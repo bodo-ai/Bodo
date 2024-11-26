@@ -3,8 +3,6 @@
 
 #include <Python.h>
 
-#include "../libs/_bodo_common.h"
-
 // CSV exports some stuff to the io module
 extern "C" void PyInit_csv(PyObject *);
 

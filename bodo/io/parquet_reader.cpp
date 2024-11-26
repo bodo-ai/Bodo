@@ -5,6 +5,7 @@
 
 #include "parquet_reader.h"
 
+#include <algorithm>
 #include <span>
 
 #include <arrow/python/pyarrow.h>
@@ -129,7 +130,7 @@ PyObject* ParquetReader::get_dataset() {
         pq_mod, "get_parquet_dataset", "OOOOOLOO", path, Py_True, expr_filters,
         storage_options, Py_False, tot_rows_to_read, this->pyarrow_schema,
         partitioning);
-    if (ds == NULL && PyErr_Occurred()) {
+    if (ds == nullptr && PyErr_Occurred()) {
         throw std::runtime_error("python");
     }
     Py_DECREF(path);
@@ -191,7 +192,7 @@ void ParquetReader::init_pq_scanner() {
         this->filesystem, str_as_dict_cols_py, this->start_row_first_piece,
         this->count, this->ds_partitioning, this->pyarrow_schema,
         batch_size_py);
-    if (scanner_batches_tup == NULL && PyErr_Occurred()) {
+    if (scanner_batches_tup == nullptr && PyErr_Occurred()) {
         throw std::runtime_error("python");
     }
 
@@ -246,9 +247,9 @@ std::shared_ptr<table_info> ParquetReader::get_empty_out_table() {
 std::tuple<table_info*, bool, uint64_t> ParquetReader::read_inner_row_level() {
     // Generate out_schema from schema and selected_columns
     std::vector<std::shared_ptr<arrow::Field>> out_schema_fields;
-    std::transform(this->selected_fields.begin(), this->selected_fields.end(),
-                   std::back_inserter(out_schema_fields),
-                   [this](int32_t i) { return schema->field(i); });
+    std::ranges::transform(this->selected_fields,
+                           std::back_inserter(out_schema_fields),
+                           [this](int32_t i) { return schema->field(i); });
     auto out_schema = arrow::schema(out_schema_fields);
 
     // If batch_size is set, then we need to iteratively read a
@@ -261,8 +262,8 @@ std::tuple<table_info*, bool, uint64_t> ParquetReader::read_inner_row_level() {
                this->out_batches->total_remaining <
                    static_cast<size_t>(this->batch_size)) {
             PyObject* batch_py =
-                PyObject_CallMethod(this->reader, "read_next_batch", NULL);
-            if (batch_py == NULL && PyErr_Occurred() &&
+                PyObject_CallMethod(this->reader, "read_next_batch", nullptr);
+            if (batch_py == nullptr && PyErr_Occurred() &&
                 PyErr_ExceptionMatches(PyExc_StopIteration)) {
                 // StopIteration is raised at the end of iteration.
                 // An iterator would clear this automatically, but we are
@@ -273,7 +274,7 @@ std::tuple<table_info*, bool, uint64_t> ParquetReader::read_inner_row_level() {
                 throw std::runtime_error(
                     "ParquetReader::read_batch: Out of batches before reading "
                     "the expected number of rows!");
-            } else if (batch_py == NULL && PyErr_Occurred()) {
+            } else if (batch_py == nullptr && PyErr_Occurred()) {
                 throw std::runtime_error("python");
             }
 
@@ -372,9 +373,9 @@ std::tuple<table_info*, bool, uint64_t> ParquetReader::read_inner_row_level() {
     size_t cur_piece = 0;
     int64_t rows_left_cur_piece = pieces_nrows[cur_piece];
 
-    PyObject* batch_py = NULL;
-    while ((batch_py =
-                PyObject_CallMethod(this->reader, "read_next_batch", NULL))) {
+    PyObject* batch_py = nullptr;
+    while ((batch_py = PyObject_CallMethod(this->reader, "read_next_batch",
+                                           nullptr))) {
         auto batch = arrow::py::unwrap_batch(batch_py).ValueOrDie();
         int64_t batch_offset = std::min(this->rows_to_skip, batch->num_rows());
         int64_t length =
@@ -414,13 +415,13 @@ std::tuple<table_info*, bool, uint64_t> ParquetReader::read_inner_row_level() {
         Py_DECREF(batch_py);
     }
 
-    if (batch_py == NULL && PyErr_Occurred() &&
+    if (batch_py == nullptr && PyErr_Occurred() &&
         PyErr_ExceptionMatches(PyExc_StopIteration)) {
         // StopIteration is raised at the end of iteration.
         // An iterator would clear this automatically, but we are
         // not using an interator, so we have to clear it manually
         PyErr_Clear();
-    } else if (batch_py == NULL && PyErr_Occurred()) {
+    } else if (batch_py == nullptr && PyErr_Occurred()) {
         // If there was a Python error, use the special string "python"
         // `py_entry` functions check for this string to avoid
         // overwriting the global Python exception
@@ -561,7 +562,7 @@ table_info* pq_read_py_entry(
         if (std::string(e.what()) != "python") {
             PyErr_SetString(PyExc_RuntimeError, e.what());
         }
-        return NULL;
+        return nullptr;
     }
 }
 
@@ -634,6 +635,6 @@ ArrowReader* pq_reader_init_py_entry(
         if (std::string(e.what()) != "python") {
             PyErr_SetString(PyExc_RuntimeError, e.what());
         }
-        return NULL;
+        return nullptr;
     }
 }

@@ -1,8 +1,6 @@
 #include <optional>
 #include <random>
 
-#include "../_array_operations.h"
-#include "../_array_utils.h"
 #include "../_bodo_common.h"
 #include "../_chunked_table_builder.h"
 #include "../_query_profile_collector.h"
@@ -382,8 +380,8 @@ struct ExternalKWayMergeSorter {
         std::vector<std::deque<TableAndRange>>&& sorted_chunks) /*const*/;
 
     template <typename IndexT>
-        requires(std::is_same<IndexT, int32_t>::value ||
-                 std::is_same<IndexT, int64_t>::value)
+        requires(std::is_same_v<IndexT, int32_t> ||
+                 std::is_same_v<IndexT, int64_t>)
     std::deque<TableAndRange> SelectRowsAndProduceOutputInMem(
         std::shared_ptr<table_info> table, bodo::vector<IndexT>&& out_idxs);
 

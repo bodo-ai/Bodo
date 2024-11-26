@@ -1,8 +1,6 @@
 #pragma once
 
-#include "_array_comparison.h"
 #include "_bodo_common.h"
-#include "vendored/gfx/timsort.hpp"
 
 // Forward Declaration from _stream_dict_encoding
 class DictEncodingState;
@@ -98,8 +96,7 @@ table_info* sort_values_table_py_entry(table_info* in_table, int64_t n_keys,
  * @param mm
  */
 template <typename IndexT>
-    requires(std::is_same<IndexT, int32_t>::value ||
-             std::is_same<IndexT, int64_t>::value)
+    requires(std::is_same_v<IndexT, int32_t> || std::is_same_v<IndexT, int64_t>)
 bodo::vector<IndexT> sort_values_table_local_get_indices(
     std::shared_ptr<table_info> in_table, size_t n_keys,
     const int64_t* vect_ascending, const int64_t* na_position, bool is_parallel,

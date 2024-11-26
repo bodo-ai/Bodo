@@ -1,9 +1,7 @@
 #include <chrono>
 #include <cmath>
 #include <ctime>
-#include <iomanip>
 #include <optional>
-#include <sstream>
 #include <string>
 
 #include <arrow/api.h>
@@ -524,7 +522,7 @@ static bodo::tests::suite tests([] {
             // Simple Test Case
             "[\"id1\"]",
             // Multiple Elements
-            "[\"id10\", \"id11\", \"id5\", \"id20\"]",
+            R"(["id10", "id11", "id5", "id20"])",
             // With Spacing and Nulls Inside
             "[\n\t\"why\",\n\t\"does\",\n\tundefined,\n\t\"snowflake\","
             "\n\t\"use\"\n]",
@@ -536,9 +534,9 @@ static bodo::tests::suite tests([] {
             "[\"\041\", \"\x21\", \"⛄\", \"\u26c4\", \"❄é\"]",
             // Escape Characters
             R"(["'", "\"", "\t\n", "\\"])",
-            "[\"test \\u0000 zero\"]",
+            R"(["test \u0000 zero"])",
             // String that represents other types
-            "[\"true\", \"10\", \"2023-10-20\", \"hello\"]",
+            R"(["true", "10", "2023-10-20", "hello"])",
         });
         auto list_arr = string_to_list_arr(arr, out_type);
 
@@ -560,7 +558,7 @@ static bodo::tests::suite tests([] {
                 vec{std::nullopt},
                 vec{"\r\n        test stuff \\t \n   \b   \f  for all\n       "
                     " "},
-                vec{"\041", "\x21", "⛄", "\u26c4", "❄é"},
+                vec{R"(!)", R"(!)", "⛄", "\u26c4", "❄é"},
                 vec{"'", "\"", "\t\n", "\\"},
                 // Shenanigans to get a \0 in the string
                 vec{"test \0 zero"s},
@@ -573,7 +571,7 @@ static bodo::tests::suite tests([] {
 
     bodo::tests::test("test_string_array_invalid_unescaped_unicode", [] {
         auto out_type = arrow::large_list(arrow::large_utf8());
-        auto arr = const_str_arr({"[\"\\u26c4\"]"});
+        auto arr = const_str_arr({R"(["\u26c4"])"});
         bodo::tests::check_exception(
             [&] { string_to_list_arr(arr, out_type); },
             "Found Unescaped Unicode In Snowflake JSON String");
@@ -700,7 +698,7 @@ static bodo::tests::suite tests([] {
             // Outer Null Array
             std::nullopt,
             // Simple Test Case Including Min
-            "[\"2023-10-24\", \"1970-01-01\", \"2024-01-01\"]",
+            R"(["2023-10-24", "1970-01-01", "2024-01-01"])",
             // With Spacing and Nulls Inside
             "[\n\t\"2008-10-09\",\n\tundefined\n]",
             // Only Null
@@ -998,7 +996,7 @@ static bodo::tests::suite tests([] {
     bodo::tests::test("test_mixed_map_invalid", [] {
         // Tests that Map Doesn't Contain Multiple Inner Datatypes
         auto arr1 = const_str_arr(
-            {"{\"test1\"  : true, \"test10\": 10, \"test24\": \"hello\"}"});
+            {R"({"test1"  : true, "test10": 10, "test24": "hello"})"});
         bodo::tests::check_exception(
             [&] {
                 string_to_map_arr(
@@ -1025,7 +1023,7 @@ static bodo::tests::suite tests([] {
 
         auto arr = const_str_arr({
             // Simple Test Case
-            "{\"id10\": \"id11\", \"id5\": \"id20\"}",
+            R"({"id10": "id11", "id5": "id20"})",
             // Unicode
             "{\"\041\": \"\", \"\x21\": \"\", \"\u26c4\": \"\", \"❄é\": \"\"}",
             // Escape Characters
@@ -1046,7 +1044,7 @@ static bodo::tests::suite tests([] {
                 // Simple Test Case
                 map{{"id10", "id11"}, {"id5", "id20"}},
                 // Unicode
-                map{{"\041", ""}, {"\x21", ""}, {"\u26c4", ""}, {"❄é", ""}},
+                map{{R"(!)", ""}, {R"(!)", ""}, {"\u26c4", ""}, {"❄é", ""}},
                 // Escape Characters
                 map{{"\"", ""}, {"\t\n", ""}, {"\\", ""}},
             });
@@ -1062,7 +1060,7 @@ static bodo::tests::suite tests([] {
             // Only Null
             "{\"null\": undefined}",
             // Empty Lists
-            "{\"a\": [], \"b\": undefined, \"c\": [undefined]}",
+            R"({"a": [], "b": undefined, "c": [undefined]})",
             // Simple Test Case
             R"(
 {
@@ -1111,7 +1109,7 @@ static bodo::tests::suite tests([] {
                                   // Only Null
                                   "{\"null\": undefined}",
                                   // Empty Maps
-                                  "{\"a\": {}, \"b\": undefined, \"c\": {}}",
+                                  R"({"a": {}, "b": undefined, "c": {}})",
                                   // Simple Test Case
                                   R"(
 {
@@ -1284,7 +1282,7 @@ static bodo::tests::suite tests([] {
             // Normal Row
             "{\"base\": 25}",
             // Empty Map,
-            "{\"base\": 10, \"extra\": null}",
+            R"({"base": 10, "extra": null})",
         });
         bodo::tests::check_exception(
             [&] { string_to_struct_arr(arr, in_type); },
@@ -1300,11 +1298,11 @@ static bodo::tests::suite tests([] {
 
         auto arr = const_str_arr({
             // Normal
-            "{\"f1\": 25, \"f2\": true, \"f3\": \"hello\"}",
+            R"({"f1": 25, "f2": true, "f3": "hello"})",
             // Rotate
-            "{\"f2\": true,  \"f3\": \"middle\",  \"f1\": 10}",
+            R"({"f2": true,  "f3": "middle",  "f1": 10})",
             // Flip All
-            "{\"f3\": \"bye\", \"f2\": false, \"f1\": -5}",
+            R"({"f3": "bye", "f2": false, "f1": -5})",
         });
         auto struct_arr = string_to_struct_arr(arr, in_type);
 
@@ -1336,7 +1334,7 @@ static bodo::tests::suite tests([] {
             // Missing All
             "{}",
             // Missing f2
-            "{\"f1\": 10, \"f3\": \"middle\"}",
+            R"({"f1": 10, "f3": "middle"})",
             // Missing f3 and f1
             "{\"f2\": false}",
         });
@@ -1361,13 +1359,13 @@ static bodo::tests::suite tests([] {
     });
 
     bodo::tests::test("test_nested_in_struct", [] {
-        auto arr = const_str_arr(
-            {// Outer Null Struct
-             std::nullopt,
-             // Empty Lists
-             "{\"array\": [undefined], \"map\": {}, \"struct\": {}}",
-             // Simple Test Case
-             R"(
+        auto arr =
+            const_str_arr({// Outer Null Struct
+                           std::nullopt,
+                           // Empty Lists
+                           R"({"array": [undefined], "map": {}, "struct": {}})",
+                           // Simple Test Case
+                           R"(
 {
     "array": [
         1.0,

@@ -1,9 +1,7 @@
 // Copyright (C) 2023 Bodo Inc. All rights reserved.
 #pragma once
 
-#include "../_array_utils.h"
 #include "../_bodo_common.h"
-#include "../groupby/_groupby_common.h"
 #include "../groupby/_groupby_ftypes.h"
 
 template <int ftype>

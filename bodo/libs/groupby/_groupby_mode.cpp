@@ -1,11 +1,10 @@
 // Copyright (C) 2023 Bodo Inc. All rights reserved.
 #include "_groupby_mode.h"
 
-#include "../_array_hash.h"
 #include "../_array_utils.h"
 #include "../_bodo_common.h"
 #include "../_dict_builder.h"
-#include "_groupby_common.h"
+// Not directly used, but for defining std::hash<__int128>
 #include "_groupby_hashing.h"
 
 /**
@@ -41,7 +40,7 @@ void mode_operation(
                 if (isnan_alltype<T, DType>(getv<T, ArrType>(arr, i))) {
                     nan_count++;
                 } else {
-                    ++counts[get_arr_item<ArrType, T, DType>(*arr, i)];
+                    counts[get_arr_item<ArrType, T, DType>(*arr, i)] += 1;
                 }
             }
             i = grp_info.next_row_in_group[i];
@@ -133,11 +132,11 @@ void mode_operation_strings(
             std::string best_elem = {};
             int best_count = 0;
             // Find string with the highest count
-            for (auto it = counts.begin(); it != counts.end(); it++) {
-                int count = it->second;
+            for (auto& it : counts) {
+                int count = it.second;
                 if (count > best_count) {
                     best_count = count;
-                    best_elem = it->first;
+                    best_elem = it.first;
                 }
             }
             strings[igrp] = best_elem;
@@ -250,8 +249,8 @@ void mode_operation_timestamptz(
             size_t best_elem_idx = 0;
             size_t best_count = 0;
             // Find timestamp with the highest count
-            for (auto it = counts.begin(); it != counts.end(); it++) {
-                auto [idx, count] = it->second;
+            for (auto& it : counts) {
+                auto [idx, count] = it.second;
                 if (count > best_count) {
                     best_count = count;
                     best_elem_idx = idx;

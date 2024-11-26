@@ -1,5 +1,6 @@
 #include "_chunked_table_builder.h"
 #include <numeric>
+#include <utility>
 
 #include "_dict_builder.h"
 #include "_query_profile_collector.h"
@@ -38,7 +39,7 @@ ChunkedTableArrayBuilder::ChunkedTableArrayBuilder(
     std::shared_ptr<array_info> _data_array,
     std::shared_ptr<DictionaryBuilder> _dict_builder, size_t chunk_size,
     size_t _max_resize_count)
-    : data_array(_data_array),
+    : data_array(std::move(_data_array)),
       dict_builder(_dict_builder),
       size(this->data_array->length),
       capacity(chunk_size),
@@ -1720,8 +1721,8 @@ AbstractChunkedTableBuilder::PopChunk(bool force_return) {
 
 void AbstractChunkedTableBuilder::Reset() {
     this->ResetInternal();
-    for (size_t i = 0; i < this->active_chunk_array_builders.size(); i++) {
-        this->active_chunk_array_builders[i].Reset();
+    for (auto& active_chunk_array_builder : this->active_chunk_array_builders) {
+        active_chunk_array_builder.Reset();
     }
     this->active_chunk_size = 0;
     this->total_size = 0;

@@ -1,3 +1,4 @@
+#include <fmt/format.h>
 #include <mpi.h>
 #include <cstddef>
 #include <cstdint>
@@ -5,14 +6,16 @@
 #include <sstream>
 #include <tuple>
 #include <vector>
+
 #include "../libs/_array_utils.h"
 #include "../libs/_bodo_common.h"
 #include "../libs/_memory.h"
+#include "../libs/groupby/_groupby_common.h"
+#include "../libs/groupby/_groupby_ftypes.h"
 #include "../libs/window/_window_calculator.h"
 #include "../libs/window/_window_compute.h"
 #include "./table_generator.hpp"
 #include "./test.hpp"
-#include "fmt/format.h"
 #include "utils.h"
 
 // creates a NUMPY/int64 array that goes from min..(min + length - 1), could be
@@ -240,7 +243,7 @@ static bodo::tests::suite tests([] {
             order_col_indices.push_back(1);
             keep_indices.push_back(0);
             keep_indices.push_back(2);
-            input_col_indices.push_back({});
+            input_col_indices.emplace_back();
             window_funcs.push_back(Bodo_FTypes::row_number);
 
             std::shared_ptr<array_info> partition =
@@ -302,9 +305,9 @@ static bodo::tests::suite tests([] {
             keep_indices.push_back(0);
             keep_indices.push_back(1);
             keep_indices.push_back(2);
-            input_col_indices.push_back({});
-            input_col_indices.push_back({});
-            input_col_indices.push_back({});
+            input_col_indices.emplace_back();
+            input_col_indices.emplace_back();
+            input_col_indices.emplace_back();
             window_funcs.push_back(Bodo_FTypes::row_number);
             window_funcs.push_back(Bodo_FTypes::row_number);
             window_funcs.push_back(Bodo_FTypes::row_number);
@@ -365,7 +368,7 @@ static bodo::tests::suite tests([] {
             partition_col_indices.push_back(0);
             order_col_indices.push_back(1);
             keep_indices.push_back(1);
-            input_col_indices.push_back({});
+            input_col_indices.emplace_back();
             window_funcs.push_back(Bodo_FTypes::row_number);
 
             // Chunk 0: all the same partition
@@ -518,7 +521,7 @@ static bodo::tests::suite tests([] {
             partition_col_indices.push_back(0);
             order_col_indices.push_back(1);
             keep_indices.push_back(1);
-            input_col_indices.push_back({});
+            input_col_indices.emplace_back();
             window_funcs.push_back(Bodo_FTypes::row_number);
 
             std::shared_ptr<array_info> partition;
@@ -587,7 +590,7 @@ static bodo::tests::suite tests([] {
             partition_col_indices.push_back(0);
             order_col_indices.push_back(1);
             keep_indices.push_back(1);
-            input_col_indices.push_back({});
+            input_col_indices.emplace_back();
             window_funcs.push_back(Bodo_FTypes::row_number);
 
             // Chunk 0: all the same partition
@@ -675,7 +678,7 @@ static bodo::tests::suite tests([] {
 
             order_col_indices.push_back(0);
             keep_indices.push_back(0);
-            input_col_indices.push_back({});
+            input_col_indices.emplace_back();
             window_funcs.push_back(Bodo_FTypes::row_number);
 
             // Chunk 0:
@@ -767,7 +770,7 @@ static bodo::tests::suite tests([] {
                 order_col_indices.push_back(1);
                 keep_indices.push_back(0);
                 keep_indices.push_back(1);
-                input_col_indices.push_back({});
+                input_col_indices.emplace_back();
                 window_funcs.push_back(Bodo_FTypes::row_number);
 
                 std::vector<int64_t> partition_vect;
@@ -853,7 +856,7 @@ static bodo::tests::suite tests([] {
                 order_col_indices.push_back(1);
                 keep_indices.push_back(0);
                 keep_indices.push_back(1);
-                input_col_indices.push_back({});
+                input_col_indices.emplace_back();
                 window_funcs.push_back(Bodo_FTypes::row_number);
 
                 // Split up each row into a singleton chunk
@@ -923,7 +926,7 @@ static bodo::tests::suite tests([] {
             order_col_indices.push_back(1);
             keep_indices.push_back(0);
             keep_indices.push_back(2);
-            input_col_indices.push_back({});
+            input_col_indices.emplace_back();
             window_funcs.push_back(Bodo_FTypes::rank);
 
             std::shared_ptr<array_info> partition =
@@ -982,7 +985,7 @@ static bodo::tests::suite tests([] {
             partition_col_indices.push_back(0);
             order_col_indices.push_back(1);
             keep_indices.push_back(1);
-            input_col_indices.push_back({});
+            input_col_indices.emplace_back();
             window_funcs.push_back(Bodo_FTypes::rank);
 
             // Chunk 0: all the same partition
@@ -1137,7 +1140,7 @@ static bodo::tests::suite tests([] {
             partition_col_indices.push_back(0);
             order_col_indices.push_back(1);
             keep_indices.push_back(1);
-            input_col_indices.push_back({});
+            input_col_indices.emplace_back();
             window_funcs.push_back(Bodo_FTypes::rank);
 
             std::shared_ptr<array_info> partition;
@@ -1221,7 +1224,7 @@ static bodo::tests::suite tests([] {
                 order_col_indices.push_back(1);
                 keep_indices.push_back(0);
                 keep_indices.push_back(1);
-                input_col_indices.push_back({});
+                input_col_indices.emplace_back();
                 window_funcs.push_back(Bodo_FTypes::rank);
 
                 // Split up each row into a singleton chunk
@@ -1304,7 +1307,7 @@ static bodo::tests::suite tests([] {
             order_col_indices.push_back(1);
             keep_indices.push_back(0);
             keep_indices.push_back(2);
-            input_col_indices.push_back({});
+            input_col_indices.emplace_back();
             window_funcs.push_back(Bodo_FTypes::dense_rank);
 
             std::shared_ptr<array_info> partition =
@@ -1363,7 +1366,7 @@ static bodo::tests::suite tests([] {
             partition_col_indices.push_back(0);
             order_col_indices.push_back(1);
             keep_indices.push_back(1);
-            input_col_indices.push_back({});
+            input_col_indices.emplace_back();
             window_funcs.push_back(Bodo_FTypes::dense_rank);
 
             // Chunk 0: all the same partition
@@ -1518,7 +1521,7 @@ static bodo::tests::suite tests([] {
             partition_col_indices.push_back(0);
             order_col_indices.push_back(1);
             keep_indices.push_back(1);
-            input_col_indices.push_back({});
+            input_col_indices.emplace_back();
             window_funcs.push_back(Bodo_FTypes::dense_rank);
 
             std::shared_ptr<array_info> partition;
@@ -1602,7 +1605,7 @@ static bodo::tests::suite tests([] {
                 order_col_indices.push_back(1);
                 keep_indices.push_back(0);
                 keep_indices.push_back(1);
-                input_col_indices.push_back({});
+                input_col_indices.emplace_back();
                 window_funcs.push_back(Bodo_FTypes::rank);
 
                 // Split up each row into a singleton chunk

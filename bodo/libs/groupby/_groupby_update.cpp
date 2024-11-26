@@ -2,14 +2,14 @@
 #include "_groupby_update.h"
 
 #include <arrow/util/decimal.h>
-#include "../_array_operations.h"
+#include "../_array_hash.h"
 #include "../_array_utils.h"
 #include "../_bodo_common.h"
 #include "../_decimal_ext.h"
 #include "../_distributed.h"
-#include "../_shuffle.h"
 #include "../vendored/_gandiva_decimal_copy.h"
 #include "_groupby_common.h"
+#include "_groupby_ftypes.h"
 #include "_groupby_hashing.h"
 
 // Really should be defined in something like _decimal_ext.h,
@@ -1796,10 +1796,10 @@ void nunique_computation(std::shared_ptr<array_info> arr,
         const size_t siztype = numpy_item_size[arr->dtype];
         const uint32_t seed = SEED_HASH_CONTAINER;
 
-        HashNuniqueComputationNumpyOrNullableIntBool hash_fct{arr, siztype,
-                                                              seed};
-        KeyEqualNuniqueComputationNumpyOrNullableIntBool equal_fct{arr,
-                                                                   siztype};
+        HashNuniqueComputationNumpyOrNullableIntBool hash_fct{
+            .arr = arr, .siztype = siztype, .seed = seed};
+        KeyEqualNuniqueComputationNumpyOrNullableIntBool equal_fct{
+            .arr = arr, .siztype = siztype};
         bodo::unord_set_container<
             int64_t, HashNuniqueComputationNumpyOrNullableIntBool,
             KeyEqualNuniqueComputationNumpyOrNullableIntBool>
@@ -1835,10 +1835,12 @@ void nunique_computation(std::shared_ptr<array_info> arr,
         }
     } else if (arr->arr_type == bodo_array_type::STRING) {
         offset_t* in_offsets = (offset_t*)arr->data2<bodo_array_type::STRING>();
-        const uint32_t seed = SEED_HASH_CONTAINER;
+        constexpr uint32_t seed = SEED_HASH_CONTAINER;
 
-        HashNuniqueComputationString hash_fct{arr, in_offsets, seed};
-        KeyEqualNuniqueComputationString equal_fct{arr, in_offsets};
+        HashNuniqueComputationString hash_fct{
+            .arr = arr, .in_offsets = in_offsets, .seed = seed};
+        KeyEqualNuniqueComputationString equal_fct{.arr = arr,
+                                                   .in_offsets = in_offsets};
         bodo::unord_set_container<int64_t, HashNuniqueComputationString,
                                   KeyEqualNuniqueComputationString>
             eset({}, hash_fct, equal_fct, pool);
@@ -1871,9 +1873,10 @@ void nunique_computation(std::shared_ptr<array_info> arr,
         }
     } else if (arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
         const size_t siztype = numpy_item_size[arr->dtype];
-        HashNuniqueComputationNumpyOrNullableIntBool hash_fct{arr, siztype};
-        KeyEqualNuniqueComputationNumpyOrNullableIntBool equal_fct{arr,
-                                                                   siztype};
+        HashNuniqueComputationNumpyOrNullableIntBool hash_fct{
+            .arr = arr, .siztype = siztype};
+        KeyEqualNuniqueComputationNumpyOrNullableIntBool equal_fct{
+            .arr = arr, .siztype = siztype};
         bodo::unord_set_container<
             int64_t, HashNuniqueComputationNumpyOrNullableIntBool,
             KeyEqualNuniqueComputationNumpyOrNullableIntBool>

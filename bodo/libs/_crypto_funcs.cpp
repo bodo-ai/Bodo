@@ -8,11 +8,15 @@
  */
 #include "_crypto_funcs.h"
 #include "_base64.h"
+#include "_bodo_common.h"
+
+#include <memory>
+#include <stdexcept>
+#include <vector>
 
 #include <Python.h>
 #include <openssl/evp.h>
 #include <openssl/sha.h>
-#include <stdexcept>
 
 // Invocation of the OpenSSL MD5 implementation as described in the following
 // links: https://github.com/yhirose/cpp-httplib/issues/1030
@@ -199,9 +203,9 @@ bool run_base64_decode_string(char *in_str, int in_len, char *char_62_str,
 // Initialize encryption/encoding functions for usage with python
 PyMODINIT_FUNC PyInit_crypto_funcs(void) {
     PyObject *m;
-    MOD_DEF(m, "crypto_funcs", "No docs", NULL);
-    if (m == NULL) {
-        return NULL;
+    MOD_DEF(m, "crypto_funcs", "No docs", nullptr);
+    if (m == nullptr) {
+        return nullptr;
     }
 
     bodo_common_init();

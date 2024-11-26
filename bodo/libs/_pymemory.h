@@ -1,6 +1,5 @@
 // Copyright (C) 2024 Bodo Inc. All rights reserved
 #include <Python.h>
-#include "_bodo_common.h"
 
 /**
  * @brief Initializes the memory_cpp module

@@ -1,8 +1,6 @@
 // Copyright (C) 2023 Bodo Inc. All rights reserved.
-
 #pragma once
 
-#include "../_array_hash.h"
 #include "../_array_utils.h"
 #include "../_bodo_common.h"
 #include "../vendored/_murmurhash3.h"

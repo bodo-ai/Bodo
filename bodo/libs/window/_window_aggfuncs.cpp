@@ -2,9 +2,10 @@
 // See this link for an explanation of how these aggfuncs work:
 // https://bodo.atlassian.net/wiki/spaces/B/pages/1384546305/Using+and+Expanding+the+Groupby.Window+Infrastructure
 #include "_window_aggfuncs.h"
+
+#include <utility>
 #include "../_array_utils.h"
 #include "../_bodo_common.h"
-#include "../groupby/_groupby_common.h"
 #include "../groupby/_groupby_ftypes.h"
 
 // Class to store any accumulator information for a window frame computation.
@@ -31,7 +32,9 @@ class WindowAggfunc {
     WindowAggfunc(std::shared_ptr<array_info> _in_arr,
                   std::shared_ptr<array_info> _out_arr,
                   std::shared_ptr<array_info> _sorted_idx)
-        : in_arr(_in_arr), out_arr(_out_arr), sorted_idx(_sorted_idx) {}
+        : in_arr(std::move(_in_arr)),
+          out_arr(std::move(_out_arr)),
+          sorted_idx(std::move(_sorted_idx)) {}
 
     // Fallback implementations.
 

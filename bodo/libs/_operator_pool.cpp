@@ -306,7 +306,7 @@ uint64_t OperatorBufferPool::bytes_pinned() const {
 std::optional<std::tuple<uint64_t, uint64_t>> OperatorBufferPool::alloc_loc(
     uint8_t *ptr, int64_t size, int64_t alignment) const {
     // OperatorBufferPool only tracks metadata about allocations, but doesn't
-    // influence where allocations themselves happen. It's suffcient to just
+    // influence where allocations themselves happen. It's sufficient to just
     // forward this request to the parent.
     return this->parent_pool_->alloc_loc(ptr, size, alignment);
 }

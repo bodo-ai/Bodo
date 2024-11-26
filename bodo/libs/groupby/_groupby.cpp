@@ -1,6 +1,8 @@
 // Copyright (C) 2019 Bodo Inc. All rights reserved.
 #include "_groupby.h"
 #include <map>
+#include <utility>
+
 #include "../_array_hash.h"
 #include "../_array_operations.h"
 #include "../_array_utils.h"
@@ -105,20 +107,24 @@ class GroupbyPipeline {
           num_keys(_num_keys),
           ncols_per_func(_ncols_per_func),
           n_window_calls_per_func(_n_window_calls_per_func),
-          dispatch_table(_dispatch_table),
-          dispatch_info(_dispatch_info),
+          dispatch_table(std::move(_dispatch_table)),
+          dispatch_info(std::move(_dispatch_info)),
           is_parallel(_is_parallel),
           return_key(_return_key),
           return_index(_return_index),
           key_dropna(_key_dropna),
-          udf_table(_udf_table),
+          udf_table(std::move(_udf_table)),
           udf_n_redvars(_udf_nredvars),
           head_n(_head_n),
           maintain_input_size(_maintain_input_size),
           n_shuffle_keys(_n_shuffle_keys),
           use_sql_rules(_use_sql_rules) {
         tracing::Event ev("GroupbyPipeline()", is_parallel);
-        udf_info = {udf_table, update_cb, combine_cb, eval_cb, general_udfs_cb};
+        udf_info = {.udf_table_dummy = udf_table,
+                    .update = update_cb,
+                    .combine = combine_cb,
+                    .eval = eval_cb,
+                    .general_udf = general_udfs_cb};
         // if true, the last column is the index on input and output.
         // this is relevant only to cumulative operations like cumsum
         // and transform.
@@ -432,28 +438,28 @@ class GroupbyPipeline {
         // skip loop (ncols = num_keys + index_i)
         if (col_sets.size() == 0 && (ftypes[0] == Bodo_FTypes::size ||
                                      ftypes[0] == Bodo_FTypes::ngroup)) {
-            col_sets.push_back(
-                makeColSet({in_table->columns[0]}, index_col, ftypes[0],
-                           do_combine, skip_na_data, periods, {0}, n_udf,
-                           is_parallel, {false}, {false}, {0}, 0, udf_n_redvars,
-                           udf_table, udf_table_idx, nullptr, use_sql_rules));
+            col_sets.push_back(makeColSet(
+                {in_table->columns[0]}, index_col, ftypes[0], do_combine,
+                skip_na_data, periods, {0}, n_udf, is_parallel, {false},
+                {false}, {nullptr}, 0, udf_n_redvars, udf_table, udf_table_idx,
+                nullptr, use_sql_rules));
         }
         // Add key-sort column and index to col_sets
         // to apply head_computation on them as well.
         if (head_op && return_index) {
             // index-column
-            col_sets.push_back(
-                makeColSet({index_col}, index_col, Bodo_FTypes::head,
-                           do_combine, skip_na_data, periods, {0}, n_udf,
-                           is_parallel, {false}, {false}, {0}, 0, udf_n_redvars,
-                           udf_table, udf_table_idx, nullptr, use_sql_rules));
+            col_sets.push_back(makeColSet(
+                {index_col}, index_col, Bodo_FTypes::head, do_combine,
+                skip_na_data, periods, {0}, n_udf, is_parallel, {false},
+                {false}, {nullptr}, 0, udf_n_redvars, udf_table, udf_table_idx,
+                nullptr, use_sql_rules));
             if (head_i) {
                 col_sets.push_back(makeColSet(
                     {in_table->columns[in_table->columns.size() - 1]},
                     index_col, Bodo_FTypes::head, do_combine, skip_na_data,
-                    periods, {0}, n_udf, is_parallel, {false}, {false}, {0}, 0,
-                    udf_n_redvars, udf_table, udf_table_idx, nullptr,
-                    use_sql_rules));
+                    periods, {0}, n_udf, is_parallel, {false}, {false},
+                    {nullptr}, 0, udf_n_redvars, udf_table, udf_table_idx,
+                    nullptr, use_sql_rules));
             }
         }
         in_table->id = 0;
@@ -584,9 +590,8 @@ class GroupbyPipeline {
             tables.push_back(in_table);
         }
 
-        for (auto it = nunique_tables.begin(); it != nunique_tables.end();
-             it++) {
-            tables.push_back(it->second);
+        for (auto& nunique_table : nunique_tables) {
+            tables.push_back(nunique_table.second);
         }
 
         if (req_extended_group_info) {

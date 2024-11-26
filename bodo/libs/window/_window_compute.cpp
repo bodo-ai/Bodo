@@ -1,24 +1,20 @@
 // Copyright (C) 2023 Bodo Inc. All rights reserved.
 #include "_window_compute.h"
 #include <arrow/util/decimal.h>
+#include <mpi.h>
 #include <memory>
-#include <sstream>
 #include <stdexcept>
-#include "../_array_operations.h"
+
 #include "../_array_utils.h"
 #include "../_bodo_common.h"
 #include "../_decimal_ext.h"
 #include "../_dict_builder.h"
-#include "../_shuffle.h"
-#include "../_table_builder.h"
-#include "../_table_builder_utils.h"
+#include "../_distributed.h"
 #include "../groupby/_groupby_common.h"
 #include "../groupby/_groupby_do_apply_to_column.h"
 #include "../groupby/_groupby_ftypes.h"
-#include "../streaming/_shuffle.h"
 #include "../vendored/_gandiva_decimal_copy.h"
 #include "_window_aggfuncs.h"
-#include "mpi.h"
 
 std::tuple<int64_t, bodo_array_type::arr_type_enum>
 get_update_ftype_idx_arr_type_for_mrnf(size_t n_orderby_arrs,
@@ -915,8 +911,8 @@ void window_computation(
     // that we do need to sort
     bool needs_sort = false;
     int64_t idx_col = 0;
-    for (size_t i = 0; i < window_funcs.size(); i++) {
-        if (window_funcs[i] != Bodo_FTypes::min_row_number_filter) {
+    for (long long window_func : window_funcs) {
+        if (window_func != Bodo_FTypes::min_row_number_filter) {
             needs_sort = true;
             /* If this is the first function encountered that requires,
              * a sort, create a sorted table with the following columns:

@@ -5,12 +5,13 @@
 #include <numeric>
 #include <stdexcept>
 
+#include <arrow/vendored/portable-snippets/safe-math.h>
+
 #include "../_bodo_common.h"
 #include "../_stl.h"
 #include "_groupby_agg_funcs.h"
 #include "_groupby_eval.h"
 #include "_groupby_ftypes.h"
-#include "arrow/vendored/portable-snippets/safe-math.h"
 
 // Equivalent to arrow::Decimal128::FitsInPrecision(DECIMAL128_MAX_PRECISION).
 // This is used in Groupby-Sum for decimals.
@@ -1221,7 +1222,7 @@ void apply_to_column_numpy(std::shared_ptr<array_info> in_col,
                     // error in snowflake anyway.
                     if (!isnan_alltype<T, DType>(val2)) {
                         // If we have an integer
-                        if (std::is_integral<T>::value) {
+                        if (std::is_integral_v<T>) {
                             // output type = input type
                             // TODO XXX Need to use templated getv here!
                             T& val1 = getv<T>(out_col, i_grp);
@@ -1755,7 +1756,7 @@ void apply_to_column_nullable(
         case Bodo_FTypes::bitxor_agg: {                                                                                                     \
             T val2 = getv<T, ArrType>(in_col, i);                                                                                           \
             if (!isnan_alltype<T, DType>(val2)) {                                                                                           \
-                if (std::is_integral<T>::value) {                                                                                           \
+                if (std::is_integral_v<T>) {                                                                                                \
                     T& val1 = getv<T>(out_col, i_grp);                                                                                      \
                     casted_aggfunc<T, T, DType, ftype>::apply(val1, val2);                                                                  \
                 } else {                                                                                                                    \

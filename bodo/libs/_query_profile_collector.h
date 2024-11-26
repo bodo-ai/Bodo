@@ -10,11 +10,9 @@
 
 // Forward declare boost::json::object to avoid including the entire header and
 // increasing compile times
-namespace boost {
-namespace json {
+namespace boost::json {
 class object;
 }
-}  // namespace boost
 
 /**
  * @brief Types of operator metrics that can be collected

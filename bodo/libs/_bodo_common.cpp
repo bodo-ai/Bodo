@@ -62,7 +62,7 @@ void bodo_common_init() {
     PyObject* np_mod = PyImport_ImportModule("numpy");
     PyObject* dtype_obj = PyObject_CallMethod(np_mod, "dtype", "s", "bool");
     if ((size_t)PyNumber_AsSsize_t(
-            PyObject_GetAttrString(dtype_obj, "itemsize"), NULL) !=
+            PyObject_GetAttrString(dtype_obj, "itemsize"), nullptr) !=
         sizeof(bool)) {
         Bodo_PyErr_SetString(PyExc_RuntimeError,
                              "bool size mismatch between C++ and NumPy!");
@@ -70,7 +70,7 @@ void bodo_common_init() {
     }
     dtype_obj = PyObject_CallMethod(np_mod, "dtype", "s", "float32");
     if ((size_t)PyNumber_AsSsize_t(
-            PyObject_GetAttrString(dtype_obj, "itemsize"), NULL) !=
+            PyObject_GetAttrString(dtype_obj, "itemsize"), nullptr) !=
         sizeof(float)) {
         Bodo_PyErr_SetString(PyExc_RuntimeError,
                              "float32 size mismatch between C++ and NumPy!");
@@ -78,7 +78,7 @@ void bodo_common_init() {
     }
     dtype_obj = PyObject_CallMethod(np_mod, "dtype", "s", "float64");
     if ((size_t)PyNumber_AsSsize_t(
-            PyObject_GetAttrString(dtype_obj, "itemsize"), NULL) !=
+            PyObject_GetAttrString(dtype_obj, "itemsize"), nullptr) !=
         sizeof(double)) {
         Bodo_PyErr_SetString(PyExc_RuntimeError,
                              "float64 size mismatch between C++ and NumPy!");
@@ -1118,7 +1118,7 @@ numpy_arr_payload allocate_numpy_payload(int64_t length,
     int64_t size = length * itemsize;
     NRT_MemInfo* meminfo = NRT_MemInfo_alloc_safe_aligned(size, ALIGNMENT);
     char* data = (char*)meminfo->data;
-    return make_numpy_array_payload(meminfo, NULL, length, itemsize, data,
+    return make_numpy_array_payload(meminfo, nullptr, length, itemsize, data,
                                     length, itemsize);
 }
 
@@ -1570,7 +1570,7 @@ table_info* cpp_table_map_to_list(table_info* table) {
 }
 
 void decref_meminfo(MemInfo* meminfo) {
-    if (meminfo != NULL && meminfo->refct != -1) {
+    if (meminfo != nullptr && meminfo->refct != -1) {
         meminfo->refct--;
         if (meminfo->refct == 0) {
             NRT_MemInfo_call_dtor(meminfo);
@@ -1579,7 +1579,7 @@ void decref_meminfo(MemInfo* meminfo) {
 }
 
 void incref_meminfo(MemInfo* meminfo) {
-    if (meminfo != NULL && meminfo->refct != -1) {
+    if (meminfo != nullptr && meminfo->refct != -1) {
         meminfo->refct++;
     }
 }
@@ -1603,9 +1603,8 @@ get_dtypes_arr_types_from_table(const std::shared_ptr<table_info>& table) {
     std::vector<int8_t> arr_c_types;
     std::vector<int8_t> arr_array_types;
 
-    for (size_t i = 0; i < table->columns.size(); i++) {
-        _get_dtypes_arr_types_from_array(table->columns[i], arr_c_types,
-                                         arr_array_types);
+    for (const auto& column : table->columns) {
+        _get_dtypes_arr_types_from_array(column, arr_c_types, arr_array_types);
     }
     return std::make_tuple(arr_c_types, arr_array_types);
 }
@@ -1771,9 +1770,9 @@ extern "C" {
 
 PyMODINIT_FUNC PyInit_ext(void) {
     PyObject* m;
-    MOD_DEF(m, "ext", "No docs", NULL);
-    if (m == NULL)
-        return NULL;
+    MOD_DEF(m, "ext", "No docs", nullptr);
+    if (m == nullptr)
+        return nullptr;
 
     bodo_common_init();
 

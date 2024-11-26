@@ -41,9 +41,9 @@ void increase_operator_budget(int64_t operator_id) {
 
 PyMODINIT_FUNC PyInit_memory_budget_cpp(void) {
     PyObject* m;
-    MOD_DEF(m, "memory_budget", "No docs", NULL);
-    if (m == NULL) {
-        return NULL;
+    MOD_DEF(m, "memory_budget", "No docs", nullptr);
+    if (m == nullptr) {
+        return nullptr;
     }
 
     bodo_common_init();

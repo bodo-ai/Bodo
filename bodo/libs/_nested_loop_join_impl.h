@@ -1,7 +1,46 @@
 #pragma once
-
-#include "_distributed.h"
+#include "_bodo_common.h"
+#include "_join.h"
 #include "_memory.h"
+
+/**
+ * @brief Create data structures for column data to match the format
+ * expected by cond_func. We create three vectors:
+ * the array_infos (which handle general types), and data1/nullbitmap pointers
+ * as a fast path for accessing numeric data. These include both keys
+ * and data columns as either can be used in the cond_func.
+ *
+ * @param table Input table
+ * @return std::tuple<std::vector<array_info*>, std::vector<void*>,
+ * std::vector<void*>> Vectors of array info, data1, and null bitmap pointers
+ */
+std::tuple<std::vector<array_info*>, std::vector<void*>, std::vector<void*>>
+get_gen_cond_data_ptrs(std::shared_ptr<table_info> table);
+
+/**
+ * @brief Populate existing data structures with column data to match the
+ * format expected by cond_func. We append pointers to three vectors:
+ * array_infos (which handle general types), and data1/nullbitmap pointers
+ * as a fast path for accessing numeric data. These include both keys
+ * and data columns as either can be used in the cond_func.
+ *
+ * @param table Input table
+ * @param table_infos Pointer to output vector of array infos
+ * @param col_ptrs Pointer to output vector of data1 pointers
+ * @param null_bitmaps Pointer to output vector of null_bitmap pointers
+ */
+void get_gen_cond_data_ptrs(std::shared_ptr<table_info> table,
+                            std::vector<array_info*>* array_infos,
+                            std::vector<void*>* col_ptrs,
+                            std::vector<void*>* null_bitmaps);
+
+std::shared_ptr<table_info> create_out_table(
+    std::shared_ptr<table_info> left_table,
+    std::shared_ptr<table_info> right_table, bodo::vector<int64_t>& left_idxs,
+    bodo::vector<int64_t>& right_idxs, bool* key_in_output,
+    int64_t* use_nullable_arr_type, uint64_t* cond_func_left_columns,
+    uint64_t cond_func_left_column_len, uint64_t* cond_func_right_columns,
+    uint64_t cond_func_right_column_len);
 
 /**
  * @brief Find unmatched outer join rows (using reduction over bit map if
@@ -16,38 +55,7 @@
  * @param offset number of bits from the start of bit_map that belongs to
  * previous chunks. Default is 0
  */
-template <typename BitMapAllocator>
-void add_unmatched_rows(bodo::vector<uint8_t, BitMapAllocator>& bit_map,
-                        size_t n_rows, bodo::vector<int64_t>& table_idxs,
+void add_unmatched_rows(std::span<uint8_t> bit_map, size_t n_rows,
+                        bodo::vector<int64_t>& table_idxs,
                         bodo::vector<int64_t>& other_table_idxs,
-                        bool needs_reduction, int64_t offset) {
-    if (needs_reduction) {
-        int n_pes, myrank;
-        MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
-        MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
-
-        MPI_Allreduce_bool_or(bit_map);
-        int pos = 0;
-        for (size_t i = 0; i < n_rows; i++) {
-            bool bit = GetBit(bit_map.data(), i + offset);
-            // distribute the replicated input table rows across ranks
-            // to load balance the output
-            if (!bit) {
-                int node = pos % n_pes;
-                if (node == myrank) {
-                    table_idxs.emplace_back(i);
-                    other_table_idxs.emplace_back(-1);
-                }
-                pos++;
-            }
-        }
-    } else {
-        for (size_t i = 0; i < n_rows; i++) {
-            bool bit = GetBit(bit_map.data(), i + offset);
-            if (!bit) {
-                table_idxs.emplace_back(i);
-                other_table_idxs.emplace_back(-1);
-            }
-        }
-    }
-}
+                        bool needs_reduction, int64_t offset = 0);

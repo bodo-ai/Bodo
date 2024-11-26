@@ -2,20 +2,24 @@
 #include <arrow/util/bit_util.h>
 #include <fmt/format.h>
 
-#include <bitset>
+#include <algorithm>
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <span>
 
 #include <arrow/array.h>
 #include <arrow/compute/api_aggregate.h>
+#include "../_array_hash.h"
 #include "../_array_utils.h"
 #include "../_bodo_common.h"
+#include "../_bodo_to_arrow.h"
 #include "../_datetime_utils.h"
 #include "../_dict_builder.h"
 #include "../_distributed.h"
 #include "../_memory_budget.h"
+#include "../_nested_loop_join_impl.h"
 #include "../_query_profile_collector.h"
 #include "../_shuffle.h"
 #include "../_table_builder_utils.h"
@@ -768,7 +772,7 @@ inline void produce_probe_output(
             has_match = true;
         }
         if (build_table_outer) {
-            SetBitTo(partition_build_table_matched_->data(), j_build, 1);
+            SetBitTo(partition_build_table_matched_->data(), j_build, true);
         }
         build_idxs.push_back(j_build);
         probe_idxs.push_back(i_row);
@@ -816,7 +820,8 @@ void generate_build_table_outer_rows_for_partition(
     bodo::vector<int64_t>& probe_idxs) {
     auto& build_table_matched_ = partition->build_table_matched_guard.value();
     if (requires_reduction) {
-        MPI_Allreduce_bool_or(*build_table_matched_);
+        auto pin = *build_table_matched_;
+        MPI_Allreduce_bool_or({pin.data(), pin.size()});
     }
     int n_pes, my_rank;
     MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
@@ -1044,7 +1049,7 @@ JoinState::JoinState(const std::shared_ptr<bodo::Schema> build_table_schema_,
       build_parallel(build_parallel_),
       probe_parallel(probe_parallel_),
       output_batch_size(output_batch_size_),
-      sync_iter(DEFAULT_SYNC_ITERS),
+
       dummy_probe_table(alloc_table(probe_table_schema_)),
       op_id(op_id_) {
     this->key_dict_builders.resize(this->n_keys);
@@ -1345,8 +1350,8 @@ HashJoinState::HashJoinState(
                 std::shared_ptr<array_info> str_arr =
                     alloc_string_array(Bodo_CTypes::STRING, 2, 0);
                 this->min_max_values.emplace_back(str_arr);
-                str_arr->set_null_bit<bodo_array_type::STRING>(0, 0);
-                str_arr->set_null_bit<bodo_array_type::STRING>(1, 0);
+                str_arr->set_null_bit<bodo_array_type::STRING>(0, false);
+                str_arr->set_null_bit<bodo_array_type::STRING>(1, false);
                 // zero out offsets because there is no data initially
                 offset_t* offsets =
                     str_arr->data2<bodo_array_type::STRING, offset_t>();
@@ -1699,10 +1704,10 @@ void HashJoinState::InitOutputBuffer(
 
 std::string HashJoinState::GetPartitionStateString() const {
     std::string partition_state = "[";
-    for (size_t i = 0; i < this->partitions.size(); i++) {
-        if (this->partitions[i] != nullptr) {
-            size_t num_top_bits = this->partitions[i]->get_num_top_bits();
-            uint32_t top_bitmask = this->partitions[i]->get_top_bitmask();
+    for (const auto& partition : this->partitions) {
+        if (partition != nullptr) {
+            size_t num_top_bits = partition->get_num_top_bits();
+            uint32_t top_bitmask = partition->get_top_bitmask();
             partition_state +=
                 fmt::format("({0}, {1:#b})", num_top_bits, top_bitmask);
         } else {
@@ -2530,8 +2535,9 @@ std::shared_ptr<table_info> filter_na_values(
             can_have_na = true;
             bodo::vector<bool> col_not_na = col->get_notna_vector();
             // Do an elementwise logical and to update not_na
-            std::transform(not_na.begin(), not_na.end(), col_not_na.begin(),
-                           not_na.begin(), std::logical_and<>());
+            std::transform(not_na.begin(), not_na.end(),  // NOLINT
+                           col_not_na.begin(), not_na.begin(),
+                           std::logical_and<>());
         }
     }
     if (!can_have_na) {
@@ -2655,7 +2661,7 @@ void update_build_min_max_state_numeric(
         T existing_min_value = getv<T>(min_max_arr, 0);
         if (!min_max_arr->get_null_bit(0) || min_value < existing_min_value) {
             getv<T>(min_max_arr, 0) = min_value;
-            min_max_arr->set_null_bit(0, 1);
+            min_max_arr->set_null_bit(0, true);
         }
         // Extract the max scalar and potentially update the value
         // stored in row #1 of the corresponding array.
@@ -2664,7 +2670,7 @@ void update_build_min_max_state_numeric(
         T existing_max_value = getv<T>(min_max_arr, 1);
         if (!min_max_arr->get_null_bit(1) || max_value > existing_max_value) {
             getv<T>(min_max_arr, 1) = max_value;
-            min_max_arr->set_null_bit(1, 1);
+            min_max_arr->set_null_bit(1, true);
         }
     }
 }
@@ -4087,7 +4093,7 @@ table_info* join_probe_consume_batch_py_entry(
     }
 #endif
 
-            bool contain_non_equi_cond = join_state->cond_func != NULL;
+            bool contain_non_equi_cond = join_state->cond_func != nullptr;
 
             bool has_bloom_filter = join_state->global_bloom_filter != nullptr;
 
@@ -4198,7 +4204,7 @@ table_info* join_probe_consume_batch_py_entry(
         return out_table;
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
-        return NULL;
+        return nullptr;
     }
 }
 
@@ -4428,7 +4434,7 @@ PyObject* get_runtime_join_filter_min_max_py_entrypt(JoinState* join_state,
 #undef RTJF_MIN_MAX_NUMERIC_CASE
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
-        return 0;
+        return nullptr;
     }
 }
 
@@ -4542,9 +4548,9 @@ PyObject* get_runtime_join_filter_unique_values_py_entrypt(
 
 PyMODINIT_FUNC PyInit_stream_join_cpp(void) {
     PyObject* m;
-    MOD_DEF(m, "stream_join_cpp", "No docs", NULL);
-    if (m == NULL)
-        return NULL;
+    MOD_DEF(m, "stream_join_cpp", "No docs", nullptr);
+    if (m == nullptr)
+        return nullptr;
 
     bodo_common_init();
 

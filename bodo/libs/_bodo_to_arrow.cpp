@@ -2,7 +2,6 @@
 #include "_bodo_to_arrow.h"
 
 #include <cassert>
-#include <iostream>
 #include <memory>
 
 #include <arrow/array.h>
@@ -12,7 +11,6 @@
 
 #include "_array_utils.h"
 #include "_bodo_common.h"
-#include "_datetime_utils.h"
 
 /**
  * @brief Create a nullbit mask for use in an arrow array

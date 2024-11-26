@@ -10,13 +10,12 @@
 #include "./test.hpp"
 
 #include <algorithm>
-#include <cstdio>
 #include <cstdlib>
 #include <functional>
 #include <memory>
-#include <mutex>
 #include <string>
 #include <thread>
+#include <utility>
 #include <vector>
 
 #include "arrow/status.h"
@@ -65,7 +64,7 @@ struct task_slow_add {
     const double seconds_;
 };
 
-typedef std::function<void(int, int, int*)> AddTaskFunc;
+using AddTaskFunc = std::function<void(int, int, int*)>;
 
 template <typename T>
 static T add(T x, T y) {
@@ -89,16 +88,16 @@ class AddTester {
     explicit AddTester(int nadds, arrow::StopToken stop_token =
                                       arrow::StopToken::Unstoppable())
         : nadds_(nadds),
-          stop_token_(stop_token),
+          stop_token_(std::move(stop_token)),
           xs_(nadds),
           ys_(nadds),
           outs_(nadds, -1) {
         int x = 0, y = 0;
-        std::generate(xs_.begin(), xs_.end(), [&] {
+        std::ranges::generate(xs_, [&] {
             ++x;
             return x;
         });
-        std::generate(ys_.begin(), ys_.end(), [&] {
+        std::ranges::generate(ys_, [&] {
             y += 10;
             return y;
         });

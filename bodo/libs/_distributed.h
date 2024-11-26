@@ -10,7 +10,6 @@
 #include <vector>
 
 #include "_bodo_common.h"
-#include "_decimal_ext.h"
 #include "_mpi.h"
 
 // Helper macro to make an MPI call that returns an error code. In case of an
@@ -102,8 +101,7 @@ static void dist_reduce(char* in_ptr, char* out_ptr, int op, int type_enum,
                         int64_t comm_ptr) __UNUSED__;
 static void decimal_reduce(int64_t index, uint64_t* in_ptr, char* out_ptr,
                            int op, int type_enum) __UNUSED__;
-template <typename Alloc>
-static void MPI_Allreduce_bool_or(std::vector<uint8_t, Alloc>& V) __UNUSED__;
+static void MPI_Allreduce_bool_or(std::span<uint8_t>) __UNUSED__;
 static void dist_exscan(char* in_ptr, char* out_ptr, int op,
                         int type_enum) __UNUSED__;
 
@@ -699,8 +697,7 @@ static void dist_reduce(char* in_ptr, char* out_ptr, int op_enum, int type_enum,
     }
 }
 
-template <typename Alloc>
-static void MPI_Allreduce_bool_or(std::vector<uint8_t, Alloc>& V) {
+static void MPI_Allreduce_bool_or(std::span<uint8_t> V) {
     int len = V.size();
     MPI_Datatype mpi_typ8 = get_MPI_typ(Bodo_CTypes::UINT8);
     CHECK_MPI(

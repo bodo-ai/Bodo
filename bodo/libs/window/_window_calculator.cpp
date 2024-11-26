@@ -1,9 +1,10 @@
 // Copyright (C) 2024 Bodo Inc. All rights reserved.
 #include "_window_calculator.h"
+
+#include <utility>
 #include "../_array_utils.h"
 #include "../_bodo_common.h"
 #include "../_memory.h"
-#include "../_shuffle.h"
 #include "../_table_builder_utils.h"
 #include "../groupby/_groupby_common.h"
 #include "../groupby/_groupby_do_apply_to_column.h"
@@ -80,12 +81,12 @@ class BaseWindowCalculator {
         bool _is_empty, bodo::IBufferPool *const _pool,
         std::shared_ptr<::arrow::MemoryManager> _mm)
         : pool(_pool),
-          mm(_mm),
-          schema(_schema),
-          chunks(_chunks),
-          order_col_indices(_order_col_indices),
-          input_col_indices(_input_col_indices),
-          builders(_builders),
+          mm(std::move(_mm)),
+          schema(std::move(_schema)),
+          chunks(std::move(_chunks)),
+          order_col_indices(std::move(_order_col_indices)),
+          input_col_indices(std::move(_input_col_indices)),
+          builders(std::move(_builders)),
           is_empty(_is_empty) {}
 
     virtual ~BaseWindowCalculator() = default;
@@ -233,10 +234,10 @@ class RowNumberWindowCalculator : public BaseWindowCalculator<OrderByArrType> {
         }
     }
 
-    virtual void ComputePartition(size_t partition_start_chunk,
-                                  size_t partition_start_row,
-                                  size_t partition_end_chunk,
-                                  size_t partition_end_row, bool is_last) {
+    void ComputePartition(size_t partition_start_chunk,
+                          size_t partition_start_row,
+                          size_t partition_end_chunk, size_t partition_end_row,
+                          bool is_last) override {
         // Skip if the input data was empty.
         if (this->is_empty) {
             return;
@@ -275,10 +276,10 @@ class RowNumberWindowCalculator : public BaseWindowCalculator<OrderByArrType> {
         }
     }
 
-    virtual size_t NumAuxillaryColumns() { return 1; }
+    size_t NumAuxillaryColumns() override { return 1; }
 
-    virtual void GetLastRowInfo(
-        std::vector<std::shared_ptr<array_info>> &out_cols) {
+    void GetLastRowInfo(
+        std::vector<std::shared_ptr<array_info>> &out_cols) override {
         // Allocate a single column storing the last row_number value.
         std::shared_ptr<array_info> row_number_arr =
             alloc_numpy(1, Bodo_CTypes::UINT64);
@@ -305,13 +306,15 @@ class RowNumberWindowCalculator : public BaseWindowCalculator<OrderByArrType> {
      * - first_partition_row_end: used to determine up to which row in
      *   first_partition_chunk_end to update.
      */
-    virtual void UpdateBoundaryInfo(
-        std::shared_ptr<table_info> &first_boundary_info,
-        std::shared_ptr<table_info> &last_boundary_info, size_t rank_idx,
-        size_t func_offset, size_t start_partition, size_t start_order,
-        size_t end_partition, size_t end_order,
-        size_t first_partition_chunk_end, size_t first_partition_row_end,
-        size_t last_partition_chunk_start, size_t last_partition_row_start) {
+    void UpdateBoundaryInfo(std::shared_ptr<table_info> &first_boundary_info,
+                            std::shared_ptr<table_info> &last_boundary_info,
+                            size_t rank_idx, size_t func_offset,
+                            size_t start_partition, size_t start_order,
+                            size_t end_partition, size_t end_order,
+                            size_t first_partition_chunk_end,
+                            size_t first_partition_row_end,
+                            size_t last_partition_chunk_start,
+                            size_t last_partition_row_start) override {
         // Compute the sum of the row_number values from previous ranks
         // in the same partition.
         size_t row_number_offset = 0;
@@ -954,10 +957,10 @@ class SimpleAggregationWindowCalculator
         }
     }
 
-    virtual void ComputePartition(size_t partition_start_chunk,
-                                  size_t partition_start_row,
-                                  size_t partition_end_chunk,
-                                  size_t partition_end_row, bool is_last) {
+    void ComputePartition(size_t partition_start_chunk,
+                          size_t partition_start_row,
+                          size_t partition_end_chunk, size_t partition_end_row,
+                          bool is_last) override {
         if (this->is_empty) {
             return;
         }
@@ -1087,7 +1090,7 @@ class SimpleAggregationWindowCalculator
                                      : last_row;
 
                 for (size_t row = start_row; row <= end_row; row++) {
-                    agg_chunk->set_null_bit(row, 0);
+                    agg_chunk->set_null_bit(row, false);
                 }
 
                 agg_chunk->unpin();
@@ -1145,7 +1148,7 @@ class SimpleAggregationWindowCalculator
                             size_t first_partition_chunk_end,
                             size_t first_partition_row_end,
                             size_t last_partition_chunk_start,
-                            size_t last_partition_row_start) {
+                            size_t last_partition_row_start) override {
         if (this->is_empty) {
             return;
         }
@@ -1204,10 +1207,7 @@ class SimpleAggregationWindowCalculator
             // chunk with that value.
             if (partition_agg->arr_type == bodo_array_type::NUMPY ||
                 partition_agg->get_null_bit(0)) {
-                for (size_t chunk_idx = 0; chunk_idx < agg_chunks.size();
-                     chunk_idx++) {
-                    std::shared_ptr<array_info> agg_chunk =
-                        agg_chunks[chunk_idx];
+                for (auto agg_chunk : agg_chunks) {
                     agg_chunk->pin();
                     fill_numeric_array_with_value(agg_chunk, partition_agg, 0,
                                                   agg_chunk->length);
@@ -1338,7 +1338,7 @@ class SizeWindowCalculator
     void ComputePartition(size_t partition_start_chunk,
                           size_t partition_start_row,
                           size_t partition_end_chunk, size_t partition_end_row,
-                          bool is_last) {
+                          bool is_last) override {
         if (this->is_empty) {
             return;
         }
@@ -1475,7 +1475,7 @@ class NumericFirstLastWindowCalculator
                             size_t first_partition_chunk_end,
                             size_t first_partition_row_end,
                             size_t last_partition_chunk_start,
-                            size_t last_partition_row_start) {
+                            size_t last_partition_row_start) override {
         if (this->is_empty) {
             return;
         }
@@ -1569,9 +1569,9 @@ class WindowCollectionComputer {
           mm(_mm),
           schema(_schema),
           chunks(_chunks),
-          partition_col_indices(_partition_col_indices),
+          partition_col_indices(std::move(_partition_col_indices)),
           order_col_indices(_order_col_indices),
-          keep_indices(_keep_indices),
+          keep_indices(std::move(_keep_indices)),
           builders(_builders),
           is_parallel(_is_parallel) {
         // Verify whether the current rank is all-empty.

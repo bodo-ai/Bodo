@@ -435,7 +435,7 @@ static bodo::tests::suite tests([] {
                         std::to_string(batch).substr(0, 1));
                     nulls.push_back(true);
                 } else {
-                    data.push_back("");
+                    data.emplace_back("");
                     nulls.push_back(false);
                 }
                 row_id++;

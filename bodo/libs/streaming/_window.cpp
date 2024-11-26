@@ -1,9 +1,9 @@
 #include "_window.h"
 #include <vector>
-#include "../_array_operations.h"
+
 #include "../_array_utils.h"
 #include "../_bodo_common.h"
-#include "../_distributed.h"
+#include "../_memory_budget.h"
 #include "../groupby/_groupby_ftypes.h"
 #include "../window/_window_calculator.h"
 #include "../window/_window_compute.h"
@@ -413,8 +413,7 @@ void WindowState::ReportBuildMetrics() {
     // to be updated.
     DictBuilderMetrics dict_builder_metrics;
     MetricBase::StatValue n_dict_builders = 0;
-    for (size_t i = 0; i < this->sorter.GetDictBuilders().size(); i++) {
-        const auto& dict_builder = this->sorter.GetDictBuilders()[i];
+    for (const auto& dict_builder : this->sorter.GetDictBuilders()) {
         if (dict_builder != nullptr) {
             dict_builder_metrics.add_metrics(dict_builder->GetMetrics());
             n_dict_builders++;
@@ -780,7 +779,7 @@ table_info* window_produce_output_batch_py_entry(WindowState* window_state,
         return new table_info(*out);
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
-        return NULL;
+        return nullptr;
     }
 }
 
@@ -794,9 +793,9 @@ void delete_window_state(WindowState* window_state) { delete window_state; }
 
 PyMODINIT_FUNC PyInit_stream_window_cpp(void) {
     PyObject* m;
-    MOD_DEF(m, "stream_window_cpp", "No docs", NULL);
-    if (m == NULL)
-        return NULL;
+    MOD_DEF(m, "stream_window_cpp", "No docs", nullptr);
+    if (m == nullptr)
+        return nullptr;
 
     bodo_common_init();
 

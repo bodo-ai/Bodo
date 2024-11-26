@@ -1,11 +1,4 @@
 // Copyright (C) 2019 Bodo Inc. All rights reserved.
-/**
- * @author Ehsan (ehsan@bodo-inc.com)
- * @brief Bodo array and table C++ library to allocate arrays, perform parallel
- * shuffle, perform array and table operations like join, groupby
- * @date 2019-10-06
- */
-
 #include <Python.h>
 #include <datetime.h>
 #include <iostream>
@@ -317,7 +310,7 @@ void info_to_struct_array(array_info* info, int64_t* n_items,
     int64_t n_null_bytes = (info->length + 7) >> 3;
     int64_t null_itemsize = numpy_item_size[Bodo_CTypes::UINT8];
     *null_bitmap_arr = make_numpy_array_payload(
-        nulls_meminfo, NULL, n_null_bytes, null_itemsize,
+        nulls_meminfo, nullptr, n_null_bytes, null_itemsize,
         (char*)nulls_meminfo->data, n_null_bytes, null_itemsize);
 }
 
@@ -839,7 +832,7 @@ inline PyObject* value_to_pyobject(const char* data, int64_t ind,
         std::cerr << "data type " << dtype
                   << " not supported for boxing array(item) array."
                   << std::endl;
-    return NULL;
+    return nullptr;
 }
 
 /**
@@ -990,9 +983,9 @@ table_info* retrieve_table_py_entry(table_info* in_table,
 
 PyMODINIT_FUNC PyInit_array_ext(void) {
     PyObject* m;
-    MOD_DEF(m, "array_ext", "No docs", NULL);
-    if (m == NULL)
-        return NULL;
+    MOD_DEF(m, "array_ext", "No docs", nullptr);
+    if (m == nullptr)
+        return nullptr;
 
     // init datetime APIs
     PyDateTime_IMPORT;

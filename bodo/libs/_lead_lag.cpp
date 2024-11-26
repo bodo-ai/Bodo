@@ -1,11 +1,3 @@
-/**
- * @file _lead_lag.cpp
- * @author Benjamin Owad (benjamin@bodo.ai)
- * @brief Implementation for lead/lag SQL functions.
- *
- * @copyright Copyright (C) 2023 Bodo Inc. All rights reserved.
- *
- */
 #include "_lead_lag.h"
 
 #include <algorithm>
@@ -737,9 +729,9 @@ array_info *lead_lag_seq_py_entry(array_info *in_raw, int64_t shift_amt,
 // Initialize lead_lag_seq_py function for usage with python
 PyMODINIT_FUNC PyInit_lead_lag(void) {
     PyObject *m;
-    MOD_DEF(m, "lead_lag", "No docs", NULL);
-    if (m == NULL) {
-        return NULL;
+    MOD_DEF(m, "lead_lag", "No docs", nullptr);
+    if (m == nullptr) {
+        return nullptr;
     }
 
     bodo_common_init();

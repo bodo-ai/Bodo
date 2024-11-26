@@ -1,20 +1,20 @@
 #include "_shuffle.h"
 
 #include <iostream>
+#include <memory>
 #include <numeric>
 #include <optional>
 
 #include <arrow/util/bit_util.h>
-#include "../_mpi.h"
+#include <fmt/format.h>
 
 #include "../_array_hash.h"
-#include "../_array_utils.h"
 #include "../_bodo_common.h"
 #include "../_dict_builder.h"
+#include "../_mpi.h"
 #include "../_query_profile_collector.h"
 #include "../_shuffle.h"
 #include "../_utils.h"
-#include "fmt/format.h"
 
 void IncrementalShuffleMetrics::add_to_metrics(
     std::vector<MetricBase>& metrics) {
@@ -164,8 +164,8 @@ void IncrementalShuffleState::ResetAfterShuffle() {
     if (capacity >
             (SHUFFLE_BUFFER_CUTOFF_MULTIPLIER * this->shuffle_threshold) &&
         (capacity * SHUFFLE_BUFFER_MIN_UTILIZATION) > buffer_used_size) {
-        this->table_buffer.reset(
-            new TableBuildBuffer(this->schema, this->dict_builders));
+        this->table_buffer = std::make_unique<TableBuildBuffer>(
+            this->schema, this->dict_builders);
         this->metrics.n_buffer_resets++;
     } else {
         this->table_buffer->Reset();
@@ -600,8 +600,7 @@ void AsyncShuffleRecvState::TryRecvMetadataAndAllocArrs(
     len_iter_t lens_iter = metadata_vec.cbegin() + 1;
 
     // Post irecv for all data
-    for (uint64_t i = 0; i < schema->column_types.size(); i++) {
-        std::unique_ptr<bodo::DataType>& data_type = schema->column_types[i];
+    for (auto& data_type : schema->column_types) {
         std::shared_ptr<array_info> out_arr =
             recv_shuffle_data_unknown_type<true>(
                 data_type, shuffle_comm, source, curr_tag, *this, lens_iter);

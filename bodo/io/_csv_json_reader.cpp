@@ -15,13 +15,11 @@
 #include <Python.h>
 #include <mpi.h>
 #include <algorithm>
-#include <cinttypes>
 #include <ciso646>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
-#include <sstream>
 #include <string>
 #include <vector>
 
@@ -31,7 +29,6 @@
 #include "../libs/_distributed.h"
 #include "_bodo_file_reader.h"
 #include "_fs_io.h"
-#include "structmember.h"
 
 // lines argument of read_json(lines = json_lines)
 // when json_lines=true, we are reading Json line format where each
@@ -116,7 +113,7 @@ class SkiprowsListInfo {
         read_start_offset.resize(len + 1);
         read_end_offset.resize(len + 1);
     }
-    ~SkiprowsListInfo() {}
+    ~SkiprowsListInfo() = default;
 
     bool is_skiprows_list;
     int64_t num_skiprows;
@@ -160,7 +157,7 @@ class PathInfo {
         obtain_file_names_and_sizes();
         obtain_compression_scheme(compression_pyarg);
     }
-    ~PathInfo() {}
+    ~PathInfo() = default;
 
     /// get the compression scheme used by this file(s)
     const std::string &get_compression_scheme() const { return compression; }
@@ -316,8 +313,8 @@ class PathInfo {
                     std::vector<arrow::fs::FileInfo> file_infos =
                         file_infos_results.ValueOrDie();
                     // sort files by name
-                    std::sort(file_infos.begin(), file_infos.end(),
-                              arrow::fs::FileInfo::ByPath{});
+                    std::ranges::sort(file_infos,
+                                      arrow::fs::FileInfo::ByPath{});
 
                     for (auto &fi : file_infos) {
                         const std::string &path = fi.path();
@@ -386,7 +383,7 @@ class PathInfo {
                           "error on MPI_Bcast:");
                 char *cur_str = str_data.data();
                 while (cur_str < str_data.data() + recv_size) {
-                    file_names.push_back(cur_str);
+                    file_names.emplace_back(cur_str);
                     cur_str += file_names.back().size() + 1;
                 }
                 file_sizes.resize(file_names.size());
@@ -461,17 +458,19 @@ class LocalFileReader : public SingleFileReader {
         CHECK(fstream->good() && !fstream->eof() && fstream->is_open(),
               "could not open file.");
     }
-    uint64_t getSize() { return std::filesystem::file_size(fname); }
-    bool seek(int64_t pos) {
+    uint64_t getSize() override { return std::filesystem::file_size(fname); }
+    bool seek(int64_t pos) override {
         this->fstream->seekg(pos + this->csv_header_bytes, std::ios_base::beg);
         return this->ok();
     }
-    bool ok() { return (this->fstream->good() and !this->fstream->eof()); }
-    bool read_to_buff(char *s, int64_t size) {
+    bool ok() override {
+        return (this->fstream->good() and !this->fstream->eof());
+    }
+    bool read_to_buff(char *s, int64_t size) override {
         this->fstream->read(s, size);
         return this->ok();
     }
-    virtual ~LocalFileReader() {
+    ~LocalFileReader() override {
         if (fstream)
             delete fstream;
     }
@@ -506,12 +505,11 @@ class LocalDirectoryFileReader : public DirectoryFileReader {
                 ("No valid file to read from directory: " + dirname).c_str());
         }
         // sort all files in directory
-        std::sort(this->file_paths.begin(), this->file_paths.end());
+        std::ranges::sort(this->file_paths);
 
         // find & set all file name
-        for (auto it = this->file_paths.begin(); it != this->file_paths.end();
-             ++it) {
-            (this->file_names).push_back((*it).string());
+        for (auto &file_path : this->file_paths) {
+            (this->file_names).push_back(file_path.string());
         }
 
         // find and set header row size in bytes
@@ -520,16 +518,15 @@ class LocalDirectoryFileReader : public DirectoryFileReader {
         // find dir_size and construct file_sizes
         // assuming the directory contains files only, i.e. no subdirectory
         this->dir_size = 0;
-        for (auto it = this->file_paths.begin(); it != this->file_paths.end();
-             ++it) {
+        for (auto &file_path : this->file_paths) {
             (this->file_sizes).push_back(this->dir_size);
-            this->dir_size += std::filesystem::file_size(*it);
+            this->dir_size += std::filesystem::file_size(file_path);
             this->dir_size -= this->csv_header_bytes;
         }
         this->file_sizes.push_back(this->dir_size);
     };
 
-    void initFileReader(const char *fname) {
+    void initFileReader(const char *fname) override {
         this->f_reader =
             new LocalFileReader(fname, this->f_type_to_string(),
                                 this->csv_header, this->json_lines);
@@ -541,7 +538,7 @@ class LocalDirectoryFileReader : public DirectoryFileReader {
 // Our file-like object for reading chunks in a std::istream
 // ***********************************************************************************
 
-typedef struct {
+using stream_reader = struct {
     PyObject_HEAD
         /* Your internal buffer, size and pos */
         FileReader *ifs;  // input stream
@@ -570,7 +567,7 @@ typedef struct {
     class SkiprowsListInfo *skiprows_list_info;
     bool csv_header;  // whether file(s) has header or not (needed for knowing
                       // whether skiprows are 1-based or 0-based indexing)
-} stream_reader;
+};
 
 static void stream_reader_dealloc(stream_reader *self) {
     // we own the stream!
@@ -599,9 +596,9 @@ static PyObject *stream_reader_new(PyTypeObject *type, PyObject *args,
     stream_reader *self = (stream_reader *)type->tp_alloc(type, 0);
     if (PyErr_Occurred()) {
         PyErr_Print();
-        return NULL;
+        return nullptr;
     }
-    self->ifs = NULL;
+    self->ifs = nullptr;
     self->chunk_start = 0;
     self->chunk_size = 0;
     self->chunk_pos = 0;
@@ -611,7 +608,7 @@ static PyObject *stream_reader_new(PyTypeObject *type, PyObject *args,
     self->chunksize_rows = 0;
     self->is_parallel = false;
     self->header_size_bytes = 0;
-    self->path_info = NULL;
+    self->path_info = nullptr;
     self->first_read = false;
     self->buf = std::make_shared<bodo::vector<char>>(0);
 
@@ -705,21 +702,21 @@ static void stream_reader_init(stream_reader *self, FileReader *ifs,
 // does not read beyond end of our chunk (even if file continues)
 static PyObject *stream_reader_read(stream_reader *self, PyObject *args) {
     // partially copied from from CPython's stringio.c
-    if (self->ifs == NULL) {
+    if (self->ifs == nullptr) {
         PyErr_SetString(PyExc_ValueError,
                         "I/O operation on uninitialized StreamReader object");
-        return NULL;
+        return nullptr;
     }
     Py_ssize_t size, n;
 
     PyObject *arg = Py_None;
     if (!PyArg_ParseTuple(args, "|O:read", &arg)) {
-        return NULL;
+        return nullptr;
     }
     if (PyNumber_Check(arg)) {
         size = PyNumber_AsSsize_t(arg, PyExc_OverflowError);
         if (size == -1 && PyErr_Occurred()) {
-            return NULL;
+            return nullptr;
         }
     } else if (arg == Py_None) {
         /* Read until EOF is reached, by default. */
@@ -727,7 +724,7 @@ static PyObject *stream_reader_read(stream_reader *self, PyObject *args) {
     } else {
         PyErr_Format(PyExc_TypeError, "integer argument expected, got '%s'",
                      Py_TYPE(arg)->tp_name);
-        return NULL;
+        return nullptr;
     }
     /* adjust invalid sizes */
     n = self->chunk_size - self->chunk_pos;
@@ -742,7 +739,7 @@ static PyObject *stream_reader_read(stream_reader *self, PyObject *args) {
     self->chunk_pos += size;
     if (!ok) {
         std::cerr << "Failed reading " << size << " bytes" << std::endl;
-        return NULL;
+        return nullptr;
     }
     // buffer_rd_bytes() function of pandas expects a Bytes object
     // using PyUnicode_FromStringAndSize is wrong since 'size'
@@ -753,7 +750,7 @@ static PyObject *stream_reader_read(stream_reader *self, PyObject *args) {
 // Needed to make Pandas accept it, never used
 static PyObject *stream_reader_iternext(PyObject *self) {
     std::cerr << "iternext not implemented";
-    return NULL;
+    return nullptr;
 };
 
 // Update stream_reader with next chunk data and update its metadata
@@ -785,7 +782,7 @@ static PyMethodDef stream_reader_methods[] = {
         METH_VARARGS,
         "Update reader with next chunk info.",
     },
-    {NULL} /* Sentinel */
+    {nullptr} /* Sentinel */
 };
 
 // the actual Python type class
@@ -795,37 +792,37 @@ static PyTypeObject stream_reader_type = {
     0,                                                       /*tp_itemsize*/
     (destructor)stream_reader_dealloc,                       /*tp_dealloc*/
     0,                                                       /*tp_print*/
-    0,                                                       /*tp_getattr*/
-    0,                                                       /*tp_setattr*/
-    0,                                                       /*tp_compare*/
-    0,                                                       /*tp_repr*/
-    0,                                                       /*tp_as_number*/
-    0,                                                       /*tp_as_sequence*/
-    0,                                                       /*tp_as_mapping*/
-    0,                                                       /*tp_hash */
-    0,                                                       /*tp_call*/
-    0,                                                       /*tp_str*/
-    0,                                                       /*tp_getattro*/
-    0,                                                       /*tp_setattro*/
-    0,                                                       /*tp_as_buffer*/
+    nullptr,                                                 /*tp_getattr*/
+    nullptr,                                                 /*tp_setattr*/
+    nullptr,                                                 /*tp_compare*/
+    nullptr,                                                 /*tp_repr*/
+    nullptr,                                                 /*tp_as_number*/
+    nullptr,                                                 /*tp_as_sequence*/
+    nullptr,                                                 /*tp_as_mapping*/
+    nullptr,                                                 /*tp_hash */
+    nullptr,                                                 /*tp_call*/
+    nullptr,                                                 /*tp_str*/
+    nullptr,                                                 /*tp_getattro*/
+    nullptr,                                                 /*tp_setattro*/
+    nullptr,                                                 /*tp_as_buffer*/
     Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE,                /*tp_flags*/
     "stream_reader objects",                                 /* tp_doc */
-    0,                                                       /* tp_traverse */
-    0,                                                       /* tp_clear */
-    0,                      /* tp_richcompare */
+    nullptr,                                                 /* tp_traverse */
+    nullptr,                                                 /* tp_clear */
+    nullptr,                /* tp_richcompare */
     0,                      /* tp_weaklistoffset */
     stream_reader_iternext, /* tp_iter */
     stream_reader_iternext, /* tp_iternext */
     stream_reader_methods,  /* tp_methods */
-    0,                      /* tp_members */
-    0,                      /* tp_getset */
-    0,                      /* tp_base */
-    0,                      /* tp_dict */
-    0,                      /* tp_descr_get */
-    0,                      /* tp_descr_set */
+    nullptr,                /* tp_members */
+    nullptr,                /* tp_getset */
+    nullptr,                /* tp_base */
+    nullptr,                /* tp_dict */
+    nullptr,                /* tp_descr_get */
+    nullptr,                /* tp_descr_set */
     0,                      /* tp_dictoffset */
     stream_reader_pyinit,   /* tp_init */
-    0,                      /* tp_alloc */
+    nullptr,                /* tp_alloc */
     stream_reader_new,      /* tp_new */
 };
 
@@ -955,17 +952,17 @@ class MemReader : public FileReader {
         data.reserve(size);
     }
 
-    virtual ~MemReader() {}
+    ~MemReader() override = default;
 
     /**
      * Return total size of data.
      */
-    uint64_t getSize() { return data.size() - start; }
+    uint64_t getSize() override { return data.size() - start; }
 
     /**
      * Read size bytes into given buffer s (from current position)
      */
-    bool read(char *s, int64_t size) {
+    bool read(char *s, int64_t size) override {
         memcpy(s, data.data() + pos, size);
         pos += size;
         return true;
@@ -974,7 +971,7 @@ class MemReader : public FileReader {
     /**
      * Seek pos_req bytes into data.
      */
-    bool seek(int64_t pos_req) {
+    bool seek(int64_t pos_req) override {
         pos = pos_req + start;
         status_ok = pos >= start && pos < int64_t(data.size());
         return status_ok;
@@ -983,13 +980,13 @@ class MemReader : public FileReader {
     /**
      * Returns reader status.
      */
-    bool ok() { return status_ok; }
+    bool ok() override { return status_ok; }
 
     /// not used by MemReader
     bool read_to_buff(char *s, int64_t size) { return false; }
 
     /// not used by MemReader
-    bool skipHeaderRows() { return this->csv_header; };
+    bool skipHeaderRows() override { return this->csv_header; };
 
     /**
      * Calculate row offsets for current data (fills row_offsets attribute).
@@ -1453,7 +1450,7 @@ void calc_row_transfer(const std::vector<int64_t> &num_rows, int64_t total_rows,
     if (rows_left == 0)
         return;
 
-    typedef std::pair<int64_t, int64_t> range;
+    using range = std::pair<int64_t, int64_t>;
     // my current row range (in global dataset)
     range my_cur_range(start_row_global, start_row_global + num_rows[myrank]);
 
@@ -1502,10 +1499,9 @@ void balance_rows(MemReader *reader) {
 
     // check that all ranks have same number of rows. in that case there is no
     // need to do anything
-    auto result =
-        std::minmax_element(num_rows_ranks.begin(), num_rows_ranks.end());
-    int64_t min = *result.first;
-    int64_t max = *result.second;
+    auto result = std::ranges::minmax_element(num_rows_ranks);
+    int64_t min = *result.min;
+    int64_t max = *result.max;
     if (min == max)
         return;  // already balanced
 
@@ -2124,7 +2120,7 @@ extern "C" PyObject *file_chunk_reader(
     bool is_skiprows_list = false, int64_t skiprows_list_len = 0,
     bool pd_low_memory = false) {
     try {
-        CHECK(fname != NULL, "NULL filename provided.");
+        CHECK(fname != nullptr, "NULL filename provided.");
         tracing::Event ev("file_chunk_reader", is_parallel);
         if (storage_options == Py_None)
             throw std::runtime_error("ParquetReader: storage_options is None");
@@ -2138,7 +2134,7 @@ extern "C" PyObject *file_chunk_reader(
             // returns borrowed ref
             PyObject *s3fs_anon_py =
                 PyDict_GetItemString(storage_options, "anon");
-            if (s3fs_anon_py != NULL && s3fs_anon_py == Py_True) {
+            if (s3fs_anon_py != nullptr && s3fs_anon_py == Py_True) {
                 is_anon = true;
             }
         } else {
@@ -2166,7 +2162,7 @@ extern "C" PyObject *file_chunk_reader(
             new PathInfo(fname, compression_pyarg, bucket_region, is_anon);
         if (!path_info->is_path_valid()) {
             delete path_info;
-            return NULL;
+            return nullptr;
         }
         const std::string compression = path_info->get_compression_scheme();
         SkiprowsListInfo *skiprows_list_info =
@@ -2415,12 +2411,12 @@ extern "C" PyObject *file_chunk_reader(
         PyObject *reader =
             PyObject_CallFunctionObjArgs((PyObject *)&stream_reader_type, NULL);
         PyGILState_Release(gilstate);
-        if (reader == NULL || PyErr_Occurred()) {
+        if (reader == nullptr || PyErr_Occurred()) {
             PyErr_Print();
             std::cerr << "Could not create chunk reader object" << std::endl;
             if (reader)
                 delete reader;
-            reader = NULL;
+            reader = nullptr;
         } else {
             stream_reader_init(
                 reinterpret_cast<stream_reader *>(reader), mem_reader, 0,
@@ -2431,7 +2427,7 @@ extern "C" PyObject *file_chunk_reader(
         return reader;
     } catch (const std::exception &e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
-        return NULL;
+        return nullptr;
     }
 }
 #undef MEMORY_LOAD_FACTOR

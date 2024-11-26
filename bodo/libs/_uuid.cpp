@@ -51,9 +51,9 @@ void uuidV5(char* output, char* namespace_, int64_t ns_length, char* name,
 
 PyMODINIT_FUNC PyInit_uuid_cpp(void) {
     PyObject* m;
-    MOD_DEF(m, "uuid_cpp", "No docs", NULL);
-    if (m == NULL) {
-        return NULL;
+    MOD_DEF(m, "uuid_cpp", "No docs", nullptr);
+    if (m == nullptr) {
+        return nullptr;
     }
 
     bodo_common_init();

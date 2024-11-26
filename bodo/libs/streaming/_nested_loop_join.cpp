@@ -1,7 +1,7 @@
+#include "../_nested_loop_join.h"
 #include "../_bodo_common.h"
 #include "../_distributed.h"
 #include "../_join.h"
-#include "../_nested_loop_join_impl.h"
 #include "../_query_profile_collector.h"
 #include "../_shuffle.h"
 #include "_join.h"
@@ -248,18 +248,15 @@ void nested_loop_join_local_chunk(
     bodo::vector<int64_t> probe_idxs;
 
 #ifndef JOIN_TABLE_LOCAL
-#define JOIN_TABLE_LOCAL(build_table_outer, probe_table_outer,              \
-                         non_equi_condition, build_table_outer_exp,         \
-                         probe_table_outer_exp, non_equi_condition_exp)     \
-    if (build_table_outer == build_table_outer_exp &&                       \
-        probe_table_outer == probe_table_outer_exp &&                       \
-        non_equi_condition == non_equi_condition_exp) {                     \
-        nested_loop_join_table_local<                                       \
-            probe_table_outer_exp, build_table_outer_exp,                   \
-            non_equi_condition_exp, bodo::PinnableAllocator<std::uint8_t>>( \
-            probe_table, build_table, cond_func, false, probe_idxs,         \
-            build_idxs, probe_table_matched, *build_table_matched_guard,    \
-            build_table_offset);                                            \
+#define JOIN_TABLE_LOCAL(build_table_outer, probe_table_outer,           \
+                         build_table_outer_exp, probe_table_outer_exp)   \
+    if (build_table_outer == build_table_outer_exp &&                    \
+        probe_table_outer == probe_table_outer_exp) {                    \
+        nested_loop_join_table_local<probe_table_outer_exp,              \
+                                     build_table_outer_exp>(             \
+            probe_table, build_table, cond_func, false, probe_idxs,      \
+            build_idxs, probe_table_matched, *build_table_matched_guard, \
+            build_table_offset);                                         \
     }
 #endif
 
@@ -269,31 +266,14 @@ void nested_loop_join_local_chunk(
     cond_expr_fn_batch_t cond_func =
         (cond_expr_fn_batch_t)join_state->cond_func;
 
-    bool non_equi_condition = cond_func != nullptr;
     JOIN_TABLE_LOCAL(join_state->build_table_outer,
-                     join_state->probe_table_outer, non_equi_condition, true,
-                     true, true)
+                     join_state->probe_table_outer, true, true)
     JOIN_TABLE_LOCAL(join_state->build_table_outer,
-                     join_state->probe_table_outer, non_equi_condition, true,
-                     true, false)
+                     join_state->probe_table_outer, true, false)
     JOIN_TABLE_LOCAL(join_state->build_table_outer,
-                     join_state->probe_table_outer, non_equi_condition, true,
-                     false, true)
+                     join_state->probe_table_outer, false, true)
     JOIN_TABLE_LOCAL(join_state->build_table_outer,
-                     join_state->probe_table_outer, non_equi_condition, true,
-                     false, false)
-    JOIN_TABLE_LOCAL(join_state->build_table_outer,
-                     join_state->probe_table_outer, non_equi_condition, false,
-                     true, true)
-    JOIN_TABLE_LOCAL(join_state->build_table_outer,
-                     join_state->probe_table_outer, non_equi_condition, false,
-                     true, false)
-    JOIN_TABLE_LOCAL(join_state->build_table_outer,
-                     join_state->probe_table_outer, non_equi_condition, false,
-                     false, true)
-    JOIN_TABLE_LOCAL(join_state->build_table_outer,
-                     join_state->probe_table_outer, non_equi_condition, false,
-                     false, false)
+                     join_state->probe_table_outer, false, false)
 
     time_pt start_append = start_timer();
     join_state->output_buffer->AppendJoinOutput(
@@ -440,7 +420,7 @@ static inline bool nested_loop_join_stream_sync_is_last(bool local_is_last,
     // We must synchronize if either we have a distributed build or an
     // LEFT/FULL OUTER JOIN where probe is distributed.
     // When build is parallel, every iteration has blocking collectives (bcast
-    // and allreduce for outer case) so is_last sync has to be blocking as well
+    // and all-reduce for outer case) so is_last sync has to be blocking as well
     // to make sure the same number of blocking collectives are called on every
     // rank. When build is not parallel, is_last sync has to be non-blocking
     // since the number of iterations per rank can be variable.
@@ -542,9 +522,10 @@ bool nested_loop_join_probe_consume_batch(
 
         time_pt start_append;
         for (const auto& build_table : *join_state->build_table_buffer) {
+            auto pinned_match = *build_table_matched_pin;
             add_unmatched_rows(
-                *build_table_matched_pin, build_table->nrows(), build_idxs,
-                probe_idxs,
+                {pinned_match.data(), pinned_match.size()},
+                build_table->nrows(), build_idxs, probe_idxs,
                 !join_state->build_parallel && join_state->probe_parallel,
                 build_table_offset);
             start_append = start_timer();

@@ -264,14 +264,13 @@ struct pinnable_ptr {
 
 /// Shared state to support copying of PinnableAllocator
 struct PinnableAllocatorState {
-    inline PinnableAllocatorState(IBufferPool *pool)
-        : pool_(pool), ptrs_(nullptr) {};
+    inline PinnableAllocatorState(IBufferPool *pool) : pool_(pool) {};
 
     /// @brief The pool we will allocate from
     IBufferPool *const pool_;
 
     /// @brief A doubly linked list of pointers allocated from this pool
-    pinnable_ptr_base *ptrs_;
+    pinnable_ptr_base *ptrs_{nullptr};
 };
 
 // C++-compatible allocator that keeps track of allocations from the given
@@ -426,17 +425,17 @@ struct pinning_traits {
     /// For example, bodo::vector<T, Allocator>'s 'pinnable_type' is
     /// bodo::vector<T, Allocator1> where Allocator1 is the pinning allocator
     /// corresponding to Allocator (see bodo::pinning_allocator_traits)
-    using pinnable_type = std::enable_if_t<std::is_arithmetic<T>::value, T>;
+    using pinnable_type = std::enable_if_t<std::is_arithmetic_v<T>, T>;
 
     /// @brief The allocator type that  this container should use. For STL
     /// containers, this is just 'typename pinnable_type::allocator_type', but
     /// primitive types don't have that, so we have it here.
     using allocator_type =
-        std::enable_if<std::is_arithmetic<T>::value, PinnableAllocator<T>>;
+        std::enable_if<std::is_arithmetic_v<T>, PinnableAllocator<T>>;
 
     /// @brief Bool value indicating whether the type is actually pinnable. By
     /// default all C++ primitive ints and floats (not pointers) are pinnable.
-    static constexpr bool is_pinnable = std::is_arithmetic<T>::value;
+    static constexpr bool is_pinnable = std::is_arithmetic_v<T>;
 };
 
 template <typename K, typename V>
@@ -573,3 +572,5 @@ struct pinnable {
     friend class ::bodo::pin_guard;
 };
 }  // namespace bodo
+
+namespace std {}

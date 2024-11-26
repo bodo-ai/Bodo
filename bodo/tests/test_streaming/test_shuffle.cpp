@@ -4,6 +4,7 @@
 #include <sstream>
 #include "../../libs/_dict_builder.h"
 #include "../../libs/_distributed.h"
+#include "../../libs/groupby/_groupby_ftypes.h"
 #include "../../libs/streaming/_groupby.h"
 #include "../../libs/streaming/_shuffle.h"
 #include "../table_generator.hpp"
@@ -26,7 +27,9 @@ class IncrementalShuffleStateTest : public IncrementalShuffleState {
         const uint64_t n_keys_, const uint64_t& curr_iter_, int64_t& sync_freq_)
         : IncrementalShuffleState(schema_, dict_builders_, n_keys_, curr_iter_,
                                   sync_freq_, -1) {};
-    void ResetAfterShuffle() { IncrementalShuffleState::ResetAfterShuffle(); }
+    void ResetAfterShuffle() override {
+        IncrementalShuffleState::ResetAfterShuffle();
+    }
 };
 
 std::shared_ptr<table_info> test_shuffle(std::shared_ptr<table_info> table) {

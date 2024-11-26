@@ -1,5 +1,7 @@
 #include <fmt/core.h>
+#include <algorithm>
 #include <sstream>
+
 #include "../libs/_array_hash.h"
 #include "../libs/_array_utils.h"
 #include "../libs/_bodo_common.h"
@@ -116,8 +118,7 @@ std::shared_ptr<array_info> get_sample_struct(size_t nfields = 1) {
     auto struct_arr = alloc_struct(10, children);
     // Name the fields alphabetically
     for (size_t i = 0; i < nfields; ++i) {
-        struct_arr->field_names.push_back(
-            std::string(i / 26 + 1, 'a' + i % 26));
+        struct_arr->field_names.emplace_back(i / 26 + 1, 'a' + i % 26);
     }
     return struct_arr;
 }
@@ -415,7 +416,7 @@ static bodo::tests::suite tests([] {
 
         // Set a value to null and ensure it is not equal
         // arr1 = [[0], [1,2,3,4], [5,6], null, [7,8,9]]
-        arr1->set_null_bit(3, 0);
+        arr1->set_null_bit(3, false);
         check_row_helper(arr1, arr2, {true, true, true, false, true});
     });
     bodo::tests::test("test_struct_array_comparison", [] {
@@ -445,13 +446,13 @@ static bodo::tests::suite tests([] {
 
         // Set a value to null and ensure it is not equal
         // struct_arr1 = [{"a":-1, "b":0}, null, {"a":0, "b":1} ...]
-        struct_arr1->set_null_bit(1, 0);
+        struct_arr1->set_null_bit(1, false);
         truth_vec[1] = false;
         check_row_helper(struct_arr1, struct_arr2, truth_vec);
 
         // Check structs with different numbers of fields are not equal
         auto struct_arr3 = get_sample_struct(1);
-        std::fill(truth_vec.begin(), truth_vec.end(), false);
+        std::fill(truth_vec.begin(), truth_vec.end(), false);  // NOLINT
         check_row_helper(struct_arr2, struct_arr3, truth_vec);
     });
     bodo::tests::test("test_map_array_comparison", [] {
@@ -488,7 +489,7 @@ static bodo::tests::suite tests([] {
         // Set a value to null and ensure it is not equal
         // map_arr1 = [{"0":0}, {"2":2, "1":1, "3":3}, {"5":5, "6":6}, null,
         // {"7":7, "8":8, "9":9}]
-        map_arr1->set_null_bit(3, 0);
+        map_arr1->set_null_bit(3, false);
         check_row_helper(map_arr1, map_arr2, {true, true, true, false, true});
     });
     bodo::tests::test("test_array_item_array_hashing", [] {
@@ -540,11 +541,11 @@ static bodo::tests::suite tests([] {
 
         // Set a value to null and ensure it is not equal
         // arr1 = [[0], [1,2,3,4], [5,6], null, [7,8,9]]
-        arr1->set_null_bit(3, 0);
+        arr1->set_null_bit(3, false);
         hash_array(hashes1.get(), arr1, 5, 0, false, false);
         hash_array(hashes2.get(), arr2, 5, 0, false, false);
         check_hashes_helper(hashes1, hashes2, {true, true, true, false, true});
-        arr1->set_null_bit(3, 1);
+        arr1->set_null_bit(3, true);
 
         // Check arrays compared from different start_row_offsets hash the same
         hash_array(hashes1.get(), arr1, 5, 0, false, false);
@@ -591,13 +592,13 @@ static bodo::tests::suite tests([] {
 
         // Set a value to null and ensure it is not equal
         // struct_arr1 = [{"a":-1, "b":0}, null, {"a":0, "b":1} ...]
-        struct_arr1->set_null_bit(1, 0);
+        struct_arr1->set_null_bit(1, false);
         hash_array(hashes1.get(), struct_arr1, 10, 0, false, false);
         hash_array(hashes2.get(), struct_arr2, 10, 0, false, false);
         check_hashes_helper(
             hashes1, hashes2,
             {true, false, true, true, true, true, true, true, true, true});
-        struct_arr1->set_null_bit(1, 1);
+        struct_arr1->set_null_bit(1, true);
 
         // Check structs with different numbers of fields hashes are different
         auto struct_arr3 = get_sample_struct(1);
@@ -684,11 +685,11 @@ static bodo::tests::suite tests([] {
         // Set a value to null and ensure it is not equal
         // map_arr = [[{'0':0}, {'2':2, '1':1, '3':3, '4':4}, {'5':5, '6':6},
         // null, {'7':7, '8':8, '9':9}]]
-        map_arr->set_null_bit(3, 0);
+        map_arr->set_null_bit(3, false);
         hash_array(hashes1.get(), map_arr, 5, 0, false, false);
         hash_array(hashes2.get(), map_arr2, 5, 0, false, false);
         check_hashes_helper(hashes1, hashes2, {true, true, true, false, true});
-        map_arr->set_null_bit(3, 1);
+        map_arr->set_null_bit(3, true);
 
         // Check that two values with different start offsets hash the same
         hash_array(hashes1.get(), map_arr, 5, 0, false, false);
@@ -699,8 +700,8 @@ static bodo::tests::suite tests([] {
         auto arr1 = get_sample_array_item();
         auto arr2 = get_sample_array_item();
         // Set row 0 to null
-        arr1->child_arrays[0]->set_null_bit(0, 0);
-        arr2->child_arrays[0]->set_null_bit(0, 0);
+        arr1->child_arrays[0]->set_null_bit(0, false);
+        arr2->child_arrays[0]->set_null_bit(0, false);
         bodo::tests::check(TestEqualColumn(arr1, 0, arr2, 0, false) == false);
         bodo::tests::check(TestEqualColumn(arr1, 0, arr2, 0, true) == true);
     });
