@@ -91,6 +91,7 @@ class FilesystemTestHarness(DDLTestHarness):
         ).toPandas()
         return output
 
+    @run_rank0
     def describe_table(self, table_identifier, spark=False):
         if not spark:
             # Spark does not support time fields, so we use bodo

@@ -216,6 +216,9 @@ def check_table_comment(
         column_comments (bool, optional): Whether the test case will test column comments. Defaults to False.
     """
 
+    if bodo.get_rank() != 0:
+        return
+
     spark = get_spark_tabular(tabular_connection)
     table_cmt = (
         spark.sql(f"DESCRIBE TABLE EXTENDED {schema}.{table_name}")

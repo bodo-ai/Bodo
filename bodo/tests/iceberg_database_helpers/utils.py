@@ -5,6 +5,8 @@ from typing import NamedTuple
 import pandas as pd
 from pyspark.sql import SparkSession
 
+import bodo
+
 DATABASE_NAME = "iceberg_db"
 
 
@@ -32,6 +34,12 @@ SPARK_JAR_PACKAGES = [
 
 
 def get_spark(path: str = ".") -> SparkSession:
+    import bodo
+
+    # Only run Spark on one rank to run faster and avoid Spark issues
+    if bodo.get_rank() != 0:
+        return None
+
     def do_get_spark():
         builder = SparkSession.builder.appName("spark")
         builder.config("spark.jars.packages", ",".join(SPARK_JAR_PACKAGES))
@@ -99,6 +107,8 @@ def get_spark(path: str = ".") -> SparkSession:
 
 
 def get_spark_tabular(tabular_connection, path="."):
+    if bodo.get_rank() != 0:
+        return None
     spark = get_spark(path=path)
     spark.sql("use default;")
     return spark

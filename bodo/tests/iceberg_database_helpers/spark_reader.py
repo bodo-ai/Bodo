@@ -25,6 +25,20 @@ def read_iceberg_table(table_name, database_name, spark=None):
     return pd_df, count, spark_schema
 
 
+def read_iceberg_table_single_rank(table_name, database_name, spark=None):
+    import bodo
+    from bodo.mpi4py import MPI
+
+    if bodo.get_rank() == 0:
+        py_out, _, _ = read_iceberg_table(table_name, database_name)
+    else:
+        py_out = None
+
+    comm = MPI.COMM_WORLD
+    py_out = comm.bcast(py_out, root=0)
+    return py_out
+
+
 if __name__ == "__main__":
     table_name = sys.argv[1]
     database_name = sys.argv[2]

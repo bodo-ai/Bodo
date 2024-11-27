@@ -73,6 +73,7 @@ def view_helper(tabular_connection, view_name, create=True):
         destroy_view()
 
 
+@pytest_mark_one_rank
 def test_create_view(tabular_catalog, tabular_connection, memory_leak_check):
     """Tests that Bodo can create a view using a Tabular catalog."""
     bc = bodosql.BodoSQLContext(catalog=tabular_catalog)
@@ -215,6 +216,7 @@ def view_helper_nontrivialview(bc, tabular_connection, view_name, create=True):
         destroy_view()
 
 
+@pytest_mark_one_rank
 @pytest.mark.parametrize("purge", [True, False])
 def test_iceberg_drop_table_purge_sql(
     purge, tabular_catalog, tabular_connection, memory_leak_check
@@ -235,6 +237,7 @@ def test_iceberg_drop_table_purge_sql(
     bc.sql(query_drop_table)
 
 
+@pytest_mark_one_rank
 @pytest.mark.parametrize("purge", [True, False])
 def test_iceberg_drop_table_purge(
     purge, tabular_catalog, tabular_connection, memory_leak_check
@@ -270,6 +273,7 @@ def _test_equal_par(bodo_output, py_output):
     assert n_passed == bodo.get_size(), "Parallel test failed"
 
 
+@pytest_mark_one_rank
 @pytest.mark.parametrize("describe_keyword", ["DESCRIBE", "DESC"])
 def test_iceberg_describe_view_basic(
     describe_keyword, tabular_catalog, tabular_connection, memory_leak_check
@@ -315,6 +319,7 @@ def test_iceberg_describe_view_basic(
         )
 
 
+@pytest_mark_one_rank
 @pytest.mark.parametrize("describe_keyword", ["DESCRIBE", "DESC"])
 def test_iceberg_describe_view_error_does_not_exist(
     describe_keyword, tabular_catalog, memory_leak_check
@@ -618,6 +623,7 @@ def check_row_exists(output, row):
 ###################
 
 
+@pytest_mark_one_rank
 @pytest.mark.parametrize("if_exists", [True, False])
 def test_iceberg_drop_view(
     if_exists, tabular_catalog, tabular_connection, memory_leak_check

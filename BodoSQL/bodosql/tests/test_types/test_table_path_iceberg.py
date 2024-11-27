@@ -77,7 +77,7 @@ def test_simple_table_read(
         df = bc.sql("SELECT * FROM iceberg_tbl")
         return df
 
-    py_out, _, _ = spark_reader.read_iceberg_table(table_name, db_schema)
+    py_out = spark_reader.read_iceberg_table_single_rank(table_name, db_schema)
 
     if table_name == "SIMPLE_BOOL_BINARY_TABLE":
         # Bodo outputs binary data as bytes while Spark does bytearray (which Bodo doesn't support),
@@ -132,7 +132,7 @@ def test_column_pruning(memory_leak_check, iceberg_database, iceberg_table_conn)
         df = bc.sql("SELECT A, C FROM iceberg_tbl")
         return df
 
-    py_out, _, _ = spark_reader.read_iceberg_table(table_name, db_schema)
+    py_out = spark_reader.read_iceberg_table_single_rank(table_name, db_schema)
     py_out = py_out[["A", "C"]]
 
     stream = io.StringIO()
@@ -174,7 +174,7 @@ def test_zero_columns_pruning(memory_leak_check, iceberg_database, iceberg_table
         df = bc.sql("SELECT COUNT(*) as cnt FROM iceberg_tbl")
         return df
 
-    py_out, _, _ = spark_reader.read_iceberg_table(table_name, db_schema)
+    py_out = spark_reader.read_iceberg_table_single_rank(table_name, db_schema)
     py_out = pd.DataFrame({"CNT": len(py_out)}, index=pd.RangeIndex(0, 1, 1))
 
     stream = io.StringIO()
@@ -217,7 +217,7 @@ def test_explicit_dict_encoding(
         df = bc.sql("SELECT A, C FROM iceberg_tbl")
         return df
 
-    py_out, _, _ = spark_reader.read_iceberg_table(table_name, db_schema)
+    py_out = spark_reader.read_iceberg_table_single_rank(table_name, db_schema)
     py_out = py_out[["A", "C"]]
 
     stream = io.StringIO()
@@ -264,7 +264,7 @@ def test_implicit_dict_encoding(
         df = bc.sql("select C, B FROM iceberg_tbl")
         return df
 
-    py_out, _, _ = spark_reader.read_iceberg_table(table_name, db_schema)
+    py_out = spark_reader.read_iceberg_table_single_rank(table_name, db_schema)
     py_out = py_out[["C", "B"]]
 
     stream = io.StringIO()
@@ -430,7 +430,7 @@ def test_iceberg_in_pushdown(memory_leak_check, iceberg_database, iceberg_table_
         df = bc.sql("select A from iceberg_tbl WHERE A in ('A', 'C')")
         return df
 
-    py_out, _, _ = spark_reader.read_iceberg_table(table_name, db_schema)
+    py_out = spark_reader.read_iceberg_table_single_rank(table_name, db_schema)
     py_out = py_out[["A"]][(py_out["A"] == "A") | (py_out["A"] == "C")]
 
     # make sure filter pushdown worked
