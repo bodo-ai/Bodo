@@ -1,4 +1,3 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """Test supported sklearn preprocessing models and methods"""
 
 import random

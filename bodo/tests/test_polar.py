@@ -1,6 +1,4 @@
-# Copyright (C) 2023 Bodo Inc. All rights reserved.
-
-"""E2E and unit tests for the polar_format function."""
+"""E2E and unit tests for the polar_format function in the workload."""
 
 import numpy as np
 import pytest

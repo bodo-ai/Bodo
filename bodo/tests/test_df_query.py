@@ -1,4 +1,3 @@
-# Copyright (C) 2019 Bodo Inc.
 """Test df.query()"""
 
 import numpy as np

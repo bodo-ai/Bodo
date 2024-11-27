@@ -1,4 +1,3 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """Helper information to keep table column deletion
 pass organized. This contains information about all
 table operations for optimizations.

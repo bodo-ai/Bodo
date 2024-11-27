@@ -1,4 +1,3 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
 File that contains the main functionality for the Iceberg
 integration within the Bodo repo. This does not contain the

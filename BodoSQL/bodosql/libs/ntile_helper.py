@@ -1,4 +1,3 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
 Library of BodoSQL functions used to emulate MYSQL's ntile function
 """

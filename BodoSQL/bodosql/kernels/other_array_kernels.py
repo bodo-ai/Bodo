@@ -1,4 +1,3 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
 Implements miscellaneous array kernels that are specific to BodoSQL
 """

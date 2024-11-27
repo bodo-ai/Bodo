@@ -1,4 +1,3 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
 Implements array operations used by parallel only implementations.
 This is used for functions that aren't inlined to avoid compilation

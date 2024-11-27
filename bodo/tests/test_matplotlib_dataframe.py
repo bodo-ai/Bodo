@@ -1,4 +1,3 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
 Tests for Matplotlib support inside Bodo. Matplotlib
 generally requires comparing visuals, so we write all

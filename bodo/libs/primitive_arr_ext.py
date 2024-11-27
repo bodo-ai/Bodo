@@ -1,4 +1,3 @@
-# Copyright (C) 2023 Bodo Inc. All rights reserved.
 """Basic 1D array of primitive fixed-sized values to replace character Numpy array in
 string array payload.
 The goal is to avoid storing data pointer directly to allow meminfo pointer changes in

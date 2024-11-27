@@ -1,4 +1,3 @@
-# Copyright (C) 2024 Bodo Inc. All rights reserved.
 """Utilities for aggregating query profiles from multiple ranks into a single
 profile"""
 

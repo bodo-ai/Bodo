@@ -1,4 +1,3 @@
-# Copyright (C) 2023 Bodo Inc. All rights reserved.
 """
 Script to convert the parquet file containing the queries with their relevant costs
 into a directory of SQL files.

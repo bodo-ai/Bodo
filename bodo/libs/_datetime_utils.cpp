@@ -1,4 +1,3 @@
-// Copyright (C) 2022 Bodo Inc. All rights reserved.
 
 /**
  * Datetime helper functions used in files that are

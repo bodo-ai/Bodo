@@ -1,4 +1,3 @@
-# Copyright (C) 2023 Bodo Inc. All rights reserved.
 """State and API information for using dictionary encoded arrays
 in a streaming fashion with a goal of minimizing the amount of computation.
 These implementations are focused on SQL Projection and Filter operations

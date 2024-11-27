@@ -1,4 +1,3 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
 List BodoSQL functions that have fixed args and variadic args
 for use in distibuted_analysis.py.

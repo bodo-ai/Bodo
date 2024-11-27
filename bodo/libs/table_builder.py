@@ -1,4 +1,3 @@
-# Copyright (C) 2023 Bodo Inc. All rights reserved.
 """Interface to C++ TableBuilderState/ChunkedTableBuilderState"""
 
 from functools import cached_property

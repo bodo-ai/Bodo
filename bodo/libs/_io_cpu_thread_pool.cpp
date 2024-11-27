@@ -1,4 +1,3 @@
-// Copyright (C) 2024 Bodo Inc. All rights reserved.
 
 #include "_io_cpu_thread_pool.h"
 #include <arrow/util/io_util.h>

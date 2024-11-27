@@ -1,4 +1,3 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """Nullable float array corresponding to Pandas FloatingArray.
 However, nulls are stored in bit arrays similar to Arrow's arrays.
 """

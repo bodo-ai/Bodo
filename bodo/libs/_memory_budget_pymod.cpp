@@ -1,4 +1,3 @@
-// Copyright (C) 2023 Bodo Inc. All rights reserved.
 // We define the python module in a separate file so that
 // the BufferPool/OperatorBufferPool Cython extension
 // doesn't need to include _bodo_common.h (and its dependencies).

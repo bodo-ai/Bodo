@@ -1,4 +1,3 @@
-# Copyright (C) 2024 Bodo Inc. All rights reserved.
 """
 File that contains tests for optional data file metrics.
 For any primitive type this should produce a value count, null count,

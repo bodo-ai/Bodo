@@ -1,4 +1,3 @@
-# Copyright (C) 2024 Bodo Inc. All rights reserved.
 """Aggregate query profile logs:
 usage: python -m bodo.utils.query_profile_collector_aggregator <dir>
 """

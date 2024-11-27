@@ -1,4 +1,3 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """Tests for array of struct values."""
 
 import numpy as np

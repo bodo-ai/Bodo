@@ -1,4 +1,3 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """DatetimeArray extension for Pandas DatetimeArray with timezone support."""
 
 import datetime

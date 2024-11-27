@@ -1,4 +1,3 @@
-# Copyright (C) 2023 Bodo Inc. All rights reserved.
 # distutils: language = c++
 
 # Declare raw C++ library APIs from _memory.h for usage in Cython.

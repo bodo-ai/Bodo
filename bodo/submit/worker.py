@@ -1,4 +1,3 @@
-# Copyright (C) 2024 Bodo Inc. All rights reserved.
 """Worker process to handle compiling and running python functions with
 Bodo - note that this module should only be run with MPI.Spawn and not invoked
 directly"""

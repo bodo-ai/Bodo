@@ -2,7 +2,6 @@
 catalog contains all information needed to connect use Tabular Iceberg catalog for organizing and modifying tables.
 """
 
-# Copyright (C) 2024 Bodo Inc. All rights reserved.
 import os
 
 import numba

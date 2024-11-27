@@ -1,4 +1,3 @@
-// Copyright (C) 2024 Bodo Inc. All rights reserved.
 #include "_window_calculator.h"
 
 #include <utility>

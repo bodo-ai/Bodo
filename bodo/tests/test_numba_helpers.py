@@ -1,4 +1,3 @@
-# Copyright (C) 2023 Bodo Inc. All rights reserved.
 """
 Tests for numba internals that require patching. These mostly consist
 of tests ported from Numba and possibly modified to test inside Bodo.

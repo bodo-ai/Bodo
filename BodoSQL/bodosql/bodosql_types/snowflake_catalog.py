@@ -3,7 +3,6 @@ catalog contains all information needed to connect to a Snowflake account
 in Java and load relevant schema information.
 """
 
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 from copy import deepcopy
 
 from numba.core import types

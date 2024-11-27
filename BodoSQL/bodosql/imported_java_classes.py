@@ -1,4 +1,3 @@
-# Copyright (C) 2023 Bodo Inc. All rights reserved.
 """
 Common location for importing all java classes from Py4j. This is used so they
 can be imported in multiple locations.

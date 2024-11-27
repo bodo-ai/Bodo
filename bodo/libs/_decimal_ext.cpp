@@ -1,4 +1,3 @@
-// Copyright (C) 2020 Bodo Inc. All rights reserved.
 // C/C++ code for DecimalArray handling
 #include <Python.h>
 #include <arrow/util/basic_decimal.h>

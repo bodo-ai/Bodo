@@ -1,4 +1,3 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """Tests I/O for HDF5 Files"""
 
 import h5py

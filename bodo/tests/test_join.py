@@ -1,4 +1,3 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """Test join operations like df.merge(), df.join(), pd.merge_asof() ..."""
 
 import io

@@ -1,4 +1,3 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
 Test File for pd_timedelta types. Checks that proper error messages are raised.
 """

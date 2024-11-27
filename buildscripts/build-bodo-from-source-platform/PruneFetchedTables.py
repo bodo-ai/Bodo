@@ -1,4 +1,3 @@
-# Copyright (C) 2023 Bodo Inc. All rights reserved.
 """
 Script that takes the table file output of BodoSQLFetchTablesWrapper.py
 and reduces the file to the set of unique table names.

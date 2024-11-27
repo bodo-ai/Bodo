@@ -1,4 +1,3 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
 File to support the numpy file IO API (np.fromfile(), np.tofile()).
 The actual definition of fromfile is inside untyped pass with the

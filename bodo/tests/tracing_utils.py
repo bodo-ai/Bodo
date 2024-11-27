@@ -1,6 +1,5 @@
 """Utility functions for writing Bodo tests using tracing."""
 
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 import json
 import os
 import subprocess

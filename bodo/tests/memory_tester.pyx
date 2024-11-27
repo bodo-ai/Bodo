@@ -1,5 +1,3 @@
-# Copyright (C) 2023 Bodo Inc. All rights reserved.
-
 # cython: profile=False
 # distutils: language = c++
 # cython: embedsignature = True

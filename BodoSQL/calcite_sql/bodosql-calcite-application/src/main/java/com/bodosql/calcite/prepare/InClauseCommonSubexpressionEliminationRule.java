@@ -1,5 +1,4 @@
 /*
- * Copyright (C) 2023 Bodo Inc.
  * This file is modified from Dremio's implementation.
  *
  * Copyright (C) 2017-2019 Dremio Corporation

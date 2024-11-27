@@ -1,4 +1,3 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
 Test File for pd_timedelta types. Covers basic functionality of boxing, unboxing,
 lowering, fields and methods.

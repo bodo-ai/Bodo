@@ -1,4 +1,3 @@
-# Copyright (C) 2024 Bodo Inc. All rights reserved.
 """
 Implements the parse url array kernel, specific to BodoSQL. This is done in it's own file due to the number
 of helper functions needed.
