@@ -6,21 +6,48 @@ on:
     types: [published]
   schedule:
     - cron: '45 21 * * 2,4'    # 9:45PM EST Tue, Thu
+  pull_request:
+    paths:
+      - 'pixi.lock'
+      - '.github/workflows/build_wheels.yml'
+      - '.github/workflows/_build_bodo_pip.yml'
 
 jobs:
+  get_version:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          # For setuptools_scm to be able to determine version,
+          # we need to fetch the entire history
+          fetch-depth: 0
+      - name: Get Version String
+        id: get_vstr
+        run: |
+          set -exo pipefail
+          pip install setuptools_scm
+          echo "bodo_version=`python -m setuptools_scm`" >> $GITHUB_OUTPUT
+    outputs:
+      bodo_version: ${{ steps.get_vstr.outputs.bodo_version }}
+
   build_bodo_linux_wheels:
     uses: ./.github/workflows/_build_bodo_pip.yml
+    needs: [get_version]
     with:
       os: ubuntu-latest
+      bodo_version: ${{ needs.get_version.outputs.bodo_version }}
     secrets: inherit
-
   build_bodo_macos_wheels:
     uses: ./.github/workflows/_build_bodo_pip.yml
+    needs: [get_version]
     strategy:
+      fail-fast: false
       matrix:
         os: [macos-13, macos-14]
     with:
       os: ${{ matrix.os }}
+      bodo_version: ${{ needs.get_version.outputs.bodo_version }}
     secrets: inherit
 
   test-bodo-linux:
