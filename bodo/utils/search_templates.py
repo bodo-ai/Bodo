@@ -1,4 +1,3 @@
-# Copyright (C) 2024 Bodo Inc. All rights reserved.
 """Determines amount of coverage based on a list of APIs. This list of API's is assumed
 to be a text file where each line is a path which includes everything after the library
 for example: "Series.str.decode\n read_csv\n"

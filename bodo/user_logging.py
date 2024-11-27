@@ -1,5 +1,3 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
-
 """
 Contains all of the helper functions and state information
 for user logging. This includes helpers for setting debug

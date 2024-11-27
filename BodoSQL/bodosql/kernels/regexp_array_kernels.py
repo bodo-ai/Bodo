@@ -1,4 +1,3 @@
-# Copyright (C) 2019 Bodo Inc. All rights reserved.
 """
 Implements regexp array kernels that are specific to BodoSQL
 """

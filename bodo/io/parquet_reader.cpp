@@ -1,4 +1,3 @@
-// Copyright (C) 2021 Bodo Inc. All rights reserved.
 
 // Implementation of ParquetReader (subclass of ArrowReader) with
 // functionality that is specific to reading parquet datasets

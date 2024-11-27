@@ -1,4 +1,3 @@
-# Copyright (C) 2023 Bodo Inc. All rights reserved.
 """File with common fixtures used for testing snowflake catalog."""
 
 import os

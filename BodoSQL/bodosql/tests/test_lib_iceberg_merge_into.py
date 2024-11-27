@@ -2,7 +2,6 @@
 Tests helper functions used in our MERGE_INTO implementation, specifically those defined
 at BodoSQL/bodosql/libs/merge_into.py
 """
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 
 import io
 import random

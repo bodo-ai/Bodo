@@ -1,4 +1,3 @@
-// Copyright (C) 2024 Bodo Inc. All rights reserved.
 
 // Implementation of SnowflakeReader (subclass of ArrowReader) with
 // functionality that is specific to reading from Snowflake

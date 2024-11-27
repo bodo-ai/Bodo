@@ -1,4 +1,3 @@
-# Copyright (C) 2024 Bodo Inc. All rights reserved.
 """
 Helper script to enable converting a snowflake native table to a Snowflake managed
 iceberg table, while retaining the original table in Snowflake. This script can

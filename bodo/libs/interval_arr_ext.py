@@ -1,4 +1,3 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
 Array of intervals corresponding to IntervalArray of Pandas.
 Used for IntervalIndex, which is necessary for Series.value_counts() with 'bins'

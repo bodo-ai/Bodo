@@ -1,5 +1,3 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
-
 import re
 from decimal import Decimal
 

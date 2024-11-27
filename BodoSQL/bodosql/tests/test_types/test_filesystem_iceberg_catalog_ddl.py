@@ -1,4 +1,3 @@
-# Copyright (C) 2024 Bodo Inc. All rights reserved.
 """
 Tests the general Iceberg DDL functionality with the file system catalog.
 

@@ -1,4 +1,3 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
 Implements a number of array kernels that handling casting functions for BodoSQL
 """

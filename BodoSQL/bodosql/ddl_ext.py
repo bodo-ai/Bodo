@@ -1,4 +1,3 @@
-# Copyright (C) 2024 Bodo Inc. All rights reserved.
 """
 BodoSQL runtime interface for DDL operations.
 Eventually all DDL operations are actually executed by the planner

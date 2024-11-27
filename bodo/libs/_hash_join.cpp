@@ -1,4 +1,3 @@
-// Copyright (C) 2019 Bodo Inc. All rights reserved.
 #include <algorithm>
 
 #include "_array_hash.h"

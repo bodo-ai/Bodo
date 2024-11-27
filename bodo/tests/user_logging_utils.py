@@ -1,4 +1,3 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
 Utility functions to help write tests that depend on the
 bodo logging level.

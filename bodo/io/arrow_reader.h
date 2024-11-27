@@ -1,4 +1,3 @@
-// Copyright (C) 2021 Bodo Inc. All rights reserved.
 
 // Here we define ArrowReader base class and TableBuilder which are
 // used to read Arrow tables into Bodo. Note that we use Arrow to read parquet

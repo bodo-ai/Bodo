@@ -1,4 +1,3 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
 Test SQL operations that should produce understandable errors on BodoSQL
 """

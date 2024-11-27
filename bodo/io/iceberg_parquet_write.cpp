@@ -1,4 +1,3 @@
-// Copyright (C) 2022 Bodo Inc. All rights reserved.
 
 // Functions to write Bodo arrays to Iceberg table (parquet format)
 

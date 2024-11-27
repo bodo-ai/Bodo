@@ -1,5 +1,3 @@
-# Copyright (C) 2023 Bodo Inc. All rights reserved.
-
 import datetime
 
 import numpy as np

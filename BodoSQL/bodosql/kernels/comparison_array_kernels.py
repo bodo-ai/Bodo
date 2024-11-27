@@ -1,4 +1,3 @@
-# Copyright (C) 2023 Bodo Inc. All rights reserved.
 """
 Implements comparison operation array kernels that are specific to BodoSQL
 """

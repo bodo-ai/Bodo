@@ -1,4 +1,3 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
 Tests basic components of the SnowflakeCatalog type both inside and outside a
 direct BodoSQLContext. This file does not access Snowflake.

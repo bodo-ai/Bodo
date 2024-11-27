@@ -1,4 +1,3 @@
-// Copyright (C) 2024 Bodo Inc. All rights reserved.
 // https://github.com/apache/arrow/blob/299eb26e8c22b4aad4876c9e3b52f9adde699a5c/cpp/src/gandiva/precompiled/decimal_ops.cc#L331
 // Code heavily copied from the gandiva precompiled code
 // to avoid importing the library.

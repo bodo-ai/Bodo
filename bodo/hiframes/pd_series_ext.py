@@ -1,4 +1,3 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """Implement pd.Series typing and data model handling."""
 
 import operator

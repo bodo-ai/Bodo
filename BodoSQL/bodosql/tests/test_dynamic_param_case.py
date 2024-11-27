@@ -4,7 +4,6 @@ Test that Dynamic Parameters are appropriately handled in case statements.
 
 import re
 
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 import pandas as pd
 import pytest
 

@@ -1,4 +1,3 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
 Implements support for matplotlib extensions such as pyplot.plot.
 """

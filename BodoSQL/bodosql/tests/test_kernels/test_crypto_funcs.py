@@ -1,4 +1,3 @@
-# Copyright (C) 2023 Bodo Inc. All rights reserved.
 """
 Implements tests for the BodoSQL kernels for SHA2 and other crypto functions.
 """

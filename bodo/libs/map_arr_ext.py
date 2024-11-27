@@ -1,4 +1,3 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """Array implementation for map values.
 Corresponds to Spark's MapType: https://spark.apache.org/docs/latest/sql-reference.html
 Corresponds to Arrow's Map arrays: https://github.com/apache/arrow/blob/master/format/Schema.fbs

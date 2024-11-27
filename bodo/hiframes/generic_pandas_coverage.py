@@ -1,5 +1,3 @@
-# Copyright (C) 2024 Bodo Inc. All rights reserved.
-
 import numba
 import numpy as np
 import pandas as pd

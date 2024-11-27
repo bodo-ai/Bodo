@@ -1,4 +1,3 @@
-# Copyright (C) 2023 Bodo Inc. All rights reserved.
 """
 Wrapper script for BodoSQLFetchTables.py. This script is used to run BodoSQLFetchTables.py
 and then parse the logs to get additional information about the tables used by BodoSQL.

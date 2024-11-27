@@ -1,4 +1,3 @@
-# Copyright (C) 2024 Bodo Inc. All rights reserved.
 """
 Tests the core functionality with the file system catalog.
 """

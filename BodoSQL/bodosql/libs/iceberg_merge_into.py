@@ -1,7 +1,6 @@
 """
 Selection of helper functions used in our MERGE_INTO implementation
 """
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 
 import numba
 import pandas as pd

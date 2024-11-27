@@ -1,4 +1,3 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
 Test correctness of the project merge optimization rule used by BodoSQL
 """

@@ -1,4 +1,3 @@
-# Copyright (C) 2024 Bodo Inc. All rights reserved.
 """
 Tests DDL operations on a BodoSQL catalog.
 """

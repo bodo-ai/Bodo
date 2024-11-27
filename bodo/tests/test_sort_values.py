@@ -1,5 +1,3 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
-
 """Test sort_values opration as called as df.sort_values()
 The C++ implementation uses the timsort which is a stable sort algorithm.
 Therefore, in the test we use mergesort, which guarantees that the equality

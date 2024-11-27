@@ -1,4 +1,3 @@
-# Copyright (C) 2024 Bodo Inc. All rights reserved.
 """
 Test correctness of table functions that ping Snowflake for data.
 """

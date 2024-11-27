@@ -1,4 +1,3 @@
-// Copyright (C) 2023 Bodo Inc. All rights reserved.
 #include "_groupby_mpi_exscan.h"
 #include "../_array_hash.h"
 #include "../_array_operations.h"

@@ -1,4 +1,3 @@
-// Copyright (C) 2024 Bodo Inc. All rights reserved.
 
 // Tests for SingleThreadedCpuThreadPool. Based heavily on Arrow's test suite:
 // https://github.com/apache/arrow/blob/apache-arrow-17.0.0/cpp/src/arrow/util/thread_pool_test.cc

@@ -1,4 +1,3 @@
-# Copyright (C) 2024 Bodo Inc. All rights reserved.
 """
 Test correctness of SQL datetime functions with BodoSQL on TIMESTAMP_TZ data
 """

@@ -1,4 +1,3 @@
-# Copyright (C) 2023 Bodo Inc. All rights reserved.
 """Test Bodo's memory budget python interface"""
 
 import bodo

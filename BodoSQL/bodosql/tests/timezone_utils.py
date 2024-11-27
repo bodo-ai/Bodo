@@ -1,4 +1,3 @@
-# Copyright (C) 2024 Bodo Inc. All rights reserved.
 """Common utilities used for timezone testing."""
 
 import datetime

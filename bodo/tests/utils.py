@@ -1,4 +1,3 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
 Utility functions for testing such as check_func() that tests a function.
 """

@@ -1,5 +1,3 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
-
 """
 Tests the logging done with the verbose JIT flag.
 This set of tests is focused on log input, NOT

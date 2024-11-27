@@ -1,4 +1,3 @@
-// Copyright (C) 2019 Bodo Inc. All rights reserved.
 //-----------------------------------------------------------------------------
 // functions here are used in np.tofile() and np.fromfile()
 // file_write_parallel is also used for df.to_csv() distributed writing to posix

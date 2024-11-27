@@ -1,4 +1,3 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """Some kernels for Series related functions. This is a legacy file that needs to be
 refactored.
 """

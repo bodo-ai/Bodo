@@ -1,4 +1,3 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """Old tests for DataFrame values which can be useful since they are different and may
 expose corner cases.
 """

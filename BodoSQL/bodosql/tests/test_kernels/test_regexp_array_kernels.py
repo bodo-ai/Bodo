@@ -1,4 +1,3 @@
-# Copyright (C) 2019 Bodo Inc. All rights reserved.
 """Test Bodo's array kernel utilities for BodoSQL regexp functions"""
 
 import re

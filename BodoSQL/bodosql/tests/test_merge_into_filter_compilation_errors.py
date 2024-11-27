@@ -1,4 +1,3 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
 Tests that check for correct behavior when there is a typing
 error with a variety of filters that may be pushed down.

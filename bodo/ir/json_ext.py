@@ -1,4 +1,3 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 import llvmlite.binding as ll
 import numba
 import numpy as np

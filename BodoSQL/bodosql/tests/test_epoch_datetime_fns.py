@@ -1,4 +1,3 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
 Test correctness of SQL queries that are dependent on time since year 0, or the unix epoch
 """

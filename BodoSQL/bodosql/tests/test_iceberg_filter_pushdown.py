@@ -1,4 +1,3 @@
-# Copyright (C) 2024 Bodo Inc. All rights reserved.
 """
 Basic E2E tests for each type of filter pushdown on Iceberg tables.
 """

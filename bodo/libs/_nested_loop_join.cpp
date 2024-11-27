@@ -1,4 +1,3 @@
-// Copyright (C) 2023 Bodo Inc. All rights reserved.
 #include "_nested_loop_join.h"
 
 #include "_array_utils.h"

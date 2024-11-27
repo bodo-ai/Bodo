@@ -1,4 +1,3 @@
-# Copyright (C) 2024 Bodo Inc. All rights reserved.
 """
 File used to handle the logic for BodoSQL specific calls in the BodoSQL package.
 """

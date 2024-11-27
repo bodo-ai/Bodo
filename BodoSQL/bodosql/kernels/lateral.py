@@ -1,4 +1,3 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
 Implements wrappers to call the C++ BodoSQL array kernels for latteral flatten.
 """

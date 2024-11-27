@@ -1,5 +1,3 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
-
 import pandas as pd
 import pytest
 from caching_tests_common import fn_distribution  # noqa

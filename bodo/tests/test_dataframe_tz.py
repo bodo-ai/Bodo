@@ -1,4 +1,3 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """Checks for functionality on DataFrames containing timezone values."""
 
 import numpy as np

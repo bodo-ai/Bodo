@@ -1,5 +1,3 @@
-# Copyright (C) 2024 Bodo Inc. All rights reserved.
-
 import pandas as pd
 import pyarrow as pa
 

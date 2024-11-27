@@ -1,4 +1,3 @@
-// Copyright (C) 2023 Bodo Inc. All rights reserved.
 
 #include "_groupby_do_apply_to_column.h"
 

@@ -1,4 +1,3 @@
-# Copyright (C) 2023 Bodo Inc. All rights reserved.
 """Interface to C++ memory_budget utilities"""
 
 import llvmlite.binding as ll

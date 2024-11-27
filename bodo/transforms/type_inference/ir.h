@@ -1,4 +1,3 @@
-// Copyright (C) 2024 Bodo Inc. All rights reserved.
 // Missing IR Nodes. All classes are defined but not filled out.
 //  Expressions:
 //  - build_set

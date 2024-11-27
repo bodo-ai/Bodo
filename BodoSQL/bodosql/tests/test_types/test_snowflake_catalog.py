@@ -1,4 +1,3 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
 Tests read and write aspects of the SnowflakeCatalog type both inside and outside a
 direct BodoSQLContext. This requires Snowflake access.

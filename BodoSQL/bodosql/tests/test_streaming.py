@@ -1,4 +1,3 @@
-# Copyright (C) 2023 Bodo Inc. All rights reserved.
 """
 Test correctness of BodoSQL operations that handle streaming data.
 """

@@ -1,4 +1,3 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
 Tests correctness of the In and Not In operations in BodoSQL
 """

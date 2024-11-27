@@ -3,7 +3,6 @@
  * @author Pintao Zou (pintao@bodo.ai)
  * @brief Implementation for SHA2 and other crypto SQL functions.
  *
- * @copyright Copyright (C) 2023 Bodo Inc. All rights reserved.
  *
  */
 #include "_crypto_funcs.h"

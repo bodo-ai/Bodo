@@ -1,7 +1,6 @@
 """
 Test that various numeric builtin functions are properly supported in BODOSQL
 """
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 
 from decimal import Decimal
 
