@@ -1,4 +1,3 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
 Boxing and unboxing support for DataFrame, Series, etc.
 """

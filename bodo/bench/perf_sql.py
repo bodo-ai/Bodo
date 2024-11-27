@@ -1,4 +1,3 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """Measure performance of sql operations."""
 
 import pandas as pd

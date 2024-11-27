@@ -1,4 +1,3 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
 Collection of utility functions. Needs to be refactored in separate files.
 """

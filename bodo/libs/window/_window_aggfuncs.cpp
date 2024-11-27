@@ -1,4 +1,3 @@
-// Copyright (C) 2023 Bodo Inc. All rights reserved.
 // See this link for an explanation of how these aggfuncs work:
 // https://bodo.atlassian.net/wiki/spaces/B/pages/1384546305/Using+and+Expanding+the+Groupby.Window+Infrastructure
 #include "_window_aggfuncs.h"

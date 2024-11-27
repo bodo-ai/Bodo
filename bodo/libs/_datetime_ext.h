@@ -1,4 +1,3 @@
-// Copyright (C) 2020 Bodo Inc. All rights reserved.
 #pragma once
 #include <cstdint>
 

@@ -1,4 +1,3 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
 Implements window/aggregation array kernels that are specific to BodoSQL.
 Specifically, window/aggregation array kernels that do not concern window

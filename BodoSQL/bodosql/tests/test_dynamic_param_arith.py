@@ -1,4 +1,3 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
 Test that Dynamic Parameters can be used in arithmetic operations expressions.
 """

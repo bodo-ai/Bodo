@@ -1,4 +1,3 @@
-# Copyright (C) 2023 Bodo Inc. All rights reserved.
 """
 Tests for the SQL Values syntax that require end to end testing.
 """

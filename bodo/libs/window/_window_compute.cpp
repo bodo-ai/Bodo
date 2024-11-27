@@ -1,4 +1,3 @@
-// Copyright (C) 2023 Bodo Inc. All rights reserved.
 #include "_window_compute.h"
 #include <arrow/util/decimal.h>
 #include <mpi.h>

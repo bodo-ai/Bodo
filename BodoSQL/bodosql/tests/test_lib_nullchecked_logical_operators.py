@@ -1,4 +1,3 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
 Checks the Library of BodoSQL functions that are used for performing "AND" and "OR"
 operations involving potentially null values

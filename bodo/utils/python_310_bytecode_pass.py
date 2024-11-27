@@ -1,4 +1,3 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
 transforms the IR to handle bytecode issues in Python 3.10.
 """

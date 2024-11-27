@@ -1,4 +1,3 @@
-# Copyright (C) 2024 Bodo Inc. All rights reserved.
 """
 Tests reading data from a SnowflakeCatalog in a manner that will cause a runtime join filter
 to be pushed down to I/O.

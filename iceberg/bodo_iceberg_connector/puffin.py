@@ -1,4 +1,3 @@
-# Copyright (C) 2024 Bodo Inc. All rights reserved.
 """
 Python classes/functionality exposed for writing puffin files via
 the Bodo Iceberg connector.

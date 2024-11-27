@@ -1,4 +1,3 @@
-# Copyright (C) 2024 Bodo Inc. All rights reserved.
 """Support for streaming sort (external sort) This file is mostly wrappers for
 C++ implementations.
 """

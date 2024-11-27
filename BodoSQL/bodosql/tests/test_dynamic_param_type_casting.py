@@ -1,4 +1,3 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
 Test that Dynamic Parameters generate runtime casts when
 the actual type doesn't match the inferred type.

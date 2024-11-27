@@ -1,4 +1,3 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """Tests merge into operations for various filter pushdown expectations.
 This includes testing that the target table is only filtered by files
 and that the source table can still have proper filtering.

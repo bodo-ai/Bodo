@@ -1,4 +1,3 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
 Common IR extension functions for connectors such as CSV, Parquet and JSON readers.
 """

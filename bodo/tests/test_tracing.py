@@ -1,4 +1,3 @@
-# Copyright (C) 2019 Bodo Inc.
 # Turn on tracing for all tests in this file.
 import os
 from tempfile import TemporaryDirectory

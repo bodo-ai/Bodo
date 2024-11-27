@@ -1,4 +1,3 @@
-// Copyright (C) 2024 Bodo Inc. All rights reserved.
 #include "../_bodo_common.h"
 #include "../_dict_builder.h"
 

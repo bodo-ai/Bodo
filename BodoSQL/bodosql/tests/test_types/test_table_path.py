@@ -1,4 +1,3 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
 Tests various components of the TablePath type both inside and outside a
 direct BodoSQLContext.

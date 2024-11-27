@@ -1,4 +1,3 @@
-# Copyright (C) 2023 Bodo Inc. All rights reserved.
 """
 Utility script for fetching the Bodo type information for a table and writing
 the results to the appropriate file. The result will be written to a json file per

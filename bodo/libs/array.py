@@ -1,4 +1,3 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """Tools for handling bodo arrays, e.g. passing to C/C++ code"""
 
 import warnings

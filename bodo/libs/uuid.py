@@ -1,5 +1,3 @@
-# Copyright (C) 2024 Bodo Inc. All rights reserved.
-
 import llvmlite.binding as ll
 import numba
 from llvmlite import ir as lir

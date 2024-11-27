@@ -1,4 +1,3 @@
-// Copyright (C) 2022 Bodo Inc. All rights reserved.
 
 // Implementation of IcebergParquetReader (subclass of ArrowReader) with
 // functionality that is specific to reading iceberg datasets (made up of

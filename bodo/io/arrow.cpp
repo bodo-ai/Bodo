@@ -1,4 +1,3 @@
-// Copyright (C) 2021 Bodo Inc. All rights reserved.
 
 // Here we export parquet read and write functions of the
 // bodo.io.arrow_cpp extension module to Python

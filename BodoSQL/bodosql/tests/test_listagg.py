@@ -1,4 +1,3 @@
-# Copyright (C) 2023 Bodo Inc. All rights reserved.
 """
 Test correctness of the LISTAGG SQL aggregation operations with and without groupby for BodoSQL
 """

@@ -1,4 +1,3 @@
-# Copyright (C) 2024 Bodo Inc. All rights reserved.
 # distutils: language = c++
 # cython: c_string_type=unicode, c_string_encoding=utf8
 

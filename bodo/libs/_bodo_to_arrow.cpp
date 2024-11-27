@@ -1,4 +1,3 @@
-// Copyright (C) 2022 Bodo Inc. All rights reserved.
 #include "_bodo_to_arrow.h"
 
 #include <cassert>

@@ -1,4 +1,3 @@
-// Copyright (C) 2022 Bodo Inc. All rights reserved.
 // Function to convert Bodo arrays to Arrow arrays
 
 #pragma once

@@ -1,4 +1,3 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """Array of tuple values, implemented by reusing array of structs implementation."""
 
 import operator

@@ -1,7 +1,6 @@
 """
 Test that various builtin trig functions are properly supported in BODOSQL
 """
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 
 import numpy as np
 import pandas as pd

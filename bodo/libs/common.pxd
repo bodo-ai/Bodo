@@ -1,5 +1,3 @@
-# Copyright (C) 2023 Bodo Inc. All rights reserved.
-
 # distutils: language = c++
 
 # Imports standard Cython modules.

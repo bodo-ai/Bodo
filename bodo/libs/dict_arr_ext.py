@@ -1,4 +1,3 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """Dictionary encoded array data type, similar to DictionaryArray of Arrow.
 The purpose is to improve memory consumption and performance over string_array_type for
 string arrays that have a lot of repetitive values (typical in practice).

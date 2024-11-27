@@ -1,4 +1,3 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """Test Bodo's array kernel utilities for BodoSQL Snowflake date-related conversion functions"""
 
 import datetime

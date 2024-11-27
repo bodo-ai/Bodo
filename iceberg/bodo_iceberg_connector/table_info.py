@@ -1,4 +1,3 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
 Python APIs used to gather metadata information about the underlying Iceberg table.
 """

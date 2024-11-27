@@ -1,7 +1,6 @@
 """
 Common file used by tests that evaluate queries with named parameters.
 """
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 
 import numpy as np
 import pandas as pd

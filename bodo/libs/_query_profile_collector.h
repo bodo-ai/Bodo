@@ -1,4 +1,3 @@
-// Copyright (C) 2024 Bodo Inc. All rights reserved.
 #pragma once
 #include <chrono>
 #include <memory>

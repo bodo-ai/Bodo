@@ -1,4 +1,3 @@
-// Copyright (C) 2021 Bodo Inc. All rights reserved.
 
 // Implementation of ArrowReader, ColumnBuilder subclasses and
 // helper code to read Arrow data into Bodo.

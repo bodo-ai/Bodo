@@ -1,4 +1,3 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """Test reloading numba config from environment variables"""
 
 import warnings

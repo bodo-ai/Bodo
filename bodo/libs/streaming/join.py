@@ -1,4 +1,3 @@
-# Copyright (C) 2023 Bodo Inc. All rights reserved.
 """Support for streaming join (a.k.a. vectorized join).
 This file is mostly wrappers for C++ implementations.
 """

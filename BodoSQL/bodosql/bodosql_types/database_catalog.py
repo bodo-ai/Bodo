@@ -4,7 +4,6 @@ construct a Java object that can be used to load schema + table
 information from Java code.
 """
 
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 from abc import ABC, abstractmethod
 
 from numba.core import types

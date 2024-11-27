@@ -1,4 +1,3 @@
-# Copyright (C) 2024 Bodo Inc. All rights reserved.
 """Distinguish Spawner from Worker at runtime"""
 
 _is_worker = False

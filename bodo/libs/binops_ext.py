@@ -1,4 +1,3 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """Implementation of binary operators for the different types.
 Currently implemented operators:
     arith: add, sub, mul, truediv, floordiv, mod, pow

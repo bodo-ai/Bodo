@@ -1,4 +1,3 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
 Tests BodoSQL queries with types that cannot be directly
 supported but has implicit conversions that can be automated.

@@ -1,4 +1,3 @@
-# Copyright (C) 2024 Bodo Inc. All rights reserved.
 """
 Explicitly test for different Dynamic Parameters passing
 patterns within JIT code.

@@ -1,4 +1,3 @@
-# Copyright (C) 2023 Bodo Inc. All rights reserved.
 """
 Implements kernels for FFT functions. Note that this file will only be imported
 if the user has scipy installed.

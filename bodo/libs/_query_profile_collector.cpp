@@ -1,4 +1,3 @@
-// Copyright (C) 2024 Bodo Inc. All rights reserved.
 #include "./_query_profile_collector.h"
 #include <fmt/core.h>
 #include <sys/stat.h>

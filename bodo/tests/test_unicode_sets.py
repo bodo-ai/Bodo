@@ -1,4 +1,3 @@
-# Copyright (C) 2022 Bodo Inc.
 import pytest
 
 from bodo.tests.utils import check_func

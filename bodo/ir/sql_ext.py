@@ -1,4 +1,3 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
 Implementation of pd.read_sql in Bodo.
 We piggyback on the pandas implementation. Future plan is to have a faster

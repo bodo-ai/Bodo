@@ -1,4 +1,3 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
 Test that Dynamic Parameters can be used for the limit and offset values in
 a SQL LIMIT expression.

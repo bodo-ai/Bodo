@@ -1,5 +1,3 @@
-# Copyright (C) 2023 Bodo Inc. All rights reserved.
-
 import numpy as np
 import pandas as pd
 import pytest

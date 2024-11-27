@@ -1,5 +1,3 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
-
 """
 Tests that check passing an unsupported type to BodoSQL in various
 contexts where the column can be pruned by Bodo

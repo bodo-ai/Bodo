@@ -1,4 +1,3 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """Array implementation for variable-size array items.
 Corresponds to Spark's ArrayType: https://spark.apache.org/docs/latest/sql-reference.html
 Corresponds to Arrow's Variable-size List: https://arrow.apache.org/docs/format/Columnar.html

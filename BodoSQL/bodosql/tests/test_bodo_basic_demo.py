@@ -4,7 +4,6 @@ Test using BodoSQL inside Bodo JIT functions
 
 import pandas as pd
 
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 import bodo
 import bodosql
 

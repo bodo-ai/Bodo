@@ -1,4 +1,3 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
 Test correctness of the filter optimization rules to extract common
 predicates from a join.

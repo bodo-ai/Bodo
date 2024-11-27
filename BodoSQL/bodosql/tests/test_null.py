@@ -2,7 +2,6 @@
 Test that SQL is Null/Not Null and IS_TRUE builtins work with Columns, scalars, and NULL values.
 Also tests that arithmatic and logical operators work with NULL values
 """
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 
 import numpy as np
 import pandas as pd

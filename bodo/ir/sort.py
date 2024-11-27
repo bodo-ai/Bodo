@@ -1,4 +1,3 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """IR node for the data sorting"""
 
 from collections import defaultdict

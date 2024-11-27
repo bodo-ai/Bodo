@@ -1,4 +1,3 @@
-# Copyright (C) 2024 Bodo Inc. All rights reserved.
 
 # cython: profile=False
 # distutils: language = c++

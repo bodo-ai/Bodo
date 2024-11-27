@@ -1,4 +1,3 @@
-# Copyright (C) 2024 Bodo Inc. All rights reserved.
 """
 Tests correctness of various grouping sets operations, either
 by directly generating queries using grouping sets or via query

@@ -1,4 +1,3 @@
-# Copyright (C) 2021 Bodo Inc. All rights reserved.
 """
 Test correctness of SQL regex functions on BodoSQL
 """

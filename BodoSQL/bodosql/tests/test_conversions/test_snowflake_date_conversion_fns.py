@@ -1,4 +1,3 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
 Test correctness of Snowflake TO_X functions for date-related casting in BodoSQL
 """

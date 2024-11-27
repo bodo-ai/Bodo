@@ -1,4 +1,3 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
 Indexing support for Series objects, including loc/iloc/at/iat types.
 """

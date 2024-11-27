@@ -1,4 +1,3 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
 Implements array kernels that are specific to BodoSQL. These kernels require special codegen
 that cannot be done through the the normal gen_vectorized path

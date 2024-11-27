@@ -1,4 +1,3 @@
-# Copyright (C) 2023 Bodo Inc. All rights reserved.
 """
 Wrapper around fetch_bodo_table_types.py
 that accepts a file of fully qualified table paths:
