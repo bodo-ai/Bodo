@@ -119,6 +119,20 @@ def simple_dataframe(request):
     )
 
 
+def _run_spark(query):
+    """Run query with Spark and return the results in a Pandas DataFrame"""
+    if bodo.get_rank() == 0:
+        spark = get_spark()
+        py_out = spark.sql(query)
+        py_out = py_out.toPandas()
+    else:
+        py_out = None
+
+    comm = MPI.COMM_WORLD
+    py_out = comm.bcast(py_out, root=0)
+    return py_out
+
+
 @pytest.mark.slow
 @pytest.mark.parametrize(
     "table_name",
@@ -151,7 +165,7 @@ def test_simple_table_read(
         df = pd.read_sql_table(table_name, conn, db_schema)
         return df
 
-    py_out, _, _ = spark_reader.read_iceberg_table(table_name, db_schema)
+    py_out = spark_reader.read_iceberg_table_single_rank(table_name, db_schema)
     check_func(
         impl,
         (table_name, conn, db_schema),
@@ -187,7 +201,7 @@ def test_read_zero_cols(iceberg_database, iceberg_table_conn, table_name):
         df = pd.read_sql_table(table_name, conn, db_schema)
         return len(df)
 
-    py_out, _, _ = spark_reader.read_iceberg_table(table_name, db_schema)
+    py_out = spark_reader.read_iceberg_table_single_rank(table_name, db_schema)
     check_func(
         impl,
         (table_name, conn, db_schema),
@@ -230,7 +244,7 @@ def test_simple_tz_aware_table_read(
         df = pd.read_sql_table(table_name, conn, db_schema)
         return df
 
-    py_out, _, _ = spark_reader.read_iceberg_table(table_name, db_schema)
+    py_out = spark_reader.read_iceberg_table_single_rank(table_name, db_schema)
     check_func(
         impl,
         (table_name, conn, db_schema),
@@ -260,7 +274,7 @@ def test_simple_numeric_table_read(
         df = pd.read_sql_table(table_name, conn, db_schema)
         return df
 
-    py_out, _, _ = spark_reader.read_iceberg_table(table_name, db_schema)
+    py_out = spark_reader.read_iceberg_table_single_rank(table_name, db_schema)
     res: pd.DataFrame = bodo.jit()(impl)(table_name, conn, db_schema)
     py_out = sync_dtypes(py_out, res.dtypes.values.tolist())
     py_out["E"] = py_out["E"].astype("Int32")
@@ -295,7 +309,7 @@ def test_simple_list_table_read(
         df = pd.read_sql_table(table_name, conn, db_schema)
         return df
 
-    py_out, _, _ = spark_reader.read_iceberg_table(table_name, db_schema)
+    py_out = spark_reader.read_iceberg_table_single_rank(table_name, db_schema)
 
     check_func(
         impl,
@@ -325,7 +339,7 @@ def test_simple_bool_binary_table_read(
         df = pd.read_sql_table(table_name, conn, db_schema)
         return df
 
-    py_out, _, _ = spark_reader.read_iceberg_table(table_name, db_schema)
+    py_out = spark_reader.read_iceberg_table_single_rank(table_name, db_schema)
     # Bodo outputs binary data as bytes while Spark does bytearray (which Bodo doesn't support),
     # so we convert Spark output.
     # This has been copied from BodoSQL. See `convert_spark_bytearray`
@@ -363,7 +377,7 @@ def test_simple_struct_table_read(
         return df
 
     # Convert columns with nested structs from tuples to dictionaries with correct keys
-    py_out, _, _ = spark_reader.read_iceberg_table(table_name, db_schema)
+    py_out = spark_reader.read_iceberg_table_single_rank(table_name, db_schema)
     py_out["A"] = py_out["A"].map(lambda x: {"a": x["a"], "b": x["b"]})
     py_out["B"] = py_out["B"].map(lambda x: {"a": x["a"], "b": x["b"], "c": x["c"]})
 
@@ -391,7 +405,7 @@ def test_column_pruning(iceberg_database, iceberg_table_conn, memory_leak_check)
         df = df[["A", "D"]]
         return df
 
-    py_out, _, _ = spark_reader.read_iceberg_table(table_name, db_schema)
+    py_out = spark_reader.read_iceberg_table_single_rank(table_name, db_schema)
     py_out = py_out[["A", "D"]]
 
     stream = io.StringIO()
@@ -920,14 +934,12 @@ def test_no_files_after_filter_pushdown(
         df = df[df["TY"].isna()]
         return df
 
-    spark = get_spark()
-    py_out = spark.sql(
+    py_out = _run_spark(
         f"""
-    select * from hadoop_prod.{db_schema}.{table_name}
-    where TY IS NULL;
-    """
+        select * from hadoop_prod.{db_schema}.{table_name}
+        where TY IS NULL;
+        """
     )
-    py_out = py_out.toPandas()
     assert (
         py_out.shape[0] == 0
     ), f"Expected DataFrame to be empty, found {py_out.shape[0]} rows instead."
@@ -1035,14 +1047,12 @@ def test_filter_pushdown_partitions(
         df = df[df["A"] <= date(2018, 12, 12)]
         return df
 
-    spark = get_spark()
-    py_out = spark.sql(
+    py_out = _run_spark(
         f"""
-    select * from hadoop_prod.{db_schema}.{table_name}
-    where A <= '2018-12-12';
-    """
+        select * from hadoop_prod.{db_schema}.{table_name}
+        where A <= '2018-12-12';
+        """
     )
-    py_out = py_out.toPandas()
 
     check_func(
         impl,
@@ -1070,14 +1080,13 @@ def test_filter_pushdown_file_filters(
         df = df[df.B == 2]
         return df
 
-    spark = get_spark()
-    py_out = spark.sql(
+    py_out = _run_spark(
         f"""
     select * from hadoop_prod.{db_schema}.{table_name}
     WHERE B = 2
     """
     )
-    py_out = py_out.toPandas()
+
     check_func(
         impl,
         (table_name, conn, db_schema),
@@ -1230,9 +1239,7 @@ def test_limit_pushdown(iceberg_database, iceberg_table_conn, memory_leak_check)
         df = pd.read_sql_table(table_name, conn, db_schema)
         return df.head(5)  # type: ignore
 
-    spark = get_spark()
-    py_out = spark.sql(f"select * from hadoop_prod.{db_schema}.{table_name} LIMIT 5;")
-    py_out = py_out.toPandas()
+    py_out = _run_spark(f"select * from hadoop_prod.{db_schema}.{table_name} LIMIT 5;")
 
     check_func(
         impl,
@@ -1364,7 +1371,7 @@ def test_basic_write_replace(
         return
 
     if read_behavior == "spark":
-        py_out, _, _ = spark_reader.read_iceberg_table(table_name, db_schema)
+        py_out = spark_reader.read_iceberg_table_single_rank(table_name, db_schema)
         # Spark reads the column in micro-seconds instead of nano-seconds like
         # we do, so we need to convert it to match Bodo.
         if base_name == "DT_TSZ_TABLE":
@@ -1561,7 +1568,7 @@ def test_basic_write_new_append(
         # TODO Open issue
         return
 
-    if initial_write == "spark" and behavior == "append":
+    if initial_write == "spark" and behavior == "append" and bodo.get_rank() == 0:
         # We need to invalidate spark cache, because it doesn't realize
         # that the table has been modified.
         spark.sql("CLEAR CACHE;")
@@ -2437,7 +2444,9 @@ def test_iceberg_missing_optional_column(iceberg_database, iceberg_table_conn):
 
         # Read the columns with Spark and check that the missing column is filled
         # with nulls.
-        spark_out, _, _ = spark_reader.read_iceberg_table(write_table_name, db_schema)
+        spark_out = spark_reader.read_iceberg_table_single_rank(
+            write_table_name, db_schema
+        )
 
         assert (
             list(spark_out["B"]).count(None) == 100
@@ -4038,14 +4047,12 @@ def test_filter_pushdown_arg(iceberg_database, iceberg_table_conn, memory_leak_c
         )  # type: ignore
         return df
 
-    spark = get_spark()
-    py_out = spark.sql(
+    py_out = _run_spark(
         f"""
-    select * from hadoop_prod.{db_schema}.{table_name}
-    where A > '2015-01-01';
-    """
+        select * from hadoop_prod.{db_schema}.{table_name}
+        where A > '2015-01-01';
+        """
     )
-    py_out = py_out.toPandas()
 
     stream = io.StringIO()
     logger = create_string_io_logger(stream)
@@ -4085,14 +4092,12 @@ def test_filter_pushdown_complex(
         ]
         return df
 
-    spark = get_spark()
-    py_out = spark.sql(
+    py_out = _run_spark(
         f"""
     select * from hadoop_prod.{db_schema}.{table_name}
     where A > '2015-01-01' and not TY like 'A%' or B in (0, 6);
     """
     )
-    py_out = py_out.toPandas()
 
     stream = io.StringIO()
     logger = create_string_io_logger(stream)

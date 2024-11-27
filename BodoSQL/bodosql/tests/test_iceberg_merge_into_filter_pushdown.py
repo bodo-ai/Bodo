@@ -276,7 +276,7 @@ def test_filter_pushdown_self_merge(iceberg_database, iceberg_table_conn):
     target_table_path = TablePath(table_name, "sql", conn_str=conn, db_schema=db_schema)
 
     # Read the table from Spark.
-    expected_output, _, _ = spark_reader.read_iceberg_table(table_name, db_schema)
+    expected_output = spark_reader.read_iceberg_table_single_rank(table_name, db_schema)
 
     # Generate the expected output
     # This filter matches the merge into condition

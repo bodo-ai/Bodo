@@ -13,11 +13,11 @@ from tabular_test_harness import TabularTestHarness
 import bodo
 import bodosql
 from bodo.mpi4py import MPI
-from bodo.tests.utils import pytest_tabular
+from bodo.tests.utils import pytest_one_rank, pytest_tabular
 from bodo.utils.typing import BodoError
 from bodosql.tests.utils import assert_equal_par, replace_type_varchar
 
-pytestmark = pytest_tabular
+pytestmark = pytest_tabular + pytest_one_rank
 
 
 @pytest.fixture(scope="session")

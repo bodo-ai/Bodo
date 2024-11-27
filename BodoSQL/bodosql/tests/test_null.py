@@ -9,6 +9,8 @@ import pandas as pd
 import pytest
 from pyspark.sql.functions import lit
 
+import bodo
+from bodo.mpi4py import MPI
 from bodosql.tests.utils import check_query
 
 
@@ -17,12 +19,17 @@ from bodosql.tests.utils import check_query
 # Spark knows the type
 # TODO: should refactor this into utils eventually
 def get_expected_output_with_null_col_b(s_info, ctx, query, typestr):
-    for table_name, df in ctx.items():
-        s_info.catalog.dropTempView(table_name)
-        s_info.createDataFrame(df).withColumn(
-            "B", lit(None).cast(typestr)
-        ).createTempView(table_name)
-    expected_output = s_info.sql(query).toPandas()
+    if bodo.get_rank() == 0:
+        for table_name, df in ctx.items():
+            s_info.catalog.dropTempView(table_name)
+            s_info.createDataFrame(df).withColumn(
+                "B", lit(None).cast(typestr)
+            ).createTempView(table_name)
+        expected_output = s_info.sql(query).toPandas()
+    else:
+        expected_output = None
+    comm = MPI.COMM_WORLD
+    expected_output = comm.bcast(expected_output)
     return expected_output
 
 

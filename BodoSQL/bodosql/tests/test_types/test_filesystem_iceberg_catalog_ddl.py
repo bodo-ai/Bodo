@@ -28,6 +28,7 @@ from bodo.tests.utils import (
     _test_equal_guard,
     check_func_seq,
     gen_unique_table_id,
+    pytest_mark_one_rank,
 )
 from bodo.utils.typing import BodoError
 from bodo.utils.utils import run_rank0
@@ -165,6 +166,7 @@ def test_drop_schema_if_exists_doesnt_exist(
     assert not schema_path.exists()
 
 
+@pytest_mark_one_rank
 def test_drop_table(iceberg_filesystem_catalog, iceberg_database, memory_leak_check):
     """
     Tests that the filesystem catalog can drop a table.
@@ -195,6 +197,7 @@ def test_drop_table(iceberg_filesystem_catalog, iceberg_database, memory_leak_ch
     assert len(remaining_tables) == 0, "Table was not dropped"
 
 
+@pytest_mark_one_rank
 def test_iceberg_drop_table_python(iceberg_filesystem_catalog, memory_leak_check):
     """
     Tests that the filesystem catalog can drop a table using
@@ -221,6 +224,7 @@ def test_iceberg_drop_table_python(iceberg_filesystem_catalog, memory_leak_check
     assert len(remaining_tables) == 0, "Table was not dropped"
 
 
+@pytest_mark_one_rank
 def test_iceberg_drop_table_execute_ddl(iceberg_filesystem_catalog, memory_leak_check):
     """
     Tests that the filesystem catalog can drop a table using
@@ -247,6 +251,7 @@ def test_iceberg_drop_table_execute_ddl(iceberg_filesystem_catalog, memory_leak_
     assert len(remaining_tables) == 0, "Table was not dropped"
 
 
+@pytest_mark_one_rank
 def test_drop_table_not_found(iceberg_filesystem_catalog, memory_leak_check):
     """Tests a table that doesn't exist in Iceberg raises an error."""
     try:
@@ -281,6 +286,7 @@ def test_drop_table_not_found(iceberg_filesystem_catalog, memory_leak_check):
         cleanup()
 
 
+@pytest_mark_one_rank
 def test_drop_table_not_found_if_exists(iceberg_filesystem_catalog, memory_leak_check):
     """Tests a table that doesn't exist in Iceberg doesn't raise an error
     with IF EXISTS."""
@@ -323,6 +329,7 @@ def test_drop_table_not_found_if_exists(iceberg_filesystem_catalog, memory_leak_
         cleanup()
 
 
+@pytest_mark_one_rank
 @pytest.mark.parametrize("describe_keyword", ["DESCRIBE", "DESC"])
 def test_describe_table(
     describe_keyword, iceberg_filesystem_catalog, memory_leak_check
@@ -438,6 +445,7 @@ def test_iceberg_drop_view_unsupported_catalog_error_does_not_exist(
             )
 
 
+@pytest_mark_one_rank
 @pytest.mark.parametrize("if_exists", [True, False])
 def test_iceberg_drop_view_unsupported_catalog_error_non_view(
     if_exists, iceberg_filesystem_catalog, memory_leak_check
@@ -563,6 +571,7 @@ def test_show_tables_compiles_jit(iceberg_filesystem_catalog, memory_leak_check)
     bc.validate_query_compiles(query)
 
 
+@pytest_mark_one_rank
 @pytest.mark.parametrize("purge", [True, False])
 def test_iceberg_drop_table_purge_sql(
     purge, iceberg_filesystem_catalog, memory_leak_check
@@ -594,6 +603,7 @@ def test_iceberg_drop_table_purge_sql(
             pd.read_parquet(path)
 
 
+@pytest_mark_one_rank
 @pytest.mark.parametrize("purge", [True, False])
 def test_iceberg_drop_table_purge_execute_dll(
     purge, iceberg_filesystem_catalog, memory_leak_check
@@ -625,6 +635,7 @@ def test_iceberg_drop_table_purge_execute_dll(
             pd.read_parquet(path)
 
 
+@pytest_mark_one_rank
 @pytest.mark.parametrize("purge", [True, False])
 def test_iceberg_drop_table_purge(purge, iceberg_filesystem_catalog, memory_leak_check):
     """

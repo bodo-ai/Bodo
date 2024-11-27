@@ -337,41 +337,42 @@ def check_query(
         print("Pandas Code:")
         print(bc.convert_to_pandas(query, named_params, bind_variables))
 
-    if expected_output is None and spark is None:
+    if expected_output is None and (bodo.get_rank() == 0 and spark is None):
         raise ValueError(
             "Either `expected_output` or `spark` argument must be set to not None"
         )
 
     # Determine the Spark output.
     if expected_output is None and use_duckdb is False:
-        spark.catalog.clearCache()
-        # If Spark specific inputs aren't provided, use the same
-        # as BodoSQL
-        if spark_dataframe_dict is None:
-            spark_dataframe_dict = dataframe_dict
-
-        for table_name, df in spark_dataframe_dict.items():
-            spark.catalog.dropTempView(table_name)
-            df = convert_nullable_object(df)
-            if convert_columns_tz_naive:
-                df = remove_tz_columns_spark(df, convert_columns_tz_naive)
-
-            if pyspark_schemas is None:
-                schema = None
-            else:
-                schema = pyspark_schemas.get(table_name, None)
-            spark_df = spark.createDataFrame(df, schema=schema)
-            if (
-                spark_input_cols_to_cast != None
-                and table_name in spark_input_cols_to_cast
-            ):
-                for colname, typename in spark_input_cols_to_cast[table_name]:
-                    spark_df = spark_df.withColumn(
-                        colname, pyspark.sql.functions.col(colname).cast(typename)
-                    )
-            spark_df.createTempView(table_name)
-        # Always run Spark on just 1 core for efficiency
+        # Only run Spark on one rank to run faster and avoid Spark issues
         if bodo.get_rank() == 0:
+            spark.catalog.clearCache()
+            # If Spark specific inputs aren't provided, use the same
+            # as BodoSQL
+            if spark_dataframe_dict is None:
+                spark_dataframe_dict = dataframe_dict
+
+            for table_name, df in spark_dataframe_dict.items():
+                spark.catalog.dropTempView(table_name)
+                df = convert_nullable_object(df)
+                if convert_columns_tz_naive:
+                    df = remove_tz_columns_spark(df, convert_columns_tz_naive)
+
+                if pyspark_schemas is None:
+                    schema = None
+                else:
+                    schema = pyspark_schemas.get(table_name, None)
+                spark_df = spark.createDataFrame(df, schema=schema)
+                if (
+                    spark_input_cols_to_cast != None
+                    and table_name in spark_input_cols_to_cast
+                ):
+                    for colname, typename in spark_input_cols_to_cast[table_name]:
+                        spark_df = spark_df.withColumn(
+                            colname, pyspark.sql.functions.col(colname).cast(typename)
+                        )
+                spark_df.createTempView(table_name)
+
             # If an equivalent query is provided we use that
             # instead of the original spark query
             if equivalent_spark_query is None:
