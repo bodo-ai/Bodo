@@ -11,7 +11,7 @@ on:
     paths:
       - 'pixi.lock'
       - '.github/workflows/release.yml'
-      - '.github/workflows/_build_*.yml'
+      - '.github/workflows/_build_*_conda.yml'
 
 jobs:
   # This is separate because we need to build Linux community in a container
