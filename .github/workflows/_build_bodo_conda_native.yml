@@ -58,11 +58,6 @@ jobs:
           set -exo pipefail
           echo "BODO_VERSION=`python -m setuptools_scm`" >> $GITHUB_ENV
           echo "IS_RELEASE=`git tag --points-at HEAD`" >> $GITHUB_ENV
-      - name: Obfuscate
-        run: |
-          set -exo pipefail         
-          cd obfuscation
-          ./do_obfuscation.py
 
       - name: Build Bodo Conda Package
         run: |

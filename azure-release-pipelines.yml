@@ -28,7 +28,6 @@ parameters:
 variables:
   CHECK_LICENSE_EXPIRED: 1
   CHECK_LICENSE_CORE_COUNT: 1
-  OBFUSCATE: 1
   # Azure Pipelines currently doesn't have a "range" function to count from 1 to total
   # We have to manually add the element and split into an array
   # TODO: Replace with range when available
