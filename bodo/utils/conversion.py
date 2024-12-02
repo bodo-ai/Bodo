@@ -183,6 +183,9 @@ class CoerceToNdarrayInfer(AbstractTemplate):
                 output = types.Array(data, 1, "C")
             return signature(output, *folded_args).replace(pysig=pysig)
 
+        if bodo.utils.utils.is_array_typ(data, False):
+            return signature(data, *folded_args).replace(pysig=pysig)
+
         if is_overload_true(error_on_nonarray):
             raise BodoError(f"cannot coerce {data} to ndarray")
 
