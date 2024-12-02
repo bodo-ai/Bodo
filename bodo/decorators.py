@@ -39,6 +39,9 @@ numba.core.cpu.CPUTargetOptions.pivots = _mapping("pivots")
 numba.core.cpu.CPUTargetOptions.h5_types = _mapping("h5_types")
 numba.core.cpu.CPUTargetOptions.spawn = _mapping("spawn")
 numba.core.cpu.CPUTargetOptions.propagate_env = _mapping("propagate_env")
+numba.core.cpu.CPUTargetOptions.distributed_diagnostics = _mapping(
+    "distributed_diagnostics"
+)
 
 
 class Flags(TargetConfig):
@@ -234,6 +237,12 @@ detail""",
         type=bool,
         default=False,
         doc="Spawn MPI processes",
+    )
+
+    distributed_diagnostics = Option(
+        type=bool,
+        default=False,
+        doc="Print distributed diagnostics information",
     )
 
 
