@@ -24,7 +24,7 @@ class TracingContextManager:
         # any tracing. AGENT_NAME distinguishes Azure from AWS
         self._needs_decryption = "AGENT_NAME" in os.environ
         # If we need to decrypt the data we run the decryption script
-        # at /obfuscation/decompress_traces.py. To avoid errors with packages
+        # at /buildscripts/decompress_traces.py. To avoid errors with packages
         # we pass this is as an environment variable, BODO_TRACING_DECRYPTION_FILE_PATH.
         self._decryption_path = os.environ.get(
             "BODO_TRACING_DECRYPTION_FILE_PATH", None

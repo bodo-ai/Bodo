@@ -141,7 +141,7 @@ def dump(fname=None, clear_traces=True):
                 # write obscured traces by compressing with zlib without zlib
                 # header and writing to a binary file (the `file` command will
                 # only identify as "data")
-                # To decompress, use obfuscation/decompress_traces.py
+                # To decompress, use buildscripts/decompress_traces.py
                 with open(fname, "wb") as f:
                     import zlib
 

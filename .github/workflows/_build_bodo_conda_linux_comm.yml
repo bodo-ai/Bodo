@@ -40,16 +40,6 @@ jobs:
           echo "BODO_VERSION=`python -m setuptools_scm`" >> $GITHUB_ENV
           echo "IS_RELEASE=`git tag --points-at HEAD`" >> $GITHUB_ENV
 
-      - name: Obfuscate
-        run: |
-          source /opt/conda/etc/profile.d/conda.sh
-          mamba create -y -n bodo_obfuscate python=3.11
-          conda activate bodo_obfuscate
-          set -exo pipefail
-          
-          cd obfuscation
-          ./do_obfuscation.py
-
       - name: Build Bodo Conda Package
         run: |
           set -exo pipefail
