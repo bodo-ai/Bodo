@@ -1918,12 +1918,11 @@ def test_diagnostics_trace(capsys, memory_leak_check):
     def f(A):
         return A.sum()
 
-    @bodo.jit
+    @bodo.jit(distributed_diagnostics=True)
     def g():
         return f(np.arange(10))
 
     g()
-    g.distributed_diagnostics()
     if bodo.get_rank() == 0:
         assert (
             "input of another Bodo call without distributed flag"
