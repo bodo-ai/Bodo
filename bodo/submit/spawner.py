@@ -74,11 +74,16 @@ def no_stdin():
 
 def get_num_workers():
     """Returns the number of workers to spawn.
-    If BODO_NUM_WORKERS is set, spawn that many workers. Else, we will spawn as
+
+    If BODO_NUM_WORKERS is set, spawn that many workers.
+    If MPI_UNIVERSE_SIZE is set, spawn that many workers.
+    Else, fallback to spawning as
     many workers as there are physical cores on this machine."""
     n_pes = 2
     if n_pes_env := os.environ.get("BODO_NUM_WORKERS"):
         n_pes = int(n_pes_env)
+    elif universe_size := MPI.COMM_WORLD.Get_attr(MPI.UNIVERSE_SIZE):
+        n_pes = universe_size
     elif cpu_count := psutil.cpu_count(logical=False):
         n_pes = cpu_count
     return n_pes
