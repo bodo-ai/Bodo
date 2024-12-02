@@ -51,7 +51,7 @@ export HADOOP_OPTS="-Djava.library.path=$HADOOP_HOME/lib/native"
 export HADOOP_OPTIONAL_TOOLS=hadoop-azure
 export ARROW_LIBHDFS_DIR=$HADOOP_HOME/lib/native
 export CLASSPATH=$($HADOOP_HOME/bin/hdfs classpath --glob)
-export BODO_TRACING_DECRYPTION_FILE_PATH=$(echo "Bodo/obfuscation/decompress_traces.py")
+export BODO_TRACING_DECRYPTION_FILE_PATH=$(echo "Bodo/buildscripts/decompress_traces.py")
 export AGENT_NAME=1
 # Pytest EC2 Credentials 1Password
 export SF_USERNAME=

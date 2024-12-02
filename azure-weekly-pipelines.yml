@@ -18,7 +18,6 @@ schedules:
 variables:
   CHECK_LICENSE_EXPIRED: 1
   CHECK_LICENSE_CORE_COUNT: 1
-  OBFUSCATE: 1
 
 # Note: we only build the packages that we need for testing on the weekly pipeline (no PiP or ARM)
 stages:

@@ -153,7 +153,6 @@ exclude = [
 
     "demo/",
     "examples/",
-    "obfuscation/examples/",
     "BodoSQL/calcite_sql/bodosql-calcite-application/src/test/resources/com/bodosql/calcite/application/_generated_files/",
     "bodo/numba_compat.py",
     "bodo/mpi4py/",

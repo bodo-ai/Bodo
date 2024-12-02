@@ -115,7 +115,7 @@ jobs:
       cd $(System.DefaultWorkingDirectory)
       # For caching tests we need to update the location of the decryption file.
       # We set the absolute path as an environment variable.
-      export BODO_TRACING_DECRYPTION_FILE_PATH=`echo "$(System.DefaultWorkingDirectory)/obfuscation/decompress_traces.py"`
+      export BODO_TRACING_DECRYPTION_FILE_PATH=`echo "$(System.DefaultWorkingDirectory)/buildscripts/decompress_traces.py"`
       if [[ "${{ parameters.caching_test }}" == "True" ]]; then
         python -m bodo.runtests_caching "${{ parameters.name }}" "$NP" bodo/tests/caching_tests
       elif [[ "${{ parameters.spawn_mode_test }}" == "True" ]]; then
