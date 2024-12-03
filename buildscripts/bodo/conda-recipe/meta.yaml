@@ -56,7 +56,6 @@ requirements:
     - vc # [win]
     - vs2015_runtime # [win]
     - vs2015_win-64 # [win]
-    - fftw >=3.3.10,<3.4.0a0=mpi_mpich_*
     - requests
     - aws-sdk-cpp
     - zstd<=1.5.6
@@ -73,7 +72,6 @@ requirements:
     - msmpi # [win]
     - vs2015_runtime # [win]
     - vs2015_win-64 # [win]
-    - fftw >=3.3.10,<3.4.0a0=mpi_mpich_*
     - requests
     - aws-sdk-cpp
     - zstd<=1.5.6

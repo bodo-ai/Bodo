@@ -67,7 +67,6 @@ pip = "*"
 # Core C++ Deps
 libcurl = "~=8.0"
 zstd = "<=1.5.6"
-fftw = { version = ">=3.3.10,<3.4.0a0", build = "*mpi_mpich_*" }
 hdf5 = { version = ">=1.14.3,<1.14.4.0a0", build = "*mpi_mpich_*" }
 "aws-sdk-cpp" = "*"
 "boost-cpp" = "1.85"
