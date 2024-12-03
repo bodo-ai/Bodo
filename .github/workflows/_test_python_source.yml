@@ -52,9 +52,6 @@ jobs:
         # Run Tests
         - name: Run Tests
           run: |
-            # TODO: Remove once fully moved to GA
-            rm -rf setup.cfg
-
             # Bodo Tests: Coverage is collected
             pytest -s -v -Wignore \
               --cov-report= --cov=bodo \

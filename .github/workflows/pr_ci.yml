@@ -117,9 +117,6 @@ jobs:
           printf "Slowest BodoSQL Tests"
           slowest-tests --durations-path outputs/test_dur_bodosql.json -c 20
 
-          # TODO: Remove once fully moved to GA
-          rm -rf setup.cfg
-
           coverage combine .coverage_*
           coverage report
           coverage xml -i --omit bodo/runtests.py
