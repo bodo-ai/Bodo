@@ -1,16 +1,16 @@
 [project]
 name = "bodo"
-channels = ["conda-forge"]
+channels = ["bodo.ai", "conda-forge"]
 platforms = ["linux-64", "osx-64", "osx-arm64"]
 conda-pypi-map = { "bodo.ai" = "buildscripts/bodo_mapping.json" }
 
 [environments]
-default = { features = ["py312", "dev", "local-mpi"], solve-group = "312" }
-dev311 = { features = ["py311", "dev", "local-mpi"], solve-group = "311" }
-dev310 = { features = ["py310", "dev", "local-mpi"], solve-group = "310" }
-platform = { features = ["py312", "platform-mpi", "platform"], solve-group = "312-platform" }
-platform-dev = { features = ["py312", "platform-mpi", "dev"], solve-group = "312-platform" }
-azure = { features = ["py312", "dev", "local-mpi", "azure"], solve-group = "312" }
+# Development
+default = { features = ["dev", "local-mpi"], solve-group = "312" }
+azure =   { features = ["dev", "local-mpi", "azure"], solve-group = "312" }
+# Platform
+platform = { features = ["platform", "platform-mpi"], solve-group = "312-platform" }
+platform-dev = { features = ["dev", "platform-mpi"], solve-group = "312-platform" }
 
 # Build Commands
 [tasks.build-bodo]
@@ -75,7 +75,7 @@ hdf5 = { version = ">=1.14.3,<1.14.4.0a0", build = "*mpi_mpich_*" }
 numba = "0.60.0"
 numpy = ">=1.24,<1.27"
 pandas = ">=2.2,<2.3"
-pyarrow = "17.0.0"
+pyarrow = { version = "17.0.0", channel = "conda-forge" }
 fsspec = ">=2021.09"
 requests = "*"
 cloudpickle = ">=3.0,<4.0"
@@ -111,16 +111,10 @@ openpyxl = "*"
 
 [target.linux-64.dependencies]
 cx_oracle = "*"
+pyarrow = { version = "17.0.0", channel = "bodo.ai" }
+libarrow = { version = "*", channel = "bodo.ai" }
 [target.osx-64.dependencies]
 cx_oracle = "*"
-
-[feature.py312]
-channels = ["bodo.ai", "conda-forge"]
-dependencies = { python = "3.12.*" }
-[feature.py311.dependencies]
-python = "3.11.*"
-[feature.py310.dependencies]
-python = "3.10.*"
 
 [feature.dev.dependencies]
 # Build Python
@@ -219,7 +213,7 @@ httpie = "*"
 # Using h* to avoid the "external_*" kind
 mpich = { version = "4.1.*", build = "h*" }
 [feature.platform-mpi]
-channels = ["conda-forge/label/broken"]
+channels = ["conda-forge", "conda-forge/label/broken"]
 platforms = ["linux-64"]
 # Want to use Intel MPI on platform, so use "external_*"
 # https://conda-forge.org/docs/user/tipsandtricks/#using-external-message-passing-interface-mpi-libraries
