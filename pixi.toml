@@ -201,6 +201,7 @@ ipykernel = "==6.29.3"
 ipyparallel = "==8.6.1"
 ipywidgets = "==8.1.1"
 nbconvert = "6.5.0"
+bodo-azurefs-sas-token-provider = "1.0"
 _openmp_mutex = { version = "*", build = "*gnu*" }
 jupyter_client = "==8.6.1"
 uvicorn = "*"
