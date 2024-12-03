@@ -93,4 +93,5 @@ def get_monthly_travels_weather():
     return monthly_trips_weather
 
 
-get_monthly_travels_weather()
+if __name__ == "__main__":
+    get_monthly_travels_weather()
