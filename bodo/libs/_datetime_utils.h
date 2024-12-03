@@ -1,8 +1,8 @@
 #pragma once
 
-#include <pytypedefs.h>
-#include <stdint.h>
+#include <Python.h>
 #include <cstddef>
+#include <cstdint>
 
 /**
  * @brief copied from Arrow since not in exported APIs
