@@ -15,17 +15,7 @@ important concepts briefly.
 
 Installation
 ------------
-
-[Conda](https://docs.conda.io){target="blank"} is the recommended way to install Bodo locally.
-
-
-```console 
-conda create -n Bodo python=3.12 -c conda-forge
-conda activate Bodo
-conda install bodo -c bodo.ai -c conda-forge
-```
-
-These commands create a conda environment called `Bodo` and install Bodo engine.
+[Install Bodo](../installation_and_setup/install.md) to get started with Python development.
 
 Data Transform Example with Bodo
 --------------------------------

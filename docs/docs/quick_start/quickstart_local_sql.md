@@ -2,20 +2,18 @@
 
 This quickstart guide will walk you through the process of running a simple SQL query using Bodo on your local machine.
 
-
 ## Prerequisites
 
-[Conda](https://docs.conda.io){target="blank"} is the recommended way to install Bodo on your local environment. You can install the _Community Edition_ using conda, which allows you to use Bodo for free on up to 8 cores. 
+[Install Bodo](../installation_and_setup/install) to get started.
+Additionally, install bodosql with pip or conda:
 
-
-```console 
-conda create -n Bodo python=3.12 -c conda-forge
-conda activate Bodo
-conda install bodosql -c bodo.ai -c conda-forge
+```shell
+pip install bodosql
 ```
 
-These commands create a conda environment called `Bodo` and install Bodo Community Edition.
-
+```shell
+conda install -c bodo.ai -c conda-forge bodosql
+```
 
 ## Generate Sample Data
 
