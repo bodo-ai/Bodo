@@ -1,5 +1,5 @@
 """
-NYC Taxi Monthly Trips with Preciptation
+NYC Taxi Monthly Trips with Precipitation
 
 Similar to:
 https://github.com/toddwschneider/nyc-taxi-data/blob/c65ad8332a44f49770644b11576c0529b40bbc76/citibike_comparison/analysis/analysis_queries.sql#L1
