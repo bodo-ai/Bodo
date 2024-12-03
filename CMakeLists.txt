@@ -491,7 +491,6 @@ set(sources_list
   "bodo/libs/_fft.cpp"
   "bodo/libs/_uuid.cpp"
   "bodo/libs/_query_profile_collector.cpp"
-  "bodo/libs/vendored/gason/gason.cpp"
   "bodo/libs/_pymemory.cpp"
   "bodo/libs/_theta_sketches.cpp"
   "bodo/libs/_puffin.cpp"
@@ -513,7 +512,6 @@ set(allow_implicit_fallthrough_list
   "bodo/libs/_puffin.cpp"
   "bodo/libs/_theta_sketches.cpp"
   "bodo/libs/vendored/_murmurhash3.cpp"
-  "bodo/libs/vendored/gason/gason.cpp"
 )
 
 # TODO: Replace with ctest when integrating Catch2
@@ -637,30 +635,8 @@ target_link_libraries(ext PRIVATE
   aws-cpp-sdk-core
 )
 
-set(IS_EXPIRED "$ENV{CHECK_LICENSE_EXPIRED}")
-set(IS_CORE_COUNT "$ENV{CHECK_LICENSE_CORE_COUNT}")
-set(IS_PLATFORM "$ENV{CHECK_LICENSE_PLATFORM}")
-cmake_print_variables(IS_EXPIRED IS_CORE_COUNT IS_PLATFORM)
-
-if (IS_EXPIRED OR IS_CORE_COUNT)
-  target_link_libraries(ext PRIVATE ssl crypto)
-  if (IS_EXPIRED)
-    target_compile_definitions(ext PRIVATE "CHECK_LICENSE_EXPIRED=1")
-  endif()
-  if (IS_CORE_COUNT)
-    target_compile_definitions(ext PRIVATE "CHECK_LICENSE_CORE_COUNT=1")
-  endif()
-endif()
-
-if (IS_PLATFORM)
-  if (IS_EXPIRED OR IS_CORE_COUNT)
-    message( FATAL_ERROR "CHECK_LICENSE_EXPIRED or CHECK_LICENSE_CORE_COUNT cant be defined if CHECK_LICENSE_PLATFORM is defined" )
-  endif()
-
-  target_link_libraries(ext PRIVATE curl)
-  target_compile_definitions(ext PRIVATE "CHECK_LICENSE_PLATFORM=1")
-  target_include_directories(ext PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/bodo/libs/vendored/gason")
-endif()
+set(IS_PLATFORM "$ENV{IS_BODO_PLATFORM}")
+cmake_print_variables(IS_PLATFORM)
 
 # Build with our fork of Arrow
 if (IS_PLATFORM OR DEFINED ENV{USE_BODO_ARROW_FORK})

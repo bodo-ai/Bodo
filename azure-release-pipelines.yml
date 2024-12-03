@@ -26,8 +26,6 @@ parameters:
 # Originally added through Azure Pipeline UI.
 # Azure pipeline UI includes AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY
 variables:
-  CHECK_LICENSE_EXPIRED: 1
-  CHECK_LICENSE_CORE_COUNT: 1
   # Azure Pipelines currently doesn't have a "range" function to count from 1 to total
   # We have to manually add the element and split into an array
   # TODO: Replace with range when available
