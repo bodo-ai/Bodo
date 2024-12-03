@@ -84,7 +84,6 @@ wheel.exclude = [
     "bodo/**/*.pxd",
     "bodo/**/*.pyx",
     "bodo/**/*.hpp",
-    "bodo/libs/HashLibs/TSL",
     "bodo/bench",
     "bodo/transforms/dataframe_pass.py",
     "bodo/transforms/distributed_analysis.py",
@@ -112,7 +111,6 @@ wheel.exclude = [
     "bodo/**/*.pxd",
     "bodo/**/*.pyx",
     "bodo/tests/data/**/*.crc",
-    "bodo/libs/HashLibs/TSL",
     "bodo/bench",
 ]
 

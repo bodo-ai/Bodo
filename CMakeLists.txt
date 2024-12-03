@@ -558,15 +558,7 @@ python_add_library(ext MODULE WITH_SOABI "${sources_list}")
 
 # Dependency Includes Are `-isystem` to Suppress Warnings
 target_include_directories(ext SYSTEM PRIVATE ${BASE_INCLUDE_DIRS})
-target_include_directories(
-  ext
-  PRIVATE
-    "bodo/libs/HashLibs/TSL/hopscotch-map"
-    "bodo/libs/HashLibs/TSL/robin-map"
-    "bodo/libs/HashLibs/TSL/sparse-map"
-)
 target_link_directories(ext PRIVATE ${CONDA_LIB_DIR})
-
 
 if (CMAKE_BUILD_TYPE STREQUAL "Release")
   target_compile_options(ext PRIVATE "-Wno-unknown-pragmas")
