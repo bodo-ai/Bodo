@@ -4,7 +4,7 @@ This quickstart guide will walk you through the process of running a simple Pyth
 
 ## Prerequisites
 
-[Install Bodo](../installation_and_setup/install) to get started.
+[Install Bodo](../installation_and_setup/install.md) to get started.
 
 ## Generate Sample Data
 
