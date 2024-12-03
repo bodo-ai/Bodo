@@ -91,6 +91,5 @@ python test_bodo.py
 ```
 
 By default Bodo will use all available cores. To set a limit on the number of processes spawned, set the environment variable `BODO_NUM_WORKERS`.
-If you're running the code on a multi-node cluster use mpiexec to launch your script, e.g. mpiexec python script.py.
 Note that the first time you run this code, it may take a few seconds to compile the code.
 Next time you run the code, it will execute much faster. Check the [Python API Reference][pythonreference] for the full list of supported Python operations.

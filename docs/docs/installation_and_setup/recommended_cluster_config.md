@@ -57,6 +57,12 @@ networking as well as EFA.
 -   ***Ensure that the file descriptor limit (`ulimit -n`) is set to a
     large number like `65000`.***
 
+- Launch scripts with mpiexec on clusters e.g.
+
+```shell
+mpiexec -f <hostfile> -usize SYSTEM python file.py
+```
+
 -   ***Avoid unnecessary threading inside the application since it can
     conflict with MPI parallelism.*** 
     

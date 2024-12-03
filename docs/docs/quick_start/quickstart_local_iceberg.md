@@ -125,7 +125,6 @@ python test_bodo_iceberg.py
 
 
 By default Bodo will use all available cores. To set a limit on the number of processes spawned, set the environment variable `BODO_NUM_WORKERS`.
-If you're running the code on a multi-node cluster use mpiexec to launch your script, e.g. mpiexec python script.py.
 Within the JIT functions data will be distributed across the number of cores you specify. Once data is returned, it can be accessed as if it all exists on a single process, though under the hood Bodo will only transfer the full data to the main process if it is actually used.
 E.g. if you run the code with 8 cores, here's the expected print out:
 
