@@ -13,16 +13,16 @@ fi
 psh git clone -b develop https://$GITHUB_TOKEN@github.com/bodo-ai/Bodo.git
 
 # Install Pixi
-psh curl -fsSL https://pixi.sh/install.sh | bash
-source ~/.bash_profile
+psh bash -c 'curl -fsSL https://pixi.sh/install.sh | bash'
+source ~/.bashrc
 
 # Install development deps
 cd ~/Bodo
 psh pixi install -e platform-dev
 # Remove conda install mpi to prefer intel MPI on the platform
-psh env BODO_SKIP_CPP_TESTS=1 USE_BODO_ARROW_FORK=1 pixi run build
+psh env BODO_SKIP_CPP_TESTS=1 USE_BODO_ARROW_FORK=1 pixi run build -e platform-dev
 
-psh pixi shell
+pixi shell -e platform-dev
 cd bodo-platform-image/bodo-platform-utils/
 psh pip install -ve .
 # Ensure that modify time for bodosql wrapper is the same on all nodes. If it is
