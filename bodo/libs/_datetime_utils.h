@@ -1,8 +1,9 @@
 // Copyright (C) 2022 Bodo Inc. All rights reserved.
 #pragma once
 
-#include <stdint.h>
-#include "Python.h"
+#include <Python.h>
+#include <cstddef>
+#include <cstdint>
 
 /**
  * @brief copied from Arrow since not in exported APIs
