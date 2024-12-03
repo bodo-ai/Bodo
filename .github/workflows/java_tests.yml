@@ -55,7 +55,7 @@ jobs:
       # Publishing Test Results
       # Always run both even if tests fail
       - name: Publish Test Result Failures
-        uses: mikepenz/action-junit-report@v4
+        uses: mikepenz/action-junit-report@v5
         if: success() || failure()
         with:
           report_paths: 'BodoSQL/calcite_sql/bodosql-calcite-application/target/surefire-reports/TEST-*.xml'        
