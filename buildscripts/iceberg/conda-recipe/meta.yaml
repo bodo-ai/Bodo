@@ -26,6 +26,6 @@ requirements:
 
 about:
 home: https://bodo.ai/
-license: Proprietary
+license: Apache-2.0
 license_file: LICENSE
 summary: Bodo Iceberg Connector

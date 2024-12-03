@@ -62,10 +62,6 @@ jobs:
           # Sccache Creds
           AWS_ACCESS_KEY_ID: ${{ vars.SCCACHE_AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.SCCACHE_AWS_SECRET_ACCESS_KEY }}
-          # Community Specific
-          CHECK_LICENSE_EXPIRED: 1
-          CHECK_LICENSE_CORE_COUNT: 1
-          CHECK_LICENSE_PLATFORM: 0
           BUILD_WITH_V8: 0
 
       - name: Upload Conda Package

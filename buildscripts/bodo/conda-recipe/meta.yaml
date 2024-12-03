@@ -8,9 +8,7 @@ source:
 build:
   number: {{ GIT_DESCRIBE_NUMBER|int }}
   script_env:
-    - CHECK_LICENSE_EXPIRED
-    - CHECK_LICENSE_CORE_COUNT
-    - CHECK_LICENSE_PLATFORM
+    - IS_BODO_PLATFORM
     - BUILD_WITH_V8
     # Necessary for sccache to find AWS
     - AWS_ACCESS_KEY_ID
@@ -100,6 +98,6 @@ test:
 
 about:
   home: https://bodo.ai
-  license: Proprietary
+  license: Apache-2.0
   license_file: LICENSE
   summary: Python Supercomputing Analytics Platform

@@ -83,9 +83,7 @@ jobs:
           AWS_ACCESS_KEY_ID: ${{ vars.SCCACHE_AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.SCCACHE_AWS_SECRET_ACCESS_KEY }}
           # Platform specific
-          CHECK_LICENSE_EXPIRED: ${{ (inputs.platform-build == true) && '0' || '1' }}
-          CHECK_LICENSE_CORE_COUNT: ${{ (inputs.platform-build == true) && '0' || '1' }}
-          CHECK_LICENSE_PLATFORM: ${{ (inputs.platform-build == true) && '1' || '0' }}
+          IS_BODO_PLATFORM: ${{ (inputs.platform-build == true) && '1' || '0' }}
           BUILD_WITH_V8: ${{ (inputs.platform-build == true) && '1' || '0' }}
           PLATFORM_CHANNEL: ${{ (inputs.platform-build == true) && '-c bodo.ai' || '' }}
 
