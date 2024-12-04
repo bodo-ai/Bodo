@@ -623,7 +623,11 @@ environment variables (listed in order of precedence):
 
 By default, Bodo uses [Apache Arrow](https://arrow.apache.org/) internally for read
 and write of data on S3. If additional `storage_options` are provided to `pd.read_parquet`
-that Arrow does not support, then S3FS will be used instead. It can be optionally installed via:
+that Arrow does not support, then S3FS will be used instead. It can be optionally installed via pip or conda:
+
+``` shell
+pip install "s3fs>=2022.1.0"
+```
 
 ``` shell
 conda install -c conda-forge "s3fs>=2022.1.0"
@@ -803,7 +807,7 @@ require slightly different core-site configurations. Here are some examples:
 - Using a SAS Token
 
     To use SAS Tokens, you need to install the `bodo-azurefs-sas-token-provider`
-    package (it can be installed using
+    package (it can be installed using `pip install bodo-azurefs-sas-token-provider` or
     `conda install bodo-azurefs-sas-token-provider -c bodo.ai -c conda-forge`).
     This is already installed on the Bodo Platform.
     Then in your program, do the following:
@@ -951,17 +955,18 @@ Snowflake {#snowflake-section}
 In order to be able to query Snowflake or write a dataframe to
 Snowflake from Bodo, installing the Snowflake connector is
 necessary (it is installed by default on Bodo Platform).
-If you are using Bodo in a conda environment:
-
-``` shell
-conda install -c conda-forge snowflake-connector-python
-```
 
 If you have installed Bodo using pip, then you can install the Snowflake
 connector using pip as well:
 
 ``` shell
 pip install snowflake-connector-python
+```
+
+If you are using Bodo in a conda environment:
+
+``` shell
+conda install -c conda-forge snowflake-connector-python
 ```
 
 ## Reading from Snowflake
@@ -1123,7 +1128,7 @@ Direct Upload (preferred) or Put Upload.
         For writing to ADLS based stages, you must have Hadoop setup
         correctly (see more details [here](#HDFS))
         and have the `bodo-azurefs-sas-token-provider` package installed (it
-        can be installed using
+        can be installed using `pip install bodo-azurefs-sas-token-provider` or
         `conda install bodo-azurefs-sas-token-provider -c bodo.ai -c conda-forge`).
         Bodo will fall back to the Put Upload strategy if both these
         conditions are not met. Also see
@@ -1216,18 +1221,18 @@ MySQL
 
 ### Prerequisites
 
-In addition to ``sqlalchemy``, installing ``pymysql`` is required.
+In addition to ``sqlalchemy``, installing ``pymysql`` is required. If you have installed Bodo using pip:
+
+```shell
+pip install pymysql
+```
+
 If you are using Bodo in a conda environment:
 
 ```shell
 conda install pymysql -c conda-forge
 ```
 
-If you have installed Bodo using pip:
-
-```shell
-pip install PyMySQL
-```
 
 ### Usage
 
@@ -1275,16 +1280,16 @@ write_mysql(df, table_name, conn)
 ### Prerequisites
 
 In addition to ``sqlalchemy``, install ``cx_oracle`` and Oracle instant client driver.
-If you are using Bodo in a conda environment:
-
-```shell
-conda install cx_oracle -c conda-forge
-```
-
 If you have installed Bodo using pip:
 
 ```shell
 pip install cx-Oracle
+```
+
+If you are using Bodo in a conda environment:
+
+```shell
+conda install cx_oracle -c conda-forge
 ```
 
 - Then, Download "Basic" or "Basic light" package matching your operating system from [here](https://www.oracle.com/database/technologies/instant-client/downloads.html){target=blank}.
@@ -1293,8 +1298,8 @@ pip install cx-Oracle
 !!! note
     For linux ``libaio`` package is required as well.
 
-    - conda: ``conda install libaio -c conda-forge``
     - pip: ``pip install libaio``
+    - conda: ``conda install libaio -c conda-forge``
 
 See [cx_oracle](https://cx-oracle.readthedocs.io/en/latest/user_guide/installation.html#cx-oracle-8-installation>){target=blank} for more information.
 Alternatively, Oracle instant driver can be automatically downloaded using ``wget`` or ``curl`` commands.
@@ -1357,16 +1362,16 @@ write_mysql(df, table_name, conn)
 ### Prerequisites
 In addition to `sqlalchemy`, install `psycopg2`.
 
+If you have installed Bodo using pip:
+
+```shell
+pip install psycopg2
+```
+
 If you are using Bodo in a conda environment:
 
 ```shell
 conda install psycopg2 -c conda-forge
-```
-
-If you have installed Bodo using pip:
-
-```shell
-$ pip install psycopg2
 ```
 
 ### Usage
