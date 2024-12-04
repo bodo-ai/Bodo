@@ -623,7 +623,7 @@ environment variables (listed in order of precedence):
 
 By default, Bodo uses [Apache Arrow](https://arrow.apache.org/) internally for read
 and write of data on S3. If additional `storage_options` are provided to `pd.read_parquet`
-that Arrow does not support, then S3FS will be used instead. It can be optionally installed via pip and conda:
+that Arrow does not support, then S3FS will be used instead. It can be optionally installed via pip or conda:
 
 ``` shell
 pip install "s3fs>=2022.1.0"
