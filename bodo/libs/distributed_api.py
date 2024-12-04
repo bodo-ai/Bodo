@@ -1428,12 +1428,16 @@ def gatherv_impl_jit(
 
         return impl_dict
 
-    try:
-        import bodosql
-        from bodosql.context_ext import BodoSQLContextType
-    except ImportError:  # pragma: no cover
-        BodoSQLContextType = None
-    if BodoSQLContextType is not None and isinstance(data, BodoSQLContextType):
+    if type(data).__name__ == "BodoSQLContextType":
+        try:
+            import bodosql
+            from bodosql.context_ext import BodoSQLContextType
+        except ImportError:  # pragma: no cover
+            raise ImportError(
+                "Install bodosql to use gatherv() with BodoSQLContextType"
+            )
+        assert isinstance(data, BodoSQLContextType)
+
         func_text = f"def impl_bodosql_context(data, allgather=False, warn_if_rep=True, root={DEFAULT_ROOT}, comm=0):\n"
         comma_sep_names = ", ".join([f"'{name}'" for name in data.names])
         comma_sep_dfs = ", ".join(
@@ -1447,12 +1451,14 @@ def gatherv_impl_jit(
         exec(func_text, {"bodo": bodo, "bodosql": bodosql}, loc_vars)
         impl_bodosql_context = loc_vars["impl_bodosql_context"]
         return impl_bodosql_context
-    try:
-        import bodosql
-        from bodosql import TablePathType
-    except ImportError:  # pragma: no cover
-        TablePathType = None
-    if TablePathType is not None and isinstance(data, TablePathType):
+
+    if type(data).__name__ == "TablePathType":
+        try:
+            import bodosql
+            from bodosql import TablePathType
+        except ImportError:  # pragma: no cover
+            raise ImportError("Install bodosql to use gatherv() with TablePathType")
+        assert isinstance(data, TablePathType)
         # Table Path info is all compile time so we return the same data.
         func_text = f"def impl_table_path(data, allgather=False, warn_if_rep=True, root={DEFAULT_ROOT}, comm=0):\n"
         func_text += "  return data\n"
