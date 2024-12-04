@@ -10,8 +10,9 @@ import bodo
 from bodo.tests.utils import check_func, pytest_mark_one_rank
 from bodo.utils.typing import BodoError
 
+pytest_mark = pytest.mark.skip("Skip until we can have fftw as a dependency")
 
-@pytest.mark.skip("Skip until we can have fftw as a dependecy")
+
 # TODO: [BSE-991] investigate parallel support for taylor function
 @pytest_mark_one_rank
 @pytest.mark.skip(
