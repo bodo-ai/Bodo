@@ -4954,7 +4954,7 @@ def to_json_overload(
 
     # TODO: refactor when objmode() can understand global string constant
     # String output case
-    if path_or_buf is None or path_or_buf == types.none:
+    if is_overload_none(path_or_buf):
 
         def _impl(
             df,
