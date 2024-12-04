@@ -108,6 +108,7 @@ snowflake-connector-python = "*"
 xlrd = "*"
 xlsxwriter = "*"
 openpyxl = "*"
+jupyter = ">=1.1.1,<2"
 
 [target.linux-64.dependencies]
 cx_oracle = "*"
