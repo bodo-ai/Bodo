@@ -15,7 +15,7 @@ important concepts briefly.
 
 Installation
 ------------
-[Install Bodo](../installation_and_setup/install.md) to get started with Python development.
+[Install Bodo](../installation_and_setup/install.md) to get started with Python development (e.g., `pip install bodo` or `conda install bodo -c bodo.ai -c conda-forge`).
 
 Data Transform Example with Bodo
 --------------------------------
