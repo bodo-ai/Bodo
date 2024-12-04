@@ -2,9 +2,14 @@ import pandas as pd
 import pytest
 from pandas.core.internals.array_manager import ArrayManager
 
+import bodo
 from bodo.pandas.frame import BodoDataFrame
 from bodo.pandas.managers import LazyBlockManager
 from bodo.tests.test_lazy.utils import pandas_managers  # noqa
+from bodo.tests.utils import (
+    sql_user_pass_and_hostname,
+)
+from bodo.utils.testing import ensure_clean_mysql_psql_table
 
 
 @pytest.fixture
@@ -410,3 +415,32 @@ def test_slice(pandas_managers, head_df, collect_func):
     assert lam_sliced_twice_df.equals(collect_func(0)["A0"][1:3])
     lam_sliced_twice_df = lam_sliced_df[10:30]
     assert lam_sliced_twice_df.equals(collect_func(0)["A0"][10:30])
+
+
+def test_sql(collect_func):
+    """Tests that to_sql() writes the frame correctly and does not trigger data fetch"""
+
+    @bodo.jit(spawn=True)
+    def _get_bodo_df(df):
+        return df
+
+    df = collect_func(0)
+    bodo_df = _get_bodo_df(df)
+
+    table_name = "table_name"
+    conn = "mysql+pymysql://" + sql_user_pass_and_hostname + "/employees"
+    with ensure_clean_mysql_psql_table(conn, table_name) as table_name:
+        bodo_df.to_sql(table_name, conn)
+        assert bodo_df._lazy
+        read_df = pd.read_sql(f"SELECT * FROM {table_name}", conn)
+
+    pd.testing.assert_frame_equal(
+        read_df,
+        df,
+        check_dtype=False,
+    )
+    pd.testing.assert_frame_equal(
+        bodo_df,
+        df,
+        check_dtype=False,
+    )
