@@ -110,6 +110,9 @@ openpyxl = "*"
 
 [target.linux-64.dependencies]
 cx_oracle = "*"
+pyarrow = { version = "17.0.0", channel = "bodo.ai" }
+libarrow = { version = "*", channel = "bodo.ai" }
+# required for bodo pyarrow package
 [target.osx-64.dependencies]
 cx_oracle = "*"
 
