@@ -422,6 +422,11 @@ def test_json(collect_func):
     @bodo.jit(spawn=True)
     def _get_bodo_df(df):
         return df
+    
+    @bodo.jit(spawn=True)
+    def _read_bodo_df(fname):
+        read_df = pd.read_json(path_or_buf=fname, orient="records", lines=True)
+        return read_df
 
     df = collect_func(0)
     bodo_df = _get_bodo_df(df)
@@ -429,15 +434,15 @@ def test_json(collect_func):
     with ensure_clean2(fname):
         bodo_df.to_json(path_or_buf=fname, orient="records", lines=True)
         assert bodo_df._lazy
-        # read_df = pd.read_json(path_or_buf=fname, orient="records", lines=True)
+        read_df = _read_bodo_df(fname)
 
-    # pd.testing.assert_frame_equal(
-    #     read_df,
-    #     df,
-    #     check_dtype=False,
-    # )
-    # pd.testing.assert_frame_equal(
-    #     bodo_df,
-    #     df,
-    #     check_dtype=False,
-    # )
+    pd.testing.assert_frame_equal(
+        read_df,
+        df,
+        check_dtype=False,
+    )
+    pd.testing.assert_frame_equal(
+        bodo_df,
+        df,
+        check_dtype=False,
+    )
