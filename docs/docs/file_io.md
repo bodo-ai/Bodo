@@ -955,7 +955,6 @@ Snowflake {#snowflake-section}
 In order to be able to query Snowflake or write a dataframe to
 Snowflake from Bodo, installing the Snowflake connector is
 necessary (it is installed by default on Bodo Platform).
-If you are using Bodo in a conda environment:
 
 If you have installed Bodo using pip, then you can install the Snowflake
 connector using pip as well:
@@ -963,6 +962,8 @@ connector using pip as well:
 ``` shell
 pip install snowflake-connector-python
 ```
+
+If you are using Bodo in a conda environment:
 
 ``` shell
 conda install -c conda-forge snowflake-connector-python
@@ -1220,14 +1221,13 @@ MySQL
 
 ### Prerequisites
 
-In addition to ``sqlalchemy``, installing ``pymysql`` is required.
-If you are using Bodo in a conda environment:
-
-If you have installed Bodo using pip:
+In addition to ``sqlalchemy``, installing ``pymysql`` is required. If you have installed Bodo using pip:
 
 ```shell
-pip install PyMySQL
+pip install pymysql
 ```
+
+If you are using Bodo in a conda environment:
 
 ```shell
 conda install pymysql -c conda-forge
@@ -1362,12 +1362,13 @@ write_mysql(df, table_name, conn)
 ### Prerequisites
 In addition to `sqlalchemy`, install `psycopg2`.
 
-If you are using Bodo in a conda environment:
 If you have installed Bodo using pip:
 
 ```shell
 pip install psycopg2
 ```
+
+If you are using Bodo in a conda environment:
 
 ```shell
 conda install psycopg2 -c conda-forge

@@ -7,14 +7,14 @@ tags:
 ---
 # Installing Bodo Engine {#install}
 
-Bodo compute engine can be installed using either the `pip` or `conda` command (see how to install [conda][conda] below). 
+Bodo compute engine can be installed using either `pip` or `conda` (see how to install [conda][conda] below). 
 To install Bodo and its dependencies with `pip`, use the following command:
 
 ```console
 pip install bodo
 ```
 
-For production environments we recommend creating a `conda` environment and installing
+For production environments, we recommend creating a `conda` environment and installing
 Bodo and its dependencies in it as shown below:
 
 ```console
@@ -55,7 +55,7 @@ export PATH=$HOME/miniconda3/bin:$PATH
 Some Bodo functionality may require other dependencies, as summarized in
 the table below. 
 
-All optional dependencies except Hadoop, Hdf5, and OpenJDK can be installed through pip using the command:
+All optional dependencies except Hadoop, HDF5, and OpenJDK can be installed through pip using the command:
 
 ```console
 pip install gcsfs sqlalchemy snowflake-connector-python deltalake

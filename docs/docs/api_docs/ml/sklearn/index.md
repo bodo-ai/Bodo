@@ -1,13 +1,11 @@
 # Scikit-learn
 
-Bodo supports `scikit-learn` versions `1.1.*`.
-
-Install scikit-learn in your Bodo environment:
+Bodo supports `scikit-learn` versions `1.1.*`. To install scikit-learn in your Bodo environment:
 
 ```shell
 pip install scikit-learn=='1.1.*'
 ```
-
+or
 ```shell
 conda install scikit-learn='1.1.*' -c conda-forge
 ```
