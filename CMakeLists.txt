@@ -669,36 +669,3 @@ add_dependencies(ext datasketches)
 set_target_properties(ext PROPERTIES CXX_CLANG_TIDY "${CLANG_TIDY_COMMAND}")
 
 install(TARGETS ext DESTINATION "bodo/")
-
-
-# ------------------------- Cythonize Transform Files -------------------------
-set(transform_files)
-if (CMAKE_BUILD_TYPE STREQUAL "Release")
-  set(transform_files
-    "bodo/transforms/dataframe_pass.py"
-    "bodo/transforms/distributed_analysis.py"
-    "bodo/transforms/distributed_pass.py"
-    "bodo/transforms/series_pass.py"
-    "bodo/transforms/table_column_del_pass.py"
-    "bodo/transforms/typing_pass.py"
-    "bodo/transforms/untyped_pass.py"
-  )
-endif()
-
-foreach (file_path ${transform_files})
-  cmake_path(GET file_path FILENAME file_name)
-  cmake_path(REMOVE_EXTENSION file_name OUTPUT_VARIABLE cython_module)
-  cmake_path(REPLACE_EXTENSION file_path ".c" OUTPUT_VARIABLE out_path)
-
-  add_custom_command(
-    OUTPUT ${out_path}
-    DEPENDS ${file_path}
-    VERBATIM
-    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-    COMMAND "${CYTHON_EXECUTABLE}" -3 --output-file "${CMAKE_CURRENT_BINARY_DIR}/${out_path}" "${file_path}"
-    COMMENT "Cythonizing Source ${file_path} into ${out_path}"
-  )
-
-  python_add_library(${cython_module} MODULE WITH_SOABI ${out_path})
-  install(TARGETS ${cython_module} DESTINATION "bodo/transforms/")
-endforeach()
