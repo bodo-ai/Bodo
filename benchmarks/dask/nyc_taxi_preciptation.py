@@ -1,8 +1,8 @@
+import time
+
 from dask_cloudprovider.aws import EC2Cluster
 from dask.distributed import Client, LocalCluster
 import dask.dataframe as dd
-import time
-import pandas as pd
 
 def run_dask_local():
     with LocalCluster() as cluster:

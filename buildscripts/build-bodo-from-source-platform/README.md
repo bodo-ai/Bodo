@@ -14,9 +14,9 @@
 1. SSH into the cluster node (`My Notebook` -> `BODO CLUSTERS` -> `Terminal` beside the running cluster).
 1. Copy `install.sh` to the node.
 1. Run the script: `bash -i install.sh` (recommended in directory `/home/bodo`).
-1. Enter your GitHub PAT and branch to checkout when prompted (alternatively,
-   `GITHUB_TOKEN` and `BRANCH_NAME` can be set as environment variables)
-1. Run `conda activate DEV` to enter the environment created by the install
+1. Enter your GitHub PAT to checkout when prompted (alternatively,
+   `GITHUB_TOKEN` can be set as environment variable)
+1. Run `pixi shell -e platform-dev` to enter the environment created by the install
    script.
 
 > [!NOTE]
