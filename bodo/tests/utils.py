@@ -3012,7 +3012,7 @@ def get_files_changed():
     """
     Returns a list of any files changed.
     """
-    res = subprocess.run(["git", "diff", "--name-only", "develop"], capture_output=True)
+    res = subprocess.run(["git", "diff", "--name-only", "main"], capture_output=True)
     return res.stdout.decode("utf-8").strip().split("\n")
 
 

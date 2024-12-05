@@ -3,12 +3,12 @@ name: Regenerate Terraform for Self-Hosted CI
 on:
   pull_request:
     branches:
-    - develop
+    - main
     paths:
       - "buildscripts/github/**"
   push:
     branches:
-    - develop
+    - main
     paths:
       - "buildscripts/github/**"
 
@@ -102,5 +102,5 @@ jobs:
 
     - name: Terraform Apply
       id: apply
-      if: github.ref == 'refs/heads/develop'
+      if: github.ref == 'refs/heads/main'
       run: terraform apply -input=false -lock-timeout=600s -auto-approve -var 'github_app_id=804367' -var 'github_key_base64=${{ secrets.SELF_HOSTED_TF_KEY_BASE64 }}'
