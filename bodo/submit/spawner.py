@@ -265,7 +265,7 @@ class Spawner:
         )
 
         # Send dispatcher
-        pickled_func = cloudpickle.dumps(dispatcher)
+        pickled_func = serialize_submit_dispatcher(dispatcher)
         self.worker_intercomm.bcast(pickled_func, root=self.bcast_root)
         debug_msg(self.logger, "submit_func_to_workers - wait for results")
 
@@ -613,18 +613,30 @@ class SubmitDispatcher:
         decorator = bodo.jit(**decorator_args)
         return decorator(py_func)
 
-    def __reduce__(self):
-        # Pickle this object by pickling the underlying function (which is
-        # guaranteed to have the extra properties necessary to build the actual
-        # dispatcher via bodo.jit on the worker side)
-        return SubmitDispatcher.get_dispatcher, (
-            self.py_func,
-            self.decorator_args,
-            self.extra_globals,
-        )
-
     def add_extra_globals(self, glbls):
         """Add extra globals to be pickled (used for BodoSQL globals that are not visible to
         cloudpickle, e.g. inside CASE implementation strings)
         """
         self.extra_globals.update(glbls)
+
+
+def serialize_submit_dispatcher(submit_dispatcher):
+    """Serialize attributes necessary to reconstruct the dispatcher on workers.
+    Avoiding direct pickle call on dispatchers due to various hard to pin down issues we
+    found in testing.
+    """
+    return cloudpickle.dumps(
+        (
+            submit_dispatcher.py_func,
+            submit_dispatcher.decorator_args,
+            submit_dispatcher.extra_globals,
+        )
+    )
+
+
+def deserialize_submit_dispatcher(pickled_func):
+    """Create a CPUDispatcher from SubmitDispatcher attributes sent by spawner to
+    workers.
+    """
+    (py_func, decorator_args, extra_globals) = cloudpickle.loads(pickled_func)
+    return SubmitDispatcher.get_dispatcher(py_func, decorator_args, extra_globals)
