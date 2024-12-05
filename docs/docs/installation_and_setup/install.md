@@ -7,8 +7,14 @@ tags:
 ---
 # Installing Bodo Engine {#install}
 
-Bodo compute engine can be installed using the `conda` command (see how to install [conda][conda] below). 
-We recommend creating a `conda` environment and installing 
+Bodo compute engine can be installed using either `pip` or `conda` (see how to install [conda][conda] below). 
+To install Bodo and its dependencies with `pip`, use the following command:
+
+```console
+pip install bodo
+```
+
+For production environments, we recommend creating a `conda` environment and installing
 Bodo and its dependencies in it as shown below:
 
 ```console
@@ -19,12 +25,12 @@ conda install bodo -c bodo.ai -c conda-forge
 
 Bodo uses [MPI](https://en.wikipedia.org/wiki/Message_Passing_Interface){target="blank"}
 for parallelization, which is automatically installed as part of the
-`conda` install command above.
+`pip` and `conda` install commands above.
 
 
 ## How to Install Conda {#conda}
 
-Install Conda using the instructions below.
+Install conda using the instructions below.
 
 ### On Linux
 
@@ -47,11 +53,19 @@ export PATH=$HOME/miniconda3/bin:$PATH
 ## Optional Dependencies {#optionaldep}
 
 Some Bodo functionality may require other dependencies, as summarized in
-the table below. All optional dependencies except Hadoop can be
-installed using the command:
+the table below. 
+
+All optional dependencies except Hadoop, HDF5, and OpenJDK can be installed through pip using the command:
 
 ```console
-conda install gcsfs sqlalchemy snowflake-connector-python hdf5='1.14.*=*mpich*' openjdk deltalake -c conda-forge
+pip install gcsfs sqlalchemy snowflake-connector-python deltalake
+```
+
+All optional dependencies except Hadoop can be
+installed through conda using the command:
+
+```console
+conda install gcsfs sqlalchemy snowflake-connector-python hdf5='1.14.*=*mpich*' openjdk=11 deltalake -c conda-forge
 ```
 
 
@@ -71,7 +85,7 @@ conda install gcsfs sqlalchemy snowflake-connector-python hdf5='1.14.*=*mpich*' 
 
 ## Testing your Installation {#testinstall }
 
-Once you have activated your `conda` environment and installed Bodo in
+Once you have installed Bodo with pip or activated your `conda` environment and installed Bodo in
 it, you can test it using the example program below. This program has
 two functions:
 
