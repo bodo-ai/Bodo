@@ -23,12 +23,14 @@ import time
 def get_monthly_travels_weather():
     start = time.time()
     central_park_weather_observations = pd.read_csv(
-        "s3://bodo-example-data/nyc-taxi/central_park_weather.csv", parse_dates=["date"]
+        "s3://bodo-example-data/nyc-taxi/central_park_weather.csv", parse_dates=["DATE"]
+    )
+    central_park_weather_observations = central_park_weather_observations.rename(
+        columns={"DATE": "date", "PRCP": "precipitation"}, copy=False
     )
     central_park_weather_observations["date"] = central_park_weather_observations[
         "date"
     ].dt.date
-
     green_taxi = pd.read_csv(
         "s3://bodo-example-data/nyc-taxi/green_tripdata_2019.csv",
         usecols=[0, 1, 5, 6, 8],
