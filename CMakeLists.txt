@@ -488,7 +488,6 @@ set(sources_list
   "bodo/libs/streaming/_shuffle.cpp"
   "bodo/libs/_storage_manager.cpp"
   "bodo/libs/_utils.cpp"
-  "bodo/libs/_fft.cpp"
   "bodo/libs/_uuid.cpp"
   "bodo/libs/_query_profile_collector.cpp"
   "bodo/libs/_pymemory.cpp"
@@ -626,11 +625,6 @@ target_link_libraries(ext PRIVATE
   arrow_python
   arrow_dataset
   parquet
-  fftw3
-  fftw3f
-  fftw3_mpi
-  fftw3f_mpi
-  m
   fmt::fmt
   aws-cpp-sdk-core
 )
