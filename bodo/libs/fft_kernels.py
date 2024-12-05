@@ -3,6 +3,8 @@ Implements kernels for FFT functions. Note that this file will only be imported
 if the user has scipy installed.
 """
 
+assert False, "This file should not be imported until we can add fftw as a dependency"
+
 import numpy as np
 import scipy.fft
 import scipy.fftpack
