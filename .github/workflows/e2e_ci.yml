@@ -1,6 +1,6 @@
 name: Nightly E2E CI
 on:
-  # Run Every Weekday on Develop Branch at 2AM EST
+  # Run Every Weekday on main Branch at 2AM EST
   schedule:
     - cron: '00 7 * * 1,2,3,4,5'
   # Manual Trigger
@@ -22,7 +22,7 @@ jobs:
         with:
           pixi-version: v0.34.0
           cache: true
-          cache-write: ${{ github.event_name == 'push' && github.ref_name == 'develop' }}
+          cache-write: ${{ github.event_name == 'push' && github.ref_name == 'main' }}
           environments: 'default'
           activate-environment: true
 
