@@ -64,13 +64,12 @@ jobs:
           owner: bodo-ai
           repo: customer-sample-code
           github_token: ${{ secrets.BOT_HERMAN_GITHUB_TOKEN }}
-          github_user: ${{ secrets.BOT_GITHUB_USERNAME }}
           workflow_file_name: customer_bodosql_ci.yaml
           ref: master
           client_payload: '{ "branch" : "${{ github.head_ref || github.ref_name }}" }'
 
   
-  # 3) Pre-Build Bodo to save build artifacts to sccache
+  # 4) Pre-Build Bodo to save build artifacts to sccache
   compile-bodo:
     needs: [commit-prefix-ci]
     name: Pre-Build Bodo for Cache
@@ -93,7 +92,7 @@ jobs:
         run: |
           wget -O hadoop.tar.gz "https://www.apache.org/dyn/mirrors/mirrors.cgi?action=download&filename=hadoop/common/hadoop-3.3.2/hadoop-3.3.2.tar.gz"
 
-  # 3) Actually run tests
+  # 5) Actually run tests
   pr-ci:
     needs: [compile-bodo]
     name: Test
@@ -121,7 +120,7 @@ jobs:
       collect-coverage: false
     secrets: inherit
 
-  # 4) Collect and combine any results from runs
+  # 6) Collect and combine any results from runs
   collect-results:
     needs: [pr-ci]
     name: Collect Results
