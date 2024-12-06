@@ -5,14 +5,16 @@
 cd benchmarks/modin-ray
 # create ray cluster
 ray up modin-cluster.yaml -y
-# Forward dashboard to local
+# (optional) Forward dashboard to local
 ray dashboard modin-cluster.yaml
-# ssh into head node
+# (in a separate terminal) (optional) ssh into head node
 ray attach modin-cluster.yaml
-# end ssh session
-exit
-# run benchmark
+# (in a separate terminal) run benchmark
+ray submit modin-cluster.yaml nyc_taxi_preciptation.py
+# run benchmark again to make sure all nodes have had a chance to start up
 ray submit modin-cluster.yaml nyc_taxi_preciptation.py
 # tear down cluster
 ray down modin-cluster.yaml -y
+# end ssh session
+exit
 ```
