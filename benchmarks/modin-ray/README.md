@@ -1,6 +1,5 @@
-# Running this benchmakr
+# Running this benchmark
 
-Install Modin/ray
 
 ``` shell
 cd benchmarks/modin-ray
