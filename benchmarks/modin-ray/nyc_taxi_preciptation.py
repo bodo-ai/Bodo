@@ -2,17 +2,35 @@ import time
 
 import ray
 
-ray.init(num_cpus=4)
+ray.init(address="auto")
+cpu_count = ray.cluster_resources()["CPU"]
+print("RAY CPU COUNT: ", cpu_count)
 import modin.pandas as pd
+
+# run on the first 6 / 60 parquet files
+# parquet_files = [
+#     f"s3://bodo-example-data/nyc-taxi/fhvhv_tripdata/fhvhv_tripdata_2019-{i:02}.parquet"
+#     for i in range(2, 8)
+# ]
+# run on entire dataset
+parquet_files = "s3://bodo-example-data/nyc-taxi/fhvhv_tripdata/"
 
 
 def run_modin():
     start = time.time()
-    central_park_weather_observations = pd.read_csv("weather.csv", parse_dates=["DATE"])
-    central_park_weather_observations = central_park_weather_observations.rename(
-        columns={"DATE": "date", "PRCP": "precipitation"}, copy=False
+    central_park_weather_observations = pd.read_csv(
+        "s3://bodo-example-data/nyc-taxi/central_park_weather.csv",
+        parse_dates=["DATE"],
+        storage_options={"anon": True},
     )
-    fhvhv_tripdata = pd.read_parquet("taxi_1k.pq")
+    central_park_weather_observations = central_park_weather_observations.rename(
+        columns={"DATE": "date", "PRCP": "precipitation"},
+        copy=False,
+    )
+    fhvhv_tripdata = pd.read_parquet(
+        parquet_files,
+        storage_options={"anon": True},
+    )
     end = time.time()
     print("Reading Time: ", (end - start))
 
@@ -25,7 +43,7 @@ def run_modin():
     fhvhv_tripdata["month"] = fhvhv_tripdata["pickup_datetime"].dt.month
     fhvhv_tripdata["hour"] = fhvhv_tripdata["pickup_datetime"].dt.hour
     fhvhv_tripdata["weekday"] = fhvhv_tripdata["pickup_datetime"].dt.dayofweek.isin(
-        [1, 2, 3, 4, 5]
+        [0, 1, 2, 3, 4]
     )
 
     monthly_trips_weather = fhvhv_tripdata.merge(
