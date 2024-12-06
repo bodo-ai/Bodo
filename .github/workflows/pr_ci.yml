@@ -55,9 +55,13 @@ jobs:
           echo "commitMsg=$(git log -1 --pretty=format:'%s')" >> $GITHUB_OUTPUT
 
   bodosql-customer-tests:
-    needs: [validate]
+    needs: [validate, commit-prefix-ci]
     name: BodoSQL Customer Tests
     runs-on: ubuntu-latest
+    if: |
+      needs.commit-prefix-ci.outputs.runCI == 'true' &&
+      needs.validate.outputs.run_bodosql_customer_tests == 'true'
+
     steps:
       - uses: convictional/trigger-workflow-and-wait@v1.6.1
         with:
