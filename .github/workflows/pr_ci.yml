@@ -8,7 +8,31 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # 1) Check if commit has [run ci] before continuing
+
+  # 1) Validate changes in PR
+  validate:
+    name: Validate
+    runs-on: ubuntu-latest
+    outputs:
+      run_bodosql_customer_tests: ${{ steps.changes.outputs.bodosql_customer_tests }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+          fetch-depth: "0"
+
+      - name: Validate Changes
+        id: changes
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            bodosql_customer_tests:
+              - 'BodoSQL/calcite_sql/**'
+
+
+  # 2) Check if commit has [run ci] before continuing
+  # TODO: We will need to probably find different way for that
   commit-prefix-ci:
     name: Get Commit Message
     runs-on: ubuntu-latest
@@ -16,19 +40,37 @@ jobs:
       # https://docs.github.com/en/actions/learn-github-actions/expressions#contains
       # contains is case-insensitive
       runCI: ${{ contains(steps.check_msg.outputs.commitMsg, '[run ci]') }}
+
     steps:
       # Fetch the PR branch for the commit history
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           sparse-checkout: .
+
       - name: Check Commit Message
         id: check_msg
         run: |
           set -xe pipefail
           echo "commitMsg=$(git log -1 --pretty=format:'%s')" >> $GITHUB_OUTPUT
+
+  bodosql-customer-tests:
+    needs: [validate]
+    name: BodoSQL Customer Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: convictional/trigger-workflow-and-wait@v1.6.1
+        with:
+          owner: bodo-ai
+          repo: customer-sample-code
+          github_token: ${{ secrets.BOT_HERMAN_GITHUB_TOKEN }}
+          github_user: ${{ secrets.BOT_GITHUB_USERNAME }}
+          workflow_file_name: customer_bodosql_ci.yaml
+          ref: master
+          client_payload: '{ "branch" : "${{ github.head_ref || github.ref_name }}" }'
+
   
-  # 2) Pre-Build Bodo to save build artifacts to sccache
+  # 3) Pre-Build Bodo to save build artifacts to sccache
   compile-bodo:
     needs: [commit-prefix-ci]
     name: Pre-Build Bodo for Cache
