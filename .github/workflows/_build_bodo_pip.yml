@@ -87,7 +87,7 @@ jobs:
             echo "NEW_PYTHON_DIR: $NEW_PYTHON_DIR"
             rm -rf $OLD_PYTHON_DIR
             ln -s $NEW_PYTHON_DIR $OLD_PYTHON_DIR
-          CIBW_ENVIRONMENT: DISABLE_CCACHE=1 SCCACHE_RECACHE=1 SCCACHE_BUCKET=engine-codebuild-cache SCCACHE_REGION=us-east-2 SCCACHE_S3_USE_SSL=true SCCACHE_S3_SERVER_SIDE_ENCRYPTION=true MACOSX_DEPLOYMENT_TARGET=${{ inputs.os == 'macos-14' && '11.0' || '10.15' }} BODO_VENDOR_MPICH=1
+          CIBW_ENVIRONMENT: DISABLE_SCCACHE=1 SCCACHE_BUCKET=engine-codebuild-cache SCCACHE_REGION=us-east-2 SCCACHE_S3_USE_SSL=true SCCACHE_S3_SERVER_SIDE_ENCRYPTION=true MACOSX_DEPLOYMENT_TARGET=${{ inputs.os == 'macos-14' && '11.0' || '10.15' }} BODO_VENDOR_MPICH=1
           CIBW_ENVIRONMENT_PASS_LINUX: AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN AWS_DEFAULT_REGION
           CIBW_REPAIR_WHEEL_COMMAND_MACOS: 'delocate-wheel --ignore-missing-dependencies --sanitize-rpaths --exclude libmpi --exclude libpmpi --exclude libarrow --exclude libarrow_acero --exclude libarrow_dataset --exclude libarrow_flight --exclude libarrow_python --exclude libarrow_python_flight --exclude libarrow_python_parquet_encryption --exclude libarrow_substrait --exclude libparquet --require-archs {delocate_archs} -v {wheel} && python buildscripts/bodo/pip/macos/patch_libs_for_pip.py -p {wheel} && mv {wheel} {dest_dir}'
           CIBW_REPAIR_WHEEL_COMMAND_LINUX: 'LD_LIBRARY_PATH=/opt/conda/lib:$LD_LIBRARY_PATH && auditwheel -v repair --exclude libmpi.so.12 --exclude libarrow.so.1700 --exclude libarrow_acero.so.1700 --exclude libarrow_dataset.so.1700 --exclude libarrow_python.so --exclude libparquet.so.1700 --plat manylinux_2_35_x86_64 {wheel} -w {dest_dir} && python buildscripts/bodo/pip/manylinux/patch_libs_for_pip.py -p {dest_dir}'
