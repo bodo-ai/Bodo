@@ -84,5 +84,3 @@ jobs:
           echo "BODO_VERSION: $BODO_VERSION"
           artifactory_channel="bodo.ai"
           ./buildscripts/bodo/publish_binary_linux.sh $artifactory_channel "linux-64" $BODO_VERSION
-        env:
-          IS_RELEASE: ${{ inputs.is-release }}
