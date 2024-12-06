@@ -27,7 +27,11 @@ import bodo.hiframes
 import bodo.hiframes.table
 from bodo.mpi4py import MPI
 from bodo.pandas import LazyMetadata
-from bodo.submit.spawner import BodoSQLContextMetadata, env_var_prefix
+from bodo.submit.spawner import (
+    BodoSQLContextMetadata,
+    deserialize_submit_dispatcher,
+    env_var_prefix,
+)
 from bodo.submit.utils import (
     ArgMetadata,
     CommandType,
@@ -390,7 +394,7 @@ def exec_func_handler(
     res = None
     func = None
     try:
-        func = cloudpickle.loads(pickled_func)
+        func = deserialize_submit_dispatcher(pickled_func)
         # ensure that we have a CPUDispatcher to compile and execute code
         assert isinstance(
             func, numba.core.registry.CPUDispatcher
