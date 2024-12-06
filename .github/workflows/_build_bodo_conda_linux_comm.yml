@@ -74,6 +74,8 @@ jobs:
         if: ${{ inputs.is-release }}
         run: |
           set -exo pipefail
+          source /opt/conda/etc/profile.d/conda.sh
+          conda activate bodo_build
 
           # Secrets File
           echo "${{ secrets.PUBLISH_BINARY_SECRETS }}" > $HOME/secret_file

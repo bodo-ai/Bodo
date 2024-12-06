@@ -107,7 +107,8 @@ jobs:
           echo "ARTIFACTORY_CHANNEL: $ARTIFACTORY_CHANNEL"
           artifactory_channel="bodo.ai"
           # Why is this "linux-64"?
-          ./buildscripts/bodo/publish_binary.sh $artifactory_channel "linux-64" $BODO_VERSION
+          ./buildscripts/bodo/publish_binary.sh $artifactory_channel $OS_DIR $BODO_VERSION
         env:
           IS_RELEASE: ${{ inputs.is-release }}
           ARTIFACTORY_CHANNEL: ${{ format('bodo.ai{0}{1}', (inputs.platform-build == true) && '-platform' || '', (inputs.is-release) && '-dev' || '') }}
+          OS_DIR: ${{ format('osx-{0}', (inputs.os == 'macos-13') && '64' || 'arm64') }}
