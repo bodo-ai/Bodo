@@ -88,7 +88,7 @@ jobs:
           SF_USERNAME: ${{ secrets.SF_USERNAME }}
           SF_PASSWORD: ${{ secrets.SF_PASSWORD }}
           SF_ACCOUNT: ${{ secrets.SF_ACCOUNT }}
-          SF_AZURE_USERNAME: ${{ secrets.SF_AZURE_USERNAME }}
+          SF_AZURE_USER: ${{ secrets.SF_AZURE_USER }}
           SF_AZURE_PASSWORD: ${{ secrets.SF_AZURE_PASSWORD }}
           SF_AZURE_ACCOUNT: ${{ secrets.SF_AZURE_ACCOUNT }}
           NESSIE_AUTH_TOKEN: ${{ secrets.NESSIE_AUTH_TOKEN }}
