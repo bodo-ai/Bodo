@@ -110,4 +110,4 @@ jobs:
         env:
           IS_RELEASE: ${{ inputs.is-release }}
           ARTIFACTORY_CHANNEL: ${{ format('bodo.ai{0}{1}', (inputs.platform-build == true) && '-platform' || '', (inputs.is-release == false) && '-dev' || '') }}
-          OS_DIR: ${{ format('osx-{0}', (inputs.os == 'macos-13') && '64' || 'arm64') }}
+          OS_DIR: ${{ format('{0}', (inputs.os == 'macos-13') && 'osx-64' || (inputs.os == 'macos-14') && 'osx-arm64' || 'linux-64') }}
