@@ -19,8 +19,8 @@ check_ipo_supported()
 # Note that SCCache doesn't handle linking, so we skip for both
 
 find_program(CCACHE_EXECUTABLE "ccache")
-#find_program(SCCACHE_EXECUTABLE "sccache")
-#
+find_program(SCCACHE_EXECUTABLE "sccache")
+
 if ((NOT DEFINED ENV{DISABLE_CCACHE}) AND CCACHE_EXECUTABLE)
   set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE ccache)
 elseif ((NOT DEFINED ENV{DISABLE_SCCACHE}) AND SCCACHE_EXECUTABLE)
