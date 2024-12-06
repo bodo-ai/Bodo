@@ -3,7 +3,7 @@ set -exo pipefail
 
 # Package Setup
 eval "$(micromamba shell hook -s posix)"
-micromamba activate bodosql_build
+micromamba activate bodo_build
 
 CHANNEL_NAME=${1:-bodo-binary}
 OS_DIR=${2:-linux-64}
