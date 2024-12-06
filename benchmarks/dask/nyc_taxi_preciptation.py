@@ -1,3 +1,13 @@
+"""This is the script version of the dask benchmark. Before running, ensure
+that your local environment matches the environment created on the cloud.
+
+   cd benchmarks/dask
+   conda env create -f env.yml
+   conda activate benchmark_dask
+
+   python nyc_taxi_preciptation.py
+"""
+
 import time
 
 import dask.dataframe as dd
