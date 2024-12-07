@@ -132,7 +132,8 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             mode,
         ):
             if orient == "records":
-                # leave out orient in forwarded arguments for it to default back to Literal["records"] instead of being unicode
+                # leave out orient in forwarded arguments for it to default back to
+                # Literal["records"] instead of being unicode
                 return df.to_json(
                     path_or_buf=path_or_buf,
                     date_format=date_format,
