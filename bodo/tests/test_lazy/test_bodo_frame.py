@@ -9,10 +9,10 @@ from bodo.pandas.frame import BodoDataFrame
 from bodo.pandas.managers import LazyBlockManager
 from bodo.tests.iceberg_database_helpers.utils import create_iceberg_table, get_spark
 from bodo.tests.test_lazy.utils import pandas_managers  # noqa
-from bodo.utils.testing import ensure_clean2
 from bodo.tests.utils import (
     _gather_output,
 )
+from bodo.utils.testing import ensure_clean2
 
 
 @pytest.fixture
