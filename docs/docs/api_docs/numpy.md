@@ -236,19 +236,6 @@ Our documentation on scalable I/O contains [example usage and more system specif
 - `numpy.asmatrix` parallelized only for array or matrix input.
 - `*` left-hand side argument can be distributed but right-hand side argument is replicated.
 
-
-## Scipy support
-
-- `scipy.fft.fft2` supports complex64 and complex128 data. Bodo uses FFTW as the backend FFT library.
-    FFTW performs parameter tuning for best performance the first time the program is run.
-    The parameters are stored in a file named `.fftw_wisdom` or `.fftwf_wisdom` to be reused for subsequent runs.
-    Environment variable `BODO_FFTW_PLANNING` allows setting the FFTW planning flag (e.g. `FFTW_ESTIMATE`), and
-    `BODO_FFTW_PLANNING_TIMEOUT` allows setting FFTW planning timeout (default is 1 hour).
-    See [FFTW documentation](https://www.fftw.org/fftw3_doc) for more information.
-
-- `scipy.fft.fftshift` supports 2D arrays of complex64 and complex128 data.
-
-
 ##  Miscellaneous
 
 - Numpy array comprehension : e.g. : A = np.array([i**2 for i in range(N)])

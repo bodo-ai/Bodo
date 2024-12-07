@@ -452,10 +452,5 @@ def _init_extensions():
 
         need_refresh = True
 
-    if "scipy" in sys.modules and "bodo.libs.fft_kernels" not in sys.modules:
-        import bodo.libs.fft_kernels  # noqa
-
-        need_refresh = True
-
     if need_refresh:
         numba.core.registry.cpu_target.target_context.refresh()

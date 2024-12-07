@@ -3788,16 +3788,22 @@ def to_parquet_overload(
         raise BodoError(
             "DataFrame.to_parquet(): Providing 'partition_cols' on DataFrames with columns determined at runtime is not yet supported. Please return the DataFrame to regular Python to update typing information."
         )
-
-    if not is_overload_none(engine) and get_overload_const_str(engine) not in (
-        "auto",
-        "pyarrow",
+    if (
+        not is_overload_none(engine)
+        and is_overload_constant_str(engine)
+        and get_overload_const_str(engine)
+        not in (
+            "auto",
+            "pyarrow",
+        )
     ):  # pragma: no cover
         raise BodoError("DataFrame.to_parquet(): only pyarrow engine supported")
 
-    if not is_overload_none(compression) and get_overload_const_str(
-        compression
-    ) not in {"snappy", "gzip", "brotli"}:
+    if (
+        not is_overload_none(compression)
+        and is_overload_constant_str(compression)
+        and get_overload_const_str(compression) not in {"snappy", "gzip", "brotli"}
+    ):
         raise BodoError(
             "to_parquet(): Unsupported compression: "
             + str(get_overload_const_str(compression))

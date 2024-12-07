@@ -15,7 +15,7 @@ runs:
         with:
           pixi-version: v0.34.0
           cache: true
-          cache-write: ${{ github.event_name == 'push' && github.ref_name == 'develop' }}
+          cache-write: ${{ github.event_name == 'push' && github.ref_name == 'main' }}
           environments: 'default'
           activate-environment: true
 

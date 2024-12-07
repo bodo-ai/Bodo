@@ -18,8 +18,8 @@ phases:
   # but we don't need to run Bodo ci unless Bodo itself has been changed
   install:
     commands:
-      - echo Merging with Develop
-      - ./buildscripts/aws/CI_if_changes.sh buildscripts/aws/merge_with_develop.sh
+      - echo Merging with Main
+      - ./buildscripts/aws/CI_if_changes.sh buildscripts/aws/merge_with_main.sh
       - ./buildscripts/aws/export_env.sh
 
   build:
