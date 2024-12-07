@@ -1,4 +1,5 @@
 import pandas as pd
+from bodo.tests.iceberg_database_helpers.utils import create_iceberg_table, get_spark
 import pytest
 from pandas.core.internals.array_manager import ArrayManager
 
@@ -7,6 +8,7 @@ from bodo.pandas.frame import BodoDataFrame
 from bodo.pandas.managers import LazyBlockManager
 from bodo.tests.test_lazy.utils import pandas_managers  # noqa
 from bodo.tests.utils import (
+    _gather_output,
     sql_user_pass_and_hostname,
 )
 from bodo.utils.testing import ensure_clean_mysql_psql_table
@@ -416,8 +418,8 @@ def test_slice(pandas_managers, head_df, collect_func):
     lam_sliced_twice_df = lam_sliced_df[10:30]
     assert lam_sliced_twice_df.equals(collect_func(0)["A0"][10:30])
 
-
-def test_sql(collect_func):
+@pytest.mark.iceberg
+def test_sql(iceberg_database, iceberg_table_conn, collect_func):
     """Tests that to_sql() writes the frame correctly and does not trigger data fetch"""
 
     @bodo.jit(spawn=True)
@@ -427,12 +429,21 @@ def test_sql(collect_func):
     df = collect_func(0)
     bodo_df = _get_bodo_df(df)
 
-    table_name = "table_name"
-    conn = "mysql+pymysql://" + sql_user_pass_and_hostname + "/employees"
-    with ensure_clean_mysql_psql_table(conn, table_name) as table_name:
-        bodo_df.to_sql(table_name, conn)
-        assert bodo_df._lazy
-        read_df = pd.read_sql(f"SELECT * FROM {table_name}", conn)
+    # create table in iceberg_database
+    table_name = "TABLE_NAME"
+    db_schema, warehouse_loc = iceberg_database(table_name)
+    conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, False)
+    sql_schema = [("A0", "float", True), ("B5", "string", True)]
+    spark = get_spark()
+    if bodo.get_rank() == 0:
+        create_iceberg_table(df, sql_schema, table_name, spark)
+    bodo.barrier()
+
+    bodo_df.to_sql(table_name, conn, db_schema, if_exists="replace")
+    assert bodo_df._lazy
+
+    bodo_out = bodo.jit()(lambda: pd.read_sql_table(table_name, conn, db_schema))()
+    read_df = _gather_output(bodo_out)
 
     pd.testing.assert_frame_equal(
         read_df,
