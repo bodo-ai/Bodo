@@ -43,6 +43,7 @@ jobs:
       os: ${{ matrix.os }}
     secrets: inherit
   bodo-conda-platform:
+    # Need comment on why platform uses MacOS script?
     uses: ./.github/workflows/_build_bodo_conda_native.yml
     with:
       python-version: '3.12'

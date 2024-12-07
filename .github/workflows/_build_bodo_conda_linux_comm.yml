@@ -53,6 +53,7 @@ jobs:
           # Conda-Build normally uses a random path. Setting these args disables that.
           # --croot for consistent base directory path for sccache
           # --build-id-pat for consistent build directory path for sccache
+          # Why `PLATFORM_CHANNEL` here?
           conda build . $PLATFORM_CHANNEL -c conda-forge \
             --no-verify --no-anaconda-upload \
             --croot $HOME/conda-bld --build-id-pat 'bb' \
