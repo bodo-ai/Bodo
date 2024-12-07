@@ -18,9 +18,9 @@ def run_commands(commands):
 def run_ci():
     """
     Function that returns if CI should run based upon the differences
-    between this branch and develop. This needs to be called in each stage of CI.
+    between this branch and main. This needs to be called in each stage of CI.
     """
-    res = subprocess.run(["git", "diff", "--name-only", "develop"], capture_output=True)
+    res = subprocess.run(["git", "diff", "--name-only", "main"], capture_output=True)
     files = res.stdout.decode("utf-8").strip().split("\n")
     for filename in files:
         if filename.startswith("bodo/docs"):

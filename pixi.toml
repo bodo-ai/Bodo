@@ -67,7 +67,6 @@ pip = "*"
 # Core C++ Deps
 libcurl = "~=8.0"
 zstd = "<=1.5.6"
-fftw = { version = ">=3.3.10,<3.4.0a0", build = "*mpi_mpich_*" }
 hdf5 = { version = ">=1.14.3,<1.14.4.0a0", build = "*mpi_mpich_*" }
 "aws-sdk-cpp" = "*"
 "boost-cpp" = "1.85"
@@ -113,6 +112,8 @@ openpyxl = "*"
 cx_oracle = "*"
 pyarrow = { version = "17.0.0", channel = "bodo.ai" }
 libarrow = { version = "*", channel = "bodo.ai" }
+# required for bodo pyarrow package
+libutf8proc = "==2.8.0"
 [target.osx-64.dependencies]
 cx_oracle = "*"
 
