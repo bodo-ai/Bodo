@@ -1,17 +1,15 @@
 import pandas as pd
-from bodo.tests.iceberg_database_helpers.utils import create_iceberg_table, get_spark
 import pytest
 from pandas.core.internals.array_manager import ArrayManager
 
 import bodo
 from bodo.pandas.frame import BodoDataFrame
 from bodo.pandas.managers import LazyBlockManager
+from bodo.tests.iceberg_database_helpers.utils import create_iceberg_table, get_spark
 from bodo.tests.test_lazy.utils import pandas_managers  # noqa
 from bodo.tests.utils import (
     _gather_output,
-    sql_user_pass_and_hostname,
 )
-from bodo.utils.testing import ensure_clean_mysql_psql_table
 
 
 @pytest.fixture
@@ -418,6 +416,7 @@ def test_slice(pandas_managers, head_df, collect_func):
     lam_sliced_twice_df = lam_sliced_df[10:30]
     assert lam_sliced_twice_df.equals(collect_func(0)["A0"][10:30])
 
+
 @pytest.mark.iceberg
 def test_sql(iceberg_database, iceberg_table_conn, collect_func):
     """Tests that to_sql() writes the frame correctly and does not trigger data fetch"""
@@ -430,7 +429,7 @@ def test_sql(iceberg_database, iceberg_table_conn, collect_func):
     bodo_df = _get_bodo_df(df)
 
     # create table in iceberg_database
-    table_name = "TABLE_NAME"
+    table_name = "TEST_TABLE_NAME"
     db_schema, warehouse_loc = iceberg_database(table_name)
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, False)
     sql_schema = [("A0", "float", True), ("B5", "string", True)]

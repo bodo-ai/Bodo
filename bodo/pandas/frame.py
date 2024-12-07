@@ -109,7 +109,6 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         method=None,
     ):
         # argument defaults should match that of to_sql_overload in pd_dataframe_ext.py
-
         @bodo.jit(spawn=True)
         def to_sql_wrapper(
             df: pd.DataFrame,
