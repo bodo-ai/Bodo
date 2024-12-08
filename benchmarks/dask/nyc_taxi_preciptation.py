@@ -55,7 +55,7 @@ def get_monthly_travels_weather():
             fhvhv_tripdata["hour"] = fhvhv_tripdata["pickup_datetime"].dt.hour
             fhvhv_tripdata["weekday"] = fhvhv_tripdata[
                 "pickup_datetime"
-            ].dt.dayofweek.isin([1, 2, 3, 4, 5])
+            ].dt.dayofweek.isin([0, 1, 2, 3, 4])
             monthly_trips_weather = fhvhv_tripdata.merge(
                 central_park_weather_observations, on="date", how="inner"
             )
