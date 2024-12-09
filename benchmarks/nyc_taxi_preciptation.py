@@ -21,7 +21,9 @@ def get_monthly_travels_weather():
     central_park_weather_observations = central_park_weather_observations.rename(
         columns={"DATE": "date", "PRCP": "precipitation"}, copy=False
     )
-    fhvhv_tripdata = pd.read_parquet("s3://bodo-example-data/nyc-taxi/fhvhv_tripdata/")
+    fhvhv_tripdata = pd.read_parquet(
+        "s3://bodo-example-data/nyc-taxi/fhvhv_tripdata/fhvhv_tripdata_2019-02.parquet"
+    )
     end = time.time()
     print("Reading Time: ", (end - start))
 
