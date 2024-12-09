@@ -1,18 +1,17 @@
 """
-    Copyright (C) 2021 Bodo Inc. All rights reserved
-    This script generates TPC-H data in parquet format for any scale factor
-    Can use very little memory regardless of SCALE_FACTOR (and very little disk
-    space when uploading directly to s3). Simply adjust the number of pieces as needed.
+Copyright (C) 2021 Bodo Inc. All rights reserved
+This script generates TPC-H data in parquet format for any scale factor
+Can use very little memory regardless of SCALE_FACTOR (and very little disk
+space when uploading directly to s3). Simply adjust the number of pieces as needed.
 """
 
-import os
 import argparse
+import os
 import shutil
 import subprocess
 from multiprocessing import Pool, set_start_method
+
 import pyarrow.parquet as pq
-
-
 from loader import (
     load_customer,
     load_lineitem_with_date,
@@ -26,6 +25,7 @@ from loader import (
 
 # Change location of tpch-dbgen if not in same place as this script
 tpch_dbgen_location = "./tpch-dbgen"
+
 
 # First element is the table single character short-hand understood by dbgen
 # Second element is the number of pieces we want the parquet dataset to have for that table
@@ -79,7 +79,6 @@ def to_parquet(args):
 def generate(
     tables, SCALE_FACTOR, folder, upload_to_s3, validate_dataset, num_processes
 ):
-
     if upload_to_s3:
         assert "AWS_ACCESS_KEY_ID" in os.environ, "AWS credentials not set"
     else:
@@ -94,7 +93,6 @@ def generate(
             fs = s3fs.S3FileSystem()
 
     for table_name, (table_short, num_pieces, load_func) in tables.items():
-
         if upload_to_s3:
             output_prefix = f"s3://{folder}/{table_name}.pq"
         else:

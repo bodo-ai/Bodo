@@ -5,15 +5,17 @@ Usage:
 
 Set the environment variable `BODO_NUM_WORKERS` to limit the number of cores used.
 """
-import time
+
 import argparse
-import bodo
+import time
+
 import pandas as pd
+
+import bodo
 
 
 @bodo.jit(cache=True)
 def run_queries(data_folder):
-
     # Load the data
     t1 = time.time()
     lineitem = load_lineitem(data_folder)
@@ -924,11 +926,13 @@ def q19(lineitem, part):
             & (jn.L_QUANTITY <= 25)
             & (jn.P_SIZE <= 10)
         )
-        |((jn.P_BRAND == Brand43)
-        & (jn.P_CONTAINER.isin([LGBOX, LGCASE, LGPACK, LGPKG]))
-        & (jn.L_QUANTITY >= 26)
-        & (jn.L_QUANTITY <= 36)
-        & (jn.P_SIZE <= 15))
+        | (
+            (jn.P_BRAND == Brand43)
+            & (jn.P_CONTAINER.isin([LGBOX, LGCASE, LGPACK, LGPKG]))
+            & (jn.L_QUANTITY >= 26)
+            & (jn.L_QUANTITY <= 36)
+            & (jn.P_SIZE <= 15)
+        )
     )
     jn = jn[jnsel]
     total = (jn.L_EXTENDEDPRICE * (1.0 - jn.L_DISCOUNT)).sum()
