@@ -9,7 +9,6 @@ Analyze beer reviews to find most common words used in positive and negative rev
 This example uses a sample reviews from S3 bucket (s3://bodo-example-data/beer/reviews_sample.csv).
 Fulldataset is available in S3 bucket (s3://bodo-example-data/beer/reviews.csv)
 or from Kaggle (https://www.kaggle.com/ehallmar/beers-breweries-and-beer-reviews)
-
 """
 import pandas as pd
 import time
@@ -19,9 +18,9 @@ import os
 
 dir_path = os.path.dirname(os.path.realpath(__file__))
 # Create lists of stopwords and punctuation that will be removed
-with open(f"{dir_path}/nltk-stopwords.txt", "r") as fh:
+with open(f"{dir_path}/data/nltk-stopwords.txt", "r") as fh:
     STOPWORDS = list(map(str.strip, fh.readlines()))
-PUNCT_LIST = ["\.", "\-", "\?", "\:", ":", "!", "&", "'", ","]
+PUNCT_LIST = [r"\.", r"\-", r"\?", r"\:", ":", "!", "&", "'", ","]
 
 # Define regex that will be used to remove these punctuation and stopwords from the reviews.
 punc_regex = "|".join([f"({p})" for p in PUNCT_LIST])
