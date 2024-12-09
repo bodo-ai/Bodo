@@ -2,20 +2,18 @@
 
 This quickstart guide will walk you through the process of creating and reading from an Iceberg table using Bodo on your local machine.
 
-
 ## Prerequisites
 
+[Install Bodo](../installation_and_setup/install.md) to get started (e.g., `pip install bodo` or `conda install bodo -c bodo.ai -c conda-forge`).
+Additionally, install bodo-iceberg-connector with pip or conda:
 
-[Conda](https://docs.conda.io){target="blank"} is the recommended way to install Bodo on your local environment. You can install the _Community Edition_ using conda, which allows you to use Bodo for free on up to 8 cores. 
-
-
-```console 
-conda create -n Bodo python=3.12 -c conda-forge
-conda activate Bodo
-conda install bodo bodo-iceberg-connector -c bodo.ai -c conda-forge
+```shell
+pip install bodo-iceberg-connector
 ```
 
-These commands create a conda environment called `Bodo` and install Bodo Community Edition.
+```shell
+conda install -c bodo.ai bodo-iceberg-connector
+```
 
 
 ## Create a local Iceberg Table

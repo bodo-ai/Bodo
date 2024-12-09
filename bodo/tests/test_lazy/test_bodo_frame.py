@@ -1,10 +1,14 @@
+import os
+
 import pandas as pd
 import pytest
 from pandas.core.internals.array_manager import ArrayManager
 
+import bodo
 from bodo.pandas.frame import BodoDataFrame
 from bodo.pandas.managers import LazyBlockManager
 from bodo.tests.test_lazy.utils import pandas_managers  # noqa
+from bodo.utils.testing import ensure_clean2
 
 
 @pytest.fixture
@@ -410,3 +414,54 @@ def test_slice(pandas_managers, head_df, collect_func):
     assert lam_sliced_twice_df.equals(collect_func(0)["A0"][1:3])
     lam_sliced_twice_df = lam_sliced_df[10:30]
     assert lam_sliced_twice_df.equals(collect_func(0)["A0"][10:30])
+
+
+def test_parquet(collect_func):
+    """Tests that to_parquet() writes the frame correctly and does not trigger data fetch"""
+
+    @bodo.jit(spawn=True)
+    def _get_bodo_df(df):
+        return df
+
+    df = collect_func(0)
+    bodo_df = _get_bodo_df(df)
+    fname = os.path.join("bodo", "tests", "data", "example")
+    with ensure_clean2(fname):
+        bodo_df.to_parquet(fname)
+        assert bodo_df._lazy
+        read_df = pd.read_parquet(fname)
+
+    pd.testing.assert_frame_equal(
+        read_df,
+        df,
+        check_dtype=False,
+    )
+    pd.testing.assert_frame_equal(
+        bodo_df,
+        df,
+        check_dtype=False,
+    )
+
+
+def test_parquet_param(collect_func):
+    """Tests that to_parquet() raises an error on unsupported parameters"""
+
+    @bodo.jit(spawn=True)
+    def _get_bodo_df(df):
+        return df
+
+    df = collect_func(0)
+    bodo_df = _get_bodo_df(df)
+    fname = os.path.join("bodo", "tests", "data", "example")
+
+    with ensure_clean2(fname):
+        with pytest.raises(
+            bodo.utils.typing.BodoError,
+            match=r"DataFrame.to_parquet\(\): only pyarrow engine supported",
+        ):
+            bodo_df.to_parquet(fname, engine="fastparquet")
+        with pytest.raises(
+            bodo.utils.typing.BodoError,
+            match=r"to_parquet\(\): row_group_size must be integer",
+        ):
+            bodo_df.to_parquet(fname, row_group_size="a")

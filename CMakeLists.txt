@@ -22,9 +22,11 @@ find_program(CCACHE_EXECUTABLE "ccache")
 find_program(SCCACHE_EXECUTABLE "sccache")
 
 if ((NOT DEFINED ENV{DISABLE_CCACHE}) AND CCACHE_EXECUTABLE)
-  set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE ccache)
+  set(CMAKE_CXX_COMPILER_LAUNCHER ccache)
+  set(CMAKE_C_COMPILER_LAUNCHER ccache)
 elseif ((NOT DEFINED ENV{DISABLE_SCCACHE}) AND SCCACHE_EXECUTABLE)
-  set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE sccache)
+  set(CMAKE_CXX_COMPILER_LAUNCHER sccache)
+  set(CMAKE_C_COMPILER_LAUNCHER sccache)
 endif()
 
 
@@ -488,7 +490,6 @@ set(sources_list
   "bodo/libs/streaming/_shuffle.cpp"
   "bodo/libs/_storage_manager.cpp"
   "bodo/libs/_utils.cpp"
-  "bodo/libs/_fft.cpp"
   "bodo/libs/_uuid.cpp"
   "bodo/libs/_query_profile_collector.cpp"
   "bodo/libs/_pymemory.cpp"
@@ -618,11 +619,6 @@ target_link_libraries(ext PRIVATE
   arrow_python
   arrow_dataset
   parquet
-  fftw3
-  fftw3f
-  fftw3_mpi
-  fftw3f_mpi
-  m
   fmt::fmt
   aws-cpp-sdk-core
 )
@@ -661,36 +657,3 @@ add_dependencies(ext datasketches)
 set_target_properties(ext PROPERTIES CXX_CLANG_TIDY "${CLANG_TIDY_COMMAND}")
 
 install(TARGETS ext DESTINATION "bodo/")
-
-
-# ------------------------- Cythonize Transform Files -------------------------
-set(transform_files)
-if (CMAKE_BUILD_TYPE STREQUAL "Release")
-  set(transform_files
-    "bodo/transforms/dataframe_pass.py"
-    "bodo/transforms/distributed_analysis.py"
-    "bodo/transforms/distributed_pass.py"
-    "bodo/transforms/series_pass.py"
-    "bodo/transforms/table_column_del_pass.py"
-    "bodo/transforms/typing_pass.py"
-    "bodo/transforms/untyped_pass.py"
-  )
-endif()
-
-foreach (file_path ${transform_files})
-  cmake_path(GET file_path FILENAME file_name)
-  cmake_path(REMOVE_EXTENSION file_name OUTPUT_VARIABLE cython_module)
-  cmake_path(REPLACE_EXTENSION file_path ".c" OUTPUT_VARIABLE out_path)
-
-  add_custom_command(
-    OUTPUT ${out_path}
-    DEPENDS ${file_path}
-    VERBATIM
-    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-    COMMAND "${CYTHON_EXECUTABLE}" -3 --output-file "${CMAKE_CURRENT_BINARY_DIR}/${out_path}" "${file_path}"
-    COMMENT "Cythonizing Source ${file_path} into ${out_path}"
-  )
-
-  python_add_library(${cython_module} MODULE WITH_SOABI ${out_path})
-  install(TARGETS ${cython_module} DESTINATION "bodo/transforms/")
-endforeach()
