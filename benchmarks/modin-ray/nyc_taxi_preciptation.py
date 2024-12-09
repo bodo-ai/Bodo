@@ -1,5 +1,5 @@
-import argparse
 import time
+from pathlib import Path
 
 import ray
 
@@ -17,7 +17,7 @@ small_dataset = [
 full_dataset = "s3://bodo-example-data/nyc-taxi/fhvhv_tripdata/"
 
 
-def run_modin(dataset):
+def run_modin():
     start = time.time()
     central_park_weather_observations = pd.read_csv(
         "s3://bodo-example-data/nyc-taxi/central_park_weather.csv",
@@ -29,7 +29,7 @@ def run_modin(dataset):
         copy=False,
     )
     fhvhv_tripdata = pd.read_parquet(
-        dataset,
+        small_dataset,
         storage_options={"anon": True},
     )
     end = time.time()
@@ -102,23 +102,12 @@ def run_modin(dataset):
     print(monthly_trips_weather.head())
 
     start = time.time()
-    monthly_trips_weather.to_parquet("modin_results.pq")
+
+    monthly_trips_weather.to_parquet("modin_results")
     end = time.time()
     return monthly_trips_weather
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        prog="nyc_tax_preciptation",
-        description="Benchmark modin using the NYC Taxi dataset",
-    )
-    parser.add_argument(
-        "-d", "--dataset", choices=["small", "large"], required=False, default="large"
-    )
-    args = parser.parse_args()
-    print(args.dataset)
-    if args.dataset == "large":
-        dataset = full_dataset
-    else:
-        dataset = small_dataset
-    result = run_modin(dataset)
+    Path("modin_results").mkdir(parents=True, exist_ok=True)
+    result = run_modin()
