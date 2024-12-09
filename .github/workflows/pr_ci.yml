@@ -55,7 +55,7 @@ jobs:
       needs.validate.outputs.run_bodosql_customer_tests == 'true'
 
     steps:
-      - uses: convictional/trigger-workflow-and-wait@v1.6.1
+      - uses: convictional/trigger-workflow-and-wait@v1.6.5
         with:
           owner: bodo-ai
           repo: customer-sample-code
