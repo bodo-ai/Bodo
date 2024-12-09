@@ -1,0 +1,10 @@
+name: PR CI Auto
+on:
+  pull_request_target:
+
+# Limit CI to cancel previous runs in the same PR
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }} 
+  cancel-in-progress: true
+
+jobs:

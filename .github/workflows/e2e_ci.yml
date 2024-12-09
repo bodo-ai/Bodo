@@ -3,6 +3,7 @@ on:
   # Run Every Weekday on main Branch at 2AM EST
   schedule:
     - cron: '00 7 * * 1,2,3,4,5'
+
   # Manual Trigger
   workflow_dispatch:
     inputs:
@@ -13,6 +14,7 @@ on:
         default: ''
 
 jobs:
+
   run-e2e:
     name: Run E2E Tests
     runs-on: [self-hosted, xlarge]

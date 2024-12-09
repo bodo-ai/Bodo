@@ -64,7 +64,6 @@ jobs:
           ref: master
           client_payload: '{ "branch" : "${{ github.head_ref || github.ref_name }}" }'
 
-  
   # 3) Pre-Build Bodo to save build artifacts to sccache
   compile-bodo:
     needs: [validate]
