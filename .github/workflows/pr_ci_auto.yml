@@ -20,3 +20,14 @@ jobs:
         with:
           version: "0.6.7"
           args: "format --check"
+
+  clang-code-test:
+    name: Clang Code Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run clang-format style check
+        uses: jidicula/clang-format-action@v4.14.0
+        with:
+          exclude-regex: (?x)^(bodo/libs/vendored/.*|bodo/libs/HashLibs/.*)$
