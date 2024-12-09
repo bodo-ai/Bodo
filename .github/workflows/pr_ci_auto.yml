@@ -32,3 +32,15 @@ jobs:
         with:
           clang-format-version: '19'
           exclude-regex: (bodo\/libs\/vendored\/.*|bodo\/libs\/HashLibs\/.*)$
+
+  java-code-test:
+    name: Java/Kotlin Code Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: axel-op/googlejavaformat-action@v3
+        name: Google Java Format
+        with:
+          version: "1.24.0"
+          args: "--dry-run"
