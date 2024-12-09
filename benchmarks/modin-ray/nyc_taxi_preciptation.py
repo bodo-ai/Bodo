@@ -6,6 +6,7 @@ ray.init(address="auto")
 cpu_count = ray.cluster_resources()["CPU"]
 print("RAY CPU COUNT: ", cpu_count)
 import modin.pandas as pd
+from modin.pandas.io import to_ray
 
 # run on the first 6 / 60 parquet files
 small_dataset = [
@@ -33,6 +34,7 @@ def run_modin():
     )
     end = time.time()
     print("Reading Time: ", (end - start))
+    print(type(central_park_weather_observations))
 
     start = time.time()
 
@@ -98,9 +100,14 @@ def run_modin():
     )
     end = time.time()
     print("Monthly Taxi Travel Times Computation Time: ", end - start)
+    print(monthly_trips_weather.head())
 
     start = time.time()
-    monthly_trips_weather.to_parquet("modin_results.pq")
+    print(type(monthly_trips_weather))
+    monthly_trips_weather_ray = to_ray(monthly_trips_weather)
+    monthly_trips_weather_ray.write_parquet("local:///tmp/data/modin_result.pq")
+    end = time.time()
+    print("Writing time:", (end - start))
     return monthly_trips_weather
 
 
