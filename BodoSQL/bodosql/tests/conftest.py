@@ -1782,20 +1782,6 @@ def pytest_collection_modifyitems(items):
         item.add_marker(azure_2p_marker)
         item.add_marker(azure_3p_marker)
 
-    # Check if we should try and mark groups for AWS Codebuild
-    if "NUMBER_GROUPS_SPLIT" in os.environ:
-        num_groups = int(os.environ["NUMBER_GROUPS_SPLIT"])
-
-        # TODO: make a testTiming json file similar to how the bodo Repo does it
-        # For now, we just use hash
-
-        for item in items:
-            # Gives filename + function name
-            testname = item.module.__name__.split(".")[-1] + ".py" + "::" + item.name
-            group_marker = group_from_hash(testname, num_groups)
-            # TODO: we should register these markers to avoid warnings in AWS logs
-            item.add_marker(getattr(pytest.mark, group_marker))
-
 
 def group_from_hash(testname, num_groups):
     """
