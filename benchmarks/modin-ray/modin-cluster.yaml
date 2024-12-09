@@ -118,8 +118,8 @@ available_node_types:
             # NOTE: If relying on spot instances, it is best to specify multiple different instance
             # types to avoid interruption when one instance type is experiencing heightened demand.
             # Demand information can be found at https://aws.amazon.com/ec2/spot/instance-advisor/
-            # InstanceMarketOptions:
-                # MarketType: spot
+            InstanceMarketOptions:
+                MarketType: on-demand
                 # Additional options can be found in the boto docs, e.g.
                 #   SpotOptions:
                 #       MaxPrice: MAX_HOURLY_PRICE
