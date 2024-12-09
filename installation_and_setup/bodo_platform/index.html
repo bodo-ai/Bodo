@@ -1,0 +1,2225 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Bodo offers a new type of just-in-time compiler with Supercomputing-style performance and the simplicity of using native Python.">
+      
+      
+        <meta name="author" content="Bodo Team">
+      
+      
+        <link rel="canonical" href="https://docs.bodo.ai/installation_and_setup/bodo_platform/">
+      
+      <link rel="icon" href="../../assets/favicon.png">
+      <meta name="generator" content="mkdocs-1.2.3, mkdocs-material-8.2.1">
+    
+    
+      
+        <title>Using Bodo Cloud Platform - Bodo Developer Documentation</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.e8d9bf0c.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.e6a45f82.min.css">
+        
+      
+    
+    
+    
+      
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,400,400i,700%7CRoboto+Mono&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../stylesheets/bodo.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="bodo-light" data-md-color-accent="bodo-green">
+  
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&"object"==typeof palette.color)for(var key of Object.keys(palette.color))document.body.setAttribute("data-md-color-"+key,palette.color[key])</script>
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#bodo_platform" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+      <div data-md-component="outdated" hidden>
+        <aside class="md-banner md-banner--warning">
+          
+        </aside>
+      </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--lifted" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="Bodo Developer Documentation" class="md-header__button md-logo" aria-label="Bodo Developer Documentation" data-md-component="logo">
+      
+  <img src="../../assets/bodo-logo.png" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3V6m0 5h18v2H3v-2m0 5h18v2H3v-2z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Bodo Developer Documentation
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Using Bodo Cloud Platform
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      <form class="md-header__option" data-md-component="palette">
+        
+          
+          
+          <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="bodo-light" data-md-color-accent="bodo-green"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_1">
+          
+            <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_2" hidden>
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M17 7H7a5 5 0 0 0-5 5 5 5 0 0 0 5 5h10a5 5 0 0 0 5-5 5 5 0 0 0-5-5m0 8a3 3 0 0 1-3-3 3 3 0 0 1 3-3 3 3 0 0 1 3 3 3 3 0 0 1-3 3z"/></svg>
+            </label>
+          
+        
+          
+          
+          <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="bodo-dark" data-md-color-accent="bodo-green"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_2">
+          
+            <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_1" hidden>
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M17 6H7c-3.31 0-6 2.69-6 6s2.69 6 6 6h10c3.31 0 6-2.69 6-6s-2.69-6-6-6zm0 10H7c-2.21 0-4-1.79-4-4s1.79-4 4-4h10c2.21 0 4 1.79 4 4s-1.79 4-4 4zM7 9c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>
+            </label>
+          
+        
+      </form>
+    
+    
+    
+      <label class="md-header__button md-icon" for="__search">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5z"/></svg>
+      </label>
+      <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5z"/></svg>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11h12z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+          <a href="javascript:void(0)" class="md-search__icon md-icon" aria-label="Share" data-clipboard data-clipboard-text="" data-md-component="search-share" tabindex="-1">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7 0-.24-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9a3 3 0 0 0-3 3 3 3 0 0 0 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.15c-.05.21-.08.43-.08.66 0 1.61 1.31 2.91 2.92 2.91 1.61 0 2.92-1.3 2.92-2.91A2.92 2.92 0 0 0 18 16.08z"/></svg>
+          </a>
+        
+        <button type="reset" class="md-search__icon md-icon" aria-label="Clear" tabindex="-1">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+    
+    
+  </nav>
+  
+    
+      
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-tabs__inner md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+
+
+  <li class="md-tabs__item">
+    <a href="../.." class="md-tabs__link">
+      About Bodo
+    </a>
+  </li>
+
+      
+        
+  
+  
+
+
+  <li class="md-tabs__item">
+    <a href="../../quick_start/" class="md-tabs__link">
+      Quick Start
+    </a>
+  </li>
+
+      
+        
+  
+  
+    
+  
+
+
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../install/" class="md-tabs__link md-tabs__link--active">
+        Installation and Setup
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+
+
+  
+  
+  
+    
+
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../bodo_parallelism/bodo_parallelism_basics/" class="md-tabs__link">
+        Programming with Bodo
+      </a>
+    </li>
+  
+
+  
+
+      
+        
+  
+  
+
+
+  
+  
+  
+    
+
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../integrating_bodo/spark/" class="md-tabs__link">
+        Bodo in your Pipeline
+      </a>
+    </li>
+  
+
+  
+
+      
+        
+  
+  
+
+
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../api_docs/" class="md-tabs__link">
+        API Docs
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+
+
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../performance/performance/" class="md-tabs__link">
+        Performance and Diagnostics
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+
+
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../help_and_reference/eula/" class="md-tabs__link">
+        Help and Reference
+      </a>
+    </li>
+  
+
+      
+    </ul>
+  </div>
+</nav>
+    
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="Bodo Developer Documentation" class="md-nav__button md-logo" aria-label="Bodo Developer Documentation" data-md-component="logo">
+      
+  <img src="../../assets/bodo-logo.png" alt="logo">
+
+    </a>
+    Bodo Developer Documentation
+  </label>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+      
+
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        About Bodo
+      </a>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../quick_start/" class="md-nav__link">
+        Quick Start
+      </a>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+    
+  
+  
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+      
+        <input class="md-nav__toggle md-toggle" data-md-toggle="__nav_3" type="checkbox" id="__nav_3" checked>
+      
+      
+      
+        
+          
+        
+          
+        
+          
+        
+          
+        
+          
+        
+          
+        
+          
+        
+          
+        
+      
+      
+        <label class="md-nav__link" for="__nav_3">
+          Installation and Setup
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <nav class="md-nav" aria-label="Installation and Setup" data-md-level="1">
+        <label class="md-nav__title" for="__nav_3">
+          <span class="md-nav__icon md-icon"></span>
+          Installation and Setup
+        </label>
+        <ul class="md-nav__list" data-md-scrollfix>
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../install/" class="md-nav__link">
+        Installing Bodo Community Edition
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../enterprise/" class="md-nav__link">
+        Configuring Bodo Enterprise Edition
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ipyparallel/" class="md-nav__link">
+        Interactive Bodo Cluster Setup using IPyParallel
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../recommended_mpi_settings/" class="md-nav__link">
+        Recommended MPI Settings
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../recommended_cluster_config/" class="md-nav__link">
+        Recommended Cluster Configuration
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+    
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" data-md-toggle="toc" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          Using Bodo Cloud Platform
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        Using Bodo Cloud Platform
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Using Bodo Cloud Platform">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Using Bodo Cloud Platform
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#creating_clusters" class="md-nav__link">
+    Creating Clusters
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#attaching_notebook_to_cluster" class="md-nav__link">
+    Attaching a Notebook to a Cluster
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#connecting_to_a_cluster" class="md-nav__link">
+    Connecting to a Cluster
+  </a>
+  
+    <nav class="md-nav" aria-label="Connecting to a Cluster">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#connecting-with-a-notebook-terminal" class="md-nav__link">
+    Connecting with a Notebook Terminal
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#ssh-from-your-machine" class="md-nav__link">
+    SSH From Your Machine
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#verify_your_connection" class="md-nav__link">
+    Verify your Connection
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#running_a_job" class="md-nav__link">
+    Running a Job
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../bodo_platform_aws/" class="md-nav__link">
+        Bodo Managed Cloud Platform on AWS
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../bodo_platform_azure/" class="md-nav__link">
+        Bodo Managed Cloud Platform on Azure
+      </a>
+    </li>
+  
+
+            
+          
+        </ul>
+      </nav>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+  
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+      
+        <input class="md-nav__toggle md-toggle" data-md-toggle="__nav_4" data-md-state="indeterminate" type="checkbox" id="__nav_4" checked>
+      
+      
+      
+        
+          
+        
+          
+        
+          
+        
+      
+      
+        <label class="md-nav__link" for="__nav_4">
+          Programming with Bodo
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <nav class="md-nav" aria-label="Programming with Bodo" data-md-level="1">
+        <label class="md-nav__title" for="__nav_4">
+          <span class="md-nav__icon md-icon"></span>
+          Programming with Bodo
+        </label>
+        <ul class="md-nav__list" data-md-scrollfix>
+          
+            
+              
+  
+  
+  
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+      
+        <input class="md-nav__toggle md-toggle" data-md-toggle="__nav_4_1" data-md-state="indeterminate" type="checkbox" id="__nav_4_1" checked>
+      
+      
+      
+        
+          
+        
+          
+        
+          
+        
+          
+        
+      
+      
+        <label class="md-nav__link" for="__nav_4_1">
+          Understanding Parallelism with Bodo
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <nav class="md-nav" aria-label="Understanding Parallelism with Bodo" data-md-level="2">
+        <label class="md-nav__title" for="__nav_4_1">
+          <span class="md-nav__icon md-icon"></span>
+          Understanding Parallelism with Bodo
+        </label>
+        <ul class="md-nav__list" data-md-scrollfix>
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../bodo_parallelism/bodo_parallelism_basics/" class="md-nav__link">
+        Basics of Bodo Parallelism
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../bodo_parallelism/advanced/" class="md-nav__link">
+        Advanced Parallelism Topics
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../bodo_parallelism/compile_time_constants/" class="md-nav__link">
+        Compile Time Constants
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../bodo_parallelism/not_supported/" class="md-nav__link">
+        Unsupported Programs
+      </a>
+    </li>
+  
+
+            
+          
+        </ul>
+      </nav>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../file_io/" class="md-nav__link">
+        Scalable File I/O
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../objmode/" class="md-nav__link">
+        Using Regular Python inside Bodo (Object Mode)
+      </a>
+    </li>
+  
+
+            
+          
+        </ul>
+      </nav>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+  
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+      
+        <input class="md-nav__toggle md-toggle" data-md-toggle="__nav_5" data-md-state="indeterminate" type="checkbox" id="__nav_5" checked>
+      
+      
+      
+        
+          
+        
+          
+        
+          
+        
+          
+        
+      
+      
+        <label class="md-nav__link" for="__nav_5">
+          Bodo in your Pipeline
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <nav class="md-nav" aria-label="Bodo in your Pipeline" data-md-level="1">
+        <label class="md-nav__title" for="__nav_5">
+          <span class="md-nav__icon md-icon"></span>
+          Bodo in your Pipeline
+        </label>
+        <ul class="md-nav__list" data-md-scrollfix>
+          
+            
+              
+  
+  
+  
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+      
+        <input class="md-nav__toggle md-toggle" data-md-toggle="__nav_5_1" data-md-state="indeterminate" type="checkbox" id="__nav_5_1" checked>
+      
+      
+      
+        
+          
+        
+          
+        
+      
+      
+        <label class="md-nav__link" for="__nav_5_1">
+          Migration from Spark
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <nav class="md-nav" aria-label="Migration from Spark" data-md-level="2">
+        <label class="md-nav__title" for="__nav_5_1">
+          <span class="md-nav__icon md-icon"></span>
+          Migration from Spark
+        </label>
+        <ul class="md-nav__list" data-md-scrollfix>
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../integrating_bodo/spark/" class="md-nav__link">
+        Spark Examples
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../integrating_bodo/sparkcheatsheet/" class="md-nav__link">
+        Bodo Spark Cheatsheet
+      </a>
+    </li>
+  
+
+            
+          
+        </ul>
+      </nav>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../integrating_bodo/dl/" class="md-nav__link">
+        Deep Learning
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../integrating_bodo/data_visualization/" class="md-nav__link">
+        Data Visualization
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../integrating_bodo/front_end/" class="md-nav__link">
+        Front End Tools
+      </a>
+    </li>
+  
+
+            
+          
+        </ul>
+      </nav>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+  
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+      
+        <input class="md-nav__toggle md-toggle" data-md-toggle="__nav_6" data-md-state="indeterminate" type="checkbox" id="__nav_6" checked>
+      
+      
+      
+        
+          
+            
+          
+        
+          
+        
+          
+        
+          
+        
+          
+        
+          
+        
+          
+        
+      
+      
+        
+        
+        <div class="md-nav__link md-nav__link--index ">
+          <a href="../../api_docs/">API Docs</a>
+          
+            <label for="__nav_6">
+              <span class="md-nav__icon md-icon"></span>
+            </label>
+          
+        </div>
+      
+      <nav class="md-nav" aria-label="API Docs" data-md-level="1">
+        <label class="md-nav__title" for="__nav_6">
+          <span class="md-nav__icon md-icon"></span>
+          API Docs
+        </label>
+        <ul class="md-nav__list" data-md-scrollfix>
+          
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api_docs/bodo_parallel_apis/" class="md-nav__link">
+        Bodo Parallel APIs
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+      
+        <input class="md-nav__toggle md-toggle" data-md-toggle="__nav_6_3" data-md-state="indeterminate" type="checkbox" id="__nav_6_3" checked>
+      
+      
+      
+        
+          
+            
+          
+        
+          
+        
+          
+        
+          
+        
+          
+        
+          
+        
+          
+        
+          
+        
+          
+        
+          
+        
+          
+        
+          
+        
+          
+        
+          
+        
+      
+      
+        
+        
+        <div class="md-nav__link md-nav__link--index ">
+          <a href="../../api_docs/pandas/">Pandas</a>
+          
+            <label for="__nav_6_3">
+              <span class="md-nav__icon md-icon"></span>
+            </label>
+          
+        </div>
+      
+      <nav class="md-nav" aria-label="Pandas" data-md-level="2">
+        <label class="md-nav__title" for="__nav_6_3">
+          <span class="md-nav__icon md-icon"></span>
+          Pandas
+        </label>
+        <ul class="md-nav__list" data-md-scrollfix>
+          
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api_docs/pandas/datatypes/" class="md-nav__link">
+        Datatypes
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api_docs/pandas/general/" class="md-nav__link">
+        General Functions
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api_docs/pandas/dataframe/" class="md-nav__link">
+        Dataframe
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api_docs/pandas/groupby/" class="md-nav__link">
+        Groupby
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api_docs/pandas/series/" class="md-nav__link">
+        Series
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api_docs/pandas/window/" class="md-nav__link">
+        Window
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api_docs/pandas/dateoffsets/" class="md-nav__link">
+        DateOffsets
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api_docs/pandas/io/" class="md-nav__link">
+        Input/Output
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api_docs/pandas/indexapi/" class="md-nav__link">
+        Index Objects
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api_docs/pandas/timedelta/" class="md-nav__link">
+        TimeDelta
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api_docs/pandas/timestamp/" class="md-nav__link">
+        Timestamp
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api_docs/pandas/na_issues/" class="md-nav__link">
+        Integer NA Issue in Pandas
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api_docs/pandas/type_inf_obj_data/" class="md-nav__link">
+        Type Inference for Object Data
+      </a>
+    </li>
+  
+
+            
+          
+        </ul>
+      </nav>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api_docs/numpy/" class="md-nav__link">
+        Numpy
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api_docs/udfs/" class="md-nav__link">
+        User Defined Functions (UDFs)
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+      
+        <input class="md-nav__toggle md-toggle" data-md-toggle="__nav_6_6" data-md-state="indeterminate" type="checkbox" id="__nav_6_6" checked>
+      
+      
+      
+        
+          
+            
+          
+        
+          
+        
+      
+      
+        
+        
+        <div class="md-nav__link md-nav__link--index ">
+          <a href="../../api_docs/ml/">Machine Learning</a>
+          
+            <label for="__nav_6_6">
+              <span class="md-nav__icon md-icon"></span>
+            </label>
+          
+        </div>
+      
+      <nav class="md-nav" aria-label="Machine Learning" data-md-level="2">
+        <label class="md-nav__title" for="__nav_6_6">
+          <span class="md-nav__icon md-icon"></span>
+          Machine Learning
+        </label>
+        <ul class="md-nav__list" data-md-scrollfix>
+          
+            
+          
+            
+              
+  
+  
+  
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+      
+        <input class="md-nav__toggle md-toggle" data-md-toggle="__nav_6_6_2" data-md-state="indeterminate" type="checkbox" id="__nav_6_6_2" checked>
+      
+      
+      
+        
+          
+            
+          
+        
+          
+        
+          
+        
+          
+        
+          
+        
+          
+        
+          
+        
+          
+        
+          
+        
+          
+        
+      
+      
+        
+        
+        <div class="md-nav__link md-nav__link--index ">
+          <a href="../../api_docs/ml/sklearn/">Scikit Learn</a>
+          
+            <label for="__nav_6_6_2">
+              <span class="md-nav__icon md-icon"></span>
+            </label>
+          
+        </div>
+      
+      <nav class="md-nav" aria-label="Scikit Learn" data-md-level="3">
+        <label class="md-nav__title" for="__nav_6_6_2">
+          <span class="md-nav__icon md-icon"></span>
+          Scikit Learn
+        </label>
+        <ul class="md-nav__list" data-md-scrollfix>
+          
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api_docs/ml/sklearn/cluster/" class="md-nav__link">
+        sklearn.cluster
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api_docs/ml/sklearn/ensemble/" class="md-nav__link">
+        sklearn.ensemble
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api_docs/ml/sklearn/feature_extraction/" class="md-nav__link">
+        sklearn.feature_extraction
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api_docs/ml/sklearn/linear_model/" class="md-nav__link">
+        sklearn.linear_model
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api_docs/ml/sklearn/metrics/" class="md-nav__link">
+        sklearn.metrics
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api_docs/ml/sklearn/model_selection/" class="md-nav__link">
+        sklearn.model_selection
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api_docs/ml/sklearn/naive_bayes/" class="md-nav__link">
+        sklearn.naive_bayes
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api_docs/ml/sklearn/preprocessing/" class="md-nav__link">
+        sklearn.preprocessing
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api_docs/ml/sklearn/svm/" class="md-nav__link">
+        sklearn.svm
+      </a>
+    </li>
+  
+
+            
+          
+        </ul>
+      </nav>
+    </li>
+  
+
+            
+          
+        </ul>
+      </nav>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api_docs/miscellaneous/" class="md-nav__link">
+        Miscellaneous Supported Python API
+      </a>
+    </li>
+  
+
+            
+          
+        </ul>
+      </nav>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+  
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+      
+        <input class="md-nav__toggle md-toggle" data-md-toggle="__nav_7" data-md-state="indeterminate" type="checkbox" id="__nav_7" checked>
+      
+      
+      
+        
+          
+        
+          
+        
+          
+        
+          
+        
+          
+        
+          
+        
+          
+        
+      
+      
+        <label class="md-nav__link" for="__nav_7">
+          Performance and Diagnostics
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <nav class="md-nav" aria-label="Performance and Diagnostics" data-md-level="1">
+        <label class="md-nav__title" for="__nav_7">
+          <span class="md-nav__icon md-icon"></span>
+          Performance and Diagnostics
+        </label>
+        <ul class="md-nav__list" data-md-scrollfix>
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../performance/performance/" class="md-nav__link">
+        Measuring Performance
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../performance/caching/" class="md-nav__link">
+        Caching
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../performance/inlining/" class="md-nav__link">
+        Inlining
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../diagnostics_and_troubleshooting/Bodoerrors/" class="md-nav__link">
+        Bodo Errors
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../diagnostics_and_troubleshooting/compilation/" class="md-nav__link">
+        Compilation Tips
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../diagnostics_and_troubleshooting/troubleaws/" class="md-nav__link">
+        Troubleshooting on AWS
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../diagnostics_and_troubleshooting/troubleazure/" class="md-nav__link">
+        Troubleshooting on Azure
+      </a>
+    </li>
+  
+
+            
+          
+        </ul>
+      </nav>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+  
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+      
+        <input class="md-nav__toggle md-toggle" data-md-toggle="__nav_8" data-md-state="indeterminate" type="checkbox" id="__nav_8" checked>
+      
+      
+      
+        
+          
+        
+          
+        
+      
+      
+        <label class="md-nav__link" for="__nav_8">
+          Help and Reference
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <nav class="md-nav" aria-label="Help and Reference" data-md-level="1">
+        <label class="md-nav__title" for="__nav_8">
+          <span class="md-nav__icon md-icon"></span>
+          Help and Reference
+        </label>
+        <ul class="md-nav__list" data-md-scrollfix>
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../help_and_reference/eula/" class="md-nav__link">
+        End User License Agreement
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../help_and_reference/releases/" class="md-nav__link">
+        Release Notes
+      </a>
+    </li>
+  
+
+            
+          
+        </ul>
+      </nav>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Using Bodo Cloud Platform">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Using Bodo Cloud Platform
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#creating_clusters" class="md-nav__link">
+    Creating Clusters
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#attaching_notebook_to_cluster" class="md-nav__link">
+    Attaching a Notebook to a Cluster
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#connecting_to_a_cluster" class="md-nav__link">
+    Connecting to a Cluster
+  </a>
+  
+    <nav class="md-nav" aria-label="Connecting to a Cluster">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#connecting-with-a-notebook-terminal" class="md-nav__link">
+    Connecting with a Notebook Terminal
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#ssh-from-your-machine" class="md-nav__link">
+    SSH From Your Machine
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#verify_your_connection" class="md-nav__link">
+    Verify your Connection
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#running_a_job" class="md-nav__link">
+    Running a Job
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          <div class="md-content" data-md-component="content">
+            <article class="md-content__inner md-typeset">
+              
+                
+
+
+<h1 id="bodo_platform">Using Bodo Cloud Platform<a class="headerlink" href="#bodo_platform" title="Permanent link">&para;</a></h1>
+<h2 id="creating_clusters">Creating Clusters<a class="headerlink" href="#creating_clusters" title="Permanent link">&para;</a></h2>
+<p>In the left bar click on <em>Clusters</em> (or click on the second step in the
+<em>Onboarding</em> list):</p>
+<p><img alt="Sidebar-Clusters" src="../../platform_onboarding_screenshots/side-clusters.png#center#center" /></p>
+<p>This will take you to the <em>Clusters</em> page. At the top right corner,
+click on <code>Create Cluster</code> which opens the cluster creation form. First,
+choose a name for your cluster and check the
+<a href="https://aws.amazon.com/hpc/efa/" target="blank">EFA</a> checkbox if you want to use
+EFA-enabled nodes (only available on AWS). Then, select the type of
+nodes in the cluster to be created from the <strong>Instance type</strong> dropdown
+list.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>If the <strong>Instance type</strong> dropdown list does not populate,
+either the credentials are not entered properly or they are not valid.
+Please see how to set your <a href="../bodo_platform_aws/#setting_aws_credentials">AWS</a>
+or <a href="../bodo_platform_azure/#setting_azure_credentials">Azure</a> credentials and make sure your credentials are valid.</p>
+</div>
+<p>Next, enter the number of nodes for your cluster in <strong>Number of
+Instances</strong>. and choose the Bodo Version to be installed on your
+cluster. Typically the three latest Bodo Releases are available.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>If the <strong>Bodo Version</strong> dropdown list does not populate,
+either the credentials are not entered properly or the permissions to
+Bodo's Images have not been granted to your account. Please repeat the steps
+to set your <a href="../bodo_platform_aws/#setting_aws_credentials">AWS</a> or <a href="../bodo_platform_azure/#setting_azure_credentials">Azure</a>
+credentials and make sure you complete themwith valid credentials and that images have been
+successfully shared with your AWS or Azure account.</p>
+</div>
+<p>Then, select a value for <strong>Cluster auto shutdown</strong>. This is the amount
+of time of inactivity after which the platform will remove the cluster
+automatically. Activity is determined through attached notebooks (see
+<a href="#attaching_notebook_to_cluster">how to attach a notebook to a cluster</a>) and jobs
+(see <a href="#running_a_job">how to run a job</a>). Therefore, if you
+don't plan to attach a notebook or a job to this cluster (and use it
+via <code>ssh</code> instead), it's recommended to set this to
+<code>Never</code>, since otherwise the cluster will be removed after
+the set time.</p>
+<p><img alt="Cluster-creation-form" src="../../platform_onboarding_screenshots/cluster-form.png#center#center" /></p>
+<p>Finally click on <code>CREATE</code>. You will see that a new task for creating the
+cluster has been created.</p>
+<p><img alt="Cluster-Status-New" src="../../platform_onboarding_screenshots/cluster-status-new.png#center#center" /></p>
+<p>The status is updated to <em>INPROGRESS</em> when the task starts executing and
+cluster creation is in progress.</p>
+<p><img alt="Cluster-Status-InProgress" src="../../platform_onboarding_screenshots/cluster-status-ip.png#center#center" /></p>
+<p>You can click on the <code>Details</code> drop down to monitor the progress for the
+cluster creation.</p>
+<p><img alt="Cluster-Info" src="../../platform_onboarding_screenshots/cluster-info.png#center#center" /></p>
+<p>Once the cluster is successfully created and ready to use, the status is
+updated to <em>FINISHED</em>.</p>
+<p><img alt="Cluster-Status-Finished" src="../../platform_onboarding_screenshots/cluster-status-done.png#center#center" /></p>
+<h2 id="attaching_notebook_to_cluster">Attaching a Notebook to a Cluster<a class="headerlink" href="#attaching_notebook_to_cluster" title="Permanent link">&para;</a></h2>
+<p>Go to the notebooks page by clicking on <em>Notebooks</em> in the left bar (or
+on the third green step in the <em>Onboarding</em> list at the top).</p>
+<p><img alt="Sidebar-Notebooks" src="../../platform_onboarding_screenshots/side-nbs.png#center" /></p>
+<p>This will take you to the <em>Notebooks</em> page. At the top right corner,
+click on the <code>Create Notebook</code> button which opens the notebook creation
+form. Choose a name for your notebook and select the type of node that
+will host the notebook from the <strong>Instance type</strong> drop down list. Note
+that this node is for running the Jupyter notebook itself, and will not
+run cluster workloads. Lastly, select a cluster for attaching the
+notebook from the <strong>Cluster</strong> drop down menu and and click on <code>CREATE</code>.</p>
+<p><img alt="Notebook-Creation-Form" src="../../platform_onboarding_screenshots/nb-form.png#center" /></p>
+<p>After clicking <code>CREATE</code>, a new task for creating the notebook and its
+corresponding node is created.</p>
+<p><img alt="Notebook-Status-New" src="../../platform_onboarding_screenshots/nb-status-new.png#center" /></p>
+<p>The status updates to <em>INPROGRESS</em> when the task starts executing.</p>
+<p><img alt="Notebook-Status-InProgress" src="../../platform_onboarding_screenshots/nb-status-ip.png#center" /></p>
+<p>After creating the notebook, the platform runs readiness probe checks:</p>
+<p><img alt="Notebook-Status-ReadinessProbe" src="../../platform_onboarding_screenshots/nb-status-rp.png#center" /></p>
+<p>The notebook is ready to use after all checks are complete.
+<code>OPEN NOTEBOOK</code> will open the notebook in the current browser page,
+while the dropdown allows opening the notebook in a new tab.</p>
+<p><img alt="Notebook-Status-Finished" src="../../platform_onboarding_screenshots/nb-status-done.png#center" /></p>
+<h2 id="connecting_to_a_cluster">Connecting to a Cluster<a class="headerlink" href="#connecting_to_a_cluster" title="Permanent link">&para;</a></h2>
+<p>We recommend interacting with clusters primarily through Jupyter
+notebooks and Jobs. However, it may be necessary to connect directly to
+a cluster in some cases. You can either connect through a notebook
+terminal (recommended), or ssh directly from your machine. The latter
+requires providing your ssh public key during cluster creation.</p>
+<h3 id="connecting-with-a-notebook-terminal">Connecting with a Notebook Terminal<a class="headerlink" href="#connecting-with-a-notebook-terminal" title="Permanent link">&para;</a></h3>
+<p>First, you need to <a href="#creating_clusters">create a cluster</a>
+and <a href="#attaching_notebook_to_cluster">attach a notebook to the cluster</a>. </p>
+<p>Then, go the cluster tab and find your cluster. Click on <code>DETAILS</code> and
+copy the cluster <code>UUID</code>.</p>
+<p><img alt="Cluster-UUID-Info" src="../../platform_onboarding_screenshots/cluster-ip-info.png#center" /></p>
+<p>Next, go to the notebooks tab and select <code>OPEN NOTEBOOK</code>. In the
+<em>Launcher</em>, click on <code>Terminal</code>.</p>
+<p><img alt="Notebook-Terminal" src="../../platform_onboarding_screenshots/notebook-terminal.png#center" /></p>
+<p>Through this terminal, you can interact with the <code>/shared</code> folder, which
+is shared by all the instances in the cluster and the Notebook instance.
+<a href="#verify_your_connection">Verify your connection</a> to interact directly with your cluster.</p>
+<h3 id="ssh-from-your-machine">SSH From Your Machine<a class="headerlink" href="#ssh-from-your-machine" title="Permanent link">&para;</a></h3>
+<p>First, navigate to the clusters tabs and select <code>Create a Cluster</code>.
+Click on <code>Show Advanced</code> and add your public key in <strong>SSH Public Key</strong>.
+Then, click on <code>Add your IP</code> in the <strong>Access from IP address</strong> section
+to enable accessing your cluster from your machine.</p>
+<p><img alt="Cluster-Creation-Advanced-Settings" src="../../platform_onboarding_screenshots/cluster-create-advanced-settings.png#center" /></p>
+<p>Fill the rest of the form by following the steps to <a href="#creating_clusters">create clusters</a>.</p>
+<p>In the clusters tab, select your cluster and click on <code>DETAILS</code> to find
+the list of IP addresses for your cluster nodes. Use any of the IP
+addresses as the ssh destination. In addition, also copy the cluster
+UUID which will be needed to execute commands across the cluster.</p>
+<p><img alt="Cluster-IP-Info" src="../../platform_onboarding_screenshots/cluster-ip-info.png#center" /></p>
+<p>In any ssh agent, you can connect to one of your nodes with:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1"></a>ssh -i &lt;path_to_private_key&gt; bodo@&lt;IP_ADDRESS&gt;
+</code></pre></div>
+<p>To add additional ssh options please refer to the documentation for your
+ssh agent.</p>
+<h3 id="verify_your_connection">Verify your Connection<a class="headerlink" href="#verify_your_connection" title="Permanent link">&para;</a></h3>
+<p>Once you have connected to a node in your cluster, you should verify
+that you can run operations across all the instances in the cluster.</p>
+<ol>
+<li>
+<p>Verify the path to the hostfile for your cluster. You can find it by
+    running:
+    <div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1"></a>ls -la /shared/.hostfile-&lt;CLUSTER UUID&gt;
+</code></pre></div></p>
+</li>
+<li>
+<p>Check that you can run a command across you cluster. To do this,
+    run:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1"></a>mpiexec -n &lt;TOTAL_CORE_COUNT&gt; -f /shared/.hostfile-&lt;CLUSTER UUID&gt; hostname
+</code></pre></div>
+<p>This will print one line per each core in the cluster, with one
+unique hostname per cluster node.</p>
+<p>Your cluster's <code>TOTAL_CORE_COUNT</code> is usually half the
+number of vCPUs on each instance times the number of instances in
+your cluster. For example, if you have a 4 instance cluster of
+c5.4xlarge, then your <code>TOTAL_CORE_COUNT</code> is 32.</p>
+</li>
+<li>
+<p>Verify that you can run a python command across your cluster. For
+    example, run:</p>
+<div class="highlight"><pre><span></span><code>mpiexec -n &lt;TOTAL_CORE_COUNT&gt; -f /shared/.hostfile-&lt;CLUSTER_UUID&gt; python --version
+</code></pre></div>
+</li>
+</ol>
+<p>If all commands succeed, you should be able to execute workloads across
+your cluster. You can place scripts and small data that are shared
+across cluster nodes in <code>/shared</code>. However, external storage, such as
+S3, should be used for reading and writing large data.</p>
+<h2 id="running_a_job">Running a Job<a class="headerlink" href="#running_a_job" title="Permanent link">&para;</a></h2>
+<p>Bodo Cloud Platform has support for running scheduled (and immediate)
+Python jobs without the need for Jupyter Notebooks. To create a Job,
+navigate to the Jobs page by selecting <em>Jobs</em> in the left bar.</p>
+<p><img alt="Sidebar-Jobs" src="../../platform_onboarding_screenshots/side-jobs.png#center" /></p>
+<p>This pages displays any <em>INPROGRESS</em> jobs you have previously scheduled
+and allows you to schedule new Jobs. At the top right corner, click on
+<code>CREATE JOB</code>. This opens a job creation form.</p>
+<p>First, select a name for your job and specify the cluster on which you
+want to deploy your job. If you have an existing cluster that is not
+currently bound to a notebook or another job, you can select this
+cluster from the dropdown menu. Alternatively, you can create a cluster
+specifically for this job by selecting the <code>NEW</code> button next to the
+cluster dropdown menu. When creating a cluster specifically for a job,
+note that the cluster is only used for that job and is removed once the
+job completes. After selecting your cluster, indicate when you want your
+job to be executed in the <strong>Schedule</strong> section. Then, enter the
+<strong>Command</strong> that you want to execute inside this cluster.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>This command is automatically prepended with
+<code>mpiexec -n &lt;CORE_COUNT&gt; python</code>. For example, to run a file <code>ex.py</code>
+with the argument 1, you would enter the command <code>ex.py 1</code>.</p>
+</div>
+<p>To specify your source code location, fill in the <strong>Path</strong> line with a
+valid Git URL or S3 URI (only available on AWS) that leads to a
+repository containing your code.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>When selecting a GitHub URL, you should select the URL
+available at the top of your web browser and NOT the path when cloning
+the repository, <em>i.e.</em> your path SHOULD NOT end in <code>.git</code>.
+If selecting an S3 URI, your S3 bucket must be in the same region as
+your cluster.</p>
+</div>
+<p><img alt="Jobs-Forms-Standard" src="../../platform_onboarding_screenshots/jobs-form-standard.png#center" /></p>
+<p>If you are cloning a private repository, you need to provide the
+platform with valid Git credentials to download your repository. To do
+so, select <code>Show advanced</code> in the bottom right of the form. Then in
+<strong>Workspace username</strong>, enter your Git username and in <strong>Workspace
+password</strong> enter either your password or a valid Github Access Token.
+The advanced options also allow you to specify a particular commit or
+branch with <strong>Workspace reference</strong> and to load other custom environment
+variables in <strong>Other</strong>.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>If your Github Account uses 2FA please use a Github Access
+Token to avoid any possible authentication issues.</p>
+</div>
+<p>Once your form is complete, select <code>CREATE</code> to begin your job.</p>
+<p><img alt="Jobs-Forms-Advanced" src="../../platform_onboarding_screenshots/jobs-form-advanced.png#center" /></p>
+<p>Once you've provided all the necessary details, select <code>CREATE</code> to
+begin your job. You will see a <em>NEW</em> task created in your jobs page.</p>
+<p><img alt="New-Job" src="../../platform_onboarding_screenshots/jobs-new.png#center" /></p>
+<p>If you created a cluster specifically for this job, a new cluster will
+also appear in your clusters page.</p>
+<p><img alt="New-Job-Cluster" src="../../platform_onboarding_screenshots/jobs-cluster-inprogress.png#center" /></p>
+<p>Your job will begin once it reaches its scheduled time and any necessary
+clusters have been created. Then your job will transition to being
+<em>INPROGRESS</em>.</p>
+<p><img alt="InProgress-Job" src="../../platform_onboarding_screenshots/jobs-inprogress.png#center" /></p>
+<p>At this point your job will execute your desired command. Once it
+finishes executing, your job will transition to <em>FINISHED</em> status. You
+can find any stdout information that you may need by pressing <code>DETAILS</code>
+followed by <code>SHOW LOGS</code>. If a cluster was specifically created for this
+job, it will be deleted after the job finishes.</p>
+<p><img alt="Finished-Job" src="../../platform_onboarding_screenshots/jobs-finished.png#center" /></p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Bodo DOES NOT preserve artifacts written to local storage. If
+you have any information that you need to persist and later review, you
+should write to external storage, such as Amazon S3. You may also write
+to stdout/stderr, but output logs may be truncated, so it should not be
+considered reliable for large outputs that need to be read later.</p>
+</div>
+
+              
+            </article>
+          </div>
+        </div>
+        
+          <a href="#" class="md-top md-icon" data-md-component="top" data-md-state="hidden">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8v12z"/></svg>
+            Back to top
+          </a>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    <nav class="md-footer__inner md-grid" aria-label="Footer">
+      
+        
+        <a href="../recommended_cluster_config/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Recommended Cluster Configuration" rel="prev">
+          <div class="md-footer__button md-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11h12z"/></svg>
+          </div>
+          <div class="md-footer__title">
+            <div class="md-ellipsis">
+              <span class="md-footer__direction">
+                Previous
+              </span>
+              Recommended Cluster Configuration
+            </div>
+          </div>
+        </a>
+      
+      
+        
+        <a href="../bodo_platform_aws/" class="md-footer__link md-footer__link--next" aria-label="Next: Bodo Managed Cloud Platform on AWS" rel="next">
+          <div class="md-footer__title">
+            <div class="md-ellipsis">
+              <span class="md-footer__direction">
+                Next
+              </span>
+              Bodo Managed Cloud Platform on AWS
+            </div>
+          </div>
+          <div class="md-footer__button md-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 11v2h12l-5.5 5.5 1.42 1.42L19.84 12l-7.92-7.92L10.5 5.5 16 11H4z"/></svg>
+          </div>
+        </a>
+      
+    </nav>
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      Copyright &copy; 2019 - 2022 Bodo, Inc.
+    </div>
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+        <div class="md-social">
+  
+    
+    
+      
+      
+    
+    <a href="https://github.com/Bodo-Inc/Feedback" target="_blank" rel="noopener" title="github.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.0.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc.--><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"/></svg>
+    </a>
+  
+    
+    
+      
+      
+    
+    <a href="https://twitter.com/bodo_ai" target="_blank" rel="noopener" title="twitter.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.0.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc.--><path d="M459.37 151.716c.325 4.548.325 9.097.325 13.645 0 138.72-105.583 298.558-298.558 298.558-59.452 0-114.68-17.219-161.137-47.106 8.447.974 16.568 1.299 25.34 1.299 49.055 0 94.213-16.568 130.274-44.832-46.132-.975-84.792-31.188-98.112-72.772 6.498.974 12.995 1.624 19.818 1.624 9.421 0 18.843-1.3 27.614-3.573-48.081-9.747-84.143-51.98-84.143-102.985v-1.299c13.969 7.797 30.214 12.67 47.431 13.319-28.264-18.843-46.781-51.005-46.781-87.391 0-19.492 5.197-37.36 14.294-52.954 51.655 63.675 129.3 105.258 216.365 109.807-1.624-7.797-2.599-15.918-2.599-24.04 0-57.828 46.782-104.934 104.934-104.934 30.213 0 57.502 12.67 76.67 33.137 23.715-4.548 46.456-13.32 66.599-25.34-7.798 24.366-24.366 44.833-46.132 57.827 21.117-2.273 41.584-8.122 60.426-16.243-14.292 20.791-32.161 39.308-52.628 54.253z"/></svg>
+    </a>
+  
+    
+    
+      
+      
+    
+    <a href="https://www.linkedin.com/company/19205698" target="_blank" rel="noopener" title="www.linkedin.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.0.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc.--><path d="M416 32H31.9C14.3 32 0 46.5 0 64.3v383.4C0 465.5 14.3 480 31.9 480H416c17.6 0 32-14.5 32-32.3V64.3c0-17.8-14.4-32.3-32-32.3zM135.4 416H69V202.2h66.5V416zm-33.2-243c-21.3 0-38.5-17.3-38.5-38.5S80.9 96 102.2 96c21.2 0 38.5 17.3 38.5 38.5 0 21.3-17.2 38.5-38.5 38.5zm282.1 243h-66.4V312c0-24.8-.5-56.7-34.5-56.7-34.6 0-39.9 27-39.9 54.9V416h-66.4V202.2h63.7v29.2h.9c8.9-16.8 30.6-34.5 62.9-34.5 67.2 0 79.7 44.3 79.7 101.9V416z"/></svg>
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    <script id="__config" type="application/json">{"base": "../..", "features": ["content.code.annotate", "navigation.instant", "navigation.tabs", "navigation.tabs.sticky", "navigation.top", "navigation.tracking", "navigation.indexes", "navigation.expand", "search.highlight", "search.share", "search.suggest"], "translations": {"clipboard.copy": "Copy to clipboard", "clipboard.copied": "Copied to clipboard", "search.config.lang": "en", "search.config.pipeline": "trimmer, stopWordFilter", "search.config.separator": "[\\s\\-]+", "search.placeholder": "Search", "search.result.placeholder": "Type to start searching", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.term.missing": "Missing", "select.version.title": "Select version"}, "search": "../../assets/javascripts/workers/search.bd0b6b67.min.js", "version": {"provider": "mike"}}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.8aa65030.min.js"></script>
+      
+    
+  </body>
+</html>

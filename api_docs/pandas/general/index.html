@@ -1,0 +1,3990 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Bodo offers a new type of just-in-time compiler with Supercomputing-style performance and the simplicity of using native Python.">
+      
+      
+        <meta name="author" content="Bodo Team">
+      
+      
+        <link rel="canonical" href="https://docs.bodo.ai/api_docs/pandas/general/">
+      
+      <link rel="icon" href="../../../assets/favicon.png">
+      <meta name="generator" content="mkdocs-1.2.3, mkdocs-material-8.2.1">
+    
+    
+      
+        <title>General Functions - Bodo Developer Documentation</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../../assets/stylesheets/main.e8d9bf0c.min.css">
+      
+        
+        <link rel="stylesheet" href="../../../assets/stylesheets/palette.e6a45f82.min.css">
+        
+      
+    
+    
+    
+      
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,400,400i,700%7CRoboto+Mono&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../../stylesheets/bodo.css">
+    
+    <script>__md_scope=new URL("../../..",location),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="bodo-light" data-md-color-accent="bodo-green">
+  
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&"object"==typeof palette.color)for(var key of Object.keys(palette.color))document.body.setAttribute("data-md-color-"+key,palette.color[key])</script>
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#general" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+      <div data-md-component="outdated" hidden>
+        <aside class="md-banner md-banner--warning">
+          
+        </aside>
+      </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--lifted" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../../.." title="Bodo Developer Documentation" class="md-header__button md-logo" aria-label="Bodo Developer Documentation" data-md-component="logo">
+      
+  <img src="../../../assets/bodo-logo.png" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3V6m0 5h18v2H3v-2m0 5h18v2H3v-2z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Bodo Developer Documentation
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              General Functions
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      <form class="md-header__option" data-md-component="palette">
+        
+          
+          
+          <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="bodo-light" data-md-color-accent="bodo-green"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_1">
+          
+            <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_2" hidden>
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M17 7H7a5 5 0 0 0-5 5 5 5 0 0 0 5 5h10a5 5 0 0 0 5-5 5 5 0 0 0-5-5m0 8a3 3 0 0 1-3-3 3 3 0 0 1 3-3 3 3 0 0 1 3 3 3 3 0 0 1-3 3z"/></svg>
+            </label>
+          
+        
+          
+          
+          <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="bodo-dark" data-md-color-accent="bodo-green"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_2">
+          
+            <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_1" hidden>
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M17 6H7c-3.31 0-6 2.69-6 6s2.69 6 6 6h10c3.31 0 6-2.69 6-6s-2.69-6-6-6zm0 10H7c-2.21 0-4-1.79-4-4s1.79-4 4-4h10c2.21 0 4 1.79 4 4s-1.79 4-4 4zM7 9c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>
+            </label>
+          
+        
+      </form>
+    
+    
+    
+      <label class="md-header__button md-icon" for="__search">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5z"/></svg>
+      </label>
+      <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5z"/></svg>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11h12z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+          <a href="javascript:void(0)" class="md-search__icon md-icon" aria-label="Share" data-clipboard data-clipboard-text="" data-md-component="search-share" tabindex="-1">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7 0-.24-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9a3 3 0 0 0-3 3 3 3 0 0 0 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.15c-.05.21-.08.43-.08.66 0 1.61 1.31 2.91 2.92 2.91 1.61 0 2.92-1.3 2.92-2.91A2.92 2.92 0 0 0 18 16.08z"/></svg>
+          </a>
+        
+        <button type="reset" class="md-search__icon md-icon" aria-label="Clear" tabindex="-1">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+    
+    
+  </nav>
+  
+    
+      
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-tabs__inner md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+
+
+  <li class="md-tabs__item">
+    <a href="../../.." class="md-tabs__link">
+      About Bodo
+    </a>
+  </li>
+
+      
+        
+  
+  
+
+
+  <li class="md-tabs__item">
+    <a href="../../../quick_start/" class="md-tabs__link">
+      Quick Start
+    </a>
+  </li>
+
+      
+        
+  
+  
+
+
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../../installation_and_setup/install/" class="md-tabs__link">
+        Installation and Setup
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+
+
+  
+  
+  
+    
+
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../../bodo_parallelism/bodo_parallelism_basics/" class="md-tabs__link">
+        Programming with Bodo
+      </a>
+    </li>
+  
+
+  
+
+      
+        
+  
+  
+
+
+  
+  
+  
+    
+
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../../integrating_bodo/spark/" class="md-tabs__link">
+        Bodo in your Pipeline
+      </a>
+    </li>
+  
+
+  
+
+      
+        
+  
+  
+    
+  
+
+
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../" class="md-tabs__link md-tabs__link--active">
+        API Docs
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+
+
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../../performance/performance/" class="md-tabs__link">
+        Performance and Diagnostics
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+
+
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../../help_and_reference/eula/" class="md-tabs__link">
+        Help and Reference
+      </a>
+    </li>
+  
+
+      
+    </ul>
+  </div>
+</nav>
+    
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../../.." title="Bodo Developer Documentation" class="md-nav__button md-logo" aria-label="Bodo Developer Documentation" data-md-component="logo">
+      
+  <img src="../../../assets/bodo-logo.png" alt="logo">
+
+    </a>
+    Bodo Developer Documentation
+  </label>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+      
+
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../.." class="md-nav__link">
+        About Bodo
+      </a>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../quick_start/" class="md-nav__link">
+        Quick Start
+      </a>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+  
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+      
+        <input class="md-nav__toggle md-toggle" data-md-toggle="__nav_3" data-md-state="indeterminate" type="checkbox" id="__nav_3" checked>
+      
+      
+      
+        
+          
+        
+          
+        
+          
+        
+          
+        
+          
+        
+          
+        
+          
+        
+          
+        
+      
+      
+        <label class="md-nav__link" for="__nav_3">
+          Installation and Setup
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <nav class="md-nav" aria-label="Installation and Setup" data-md-level="1">
+        <label class="md-nav__title" for="__nav_3">
+          <span class="md-nav__icon md-icon"></span>
+          Installation and Setup
+        </label>
+        <ul class="md-nav__list" data-md-scrollfix>
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../installation_and_setup/install/" class="md-nav__link">
+        Installing Bodo Community Edition
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../installation_and_setup/enterprise/" class="md-nav__link">
+        Configuring Bodo Enterprise Edition
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../installation_and_setup/ipyparallel/" class="md-nav__link">
+        Interactive Bodo Cluster Setup using IPyParallel
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../installation_and_setup/recommended_mpi_settings/" class="md-nav__link">
+        Recommended MPI Settings
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../installation_and_setup/recommended_cluster_config/" class="md-nav__link">
+        Recommended Cluster Configuration
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../installation_and_setup/bodo_platform/" class="md-nav__link">
+        Using Bodo Cloud Platform
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../installation_and_setup/bodo_platform_aws/" class="md-nav__link">
+        Bodo Managed Cloud Platform on AWS
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../installation_and_setup/bodo_platform_azure/" class="md-nav__link">
+        Bodo Managed Cloud Platform on Azure
+      </a>
+    </li>
+  
+
+            
+          
+        </ul>
+      </nav>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+  
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+      
+        <input class="md-nav__toggle md-toggle" data-md-toggle="__nav_4" data-md-state="indeterminate" type="checkbox" id="__nav_4" checked>
+      
+      
+      
+        
+          
+        
+          
+        
+          
+        
+      
+      
+        <label class="md-nav__link" for="__nav_4">
+          Programming with Bodo
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <nav class="md-nav" aria-label="Programming with Bodo" data-md-level="1">
+        <label class="md-nav__title" for="__nav_4">
+          <span class="md-nav__icon md-icon"></span>
+          Programming with Bodo
+        </label>
+        <ul class="md-nav__list" data-md-scrollfix>
+          
+            
+              
+  
+  
+  
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+      
+        <input class="md-nav__toggle md-toggle" data-md-toggle="__nav_4_1" data-md-state="indeterminate" type="checkbox" id="__nav_4_1" checked>
+      
+      
+      
+        
+          
+        
+          
+        
+          
+        
+          
+        
+      
+      
+        <label class="md-nav__link" for="__nav_4_1">
+          Understanding Parallelism with Bodo
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <nav class="md-nav" aria-label="Understanding Parallelism with Bodo" data-md-level="2">
+        <label class="md-nav__title" for="__nav_4_1">
+          <span class="md-nav__icon md-icon"></span>
+          Understanding Parallelism with Bodo
+        </label>
+        <ul class="md-nav__list" data-md-scrollfix>
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../bodo_parallelism/bodo_parallelism_basics/" class="md-nav__link">
+        Basics of Bodo Parallelism
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../bodo_parallelism/advanced/" class="md-nav__link">
+        Advanced Parallelism Topics
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../bodo_parallelism/compile_time_constants/" class="md-nav__link">
+        Compile Time Constants
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../bodo_parallelism/not_supported/" class="md-nav__link">
+        Unsupported Programs
+      </a>
+    </li>
+  
+
+            
+          
+        </ul>
+      </nav>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../file_io/" class="md-nav__link">
+        Scalable File I/O
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../objmode/" class="md-nav__link">
+        Using Regular Python inside Bodo (Object Mode)
+      </a>
+    </li>
+  
+
+            
+          
+        </ul>
+      </nav>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+  
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+      
+        <input class="md-nav__toggle md-toggle" data-md-toggle="__nav_5" data-md-state="indeterminate" type="checkbox" id="__nav_5" checked>
+      
+      
+      
+        
+          
+        
+          
+        
+          
+        
+          
+        
+      
+      
+        <label class="md-nav__link" for="__nav_5">
+          Bodo in your Pipeline
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <nav class="md-nav" aria-label="Bodo in your Pipeline" data-md-level="1">
+        <label class="md-nav__title" for="__nav_5">
+          <span class="md-nav__icon md-icon"></span>
+          Bodo in your Pipeline
+        </label>
+        <ul class="md-nav__list" data-md-scrollfix>
+          
+            
+              
+  
+  
+  
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+      
+        <input class="md-nav__toggle md-toggle" data-md-toggle="__nav_5_1" data-md-state="indeterminate" type="checkbox" id="__nav_5_1" checked>
+      
+      
+      
+        
+          
+        
+          
+        
+      
+      
+        <label class="md-nav__link" for="__nav_5_1">
+          Migration from Spark
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <nav class="md-nav" aria-label="Migration from Spark" data-md-level="2">
+        <label class="md-nav__title" for="__nav_5_1">
+          <span class="md-nav__icon md-icon"></span>
+          Migration from Spark
+        </label>
+        <ul class="md-nav__list" data-md-scrollfix>
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../integrating_bodo/spark/" class="md-nav__link">
+        Spark Examples
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../integrating_bodo/sparkcheatsheet/" class="md-nav__link">
+        Bodo Spark Cheatsheet
+      </a>
+    </li>
+  
+
+            
+          
+        </ul>
+      </nav>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../integrating_bodo/dl/" class="md-nav__link">
+        Deep Learning
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../integrating_bodo/data_visualization/" class="md-nav__link">
+        Data Visualization
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../integrating_bodo/front_end/" class="md-nav__link">
+        Front End Tools
+      </a>
+    </li>
+  
+
+            
+          
+        </ul>
+      </nav>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+    
+  
+  
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+      
+        <input class="md-nav__toggle md-toggle" data-md-toggle="__nav_6" type="checkbox" id="__nav_6" checked>
+      
+      
+      
+        
+          
+            
+          
+        
+          
+        
+          
+        
+          
+        
+          
+        
+          
+        
+          
+        
+      
+      
+        
+        
+        <div class="md-nav__link md-nav__link--index ">
+          <a href="../../">API Docs</a>
+          
+            <label for="__nav_6">
+              <span class="md-nav__icon md-icon"></span>
+            </label>
+          
+        </div>
+      
+      <nav class="md-nav" aria-label="API Docs" data-md-level="1">
+        <label class="md-nav__title" for="__nav_6">
+          <span class="md-nav__icon md-icon"></span>
+          API Docs
+        </label>
+        <ul class="md-nav__list" data-md-scrollfix>
+          
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../bodo_parallel_apis/" class="md-nav__link">
+        Bodo Parallel APIs
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+    
+  
+  
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+      
+        <input class="md-nav__toggle md-toggle" data-md-toggle="__nav_6_3" type="checkbox" id="__nav_6_3" checked>
+      
+      
+      
+        
+          
+            
+          
+        
+          
+        
+          
+        
+          
+        
+          
+        
+          
+        
+          
+        
+          
+        
+          
+        
+          
+        
+          
+        
+          
+        
+          
+        
+          
+        
+      
+      
+        
+        
+        <div class="md-nav__link md-nav__link--index ">
+          <a href="../">Pandas</a>
+          
+            <label for="__nav_6_3">
+              <span class="md-nav__icon md-icon"></span>
+            </label>
+          
+        </div>
+      
+      <nav class="md-nav" aria-label="Pandas" data-md-level="2">
+        <label class="md-nav__title" for="__nav_6_3">
+          <span class="md-nav__icon md-icon"></span>
+          Pandas
+        </label>
+        <ul class="md-nav__list" data-md-scrollfix>
+          
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../datatypes/" class="md-nav__link">
+        Datatypes
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+    
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" data-md-toggle="toc" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          General Functions
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        General Functions
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="General Functions">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      General Functions
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#data-manipulations" class="md-nav__link">
+    Data manipulations
+  </a>
+  
+    <nav class="md-nav" aria-label="Data manipulations">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#pdpivot" class="md-nav__link">
+    pd.pivot
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pdpivot_table" class="md-nav__link">
+    pd.pivot_table
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pdcrosstab" class="md-nav__link">
+    pd.crosstab
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pdcut" class="md-nav__link">
+    pd.cut
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pdqcut" class="md-nav__link">
+    pd.qcut
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pdmerge" class="md-nav__link">
+    pd.merge
+  </a>
+  
+    <nav class="md-nav" aria-label="pd.merge">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#merge-notes" class="md-nav__link">
+    Merge Notes
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pdmerge_asof" class="md-nav__link">
+    pd.merge_asof
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pdconcat" class="md-nav__link">
+    pd.concat
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pdget_dummies" class="md-nav__link">
+    pd.get_dummies
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#top-level-missing-data" class="md-nav__link">
+    Top-level missing data
+  </a>
+  
+    <nav class="md-nav" aria-label="Top-level missing data">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#pdisna" class="md-nav__link">
+    pd.isna
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pdisnull" class="md-nav__link">
+    pd.isnull
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pdnotna" class="md-nav__link">
+    pd.notna
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pdnotnull" class="md-nav__link">
+    pd.notnull
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#top-level-conversions" class="md-nav__link">
+    Top-level conversions
+  </a>
+  
+    <nav class="md-nav" aria-label="Top-level conversions">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#pdto_numeric" class="md-nav__link">
+    pd.to_numeric
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#top-level-dealing-with-datetime-and-timedelta-like" class="md-nav__link">
+    Top-level dealing with datetime and timedelta like
+  </a>
+  
+    <nav class="md-nav" aria-label="Top-level dealing with datetime and timedelta like">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#pdto_datetime" class="md-nav__link">
+    pd.to_datetime
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pdto_timedelta" class="md-nav__link">
+    pd.to_timedelta
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pddate_range" class="md-nav__link">
+    pd.date_range
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pdtimedelta_range" class="md-nav__link">
+    pd.timedelta_range
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../dataframe/" class="md-nav__link">
+        Dataframe
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../groupby/" class="md-nav__link">
+        Groupby
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../series/" class="md-nav__link">
+        Series
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../window/" class="md-nav__link">
+        Window
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../dateoffsets/" class="md-nav__link">
+        DateOffsets
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../io/" class="md-nav__link">
+        Input/Output
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../indexapi/" class="md-nav__link">
+        Index Objects
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../timedelta/" class="md-nav__link">
+        TimeDelta
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../timestamp/" class="md-nav__link">
+        Timestamp
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../na_issues/" class="md-nav__link">
+        Integer NA Issue in Pandas
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../type_inf_obj_data/" class="md-nav__link">
+        Type Inference for Object Data
+      </a>
+    </li>
+  
+
+            
+          
+        </ul>
+      </nav>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../numpy/" class="md-nav__link">
+        Numpy
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../udfs/" class="md-nav__link">
+        User Defined Functions (UDFs)
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+      
+        <input class="md-nav__toggle md-toggle" data-md-toggle="__nav_6_6" data-md-state="indeterminate" type="checkbox" id="__nav_6_6" checked>
+      
+      
+      
+        
+          
+            
+          
+        
+          
+        
+      
+      
+        
+        
+        <div class="md-nav__link md-nav__link--index ">
+          <a href="../../ml/">Machine Learning</a>
+          
+            <label for="__nav_6_6">
+              <span class="md-nav__icon md-icon"></span>
+            </label>
+          
+        </div>
+      
+      <nav class="md-nav" aria-label="Machine Learning" data-md-level="2">
+        <label class="md-nav__title" for="__nav_6_6">
+          <span class="md-nav__icon md-icon"></span>
+          Machine Learning
+        </label>
+        <ul class="md-nav__list" data-md-scrollfix>
+          
+            
+          
+            
+              
+  
+  
+  
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+      
+        <input class="md-nav__toggle md-toggle" data-md-toggle="__nav_6_6_2" data-md-state="indeterminate" type="checkbox" id="__nav_6_6_2" checked>
+      
+      
+      
+        
+          
+            
+          
+        
+          
+        
+          
+        
+          
+        
+          
+        
+          
+        
+          
+        
+          
+        
+          
+        
+          
+        
+      
+      
+        
+        
+        <div class="md-nav__link md-nav__link--index ">
+          <a href="../../ml/sklearn/">Scikit Learn</a>
+          
+            <label for="__nav_6_6_2">
+              <span class="md-nav__icon md-icon"></span>
+            </label>
+          
+        </div>
+      
+      <nav class="md-nav" aria-label="Scikit Learn" data-md-level="3">
+        <label class="md-nav__title" for="__nav_6_6_2">
+          <span class="md-nav__icon md-icon"></span>
+          Scikit Learn
+        </label>
+        <ul class="md-nav__list" data-md-scrollfix>
+          
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../ml/sklearn/cluster/" class="md-nav__link">
+        sklearn.cluster
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../ml/sklearn/ensemble/" class="md-nav__link">
+        sklearn.ensemble
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../ml/sklearn/feature_extraction/" class="md-nav__link">
+        sklearn.feature_extraction
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../ml/sklearn/linear_model/" class="md-nav__link">
+        sklearn.linear_model
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../ml/sklearn/metrics/" class="md-nav__link">
+        sklearn.metrics
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../ml/sklearn/model_selection/" class="md-nav__link">
+        sklearn.model_selection
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../ml/sklearn/naive_bayes/" class="md-nav__link">
+        sklearn.naive_bayes
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../ml/sklearn/preprocessing/" class="md-nav__link">
+        sklearn.preprocessing
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../ml/sklearn/svm/" class="md-nav__link">
+        sklearn.svm
+      </a>
+    </li>
+  
+
+            
+          
+        </ul>
+      </nav>
+    </li>
+  
+
+            
+          
+        </ul>
+      </nav>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../miscellaneous/" class="md-nav__link">
+        Miscellaneous Supported Python API
+      </a>
+    </li>
+  
+
+            
+          
+        </ul>
+      </nav>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+  
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+      
+        <input class="md-nav__toggle md-toggle" data-md-toggle="__nav_7" data-md-state="indeterminate" type="checkbox" id="__nav_7" checked>
+      
+      
+      
+        
+          
+        
+          
+        
+          
+        
+          
+        
+          
+        
+          
+        
+          
+        
+      
+      
+        <label class="md-nav__link" for="__nav_7">
+          Performance and Diagnostics
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <nav class="md-nav" aria-label="Performance and Diagnostics" data-md-level="1">
+        <label class="md-nav__title" for="__nav_7">
+          <span class="md-nav__icon md-icon"></span>
+          Performance and Diagnostics
+        </label>
+        <ul class="md-nav__list" data-md-scrollfix>
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../performance/performance/" class="md-nav__link">
+        Measuring Performance
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../performance/caching/" class="md-nav__link">
+        Caching
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../performance/inlining/" class="md-nav__link">
+        Inlining
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../diagnostics_and_troubleshooting/Bodoerrors/" class="md-nav__link">
+        Bodo Errors
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../diagnostics_and_troubleshooting/compilation/" class="md-nav__link">
+        Compilation Tips
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../diagnostics_and_troubleshooting/troubleaws/" class="md-nav__link">
+        Troubleshooting on AWS
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../diagnostics_and_troubleshooting/troubleazure/" class="md-nav__link">
+        Troubleshooting on Azure
+      </a>
+    </li>
+  
+
+            
+          
+        </ul>
+      </nav>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+  
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+      
+        <input class="md-nav__toggle md-toggle" data-md-toggle="__nav_8" data-md-state="indeterminate" type="checkbox" id="__nav_8" checked>
+      
+      
+      
+        
+          
+        
+          
+        
+      
+      
+        <label class="md-nav__link" for="__nav_8">
+          Help and Reference
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <nav class="md-nav" aria-label="Help and Reference" data-md-level="1">
+        <label class="md-nav__title" for="__nav_8">
+          <span class="md-nav__icon md-icon"></span>
+          Help and Reference
+        </label>
+        <ul class="md-nav__list" data-md-scrollfix>
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../help_and_reference/eula/" class="md-nav__link">
+        End User License Agreement
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../help_and_reference/releases/" class="md-nav__link">
+        Release Notes
+      </a>
+    </li>
+  
+
+            
+          
+        </ul>
+      </nav>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="General Functions">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      General Functions
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#data-manipulations" class="md-nav__link">
+    Data manipulations
+  </a>
+  
+    <nav class="md-nav" aria-label="Data manipulations">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#pdpivot" class="md-nav__link">
+    pd.pivot
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pdpivot_table" class="md-nav__link">
+    pd.pivot_table
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pdcrosstab" class="md-nav__link">
+    pd.crosstab
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pdcut" class="md-nav__link">
+    pd.cut
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pdqcut" class="md-nav__link">
+    pd.qcut
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pdmerge" class="md-nav__link">
+    pd.merge
+  </a>
+  
+    <nav class="md-nav" aria-label="pd.merge">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#merge-notes" class="md-nav__link">
+    Merge Notes
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pdmerge_asof" class="md-nav__link">
+    pd.merge_asof
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pdconcat" class="md-nav__link">
+    pd.concat
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pdget_dummies" class="md-nav__link">
+    pd.get_dummies
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#top-level-missing-data" class="md-nav__link">
+    Top-level missing data
+  </a>
+  
+    <nav class="md-nav" aria-label="Top-level missing data">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#pdisna" class="md-nav__link">
+    pd.isna
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pdisnull" class="md-nav__link">
+    pd.isnull
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pdnotna" class="md-nav__link">
+    pd.notna
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pdnotnull" class="md-nav__link">
+    pd.notnull
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#top-level-conversions" class="md-nav__link">
+    Top-level conversions
+  </a>
+  
+    <nav class="md-nav" aria-label="Top-level conversions">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#pdto_numeric" class="md-nav__link">
+    pd.to_numeric
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#top-level-dealing-with-datetime-and-timedelta-like" class="md-nav__link">
+    Top-level dealing with datetime and timedelta like
+  </a>
+  
+    <nav class="md-nav" aria-label="Top-level dealing with datetime and timedelta like">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#pdto_datetime" class="md-nav__link">
+    pd.to_datetime
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pdto_timedelta" class="md-nav__link">
+    pd.to_timedelta
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pddate_range" class="md-nav__link">
+    pd.date_range
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pdtimedelta_range" class="md-nav__link">
+    pd.timedelta_range
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          <div class="md-content" data-md-component="content">
+            <article class="md-content__inner md-typeset">
+              
+                
+
+
+<h1 id="general">General functions<a class="headerlink" href="#general" title="Permanent link">&para;</a></h1>
+<h2 id="data-manipulations">Data manipulations<a class="headerlink" href="#data-manipulations" title="Permanent link">&para;</a></h2>
+<h4 id="pdpivot"><code>pd.pivot</code><a class="headerlink" href="#pdpivot" title="Permanent link">&para;</a></h4>
+<ul>
+<li>
+<p><code><apihead>pandas.<apiname>pivot</apiname>(data, values=None, index=None, columns=None)</apihead></code>
+<br><br></p>
+<p><strong><em>Supported Arguments</em></strong></p>
+<table>
+<thead>
+<tr>
+<th colspan="1" rowspan="1">
+<p>argument</p>
+</th>
+<th colspan="1" rowspan="1">
+<p>datatypes</p>
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td colspan="1" rowspan="1">
+<p><code>data</code></p>
+</td>
+<td colspan="1" rowspan="1">
+<ul>
+<li>DataFrame</li>
+</ul>
+</td>
+</tr>
+<tr>
+<td colspan="1" rowspan="1">
+<p><code>values</code>
+</p>
+</td>
+<td colspan="1" rowspan="1">
+<ul>
+<li>Constant Column Label or list of
+    labels</li>
+</ul>
+</td>
+</tr>
+<tr>
+<td colspan="1" rowspan="1">
+<p><code>index</code>
+</p>
+</td>
+<td colspan="1" rowspan="1">
+<ul>
+<li>Constant Column Label or list of
+    labels</li>
+</ul>
+</td>
+</tr>
+<tr>
+<td colspan="1" rowspan="1">
+<p><code>columns</code></p>
+</td>
+<td colspan="1" rowspan="1">
+<ul>
+<li>Constant Column Label</li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>The the number of columns and names of the output DataFrame won't be known
+at compile time. To update typing information on DataFrame you should pass it back to Python.</p>
+</div>
+<p><strong><em>Example Usage</em></strong></p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1"></a><span class="o">&gt;&gt;&gt;</span> <span class="nd">@bodo</span><span class="o">.</span><span class="n">jit</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2"></a><span class="o">...</span> <span class="k">def</span> <span class="nf">f</span><span class="p">():</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3"></a><span class="o">...</span>   <span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span><span class="s2">&quot;A&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;X&quot;</span><span class="p">,</span><span class="s2">&quot;X&quot;</span><span class="p">,</span><span class="s2">&quot;X&quot;</span><span class="p">,</span><span class="s2">&quot;X&quot;</span><span class="p">,</span><span class="s2">&quot;Y&quot;</span><span class="p">,</span><span class="s2">&quot;Y&quot;</span><span class="p">],</span> <span class="s2">&quot;B&quot;</span><span class="p">:</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span><span class="mi">2</span><span class="p">,</span><span class="mi">3</span><span class="p">,</span><span class="mi">4</span><span class="p">,</span><span class="mi">5</span><span class="p">,</span><span class="mi">6</span><span class="p">],</span> <span class="s2">&quot;C&quot;</span><span class="p">:</span> <span class="p">[</span><span class="mi">10</span><span class="p">,</span><span class="mi">11</span><span class="p">,</span><span class="mi">12</span><span class="p">,</span><span class="mi">20</span><span class="p">,</span><span class="mi">21</span><span class="p">,</span><span class="mi">22</span><span class="p">]})</span>
+<a id="__codelineno-0-4" name="__codelineno-0-4"></a><span class="o">...</span>   <span class="n">pivoted_tbl</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">pivot</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">columns</span><span class="o">=</span><span class="s2">&quot;A&quot;</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="s2">&quot;B&quot;</span><span class="p">,</span> <span class="n">values</span><span class="o">=</span><span class="s2">&quot;C&quot;</span><span class="p">)</span>
+<a id="__codelineno-0-5" name="__codelineno-0-5"></a><span class="o">...</span>   <span class="k">return</span> <span class="n">pivoted_tbl</span>
+<a id="__codelineno-0-6" name="__codelineno-0-6"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">f</span><span class="p">()</span>
+<a id="__codelineno-0-7" name="__codelineno-0-7"></a><span class="n">A</span>     <span class="n">X</span>     <span class="n">Y</span>
+<a id="__codelineno-0-8" name="__codelineno-0-8"></a><span class="n">B</span>
+<a id="__codelineno-0-9" name="__codelineno-0-9"></a><span class="mi">1</span>  <span class="mf">10.0</span>   <span class="n">NaN</span>
+<a id="__codelineno-0-10" name="__codelineno-0-10"></a><span class="mi">2</span>  <span class="mf">11.0</span>   <span class="n">NaN</span>
+<a id="__codelineno-0-11" name="__codelineno-0-11"></a><span class="mi">3</span>  <span class="mf">12.0</span>   <span class="n">NaN</span>
+<a id="__codelineno-0-12" name="__codelineno-0-12"></a><span class="mi">4</span>  <span class="mf">20.0</span>   <span class="n">NaN</span>
+<a id="__codelineno-0-13" name="__codelineno-0-13"></a><span class="mi">5</span>   <span class="n">NaN</span>  <span class="mf">21.0</span>
+<a id="__codelineno-0-14" name="__codelineno-0-14"></a><span class="mi">6</span>   <span class="n">NaN</span>  <span class="mf">22.0</span>
+</code></pre></div>
+</li>
+</ul>
+<h4 id="pdpivot_table"><code>pd.pivot_table</code><a class="headerlink" href="#pdpivot_table" title="Permanent link">&para;</a></h4>
+<ul>
+<li>
+<p><code><apihead>pandas.<apiname>pivot_table</apiname>(data, values=None, index=None, columns=None, aggfunc='mean', fill_value=None, margins=False, dropna=True, margins_name='All', observed=False, sort=True)</apihead></code>
+<br><br></p>
+<p><strong><em>Supported Arguments</em></strong></p>
+<table>
+<thead>
+<tr>
+<th colspan="1" rowspan="1">
+<p>argument</p>
+</th>
+<th colspan="1" rowspan="1">
+<p>datatypes</p>
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td colspan="1" rowspan="1">
+<p><code>data</code></p>
+</td>
+<td colspan="1" rowspan="1">
+<ul>
+<li>DataFrame</li>
+</ul>
+</td>
+</tr>
+<tr>
+<td colspan="1" rowspan="1">
+<p><code>values</code>
+</p>
+</td>
+<td colspan="1" rowspan="1">
+<ul>
+<li>Constant Column Label or list of
+    labels</li>
+</ul>
+</td>
+</tr>
+<tr>
+<td colspan="1" rowspan="1">
+<p><code>index</code>
+</p>
+</td>
+<td colspan="1" rowspan="1">
+<ul>
+<li>Constant Column Label or list of
+    labels</li>
+</ul>
+</td>
+</tr>
+<tr>
+<td colspan="1" rowspan="1">
+<p><code>columns</code></p>
+</td>
+<td colspan="1" rowspan="1">
+<ul>
+<li>Constant Column Label</li>
+</ul>
+</td>
+</tr>
+<tr>
+<td colspan="1" rowspan="1">
+<p><code>aggfunc</code></p>
+</td>
+<td colspan="1" rowspan="1">
+<ul>
+<li>String Constant</li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>This code takes two different paths depending on if pivot values are annotated. When
+pivot values are annotated then output columns are set to the annotated values.
+For example, <code>@bodo.jit(pivots={'pt': ['small', 'large']})</code>
+declares the output pivot table <code>pt</code> will have columns called <code>small</code> and <code>large</code>.</p>
+<p>If pivot values are not annotated, then the number of columns and names of the output DataFrame won't be known
+at compile time. To update typing information on DataFrame you should pass it back to Python.</p>
+</div>
+<p><strong><em>Example Usage</em></strong></p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1"></a><span class="o">&gt;&gt;&gt;</span> <span class="nd">@bodo</span><span class="o">.</span><span class="n">jit</span><span class="p">(</span><span class="n">pivots</span><span class="o">=</span><span class="p">{</span><span class="s1">&#39;pivoted_tbl&#39;</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;X&#39;</span><span class="p">,</span> <span class="s1">&#39;Y&#39;</span><span class="p">]})</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2"></a><span class="o">...</span> <span class="k">def</span> <span class="nf">f</span><span class="p">():</span>
+<a id="__codelineno-1-3" name="__codelineno-1-3"></a><span class="o">...</span>   <span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span><span class="s2">&quot;A&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;X&quot;</span><span class="p">,</span><span class="s2">&quot;X&quot;</span><span class="p">,</span><span class="s2">&quot;X&quot;</span><span class="p">,</span><span class="s2">&quot;X&quot;</span><span class="p">,</span><span class="s2">&quot;Y&quot;</span><span class="p">,</span><span class="s2">&quot;Y&quot;</span><span class="p">],</span> <span class="s2">&quot;B&quot;</span><span class="p">:</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span><span class="mi">2</span><span class="p">,</span><span class="mi">3</span><span class="p">,</span><span class="mi">4</span><span class="p">,</span><span class="mi">5</span><span class="p">,</span><span class="mi">6</span><span class="p">],</span> <span class="s2">&quot;C&quot;</span><span class="p">:</span> <span class="p">[</span><span class="mi">10</span><span class="p">,</span><span class="mi">11</span><span class="p">,</span><span class="mi">12</span><span class="p">,</span><span class="mi">20</span><span class="p">,</span><span class="mi">21</span><span class="p">,</span><span class="mi">22</span><span class="p">]})</span>
+<a id="__codelineno-1-4" name="__codelineno-1-4"></a><span class="o">...</span>   <span class="n">pivoted_tbl</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">pivot_table</span><span class="p">(</span><span class="n">df</span><span class="p">,</span> <span class="n">columns</span><span class="o">=</span><span class="s2">&quot;A&quot;</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="s2">&quot;B&quot;</span><span class="p">,</span> <span class="n">values</span><span class="o">=</span><span class="s2">&quot;C&quot;</span><span class="p">,</span> <span class="n">aggfunc</span><span class="o">=</span><span class="s2">&quot;mean&quot;</span><span class="p">)</span>
+<a id="__codelineno-1-5" name="__codelineno-1-5"></a><span class="o">...</span>   <span class="k">return</span> <span class="n">pivoted_tbl</span>
+<a id="__codelineno-1-6" name="__codelineno-1-6"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">f</span><span class="p">()</span>
+<a id="__codelineno-1-7" name="__codelineno-1-7"></a>      <span class="n">X</span>     <span class="n">Y</span>
+<a id="__codelineno-1-8" name="__codelineno-1-8"></a><span class="n">B</span>
+<a id="__codelineno-1-9" name="__codelineno-1-9"></a><span class="mi">1</span>  <span class="mf">10.0</span>   <span class="n">NaN</span>
+<a id="__codelineno-1-10" name="__codelineno-1-10"></a><span class="mi">2</span>  <span class="mf">11.0</span>   <span class="n">NaN</span>
+<a id="__codelineno-1-11" name="__codelineno-1-11"></a><span class="mi">3</span>  <span class="mf">12.0</span>   <span class="n">NaN</span>
+<a id="__codelineno-1-12" name="__codelineno-1-12"></a><span class="mi">4</span>  <span class="mf">20.0</span>   <span class="n">NaN</span>
+<a id="__codelineno-1-13" name="__codelineno-1-13"></a><span class="mi">5</span>   <span class="n">NaN</span>  <span class="mf">21.0</span>
+<a id="__codelineno-1-14" name="__codelineno-1-14"></a><span class="mi">6</span>   <span class="n">NaN</span>  <span class="mf">22.0</span>
+</code></pre></div>
+</li>
+</ul>
+<h4 id="pdcrosstab"><code>pd.crosstab</code><a class="headerlink" href="#pdcrosstab" title="Permanent link">&para;</a></h4>
+<ul>
+<li>
+<p><code><apihead>pandas.<apiname>crosstab</apiname>(index, columns, values=None, rownames=None, colnames=None, aggfunc=None, margins=False, margins_name='All', dropna=True, normalize=False)</apihead></code>
+<br><br>
+    <strong><em>Supported Arguments</em></strong></p>
+<table>
+<thead>
+<tr>
+<th colspan="1" rowspan="1">
+<p>argument</p>
+</th>
+<th colspan="1" rowspan="1">
+<p>datatypes</p>
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td colspan="1" rowspan="1">
+<p><code>index</code></p>
+</td>
+<td colspan="1" rowspan="1">
+<p>SeriesType</p>
+</td>
+</tr>
+<tr>
+<td colspan="1" rowspan="1">
+<p><code>columns</code></p>
+</td>
+<td colspan="1" rowspan="1">
+<p>SeriesType</p>
+</td>
+</tr>
+</tbody>
+</table>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Annotation of pivot values is required. For example,
+<code>@bodo.jit(pivots={'pt': ['small', 'large']})</code> declares
+the output table <code>pt</code> will have columns called <code>small</code> and <code>large</code>.</p>
+</div>
+<p><strong><em>Example Usage</em></strong></p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1"></a><span class="o">&gt;&gt;&gt;</span> <span class="nd">@bodo</span><span class="o">.</span><span class="n">jit</span><span class="p">(</span><span class="n">pivots</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;pt&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;small&quot;</span><span class="p">,</span> <span class="s2">&quot;large&quot;</span><span class="p">]})</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2"></a><span class="o">...</span> <span class="k">def</span> <span class="nf">f</span><span class="p">(</span><span class="n">df</span><span class="p">):</span>
+<a id="__codelineno-2-3" name="__codelineno-2-3"></a><span class="o">...</span>   <span class="n">pt</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">crosstab</span><span class="p">(</span><span class="n">df</span><span class="o">.</span><span class="n">A</span><span class="p">,</span> <span class="n">df</span><span class="o">.</span><span class="n">C</span><span class="p">)</span>
+<a id="__codelineno-2-4" name="__codelineno-2-4"></a><span class="o">...</span>   <span class="k">return</span> <span class="n">pt</span>
+<a id="__codelineno-2-5" name="__codelineno-2-5"></a>
+<a id="__codelineno-2-6" name="__codelineno-2-6"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">list_A</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;foo&quot;</span><span class="p">,</span> <span class="s2">&quot;foo&quot;</span><span class="p">,</span> <span class="s2">&quot;bar&quot;</span><span class="p">,</span> <span class="s2">&quot;bar&quot;</span><span class="p">,</span> <span class="s2">&quot;bar&quot;</span><span class="p">,</span> <span class="s2">&quot;bar&quot;</span><span class="p">]</span>
+<a id="__codelineno-2-7" name="__codelineno-2-7"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">list_C</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;small&quot;</span><span class="p">,</span> <span class="s2">&quot;small&quot;</span><span class="p">,</span> <span class="s2">&quot;large&quot;</span><span class="p">,</span> <span class="s2">&quot;small&quot;</span><span class="p">,</span> <span class="s2">&quot;small&quot;</span><span class="p">,</span> <span class="s2">&quot;middle&quot;</span><span class="p">]</span>
+<a id="__codelineno-2-8" name="__codelineno-2-8"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span><span class="s2">&quot;A&quot;</span><span class="p">:</span> <span class="n">list_A</span><span class="p">,</span> <span class="s2">&quot;C&quot;</span><span class="p">:</span> <span class="n">list_C</span><span class="p">})</span>
+<a id="__codelineno-2-9" name="__codelineno-2-9"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">f</span><span class="p">(</span><span class="n">df</span><span class="p">)</span>
+<a id="__codelineno-2-10" name="__codelineno-2-10"></a>
+<a id="__codelineno-2-11" name="__codelineno-2-11"></a>       <span class="n">small</span>  <span class="n">large</span>
+<a id="__codelineno-2-12" name="__codelineno-2-12"></a><span class="n">index</span>
+<a id="__codelineno-2-13" name="__codelineno-2-13"></a><span class="n">foo</span>        <span class="mi">2</span>      <span class="mi">0</span>
+<a id="__codelineno-2-14" name="__codelineno-2-14"></a><span class="n">bar</span>        <span class="mi">2</span>      <span class="mi">1</span>
+</code></pre></div>
+</li>
+</ul>
+<h4 id="pdcut"><code>pd.cut</code><a class="headerlink" href="#pdcut" title="Permanent link">&para;</a></h4>
+<ul>
+<li>
+<p><code><apihead>pandas.<apiname>cut</apiname>(x, bins, right=True, labels=None, retbins=False, precision=3, include_lowest=False, duplicates="raise", ordered=True)</apihead></code>
+<br><br>
+    <strong><em>Supported Arguments</em></strong></p>
+<table>
+<thead>
+<tr>
+<th colspan="1" rowspan="1">
+<p>argument</p>
+</th>
+<th colspan="1" rowspan="1">
+<p>datatypes</p>
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td colspan="1" rowspan="1">
+<p><code>x</code></p>
+</td>
+<td colspan="1" rowspan="1">
+<p>Series or Array like</p>
+</td>
+</tr>
+<tr>
+<td colspan="1" rowspan="1">
+<p><code>bins</code></p>
+</td>
+<td colspan="1" rowspan="1">
+<p>Integer or Array like</p>
+</td>
+</tr>
+<tr>
+<td colspan="1" rowspan="1">
+<p><code>include_lowest</code></p>
+</td>
+<td colspan="1" rowspan="1">
+<p>Boolean</p>
+</td>
+</tr>
+</tbody>
+</table>
+<p><strong><em>Example Usage</em></strong></p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1"></a> <span class="o">&gt;&gt;&gt;</span> <span class="nd">@bodo</span><span class="o">.</span><span class="n">jit</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2"></a> <span class="o">...</span> <span class="k">def</span> <span class="nf">f</span><span class="p">(</span><span class="n">S</span><span class="p">):</span>
+<a id="__codelineno-3-3" name="__codelineno-3-3"></a> <span class="o">...</span>   <span class="n">bins</span> <span class="o">=</span> <span class="mi">4</span>
+<a id="__codelineno-3-4" name="__codelineno-3-4"></a> <span class="o">...</span>   <span class="n">include_lowest</span> <span class="o">=</span> <span class="kc">True</span>
+<a id="__codelineno-3-5" name="__codelineno-3-5"></a> <span class="o">...</span>   <span class="k">return</span> <span class="n">pd</span><span class="o">.</span><span class="n">cut</span><span class="p">(</span><span class="n">S</span><span class="p">,</span> <span class="n">bins</span><span class="p">,</span> <span class="n">include_lowest</span><span class="o">=</span><span class="n">include_lowest</span><span class="p">)</span>
+<a id="__codelineno-3-6" name="__codelineno-3-6"></a>
+<a id="__codelineno-3-7" name="__codelineno-3-7"></a> <span class="o">&gt;&gt;&gt;</span> <span class="n">S</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">Series</span><span class="p">(</span>
+<a id="__codelineno-3-8" name="__codelineno-3-8"></a> <span class="o">...</span>    <span class="p">[</span><span class="o">-</span><span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">11</span><span class="p">,</span> <span class="mi">15</span><span class="p">,</span> <span class="mi">20</span><span class="p">,</span> <span class="mi">22</span><span class="p">],</span>
+<a id="__codelineno-3-9" name="__codelineno-3-9"></a> <span class="o">...</span>    <span class="p">[</span><span class="s2">&quot;a1&quot;</span><span class="p">,</span> <span class="s2">&quot;a2&quot;</span><span class="p">,</span> <span class="s2">&quot;a3&quot;</span><span class="p">,</span> <span class="s2">&quot;a4&quot;</span><span class="p">,</span> <span class="s2">&quot;a5&quot;</span><span class="p">,</span> <span class="s2">&quot;a6&quot;</span><span class="p">,</span> <span class="s2">&quot;a7&quot;</span><span class="p">,</span> <span class="s2">&quot;a8&quot;</span><span class="p">,</span> <span class="s2">&quot;a9&quot;</span><span class="p">],</span>
+<a id="__codelineno-3-10" name="__codelineno-3-10"></a> <span class="o">...</span>    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;ABC&quot;</span><span class="p">,</span>
+<a id="__codelineno-3-11" name="__codelineno-3-11"></a> <span class="o">...</span> <span class="p">)</span>
+<a id="__codelineno-3-12" name="__codelineno-3-12"></a> <span class="o">&gt;&gt;&gt;</span> <span class="n">f</span><span class="p">(</span><span class="n">S</span><span class="p">)</span>
+<a id="__codelineno-3-13" name="__codelineno-3-13"></a>
+<a id="__codelineno-3-14" name="__codelineno-3-14"></a><span class="n">a1</span>    <span class="p">(</span><span class="o">-</span><span class="mf">2.025</span><span class="p">,</span> <span class="mf">4.0</span><span class="p">]</span>
+<a id="__codelineno-3-15" name="__codelineno-3-15"></a><span class="n">a2</span>    <span class="p">(</span><span class="o">-</span><span class="mf">2.025</span><span class="p">,</span> <span class="mf">4.0</span><span class="p">]</span>
+<a id="__codelineno-3-16" name="__codelineno-3-16"></a><span class="n">a3</span>    <span class="p">(</span><span class="o">-</span><span class="mf">2.025</span><span class="p">,</span> <span class="mf">4.0</span><span class="p">]</span>
+<a id="__codelineno-3-17" name="__codelineno-3-17"></a><span class="n">a4</span>    <span class="p">(</span><span class="o">-</span><span class="mf">2.025</span><span class="p">,</span> <span class="mf">4.0</span><span class="p">]</span>
+<a id="__codelineno-3-18" name="__codelineno-3-18"></a><span class="n">a5</span>      <span class="p">(</span><span class="mf">4.0</span><span class="p">,</span> <span class="mf">10.0</span><span class="p">]</span>
+<a id="__codelineno-3-19" name="__codelineno-3-19"></a><span class="n">a6</span>     <span class="p">(</span><span class="mf">10.0</span><span class="p">,</span> <span class="mf">16.0</span><span class="p">]</span>
+<a id="__codelineno-3-20" name="__codelineno-3-20"></a><span class="n">a7</span>     <span class="p">(</span><span class="mf">10.0</span><span class="p">,</span> <span class="mf">16.0</span><span class="p">]</span>
+<a id="__codelineno-3-21" name="__codelineno-3-21"></a><span class="n">a8</span>     <span class="p">(</span><span class="mf">16.0</span><span class="p">,</span> <span class="mf">22.0</span><span class="p">]</span>
+<a id="__codelineno-3-22" name="__codelineno-3-22"></a><span class="n">a9</span>     <span class="p">(</span><span class="mf">16.0</span><span class="p">,</span> <span class="mf">22.0</span><span class="p">]</span>
+<a id="__codelineno-3-23" name="__codelineno-3-23"></a><span class="n">Name</span><span class="p">:</span> <span class="n">ABC</span><span class="p">,</span> <span class="n">dtype</span><span class="p">:</span> <span class="n">category</span>
+<a id="__codelineno-3-24" name="__codelineno-3-24"></a><span class="n">Categories</span> <span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="n">interval</span><span class="p">[</span><span class="n">float64</span><span class="p">,</span> <span class="n">right</span><span class="p">]):</span> <span class="p">[(</span><span class="o">-</span><span class="mf">2.025</span><span class="p">,</span> <span class="mf">4.0</span><span class="p">]</span> <span class="o">&lt;</span> <span class="p">(</span><span class="mf">4.0</span><span class="p">,</span> <span class="mf">10.0</span><span class="p">]</span> <span class="o">&lt;</span> <span class="p">(</span><span class="mf">10.0</span><span class="p">,</span> <span class="mf">16.0</span><span class="p">]</span> <span class="o">&lt;</span> <span class="p">(</span><span class="mf">16.0</span><span class="p">,</span> <span class="mf">22.0</span><span class="p">]]</span>
+</code></pre></div>
+</li>
+</ul>
+<h4 id="pdqcut"><code>pd.qcut</code><a class="headerlink" href="#pdqcut" title="Permanent link">&para;</a></h4>
+<ul>
+<li>
+<p><code><apihead>pandas.<apiname>qcut</apiname>(x, q, labels=None, retbins=False, precision=3, duplicates="raise")</apihead></code>
+<br><br>
+    <strong><em>Supported Arguments</em></strong></p>
+<table>
+<thead>
+<tr>
+<th colspan="1" rowspan="1">
+<p>argument</p>
+</th>
+<th colspan="1" rowspan="1">
+<p>datatypes</p>
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td colspan="1" rowspan="1">
+<p><code>x</code></p>
+</td>
+<td colspan="1" rowspan="1">
+<p>Series or Array like</p>
+</td>
+</tr>
+<tr>
+<td colspan="1" rowspan="1">
+<p><code>q</code></p>
+</td>
+<td colspan="1" rowspan="1">
+<p>Integer or Array like of floats</p>
+</td>
+</tr>
+</tbody>
+</table>
+<p><strong><em>Example Usage</em></strong></p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1"></a> <span class="o">&gt;&gt;&gt;</span> <span class="nd">@bodo</span><span class="o">.</span><span class="n">jit</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2"></a> <span class="o">...</span> <span class="k">def</span> <span class="nf">f</span><span class="p">(</span><span class="n">S</span><span class="p">):</span>
+<a id="__codelineno-4-3" name="__codelineno-4-3"></a> <span class="o">...</span>   <span class="n">q</span> <span class="o">=</span> <span class="mi">4</span>
+<a id="__codelineno-4-4" name="__codelineno-4-4"></a> <span class="o">...</span>   <span class="k">return</span> <span class="n">pd</span><span class="o">.</span><span class="n">qcut</span><span class="p">(</span><span class="n">S</span><span class="p">,</span> <span class="n">q</span><span class="p">)</span>
+<a id="__codelineno-4-5" name="__codelineno-4-5"></a>
+<a id="__codelineno-4-6" name="__codelineno-4-6"></a> <span class="o">&gt;&gt;&gt;</span> <span class="n">S</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">Series</span><span class="p">(</span>
+<a id="__codelineno-4-7" name="__codelineno-4-7"></a> <span class="o">...</span>      <span class="p">[</span><span class="o">-</span><span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">11</span><span class="p">,</span> <span class="mi">15</span><span class="p">,</span> <span class="mi">20</span><span class="p">,</span> <span class="mi">22</span><span class="p">],</span>
+<a id="__codelineno-4-8" name="__codelineno-4-8"></a> <span class="o">...</span>      <span class="p">[</span><span class="s2">&quot;a1&quot;</span><span class="p">,</span> <span class="s2">&quot;a2&quot;</span><span class="p">,</span> <span class="s2">&quot;a3&quot;</span><span class="p">,</span> <span class="s2">&quot;a4&quot;</span><span class="p">,</span> <span class="s2">&quot;a5&quot;</span><span class="p">,</span> <span class="s2">&quot;a6&quot;</span><span class="p">,</span> <span class="s2">&quot;a7&quot;</span><span class="p">,</span> <span class="s2">&quot;a8&quot;</span><span class="p">,</span> <span class="s2">&quot;a9&quot;</span><span class="p">],</span>
+<a id="__codelineno-4-9" name="__codelineno-4-9"></a> <span class="o">...</span>      <span class="n">name</span><span class="o">=</span><span class="s2">&quot;ABC&quot;</span><span class="p">,</span>
+<a id="__codelineno-4-10" name="__codelineno-4-10"></a> <span class="o">...</span> <span class="p">)</span>
+<a id="__codelineno-4-11" name="__codelineno-4-11"></a> <span class="o">&gt;&gt;&gt;</span> <span class="n">f</span><span class="p">(</span><span class="n">S</span><span class="p">)</span>
+<a id="__codelineno-4-12" name="__codelineno-4-12"></a>
+<a id="__codelineno-4-13" name="__codelineno-4-13"></a> <span class="n">a1</span>    <span class="p">(</span><span class="o">-</span><span class="mf">2.001</span><span class="p">,</span> <span class="mf">3.0</span><span class="p">]</span>
+<a id="__codelineno-4-14" name="__codelineno-4-14"></a> <span class="n">a2</span>    <span class="p">(</span><span class="o">-</span><span class="mf">2.001</span><span class="p">,</span> <span class="mf">3.0</span><span class="p">]</span>
+<a id="__codelineno-4-15" name="__codelineno-4-15"></a> <span class="n">a3</span>    <span class="p">(</span><span class="o">-</span><span class="mf">2.001</span><span class="p">,</span> <span class="mf">3.0</span><span class="p">]</span>
+<a id="__codelineno-4-16" name="__codelineno-4-16"></a> <span class="n">a4</span>       <span class="p">(</span><span class="mf">3.0</span><span class="p">,</span> <span class="mf">5.0</span><span class="p">]</span>
+<a id="__codelineno-4-17" name="__codelineno-4-17"></a> <span class="n">a5</span>       <span class="p">(</span><span class="mf">3.0</span><span class="p">,</span> <span class="mf">5.0</span><span class="p">]</span>
+<a id="__codelineno-4-18" name="__codelineno-4-18"></a> <span class="n">a6</span>      <span class="p">(</span><span class="mf">5.0</span><span class="p">,</span> <span class="mf">15.0</span><span class="p">]</span>
+<a id="__codelineno-4-19" name="__codelineno-4-19"></a> <span class="n">a7</span>      <span class="p">(</span><span class="mf">5.0</span><span class="p">,</span> <span class="mf">15.0</span><span class="p">]</span>
+<a id="__codelineno-4-20" name="__codelineno-4-20"></a> <span class="n">a8</span>     <span class="p">(</span><span class="mf">15.0</span><span class="p">,</span> <span class="mf">22.0</span><span class="p">]</span>
+<a id="__codelineno-4-21" name="__codelineno-4-21"></a> <span class="n">a9</span>     <span class="p">(</span><span class="mf">15.0</span><span class="p">,</span> <span class="mf">22.0</span><span class="p">]</span>
+<a id="__codelineno-4-22" name="__codelineno-4-22"></a> <span class="n">Name</span><span class="p">:</span> <span class="n">ABC</span><span class="p">,</span> <span class="n">dtype</span><span class="p">:</span> <span class="n">category</span>
+<a id="__codelineno-4-23" name="__codelineno-4-23"></a> <span class="n">Categories</span> <span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="n">interval</span><span class="p">[</span><span class="n">float64</span><span class="p">,</span> <span class="n">right</span><span class="p">]):</span> <span class="p">[(</span><span class="o">-</span><span class="mf">2.001</span><span class="p">,</span> <span class="mf">3.0</span><span class="p">]</span> <span class="o">&lt;</span> <span class="p">(</span><span class="mf">3.0</span><span class="p">,</span> <span class="mf">5.0</span><span class="p">]</span> <span class="o">&lt;</span> <span class="p">(</span><span class="mf">5.0</span><span class="p">,</span> <span class="mf">15.0</span><span class="p">]</span> <span class="o">&lt;</span> <span class="p">(</span><span class="mf">15.0</span><span class="p">,</span> <span class="mf">22.0</span><span class="p">]]</span>
+</code></pre></div>
+</li>
+</ul>
+<h4 id="pdmerge"><code>pd.merge</code><a class="headerlink" href="#pdmerge" title="Permanent link">&para;</a></h4>
+<ul>
+<li>
+<p><code><apihead>pandas.<apiname>merge</apiname>(left, right, how="inner", on=None, left_on=None, right_on=None, left_index=False, right_index=False, sort=False, suffixes=("_x", "_y"), copy=True, indicator=False, validate=None, _bodo_na_equal=True)</apihead></code>
+<br><br></p>
+<p><strong><em>Supported Arguments</em></strong></p>
+<table>
+<thead>
+<tr>
+<th colspan="1" rowspan="1">
+<p>argument</p>
+</th>
+<th colspan="1" rowspan="1">
+<p>datatypes</p>
+</th>
+<th colspan="1" rowspan="1">
+<p>other requirements</p>
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td colspan="1" rowspan="1">
+<p><code>left</code></p>
+</td>
+<td colspan="1" rowspan="1">
+<p>DataFrame</p>
+</td>
+<td colspan="1" rowspan="1"></td>
+</tr>
+<tr>
+<td colspan="1" rowspan="1">
+<p><code>right</code></p>
+</td>
+<td colspan="1" rowspan="1">
+<p>DataFrame</p>
+</td>
+<td colspan="1" rowspan="1"></td>
+</tr>
+<tr>
+<td colspan="1" rowspan="1">
+<p><code>how</code></p>
+</td>
+<td colspan="1" rowspan="1">
+<p>String</p>
+</td>
+<td colspan="1" rowspan="1">
+<ul>
+<li>Must be one of
+    <code>"inner"</code>, <code>"outer"</code>,
+    <code>"left"</code>, <code>"right"</code></li>
+<li><strong>Must be constant at
+    Compile Time</strong></li>
+</ul>
+</td>
+</tr>
+<tr>
+<td colspan="1" rowspan="1">
+<p><code>on</code></p>
+</td>
+<td colspan="1" rowspan="1">
+<p>Column Name, List
+of Column Names,
+or General Merge
+Condition String
+(see
+<a href="#merge-notes">merge-notes</a>)</p>
+</td>
+<td colspan="1" rowspan="1">
+<ul>
+<li><strong>Must be constant at
+    Compile Time</strong></li>
+</ul>
+</td>
+</tr>
+<tr>
+<td colspan="1" rowspan="1">
+<p><code>left_on</code></p>
+</td>
+<td colspan="1" rowspan="1">
+<p>Column Name or
+List of Column
+Names</p>
+</td>
+<td colspan="1" rowspan="1">
+<ul>
+<li><strong>Must be constant at
+    Compile Time</strong>
+</li>
+</ul>
+</td>
+</tr>
+<tr>
+<td colspan="1" rowspan="1">
+<p><code>right_on</code></p>
+</td>
+<td colspan="1" rowspan="1">
+<p>Column Name or
+List of Column
+Names</p>
+</td>
+<td colspan="1" rowspan="1">
+<ul>
+<li><strong>Must be constant at
+    Compile Time</strong>
+</li>
+</ul>
+</td>
+</tr>
+<tr>
+<td colspan="1" rowspan="1">
+<p><code>left_index</code>
+</p>
+</td>
+<td colspan="1" rowspan="1">
+<p>Boolean
+</p>
+</td>
+<td colspan="1" rowspan="1">
+<ul>
+<li><strong>Must be constant at
+    Compile Time</strong></li>
+</ul>
+</td>
+</tr>
+<tr>
+<td colspan="1" rowspan="1">
+<p><code>right_index</code>
+</p>
+</td>
+<td colspan="1" rowspan="1">
+<p>Boolean
+</p>
+</td>
+<td colspan="1" rowspan="1">
+<ul>
+<li><strong>Must be constant at
+    Compile Time</strong></li>
+</ul>
+</td>
+</tr>
+<tr>
+<td colspan="1" rowspan="1">
+<p><code>suffixes</code>
+</p>
+</td>
+<td colspan="1" rowspan="1">
+<p>Tuple of Strings
+</p>
+</td>
+<td colspan="1" rowspan="1">
+<ul>
+<li><strong>Must be constant at
+    Compile Time</strong></li>
+</ul>
+</td>
+</tr>
+<tr>
+<td colspan="1" rowspan="1">
+<p><code>indicator</code>
+</p>
+</td>
+<td colspan="1" rowspan="1">
+<p>Boolean
+</p>
+</td>
+<td colspan="1" rowspan="1">
+<ul>
+<li><strong>Must be constant at
+    Compile Time</strong></li>
+</ul>
+</td>
+</tr>
+<tr>
+<td colspan="1" rowspan="1">
+<p><code>_bodo_na_equal</code></p>
+</td>
+<td colspan="1" rowspan="1">
+<p>Boolean</p>
+</td>
+<td colspan="1" rowspan="1">
+<ul>
+<li><strong>Must be constant at
+    Compile Time</strong></li>
+<li>This argument is
+    unique to Bodo and not
+    available in Pandas.
+    If False, Bodo won't
+    consider NA/nan keys
+    as equal, which
+    differs from Pandas.</li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+<div class="admonition important">
+<p class="admonition-title">Important</p>
+<p>The argument <code>_bodo_na_equal</code> is unique to Bodo and not available in Pandas. If it is <code>False</code>, Bodo won't consider NA/nan keys as equal, which differs from Pandas.</p>
+</div>
+</li>
+</ul>
+<h5 id="merge-notes">Merge Notes<a class="headerlink" href="#merge-notes" title="Permanent link">&para;</a></h5>
+<ul>
+<li>
+<p><em>Output Ordering</em>:</p>
+<p>The output dataframe is not sorted by default for better parallel performance
+(Pandas may preserve key order depending on <code>how</code>).
+One can use explicit sort if needed.</p>
+</li>
+<li>
+<p><em>General Merge Conditions</em>:</p>
+<p>Within Pandas, the merge criteria supported by <code>pd.merge</code> are limited to equality between 1
+or more pairs of keys. For some use cases, this is not sufficient and more generalized
+support is necessary. For example, with these limitations, a <code>left outer join</code> where
+<code>df1.A == df2.B &amp; df2.C &lt; df1.A</code> cannot be efficiently computed.</p>
+<p>Bodo supports these use cases by allowing users to pass general merge conditions to <code>pd.merge</code>.
+We plan to contribute this feature to Pandas to ensure full compatibility of Bodo and Pandas code.</p>
+<p>General merge conditions are performed by providing the condition as a string via the <code>on</code> argument. Columns in the left table
+are referred to by <code>left.{column name}</code> and columns in the right table are referred to by <code>right.{column name}</code>.</p>
+<p>Here's an example demonstrating the above:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1"></a><span class="o">&gt;&gt;&gt;</span> <span class="nd">@bodo</span><span class="o">.</span><span class="n">jit</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2"></a><span class="o">...</span> <span class="k">def</span> <span class="nf">general_merge</span><span class="p">(</span><span class="n">df1</span><span class="p">,</span> <span class="n">df2</span><span class="p">):</span>
+<a id="__codelineno-5-3" name="__codelineno-5-3"></a><span class="o">...</span>   <span class="k">return</span> <span class="n">df1</span><span class="o">.</span><span class="n">merge</span><span class="p">(</span><span class="n">df2</span><span class="p">,</span> <span class="n">on</span><span class="o">=</span><span class="s2">&quot;left.`A` == right.`B` &amp; right.`C` &lt; left.`A`&quot;</span><span class="p">,</span> <span class="n">how</span><span class="o">=</span><span class="s2">&quot;left&quot;</span><span class="p">)</span>
+<a id="__codelineno-5-4" name="__codelineno-5-4"></a>
+<a id="__codelineno-5-5" name="__codelineno-5-5"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">df1</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span><span class="s2">&quot;col&quot;</span><span class="p">:</span> <span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">8</span><span class="p">],</span> <span class="s2">&quot;A&quot;</span><span class="p">:</span> <span class="p">[</span><span class="mi">4</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">9</span><span class="p">,</span> <span class="mi">9</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">]})</span>
+<a id="__codelineno-5-6" name="__codelineno-5-6"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">df2</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span><span class="s2">&quot;B&quot;</span><span class="p">:</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">9</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">2</span><span class="p">],</span> <span class="s2">&quot;C&quot;</span><span class="p">:</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">7</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">5</span><span class="p">]})</span>
+<a id="__codelineno-5-7" name="__codelineno-5-7"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">general_merge</span><span class="p">(</span><span class="n">df1</span><span class="p">,</span> <span class="n">df2</span><span class="p">)</span>
+<a id="__codelineno-5-8" name="__codelineno-5-8"></a>
+<a id="__codelineno-5-9" name="__codelineno-5-9"></a>   <span class="n">col</span>  <span class="n">A</span>     <span class="n">B</span>     <span class="n">C</span>
+<a id="__codelineno-5-10" name="__codelineno-5-10"></a><span class="mi">0</span>    <span class="mi">2</span>  <span class="mi">4</span>  <span class="o">&lt;</span><span class="n">NA</span><span class="o">&gt;</span>  <span class="o">&lt;</span><span class="n">NA</span><span class="o">&gt;</span>
+<a id="__codelineno-5-11" name="__codelineno-5-11"></a><span class="mi">1</span>    <span class="mi">3</span>  <span class="mi">6</span>  <span class="o">&lt;</span><span class="n">NA</span><span class="o">&gt;</span>  <span class="o">&lt;</span><span class="n">NA</span><span class="o">&gt;</span>
+<a id="__codelineno-5-12" name="__codelineno-5-12"></a><span class="mi">2</span>    <span class="mi">5</span>  <span class="mi">3</span>  <span class="o">&lt;</span><span class="n">NA</span><span class="o">&gt;</span>  <span class="o">&lt;</span><span class="n">NA</span><span class="o">&gt;</span>
+<a id="__codelineno-5-13" name="__codelineno-5-13"></a><span class="mi">3</span>    <span class="mi">1</span>  <span class="mi">9</span>     <span class="mi">9</span>     <span class="mi">2</span>
+<a id="__codelineno-5-14" name="__codelineno-5-14"></a><span class="mi">4</span>    <span class="mi">2</span>  <span class="mi">9</span>     <span class="mi">9</span>     <span class="mi">2</span>
+<a id="__codelineno-5-15" name="__codelineno-5-15"></a><span class="mi">5</span>    <span class="mi">8</span> <span class="o">-</span><span class="mi">1</span>  <span class="o">&lt;</span><span class="n">NA</span><span class="o">&gt;</span>  <span class="o">&lt;</span><span class="n">NA</span><span class="o">&gt;</span>
+</code></pre></div>
+<p>These calls have a few additional requirements:</p>
+<ul>
+<li>The condition must be constant string.</li>
+<li>The condition must be of the form <code>cond_1 &amp; ... &amp; cond_N</code> where at least one <code>cond_i</code>
+  is a simple equality. This restriction will be removed in a future release.</li>
+<li>The columns specified in these conditions are limited to certain column types.
+  We currently support <code>boolean</code>, <code>integer</code>, <code>float</code>, <code>datetime64</code>, <code>timedelta64</code>, <code>datetime.date</code>,
+  and <code>string</code> columns.</li>
+</ul>
+<p><strong><em>Example Usage</em></strong></p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1"></a><span class="o">&gt;&gt;&gt;</span> <span class="nd">@bodo</span><span class="o">.</span><span class="n">jit</span>
+<a id="__codelineno-6-2" name="__codelineno-6-2"></a><span class="o">...</span> <span class="k">def</span> <span class="nf">f</span><span class="p">(</span><span class="n">df1</span><span class="p">,</span> <span class="n">df2</span><span class="p">):</span>
+<a id="__codelineno-6-3" name="__codelineno-6-3"></a><span class="o">...</span>   <span class="k">return</span> <span class="n">pd</span><span class="o">.</span><span class="n">merge</span><span class="p">(</span><span class="n">df1</span><span class="p">,</span> <span class="n">df2</span><span class="p">,</span> <span class="n">how</span><span class="o">=</span><span class="s2">&quot;inner&quot;</span><span class="p">,</span> <span class="n">on</span><span class="o">=</span><span class="s2">&quot;key&quot;</span><span class="p">)</span>
+<a id="__codelineno-6-4" name="__codelineno-6-4"></a>
+<a id="__codelineno-6-5" name="__codelineno-6-5"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">df1</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span><span class="s2">&quot;key&quot;</span><span class="p">:</span> <span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">8</span><span class="p">],</span> <span class="s2">&quot;A&quot;</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">4</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">9</span><span class="p">,</span> <span class="mi">9</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="nb">float</span><span class="p">)})</span>
+<a id="__codelineno-6-6" name="__codelineno-6-6"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">df2</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span><span class="s2">&quot;key&quot;</span><span class="p">:</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">9</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">2</span><span class="p">],</span> <span class="s2">&quot;B&quot;</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">1</span><span class="p">,</span> <span class="mi">7</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">5</span><span class="p">],</span> <span class="nb">float</span><span class="p">)})</span>
+<a id="__codelineno-6-7" name="__codelineno-6-7"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">f</span><span class="p">(</span><span class="n">df1</span><span class="p">,</span> <span class="n">df2</span><span class="p">)</span>
+<a id="__codelineno-6-8" name="__codelineno-6-8"></a>
+<a id="__codelineno-6-9" name="__codelineno-6-9"></a><span class="n">key</span>    <span class="n">A</span>    <span class="n">B</span>
+<a id="__codelineno-6-10" name="__codelineno-6-10"></a><span class="mi">0</span>    <span class="mi">2</span>  <span class="mf">4.0</span>  <span class="mf">7.0</span>
+<a id="__codelineno-6-11" name="__codelineno-6-11"></a><span class="mi">1</span>    <span class="mi">2</span>  <span class="mf">4.0</span>  <span class="mf">5.0</span>
+<a id="__codelineno-6-12" name="__codelineno-6-12"></a><span class="mi">2</span>    <span class="mi">3</span>  <span class="mf">6.0</span>  <span class="mf">6.0</span>
+<a id="__codelineno-6-13" name="__codelineno-6-13"></a><span class="mi">3</span>    <span class="mi">1</span>  <span class="mf">9.0</span>  <span class="mf">1.0</span>
+<a id="__codelineno-6-14" name="__codelineno-6-14"></a><span class="mi">4</span>    <span class="mi">2</span>  <span class="mf">9.0</span>  <span class="mf">7.0</span>
+<a id="__codelineno-6-15" name="__codelineno-6-15"></a><span class="mi">5</span>    <span class="mi">2</span>  <span class="mf">9.0</span>  <span class="mf">5.0</span>
+</code></pre></div>
+</li>
+</ul>
+<h4 id="pdmerge_asof"><code>pd.merge_asof</code><a class="headerlink" href="#pdmerge_asof" title="Permanent link">&para;</a></h4>
+<ul>
+<li>
+<p><code><apihead>pandas.<apiname>merge_asof</apiname>(left, right, on=None, left_on=None, right_on=None, left_index=False, right_index=False, by=None, left_by=None, right_by=None, suffixes=("_x", "_y"), tolerance=None, allow_exact_matches=True, direction="backward")</apihead></code>
+<br><br></p>
+<p><strong><em>Supported Arguments</em></strong></p>
+<table>
+<thead>
+<tr>
+<th colspan="1" rowspan="1">
+<p>argument</p>
+</th>
+<th colspan="1" rowspan="1">
+<p>datatypes</p>
+</th>
+<th colspan="1" rowspan="1">
+<p>other requirements</p>
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td colspan="1" rowspan="1">
+<p><code>left</code></p>
+</td>
+<td colspan="1" rowspan="1">
+<p>DataFrame</p>
+</td>
+<td colspan="1" rowspan="1"></td>
+</tr>
+<tr>
+<td colspan="1" rowspan="1">
+<p><code>right</code></p>
+</td>
+<td colspan="1" rowspan="1">
+<p>DataFrame</p>
+</td>
+<td colspan="1" rowspan="1"></td>
+</tr>
+<tr>
+<td colspan="1" rowspan="1">
+<p><code>on</code>
+</p>
+</td>
+<td colspan="1" rowspan="1">
+<p>Column Name, List
+of Column Names</p>
+</td>
+<td colspan="1" rowspan="1">
+<ul>
+<li><strong>Must be constant at
+    Compile Time</strong></li>
+</ul>
+</td>
+</tr>
+<tr>
+<td colspan="1" rowspan="1">
+<p><code>left_on</code></p>
+</td>
+<td colspan="1" rowspan="1">
+<p>Column Name or
+List of Column
+Names</p>
+</td>
+<td colspan="1" rowspan="1">
+<ul>
+<li><strong>Must be constant at
+    Compile Time</strong>
+</li>
+</ul>
+</td>
+</tr>
+<tr>
+<td colspan="1" rowspan="1">
+<p><code>right_on</code></p>
+</td>
+<td colspan="1" rowspan="1">
+<p>Column Name or
+List of Column
+Names</p>
+</td>
+<td colspan="1" rowspan="1">
+<ul>
+<li><strong>Must be constant at
+    Compile Time</strong>
+</li>
+</ul>
+</td>
+</tr>
+<tr>
+<td colspan="1" rowspan="1">
+<p><code>left_index</code>
+</p>
+</td>
+<td colspan="1" rowspan="1">
+<p>Boolean
+</p>
+</td>
+<td colspan="1" rowspan="1">
+<ul>
+<li><strong>Must be constant at
+    Compile Time</strong></li>
+</ul>
+</td>
+</tr>
+<tr>
+<td colspan="1" rowspan="1">
+<p><code>right_index</code>
+</p>
+</td>
+<td colspan="1" rowspan="1">
+<p>Boolean
+</p>
+</td>
+<td colspan="1" rowspan="1">
+<ul>
+<li><strong>Must be constant at
+    Compile Time</strong></li>
+</ul>
+</td>
+</tr>
+<tr>
+<td colspan="1" rowspan="1">
+<p><code>suffixes</code>
+</p>
+</td>
+<td colspan="1" rowspan="1">
+<p>Tuple of Strings
+</p>
+</td>
+<td colspan="1" rowspan="1">
+<ul>
+<li><strong>Must be constant at
+    Compile Time</strong></li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+<p><strong><em>Example Usage</em></strong></p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1"></a><span class="o">&gt;&gt;&gt;</span> <span class="nd">@bodo</span><span class="o">.</span><span class="n">jit</span>
+<a id="__codelineno-7-2" name="__codelineno-7-2"></a><span class="o">...</span> <span class="k">def</span> <span class="nf">f</span><span class="p">(</span><span class="n">df1</span><span class="p">,</span> <span class="n">df2</span><span class="p">):</span>
+<a id="__codelineno-7-3" name="__codelineno-7-3"></a><span class="o">...</span>   <span class="k">return</span> <span class="n">pd</span><span class="o">.</span><span class="n">merge_asof</span><span class="p">(</span><span class="n">df1</span><span class="p">,</span> <span class="n">df2</span><span class="p">,</span> <span class="n">on</span><span class="o">=</span><span class="s2">&quot;time&quot;</span><span class="p">)</span>
+<a id="__codelineno-7-4" name="__codelineno-7-4"></a>
+<a id="__codelineno-7-5" name="__codelineno-7-5"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">df1</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span>
+<a id="__codelineno-7-6" name="__codelineno-7-6"></a><span class="o">...</span>   <span class="p">{</span>
+<a id="__codelineno-7-7" name="__codelineno-7-7"></a><span class="o">...</span>       <span class="s2">&quot;time&quot;</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">DatetimeIndex</span><span class="p">([</span><span class="s2">&quot;2017-01-03&quot;</span><span class="p">,</span> <span class="s2">&quot;2017-01-06&quot;</span><span class="p">,</span> <span class="s2">&quot;2017-02-21&quot;</span><span class="p">]),</span>
+<a id="__codelineno-7-8" name="__codelineno-7-8"></a><span class="o">...</span>       <span class="s2">&quot;B&quot;</span><span class="p">:</span> <span class="p">[</span><span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">6</span><span class="p">],</span>
+<a id="__codelineno-7-9" name="__codelineno-7-9"></a><span class="o">...</span>   <span class="p">}</span>
+<a id="__codelineno-7-10" name="__codelineno-7-10"></a><span class="o">...</span> <span class="p">)</span>
+<a id="__codelineno-7-11" name="__codelineno-7-11"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">df2</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span>
+<a id="__codelineno-7-12" name="__codelineno-7-12"></a><span class="o">...</span>   <span class="p">{</span>
+<a id="__codelineno-7-13" name="__codelineno-7-13"></a><span class="o">...</span>       <span class="s2">&quot;time&quot;</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">DatetimeIndex</span><span class="p">(</span>
+<a id="__codelineno-7-14" name="__codelineno-7-14"></a><span class="o">...</span>           <span class="p">[</span><span class="s2">&quot;2017-01-01&quot;</span><span class="p">,</span> <span class="s2">&quot;2017-01-02&quot;</span><span class="p">,</span> <span class="s2">&quot;2017-01-04&quot;</span><span class="p">,</span> <span class="s2">&quot;2017-02-23&quot;</span><span class="p">,</span> <span class="s2">&quot;2017-02-25&quot;</span><span class="p">]</span>
+<a id="__codelineno-7-15" name="__codelineno-7-15"></a><span class="o">...</span>       <span class="p">),</span>
+<a id="__codelineno-7-16" name="__codelineno-7-16"></a><span class="o">...</span>       <span class="s2">&quot;A&quot;</span><span class="p">:</span> <span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">7</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">9</span><span class="p">],</span>
+<a id="__codelineno-7-17" name="__codelineno-7-17"></a><span class="o">...</span>   <span class="p">}</span>
+<a id="__codelineno-7-18" name="__codelineno-7-18"></a><span class="o">...</span> <span class="p">)</span>
+<a id="__codelineno-7-19" name="__codelineno-7-19"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">f</span><span class="p">(</span><span class="n">df1</span><span class="p">,</span> <span class="n">df2</span><span class="p">)</span>
+<a id="__codelineno-7-20" name="__codelineno-7-20"></a>
+<a id="__codelineno-7-21" name="__codelineno-7-21"></a>     <span class="n">time</span>  <span class="n">B</span>  <span class="n">A</span>
+<a id="__codelineno-7-22" name="__codelineno-7-22"></a><span class="mi">0</span> <span class="mi">2017</span><span class="o">-</span><span class="mi">01</span><span class="o">-</span><span class="mi">03</span>  <span class="mi">4</span>  <span class="mi">3</span>
+<a id="__codelineno-7-23" name="__codelineno-7-23"></a><span class="mi">1</span> <span class="mi">2017</span><span class="o">-</span><span class="mi">01</span><span class="o">-</span><span class="mi">06</span>  <span class="mi">5</span>  <span class="mi">7</span>
+<a id="__codelineno-7-24" name="__codelineno-7-24"></a><span class="mi">2</span> <span class="mi">2017</span><span class="o">-</span><span class="mi">02</span><span class="o">-</span><span class="mi">21</span>  <span class="mi">6</span>  <span class="mi">7</span>
+</code></pre></div>
+</li>
+</ul>
+<h4 id="pdconcat"><code>pd.concat</code><a class="headerlink" href="#pdconcat" title="Permanent link">&para;</a></h4>
+<ul>
+<li>
+<p><code><apihead>pandas.<apiname>concat</apiname>(objs, axis=0, join="outer", join_axes=None, ignore_index=False, keys=None, levels=None, names=None, verify_integrity=False, sort=None, copy=True)</apihead></code>
+<br><br>
+    <strong><em>Supported Arguments</em></strong></p>
+<table>
+<thead>
+<tr>
+<th colspan="1" rowspan="1">
+<p>argument</p>
+</th>
+<th colspan="1" rowspan="1">
+<p>datatypes</p>
+</th>
+<th colspan="1" rowspan="1">
+<p>other requirements</p>
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td colspan="1" rowspan="1">
+<p><code>objs</code>
+</p>
+</td>
+<td colspan="1" rowspan="1">
+<p>List or Tuple of
+DataFrames/Series</p>
+</td>
+<td colspan="1" rowspan="1"></td>
+</tr>
+<tr>
+<td colspan="1" rowspan="1">
+<p><code>axis</code>
+</p>
+</td>
+<td colspan="1" rowspan="1">
+<p>Integer with
+either 0 or 1</p>
+</td>
+<td colspan="1" rowspan="1">
+<ul>
+<li><strong>Must be constant at
+    Compile Time</strong></li>
+</ul>
+</td>
+</tr>
+<tr>
+<td colspan="1" rowspan="1">
+<p><code>ignore_index</code>
+</p>
+</td>
+<td colspan="1" rowspan="1">
+<p>Boolean
+</p>
+</td>
+<td colspan="1" rowspan="1">
+<ul>
+<li><strong>Must be constant at
+    Compile Time</strong></li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+<div class="admonition important">
+<p class="admonition-title">Important</p>
+<p>Bodo currently concatenates local data chunks for distributed datasets, which does not preserve global order of concatenated objects in output.</p>
+</div>
+<p><strong><em>Example Usage</em></strong></p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1"></a><span class="o">&gt;&gt;&gt;</span> <span class="nd">@bodo</span><span class="o">.</span><span class="n">jit</span>
+<a id="__codelineno-8-2" name="__codelineno-8-2"></a><span class="o">...</span> <span class="k">def</span> <span class="nf">f</span><span class="p">(</span><span class="n">df1</span><span class="p">,</span> <span class="n">df2</span><span class="p">):</span>
+<a id="__codelineno-8-3" name="__codelineno-8-3"></a><span class="o">...</span>     <span class="k">return</span> <span class="n">pd</span><span class="o">.</span><span class="n">concat</span><span class="p">([</span><span class="n">df1</span><span class="p">,</span> <span class="n">df2</span><span class="p">],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+<a id="__codelineno-8-4" name="__codelineno-8-4"></a>
+<a id="__codelineno-8-5" name="__codelineno-8-5"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">df1</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span><span class="s2">&quot;A&quot;</span><span class="p">:</span> <span class="p">[</span><span class="mi">3</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">4</span><span class="p">,</span> <span class="mi">7</span><span class="p">]})</span>
+<a id="__codelineno-8-6" name="__codelineno-8-6"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">df2</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span><span class="s2">&quot;B&quot;</span><span class="p">:</span> <span class="p">[</span><span class="mi">3</span><span class="p">,</span> <span class="mi">25</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">4</span><span class="p">,</span> <span class="o">-</span><span class="mi">24</span><span class="p">]})</span>
+<a id="__codelineno-8-7" name="__codelineno-8-7"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">f</span><span class="p">(</span><span class="n">df1</span><span class="p">,</span> <span class="n">df2</span><span class="p">)</span>
+<a id="__codelineno-8-8" name="__codelineno-8-8"></a>
+<a id="__codelineno-8-9" name="__codelineno-8-9"></a><span class="n">A</span>   <span class="n">B</span>
+<a id="__codelineno-8-10" name="__codelineno-8-10"></a><span class="mi">0</span>  <span class="mi">3</span>   <span class="mi">3</span>
+<a id="__codelineno-8-11" name="__codelineno-8-11"></a><span class="mi">1</span>  <span class="mi">2</span>  <span class="mi">25</span>
+<a id="__codelineno-8-12" name="__codelineno-8-12"></a><span class="mi">2</span>  <span class="mi">1</span>   <span class="mi">1</span>
+<a id="__codelineno-8-13" name="__codelineno-8-13"></a><span class="mi">3</span> <span class="o">-</span><span class="mi">4</span>  <span class="o">-</span><span class="mi">4</span>
+<a id="__codelineno-8-14" name="__codelineno-8-14"></a><span class="mi">4</span>  <span class="mi">7</span> <span class="o">-</span><span class="mi">24</span>
+</code></pre></div>
+</li>
+</ul>
+<h4 id="pdget_dummies"><code>pd.get_dummies</code><a class="headerlink" href="#pdget_dummies" title="Permanent link">&para;</a></h4>
+<ul>
+<li>
+<p><code><apihead>pandas.<apiname>get_dummies</apiname>(data, prefix=None, prefix_sep="_", dummy_na=False, columns=None, sparse=False, drop_first=False, dtype=None)</apihead></code>
+<br><br>
+    <strong><em>Supported Arguments</em></strong></p>
+<table>
+<thead>
+<tr>
+<th colspan="1" rowspan="1">
+<p>argument</p>
+</th>
+<th colspan="1" rowspan="1">
+<p>datatypes</p>
+</th>
+<th colspan="1" rowspan="1">
+<p>other requirements</p>
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td colspan="1" rowspan="1">
+<p><code>data</code></p>
+</td>
+<td colspan="1" rowspan="1">
+<p>Array or Series
+with Categorical
+dtypes</p>
+</td>
+<td colspan="1" rowspan="1">
+<ul>
+<li><strong>Categories must be
+    known at compile
+    time.</strong></li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+<p><strong><em>Example Usage</em></strong></p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1"></a><span class="o">&gt;&gt;&gt;</span> <span class="nd">@bodo</span><span class="o">.</span><span class="n">jit</span>
+<a id="__codelineno-9-2" name="__codelineno-9-2"></a><span class="o">...</span> <span class="k">def</span> <span class="nf">f</span><span class="p">(</span><span class="n">S</span><span class="p">):</span>
+<a id="__codelineno-9-3" name="__codelineno-9-3"></a><span class="o">...</span>     <span class="k">return</span> <span class="n">pd</span><span class="o">.</span><span class="n">get_dummies</span><span class="p">(</span><span class="n">S</span><span class="p">)</span>
+<a id="__codelineno-9-4" name="__codelineno-9-4"></a>
+<a id="__codelineno-9-5" name="__codelineno-9-5"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">S</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">Series</span><span class="p">([</span><span class="s2">&quot;CC&quot;</span><span class="p">,</span> <span class="s2">&quot;AA&quot;</span><span class="p">,</span> <span class="s2">&quot;B&quot;</span><span class="p">,</span> <span class="s2">&quot;D&quot;</span><span class="p">,</span> <span class="s2">&quot;AA&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="s2">&quot;B&quot;</span><span class="p">,</span> <span class="s2">&quot;CC&quot;</span><span class="p">])</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="s2">&quot;category&quot;</span><span class="p">)</span>
+<a id="__codelineno-9-6" name="__codelineno-9-6"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">f</span><span class="p">(</span><span class="n">S</span><span class="p">)</span>
+<a id="__codelineno-9-7" name="__codelineno-9-7"></a>
+<a id="__codelineno-9-8" name="__codelineno-9-8"></a><span class="n">AA</span>  <span class="n">B</span>  <span class="n">CC</span>  <span class="n">D</span>
+<a id="__codelineno-9-9" name="__codelineno-9-9"></a><span class="mi">0</span>   <span class="mi">0</span>  <span class="mi">0</span>   <span class="mi">1</span>  <span class="mi">0</span>
+<a id="__codelineno-9-10" name="__codelineno-9-10"></a><span class="mi">1</span>   <span class="mi">1</span>  <span class="mi">0</span>   <span class="mi">0</span>  <span class="mi">0</span>
+<a id="__codelineno-9-11" name="__codelineno-9-11"></a><span class="mi">2</span>   <span class="mi">0</span>  <span class="mi">1</span>   <span class="mi">0</span>  <span class="mi">0</span>
+<a id="__codelineno-9-12" name="__codelineno-9-12"></a><span class="mi">3</span>   <span class="mi">0</span>  <span class="mi">0</span>   <span class="mi">0</span>  <span class="mi">1</span>
+<a id="__codelineno-9-13" name="__codelineno-9-13"></a><span class="mi">4</span>   <span class="mi">1</span>  <span class="mi">0</span>   <span class="mi">0</span>  <span class="mi">0</span>
+<a id="__codelineno-9-14" name="__codelineno-9-14"></a><span class="mi">5</span>   <span class="mi">0</span>  <span class="mi">0</span>   <span class="mi">0</span>  <span class="mi">0</span>
+<a id="__codelineno-9-15" name="__codelineno-9-15"></a><span class="mi">6</span>   <span class="mi">0</span>  <span class="mi">1</span>   <span class="mi">0</span>  <span class="mi">0</span>
+<a id="__codelineno-9-16" name="__codelineno-9-16"></a><span class="mi">7</span>   <span class="mi">0</span>  <span class="mi">0</span>   <span class="mi">1</span>  <span class="mi">0</span>
+</code></pre></div>
+</li>
+</ul>
+<h2 id="top-level-missing-data">Top-level missing data<a class="headerlink" href="#top-level-missing-data" title="Permanent link">&para;</a></h2>
+<h4 id="pdisna"><code>pd.isna</code><a class="headerlink" href="#pdisna" title="Permanent link">&para;</a></h4>
+<ul>
+<li>
+<p><code><apihead>pandas.<apiname>isna</apiname>(obj)</apihead></code>
+<br><br>
+    <strong><em>Supported Arguments</em></strong></p>
+<table>
+<thead>
+<tr>
+<th colspan="1" rowspan="1">
+<p>argument</p>
+</th>
+<th colspan="1" rowspan="1">
+<p>datatypes</p>
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td colspan="1" rowspan="1">
+<p><code>obj</code></p>
+</td>
+<td colspan="1" rowspan="1">
+<p>DataFrame, Series, Index, Array, or
+Scalar
+</p>
+</td>
+</tr>
+</tbody>
+</table>
+<p><strong><em>Example Usage</em></strong></p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1"></a><span class="o">&gt;&gt;&gt;</span> <span class="nd">@bodo</span><span class="o">.</span><span class="n">jit</span>
+<a id="__codelineno-10-2" name="__codelineno-10-2"></a><span class="o">...</span> <span class="k">def</span> <span class="nf">f</span><span class="p">(</span><span class="n">df</span><span class="p">):</span>
+<a id="__codelineno-10-3" name="__codelineno-10-3"></a><span class="o">...</span>     <span class="k">return</span> <span class="n">pd</span><span class="o">.</span><span class="n">isna</span><span class="p">(</span><span class="n">df</span><span class="p">)</span>
+<a id="__codelineno-10-4" name="__codelineno-10-4"></a>
+<a id="__codelineno-10-5" name="__codelineno-10-5"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span>
+<a id="__codelineno-10-6" name="__codelineno-10-6"></a><span class="o">...</span>    <span class="p">{</span><span class="s2">&quot;A&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;AA&quot;</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="s2">&quot;D&quot;</span><span class="p">,</span> <span class="s2">&quot;GG&quot;</span><span class="p">],</span> <span class="s2">&quot;B&quot;</span><span class="p">:</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">]},</span>
+<a id="__codelineno-10-7" name="__codelineno-10-7"></a><span class="o">...</span>    <span class="p">[</span><span class="mf">1.1</span><span class="p">,</span> <span class="o">-</span><span class="mf">2.1</span><span class="p">,</span> <span class="mf">7.1</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">,</span> <span class="mf">3.1</span><span class="p">],</span>
+<a id="__codelineno-10-8" name="__codelineno-10-8"></a><span class="o">...</span> <span class="p">)</span>
+<a id="__codelineno-10-9" name="__codelineno-10-9"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">f</span><span class="p">(</span><span class="n">df</span><span class="p">)</span>
+<a id="__codelineno-10-10" name="__codelineno-10-10"></a>
+<a id="__codelineno-10-11" name="__codelineno-10-11"></a>       <span class="n">A</span>      <span class="n">B</span>
+<a id="__codelineno-10-12" name="__codelineno-10-12"></a><span class="mf">1.1</span>  <span class="kc">False</span>  <span class="kc">False</span>
+<a id="__codelineno-10-13" name="__codelineno-10-13"></a><span class="o">-</span><span class="mf">2.1</span>   <span class="kc">True</span>  <span class="kc">False</span>
+<a id="__codelineno-10-14" name="__codelineno-10-14"></a><span class="mf">7.1</span>  <span class="kc">False</span>  <span class="kc">False</span>
+<a id="__codelineno-10-15" name="__codelineno-10-15"></a><span class="mf">0.1</span>  <span class="kc">False</span>  <span class="kc">False</span>
+<a id="__codelineno-10-16" name="__codelineno-10-16"></a><span class="mf">3.1</span>  <span class="kc">False</span>  <span class="kc">False</span>
+</code></pre></div>
+</li>
+</ul>
+<h4 id="pdisnull"><code>pd.isnull</code><a class="headerlink" href="#pdisnull" title="Permanent link">&para;</a></h4>
+<ul>
+<li>
+<p><code><apihead>pandas.<apiname>isnull</apiname>(obj)</apihead></code>
+<br><br></p>
+<p><strong><em>Supported Arguments</em></strong></p>
+<table>
+<thead>
+<tr>
+<th colspan="1" rowspan="1">
+<p>argument</p>
+</th>
+<th colspan="1" rowspan="1">
+<p>datatypes</p>
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td colspan="1" rowspan="1">
+<p><code>obj</code></p>
+</td>
+<td colspan="1" rowspan="1">
+<p>DataFrame, Series, Index, Array, or
+Scalar
+</p>
+</td>
+</tr>
+</tbody>
+</table>
+<p><strong><em>Example Usage</em></strong></p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1"></a><span class="o">&gt;&gt;&gt;</span> <span class="nd">@bodo</span><span class="o">.</span><span class="n">jit</span>
+<a id="__codelineno-11-2" name="__codelineno-11-2"></a><span class="o">...</span> <span class="k">def</span> <span class="nf">f</span><span class="p">(</span><span class="n">df</span><span class="p">):</span>
+<a id="__codelineno-11-3" name="__codelineno-11-3"></a><span class="o">...</span>     <span class="k">return</span> <span class="n">pd</span><span class="o">.</span><span class="n">isnull</span><span class="p">(</span><span class="n">df</span><span class="p">)</span>
+<a id="__codelineno-11-4" name="__codelineno-11-4"></a>
+<a id="__codelineno-11-5" name="__codelineno-11-5"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span>
+<a id="__codelineno-11-6" name="__codelineno-11-6"></a><span class="o">...</span>    <span class="p">{</span><span class="s2">&quot;A&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;AA&quot;</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="s2">&quot;D&quot;</span><span class="p">,</span> <span class="s2">&quot;GG&quot;</span><span class="p">],</span> <span class="s2">&quot;B&quot;</span><span class="p">:</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">]},</span>
+<a id="__codelineno-11-7" name="__codelineno-11-7"></a><span class="o">...</span>    <span class="p">[</span><span class="mf">1.1</span><span class="p">,</span> <span class="o">-</span><span class="mf">2.1</span><span class="p">,</span> <span class="mf">7.1</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">,</span> <span class="mf">3.1</span><span class="p">],</span>
+<a id="__codelineno-11-8" name="__codelineno-11-8"></a><span class="o">...</span> <span class="p">)</span>
+<a id="__codelineno-11-9" name="__codelineno-11-9"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">f</span><span class="p">(</span><span class="n">df</span><span class="p">)</span>
+<a id="__codelineno-11-10" name="__codelineno-11-10"></a>
+<a id="__codelineno-11-11" name="__codelineno-11-11"></a>       <span class="n">A</span>      <span class="n">B</span>
+<a id="__codelineno-11-12" name="__codelineno-11-12"></a><span class="mf">1.1</span>  <span class="kc">False</span>  <span class="kc">False</span>
+<a id="__codelineno-11-13" name="__codelineno-11-13"></a><span class="o">-</span><span class="mf">2.1</span>   <span class="kc">True</span>  <span class="kc">False</span>
+<a id="__codelineno-11-14" name="__codelineno-11-14"></a><span class="mf">7.1</span>  <span class="kc">False</span>  <span class="kc">False</span>
+<a id="__codelineno-11-15" name="__codelineno-11-15"></a><span class="mf">0.1</span>  <span class="kc">False</span>  <span class="kc">False</span>
+<a id="__codelineno-11-16" name="__codelineno-11-16"></a><span class="mf">3.1</span>  <span class="kc">False</span>  <span class="kc">False</span>
+</code></pre></div>
+</li>
+</ul>
+<h4 id="pdnotna"><code>pd.notna</code><a class="headerlink" href="#pdnotna" title="Permanent link">&para;</a></h4>
+<ul>
+<li>
+<p><code><apihead>pandas.<apiname>notna</apiname>(obj)</apihead></code>
+<br><br>
+    <strong><em>Supported Arguments</em></strong></p>
+<table>
+<thead>
+<tr>
+<th colspan="1" rowspan="1">
+<p>argument</p>
+</th>
+<th colspan="1" rowspan="1">
+<p>datatypes</p>
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td colspan="1" rowspan="1">
+<p><code>obj</code></p>
+</td>
+<td colspan="1" rowspan="1">
+<p>DataFrame, Series, Index, Array, or
+Scalar
+</p>
+</td>
+</tr>
+</tbody>
+</table>
+<p><strong><em>Example Usage</em></strong></p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1"></a> <span class="o">&gt;&gt;&gt;</span> <span class="nd">@bodo</span><span class="o">.</span><span class="n">jit</span>
+<a id="__codelineno-12-2" name="__codelineno-12-2"></a> <span class="o">...</span> <span class="k">def</span> <span class="nf">f</span><span class="p">(</span><span class="n">df</span><span class="p">):</span>
+<a id="__codelineno-12-3" name="__codelineno-12-3"></a> <span class="o">...</span>     <span class="k">return</span> <span class="n">pd</span><span class="o">.</span><span class="n">notna</span><span class="p">(</span><span class="n">df</span><span class="p">)</span>
+<a id="__codelineno-12-4" name="__codelineno-12-4"></a>
+<a id="__codelineno-12-5" name="__codelineno-12-5"></a> <span class="o">&gt;&gt;&gt;</span> <span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span>
+<a id="__codelineno-12-6" name="__codelineno-12-6"></a> <span class="o">...</span>    <span class="p">{</span><span class="s2">&quot;A&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;AA&quot;</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="s2">&quot;D&quot;</span><span class="p">,</span> <span class="s2">&quot;GG&quot;</span><span class="p">],</span> <span class="s2">&quot;B&quot;</span><span class="p">:</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">]},</span>
+<a id="__codelineno-12-7" name="__codelineno-12-7"></a> <span class="o">...</span>    <span class="p">[</span><span class="mf">1.1</span><span class="p">,</span> <span class="o">-</span><span class="mf">2.1</span><span class="p">,</span> <span class="mf">7.1</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">,</span> <span class="mf">3.1</span><span class="p">],</span>
+<a id="__codelineno-12-8" name="__codelineno-12-8"></a> <span class="o">...</span> <span class="p">)</span>
+<a id="__codelineno-12-9" name="__codelineno-12-9"></a> <span class="o">&gt;&gt;&gt;</span> <span class="n">f</span><span class="p">(</span><span class="n">df</span><span class="p">)</span>
+<a id="__codelineno-12-10" name="__codelineno-12-10"></a>
+<a id="__codelineno-12-11" name="__codelineno-12-11"></a>           <span class="n">A</span>     <span class="n">B</span>
+<a id="__codelineno-12-12" name="__codelineno-12-12"></a>  <span class="mf">1.1</span>   <span class="kc">True</span>  <span class="kc">True</span>
+<a id="__codelineno-12-13" name="__codelineno-12-13"></a> <span class="o">-</span><span class="mf">2.1</span>  <span class="kc">False</span>  <span class="kc">True</span>
+<a id="__codelineno-12-14" name="__codelineno-12-14"></a>  <span class="mf">7.1</span>   <span class="kc">True</span>  <span class="kc">True</span>
+<a id="__codelineno-12-15" name="__codelineno-12-15"></a>  <span class="mf">0.1</span>   <span class="kc">True</span>  <span class="kc">True</span>
+<a id="__codelineno-12-16" name="__codelineno-12-16"></a>  <span class="mf">3.1</span>   <span class="kc">True</span>  <span class="kc">True</span>
+</code></pre></div>
+</li>
+</ul>
+<h4 id="pdnotnull"><code>pd.notnull</code><a class="headerlink" href="#pdnotnull" title="Permanent link">&para;</a></h4>
+<ul>
+<li>
+<p><code><apihead>pandas.<apiname>notnull</apiname>(obj)</apihead></code>
+<br><br>
+    <strong><em>Supported Arguments</em></strong></p>
+<table>
+<thead>
+<tr>
+<th colspan="1" rowspan="1">
+<p>argument</p>
+</th>
+<th colspan="1" rowspan="1">
+<p>datatypes</p>
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td colspan="1" rowspan="1">
+<p><code>obj</code></p>
+</td>
+<td colspan="1" rowspan="1">
+<p>DataFrame, Series, Index, Array, or
+Scalar
+</p>
+</td>
+</tr>
+</tbody>
+</table>
+<p><strong><em>Example Usage</em></strong></p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1"></a><span class="o">&gt;&gt;&gt;</span> <span class="nd">@bodo</span><span class="o">.</span><span class="n">jit</span>
+<a id="__codelineno-13-2" name="__codelineno-13-2"></a><span class="o">...</span> <span class="k">def</span> <span class="nf">f</span><span class="p">(</span><span class="n">df</span><span class="p">):</span>
+<a id="__codelineno-13-3" name="__codelineno-13-3"></a><span class="o">...</span>     <span class="k">return</span> <span class="n">pd</span><span class="o">.</span><span class="n">notnull</span><span class="p">(</span><span class="n">df</span><span class="p">)</span>
+<a id="__codelineno-13-4" name="__codelineno-13-4"></a>
+<a id="__codelineno-13-5" name="__codelineno-13-5"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span>
+<a id="__codelineno-13-6" name="__codelineno-13-6"></a><span class="o">...</span>    <span class="p">{</span><span class="s2">&quot;A&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;AA&quot;</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="s2">&quot;D&quot;</span><span class="p">,</span> <span class="s2">&quot;GG&quot;</span><span class="p">],</span> <span class="s2">&quot;B&quot;</span><span class="p">:</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">]},</span>
+<a id="__codelineno-13-7" name="__codelineno-13-7"></a><span class="o">...</span>    <span class="p">[</span><span class="mf">1.1</span><span class="p">,</span> <span class="o">-</span><span class="mf">2.1</span><span class="p">,</span> <span class="mf">7.1</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">,</span> <span class="mf">3.1</span><span class="p">],</span>
+<a id="__codelineno-13-8" name="__codelineno-13-8"></a><span class="o">...</span> <span class="p">)</span>
+<a id="__codelineno-13-9" name="__codelineno-13-9"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">f</span><span class="p">(</span><span class="n">df</span><span class="p">)</span>
+<a id="__codelineno-13-10" name="__codelineno-13-10"></a>
+<a id="__codelineno-13-11" name="__codelineno-13-11"></a>       <span class="n">A</span>     <span class="n">B</span>
+<a id="__codelineno-13-12" name="__codelineno-13-12"></a><span class="mf">1.1</span>   <span class="kc">True</span>  <span class="kc">True</span>
+<a id="__codelineno-13-13" name="__codelineno-13-13"></a><span class="o">-</span><span class="mf">2.1</span>  <span class="kc">False</span>  <span class="kc">True</span>
+<a id="__codelineno-13-14" name="__codelineno-13-14"></a><span class="mf">7.1</span>   <span class="kc">True</span>  <span class="kc">True</span>
+<a id="__codelineno-13-15" name="__codelineno-13-15"></a><span class="mf">0.1</span>   <span class="kc">True</span>  <span class="kc">True</span>
+<a id="__codelineno-13-16" name="__codelineno-13-16"></a><span class="mf">3.1</span>   <span class="kc">True</span>  <span class="kc">True</span>
+</code></pre></div>
+</li>
+</ul>
+<h2 id="top-level-conversions">Top-level conversions<a class="headerlink" href="#top-level-conversions" title="Permanent link">&para;</a></h2>
+<h4 id="pdto_numeric"><code>pd.to_numeric</code><a class="headerlink" href="#pdto_numeric" title="Permanent link">&para;</a></h4>
+<ul>
+<li>
+<p><code><apihead>pandas.<apiname>to_numeric</apiname>(arg, errors="raise", downcast=None)</apihead></code>
+<br><br>
+    <strong><em>Supported Arguments</em></strong></p>
+<table>
+<thead>
+<tr>
+<th colspan="1" rowspan="1">
+<p>argument</p>
+</th>
+<th colspan="1" rowspan="1">
+<p>datatypes</p>
+</th>
+<th colspan="1" rowspan="1">
+<p>other requirements</p>
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td colspan="1" rowspan="1">
+<p><code>arg</code></p>
+</td>
+<td colspan="1" rowspan="1">
+<p>Series or Array</p>
+</td>
+<td colspan="1" rowspan="1"></td>
+</tr>
+<tr>
+<td colspan="1" rowspan="1">
+<p><code>downcast</code></p>
+</td>
+<td colspan="1" rowspan="1">
+<p>String and one of
+(<code>'integer'</code>,
+<code>'signed'</code>,
+<code>'unsigned'</code>,
+<code>'float'</code>)</p>
+</td>
+<td colspan="1" rowspan="1">
+<ul>
+<li><strong>Must be constant at
+    Compile Time</strong></li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<ul>
+<li>Output type is float64 by default</li>
+<li>Unlike Pandas, Bodo does not dynamically determine output type,
+  and does not downcast to the smallest numerical type.</li>
+<li><code>downcast</code> parameter should be used for type annotation of output.</li>
+</ul>
+</div>
+<p><strong><em>Example Usage</em></strong></p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1"></a><span class="o">&gt;&gt;&gt;</span> <span class="nd">@bodo</span><span class="o">.</span><span class="n">jit</span>
+<a id="__codelineno-14-2" name="__codelineno-14-2"></a><span class="o">...</span> <span class="k">def</span> <span class="nf">f</span><span class="p">(</span><span class="n">S</span><span class="p">):</span>
+<a id="__codelineno-14-3" name="__codelineno-14-3"></a><span class="o">...</span>     <span class="k">return</span> <span class="n">pd</span><span class="o">.</span><span class="n">to_numeric</span><span class="p">(</span><span class="n">S</span><span class="p">,</span> <span class="n">errors</span><span class="o">=</span><span class="s2">&quot;coerce&quot;</span><span class="p">,</span> <span class="n">downcast</span><span class="o">=</span><span class="s2">&quot;integer&quot;</span><span class="p">)</span>
+<a id="__codelineno-14-4" name="__codelineno-14-4"></a>
+<a id="__codelineno-14-5" name="__codelineno-14-5"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">S</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">Series</span><span class="p">([</span><span class="s2">&quot;1&quot;</span><span class="p">,</span> <span class="s2">&quot;3&quot;</span><span class="p">,</span> <span class="s2">&quot;12&quot;</span><span class="p">,</span> <span class="s2">&quot;4&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="s2">&quot;-555&quot;</span><span class="p">])</span>
+<a id="__codelineno-14-6" name="__codelineno-14-6"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">f</span><span class="p">(</span><span class="n">S</span><span class="p">)</span>
+<a id="__codelineno-14-7" name="__codelineno-14-7"></a>
+<a id="__codelineno-14-8" name="__codelineno-14-8"></a><span class="mi">0</span>       <span class="mi">1</span>
+<a id="__codelineno-14-9" name="__codelineno-14-9"></a><span class="mi">1</span>       <span class="mi">3</span>
+<a id="__codelineno-14-10" name="__codelineno-14-10"></a><span class="mi">2</span>      <span class="mi">12</span>
+<a id="__codelineno-14-11" name="__codelineno-14-11"></a><span class="mi">3</span>       <span class="mi">4</span>
+<a id="__codelineno-14-12" name="__codelineno-14-12"></a><span class="mi">4</span>    <span class="o">&lt;</span><span class="n">NA</span><span class="o">&gt;</span>
+<a id="__codelineno-14-13" name="__codelineno-14-13"></a><span class="mi">5</span>    <span class="o">-</span><span class="mi">555</span>
+<a id="__codelineno-14-14" name="__codelineno-14-14"></a><span class="n">dtype</span><span class="p">:</span> <span class="n">Int64</span>
+</code></pre></div>
+</li>
+</ul>
+<h2 id="top-level-dealing-with-datetime-and-timedelta-like">Top-level dealing with datetime and timedelta like<a class="headerlink" href="#top-level-dealing-with-datetime-and-timedelta-like" title="Permanent link">&para;</a></h2>
+<h4 id="pdto_datetime"><code>pd.to_datetime</code><a class="headerlink" href="#pdto_datetime" title="Permanent link">&para;</a></h4>
+<ul>
+<li>
+<p><code><apihead>pandas.<apiname>to_datetime</apiname>(arg, errors='raise', dayfirst=False, yearfirst=False, utc=None, format=None, exact=True, unit=None, infer_datetime_format=False, origin='unix', cache=True)</apihead></code>
+<br><br>
+    <strong><em>Supported Arguments</em></strong></p>
+<table>
+<thead>
+<tr>
+<th colspan="1" rowspan="1">
+<p>argument</p>
+</th>
+<th colspan="1" rowspan="1">
+<p>datatypes</p>
+</th>
+<th colspan="1" rowspan="1">
+<p>other requirements</p>
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td colspan="1" rowspan="1">
+<p><code>arg</code></p>
+</td>
+<td colspan="1" rowspan="1">
+<p>Series, Array or
+scalar of integers
+or strings</p>
+</td>
+<td colspan="1" rowspan="1"></td>
+</tr>
+<tr>
+<td colspan="1" rowspan="1">
+<p><code>errors</code></p>
+</td>
+<td colspan="1" rowspan="1">
+<p>String and one of
+('ignore',
+'raise',
+'coerce')</p>
+</td>
+<td colspan="1" rowspan="1"></td>
+</tr>
+<tr>
+<td colspan="1" rowspan="1">
+<p><code>dayfirst</code></p>
+</td>
+<td colspan="1" rowspan="1">
+<p>Boolean</p>
+</td>
+<td colspan="1" rowspan="1"></td>
+</tr>
+<tr>
+<td colspan="1" rowspan="1">
+<p><code>yearfirst</code></p>
+</td>
+<td colspan="1" rowspan="1">
+<p>Boolean</p>
+</td>
+<td colspan="1" rowspan="1"></td>
+</tr>
+<tr>
+<td colspan="1" rowspan="1">
+<p><code>utc</code></p>
+</td>
+<td colspan="1" rowspan="1">
+<p>Boolean</p>
+</td>
+<td colspan="1" rowspan="1"></td>
+</tr>
+<tr>
+<td colspan="1" rowspan="1">
+<p><code>format</code></p>
+</td>
+<td colspan="1" rowspan="1">
+<p>String matching
+Pandas
+<a href="https:/
+/docs.python.org/3
+/library/datetime.
+html#strftime-and-
+strptime-behavior">strftime
+/strptime</a></p>
+</td>
+<td colspan="1" rowspan="1"></td>
+</tr>
+<tr>
+<td colspan="1" rowspan="1">
+<p><code>exact</code></p>
+</td>
+<td colspan="1" rowspan="1">
+<p>Boolean</p>
+</td>
+<td colspan="1" rowspan="1"></td>
+</tr>
+<tr>
+<td colspan="1" rowspan="1">
+<p><code>unit</code></p>
+</td>
+<td colspan="1" rowspan="1">
+<p>String</p>
+</td>
+<td colspan="1" rowspan="1">
+<ul>
+<li>Must be a <a href="https://pandas.py
+    data.org/pandas-docs/st
+    able/user_guide/timeser
+    ies.html#timeseries-off
+    set-aliases">valid
+    Pandas timedelta
+    unit</a></li>
+</ul>
+</td>
+</tr>
+<tr>
+<td colspan="1" rowspan="1">
+<p><code>infer
+ _datetime_format</code></p>
+</td>
+<td colspan="1" rowspan="1">
+<p>Boolean
+</p>
+</td>
+<td colspan="1" rowspan="1"></td>
+</tr>
+<tr>
+<td colspan="1" rowspan="1">
+<p><code>origin</code>
+</p>
+</td>
+<td colspan="1" rowspan="1">
+<p>Scalar string or
+timestamp value</p>
+</td>
+<td colspan="1" rowspan="1"></td>
+</tr>
+<tr>
+<td colspan="1" rowspan="1">
+<p><code>cache</code></p>
+</td>
+<td colspan="1" rowspan="1">
+<p>Boolean</p>
+</td>
+<td colspan="1" rowspan="1"></td>
+</tr>
+</tbody>
+</table>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<ul>
+<li>The function is not optimized.</li>
+<li>Bodo doesn't support Timezone-Aware datetime values</li>
+</ul>
+</div>
+<p><strong><em>Example Usage</em></strong></p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-15-1" name="__codelineno-15-1"></a><span class="o">&gt;&gt;&gt;</span> <span class="nd">@bodo</span><span class="o">.</span><span class="n">jit</span>
+<a id="__codelineno-15-2" name="__codelineno-15-2"></a><span class="o">...</span> <span class="k">def</span> <span class="nf">f</span><span class="p">(</span><span class="n">val</span><span class="p">):</span>
+<a id="__codelineno-15-3" name="__codelineno-15-3"></a><span class="o">...</span>     <span class="k">return</span> <span class="n">pd</span><span class="o">.</span><span class="n">to_datetime</span><span class="p">(</span><span class="n">val</span><span class="p">,</span> <span class="nb">format</span><span class="o">=</span><span class="s2">&quot;%Y-</span><span class="si">%d</span><span class="s2">-%m&quot;</span><span class="p">)</span>
+<a id="__codelineno-15-4" name="__codelineno-15-4"></a>
+<a id="__codelineno-15-5" name="__codelineno-15-5"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">val</span> <span class="o">=</span> <span class="s2">&quot;2016-01-06&quot;</span>
+<a id="__codelineno-15-6" name="__codelineno-15-6"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">f</span><span class="p">(</span><span class="n">val</span><span class="p">)</span>
+<a id="__codelineno-15-7" name="__codelineno-15-7"></a>
+<a id="__codelineno-15-8" name="__codelineno-15-8"></a><span class="n">Timestamp</span><span class="p">(</span><span class="s1">&#39;2016-06-01 00:00:00&#39;</span><span class="p">)</span>
+</code></pre></div>
+</li>
+</ul>
+<h4 id="pdto_timedelta"><code>pd.to_timedelta</code><a class="headerlink" href="#pdto_timedelta" title="Permanent link">&para;</a></h4>
+<ul>
+<li>
+<p><code><apihead>pandas.<apiname>to_timedelta</apiname>(arg, unit=None, errors='raise')</apihead></code>
+<br><br>
+    <strong><em>Supported Arguments</em></strong></p>
+<table>
+<thead>
+<tr>
+<th colspan="1" rowspan="1">
+<p>argument</p>
+</th>
+<th colspan="1" rowspan="1">
+<p>datatypes</p>
+</th>
+<th colspan="1" rowspan="1">
+<p>other requirements</p>
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td colspan="1" rowspan="1">
+<p><code>arg</code></p>
+</td>
+<td colspan="1" rowspan="1">
+<p>Series, Array or
+scalar of integers
+or strings</p>
+</td>
+<td colspan="1" rowspan="1"></td>
+</tr>
+<tr>
+<td colspan="1" rowspan="1">
+<p><code>unit</code></p>
+</td>
+<td colspan="1" rowspan="1">
+<p>String</p>
+</td>
+<td colspan="1" rowspan="1">
+<ul>
+<li>Must be a valid Pandas
+    <a href="https:
+    //pandas.pydata.org/pan
+    das-docs/stable/user_gu
+    ide/timeseries.html#tim
+    eseries-offset-aliases">timedelta unit</a></li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Passing string data as <code>arg</code> is not optimized.</p>
+</div>
+<p><strong><em>Example Usage</em></strong></p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-16-1" name="__codelineno-16-1"></a><span class="o">&gt;&gt;&gt;</span> <span class="nd">@bodo</span><span class="o">.</span><span class="n">jit</span>
+<a id="__codelineno-16-2" name="__codelineno-16-2"></a><span class="o">...</span> <span class="k">def</span> <span class="nf">f</span><span class="p">(</span><span class="n">S</span><span class="p">):</span>
+<a id="__codelineno-16-3" name="__codelineno-16-3"></a><span class="o">...</span>     <span class="k">return</span> <span class="n">pd</span><span class="o">.</span><span class="n">to_timedelta</span><span class="p">(</span><span class="n">S</span><span class="p">,</span> <span class="n">unit</span><span class="o">=</span><span class="s2">&quot;D&quot;</span><span class="p">)</span>
+<a id="__codelineno-16-4" name="__codelineno-16-4"></a>
+<a id="__codelineno-16-5" name="__codelineno-16-5"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">S</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">Series</span><span class="p">([</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">2.2</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span><span class="p">,</span> <span class="mf">4.2</span><span class="p">],</span> <span class="p">[</span><span class="mi">3</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="o">-</span><span class="mi">2</span><span class="p">],</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;AA&quot;</span><span class="p">)</span>
+<a id="__codelineno-16-6" name="__codelineno-16-6"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">f</span><span class="p">(</span><span class="n">val</span><span class="p">)</span>
+<a id="__codelineno-16-7" name="__codelineno-16-7"></a>
+<a id="__codelineno-16-8" name="__codelineno-16-8"></a><span class="mi">3</span>   <span class="mi">1</span> <span class="n">days</span> <span class="mi">00</span><span class="p">:</span><span class="mi">00</span><span class="p">:</span><span class="mi">00</span>
+<a id="__codelineno-16-9" name="__codelineno-16-9"></a><span class="mi">1</span>   <span class="mi">2</span> <span class="n">days</span> <span class="mi">04</span><span class="p">:</span><span class="mi">48</span><span class="p">:</span><span class="mi">00</span>
+<a id="__codelineno-16-10" name="__codelineno-16-10"></a><span class="mi">0</span>               <span class="n">NaT</span>
+<a id="__codelineno-16-11" name="__codelineno-16-11"></a><span class="o">-</span><span class="mi">2</span>   <span class="mi">4</span> <span class="n">days</span> <span class="mi">04</span><span class="p">:</span><span class="mi">48</span><span class="p">:</span><span class="mi">00</span>
+<a id="__codelineno-16-12" name="__codelineno-16-12"></a><span class="n">Name</span><span class="p">:</span> <span class="n">AA</span><span class="p">,</span> <span class="n">dtype</span><span class="p">:</span> <span class="n">timedelta64</span><span class="p">[</span><span class="n">ns</span><span class="p">]</span>
+</code></pre></div>
+</li>
+</ul>
+<h4 id="pddate_range"><code>pd.date_range</code><a class="headerlink" href="#pddate_range" title="Permanent link">&para;</a></h4>
+<ul>
+<li>
+<p><code><apihead>pandas.<apiname>date_range</apiname>(start=None, end=None, periods=None, freq=None, tz=None, normalize=False, name=None, closed=None, **kwargs)</apihead></code></p>
+<p><strong><em>Supported Arguments</em></strong></p>
+<table>
+<thead>
+<tr>
+<th colspan="1" rowspan="1">
+<p>argument</p>
+</th>
+<th colspan="1" rowspan="1">
+<p>datatypes</p>
+</th>
+<th colspan="1" rowspan="1">
+<p>other requirements</p>
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td colspan="1" rowspan="1">
+<p><code>start</code>
+</p>
+</td>
+<td colspan="1" rowspan="1">
+<p>String or
+Timestamp</p>
+</td>
+<td colspan="1" rowspan="1"></td>
+</tr>
+<tr>
+<td colspan="1" rowspan="1">
+<p><code>end</code>
+</p>
+</td>
+<td colspan="1" rowspan="1">
+<p>String or
+Timestamp</p>
+</td>
+<td colspan="1" rowspan="1"></td>
+</tr>
+<tr>
+<td colspan="1" rowspan="1">
+<p><code>periods</code></p>
+</td>
+<td colspan="1" rowspan="1">
+<p>Integer</p>
+</td>
+<td colspan="1" rowspan="1"></td>
+</tr>
+<tr>
+<td colspan="1" rowspan="1">
+<p><code>freq</code></p>
+</td>
+<td colspan="1" rowspan="1">
+<p>String</p>
+</td>
+<td colspan="1" rowspan="1">
+<ul>
+<li>Must be a <a href="https://pandas.pydat
+a.org/pandas-docs/stable/u
+ser_guide/timeseries.html#
+timeseries-offset-aliases">valid
+    Pandas
+    frequ
+ency</a></li>
+</ul>
+</td>
+</tr>
+<tr>
+<td colspan="1" rowspan="1">
+<p><code>name</code></p>
+</td>
+<td colspan="1" rowspan="1">
+<p>String</p>
+</td>
+<td colspan="1" rowspan="1"></td>
+</tr>
+<tr>
+<td colspan="1" rowspan="1">
+<p><code>closed</code></p>
+</td>
+<td colspan="1" rowspan="1">
+<p>String and one of
+(<code>'left'</code>,
+<code>'right'</code>)</p>
+</td>
+<td colspan="1" rowspan="1"></td>
+</tr>
+</tbody>
+</table>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<ul>
+<li>Exactly three of <code>start</code>, <code>end</code>, <code>periods</code>, and <code>freq</code> must
+  be provided.</li>
+<li>Bodo <strong>Does Not</strong> support <code>kwargs</code>, even for compatibility.</li>
+<li>This function is not parallelized yet.</li>
+</ul>
+</div>
+<p><strong><em>Example Usage</em></strong></p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-17-1" name="__codelineno-17-1"></a><span class="o">&gt;&gt;&gt;</span> <span class="nd">@bodo</span><span class="o">.</span><span class="n">jit</span>
+<a id="__codelineno-17-2" name="__codelineno-17-2"></a><span class="o">...</span> <span class="k">def</span> <span class="nf">f</span><span class="p">():</span>
+<a id="__codelineno-17-3" name="__codelineno-17-3"></a><span class="o">...</span>     <span class="k">return</span> <span class="n">pd</span><span class="o">.</span><span class="n">date_range</span><span class="p">(</span><span class="n">start</span><span class="o">=</span><span class="s2">&quot;2018-04-24&quot;</span><span class="p">,</span> <span class="n">end</span><span class="o">=</span><span class="s2">&quot;2018-04-27&quot;</span><span class="p">,</span> <span class="n">periods</span><span class="o">=</span><span class="mi">3</span><span class="p">)</span>
+<a id="__codelineno-17-4" name="__codelineno-17-4"></a>
+<a id="__codelineno-17-5" name="__codelineno-17-5"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">f</span><span class="p">()</span>
+<a id="__codelineno-17-6" name="__codelineno-17-6"></a>
+<a id="__codelineno-17-7" name="__codelineno-17-7"></a><span class="n">DatetimeIndex</span><span class="p">([</span><span class="s1">&#39;2018-04-24 00:00:00&#39;</span><span class="p">,</span> <span class="s1">&#39;2018-04-25 12:00:00&#39;</span><span class="p">,</span>
+<a id="__codelineno-17-8" name="__codelineno-17-8"></a>              <span class="s1">&#39;2018-04-27 00:00:00&#39;</span><span class="p">],</span>
+<a id="__codelineno-17-9" name="__codelineno-17-9"></a>             <span class="n">dtype</span><span class="o">=</span><span class="s1">&#39;datetime64[ns]&#39;</span><span class="p">,</span> <span class="n">freq</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+</code></pre></div>
+</li>
+</ul>
+<h4 id="pdtimedelta_range"><code>pd.timedelta_range</code><a class="headerlink" href="#pdtimedelta_range" title="Permanent link">&para;</a></h4>
+<ul>
+<li>
+<p><code><apihead>pandas.<apiname>timedelta_range</apiname>(start=None, end=None, periods=None, freq=None, name=None, closed=None)</apihead></code>
+<br><br></p>
+<p><strong><em>Supported Arguments</em></strong></p>
+<table>
+<thead>
+<tr>
+<th colspan="1" rowspan="1">
+<p>argument</p>
+</th>
+<th colspan="1" rowspan="1">
+<p>datatypes</p>
+</th>
+<th colspan="1" rowspan="1">
+<p>other requirements</p>
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td colspan="1" rowspan="1">
+<p><code>start</code>
+</p>
+</td>
+<td colspan="1" rowspan="1">
+<p>String or
+Timedelta</p>
+</td>
+<td colspan="1" rowspan="1"></td>
+</tr>
+<tr>
+<td colspan="1" rowspan="1">
+<p><code>end</code>
+</p>
+</td>
+<td colspan="1" rowspan="1">
+<p>String or
+Timedelta</p>
+</td>
+<td colspan="1" rowspan="1"></td>
+</tr>
+<tr>
+<td colspan="1" rowspan="1">
+<p><code>periods</code></p>
+</td>
+<td colspan="1" rowspan="1">
+<p>Integer</p>
+</td>
+<td colspan="1" rowspan="1"></td>
+</tr>
+<tr>
+<td colspan="1" rowspan="1">
+<p><code>freq</code></p>
+</td>
+<td colspan="1" rowspan="1">
+<p>String</p>
+</td>
+<td colspan="1" rowspan="1">
+<ul>
+<li>Must be a <a href="https://pandas.pydat
+a.org/pandas-docs/stable/u
+ser_guide/timeseries.html#
+timeseries-offset-aliases">valid
+    Pandas
+    frequ
+ency</a></li>
+</ul>
+</td>
+</tr>
+<tr>
+<td colspan="1" rowspan="1">
+<p><code>name</code></p>
+</td>
+<td colspan="1" rowspan="1">
+<p>String</p>
+</td>
+<td colspan="1" rowspan="1"></td>
+</tr>
+<tr>
+<td colspan="1" rowspan="1">
+<p><code>closed</code></p>
+</td>
+<td colspan="1" rowspan="1">
+<p>String and one of
+('left',
+'right')</p>
+</td>
+<td colspan="1" rowspan="1"></td>
+</tr>
+</tbody>
+</table>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<ul>
+<li>Exactly three of <code>start</code>, <code>end</code>, <code>periods</code>, and <code>freq</code> must
+  be provided.</li>
+<li>This function is not parallelized yet.</li>
+</ul>
+</div>
+<p><strong><em>Example Usage</em></strong></p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-18-1" name="__codelineno-18-1"></a><span class="o">&gt;&gt;&gt;</span> <span class="nd">@bodo</span><span class="o">.</span><span class="n">jit</span>
+<a id="__codelineno-18-2" name="__codelineno-18-2"></a><span class="o">...</span> <span class="k">def</span> <span class="nf">f</span><span class="p">():</span>
+<a id="__codelineno-18-3" name="__codelineno-18-3"></a><span class="o">...</span>     <span class="k">return</span> <span class="n">pd</span><span class="o">.</span><span class="n">timedelta_range</span><span class="p">(</span><span class="n">start</span><span class="o">=</span><span class="s2">&quot;1 day&quot;</span><span class="p">,</span> <span class="n">end</span><span class="o">=</span><span class="s2">&quot;11 days 1 hour&quot;</span><span class="p">,</span> <span class="n">periods</span><span class="o">=</span><span class="mi">3</span><span class="p">)</span>
+<a id="__codelineno-18-4" name="__codelineno-18-4"></a>
+<a id="__codelineno-18-5" name="__codelineno-18-5"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">f</span><span class="p">()</span>
+<a id="__codelineno-18-6" name="__codelineno-18-6"></a>
+<a id="__codelineno-18-7" name="__codelineno-18-7"></a><span class="n">TimedeltaIndex</span><span class="p">([</span><span class="s1">&#39;1 days 00:00:00&#39;</span><span class="p">,</span> <span class="s1">&#39;6 days 00:30:00&#39;</span><span class="p">,</span> <span class="s1">&#39;11 days 01:00:00&#39;</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="s1">&#39;timedelta64[ns]&#39;</span><span class="p">,</span> <span class="n">freq</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+</code></pre></div>
+</li>
+</ul>
+
+              
+            </article>
+          </div>
+        </div>
+        
+          <a href="#" class="md-top md-icon" data-md-component="top" data-md-state="hidden">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8v12z"/></svg>
+            Back to top
+          </a>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    <nav class="md-footer__inner md-grid" aria-label="Footer">
+      
+        
+        <a href="../datatypes/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Datatypes" rel="prev">
+          <div class="md-footer__button md-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11h12z"/></svg>
+          </div>
+          <div class="md-footer__title">
+            <div class="md-ellipsis">
+              <span class="md-footer__direction">
+                Previous
+              </span>
+              Datatypes
+            </div>
+          </div>
+        </a>
+      
+      
+        
+        <a href="../dataframe/" class="md-footer__link md-footer__link--next" aria-label="Next: Dataframe" rel="next">
+          <div class="md-footer__title">
+            <div class="md-ellipsis">
+              <span class="md-footer__direction">
+                Next
+              </span>
+              Dataframe
+            </div>
+          </div>
+          <div class="md-footer__button md-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 11v2h12l-5.5 5.5 1.42 1.42L19.84 12l-7.92-7.92L10.5 5.5 16 11H4z"/></svg>
+          </div>
+        </a>
+      
+    </nav>
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      Copyright &copy; 2019 - 2022 Bodo, Inc.
+    </div>
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+        <div class="md-social">
+  
+    
+    
+      
+      
+    
+    <a href="https://github.com/Bodo-Inc/Feedback" target="_blank" rel="noopener" title="github.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.0.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc.--><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"/></svg>
+    </a>
+  
+    
+    
+      
+      
+    
+    <a href="https://twitter.com/bodo_ai" target="_blank" rel="noopener" title="twitter.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.0.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc.--><path d="M459.37 151.716c.325 4.548.325 9.097.325 13.645 0 138.72-105.583 298.558-298.558 298.558-59.452 0-114.68-17.219-161.137-47.106 8.447.974 16.568 1.299 25.34 1.299 49.055 0 94.213-16.568 130.274-44.832-46.132-.975-84.792-31.188-98.112-72.772 6.498.974 12.995 1.624 19.818 1.624 9.421 0 18.843-1.3 27.614-3.573-48.081-9.747-84.143-51.98-84.143-102.985v-1.299c13.969 7.797 30.214 12.67 47.431 13.319-28.264-18.843-46.781-51.005-46.781-87.391 0-19.492 5.197-37.36 14.294-52.954 51.655 63.675 129.3 105.258 216.365 109.807-1.624-7.797-2.599-15.918-2.599-24.04 0-57.828 46.782-104.934 104.934-104.934 30.213 0 57.502 12.67 76.67 33.137 23.715-4.548 46.456-13.32 66.599-25.34-7.798 24.366-24.366 44.833-46.132 57.827 21.117-2.273 41.584-8.122 60.426-16.243-14.292 20.791-32.161 39.308-52.628 54.253z"/></svg>
+    </a>
+  
+    
+    
+      
+      
+    
+    <a href="https://www.linkedin.com/company/19205698" target="_blank" rel="noopener" title="www.linkedin.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.0.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc.--><path d="M416 32H31.9C14.3 32 0 46.5 0 64.3v383.4C0 465.5 14.3 480 31.9 480H416c17.6 0 32-14.5 32-32.3V64.3c0-17.8-14.4-32.3-32-32.3zM135.4 416H69V202.2h66.5V416zm-33.2-243c-21.3 0-38.5-17.3-38.5-38.5S80.9 96 102.2 96c21.2 0 38.5 17.3 38.5 38.5 0 21.3-17.2 38.5-38.5 38.5zm282.1 243h-66.4V312c0-24.8-.5-56.7-34.5-56.7-34.6 0-39.9 27-39.9 54.9V416h-66.4V202.2h63.7v29.2h.9c8.9-16.8 30.6-34.5 62.9-34.5 67.2 0 79.7 44.3 79.7 101.9V416z"/></svg>
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    <script id="__config" type="application/json">{"base": "../../..", "features": ["content.code.annotate", "navigation.instant", "navigation.tabs", "navigation.tabs.sticky", "navigation.top", "navigation.tracking", "navigation.indexes", "navigation.expand", "search.highlight", "search.share", "search.suggest"], "translations": {"clipboard.copy": "Copy to clipboard", "clipboard.copied": "Copied to clipboard", "search.config.lang": "en", "search.config.pipeline": "trimmer, stopWordFilter", "search.config.separator": "[\\s\\-]+", "search.placeholder": "Search", "search.result.placeholder": "Type to start searching", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.term.missing": "Missing", "select.version.title": "Select version"}, "search": "../../../assets/javascripts/workers/search.bd0b6b67.min.js", "version": {"provider": "mike"}}</script>
+    
+    
+      <script src="../../../assets/javascripts/bundle.8aa65030.min.js"></script>
+      
+    
+  </body>
+</html>

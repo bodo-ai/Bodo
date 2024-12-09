@@ -1,0 +1,2533 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Bodo offers a new type of just-in-time compiler with Supercomputing-style performance and the simplicity of using native Python.">
+      
+      
+        <meta name="author" content="Bodo Team">
+      
+      
+        <link rel="canonical" href="https://docs.bodo.ai/api_docs/bodo_parallel_apis/">
+      
+      <link rel="icon" href="../../assets/favicon.png">
+      <meta name="generator" content="mkdocs-1.2.3, mkdocs-material-8.2.1">
+    
+    
+      
+        <title>Bodo Parallel APIs - Bodo Developer Documentation</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.e8d9bf0c.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.e6a45f82.min.css">
+        
+      
+    
+    
+    
+      
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,400,400i,700%7CRoboto+Mono&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../stylesheets/bodo.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="bodo-light" data-md-color-accent="bodo-green">
+  
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&"object"==typeof palette.color)for(var key of Object.keys(palette.color))document.body.setAttribute("data-md-color-"+key,palette.color[key])</script>
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#bodoparallelapis" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+      <div data-md-component="outdated" hidden>
+        <aside class="md-banner md-banner--warning">
+          
+        </aside>
+      </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--lifted" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="Bodo Developer Documentation" class="md-header__button md-logo" aria-label="Bodo Developer Documentation" data-md-component="logo">
+      
+  <img src="../../assets/bodo-logo.png" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3V6m0 5h18v2H3v-2m0 5h18v2H3v-2z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Bodo Developer Documentation
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Bodo Parallel APIs
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      <form class="md-header__option" data-md-component="palette">
+        
+          
+          
+          <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="bodo-light" data-md-color-accent="bodo-green"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_1">
+          
+            <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_2" hidden>
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M17 7H7a5 5 0 0 0-5 5 5 5 0 0 0 5 5h10a5 5 0 0 0 5-5 5 5 0 0 0-5-5m0 8a3 3 0 0 1-3-3 3 3 0 0 1 3-3 3 3 0 0 1 3 3 3 3 0 0 1-3 3z"/></svg>
+            </label>
+          
+        
+          
+          
+          <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="bodo-dark" data-md-color-accent="bodo-green"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_2">
+          
+            <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_1" hidden>
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M17 6H7c-3.31 0-6 2.69-6 6s2.69 6 6 6h10c3.31 0 6-2.69 6-6s-2.69-6-6-6zm0 10H7c-2.21 0-4-1.79-4-4s1.79-4 4-4h10c2.21 0 4 1.79 4 4s-1.79 4-4 4zM7 9c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>
+            </label>
+          
+        
+      </form>
+    
+    
+    
+      <label class="md-header__button md-icon" for="__search">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5z"/></svg>
+      </label>
+      <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5z"/></svg>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11h12z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+          <a href="javascript:void(0)" class="md-search__icon md-icon" aria-label="Share" data-clipboard data-clipboard-text="" data-md-component="search-share" tabindex="-1">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7 0-.24-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9a3 3 0 0 0-3 3 3 3 0 0 0 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.15c-.05.21-.08.43-.08.66 0 1.61 1.31 2.91 2.92 2.91 1.61 0 2.92-1.3 2.92-2.91A2.92 2.92 0 0 0 18 16.08z"/></svg>
+          </a>
+        
+        <button type="reset" class="md-search__icon md-icon" aria-label="Clear" tabindex="-1">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+    
+    
+  </nav>
+  
+    
+      
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-tabs__inner md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+
+
+  <li class="md-tabs__item">
+    <a href="../.." class="md-tabs__link">
+      About Bodo
+    </a>
+  </li>
+
+      
+        
+  
+  
+
+
+  <li class="md-tabs__item">
+    <a href="../../quick_start/" class="md-tabs__link">
+      Quick Start
+    </a>
+  </li>
+
+      
+        
+  
+  
+
+
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../installation_and_setup/install/" class="md-tabs__link">
+        Installation and Setup
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+
+
+  
+  
+  
+    
+
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../bodo_parallelism/bodo_parallelism_basics/" class="md-tabs__link">
+        Programming with Bodo
+      </a>
+    </li>
+  
+
+  
+
+      
+        
+  
+  
+
+
+  
+  
+  
+    
+
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../integrating_bodo/spark/" class="md-tabs__link">
+        Bodo in your Pipeline
+      </a>
+    </li>
+  
+
+  
+
+      
+        
+  
+  
+    
+  
+
+
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../" class="md-tabs__link md-tabs__link--active">
+        API Docs
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+
+
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../performance/performance/" class="md-tabs__link">
+        Performance and Diagnostics
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+
+
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../help_and_reference/eula/" class="md-tabs__link">
+        Help and Reference
+      </a>
+    </li>
+  
+
+      
+    </ul>
+  </div>
+</nav>
+    
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="Bodo Developer Documentation" class="md-nav__button md-logo" aria-label="Bodo Developer Documentation" data-md-component="logo">
+      
+  <img src="../../assets/bodo-logo.png" alt="logo">
+
+    </a>
+    Bodo Developer Documentation
+  </label>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+      
+
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        About Bodo
+      </a>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../quick_start/" class="md-nav__link">
+        Quick Start
+      </a>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+  
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+      
+        <input class="md-nav__toggle md-toggle" data-md-toggle="__nav_3" data-md-state="indeterminate" type="checkbox" id="__nav_3" checked>
+      
+      
+      
+        
+          
+        
+          
+        
+          
+        
+          
+        
+          
+        
+          
+        
+          
+        
+          
+        
+      
+      
+        <label class="md-nav__link" for="__nav_3">
+          Installation and Setup
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <nav class="md-nav" aria-label="Installation and Setup" data-md-level="1">
+        <label class="md-nav__title" for="__nav_3">
+          <span class="md-nav__icon md-icon"></span>
+          Installation and Setup
+        </label>
+        <ul class="md-nav__list" data-md-scrollfix>
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../installation_and_setup/install/" class="md-nav__link">
+        Installing Bodo Community Edition
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../installation_and_setup/enterprise/" class="md-nav__link">
+        Configuring Bodo Enterprise Edition
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../installation_and_setup/ipyparallel/" class="md-nav__link">
+        Interactive Bodo Cluster Setup using IPyParallel
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../installation_and_setup/recommended_mpi_settings/" class="md-nav__link">
+        Recommended MPI Settings
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../installation_and_setup/recommended_cluster_config/" class="md-nav__link">
+        Recommended Cluster Configuration
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../installation_and_setup/bodo_platform/" class="md-nav__link">
+        Using Bodo Cloud Platform
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../installation_and_setup/bodo_platform_aws/" class="md-nav__link">
+        Bodo Managed Cloud Platform on AWS
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../installation_and_setup/bodo_platform_azure/" class="md-nav__link">
+        Bodo Managed Cloud Platform on Azure
+      </a>
+    </li>
+  
+
+            
+          
+        </ul>
+      </nav>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+  
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+      
+        <input class="md-nav__toggle md-toggle" data-md-toggle="__nav_4" data-md-state="indeterminate" type="checkbox" id="__nav_4" checked>
+      
+      
+      
+        
+          
+        
+          
+        
+          
+        
+      
+      
+        <label class="md-nav__link" for="__nav_4">
+          Programming with Bodo
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <nav class="md-nav" aria-label="Programming with Bodo" data-md-level="1">
+        <label class="md-nav__title" for="__nav_4">
+          <span class="md-nav__icon md-icon"></span>
+          Programming with Bodo
+        </label>
+        <ul class="md-nav__list" data-md-scrollfix>
+          
+            
+              
+  
+  
+  
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+      
+        <input class="md-nav__toggle md-toggle" data-md-toggle="__nav_4_1" data-md-state="indeterminate" type="checkbox" id="__nav_4_1" checked>
+      
+      
+      
+        
+          
+        
+          
+        
+          
+        
+          
+        
+      
+      
+        <label class="md-nav__link" for="__nav_4_1">
+          Understanding Parallelism with Bodo
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <nav class="md-nav" aria-label="Understanding Parallelism with Bodo" data-md-level="2">
+        <label class="md-nav__title" for="__nav_4_1">
+          <span class="md-nav__icon md-icon"></span>
+          Understanding Parallelism with Bodo
+        </label>
+        <ul class="md-nav__list" data-md-scrollfix>
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../bodo_parallelism/bodo_parallelism_basics/" class="md-nav__link">
+        Basics of Bodo Parallelism
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../bodo_parallelism/advanced/" class="md-nav__link">
+        Advanced Parallelism Topics
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../bodo_parallelism/compile_time_constants/" class="md-nav__link">
+        Compile Time Constants
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../bodo_parallelism/not_supported/" class="md-nav__link">
+        Unsupported Programs
+      </a>
+    </li>
+  
+
+            
+          
+        </ul>
+      </nav>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../file_io/" class="md-nav__link">
+        Scalable File I/O
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../objmode/" class="md-nav__link">
+        Using Regular Python inside Bodo (Object Mode)
+      </a>
+    </li>
+  
+
+            
+          
+        </ul>
+      </nav>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+  
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+      
+        <input class="md-nav__toggle md-toggle" data-md-toggle="__nav_5" data-md-state="indeterminate" type="checkbox" id="__nav_5" checked>
+      
+      
+      
+        
+          
+        
+          
+        
+          
+        
+          
+        
+      
+      
+        <label class="md-nav__link" for="__nav_5">
+          Bodo in your Pipeline
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <nav class="md-nav" aria-label="Bodo in your Pipeline" data-md-level="1">
+        <label class="md-nav__title" for="__nav_5">
+          <span class="md-nav__icon md-icon"></span>
+          Bodo in your Pipeline
+        </label>
+        <ul class="md-nav__list" data-md-scrollfix>
+          
+            
+              
+  
+  
+  
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+      
+        <input class="md-nav__toggle md-toggle" data-md-toggle="__nav_5_1" data-md-state="indeterminate" type="checkbox" id="__nav_5_1" checked>
+      
+      
+      
+        
+          
+        
+          
+        
+      
+      
+        <label class="md-nav__link" for="__nav_5_1">
+          Migration from Spark
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <nav class="md-nav" aria-label="Migration from Spark" data-md-level="2">
+        <label class="md-nav__title" for="__nav_5_1">
+          <span class="md-nav__icon md-icon"></span>
+          Migration from Spark
+        </label>
+        <ul class="md-nav__list" data-md-scrollfix>
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../integrating_bodo/spark/" class="md-nav__link">
+        Spark Examples
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../integrating_bodo/sparkcheatsheet/" class="md-nav__link">
+        Bodo Spark Cheatsheet
+      </a>
+    </li>
+  
+
+            
+          
+        </ul>
+      </nav>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../integrating_bodo/dl/" class="md-nav__link">
+        Deep Learning
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../integrating_bodo/data_visualization/" class="md-nav__link">
+        Data Visualization
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../integrating_bodo/front_end/" class="md-nav__link">
+        Front End Tools
+      </a>
+    </li>
+  
+
+            
+          
+        </ul>
+      </nav>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+    
+  
+  
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+      
+        <input class="md-nav__toggle md-toggle" data-md-toggle="__nav_6" type="checkbox" id="__nav_6" checked>
+      
+      
+      
+        
+          
+            
+          
+        
+          
+        
+          
+        
+          
+        
+          
+        
+          
+        
+          
+        
+      
+      
+        
+        
+        <div class="md-nav__link md-nav__link--index ">
+          <a href="../">API Docs</a>
+          
+            <label for="__nav_6">
+              <span class="md-nav__icon md-icon"></span>
+            </label>
+          
+        </div>
+      
+      <nav class="md-nav" aria-label="API Docs" data-md-level="1">
+        <label class="md-nav__title" for="__nav_6">
+          <span class="md-nav__icon md-icon"></span>
+          API Docs
+        </label>
+        <ul class="md-nav__list" data-md-scrollfix>
+          
+            
+          
+            
+              
+  
+  
+    
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" data-md-toggle="toc" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          Bodo Parallel APIs
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        Bodo Parallel APIs
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Bodo Parallel APIs">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Bodo Parallel APIs
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#bodoallgatherv" class="md-nav__link">
+    bodo.allgatherv
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#bodobarrier" class="md-nav__link">
+    bodo.barrier
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#bodogatherv" class="md-nav__link">
+    bodo.gatherv
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#bodoget_rank" class="md-nav__link">
+    bodo.get_rank
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#bodoget_size" class="md-nav__link">
+    bodo.get_size
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#bodorandom_shuffle" class="md-nav__link">
+    bodo.random_shuffle
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#bodorebalance" class="md-nav__link">
+    bodo.rebalance
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#bodoscatterv" class="md-nav__link">
+    bodo.scatterv
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+      
+        <input class="md-nav__toggle md-toggle" data-md-toggle="__nav_6_3" data-md-state="indeterminate" type="checkbox" id="__nav_6_3" checked>
+      
+      
+      
+        
+          
+            
+          
+        
+          
+        
+          
+        
+          
+        
+          
+        
+          
+        
+          
+        
+          
+        
+          
+        
+          
+        
+          
+        
+          
+        
+          
+        
+          
+        
+      
+      
+        
+        
+        <div class="md-nav__link md-nav__link--index ">
+          <a href="../pandas/">Pandas</a>
+          
+            <label for="__nav_6_3">
+              <span class="md-nav__icon md-icon"></span>
+            </label>
+          
+        </div>
+      
+      <nav class="md-nav" aria-label="Pandas" data-md-level="2">
+        <label class="md-nav__title" for="__nav_6_3">
+          <span class="md-nav__icon md-icon"></span>
+          Pandas
+        </label>
+        <ul class="md-nav__list" data-md-scrollfix>
+          
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../pandas/datatypes/" class="md-nav__link">
+        Datatypes
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../pandas/general/" class="md-nav__link">
+        General Functions
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../pandas/dataframe/" class="md-nav__link">
+        Dataframe
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../pandas/groupby/" class="md-nav__link">
+        Groupby
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../pandas/series/" class="md-nav__link">
+        Series
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../pandas/window/" class="md-nav__link">
+        Window
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../pandas/dateoffsets/" class="md-nav__link">
+        DateOffsets
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../pandas/io/" class="md-nav__link">
+        Input/Output
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../pandas/indexapi/" class="md-nav__link">
+        Index Objects
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../pandas/timedelta/" class="md-nav__link">
+        TimeDelta
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../pandas/timestamp/" class="md-nav__link">
+        Timestamp
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../pandas/na_issues/" class="md-nav__link">
+        Integer NA Issue in Pandas
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../pandas/type_inf_obj_data/" class="md-nav__link">
+        Type Inference for Object Data
+      </a>
+    </li>
+  
+
+            
+          
+        </ul>
+      </nav>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../numpy/" class="md-nav__link">
+        Numpy
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../udfs/" class="md-nav__link">
+        User Defined Functions (UDFs)
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+      
+        <input class="md-nav__toggle md-toggle" data-md-toggle="__nav_6_6" data-md-state="indeterminate" type="checkbox" id="__nav_6_6" checked>
+      
+      
+      
+        
+          
+            
+          
+        
+          
+        
+      
+      
+        
+        
+        <div class="md-nav__link md-nav__link--index ">
+          <a href="../ml/">Machine Learning</a>
+          
+            <label for="__nav_6_6">
+              <span class="md-nav__icon md-icon"></span>
+            </label>
+          
+        </div>
+      
+      <nav class="md-nav" aria-label="Machine Learning" data-md-level="2">
+        <label class="md-nav__title" for="__nav_6_6">
+          <span class="md-nav__icon md-icon"></span>
+          Machine Learning
+        </label>
+        <ul class="md-nav__list" data-md-scrollfix>
+          
+            
+          
+            
+              
+  
+  
+  
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+      
+        <input class="md-nav__toggle md-toggle" data-md-toggle="__nav_6_6_2" data-md-state="indeterminate" type="checkbox" id="__nav_6_6_2" checked>
+      
+      
+      
+        
+          
+            
+          
+        
+          
+        
+          
+        
+          
+        
+          
+        
+          
+        
+          
+        
+          
+        
+          
+        
+          
+        
+      
+      
+        
+        
+        <div class="md-nav__link md-nav__link--index ">
+          <a href="../ml/sklearn/">Scikit Learn</a>
+          
+            <label for="__nav_6_6_2">
+              <span class="md-nav__icon md-icon"></span>
+            </label>
+          
+        </div>
+      
+      <nav class="md-nav" aria-label="Scikit Learn" data-md-level="3">
+        <label class="md-nav__title" for="__nav_6_6_2">
+          <span class="md-nav__icon md-icon"></span>
+          Scikit Learn
+        </label>
+        <ul class="md-nav__list" data-md-scrollfix>
+          
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ml/sklearn/cluster/" class="md-nav__link">
+        sklearn.cluster
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ml/sklearn/ensemble/" class="md-nav__link">
+        sklearn.ensemble
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ml/sklearn/feature_extraction/" class="md-nav__link">
+        sklearn.feature_extraction
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ml/sklearn/linear_model/" class="md-nav__link">
+        sklearn.linear_model
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ml/sklearn/metrics/" class="md-nav__link">
+        sklearn.metrics
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ml/sklearn/model_selection/" class="md-nav__link">
+        sklearn.model_selection
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ml/sklearn/naive_bayes/" class="md-nav__link">
+        sklearn.naive_bayes
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ml/sklearn/preprocessing/" class="md-nav__link">
+        sklearn.preprocessing
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ml/sklearn/svm/" class="md-nav__link">
+        sklearn.svm
+      </a>
+    </li>
+  
+
+            
+          
+        </ul>
+      </nav>
+    </li>
+  
+
+            
+          
+        </ul>
+      </nav>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../miscellaneous/" class="md-nav__link">
+        Miscellaneous Supported Python API
+      </a>
+    </li>
+  
+
+            
+          
+        </ul>
+      </nav>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+  
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+      
+        <input class="md-nav__toggle md-toggle" data-md-toggle="__nav_7" data-md-state="indeterminate" type="checkbox" id="__nav_7" checked>
+      
+      
+      
+        
+          
+        
+          
+        
+          
+        
+          
+        
+          
+        
+          
+        
+          
+        
+      
+      
+        <label class="md-nav__link" for="__nav_7">
+          Performance and Diagnostics
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <nav class="md-nav" aria-label="Performance and Diagnostics" data-md-level="1">
+        <label class="md-nav__title" for="__nav_7">
+          <span class="md-nav__icon md-icon"></span>
+          Performance and Diagnostics
+        </label>
+        <ul class="md-nav__list" data-md-scrollfix>
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../performance/performance/" class="md-nav__link">
+        Measuring Performance
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../performance/caching/" class="md-nav__link">
+        Caching
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../performance/inlining/" class="md-nav__link">
+        Inlining
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../diagnostics_and_troubleshooting/Bodoerrors/" class="md-nav__link">
+        Bodo Errors
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../diagnostics_and_troubleshooting/compilation/" class="md-nav__link">
+        Compilation Tips
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../diagnostics_and_troubleshooting/troubleaws/" class="md-nav__link">
+        Troubleshooting on AWS
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../diagnostics_and_troubleshooting/troubleazure/" class="md-nav__link">
+        Troubleshooting on Azure
+      </a>
+    </li>
+  
+
+            
+          
+        </ul>
+      </nav>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+  
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+      
+        <input class="md-nav__toggle md-toggle" data-md-toggle="__nav_8" data-md-state="indeterminate" type="checkbox" id="__nav_8" checked>
+      
+      
+      
+        
+          
+        
+          
+        
+      
+      
+        <label class="md-nav__link" for="__nav_8">
+          Help and Reference
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <nav class="md-nav" aria-label="Help and Reference" data-md-level="1">
+        <label class="md-nav__title" for="__nav_8">
+          <span class="md-nav__icon md-icon"></span>
+          Help and Reference
+        </label>
+        <ul class="md-nav__list" data-md-scrollfix>
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../help_and_reference/eula/" class="md-nav__link">
+        End User License Agreement
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../help_and_reference/releases/" class="md-nav__link">
+        Release Notes
+      </a>
+    </li>
+  
+
+            
+          
+        </ul>
+      </nav>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Bodo Parallel APIs">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Bodo Parallel APIs
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#bodoallgatherv" class="md-nav__link">
+    bodo.allgatherv
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#bodobarrier" class="md-nav__link">
+    bodo.barrier
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#bodogatherv" class="md-nav__link">
+    bodo.gatherv
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#bodoget_rank" class="md-nav__link">
+    bodo.get_rank
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#bodoget_size" class="md-nav__link">
+    bodo.get_size
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#bodorandom_shuffle" class="md-nav__link">
+    bodo.random_shuffle
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#bodorebalance" class="md-nav__link">
+    bodo.rebalance
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#bodoscatterv" class="md-nav__link">
+    bodo.scatterv
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          <div class="md-content" data-md-component="content">
+            <article class="md-content__inner md-typeset">
+              
+                
+
+
+<h1 id="bodoparallelapis">Bodo Parallel APIs<a class="headerlink" href="#bodoparallelapis" title="Permanent link">&para;</a></h1>
+<h2 id="bodoallgatherv">bodo.allgatherv<a class="headerlink" href="#bodoallgatherv" title="Permanent link">&para;</a></h2>
+<p><code><apihead>bodo.<apiname>allgatherv</apiname>(data, warn_if_rep=True)</apihead></code><br><br><br><br>
+gather data from all ranks and send to all, effectively replicating the data:</p>
+<p><strong><em>Arguments</em></strong></p>
+<ul>
+<li><code>data</code>: data to gather.</li>
+<li><code>warn_if_rep</code>: prints a BodoWarning if data to gather is replicated. </li>
+</ul>
+<p><strong><em>Example Usage</em></strong></p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1"></a><span class="kn">import</span> <span class="nn">bodo</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2"></a><span class="kn">import</span> <span class="nn">pandas</span> <span class="k">as</span> <span class="nn">pd</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3"></a>
+<a id="__codelineno-0-4" name="__codelineno-0-4"></a><span class="nd">@bodo</span><span class="o">.</span><span class="n">jit</span>
+<a id="__codelineno-0-5" name="__codelineno-0-5"></a><span class="k">def</span> <span class="nf">mean_power</span><span class="p">():</span>
+<a id="__codelineno-0-6" name="__codelineno-0-6"></a>    <span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_parquet</span><span class="p">(</span><span class="s2">&quot;data/cycling_dataset.pq&quot;</span><span class="p">)</span>
+<a id="__codelineno-0-7" name="__codelineno-0-7"></a>    <span class="k">return</span> <span class="n">bodo</span><span class="o">.</span><span class="n">allgatherv</span><span class="p">(</span><span class="n">df</span><span class="p">)</span>
+<a id="__codelineno-0-8" name="__codelineno-0-8"></a>
+<a id="__codelineno-0-9" name="__codelineno-0-9"></a><span class="n">df</span> <span class="o">=</span> <span class="n">mean_power</span><span class="p">()</span>
+<a id="__codelineno-0-10" name="__codelineno-0-10"></a><span class="nb">print</span><span class="p">(</span><span class="n">df</span><span class="p">)</span>
+</code></pre></div>
+<p>Save code in <code>test_allgatherv.py</code> file and run with <code>mpiexec</code>.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1"></a>mpiexec -n <span class="m">4</span> python test_allgatherv.py
+</code></pre></div>
+<p>Output:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1"></a><span class="go">[stdout:0]</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2"></a><span class="go">      Unnamed: 0    altitude  cadence  ...  power  speed                time</span>
+<a id="__codelineno-2-3" name="__codelineno-2-3"></a><span class="go">0              0  185.800003       51  ...     45  3.459 2016-10-20 22:01:26</span>
+<a id="__codelineno-2-4" name="__codelineno-2-4"></a><span class="go">1              1  185.800003       68  ...      0  3.710 2016-10-20 22:01:27</span>
+<a id="__codelineno-2-5" name="__codelineno-2-5"></a><span class="go">2              2  186.399994       38  ...     42  3.874 2016-10-20 22:01:28</span>
+<a id="__codelineno-2-6" name="__codelineno-2-6"></a><span class="go">3              3  186.800003       38  ...      5  4.135 2016-10-20 22:01:29</span>
+<a id="__codelineno-2-7" name="__codelineno-2-7"></a><span class="go">4              4  186.600006       38  ...      1  4.250 2016-10-20 22:01:30</span>
+<a id="__codelineno-2-8" name="__codelineno-2-8"></a><span class="go">...          ...         ...      ...  ...    ...    ...                 ...</span>
+<a id="__codelineno-2-9" name="__codelineno-2-9"></a><span class="go">3897        1127  178.199997        0  ...      0  3.497 2016-10-20 23:14:31</span>
+<a id="__codelineno-2-10" name="__codelineno-2-10"></a><span class="go">3898        1128  178.199997        0  ...      0  3.289 2016-10-20 23:14:32</span>
+<a id="__codelineno-2-11" name="__codelineno-2-11"></a><span class="go">3899        1129  178.199997        0  ...      0  2.969 2016-10-20 23:14:33</span>
+<a id="__codelineno-2-12" name="__codelineno-2-12"></a><span class="go">3900        1130  178.399994        0  ...      0  2.969 2016-10-20 23:14:34</span>
+<a id="__codelineno-2-13" name="__codelineno-2-13"></a><span class="go">3901        1131  178.399994        0  ...      0  2.853 2016-10-20 23:14:35</span>
+<a id="__codelineno-2-14" name="__codelineno-2-14"></a>
+<a id="__codelineno-2-15" name="__codelineno-2-15"></a><span class="go">[3902 rows x 10 columns]</span>
+<a id="__codelineno-2-16" name="__codelineno-2-16"></a><span class="go">[stdout:1]</span>
+<a id="__codelineno-2-17" name="__codelineno-2-17"></a><span class="go">      Unnamed: 0    altitude  cadence  ...  power  speed                time</span>
+<a id="__codelineno-2-18" name="__codelineno-2-18"></a><span class="go">0              0  185.800003       51  ...     45  3.459 2016-10-20 22:01:26</span>
+<a id="__codelineno-2-19" name="__codelineno-2-19"></a><span class="go">1              1  185.800003       68  ...      0  3.710 2016-10-20 22:01:27</span>
+<a id="__codelineno-2-20" name="__codelineno-2-20"></a><span class="go">2              2  186.399994       38  ...     42  3.874 2016-10-20 22:01:28</span>
+<a id="__codelineno-2-21" name="__codelineno-2-21"></a><span class="go">3              3  186.800003       38  ...      5  4.135 2016-10-20 22:01:29</span>
+<a id="__codelineno-2-22" name="__codelineno-2-22"></a><span class="go">4              4  186.600006       38  ...      1  4.250 2016-10-20 22:01:30</span>
+<a id="__codelineno-2-23" name="__codelineno-2-23"></a><span class="go">...          ...         ...      ...  ...    ...    ...                 ...</span>
+<a id="__codelineno-2-24" name="__codelineno-2-24"></a><span class="go">3897        1127  178.199997        0  ...      0  3.497 2016-10-20 23:14:31</span>
+<a id="__codelineno-2-25" name="__codelineno-2-25"></a><span class="go">3898        1128  178.199997        0  ...      0  3.289 2016-10-20 23:14:32</span>
+<a id="__codelineno-2-26" name="__codelineno-2-26"></a><span class="go">3899        1129  178.199997        0  ...      0  2.969 2016-10-20 23:14:33</span>
+<a id="__codelineno-2-27" name="__codelineno-2-27"></a><span class="go">3900        1130  178.399994        0  ...      0  2.969 2016-10-20 23:14:34</span>
+<a id="__codelineno-2-28" name="__codelineno-2-28"></a><span class="go">3901        1131  178.399994        0  ...      0  2.853 2016-10-20 23:14:35</span>
+<a id="__codelineno-2-29" name="__codelineno-2-29"></a>
+<a id="__codelineno-2-30" name="__codelineno-2-30"></a><span class="go">[3902 rows x 10 columns]</span>
+<a id="__codelineno-2-31" name="__codelineno-2-31"></a><span class="go">[stdout:2]</span>
+<a id="__codelineno-2-32" name="__codelineno-2-32"></a><span class="go">      Unnamed: 0    altitude  cadence  ...  power  speed                time</span>
+<a id="__codelineno-2-33" name="__codelineno-2-33"></a><span class="go">0              0  185.800003       51  ...     45  3.459 2016-10-20 22:01:26</span>
+<a id="__codelineno-2-34" name="__codelineno-2-34"></a><span class="go">1              1  185.800003       68  ...      0  3.710 2016-10-20 22:01:27</span>
+<a id="__codelineno-2-35" name="__codelineno-2-35"></a><span class="go">2              2  186.399994       38  ...     42  3.874 2016-10-20 22:01:28</span>
+<a id="__codelineno-2-36" name="__codelineno-2-36"></a><span class="go">3              3  186.800003       38  ...      5  4.135 2016-10-20 22:01:29</span>
+<a id="__codelineno-2-37" name="__codelineno-2-37"></a><span class="go">4              4  186.600006       38  ...      1  4.250 2016-10-20 22:01:30</span>
+<a id="__codelineno-2-38" name="__codelineno-2-38"></a><span class="go">...          ...         ...      ...  ...    ...    ...                 ...</span>
+<a id="__codelineno-2-39" name="__codelineno-2-39"></a><span class="go">3897        1127  178.199997        0  ...      0  3.497 2016-10-20 23:14:31</span>
+<a id="__codelineno-2-40" name="__codelineno-2-40"></a><span class="go">3898        1128  178.199997        0  ...      0  3.289 2016-10-20 23:14:32</span>
+<a id="__codelineno-2-41" name="__codelineno-2-41"></a><span class="go">3899        1129  178.199997        0  ...      0  2.969 2016-10-20 23:14:33</span>
+<a id="__codelineno-2-42" name="__codelineno-2-42"></a><span class="go">3900        1130  178.399994        0  ...      0  2.969 2016-10-20 23:14:34</span>
+<a id="__codelineno-2-43" name="__codelineno-2-43"></a><span class="go">3901        1131  178.399994        0  ...      0  2.853 2016-10-20 23:14:35</span>
+<a id="__codelineno-2-44" name="__codelineno-2-44"></a>
+<a id="__codelineno-2-45" name="__codelineno-2-45"></a><span class="go">[3902 rows x 10 columns]</span>
+<a id="__codelineno-2-46" name="__codelineno-2-46"></a><span class="go">[stdout:3]</span>
+<a id="__codelineno-2-47" name="__codelineno-2-47"></a><span class="go">      Unnamed: 0    altitude  cadence  ...  power  speed                time</span>
+<a id="__codelineno-2-48" name="__codelineno-2-48"></a><span class="go">0              0  185.800003       51  ...     45  3.459 2016-10-20 22:01:26</span>
+<a id="__codelineno-2-49" name="__codelineno-2-49"></a><span class="go">1              1  185.800003       68  ...      0  3.710 2016-10-20 22:01:27</span>
+<a id="__codelineno-2-50" name="__codelineno-2-50"></a><span class="go">2              2  186.399994       38  ...     42  3.874 2016-10-20 22:01:28</span>
+<a id="__codelineno-2-51" name="__codelineno-2-51"></a><span class="go">3              3  186.800003       38  ...      5  4.135 2016-10-20 22:01:29</span>
+<a id="__codelineno-2-52" name="__codelineno-2-52"></a><span class="go">4              4  186.600006       38  ...      1  4.250 2016-10-20 22:01:30</span>
+<a id="__codelineno-2-53" name="__codelineno-2-53"></a><span class="go">...          ...         ...      ...  ...    ...    ...                 ...</span>
+<a id="__codelineno-2-54" name="__codelineno-2-54"></a><span class="go">3897        1127  178.199997        0  ...      0  3.497 2016-10-20 23:14:31</span>
+<a id="__codelineno-2-55" name="__codelineno-2-55"></a><span class="go">3898        1128  178.199997        0  ...      0  3.289 2016-10-20 23:14:32</span>
+<a id="__codelineno-2-56" name="__codelineno-2-56"></a><span class="go">3899        1129  178.199997        0  ...      0  2.969 2016-10-20 23:14:33</span>
+<a id="__codelineno-2-57" name="__codelineno-2-57"></a><span class="go">3900        1130  178.399994        0  ...      0  2.969 2016-10-20 23:14:34</span>
+<a id="__codelineno-2-58" name="__codelineno-2-58"></a><span class="go">3901        1131  178.399994        0  ...      0  2.853 2016-10-20 23:14:35</span>
+<a id="__codelineno-2-59" name="__codelineno-2-59"></a>
+<a id="__codelineno-2-60" name="__codelineno-2-60"></a><span class="go">[3902 rows x 10 columns]</span>
+</code></pre></div>
+<h2 id="bodobarrier">bodo.barrier<a class="headerlink" href="#bodobarrier" title="Permanent link">&para;</a></h2>
+<p><code><apihead>bodo.<apiname>barrier</apiname>()</apihead></code><br><br><br><br> 
+Synchronize all processes. Block process from proceeding until all processes reach this point.</p>
+<p><strong><em>Example Usage</em></strong></p>
+<p>A typical example is to make sure all processes see side effects simultaneously.
+For example, a process can delete files from storage while
+others wait before writing to file:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1"></a><span class="kn">import</span> <span class="nn">shutil</span><span class="o">,</span> <span class="nn">os</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2"></a><span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+<a id="__codelineno-3-3" name="__codelineno-3-3"></a>
+<a id="__codelineno-3-4" name="__codelineno-3-4"></a><span class="c1"># remove file if exists</span>
+<a id="__codelineno-3-5" name="__codelineno-3-5"></a><span class="k">if</span> <span class="n">bodo</span><span class="o">.</span><span class="n">get_rank</span><span class="p">()</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+<a id="__codelineno-3-6" name="__codelineno-3-6"></a>    <span class="k">if</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="s2">&quot;data/data.pq&quot;</span><span class="p">):</span>
+<a id="__codelineno-3-7" name="__codelineno-3-7"></a>        <span class="n">shutil</span><span class="o">.</span><span class="n">rmtree</span><span class="p">(</span><span class="s2">&quot;data/data.pq&quot;</span><span class="p">)</span>
+<a id="__codelineno-3-8" name="__codelineno-3-8"></a>
+<a id="__codelineno-3-9" name="__codelineno-3-9"></a><span class="c1"># make sure all processes are synchronized</span>
+<a id="__codelineno-3-10" name="__codelineno-3-10"></a><span class="c1"># (e.g. all processes need to see effect of rank 0&#39;s work)</span>
+<a id="__codelineno-3-11" name="__codelineno-3-11"></a><span class="n">bodo</span><span class="o">.</span><span class="n">barrier</span><span class="p">()</span>
+<a id="__codelineno-3-12" name="__codelineno-3-12"></a>
+<a id="__codelineno-3-13" name="__codelineno-3-13"></a>
+<a id="__codelineno-3-14" name="__codelineno-3-14"></a><span class="nd">@bodo</span><span class="o">.</span><span class="n">jit</span>
+<a id="__codelineno-3-15" name="__codelineno-3-15"></a><span class="k">def</span> <span class="nf">f</span><span class="p">(</span><span class="n">n</span><span class="p">):</span>
+<a id="__codelineno-3-16" name="__codelineno-3-16"></a>    <span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span><span class="s2">&quot;A&quot;</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">n</span><span class="p">)})</span>
+<a id="__codelineno-3-17" name="__codelineno-3-17"></a>    <span class="n">df</span><span class="o">.</span><span class="n">to_parquet</span><span class="p">(</span><span class="s2">&quot;data/data.pq&quot;</span><span class="p">)</span>
+<a id="__codelineno-3-18" name="__codelineno-3-18"></a>
+<a id="__codelineno-3-19" name="__codelineno-3-19"></a>
+<a id="__codelineno-3-20" name="__codelineno-3-20"></a><span class="n">f</span><span class="p">(</span><span class="mi">10</span><span class="p">)</span>
+</code></pre></div>
+<p>The following figure illustrates what happens when processes call
+<code>bodo.barrier()</code>. When barrier is called, a process pauses and waits
+until all other processes have reached the barrier:</p>
+<p><img alt="Process synchronization with Barrier" src="../../img/barrier.svg#center" /></p>
+<div class="admonition danger">
+<p class="admonition-title">Danger</p>
+<p>The example above shows that it is possible to have each process
+follow a different control flow, but all processes must always call
+the same Bodo functions in the same order.</p>
+</div>
+<h2 id="bodogatherv">bodo.gatherv<a class="headerlink" href="#bodogatherv" title="Permanent link">&para;</a></h2>
+<p><code><apihead>bodo.<apiname>gatherv</apiname>(data, allgather=False, warn_if_rep=True, root=0)</apihead></code><br><br><br><br> 
+Collect distributed data manually by <em>gathering</em> them into a single rank. </p>
+<p><strong><em>Arguments</em></strong></p>
+<ul>
+<li><code>data</code>: data to gather.</li>
+<li><code>root</code>: specify rank to collect the data. Default: rank <code>0</code>.</li>
+<li><code>warn_if_rep</code>: prints a BodoWarning if data to gather is replicated. </li>
+<li><code>allgather</code>: send gathered data to all ranks. Default: <code>False</code>. Same behavior as <code>bodo.allgatherv</code>.</li>
+</ul>
+<p><strong><em>Example Usage</em></strong></p>
+<p><div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1"></a><span class="kn">import</span> <span class="nn">bodo</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2"></a><span class="kn">import</span> <span class="nn">pandas</span> <span class="k">as</span> <span class="nn">pd</span>
+<a id="__codelineno-4-3" name="__codelineno-4-3"></a>
+<a id="__codelineno-4-4" name="__codelineno-4-4"></a><span class="nd">@bodo</span><span class="o">.</span><span class="n">jit</span>
+<a id="__codelineno-4-5" name="__codelineno-4-5"></a><span class="k">def</span> <span class="nf">mean_power</span><span class="p">():</span>
+<a id="__codelineno-4-6" name="__codelineno-4-6"></a>    <span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_parquet</span><span class="p">(</span><span class="s2">&quot;data/cycling_dataset.pq&quot;</span><span class="p">)</span>
+<a id="__codelineno-4-7" name="__codelineno-4-7"></a>    <span class="k">return</span> <span class="n">bodo</span><span class="o">.</span><span class="n">gatherv</span><span class="p">(</span><span class="n">df</span><span class="p">,</span> <span class="n">root</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+<a id="__codelineno-4-8" name="__codelineno-4-8"></a>
+<a id="__codelineno-4-9" name="__codelineno-4-9"></a><span class="n">df</span> <span class="o">=</span> <span class="n">mean_power</span><span class="p">()</span>
+<a id="__codelineno-4-10" name="__codelineno-4-10"></a><span class="nb">print</span><span class="p">(</span><span class="n">df</span><span class="p">)</span>
+</code></pre></div>
+Save code in <code>test_gatherv.py</code> file and run with <code>mpiexec</code>.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1"></a>mpiexec -n <span class="m">4</span> python test_gatherv.py
+</code></pre></div>
+<p>Output:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1"></a><span class="go">[stdout:1]</span>
+<a id="__codelineno-6-2" name="__codelineno-6-2"></a><span class="go">      Unnamed: 0    altitude  cadence  ...  power  speed                time</span>
+<a id="__codelineno-6-3" name="__codelineno-6-3"></a><span class="go">0              0  185.800003       51  ...     45  3.459 2016-10-20 22:01:26</span>
+<a id="__codelineno-6-4" name="__codelineno-6-4"></a><span class="go">1              1  185.800003       68  ...      0  3.710 2016-10-20 22:01:27</span>
+<a id="__codelineno-6-5" name="__codelineno-6-5"></a><span class="go">2              2  186.399994       38  ...     42  3.874 2016-10-20 22:01:28</span>
+<a id="__codelineno-6-6" name="__codelineno-6-6"></a><span class="go">3              3  186.800003       38  ...      5  4.135 2016-10-20 22:01:29</span>
+<a id="__codelineno-6-7" name="__codelineno-6-7"></a><span class="go">4              4  186.600006       38  ...      1  4.250 2016-10-20 22:01:30</span>
+<a id="__codelineno-6-8" name="__codelineno-6-8"></a><span class="go">...          ...         ...      ...  ...    ...    ...                 ...</span>
+<a id="__codelineno-6-9" name="__codelineno-6-9"></a><span class="go">3897        1127  178.199997        0  ...      0  3.497 2016-10-20 23:14:31</span>
+<a id="__codelineno-6-10" name="__codelineno-6-10"></a><span class="go">3898        1128  178.199997        0  ...      0  3.289 2016-10-20 23:14:32</span>
+<a id="__codelineno-6-11" name="__codelineno-6-11"></a><span class="go">3899        1129  178.199997        0  ...      0  2.969 2016-10-20 23:14:33</span>
+<a id="__codelineno-6-12" name="__codelineno-6-12"></a><span class="go">3900        1130  178.399994        0  ...      0  2.969 2016-10-20 23:14:34</span>
+<a id="__codelineno-6-13" name="__codelineno-6-13"></a><span class="go">3901        1131  178.399994        0  ...      0  2.853 2016-10-20 23:14:35</span>
+<a id="__codelineno-6-14" name="__codelineno-6-14"></a>
+<a id="__codelineno-6-15" name="__codelineno-6-15"></a><span class="go">[3902 rows x 10 columns]</span>
+<a id="__codelineno-6-16" name="__codelineno-6-16"></a><span class="go">[stdout:0]</span>
+<a id="__codelineno-6-17" name="__codelineno-6-17"></a><span class="go">Empty DataFrame</span>
+<a id="__codelineno-6-18" name="__codelineno-6-18"></a><span class="go">Columns: [Unnamed: 0, altitude, cadence, distance, hr, latitude, longitude, power, speed, time]</span>
+<a id="__codelineno-6-19" name="__codelineno-6-19"></a><span class="go">Index: []</span>
+<a id="__codelineno-6-20" name="__codelineno-6-20"></a>
+<a id="__codelineno-6-21" name="__codelineno-6-21"></a><span class="go">[0 rows x 10 columns]</span>
+<a id="__codelineno-6-22" name="__codelineno-6-22"></a><span class="go">[stdout:2]</span>
+<a id="__codelineno-6-23" name="__codelineno-6-23"></a><span class="go">Empty DataFrame</span>
+<a id="__codelineno-6-24" name="__codelineno-6-24"></a><span class="go">Columns: [Unnamed: 0, altitude, cadence, distance, hr, latitude, longitude, power, speed, time]</span>
+<a id="__codelineno-6-25" name="__codelineno-6-25"></a><span class="go">Index: []</span>
+<a id="__codelineno-6-26" name="__codelineno-6-26"></a>
+<a id="__codelineno-6-27" name="__codelineno-6-27"></a><span class="go">[0 rows x 10 columns]</span>
+<a id="__codelineno-6-28" name="__codelineno-6-28"></a><span class="go">[stdout:3]</span>
+<a id="__codelineno-6-29" name="__codelineno-6-29"></a><span class="go">Empty DataFrame</span>
+<a id="__codelineno-6-30" name="__codelineno-6-30"></a><span class="go">Columns: [Unnamed: 0, altitude, cadence, distance, hr, latitude, longitude, power, speed, time]</span>
+<a id="__codelineno-6-31" name="__codelineno-6-31"></a><span class="go">Index: []</span>
+<a id="__codelineno-6-32" name="__codelineno-6-32"></a>
+<a id="__codelineno-6-33" name="__codelineno-6-33"></a><span class="go">[0 rows x 10 columns]</span>
+</code></pre></div>
+<h2 id="bodoget_rank">bodo.get_rank<a class="headerlink" href="#bodoget_rank" title="Permanent link">&para;</a></h2>
+<p><code><apihead>bodo.<apiname>get_rank</apiname>()</apihead></code><br><br><br>
+<br>
+Get the process number from Bodo (called <code>rank</code> in MPI terminology).</p>
+<p><strong><em>Example Usage</em></strong></p>
+<p>Save following code in <code>get_rank.py</code> file and run with <code>mpiexec</code>.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1"></a><span class="kn">import</span> <span class="nn">bodo</span>
+<a id="__codelineno-7-2" name="__codelineno-7-2"></a><span class="c1"># some work only on rank 0</span>
+<a id="__codelineno-7-3" name="__codelineno-7-3"></a><span class="k">if</span> <span class="n">bodo</span><span class="o">.</span><span class="n">get_rank</span><span class="p">()</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+<a id="__codelineno-7-4" name="__codelineno-7-4"></a>    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;rank 0 done&quot;</span><span class="p">)</span>
+<a id="__codelineno-7-5" name="__codelineno-7-5"></a>
+<a id="__codelineno-7-6" name="__codelineno-7-6"></a><span class="c1"># some work on every process</span>
+<a id="__codelineno-7-7" name="__codelineno-7-7"></a><span class="nb">print</span><span class="p">(</span><span class="s2">&quot;rank&quot;</span><span class="p">,</span> <span class="n">bodo</span><span class="o">.</span><span class="n">get_rank</span><span class="p">(),</span> <span class="s2">&quot;here&quot;</span><span class="p">)</span>
+</code></pre></div>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1"></a><span class="go">mpiexec -n 4 python get_rank.py</span>
+</code></pre></div>
+<p>Output</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1"></a><span class="go">rank 0 done</span>
+<a id="__codelineno-9-2" name="__codelineno-9-2"></a><span class="go">rank 0 here</span>
+<a id="__codelineno-9-3" name="__codelineno-9-3"></a><span class="go">rank 1 here</span>
+<a id="__codelineno-9-4" name="__codelineno-9-4"></a><span class="go">rank 2 here</span>
+<a id="__codelineno-9-5" name="__codelineno-9-5"></a><span class="go">rank 3 here</span>
+</code></pre></div>
+<h2 id="bodoget_size">bodo.get_size<a class="headerlink" href="#bodoget_size" title="Permanent link">&para;</a></h2>
+<p><code><apihead>bodo.<apiname>get_size</apiname>()</apihead> </code><br><br><br><br>
+Get the total number of processes.</p>
+<p><strong><em>Example Usage</em></strong></p>
+<p>Save following code in <code>get_rank_size.py</code> file and run with <code>mpiexec</code>.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1"></a><span class="kn">import</span> <span class="nn">bodo</span>
+<a id="__codelineno-10-2" name="__codelineno-10-2"></a><span class="c1"># some work only on rank 0</span>
+<a id="__codelineno-10-3" name="__codelineno-10-3"></a><span class="k">if</span> <span class="n">bodo</span><span class="o">.</span><span class="n">get_rank</span><span class="p">()</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+<a id="__codelineno-10-4" name="__codelineno-10-4"></a>    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;rank 0 done&quot;</span><span class="p">)</span>
+<a id="__codelineno-10-5" name="__codelineno-10-5"></a>
+<a id="__codelineno-10-6" name="__codelineno-10-6"></a><span class="c1"># some work on every process</span>
+<a id="__codelineno-10-7" name="__codelineno-10-7"></a><span class="nb">print</span><span class="p">(</span><span class="s2">&quot;rank&quot;</span><span class="p">,</span> <span class="n">bodo</span><span class="o">.</span><span class="n">get_rank</span><span class="p">(),</span> <span class="s2">&quot;here&quot;</span><span class="p">)</span>
+<a id="__codelineno-10-8" name="__codelineno-10-8"></a><span class="nb">print</span><span class="p">(</span><span class="s2">&quot;total ranks:&quot;</span><span class="p">,</span> <span class="n">bodo</span><span class="o">.</span><span class="n">get_size</span><span class="p">())</span>
+</code></pre></div>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1"></a><span class="go">mpiexec -n 4 python get_rank_size.py</span>
+</code></pre></div>
+<p>Output</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1"></a><span class="go">rank 0 done</span>
+<a id="__codelineno-12-2" name="__codelineno-12-2"></a><span class="go">rank 0 here</span>
+<a id="__codelineno-12-3" name="__codelineno-12-3"></a><span class="go">total ranks: 4</span>
+<a id="__codelineno-12-4" name="__codelineno-12-4"></a><span class="go">rank 1 here</span>
+<a id="__codelineno-12-5" name="__codelineno-12-5"></a><span class="go">total ranks: 4</span>
+<a id="__codelineno-12-6" name="__codelineno-12-6"></a><span class="go">rank 2 here</span>
+<a id="__codelineno-12-7" name="__codelineno-12-7"></a><span class="go">total ranks: 4</span>
+<a id="__codelineno-12-8" name="__codelineno-12-8"></a><span class="go">rank 3 here</span>
+<a id="__codelineno-12-9" name="__codelineno-12-9"></a><span class="go">total ranks: 4</span>
+</code></pre></div>
+<h2 id="bodorandom_shuffle">bodo.random_shuffle<a class="headerlink" href="#bodorandom_shuffle" title="Permanent link">&para;</a></h2>
+<p><code><apihead>bodo.<apiname>random_shuffle</apiname>(data, seed=None, dests=None, parallel=False)</apihead></code><br><br><br><br>
+Manually shuffle data evenly across selected ranks.</p>
+<p><strong><em>Arguments</em></strong></p>
+<ul>
+<li><code>data</code>: data to shuffle.</li>
+<li><code>seed</code>: number to initialze random number generator.</li>
+<li><code>dests</code>: selected ranks to distribute shuffled data to. By default, distribution includes all ranks.</li>
+<li><code>parallel</code>: flag to indicate whether data is distributed. Default: <code>False</code>. Inside JIT default value depends on Bodo's distribution analysis algorithm for the data passed (For more information, see Data Distribution section below).</li>
+</ul>
+<p><strong><em>Example Usage</em></strong></p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1"></a><span class="kn">import</span> <span class="nn">bodo</span>
+<a id="__codelineno-13-2" name="__codelineno-13-2"></a><span class="kn">import</span> <span class="nn">pandas</span> <span class="k">as</span> <span class="nn">pd</span>
+<a id="__codelineno-13-3" name="__codelineno-13-3"></a>
+<a id="__codelineno-13-4" name="__codelineno-13-4"></a><span class="nd">@bodo</span><span class="o">.</span><span class="n">jit</span>
+<a id="__codelineno-13-5" name="__codelineno-13-5"></a><span class="k">def</span> <span class="nf">test_random_shuffle</span><span class="p">():</span>
+<a id="__codelineno-13-6" name="__codelineno-13-6"></a>    <span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span><span class="s2">&quot;A&quot;</span><span class="p">:</span> <span class="nb">range</span><span class="p">(</span><span class="mi">100</span><span class="p">)})</span>
+<a id="__codelineno-13-7" name="__codelineno-13-7"></a>    <span class="k">return</span> <span class="n">df</span>
+<a id="__codelineno-13-8" name="__codelineno-13-8"></a>
+<a id="__codelineno-13-9" name="__codelineno-13-9"></a><span class="n">df</span> <span class="o">=</span> <span class="n">test_random_shuffle</span><span class="p">()</span>
+<a id="__codelineno-13-10" name="__codelineno-13-10"></a><span class="nb">print</span><span class="p">(</span><span class="n">df</span><span class="o">.</span><span class="n">head</span><span class="p">())</span>
+<a id="__codelineno-13-11" name="__codelineno-13-11"></a><span class="n">df</span> <span class="o">=</span> <span class="n">bodo</span><span class="o">.</span><span class="n">random_shuffle</span><span class="p">(</span><span class="n">res</span><span class="p">,</span> <span class="n">parallel</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<a id="__codelineno-13-12" name="__codelineno-13-12"></a><span class="nb">print</span><span class="p">(</span><span class="n">df</span><span class="o">.</span><span class="n">head</span><span class="p">())</span>
+</code></pre></div>
+<p>Save code in <code>test_random_shuffle.py</code> file and run with <code>mpiexec</code>.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1"></a>mpiexec -n <span class="m">4</span> python test_random_shuffle.py
+</code></pre></div>
+<p>Output:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-15-1" name="__codelineno-15-1"></a><span class="go">[stdout:1]</span>
+<a id="__codelineno-15-2" name="__codelineno-15-2"></a><span class="go">    A</span>
+<a id="__codelineno-15-3" name="__codelineno-15-3"></a><span class="go">0  25</span>
+<a id="__codelineno-15-4" name="__codelineno-15-4"></a><span class="go">1  26</span>
+<a id="__codelineno-15-5" name="__codelineno-15-5"></a><span class="go">2  27</span>
+<a id="__codelineno-15-6" name="__codelineno-15-6"></a><span class="go">3  28</span>
+<a id="__codelineno-15-7" name="__codelineno-15-7"></a><span class="go">4  29</span>
+<a id="__codelineno-15-8" name="__codelineno-15-8"></a><span class="go">    A</span>
+<a id="__codelineno-15-9" name="__codelineno-15-9"></a><span class="go">19  19</span>
+<a id="__codelineno-15-10" name="__codelineno-15-10"></a><span class="go">10  10</span>
+<a id="__codelineno-15-11" name="__codelineno-15-11"></a><span class="go">17  42</span>
+<a id="__codelineno-15-12" name="__codelineno-15-12"></a><span class="go">9    9</span>
+<a id="__codelineno-15-13" name="__codelineno-15-13"></a><span class="go">17  17</span>
+<a id="__codelineno-15-14" name="__codelineno-15-14"></a><span class="go">[stdout:3]</span>
+<a id="__codelineno-15-15" name="__codelineno-15-15"></a><span class="go">    A</span>
+<a id="__codelineno-15-16" name="__codelineno-15-16"></a><span class="go">0  75</span>
+<a id="__codelineno-15-17" name="__codelineno-15-17"></a><span class="go">1  76</span>
+<a id="__codelineno-15-18" name="__codelineno-15-18"></a><span class="go">2  77</span>
+<a id="__codelineno-15-19" name="__codelineno-15-19"></a><span class="go">3  78</span>
+<a id="__codelineno-15-20" name="__codelineno-15-20"></a><span class="go">4  79</span>
+<a id="__codelineno-15-21" name="__codelineno-15-21"></a><span class="go">    A</span>
+<a id="__codelineno-15-22" name="__codelineno-15-22"></a><span class="go">6   31</span>
+<a id="__codelineno-15-23" name="__codelineno-15-23"></a><span class="go">0   25</span>
+<a id="__codelineno-15-24" name="__codelineno-15-24"></a><span class="go">24  49</span>
+<a id="__codelineno-15-25" name="__codelineno-15-25"></a><span class="go">22  22</span>
+<a id="__codelineno-15-26" name="__codelineno-15-26"></a><span class="go">5   30</span>
+<a id="__codelineno-15-27" name="__codelineno-15-27"></a><span class="go">[stdout:2]</span>
+<a id="__codelineno-15-28" name="__codelineno-15-28"></a><span class="go">    A</span>
+<a id="__codelineno-15-29" name="__codelineno-15-29"></a><span class="go">0  50</span>
+<a id="__codelineno-15-30" name="__codelineno-15-30"></a><span class="go">1  51</span>
+<a id="__codelineno-15-31" name="__codelineno-15-31"></a><span class="go">2  52</span>
+<a id="__codelineno-15-32" name="__codelineno-15-32"></a><span class="go">3  53</span>
+<a id="__codelineno-15-33" name="__codelineno-15-33"></a><span class="go">4  54</span>
+<a id="__codelineno-15-34" name="__codelineno-15-34"></a><span class="go">    A</span>
+<a id="__codelineno-15-35" name="__codelineno-15-35"></a><span class="go">11  36</span>
+<a id="__codelineno-15-36" name="__codelineno-15-36"></a><span class="go">24  24</span>
+<a id="__codelineno-15-37" name="__codelineno-15-37"></a><span class="go">15  65</span>
+<a id="__codelineno-15-38" name="__codelineno-15-38"></a><span class="go">14  14</span>
+<a id="__codelineno-15-39" name="__codelineno-15-39"></a><span class="go">10  35</span>
+<a id="__codelineno-15-40" name="__codelineno-15-40"></a><span class="go">[stdout:0]</span>
+<a id="__codelineno-15-41" name="__codelineno-15-41"></a><span class="go">    A</span>
+<a id="__codelineno-15-42" name="__codelineno-15-42"></a><span class="go">0  0</span>
+<a id="__codelineno-15-43" name="__codelineno-15-43"></a><span class="go">1  1</span>
+<a id="__codelineno-15-44" name="__codelineno-15-44"></a><span class="go">2  2</span>
+<a id="__codelineno-15-45" name="__codelineno-15-45"></a><span class="go">3  3</span>
+<a id="__codelineno-15-46" name="__codelineno-15-46"></a><span class="go">4  4</span>
+<a id="__codelineno-15-47" name="__codelineno-15-47"></a><span class="go">    A</span>
+<a id="__codelineno-15-48" name="__codelineno-15-48"></a><span class="go">4   29</span>
+<a id="__codelineno-15-49" name="__codelineno-15-49"></a><span class="go">18  18</span>
+<a id="__codelineno-15-50" name="__codelineno-15-50"></a><span class="go">8   58</span>
+<a id="__codelineno-15-51" name="__codelineno-15-51"></a><span class="go">15  15</span>
+<a id="__codelineno-15-52" name="__codelineno-15-52"></a><span class="go">3   28</span>
+</code></pre></div>
+<h2 id="bodorebalance">bodo.rebalance<a class="headerlink" href="#bodorebalance" title="Permanent link">&para;</a></h2>
+<p><code><apihead>bodo.<apiname>rebalance</apiname>(data, dests=None, random=False, random_seed=None, parallel=False)</apihead> </code><br><br><br><br>
+Manually redistribute data evenly across [selected] ranks.</p>
+<p><strong><em>Arguments</em></strong></p>
+<ul>
+<li><code>data</code>: data to rebalance.</li>
+<li><code>dests</code>: selected ranks to distribute data to. By default, distribution includes all ranks.</li>
+<li><code>random</code>: flag to randomize order of the rows of the data. Default: <code>False</code>.</li>
+<li><code>random_seed</code>: number to initialize random number generator.</li>
+<li><code>parallel</code>: flag to indicate whether data is distributed. Default: <code>False</code>. Inside JIT default value depends on Bodo's distribution analysis algorithm for the data passed (For more information, see Data Distribution section below).</li>
+</ul>
+<p><strong><em>Example Usage</em></strong> </p>
+<ul>
+<li>
+<p>Example with just the <code>parallel</code> flag set to <code>True</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-16-1" name="__codelineno-16-1"></a><span class="kn">import</span> <span class="nn">bodo</span>
+<a id="__codelineno-16-2" name="__codelineno-16-2"></a><span class="kn">import</span> <span class="nn">pandas</span> <span class="k">as</span> <span class="nn">pd</span>
+<a id="__codelineno-16-3" name="__codelineno-16-3"></a>
+<a id="__codelineno-16-4" name="__codelineno-16-4"></a><span class="nd">@bodo</span><span class="o">.</span><span class="n">jit</span>
+<a id="__codelineno-16-5" name="__codelineno-16-5"></a><span class="k">def</span> <span class="nf">mean_power</span><span class="p">():</span>
+<a id="__codelineno-16-6" name="__codelineno-16-6"></a>    <span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_parquet</span><span class="p">(</span><span class="s2">&quot;data/cycling_dataset.pq&quot;</span><span class="p">)</span>
+<a id="__codelineno-16-7" name="__codelineno-16-7"></a>    <span class="n">df</span> <span class="o">=</span> <span class="n">df</span><span class="o">.</span><span class="n">sort_values</span><span class="p">(</span><span class="s2">&quot;power&quot;</span><span class="p">)[</span><span class="n">df</span><span class="p">[</span><span class="s2">&quot;power&quot;</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mi">400</span><span class="p">]</span>
+<a id="__codelineno-16-8" name="__codelineno-16-8"></a>    <span class="k">return</span> <span class="n">df</span>
+<a id="__codelineno-16-9" name="__codelineno-16-9"></a>
+<a id="__codelineno-16-10" name="__codelineno-16-10"></a><span class="n">df</span> <span class="o">=</span> <span class="n">mean_power</span><span class="p">()</span>
+<a id="__codelineno-16-11" name="__codelineno-16-11"></a><span class="nb">print</span><span class="p">(</span><span class="n">df</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+<a id="__codelineno-16-12" name="__codelineno-16-12"></a><span class="n">df</span> <span class="o">=</span> <span class="n">bodo</span><span class="o">.</span><span class="n">rebalance</span><span class="p">(</span><span class="n">df</span><span class="p">,</span> <span class="n">parallel</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<a id="__codelineno-16-13" name="__codelineno-16-13"></a><span class="nb">print</span><span class="p">(</span><span class="s2">&quot;After rebalance: &quot;</span><span class="p">,</span> <span class="n">df</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+</code></pre></div>
+<p>Save code in <code>test_rebalance.py</code> file and run with <code>mpiexec</code>.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-17-1" name="__codelineno-17-1"></a>mpiexec -n <span class="m">4</span> python test_rebalance.py
+</code></pre></div>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-18-1" name="__codelineno-18-1"></a><span class="go">[stdout:0]</span>
+<a id="__codelineno-18-2" name="__codelineno-18-2"></a><span class="gp gp-VirtualEnv">(5, 10)</span>
+<a id="__codelineno-18-3" name="__codelineno-18-3"></a><span class="go">After rebalance: (33, 10)</span>
+<a id="__codelineno-18-4" name="__codelineno-18-4"></a><span class="go">[stdout:1]</span>
+<a id="__codelineno-18-5" name="__codelineno-18-5"></a><span class="gp gp-VirtualEnv">(18, 10)</span>
+<a id="__codelineno-18-6" name="__codelineno-18-6"></a><span class="go">After rebalance: (33, 10)</span>
+<a id="__codelineno-18-7" name="__codelineno-18-7"></a><span class="go">[stdout:2]</span>
+<a id="__codelineno-18-8" name="__codelineno-18-8"></a><span class="gp gp-VirtualEnv">(82, 10)</span>
+<a id="__codelineno-18-9" name="__codelineno-18-9"></a><span class="go">After rebalance: (33, 10)</span>
+<a id="__codelineno-18-10" name="__codelineno-18-10"></a><span class="go">[stdout:3]</span>
+<a id="__codelineno-18-11" name="__codelineno-18-11"></a><span class="gp gp-VirtualEnv">(26, 10)</span>
+<a id="__codelineno-18-12" name="__codelineno-18-12"></a><span class="go">After rebalance: (32, 10)</span>
+</code></pre></div>
+</li>
+<li>
+<p>Example to distribute the data from all ranks to subset of ranks using <code>dests</code> argument.</p>
+<p><div class="highlight"><pre><span></span><code><a id="__codelineno-19-1" name="__codelineno-19-1"></a><span class="kn">import</span> <span class="nn">bodo</span>
+<a id="__codelineno-19-2" name="__codelineno-19-2"></a><span class="kn">import</span> <span class="nn">pandas</span> <span class="k">as</span> <span class="nn">pd</span>
+<a id="__codelineno-19-3" name="__codelineno-19-3"></a>
+<a id="__codelineno-19-4" name="__codelineno-19-4"></a><span class="nd">@bodo</span><span class="o">.</span><span class="n">jit</span>
+<a id="__codelineno-19-5" name="__codelineno-19-5"></a><span class="k">def</span> <span class="nf">mean_power</span><span class="p">():</span>
+<a id="__codelineno-19-6" name="__codelineno-19-6"></a>    <span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_parquet</span><span class="p">(</span><span class="s2">&quot;data/cycling_dataset.pq&quot;</span><span class="p">)</span>
+<a id="__codelineno-19-7" name="__codelineno-19-7"></a>    <span class="n">df</span> <span class="o">=</span> <span class="n">df</span><span class="o">.</span><span class="n">sort_values</span><span class="p">(</span><span class="s2">&quot;power&quot;</span><span class="p">)[</span><span class="n">df</span><span class="p">[</span><span class="s2">&quot;power&quot;</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mi">400</span><span class="p">]</span>
+<a id="__codelineno-19-8" name="__codelineno-19-8"></a>    <span class="k">return</span> <span class="n">df</span>
+<a id="__codelineno-19-9" name="__codelineno-19-9"></a>
+<a id="__codelineno-19-10" name="__codelineno-19-10"></a><span class="n">df</span> <span class="o">=</span> <span class="n">mean_power</span><span class="p">()</span>
+<a id="__codelineno-19-11" name="__codelineno-19-11"></a><span class="nb">print</span><span class="p">(</span><span class="n">df</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+<a id="__codelineno-19-12" name="__codelineno-19-12"></a><span class="n">df</span> <span class="o">=</span> <span class="n">bodo</span><span class="o">.</span><span class="n">rebalance</span><span class="p">(</span><span class="n">df</span><span class="p">,</span> <span class="n">dests</span><span class="o">=</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span><span class="mi">3</span><span class="p">],</span> <span class="n">parallel</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<a id="__codelineno-19-13" name="__codelineno-19-13"></a><span class="nb">print</span><span class="p">(</span><span class="s2">&quot;After rebalance: &quot;</span><span class="p">,</span> <span class="n">df</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+</code></pre></div>
+Save code in <code>test_rebalance.py</code> file and run with <code>mpiexec</code>.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-20-1" name="__codelineno-20-1"></a>mpiexec -n <span class="m">4</span> python test_rebalance.py
+</code></pre></div>
+<p>Output:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-21-1" name="__codelineno-21-1"></a><span class="go">[stdout:0]</span>
+<a id="__codelineno-21-2" name="__codelineno-21-2"></a><span class="gp gp-VirtualEnv">(5, 10)</span>
+<a id="__codelineno-21-3" name="__codelineno-21-3"></a><span class="go">After rebalance: (0, 10)</span>
+<a id="__codelineno-21-4" name="__codelineno-21-4"></a><span class="go">[stdout:1]</span>
+<a id="__codelineno-21-5" name="__codelineno-21-5"></a><span class="gp gp-VirtualEnv">(18, 10)</span>
+<a id="__codelineno-21-6" name="__codelineno-21-6"></a><span class="go">After rebalance: (66, 10)</span>
+<a id="__codelineno-21-7" name="__codelineno-21-7"></a><span class="go">[stdout:2]</span>
+<a id="__codelineno-21-8" name="__codelineno-21-8"></a><span class="gp gp-VirtualEnv">(82, 10)</span>
+<a id="__codelineno-21-9" name="__codelineno-21-9"></a><span class="go">After rebalance: (0, 10)</span>
+<a id="__codelineno-21-10" name="__codelineno-21-10"></a><span class="go">[stdout:3]</span>
+<a id="__codelineno-21-11" name="__codelineno-21-11"></a><span class="gp gp-VirtualEnv">(26, 10)</span>
+<a id="__codelineno-21-12" name="__codelineno-21-12"></a><span class="go">After rebalance: (65, 10)</span>
+</code></pre></div>
+</li>
+</ul>
+<h2 id="bodoscatterv">bodo.scatterv<a class="headerlink" href="#bodoscatterv" title="Permanent link">&para;</a></h2>
+<p><code><apihead>bodo.<apiname>scatterv</apiname>(data, warn_if_dist=True)</apihead></code><br><br><br><br> 
+Distribute data manually by <em>scattering</em> data from one process to all processes.</p>
+<p><strong><em>Arguments</em></strong></p>
+<ul>
+<li><code>data</code>: data to distribute.</li>
+<li><code>warn_if_dist</code>: flag to print a BodoWarning if <code>data</code> is already distributed.</li>
+</ul>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Currently, <code>bodo.scatterv</code> only supports scattering from rank 0.</p>
+</div>
+<p><strong><em>Example Usage</em></strong></p>
+<ul>
+<li>When used outside of JIT code, we recommend that the argument be set to <code>None</code> for all ranks except rank 0. 
+  For example:</li>
+</ul>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-22-1" name="__codelineno-22-1"></a><span class="kn">import</span> <span class="nn">bodo</span>
+<a id="__codelineno-22-2" name="__codelineno-22-2"></a><span class="kn">import</span> <span class="nn">pandas</span> <span class="k">as</span> <span class="nn">pd</span>
+<a id="__codelineno-22-3" name="__codelineno-22-3"></a>
+<a id="__codelineno-22-4" name="__codelineno-22-4"></a>
+<a id="__codelineno-22-5" name="__codelineno-22-5"></a><span class="nd">@bodo</span><span class="o">.</span><span class="n">jit</span><span class="p">(</span><span class="n">distributed</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;df&quot;</span><span class="p">])</span>
+<a id="__codelineno-22-6" name="__codelineno-22-6"></a><span class="k">def</span> <span class="nf">mean_power</span><span class="p">(</span><span class="n">df</span><span class="p">):</span>
+<a id="__codelineno-22-7" name="__codelineno-22-7"></a>    <span class="n">x</span> <span class="o">=</span> <span class="n">df</span><span class="o">.</span><span class="n">power</span><span class="o">.</span><span class="n">mean</span><span class="p">()</span>
+<a id="__codelineno-22-8" name="__codelineno-22-8"></a>    <span class="k">return</span> <span class="n">x</span>
+<a id="__codelineno-22-9" name="__codelineno-22-9"></a>
+<a id="__codelineno-22-10" name="__codelineno-22-10"></a><span class="n">df</span> <span class="o">=</span> <span class="kc">None</span>
+<a id="__codelineno-22-11" name="__codelineno-22-11"></a><span class="c1"># only rank 0 reads the data</span>
+<a id="__codelineno-22-12" name="__codelineno-22-12"></a><span class="k">if</span> <span class="n">bodo</span><span class="o">.</span><span class="n">get_rank</span><span class="p">()</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+<a id="__codelineno-22-13" name="__codelineno-22-13"></a>    <span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_parquet</span><span class="p">(</span><span class="s2">&quot;data/cycling_dataset.pq&quot;</span><span class="p">)</span>
+<a id="__codelineno-22-14" name="__codelineno-22-14"></a>
+<a id="__codelineno-22-15" name="__codelineno-22-15"></a><span class="n">df</span> <span class="o">=</span> <span class="n">bodo</span><span class="o">.</span><span class="n">scatterv</span><span class="p">(</span><span class="n">df</span><span class="p">)</span>
+<a id="__codelineno-22-16" name="__codelineno-22-16"></a><span class="n">res</span> <span class="o">=</span> <span class="n">mean_power</span><span class="p">(</span><span class="n">df</span><span class="p">)</span>
+<a id="__codelineno-22-17" name="__codelineno-22-17"></a><span class="nb">print</span><span class="p">(</span><span class="n">res</span><span class="p">)</span>
+</code></pre></div>
+<p>Save the code in <code>test_scatterv.py</code> file and run with <code>mpiexec</code>.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-23-1" name="__codelineno-23-1"></a>mpiexec -n <span class="m">4</span> python test_scatterv.py
+</code></pre></div>
+<p>Output: </p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-24-1" name="__codelineno-24-1"></a><span class="go">[stdout:0] 102.07842132239877</span>
+<a id="__codelineno-24-2" name="__codelineno-24-2"></a><span class="go">[stdout:1] 102.07842132239877</span>
+<a id="__codelineno-24-3" name="__codelineno-24-3"></a><span class="go">[stdout:2] 102.07842132239877</span>
+<a id="__codelineno-24-4" name="__codelineno-24-4"></a><span class="go">[stdout:3] 102.07842132239877</span>
+</code></pre></div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p><code>data/cycling_dataset.pq</code> is located in the Bodo tutorial
+<a href="https://github.com/Bodo-inc/Bodo-tutorial">repo</a>.</p>
+</div>
+<ul>
+<li>This is not a strict requirement. However, since this might be bad practice in certain situations, 
+  Bodo will throw a warning if the data is not None on other ranks.</li>
+</ul>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-25-1" name="__codelineno-25-1"></a><span class="kn">import</span> <span class="nn">bodo</span>
+<a id="__codelineno-25-2" name="__codelineno-25-2"></a><span class="kn">import</span> <span class="nn">pandas</span> <span class="k">as</span> <span class="nn">pd</span>
+<a id="__codelineno-25-3" name="__codelineno-25-3"></a>
+<a id="__codelineno-25-4" name="__codelineno-25-4"></a><span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_parquet</span><span class="p">(</span><span class="s2">&quot;data/cycling_dataset.pq&quot;</span><span class="p">)</span>
+<a id="__codelineno-25-5" name="__codelineno-25-5"></a><span class="n">df</span> <span class="o">=</span> <span class="n">bodo</span><span class="o">.</span><span class="n">scatterv</span><span class="p">(</span><span class="n">df</span><span class="p">)</span>
+<a id="__codelineno-25-6" name="__codelineno-25-6"></a><span class="n">res</span> <span class="o">=</span> <span class="n">mean_power</span><span class="p">(</span><span class="n">df</span><span class="p">)</span>
+<a id="__codelineno-25-7" name="__codelineno-25-7"></a><span class="nb">print</span><span class="p">(</span><span class="n">res</span><span class="p">)</span>
+</code></pre></div>
+<p>Save code in <code>test_scatterv.py</code> file and run with <code>mpiexec</code>.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-26-1" name="__codelineno-26-1"></a>mpiexec -n <span class="m">4</span> python test_scatterv.py
+</code></pre></div>
+<p>Output:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-27-1" name="__codelineno-27-1"></a><span class="go">BodoWarning: bodo.scatterv(): A non-None value for &#39;data&#39; was found on a rank other than the root. This data won&#39;t be sent to any other ranks and will be overwritten with data from rank 0.</span>
+<a id="__codelineno-27-2" name="__codelineno-27-2"></a>
+<a id="__codelineno-27-3" name="__codelineno-27-3"></a><span class="go">[stdout:0] 102.07842132239877</span>
+<a id="__codelineno-27-4" name="__codelineno-27-4"></a><span class="go">[stdout:1] 102.07842132239877</span>
+<a id="__codelineno-27-5" name="__codelineno-27-5"></a><span class="go">[stdout:2] 102.07842132239877</span>
+<a id="__codelineno-27-6" name="__codelineno-27-6"></a><span class="go">[stdout:3] 102.07842132239877</span>
+</code></pre></div>
+<ul>
+<li>When using <code>scatterv</code> inside of JIT code, the argument must have the same type on each rank due to Bodo's typing constraints.
+  All inputs except for rank 0 are ignored.</li>
+</ul>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-28-1" name="__codelineno-28-1"></a><span class="kn">import</span> <span class="nn">bodo</span>
+<a id="__codelineno-28-2" name="__codelineno-28-2"></a><span class="kn">import</span> <span class="nn">pandas</span> <span class="k">as</span> <span class="nn">pd</span>
+<a id="__codelineno-28-3" name="__codelineno-28-3"></a>
+<a id="__codelineno-28-4" name="__codelineno-28-4"></a><span class="nd">@bodo</span><span class="o">.</span><span class="n">jit</span><span class="p">()</span>
+<a id="__codelineno-28-5" name="__codelineno-28-5"></a><span class="k">def</span> <span class="nf">impl</span><span class="p">():</span>
+<a id="__codelineno-28-6" name="__codelineno-28-6"></a>    <span class="k">if</span> <span class="n">bodo</span><span class="o">.</span><span class="n">get_rank</span><span class="p">()</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+<a id="__codelineno-28-7" name="__codelineno-28-7"></a>        <span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span><span class="s2">&quot;A&quot;</span><span class="p">:</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span><span class="mi">2</span><span class="p">,</span><span class="mi">3</span><span class="p">,</span><span class="mi">4</span><span class="p">,</span><span class="mi">5</span><span class="p">,</span><span class="mi">6</span><span class="p">,</span><span class="mi">7</span><span class="p">,</span><span class="mi">8</span><span class="p">]})</span>
+<a id="__codelineno-28-8" name="__codelineno-28-8"></a>    <span class="k">else</span><span class="p">:</span>
+<a id="__codelineno-28-9" name="__codelineno-28-9"></a>        <span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span><span class="s2">&quot;A&quot;</span><span class="p">:</span> <span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">*</span><span class="mi">8</span><span class="p">})</span>
+<a id="__codelineno-28-10" name="__codelineno-28-10"></a>    <span class="k">return</span> <span class="n">bodo</span><span class="o">.</span><span class="n">scatterv</span><span class="p">(</span><span class="n">df</span><span class="p">)</span>
+<a id="__codelineno-28-11" name="__codelineno-28-11"></a><span class="nb">print</span><span class="p">(</span><span class="n">impl</span><span class="p">())</span>
+</code></pre></div>
+<p>Save code in <code>test_scatterv.py</code> file and run with <code>mpiexec</code>.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-29-1" name="__codelineno-29-1"></a>mpiexec -n <span class="m">8</span> python test_scatterv.py
+</code></pre></div>
+<p>Output:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-30-1" name="__codelineno-30-1"></a><span class="go">[stdout:6]</span>
+<a id="__codelineno-30-2" name="__codelineno-30-2"></a><span class="go">      A</span>
+<a id="__codelineno-30-3" name="__codelineno-30-3"></a><span class="go">6     7</span>
+<a id="__codelineno-30-4" name="__codelineno-30-4"></a><span class="go">[stdout:0]</span>
+<a id="__codelineno-30-5" name="__codelineno-30-5"></a><span class="go">      A</span>
+<a id="__codelineno-30-6" name="__codelineno-30-6"></a><span class="go">0     1</span>
+<a id="__codelineno-30-7" name="__codelineno-30-7"></a><span class="go">[stdout:1]</span>
+<a id="__codelineno-30-8" name="__codelineno-30-8"></a><span class="go">      A</span>
+<a id="__codelineno-30-9" name="__codelineno-30-9"></a><span class="go">1     2</span>
+<a id="__codelineno-30-10" name="__codelineno-30-10"></a><span class="go">[stdout:4]</span>
+<a id="__codelineno-30-11" name="__codelineno-30-11"></a><span class="go">      A</span>
+<a id="__codelineno-30-12" name="__codelineno-30-12"></a><span class="go">4     5</span>
+<a id="__codelineno-30-13" name="__codelineno-30-13"></a><span class="go">[stdout:7]</span>
+<a id="__codelineno-30-14" name="__codelineno-30-14"></a><span class="go">      A</span>
+<a id="__codelineno-30-15" name="__codelineno-30-15"></a><span class="go">7     8</span>
+<a id="__codelineno-30-16" name="__codelineno-30-16"></a><span class="go">[stdout:3]</span>
+<a id="__codelineno-30-17" name="__codelineno-30-17"></a><span class="go">      A</span>
+<a id="__codelineno-30-18" name="__codelineno-30-18"></a><span class="go">3     4</span>
+<a id="__codelineno-30-19" name="__codelineno-30-19"></a><span class="go">[stdout:2]</span>
+<a id="__codelineno-30-20" name="__codelineno-30-20"></a><span class="go">      A</span>
+<a id="__codelineno-30-21" name="__codelineno-30-21"></a><span class="go">2     3</span>
+<a id="__codelineno-30-22" name="__codelineno-30-22"></a><span class="go">[stdout:5]</span>
+<a id="__codelineno-30-23" name="__codelineno-30-23"></a><span class="go">      A</span>
+<a id="__codelineno-30-24" name="__codelineno-30-24"></a><span class="go">5     6</span>
+</code></pre></div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p><code>scatterv</code>, <code>gatherv</code>, <code>allgatherv</code>, <code>rebalance</code>, and <code>random_shuffle</code> work with all distributable data types. This includes:</p>
+<ul>
+<li>All supported numpy array types.</li>
+<li>All supported pandas array types (with the exception of Interval Arrays).</li>
+<li>All supported pandas Series types.</li>
+<li>All supported DataFrame types.</li>
+<li>All supported Index types (with the exception of Interval Index).</li>
+<li>Tuples of the above types.</li>
+</ul>
+</div>
+
+              
+            </article>
+          </div>
+        </div>
+        
+          <a href="#" class="md-top md-icon" data-md-component="top" data-md-state="hidden">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8v12z"/></svg>
+            Back to top
+          </a>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    <nav class="md-footer__inner md-grid" aria-label="Footer">
+      
+        
+        <a href="../" class="md-footer__link md-footer__link--prev" aria-label="Previous: Index" rel="prev">
+          <div class="md-footer__button md-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11h12z"/></svg>
+          </div>
+          <div class="md-footer__title">
+            <div class="md-ellipsis">
+              <span class="md-footer__direction">
+                Previous
+              </span>
+              Index
+            </div>
+          </div>
+        </a>
+      
+      
+        
+        <a href="../pandas/" class="md-footer__link md-footer__link--next" aria-label="Next: Index" rel="next">
+          <div class="md-footer__title">
+            <div class="md-ellipsis">
+              <span class="md-footer__direction">
+                Next
+              </span>
+              Index
+            </div>
+          </div>
+          <div class="md-footer__button md-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 11v2h12l-5.5 5.5 1.42 1.42L19.84 12l-7.92-7.92L10.5 5.5 16 11H4z"/></svg>
+          </div>
+        </a>
+      
+    </nav>
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      Copyright &copy; 2019 - 2022 Bodo, Inc.
+    </div>
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+        <div class="md-social">
+  
+    
+    
+      
+      
+    
+    <a href="https://github.com/Bodo-Inc/Feedback" target="_blank" rel="noopener" title="github.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.0.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc.--><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"/></svg>
+    </a>
+  
+    
+    
+      
+      
+    
+    <a href="https://twitter.com/bodo_ai" target="_blank" rel="noopener" title="twitter.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.0.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc.--><path d="M459.37 151.716c.325 4.548.325 9.097.325 13.645 0 138.72-105.583 298.558-298.558 298.558-59.452 0-114.68-17.219-161.137-47.106 8.447.974 16.568 1.299 25.34 1.299 49.055 0 94.213-16.568 130.274-44.832-46.132-.975-84.792-31.188-98.112-72.772 6.498.974 12.995 1.624 19.818 1.624 9.421 0 18.843-1.3 27.614-3.573-48.081-9.747-84.143-51.98-84.143-102.985v-1.299c13.969 7.797 30.214 12.67 47.431 13.319-28.264-18.843-46.781-51.005-46.781-87.391 0-19.492 5.197-37.36 14.294-52.954 51.655 63.675 129.3 105.258 216.365 109.807-1.624-7.797-2.599-15.918-2.599-24.04 0-57.828 46.782-104.934 104.934-104.934 30.213 0 57.502 12.67 76.67 33.137 23.715-4.548 46.456-13.32 66.599-25.34-7.798 24.366-24.366 44.833-46.132 57.827 21.117-2.273 41.584-8.122 60.426-16.243-14.292 20.791-32.161 39.308-52.628 54.253z"/></svg>
+    </a>
+  
+    
+    
+      
+      
+    
+    <a href="https://www.linkedin.com/company/19205698" target="_blank" rel="noopener" title="www.linkedin.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.0.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc.--><path d="M416 32H31.9C14.3 32 0 46.5 0 64.3v383.4C0 465.5 14.3 480 31.9 480H416c17.6 0 32-14.5 32-32.3V64.3c0-17.8-14.4-32.3-32-32.3zM135.4 416H69V202.2h66.5V416zm-33.2-243c-21.3 0-38.5-17.3-38.5-38.5S80.9 96 102.2 96c21.2 0 38.5 17.3 38.5 38.5 0 21.3-17.2 38.5-38.5 38.5zm282.1 243h-66.4V312c0-24.8-.5-56.7-34.5-56.7-34.6 0-39.9 27-39.9 54.9V416h-66.4V202.2h63.7v29.2h.9c8.9-16.8 30.6-34.5 62.9-34.5 67.2 0 79.7 44.3 79.7 101.9V416z"/></svg>
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    <script id="__config" type="application/json">{"base": "../..", "features": ["content.code.annotate", "navigation.instant", "navigation.tabs", "navigation.tabs.sticky", "navigation.top", "navigation.tracking", "navigation.indexes", "navigation.expand", "search.highlight", "search.share", "search.suggest"], "translations": {"clipboard.copy": "Copy to clipboard", "clipboard.copied": "Copied to clipboard", "search.config.lang": "en", "search.config.pipeline": "trimmer, stopWordFilter", "search.config.separator": "[\\s\\-]+", "search.placeholder": "Search", "search.result.placeholder": "Type to start searching", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.term.missing": "Missing", "select.version.title": "Select version"}, "search": "../../assets/javascripts/workers/search.bd0b6b67.min.js", "version": {"provider": "mike"}}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.8aa65030.min.js"></script>
+      
+    
+  </body>
+</html>
