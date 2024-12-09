@@ -15,7 +15,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Check format Python
+      - name: Python format check
         uses: astral-sh/ruff-action@v2
         with:
           version: "0.6.7"
@@ -27,20 +27,27 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Run clang-format style check
+      - name: Clang format check
         uses: jidicula/clang-format-action@v4.14.0
         with:
           clang-format-version: '19'
           exclude-regex: (bodo\/libs\/vendored\/.*|bodo\/libs\/HashLibs\/.*)$
 
   java-code-test:
-    name: Java/Kotlin Code Test
+    name: Java Code Test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
       - uses: axel-op/googlejavaformat-action@v3
-        name: Google Java Format
+        name: Google Java format check
         with:
           version: "v1.24.0"
           args: "--dry-run"
+
+      - name: Install ktlint
+        run: |
+          curl -sSLO https://github.com/pinterest/ktlint/releases/download/1.5.0/ktlint && chmod a+x ktlint && sudo mv ktlint /usr/local/bin/
+
+      - name: Kotlin format check
+        run: ktlint --reporter=checkstyle,output=build/ktlint-report.xml
