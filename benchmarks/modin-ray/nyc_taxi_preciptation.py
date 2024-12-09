@@ -1,9 +1,11 @@
 import argparse
 import time
 
-# ray.init(address="auto")
-# cpu_count = ray.cluster_resources()["CPU"]
-# print("RAY CPU COUNT: ", cpu_count)
+import ray
+
+ray.init(address="auto")
+cpu_count = ray.cluster_resources()["CPU"]
+print("RAY CPU COUNT: ", cpu_count)
 import modin.pandas as pd
 
 # run on the first 6 / 60 parquet files
