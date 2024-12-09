@@ -1,4 +1,4 @@
-name: Bodo Conda Build (Native)
+name: Bodo Conda Build (Linux)
 on:
   workflow_call:
     inputs:
