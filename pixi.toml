@@ -110,6 +110,8 @@ openpyxl = "*"
 jupyterlab = ">=4.3.2,<5"
 ipykernel = ">=6.29.3,<7"
 pyspark = ">=3.5.0,<4"
+imbalanced-learn = ">=0.12.4,<0.13"
+seaborn = ">=0.13.2,<0.14"
 
 [target.linux-64.dependencies]
 cx_oracle = "*"
