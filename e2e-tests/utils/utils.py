@@ -83,7 +83,7 @@ def get_sf_write_conn(user=1):
         password is derived from the SF_PASSWORD environment variable
         account is derived from the SF_ACCOUNT environment variable
     When user=2, we use an Azure based account
-        username is derived from the SF_AZURE_USERNAME environment variable
+        username is derived from the SF_AZURE_USER environment variable
         password is derived from the SF_AZURE_PASSWORD environment variable
         account is derived from the SF_AZURE_ACCOUNT environment variable
 
@@ -99,7 +99,7 @@ def get_sf_write_conn(user=1):
         password = os.environ["SF_PASSWORD"]
         account = os.environ["SF_ACCOUNT"]
     elif user == 2:
-        username = os.environ["SF_AZURE_USERNAME"]
+        username = os.environ["SF_AZURE_USER"]
         password = os.environ["SF_AZURE_PASSWORD"]
         account = os.environ["SF_AZURE_ACCOUNT"]
     else:

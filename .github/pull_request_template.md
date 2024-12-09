@@ -26,5 +26,5 @@ Spawn mode (default mode):
 
 ## Checklist
 - [ ] Pipelines passed before requesting review. To run CI you must include `[run CI]` in your commit message.
-- [ ] I am familiar with the [Contributing Guide](https://github.com/bodo-ai/Bodo/blob/develop/CONTRIBUTING.md) 
+- [ ] I am familiar with the [Contributing Guide](https://github.com/bodo-ai/Bodo/blob/main/CONTRIBUTING.md) 
 - [ ] I have installed + ran pre-commit hooks.
