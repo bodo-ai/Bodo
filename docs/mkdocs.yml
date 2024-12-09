@@ -1,0 +1,239 @@
+# Project information
+site_name: Bodo Developer Documentation
+site_url: https://docs.bodo.ai/
+site_author: Bodo Team
+site_description: >-
+  Bodo offers a new type of just-in-time compiler with Supercomputing-style performance and the simplicity of using native Python.
+
+# Copyright
+copyright: Copyright &copy; 2019 - 2024 Bodo, Inc. <br/> <a href="https://docs.bodo.ai/latest/help_and_reference/eula">End User License Agreement</a>
+
+# Configuration
+theme:
+  name: material
+  custom_dir: overrides
+  include_search_page: false
+  search_index_only: true
+  language: en
+  features:
+    - navigation.instant
+  #  - navigation.tabs
+  #  - navigation.tabs.sticky
+    - navigation.top
+    - navigation.tracking
+    - navigation.indexes
+  #  - navigation.expand
+    - search.highlight
+    - search.suggest
+    - toc.follow
+    - navigation.path
+    - content.tooltips
+    - navigation.footer
+
+  palette:
+    - media: '(prefers-color-scheme: light)'
+      scheme: bodo-light
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: '(prefers-color-scheme: dark)'
+      scheme: bodo-dark
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+
+  font:
+    text: Archivo
+    code: Roboto Mono
+  favicon: assets/favicon.png
+  logo_dark_mode: assets/bodo-white-green.svg
+  logo_light_mode: assets/bodo-grey-green.svg
+
+# Plugins
+plugins:
+  - search
+  - include_dir_to_nav
+  - autorefs
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: []
+
+extra_css:
+  - stylesheets/bodo.css
+  - stylesheets/tango.css
+
+# Customization
+extra:
+  generator: false
+  status:
+    new: Recently added
+  version:
+    provider: mike
+  social:
+    - icon: fontawesome/brands/slack
+      link: https://join.slack.com/t/bodocommunity/shared_invite/zt-qwdc8fad-6rZ8a1RmkkJ6eOX1X__knA
+    - icon: fontawesome/brands/github
+      link: https://github.com/Bodo-Inc/Feedback
+    - icon: fontawesome/brands/twitter
+      link: https://twitter.com/bodo_ai
+    - icon: fontawesome/brands/linkedin
+      link: https://www.linkedin.com/company/19205698
+
+
+# Extensions
+markdown_extensions:
+  - admonition
+  - abbr
+  - attr_list
+  - def_list
+  - footnotes
+  - meta
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+      title: On this page
+  - pymdownx.arithmatex:
+      generic: true
+  - pymdownx.betterem:
+      smart_enable: all
+  - pymdownx.caret
+  - pymdownx.details
+  - pymdownx.emoji:
+     emoji_index: !!python/name:material.extensions.emoji.twemoji
+     emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.keys
+  - pymdownx.mark
+  - pymdownx.smartsymbols
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.tilde
+
+nav:
+  - Home: index.md
+  - About Bodo: about_bodo.md
+  - Getting Started:
+    - quick_start/index.md
+    - Quick Start (Cloud): quick_start/quick_start_platform.md
+    - Local SQL Engine Quick Start (Community Edition): quick_start/quickstart_local_sql.md
+    - Local Python Engine Quick Start (Community Edition): quick_start/quickstart_local_python.md
+    - Local Iceberg Quick Start (Community Edition): quick_start/quickstart_local_iceberg.md
+    - Tabular Catalog Quick Start: quick_start/quickstart_tabular_catalog.md
+  - Guides:
+      - integrating_bodo/index.md
+      - Installation and Setup Guides:
+          - installation_and_setup/index.md
+          - Bodo Platform:
+            - Bodo Platform on AWS: installation_and_setup/bodo_platform_aws.md
+            - Bodo Platform on Azure: installation_and_setup/bodo_platform_azure.md
+            - Bodo Platform SDK: installation_and_setup/platform_sdk.md
+          - Bodo On-Prem:
+            - Installing Bodo Community Edition: installation_and_setup/install.md
+            - Configuring Bodo Enterprise Edition: installation_and_setup/enterprise.md
+            - Interactive Bodo Cluster Setup using IPyParallel: installation_and_setup/ipyparallel.md
+            - Recommended MPI Settings: installation_and_setup/recommended_mpi_settings.md
+            - Recommended Cluster Configuration: installation_and_setup/recommended_cluster_config.md
+      - Python Development Guide: quick_start/dev_guide.md
+      - Using the Bodo Cloud Platform:
+          - guides/using_bodo_platform/index.md
+          - Organization Basics: guides/using_bodo_platform/organization.md
+          - Creating a Cluster: guides/using_bodo_platform/clusters.md
+          - Using Notebooks: guides/using_bodo_platform/notebooks.md
+          - Using Native SQL with Catalogs: integrating_bodo/database_catalog.md
+          - Running a Batch Job: guides/using_bodo_platform/bodo_jobs.md
+          - Using your own Instance Role for a Cluster: guides/using_bodo_platform/instance_role.md
+          - Managing Packages Manually: guides/using_bodo_platform/packages.md
+          - Running Shell Commands on a Cluster: guides/using_bodo_platform/shell.md
+          - Connecting to a Cluster: guides/using_bodo_platform/connect.md
+          - Configuring Customer Managed VPC: guides/using_bodo_platform/customer_managed_vpc.md
+          - AWS PrivateLink: guides/using_bodo_platform/aws_private_link.md
+          - Troubleshooting: guides/using_bodo_platform/troubleshooting.md
+          - Bodo Platform SDK guide : guides/using_bodo_platform/bodo_platform_sdk_guide.md
+      - Understanding Parallelism with Bodo:
+          - Basics of Bodo Parallelism: bodo_parallelism/bodo_parallelism_basics.md
+          - Advanced Parallelism Topics: bodo_parallelism/advanced.md
+          - Typing Considerations: bodo_parallelism/typing_considerations.md
+          - Unsupported Programs: bodo_parallelism/not_supported.md
+      - Iceberg:
+          - Introduction: iceberg/intro.md
+          - Reading and Writing: iceberg/read_write.md
+          - Supported Data Types: iceberg/data_types.md
+          - Puffin Files: iceberg/puffin_files.md
+      - Scalable Data I/O with Bodo: file_io.md
+      - Using Regular Python inside Bodo (Object Mode): objmode.md
+      - Measuring Performance: performance/performance.md
+      - Caching: performance/caching.md
+      - Inlining: performance/inlining.md
+      - Bodo Errors: diagnostics_and_troubleshooting/Bodoerrors.md
+      - Compilation Tips: diagnostics_and_troubleshooting/compilation.md
+      - Verbose Mode: diagnostics_and_troubleshooting/verbose_mode.md
+      - Deploying Bodo with Kubernetes: integrating_bodo/kubernetes.md
+  - API Reference:
+      - api_docs/index.md
+      - BodoSQL Reference:
+          - api_docs/sql/index.md
+          - Supported DataFrame Types: api_docs/sql/data_types.md
+          - Aliasing : api_docs/sql/aliasing.md
+          - User Defined Functions: api_docs/sql/sql_udfs.md
+          - Caching and Parameterized Queries: api_docs/sql/named_params.md
+          - I/O handling: api_docs/sql/io_handling.md
+          - BodoSQLContext API: api_docs/sql/bodosqlcontext.md
+          - TablePath API: api_docs/sql/tablepath.md
+          - Database Catalogs: api_docs/sql/database_catalogs.md
+          - Identifier Case Sensitivity: api_docs/sql/case_sensitivity.md
+          - Performance Considerations: api_docs/sql/performance.md
+          - Errors: api_docs/sql/bodosqlerrors.md
+          - API Reference:
+              - DDL: api_docs/sql/ddl
+              - DML: api_docs/sql/dml
+              - Query Syntax: api_docs/sql/query_syntax
+              - Functions:
+                - Aggregations and Window Functions: api_docs/sql/functions/agg
+                - Array Functions: api_docs/sql/functions/array
+                - Casting Functions: api_docs/sql/functions/casting
+                - Context Functions: api_docs/sql/functions/context
+                - Control Flow Functions: api_docs/sql/functions/control
+                - Data Generation Functions: api_docs/sql/functions/data_gen
+                - Numeric Functions: api_docs/sql/functions/numeric
+                - Object Functions: api_docs/sql/functions/object
+                - Operators: api_docs/sql/functions/operators.md
+                - Regular Expressions: api_docs/sql/functions/regex.md
+                - String Functions: api_docs/sql/functions/string
+                - Table Functions:  api_docs/sql/functions/table
+                - Timestamp Functions: api_docs/sql/functions/timestamp
+                - Type Predicates: api_docs/sql/functions/type
+      - Bodo Parallel API Reference: api_docs/bodo_parallel_apis
+      - Python Reference:
+        - api_docs/python/index.md
+        - Pandas:
+            - api_docs/pandas/index.md
+            - General Functions: api_docs/pandas/general_functions
+            - DataFrame: api_docs/pandas/dataframe
+            - Groupby : api_docs/pandas/groupby
+            - Series : api_docs/pandas/series
+            - Window : api_docs/pandas/window
+            - DateOffsets: api_docs/pandas/dateoffsets
+            - Input/Output: api_docs/pandas/io
+            - Index Objects: api_docs/pandas/indexapi
+            - TimeDelta : api_docs/pandas/timedelta
+            - Timestamp : api_docs/pandas/timestamp
+        - Numpy: api_docs/numpy.md
+        - User Defined Functions (UDFs): api_docs/udfs.md
+        - Machine Learning:
+            - api_docs/ml/index.md
+            - Scikit Learn: api_docs/ml/sklearn
+            - XGBoost: api_docs/ml/xgboost.md
+        - Miscellaneous Functions: api_docs/miscellaneous.md
+      - Bodo Platform SDK Reference: api_docs/platform_sdk.md
+  - Release Notes: release_notes

@@ -1,0 +1,217 @@
+<!-- Custom HTML site displayed as the Home chapter -->
+
+<style>
+  .md-content__inner{ margin-left:0 !important; margin-right:0 !important; padding-top:0; }
+  #hero{ background:linear-gradient(180deg, rgba(21,76,51,1) 0%, rgba(20,44,46,1) 100%); padding:45px 0; margin-top:-60px; }
+  #hero .row{ padding:0 20px; text-align:center; margin:0 auto; max-width:600px; }
+  #hero h1{ font-size:45px; color:#fff; margin:0 auto 10px auto; font-weight:700; line-height:120%; }
+  #hero p{ font-size:20px; color:#fff; margin:0 auto 0 auto; font-weight:400; line-height:125%; }
+  #hero .search{ margin:25px auto 0 auto; max-width:480px; }
+  #hero .search input{ border:none; font-size:16px; line-height:20px; padding:17px 50px 17px 25px; background-image:url('img/ico-search.svg'); background-repeat:no-repeat; background-size:24px auto; background-position:right 20px center; background-color:#fff; width:100%; border-radius:27px; }
+
+  #links{ padding:60px 0 30px 0; }
+  #links .row{ padding:0 20px; text-align:center; margin:0 auto; max-width:1040px; }
+  #links .flex{ display:flex; margin:0 -10px; }
+  #links .flex .post{ padding:0 10px; text-align:left; flex:1; }
+  #links .flex .post a{ display:block; height:100%; border:1px solid rgba(148, 163, 184, 0.50); border-radius:4px; padding:30px; transition:all .3s; }
+  #links .flex .post a:hover{ border-color:#1FB000; }
+  #links .flex .post .ico{ width:69px; height:69px; margin:0 0 20px 0; }
+  #links .flex .post .ico img{ width:100%; height:100%; object-fit:cover; }
+  #links .flex .post h2{ font-size:20px; line-height:120%; font-weight:600; margin:20px 0 10px 0; color:var(--md-typeset-color); }
+  #links .flex .post p{ font-size:14px; line-height:140%; font-weight:400; margin:10px 0 0 0; color:var(--md-typeset-color); }
+
+  #resources{ padding:60px 0 30px 0; }
+  #resources .row{ padding:0 20px; text-align:center; margin:0 auto; max-width:1040px; }
+  #resources h2{ font-size:30px; line-height:125%; font-weight:700; margin:0 0 45px 0; text-align:left; color:var(--md-typeset-color); }
+  #resources .flex{ display:flex; margin:0 -30px; }
+  #resources .flex .post{ padding:0 30px; flex:1 0 33.33%; max-width:33.33%; }
+  #resources .flex .post h3{ font-size:13px; line-height:130%; font-weight:600; color:#94A3B8; margin:0 0 5px 0; text-transform:uppercase; text-align:left; }
+  #resources .flex .post h4{ font-size:20px; line-height:130%; font-weight:700; color:var(--md-typeset-color); margin:0 0 15px 0; text-align:left; }
+  #resources .flex .post p{ font-size:14px; line-height:130%; font-weight:400; color:var(--md-typeset-color); margin:0 0 15px 0; text-align:left; }
+  #resources .flex .post ul{ list-style:none; margin:0; padding:0; }
+  #resources .flex .post ul li{ font-size:15px; line-height:130%;  color:#1F52B6; font-weight:400; text-align:left; margin:0 0 5px 0; }
+  #resources .flex .post ul li a{ color:inherit; text-decoration:underline; }
+  #resources .flex .post ul li a:hover{ text-decoration:none; }
+
+  #releases{ padding:60px 0 30px 0; }
+  #releases .row{ padding:0 20px; text-align:center; margin:0 auto; max-width:1040px; }
+  #releases h2{ font-size:30px; line-height:125%; font-weight:700; margin:0 0 45px 0; text-align:left; color:var(--md-typeset-color); }
+  #releases .flex{ display:flex; margin:0 -30px; }
+  #releases .flex .note{ padding:0 30px; flex:1 0 66.67%; max-width:66.67%; text-align:left; }
+  #releases .flex .note h3{ font-size:13px; line-height:130%; font-weight:600; color:#94A3B8; margin:0 0 5px 0; text-transform:uppercase; text-align:left; }
+  #releases .flex .note h4{ font-size:20px; line-height:130%; font-weight:700; color:var(--md-typeset-color); margin:0 0 15px 0; text-align:left; }
+  #releases .flex .note p{ font-size:14px; line-height:130%; font-weight:400; color:var(--md-typeset-color); margin:0 0 15px 0; text-align:left; }
+  #releases .flex .aside{ padding:0 30px; flex:1 0 33.33%; max-width:33.33%; text-align:left; }
+  #releases .flex .aside .content{ padding:30px; border-radius:2px; }
+  :root body[data-md-color-scheme=bodo-light] #releases .flex .aside .content{ background:#F9FAFE; }
+  :root body[data-md-color-scheme=bodo-dark] #releases .flex .aside .content{ background:rgb(38, 37, 42); }
+  #releases .flex .aside ul{ list-style:none; margin:0; padding:0; }
+  #releases .flex .aside ul li{ font-size:15px; line-height:130%; color:var(--md-typeset-color); font-weight:500; text-align:left; margin:0 0 10px 0; }
+  #releases .flex .aside ul li a{ display:block; color:inherit; text-decoration:none; position:relative; padding-right:30px; }
+  #releases .flex .aside ul li a:after{ content:''; display:block; width:20px; height:20px; position:absolute; right:0; top:0; background-repeat:no-repeat; background-size:6.5px auto; background-position:center; background-image:url('img/ico-forward.svg'); transition:all .3s; opacity:0.6; }
+  #releases .flex .aside ul li a:hover{ text-decoration:none; font-weight:bold; }
+  #releases .flex .aside ul li a:hover:after{ opacity:1; }
+  #releases .flex a.more{ color:#1F52B6; font-size:15px; line-height:130%; font-weight:700; }
+  #releases .flex a.more:hover{ text-decoration:underline; }
+
+
+  @media only screen and (max-width: 800px){
+    #links .flex{ flex-wrap:wrap; }
+    #links .flex .post{ flex:1 0 50%; max-width:50%; padding:10px; }
+  }
+
+
+  @media only screen and (max-width: 750px){
+    #resources .flex{ flex-wrap:wrap; }
+    #resources .flex .post{ flex:1 0 50%; max-width:50%; margin-bottom:40px; }
+    #releases{ padding-top:20px; }
+    #releases .flex{ flex-wrap:wrap; }
+    #releases .flex .note{ flex:1 0 100%; max-width:100%; }
+    #releases .flex .aside{ flex:1 0 360px; max-width:360px; margin-top:40px; }
+  }
+
+
+  @media only screen and (max-width: 450px){
+    #hero h1{ font-size:38px; }
+    #hero p{ font-size:18px; }
+    #links .flex .post{ flex:1 0 100%; max-width:100%; }
+    #resources .flex .post{ flex:1 0 100%; max-width:100%; }
+  }
+</style>
+
+{% extends "main.html" %}
+{% block content %}
+  <section id="hero">
+    <div class="row">
+      <h1>Developer Documentation</h1>
+      <p>Access all your Bodo resources in one place</p>
+<!--      <div class="search"><input id="hpsearch" placeholder="Search for anything"></div>-->
+    </div>
+  </section>
+
+  <section id="links">
+    <div class="row">
+      <div class="flex">
+        <div class="post">
+          <a href="./quick_start/quick_start_platform/">
+            <div class="ico">
+              <img src="img/home-ico2.png" alt="Platform Quick Start">
+            </div>
+            <h2>Platform Quick Start</h2>
+            <p> Sign up for a 14-day trial of Bodo and walk through a quick and easy way to set up Bodo platform in your own AWS account. </p>
+          </a>
+        </div>
+        <div class="post">
+          <a href="./quick_start/iceberg/">
+            <div class="ico">
+              <img src="img/ico-iceberg.png" alt="Iceberg Quickstart">
+            </div>
+            <h2>Get started with Bodo and Iceberg</h2>
+            <p> Bodo supports Apache Iceberg tables as a first-class data source, enabling users to read and write Iceberg tables
+                with Bodo's high-performance data processing engine. Follow this guide to start using Bodo for Iceberg tables.
+            </p>
+          </a>
+        </div>
+        <div class="post">
+          <a href="./integrating_bodo/">
+            <div class="ico">
+              <img src="img/home-ico3.png" alt="Bodo Usage Guides">
+            </div>
+            <h2>Bodo Usage Guides</h2>
+            <p> Find out how to get the best performance while seamlessly integrating Bodo with your existing data pipelines, or building them from scratch </p>
+          </a>
+        </div>
+        <div class="post">
+          <a href="./api_docs/">
+            <div class="ico">
+              <img src="img/home-ico4.png" alt="API Reference">
+            </div>
+            <h2>API Reference</h2>
+            <p>A complete reference for all supported functionality including SQL and Python as well as an SDK for managing your Bodo Platform resources. </p>
+          </a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+
+  <section id="resources">
+    <div class="row">
+      <h2>Most Popular Resources</h2>
+      <div class="flex">
+
+        <div class="post">
+          <h3>Getting Started</h3>
+          <h4>Getting Started Overview</h4>
+          <p>If you are new to Bodo, this section has a couple of quick start guides to help you get started with Bodo.</p>
+          <ul>
+            <li><a href="./quick_start/quick_start_platform/">Platform Quick Start</a></li>
+            <li><a href="./quick_start/quickstart_local_sql/">Bodo SQL Quickstart</a> (Local)</li>
+            <li><a href="./quick_start/quickstart_local_python/">Bodo Python Quickstart</a> (Local)</li>
+          </ul>
+        </div>
+
+        <div class="post">
+          <h3>Guides</h3>
+          <h4>Bodo Usage Guides</h4>
+          <p>This section provides a collection of guides to help you go from beginner to expert with Bodo. Choose a guide from the list below to get started.</p>
+          <ul>
+            <li><a href="./installation_and_setup/">Installation and Setup Guides</a></li>
+            <li><a href="./integrating_bodo/database_catalog/">Using native SQL with Catalogs</a></li>
+            <li><a href="./quick_start/dev_guide/">Python Developer's Guide</a></li>
+            <li><a href="./performance/performance/">Measuring Performance</a></li>
+          </ul>
+        </div>
+
+        <div class="post">
+          <h3>Guides</h3>
+          <h4>Installation and Setup Guides</h4>
+          <p>This section provides guides to help you install and set up Bodo on your local machine or get onboarded on Bodo Platform on AWS or Azure.</p>
+          <ul>
+            <li><a href="./installation_and_setup/bodo_platform_aws/#bodo_platform_aws">Bodo Platform on AWS</a></li>
+            <li><a href="./installation_and_setup/bodo_platform_azure/#bodo_platform_azure">Bodo Platform on Azure</a></li>
+          </ul>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+
+  <section id="releases">
+    <div class="row">
+      <h2>Release Notes</h2>
+      <div class="flex">
+
+        <div class="note">
+          <h3>on July 9, 2024</h3>
+          <h4>Bodo 2024.7 Release</h4>
+          <p>We are thrilled to announce the Bodo 2024.7 Release, featuring expanded DDL support, theta sketches for specific columns, performance improvements including improvements for SQL window functions, and bug fixes. Advanced users can now also take advantage of experimental features for performance and caching hints </p>
+          <a class="more" href="./release_notes/July_2024/#July_2024">Read more</a>
+        </div>
+
+        <div class="aside">          
+          <div class="content">
+            <ul>
+              <li><a href="./release_notes/July_2024/#July_2024">Bodo.ai 2024.7 Release</a></li>
+              <li><a href="./release_notes/June_2024/#June_2024">Bodo.ai 2024.6 Release</a></li>
+              <li><a href="./release_notes/May_2024/#May_2024">Bodo.ai 2024.5 Release</a></li>
+            </ul>
+            <a class="more" href="./release_notes/">View all</a>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+
+<!--  <script>-->
+<!--    const firstInput = document.getElementById('hpsearch');-->
+<!--    const secondInput = document.querySelector('.md-search__input');-->
+
+<!--    firstInput.addEventListener('focus', function() {-->
+<!--      secondInput.focus();-->
+<!--    });-->
+<!--  </script>-->
+{% endblock %} 

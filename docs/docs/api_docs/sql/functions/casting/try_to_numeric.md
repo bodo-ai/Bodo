@@ -1,0 +1,8 @@
+# TRY_TO_NUMERIC
+
+
+`#!sql TRY_TO_NUMERIC(EXPR [, PRECICION [, SCALE]])`
+
+Equivalent to `#!sql TRY_TO_NUMBER(EXPR, PRECICION, SCALE)`.
+
+
