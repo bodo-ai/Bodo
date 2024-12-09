@@ -29,7 +29,7 @@ jobs:
           title: Update Pixi Lockfile
           body-path: diff.md
           branch: update-pixi
-          base: develop
+          base: main
           labels: dependencies
           delete-branch: true
           add-paths: pixi.lock

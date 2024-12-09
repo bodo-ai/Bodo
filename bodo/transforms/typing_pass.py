@@ -4766,7 +4766,7 @@ class TypingTransforms:
                     inputs_unified_arg = get_overload_const_bool(inputs_unified_type)
                     inputs_unified_txt = f"input_dicts_unified={inputs_unified_arg}"
 
-                args = []
+                args = ()
                 new_type = bodo.libs.table_builder.TableBuilderStateType(
                     input_table_type, should_use_chunked_builder_arg
                 )
