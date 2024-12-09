@@ -1,6 +1,6 @@
 name: PR CI Auto
 on:
-  pull_request:
+  pull_request_target:
 
 # Limit CI to cancel previous runs in the same PR
 concurrency:
