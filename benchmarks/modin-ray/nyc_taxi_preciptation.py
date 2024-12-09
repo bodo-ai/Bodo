@@ -1,22 +1,21 @@
+import argparse
 import time
 
-import ray
-
-ray.init(address="auto")
-cpu_count = ray.cluster_resources()["CPU"]
-print("RAY CPU COUNT: ", cpu_count)
+# ray.init(address="auto")
+# cpu_count = ray.cluster_resources()["CPU"]
+# print("RAY CPU COUNT: ", cpu_count)
 import modin.pandas as pd
 
 # run on the first 6 / 60 parquet files
-# parquet_files = [
-#     f"s3://bodo-example-data/nyc-taxi/fhvhv_tripdata/fhvhv_tripdata_2019-{i:02}.parquet"
-#     for i in range(2, 8)
-# ]
+small_dataset = [
+    f"s3://bodo-example-data/nyc-taxi/fhvhv_tripdata/fhvhv_tripdata_2019-{i:02}.parquet"
+    for i in range(2, 8)
+]
 # run on entire dataset
-parquet_files = "s3://bodo-example-data/nyc-taxi/fhvhv_tripdata/"
+full_dataset = "s3://bodo-example-data/nyc-taxi/fhvhv_tripdata/"
 
 
-def run_modin():
+def run_modin(dataset):
     start = time.time()
     central_park_weather_observations = pd.read_csv(
         "s3://bodo-example-data/nyc-taxi/central_park_weather.csv",
@@ -28,7 +27,7 @@ def run_modin():
         copy=False,
     )
     fhvhv_tripdata = pd.read_parquet(
-        parquet_files,
+        dataset,
         storage_options={"anon": True},
     )
     end = time.time()
@@ -102,4 +101,17 @@ def run_modin():
 
 
 if __name__ == "__main__":
-    result = run_modin()
+    parser = argparse.ArgumentParser(
+        prog="nyc_tax_preciptation",
+        description="Benchmark modin using the NYC Taxi dataset",
+    )
+    parser.add_argument(
+        "-d", "--dataset", choices=["small", "large"], required=False, default="large"
+    )
+    args = parser.parse_args()
+    print(args.dataset)
+    if args.dataset == "large":
+        dataset = full_dataset
+    else:
+        dataset = small_dataset
+    result = run_modin(dataset)
