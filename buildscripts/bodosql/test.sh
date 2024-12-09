@@ -2,12 +2,6 @@
 set -eo pipefail
 set +x
 
-# Deactivate env in case this was called by another file that
-# activated the env. This only happens on AWS and causes errors
-# on Azure with MacOS
-if [[ "$CI_SOURCE" == "AWS" ]]; then
-    source deactivate || true
-fi
 export PATH=$HOME/miniforge3/bin:$PATH
 source activate $CONDA_ENV
 set -x

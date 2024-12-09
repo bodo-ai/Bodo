@@ -1,17 +1,6 @@
 #!/bin/bash
 set -exo pipefail
 
-if [[ "$CI_SOURCE" == "AWS" ]]; then
-    export PATH=$HOME/miniforge3/bin:$PATH
-
-    # ---- Activate Conda Env ----
-    # Deactivate if another script has already activated the env
-    set +x
-    source deactivate || true
-    source activate $CONDA_ENV
-    set -x
-fi
-
 # Setup Hadoop
 if [[ ! -f hadoop.tar.gz ]]; then
     wget -O hadoop.tar.gz "https://www.apache.org/dyn/mirrors/mirrors.cgi?action=download&filename=hadoop/common/hadoop-3.3.2/hadoop-3.3.2.tar.gz"

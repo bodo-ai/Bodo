@@ -1,4 +1,3 @@
-import json
 import os
 import re
 import subprocess
@@ -15,50 +14,6 @@ file_timeout = int(os.environ.get("BODO_RUNTESTS_TIMEOUT", 7200))
 
 # Pipeline name is only used when testing on Azure
 use_run_name = "AGENT_NAME" in os.environ
-
-logfile_name = "splitting_logs/logfile-07-18-22.txt"
-
-# If in AWS Codebuild partition tests
-if "CODEBUILD_BUILD_ID" in os.environ:
-    # Make sure buildscripts is in the import path
-    module_dir = os.path.abspath(os.path.join(__file__, os.pardir))
-    repo_dir = os.path.abspath(os.path.join(module_dir, os.pardir))
-    assert module_dir in sys.path
-    if repo_dir not in sys.path:
-        sys.path.append(repo_dir)
-
-    import buildscripts.aws.select_timing_from_logs
-
-    # Load the logfile for splitting tests
-    result = subprocess.call(
-        [
-            "python",
-            "buildscripts/aws/download_s3paths_with_prefix.py",
-            "bodo-pr-testing-logs",
-            logfile_name,
-        ]
-    )
-    if result != 0:
-        raise Exception(
-            "buildscripts/aws/download_s3_prefixes.py fails trying to download log file."
-        )
-    if not os.path.exists(logfile_name):
-        raise Exception("Log file download unsuccessful, exiting with failure.")
-    # Select the markers that may be needed.
-    marker_groups = buildscripts.aws.select_timing_from_logs.generate_marker_groups(
-        logfile_name, int(os.environ["NUMBER_GROUPS_SPLIT"])
-    )
-
-    # Generate the marker file.
-    with open("bodo/pytest.ini", "a") as f:
-        indent = " " * 4
-        for marker in set(marker_groups.values()):
-            print(
-                f"{indent}{marker}: Group {marker} for running distributed tests\n",
-            )
-
-    with open("testtiming.json", "w") as f:
-        json.dump(marker_groups, f)
 
 # run pytest with --collect-only to find Python modules containing tests
 # (this doesn't execute any tests)
