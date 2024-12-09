@@ -14,6 +14,8 @@ schedules:
   branches:
     include:
     - main
+    exclude:
+    - develop
 
 parameters:
   - name: PYTEST_MARKER
