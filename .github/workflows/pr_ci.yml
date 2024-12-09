@@ -9,11 +9,14 @@ concurrency:
 
 jobs:
 
-  # 1) Validate changes in PR
+  # 1) Validate changes and commit message
   validate:
     name: Validate
     runs-on: ubuntu-latest
     outputs:
+      # https://docs.github.com/en/actions/learn-github-actions/expressions#contains
+      # contains is case-insensitive
+      run_tests: ${{ contains(steps.check_msg.outputs.commit_message, '[run ci]') }}
       run_bodosql_customer_tests: ${{ steps.changes.outputs.bodosql_customer_tests }}
 
     steps:
@@ -30,18 +33,6 @@ jobs:
             bodosql_customer_tests:
               - 'BodoSQL/calcite_sql/**'
 
-
-  # 2) Check if commit has [run ci] before continuing
-  # TODO: We will need to probably find different way for that
-  commit-prefix-ci:
-    name: Get Commit Message
-    runs-on: ubuntu-latest
-    outputs:
-      # https://docs.github.com/en/actions/learn-github-actions/expressions#contains
-      # contains is case-insensitive
-      runCI: ${{ contains(steps.check_msg.outputs.commitMsg, '[run ci]') }}
-
-    steps:
       # Fetch the PR branch for the commit history
       - uses: actions/checkout@v4
         with:
@@ -52,14 +43,15 @@ jobs:
         id: check_msg
         run: |
           set -xe pipefail
-          echo "commitMsg=$(git log -1 --pretty=format:'%s')" >> $GITHUB_OUTPUT
+          echo "commit_message=$(git log -1 --pretty=format:'%s')" >> $GITHUB_OUTPUT
 
+  # 2) Trigger BodoSQL Customer tests
   bodosql-customer-tests:
-    needs: [validate, commit-prefix-ci]
+    needs: [validate]
     name: BodoSQL Customer Tests
     runs-on: ubuntu-latest
     if: |
-      needs.commit-prefix-ci.outputs.runCI == 'true' &&
+      needs.validate.outputs.run_tests == 'true' &&
       needs.validate.outputs.run_bodosql_customer_tests == 'true'
 
     steps:
@@ -73,12 +65,12 @@ jobs:
           client_payload: '{ "branch" : "${{ github.head_ref || github.ref_name }}" }'
 
   
-  # 4) Pre-Build Bodo to save build artifacts to sccache
+  # 3) Pre-Build Bodo to save build artifacts to sccache
   compile-bodo:
-    needs: [commit-prefix-ci]
+    needs: [validate]
     name: Pre-Build Bodo for Cache
     runs-on: [self-hosted, large]
-    if: needs.commit-prefix-ci.outputs.runCI == 'true'
+    if: needs.validate.outputs.run_tests == 'true'
     steps:
       - uses: actions/checkout@v4
       - name: Build from Source
@@ -96,7 +88,7 @@ jobs:
         run: |
           wget -O hadoop.tar.gz "https://www.apache.org/dyn/mirrors/mirrors.cgi?action=download&filename=hadoop/common/hadoop-3.3.2/hadoop-3.3.2.tar.gz"
 
-  # 5) Actually run tests
+  # 4) Actually run tests
   pr-ci:
     needs: [compile-bodo]
     name: Test
@@ -124,7 +116,7 @@ jobs:
       collect-coverage: false
     secrets: inherit
 
-  # 6) Collect and combine any results from runs
+  # 5) Collect and combine any results from runs
   collect-results:
     needs: [pr-ci]
     name: Collect Results
