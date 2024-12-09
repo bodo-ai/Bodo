@@ -42,4 +42,5 @@ jobs:
       - uses: axel-op/googlejavaformat-action@v3
         name: Google Java Format
         with:
+          version: "v1.24.0"
           args: "--dry-run"
