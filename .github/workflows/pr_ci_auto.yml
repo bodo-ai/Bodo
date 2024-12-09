@@ -30,4 +30,5 @@ jobs:
       - name: Run clang-format style check
         uses: jidicula/clang-format-action@v4.14.0
         with:
+          clang-format-version: '19'
           exclude-regex: (?x)^(bodo/libs/vendored/.*|bodo/libs/HashLibs/.*)$
