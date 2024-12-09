@@ -109,7 +109,7 @@ def get_monthly_travels_weather():
                     "trip_miles": "avg_distance",
                 },
             )
-            monthly_trips_weather = monthly_trips_weather.compute()
+            monthly_trips_weather = monthly_trips_weather.to_parquet("dask_results.pq")
 
             end = time.time()
             print("Total read and compute time: ", end - start)

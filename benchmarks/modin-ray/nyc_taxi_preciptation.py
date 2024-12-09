@@ -99,6 +99,11 @@ def run_modin(dataset):
     )
     end = time.time()
     print("Monthly Taxi Travel Times Computation Time: ", end - start)
+    print(monthly_trips_weather.head())
+
+    start = time.time()
+    monthly_trips_weather.to_parquet("modin_results.pq")
+    end = time.time()
     return monthly_trips_weather
 
 
