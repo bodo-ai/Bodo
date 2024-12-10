@@ -582,7 +582,7 @@ def test_logistic_regression(memory_leak_check):
     )
 
     def impl_score(X, y):
-        # TODO (Hadia, Sahil) When n_jobs is set to 8, it's (recently been) failing on CodeBuild (but not Azure) for some
+        # TODO (Hadia, Sahil) When n_jobs is set to 8, it's (recently been) failing on PR CI (but not Azure) for some
         # reason, so we need to investigate and fix the issue.
         clf = LogisticRegression(n_jobs=1)
         clf.fit(X, y)
@@ -598,7 +598,7 @@ def test_logistic_regression(memory_leak_check):
 
     def impl(X_train, y_train, X_test, y_test, name="Logistic Regression BODO"):
         # Bodo ignores n_jobs. This is set for scikit-learn (non-bodo) run. It should be set to number of cores available.
-        # TODO (Hadia, Sahil) When n_jobs is set to 8, it's (recently been) failing on CodeBuild (but not Azure) for some
+        # TODO (Hadia, Sahil) When n_jobs is set to 8, it's (recently been) failing on PR CI (but not Azure) for some
         # reason, so we need to investigate and fix the issue.
         clf = LogisticRegression(n_jobs=1)
         start_time = time.time()

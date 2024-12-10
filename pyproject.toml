@@ -76,7 +76,6 @@ logging.level = "INFO"
 
 metadata.version.provider = "scikit_build_core.metadata.setuptools_scm"
 build-dir = "build/type_{build_type}"
-# Exclude bodo/transforms since it should be Cythonized in production builds
 wheel.exclude = [
     "bodo/**/*.h",
     "bodo/**/*.cpp",
@@ -84,15 +83,7 @@ wheel.exclude = [
     "bodo/**/*.pxd",
     "bodo/**/*.pyx",
     "bodo/**/*.hpp",
-    "bodo/libs/HashLibs/TSL",
     "bodo/bench",
-    "bodo/transforms/dataframe_pass.py",
-    "bodo/transforms/distributed_analysis.py",
-    "bodo/transforms/distributed_pass.py",
-    "bodo/transforms/series_pass.py",
-    "bodo/transforms/table_column_del_pass.py",
-    "bodo/transforms/typing_pass.py",
-    "bodo/transforms/untyped_pass.py",
     "bodo/transforms/**/*.pyc",
     "bodo/tests/*",
 ]
@@ -112,7 +103,6 @@ wheel.exclude = [
     "bodo/**/*.pxd",
     "bodo/**/*.pyx",
     "bodo/tests/data/**/*.crc",
-    "bodo/libs/HashLibs/TSL",
     "bodo/bench",
 ]
 
@@ -215,7 +205,7 @@ for file in $DYLIBS_DIR/*; do
 done
 """
 
-
+# ---------------------------------------- PR CI ---------------------------------------- #
 [tool.coverage.run]
 source = ["bodo"]
 branch = true

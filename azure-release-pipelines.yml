@@ -13,6 +13,8 @@ schedules:
   displayName: 'Weekdays Daily midnight build'
   branches:
     include:
+    - main
+    exclude:
     - develop
 
 parameters:

@@ -103,7 +103,7 @@ jobs:
           sudo chmod a+r $HOME/secret_file
 
           echo "BODO_VERSION: $BODO_VERSION"
-          echo $ARTIFACTORY_CHANNEL
+          echo "ARTIFACTORY_CHANNEL: $ARTIFACTORY_CHANNEL"
           ./buildscripts/bodo/publish_binary.sh $ARTIFACTORY_CHANNEL "linux-64" $BODO_VERSION
         env:
           IS_RELEASE: ${{ inputs.is-release }}

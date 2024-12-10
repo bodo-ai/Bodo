@@ -10,6 +10,7 @@ repos:
       - id: debug-statements
         exclude: bodo-platform-image/ansible/roles/ipython/files/load_bodo_platform_extensions_magics.py
       - id: detect-aws-credentials
+        args: [--allow-missing-credentials]
   # Python
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.6.7
@@ -39,10 +40,7 @@ repos:
       - id: clang-format
         types_or: [c++]
         exclude: |
-          (?x)^(
-            bodo/libs/vendored/.*|
-            bodo/libs/HashLibs/.*
-          )$
+          (?x)^(bodo/libs/vendored/.*)$
   # GitHub Actions
   - repo: https://github.com/rhysd/actionlint
     rev: v1.7.4

@@ -9,7 +9,12 @@ from bodo.pandas.lazy_metadata import LazyMetadata
 from bodo.pandas.lazy_wrapper import BodoLazyWrapper
 from bodo.pandas.managers import LazyBlockManager, LazyMetadataMixin
 from bodo.pandas.utils import get_lazy_manager_class
-from bodo.utils.typing import check_unsupported_args
+from bodo.utils.typing import (
+    BodoError,
+    check_unsupported_args,
+    get_overload_const_str,
+    is_overload_none,
+)
 
 
 class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
@@ -79,18 +84,64 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             # If head_df is available and larger than n, then use it directly.
             return self._head_df.head(n)
 
-    def to_parquet(self, *args, **kwargs):
-        # TODO: Implement this BSE-4100
-        print("Asking workers to write to parquet...")
-        print("args: ", *args)
-        print("kwargs: ", **kwargs)
+    def to_parquet(
+        self,
+        path,
+        engine="auto",
+        compression="snappy",
+        index=None,
+        partition_cols=None,
+        storage_options=None,
+        row_group_size=-1,
+    ):
+        # argument defaults should match that of to_parquet_overload in pd_dataframe_ext.py
 
-        ## Dynamic codegen implementation would look something like this:
-        # @submit_jit
-        # def to_parquet_wrapper(df: pd.DataFrame, path):
-        #     df.to_parquet(path)
+        @bodo.jit(spawn=True)
+        def to_parquet_wrapper(
+            df: pd.DataFrame,
+            path,
+            engine,
+            compression,
+            index,
+            partition_cols,
+            storage_options,
+            row_group_size,
+        ):
+            return df.to_parquet(
+                path,
+                engine,
+                compression,
+                index,
+                partition_cols,
+                storage_options,
+                row_group_size,
+            )
 
-        # to_parquet_wrapper(self, args[0])
+        # checks string arguments before jit performs conversion to unicode
+        if not is_overload_none(engine) and get_overload_const_str(engine) not in (
+            "auto",
+            "pyarrow",
+        ):  # pragma: no cover
+            raise BodoError("DataFrame.to_parquet(): only pyarrow engine supported")
+
+        if not is_overload_none(compression) and get_overload_const_str(
+            compression
+        ) not in {"snappy", "gzip", "brotli"}:
+            raise BodoError(
+                "to_parquet(): Unsupported compression: "
+                + get_overload_const_str(compression)
+            )
+
+        to_parquet_wrapper(
+            self,
+            path,
+            engine,
+            compression,
+            index,
+            partition_cols,
+            storage_options,
+            row_group_size,
+        )
 
     def _get_result_id(self) -> str | None:
         if isinstance(self._mgr, LazyMetadataMixin):

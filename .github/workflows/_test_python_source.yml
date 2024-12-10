@@ -52,9 +52,6 @@ jobs:
         # Run Tests
         - name: Run Tests
           run: |
-            # TODO: Remove once fully moved to GA
-            rm -rf setup.cfg
-
             # Bodo Tests: Coverage is collected
             pytest -s -v -Wignore \
               --cov-report= --cov=bodo \
@@ -89,7 +86,7 @@ jobs:
             SF_USERNAME: ${{ secrets.SF_USERNAME }}
             SF_PASSWORD: ${{ secrets.SF_PASSWORD }}
             SF_ACCOUNT: ${{ secrets.SF_ACCOUNT }}
-            SF_AZURE_USERNAME: ${{ secrets.SF_AZURE_USERNAME }}
+            SF_AZURE_USER: ${{ secrets.SF_AZURE_USER }}
             SF_AZURE_PASSWORD: ${{ secrets.SF_AZURE_PASSWORD }}
             SF_AZURE_ACCOUNT: ${{ secrets.SF_AZURE_ACCOUNT }}
             AZURE_STORAGE_ACCOUNT_NAME: ${{ secrets.AZURE_STORAGE_ACCOUNT_NAME }}
