@@ -68,8 +68,8 @@ pip = "*"
 libcurl = "~=8.0"
 zstd = "<=1.5.6"
 hdf5 = { version = ">=1.14.3,<1.14.4.0a0", build = "*mpi_mpich_*" }
-"aws-sdk-cpp" = "*"
-"boost-cpp" = "1.85"
+aws-sdk-cpp = "*"
+boost-cpp = "1.85"
 # Core Python Deps
 numba = "0.60.0"
 numpy = ">=1.24,<1.27"
@@ -107,11 +107,6 @@ snowflake-connector-python = "*"
 xlrd = "*"
 xlsxwriter = "*"
 openpyxl = "*"
-jupyterlab = ">=4.3.2,<5"
-ipykernel = ">=6.29.3,<7"
-pyspark = ">=3.5.0,<4"
-imbalanced-learn = ">=0.12.4,<0.13"
-seaborn = ">=0.13.2,<0.14"
 
 [target.linux-64.dependencies]
 cx_oracle = "*"
