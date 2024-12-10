@@ -1,6 +1,11 @@
 # `pd.Series.dt.hour`
 
+[Link to Pandas documentation](https://pandas.pydata.org/docs/reference/api/pandas.Series.dt.hour.html#pandas.Series.dt.hour)
+
 `pandas.Series.dt.hour`
+
+!!! note
+	Input must be a Series of `datetime64` data.
 
 ### Example Usage
 

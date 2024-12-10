@@ -1,6 +1,11 @@
 # `pd.Series.dt.daysinmonth`
 
+[Link to Pandas documentation](https://pandas.pydata.org/docs/reference/api/pandas.Series.dt.daysinmonth.html#pandas.Series.dt.daysinmonth)
+
 `pandas.Series.dt.daysinmonth`
+
+!!! note
+	Input must be a Series of `datetime64` data.
 
 ### Example Usage
 

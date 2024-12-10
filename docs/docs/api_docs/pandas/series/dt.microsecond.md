@@ -1,6 +1,11 @@
 # `pd.Series.dt.microsecond`
 
+[Link to Pandas documentation](https://pandas.pydata.org/docs/reference/api/pandas.Series.dt.microsecond.html#pandas.Series.dt.microsecond)
+
 `pandas.Series.dt.microsecond`
+
+!!! note
+	Input must be a Series of `datetime64` data.
 
 ### Example Usage
 

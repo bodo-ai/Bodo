@@ -1,15 +1,18 @@
 # `pd.Series.str.pad`
 
+[Link to Pandas documentation](https://pandas.pydata.org/docs/reference/api/pandas.Series.str.pad.html#pandas.Series.str.pad)
+
 `pandas.Series.str.pad(width, side='left', fillchar=' ')`
 
-### Supported Arguments
+### Argument Restrictions:
+ * `width`: must be type `Integer`.
+ * `side`: must be a compile time constant and must be `"left"`, `"right"` or `"both"`.
+ * `fillchar`: must be type `Character`.
 
-| argument   | datatypes                          | other requirements                   |
-|------------|------------------------------------|--------------------------------------|
-| `width`    | Integer                            |                                      |
-| `width`    | One of ("left",  "right",  "both") | **Must be constant at Compile Time** |
-| `fillchar` | String with a single character     |                                      |
+!!! note
+	Input must be a Series of `String` data.
 
+### Example Usage
 ``` py
 >>> @bodo.jit
 ... def f(S):

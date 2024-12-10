@@ -11,12 +11,14 @@ Manually shuffle data evenly across selected ranks.
 - ``parallel``: flag to indicate whether data is distributed. Default: `False`. Inside JIT default value depends on Bodo's distribution analysis algorithm for the data passed (For more information, see Data Distribution section below).
 
 ### Example Usage
+
+Note that this example uses [SPMD launch mode](../../bodo_parallelism/bodo_parallelism_basics.md#spmd).
     
 ```py
 import bodo
 import pandas as pd
 
-@bodo.jit
+@bodo.jit(spawn=False)
 def test_random_shuffle():
     df = pd.DataFrame({"A": range(100)})
     return df

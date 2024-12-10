@@ -8,7 +8,8 @@ Synchronize all processes. Block process from proceeding until all processes rea
 
 A typical example is to make sure all processes see side effects simultaneously.
 For example, a process can delete files from storage while
-others wait before writing to file:
+others wait before writing to file.
+The following example uses [SPMD launch mode](../../bodo_parallelism/bodo_parallelism_basics.md#spmd):
 
 ```py 
 import shutil, os

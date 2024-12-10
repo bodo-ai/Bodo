@@ -50,21 +50,17 @@ CPUDispatcher(<function f at 0x100bec310>)
 ## Parallel Execution Model
 
 As we saw in the "Getting Started" tutorial, Bodo transforms functions
-for parallel execution. Bodo uses Message Passing Interface
-([MPI](https://en.wikipedia.org/wiki/Message_Passing_Interface)) that
-follows Single Program Multiple Data
-([SPMD](https://en.wikipedia.org/wiki/SPMD)) paradigm. In this model,
-the dispatcher does not launch processes or threads on the fly. Instead,
-all processes are launched at the beginning and run the same file using
-`mpiexec` command.
+for parallel execution. Under the hood, the Bodo dispatcher spawns processes on the fly,
+running compiled code in parallel and transparently distributing inputs and
+lazily collecting outputs onto the main process on demand.
 
 Bodo parallelizes functions with the `bodo.jit` decorator by
 distributing the data across the processes. Each rank runs the same code
 on a chunk of the data, and Bodo automatically communicates the data
 between the ranks (as needed).
 
-For example, save the following code in a`test_bodo.py` and use
-`mpiexec` to launch 4 processes as follows:
+For example, save the following code in a`test_bodo.py` and use 4 processes as
+follows:
 
 ```py 
 import numpy as np
@@ -75,14 +71,17 @@ import bodo
 @bodo.jit
 def f(n, a):
     df = pd.DataFrame({"A": np.arange(n) + a})
+    print(df)
     return df
 
 
-print(f(8, 1))
+res = f(8, 1)
+print("RESULT")
+print(res)
 ```
 
 ```shell 
-mpiexec -n 4 python test_bodo.py
+BODO_NUM_WORKERS=4 python test_bodo.py
 ```
 
 Output:
@@ -100,19 +99,33 @@ Output:
    A
 0  1
 1  2
+
+RESULT
+   A
+0  1
+1  2
+2  3
+3  4
+4  5
+5  6
+6  7
+7  8
+
 ```
 
-In this example, `mpiexec` launches 4 Python processes, each 
-executing the same `test_bodo.py` file. Since the function `f` is
-decorated with `bodo.jit` and Bodo can parallelize it, each
-process generates a chunk of the data in `np.arange`.
+In this example, the `bodo.jit` decorator informs `Bodo` to run the function `f` 
+on 4 processes. Execution is parallelized by Bodo and each process generates a
+chunk of the data in `np.arange`.
 
-Note how the prints, which are regular Python code executed outside of
-Bodo, run for each process.
+Note how the prints within the compiled code occur once per process, while
+regular prints occur only once. Within the parallel context, each process
+operates on a chunk of the full data and will communicate when necessary to
+operate on data that isn't locally available. Outside of the JIT function, the
+returned data will only be collected onto the main process if it is accessed. In
+cases where the full data is never accessed on the main thread and simply passed
+to another JIT function, there is no overhead.
 
 !!! warning
-    - Python codes outside of Bodo functions execute sequentially on
-    every process.
     - Bodo functions run in parallel assuming that Bodo is
     able to parallelize them. Otherwise, Bodo prints the following warning
     and runs sequentially on every process.
@@ -122,9 +135,7 @@ Bodo, run for each process.
     ```
 
 On Jupyter notebook, parallel execution happens in very much the same
-way. We start a set of MPI engines through `ipyparallel` and activate a
-client. See [how to use bodo with jupyter notebooks][jupyter] for more information
-and examples.
+way.
 
 !!! seealso "See Also"
     [Parallel APIs][bodoparallelapis]
@@ -151,16 +162,16 @@ import pandas as pd
 def mean_power_speed():
     df = pd.read_parquet("data/cycling_dataset.pq")
     m = df[["power", "speed"]].mean()
+    print(m)
     return m
 
 res = mean_power_speed()
-print(res)
 ```
 
-Save code in mean_power_speed.py and run it with `mpiexec` as follows:
+Save code in mean_power_speed.py and run it as follows:
 
 ```shell
-mpiexec -n 4 python mean_power_speed.py
+BODO_NUM_WORKERS=4 python mean_power_speed.py
 ```
 
 ```console
@@ -187,6 +198,26 @@ chunk) but `m` is replicated, even though it is a Series. Semantically,
 it makes sense for the output of `mean` operation to be replicated on
 all processors, since it is a reduction and produces "small" data.
 
+### Collecting Results from Distributed Execution
+
+Data that is returned from JIT functions is not immediately collected onto the
+main process. Output data is collected lazily only if necessary.
+This has two benefits. First, in cases where the size of the
+data exceeds the amount of available memory on a single host, the program will
+not crash and downstream JIT functions can still be called to
+continue processing data. Second, there is no overhead incurred by needing to
+collect results until the full results are accessed in the main process.
+For example, in cases where the output of a JIT function is obtained to peek at the first few
+rows (`df.head()`) before being consumed as an input to another JIT function, there will be no
+data that needs to be collected.
+
+Lazy data collection is done completely transparently to the user.
+There is no visible difference between, say, a distributed lazy Bodo DataFrame
+versus a regular Pandas DataFrame. As the DataFrame is accessed
+outside of a JIT context, data is collected from other processes back onto the
+main process to allow regular Python execution. Other data types are also supported in this
+way such as pandas Series. 
+
 ### Distributed Diagnostics
 
 The distributions found by Bodo can be printed either by setting the
@@ -200,7 +231,7 @@ mean_power_speed.distributed_diagnostics()
 ```
 
 ```shell
-python mean_power_speed.py
+BODO_NUM_WORKERS=1 python mean_power_speed.py
 ```
 
 ```console
@@ -238,5 +269,81 @@ The output shows that `power` and `speed` columns of `df` are distributed (`1D_B
 This is because `df` is the output from `read_parquet` and input to `mean`, both of which can be distributed by Bodo. 
 `m` is the output from `mean`, which is replicated (available on every process).
 
-[comment]: <> (Autorefs to [caching] and [jupyter] will be populated once those sections are added)
-[todo]: <> (Modify/remove comment above as [caching] and [jupyter] sections are added)
+## Avoiding Spawn Overheads (SPMD launch mode) {#spmd}
+
+By default, Bodo spawns MPI processes the first time a JIT function
+is called. In addition, for each top level JIT call, Bodo sends 
+the execution function and its arguments and receives the output in the main process when execution finished.
+This workflow fits existing sequential Python workflows seamlessly but has some overheads that may be significant for small computations.
+
+The user can launch the program using `mpiexec` to avoid spawn overheads.
+In this mode, the whole program runs in
+Single Program Multiple Data
+([SPMD](https://en.wikipedia.org/wiki/SPMD)) fashion and
+the dispatcher does not launch processes on the fly. Instead,
+all processes are launched at the beginning and run the same file using the
+`mpiexec` command.
+The user code has to be updated to make sure it is valid to run the non-JIT
+parts (which are not managed by Bodo) on all processes in parallel.
+
+
+For example, save the following code in `test_bodo.py` and use
+`mpiexec` to launch 4 processes as follows:
+
+```py 
+import numpy as np
+import pandas as pd
+import bodo
+
+
+@bodo.jit(spawn=False)
+def f(n, a):
+    df = pd.DataFrame({"A": np.arange(n) + a})
+    return df
+
+
+print(f(8, 1))
+```
+
+```shell 
+mpiexec -n 4 python test_bodo.py
+```
+
+Output:
+
+```console
+   A
+2  3
+3  4
+   A
+6  7
+7  8
+   A
+4  5
+5  6
+   A
+0  1
+1  2
+```
+
+In this example, `mpiexec` launches 4 Python processes, each 
+executing the same `test_bodo.py` file. Since the function `f` is
+decorated with `bodo.jit` and Bodo can parallelize it, each
+process generates a chunk of the data in `np.arange`.
+
+
+An advantage of SPMD launch mode is that operations outside of JIT functions that do
+not need access to the full data are inherently parallelized. Since each core
+only has a chunk of the data when returned from JIT, regular Python operations
+happen on data chunks of the JIT output.
+However, this can be error-prone, as operations that
+require access to all rows will need explicit communication.
+The main challenge is that most Python libraries are
+usually not aware of the MPI runtime, and may not expect to be run on every
+core. A common workaround is to use `bodo.get_rank()` to get a unique ID per
+core (integers from `0` to `num processes`), and conditionally execute code only
+when the rank is `0`.
+
+!!! warning
+    - Python code outside of Bodo functions executes sequentially on
+    every process.

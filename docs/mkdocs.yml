@@ -125,26 +125,34 @@ nav:
   - About Bodo: about_bodo.md
   - Getting Started:
     - quick_start/index.md
-    - Quick Start (Cloud): quick_start/quick_start_platform.md
-    - Local SQL Engine Quick Start (Community Edition): quick_start/quickstart_local_sql.md
-    - Local Python Engine Quick Start (Community Edition): quick_start/quickstart_local_python.md
-    - Local Iceberg Quick Start (Community Edition): quick_start/quickstart_local_iceberg.md
-    - Tabular Catalog Quick Start: quick_start/quickstart_tabular_catalog.md
+    - Python Quick Start: quick_start/quickstart_local_python.md
+    - SQL Quick Start: quick_start/quickstart_local_sql.md
+    - Iceberg Quick Start: quick_start/quickstart_local_iceberg.md
+    - Cloud Platform Quick Start: quick_start/quick_start_platform.md
   - Guides:
       - integrating_bodo/index.md
       - Installation and Setup Guides:
           - installation_and_setup/index.md
-          - Bodo Platform:
+          - Local and On-Prem Cluster Installation:
+            - Installing Bodo Engine: installation_and_setup/install.md
+            - Recommended MPI Settings: installation_and_setup/recommended_mpi_settings.md
+            - Recommended Cluster Configuration: installation_and_setup/recommended_cluster_config.md
+          - Bodo Cloud Platform:
             - Bodo Platform on AWS: installation_and_setup/bodo_platform_aws.md
             - Bodo Platform on Azure: installation_and_setup/bodo_platform_azure.md
             - Bodo Platform SDK: installation_and_setup/platform_sdk.md
-          - Bodo On-Prem:
-            - Installing Bodo Community Edition: installation_and_setup/install.md
-            - Configuring Bodo Enterprise Edition: installation_and_setup/enterprise.md
-            - Interactive Bodo Cluster Setup using IPyParallel: installation_and_setup/ipyparallel.md
-            - Recommended MPI Settings: installation_and_setup/recommended_mpi_settings.md
-            - Recommended Cluster Configuration: installation_and_setup/recommended_cluster_config.md
       - Python Development Guide: quick_start/dev_guide.md
+      - Understanding Parallelism with Bodo:
+          - Basics of Bodo Parallelism: bodo_parallelism/bodo_parallelism_basics.md
+          - Advanced Parallelism Topics: bodo_parallelism/advanced.md
+          - Typing Considerations: bodo_parallelism/typing_considerations.md
+          - Unsupported Programs: bodo_parallelism/not_supported.md
+      - Scalable Data I/O with Bodo: file_io.md
+      - Iceberg:
+          - Introduction: iceberg/intro.md
+          - Reading and Writing: iceberg/read_write.md
+          - Supported Data Types: iceberg/data_types.md
+          - Puffin Files: iceberg/puffin_files.md
       - Using the Bodo Cloud Platform:
           - guides/using_bodo_platform/index.md
           - Organization Basics: guides/using_bodo_platform/organization.md
@@ -160,17 +168,6 @@ nav:
           - AWS PrivateLink: guides/using_bodo_platform/aws_private_link.md
           - Troubleshooting: guides/using_bodo_platform/troubleshooting.md
           - Bodo Platform SDK guide : guides/using_bodo_platform/bodo_platform_sdk_guide.md
-      - Understanding Parallelism with Bodo:
-          - Basics of Bodo Parallelism: bodo_parallelism/bodo_parallelism_basics.md
-          - Advanced Parallelism Topics: bodo_parallelism/advanced.md
-          - Typing Considerations: bodo_parallelism/typing_considerations.md
-          - Unsupported Programs: bodo_parallelism/not_supported.md
-      - Iceberg:
-          - Introduction: iceberg/intro.md
-          - Reading and Writing: iceberg/read_write.md
-          - Supported Data Types: iceberg/data_types.md
-          - Puffin Files: iceberg/puffin_files.md
-      - Scalable Data I/O with Bodo: file_io.md
       - Using Regular Python inside Bodo (Object Mode): objmode.md
       - Measuring Performance: performance/performance.md
       - Caching: performance/caching.md
@@ -181,6 +178,28 @@ nav:
       - Deploying Bodo with Kubernetes: integrating_bodo/kubernetes.md
   - API Reference:
       - api_docs/index.md
+      - Bodo Parallel API Reference: api_docs/bodo_parallel_apis
+      - Python Reference:
+        - api_docs/python/index.md
+        - Pandas:
+            - api_docs/pandas/index.md
+            - General Functions: api_docs/pandas/general_functions
+            - DataFrame: api_docs/pandas/dataframe
+            - Groupby : api_docs/pandas/groupby
+            - Series : api_docs/pandas/series
+            - Window : api_docs/pandas/window
+            - DateOffsets: api_docs/pandas/dateoffsets
+            - Input/Output: api_docs/pandas/io
+            - Index Objects: api_docs/pandas/indexapi
+            - TimeDelta : api_docs/pandas/timedelta
+            - Timestamp : api_docs/pandas/timestamp
+        - Numpy: api_docs/numpy.md
+        - User Defined Functions (UDFs): api_docs/udfs.md
+        - Machine Learning:
+            - api_docs/ml/index.md
+            - Scikit Learn: api_docs/ml/sklearn
+            - XGBoost: api_docs/ml/xgboost.md
+        - Miscellaneous Functions: api_docs/miscellaneous.md
       - BodoSQL Reference:
           - api_docs/sql/index.md
           - Supported DataFrame Types: api_docs/sql/data_types.md
@@ -213,27 +232,5 @@ nav:
                 - Table Functions:  api_docs/sql/functions/table
                 - Timestamp Functions: api_docs/sql/functions/timestamp
                 - Type Predicates: api_docs/sql/functions/type
-      - Bodo Parallel API Reference: api_docs/bodo_parallel_apis
-      - Python Reference:
-        - api_docs/python/index.md
-        - Pandas:
-            - api_docs/pandas/index.md
-            - General Functions: api_docs/pandas/general_functions
-            - DataFrame: api_docs/pandas/dataframe
-            - Groupby : api_docs/pandas/groupby
-            - Series : api_docs/pandas/series
-            - Window : api_docs/pandas/window
-            - DateOffsets: api_docs/pandas/dateoffsets
-            - Input/Output: api_docs/pandas/io
-            - Index Objects: api_docs/pandas/indexapi
-            - TimeDelta : api_docs/pandas/timedelta
-            - Timestamp : api_docs/pandas/timestamp
-        - Numpy: api_docs/numpy.md
-        - User Defined Functions (UDFs): api_docs/udfs.md
-        - Machine Learning:
-            - api_docs/ml/index.md
-            - Scikit Learn: api_docs/ml/sklearn
-            - XGBoost: api_docs/ml/xgboost.md
-        - Miscellaneous Functions: api_docs/miscellaneous.md
       - Bodo Platform SDK Reference: api_docs/platform_sdk.md
   - Release Notes: release_notes

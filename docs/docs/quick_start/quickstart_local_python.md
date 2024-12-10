@@ -1,20 +1,10 @@
-# Bodo Python Quickstart (Local) {#quickstart-local-python}
+# Bodo Python Quick Start {#quickstart-local-python}
 
 This quickstart guide will walk you through the process of running a simple Python computation using Bodo on your local machine.
 
 ## Prerequisites
 
-[Conda](https://docs.conda.io){target="blank"} is the recommended way to install Bodo on your local environment. You can install the _Community Edition_ using conda, which allows you to use Bodo for free on up to 8 cores. 
-
-
-```console 
-conda create -n Bodo python=3.12 -c conda-forge
-conda activate Bodo
-conda install bodo -c bodo.ai -c conda-forge
-```
-
-These commands create a conda environment called `Bodo` and install Bodo Community Edition.
-
+[Install Bodo](../installation_and_setup/install.md) to get started (e.g., `pip install bodo` or `conda install bodo -c bodo.ai -c conda-forge`).
 
 ## Generate Sample Data
 
@@ -87,8 +77,9 @@ print(result)
 To run the code, save it to a file, e.g. `test_bodo.py`, and run the following command in your terminal:
 
 ```bash
-mpiexec -n 8 python test_bodo.py
+python test_bodo.py
 ```
 
-Replace `8` with the number of cores you want to use. Note that the first time you run this code, it may take a few seconds to compile the code. Next time you run the code, it will execute much faster. Check the [Python API Reference][pythonreference] for the full list of supported Python operations.
-
+By default Bodo will use all available cores. To set a limit on the number of processes spawned, set the environment variable `BODO_NUM_WORKERS`.
+Note that the first time you run this code, it may take a few seconds to compile the code.
+Next time you run the code, it will execute much faster. Check the [Python API Reference][pythonreference] for the full list of supported Python operations.

@@ -1,6 +1,11 @@
 # `pd.Series.dt.is_year_end`
 
+[Link to Pandas documentation](https://pandas.pydata.org/docs/reference/api/pandas.Series.dt.is_year_end.html#pandas.Series.dt.is_year_end)
+
 `pandas.Series.dt.is_year_end`
+
+!!! note
+	Input must be a Series of `datetime64` data.
 
 ### Example Usage
 

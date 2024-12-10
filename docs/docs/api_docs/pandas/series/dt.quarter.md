@@ -1,6 +1,11 @@
 # `pd.Series.dt.quarter`
 
+[Link to Pandas documentation](https://pandas.pydata.org/docs/reference/api/pandas.Series.dt.quarter.html#pandas.Series.dt.quarter)
+
 `pandas.Series.dt.quarter`
+
+!!! note
+	Input must be a Series of `datetime64` data.
 
 ### Example Usage
 

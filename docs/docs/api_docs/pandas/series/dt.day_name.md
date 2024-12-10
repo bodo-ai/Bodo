@@ -1,8 +1,14 @@
 # `pd.Series.dt.day_name`
 
+[Link to Pandas documentation](https://pandas.pydata.org/docs/reference/api/pandas.Series.dt.day_name.html#pandas.Series.dt.day_name)
+
 `pandas.Series.dt.day_name(locale=None)`
 
-### Supported Arguments None
+### Argument Restrictions:
+ * `locale`: only supports default value `None`.
+
+!!! note
+	Input must be a Series of `datetime64` data.
 
 ### Example Usage
 

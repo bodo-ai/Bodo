@@ -1,21 +1,19 @@
-# Bodo Iceberg Quickstart (Local) {#quickstart-local-iceberg}
+# Bodo Iceberg Quick Start {#quickstart-local-iceberg}
 
 This quickstart guide will walk you through the process of creating and reading from an Iceberg table using Bodo on your local machine.
 
-
 ## Prerequisites
 
+[Install Bodo](../installation_and_setup/install.md) to get started (e.g., `pip install bodo` or `conda install bodo -c bodo.ai -c conda-forge`).
+Additionally, install bodo-iceberg-connector with pip or conda:
 
-[Conda](https://docs.conda.io){target="blank"} is the recommended way to install Bodo on your local environment. You can install the _Community Edition_ using conda, which allows you to use Bodo for free on up to 8 cores. 
-
-
-```console 
-conda create -n Bodo python=3.12 -c conda-forge
-conda activate Bodo
-conda install bodo bodo-iceberg-connector -c bodo.ai -c conda-forge
+```shell
+pip install bodo-iceberg-connector
 ```
 
-These commands create a conda environment called `Bodo` and install Bodo Community Edition.
+```shell
+conda install -c bodo.ai bodo-iceberg-connector
+```
 
 
 ## Create a local Iceberg Table
@@ -120,10 +118,13 @@ df_read = example_read_iceberg()
 To run the code, save it to a file, e.g. `test_bodo_iceberg.py`, and run the following command in your terminal:
 
 ```bash
-mpiexec -n 8 python test_bodo_iceberg.py
+python test_bodo_iceberg.py
 ```
 
-Replace `8` with the number of cores you want to use. The output will be distributed across the number of cores you specify. E.g. if you run the code with 8 cores, here's the expected output:
+
+By default Bodo will use all available cores. To set a limit on the number of processes spawned, set the environment variable `BODO_NUM_WORKERS`.
+Within the JIT functions data will be distributed across the number of cores you specify. Once data is returned, it can be accessed as if it all exists on a single process, though under the hood Bodo will only transfer the full data to the main process if it is actually used.
+E.g. if you run the code with 8 cores, here's the expected print out:
 
 <details> <summary> Click to expand output</summary>
 

@@ -1,6 +1,11 @@
 # `pd.Series.dt.day_of_year`
 
+[Link to Pandas documentation](https://pandas.pydata.org/docs/reference/api/pandas.Series.dt.day_of_year.html#pandas.Series.dt.day_of_year)
+
 `pandas.Series.dt.day_of_year`
+
+!!! note
+	Input must be a Series of `datetime64` data.
 
 ### Example Usage
 

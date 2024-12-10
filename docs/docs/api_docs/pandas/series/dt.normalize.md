@@ -1,6 +1,11 @@
 # `pd.Series.dt.normalize`
 
+[Link to Pandas documentation](https://pandas.pydata.org/docs/reference/api/pandas.Series.dt.normalize.html#pandas.Series.dt.normalize)
+
 `pandas.Series.dt.normalize()`
+
+!!! note
+	Input must be a Series of `datetime64` data.
 
 ### Example Usage
 

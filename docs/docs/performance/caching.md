@@ -36,9 +36,8 @@ def mean_power_speed():
 
 t0 = time.time()
 result = mean_power_speed()
-if bodo.get_rank() == 0:
-    print(result)
-    print("Total execution time:", round(time.time() - t0, 3), "secs")
+print(result)
+print("Total execution time:", round(time.time() - t0, 3), "secs")
 ```
 
 The first time that the above code runs, Bodo compiles the function and
@@ -63,7 +62,7 @@ Total execution time: 0.518 secs
 
 !!! note
     `data/cycling_dataset.pq` is located in the Bodo tutorial
-    [repo](https://github.com/Bodo-inc/Bodo-tutorial).
+    [repo](https://github.com/bodo-ai/Bodo-tutorial).
 
 
 ## Cache Location and Portability
@@ -195,4 +194,4 @@ from cache.
 
 If the compiler reports that it is not able to cache a function, or load
 a function from cache, please report the issue
-[on our feedback respository](https://github.com/Bodo-inc/Feedback).
+[on our feedback respository](https://github.com/bodo-ai/Feedback).

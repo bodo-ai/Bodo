@@ -31,13 +31,13 @@ This guide explains how to use your own instance role for a cluster on the Bodo 
 
 ---
 
-## [Managing Packages on the cluster using IPyParallel magics - Conda and Pip][managing-packages]
-This guide includes instructions on how to manage packages on the cluster using IPyParallel magics.
+## [Managing Packages on the cluster using Jupyter magics - Conda and Pip][managing-packages]
+This guide includes instructions on how to manage packages on the cluster using Jupyter magics.
 
 ---
 
-## [Running shell commands on the cluster using IPyParallel magics][shell-commands]
-This guide explains how to run shell commands on the cluster using IPyParallel magics.
+## [Running shell commands on the cluster using Jupyter magics][shell-commands]
+This guide explains how to run shell commands on the cluster using Jupyter magics.
 
 ---
 

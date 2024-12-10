@@ -1,4 +1,4 @@
-# Managing Packages on the cluster using IPyParallel magics - Conda and Pip {#managing-packages}
+# Managing Packages on the cluster using Jupyter magics - Conda and Pip {#managing-packages}
 
 We recommend all packages to be installed using Conda as that is what we use in our environments.
 Any conda command can be run in parallel on all the nodes of your cluster using `%pconda`.

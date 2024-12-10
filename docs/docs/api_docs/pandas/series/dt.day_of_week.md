@@ -1,6 +1,11 @@
 # `pd.Series.dt.day_of_week`
 
+[Link to Pandas documentation](https://pandas.pydata.org/docs/reference/api/pandas.Series.dt.day_of_week.html#pandas.Series.dt.day_of_week)
+
 `pandas.Series.dt.day_of_week`
+
+!!! note
+	Input must be a Series of `datetime64` data.
 
 ### Example Usage
 

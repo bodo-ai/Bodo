@@ -1,7 +1,7 @@
 ## Clone the bodo platform repository and set required env vars
 
 > [!WARNING]
-> You need to have https://github.com/Bodo-inc/bodo-platform cloned and updated. Ensure you are on the `main` branch.
+> You need to have https://github.com/bodo-ai/bodo-platform cloned and updated. Ensure you are on the `main` branch.
 > You need to set the PLATFORM_SDK_PATH env var to the path of the `sdk2` folder in the bodo-platform repo.
 
 - `export PLATFORM_SDK_PATH=<path_to_sdk2_folder_in_bodo_platform_repo/>`
@@ -24,7 +24,7 @@
 
 ## Creating and api docs 
 
-**WARNING** : Only do this if you are modifying API reference. Contact @ritwika314 first.
+**WARNING** : Only do this if you are modifying API reference.
 
 **note** This process is a bit hacky and manual at the moment, but will improve with time. 
 
@@ -45,4 +45,3 @@ Generate an svg, with a transparent background and embed fonts for any diagrams.
 - To view the deployed docs locally, use `make mike-serve`.
 - To push the current update docs to the docs site, use `make mike-push version_name=<your_version_name>`.
 - To publish new release docs to the docs site, use `make mike-push-latest version_name=<your_version_name>`.
-

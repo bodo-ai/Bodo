@@ -41,6 +41,9 @@ configuration and application behavior. We recommend trying *block
 mapping* and *round-robin mapping* options below for your application to
 achieve the best performance.
 
+!!! info "Important"
+    These options are only supported in [SPMD launch mode](../bodo_parallelism/bodo_parallelism_basics.md#spmd).
+
 ### Block Mapping
 
 In block mapping, cores of each node in the `hostfile` are filled with
@@ -165,3 +168,33 @@ environment variables are set as shown below:
 [0] MPI startup(): I_MPI_ADJUST_REDUCE=3
 [0] MPI startup(): I_MPI_DEBUG=5
 ```
+
+## Automatic Worker Number Detection
+
+Bodo can automatically detect the number of workers to spawn based on MPI_UNIVERSE_SIZE.
+The following sections demonstrate how to configure Intel MPI and MPICH to set
+MPI_UNIVERSE_SIZE.
+
+### Intel MPI
+
+For Intel MPI to correctly set MPI_UNIVERSE_SIZE, you need to create
+`~/.mpiexec.conf` if it doesn't exist and add `--usize SYSTEM`.
+A valid hostfile is also required.
+
+### MPICH
+
+For MPICH to correctly set MPI_UNIVERSE_SIZE, you need to pass the
+`-f <path_to_hostfile>` and `-usize SYSTEM` flags to mpiexec. Mpich doesn't
+have a way to set either of these flags in a configuration file
+so the flags must be passed on the command line every time.
+We recommend creating an alias for `mpiexec` with these flags.
+The hostfile should specify how many processes to run on each host. For example:
+
+```shell
+host1:4
+host2:4
+```
+
+This specifies that 4 processes should run on each of `host1` and `host2`.
+Generally, the number of processes should be equal to the number of
+physical cores on each host.

@@ -15,19 +15,7 @@ important concepts briefly.
 
 Installation
 ------------
-
-We recommend Bodo Platform on AWS or Azure for using Bodo.
-See how to [get started with the Bodo platform](quick_start_platform.md).
-If you prefer a local environment, [Conda](https://docs.conda.io){target="blank"} is the recommended way to install Bodo locally. You can install the _Community Edition_ using conda, which allows you to use Bodo for free on up to 8 cores. 
-
-
-```console 
-conda create -n Bodo python=3.12 -c conda-forge
-conda activate Bodo
-conda install bodo -c bodo.ai -c conda-forge
-```
-
-These commands create a conda environment called `Bodo` and install Bodo Community Edition.
+[Install Bodo](../installation_and_setup/install.md) to get started with Python development (e.g., `pip install bodo` or `conda install bodo -c bodo.ai -c conda-forge`).
 
 Data Transform Example with Bodo
 --------------------------------
@@ -132,7 +120,7 @@ Save this code in `bodo_data_transform.py` and run on a single core from
 command line:
 
 ``` 
-$ python bodo_data_transform.py
+$ BODO_NUM_WORKERS=1 python bodo_data_transform.py
 Total time: 1.78
 ```
 
@@ -140,17 +128,19 @@ This code is *94x* faster with Bodo than Pandas even on a single core,
 because Bodo compiles the function into a native binary, eliminating the
 interpreter overheads in `apply`.
 
-Now let's run the code on 8 CPU cores using `mpiexec` in command line:
+Now let's run the code on all CPU cores - the example below assumes an 8 core
+machine.
 
 ``` 
-$ mpiexec -n 8 python bodo_data_transform.py
+$ python bodo_data_transform.py
 Total time: 0.38
 ```
 
 Using 8 cores gets an additional *~5x* speedup. The same program can be
 scaled to larger datasets and as many cores as necessary in compute
-clusters and cloud environments (e.g.
-`mpiexec -n 10000 python bodo_data_transform.py`).
+clusters and cloud environments. An explicit limit on the number of cores used
+can be set with the environment variable `BODO_NUM_WORKERS`, but by default Bodo
+will use all available cores.
 
 See the documentation on [bodo parallelism basics][basics] for more
 details about Bodo's JIT compilation workflow and parallel computation
@@ -235,11 +225,9 @@ to make caching default in the future. See [caching][caching] for more informati
 Parallel Python Processes
 -------------------------
 
-Bodo uses the [MPI](https://en.wikipedia.org/wiki/Message_Passing_Interface){target="blank"}
-parallelism model, which runs the full program on all cores from the
-beginning. Essentially, `mpiexec` launches identical Python processes but
-Bodo divides the data and computation in JIT functions to exploit
-parallelism.
+Bodo will execute code decorated with `bodo.jit` in parallel. The function is
+run on all cores, but Bodo divides the data and computation in JIT functions to
+exploit parallelism.
 
 Let's try a simple example that demonstrates how chunks of data are
 loaded in parallel:
@@ -265,29 +253,12 @@ if __name__ == "__main__":
     load_data_bodo()
 ```
 
-Save this code in `load_data.py` and run on two cores (output prints of
-the cores are mixed):
+Save this code in `load_data.py` and run on two cores:
 
 <details> <summary> Click to expand output</summary>
 
     ```console
-    $ mpiexec -n 2 python load_data.py
-    pandas dataframe:
-                     A        B
-    0              NaT        0
-    1       2013-01-03        1
-    2       2013-01-03        2
-    3              NaT        3
-    4       2013-01-03        4
-    ...            ...      ...
-    9999995 2015-09-29  9999995
-    9999996 2015-09-29  9999996
-    9999997 2015-09-29  9999997
-    9999998 2015-09-29  9999998
-    9999999 2015-09-29  9999999
-    
-    [10000000 rows x 2 columns]
-    
+    $ BODO_NUM_WORKERS=2 python load_data.py
     pandas dataframe:
                      A        B
     0              NaT        0
@@ -320,8 +291,6 @@ the cores are mixed):
     
     [5000000 rows x 2 columns]
     
-    pandas dataframe:
-                     A        B
     5000000 2014-05-18  5000000
     5000001 2014-05-18  5000001
     5000002 2014-05-18  5000002
@@ -339,13 +308,21 @@ the cores are mixed):
 
 </details>   
 
-The first two dataframes printed are regular Pandas dataframes which are
-replicated on both processes and have all 10 million rows. However, the
-last two dataframes printed are Bodo parallelized Pandas dataframes,
-with 5 million rows each. In this case, Bodo parallelizes `read_parquet`
-automatically and loads different chunks of data in different cores.
-Therefore, the non-JIT parts of the Python program are replicated across
-cores whereas Bodo JIT functions are parallelized.
+The first dataframe is a regular Pandas dataframe and has all 10 million rows.
+However, the second dataframe is a Bodo parallelized Pandas
+dataframe which is split into two chunks with 5 million rows each. In this case,
+Bodo parallelizes `read_parquet` automatically and loads different chunks of
+data in different cores.
+
+When parallelizable input is given to a function (e.g. Pandas DataFrames/Series,
+numpy Arrays), Bodo will automatically distribute input for parallel
+computation, freeing users from having to manually reason about transforming
+data for parallel computation (see more on that below). For values returned by
+JIT'ed functions, Bodo will avoid gathering all of the output back onto a single
+process unless the full data is actually used outside of a parallel context.
+This means that for large programs running across distributed clusters, one does
+not need to worry about crashes due to running out of memory when retrieving a
+large object from a JIT call.
 
 ### Parallel Computation
 
@@ -371,13 +348,13 @@ if __name__ == "__main__":
 Save this code as `data_groupby.py` and run from command line:
 
 ``` 
-$ mpiexec -n 8 python data_groupby.py
+$ BODO_NUM_WORKERS=8 python data_groupby.py
 ```
 
 This program uses `groupby` which requires rows with the same key to be
-aggregated together. Therefore, Bodo *shuffles* the data automatically
-under the hoods using MPI, and the user doesn't need to worry about
-parallelism challenges like communication.
+aggregated together. Therefore, Bodo *shuffles* the data automatically, and the
+user doesn't need to worry about parallelism challenges
+like communication.
 
 <br>
 
@@ -574,11 +551,3 @@ if __name__ == "__main__":
 
 Please refer to the [Unsupported Python Programs](../bodo_parallelism/not_supported.md#notsupported)
 documentation for more details.
-
-Using Bodo in Jupyter Notebooks {#jupyter}
--------------------------------
-
-See [Interactive Bodo Cluster Setup using IPyParallel][ipyparallelsetup] for more
-information.
-
-
