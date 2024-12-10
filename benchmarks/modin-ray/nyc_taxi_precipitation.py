@@ -8,14 +8,6 @@ print("RAY CPU COUNT: ", cpu_count)
 import modin.pandas as pd
 from modin.pandas.io import to_ray
 
-# run on the first 6 / 60 parquet files
-small_dataset = [
-    f"s3://bodo-example-data/nyc-taxi/fhvhv_tripdata/fhvhv_tripdata_2019-{i:02}.parquet"
-    for i in range(2, 8)
-]
-# run on entire dataset
-full_dataset = "s3://bodo-example-data/nyc-taxi/fhvhv_tripdata/"
-
 
 def run_modin():
     start = time.time()
@@ -29,12 +21,11 @@ def run_modin():
         copy=False,
     )
     fhvhv_tripdata = pd.read_parquet(
-        small_dataset,
+        "s3://bodo-example-data/nyc-taxi/fhvhv_tripdata/",
         storage_options={"anon": True},
     )
     end = time.time()
     print("Reading Time: ", (end - start))
-    print(type(central_park_weather_observations))
 
     start = time.time()
 
@@ -103,7 +94,6 @@ def run_modin():
     print(monthly_trips_weather.head())
 
     start = time.time()
-    print(type(monthly_trips_weather))
     monthly_trips_weather_ray = to_ray(monthly_trips_weather)
     monthly_trips_weather_ray.write_parquet("local:///tmp/data/modin_result.pq")
     end = time.time()
