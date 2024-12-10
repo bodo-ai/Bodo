@@ -1,6 +1,7 @@
 # Pre-Commit CI Config
 ci:
   autoupdate_schedule: monthly
+  skip: [pretty-format-java, pretty-format-kotlin]
 
 # We should never format the copied Calcite files, in order to avoid massive diffs when Calcite is updated.
 # See https://bodo.atlassian.net/wiki/spaces/B/pages/1415970823/Bodo+s+Calcite+Fork#Managing-the-Fork
