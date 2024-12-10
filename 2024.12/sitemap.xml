@@ -4601,7 +4601,17 @@
          <changefreq>daily</changefreq>
     </url>
     <url>
+         <loc>https://docs.bodo.ai/2024.12/installation_and_setup/enterprise/</loc>
+         <lastmod>2024-12-10</lastmod>
+         <changefreq>daily</changefreq>
+    </url>
+    <url>
          <loc>https://docs.bodo.ai/2024.12/installation_and_setup/install/</loc>
+         <lastmod>2024-12-10</lastmod>
+         <changefreq>daily</changefreq>
+    </url>
+    <url>
+         <loc>https://docs.bodo.ai/2024.12/installation_and_setup/ipyparallel/</loc>
          <lastmod>2024-12-10</lastmod>
          <changefreq>daily</changefreq>
     </url>
@@ -4632,6 +4642,16 @@
     </url>
     <url>
          <loc>https://docs.bodo.ai/2024.12/integrating_bodo/database_catalog/</loc>
+         <lastmod>2024-12-10</lastmod>
+         <changefreq>daily</changefreq>
+    </url>
+    <url>
+         <loc>https://docs.bodo.ai/2024.12/integrating_bodo/dl/</loc>
+         <lastmod>2024-12-10</lastmod>
+         <changefreq>daily</changefreq>
+    </url>
+    <url>
+         <loc>https://docs.bodo.ai/2024.12/integrating_bodo/front_end/</loc>
          <lastmod>2024-12-10</lastmod>
          <changefreq>daily</changefreq>
     </url>
@@ -4692,6 +4712,11 @@
     </url>
     <url>
          <loc>https://docs.bodo.ai/2024.12/quick_start/quickstart_local_sql/</loc>
+         <lastmod>2024-12-10</lastmod>
+         <changefreq>daily</changefreq>
+    </url>
+    <url>
+         <loc>https://docs.bodo.ai/2024.12/quick_start/quickstart_tabular_catalog/</loc>
          <lastmod>2024-12-10</lastmod>
          <changefreq>daily</changefreq>
     </url>
@@ -4937,6 +4962,16 @@
     </url>
     <url>
          <loc>https://docs.bodo.ai/2024.12/release_notes/2024.10/</loc>
+         <lastmod>2024-12-10</lastmod>
+         <changefreq>daily</changefreq>
+    </url>
+    <url>
+         <loc>https://docs.bodo.ai/2024.12/release_notes/2024.11/</loc>
+         <lastmod>2024-12-10</lastmod>
+         <changefreq>daily</changefreq>
+    </url>
+    <url>
+         <loc>https://docs.bodo.ai/2024.12/release_notes/2024.12/</loc>
          <lastmod>2024-12-10</lastmod>
          <changefreq>daily</changefreq>
     </url>
