@@ -34,7 +34,7 @@ def get_monthly_travels_weather():
     )
 
     fhvhv_tripdata = spark.read.parquet(
-        "s3a://bodo-example-data/nyc-taxi/fhvhv_tripdata"
+        "s3a://bodo-example-data/nyc-taxi/fhvhv_tripdata/"
     )
 
     fhvhv_tripdata = (
