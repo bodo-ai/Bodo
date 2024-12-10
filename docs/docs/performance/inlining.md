@@ -8,9 +8,10 @@ dependent on the code of other functions. We will explain this with
 examples below.
 
 !!! danger
-Inlining should be used sparingly as it can cause increased compilation
-time. We strongly recommend against inlining functions with 10 or more
-lines of code.
+    Inlining should be used sparingly as it can cause increased compilation
+    time. We strongly recommend against inlining functions with 10 or more
+    lines of code.
+
 
 Bodo's compiler translates high-level code inside `bodo.jit` decorated
 functions to highly optimized lower level code. It can perform many
@@ -20,7 +21,7 @@ inside the function being compiled.
 Let's consider the following example where `data.pq` is a dataset with
 1000 columns:
 
-```py
+``` py
 @bodo.jit
 def example():
     df = pd.read_parquet("data.pq")
@@ -34,13 +35,14 @@ those. When compiling `example`, Bodo automatically optimizes the
 `read_parquet` call to only read the three required columns.
 
 !!! warning
-If you have separate Bodo functions and their code needs to be optimized
-jointly, you need to use inlining.
+    If you have separate Bodo functions and their code needs to be optimized
+    jointly, you need to use inlining.
+
 
 Any code that needs to be optimized jointly needs to be compiled as part
 of the same JIT compilation. If we have the following:
 
-```py
+``` py
 @bodo.jit
 def read_data(fname):
     return pd.read_parquet(fname)
@@ -61,7 +63,7 @@ one.
 
 For example:
 
-```py
+``` py
 @bodo.jit(inline="always")
 def read_data(fname):
     return pd.read_parquet(fname)
@@ -74,3 +76,4 @@ def query():
 
 The option `inline="always"` in this example tells the compiler to
 compile and include `read_data` when it is compiling `query`.
+

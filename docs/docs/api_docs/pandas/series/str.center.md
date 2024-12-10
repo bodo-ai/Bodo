@@ -4,14 +4,14 @@
 
 ### Supported Arguments
 
-| argument | datatypes |
+| argument   | datatypes                      |
 |------------|--------------------------------|
-| `width` | Integer |
+| `width`    | Integer                        |
 | `fillchar` | String with a single character |
 
 ### Example Usage
 
-```py
+``` py
 >>> @bodo.jit
 ... def f(S):
 ...     return S.str.center(4)
@@ -26,3 +26,4 @@
 6    ^ Ef
 dtype: object
 ```
+

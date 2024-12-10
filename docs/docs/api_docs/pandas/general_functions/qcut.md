@@ -1,13 +1,15 @@
+
 # `pd.qcut`
+
 
 `pandas.qcut(x, q, labels=None, retbins=False, precision=3, duplicates="raise")`
 
 ### Supported Arguments
 
-|argument | datatypes |
+|argument                   |  datatypes                        |
 |---------------------------|-----------------------------------|
-|`x` | Series or Array like |
-|`q` | Integer or Array like of floats |
+|`x`                        |  Series or Array like             |
+|`q`                        |  Integer or Array like of floats  |
 
 ### Example Usage
 

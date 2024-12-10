@@ -4,9 +4,9 @@
 
 ***Unsupported Index Types***
 
-- PeriodIndex
-- IntervalIndex
-- MultiIndex
+  - PeriodIndex
+  - IntervalIndex
+  - MultiIndex
 
 ### Example Usage
 
@@ -19,3 +19,4 @@
 >>> f(I)
 [5, 4, 3, 2, 1, 0]
 ```
+

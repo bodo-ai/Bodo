@@ -2,6 +2,7 @@
 
 `pandas.core.groupby.Groupby.apply(func, *args, **kwargs)`
 
+
 ### Supported Arguments
 
 - `func`: JIT function, callable defined within a JIT function that returns a DataFrame or Series
@@ -47,3 +48,4 @@ f31  1     233260.000
    19        16.210
 dtype: float64
 ```
+

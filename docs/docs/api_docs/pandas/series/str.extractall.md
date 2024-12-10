@@ -4,12 +4,12 @@
 
 ### Supported Arguments
 
-| argument | datatypes | other requirements |
+| argument | datatypes | other requirements                   |
 |----------|-----------|--------------------------------------|
-| `pat` | String | **Must be constant at Compile Time** |
-| `flags` | Integer | **Must be constant at Compile Time** |
+| `pat`    |   String  | **Must be constant at Compile Time** |
+| `flags`  |   Integer | **Must be constant at Compile Time** |
 
-```py
+``` py
 >>> @bodo.jit
 ... def f(S):
 ...     return S.str.extractall("(a|n)")
@@ -22,3 +22,4 @@
 5 0      a
   1      n
 ```
+

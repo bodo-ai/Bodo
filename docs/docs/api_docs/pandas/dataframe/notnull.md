@@ -1,5 +1,6 @@
 # `pd.DataFrame.notnull`
 
+
 `pandas.DataFrame.notnull()`
 
 ### Example Usage
@@ -16,3 +17,4 @@
 1  False
 2   True
 ```
+

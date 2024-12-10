@@ -8,9 +8,9 @@
 
 ***Unsupported Index Types***
 
-- MultiIndex
-- IntervalIndex
-- PeriodIndex
+  - MultiIndex
+  - IntervalIndex
+  - PeriodIndex
 
 ### Example Usage
 
@@ -23,3 +23,4 @@
 >>> f(I)
 array([ True,  True, False,  True,  True, False, False, False])
 ```
+

@@ -6,9 +6,9 @@ The general recommendation is to use Bodo JIT compilation only for code
 that is data and/or compute intensive (e.g. Pandas code on large
 dataframes). In other words:
 
-- Only use Bodo for data processing and analytics code such as Pandas, Numpy, and Scikit-Learn
-  (see [Bodo API reference][apireference] for analytics APIs with JIT support).
-- Refactor code that sets up infrastructure or performs initializations out of JIT functions.
+-   Only use Bodo for data processing and analytics code such as Pandas, Numpy, and Scikit-Learn 
+    (see [Bodo API reference][apireference] for analytics APIs with JIT support).
+-   Refactor code that sets up infrastructure or performs initializations out of JIT functions.
 
 This reduces the risk of encountering unsupported features and also
 reduces compilation time. For example, the program below finds the input
@@ -44,10 +44,10 @@ This recommendation is similar to Numba's
 First of all, let us understand why the code may fail to compile. There
 are three main kinds of issues:
 
-1. Some API is used that is not supported in Bodo JIT yet (see [Bodo API Reference][apireference]).
-1. Some Python construct or data structure is used that cannot be JIT compiled
-   (see [Unsupported Python APIs][notsupportedpython]).
-1. The code has type stability issues (see [type stability][typestability]).
+1.  Some API is used that is not supported in Bodo JIT yet (see [Bodo API Reference][apireference]).
+2.  Some Python construct or data structure is used that cannot be JIT compiled
+    (see [Unsupported Python APIs][notsupportedpython]).
+3.  The code has type stability issues (see [type stability][typestability]).
 
 Below are some examples of the type of errors you may see due to these
 issues.
@@ -86,7 +86,7 @@ result in a `BodoError` as follows:
 ```
 BodoError: <attribute> not supported yet
 ```
-
+        
 For example:
 
 ```py
@@ -228,7 +228,6 @@ bodo.utils.typing.BodoError: pd.concat(): 'axis' should be a constant integer
     2    5
     dtype: int64
 ```
-
 See [Bodo API reference][apireference] for more details on argument requirements.
 
 ## Troubleshooting Compilation Errors
@@ -238,91 +237,91 @@ Now that we understand what causes the error, let's fix it!
 For potential unsupported APIs, Python feature gaps or type stability
 issues try the following:
 
-1. Make sure your code works in Python. In a lot of cases, a Bodo
-   decorated function does not compile, but it does not compile in
-   Python either.
+1.  Make sure your code works in Python. In a lot of cases, a Bodo
+    decorated function does not compile, but it does not compile in
+    Python either.
 
-1. Refactor your code with supported operations if possible. For
-   instance, the `sort_index(key=lambda ...)` examble above can be
-   replaced with regular `sort_values`:
+2.  Refactor your code with supported operations if possible. For
+    instance, the `sort_index(key=lambda ...)` examble above can be
+    replaced with regular `sort_values`:
 
-   ```py
-   >>> df = pd.DataFrame({"a": [1, 2, 3, 4]}, index=['A', 'b', 'C', 'd'])
-   >>> @bodo.jit
-   ... def f(df):
-   ...     return df.sort_index(key=lambda x: x.str.lower())
-   ...
-   >>> f(df)
-   Traceback (most recent call last):
-     File "<stdin>", line 1, in <module>
-     File "/opt/miniconda3/envs/Bodo/lib/python3.12/site-packages/bodo/numba_compat.py", line 874, in _compile_for_args
-       raise error
-   bodo.utils.typing.BodoError: DataFrame.sort_index(): key parameter only supports default value None
+    ```py
+    >>> df = pd.DataFrame({"a": [1, 2, 3, 4]}, index=['A', 'b', 'C', 'd'])
+    >>> @bodo.jit
+    ... def f(df):
+    ...     return df.sort_index(key=lambda x: x.str.lower())
+    ...
+    >>> f(df)
+    Traceback (most recent call last):
+      File "<stdin>", line 1, in <module>
+      File "/opt/miniconda3/envs/Bodo/lib/python3.12/site-packages/bodo/numba_compat.py", line 874, in _compile_for_args
+        raise error
+    bodo.utils.typing.BodoError: DataFrame.sort_index(): key parameter only supports default value None
 
-   >>> @bodo.jit
-   ... def f(df):
-   ...     df["key"] = df.index.map(lambda a: a.lower())
-   ...     return df.sort_values("key").drop(columns="key")
-   ...
-   >>> f(df)
-       a
-       A  1
-       b  2
-       C  3
-       d  4
-   ```
+    >>> @bodo.jit
+    ... def f(df):
+    ...     df["key"] = df.index.map(lambda a: a.lower())
+    ...     return df.sort_values("key").drop(columns="key")
+    ...
+    >>> f(df)
+        a
+        A  1
+        b  2
+        C  3
+        d  4
+    ```
+    
+3.  Refactor your code and use regular Python for unsupported
+    features.
 
-1. Refactor your code and use regular Python for unsupported
-   features.
+    a.  Move the code causing issues to regular Python and pass
+        necessary data to JIT functions.
+    b.  Use Object Mode to perform some computation within JIT
+        functions in regular Python if necessary (see [Object Mode][objmode]).
 
-   a. Move the code causing issues to regular Python and pass
-   necessary data to JIT functions.
-   b. Use Object Mode to perform some computation within JIT
-   functions in regular Python if necessary (see [Object Mode][objmode]).
+4.  Refactor your code to make it type stable (see
+    [type stability][typestability]). For example:
 
-1. Refactor your code to make it type stable (see
-   [type stability][typestability]). For example:
-
-   ```py
-   >>> flag = True
-   >>> @bodo.jit
-   ... def f(flag):
-   ...     df = pd.read_parquet("in.parquet")
-   ...     if flag:
-   ...             df["C"] = 1
-   ...     df.to_parquet("out.parquet")
-   ...
-   >>> f(flag)
-   Traceback (most recent call last):
-     File "<stdin>", line 1, in <module>
-     File "/opt/miniconda3/envs/Bodo/lib/python3.12/site-packages/bodo/numba_compat.py", line 854, in _compile_for_args
-       error_rewrite(e, 'typing')
-     File "/opt/miniconda3/envs/Bodo/lib/python3.12/site-packages/bodo/numba_compat.py", line 763, in error_rewrite
-       raise e.with_traceback(None)
-   numba.core.errors.TypingError: Cannot unify dataframe((Array(datetime64[ns], 1, 'C', False, aligned=True), Array(int64, 1, 'C', False, aligned=True)), RangeIndexType(none), ('A', 'B'), 1D_Block_Var, True, False) and dataframe((Array(datetime64[ns], 1, 'C', False, aligned=True), Array(int64, 1, 'C', False, aligned=True), Array(int64, 1, 'C', False, aligned=True)), RangeIndexType(none), ('A', 'B', 'C'), 1D_Block_Var, True, False) for 'df', defined at <stdin> (3)
+    ```py
+    >>> flag = True
+    >>> @bodo.jit
+    ... def f(flag):
+    ...     df = pd.read_parquet("in.parquet")
+    ...     if flag:
+    ...             df["C"] = 1
+    ...     df.to_parquet("out.parquet")
+    ...
+    >>> f(flag)
+    Traceback (most recent call last):
+      File "<stdin>", line 1, in <module>
+      File "/opt/miniconda3/envs/Bodo/lib/python3.12/site-packages/bodo/numba_compat.py", line 854, in _compile_for_args
+        error_rewrite(e, 'typing')
+      File "/opt/miniconda3/envs/Bodo/lib/python3.12/site-packages/bodo/numba_compat.py", line 763, in error_rewrite
+        raise e.with_traceback(None)
+    numba.core.errors.TypingError: Cannot unify dataframe((Array(datetime64[ns], 1, 'C', False, aligned=True), Array(int64, 1, 'C', False, aligned=True)), RangeIndexType(none), ('A', 'B'), 1D_Block_Var, True, False) and dataframe((Array(datetime64[ns], 1, 'C', False, aligned=True), Array(int64, 1, 'C', False, aligned=True), Array(int64, 1, 'C', False, aligned=True)), RangeIndexType(none), ('A', 'B', 'C'), 1D_Block_Var, True, False) for 'df', defined at <stdin> (3)
 
 
 
-   >>> @bodo.jit
-   ... def f1():
-   ...     df = pd.read_parquet("in.parquet")
-   ...     return df
-   ...
-   >>> @bodo.jit
-   ... def f2(df):
-   ...     df["C"] = 1
-   ...     return df
-   ...
-   >>> @bodo.jit
-   ... def f3(df):
-   ...     df.to_parquet("out.parquet")
-   ...
-   >>> df = f1()
-   >>> if flag:
-   ...     df = f2(df)
-   ...
-   >>> f3(df)
-   ```
+    >>> @bodo.jit
+    ... def f1():
+    ...     df = pd.read_parquet("in.parquet")
+    ...     return df
+    ...
+    >>> @bodo.jit
+    ... def f2(df):
+    ...     df["C"] = 1
+    ...     return df
+    ...
+    >>> @bodo.jit
+    ... def f3(df):
+    ...     df.to_parquet("out.parquet")
+    ...
+    >>> df = f1()
+    >>> if flag:
+    ...     df = f2(df)
+    ...
+    >>> f3(df)
+    ```
 
 ## Disabling Python Output Buffering
 
@@ -340,3 +339,4 @@ If you want to request a new feature, or report a bug you have found,
 please create an issue in our[Feedback](https://github.com/bodo-ai/Feedback) repository. If you
 encounter an error which is not covered on this page, please report it
 to our Feedback repository as well.
+

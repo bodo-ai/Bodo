@@ -1,12 +1,15 @@
 # `pd.DataFrame.sample`
 
+
 `pandas.DataFrame.sample(n=None, frac=None, replace=False, weights=None, random_state=None, axis=None, ignore_index=False)`
+
 
 ### Supported Arguments
 
 - `n`: Integer
 - `frac`: Float
 - `replace`: boolean
+
 
 ### Example Usage
 
@@ -20,3 +23,4 @@
    A  B  C
 2  3  6  9
 ```
+

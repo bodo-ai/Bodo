@@ -3089,8 +3089,8 @@ def test_dict_encoded_small_table(memory_leak_check):
 def test_snowflake_filter_pushdown_edgecase(memory_leak_check):
     """
     Test that filter pushdown works for an edge case
-
-
+    
+    
     """
 
     @bodo.jit(inline="never")
@@ -3153,7 +3153,7 @@ def test_snowflake_filter_pushdown_edgecase(memory_leak_check):
 def test_snowflake_filter_pushdown_edgecase_2(memory_leak_check):
     """
     Test that filter pushdown works for a specific edge case
-
+    
     Originally, this would throw a compile time error in the filter pushdown code.
     """
 

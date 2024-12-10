@@ -32,6 +32,7 @@ For Iceberg catalogs, only a subset of the columns are supported. The rest will 
 - `NAME`
 - `DATABASE_NAME`
 
+
 The `TERSE` option will return only the following output columns, regardless of catalog:
 
 - `CREATED_ON`

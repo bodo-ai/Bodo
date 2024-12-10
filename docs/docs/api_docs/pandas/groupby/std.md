@@ -2,8 +2,9 @@
 
 `pandas.core.groupby.Groupby.std(ddof=1)`
 
+
 !!! note
-`std` is only supported on numeric columns and is not supported on boolean column
+    `std` is only supported on numeric columns and is not supported on boolean column
 
 ### Example Usage
 
@@ -26,3 +27,4 @@ B
 421  12.122064  122923.261366
 f31   0.000000       5.159256
 ```
+

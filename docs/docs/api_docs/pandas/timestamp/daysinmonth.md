@@ -1,5 +1,6 @@
 # `pd.Timestamp.daysinmonth`
 
+
 `pandasTimestamp.daysinmonth`
 
 ### Example Usage
@@ -13,3 +14,5 @@
 >>> f()
 31
 ```
+
+

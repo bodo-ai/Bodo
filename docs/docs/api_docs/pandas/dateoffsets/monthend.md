@@ -1,5 +1,6 @@
 # `pd.tseries.offsets.MonthEnd`
 
+
 `pandas.tseries.offsets.MonthEnd(n=1, normalize=False)`
 
 ### Supported Arguments
@@ -8,7 +9,6 @@
 - `normalize`: boolean
 
 ### Example Usage
-
 ```py
 >>> @bodo.jit
 >>> def f(ts):
@@ -18,3 +18,6 @@
 
 Timestamp('2021-01-31 22:00:00')
 ```
+
+
+

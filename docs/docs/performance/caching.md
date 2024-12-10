@@ -13,10 +13,9 @@ the most common situation).
 
 !!! warning
 
-```
-Caching works in most (but not all) situations, and is disabled by
-default. See caching limitations below for more information.
-```
+    Caching works in most (but not all) situations, and is disabled by
+    default. See caching limitations below for more information.
+
 
 ## Caching Example
 
@@ -51,7 +50,6 @@ speed      5.656851
 dtype: float64
 Total execution time: 4.614 secs
 ```
-
 In subsequent runs, it will recover the function from cache and as a
 result, the execution time will be much faster:
 
@@ -63,8 +61,9 @@ Total execution time: 0.518 secs
 ```
 
 !!! note
-`data/cycling_dataset.pq` is located in the Bodo tutorial
-[repo](https://github.com/bodo-ai/Bodo-tutorial).
+    `data/cycling_dataset.pq` is located in the Bodo tutorial
+    [repo](https://github.com/bodo-ai/Bodo-tutorial).
+
 
 ## Cache Location and Portability
 
@@ -111,9 +110,10 @@ determine that the source code has been modified, invalidate the cache
 and recompile the function.
 
 !!! warning
-It is sometimes necessary to clear the cache manually (see caching
-limitations below). To clear the cache, the cache files can simply be
-removed.
+    It is sometimes necessary to clear the cache manually (see caching
+    limitations below). To clear the cache, the cache files can simply be
+    removed.
+
 
 ## Tips for Reusing the Cache
 
@@ -127,7 +127,7 @@ the cache will be invalidated.
 For example: a typical use case is calling an IO function with a
 different file name.
 
-```py
+``` py
 @bodo.jit(cache=True)
 def io_call(file_name):
     ...
@@ -142,7 +142,7 @@ new arguments. The cached IO function will work for a change in file
 name so long as the file schema is the same. For example, the below code
 snippet
 
-```py
+``` py
 import IO_function from IO_functions
 IO_function(file_name)
 ```
@@ -155,13 +155,13 @@ modified since `IO_function` is isolated from that code change.
 For IPython notebooks the function to be cached should be in a separate
 cell from the function call.
 
-```py
+``` py
 @bodo.jit(cache=True)
 def io_call(file_name):
     ...
 ```
 
-```py
+``` py
 io_call(file_name)
 io_call(another_file_name)
 ...
@@ -172,17 +172,17 @@ invalidated and the function must be compiled again.
 
 ## Current Caching Limitations
 
-- Changes in compiled functions are not seen across files. For
-  example, if we have a cached Bodo function that calls a cached Bodo
-  function in a different file, and modify the latter, Bodo will not
-  update its cache (and therefore run with the old version of the
-  function).
-- Global variables are treated as compile-time constants. When a
-  function is compiled, the value of any globals that the function
-  uses are embedded in the binary at compilation time and remain
-  constant. If the value of the global changes in the source code
-  after compilation, the compiled object (and cache) will not rebind
-  to the new value.
+-   Changes in compiled functions are not seen across files. For
+    example, if we have a cached Bodo function that calls a cached Bodo
+    function in a different file, and modify the latter, Bodo will not
+    update its cache (and therefore run with the old version of the
+    function).
+-   Global variables are treated as compile-time constants. When a
+    function is compiled, the value of any globals that the function
+    uses are embedded in the binary at compilation time and remain
+    constant. If the value of the global changes in the source code
+    after compilation, the compiled object (and cache) will not rebind
+    to the new value.
 
 ## Troubleshooting
 

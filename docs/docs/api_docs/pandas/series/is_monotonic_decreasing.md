@@ -1,10 +1,10 @@
 # `pd.Series.is_monotonic_decreasing`
 
-\`pandas.Series.is_monotonic_decreasing
+`pandas.Series.is_monotonic_decreasing
 
 ### Example Usage
 
-```py
+``` py
 >>> @bodo.jit
 ... def f(S):
 ...     return S.is_monotonic_decreasing
@@ -12,3 +12,4 @@
 >>> f(S)
 False
 ```
+

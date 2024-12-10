@@ -4,6 +4,7 @@
 
 - `sklearn.naive_bayes.MultinomialNB`
 
+
 This class provides Naive Bayes classifier for multinomial models with
 distributed large-scale learning.
 
@@ -13,34 +14,31 @@ distributed large-scale learning.
 
 - `sklearn.naive_bayes.MultinomialNB.fit(X, y, sample_weight=None)`
 
-  ***Supported Arguments***
-  <br>
-  <br>
-
-  - `X`: NumPy Array or Pandas Dataframes.
-  - `y`: NumPy Array or Pandas Dataframes.
+    ***Supported Arguments***
+    <br>
+    <br>    
+    -   `X`: NumPy Array or Pandas Dataframes.
+    -   `y`: NumPy Array or Pandas Dataframes.
 
 #### sklearn.naive_bayes.MultinomialNB.predict
 
 - `sklearn.naive_bayes.MultinomialNB.predict(X)`
 
-  ***Supported Arguments***
-  <br>
-  <br>
-
-  - `X`: NumPy Array or Pandas Dataframes.
+    ***Supported Arguments***
+    <br>
+    <br>    
+    -  `X`: NumPy Array or Pandas Dataframes.
 
 #### sklearn.naive_bayes.MultinomialNB.score
 
 - `sklearn.naive_bayes.MultinomialNB.score(X, y, sample_weight=None)`
 
-  ***Supported Arguments***
-  <br>
-  <br>
-
-  - `X`: NumPy Array or Pandas Dataframes.
-  - `y`: NumPy Array or Pandas Dataframes.
-  - `sample_weight`: Numeric NumPy Array or Pandas Dataframes.
+    ***Supported Arguments***
+    <br>
+    <br>    
+    -   `X`: NumPy Array or Pandas Dataframes.
+    -   `y`: NumPy Array or Pandas Dataframes.
+    -   `sample_weight`: Numeric NumPy Array or Pandas Dataframes.
 
 ### Example Usage
 

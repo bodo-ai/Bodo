@@ -1,15 +1,18 @@
 # `pd.Index.is_monotonic_decreasing`
 
+
 `pandasIndex.is_monotonic_decreasing`
+
 
 ***Unsupported Index Types***
 
-- StringIndex
-- BinaryIndex
-- IntervalIndex
-- CategoricalIndex
-- PeriodIndex
-- MultiIndex
+  - StringIndex
+  - BinaryIndex
+  - IntervalIndex
+  - CategoricalIndex
+  - PeriodIndex
+  - MultiIndex
+
 
 ### Example Usage
 
@@ -22,3 +25,5 @@
 >>> f(I)
 False
 ```
+
+

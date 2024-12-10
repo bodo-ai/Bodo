@@ -1,19 +1,21 @@
 # `pd.pivot`
 
-`pandas.pivot(data, values=None, index=None, columns=None)`
+ `pandas.pivot(data, values=None, index=None, columns=None)`
+
 
 ### Supported Arguments
 
-| argument | datatypes |
+| argument                    | datatypes                                  |
 |-----------------------------|--------------------------------------------|
-| `data` | DataFrame |
-| `values` | Constant Column Label or list of labels |
-| `index` | Constant Column Label or list of labels |
-| `columns` | Constant Column Label |
+| `data`                      |   DataFrame                                |
+| `values`                    |   Constant Column Label or list of  labels |
+| `index`                     |   Constant Column Label or list of  labels |
+| `columns`                   |   Constant Column Label                    |
 
 !!! note
-The the number of columns and names of the output DataFrame won't be known
-at compile time. To update typing information on DataFrame you should pass it back to Python.
+    The the number of columns and names of the output DataFrame won't be known
+    at compile time. To update typing information on DataFrame you should pass it back to Python.
+
 
 ### Example Usage
 

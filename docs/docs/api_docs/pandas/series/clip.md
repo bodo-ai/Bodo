@@ -2,16 +2,16 @@
 
 `pandas.Series.clip(axis=0, inplace=False, lower=None, upper=None)`
 
-### Supported Arguments
+### Supported Arguments 
 
-| argument | datatypes | other requirements |
+| argument    | datatypes                                  | other requirements                   |
 |-------------|--------------------------------------------|--------------------------------------|
-| `lower` | Scalar or series matching the Series type | |
-| `upper` | Scalar or series matching the Series type | |
+| `lower`     | Scalar or series matching the Series type  |                                      |
+| `upper`     | Scalar or series matching the Series type  |                                      |
 
 ### Example Usage
 
-```py
+``` py
 >>> @bodo.jit
 ... def f(S, lower, upper):
 ...     return S.clip(lower, upper)
@@ -25,3 +25,4 @@
 5     4
 dtype: Int64
 ```
+

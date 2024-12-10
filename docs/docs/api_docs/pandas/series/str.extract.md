@@ -4,13 +4,13 @@
 
 ### Supported Arguments
 
-| argument | datatypes | other requirements |
+| argument | datatypes   | other requirements                   |
 |----------|-------------|--------------------------------------|
-| `pat` | - String | **Must be constant at Compile Time** |
-| `flags` | - Integer | **Must be constant at Compile Time** |
-| `expand` | - Boolean | **Must be constant at Compile Time** |
+| `pat`    | -   String  | **Must be constant at Compile Time** |
+| `flags`  | -   Integer | **Must be constant at Compile Time** |
+| `expand` | -   Boolean | **Must be constant at Compile Time** |
 
-```py
+``` py
 >>> @bodo.jit
 ... def f(S):
 ...     return S.str.extract("(a|e)")
@@ -25,3 +25,4 @@
 5    a
 6  NaN
 ```
+

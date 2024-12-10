@@ -1,5 +1,6 @@
 # `pd.Timestamp.day_of_year`
 
+
 `pandasTimestamp.day_of_year`
 
 ### Example Usage
@@ -13,3 +14,5 @@
 >>> f()
 343
 ```
+
+

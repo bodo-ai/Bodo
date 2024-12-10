@@ -1,15 +1,16 @@
 # `pd.DataFrame.last`
 
+
 `pandas.DataFrame.last(offset)`
 
 ### Supported Arguments
 
 - `offset`: String or Offset type
-  - String argument must be a valid [frequency alias](https://pandas.pydata.org/docs/user_guide/timeseries.html#timeseries-offset-aliases){target=blank}
+    - String argument must be a valid [frequency alias](https://pandas.pydata.org/docs/user_guide/timeseries.html#timeseries-offset-aliases){target=blank}
 
 !!! note
-DataFrame must have a valid DatetimeIndex and is assumed to already be sorted.
-This function have undefined behavior if the DatetimeIndex is not sorted.
+    DataFrame must have a valid DatetimeIndex and is assumed to already be sorted.
+    This function have undefined behavior if the DatetimeIndex is not sorted.
 
 ### Example Usage
 
@@ -27,3 +28,4 @@ This function have undefined behavior if the DatetimeIndex is not sorted.
 2024-12-19 22:32:43.636363632  98  198
 2024-12-31 00:00:00.000000000  99  199
 ```
+

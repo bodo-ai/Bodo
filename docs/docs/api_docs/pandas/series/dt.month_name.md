@@ -5,15 +5,14 @@
 `pandas.Series.dt.month_name(locale=None)`
 
 ### Argument Restrictions:
-
-- `locale`: only supports default value `None`.
+ * `locale`: only supports default value `None`.
 
 !!! note
-Input must be a Series of `datetime64` data.
+	Input must be a Series of `datetime64` data.
 
 ### Example Usage
 
-```py
+``` py
 >>> @bodo.jit
 ... def f(S):
 ...     return S.dt.month_name()
@@ -51,3 +50,4 @@ Input must be a Series of `datetime64` data.
 29      January
 dtype: object
 ```
+

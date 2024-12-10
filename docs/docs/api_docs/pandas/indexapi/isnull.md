@@ -4,8 +4,8 @@
 
 ***Unsupported Index Types***
 
-- MultiIndex
-- IntervalIndex
+  - MultiIndex
+  - IntervalIndex
 
 ### Example Usage
 
@@ -19,4 +19,6 @@
 [False  True False]
 ```
 
+
 ### Conversion
+

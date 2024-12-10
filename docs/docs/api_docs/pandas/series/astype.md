@@ -2,17 +2,19 @@
 
 `pandas.Series.astype(dtype, copy=True, errors="raise", _bodo_nan_to_str=True)`
 
+
 ### Supported Arguments
 
-| argument | datatypes | other requirements |
+| argument           | datatypes                                                                                                                                                        | other requirements                                                                                                                                                                                                                                     |
 |--------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `dtype` | <ul><li> String (string must be parsable by `np.dtype`) </li><li> Valid type (see types)</li><li> The following functions: float, int, bool, str </li></ul> | **Must be constant at Compile Time** |
-| `copy` | Boolean | **Must be constant at Compile Time** |
-| `_bodo_nan_to_str` | Boolean | <ul><li> **Must be constant at Compile Time** </li><li> Argument unique to Bodo. When `True` NA values in when converting to string are represented as NA instead of a string representation of the NA value '<NA>'), the default Pandas behavior. |
+| `dtype`            | <ul><li>   String (string must be parsable by `np.dtype`) </li><li>  Valid type (see types)</li><li>   The following functions: float, int, bool, str </li></ul> | **Must be constant at   Compile Time**                                                                                                                                                                                                                 |
+| `copy`             | Boolean                                                                                                                                                          | **Must be constant at Compile Time**                                                                                                                                                                                                                   |
+| `_bodo_nan_to_str` | Boolean                                                                                                                                                          | <ul><li> **Must be constant at Compile Time** </li><li> Argument unique to  Bodo. When `True` NA values in when converting to string are represented as NA  instead of a string representation of the  NA value  '<NA>'), the default  Pandas behavior. |
+
 
 ### Example Usage
 
-```py
+``` py
 >>> @bodo.jit
 ... def f(S):
 ...     return S.astype(np.float32)

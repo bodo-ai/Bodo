@@ -4,8 +4,8 @@
 
 ***Unsupported Index Types***
 
-- MultiIndex
-- IntervalIndex
+  - MultiIndex
+  - IntervalIndex
 
 ### Example Usage
 
@@ -18,3 +18,4 @@
 >>> f(I)
 [False  True False]
 ```
+

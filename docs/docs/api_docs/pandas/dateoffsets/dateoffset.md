@@ -10,13 +10,13 @@
 - `months`: integer
 - `weeks`: integer
 - `days`: integer
-- `hours`: integer
+- `hours`:  integer
 - `minutes`: integer
-- `seconds`: integer
-- `microseconds`: integer
+- `seconds`:  integer
+- `microseconds`:  integer
 - `nanoseconds`: integer
-- `year`: integer
-- `month`: integer
+- `year`:  integer
+- `month`:  integer
 - `weekday`: integer
 - `day`: integer
 - `hour`: integer
@@ -36,3 +36,5 @@
 
 Timestamp('2021-09-03 02:00:00')
 ```
+
+

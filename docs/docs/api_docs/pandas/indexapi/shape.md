@@ -1,5 +1,6 @@
 # `pd.Index.shape`
 
+
 `pandasIndex.shape`
 
 ### Example Usage
@@ -13,3 +14,5 @@
 >>> f(I)
 (3,)
 ```
+
+

@@ -4,15 +4,15 @@
 
 ### Supported Arguments
 
-| argument | datatypes | other requirements |
+| argument    | datatypes                        | other requirements                   |
 |-------------|----------------------------------|--------------------------------------|
-| `left` | Scalar matching the Series type | |
-| `right` | Scalar matching the Series type | |
-| `inclusive` | One of ("both", "neither") | **Must be constant at Compile Time** |
+| `left`      | Scalar matching the Series type  |                                      |
+| `right`     | Scalar matching  the Series type |                                      |
+| `inclusive` | One of ("both", "neither")       | **Must be constant at Compile Time** |
 
 ### Example Usage
 
-```py
+``` py
 >>> @bodo.jit
 ... def f(S):
 ...     return S.between(3, 5, "both")
@@ -31,3 +31,4 @@
 99    False
 Length: 100, dtype: bool
 ```
+

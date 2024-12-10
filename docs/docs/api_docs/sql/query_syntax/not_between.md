@@ -1,23 +1,20 @@
 # NOT BETWEEN
 
+
+
 The `#!sql BETWEEN` operator selects values within a given range. The
 values can be numbers, text, or datetimes. The `#!sql BETWEEN` operator
 is inclusive: begin and end values are included:
-
 ```sql
 SELECT <COLUMN_NAMES>
 FROM <TABLE_NAME>
 WHERE <COLUMN_NAME> BETWEEN <VALUE1> AND <VALUE2>
 ```
-
 For example:
-
 ```sql
 SELECT A FROM table1 WHERE A BETWEEN 10 AND 100
 ```
-
 ### Example Usage
-
 ```py
 >>>@bodo.jit
 ... def g(df):
@@ -54,3 +51,4 @@ SELECT A FROM table1 WHERE A BETWEEN 10 AND 100
 6  Jonathon Middleton  12764.50
 9      Darryl Rosales  25645.39
 ```
+

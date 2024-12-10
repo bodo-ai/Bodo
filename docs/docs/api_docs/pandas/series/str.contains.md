@@ -5,19 +5,17 @@
 `pandas.Series.str.contains(pat, case=True, flags=0, na=None, regex=True)`
 
 ### Argument Restrictions:
-
-- `pat`: must be type `String`.
-- `case`: must be a compile time constant and must be type `Boolean`.
-- `flags`: must be type `Integer`.
-- `na`: only supports default value `None`.
-- `regex`: must be a compile time constant and must be type `Boolean`.
+ * `pat`: must be type `String`.
+ * `case`: must be a compile time constant and must be type `Boolean`.
+ * `flags`: must be type `Integer`.
+ * `na`: only supports default value `None`.
+ * `regex`: must be a compile time constant and must be type `Boolean`.
 
 !!! note
-Input must be a Series of `String` data.
+	Input must be a Series of `String` data.
 
 ### Example Usage:
-
-```py
+``` py
 >>> @bodo.jit
 ... def f(S):
 ...     return S.str.contains("a.+")
@@ -32,3 +30,4 @@ Input must be a Series of `String` data.
 6    False
 dtype: boolean
 ```
+

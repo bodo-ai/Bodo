@@ -2,10 +2,11 @@
 
 `pandas.DataFrame.join(other, on=None, how='left', lsuffix='', rsuffix='', sort=False)`
 
+
 ### Supported Arguments
 
-- `other`: DataFrame
-- `on`: constant string column name, constant list/tuple of column names
+   - `other`: DataFrame
+   - `on`: constant string column name, constant list/tuple of column names
 
 ### Example Usage
 
@@ -24,4 +25,5 @@
 ```
 
 !!! note
-Joined dataframes cannot have common columns. The output dataframe is not sorted by default for better parallel performance
+    Joined dataframes cannot have common columns. The output dataframe is not sorted by default for better parallel performance
+

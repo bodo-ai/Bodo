@@ -1,9 +1,9 @@
 # `pd.Timestamp.now`
 
+
 `pandasTimestamp.now(tz=None)`
 
 ### Supported Arguments:
-
 - `tz`: constant string, integer, or None
 
 ### Example Usage

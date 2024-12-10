@@ -4,14 +4,14 @@
 
 ### Supported Arguments
 
-| argument | datatypes | other requirements |
+| argument          | datatypes                                                                                                           | other requirements                                      |
 |-------------------|---------------------------------------------------------------------------------------------------------------------|---------------------------------------------------------|
-| `to_replace` | <ul><li> Scalar </li><li> List of Scalars </li><li> Dictionary mapping scalars of the same type </li></ul> | |
-| `value` | - Scalar | If `to_replace` is not a scalar, value must be `None` |
+| `to_replace`      | <ul><li>   Scalar  </li><li>   List of Scalars  </li><li>   Dictionary mapping scalars of the  same type </li></ul> |                                                         |
+| `value`           | -   Scalar                                                                                                          | If `to_replace` is not a  scalar, value must be  `None` |
 
 ### Example Usage
 
-```py
+``` py
 >>> @bodo.jit
 ... def f(S, replace_dict):
 ...     return S.replace(replace_dict)
@@ -28,3 +28,4 @@ dtype: Int64
 ```
 
 ### Reshaping, sorting
+

@@ -2,13 +2,15 @@
 
 `pandas.Series.nbytes`
 
+
 !!! note
-This tracks the number of bytes used by Bodo which may differ from
-the Pandas values.
+    This tracks the number of bytes used by Bodo which may differ from
+    the Pandas values.
+
 
 ### Example Usage
 
-```py
+``` py
 >>> @bodo.jit
 ... def f(S):
 ...     return S.nbytes
@@ -16,3 +18,4 @@ the Pandas values.
 >>> f(S)
 8000
 ```
+

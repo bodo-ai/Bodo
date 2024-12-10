@@ -4,13 +4,13 @@
 
 ### Supported Arguments
 
-| argument | datatypes |
+| argument                    | datatypes                              |
 |-----------------------------|----------------------------------------|
-| `lag` | Integer |
+| `lag`                       |    Integer                             |
 
 ### Example Usage
 
-```py
+``` py
 >>> @bodo.jit
 ... def f(S):
 ...     return S.autocorr(3)
@@ -18,3 +18,4 @@
 >>> f(S)
 -0.49872171657407155
 ```
+

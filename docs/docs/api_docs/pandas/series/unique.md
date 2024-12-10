@@ -2,14 +2,16 @@
 
 `pandas.Series.unique()`
 
+
 !!! note
-The output is assumed to be "small" relative to input and is
-replicated. Use `Series.drop_duplicates()` if the output should
-remain distributed.
+    The output is assumed to be "small" relative to input and is
+    replicated. Use `Series.drop_duplicates()` if the output should
+    remain distributed.
+
 
 ### Example Usage
 
-```py
+``` py
 >>> @bodo.jit
 ... def f(S):
 ...     return S.unique()
@@ -17,3 +19,4 @@ remain distributed.
 >>> f(S)
 [0 1 2 3 4 5 6]
 ```
+

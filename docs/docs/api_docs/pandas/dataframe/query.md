@@ -1,10 +1,12 @@
 # `pd.DataFrame.query`
 
-- pandas.DataFrame.query(expr, inplace=False, \*\*kwargs)
+
+-  pandas.DataFrame.query(expr, inplace=False, \**kwargs)
+
 
 ### Supported Arguments
 
-- `expr`: Constant String
+- `expr`:  Constant String
 
 ### Example Usage
 
@@ -21,7 +23,8 @@
 ```
 
 !!! note
-\* The output of the query must evaluate to a 1d boolean array.
-\* Cannot refer to the index by name in the query string.
-\* Query must be one line.
-\* If using environment variables, they should be passed as arguments to the function.
+    * The output of the query must evaluate to a 1d boolean array.
+    * Cannot refer to the index by name in the query string.
+    * Query must be one line.
+    * If using environment variables, they should be passed as arguments to the function.
+

@@ -2,13 +2,15 @@
 
 `pandas.Series.tolist()`
 
+
 !!! note
-Calling `tolist` on a non-float array with NA values with cause a
-runtime exception.
+    Calling `tolist` on a non-float array with NA values with cause a
+    runtime exception.
+
 
 ### Example Usage
 
-```py
+``` py
 >>> @bodo.jit
 ... def f(S):
 ...     return S.tolist()
@@ -71,3 +73,4 @@ runtime exception.
 Location based indexing using `[]`, `iat`, and
 `iloc` is supported. Changing values of existing string
 Series using these operators is not supported yet.
+

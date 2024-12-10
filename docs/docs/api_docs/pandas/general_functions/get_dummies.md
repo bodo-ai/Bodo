@@ -4,9 +4,10 @@
 
 ### Supported Arguments
 
-| argument | datatypes | other requirements |
+| argument            | datatypes                                 | other requirements                              |
 |---------------------|-------------------------------------------|-------------------------------------------------|
-| `data` | Array or Series with Categorical dtypes | **Categories must be known at compile time.** |
+| `data`              | Array or Series with Categorical dtypes   |  **Categories must be  known at compile time.** |   
+
 
 ### Example Usage
 

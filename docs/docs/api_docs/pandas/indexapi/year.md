@@ -1,9 +1,9 @@
 # `pd.DateTimeIndex.year`
 
+
 `pandasDatetimeIndex.year`
 
 ### Example Usage
-
 ```py
 >>> @bodo.jit
 ... def f(I):
@@ -13,3 +13,5 @@
 >>> f(I)
 Int64Index([2019, 2019, 2019, 2020, 2020], dtype='int64')
 ```
+
+

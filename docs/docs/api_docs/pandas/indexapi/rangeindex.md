@@ -1,13 +1,16 @@
 # `pd.RangeIndex`
 
+
 `pandas.RangeIndex(start=None, stop=None, step=None, dtype=None, copy=False, name=None)`
 
-### Supported Arguments
 
+### Supported Arguments
+    
 - `start`: integer
 - `stop`: integer
 - `step`: integer
 - `name`: String
+
 
 ### Example Usage
 
@@ -19,3 +22,4 @@
 >>> f(I)
 RangeIndex(start=0, stop=10, step=2)
 ```
+

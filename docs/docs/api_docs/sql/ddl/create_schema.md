@@ -11,3 +11,4 @@ Currently, BodoSQL only supports the following syntax:
 ```sql
 CREATE [ OR REPLACE ] SCHEMA [ IF NOT EXISTS ] <name>
 ```
+

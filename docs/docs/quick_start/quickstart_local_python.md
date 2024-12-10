@@ -29,6 +29,7 @@ df.to_parquet("my_data.pq")
 
 Now let's write a simple Python function that computes the sum of column `A` for all rows where `B` is greater than 4 using pandas. We decorate the function with `@bodo.jit` to indicate that we want to compile the code using Bodo. Let's also add a timer to measure the execution time.
 
+
 ```python
 @bodo.jit(cache=True)
 def computation():

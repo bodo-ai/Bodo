@@ -1,5 +1,6 @@
 # `pd.DataFrame.cumsum`
 
+
 `pandas.DataFrame.cumsum(axis=None, skipna=True)`
 
 ### Supported Arguments : None
@@ -18,6 +19,5 @@
 1  3  NaN
 2  6  NaN
 ```
-
 !!! note
-Not supported for dataframe with nullable integer.
+  Not supported for dataframe with nullable integer.

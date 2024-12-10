@@ -4,16 +4,17 @@
 
 ### Supported Arguments
 
-| argument | datatypes |
+| argument | datatypes                |
 |----------|--------------------------|
-| `other` | Series with numeric data |
+| `other`  | Series with numeric data |
 
 !!! note
-`Series.dot` is only supported on Series of numeric data.
+    `Series.dot` is only supported on Series of numeric data.
+
 
 ### Example Usage
 
-```py
+``` py
 >>> @bodo.jit
 ... def f(S, other):
 ...   return S.dot(other)
@@ -24,3 +25,4 @@
 ```
 
 ### Function application, GroupBy & Window
+

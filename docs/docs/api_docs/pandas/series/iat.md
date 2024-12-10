@@ -5,10 +5,8 @@
 We only support indexing using `iat` using a pair of integers
 
 ### Example Usage
-
 >
-
-```py
+``` py
 >>> @bodo.jit
 ... def f(S, i):
 ...   return S.iat[i]
@@ -16,3 +14,4 @@ We only support indexing using `iat` using a pair of integers
 >>> f(S, 27)
 27
 ```
+

@@ -1,9 +1,12 @@
 # `pd.Index.names`
 
+
 `pandasIndex.names`
 
+
 !!! info "Important"
-Bodo returns a tuple instead of a FrozenList.
+    Bodo returns a tuple instead of a FrozenList.
+
 
 ### Example Usage
 
@@ -16,3 +19,5 @@ Bodo returns a tuple instead of a FrozenList.
 >>> f(I)
 ('C1', 'C2')
 ```
+
+

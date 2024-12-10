@@ -1,13 +1,13 @@
 # TO_CHAR
 
-- `#!sql TO_CHAR(COLUMN_EXPRESSION)`
+
+-  `#!sql TO_CHAR(COLUMN_EXPRESSION)`
 
 Casts the input to a string value. If the input is a boolean, it will be cast to `'true'` if it is `true` and `'false'` if it is `false`. If the input is `NULL`, the output will be `NULL`.
 
 _Example:_
 
 We are given `table1` with columns `a` and `b` and `c`
-
 ```python
 table1 = pd.DataFrame({
     'a': [1.1, 0, 2],
@@ -15,9 +15,7 @@ table1 = pd.DataFrame({
     'c': [None, 1, 0]
 })
 ```
-
 upon query
-
 ```sql
 SELECT
     TO_CHAR(a) AS a,
@@ -25,9 +23,7 @@ SELECT
     TO_CHAR(c) AS c
 FROM table1;
 ```
-
 we will get the following output:
-
 ```
     a      b      c
 0  1.1   true   <NA>

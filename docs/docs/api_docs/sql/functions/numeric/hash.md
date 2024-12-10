@@ -1,5 +1,6 @@
 # HASH
 
+
 `#!sql HASH(A, B, C, ...)`
 
 Takes in a variable number of arguments of any type and returns a hash

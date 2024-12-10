@@ -4,13 +4,13 @@
 
 ### Supported Arguments
 
-| argument | datatypes |
+| argument                    | datatypes                             |
 |-----------------------------|---------------------------------------|
-| `dropna` | Boolean |
+| `dropna`                    |   Boolean                             |
 
 ### Example Usage
 
-```py
+``` py
 >>> @bodo.jit
 ... def f(S):
 ...     return S.nunique()
@@ -18,3 +18,4 @@
 >>> f(S)
 7
 ```
+

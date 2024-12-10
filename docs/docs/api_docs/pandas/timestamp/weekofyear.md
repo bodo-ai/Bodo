@@ -1,5 +1,6 @@
 # `pd.Timestamp.weekofyear`
 
+
 `pandasTimestamp.weekofyear`
 
 ### Example Usage
@@ -14,3 +15,5 @@
 >>> f()
 (35, 38)
 ```
+
+

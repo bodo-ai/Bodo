@@ -1,11 +1,8 @@
-______________________________________________________________________
-
+---
 hide:
-
-- toc
-- footer
-
-______________________________________________________________________
+  - toc
+  - footer
+---
 
 # Bodo: High-Performance Python Compute Engine for Data and AI
 
@@ -18,6 +15,7 @@ Unlike traditional distributed computing frameworks, Bodo:
 
 - Seamlessly supports native Python APIs like Pandas and NumPy.
 - Eliminates runtime overheads common in driver-executor models by leveraging Message Passing Interface (MPI) technology for true distributed execution.
+
 
 ## Key Features
 

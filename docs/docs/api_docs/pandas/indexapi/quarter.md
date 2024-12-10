@@ -14,6 +14,7 @@
 Int64Index([4, 4, 4, 1, 1], dtype='int64')
 ```
 
+
 Subtraction of `Timestamp` from `DatetimeIndex` and vice versa
 is supported.
 
@@ -25,3 +26,4 @@ are supported.
 
 `TimedeltaIndex` objects are supported. They can be constructed,
 boxed/unboxed, and set as index to dataframes and series.
+

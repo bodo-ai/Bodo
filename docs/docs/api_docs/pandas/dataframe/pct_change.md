@@ -1,10 +1,13 @@
 # `pd.DataFrame.pct_change`
 
+
 `pandas.DataFrame.pct_change(periods=1, fill_method='pad', limit=None, freq=None)`
+
 
 ### Supported Arguments
 
 - `periods`: Integer
+
 
 ### Example Usage
 
@@ -21,3 +24,4 @@
 2  9.0
 3  9.0
 ```
+

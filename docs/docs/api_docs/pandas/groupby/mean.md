@@ -2,8 +2,9 @@
 
 `pandas.core.groupby.Groupby.mean(numeric_only=NoDefault.no_default)`
 
+
 !!! note
-`mean` is only supported on numeric columns and is not supported on boolean column
+    `mean` is only supported on numeric columns and is not supported on boolean column
 
 ### Example Usage
 
@@ -26,3 +27,4 @@ B
 421  12.5  116616.7550
 f31   2.0       7.3155
 ```
+

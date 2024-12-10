@@ -1,5 +1,6 @@
 # `pd.Timestamp.nanosecond`
 
+
 `pandasTimestamp.nanosecond`
 
 ### Example Usage
@@ -13,3 +14,5 @@
 >>> f()
 12
 ```
+
+

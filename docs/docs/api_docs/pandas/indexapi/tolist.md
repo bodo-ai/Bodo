@@ -4,11 +4,11 @@
 
 ***Unsupported Index Types***
 
-- PeriodIndex
-- IntervalIndex
-- DatetimeIndex
-- TimedeltaIndex
-- MultiIndex
+  - PeriodIndex
+  - IntervalIndex
+  - DatetimeIndex
+  - TimedeltaIndex
+  - MultiIndex
 
 ### Example Usage
 
@@ -24,7 +24,10 @@
 
 ## Numeric Index
 
+
 Numeric index objects `RangeIndex`, `Int64Index`, `UInt64Index` and
 `Float64Index` are supported as index to dataframes and series.
 Constructing them in Bodo functions, passing them to Bodo functions (unboxing),
 and returning them from Bodo functions (boxing) are also supported.
+
+

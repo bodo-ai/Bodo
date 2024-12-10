@@ -1,6 +1,6 @@
 # Instructions to Build
 
-1. Create file `terraform.tfvars` in the following format:
+1) Create file `terraform.tfvars` in the following format:
 
 ```
 github_app = {
@@ -11,9 +11,9 @@ github_app = {
 
 Fill in the actual values. See `variables.tf` for more details.
 
-2. Install Terraform (instructions online)
+2) Install Terraform (instructions online)
 
-1. Run the following in this folder:
+3) Run the following in this folder:
 
 ```
 terraform init

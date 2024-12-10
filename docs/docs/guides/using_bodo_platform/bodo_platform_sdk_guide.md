@@ -587,4 +587,4 @@ A new cluster will be created with the same configuration as the existing cluste
 new cluster will be terminated as soon as the job finishes.
 
 !!! seealso "See Also"
-[BodoSDK Reference](../../api_docs/platform_sdk.md)
+    [BodoSDK Reference](../../api_docs/platform_sdk.md)

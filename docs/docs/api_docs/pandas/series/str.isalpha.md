@@ -2,7 +2,7 @@
 
 `pandas.Series.str.isalpha()`
 
-```py
+``` py
 >>> @bodo.jit
 ... def f(S):
 ...     return S.str.isalpha()
@@ -17,3 +17,4 @@
 6    False
 dtype: boolean
 ```
+

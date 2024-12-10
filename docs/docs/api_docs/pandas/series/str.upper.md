@@ -2,7 +2,7 @@
 
 `pandas.Series.str.upper()`
 
-```py
+``` py
 >>> @bodo.jit
 ... def f(S):
 ...     return S.str.upper()
@@ -17,3 +17,4 @@
 6    ^ Ef
 dtype: object
 ```
+

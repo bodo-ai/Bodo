@@ -3,14 +3,14 @@
 `pandasIndex.to_frame(index=True, name=None)`
 
 ### Supported Arguments:
-
-- `index`: can be a True or False
-- `name`: can be a string or int
+  
+  - `index`: can be a True or False
+  - `name`: can be a string or int
 
 ***Unsupported Index Types***
 
-- IntervalIndex
-- PeriodIndex
+  - IntervalIndex
+  - PeriodIndex
 
 ### Example Usage
 
@@ -29,3 +29,4 @@
 4      U
 5      Y
 ```
+

@@ -6,6 +6,7 @@ We derived these queries from the TPC-H benchmarks. TPC-H is a benchmark suite f
 
 More information can be found [here](http://www.tpc.org/tpch/)
 
+
 ## Generating Data in Parquet Format
 
 ### 1. Download and Install tpch-dbgen
@@ -96,3 +97,4 @@ In the **Cluster Nodes and Instances** step, choose the same instance type for b
 ### Running queries
 
 Attach [pyspark_notebook.ipynb](./pyspark_notebook.ipynb) to your EMR cluster following the examples in the [AWS documentation](https://docs.aws.amazon.com/emr/latest/ManagementGuide/emr-managed-notebooks-create.html)
+

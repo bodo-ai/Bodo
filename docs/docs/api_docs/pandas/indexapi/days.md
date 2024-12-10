@@ -13,3 +13,4 @@
 >>> f(I)
 Int64Index([3], dtype='int64')
 ```
+

@@ -1,9 +1,9 @@
 # `pd.Timedelta.days`
 
+
 `pandas.Timedelta.days`
 
 ### Example Usage
-
 ```py
 >>> @bodo.jit
 ... def f():
@@ -11,3 +11,4 @@
 >>> f()
 10
 ```
+

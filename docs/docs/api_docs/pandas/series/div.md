@@ -3,20 +3,19 @@
 `pandas.Series.div(other, level=None, fill_value=None, axis=0)`
 
 ### Supported Arguments
-
--
-
-| argument | datatypes |
+- 
+| argument     | datatypes                                                                                                |
 |--------------|----------------------------------------------------------------------------------------------------------|
-| `other` | <ul><li> numeric scalar </li><li> array with numeric data </li><li> Series with numeric data </li></ul> |
-| `fill_value` | numeric scalar |
+| `other`      | <ul><li>  numeric scalar </li><li> array with numeric data </li><li> Series with numeric data </li></ul> |
+| `fill_value` | numeric scalar                                                                                           |
 
 !!! note
-`Series.div` is only supported on Series of numeric data.
+    `Series.div` is only supported on Series of numeric data.
+
 
 ### Example Usage
 
-```py
+``` py
 >>> @bodo.jit
 ... def f(S, other):
 ...   return S.div(other)
@@ -36,3 +35,4 @@
 999    1000.000000
 Length: 1000, dtype: float64
 ```
+

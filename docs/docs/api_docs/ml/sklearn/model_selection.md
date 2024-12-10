@@ -6,16 +6,16 @@
 
 ***Supported Arguments***
 
-- `X`: NumPy array or Pandas Dataframes.
-- `y`: NumPy array or Pandas Dataframes.
-- `train_size`: float between 0.0 and 1.0 or `None` only.
-- `test_size`: float between 0.0 and 1.0 or `None` only.
-- `random_state`: int, RandomState, or None.
-- `shuffle`: bool.
+-   `X`: NumPy array or Pandas Dataframes.
+-   `y`: NumPy array or Pandas Dataframes.
+-   `train_size`: float between 0.0 and 1.0 or `None` only.
+-   `test_size`: float between 0.0 and 1.0 or `None` only.
+-   `random_state`: int, RandomState, or None.
+-   `shuffle`: bool.
 
 ***Example Usage***
 
-```py
+```py 
 >>> import bodo
 >>> import numpy as np
 >>> from sklearn.model_selection import train_test_split

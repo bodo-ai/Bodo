@@ -8,7 +8,6 @@ consistent approach. For example the query:
 ```sql
 bc.sql("SELECT SUM(A) FROM table1 WHERE B > 4")
 ```
-
 Results in an output column named `$EXPR0`. To reliably reference this
 column later in your code, we highly recommend using aliases for all
 columns that are the final outputs of a query, such as:
@@ -18,6 +17,6 @@ bc.sql("SELECT SUM(A) as sum_col FROM table1 WHERE B > 4")
 ```
 
 !!! note
-BodoSQL supports using aliases generated in `#!sql SELECT` inside
-`#!sql GROUP BY` and `#!sql HAVING` in the same query, but you cannot do so with
-`#!sql WHERE`
+     BodoSQL supports using aliases generated in `#!sql SELECT` inside
+    `#!sql GROUP BY` and `#!sql HAVING` in the same query, but you cannot do so with
+    `#!sql WHERE`

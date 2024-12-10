@@ -5,7 +5,7 @@ types such as dtype of string series not supported yet)
 
 ### Example Usage
 
-```py
+``` py
 >>> @bodo.jit
 ... def f(S):
 ...     return S.dtype
@@ -13,3 +13,4 @@ types such as dtype of string series not supported yet)
 >>> f(S)
 dtype('int64')
 ```
+

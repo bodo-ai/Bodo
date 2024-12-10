@@ -4,6 +4,7 @@
 
 `sklearn.svm.LinearSVC`
 
+
 This class provides Linear Support Vector Classification.
 
 ### Methods
@@ -12,36 +13,33 @@ This class provides Linear Support Vector Classification.
 
 - `sklearn.svm.LinearSVC.fit(X, y, sample_weight=None)`
 
-  ***Supported Arguments***
-  <br>
-  <br>
-
-  - `X`: NumPy Array or Pandas Dataframes.
-  - `y`: NumPy Array.
-  - `sample_weight`: Numeric NumPy Array (only if data is not
-    distributed)
+    ***Supported Arguments***
+    <br>
+    <br>
+    -   `X`: NumPy Array or Pandas Dataframes.
+    -   `y`: NumPy Array.
+    -   `sample_weight`: Numeric NumPy Array (only if data is not
+     distributed)
 
 #### sklearn.svm.LinearSVC.predict
 
 - `sklearn.svm.LinearSVC.predict(X)`
 
-  ***Supported Arguments***
-  <br>
-  <br>
-
-  - `X`: NumPy Array or Pandas Dataframes.
+    ***Supported Arguments***
+    <br>
+    <br>    
+    -   `X`: NumPy Array or Pandas Dataframes.
 
 #### sklearn.svm.LinearSVC.score
 
 - `sklearn.svm.LinearSVC.score(X, y, sample_weight=None)`
 
-  ***Supported Arguments***
-  <br>
-  <br>
-
-  - `X`: NumPy Array or Pandas Dataframes.
-  - `y`: NumPy Array or Pandas Dataframes.
-  - `sample_weight`: Numeric NumPy Array or Pandas Dataframes.
+    ***Supported Arguments***
+    <br>
+    <br>    
+    -   `X`: NumPy Array or Pandas Dataframes.
+    -   `y`: NumPy Array or Pandas Dataframes.
+    -   `sample_weight`: Numeric NumPy Array or Pandas Dataframes.
 
 ### Example Usage:
 
@@ -65,3 +63,4 @@ This class provides Linear Support Vector Classification.
 >>> test_linearsvc(X, y)
 [1]
 ```
+

@@ -1,13 +1,15 @@
 # `pd.Timedelta.ceil`
+                          
 
 `pandas.Timedelta.ceil(freq)`
 
+
 ### Supported Arguments
 
-- `freq`: String
+
+-  `freq`: String
 
 ### Example Usage
-
 ```py
 >>> @bodo.jit
 ... def f():
@@ -15,3 +17,4 @@
 >>> f()
 11 days 00:00:00
 ```
+

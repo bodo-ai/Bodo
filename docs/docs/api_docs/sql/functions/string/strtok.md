@@ -1,5 +1,6 @@
 # STRTOK
 
+
 `#!sql STRTOK(source[, delimiter[, part]])`
 
 Tokenizes the source string by occurrences of any character in the
@@ -11,3 +12,5 @@ are always skipped in favor of the next non-empty token. In any
 case where the only possible output is '', the output is `NULL`.
 The delimiter is optional and defaults to ' '. The part is optional
 and defaults to 1.
+
+

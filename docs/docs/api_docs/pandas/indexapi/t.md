@@ -1,6 +1,8 @@
 # `pd.Index.T`
 
+
 `pandasIndex.T`
+
 
 ### Example Usage
 
@@ -12,6 +14,7 @@
 >>> I = pd.Index(["A", "E", "I", "O", "U"])
 >>> f(I)
 Index(["A", "E", "I", "O", "U"], dtype='object')
-```
+```  
 
 ### Type information
+

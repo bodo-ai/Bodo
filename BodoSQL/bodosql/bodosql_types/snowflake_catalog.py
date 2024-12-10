@@ -179,7 +179,8 @@ class SnowflakeCatalog(DatabaseCatalog):
             raise BodoError(
                 f"SnowflakeCatalog.from_conn_str: `conn_str` must contain a user login name. {ref_str}"
             )
-
+        
+        
         if (password := conn_contents.pop("password", None)) is None:
             password = ""
         if (account := conn_contents.pop("account", None)) is None:

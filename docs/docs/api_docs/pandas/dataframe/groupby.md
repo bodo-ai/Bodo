@@ -1,18 +1,22 @@
 # `pd.DataFrame.groupby`
 
+
 `pandas.DataFrame.groupby(by=None, axis=0, level=None, as_index=True, sort=True, group_keys=True, squeeze=NoDefault.no_default, observed=False, dropna=True)`
 
 ### Supported Arguments
 
-- `by`: String column label, List/Tuple of column labels
-  - **Must be constant at Compile Time**
+
+- `by`: String column label,  List/Tuple of column labels
+    - **Must be constant at Compile Time**
 - `as_index`: boolean
-  - **Must be constant at Compile Time**
+    - **Must be constant at Compile Time**
 - `dropna`: boolean
-  - **Must be constant at Compile Time**
+    - **Must be constant at Compile Time**
+
 
 !!! note
-`sort=False` and `observed=True` are set by default. These are the only support values for sort and observed. For more information on using groupby, see [the groupby section][pd_groupby_section].
+    `sort=False` and `observed=True` are set by default. These are the only support values for sort and observed. For more information on using groupby, see [the groupby section][pd_groupby_section].
+
 
 ### Example Usage
 
@@ -28,3 +32,4 @@ A
 1 -4
 2  4
 ```
+

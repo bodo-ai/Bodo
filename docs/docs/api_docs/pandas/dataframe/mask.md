@@ -2,16 +2,17 @@
 
 `pandas.DataFrame.mask(cond, other=np.nan, inplace=False, axis=1, level=None, errors='raise', try_cast=NoDefault.no_default)`
 
+
 ### Supported Arguments
 
 - `cond`: Boolean DataFrame,Boolean Series,Boolean Array
-  - If 1-dimensional array or Series is provided, equivalent to Pandas `df.mask` with `axis=1`.
+   - If 1-dimensional array or Series is provided, equivalent to Pandas `df.mask` with `axis=1`.
 - `other`: Scalar, DataFrame, Series, 1 or 2-D Array
-  - `None`, - Data types in `other` must match corresponding entries in DataFrame.
-  - `None` or omitting argument defaults to the respective `NA` value for each type.
+   - `None`, - Data types in `other` must match corresponding entries in DataFrame.
+   - `None` or omitting argument defaults to the respective `NA` value for each type.
 
 !!! note
-DataFrame can contain categorical data if `other` is a scalar.
+    DataFrame can contain categorical data if `other` is a scalar.
 
 ### Example Usage
 

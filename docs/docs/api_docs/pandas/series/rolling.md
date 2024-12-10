@@ -4,15 +4,15 @@
 
 ### Supported Arguments
 
-| argument | datatypes |
+| argument                    | datatypes                                                                                       |
 |-----------------------------|-------------------------------------------------------------------------------------------------|
-| `window` | <ul><li> Integer </li><li> String representing a Time Offset </li><li> Timedelta </li></ul> |
-| `min_periods` | Integer |
-| `center` | Boolean |
+| `window`                    | <ul><li>  Integer </li><li>  String representing a Time Offset  </li><li>  Timedelta </li></ul> |
+| `min_periods`               | Integer                                                                                         |
+| `center`                    | Boolean                                                                                         |
 
 ### Example Usage
 
-```py
+``` py
 >>> @bodo.jit
 ... def f(S):
 ...     return S.rolling(2).mean()
@@ -31,3 +31,4 @@
   99    98.5
   Length: 100, dtype: float64
 ```
+

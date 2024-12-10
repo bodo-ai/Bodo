@@ -5,13 +5,13 @@
 ### Supported Arguments None
 
 !!! note
-\- Series type must be numeric
-\- Bodo does not accept any additional arguments to pass to the
-function
+    - Series type must be numeric
+    - Bodo does not accept any additional arguments to pass to the
+    function
 
 ### Example Usage
 
-```py
+``` py
 >>> @bodo.jit
 ... def f(S):
 ...     return S.mean()
@@ -19,3 +19,4 @@ function
 >>> f(S)
 2.95
 ```
+

@@ -74,6 +74,7 @@ the available metadata:
 - Some special characters in argument names, especially commas or spaces, may not compile
   because they are not properly escaped within the Snowflake metadata.
 
+
 ## Performance
 
 BodoSQL supports UDFs and UDTFs by inlining the function body directly into the
@@ -86,6 +87,7 @@ This can cause a significant performance hit, so BodoSQL undergoes a process cal
 decorrelation to rewrite the query in terms of much more efficient joins. If BodoSQL
 is not able to rewrite a query, then it will raise an error indicating a correlation
 could not be fully removed.
+
 
 ## Overloaded Definition Priority
 
@@ -104,19 +106,19 @@ possible UDF defintions as shown in the table below.
 
 <center>
 
-| Source Type | Target Option 1 | Target Option 2 | Target Option 3 | Target Option 4 | Target Option 5 | Target Option 6 | Target Option 7 | Target Option 8 | Target Option 9 | Target Option 10 |
+| Source Type   | Target Option 1 | Target Option 2 | Target Option 3 | Target Option 4 | Target Option 5 | Target Option 6 | Target Option 7 | Target Option 8 | Target Option 9 | Target Option 10 |
 |---------------|-----------------|-----------------|-----------------|-----------------|-----------------|-----------------|-----------------|-----------------|-----------------|------------------|
-| ARRAY | VARIANT | | | | | | | | | |
-| BOOLEAN | VARCHAR | VARIANT | | | | | | | | |
-| DATE | TIMESTAMP_LTZ | TIMESTAMP_NTZ | VARCHAR | VARIANT | | | | | | |
-| DOUBLE | BOOLEAN | VARIANT | VARCHAR | NUMBER | | | | | | |
-| NUMBER | DOUBLE | BOOLEAN | VARIANT | VARCHAR | | | | | | |
-| OBJECT | VARIANT | | | | | | | | | |
-| TIME | VARCHAR | | | | | | | | | |
-| TIMESTAMP_NTZ | TIMESTAMP_LTZ | VARCHAR | DATE | TIME | VARIANT | | | | | |
-| TIMESTAMP_LTZ | TIMESTAMP_NTZ | VARCHAR | DATE | TIME | VARIANT | | | | | |
-| VARCHAR | BOOLEAN | DATE | DOUBLE | TIMESTAMP_LTZ | TIMESTAMP_NTZ | NUMBER | TIME | VARIANT | | |
-| VARIANT | ARRAY | BOOLEAN | OBJECT | VARCHAR | DATE | TIME | TIMESTAMP_LTZ | TIMESTAMP_NTZ | DOUBLE | NUMBER |
+| ARRAY         | VARIANT         |                 |                 |                 |                 |                 |                 |                 |                 |                  |
+| BOOLEAN       | VARCHAR         | VARIANT         |                 |                 |                 |                 |                 |                 |                 |                  |
+| DATE          | TIMESTAMP_LTZ   | TIMESTAMP_NTZ   | VARCHAR         | VARIANT         |                 |                 |                 |                 |                 |                  |
+| DOUBLE        | BOOLEAN         | VARIANT         | VARCHAR         | NUMBER          |                 |                 |                 |                 |                 |                  |
+| NUMBER        | DOUBLE          | BOOLEAN         | VARIANT         | VARCHAR         |                 |                 |                 |                 |                 |                  |
+| OBJECT        | VARIANT         |                 |                 |                 |                 |                 |                 |                 |                 |                  |
+| TIME          | VARCHAR         |                 |                 |                 |                 |                 |                 |                 |                 |                  |
+| TIMESTAMP_NTZ | TIMESTAMP_LTZ   | VARCHAR         | DATE            | TIME            | VARIANT         |                 |                 |                 |                 |                  |
+| TIMESTAMP_LTZ | TIMESTAMP_NTZ   | VARCHAR         | DATE            | TIME            | VARIANT         |                 |                 |                 |                 |                  |
+| VARCHAR       | BOOLEAN         | DATE            | DOUBLE          | TIMESTAMP_LTZ   | TIMESTAMP_NTZ   | NUMBER          | TIME            | VARIANT         |                 |                  |
+| VARIANT       | ARRAY           | BOOLEAN         | OBJECT          | VARCHAR         | DATE            | TIME            | TIMESTAMP_LTZ   | TIMESTAMP_NTZ   | DOUBLE          | NUMBER           |
 
 </center>
 
@@ -128,3 +130,12 @@ in all situations, we have found that in common cases (e.g., differing by a sing
 
 However, as we add further type support or expand our UDF infrastructure, this matching system is subject to change. As a result,
 we strongly recommend using a unique name for each argument and only using the named calling convention to avoid any potential issues.
+
+
+
+
+
+
+
+
+

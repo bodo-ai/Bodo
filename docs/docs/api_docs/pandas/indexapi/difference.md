@@ -4,19 +4,19 @@
 
 ### Supported Arguments:
 
-- `other`: can be an Index, Series, or 1-dim numpy array with a matching type for the Index
+  - `other`: can be an Index, Series, or 1-dim numpy array with a matching type for the Index
 
 ***Supported Index Types***
 
-- NumericIndex
-- StringIndex
-- BinaryIndex
-- RangeIndex
-- DatetimeIndex
-- TimedeltaIndex
+  - NumericIndex
+  - StringIndex
+  - BinaryIndex
+  - RangeIndex
+  - DatetimeIndex
+  - TimedeltaIndex
 
 !!! info "Important"
-Bodo diverges from the Pandas API for Index.difference() in several ways: the order of elements may be different and a NumericIndex is always returned instead of a RangeIndex.
+      Bodo diverges from the Pandas API for Index.difference() in several ways: the order of elements may be different and a NumericIndex is always returned instead of a RangeIndex.
 
 ### Example Usage
 
@@ -30,3 +30,6 @@ Bodo diverges from the Pandas API for Index.difference() in several ways: the or
 >>> f(I, J)
 Int64Index([1, 3, 5], dtype='int64')
 ```
+
+
+

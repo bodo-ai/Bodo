@@ -3,10 +3,10 @@
 `pandas.core.window.rolling.Rolling.cov(other=None, pairwise=None, ddof=1)`
 
 ### Supported Arguments
-
 - `other`: DataFrame or Series (cannot contain nullable Integer Types)
 - **Required**
   - If called with a DataFrame, `other` must be a DataFrame. If called with a Series, `other` must be a Series.
+
 
 ### Example Usage
 
@@ -26,3 +26,4 @@ A
 5 -5.0
 6 -1.0
 ```
+

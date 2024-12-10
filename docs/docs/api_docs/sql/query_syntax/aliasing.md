@@ -1,5 +1,7 @@
 # Aliasing
 
+
+
 SQL aliases are used to give a table, or a column in a table, a
 temporary name:
 
@@ -9,7 +11,6 @@ FROM <TABLE_NAME>
 ```
 
 For example:
-
 ```sql
 Select SUM(A) as total FROM table1
 ```

@@ -2,6 +2,7 @@
 
 `pandas.DataFrame.pivot_table(values=None, index=None, columns=None, aggfunc='mean', fill_value=None, margins=False, dropna=True, margins_name='All', observed=False, sort=True)`
 
+
 ### Supported Arguments
 
 - `values`: Constant Column Label or list of labels
@@ -9,14 +10,16 @@
 - `columns`: Constant Column Label
 - `aggfunc`: String Constant
 
-!!! note
-This code takes two different paths depending on if pivot values are annotated. When
-pivot values are annotated then output columns are set to the annotated values.
-For example, `@bodo.jit(pivots={'pt': ['small', 'large']})`
-declares the output pivot table `pt` will have columns called `small` and `large`.
 
-If pivot values are not annotated, then the number of columns and names of the output DataFrame won't be known
-at compile time. To update typing information on DataFrame you should pass it back to Python.
+!!! note
+  This code takes two different paths depending on if pivot values are annotated. When
+  pivot values are annotated then output columns are set to the annotated values.
+  For example, `@bodo.jit(pivots={'pt': ['small', 'large']})`
+  declares the output pivot table `pt` will have columns called `small` and `large`.
+
+  If pivot values are not annotated, then the number of columns and names of the output DataFrame won't be known
+  at compile time. To update typing information on DataFrame you should pass it back to Python.
+
 
 ### Example Usage
 
@@ -37,3 +40,4 @@ B
 5   NaN  21.0
 6   NaN  22.0
 ```
+

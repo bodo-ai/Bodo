@@ -1,10 +1,10 @@
 # pd.Series.index
 
-- `pandas.Series.index`
+-   `pandas.Series.index`
 
 ### Example Usage
 
-```py
+``` py
 >>> @bodo.jit
 ... def f(df):
 ...     return df.apply(lambda row: len(row.index), axis=1)
@@ -23,3 +23,4 @@
 99    2
 Length: 100, dtype: int64
 ```
+

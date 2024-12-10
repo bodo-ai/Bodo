@@ -2,13 +2,14 @@
 
 `pandasIndex.nbytes`
 
+
 ***Unsupported Index Types***
 
-- MultiIndex
-- IntervalIndex
+  - MultiIndex
+  - IntervalIndex
 
 !!! info "Important"
-Currently, Bodo upcasts all numeric index data types to 64 bitwidth.
+    Currently, Bodo upcasts all numeric index data types to 64 bitwidth.
 
 ### Example Usage
 
@@ -28,3 +29,4 @@ Currently, Bodo upcasts all numeric index data types to 64 bitwidth.
 >>> f(I3)
 24
 ```
+

@@ -13,3 +13,4 @@ INSERT INTO <name> [ ( <target_col_name> [ , ... ] ) ]
     <query>
   }
 ```
+

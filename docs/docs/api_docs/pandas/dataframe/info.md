@@ -1,5 +1,6 @@
 # `pd.DataFrame.info`
 
+
 `pandas.DataFrame.info(verbose=None, buf=None, max_cols=None, memory_usage=None, show_counts=None, null_counts=None)`
 
 ### Supported Arguments: None
@@ -26,4 +27,6 @@ memory usage: 108.0 bytes
 ```
 
 !!! note
-The exact output string may vary slightly from Pandas.
+    The exact output string may vary slightly from Pandas.
+
+

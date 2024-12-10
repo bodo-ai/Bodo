@@ -1,6 +1,8 @@
 # `pd.DataFrame.corr`
 
+
 `pandas.DataFrame.corr(method='pearson', min_periods=1)`
+
 
 ### Supported Arguments
 
@@ -20,3 +22,4 @@ A  1.000000 -0.904656  0.92582
 B -0.904656  1.000000 -0.97714
 c  0.925820 -0.977140  1.00000
 ```
+

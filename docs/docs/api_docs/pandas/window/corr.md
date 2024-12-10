@@ -8,6 +8,7 @@
 - **Required**
   - If called with a DataFrame, `other` must be a DataFrame. If called with a Series, `other` must be a Series.
 
+
 ### Example Usage
 
 ```py
@@ -26,3 +27,4 @@
 5 -0.907841
 6 -1.000000
 ```
+

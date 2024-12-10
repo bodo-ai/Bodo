@@ -2,9 +2,11 @@
 
 `pandas.DataFrame.copy(deep=True)`
 
+
 ### Supported Arguments
 
 - `copy`: boolean
+
 
 ### Example Usage
 
@@ -32,3 +34,4 @@
 1  2
 2  3
 ```
+

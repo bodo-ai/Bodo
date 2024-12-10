@@ -1,11 +1,19 @@
-# PySpark Bodo Cheatsheet {#pscheatsheet}
+
+
+PySpark Bodo Cheatsheet   {#pscheatsheet}
+========================
 
 References of PySpark methods and their Python equivalents supported by Bodo.
 
-## pyspark.sql.SparkSession {#pssession}
 
+
+
+
+pyspark.sql.SparkSession {#pssession}
+-------------------------
 The table below is a reference of SparkSession methods and their equivalents in Python,
 which are supported by Bodo.
+
 
 |PySpark Method|Python Equivalent|
 |-|-|
@@ -14,10 +22,15 @@ which are supported by Bodo.
 |`pyspark.sql.SparkSession.read.parquet`|`pd.read_parquet()`|
 |`pyspark.sql.SparkSession.read.json`|`pd.read_json()`|
 
-## pyspark.sql.DataFrame {#psdataframe}
 
+
+pyspark.sql.DataFrame   {#psdataframe}
+----------------------
 The table below is a reference of Spark DataFrame methods and their equivalents in Python,
 which are supported by Bodo.
+
+
+
 
 | PySpark Method|Python Equivalent|
 |-|-|
@@ -48,10 +61,13 @@ which are supported by Bodo.
 | `pyspark.sql.DataFrame.show`|`print(df.head(n))`|
 | `pyspark.sql.DataFrame.sort`|`df.sort_values('colname')`|
 
-## pyspark.sql.functions {#psfunctions}
+
+pyspark.sql.functions   {#psfunctions}
+----------------------
 
 The table below is a reference of Spark SQL functions and their equivalents in Python,
 which are supported by Bodo.
+
 
 | PySpark Function| Python Equivalent|
 |-|-|
@@ -194,89 +210,85 @@ which are supported by Bodo.
 ### Special Cases
 
 #### `pyspark.sql.functions.concat`
-
-- `pyspark.sql.functions.concat`
-  - for Arrays : `df[['col1', 'col2', 'col3']].apply(lambda x: np.hstack(x), axis=1)`
-  - for Strings : `df[['col1', 'col2', 'col3']].apply(lambda x: "".join(x), axis=1)`
+-   `pyspark.sql.functions.concat`
+    - for Arrays : `df[['col1', 'col2', 'col3']].apply(lambda x: np.hstack(x), axis=1)`
+    - for Strings : `df[['col1', 'col2', 'col3']].apply(lambda x: "".join(x), axis=1)`
 
 #### `pyspark.sql.functions.conv`
+-   `pyspark.sql.functions.conv`
+    
+    pandas equivalent: 
+    
+    ```py
+    base_map = {2: "{0:b}", 8: "{0:o}", 10: "{0:d}", 16: "{0:x}"}
+    new_format = base_map[new_base]
+    df.col.apply(lambda x, old_base, new_format: new_format.format(int(x, old_base)), old_base=old_base, new_format=new_format)
+    ```
+    
+####  `pyspark.sql.functions.date_trunc`
 
-- `pyspark.sql.functions.conv`
+-   `pyspark.sql.functions.date_trunc`   
 
-  pandas equivalent:
+    - For frequencies day and below: `df.col.dt.floor(freq=trunc_val)`
+    - For month: `df.col.map(lambda x: pd.Timestamp(year=x.year, month=x.month, day=1))`
+    - For year: `df.col.map(lambda x: pd.Timestamp(year=x.year, month=1, day=1))`
 
-  ```py
-  base_map = {2: "{0:b}", 8: "{0:o}", 10: "{0:d}", 16: "{0:x}"}
-  new_format = base_map[new_base]
-  df.col.apply(lambda x, old_base, new_format: new_format.format(int(x, old_base)), old_base=old_base, new_format=new_format)
-  ```
+####   `pyspark.sql.functions.regexp_extract`
 
-#### `pyspark.sql.functions.date_trunc`
+-   `pyspark.sql.functions.regexp_extract`
 
-- `pyspark.sql.functions.date_trunc`
-
-  - For frequencies day and below: `df.col.dt.floor(freq=trunc_val)`
-  - For month: `df.col.map(lambda x: pd.Timestamp(year=x.year, month=x.month, day=1))`
-  - For year: `df.col.map(lambda x: pd.Timestamp(year=x.year, month=1, day=1))`
-
-#### `pyspark.sql.functions.regexp_extract`
-
-- `pyspark.sql.functions.regexp_extract`
-
-  Here's a small pandas function equivalent:
-
-  ```py
-  def f(x, pat):
-      res = re.search(pat, x)
-      return "" if res is None else res[0]
-  df.col.apply(f, pat=pat)  
-  ```
-
+    Here's a small pandas function equivalent:
+    
+    ```py
+    def f(x, pat):
+        res = re.search(pat, x)
+        return "" if res is None else res[0]
+    df.col.apply(f, pat=pat)  
+    ```         
+    
 #### `pyspark.sql.functions.shiftLeft`
+-   `pyspark.sql.functions.shiftLeft`
 
-- `pyspark.sql.functions.shiftLeft`
+    - If the type is uint64 `np.left_shift(df.col.astype(np.int64), numbits).astype(np.uint64))`
+    - Other integer types: `np.left_shift(df.col, numbits)`
 
-  - If the type is uint64 `np.left_shift(df.col.astype(np.int64), numbits).astype(np.uint64))`
-  - Other integer types: `np.left_shift(df.col, numbits)`
-
-#### `pyspark.sql.functions.shiftRight`
+####  `pyspark.sql.functions.shiftRight`
 
 - `pyspark.sql.functions.shiftRight`
 
-  - If the type is uint64 use `shiftRightUnsigned`
-  - Other integer types: `np.right_shift(df.col, numbits)`
-
+    - If the type is uint64 use `shiftRightUnsigned`
+    - Other integer types: `np.right_shift(df.col, numbits)`
+    
 #### `pyspark.sql.functions.shiftRightUnsigned`
 
 - `pyspark.sql.functions.shiftRightUnsigned`
 
-  Here's a small pandas function equivalent:
+    Here's a small pandas function equivalent:
 
-  ```py
-  def shiftRightUnsigned(col, num_bits):
-      bits_minus_1 = max((num_bits - 1), 0)
-      mask_bits = (np.int64(1) << bits_minus_1) - 1
-      mask = ~(mask_bits << (63 - bits_minus_1))
-      return np.right_shift(col.astype(np.int64), num_bits) & mask).astype(np.uint64)
-  shiftRightUnsigned(df.col, numbits)  
-  ```
-
+    ```py 
+    def shiftRightUnsigned(col, num_bits):
+        bits_minus_1 = max((num_bits - 1), 0)
+        mask_bits = (np.int64(1) << bits_minus_1) - 1
+        mask = ~(mask_bits << (63 - bits_minus_1))
+        return np.right_shift(col.astype(np.int64), num_bits) & mask).astype(np.uint64)
+    shiftRightUnsigned(df.col, numbits)  
+    ```    
+  
 #### `pyspark.sql.functions.sort_array`
+-   `pyspark.sql.functions.sort_array`
 
-- `pyspark.sql.functions.sort_array`
-
-  - Ascending: `df.col.map(lambda x: np.sort(x))`
-  - Descending: `df.col.map(lambda x: np.sort(x)[::-1])`
-
+    - Ascending:  `df.col.map(lambda x: np.sort(x))`
+    - Descending: `df.col.map(lambda x: np.sort(x)[::-1])`
+    
+    
 #### `pyspark.sql.functions.trunc`
+-   `pyspark.sql.functions.trunc`
 
-- `pyspark.sql.functions.trunc`
-
-  ```py
-  def f(date, trunc_str):
-      if trunc_str == 'year':
-          return pd.Timestamp(year=date.year, month=1, day=1)
-      if trunc_str == 'month':
-          return pd.Timestamp(year=date.year, month=date.month, day=1)
-  df.A.apply(f, trunc_str=trunc_str)
-  ```
+    ```py
+    def f(date, trunc_str):
+        if trunc_str == 'year':
+            return pd.Timestamp(year=date.year, month=1, day=1)
+        if trunc_str == 'month':
+            return pd.Timestamp(year=date.year, month=date.month, day=1)
+    df.A.apply(f, trunc_str=trunc_str)
+    ```

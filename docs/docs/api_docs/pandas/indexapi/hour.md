@@ -1,9 +1,9 @@
 # `pd.DateTimeIndex.hour`
 
+
 `pandasDatetimeIndex.hour`
 
 ### Example Usage
-
 ```py
 >>> @bodo.jit
 ... def f(I):
@@ -13,3 +13,7 @@
 >>> f(I)
 Int64Index([2, 12, 22, 9, 19], dtype='int64')
 ```
+
+
+
+

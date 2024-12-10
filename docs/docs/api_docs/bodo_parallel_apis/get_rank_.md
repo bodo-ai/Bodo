@@ -1,4 +1,4 @@
-# bodo.get_rank
+# bodo.get_rank 
 
 `bodo.get_rank()`
 
@@ -6,6 +6,7 @@ Get the process number from Bodo (called `rank` in MPI terminology).
 
 ### Example Usage
 
+    
 Save following code in `get_rank.py` file and run with multiple cores.
 
 ```py
@@ -22,7 +23,7 @@ def run_in_parallel():
 run_in_parallel()
 ```
 
-```console
+```console 
 BODO_NUM_WORKERS=4 python get_rank.py
 ```
 
@@ -35,3 +36,4 @@ rank 1 here
 rank 2 here
 rank 3 here
 ```
+

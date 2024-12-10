@@ -6,7 +6,7 @@
 
 ### Example Usage
 
-```py
+``` py
 >>> @bodo.jit
 ... def f(S):
 ...     return S.pad()
@@ -21,3 +21,4 @@
 6       5
 dtype: Int64
 ```
+

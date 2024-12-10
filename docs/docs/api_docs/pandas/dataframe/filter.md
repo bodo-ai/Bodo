@@ -2,12 +2,15 @@
 
 `pandas.DataFrame.filter(items=None, like=None, regex=None, axis=None)`
 
+
 ### Supported Arguments
+
 
 - `items`: Constant list of String
 - `like`: Constant string
 - `regex`: Constant String
 - `axis` (only supports the "column" axis): Constant String, Constant integer
+
 
 ### Example Usage
 
@@ -29,3 +32,4 @@
   ababab
 0       1
 ```
+

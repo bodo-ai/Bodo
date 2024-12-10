@@ -1,6 +1,8 @@
 # `pd.Index.size`
 
+
 `pandasIndex.size`
+
 
 ### Example Usage
 
@@ -13,3 +15,5 @@
 >>> f(I)
 4
 ```
+
+

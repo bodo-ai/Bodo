@@ -5,11 +5,11 @@
 `pandas.Series.dt.weekday`
 
 !!! note
-Input must be a Series of `datetime64` data.
+	Input must be a Series of `datetime64` data.
 
 ### Example Usage
 
-```py
+``` py
 >>> @bodo.jit
 ... def f(S):
 ...     return S.dt.weekday
@@ -47,3 +47,4 @@ Input must be a Series of `datetime64` data.
 29    4
 dtype: Int64
 ```
+

@@ -4,13 +4,13 @@
 
 ### Supported Arguments
 
-| argument | datatypes |
+| argument                    | datatypes                            |
 |-----------------------------|--------------------------------------|
-| `sub` | String |
-| `start` | Integer |
-| `end` | Integer |
+| `sub`                       |    String                            |
+| `start`                     |    Integer                           |
+| `end`                       |    Integer                           |
 
-```py
+``` py
 >>> @bodo.jit
 ... def f(S):
 ...     return S.str.index("a", start=1)
@@ -24,3 +24,4 @@
 5     1
 dtype: Int64
 ```
+

@@ -4,14 +4,15 @@
 
 ### Supported Arguments
 
-| argument | datatypes |
+| argument        | datatypes            |
 |-----------------|----------------------|
-| `others` | DataFrame |
-| `sep` | String |
+| `others`        |    DataFrame         |
+| `sep`           |    String            |
+
 
 ### Example Usage
 
-```py
+``` py
 >>> @bodo.jit
 ... def f(S, df):
 ...     return S.str.cat(df, ",")
@@ -25,3 +26,5 @@
 4    s5,a5,b5
 dtype: object
 ```
+
+

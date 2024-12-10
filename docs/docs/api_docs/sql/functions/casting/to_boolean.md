@@ -1,6 +1,7 @@
 # TO_BOOLEAN
 
-- `#!sql TO_BOOLEAN(COLUMN_EXPRESSION)`
+
+-  `#!sql TO_BOOLEAN(COLUMN_EXPRESSION)`
 
 Casts the input to a boolean value. If the input is a string, it will be cast to `true` if it is
 `'true'`, `'t'`, `'yes'`, `'y'`, `'1'`, cast to `false` if it is `'false'`, `'f'`, `'no'`, `'n'`, `'0'`,
@@ -11,7 +12,6 @@ If the input is a float, it will be cast to `true` if it is non-zero, `false` if
 _Example:_
 
 We are given `table1` with columns `a` and `b` and `c`
-
 ```python
 table1 = pd.DataFrame({
     'a': [1.1, 0, 2],
@@ -19,9 +19,7 @@ table1 = pd.DataFrame({
     'c': [None, 1, 0]
 })
 ```
-
 upon query
-
 ```sql
 SELECT
     TO_BOOLEAN(a) AS a,
@@ -29,27 +27,22 @@ SELECT
     TO_BOOLEAN(c) AS c
 FROM table1;
 ```
-
 we will get the following output:
-
 ```
        a      b      c
 0   True   True   <NA>
 1  False  False   True
 2   True   True  False
 ```
-
 Upon query
-
 ```sql
 SELECT TO_BOOLEAN('other')
 ```
-
 we see the following error:
-
 ```python
 ValueError: invalid value for boolean conversion: string must be one of {'true', 't', 'yes', 'y', 'on', '1'} or {'false', 'f', 'no', 'n', 'off', '0'}
 ```
 
 !!!note
 BodoSQL will read `NaN`s as `NULL` and thus will not produce errors on `NaN` input.
+

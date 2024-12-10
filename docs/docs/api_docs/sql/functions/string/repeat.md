@@ -1,5 +1,6 @@
 # REPEAT
 
+
 `#!sql REPEAT(str, len)`
 
 Extends the specified string to the specified length by
@@ -12,3 +13,5 @@ For example:
 REPEAT('abc', 7) =='abcabca'
 REPEAT('hello world', 5) =='hello'
 ```
+
+

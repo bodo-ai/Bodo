@@ -5,15 +5,14 @@
 `pandas.Series.dt.day_name(locale=None)`
 
 ### Argument Restrictions:
-
-- `locale`: only supports default value `None`.
+ * `locale`: only supports default value `None`.
 
 !!! note
-Input must be a Series of `datetime64` data.
+	Input must be a Series of `datetime64` data.
 
 ### Example Usage
 
-```py
+``` py
 >>> @bodo.jit
 ... def f(S):
 ...     return S.dt.day_name()
@@ -53,3 +52,4 @@ dtype: object
 ```
 
 ### String handling
+

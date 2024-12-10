@@ -1,5 +1,6 @@
 # `pd.tseries.offsets.Week`
 
+
 `pandas.tseries.offsets.Week(n=1, normalize=False, weekday=None)`
 
 ### Supported Arguments
@@ -9,7 +10,6 @@
 - `weekday`: integer
 
 ### Example Usage
-
 ```py
 >>> @bodo.jit
 >>> def f(ts):
@@ -19,3 +19,4 @@
 
 Timestamp('2020-11-21 00:00:00')
 ```
+

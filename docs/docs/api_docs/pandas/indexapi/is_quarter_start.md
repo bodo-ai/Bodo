@@ -1,5 +1,6 @@
 # `pd.DateTimeIndex.is_quarter_start`
 
+
 `pandasDatetimeIndex.is_quarter_start`
 
 ### Example Usage
@@ -14,3 +15,4 @@
 >>> f(I)
 Int64Index([0, 0, 0, 1, 1], dtype='int64')
 ```
+

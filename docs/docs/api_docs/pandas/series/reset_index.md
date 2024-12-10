@@ -4,18 +4,19 @@
 
 ### Supported Arguments
 
-| argument | datatypes | other requirements |
+| argument                             | datatypes                                     | other requirements                                                                                                           |
 |--------------------------------------|-----------------------------------------------|------------------------------------------------------------------------------------------------------------------------------|
-| `level` | <ul> <li> Integer</li><li> Boolean</li> </ul> | |
-| **Must be constant at Compile Time** | | |
-| `drop` | Boolean | \<> <li> **Must be constant at Compile Time** </li> <li> If `False`, Index name must be known at compilation time </li> </ul> |
+| `level`                              | <ul> <li> Integer</li><li> Boolean</li> </ul> |                                                                                                                              |
+| **Must be constant at Compile Time** |                                               |                                                                                                                              |
+| `drop`                               | Boolean                                       | <> <li> **Must be constant at Compile Time** </li> <li> If `False`, Index name must be known at compilation time </li> </ul> |
 
 !!! note
-For MultiIndex case, only dropping all levels is supported.
+    For MultiIndex case, only dropping all levels is supported.
+
 
 ### Example Usage
 
-```py
+``` py
 >>> @bodo.jit
 ... def f(S):
 ...     return S.reset_index()
@@ -36,3 +37,4 @@ For MultiIndex case, only dropping all levels is supported.
 >
 [100 rows x 2 columns]
 ```
+

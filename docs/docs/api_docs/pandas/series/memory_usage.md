@@ -4,17 +4,18 @@
 
 ### Supported Arguments
 
-| argument | datatypes | other requirements |
+| argument | datatypes | other requirements                   |
 |----------|-----------|--------------------------------------|
-| `index` | Boolean | **Must be constant at Compile Time** |
+| `index`  | Boolean   | **Must be constant at Compile Time** |
 
 !!! note
-This tracks the number of bytes used by Bodo which may differ from
-the Pandas values.
+    This tracks the number of bytes used by Bodo which may differ from
+    the Pandas values.
+
 
 ### Example Usage
 
-```py
+``` py
 >>> @bodo.jit
 ... def f(S):
 ...     return S.memory_usage()
@@ -22,3 +23,4 @@ the Pandas values.
 >>> f(S)
 8024
 ```
+

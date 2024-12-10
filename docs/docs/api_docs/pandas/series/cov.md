@@ -4,17 +4,18 @@
 
 ### Supported Arguments
 
-| argument | datatypes |
+| argument                    | datatypes                               |
 |-----------------------------|-----------------------------------------|
-| `other` | - Numeric Series or Array |
-| `ddof` | - Integer |
+| `other`                     | -   Numeric Series or Array             |
+| `ddof`                      | -   Integer                             |
 
 !!! note
-Series type must be numeric
+    Series type must be numeric
+
 
 ### Example Usage
 
-```py
+``` py
 >>> @bodo.jit
 ... def f(S, other):
 ...     return S.cov(other)
@@ -23,3 +24,4 @@ Series type must be numeric
 >>> f(S, other)
 0.025252525252525252
 ```
+

@@ -2,14 +2,14 @@
 
 `pandas.Series.str.rjust(width, fillchar=' ')`
 
-Supported arguments\`:
+Supported arguments`:
 
-| argument | datatypes |
+| argument   | datatypes                      |
 |------------|--------------------------------|
-| `width` | Integer |
+| `width`    | Integer                        |
 | `fillchar` | String with a single character |
 
-```py
+``` py
 >>> @bodo.jit
 ... def f(S):
 ...     return S.str.rjust(10)
@@ -24,3 +24,4 @@ Supported arguments\`:
 6          ^ Ef
 dtype: object
 ```
+

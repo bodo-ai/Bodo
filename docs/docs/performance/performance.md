@@ -4,21 +4,21 @@ This page provides tips on measuring performance of Bodo programs. It
 is important to keep the following in mind when measuring program run
 time:
 
-1. Every program has some overhead, so large data sets may be
-   necessary for useful measurements.
-1. Performance can vary from one run to another. Several measurements
-   are always needed.
-1. Longer computations typically provide more reliable run time
-   information.
-1. It is important to use a sequence of tests with increasing input
-   size, which helps understand the impact of problem size on program
-   performance.
-1. Testing with different data (in terms statistical distribution and
-   skew) can be useful to see the impact of data skew on performance
-   and scaling.
-1. Simple programs are useful to study performance factors. Complex
-   programs are impacted by multiple factors and their performance is
-   harder to understand.
+1.  Every program has some overhead, so large data sets may be
+    necessary for useful measurements.
+2.  Performance can vary from one run to another. Several measurements
+    are always needed.
+3.  Longer computations typically provide more reliable run time
+    information.
+4.  It is important to use a sequence of tests with increasing input
+    size, which helps understand the impact of problem size on program
+    performance.
+5.  Testing with different data (in terms statistical distribution and
+    skew) can be useful to see the impact of data skew on performance
+    and scaling.
+6.  Simple programs are useful to study performance factors. Complex
+    programs are impacted by multiple factors and their performance is
+    harder to understand.
 
 ## Measuring execution time of Bodo functions
 
@@ -109,6 +109,7 @@ optimizations).
 In addition, [SPMD launch mode](../bodo_parallelism/bodo_parallelism_basics.md#spmd) is recommended
 for performance measurements since it has lower overheads.
 
+
 ## Measuring sections inside Bodo functions
 
 We can add multiple timers inside a function to see how much time each
@@ -158,11 +159,12 @@ result: 3.14155538
 ```
 
 !!! note
-Note that Bodo execution took longer in the last example than previous
-ones, since the presence of timers in the middle of computation can
-inhibit some code optimizations (e.g. code reordering and fusion).
-Therefore, one should be cautious about adding timers in the middle of
-computation.
+    Note that Bodo execution took longer in the last example than previous
+    ones, since the presence of timers in the middle of computation can
+    inhibit some code optimizations (e.g. code reordering and fusion).
+    Therefore, one should be cautious about adding timers in the middle of
+    computation.
+
 
 ## Disabling JIT Compilation {#disable-jit}
 

@@ -13,14 +13,13 @@ DESC[RIBE] SCHEMA <name>
 ```
 
 ## Output
-
 The output provides object properties and metadata in the following columns:
 
-| Column | DESCRIPTION |
+| Column       | DESCRIPTION    |
 |:-------------|:---------------|
-| CREATED_ON | The timestamp at which the object was created, **as a string type**. |
-| NAME | The name of the object. |
-| KIND | The kind of the object. |
+| CREATED_ON   | The timestamp at which the object was created, **as a string type**. |
+| NAME         | The name of the object. |
+| KIND         | The kind of the object. |
 
 For Iceberg tables, the `CREATED_ON` field will be `None`.
 

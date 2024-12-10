@@ -4,7 +4,7 @@
 
 ### Example Usage
 
-```py
+``` py
 >>> @bodo.jit
 ... def f(S):
 ...     return S.dt.week
@@ -42,3 +42,4 @@
 29     2
 dtype: Int64
 ```
+

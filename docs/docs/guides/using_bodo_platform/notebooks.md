@@ -20,13 +20,14 @@ To execute your code across the attached cluster, select the _Parallel Python_ c
 
 ![Run-Code-Notebook](../../platform2-gifs/parallel-python.gif#center)
 
-To run a SQL query, first select the catalog you want to use, then select the SQL cell type from the cell type selector dropdown.
+To run a SQL query, first select the catalog you want to use, then select the SQL cell type from the cell type selector dropdown. 
 For more information on SQL catalogs, refer to the [SQL Catalogs usage guide][sql_catalog].
 
 ![Run-Code-Notebook](../../platform2-gifs/sql.gif#center)
 
-!!! note
-Execution is only allowed when the notebook is attached to a cluster.
-If you execute a cell without a cluster attached, the following warning will be shown:
+
+!!! note 
+    Execution is only allowed when the notebook is attached to a cluster.
+    If you execute a cell without a cluster attached, the following warning will be shown:
 
 ![Detached-Notebook-Warning](../../platform2-gifs/not-attached-to-cluster-warning.gif#center)

@@ -4,16 +4,17 @@
 
 ### Supported Arguments
 
-| argument | datatypes | other requirements |
+| argument        | datatypes             | other requirements                   |
 |-----------------|-----------------------|--------------------------------------|
-| `name` | String | **Must be constant at Compile Time** |
+| `name`          |    String             | **Must be constant at Compile Time** |
 
 !!! note
-If `name` is not provided Series name must be a known constant
+    If `name` is not provided Series name must be a known constant
+
 
 ### Example Usage
 
-```py
+``` py
 >>> @bodo.jit
 ... def f(S):
 ...     return S.to_frame("my_column")
@@ -34,3 +35,6 @@ If `name` is not provided Series name must be a known constant
 ```
 
 [1000 rows x 1 columns]
+
+
+

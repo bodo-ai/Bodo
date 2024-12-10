@@ -4,16 +4,16 @@
 
 ### Supported Arguments
 
-| argument | datatypes | other requirements |
+| argument    | datatypes                                                      | other requirements                   |
 |-------------|----------------------------------------------------------------|--------------------------------------|
-| `normalize` | Boolean | **Must be constant at Compile Time** |
-| `sort` | Boolean | **Must be constant at Compile Time** |
-| `ascending` | Boolean | |
-| `bins` | <ul><li> Integer </li></li> Array-like of integers </li></ul> | |
+| `normalize` | Boolean                                                        | **Must be constant at Compile Time** |
+| `sort`      | Boolean                                                        | **Must be constant at Compile Time** |
+| `ascending` | Boolean                                                        |                                      |
+| `bins`      | <ul><li> Integer </li></li>  Array-like of integers </li></ul> |                                      |
 
 ### Example Usage
 
-```py
+``` py
 >>> @bodo.jit
 ... def f(S):
 ...     return S.value_counts()
@@ -30,3 +30,4 @@ dtype: int64
 ```
 
 ### Reindexing / Selection / Label manipulation
+

@@ -1,11 +1,7 @@
-______________________________________________________________________
-
+---
 hide:
-
-- toc
-
-______________________________________________________________________
-
+  - toc
+---
 # Aggregation & Window Functions
 
 An aggregation function can be used to combine data across many
@@ -31,7 +27,6 @@ following syntax:
 ```sql
 SELECT WINDOW_FN(ARG1, ..., ARGN) OVER (PARTITION BY PARTITION_COLUMN_1, ..., PARTITION_COLUMN_N ORDER BY SORT_COLUMN_1, ..., SORT_COLUMN_N ROWS BETWEEN <LOWER_BOUND> AND <UPPER_BOUND>) FROM table_name
 ```
-
 The `#!sql ROWS BETWEEN ROWS BETWEEN <LOWER_BOUND> AND <UPPER_BOUND>`
 section is the window's "frame" used to specify the window over which to compute the
 function. A bound can can come before the current row, using `#!sql PRECEDING` or after the current row, using
@@ -50,32 +45,31 @@ SELECT
     SUM(A) OVER (ORDER BY C ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) as S4,
 FROM table1
 ```
-
 This query computes 4 sums, and returns 1 row for every row in the original table:
 
-- `S1`: The sum of each row of `A` across the entire table.
+- `S1`: The sum of each row of `A` across the entire table. 
 - `S2`: The sum of all values of `A` within each partition of `B`.
 - `S3`: The cumulative sum of each row and all rows before it when the rows are partitioned by B the sorted by C.
 - `S4`: The the sum each row with the row before & after it in the entire table when ordered by C.
 
 !!! note
-For most window functions, BodoSQL returns `NULL` if the specified window frame
-is empty or all `NULL`. Exceptions to this behavior are noted.
+    For most window functions, BodoSQL returns `NULL` if the specified window frame
+    is empty or all `NULL`. Exceptions to this behavior are noted.
 
 All window functions optionally allow `#!sql PARTITION BY`. Some window functions optionally allow `#!sql ORDER BY`, and some may actually require it. Some window functions optionally allow window frames, and others ban it. If a function supports window frames but one is not provided, the default frame behavior depends on the function.
 
 !!! note
-`#!sql RANGE BETWEEN` is not currently supported.
+    `#!sql RANGE BETWEEN` is not currently supported.
 
 !!!note
-If a window frame contains `NaN` values, the output may diverge from Snowflake's
-behavior. When a `NaN` value enters a window, any window function that combines
-the results with arithmetic (e.g. `SUM`, `AVG`, `VARIANCE`, etc.) will output
-`NaN` until the `NaN` value has exited the window.
+    If a window frame contains `NaN` values, the output may diverge from Snowflake's
+    behavior. When a `NaN` value enters a window, any window function that combines
+    the results with arithmetic (e.g. `SUM`, `AVG`, `VARIANCE`, etc.) will output
+    `NaN` until the `NaN` value has exited the window.
 
 BodoSQL Currently supports the following Aggregation & Window functions:
 
-| Function | Supported with GROUP BY? | Supported without GROUP BY? | Supported as window function? | (WINDOW) Requires ORDER BY? | (WINDOW) Allows frame? |
+| Function | Supported with GROUP BY? | Supported without GROUP BY? | Supported as window function?  | (WINDOW) Requires ORDER BY? | (WINDOW) Allows frame? |
 |---|---|---|---|---|---|
 | `#!sql ANY_VALUE` | Y | Y | Y | N | N |
 | `#!sql APPROX_PERCENTILE` | N | Y | Y | N | N |

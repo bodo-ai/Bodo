@@ -1,5 +1,6 @@
 # `pd.core.window.rolling.Rolling.count`
 
+
 `pandas.core.window.rolling.Rolling.count()`
 
 ### Example Usage
@@ -19,3 +20,4 @@ A    B
 5  3.0  2.0
 6  3.0  3.0
 ```
+

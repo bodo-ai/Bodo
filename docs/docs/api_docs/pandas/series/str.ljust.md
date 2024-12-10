@@ -4,12 +4,12 @@
 
 ### Supported Arguments
 
-| argument | datatypes |
+| argument   | datatypes                      |
 |------------|--------------------------------|
-| `width` | Integer |
+| `width`    | Integer                        |
 | `fillchar` | String with a single character |
 
-```py
+``` py
 >>> @bodo.jit
 ... def f(S):
 ...     return S.str.ljust(5, fillchar=",")
@@ -24,3 +24,4 @@
 6    ^ Ef,
 dtype: object
 ```
+

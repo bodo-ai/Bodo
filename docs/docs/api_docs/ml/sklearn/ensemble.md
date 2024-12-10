@@ -1,71 +1,67 @@
-# sklearn.ensemble
+# sklearn.ensemble 
 
 ## sklearn.ensemble.RandomForestClassifier
 
 `sklearn.ensemble.RandomForestClassifier`
 
+
 This class provides Random Forest Classifier, an ensemble learning
 model, for distributed large-scale learning.
 
 !!! info "Important"
-`random_state` value is ignored when running on a multi-node cluster.
+    `random_state` value is ignored when running on a multi-node cluster.
 
 ### Methods
 
-#### sklearn.ensemble.RandomForestClassifier.fit
+#### sklearn.ensemble.RandomForestClassifier.fit 
 
 - `sklearn.ensemble.RandomForestClassifier.fit(X, y, sample_weight=None)`
 
-  ***Supported Arguments***
-  <br>
-  <br>
-
-  - `X`: NumPy Array, Pandas Dataframes, or CSR sparse matrix.
-  - `y`: NumPy Array
-  - `sample_weight`: Numeric NumPy Array (only if data is not
-    distributed)
-
+    ***Supported Arguments***
+    <br>
+    <br> 
+    -   `X`: NumPy Array, Pandas Dataframes, or CSR sparse matrix.
+    -   `y`: NumPy Array
+    -   `sample_weight`: Numeric NumPy Array (only if data is not
+        distributed)
+    
+    
 #### sklearn.ensemble.RandomForestClassifier.predict
-
 - `sklearn.ensemble.RandomForestClassifier.predict(X)`
 
-  ***Supported Arguments***
-  <br>
-  <br>
-
-  - `X`: NumPy Array, Pandas Dataframes, or CSR sparse matrix.
+    ***Supported Arguments***
+    <br>
+    <br> 
+    -   `X`: NumPy Array, Pandas Dataframes, or CSR sparse matrix.
 
 #### sklearn.ensemble.RandomForestClassifier.predict_log_proba
 
 - `sklearn.ensemble.RandomForestClassifier.predict_log_proba(X)`
 
-  ***Supported Arguments***
-  <br>
-  <br>
-
-  - `X`: NumPy Array, Pandas Dataframes, or CSR sparse matrix.
+    ***Supported Arguments***
+    <br>
+    <br> 
+    -   `X`: NumPy Array, Pandas Dataframes, or CSR sparse matrix.
 
 #### sklearn.ensemble.RandomForestClassifier.predict_proba
 
 - `sklearn.ensemble.RandomForestClassifier.predict_proba(X)`
 
-  ***Supported Arguments***
-  <br>
-  <br>
-
-  - `X`: NumPy Array, Pandas Dataframes, or CSR sparse matrix.
+    ***Supported Arguments***
+    <br>
+    <br> 
+    -   `X`: NumPy Array, Pandas Dataframes, or CSR sparse matrix.
 
 #### sklearn.ensemble.RandomForestClassifier.score
 
 - `sklearn.ensemble.RandomForestClassifier.score(X, y, sample_weight=None)`
 
-  ***Supported Arguments***
-  <br>
-  <br>
-
-  - `X`: NumPy Array or Pandas Dataframes.
-  - `y`: NumPy Array
-  - `sample_weight`: Numeric NumPy Array
+    ***Supported Arguments***
+    <br>
+    <br> 
+    -   `X`: NumPy Array or Pandas Dataframes.
+    -   `y`: NumPy Array
+    -   `sample_weight`: Numeric NumPy Array
 
 ### Example Usage
 
@@ -85,8 +81,10 @@ model, for distributed large-scale learning.
 ...
 >>> test_random_forest_classifier(X, y)
 [1]
-```
-
+```  
+     
+     
+     
 ## sklearn.ensemble.RandomForestRegressor
 
 `sklearn.ensemble.RandomForestRegressor`
@@ -95,7 +93,7 @@ This class provides Random Forest Regressor, an ensemble learning
 model, for distributed large-scale learning.
 
 !!! info "Important"
-`random_state` value is ignored when running on a multi-node cluster.
+    `random_state` value is ignored when running on a multi-node cluster.
 
 ### Methods
 
@@ -103,36 +101,33 @@ model, for distributed large-scale learning.
 
 - `sklearn.ensemble.RandomForestRegressor.fit(X, y, sample_weight=None)`
 
-  ***Supported Arguments***
-  <br>
-  <br>
-
-  - `X`: NumPy Array, Pandas Dataframes, or CSR sparse matrix.
-  - `y`: NumPy Array
-  - `sample_weight`: Numeric NumPy Array (only if data is not
-    distributed)
+    ***Supported Arguments***
+    <br>
+    <br> 
+    -   `X`: NumPy Array, Pandas Dataframes, or CSR sparse matrix.
+    -   `y`: NumPy Array
+    -   `sample_weight`: Numeric NumPy Array (only if data is not
+        distributed)
 
 #### sklearn.ensemble.RandomForestRegressor.predict
 
 - `sklearn.ensemble.RandomForestRegressor.predict(X)`
 
-  ***Supported Arguments***
-  <br>
-  <br>
-
-  - `X`: NumPy Array, Pandas Dataframes, or CSR sparse matrix.
+    ***Supported Arguments***
+    <br>
+    <br> 
+    -   `X`: NumPy Array, Pandas Dataframes, or CSR sparse matrix.
 
 #### sklearn.ensemble.RandomForestRegressor.score
 
 - `sklearn.ensemble.RandomForestRegressor.score(X, y, sample_weight=None)`
 
-  ***Supported Arguments***
-  <br>
-  <br>
-
-  - `X`: NumPy Array, Pandas Dataframes, or CSR sparse matrix.
-  - `y`: NumPy Array
-  - `sample_weight`: Numeric NumPy Array
+    ***Supported Arguments***
+    <br>
+    <br> 
+    -   `X`: NumPy Array, Pandas Dataframes, or CSR sparse matrix.
+    -   `y`: NumPy Array
+    -   `sample_weight`: Numeric NumPy Array
 
 ### Example Usage
 

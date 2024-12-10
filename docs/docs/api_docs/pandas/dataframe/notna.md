@@ -1,5 +1,6 @@
 # `pd.DataFrame.notna`
 
+
 `pandas.DataFrame.notna()`
 
 ### Example Usage
@@ -16,3 +17,4 @@
 1  False
 2   True
 ```
+

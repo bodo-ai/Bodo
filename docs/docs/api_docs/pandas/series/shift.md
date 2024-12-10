@@ -4,23 +4,24 @@
 
 ### Supported Arguments
 
-| argument | datatypes |
+| argument  | datatypes |
 |-----------|-----------|
-| `periods` | Integer |
+| `periods` | Integer   |
 
 !!! note
-This data type for the series must be one of:
-\- Integer
-\- Float
-\- Boolean
-\- datetime.data
-\- datetime64
-\- timedelta64
-\- string
+    This data type for the series must be one of:
+    -   Integer
+    -   Float
+    -   Boolean
+    -   datetime.data
+    -   datetime64
+    -   timedelta64
+    -   string
+
 
 ### Example Usage
 
-```py
+``` py
 >>> @bodo.jit
 ... def f(S):
 ...     return S.shift(1)
@@ -41,3 +42,4 @@ Length: 100, dtype: float64
 ```
 
 ### Datetime properties
+

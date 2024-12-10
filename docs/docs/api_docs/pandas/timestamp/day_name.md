@@ -1,6 +1,8 @@
 # `pd.Timestamp.day_name`
 
+
 `pandasTimestamp.day_name(*args, **kwargs)`
+
 
 ### Supported Arguments: None
 
@@ -17,3 +19,5 @@
 >>> f()
 ('Thursday', 'Friday', 'Saturday')
 ```
+
+

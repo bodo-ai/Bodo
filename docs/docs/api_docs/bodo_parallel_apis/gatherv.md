@@ -1,18 +1,18 @@
 # bodo.gatherv
 
 `bodo.gatherv(data, allgather=False, warn_if_rep=True, root=0)`
-<br>
-Collect distributed data manually by *gathering* them into a single rank.
+<br> 
+Collect distributed data manually by *gathering* them into a single rank. 
 
 ### Arguments
-
-- `data`: data to gather.
-- `root`: specify rank to collect the data. Default: rank `0`.
-- `warn_if_rep`: prints a BodoWarning if data to gather is replicated.
-- `allgather`: send gathered data to all ranks. Default: `False`. Same behavior as `bodo.allgatherv`.
+  
+- ``data``: data to gather.
+- ``root``: specify rank to collect the data. Default: rank `0`.
+- ``warn_if_rep``: prints a BodoWarning if data to gather is replicated. 
+- ``allgather``: send gathered data to all ranks. Default: `False`. Same behavior as ``bodo.allgatherv``.
 
 ### Example Usage
-
+    
 ```py
 import bodo
 import pandas as pd
@@ -25,8 +25,7 @@ def mean_power():
 
 mean_power()
 ```
-
-Save code in `test_gatherv.py` file and run with 4 processes.
+Save code in ``test_gatherv.py`` file and run with 4 processes.
 
 ```shell
 BODO_NUM_WORKERS=4 python test_gatherv.py
@@ -69,3 +68,4 @@ Index: []
 
 [0 rows x 10 columns]
 ```
+

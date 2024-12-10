@@ -1,6 +1,8 @@
 # `pd.DataFrame.memory_usage`
 
+
 `pandas.DataFrame.memory_usage(index=True, deep=False)`
+
 
 ### Supported Arguments
 
@@ -21,3 +23,6 @@ B        12
 C        42
 dtype: int64
 ```
+
+
+

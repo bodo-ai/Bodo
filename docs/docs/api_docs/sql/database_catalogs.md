@@ -32,7 +32,7 @@ Database catalogs can be used alongside local, in-memory `DataFrame` or `TablePa
 specified without a schema then BodoSQL resolves the table in the following order:
 
 1. Default Catalog Schema
-1. Local (in-memory) DataFrames / TablePath names
+2. Local (in-memory) DataFrames / TablePath names
 
 An error is raised if the table cannot be resolved after searching through both of these data sources.
 
@@ -100,41 +100,42 @@ run_query(bc)
 Internally, Bodo uses the following connections to Snowflake:
 
 1. A JDBC connection to lazily fetch metadata.
-1. The Snowflake-Python-Connector's distributed fetch API to load batches of arrow data.
+2. The Snowflake-Python-Connector's distributed fetch API to load batches of arrow data.
 
 ### API Reference
 
 - `bodosql.SnowflakeCatalog(username: str, password: str, account: str, warehouse: str, database: str, connection_params: Optional[Dict[str, str]] = None, iceberg_volume: Optional[str] = None)`
-  <br><br>
+<br><br>
 
-  Constructor for `SnowflakeCatalog`. This allows users to execute queries on tables stored in Snowflake when the `SnowflakeCatalog` object is registered with a `BodoSQLContext`.
+    Constructor for `SnowflakeCatalog`. This allows users to execute queries on tables stored in Snowflake when the `SnowflakeCatalog` object is registered with a `BodoSQLContext`.
 
-  ***Arguments***
+    ***Arguments***
 
-  - `username`: Snowflake account username.
+    - `username`: Snowflake account username.
 
-  - `password`: Snowflake account password.
+    - `password`: Snowflake account password.
 
-  - `account`: Snowflake account name.
+    - `account`: Snowflake account name.
 
-  - `warehouse`: Snowflake warehouse to use when loading data.
+    - `warehouse`: Snowflake warehouse to use when loading data.
 
-  - `database`: Name of Snowflake database to load data from. The Snowflake
-    Catalog is currently restricted to using a single Snowflake `database`.
+    - `database`: Name of Snowflake database to load data from. The Snowflake
+        Catalog is currently restricted to using a single Snowflake `database`.
 
-  - `connection_params`: A dictionary of Snowflake session parameters.
+    - `connection_params`: A dictionary of Snowflake session parameters.
 
-  - `iceberg_volume`: The name of a storage volume to use for writing Iceberg tables. When provided any tables created by BodoSQL will be written as
-    an Iceberg table.
+    - `iceberg_volume`: The name of a storage volume to use for writing Iceberg tables. When provided any tables created by BodoSQL will be written as
+       an Iceberg table.
+
 
 #### Supported Query Types
 
 The `SnowflakeCatalog` currently supports the following types of SQL queries:
 
-- `#!sql SELECT`
-- `#!sql INSERT INTO`
-- `#!sql DELETE`
-- `#!sql CREATE TABLE AS`
+  * `#!sql SELECT`
+  * `#!sql INSERT INTO`
+  * `#!sql DELETE`
+  * `#!sql CREATE TABLE AS`
 
 ## FileSystemCatalog {#fs-catalog-api}
 
@@ -182,26 +183,27 @@ run_query(bc)
 ### API Reference
 
 - `bodosql.FileSystemCatalog(root: str, default_write_format: str = "iceberg", default_schema: str = ".")`
-  <br><br>
+<br><br>
 
-  Constructor for `FileSystemCatalog`. This allows users to try a file system as a database for querying
-  or writing tables with a `BodoSQLContext`.
+    Constructor for `FileSystemCatalog`. This allows users to try a file system as a database for querying
+    or writing tables with a `BodoSQLContext`.
 
-  ***Arguments***
+    ***Arguments***
 
-  - `root`: Filesystem path that provides the root directory for the database. This can either be a local file system path or an S3 path.
+    - `root`: Filesystem path that provides the root directory for the database. This can either be a local file system path or an S3 path.
 
-  - `default_write_format`: The default format to use when writing tables using `#!sql create table as`. This can be either `iceberg` or `parquet`.
+    - `default_write_format`: The default format to use when writing tables using `#!sql create table as`. This can be either `iceberg` or `parquet`.
 
-  - `default_schema`: The default schema to use when resolving tables. This should be a `.` separated string that represents the path to the default schema.
-    Each value separated by a `.` should be treated as its own SQL identifier. If no default schema is provided the root directory is used.
+    - `default_schema`: The default schema to use when resolving tables. This should be a `.` separated string that represents the path to the default schema.
+       Each value separated by a `.` should be treated as its own SQL identifier. If no default schema is provided the root directory is used.
 
 #### Supported Query Types
 
 The `FileSystemCatalog` currently supports the following types of SQL queries:
 
-- `#!sql SELECT`
-- `#!sql CREATE TABLE AS`
+  * `#!sql SELECT`
+  * `#!sql CREATE TABLE AS`
+
 
 #### Supported Table Types
 
@@ -214,12 +216,13 @@ in the file system. Future releases will provide additional table support.
 The `FileSystemCatalog` supports reading and writing tables from S3. When using S3, the `root` parameter should be an s3 uri.
 To access S3 BodoSQL uses the following environment variables to connect to S3:
 
-- `AWS_ACCESS_KEY_ID`
-- `AWS_SECRET_ACCESS_KEY`
-- `AWS_REGION`
+  * `AWS_ACCESS_KEY_ID`
+  * `AWS_SECRET_ACCESS_KEY`
+  * `AWS_REGION`
 
 If you encounter any issues connecting to s3 or accessing a table, please ensure that these environment variables are set.
 For more information please refer to the [AWS documentation.](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-envvars.html)
+
 
 ## TabularCatalog {#tabular-catalog-api}
 
@@ -242,30 +245,32 @@ run_query(bc)
 
 When constructing a query you must follow the BodoSQL rules for [identifier case sensitivity][identifier-case-sensitivity].
 
+
 ### API Reference
 
 - `bodosql.TabularCatalog(warehouse: str, credential: str, token: str)`
-  <br><br>
+<br><br>
 
-  Constructor for `TabularCatalog`. This allows users to use a Tabular Iceberg Warehouse as a database for querying
-  or writing tables with a `BodoSQLContext`. Either `credential` or `token` must be provided.
+    Constructor for `TabularCatalog`. This allows users to use a Tabular Iceberg Warehouse as a database for querying
+    or writing tables with a `BodoSQLContext`. Either `credential` or `token` must be provided.
 
-  ***Arguments***
+    ***Arguments***
 
-  - `warehouse`: Name of the Tabular Iceberg Warehouse to query.
+    - `warehouse`: Name of the Tabular Iceberg Warehouse to query.
 
-  - `rest_uri`: The REST URI for Tabular's REST Iceberg catalog, defaults to `https://api.tabular.io/ws`.
+    - `rest_uri`: The REST URI for Tabular's REST Iceberg catalog, defaults to `https://api.tabular.io/ws`.
 
-  - `credential`: The [Tabular credential](https://docs.tabular.io/en/creating-and-modifying-credentials.html) to use for authentication. This should be in the form of `clientid:clientsecret`.
+    - `credential`: The [Tabular credential](https://docs.tabular.io/en/creating-and-modifying-credentials.html) to use for authentication. This should be in the form of `clientid:clientsecret`.
 
-  - `token`: A [temporary OAuth2 token](https://docs.tabular.io/en/data-access-flow-in-tabular.html) to use for authentication. This token should be a valid token for the Tabular Warehouse.
+    - `token`: A [temporary OAuth2 token](https://docs.tabular.io/en/data-access-flow-in-tabular.html) to use for authentication. This token should be a valid token for the Tabular Warehouse.
 
 #### Supported Query Types
 
 The `TabularCatalog` currently supports the following types of SQL queries:
 
-- `#!sql SELECT`
-- `#!sql CREATE TABLE AS`
+  * `#!sql SELECT`
+  * `#!sql CREATE TABLE AS`
+
 
 #### S3 Support
 
@@ -296,7 +301,6 @@ When constructing a query you must follow the BodoSQL rules for [identifier case
 ### Authentication / Authorization
 
 Before creating a catalog for the Glue S3 bucket, you must first ensure that the cloud config role for the workspace has access to the Glue S3 bucket with the following permissions:
-
 ```
 {
     "Sid": "BodoPlatformCatalog",
@@ -309,14 +313,13 @@ Before creating a catalog for the Glue S3 bucket, you must first ensure that the
 ```
 
 The following are the steps to find the cloud config role:
-
-- find the `Cloud Config uuid` in the workpace details.
-- find the `Cloud Config` that has the same uuid in the `Cloud Configurations` page.
-- find the `Role ARN` in the details of the `Cloud Config`. It may look like `BodoPlatformUser-XXXXXXXX`
-  if it was created using `Cloud Formation` or `Access Key`.
+  * find the `Cloud Config uuid` in the workpace details.
+  * find the `Cloud Config` that has the same uuid in the `Cloud Configurations` page.
+  * find the `Role ARN` in the details of the `Cloud Config`. It may look like `BodoPlatformUser-XXXXXXXX`
+  if it was created using `Cloud Formation` or `Access Key`. 
 
 The Bodo clusters that run the queries on the Glue Catalog need to be created with an instance role. This instance role needs to have read/write access to
-the Glue S3 bucket and also appropreate Glue permissions. The exact set of Glue permissions depend on the queries on the Glue database. The following is
+the Glue S3 bucket and also appropreate Glue permissions. The exact set of Glue permissions depend on the queries on the Glue database. The following is 
 an example that could work for most of the use cases.
 
 ```
@@ -372,18 +375,20 @@ For workspaces that have PrivateLink enabled, or have no internet access, users 
 ### API Reference
 
 - `bodosql.GlueCatalog(warehouse: str)`
-  <br><br>
+<br><br>
 
-  Constructor for `GlueCatalog`. This allows users to use an AWS Glue Iceberg Warehouse as a database for querying
-  or writing tables with a `BodoSQLContext`.
+    Constructor for `GlueCatalog`. This allows users to use an AWS Glue Iceberg Warehouse as a database for querying
+    or writing tables with a `BodoSQLContext`.
 
-  ***Arguments***
+    ***Arguments***
 
-  - `warehouse`: Name of the Glue S3 bucket, with or without the `s3://` prefix. I.e., both `s3://bucket_name` and `bucket_name` are valid.
+    - `warehouse`: Name of the Glue S3 bucket, with or without the `s3://` prefix. I.e., both `s3://bucket_name` and `bucket_name` are valid.
 
 #### Supported Query Types
 
 The `GlueCatalog` currently supports the following types of SQL queries:
 
-- `#!sql SELECT`
-- `#!sql CREATE TABLE AS`
+  * `#!sql SELECT`
+  * `#!sql CREATE TABLE AS`
+
+

@@ -1,6 +1,8 @@
 # `pd.Index.nlevels`
 
+
 `pandasIndex.nlevels`
+
 
 ### Example Usage
 
@@ -13,3 +15,5 @@
 >>> f(I)
 2
 ```
+
+

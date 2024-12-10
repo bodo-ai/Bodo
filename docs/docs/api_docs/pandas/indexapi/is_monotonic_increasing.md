@@ -2,17 +2,17 @@
 
 `pandasIndex.is_monotonic_increasing` and `pandas.Index.is_monotonic`
 
+
 ***Unsupported Index Types***
 
-- StringIndex
-- BinaryIndex
-- IntervalIndex
-- CategoricalIndex
-- PeriodIndex
-- MultiIndex
+  - StringIndex
+  - BinaryIndex
+  - IntervalIndex
+  - CategoricalIndex
+  - PeriodIndex
+  - MultiIndex
 
 ### Example Usage
-
 ```py
 >>> @bodo.jit
 ... def f(I):
@@ -30,3 +30,4 @@ True
 >>> g(I)
 True
 ```
+

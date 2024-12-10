@@ -4,16 +4,16 @@
 
 - *getitem*:
 
-  - `Series.loc` supports list/array of booleans
-  - `Series.loc` supports integer with RangeIndex
+    -  `Series.loc` supports list/array of booleans
+    -  `Series.loc` supports integer with RangeIndex
 
 - *setitem*:
 
-  - `Series.loc` supports list/array of booleans
+    -  `Series.loc` supports list/array of booleans
 
 ### Example Usage
 
-```py
+``` py
 >>> @bodo.jit
 ... def f(S, idx):
 ...   return S.loc[idx]
@@ -33,3 +33,4 @@ dtype: int64
 ```
 
 ### Binary operator functions:
+

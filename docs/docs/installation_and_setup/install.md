@@ -1,18 +1,13 @@
-______________________________________________________________________
-
+---
 hide:
-
-- tags
+  - tags
 
 tags:
-
-- install
-
-______________________________________________________________________
-
+  - install
+---
 # Installing Bodo Engine {#install}
 
-Bodo compute engine can be installed using either `pip` or `conda` (see how to install [conda][conda] below).
+Bodo compute engine can be installed using either `pip` or `conda` (see how to install [conda][conda] below). 
 To install Bodo and its dependencies with `pip`, use the following command:
 
 ```console
@@ -31,6 +26,7 @@ conda install bodo -c bodo.ai -c conda-forge
 Bodo uses [MPI](https://en.wikipedia.org/wiki/Message_Passing_Interface){target="blank"}
 for parallelization, which is automatically installed as part of the
 `pip` and `conda` install commands above.
+
 
 ## How to Install Conda {#conda}
 
@@ -57,7 +53,7 @@ export PATH=$HOME/miniconda3/bin:$PATH
 ## Optional Dependencies {#optionaldep}
 
 Some Bodo functionality may require other dependencies, as summarized in
-the table below.
+the table below. 
 
 All optional dependencies except Hadoop, HDF5, and OpenJDK can be installed through pip using the command:
 
@@ -72,17 +68,18 @@ installed through conda using the command:
 conda install gcsfs sqlalchemy snowflake-connector-python hdf5='1.14.*=*mpich*' openjdk=11 deltalake -c conda-forge
 ```
 
+
 <br/>
 <center>
 
-| Functionality | Dependency
+| Functionality            |   Dependency
 |--------------------------|------------------------------------------------------------------------------------
-|`pd.read_sql / df.to_sql` |`sqlalchemy`\
-|`Snowflake I/O` |`snowflake-connector-python`\
-|`GCS I/O` |`gcsfs`\
-|`Delta Lake` |`deltalake`\
-|`HDFS or ADLS Gen2` |[hadoop](http://hadoop.apache.org/docs/stable/){target="html"} (only the Hadoop client is needed)
-|`HDF5` |`hdf5 (MPI version)`
+|`pd.read_sql / df.to_sql` |`sqlalchemy`                                                                       
+|`Snowflake I/O`           |`snowflake-connector-python`                                                       
+|`GCS I/O`                 |`gcsfs`                                                                            
+|`Delta Lake`              |`deltalake`                                                                        
+|`HDFS or ADLS Gen2`       |[hadoop](http://hadoop.apache.org/docs/stable/){target="html"} (only the Hadoop client is needed) 
+|`HDF5`                    |`hdf5 (MPI version)`                                                               
 
 </center>
 
@@ -92,12 +89,12 @@ Once you have installed Bodo with pip or activated your `conda` environment and 
 it, you can test it using the example program below. This program has
 two functions:
 
-- The function `gen_data` creates a sample dataset with 20,000 rows
-  and writes to a parquet file called `example1.pq`.
-- The function `test` reads `example1.pq` and performs multiple
-  computations on it.
+-   The function `gen_data` creates a sample dataset with 20,000 rows
+    and writes to a parquet file called `example1.pq`.
+-   The function `test` reads `example1.pq` and performs multiple
+    computations on it.
 
-```python3
+``` python3
 import bodo
 import pandas as pd
 import numpy as np
@@ -140,8 +137,10 @@ Alternatively, to run it on a single core:
 BODO_NUM_WORKERS=1 python example.py
 ```
 
+
 !!! note
-You may need to delete `example1.pq` between consecutive runs.
+    You may need to delete `example1.pq` between consecutive runs.
+
 
 ## Enabling parallelism in Clusters
 
@@ -161,27 +160,29 @@ BODO_NUM_WORKERS=64 python example.py
 For cloud instances, one physical core typically corresponds to two vCPUs.
 For example, an instance with 32 vCPUs has 16 physical cores.
 
+
 ## Setting up passwordless SSH on your multi-node cluster {#passwordless_ssh}
 
 Using MPI on a multi-node cluster requires setting up passwordless SSH
 between the hosts. There are multiple ways to do this. Here is one way:
 
-1. Generate an SSH key pair using a tool like `ssh-keygen`, for
-   instance:
+1.  Generate an SSH key pair using a tool like `ssh-keygen`, for
+    instance:
+    
+    ```shell
+    ssh-keygen -b 2048 -f cluster_ssh_key -N ""
+    ```
+    
+2.  Copy over the generated private key (`cluster_ssh_key`) and public key (`cluster_ssh_key.pub`) to all the hosts and 
+    store them in `~/.ssh/id_rsa` and `~/.ssh/id_rsa.pub` respectively.
 
-   ```shell
-   ssh-keygen -b 2048 -f cluster_ssh_key -N ""
-   ```
+3.  Add the public key to `~/.ssh/authorized_keys` on all hosts.
 
-1. Copy over the generated private key (`cluster_ssh_key`) and public key (`cluster_ssh_key.pub`) to all the hosts and
-   store them in `~/.ssh/id_rsa` and `~/.ssh/id_rsa.pub` respectively.
+4.  To disable host key checking, add the following to `~/.ssh/config`
+    on each host:
 
-1. Add the public key to `~/.ssh/authorized_keys` on all hosts.
-
-1. To disable host key checking, add the following to `~/.ssh/config`
-   on each host:
-
-   ```shell
-   Host *
-       StrictHostKeyChecking no
-   ```
+    ```shell
+    Host *
+        StrictHostKeyChecking no
+    ```
+    

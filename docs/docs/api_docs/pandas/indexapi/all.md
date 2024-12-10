@@ -6,13 +6,13 @@
 
 ***Supported Index Types***
 
-- NumericIndex (only Integers or Booleans)
-- RangeIndex
-- StringIndex
-- BinaryIndex
+  - NumericIndex (only Integers or Booleans)
+  - RangeIndex
+  - StringIndex
+  - BinaryIndex
 
-!!! info "Important"
-Bodo diverges from the Pandas API for StringIndex and BinaryIndex by always returning a boolean instead of sometimes returning a string.
+ !!! info "Important"
+      Bodo diverges from the Pandas API for StringIndex and BinaryIndex by always returning a boolean instead of sometimes returning a string.
 
 ### Example Usage
 
@@ -25,3 +25,5 @@ Bodo diverges from the Pandas API for StringIndex and BinaryIndex by always retu
 >>> f(I)
 False
 ```
+
+

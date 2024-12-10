@@ -1,9 +1,11 @@
 # `pd.DataFrame.abs`
 
+
 `pandas.DataFrame.abs()`
 
+
 !!! note
-Only supported for dataframes containing numerical data and Timedeltas
+    Only supported for dataframes containing numerical data and Timedeltas
 
 ### Example Usage
 
@@ -18,3 +20,4 @@ Only supported for dataframes containing numerical data and Timedeltas
 0  1  3.1 10 days
 1  2  4.2 10 days
 ```
+

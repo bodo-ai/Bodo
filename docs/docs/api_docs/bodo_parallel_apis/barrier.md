@@ -11,7 +11,7 @@ For example, a process can delete files from storage while
 others wait before writing to file.
 The following example uses [SPMD launch mode](../../bodo_parallelism/bodo_parallelism_basics.md#spmd):
 
-```py
+```py 
 import shutil, os
 import numpy as np
 
@@ -41,6 +41,7 @@ until all other processes have reached the barrier:
 ![Process synchronization with Barrier](../../img/barrier.svg#center)
 
 !!! danger
-The example above shows that it is possible to have each process
-follow a different control flow, but all processes must always call
-the same Bodo functions in the same order.
+    The example above shows that it is possible to have each process
+    follow a different control flow, but all processes must always call
+    the same Bodo functions in the same order.
+

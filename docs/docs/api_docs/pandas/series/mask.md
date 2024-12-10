@@ -4,17 +4,18 @@
 
 ### Supported Arguments
 
-| argument | datatypes |
+| argument | datatypes                                                            |
 |----------|----------------------------------------------------------------------|
-| `cond` | <ul><li> boolean array </li></li> 1d bool numpy array </li></ul> |
-| `other` | <ul><li> 1d numpy array </li></li> scalar </li></ul> |
+| `cond`   | <ul><li>  boolean array  </li></li>   1d bool numpy array </li></ul> |
+| `other`  | <ul><li>  1d numpy array </li></li>   scalar     </li></ul>          |
 
 !!! note
-Series can contain categorical data if `other` is a scalar
+    Series can contain categorical data if `other` is a scalar
+
 
 ### Example Usage
 
-```py
+``` py
 >>> @bodo.jit
 ... def f(S):
 ...     return S.mask((S % 3) != 0, 0)
@@ -35,3 +36,4 @@ Length: 100, dtype: int64
 ```
 
 ### Missing data handling
+

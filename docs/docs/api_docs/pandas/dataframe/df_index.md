@@ -13,3 +13,4 @@
 >>> f()
 Index(['x', 'y', 'z'], dtype='object')
 ```
+

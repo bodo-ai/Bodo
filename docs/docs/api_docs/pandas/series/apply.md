@@ -1,16 +1,16 @@
 # `pd.Series.apply`
 
-- pandas.Series.applyf(func, convert_dtype=True, args=(), \*\*kwargs)
+- pandas.Series.applyf(func, convert_dtype=True, args=(), **kwargs)
 
 ### Supported Arguments
-
-| argument | datatypes | other requirements |
+                  
+| argument | datatypes                                                              | other requirements                                                                                                                                                                          |
 |----------|------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `func` | Additional arguments for `func` can be passed as additional arguments. | <ul><li> JIT function or callable defined within a JIT function </li><li> Numpy ufunc </li><li> Constant String which is the name of a supported Series method or Numpy ufunc </li> |
+| `func`   | Additional arguments for `func` can be passed as additional arguments. | <ul><li>   JIT function or callable defined within a JIT function </li><li>   Numpy ufunc  </li><li>   Constant String which is the name of a supported Series method or Numpy ufunc  </li> |
 
 ### Example Usage
 
-```py
+``` py
 >>> @bodo.jit
 ... def f(S):
 ...   return S.apply(lambda x: x ** 0.75)
@@ -29,3 +29,4 @@
 99    31.385308
 Length: 100, dtype: float64
 ```
+

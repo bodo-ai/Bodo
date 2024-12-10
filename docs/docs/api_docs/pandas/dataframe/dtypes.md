@@ -1,5 +1,6 @@
 # `pd.DataFrame.dtypes`
 
+
 `pandas.DataFrame.dtypes`
 
 ### Example Usage
@@ -16,3 +17,4 @@ B             string
 C    timedelta64[ns]
 dtype: object
 ```
+

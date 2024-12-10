@@ -1,5 +1,6 @@
 # `pd.Timestamp.month_name`
 
+
 `pandasTimestamp.month_name(locale=None)`
 
 ### Supported Arguments: None
@@ -14,3 +15,5 @@
 >>> f()
 'December'
 ```
+
+

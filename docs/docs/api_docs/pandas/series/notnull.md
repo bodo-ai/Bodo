@@ -4,7 +4,7 @@
 
 ### Example Usage
 
-```py
+``` py
 >>> @bodo.jit
 ... def f(S):
 ...     return S.notnull()
@@ -19,3 +19,4 @@
 6    False
 dtype: bool
 ```
+

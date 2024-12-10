@@ -1,5 +1,6 @@
 # `pd.Timestamp.weekday`
 
+
 `pandasTimestamp.weekday()`
 
 ### Example Usage
@@ -14,3 +15,5 @@
 >>> f()
 (3, 4)
 ```
+
+

@@ -1,10 +1,11 @@
 # `pd.Index.duplicated`
 
+
 `pandasIndex.duplicated(keep='first')`
 
 ### Supported Arguments: None
 
-### Example Usage
+### Example Usage 
 
 ```py
   
@@ -16,3 +17,5 @@
 >>> f(idx)
 array([False, False, False,  True, False,  True, False,  True])
 ```
+
+

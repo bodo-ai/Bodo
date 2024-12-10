@@ -195,29 +195,28 @@ should be avoided in Bodo programs.
 
 Generally, these Python features are not supported:
 
-- exceptions: `try .. except`, `raise`
-- context manager: `with`
-- list, set, dict and generator comprehensions
-- async features
-- class definition: `class`
-- jit functions cannot have `**kwargs`
-- functions can be passed as arguments but not returned
-- lists of lists cannot be passed as arguments unless [Numba typed-lists](http://numba.pydata.org/numba-doc/latest/reference/pysupported.html#typed-list){target="blank"}
-  are used.
-- [Numba typed-dicts](http://numba.pydata.org/numba-doc/latest/reference/pysupported.html#typed-dict){target="blank"}
-  are currently required for passing dictionaries as argument to jit
-  functions.
+-   exceptions: `try .. except`, `raise`
+-   context manager: `with`
+-   list, set, dict and generator comprehensions
+-   async features
+-   class definition: `class`
+-   jit functions cannot have `**kwargs`
+-   functions can be passed as arguments but not returned
+-   lists of lists cannot be passed as arguments unless [Numba typed-lists](http://numba.pydata.org/numba-doc/latest/reference/pysupported.html#typed-list){target="blank"}
+    are used.
+-   [Numba typed-dicts](http://numba.pydata.org/numba-doc/latest/reference/pysupported.html#typed-dict){target="blank"}
+    are currently required for passing dictionaries as argument to jit
+    functions.
 
 ### Heterogeneous types inside a data structure {#heterogeneousdtype}
 
-- `List` containing values of heterogeneous type:
+-   `List` containing values of heterogeneous type: 
+    ```py
+    myList = [1, "a", 0.1]
+    ```
+    
+-   `Dictionary` containing values of heterogeneous type
 
-  ```py
-  myList = [1, "a", 0.1]
-  ```
-
-- `Dictionary` containing values of heterogeneous type
-
-  ```py
-  myDict = {"A": 1, "B": "a", "C": 0.1}
-  ```
+    ```py
+    myDict = {"A": 1, "B": "a", "C": 0.1}
+    ```

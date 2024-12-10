@@ -2,14 +2,16 @@
 
 `pandas.Series.cat.codes`
 
+
 !!! note
-If categories cannot be determined at compile time, then Bodo
-defaults to creating codes with an `int64`, which may differ from
-Pandas.
+    If categories cannot be determined at compile time, then Bodo
+    defaults to creating codes with an `int64`, which may differ from
+    Pandas.
+
 
 ### Example Usage
 
-```py
+``` py
 >>> @bodo.jit
 ... def f(S):
 ...     return S.cat.codes
@@ -69,3 +71,4 @@ dtype: int8
 ```
 
 ### Serialization / IO / Conversion
+

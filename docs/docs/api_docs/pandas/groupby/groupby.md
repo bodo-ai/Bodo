@@ -2,15 +2,17 @@
 
 `pandas.DataFrame.groupby(by=None, axis=0, level=None, as_index=True, sort=True, group_keys=True, squeeze=NoDefault.no_default, observed=False, dropna=True)`
 
+
 ### Supported Arguments
 
 - `by`: Column label or list of column labels
-  - **Must be constant at Compile Time**
-  - **This argument is required**
+    - **Must be constant at Compile Time**
+    - **This argument is required**
 - `as_index`: Boolean
-  - **Must be constant at Compile Time**
+    - **Must be constant at Compile Time**
 - `dropna`: Boolean
-  - **Must be constant at Compile Time**
+    - **Must be constant at Compile Time**
+
 
 ### Example Usage
 
@@ -32,3 +34,4 @@
 0  421  10  10
 1  f31   5  10
 ```
+

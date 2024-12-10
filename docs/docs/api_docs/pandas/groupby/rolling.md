@@ -2,18 +2,20 @@
 
 `pandas.core.groupby.Groupby.rolling(window, min_periods=None, center=False, win_type=None, on=None, axis=0, closed=None, method='single')`
 
+
 ### Supported Arguments
 
 - `window`: Integer, String, Datetime, Timedelta
 - `min_periods`: Integer
 - `center`: Boolean
 - `on`: Column label
-  - **Must be constant at Compile Time**
+    - **Must be constant at Compile Time**
 
-!!! note\
-This is equivalent to performing the DataFrame API
-on each groupby. All operations of the rolling API
-can be used with groupby.
+
+!!! note       
+    This is equivalent to performing the DataFrame API
+    on each groupby. All operations of the rolling API
+    can be used with groupby.
 
 ### Example Usage
 
@@ -54,3 +56,4 @@ f31 1   12.5  116616.7550
     17  12.5  116616.7550
     19   NaN       7.3155
 ```
+  

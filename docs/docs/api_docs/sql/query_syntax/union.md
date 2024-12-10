@@ -1,14 +1,14 @@
 # UNION
 
+
+
 The `#!sql UNION` operator is used to combine the result-set of two `#!sql SELECT`
 statements:
-
 ```sql
 SELECT <COLUMN_NAMES> FROM <TABLE1>
 UNION
 SELECT <COLUMN_NAMES> FROM <TABLE2>
 ```
-
 Each `#!sql SELECT` statement within the `#!sql UNION` clause must have the same
 number of columns. The columns must also have similar data types.
 The output of the `#!sql UNION` is the set of rows which are present in
@@ -66,3 +66,4 @@ SELECT <COLUMN_NAMES> FROM <TABLE2>
 0        Eden Heath        AMEX    23.58
 1  Demetrius Chavez        WIRE   943.43
 ```
+

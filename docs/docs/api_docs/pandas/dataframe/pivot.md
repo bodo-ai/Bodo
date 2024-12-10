@@ -1,6 +1,9 @@
 # `pd.DataFrame.pivot`
 
+
+
 `pandas.DataFrame.pivot(values=None, index=None, columns=None)`
+
 
 ### Supported Arguments
 
@@ -8,9 +11,11 @@
 - `index`: Constant Column Label or list of labels
 - `columns`: Constant Column Label
 
+
 !!! note
-The the number of columns and names of the output DataFrame won't be known
-at compile time. To update typing information on DataFrame you should pass it back to Python.
+  The the number of columns and names of the output DataFrame won't be known
+  at compile time. To update typing information on DataFrame you should pass it back to Python.
+
 
 ### Example Usage
 
@@ -31,3 +36,4 @@ B
 5   NaN  21.0
 6   NaN  22.0
 ```
+

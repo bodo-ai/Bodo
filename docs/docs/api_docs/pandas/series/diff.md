@@ -4,16 +4,17 @@
 
 ### Supported Arguments
 
-| argument | datatypes |
+| argument                    | datatypes                              |
 |-----------------------------|----------------------------------------|
-| `periods` | Integer |
+| `periods`                   |    Integer                             |
 
 !!! note
-Bodo only supports numeric and datetime64 types
+    Bodo only supports numeric and datetime64 types
+
 
 ### Example Usage
 
-```py
+``` py
 >>> @bodo.jit
 ... def f(S):
 ...     return S.diff(3)
@@ -32,3 +33,4 @@ Bodo only supports numeric and datetime64 types
 99   -4.0
 Length: 100, dtype: float64
 ```
+

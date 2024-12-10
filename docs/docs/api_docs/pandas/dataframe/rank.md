@@ -1,26 +1,26 @@
 # `pd.DataFrame.rank`
 
-- `pandas.DataFrame.rank(axis=0, method='average', numeric_only=NoDefault.no_default, na_option='keep', ascending=True, pct=False)`
+-  `pandas.DataFrame.rank(axis=0, method='average', numeric_only=NoDefault.no_default, na_option='keep', ascending=True, pct=False)`
 
 ### Supported Arguments
 
 +-----------------------------+------------------------------------------------------------+
-| argument | datatypes |
-| `method` | - String in {'average', 'min', 'max', 'first', 'dense'} |
+| argument                    | datatypes                                                  |
+| `method`                    | -   String in {'average', 'min', 'max', 'first', 'dense'}  |
 +-----------------------------+------------------------------------------------------------+
-| `na_option` | - String in {'keep', 'top', 'bottom'} |
+| `na_option`                 | -   String in {'keep', 'top', 'bottom'}                    |
 +-----------------------------+------------------------------------------------------------+
-| `ascending` | - Boolean |
+| `ascending`                 | -   Boolean                                                |
 +-----------------------------+------------------------------------------------------------+
-| `pct` | - Boolean |
+| `pct`                       | -   Boolean                                                |
 +-----------------------------+------------------------------------------------------------+
 
 !!! note
-\- Using `method='first'` with `ascending=False` is currently unsupported.
+    - Using `method='first'`  with `ascending=False` is currently unsupported.
 
 ### Example Usage
 
-```py
+``` py
 >>> @bodo.jit
 ... def f(df):
 ...     return df.rank(method='dense', na_option='keep', pct=True)
@@ -32,3 +32,4 @@
 2  0.5  1.0
 3  1.0  NaN
 ```
+

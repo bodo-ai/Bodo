@@ -4,7 +4,7 @@
 
 ### Example Usage
 
-```py
+``` py
 >>> @bodo.jit
 ... def f(S):
 ...     return S.dtypes
@@ -12,3 +12,4 @@
 >>> f(S)
 dtype('int64')
 ```
+

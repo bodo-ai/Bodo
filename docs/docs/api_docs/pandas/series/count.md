@@ -6,7 +6,7 @@
 
 ### Example Usage
 
-```py
+``` py
 >>> @bodo.jit
 ... def f(S):
 ...     return S.count()
@@ -14,3 +14,4 @@
 >>> f(S)
 100
 ```
+

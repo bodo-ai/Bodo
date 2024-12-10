@@ -3,7 +3,6 @@
 `pandas.Timedelta.total_seconds()`
 
 ### Example Usage
-
 ```py
 >>> @bodo.jit
 ... def f():

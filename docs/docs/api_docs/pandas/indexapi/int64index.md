@@ -3,7 +3,6 @@
 `pandas.Int64Index(data=None, dtype=None, copy=False, name=None)`
 
 ### Example Usage
-
 ```py
 >>> @bodo.jit
 ... def f():
@@ -12,3 +11,4 @@
 >>> f()
 Int64Index([0, 1, 2], dtype='int64')
 ```
+

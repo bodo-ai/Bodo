@@ -1,5 +1,8 @@
 # TRY_TO_DECIMAL
 
+
 `#!sql TRY_TO_DECIMAL(EXPR [, PRECICION [, SCALE]])`
 
 Equivalent to `#!sql TRY_TO_NUMBER(EXPR, PRECICION, SCALE)`.
+
+

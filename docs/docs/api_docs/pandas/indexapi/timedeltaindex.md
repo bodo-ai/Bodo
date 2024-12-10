@@ -4,4 +4,5 @@
 
 ### Supported Arguments
 
--`data`: must be array-like of timedelta64ns or Ingetger.
+-`data`:  must be array-like of timedelta64ns or Ingetger.
+

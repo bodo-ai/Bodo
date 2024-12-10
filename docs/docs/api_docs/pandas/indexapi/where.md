@@ -4,16 +4,16 @@
 
 ### Supported Arguments:
 
-- `cond`: can be a Series or 1-dim array of booleans
-- `other`: can be a scalar, non-categorical Series, 1-dim numpy array or StringArray with a matching type for the Index
+  - `cond`: can be a Series or 1-dim array of booleans
+  - `other`: can be a scalar, non-categorical Series, 1-dim numpy array or StringArray with a matching type for the Index
 
 ***Unsupported Index Types***
 
-- IntervalIndex
-- MultiIndex
+  - IntervalIndex
+  - MultiIndex
 
 !!! info "Important"
-Only supported for CategoricalIndex if the elements of other are the same as (or a subset of) the categories of the CategoricalIndex.
+      Only supported for CategoricalIndex if the elements of other are the same as (or a subset of) the categories of the CategoricalIndex.
 
 ### Example Usage
 
@@ -28,3 +28,4 @@ Only supported for CategoricalIndex if the elements of other are the same as (or
 >>> f(I, C, O)
 Index(['A', 'e', 'C', 'D', 'u'], dtype='object')
 ```
+

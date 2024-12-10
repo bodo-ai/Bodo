@@ -4,16 +4,17 @@
 
 ### Supported Arguments
 
-| argument | datatypes |
+| argument                    | datatypes                             |
 |-----------------------------|---------------------------------------|
-| `other` | Series |
+| `other`                     |   Series                              |
 
 !!! note
-Series and `other` must contain scalar values in each row
+    Series and `other` must contain scalar values in each row
+
 
 ### Example Usage
 
-```py
+``` py
 >>> @bodo.jit
 ... def f(S, other):
 ...     return S.equals(other)
@@ -22,3 +23,4 @@ Series and `other` must contain scalar values in each row
 >>> f(S, other)
 False
 ```
+

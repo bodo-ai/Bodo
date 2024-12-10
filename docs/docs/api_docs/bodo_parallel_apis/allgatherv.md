@@ -1,16 +1,16 @@
 # `bodo.allgatherv`
-
+    
 `bodo.allgatherv(data, warn_if_rep=True)`
 <br/>
 Gather data from all ranks and send to all, effectively replicating the data.
 
 ### Arguments
 
-- `data`: data to gather.
-- `warn_if_rep`: prints a BodoWarning if data to gather is replicated.
+- ``data``: data to gather.
+- ``warn_if_rep``: prints a BodoWarning if data to gather is replicated. 
 
 ### Example Usage
-
+    
 ```py
 
 import bodo
@@ -26,7 +26,7 @@ def mean_power():
 df = mean_power()
 ```
 
-Save code in `test_allgatherv.py` file and run with 4 processes.
+Save code in ``test_allgatherv.py`` file and run with 4 processes.
 
 ```shell
 BODO_NUM_WORKERS=4 python test_allgatherv.py
@@ -96,3 +96,4 @@ Output:
 
 [3902 rows x 10 columns]
 ```
+

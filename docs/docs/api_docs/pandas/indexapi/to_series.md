@@ -3,15 +3,15 @@
 `pandasIndex.to_series(index=None, name=None)`
 
 ### Supported Arguments:
-
-- `index`: can be a Index, Series, 1-dim numpy array, list, or tuple
-- `name`: can be a string or int
+  
+  - `index`: can be a Index, Series, 1-dim numpy array, list, or tuple
+  - `name`: can be a string or int
 
 ***Unsupported Index Types***
 
-- IntervalIndex
-- PeriodIndex
-- MultiIndex
+  - IntervalIndex
+  - PeriodIndex
+  - MultiIndex
 
 ### Example Usage
 
@@ -30,3 +30,4 @@ D    0
 E    3
 dtype: int64
 ```
+

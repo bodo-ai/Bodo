@@ -1,5 +1,7 @@
 # ORDER BY
 
+
+
 The `#!sql ORDER BY` keyword sorts the resulting DataFrame in ascending
 or descending order. By default, it sorts the records in ascending order.
 NULLs are sorted in accordance with the optional `#!sql NULLS FIRST` or
@@ -26,12 +28,12 @@ ORDER BY <ORDERED_COLUMN_NAMES> [ASC|DESC] [NULLS FIRST|LAST]
 ```
 
 For Example:
-
 ```sql
 SELECT A, B FROM table1 ORDER BY B, A DESC NULLS LAST
 ```
 
 ### Example Usage
+
 
 ```py
 >>>@bodo.jit

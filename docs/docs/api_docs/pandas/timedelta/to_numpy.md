@@ -1,9 +1,8 @@
 # `pd.Timedelta.to_numpy`
-
+                          
 `pandas.Timedelta.to_numpy()`
 
 ### Example Usage
-
 ```py
 >>> @bodo.jit
 ... def f():
@@ -11,3 +10,4 @@
 >>> f()
 871623013023000 nanoseconds
 ```
+

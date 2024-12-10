@@ -2,8 +2,9 @@
 
 `pandas.core.groupby.DataFrameGroupby.shift(periods=1, freq=None, axis=0, fill_value=None)`
 
+
 !!! note
-`shift` is not supported on columns with nested array types
+    `shift` is not supported on columns with nested array types
 
 ### Example Usage
 
@@ -43,3 +44,4 @@
 18   1.0       1.510
 19   2.0       2.421
 ```
+

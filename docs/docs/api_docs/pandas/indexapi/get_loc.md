@@ -1,9 +1,10 @@
 # `pd.Index.get_loc`
 
-- `pandas.Index.get_loc(key, method=None, tolerance=None)`
+-  `pandas.Index.get_loc(key, method=None, tolerance=None)`
+
 
 !!! note
-Should be about as fast as standard python, maybe slightly slower.
+    Should be about as fast as standard python, maybe slightly slower.
 
 ***Unsupported Index Types***
 
@@ -13,14 +14,13 @@ Should be about as fast as standard python, maybe slightly slower.
 
 ### Supported Arguments
 
-- `key`: must be of same type as the index
+ - `key`: must be of same type as the index
 
 !!! info "Important"
 
-```
-- Only works for index with unique values (scalar return).
-- Only works with replicated Index
-```
+    - Only works for index with unique values (scalar return).
+    - Only works with replicated Index
+
 
 ### Example Usage
 
@@ -34,3 +34,4 @@ Should be about as fast as standard python, maybe slightly slower.
 >>> f(I)
 1
 ```
+

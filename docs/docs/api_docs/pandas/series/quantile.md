@@ -4,13 +4,13 @@
 
 ### Supported Arguments
 
-| argument | datatypes |
+| argument                    | datatypes                                                                            |
 |-----------------------------|--------------------------------------------------------------------------------------|
-| `q` | <ul><li> Float in [0.0, 1.0] </li><li> Iterable of floats in [0.0, 1.0] </li>\</ul |
+| `q`                         | <ul><li>   Float in [0.0, 1.0] </li><li>  Iterable of floats in [0.0, 1.0] </li></ul |
 
 ### Example Usage
 
-```py
+``` py
 >>> @bodo.jit
 ... def f(S):
 ...     return S.quantile([0.25, 0.5, 0.75])
@@ -21,3 +21,4 @@
 0.75    5.0
 dtype: float64
 ```
+

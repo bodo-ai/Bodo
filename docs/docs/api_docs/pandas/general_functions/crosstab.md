@@ -1,18 +1,20 @@
+
 # `pd.crosstab`
 
 `pandas.crosstab(index, columns, values=None, rownames=None, colnames=None, aggfunc=None, margins=False, margins_name='All', dropna=True, normalize=False)`
 
 ### Supported Arguments
 
-| argument | datatypes |
-|-----------|------------|
-| `index` | SeriesType |
-| `columns` | SeriesType |
+ | argument  | datatypes  |
+ |-----------|------------|
+ | `index`   | SeriesType |
+ | `columns` | SeriesType |
+ 
 
 !!! note
-Annotation of pivot values is required. For example,
-`@bodo.jit(pivots={'pt': ['small', 'large']})` declares
-the output table `pt` will have columns called `small` and `large`.
+    Annotation of pivot values is required. For example,
+    `@bodo.jit(pivots={'pt': ['small', 'large']})` declares
+    the output table `pt` will have columns called `small` and `large`.
 
 ### Example Usage
 

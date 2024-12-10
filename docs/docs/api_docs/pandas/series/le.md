@@ -4,17 +4,19 @@
 
 ### Supported Arguments
 
-| argument | datatypes |
+| argument     | datatypes                                                                                                 |
 |--------------|-----------------------------------------------------------------------------------------------------------|
-| `other` | <ul><li> numeric scalar </li><li> array with numeric data </li><li> Series with numeric data </li></ul> |
-| `fill_value` | numeric scalar |
+| `other`      | <ul><li>  numeric scalar </li><li>  array with numeric data </li><li> Series with numeric data </li></ul> |
+| `fill_value` | numeric scalar                                                                                            |
+
 
 !!! note
-`Series.le` is only supported on Series of numeric data.
+    `Series.le` is only supported on Series of numeric data.
+
 
 ### Example Usage
 
-```py
+``` py
 >>> @bodo.jit
 ... def f(S, other):
 ...   return S.le(other)
@@ -34,3 +36,4 @@
 999    False
 Length: 1000, dtype: bool
 ```
+

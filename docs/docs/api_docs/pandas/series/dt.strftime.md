@@ -4,13 +4,13 @@
 
 ### Supported Arguments
 
-| argument | datatypes | other requirements |
+| argument      | datatypes | other requirements                                                                                                       |
 |---------------|-----------|--------------------------------------------------------------------------------------------------------------------------|
-| `date_format` | String | Must be a valid [datetime format string](https://docs.python.org/3/library/datetime.html#strftime-and-strptime-behavior) |
+| `date_format` | String    | Must be a valid [datetime format string](https://docs.python.org/3/library/datetime.html#strftime-and-strptime-behavior) |
 
 ### Example Usage
 
-```py
+``` py
 >>> @bodo.jit
 ... def f(S):
 ...     return S.dt.strftime("%B %d, %Y, %r")
@@ -48,3 +48,4 @@
 29    January 10, 2022, 12:00:00 AM
 dtype: object
 ```
+

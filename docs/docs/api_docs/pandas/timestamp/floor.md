@@ -1,5 +1,6 @@
 # `pd.Timestamp.floor`
 
+
 `pandasTimestamp.floor(freq, ambiguous='raise', nonexistent='raise')`
 
 ### Supported Arguments
@@ -18,3 +19,5 @@
 >>> f()
 (Timestamp('2021-12-09 09:57:44.114123'), Timestamp('2021-12-09 00:00:00'))
 ```
+
+

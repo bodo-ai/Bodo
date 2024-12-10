@@ -1,19 +1,20 @@
 # `pd.Series.pipe`
 
-- pandas.Series.pipe(func, \*args, \*\*kwargs)
+-  pandas.Series.pipe(func, *args, **kwargs)
 
 ### Supported Arguments
 
-| argument | datatypes | other requirements |
+| argument | datatypes                                               | other requirements                                                     |
 |----------|---------------------------------------------------------|------------------------------------------------------------------------|
-| `func` | JIT function or callable defined within a JIT function. | Additional arguments for `func` can be passed as additional arguments. |
+| `func`   | JIT function or callable defined within a JIT function. | Additional arguments for `func` can be passed as additional arguments. |
 
 !!! note
-`func` cannot be a tuple
+    `func` cannot be a tuple
+
 
 ### Example Usage
 
-```py
+``` py
 >>> @bodo.jit
 ... def f(S):
 ...     def g(row, y):
@@ -43,3 +44,4 @@ Length: 100, dtype: int64
 
 Statistical functions below are supported without optional arguments
 unless support is explicitly mentioned.
+

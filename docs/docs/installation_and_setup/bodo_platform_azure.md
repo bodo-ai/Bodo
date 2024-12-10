@@ -36,50 +36,54 @@ it. As shown below, go to the IAM section of your resource group and add a
 ![Assign SP a Role](../platform_onboarding_screenshots/az-assign-sp-role.gif#center)
 
 !!! seealso "See Also"
-[Required Azure resource providers][required_az_resource_providers]
+    [Required Azure resource providers][required_az_resource_providers]
+
 
 Once you have created the service principal and assigned a role to it,
 you are now ready to fill the *Cloud Configuration* Form on the Bodo Platform.
 
 ![Cloud Configuration Page Azure](../platform_onboarding_screenshots/cloud-configuration-az.png#center)
 
-1. Enter your Azure subscription ID in the **Subscription ID** field.
-   You can find this in the *Subscription Overview*.
+1.  Enter your Azure subscription ID in the **Subscription ID** field.
+    You can find this in the *Subscription Overview*.
 
-   ![Azure subscription ID](../platform_onboarding_screenshots/az-subscription-id.png#center)
+      ![Azure subscription ID](../platform_onboarding_screenshots/az-subscription-id.png#center)
 
-1. Enter your Azure Tenant ID in the **Tenant ID** field. You can find
-   this in *Azure AD*.
+2.  Enter your Azure Tenant ID in the **Tenant ID** field. You can find
+    this in *Azure AD*.
 
-   ![Azure Tenant ID](../platform_onboarding_screenshots/az-tenant-id.png#center)
+    ![Azure Tenant ID](../platform_onboarding_screenshots/az-tenant-id.png#center)
 
-1. Enter the name of the resource group where the infrastructure should be deployed.
+3. Enter the name of the resource group where the infrastructure should be deployed.
+   
+4.  Select a **region** from the dropdown list. This region refers to the region of 
+    the resource group mentioned in the previous step. We will also create a storage account and a blob container in this region to store metadata such as the state of the deployed infrastructure, logs, etc.
+   
 
-1. Select a **region** from the dropdown list. This region refers to the region of
-   the resource group mentioned in the previous step. We will also create a storage account and a blob container in this region to store metadata such as the state of the deployed infrastructure, logs, etc.
+5.  Click on `CREATE`.
 
-1. Click on `CREATE`.
-
-!!! note
-We highly recommend that you ensure sufficient limits on
-your Azure subscription to launch resources. See
-[here][resources_created_in_azure_env] for the
-resources required for Bodo Cloud Platform.
+!!! note 
+    We highly recommend that you ensure sufficient limits on
+    your Azure subscription to launch resources. See
+    [here][resources_created_in_azure_env] for the
+    resources required for Bodo Cloud Platform.
 
 ## Required Resource Providers on Azure subscription {#required_az_resource_providers}
 
 Ensure that the following resource providers are registered on your
 Azure subscription:
 
-- Microsoft.Authorization
-- Microsoft.Compute
-- Microsoft.KeyVault
-- Microsoft.ManagedIdentity
-- Microsoft.Network
-- Microsoft.Resources
-- Microsoft.Storage
+-   Microsoft.Authorization
+-   Microsoft.Compute
+-   Microsoft.KeyVault
+-   Microsoft.ManagedIdentity
+-   Microsoft.Network
+-   Microsoft.Resources
+-   Microsoft.Storage
 
 ![Azure Required Resource Providers](../platform_onboarding_screenshots/az-resource-providers.png#center)
+
+
 
 ## Resources Created in Your Azure Environment {#resources_created_in_azure_env}
 
@@ -88,19 +92,21 @@ ensure security of your data. Below is a list of Azure resources that
 the Bodo Platform creates in your account to enable clusters and
 notebooks.
 
-Azure Service | Purpose
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------
-[Virtual Machines](https://azure.microsoft.com/en-us/services/virtual-machines/) | Cluster/notebook workers
-[Storage Accounts](https://azure.microsoft.com/en-us/product-categories/storage/), [File-Shares](https://azure.microsoft.com/en-us/services/storage/files/) | Shared file system for clusters
-[Virtual Network with Subnets and NAT Gateway](https://azure.microsoft.com/en-us/services/virtual-network/), [Public IP](https://docs.microsoft.com/en-us/azure/virtual-network/associate-public-ip-address-vm), [NIC](https://docs.microsoft.com/en-us/azure/virtual-network/virtual-network-network-interface-vm), [Proximity Placement Groups](https://docs.microsoft.com/en-us/azure/virtual-machines/co-location), [Availability Sets](https://docs.microsoft.com/en-us/azure/virtual-machines/availability-set-overview), [Security Groups](https://docs.microsoft.com/en-us/azure/virtual-network/network-security-groups-overview), ... |Secure networking for clusters/notebooks
-[Blob Containers](https://azure.microsoft.com/en-us/services/storage/blobs/), | Resource states
-[KeyVault](https://azure.microsoft.com/en-us/services/key-vault/) | Cluster secrets (e.g. SSH keys)
-[VM Identity](https://docs.microsoft.com/en-us/azure/active-directory/managed-identities-azure-resources/qs-configure-portal-windows-vm) for Clusters | Allow cluster workers to access resources above
+  Azure Service                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | Purpose
+  --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------
+  [Virtual Machines](https://azure.microsoft.com/en-us/services/virtual-machines/)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | Cluster/notebook workers
+  [Storage Accounts](https://azure.microsoft.com/en-us/product-categories/storage/), [File-Shares](https://azure.microsoft.com/en-us/services/storage/files/)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | Shared file system for clusters
+  [Virtual Network with Subnets and NAT Gateway](https://azure.microsoft.com/en-us/services/virtual-network/), [Public IP](https://docs.microsoft.com/en-us/azure/virtual-network/associate-public-ip-address-vm), [NIC](https://docs.microsoft.com/en-us/azure/virtual-network/virtual-network-network-interface-vm), [Proximity Placement Groups](https://docs.microsoft.com/en-us/azure/virtual-machines/co-location), [Availability Sets](https://docs.microsoft.com/en-us/azure/virtual-machines/availability-set-overview), [Security Groups](https://docs.microsoft.com/en-us/azure/virtual-network/network-security-groups-overview), ...   |Secure networking for clusters/notebooks
+  [Blob Containers](https://azure.microsoft.com/en-us/services/storage/blobs/),                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | Resource states
+  [KeyVault](https://azure.microsoft.com/en-us/services/key-vault/)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | Cluster secrets (e.g. SSH keys)
+  [VM Identity](https://docs.microsoft.com/en-us/azure/active-directory/managed-identities-azure-resources/qs-configure-portal-windows-vm) for Clusters                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | Allow cluster workers to access resources above
 
 !!! note
-These resources incur additional Azure infrastructure charges and are
-not included in the Bodo Platform charges.
+    These resources incur additional Azure infrastructure charges and are
+    not included in the Bodo Platform charges.
 
 ## Using Bodo Platform
 
 Please refer to the [platform usage guides][using-the-bodo-cloud-platform] to explain the basics of using the Bodo Cloud Platform and associated concepts.
+
+

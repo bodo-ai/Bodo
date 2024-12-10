@@ -5,13 +5,14 @@
 ### Supported Arguments None
 
 !!! note
-\- Series type must be numeric
-\- Bodo does not accept any additional arguments for Numpy
-compatibility
+    - Series type must be numeric
+    - Bodo does not accept any additional arguments for Numpy
+    compatibility
+
 
 ### Example Usage
 
-```py
+``` py
 >>> @bodo.jit
 ... def f(S):
 ...     return S.cumprod()
@@ -29,3 +30,4 @@ compatibility
 9    30240
 dtype: int64
 ```
+

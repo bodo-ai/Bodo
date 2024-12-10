@@ -14,7 +14,7 @@ different argument types (not often in practice). All of this is
 completely transparent to the caller, and does not affect any Python
 code calling the function.
 
-```py
+```py 
 >>> import numpy as np
 >>> import pandas as pd
 >>> import bodo
@@ -43,9 +43,9 @@ CPUDispatcher(<function f at 0x100bec310>)
 ```
 
 !!! note
-In many cases, the binary that Bodo generates when compiling a function
-can be saved to disk and reused across program executions. See
-[caching][caching] for more information.
+    In many cases, the binary that Bodo generates when compiling a function
+    can be saved to disk and reused across program executions. See
+    [caching][caching] for more information.
 
 ## Parallel Execution Model
 
@@ -62,7 +62,7 @@ between the ranks (as needed).
 For example, save the following code in a`test_bodo.py` and use 4 processes as
 follows:
 
-```py
+```py 
 import numpy as np
 import pandas as pd
 import bodo
@@ -80,7 +80,7 @@ print("RESULT")
 print(res)
 ```
 
-```shell
+```shell 
 BODO_NUM_WORKERS=4 python test_bodo.py
 ```
 
@@ -113,7 +113,7 @@ RESULT
 
 ```
 
-In this example, the `bodo.jit` decorator informs `Bodo` to run the function `f`
+In this example, the `bodo.jit` decorator informs `Bodo` to run the function `f` 
 on 4 processes. Execution is parallelized by Bodo and each process generates a
 chunk of the data in `np.arange`.
 
@@ -126,21 +126,19 @@ cases where the full data is never accessed on the main thread and simply passed
 to another JIT function, there is no overhead.
 
 !!! warning
-\- Bodo functions run in parallel assuming that Bodo is
-able to parallelize them. Otherwise, Bodo prints the following warning
-and runs sequentially on every process.
-
-````
-```console
-BodoWarning: No parallelism found for function
-```
-````
+    - Bodo functions run in parallel assuming that Bodo is
+    able to parallelize them. Otherwise, Bodo prints the following warning
+    and runs sequentially on every process.
+    
+    ```console
+    BodoWarning: No parallelism found for function
+    ```
 
 On Jupyter notebook, parallel execution happens in very much the same
 way.
 
 !!! seealso "See Also"
-[Parallel APIs][bodoparallelapis]
+    [Parallel APIs][bodoparallelapis]
 
 ## Data Distribution
 
@@ -149,10 +147,10 @@ across processes. However, some data handled by a Bodo function may not
 be divided into chunks. There are are two main data distribution
 schemes:
 
-- Replicated (*REP*): the data associated with the variable is the
-  same on every process.
-- One-dimensional (*1D*): the data is divided into chunks, split along
-  one dimension (rows of a dataframe or first dimension of an array).
+-   Replicated (*REP*): the data associated with the variable is the
+    same on every process.
+-   One-dimensional (*1D*): the data is divided into chunks, split along
+    one dimension (rows of a dataframe or first dimension of an array).
 
 Bodo determines distribution of variables automatically, using the
 nature of the computation that produces them. Let's see an example:
@@ -218,7 +216,7 @@ There is no visible difference between, say, a distributed lazy Bodo DataFrame
 versus a regular Pandas DataFrame. As the DataFrame is accessed
 outside of a JIT context, data is collected from other processes back onto the
 main process to allow regular Python execution. Other data types are also supported in this
-way such as pandas Series.
+way such as pandas Series. 
 
 ### Distributed Diagnostics
 
@@ -265,15 +263,16 @@ Data distributions:
     Setting distribution of variable 'impl_v48_data_74' to REP: output of np.asarray() call on non-array is REP
 ```
 
-Bodo compiler optimizations rename the variables.
-The output shows that `power` and `speed` columns of `df` are distributed (`1D_Block`), but `m` is replicated (`REP`).
-This is because `df` is the output from `read_parquet` and input to `mean`, both of which can be distributed by Bodo.
+
+Bodo compiler optimizations rename the variables. 
+The output shows that `power` and `speed` columns of `df` are distributed (`1D_Block`), but `m` is replicated (`REP`). 
+This is because `df` is the output from `read_parquet` and input to `mean`, both of which can be distributed by Bodo. 
 `m` is the output from `mean`, which is replicated (available on every process).
 
 ## Avoiding Spawn Overheads (SPMD launch mode) {#spmd}
 
 By default, Bodo spawns MPI processes the first time a JIT function
-is called. In addition, for each top level JIT call, Bodo sends
+is called. In addition, for each top level JIT call, Bodo sends 
 the execution function and its arguments and receives the output in the main process when execution finished.
 This workflow fits existing sequential Python workflows seamlessly but has some overheads that may be significant for small computations.
 
@@ -287,10 +286,11 @@ all processes are launched at the beginning and run the same file using the
 The user code has to be updated to make sure it is valid to run the non-JIT
 parts (which are not managed by Bodo) on all processes in parallel.
 
+
 For example, save the following code in `test_bodo.py` and use
 `mpiexec` to launch 4 processes as follows:
 
-```py
+```py 
 import numpy as np
 import pandas as pd
 import bodo
@@ -305,7 +305,7 @@ def f(n, a):
 print(f(8, 1))
 ```
 
-```shell
+```shell 
 mpiexec -n 4 python test_bodo.py
 ```
 
@@ -326,10 +326,11 @@ Output:
 1  2
 ```
 
-In this example, `mpiexec` launches 4 Python processes, each
+In this example, `mpiexec` launches 4 Python processes, each 
 executing the same `test_bodo.py` file. Since the function `f` is
 decorated with `bodo.jit` and Bodo can parallelize it, each
 process generates a chunk of the data in `np.arange`.
+
 
 An advantage of SPMD launch mode is that operations outside of JIT functions that do
 not need access to the full data are inherently parallelized. Since each core
@@ -344,5 +345,5 @@ core (integers from `0` to `num processes`), and conditionally execute code only
 when the rank is `0`.
 
 !!! warning
-\- Python code outside of Bodo functions executes sequentially on
-every process.
+    - Python code outside of Bodo functions executes sequentially on
+    every process.

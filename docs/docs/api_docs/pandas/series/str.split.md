@@ -4,12 +4,12 @@
 
 ### Supported Arguments
 
-| argument | datatypes |
+| argument                    | datatypes                             |
 |-----------------------------|---------------------------------------|
-| `pat` | String |
-| `n` | Integer |
+| `pat`                       |    String                             |
+| `n`                         |    Integer                            |
 
-```py
+``` py
 >>> @bodo.jit
 ... def f(S):
 ...     return S.str.split(" ")
@@ -25,7 +25,7 @@
 dtype: object
 ```
 
-```py
+``` py
 >>> @bodo.jit
 ... def f(S):
 ...     return S.str.split(" ", n=2)
@@ -37,7 +37,7 @@ dtype: object
 dtype: object
 ```
 
-```py
+``` py
 >>> @bodo.jit
 ... def f(S):
 ...     return S.str.split(n=1)
@@ -48,3 +48,4 @@ dtype: object
 2    [oh, what a beautiful morning]
 dtype: object
 ```
+

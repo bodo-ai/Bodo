@@ -37,7 +37,7 @@ df.to_parquet("my_data.pq")
 
 ## Create a local in-memory SQL Table
 
-Now let's create a local in-memory SQL table from the Parquet file. We can use the \[`TablePATH` API\][tablepath-api] to register the table into our \[`BodoSQLContext`\][bodosqlcontext-api].
+Now let's create a local in-memory SQL table from the Parquet file. We can use the [`TablePATH` API][tablepath-api] to register the table into our [`BodoSQLContext`][bodosqlcontext-api].
 
 ```python
 bc = bodosql.BodoSQLContext(
@@ -62,6 +62,7 @@ def query(bc):
 result = query(bc)
 print(result)
 ```
+
 
 ## Running your code
 
@@ -101,11 +102,13 @@ result = query(bc)
 print(result)
 ```
 
+
 To run the code, save it to a file, e.g. `test_bodo_sql.py`, and run the following command in your terminal:
 
 ```bash
 python test_bodo_sql.py
 ```
+
 
 By default Bodo will use all available cores. To set a limit on the number of processes spawned, set the environment variable `BODO_NUM_WORKERS`.
 Note that the first time you run this code, it may take a few seconds to compile the code.

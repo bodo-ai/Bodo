@@ -2,10 +2,12 @@
 
 `pandas.core.groupby.Groupby.head(n=5)`
 
+
 ### Supported Arguments
 
 - `n`: Non-negative integer
-  - **Must be constant at Compile Time**
+    - **Must be constant at Compile Time**
+
 
 ### Example Usage
 
@@ -35,3 +37,4 @@
 8   1.0  421       1.510
 9   2.0  f31       2.421
 ```
+  

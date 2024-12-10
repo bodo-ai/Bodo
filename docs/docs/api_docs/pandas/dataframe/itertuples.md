@@ -1,5 +1,6 @@
 # `pd.DataFrame.itertuples`
 
+
 `pandas.DataFrame.itertuples(index=True, name='Pandas')`
 
 ### Supported Arguments: None
@@ -25,3 +26,4 @@ Pandas(Index=2, A=3, B=6, C=9)
 2
 (6, 9)
 ```
+

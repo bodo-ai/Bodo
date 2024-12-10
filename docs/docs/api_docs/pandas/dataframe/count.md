@@ -1,5 +1,6 @@
 # `pd.DataFrame.count`
 
+
 `pandas.DataFrame.count(axis=0, level=None, numeric_only=False)`
 
 ### Supported Arguments : None
@@ -16,3 +17,4 @@
 A    2
 B    1
 ```
+

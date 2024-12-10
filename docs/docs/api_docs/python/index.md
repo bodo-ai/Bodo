@@ -1,4 +1,5 @@
-# Python Reference {#pythonreference}
+Python Reference {#pythonreference}
+=============
 
 <div class="grid cards" markdown>
 - [Bodo Parallel API Reference][bodoparallelapis]

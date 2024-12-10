@@ -1,5 +1,6 @@
 # `pd.Timestamp.is_month_start`
 
+
 `pandasTimestamp.is_month_start`
 
 ### Example Usage
@@ -14,3 +15,5 @@
 >>> f()
 (True, False)
 ```
+
+

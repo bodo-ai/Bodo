@@ -2,6 +2,7 @@
 
 `pandasIndex.rename(name, inplace=False)`
 
+
 ### Supported Arguments
 
 - `name`: label or list of labels
@@ -12,7 +13,7 @@
 
 ### Example Usage
 
-```py
+```py 
 >>> @bodo.jit
 ... def f(I, name):
 ...   return I.rename(name)
@@ -21,3 +22,6 @@
 >>> f(I, "new_name")
 Index(['a', 'b', 'c'], dtype='object', name='new_name')
 ```
+
+
+

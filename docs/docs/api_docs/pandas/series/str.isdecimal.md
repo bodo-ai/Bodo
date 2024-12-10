@@ -2,7 +2,7 @@
 
 `pandas.Series.str.isdecimal()`
 
-```py
+``` py
 >>> @bodo.jit
 ... def f(S):
 ...     return S.str.isdecimal()
@@ -19,3 +19,4 @@ dtype: boolean
 ```
 
 ### Categorical accessor
+

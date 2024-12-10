@@ -1,5 +1,6 @@
 # `pd.DateTimeIndex.dayofyear`
 
+
 `pandasDatetimeIndex.dayofyear`
 
 ### Example Usage
@@ -13,3 +14,4 @@
 >>> f(I)
 Int64Index([365, 365, 365, 1, 1], dtype='int64')
 ```
+

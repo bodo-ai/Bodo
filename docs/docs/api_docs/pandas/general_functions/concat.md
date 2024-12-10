@@ -1,17 +1,21 @@
+
 # `pd.concat`
 
 `pandas.concat(objs, axis=0, join="outer", join_axes=None, ignore_index=False, keys=None, levels=None, names=None, verify_integrity=False, sort=None, copy=True)`
 
+
 ### Supported Arguments
 
-| argument | datatypes | other requirements |
+| argument           | datatypes                           | other requirements                                          |
 |--------------------|-------------------------------------|-------------------------------------------------------------|
-| `objs` | List or Tuple of DataFrames/Series | |
-| `axis` | Integer with either 0 or 1 | <ul><li> **Must be constant at Compile Time** </li></ul> |
-| `ignore_index` | Boolean | <ul><li> **Must be constant at Compile Time** </li></ul> |
+| `objs`             | List or Tuple of DataFrames/Series  |                                                             |
+| `axis`             | Integer with either 0 or 1          | <ul><li>   **Must be constant at  Compile Time** </li></ul> |
+| `ignore_index`     | Boolean                             | <ul><li>   **Must be constant at  Compile Time** </li></ul> | 
+
 
 !!! info "Important"
-Bodo currently concatenates local data chunks for distributed datasets, which does not preserve global order of concatenated objects in output.
+    Bodo currently concatenates local data chunks for distributed datasets, which does not preserve global order of concatenated objects in output.
+
 
 ### Example Usage
 

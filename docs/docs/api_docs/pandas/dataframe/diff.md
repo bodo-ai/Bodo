@@ -1,6 +1,8 @@
 # `pd.DataFrame.diff`
 
+
 `pandas.DataFrame.diff(periods=1, axis=0)`
+
 
 ### Supported Arguments
 
@@ -20,6 +22,7 @@
 1  1.0 338 days
 2  1.0 187 days
 ```
-
 !!! note
-Only supported for dataframes containing float, non-null int, and datetime64ns values
+    Only supported for dataframes containing float, non-null int, and datetime64ns values
+
+

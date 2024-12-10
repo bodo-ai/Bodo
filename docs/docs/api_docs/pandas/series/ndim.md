@@ -1,10 +1,10 @@
 # pd.Series.ndim
 
-- `pandas.Series.ndim`
+-   `pandas.Series.ndim`
 
 ### Example Usage
 
-```py
+``` py
 >>> @bodo.jit
 ... def f(df):
 ...     return df.apply(lambda row: row.ndim, axis=1)
@@ -23,3 +23,4 @@
 99    1
 Length: 100, dtype: int64
 ```
+

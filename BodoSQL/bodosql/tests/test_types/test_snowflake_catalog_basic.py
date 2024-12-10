@@ -127,6 +127,8 @@ def test_snowflake_catalog_constructor(memory_leak_check):
         "snowflake://myusername:mypassword@myaccount/mydatabase/myschema?role=USERADMIN&warehouse=mywarehouse",
         # Missing Password
         "snowflake://myusername@myaccount/mydatabase?warehouse=mywarehouse",
+        
+        
     ],
 )
 def test_snowflake_catalog_from_conn_str(conn_str: str):

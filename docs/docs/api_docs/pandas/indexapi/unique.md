@@ -4,9 +4,9 @@
 
 ***Unsupported Index Types***
 
-- IntervalIndex
-- PeriodIndex
-- MultiIndex
+  - IntervalIndex
+  - PeriodIndex
+  - MultiIndex
 
 ### Example Usage
 
@@ -19,3 +19,5 @@
 >>> f(I)
 Int64Index([1, 5, 2, 0, 3], dtype='int64')
 ```
+
+

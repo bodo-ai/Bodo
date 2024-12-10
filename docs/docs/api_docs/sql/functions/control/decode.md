@@ -1,5 +1,6 @@
 # DECODE
 
+
 `#!sql DECODE(Arg0, Arg1, Arg2, ...)`
 
 When `Arg0` is `Arg1`, outputs `Arg2`. When `Arg0` is `Arg3`,
@@ -8,7 +9,7 @@ At this point, if there is one remaining argument, this is used
 as a default value. If not, then the output is `NULL`.
 
 !!! note
-Treats `NULL` as a literal value that can be matched on.
+    Treats `NULL` as a literal value that can be matched on.
 
 Therefore, the following:
 
@@ -25,3 +26,4 @@ CASE WHEN A IS NULL THEN 0
      WHEN A = 'z' THEN 3
      ELSE -1 END
 ```
+

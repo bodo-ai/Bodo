@@ -3,7 +3,7 @@
 Returns the value of a table property given an optional value for a property key. If no key is specified then all the properties are returned.
 
 !!! note
-This operation is an Iceberg-only operation.
+    This operation is an Iceberg-only operation.
 
 ## Syntax
 
@@ -32,3 +32,4 @@ SHOW TBLPROPERTIES my_table ('property_1');
   |value_1   |
   +----------+
 ```
+

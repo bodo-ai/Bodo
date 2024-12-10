@@ -2,10 +2,12 @@
 
 `pandas.core.groupby.SeriesGroupby.value_counts(normalize=False, sort=True, ascending=False, bins=None, dropna=True)`
 
+
 ### Supported Arguments
 
 - `ascending`: boolean
-  - **Must be constant at Compile Time**
+    - **Must be constant at Compile Time**
+
 
 ### Example Usage
 

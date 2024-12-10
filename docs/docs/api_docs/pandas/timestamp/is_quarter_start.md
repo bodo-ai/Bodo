@@ -1,5 +1,6 @@
 # `pd.Timestamp.is_quarter_start`
 
+
 `pandasTimestamp.is_quarter_start`
 
 ### Example Usage
@@ -14,3 +15,5 @@
 >>> f()
 (False, True)
 ```
+
+

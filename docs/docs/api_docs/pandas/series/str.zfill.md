@@ -6,9 +6,9 @@
 
 | argument | datatypes |
 |----------|-----------|
-| `width` | Integer |
+| `width`  | Integer   |
 
-```py
+``` py
 >>> @bodo.jit
 ... def f(S):
 ...     return S.str.zfill(5)
@@ -23,3 +23,4 @@
 6    0^ Ef
 dtype: object
 ```
+

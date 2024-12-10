@@ -1,4 +1,5 @@
-# Introduction to Iceberg in Bodo {#iceberg_intro}
+Introduction to Iceberg in Bodo {#iceberg_intro}
+=================
 
 Apache Iceberg is an open table format designed for storing large datasets as a lakehouse.
 With Iceberg, data stored in open-source file formats in a data lake (e.g. S3) can be used like a data warehouse.
@@ -13,7 +14,7 @@ This solves many of the problems of traditional data lakes, such as:
 Bodo has first-class read and write support for Iceberg tables in both Python and SQL. Bodo supports Iceberg tables that use the Apache Parquet file format.
 
 !!! note
-Iceberg support is generally available as of v2024.4. If you are using a previous alpha version, we recommend that you upgrade.
+      Iceberg support is generally available as of v2024.4. If you are using a previous alpha version, we recommend that you upgrade.
 
 ## Getting Started
 
@@ -36,8 +37,9 @@ These are the Iceberg catalogs supported in Bodo Python and SQL:
 | HadoopCatalog | Yes | Yes, via the FileSystemCatalog | Local and S3 Support |
 | Snowflake's Managed Iceberg Catalog | Yes | Yes, via the SnowflakeCatalog | Integrated into BodoSQL's Snowflake support |
 | Tabular's RESTCatalog | Yes | Yes, via the TabularCatalog | Only tested on S3 |
-| GlueCatalog | Yes | Yes, via TablePath | |
-| HiveCatalog | Yes | Yes, via TablePath | |
+| GlueCatalog | Yes | Yes, via TablePath |  |
+| HiveCatalog | Yes | Yes, via TablePath |  |
+
 
 ## Limitations and Considerations
 
@@ -54,5 +56,5 @@ Here are the following limitations when working with Iceberg tables in Bodo:
 
 - Iceberg tables do not support the `TEMPORARY` or `TRANSIENT` options when creating tables.
 - The Iceberg View spec is not supported right now. In the case of the:
-  - Filesystem Catalog: View names will be undefined.
-  - Snowflake Catalog: View names will be defined if there is a definition in Snowflake. Otherwise, it will be undefined.
+    - Filesystem Catalog: View names will be undefined.
+    - Snowflake Catalog: View names will be defined if there is a definition in Snowflake. Otherwise, it will be undefined.

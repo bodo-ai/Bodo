@@ -1,6 +1,8 @@
 # `pd.DataFrame.shift`
 
+
 `pandas.DataFrame.shift(periods=1, freq=None, axis=0, fill_value=NoDefault.no_default)`
+
 
 ### Supported Arguments
 
@@ -22,4 +24,7 @@
 ```
 
 !!! note
-Only supported for dataframes containing numeric, boolean, datetime.date and string types.
+    Only supported for dataframes containing numeric, boolean, datetime.date and string types.
+
+
+

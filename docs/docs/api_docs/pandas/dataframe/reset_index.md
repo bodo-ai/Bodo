@@ -1,11 +1,13 @@
 # `pd.DataFrame.reset_index`
 
+
 `pandas.DataFrame.reset_index(level=None, drop=False, inplace=False, col_level=0, col_fill='')`
 
 ### Supported Arguments
 
+
 - `level`: Integer
-  - If specified, must drop all levels.
+    - If specified, must drop all levels.
 - `drop`: Constant boolean
 - `inplace`: Constant boolean
 
@@ -23,3 +25,4 @@
 1     Y  2  5  8
 2     Z  3  6  9
 ```
+

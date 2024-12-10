@@ -11,12 +11,11 @@ downloaded from
 [Kaggle](https://www.kaggle.com/gpreda/covid-world-vaccination-progress?select=country_vaccinations.csv){target=blank}.
 If you want to execute the code as shown below, make sure that you have
 [Bodo][install] installed. Here
-is a list of examples.
+is a list of examples. 
 
 ## Environment Setup {#Environment Setup}
 
 With Bodo:
-
 ```py
 import bodo
 import pandas as pd
@@ -24,7 +23,6 @@ import numpy as np
 ```
 
 With PySpark:
-
 ```py
 from pyspark.sql import SparkSession
 spark = SparkSession \
@@ -191,7 +189,7 @@ data.dropDuplicates().show()
 
 ## Missing Values {#Missing Values}
 
-### Count NA
+### Count NA 
 
 With Bodo:
 
@@ -214,7 +212,7 @@ from pyspark.sql.functions import isnan, when, count, col
 data.select([count(when(isnan(c) | col(c).isNull(), c)).alias(c) for c in df_s.columns]).show()
 ```
 
-### Drop NA
+### Drop NA 
 
 With Bodo:
 
@@ -235,8 +233,7 @@ With Pyspark:
 
 data_valid = data.dropna(how='any')
 ```
-
-### Replace NA
+### Replace NA 
 
 With Bodo:
 

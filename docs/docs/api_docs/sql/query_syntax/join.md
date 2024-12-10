@@ -1,31 +1,29 @@
 # JOIN
 
+
+
 A `#!sql JOIN` clause is used to combine rows from two or more tables,
 based on a related column between them:
-
 ```sql
 SELECT <COLUMN_NAMES>
   FROM <LEFT_TABLE_NAME>
   <JOIN_TYPE> <RIGHT_TABLE_NAME>
   ON <LEFT_TABLE_COLUMN_NAME> OP <RIGHT_TABLE_COLUMN_NAME>
 ```
-
 For example:
-
 ```sql
 SELECT table1.A, table1.B FROM table1 JOIN table2 on table1.A = table2.C
 ```
-
 Here are the different types of the joins in SQL:
 
-- `#!sql (INNER) JOIN`: returns records that have matching values in
-  both tables
-- `#!sql LEFT (OUTER) JOIN`: returns all records from the left table,
-  and the matched records from the right table
-- `#!sql RIGHT (OUTER) JOIN`: returns all records from the right
-  table, and the matched records from the left table
-- `#!sql FULL (OUTER) JOIN`: returns all records when there is a match
-  in either left or right table
+-   `#!sql (INNER) JOIN`: returns records that have matching values in
+both tables
+-   `#!sql LEFT (OUTER) JOIN`: returns all records from the left table,
+and the matched records from the right table
+-   `#!sql RIGHT (OUTER) JOIN`: returns all records from the right
+table, and the matched records from the left table
+-   `#!sql FULL (OUTER) JOIN`: returns all records when there is a match
+in either left or right table
 
 ### Example Usage
 
@@ -73,3 +71,4 @@ Here are the different types of the joins in SQL:
 5               NaN        VISA
 6               NaN        VISA
 ```
+

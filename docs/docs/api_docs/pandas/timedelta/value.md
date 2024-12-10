@@ -1,9 +1,9 @@
 # `pd.Timedelta.value`
+                          
 
 `pandas.Timedelta.value`
 
 ### Example Usage
-
 ```py
 >>> @bodo.jit
 ... def f():
@@ -11,3 +11,4 @@
 >>> f()
 13
 ```
+

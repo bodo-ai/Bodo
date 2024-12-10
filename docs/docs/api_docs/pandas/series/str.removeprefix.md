@@ -4,11 +4,11 @@
 
 ### Supported Arguments
 
-| argument | datatypes |
+| argument                    | datatypes                              |
 |-----------------------------|----------------------------------------|
-| `prefix` | String |
+| `prefix`                    |    String                              |
 
-```py
+``` py
 >>> @bodo.jit
 ... def f(S):
 ...     return S.str.removeprefix("ab")
@@ -23,3 +23,4 @@
 6      xab
 dtype: string
 ```
+

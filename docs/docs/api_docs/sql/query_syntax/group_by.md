@@ -4,7 +4,6 @@ The `#!sql GROUP BY` statement groups rows that have the same values
 into summary rows, like "find the number of customers in each
 country". The `#!sql GROUP BY` statement is often used with aggregate
 functions to group the result-set by one or more columns:
-
 ```sql
 SELECT <COLUMN_NAMES>
 FROM <TABLE_NAME>
@@ -14,14 +13,11 @@ ORDER BY <COLUMN_NAMES>
 ```
 
 For example:
-
 ```sql
 SELECT MAX(A) FROM table1 GROUP BY B
 ```
-
 `#!sql GROUP BY` statements also referring to columns by alias or
 column number:
-
 ```sql
 SELECT MAX(A), B - 1 as val FROM table1 GROUP BY val
 SELECT MAX(A), B FROM table1 GROUP BY 2
@@ -50,8 +46,8 @@ UNION
 ```
 
 !!! note
-The above example is not valid BodoSQL code, as we do not support null literals.
-It is used only to show the null filling behavior.
+    The above example is not valid BodoSQL code, as we do not support null literals.
+    It is used only to show the null filling behavior.
 
 `#!sql CUBE` is equivalent to grouping by all possible permutations of the specified set.
 For example:
@@ -89,3 +85,4 @@ Which is equivalent to
 ```sql
 SELECT MAX(A), B, C GROUP BY GROUPING SETS ((B, C, D), (B, C), (B), (), (B, C), (B), (C), (), (A))
 ```
+

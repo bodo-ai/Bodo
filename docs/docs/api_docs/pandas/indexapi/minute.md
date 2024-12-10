@@ -1,5 +1,6 @@
 # `pd.DateTimeIndex.minute`
 
+
 `pandasDatetimeIndex.minute`
 
 ### Example Usage
@@ -13,3 +14,4 @@
 >>> f(I)
 Int64Index([32, 42, 52, 2, 12], dtype='int64')
 ```
+

@@ -1,5 +1,6 @@
 # `pd.Timestamp.date`
 
+
 `pandasTimestamp.date()`
 
 ### Example Usage
@@ -14,3 +15,5 @@
 >>> f()
 (Timestamp('2021-12-09 09:57:44.114123'), datetime.date(2021, 12, 9))
 ```
+
+

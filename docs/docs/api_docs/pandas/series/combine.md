@@ -4,18 +4,18 @@
 
 ### Supported Arguments
 
-| argument | datatypes | other requirements |
+| argument        | datatypes                                                                   | other requirements        |
 |-----------------|-----------------------------------------------------------------------------|---------------------------|
-| `other` | <ul><li> Array </li><li> Series </li></ul> | |
-| `func` | - Function that takes two scalar arguments and returns a scalar value. | |
-| `fill_value` | scalar | Must be provided if the |
-| | | Series lengths aren't |
-| | | equal and the dtypes |
-| | | aren't floats. |
+| `other`         | <ul><li>   Array  </li><li> Series  </li></ul>                              |                           |
+| `func`          | -   Function that takes two scalar arguments and   returns a scalar  value. |                           |
+| `fill_value`    | scalar                                                                      | Must be provided if the   |
+|                 |                                                                             | Series lengths aren't     |
+|                 |                                                                             | equal and the dtypes      |
+|                 |                                                                             | aren't floats.            |
 
 ### Example Usage
 
-```py
+``` py
 >>> @bodo.jit
 ... def f(S, other):
 ...   return S.combine(other, lambda a, b: 2 * a + b)
@@ -35,3 +35,4 @@
 999    2001
 Length: 1000, dtype: int64
 ```
+

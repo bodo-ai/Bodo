@@ -1,3 +1,4 @@
-# pd.tseries.offsets.DateOffset.normalize\`
+# pd.tseries.offsets.DateOffset.normalize`
 
 `pandas.tseries.offsets.DateOffset.normalize`
+

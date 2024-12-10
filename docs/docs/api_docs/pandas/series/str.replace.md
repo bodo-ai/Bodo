@@ -2,11 +2,11 @@
 
 `pandas.Series.str.replace(pat, repl, n=- 1, case=None, flags=0, regex=None)`
 
-### Supported Arguments
+### Supported Arguments 
 
 - `regex`
 
-```py
+``` py
 >>> @bodo.jit
 ... def f(S):
 ...     return S.str.replace("(a|e)", "yellow")
@@ -21,3 +21,4 @@
 6        ^ Ef
 dtype: object
 ```
+

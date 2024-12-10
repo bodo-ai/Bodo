@@ -1,11 +1,15 @@
 # `pd.DataFrame.product`
 
+
 `pandas.DataFrame.product(axis=None, skipna=None, level=None, numeric_only=None)`
+
 
 ### Supported Arguments
 
+
 - `axis`: Integer (0 or 1)
-  - **Must be constant at Compile Time**
+    - **Must be constant at Compile Time**
+
 
 ### Example Usage
 
@@ -21,3 +25,4 @@ B    120
 C    504
 dtype: int64
 ```
+

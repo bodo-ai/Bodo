@@ -2,8 +2,10 @@
 
 `pandas.core.groupby.Groupby.first(numeric_only=False, min_count=-1)`
 
+
 !!! note
-`first` is not supported on columns with nested array types
+    `first` is not supported on columns with nested array types
+
 
 ### Example Usage
 
@@ -26,3 +28,4 @@ B
 421  1.0  1.510
 f31  2.0  2.421
 ```
+  

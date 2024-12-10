@@ -2,7 +2,7 @@
 
 `pandas.Series.str.islower()`
 
-```py
+``` py
 >>> @bodo.jit
 ... def f(S):
 ...     return S.str.islower()
@@ -17,3 +17,4 @@
 6    False
 dtype: boolean
 ```
+
