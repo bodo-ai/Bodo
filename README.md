@@ -1,9 +1,6 @@
 # Bodo: High-Performance Python Compute Engine for Data and AI
 
-Bodo is a cutting-edge compute engine that brings high-performance computing (HPC) speed
-and scalability to Python data and AI programs. Powered by an innovative auto-parallelizing
-just-in-time (JIT) compiler, Bodo transforms Python programs into highly optimized,
-parallel binaries without requiring code rewrites.
+Bodo is a cutting-edge compute engine for high performance Python data processing. Powered by an innovative auto-parallelizing just-in-time compiler, Bodo transforms Python programs into highly optimized, parallel binaries without requiring code rewrites.
 
 Unlike traditional distributed computing frameworks, Bodo:
 - Seamlessly supports native Python APIs like Pandas and NumPy.
@@ -63,6 +60,8 @@ conda create -n Bodo python=3.12 -c conda-forge
 conda activate Bodo
 conda install bodo -c bodo.ai -c conda-forge
 ```
+
+Bodo works on MacOS and Linux right now, and will have Windows (and more) coming soon!
 
 ## Example Code
 
