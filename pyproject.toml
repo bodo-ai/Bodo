@@ -13,8 +13,8 @@ build-backend = "scikit_build_core.build"
 [project]
 name = "bodo"
 dynamic = ["version"]
-description = "The Python Supercomputing Analytics Platform"
-readme = "README_pypi.md"
+description = "High-Performance Python Compute Engine for Data and AI"
+readme = "README.md"
 requires-python = ">=3.10,<3.13"
 keywords = ["data", "analytics", "cluster"]
 authors = [{ name = "Bodo.ai" }]
