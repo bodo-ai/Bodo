@@ -1,4 +1,5 @@
 # Azure Pipeline that is triggered weekdays at midnight or when a release is tagged.
+trigger: none
 pr: none
 
 # Currently nightly can take up to ~12 hours to run. 1 AM is a good time to start.
