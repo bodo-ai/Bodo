@@ -47,8 +47,3 @@ repos:
     hooks:
       - id: actionlint
 
-  - repo: https://github.com/hukkin/mdformat
-    rev: 0.7.19
-    hooks:
-      - id: mdformat
-
