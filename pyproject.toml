@@ -83,7 +83,6 @@ wheel.exclude = [
     "bodo/**/*.pxd",
     "bodo/**/*.pyx",
     "bodo/**/*.hpp",
-    "bodo/libs/HashLibs/TSL",
     "bodo/bench",
     "bodo/transforms/**/*.pyc",
     "bodo/tests/*",
@@ -104,7 +103,6 @@ wheel.exclude = [
     "bodo/**/*.pxd",
     "bodo/**/*.pyx",
     "bodo/tests/data/**/*.crc",
-    "bodo/libs/HashLibs/TSL",
     "bodo/bench",
 ]
 
@@ -207,7 +205,7 @@ for file in $DYLIBS_DIR/*; do
 done
 """
 
-
+# ---------------------------------------- PR CI ---------------------------------------- #
 [tool.coverage.run]
 source = ["bodo"]
 branch = true

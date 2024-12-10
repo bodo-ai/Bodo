@@ -26,7 +26,6 @@ def run_modin():
     )
     end = time.time()
     print("Reading Time: ", (end - start))
-    print(type(central_park_weather_observations))
 
     start = time.time()
 
@@ -95,7 +94,6 @@ def run_modin():
     print(monthly_trips_weather.head())
 
     start = time.time()
-    print(type(monthly_trips_weather))
     monthly_trips_weather_ray = to_ray(monthly_trips_weather)
     monthly_trips_weather_ray.write_parquet("local:///tmp/data/modin_result.pq")
     end = time.time()

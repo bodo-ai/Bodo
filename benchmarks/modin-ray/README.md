@@ -4,6 +4,7 @@ Ensure that you have a python environment with modin/ray installed. For conveini
 
 ``` shell
 conda env create -f env.yml
+conda activate benchmark_modin
 ```
 
 You will also need to set your aws credentials which can be done by running `aws configure`
@@ -12,7 +13,7 @@ Refer to the [Modin documentation](https://modin.readthedocs.io/en/0.20.1/gettin
 
 # Running the benchmark
 
-This script will run the code to setup the ray cluster, submit a small job to make sure all the nodes are up and running, and submit the full benchmark. This script can take up to an hour to run.
+This script will setup the ray cluster, submit the benchmark job, and shutdown the cluster. This script can take up to an hour to run. 
 
 ```shell
 ./run.sh
