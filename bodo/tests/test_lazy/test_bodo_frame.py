@@ -416,6 +416,7 @@ def test_slice(pandas_managers, head_df, collect_func):
     assert lam_sliced_twice_df.equals(collect_func(0)["A0"][10:30])
 
 
+@pytest.mark.spawn_mode
 def test_parquet(collect_func):
     """Tests that to_parquet() writes the frame correctly and does not trigger data fetch"""
 
@@ -443,6 +444,7 @@ def test_parquet(collect_func):
     )
 
 
+@pytest.mark.spawn_mode
 def test_parquet_param(collect_func):
     """Tests that to_parquet() raises an error on unsupported parameters"""
 
