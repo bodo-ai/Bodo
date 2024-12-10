@@ -18,7 +18,7 @@ repos:
         args: [--allow-missing-credentials]
   # Python
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.6.7
+    rev: v0.8.0
     hooks:
       - id: ruff
         args: [ --fix, --exit-non-zero-on-fix ]
