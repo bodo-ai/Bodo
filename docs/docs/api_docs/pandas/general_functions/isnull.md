@@ -1,14 +1,12 @@
 # `pd.isnull`
 
-
 `pandas.isnull(obj)`
-
 
 ### Supported Arguments
 
-| argument | datatypes                                   |
+| argument | datatypes |
 |----------|---------------------------------------------|
-| `obj`    | DataFrame, Series, Index, Array, or  Scalar |  
+| `obj` | DataFrame, Series, Index, Array, or Scalar |
 
 ### Example Usage
 
@@ -31,4 +29,3 @@
 0.1  False  False
 3.1  False  False
 ```
-

@@ -2,10 +2,8 @@
 
 `pandas.core.groupby.Groupby.last(numeric_only=False, min_count=-1)`
 
-
 !!! note
-    `last` is not supported on columns with nested array types
-
+`last` is not supported on columns with nested array types
 
 ### Example Usage
 
@@ -28,4 +26,3 @@ B
 421  24.0  233232.00
 f31   2.0      12.21
 ```
-  

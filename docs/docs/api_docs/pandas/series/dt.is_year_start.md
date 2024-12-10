@@ -5,11 +5,11 @@
 `pandas.Series.dt.is_year_start`
 
 !!! note
-	Input must be a Series of `datetime64` data.
+Input must be a Series of `datetime64` data.
 
 ### Example Usage
 
-``` py
+```py
 >>> @bodo.jit
 ... def f(S):
 ...     return S.dt.is_year_start
@@ -47,4 +47,3 @@
 29    False
 dtype: bool
 ```
-

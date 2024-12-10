@@ -5,14 +5,16 @@
 `pandas.Series.str.encode(encoding, errors='strict')`
 
 ### Argument Restrictions:
- * `encoding`: must be type `String`.
- * `errors`: must be type `String`.
+
+- `encoding`: must be type `String`.
+- `errors`: must be type `String`.
 
 !!! note
-	Input must be a Series of `String` data.
+Input must be a Series of `String` data.
 
 ### Example Usage
-``` py
+
+```py
 >>> @bodo.jit
 ... def f(S):
 ...     return S.str.encode("ascii")

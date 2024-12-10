@@ -13,4 +13,3 @@
 >>> f(I)
 Int64Index([-2], dtype='int64')
 ```
-

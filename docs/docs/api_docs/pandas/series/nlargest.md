@@ -4,17 +4,16 @@
 
 ### Supported Arguments
 
-| argument                    | datatypes                              |
+| argument | datatypes |
 |-----------------------------|----------------------------------------|
-| `n`                         |    Integer                             |
+| `n` | Integer |
 
 !!! note
-    Series type must be numeric
-
+Series type must be numeric
 
 ### Example Usage
 
-``` py
+```py
 >>> @bodo.jit
 ... def f(S):
 ...     return S.nlargest(20)
@@ -42,4 +41,3 @@
 68    5
 dtype: int64
 ```
-

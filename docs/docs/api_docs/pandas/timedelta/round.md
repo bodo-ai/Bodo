@@ -1,5 +1,5 @@
 # `pd.Timedelta.round`
-                          
+
 `pandas.Timedelta.round`
 
 ### Supported Arguments
@@ -7,6 +7,7 @@
 - `freq`: String
 
 ### Example Usage
+
 ```py
 >>> @bodo.jit
 ... def f():
@@ -14,4 +15,3 @@
 >>> f()
 (Timedelta('10 days 00:00:00'), Timedelta('11 days 00:00:00'))
 ```
-

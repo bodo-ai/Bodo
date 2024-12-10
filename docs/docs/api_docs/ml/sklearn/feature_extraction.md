@@ -1,17 +1,14 @@
 # sklearn.feature_extraction
 
-
-
 ## sklearn.feature_extraction.text.CountVectorizer
 
 `sklearn.feature_extraction.text.CountVectorizer`
-
 
 This class provides CountVectorizer support to convert a collection of
 text documents to a matrix of token counts.
 
 !!! note
-    Arguments `max_df` and `min_df` are not supported yet.
+Arguments `max_df` and `min_df` are not supported yet.
 
 ### Methods
 
@@ -19,16 +16,16 @@ text documents to a matrix of token counts.
 
 - `sklearn.feature_extraction.text.CountVectorizer.fit_transform ( raw_documents, y=None ) `
 
-    ***Supported Arguments***
-    <br>
-    <br> 
-    -   `raw_documents`: iterables ( list, tuple, or NumPy Array, or Pandas
+  ***Supported Arguments***
+  <br>
+  <br>
+
+  - `raw_documents`: iterables ( list, tuple, or NumPy Array, or Pandas
     Series that contains string)
 
-    !!! note
-        Bodo ignores `y`, which is consistent with scikit-learn.
-        
-        
+  !!! note
+  Bodo ignores `y`, which is consistent with scikit-learn.
+
 #### sklearn.feature_extraction.text.CountVectorizer.get_feature_names_out
 
 - `sklearn.feature_extraction.text.CountVectorizer. get_feature_names_out()`
@@ -58,7 +55,6 @@ text documents to a matrix of token counts.
 
 `sklearn.feature_extraction.text.HashingVectorizer`
 
-
 This class provides `HashingVectorizer` support to convert a collection
 of text documents to a matrix of token occurrences.
 
@@ -68,14 +64,15 @@ of text documents to a matrix of token occurrences.
 
 - `sklearn.feature_extraction.text.HashingVectorizer.fit_transform(X, y=None)`
 
-    ***Supported Arguments***
-    <br>
-    <br> 
-    - `X`: iterables ( list, tuple, or NumPy Array, or Pandas
-           Series that contains string)
+  ***Supported Arguments***
+  <br>
+  <br>
 
-    !!! note
-        Bodo ignores `y`, which is consistent with scikit-learn.
+  - `X`: iterables ( list, tuple, or NumPy Array, or Pandas
+    Series that contains string)
+
+  !!! note
+  Bodo ignores `y`, which is consistent with scikit-learn.
 
 ### Example Usage
 

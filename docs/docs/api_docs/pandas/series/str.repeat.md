@@ -4,11 +4,11 @@
 
 ### Supported Arguments
 
-| argument  | datatypes                                                               | other requirements                                                          |
+| argument | datatypes | other requirements |
 |-----------|-------------------------------------------------------------------------|-----------------------------------------------------------------------------|
-| `repeats` | <ul><li>   Integer </li><li>  Array Like containing integers </li></ul> | If `repeats` is array  like, then it must be the same length as the Series. |
+| `repeats` | <ul><li> Integer </li><li> Array Like containing integers </li></ul> | If `repeats` is array like, then it must be the same length as the Series. |
 
-``` py
+```py
 >>> @bodo.jit
 ... def f(S):
 ...     return S.str.repeat(2)
@@ -23,4 +23,3 @@
 6    ^ Ef^ Ef
 dtype: object
 ```
-

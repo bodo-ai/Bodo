@@ -4,19 +4,17 @@
 
 ### Supported Arguments
 
-| argument     | datatypes                                                                                                 |
+| argument | datatypes |
 |--------------|-----------------------------------------------------------------------------------------------------------|
-| `other`      | <ul><li>  numeric scalar </li><li>  array with numeric data </li><li> Series with numeric data </li></ul> |
-| `fill_value` | numeric scalar                                                                                            |
-
+| `other` | <ul><li> numeric scalar </li><li> array with numeric data </li><li> Series with numeric data </li></ul> |
+| `fill_value` | numeric scalar |
 
 !!! note
-    `Series.gt` is only supported on Series of numeric data.
-
+`Series.gt` is only supported on Series of numeric data.
 
 ### Example Usage
 
-``` py
+```py
 >>> @bodo.jit
 ... def f(S, other):
 ...   return S.gt(other)
@@ -36,4 +34,3 @@
 999     True
 Length: 1000, dtype: bool
 ```
-

@@ -1,9 +1,9 @@
 # `pd.Timedelta.to_pytimedelta`
-                            
 
 `pandas.Timedelta.to_pytimedelta()`
 
 ### Example Usage
+
 ```py
 >>> @bodo.jit
 ... def f():
@@ -11,4 +11,3 @@
 >>> f()
 10 days, 2:07:03.013023
 ```
-

@@ -2,7 +2,7 @@
 
 `pandas.Series.str.len()`
 
-``` py
+```py
 >>> @bodo.jit
 ... def f(S):
 ...     return S.str.len()
@@ -17,4 +17,3 @@
 6    4
 dtype: Int64
 ```
-

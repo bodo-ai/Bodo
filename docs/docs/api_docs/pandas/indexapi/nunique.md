@@ -8,8 +8,8 @@
 
 ***Unsupported Index Types***
 
-  - IntervalIndex
-  - MultiIndex
+- IntervalIndex
+- MultiIndex
 
 ### Example Usage
 
@@ -22,4 +22,3 @@
 >>> f(I)
 4
 ```
-

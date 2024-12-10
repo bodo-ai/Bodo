@@ -1,6 +1,5 @@
 # TO_TIMESTAMP_TZ
 
-
 `#!sql TO_TIMESTAMP_TZ(EXPR)`
 
 Equivalent to `#!sql TO_TIMESTAMP` except that if the input is a timezone-aware
@@ -20,11 +19,11 @@ Additionally, if `EXPR` evaluates to a string, if an offset is not explicitly
 specified, the offset of the timestamp in the session's timezone is used. The
 following formats for offset are supported:
 
-+ `z` or `Z` for the zero offset
-+ `[+-]H:M`
-+ `[+-]HH:M`
-+ `[+-]H:MM`
-+ `[+-]HH:MM`
-+ `[+-]HHMM`
-+ `[+-]HMM`
-+ `[+-]HH`
+- `z` or `Z` for the zero offset
+- `[+-]H:M`
+- `[+-]HH:M`
+- `[+-]H:MM`
+- `[+-]HH:MM`
+- `[+-]HHMM`
+- `[+-]HMM`
+- `[+-]HH`

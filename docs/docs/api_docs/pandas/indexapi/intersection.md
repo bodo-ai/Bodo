@@ -4,19 +4,19 @@
 
 ### Supported Arguments:
 
-  - `other`: can be an Index, Series, or 1-dim numpy array with a matching type for the Index
+- `other`: can be an Index, Series, or 1-dim numpy array with a matching type for the Index
 
 ***Supported Index Types***
 
-  - NumericIndex
-  - StringIndex
-  - BinaryIndex
-  - RangeIndex
-  - DatetimeIndex
-  - TimedeltaIndex
+- NumericIndex
+- StringIndex
+- BinaryIndex
+- RangeIndex
+- DatetimeIndex
+- TimedeltaIndex
 
 !!! info "Important"
-      Bodo diverges from the Pandas API for Index.intersection() in several ways: the default is sort=None, and a NumericIndex is always returned instead of a RangeIndex.
+Bodo diverges from the Pandas API for Index.intersection() in several ways: the default is sort=None, and a NumericIndex is always returned instead of a RangeIndex.
 
 ### Example Usage
 
@@ -30,5 +30,3 @@
 >>> f(I, J)
 Int64Index([2, 4], dtype='int64')
 ```
-
-

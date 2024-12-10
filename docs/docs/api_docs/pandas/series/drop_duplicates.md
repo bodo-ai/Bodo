@@ -5,8 +5,10 @@
 ### Supported Arguments None
 
 ### Example Usage
+
 >
-``` py
+
+```py
 >>> @bodo.jit
 ... def f(S):
 ...     return S.drop_duplicates()
@@ -24,4 +26,3 @@
 9    9
 dtype: int64
 ```
-

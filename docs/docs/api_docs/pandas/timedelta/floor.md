@@ -1,14 +1,13 @@
 # `pd.Timedelta.floor`
-                          
 
 `pandas.Timedelta.floor`
 
 ### Supported Arguments
 
-
 - `freq`: String
 
 ### Example Usage
+
 ```py
 >>> @bodo.jit
 ... def f():
@@ -16,4 +15,3 @@
 >>> f()
 10 days 00:00:00
 ```
-

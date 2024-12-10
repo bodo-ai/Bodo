@@ -1,4 +1,5 @@
 # APPROX_PERCENTILE
+
 `#!sql APPROX_PERCENTILE(A, q)`
 
 Returns the approximate value of the `q`-th percentile of column `A` (e.g.
@@ -6,5 +7,3 @@ Returns the approximate value of the `q`-th percentile of column `A` (e.g.
 and `q` can be any scalar float between zero and one.
 
 The approximation is calculated using the t-digest algorithm.
-
-

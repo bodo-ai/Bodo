@@ -1,7 +1,5 @@
 # NATURAL JOIN
 
-
-
 A natural join is a type of join that provides an equality condition on all
 columns with the same name and only returns 1 column for the keys. On cannot
 be provided because it is implied but all join types can be provided.
@@ -11,20 +9,23 @@ SELECT <COLUMN_NAMES>
   FROM <LEFT_TABLE_NAME>
   NATURAL <JOIN_TYPE> <RIGHT_TABLE_NAME>
 ```
+
 For example:
+
 ```sql
 SELECT table1.A, table1.B FROM table1 NATURAL JOIN table2
 ```
+
 Here are the different types of the joins in SQL:
 
--   `#!sql (INNER) JOIN`: returns records that have matching values in
-both tables
--   `#!sql LEFT (OUTER) JOIN`: returns all records from the left table,
-and the matched records from the right table
--   `#!sql RIGHT (OUTER) JOIN`: returns all records from the right
-table, and the matched records from the left table
--   `#!sql FULL (OUTER) JOIN`: returns all records when there is a match
-in either left or right table
+- `#!sql (INNER) JOIN`: returns records that have matching values in
+  both tables
+- `#!sql LEFT (OUTER) JOIN`: returns all records from the left table,
+  and the matched records from the right table
+- `#!sql RIGHT (OUTER) JOIN`: returns all records from the right
+  table, and the matched records from the left table
+- `#!sql FULL (OUTER) JOIN`: returns all records when there is a match
+  in either left or right table
 
 ### Example Usage
 
@@ -72,4 +73,3 @@ in either left or right table
 5           1        VISA
 6           6        VISA
 ```
-

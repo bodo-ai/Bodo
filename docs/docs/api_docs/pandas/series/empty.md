@@ -1,10 +1,10 @@
 # pd.Series.empty
 
--   `pandas.Series.empty`
+- `pandas.Series.empty`
 
 ### Example Usage
 
-``` py
+```py
 >>> @bodo.jit
 ... def f(df):
 ...     return df.apply(lambda row: row.empty, axis=1)
@@ -23,4 +23,3 @@
 99    False
 Length: 100, dtype: boolean
 ```
-

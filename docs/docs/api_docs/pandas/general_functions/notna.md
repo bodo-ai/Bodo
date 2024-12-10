@@ -1,13 +1,12 @@
 # `pd.notna`
 
-
 `pandas.notna(obj)`
 
 ### Supported Arguments
 
-| argument | datatypes                                  |
+| argument | datatypes |
 |----------|--------------------------------------------|
-| `obj`    | DataFrame, Series, Index, Array, or Scalar |
+| `obj` | DataFrame, Series, Index, Array, or Scalar |
 
 ### Example Usage
 

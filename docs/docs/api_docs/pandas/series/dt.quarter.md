@@ -5,11 +5,11 @@
 `pandas.Series.dt.quarter`
 
 !!! note
-	Input must be a Series of `datetime64` data.
+Input must be a Series of `datetime64` data.
 
 ### Example Usage
 
-``` py
+```py
 >>> @bodo.jit
 ... def f(S):
 ...     return S.dt.quarter
@@ -47,4 +47,3 @@
 29    1
 dtype: Int64
 ```
-

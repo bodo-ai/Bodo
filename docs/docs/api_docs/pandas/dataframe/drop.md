@@ -1,12 +1,11 @@
 # `pd.DataFrame.drop`
 
-
 `pandas.DataFrame.drop(labels=None, axis=0, index=None, columns=None, level=None, inplace=False, errors='raise')`
 
-*  Only dropping columns supported, either using `columns` argument or setting `axis=1` and using the `labels` argument
-* `labels` and `columns` require constant string, or constant list/tuple of string values
-* `inplace` supported with a constant boolean value
-* All other arguments are unsupported
+- Only dropping columns supported, either using `columns` argument or setting `axis=1` and using the `labels` argument
+- `labels` and `columns` require constant string, or constant list/tuple of string values
+- `inplace` supported with a constant boolean value
+- All other arguments are unsupported
 
 ### Example Usage
 
@@ -23,4 +22,3 @@
 1  2
 2  3
 ```
-

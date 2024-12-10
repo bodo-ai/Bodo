@@ -1,14 +1,11 @@
 # `pd.DataFrame.median`
 
-
 `pandas.DataFrame.median(axis=None, skipna=None, level=None, numeric_only=None)`
-
 
 ### Supported Arguments
 
 - `axis`: Integer (0 or 1)
-    - **Must be constant at Compile Time**
-
+  - **Must be constant at Compile Time**
 
 ### Example Usage
 
@@ -25,5 +22,4 @@
 ```
 
 !!! note
-  Only supported for dataframes containing float, non-null int, and datetime64ns values.
-
+Only supported for dataframes containing float, non-null int, and datetime64ns values.

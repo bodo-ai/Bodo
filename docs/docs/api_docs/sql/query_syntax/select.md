@@ -1,7 +1,5 @@
 # SELECT
 
-
-
 The `#!sql SELECT` statement is used to select data in the form of
 columns. The data returned from BodoSQL is stored in a dataframe.
 
@@ -68,4 +66,3 @@ SELECT A, B, C, D, E FROM T
 
 SELECT B, C, D FROM T
 ```
-

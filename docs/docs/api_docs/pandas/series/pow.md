@@ -5,17 +5,18 @@
 `pandas.Series.pow(other, level=None, fill_value=None, axis=0)`
 
 ### Argument Restrictions:
- * `other`: must be a numeric scalar or Series, Index, Array, List, or Tuple with numeric data.
- * `level`: only supports default value `None`.
- * `fill_value`: (optional, defaults to `None`) must be `Integer`, `Float` or `Boolean`.
- * `axis`: only supports default value `0`.
+
+- `other`: must be a numeric scalar or Series, Index, Array, List, or Tuple with numeric data.
+- `level`: only supports default value `None`.
+- `fill_value`: (optional, defaults to `None`) must be `Integer`, `Float` or `Boolean`.
+- `axis`: only supports default value `0`.
 
 !!! note
-	Input must be a Series of `Integer` or `Float` data.
+Input must be a Series of `Integer` or `Float` data.
 
 ### Example Usage
 
-``` py
+```py
 >>> @bodo.jit
 ... def f(S, other):
 ...   return S.pow(other)
@@ -35,4 +36,3 @@
 999                   1000
 Length: 1000, dtype: int64
 ```
-

@@ -5,5 +5,4 @@
 `pandas.Series.dt.dayofweek`
 
 !!! note
-	Input must be a Series of `datetime64` data.
-
+Input must be a Series of `datetime64` data.

@@ -1,6 +1,5 @@
 # `pd.DataFrame.infer_objects`
 
-
 `pandas.DataFrame.infer_objects()`
 
 ### Example Usage
@@ -15,8 +14,6 @@
 1  2
 2  3
 ```
+
 !!! note
-    Bodo does not internally use the object dtype, so types are never inferred. As a result, this API just produces a deep copy, consistent with Pandas.
-
-
-
+Bodo does not internally use the object dtype, so types are never inferred. As a result, this API just produces a deep copy, consistent with Pandas.

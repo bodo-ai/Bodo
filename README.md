@@ -6,6 +6,7 @@ just-in-time (JIT) compiler, Bodo transforms Python programs into highly optimiz
 parallel binaries without requiring code rewrites.
 
 Unlike traditional distributed computing frameworks, Bodo:
+
 - Seamlessly supports native Python APIs like Pandas and NumPy.
 - Eliminates runtime overheads common in driver-executor models by leveraging Message Passing Interface (MPI) technology for true distributed execution.
 
@@ -14,29 +15,27 @@ Unlike traditional distributed computing frameworks, Bodo:
 Bodo makes Python run much (much!) faster than it normally does!
 
 1. **Exceptional Performance:**
-Deliver HPC-grade performance and scalability for Python data workloads as if the code was written in C++/MPI, whether running on a laptop or across large cloud clusters.
+   Deliver HPC-grade performance and scalability for Python data workloads as if the code was written in C++/MPI, whether running on a laptop or across large cloud clusters.
 
-2. **Easy to Use:**
-Easily integrate into Python workflows with a simple decorator, and support native Pandas and NumPy APIs.
+1. **Easy to Use:**
+   Easily integrate into Python workflows with a simple decorator, and support native Pandas and NumPy APIs.
 
-3. **Interoperable:**
-Compatible with regular Python ecosystem, and can selectively speed up only the functions that are Bodo supported.
+1. **Interoperable:**
+   Compatible with regular Python ecosystem, and can selectively speed up only the functions that are Bodo supported.
 
-4. **Integration with Modern Data Infrastructure:**
-Provide robust support for industry-leading data platforms like Apache Iceberg and Snowflake, enabling smooth interoperability with existing ecosystems.
-
+1. **Integration with Modern Data Infrastructure:**
+   Provide robust support for industry-leading data platforms like Apache Iceberg and Snowflake, enabling smooth interoperability with existing ecosystems.
 
 ## Non-goals
 
 1. *Full Python Language Support:*
-We are currently focused on a targeted subset of Python used for data-intensive and computationally heavy workloads, rather than supporting the entire Python syntax and all library APIs.
+   We are currently focused on a targeted subset of Python used for data-intensive and computationally heavy workloads, rather than supporting the entire Python syntax and all library APIs.
 
-2. *Non-Data Workloads:*
-Prioritize applications in data engineering, data science, and AI/ML. Bodo is not designed for general-purpose use cases that are non-data-centric.
+1. *Non-Data Workloads:*
+   Prioritize applications in data engineering, data science, and AI/ML. Bodo is not designed for general-purpose use cases that are non-data-centric.
 
-3. *Real-time Compilation:*
-While compilation time is improving, Bodo is not yet optimized for scenarios requiring very short compilation times (e.g., workloads with execution times of only a few seconds).
-
+1. *Real-time Compilation:*
+   While compilation time is improving, Bodo is not yet optimized for scenarios requiring very short compilation times (e.g., workloads with execution times of only a few seconds).
 
 ## Key Features
 
@@ -47,7 +46,6 @@ While compilation time is improving, Bodo is not yet optimized for scenarios req
 
 See Bodo documentation to learn more: https://docs.bodo.ai/
 
-
 ## Installation
 
 Bodo can be installed using Pip or Conda:
@@ -56,7 +54,7 @@ Bodo can be installed using Pip or Conda:
 pip install -U bodo
 ```
 
-or 
+or
 
 ```bash
 conda create -n Bodo python=3.12 -c conda-forge
@@ -67,7 +65,6 @@ conda install bodo -c bodo.ai -c conda-forge
 ## Example Code
 
 Here is an example Pandas code that reads and processes a sample Parquet dataset with Bodo.
-
 
 ```python
 import pandas as pd

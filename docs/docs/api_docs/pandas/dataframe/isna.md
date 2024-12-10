@@ -1,6 +1,5 @@
 # `pd.DataFrame.isna`
 
-
 `pandas.DataFrame.isna()`
 
 ### Example Usage
@@ -17,4 +16,3 @@
 1   True
 2  False
 ```
-

@@ -4,17 +4,16 @@
 
 ### Supported Arguments
 
-| argument | datatypes                |
+| argument | datatypes |
 |----------|--------------------------|
-| `other`  | Series with numeric data |
+| `other` | Series with numeric data |
 
 !!! note
-    `Series.round` is only supported on Series of numeric data.
-
+`Series.round` is only supported on Series of numeric data.
 
 ### Example Usage
 
-``` py
+```py
 >>> @bodo.jit
 ... def f(S):
 ...   return S.round(2)
@@ -72,4 +71,3 @@
 49    1000.00
 dtype: float64
 ```
-

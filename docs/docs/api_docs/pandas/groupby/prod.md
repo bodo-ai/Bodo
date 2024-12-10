@@ -2,10 +2,8 @@
 
 `pandas.core.groupby.Groupby.prod(numeric_only=NoDefault.no_default, min_count=0)`
 
-
 !!! note
-    `prod` is not supported on columns with nested array types
-
+`prod` is not supported on columns with nested array types
 
 ### Example Usage
 
@@ -28,4 +26,3 @@ B
 421  7962624.0  5.417831e+27
 f31       32.0  2.257108e+07
 ```
-  

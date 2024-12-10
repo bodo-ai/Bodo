@@ -1,6 +1,5 @@
 # `pd.DataFrame.duplicated`
 
-
 `pandas.DataFrame.duplicated(subset=None, keep='first')`
 
 ### Supported Arguments : None
@@ -20,4 +19,3 @@
 3    False
 dtype: bool
 ```
-

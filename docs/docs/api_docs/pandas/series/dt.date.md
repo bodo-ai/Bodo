@@ -1,10 +1,10 @@
-# `pd.Series.dt.date
+# \`pd.Series.dt.date
 
-`pandas.Series.dt.date
+\`pandas.Series.dt.date
 
 ### Example Usage
 
-``` py
+```py
 >>> @bodo.jit
 ... def f(S):
 ...     return S.dt.date
@@ -42,4 +42,3 @@
 29    2022-01-10
 dtype: object
 ```
-

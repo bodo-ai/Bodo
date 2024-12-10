@@ -3,7 +3,7 @@
 `pandas.core.groupby.Groupby.cumsum(axis=0)`
 
 !!! note
-    `cumsum` is only supported on numeric columns and is not supported on boolean columns
+`cumsum` is only supported on numeric columns and is not supported on boolean columns
 
 ### Example Usage
 
@@ -43,4 +43,3 @@
 18  125.0  1166167.550
 19    NaN       73.155
 ```
-

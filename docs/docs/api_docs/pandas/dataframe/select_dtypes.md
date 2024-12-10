@@ -4,12 +4,10 @@
 
 ### Supported Arguments
 
-
 - `include`: string, type, List or tuple of string/type
-    - **Must be constant at Compile Time**
+  - **Must be constant at Compile Time**
 - `exclude`: string, type, List or tuple of string/type
-    - **Must be constant at Compile Time**
-
+  - **Must be constant at Compile Time**
 
 ### Example Usage
 
@@ -31,4 +29,3 @@
       D
 0  True
 ```
-

@@ -1,6 +1,5 @@
 # `pd.Timestamp.is_year_start`
 
-
 `pandasTimestamp.is_year_start`
 
 ### Example Usage
@@ -15,5 +14,3 @@
 >>> f()
 (False, True)
 ```
-
-

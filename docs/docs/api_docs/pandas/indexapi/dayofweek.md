@@ -1,6 +1,5 @@
 # `pd.DateTimeIndex.dayofweek`
 
-
 `pandasDatetimeIndex.dayofweek`
 
 ### Example Usage
@@ -14,4 +13,3 @@
 >>> f(I)
 Int64Index([1, 1, 1, 2, 2], dtype='int64')
 ```
-

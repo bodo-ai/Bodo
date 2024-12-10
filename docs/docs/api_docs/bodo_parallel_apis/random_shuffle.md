@@ -1,19 +1,19 @@
 # bodo.random_shuffle
-    
+
 `bodo.random_shuffle(data, seed=None, dests=None, parallel=False)`
 Manually shuffle data evenly across selected ranks.
 
 ### Arguments
-    
-- ``data``: data to shuffle.
-- ``seed``: number to initialze random number generator.
-- ``dests``: selected ranks to distribute shuffled data to. By default, distribution includes all ranks.
-- ``parallel``: flag to indicate whether data is distributed. Default: `False`. Inside JIT default value depends on Bodo's distribution analysis algorithm for the data passed (For more information, see Data Distribution section below).
+
+- `data`: data to shuffle.
+- `seed`: number to initialze random number generator.
+- `dests`: selected ranks to distribute shuffled data to. By default, distribution includes all ranks.
+- `parallel`: flag to indicate whether data is distributed. Default: `False`. Inside JIT default value depends on Bodo's distribution analysis algorithm for the data passed (For more information, see Data Distribution section below).
 
 ### Example Usage
 
 Note that this example uses [SPMD launch mode](../../bodo_parallelism/bodo_parallelism_basics.md#spmd).
-    
+
 ```py
 import bodo
 import pandas as pd
@@ -29,7 +29,7 @@ df = bodo.random_shuffle(res, parallel=True)
 print(df.head())
 ```
 
-Save code in ``test_random_shuffle.py`` file and run with `mpiexec`.
+Save code in `test_random_shuffle.py` file and run with `mpiexec`.
 
 ```shell
 mpiexec -n 4 python test_random_shuffle.py
@@ -91,4 +91,3 @@ Output:
 15  15
 3   28
 ```
-

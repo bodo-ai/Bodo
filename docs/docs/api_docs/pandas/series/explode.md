@@ -5,13 +5,12 @@
 ### Supported Arguments None
 
 !!! note
-    Bodo's output type may differ from Pandas because Bodo must convert
-    to a nullable type at compile time.
-
+Bodo's output type may differ from Pandas because Bodo must convert
+to a nullable type at compile time.
 
 ### Example Usage
 
-``` py
+```py
 >>> @bodo.jit
 ... def f(S):
 ...     return S.explode()
@@ -65,4 +64,3 @@
 9       8
 dtype: Int64
 ```
-

@@ -1,6 +1,5 @@
 # `pd.Timestamp.month`
 
-
 `pandasTimestamp.month`
 
 ### Example Usage
@@ -14,4 +13,3 @@
 >>> f()
 month
 ```
-

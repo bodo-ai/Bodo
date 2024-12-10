@@ -1,6 +1,5 @@
 # UUID_STRING
 
-
 `#!sql UUID_STRING([uuid, name])`
 
 Outputs a UUID (as defined by RFC 4122) formatted as a string. If no

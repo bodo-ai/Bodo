@@ -4,19 +4,19 @@
 
 ### Supported Arguments
 
-| argument  | datatypes                                        | other requirements                   |
+| argument | datatypes | other requirements |
 |-----------|--------------------------------------------------|--------------------------------------|
-| `value`   | Scalar                                           |                                      |
-| `method`  | One of ("bfill", "backfill", "ffill", and "pad") | **Must be constant at Compile Time** |
-| `inplace` | Boolean                                          | **Must be constant at Compile Time** |
+| `value` | Scalar | |
+| `method` | One of ("bfill", "backfill", "ffill", and "pad") | **Must be constant at Compile Time** |
+| `inplace` | Boolean | **Must be constant at Compile Time** |
 
--   If `value` is provided then `method` must be `None` and
-    vice-versa
--   If `method` is provided then `inplace` must be `False`
+- If `value` is provided then `method` must be `None` and
+  vice-versa
+- If `method` is provided then `inplace` must be `False`
 
 ### Example Usage
 
-``` py
+```py
 >>> @bodo.jit
 ... def f(S):
 ...     return S.fillna(-1)
@@ -31,4 +31,3 @@
 6    -1
 dtype: Int64
 ```
-

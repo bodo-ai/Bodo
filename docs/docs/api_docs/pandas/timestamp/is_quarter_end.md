@@ -1,6 +1,5 @@
 # `pd.Timestamp.is_quarter_end`
 
-
 `pandasTimestamp.is_quarter_end`
 
 ### Example Usage
@@ -15,5 +14,3 @@
 >>> f()
 (True, False)
 ```
-
-

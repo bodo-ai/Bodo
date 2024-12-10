@@ -4,18 +4,17 @@
 
 ### Supported Arguments
 
-| argument                    | datatypes                              |
+| argument | datatypes |
 |-----------------------------|----------------------------------------|
-| `periods`                   |    Integer                             |
+| `periods` | Integer |
 
 !!! note
-    - Series type must be numeric
-    - Bodo does not accept any additional arguments to pass to shift
-    
+\- Series type must be numeric
+\- Bodo does not accept any additional arguments to pass to shift
 
 ### Example Usage
 
-``` py
+```py
 >>> @bodo.jit
 ... def f(S):
 ...     return S.pct_change(3)
@@ -34,4 +33,3 @@
 99   -0.666667
 Length: 100, dtype: float64
 ```
-

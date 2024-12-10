@@ -4,13 +4,13 @@
 
 ### Supported Arguments
 
-| argument | datatypes                                                                                                                                                                                                             |
+| argument | datatypes |
 |----------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `arg`    | <ul><li>   Dictionary   </li><li>   JIT function or callable defined within a JIT function </li><li>   Constant String which refers to a supported Series method or Numpy  ufunc  </li><li>   Numpy ufunc  </li></ul> |
+| `arg` | <ul><li> Dictionary </li><li> JIT function or callable defined within a JIT function </li><li> Constant String which refers to a supported Series method or Numpy ufunc </li><li> Numpy ufunc </li></ul> |
 
 ### Example Usage
 
-``` py
+```py
 >>> @bodo.jit
 ... def f(S):
 ...   return S.map(lambda x: x ** 0.75)
@@ -29,4 +29,3 @@
 99    31.385308
 Length: 100, dtype: float64
 ```
-

@@ -1,9 +1,9 @@
 # `pd.Timedelta.microseconds`
 
-
 `pandas.Timedelta.microseconds`
 
 ### Example Usage
+
 ```py
 >>> @bodo.jit
 ... def f():
@@ -11,4 +11,3 @@
 >>> f()
 23
 ```
-

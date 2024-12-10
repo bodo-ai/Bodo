@@ -1,11 +1,10 @@
-# bodo.get_size 
+# bodo.get_size
 
-
-`bodo.get_size()` 
+`bodo.get_size()`
 Get the total number of processes.
 
 ### Example Usage
-    
+
 Save following code in `get_rank.py` file and run with multiple cores.
 
 ```py
@@ -23,7 +22,7 @@ def run_in_parallel():
 run_in_parallel()
 ```
 
-```console 
+```console
 BODO_NUM_WORKERS=4 python get_rank.py
 ```
 
@@ -40,4 +39,3 @@ total ranks: 4
 rank 3 here
 total ranks: 4
 ```
-

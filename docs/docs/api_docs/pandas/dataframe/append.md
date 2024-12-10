@@ -2,7 +2,6 @@
 
 `pandas.DataFrame.append(other, ignore_index=False, verify_integrity=False, sort=False)`
 
-
 ### Supported Arguments
 
 - `other`: DataFrame, list/tuple of DataFrame
@@ -24,4 +23,3 @@
 1 -2  NaN  5.0
 2 -3  NaN  6.0
 ```
-

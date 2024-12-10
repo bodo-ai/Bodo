@@ -5,13 +5,12 @@
 ### Supported Arguments None
 
 !!! note
-    Bodo does not accept any additional arguments for Numpy
-    compatibility
-
+Bodo does not accept any additional arguments for Numpy
+compatibility
 
 ### Example Usage
 
-``` py
+```py
 >>> @bodo.jit
 ... def f(S):
 ...     return S.all()
@@ -19,4 +18,3 @@
 >>> f(S)
 False
 ```
-

@@ -2,7 +2,7 @@
 
 This section discusses some supported Pandas datatypes, potential typing related issues, and ways to resolve them.
 
-##  Supported Pandas Data Types {#pandas-dtype}
+## Supported Pandas Data Types {#pandas-dtype}
 
 Bodo supports the following data types as values in Pandas Dataframe and
 Series data structures. This represents all [Pandas data
@@ -13,22 +13,22 @@ supported in the future). Comparing to Spark, equivalents of all [Spark
 data types](http://spark.apache.org/docs/latest/sql-ref-datatypes.html){target="blank"}
 are supported.
 
- - Numpy booleans: `np.bool_`.
- - Numpy integer data types: `np.int8`, `np.int16`, `np.int32`, `np.int64`, `np.uint8`, `np.uint16`, `np.uint32`, `np.uint64`.
- - Numpy floating point data types: `np.float32`, `np.float64`.
- - Numpy datetime data types: `np.dtype("datetime64[ns]")` and `np.dtype("timedelta[ns]")`. The resolution has to be `ns` currently, which covers most practical use cases.
- - Numpy complex data types: `np.complex64` and `np.complex128`.
- - Strings (including nulls).
- - `datetime.date` values (including nulls).
- - `datetime.timedelta` values (including nulls).
- - Pandas [nullable integers](https://pandas.pydata.org/pandas-docs/stable/user_guide/integer_na.html){target=blank"}.
- - Pandas [nullable booleans](https://pandas.pydata.org/pandas-docs/stable/user_guide/boolean.html){target=blank"}.
- - Pandas [Categoricals](https://pandas.pydata.org/pandas-docs/stable/user_guide/categorical.html){target=blank"}.
- - Lists of other data types.
- - Tuples of other data types.
- - Structs of other data types.
- - Maps of other data types (each map is a set of key-value pairs). All keys should have the same type to ensure type stability. All values should have the same type as well.
- - `decimal.Decimal` values (including nulls). The decimal values are stored as fixed-precision [Apache Arrow Decimal128](https://arrow.apache.org/docs/cpp/api/utilities.html#classarrow_1_1_decimal128) format, which is also similar to [PySpark decimals](https://spark.apache.org/docs/latest/api/python/pyspark.sql.html). The decimal type has a `precision` (the maximum total number of digits) and a `scale` (the number of digits on the right of dot) attribute, specifying how the stored data is interpreted. For example, the (4, 2) case can store from -999.99 to 999.99. The precision can be up to 38, and the scale must be less or equal to precision. Arbitrary-precision Python `decimal.Decimal` values are converted with precision of 38 and scale of 18.
+- Numpy booleans: `np.bool_`.
+- Numpy integer data types: `np.int8`, `np.int16`, `np.int32`, `np.int64`, `np.uint8`, `np.uint16`, `np.uint32`, `np.uint64`.
+- Numpy floating point data types: `np.float32`, `np.float64`.
+- Numpy datetime data types: `np.dtype("datetime64[ns]")` and `np.dtype("timedelta[ns]")`. The resolution has to be `ns` currently, which covers most practical use cases.
+- Numpy complex data types: `np.complex64` and `np.complex128`.
+- Strings (including nulls).
+- `datetime.date` values (including nulls).
+- `datetime.timedelta` values (including nulls).
+- Pandas [nullable integers](https://pandas.pydata.org/pandas-docs/stable/user_guide/integer_na.html){target=blank"}.
+- Pandas [nullable booleans](https://pandas.pydata.org/pandas-docs/stable/user_guide/boolean.html){target=blank"}.
+- Pandas [Categoricals](https://pandas.pydata.org/pandas-docs/stable/user_guide/categorical.html){target=blank"}.
+- Lists of other data types.
+- Tuples of other data types.
+- Structs of other data types.
+- Maps of other data types (each map is a set of key-value pairs). All keys should have the same type to ensure type stability. All values should have the same type as well.
+- `decimal.Decimal` values (including nulls). The decimal values are stored as fixed-precision [Apache Arrow Decimal128](https://arrow.apache.org/docs/cpp/api/utilities.html#classarrow_1_1_decimal128) format, which is also similar to [PySpark decimals](https://spark.apache.org/docs/latest/api/python/pyspark.sql.html). The decimal type has a `precision` (the maximum total number of digits) and a `scale` (the number of digits on the right of dot) attribute, specifying how the stored data is interpreted. For example, the (4, 2) case can store from -999.99 to 999.99. The precision can be up to 38, and the scale must be less or equal to precision. Arbitrary-precision Python `decimal.Decimal` values are converted with precision of 38 and scale of 18.
 
 In addition, it may be desirable to specify type annotations in some
 cases (*e.g.*, [file I/O array input types][non-constant-filepaths]).
@@ -41,7 +41,7 @@ desired Python, Numpy, or Pandas type.
 |---------------|-----------------------------------------|
 | `bodo.bool_[:]`, `bodo.int8[:]`, ..., `bodo.int64[:]`, `bodo.uint8[:]`, ..., `bodo.uint64[:]`, `bodo.float32[:]`, `bodo.float64[:]` | One-dimensional Numpy array of the given type. A full list of supported Numpy types can be found [here](https://numba.readthedocs.io/en/stable/reference/types.html#numbers){target="blank"}. A multidimensional can be specified by adding additional colons (*e.g.*, `bodo.int32[:, :, :]` for a three-dimensional array).|
 | `bodo.string_array_type`| Array of nullable strings|
-| `bodo.IntegerArrayType(integer_type)`|  Array of Pandas nullable integers of the given integer type. <br> *e.g.*, `bodo.IntegerArrayType(bodo.int64)`|
+| `bodo.IntegerArrayType(integer_type)`| Array of Pandas nullable integers of the given integer type. <br> *e.g.*, `bodo.IntegerArrayType(bodo.int64)`|
 | `bodo.boolean_array_type`| Array of Pandas nullable booleans|
 | `bodo.datetime64ns[:]`| Array of Numpy datetime64 values|
 | `bodo.timedelta64ns[:]`|Array of Numpy timedelta64 values|
@@ -63,8 +63,6 @@ desired Python, Numpy, or Pandas type.
 | `bodo.TimedeltaIndexType(name_type)`| Index of timedelta64 values with a given name type.<br> *e.g.*, `bodo.TimedeltaIndexType(bodo.string_type)`|
 | `bodo.SeriesType(dtype=data_type, index=index_type, name_typ=name_type)`| Series with a given data type, index type, and name type. <br> *e.g.*, `bodo.SeriesType(bodo.float32, bodo.DatetimeIndexType(bodo.string_type), bodo.string_type)`|
 | `bodo.DataFrameType(data_types_tuple, index_type, column_names)`| DataFrame with a tuple of data types, an index type, and the names of the columns. <br> *e.g.*, `bodo.DataFrameType((bodo.int64[::1], bodo.float64[::1]), bodo.RangeIndexType(bodo.none), ("A", "B"))`|
-
-
 
 ## Compile Time Constants {#require_constants}
 
@@ -141,7 +139,6 @@ of these can be resolved by making this value a literal. Alternatively,
 some APIs support other ways of specifying the output types, which will
 be indicated in the error message.
 
-
 ## Integer NA issue in Pandas {#integer-na-issue-pandas}
 
 DataFrame and Series objects with integer data need special care due to
@@ -170,7 +167,6 @@ def example(fname):
   )
   ...
 ```
-
 
 ## Type Inference for Object Data
 

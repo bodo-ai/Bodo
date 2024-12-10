@@ -1,6 +1,5 @@
 # `pd.Timestamp.year`
 
-
 `pandasTimestamp.year`
 
 ### Example Usage
@@ -14,5 +13,3 @@
 >>> f()
 2021
 ```
-
-

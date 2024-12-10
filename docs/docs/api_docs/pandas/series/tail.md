@@ -4,13 +4,13 @@
 
 ### Supported Arguments
 
-| argument                    | datatypes                              |
+| argument | datatypes |
 |-----------------------------|----------------------------------------|
-| `n`                         |    Integer                             |
+| `n` | Integer |
 
 ### Example Usage
 
-``` py
+```py
 >>> @bodo.jit
 ... def f(S):
 ...     return S.tail(10)
@@ -28,4 +28,3 @@
 99    99
 dtype: int64
 ```
-

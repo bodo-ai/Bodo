@@ -11,5 +11,3 @@ be ordered before being concatenated. If no clause is specified, then the orderi
 is unpredictable.
 
 Returns `#!sql ''` if the input is all `#!sql NULL` or empty.
-
-

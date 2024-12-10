@@ -1,19 +1,18 @@
 #`pd.to_timedelta`
 
-
 `pandas.to_timedelta(arg, unit=None, errors='raise')`
 
 ### Supported Arguments
 
-| argument           | datatypes          | other requirements                                                                                                                                           |
+| argument | datatypes | other requirements |
 |--------------------|--------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `arg`              | Series, Array or   |                                                                                                                                                              |
-|                    | scalar of integers |                                                                                                                                                              |
-|                    | or strings         |                                                                                                                                                              |
-| `unit`             | String             | <ul><li>Must be a valid Pandas[timedelta unit](https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html#timeseries-offset-aliases) </li></ul> |
+| `arg` | Series, Array or | |
+| | scalar of integers | |
+| | or strings | |
+| `unit` | String | <ul><li>Must be a valid Pandas[timedelta unit](https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html#timeseries-offset-aliases) </li></ul> |
 
 !!! note
-    Passing string data as `arg` is not optimized.
+Passing string data as `arg` is not optimized.
 
 ### Example Usage
 
@@ -32,4 +31,3 @@
 -2   4 days 04:48:00
 Name: AA, dtype: timedelta64[ns]
 ```
-

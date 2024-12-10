@@ -1,6 +1,5 @@
 # `pd.DataFrame.cumprod`
 
-
 `pandas.DataFrame.cumprod(axis=None, skipna=True)`
 
 ### Supported Arguments : None
@@ -19,5 +18,6 @@
 1  2  NaN
 2  6  NaN
 ```
+
 !!! note
-    Not supported for dataframe with nullable integer.
+Not supported for dataframe with nullable integer.

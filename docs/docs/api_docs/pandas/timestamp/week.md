@@ -1,6 +1,5 @@
 # `pd.Timestamp.week`
 
-
 `pandasTimestamp.week`
 
 ### Example Usage
@@ -15,5 +14,3 @@
 >>> f()
 (35, 38)
 ```
-
-

@@ -4,19 +4,21 @@
 
 ### Supported Arguments
 
-| argument  | datatypes           | other requirements                                                                                                                                        |
+| argument | datatypes | other requirements |
 |-----------|---------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `start`   | String or Timestamp |                                                                                                                                                           |
-| `end`     | String or Timestamp |                                                                                                                                                           |
-| `periods` | Integer             |                                                                                                                                                           |
-| `freq`    | String              | <ul><li> Must be a [valid Pandas frequency](https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html#timeseries-offset-aliases) </li></ul> |
-| `name`    | String              |                                                                                                                                                           |
+| `start` | String or Timestamp | |
+| `end` | String or Timestamp | |
+| `periods` | Integer | |
+| `freq` | String | <ul><li> Must be a [valid Pandas frequency](https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html#timeseries-offset-aliases) </li></ul> |
+| `name` | String | |
 
 !!! note
 
-    * Exactly three of `start`, `end`, `periods`, and `freq` must
-      be provided.
-    * Bodo **Does Not** support `kwargs`, even for compatibility.
+```
+* Exactly three of `start`, `end`, `periods`, and `freq` must
+  be provided.
+* Bodo **Does Not** support `kwargs`, even for compatibility.
+```
 
 ### Example Usage
 
@@ -32,4 +34,3 @@ DatetimeIndex(['2018-04-24 00:00:00', '2018-04-25 12:00:00',
               '2018-04-27 00:00:00'],
              dtype='datetime64[ns]', freq=None)
 ```
-

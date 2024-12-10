@@ -1,24 +1,21 @@
 # `pd.timedelta_range`
 
-
 `pandas.timedelta_range(start=None, end=None, periods=None, freq=None, name=None, closed=None)`
-
 
 ### Supported Arguments
 
-| argument  | datatypes                             | other requirements                                                                                                                                              |
+| argument | datatypes | other requirements |
 |-----------|---------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `start`   | String or  Timedelta                  |                                                                                                                                                                 |
-| `end`     | String or  Timedelta                  |                                                                                                                                                                 |
-| `periods` | Integer                               |                                                                                                                                                                 |
-| `freq`    | String                                | <ul><li>   Must be a [valid    Pandas  frequency](https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html#timeseries-offset-aliases) </li></ul> |
-| `name`    | String                                |                                                                                                                                                                 |
-| `closed`  | String and one of   ('left', 'right') |                                                                                                                                                                 |
-
+| `start` | String or Timedelta | |
+| `end` | String or Timedelta | |
+| `periods` | Integer | |
+| `freq` | String | <ul><li> Must be a [valid Pandas frequency](https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html#timeseries-offset-aliases) </li></ul> |
+| `name` | String | |
+| `closed` | String and one of ('left', 'right') | |
 
 !!! note
-    * Exactly three of `start`, `end`, `periods`, and `freq` must be provided.
-    * This function is not parallelized yet.
+\* Exactly three of `start`, `end`, `periods`, and `freq` must be provided.
+\* This function is not parallelized yet.
 
 ### Example Usage
 

@@ -5,11 +5,10 @@
 ### Supported Arguments
 
 - `func`: JIT function, callable defined within a JIT function.
-    - Additional arguments for `func` can be passed as additional arguments.
-
+  - Additional arguments for `func` can be passed as additional arguments.
 
 !!! note
-    `func` cannot be a tuple
+`func` cannot be a tuple
 
 ### Example Usage
 
@@ -33,4 +32,3 @@ B
 421  120.0  1166162.550
 f31    5.0       68.155
 ```
-  

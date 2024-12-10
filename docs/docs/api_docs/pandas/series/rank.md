@@ -4,19 +4,19 @@
 
 ### Supported Arguments
 
-| argument    | datatypes                                             |
+| argument | datatypes |
 |-------------|-------------------------------------------------------|
-| `method`    | String in {'average', 'min', 'max', 'first', 'dense'} |
-| `na_option` | String in {'keep', 'top', 'bottom'}                   |
-| `ascending` | Boolean                                               |
-| `pct`       | Boolean                                               |
+| `method` | String in {'average', 'min', 'max', 'first', 'dense'} |
+| `na_option` | String in {'keep', 'top', 'bottom'} |
+| `ascending` | Boolean |
+| `pct` | Boolean |
 
 !!! note
-    - Using `method='first'`  with `ascending=False` is currently unsupported.
+\- Using `method='first'` with `ascending=False` is currently unsupported.
 
 ### Example Usage
 
-``` py
+```py
 >>> @bodo.jit
 ... def f(S):
 ...     return S.rank(method='dense', na_option='bottom', pct=True)
@@ -30,4 +30,3 @@
 5    1.00
 dtype: float64
 ```
-

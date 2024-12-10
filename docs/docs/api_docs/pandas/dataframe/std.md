@@ -1,14 +1,11 @@
 # `pd.DataFrame.std`
 
-
 `pandas.DataFrame.std(axis=None, skipna=None, level=None, ddof=1, numeric_only=None)`
-
 
 ### Supported Arguments
 
 - `axis`: Integer (0 or 1)
 - **Must be constant at Compile Time**
-
 
 ### Example Usage
 
@@ -24,4 +21,3 @@
 2    3.0
 dtype: float64
 ```
-

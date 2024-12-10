@@ -4,7 +4,7 @@
 
 ### Example Usage
 
-``` py
+```py
 >>> @bodo.jit
 ... def f(S):
 ...     return S.str.capitalize()
@@ -19,5 +19,3 @@
 6    ^ Ef
 dtype: object
 ```
-
-

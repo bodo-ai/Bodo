@@ -4,19 +4,17 @@
 
 ### Supported Arguments
 
-| argument  | datatypes                    | other requirements                                                                    |
+| argument | datatypes | other requirements |
 |-----------|------------------------------|---------------------------------------------------------------------------------------|
-| `indices` | Array like with integer data | To have distributed  data `indices` must be an array with the same distribution as S. |
-
+| `indices` | Array like with integer data | To have distributed data `indices` must be an array with the same distribution as S. |
 
 !!! note
-    Bodo does not accept any additional arguments for Numpy
-    compatibility
-
+Bodo does not accept any additional arguments for Numpy
+compatibility
 
 ### Example Usage
 
-``` py
+```py
 >>> @bodo.jit
 ... def f(S):
 ...     return S.take([2, 7, 4, 19])
@@ -28,4 +26,3 @@
 19    19
 dtype: int64
 ```
-

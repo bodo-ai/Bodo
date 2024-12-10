@@ -2,9 +2,8 @@
 
 `pandas.core.groupby.Groupby.sum(numeric_only=NoDefault.no_default, min_count=0)`
 
-
 !!! note
-    `sum` is not supported on columns with nested array types
+`sum` is not supported on columns with nested array types
 
 ### Example Usage
 
@@ -27,4 +26,3 @@ B
 421  125.0  1166167.550
 f31   10.0       73.155
 ```
-

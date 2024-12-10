@@ -4,13 +4,13 @@
 
 ### Supported Arguments
 
-| argument  | datatypes                                                                                      |
+| argument | datatypes |
 |-----------|------------------------------------------------------------------------------------------------|
-| `repeats` | <ul><li>   Integer </li><li>   Array-like of integers the same length as the Series </li></ul> |
+| `repeats` | <ul><li> Integer </li><li> Array-like of integers the same length as the Series </li></ul> |
 
 ### Example Usage
 
-``` py
+```py
 >>> @bodo.jit
 ... def f(S):
 ...     return S.repeat(3)
@@ -31,4 +31,3 @@ Length: 300, dtype: int64
 ```
 
 ### Combining / comparing / joining / merging
-

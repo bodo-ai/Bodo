@@ -2,7 +2,7 @@
 
 `pandas.Series.str.isspace()`
 
-``` py
+```py
 >>> @bodo.jit
 ... def f(S):
 ...     return S.str.isspace()
@@ -17,4 +17,3 @@
 6    False
 dtype: boolean
 ```
-

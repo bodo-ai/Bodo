@@ -1,10 +1,10 @@
 # pd.Series.T
 
--   `pandas.Series.T`
+- `pandas.Series.T`
 
 ### Example Usage
 
-``` py
+```py
 >>> @bodo.jit
 ... def f(df):
 ...     return df.apply(lambda row: row.T.size, axis=1)
@@ -23,4 +23,3 @@
 99    2
 Length: 100, dtype: int64
 ```
-

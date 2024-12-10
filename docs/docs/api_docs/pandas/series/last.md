@@ -4,20 +4,18 @@
 
 ### Supported Arguments
 
-| argument          | datatypes                 | other requirements                                                                                                                    |
+| argument | datatypes | other requirements |
 |-------------------|---------------------------|---------------------------------------------------------------------------------------------------------------------------------------|
-| `offset`          | -   String or Offset type | -   String argument be a valid [frequency alias](https://pandas.pydata.org/docs/user_guide/timeseries.html#timeseries-offset-aliases) |
-
+| `offset` | - String or Offset type | - String argument be a valid [frequency alias](https://pandas.pydata.org/docs/user_guide/timeseries.html#timeseries-offset-aliases) |
 
 !!! note
-    Series must have a valid DatetimeIndex and is assumed to already be
-    sorted. This function have undefined behavior if the DatetimeIndex
-    is not sorted.
-
+Series must have a valid DatetimeIndex and is assumed to already be
+sorted. This function have undefined behavior if the DatetimeIndex
+is not sorted.
 
 ### Example Usage
 
-``` py
+```py
 >>> @bodo.jit
 ... def f(S, offset):
 ...     return S.last(offset)
@@ -31,4 +29,3 @@
 2024-12-31 00:00:00.000000000    99
 dtype: int64
 ```
-

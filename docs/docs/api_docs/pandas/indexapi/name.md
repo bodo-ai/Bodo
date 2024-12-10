@@ -2,7 +2,6 @@
 
 `pandasIndex.name`
 
-
 ### Example Usage
 
 ```py
@@ -14,4 +13,3 @@
 >>> f(I)
 "hello world"
 ```
-

@@ -1,6 +1,5 @@
 # `pd.DataFrame.idxmax`
 
-
 `pandas.DataFrame.idxmax(axis=0, skipna=True)`
 
 ### Supported Arguments : None
@@ -19,4 +18,3 @@ B    2
 C    2
 dtype: int64
 ```
-

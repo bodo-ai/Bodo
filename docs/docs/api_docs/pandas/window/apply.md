@@ -1,15 +1,13 @@
 # `pd.core.window.rolling.Rolling.apply`
 
-
 `pandas.core.window.rolling.apply(func, raw=False, engine=None, engine_kwargs=None, args=None, kwargs=None)`
 
 ### Supported Arguments
- 
-- `func`: JIT function or callable defined within a JIT function
-    - **Must be constant at Compile Time**
-- `raw`: boolean
-    - **Must be constant at Compile Time**
 
+- `func`: JIT function or callable defined within a JIT function
+  - **Must be constant at Compile Time**
+- `raw`: boolean
+  - **Must be constant at Compile Time**
 
 ### Example Usage
 
@@ -28,5 +26,3 @@ A
 5  0.0
 6  0.0
 ```
-
-

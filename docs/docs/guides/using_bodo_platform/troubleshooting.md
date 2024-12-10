@@ -1,16 +1,16 @@
 # Troubleshooting Guide {#troubleshooting}
 
 Here are solutions to potential issues you may encounter while using the
-Bodo Cloud Platform. 
+Bodo Cloud Platform.
 
 ### Notebook: 403 Forbidden
 
 ![Notebook-403-Error](../../platform2-screenshots/notebook_403_error.png#center)
 
-This error is typically caused by an incorrect token, often occurring when a token is cached from accessing a different workspace. 
+This error is typically caused by an incorrect token, often occurring when a token is cached from accessing a different workspace.
 There are two recommended workarounds:
 
-First, attempt to resolve the issue by navigating back to the organization using the left menu `Back to Organization`. 
+First, attempt to resolve the issue by navigating back to the organization using the left menu `Back to Organization`.
 Once there, re-enter the workspace.
 
 If the problem persists, try clearing your web browser's cache and then logging in to Bodo Platform once more.
@@ -38,5 +38,3 @@ cells by clicking `Edit` > `Clear All Outputs` in the notebook interface.
 
 When you login to the platform, if you get an account locked error with message `User is locked out. To unlock user, please contact your administrators`,
 this means that your account has been dormant (no login in more than 90 days). Please [contact us](https://bodo.ai/contact/){target="blank"} to unlock your account.
-
-[//]: # (TODO: add specific aws and azure troubleshooting)

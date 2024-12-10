@@ -1,6 +1,5 @@
 # `pd.Timestamp.isocalendar`
 
-
 `pandasTimestamp.isocalendar()`
 
 ### Example Usage
@@ -14,5 +13,3 @@
 >>> f()
 (2021, 49, 4)
 ```
-
-

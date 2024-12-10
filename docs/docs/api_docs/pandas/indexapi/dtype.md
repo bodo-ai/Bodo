@@ -1,13 +1,11 @@
 # `pd.Index.dtype`
 
-
 `pandasIndex.dtype`
-
 
 ***Unsupported Index Types***
 
-  - PeriodIndex
-  - IntervalIndex
+- PeriodIndex
+- IntervalIndex
 
 ### Example Usage
 
@@ -19,6 +17,4 @@
 >>> I = pd.Index([1,2,3,4])
 >>> f(I)
 dtype('int64')
-``` 
-
-
+```

@@ -2,10 +2,9 @@
 
 `pandas.core.groupby.Groupby.min(numeric_only=False, min_count=-1)`
 
-
-!!! note      
-    * `min` is not supported on columns with nested array types
-    * Categorical columns must be ordered.
+!!! note\
+\* `min` is not supported on columns with nested array types
+\* Categorical columns must be ordered.
 
 ### Example Usage
 
@@ -28,4 +27,3 @@ B
 421  1.0  1.510
 f31  2.0  2.421
 ```
-

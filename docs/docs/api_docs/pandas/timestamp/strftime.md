@@ -1,6 +1,5 @@
 # `pd.Timestamp.strftime`
 
-
 `pandasTimestamp.strftime(format)`
 
 ### Supported Arguments
@@ -17,5 +16,3 @@
 >>> f()
 '2021-12-09 12:00:00'
 ```
-
-

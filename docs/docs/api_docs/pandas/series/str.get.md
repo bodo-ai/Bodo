@@ -4,11 +4,11 @@
 
 ### Supported Arguments
 
-| argument                    | datatypes                              |
+| argument | datatypes |
 |-----------------------------|----------------------------------------|
-| `i`                         |    Integer                             |
+| `i` | Integer |
 
-``` py
+```py
 >>> @bodo.jit
 ... def f(S):
 ...     return S.str.get(1)
@@ -23,4 +23,3 @@
 6
 dtype: object
 ```
-

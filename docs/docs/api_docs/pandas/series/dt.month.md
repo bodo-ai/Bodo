@@ -5,11 +5,11 @@
 `pandas.Series.dt.month`
 
 !!! note
-	Input must be a Series of `datetime64` data.
+Input must be a Series of `datetime64` data.
 
 ### Example Usage
 
-``` py
+```py
 >>> @bodo.jit
 ... def f(S):
 ...     return S.dt.month
@@ -47,4 +47,3 @@
 29     1
 dtype: Int64
 ```
-

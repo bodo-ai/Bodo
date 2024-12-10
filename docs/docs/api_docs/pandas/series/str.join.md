@@ -4,11 +4,11 @@
 
 ### Supported Arguments
 
-| argument                    | datatypes                              |
+| argument | datatypes |
 |-----------------------------|----------------------------------------|
-| `sep`                       |    String                              |
+| `sep` | String |
 
-``` py
+```py
 >>> @bodo.jit
 ... def f(S):
 ...     return S.str.join(",")
@@ -20,4 +20,3 @@
 3           c
 dtype: object
 ```
-

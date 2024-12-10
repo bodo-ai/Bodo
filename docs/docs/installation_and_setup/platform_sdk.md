@@ -1,9 +1,11 @@
 # Bodo Platform SDK
+
 Bodo Cloud Platform provides a simple SDK that can be integrated in CI/CD pipelines easily.
 For example, compute jobs can be orchestrated
 easily.
 
 <!-- List of contents: -->
+
 <!-- - [Getting Started](#getting-started) -->
 
 ## Getting started {#getting-started}
@@ -13,6 +15,7 @@ Install the latest Bodo SDK using:
 ```console
 pip install bodosdk
 ```
+
 The first step is to create an *API Token* in the Bodo Platform for
 Bodo SDK authentication.
 Navigate to *API Tokens* in the Admin Console to generate a token.

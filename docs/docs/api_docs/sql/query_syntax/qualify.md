@@ -1,7 +1,5 @@
 # QUALIFY
 
-
-
 `#!sql QUALIFY` is similar to `#!sql HAVING`, except it applies filters after computing the results of at least one window function. `#!sql QUALIFY` is used after using `#!sql WHERE` and `#!sql HAVING`.
 
 For example:
@@ -26,4 +24,3 @@ SELECT column_name(s) FROM
     HAVING condition)
 WHERE window_output > 1
 ```
-

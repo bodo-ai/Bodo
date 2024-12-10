@@ -1,4 +1,4 @@
-#  String Functions
+# String Functions
 
 BodoSQL currently supports the following string functions:
 

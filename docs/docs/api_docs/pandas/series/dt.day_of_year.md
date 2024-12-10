@@ -5,11 +5,11 @@
 `pandas.Series.dt.day_of_year`
 
 !!! note
-	Input must be a Series of `datetime64` data.
+Input must be a Series of `datetime64` data.
 
 ### Example Usage
 
-``` py
+```py
 >>> @bodo.jit
 ... def f(S):
 ...     return S.dt.day_of_year
@@ -47,4 +47,3 @@
 29     10
 dtype: Int64
 ```
-

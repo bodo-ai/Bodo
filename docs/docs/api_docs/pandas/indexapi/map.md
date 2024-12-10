@@ -13,7 +13,7 @@
 
 ### Example Usage
 
-```py 
+```py
 >>> @bodo.jit
 ... def f(I):
 ...   return I.map(lambda x: x + 2)
@@ -22,4 +22,3 @@
 >>> f(I)
 Float64Index([3.0, nan, 5.0], dtype='float64')
 ```
-

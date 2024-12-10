@@ -3,37 +3,37 @@
 Below is the list of the data-parallel Numpy operators that Bodo can
 optimize and parallelize.
 
-
 ## Numpy *element-wise* array operations
 
-### Unary operators 
+### Unary operators
 
-- `+` 
+- `+`
 - `-`
 - `~`
 
 ### Binary operators
-- `+` 
-- `-` 
-- `*` 
-- `/` 
+
+- `+`
+- `-`
+- `*`
+- `/`
 - `/?`
-- `%` 
-- `|` 
-- `>>` 
-- `^` 
+- `%`
+- `|`
+- `>>`
+- `^`
 - `<<`
-- `&` 
-- `**` 
+- `&`
+- `**`
 - `//`
 
-### Comparison operators 
+### Comparison operators
 
 - `==`
 - `!=`
-- `<` 
-- `<=` 
-- `>` 
+- `<`
+- `<=`
+- `>`
 - `>=`
 
 ### Data-parallel math operations
@@ -74,26 +74,25 @@ optimize and parallelize.
 
 ### Trigonometric functions
 
- - `numpy.sin`
- - `numpy.cos`
- - `numpy.tan`
- - `numpy.arcsin`
- - `numpy.arccos`
- - `numpy.arctan`
- - `numpy.arctan2`
- - `numpy.hypot`
- - `numpy.sinh`
- - `numpy.cosh`
- - `numpy.tanh`
- - `numpy.arcsinh`
- - `numpy.arccosh`
- - `numpy.arctanh`
- - `numpy.deg2rad`
- - `numpy.rad2deg`
- - `numpy.degrees`
- - `numpy.radians`
- 
- 
+- `numpy.sin`
+- `numpy.cos`
+- `numpy.tan`
+- `numpy.arcsin`
+- `numpy.arccos`
+- `numpy.arctan`
+- `numpy.arctan2`
+- `numpy.hypot`
+- `numpy.sinh`
+- `numpy.cosh`
+- `numpy.tanh`
+- `numpy.arcsinh`
+- `numpy.arccosh`
+- `numpy.arctanh`
+- `numpy.deg2rad`
+- `numpy.rad2deg`
+- `numpy.degrees`
+- `numpy.radians`
+
 ### Bit manipulation functions
 
 - `numpy.bitwise_and`
@@ -103,8 +102,7 @@ optimize and parallelize.
 - `numpy.invert`
 - `numpy.left_shift`
 - `numpy.right_shift`
- 
- 
+
 ### Comparison functions
 
 - `numpy.logical_and`
@@ -148,34 +146,46 @@ optimize and parallelize.
 - `numpy.copy`
 - `numpy.arange`
 - `numpy.linspace`
-- `numpy.repeat`  only scalar `num_repeats`
+- `numpy.repeat` only scalar `num_repeats`
 
 ### Numpy array manipulation functions
 
 - `numpy.shape`
-- `numpy.reshape`   
-  
-    `shape` values cannot be -1.
-   
+
+- `numpy.reshape`
+
+  `shape` values cannot be -1.
+
 - `numpy.sort`
+
 - `numpy.concatenate`
+
 - `numpy.append`
-- `numpy.unique`  The output is assumed to be "small" relative to input and is replicated.
-                  Use `Series.drop_duplicates()` if the output should remain distributed.
+
+- `numpy.unique` The output is assumed to be "small" relative to input and is replicated.
+  Use `Series.drop_duplicates()` if the output should remain distributed.
 
 - `numpy.where` (1 and 3 arguments)
-- `numpy.select`  The default value for numeric/boolean types is `0/False`. For all other
-                  types, the default is `pd.NA`. If any of the values in
-                  `choicelist` are nullable, or the default is `pd.NA` or `None`, the
-                  output will be a nullable pandas array instead of a numpy
-                  array.  
+
+- `numpy.select` The default value for numeric/boolean types is `0/False`. For all other
+  types, the default is `pd.NA`. If any of the values in
+  `choicelist` are nullable, or the default is `pd.NA` or `None`, the
+  output will be a nullable pandas array instead of a numpy
+  array.
+
 - `numpy.nan_to_num` converts infinity/NaN values to regular floats.
+
 - `numpy.union1d`
-- `numpy.intersect1d`  no distributed support yet
-- `numpy.setdiff1d`  no distributed support yet
-- `numpy.hstack`  concatenates elements on each rank without maintaining order
-- `numpy.tile`  Supported in 2 cases: the array is 2D and `reps` is in the form `(1, x)`, or
-                the array is 1D and `reps` is in the form `(x, 1)`.   
+
+- `numpy.intersect1d` no distributed support yet
+
+- `numpy.setdiff1d` no distributed support yet
+
+- `numpy.hstack` concatenates elements on each rank without maintaining order
+
+- `numpy.tile` Supported in 2 cases: the array is 2D and `reps` is in the form `(1, x)`, or
+  the array is 1D and `reps` is in the form `(x, 1)`.
+
 - `numpy.ndarray.T` distributed array transpose is supported for 2D arrays.
 
 ## Numpy mathematical and statistics functions
@@ -218,34 +228,33 @@ optimize and parallelize.
 - `numpy.random.randint`
 - `numpy.random.triangular`
 
-## `numpy.dot` function 
+## `numpy.dot` function
 
 - `numpy.dot` between a matrix and a vector or between two vectors.
 
+## Numpy I/O
 
-##  Numpy I/O
-
-- `numpy.ndarray.tofile` 
+- `numpy.ndarray.tofile`
 - `numpy.fromfile` supports reading binary files. `file`, `dtype`, `count`, and `offset` arguments are supported (`file` and `dtype` are required). `file` should be a string. `s3://` and `hdfs://` file paths are also supported.
 
 Our documentation on scalable I/O contains [example usage and more system specific instructions][numpy-binary-section].
-
 
 ## Numpy matrix support
 
 - `numpy.asmatrix` parallelized only for array or matrix input.
 - `*` left-hand side argument can be distributed but right-hand side argument is replicated.
 
-##  Miscellaneous
+## Miscellaneous
 
-- Numpy array comprehension : e.g. : A = np.array([i**2 for i in range(N)])
-  
-  
+- Numpy array comprehension : e.g. : A = np.array([i\*\*2 for i in range(N)])
+
 !!! note
 
-    Optional arguments are not supported unless if explicitly mentioned
-    here. For operations on multi-dimensional arrays, automatic broadcast of
-    dimensions of size 1 is not supported.
+```
+Optional arguments are not supported unless if explicitly mentioned
+here. For operations on multi-dimensional arrays, automatic broadcast of
+dimensions of size 1 is not supported.
+```
 
 ## Numpy dot() Parallelization
 
@@ -295,16 +304,14 @@ The first `dot` has a 1D array with `1D_Block`
 distribution as first input `Y`, while the second input `X` is
 a 2D array with `1D_Block` distribution.
 Hence, `dot` is a sum reduction across distributed datasets
-and therefore, the output (`w`) is on the `reduce` side and is 
+and therefore, the output (`w`) is on the `reduce` side and is
 assigned `REP` distribution.
-
 
 The second `dot` has a 2D array with `1D_Block`
 distribution (`X`) as first input, while the second input is
 a REP array (`w`). Hence, the computation is data-parallel
 across rows of `X`, which implies a `1D_Block`
 distribution for output (`z`).
-
 
 Variable `z` does not exist in the distribution report since
 the compiler optimizations were able to eliminate it. Its values are

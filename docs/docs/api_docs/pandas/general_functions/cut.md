@@ -4,11 +4,11 @@
 
 ### Supported Arguments
 
-|argument                 |    datatypes             |
+|argument | datatypes |
 |-------------------------|--------------------------|
-|`x`                      |    Series or Array like  |
-|`bins`                   |    Integer or Array like |
-|`include_lowest`         |    Boolean               |
+|`x` | Series or Array like |
+|`bins` | Integer or Array like |
+|`include_lowest` | Boolean |
 
 ### Example Usage
 

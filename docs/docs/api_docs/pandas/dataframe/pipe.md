@@ -1,17 +1,17 @@
 # `pd.DataFrame.pipe`
 
-
-- pandas.DataFrame.pipe(func, *args, **kwargs)
-
+- pandas.DataFrame.pipe(func, \*args, \*\*kwargs)
 
 ### Supported Arguments
 
 - `func`: JIT function or callable defined within a JIT function.
-    - Additional arguments for `func` can be passed as additional arguments.
+  - Additional arguments for `func` can be passed as additional arguments.
 
 !!! note
 
-    `func` cannot be a tuple
+```
+`func` cannot be a tuple
+```
 
 ### Example Usage
 
@@ -28,4 +28,3 @@
 A    10000
 dtype: int64
 ```
-

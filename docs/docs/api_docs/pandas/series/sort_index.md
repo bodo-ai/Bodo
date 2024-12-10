@@ -4,14 +4,14 @@
 
 ### Supported Arguments
 
-| argument      | datatypes                | other requirements                    |
+| argument | datatypes | other requirements |
 |---------------|--------------------------|---------------------------------------|
-| `ascending`   | Boolean                  |                                       |
-| `na_position` | One of ("first", "last") | **Must be constant at  Compile Time** |
+| `ascending` | Boolean | |
+| `na_position` | One of ("first", "last") | **Must be constant at Compile Time** |
 
 ### Example Usage
 
-``` py
+```py
 >>> @bodo.jit
 ... def f(S):
 ...     return S.sort_index()
@@ -30,4 +30,3 @@
 99     0
 Length: 100, dtype: int64
 ```
-

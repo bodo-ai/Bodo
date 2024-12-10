@@ -1,6 +1,5 @@
 # `pd.DataFrame.describe`
 
-
 `pandas.DataFrame.describe(percentiles=None, include=None, exclude=None, datetime_is_numeric=False)`
 
 ### Supported Arguments : None
@@ -26,5 +25,4 @@ std    1.0                  NaN
 ```
 
 !!! note
-    Only supported for dataframes containing numeric data, and datetime data. Datetime_is_numeric defaults to True in JIT code.
-
+Only supported for dataframes containing numeric data, and datetime data. Datetime_is_numeric defaults to True in JIT code.

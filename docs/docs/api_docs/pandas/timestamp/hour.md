@@ -1,6 +1,5 @@
 # `pd.Timestamp.hour`
 
-
 `pandasTimestamp.hour`
 
 ### Example Usage
@@ -14,4 +13,3 @@
 >>> f()
 9
 ```
-

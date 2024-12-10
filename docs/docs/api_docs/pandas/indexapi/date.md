@@ -1,6 +1,5 @@
 # `pd.DateTimeIndex.date`
 
-
 `pandasDatetimeIndex.date`
 
 ### Example Usage
@@ -14,5 +13,3 @@
 >>> f(I)
 [datetime.date(2019, 12, 31) datetime.date(2019, 12, 31) datetime.date(2019, 12, 31) datetime.date(2020, 1, 1) datetime.date(2020, 1, 1)]
 ```
-
-

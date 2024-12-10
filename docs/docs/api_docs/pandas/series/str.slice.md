@@ -4,13 +4,13 @@
 
 ### Supported Arguments
 
-| argument                    | datatypes                         |
+| argument | datatypes |
 |-----------------------------|-----------------------------------|
-| `start`                     |    Integer                        |
-| `stop`                      |   Integer                         |
-| `step`                      |  Integer                          |
+| `start` | Integer |
+| `stop` | Integer |
+| `step` | Integer |
 
-``` py
+```py
 >>> @bodo.jit
 ... def f(S):
 ...     return S.str.slice(1, 4)
@@ -25,4 +25,3 @@
 6    #
 dtype: object
 ```
-

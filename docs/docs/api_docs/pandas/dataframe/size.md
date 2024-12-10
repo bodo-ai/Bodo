@@ -2,15 +2,16 @@
 
 `pandas.DataFrame.size`
 
-    ### Example Usage
+````
+### Example Usage
 
-    ```py
+```py
 
-    >>> @bodo.jit
-    ... def f():
-    ...   df = pd.DataFrame({"A": [1,2,3], "B": [3,4,5]})
-    ...   return df.size
-    >>> f()
-    6
-    ```
-
+>>> @bodo.jit
+... def f():
+...   df = pd.DataFrame({"A": [1,2,3], "B": [3,4,5]})
+...   return df.size
+>>> f()
+6
+```
+````
