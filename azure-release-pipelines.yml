@@ -1,9 +1,5 @@
-
 # Azure Pipeline that is triggered weekdays at midnight or when a release is tagged.
-
-trigger:
-- refs/tags/*
-
+trigger: none
 pr: none
 
 # Currently nightly can take up to ~12 hours to run. 1 AM is a good time to start.
@@ -142,14 +138,3 @@ stages:
         TEST_2P:
           NP: 2
           PYTEST_MARKER: "spawn_mode"
-
-# Comment out till OOM issue is resolved.
-# Tests already run on PR CI
-# Java Unit Tests
-# - stage: Test_BodoSQL_Maven
-#   displayName: 'Test BodoSQL Maven Unit Tests'
-#   dependsOn: []
-#   jobs:
-#   - template: buildscripts/bodosql/azure/azure-test-mvn-linux.yml
-#     parameters:
-#       name: BODOSQL_maven_unit_tests
