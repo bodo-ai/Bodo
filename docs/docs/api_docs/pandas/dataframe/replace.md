@@ -2,13 +2,12 @@
 
 `pandas.DataFrame.replace(to_replace=None, value=None, inplace=False, limit=None, regex=False, method='pad')`
 
-
 ### Supported Arguments
 
 - `to_replace`: various scalars
-    - **Required argument**
+  - **Required argument**
 - `value`: various scalars
-    -  Must be of the same type as to_replace
+  - Must be of the same type as to_replace
 
 ### Example Usage
 
@@ -24,6 +23,3 @@
 1  2  5  8
 2  3  6  9
 ```
-
-
-

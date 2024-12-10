@@ -1,8 +1,6 @@
 # `pd.DataFrame.tail`
 
-
 `pandas.DataFrame.tail(n=5)`
-
 
 ### Supported Arguments
 
@@ -21,8 +19,3 @@
 998  998
 999  999
 ```
-
-
-
-
-

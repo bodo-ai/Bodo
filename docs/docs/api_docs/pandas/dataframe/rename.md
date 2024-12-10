@@ -1,18 +1,16 @@
 # `pd.DataFrame.rename`
 
-
 `pandas.DataFrame.rename(mapper=None, index=None, columns=None, axis=None, copy=True, inplace=False, level=None, errors='ignore')`
 
 ### Supported Arguments
 
-
 - `mapper`: must be constant dictionary.
-    - Can only be used alongside axis=1
+  - Can only be used alongside axis=1
 - `columns`: must be constant dictionary
 - `axis`: Integer
-    - Can only be used alongside mapper argument
+  - Can only be used alongside mapper argument
 - `copy`: boolean
-- `inplace`:  must be constant boolean
+- `inplace`: must be constant boolean
 
 ### Example Usage
 
@@ -28,4 +26,3 @@
 1  2  5  8
 2  3  6  9
 ```
-

@@ -1,6 +1,5 @@
 # `pd.Timestamp.dayofweek`
 
-
 `pandasTimestamp.dayofweek`
 
 ### Example Usage
@@ -14,5 +13,3 @@
 >>> f()
 343
 ```
-
-

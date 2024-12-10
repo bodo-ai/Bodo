@@ -2,18 +2,16 @@
 
 `pandas.Series.groupby(by=None, axis=0, level=None, as_index=True, sort=True, group_keys=True, squeeze=NoDefault.no_default, observed=False, dropna=True)`
 
-
 ### Supported Arguments
 
 - `by`: Array-like or Series data. This is not supported with Decimal or Categorical data.
-    - **Must be constant at Compile Time**
+  - **Must be constant at Compile Time**
 - `level`: integer
-    - **Must be constant at Compile Time**
-    - Only `level=0` is supported and not with MultiIndex.
-
+  - **Must be constant at Compile Time**
+  - Only `level=0` is supported and not with MultiIndex.
 
 !!! info "Important"
-    You must provide exactly one of `by` and `level`
+You must provide exactly one of `by` and `level`
 
 ### Example Usage
 
@@ -32,5 +30,4 @@ Name: , dtype: int64
 ```
 
 !!! note
-    `Series.groupby` doesn't currently keep the name of the original Series.
-
+`Series.groupby` doesn't currently keep the name of the original Series.

@@ -4,16 +4,16 @@
 
 ### Supported Arguments
 
-| argument | datatypes                                                                          | other requirements                                                                                               |
+| argument | datatypes | other requirements |
 |----------|------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------|
-| `by`     | Array-like or Series data. This is not supported with Decimal or Categorical data. | **Must be constant at  Compile Time**                                                                            |
-| `level`  | integer                                                                            | <ul><li>   **Must be constant at  Compile Time** </li><li> Only `level=0` is supported and not  with MultiIndex. |
+| `by` | Array-like or Series data. This is not supported with Decimal or Categorical data. | **Must be constant at Compile Time** |
+| `level` | integer | <ul><li> **Must be constant at Compile Time** </li><li> Only `level=0` is supported and not with MultiIndex. |
 
 You must provide exactly one of `by` and `level`
 
 ### Example Usage
 
-``` py
+```py
 >>> @bodo.jit
 ... def f(S, by_series):
 ...     return S.groupby(by_series).count()
@@ -27,7 +27,5 @@ Name: , dtype: int64
 ```
 
 !!! note
-    `Series.groupby` doesn't currently keep the name of the original
-    Series.
-
-
+`Series.groupby` doesn't currently keep the name of the original
+Series.

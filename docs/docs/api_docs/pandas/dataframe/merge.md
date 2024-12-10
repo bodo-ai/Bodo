@@ -1,11 +1,9 @@
 # `pd.DataFrame.merge`
 
-
 `pandas.DataFrame.merge(right, how='inner', on=None, left_on=None, right_on=None, left_index=False, right_index=False, sort=False, suffixes=('_x', '_y'), copy=True, indicator=False, validate=None)`
 
-
 !!! note
-    See [`pd.merge`][pdmerge] for full list of supported arguments, and more examples.
+See \[`pd.merge`\][pdmerge] for full list of supported arguments, and more examples.
 
 ### Example Usage
 
@@ -21,8 +19,3 @@
 1  1  4 -2  4
 2  3  6 -3  6
 ```
-
-
-
-
-

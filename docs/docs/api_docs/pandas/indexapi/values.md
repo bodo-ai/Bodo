@@ -2,11 +2,10 @@
 
 `pandasIndex.values`
 
-
 ***Unsupported Index Types***
 
-  - MultiIndex
-  - IntervalIndex
+- MultiIndex
+- IntervalIndex
 
 ### Example Usage
 
@@ -20,5 +19,3 @@
 >>> f(I)
 [1 2 3]
 ```
-
-

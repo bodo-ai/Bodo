@@ -4,11 +4,11 @@
 
 ### Supported Arguments
 
-| argument                    | datatypes                              |
+| argument | datatypes |
 |-----------------------------|----------------------------------------|
-| `to_strip`                  |    String                              |
+| `to_strip` | String |
 
-``` py
+```py
 >>> @bodo.jit
 ... def f(S):
 ...     return S.str.lstrip("c")
@@ -23,4 +23,3 @@
 6    ^ Ef
 dtype: object
 ```
-

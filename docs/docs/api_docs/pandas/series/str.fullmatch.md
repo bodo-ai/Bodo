@@ -4,13 +4,13 @@
 
 ### Supported Arguments
 
-| argument                    | datatypes                            |
+| argument | datatypes |
 |-----------------------------|--------------------------------------|
-| `pat`                       |    String                            |
-| `case`                      |    Boolean                           |
-| `flags`                     |    Integer                           |
+| `pat` | String |
+| `case` | Boolean |
+| `flags` | Integer |
 
-``` py
+```py
 >>> @bodo.jit
 ... def f(S):
 ...     return S.str.fullmatch("ab.*")

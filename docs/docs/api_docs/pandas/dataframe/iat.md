@@ -1,13 +1,10 @@
 # `pd.DataFrame.iat`
 
-
 `pandas.DataFrame.iat`
 
-
 !!! note
-    We only support indexing using `iat` using a pair of integers. We require that the second int
-    (the column integer) is a compile time constant
-
+We only support indexing using `iat` using a pair of integers. We require that the second int
+(the column integer) is a compile time constant
 
 ### Example Usage
 
@@ -24,4 +21,3 @@
 1  2  5  8
 2  3  6  9
 ```
-

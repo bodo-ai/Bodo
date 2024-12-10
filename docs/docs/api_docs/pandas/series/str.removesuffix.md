@@ -4,11 +4,11 @@
 
 ### Supported Arguments
 
-| argument                    | datatypes                              |
+| argument | datatypes |
 |-----------------------------|----------------------------------------|
-| `suffix`                    |    String                              |
+| `suffix` | String |
 
-``` py
+```py
 >>> @bodo.jit
 ... def f(S):
 ...     return S.str.removesuffix("b")
@@ -23,4 +23,3 @@
 6       xa
 dtype: string
 ```
-

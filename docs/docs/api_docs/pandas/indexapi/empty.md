@@ -1,8 +1,6 @@
 # `pd.Index.empty`
 
-
 `pandasIndex.empty`
-
 
 ### Example Usage
 
@@ -15,5 +13,3 @@
 >>> f(I)
 False
 ```
-
-

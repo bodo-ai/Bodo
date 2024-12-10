@@ -4,7 +4,6 @@
 
 - `sklearn.preprocessing.LabelEncoder`
 
-
 This class provides LabelEncoder support to encode target labels `y`
 with values between 0 and n-classes-1.
 
@@ -14,29 +13,31 @@ with values between 0 and n-classes-1.
 
 - `sklearn.preprocessing.LabelEncoder.fit(y)`
 
-    ***Supported Arguments***
-    <br>
-    <br>
-    -   `y`: 1d array-like.
+  ***Supported Arguments***
+  <br>
+  <br>
+
+  - `y`: 1d array-like.
 
 #### sklearn.preprocessing.LabelEncoder.fit_transform
 
 - `sklearn.preprocessing.LabelEncoder.fit_transform(y)`
 
-    ***Supported Arguments***
-    <br>
-    <br>
-    -   `y`: 1d array-like.
+  ***Supported Arguments***
+  <br>
+  <br>
 
+  - `y`: 1d array-like.
 
 #### sklearn.preprocessing.LabelEncoder.transform
 
 - `sklearn.preprocessing.LabelEncoder.transform(y)`
 
-    ***Supported Arguments***
-    <br>
-    <br>
-    -   `y`: 1d array-like.
+  ***Supported Arguments***
+  <br>
+  <br>
+
+  - `y`: 1d array-like.
 
 ### Example Usage
 
@@ -54,43 +55,44 @@ with values between 0 and n-classes-1.
 [0 0 1 2]
 ```
 
-
 ## sklearn.preprocessing.MinMaxScaler
 
 `sklearn.preprocessing.MinMaxScaler`
 
-
 This class provides MinMax Scaler support to scale your data based on
 the range of its features.
- 
+
 ### Methods
- 
+
 #### sklearn.preprocessing.MinMaxScaler.fit
 
 - `sklearn.preprocessing.MinMaxScaler.fit(X, y=None)`
 
-    ***Supported Arguments***
-    <br>
-    <br>
-    -   `X`: NumPy array or Pandas Dataframes.
+  ***Supported Arguments***
+  <br>
+  <br>
+
+  - `X`: NumPy array or Pandas Dataframes.
 
 #### sklearn.preprocessing.MinMaxScaler.inverse_transform
 
 - `sklearn.preprocessing.MinMaxScaler.inverse_transform(X)`
 
-    ***Supported Arguments***
-    <br>
-    <br>
-    -   `X`: NumPy array or Pandas Dataframes.
+  ***Supported Arguments***
+  <br>
+  <br>
+
+  - `X`: NumPy array or Pandas Dataframes.
 
 #### sklearn.preprocessing.MinMaxScaler.transform
 
 - `sklearn.preprocessing.MinMaxScaler.transform(X)`
-    
-    ***Supported Arguments***
-    <br>
-    <br>
-    -   `X`: NumPy array or Pandas Dataframes.
+
+  ***Supported Arguments***
+  <br>
+  <br>
+
+  - `X`: NumPy array or Pandas Dataframes.
 
 ### Example Usage
 
@@ -110,12 +112,11 @@ the range of its features.
  [0.25 0.25]
  [0.5  0.5 ]
  [1.   1.  ]]
-```   
+```
 
 ## sklearn.preprocessing.StandardScaler
 
 `sklearn.preprocessing.StandardScaler`
-
 
 This class provides Standard Scaler support to center your data and to
 scale it to achieve unit variance.
@@ -126,34 +127,36 @@ scale it to achieve unit variance.
 
 - `sklearn.preprocessing.StandardScaler.fit(X, y=None, sample_weight=None)`
 
+  ***Supported Arguments***
+  <br>
+  <br>
 
-    ***Supported Arguments***
-    <br>
-    <br>
-    -   `X`: NumPy Array or Pandas Dataframes.
-    -   `y`: NumPy Array.
-    -   `sample_weight`: Numeric NumPy Array (only if data is not
-            distributed)
+  - `X`: NumPy Array or Pandas Dataframes.
+  - `y`: NumPy Array.
+  - `sample_weight`: Numeric NumPy Array (only if data is not
+    distributed)
 
 #### sklearn.preprocessing.StandardScaler.inverse_transform
 
 - `sklearn.preprocessing.StandardScaler.inverse_transform(X, copy=None)`
 
-    ***Supported Arguments***
-    <br>
-    <br>
-    -   `X`: NumPy Array or Pandas Dataframes.
-    -   `copy`: bool or None.
+  ***Supported Arguments***
+  <br>
+  <br>
+
+  - `X`: NumPy Array or Pandas Dataframes.
+  - `copy`: bool or None.
 
 #### sklearn.preprocessing.StandardScaler.transform
 
 - `sklearn.preprocessing.StandardScaler.transform(X, copy=None)`
 
-    ***Supported Arguments***
-    <br>
-    <br>
-    -   `X`: NumPy Array or Pandas Dataframes.
-    -   `copy`: bool or None.
+  ***Supported Arguments***
+  <br>
+  <br>
+
+  - `X`: NumPy Array or Pandas Dataframes.
+  - `copy`: bool or None.
 
 ### Example Usage
 
@@ -176,45 +179,46 @@ scale it to achieve unit variance.
 ...
 >>> test_linearsvc(X, y)
 [1]
-```      
-
+```
 
 ## sklearn.preprocessing.RobustScaler
 
 `sklearn.preprocessing.RobustScaler`
 
-
 This class provides Robust Scaler support to scale your data while being
 robust to outliers.
- 
+
 ### Methods
- 
+
 #### sklearn.preprocessing.RobustScaler.fit
 
 - `sklearn.preprocessing.RobustScaler.fit(X, y=None)`
 
-    ***Supported Arguments***
-    <br>
-    <br>
-    -   `X`: NumPy array or Pandas DataFrame. Sparse matrices are not yet supported.
+  ***Supported Arguments***
+  <br>
+  <br>
+
+  - `X`: NumPy array or Pandas DataFrame. Sparse matrices are not yet supported.
 
 #### sklearn.preprocessing.RobustScaler.inverse_transform
 
 - `sklearn.preprocessing.RobustScaler.inverse_transform(X)`
 
-    ***Supported Arguments***
-    <br>
-    <br>
-    -   `X`: NumPy array or Pandas DataFrame. Sparse matrices are not yet supported.
+  ***Supported Arguments***
+  <br>
+  <br>
+
+  - `X`: NumPy array or Pandas DataFrame. Sparse matrices are not yet supported.
 
 #### sklearn.preprocessing.RobustScaler.transform
 
 - `sklearn.preprocessing.RobustScaler.transform(X)`
-    
-    ***Supported Arguments***
-    <br>
-    <br>
-    -   `X`: NumPy array or Pandas DataFrame. Sparse matrices are not yet supported.
+
+  ***Supported Arguments***
+  <br>
+  <br>
+
+  - `X`: NumPy array or Pandas DataFrame. Sparse matrices are not yet supported.
 
 ### Example Usage
 

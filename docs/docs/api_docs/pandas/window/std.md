@@ -1,6 +1,5 @@
 # `pd.core.window.rolling.Rolling.std`
 
-
 `pandas.core.window.rolling.Rolling.std(ddof=1)`
 
 ### Supported Arguments: None
@@ -22,4 +21,3 @@
 5  1.0  NaN
 6  1.0  1.0
 ```
-    

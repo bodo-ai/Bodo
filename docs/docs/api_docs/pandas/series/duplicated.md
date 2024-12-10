@@ -6,7 +6,7 @@
 
 ### Example Usage
 
-``` py
+```py
 >>> @bodo.jit
 ... def f(S):
 ...  return S.duplicated()
@@ -22,4 +22,3 @@
 7    False
 dtype: bool
 ```
-

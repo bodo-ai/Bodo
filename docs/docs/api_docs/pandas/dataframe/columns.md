@@ -13,4 +13,3 @@
 >>> f()
 Index(['A', 'B', 'C'], dtype='object')
 ```
-

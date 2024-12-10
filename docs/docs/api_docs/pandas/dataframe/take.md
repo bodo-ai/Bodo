@@ -2,7 +2,6 @@
 
 `pandas.DataFrame.take(indices, axis=0, is_copy=None)`
 
-
 ### Supported Arguments
 
 - indices: scalar Integer, Pandas Integer Array, Numpy Integer Array, Integer Series
@@ -20,6 +19,3 @@
 2  3  6  9
 1  2  5  8
 ```
-
-
-

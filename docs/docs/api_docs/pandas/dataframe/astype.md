@@ -4,12 +4,11 @@
 
 ### Supported Arguments
 
-
 - `dtype`: dict of string column names keys, and Strings/types values. String (string must be parsable by `np.dtype`), Valid type (see types), The following functions: float, int, bool, str
-    - **Must be constant at Compile Time**
+
+  - **Must be constant at Compile Time**
 
 - `copy`: boolean
-
 
 ### Example Usage
 
@@ -25,4 +24,3 @@
 1  2.0 1970-01-01 00:00:00.000000004
 2  3.0 1970-01-01 00:00:00.000000005
 ```
-

@@ -6,17 +6,16 @@
 
 | argument | datatypes |
 |----------|-----------|
-| `skipna` | Boolean   |
+| `skipna` | Boolean |
 
 !!! note
-    - Series type must be numeric
-    - Bodo does not accept any additional arguments to pass to the
-    function
-
+\- Series type must be numeric
+\- Bodo does not accept any additional arguments to pass to the
+function
 
 ### Example Usage
 
-``` py
+```py
 >>> @bodo.jit
 ... def f(S):
 ...     return S.kurtosis()
@@ -24,4 +23,3 @@
 >>> f(S)
 -1.269562153611973
 ```
-

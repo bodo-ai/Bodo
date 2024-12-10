@@ -4,13 +4,13 @@
 
 ### Supported Arguments
 
-| argument | datatypes | other requirements                                                                                                          |
+| argument | datatypes | other requirements |
 |----------|-----------|-----------------------------------------------------------------------------------------------------------------------------|
-| `freq`   | String    | Must be a valid fixed[frequency alias](https://pandas.pydata.org/docs/user_guide/timeseries.html#timeseries-offset-aliases) |
+| `freq` | String | Must be a valid fixed[frequency alias](https://pandas.pydata.org/docs/user_guide/timeseries.html#timeseries-offset-aliases) |
 
 ### Example Usage
 
-``` py
+```py
 >>> @bodo.jit
 ... def f(S):
 ...     return S.dt.round("H")
@@ -48,4 +48,3 @@
 29   2022-01-10 00:00:00
 dtype: datetime64[ns]
 ```
-

@@ -2,7 +2,6 @@
 
 `pandas.core.groupby.Groupby.size()`
 
-
 ### Example Usage
 
 ```py
@@ -24,4 +23,3 @@ B
 f31    10
 dtype: int64
 ```
-  

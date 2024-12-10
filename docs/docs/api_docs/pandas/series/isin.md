@@ -4,18 +4,17 @@
 
 ### Supported Arguments
 
-| argument | datatypes                                                   |
+| argument | datatypes |
 |----------|-------------------------------------------------------------|
-| `values` | <ul><li>   Series </li><li> Array </li><li> List </li></ul> |
+| `values` | <ul><li> Series </li><li> Array </li><li> List </li></ul> |
 
 !!! note
-    `values` argument supports both distributed array/Series
-    and replicated list/array/Series
-
+`values` argument supports both distributed array/Series
+and replicated list/array/Series
 
 ### Example Usage
 
-``` py
+```py
 >>> @bodo.jit
 ... def f(S):
 ...     return S.isin([3, 11, 98])
@@ -34,4 +33,3 @@
 99    False
 Length: 100, dtype: bool
 ```
-

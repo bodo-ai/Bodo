@@ -4,9 +4,9 @@
 
 ### Supported Arguments
 
-| argument | datatypes                                    |
+| argument | datatypes |
 |----------|----------------------------------------------|
-| `values` | Series or 1-d array  with Categorical dtypes |
+| `values` | Series or 1-d array with Categorical dtypes |
 
 ### Example Usage
 

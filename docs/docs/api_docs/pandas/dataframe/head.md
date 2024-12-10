@@ -1,8 +1,6 @@
 # `pd.DataFrame.head`
 
-
 `pandas.DataFrame.head(n=5)`
-
 
 ### Supported Arguments
 
@@ -20,4 +18,3 @@
     1  1
     2  2
 ```
-

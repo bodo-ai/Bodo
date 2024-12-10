@@ -4,19 +4,19 @@
 
 ### Supported Arguments:
 
-  - `repeat`: can be a non-negative integer or array of non-negative integers
+- `repeat`: can be a non-negative integer or array of non-negative integers
 
 ***Supported Index Types***
 
-  - NumericIndex
-  - StringIndex
-  - RangeIndex
-  - DatetimeIndex
-  - TimedeltaIndex
-  - CategoricalIndex
+- NumericIndex
+- StringIndex
+- RangeIndex
+- DatetimeIndex
+- TimedeltaIndex
+- CategoricalIndex
 
 !!! info "Important"
-      If repeats is an integer array but its size is not the same as the length of I, undefined behavior may occur.
+If repeats is an integer array but its size is not the same as the length of I, undefined behavior may occur.
 
 ### Example Usage
 
@@ -31,5 +31,3 @@ Index(['A', 'A', 'A', 'B', 'B', 'B', 'C', 'C', 'C'], dtype='object')
 ```
 
 ### Missing values
-
-

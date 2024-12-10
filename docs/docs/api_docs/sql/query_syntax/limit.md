@@ -1,7 +1,5 @@
 # LIMIT
 
-
-
 BodoSQL supports the `#!sql LIMIT` keyword to select a limited number
 of rows. This keyword can optionally include an offset:
 
@@ -11,6 +9,7 @@ FROM <TABLE_NAME>
 WHERE <CONDITION>
 LIMIT <LIMIT_NUMBER> OFFSET <OFFSET_NUMBER>
 ```
+
 For Example:
 
 ```sql
@@ -18,16 +17,19 @@ SELECT A FROM table1 LIMIT 5
 
 SELECT B FROM table2 LIMIT 8 OFFSET 3
 ```
+
 Specifying a limit and offset can be also be written as:
 
 ```sql
 LIMIT <OFFSET_NUMBER>, <LIMIT_NUMBER>
 ```
+
 For Example:
 
 ```sql
 SELECT B FROM table2 LIMIT 3, 8
 ```
+
 ### Example Usage
 
 ```py
@@ -67,4 +69,3 @@ SELECT B FROM table2 LIMIT 3, 8
 4  Demetrius Chavez
 5  Weston Jefferson
 ```
-

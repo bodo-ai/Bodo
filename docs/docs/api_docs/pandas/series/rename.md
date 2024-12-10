@@ -4,15 +4,14 @@
 
 ### Supported Arguments
 
-| argument                      | datatypes                                                                           |
+| argument | datatypes |
 |-------------------------------|-------------------------------------------------------------------------------------|
-| `index`                       | -   String                                                                          |
-| `axis`                        | -   Any value. Bodo ignores this argument entirely, which i consistent with Pandas. |
-
+| `index` | - String |
+| `axis` | - Any value. Bodo ignores this argument entirely, which i consistent with Pandas. |
 
 ### Example Usage
 
-``` py
+```py
 >>> @bodo.jit
 ... def f(S):
 ...     return S.rename("a")
@@ -31,4 +30,3 @@
 99    99
 Name: a, Length: 100, dtype: int64
 ```
-

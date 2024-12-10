@@ -2,11 +2,10 @@
 
 `pandasIndex.is_object()`
 
-
 !!! info "Important"
-    Currently, Bodo diverges from the Pandas API for Indices of boolean
-    values. Bodo always returns True, whereas Pandas returns False if
-    the index was constructed from a pd.array of booleans.
+Currently, Bodo diverges from the Pandas API for Indices of boolean
+values. Bodo always returns True, whereas Pandas returns False if
+the index was constructed from a pd.array of booleans.
 
 ### Example Usage
 
@@ -22,4 +21,3 @@ False
 ```
 
 ### Modifications and computations
-

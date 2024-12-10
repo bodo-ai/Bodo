@@ -1,14 +1,11 @@
 # `pd.DataFrame.sum`
 
-
 `pandas.DataFrame.sum(axis=None, skipna=None, level=None, numeric_only=None, min_count=0)`
 
 ### Supported Arguments
 
-
 - `axis`: Integer (0 or 1)
-    - **Must be constant at Compile Time**
-
+  - **Must be constant at Compile Time**
 
 ### Example Usage
 
@@ -24,4 +21,3 @@
 2    18
 dtype: int64
 ```
-

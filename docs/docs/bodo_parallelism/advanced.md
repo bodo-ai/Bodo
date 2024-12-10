@@ -62,7 +62,8 @@ df3 = g(df)
 Generally, Bodo can handle distributions of most use cases automatically and
 we do not recommend setting distributions manually due to the possibility of human error.
 However, there are some advanced use cases where setting these flags may be desirable or necessary.
-For example, when a small dataframe is an input to a join, setting its distribution to replicated can improve parallel performance. In the example below, a small dataframe `df2` is an argument to a join on a large dataframe `df1`, and we specify `df2` as replicated for better parallel performance. 
+For example, when a small dataframe is an input to a join, setting its distribution to replicated can improve parallel performance. In the example below, a small dataframe `df2` is an argument to a join on a large dataframe `df1`, and we specify `df2` as replicated for better parallel performance.
+
 ```py
 @bodo.jit(distributed=["df1"], replicated=["df2"])
 def load_data():
@@ -92,7 +93,7 @@ Functions `create_params` and `load_data` have `distributed=False` set,
 which makes all of their data structures and computations replicated across processors.
 
 !!! seealso "See Also"
-        [`bodo.scatterv`][bodoscatterv], [`bodo.prange`][explicit-parallel-loops]
+\[`bodo.scatterv`\][bodoscatterv], \[`bodo.prange`\][explicit-parallel-loops]
 
 ```py
 @bodo.jit(distributed=False)
@@ -145,24 +146,24 @@ Distributed data is usually accessed and modified through high-level
 Pandas and Numpy APIs. However, in many cases, Bodo allows indexing operations on distributed
 data without code modification. Here are such cases that Bodo currently supports:
 
-1.  Getting values using boolean array indexing, e.g. `B = A[A > 3]`.
-    The output can be distributed, but may be imbalanced
-    ([`bodo.rebalance()`](#load-balancing-distributed-data) can be used if necessary).
+1. Getting values using boolean array indexing, e.g. `B = A[A > 3]`.
+   The output can be distributed, but may be imbalanced
+   ([`bodo.rebalance()`](#load-balancing-distributed-data) can be used if necessary).
 
-2.  Getting values using a slice, e.g. `B = A[::2]`. The output can be
-    distributed, but may be imbalanced 
-    ([`bodo.rebalance()`](#load-balancing-distributed-data) can be used if necessary).
+1. Getting values using a slice, e.g. `B = A[::2]`. The output can be
+   distributed, but may be imbalanced
+   ([`bodo.rebalance()`](#load-balancing-distributed-data) can be used if necessary).
 
-3.  Getting a value using a scalar index, e.g. `a = A[m]`. The output
-    can be replicated.
-    
-4.  Setting values using boolean array indexing, e.g. `A[A > 3] = a`.
-    Only supports setting a scalar or lower-dimension value currently.
-    
-5.  Setting values using a slice, e.g. `A[::2] = a`. Only supports
-    setting a scalar or lower-dimension value currently.
-    
-6.  Setting a value using a scalar index, e.g. `A[m] = a`.
+1. Getting a value using a scalar index, e.g. `a = A[m]`. The output
+   can be replicated.
+
+1. Setting values using boolean array indexing, e.g. `A[A > 3] = a`.
+   Only supports setting a scalar or lower-dimension value currently.
+
+1. Setting values using a slice, e.g. `A[::2] = a`. Only supports
+   setting a scalar or lower-dimension value currently.
+
+1. Setting a value using a scalar index, e.g. `A[m] = a`.
 
 ## Concatenation Reduction
 
@@ -247,7 +248,7 @@ but reductions are handled using data exchange.
 
 The example below demonstrates a parallel loop with a reduction:
 
-``` py
+```py
 import bodo
 from bodo import prange
 import numpy as np
@@ -270,7 +271,7 @@ res = prange_test(10)
 print(res)
 ```
 
-Output: 
+Output:
 
 ```console
 [stdout:0]
@@ -302,7 +303,7 @@ not supported.
 The below example shows what happens when control flow prevents a reduction
 from being parallelized:
 
-``` py
+```py
 import bodo
 from bodo import prange
 import numpy as np
@@ -322,7 +323,7 @@ res = prange_test(10)
 print(res)
 ```
 
-Output: 
+Output:
 
 ```console
 numba.core.errors.UnsupportedRewriteError: Failed in bodo mode pipeline (step: convert to parfors)
@@ -335,7 +336,7 @@ There are multiple methods for integration with APIs that Bodo does not
 support natively:
 
 1. Switch to [python Object Mode][objmode] inside jit functions
-2. Pass data in and out of jit functions
+1. Pass data in and out of jit functions
 
 ### Passing Distributed Data
 
@@ -355,7 +356,7 @@ integration with any non-Bodo Python code. The following example passes
 chunks of data to interpolate with Scipy, and returns interpolation
 results back to jit function.
 
-``` py
+```py
 import scipy.interpolate
 
 @bodo.jit(distributed=["X", "Y", "X2"])
@@ -391,7 +392,7 @@ print(res)
 List and dictionary collections can be used to hold distributed data
 structures:
 
-``` py
+```py
 @bodo.jit(distributed=["df"])
 def f():
     to_concat = []
@@ -410,6 +411,7 @@ f()
 By default, all non-JIT code will only be run on a single rank. Within a JIT
 function, if there's some code you want to only run from a single rank, you can
 do so as follows:
+
 ```py
 @bodo.jit
 def f():
@@ -428,7 +430,7 @@ def f():
 
 This is similar in SPMD launch mode (where the whole script is launched as parallel
 MPI processes), except you will need to ensure that code that must only run on a
-single rank is protected even outside of JIT functions: 
+single rank is protected even outside of JIT functions:
 
 ```py
 if bodo.get_rank() == 0:
@@ -460,8 +462,7 @@ bodo.barrier()
 
 In SPMD launch mode the above can also be run outside of JIT functions.
 
-
 !!! warning
-    Running code on a single rank or a subset of ranks can lead to
-    deadlocks. Ensure that your code doesn't include any MPI or Bodo
-    functions.
+Running code on a single rank or a subset of ranks can lead to
+deadlocks. Ensure that your code doesn't include any MPI or Bodo
+functions.

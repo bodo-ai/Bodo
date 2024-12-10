@@ -1,7 +1,5 @@
 # WHERE
 
-
-
 The `#!sql WHERE` clause on columns can be used to filter records that
 satisfy specific conditions:
 
@@ -10,11 +8,13 @@ SELECT <COLUMN_NAMES> FROM <TABLE_NAME> WHERE <CONDITION>
 ```
 
 For Example:
+
 ```sql
 SELECT A FROM table1 WHERE B > 4
 ```
 
 ### Example Usage
+
 ```py
 >>>@bodo.jit
 ... def g(df):
@@ -38,4 +38,3 @@ SELECT A FROM table1 WHERE B > 4
 7       Shawn Winters
 9      Darryl Rosales
 ```
-

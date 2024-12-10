@@ -1,6 +1,5 @@
 # `pd.core.groupby.DataFrameGroupby.idxmax`
 
-
 `pandas.core.groupby.DataFrameGroupby.idxmax(axis=0, skipna=True)`
 
 ### Example Usage
@@ -24,4 +23,3 @@ B
 421  2  2
 f31  1  3
 ```
-

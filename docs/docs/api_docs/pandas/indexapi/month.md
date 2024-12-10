@@ -1,9 +1,9 @@
 # `pd.DateTimeIndex.month`
 
-
 `pandasDatetimeIndex.month`
 
 ### Example Usage
+
 ```py
 >>> @bodo.jit
 ... def f(I):
@@ -13,5 +13,3 @@
 >>> f(I)
 Int64Index([12, 12, 12, 1, 1], dtype='int64')
 ```
-
-

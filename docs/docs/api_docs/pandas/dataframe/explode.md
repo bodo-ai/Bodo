@@ -1,8 +1,6 @@
 # `pd.DataFrame.explode`
 
-
 `pandas.DataFrame.explode(column, ignore_index=False)`
-
 
 ### Supported Arguments
 
@@ -25,4 +23,3 @@
 3     3  4     1
 3     4  4     2
 ```
-

@@ -1,8 +1,6 @@
 # `pd.DataFrame.cov`
 
-
 `pandas.DataFrame.cov(min_periods=None, ddof=1)`
-
 
 ### Supported Arguments
 
@@ -22,4 +20,3 @@ A  0.012346 -0.012346  0.047577
 B -0.012346  0.012346 -0.047577
 C  0.047577 -0.047577  0.223293
 ```
-

@@ -3,17 +3,17 @@
 `pandasIndex.to_numpy(dtype=None, copy=True, na_value=None)`
 
 ### Supported Arguments:
-  
-  - `copy`: can be a True or False
+
+- `copy`: can be a True or False
 
 ***Unsupported Index Types***
 
-  - PeriodIndex
-  - MultiIndex
+- PeriodIndex
+- MultiIndex
 
 !!! info "Important"
-    Sometimes Bodo returns a Pandas array instead of a np.ndarray. Cases
-    include a NumericIndex of integers containing nulls, or a CategoricalIndex.
+Sometimes Bodo returns a Pandas array instead of a np.ndarray. Cases
+include a NumericIndex of integers containing nulls, or a CategoricalIndex.
 
 ### Example Usage
 
@@ -26,4 +26,3 @@
 >>> f(I)
 [ 1  9 -1  3  0  1  6]
 ```
-

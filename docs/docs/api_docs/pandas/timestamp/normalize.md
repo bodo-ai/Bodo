@@ -1,6 +1,5 @@
 # `pd.Timestamp.normalize`
 
-
 `pandasTimestamp.normalize()`
 
 ### Example Usage
@@ -14,5 +13,3 @@
 >>> f()
 Timestamp('2021-12-09 00:00:00')
 ```
-
-

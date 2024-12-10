@@ -1,6 +1,5 @@
 # CONV
 
-
 `#!sql CONV(X, current_base, new_base)`
 
 `#!sql CONV` takes a string representation of an integer value,

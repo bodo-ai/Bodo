@@ -5,13 +5,12 @@
 ### Supported Arguments None
 
 !!! note
-    Bodo only supports numeric and datetime64 types and assumes
-    `datetime_is_numeric=True`
-
+Bodo only supports numeric and datetime64 types and assumes
+`datetime_is_numeric=True`
 
 ### Example Usage
 
-``` py
+```py
 >>> @bodo.jit
 ... def f(S):
 ...     return S.describe()
@@ -27,4 +26,3 @@ min        0.000000
 max        6.000000
 dtype: float64
 ```
-

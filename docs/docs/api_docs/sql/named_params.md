@@ -48,5 +48,5 @@ Named parameters cannot be used in places that require a constant value
 to generate the correct implementation (e.g. TimeUnit in EXTRACT).
 
 !!! note
-    Named parameters are case sensitive, so `@var` and `@VAR` are
-    different identifiers.
+Named parameters are case sensitive, so `@var` and `@VAR` are
+different identifiers.

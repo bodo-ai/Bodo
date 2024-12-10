@@ -2,9 +2,8 @@
 
 `pandas.core.groupby.Groupby.var(ddof=1)`
 
-
 !!! note
-    `var` is only supported on numeric columns and is not supported on boolean column
+`var` is only supported on numeric columns and is not supported on boolean column
 
 ### Example Usage
 
@@ -27,4 +26,3 @@ B
 421  146.944444  1.511013e+10
 f31    0.000000  2.661792e+01
 ```
-

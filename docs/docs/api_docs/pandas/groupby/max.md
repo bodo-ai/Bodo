@@ -2,11 +2,9 @@
 
 `pandas.core.groupby.Groupby.max(numeric_only=False, min_count=-1)`
 
-
 !!! note
-    * `max` is not supported on columns with nested array types.
-    * Categorical columns must be ordered.
-
+\* `max` is not supported on columns with nested array types.
+\* Categorical columns must be ordered.
 
 ### Example Usage
 
@@ -29,4 +27,3 @@ B
 421  24.0  233232.00
 f31   2.0      12.21
 ```
-  

@@ -1,5 +1,4 @@
-DDL {#ddl}
-========
+# DDL {#ddl}
 
 BodoSQL currently supports the following Data Definition Language (DDL) statements.
 
@@ -20,4 +19,4 @@ BodoSQL currently supports the following Data Definition Language (DDL) statemen
 - [SHOW TBLPROPERTIES][show-tblproperties]
 - [SHOW VIEWS][show-views]
 
---- 
+______________________________________________________________________

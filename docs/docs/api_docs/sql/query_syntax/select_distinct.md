@@ -1,7 +1,5 @@
 # SELECT DISTINCT
 
-
-
 The `#!sql SELECT DISTINCT` statement is used to return only distinct
 (different) values:
 
@@ -19,6 +17,7 @@ SELECT COUNT DISTINCT A FROM table1
 ```
 
 ### Example Usage
+
 ```py
 >>>@bodo.jit
 ... def g(df):
@@ -48,4 +47,3 @@ paymentType
 NUM_PAYMENT_TYPES
 0          3
 ```
-

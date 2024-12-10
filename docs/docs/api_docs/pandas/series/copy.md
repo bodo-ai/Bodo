@@ -4,13 +4,13 @@
 
 ### Supported Arguments
 
-| argument                    | datatypes                               |
+| argument | datatypes |
 |-----------------------------|-----------------------------------------|
-| `deep`                      | -   Boolean                             |
+| `deep` | - Boolean |
 
 ### Example Usage
 
-``` py
+```py
 >>> @bodo.jit
 ... def f(S):
 ...     return S.copy()
@@ -29,4 +29,3 @@
 999    999
 Length: 1000, dtype: int64
 ```
-

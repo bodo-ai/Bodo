@@ -6,7 +6,7 @@
 
 ### Example Usage
 
-``` py
+```py
 >>> @bodo.jit
 ... def f(S):
 ...     return S.sort_values()
@@ -25,4 +25,3 @@
 99     0
 Length: 100, dtype: int64
 ```
-

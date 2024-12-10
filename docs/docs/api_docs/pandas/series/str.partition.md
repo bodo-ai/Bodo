@@ -4,15 +4,15 @@
 
 ### Supported Arguments
 
-| argument                    | datatypes                              |
+| argument | datatypes |
 |-----------------------------|----------------------------------------|
-| `sep`                       |    String                              |
-| `expand`                    |    Boolean                             |
+| `sep` | String |
+| `expand` | Boolean |
 
 !!! note
-    Bodo currently only supports expand=True.
+Bodo currently only supports expand=True.
 
-``` py
+```py
 >>> @bodo.jit
 ... def f(S):
 ...     return S.str.partition()
@@ -23,4 +23,3 @@
 1     hello                 world
 2   goodbye                      
 ```
-

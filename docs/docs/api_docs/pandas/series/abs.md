@@ -4,7 +4,7 @@
 
 ### Example Usage
 
-``` py
+```py
 >>> @bodo.jit
 ... def f(S):
 ...     return S.abs()
@@ -23,4 +23,3 @@
 99    1
 Length: 100, dtype: int64
 ```
-

@@ -1,4 +1,5 @@
 # NTILE
+
 `#!sql NTILE(N)`
 
 Divides the partitioned groups into N buckets based on
@@ -11,5 +12,3 @@ than the last bucket. For example, if N=4 and there are
 22 rows in a partition, the first 6 are assigned 1, the
 next 6 are assigned 2, the next 5 are assigned 3, and
 the last 5 are assigned 4.
-
-

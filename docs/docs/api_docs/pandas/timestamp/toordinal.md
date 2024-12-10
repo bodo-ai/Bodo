@@ -1,6 +1,5 @@
 # `pd.Timestamp.toordinal`
 
-
 `pandasTimestamp.toordinal()`
 
 ### Example Usage
@@ -13,5 +12,3 @@
 >>> f()
 738133
 ```
-
-

@@ -1,8 +1,5 @@
 # ARRAY_CONSTRUCT_COMPACT
 
-
 `#!sql ARRAY_CONSTRUCT_COMPACT(A, B, C, ...)`
 
-Equivalent to  `#!sql ARRAY_COMPACT(ARRAY_CONSTRUCT(A, B, C, ...))`
-
-
+Equivalent to `#!sql ARRAY_COMPACT(ARRAY_CONSTRUCT(A, B, C, ...))`

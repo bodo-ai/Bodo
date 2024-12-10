@@ -1,6 +1,5 @@
 # `pd.DataFrame.isin`
 
-
 `pandas.DataFrame.isin(values)`
 
 ### Supported Arguments
@@ -31,7 +30,9 @@
 
 !!! note
 
-    `DataFrame.isin` ignores DataFrame indices. For example:
+```
+`DataFrame.isin` ignores DataFrame indices. For example:
+```
 
 ```py
 
@@ -54,4 +55,3 @@
         1  False  False  False
         2  False  False  False
 ```
-

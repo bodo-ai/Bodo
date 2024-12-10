@@ -1,6 +1,5 @@
 # `pd.DateTimeIndex.second`
 
-
 `pandasDatetimeIndex.second`
 
 ### Example Usage
@@ -14,5 +13,3 @@
 >>> f(I)
 Int64Index([45, 35, 25, 15, 5], dtype='int64')
 ```
-
-

@@ -1,6 +1,5 @@
 # `pd.Index.drop_duplicates`
 
-
 `pandasIndex.drop_duplicates(keep='first')`
 
 ### Supported Arguments: None
@@ -20,4 +19,3 @@
 >>> f(I)
 Index(['a', 'b', 'c'], dtype='object')
 ```
-

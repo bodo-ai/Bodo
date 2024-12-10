@@ -4,7 +4,7 @@
 
 ### Example Usage
 
-``` py
+```py
 >>> @bodo.jit
 ... def f(S):
 ...     return S.isna()
@@ -19,4 +19,3 @@
 6     True
 dtype: bool
 ```
-

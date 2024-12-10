@@ -42,6 +42,7 @@ personal machine, and then pull the changes on the nodes and rebuild. e.g.
 ## Using Bodo/BodoSQL
 
 1. Drop into the `DEV` environment by running `source activate DEV`
+
 1. Make sure you have set your AWS access credentials if you need access to s3. E.g.
 
    ```
@@ -74,4 +75,5 @@ personal machine, and then pull the changes on the nodes and rebuild. e.g.
 - If you set `export BODO_SKIP_CPP_TESTS=1` you can skip compiling the C++ tests, which can take a long time to build.
 
 ## Troubleshooting
-If you encounter any issues, [check this confluence document](https://bodo.atlassian.net/wiki/spaces/B/pages/1894416388/Troubleshooting+build+bodo+from+source+on+platform). 
+
+If you encounter any issues, [check this confluence document](https://bodo.atlassian.net/wiki/spaces/B/pages/1894416388/Troubleshooting+build+bodo+from+source+on+platform).

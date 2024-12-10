@@ -1,10 +1,12 @@
----
-hide:
-  - footer
----
+______________________________________________________________________
 
-API Reference {#apireference}
-=============
+hide:
+
+- footer
+
+______________________________________________________________________
+
+# API Reference {#apireference}
 
 <div class="grid cards" markdown>
 - [Bodo Parallel API Reference][bodoparallelapis]

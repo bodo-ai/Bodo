@@ -1,8 +1,6 @@
 # `pd.Index.inferred_type`
 
-
 `pandasIndex.inferred_type`
-
 
 ### Example Usage
 
@@ -14,6 +12,4 @@
 >>> I = pd.Index(["A", "E", "I", "O", "U"])
 >>> f(I)
 'string'
-```  
-
-
+```

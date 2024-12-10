@@ -1,5 +1,4 @@
-Miscellaneous Supported Python API {#miscapi}
-==================================
+# Miscellaneous Supported Python API {#miscapi}
 
 In this page, we will discuss some useful Bodo features and concepts.
 
@@ -18,7 +17,7 @@ that can solve this issue, which is also supported by Bodo. For example,
 this code reads column A into a nullable integer array (the capital "I"
 denotes nullable integer type):
 
-``` py
+```py
 data = (
     "11,1.2\n"
     "-2,\n"
@@ -95,6 +94,7 @@ df = gen_data()
 res = mean_power(df)
 print(res)
 ```
+
 Output:
 
 ```console
@@ -219,191 +219,238 @@ except *finditer* are supported. Note that currently, Bodo
 JIT uses Python's `re` package as backend and therefore the compute
 speed of these functions is similar to Python.
 
-####   re.A
+#### re.A
+
 - `re.A`
 
-####   re.ASCII
+#### re.ASCII
+
 - `re.ASCII`
 
-####   re.DEBUG
+#### re.DEBUG
+
 - `re.DEBUG`
 
-####   re.I
+#### re.I
+
 - `re.I`
 
-####   re.IGNORECASE
+#### re.IGNORECASE
+
 - `re.IGNORECASE`
 
-####   re.L
+#### re.L
+
 - `re.L`
 
-####   re.LOCALE
+#### re.LOCALE
+
 - `re.LOCALE`
 
-####   re.M
+#### re.M
+
 - `re.M`
 
-####   re.MULTILINE
+#### re.MULTILINE
+
 - `re.MULTILINE`
 
-####   re.S
+#### re.S
+
 - `re.S`
 
-####   re.DOTALL
+#### re.DOTALL
+
 - `re.DOTALL`
 
-####   re.X
+#### re.X
+
 - `re.X`
 
-####   re.VERBOSE
+#### re.VERBOSE
+
 - `re.VERBOSE`
 
-####   re.search
+#### re.search
+
 - `re.search(pattern, string, flags=0)`
 
-####   re.match
+#### re.match
+
 - `re.match(pattern, string, flags=0)`
 
-####   re.fullmatch
+#### re.fullmatch
+
 - `re.fullmatch(pattern, string, flags=0)`
 
-####   re.split
+#### re.split
+
 - `re.split(pattern, string, maxsplit=0, flags=0)`
 
-####   re.findall
+#### re.findall
+
 - `re.findall(pattern, string, flags=0)`
 
-    The `pattern` argument should be a constant string for
-    multi-group patterns (for Bodo to know the output will be a list of
-    string tuples). An error is raised otherwise.
-    
-    ***Example Usage***:
-    
-    ```py
-    >>> @bodo.jit
-    ... def f(pat, in_str):
-    ...     return re.findall(pat, in_str)
-    ...
-    >>> f(r"\w+", "Words, words, words.")
-    ['Words', 'words', 'words']
-    ```
-    
-    Constant multi-group pattern works:
-    
-    ```py
-    >>> @bodo.jit
-    ... def f2(in_str):
-    ...     return re.findall(r"(\w+).*(\d+)", in_str)
-    ...
-    >>> f2("Words, 123")
-    [('Words', '3')]
-    ```
-    
-    Non-constant multi-group pattern throws an error:
-    
-    ```py
-    >>> @bodo.jit
-    ... def f(pat, in_str):
-    ...     return re.findall(pat, in_str)
-    ...
-    >>> f(r"(\w+).*(\d+)", "Words, 123")
-    Traceback (most recent call last):
-    File "<stdin>", line 1, in <module>
-    File "/Users/user/dev/bodo/bodo/libs/re_ext.py", line 338, in _pat_findall_impl
-        raise ValueError(
-    ValueError: pattern string should be constant for 'findall' with multiple groups
-    ```
+  The `pattern` argument should be a constant string for
+  multi-group patterns (for Bodo to know the output will be a list of
+  string tuples). An error is raised otherwise.
 
-####  re.sub
+  ***Example Usage***:
+
+  ```py
+  >>> @bodo.jit
+  ... def f(pat, in_str):
+  ...     return re.findall(pat, in_str)
+  ...
+  >>> f(r"\w+", "Words, words, words.")
+  ['Words', 'words', 'words']
+  ```
+
+  Constant multi-group pattern works:
+
+  ```py
+  >>> @bodo.jit
+  ... def f2(in_str):
+  ...     return re.findall(r"(\w+).*(\d+)", in_str)
+  ...
+  >>> f2("Words, 123")
+  [('Words', '3')]
+  ```
+
+  Non-constant multi-group pattern throws an error:
+
+  ```py
+  >>> @bodo.jit
+  ... def f(pat, in_str):
+  ...     return re.findall(pat, in_str)
+  ...
+  >>> f(r"(\w+).*(\d+)", "Words, 123")
+  Traceback (most recent call last):
+  File "<stdin>", line 1, in <module>
+  File "/Users/user/dev/bodo/bodo/libs/re_ext.py", line 338, in _pat_findall_impl
+      raise ValueError(
+  ValueError: pattern string should be constant for 'findall' with multiple groups
+  ```
+
+#### re.sub
+
 - `re.sub(pattern, repl, string, count=0, flags=0)`
 
-####  re.subn
+#### re.subn
+
 - `re.subn(pattern, repl, string, count=0, flags=0)`
 
-####  re.escape
+#### re.escape
+
 - `re.escape(pattern)`
 
-####  re.purge
+#### re.purge
+
 - `re.purge`
 
-####  re.Pattern.search
+#### re.Pattern.search
+
 - `re.Pattern.search(string[, pos[, endpos]])`
 
-####  re.Pattern.match
+#### re.Pattern.match
+
 - `re.Pattern.match(string[, pos[, endpos]])`
 
-####  re.Pattern.fullmatch
+#### re.Pattern.fullmatch
+
 - `re.Pattern.fullmatch(string[, pos[, endpos]])`
 
-####  re.Pattern.split
+#### re.Pattern.split
+
 - `re.Pattern.split(string, maxsplit=0)`
 
-####  re.Pattern.findall
+#### re.Pattern.findall
+
 - `re.Pattern.findall(string[, pos[, endpos]])`
 
-This has the same limitation as [`re.findall`](#refindall). 
+This has the same limitation as [`re.findall`](#refindall).
 
-####  re.Pattern.sub
+#### re.Pattern.sub
+
 - `re.Pattern.sub(repl, string, count=0)`
 
-####   re.Pattern.subn
+#### re.Pattern.subn
+
 - `re.Pattern.subn(repl, string, count=0)`
 
-####   re.Pattern.flags
+#### re.Pattern.flags
+
 - `re.Pattern.flags`
 
-####   re.Pattern.groups
+#### re.Pattern.groups
+
 - `re.Pattern.groups`
 
-####   re.Pattern.groupindex
+#### re.Pattern.groupindex
+
 - `re.Pattern.groupindex`
 
-####   re.Pattern.pattern
+#### re.Pattern.pattern
+
 - `re.Pattern.pattern`
 
-####   re.Match.expand
+#### re.Match.expand
+
 - `re.Match.expand(template)`
 
-####   re.Match.group
+#### re.Match.group
+
 - `re.Match.group([group1, ...])`
 
-####   re.Match.\_\_getitem\_\_
+#### re.Match.\_\_getitem\_\_
+
 - <code><apihead>re.Match.<apiname>\_\_getitem\_\_</apiname>(g)</apihead></code>
 
-####   re.Match.groups
+#### re.Match.groups
+
 - `re.Match.groups(default=None)`
 
-####   re.Match.groupdict
+#### re.Match.groupdict
+
 - `re.Match.groupdict(default=None)`
 
 (does not support default=None for groups that did not participate
-    in the match)
-    
-####   re.Match.start
+in the match)
+
+#### re.Match.start
+
 - `re.Match.start([group])`
 
-####   re.Match.end
+#### re.Match.end
+
 - `re.Match.end([group])`
 
-####   re.Match.span
+#### re.Match.span
+
 - `re.Match.span([group])`
 
-####   re.Match.pos
+#### re.Match.pos
+
 - `re.Match.pos`
 
-####   re.Match.endpos
+#### re.Match.endpos
+
 - `re.Match.endpos`
 
-####   re.Match.lastindex
+#### re.Match.lastindex
+
 - `re.Match.lastindex`
 
-####   re.Match.lastgroup
+#### re.Match.lastgroup
+
 - `re.Match.lastgroup`
 
-####   re.Match.re
+#### re.Match.re
+
 - `re.Match.re`
 
-####   re.Match.string
+#### re.Match.string
+
 - `re.Match.string`
 
 ## Class Support using `@jitclass`
@@ -418,9 +465,8 @@ and has to initialize the attributes. In addition, subclasses are not
 supported in `jitclass` yet.
 
 !!! warning
-    Class support is currently experimental and therefore we recommend
-    refactoring computation into regular JIT functions instead if possible.
-
+Class support is currently experimental and therefore we recommend
+refactoring computation into regular JIT functions instead if possible.
 
 ```py
 @bodo.jitclass(

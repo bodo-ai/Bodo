@@ -1,6 +1,5 @@
 # `pd.DateTimeIndex.is_month_end`
 
-
 `pandasDatetimeIndex.is_month_end`
 
 ### Example Usage
@@ -15,4 +14,3 @@
 >>> f(I)
 Int64Index([1, 1, 1, 0, 0], dtype='int64')
 ```
-

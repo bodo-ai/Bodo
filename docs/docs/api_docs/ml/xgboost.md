@@ -2,11 +2,10 @@
 
 This page lists the XGBoost (using the Scikit-Learn-like API) classes and functions that Bodo supports natively inside JIT functions.
 
-
 ## Installing XGBoost
 
 You will need to build XGBoost with MPI support from source.
-XGBoost version must be ``<= 1.5.1``. Refer to [XGBoost instructions about building requirements](https://xgboost.readthedocs.io/en/stable/build.html#id4){target="blank"} for more details.
+XGBoost version must be `<= 1.5.1`. Refer to [XGBoost instructions about building requirements](https://xgboost.readthedocs.io/en/stable/build.html#id4){target="blank"} for more details.
 Then, build XGBoost with MPI support from source and install it in your Bodo environment as follows:
 
 ```shell
@@ -24,45 +23,47 @@ python setup.py install
 
 This class provides implementation of the scikit-learn API for XGBoost classification with distributed large-scale learning.
 
-###  Methods
+### Methods
 
 #### `xgboost.XGBClassifier.fit`
+
 - `xgboost.XGBClassifier.fit(X, y, sample_weight=None, base_margin=None, eval_set=None, eval_metric=None, early_stopping_rounds=None, verbose=True, xgb_model=None, sample_weight_eval_set=None, feature_weights=None, callbacks=None)`
 
-    ***Supported Arguments***
-    
-    | argument                    | datatypes                               |
-    | ----------------------------|-----------------------------------------|
-    | ``X``                       | NumPy Array or Pandas Dataframes        |
-    | ``y``                       | NumPy Array or Pandas Dataframes        |
+  ***Supported Arguments***
+
+  | argument | datatypes |
+  | ----------------------------|-----------------------------------------|
+  | `X` | NumPy Array or Pandas Dataframes |
+  | `y` | NumPy Array or Pandas Dataframes |
 
 #### `xgboost.XGBClassifier.predict`
+
 - `xgboost.XGBClassifier.predict(X, output_margin=False, ntree_limit=None, validate_features=True, base_margin=None)`
 
+  ***Supported Arguments***
 
-    ***Supported Arguments***
-
-    | argument                    | datatypes                               |
-    |-----------------------------|-----------------------------------------|
-    | ``X``                       |  NumPy Array or Pandas Dataframes       |
-
+  | argument | datatypes |
+  |-----------------------------|-----------------------------------------|
+  | `X` | NumPy Array or Pandas Dataframes |
 
 #### `xgboost.XGBClassifier.predict_proba`
--  `xgboost.XGBClassifier.predict_proba(X, ntree_limit=None, validate_features=True, base_margin=None)`
 
-    ***Supported Arguments***
+- `xgboost.XGBClassifier.predict_proba(X, ntree_limit=None, validate_features=True, base_margin=None)`
 
-    | argument                    | datatypes                               |
-    |-----------------------------|-----------------------------------------|
-    | ``X``                       |  NumPy Array or Pandas Dataframes       |
+  ***Supported Arguments***
 
+  | argument | datatypes |
+  |-----------------------------|-----------------------------------------|
+  | `X` | NumPy Array or Pandas Dataframes |
 
 ### Attributes
 
 #### `xgboost.XGBClassifier.feature_importances_`
+
 - `xgboost.XGBClassifier.feature_importances_`
 
-###  Example Usage:
+### Example Usage:
+
 ```py
 >>> import bodo
 >>> import xgboost as xgb
@@ -89,17 +90,18 @@ This class provides implementation of the scikit-learn API for XGBoost classific
 
 This class provides implementation of the scikit-learn API for XGBoost regression with distributed large-scale learning.
 
-###  Methods
+### Methods
 
 #### `xgboost.XGBRegressor.fit`
+
 - `xgboost.XGBRegressor.fit(X, y, sample_weight=None, base_margin=None, eval_set=None, eval_metric=None, early_stopping_rounds=None, verbose=True, xgb_model=None, sample_weight_eval_set=None, feature_weights=None, callbacks=None)`
 
   ***Supported Arguments***
 
-    | argument                    | datatypes                               |
-    |-----------------------------|-----------------------------------------|
-    |``X``                        | NumPy Array                             |
-    |``y``                        | NumPy Array                             |
+  | argument | datatypes |
+  |-----------------------------|-----------------------------------------|
+  |`X` | NumPy Array |
+  |`y` | NumPy Array |
 
 #### `xgboost.XGBRegressor.predict`
 
@@ -107,17 +109,17 @@ This class provides implementation of the scikit-learn API for XGBoost regressio
 
   ***Supported Arguments***
 
-    | argument                    | datatypes                               |
-    |-----------------------------|-----------------------------------------|
-    |``X``                        | NumPy Array                             |
+  | argument | datatypes |
+  |-----------------------------|-----------------------------------------|
+  |`X` | NumPy Array |
 
-###  Attributes
+### Attributes
 
 #### `xgboost.XGBRegressor.feature_importances_`
 
 - `xgboost.XGBRegressor.feature_importances_`
 
-###  Example Usage
+### Example Usage
 
 ```py
 >>> import bodo

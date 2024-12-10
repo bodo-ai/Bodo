@@ -19,7 +19,6 @@ def f(f1, f2):
     return bc.sql("select t1.A, t2.B from t1, t2 where t1.C > 5 and t1.D = t2.D")
 ```
 
-
 ## Pandas IO in a JIT Function Separate from Query
 
 The previous approach works well for most individual queries. However, when running several queries on the same dataset, it should ideally be loaded once for all queries. To do this, you can structure your JIT code to contain a single load function at the beginning. For example:

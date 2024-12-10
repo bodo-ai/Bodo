@@ -2,14 +2,12 @@
 
 `pandasIndex.argsort(*args, **kwargs)`
 
-
 ### Supported Arguments: None
 
 ***Unsupported Index Types***
 
 - IntervalIndex
 - MultiIndex
-
 
 ### Example Usage
 
@@ -22,4 +20,3 @@
 >>> f(I)
 array([0, 4, 3, 1, 2])
 ```
-

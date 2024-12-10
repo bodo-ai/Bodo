@@ -18,6 +18,4 @@
 ```
 
 !!! note
-    arguments can be JIT functions, lambda functions, or values that can be used to initialize a Pandas Series.
-
-
+arguments can be JIT functions, lambda functions, or values that can be used to initialize a Pandas Series.

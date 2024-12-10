@@ -1,6 +1,5 @@
 # RPAD
 
-
 `#!sql RPAD(string, len, padstring)`
 
 Extends the input string to the specified length, by
@@ -9,9 +8,8 @@ string. If the input string's length is less than the len
 argument, it will truncate the input string.
 
 For example:
+
 ```sql
 RPAD('hello', 10, 'abc') =='helloabcab'
 RPAD('hello', 1, 'abc') =='h'
 ```
-
-

@@ -1,8 +1,6 @@
 # `pd.DataFrame.melt`
 
-
 `pandas.DataFrame.melt(id_vars=None, value_vars=None, var_name=None, value_name='value', col_level=None)`
-
 
 ### Supported Arguments
 
@@ -27,7 +25,4 @@
 ```
 
 !!! note
-    To offer increased performance, row ordering and corresponding Index value may not match Pandas when run on multiple cores.
-
-
-
+To offer increased performance, row ordering and corresponding Index value may not match Pandas when run on multiple cores.

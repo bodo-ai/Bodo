@@ -2,14 +2,12 @@
 
 `pandas.core.groupby.DataFrameGroupby.nunique(dropna=True)`
 
-
 ### Supported Arguments
-  
+
 - `dropna`: boolean
 
-
 !!! note
-    `nunique` is not supported on columns with nested array types
+`nunique` is not supported on columns with nested array types
 
 ### Example Usage
 
@@ -32,4 +30,3 @@ B
 421  2  2
 f31  1  2
 ```
-  

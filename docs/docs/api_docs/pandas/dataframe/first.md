@@ -5,11 +5,11 @@
 ### Supported Arguments
 
 - `offset`: String or Offset type
-    - String argument must be a valid [frequency alias](https://pandas.pydata.org/docs/user_guide/timeseries.html#timeseries-offset-aliases){target=blank}.
+  - String argument must be a valid [frequency alias](https://pandas.pydata.org/docs/user_guide/timeseries.html#timeseries-offset-aliases){target=blank}.
 
 !!! note
-    DataFrame must have a valid DatetimeIndex and is assumed to already be sorted.
-    This function have undefined behavior if the DatetimeIndex is not sorted.
+DataFrame must have a valid DatetimeIndex and is assumed to already be sorted.
+This function have undefined behavior if the DatetimeIndex is not sorted.
 
 ### Example Usage
 
@@ -28,4 +28,3 @@
 2022-02-14 05:49:05.454545454  4  104
 2022-02-25 07:16:21.818181818  5  105
 ```
-

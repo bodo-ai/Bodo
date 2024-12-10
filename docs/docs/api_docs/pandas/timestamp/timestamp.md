@@ -1,7 +1,6 @@
 # `pd.Timestamp`
 
-
-- pandas.Timestamp(ts_input=<object object\>, freq=None, tz=None, unit=None, year=None, month=None, day=None, hour=None, minute=None, second=None, microsecond=None, nanosecond=None, tzinfo=None, *, fold=None)
+- pandas.Timestamp(ts_input=\<object object>, freq=None, tz=None, unit=None, year=None, month=None, day=None, hour=None, minute=None, second=None, microsecond=None, nanosecond=None, tzinfo=None, \*, fold=None)
 
 ### Supported Arguments
 
@@ -31,6 +30,3 @@
 >>> f()
 (Timestamp('2021-12-09 09:57:44.114123'), Timestamp('2021-12-09 09:57:44.114123'), Timestamp('1970-04-11 00:00:00'), Timestamp('2021-12-09 09:57:44.114123'))
 ```
-
-
-

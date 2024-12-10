@@ -1,7 +1,5 @@
 # INTERSECT
 
-
-
 The `#!sql INTERSECT` operator is used to calculate the intersection of
 two `#!sql SELECT` statements:
 
@@ -16,4 +14,3 @@ same number of columns. The columns must also have similar data
 types. The output of the `#!sql INTERSECT` is the set of rows which are
 present in both of the input SELECT statements. The `#!sql INTERSECT`
 operator selects only the distinct values from the inputs.
-

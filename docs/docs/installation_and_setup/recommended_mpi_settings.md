@@ -4,8 +4,8 @@ These are our recommendations to tune your application environment and
 achieve the best possible performance with Bodo.
 
 !!! info "Important"
-    These recommendations are only applicable when you are running your workload
-    on a cluster. You do not need to do any of this on your laptop.
+These recommendations are only applicable when you are running your workload
+on a cluster. You do not need to do any of this on your laptop.
 
 [Intel-MPI
 library](https://software.intel.com/content/www/us/en/develop/tools/oneapi/components/mpi-library.html#gs.cfkkrf){target="blank"}
@@ -42,7 +42,7 @@ mapping* and *round-robin mapping* options below for your application to
 achieve the best performance.
 
 !!! info "Important"
-    These options are only supported in [SPMD launch mode](../bodo_parallelism/bodo_parallelism_basics.md#spmd).
+These options are only supported in [SPMD launch mode](../bodo_parallelism/bodo_parallelism_basics.md#spmd).
 
 ### Block Mapping
 
@@ -62,9 +62,9 @@ per host) and the number of cores on each host is the same.
 ```shell
 mpiexec -n <N> -f <hostfile> -ppn <P> python bodo_file.py
 ```
+
 where `N` is the number of MPI processes, `hostfile` contains the list
 of hosts, and `P` the number of processes (cores) per node.
-
 
 ### Round-Robin Mapping
 
@@ -80,12 +80,12 @@ MPICH and Intel MPI below. The following assumes the hostfile only
 contains a list of hosts (e.g. it does not specify number of processes
 per host) and the number of cores on each host is the same.
 
-
 **Round-Robin with MPICH**:
 
 ```shell
 mpiexec -n <N> -f <hostfile> python bodo_file.py
 ```
+
 **Round-Robin with Intel MPI**:
 
 ```shell
@@ -95,7 +95,7 @@ mpiexec -n <N> -f <hostfile> -rr python bodo_file.py
 ### Useful References
 
 - More information on controlling process placement with Intel MPI can be found
-[here](https://www.intel.com/content/www/us/en/developer/articles/technical/controlling-process-placement-with-the-intel-mpi-library.html){target="blank"}.
+  [here](https://www.intel.com/content/www/us/en/developer/articles/technical/controlling-process-placement-with-the-intel-mpi-library.html){target="blank"}.
 
 - See how to use the Hydra Process Manager for MPICH [here](https://wiki.mpich.org/mpich/index.php/Using_the_Hydra_Process_Manager){target="blank"}.
 
@@ -110,29 +110,29 @@ To enable EFA with Intel-MPI on your cluster, follow instructions
 
 Some points to note in addition to the referenced instructions:
 
-1.  All instances must be in the same subnet. For more information, see
-    the "EFA Limitations" section
-    [here](https://www.hpcworkshops.com/07-efa/00-efa-basics.html).
+1. All instances must be in the same subnet. For more information, see
+   the "EFA Limitations" section
+   [here](https://www.hpcworkshops.com/07-efa/00-efa-basics.html).
 
-2.  All instances must be part of a security group that allows all
-    inbound and outbound traffic to and from the security group itself.
-    Follow these
-    [instructions](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/efa-start.html#efa-start-security)
-    to set up the security group correctly.
+1. All instances must be part of a security group that allows all
+   inbound and outbound traffic to and from the security group itself.
+   Follow these
+   [instructions](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/efa-start.html#efa-start-security)
+   to set up the security group correctly.
 
-3.  For use with Intel-MPI, a minimal installation of the EFA drivers is
-    sufficient and recommended:
+1. For use with Intel-MPI, a minimal installation of the EFA drivers is
+   sufficient and recommended:
 
-    ```shell
-    sudo ./efa_installer.sh -y --minimal
-    ```
+   ```shell
+   sudo ./efa_installer.sh -y --minimal
+   ```
 
-    Depending on where the drivers were downloaded from, you might need
-    to include a `--no-verify` flag:
+   Depending on where the drivers were downloaded from, you might need
+   to include a `--no-verify` flag:
 
-    ```shell
-    sudo ./efa_installer.sh -y --minimal --no-verify
-    ```
+   ```shell
+   sudo ./efa_installer.sh -y --minimal --no-verify
+   ```
 
 We recommend the following versions for the EFA installer and Intel-MPI:
 

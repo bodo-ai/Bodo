@@ -1,6 +1,5 @@
 # `pd.Index.copy`
 
-
 `pandasIndex.copy(name=None, deep=False, dtype=None, names=None)`
 
 ***Unsupported Index Types***
@@ -24,5 +23,3 @@
 >>> f(I)
 Int64Index([1, 2, 3], dtype='int64', name='new_name')
 ```
-
-

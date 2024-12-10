@@ -1,8 +1,6 @@
 # `pd.DataFrame.nunique`
 
-
 `pandas.DataFrame.nunique(axis=0, dropna=True)`
-
 
 ### Supported Arguments
 
@@ -21,4 +19,3 @@ A    3
 B    1
 C    2
 ```
-

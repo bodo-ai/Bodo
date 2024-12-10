@@ -5,12 +5,12 @@
 ### Supported Arguments None
 
 !!! note
-    - Series dtype must be a numeric type
-    - Bodo only accepts default values for `axis` and `skipna`
+\- Series dtype must be a numeric type
+\- Bodo only accepts default values for `axis` and `skipna`
 
 ### Example Usage
 
-``` py
+```py
 >>> @bodo.jit
 ... def f(S):
 ...     return S.argmin()

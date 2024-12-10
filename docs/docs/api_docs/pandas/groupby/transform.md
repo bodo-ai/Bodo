@@ -2,16 +2,15 @@
 
 `pandas.core.groupby.DataFrameGroupby.transform(func, \*args, engine=None, engine_kwargs=None, **kwargs)`
 
-
 ### Supported Arguments
 
 - `func`: Constant string, Python function from the builtins module that matches a supported operation
 - Numpy functions cannot be provided.
 
 !!! note
-    The supported builtin functions are `'count'`, `'first'`, `'last'`,
-    `'min'`, `'max'`, `'mean'`, `'median'`, `'nunique'`, `'prod'`,
-    `'std'`, `'sum'`, and `'var'`
+The supported builtin functions are `'count'`, `'first'`, `'last'`,
+`'min'`, `'max'`, `'mean'`, `'median'`, `'nunique'`, `'prod'`,
+`'std'`, `'sum'`, and `'var'`
 
 ### Example Usage
 
@@ -51,4 +50,3 @@
 18  24.0  233232.00
 19   2.0      12.21
 ```
-

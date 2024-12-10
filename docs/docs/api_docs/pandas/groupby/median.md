@@ -2,10 +2,8 @@
 
 `pandas.core.groupby.Groupby.median(numeric_only=NoDefault.no_default)`
 
-
 !!! note
-    `median` is only supported on numeric columns and is not supported on boolean column
-
+`median` is only supported on numeric columns and is not supported on boolean column
 
 ### Example Usage
 
@@ -28,4 +26,3 @@ B
 421  12.5  116616.7550
 f31   2.0       7.3155
 ```
-  

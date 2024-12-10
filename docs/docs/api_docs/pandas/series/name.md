@@ -1,10 +1,10 @@
 # pd.Series.name
 
--   `pandas.Series.name`
+- `pandas.Series.name`
 
 ### Example Usage
 
-``` py
+```py
 >>> @bodo.jit
 ... def f(df):
 ...     return df.apply(lambda row: row.name, axis=1)

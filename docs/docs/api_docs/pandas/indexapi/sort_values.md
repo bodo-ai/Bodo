@@ -2,7 +2,6 @@
 
 `pandasIndex.sort_values(return_indexer=False, ascending=True, na_position="last", key=None)`
 
-
 ### Supported Arguments:
 
 - `ascending`: can be True or False
@@ -13,7 +12,6 @@
 - IntervalIndex
 - PeriodIndex
 - MultiIndex
-
 
 ### Example Usage
 
@@ -26,4 +24,3 @@
 >>> f(I)
 Int64Index([-13, -5, -2, -1, 0, 1, 3, 8], dtype='int64')
 ```
-

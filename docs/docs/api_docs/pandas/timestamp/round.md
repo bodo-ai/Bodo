@@ -1,6 +1,5 @@
 # `pd.Timestamp.round`
 
-
 `pandasTimestamp.round(freq, ambiguous='raise', nonexistent='raise')`
 
 ### Supported Arguments
@@ -19,5 +18,3 @@
 >>> f()
 (Timestamp('2021-12-09 00:00:00'),Timestamp('2021-12-10 00:00:00'))
 ```
-
-

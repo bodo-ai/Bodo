@@ -1,8 +1,6 @@
 # `pd.Timedelta`
 
-
 `pandas.Timedelta(value=<object object\>, unit="ns", days=0, seconds=0, microseconds=0, milliseconds=0, minutes=0, hours=0, weeks=0)`
-
 
 ### Supported Arguments
 
@@ -17,6 +15,7 @@
 - `weeks`: Integer
 
 ### Example Usage
+
 ```py
 >>> @bodo.jit
 ... def f():
@@ -27,4 +26,3 @@
 >>> f()
 (Timedelta('0 days 00:00:10'), Timedelta('70 days 00:00:00'), Timedelta('10 days 02:00:00.000023'))
 ```
-

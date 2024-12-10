@@ -4,12 +4,12 @@
 
 ### Supported Arguments
 
-| argument                    | datatypes                             |
+| argument | datatypes |
 |-----------------------------|---------------------------------------|
-| `pat`                       |    String                             |
-| `flags`                     |    Integer                            |
+| `pat` | String |
+| `flags` | Integer |
 
-``` py
+```py
 >>> @bodo.jit
 ... def f(S):
 ...     return S.str.count("w")
@@ -24,4 +24,3 @@
 6    2
 dtype: Int64
 ```
-

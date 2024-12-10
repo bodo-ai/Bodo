@@ -1,14 +1,12 @@
 # `pd.DataFrame.dropna`
 
-
 `pandas.DataFrame.dropna(axis=0, how='any', thresh=None, subset=None, inplace=False)`
 
 ### Supported Arguments
 
-
-   - `how`: Constant String: either "all" or "any"
-   - `thresh`: Integer
-   - `subset`: Constant list/tuple of String column names, Constant list/tuple of Integer column names, Constant String column names, Constant Integer column names
+- `how`: Constant String: either "all" or "any"
+- `thresh`: Integer
+- `subset`: Constant list/tuple of String column names, Constant list/tuple of Integer column names, Constant String column names, Constant Integer column names
 
 ### Example Usage
 
@@ -28,4 +26,3 @@
    A  B  C
 0  1  4  6
 ```
-

@@ -1,8 +1,6 @@
 # `pd.Index.is_all_dates`
 
-
 `pandasIndex.is_all_dates`
-
 
 ### Example Usage
 
@@ -14,6 +12,4 @@
 >>> I = pd.date_range("2018-01-01", "2018-01-06")
 >>> f(I)
 True
-```      
-
-
+```

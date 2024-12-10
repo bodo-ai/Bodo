@@ -22,10 +22,8 @@ Operations on them will be supported in upcoming releases.
 
 ## BinaryIndex
 
-
 `BinaryIndex` objects can be
 boxed/unboxed and set as index to dataframes and series.
 Operations on them will be supported in upcoming releases.
 
 ## MultiIndex
-

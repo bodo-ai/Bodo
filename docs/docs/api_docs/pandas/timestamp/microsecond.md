@@ -1,6 +1,5 @@
 # `pd.Timestamp.microsecond`
 
-
 `pandasTimestamp.microsecond`
 
 ### Example Usage
@@ -14,4 +13,3 @@
 >>> f()
 114123
 ```
-

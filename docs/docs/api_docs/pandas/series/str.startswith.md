@@ -4,11 +4,11 @@
 
 ### Supported Arguments
 
-| argument                    | datatypes                              |
+| argument | datatypes |
 |-----------------------------|----------------------------------------|
-| `pat`                       |    String                              |
+| `pat` | String |
 
-``` py
+```py
 >>> @bodo.jit
 ... def f(S):
 ...     return S.str.startswith("A")
@@ -23,4 +23,3 @@
 6    False
 dtype: boolean
 ```
-

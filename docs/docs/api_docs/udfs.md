@@ -15,7 +15,7 @@ closure). For example, here are two ways to construct a UDF that
 advances each element of a Timestamp Series to the last day of the
 current month.
 
-``` py
+```py
 import pandas as pd
 import bodo
 
@@ -43,20 +43,20 @@ information.
 
 ### Map Functions
 
--   `Series.map`
--   `Series.apply`
--   `Series.pipe`
--   `DataFrame.map`
--   `DataFrame.apply`
--   `DataFrame.pipe`
--   `GroupBy.apply`
--   `GroupBy.pipe`
--   `GroupBy.transform`
+- `Series.map`
+- `Series.apply`
+- `Series.pipe`
+- `DataFrame.map`
+- `DataFrame.apply`
+- `DataFrame.pipe`
+- `GroupBy.apply`
+- `GroupBy.pipe`
+- `GroupBy.transform`
 
 ### Agg Functions
 
--   `GroupBy.agg`
--   `GroupBy.aggregate`
+- `GroupBy.agg`
+- `GroupBy.aggregate`
 
 ## UDF Performance
 
@@ -72,14 +72,14 @@ based solutions are typically limited in their ability to optimize UDFs.
 
 We recommend passing additional variables to UDFs explicitly, instead of
 directly using variables local to the function defining the UDF. The
-latter is called the \"captured\" variables case, which is often
+latter is called the "captured" variables case, which is often
 error-prone and may result in compilation errors.
 
 For example, consider a UDF that appends a variable suffix to each
 string in a Series of strings. The proper way to write this function is
 to use the `args` argument to `Series.apply()`.
 
-```py 
+```py
 import pandas as pd
 import bodo
 
@@ -101,9 +101,9 @@ def add_suffix(S, suffix):
 ```
 
 !!! note
-    Not all APIs support additional arguments. Please refer to
-    [supported Pandas API][pandas] for more
-    information on intended API usage.
+Not all APIs support additional arguments. Please refer to
+[supported Pandas API][pandas] for more
+information on intended API usage.
 
 ## Apply with Pandas Methods and Numpy ufuncs
 
@@ -143,8 +143,7 @@ pd.testing.assert_series_equal(ex_str(S), ex_func(S))
 ```
 
 !!! note
-    Numpy ufuncs are not currently supported with DataFrames.
-
+Numpy ufuncs are not currently supported with DataFrames.
 
 ## Type Stability Restrictions
 
@@ -170,8 +169,8 @@ reasons, Bodo can only infer a DataFrame when returning a Series whose
 size can be inferred at compile time for each row.
 
 !!! note
-    If you provide an Index, then all Index values must be compile time
-    constants.
+If you provide an Index, then all Index values must be compile time
+constants.
 
 Here is an example using`Series.apply` to return a DataFrame.
 

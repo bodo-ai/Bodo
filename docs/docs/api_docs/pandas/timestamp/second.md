@@ -1,6 +1,5 @@
 # `pd.Timestamp.second`
 
-
 `pandasTimestamp.second`
 
 ### Example Usage
@@ -14,5 +13,3 @@
 >>> f()
 44
 ```
-
-

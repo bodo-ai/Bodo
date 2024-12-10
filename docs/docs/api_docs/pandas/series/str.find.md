@@ -4,13 +4,13 @@
 
 ### Supported Arguments
 
-| argument                    | datatypes                            |
+| argument | datatypes |
 |-----------------------------|--------------------------------------|
-| `sub`                       |    String                            |
-| `start`                     |    Integer                           |
-| `end`                       |    Integer                           |
+| `sub` | String |
+| `start` | Integer |
+| `end` | Integer |
 
-``` py
+```py
 >>> @bodo.jit
 ... def f(S):
 ...     return S.str.find("a3", start=1)
@@ -25,4 +25,3 @@
 6     3
 dtype: Int64
 ```
-

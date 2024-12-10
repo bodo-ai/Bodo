@@ -1,13 +1,11 @@
 # `pd.DataFrame.max`
 
-
 `pandas.DataFrame.max(axis=None, skipna=None, level=None, numeric_only=None)`
-
 
 ### Supported Arguments
 
 - `axis`: Integer (0 or 1)
-    - **Must be constant at Compile Time**
+  - **Must be constant at Compile Time**
 
 ### Example Usage
 
@@ -22,7 +20,6 @@
 1    8
 2    9
 ```
+
 !!! note
-    Only supported for dataframes containing float, non-null int, and datetime64ns values.
-
-
+Only supported for dataframes containing float, non-null int, and datetime64ns values.

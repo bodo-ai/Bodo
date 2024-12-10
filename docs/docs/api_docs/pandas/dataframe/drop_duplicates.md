@@ -1,8 +1,6 @@
 # `pd.DataFrame.drop_duplicates`
 
-
 `pandas.DataFrame.drop_duplicates(subset=None, keep='first', inplace=False, ignore_index=False)`
-
 
 ### Supported Arguments
 
@@ -22,4 +20,3 @@
 2  3  3   9
 3  4  3  10
 ```
-

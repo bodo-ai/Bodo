@@ -4,20 +4,19 @@
 
 ### Supported Arguments
 
-| argument                    | datatypes                           |
+| argument | datatypes |
 |-----------------------------|-------------------------------------|
-| `skipna`                    |   Boolean                           |
-| `ddof`                      |   Integer                           |
+| `skipna` | Boolean |
+| `ddof` | Integer |
 
 !!! note
-    - Series type must be numeric
-    - Bodo does not accept any additional arguments to pass to the
-    function
-
+\- Series type must be numeric
+\- Bodo does not accept any additional arguments to pass to the
+function
 
 ### Example Usage
 
-``` py
+```py
 >>> @bodo.jit
 ... def f(S):
 ...     return S.std()
@@ -25,4 +24,3 @@
 >>> f(S)
 2.021975231891785
 ```
-

@@ -1,5 +1,5 @@
 # `pd.Timedelta.to_timedelta64`
-                            
+
 `pandas.Timedelta.to_timedelta64()`
 
 ### Example Usage
@@ -11,4 +11,3 @@
 >>> f()
 871623013023000 nanoseconds
 ```
-

@@ -23,10 +23,10 @@ Select the type of nodes in the cluster to be created from the dropdown list.
 ![Cluster-Form-Instance](../../platform2-gifs/create_cluster_list.gif#center)
 
 !!! note
-    If the **Instance type** dropdown list does not populate,
-    either the credentials are not entered properly or they are not valid.
-    Please see how to set your [AWS][setting_aws_credentials]
-    or [Azure][setting_azure_credentials] credentials and make sure your credentials are valid.
+If the **Instance type** dropdown list does not populate,
+either the credentials are not entered properly or they are not valid.
+Please see how to set your [AWS][setting_aws_credentials]
+or [Azure][setting_azure_credentials] credentials and make sure your credentials are valid.
 
 #### Use Spot Instances
 
@@ -35,17 +35,17 @@ This option enables spot instances in the cluster. Use this option to reduce the
 ![Cluster-Spot-Instance](../../platform2-screenshots/use_spot_instance.png#center)
 
 !!! note
-    However, it's important to note that selecting this option can also have some drawbacks. 
-    For further insights, please refer to the breakdowns associated with AWS and Azure spot instances.
-    [Azure Spot](https://azure.microsoft.com/en-us/products/virtual-machines/spot), [AWS Spot](https://aws.amazon.com/ec2/spot/)
+However, it's important to note that selecting this option can also have some drawbacks.
+For further insights, please refer to the breakdowns associated with AWS and Azure spot instances.
+[Azure Spot](https://azure.microsoft.com/en-us/products/virtual-machines/spot), [AWS Spot](https://aws.amazon.com/ec2/spot/)
 
 #### Number of Instances
 
 This option specifies the number of nodes in your cluster.
 
-#### Bodo Version 
+#### Bodo Version
 
-This option specifies the Bodo version to be installed on your cluster. 
+This option specifies the Bodo version to be installed on your cluster.
 Typically, the three latest Bodo Releases are available.
 
 ![Cluster-Form-Bodo](../../platform2-screenshots/cluster_bodo_version.png#center)
@@ -57,6 +57,7 @@ This is the amount of time of inactivity after which the platform will pause the
 ![Cluster-Form-Auto-Pause](../../platform2-screenshots/cluster_auto_pause.png#center)
 
 ### Cluster Advanced Configuration
+
 Additionally, you can specify the following advanced configuration options for cluster.
 
 ![Cluster-Form-Advanced](../../platform2-screenshots/cluster_advanced.png#center)
@@ -67,7 +68,7 @@ Additionally, you can specify the following advanced configuration options for c
 
 Select the availability zone where you want to deploy your cluster. By default, this is set to `Auto Select`.
 
-#### Auto Stop 
+#### Auto Stop
 
 Activity is determined through attached notebooks (see
 [how to attach a notebook to a cluster][attaching_notebook_to_cluster]) and jobs
@@ -77,35 +78,36 @@ via `ssh` instead), we recommend that you to set this to
 `Never,` since otherwise, the cluster will be stopped after
 the set time.
 
-#### Instance Role 
+#### Instance Role
 
-:fontawesome-brands-aws: On AWS only 
+:fontawesome-brands-aws: On AWS only
 
-Is the instance role that should be attached to the cluster instances. 
+Is the instance role that should be attached to the cluster instances.
 You can define these in Settings. By default, a new role will be created and attached.
 
-#### Cluster description 
+#### Cluster description
 
 Description for the cluster.
 
 ### Cluster Instance Type and Size Recommendations
+
 If you were previously running a query on a Snowflake Warehouse this table provides a starting point for what
 instance type and size you can use to run the query using Bodo. Since this is only a starting point you should
 experiment to find the best configuration for your specific use case.
 
 | Snowflake Warehouse Size | Bodo Cluster Spec |
 |--------------------------|-------------------|
-| 2X-Small                 | 1 x i4i.xlarge    |
-| X-Small                  | 1 x i4i.2xlarge   |
-| Small                    | 1 x i4i.4xlarge   |
-| Medium                   | 1 x i4i.8xlarge   |
-| Large                    | 1 x i4i.16xlarge  |
-| X-Large                  | 1 x i4i.32xlarge  |
-| 2X-Large                 | 2 x i4i.32xlarge  |
-| 3X-Large                 | 4 x i4i.32xlarge  |
-| 4X-Large                 | 8 x i4i.32xlarge  |
-| 5X-Large                 | 16 x i4i.32xlarge |
-| 6X-Large                 | 32 x i4i.32xlarge |
+| 2X-Small | 1 x i4i.xlarge |
+| X-Small | 1 x i4i.2xlarge |
+| Small | 1 x i4i.4xlarge |
+| Medium | 1 x i4i.8xlarge |
+| Large | 1 x i4i.16xlarge |
+| X-Large | 1 x i4i.32xlarge |
+| 2X-Large | 2 x i4i.32xlarge |
+| 3X-Large | 4 x i4i.32xlarge |
+| 4X-Large | 8 x i4i.32xlarge |
+| 5X-Large | 16 x i4i.32xlarge |
+| 6X-Large | 32 x i4i.32xlarge |
 
 ### Monitoring the Cluster Creation Status
 
