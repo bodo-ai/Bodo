@@ -26,7 +26,7 @@ This variable specifies the temporary location where the SAS token will be writt
 
 ## How It Works
 
-### **`SF_AZURE_WRITE_HDFS_CORE_SITE` Configuration**:
+### **`SF_AZURE_WRITE_HDFS_CORE_SITE`**:
 
 - This value is inserted into the `core-site.xml` file used by Snowflake for writing data to ADLS. It references the custom `BodoSASTokenProvider`, which handles the retrieval of the SAS token.
 
