@@ -44,6 +44,7 @@ While compilation time is improving, Bodo is not yet optimized for scenarios req
 - Linear scalability from laptops to large-scale clusters and supercomputers.
 - Advanced scalable I/O support for Iceberg, Snowflake, Parquet, CSV, and JSON with automatic filter pushdown and column pruning for optimized data access.
 - High-Performance SQL Engine that is natively integrated into Python.
+- MacOS and Linux support (Windows coming soon).
 
 See Bodo documentation to learn more: https://docs.bodo.ai/
 
