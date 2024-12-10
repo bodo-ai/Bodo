@@ -60,9 +60,10 @@ clean = { cmd = "pip uninstall -y bodo bodosql bodo-iceberg-connector && bash bu
 
 
 [system-requirements]
-macos = "11.0"
+macos = "12.0"
 
 [dependencies]
+python = "3.12.*"
 pip = "*"
 # Core C++ Deps
 libcurl = "~=8.0"
@@ -74,7 +75,7 @@ boost-cpp = "1.85"
 numba = "0.60.0"
 numpy = ">=1.24,<1.27"
 pandas = ">=2.2,<2.3"
-pyarrow = { version = "17.0.0", channel = "conda-forge" }
+pyarrow = { version = "18.1.0", channel = "conda-forge" }
 fsspec = ">=2021.09"
 requests = "*"
 cloudpickle = ">=3.0,<4.0"
@@ -110,10 +111,8 @@ openpyxl = "*"
 
 [target.linux-64.dependencies]
 cx_oracle = "*"
-pyarrow = { version = "17.0.0", channel = "bodo.ai" }
-libarrow = { version = "*", channel = "bodo.ai" }
-# required for bodo pyarrow package
-libutf8proc = "==2.8.0"
+pyarrow = { version = "18.1.0", channel = "bodo.ai" }
+libarrow = { version = "18.1.0", channel = "bodo.ai" }
 [target.osx-64.dependencies]
 cx_oracle = "*"
 
