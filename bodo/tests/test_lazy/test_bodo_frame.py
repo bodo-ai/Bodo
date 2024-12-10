@@ -465,3 +465,59 @@ def test_parquet_param(collect_func):
             match=r"to_parquet\(\): row_group_size must be integer",
         ):
             bodo_df.to_parquet(fname, row_group_size="a")
+
+
+def test_csv(collect_func):
+    """Tests that to_csv() writes the frame correctly and does not trigger data fetch"""
+
+    @bodo.jit(spawn=True)
+    def _get_bodo_df(df):
+        return df
+
+    df = collect_func(0)
+    bodo_df = _get_bodo_df(df)
+    fname = os.path.join("bodo", "tests", "data", "example")
+    with ensure_clean2(fname):
+        bodo_df.to_csv(fname, index=False)
+        assert bodo_df._lazy
+        read_df = pd.read_csv(fname)
+
+    pd.testing.assert_frame_equal(
+        read_df,
+        df,
+        check_dtype=False,
+    )
+    pd.testing.assert_frame_equal(
+        bodo_df,
+        df,
+        check_dtype=False,
+    )
+
+
+def test_csv_param(collect_func):
+    """Tests that to_csv() raises an error on unsupported parameters"""
+
+    @bodo.jit(spawn=True)
+    def _get_bodo_df(df):
+        return df
+
+    df = collect_func(0)
+    bodo_df = _get_bodo_df(df)
+    fname = os.path.join("bodo", "tests", "data", "example")
+
+    with ensure_clean2(fname):
+        with pytest.raises(
+            bodo.utils.typing.BodoError,
+            match=r"DataFrame.to_csv\(\): 'path_or_buf' argument should be None or string",
+        ):
+            bodo_df.to_csv(1)
+        with pytest.raises(
+            bodo.utils.typing.BodoError,
+            match=r"DataFrame.to_csv\(\): 'compression' argument supports only None, which is the default in JIT code.",
+        ):
+            bodo_df.to_csv(fname, compression="a")
+        with pytest.raises(
+            bodo.utils.typing.BodoError,
+            match=r"BodoDataFrame.to_csv\(\): mode parameter only supports default value w",
+        ):
+            bodo_df.to_csv(fname, mode="r")
