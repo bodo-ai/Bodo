@@ -5,7 +5,7 @@ requires = [
     "scikit-build-core[pyproject]",
     "cython>=3.0,<3.1",
     "numpy>=1.24,<1.27",
-    "pyarrow==18.0.0",
+    "pyarrow==18.1.0",
     "pip"
 ]
 build-backend = "scikit_build_core.build"
@@ -34,7 +34,7 @@ classifiers = [
 
 dependencies = [
     "numba==0.60.0",
-    "pyarrow==18.0.0",
+    "pyarrow==18.1.0",
     "pandas>=2.2,<2.3",
     "numpy>=1.24,<1.27",
     # fsspec >= 2021.09 because it includes Arrow filesystem wrappers (useful for fs.glob() for example)
