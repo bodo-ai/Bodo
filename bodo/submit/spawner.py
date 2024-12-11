@@ -623,7 +623,9 @@ class SubmitDispatcher:
         """
         linecache_entry = None
         source_path = inspect.getfile(self.py_func)
-        if source_path.startswith("<ipython-"):
+        if source_path.startswith("<ipython-") or os.path.basename(
+            os.path.dirname(source_path)
+        ).startswith("ipykernel_"):
             linecache_entry = (source_path, linecache.cache[source_path])
 
         return linecache_entry
