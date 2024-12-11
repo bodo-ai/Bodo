@@ -470,6 +470,7 @@ def test_parquet_param(collect_func):
             bodo_df.to_parquet(fname, row_group_size="a")
 
 
+@pytest_mark_spawn_mode
 def test_json(collect_func):
     """Tests that to_json() writes the frame correctly and does not trigger data fetch"""
 
