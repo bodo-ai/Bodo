@@ -2,7 +2,9 @@
 
 import atexit
 import contextlib
+import inspect
 import itertools
+import linecache
 import logging
 import os
 import signal
@@ -606,12 +608,27 @@ class SubmitDispatcher:
         )
 
     @classmethod
-    def get_dispatcher(cls, py_func, decorator_args, extra_globals):
+    def get_dispatcher(cls, py_func, decorator_args, extra_globals, linecache_entry):
         # Instead of unpickling into a new SubmitDispatcher, we call bodo.jit to
         # return the real dispatcher
         py_func.__globals__.update(extra_globals)
         decorator = bodo.jit(**decorator_args)
+        if linecache_entry:
+            linecache.cache[linecache_entry[0]] = linecache_entry[1]
         return decorator(py_func)
+
+    def _get_ipython_cache_entry(self):
+        """Get IPython cell entry in linecache for the function to send to workers,
+        which is necessary for inspect.getsource to work (used in caching).
+        """
+        linecache_entry = None
+        source_path = inspect.getfile(self.py_func)
+        if source_path.startswith("<ipython-") or os.path.basename(
+            os.path.dirname(source_path)
+        ).startswith("ipykernel_"):
+            linecache_entry = (source_path, linecache.cache[source_path])
+
+        return linecache_entry
 
     def __reduce__(self):
         # Pickle this object by pickling the underlying function (which is
@@ -621,6 +638,7 @@ class SubmitDispatcher:
             self.py_func,
             self.decorator_args,
             self.extra_globals,
+            self._get_ipython_cache_entry(),
         )
 
     def add_extra_globals(self, glbls):
