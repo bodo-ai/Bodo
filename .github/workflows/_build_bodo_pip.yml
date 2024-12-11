@@ -93,6 +93,14 @@ jobs:
             CFLAGS="-isystem /project/.pixi/envs/pip-cpp/include"
             CPPFLAGS="-isystem /project/.pixi/envs/pip-cpp/include"
             MPICH_CC=gcc
+            DISABLE_CCACHE=1
+            SCCACHE_BUCKET=engine-codebuild-cache
+            SCCACHE_REGION=us-east-2
+            SCCACHE_S3_USE_SSL=true
+            SCCACHE_S3_SERVER_SIDE_ENCRYPTION=true
+            BODO_VENDOR_MPICH=1
+            CONDA_PREFIX=/project/.pixi/envs/pip-cpp
+            SETUPTOOLS_SCM_PRETEND_VERSION=${{ inputs.bodo_version }}
           CIBW_ENVIRONMENT_PASS_LINUX: >
             AWS_ACCESS_KEY_ID
             AWS_SECRET_ACCESS_KEY
