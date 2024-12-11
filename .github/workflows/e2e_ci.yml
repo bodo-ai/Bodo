@@ -133,7 +133,9 @@ jobs:
           # Azure SAS Provider Install
           ./buildscripts/install_azurefs_sas_token_provider.sh
 
-      - name: Run Examples
+      - name: Run Python Examples
         run: |
           set -eo pipefail
           python examples/pi.py
+          python examples/word_count.py
+          python examples/beer-reviews.py
