@@ -2,7 +2,6 @@ import datetime
 import gc
 import glob
 import hashlib
-import json
 import operator
 import os
 import shutil
@@ -236,21 +235,6 @@ def pytest_collection_modifyitems(items):
             azure_2p_marker = azure_2p_markers[0]
         item.add_marker(azure_1p_marker)
         item.add_marker(azure_2p_marker)
-
-    # Check if we should try and mark groups for AWS Codebuild
-    if "NUMBER_GROUPS_SPLIT" in os.environ:
-        num_groups = int(os.environ["NUMBER_GROUPS_SPLIT"])
-        with open("testtiming.json") as f:
-            marker_groups = json.load(f)
-
-        for item in items:
-            # Gives filename + function name
-            testname = item_file_name(item) + "::" + item.name
-            if testname in marker_groups:
-                group_marker = marker_groups[testname]
-            else:
-                group_marker = group_from_hash(testname, num_groups)
-            item.add_marker(getattr(pytest.mark, group_marker))
 
 
 def group_from_hash(testname, num_groups):

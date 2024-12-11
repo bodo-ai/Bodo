@@ -2595,7 +2595,7 @@ def getitem_tuple_lower(context, builder, sig, args):
         if idx < 0:
             idx += len(tupty)
         if not 0 <= idx < len(tupty):
-            raise IndexError("cannot index at %d in %s" % (idx, tupty))
+            raise IndexError(f"cannot index at {idx} in {tupty}")
         res = builder.extract_value(tup, idx)
     elif isinstance(idx, slice):
         items = cgutils.unpack_tuple(builder, tup)[idx]

@@ -22,7 +22,7 @@ jobs:
         with:
           pixi-version: v0.34.0
           cache: true
-          cache-write: ${{ github.event_name == 'push' && github.ref_name == 'main' }}
+          cache-write: ${{ github.event_name == 'schedule' }}
           environments: 'default'
           activate-environment: true
 

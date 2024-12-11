@@ -1657,7 +1657,7 @@ def resolve_window_funcs(
         args[3] if len(args) > 3 else kws.pop("na_position", default_tuple)
     )
     # We currently require only a single order by column as that satisfies the initial
-    
+
     if not (
         isinstance(order_by, tuple)
         and all(isinstance(col_name, str) for col_name in order_by)
