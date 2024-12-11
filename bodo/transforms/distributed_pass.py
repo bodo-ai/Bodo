@@ -2818,13 +2818,22 @@ class DistributedPass:
 
             df_typ = self.typemap[df.name]
             rhs = assign.value
-            fname = args[0]
+            kws = dict(rhs.kws)
+            fname = get_call_expr_arg(
+                "to_json",
+                rhs.args,
+                kws,
+                0,
+                "path_or_buf",
+                default=None,
+                use_default=True,
+            )
+            if fname is None or isinstance(self.typemap[fname.name], types.NoneType):
+                return [assign]
             # convert StringLiteral to Unicode to make ._data available
             self.typemap.pop(fname.name)
             self.typemap[fname.name] = string_type
             nodes = []
-
-            kws = dict(rhs.kws)
 
             is_records = False
             if "orient" in kws:
@@ -2839,7 +2848,7 @@ class DistributedPass:
                 lines_var = get_call_expr_arg(
                     "to_json", rhs.args, kws, 7, "lines", None
                 )
-                is_lines = self.typemap[lines_var.name].literal_value
+                is_lines = self.typemap[lines_var.name]
 
             is_records_lines = ir.Var(
                 assign.target.scope, mk_unique_var("is_records_lines"), rhs.loc
@@ -2853,7 +2862,7 @@ class DistributedPass:
 
             if "_bodo_file_prefix" in kws:
                 file_prefix_var = get_call_expr_arg(
-                    "to_csv",
+                    "to_json",
                     rhs.args,
                     kws,
                     14,
@@ -2889,7 +2898,8 @@ class DistributedPass:
             self.typemap[none_var.name] = types.none
             none_assign = ir.Assign(ir.Const(None, rhs.loc), none_var, rhs.loc)
             nodes.append(none_assign)
-            rhs.args[0] = none_var
+            set_call_expr_arg(none_var, rhs.args, kws, 0, "path_or_buf")
+            rhs.kws = kws
 
             # str_out = df.to_json(None)
             str_out = ir.Var(assign.target.scope, mk_unique_var("write_json"), rhs.loc)
