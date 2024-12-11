@@ -136,6 +136,4 @@ jobs:
       - name: Run Python Examples
         run: |
           set -eo pipefail
-          python examples/pi.py
-          python examples/word_count.py
-          python examples/beer-reviews.py
+          ls examples/*.py | xargs -n 1 -P 1 python
