@@ -7,6 +7,10 @@ on:
         description: 'Operating System to Build On/For'
         type: string
         required: true
+      bodo_version:
+        description: 'Bodo Version to Build'
+        type: string
+        required: true
 
 # Recommended with setup-micromamba
 # https://github.com/mamba-org/setup-micromamba#about-login-shells
@@ -30,68 +34,86 @@ jobs:
           role-to-assume: arn:aws:iam::427443013497:role/BodoEngineBuildWheelRole
           role-session-name: BodoEngineBuildWheelSession
           role-skip-session-tagging: true
-      # Login to ECR so the linux build can pull the necessary image
-      - name: Login to Amazon ECR
-        id: login-ecr
-        if: inputs.os == 'ubuntu-latest'
-        uses: aws-actions/amazon-ecr-login@v2
-
       - uses: actions/checkout@v4
-        with:
-          # For setuptools_scm to be able to determine version,
-          # we need to fetch the entire history
-          fetch-depth: 0
 
       # https://github.com/actions/runner-images/issues/10624
       - name: Fix PATH in .bashrc
         if: inputs.os == 'macos-14'
         run: |
           sed -i '' '/; export PATH;/d' ~/.bashrc
-          # shellcheck disable=SC2016
-          echo 'export PATH="/opt/homebrew/bin:/opt/homebrew/sbin:$PATH"' >> ~/.bashrc 
-          # shellcheck disable=SC1090
+          echo 'export PATH="/opt/homebrew/bin:/opt/homebrew/sbin:$PATH"' >> ~/.bashrc
           source ~/.bashrc
-
-      # Set up the build conda environment
-      - uses: mamba-org/setup-micromamba@v1
+      # We need Pixi to properly configure the C++ compilers for Mac
+      # For Linux, we only need C++ dependencies, so installing it and updating
+      # some of the envs is enough
+      - name: Install Pixi for Compiler
         if: contains(inputs.os, 'macos')
+        uses: prefix-dev/setup-pixi@v0.8.1
         with:
-          environment-name: build-env
-          environment-file: buildscripts/envs/conda-lock.yml
-          cache-environment: true
-          create-args: --category main --category dev
-          init-shell: >-
-            bash
-            zsh
+          pixi-version: v0.36.0
+          cache: true
+          cache-write: ${{ github.event_name == 'schedule'}}
+          environments: 'pip-cpp'
+          activate-environment: true
+      - name: Install Pixi Global Tools
+        if: contains(inputs.os, 'macos')
+        run: |
+          pixi global install sccache
 
-      - name: Build wheels
+      - name: Build Wheels
+        uses: pypa/cibuildwheel@v2.21.3
         env:
-          CIBW_BEFORE_BUILD_MACOS: |
-            rm -r {package}/bodo/mpi4py
-            eval "$(micromamba shell hook --shell bash)"
-            micromamba deactivate
-            micromamba deactivate
-            PYTHON_VERSION=$(python --version | awk -F 'Python ' '{print$2}')
-            micromamba activate build-env
-            source {project}/buildscripts/bodo/pip/macos/setup_env.sh "$PYTHON_VERSION" {package}/buildscripts/envs/
-          CIBW_BEFORE_BUILD_LINUX: |
-            # Delete mpi4py folder if it exists so correct version gets copied in
-            rm -r {package}/bodo/mpi4py
-            PYTHON_VERSION=$(python --version | awk -F 'Python ' '{print$2}')
-            ENVS_PATH={package}/buildscripts/envs
-            OLD_PYTHON_DIR=$(cd $(dirname $(which python))/..; pwd)
-            echo "OLD_PYTHON_DIR: $OLD_PYTHON_DIR"
-            source {package}/buildscripts/bodo/pip/manylinux/setup_env.sh "${PYTHON_VERSION}" "${ENVS_PATH}"
+          CIBW_BEFORE_ALL_LINUX: |
+            # Install Pixi and Environment
+            curl -fsSL https://pixi.sh/install.sh | bash
             source ~/.bashrc
-            NEW_PYTHON_DIR=$(cd $(dirname $(which python))/..; pwd)
-            echo "NEW_PYTHON_DIR: $NEW_PYTHON_DIR"
-            rm -rf $OLD_PYTHON_DIR
-            ln -s $NEW_PYTHON_DIR $OLD_PYTHON_DIR
-          CIBW_ENVIRONMENT: DISABLE_CCACHE=1 SCCACHE_BUCKET=engine-codebuild-cache SCCACHE_REGION=us-east-2 SCCACHE_S3_USE_SSL=true SCCACHE_S3_SERVER_SIDE_ENCRYPTION=true MACOSX_DEPLOYMENT_TARGET=${{ inputs.os == 'macos-14' && '12.0' || '10.15' }} BODO_VENDOR_MPICH=1
-          CIBW_ENVIRONMENT_PASS_LINUX: AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN AWS_DEFAULT_REGION
-          CIBW_REPAIR_WHEEL_COMMAND_MACOS: 'delocate-wheel --ignore-missing-dependencies --sanitize-rpaths --exclude libmpi --exclude libpmpi --exclude libarrow --exclude libarrow_acero --exclude libarrow_dataset --exclude libarrow_flight --exclude libarrow_python --exclude libarrow_python_flight --exclude libarrow_python_parquet_encryption --exclude libarrow_substrait --exclude libparquet --require-archs {delocate_archs} -v {wheel} && python buildscripts/bodo/pip/macos/patch_libs_for_pip.py -p {wheel} && mv {wheel} {dest_dir}'
-          CIBW_REPAIR_WHEEL_COMMAND_LINUX: 'LD_LIBRARY_PATH=/opt/conda/lib:$LD_LIBRARY_PATH && auditwheel -v repair --exclude libmpi.so.12 --exclude libarrow.so.1801 --exclude libarrow_acero.so.1801 --exclude libarrow_dataset.so.1801 --exclude libarrow_python.so --exclude libparquet.so.1801 --plat manylinux_2_35_x86_64 {wheel} -w {dest_dir} && python buildscripts/bodo/pip/manylinux/patch_libs_for_pip.py -p {dest_dir}'
-        run: pipx run cibuildwheel==2.20.*
+            pixi install -v --locked -e pip-cpp
+            pixi list -e pip-cpp
+            # Global Tools
+            pixi global install sccache
+          CIBW_BEFORE_BUILD: |
+            # Delete mpi4py folder if it exists so correct version gets copied in
+            rm -r {package}/bodo/mpi4py || true
+            rm -rf {package}/build
+            rm -f {package}/mpich.whl
+          CIBW_ENVIRONMENT: >-
+            DISABLE_CCACHE=1
+            SCCACHE_BUCKET=engine-codebuild-cache
+            SCCACHE_REGION=us-east-2
+            SCCACHE_S3_USE_SSL=true
+            SCCACHE_S3_SERVER_SIDE_ENCRYPTION=true
+            MACOSX_DEPLOYMENT_TARGET=${{ inputs.os == 'macos-14' && '11.0' || '10.15' }}
+            BODO_VENDOR_MPICH=1
+            PATH=$HOME/.pixi/bin:$PATH
+            CONDA_PREFIX=$(pwd)/.pixi/envs/pip-cpp
+            SETUPTOOLS_SCM_PRETEND_VERSION=${{ inputs.bodo_version }}
+          CIBW_ENVIRONMENT_LINUX: >
+            LD_LIBRARY_PATH=/project/.pixi/envs/pip-cpp/lib
+            CFLAGS="-isystem /project/.pixi/envs/pip-cpp/include"
+            CPPFLAGS="-isystem /project/.pixi/envs/pip-cpp/include"
+          CIBW_ENVIRONMENT_PASS_LINUX: >
+            AWS_ACCESS_KEY_ID
+            AWS_SECRET_ACCESS_KEY
+            AWS_SESSION_TOKEN
+            AWS_DEFAULT_REGION
+          CIBW_REPAIR_WHEEL_COMMAND_MACOS: >
+            sccache --show-stats && 
+            delocate-wheel --ignore-missing-dependencies --sanitize-rpaths
+            -e libmpi -e libpmpi
+            -e libarrow -e libarrow_acero -e libarrow_dataset -e libarrow_flight
+            -e libarrow_python -e libarrow_python_flight -e libarrow_python_parquet_encryption
+            -e libarrow_substrait -e libparquet
+            --require-archs {delocate_archs} -v {wheel} &&
+            python buildscripts/bodo/pip/macos/patch_libs_for_pip.py -p {wheel} &&
+            mv {wheel} {dest_dir}
+          CIBW_REPAIR_WHEEL_COMMAND_LINUX: >
+            sccache --show-stats && 
+            LD_LIBRARY_PATH=/project/.pixi/envs/pip-cpp/lib:$LD_LIBRARY_PATH auditwheel -v repair 
+            --exclude libmpi.so.12 --exclude libmpi.so.40 
+            --exclude libarrow.so.1801 --exclude libarrow_acero.so.1801 --exclude libarrow_dataset.so.1801 
+            --exclude libarrow_python.so --exclude libparquet.so.1801 
+            --plat manylinux_2_35_x86_64 {wheel} -w {dest_dir} && 
+            python buildscripts/bodo/pip/manylinux/patch_libs_for_pip.py -p {dest_dir}
 
       - uses: actions/upload-artifact@v4
         with:
