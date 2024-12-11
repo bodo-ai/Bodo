@@ -3,6 +3,7 @@ on:
   # Run Every Weekday on main Branch at 2AM EST
   schedule:
     - cron: '00 7 * * 1,2,3,4,5'
+
   # Manual Trigger
   workflow_dispatch:
     inputs:
@@ -95,7 +96,7 @@ jobs:
 #          NESSIE_AUTH_TOKEN: ${{ secrets.NESSIE_AUTH_TOKEN }}
 
   run-examples:
-    name: Run E2E Tests
+    name: Run Examples
     runs-on: [self-hosted, large]
     steps:
       - uses: actions/checkout@v4
@@ -121,7 +122,6 @@ jobs:
           path: hadoop.tar.gz
           key: hadoop-3.3.2-${{ runner.os }}
 
-      # TODO: Once stable, inline all the scripts
       - name: Install Bodo Packages
         env:
           # Build with support for javascript udfs
@@ -132,3 +132,8 @@ jobs:
           pixi run build
           # Azure SAS Provider Install
           ./buildscripts/install_azurefs_sas_token_provider.sh
+
+      - name: Run Examples
+        run: |
+          set -eo pipefail
+          python examples/pi.py
