@@ -14,7 +14,10 @@ on:
       - '.github/workflows/_build_*.yml'
 
 jobs:
-  # This is separate because we need to build Linux community in a container
+  # For Linux, we need to build conda inside a docker container for best support. 
+  # But for the platform package to have the best potential performance, 
+  # we want to build outside of a container on the native architecture. 
+  # MacOS also builds on the native VM (no docker container. Thus, they are grouped together.
   bodo-conda-linux:
     strategy:
       # Don't cancel other jobs if one fails
