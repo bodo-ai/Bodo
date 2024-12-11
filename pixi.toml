@@ -228,6 +228,8 @@ pytest-nunit = "*"
 
 # Pip to Limit libstdcxx.so
 [feature.pip.target.linux-64.dependencies]
+gcc_linux-64 = "*"
+gxx_linux-64 = "*"
 libstdcxx = "<13.1"
 libstdcxx-ng = "<13.1"
 [feature.pip.target.osx-64.dependencies]

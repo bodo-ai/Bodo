@@ -75,6 +75,7 @@ jobs:
           pip install bodo
       - name: Test
         run: |
+          set -exo pipefail
           export BODO_NUM_WORKERS=2
           python -c '\
           import bodo
@@ -174,6 +175,7 @@ jobs:
           pip install bodo bodosql
       - name: Test
         run: |
+          set -exo pipefail
           BODO_NUM_WORKERS=2 python -c '\
           import pandas as pd
           import bodosql
