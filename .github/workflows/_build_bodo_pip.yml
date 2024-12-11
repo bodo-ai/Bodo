@@ -92,6 +92,8 @@ jobs:
             LD_LIBRARY_PATH=/project/.pixi/envs/pip-cpp/lib
             CFLAGS="-isystem /project/.pixi/envs/pip-cpp/include"
             CPPFLAGS="-isystem /project/.pixi/envs/pip-cpp/include"
+            CC=/project/.pixi/envs/pip-cpp/bin/x86_64-conda-linux-gnu-gcc
+            CXX=/project/.pixi/envs/pip-cpp/bin/x86_64-conda-linux-gnu-g++
             DISABLE_CCACHE=1
             SCCACHE_BUCKET=engine-codebuild-cache
             SCCACHE_REGION=us-east-2
