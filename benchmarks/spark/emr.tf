@@ -67,7 +67,7 @@ resource "aws_emr_cluster" "emr_cluster" {
   }
   auto_termination_policy {
     idle_timeout = 60
- }
+  }
 
   service_role = aws_iam_role.emr_service_role.arn
   tags = {
@@ -99,8 +99,8 @@ resource "aws_iam_role_policy_attachment" "emr_service_role_policy" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonEMRServicePolicy_v2"
 }
 resource "aws_iam_role_policy" "emr_pass_intsance_role_policy" {
-  name = "EMR_Pass_Instance_Role_Policy"
-  role = aws_iam_role.emr_service_role.name
+  name   = "EMR_Pass_Instance_Role_Policy"
+  role   = aws_iam_role.emr_service_role.name
   policy = <<EOF
 {
   "Version": "2012-10-17",
