@@ -1,5 +1,6 @@
 import time
 
+import pyspark.pandas as ps
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import (
     col,
@@ -21,7 +22,6 @@ def get_monthly_travels_weather():
         )
         .getOrCreate()
     )
-    import pyspark.pandas as ps
 
     start = time.time()
 
@@ -48,7 +48,7 @@ def get_monthly_travels_weather():
             .withColumn(
                 "weekday", dayofweek(col("pickup_datetime")).isin([2, 3, 4, 5, 6])
             )
-            # pandas-on-Spark doesn't like these datetime columns which is why we use spark apis for the read and this conversion
+            # pandas-on-Spark doesn't like these datetime columns which is why we use Spark APIs for the read and this conversion
         )
         .drop("pickup_datetime")
         .drop("dropoff_datetime")
