@@ -76,5 +76,3 @@ terraform destroy
 ```
 
 You will be prompted to confirm. Type `yes` to proceed.
-
----
