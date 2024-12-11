@@ -94,22 +94,15 @@ def get_monthly_travels_weather(client):
         },
     )
 
-    # Try to write parquet results to one of the workers
+    # convert to pandas and then write result dataframe ~11 rows, 8 columns
     def write_results():
-        try:
-            monthly_trips_weather.to_parquet(
-                "local:///tmp/data/dask_results.pq", compute=True
-            )
-        except FileNotFoundError:
-            pass
+        monthly_trips_weather.compute().to_parquet("/tmp/data/dask_results.pq")
 
     future = client.submit(write_results)
     future.result()
 
     end = time.time()
     print("Total IO and compute time: ", (end - start))
-
-    print(monthly_trips_weather.head())
 
     return monthly_trips_weather
 
@@ -125,7 +118,6 @@ if __name__ == "__main__":
         instance_type="r6i.8xlarge",
         # Region for accessing bodo-example-data
         region="us-east-2",
-        debug=True,
         env_vars=env_vars,
     ) as cluster:
         with Client(cluster) as client:
