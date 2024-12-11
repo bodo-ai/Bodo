@@ -22,7 +22,7 @@ jobs:
           fetch-depth: 0
 
       - name: Create Micromamba Environment
-        uses: mamba-org/setup-micromamba@v1
+        uses: mamba-org/setup-micromamba@v2
         with:
           environment-name: bodosql_build 
           create-args: conda-build anaconda-client python-libarchive-c setuptools_scm -c conda-forge

@@ -53,7 +53,7 @@ jobs:
           source ~/.bashrc
 
       # Set up the build conda environment
-      - uses: mamba-org/setup-micromamba@v1
+      - uses: mamba-org/setup-micromamba@v2
         if: contains(inputs.os, 'macos')
         with:
           environment-name: build-env
