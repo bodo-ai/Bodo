@@ -53,7 +53,7 @@ jobs:
           # Conda-Build normally uses a random path. Setting these args disables that.
           # --croot for consistent base directory path for sccache
           # --build-id-pat for consistent build directory path for sccache
-          conda build . $PLATFORM_CHANNEL -c conda-forge \
+          conda build . -c conda-forge \
             --no-verify --no-anaconda-upload \
             --croot $HOME/conda-bld --build-id-pat 'bb' \
             --python '${{ inputs.python-version }}'
@@ -82,8 +82,8 @@ jobs:
           sudo chmod a+r $HOME/secret_file
 
           echo "BODO_VERSION: $BODO_VERSION"
-          echo $ARTIFACTORY_CHANNEL
+          echo "ARTIFACTORY_CHANNEL: $ARTIFACTORY_CHANNEL"
           ./buildscripts/bodo/publish_binary.sh $ARTIFACTORY_CHANNEL "linux-64" $BODO_VERSION
         env:
           IS_RELEASE: ${{ inputs.is-release }}
-          ARTIFACTORY_CHANNEL: ${{ format('bodo.ai{0}', (inputs.is-release) && '-dev' || '') }}
+          ARTIFACTORY_CHANNEL: ${{ format('bodo.ai{0}', (inputs.is-release == false) && '-dev' || '') }}

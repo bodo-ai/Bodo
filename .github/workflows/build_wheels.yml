@@ -6,6 +6,11 @@ on:
     types: [published]
   schedule:
     - cron: '45 21 * * 2,4'    # 9:45PM EST Tue, Thu
+  pull_request:
+    paths:
+      - 'pixi.lock'
+      - '.github/workflows/release.yml'
+      - '.github/workflows/_build_*_pip.yml'
 
 jobs:
   build_bodo_linux_wheels:
@@ -17,6 +22,7 @@ jobs:
   build_bodo_macos_wheels:
     uses: ./.github/workflows/_build_bodo_pip.yml
     strategy:
+      fail-fast: false
       matrix:
         os: [macos-13, macos-14]
     with:
