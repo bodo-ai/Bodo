@@ -7,8 +7,7 @@ name = "bodo-iceberg-connector"
 dynamic = ["version"]
 description = "Bodo Connector for Iceberg"
 readme = "README_pypi.md"
-# requires-python = ">=3.10,<3.13"
-requires-python = ">=3.12,<3.13"
+requires-python = ">=3.10,<3.13"
 keywords = ["data", "analytics", "cluster"]
 authors = [{ name = "Bodo.ai" }]
 
