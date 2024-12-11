@@ -92,7 +92,7 @@ jobs:
             LD_LIBRARY_PATH=/project/.pixi/envs/pip-cpp/lib
             CFLAGS="-isystem /project/.pixi/envs/pip-cpp/include"
             CPPFLAGS="-isystem /project/.pixi/envs/pip-cpp/include"
-            MPI_CC=gcc
+            MPICH_CC=gcc
           CIBW_ENVIRONMENT_PASS_LINUX: >
             AWS_ACCESS_KEY_ID
             AWS_SECRET_ACCESS_KEY
