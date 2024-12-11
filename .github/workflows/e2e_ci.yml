@@ -139,10 +139,11 @@ jobs:
           ./buildscripts/install_azurefs_sas_token_provider.sh
 
       - name: Run Python Examples
+        working-directory: ./examples
         env:
           SF_USERNAME: ${{ secrets.SF_USERNAME }}
           SF_PASSWORD: ${{ secrets.SF_PASSWORD }}
           SF_ACCOUNT: ${{ secrets.SF_ACCOUNT }}
         run: |
           set -eo pipefail
-          ls examples/*.py | xargs -n 1 -P 1 python
+          ls *.py | xargs -n 1 -P 1 python
