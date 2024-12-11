@@ -58,8 +58,6 @@ jobs:
     # The manylinux image we use to build the wheels can't install the wheels since it's too old.
     # For this reason we test them separately
     runs-on: ubuntu-latest
-    container:
-      image: python:${{ matrix.python_version }}
     needs: build_bodo_linux_wheels
     steps:
       - uses: actions/download-artifact@v4
@@ -67,6 +65,9 @@ jobs:
         with:
           pattern: cibw-wheels-ubuntu-*
           path: .
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python_version }}
       - name: Install
         run: |
           # Install bodo from the local wheel
