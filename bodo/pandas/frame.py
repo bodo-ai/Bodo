@@ -216,6 +216,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             )
 
         # checks string arguments before jit performs conversion to unicode
+        # checks should match that of to_csv_overload in pd_dataframe_ext.py
         check_unsupported_args(
             "BodoDataFrame.to_csv",
             {
