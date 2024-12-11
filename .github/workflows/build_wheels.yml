@@ -39,17 +39,17 @@ jobs:
       bodo_version: ${{ needs.get_version.outputs.bodo_version }}
     secrets: inherit
 
-  build_bodo_macos_wheels:
-    uses: ./.github/workflows/_build_bodo_pip.yml
-    needs: [get_version]
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [macos-13, macos-14]
-    with:
-      os: ${{ matrix.os }}
-      bodo_version: ${{ needs.get_version.outputs.bodo_version }}
-    secrets: inherit
+  # build_bodo_macos_wheels:
+  #   uses: ./.github/workflows/_build_bodo_pip.yml
+  #   needs: [get_version]
+  #   strategy:
+  #     fail-fast: false
+  #     matrix:
+  #       os: [macos-13, macos-14]
+  #   with:
+  #     os: ${{ matrix.os }}
+  #     bodo_version: ${{ needs.get_version.outputs.bodo_version }}
+  #   secrets: inherit
 
   test-bodo-linux:
     strategy:
@@ -228,7 +228,7 @@ jobs:
       # TODO: Chain with E2E tests for effective testing
 
   upload-all:
-    needs: [build-iceberg, test-iceberg-import, build_bodo_linux_wheels, build_bodo_macos_wheels, test-bodo-linux, build_bodosql_wheels, test-bodosql]
+    needs: [build-iceberg, test-iceberg-import, build_bodo_linux_wheels, test-bodo-linux, build_bodosql_wheels, test-bodosql]
     permissions:
       id-token: write
     runs-on: ubuntu-latest
