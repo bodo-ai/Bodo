@@ -1,3 +1,7 @@
+![Logo](Assets/bodo.png)
+
+[Docs](https://docs.bodo.ai/latest/)· [Slack](https://bodocommunity.slack.com/join/shared_invite/zt-qwdc8fad-6rZ8a1RmkkJ6eOX1X__knA#/shared-invite/email) · [Benchmarks](https://www.bodo.ai/benchmarks)
+
 # Bodo: High-Performance Python Compute Engine for Data and AI
 
 Bodo is a cutting edge compute engine for high performance Python data processing. Powered by an innovative auto-parallelizing just-in-time compiler, Bodo transforms Python programs into highly optimized, parallel binaries without requiring code rewrites.
