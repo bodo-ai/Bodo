@@ -34,8 +34,10 @@ def patch_lib(fpath):
     #     @rpath/libarrow.500.dylib (compatibility version 500.0.0, current version 500.0.0)
     #     @rpath/libc++.1.dylib (compatibility version 1.0.0, current version 1.0.0)
     #     /usr/lib/libSystem.B.dylib (compatibility version 1.0.0, current version 1311.0.0)
+    print("Loaded Libs for", fpath)
 
     for lib in load_libs[1:]:
+        print(lib)
         if is_libmpi(lib):
             print("Patching libmpi")
             # Each line looks like

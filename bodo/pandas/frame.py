@@ -143,6 +143,57 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             return self._mgr._md_result_id
         return None
 
+    def to_sql(
+        self,
+        name,
+        con,
+        schema=None,
+        if_exists="fail",
+        index=True,
+        index_label=None,
+        chunksize=None,
+        dtype=None,
+        method=None,
+    ):
+        # argument defaults should match that of to_sql_overload in pd_dataframe_ext.py
+        @bodo.jit(spawn=True)
+        def to_sql_wrapper(
+            df: pd.DataFrame,
+            name,
+            con,
+            schema,
+            if_exists,
+            index,
+            index_label,
+            chunksize,
+            dtype,
+            method,
+        ):
+            return df.to_sql(
+                name,
+                con,
+                schema,
+                if_exists,
+                index,
+                index_label,
+                chunksize,
+                dtype,
+                method,
+            )
+
+        to_sql_wrapper(
+            self,
+            name,
+            con,
+            schema,
+            if_exists,
+            index,
+            index_label,
+            chunksize,
+            dtype,
+            method,
+        )
+
     def to_json(
         self,
         path_or_buf=None,
