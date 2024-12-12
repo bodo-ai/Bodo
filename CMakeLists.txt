@@ -628,6 +628,7 @@ target_compile_options(
 
 target_link_directories(ext PRIVATE ${PYARROW_LIB_DIR} "${Python_NumPy_INCLUDE_DIR}/../lib")
 target_link_libraries(ext PRIVATE
+  pthread
   npymath
   mpi
   hdf5
