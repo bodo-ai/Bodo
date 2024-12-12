@@ -9,6 +9,12 @@ include(CMakePrintHelpers)
 include(CheckIPOSupported)
 check_ipo_supported(LANGUAGES CXX)
 
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "(x86)|(X86)|(amd64)|(AMD64)")
+  set (X86 TRUE)
+else()
+  set (X86 FALSE)
+endif()
+
 
 # ------------------------- Enable Compilation Caches -------------------------
 # Enable CCache or SCCache if Found
@@ -148,7 +154,7 @@ add_compile_options(
   "-fstack-protector-strong"    # Conda used to force-add. Remove in follow up PR
   "-D_FORTIFY_SOURCE=2"         # Conda used to force-add. Remove in follow up PR
 )
-if (LINUX)
+if (LINUX AND X86)
   add_compile_options(
     # -march=haswell is used to enable AVX2 support (required by SIMD bloom filter implementation)
     "-march=haswell"
