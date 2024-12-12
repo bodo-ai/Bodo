@@ -28,7 +28,7 @@ ENV PATH=/opt/conda/bin:$PATH
 WORKDIR /app
 
 # Copy the two Python files to the container
-COPY ./pi.ipynb ./quickstart.ipynb /app/
+COPY ./Bodo/buildscripts/docker_release/pi.ipynb ./Bodo/buildscripts/docker_release/quickstart.ipynb /app/
 
 # Expose port 8888 for the Jupyter Notebook
 EXPOSE 8888

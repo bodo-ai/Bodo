@@ -51,6 +51,6 @@ jobs:
       # if: ${{ inputs.is-release }}
       with:
          push: true
-         file: ./buildscripts/docker_release/Dockerfile
+         file: ./Bodo/buildscripts/docker_release/Dockerfile
          platforms: linux/amd64
          tags: bodoaidocker/test_release_image:latest
