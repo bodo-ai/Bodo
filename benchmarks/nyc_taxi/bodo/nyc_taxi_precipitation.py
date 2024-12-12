@@ -91,7 +91,7 @@ def get_monthly_travels_weather():
     print("Monthly Taxi Travel Times Computation Time: ", end - start)
 
     start = time.time()
-    monthly_trips_weather.to_parquet("bodo_result.pq")
+    monthly_trips_weather.to_parquet("monthly_trips_weather.pq")
     end = time.time()
     print("Writing time:", (end - start))
     return monthly_trips_weather

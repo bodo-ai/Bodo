@@ -44,7 +44,7 @@ provider:
     # Availability zone(s), comma-separated, that nodes may be launched in.
     # Nodes will be launched in the first listed availability zone and will
     # be tried in the subsequent availability zones if launching fails.
-    availability_zone: us-east-2a,us-east-2b
+    availability_zone: us-east-2a, us-east-2b
     # Whether to allow node reuse. If set to False, nodes will be terminated
     # instead of stopped.
     cache_stopped_nodes: False # If not present, the default is True.
@@ -73,7 +73,7 @@ available_node_types:
         # For more documentation on available fields, see:
         # http://boto3.readthedocs.io/en/latest/reference/services/ec2.html#EC2.ServiceResource.create_instances
         node_config:
-            InstanceType: r6i.8xlarge
+            InstanceType: r6i.16xlarge
             # Default AMI for us-east-2.
             # Check https://github.com/ray-project/ray/blob/master/python/ray/autoscaler/_private/aws/config.py
             # for default images for other zones.
@@ -103,7 +103,7 @@ available_node_types:
         # For more documentation on available fields, see:
         # http://boto3.readthedocs.io/en/latest/reference/services/ec2.html#EC2.ServiceResource.create_instances
         node_config:
-            InstanceType: r6i.8xlarge
+            InstanceType: r6i.16xlarge
             # Default AMI for us-east-2.
             # Check https://github.com/ray-project/ray/blob/master/python/ray/autoscaler/_private/aws/config.py
             # for default images for other zones.

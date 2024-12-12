@@ -17,19 +17,27 @@ usage:
 
 from bodosdk import BodoWorkspaceClient
 
-bodo_workspace = BodoWorkspaceClient()
-benchmark_cluster = bodo_workspace.ClusterClient.create(
-    name="Benchmark Bodo", instance_type="c6i.8xlarge", workers_quantity=4
-)
-benchmark_cluster.wait_for_status(["RUNNING"])
 
-benchmark_job = benchmark_cluster.run_job(
-    code_type="PYTHON",
-    source={"type": "WORKSPACE", "path": "/"},
-    exec_file="nyc_taxi_precipitation.py",
-)
-print(benchmark_job.wait_for_status(["SUCCEEDED"]).get_stdout())
+def run_bodo_benchmark():
+    bodo_workspace = BodoWorkspaceClient()
+    benchmark_cluster = bodo_workspace.ClusterClient.create(
+        name="Benchmark Bodo", instance_type="c6i.16xlarge", workers_quantity=4
+    )
+    benchmark_cluster.wait_for_status(["RUNNING"])
 
-# cleanup:
-benchmark_cluster.stop(wait=True)
-benchmark_cluster.delete(wait=True)
+    # run the job three times
+    for _ in range(3):
+        benchmark_job = benchmark_cluster.run_job(
+            code_type="PYTHON",
+            source={"type": "WORKSPACE", "path": "/"},
+            exec_file="nyc_taxi_precipitation.py",
+        )
+        print(benchmark_job.wait_for_status(["SUCCEEDED"]).get_stdout())
+
+    # cleanup:
+    benchmark_cluster.stop(wait=True)
+    benchmark_cluster.delete(wait=True)
+
+
+if __name__ == "__main__":
+    run_bodo_benchmark()

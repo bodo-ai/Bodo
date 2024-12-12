@@ -94,22 +94,16 @@ def get_monthly_travels_weather(client):
         },
     )
 
-    # convert to pandas and then write result dataframe ~11 rows, 8 columns
-    def write_results():
-        monthly_trips_weather.compute().to_parquet("/tmp/data/dask_results.pq")
-
-    future = client.submit(write_results)
-    future.result()
+    # TODO: Write to S3 once permissions issue is fixed
+    monthly_trips_weather = monthly_trips_weather.compute()
 
     end = time.time()
-    print("Total IO and compute time: ", (end - start))
 
-    return monthly_trips_weather
+    return end - start
 
 
-if __name__ == "__main__":
+def main():
     env_vars = {"EXTRA_CONDA_PACKAGES": "s3fs==2024.10.0"}
-
     with EC2Cluster(
         # NOTE: Setting security = False to avoid large config size
         # https://github.com/dask/dask-cloudprovider/issues/249
@@ -121,4 +115,12 @@ if __name__ == "__main__":
         env_vars=env_vars,
     ) as cluster:
         with Client(cluster) as client:
-            get_monthly_travels_weather(client)
+            for _ in range(3):
+                future = client.submit(get_monthly_travels_weather)
+                total_time = future.result()
+                client.restart()
+                print("Total time for IO and compute:", total_time)
+
+
+if __name__ == "__main__":
+    main()
