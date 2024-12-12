@@ -3,7 +3,8 @@ provider "aws" {
 }
 
 resource "aws_s3_bucket" "emr_bucket" {
-  bucket = "spark-benchmark-python-script-bucket-${random_id.bucket_id.hex}"
+  bucket        = "spark-benchmark-python-script-bucket-${random_id.bucket_id.hex}"
+  force_destroy = true
 }
 
 resource "random_id" "bucket_id" {
@@ -31,8 +32,10 @@ resource "aws_emr_cluster" "emr_cluster" {
   applications  = ["Hadoop", "Spark"]
 
   ec2_attributes {
-    instance_profile = aws_iam_instance_profile.emr_profile.arn
-    subnet_id        = aws_subnet.emr_subnet.id
+    instance_profile                  = aws_iam_instance_profile.emr_profile.arn
+    subnet_id                         = aws_subnet.emr_subnet.id
+    emr_managed_master_security_group = aws_security_group.allow_access.id
+    emr_managed_slave_security_group  = aws_security_group.allow_access.id
   }
 
   master_instance_group {
@@ -180,6 +183,41 @@ resource "aws_vpc" "emr_vpc" {
   }
 }
 
+resource "aws_security_group" "allow_access" {
+  name                   = "allow_access"
+  description            = "Allow inbound traffic"
+  vpc_id                 = aws_vpc.emr_vpc.id
+  revoke_rules_on_delete = true
+
+  ingress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = [aws_vpc.emr_vpc.cidr_block]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  depends_on = [aws_subnet.emr_subnet]
+
+  lifecycle {
+    ignore_changes = [
+      ingress,
+      egress,
+    ]
+  }
+
+  tags = {
+    for-use-with-amazon-emr-managed-policies = "true"
+  }
+}
+
+
 
 resource "aws_internet_gateway" "emr_igw" {
   vpc_id = aws_vpc.emr_vpc.id
@@ -205,7 +243,7 @@ output "emr_cluster_id" {
   value = aws_emr_cluster.emr_cluster.id
 }
 output "emr_cluster_region" {
-    value = data.aws_region.current.name
+  value = data.aws_region.current.name
 }
 output "s3_bucket_id" {
   value = aws_s3_bucket.emr_bucket.id
