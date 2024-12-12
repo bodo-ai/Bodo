@@ -109,7 +109,7 @@ def main():
         # https://github.com/dask/dask-cloudprovider/issues/249
         security=False,
         n_workers=4,
-        instance_type="r6i.8xlarge",
+        instance_type="r6i.16xlarge",
         # Region for accessing bodo-example-data
         region="us-east-2",
         env_vars=env_vars,
