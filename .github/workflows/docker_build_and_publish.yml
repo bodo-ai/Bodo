@@ -47,7 +47,8 @@ jobs:
 
     - name: Build and push to dockerhub
       uses: docker/build-push-action@v5
-      if: ${{ inputs.is-release }}
+      # TODO: uncomment before merging.
+      # if: ${{ inputs.is-release }}
       with:
          push: true
          file: ./buildscripts/docker_release/Dockerfile
