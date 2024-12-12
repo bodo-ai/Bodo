@@ -53,6 +53,8 @@ Run the following command to wait for the script to complete:
 ./wait_for_steps.sh
 ```
 
+This will take a few minutes.
+
 ---
 
 ## Retrieving Logs
