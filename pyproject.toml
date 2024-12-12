@@ -179,7 +179,6 @@ skip = ["pp*", "*musllinux*", "*i686*"]
 # Increase pip debugging output
 build-verbosity = 1
 build-frontend = { name = "pip" }
-#, args = ["--only-binary", "mpi4py", "--extra-index-url", "https://pypi.anaconda.org/mpi4py/simple"] }
 
 [tool.cibuildwheel.linux]
 manylinux-x86_64-image = "quay.io/pypa/manylinux_2_28_x86_64:latest"

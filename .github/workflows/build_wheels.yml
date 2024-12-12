@@ -231,7 +231,7 @@ jobs:
       # TODO: Chain with E2E tests for effective testing
 
   upload-all:
-    needs: [build-iceberg, test-iceberg-import, build_bodo_linux_wheels, test-bodo-linux, build_bodosql_wheels, test-bodosql]
+    needs: [build-iceberg, test-iceberg-import, build_bodo_linux_wheels, build_bodo_macos_wheels, test-bodo-linux, build_bodosql_wheels, test-bodosql]
     permissions:
       id-token: write
     runs-on: ubuntu-latest
