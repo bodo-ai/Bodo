@@ -13,8 +13,8 @@ resource "random_id" "bucket_id" {
 
 resource "aws_s3_object" "python_script" {
   bucket = aws_s3_bucket.emr_bucket.id
-  key    = "scripts/spark_nyc_taxi_preciptation.py"
-  source = "./spark_nyc_taxi_preciptation.py"
+  key    = "scripts/spark_nyc_taxi_precipitation.py"
+  source = "./spark_nyc_taxi_precipitation.py"
 }
 
 resource "aws_s3_object" "bootstrap_script" {
@@ -65,7 +65,7 @@ resource "aws_emr_cluster" "emr_cluster" {
     action_on_failure = "TERMINATE_CLUSTER"
     hadoop_jar_step {
       jar  = "command-runner.jar"
-      args = ["spark-submit", "s3://${aws_s3_bucket.emr_bucket.id}/scripts/spark_nyc_taxi_preciptation.py"]
+      args = ["spark-submit", "s3://${aws_s3_bucket.emr_bucket.id}/scripts/spark_nyc_taxi_precipitation.py"]
     }
   }
   auto_termination_policy {
