@@ -21,7 +21,7 @@ resource "aws_s3_object" "bootstrap_script" {
   key     = "scripts/bootstrap.sh"
   content = <<EOF
 #!/bin/bash
-pip install pandas numpy==1.26.4 pyarrow
+sudo pip install -U pandas numpy==1.26.4 pyarrow
 EOF
 }
 
@@ -167,7 +167,7 @@ resource "aws_iam_instance_profile" "emr_profile" {
 resource "aws_subnet" "emr_subnet" {
   vpc_id            = aws_vpc.emr_vpc.id
   cidr_block        = "10.0.0.0/16"
-  availability_zone = "us-east-2a"
+  availability_zone = "us-east-2b"
   tags = {
     for-use-with-amazon-emr-managed-policies = "true"
   }
