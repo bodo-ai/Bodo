@@ -1,6 +1,6 @@
 # Installation
 
-Ensure that you have a python environment with modin/ray installed. For conveinience, you can use `env.yml` which includes all of the packages needed for running this benchmark.  
+Ensure that you have a python environment with Modin/Ray installed. For convenience, you can use `env.yml` which includes all of the packages needed for running this benchmark.
 
 ``` shell
 conda env create -f env.yml
