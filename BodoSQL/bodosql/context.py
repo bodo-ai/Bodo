@@ -1104,6 +1104,9 @@ class BodoSQLContext:
             # are not visible to cloudpickle as used by the function. See:
             # test_json_fns.py::test_object_construct_keep_null[no_nested-no_null-with_case]
             if isinstance(dispatcher, SubmitDispatcher):
+                # __builtins__ which is added to glbls by exec causes issues in
+                # Jupyter/IPython pickling.
+                glbls.pop("__builtins__", None)
                 dispatcher.add_extra_globals(glbls)
 
             return dispatcher(
