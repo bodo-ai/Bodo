@@ -7,7 +7,7 @@ include(FetchContent)
 include(CMakePrintHelpers)
 # LTO Support
 include(CheckIPOSupported)
-check_ipo_supported()
+check_ipo_supported(LANGUAGES CXX)
 
 
 # ------------------------- Enable Compilation Caches -------------------------
@@ -198,7 +198,7 @@ cmake_print_variables(CONDA_INCLUDE_DIR)
 set(CONDA_LIB_DIR "$ENV{CONDA_PREFIX}/lib")
 cmake_print_variables(CONDA_LIB_DIR)
 
-# This is supposed to work, but isnt. I don't know why
+# This is supposed to work, but isn't. I don't know why
 # include_directories(SYSTEM "${CONDA_INCLUDE_DIR}")
 # Similarly, the following line doesn't work
 # target_include_directories(ext SYSTEM PRIVATE ${CONDA_INCLUDE_DIR})
@@ -210,35 +210,53 @@ cmake_print_variables(CONDA_LIB_DIR)
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -isystem ${CONDA_INCLUDE_DIR}")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -isystem ${CONDA_INCLUDE_DIR}")
 
-# Vendor MPI4Py
-if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/bodo/mpi4py")
-  message(STATUS "Copying mpi4py to source directory")
-  file(COPY "$ENV{CONDA_PREFIX}/lib/python${Python_VERSION_MAJOR}.${Python_VERSION_MINOR}/site-packages/mpi4py" DESTINATION "${CMAKE_CURRENT_SOURCE_DIR}/bodo/")
-endif()
-message(STATUS "Copying mpi4py to wheel")
-file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/bodo/mpi4py" DESTINATION "${SKBUILD_PLATLIB_DIR}/bodo/")
-
 # Vendor MPICH
 if(DEFINED ENV{BODO_VENDOR_MPICH})
-  message(STATUS "Downloading mpich")
-  execute_process(COMMAND ${Python_EXECUTABLE} -m pip download mpich==${MPICH_VERSION} -i  https://pypi.anaconda.org/mpi4py/simple)
-  execute_process(COMMAND unzip mpich-*.whl "mpich*.data/*" -d mpich-tmp-extract-dir)
+  message(STATUS "Downloading MPICH")
+  execute_process(COMMAND ${Python_EXECUTABLE} -m pip download mpich==${MPICH_VERSION} -i https://pypi.anaconda.org/mpi4py/simple)
+  execute_process(COMMAND unzip "mpich-*.whl" "mpich*.data/*" -d mpich-tmp-extract-dir)
   file(GLOB MPICH_DATA_DIR "mpich-tmp-extract-dir/mpich-*.data/data/*")
-  file(COPY ${MPICH_DATA_DIR} DESTINATION "${SKBUILD_DATA_DIR}" FOLLOW_SYMLINK_CHAIN FILE_PERMISSIONS OWNER_EXECUTE GROUP_EXECUTE WORLD_EXECUTE OWNER_READ GROUP_READ WORLD_READ OWNER_WRITE GROUP_WRITE)
+  file(COPY ${MPICH_DATA_DIR} DESTINATION "${SKBUILD_DATA_DIR}" FOLLOW_SYMLINK_CHAIN 
+    FILE_PERMISSIONS OWNER_EXECUTE GROUP_EXECUTE WORLD_EXECUTE OWNER_READ GROUP_READ WORLD_READ OWNER_WRITE GROUP_WRITE)
   file(GLOB MPICH_WHEEL "mpich-*.whl")
   file(REMOVE_RECURSE ${MPICH_WHEEL} mpich-tmp-extract-dir)
-  message(STATUS "Moved mpich to ${SKBUILD_DATA_DIR}")
-endif()
+  message(STATUS "Moved MPICH to ${SKBUILD_DATA_DIR}")
 
-# Find PyArrow Include Directory
-# TODO: Use Arrow Include Directory from Conda Instead
+  set(MPICH_INCLUDE_DIR "${SKBUILD_DATA_DIR}/include")
+  set(MPICH_LIB_DIR "${SKBUILD_DATA_DIR}/lib")
+else()
+  set(MPICH_INCLUDE_DIR "${CONDA_INCLUDE_DIR}")
+  set(MPICH_LIB_DIR "${CONDA_LIB_DIR}")
+endif()
+cmake_print_variables(MPICH_INCLUDE_DIR)
+
+# Vendor MPI4Py
+if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/bodo/mpi4py")
+  message(STATUS "Copying MPI4Py to Source Directory")
+  # Extract the location of the site-packages directory containing mpi4py
+  execute_process(
+    COMMAND "${PYTHON_EXECUTABLE}" -c "import mpi4py; print(mpi4py.__path__[0])"
+    OUTPUT_VARIABLE MPI4PY_PACKAGE_DIR
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+  )
+  file(COPY ${MPI4PY_PACKAGE_DIR} DESTINATION "${CMAKE_CURRENT_SOURCE_DIR}/bodo/")
+endif()
+message(STATUS "Copying MPI4Py to Bodo Directory")
+file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/bodo/mpi4py" DESTINATION "${SKBUILD_PLATLIB_DIR}/bodo/")
+
+# Find PyArrow Include and Lib Directory
+# TODO: Use Arrow Directories from Conda Instead if Available
 execute_process(
   COMMAND "${PYTHON_EXECUTABLE}" -c "import pyarrow; print(pyarrow.get_include())"
   OUTPUT_VARIABLE PYARROW_INCLUDE_DIR
   OUTPUT_STRIP_TRAILING_WHITESPACE
 )
+# PyArrow on Pip bundles the Arrow shared libraries, but named as lib*.EXT.VERSION
+# I.E. libarrow.so.1700 instead of the expected libarrow.so
+# Thus, we need PyArrow to create symlinks to the correct names
+# They have a helper function to do this, and it should be a NOOP with PyArrow on Conda
 execute_process(
-  COMMAND "${PYTHON_EXECUTABLE}" -c "import pyarrow; print(pyarrow.get_library_dirs()[0])"
+  COMMAND "${PYTHON_EXECUTABLE}" -c "import pyarrow; pyarrow.create_library_symlinks(); print(pyarrow.get_library_dirs()[0])"
   OUTPUT_VARIABLE PYARROW_LIB_DIR
   OUTPUT_STRIP_TRAILING_WHITESPACE
 )
@@ -250,7 +268,7 @@ cmake_print_variables(PYARROW_LIB_DIR)
 cmake_print_variables(Python_NumPy_INCLUDE_DIR)
 
 # Combine All 2 Includes
-set(BASE_INCLUDE_DIRS ${PYARROW_INCLUDE_DIR} ${Python_NumPy_INCLUDE_DIR})
+set(BASE_INCLUDE_DIRS ${PYARROW_INCLUDE_DIR} ${Python_NumPy_INCLUDE_DIR} ${MPICH_INCLUDE_DIR})
 
 
 # ------------------------ Cython Target - bodo.io.pyfs -----------------------
@@ -266,8 +284,7 @@ add_custom_command(
 
 python_add_library(pyfs MODULE WITH_SOABI "bodo/io/pyfs.cpp")
 target_include_directories(pyfs PRIVATE ${BASE_INCLUDE_DIRS})
-target_link_directories(pyfs PRIVATE ${PYARROW_LIB_DIR})
-target_link_directories(pyfs PRIVATE ${CONDA_LIB_DIR})
+target_link_directories(pyfs PRIVATE ${PYARROW_LIB_DIR} ${CONDA_LIB_DIR})
 target_link_libraries(pyfs PRIVATE arrow arrow_python)
 install(TARGETS pyfs DESTINATION "bodo/io/")
 
@@ -284,11 +301,9 @@ add_custom_command(
 set(pyarrow_wrappers_sources "bodo/io/pyarrow_wrappers.cpp" "bodo/io/arrow_compat.cpp")
 python_add_library(pyarrow_wrappers MODULE WITH_SOABI "${pyarrow_wrappers_sources}")
 target_include_directories(pyarrow_wrappers PRIVATE ${BASE_INCLUDE_DIRS})
-target_link_directories(pyarrow_wrappers PRIVATE ${PYARROW_LIB_DIR})
-target_link_directories(pyarrow_wrappers PRIVATE ${CONDA_LIB_DIR})
-target_link_libraries(pyarrow_wrappers PRIVATE arrow arrow_python arrow_dataset)
+target_link_directories(pyarrow_wrappers PRIVATE ${PYARROW_LIB_DIR} ${CONDA_LIB_DIR} ${MPICH_LIB_DIR})
+target_link_libraries(pyarrow_wrappers PRIVATE arrow arrow_python arrow_dataset mpi)
 install(TARGETS pyarrow_wrappers DESTINATION "bodo/io/")
-
 
 # ----------------------- Cython Target - bodo.io._hdfs -----------------------
 add_custom_command(
@@ -303,11 +318,9 @@ add_custom_command(
 
 python_add_library(_hdfs MODULE WITH_SOABI "bodo/io/_hdfs.cpp")
 target_include_directories(_hdfs PUBLIC ${BASE_INCLUDE_DIRS})
-target_link_directories(_hdfs PRIVATE ${PYARROW_LIB_DIR})
-target_link_directories(_hdfs PRIVATE ${CONDA_LIB_DIR})
+target_link_directories(_hdfs PRIVATE ${PYARROW_LIB_DIR} ${CONDA_LIB_DIR})
 target_link_libraries(_hdfs PRIVATE arrow arrow_python)
 install(TARGETS _hdfs DESTINATION "bodo/io/")
-
 
 # ---------------------- Cython Target - bodo.io.tracing ----------------------
 if (NOT (CMAKE_BUILD_TYPE STREQUAL "Release"))
@@ -326,10 +339,10 @@ add_custom_command(
 )
 
 python_add_library(tracing MODULE WITH_SOABI "bodo/utils/tracing.c")
-target_link_directories(tracing PRIVATE ${CONDA_LIB_DIR})
+target_include_directories(tracing PRIVATE ${MPICH_INCLUDE_DIR})
+target_link_directories(tracing PRIVATE ${CONDA_LIB_DIR} ${MPICH_LIB_DIR})
 target_link_libraries(tracing PRIVATE mpi)
 install(TARGETS tracing DESTINATION "bodo/utils/")
-
 
 # ---------------------- Cython Target - bodo.memory -----------------------
 add_custom_command(
@@ -343,11 +356,9 @@ add_custom_command(
 
 python_add_library(memory MODULE WITH_SOABI "bodo/memory.cpp")
 target_include_directories(memory PRIVATE ${BASE_INCLUDE_DIRS} "${CMAKE_CURRENT_SOURCE_DIR}/bodo/")
-target_link_directories(memory PRIVATE ${PYARROW_LIB_DIR})
-target_link_directories(memory PRIVATE ${CONDA_LIB_DIR})
+target_link_directories(memory PRIVATE ${PYARROW_LIB_DIR} ${CONDA_LIB_DIR})
 target_link_libraries(memory PRIVATE arrow arrow_python)
 install(TARGETS memory DESTINATION "bodo/")
-
 
 # ---------------------- Cython Target - bodo.tests.memory_tester -----------------------
 add_custom_command(
@@ -371,8 +382,7 @@ python_add_library(
 )
 
 target_include_directories(memory_tester PRIVATE ${BASE_INCLUDE_DIRS} "${CMAKE_CURRENT_SOURCE_DIR}/bodo/tests/")
-target_link_directories(memory_tester PRIVATE ${PYARROW_LIB_DIR})
-target_link_directories(memory_tester PRIVATE ${CONDA_LIB_DIR})
+target_link_directories(memory_tester PRIVATE ${PYARROW_LIB_DIR} ${CONDA_LIB_DIR} ${MPICH_LIB_DIR})
 target_link_libraries(memory_tester PRIVATE mpi arrow arrow_python fmt::fmt)
 if(NOT(CMAKE_BUILD_TYPE STREQUAL "Release"))
   target_compile_definitions(
@@ -383,7 +393,6 @@ if(NOT(CMAKE_BUILD_TYPE STREQUAL "Release"))
   )
 endif()
 install(TARGETS memory_tester DESTINATION "bodo/tests/")
-
 
 # ---------------------- Cython Target - bodo.transforms.type_inference.native_typer -----------------------
 add_custom_command(
@@ -403,9 +412,7 @@ python_add_library(
     "bodo/transforms/type_inference/typeinfer.cpp"
     "bodo/transforms/type_inference/ir.cpp"
 )
-
 target_include_directories(native_typer PRIVATE ${BASE_INCLUDE_DIRS} "${CMAKE_CURRENT_SOURCE_DIR}/bodo/transforms/type_inference/" "${CMAKE_CURRENT_BINARY_DIR}/bodo/transforms/type_inference/")
-target_link_directories(native_typer PRIVATE ${PYARROW_LIB_DIR})
 target_link_directories(native_typer PRIVATE ${CONDA_LIB_DIR})
 target_link_libraries(native_typer PRIVATE fmt::fmt)
 install(TARGETS native_typer DESTINATION "bodo/transforms/type_inference/")
@@ -500,8 +507,7 @@ set(sources_list
 
 if (BUILD_WITH_V8)
   set(sources_list "${sources_list}"
-    "bodo/libs/_javascript_udf.cpp"
-      )
+    "bodo/libs/_javascript_udf.cpp")
 endif()
 
 # Some files cannot be compiled with -Werror=implict-fallthrough, but we want
@@ -559,7 +565,7 @@ python_add_library(ext MODULE WITH_SOABI "${sources_list}")
 
 # Dependency Includes Are `-isystem` to Suppress Warnings
 target_include_directories(ext SYSTEM PRIVATE ${BASE_INCLUDE_DIRS})
-target_link_directories(ext PRIVATE ${CONDA_LIB_DIR})
+target_link_directories(ext PRIVATE ${CONDA_LIB_DIR} ${MPICH_LIB_DIR})
 
 if (CMAKE_BUILD_TYPE STREQUAL "Release")
   target_compile_options(ext PRIVATE "-Wno-unknown-pragmas")
@@ -631,7 +637,6 @@ if (IS_PLATFORM OR DEFINED ENV{USE_BODO_ARROW_FORK})
   target_compile_definitions(ext PRIVATE "USE_BODO_ARROW_FORK=1")
 endif()
 
-
 if (BUILD_WITH_V8)
   message(STATUS "Building with V8")
   target_link_libraries(ext PRIVATE
@@ -648,12 +653,10 @@ if (BUILD_WITH_V8)
   target_include_directories(ext PRIVATE "${v8_SOURCE_DIR}/v8")
   target_compile_definitions(ext PRIVATE "BUILD_WITH_V8=1")
 endif()
-add_dependencies(ext pyfs _hdfs tracing pyarrow_wrappers)
-
 
 target_include_directories(ext PRIVATE ${datasketches_INSTALL_DIR}/include/DataSketches)
 add_dependencies(ext datasketches)
 
 set_target_properties(ext PROPERTIES CXX_CLANG_TIDY "${CLANG_TIDY_COMMAND}")
-
+add_dependencies(ext pyfs _hdfs tracing pyarrow_wrappers datasketches)
 install(TARGETS ext DESTINATION "bodo/")
