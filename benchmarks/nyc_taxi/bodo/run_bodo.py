@@ -1,10 +1,10 @@
-"""This script runs the full bodo benchmark on the platform.
-First, ensure that you have bodosdk installed: `pip install bodosdk`, you will
-also need to have an account on the bodo platform and the following environment
+"""This script runs the full Bodo benchmark on the Bodo Platform.
+First, ensure that you have bodosdk installed (pip install bodosdk), you will
+also need to have an account on the Bodo Platform and the following environment
 variables set:
-    * BODO_CLIENT_ID: Bodo platform client id
-    * BODO_SECRET_KEY: Bodo platform secret key
-Refer to our SDK guide for more details:
+    * BODO_CLIENT_ID: Bodo Platform client id
+    * BODO_SECRET_KEY: Bodo Platform secret key
+Refer to the SDK guide for more details:
 
 https://docs.bodo.ai/latest/guides/using_bodo_platform/bodo_platform_sdk_guide/#installation
 

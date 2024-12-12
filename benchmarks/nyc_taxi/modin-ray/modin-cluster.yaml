@@ -1,4 +1,4 @@
-# Copied from https://github.com/modin-project/modin/blob/main/examples/tutorial/jupyter/execution/pandas_on_ray/cluster/modin-cluster.yaml
+# Copied from https://github.com/modin-project/modin/blob/main/examples/tutorial/jupyter/execution/pandas_on_ray/cluster/modin-cluster.yaml with some modifications.
 
 # An unique identifier for the head node and workers of this cluster.
 cluster_name: modin_init

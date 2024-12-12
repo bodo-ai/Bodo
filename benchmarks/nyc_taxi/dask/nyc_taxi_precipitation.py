@@ -1,10 +1,11 @@
-"""This is the script version of the dask benchmark. Before running, ensure
-that your local environment matches the environment created on the cloud.
+"""This is the script version of the Dask benchmark. Before running, ensure
+that your local environment matches the environment on the cloud:
 
    cd benchmarks/dask
    conda env create -f env.yml
    conda activate benchmark_dask
 
+usage:
    python nyc_taxi_preciptation.py
 """
 
@@ -15,7 +16,7 @@ from dask.distributed import Client
 from dask_cloudprovider.aws import EC2Cluster
 
 
-def get_monthly_travels_weather(client):
+def get_monthly_travels_weather():
     start = time.time()
     central_park_weather_observations = dd.read_csv(
         "s3://bodo-example-data/nyc-taxi/central_park_weather.csv",
@@ -94,7 +95,7 @@ def get_monthly_travels_weather(client):
         },
     )
 
-    # TODO: Write to S3 once permissions issue is fixed
+    # TODO: Write output to S3 once permissions issue is resolved.
     monthly_trips_weather = monthly_trips_weather.compute()
 
     end = time.time()
