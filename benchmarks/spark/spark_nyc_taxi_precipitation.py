@@ -34,7 +34,8 @@ def get_monthly_travels_weather():
         central_park_weather_observations["date"]
     )
 
-    # Read in trip data using spark
+    # Read in trip data using spark, this reads a re-written dataset because spark doesn't support reading the original dataset
+    # due to schema unification issues
     fhvhv_tripdata = spark.read.parquet(
         "s3a://bodo-example-data/nyc-taxi/fhvhv_tripdata_rewrite/"
     ).drop("__index_level_0__")
