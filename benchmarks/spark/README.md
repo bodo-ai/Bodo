@@ -6,6 +6,8 @@
 
 1. **AWS CLI**: Installed and configured with access keys.
 2. **Terraform**: Installed on your local machine.
+3. **jq**: Installed on your local machine.
+4. **gzip**: Installed on your local machine.
 
 ---
 
@@ -43,6 +45,16 @@ The script will automatically run on the EMR cluster as a step during the deploy
 
 ---
 
+## Wait for the Script to Complete
+
+Run the following command to wait for the script to complete:
+
+```bash
+./wait_for_steps.sh
+```
+
+---
+
 ## Retrieving Logs
 
 ### 2. Download Logs Using AWS CLI
@@ -50,10 +62,8 @@ The script will automatically run on the EMR cluster as a step during the deploy
 Use the AWS CLI to download the logs:
 
 ```bash
-aws s3 cp s3://spark-benchmark-python-script-bucket-<random characters>/logs/ ./emr-logs --recursive
+aws s3 cp s3://"$(terraform output --json | jq -r '.s3_bucket_id.value')"/logs/"$(terraform output --json | jq -r '.emr_cluster_id.value')" ./emr-logs --recursive --region "$(terraform output --json | jq -r '.emr_cluster_region.value')"
 ```
-
-The bucket name can be found in the logs of `terraform apply`.
 
 ### 3. Explore the Logs
 
@@ -63,7 +73,12 @@ Logs are structured into the following directories:
 - `node/`: Logs for individual cluster nodes.
 - `applications/`: Logs for applications like Spark.
 
-Example command to view step logs:
+Example command to view step logs with execution time result:
+
+```bash
+gzip -d ./emr-logs/steps/*/*
+cat ./emr-logs/steps/*/stdout
+```
 
 ---
 

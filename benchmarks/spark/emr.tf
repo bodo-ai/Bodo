@@ -198,3 +198,15 @@ resource "aws_route_table_association" "emr_route_table_association" {
   subnet_id      = aws_subnet.emr_subnet.id
   route_table_id = aws_route_table.emr_route_table.id
 }
+
+data "aws_region" "current" {}
+
+output "emr_cluster_id" {
+  value = aws_emr_cluster.emr_cluster.id
+}
+output "emr_cluster_region" {
+    value = data.aws_region.current.name
+}
+output "s3_bucket_id" {
+  value = aws_s3_bucket.emr_bucket.id
+}
