@@ -654,9 +654,10 @@ class SubmitDispatcher:
 # See https://github.com/microsoft/vscode-jupyter/issues/16283
 
 vs_code_nb_msg = """
-Please turn off VS Code Jupyter extension's ZMQ to use Bodo in VS Code notebooks.
-Add `"jupyter.disableZMQSupport": true,` to VS Code settings and restart VS Code
-(e.g., using
+VS Code has a problem running MPI (and therefore Bodo) inside Jupyter notebooks.
+To fix it, please turn off VS Code Jupyter extension's ZMQ to use Bodo in VS Code
+notebooks. Add `"jupyter.disableZMQSupport": true,` to VS Code settings and restart
+VS Code (e.g., using
 "Preferences: Open User Settings (JSON)" in Command Pallette (Ctrl/CMD+Shift+P),
 see https://code.visualstudio.com/docs/getstarted/settings#_user-settings).
 """
