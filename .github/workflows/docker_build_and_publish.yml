@@ -82,7 +82,7 @@ jobs:
         docker rm -f test-container
 
 
-    - name: Upload notebook outputs
+    - name: Upload Notebook Outputs
       uses: actions/upload-artifact@v4
       with:
         name: notebook-outputs
