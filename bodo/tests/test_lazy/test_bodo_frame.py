@@ -570,3 +570,37 @@ def test_csv_param(collect_func):
             match=r"BodoDataFrame.to_csv\(\): mode parameter only supports default value w",
         ):
             bodo_df.to_csv(fname, mode="r")
+
+
+@pytest_mark_spawn_mode
+def test_json(collect_func):
+    """Tests that to_json() writes the frame correctly and does not trigger data fetch"""
+
+    @bodo.jit(spawn=True)
+    def _get_bodo_df(df):
+        return df
+
+    @bodo.jit(spawn=True)
+    def _read_bodo_df(fname):
+        read_df = pd.read_json(path_or_buf=fname, orient="records", lines=True)
+        return read_df
+
+    df = collect_func(0)
+    bodo_df = _get_bodo_df(df)
+    fname = os.path.join("bodo", "tests", "data", "example")
+
+    with ensure_clean2(fname):
+        bodo_df.to_json(path_or_buf=fname, orient="records", lines=True)
+        assert bodo_df._lazy
+        read_df = _read_bodo_df(fname)
+
+    pd.testing.assert_frame_equal(
+        read_df,
+        df,
+        check_dtype=False,
+    )
+    pd.testing.assert_frame_equal(
+        bodo_df,
+        df,
+        check_dtype=False,
+    )
