@@ -493,6 +493,7 @@ def worker_loop(
             exec_func_handler(comm_world, spawner_intercomm, logger)
         elif command == CommandType.EXIT.value:
             debug_worker_msg(logger, "Exiting...")
+            spawner_intercomm.Disconnect()
             return
         elif command == CommandType.BROADCAST.value:
             bodo.libs.distributed_api.bcast(None, root=0, comm=spawner_intercomm)

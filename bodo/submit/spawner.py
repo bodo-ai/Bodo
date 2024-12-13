@@ -556,6 +556,7 @@ class Spawner:
             # We might not be able to log during process teardown
             pass
         self.worker_intercomm.bcast(CommandType.EXIT.value, root=self.bcast_root)
+        self.worker_intercomm.Disconnect()
         self.destroyed = True
 
 
@@ -646,3 +647,25 @@ class SubmitDispatcher:
         cloudpickle, e.g. inside CASE implementation strings)
         """
         self.extra_globals.update(glbls)
+
+
+# Raise error for VS Code notebooks if jupyter.disableZMQSupport is not set to avoid
+# VS Code crashes (during restart, etc).
+# See https://github.com/microsoft/vscode-jupyter/issues/16283
+
+vs_code_nb_msg = """
+Please turn off VS Code Jupyter extension's ZMQ to use Bodo in VS Code notebooks.
+Add `"jupyter.disableZMQSupport": true,` to VS Code settings and restart VS Code
+(e.g., using
+"Preferences: Open User Settings (JSON)" in Command Pallette (Ctrl/CMD+Shift+P),
+see https://code.visualstudio.com/docs/getstarted/settings#_user-settings).
+"""
+
+# Detect VS Code Jupyter extension using this environment variable:
+# https://github.com/microsoft/vscode-jupyter/blob/f80bf701a710328b20c5931d621e8d83813055ea/src/kernels/raw/launcher/kernelEnvVarsService.node.ts#L134
+# Detect Jupyter session (no ZMQ) using JPY_SESSION_NAME
+if (
+    "PYDEVD_IPYTHON_COMPATIBLE_DEBUGGING" in os.environ
+    and "JPY_SESSION_NAME" not in os.environ
+):
+    raise bodo.utils.typing.BodoError(vs_code_nb_msg)
