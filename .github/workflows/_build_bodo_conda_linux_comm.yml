@@ -77,13 +77,12 @@ jobs:
           source /opt/conda/etc/profile.d/conda.sh
           conda activate bodo_build
 
-          # Secrets File
-          echo "${{ secrets.PUBLISH_BINARY_SECRETS }}" > $HOME/secret_file
-          sudo chmod a+r $HOME/secret_file
-
           echo "BODO_VERSION: $BODO_VERSION"
           echo "ARTIFACTORY_CHANNEL: $ARTIFACTORY_CHANNEL"
           ./buildscripts/bodo/publish_binary.sh $ARTIFACTORY_CHANNEL "linux-64" $BODO_VERSION
         env:
           IS_RELEASE: ${{ inputs.is-release }}
           ARTIFACTORY_CHANNEL: ${{ format('bodo.ai{0}', (inputs.is-release == false) && '-dev' || '') }}
+          USERNAME: ${{ secrets.ARTIFACTORY_USERNAME }}
+          TOKEN: ${{ secrets.ARTIFACTORY_TOKEN }}
+          ANACONDA_TOKEN: ${{ secrets.ANACONDA_TOKEN }}
