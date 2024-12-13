@@ -78,8 +78,9 @@ void copy_string_values_transform(
         size = end_offset - start_offset;
         int64_t idx = grp_info.group_to_first_row[igrp];
         while (true) {
-            if (idx == -1)
+            if (idx == -1) {
                 break;
+            }
             ListSizes[idx] = size;
             n_chars += size;
             idx = grp_info.next_row_in_group[idx];

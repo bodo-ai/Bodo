@@ -618,8 +618,9 @@ array_info* fftshift_py_entry(array_info* arr, uint64_t shape[2],
 PyMODINIT_FUNC PyInit_fft_cpp(void) {
     PyObject* m;
     MOD_DEF(m, "fft_cpp", "No docs", nullptr);
-    if (m == nullptr)
+    if (m == nullptr) {
         return nullptr;
+    }
 
     bodo_common_init();
 

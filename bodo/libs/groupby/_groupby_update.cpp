@@ -112,14 +112,18 @@ void cumulative_computation_T(std::shared_ptr<array_info> arr,
                         set_entry(i, ePair);
                     }
                 } else {  // The value is a normal one.
-                    if (ftype == Bodo_FTypes::cumsum)
+                    if (ftype == Bodo_FTypes::cumsum) {
                         ePair.second += fPair.second;
-                    if (ftype == Bodo_FTypes::cumprod)
+                    }
+                    if (ftype == Bodo_FTypes::cumprod) {
                         ePair.second *= fPair.second;
-                    if (ftype == Bodo_FTypes::cummin)
+                    }
+                    if (ftype == Bodo_FTypes::cummin) {
                         ePair.second = std::min(ePair.second, fPair.second);
-                    if (ftype == Bodo_FTypes::cummax)
+                    }
+                    if (ftype == Bodo_FTypes::cummax) {
                         ePair.second = std::max(ePair.second, fPair.second);
+                    }
                     set_entry(i, ePair);
                 }
                 i = grp_info.next_row_in_group[i];
@@ -143,10 +147,11 @@ void cumulative_computation_T(std::shared_ptr<array_info> arr,
                     return {isna, eVal};
                 },
                 [=](int64_t pos, std::pair<bool, T> const& ePair) -> void {
-                    if (ePair.first)
+                    if (ePair.first) {
                         out_arr->at<T>(pos) = std::numeric_limits<T>::min();
-                    else
+                    } else {
                         out_arr->at<T>(pos) = ePair.second;
+                    }
                 });
         } else {
             cum_computation(
@@ -247,8 +252,9 @@ void cumulative_computation_list_string(std::shared_ptr<array_info> arr,
                     null_bit_val_vec[i] = ePair;
                 }
             } else {  // The value is a normal one.
-                for (auto& eStr : fPair.second)
+                for (auto& eStr : fPair.second) {
                     ePair.second.push_back(eStr);
+                }
                 null_bit_val_vec[i] = ePair;
             }
             i = grp_info.next_row_in_group[i];
@@ -625,8 +631,9 @@ void percentile_computation_util(
             // corresponding to the first location whose cumulative distribution
             // is >= percentile.
             int64_t k_select = (k_approx == k_exact) ? (k_exact - 1) : k_exact;
-            if (k_select < 0)
+            if (k_select < 0) {
                 k_select = 0;
+            }
             std::nth_element(vect.begin(), vect.begin() + k_select, vect.end());
             valReturn = vect[k_select];
         }
@@ -777,8 +784,9 @@ void percentile_computation_decimal_util(
             // corresponding to the first location whose cumulative distribution
             // is >= percentile.
             int64_t k_select = (k_approx == k_exact) ? (k_exact - 1) : k_exact;
-            if (k_select < 0)
+            if (k_select < 0) {
                 k_select = 0;
+            }
             std::nth_element(vect.begin(), vect.begin() + k_select, vect.end());
             valReturn = vect[k_select];
         }
@@ -1824,12 +1832,14 @@ void nunique_computation(std::shared_ptr<array_info> arr,
                     HasNullRow = true;
                 }
                 i = grp_info.next_row_in_group[i];
-                if (i == -1)
+                if (i == -1) {
                     break;
+                }
             }
             int64_t size = eset.size();
-            if (HasNullRow && !dropna)
+            if (HasNullRow && !dropna) {
                 size++;
+            }
             out_arr->at<int64_t>(igrp) = size;
         }
     } else if (arr->arr_type == bodo_array_type::STRING) {
@@ -1862,12 +1872,14 @@ void nunique_computation(std::shared_ptr<array_info> arr,
                     HasNullRow = true;
                 }
                 i = grp_info.next_row_in_group[i];
-                if (i == -1)
+                if (i == -1) {
                     break;
+                }
             }
             int64_t size = eset.size();
-            if (HasNullRow && !dropna)
+            if (HasNullRow && !dropna) {
                 size++;
+            }
             out_arr->at<int64_t>(igrp) = size;
         }
     } else if (arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
@@ -1899,12 +1911,14 @@ void nunique_computation(std::shared_ptr<array_info> arr,
                     HasNullRow = true;
                 }
                 i = grp_info.next_row_in_group[i];
-                if (i == -1)
+                if (i == -1) {
                     break;
+                }
             }
             int64_t size = eset.size();
-            if (HasNullRow && !dropna)
+            if (HasNullRow && !dropna) {
                 size++;
+            }
             out_arr->at<int64_t>(igrp) = size;
         }
     } else {

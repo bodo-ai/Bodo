@@ -345,10 +345,11 @@ void unbox_datetime_date_array(PyObject* obj, int64_t n, int32_t* data,
             Py_DECREF(year_obj);
             Py_DECREF(month_obj);
             Py_DECREF(day_obj);
-            if (year == -1 && month == -1 && day == -1)
+            if (year == -1 && month == -1 && day == -1) {
                 value_bitmap = false;
-            else
+            } else {
                 value_bitmap = true;
+            }
         }
         data[i] = value_data;
         if (value_bitmap) {
@@ -686,10 +687,11 @@ void unbox_datetime_timedelta_array(PyObject* obj, int64_t n,
             Py_DECREF(days_obj);
             Py_DECREF(seconds_obj);
             Py_DECREF(microseconds_obj);
-            if (days_val == -1 && seconds_val == -1 && microseconds_val == -1)
+            if (days_val == -1 && seconds_val == -1 && microseconds_val == -1) {
                 value_bitmap = false;
-            else
+            } else {
                 value_bitmap = true;
+            }
         }
         days_data[i] = days_val;
         seconds_data[i] = seconds_val;
@@ -1016,8 +1018,9 @@ void* box_timestamptz_array(int64_t n, const int64_t* data_ts,
 PyMODINIT_FUNC PyInit_hdatetime_ext(void) {
     PyObject* m;
     MOD_DEF(m, "hdatetime_ext", "No docs", nullptr);
-    if (m == nullptr)
+    if (m == nullptr) {
         return nullptr;
+    }
 
     // init numpy
     import_array();
