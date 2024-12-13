@@ -89,7 +89,11 @@ def get_monthly_travels_weather():
     )
     end = time.time()
     print("Monthly Taxi Travel Times Computation Time: ", end - start)
-    print(monthly_trips_weather.head())
+
+    start = time.time()
+    monthly_trips_weather.to_parquet("monthly_trips_weather.pq")
+    end = time.time()
+    print("Writing time:", (end - start))
     return monthly_trips_weather
 
 

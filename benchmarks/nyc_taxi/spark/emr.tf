@@ -68,6 +68,22 @@ resource "aws_emr_cluster" "emr_cluster" {
       args = ["spark-submit", "s3://${aws_s3_bucket.emr_bucket.id}/scripts/spark_nyc_taxi_precipitation.py"]
     }
   }
+  step {
+    name              = "Run Python Script"
+    action_on_failure = "TERMINATE_CLUSTER"
+    hadoop_jar_step {
+      jar  = "command-runner.jar"
+      args = ["spark-submit", "s3://${aws_s3_bucket.emr_bucket.id}/scripts/spark_nyc_taxi_precipitation.py"]
+    }
+  }
+  step {
+    name              = "Run Python Script"
+    action_on_failure = "TERMINATE_CLUSTER"
+    hadoop_jar_step {
+      jar  = "command-runner.jar"
+      args = ["spark-submit", "s3://${aws_s3_bucket.emr_bucket.id}/scripts/spark_nyc_taxi_precipitation.py"]
+    }
+  }
   auto_termination_policy {
     idle_timeout = 60
   }
