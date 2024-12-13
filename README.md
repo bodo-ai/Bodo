@@ -1,14 +1,20 @@
 ![Logo](Assets/bodo.png)
 
-[Docs](https://docs.bodo.ai/latest/)· [Slack](https://bodocommunity.slack.com/join/shared_invite/zt-qwdc8fad-6rZ8a1RmkkJ6eOX1X__knA#/shared-invite/email) · [Benchmarks](https://www.bodo.ai/benchmarks)
+<h3 align="center">
+  <a href="https://docs.bodo.ai/latest/" target="_blank"><b>Docs</b></a>
+  &nbsp;&#183;&nbsp;
+  <a href="https://bodocommunity.slack.com/join/shared_invite/zt-qwdc8fad-6rZ8a1RmkkJ6eOX1X__knA#/shared-invite/email" target="_blank"><b>Slack</b></a>
+  &nbsp;&#183;&nbsp;
+  <a href="https://www.bodo.ai/benchmarks/" target="_blank"><b>Benchmarks</b></a>
+</h3>
 
 # Bodo: High-Performance Python Compute Engine for Data and AI
 
-Bodo is a cutting edge compute engine for high performance Python data processing. Powered by an innovative auto-parallelizing just-in-time compiler, Bodo transforms Python programs into highly optimized, parallel binaries without requiring code rewrites.
+Bodo is a cutting edge compute engine for large scale Python data processing. Powered by an innovative auto-parallelizing just-in-time compiler, Bodo transforms Python programs into highly optimized, parallel binaries without requiring code rewrites, which makes Bodo 20x to 240x faster compared to alternatives!
 
 Unlike traditional distributed computing frameworks, Bodo:
 - Seamlessly supports native Python APIs like Pandas and NumPy.
-- Eliminates runtime overheads common in driver-executor models by leveraging Message Passing Interface (MPI) technology for true distributed execution.
+- Eliminates runtime overheads common in driver-executor models by leveraging Message Passing Interface (MPI) tech for true distributed execution.
 
 ## Goals
 
