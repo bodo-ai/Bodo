@@ -1,4 +1,4 @@
-<img width="888" alt="image" src="https://github.com/user-attachments/assets/6403a8ac-974e-4610-bf3f-1fbba3db690f" />![Logo](Assets/bodo.png)
+![Logo](Assets/bodo.png)
 
 <h3 align="center">
   <a href="https://docs.bodo.ai/latest/" target="_blank"><b>Docs</b></a>
