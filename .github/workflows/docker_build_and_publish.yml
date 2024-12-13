@@ -22,7 +22,7 @@ on:
         default: false
 env:
   TEST_TAG: bodoaidocker/test_release_image:test
-  # LATEST_TAG: bodoaidocker/bodoai_image:latest
+  LATEST_TAG: bodoaidocker/bodoai_image:latest
 
 jobs:
 
@@ -53,7 +53,7 @@ jobs:
       with:
         load: true
         file: ./buildscripts/docker/docker_release/Dockerfile
-        platforms: linux/amd64
+        platforms: linux/amd64, linux/arm64
         tags: ${{ env.TEST_TAG }}
  
     - name: Test Jupyter notebooks inside the Docker image
@@ -84,11 +84,11 @@ jobs:
 
     - name: Build and push
       uses: docker/build-push-action@v6
-      if: ${{ inputs.is-release }}
+      # if: ${{ inputs.is-release }}
       with:
         platforms: linux/amd64
         push: true
-        tags: ${{ env.TEST_TAG }}  
+        tags: ${{ env.LATEST_TAG}}  
     # - name: Push Image to Docker Hub
     #   run: |
     #     docker push bodoaidocker/test_release_image:latest
