@@ -622,9 +622,9 @@ std::deque<TableAndRange> ExternalKWayMergeSorter::MergeChunks(
                                      static_cast<size_t>(chunk.table->nrows()));
                         sortlimit_ -= end_index;
                         if (start_index == 0 &&
-                            end_index == chunk.table->nrows())
+                            end_index == chunk.table->nrows()) {
                             out_table_builder.AppendBatch(chunk.table);
-                        else {
+                        } else {
                             std::vector<int64_t> index(end_index - start_index);
                             iota(index.begin(), index.end(), start_index);
                             out_table_builder.AppendBatch(chunk.table, index);

@@ -1,5 +1,4 @@
 #include "_distributed.h"
-#include <fstream>
 
 #include <fmt/format.h>
 #include <mpi.h>
@@ -276,8 +275,9 @@ std::shared_ptr<array_info> gather_array(std::shared_ptr<array_info> in_arr,
         // Computing the total number of rows.
         // On mpi_root, all rows, on others just 1 row for consistency.
         int64_t n_rows_tot = 0;
-        for (int i_p = 0; i_p < n_pes; i_p++)
+        for (int i_p = 0; i_p < n_pes; i_p++) {
             n_rows_tot += arr_gath_r[2 * i_p];
+        }
         char *data1_ptr = nullptr;
         char *data2_ptr = nullptr;
         if (is_receiver || all_gather) {
@@ -658,8 +658,9 @@ static PyMethodDef ext_methods[] = {
 PyMODINIT_FUNC PyInit_hdist(void) {
     PyObject *m;
     MOD_DEF(m, "hdist", "No docs", ext_methods);
-    if (m == nullptr)
+    if (m == nullptr) {
         return nullptr;
+    }
 
     // make sure MPI is initialized, assuming this will be called
     // on all processes
@@ -673,8 +674,9 @@ PyMODINIT_FUNC PyInit_hdist(void) {
     CHECK_MPI(MPI_Type_size(get_MPI_typ(Bodo_CTypes::DECIMAL), &decimal_bytes),
               "PyInit_hdist: MPI error on MPI_Type_size:");
     // decimal_value should be exactly 128 bits to match Python
-    if (decimal_bytes != 16)
+    if (decimal_bytes != 16) {
         std::cerr << "invalid decimal mpi type size" << std::endl;
+    }
 
     SetAttrStringFromVoidPtr(m, dist_get_rank);
     SetAttrStringFromVoidPtr(m, dist_get_size);

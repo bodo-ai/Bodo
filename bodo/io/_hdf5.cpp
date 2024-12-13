@@ -304,8 +304,9 @@ void h5_close_file_objects(hid_t file_id, unsigned types) {
     // get object id list
     size_t count = H5Fget_obj_count(file_id, types);
     hid_t* obj_list = (hid_t*)malloc(sizeof(hid_t) * count);
-    if (obj_list == nullptr)
+    if (obj_list == nullptr) {
         return;
+    }
     H5Fget_obj_ids(file_id, types, count, obj_list);
     // TODO: check file_id of objects like h5py/files.py:close
     // for(size_t i=0; i<count; i++)
@@ -315,8 +316,9 @@ void h5_close_file_objects(hid_t file_id, unsigned types) {
     for (size_t i = 0; i < count; i++) {
         hid_t obj_id = obj_list[i];
         // if (H5Iget_file_id(obj_id)==file_id)
-        if (obj_id != -1)
+        if (obj_id != -1) {
             h5_close_object(obj_id);
+        }
     }
     free(obj_list);
 }
@@ -407,8 +409,9 @@ void* h5g_get_objname_by_idx(hid_t file_id, int64_t ind) {
     int size = H5Lget_name_by_idx(file_id, ".", H5_INDEX_NAME, H5_ITER_NATIVE,
                                   (hsize_t)ind, nullptr, 0, H5P_DEFAULT);
     char* name = (char*)malloc(size + 1);
-    if (name == nullptr)
+    if (name == nullptr) {
         return nullptr;
+    }
     (void)H5Lget_name_by_idx(file_id, ".", H5_INDEX_NAME, H5_ITER_NATIVE,
                              (hsize_t)ind, name, size + 1, H5P_DEFAULT);
     // printf("g name:%s\n", name);
