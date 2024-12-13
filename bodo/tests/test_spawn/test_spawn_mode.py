@@ -264,18 +264,21 @@ def test_args():
     # Test BodoSQLContext if bodosql installed in test environment
     try:
         import bodosql
+
+        @bodo.jit(spawn=True)
+        def impl3(a, bc, b):
+            df = bc.sql('select * from "source"')
+            return df
+
+        df1 = pd.DataFrame({"id": [1, 1], "dep": ["software", "hr"]})
+        df2 = pd.DataFrame({"id": [1, 2], "dep": ["finance", "hardware"]})
+        bc = bodosql.context.BodoSQLContext({"target": df1, "source": df2})
+        _test_equal(impl3(1, bc, 4), df2)
     except ImportError:
         return
-
-    @bodo.jit(spawn=True)
-    def impl3(a, bc, b):
-        df = bc.sql('select * from "source"')
-        return df
-
-    df1 = pd.DataFrame({"id": [1, 1], "dep": ["software", "hr"]})
-    df2 = pd.DataFrame({"id": [1, 2], "dep": ["finance", "hardware"]})
-    bc = bodosql.context.BodoSQLContext({"target": df1, "source": df2})
-    _test_equal(impl3(1, bc, 4), df2)
+    finally:
+        # Make sure bodosql isn't in modules since checked in test_no_bodosql_import
+        sys.modules.pop("bodosql", None)
 
 
 def test_args_tuple_list_dict():

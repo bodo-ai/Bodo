@@ -3293,3 +3293,16 @@ def test_get_value_for_type(dtype):
     """
     data = bodo.libs.distributed_api.get_value_for_type(dtype)
     assert bodo.typeof(data) == dtype
+
+
+@pytest.mark.slow
+def test_no_bodosql_import(memory_leak_check):
+    """Make sure BodoSQL isn't imported unnecessarily during compilation"""
+
+    @bodo.jit(spawn=False)
+    def f(df):
+        return (df.A.unique(), 3)
+
+    df = pd.DataFrame({"A": np.arange(10)})
+    f(df)
+    assert "bodosql" not in sys.modules

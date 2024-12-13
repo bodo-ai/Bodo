@@ -1293,6 +1293,21 @@ def get_index_name_types(t):
     return (t.name_typ,)
 
 
+def is_bodosql_context_type(t):
+    """Check for BodoSQLContextType without importing BodoSQL unnecessarily"""
+    if type(t).__name__ == "BodoSQLContextType":
+        try:
+            from bodosql.context_ext import BodoSQLContextType
+        except ImportError:  # pragma: no cover
+            raise ImportError("BodoSQL not installed properly")
+        assert isinstance(
+            t, BodoSQLContextType
+        ), "is_bodosql_context_type: expected BodoSQLContextType"
+        return True
+
+    return False
+
+
 class ListLiteral(types.Literal):
     """class for literal lists, only used when Bodo forces an argument to be a literal
     list (e.g. in typing pass for groupby/join/sort_values).
