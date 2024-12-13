@@ -45,12 +45,51 @@ jobs:
        username: ${{ secrets.DOCKERHUB_USERNAME }}
        password: ${{ secrets.DOCKERHUB_ACCESS_TOKEN }}
 
-    - name: Build and push to dockerhub
+    # - name: Build and push to dockerhub
+    #   uses: docker/build-push-action@v5
+    #   with:
+    #      push: true
+    #      file: ./buildscripts/docker/docker_release/Dockerfile
+    #      platforms: linux/amd64
+    #      tags: bodoaidocker/test_release_image:latest
+
+    - name: Build Docker image
       uses: docker/build-push-action@v5
-      # TODO: uncomment before merging.
-      # if: ${{ inputs.is-release }}
       with:
-         push: true
-         file: ./buildscripts/docker/docker_release/Dockerfile
-         platforms: linux/amd64
-         tags: bodoaidocker/test_release_image:latest
+        push: false # Do not push during the build step
+        file: ./buildscripts/docker_release/Dockerfile
+        context: .
+        platforms: linux/amd64
+        tags: bodoaidocker/test_release_image:latest
+ 
+    - name: Test Jupyter notebooks inside the Docker image
+      run: |
+        # Run the pi notebook
+        docker run --rm bodoaidocker/test_release_image:latest python -m nbconvert --to notebook --execute /app/pi.ipynb --output /app/pi_output.ipynb
+           
+        # TODO: uncomment with new release that fixes BodoSQL test issue
+        # Run the quickstart notebook
+        # docker run --rm bodoaidocker/test_release_image:latest python -m nbconvert --to notebook --execute /app/quickstart.ipynb --output /app/quickstart_output.ipynb
+
+        # Create folder to save output
+        mkdir -p ./notebooks
+
+        # Copy notebook outputs
+        docker cp $(docker create bodoaidocker/test_release_image:latest):/app/pi_output.ipynb ./notebooks/
+        docker cp $(docker create bodoaidocker/test_release_image:latest):/app/quickstart_output.ipynb ./notebooks/
+
+    - name: Upload notebook outputs
+      uses: actions/upload-artifact@v4
+      with:
+        name: notebook-outputs
+        path: ./notebooks/
+      
+    - name: Push Docker image to Docker Hub
+      # if: ${{ inputs.is-release }}
+      uses: docker/build-push-action@v5
+      with:
+        push: true
+        file: ./buildscripts/docker_release/Dockerfile
+        context: .
+        platforms: linux/amd64
+        tags: bodoaidocker/test_release_image:latest
