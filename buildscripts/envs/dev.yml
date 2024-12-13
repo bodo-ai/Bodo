@@ -51,9 +51,6 @@ dependencies:
   - mmh3
   - avro
 
-  # Copied into bodo/mpi4py
-  - mpi4py ~= 3.1
-
   # Excel
   - xlrd
   - xlsxwriter
