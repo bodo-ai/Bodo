@@ -477,10 +477,11 @@ std::string generate_iceberg_file_name() {
     // the name)
     check = snprintf(fname.data(), fname.size(), "%05d-%d-%s.parquet", rank,
                      rank, uuid.c_str());
-    if (size_t(check + 1) > fname.size())
+    if (size_t(check + 1) > fname.size()) {
         throw std::runtime_error(
             "Fatal error: number of written char for iceberg file name is "
             "greater than fname size");
+    }
     return std::string(fname.data());
 }
 
@@ -990,8 +991,9 @@ void iceberg_pq_write(const char *table_data_loc,
                 // TODO: Make our path handling more consistent between C++ and
                 // Java
                 p.fpath = std::string(table_data_loc);
-                if (p.fpath.back() != '/')
+                if (p.fpath.back() != '/') {
                     p.fpath += "/";
+                }
                 p.fpath += inner_path;
             }
             p.rows.push_back(i);
@@ -1048,8 +1050,9 @@ void iceberg_pq_write(const char *table_data_loc,
         // there was a sort order else the table as is)
         std::string fname = generate_iceberg_file_name();
         std::string fpath(table_data_loc);
-        if (fpath.back() != '/')
+        if (fpath.back() != '/') {
             fpath += "/";
+        }
         fpath += fname;
         Bodo_Fs::FsEnum fs_type = filesystem_type(fpath.c_str());
         if (fs_type == Bodo_Fs::FsEnum::posix) {
