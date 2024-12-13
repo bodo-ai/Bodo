@@ -65,18 +65,32 @@ jobs:
     - name: Test Jupyter notebooks inside the Docker image
       run: |
         # Run the pi notebook
-        docker run --rm bodoaidocker/test_release_image:latest python -m nbconvert --to notebook --execute /app/pi.ipynb --output /app/pi_output.ipynb
+        # docker run --rm bodoaidocker/test_release_image:latest python -m nbconvert --to notebook --execute /app/pi.ipynb --output /app/pi_output.ipynb
            
-        # TODO: uncomment with new release that fixes BodoSQL test issue
-        # Run the quickstart notebook
-        # docker run --rm bodoaidocker/test_release_image:latest python -m nbconvert --to notebook --execute /app/quickstart.ipynb --output /app/quickstart_output.ipynb
+        # # TODO: uncomment with new release that fixes BodoSQL test issue
+        # # Run the quickstart notebook
+        # # docker run --rm bodoaidocker/test_release_image:latest python -m nbconvert --to notebook --execute /app/quickstart.ipynb --output /app/quickstart_output.ipynb
+
+
+        # # Copy notebook outputs
+        # docker cp $(docker create bodoaidocker/test_release_image:latest):/app/pi_output.ipynb ./notebooks/
+        # docker cp $(docker create bodoaidocker/test_release_image:latest):/app/quickstart_output.ipynb ./notebooks/
 
         # Create folder to save output
         mkdir -p ./notebooks
 
-        # Copy notebook outputs
-        docker cp $(docker create bodoaidocker/test_release_image:latest):/app/pi_output.ipynb ./notebooks/
-        docker cp $(docker create bodoaidocker/test_release_image:latest):/app/quickstart_output.ipynb ./notebooks/
+        # Step 1: Run the container in detached mode
+        docker run -d --name test-container bodoaidocker/test_release_image:latest
+
+        # Step 2: Execute the notebook inside the container using jupyter nbconvert
+        docker exec test-container jupyter nbconvert --to notebook --execute /app/pi.ipynb --output /app/pi_output.ipynb
+
+        # Step 3: Copy the output notebooks from the container to the local directory
+        docker cp test-container:/app/pi_output.ipynb ./notebooks/pi_output.ipynb
+
+        # Step 4: Stop and remove the container after the test
+        docker rm -f test-container
+
 
     - name: Upload notebook outputs
       uses: actions/upload-artifact@v4
@@ -91,5 +105,6 @@ jobs:
         push: true
         file: ./buildscripts/docker/docker_release/Dockerfile
         context: .
+        # TODO: linux/arm64
         platforms: linux/amd64
         tags: bodoaidocker/test_release_image:latest
