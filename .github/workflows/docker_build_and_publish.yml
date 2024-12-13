@@ -20,6 +20,9 @@ on:
         required: false
         type: boolean
         default: false
+env:
+  TEST_TAG: bodoaidocker/test_release_image:test
+  # LATEST_TAG: bodoaidocker/bodoai_image:latest
 
 jobs:
 
@@ -30,14 +33,6 @@ jobs:
     steps:
     - name: Check out the repo
       uses: actions/checkout@v4
-    -
-        # Add support for more platforms with QEMU (optional)
-        # https://github.com/docker/setup-qemu-action
-        name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3
 
     - name: Login to dockerhub
       uses: docker/login-action@v3
@@ -45,21 +40,22 @@ jobs:
        username: ${{ secrets.DOCKERHUB_USERNAME }}
        password: ${{ secrets.DOCKERHUB_ACCESS_TOKEN }}
 
-    - name: Remove any previous images
-      run: docker rmi -f bodoaidocker/test_release_image:latest || true
+      # Add support for more platforms with QEMU (optional)
+      # https://github.com/docker/setup-qemu-action
+    - name: Set up QEMU
+      uses: docker/setup-qemu-action@v3
 
-    - name: Build Docker image
-      uses: docker/build-push-action@v5
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Build and export Docker image
+      uses: docker/build-push-action@v6
       with:
-        push: false # Do not push during the build step
-        context: .
+        load: true
         file: ./buildscripts/docker/docker_release/Dockerfile
         platforms: linux/amd64
-        tags: bodoaidocker/test_release_image:latest
+        tags: ${{ env.TEST_TAG }}
  
-    - name: List Docker images (debug)
-      run: docker images
-
     - name: Test Jupyter notebooks inside the Docker image
       run: |
 
@@ -67,7 +63,7 @@ jobs:
         mkdir -p ./notebooks
 
         # Step 1: Run the container in detached mode
-        docker run -d --name test-container bodoaidocker/test_release_image:latest
+        docker run -d --name test-container ${{env.TEST_TAG}}
 
         # Step 2: Execute the notebook inside the container using jupyter nbconvert
         # TODO: 2nd notebook after new release that has BodoSQL fix.
@@ -85,8 +81,14 @@ jobs:
       with:
         name: notebook-outputs
         path: ./notebooks/
-      
-    - name: Push Image to Docker Hub
+
+    - name: Build and push
+      uses: docker/build-push-action@v6
       if: ${{ inputs.is-release }}
-      run: |
-        docker push bodoaidocker/test_release_image:latest
+      with:
+        platforms: linux/amd64
+        push: true
+        tags: ${{ env.TEST_TAG }}  
+    # - name: Push Image to Docker Hub
+    #   run: |
+    #     docker push bodoaidocker/test_release_image:latest
