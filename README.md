@@ -1,4 +1,4 @@
-![Logo](Assets/bodo.png)
+<img width="888" alt="image" src="https://github.com/user-attachments/assets/6403a8ac-974e-4610-bf3f-1fbba3db690f" />![Logo](Assets/bodo.png)
 
 <h3 align="center">
   <a href="https://docs.bodo.ai/latest/" target="_blank"><b>Docs</b></a>
@@ -10,7 +10,7 @@
 
 # Bodo: High-Performance Python Compute Engine for Data and AI
 
-Bodo is a cutting edge compute engine for large scale Python data processing. Powered by an innovative auto-parallelizing just-in-time compiler, Bodo transforms Python programs into highly optimized, parallel binaries without requiring code rewrites, which makes Bodo 20x to 240x faster compared to alternatives!
+Bodo is a cutting edge compute engine for large scale Python data processing. Powered by an innovative auto-parallelizing just-in-time compiler, Bodo transforms Python programs into highly optimized, parallel binaries without requiring code rewrites, which makes Bodo [20x to 240x faster](https://github.com/bodo-ai/Bodo/tree/main/benchmarks/nyc_taxi) compared to alternatives!
 
 Unlike traditional distributed computing frameworks, Bodo:
 - Seamlessly supports native Python APIs like Pandas and NumPy.
