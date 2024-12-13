@@ -85,6 +85,7 @@ from bodo.utils.typing import (
     get_overload_const_int,
     get_overload_const_str,
     handle_bodosql_case_init_code,
+    is_bodosql_context_type,
     is_const_func_type,
     is_immutable,
     is_list_like_index_type,
@@ -2982,15 +2983,8 @@ class TypingTransforms:
             "convert_to_pandas",
         ):  # pragma: no cover
             # Try import BodoSQL and check the type
-            try:  # pragma: no cover
-                from bodosql.context_ext import BodoSQLContextType
-            except ImportError:
-                # workaround: something that makes isinstance(type, BodoSQLContextType) always false
-                BodoSQLContextType = int
 
-            if isinstance(
-                self._get_method_obj_type(func_mod, rhs.func), BodoSQLContextType
-            ):
+            if is_bodosql_context_type(self._get_method_obj_type(func_mod, rhs.func)):
                 return self._run_call_bodosql_sql(
                     assign, rhs, func_mod, func_name, label
                 )

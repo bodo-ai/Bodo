@@ -62,6 +62,7 @@ from bodo.utils.typing import (
     BodoError,
     BodoWarning,
     MetaType,
+    is_bodosql_context_type,
     is_overload_none,
     is_str_arr_type,
 )
@@ -570,11 +571,6 @@ def is_bodosql_kernel_mod(module: pt.Any) -> bool:
 
 
 def is_distributable_tuple_typ(var_typ):
-    try:
-        from bodosql.context_ext import BodoSQLContextType
-    except ImportError:  # pragma: no cover
-        # ignore if None.
-        BodoSQLContextType = None
     return (
         (
             isinstance(var_typ, types.BaseTuple)
@@ -599,8 +595,7 @@ def is_distributable_tuple_typ(var_typ):
             )
         )
         or (
-            BodoSQLContextType is not None
-            and isinstance(var_typ, BodoSQLContextType)
+            is_bodosql_context_type(var_typ)
             and any(is_distributable_typ(df) for df in var_typ.dataframes)
         )
     )

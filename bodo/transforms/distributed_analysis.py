@@ -55,6 +55,7 @@ from bodo.utils.typing import (
     BodoError,
     BodoWarning,
     get_overload_const_str,
+    is_bodosql_context_type,
     is_overload_constant_tuple,
     is_overload_false,
     is_overload_none,
@@ -645,10 +646,6 @@ class DistributedAnalysis:
         # NOTE: assuming getattr doesn't change distribution by default, since almost
         # all attribute accesses are benign (e.g. A.shape). Exceptions should be handled
         # here.
-        try:
-            from bodosql.context_ext import BodoSQLContextType
-        except ImportError:  # pragma: no cover
-            BodoSQLContextType = None
 
         lhs_typ = self.typemap[lhs]
         rhs_typ = self.typemap[rhs.value.name]
@@ -718,11 +715,7 @@ class DistributedAnalysis:
         ):
             # Spark dataframe may be replicated, e.g. sdf.select(F.sum(F.col("A")))
             self._meet_array_dists(lhs, rhs.value.name, array_dists)
-        elif (
-            BodoSQLContextType is not None
-            and isinstance(rhs_typ, BodoSQLContextType)
-            and attr == "dataframes"
-        ):
+        elif is_bodosql_context_type(rhs_typ) and attr == "dataframes":
             self._meet_array_dists(lhs, rhs.value.name, array_dists)
         elif isinstance(rhs_typ, DataFrameType) and attr == "dtypes":
             self._set_REP(
@@ -4808,10 +4801,7 @@ class DistributedAnalysis:
         """get proper distribution value for type. Returns list of distributions for
         tuples (but just the input 'dist' otherwise).
         """
-        try:
-            from bodosql.context_ext import BodoSQLContextType
-        except ImportError:  # pragma: no cover
-            BodoSQLContextType = None
+
         if is_distributable_tuple_typ(typ):
             if isinstance(typ, types.iterators.EnumerateType):
                 typ = typ.yield_type[1]
@@ -4819,7 +4809,7 @@ class DistributedAnalysis:
                 return [None, self._get_dist(typ, dist)]
             if isinstance(typ, types.List):
                 typ = typ.dtype
-            if BodoSQLContextType is not None and isinstance(typ, BodoSQLContextType):
+            if is_bodosql_context_type(typ):
                 typs = typ.dataframes
             else:
                 typs = typ.types

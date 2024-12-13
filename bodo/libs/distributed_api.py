@@ -74,6 +74,7 @@ from bodo.utils.typing import (
     ExternalFunctionErrorChecked,
     MetaType,
     decode_if_dict_array,
+    is_bodosql_context_type,
     is_overload_false,
     is_overload_none,
     is_str_arr_type,
@@ -1428,15 +1429,8 @@ def gatherv_impl_jit(
 
         return impl_dict
 
-    if type(data).__name__ == "BodoSQLContextType":
-        try:
-            import bodosql
-            from bodosql.context_ext import BodoSQLContextType
-        except ImportError:  # pragma: no cover
-            raise ImportError(
-                "Install bodosql to use gatherv() with BodoSQLContextType"
-            )
-        assert isinstance(data, BodoSQLContextType)
+    if is_bodosql_context_type(data):
+        import bodosql
 
         func_text = f"def impl_bodosql_context(data, allgather=False, warn_if_rep=True, root={DEFAULT_ROOT}, comm=0):\n"
         comma_sep_names = ", ".join([f"'{name}'" for name in data.names])
@@ -1454,7 +1448,6 @@ def gatherv_impl_jit(
 
     if type(data).__name__ == "TablePathType":
         try:
-            import bodosql
             from bodosql import TablePathType
         except ImportError:  # pragma: no cover
             raise ImportError("Install bodosql to use gatherv() with TablePathType")

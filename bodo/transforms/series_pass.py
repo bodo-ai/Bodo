@@ -112,6 +112,7 @@ from bodo.utils.typing import (
     get_overload_const_int,
     get_overload_const_str,
     get_overload_const_tuple,
+    is_bodosql_context_type,
     is_literal_type,
     is_overload_constant_str,
     is_overload_constant_tuple,
@@ -956,14 +957,7 @@ class SeriesPass:
                 "init_sql_context",
                 "bodosql.context_ext",
             ):
-                # Try import BodoSQL and check the type
-                # TODO: Remove from the main Bodo code base and handle by an extension
-                try:  # pragma: no cover
-                    from bodosql.context_ext import BodoSQLContextType
-                except ImportError:
-                    # workaround: something that makes isinstance(type, BodoSQLContextType) always false
-                    BodoSQLContextType = int
-                if isinstance(rhs_type, BodoSQLContextType):
+                if is_bodosql_context_type(rhs_type):
                     assign.value = sql_ctx_def.args[1]
                     return [assign]
 
