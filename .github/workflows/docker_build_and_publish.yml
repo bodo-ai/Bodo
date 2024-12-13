@@ -45,13 +45,8 @@ jobs:
        username: ${{ secrets.DOCKERHUB_USERNAME }}
        password: ${{ secrets.DOCKERHUB_ACCESS_TOKEN }}
 
-    # - name: Build and push to dockerhub
-    #   uses: docker/build-push-action@v5
-    #   with:
-    #      push: true
-    #      file: ./buildscripts/docker/docker_release/Dockerfile
-    #      platforms: linux/amd64
-    #      tags: bodoaidocker/test_release_image:latest
+    - name: Remove any previous images
+      run: docker rmi -f bodoaidocker/test_release_image:latest || true
 
     - name: Build Docker image
       uses: docker/build-push-action@v5
@@ -88,13 +83,7 @@ jobs:
         name: notebook-outputs
         path: ./notebooks/
       
-    - name: Push Docker image to Docker Hub
+    - name: Push Image to Docker Hub
       if: ${{ inputs.is-release }}
-      uses: docker/build-push-action@v5
-      with:
-        push: true
-        file: ./buildscripts/docker/docker_release/Dockerfile
-        context: .
-        # TODO: linux/arm64
-        platforms: linux/amd64
-        tags: bodoaidocker/test_release_image:latest
+      run: |
+        docker push bodoaidocker/test_release_image:latest
