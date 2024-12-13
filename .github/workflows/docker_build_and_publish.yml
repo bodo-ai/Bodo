@@ -64,17 +64,6 @@ jobs:
  
     - name: Test Jupyter notebooks inside the Docker image
       run: |
-        # Run the pi notebook
-        # docker run --rm bodoaidocker/test_release_image:latest python -m nbconvert --to notebook --execute /app/pi.ipynb --output /app/pi_output.ipynb
-           
-        # # TODO: uncomment with new release that fixes BodoSQL test issue
-        # # Run the quickstart notebook
-        # # docker run --rm bodoaidocker/test_release_image:latest python -m nbconvert --to notebook --execute /app/quickstart.ipynb --output /app/quickstart_output.ipynb
-
-
-        # # Copy notebook outputs
-        # docker cp $(docker create bodoaidocker/test_release_image:latest):/app/pi_output.ipynb ./notebooks/
-        # docker cp $(docker create bodoaidocker/test_release_image:latest):/app/quickstart_output.ipynb ./notebooks/
 
         # Create folder to save output
         mkdir -p ./notebooks
@@ -83,6 +72,7 @@ jobs:
         docker run -d --name test-container bodoaidocker/test_release_image:latest
 
         # Step 2: Execute the notebook inside the container using jupyter nbconvert
+        # TODO: 2nd notebook after new release that has BodoSQL fix.
         docker exec test-container jupyter nbconvert --to notebook --execute /app/pi.ipynb --output /app/pi_output.ipynb
 
         # Step 3: Copy the output notebooks from the container to the local directory
@@ -99,7 +89,7 @@ jobs:
         path: ./notebooks/
       
     - name: Push Docker image to Docker Hub
-      # if: ${{ inputs.is-release }}
+      if: ${{ inputs.is-release }}
       uses: docker/build-push-action@v5
       with:
         push: true
