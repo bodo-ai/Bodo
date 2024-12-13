@@ -92,12 +92,11 @@ df.to_parquet("my_data.pq")
 def computation():
     t1 = time.time()
     df = pd.read_parquet("my_data.pq")
-    df1 = df[df.B > 4].A.sum()
+    df2 = pd.DataFrame({"A": df.apply(lambda r: 0 if r.A == 0 else (r.B // r.A), axis=1)})
+    df2.to_parquet("out.pq")
     print("Execution time:", time.time() - t1)
-    return df1
 
-result = computation()
-print(result)
+computation()
 ```
 
 ## How to Contribute
