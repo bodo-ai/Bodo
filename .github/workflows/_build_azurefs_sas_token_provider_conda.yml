@@ -7,10 +7,7 @@ on:
 jobs:
   build:
     runs-on: [self-hosted, small]
-    timeout-minutes: 240
-
-    env:
-      BODO_CHANNEL_NAME: 'bodo.ai'
+    timeout-minutes: 240      
 
     steps:
       - uses: actions/checkout@v4
@@ -34,10 +31,12 @@ jobs:
       - name: 'Set Secret File Permissions and Conda Build and Publish Bodo-AzureFS-SAS-Token-Provider Binary to Artifactory'
         run: |
           set -eo pipefail
-          echo "${{ secrets.PUBLISH_BINARY_SECRETS }}" > $HOME/secret_file
-          sudo chmod a+r $HOME/secret_file
 
           artifactory_channel="bodo.ai"
-          echo "artifactory_channel: $artifactory_channel"
-          ./buildscripts/azurefs-sas-token-provider/publish_binary.sh $artifactory_channel
+          ./buildscripts/azurefs-sas-token-provider/publish_binary.sh "bodo.ai"
         shell: bash
+        env:
+          USERNAME: ${{ secrets.ARTIFACTORY_USERNAME }}
+          TOKEN: ${{ secrets.ARTIFACTORY_TOKEN }}
+          ANACONDA_TOKEN: ${{ secrets.ANACONDA_TOKEN }}
+          BODO_CHANNEL_NAME: 'bodo.ai'

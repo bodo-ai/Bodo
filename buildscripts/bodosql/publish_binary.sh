@@ -8,10 +8,6 @@ micromamba activate bodosql_build
 BODOSQL_CHANNEL_NAME=${1:-bodo-binary}
 
 echo "********** Publishing to Artifactory **********"
-USERNAME=`cat $HOME/secret_file | grep artifactory.ci.username | cut -f 2 -d' '`
-TOKEN=`cat $HOME/secret_file | grep artifactory.ci.token | cut -f 2 -d' '`
-ANACONDA_TOKEN=`cat $HOME/secret_file | grep anaconda.org.token | cut -f 2 -d' '`
-
 # Get the BodoSQL version
 # Since we build BodoSQL after Bodo on Azure, we can tie the BodoSQL and Bodo version together
 export BODOSQL_VERSION=`python -m setuptools_scm`

@@ -12,10 +12,6 @@ micromamba activate iceberg_build
 CHANNEL_NAME=${1:-bodo-binary}
 
 echo "********** Publishing to Artifactory **********"
-USERNAME=`cat $HOME/secret_file | grep artifactory.ci.username | cut -f 2 -d' '`
-TOKEN=`cat $HOME/secret_file | grep artifactory.ci.token | cut -f 2 -d' '`
-ANACONDA_TOKEN=`cat $HOME/secret_file | grep anaconda.org.token | cut -f 2 -d' '`
-
 # Get the Connector Version
 export CONNECTOR_VERSION=`python -m setuptools_scm`
 export IS_RELEASE=`git tag --points-at HEAD`

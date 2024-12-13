@@ -12,9 +12,6 @@ micromamba activate sas_build
 CHANNEL_NAME=${1:-bodo-binary}
 
 echo "********** Publishing to Artifactory **********"
-USERNAME=`cat $HOME/secret_file | grep artifactory.ci.username | cut -f 2 -d' '`
-TOKEN=`cat $HOME/secret_file | grep artifactory.ci.token | cut -f 2 -d' '`
-ANACONDA_TOKEN=`cat $HOME/secret_file | grep anaconda.org.token | cut -f 2 -d' '`
 
 # We always upload to the main channel since it's a manual pipeline and
 # the package is not expected to change.

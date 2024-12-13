@@ -6,10 +6,6 @@ OS_DIR=${2:-linux-64}
 BODO_VERSION=${3:-}
 
 echo "********** Publishing to Artifactory **********"
-USERNAME=`cat $HOME/secret_file | grep artifactory.ci.username | cut -f 2 -d' '`
-TOKEN=`cat $HOME/secret_file | grep artifactory.ci.token | cut -f 2 -d' '`
-ANACONDA_TOKEN=`cat $HOME/secret_file | grep anaconda.org.token | cut -f 2 -d' '`
-
 label="main"
 PACKAGE_DIR=$HOME/conda-bld/$OS_DIR
 
