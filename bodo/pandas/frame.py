@@ -9,7 +9,12 @@ from bodo.pandas.lazy_metadata import LazyMetadata
 from bodo.pandas.lazy_wrapper import BodoLazyWrapper
 from bodo.pandas.managers import LazyBlockManager, LazyMetadataMixin
 from bodo.pandas.utils import get_lazy_manager_class
-from bodo.utils.typing import BodoError, get_overload_const_str, is_overload_none
+from bodo.utils.typing import (
+    BodoError,
+    check_unsupported_args,
+    get_overload_const_str,
+    is_overload_none,
+)
 
 
 class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
@@ -142,3 +147,162 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         if isinstance(self._mgr, LazyMetadataMixin):
             return self._mgr._md_result_id
         return None
+
+    def to_sql(
+        self,
+        name,
+        con,
+        schema=None,
+        if_exists="fail",
+        index=True,
+        index_label=None,
+        chunksize=None,
+        dtype=None,
+        method=None,
+    ):
+        # argument defaults should match that of to_sql_overload in pd_dataframe_ext.py
+        @bodo.jit(spawn=True)
+        def to_sql_wrapper(
+            df: pd.DataFrame,
+            name,
+            con,
+            schema,
+            if_exists,
+            index,
+            index_label,
+            chunksize,
+            dtype,
+            method,
+        ):
+            return df.to_sql(
+                name,
+                con,
+                schema,
+                if_exists,
+                index,
+                index_label,
+                chunksize,
+                dtype,
+                method,
+            )
+
+        to_sql_wrapper(
+            self,
+            name,
+            con,
+            schema,
+            if_exists,
+            index,
+            index_label,
+            chunksize,
+            dtype,
+            method,
+        )
+
+    def to_csv(
+        self,
+        path_or_buf=None,
+        sep=",",
+        na_rep="",
+        float_format=None,
+        columns=None,
+        header=True,
+        index=True,
+        index_label=None,
+        mode="w",
+        encoding=None,
+        compression=None,
+        quoting=None,
+        quotechar='"',
+        lineterminator=None,
+        chunksize=None,
+        date_format=None,
+        doublequote=True,
+        escapechar=None,
+        decimal=".",
+        errors="strict",
+        storage_options=None,
+    ):
+        # argument defaults should match that of to_csv_overload in pd_dataframe_ext.py
+
+        @bodo.jit(spawn=True)
+        def to_csv_wrapper(
+            df: pd.DataFrame,
+            path_or_buf,
+            sep,
+            na_rep,
+            float_format,
+            columns,
+            header,
+            index,
+            index_label,
+            compression,
+            quoting,
+            quotechar,
+            lineterminator,
+            chunksize,
+            date_format,
+            doublequote,
+            escapechar,
+            decimal,
+        ):
+            return df.to_csv(
+                path_or_buf=path_or_buf,
+                sep=sep,
+                na_rep=na_rep,
+                float_format=float_format,
+                columns=columns,
+                header=header,
+                index=index,
+                index_label=index_label,
+                compression=compression,
+                quoting=quoting,
+                quotechar=quotechar,
+                lineterminator=lineterminator,
+                chunksize=chunksize,
+                date_format=date_format,
+                doublequote=doublequote,
+                escapechar=escapechar,
+                decimal=decimal,
+            )
+
+        # checks string arguments before jit performs conversion to unicode
+        # checks should match that of to_csv_overload in pd_dataframe_ext.py
+        check_unsupported_args(
+            "BodoDataFrame.to_csv",
+            {
+                "encoding": encoding,
+                "mode": mode,
+                "errors": errors,
+                "storage_options": storage_options,
+            },
+            {
+                "encoding": None,
+                "mode": "w",
+                "errors": "strict",
+                "storage_options": None,
+            },
+            package_name="pandas",
+            module_name="IO",
+        )
+
+        to_csv_wrapper(
+            self,
+            path_or_buf,
+            sep,
+            na_rep,
+            float_format,
+            columns,
+            header,
+            index,
+            index_label,
+            compression,
+            quoting,
+            quotechar,
+            lineterminator,
+            chunksize,
+            date_format,
+            doublequote,
+            escapechar,
+            decimal,
+        )

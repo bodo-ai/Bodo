@@ -43,10 +43,10 @@ dependencies:
   - matplotlib<=3.8.2
 
   # IO
-  - bodo.ai/linux-64::pyarrow=17.0.0  #[linux64]
+  - bodo.ai/linux-64::pyarrow=18.1.0  #[linux64]
   # Note this is both x86 and arm with MacOS
-  - pyarrow =17.0.0  #[osx]
-  - bodo.ai/linux-64::libarrow=17.0.0  #[linux64]
+  - pyarrow =18.1.0  #[osx]
+  - bodo.ai/linux-64::libarrow=18.1.0  #[linux64]
   - fsspec >=2021.09
   # IO Optional
   - boto3

@@ -1,3 +1,8 @@
+# Pre-Commit CI Config
+ci:
+  autoupdate_schedule: monthly
+  skip: [pretty-format-java, pretty-format-kotlin]
+
 # We should never format the copied Calcite files, in order to avoid massive diffs when Calcite is updated.
 # See https://bodo.atlassian.net/wiki/spaces/B/pages/1415970823/Bodo+s+Calcite+Fork#Managing-the-Fork
 exclude: ^BodoSQL/calcite_sql/bodosql-calcite-application/src/main/java/org/apache/calcite/|^BodoSQL/calcite_sql/bodosql-calcite-application/src/test/resources
@@ -13,7 +18,7 @@ repos:
         args: [--allow-missing-credentials]
   # Python
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.6.7
+    rev: v0.8.0
     hooks:
       - id: ruff
         args: [ --fix, --exit-non-zero-on-fix ]
@@ -46,3 +51,4 @@ repos:
     rev: v1.7.4
     hooks:
       - id: actionlint
+

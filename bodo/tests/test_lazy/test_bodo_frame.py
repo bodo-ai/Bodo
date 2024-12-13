@@ -7,8 +7,14 @@ from pandas.core.internals.array_manager import ArrayManager
 import bodo
 from bodo.pandas.frame import BodoDataFrame
 from bodo.pandas.managers import LazyBlockManager
+from bodo.tests.iceberg_database_helpers.utils import create_iceberg_table, get_spark
 from bodo.tests.test_lazy.utils import pandas_managers  # noqa
+from bodo.tests.utils import (
+    _gather_output,
+    pytest_mark_spawn_mode,
+)
 from bodo.utils.testing import ensure_clean2
+from bodo.utils.utils import run_rank0
 
 
 @pytest.fixture
@@ -416,6 +422,7 @@ def test_slice(pandas_managers, head_df, collect_func):
     assert lam_sliced_twice_df.equals(collect_func(0)["A0"][10:30])
 
 
+@pytest_mark_spawn_mode
 def test_parquet(collect_func):
     """Tests that to_parquet() writes the frame correctly and does not trigger data fetch"""
 
@@ -443,6 +450,7 @@ def test_parquet(collect_func):
     )
 
 
+@pytest_mark_spawn_mode
 def test_parquet_param(collect_func):
     """Tests that to_parquet() raises an error on unsupported parameters"""
 
@@ -465,3 +473,100 @@ def test_parquet_param(collect_func):
             match=r"to_parquet\(\): row_group_size must be integer",
         ):
             bodo_df.to_parquet(fname, row_group_size="a")
+
+
+@pytest_mark_spawn_mode
+@pytest.mark.iceberg
+@run_rank0
+def test_sql(iceberg_database, iceberg_table_conn, collect_func):
+    """Tests that to_sql() writes the frame correctly and does not trigger data fetch"""
+
+    @bodo.jit(spawn=True)
+    def _get_bodo_df(df):
+        return df
+
+    df = collect_func(0)
+    bodo_df = _get_bodo_df(df)
+
+    # create table in iceberg_database
+    table_name = "TEST_TABLE_NAME"
+    db_schema, warehouse_loc = iceberg_database(table_name)
+    conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, False)
+    sql_schema = [("A0", "float", True), ("B5", "string", True)]
+    spark = get_spark()
+    create_iceberg_table(df, sql_schema, table_name, spark)
+
+    bodo_df.to_sql(table_name, conn, db_schema, if_exists="replace")
+    assert bodo_df._lazy
+
+    bodo_out = bodo.jit()(lambda: pd.read_sql_table(table_name, conn, db_schema))()
+    read_df = _gather_output(bodo_out)
+
+    pd.testing.assert_frame_equal(
+        read_df,
+        df,
+        check_dtype=False,
+    )
+    pd.testing.assert_frame_equal(
+        bodo_df,
+        df,
+        check_dtype=False,
+    )
+
+
+@pytest_mark_spawn_mode
+def test_csv(collect_func):
+    """Tests that to_csv() writes the frame correctly and does not trigger data fetch"""
+
+    @bodo.jit(spawn=True)
+    def _get_bodo_df(df):
+        return df
+
+    df = collect_func(0)
+    bodo_df = _get_bodo_df(df)
+    fname = os.path.join("bodo", "tests", "data", "example")
+    with ensure_clean2(fname):
+        bodo_df.to_csv(fname, index=False)
+        assert bodo_df._lazy
+        read_df = pd.read_csv(fname)
+
+    pd.testing.assert_frame_equal(
+        read_df,
+        df,
+        check_dtype=False,
+    )
+    pd.testing.assert_frame_equal(
+        bodo_df,
+        df,
+        check_dtype=False,
+    )
+
+
+@pytest_mark_spawn_mode
+def test_csv_param(collect_func):
+    """Tests that to_csv() raises an error on unsupported parameters"""
+
+    @bodo.jit(spawn=True)
+    def _get_bodo_df(df):
+        return df
+
+    df = collect_func(0)
+    bodo_df = _get_bodo_df(df)
+    fname = os.path.join("bodo", "tests", "data", "example")
+
+    with ensure_clean2(fname):
+        with pytest.raises(
+            bodo.utils.typing.BodoError,
+            match=r"DataFrame.to_csv\(\): 'path_or_buf' argument should be None or string",
+        ):
+            bodo_df.to_csv(1)
+        with pytest.raises(
+            bodo.utils.typing.BodoError,
+            match=r"DataFrame.to_csv\(\): 'compression' argument supports only None, which is the default in JIT code.",
+        ):
+            bodo_df.to_csv(fname, compression="a")
+        with pytest.raises(
+            bodo.utils.typing.BodoError,
+            match=r"BodoDataFrame.to_csv\(\): mode parameter only supports default value w",
+        ):
+            bodo_df.to_csv(fname, mode="r")

@@ -4354,7 +4354,7 @@ def np_interp(x, xp, fp, left=None, right=None, period=None):
 
     # Using objmode since Numpy's implementation is optimized:
     # https://github.com/numpy/numpy/blob/1f82da745496092d85b402b1703877462a7c2de2/numpy/core/src/multiarray/compiled_base.c#L492
-    
+
     def impl(x, xp, fp, left=None, right=None, period=None):  # pragma: no cover
         with bodo.objmode(A=out_type):
             A = np.interp(x, xp, fp, left, right, period)

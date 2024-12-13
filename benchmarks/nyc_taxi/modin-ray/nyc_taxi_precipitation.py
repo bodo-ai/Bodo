@@ -1,27 +1,29 @@
-"""
-NYC Taxi Monthly Trips with Precipitation
-
-Similar to:
-https://github.com/toddwschneider/nyc-taxi-data/blob/c65ad8332a44f49770644b11576c0529b40bbc76/citibike_comparison/analysis/analysis_queries.sql#L1
-"""
-
 import time
 
-import pandas as pd
+import ray
 
-import bodo
+ray.init(address="auto")
+cpu_count = ray.cluster_resources()["CPU"]
+print("RAY CPU COUNT: ", cpu_count)
+import modin.pandas as pd
+from modin.pandas.io import to_ray
 
 
-@bodo.jit(cache=True)
-def get_monthly_travels_weather():
+def run_modin():
     start = time.time()
     central_park_weather_observations = pd.read_csv(
-        "s3://bodo-example-data/nyc-taxi/central_park_weather.csv", parse_dates=["DATE"]
+        "s3://bodo-example-data/nyc-taxi/central_park_weather.csv",
+        parse_dates=["DATE"],
+        storage_options={"anon": True},
     )
     central_park_weather_observations = central_park_weather_observations.rename(
-        columns={"DATE": "date", "PRCP": "precipitation"}, copy=False
+        columns={"DATE": "date", "PRCP": "precipitation"},
+        copy=False,
     )
-    fhvhv_tripdata = pd.read_parquet("s3://bodo-example-data/nyc-taxi/fhvhv_tripdata/")
+    fhvhv_tripdata = pd.read_parquet(
+        "s3://bodo-example-data/nyc-taxi/fhvhv_tripdata/",
+        storage_options={"anon": True},
+    )
     end = time.time()
     print("Reading Time: ", (end - start))
 
@@ -90,8 +92,14 @@ def get_monthly_travels_weather():
     end = time.time()
     print("Monthly Taxi Travel Times Computation Time: ", end - start)
     print(monthly_trips_weather.head())
+
+    start = time.time()
+    monthly_trips_weather_ray = to_ray(monthly_trips_weather)
+    monthly_trips_weather_ray.write_parquet("local:///tmp/data/modin_result.pq")
+    end = time.time()
+    print("Writing time:", (end - start))
     return monthly_trips_weather
 
 
 if __name__ == "__main__":
-    get_monthly_travels_weather()
+    result = run_modin()
