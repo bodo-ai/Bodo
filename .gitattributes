@@ -1,2 +1,1 @@
-buildscripts/envs/conda-lock.yml merge=ours
 pixi.lock merge=ours linguist-language=YAML linguist-generated=true

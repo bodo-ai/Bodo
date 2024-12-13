@@ -1,6 +1,6 @@
 """
 Helper script to dump the content of avro files for manual inspection.
-Avro is installed by default on the dev conda lock.
+Avro is installed by default on the dev Pixi environment.
 """
 
 import sys
