@@ -34,7 +34,7 @@ from numba.core.untyped_passes import PreserveIR
 
 import bodo
 from bodo.mpi4py import MPI
-from bodo.utils.typing import BodoWarning, dtype_to_array_type
+from bodo.utils.typing import BodoWarning, dtype_to_array_type, is_bodosql_context_type
 from bodo.utils.utils import (
     is_assign,
     is_distributable_tuple_typ,
@@ -937,13 +937,9 @@ def _get_dist_arg(
     if not (is_distributable_typ(bodo_typ) or is_distributable_tuple_typ(bodo_typ)):
         return a
 
-    try:
+    if is_bodosql_context_type(bodo_typ):
         from bodosql import BodoSQLContext
-        from bodosql.context_ext import BodoSQLContextType
-    except ImportError:  # pragma: no cover
-        BodoSQLContextType = None
 
-    if BodoSQLContextType is not None and isinstance(bodo_typ, BodoSQLContextType):
         # Distribute each of the DataFrames.
         new_dict = {
             name: _get_dist_arg(df, copy, var_length, check_typing_issues)
