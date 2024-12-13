@@ -52,11 +52,14 @@ jobs:
       uses: docker/build-push-action@v5
       with:
         push: false # Do not push during the build step
-        file: ./buildscripts/docker/docker_release/Dockerfile
         context: .
+        file: ./buildscripts/docker/docker_release/Dockerfile
         platforms: linux/amd64
         tags: bodoaidocker/test_release_image:latest
  
+    - name: List Docker images (debug)
+      run: docker images
+
     - name: Test Jupyter notebooks inside the Docker image
       run: |
 
