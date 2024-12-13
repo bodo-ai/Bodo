@@ -40,3 +40,7 @@ jobs:
           echo "artifactory_channel: $artifactory_channel"
           ./buildscripts/iceberg/publish_binary.sh $artifactory_channel
         shell: bash
+        env:
+          USERNAME: ${{ secrets.ARTIFACTORY_USERNAME }}
+          TOKEN: ${{ secrets.ARTIFACTORY_TOKEN }}
+          ANACONDA_TOKEN: ${{ secrets.ANACONDA_TOKEN }}

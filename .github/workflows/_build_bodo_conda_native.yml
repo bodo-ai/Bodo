@@ -98,10 +98,6 @@ jobs:
         run: |
           set -exo pipefail
 
-          # Secrets File
-          echo "${{ secrets.PUBLISH_BINARY_SECRETS }}" > $HOME/secret_file
-          sudo chmod a+r $HOME/secret_file
-
           echo "BODO_VERSION: $BODO_VERSION"
           echo "ARTIFACTORY_CHANNEL: $ARTIFACTORY_CHANNEL"
           ./buildscripts/bodo/publish_binary.sh $ARTIFACTORY_CHANNEL $OS_DIR $BODO_VERSION
@@ -109,3 +105,6 @@ jobs:
           IS_RELEASE: ${{ inputs.is-release }}
           ARTIFACTORY_CHANNEL: ${{ format('bodo.ai{0}{1}', (inputs.platform-build == true) && '-platform' || '', (inputs.is-release == false) && '-dev' || '') }}
           OS_DIR: ${{ format('{0}', (inputs.os == 'macos-13') && 'osx-64' || (inputs.os == 'macos-14') && 'osx-arm64' || 'linux-64') }}
+          USERNAME: ${{ secrets.ARTIFACTORY_USERNAME }}
+          TOKEN: ${{ secrets.ARTIFACTORY_TOKEN }}
+          ANACONDA_TOKEN: ${{ secrets.ANACONDA_TOKEN }}
