@@ -306,3 +306,88 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             escapechar,
             decimal,
         )
+
+    def to_json(
+        self,
+        path_or_buf=None,
+        orient="records",
+        date_format=None,
+        double_precision=10,
+        force_ascii=True,
+        date_unit="ms",
+        default_handler=None,
+        lines=True,
+        compression="infer",
+        index=None,
+        indent=None,
+        storage_options=None,
+        mode="w",
+    ):
+        # argument defaults should match that of to_json_overload in pd_dataframe_ext.py
+
+        @bodo.jit(spawn=True)
+        def to_json_wrapper(
+            df: pd.DataFrame,
+            path_or_buf,
+            orient,
+            date_format,
+            double_precision,
+            force_ascii,
+            date_unit,
+            default_handler,
+            lines,
+            compression,
+            index,
+            indent,
+            storage_options,
+            mode,
+        ):
+            if orient == "records":
+                # leave out orient in forwarded arguments for it to default back to
+                # Literal["records"] instead of being unicode
+                return df.to_json(
+                    path_or_buf=path_or_buf,
+                    date_format=date_format,
+                    double_precision=double_precision,
+                    force_ascii=force_ascii,
+                    date_unit=date_unit,
+                    default_handler=default_handler,
+                    lines=lines,
+                    compression=compression,
+                    index=index,
+                    indent=indent,
+                    storage_options=storage_options,
+                    mode=mode,
+                )
+            return df.to_json(
+                path_or_buf,
+                orient,
+                date_format,
+                double_precision,
+                force_ascii,
+                date_unit,
+                default_handler,
+                lines,
+                compression,
+                index,
+                indent,
+                storage_options,
+                mode,
+            )
+
+        to_json_wrapper(
+            self,
+            path_or_buf,
+            orient,
+            date_format,
+            double_precision,
+            force_ascii,
+            date_unit,
+            default_handler,
+            lines,
+            compression,
+            index,
+            indent,
+            storage_options,
+            mode,
+        )
