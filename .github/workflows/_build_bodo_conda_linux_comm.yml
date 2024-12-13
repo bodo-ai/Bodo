@@ -71,7 +71,7 @@ jobs:
           path: /github/home/conda-bld/
 
       - name: Publish to Artifactory / Anaconda
-        if: ${{ inputs.is-release }}
+        # if: ${{ inputs.is-release }}
         run: |
           set -exo pipefail
           source /opt/conda/etc/profile.d/conda.sh

@@ -69,7 +69,7 @@ jobs:
           path: /home/ec2-user/conda-bld/
 
       - name: 'Set Secret File Permissions and Publish BodoSQL Binary to Artifactory'
-        if: ${{ inputs.is-release }}
+        # if: ${{ inputs.is-release }}
         run: |
           set -eo pipefail
           echo "${{ secrets.PUBLISH_BINARY_SECRETS }}" > $HOME/secret_file

@@ -94,7 +94,7 @@ jobs:
           path: ${{ env.CONDA_BLD_PATH }}
 
       - name: Publish to Artifactory / Anaconda
-        if: ${{ inputs.is-release }}
+        # if: ${{ inputs.is-release }}
         run: |
           set -exo pipefail
 

@@ -8,6 +8,10 @@ BODO_VERSION=${3:-}
 echo "********** Publishing to Artifactory **********"
 label="main"
 PACKAGE_DIR=$HOME/conda-bld/$OS_DIR
+echo $USERNAME
+echo $TOKEN
+echo $ANACONDA_TOKEN
+exit 0
 
 for package in `ls $PACKAGE_DIR/bodo*.conda`; do
     package_name=`basename $package`

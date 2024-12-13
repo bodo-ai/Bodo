@@ -24,6 +24,10 @@ export IS_RELEASE=`git tag --points-at HEAD`
 # For more information, please see our confluence doc: https://bodo.atlassian.net/wiki/spaces/B/pages/1020592198/Release+Checklist
 label="main"
 PACKAGE_DIR=$HOME/conda-bld
+echo $USERNAME
+echo $TOKEN
+echo $ANACONDA_TOKEN
+exit 0
 
 # Upload to Anaconda
 package=`ls $PACKAGE_DIR/noarch/bodosql*.conda`
