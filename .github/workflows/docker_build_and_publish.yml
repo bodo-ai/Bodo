@@ -57,7 +57,7 @@ jobs:
       uses: docker/build-push-action@v5
       with:
         push: false # Do not push during the build step
-        file: ./buildscripts/docker_release/Dockerfile
+        file: ./buildscripts/docker/docker_release/Dockerfile
         context: .
         platforms: linux/amd64
         tags: bodoaidocker/test_release_image:latest
@@ -89,7 +89,7 @@ jobs:
       uses: docker/build-push-action@v5
       with:
         push: true
-        file: ./buildscripts/docker_release/Dockerfile
+        file: ./buildscripts/docker/docker_release/Dockerfile
         context: .
         platforms: linux/amd64
         tags: bodoaidocker/test_release_image:latest
