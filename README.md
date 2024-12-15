@@ -112,3 +112,5 @@ Please read our latest [project contribution guide](CONTRIBUTING.md).
 ## Getting involved
 
 You can join our community and collaborate with other contributors by joining our [Slack channel](https://bodocommunity.slack.com/join/shared_invite/zt-qwdc8fad-6rZ8a1RmkkJ6eOX1X__knA#/shared-invite/email) – we’re excited to hear your ideas and help you get started!
+
+[![codecov](https://codecov.io/github/bodo-ai/Bodo/graph/badge.svg?token=zYHQy0R9ck)](https://codecov.io/github/bodo-ai/Bodo)

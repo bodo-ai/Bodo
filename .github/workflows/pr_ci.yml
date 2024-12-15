@@ -172,6 +172,12 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
           slug: bodo-ai/Bodo
 
+      - name: Upload test results to Codecov
+        if: ${{ !cancelled() }}
+        uses: codecov/test-results-action@v1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+
       # Notify GitHub Checks
       # If any test runs failed, this step should fail
       # This step failing will block the PR from being merged
