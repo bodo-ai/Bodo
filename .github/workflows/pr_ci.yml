@@ -143,7 +143,7 @@ jobs:
         run: |
           set -exo pipefail
           mkdir outputs
-          python -m pip install pytest-split coverage
+          python -m pip install pytest-split coverage pytest-cov
 
           # -S to sort by key, -s to read as arrays, 'add' to merge
           jq -S -s 'add' test_dur_bodo_*.json > outputs/test_dur_bodo.json
@@ -166,31 +166,11 @@ jobs:
           path: outputs/
           include-hidden-files: true
 
-      # Upload to SonarQube
-      # TODO: Replace with Sonarqube GitHub Action when we upgrade the server
-      - name: Load Sonar Scanner CLI from cache
-        id: sonar-scanner-cli
-        uses: actions/cache@v4
+      - name: Upload coverage reports to Codecov
+        uses: codecov/codecov-action@v5
         with:
-          path: sonar-scanner-cli-4.8
-          key: sonar-scanner-cli-4.8
-      - name: Install Sonar Scanner CLI
-        if: steps.sonar-scanner-cli.outputs.cache-hit != 'true'
-        run: |
-          set -eou pipefail
-          wget https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-4.8.1.3023-linux.zip
-          unzip sonar-scanner-cli-4.8.1.3023-linux.zip
-      - name: SonarQube Scan
-        run: |
-          ls -alh
-          ./sonar-scanner-4.8.1.3023-linux/bin/sonar-scanner \
-            -Dsonar.projectBaseDir=. \
-            -Dsonar.pullrequest.key=${{ github.event.pull_request.number }} \
-            -Dsonar.pullrequest.branch=$HEAD_REF
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          SONAR_HOST_URL: ${{ vars.SONAR_HOST_URL }}
-          HEAD_REF: ${{ github.head_ref }}
+          token: ${{ secrets.CODECOV_TOKEN }}
+          slug: bodo-ai/Bodo
 
       # Notify GitHub Checks
       # If any test runs failed, this step should fail
