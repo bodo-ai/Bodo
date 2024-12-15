@@ -101,5 +101,5 @@ def get_monthly_travels_weather(fhvhv_dataset):
 
 
 if __name__ == "__main__":
-    fhvhv_dataset = "s3://bodo-example-data/nyc_taxi/fhvhv_5M_rows.pq"
+    fhvhv_dataset = "s3://bodo-example-data/nyc-taxi/fhvhv_5M_rows.pq"
     get_monthly_travels_weather(fhvhv_dataset)
