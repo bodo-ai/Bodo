@@ -13,15 +13,17 @@ import bodo
 
 
 @bodo.jit(cache=True)
-def get_monthly_travels_weather():
+def get_monthly_travels_weather(hvfhv_dataset):
     start = time.time()
     central_park_weather_observations = pd.read_csv(
-        "s3://bodo-example-data/nyc-taxi/central_park_weather.csv", parse_dates=["DATE"]
+        "s3://bodo-example-data/nyc-taxi/central_park_weather.csv",
+        parse_dates=["DATE"],
+        storage_options={"anon": True},
     )
     central_park_weather_observations = central_park_weather_observations.rename(
         columns={"DATE": "date", "PRCP": "precipitation"}, copy=False
     )
-    fhvhv_tripdata = pd.read_parquet("s3://bodo-example-data/nyc-taxi/fhvhv_tripdata/")
+    fhvhv_tripdata = pd.read_parquet(hvfhv_dataset, storage_options={"anon": True})
     end = time.time()
     print("Reading Time: ", (end - start))
 
@@ -98,4 +100,5 @@ def get_monthly_travels_weather():
 
 
 if __name__ == "__main__":
-    get_monthly_travels_weather()
+    hvfhv_dataset = "s3://bodo-example-data/nyc-taxi/fhvhv/"
+    get_monthly_travels_weather(hvfhv_dataset)

@@ -11,7 +11,7 @@ from pyspark.sql.functions import (
 )
 
 
-def get_monthly_travels_weather():
+def get_monthly_travels_weather(hvfhv_dataset):
     spark = (
         SparkSession.builder.appName("MonthlyTravelsWeather")
         .config("spark.jars.packages", "org.apache.hadoop:hadoop-aws:3.3.2")
@@ -36,9 +36,7 @@ def get_monthly_travels_weather():
 
     # Read in trip data using spark, this reads a re-written dataset because spark doesn't support reading the original dataset
     # due to schema unification issues
-    fhvhv_tripdata = spark.read.parquet(
-        "s3a://bodo-example-data/nyc-taxi/fhvhv_tripdata_rewrite/"
-    ).drop("__index_level_0__")
+    fhvhv_tripdata = spark.read.parquet(hvfhv_dataset).drop("__index_level_0__")
 
     # Convert datetime columns and create necessary features
     fhvhv_tripdata = (
@@ -113,4 +111,6 @@ def get_monthly_travels_weather():
     print("Execution time:", time.time() - start)
 
 
-get_monthly_travels_weather()
+if __name__ == "__main__":
+    hvfhv_dataset = "s3a://bodo-example-data/nyc-taxi/fhvhv_tripdata_rewrite/"
+    get_monthly_travels_weather(hvfhv_dataset)

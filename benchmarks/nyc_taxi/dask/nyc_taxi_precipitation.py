@@ -13,10 +13,9 @@ import time
 
 import dask.dataframe as dd
 from dask.distributed import Client
-from dask_cloudprovider.aws import EC2Cluster
 
 
-def get_monthly_travels_weather():
+def get_monthly_travels_weather(hvfhv_dataset):
     start = time.time()
     central_park_weather_observations = dd.read_csv(
         "s3://bodo-example-data/nyc-taxi/central_park_weather.csv",
@@ -28,7 +27,7 @@ def get_monthly_travels_weather():
     )
 
     fhvhv_tripdata = dd.read_parquet(
-        "s3://bodo-example-data/nyc-taxi/fhvhv_tripdata/",
+        hvfhv_dataset,
         storage_options={"anon": True},
     )
 
@@ -103,7 +102,17 @@ def get_monthly_travels_weather():
     return end - start
 
 
-def main():
+def local_get_monthly_travels_weather(hvfhv_dataset):
+    """Run Dask on local cluster."""
+    with Client():
+        total_time = get_monthly_travels_weather(hvfhv_dataset)
+        print("Total time for IO and compute:", total_time)
+
+
+def ec2_get_monthly_travels_weather(hvfhv_dataset):
+    """Run Dask on EC2 cluster."""
+    from dask_cloudprovider.aws import EC2Cluster
+
     env_vars = {"EXTRA_CONDA_PACKAGES": "s3fs==2024.10.0"}
     with EC2Cluster(
         # NOTE: Setting security = False to avoid large config size
@@ -117,11 +126,12 @@ def main():
     ) as cluster:
         with Client(cluster) as client:
             for _ in range(3):
-                future = client.submit(get_monthly_travels_weather)
+                future = client.submit(get_monthly_travels_weather, hvfhv_dataset)
                 total_time = future.result()
                 client.restart()
                 print("Total time for IO and compute:", total_time)
 
 
 if __name__ == "__main__":
-    main()
+    hvfhv_dataset = "s3://bodo-example-data/nyc-taxi/fhvhv_tripdata/"
+    ec2_get_monthly_travels_weather(hvfhv_dataset)

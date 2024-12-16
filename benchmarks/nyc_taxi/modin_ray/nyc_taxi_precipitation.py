@@ -1,20 +1,11 @@
-"""
-Bodo implementation of the High Volume For Hire Vehicle benchmark workload
-that can be run locally.
-
-usage:
-    python bodo_nyc_taxi_precipitation.py
-"""
-
 import time
 
-import pandas as pd
+import modin.pandas as pd
+import ray
+from modin.pandas.io import to_ray
 
-import bodo
 
-
-@bodo.jit(cache=True)
-def get_monthly_travels_weather(fhvhv_dataset):
+def get_monthly_travels_weather(hvfhv_dataset):
     start = time.time()
     central_park_weather_observations = pd.read_csv(
         "s3://bodo-example-data/nyc-taxi/central_park_weather.csv",
@@ -22,9 +13,13 @@ def get_monthly_travels_weather(fhvhv_dataset):
         storage_options={"anon": True},
     )
     central_park_weather_observations = central_park_weather_observations.rename(
-        columns={"DATE": "date", "PRCP": "precipitation"}, copy=False
+        columns={"DATE": "date", "PRCP": "precipitation"},
+        copy=False,
     )
-    fhvhv_tripdata = pd.read_parquet(fhvhv_dataset, storage_options={"anon": True})
+    fhvhv_tripdata = pd.read_parquet(
+        hvfhv_dataset,
+        storage_options={"anon": True},
+    )
     end = time.time()
     print("Reading Time: ", (end - start))
 
@@ -94,12 +89,24 @@ def get_monthly_travels_weather(fhvhv_dataset):
     print("Monthly Taxi Travel Times Computation Time: ", end - start)
 
     start = time.time()
-    monthly_trips_weather.to_parquet("bodo_out.pq")
+    monthly_trips_weather_ray = to_ray(monthly_trips_weather)
+    monthly_trips_weather_ray.write_parquet("local:///tmp/data/modin_result.pq")
     end = time.time()
     print("Writing time:", (end - start))
     return monthly_trips_weather
 
 
+def local_get_monthly_travels_weather(hvfhv_dataset):
+    """Run Modin on local Ray cluster"""
+    ray.init()
+    get_monthly_travels_weather(hvfhv_dataset)
+    ray.shutdown()
+
+
 if __name__ == "__main__":
-    fhvhv_dataset = "s3://bodo-example-data/nyc-taxi/fhvhv_5M_rows.pq"
-    get_monthly_travels_weather(fhvhv_dataset)
+    ray.init(address="auto")
+    cpu_count = ray.cluster_resources()["CPU"]
+    print("RAY CPU COUNT: ", cpu_count)
+
+    hvfhv_dataset = "s3://bodo-example-data/nyc-taxi/fhvhv/"
+    get_monthly_travels_weather(hvfhv_dataset)
