@@ -12,6 +12,8 @@
 
 Bodo is a cutting edge compute engine for large scale Python data processing. Powered by an innovative auto-parallelizing just-in-time compiler, Bodo transforms Python programs into highly optimized, parallel binaries without requiring code rewrites, which makes Bodo [20x to 240x faster](https://github.com/bodo-ai/Bodo/tree/main/benchmarks/nyc_taxi) compared to alternatives!
 
+<img src="benchmarks/img/nyc-taxi-benchmark.png" alt="NYC Taxi Benchmark" width="500"/>
+
 Unlike traditional distributed computing frameworks, Bodo:
 - Seamlessly supports native Python APIs like Pandas and NumPy.
 - Eliminates runtime overheads common in driver-executor models by leveraging Message Passing Interface (MPI) tech for true distributed execution.
