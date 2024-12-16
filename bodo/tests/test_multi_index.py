@@ -5,8 +5,10 @@ import pandas as pd
 import pytest
 
 import bodo
-from bodo.tests.utils import check_func
+from bodo.tests.utils import check_func, get_num_test_workers, pytest_pandas
 from bodo.utils.typing import BodoError
+
+pytestmark = pytest_pandas
 
 
 def test_from_product_tuple():
@@ -82,8 +84,8 @@ def test_multi_index_head(memory_leak_check):
 
     df = pd.DataFrame(
         {
-            "A": [i for i in range(10)] * 70,
-            "B": [j for j in range(7)] * 100,
+            "A": list(range(10)) * 70,
+            "B": list(range(7)) * 100,
             "C": np.arange(700),
         }
     )
@@ -106,11 +108,12 @@ def test_multi_nbytes(memory_leak_check):
         (40 * 8) + (40 // 8) + (41 * 8) + (40 * 3.5)
     )  # int data is 40 * 8, string data is 5 bytes null bitmap + 41 * 8 for offset + 170 for string data
     check_func(impl, (index,), py_output=py_out, only_seq=True)
+    n_pes = get_num_test_workers()
     # Same data is distributed on multiple ranks. As a result int is unchanged, but
     # string needs to account for null bitmap changes and offset changes.
     # 1 extra offset integer on extra ranks
-    extra_offset_bytes = (bodo.get_size() - 1) * 8
+    extra_offset_bytes = (n_pes - 1) * 8
     # Null bits depends on the bitmap padding
-    extra_null_bitmap = (math.ceil(40 / (8 * bodo.get_size())) * bodo.get_size()) - 5
+    extra_null_bitmap = (math.ceil(40 / (8 * n_pes)) * n_pes) - 5
     py_out = py_out + extra_offset_bytes + extra_null_bitmap
     check_func(impl, (index,), py_output=py_out, only_1DVar=True)

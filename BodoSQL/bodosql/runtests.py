@@ -1,17 +1,23 @@
 """
 File used to run tests on CI.
 """
-import os
 
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
+import os
 import re
 import subprocess
 import sys
 
-# first arg is the number of processes to run the tests with
-num_processes = int(sys.argv[1])
+# first arg is the name of the testing pipeline
+pipeline_name = sys.argv[1]
+# second arg is the number of processes to run the tests with
+num_processes = int(sys.argv[2])
 # all other args go to pytest
-pytest_args = sys.argv[2:]
+pytest_args = sys.argv[3:]
+# Get File-Level Timeout Info from Environment Variable (in seconds)
+file_timeout = int(os.environ.get("BODO_RUNTESTS_TIMEOUT", 7200))
+
+# Pipeline name is only used when testing on Azure
+use_run_name = "AGENT_NAME" in os.environ
 
 # run pytest with --collect-only to find Python modules containing tests
 # (this doesn't execute any tests)
@@ -26,7 +32,9 @@ except subprocess.CalledProcessError as e:
 
 # get the list of test modules (test file names) to run
 # excluding the test files located in the caching tests directory
-pytest_module_regexp = re.compile(r"<Module ((?!tests/caching_tests/)\S+.py)>")
+pytest_module_regexp = re.compile(
+    r"<(?:Module|CppTestFile) ((?!tests/caching_tests/)\S+.(?:py|cpp))>"
+)
 modules = []
 for line in output.decode().split("\n"):
     m = pytest_module_regexp.search(line)
@@ -58,10 +66,21 @@ for i, m in enumerate(modules):
         "-n",
         str(num_processes),
         "pytest",
-    ] + mod_pytest_args
+        "-Wignore",
+        # junitxml generates test report file that can be displayed by CodeBuild website
+        # use PYTEST_MARKER and module name to generate a unique filename for each group of tests as identified
+        # by markers and test filename.
+        f"--junitxml=pytest-report-{m.split('.')[0]}-{os.environ['PYTEST_MARKER'].replace(' ','-')}.xml",
+    ]
+    if use_run_name:
+        cmd.append(
+            f"--test-run-title={pipeline_name}",
+        )
+    cmd += mod_pytest_args
     print(f"Running: {' '.join(cmd)} with module {m}")
     p = subprocess.Popen(cmd, shell=False)
-    rc = p.wait()
+    rc = p.wait(timeout=file_timeout)
+
     if rc not in (0, 5):  # pytest returns error code 5 when no tests found
         # raise RuntimeError("An error occurred when running the command " + str(cmd))
         print(

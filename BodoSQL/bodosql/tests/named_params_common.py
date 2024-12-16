@@ -1,7 +1,6 @@
 """
 Common file used by tests that evaluate queries with named parameters.
 """
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 
 import numpy as np
 import pandas as pd
@@ -75,37 +74,19 @@ def timestamp_named_params(request):
 
 @pytest.fixture(
     params=[
-        # Check positive values
-        (pd.Timedelta(days=1), pd.Timedelta(hours=5)),
-        pytest.param(
-            (pd.Timedelta(days=-2, hours=1), pd.Timedelta(minutes=-15)),
-            marks=pytest.mark.slow,
-        ),
+        "US/Pacific",
     ]
 )
-def timedelta_named_params(request):
+def tzaware_timestamp_named_params(request):
     """
-    Fixture for Timedelta named params. These always contain 2 values:
-    @a, and @b, which refer to elements 0 and 1 of the tuple.
+    Fixture for Timestamp named params. These always contain 2 values:
+    @a, and @b, which refer to elements 0 and 1 of the tuple, as well as
+    the string of the timezone used by both (which must be the same).
     """
-    params_tuple = request.param
-    return {"a": params_tuple[0], "b": params_tuple[1]}
-
-
-@pytest.fixture(
-    params=[
-        # Check positive values
-        (pd.DateOffset(years=1, months=2), pd.DateOffset(months=-3)),
-        (pd.DateOffset(years=-3, months=1), pd.DateOffset(years=4)),
-    ]
-)
-def dateoffset_named_params(request):
-    """
-    Fixture for Dateoffset named params. These always contain 2 values:
-    @a, and @b, which refer to elements 0 and 1 of the tuple.
-    """
-    params_tuple = request.param
-    return {"a": params_tuple[0], "b": params_tuple[1]}
+    tz = request.param
+    param_a = pd.Timestamp(year=2022, month=1, day=31, second=15, tz=tz)
+    param_b = pd.Timestamp(year=2000, month=1, day=1, hour=3, tz=tz)
+    return {"a": param_a, "b": param_b}, tz
 
 
 @pytest.fixture(
@@ -114,7 +95,6 @@ def dateoffset_named_params(request):
         (5.6, np.float32(17.7)),
         ("hello", "world"),
         (pd.Timestamp(2021, 8, 16), pd.Timestamp(year=2020, month=2, day=2, minute=4)),
-        (pd.Timedelta(days=-1), pd.Timedelta(hours=5)),
     ]
 )
 def named_params_all_column_types(request):

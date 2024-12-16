@@ -1,433 +1,399 @@
-// Copyright (C) 2019 Bodo Inc. All rights reserved.
-/**
- * @author Ehsan (ehsan@bodo-inc.com)
- * @brief Bodo array and table C++ library to allocate arrays, perform parallel
- * shuffle, perform array and table operations like join, groupby
- * @date 2019-10-06
- */
-
 #include <Python.h>
 #include <datetime.h>
+#include <iostream>
 #define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
+
 #include <arrow/api.h>
 #include <arrow/python/pyarrow.h>
 #include <numpy/arrayobject.h>
+
+#include "_array_hash.h"
 #include "_array_operations.h"
 #include "_array_utils.h"
 #include "_bodo_common.h"
-#include "_distributed.h"
-#include "_groupby.h"
+#include "_bodo_to_arrow.h"
+#include "_dict_builder.h"
 #include "_join.h"
 #include "_shuffle.h"
+#include "groupby/_groupby.h"
 
-MPI_Datatype decimal_mpi_type = MPI_DATATYPE_NULL;
-
-#undef USE_ARROW_FOR_LIST_STRING
-
-struct ArrayBuildInfo {
-    ArrayBuildInfo(std::shared_ptr<arrow::Array> a, int p1, int p2, int p3,
-                   int p4)
-        : array(a), type_pos(p1), buf_pos(p2), length_pos(p3), name_pos(p4) {}
-    std::shared_ptr<arrow::Array> array;
-    int type_pos;
-    int buf_pos;
-    int length_pos;
-    int name_pos;
-};
-
-/**
- * This is called recursively
- * @param types: array of type IDs for each array in nested structure
- * @param buffers: array of buffers for each array in nested structure
-                   (includes offset, null_bitmap and data buffers)
-                   NOTE that not all arrays have all three
- * @param lengths: length of each array in nested structure
- * @param type_pos: track current position in types array
- * @param buf_pos: track current position in buffers array
- * @param length_pos: track current position in lengths array
- * @param name_pos: track current position in field names
- */
-ArrayBuildInfo nested_array_from_c(const int* types, const uint8_t** buffers,
-                                   const int64_t* lengths, char** field_names,
-                                   int type_pos, int buf_pos, int length_pos,
-                                   int name_pos) {
-    Bodo_CTypes::CTypeEnum type = (Bodo_CTypes::CTypeEnum)types[type_pos];
-    int64_t length = lengths[length_pos];
-    if (type == Bodo_CTypes::LIST) {
-        const uint8_t* _offsets = buffers[buf_pos++];
-        const uint8_t* _null_bitmap = buffers[buf_pos++];
-
-        ArrayBuildInfo ai = nested_array_from_c(
-            types, buffers, lengths, field_names, type_pos + 1, buf_pos,
-            length_pos + 1, name_pos);
-        type_pos = ai.type_pos;
-        buf_pos = ai.buf_pos;
-        length_pos = ai.length_pos;
-        name_pos = ai.name_pos;
-
-        std::shared_ptr<arrow::Buffer> list_offsets =
-            std::make_shared<arrow::Buffer>(_offsets,
-                                            sizeof(offset_t) * (length + 1));
-        std::shared_ptr<arrow::Buffer> null_bitmap = NULLPTR;
-        if (_null_bitmap)
-            null_bitmap = std::make_shared<arrow::Buffer>(_null_bitmap,
-                                                          (length + 7) >> 3);
-        // We use `element` for consistency.
-        // TODO [BE-3247] We should specify nullability of the fields here.
-        std::shared_ptr<arrow::Field> field =
-            std::make_shared<arrow::Field>("element", ai.array->type());
-        std::shared_ptr<arrow::Array> array =
-#if OFFSET_BITWIDTH == 32
-            std::make_shared<arrow::ListArray>(arrow::list(field), length,
-#else
-            std::make_shared<arrow::LargeListArray>(arrow::large_list(field),
-                                                    length,
-#endif
-                                               list_offsets, ai.array,
-                                               null_bitmap);
-
-        return ArrayBuildInfo(array, type_pos, buf_pos, length_pos, name_pos);
-    } else if (type == Bodo_CTypes::STRUCT) {
-        int num_fields = types[type_pos + 1];
-        type_pos += 2;
-        length_pos += 2;
-
-        const uint8_t* _null_bitmap = buffers[buf_pos++];
-
-        std::vector<std::shared_ptr<arrow::Array>> child_arrays;
-        std::vector<std::shared_ptr<arrow::Field>> fields;
-        for (int i = 0; i < num_fields; i++) {
-            std::string e_name(field_names[name_pos]);
-            ArrayBuildInfo ai = nested_array_from_c(
-                types, buffers, lengths, field_names, type_pos, buf_pos,
-                length_pos, name_pos + 1);
-            child_arrays.push_back(ai.array);
-            // TODO [BE-3247] We should specify nullability of the fields here.
-            fields.push_back(
-                std::make_shared<arrow::Field>(e_name, ai.array->type()));
-            type_pos = ai.type_pos;
-            buf_pos = ai.buf_pos;
-            length_pos = ai.length_pos;
-            name_pos = ai.name_pos;
-        }
-
-        std::shared_ptr<arrow::StructType> struct_type =
-            std::make_shared<arrow::StructType>(fields);
-        std::shared_ptr<arrow::Buffer> null_bitmap = NULLPTR;
-        if (_null_bitmap)
-            null_bitmap = std::make_shared<arrow::Buffer>(_null_bitmap,
-                                                          (length + 7) >> 3);
-        std::shared_ptr<arrow::Array> array =
-            std::make_shared<arrow::StructArray>(struct_type, length,
-                                                 child_arrays, null_bitmap);
-        return ArrayBuildInfo(array, type_pos, buf_pos, length_pos, name_pos);
-    } else if (type == Bodo_CTypes::STRING) {
-        const uint8_t* _offsets = buffers[buf_pos++];
-        const uint8_t* _null_bitmap = buffers[buf_pos++];
-
-        std::shared_ptr<arrow::Buffer> str_offsets =
-            std::make_shared<arrow::Buffer>(_offsets,
-                                            sizeof(offset_t) * (length + 1));
-
-        std::shared_ptr<arrow::Buffer> null_bitmap = NULLPTR;
-        if (_null_bitmap)
-            null_bitmap = std::make_shared<arrow::Buffer>(_null_bitmap,
-                                                          (length + 7) >> 3);
-
-        int64_t num_chars = ((offset_t*)_offsets)[length];
-        std::shared_ptr<arrow::Buffer> data = std::make_shared<arrow::Buffer>(
-            buffers[buf_pos++], num_chars * sizeof(char));
-
-        std::shared_ptr<arrow::Array> array =
-#if OFFSET_BITWIDTH == 32
-            std::make_shared<arrow::StringArray>(length, str_offsets, data,
-#else
-            std::make_shared<arrow::LargeStringArray>(length, str_offsets, data,
-#endif
-                                                 null_bitmap);
-        return ArrayBuildInfo(array, type_pos + 1, buf_pos, length_pos + 1,
-                              name_pos);
-    } else if (type == Bodo_CTypes::DECIMAL) {
-        // The null bitmap
-        const uint8_t* _null_bitmap = buffers[buf_pos++];
-        std::shared_ptr<arrow::Buffer> null_bitmap = NULLPTR;
-        int64_t null_count_ = 0;
-        if (_null_bitmap) {
-            null_bitmap = std::make_shared<arrow::Buffer>(_null_bitmap,
-                                                          (length + 7) >> 3);
-            for (int64_t i_row = 0; i_row < length; i_row++) {
-                bool bit = GetBit(_null_bitmap, i_row);
-                if (!bit) null_count_++;
-            }
-        }
-        // The other buffers
-        const uint8_t* data = buffers[buf_pos++];
-        std::shared_ptr<arrow::Buffer> data_buf =
-            std::make_shared<arrow::Buffer>(data, length);
-        std::vector<std::shared_ptr<arrow::Buffer>> l_buf = {null_bitmap,
-                                                             data_buf};
-        // The returning array.
-        int32_t precision = types[type_pos + 1];
-        int32_t scale = types[type_pos + 2];
-        arrow::Result<std::shared_ptr<arrow::DataType>> type_res;
-        type_res = arrow::Decimal128Type::Make(precision, scale);
-        std::shared_ptr<arrow::DataType> type =
-            std::move(type_res).ValueOrDie();
-        std::shared_ptr<arrow::ArrayData> arr =
-            arrow::ArrayData::Make(type, length, l_buf, null_count_, 0);
-        std::shared_ptr<arrow::Array> array =
-            std::make_shared<arrow::Decimal128Array>(arr);
-        return ArrayBuildInfo(array, type_pos + 3, buf_pos, length_pos + 1,
-                              name_pos);
-    } else {  // Case of numeric/decimal array
-        // First the null bitmap of the array
-        const uint8_t* _null_bitmap = buffers[buf_pos++];
-        std::shared_ptr<arrow::Buffer> null_bitmap = NULLPTR;
-        if (_null_bitmap)
-            null_bitmap = std::make_shared<arrow::Buffer>(_null_bitmap,
-                                                          (length + 7) >> 3);
-        // Second the array itself
-        std::shared_ptr<arrow::Array> array;
-        int64_t siz_typ = numpy_item_size[type];
-        std::shared_ptr<arrow::Buffer> data = std::make_shared<arrow::Buffer>(
-            buffers[buf_pos++], length * siz_typ);
-        // We canot change code below to something more generic since the
-        // arrow::UInt8Type are really types and not enum values.
-        if (type == Bodo_CTypes::_BOOL) {
-            // Arrow's boolean array uses 1 bit for each bool
-            // we use uint8 for now to avoid conversion
-            array = std::make_shared<arrow::NumericArray<arrow::UInt8Type>>(
-                length, data, null_bitmap);
-        } else if (type == Bodo_CTypes::INT8) {
-            array = std::make_shared<arrow::NumericArray<arrow::Int8Type>>(
-                length, data, null_bitmap);
-        } else if (type == Bodo_CTypes::UINT8) {
-            array = std::make_shared<arrow::NumericArray<arrow::UInt8Type>>(
-                length, data, null_bitmap);
-        } else if (type == Bodo_CTypes::INT16) {
-            array = std::make_shared<arrow::NumericArray<arrow::Int16Type>>(
-                length, data, null_bitmap);
-        } else if (type == Bodo_CTypes::UINT16) {
-            array = std::make_shared<arrow::NumericArray<arrow::UInt16Type>>(
-                length, data, null_bitmap);
-        } else if (type == Bodo_CTypes::INT32) {
-            array = std::make_shared<arrow::NumericArray<arrow::Int32Type>>(
-                length, data, null_bitmap);
-        } else if (type == Bodo_CTypes::UINT32) {
-            array = std::make_shared<arrow::NumericArray<arrow::UInt32Type>>(
-                length, data, null_bitmap);
-        } else if (type == Bodo_CTypes::INT64) {
-            array = std::make_shared<arrow::NumericArray<arrow::Int64Type>>(
-                length, data, null_bitmap);
-        } else if (type == Bodo_CTypes::UINT64) {
-            array = std::make_shared<arrow::NumericArray<arrow::UInt64Type>>(
-                length, data, null_bitmap);
-        } else if (type == Bodo_CTypes::FLOAT32) {
-            array = std::make_shared<arrow::NumericArray<arrow::FloatType>>(
-                length, data, null_bitmap);
-        } else if (type == Bodo_CTypes::FLOAT64) {
-            array = std::make_shared<arrow::NumericArray<arrow::DoubleType>>(
-                length, data, null_bitmap);
-        } else {
-            Bodo_PyErr_SetString(PyExc_RuntimeError,
-                                 "nested_array_from_c unsupported type");
-            return {nullptr, 0, 0, 0, 0};
-        }
-        return ArrayBuildInfo(array, type_pos + 1, buf_pos, length_pos + 1,
-                              name_pos);
+array_info* struct_array_to_info(int64_t n_fields, int64_t n_items,
+                                 array_info** inner_arrays, char** field_names,
+                                 NRT_MemInfo* null_bitmap) {
+    std::vector<std::shared_ptr<array_info>> inner_arrs_vec(
+        inner_arrays, inner_arrays + n_fields);
+    std::vector<std::string> field_names_vec(field_names,
+                                             field_names + n_fields);
+    // Get length from an inner array in case n_items is set wrong since this
+    // field is new and there could be gaps somewhere. See
+    // https://github.com/bodo-ai/Bodo/pull/6891
+    if (inner_arrs_vec.size() > 0) {
+        n_items = inner_arrs_vec[0]->length;
     }
+
+    // wrap meminfo in BodoBuffer (increfs meminfo also)
+    int64_t n_bytes = arrow::bit_util::BytesForBits(n_items);
+    std::shared_ptr<BodoBuffer> null_bitmap_buff = std::make_shared<BodoBuffer>(
+        (uint8_t*)null_bitmap->data, n_bytes, null_bitmap);
+
+    // Python is responsible for deleting pointer
+    return new array_info(bodo_array_type::STRUCT, Bodo_CTypes::STRUCT, n_items,
+                          {null_bitmap_buff}, inner_arrs_vec, 0, 0, 0, -1,
+                          false, false, false, 0, field_names_vec);
 }
 
-array_info* nested_array_to_info(int* types, const uint8_t** buffers,
-                                 int64_t* lengths, char** field_names,
-                                 NRT_MemInfo* meminfo) {
-    try {
-        int type_pos = 0;
-        int buf_pos = 0;
-        int length_pos = 0;
-        int name_pos = 0;
-        ArrayBuildInfo ai =
-            nested_array_from_c(types, buffers, lengths, field_names, type_pos,
-                                buf_pos, length_pos, name_pos);
-        // TODO: better memory management of struct, meminfo refcount?
-        return new array_info(
-            bodo_array_type::ARROW, Bodo_CTypes::INT8 /*dummy*/, lengths[0], -1,
-            -1, NULL, NULL, NULL, NULL, NULL, meminfo, NULL, ai.array);
-    } catch (const std::exception& e) {
-        PyErr_SetString(PyExc_RuntimeError, e.what());
-        return NULL;
-    }
+array_info* array_item_array_to_info(uint64_t n_items, array_info* inner_array,
+                                     NRT_MemInfo* offsets,
+                                     NRT_MemInfo* null_bitmap) {
+    // wrap meminfo in BodoBuffer (increfs meminfo also)
+    std::shared_ptr<BodoBuffer> offsets_buff = std::make_shared<BodoBuffer>(
+        (uint8_t*)offsets->data, (n_items + 1) * sizeof(offset_t), offsets);
+    int64_t n_bytes = arrow::bit_util::BytesForBits(n_items);
+    std::shared_ptr<BodoBuffer> null_bitmap_buff = std::make_shared<BodoBuffer>(
+        (uint8_t*)null_bitmap->data, n_bytes, null_bitmap);
+
+    // Python is responsible for deleting pointer
+    return new array_info(bodo_array_type::ARRAY_ITEM, Bodo_CTypes::LIST,
+                          n_items, {offsets_buff, null_bitmap_buff},
+                          {std::shared_ptr<array_info>(inner_array)});
 }
 
-array_info* list_string_array_to_info(NRT_MemInfo* meminfo) {
-    array_item_arr_payload* payload = (array_item_arr_payload*)meminfo->data;
-    int64_t n_items = payload->n_arrays;
-
-    array_item_arr_numpy_payload* sub_payload =
-        (array_item_arr_numpy_payload*)payload->data->data;
-    int64_t n_strings = sub_payload->n_arrays;
-    int64_t n_chars = ((offset_t*)sub_payload->offsets.data)[n_strings];
-
-    return new array_info(
-        bodo_array_type::LIST_STRING, Bodo_CTypes::LIST_STRING, n_items,
-        n_strings, n_chars, (char*)sub_payload->data.data,
-        (char*)sub_payload->offsets.data, (char*)payload->offsets.data,
-        (char*)payload->null_bitmap.data, (char*)sub_payload->null_bitmap.data,
-        meminfo, nullptr);
+array_info* map_array_to_info(array_info* inner_array) {
+    // Python is responsible for deleting pointer
+    return new array_info(bodo_array_type::MAP, Bodo_CTypes::MAP,
+                          inner_array->length, {},
+                          {std::shared_ptr<array_info>(inner_array)});
 }
 
-array_info* string_array_to_info(uint64_t n_items, uint64_t n_chars, char* data,
-                                 char* offsets, char* null_bitmap,
-                                 NRT_MemInfo* meminfo, int is_bytes) {
+array_info* string_array_to_info(uint64_t n_items, NRT_MemInfo* data,
+                                 NRT_MemInfo* offsets, NRT_MemInfo* null_bitmap,
+                                 int is_bytes) {
     // TODO: better memory management of struct, meminfo refcount?
     auto dtype = Bodo_CTypes::STRING;
-    if (is_bytes) dtype = Bodo_CTypes::BINARY;
-    return new array_info(bodo_array_type::STRING, dtype, n_items, n_chars, -1,
-                          data, offsets, NULL, null_bitmap, NULL, meminfo,
-                          NULL);
+    if (is_bytes) {
+        dtype = Bodo_CTypes::BINARY;
+    }
+
+    // wrap meminfo in BodoBuffer (increfs meminfo also)
+    int64_t n_chars = ((offset_t*)offsets->data)[n_items];
+    std::shared_ptr<BodoBuffer> data_buff =
+        std::make_shared<BodoBuffer>((uint8_t*)data->data, n_chars, data);
+    std::shared_ptr<BodoBuffer> offsets_buff = std::make_shared<BodoBuffer>(
+        (uint8_t*)offsets->data, (n_items + 1) * sizeof(offset_t), offsets);
+    int64_t n_bytes = arrow::bit_util::BytesForBits(n_items);
+    std::shared_ptr<BodoBuffer> null_bitmap_buff = std::make_shared<BodoBuffer>(
+        (uint8_t*)null_bitmap->data, n_bytes, null_bitmap);
+
+    // Python is responsible for deleting
+    return new array_info(bodo_array_type::STRING, dtype, n_items,
+                          {data_buff, offsets_buff, null_bitmap_buff});
 }
 
 array_info* dict_str_array_to_info(array_info* str_arr, array_info* indices_arr,
-                                   int32_t has_global_dictionary) {
-    // For now has_sorted_dictionary is only available and exposed in the C++
-    // struct, so we set it to false
-    return new array_info(
-        bodo_array_type::DICT, Bodo_CTypes::STRING, indices_arr->length, -1, -1,
-        NULL, NULL, NULL, indices_arr->null_bitmask, NULL, NULL, NULL, NULL, 0,
-        0, 0, bool(has_global_dictionary), false, str_arr, indices_arr);
+                                   int32_t has_global_dictionary,
+                                   int32_t has_unique_local_dictionary,
+                                   int64_t dict_id) {
+    // Update the id for the string array
+    // TODO(njriasan): Should we move this to string_array_to_info?
+    str_arr->is_globally_replicated = has_global_dictionary;
+    str_arr->is_locally_unique = has_unique_local_dictionary;
+    str_arr->array_id = dict_id;
+    // For now is_locally_sorted is only available and exposed in the C++
+    // struct, so its kept as false.
+
+    // Python is responsible for deleting
+    return new array_info(bodo_array_type::DICT, Bodo_CTypes::STRING,
+                          indices_arr->length, {},
+                          {std::shared_ptr<array_info>(str_arr),
+                           std::shared_ptr<array_info>(indices_arr)});
 }
 
-array_info* get_nested_info(array_info* dict_arr, int32_t info_no) {
-    if (info_no == 1) {
-        return dict_arr->info1;
-    } else if (info_no == 2) {
-        return dict_arr->info2;
-    } else {
-        Bodo_PyErr_SetString(PyExc_RuntimeError,
-                             "get_nested_info: invalid info_no");
-        return NULL;
-    }
+array_info* timestamp_tz_array_to_info(uint64_t n_items, char* timestamp_arr,
+                                       char* offset_arr, char* null_bitmap,
+                                       NRT_MemInfo* meminfo_ts,
+                                       NRT_MemInfo* meminfo_offset,
+                                       NRT_MemInfo* meminfo_bitmask) {
+    // wrap meminfo in BodoBuffer (increfs meminfo also)
+    std::shared_ptr<BodoBuffer> ts_buff = std::make_shared<BodoBuffer>(
+        (uint8_t*)meminfo_ts->data,
+        n_items * numpy_item_size[Bodo_CTypes::INT64], meminfo_ts);
+    std::shared_ptr<BodoBuffer> offset_buff = std::make_shared<BodoBuffer>(
+        (uint8_t*)meminfo_offset->data,
+        n_items * numpy_item_size[Bodo_CTypes::INT16], meminfo_offset);
+    int64_t n_bytes = arrow::bit_util::BytesForBits(n_items);
+    std::shared_ptr<BodoBuffer> null_bitmap_buff = std::make_shared<BodoBuffer>(
+        (uint8_t*)meminfo_bitmask->data, n_bytes, meminfo_bitmask);
+
+    // Python is responsible for deleting
+    return new array_info(bodo_array_type::arr_type_enum::TIMESTAMPTZ,
+                          Bodo_CTypes::CTypeEnum::TIMESTAMPTZ, n_items,
+                          {ts_buff, offset_buff, null_bitmap_buff}, {}, 0, 0, 0,
+                          -1, false, false, false,
+                          /*offset*/ timestamp_arr - (char*)meminfo_ts->data);
 }
 
+// Raw pointer since called from Python
 int32_t get_has_global_dictionary(array_info* dict_arr) {
-    return int32_t(dict_arr->has_global_dictionary);
+    return int32_t(dict_arr->child_arrays[0]->is_globally_replicated);
+}
+
+// Raw pointer since called from Python
+int32_t get_has_unique_local_dictionary(array_info* dict_arr) {
+    return int32_t(dict_arr->child_arrays[0]->is_locally_unique);
+}
+
+// Raw pointer since called from Python
+int64_t get_dict_id(array_info* dict_arr) {
+    return dict_arr->child_arrays[0]->array_id;
 }
 
 array_info* numpy_array_to_info(uint64_t n_items, char* data, int typ_enum,
                                 NRT_MemInfo* meminfo) {
-    // TODO: better memory management of struct, meminfo refcount?
-    return new array_info(bodo_array_type::NUMPY,
-                          (Bodo_CTypes::CTypeEnum)typ_enum, n_items, -1, -1,
-                          data, NULL, NULL, NULL, NULL, meminfo, NULL);
-}
+    // Numpy array slicing creates views on MemInfo buffers with an offset
+    // from the MemInfo data pointer. For example, A[2:4] will have
+    // an offset of 16 bytes for int64 arrays (and n_items=2).
+    // We use pointer arithmetic to get the offset since not explicitly stored
+    // in Numpy struct.
 
-#undef DEBUG_CATEGORICAL
+    std::shared_ptr<BodoBuffer> data_buff = std::make_shared<BodoBuffer>(
+        (uint8_t*)meminfo->data, n_items * numpy_item_size[typ_enum], meminfo);
+
+    // Python is responsible for deleting
+    return new array_info(bodo_array_type::NUMPY,
+                          (Bodo_CTypes::CTypeEnum)typ_enum, n_items,
+                          {data_buff}, {}, 0, 0, 0, -1, false, false, false,
+                          /*offset*/ data - (char*)meminfo->data);
+}
 
 array_info* categorical_array_to_info(uint64_t n_items, char* data,
                                       int typ_enum, int64_t num_categories,
                                       NRT_MemInfo* meminfo) {
-// TODO: better memory management of struct, meminfo refcount?
-#ifdef DEBUG_CATEGORICAL
-    std::cout << "num_categories=" << num_categories << " n_items=" << n_items
-              << "\n";
-    std::cout << "typ_enum=" << typ_enum << "\n";
-#endif
-    return new array_info(bodo_array_type::CATEGORICAL,
-                          (Bodo_CTypes::CTypeEnum)typ_enum, n_items, -1, -1,
-                          data, NULL, NULL, NULL, NULL, meminfo, NULL, nullptr,
-                          0, 0, num_categories);
+    std::shared_ptr<BodoBuffer> data_buff = std::make_shared<BodoBuffer>(
+        (uint8_t*)meminfo->data, n_items * numpy_item_size[typ_enum], meminfo);
+    // Python is responsible for deleting
+    return new array_info(
+        bodo_array_type::CATEGORICAL, (Bodo_CTypes::CTypeEnum)typ_enum, n_items,
+        {data_buff}, {}, 0, 0, num_categories, -1, false, false, false,
+        /*offset*/ data - (char*)meminfo->data);
+}
+
+array_info* null_array_to_info(uint64_t n_items) {
+    // Null arrays are all null and just represented by a length. However,
+    // most of the C++ code doesn't support null arrays, so we create an
+    // all null boolean array.
+
+    // TODO[BSE-433]: Avoid allocating the null bitmap and data array and create
+    // a NULL CTYPE. This will require changes in the C++ code to support.
+    return alloc_nullable_array_all_nulls(n_items, Bodo_CTypes::_BOOL)
+        .release();
 }
 
 array_info* nullable_array_to_info(uint64_t n_items, char* data, int typ_enum,
                                    char* null_bitmap, NRT_MemInfo* meminfo,
                                    NRT_MemInfo* meminfo_bitmask) {
-    // TODO: better memory management of struct, meminfo refcount?
+    // wrap meminfo in BodoBuffer (increfs meminfo also)
+    std::shared_ptr<BodoBuffer> data_buff = std::make_shared<BodoBuffer>(
+        (uint8_t*)meminfo->data, n_items * numpy_item_size[typ_enum], meminfo);
+    int64_t n_bytes = arrow::bit_util::BytesForBits(n_items);
+    std::shared_ptr<BodoBuffer> null_bitmap_buff = std::make_shared<BodoBuffer>(
+        (uint8_t*)meminfo_bitmask->data, n_bytes, meminfo_bitmask);
+
+    // Python is responsible for deleting
     return new array_info(bodo_array_type::NULLABLE_INT_BOOL,
-                          (Bodo_CTypes::CTypeEnum)typ_enum, n_items, -1, -1,
-                          data, NULL, NULL, null_bitmap, NULL, meminfo,
-                          meminfo_bitmask);
+                          (Bodo_CTypes::CTypeEnum)typ_enum, n_items,
+                          {data_buff, null_bitmap_buff}, {}, 0, 0, 0, -1, false,
+                          false, false, /*offset*/ data - (char*)meminfo->data);
 }
 
 array_info* interval_array_to_info(uint64_t n_items, char* left_data,
                                    char* right_data, int typ_enum,
                                    NRT_MemInfo* left_meminfo,
                                    NRT_MemInfo* right_meminfo) {
+    if (left_data - (char*)left_meminfo->data != 0 ||
+        right_data - (char*)right_meminfo->data != 0) {
+        throw std::runtime_error(
+            "interval_array_to_info: offsets not supported for interval array");
+    }
+    std::shared_ptr<BodoBuffer> left_buff = std::make_shared<BodoBuffer>(
+        (uint8_t*)left_meminfo->data, n_items * numpy_item_size[typ_enum],
+        left_meminfo);
+    std::shared_ptr<BodoBuffer> right_buff = std::make_shared<BodoBuffer>(
+        (uint8_t*)right_meminfo->data, n_items * numpy_item_size[typ_enum],
+        right_meminfo);
+    // Python is responsible for deleting
     return new array_info(bodo_array_type::INTERVAL,
-                          (Bodo_CTypes::CTypeEnum)typ_enum, n_items, -1, -1,
-                          left_data, right_data, NULL, NULL, NULL, left_meminfo,
-                          right_meminfo);
+                          (Bodo_CTypes::CTypeEnum)typ_enum, n_items,
+                          {left_buff, right_buff});
 }
 
 array_info* decimal_array_to_info(uint64_t n_items, char* data, int typ_enum,
                                   char* null_bitmap, NRT_MemInfo* meminfo,
                                   NRT_MemInfo* meminfo_bitmask,
                                   int32_t precision, int32_t scale) {
-    // TODO: better memory management of struct, meminfo refcount?
-    return new array_info(bodo_array_type::NULLABLE_INT_BOOL,
-                          (Bodo_CTypes::CTypeEnum)typ_enum, n_items, -1, -1,
-                          data, NULL, NULL, null_bitmap, NULL, meminfo,
-                          meminfo_bitmask, NULL, precision, scale);
+    // wrap meminfo in BodoBuffer (increfs meminfo also)
+    std::shared_ptr<BodoBuffer> data_buff = std::make_shared<BodoBuffer>(
+        (uint8_t*)meminfo->data, n_items * numpy_item_size[typ_enum], meminfo);
+    int64_t n_bytes = arrow::bit_util::BytesForBits(n_items);
+    std::shared_ptr<BodoBuffer> null_bitmap_buff = std::make_shared<BodoBuffer>(
+        (uint8_t*)meminfo_bitmask->data, n_bytes, meminfo_bitmask);
+
+    // Python is responsible for deleting
+    return new array_info(
+        bodo_array_type::NULLABLE_INT_BOOL, (Bodo_CTypes::CTypeEnum)typ_enum,
+        n_items, {data_buff, null_bitmap_buff}, {}, precision, scale, 0, -1,
+        false, false, false, /*offset*/ data - (char*)meminfo->data);
 }
 
 array_info* time_array_to_info(uint64_t n_items, char* data, int typ_enum,
                                char* null_bitmap, NRT_MemInfo* meminfo,
                                NRT_MemInfo* meminfo_bitmask,
                                int32_t precision) {
-    return new array_info(bodo_array_type::NULLABLE_INT_BOOL,
-                          (Bodo_CTypes::CTypeEnum)typ_enum, n_items, -1, -1,
-                          data, NULL, NULL, null_bitmap, NULL, meminfo,
-                          meminfo_bitmask, NULL, precision);
+    // wrap meminfo in BodoBuffer (increfs meminfo also)
+    std::shared_ptr<BodoBuffer> data_buff = std::make_shared<BodoBuffer>(
+        (uint8_t*)meminfo->data, n_items * numpy_item_size[typ_enum], meminfo);
+    int64_t n_bytes = arrow::bit_util::BytesForBits(n_items);
+    std::shared_ptr<BodoBuffer> null_bitmap_buff = std::make_shared<BodoBuffer>(
+        (uint8_t*)meminfo_bitmask->data, n_bytes, meminfo_bitmask);
+
+    // Python is responsible for deleting
+    return new array_info(
+        bodo_array_type::NULLABLE_INT_BOOL, (Bodo_CTypes::CTypeEnum)typ_enum,
+        n_items, {data_buff, null_bitmap_buff}, {}, precision, 0, 0, -1, false,
+        false, false, /*offset*/ data - (char*)meminfo->data);
 }
 
-void info_to_list_string_array(array_info* info,
-                               NRT_MemInfo** array_item_meminfo) {
-    if (info->arr_type != bodo_array_type::LIST_STRING) {
+array_info* info_to_array_item_array(array_info* info, int64_t* length,
+                                     NRT_MemInfo** offsets_arr,
+                                     NRT_MemInfo** null_bitmap_arr) {
+    if (info->arr_type != bodo_array_type::ARRAY_ITEM) {
         PyErr_SetString(
             PyExc_RuntimeError,
-            "_array.cpp::info_to_list_string_array: info_to_list_string_array "
-            "requires list string input.");
-        return;
+            "_array.cpp::info_to_array_item_array: info_to_array_item_array "
+            "requires array(array(item)) input.");
+        return nullptr;
     }
+    *length = info->length;
 
-    *array_item_meminfo = info->meminfo;
+    // create Numpy arrays for offset/null_bitmap buffers as expected by
+    // Python data model
+    NRT_MemInfo* offsets_meminfo = info->buffers[0]->getMeminfo();
+    incref_meminfo(offsets_meminfo);
+    *offsets_arr = offsets_meminfo;
+
+    NRT_MemInfo* nulls_meminfo = info->buffers[1]->getMeminfo();
+    incref_meminfo(nulls_meminfo);
+    *null_bitmap_arr = nulls_meminfo;
+
+    // Passing raw pointer to Python without giving ownership.
+    // info_to_array() uses it to convert the child array recursively,
+    // so the parent array shared_ptr stays alive in the process and
+    // therefore the pointer stays valid.
+    return info->child_arrays[0].get();
 }
 
-void info_to_nested_array(array_info* info, int64_t* lengths,
-                          array_info** out_infos) {
-    try {
-        int64_t lengths_pos = 0;
-        int64_t infos_pos = 0;
-        nested_array_to_c(info->array, lengths, out_infos, lengths_pos,
-                          infos_pos);
-    } catch (const std::exception& e) {
-        PyErr_SetString(PyExc_RuntimeError, e.what());
+void info_to_struct_array(array_info* info, int64_t* n_items,
+                          numpy_arr_payload* null_bitmap_arr) {
+    if (info->arr_type != bodo_array_type::STRUCT) {
+        PyErr_SetString(
+            PyExc_RuntimeError,
+            "_array.cpp::info_to_struct_array: info_to_struct_array "
+            "requires struct array input.");
         return;
     }
+    *n_items = info->length;
+
+    // create Numpy array for null_bitmap buffer as expected by
+    // Python data model
+    NRT_MemInfo* nulls_meminfo = info->buffers[0]->getMeminfo();
+    incref_meminfo(nulls_meminfo);
+    int64_t n_null_bytes = (info->length + 7) >> 3;
+    int64_t null_itemsize = numpy_item_size[Bodo_CTypes::UINT8];
+    *null_bitmap_arr = make_numpy_array_payload(
+        nulls_meminfo, nullptr, n_null_bytes, null_itemsize,
+        (char*)nulls_meminfo->data, n_null_bytes, null_itemsize);
 }
 
-void info_to_string_array(array_info* info, NRT_MemInfo** meminfo) {
+/**
+ * @brief return array_info* for child array
+ * Using raw pointers since called from Python
+ *
+ * @param in_info input array (must be nested)
+ * @param i index of child array
+ * @return array_info* child array
+ */
+array_info* get_child_info(array_info* in_info, int64_t i) {
+    if (in_info->child_arrays.size() <= (size_t)i) {
+        PyErr_SetString(
+            PyExc_RuntimeError,
+            "_array.cpp::get_child_info: invalid child array index ");
+        return nullptr;
+    }
+    return in_info->child_arrays[i].get();
+}
+
+void info_to_string_array(array_info* info, int64_t* length,
+                          int64_t* out_n_chars, NRT_MemInfo** data_arr,
+                          NRT_MemInfo** offsets_arr,
+                          NRT_MemInfo** null_bitmap_arr) {
     if (info->arr_type != bodo_array_type::STRING) {
-        PyErr_SetString(PyExc_RuntimeError,
-                        "_array.cpp::info_to_string_array: "
-                        "info_to_string_array requires string input.");
+        PyErr_SetString(
+            PyExc_RuntimeError,
+            ("_array.cpp::info_to_string_array: "
+             "info_to_string_array requires string input. Got input " +
+             GetArrType_as_string(info->arr_type))
+                .c_str());
         return;
     }
-    *meminfo = info->meminfo;
+    *length = info->length;
+    *out_n_chars = info->n_sub_elems();
+
+    // create Numpy arrays for char/offset/null_bitmap buffers as expected by
+    // Python data model
+    NRT_MemInfo* data_meminfo = info->buffers[0]->getMeminfo();
+    incref_meminfo(data_meminfo);
+    *data_arr = data_meminfo;
+
+    NRT_MemInfo* offsets_meminfo = info->buffers[1]->getMeminfo();
+    incref_meminfo(offsets_meminfo);
+    *offsets_arr = offsets_meminfo;
+
+    NRT_MemInfo* nulls_meminfo = info->buffers[2]->getMeminfo();
+    incref_meminfo(nulls_meminfo);
+    *null_bitmap_arr = nulls_meminfo;
 }
 
 void info_to_numpy_array(array_info* info, uint64_t* n_items, char** data,
                          NRT_MemInfo** meminfo) {
+    // arrow_array_to_bodo() always produces a nullable array but
+    // Python may expect a Numpy array
     if ((info->arr_type != bodo_array_type::NUMPY) &&
-        (info->arr_type != bodo_array_type::CATEGORICAL)) {
+        (info->arr_type != bodo_array_type::CATEGORICAL) &&
+        (info->arr_type != bodo_array_type::NULLABLE_INT_BOOL)) {
         // TODO: print array type in the error
+        PyErr_Format(PyExc_RuntimeError,
+                     "_array.cpp::info_to_numpy_array: info_to_numpy_array "
+                     "requires numpy input but got %s",
+                     GetArrType_as_string(info->arr_type).c_str());
+        return;
+    }
+
+    *n_items = info->length;
+    *data = info->data1();
+    NRT_MemInfo* data_meminfo = info->buffers[0]->getMeminfo();
+    incref_meminfo(data_meminfo);
+    *meminfo = data_meminfo;
+}
+
+void info_to_null_array(array_info* info, uint64_t* n_items) {
+    // TODO[BSE-433]: Replace with proper null array requirements once
+    // they are integrated into C++.
+    if (info->arr_type != bodo_array_type::NULLABLE_INT_BOOL) {
         PyErr_SetString(PyExc_RuntimeError,
-                        "_array.cpp::info_to_numpy_array: info_to_numpy_array "
-                        "requires numpy input.");
+                        "_array.cpp:: info_to_null_array: "
+                        "info_to_null_array requires nullable input");
         return;
     }
     *n_items = info->length;
-    *data = info->data1;
-    *meminfo = info->meminfo;
 }
 
 void info_to_nullable_array(array_info* info, uint64_t* n_items,
@@ -440,12 +406,28 @@ void info_to_nullable_array(array_info* info, uint64_t* n_items,
                         "info_to_nullable_array requires nullable input");
         return;
     }
+    if (info->dtype == Bodo_CTypes::DATETIME) {
+        // Temporary fix to set invalid entries to NaT
+        std::uint8_t* bitmap =
+            reinterpret_cast<std::uint8_t*>(info->null_bitmask());
+        std::int64_t* data = reinterpret_cast<std::int64_t*>(info->data1());
+        for (std::uint64_t i = 0; i < info->length; ++i) {
+            if (!GetBit(bitmap, i)) {
+                data[i] = std::numeric_limits<std::int64_t>::min();
+            }
+        }
+    }
     *n_items = info->length;
     *n_bytes = (info->length + 7) >> 3;
-    *data = info->data1;
-    *null_bitmap = info->null_bitmask;
-    *meminfo = info->meminfo;
-    *meminfo_bitmask = info->meminfo_bitmask;
+    *data = info->data1();
+    *null_bitmap = info->null_bitmask();
+    // give Python a reference
+    NRT_MemInfo* data_meminfo = info->buffers[0]->getMeminfo();
+    incref_meminfo(data_meminfo);
+    *meminfo = data_meminfo;
+    NRT_MemInfo* nulls_meminfo = info->buffers[1]->getMeminfo();
+    incref_meminfo(nulls_meminfo);
+    *meminfo_bitmask = nulls_meminfo;
 }
 
 void info_to_interval_array(array_info* info, uint64_t* n_items,
@@ -459,40 +441,79 @@ void info_to_interval_array(array_info* info, uint64_t* n_items,
         return;
     }
     *n_items = info->length;
-    *left_data = info->data1;
-    *right_data = info->data2;
-    *left_meminfo = info->meminfo;
-    *right_meminfo = info->meminfo_bitmask;
+    *left_data = info->data1();
+    *right_data = info->data2();
+    NRT_MemInfo* l_meminfo = info->buffers[0]->getMeminfo();
+    incref_meminfo(l_meminfo);
+    *left_meminfo = l_meminfo;
+    NRT_MemInfo* r_meminfo = info->buffers[1]->getMeminfo();
+    incref_meminfo(r_meminfo);
+    *right_meminfo = r_meminfo;
 }
 
+void info_to_timestamptz_array(array_info* info, uint64_t* n_items,
+                               uint64_t* n_bytes, char** data_ts,
+                               char** data_offset, char** null_bitmap,
+                               NRT_MemInfo** meminfo_ts,
+                               NRT_MemInfo** meminfo_offset,
+                               NRT_MemInfo** meminfo_bitmask) {
+    if (info->arr_type != bodo_array_type::TIMESTAMPTZ) {
+        PyErr_SetString(PyExc_RuntimeError,
+                        "_array.cpp::info_to_timestamptz_array: "
+                        "info_to_nullable_array requires Timestamp TZ input");
+        return;
+    }
+    if (info->dtype == Bodo_CTypes::TIMESTAMPTZ) {
+        // Temporary fix to set invalid entries to NaT
+        std::uint8_t* bitmap =
+            reinterpret_cast<std::uint8_t*>(info->null_bitmask());
+        std::int64_t* data = reinterpret_cast<std::int64_t*>(info->data1());
+        for (std::uint64_t i = 0; i < info->length; ++i) {
+            if (!GetBit(bitmap, i)) {
+                data[i] = std::numeric_limits<std::int64_t>::min();
+            }
+        }
+    }
+    *n_items = info->length;
+    *n_bytes = (info->length + 7) >> 3;
+    *data_ts = info->data1();
+    *data_offset = info->data2();
+    *null_bitmap = info->null_bitmask();
+    // give Python a reference
+    NRT_MemInfo* data_ts_meminfo = info->buffers[0]->getMeminfo();
+    incref_meminfo(data_ts_meminfo);
+    *meminfo_ts = data_ts_meminfo;
+    NRT_MemInfo* data_offset_meminfo = info->buffers[1]->getMeminfo();
+    incref_meminfo(data_offset_meminfo);
+    *meminfo_offset = data_offset_meminfo;
+    NRT_MemInfo* nulls_meminfo = info->buffers[2]->getMeminfo();
+    incref_meminfo(nulls_meminfo);
+    *meminfo_bitmask = nulls_meminfo;
+}
+
+// returns raw pointer since called from Python
 table_info* arr_info_list_to_table(array_info** arrs, int64_t n_arrs) {
-    std::vector<array_info*> columns(arrs, arrs + n_arrs);
+    std::vector<std::shared_ptr<array_info>> columns(arrs, arrs + n_arrs);
     return new table_info(columns);
 }
 
+// Raw pointers since called from Python
 array_info* info_from_table(table_info* table, int64_t col_ind) {
-    return table->columns[col_ind];
+    return new array_info(*table->columns[col_ind]);
 }
-
-#define CHECK_ARROW_AND_ASSIGN(res, msg, lhs)                              \
-    if (!(res.status().ok())) {                                            \
-        std::string err_msg = std::string("Error in arrow ") + msg + " " + \
-                              res.status().ToString();                     \
-        std::cerr << msg << std::endl;                                     \
-    }                                                                      \
-    lhs = std::move(res).ValueOrDie();
 
 /**
  * @brief create a Bodo string array from a PyArrow string array
  *
  * @param obj PyArrow string array
- * @return NRT_MemInfo* meminfo of array(item) array containing string data
+ * @return std::shared_ptr<array_info> Bodo string array
  */
-NRT_MemInfo* string_array_from_pyarrow(PyObject* pyarrow_arr) {
+std::shared_ptr<array_info> string_array_from_pyarrow(PyObject* pyarrow_arr) {
+#undef CHECK
 #define CHECK(expr, msg)               \
     if (!(expr)) {                     \
         std::cerr << msg << std::endl; \
-        return NULL;                   \
+        return nullptr;                \
     }
 
     // https://arrow.apache.org/docs/python/integration/extending.html
@@ -507,50 +528,8 @@ NRT_MemInfo* string_array_from_pyarrow(PyObject* pyarrow_arr) {
     std::shared_ptr<arrow::LargeStringArray> arrow_str_arr =
         std::static_pointer_cast<arrow::LargeStringArray>(arrow_arr);
 
-    int64_t n = arrow_str_arr->length();
+    return arrow_array_to_bodo(arrow_str_arr, nullptr);
 
-    // allocate null bitmap and copy data
-    int64_t n_bytes = arrow::bit_util::BytesForBits(n);
-    numpy_arr_payload null_bitmap_payload =
-        allocate_numpy_payload(n_bytes, Bodo_CTypes::UINT8);
-    uint8_t* null_bitmap = (uint8_t*)null_bitmap_payload.data;
-
-    // Arrow doesn't allocate null bitmap if there are no nulls in the array
-    if (arrow_str_arr->null_bitmap_data() != NULLPTR) {
-        memcpy(null_bitmap, arrow_str_arr->null_bitmap_data(), n_bytes);
-    } else {
-        CHECK(arrow_str_arr->null_count() == 0,
-              "expected no nulls in Arrow array");
-        // set all elements to non-null
-        memset(null_bitmap, 0xff, n_bytes);
-    }
-
-    // allocate characters array and copy data
-    // TODO[BE-3591]: support zero-copy Arrow array unboxing
-    int64_t n_chars = arrow_str_arr->total_values_length();
-    numpy_arr_payload char_buf_payload =
-        allocate_numpy_payload(n_chars, Bodo_CTypes::UINT8);
-    char* char_buff = char_buf_payload.data;
-    memcpy(char_buff, arrow_str_arr->raw_data(), n_chars);
-
-    // allocate offsets and copy data
-    numpy_arr_payload offsets_payload =
-        allocate_numpy_payload(n + 1, Bodo_CType_offset);
-    offset_t* offsets = (offset_t*)offsets_payload.data;
-    memcpy(offsets, arrow_str_arr->raw_value_offsets(),
-           sizeof(offset_t) * (n + 1));
-
-    // create array(item) meminfo and set data members
-    NRT_MemInfo* meminfo_array_item = alloc_array_item_arr_meminfo();
-    array_item_arr_numpy_payload* payload =
-        (array_item_arr_numpy_payload*)(meminfo_array_item->data);
-
-    payload->n_arrays = n;
-    payload->data = char_buf_payload;
-    payload->offsets = offsets_payload;
-    payload->null_bitmap = null_bitmap_payload;
-
-    return meminfo_array_item;
 #undef CHECK
 }
 
@@ -560,27 +539,36 @@ NRT_MemInfo* string_array_from_pyarrow(PyObject* pyarrow_arr) {
  *
  * @param obj numpy array of strings, pd.arrays.StringArray, or
  * pd.arrays.ArrowStringArray
+ * @param[out] data_arr pointer to Numpy array for characters in output string
+ * array
+ * @param[out] offsets_arr pointer to Numpy array for offsets in output string
+ * array
+ * @param[out] null_bitmap_arr pointer to Numpy array for null bitmap in output
+ * string array
  * @param is_bytes whether the contents are bytes objects instead of str
- * @return NRT_MemInfo* meminfo of array(item) array containing string data
  */
-NRT_MemInfo* string_array_from_sequence(PyObject* obj, int is_bytes) {
+void string_array_from_sequence(PyObject* obj, int64_t* length,
+                                int64_t* out_n_chars, NRT_MemInfo** data_arr,
+                                NRT_MemInfo** offsets_arr,
+                                NRT_MemInfo** null_bitmap_arr, int is_bytes) {
+#undef CHECK
 #define CHECK(expr, msg)               \
     if (!(expr)) {                     \
         std::cerr << msg << std::endl; \
-        return NULL;                   \
+        return;                        \
     }
 
     CHECK(PySequence_Check(obj), "expecting a PySequence");
 
     Py_ssize_t n = PyObject_Size(obj);
+    *length = n;
     if (n == 0) {
         // empty sequence, this is not an error, need to set size
-        array_info* out_arr =
-            alloc_array(0, 0, -1, bodo_array_type::arr_type_enum::ARRAY_ITEM,
-                        Bodo_CTypes::UINT8, 0, 0);
-        NRT_MemInfo* out_meminfo = out_arr->meminfo;
-        delete out_arr;
-        return out_meminfo;
+        std::shared_ptr<array_info> out_arr = alloc_array_top_level(
+            0, 0, -1, bodo_array_type::STRING, Bodo_CTypes::STRING);
+        info_to_string_array(out_arr.get(), length, out_n_chars, data_arr,
+                             offsets_arr, null_bitmap_arr);
+        return;
     }
 
     // check if obj is ArrowStringArray to unbox it properly
@@ -593,18 +581,28 @@ NRT_MemInfo* string_array_from_sequence(PyObject* obj, int is_bytes) {
         PyObject_GetAttrString(pd_arrays_obj, "ArrowStringArray");
     CHECK(pd_arrays_obj, "getting pd.arrays.ArrowStringArray failed");
 
+    PyObject* pd_arrow_ext_arr_obj =
+        PyObject_GetAttrString(pd_arrays_obj, "ArrowExtensionArray");
+    CHECK(pd_arrays_obj, "getting pd.arrays.ArrowExtensionArray failed");
+
     // isinstance(arr, ArrowStringArray)
     int is_arrow_str_arr = PyObject_IsInstance(obj, pd_arrow_str_arr_obj);
     CHECK(is_arrow_str_arr >= 0, "isinstance(obj, ArrowStringArray) fails");
 
+    // isinstance(arr, ArrowExtensionArray)
+    int is_arrow_ext_arr = PyObject_IsInstance(obj, pd_arrow_ext_arr_obj);
+    CHECK(is_arrow_str_arr >= 0, "isinstance(obj, ArrowExtensionArray) fails");
+
     Py_DECREF(pandas_mod);
     Py_DECREF(pd_arrays_obj);
     Py_DECREF(pd_arrow_str_arr_obj);
+    Py_DECREF(pd_arrow_ext_arr_obj);
 
-    if (is_arrow_str_arr) {
-        // pyarrow_chunked_arr = obj._data
-        PyObject* pyarrow_chunked_arr = PyObject_GetAttrString(obj, "_data");
-        CHECK(pyarrow_chunked_arr, "getting obj._data failed");
+    if (is_arrow_str_arr || (!is_bytes && is_arrow_ext_arr)) {
+        // pyarrow_chunked_arr = obj._pa_array
+        PyObject* pyarrow_chunked_arr =
+            PyObject_GetAttrString(obj, "_pa_array");
+        CHECK(pyarrow_chunked_arr, "getting obj._pa_array failed");
 
         // pyarrow_arr = pyarrow_chunked_arr.combine_chunks()
         PyObject* pyarrow_arr =
@@ -617,11 +615,14 @@ NRT_MemInfo* string_array_from_sequence(PyObject* obj, int is_bytes) {
             PyObject_CallMethod(pyarrow_arr, "cast", "s", "large_string");
         CHECK(pyarrow_arr_large_str, "array.cast(\"large_string\") failed");
 
-        NRT_MemInfo* out = string_array_from_pyarrow(pyarrow_arr_large_str);
+        std::shared_ptr<array_info> arr =
+            string_array_from_pyarrow(pyarrow_arr_large_str);
+        info_to_string_array(arr.get(), length, out_n_chars, data_arr,
+                             offsets_arr, null_bitmap_arr);
         Py_DECREF(pyarrow_chunked_arr);
         Py_DECREF(pyarrow_arr);
         Py_DECREF(pyarrow_arr_large_str);
-        return out;
+        return;
     }
 
     // allocate null bitmap
@@ -643,11 +644,15 @@ NRT_MemInfo* string_array_from_sequence(PyObject* obj, int is_bytes) {
     numpy_arr_payload offsets_payload =
         allocate_numpy_payload(n + 1, Bodo_CType_offset);
     offset_t* offsets = (offset_t*)offsets_payload.data;
-    std::vector<const char*> tmp_store(n);
+    bodo::vector<const char*> tmp_store(n);
+    // We need to keep the references alive until we copy the data from the
+    // tmp_store
+    bodo::vector<const PyObject*> tmp_unicode_refs(n);
     size_t len = 0;
     for (Py_ssize_t i = 0; i < n; ++i) {
         offsets[i] = len;
         PyObject* s = PySequence_GetItem(obj, i);
+        tmp_unicode_refs[i] = s;
         CHECK(s, "getting element failed");
         // Pandas stores NA as either None, nan, or pd.NA
         if (s == Py_None ||
@@ -674,7 +679,6 @@ NRT_MemInfo* string_array_from_sequence(PyObject* obj, int is_bytes) {
             CHECK(tmp_store[i], "string conversion failed");
             len += size;
         }
-        Py_DECREF(s);
     }
     offsets[n] = len;
 
@@ -683,56 +687,98 @@ NRT_MemInfo* string_array_from_sequence(PyObject* obj, int is_bytes) {
     char* outbuf = outbuf_payload.data;
     for (Py_ssize_t i = 0; i < n; ++i) {
         memcpy(outbuf + offsets[i], tmp_store[i], offsets[i + 1] - offsets[i]);
+        Py_DECREF(tmp_unicode_refs[i]);
     }
 
     Py_DECREF(C_NA);
     Py_DECREF(pd_mod);
 
-    NRT_MemInfo* meminfo_array_item = alloc_array_item_arr_meminfo();
-    array_item_arr_numpy_payload* payload =
-        (array_item_arr_numpy_payload*)(meminfo_array_item->data);
-
-    payload->n_arrays = n;
-    payload->data = outbuf_payload;
-    payload->offsets = offsets_payload;
-    payload->null_bitmap = null_bitmap_payload;
-
-    return meminfo_array_item;
+    *out_n_chars = len;
+    *data_arr = outbuf_payload.meminfo;
+    *offsets_arr = offsets_payload.meminfo;
+    *null_bitmap_arr = null_bitmap_payload.meminfo;
+    return;
 #undef CHECK
 }
 
 /**
- * @brief count the total number of data elements in array(item) arrays
+ * @brief create a Bodo array from a PyArrow array PyObject
  *
- * @param list_arr_obj array(item) array object
- * @return int64_t total number of data elements
+ * @param obj PyArrow array PyObject
+ * @return std::shared_ptr<array_info> Bodo array
  */
-int64_t count_total_elems_list_array(PyObject* list_arr_obj) {
+array_info* bodo_array_from_pyarrow_py_entry(PyObject* pyarrow_arr) {
+#undef CHECK
 #define CHECK(expr, msg)               \
     if (!(expr)) {                     \
-        std::cerr << msg << std::endl; \
-        return -1;                     \
+        throw std::runtime_error(msg); \
     }
-    // get pd.NA object to check for new NA kind
-    PyObject* pd_mod = PyImport_ImportModule("pandas");
-    CHECK(pd_mod, "importing pandas module failed");
-    PyObject* C_NA = PyObject_GetAttrString(pd_mod, "NA");
-    CHECK(C_NA, "getting pd.NA failed");
 
-    Py_ssize_t n = PyObject_Size(list_arr_obj);
-    int64_t n_lists = 0;
-    for (Py_ssize_t i = 0; i < n; ++i) {
-        PyObject* s = PySequence_GetItem(list_arr_obj, i);
-        CHECK(s, "getting element failed");
-        // Pandas stores NA as either None or nan
-        if (!(s == Py_None ||
-              (PyFloat_Check(s) && std::isnan(PyFloat_AsDouble(s)))) ||
-            s == C_NA) {
-            n_lists += PyObject_Size(s);
-        }
-        Py_DECREF(s);
+    try {
+        // https://arrow.apache.org/docs/python/integration/extending.html
+        CHECK(!arrow::py::import_pyarrow(), "importing pyarrow failed");
+
+        // unwrap C++ Arrow array from pyarrow array
+        std::shared_ptr<arrow::Array> arrow_arr;
+        auto res = arrow::py::unwrap_array(pyarrow_arr);
+        CHECK_ARROW_AND_ASSIGN(res, "unwrap_array(pyarrow_arr)", arrow_arr);
+        CHECK(arrow_arr->offset() == 0,
+              "only Arrow arrays with zero offset supported");
+
+        return new array_info(*arrow_array_to_bodo(arrow_arr, nullptr));
+    } catch (const std::exception& e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return nullptr;
     }
-    return n_lists;
+
+#undef CHECK
+}
+
+/**
+ * @brief Create Pandas ArrowExtensionArray from Bodo array
+ *
+ * @param arr input Bodo array
+ * @return void* Pandas ArrowStringArray object
+ */
+void* pd_pyarrow_array_from_bodo_array_py_entry(array_info* arr) {
+#undef CHECK
+#define CHECK(expr, msg)               \
+    if (!(expr)) {                     \
+        throw std::runtime_error(msg); \
+    }
+
+    try {
+        // convert to Arrow array
+        arrow::TimeUnit::type time_unit = arrow::TimeUnit::NANO;
+        auto arrow_arr = bodo_array_to_arrow(
+            bodo::BufferPool::DefaultPtr(), std::shared_ptr<array_info>(arr),
+            false /*convert_timedelta_to_int64*/, "", time_unit,
+            false, /*downcast_time_ns_to_us*/
+            bodo::default_buffer_memory_manager());
+
+        // https://arrow.apache.org/docs/python/integration/extending.html
+        CHECK(!arrow::py::import_pyarrow(), "importing pyarrow failed");
+
+        // convert Arrow C++ to PyArrow
+        PyObject* pyarrow_arr = arrow::py::wrap_array(arrow_arr);
+
+        // call pd.arrays.ArrowStringArray(pyarrow_arr) which avoids copy
+        PyObject* pd_mod = PyImport_ImportModule("pandas");
+        CHECK(pd_mod, "importing pandas module failed");
+        PyObject* pd_arrays_mod = PyObject_GetAttrString(pd_mod, "arrays");
+        CHECK(pd_arrays_mod, "importing pandas.arrays module failed");
+
+        PyObject* arr_obj = PyObject_CallMethod(
+            pd_arrays_mod, "ArrowExtensionArray", "O", pyarrow_arr);
+
+        Py_DECREF(pd_mod);
+        Py_DECREF(pd_arrays_mod);
+        Py_DECREF(pyarrow_arr);
+        return arr_obj;
+    } catch (const std::exception& e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return nullptr;
+    }
 #undef CHECK
 }
 
@@ -755,87 +801,10 @@ inline void copy_item_to_buffer(char* data, Py_ssize_t ind, PyObject* item,
     } else if (dtype == Bodo_CTypes::_BOOL) {
         bool* ptr = (bool*)data;
         ptr[ind] = (item == Py_True);
-    } else if (dtype == Bodo_CTypes::DATE) {
-        int64_t* ptr = (int64_t*)data;
-        PyObject* year_obj = PyObject_GetAttrString(item, "year");
-        PyObject* month_obj = PyObject_GetAttrString(item, "month");
-        PyObject* day_obj = PyObject_GetAttrString(item, "day");
-        int64_t year = PyLong_AsLongLong(year_obj);
-        int64_t month = PyLong_AsLongLong(month_obj);
-        int64_t day = PyLong_AsLongLong(day_obj);
-        ptr[ind] = (year << 32) + (month << 16) + day;
-        Py_DECREF(year_obj);
-        Py_DECREF(month_obj);
-        Py_DECREF(day_obj);
     } else
         std::cerr << "data type " << dtype
                   << " not supported for unboxing array(item) array."
                   << std::endl;
-}
-
-/**
- * @brief compute offsets, data, and null_bitmap values for array(item) array
- * from an array of lists of values. The lists inside array can have different
- * lengths.
- *
- * @param array_item_arr_obj Python Sequence object, intended to be an array of
- * lists of items.
- * @param data data buffer to be filled with all values
- * @param offsets offsets buffer to be filled with computed offsets
- * @param null_bitmap nulls buffer to be filled
- * @param dtype data type of values, currently only float64 and int64 supported.
- */
-void array_item_array_from_sequence(PyObject* list_arr_obj, char* data,
-                                    offset_t* offsets, uint8_t* null_bitmap,
-                                    Bodo_CTypes::CTypeEnum dtype) {
-#define CHECK(expr, msg)               \
-    if (!(expr)) {                     \
-        std::cerr << msg << std::endl; \
-        return;                        \
-    }
-
-    CHECK(PySequence_Check(list_arr_obj), "expecting a PySequence");
-    CHECK(data && offsets && null_bitmap, "buffer arguments must not be NULL");
-
-    // get pd.NA object to check for new NA kind
-    PyObject* pd_mod = PyImport_ImportModule("pandas");
-    CHECK(pd_mod, "importing pandas module failed");
-    PyObject* C_NA = PyObject_GetAttrString(pd_mod, "NA");
-    CHECK(C_NA, "getting pd.NA failed");
-
-    Py_ssize_t n = PyObject_Size(list_arr_obj);
-
-    int64_t curr_item_ind = 0;
-    for (Py_ssize_t i = 0; i < n; ++i) {
-        offsets[i] = curr_item_ind;
-        PyObject* s = PySequence_GetItem(list_arr_obj, i);
-        CHECK(s, "getting array(item) array element failed");
-        // Pandas stores NA as either None or nan
-        if (s == Py_None ||
-            (PyFloat_Check(s) && std::isnan(PyFloat_AsDouble(s))) ||
-            s == C_NA) {
-            // set null bit to 0
-            SetBitTo(null_bitmap, i, 0);
-        } else {
-            // set null bit to 1
-            null_bitmap[i / 8] |= kBitmask[i % 8];
-            // check list
-            CHECK(PySequence_Check(s), "expecting a list");
-            Py_ssize_t n_items = PyObject_Size(s);
-            for (Py_ssize_t j = 0; j < n_items; j++) {
-                PyObject* v = PySequence_GetItem(s, j);
-                copy_item_to_buffer(data, curr_item_ind, v, dtype);
-                Py_DECREF(v);
-                curr_item_ind++;
-            }
-        }
-        Py_DECREF(s);
-    }
-    offsets[n] = curr_item_ind;
-
-    Py_DECREF(pd_mod);
-    Py_DECREF(C_NA);
-#undef CHECK
 }
 
 /**
@@ -858,306 +827,11 @@ inline PyObject* value_to_pyobject(const char* data, int64_t ind,
     } else if (dtype == Bodo_CTypes::_BOOL) {
         bool* ptr = (bool*)data;
         return PyBool_FromLong((long)(ptr[ind]));
-    } else if (dtype == Bodo_CTypes::DATE) {
-        int64_t* ptr = (int64_t*)data;
-        int64_t val = ptr[ind];
-        int year = val >> 32;
-        int month = (val >> 16) & 0xFFFF;
-        int day = val & 0xFFFF;
-        return PyDate_FromDate(year, month, day);
     } else
         std::cerr << "data type " << dtype
                   << " not supported for boxing array(item) array."
                   << std::endl;
-    return NULL;
-}
-
-/**
- * @brief create a numpy array of lists of item objects from a ArrayItemArray
- *
- * @param num_lists number of lists in input array
- * @param buffer all values
- * @param offsets offsets to data
- * @param null_bitmap null bitmask
- * @param dtype data type of values (currently, only int/float)
- * @return numpy array of list of item objects
- */
-void* np_array_from_array_item_array(int64_t num_lists, const char* buffer,
-                                     const offset_t* offsets,
-                                     const uint8_t* null_bitmap,
-                                     Bodo_CTypes::CTypeEnum dtype) {
-#define CHECK(expr, msg)               \
-    if (!(expr)) {                     \
-        std::cerr << msg << std::endl; \
-        return NULL;                   \
-    }
-
-    // allocate array and get nan object
-    npy_intp dims[] = {num_lists};
-    PyObject* ret = PyArray_SimpleNew(1, dims, NPY_OBJECT);
-    CHECK(ret, "allocating numpy array failed");
-    int err;
-    PyObject* np_mod = PyImport_ImportModule("numpy");
-    CHECK(np_mod, "importing numpy module failed");
-    PyObject* nan_obj = PyObject_GetAttrString(np_mod, "nan");
-    CHECK(nan_obj, "getting np.nan failed");
-
-    size_t curr_value = 0;
-    // for each list item
-    for (int64_t i = 0; i < num_lists; ++i) {
-        // set nan if item is NA
-        auto p = PyArray_GETPTR1((PyArrayObject*)ret, i);
-        CHECK(p, "getting offset in numpy array failed");
-        if (is_na(null_bitmap, i)) {
-            err = PyArray_SETITEM((PyArrayObject*)ret, (char*)p, nan_obj);
-            CHECK(err == 0, "setting item in numpy array failed");
-            continue;
-        }
-
-        // alloc list item
-        Py_ssize_t n_vals = (Py_ssize_t)(offsets[i + 1] - offsets[i]);
-        PyObject* l = PyList_New(n_vals);
-
-        for (Py_ssize_t j = 0; j < n_vals; j++) {
-            PyObject* s = value_to_pyobject(buffer, curr_value, dtype);
-            CHECK(s, "creating Python int/float object failed");
-            PyList_SET_ITEM(l, j, s);  // steals reference to s!
-            curr_value++;
-        }
-
-        err = PyArray_SETITEM((PyArrayObject*)ret, (char*)p, l);
-        CHECK(err == 0, "setting item in numpy array failed");
-        Py_DECREF(l);
-    }
-
-    Py_DECREF(np_mod);
-    Py_DECREF(nan_obj);
-    return ret;
-#undef CHECK
-}
-
-/**
- * @brief create a numpy array of dict objects from a MapArrayType
- *
- * @param num_maps number of map in input array
- * @param key_data data buffer for keys
- * @param value_data data buffer for values
- * @param offsets offsets for different map key/value pairs
- * @param null_bitmap nulls buffer
- * @param key_dtype data types of keys
- * @param value_dtype data types of values
- * @return numpy array of dict objects
- */
-void* np_array_from_map_array(int64_t num_maps, const char* key_data,
-                              const char* value_data, const offset_t* offsets,
-                              const uint8_t* null_bitmap,
-                              Bodo_CTypes::CTypeEnum key_dtype,
-                              Bodo_CTypes::CTypeEnum value_dtype) {
-#define CHECK(expr, msg)               \
-    if (!(expr)) {                     \
-        std::cerr << msg << std::endl; \
-        return NULL;                   \
-    }
-
-    // allocate array and get nan object
-    npy_intp dims[] = {num_maps};
-    PyObject* ret = PyArray_SimpleNew(1, dims, NPY_OBJECT);
-    CHECK(ret, "allocating numpy array failed");
-    int err;
-    PyObject* np_mod = PyImport_ImportModule("numpy");
-    CHECK(np_mod, "importing numpy module failed");
-    PyObject* nan_obj = PyObject_GetAttrString(np_mod, "nan");
-    CHECK(nan_obj, "getting np.nan failed");
-
-    size_t curr_item = 0;
-    // for each map
-    for (int64_t i = 0; i < num_maps; ++i) {
-        // set nan if item is NA
-        auto p = PyArray_GETPTR1((PyArrayObject*)ret, i);
-        CHECK(p, "getting offset in numpy array failed");
-        if (is_na(null_bitmap, i)) {
-            err = PyArray_SETITEM((PyArrayObject*)ret, (char*)p, nan_obj);
-            CHECK(err == 0, "setting item in numpy array failed");
-            continue;
-        }
-
-        // create dict and fill key/value items
-        Py_ssize_t n_items = (Py_ssize_t)(offsets[i + 1] - offsets[i]);
-        PyObject* dict = PyDict_New();
-
-        for (Py_ssize_t j = 0; j < n_items; j++) {
-            PyObject* key_obj =
-                value_to_pyobject(key_data, curr_item, key_dtype);
-            CHECK(key_obj, "creating Python int/float object failed");
-            PyObject* value_obj =
-                value_to_pyobject(value_data, curr_item, value_dtype);
-            CHECK(value_obj, "creating Python int/float object failed");
-            PyDict_SetItem(dict, key_obj, value_obj);
-            Py_DECREF(key_obj);
-            Py_DECREF(value_obj);
-            curr_item++;
-        }
-
-        err = PyArray_SETITEM((PyArrayObject*)ret, (char*)p, dict);
-        CHECK(err == 0, "setting item in numpy array failed");
-        Py_DECREF(dict);
-    }
-
-    Py_DECREF(np_mod);
-    Py_DECREF(nan_obj);
-    return ret;
-#undef CHECK
-}
-
-/**
- * @brief extract data and null_bitmap values for struct array
- * from an array of dict of values. The dicts inside array should have
- * the same key names.
- *
- * @param struct_arr_obj Python Sequence object, intended to be an array of
- * dicts.
- * @param n_fields number of fields in struct array
- * @param data data buffers to be filled with all values (one buffer per field)
- * @param null_bitmap nulls buffer to be filled
- * @param dtype data types of field values
- * @param field_names names of struct fields.
- */
-void struct_array_from_sequence(PyObject* struct_arr_obj, int n_fields,
-                                char** data, uint8_t* null_bitmap,
-                                int32_t* dtypes, char** field_names,
-                                bool is_tuple_array) {
-#define CHECK(expr, msg)               \
-    if (!(expr)) {                     \
-        std::cerr << msg << std::endl; \
-        return;                        \
-    }
-
-    // TODO: currently only float64 and int64 supported
-    CHECK(PySequence_Check(struct_arr_obj), "expecting a PySequence");
-    CHECK(data && null_bitmap, "buffer arguments must not be NULL");
-
-    // get pd.NA object to check for new NA kind
-    PyObject* pd_mod = PyImport_ImportModule("pandas");
-    CHECK(pd_mod, "importing pandas module failed");
-    PyObject* C_NA = PyObject_GetAttrString(pd_mod, "NA");
-    CHECK(C_NA, "getting pd.NA failed");
-
-    Py_ssize_t n = PyObject_Size(struct_arr_obj);
-
-    for (Py_ssize_t i = 0; i < n; ++i) {
-        PyObject* s = PySequence_GetItem(struct_arr_obj, i);
-        CHECK(s, "getting struct array element failed");
-        // Pandas stores NA as either None or nan
-        if (s == Py_None ||
-            (PyFloat_Check(s) && std::isnan(PyFloat_AsDouble(s))) ||
-            s == C_NA) {
-            // set null bit to 0
-            SetBitTo(null_bitmap, i, 0);
-        } else {
-            // set null bit to 1
-            null_bitmap[i / 8] |= kBitmask[i % 8];
-            if (is_tuple_array) {
-                CHECK(PyTuple_Check(s),
-                      "invalid non-tuple element in tuple array");
-            } else {
-                CHECK(PyDict_Check(s),
-                      "invalid non-dict element in struct array");
-            }
-            // set field data values
-            for (Py_ssize_t j = 0; j < n_fields; j++) {
-                PyObject* v;
-                if (is_tuple_array)
-                    v = PyTuple_GET_ITEM(s, j);  // returns borrowed reference
-                else
-                    v = PyDict_GetItemString(
-                        s, field_names[j]);  // returns borrowed reference
-                copy_item_to_buffer(data[j], i, v,
-                                    (Bodo_CTypes::CTypeEnum)dtypes[j]);
-            }
-        }
-        Py_DECREF(s);
-    }
-
-    Py_DECREF(pd_mod);
-    Py_DECREF(C_NA);
-#undef CHECK
-}
-
-/**
- * @brief extract key/value data, offsets and null_bitmap values for map array
- * from an array of dict of values.
- *
- * @param map_arr_obj Python Sequence object, intended to be an array of
- * dicts.
- * @param key_data data buffer for keys
- * @param value_data data buffer for values
- * @param offsets offsets for different map key/value pairs
- * @param null_bitmap nulls buffer to be filled
- * @param key_dtype data types of keys
- * @param value_dtype data types of values
- */
-void map_array_from_sequence(PyObject* map_arr_obj, char* key_data,
-                             char* value_data, offset_t* offsets,
-                             uint8_t* null_bitmap,
-                             Bodo_CTypes::CTypeEnum key_dtype,
-                             Bodo_CTypes::CTypeEnum value_dtype) {
-#define CHECK(expr, msg)               \
-    if (!(expr)) {                     \
-        std::cerr << msg << std::endl; \
-        return;                        \
-    }
-
-    // TODO: currently only a few types like float64 and int64 supported
-    CHECK(PySequence_Check(map_arr_obj), "expecting a PySequence");
-    CHECK(key_data && value_data && offsets && null_bitmap,
-          "buffer arguments must not be NULL");
-
-    // get pd.NA object to check for new NA kind
-    PyObject* pd_mod = PyImport_ImportModule("pandas");
-    CHECK(pd_mod, "importing pandas module failed");
-    PyObject* C_NA = PyObject_GetAttrString(pd_mod, "NA");
-    CHECK(C_NA, "getting pd.NA failed");
-
-    Py_ssize_t n = PyObject_Size(map_arr_obj);
-
-    int64_t curr_item_ind = 0;
-    for (Py_ssize_t i = 0; i < n; ++i) {
-        offsets[i] = curr_item_ind;
-        PyObject* s = PySequence_GetItem(map_arr_obj, i);
-        CHECK(s, "getting map array element failed");
-        // Pandas stores NA as either None or nan
-        if (s == Py_None ||
-            (PyFloat_Check(s) && std::isnan(PyFloat_AsDouble(s))) ||
-            s == C_NA) {
-            // set null bit to 0
-            SetBitTo(null_bitmap, i, 0);
-        } else {
-            // set null bit to 1
-            null_bitmap[i / 8] |= kBitmask[i % 8];
-            CHECK(PyDict_Check(s), "invalid non-dict element in map array");
-            PyObject* key_list = PyDict_Keys(s);
-            PyObject* value_list = PyDict_Values(s);
-            Py_ssize_t n_items = PyObject_Size(key_list);
-            // set field data values
-            for (Py_ssize_t j = 0; j < n_items; j++) {
-                PyObject* v1 =
-                    PyList_GET_ITEM(key_list, j);  // returns borrowed reference
-                PyObject* v2 = PyList_GET_ITEM(
-                    value_list, j);  // returns borrowed reference
-                copy_item_to_buffer(key_data, curr_item_ind, v1,
-                                    (Bodo_CTypes::CTypeEnum)key_dtype);
-                copy_item_to_buffer(value_data, curr_item_ind, v2,
-                                    (Bodo_CTypes::CTypeEnum)value_dtype);
-                curr_item_ind++;
-            }
-        }
-        Py_DECREF(s);
-    }
-    offsets[n] = curr_item_ind;
-
-    Py_DECREF(pd_mod);
-    Py_DECREF(C_NA);
-#undef CHECK
+    return nullptr;
 }
 
 /**
@@ -1168,6 +842,7 @@ void map_array_from_sequence(PyObject* map_arr_obj, char* key_data,
  * @return PyObject* value returned by getitem
  */
 PyObject* array_getitem(PyArrayObject* arr, const char* p) {
+#undef CHECK
 #define CHECK(expr, msg)               \
     if (!(expr)) {                     \
         std::cerr << msg << std::endl; \
@@ -1187,6 +862,7 @@ PyObject* array_getitem(PyArrayObject* arr, const char* p) {
  * @return PyObject* value returned by getitem
  */
 PyObject* seq_getitem(PyObject* obj, Py_ssize_t i) {
+#undef CHECK
 #define CHECK(expr, msg)               \
     if (!(expr)) {                     \
         std::cerr << msg << std::endl; \
@@ -1195,77 +871,6 @@ PyObject* seq_getitem(PyObject* obj, Py_ssize_t i) {
     PyObject* s = PySequence_GetItem(obj, i);
     CHECK(s, "getting item failed");
     return s;
-#undef CHECK
-}
-
-/**
- * @brief create a numpy array of dict objects from a StructArray
- *
- * @param num_structs number of structs in input array (length of array)
- * @param n_fields number of fields in structs
- * @param data data values (one array per field)
- * @param null_bitmap null bitmask
- * @param dtypes data types of field values (currently, only int/float)
- * @param field_names names of struct fields
- * @return numpy array of dict objects
- */
-void* np_array_from_struct_array(int64_t num_structs, int n_fields, char** data,
-                                 uint8_t* null_bitmap, int32_t* dtypes,
-                                 char** field_names, bool is_tuple_array) {
-#define CHECK(expr, msg)               \
-    if (!(expr)) {                     \
-        std::cerr << msg << std::endl; \
-        return NULL;                   \
-    }
-
-    // allocate array and get nan object
-    npy_intp dims[] = {num_structs};
-    PyObject* ret = PyArray_SimpleNew(1, dims, NPY_OBJECT);
-    CHECK(ret, "allocating numpy array failed");
-    int err;
-    PyObject* np_mod = PyImport_ImportModule("numpy");
-    CHECK(np_mod, "importing numpy module failed");
-    PyObject* nan_obj = PyObject_GetAttrString(np_mod, "nan");
-    CHECK(nan_obj, "getting np.nan failed");
-
-    // for each struct value
-    for (int64_t i = 0; i < num_structs; ++i) {
-        // set nan if value is NA
-        auto p = PyArray_GETPTR1((PyArrayObject*)ret, i);
-        CHECK(p, "getting offset in numpy array failed");
-        if (is_na(null_bitmap, i)) {
-            err = PyArray_SETITEM((PyArrayObject*)ret, (char*)p, nan_obj);
-            CHECK(err == 0, "setting item in numpy array failed");
-            continue;
-        }
-
-        // alloc dictionary
-        PyObject* d;
-        if (is_tuple_array)
-            d = PyTuple_New(n_fields);
-        else
-            d = PyDict_New();
-
-        for (Py_ssize_t j = 0; j < n_fields; j++) {
-            PyObject* s = value_to_pyobject(data[j], i,
-                                            (Bodo_CTypes::CTypeEnum)dtypes[j]);
-            CHECK(s, "creating Python int/float object failed");
-            if (is_tuple_array) {
-                PyTuple_SET_ITEM(d, j, s);  // steals s reference
-            } else {
-                PyDict_SetItemString(d, field_names[j], s);
-                Py_DECREF(s);
-            }
-        }
-
-        err = PyArray_SETITEM((PyArrayObject*)ret, (char*)p, d);
-        CHECK(err == 0, "setting item in numpy array failed");
-        Py_DECREF(d);
-    }
-
-    Py_DECREF(np_mod);
-    Py_DECREF(nan_obj);
-    return ret;
 #undef CHECK
 }
 
@@ -1318,88 +923,6 @@ int is_na_value(PyObject* s, PyObject* C_NA) {
             (PyFloat_Check(s) && std::isnan(PyFloat_AsDouble(s))) || s == C_NA);
 }
 
-int is_pd_int_array(PyObject* arr) {
-#define CHECK(expr, msg)               \
-    if (!(expr)) {                     \
-        std::cerr << msg << std::endl; \
-        PyGILState_Release(gilstate);  \
-        return false;                  \
-    }
-
-    auto gilstate = PyGILState_Ensure();
-    // pd.arrays.IntegerArray
-    PyObject* pd_mod = PyImport_ImportModule("pandas");
-    CHECK(pd_mod, "importing pandas module failed");
-    PyObject* pd_arrays_obj = PyObject_GetAttrString(pd_mod, "arrays");
-    CHECK(pd_arrays_obj, "getting pd.arrays failed");
-    PyObject* pd_arrays_int_arr_obj =
-        PyObject_GetAttrString(pd_arrays_obj, "IntegerArray");
-    CHECK(pd_arrays_obj, "getting pd.arrays.IntegerArray failed");
-
-    // isinstance(arr, IntegerArray)
-    int ret = PyObject_IsInstance(arr, pd_arrays_int_arr_obj);
-    CHECK(ret >= 0, "isinstance fails");
-
-    Py_DECREF(pd_mod);
-    Py_DECREF(pd_arrays_obj);
-    Py_DECREF(pd_arrays_int_arr_obj);
-    PyGILState_Release(gilstate);
-    return ret;
-
-#undef CHECK
-}
-
-/**
- * @brief unbox object array into native data and null_bitmap of native nullable
- * int array
- *
- * @param arr_obj object array with int or NA values
- * @param data native int data array of output array
- * @param null_bitmap null bitmap of output array
- */
-void int_array_from_sequence(PyObject* arr_obj, int64_t* data,
-                             uint8_t* null_bitmap) {
-#define CHECK(expr, msg)               \
-    if (!(expr)) {                     \
-        std::cerr << msg << std::endl; \
-        return;                        \
-    }
-
-    CHECK(PySequence_Check(arr_obj), "expecting a PySequence");
-    CHECK(data && null_bitmap, "buffer arguments must not be NULL");
-
-    // get pd.NA object to check for new NA kind
-    PyObject* pd_mod = PyImport_ImportModule("pandas");
-    CHECK(pd_mod, "importing pandas module failed");
-    PyObject* C_NA = PyObject_GetAttrString(pd_mod, "NA");
-    CHECK(C_NA, "getting pd.NA failed");
-
-    Py_ssize_t n = PyObject_Size(arr_obj);
-
-    for (Py_ssize_t i = 0; i < n; ++i) {
-        PyObject* s = PySequence_GetItem(arr_obj, i);
-        CHECK(s, "getting int array element failed");
-        // Pandas stores NA as either None or nan
-        if (s == Py_None ||
-            (PyFloat_Check(s) && std::isnan(PyFloat_AsDouble(s))) ||
-            s == C_NA) {
-            // set null bit to 0
-            SetBitTo(null_bitmap, i, 0);
-        } else {
-            // set null bit to 1
-            null_bitmap[i / 8] |= kBitmask[i % 8];
-            // TODO: checking int fails for some reason
-            // CHECK(PyLong_Check(s), "expecting an int");
-            data[i] = PyLong_AsLongLong(s);
-        }
-        Py_DECREF(s);
-    }
-
-    Py_DECREF(pd_mod);
-    Py_DECREF(C_NA);
-#undef CHECK
-}
-
 /**
  * Extract the value from an array with the given row number.
  * This function does not check for NA values (these are handled elsewhere).
@@ -1415,8 +938,8 @@ char* array_info_getitem(array_info* arr, int64_t row_num,
     bodo_array_type::arr_type_enum arr_type = arr->arr_type;
     if (arr_type == bodo_array_type::STRING) {
         // In the first case of STRING, we have to check the offsets.
-        offset_t* offsets = (offset_t*)arr->data2;
-        char* in_data1 = arr->data1;
+        offset_t* offsets = (offset_t*)arr->data2<bodo_array_type::STRING>();
+        char* in_data1 = arr->data1<bodo_array_type::STRING>();
         offset_t start_offset = offsets[row_num];
         offset_t end_offset = offsets[row_num + 1];
         offset_t size = end_offset - start_offset;
@@ -1426,15 +949,42 @@ char* array_info_getitem(array_info* arr, int64_t row_num,
     throw std::runtime_error("array_info_getitem : Unsupported type");
 }
 
-char* array_info_getdata1(array_info* arr) { return arr->data1; }
+char* array_info_getdata1(array_info* arr) { return arr->data1(); }
+
+/// @brief Wrapper Function to Test if Array Unpinning Works
+/// as expected in our tests. See
+/// test_memory.py::test_array_unpinned
+void array_info_unpin(array_info* arr) { arr->unpin(); }
+
+/**
+ * @brief Python entrypoint for retrieve table.
+ *
+ * @param in_table The table to filter.
+ * @param row_bitmask_arr The bitmask whether row is included. Expects
+ * array_type=NULLABLE_INTO_BOOL, dtype=BOOL.
+ * @return table_info* the filtered table after applying the row bitmask
+ */
+table_info* retrieve_table_py_entry(table_info* in_table,
+                                    array_info* row_bitmask_arr) {
+    try {
+        assert(row_bitmask_arr->arr_type ==
+                   bodo_array_type::NULLABLE_INT_BOOL &&
+               row_bitmask_arr->dtype == Bodo_CTypes::_BOOL);
+        auto row_bitmask_ptr = std::unique_ptr<array_info>(row_bitmask_arr);
+        auto in_table_ptr = std::unique_ptr<table_info>(in_table);
+        return new table_info(*RetrieveTable(std::move(in_table_ptr),
+                                             std::move(row_bitmask_ptr)));
+    } catch (const std::exception& e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return nullptr;
+    }
+}
 
 PyMODINIT_FUNC PyInit_array_ext(void) {
     PyObject* m;
-    static struct PyModuleDef moduledef = {
-        PyModuleDef_HEAD_INIT, "array_ext", "No docs", -1, NULL,
-    };
-    m = PyModule_Create(&moduledef);
-    if (m == NULL) return NULL;
+    MOD_DEF(m, "array_ext", "No docs", nullptr);
+    if (m == nullptr)
+        return nullptr;
 
     // init datetime APIs
     PyDateTime_IMPORT;
@@ -1444,233 +994,110 @@ PyMODINIT_FUNC PyInit_array_ext(void) {
 
     bodo_common_init();
 
-    // initialize decimal_mpi_type
-    // TODO: free when program exits
-    if (decimal_mpi_type == MPI_DATATYPE_NULL) {
-        MPI_Type_contiguous(2, MPI_LONG_LONG_INT, &decimal_mpi_type);
-        MPI_Type_commit(&decimal_mpi_type);
-    }
-
-    groupby_init();
-
     // DEC_MOD_METHOD(string_array_to_info);
-    PyObject_SetAttrString(
-        m, "list_string_array_to_info",
-        PyLong_FromVoidPtr((void*)(&list_string_array_to_info)));
-    PyObject_SetAttrString(m, "nested_array_to_info",
-                           PyLong_FromVoidPtr((void*)(&nested_array_to_info)));
+    SetAttrStringFromVoidPtr(m, array_item_array_to_info);
+    SetAttrStringFromVoidPtr(m, struct_array_to_info);
+    SetAttrStringFromVoidPtr(m, map_array_to_info);
     // Not covered by error handler
-    PyObject_SetAttrString(m, "string_array_to_info",
-                           PyLong_FromVoidPtr((void*)(&string_array_to_info)));
+    SetAttrStringFromVoidPtr(m, string_array_to_info);
     // Not covered by error handler
-    PyObject_SetAttrString(
-        m, "dict_str_array_to_info",
-        PyLong_FromVoidPtr((void*)(&dict_str_array_to_info)));
-    PyObject_SetAttrString(m, "get_nested_info",
-                           PyLong_FromVoidPtr((void*)(&get_nested_info)));
-    PyObject_SetAttrString(
-        m, "get_has_global_dictionary",
-        PyLong_FromVoidPtr((void*)(&get_has_global_dictionary)));
+    SetAttrStringFromVoidPtr(m, dict_str_array_to_info);
+    SetAttrStringFromVoidPtr(m, timestamp_tz_array_to_info);
+    SetAttrStringFromVoidPtr(m, get_has_global_dictionary);
+    SetAttrStringFromVoidPtr(m, get_has_unique_local_dictionary);
+    SetAttrStringFromVoidPtr(m, get_dict_id);
     // Not covered by error handler
-    PyObject_SetAttrString(m, "numpy_array_to_info",
-                           PyLong_FromVoidPtr((void*)(&numpy_array_to_info)));
+    SetAttrStringFromVoidPtr(m, numpy_array_to_info);
     // Not covered by error handler
-    PyObject_SetAttrString(
-        m, "categorical_array_to_info",
-        PyLong_FromVoidPtr((void*)(&categorical_array_to_info)));
+    SetAttrStringFromVoidPtr(m, categorical_array_to_info);
     // Not covered by error handler
-    PyObject_SetAttrString(
-        m, "nullable_array_to_info",
-        PyLong_FromVoidPtr((void*)(&nullable_array_to_info)));
-    PyObject_SetAttrString(
-        m, "interval_array_to_info",
-        PyLong_FromVoidPtr((void*)(&interval_array_to_info)));
+    SetAttrStringFromVoidPtr(m, null_array_to_info);
     // Not covered by error handler
-    PyObject_SetAttrString(m, "decimal_array_to_info",
-                           PyLong_FromVoidPtr((void*)(&decimal_array_to_info)));
-    PyObject_SetAttrString(m, "time_array_to_info",
-                           PyLong_FromVoidPtr((void*)(&time_array_to_info)));
-    PyObject_SetAttrString(m, "info_to_string_array",
-                           PyLong_FromVoidPtr((void*)(&info_to_string_array)));
-    PyObject_SetAttrString(
-        m, "info_to_list_string_array",
-        PyLong_FromVoidPtr((void*)(&info_to_list_string_array)));
-    PyObject_SetAttrString(m, "info_to_nested_array",
-                           PyLong_FromVoidPtr((void*)(&info_to_nested_array)));
-    PyObject_SetAttrString(m, "info_to_numpy_array",
-                           PyLong_FromVoidPtr((void*)(&info_to_numpy_array)));
-    PyObject_SetAttrString(
-        m, "info_to_nullable_array",
-        PyLong_FromVoidPtr((void*)(&info_to_nullable_array)));
-    PyObject_SetAttrString(
-        m, "info_to_interval_array",
-        PyLong_FromVoidPtr((void*)(&info_to_interval_array)));
-    PyObject_SetAttrString(m, "alloc_numpy",
-                           PyLong_FromVoidPtr((void*)(&alloc_numpy)));
-    PyObject_SetAttrString(m, "alloc_string_array",
-                           PyLong_FromVoidPtr((void*)(&alloc_string_array)));
-    PyObject_SetAttrString(
-        m, "arr_info_list_to_table",
-        PyLong_FromVoidPtr((void*)(&arr_info_list_to_table)));
+    SetAttrStringFromVoidPtr(m, nullable_array_to_info);
+    SetAttrStringFromVoidPtr(m, interval_array_to_info);
     // Not covered by error handler
-    PyObject_SetAttrString(m, "info_from_table",
-                           PyLong_FromVoidPtr((void*)(&info_from_table)));
+    SetAttrStringFromVoidPtr(m, decimal_array_to_info);
+    SetAttrStringFromVoidPtr(m, time_array_to_info);
+    SetAttrStringFromVoidPtr(m, info_to_string_array);
+    SetAttrStringFromVoidPtr(m, info_to_array_item_array);
+    SetAttrStringFromVoidPtr(m, info_to_struct_array);
+    SetAttrStringFromVoidPtr(m, get_child_info);
+    SetAttrStringFromVoidPtr(m, info_to_numpy_array);
+    SetAttrStringFromVoidPtr(m, info_to_null_array);
+    SetAttrStringFromVoidPtr(m, info_to_nullable_array);
+    SetAttrStringFromVoidPtr(m, info_to_interval_array);
+    SetAttrStringFromVoidPtr(m, info_to_timestamptz_array);
+    SetAttrStringFromVoidPtr(m, alloc_numpy);
+    SetAttrStringFromVoidPtr(m, alloc_string_array);
+    SetAttrStringFromVoidPtr(m, arr_info_list_to_table);
     // Not covered by error handler
-    PyObject_SetAttrString(
-        m, "delete_info_decref_array",
-        PyLong_FromVoidPtr((void*)(&delete_info_decref_array)));
+    SetAttrStringFromVoidPtr(m, info_from_table);
     // Not covered by error handler
-    PyObject_SetAttrString(
-        m, "delete_table_decref_arrays",
-        PyLong_FromVoidPtr((void*)(&delete_table_decref_arrays)));
-    PyObject_SetAttrString(m, "decref_table_array",
-                           PyLong_FromVoidPtr((void*)(&decref_table_array)));
+    SetAttrStringFromVoidPtr(m, delete_info);
     // Not covered by error handler
-    PyObject_SetAttrString(m, "delete_table",
-                           PyLong_FromVoidPtr((void*)(&delete_table)));
-    PyObject_SetAttrString(
-        m, "shuffle_table",
-        PyLong_FromVoidPtr((void*)(&shuffle_table_py_entrypt)));
-    PyObject_SetAttrString(m, "get_shuffle_info",
-                           PyLong_FromVoidPtr((void*)(&get_shuffle_info)));
-    PyObject_SetAttrString(m, "delete_shuffle_info",
-                           PyLong_FromVoidPtr((void*)(&delete_shuffle_info)));
-    PyObject_SetAttrString(m, "reverse_shuffle_table",
-                           PyLong_FromVoidPtr((void*)(&reverse_shuffle_table)));
-    PyObject_SetAttrString(
-        m, "shuffle_renormalization",
-        PyLong_FromVoidPtr((void*)(&shuffle_renormalization_py_entrypt)));
-    PyObject_SetAttrString(
-        m, "shuffle_renormalization_group",
-        PyLong_FromVoidPtr((void*)(&shuffle_renormalization_group_py_entrypt)));
-    PyObject_SetAttrString(m, "hash_join_table",
-                           PyLong_FromVoidPtr((void*)(&hash_join_table)));
-    PyObject_SetAttrString(m, "sample_table",
-                           PyLong_FromVoidPtr((void*)(&sample_table)));
-    PyObject_SetAttrString(m, "sort_values_table",
-                           PyLong_FromVoidPtr((void*)(&sort_values_table)));
-    PyObject_SetAttrString(m, "drop_duplicates_table",
-                           PyLong_FromVoidPtr((void*)(&drop_duplicates_table)));
-    PyObject_SetAttrString(m, "groupby_and_aggregate",
-                           PyLong_FromVoidPtr((void*)(&groupby_and_aggregate)));
-    PyObject_SetAttrString(
-        m, "convert_local_dictionary_to_global",
-        PyLong_FromVoidPtr((void*)(&convert_local_dictionary_to_global)));
-    PyObject_SetAttrString(m, "get_groupby_labels",
-                           PyLong_FromVoidPtr((void*)(&get_groupby_labels)));
-    PyObject_SetAttrString(m, "array_isin",
-                           PyLong_FromVoidPtr((void*)(&array_isin)));
-    PyObject_SetAttrString(m, "get_search_regex",
-                           PyLong_FromVoidPtr((void*)(&get_search_regex)));
-    // Only uses C which cannot throw exceptions, so typical exception
-    // handling is not required
-    PyObject_SetAttrString(
-        m, "count_total_elems_list_array",
-        PyLong_FromVoidPtr((void*)(&count_total_elems_list_array)));
-    // Only uses C which cannot throw exceptions, so typical exception
-    // handling is not required
-    PyObject_SetAttrString(
-        m, "array_item_array_from_sequence",
-        PyLong_FromVoidPtr((void*)(&array_item_array_from_sequence)));
-    // Only uses C which cannot throw exceptions, so typical exception
-    // handling is not required
-    PyObject_SetAttrString(
-        m, "struct_array_from_sequence",
-        PyLong_FromVoidPtr((void*)(&struct_array_from_sequence)));
-    // Only uses C which cannot throw exceptions, so typical exception
-    // handling is not required
-    PyObject_SetAttrString(
-        m, "map_array_from_sequence",
-        PyLong_FromVoidPtr((void*)(&map_array_from_sequence)));
-    // Only uses C which cannot throw exceptions, so typical exception
-    // handling is not required
-    PyObject_SetAttrString(
-        m, "string_array_from_sequence",
-        PyLong_FromVoidPtr((void*)(&string_array_from_sequence)));
-    // Only uses C which cannot throw exceptions, so typical exception
-    // handling is not required
-    PyObject_SetAttrString(
-        m, "np_array_from_struct_array",
-        PyLong_FromVoidPtr((void*)(&np_array_from_struct_array)));
-    // Only uses C which cannot throw exceptions, so typical exception
-    // handling is not required
-    PyObject_SetAttrString(
-        m, "np_array_from_array_item_array",
-        PyLong_FromVoidPtr((void*)(&np_array_from_array_item_array)));
-    // Only uses C which cannot throw exceptions, so typical exception
-    // handling is not required
-    PyObject_SetAttrString(
-        m, "np_array_from_map_array",
-        PyLong_FromVoidPtr((void*)(&np_array_from_map_array)));
-    // Only uses C which cannot throw exceptions, so typical exception
-    // handling is not required
-    PyObject_SetAttrString(m, "array_getitem",
-                           PyLong_FromVoidPtr((void*)(&array_getitem)));
-    // Only uses C which cannot throw exceptions, so typical exception
-    // handling is not required
-    PyObject_SetAttrString(m, "list_check",
-                           PyLong_FromVoidPtr((void*)(&list_check)));
-    // Only uses C which cannot throw exceptions, so typical exception
-    // handling is not required
-    PyObject_SetAttrString(m, "dict_keys",
-                           PyLong_FromVoidPtr((void*)(&dict_keys)));
-    // Only uses C which cannot throw exceptions, so typical exception
-    // handling is not required
-    PyObject_SetAttrString(m, "dict_values",
-                           PyLong_FromVoidPtr((void*)(&dict_values)));
+    SetAttrStringFromVoidPtr(m, delete_table);
+    SetAttrStringFromVoidPtr(m, cpp_table_map_to_list);
+    SetAttrStringFromVoidPtr(m, shuffle_table_py_entrypt);
+    SetAttrStringFromVoidPtr(m, get_shuffle_info);
+    SetAttrStringFromVoidPtr(m, delete_shuffle_info);
+    SetAttrStringFromVoidPtr(m, reverse_shuffle_table);
+    SetAttrStringFromVoidPtr(m, shuffle_renormalization_py_entrypt);
+    SetAttrStringFromVoidPtr(m, shuffle_renormalization_group_py_entrypt);
+    SetAttrStringFromVoidPtr(m, hash_join_table);
+    SetAttrStringFromVoidPtr(m, nested_loop_join_table);
+    SetAttrStringFromVoidPtr(m, interval_join_table);
+    SetAttrStringFromVoidPtr(m, sample_table_py_entry);
+    SetAttrStringFromVoidPtr(m, sort_values_table_py_entry);
+    SetAttrStringFromVoidPtr(m, sort_table_for_interval_join_py_entrypoint);
+    SetAttrStringFromVoidPtr(m, drop_duplicates_table_py_entry);
+    SetAttrStringFromVoidPtr(m, union_tables);
+    SetAttrStringFromVoidPtr(m, concat_tables_py_entry);
+    SetAttrStringFromVoidPtr(m, groupby_and_aggregate_py_entry);
+    SetAttrStringFromVoidPtr(m, drop_duplicates_local_dictionary_py_entry);
+    SetAttrStringFromVoidPtr(m, get_groupby_labels_py_entry);
+    SetAttrStringFromVoidPtr(m, array_isin_py_entry);
+    SetAttrStringFromVoidPtr(m, get_search_regex_py_entry);
+    SetAttrStringFromVoidPtr(m, get_replace_regex_py_entry);
+    SetAttrStringFromVoidPtr(m, get_replace_regex_dict_state_py_entry);
+
+    // Functions in the section below only use C which cannot throw exceptions,
+    // so typical exception handling is not required
+    SetAttrStringFromVoidPtr(m, bodo_array_from_pyarrow_py_entry);
+    SetAttrStringFromVoidPtr(m, pd_pyarrow_array_from_bodo_array_py_entry);
+    SetAttrStringFromVoidPtr(m, string_array_from_sequence);
+    SetAttrStringFromVoidPtr(m, array_getitem);
+    SetAttrStringFromVoidPtr(m, list_check);
+    SetAttrStringFromVoidPtr(m, dict_keys);
+    SetAttrStringFromVoidPtr(m, dict_values);
     // This function calls PyErr_Set_String, but the function is called inside
     // box/unbox functions in Python, where we don't yet know how best to
     // detect and raise errors. Once we do, we should raise an error in Python
     // if this function calls PyErr_Set_String. TODO
-    PyObject_SetAttrString(m, "dict_merge_from_seq2",
-                           PyLong_FromVoidPtr((void*)(&dict_merge_from_seq2)));
+    SetAttrStringFromVoidPtr(m, dict_merge_from_seq2);
     // This function is C, but it has components that can fail, in which case
     // we should call PyErr_Set_String and detect this and raise it in Python.
     // We currently don't know the best way to detect and raise exceptions
     // in box/unbox functions which is where this function is called.
     // Once we do, we should handle this appropriately. TODO
-    PyObject_SetAttrString(m, "seq_getitem",
-                           PyLong_FromVoidPtr((void*)(&seq_getitem)));
-    // Only uses C which cannot throw exceptions, so typical exception
-    // handling is not required
-    PyObject_SetAttrString(m, "is_na_value",
-                           PyLong_FromVoidPtr((void*)(&is_na_value)));
-    // This function is C, but it has components that can fail, in which case
-    // we should call PyErr_Set_String and detect this and raise an exception in
-    // Python. We currently don't know the best way to detect and raise
-    // exceptions in box/unbox functions which is where this function is called.
-    // Once we do, we should handle this appropriately. TODO
-    PyObject_SetAttrString(m, "is_pd_int_array",
-                           PyLong_FromVoidPtr((void*)(&is_pd_int_array)));
-    // This function is C, but it has components that can fail, in which case
-    // we should call PyErr_Set_String and detect this and raise an exception in
-    // Python. We currently don't know the best way to detect and raise
-    // exceptions in box/unbox functions which is where this function is called.
-    // Once we do, we should handle this appropriately. TODO
-    PyObject_SetAttrString(
-        m, "int_array_from_sequence",
-        PyLong_FromVoidPtr((void*)(&int_array_from_sequence)));
-    // Only uses C which cannot throw exceptions, so typical exception
-    // handling is not required
-    PyObject_SetAttrString(m, "get_stats_alloc",
-                           PyLong_FromVoidPtr((void*)(&get_stats_alloc)));
-    // Only uses C which cannot throw exceptions, so typical exception
-    // handling is not required
-    PyObject_SetAttrString(m, "get_stats_free",
-                           PyLong_FromVoidPtr((void*)(&get_stats_free)));
-    // Only uses C which cannot throw exceptions, so typical exception
-    // handling is not required
-    PyObject_SetAttrString(m, "get_stats_mi_alloc",
-                           PyLong_FromVoidPtr((void*)(&get_stats_mi_alloc)));
-    // Only uses C which cannot throw exceptions, so typical exception
-    // handling is not required
-    PyObject_SetAttrString(m, "get_stats_mi_free",
-                           PyLong_FromVoidPtr((void*)(&get_stats_mi_free)));
+    SetAttrStringFromVoidPtr(m, seq_getitem);
+    SetAttrStringFromVoidPtr(m, is_na_value);
+    SetAttrStringFromVoidPtr(m, get_stats_alloc);
+    SetAttrStringFromVoidPtr(m, get_stats_free);
+    SetAttrStringFromVoidPtr(m, get_stats_mi_alloc);
+    SetAttrStringFromVoidPtr(m, get_stats_mi_free);
+    SetAttrStringFromVoidPtr(m, array_info_getitem);
+    SetAttrStringFromVoidPtr(m, array_info_getdata1);
+    SetAttrStringFromVoidPtr(m, array_info_unpin);
+    // End section of functions which only use C and cannot throw exceptions
 
-    PyObject_SetAttrString(m, "array_info_getitem",
-                           PyLong_FromVoidPtr((void*)(&array_info_getitem)));
+    // C++ Cache functions for Like Kernel with dictionary encoded inputs
+    SetAttrStringFromVoidPtr(m, alloc_like_kernel_cache);
+    SetAttrStringFromVoidPtr(m, add_to_like_kernel_cache);
+    SetAttrStringFromVoidPtr(m, check_like_kernel_cache);
+    SetAttrStringFromVoidPtr(m, dealloc_like_kernel_cache);
+    SetAttrStringFromVoidPtr(m, NRT_MemInfo_alloc_safe_aligned);
 
-    PyObject_SetAttrString(m, "array_info_getdata1",
-                           PyLong_FromVoidPtr((void*)(&array_info_getdata1)));
+    SetAttrStringFromVoidPtr(m, retrieve_table_py_entry);
+
     return m;
 }

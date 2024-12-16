@@ -1,0 +1,32 @@
+
+# Casting / Conversion Functions
+
+BodoSQL currently supports the following casting/conversion functions:
+
+- [`#!sql TO_ARRAY`][to_array]
+- [`#!sql TO_BINARY`][to_binary]
+- [`#!sql TO_BOOLEAN`][to_boolean]
+- [`#!sql TO_CHAR`][to_char]
+- [`#!sql TO_DATE`][to_date]
+- [`#!sql TO_DECIMAL`][to_decimal]
+- [`#!sql TO_DOUBLE`][to_double]
+- [`#!sql TO_NUMBER`][to_number]
+- [`#!sql TO_NUMERIC`][to_numeric]
+- [`#!sql TO_OBJECT`][to_object]
+- [`#!sql TO_TIME`][to_time]
+- [`#!sql TO_TIMESTAMP`][to_timestamp]
+- [`#!sql TO_TIMESTAMP_LTZ`][to_timestamp_ltz]
+- [`#!sql TO_TIMESTAMP_NTZ`][to_timestamp_ntz]
+- [`#!sql TO_TIMESTAMP_TZ`][to_timestamp_tz]
+- [`#!sql TO_VARCHAR`][to_varchar]
+- [`#!sql TRY_TO_BINARY`][try_to_binary]
+- [`#!sql TRY_TO_BOOLEAN`][try_to_boolean]
+- [`#!sql TRY_TO_DATE`][try_to_date]
+- [`#!sql TRY_TO_DECIMAL`][try_to_decimal]
+- [`#!sql TRY_TO_DOUBLE`][try_to_double]
+- [`#!sql TRY_TO_NUMBER`][try_to_number]
+- [`#!sql TRY_TO_NUMERIC`][try_to_numeric]
+- [`#!sql TRY_TO_TIME`][try_to_time]
+- [`#!sql TRY_TO_TIMESTAMP`][try_to_timestamp]
+- [`#!sql TRY_TO_TIMESTAMP_LTZ`][try_to_timestamp_ltz]
+- [`#!sql TRY_TO_TIMESTAMP_NTZ`][try_to_timestamp_ntz]

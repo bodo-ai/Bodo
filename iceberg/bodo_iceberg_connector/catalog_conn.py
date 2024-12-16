@@ -1,19 +1,21 @@
 import os
-import sys
-from typing import Dict, List, Optional, Tuple
+import warnings
+from typing import Literal
 from urllib.parse import parse_qs, urlparse
 
-from bodo_iceberg_connector.errors import IcebergError
+from bodo_iceberg_connector.errors import IcebergError, IcebergWarning
+
+CatalogType = Literal["hadoop", "hive", "nessie", "glue", "snowflake", "rest"]
 
 
-def _get_first(elems: Dict[str, List[str]], param: str) -> Optional[str]:
+def _get_first(elems: dict[str, list[str]], param: str) -> str | None:
     elem = elems.get(param, None)
     return elem[0] if elem and len(elem) > 0 else None
 
 
 def parse_conn_str(
     conn_str: str,
-) -> Tuple[str, Optional[str]]:
+) -> tuple[str, str | None]:
     """
     Parse catalog / metastore connection string to determine catalog type
     and potentially the warehouse location
@@ -24,76 +26,123 @@ def parse_conn_str(
 
     # Determine Catalog Type
     catalog_type = _get_first(conn_query, "type")
+    warehouse = _get_first(conn_query, "warehouse")
     if catalog_type is None:
         if parsed_conn.scheme == "thrift":
             catalog_type = "hive"
+
         elif parsed_conn.scheme == "" and parsed_conn.path == "glue":
             catalog_type = "glue"
+
         elif parsed_conn.scheme == "s3":
             catalog_type = "hadoop-s3"
+            if warehouse is not None:
+                warnings.warn(
+                    "The `warehouse` property in the connection string will be ignored when accessing a Hadoop S3 catalog. Instead, the `warehouse` will be inferred from the connection string path itself.",
+                    IcebergWarning,
+                )
+            warehouse = f"s3://{parsed_conn.netloc}{parsed_conn.path}"
+
+        elif parsed_conn.scheme in ("abfs", "abfss"):
+            catalog_type = "hadoop-abfs"
+            if warehouse is not None:
+                warnings.warn(
+                    "The `warehouse` property in the connection string will be ignored when accessing a Hadoop ABFS catalog. Instead, the `warehouse` will be inferred from the connection string path itself.",
+                    IcebergWarning,
+                )
+            warehouse = f"{parsed_conn.scheme}://{parsed_conn.netloc}{parsed_conn.path}"
+
         elif parsed_conn.scheme == "" or parsed_conn.scheme == "file":
             catalog_type = "hadoop"
+            if warehouse is not None:
+                warnings.warn(
+                    "The `warehouse` property in the connection string will be ignored when accessing a local Hadoop catalog. Instead, the `warehouse` will be inferred from the connection string path itself.",
+                    IcebergWarning,
+                )
+            warehouse = f"{parsed_conn.netloc}{parsed_conn.path}"
+        elif parsed_conn.scheme == "snowflake":
+            catalog_type = "snowflake"
+        elif parsed_conn.scheme == "rest":
+            catalog_type = "rest"
+
         else:
-            types = ", ".join(["hadoop-s3", "hadoop", "hive", "nessie", "glue"])
+            types = ", ".join(
+                [
+                    "hadoop-s3",
+                    "hadoop",
+                    "hive",
+                    "nessie",
+                    "glue",
+                    "snowflake",
+                    "rest",
+                ]
+            )
             raise IcebergError(
                 f"Cannot detect Iceberg catalog type from connection string:\n  {conn_str}\nIn the connection string, set the URL parameter `type` to one of the following:\n  {types}"
             )
 
-    assert catalog_type in ["hadoop-s3", "hadoop", "hive", "nessie", "glue"]
+    assert catalog_type in [
+        "hadoop-s3",
+        "hadoop-abfs",
+        "hadoop",
+        "hive",
+        "nessie",
+        "glue",
+        "snowflake",
+        "rest",
+    ]
 
     # Get Warehouse Location
-    # TODO: Do something more intelligent with thrift
-    if catalog_type in ["hadoop", "hadoop-s3"]:
-        # TODO: assert warehouse query parameter is None ???
-        fs_prefix = "s3://" if parsed_conn.scheme == "s3" else ""
-        warehouse = f"{fs_prefix}{parsed_conn.netloc}{parsed_conn.path}"
-    else:
-        warehouse = _get_first(conn_query, "warehouse")
+    if catalog_type != "snowflake" and warehouse is None:
+        warnings.warn(
+            "It is recommended that the `warehouse` property is included in the connection string for this type of catalog. Bodo can automatically infer what kind of FileIO to use from the warehouse location. It is also highly recommended to include with Glue and Nessie catalogs.",
+            IcebergWarning,
+        )
 
     # TODO: Pass more parsed results to use in java
     return catalog_type, warehouse
 
 
 def gen_table_loc(
-    catalog_type: str, warehouse: str, db_name: str, table_name: str
+    catalog_type: CatalogType,
+    warehouse: str,
+    db_name: str,
+    table_name: str,
 ) -> str:
-    """Construct Table Data Location from Warehouse and Connection Info"""
+    """
+    Construct Table Location from Warehouse, Database Schema, and Table Name
+    Note that this should only be used when creating a new table,
+    as we have seen problems with guessing the location in the past
+
+    TODO: Replace once we add PyIceberg
+    """
     inner_name = (
-        db_name + ".db"
-        if catalog_type == "glue" or catalog_type == "nessie"
-        else db_name
+        db_name + ".db" if catalog_type == "glue" or catalog_type == "hive" else db_name
     )
 
-    # We attach `data` since C++ code expects the directory
-    # where the parquet files should be written
     return os.path.join(warehouse, inner_name, table_name)
 
 
-def gen_file_loc(
-    catalog_type: str, table_loc: str, db_name: str, table_name: str, file_name: str
-) -> str:
+def gen_file_loc(table_loc: str, db_name: str, table_name: str, file_name: str) -> str:
     """Construct Valid Paths for Files Written to Iceberg"""
-
-    if catalog_type == "hadoop":
-        return os.path.join(db_name, table_name, "data", file_name)
-    elif catalog_type in ["glue", "nessie", "hadoop-s3"]:
+    # S3 warehouse requires absolute file paths
+    if (
+        table_loc.startswith("s3a://")
+        or table_loc.startswith("s3://")
+        or table_loc.startswith("abfs://")
+        or table_loc.startswith("abfss://")
+    ):
         return os.path.join(table_loc, file_name)
     else:
-        return file_name
+        # TODO: Not sure if this is the best approach
+        # How can we use the table or data location instead?
+        return os.path.join(db_name, table_name, "data", file_name)
 
 
 def normalize_loc(loc: str):
-    loc = _remove_prefix(loc.replace("s3a://", "s3://"), "file:")
+    return loc.replace("s3a://", "s3://").removeprefix("file:")
+
+
+def normalize_data_loc(loc: str):
+    loc = normalize_loc(loc)
     return os.path.join(loc, "data")
-
-
-def _remove_prefix(input: str, prefix: str) -> str:
-    """
-    Remove Prefix from String if Available
-    This is part of Python's Standard Library starting from 3.9
-    TODO: Remove once Python 3.8 is deprecated
-    """
-    if sys.version_info.minor < 9:
-        return input[len(prefix) :] if input.startswith(prefix) else input
-    else:
-        return input.removeprefix(prefix)

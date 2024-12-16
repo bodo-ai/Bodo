@@ -1,7 +1,4 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
-"""Test Bodo's Table data type
-"""
-
+"""Test Bodo's Table data type"""
 
 import io
 
@@ -20,6 +17,7 @@ from bodo.tests.user_logging_utils import (
 )
 from bodo.tests.utils import (
     ColumnDelTestPipeline,
+    DistTestPipeline,
     SeriesOptTestPipeline,
     check_func,
     dist_IR_contains,
@@ -173,7 +171,7 @@ def test_logical_table_to_table_dels(datapath, memory_leak_check):
     """
     Make sure table columns are deleted properly for logical_table_to_table() calls
     """
-    filename = datapath(f"many_columns.parquet")
+    filename = datapath("many_columns.parquet")
     col_inds = bodo.utils.typing.MetaType((2, 99, 11, 7))
     col_names = bodo.utils.typing.ColNamesMetaType(("C1", "C2", "C3", "C4"))
 
@@ -207,3 +205,98 @@ def test_logical_table_to_table_dels(datapath, memory_leak_check):
         columns_list = [f"Column{i}" for i in [2, 7, 11]]
         check_logger_msg(stream, f"Columns loaded {columns_list}")
         _check_column_dels(bodo_func, [[2, 11, 7]])
+
+
+def test_table_shape_opt(datapath, table_value, memory_leak_check):
+    """
+    Make sure table.shape[1] is optimized out (used in BodoSQL)
+    """
+
+    def impl(T):
+        return T.shape[1]
+
+    check_func(impl, (table_value,), py_output=len(table_value.arrays), only_seq=True)
+    bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl)
+    bodo_func(table_value)
+    f_ir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
+    assert not dist_IR_contains(f_ir, "shape")
+
+
+def test_table_astype_copy_false_bug(memory_leak_check):
+    """
+    Make sure table.astype(copy=False) works correctly with column elimination.
+    See [BSE-840]
+    """
+    from bodo.utils.typing import ColNamesMetaType
+
+    global_9 = ColNamesMetaType(("A", "B"))
+
+    @bodo.jit
+    def inner(delta_table, delta_col_names):
+        delta_index = bodo.hiframes.pd_index_ext.init_range_index(
+            0, len(delta_table), 1, None
+        )
+        delta_df = bodo.hiframes.pd_dataframe_ext.init_dataframe(
+            (delta_table,), delta_index, delta_col_names
+        )
+        delta_df_casted = delta_df.astype(
+            delta_df.dtypes, copy=False, _bodo_nan_to_str=False
+        )
+        return delta_df_casted
+
+    def impl(T9):
+        return inner(T9, global_9)
+
+    arrs = [np.array([1], np.int64), np.array([1], np.int8)]
+    T9 = bodo.hiframes.table.Table(arrs)
+    py_output = pd.DataFrame({"A": [1], "B": np.array([1], np.int8)})
+    check_func(impl, (T9,), py_output=py_output, only_seq=True)
+
+
+def test_create_empty_table(memory_leak_check):
+    """
+    Tests the implementation of create empty table, which should create a table
+    of length 0 with a specified type.
+    """
+    empty_table = bodo.hiframes.table.Table(
+        [
+            pd.array([], dtype="Int64"),
+            pd.array([], dtype="Int32"),
+            pd.array([], dtype="string"),
+            pd.array([], dtype="boolean"),
+            pd.array([], dtype="Int64"),
+        ]
+    )
+    table_type = bodo.typeof(empty_table)
+
+    def impl():
+        return bodo.hiframes.table.create_empty_table(table_type)
+
+    check_func(impl, (), py_output=empty_table)
+
+
+def test_create_empty_table_len(memory_leak_check):
+    """
+    Tests the implementation of create empty table is defined to be length 0
+    and can optimized out the create_empty_table call.
+    """
+    empty_table = bodo.hiframes.table.Table(
+        [
+            pd.array([], dtype="Int64"),
+            pd.array([], dtype="Int32"),
+            pd.array([], dtype="string"),
+            pd.array([], dtype="boolean"),
+            pd.array([], dtype="Int64"),
+        ]
+    )
+    table_type = bodo.typeof(empty_table)
+
+    def impl():
+        return len(bodo.hiframes.table.create_empty_table(table_type))
+
+    check_func(impl, (), py_output=0)
+    # Check the IR for removing create_empty_table
+    bodo_func = bodo.jit(pipeline_class=DistTestPipeline)(impl)
+    bodo_func()
+    f_ir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
+    assert not dist_IR_contains(f_ir, "create_empty_table")

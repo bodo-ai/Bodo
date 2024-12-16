@@ -1,17 +1,15 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
 Test correctness of TPCxBB Benchmark on BodoSQL
 """
+
 import pytest
+
 from bodosql.tests.utils import check_query
 
 
 @pytest.mark.skip("[BS-633] Resolve nightly issues for TPCx-BB")
 @pytest.mark.slow
 def test_tpcxbb_q20(tpcxbb_data, spark_info, memory_leak_check):
-    N_CLUSTERS = 8
-    CLUSTER_ITERATIONS = 20
-    N_ITER = 5
     tpcxbb_query = """
         SELECT
             ss_customer_sk AS user_sk,
@@ -56,7 +54,7 @@ def test_tpcxbb_q20(tpcxbb_data, spark_info, memory_leak_check):
         ) returned ON ss_customer_sk=sr_customer_sk
     """
     tpcxbb_data_dict, pyspark_schemas = tpcxbb_data
-    result = check_query(
+    check_query(
         tpcxbb_query,
         tpcxbb_data_dict,
         spark_info,
@@ -260,7 +258,7 @@ def test_tpcxbb_q24(tpcxbb_data, spark_info, memory_leak_check):
 		) ss
 		ON (ws.ws_item_sk = ss.ss_item_sk and ws.imp_sk = ss.imp_sk)
 		GROUP BY  ws.ws_item_sk
-  	"""
+    """
 
     tpcxbb_data_dict, pyspark_schemas = tpcxbb_data
     check_query(
@@ -326,8 +324,7 @@ def test_tpcxbb_q25(tpcxbb_data, spark_info, memory_leak_check):
 
 @pytest.mark.skip("[BS-633] Resolve nightly issues for TPCx-BB")
 @pytest.mark.slow
-def test_tpcxbb_q26(tpcxbb_data, spark_info):
-    # TODO: re add memory leak check, see BS-574
+def test_tpcxbb_q26(tpcxbb_data, spark_info, memory_leak_check):
     tpcxbb_query = """
         SELECT
             ss.ss_customer_sk AS cid,

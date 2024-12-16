@@ -1,32 +1,47 @@
 """
 Infrastructure used to test correctness.
 """
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 
 import os
 import re
+import warnings
 from decimal import Decimal
 from enum import Enum
+from typing import TYPE_CHECKING, Any, Optional
 
-import bodosql
+import duckdb
 import numba
 import numpy as np
 import pandas as pd
-from mpi4py import MPI
-from pyspark.sql.functions import col
+import pyarrow as pa
+import pyspark
+import sqlglot
 from pyspark.sql.types import (
     ByteType,
+    DayTimeIntervalType,
     DoubleType,
     FloatType,
     IntegerType,
     LongType,
     ShortType,
+    StringType,
     StructField,
     StructType,
+    TimestampType,
 )
 
 import bodo
-from bodo.tests.utils import _get_dist_arg, reduce_sum
+import bodosql
+from bodo.mpi4py import MPI
+from bodo.tests.utils import (
+    _convert_float_to_nullable_float,
+    _get_dist_arg,
+    gen_unique_table_id,
+    reduce_sum,
+)
+
+if TYPE_CHECKING:
+    from pyspark.sql.session import SparkSession
 
 
 class InputDist(Enum):
@@ -42,43 +57,53 @@ class InputDist(Enum):
 
 
 def check_query(
-    query,
-    dataframe_dict,
-    spark,
-    named_params=None,
-    check_names=True,
-    check_dtype=True,
-    sort_output=True,
-    expected_output=None,
-    convert_columns_bytearray=None,
-    convert_columns_string=None,
-    convert_columns_timedelta=None,
-    convert_columns_decimal=None,
-    convert_float_nan=False,
-    convert_columns_bool=None,
-    return_codegen=False,
-    return_seq_dataframe=False,
-    run_dist_tests=True,
-    only_python=False,
-    only_jit_seq=False,
-    only_jit_1D=False,
-    only_jit_1DVar=None,
-    spark_dataframe_dict=None,
-    equivalent_spark_query=None,
-    optimize_calcite_plan=True,
-    spark_input_cols_to_cast=None,
-    spark_output_cols_to_cast=None,
-    pyspark_schemas=None,
-    named_params_timedelta_interval=False,
-    convert_nullable_bodosql=True,
-    use_table_format=None,
-    use_dict_encoded_strings=None,
-    is_out_distributed=True,
+    query: str,
+    dataframe_dict: dict[str, pd.DataFrame],
+    spark: Optional["SparkSession"],
+    named_params: dict[str, Any] | None = None,
+    bind_variables: tuple[Any] | None = None,
+    check_names: bool = True,
+    check_dtype: bool = False,
+    sort_output: bool = True,
+    expected_output: pd.DataFrame | None = None,
+    convert_columns_bytearray: list[str] | None = None,
+    convert_columns_string: list[str] | None = None,
+    convert_columns_timedelta: list[str] | None = None,
+    convert_columns_decimal: list[str] | None = None,
+    convert_input_to_nullable_float: bool = True,
+    convert_expected_output_to_nullable_float: bool = True,
+    convert_float_nan: bool = False,
+    convert_columns_bool: list[str] | None = None,
+    convert_columns_tz_naive: list[str] | None = None,
+    return_codegen: bool = False,
+    return_seq_dataframe: bool = False,
+    run_dist_tests: bool = True,
+    only_python: bool = False,
+    only_jit_seq: bool = False,
+    only_jit_1D: bool = False,
+    only_jit_1DVar: bool | None = None,
+    spark_dataframe_dict: dict[str, pd.DataFrame] | None = None,
+    equivalent_spark_query: str | None = None,
+    spark_input_cols_to_cast: dict[str, dict[str, str]] | None = None,
+    pyspark_schemas: dict[str, pyspark.sql.types.StructType] | None = None,
+    named_params_timedelta_interval: bool = False,
+    convert_nullable_bodosql: bool = True,
+    use_table_format: bool | None = True,
+    use_dict_encoded_strings: bool | None = None,
+    is_out_distributed: bool = True,
+    check_typing_issues: bool = True,
+    use_map_arrays: bool = False,
+    atol: float = 1e-08,
+    rtol: float = 1e-05,
+    convert_columns_to_pandas: bool = False,
+    session_tz: str | None = None,
+    enable_timestamp_tz: bool = False,
+    use_duckdb: bool = False,
 ):
     """
     Evaluates the correctness of a BodoSQL query by comparing SparkSQL
     as a baseline. Correctness is determined by converting both outputs
-    to Pandas dataframes and checking equality.
+    to Pandas DataFrames and checking equality.
 
     This function returns a dictionary of key value pairs depending
     on the information requested to be returned. Currently the following
@@ -104,6 +129,9 @@ def check_query(
             changes in Bodo. Spark queries need to replace these variables
             with the constant values if they exist.
 
+        bind_variables: Tuple of Python variables used as bind variables in the
+        query. These queries do not support Spark.
+
         check_names: Compare BodoSQL and SparkSQL names for equality.
             This is useful for checking aliases.
 
@@ -118,7 +146,7 @@ def check_query(
 
         convert_columns_bytearray: Convert the given list of
             columns to bytes types. This is because BodoSQL always
-            outputs bytes types, but Spark outputs binaryarray.
+            outputs bytes types, but Spark outputs binary array.
 
         convert_columns_string: Convert the given list of string
             columns to bytes types. This is needed when the SUBSTR function
@@ -130,12 +158,23 @@ def check_query(
             natively support timedelta types and converts the result
             to int64. This argument is only used if expected_output=None.
 
+        convert_input_to_nullable_float: Convert float columns in inputs
+            to nullable float if the nullable float global flag is enabled.
+
+        convert_expected_output_to_nullable_float: Convert float columns in expected
+            output to nullable float if the nullable float global flag is enabled.
+
         convert_float_nan: Convert NaN values in float columns to None.
             This is used when Spark and Bodo will have different output
             types.
 
         convert_columns_bool: Convert NaN values to None by setting datatype
             to boolean.
+
+        convert_columns_tz_naive(Optional[List[str]]): List of columns
+            in the input DataFrame(s) that use tz-aware timestamp data.
+            Spark will produce an incorrect output for these columns, so
+            we convert them to tz-naive before running the query in Spark.
 
         convert_columns_decimal: Convert the given list of
             decimal columns to float64 types.
@@ -167,9 +206,6 @@ def check_query(
             the expected output, if different from the query string used with
             BodoSQL.
 
-        optimize_calcite_plan: Controls if the calcite plan used to construct
-            the pandas code is optimized or not
-
         spark_input_cols_to_cast: A hashmap of dataframe --> list of tuples in the form
             (colname, typename) as strings. The specified columns in the specified
             dataframe are cast to the specified types before the expected
@@ -180,12 +216,6 @@ def check_query(
             from pandas types (Specifically, all pandas integers types are converted
             to bigint, which is an invalid type for certain functions in spark,
             such as DATE_ADD, and FORMAT_NUMBER)
-
-        spark_output_cols_to_cast: A List of tuples in the form (colname, typename).
-            Casts the specified columns in the spark output to the the specified types.
-            for example, a value of ["A", "Int64"] would cause the expected_ouput["A"]
-            to be cast to int64. Will raise errors if the column is not present in the output,
-            or if the type is not valid when used with series.astype.
 
         pyspark_schemas: Dictionary of Pyspark Schema for each DataFrame provided in dataframe_dict.
             If this value is None or the DataFrame is not provided in the dict, this value
@@ -205,11 +235,30 @@ def check_query(
             If None, tests both formats if input arguments have string arrays.
         is_out_distributed: flag to whether gather the output before equality checking.
             Default True.
+        check_typing_issues: raise an error if there is a typing issue for input args.
+        Runs bodo typing on arguments and converts warnings to errors.
+
+        use_map_arrays: Flag for forcing all input dict-object arrays to be unboxed as map arrays.
+
+        atol: absolute tolerance used for approximately-equal calculations
+
+        rtol: relative tolerance used for approximately-equal calculations
+
+        convert_columns_to_pandas: Pandas does not support well some datatype such as decimal,
+        list of strings or in general arrow data type. It typically fails at sorting. In that case
+        using convert_columns_to_pandas=True will convert the columns to a string format which may help.
+
+        session_tz: the string representation of the timezone to use for TIMESTAMP_LTZ.
+
+        enable_timestamp_tz: True if TIMESTAMP_TZ support should be enabled.
+
+        use_duckdb: True if DuckDB should be used to generate the expected output. If so, we will either
+            use the equivalent_spark_query as is or use SQLGlot to transpile the base query to DuckDB.
     """
 
     # We allow the environment flag BODO_TESTING_ONLY_RUN_1D_VAR to change the default
     # testing behavior, to test with only 1D_var. This environment variable is set in our
-    # PR CI environment
+    # AWS PR CI environment
     if only_jit_1DVar is None and not (only_python or only_jit_1D or only_jit_seq):
         only_jit_1DVar = (
             os.environ.get("BODO_TESTING_ONLY_RUN_1D_VAR", None) is not None
@@ -231,57 +280,98 @@ def check_query(
 
     n_pes = bodo.get_size()
 
-    if not numba.core.config.DEVELOPER_MODE:
-        # avoid running sequential tests on multi-process configs to save time
-        if n_pes > 1:
-            run_python = False
-            run_jit_seq = False
-        # Avoid running parallel tests on single-process configs to save time
-        elif n_pes == 1:
-            run_jit_1D = False
-            run_jit_1DVar = False
+    # Avoid testing BodoSQLContext.sql() call in regular Python on CI to run faster.
+    # It's not used in platform deployment and also not likely to fail independently.
+    if not only_python and not numba.core.config.DEVELOPER_MODE:
+        run_python = False
+
+    # Avoid testing 1D on CI to run faster. It's not likely to fail independent of
+    # 1D_Var.
+    if not only_jit_1D and not numba.core.config.DEVELOPER_MODE:
+        run_jit_1D = False
+
+    # avoid running sequential tests on multi-process configs to save time
+    # is_out_distributed=False may lead to avoiding parallel runs and seq run
+    # Ideally we would like to also restrict running parallel tests when we have a single rank,
+    # but this can lead to test coverage issues when running with BODO_TESTING_ONLY_RUN_1D_VAR
+    # on AWS PR CI, where we only run with a single rank
+    if (
+        n_pes > 1
+        and not numba.core.config.DEVELOPER_MODE
+        and is_out_distributed is not False
+    ):
+        run_jit_seq = False
+        run_python = False
+    elif (
+        n_pes == 1
+        and not numba.core.config.DEVELOPER_MODE
+        and os.environ.get("BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST", False)
+    ):
+        # We only skip the parallel tests when running on one rank if we know that
+        # there exists another worker running on multiple ranks
+        run_jit_1D = False
+        run_jit_1DVar = False
+
+    # Only run Python mode when spawn testing is enabled since others aren't applicable
+    if bodo.tests.utils.test_spawn_mode_enabled:
+        run_python, run_jit_seq, run_jit_1D, run_jit_1DVar = True, False, False, False
+        if only_jit_seq:
+            warnings.warn(
+                "check_query: no tests are being run since spawn enabled and only_jit_seq=True."
+            )
+            return
+
+    if not (run_jit_seq or run_jit_1D or run_jit_1DVar or run_python):
+        warnings.warn("check_query: No tests are being run.")
 
     # If a user sets BODOSQL_TESTING_DEBUG, we print the
     # unoptimized plan, optimized plan, and the Pandas code
     debug_mode = os.environ.get("BODOSQL_TESTING_DEBUG", False)
     if debug_mode:
-
         print("Query:")
         print(query)
-        bc = bodosql.BodoSQLContext(dataframe_dict)
-        print("Unoptimized Plan:")
-        print(bc.generate_unoptimized_plan(query, named_params))
-        print("Optimized Plan:")
-        print(bc.generate_plan(query, named_params))
+        bc = bodosql.BodoSQLContext(dataframe_dict, default_tz=session_tz)
+        print("Plan:")
+        print(bc.generate_plan(query, named_params, bind_variables))
         print("Pandas Code:")
-        print(bc.convert_to_pandas(query, named_params))
+        print(bc.convert_to_pandas(query, named_params, bind_variables))
 
-    # Determine the spark output.
-    if expected_output is None:
-        spark.catalog.clearCache()
-        # If Spark specific inputs aren't provided, use the same
-        # as BodoSQL
-        if spark_dataframe_dict is None:
-            spark_dataframe_dict = dataframe_dict
+    if expected_output is None and (bodo.get_rank() == 0 and spark is None):
+        raise ValueError(
+            "Either `expected_output` or `spark` argument must be set to not None"
+        )
 
-        for table_name, df in spark_dataframe_dict.items():
-            spark.catalog.dropTempView(table_name)
-            df = convert_nullable_object(df)
-
-            if pyspark_schemas is None:
-                schema = None
-            else:
-                schema = pyspark_schemas.get(table_name, None)
-            spark_df = spark.createDataFrame(df, schema=schema)
-            if (
-                spark_input_cols_to_cast != None
-                and table_name in spark_input_cols_to_cast
-            ):
-                for colname, typename in spark_input_cols_to_cast[table_name]:
-                    spark_df = spark_df.withColumn(colname, col(colname).cast(typename))
-            spark_df.createTempView(table_name)
-        # Always run Spark on just 1 core for efficiency
+    # Determine the Spark output.
+    if expected_output is None and use_duckdb is False:
+        # Only run Spark on one rank to run faster and avoid Spark issues
         if bodo.get_rank() == 0:
+            spark.catalog.clearCache()
+            # If Spark specific inputs aren't provided, use the same
+            # as BodoSQL
+            if spark_dataframe_dict is None:
+                spark_dataframe_dict = dataframe_dict
+
+            for table_name, df in spark_dataframe_dict.items():
+                spark.catalog.dropTempView(table_name)
+                df = convert_nullable_object(df)
+                if convert_columns_tz_naive:
+                    df = remove_tz_columns_spark(df, convert_columns_tz_naive)
+
+                if pyspark_schemas is None:
+                    schema = None
+                else:
+                    schema = pyspark_schemas.get(table_name, None)
+                spark_df = spark.createDataFrame(df, schema=schema)
+                if (
+                    spark_input_cols_to_cast != None
+                    and table_name in spark_input_cols_to_cast
+                ):
+                    for colname, typename in spark_input_cols_to_cast[table_name]:
+                        spark_df = spark_df.withColumn(
+                            colname, pyspark.sql.functions.col(colname).cast(typename)
+                        )
+                spark_df.createTempView(table_name)
+
             # If an equivalent query is provided we use that
             # instead of the original spark query
             if equivalent_spark_query is None:
@@ -310,18 +400,6 @@ def check_query(
             if isinstance(e, Exception):
                 raise e
 
-        if spark_output_cols_to_cast != None:
-            for colname, typ in spark_output_cols_to_cast:
-                if colname in expected_output.columns:
-                    expected_output[colname] = expected_output[colname].astype(typ)
-                else:
-                    print("Column and typecast")
-                    print(colname, typ)
-                    print("expected_output")
-                    print(expected_output)
-                    raise Exception(
-                        "Error, didn't find column to cast in expected output"
-                    )
         if convert_columns_bytearray:
             expected_output = convert_spark_bytearray(
                 expected_output, convert_columns_bytearray
@@ -334,26 +412,71 @@ def check_query(
             expected_output = convert_spark_timedelta(
                 expected_output, convert_columns_timedelta
             )
+        if convert_input_to_nullable_float:
+            dataframe_dict = {
+                c: _convert_float_to_nullable_float(df)
+                for c, df in dataframe_dict.items()
+            }
+        if convert_expected_output_to_nullable_float:
+            expected_output = _convert_float_to_nullable_float(expected_output)
         if convert_float_nan:
             expected_output = convert_spark_nan_none(expected_output)
-        if convert_columns_decimal:
-            expected_output = convert_spark_decimal(
-                expected_output, convert_columns_decimal
-            )
         if convert_columns_bool:
             expected_output = convert_spark_bool(expected_output, convert_columns_bool)
+
+    elif expected_output is None:
+        if bodo.get_rank() == 0:
+            # Use SQLGlot to transpile the query to DuckDB syntax
+            # TODO: We can use this for Spark as well
+            q = (
+                sqlglot.transpile(query, read="snowflake", write="duckdb")[0]
+                if equivalent_spark_query is None
+                else equivalent_spark_query
+            )
+
+            # Start a temporary DuckDB connection and register the tables from the dataframe_dict
+            conn = duckdb.connect(":memory:")
+            for name, df in dataframe_dict.items():
+                if convert_columns_tz_naive:
+                    df = remove_tz_columns_spark(df, convert_columns_tz_naive)
+                conn.register(name, df)
+
+            # Compute the expected output
+            # We need to convert to arrow and then Pandas to maintain some types (decimal, timestamp)
+            expected_output = conn.sql(q).arrow().to_pandas()
+
+        # Distribute the expected output and handle errors
+        comm = MPI.COMM_WORLD
+        try:
+            expected_output = comm.bcast(expected_output, root=0)
+            errors = comm.allgather(None)
+        except Exception as e:
+            # If we can an exception, raise it on all processes.
+            errors = comm.allgather(e)
+        for e in errors:
+            if isinstance(e, Exception):
+                raise e
+
+    if convert_columns_decimal:
+        expected_output = convert_spark_decimal(
+            expected_output, convert_columns_decimal
+        )
 
     if run_python:
         check_query_python(
             query,
             dataframe_dict,
             named_params,
+            bind_variables,
             check_names,
             check_dtype,
             sort_output,
             expected_output,
-            optimize_calcite_plan,
             convert_nullable_bodosql,
+            convert_columns_to_pandas,
+            session_tz,
+            atol=atol,
+            rtol=rtol,
         )
 
     check_query_jit(
@@ -363,37 +486,38 @@ def check_query(
         query,
         dataframe_dict,
         named_params,
+        bind_variables,
         check_names,
         check_dtype,
         sort_output,
         expected_output,
-        optimize_calcite_plan,
         convert_nullable_bodosql,
         use_table_format,
         use_dict_encoded_strings,
+        session_tz=session_tz,
+        enable_timestamp_tz=enable_timestamp_tz,
         is_out_distributed=is_out_distributed,
+        check_typing_issues=check_typing_issues,
+        convert_columns_to_pandas=convert_columns_to_pandas,
+        use_map_arrays=use_map_arrays,
+        atol=atol,
+        rtol=rtol,
     )
 
-    result = dict()
+    result = {}
 
     if return_codegen or return_seq_dataframe:
-        bc = bodosql.BodoSQLContext(dataframe_dict)
+        bc = bodosql.BodoSQLContext(dataframe_dict, default_tz=session_tz)
 
     # Return Pandas code if requested
     if return_codegen:
-        if optimize_calcite_plan:
-            result["pandas_code"] = bc.convert_to_pandas(query, named_params)
-        else:
-            result["pandas_code"] = bc._convert_to_pandas_unoptimized(
-                query, named_params
-            )
+        result["pandas_code"] = bc.convert_to_pandas(
+            query, named_params, bind_variables
+        )
 
     # Return sequential output if requested
     if return_seq_dataframe:
-        if optimize_calcite_plan:
-            result["output_df"] = bc.sql(query, named_params)
-        else:
-            result["output_df"] = bc._test_sql_unoptimized(query, named_params)
+        result["output_df"] = bc.sql(query, named_params, bind_variables)
     return result
 
 
@@ -404,15 +528,22 @@ def check_query_jit(
     query,
     dataframe_dict,
     named_params,
+    bind_variables,
     check_names,
     check_dtype,
     sort_output,
     expected_output,
-    optimize_calcite_plan,
     convert_nullable_bodosql,
     use_table_format,
     use_dict_encoded_strings,
     is_out_distributed,
+    check_typing_issues,
+    convert_columns_to_pandas,
+    use_map_arrays,
+    session_tz,
+    enable_timestamp_tz,
+    atol: float = 1e-08,
+    rtol: float = 1e-05,
 ):
     """
     Evaluates the correctness of a BodoSQL query against expected_output.
@@ -435,6 +566,8 @@ def check_query_jit(
         named_params: Dictionary of mapping constant values to Bodo variable
             names used in query.
 
+        bind_variables: Tuple of Python values used as bind variables in a query.
+
         check_names: Compare BodoSQL and expected_output names for equality.
 
         check_dtype: Compare BodoSQL and expected_output types for equality.
@@ -446,16 +579,33 @@ def check_query_jit(
 
         convert_nullable_bodosql: Should BodoSQL nullable integers be converted to Object dtype with None.
 
-        use_table_format: flag for loading dataframes in table format for testing.
+        use_table_format: flag for loading DataFrames in table format for testing.
             If None, tests both formats.
 
         use_dict_encoded_strings: flag for loading string arrays in dictionary-encoded
             format for testing.
             If None, tests both formats if input arguments have string arrays.
+
+        session_tz: the string representation of the timezone to use for TIMESTAMP_LTZ.
+
+        atol: absolute tolerance used for approximately-equal calculations
+
+        rtol: relative tolerance used for approximately-equal calculations
+
+        check_typing_issues: raise an error if there is a typing issue for input args.
+        Runs bodo typing on arguments and converts warnings to errors.
+
+        convert_columns_to_pandas: Pandas does not support well some datatype such as decimal,
+        list of strings or in general arrow data type. It typically fails at sorting. In that case
+        using convert_columns_to_pandas=True will convert the columns to a string format which may help.
+
+        enable_timestamp_tz: true if TIMESTAMP_TZ support should be enabled
     """
 
     saved_TABLE_FORMAT_THRESHOLD = bodo.hiframes.boxing.TABLE_FORMAT_THRESHOLD
     saved_use_dict_str_type = bodo.hiframes.boxing._use_dict_str_type
+    saved_struct_size_limit = bodo.hiframes.boxing.struct_size_limit
+    saved_enable_timestamp_tz = bodo.enable_timestamp_tz
     try:
         # test table format for dataframes (non-table format tested below if flag is
         # None)
@@ -467,47 +617,70 @@ def check_query_jit(
         if use_dict_encoded_strings:
             bodo.hiframes.boxing._use_dict_str_type = True
 
+        # Test all dict-like arguments as map arrays (no structs) if flag is set
+        if use_map_arrays:
+            bodo.hiframes.boxing.struct_size_limit = -1
+
+        bodo.enable_timestamp_tz = enable_timestamp_tz
+
         if run_jit_seq:
             check_query_jit_seq(
                 query,
                 dataframe_dict,
                 named_params,
+                bind_variables,
                 check_names,
                 check_dtype,
                 sort_output,
                 expected_output,
-                optimize_calcite_plan,
                 convert_nullable_bodosql,
+                check_typing_issues,
+                convert_columns_to_pandas,
+                session_tz,
+                atol,
+                rtol,
             )
         if run_jit_1D:
             check_query_jit_1D(
                 query,
                 dataframe_dict,
                 named_params,
+                bind_variables,
                 check_names,
                 check_dtype,
                 sort_output,
                 expected_output,
-                optimize_calcite_plan,
                 convert_nullable_bodosql,
                 is_out_distributed,
+                check_typing_issues,
+                convert_columns_to_pandas,
+                session_tz,
+                atol,
+                rtol,
             )
         if run_jit_1DVar:
             check_query_jit_1DVar(
                 query,
                 dataframe_dict,
                 named_params,
+                bind_variables,
                 check_names,
                 check_dtype,
                 sort_output,
                 expected_output,
-                optimize_calcite_plan,
                 convert_nullable_bodosql,
                 is_out_distributed,
+                check_typing_issues,
+                convert_columns_to_pandas,
+                session_tz,
+                atol,
+                rtol,
             )
     finally:
         bodo.hiframes.boxing.TABLE_FORMAT_THRESHOLD = saved_TABLE_FORMAT_THRESHOLD
         bodo.hiframes.boxing._use_dict_str_type = saved_use_dict_str_type
+        bodo.hiframes.boxing.struct_size_limit = saved_struct_size_limit
+        bodo.enable_timestamp_tz = saved_enable_timestamp_tz
 
     # test non-table format case
     if use_table_format is None:
@@ -518,15 +691,22 @@ def check_query_jit(
             query,
             dataframe_dict,
             named_params,
+            bind_variables,
             check_names,
             check_dtype,
             sort_output,
             expected_output,
-            optimize_calcite_plan,
             convert_nullable_bodosql,
+            session_tz=session_tz,
+            enable_timestamp_tz=enable_timestamp_tz,
             use_table_format=False,
             use_dict_encoded_strings=use_dict_encoded_strings,
             is_out_distributed=is_out_distributed,
+            check_typing_issues=check_typing_issues,
+            convert_columns_to_pandas=convert_columns_to_pandas,
+            use_map_arrays=use_map_arrays,
+            atol=atol,
+            rtol=rtol,
         )
 
     # test dict-encoded string type if there is any string array in input
@@ -541,17 +721,24 @@ def check_query_jit(
             query,
             dataframe_dict,
             named_params,
+            bind_variables,
             check_names,
             check_dtype,
             sort_output,
             expected_output,
-            optimize_calcite_plan,
             convert_nullable_bodosql,
+            session_tz=session_tz,
+            enable_timestamp_tz=enable_timestamp_tz,
             # the default case use_table_format=None already tests
             # use_table_format=False above so we just test use_table_format=True for it
             use_table_format=True if use_table_format is None else use_table_format,
             use_dict_encoded_strings=True,
             is_out_distributed=is_out_distributed,
+            check_typing_issues=check_typing_issues,
+            convert_columns_to_pandas=convert_columns_to_pandas,
+            use_map_arrays=use_map_arrays,
+            atol=atol,
+            rtol=rtol,
         )
 
 
@@ -559,12 +746,16 @@ def check_query_python(
     query,
     dataframe_dict,
     named_params,
+    bind_variables,
     check_names,
     check_dtype,
     sort_output,
     expected_output,
-    optimize_calcite_plan,
     convert_nullable_bodosql,
+    convert_columns_to_pandas,
+    session_tz,
+    atol: float = 1e-08,
+    rtol: float = 1e-05,
 ):
     """
     Evaluates the correctness of a BodoSQL query against expected_output.
@@ -580,6 +771,8 @@ def check_query_python(
         named_params: Dictionary of mapping constant values to Bodo variable
             names used in query.
 
+        bind_variables: Tuple of Python values used as bind variables in a query.
+
         check_names: Compare BodoSQL and expected_output names for equality.
 
         check_dtype: Compare BodoSQL and expected_output types for equality.
@@ -590,12 +783,22 @@ def check_query_python(
         expected_output: The expected result of running the query.
 
         convert_nullable_bodosql: Should BodoSQL nullable integers be converted to Object dtype with None.
+
+        atol: absolute tolerance used for approximately-equal calculations
+
+        rtol: relative tolerance used for approximately-equal calculations
+
+        convert_columns_to_pandas: Pandas does not support well some datatype such as decimal,
+        list of strings or in general arrow data type. It typically fails at sorting. In that case
+        using convert_columns_to_pandas=True will convert the columns to a string format which may help.
+
+        session_tz: the string representation of the timezone to use for TIMESTAMP_LTZ.
     """
-    bc = bodosql.BodoSQLContext(dataframe_dict)
-    if optimize_calcite_plan:
-        bodosql_output = bc.sql(query, named_params)
-    else:
-        bodosql_output = bc._test_sql_unoptimized(query, named_params)
+    bc = bodosql.BodoSQLContext(dataframe_dict, default_tz=session_tz)
+    jit_options = {}
+    if bodo.tests.utils.test_spawn_mode_enabled:
+        jit_options["spawn"] = True
+    bodosql_output = bc.sql(query, named_params, bind_variables, **jit_options)
     _check_query_equal(
         bodosql_output,
         expected_output,
@@ -605,6 +808,9 @@ def check_query_python(
         False,
         "Sequential Python Test Failed",
         convert_nullable_bodosql,
+        convert_columns_to_pandas=convert_columns_to_pandas,
+        atol=atol,
+        rtol=rtol,
     )
 
 
@@ -612,12 +818,17 @@ def check_query_jit_seq(
     query,
     dataframe_dict,
     named_params,
+    bind_variables,
     check_names,
     check_dtype,
     sort_output,
     expected_output,
-    optimize_calcite_plan,
     convert_nullable_bodosql,
+    check_typing_issues,
+    convert_columns_to_pandas,
+    session_tz,
+    atol: float = 1e-08,
+    rtol: float = 1e-05,
 ):
     """
     Evaluates the correctness of a BodoSQL query against expected_output.
@@ -634,6 +845,8 @@ def check_query_jit_seq(
         named_params: Dictionary of mapping constant values to Bodo variable
             names used in query.
 
+        bind_variables: Tuple of Python values used as bind variables in a query.
+
         check_names: Compare BodoSQL and expected_output names for equality.
 
         check_dtype: Compare BodoSQL and expected_output types for equality.
@@ -644,9 +857,29 @@ def check_query_jit_seq(
         expected_output: The expected result of running the query.
 
         convert_nullable_bodosql: Should BodoSQL nullable integers be converted to Object dtype with None.
+
+        check_typing_issues: raise an error if there is a typing issue for input args.
+        Runs bodo typing on arguments and converts warnings to errors.
+
+        convert_columns_to_pandas: Pandas does not support well some datatype such as decimal,
+        list of strings or in general arrow data type. It typically fails at sorting. In that case
+        using convert_columns_to_pandas=True will convert the columns to a string format which may help.
+
+        session_tz: the string representation of the timezone to use for TIMESTAMP_LTZ.
+
+        atol: absolute tolerance used for approximately-equal calculations
+
+        rtol: relative tolerance used for approximately-equal calculations
     """
     bodosql_output = _run_jit_query(
-        query, dataframe_dict, named_params, InputDist.REP, optimize_calcite_plan, False
+        query,
+        dataframe_dict,
+        named_params,
+        bind_variables,
+        InputDist.REP,
+        False,
+        session_tz,
+        check_typing_issues=check_typing_issues,
     )
     _check_query_equal(
         bodosql_output,
@@ -657,6 +890,9 @@ def check_query_jit_seq(
         False,
         "Sequential JIT Test Failed",
         convert_nullable_bodosql,
+        convert_columns_to_pandas=convert_columns_to_pandas,
+        atol=atol,
+        rtol=rtol,
     )
 
 
@@ -664,13 +900,18 @@ def check_query_jit_1D(
     query,
     dataframe_dict,
     named_params,
+    bind_variables,
     check_names,
     check_dtype,
     sort_output,
     expected_output,
-    optimize_calcite_plan,
     convert_nullable_bodosql,
     is_out_distributed,
+    check_typing_issues,
+    convert_columns_to_pandas,
+    session_tz,
+    atol: float = 1e-08,
+    rtol: float = 1e-05,
 ):
     """
     Evaluates the correctness of a BodoSQL query against expected_output.
@@ -687,6 +928,8 @@ def check_query_jit_1D(
         named_params: Dictionary of mapping constant values to Bodo variable
             names used in query.
 
+        bind_variables: Tuple of Python values used as bind variables in a query.
+
         check_names: Compare BodoSQL and expected_output names for equality.
 
         check_dtype: Compare BodoSQL and expected_output types for equality.
@@ -697,17 +940,41 @@ def check_query_jit_1D(
         expected_output: The expected result of running the query.
 
         convert_nullable_bodosql: Should BodoSQL nullable integers be converted to Object dtype with None.
+
+        check_typing_issues: raise an error if there is a typing issue for input args.
+        Runs bodo typing on arguments and converts warnings to errors.
+
+        convert_columns_to_pandas: Pandas does not support well some datatype such as decimal,
+        list of strings or in general arrow data type. It typically fails at sorting. In that case
+        using convert_columns_to_pandas=True will convert the columns to a string format which may help.
+
+        session_tz: the string representation of the timezone to use for TIMESTAMP_LTZ.
+
+        atol: absolute tolerance used for approximately-equal calculations
+
+        rtol: relative tolerance used for approximately-equal calculations
     """
     bodosql_output = _run_jit_query(
         query,
         dataframe_dict,
         named_params,
+        bind_variables,
         InputDist.OneD,
-        optimize_calcite_plan,
         is_out_distributed,
+        session_tz,
+        check_typing_issues=check_typing_issues,
     )
     if is_out_distributed:
-        bodosql_output = bodo.gatherv(bodosql_output)
+        try:
+            bodosql_output = bodo.gatherv(bodosql_output)
+        except Exception:
+            comm = MPI.COMM_WORLD
+            bodosql_output_list = comm.gather(bodosql_output)
+            if bodo.get_rank() == 0:
+                if isinstance(bodosql_output_list[0], np.ndarray):
+                    bodosql_output = np.concatenate(bodosql_output_list)
+                else:
+                    bodosql_output = pd.concat(bodosql_output_list)
     _check_query_equal(
         bodosql_output,
         expected_output,
@@ -717,6 +984,9 @@ def check_query_jit_1D(
         is_out_distributed,
         "1D Parallel JIT Test Failed",
         convert_nullable_bodosql,
+        convert_columns_to_pandas=convert_columns_to_pandas,
+        atol=atol,
+        rtol=rtol,
     )
 
 
@@ -724,13 +994,18 @@ def check_query_jit_1DVar(
     query,
     dataframe_dict,
     named_params,
+    bind_variables,
     check_names,
     check_dtype,
     sort_output,
     expected_output,
-    optimize_calcite_plan,
     convert_nullable_bodosql,
     is_out_distributed,
+    check_typing_issues,
+    convert_columns_to_pandas,
+    session_tz,
+    atol: float = 1e-08,
+    rtol: float = 1e-05,
 ):
     """
     Evaluates the correctness of a BodoSQL query against expected_output.
@@ -747,6 +1022,8 @@ def check_query_jit_1DVar(
         named_params: Dictionary of mapping constant values to Bodo variable
             names used in query.
 
+        bind_variables: Tuple of Python values used as bind variables in a query.
+
         check_names: Compare BodoSQL and expected_output names for equality.
 
         check_dtype: Compare BodoSQL and expected_output types for equality.
@@ -757,17 +1034,41 @@ def check_query_jit_1DVar(
         expected_output: The expected result of running the query.
 
         convert_nullable_bodosql: Should BodoSQL nullable integers be converted to Object dtype with None.
+
+        check_typing_issues: raise an error if there is a typing issue for input args.
+        Runs bodo typing on arguments and converts warnings to errors.
+
+        convert_columns_to_pandas: Pandas does not support well some datatype such as decimal,
+        list of strings or in general arrow data type. It typically fails at sorting. In that case
+        using convert_columns_to_pandas=True will convert the columns to a string format which may help.
+
+        session_tz: the string representation of the timezone to use for TIMESTAMP_LTZ.
+
+        atol: absolute tolerance used for approximately-equal calculations
+
+        rtol: relative tolerance used for approximately-equal calculations
     """
     bodosql_output = _run_jit_query(
         query,
         dataframe_dict,
         named_params,
+        bind_variables,
         InputDist.OneDVar,
-        optimize_calcite_plan,
         is_out_distributed,
+        session_tz,
+        check_typing_issues=check_typing_issues,
     )
     if is_out_distributed:
-        bodosql_output = bodo.gatherv(bodosql_output)
+        try:
+            bodosql_output = bodo.gatherv(bodosql_output)
+        except Exception:
+            comm = MPI.COMM_WORLD
+            bodosql_output_list = comm.gather(bodosql_output)
+            if bodo.get_rank() == 0:
+                if isinstance(bodosql_output_list[0], np.ndarray):
+                    bodosql_output = np.concatenate(bodosql_output_list)
+                else:
+                    bodosql_output = pd.concat(bodosql_output_list)
     _check_query_equal(
         bodosql_output,
         expected_output,
@@ -777,6 +1078,9 @@ def check_query_jit_1DVar(
         is_out_distributed,
         "1DVar Parallel JIT Test Failed",
         convert_nullable_bodosql,
+        convert_columns_to_pandas=convert_columns_to_pandas,
+        atol=atol,
+        rtol=rtol,
     )
 
 
@@ -784,9 +1088,11 @@ def _run_jit_query(
     query,
     dataframe_dict,
     named_params,
+    bind_variables,
     input_dist,
-    optimize_calcite_plan,
     is_out_distributed,
+    session_tz,
+    check_typing_issues,
 ):
     """
     Helper function to generate and run a JIT based BodoSQL query with a given
@@ -803,9 +1109,16 @@ def _run_jit_query(
         named_params: Dictionary of mapping constant values to Bodo variable
             names used in query.
 
+        bind_variables: Tuple of Python values used as bind variables in a query.
+
         input_dist: How the input data should be distributed. Either REP,
             1D or 1DVar. All input DataFrames are presumed to have the same
             distribution
+
+        session_tz: the string representation of the timezone to use for TIMESTAMP_LTZ.
+
+        check_typing_issues: raise an error if there is a typing issue for input args.
+        Runs bodo typing on arguments and converts warnings to errors.
 
     @returns:
         The Pandas dataframe (possibly distributed) from running the query.
@@ -818,32 +1131,57 @@ def _run_jit_query(
         keys_list = []
         values_list = []
 
+    if bind_variables is None:
+        bind_variables = ()
+
     # Generate the BodoSQLContext with func_text so we can use jit code
-    params = ",".join([f"e{i}" for i in range(len(dataframe_dict))] + keys_list)
+    params = ",".join(
+        [f"e{i}" for i in range(len(dataframe_dict))]
+        + keys_list
+        + [f"f{i}" for i in range(len(bind_variables))]
+    )
     func_text = f"def test_impl(query, {params}):\n"
     func_text += "    bc = bodosql.BodoSQLContext(\n"
     func_text += "        {\n"
     args = [query]
     for i, key in enumerate(dataframe_dict.keys()):
         if input_dist == InputDist.OneD:
-            args.append(_get_dist_df(dataframe_dict[key]))
+            args.append(
+                _get_dist_df(
+                    dataframe_dict[key], check_typing_issues=check_typing_issues
+                )
+            )
         elif input_dist == InputDist.OneDVar:
-            args.append(_get_dist_df(dataframe_dict[key], var_length=True))
+            args.append(
+                _get_dist_df(
+                    dataframe_dict[key],
+                    var_length=True,
+                    check_typing_issues=check_typing_issues,
+                )
+            )
         else:
             args.append(dataframe_dict[key])
         func_text += f"            '{key}': e{i},\n"
-    args = args + values_list
+    args = args + values_list + list(bind_variables)
     func_text += "        }\n"
+    if session_tz is not None:
+        func_text += f"        , default_tz={repr(session_tz)}\n"
     func_text += "    )\n"
-    if optimize_calcite_plan:
-        func_text += f"    result = bc.sql(query"
-    else:
-        func_text += f"    result = bc._test_sql_unoptimized(query"
+    func_text += "    result = bc.sql(query, "
     if keys_list:
-        func_text += ", {"
+        func_text += "{"
         for key in keys_list:
             func_text += f"'{key}': {key}, "
-        func_text += "}"
+        func_text += "}, "
+    else:
+        func_text += "None, "
+    if bind_variables:
+        func_text += "( "
+        for j in range(len(bind_variables)):
+            func_text += f"f{j}, "
+        func_text += "), "
+    else:
+        func_text += "None, "
     func_text += ")\n"
     func_text += "    return result\n"
     locs = {}
@@ -872,6 +1210,9 @@ def _check_query_equal(
     is_out_distributed,
     failure_message,
     convert_nullable_bodosql,
+    convert_columns_to_pandas: bool = False,
+    atol: float = 1e-08,
+    rtol: float = 1e-05,
 ):
     """
     Evaluates the BodoSQL output against the expected output.
@@ -895,23 +1236,43 @@ def _check_query_equal(
 
         convert_nullable_bodosql: Should BodoSQL nullable integers be converted to Object dtype with None.
 
+        convert_columns_to_pandas: Pandas does not support well some datatype such as decimal,
+        list of strings or in general arrow data type. It typically fails at sorting. In that case
+        using convert_columns_to_pandas=True will convert the columns to a string format which may help.
+
+        atol: absolute tolerance used for approximately-equal calculations
+
+        rtol: relative tolerance used for approximately-equal calculations
+
     """
     # convert pyarrow string data to regular object arrays to avoid dtype errors
     for i in range(len(bodosql_output.columns)):
         # pd dtype must be the first value for comparing numpy dtypes
         if pd.StringDtype("pyarrow") == bodosql_output.dtypes.iloc[i]:
             arr = bodosql_output.iloc[:, i].values
-            # arr.to_numpy() fails in Arrow if all values are NA
-            # see test_cond.py::test_decode\[all_scalar_no_case_no_default\]
-            if arr.isna().all():
-                bodosql_output.iloc[:, i] = None
-            else:
-                bodosql_output.iloc[:, i] = arr.to_numpy()
+            try:
+                # Cast to regular string array to avoid dictionary issues.
+                result = pa.compute.cast(arr._pa_array, pa.string()).to_pandas()
+                # Workaround Pandas 2 Arrow setitem error by setting to an int first
+                bodosql_output.iloc[:, i] = 3
+                bodosql_output.iloc[:, i] = result
+            except Exception:
+                pass
 
-    if sort_output:
-        bodosql_output = bodosql_output.sort_values(
-            bodosql_output.columns.tolist()
-        ).reset_index(drop=True)
+    if convert_columns_to_pandas:
+        bodosql_output = bodo.tests.utils.convert_non_pandas_columns(bodosql_output)
+        expected_output = bodo.tests.utils.convert_non_pandas_columns(expected_output)
+    # NOTE: zero length dataframe may cause errors in Arrow's sort
+    if sort_output and len(bodosql_output.dropna(how="all")):
+        # Avoid sorting PyArrow null columns since causes errors in Pandas
+        sort_colnames = [
+            c
+            for i, c in enumerate(bodosql_output.columns)
+            if bodosql_output.dtypes.iloc[i] != pd.ArrowDtype(pa.null())
+        ]
+        bodosql_output = bodosql_output.sort_values(sort_colnames).reset_index(
+            drop=True
+        )
         expected_output = expected_output.sort_values(
             expected_output.columns.tolist()
         ).reset_index(drop=True)
@@ -927,14 +1288,15 @@ def _check_query_equal(
 
     passed = 1
     n_ranks = bodo.get_size()
-    # print("BODO")
-    # print(bodosql_output)
-    # print("SPARK")
-    # print(expected_output)
     # only rank 0 should check if gatherv() called on output
     if not is_out_distributed or bodo.get_rank() == 0:
         passed = _test_equal_guard(
-            bodosql_output, expected_output, check_dtype, convert_nullable_bodosql
+            bodosql_output,
+            expected_output,
+            check_dtype,
+            convert_nullable_bodosql,
+            atol=atol,
+            rtol=rtol,
         )
     n_passed = reduce_sum(passed)
     assert n_passed == n_ranks, failure_message
@@ -945,27 +1307,41 @@ def _test_equal_guard(
     expected_output,
     check_dtype,
     convert_nullable_bodosql,
+    atol: float = 1e-08,
+    rtol: float = 1e-05,
 ):
+    # No need to avoid exceptions if running with a single process and hang is not
+    # possible. TODO: remove _test_equal_guard in general when [BE-2223] is resolved
+    if bodo.get_size() == 1:
+        # convert bodosql output to a value that can be compared with Spark
+        if convert_nullable_bodosql:
+            bodosql_output = convert_nullable_object(bodosql_output)
+        pd.testing.assert_frame_equal(
+            bodosql_output,
+            expected_output,
+            check_dtype,
+            check_column_type=False,
+            rtol=rtol,
+            atol=atol,
+        )
+        return 1
     passed = 1
     try:
         # convert bodosql output to a value that can be compared with Spark
         if convert_nullable_bodosql:
             bodosql_output = convert_nullable_object(bodosql_output)
         pd.testing.assert_frame_equal(
-            bodosql_output, expected_output, check_dtype, check_column_type=False
+            bodosql_output,
+            expected_output,
+            check_dtype,
+            check_column_type=False,
+            rtol=rtol,
+            atol=atol,
         )
     except Exception as e:
         print(e)
         passed = 0
     return passed
-
-
-def check_efficient_join(pandas_code):
-    """
-    Checks that given pandas_code doesn't contain any joins that required
-    merging the whole table on a dummy column.
-    """
-    assert "$__bodo_dummy__" not in pandas_code
 
 
 def convert_spark_bool(df, columns):
@@ -1044,24 +1420,22 @@ def convert_nullable_object(df):
     can interpret the results.
     """
     if any(
-        [
-            isinstance(
-                x,
-                (
-                    pd.core.arrays.integer._IntegerDtype,
-                    pd.core.arrays.boolean.BooleanDtype,
-                    pd.StringDtype,
-                ),
-            )
-            for x in df.dtypes
-        ]
+        isinstance(
+            x,
+            (
+                pd.core.arrays.integer.IntegerDtype,
+                pd.core.arrays.boolean.BooleanDtype,
+                pd.StringDtype,
+            ),
+        )
+        for x in df.dtypes
     ):
         df = df.copy()
         for i, x in enumerate(df.dtypes):
             if isinstance(
                 x,
                 (
-                    pd.core.arrays.integer._IntegerDtype,
+                    pd.core.arrays.integer.IntegerDtype,
                     pd.core.arrays.boolean.BooleanDtype,
                     pd.StringDtype,
                 ),
@@ -1071,22 +1445,39 @@ def convert_nullable_object(df):
     return df
 
 
-def generate_plan(query, dataframe_dict):
+def remove_tz_columns_spark(df: pd.DataFrame, cols: list[str]) -> pd.DataFrame:
+    """Takes any DataFrame columns in df that
+    are also found in cols and converts them from
+    tz-aware to tz-naive. This is necessary for passing data to
+    Spark because Spark will compute the incorrect timestamp when it
+    converts the timezone to local time (as it doesn't handle tz information
+    in a way we can use for testing).
+
+    Args:
+        df (pd.DataFrame): Data which will be an input to spark
+        cols (List[str]): List of column names which if found should be
+            converted from tz-aware to tz-naive.
+
+    Returns:
+        pd.DataFrame: A new DataFrame with possibly some columns changed.
+    """
+    new_df = pd.DataFrame({})
+    naive_cols = set(cols)
+    for col in df.columns:
+        if col in naive_cols:
+            new_df[col] = df[col].dt.tz_convert(None)
+        else:
+            new_df[col] = df[col]
+    return new_df
+
+
+def generate_plan(query, dataframe_dict, session_tz=None):
     """
     Return a plan for a given query with the dictionary
     for a BodoSQLContext.
     """
-    bc = bodosql.BodoSQLContext(dataframe_dict)
+    bc = bodosql.BodoSQLContext(dataframe_dict, session_tz)
     return bc.generate_plan(query)
-
-
-def check_plan_length(query, dataframe_dict, expected_length):
-    """
-    Helper function that verifies a plan length for queries
-    with expected plan sizes.
-    """
-    plan = generate_plan(query, dataframe_dict)
-    assert plan.count("\n") == expected_length
 
 
 def _get_dist_df(df, var_length=False, check_typing_issues=True):
@@ -1168,13 +1559,11 @@ def get_pyspark_literal(value, use_interval):
         # Generate an interval string in Spark with only years and months
         return f"INTERVAL {getattr(value, 'years', 0)} YEARS {getattr(value, 'months', 0)} MONTHS"
     else:
-        raise ValueError(
-            "Named Parameter converstion to Pyspark Literal not supported."
-        )
+        raise ValueError("Named Parameter conversion to Pyspark Literal not supported.")
 
 
 def shrink_data(ctx, n, keys_to_shrink=None, keys_to_not_shrink=None):
-    output_dict = dict()
+    output_dict = {}
     if keys_to_shrink is None:
         keys_to_shrink = ctx.keys()
 
@@ -1207,21 +1596,36 @@ def create_pyspark_schema_from_dataframe(df):
     DataFrame. This is used for tests whose output depends on
     maintaining precision.
     """
-    int_byte_type_map = {
-        1: ByteType(),
-        2: ShortType(),
-        4: IntegerType(),
-        8: LongType(),
+    from numba.core import types
+
+    bodo_to_pyspark_dtype_map = {
+        types.int8: ByteType(),
+        types.uint8: ByteType(),
+        types.int16: ShortType(),
+        types.uint16: ShortType(),
+        types.int32: IntegerType(),
+        types.uint32: IntegerType(),
+        types.int64: LongType(),
+        types.uint64: LongType(),
+        types.float32: FloatType(),
+        types.float64: DoubleType(),
+        bodo.datetime64ns: TimestampType(),
+        bodo.timedelta64ns: DayTimeIntervalType(),
     }
-    float_byte_type_map = {4: FloatType(), 8: DoubleType()}
+
+    df_type = bodo.typeof(df)
 
     field_list = []
-    for i, col in enumerate(df.columns):
-        dtype = df.dtypes[i]
-        if np.issubdtype(dtype, np.integer):
-            pyspark_type = int_byte_type_map[dtype.itemsize]
-        elif np.issubdtype(dtype, np.floating):
-            pyspark_type = float_byte_type_map[dtype.itemsize]
+    for col, arr_type in zip(df_type.columns, df_type.data):
+        if (
+            isinstance(
+                arr_type, (types.Array, bodo.IntegerArrayType, bodo.FloatingArrayType)
+            )
+            or arr_type == bodo.boolean_array_type
+        ):
+            pyspark_type = bodo_to_pyspark_dtype_map[arr_type.dtype]
+        elif arr_type == bodo.string_array_type:
+            pyspark_type = StringType()
         else:
             raise TypeError("Type mapping to Pyspark Schema not implemented yet.")
         field_list.append(StructField(col, pyspark_type, True))
@@ -1229,7 +1633,7 @@ def create_pyspark_schema_from_dataframe(df):
 
 
 def make_tables_nullable(input_ctx):
-    output_ctx = dict()
+    output_ctx = {}
     np.random.seed(42)
 
     for table_name, table_value in input_ctx.items():
@@ -1254,7 +1658,6 @@ def remap_spark_agg_fn_name(query):
     variable names or literals in SQL queries.
     """
     spark_dict = {
-        "ANY_VALUE": "FIRST",
         "VARIANCE_POP": "VAR_POP",
         "VARIANCE_SAMP": "VAR_SAMP",
     }
@@ -1280,6 +1683,36 @@ def get_equivalent_spark_agg_query(query):
     spark_query = re.sub(
         "VARIANCE_SAMP\\(([a-zA-Z0-9-_]+)\\)", "VAR_SAMP(\\1)", spark_query
     )
+    spark_query = re.sub(
+        "CAST\\(([a-zA-Z0-9-_]+) AS VARCHAR\\)", "CAST(\\1 AS STRING)", spark_query
+    )
 
     return spark_query
     # TODO (allai5): BY CUBE, BY ROLLUP
+
+
+def gen_unique_id(name_prefix: str) -> str:
+    path = None
+    if bodo.get_rank() == 0:
+        path = gen_unique_table_id(name_prefix)
+    path = MPI.COMM_WORLD.bcast(path)
+    return path
+
+
+def assert_equal_par(bodo_output, py_output, check_dtype=False):
+    passed = _test_equal_guard(bodo_output, py_output, check_dtype, False)
+    # count how many pes passed the test, since throwing exceptions directly
+    # can lead to inconsistency across pes and hangs
+    n_passed = reduce_sum(passed)
+    assert n_passed == bodo.get_size(), "Parallel test failed"
+
+
+def replace_type_varchar(output: pd.DataFrame):
+    """Additionally, erase precision from VARCHAR types. This is useful for
+    asserting on the output of functions like describe_table, where we just want
+    to check if a column is a VARCHAR type."""
+    res = output.copy()
+    # replace VARCHAR(precision) with VARCHAR
+    type_is_varchar = res["TYPE"].map(lambda x: x.startswith("VARCHAR"))
+    res["TYPE"][type_is_varchar] = "VARCHAR"
+    return res

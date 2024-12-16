@@ -1,4 +1,3 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
 Tests of series.map and dataframe.apply used for parity
 with pyspark.sql.functions that operation on strings as
@@ -73,7 +72,7 @@ def binary_dataframe_val(request):
 @pytest.mark.slow
 def test_bin(memory_leak_check):
     def test_impl(df):
-        return df.A.map(lambda x: "{0:b}".format(x))
+        return df.A.map(lambda x: f"{x:b}")
 
     df = pd.DataFrame(
         {

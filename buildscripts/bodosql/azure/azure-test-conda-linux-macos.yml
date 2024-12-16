@@ -1,0 +1,120 @@
+parameters:
+- name: name
+  type: string
+  default: ''
+- name: matrix
+  type: object
+  default: []
+- name: CACHE_TEST
+  type: boolean
+  default: false
+- name: SPAWN_MODE_TEST
+  type: boolean
+  default: false
+- name: BODO_STREAMING_ENABLED
+  type: number
+  default: 0
+
+jobs:
+- job: ${{ parameters.name }}
+  variables:
+    - group: AWS-427-S3-Access-Keys
+    - group: SnowflakeCredentials
+    - group: TabularCredentials
+  timeoutInMinutes: 360
+  pool: ScalingVMSet
+  strategy:
+    matrix:
+      ${{ insert }}: ${{ parameters.matrix }}
+
+  steps:
+  - script: |
+      set -exo pipefail
+      curl -fsSL https://pixi.sh/install.sh | bash
+      source ~/.bashrc
+      echo "##vso[task.prependpath]$HOME/.pixi/bin"
+    displayName: Install Pixi
+  - script: pixi install -v --locked -e azure
+    displayName: Install Test Environment
+
+  - script: |
+      set -exo pipefail
+      pixi run -e azure build-bodo -Cbuild.verbose=true
+      pixi run -e azure build-bodosql
+      pixi run -e azure build-iceberg
+      pixi run -e azure -- sccache --show-stats
+    env:
+      AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
+      AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
+      DISABLE_CCACHE: 1  # Just use sccache directly on CI
+      USE_BODO_ARROW_FORK: 1  # Build from Source with Arrow Fork
+    displayName: 'Build Bodo, BodoSQL, and Iceberg Connector'
+
+  - script: |
+      set -exo pipefail
+      eval "$(pixi shell-hook --shell bash -e azure)"
+
+      wget -q -O - "https://adlsresources.blob.core.windows.net/adlsresources/hadoop-3.3.2.tar.gz" | sudo tar -xzf - -C /opt
+      cd azurefs-sas-token-provider
+      pip install --no-deps --no-build-isolation -ve .
+    displayName: "Setup Snowflake ADLS Testing (only Linux)"
+    retryCountOnTaskFailure: 5
+
+  - script: |
+      pixi list
+      pixi run pip list
+    continueOnError: true
+    displayName: Export Environment Spec
+
+  - script: |
+      set -exo pipefail
+      eval "$(pixi shell-hook --shell bash -e azure)"
+
+      python -c "import bodo; print(bodo.__version__)"
+      python -c "import bodosql; print(bodosql.__version__)"
+
+      unamestr=`uname`
+      if [[ "$unamestr" == 'Linux' ]]; then
+        echo "Setting up Hadoop (and Arrow) environment variables"
+        export HADOOP_HOME=/opt/hadoop-3.3.2
+        export HADOOP_INSTALL=$HADOOP_HOME
+        export HADOOP_MAPRED_HOME=$HADOOP_HOME
+        export HADOOP_COMMON_HOME=$HADOOP_HOME
+        export HADOOP_HDFS_HOME=$HADOOP_HOME
+        export YARN_HOME=$HADOOP_HOME
+        export HADOOP_COMMON_LIB_NATIVE_DIR=$HADOOP_HOME/lib/native
+        export HADOOP_OPTS='-Djava.library.path=$HADOOP_HOME/lib'
+        export HADOOP_OPTIONAL_TOOLS=hadoop-azure
+        export ARROW_LIBHDFS_DIR=$HADOOP_HOME/lib/native
+        export CLASSPATH=`$HADOOP_HOME/bin/hdfs classpath --glob`
+      else
+        echo "Skipping hadoop/arrow env var setup"
+      fi
+
+      cd $(System.DefaultWorkingDirectory)/BodoSQL
+      # For caching tests we need to update the location of the decryption file.
+      # We set the absolute path as an environment variable.
+      export BODO_TRACING_DECRYPTION_FILE_PATH=`echo "$(System.DefaultWorkingDirectory)/buildscripts/decompress_traces.py"`
+      if [[ "${{ parameters.CACHE_TEST }}" == "True" ]]; then
+        python -u -m bodosql.runtests_caching "${{ parameters.name }}" "$(NP)" bodosql/tests/caching_tests/
+      elif [[ "${{ parameters.SPAWN_MODE_TEST }}" == "True" ]]; then
+        export BODO_TEST_SPAWN_MODE=1
+        export BODO_NUM_WORKERS="$NP"
+        pytest -s -v -p no:faulthandler -Wignore -m "$(PYTEST_MARKER)" bodosql/tests --junitxml=pytest-report-sql-spawn-mode.xml --test-run-title="${{ parameters.name }}"
+      else
+        python -u -m bodosql.runtests "${{ parameters.name }}" "$(NP)" -s -v -p no:faulthandler -m "$(PYTEST_MARKER)" bodosql/tests/
+      fi
+    env:
+      SF_USERNAME: $(SNOWFLAKE_USER)
+      SF_PASSWORD: $(SNOWFLAKE_PASSWORD)
+      SF_AZURE_USER: $(SF_AZURE_USER)
+      SF_AZURE_PASSWORD: $(SF_AZURE_PASSWORD)
+      TABULAR_CREDENTIAL: $(TABULAR_CREDENTIAL)
+      AZURE_STORAGE_ACCOUNT_NAME: $(AZURE_ICEBERG_STORAGE_ACCOUNT)
+      AZURE_STORAGE_ACCOUNT_KEY: $(AZURE_ICEBERG_ACCESS_KEY)
+      AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
+      AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
+      AWS_REGION: us-east-1
+      BODO_STREAMING_ENABLED: ${{ parameters.BODO_STREAMING_ENABLED }}
+      BODO_SPAWN_MODE: "0"
+    displayName: 'Test BodoSQL'

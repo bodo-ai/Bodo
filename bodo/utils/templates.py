@@ -1,10 +1,12 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
 Helper functions and classes to simplify Template Generation
 for Bodo classes.
 """
+
 import numba
 from numba.core.typing.templates import AttributeTemplate
+
+from bodo.ir.unsupported_method_template import _UnsupportedTemplate
 
 
 class OverloadedKeyAttributeTemplate(AttributeTemplate):
@@ -41,7 +43,7 @@ class OverloadedKeyAttributeTemplate(AttributeTemplate):
                 # in _attr.
                 if isinstance(
                     templates[i], numba.core.typing.templates._OverloadAttributeTemplate
-                ):
+                ) or isinstance(templates[i], _UnsupportedTemplate):
                     s.add(templates[i]._attr)
             self._attr_set = s
 

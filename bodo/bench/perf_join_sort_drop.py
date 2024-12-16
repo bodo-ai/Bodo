@@ -1,6 +1,5 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
-"""Measure performance of various operations that uses the unordered_map/unordered_set
-"""
+"""Measure performance of various operations that uses the unordered_map/unordered_set"""
+
 import random
 import string
 
@@ -72,7 +71,7 @@ def test_dd_numpy_int_nan(n, len_siz):
     """
 
     def test_impl(df1):
-        df2 = df1.drop_duplicates()
+        df1.drop_duplicates()
         return True
 
     random.seed(5)
@@ -90,7 +89,7 @@ def test_dd_strings(n, len_siz):
     """
 
     def test_impl(df1):
-        df2 = df1.drop_duplicates()
+        df1.drop_duplicates()
         return True
 
     random.seed(5)
@@ -115,7 +114,7 @@ def test_dd_nullable_int_bool(n, len_siz):
     """
 
     def test_impl(df1):
-        df2 = df1.drop_duplicates()
+        df1.drop_duplicates()
         return True
 
     random.seed(5)
@@ -130,11 +129,11 @@ def test_join_nullable_int(n, len_siz):
     """
 
     def test_impl1(df1, df2):
-        df3 = df1.merge(df2, how="inner", on=["A", "B"])
+        df1.merge(df2, how="inner", on=["A", "B"])
         return True
 
     def test_impl2(df1, df2):
-        df3 = df1.merge(df2, how="outer", on=["A", "B"])
+        df1.merge(df2, how="outer", on=["A", "B"])
         return True
 
     random.seed(5)
@@ -153,7 +152,7 @@ def test_sort_nullable_int(n, len_siz):
     """
 
     def test_impl(df1):
-        df2 = df1.sort_values(by=["A", "B"])
+        df1.sort_values(by=["A", "B"])
         return True
 
     random.seed(5)

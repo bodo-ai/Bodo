@@ -1,4 +1,3 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 import datetime
 import random
 import string
@@ -7,10 +6,10 @@ from decimal import Decimal
 import numba
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 import pytest
 
 import bodo
-from bodo.pandas_compat import pandas_version
 from bodo.tests.utils import (
     DeadcodeTestPipeline,
     DistTestPipeline,
@@ -23,8 +22,14 @@ from bodo.tests.utils import (
     gen_random_list_string_array,
     get_start_end,
     has_udf_call,
+    pytest_mark_pandas,
 )
 from bodo.utils.typing import BodoError
+
+# Note: this file tests a large mix of features that are critical
+# for BodoSQL, but also a large number that are only relevent
+# for Python. The former needs to be tested, but the latter can
+# be given special marks so it is infrequently tested.
 
 
 @pytest.fixture(
@@ -45,6 +50,20 @@ from bodo.utils.typing import BodoError
                 }
             ),
             marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": [2, 1, 1, 1, 2, 2, 1],
+                    "B": pd.Series(
+                        [float(i) if i % 2 == 0 else None for i in range(7)],
+                        dtype="Float64",
+                    ),
+                    "C": [3, 5, 6, 5, 4, 4, 3],
+                }
+            ),
+            marks=pytest.mark.slow,
+            id="nullable_float",
         ),
         pytest.param(
             pd.DataFrame(
@@ -225,9 +244,7 @@ def test_nullable_int(memory_leak_check):
         }
     )
 
-    # pandas 1.2 has a regression here: output is int64 instead of Int8
-    # so we disable check_dtype
-    check_func(impl, (df,), sort_output=True, check_dtype=False)
+    check_func(impl, (df,), sort_output=True)
     # pandas 1.0 has a regression here: output is int64 instead of Int8
     # so we disable check_dtype
     check_func(impl_select_colB, (df,), sort_output=True, check_dtype=False)
@@ -236,6 +253,141 @@ def test_nullable_int(memory_leak_check):
     check_func(impl_select_colH, (df,), sort_output=True, check_dtype=False)
 
 
+def test_groupby_sum_integer_upcast(memory_leak_check):
+    """
+    Test that we upcast output of groupby sum on integers to their
+    64-bit variants and don't overflow.
+    """
+
+    def impl(df):
+        A = df.groupby("A").sum()
+        return A
+
+    df = pd.DataFrame(
+        {
+            "A": pd.array([1, 1, 1, 2, 2, 2, 2], "Int32"),
+            "Int8": pd.Series(
+                np.array([124, 124, 127, 54, 125, -4, np.nan]), dtype="Int8"
+            ),
+            "int8": pd.Series(np.array([124, 124, 127, 54, 125, -4, 20]), dtype="int8"),
+            "Int16": pd.Series(
+                np.array([16000, 16000, 16000, 32000, 32000, -16000, np.nan]),
+                dtype="Int16",
+            ),
+            "int16": pd.Series(
+                np.array([16000, 16000, 16000, 32000, 32000, -16000, 9099]),
+                dtype="int16",
+            ),
+            "Int32": pd.Series(
+                np.array(
+                    [
+                        1_000_000_000,
+                        1_000_000_000,
+                        1_000_000_000,
+                        2_000_000_000,
+                        2_000_000_000,
+                        -1_000_000_000,
+                        np.nan,
+                    ]
+                ),
+                dtype="Int32",
+            ),
+            "int32": pd.Series(
+                np.array(
+                    [
+                        1_000_000_000,
+                        1_000_000_000,
+                        1_000_000_000,
+                        2_000_000_000,
+                        2_000_000_000,
+                        -1_000_000_000,
+                        8790,
+                    ]
+                ),
+                dtype="int32",
+            ),
+            "UInt8": pd.Series(
+                np.array([124, 124, 127, 54, 125, 120, np.nan]), dtype="UInt8"
+            ),
+            "uint8": pd.Series(
+                np.array([124, 124, 127, 54, 125, 120, 20]), dtype="uint8"
+            ),
+            "UInt16": pd.Series(
+                np.array([16000, 16000, 16000, 32000, 32000, 1000, np.nan]),
+                dtype="UInt16",
+            ),
+            "uint16": pd.Series(
+                np.array([16000, 16000, 16000, 32000, 32000, 1000, 9099]),
+                dtype="uint16",
+            ),
+            "UInt32": pd.Series(
+                np.array(
+                    [
+                        1_000_000_000,
+                        1_000_000_000,
+                        1_000_000_000,
+                        2_000_000_000,
+                        2_000_000_000,
+                        1_000_000_000,
+                        np.nan,
+                    ]
+                ),
+                dtype="UInt32",
+            ),
+            "uint32": pd.Series(
+                np.array(
+                    [
+                        1_000_000_000,
+                        1_000_000_000,
+                        1_000_000_000,
+                        2_000_000_000,
+                        2_000_000_000,
+                        1_000_000_000,
+                        8790,
+                    ]
+                ),
+                dtype="uint32",
+            ),
+        }
+    )
+
+    check_func(impl, (df,), sort_output=True)
+
+
+@pytest.mark.slow
+def test_groupby_nullable_float(memory_leak_check):
+    def impl(df):
+        A = df.groupby("A").sum()
+        return A
+
+    def impl_select_colB(df):
+        A = df.groupby("A")["B"].sum()
+        return A
+
+    def impl_select_colC(df):
+        A = df.groupby("A")["C"].sum()
+        return A
+
+    df = pd.DataFrame(
+        {
+            "A": pd.array([2, 1, 1, 1, 21, 2, 11], "Int64"),
+            "B": pd.Series(
+                np.array([np.nan, 3.14, 2.0, np.nan, np.nan, np.nan, 20]),
+                dtype="Float32",
+            ),
+            "C": pd.Series(
+                np.array([np.nan, 3.14, 2.0, np.nan, np.nan, np.nan, 20]),
+                dtype="Float64",
+            ),
+        }
+    )
+
+    check_func(impl, (df,), sort_output=True)
+    check_func(impl_select_colB, (df,), sort_output=True)
+    check_func(impl_select_colC, (df,), sort_output=True)
+
+
+@pytest_mark_pandas
 @pytest.mark.parametrize(
     "df_null",
     [
@@ -271,6 +423,7 @@ def test_return_type_nullable_cumsum_cumprod(df_null, memory_leak_check):
     check_func(impl2, (df_null,), sort_output=True, check_dtype=False)
 
 
+@pytest_mark_pandas
 def test_groupby_df_numpy_bool(memory_leak_check):
     """
     Test calling groupby using a scalar column bool,
@@ -291,6 +444,7 @@ def test_groupby_df_numpy_bool(memory_leak_check):
     check_func(impl, (), sort_output=True, reset_index=True)
 
 
+@pytest_mark_pandas
 def test_all_null_keys(memory_leak_check):
     """
     Test Groupby when all rows have null keys (returns empty dataframe)
@@ -403,14 +557,459 @@ def test_sum_bool(df, memory_leak_check):
     check_func(impl, (df,), sort_output=True, reset_index=True)
 
 
+@pytest.mark.parametrize(
+    "df",
+    [
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": ["A"] * 10,
+                    "B": pd.Series([i**2 for i in range(10)]),
+                }
+            ),
+            id="1_group-no_null",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": ["A"] * 10,
+                    "B": pd.Series(
+                        [None if i % 4 == 3 else i**2 for i in range(10)],
+                        dtype=pd.Int32Dtype(),
+                    ),
+                }
+            ),
+            id="1_group-with_null",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": list("ABCDEFGHIJ") * 10,
+                    "B": pd.Series(
+                        [
+                            np.arctanh((i - 50) / 75) * i ** (1 / (1 + i % 10))
+                            for i in range(100)
+                        ]
+                    ),
+                }
+            ),
+            id="10_groups-no_null",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": list("ABCDEFGHIJ") * 10,
+                    "B": pd.Series(
+                        [
+                            (
+                                None
+                                if (i**2) % 17 > 13
+                                else np.arctanh((i - 50) / 75) * i ** (1 / (1 + i % 10))
+                            )
+                            for i in range(100)
+                        ]
+                    ),
+                }
+            ),
+            id="10_groups-with_null",
+        ),
+    ],
+)
+def test_kurtosis_skew(df, memory_leak_check):
+    """
+    Test groupby with pd.NamedAgg() for kurtosis and skew
+    """
+
+    def impl(df):
+        return df.groupby(["A"], as_index=False, dropna=False).agg(
+            out_1=pd.NamedAgg(column="B", aggfunc="kurtosis"),
+            out_2=pd.NamedAgg(column="B", aggfunc="skew"),
+        )
+
+    # A function that simulates the aggregation above since kurtosis is not
+    # natively supported in groupby.aggs
+    def py_impl(df):
+        result = df.groupby(["A"], as_index=False, dropna=False).apply(
+            lambda group: pd.DataFrame(
+                {
+                    "A": [group["A"].iloc[0]],
+                    "out_1": group["B"].kurtosis(),
+                    "out_2": group["B"].skew(),
+                }
+            )
+        )
+        result.index = result.index.droplevel(1)
+        return result
+
+    answer = py_impl(df)
+
+    check_func(impl, (df,), py_output=answer, sort_output=True, reset_index=True)
+
+
+@pytest.mark.parametrize(
+    "df_sep_and_expected_out",
+    [
+        pytest.param(
+            (
+                pd.DataFrame(
+                    {
+                        "A": list("ABCDEF"),
+                        "B": pd.Series(list(np.arange(3)) * 2),
+                        "C": pd.arrays.ArrowStringArray(
+                            pa.array(
+                                [""] * 6,
+                                type=pa.dictionary(pa.int32(), pa.string()),
+                            )
+                        ),
+                    }
+                ),
+                pd.DataFrame({"AGG_OUTPUT_0": ["AD", "BE", "CF"]}),
+            ),
+            id="no-null",
+        ),
+        pytest.param(
+            (
+                pd.DataFrame(
+                    {
+                        "A": ["A", None, None] + [None, "B", None] + [None, "C", None],
+                        "B": pd.Series(list(np.arange(3)) * 3),
+                        "C": pd.arrays.ArrowStringArray(
+                            pa.array(
+                                ["__different_sep__"] * 9,
+                                type=pa.dictionary(pa.int32(), pa.string()),
+                            )
+                        ),
+                    }
+                ),
+                pd.DataFrame({"AGG_OUTPUT_0": ["A", "B__different_sep__C", ""]}),
+            ),
+            id="some-null",
+        ),
+        pytest.param(
+            (
+                pd.DataFrame(
+                    {
+                        # A few strings are needed so that the dtype can be inferred
+                        "A": pd.Series((["A"] + [None] * 2) * 5, dtype=str),
+                        "B": pd.Series(list(np.arange(3)) * 5),
+                        "C": pd.arrays.ArrowStringArray(
+                            pa.array(
+                                ["__different_sep__"] * 15,
+                                type=pa.dictionary(pa.int32(), pa.string()),
+                            )
+                        ),
+                    }
+                ),
+                pd.DataFrame(
+                    {
+                        "AGG_OUTPUT_0": pd.Series(
+                            [
+                                "A__different_sep__A__different_sep__A__different_sep__A__different_sep__A"
+                            ]
+                            + [""] * 2,
+                            dtype=str,
+                        )
+                    }
+                ),
+            ),
+            id="all-null",
+        ),
+        pytest.param(
+            (
+                pd.DataFrame(
+                    {
+                        "A": ["½⅓¼⅕⅙⅐⅛⅑ ⅔⅖ ¾⅗ ⅘ ⅚⅝ ⅞", "₩", None]
+                        + [None, "B", None]
+                        + [None, "Å Ů ẘ ẙ", None],
+                        "B": pd.Series(list(np.arange(3)) * 3),
+                        "C": pd.arrays.ArrowStringArray(
+                            pa.array(
+                                ["__« »__"] * 9,
+                                type=pa.dictionary(pa.int32(), pa.string()),
+                            )
+                        ),
+                    }
+                ),
+                pd.DataFrame(
+                    {
+                        "AGG_OUTPUT_0": [
+                            "½⅓¼⅕⅙⅐⅛⅑ ⅔⅖ ¾⅗ ⅘ ⅚⅝ ⅞",
+                            "₩__« »__B__« »__Å Ů ẘ ẙ",
+                            "",
+                        ]
+                    }
+                ),
+            ),
+            id="listagg_nonascii",
+        ),
+        pytest.param(
+            (
+                pd.DataFrame(
+                    {
+                        "A": [""] * 9,
+                        "B": pd.Series(list(np.arange(3)) * 3),
+                        "C": pd.arrays.ArrowStringArray(
+                            pa.array(
+                                [""] * 9,
+                                type=pa.dictionary(pa.int32(), pa.string()),
+                            )
+                        ),
+                    }
+                ),
+                pd.DataFrame({"AGG_OUTPUT_0": [""] * 3}),
+            ),
+            id="all-empty-edgecase",
+        ),
+    ],
+)
+def test_listagg_sep(df_sep_and_expected_out, memory_leak_check):
+    """
+    Test simple groupby with listagg + separator
+    """
+    df, expected = df_sep_and_expected_out
+
+    def impl(df):
+        return df.groupby(["B"], dropna=False).agg(
+            AGG_OUTPUT_0=bodo.utils.utils.ExtendedNamedAgg(
+                column="A", aggfunc="listagg", additional_args=("C", (), (), ())
+            )
+        )
+
+    check_func(
+        impl,
+        (df,),
+        check_names=False,
+        reset_index=True,
+        py_output=expected,
+    )
+
+
+@pytest.mark.parametrize(
+    "df_sep_and_expected_out",
+    [
+        pytest.param(
+            (
+                pd.DataFrame(
+                    {
+                        "A": ["A"] * 3 + ["B"] * 3,
+                        "B": pd.Series(list(np.arange(3)) * 2),
+                        "C": pd.arrays.ArrowStringArray(
+                            pa.array(
+                                ["_sep_"] * 6,
+                                type=pa.dictionary(pa.int32(), pa.string()),
+                            )
+                        ),
+                        "C2": pd.arrays.ArrowStringArray(
+                            pa.array(
+                                ["_sep2_"] * 6,
+                                type=pa.dictionary(pa.int32(), pa.string()),
+                            )
+                        ),
+                        "D": np.arange(6),
+                        "int_col": [1] * 6,
+                        "int_col2": [1] * 6,
+                    }
+                ),
+                (("D",), (True,), ("first",)),
+                (("D",), (False,), ("first",)),
+                pd.DataFrame(
+                    {
+                        "sum_col": [2] * 3,
+                        "AGG_OUTPUT_0": ["A_sep_B", "A_sep_B", "A_sep_B"],
+                        "max_col": [1] * 3,
+                        "AGG_OUTPUT_1": ["B_sep2_A", "B_sep2_A", "B_sep2_A"],
+                        "max_col_2": [1] * 3,
+                    }
+                ),
+            ),
+            id="simple-1col-sort",
+        ),
+        pytest.param(
+            (
+                pd.DataFrame(
+                    {
+                        "A": list(string.ascii_uppercase[:6]),
+                        "B": [1] * 6,
+                        "C": pd.arrays.ArrowStringArray(
+                            pa.array(
+                                ["_ó_"] * 6,
+                                type=pa.dictionary(pa.int32(), pa.string()),
+                            )
+                        ),
+                        "C2": pd.arrays.ArrowStringArray(
+                            pa.array(
+                                ["_é_"] * 6,
+                                type=pa.dictionary(pa.int32(), pa.string()),
+                            )
+                        ),
+                        "D": list(np.arange(3)) * 2,
+                        "E": [1] * 3 + [2] * 3,
+                        "int_col": [1] * 6,
+                        "int_col2": [1] * 6,
+                    }
+                ),
+                (
+                    (
+                        "E",
+                        "D",
+                    ),
+                    (True, False),
+                    ("first", "first"),
+                ),
+                (("D", "E"), (False, False), ("first", "first")),
+                pd.DataFrame(
+                    {
+                        "sum_col": [6],
+                        "AGG_OUTPUT_0": [
+                            "C_ó_B_ó_A_ó_F_ó_E_ó_D",
+                        ],
+                        "max_col": [1],
+                        "AGG_OUTPUT_1": ["F_é_C_é_E_é_B_é_D_é_A"],
+                        "max_col_2": [1],
+                    }
+                ),
+            ),
+            id="test-2col-sort",
+        ),
+        pytest.param(
+            (
+                pd.DataFrame(
+                    {
+                        "A": list(string.ascii_uppercase[:6]),
+                        "B": [1] * 6,
+                        "C": pd.arrays.ArrowStringArray(
+                            pa.array(
+                                ["_ó_"] * 6,
+                                type=pa.dictionary(pa.int32(), pa.string()),
+                            )
+                        ),
+                        "C2": pd.arrays.ArrowStringArray(
+                            pa.array(
+                                ["_é_"] * 6,
+                                type=pa.dictionary(pa.int32(), pa.string()),
+                            )
+                        ),
+                        "D": [None, 1, None, 2, None, 3],
+                        "E": [1, None, 2, None, 3, None],
+                        "int_col": [1] * 6,
+                        "int_col2": [1] * 6,
+                    }
+                ),
+                (
+                    (
+                        "E",
+                        "D",
+                    ),
+                    (True, True),
+                    ("first", "first"),
+                ),
+                (("D", "E"), (True, False), ("last", "first")),
+                pd.DataFrame(
+                    {
+                        "sum_col": [6],
+                        "AGG_OUTPUT_0": [
+                            "B_ó_D_ó_F_ó_A_ó_C_ó_E",
+                        ],
+                        "max_col": [1],
+                        "AGG_OUTPUT_1": ["B_é_D_é_F_é_E_é_C_é_A"],
+                        "max_col_2": [1],
+                    }
+                ),
+            ),
+            id="test-2col-na-sort",
+        ),
+    ],
+)
+def test_listagg_within_group_sorting(df_sep_and_expected_out, memory_leak_check):
+    """
+    Test groupby with listagg with withing group sorting.
+    """
+    df, additional_args_1, additional_args_2, expected = df_sep_and_expected_out
+
+    orderby_cols_1, ascending_1, nulls_first_1 = additional_args_1
+    orderby_cols_2, ascending_2, nulls_first_2 = additional_args_2
+
+    def impl(df):
+        return df.groupby(["B"], dropna=False).agg(
+            sum_col=pd.NamedAgg(column="int_col", aggfunc="sum"),
+            AGG_OUTPUT_0=bodo.utils.utils.ExtendedNamedAgg(
+                column="A",
+                aggfunc="listagg",
+                additional_args=("C", orderby_cols_1, ascending_1, nulls_first_1),
+            ),
+            max_col=pd.NamedAgg(column="int_col", aggfunc="max"),
+            AGG_OUTPUT_1=bodo.utils.utils.ExtendedNamedAgg(
+                column="A",
+                aggfunc="listagg",
+                additional_args=("C2", orderby_cols_2, ascending_2, nulls_first_2),
+            ),
+            max_col_2=pd.NamedAgg(column="int_col2", aggfunc="max"),
+        )
+
+    check_func(
+        impl,
+        (df,),
+        check_names=False,
+        reset_index=True,
+        py_output=expected,
+    )
+
+
+def test_listagg_non_duplicate():
+    """
+    Tests a specific issue wherein listagg would be treated as being a duplicate aggregation,
+    despite having different additional arguments."""
+    df = pd.DataFrame(
+        {
+            "A": list(string.ascii_uppercase[:6]),
+            "B": [1] * 6,
+            "C": pd.arrays.ArrowStringArray(
+                pa.array(
+                    ["_ó_"] * 6,
+                    type=pa.dictionary(pa.int32(), pa.string()),
+                )
+            ),
+            "D": [None, 1, None, 2, None, 3],
+            "E": [1, None, 2, None, 3, None],
+        }
+    )
+
+    def impl(df):
+        return df.groupby(["B"], dropna=False).agg(
+            AGG_OUTPUT_0=bodo.utils.utils.ExtendedNamedAgg(
+                column="A",
+                aggfunc="listagg",
+                additional_args=("C", ("D", "E"), (True, True), ("first", "first")),
+            ),
+            AGG_OUTPUT_1=bodo.utils.utils.ExtendedNamedAgg(
+                column="A",
+                aggfunc="listagg",
+                additional_args=("C", ("D", "E"), (True, False), ("first", "first")),
+            ),
+            AGG_OUTPUT_2=bodo.utils.utils.ExtendedNamedAgg(
+                column="A",
+                aggfunc="listagg",
+                additional_args=("C", ("D", "E"), (True, True), ("first", "last")),
+            ),
+        )
+
+    expected_output = pd.DataFrame(
+        {
+            "AGG_OUTPUT_0": [
+                "A_ó_C_ó_E_ó_B_ó_D_ó_F",
+            ],
+            "AGG_OUTPUT_1": ["E_ó_C_ó_A_ó_B_ó_D_ó_F"],
+            "AGG_OUTPUT_2": ["A_ó_C_ó_E_ó_B_ó_D_ó_F"],
+        }
+    )
+
+    check_func(
+        impl, (df,), sort_output=True, reset_index=True, py_output=expected_output
+    )
+
+
 @pytest.mark.slow
 def test_sum_string(memory_leak_check):
-
-    assert pandas_version in (
-        (1, 3),
-        (1, 4),
-    ), "String sum will raise a TypeError in a later Pandas version."
-
     def impl(df):
         A = df.groupby("A").sum()
         return A
@@ -419,7 +1018,6 @@ def test_sum_string(memory_leak_check):
         {
             "A": [1, 1, 1, 2, 3, 3, 4, 0, 5, 0, 11],
             "B": ["a", "b", "c", "d", "", "AA"] + gen_nonascii_list(5),
-            # String cols are dropped for sum, so we need an extra column to avoid empty output in that case
             "C": [1] * 11,
         }
     )
@@ -428,14 +1026,7 @@ def test_sum_string(memory_leak_check):
 
 @pytest.mark.slow
 def test_sum_binary(memory_leak_check):
-    """Tests sum on dataframes containing binary columns. Currently, since the numeric_only
-    argument should default to true, this should simply result in the column being dropped.
-    In later versions of pandas, this may raise a type error by default."""
-
-    assert pandas_version in (
-        (1, 3),
-        (1, 4),
-    ), "Object sum will raise a TypeError in a later Pandas version."
+    """Tests sum on dataframes containing binary columns."""
 
     def impl(df):
         A = df.groupby("A").sum()
@@ -445,57 +1036,102 @@ def test_sum_binary(memory_leak_check):
         {
             "A": [1, 1, 1, 2, 3, 3, 4, 0, 5, 0, 11],
             "B": [b"a", b"b", b"c", b"d", b"", b"AA", b"ABC", b"AB", b"c", b"F", b"GG"],
-            # Binary cols are dropped for sum, so we need an extra column to avoid empty output in that case
             "C": [1] * 11,
         }
     )
     check_func(impl, (df1,), sort_output=True)
 
 
-def test_random_decimal_sum_min_max_last(is_slow_run, memory_leak_check):
+# ------ impls used within the test function "random_decimal_sum_min_max_last" below ------
+
+
+def random_decimal_sum_min_max_last_impl1(df):
+    df_ret = df.groupby("A", as_index=False).nunique()
+    return df_ret["B"].copy()
+
+
+def random_decimal_sum_min_max_last_impl2(df):
+    A = df.groupby("A", as_index=False).last()
+    return A
+
+
+def random_decimal_sum_min_max_last_impl3(df):
+    A = df.groupby("A", as_index=False)["B"].first()
+    return A
+
+
+def random_decimal_sum_min_max_last_impl4(df):
+    A = df.groupby("A", as_index=False)["B"].count()
+    return A
+
+
+def random_decimal_sum_min_max_last_impl5(df):
+    A = df.groupby("A", as_index=False).max()
+    return A
+
+
+def random_decimal_sum_min_max_last_impl6(df):
+    A = df.groupby("A", as_index=False).min()
+    return A
+
+
+def random_decimal_sum_min_max_last_impl7(df):
+    A = df.groupby("A", as_index=False)["B"].mean()
+    return A
+
+
+def random_decimal_sum_min_max_last_impl8(df):
+    A = df.groupby("A", as_index=False)["B"].median()
+    return A
+
+
+def random_decimal_sum_min_max_last_impl9(df):
+    A = df.groupby("A", as_index=False)["B"].var()
+    return A
+
+
+# We need to drop column A because the column A is replaced by std(A)
+# in pandas due to a pandas bug.
+def random_decimal_sum_min_max_last_impl10(df):
+    A = df.groupby("A", as_index=False)["B"].std()
+    return A.drop(columns="A")
+
+
+@pytest.mark.parametrize(
+    "impl",
+    [
+        pytest.param(random_decimal_sum_min_max_last_impl1, id="impl1"),
+        pytest.param(
+            random_decimal_sum_min_max_last_impl2, id="impl2", marks=pytest.mark.slow
+        ),
+        pytest.param(
+            random_decimal_sum_min_max_last_impl3, id="impl3", marks=pytest.mark.slow
+        ),
+        pytest.param(
+            random_decimal_sum_min_max_last_impl4, id="impl4", marks=pytest.mark.slow
+        ),
+        pytest.param(
+            random_decimal_sum_min_max_last_impl5, id="impl5", marks=pytest.mark.slow
+        ),
+        pytest.param(
+            random_decimal_sum_min_max_last_impl6, id="impl6", marks=pytest.mark.slow
+        ),
+        pytest.param(
+            random_decimal_sum_min_max_last_impl7, id="impl7", marks=pytest.mark.slow
+        ),
+        pytest.param(
+            random_decimal_sum_min_max_last_impl8, id="impl8", marks=pytest.mark.slow
+        ),
+        pytest.param(
+            random_decimal_sum_min_max_last_impl9, id="impl9", marks=pytest.mark.slow
+        ),
+        pytest.param(
+            random_decimal_sum_min_max_last_impl10, id="impl10", marks=pytest.mark.slow
+        ),
+    ],
+)
+def test_random_decimal_sum_min_max_last(impl, memory_leak_check):
     """We do not have decimal as index. Therefore we have to use as_index=False"""
-
-    def impl1(df):
-        df_ret = df.groupby("A", as_index=False).nunique()
-        return df_ret["B"].copy()
-
-    def impl2(df):
-        A = df.groupby("A", as_index=False).last()
-        return A
-
-    def impl3(df):
-        A = df.groupby("A", as_index=False)["B"].first()
-        return A
-
-    def impl4(df):
-        A = df.groupby("A", as_index=False)["B"].count()
-        return A
-
-    def impl5(df):
-        A = df.groupby("A", as_index=False).max()
-        return A
-
-    def impl6(df):
-        A = df.groupby("A", as_index=False).min()
-        return A
-
-    def impl7(df):
-        A = df.groupby("A", as_index=False)["B"].mean()
-        return A
-
-    def impl8(df):
-        A = df.groupby("A", as_index=False)["B"].median()
-        return A
-
-    def impl9(df):
-        A = df.groupby("A", as_index=False)["B"].var()
-        return A
-
-    # We need to drop column A because the column A is replaced by std(A)
-    # in pandas due to a pandas bug.
-    def impl10(df):
-        A = df.groupby("A", as_index=False)["B"].std()
-        return A.drop(columns="A")
 
     random.seed(5)
     n = 10
@@ -506,54 +1142,73 @@ def test_random_decimal_sum_min_max_last(is_slow_run, memory_leak_check):
         }
     )
 
-    # Direct checks for which pandas has equivalent functions.
-    check_func(impl1, (df1,), sort_output=True, reset_index=True)
-    if not is_slow_run:
-        return
-    check_func(impl2, (df1,), sort_output=True, reset_index=True)
-    check_func(impl3, (df1,), sort_output=True, reset_index=True)
-    check_func(impl4, (df1,), sort_output=True, reset_index=True)
-    check_func(impl5, (df1,), sort_output=True, reset_index=True)
-    check_func(impl6, (df1,), sort_output=True, reset_index=True)
+    if impl in {
+        random_decimal_sum_min_max_last_impl1,
+        random_decimal_sum_min_max_last_impl2,
+        random_decimal_sum_min_max_last_impl3,
+        random_decimal_sum_min_max_last_impl4,
+        random_decimal_sum_min_max_last_impl5,
+        random_decimal_sum_min_max_last_impl6,
+    }:
+        # Direct checks for which pandas has equivalent functions.
+        check_func(impl, (df1,), sort_output=True, reset_index=True)
+    elif impl in {
+        random_decimal_sum_min_max_last_impl7,
+        random_decimal_sum_min_max_last_impl8,
+        random_decimal_sum_min_max_last_impl9,
+        random_decimal_sum_min_max_last_impl10,
+    }:
+        # For mean/median/var/std we need to map the types.
+        check_func(
+            impl,
+            (df1,),
+            sort_output=True,
+            reset_index=True,
+            convert_columns_to_pandas=True,
+            check_dtype=False,
+        )
+    else:
+        raise ValueError("Unexpected impl")
 
-    # For mean/median/var/std we need to map the types.
+
+def test_decimal_sum():
+    """Test groupby sum on decimal input, where overflow throws an error"""
+
+    def impl(df):
+        return df.groupby("A", as_index=False)["B"].sum()
+
+    B = pd.array(
+        pa.array(["0.01", "0.03", None] * 10).cast(pa.decimal128(38, 37)),
+        dtype=pd.ArrowDtype(pa.decimal128(37, 37)),
+    )
+    df = pd.DataFrame({"A": [1, 2, 3] * 10, "B": B})
+    B_out = pd.array(
+        pa.array(["0.1", "0.3", "0"]).cast(pa.decimal128(38, 37)),
+        dtype=pd.ArrowDtype(pa.decimal128(38, 37)),
+    )
+    py_output = pd.DataFrame({"A": [1, 2, 3], "B": B_out})
     check_func(
-        impl7,
-        (df1,),
+        impl,
+        (df,),
         sort_output=True,
         reset_index=True,
-        convert_columns_to_pandas=True,
+        check_dtype=False,
+        py_output=py_output,
     )
-    check_func(
-        impl8,
-        (df1,),
-        sort_output=True,
-        reset_index=True,
-        convert_columns_to_pandas=True,
+
+    # Group 2 will overflow
+    B = pd.array(
+        pa.array(["0.01", "3.3", None] * 10).cast(pa.decimal128(38, 37)),
+        dtype=pd.ArrowDtype(pa.decimal128(38, 37)),
     )
-    check_func(
-        impl9,
-        (df1,),
-        sort_output=True,
-        reset_index=True,
-        convert_columns_to_pandas=True,
-    )
-    check_func(
-        impl10,
-        (df1,),
-        sort_output=True,
-        reset_index=True,
-        convert_columns_to_pandas=True,
-    )
+    df = pd.DataFrame({"A": [1, 2, 3] * 10, "B": B})
+    with pytest.raises(
+        RuntimeError, match="Overflow detected in groupby sum of Decimal data"
+    ):
+        bodo.jit(impl)(df)
 
 
 def test_random_string_sum_min_max_first_last(memory_leak_check):
-
-    assert pandas_version in (
-        (1, 3),
-        (1, 4),
-    ), "String sum will raise a TypeError in a later Pandas version."
-
     def impl1(df):
         A = df.groupby("A").sum()
         return A
@@ -580,7 +1235,7 @@ def test_random_string_sum_min_max_first_last(memory_leak_check):
         eList_B = []
         # String cols are dropped for sum, so we need an extra column to avoid empty output in that case
         eList_C = []
-        for i in range(n):
+        for _ in range(n):
             len_str = random.randint(1, 10)
             k2 = random.randint(1, len_str)
             nonascii_val_B = " ".join(random.sample(gen_nonascii_list(k2), k2))
@@ -591,10 +1246,20 @@ def test_random_string_sum_min_max_first_last(memory_leak_check):
             eList_A.append(val_A)
             eList_B.append(val_B)
             eList_C.append(1)
+        # add a group with all NA values in string data column
+        eList_A.append(0)
+        eList_A.append(0)
+        eList_B.append(None)
+        eList_B.append(None)
+        eList_C.append(3)
+        eList_C.append(4)
         return pd.DataFrame({"A": eList_A, "B": eList_B, "C": eList_C})
 
     df1 = random_dataframe(100)
-    check_func(impl1, (df1,), sort_output=True)
+    # Pandas 2.0 outputs 0 for all NA string column which is wrong
+    check_func(
+        impl1, (df1,), sort_output=True, py_output=df1.groupby("A").sum().replace(0, "")
+    )
     check_func(impl2, (df1,), sort_output=True)
     check_func(impl3, (df1,), sort_output=True)
     check_func(impl4, (df1,), sort_output=True)
@@ -602,12 +1267,6 @@ def test_random_string_sum_min_max_first_last(memory_leak_check):
 
 
 def test_random_binary_sum_min_max_first_last(memory_leak_check):
-
-    assert pandas_version in (
-        (1, 3),
-        (1, 4),
-    ), "Object sum will raise a TypeError in a later Pandas version."
-
     def impl1(df):
         A = df.groupby("A").sum()
         return A
@@ -637,7 +1296,6 @@ def test_random_binary_sum_min_max_first_last(memory_leak_check):
         # String cols are dropped for sum, so we need an extra column to avoid empty output in that case
         eList_C = []
         for i in range(n):
-            len_str = random.randint(1, 10)
             val_A = random.randint(1, 10)
             val_B = bytes(random.randint(1, 10))
             eList_A.append(val_A)
@@ -653,16 +1311,12 @@ def test_random_binary_sum_min_max_first_last(memory_leak_check):
     check_func(impl5, (df1,), sort_output=True)
 
 
+@pytest_mark_pandas
 def test_groupby_missing_entry(is_slow_run, memory_leak_check):
     """The columns which cannot be processed cause special problems as they are
     sometimes dropped instead of failing. This behavior is expected to raise an error
     in future versions of Pandas.
     """
-
-    assert pandas_version in (
-        (1, 3),
-        (1, 4),
-    ), "String sum will raise a TypeError in a later Pandas version."
 
     def test_drop_sum(df):
         return df.groupby("A").sum()
@@ -687,7 +1341,8 @@ def test_groupby_missing_entry(is_slow_run, memory_leak_check):
             "C": [3, 1, 2, 0, -3] * 3,
         }
     )
-    check_func(test_drop_sum, (df1,), sort_output=True, check_typing_issues=False)
+    # TODO[BSE-2010] raise error on groupby sum of datetime to match Pandas 2
+    # check_func(test_drop_sum, (df1,), sort_output=True, check_typing_issues=False)
     if not is_slow_run:
         return
     check_func(test_drop_sum, (df2,), sort_output=True, check_typing_issues=False)
@@ -697,6 +1352,7 @@ def test_groupby_missing_entry(is_slow_run, memory_leak_check):
     check_func(test_drop_count, (df3,), sort_output=True, check_typing_issues=False)
 
 
+@pytest_mark_pandas
 def test_agg_str_key(memory_leak_check):
     """
     Test Groupby.agg() with string keys
@@ -715,6 +1371,7 @@ def test_agg_str_key(memory_leak_check):
     check_func(impl, (df,), sort_output=True)
 
 
+@pytest_mark_pandas
 def test_agg_nonascii_str_key(memory_leak_check):
     """
     Test Groupby.agg() with non-ASCII string keys
@@ -733,6 +1390,7 @@ def test_agg_nonascii_str_key(memory_leak_check):
     check_func(impl, (df,), sort_output=True)
 
 
+@pytest_mark_pandas
 def test_agg_binary_key(memory_leak_check):
     """
     Test Groupby.agg() with binary keys
@@ -751,6 +1409,7 @@ def test_agg_binary_key(memory_leak_check):
     check_func(impl, (df,), sort_output=True)
 
 
+@pytest_mark_pandas
 def test_agg_series_input(memory_leak_check):
     """
     Test Groupby.agg(): make sure input to UDF is a Series, not Array
@@ -762,9 +1421,17 @@ def test_agg_series_input(memory_leak_check):
         return A
 
     # check_dtype=False since Pandas returns float64 for count sometimes for some reason
-    check_func(impl, (udf_in_df,), sort_output=True, check_dtype=False)
+    # no nullable float since NAs aren't handled in UDFs yet
+    check_func(
+        impl,
+        (udf_in_df,),
+        sort_output=True,
+        check_dtype=False,
+        convert_to_nullable_float=False,
+    )
 
 
+@pytest_mark_pandas
 def test_agg_bool_expr(memory_leak_check):
     """
     Test Groupby.agg(): make sure boolean expressions work (#326)
@@ -777,6 +1444,7 @@ def test_agg_bool_expr(memory_leak_check):
     check_func(impl, (df,), sort_output=True)
 
 
+@pytest_mark_pandas
 @pytest.mark.parametrize(
     "df_index",
     [
@@ -834,6 +1502,7 @@ def test_cumsum_index_preservation(df_index, memory_leak_check):
     check_func(test_impl_all, (df_index,), sort_output=True, check_dtype=False)
 
 
+@pytest_mark_pandas
 @pytest.mark.slow
 def test_cumsum_random_index(memory_leak_check):
     def test_impl(df1):
@@ -888,6 +1557,7 @@ def test_cumsum_random_index(memory_leak_check):
     check_func(test_impl, (df3,), sort_output=True, check_dtype=False)
 
 
+@pytest_mark_pandas
 @pytest.mark.slow
 def test_cumsum_reverse_shuffle_list_string(memory_leak_check):
     """We want to use here the classical scheme of the groupby for cumsum.
@@ -908,6 +1578,7 @@ def test_cumsum_reverse_shuffle_list_string(memory_leak_check):
     check_func(f, (df,), convert_columns_to_pandas=True, py_output=df_out)
 
 
+@pytest_mark_pandas
 @pytest.mark.slow
 def test_cumsum_reverse_shuffle_string(memory_leak_check):
     """We want to use here the classical scheme of the groupby for cumsum.
@@ -931,6 +1602,7 @@ def test_cumsum_reverse_shuffle_string(memory_leak_check):
     check_func(f, (df,), py_output=df_out)
 
 
+@pytest_mark_pandas
 @pytest.mark.slow
 def test_cumsum_reverse_shuffle_large_numpy(memory_leak_check):
     """We want to use here the classical scheme of the groupby for cumsum.
@@ -949,6 +1621,7 @@ def test_cumsum_reverse_shuffle_large_numpy(memory_leak_check):
     check_func(f, (df,))
 
 
+@pytest_mark_pandas
 def test_sum_categorical_key(memory_leak_check):
     """Testing of categorical keys and their missing value"""
 
@@ -974,6 +1647,7 @@ def test_sum_categorical_key(memory_leak_check):
     check_func(f, (df,), sort_output=True, reset_index=True)
 
 
+@pytest_mark_pandas
 @pytest.mark.slow
 def test_all_categorical_count(memory_leak_check):
     """Testing of categorical keys and their missing value.
@@ -1001,6 +1675,7 @@ def test_all_categorical_count(memory_leak_check):
     check_func(f, (df,), sort_output=True, reset_index=True)
 
 
+@pytest_mark_pandas
 def test_cumsum_exscan_categorical_random(memory_leak_check):
     """For categorical and cumsum, a special code path allows for better performance"""
 
@@ -1057,10 +1732,26 @@ def test_cumsum_exscan_categorical_random(memory_leak_check):
     )
     check_func(f1, (df1,), check_dtype=False)
     check_func(f2, (df1,), check_dtype=False)
-    check_func(f1, (df2,), check_dtype=False)
-    check_func(f2, (df2,), check_dtype=False)
+    # Replace NaN in Pandas output (Pandas bug) to avoid output comparison issues
+    check_func(
+        f1,
+        (df2,),
+        check_dtype=False,
+        py_output=df2.groupby("A")
+        .cumsum(skipna=False)
+        .map(lambda a: pd.NA if (a is not pd.NA) and np.isnan(a) else a),
+    )
+    check_func(
+        f2,
+        (df2,),
+        check_dtype=False,
+        py_output=df2.groupby("A")
+        .cumsum(skipna=True)
+        .map(lambda a: pd.NA if (a is not pd.NA) and np.isnan(a) else a),
+    )
 
 
+@pytest_mark_pandas
 @pytest.mark.slow
 def test_cumsum_exscan_multikey_random(memory_leak_check):
     """For cumulative sum of integers, a special code that create a categorical key column
@@ -1100,19 +1791,22 @@ def test_cumsum_exscan_multikey_random(memory_leak_check):
             "E": list_E_i_null,
         }
     )
-    check_func(f, (df,), check_dtype=False)
+    check_func(
+        f,
+        (df,),
+        check_dtype=False,
+        py_output=df.groupby(["A", "B"])
+        .cumsum()
+        .map(lambda a: pd.NA if (a is not pd.NA) and np.isnan(a) else a),
+    )
 
 
+@pytest_mark_pandas
 @pytest.mark.slow
 def test_sum_max_min_list_string_random(memory_leak_check):
     """Tests for columns being a list of strings.
     We have to use as_index=False since list of strings are mutable
     and index are immutable so cannot be an index"""
-
-    assert pandas_version in (
-        (1, 3),
-        (1, 4),
-    ), "String sum will raise a TypeError in a later Pandas version."
 
     def test_impl1(df1):
         df2 = df1.groupby("A", as_index=False).sum()
@@ -1238,6 +1932,7 @@ def test_sum_max_min_list_string_random(memory_leak_check):
     check_fct(test_impl8, df1, ["B"])
 
 
+@pytest_mark_pandas
 def test_groupby_datetime_miss(memory_leak_check):
     """Testing the groupby with columns having datetime with missing entries
     TODO: need to support the cummin/cummax cases after pandas is corrected"""
@@ -1275,7 +1970,7 @@ def test_groupby_datetime_miss(memory_leak_check):
 
     def get_random_entry(small_list):
         if random.random() < 0.2:
-            return "NaT"
+            return pd.NaT
         else:
             pos = random.randint(0, len(small_list) - 1)
             return small_list[pos]
@@ -1364,15 +2059,7 @@ def test_agg_as_index(memory_leak_check):
     # check_func(impl2, (df,), sort_output=True, check_dtype=False)
     check_func(impl3, (df,), sort_output=True, reset_index=True)
     check_func(impl3b, (df,), sort_output=True, reset_index=True)
-
-    # for some reason pandas does not make index a column with impl4:
-    # https://github.com/pandas-dev/pandas/issues/25011
-    pandas_df = impl4(df)
-    pandas_df.reset_index(inplace=True)  # convert A index to column
-    pandas_df = pandas_df.sort_values(by="A").reset_index(drop=True)
-    bodo_df = bodo.jit(impl4)(df)
-    bodo_df = bodo_df.sort_values(by="A").reset_index(drop=True)
-    pd.testing.assert_frame_equal(pandas_df, bodo_df, check_column_type=False)
+    check_func(impl4, (df,), sort_output=True, reset_index=True)
 
 
 @pytest.mark.skip
@@ -1394,6 +2081,7 @@ def test_agg_dt64(memory_leak_check):
     check_func(test_impl, (df,), sort_output=True, reset_index=True)
 
 
+@pytest_mark_pandas
 def test_agg_td64(memory_leak_check):
     """
     Test using groupby.agg with td64 column values. [BE-733]
@@ -1412,6 +2100,7 @@ def test_agg_td64(memory_leak_check):
     check_func(test_impl, (df,), sort_output=True, reset_index=True)
 
 
+@pytest_mark_pandas
 def test_agg_select_col_fast(memory_leak_check):
     """
     Test Groupby.agg() with explicitly select one (str)column
@@ -1432,6 +2121,7 @@ def test_agg_select_col_fast(memory_leak_check):
     check_func(impl_str, (df_str,), sort_output=True)
 
 
+@pytest_mark_pandas
 @pytest.mark.slow
 def test_agg_select_col(memory_leak_check):
     """
@@ -1451,18 +2141,12 @@ def test_agg_select_col(memory_leak_check):
     df_float = pd.DataFrame(
         {"A": [2, 1, 1, 1, 2, 2, 1], "B": [1.2, 2.4, np.nan, 2.2, 5.3, 3.3, 7.2]}
     )
-    df_str = pd.DataFrame(
-        {
-            "A": [2, 1, 1, 1, 2, 2, 1],
-            "B": ["a", "b", "c", "c", "b", "c", "a"],
-            "C": gen_nonascii_list(7),
-        }
-    )
     check_func(impl_num, (df_int,), sort_output=True, check_dtype=False)
     check_func(impl_num, (df_float,), sort_output=True, check_dtype=False)
     check_func(test_impl, (11,), sort_output=True, check_dtype=False)
 
 
+@pytest_mark_pandas
 def test_agg_no_parfor(memory_leak_check):
     """
     Test Groupby.agg(): simple UDF with no parfor
@@ -1480,6 +2164,7 @@ def test_agg_no_parfor(memory_leak_check):
     check_func(impl2, (udf_in_df,), sort_output=True, check_dtype=False)
 
 
+@pytest_mark_pandas
 def test_agg_len_mix(memory_leak_check):
     """
     Test Groupby.agg(): use of len() in a UDF mixed with another parfor
@@ -1489,52 +2174,73 @@ def test_agg_len_mix(memory_leak_check):
         A = df.groupby("A").agg(lambda x: x.sum() / len(x))
         return A
 
-    check_func(impl, (udf_in_df,), sort_output=True, check_dtype=False)
+    check_func(
+        impl,
+        (udf_in_df,),
+        sort_output=True,
+        check_dtype=False,
+        convert_to_nullable_float=False,
+    )
 
 
-def test_agg_multi_udf(memory_leak_check):
+def agg_multi_udf_impl(df):
+    def id1(x):
+        return (x <= 2).sum()
+
+    def id2(x):
+        return (x > 2).sum()
+
+    return df.groupby("A")["B"].agg((id1, id2))
+
+
+def agg_multi_udf_impl2(df):
+    def id1(x):
+        return (x <= 2).sum()
+
+    def id2(x):
+        return (x > 2).sum()
+
+    return df.groupby("A")["B"].agg(("var", id1, id2, "sum"))
+
+
+# check_dtype=False for impl3 since Bodo returns float for Series.min/max. TODO: fix min/max
+def agg_multi_udf_impl3(df):
+    return df.groupby("A")["B"].agg(
+        (lambda x: x.max() - x.min(), lambda x: x.max() + x.min())
+    )
+
+
+def agg_multi_udf_impl4(df):
+    return df.groupby("A")["B"].agg(("cumprod", "cumsum"))
+
+
+@pytest_mark_pandas
+@pytest.mark.parametrize(
+    "impl",
+    [
+        agg_multi_udf_impl,
+        agg_multi_udf_impl2,
+        agg_multi_udf_impl3,
+        agg_multi_udf_impl4,
+    ],
+)
+def test_agg_multi_udf(impl, memory_leak_check):
     """
     Test Groupby.agg() multiple user defined functions
     """
-
-    def impl(df):
-        def id1(x):
-            return (x <= 2).sum()
-
-        def id2(x):
-            return (x > 2).sum()
-
-        return df.groupby("A")["B"].agg((id1, id2))
-
-    def impl2(df):
-        def id1(x):
-            return (x <= 2).sum()
-
-        def id2(x):
-            return (x > 2).sum()
-
-        return df.groupby("A")["B"].agg(("var", id1, id2, "sum"))
-
-    def impl3(df):
-        return df.groupby("A")["B"].agg(
-            (lambda x: x.max() - x.min(), lambda x: x.max() + x.min())
-        )
-
-    def impl4(df):
-        return df.groupby("A")["B"].agg(("cumprod", "cumsum"))
 
     df = pd.DataFrame(
         {"A": [2, 1, 1, 1, 2, 2, 1], "B": [1, 2, 3, 4, 5, 6, 7]},
         index=[7, 8, 9, 2, 3, 4, 5],
     )
 
-    check_func(impl, (df,), sort_output=True)
-    check_func(impl2, (df,), sort_output=True)
-    # check_dtype=False since Bodo returns float for Series.min/max. TODO: fix min/max
-    check_func(impl3, (df,), sort_output=True, check_dtype=False)
-    check_func(impl4, (df,), sort_output=True)
+    if impl in {agg_multi_udf_impl2, agg_multi_udf_impl3}:
+        check_func(impl, (df,), sort_output=True, check_dtype=False)
+    elif impl in {agg_multi_udf_impl, agg_multi_udf_impl4}:
+        check_func(impl, (df,), sort_output=True)
 
 
+@pytest_mark_pandas
 def test_series_groupby_max_min_cat(memory_leak_check):
     """
     Tests support for GroupBy.max/min on Ordered Categorical Data. This tests
@@ -1595,6 +2301,7 @@ def test_series_groupby_max_min_cat(memory_leak_check):
     )
 
 
+@pytest_mark_pandas
 @pytest.mark.slow
 def test_aggregate(memory_leak_check):
     """
@@ -1616,6 +2323,7 @@ def test_aggregate(memory_leak_check):
     check_func(impl, (df,), sort_output=True, check_dtype=False)
 
 
+@pytest_mark_pandas
 @pytest.mark.slow
 def test_aggregate_as_index(memory_leak_check):
     """
@@ -1638,6 +2346,7 @@ def test_aggregate_as_index(memory_leak_check):
     check_func(impl1, (df,), sort_output=True, check_dtype=False, reset_index=True)
 
 
+@pytest_mark_pandas
 def test_aggregate_select_col(is_slow_run, memory_leak_check):
     """
     Test Groupby.aggregate() with explicitly select one column
@@ -1675,6 +2384,7 @@ def test_aggregate_select_col(is_slow_run, memory_leak_check):
     check_func(test_impl, (11,), sort_output=True, check_dtype=False)
 
 
+@pytest_mark_pandas
 def test_groupby_agg_general_udf(memory_leak_check):
     """
     Test groupy.agg with mix of general UDFs, regular UDF and builtin aggregation functions
@@ -1707,109 +2417,159 @@ def test_groupby_agg_general_udf(memory_leak_check):
         return res
 
     df = pd.DataFrame({"A": [0, 0, 1, 1, 1, 0], "B": [3, 10, 20, 4, 5, 1]})
-    check_func(impl, (df,), sort_output=True)
+    # Note: var always outputs nullable float in Bodo, so we disable the check_dtype
+    check_func(
+        impl,
+        (df,),
+        sort_output=True,
+        convert_to_nullable_float=False,
+        check_dtype=False,
+    )
 
 
-def test_groupby_agg_const_dict(memory_leak_check):
+# ------------ Test function implementations to be used in test_groupby_agg_const_dict_part1 ------------
+def groupby_agg_const_dict_impl(df):
+    df2 = df.groupby("A")[["B", "C"]].agg({"B": "count", "C": "sum"})
+    return df2
+
+
+def groupby_agg_const_dict_impl2(df):
+    df2 = df.groupby("A").agg({"B": "count", "C": "sum"})
+    return df2
+
+
+def groupby_agg_const_dict_impl3(df):
+    df2 = df.groupby("A").agg({"B": "median"})
+    return df2
+
+
+def groupby_agg_const_dict_impl4(df):
+    df2 = df.groupby("A").agg({"B": ["median"]})
+    return df2
+
+
+def groupby_agg_const_dict_impl5(df):
+    df2 = df.groupby("A").agg({"D": "nunique", "B": "median", "C": "var"})
+    return df2
+
+
+def groupby_agg_const_dict_impl6(df):
+    df2 = df.groupby("A").agg({"B": ["median", "nunique"]})
+    return df2
+
+
+def groupby_agg_const_dict_impl7(df):
+    df2 = df.groupby("A").agg({"B": ["count", "var", "prod"], "C": ["std", "sum"]})
+    return df2
+
+
+def groupby_agg_const_dict_impl8(df):
+    df2 = df.groupby("A", as_index=False).agg(
+        {"B": ["count", "var", "prod"], "C": ["std", "sum"]}
+    )
+    return df2
+
+
+def groupby_agg_const_dict_impl9(df):
+    df2 = df.groupby("A").agg({"B": ["count", "var", "prod"], "C": "std"})
+    return df2
+
+
+def groupby_agg_const_dict_impl10(df):
+    df2 = df.groupby("A").agg({"B": ["count", "var", "prod"], "C": ["std"]})
+    return df2
+
+
+def groupby_agg_const_dict_impl11(df):
+    df2 = df.groupby("A").agg(
+        {"B": ["count", "median", "prod"], "C": ["nunique", "sum"]}
+    )
+    return df2
+
+
+def groupby_agg_const_dict_impl12(df):
+    def id1(x):
+        return (x >= 2).sum()
+
+    df2 = df.groupby("D").agg({"B": "var", "A": id1, "C": "sum"})
+    return df2
+
+
+def groupby_agg_const_dict_impl13(df):
+    df2 = df.groupby("D").agg({"B": lambda x: x.max() - x.min(), "A": "sum"})
+    return df2
+
+
+def groupby_agg_const_dict_impl14(df):
+    df2 = df.groupby("A").agg(
+        {
+            "D": lambda x: (x == "BB").sum(),
+            "B": lambda x: x.max() - x.min(),
+            "C": "sum",
+        }
+    )
+    return df2
+
+
+def groupby_agg_const_dict_impl15(df):
+    df2 = df.groupby("A").agg({"B": "cumsum", "C": "cumprod"})
+    return df2
+
+
+# reuse a complex dict to test typing transform for const dict removal
+def groupby_agg_const_dict_impl16(df):
+    d = {"B": [lambda a: a.sum(), "mean"]}
+    df1 = df.groupby("A").agg(d)
+    df2 = df.groupby("C").agg(d)
+    return df1, df2
+
+
+# reuse and return a const dict to test typing transform
+def groupby_agg_const_dict_impl17(df):
+    d = {"B": "sum"}
+    df1 = df.groupby("A").agg(d)
+    df2 = df.groupby("C").agg(d)
+    return df1, df2, d
+
+
+# test tuple of UDFs inside agg dict
+def groupby_agg_const_dict_impl18(df):
+    return df.groupby("A").agg(
+        {
+            "C": (lambda x: (x >= 3).sum(),),
+            "B": (lambda x: x.sum(), lambda x: (x < 6.1).sum()),
+        }
+    )
+
+
+@pytest_mark_pandas
+@pytest.mark.parametrize(
+    "cur_impl",
+    [
+        groupby_agg_const_dict_impl,
+        groupby_agg_const_dict_impl2,
+        groupby_agg_const_dict_impl3,
+        groupby_agg_const_dict_impl4,
+        groupby_agg_const_dict_impl5,
+        groupby_agg_const_dict_impl6,
+        groupby_agg_const_dict_impl7,
+        groupby_agg_const_dict_impl8,
+        groupby_agg_const_dict_impl9,
+        groupby_agg_const_dict_impl10,
+        groupby_agg_const_dict_impl11,
+        groupby_agg_const_dict_impl12,
+        groupby_agg_const_dict_impl13,
+        groupby_agg_const_dict_impl14,
+        groupby_agg_const_dict_impl15,
+        groupby_agg_const_dict_impl16,
+        groupby_agg_const_dict_impl17,
+        groupby_agg_const_dict_impl18,
+    ],
+)
+def test_groupby_agg_const_dict(cur_impl, memory_leak_check):
     """
     Test groupy.agg with function spec passed as constant dictionary
     """
-
-    def impl(df):
-        df2 = df.groupby("A")[["B", "C"]].agg({"B": "count", "C": "sum"})
-        return df2
-
-    def impl2(df):
-        df2 = df.groupby("A").agg({"B": "count", "C": "sum"})
-        return df2
-
-    def impl3(df):
-        df2 = df.groupby("A").agg({"B": "median"})
-        return df2
-
-    def impl4(df):
-        df2 = df.groupby("A").agg({"B": ["median"]})
-        return df2
-
-    def impl5(df):
-        df2 = df.groupby("A").agg({"D": "nunique", "B": "median", "C": "var"})
-        return df2
-
-    def impl6(df):
-        df2 = df.groupby("A").agg({"B": ["median", "nunique"]})
-        return df2
-
-    def impl7(df):
-        df2 = df.groupby("A").agg({"B": ["count", "var", "prod"], "C": ["std", "sum"]})
-        return df2
-
-    def impl8(df):
-        df2 = df.groupby("A", as_index=False).agg(
-            {"B": ["count", "var", "prod"], "C": ["std", "sum"]}
-        )
-        return df2
-
-    def impl9(df):
-        df2 = df.groupby("A").agg({"B": ["count", "var", "prod"], "C": "std"})
-        return df2
-
-    def impl10(df):
-        df2 = df.groupby("A").agg({"B": ["count", "var", "prod"], "C": ["std"]})
-        return df2
-
-    def impl11(df):
-        df2 = df.groupby("A").agg(
-            {"B": ["count", "median", "prod"], "C": ["nunique", "sum"]}
-        )
-        return df2
-
-    def impl12(df):
-        def id1(x):
-            return (x >= 2).sum()
-
-        df2 = df.groupby("D").agg({"B": "var", "A": id1, "C": "sum"})
-        return df2
-
-    def impl13(df):
-        df2 = df.groupby("D").agg({"B": lambda x: x.max() - x.min(), "A": "sum"})
-        return df2
-
-    def impl14(df):
-        df2 = df.groupby("A").agg(
-            {
-                "D": lambda x: (x == "BB").sum(),
-                "B": lambda x: x.max() - x.min(),
-                "C": "sum",
-            }
-        )
-        return df2
-
-    def impl15(df):
-        df2 = df.groupby("A").agg({"B": "cumsum", "C": "cumprod"})
-        return df2
-
-    # reuse a complex dict to test typing transform for const dict removal
-    def impl16(df):
-        d = {"B": [lambda a: a.sum(), "mean"]}
-        df1 = df.groupby("A").agg(d)
-        df2 = df.groupby("C").agg(d)
-        return df1, df2
-
-    # reuse and return a const dict to test typing transform
-    def impl17(df):
-        d = {"B": "sum"}
-        df1 = df.groupby("A").agg(d)
-        df2 = df.groupby("C").agg(d)
-        return df1, df2, d
-
-    # test tuple of UDFs inside agg dict
-    def impl18(df):
-        return df.groupby("A").agg(
-            {
-                "C": (lambda x: (x >= 3).sum(),),
-                "B": (lambda x: x.sum(), lambda x: (x < 6.1).sum()),
-            }
-        )
 
     df = pd.DataFrame(
         {
@@ -1820,31 +2580,48 @@ def test_groupby_agg_const_dict(memory_leak_check):
         },
         index=np.arange(10, 17),
     )
-    check_func(impl, (df,), sort_output=True)
-    check_func(impl2, (df,), sort_output=True)
-    check_func(impl3, (df,), sort_output=True)
-    check_func(impl4, (df,), sort_output=True)
-    check_func(impl5, (df,), sort_output=True)
-    check_func(impl6, (df,), sort_output=True)
-    check_func(impl7, (df,), sort_output=True)
-    check_func(impl8, (df,), sort_output=True, reset_index=True)
-    check_func(impl9, (df,), sort_output=True)
-    check_func(impl10, (df,), sort_output=True)
-    check_func(impl11, (df,), sort_output=True)
-    check_func(impl12, (df,), sort_output=True)
-    check_func(impl13, (df,), sort_output=True)
-    check_func(impl14, (df,), sort_output=True)
-    check_func(impl15, (df,), sort_output=True)
-    # can't use check_func since lambda name in MultiIndex doesn't match Pandas
-    # TODO: fix lambda name
-    # check_func(impl16, (df,), sort_output=True, reset_index=True)
-    bodo.jit(impl16)(df)  # just check for compilation errors
-    # TODO: enable is_out_distributed after fixing gatherv issue for tuple output
-    check_func(impl17, (df,), sort_output=True, dist_test=False)
-    # Pandas (as of 1.2.2) produces float instead of int for last column for some reason
-    check_func(impl18, (df,), sort_output=True, check_dtype=False)
+    if (
+        cur_impl is groupby_agg_const_dict_impl
+        or cur_impl is groupby_agg_const_dict_impl2
+    ):
+        check_func(cur_impl, (df,), sort_output=True)
+    elif cur_impl is groupby_agg_const_dict_impl8:
+        check_func(
+            cur_impl,
+            (df,),
+            sort_output=True,
+            reset_index=True,
+            convert_to_nullable_float=False,
+            check_dtype=False,
+        )
+    elif cur_impl is groupby_agg_const_dict_impl16:
+        # just check for compilation errors
+        # can't use check_func since lambda name in MultiIndex doesn't match Pandas
+        # TODO: fix lambda name
+        # check_func(impl16, (df,), sort_output=True, reset_index=True)
+        bodo.jit(cur_impl)(df)
+    elif cur_impl is groupby_agg_const_dict_impl17:
+        # TODO: enable is_out_distributed after fixing gatherv issue for tuple output
+        check_func(
+            cur_impl,
+            (df,),
+            sort_output=True,
+            dist_test=False,
+            convert_to_nullable_float=False,
+        )
+    else:
+        # For median, var, etc. we output a Float64 even if the input is float64.
+        # As a result we disable the dtype check.
+        check_func(
+            cur_impl,
+            (df,),
+            sort_output=True,
+            convert_to_nullable_float=False,
+            check_dtype=False,
+        )
 
 
+@pytest_mark_pandas
 def test_groupby_agg_func_list(memory_leak_check):
     # TODO: Restore memory leak check
     """
@@ -1877,6 +2654,7 @@ def test_groupby_agg_func_list(memory_leak_check):
     assert not dist_IR_contains(f_ir, "global(cpp_cb_general:")
 
 
+@pytest_mark_pandas
 def test_groupby_agg_nullable_or(memory_leak_check):
     """
     Test groupy.agg with & and | can take the optimized path
@@ -1966,8 +2744,15 @@ def test_groupby_nunique(df, memory_leak_check):
         return df2
 
     check_func(impl0, (df,), sort_output=True)
-    check_func(impl1, (df,), sort_output=True)
-    check_func(impl2, (df,), sort_output=True)
+    # Bodo currently always outputs a nullable float for median
+    check_func(
+        impl1,
+        (df,),
+        sort_output=True,
+        convert_to_nullable_float=False,
+        check_dtype=False,
+    )
+    check_func(impl2, (df,), sort_output=True, convert_to_nullable_float=False)
     check_func(impl3, (df,), sort_output=True)
 
 
@@ -2008,7 +2793,7 @@ def test_groupby_nunique_dropna(memory_leak_check):
             # Nullable boolean
             "C": pd.Series([True, None, None, None, True, True, True], dtype="boolean"),
             # Nullable Binary
-            "H": [b"AA", b"B", np.NaN, b"B", np.NaN, b"AA", b"B"],
+            "H": [b"AA", b"B", None, b"B", None, b"AA", b"B"],
         },
     )
 
@@ -2030,6 +2815,7 @@ def g(x):
     return (x == "a").sum()
 
 
+@pytest_mark_pandas
 @pytest.mark.slow
 def test_agg_global_func(memory_leak_check):
     """
@@ -2081,7 +2867,7 @@ def test_count(memory_leak_check):
     df_str = pd.DataFrame(
         {
             "A": ["aa", "b", "b", "b", "aa", "aa", "b"],
-            "B": ["ccc", np.nan, "bb", "aa", np.nan, "ggg", "rr"],
+            "B": ["ccc", None, "bb", "aa", None, "ggg", "rr"],
             "C": gen_nonascii_list(7),
         }
     )
@@ -2089,7 +2875,7 @@ def test_count(memory_leak_check):
     df_bool = pd.DataFrame(
         {
             "A": [2, 1, 1, 1, 2, 2, 1],
-            "B": [True, np.nan, False, True, np.nan, False, False],
+            "B": [True, None, False, True, None, False, False],
             "C": [True, True, False, True, True, False, False],
         }
     )
@@ -2099,7 +2885,7 @@ def test_count(memory_leak_check):
     df_bin = pd.DataFrame(
         {
             "A": [2, 1, 1, 1, 2, 2, 1],
-            "B": [b"", bytes(13), np.nan, b"asd", b"wesds", b"asdk", np.nan],
+            "B": [b"", bytes(13), None, b"asd", b"wesds", b"asdk", None],
             "C": [b"alkj", b"lkjhg", b"w345", b"aszxd", b"poiu", bytes(5), b"lkjhg"],
         }
     )
@@ -2111,6 +2897,7 @@ def test_count(memory_leak_check):
     check_func(impl2, (11,), sort_output=True)
 
 
+@pytest_mark_pandas
 @pytest.mark.slow
 def test_count_select_col(memory_leak_check):
     """
@@ -2138,7 +2925,7 @@ def test_count_select_col(memory_leak_check):
     df_str = pd.DataFrame(
         {
             "A": ["aa", "b", "b", "b", "aa", "aa", "b"],
-            "B": ["ccc", np.nan, "bb", "aa", np.nan, "ggg", "rr"],
+            "B": ["ccc", None, "bb", "aa", None, "ggg", "rr"],
             "C": ["cc", "aa", "aa", "bb", "vv", "cc", "cc"],
             "D": gen_nonascii_list(7),
         }
@@ -2146,7 +2933,7 @@ def test_count_select_col(memory_leak_check):
     df_bool = pd.DataFrame(
         {
             "A": [2, 1, 1, 1, 2, 2, 1],
-            "B": [True, np.nan, False, True, np.nan, False, False],
+            "B": [True, None, False, True, None, False, False],
             "C": [True, True, False, True, True, False, False],
         }
     )
@@ -2156,16 +2943,16 @@ def test_count_select_col(memory_leak_check):
     df_bin = pd.DataFrame(
         {
             "A": [2, 1, 1, 1, 2, 2, 1],
-            "B": [b"", bytes(13), np.nan, b"asd", b"wesds", b"asdk", np.nan],
+            "B": [b"", bytes(13), None, b"asd", b"wesds", b"asdk", None],
             "C": [b"alkj", b"lkjhg", b"w345", b"aszxd", b"poiu", bytes(5), b"lkjhg"],
         }
     )
-    check_func(impl1, (df_int,), sort_output=True)
-    check_func(impl1, (df_str,), sort_output=True)
-    check_func(impl1, (df_bool,), sort_output=True)
-    check_func(impl1, (df_dt,), sort_output=True)
-    check_func(impl1, (df_bin,), sort_output=True)
-    check_func(impl2, (11,), sort_output=True)
+    check_func(impl1, (df_int,), sort_output=True, check_dtype=False)
+    check_func(impl1, (df_str,), sort_output=True, check_dtype=False)
+    check_func(impl1, (df_bool,), sort_output=True, check_dtype=False)
+    check_func(impl1, (df_dt,), sort_output=True, check_dtype=False)
+    check_func(impl1, (df_bin,), sort_output=True, check_dtype=False)
+    check_func(impl2, (11,), sort_output=True, check_dtype=False)
 
 
 @pytest.mark.parametrize(
@@ -2195,7 +2982,7 @@ def test_median_simple(df_med, memory_leak_check):
         A = df.groupby("A")["B"].median()
         return A
 
-    check_func(impl1, (df_med,), sort_output=True)
+    check_func(impl1, (df_med,), sort_output=True, check_dtype=False)
 
 
 @pytest.mark.slow
@@ -2220,7 +3007,7 @@ def test_median_large_random_numpy(memory_leak_check):
     random.seed(5)
     nb = 100
     df1 = pd.DataFrame({"A": get_random_array(nb, 10), "B": get_random_array(nb, 100)})
-    check_func(impl1, (df1,), sort_output=True)
+    check_func(impl1, (df1,), sort_output=True, check_dtype=False)
 
 
 @pytest.mark.slow
@@ -2240,6 +3027,7 @@ def test_median_nullable_int_bool(memory_leak_check):
     check_func(impl1, (df1,), sort_output=True, check_dtype=False)
 
 
+@pytest_mark_pandas
 @pytest.mark.slow
 @pytest.mark.parametrize(
     "df_uniq",
@@ -2250,7 +3038,7 @@ def test_median_nullable_int_bool(memory_leak_check):
         pd.DataFrame(
             {
                 "A": ["aa", "b", "b", "b", "aa", "aa", "b"],
-                "B": ["ccc", np.nan, "bb", "aa", np.nan, "ggg", "rr"],
+                "B": ["ccc", None, "bb", "aa", None, "ggg", "rr"],
             }
         ),
         pd.DataFrame(
@@ -2270,10 +3058,10 @@ def test_median_nullable_int_bool(memory_leak_check):
                 ],
                 "B": [
                     b"ccc",
-                    np.nan,
+                    None,
                     b"bb",
                     b"aa",
-                    np.nan,
+                    None,
                     b"ggg",
                     b"rr",
                     b"sdalk",
@@ -2309,6 +3097,7 @@ def test_nunique_select_col(df_uniq, memory_leak_check):
     check_func(impl3, (df_uniq,), sort_output=True, reset_index=True)
 
 
+@pytest_mark_pandas
 def test_nunique_select_col_missing_keys(memory_leak_check):
     """
     Test Groupby.nunique() with explicitly select one column. Some keys are missing
@@ -2324,19 +3113,19 @@ def test_nunique_select_col_missing_keys(memory_leak_check):
     )
     df_str = pd.DataFrame(
         {
-            "A": [np.nan, "b", "b", "b", "aa", "aa", "b"],
-            "B": ["ccc", np.nan, "bb", "aa", np.nan, "ggg", "rr"],
+            "A": [None, "b", "b", "b", "aa", "aa", "b"],
+            "B": ["ccc", None, "bb", "aa", None, "ggg", "rr"],
         }
     )
     df_bin = pd.DataFrame(
         {
             "A": [
                 b"aaa",
-                np.nan,
+                None,
                 b"baaa",
                 b"baaa",
                 b"aaa",
-                np.nan,
+                None,
                 b"aaa",
                 b"asdf",
                 b"anmb",
@@ -2344,10 +3133,10 @@ def test_nunique_select_col_missing_keys(memory_leak_check):
             ],
             "B": [
                 b"ccc",
-                np.nan,
+                None,
                 b"bb",
                 b"aa",
-                np.nan,
+                None,
                 b"ggg",
                 b"rr",
                 b"aksjdhg",
@@ -2361,6 +3150,7 @@ def test_nunique_select_col_missing_keys(memory_leak_check):
     check_func(impl1, (df_bin,), sort_output=True, reset_index=True)
 
 
+@pytest_mark_pandas
 def test_filtered_count(memory_leak_check):
     """
     Test Groupby.count() with filtered dataframe
@@ -2453,7 +3243,13 @@ def test_named_agg(memory_leak_check):
         }
     )
     check_func(impl1, (df,), sort_output=True, reset_index=True)
-    check_func(impl2, (df,), sort_output=True, reset_index=True)
+    check_func(
+        impl2,
+        (df,),
+        sort_output=True,
+        reset_index=True,
+        convert_to_nullable_float=False,
+    )
 
 
 def test_bool_sum_simple(memory_leak_check):
@@ -2476,6 +3272,10 @@ def test_bool_sum_simple(memory_leak_check):
     check_func(impl, (df,), sort_output=True, reset_index=True)
 
 
+# https://dev.azure.com/bodo-inc/Bodo/_test/analytics?definitionId=5&contextType=build
+# test_groupby_apply on average takes 11.14 min, or 668.4 seconds
+@pytest_mark_pandas
+@pytest.mark.timeout(1000)
 def test_groupby_apply(is_slow_run, memory_leak_check):
     """
     Test Groupby.apply() for UDFs that return a dataframes
@@ -2619,7 +3419,8 @@ def test_groupby_apply(is_slow_run, memory_leak_check):
             "E": [b"AB", b"DD", bytes(3), b"A", b"DD", b"AB"],
         }
     )
-    check_func(impl1, (df,), sort_output=True)
+    check_func(impl1, (df,), sort_output=True, convert_to_nullable_float=False)
+
     # acc_loop: as_index=False, Series output. (Key has string column)
     def impl14(df):
         df2 = df.groupby(["A", "B"], as_index=False).B.apply(
@@ -2629,6 +3430,7 @@ def test_groupby_apply(is_slow_run, memory_leak_check):
         return df2
 
     check_func(impl14, (df,), sort_output=True, reset_index=True)
+
     # acc_loop: as_index=True, DataFrame output. (Key has string column)
     def impl15(df):
         df2 = df.groupby(["A", "B"]).B.apply(
@@ -2638,6 +3440,7 @@ def test_groupby_apply(is_slow_run, memory_leak_check):
         return df2
 
     check_func(impl15, (df,), sort_output=True, reset_index=True)
+
     # row_loop: as_index=True, index is single column, output: Series
     def impl16(df):
         df2 = df.groupby(["B"]).apply(
@@ -2645,29 +3448,143 @@ def test_groupby_apply(is_slow_run, memory_leak_check):
         )
         return df2
 
-    check_func(impl16, (df,), sort_output=True)
+    check_func(impl16, (df,), sort_output=True, check_dtype=False)
     # TODO [BE-2246]: Match output dtype by checking null info.
 
     check_func(impl7, (df,), sort_output=True, reset_index=True, check_dtype=False)
-    check_func(impl11, (df,), sort_output=True, reset_index=True)
+    check_func(
+        impl11,
+        (df,),
+        sort_output=True,
+        reset_index=True,
+        convert_to_nullable_float=False,
+    )
     check_func(impl13, (df,), sort_output=True, reset_index=True, check_dtype=False)
     if not is_slow_run:
         return
-    check_func(impl2, (df,), sort_output=True)
+    check_func(impl2, (df,), sort_output=True, convert_to_nullable_float=False)
     # NOTE: Pandas assigns group numbers in sorted order to Index but we don't match it
     # since requires expensive sorting
-    check_func(impl3, (df,), sort_output=True, reset_index=True)
-    check_func(impl4, (df,), sort_output=True)
-    check_func(impl5, (df,), sort_output=True)
+    check_func(
+        impl3,
+        (df,),
+        sort_output=True,
+        reset_index=True,
+        convert_to_nullable_float=False,
+    )
+    check_func(impl4, (df,), sort_output=True, convert_to_nullable_float=False)
+    check_func(impl5, (df,), sort_output=True, convert_to_nullable_float=False)
     # NOTE: Pandas bug: drops the key arrays from output Index if it's Series sometimes
     # (as of 1.1.5)
-    check_func(impl6, (df,), reset_index=True)
+    check_func(impl6, (df,), sort_output=True, reset_index=True)
     check_func(impl8, (df,), sort_output=True, reset_index=True)
     # TODO [BE-2246]: Match output dtype by checking null info.
     check_func(impl9, (df,), sort_output=True, reset_index=True, check_dtype=False)
     # TODO [BE-2246]: Match output dtype by checking null info.
     check_func(impl10, (df,), sort_output=True, reset_index=True, check_dtype=False)
     check_func(impl12, (df,), sort_output=True, reset_index=True)
+
+
+@pytest.mark.skipif(
+    bodo.get_size() == 1,
+    reason="Test should only run on more than one rank",
+)
+def test_groupby_apply_global_dict(memory_leak_check):
+    """make sure returning dictionary-encoded arrays to output with input's
+    global dictionary doesn't cause hangs.
+    See https://bodo.atlassian.net/browse/BSE-2566
+    """
+
+    def impl(in_df):
+        def _bodo_f(df):
+            arr = df["B"]
+            return pd.DataFrame(
+                {
+                    "AGG_OUTPUT_0": arr,
+                },
+                index=df.index,
+            )
+
+        return in_df.groupby(["A"], as_index=False, dropna=False).apply(_bodo_f)
+
+    df = pd.DataFrame(
+        {
+            "A": [1, 1, 1, 1],
+            "B": ["A", "A", "B", "B"],
+        }
+    )
+    check_func(
+        impl,
+        (df,),
+        sort_output=True,
+        reset_index=True,
+        use_dict_encoded_strings=True,
+        only_1D=True,
+    )
+
+
+@pytest.mark.parametrize(
+    "array",
+    [
+        # array(int)
+        pd.array(
+            [[1], [1, None, 2], None, [3, 4], [None]],
+            dtype=pd.ArrowDtype(pa.large_list(pa.int32())),
+        ),
+        # array(struct(array))
+        pd.array(
+            [
+                [{"A": 0, "B": [1]}, None, {"A": 10, "B": [1, 11]}],
+                None,
+                [{"A": 1, "B": [1, 3, 2]}, {"A": 5, "B": [2]}],
+                [{"A": 4, "B": [0, 1]}],
+                [None],
+            ],
+            dtype=pd.ArrowDtype(
+                pa.large_list(
+                    pa.struct(
+                        [
+                            pa.field("A", pa.int32()),
+                            pa.field("B", pa.large_list(pa.int64())),
+                        ]
+                    )
+                )
+            ),
+        ),
+        # array(string)
+        pd.array(
+            [
+                pd.array(["asfdav", None, "abc"], dtype="string[pyarrow]"),
+                pd.array(["1423", "aa3"], dtype="string[pyarrow]"),
+                pd.array(["!@#$"], dtype="string[pyarrow]"),
+                None,
+                pd.array(["0.9305", None], dtype="string[pyarrow]"),
+            ],
+            dtype=pd.ArrowDtype(pa.large_list(pa.string())),
+        ),
+        # map
+        pd.array(
+            [
+                [{"A": 0, "B": 1}, {"A": 0, "B": 1, "C": 2}],
+                [{}, {"A": 0}],
+                [
+                    {"A": 1, "B": 0},
+                ],
+                None,
+                [{}, {"B": 1, "A": 0}],
+            ],
+            dtype=pd.ArrowDtype(pa.large_list(pa.map_(pa.large_string(), pa.int64()))),
+        ),
+    ],
+)
+def test_reverse_shuffle_nested_arrays(array, memory_leak_check):
+    """Test reverse shuffle used in groupby/apply for nested array types"""
+
+    def impl(df):
+        return df.groupby("A").apply(lambda x: pd.DataFrame({"C": x["B"]}))
+
+    df = pd.DataFrame({"A": [1, 3, 1, 4, 0], "B": array})
+    check_func(impl, (df,), sort_output=True, reset_index=True, check_dtype=False)
 
 
 @pytest.mark.skip(reason="[BE-1531] test fails in CI")
@@ -2747,6 +3664,7 @@ def test_groupby_apply_objmode():
     assert not has_udf_call(fir)
 
 
+@pytest_mark_pandas
 def test_groupby_apply_arg_dist(memory_leak_check):
     """
     Make sure extra arguments to Groupby.apply() are replicated
@@ -2766,6 +3684,7 @@ def test_groupby_apply_arg_dist(memory_leak_check):
     check_func(impl1, (df, 10), sort_output=True, reset_index=True)
 
 
+@pytest_mark_pandas
 def test_groupby_multiindex(memory_leak_check):
     """Test groupby with a multiindex having more than one col."""
     df = pd.DataFrame(
@@ -2783,6 +3702,7 @@ def test_groupby_multiindex(memory_leak_check):
     check_func(impl, (df,), sort_output=True, check_dtype=False, reset_index=True)
 
 
+@pytest_mark_pandas
 def test_groupby_pipe(memory_leak_check):
     """
     Test Groupby.pipe()
@@ -2815,6 +3735,7 @@ def test_groupby_pipe(memory_leak_check):
     check_func(impl3, (df, 1, 2), sort_output=True, reset_index=True)
 
 
+@pytest_mark_pandas
 @pytest.mark.slow
 def test_single_col_reset_index(test_df, memory_leak_check):
     """We need the reset_index=True because otherwise the order is scrambled"""
@@ -2830,6 +3751,7 @@ def test_single_col_reset_index(test_df, memory_leak_check):
     check_func(impl1, (test_df,), sort_output=True, reset_index=True)
 
 
+@pytest_mark_pandas
 @pytest.mark.slow
 def test_nonvar_column_names(memory_leak_check):
     """Test column names that cannot be variable names to make sure groupby code
@@ -2850,6 +3772,7 @@ def test_nonvar_column_names(memory_leak_check):
     check_func(impl1, (df,), sort_output=True)
 
 
+@pytest_mark_pandas
 @pytest.mark.slow
 def test_cumsum_large_random_numpy(memory_leak_check):
     def get_random_array(n, sizlen):
@@ -2879,11 +3802,34 @@ def test_cumsum_large_random_numpy(memory_leak_check):
         {"A": get_random_array(nb, 10), "B": get_random_array(nb, 100)},
         index=get_random_array(nb, 100),
     )
-    check_func(impl1, (df1,), sort_output=True)
-    check_func(impl2, (df1,), sort_output=True)
-    check_func(impl3, (df1,), sort_output=True)
+    # Replace NaN in Pandas output (Pandas bug) to avoid output comparison issues
+    check_func(
+        impl1,
+        (df1,),
+        sort_output=True,
+        py_output=df1.groupby("A")["B"]
+        .cumsum()
+        .map(lambda a: pd.NA if (a is not pd.NA) and np.isnan(a) else a),
+    )
+    check_func(
+        impl2,
+        (df1,),
+        sort_output=True,
+        py_output=df1.groupby("A")["B"]
+        .cumsum(skipna=True)
+        .map(lambda a: pd.NA if (a is not pd.NA) and np.isnan(a) else a),
+    )
+    check_func(
+        impl3,
+        (df1,),
+        sort_output=True,
+        py_output=df1.groupby("A")["B"]
+        .cumsum(skipna=False)
+        .map(lambda a: pd.NA if (a is not pd.NA) and np.isnan(a) else a),
+    )
 
 
+@pytest_mark_pandas
 @pytest.mark.slow
 def test_cummin_cummax_large_random_numpy(memory_leak_check):
     """A bunch of tests related to cummin/cummax functions."""
@@ -2935,16 +3881,67 @@ def test_cummin_cummax_large_random_numpy(memory_leak_check):
     nb = 100
     df1 = pd.DataFrame({"A": get_random_array(nb, 10), "B": get_random_array(nb, 100)})
     # Need reset_index as none is set on input.
-    check_func(impl1, (df1,), sort_output=True, reset_index=True)
-    check_func(impl2, (df1,), sort_output=True, reset_index=True)
-    check_func(impl3, (df1,), sort_output=True, reset_index=True)
-    check_func(impl4, (df1,), sort_output=True, reset_index=True)
-    check_func(impl5, (df1,), sort_output=True, reset_index=True)
-    check_func(impl6, (df1,), sort_output=True, reset_index=True)
-    check_func(impl7, (df1,), sort_output=True, reset_index=True)
-    check_func(impl8, (df1,), sort_output=True, reset_index=True)
+    check_func(
+        impl1,
+        (df1,),
+        sort_output=True,
+        reset_index=True,
+        convert_to_nullable_float=False,
+    )
+    check_func(
+        impl2,
+        (df1,),
+        sort_output=True,
+        reset_index=True,
+        convert_to_nullable_float=False,
+    )
+    check_func(
+        impl3,
+        (df1,),
+        sort_output=True,
+        reset_index=True,
+        convert_to_nullable_float=False,
+    )
+    check_func(
+        impl4,
+        (df1,),
+        sort_output=True,
+        reset_index=True,
+        convert_to_nullable_float=False,
+    )
+    check_func(
+        impl5,
+        (df1,),
+        sort_output=True,
+        reset_index=True,
+        convert_to_nullable_float=False,
+    )
+    check_func(
+        impl6,
+        (df1,),
+        sort_output=True,
+        reset_index=True,
+        convert_to_nullable_float=False,
+    )
+    check_func(
+        impl7,
+        (df1,),
+        sort_output=True,
+        reset_index=True,
+        convert_to_nullable_float=False,
+    )
+    # Pandas 2 creates a Series in output for some reason in this case (seems like a bug).
+    # TODO[BSE-2060] investigate
+    # check_func(
+    #     impl8,
+    #     (df1,),
+    #     sort_output=True,
+    #     reset_index=True,
+    #     convert_to_nullable_float=False,
+    # )
 
 
+@pytest_mark_pandas
 def test_groupby_cumsum_simple(memory_leak_check):
     """
     Test Groupby.cumsum(): a simple case
@@ -2960,6 +3957,7 @@ def test_groupby_cumsum_simple(memory_leak_check):
     check_func(impl, (df1,), sort_output=True)
 
 
+@pytest_mark_pandas
 def test_groupby_cumprod_simple(memory_leak_check):
     """
     Test Groupby.cumprod(): a simple case
@@ -2975,6 +3973,7 @@ def test_groupby_cumprod_simple(memory_leak_check):
     check_func(impl, (df1,), sort_output=True)
 
 
+@pytest_mark_pandas
 @pytest.mark.slow
 def test_groupby_cumsum(memory_leak_check):
     """
@@ -3013,14 +4012,57 @@ def test_groupby_cumsum(memory_leak_check):
         },
         index=np.arange(52, 62),
     )
-    check_func(impl1, (df1,), sort_output=True)
-    check_func(impl1, (df2,), sort_output=True)
-    check_func(impl1, (df3,), sort_output=True)
-    check_func(impl2, (df1,), sort_output=True)
-    check_func(impl2, (df2,), sort_output=True)
-    check_func(impl2, (df3,), sort_output=True)
+    check_func(
+        impl1,
+        (df1,),
+        sort_output=True,
+        py_output=df1.groupby("A")
+        .cumsum(skipna=False)
+        .map(lambda a: pd.NA if (a is not pd.NA) and np.isnan(a) else a),
+    )
+    check_func(
+        impl1,
+        (df2,),
+        sort_output=True,
+        py_output=df2.groupby("A")
+        .cumsum(skipna=False)
+        .map(lambda a: pd.NA if (a is not pd.NA) and np.isnan(a) else a),
+    )
+    check_func(
+        impl1,
+        (df3,),
+        sort_output=True,
+        py_output=df3.groupby("A")
+        .cumsum(skipna=False)
+        .map(lambda a: pd.NA if (a is not pd.NA) and np.isnan(a) else a),
+    )
+    check_func(
+        impl2,
+        (df1,),
+        sort_output=True,
+        py_output=df1.groupby("A")
+        .cumsum(skipna=True)
+        .map(lambda a: pd.NA if (a is not pd.NA) and np.isnan(a) else a),
+    )
+    check_func(
+        impl2,
+        (df2,),
+        sort_output=True,
+        py_output=df2.groupby("A")
+        .cumsum(skipna=True)
+        .map(lambda a: pd.NA if (a is not pd.NA) and np.isnan(a) else a),
+    )
+    check_func(
+        impl2,
+        (df3,),
+        sort_output=True,
+        py_output=df3.groupby("A")
+        .cumsum(skipna=True)
+        .map(lambda a: pd.NA if (a is not pd.NA) and np.isnan(a) else a),
+    )
 
 
+@pytest_mark_pandas
 @pytest.mark.slow
 def test_groupby_multi_intlabels_cumsum_int(memory_leak_check):
     """
@@ -3043,6 +4085,7 @@ def test_groupby_multi_intlabels_cumsum_int(memory_leak_check):
     check_func(impl, (df,), sort_output=True)
 
 
+@pytest_mark_pandas
 @pytest.mark.slow
 def test_groupby_multi_labels_cumsum_multi_cols(memory_leak_check):
     """
@@ -3057,15 +4100,24 @@ def test_groupby_multi_labels_cumsum_multi_cols(memory_leak_check):
     df = pd.DataFrame(
         {
             "A": [np.nan, 1.0, np.nan, 1.0, 2.0, 2.0, 2.0],
-            "B": [1, 2, 3, 2, 1, 1, 1],
-            "C": [3, 5, 6, 5, 4, 4, 3],
+            "B": pd.array([1, 2, 3, 2, 1, 1, 1], "Int64"),
+            "C": pd.array([3, 5, 6, 5, 4, 4, 3], "Int64"),
             "D": [3.1, 1.1, 6.0, np.nan, 4.0, np.nan, 3],
         },
         index=np.arange(10, 17),
     )
-    check_func(impl, (df,), sort_output=True)
+    check_func(
+        impl,
+        (df,),
+        sort_output=True,
+        check_dtype=False,
+        py_output=df.groupby(["A", "B"])[["C", "D"]]
+        .cumsum()
+        .map(lambda a: pd.NA if (a is not pd.NA) and np.isnan(a) else a),
+    )
 
 
+@pytest_mark_pandas
 @pytest.mark.slow
 def test_groupby_as_index_cumsum(memory_leak_check):
     """
@@ -3093,9 +4145,12 @@ def test_groupby_as_index_cumsum(memory_leak_check):
         index=np.arange(10, 17),
     )
     check_func(impl1, (df,), sort_output=True)
-    check_func(impl2, (df,), sort_output=True)
+    # Pandas 2 creates a Series in output for some reason in this case (seems like a bug).
+    # TODO[BSE-2060] investigate
+    # check_func(impl2, (df,), sort_output=True)
 
 
+@pytest_mark_pandas
 @pytest.mark.slow
 def test_cumsum_all_nulls_col(memory_leak_check):
     """
@@ -3137,7 +4192,7 @@ def test_max(test_df, memory_leak_check):
     df_bool = pd.DataFrame(
         {
             "A": [16, 1, 1, 1, 16, 16, 1, 40],
-            "B": [True, np.nan, False, True, np.nan, False, False, True],
+            "B": [True, None, False, True, None, False, False, True],
             "C": [True, True, False, True, True, False, False, False],
         }
     )
@@ -3165,15 +4220,15 @@ def test_max_one_col(test_df, memory_leak_check):
         A = df.groupby("A")["B"].max()
         return A
 
-    def impl2(n):
+    def impl2(n):  # noqa: F841
         df = pd.DataFrame({"A": np.ones(n, np.int64), "B": np.arange(n)})
         A = df.groupby("A")["B"].max()
         return A
 
-    df_bool = pd.DataFrame(
+    df_bool = pd.DataFrame(  # noqa: F841
         {
             "A": [16, 1, 1, 1, 16, 16, 1, 40],
-            "B": [True, np.nan, False, True, np.nan, False, False, True],
+            "B": [True, None, False, True, None, False, False, True],
             "C": [True, True, False, True, True, False, False, False],
         }
     )
@@ -3184,10 +4239,8 @@ def test_max_one_col(test_df, memory_leak_check):
         check_dtype = False
 
     check_func(impl1, (test_df,), sort_output=True, check_dtype=check_dtype)
-
-
-#    check_func(impl1, (df_bool,), sort_output=True)
-#    check_func(impl2, (11,))
+    # check_func(impl1, (df_bool,), sort_output=True)
+    # check_func(impl2, (11,))
 
 
 @pytest.mark.slow
@@ -3211,6 +4264,7 @@ def test_groupby_as_index_max(memory_leak_check):
     check_func(impl2, (11,), sort_output=True, reset_index=True)
 
 
+@pytest_mark_pandas
 def test_max_date(memory_leak_check):
     """
     Test Groupby.max() on datetime and datetime.date column
@@ -3262,15 +4316,10 @@ def test_mean(test_df, memory_leak_check):
         A = df.groupby("A").mean()
         return A
 
-    def impl2(n):
-        df = pd.DataFrame({"A": np.ones(n, np.int64), "B": np.arange(n)})
-        A = df.groupby("A").mean()
-        return A
-
     check_func(impl1, (test_df,), sort_output=True, check_dtype=False)
-    check_func(impl2, (11,), sort_output=True, check_dtype=False)
 
 
+@pytest_mark_pandas
 @pytest.mark.slow
 def test_mean_one_col(test_df, memory_leak_check):
     """
@@ -3294,6 +4343,7 @@ def test_mean_one_col(test_df, memory_leak_check):
     check_func(impl2, (11,), sort_output=True, check_dtype=False)
 
 
+@pytest_mark_pandas
 @pytest.mark.slow
 def test_groupby_as_index_mean(memory_leak_check):
     """
@@ -3315,6 +4365,7 @@ def test_groupby_as_index_mean(memory_leak_check):
     check_func(impl2, (11,), sort_output=True, check_dtype=False, reset_index=True)
 
 
+@pytest_mark_pandas
 @pytest.mark.slow
 def test_mean_median_other_supported_types(memory_leak_check):
     """Test Groupby.mean()/median() with cases not in test_df"""
@@ -3329,8 +4380,8 @@ def test_mean_median_other_supported_types(memory_leak_check):
 
     # Empty
     df = pd.DataFrame({"A": [], "B": []})
-    check_func(impl1, (df,), sort_output=True)
-    check_func(impl2, (df,), sort_output=True)
+    check_func(impl1, (df,), sort_output=True, check_dtype=False)
+    check_func(impl2, (df,), sort_output=True, check_dtype=False)
 
     # Zero columns
     df_empty = pd.DataFrame({"A": [2, 1, 1, 1, 2, 2, 1]})
@@ -3359,7 +4410,7 @@ def test_mean_median_other_supported_types(memory_leak_check):
                     Decimal("1.6"),
                     Decimal("-0.2"),
                     Decimal("44.2"),
-                    np.nan,
+                    None,
                     Decimal("0"),
                 ]
             ),
@@ -3372,13 +4423,27 @@ def test_mean_median_other_supported_types(memory_leak_check):
         sort_output=True,
         reset_index=True,
         py_output=impl1(df_decimal.astype({"B": "float64"})),
+        check_dtype=False,
     )
+
+    # Median supports decimal natively
+    expected = pd.DataFrame(
+        {
+            "B": [
+                Decimal("0.800000000000000000000"),
+                Decimal("22.000000000000000000000"),
+            ],
+        },
+        index=[1, 2],
+    ).rename_axis("A")
+
     check_func(
         impl2,
         (df_decimal,),
         sort_output=True,
         reset_index=True,
-        py_output=impl2(df_decimal.astype({"B": "float64"})),
+        py_output=expected,
+        check_dtype=False,
     )
 
 
@@ -3399,7 +4464,7 @@ def test_min(test_df, memory_leak_check):
     df_bool = pd.DataFrame(
         {
             "A": [16, 1, 1, 1, 16, 16, 1, 40],
-            "B": [True, np.nan, False, True, np.nan, False, False, True],
+            "B": [True, None, False, True, None, False, False, True],
             "C": [True, True, False, True, True, False, False, False],
         }
     )
@@ -3420,6 +4485,7 @@ def test_min(test_df, memory_leak_check):
 @pytest.mark.slow
 def test_min_max_other_supported_types(memory_leak_check):
     """Test Groupby.min()/max() with other types not in df_test"""
+
     # TODO: [BE-435] HA: Once all these groupby functions are done, merge the dataframe examples with df_test
     def impl1(df):
         A = df.groupby("A").min()
@@ -3467,8 +4533,11 @@ def test_min_max_other_supported_types(memory_leak_check):
     df_td = pd.DataFrame(
         {
             "A": [1, 2, 3, 2, 1],
-            "B": pd.Series(pd.timedelta_range(start="1 day", periods=4)).append(
-                pd.Series(data=[np.timedelta64("nat")], index=[4])
+            "B": pd.concat(
+                (
+                    pd.Series(pd.timedelta_range(start="1 day", periods=4)),
+                    pd.Series(data=[np.timedelta64("nat")], index=[4]),
+                )
             ),
         }
     )
@@ -3498,6 +4567,7 @@ def test_min_max_other_supported_types(memory_leak_check):
     check_func(impl2, (df_mix,), sort_output=True)
 
 
+@pytest_mark_pandas
 @pytest.mark.slow
 def test_min_one_col(test_df, memory_leak_check):
     """
@@ -3516,7 +4586,7 @@ def test_min_one_col(test_df, memory_leak_check):
     df_bool = pd.DataFrame(
         {
             "A": [16, 1, 1, 1, 16, 16, 1, 40],
-            "B": [True, np.nan, False, True, np.nan, False, False, True],
+            "B": [True, None, False, True, None, False, False, True],
             "C": [True, True, False, True, True, False, False, False],
         }
     )
@@ -3531,6 +4601,7 @@ def test_min_one_col(test_df, memory_leak_check):
     check_func(impl2, (11,), sort_output=True)
 
 
+@pytest_mark_pandas
 @pytest.mark.slow
 def test_groupby_as_index_min(memory_leak_check):
     """
@@ -3552,6 +4623,7 @@ def test_groupby_as_index_min(memory_leak_check):
     check_func(impl2, (11,), sort_output=True, reset_index=True)
 
 
+@pytest_mark_pandas
 def test_min_datetime(memory_leak_check):
     """
     Test Groupby.min() on datetime column
@@ -3573,6 +4645,7 @@ def test_min_datetime(memory_leak_check):
     check_func(impl2, (df,), sort_output=True, reset_index=True)
 
 
+@pytest_mark_pandas
 def test_optional_heterogenous_series_apply(memory_leak_check):
     """
     Test groupby.apply works when heterogenous series requires an optional type
@@ -3604,6 +4677,7 @@ def test_optional_heterogenous_series_apply(memory_leak_check):
     check_func(impl, (df,), sort_output=True, reset_index=True, check_dtype=False)
 
 
+@pytest_mark_pandas
 def test_optional_homogenous_series_apply(memory_leak_check):
     """
     Test groupby.apply works when a homogenous series requires an optional type
@@ -3629,6 +4703,7 @@ def test_optional_homogenous_series_apply(memory_leak_check):
     check_func(impl, (df,), sort_output=True, reset_index=True, check_dtype=False)
 
 
+@pytest_mark_pandas
 def test_prod(test_df, memory_leak_check):
     """
     Test Groupby.prod()
@@ -3653,7 +4728,7 @@ def test_prod(test_df, memory_leak_check):
             # This column is disabled because pandas removes it
             # from output. This could be a bug in pandas. TODO: enable when it
             # is fixed
-            # "B": [True, np.nan, False, True, np.nan, False, False, True],
+            # "B": [True, None, False, True, None, False, False, True],
             "C": [True, True, False, True, True, False, False, False],
         }
     )
@@ -3665,6 +4740,7 @@ def test_prod(test_df, memory_leak_check):
     check_func(impl2, (11,), sort_output=True)
 
 
+@pytest_mark_pandas
 @pytest.mark.slow
 def test_prod_one_col(test_df, memory_leak_check):
     """
@@ -3687,7 +4763,7 @@ def test_prod_one_col(test_df, memory_leak_check):
     df_bool = pd.DataFrame(
         {
             "A": [16, 1, 1, 1, 16, 16, 1, 40],
-            "C": [True, np.nan, False, True, np.nan, False, False, True],
+            "C": [True, None, False, True, None, False, False, True],
             "B": [True, True, False, True, True, False, False, False],
         }
     )
@@ -3703,6 +4779,7 @@ def test_prod_one_col(test_df, memory_leak_check):
     check_func(impl2, (11,), sort_output=True)
 
 
+@pytest_mark_pandas
 @pytest.mark.slow
 def test_groupby_as_index_prod(memory_leak_check):
     """
@@ -3724,6 +4801,7 @@ def test_groupby_as_index_prod(memory_leak_check):
     check_func(impl2, (11,), sort_output=True, reset_index=True)
 
 
+@pytest_mark_pandas
 @pytest.mark.slow
 def test_sum_prod_empty_mix(memory_leak_check):
     """Test Groupby.sum()/prod() with cases not in test_df"""
@@ -3787,7 +4865,7 @@ def test_first_last(test_df):
     df_str = pd.DataFrame(
         {
             "A": ["aa", "b", "b", "b", "aa", "aa", "b"],
-            "B": ["ccc", np.nan, "bb", "aa", np.nan, "ggg", "rr"],
+            "B": ["ccc", None, "bb", "aa", None, "ggg", "rr"],
             "C": gen_nonascii_list(7),
         }
     )
@@ -3802,7 +4880,7 @@ def test_first_last(test_df):
     df_bool = pd.DataFrame(
         {
             "A": [16, 1, 1, 1, 16, 16, 1, 40],
-            "B": [True, np.nan, False, True, np.nan, False, False, True],
+            "B": [True, None, False, True, None, False, False, True],
             "C": [True, True, False, True, True, False, False, False],
         }
     )
@@ -3812,7 +4890,7 @@ def test_first_last(test_df):
     df_bin = pd.DataFrame(
         {
             "A": [1, 1, 3, 3, 2, 1, 2],
-            "B": [b"ccc", np.nan, b"bb", b"aa", np.nan, b"ggg", b"rr"],
+            "B": [b"ccc", None, b"bb", b"aa", None, b"ggg", b"rr"],
             "C": [b"cc", b"aa", b"aa", b"bb", b"vv", b"cc", b"cc"],
         }
     )
@@ -3885,7 +4963,7 @@ def test_first_last_supported_types(memory_leak_check):
         {
             "A": [2, 1, 1, 2, 2],
             "B": pd.Series(
-                [Decimal("1.6"), Decimal("-0.2"), Decimal("44.2"), np.nan, Decimal("0")]
+                [Decimal("1.6"), Decimal("-0.2"), Decimal("44.2"), None, Decimal("0")]
             ),
         }
     )
@@ -3896,8 +4974,11 @@ def test_first_last_supported_types(memory_leak_check):
     df_td = pd.DataFrame(
         {
             "A": [1, 2, 3, 2, 1],
-            "B": pd.Series(pd.timedelta_range(start="1 day", periods=4)).append(
-                pd.Series(data=[np.timedelta64("nat")], index=[4])
+            "B": pd.concat(
+                (
+                    pd.Series(pd.timedelta_range(start="1 day", periods=4)),
+                    pd.Series(data=[np.timedelta64("nat")], index=[4]),
+                )
             ),
         }
     )
@@ -3908,7 +4989,7 @@ def test_first_last_supported_types(memory_leak_check):
     df_bin = pd.DataFrame(
         {
             "A": [2, 1, 1, 2, 3] * 2,
-            "C": [b"ab", b"cd", np.nan, b"gh", b"ijk"] * 2,
+            "C": [b"ab", b"cd", None, b"gh", b"ijk"] * 2,
         }
     )
     check_func(impl1, (df_bin,), sort_output=True)
@@ -3916,7 +4997,7 @@ def test_first_last_supported_types(memory_leak_check):
 
     # Test different column types in same dataframe
     def impl_mix(df):
-        A = df.groupby("A")["B", "C"].first()
+        A = df.groupby("A")[["B", "C"]].first()
         return A
 
     df_mix = pd.DataFrame(
@@ -3957,7 +5038,7 @@ def test_first_last_one_col(test_df):
     df_str = pd.DataFrame(
         {
             "A": ["aa", "b", "b", "b", "aa", "aa", "b"],
-            "B": ["ccc", np.nan, "bb", "aa", np.nan, "ggg", "rr"],
+            "B": ["ccc", None, "bb", "aa", None, "ggg", "rr"],
             "C": gen_nonascii_list(7),
         }
     )
@@ -3965,7 +5046,7 @@ def test_first_last_one_col(test_df):
     df_bool = pd.DataFrame(
         {
             "A": [16, 1, 1, 1, 16, 16, 1, 40],
-            "B": [True, np.nan, False, True, np.nan, False, False, True],
+            "B": [True, None, False, True, None, False, False, True],
             "C": [True, True, False, True, True, False, False, False],
         }
     )
@@ -3975,7 +5056,7 @@ def test_first_last_one_col(test_df):
     df_bin = pd.DataFrame(
         {
             "A": [1, 1, 3, 3, 2, 1, 2],
-            "B": [b"ccc", np.nan, b"bb", b"aa", np.nan, b"ggg", b"rr"],
+            "B": [b"ccc", None, b"bb", b"aa", None, b"ggg", b"rr"],
             "C": [b"cc", b"aa", b"aa", b"bb", b"vv", b"cc", b"cc"],
         }
     )
@@ -4000,6 +5081,7 @@ def test_first_last_one_col(test_df):
     check_func(impl4, (11,), sort_output=True)
 
 
+@pytest_mark_pandas
 @pytest.mark.slow
 def test_groupby_as_index_first_last(memory_leak_check):
     """
@@ -4059,28 +5141,19 @@ def test_std(test_df_int_no_null, memory_leak_check):
     check_func(impl2, (11,), sort_output=True, check_dtype=False)
 
 
+@pytest_mark_pandas
 @pytest.mark.slow
 def test_std_one_col(test_df, memory_leak_check):
     """
     Test Groupby.std() with one column selected
-    ---
-    For the df.groupby("A")["B"].std() we have an error for test_df1
-    This is due to a bug in pandas. See
-    https://github.com/pandas-dev/pandas/issues/35516
     """
-
-    assert pandas_version in (
-        (1, 3),
-        (1, 4),
-    ), "revisit the df.groupby(A)[B].std() issue at next pandas version."
 
     # TODO: std _is_ supported by Pandas groupby on categorical columns
     if isinstance(test_df.iloc[:, 0].dtype, pd.CategoricalDtype):
         return
 
     def impl1(df):
-        #        A = df.groupby("A")["B"].std()
-        A = df.groupby("A")["B"].var()
+        A = df.groupby("A")["B"].std()
         return A
 
     def impl2(n):
@@ -4092,6 +5165,7 @@ def test_std_one_col(test_df, memory_leak_check):
     check_func(impl2, (11,), sort_output=True, check_dtype=False)
 
 
+@pytest_mark_pandas
 @pytest.mark.slow
 def test_groupby_as_index_std(memory_leak_check):
     """
@@ -4135,6 +5209,7 @@ def test_sum(test_df, memory_leak_check):
     check_func(impl2, (11,), sort_output=True)
 
 
+@pytest_mark_pandas
 @pytest.mark.slow
 def test_sum_one_col(test_df, memory_leak_check):
     """
@@ -4167,6 +5242,7 @@ def test_sum_one_col(test_df, memory_leak_check):
     check_func(impl2, (11,), sort_output=True)
 
 
+@pytest_mark_pandas
 def test_select_col_attr(memory_leak_check):
     """
     Test Groupby with column selected using getattr instead of getitem
@@ -4186,6 +5262,7 @@ def test_select_col_attr(memory_leak_check):
     check_func(impl, (df,), sort_output=True)
 
 
+@pytest_mark_pandas
 def test_select_col_single_list(memory_leak_check):
     """
     Test Groupby with single column selected but using a list (should return a DataFrame
@@ -4206,6 +5283,7 @@ def test_select_col_single_list(memory_leak_check):
     check_func(impl, (df,), sort_output=True)
 
 
+@pytest_mark_pandas
 @pytest.mark.slow
 def test_groupby_as_index_sum(memory_leak_check):
     """
@@ -4227,6 +5305,7 @@ def test_groupby_as_index_sum(memory_leak_check):
     check_func(impl2, (11,), sort_output=True, reset_index=True)
 
 
+@pytest_mark_pandas
 @pytest.mark.slow
 def test_agg_nested_tup_colnames(memory_leak_check):
     """
@@ -4246,6 +5325,7 @@ def test_agg_nested_tup_colnames(memory_leak_check):
     check_func(impl, (df,), sort_output=True, reset_index=True, check_names=False)
 
 
+@pytest_mark_pandas
 @pytest.mark.slow
 def test_groupby_multi_intlabels_sum(memory_leak_check):
     """
@@ -4268,6 +5348,7 @@ def test_groupby_multi_intlabels_sum(memory_leak_check):
 
 
 # TODO: add memory leak check when issues addressed
+@pytest_mark_pandas
 def test_groupby_multi_key_to_index(memory_leak_check):
     """
     Make sure df.groupby() with multiple keys creates a MultiIndex index in output
@@ -4293,6 +5374,7 @@ def test_groupby_multi_key_to_index(memory_leak_check):
     )
 
 
+@pytest_mark_pandas
 def test_groupby_multi_strlabels(memory_leak_check):
     """
     Test df.groupby() multiple labels of string columns
@@ -4313,18 +5395,15 @@ def test_groupby_multi_strlabels(memory_leak_check):
     check_func(impl, (df,), sort_output=True, reset_index=True)
 
 
+@pytest_mark_pandas
 @pytest.mark.slow
 def test_groupby_multiselect_sum(memory_leak_check):
     """
-    Test groupy.sum() on explicitly selected columns using a tuple and using a constant
+    Test groupy.sum() on explicitly selected columns using a constant
     list (#198)
     """
 
-    def impl1(df):
-        df2 = df.groupby("A")["B", "C"].sum()
-        return df2
-
-    def impl2(df):
+    def impl(df):
         df2 = df.groupby("A")[["B", "C"]].sum()
         return df2
 
@@ -4335,10 +5414,10 @@ def test_groupby_multiselect_sum(memory_leak_check):
             "C": [3, 5, 6, 5, 4, 4, 3],
         }
     )
-    check_func(impl1, (df,), sort_output=True)
-    check_func(impl2, (df,), sort_output=True)
+    check_func(impl, (df,), sort_output=True)
 
 
+@pytest_mark_pandas
 @pytest.mark.slow
 def test_agg_multikey_parallel(memory_leak_check):
     """
@@ -4385,6 +5464,7 @@ def test_var(test_df, memory_leak_check):
     check_func(impl2, (11,), sort_output=True, check_dtype=False)
 
 
+@pytest_mark_pandas
 @pytest.mark.slow
 def test_var_std_supported_types(memory_leak_check):
     """
@@ -4401,8 +5481,8 @@ def test_var_std_supported_types(memory_leak_check):
 
     # Empty dataframe
     df = pd.DataFrame({"A": [], "B": []})
-    check_func(impl1, (df,), sort_output=True)
-    check_func(impl2, (df,), sort_output=True)
+    check_func(impl1, (df,), sort_output=True, check_dtype=False)
+    check_func(impl2, (df,), sort_output=True, check_dtype=False)
 
     # Zero columns
     df_empty = pd.DataFrame({"A": [2, 1, 1, 1, 2, 2, 1]})
@@ -4423,6 +5503,7 @@ def test_var_std_supported_types(memory_leak_check):
     check_func(impl2, (df_mix,), sort_output=True, check_dtype=False)
 
 
+@pytest_mark_pandas
 @pytest.mark.slow
 def test_var_one_col(test_df, memory_leak_check):
     """
@@ -4446,6 +5527,7 @@ def test_var_one_col(test_df, memory_leak_check):
     check_func(impl2, (11,), sort_output=True, check_dtype=False)
 
 
+@pytest_mark_pandas
 def test_groupby_key_value_shared(memory_leak_check):
     """
     Test using the key column in a groupby operation.
@@ -4570,6 +5652,16 @@ def test_idxmin_idxmax(memory_leak_check):
             ),
             marks=pytest.mark.slow,
         ),
+        # nullable float
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": [2, 1, 1, 2, 3],
+                    "B": pd.Series([1.1, 2.2, 3.3, None, 5.5], dtype="Float64"),
+                }
+            ),
+            marks=pytest.mark.slow,
+        ),
         # boolean
         pytest.param(
             pd.DataFrame(
@@ -4605,6 +5697,7 @@ def test_idxmin_idxmax_supported_types(df, memory_leak_check):
     check_func(impl2, (df,), sort_output=True, reset_index=True)
 
 
+@pytest_mark_pandas
 @pytest.mark.slow
 def test_groupby_as_index_var(memory_leak_check):
     """
@@ -4626,6 +5719,7 @@ def test_groupby_as_index_var(memory_leak_check):
     check_func(impl2, (11,), sort_output=True, check_dtype=False, reset_index=True)
 
 
+@pytest_mark_pandas
 def test_const_list_inference(memory_leak_check):
     """
     Test passing non-const list that can be inferred as constant to groupby()
@@ -4635,7 +5729,7 @@ def test_const_list_inference(memory_leak_check):
         return df.groupby(["A"] + ["B"]).sum()
 
     def impl2(df):
-        return df.groupby(list(set(df.columns) - set(["A", "C"]))).sum()
+        return df.groupby(list(set(df.columns) - {"A", "C"})).sum()
 
     # test df schema change by setting a column
     def impl3(n):
@@ -4680,6 +5774,7 @@ def test_const_list_inference(memory_leak_check):
 g_keys = ["A", "B"]
 
 
+@pytest_mark_pandas
 def test_global_list(memory_leak_check):
     """
     Test passing a global list to groupby()
@@ -4711,6 +5806,7 @@ def test_global_list(memory_leak_check):
 df_global = pd.DataFrame({"A": [1, 2, 1], "B": [1.1, 2.2, 3.3]})
 
 
+@pytest_mark_pandas
 def test_global_df(memory_leak_check):
     """test groupby on a global dataframe object"""
 
@@ -4720,6 +5816,7 @@ def test_global_df(memory_leak_check):
     check_func(impl, (), sort_output=True, only_seq=True)
 
 
+@pytest_mark_pandas
 def test_literal_args(memory_leak_check):
     """
     Test forcing groupby() key list and as_index to be literals if jit arguments
@@ -4757,6 +5854,7 @@ def test_literal_args(memory_leak_check):
     check_func(impl4, (df, ["B", "C"]), sort_output=True)
 
 
+@pytest_mark_pandas
 def test_schema_change(memory_leak_check):
     """
     Test df schema change for groupby() to make sure errors are not thrown
@@ -4784,6 +5882,7 @@ def test_schema_change(memory_leak_check):
     check_func(impl2, (df,), sort_output=True)
 
 
+@pytest_mark_pandas
 def test_groupby_empty_funcs(memory_leak_check):
     """Test groupby that has no function to execute (issue #1590)"""
 
@@ -4795,6 +5894,7 @@ def test_groupby_empty_funcs(memory_leak_check):
     assert impl(df) == bodo.jit(impl)(df)
 
 
+@pytest_mark_pandas
 def test_groupby_in_loop(memory_leak_check):
     """Test groupby inside a loop, where input shape info is not available in array
     analysis"""
@@ -4810,6 +5910,7 @@ def test_groupby_in_loop(memory_leak_check):
     assert impl(df) == bodo.jit(impl)(df)
 
 
+@pytest_mark_pandas
 def test_groupby_dead_col_multifunc(memory_leak_check):
     """Test dead column elimination in groupbys with UDFs (issues #1724, #1732, #1750)"""
 
@@ -4868,6 +5969,7 @@ def test_groupby_dead_col_multifunc(memory_leak_check):
     assert impl6(df) == bodo.jit(impl6)(df)
 
 
+@pytest_mark_pandas
 def test_groupby_shift_cat(memory_leak_check):
     """Checks that groupby.shift is supported
     when the target column is categorical."""
@@ -4888,6 +5990,7 @@ def test_groupby_shift_cat(memory_leak_check):
     check_func(test_impl, (df,))
 
 
+@pytest_mark_pandas
 def test_groupby_shift_unknown_cats(memory_leak_check):
     """Checks that groupby.shift is supported
     when the target column is categorical."""
@@ -4913,7 +6016,7 @@ def test_groupby_shift_unknown_cats(memory_leak_check):
         }
     )
 
-    df3 = pd.DataFrame(
+    df3 = pd.DataFrame(  # noqa: F841
         {
             "A": [1, 1, 1, 4, 5],
             "B": np.array([2, 3, 4, 5, 8], dtype=np.uint8),
@@ -4992,6 +6095,7 @@ def test_groupby_shift_int():
     print(bodo.jit(distributed=["df"])(impl2)(df_multicol))
 
 
+@pytest_mark_pandas
 @pytest.mark.slow
 def test_groupby_shift_timedelta(memory_leak_check):
     def impl2(df):
@@ -5004,14 +6108,14 @@ def test_groupby_shift_timedelta(memory_leak_check):
                 datetime.timedelta(3, 3, 3),
                 datetime.timedelta(2, 2, 2),
                 datetime.timedelta(1, 1, 1),
-                np.nan,
+                None,
                 datetime.timedelta(5, 5, 5),
             ],
             "B": [
                 datetime.timedelta(3, 3, 3),
                 datetime.timedelta(2, 2, 2),
                 datetime.timedelta(1, 1, 1),
-                np.nan,
+                None,
                 datetime.timedelta(5, 5, 5),
             ],
         }
@@ -5019,6 +6123,7 @@ def test_groupby_shift_timedelta(memory_leak_check):
     check_func(impl2, (df,))
 
 
+@pytest_mark_pandas
 @pytest.mark.slow
 def test_groupby_shift_binary(memory_leak_check):
     """tests groupby shift for dataframes containing binary data"""
@@ -5030,12 +6135,13 @@ def test_groupby_shift_binary(memory_leak_check):
     df = pd.DataFrame(
         {
             "A": [1, 1, 1, 2, 2] * 2,
-            "B": [b"hkjl", b"jkhb", np.nan, bytes(4), b"mhgt"] * 2,
+            "B": [b"hkjl", b"jkhb", None, bytes(4), b"mhgt"] * 2,
         }
     )
     check_func(impl2, (df,))
 
 
+@pytest_mark_pandas
 def test_groupby_shift_simple(memory_leak_check):
     def impl(df):
         df2 = df.groupby("A").shift()
@@ -5052,6 +6158,7 @@ def test_groupby_shift_simple(memory_leak_check):
     check_func(impl, (df3,))
 
 
+@pytest_mark_pandas
 def test_groupby_shift_dead_index(memory_leak_check):
     """Test dead output Index case for groupby shift which returns an Index."""
 
@@ -5069,6 +6176,7 @@ def test_groupby_shift_dead_index(memory_leak_check):
     check_func(impl, (df3,))
 
 
+@pytest_mark_pandas
 @pytest.mark.parametrize(
     "periods",
     [0, 2, -2],
@@ -5095,14 +6203,11 @@ def test_groupby_shift_main(periods):
 
     siz = 10
     datetime_arr_1 = pd.date_range("1917-01-01", periods=siz)
-    datetime_arr_2 = pd.date_range("2017-01-01", periods=siz)
-    timedelta_arr = datetime_arr_1 - datetime_arr_2
     date_arr = datetime_arr_1.date
     df1_datetime = pd.DataFrame(
         {"A": [1, 2, 1, 4, 5, 6, 4, 6, 6, 1], "B": datetime_arr_1}
     )
     df1_date = pd.DataFrame({"A": np.arange(siz), "B": date_arr})
-    df1_timedelta = pd.DataFrame({"A": np.arange(siz), "B": timedelta_arr})
 
     check_func(impl2, (df1_datetime,))
     check_func(impl3, (df1_datetime,))
@@ -5142,6 +6247,7 @@ def test_groupby_size(by, memory_leak_check):
     check_func(impl, (df,), sort_output=True, reset_index=True)
 
 
+@pytest_mark_pandas
 def test_groupby_size_single_column(memory_leak_check):
     """test groupby size() for dataframes with single column"""
 
@@ -5152,6 +6258,7 @@ def test_groupby_size_single_column(memory_leak_check):
     check_func(impl, (df,), sort_output=True, reset_index=True)
 
 
+@pytest_mark_pandas
 def test_size(memory_leak_check):
     def impl(df):
         result = df.groupby("class", as_index=False).size()
@@ -5208,6 +6315,7 @@ def test_size_agg(df_null, memory_leak_check):
     check_func(impl1, (df_null,), sort_output=True, reset_index=True)
 
 
+@pytest_mark_pandas
 @pytest.mark.slow
 def test_cumulatives_supported_cases(memory_leak_check):
     """
@@ -5274,7 +6382,7 @@ def test_cumulatives_supported_cases(memory_leak_check):
                             Decimal("1.6"),
                             Decimal("-0.2"),
                             Decimal("44.2"),
-                            np.nan,
+                            None,
                             Decimal("0"),
                         ]
                     ),
@@ -5373,7 +6481,7 @@ def test_cumulatives_supported_cases(memory_leak_check):
             pd.DataFrame(
                 {
                     "A": [2, 1, 1, 2, 1, 2],
-                    "B": pd.Series([(1, 2), (3,), (5, 4, 6), (-1, 3, 4), (1,), (1, 2)]),
+                    "B": pd.Series([(1, 2), (3, 4), (5, 4), (-1, 3), (1, 5), (1, 2)]),
                 }
             ),
             marks=pytest.mark.slow,
@@ -5384,12 +6492,21 @@ def test_cumulatives_supported_cases(memory_leak_check):
                 {"A": [2, 1, 1, 2, 3], "B": pd.array([True, False, None, True, True])}
             )
         ),
+        # nullable float
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": [2, 1, 1, 2, 3],
+                    "B": pd.array([1.1, 2.2, None, 4.4, 1.1], dtype="Float64"),
+                }
+            )
+        ),
         # binary
         pytest.param(
             pd.DataFrame(
                 {
                     "A": [16, 1, 1, 1, 16, 16, 1, 40],
-                    "B": [b"ab", b"cd", b"ef", np.nan, b"mm", b"a", b"abc", b"x"],
+                    "B": [b"ab", b"cd", b"ef", None, b"mm", b"a", b"abc", b"x"],
                 }
             ),
             marks=pytest.mark.slow,
@@ -5422,6 +6539,7 @@ def test_size_df(request):
     return request.param
 
 
+@pytest_mark_pandas
 def test_size_supported_types(test_size_df, memory_leak_check):
     """
     Test Groupby.size
@@ -5435,6 +6553,7 @@ def test_size_supported_types(test_size_df, memory_leak_check):
     check_func(impl1, (test_size_df,), sort_output=True)
 
 
+@pytest_mark_pandas
 @pytest.mark.slow
 def test_count_supported_cases(memory_leak_check):
     """
@@ -5447,7 +6566,7 @@ def test_count_supported_cases(memory_leak_check):
 
     # Empty dataframe
     df = pd.DataFrame({"A": [], "B": []})
-    check_func(impl1, (df,), sort_output=True)
+    check_func(impl1, (df,), sort_output=True, check_dtype=False)
 
     # Zero columns
     df_empty = pd.DataFrame({"A": [2, 1, 1, 1, 2, 2, 1]})
@@ -5460,14 +6579,14 @@ def test_count_supported_cases(memory_leak_check):
             "A": [2, 1, 1, 2, 3],
             "B": [1.1, 2.2, 3.3, 4.4, 1.1],
             "C": pd.Series([1, 2, 3, 4, 5], dtype="Int64"),
-            "D": [b"ab", b"cd", b"ef", np.nan, b"mm"],
+            "D": [b"ab", b"cd", b"ef", None, b"mm"],
         }
     )
     check_func(impl1, (df_mix,), sort_output=True, check_dtype=False)
 
 
-# TODO: memory_leak_check
-def test_value_counts():
+@pytest_mark_pandas
+def test_value_counts(memory_leak_check):
     """Test groupby.value_counts"""
 
     # SeriesGroupBy
@@ -5501,6 +6620,7 @@ def test_value_counts():
         bodo.jit(impl3)(df)
 
 
+@pytest_mark_pandas
 @pytest.mark.slow
 def test_nunique_supported_types(test_size_df, memory_leak_check):
     """
@@ -5522,6 +6642,7 @@ def test_nunique_supported_types(test_size_df, memory_leak_check):
     check_func(impl1, (test_size_df,), sort_output=True)
 
 
+@pytest_mark_pandas
 def test_nunique_categorical(memory_leak_check):
     """
     Test groupby.nunique on a column with categorical data.
@@ -5570,6 +6691,7 @@ def test_nunique_dict(memory_leak_check):
     check_func(impl2, (df,), sort_output=True, use_dict_encoded_strings=True)
 
 
+@pytest_mark_pandas
 @pytest.mark.slow
 def test_shift_supported_types(test_size_df, memory_leak_check):
     """
@@ -5590,6 +6712,7 @@ def test_shift_supported_types(test_size_df, memory_leak_check):
     check_func(impl1, (test_size_df,), sort_output=True)
 
 
+@pytest_mark_pandas
 @pytest.mark.parametrize(
     "df",
     [
@@ -5614,6 +6737,13 @@ def test_shift_supported_types(test_size_df, memory_leak_check):
                 "B": pd.Series([1, 2, 3, 4, 5], dtype="Int64"),
             }
         ),
+        # nullable float
+        pd.DataFrame(
+            {
+                "A": [2, 1, 1, 2, 3],
+                "B": pd.Series([1.1, 2.2, 3.3, 4.4, 5.5], dtype="float64"),
+            }
+        ),
         # boolean
         pd.DataFrame(
             {
@@ -5636,6 +6766,7 @@ def test_agg_supported_types(df, memory_leak_check):
     check_func(impl1, (df,), sort_output=True, check_dtype=False, reset_index=True)
 
 
+@pytest_mark_pandas
 @pytest.mark.slow
 @pytest.mark.parametrize(
     "df",
@@ -5682,9 +6813,10 @@ def test_groupby_transform(df, func, memory_leak_check):
         A = df.groupby("A").transform(func)
         return A
 
-    check_func(impl, (df,))
+    check_func(impl, (df,), check_dtype=False)
 
 
+@pytest_mark_pandas
 @pytest.mark.slow
 def test_groupby_transform_count(memory_leak_check):
     """Test groupby().transform('count') with multiple datatypes"""
@@ -5702,11 +6834,13 @@ def test_groupby_transform_count(memory_leak_check):
             "H": [b"foo", b"foo", b"foo", b"bar", b"foo", b"bar"],
             "E": [-8.3, np.nan, 3.8, 1.3, 5.4, np.nan],
             "G": pd.Series(np.array([np.nan, 8, 2, np.nan, np.nan, 20]), dtype="Int8"),
+            "F": pd.Series(pd.array([1.1, 2.2, 3.3, None, 5.5, 6.6], dtype="Float64")),
         }
     )
-    check_func(impl_count, (df,))
+    check_func(impl_count, (df,), check_dtype=False)
 
 
+@pytest_mark_pandas
 @pytest.mark.slow
 def test_groupby_transform_nullable(memory_leak_check):
     """Test groupby().transform with nullable and string datatypes"""
@@ -5750,9 +6884,11 @@ def test_groupby_transform_nullable(memory_leak_check):
     check_func(impl_first, (df,))
     check_func(impl_last, (df,))
     check_func(impl_nunique, (df,))
-    check_func(impl_sum, (df,))
+    # NOTE: Pandas 1.5 doesn't return sum output for non-numerics
+    check_func(impl_sum, (df[["A", "G"]],), check_dtype=False)
 
 
+@pytest_mark_pandas
 @pytest.mark.slow
 @pytest.mark.parametrize("dropna", [True, False])
 def test_groupby_apply_na_key(dropna, memory_leak_check):
@@ -5773,92 +6909,132 @@ def test_groupby_apply_na_key(dropna, memory_leak_check):
     check_func(impl_apply, (df,), sort_output=True, check_dtype=False, reset_index=True)
 
 
+@pytest_mark_pandas
 @pytest.mark.slow
 @pytest.mark.parametrize(
     "df",
     [
         # int
-        pd.DataFrame(
-            {
-                "A": [np.nan, 1, 11, 1, 11, np.nan, np.nan],
-                "B": [2.2, 3.3, 4.4, 3.3, 3.3, 4.4, 5.5],
-            }
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": [np.nan, 1, 11, 1, 11, np.nan, np.nan],
+                    "B": [2.2, 3.3, 4.4, 3.3, 3.3, 4.4, 5.5],
+                }
+            ),
+            id="integer",
         ),
         # float
-        pd.DataFrame(
-            {
-                "A": [np.nan, 1.1, 2.2, 1.1, 2.2, np.nan, np.nan],
-                "B": [2.2, 3.3, 4.4, 3.3, 3.3, 4.4, 5.5],
-            }
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": [np.nan, 1.1, 2.2, 1.1, 2.2, np.nan, np.nan],
+                    "B": [2.2, 3.3, 4.4, 3.3, 3.3, 4.4, 5.5],
+                }
+            ),
+            id="float",
         ),
         # nullable int
-        pd.DataFrame(
-            {
-                "A": pd.Series(
-                    [np.nan, 1, 11, 1, 11, np.nan, np.nan, 3, 3], dtype="Int64"
-                ),
-                "B": [2.2, 3.3, 4.4, 3.3, 3.3, 4.4, 5.5, 6.6, 6.6],
-            }
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": pd.Series(
+                        [np.nan, 1, 11, 1, 11, np.nan, np.nan, 3, 3], dtype="Int64"
+                    ),
+                    "B": [2.2, 3.3, 4.4, 3.3, 3.3, 4.4, 5.5, 6.6, 6.6],
+                }
+            ),
+            id="nullable_integer",
+        ),
+        # nullable float
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": pd.Series(
+                        [np.nan, 1.1, 2.2, 1.1, 2.2, np.nan, np.nan, 3.3, 3.3],
+                        dtype="Float64",
+                    ),
+                    "B": [2.2, 3.3, 4.4, 3.3, 3.3, 4.4, 5.5, 6.6, 6.6],
+                }
+            ),
+            id="nullable_float",
         ),
         # timedelta
-        pd.DataFrame(
-            {
-                "A": [
-                    datetime.timedelta(3, 3, 3),
-                    datetime.timedelta(2, 2, 2),
-                    datetime.timedelta(1, 1, 1),
-                    np.nan,
-                    datetime.timedelta(5, 5, 5),
-                    np.nan,
-                    np.nan,
-                ],
-                "B": [2.2, 3.3, 4.4, 3.3, 3.3, 4.4, 5.5],
-            }
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": [
+                        datetime.timedelta(3, 3, 3),
+                        datetime.timedelta(2, 2, 2),
+                        datetime.timedelta(1, 1, 1),
+                        None,
+                        datetime.timedelta(5, 5, 5),
+                        None,
+                        None,
+                    ],
+                    "B": [2.2, 3.3, 4.4, 3.3, 3.3, 4.4, 5.5],
+                }
+            ),
+            id="timedelta",
         ),
         # datetime
-        pd.DataFrame(
-            {
-                "A": pd.concat(
-                    [
-                        pd.Series(
-                            pd.date_range(start="2/1/2015", end="2/24/2016", periods=6)
-                        ),
-                        pd.Series(data=[None]),
-                    ]
-                ),
-                "B": [2.2, 5.5, 5.5, 11.1, 12.2, 5.5, 2.2],
-            }
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": pd.concat(
+                        [
+                            pd.Series(
+                                pd.date_range(
+                                    start="2/1/2015", end="2/24/2016", periods=6
+                                )
+                            ),
+                            pd.Series(data=[pd.NaT]),
+                        ]
+                    ),
+                    "B": [2.2, 5.5, 5.5, 11.1, 12.2, 5.5, 2.2],
+                }
+            ),
+            id="timestamp",
         ),
         # String
-        pd.DataFrame(
-            {
-                "A": ["CC", "aa", "b", np.nan, "aa", np.nan, "aa", "CC"],
-                "B": [10.2, 11.1, 1.1, 2.2, 2.2, 1.3, 3.4, 4.5],
-            },
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": ["CC", "aa", "b", None, "aa", None, "aa", "CC"],
+                    "B": [10.2, 11.1, 1.1, 2.2, 2.2, 1.3, 3.4, 4.5],
+                },
+            ),
+            id="string",
         ),
         # Binary
         pytest.param(
             pd.DataFrame(
                 {
-                    "A": [b"CC", b"aa", b"b", np.nan, b"aa", np.nan, b"aa", b"CC"],
+                    "A": [b"CC", b"aa", b"b", None, b"aa", None, b"aa", b"CC"],
                     "B": [10.2, 11.1, 1.1, 2.2, 2.2, 1.3, 3.4, 4.5],
                 },
             ),
-            id="binary_case",
+            id="binary",
         ),
         # Boolean
-        pd.DataFrame(
-            {
-                "A": [np.nan, False, True, True, True],
-                "B": [1.0, 2.0, 2, 1, 3],
-            },
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": [None, False, True, True, True],
+                    "B": [1.0, 2.0, 2, 1, 3],
+                },
+            ),
+            id="boolean",
         ),
         # String Repeat keys
-        pd.DataFrame(
-            {
-                "A": ["CC", "aa", "b", np.nan] * 20,
-                "B": [10.2, 11.1, 1.1, 2.2] * 20,
-            },
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": ["CC", "aa", "b", None] * 20,
+                    "B": [10.2, 11.1, 1.1, 2.2] * 20,
+                },
+            ),
+            id="string_repeats",
         ),
     ],
 )
@@ -5866,7 +7042,7 @@ def test_groupby_na_key(df, memory_leak_check):
     """
     Test groupby(dropna=False)
     """
-    if bodo.get_size() > 2 and set(df["A"]) == {np.nan, True, False}:
+    if bodo.get_size() > 2 and set(df["A"]) == {None, True, False}:
         # This produces empty output on one rank with np3 so we skip to avoid
         # hangs
         return
@@ -5984,7 +7160,7 @@ def test_head(memory_leak_check):
             "B": pd.Series(
                 [
                     Decimal("1.6"),
-                    np.nan,
+                    None,
                     Decimal("1.6"),
                     Decimal("44.2"),
                     Decimal("1.6"),
@@ -6007,7 +7183,10 @@ def test_head(memory_leak_check):
             "H": pd.Series([1, 1, np.nan, 1, 2, np.nan, 2], dtype="Int64"),
             "I": [True, True, False, True, True, False, False],
             "J": pd.array([True, False, None, True, True, False, True]),
-            "K": [b"ab", b"cd", np.nan, b"ef", b"mm", b"", b"xxx"],
+            "K": [b"ab", b"cd", None, b"ef", b"mm", b"", b"xxx"],
+            "L": pd.array(
+                [float(i) if i % 2 else None for i in range(7)], dtype="float64"
+            ),
         }
     )
     check_func(impl1, (df,))
@@ -6019,6 +7198,7 @@ def test_head(memory_leak_check):
     check_func(impl1, (df_empty,))
 
 
+@pytest_mark_pandas
 @pytest.mark.slow
 def test_head_cat(memory_leak_check):
     """
@@ -6039,6 +7219,7 @@ def test_head_cat(memory_leak_check):
     check_func(impl1, (df,))
 
 
+@pytest_mark_pandas
 @pytest.mark.slow
 def test_head_idx(datapath, memory_leak_check):
     """
@@ -6055,6 +7236,7 @@ def test_head_idx(datapath, memory_leak_check):
     check_func(impl1, ())
 
 
+@pytest_mark_pandas
 def test_series_reset_index(memory_leak_check):
     """
     [BE-2800] Test that Series.reset_index() handles
@@ -6076,6 +7258,7 @@ def test_series_reset_index(memory_leak_check):
     check_func(impl, (df,), sort_output=True, reset_index=True)
 
 
+@pytest_mark_pandas
 def test_groupby_asindex_no_values(memory_leak_check):
     """
     Test for BE-434. Verifies that groupby(as_index=False)
@@ -6091,6 +7274,7 @@ def test_groupby_asindex_no_values(memory_leak_check):
     check_func(test_impl, (df_empty,), sort_output=True, reset_index=True)
 
 
+@pytest_mark_pandas
 def test_groupby_agg_list_builtin(memory_leak_check):
     """
     [BE-2764] Tests support for groupby.agg with
@@ -6121,6 +7305,7 @@ def test_groupby_agg_list_builtin(memory_leak_check):
     check_func(impl, (df_str,), sort_output=True, reset_index=True)
 
 
+@pytest_mark_pandas
 def test_groupby_agg_list_lambda(memory_leak_check):
     """
     [BE-2764] Tests support for groupby.agg with
@@ -6142,6 +7327,7 @@ def test_groupby_agg_list_lambda(memory_leak_check):
     check_func(impl, (df,), sort_output=True, reset_index=True)
 
 
+@pytest_mark_pandas
 def test_agg_set(memory_leak_check):
     """
     [BE-327] Test Groupby.agg() with constant set input
@@ -6163,6 +7349,7 @@ def test_agg_set(memory_leak_check):
     check_func(impl, (df,), sort_output=True, reset_index=True)
 
 
+@pytest_mark_pandas
 @pytest.mark.slow
 def test_groupby_ngroup(memory_leak_check):
     """Test groupby.ngroup()
@@ -6171,6 +7358,7 @@ def test_groupby_ngroup(memory_leak_check):
         memory_leak_check (fixture function): check memory leak in the test.
 
     """
+
     # basic case
     def impl1(df):
         result = df.groupby("A").ngroup()
@@ -6214,6 +7402,7 @@ def test_groupby_ngroup(memory_leak_check):
     check_func(impl1, (df,), sort_output=True, reset_index=True)
 
 
+@pytest_mark_pandas
 def test_groupby_num_shuffle_keys(memory_leak_check):
     """
     Tests the Bodo optional argument, _bodo_num_shuffle_keys
@@ -6310,4 +7499,760 @@ def test_groupby_num_shuffle_keys(memory_leak_check):
         sort_output=True,
         reset_index=True,
         py_output=df2.groupby(["A", "B"])["C"].nunique(),
+    )
+
+
+@pytest.mark.parametrize(
+    "t_val, f_val, dtype",
+    [
+        pytest.param(-1, 0, pd.Int8Dtype(), id="int8"),
+        pytest.param(5, 0, pd.UInt8Dtype(), id="uint8", marks=pytest.mark.slow),
+        pytest.param(10, 0, pd.Int16Dtype(), id="int16", marks=pytest.mark.slow),
+        pytest.param(255, 0, pd.UInt16Dtype(), id="uint16", marks=pytest.mark.slow),
+        pytest.param(1024, 0, pd.Int32Dtype(), id="int32", marks=pytest.mark.slow),
+        pytest.param(1, 0, pd.UInt32Dtype(), id="uint32", marks=pytest.mark.slow),
+        pytest.param(-2048, 0, pd.Int64Dtype(), id="int64", marks=pytest.mark.slow),
+        pytest.param(64, 0, pd.UInt64Dtype(), id="uint64"),
+        pytest.param(True, False, pd.BooleanDtype(), id="bool"),
+        pytest.param(3.14, 0.0, np.float32, id="float32"),
+        pytest.param(-2.71828, 0.0, np.float64, id="float64"),
+        pytest.param(Decimal("0.05"), Decimal("0.0"), None, id="decimal"),
+    ],
+)
+def test_boolor_booland_boolxor_agg(t_val, f_val, dtype, memory_leak_check):
+    """Tests calling a groupby with boolor_agg/booland_agg/boolxor_agg, functions
+    used by BodoSQL and not part or regular pandas, on all possible datatypes."""
+
+    def impl(df):
+        # Note we choose all of these flag + code format because
+        # these are the generated SQL flags
+        return df.groupby(["key"], as_index=False, dropna=False).agg(
+            or_out=pd.NamedAgg(column="data", aggfunc="boolor_agg"),
+            and_out=pd.NamedAgg(column="data", aggfunc="booland_agg"),
+            xor_out=pd.NamedAgg(column="data", aggfunc="boolxor_agg"),
+        )
+
+    scale = 5
+
+    # For boolxor_agg, groups where exactly one value is t_val and the rest are
+    # either f_val or None should be True, the rest should be False, or NULL
+    # if the entire group is all-null. For booland_agg, all the values must
+    # be true. For boolor_agg, at least one value must be true.
+    original_keys = [
+        "0/3",
+        "1/3",
+        "2/3",
+        "3/3",
+        "1/1",
+        "2/2",
+        "0/0",
+        "0/1",
+        "0/2",
+        "1/2",
+    ]
+    group_keys = []
+    for i in range(scale):
+        for key in original_keys:
+            group_keys.append(key + chr(i + 65))
+    groups = pd.Series(group_keys).repeat(3).values
+    df = pd.DataFrame(
+        {
+            "key": groups,
+            "data": pd.Series(
+                (
+                    [f_val, f_val, f_val]
+                    + [f_val, t_val, f_val]
+                    + [t_val, f_val, t_val]
+                    + [t_val, t_val, t_val]
+                    + [None, None, t_val]
+                    + [None, t_val, t_val]
+                    + [None, None, None]
+                    + [f_val, None, None]
+                    + [None, f_val, f_val]
+                    + [t_val, f_val, None]
+                )
+                * scale,
+                dtype=dtype,
+            ),
+        }
+    )
+    expected_output = pd.DataFrame(
+        {
+            "key": pd.Series(group_keys),
+            "or_out": pd.Series(
+                [False, True, True, True, True, True, None, False, False, True] * scale,
+                dtype="boolean",
+            ),
+            "and_out": pd.Series(
+                [False, False, False, True, True, True, None, False, False, False]
+                * scale,
+                dtype="boolean",
+            ),
+            "xor_out": pd.Series(
+                [False, True, False, False, True, False, None, False, False, True]
+                * scale,
+                dtype="boolean",
+            ),
+        }
+    )
+
+    check_func(
+        impl,
+        (df,),
+        sort_output=True,
+        reset_index=True,
+        py_output=expected_output,
+        check_names=False,
+    )
+
+
+@pytest.mark.parametrize(
+    "data, dtype",
+    [
+        pytest.param(
+            [42, 100, 60, 5, 15, 70, 3, 213, 6, None], pd.Int32Dtype(), id="int32"
+        ),
+        pytest.param(
+            [41.5, 100.4, 60.0, 5.0, 15.21, 69.53, 3.2, 213.1, 5.8, None],
+            pd.Float32Dtype(),
+            id="floats",
+        ),
+        pytest.param(
+            ["41.5", "100", "60", "5", "15", "69.53", "3.2", "213.1", "5.8", None],
+            pd.StringDtype(),
+            id="strings",
+        ),
+    ],
+)
+def test_bit_agg(data, dtype, memory_leak_check):
+    """Tests the BITOR_AGG, BITAND_AGG, and BITXOR_AGG aggregation functions
+        with groupby.
+
+    Args:
+        data (pd.Series): Input column
+        dtype (int): Dtype of the input column (data)
+        memory_leak_check (): Fixture, see `conftest.py`.
+    """
+
+    def impl(df):
+        # Note this flag + code format is chosen because
+        # these are the generated SQL flags
+        return df.groupby(["key"], as_index=False, dropna=False).agg(
+            or_out=pd.NamedAgg(column="data", aggfunc="bitor_agg"),
+            and_out=pd.NamedAgg(column="data", aggfunc="bitand_agg"),
+            xor_out=pd.NamedAgg(column="data", aggfunc="bitxor_agg"),
+        )
+
+    df = pd.DataFrame(
+        {
+            "key": pd.Series([1, 1, 1, 2, 2, 2, 3, 3, 3, 4]),
+            "data": pd.Series(data, dtype=dtype),
+        }
+    )
+
+    expected = pd.DataFrame(
+        {
+            "key": pd.Series([1, 2, 3, 4]),
+            "or_out": pd.Series([126, 79, 215, None], dtype=pd.Int32Dtype()),
+            "and_out": pd.Series([32, 4, 0, None], dtype=pd.Int32Dtype()),
+            "xor_out": pd.Series([114, 76, 208, None], dtype=pd.Int32Dtype()),
+        }
+    )
+
+    check_func(
+        impl,
+        (df,),
+        sort_output=True,
+        reset_index=True,
+        py_output=expected,
+        check_names=False,
+        check_dtype=False,  # Output type depends on input type.
+    )
+
+
+@pytest.mark.parametrize(
+    "data_col",
+    [
+        # Note string/binary is not supported inside Snowflake
+        # https://docs.snowflake.com/en/sql-reference/functions/boolor_agg.html#usage-notes
+        pd.Series(["afde", "Rewr"] * 6),
+        # Bytes is unsupported
+        pd.Series([b"afde", b"Rewr"] * 6),
+        # Also the types require the ability to cast to boolean. Therefore it doesn't support
+        # date (try in snowflake: select date_from_parts(2000, 1, 1)::boolean)
+        pd.Series([datetime.date(2022, 10, 10), datetime.date(2022, 11, 10)] * 6),
+        # time (try in snowflake: select time_from_parts(12, 55, 55)::boolean)
+        pd.Series(
+            [bodo.Time(12, 34, 56, precision=0), bodo.Time(12, 46, 56, precision=0)] * 6
+        ),
+        # timestamp (try in snowflake: select timestamp_from_parts(2000, 1, 1, 1, 1, 1)::boolean)
+        pd.Series([pd.Timestamp(2022, 10, 10), pd.Timestamp(2022, 11, 10)] * 6),
+        # timedelta isn't a proper type inside snowflake
+        pd.Series([pd.Timedelta(1), pd.Timedelta(2)] * 6),
+        # Categorical string
+        pd.Series(pd.Categorical(["afde", "Rewr"] * 6)),
+    ],
+)
+def test_boolagg_or_invalid(data_col, memory_leak_check):
+    """Tests calling a groupby with boolagg_or, a function used by
+    BodoSQL and not part or regular pandas, on unsupported datatypes."""
+
+    @bodo.jit
+    def impl(df):
+        # Note we choose all of these flag + code format because
+        # these are the generated SQL flags
+        return df.groupby(["key"], as_index=False, dropna=False).agg(
+            data_out=pd.NamedAgg(column="data", aggfunc="boolor_agg"),
+        )
+
+    groups = pd.Series([1, 2, 3, 4, 5, 6] * 2)
+    df = pd.DataFrame(
+        {
+            "key": groups,
+            "data": data_col,
+        }
+    )
+    with pytest.raises(
+        BodoError,
+        match="boolor_agg, only columns of type integer, float, Decimal, or boolean type are allowed",
+    ):
+        impl(df)
+
+
+@pytest.mark.tz_aware
+def test_tz_aware_gb_apply(memory_leak_check):
+    """
+    Tests using groupby.apply with a tz-aware column as a data column on a
+    supported operation.
+    """
+
+    def udf(data_df):
+        # Sort by the tz-aware column
+        new_df = data_df.sort_values(
+            by=[
+                "B",
+            ],
+            ascending=[
+                True,
+            ],
+        )
+        # Check the order
+        return new_df["C"].iat[0]
+
+    def impl(df):
+        return df.groupby("A").apply(udf)
+
+    df = pd.DataFrame(
+        {
+            "A": ["A", "B", "C", "D"] * 5,
+            "B": pd.date_range(
+                start="1/1/2022",
+                freq="16D5H",
+                periods=20,
+                tz="Poland",
+            ).to_series(),
+            "C": list("abcdefgABCDEFGhijkML"),
+        }
+    )
+
+    check_func(
+        impl,
+        (df,),
+        sort_output=True,
+        reset_index=True,
+    )
+
+
+@pytest.mark.parametrize(
+    "df",
+    [
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": [
+                        1,
+                        2,
+                        1,
+                        0,
+                        2,
+                        1,
+                        2,
+                        2,
+                    ],
+                    "B": np.array(
+                        [[[1, 2], [3]], [[None], [4]], [[5], [6]], None] * 2, object
+                    ),
+                    "C": np.array([[1, 2], [3], [4, 5, 6], [0]] * 2, object),
+                    "D": pd.array([1, 2, 3, 4] * 2),
+                    "E": ["xyz", "xyz", "wxy", "wxy"] * 2,
+                    "F": pd.array(
+                        [
+                            [],
+                            None,
+                            ["A"],
+                            ["A", None, "B"],
+                            ["A"],
+                            ["X", None, "Y"],
+                            None,
+                            [],
+                        ],
+                        dtype=pd.ArrowDtype(pa.large_list(pa.string())),
+                    ),
+                }
+            ),
+            id="array",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": [
+                        1,
+                        2,
+                        1,
+                        0,
+                        2,
+                        1,
+                        2,
+                        2,
+                    ],
+                    "B": pd.array(
+                        [
+                            {
+                                "X": "AB",
+                                "Y": [1.1, 2.2],
+                                "Z": [[1], None, [3, None]],
+                                "W": {"A": 1, "B": "A"},
+                                "Q": ["A"],
+                            },
+                            {
+                                "X": "C",
+                                "Y": [1.1],
+                                "Z": [[11], None],
+                                "W": {"A": 1, "B": "ABC"},
+                                "Q": None,
+                            },
+                            None,
+                            {
+                                "X": "D",
+                                "Y": [4.0, 6.0],
+                                "Z": [[1], None],
+                                "W": {"A": 1, "B": ""},
+                                "Q": ["AE", "IOU", None],
+                            },
+                            {
+                                "X": "VFD",
+                                "Y": [1.2],
+                                "Z": [[], [3, 1]],
+                                "W": {"A": 1, "B": "AA"},
+                                "Q": ["Y"],
+                            },
+                            {
+                                "X": "LMMM",
+                                "Y": [9.0, 1.2, 3.1],
+                                "Z": [[10, 11], [11, 0, -3, -5]],
+                                "W": {"A": 1, "B": "DFG"},
+                                "Q": [],
+                            },
+                            {
+                                "X": "LMMM",
+                                "Y": [9.0, 1.2, 3.1],
+                                "Z": [[10, 11], [11, 0, -3, -5]],
+                                "W": {"A": 1, "B": "DFG"},
+                                "Q": ["X", None, "Z"],
+                            },
+                            None,
+                        ],
+                        dtype=pd.ArrowDtype(
+                            pa.struct(
+                                [
+                                    pa.field("X", pa.string()),
+                                    pa.field("Y", pa.large_list(pa.float64())),
+                                    pa.field(
+                                        "Z", pa.large_list(pa.large_list(pa.int64()))
+                                    ),
+                                    pa.field(
+                                        "W",
+                                        pa.struct(
+                                            [
+                                                pa.field("A", pa.int8()),
+                                                pa.field("B", pa.string()),
+                                            ]
+                                        ),
+                                    ),
+                                    pa.field("Q", pa.large_list(pa.string())),
+                                ]
+                            )
+                        ),
+                    ),
+                }
+            ),
+            id="struct",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": [
+                        1,
+                        2,
+                        1,
+                        0,
+                        2,
+                        1,
+                        2,
+                        2,
+                    ],
+                    "B": pd.Series(
+                        [
+                            {1: 1.4, 2: 3.1},
+                            None,
+                            {},
+                            {11: 3.4, 21: 3.1, 9: 8.1},
+                        ]
+                        * 2,
+                        dtype=pd.ArrowDtype(pa.map_(pa.int64(), pa.float64())),
+                    ),
+                    "C": pd.Series(
+                        [
+                            {1: [], 2: None},
+                            None,
+                            {},
+                            {11: ["A"], 21: ["B", None], 9: ["C"]},
+                        ]
+                        * 2,
+                        dtype=pd.ArrowDtype(
+                            pa.map_(pa.int64(), pa.large_list(pa.string()))
+                        ),
+                    ),
+                }
+            ),
+            id="map",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": [
+                        1,
+                        2,
+                        1,
+                        0,
+                        2,
+                        1,
+                        2,
+                        2,
+                    ],
+                    "B": [(1, 1.1), (2, 2.2), None, (4, 4.4)] * 2,
+                }
+            ),
+            id="tuple",
+            marks=pytest.mark.skip(
+                "[BSE-2076] TODO: Support tuple array in Arrow boxing/unboxing"
+            ),
+        ),
+    ],
+)
+@pytest.mark.parametrize(
+    "fstr",
+    [
+        pytest.param("first", id="first"),
+        pytest.param("count", id="count"),
+    ],
+)
+def test_nested_array_data(df, memory_leak_check, fstr):
+    """
+    Test using groupby.apply on a column with nested array data.
+    """
+
+    def impl(df, fstr):
+        return df.groupby("A", dropna=False, as_index=False).agg(fstr)
+
+    expected_df = df.groupby("A", dropna=False, as_index=False).agg(fstr)
+
+    check_func(
+        impl,
+        (df, fstr),
+        py_output=expected_df,
+        convert_columns_to_pandas=True,
+        sort_output=True,
+        reset_index=True,
+    )
+
+
+def test_reverse_shuffle_timestamp_tz(memory_leak_check):
+    """Test reverse shuffle used in groupby/apply for TimestampTZ datatype"""
+
+    def impl(df):
+        return df.groupby("A").apply(lambda x: pd.DataFrame({"C": x["B"]}))
+
+    tz_arr = np.array(
+        [
+            bodo.TimestampTZ.fromUTC("2021-01-02 03:04:05", 100),
+            bodo.TimestampTZ.fromUTC("2022-12-31 12:59:59", 200),
+            bodo.TimestampTZ.fromUTC("2024-01-01 00:00:00", 300),
+            None,
+            bodo.TimestampTZ.fromUTC("2022-12-31 12:59:59", 200),
+        ]
+    )
+    df = pd.DataFrame({"A": [1, 3, 1, 4, 0], "B": tz_arr})
+    check_func(impl, (df,), sort_output=True, reset_index=True, check_dtype=False)
+
+
+def test_timestamptz_gb_key(memory_leak_check):
+    """Tests groupby where key is timestamptz
+    as_index=False to avoid timestamptz as an index
+    dropna=False Snowflake Keeps Null as Keys
+    """
+
+    def impl(df):
+        return df.groupby("B", as_index=False, dropna=False).sum()
+
+    tz_arr = np.array(
+        [
+            bodo.TimestampTZ.fromUTC("2021-01-02 03:04:05", 400),
+            None,
+            bodo.TimestampTZ.fromUTC("2021-01-02 03:04:05", 300),
+            None,
+        ]
+        * 5
+    )
+    df = pd.DataFrame(
+        {
+            "A": ["A", "B", "C", "D"] * 5,
+            "B": tz_arr,
+            "C": list("abcdefgABCDEFGhijkML"),
+        }
+    )
+    check_func(impl, (df,), sort_output=True, reset_index=True)
+
+
+@pytest.mark.parametrize(
+    "fstr, expected",
+    [
+        pytest.param(
+            "count",
+            pd.DataFrame({"A": ["A", "B", "C", "D"], "B": [6, 3, 6, 0]}),
+            id="count",
+        ),
+        pytest.param(
+            "size",
+            pd.DataFrame({"A": ["A", "B", "C", "D"], "size": [6, 6, 6, 6]}),
+            id="size",
+        ),
+        pytest.param(
+            "first",
+            pd.DataFrame(
+                {
+                    "A": ["A", "B", "C", "D"],
+                    "B": [
+                        bodo.TimestampTZ.fromUTC("2021-01-02 03:04:05", 400),
+                        bodo.TimestampTZ.fromUTC("2021-01-02 03:04:05", 400),
+                        bodo.TimestampTZ.fromUTC("2024-01-01 01:00:00", 0),
+                        None,
+                    ],
+                }
+            ),
+            id="first",
+        ),
+        pytest.param(
+            "last",
+            pd.DataFrame(
+                {
+                    "A": ["A", "B", "C", "D"],
+                    "B": [
+                        bodo.TimestampTZ.fromUTC("2021-01-02 03:04:05", 0),
+                        bodo.TimestampTZ.fromUTC("2021-01-02 03:04:05", 400),
+                        bodo.TimestampTZ.fromUTC("2024-01-01 00:00:00", 60),
+                        None,
+                    ],
+                }
+            ),
+            id="last",
+        ),
+        pytest.param(
+            "min",
+            pd.DataFrame(
+                {
+                    "A": ["A", "B", "C", "D"],
+                    "B": [
+                        bodo.TimestampTZ.fromUTC("2021-01-02 03:04:05", 400),
+                        bodo.TimestampTZ.fromUTC("2021-01-02 03:04:05", 400),
+                        bodo.TimestampTZ.fromUTC("2024-01-01 00:00:00", 60),
+                        None,
+                    ],
+                }
+            ),
+            id="min",
+        ),
+        pytest.param(
+            "max",
+            pd.DataFrame(
+                {
+                    "A": ["A", "B", "C", "D"],
+                    "B": [
+                        bodo.TimestampTZ.fromUTC("2021-01-02 03:04:05", 400),
+                        bodo.TimestampTZ.fromUTC("2021-01-02 03:04:05", 400),
+                        bodo.TimestampTZ.fromUTC("2024-01-01 01:00:00", 0),
+                        None,
+                    ],
+                }
+            ),
+            id="max",
+        ),
+    ],
+)
+def test_timestamptz_gb_agg(fstr, expected, memory_leak_check):
+    """Tests groupby with timestamptz column and aggregation"""
+
+    def impl(df):
+        return df.groupby("A", as_index=False, dropna=False).agg(fstr)
+
+    # groups A and C always have values, B has some nulls, D has all nulls
+    tz_arr = np.array(
+        [
+            bodo.TimestampTZ.fromUTC("2021-01-02 03:04:05", 400),
+            None,
+            bodo.TimestampTZ.fromUTC("2024-01-01 01:00:00", 0),
+            None,
+            bodo.TimestampTZ.fromUTC("2021-01-02 03:04:05", 0),
+            bodo.TimestampTZ.fromUTC("2021-01-02 03:04:05", 400),
+            bodo.TimestampTZ.fromUTC("2024-01-01 00:00:00", 60),
+            None,
+        ]
+        * 3
+    )
+    df = pd.DataFrame(
+        {
+            "A": ["A", "B", "C", "D"] * 6,
+            "B": tz_arr,
+        }
+    )
+    check_func(impl, (df,), py_output=expected, sort_output=True, reset_index=True)
+
+
+def test_timestamptz_gb_mode(memory_leak_check):
+    """Tests groupby + mode with timestamptz column"""
+
+    # This isn't tested with the other functions above to control the values
+    # per group better - if we have more tests like this, we should combine the
+    # tests and make it more generic
+    def impl(df):
+        return df.groupby("A", as_index=False, dropna=False).agg("mode")
+
+    gb_key = ["A"] * 4 + ["B"] * 4 + ["C"] * 4 + ["D"] * 4 + ["E"] * 4 + ["F"] * 4
+
+    # groups A and C always have values, B has some nulls, D has all nulls
+    tz_arr = np.array(
+        [
+            # A - all the same UTC time, but different offsets
+            bodo.TimestampTZ.fromUTC("2024-01-01 00:00:00", 0),
+            bodo.TimestampTZ.fromUTC("2024-01-01 00:00:00", 60),
+            bodo.TimestampTZ.fromUTC("2024-01-01 00:00:00", 125),
+            bodo.TimestampTZ.fromUTC("2024-01-01 00:00:00", 333),
+            # B - all the same local time, but different UTC times
+            bodo.TimestampTZ.fromLocal("2024-01-01 00:00:00", 0),
+            bodo.TimestampTZ.fromLocal("2024-01-01 00:00:00", 60),
+            bodo.TimestampTZ.fromLocal("2024-01-01 00:00:00", 125),
+            bodo.TimestampTZ.fromLocal("2024-01-01 00:00:00", 333),
+            # C - value is the mode
+            bodo.TimestampTZ.fromUTC("2024-01-01 00:00:00", 60),
+            bodo.TimestampTZ.fromUTC("2024-01-01 00:00:00", 120),
+            bodo.TimestampTZ.fromUTC("2024-01-01 00:00:00", 240),
+            bodo.TimestampTZ.fromUTC("2024-01-01 01:01:01", 0),
+            # D - all null
+            None,
+            None,
+            None,
+            None,
+            # E - some nulls
+            bodo.TimestampTZ.fromUTC("2024-01-01 00:00:00", 60),
+            None,
+            bodo.TimestampTZ.fromUTC("2024-01-01 00:00:00", 60),
+            bodo.TimestampTZ.fromUTC("2024-01-01 00:00:00", 60),
+            # F - majority null
+            None,
+            None,
+            bodo.TimestampTZ.fromUTC("2024-01-01 00:00:00", 60),
+            None,
+        ]
+    )
+    df = pd.DataFrame({"A": gb_key, "B": tz_arr})
+
+    expected = pd.DataFrame(
+        {
+            "A": ["A", "B", "C", "D", "E", "F"],
+            "B": np.array(
+                [
+                    bodo.TimestampTZ.fromUTC("2024-01-01 00:00:00", 0),
+                    bodo.TimestampTZ.fromLocal("2024-01-01 00:00:00", 0),
+                    bodo.TimestampTZ.fromUTC("2024-01-01 00:00:00", 60),
+                    None,
+                    bodo.TimestampTZ.fromUTC("2024-01-01 00:00:00", 60),
+                    bodo.TimestampTZ.fromUTC("2024-01-01 00:00:00", 60),
+                ]
+            ),
+        }
+    )
+    check_func(impl, (df,), py_output=expected, sort_output=True, reset_index=True)
+
+
+@pytest.mark.slow
+def test_many_same_type_keys(memory_leak_check):
+    """
+    Test the case where we have many keys of the same type. This is used
+    for testing a specially templated case
+    (see GROUPBY_INFO_IMPL_ALL_SAME_KEY_TYPES in _groupby_groups.cpp).
+    """
+
+    def impl(df):
+        return df.groupby(["A", "B", "C", "D", "E"], as_index=False, dropna=False)[
+            "F"
+        ].sum()
+
+    df = pd.DataFrame(
+        {
+            "A": pd.Series([0, 1, 4, 5, 9] * 10, dtype="Int64"),
+            "B": pd.Series(list(np.arange(10, 20)) * 5, dtype="Int64"),
+            "C": pd.Series(list(np.arange(20, 45)) * 2, dtype="Int64"),
+            "D": pd.Series(list(np.arange(0, 5)) * 10, dtype="Int64"),
+            "E": pd.Series(list(np.arange(90, 140)), dtype="Int64"),
+            "F": pd.Series(list(np.arange(10, 20)) * 5, dtype="Int64"),
+        }
+    )
+    check_func(impl, (df,), sort_output=True, reset_index=True, check_dtype=False)
+
+
+def test_mixed_semi_structured_and_regular_keys(memory_leak_check):
+    """
+    Test the case where we have a mix of semi-structured and regular keys.
+    """
+
+    # This isn't tested with the other functions above to control the values
+    # per group better - if we have more tests like this, we should combine the
+    # tests and make it more generic
+    def impl(df):
+        return df.groupby(["A", "B"], as_index=False, dropna=False).agg("sum")
+
+    df = pd.DataFrame(
+        {
+            "A": ["1", "1", "2", "2", "4", "4"],
+            "B": pd.array([["1"], ["1"], ["2"], ["3"], ["4"], ["4"]]),
+            "C": [1, 2, 3, 4, 5, 5],
+        }
+    )
+
+    expected = pd.DataFrame(
+        {
+            "A": ["1", "2", "2", "4"],
+            "B": pd.array([["1"], ["2"], ["3"], ["4"]]),
+            "C": [3, 3, 4, 10],
+        }
+    )
+    # use_dict_encoded_strings must be set to false or hash_arrow_array will
+    # panic as the underlying string array will unexpectedly be dict encoded.
+    check_func(
+        impl,
+        (df,),
+        py_output=expected,
+        sort_output=True,
+        reset_index=True,
+        use_dict_encoded_strings=False,
     )

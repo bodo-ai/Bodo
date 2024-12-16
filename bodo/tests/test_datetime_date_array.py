@@ -1,4 +1,3 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 import datetime
 
 import numpy as np
@@ -132,5 +131,5 @@ def test_nbytes(date_arr_value, memory_leak_check):
     def impl(arr):
         return arr.nbytes
 
-    py_out = 139  # 136 for data, 3 for null_bitmap
+    py_out = 71  # 68 for data, 3 for null_bitmap
     check_func(impl, (date_arr_value,), py_output=py_out)

@@ -1,6 +1,3 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
-import os
-
 import pandas as pd
 import pytest
 from caching_tests_common import fn_distribution  # noqa
@@ -9,6 +6,7 @@ import bodo
 from bodo.tests.utils import (
     check_caching,
     get_snowflake_connection_string,
+    pytest_mark_snowflake,
     sql_user_pass_and_hostname,
 )
 
@@ -45,6 +43,7 @@ def test_read_csv_cache(fn_distribution, is_cached, datapath, memory_leak_check)
     check_caching(impl, (), is_cached, fn_distribution)
 
 
+@pytest.mark.parquet
 @pytest.mark.smoke
 def test_read_parquet_cache(fn_distribution, is_cached, datapath, memory_leak_check):
     """
@@ -58,6 +57,7 @@ def test_read_parquet_cache(fn_distribution, is_cached, datapath, memory_leak_ch
     check_caching(impl, (fname,), is_cached, fn_distribution)
 
 
+@pytest.mark.parquet
 def test_read_parquet_cache_fname_arg(
     fn_distribution, is_cached, datapath, memory_leak_check
 ):
@@ -78,6 +78,7 @@ def test_read_parquet_cache_fname_arg(
     check_caching(impl, (fname,), is_cached, fn_distribution, py_output=py_out)
 
 
+@pytest.mark.parquet
 def test_read_parquet_cache_fname_arg2(
     fn_distribution, is_cached, datapath, memory_leak_check
 ):
@@ -103,6 +104,7 @@ def test_read_parquet_cache_fname_arg2(
     check_caching(impl, (fname,), is_cached, fn_distribution, py_output=py_out)
 
 
+@pytest.mark.parquet
 def test_read_parquet_cache_fname_arg_list_files(
     fn_distribution, is_cached, datapath, memory_leak_check
 ):
@@ -180,7 +182,7 @@ def test_cache_sql_hardcoded_aws(fn_distribution, is_cached, memory_leak_check):
     check_caching(test_impl_hardcoded, (), is_cached, fn_distribution)
 
 
-@pytest.mark.skipif("AGENT_NAME" not in os.environ, reason="requires Azure Pipelines")
+@pytest_mark_snowflake
 def test_cache_sql_snowflake(fn_distribution, is_cached, memory_leak_check):
     """
     Tests that caching works on Snowflake queries

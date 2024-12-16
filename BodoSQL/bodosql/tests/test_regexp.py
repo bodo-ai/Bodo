@@ -1,17 +1,21 @@
-# Copyright (C) 2021 Bodo Inc. All rights reserved.
 """
 Test correctness of SQL regex functions on BodoSQL
 """
 
 import pandas as pd
 import pytest
+
+from bodo.tests.utils import pytest_slow_unless_codegen
 from bodosql.tests.utils import check_query
+
+# Skip unless any codegen files were changed
+pytestmark = pytest_slow_unless_codegen
 
 
 @pytest.fixture
 def regexp_strings_df():
     return {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
                 "A": [
                     "She opened up her third bottle of wine of the night.",
@@ -22,6 +26,7 @@ def regexp_strings_df():
                     None,
                 ],
                 "B": [1, 2, 3, 1, 2, 3],
+                "P": [".*The.*", ".*\W+o\w*.*", None, "the.*", None, ".*\w+-\w+.*"],
             }
         )
     }
@@ -57,6 +62,7 @@ def regexp_strings_df():
                 ),
             ),
             id="simple_pattern-no_flags-alias-1",
+            marks=pytest.mark.slow,
         ),
         pytest.param(
             (
@@ -71,6 +77,7 @@ def regexp_strings_df():
                 ),
             ),
             id="simple_pattern-no_flags-alias-2",
+            marks=pytest.mark.slow,
         ),
         pytest.param(
             (
@@ -99,6 +106,7 @@ def regexp_strings_df():
                 ),
             ),
             id="medium_pattern-no_flags-alias-2",
+            marks=pytest.mark.slow,
         ),
         pytest.param(
             (
@@ -183,6 +191,39 @@ def test_regexp_like(regexp_strings_df, args, spark_info, memory_leak_check):
 @pytest.mark.parametrize(
     "args",
     [
+        (
+            "SELECT REGEXP_LIKE(A, P, 'i') FROM table1",
+            pd.DataFrame(
+                {
+                    0: pd.Series(
+                        [True, True, None, False, None, None],
+                        dtype=pd.BooleanDtype(),
+                    )
+                }
+            ),
+        ),
+        (
+            "SELECT CASE WHEN REGEXP_LIKE(A, P, '') THEN 'Y' ELSE 'N' END FROM table1",
+            pd.DataFrame({0: pd.Series(["N", "Y", "N", "N", "N", "N"])}),
+        ),
+    ],
+)
+def test_regexp_like_non_scalar_pattern(regexp_strings_df, args, memory_leak_check):
+    """Test REGEXP_LIKE with a non-scalar pattern argument"""
+    query, answer = args
+    check_query(
+        query,
+        regexp_strings_df,
+        None,
+        check_names=False,
+        check_dtype=False,
+        expected_output=answer,
+    )
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
         pytest.param(
             (
                 "SELECT REGEXP_COUNT(A, 'The') FROM table1",
@@ -227,6 +268,34 @@ def test_regexp_count(regexp_strings_df, args, spark_info, memory_leak_check):
         query,
         regexp_strings_df,
         spark_info,
+        check_names=False,
+        check_dtype=False,
+        expected_output=answer,
+    )
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        (
+            "SELECT REGEXP_COUNT(A, P) FROM table1",
+            pd.DataFrame(
+                {0: pd.Series([0, 1, None, 1, None, None], dtype=pd.Int32Dtype())}
+            ),
+        ),
+        (
+            "SELECT CASE WHEN REGEXP_COUNT(A, P, 1, 'i') > 0 THEN ':)' ELSE ':(' END FROM table1",
+            pd.DataFrame({0: pd.Series([":)", ":)", ":(", ":)", ":(", ":("])}),
+        ),
+    ],
+)
+def test_regexp_count_non_scalar_pattern(regexp_strings_df, args, memory_leak_check):
+    """Test REGEXP_COUNT with a non-scalar pattern argument"""
+    query, answer = args
+    check_query(
+        query,
+        regexp_strings_df,
+        None,
         check_names=False,
         check_dtype=False,
         expected_output=answer,
@@ -340,7 +409,7 @@ def test_regexp_count(regexp_strings_df, args, spark_info, memory_leak_check):
         ),
         pytest.param(
             (
-                "SELECT CASE WHEN INSTR(A, '-') > 0 THEN REGEXP_REPLACE(A, '\W+([[:alpha:]]+)-([[:alpha:]]+)', ' \\\\\\\\2-\\\\\\\\1') ELSE REGEXP_REPLACE(A, '(\W+)(\w+) (\w+) (\w+)', '\\\\\\\\1[\\\\\\\\4,\\\\\\\\3,\\\\\\\\2]', 6) END FROM table1",
+                "SELECT CASE WHEN INSTR(A, '-') > 0 THEN REGEXP_REPLACE(A, '\W+([[:alpha:]]+)-([[:alpha:]]+)', ' \\\\2-\\\\1') ELSE REGEXP_REPLACE(A, '(\W+)(\w+) (\w+) (\w+)', '\\\\1[\\\\4,\\\\3,\\\\2]', 6) END FROM table1",
                 pd.DataFrame(
                     {
                         0: pd.Series(
@@ -361,12 +430,12 @@ def test_regexp_count(regexp_strings_df, args, spark_info, memory_leak_check):
         ),
     ],
 )
-def test_regexp_replace(regexp_strings_df, args, spark_info, memory_leak_check):
+def test_regexp_replace(regexp_strings_df, args, memory_leak_check):
     query, answer = args
     check_query(
         query,
         regexp_strings_df,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
         expected_output=answer,
@@ -438,6 +507,7 @@ def test_regexp_replace(regexp_strings_df, args, spark_info, memory_leak_check):
                 ),
             ),
             id="simple_pattern-1-1-ignore_case_extract-no_group",
+            marks=pytest.mark.slow,
         ),
         pytest.param(
             (
@@ -510,6 +580,7 @@ def test_regexp_substr(regexp_strings_df, args, spark_info, memory_leak_check):
                 ),
             ),
             id="simple_pattern-1-1-0-ignore_case-no_group",
+            marks=pytest.mark.slow,
         ),
         pytest.param(
             (
@@ -538,6 +609,7 @@ def test_regexp_substr(regexp_strings_df, args, spark_info, memory_leak_check):
                 ),
             ),
             id="medium_pattern-1-2-1-no_flags-2",
+            marks=pytest.mark.slow,
         ),
         pytest.param(
             (

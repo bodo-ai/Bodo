@@ -1,16 +1,19 @@
 package com.bodosql.calcite.application.BodoSQLCodeGen;
 
-import static com.bodosql.calcite.application.Utils.AggHelpers.getDummyColName;
-import static com.bodosql.calcite.application.Utils.JoinHelpers.preventColumnCollision;
-import static com.bodosql.calcite.application.Utils.Utils.getBodoIndent;
-import static com.bodosql.calcite.application.Utils.Utils.makeQuoted;
+import static com.bodosql.calcite.application.utils.AggHelpers.getDummyColName;
+import static com.bodosql.calcite.application.utils.JoinHelpers.preventColumnCollision;
+import static com.bodosql.calcite.application.utils.Utils.makeQuoted;
 
+import com.bodosql.calcite.ir.Expr;
+import com.bodosql.calcite.ir.Op;
+import com.bodosql.calcite.ir.Variable;
 import java.util.*;
 
 public class JoinCodeGen {
 
   /* Counter used to generate dummy column names. */
-  private static int dummyCounter = 0;
+  public static int dummyCounter = 0;
+
   /**
    * Function that returns the necessary generated code for a Join expression, and fills the input
    * list, allColNames, with the column names of the table resulting from the join. If the join
@@ -24,24 +27,25 @@ public class JoinCodeGen {
    * @param rightColNames The names of the columns in the right table
    * @param leftColNames The names of the columns in the left table
    * @param expectedOutColumns The expected names of the columns in the output table
-   * @param joinCond Expression to be passed to Bodo for pd.merge. If this expression is True we
-   *     cannot support it directly and need to perform a cross join instead.
+   * @param joinCond Expression to be passed to Bodo for pd.merge.
+   * @param mergeCols Set of column names that overlap for merging. Used for renamed columns.
+   * @param tryRebalanceOutput Should we set a flag to try and rebalance the output if there is
+   *     skew.
    * @return The code generated for the Join expression.
    */
-  public static String generateJoinCode(
-      String outVar,
+  public static Op.Assign generateJoinCode(
+      Variable outVar,
       String joinType,
-      String rightTable,
-      String leftTable,
+      Variable rightTable,
+      Variable leftTable,
       List<String> rightColNames,
       List<String> leftColNames,
       List<String> expectedOutColumns,
-      String joinCond,
-      boolean hasEquals,
-      HashSet<String> mergeCols) {
+      Expr joinCond,
+      HashSet<String> mergeCols,
+      boolean tryRebalanceOutput) {
 
     List<String> allColNames = new ArrayList<>();
-    StringBuilder generatedJoinCode = new StringBuilder();
 
     HashMap<String, Boolean> seenColNames = new HashMap<String, Boolean>();
     preventColumnCollision(leftColNames, mergeCols, seenColNames);
@@ -89,34 +93,16 @@ public class JoinCodeGen {
       }
     }
 
-    /* Do we generate a dummy column to do the merge. */
-    boolean hasDummy = false;
     boolean updateOnStr = false;
-
-    if (joinCond.equals("True") || !hasEquals) {
-      /*
-       * Temporary workaround to support cross join until it's supported in
-       * the engine. Creates a temporary column and merges on that column.
-       */
-      hasDummy = true;
-      generatedJoinCode.append(
-          String.format("  left_arr = np.ones(len(%s), np.int8)\n", leftTable));
-      generatedJoinCode.append(
-          String.format("  right_arr = np.ones(len(%s), np.int8)\n", rightTable));
-      /* Generate a unique column name to avoid possible collisions. */
-      String dummyColumn = getDummyColName(dummyCounter) + "_key";
-      leftTable =
-          String.format(
-              "pd.concat((%s, pd.DataFrame({\"%s\": left_arr})), axis=1)", leftTable, dummyColumn);
-      rightTable =
-          String.format(
-              "pd.concat((%s, pd.DataFrame({\"%s\": right_arr})), axis=1)",
-              rightTable, dummyColumn);
-      onStr = makeQuoted(dummyColumn);
-    } else {
-      onStr = makeQuoted(joinCond);
+    if (!joinType.equals("cross")) {
+      // Use Expr.StringLiteral in case there are nested quotes
+      onStr = new Expr.StringLiteral(joinCond.emit()).emit();
       updateOnStr = true;
     }
+
+    Expr leftTableExpr;
+    Expr rightTableExpr;
+
     // If we have an outer join we need to create duplicate columns
     if (hasDuplicateNames) {
       // Give the key columns separate names to create duplicate columns
@@ -148,29 +134,31 @@ public class JoinCodeGen {
       }
       leftRename.append("}, copy=False)");
       rightRename.append("}, copy=False)");
-      leftTable = leftTable + leftRename.toString();
-      rightTable = rightTable + rightRename.toString();
+      leftTableExpr = new Expr.Raw(leftTable.emit() + leftRename.toString());
+      rightTableExpr = new Expr.Raw(rightTable.emit() + rightRename.toString());
+    } else {
+      leftTableExpr = leftTable;
+      rightTableExpr = rightTable;
     }
 
-    if (joinType.equals("full")) joinType = "outer";
+    if (joinType.equals("full")) {
+      joinType = "outer";
+    }
+    onStr = onStr.equals("") ? "" : ", on=" + onStr;
     StringBuilder joinBuilder = new StringBuilder();
     joinBuilder
-        .append(leftTable)
+        .append(leftTableExpr.emit())
         .append(".merge(")
-        .append(rightTable)
-        .append(", on=")
+        .append(rightTableExpr.emit())
         .append(onStr)
         .append(", how=")
         .append(makeQuoted(joinType))
-        .append(", _bodo_na_equal=False)");
-    /* Drop the dummy column if it exists. */
-    if (hasDummy) {
-      joinBuilder.append(".loc[:, [");
-      for (String name : allColNames) {
-        joinBuilder.append(makeQuoted(name)).append(", ");
-      }
-      joinBuilder.append("]]");
+        .append(", _bodo_na_equal=False");
+    if (tryRebalanceOutput) {
+      joinBuilder.append(", _bodo_rebalance_output_if_skewed=True");
     }
+    joinBuilder.append(")");
+
     // Determine if we need to do a rename to convert names
     // back.
     if (hasDuplicateNames) {
@@ -189,14 +177,10 @@ public class JoinCodeGen {
       joinBuilder.append("}, copy=False)");
     }
 
-    generatedJoinCode
-        .append(getBodoIndent())
-        .append(outVar)
-        .append(" = ")
-        .append(joinBuilder.toString())
-        .append('\n');
+    Op.Assign outputAssign = new Op.Assign(outVar, new Expr.Raw(joinBuilder.toString()));
+
     // Increment the counter for future joins.
     dummyCounter += 1;
-    return generatedJoinCode.toString();
+    return outputAssign;
   }
 }

@@ -1,4 +1,3 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
 Test correctness of MERGE INTO plan generation within BodoSQL.
 Specifically, tests the plan generation for the "Delta table",
@@ -8,15 +7,12 @@ This file should not be extended, as it contains a significant amount of code th
 dedicated to testing MERGE INTO plan generation within BodoSQL.
 """
 
-
 import itertools
-import os
 import random
 
 import numpy as np
 import pandas as pd
 import pytest
-from bodosql.tests.utils import check_query
 
 """In this file, to create test cases, we manually generate the rows that are
 matched/not matched depending on the join condition and the source/dest table, since there isn't
@@ -25,11 +21,19 @@ A way of handling it in pandas (for non equality joins specifically)
 Once that's done, we have a variety of helper functions
 that can automatically compute the expected delta table, given the matched/not matched conditions/actions,
 and their ordering in the query.
+
 """
+
+# Skip this file until we merge the Iceberg branch
+pytest.skip(
+    allow_module_level=True,
+    reason="Waiting for MERGE INTO support to fix the Calcite generated issue",
+)
 
 from bodosql.libs.iceberg_merge_into import (
     DELETE_ENUM,
     INSERT_ENUM,
+    ROW_ID_COL_NAME,
     UPDATE_ENUM,
 )
 
@@ -46,17 +50,28 @@ using_cond_one = "SOURCE_TABLE as SOURCE_TABLE"
 target_one_source_one_condition_one_matched_rows = source_df_one.merge(
     target_df_one, left_on="X", right_on="A"
 )
+target_one_source_one_condition_one_matched_rows[ROW_ID_COL_NAME] = (
+    target_one_source_one_condition_one_matched_rows["A"]
+)
 target_one_source_one_condition_one_not_matched_rows = pd.DataFrame(
-    {"X": [20], "Y": [-4], "Z": [-8]}
+    {"X": [20], "Y": [-4], "Z": [-8], ROW_ID_COL_NAME: [None]}
 )
 
 join_condition_two = "(SOURCE_TABLE.X - 9) = DEST_TABLE.A AND SOURCE_TABLE.Y in (-5, -4) AND DEST_TABLE.A IN (11, 20, 100)"
 
 target_one_source_one_condition_two_matched_rows = pd.DataFrame(
-    {"A": [11], "B": [11 * 2], "C": [11 * 3], "X": [20], "Y": [-4], "Z": [-8]}
+    {
+        "A": [11],
+        "B": [11 * 2],
+        "C": [11 * 3],
+        "X": [20],
+        "Y": [-4],
+        "Z": [-8],
+        ROW_ID_COL_NAME: [11],
+    }
 )
 target_one_source_one_condition_two_not_matched_rows = pd.DataFrame(
-    {"X": [1, 3, 10], "Y": [-1, -2, -3], "Z": [-5, -6, -7]}
+    {"X": [1, 3, 10], "Y": [-1, -2, -3], "Z": [-5, -6, -7], ROW_ID_COL_NAME: [None] * 3}
 )
 
 not_matched_condition0 = "X = 1"
@@ -131,7 +146,6 @@ valid_matched_actions = [matched_action_0, matched_action_1]
 
 
 def apply_matched_action(df, action):
-
     assert action in valid_matched_actions, f"Found impossible matched action: {action}"
     if action == matched_action_0:
         df["B"] = df["Y"]
@@ -142,7 +156,7 @@ def apply_matched_action(df, action):
     else:
         raise Exception(f"Error, unhandled action in apply_matched_action: {action}")
 
-    return df.loc[:, ["A", "B", "C", "_merge_into_change"]]
+    return df.loc[:, ["A", "B", "C", ROW_ID_COL_NAME, "_merge_into_change"]]
 
 
 not_matched_action_0 = "THEN INSERT (A, B, C) VALUES (-101, -102, -103)"
@@ -212,7 +226,6 @@ def gen_expected_query_and_expected_df(
     matched_conditions_and_actions,
     not_matched_conditions_and_actions,
 ):
-
     matched_rows = matched_rows.copy()
     not_matched_rows = not_matched_rows.copy()
 
@@ -221,7 +234,7 @@ def gen_expected_query_and_expected_df(
         MERGE INTO DEST_TABLE as DEST_TABLE
         USING {using_cond} ON ({join_cond})\n
     """
-    output_df = pd.DataFrame({})
+    output_df = pd.DataFrame({}, columns=["A", "B", "C", ROW_ID_COL_NAME])
 
     query += gen_clauses(
         matched_conditions_and_actions, not_matched_conditions_and_actions
@@ -309,7 +322,6 @@ def get_actions(gen_matched_actions=True):
     # Add the test cases that check multiple clauses concurrently
     seen_permutations = set()
     for i in range(num_conditional_permutations + num_non_conditional_permutations):
-
         saw_new_permutation = False
         # Forcibly calculating every possible permutation and then doing random.choices causes
         # my computer to go OOM locally. Since the number of permutations is so large.
@@ -366,88 +378,3 @@ def make_parameterized(params_list, matched=True):
         out_params_list.append(pytest.param(condition_action_list, id=id))
 
     return out_params_list
-
-
-@pytest.mark.parametrize(
-    "args",
-    [
-        (
-            target_df_one,
-            source_df_one,
-            join_condition_one,
-            using_cond_one,
-            target_one_source_one_condition_one_matched_rows,
-            target_one_source_one_condition_one_not_matched_rows,
-        ),
-        pytest.param(
-            (
-                target_df_one,
-                source_df_one,
-                join_condition_two,
-                using_cond_one,
-                target_one_source_one_condition_two_matched_rows,
-                target_one_source_one_condition_two_not_matched_rows,
-            ),
-            marks=pytest.mark.slow,
-        ),
-    ],
-)
-@pytest.mark.parametrize(
-    ("matched_conditions_and_actions", "not_matched_conditions_and_actions"),
-    zip(get_matched_actions(), get_not_matched_actions()),
-)
-def test_delta_table_simple(
-    memory_leak_check,
-    args,
-    matched_conditions_and_actions,
-    not_matched_conditions_and_actions,
-):
-    """
-    Tests that the generated delta table is the expected value. Does NOT test
-    that the delta table is valid (no two actions applied to the same row)
-    """
-
-    if (
-        len(matched_conditions_and_actions) == 0
-        and len(not_matched_conditions_and_actions) == 0
-    ):
-        # Need at least one matched/not matched clause
-        return
-
-    (
-        dest_table,
-        source_table,
-        join_cond,
-        using_cond,
-        matched_rows,
-        not_matched_rows,
-    ) = args
-    ctx = {"DEST_TABLE": dest_table, "SOURCE_TABLE": source_table}
-    query, expected_output = gen_expected_query_and_expected_df(
-        using_cond,
-        join_cond,
-        matched_rows,
-        not_matched_rows,
-        matched_conditions_and_actions,
-        not_matched_conditions_and_actions,
-    )
-
-    # This environment variable causes BodoSQL to just return the table that
-    # is inputted to the LogicalTableModify node. IE, the Delta Table.
-    os.environ["__BODO_TESTING_DEBUG_DELTA_TABLE"] = "1"
-    try:
-        check_query(
-            query,
-            ctx,
-            None,
-            expected_output=expected_output,
-            check_dtype=False,
-            check_names=False,
-            # Only check python, since we're primarily checking
-            # the Calcite codegen for correctness, not if we handle
-            # distributed case stmts/joins correctly
-            only_python=True,
-        )
-    except Exception as e:
-        del os.environ["__BODO_TESTING_DEBUG_DELTA_TABLE"]
-        raise e

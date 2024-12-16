@@ -6,13 +6,13 @@ In particular, we have the following datasets:
 
 - Simple Datasets: Very simple datasets, without any additional inserts, schema evolution, etc.
 
-  - simple_numeric_table: Numeric datatypes
-  - simple_string_table: Strings
-  - simple_bool_binary_table: Boolean and Binary datatypes
-  - simple_struct_table: Structs with numeric and string elements
-  - simple_list_table: Lists with numeric and string elements
-  - simple_map_table: Maps with various numeric types and strings as keys and values
-  - simple_dt_tsz_table: date (w/o time or tz) and timestampz (w/ tz) columns.
+  - SIMPLE_NUMERIC_TABLE: Numeric datatypes
+  - SIMPLE_STRING_TABLE: Strings
+  - SIMPLE_BOOL_BINARY_TABLE: Boolean and Binary datatypes
+  - SIMPLE_STRUCT_TABLE: Structs with numeric and string elements
+  - SIMPLE_LIST_TABLE: Lists with numeric and string elements
+  - SIMPLE_MAP_TABLE: Maps with various numeric types and strings as keys and values
+  - SIMPLE_DT_TSZ_TABLE: date (w/o time or tz) and timestampz (w/ tz) columns.
     - time (time of day w/o date or tz) and timestamp (w/o tz) are not supported by Spark, so will need to be done later.
 
 - Schema Evolution: Datasets that have gone through schema evolutions such as adding, removing, renaming, changing dtype of, moving positions of columns.
@@ -41,5 +41,5 @@ will be created at `./iceberg_db/<TABLE_NAME>`. This was tested with `pyspark==3
 
 You can use `python create_all_tables.py` to generate all the test datasets.
 
-NOTE: Spark may throw errors saying `java.io.FileNotFoundException: File iceberg_db/simple_numeric_table/metadata/version-hint.text does not exist`
+NOTE: Spark may throw errors saying `java.io.FileNotFoundException: File iceberg_db/SIMPLE_NUMERIC_TABLE/metadata/version-hint.text does not exist`
 which seems to be harmless.

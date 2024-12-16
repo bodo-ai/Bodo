@@ -1,6 +1,6 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
-"""Numba extension support for time objects and their arrays.
-"""
+"""Numba extension support for time objects and their arrays."""
+
+import datetime
 import operator
 
 import llvmlite.binding as ll
@@ -20,6 +20,7 @@ from numba.extending import (
     overload,
     overload_attribute,
     overload_method,
+    register_jitable,
     register_model,
     typeof_impl,
     unbox,
@@ -38,8 +39,10 @@ from bodo.utils.indexing import (
 )
 from bodo.utils.typing import (
     BodoError,
+    assert_bodo_error,
     is_iterable_type,
     is_list_like_index_type,
+    is_overload_none,
 )
 
 _nanos_per_micro = 1000
@@ -47,6 +50,7 @@ _nanos_per_milli = 1000 * _nanos_per_micro
 _nanos_per_second = 1000 * _nanos_per_milli
 _nanos_per_minute = 60 * _nanos_per_second
 _nanos_per_hour = 60 * _nanos_per_minute
+_nanos_per_day = 24 * _nanos_per_hour
 
 
 class Time:
@@ -67,40 +71,99 @@ class Time:
         ), "All time components must be integers"
 
         self.value = np.int64(
-            hour * _nanos_per_hour
-            + minute * _nanos_per_minute
-            + second * _nanos_per_second
-            + millisecond * _nanos_per_milli
-            + microsecond * _nanos_per_micro
-            + nanosecond
+            (
+                hour * _nanos_per_hour
+                + minute * _nanos_per_minute
+                + second * _nanos_per_second
+                + millisecond * _nanos_per_milli
+                + microsecond * _nanos_per_micro
+                + nanosecond
+            )
+            % _nanos_per_day
         )
 
     def __repr__(self):
         return (
-            f"Time({self.hour}, {self.minute}, {self.second}, "
-            f"{self.millisecond}, {self.microsecond}, {self.nanosecond}, "
+            f"Time(hour={self.hour}, minute={self.minute}, second={self.second}, "
+            f"millisecond={self.millisecond}, microsecond={self.microsecond}, nanosecond={self.nanosecond}, "
             f"precision={self.precision})"
         )
 
-    def __eq__(self, other):
-        if not isinstance(other, Time):  # pragma: no cover
-            return False
-        return self.value == other.value and self.precision == other.precision
+    def __str__(self):
+        return f"{self.hour}:{self.minute}:{self.second}.{self.millisecond}{self.microsecond}{self.nanosecond}"
+
+    def __hash__(self):
+        return int(self.value)
+
+    @staticmethod
+    def _convert_datetime_to_bodo_time(dt_time):
+        if isinstance(dt_time, datetime.time):
+            return Time(
+                hour=dt_time.hour,
+                minute=dt_time.minute,
+                second=dt_time.second,
+                millisecond=dt_time.microsecond // 1000,
+                microsecond=dt_time.microsecond % 1000,
+                nanosecond=0,
+                precision=9,
+            )
+        else:
+            return dt_time
 
     def _check_can_compare(self, other):
-        # raise an error if the precision is not the same to mimic sql time comparison
-        if self.precision != other.precision:  # pragma: no cover
-            raise BodoError(
-                f"Cannot compare times with different precisions: {self} and {other}"
-            )
+        if not isinstance(other, Time):
+            raise TypeError("Cannot compare Time with non-Time type")
 
-    def __lt__(self, other):
+    def __eq__(self, other):
+        other = self._convert_datetime_to_bodo_time(other)
+        if not isinstance(other, Time):  # pragma: no cover
+            return False
+        # Removing precision check. It does not affect how Bodo computes `value`.
+        # Plus, Snowflake equality test doesn't about precision.
+        # SELECT '12:30:0'::TIME(0) = '12:30:0'::TIME(9) -> TRUE
+        return self.value == other.value
+
+    def __ne__(self, other):
+        other = self._convert_datetime_to_bodo_time(other)
+        if not isinstance(other, Time):  # pragma: no cover
+            return True
+        return self.value != other.value
+
+    def __lt__(self, other):  # pragma: no cover
+        other = self._convert_datetime_to_bodo_time(other)
+        if other is None or other == float("inf"):  # pragma: no cover
+            # None will be transformed to float('inf') during < comparison
+            # with other Time objects in pandas.Series
+            return True
         self._check_can_compare(other)
         return self.value < other.value
 
-    def __le__(self, other):
+    def __le__(self, other):  # pragma: no cover
+        other = self._convert_datetime_to_bodo_time(other)
+        if other is None or other == float("inf"):  # pragma: no cover
+            # None will be transformed to float('inf') during <= comparison
+            # with other Time objects in pandas.Series
+            return True
         self._check_can_compare(other)
         return self.value <= other.value
+
+    def __gt__(self, other):
+        other = self._convert_datetime_to_bodo_time(other)
+        if other is None or other == float("-inf"):  # pragma: no cover
+            # None will be transformed to float('inf') during > comparison
+            # with other Time objects in pandas.Series
+            return True
+        self._check_can_compare(other)
+        return self.value > other.value
+
+    def __ge__(self, other):
+        other = self._convert_datetime_to_bodo_time(other)
+        if other is None or other == float("-inf"):  # pragma: no cover
+            # None will be transformed to float('-inf') during >= comparison
+            # with other Time objects in pandas.Series
+            return True
+        self._check_can_compare(other)
+        return self.value >= other.value
 
     def __int__(self):
         """Return the value of the time as an integer in the given precision.
@@ -115,9 +178,6 @@ class Time:
         if self.precision == 0:
             return self.value // _nanos_per_second
         raise BodoError(f"Unsupported precision: {self.precision}")
-
-    def __hash__(self):
-        return hash((self.value, self.precision))
 
     @property
     def hour(self):
@@ -144,57 +204,107 @@ class Time:
         return self.value % _nanos_per_micro
 
 
-def time_from_str(time_str, precision=9):
+@register_jitable
+def parse_time_string(time_str):  # pragma: no cover
     """Parse a time string into its components.
     `time_str` is passed in the formats:
-    - 'hh:mm:ss'
-    - 'hh:mm:ss.mmm'
-    - 'hh:mm:SS.mmmμμμ'
-    - 'hh:mm:SS.mmmμμμnnn'
+    - Format 1: 'num_seconds' (can be any non-negative integer)
+    - Format 2: 'hh:mm'
+    - Format 3: 'hh:mm:ss'
+    - Format 4: 'hh:mm:ss.'
+    - Format 5: 'hh:mm:ss.ns'
+    - hh can be any number from 0 to 23 (with or without a leading zero)
+    - mm can be any number from 0 to 59 (with or without a leading zero)
+    - ss can be any number from 0 to 59 (with or without a leading zero)
+    - ns can be any non-negative number (though digits after the first 9 are ignored)
 
-    This function is used both by the native Python Time class as well as Bodo's
-    compiled Time constructor.
+    Outputs a tuple in the form: (hh, mm, ss, ns, succ) where the first four
+    terms are as mentioned above (defaults are zero if not present), and
+    succeded is a boolean indicating whether or not the parse succeeded.
     """
-    hour = 0
-    minute = 0
-    second = 0
-    millisecond = 0
-    microsecond = 0
-    nanosecond = 0
-    hour = int(time_str[:2])
-    assert time_str[2] == ":", "Invalid time string"
-    minute = int(time_str[3:5])
-    assert time_str[5] == ":", "Invalid time string"
-    second = int(time_str[6:8])
-
-    if len(time_str) > 8:
-        assert time_str[8] == ".", "Invalid time string"
-        millisecond = int(time_str[9:12])
-        if len(time_str) > 12:
-            microsecond = int(time_str[12:15])
-            if len(time_str) > 15:
-                nanosecond = int(time_str[15:18])
-
-    return Time(
-        hour,
-        minute,
-        second,
-        millisecond,
-        microsecond,
-        nanosecond,
-        precision=precision,
-    )
-
-
-@overload(time_from_str)
-def overload_time_from_str(time_str, precision=9):
-    """Overload time_from_str."""
-
-    return time_from_str
+    hr = 0
+    mi = 0
+    sc = 0
+    ns = 0
+    # [FORMAT 1] String is a number: it represents the total seconds
+    if time_str.isdigit():
+        sc = int(time_str)
+        return hr, mi, sc, ns, True
+    # The string must be at least 3 characters (i.e. 0:0)
+    if len(time_str) < 3:
+        return 0, 0, 0, 0, False
+    # [FORMAT 2/3/4/5] String starts with a digit and a colon: the digit is the hour
+    if time_str[0].isdigit() and time_str[1] == ":":
+        hr = int(time_str[0])
+        time_str = time_str[2:]
+    # [FORMAT 2/3/4/5] String starts with 2 digits and a colon: the two digits
+    # are the hour so long as they are less than 24
+    elif time_str[:2].isdigit() and time_str[2] == ":" and int(time_str[:2]) < 24:
+        hr = int(time_str[:2])
+        time_str = time_str[3:]
+    else:
+        return 0, 0, 0, 0, False
+    # [FORMAT 2] Rest of the string is just a number: the number is the minute
+    # so long as it is less than 60
+    if time_str.isdigit():
+        mi = int(time_str)
+        return hr, mi, sc, ns, mi < 60
+    # [FORMAT 3/4/5] Next section starts with a digit and a colon: the digit
+    # is the minute
+    if len(time_str) > 1 and time_str[0].isdigit() and time_str[1] == ":":
+        mi = int(time_str[0])
+        time_str = time_str[2:]
+    # [FORMAT 3/4/5] Next section starts with 2 digits and a colon: the two digits
+    # are the minute so long as they are less than 60
+    elif (
+        len(time_str) > 2
+        and time_str[:2].isdigit()
+        and time_str[2] == ":"
+        and int(time_str[:2]) < 60
+    ):
+        mi = int(time_str[:2])
+        time_str = time_str[3:]
+    else:
+        return 0, 0, 0, 0, False
+    # [FORMAT 3] Rest of the string is just a number: the number is the second
+    # so long as it is less than 60
+    if time_str.isdigit():
+        sc = int(time_str)
+        return hr, mi, sc, ns, sc < 60
+    # [FORMAT 4/5] Next section starts with a digit and a dot: the digit is
+    # the second
+    if len(time_str) > 1 and time_str[0].isdigit() and time_str[1] == ".":
+        sc = int(time_str[0])
+        time_str = time_str[2:]
+    # [FORMAT 4/5] Next section starts with 2 digits and a dot: the two digits
+    # are the second so long as they are less than 60
+    elif (
+        len(time_str) > 2
+        and time_str[:2].isdigit()
+        and time_str[2] == "."
+        and int(time_str[:2]) < 60
+    ):
+        sc = int(time_str[:2])
+        time_str = time_str[3:]
+    else:
+        return 0, 0, 0, 0, False
+    # [FORMAT 4] The rest of the string is empty: we are done
+    if len(time_str) == 0:
+        return hr, mi, sc, ns, True
+    # [FORMAT 5] The rest of the string is a number: that number is the nanoseconds.
+    # all digits after the first 9 are ignored, and trailing zeros are added
+    if time_str.isdigit():
+        digits = min(9, len(time_str))
+        ns = int(time_str[:9])
+        ns *= 10 ** (9 - digits)
+        return hr, mi, sc, ns, True
+    # Any other case is malformed
+    return 0, 0, 0, 0, False
 
 
 ll.add_symbol("box_time_array", hdatetime_ext.box_time_array)
 ll.add_symbol("unbox_time_array", hdatetime_ext.unbox_time_array)
+
 
 # bodo.Time implementation that uses a single int to store hour/minute/second/microsecond/nanosecond
 # The precision is saved in it's type
@@ -205,7 +315,7 @@ class TimeType(types.Type):
             isinstance(precision, int) and precision >= 0 and precision <= 9
         ), "precision must be an integer between 0 and 9"
         self.precision = precision
-        super(TimeType, self).__init__(name=f"TimeType({precision})")
+        super().__init__(name=f"TimeType({precision})")
         self.bitwidth = 64  # needed for using IntegerModel
 
 
@@ -280,6 +390,21 @@ def time_microsecond_attribute(val):  # pragma: no cover
 @overload_attribute(TimeType, "nanosecond")
 def time_nanosecond_attribute(val):  # pragma: no cover
     return lambda val: cast_time_to_int(val) % _nanos_per_micro
+
+
+@overload_attribute(TimeType, "value")
+def time_value_attribute(val):  # pragma: no cover
+    return lambda val: cast_time_to_int(val)
+
+
+@overload_method(TimeType, "__hash__")
+def __hash__(t):
+    """Hashcode for Time types."""
+
+    def impl(t):  # pragma: no cover
+        return t.value
+
+    return impl
 
 
 def _to_nanos_codegen(
@@ -393,24 +518,16 @@ def unbox_time(typ, val, c):
 @lower_constant(TimeType)
 def lower_constant_time(context, builder, ty, pyval):  # pragma: no cover
     """Convert a constant Python time object to its Bodo representation as a nanoseconds integer."""
-    hour_ll = context.get_constant(types.int64, pyval.hour)
-    minute_ll = context.get_constant(types.int64, pyval.minute)
-    second_ll = context.get_constant(types.int64, pyval.second)
-    millisecond_ll = context.get_constant(types.int64, pyval.millisecond)
-    microsecond_ll = context.get_constant(types.int64, pyval.microsecond)
-    nanosecond_ll = context.get_constant(types.int64, pyval.nanosecond)
 
-    nopython_time = _to_nanos_codegen(
-        context,
-        hour_ll,
-        minute_ll,
-        second_ll,
-        millisecond_ll,
-        microsecond_ll,
-        nanosecond_ll,
-    )
-
-    return nopython_time
+    as_nano = (
+        (
+            ((((pyval.hour * 60) + pyval.minute) * 60 + pyval.second) * 1000)
+            + pyval.millisecond
+        )
+        * 1000
+        + pyval.microsecond
+    ) * 1000 + pyval.nanosecond
+    return context.get_constant(types.int64, as_nano)
 
 
 @box(TimeType)
@@ -472,13 +589,14 @@ def impl_ctor_time(context, builder, sig, args):  # pragma: no cover
     return nopython_time
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def cast_int_to_time(typingctx, val, precision):
     """Cast int value to Time"""
     assert types.unliteral(val) == types.int64, "val must be int64"
-    assert isinstance(
-        precision, types.IntegerLiteral
-    ), "precision must be an integer literal"
+    assert_bodo_error(
+        isinstance(precision, types.IntegerLiteral),
+        "precision must be an integer literal",
+    )
 
     def codegen(context, builder, signature, args):
         return args[0]
@@ -506,7 +624,7 @@ class TimeArrayType(types.ArrayCompatible):
             isinstance(precision, int) and precision >= 0 and precision <= 9
         ), "precision must be an integer between 0 and 9"
         self.precision = precision
-        super(TimeArrayType, self).__init__(name=f"TimeArrayType({precision})")
+        super().__init__(name=f"TimeArrayType({precision})")
 
     @property
     def as_array(self):
@@ -522,6 +640,7 @@ class TimeArrayType(types.ArrayCompatible):
 
 data_type = types.Array(types.int64, 1, "C")
 nulls_type = types.Array(types.uint8, 1, "C")
+
 
 # Time array has only an array integers to store data
 @register_model(TimeArrayType)
@@ -540,10 +659,10 @@ make_attribute_wrapper(TimeArrayType, "null_bitmap", "_null_bitmap")
 
 @overload_method(TimeArrayType, "copy", no_unliteral=True)
 def overload_time_arr_copy(A):
+    precision = A.precision
     """Copy a TimeArrayType by copying the underlying data and null bitmap"""
     return lambda A: bodo.hiframes.time_ext.init_time_array(
-        A._data.copy(),
-        A._null_bitmap.copy(),
+        A._data.copy(), A._null_bitmap.copy(), precision
     )  # pragma: no cover
 
 
@@ -630,7 +749,7 @@ def box_time_array(typ, val, c):
     return obj_arr
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def init_time_array(typingctx, data, nulls, precision):
     """Create a TimeArrayType with provided data values."""
     assert data == types.Array(types.int64, 1, "C"), "data must be an array of int64"
@@ -719,7 +838,7 @@ def time_arr_getitem(A, ind):  # pragma: no cover
             A._data[ind], precision
         )  # pragma: no cover
 
-    # bool arr indexing
+    # bool arr indexing.
     if is_list_like_index_type(ind) and ind.dtype == types.bool_:
 
         def impl_bool(A, ind):  # pragma: no cover
@@ -767,7 +886,6 @@ def time_arr_setitem(A, idx, val):  # pragma: no cover
 
     # scalar case
     if isinstance(idx, types.Integer):
-
         if isinstance(types.unliteral(val), TimeType):
 
             def impl(A, idx, val):  # pragma: no cover
@@ -788,7 +906,6 @@ def time_arr_setitem(A, idx, val):  # pragma: no cover
 
     # array of integers
     if is_list_like_index_type(idx) and isinstance(idx.dtype, types.Integer):
-
         if isinstance(types.unliteral(val), TimeType):
             return lambda A, idx, val: array_setitem_int_index(
                 A, idx, cast_time_to_int(val)
@@ -802,7 +919,6 @@ def time_arr_setitem(A, idx, val):  # pragma: no cover
 
     # bool array
     if is_list_like_index_type(idx) and idx.dtype == types.bool_:
-
         if isinstance(types.unliteral(val), TimeType):
             return lambda A, idx, val: array_setitem_bool_index(
                 A, idx, cast_time_to_int(val)
@@ -815,7 +931,6 @@ def time_arr_setitem(A, idx, val):  # pragma: no cover
 
     # slice case
     if isinstance(idx, types.SliceType):
-
         if isinstance(types.unliteral(val), TimeType):
             return lambda A, idx, val: array_setitem_slice_index(
                 A, idx, cast_time_to_int(val)
@@ -870,4 +985,36 @@ def create_cmp_op_overload(op):
 
             return impl
 
+        if isinstance(lhs, TimeType) and is_overload_none(rhs):
+            # When we compare Time and None in order to sort or take extreme values
+            # in a series/array of Time, Time() > None, Time() < None should all return True
+            return (
+                lambda lhs, rhs: False if op is operator.eq else True
+            )  # pragma: no cover
+
+        if is_overload_none(lhs) and isinstance(rhs, TimeType):
+            # When we compare None and Time in order to sort or take extreme values
+            # in a series/array of Time, None > Time(), None < Time() should all return False
+            return lambda lhs, rhs: False  # pragma: no cover
+
     return overload_time_cmp
+
+
+@overload(min, no_unliteral=True)
+def time_min(lhs, rhs):
+    if isinstance(lhs, TimeType) and isinstance(rhs, TimeType):
+
+        def impl(lhs, rhs):  # pragma: no cover
+            return lhs if lhs < rhs else rhs
+
+        return impl
+
+
+@overload(max, no_unliteral=True)
+def time_max(lhs, rhs):
+    if isinstance(lhs, TimeType) and isinstance(rhs, TimeType):
+
+        def impl(lhs, rhs):  # pragma: no cover
+            return lhs if lhs > rhs else rhs
+
+        return impl

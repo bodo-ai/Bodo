@@ -4,8 +4,10 @@
 
 a.  Subscribe through the [AWS Marketplace](https://aws.amazon.com/marketplace/pp/B08NY29SMQ){target="blank"}.
 
-b.  After confirming your subscription, you'll be directed to Bodo
-    Platform's registration page.
+b.  After confirming your subscription, you should click **Set up your Account** in the top right corner of the page. Bodo Platform's registration page will open in a new tab.
+
+![Set up Account](../platform_onboarding_screenshots/set-up-account.png#center)
+
 
 c.  Fill out the fields with your information. If this is your
     individual account, use a unique name such as
@@ -26,38 +28,50 @@ e.  A page confirming that an activation link was sent to your email
 ## Setting AWS Credentials {#setting_aws_credentials}
 
 To use Bodo on AWS, you need to link your AWS account to the Bodo
-platform. This can be done using the *Cloud Configuration* page in the left
-bar as shown in the picture below:
+platform.
+
+This can be done using the *Cloud Configuration* page in the left sidebar and followed by clicking on *Create Cloud Configuration* at the top right corner of the page as shown in the picture below:
 
 ![Dashboard](../platform_onboarding_screenshots/dashboard.gif#center)
 
 To be able to use the Bodo Platform to launch clusters and notebooks,
 you must grant it permission to access your AWS account and provision
-the required resources in it. This can be done through two ways:
+the required resources in it. This can be done through three ways:
 
-### 1. With Access Keys {#with Access Keys}
-
-1.  Follow the instructions from [AWS Account and Access Keys
-    guide](https://docs.aws.amazon.com/powershell/latest/userguide/pstools-appendix-sign-up.html)
-    to create/retrieve your AWS access key ID and secret access key.
-
-2.  Enter the Access Key ID and Secret created in the previous step.
-
-3. Select the region the where the metadata will be stored and click on
-    `CREATE`.
-
-    ![Enter Access Keys on Platform](../create_role_screenshots/create_config_with_accesskeys.png#center)
+### 1. AWS CloudFormation Quick Start {#cloud_formation_stack}
 
 
-    !!! note
-         This has been tested using access keys that have `S3FullAccess`, `DynamoDBFullAccess` and `IAMFullAccess` permissions. 
-         **Access keys with limited permissions will not work**.
+!!! tip Important
+    You need the following set of permissions to successfully create the resources defined in the CloudFormation stack:
 
-    !!! note
-         We will **not** save the provided Access Keys for security
-        reasons.
+    - [`AWSCloudFormationFullAccess`](https://docs.aws.amazon.com/aws-managed-policy/latest/reference/AWSCloudFormationFullAccess.html){target="blank"}
+    - [`AWSIAMFullAccess`](https://docs.aws.amazon.com/aws-managed-policy/latest/reference/IAMFullAccess.html){target="blank"}
 
+Once you have ensured that you have all permissions necessary to create the resources, follow the steps below to create a Cloud Configuration:
 
+1. Fill in the following values :
+    - **Cloud Configuration Name**: A name for your Cloud Configuration.
+    - **CloudFormation Region**: Fill this with the region where you want to deploy the stack.
+
+   ![CloudFormation Form](../platform_onboarding_screenshots/cloudformation-form.png#center)
+
+2. Click on **Launch CloudFormation Template**. This will open the AWS CloudFormation console in a new tab in the selected region.
+    
+
+    !!! note "Important"
+         All values are pre-filled in the CloudFormation template. Please do not modify.
+
+3. Click on "Create Stack" to create the stack. This will create the necessary resources in your AWS account.
+
+   ![CloudFormation Page](../platform_onboarding_screenshots/cloudformation.png#center)
+
+!!! note
+
+     The stack creation process may take a few minutes to complete. 
+     Please wait until the stack is created successfully.
+
+4. You can check the status of the stack from Bodo Platform as shown below. Once the stack is created successfully, Cloud Configuration will be created.
+   ![CloudFormation Status](../platform_onboarding_screenshots/cloudformation-status.gif#center)
 
 
 
@@ -65,47 +79,13 @@ the required resources in it. This can be done through two ways:
 
 Open the *Cloud Configuration Form* and note down the `External ID`.
 
-We need to create 3 resources through the AWS Console and provide details about them in 
+We need to create an IAM Role the AWS Console and provide details about it in 
 the *Cloud Configuration Form*.
-
-Before that, Open the Cloud Configuration Form and note down the External ID.
-
-![Cloud-Configuration](../create_s3_and_dynamo_screenshots/cloud_config_id.png#center)
-
-!!! note
-   The S3 bucket and the Dynamo DB table should be created in the same region. 
-   Supported regions are: 'us-east-1', 'us-east-2', 'us-west-1' and 'us-west-2'.
-
-#### Setup S3 Bucket {#setup_s3_bucket}
-- **Setup S3 Bucket**
-    1. In AWS console, go to S3 Management Console and click on `Create Bucket`.
-     ![S3-Page](../create_s3_and_dynamo_screenshots/s3_bucket_console.png#center)
-
-    2. In the creation form, enter the **Bucket Name** and select the **AWS Region**. 
-       Note these down since you will need to enter them in the *Cloud Configuration Form*.
-    ![create-s3-Page](../create_s3_and_dynamo_screenshots/s3-create-page.png#center)
-
-    3. All other fields can remain as it is by default and click on `Create Bucket`.
-
-#### Setup Dynamo DB table {#setup_dynamo_db}
-- **Setup Dynamo DB table**
-    1. In AWS console, go to Dynamo DB page and click on `Create Table`.
-     ![dynamo-Page](../create_s3_and_dynamo_screenshots/dynamo_console.png#center)
-    
-    2.  In the table creation form, enter the **Table name**. 
-        Note this down since you will need to enter it in the *Cloud Configuration Form*.
-
-    3. Under Partition key, enter the partion key as **LockID** and select the type as **String**. This partion key must be created
-       for Bodo Platform to work.
-     ![dynamo-create-page](../create_s3_and_dynamo_screenshots/create-dynamo.png#center)
-     
-    4. All other fields can remain as it is by default and click on `Create Table`.
 
 #### Setup IAM role {iam_role_setup}
 - **IAM role**
 
-    1.  Log in to the [AWS Management
-        Console](https://aws.amazon.com/console/) and navigate to the
+    1.  Log in to the [AWS Management Console](https://aws.amazon.com/console/) and navigate to the
         **IAM** Service.
 
     2.  Select the *Roles* tab in the sidebar, and click `Create Role`.
@@ -140,7 +120,7 @@ Before that, Open the Cloud Configuration Form and note down the External ID.
 
     11. In the list of IAM Roles, click on the role you just created.
 
-    12. Click on `Add inline policy`.
+    12. Under Permissions tab, Click on `Add Permissions` and select `Create inline policy` from the dropdown.
 
         ![Create Role Summary Page](../create_role_screenshots/create_role_manual_summary_page.png#center)
 
@@ -149,11 +129,8 @@ Before that, Open the Cloud Configuration Form and note down the External ID.
         ![Create Role Manual Policy Editor](../create_role_screenshots/create_iam_role_manual_policy_editor.png#center)
 
     14. Bodo Cloud Platform requires a specific set of AWS permissions which
-        are documented in [Bodo-Platform Policy](../downloadables/bodo-platform.json){target="blank"}.
+        are documented in [Bodo-Platform Policy](https://api.bodo.ai/platformPolicyDefinition.json){target="blank"}.
         Paste the contents of the linked JSON file into the policy editor.
-    
-    15. **`$$BUCKET_NAME$$`** and **`$$DYNAMO_ARN$$`** placeholders needs to be updated in the Bodo Platform Policy 
-        with the **S3 Bucket name** and **Dynamo DB ARN** respectively.
 
     15. Click on `Review policy`.
 
@@ -172,19 +149,22 @@ Once you have generated an IAM Role using the steps described above,
 you can fill the remaining fields in the **Cloud Configuration** form on the Bodo
 Platform.
 
-1.  Enter the **Name** of the configuration.
-2.  Enter the **S3 Bucket** name.
-3.  Enter the **Dynamo DB Table** name. 
-4.  Enter the Role ARN in the **Role ARN** field.
-5.  Select a **Region** from the dropdown list. 
-    This is the region of your S3 bucket and Dynamo DB table.
-6.  Click on `CREATE`.
+1.  Enter the **Name** of the configuration. 
+2.  Enter the Role ARN in the **Role ARN** field.
+3.  Click on `Create`.
+
+!!! info "Important"
+
+    Validation is not run during Cloud Configuration creation.
+    Some errors are detected only when you use the configuration to create a new workspace. 
+    These errors can include an invalid IAM Role ARN or incorrect permissions for the role.
 
 
 ![Create Cloud Configuration AWS Manual ](../platform_onboarding_screenshots/cloud_configuration_aws_manual.png#center)
 
 
-!!! important 
+!!! info "Important" 
+
     We highly recommend that you ensure sufficient limits on
     your AWS account to launch resources. See
     [here][resources_created_in_aws_env] for details on the
@@ -198,15 +178,15 @@ Bodo deploys cluster/notebook resources in your own AWS environment to
 ensure security of your data. Below is a list of AWS resources that the
 Bodo Platform creates in your account to enable clusters and notebooks.
 
-  AWS Service                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | Purpose
-  ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------
-  [EC2 Instances](https://aws.amazon.com/ec2/)                                                                                                                                                                                                                                                                                                                                                                                                                                           |Cluster/notebook workers
-  [EFS](https://aws.amazon.com/efs/)                                                                                                                                                                                                                                                                                                                                                                                                                                                     |Shared file system for clusters
-  [VPC](https://aws.amazon.com/vpc/), [Subnets](https://docs.aws.amazon.com/vpc/latest/userguide/VPC_Subnets.html), [NAT Gateway](https://docs.aws.amazon.com/vpc/latest/userguide/vpc-nat-gateway.html), [Elastic IP](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/elastic-ip-addresses-eip.html), [ENI](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/using-eni.html), [Security Groups](https://docs.aws.amazon.com/vpc/latest/userguide/VPC_SecurityGroups.html), ...   |Secure networking for clusters/notebooks
-  [S3](https://aws.amazon.com/s3/) and [Dynamo DB](https://aws.amazon.com/dynamodb/)                                                                                                                                                                                                                                                                                                                                                                                                     |Resource states
-  [AWS Systems Manager](https://aws.amazon.com/systems-manager/)                                                                                                                                                                                                                                                                                                                                                                                                                         |Managing EC2 instances
-  [KMS](https://aws.amazon.com/kms/)                                                                                                                                                                                                                                                                                                                                                                                                                                                     |Cluster secrets (e.g. SSH keys)
-  [IAM Role](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles.html) for Clusters                                                                                                                                                                                                                                                                                                                                                                                                |Allow cluster workers to access resources above
+| AWS Service                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | Purpose                                         |
+|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------|
+| [EC2 Instances](https://aws.amazon.com/ec2/)                                                                                                                                                                                                                                                                                                                                                                                                                                         | Cluster/notebook workers                        |
+| [EFS](https://aws.amazon.com/efs/)                                                                                                                                                                                                                                                                                                                                                                                                                                                   | Shared file system for clusters                 |
+| [VPC](https://aws.amazon.com/vpc/), [Subnets](https://docs.aws.amazon.com/vpc/latest/userguide/VPC_Subnets.html), [NAT Gateway](https://docs.aws.amazon.com/vpc/latest/userguide/vpc-nat-gateway.html), [Elastic IP](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/elastic-ip-addresses-eip.html), [ENI](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/using-eni.html), [Security Groups](https://docs.aws.amazon.com/vpc/latest/userguide/VPC_SecurityGroups.html), ... | Secure networking for clusters/notebooks        |
+| [S3](https://aws.amazon.com/s3/)                                                                                                                                                                                                                                                                                                                                                                                                                                                     | Storage                                         |
+| [AWS AutoScaling Group](https://aws.amazon.com/ec2/autoscaling/)                                                                                                                                                                                                                                                                                                                                                                                                                     | Managing EC2 instances                          |
+| [SSM Parameter Store](https://docs.aws.amazon.com/systems-manager/latest/userguide/systems-manager-parameter-store.html)                                                                                                                                                                                                                                                                                                                                                             | Cluster secrets (e.g. SSH keys)                 |
+| [IAM Role](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles.html) for Clusters                                                                                                                                                                                                                                                                                                                                                                                              | Allow cluster workers to access resources above |
 
 !!! note
 
@@ -214,15 +194,9 @@ Bodo Platform creates in your account to enable clusters and notebooks.
     included in the Bodo Platform charges.
 
 
-!!! seealso "See Also"
-    [Troubleshooting Managed Bodo Cloud Platform Issues on AWS][troubleshootingaws]
-
-
-
 ## Using Bodo Platform
-Check the following link on how to use the Bodo Platform once the **cloud credentials are added**.
 
-[Bodo Cloud Platform][bodo_platform]
+Please refer to the [platform usage guides][using-the-bodo-cloud-platform] to explain the basics of using the Bodo Cloud Platform and associated concepts.
 
 
 ## Billing {#aws_billing}

@@ -20,6 +20,8 @@ from numba.extending import (
     unbox,
 )
 
+import bodo
+
 """
 Implementation is based on
 https://github.com/python/cpython/blob/39a5c889d30d03a88102e56f03ee0c95db198fb3/Lib/datetime.py
@@ -28,7 +30,7 @@ https://github.com/python/cpython/blob/39a5c889d30d03a88102e56f03ee0c95db198fb3/
 
 class DatetimeDatetimeType(types.Type):
     def __init__(self):
-        super(DatetimeDatetimeType, self).__init__(name="DatetimeDatetimeType()")
+        super().__init__(name="DatetimeDatetimeType()")
 
 
 datetime_datetime_type = DatetimeDatetimeType()
@@ -52,7 +54,7 @@ class DatetimeDateTimeModel(models.StructModel):
             ("second", types.int64),
             ("microsecond", types.int64),
         ]
-        super(DatetimeDateTimeModel, self).__init__(dmm, fe_type, members)
+        super().__init__(dmm, fe_type, members)
 
 
 @box(DatetimeDatetimeType)
@@ -147,7 +149,6 @@ def datetime_datetime(year, month, day, hour=0, minute=0, second=0, microsecond=
     def impl_datetime(
         year, month, day, hour=0, minute=0, second=0, microsecond=0
     ):  # pragma: no cover
-
         return init_datetime(year, month, day, hour, minute, second, microsecond)
 
     return impl_datetime
@@ -242,6 +243,7 @@ def datetime_get_microsecond(dt):
 @overload_method(DatetimeDatetimeType, "date", no_unliteral=True)
 def date(dt):
     """Return the date part."""
+
     # TODO: support datetime.datetime.time() method once datetime.time is implemented
     def impl(dt):  # pragma: no cover
         return datetime.date(dt.year, dt.month, dt.day)
@@ -255,7 +257,7 @@ def now_impl():  # pragma: no cover
     Untyped pass replaces datetime.date.now() with this call since class methods are
     not supported in Numba's typing
     """
-    with numba.objmode(d="datetime_datetime_type"):
+    with bodo.objmode(d="datetime_datetime_type"):
         d = datetime.datetime.now()
     return d
 
@@ -266,7 +268,7 @@ def today_impl():  # pragma: no cover
     Untyped pass replaces datetime.datetime.today() with this call since class methods are
     not supported in Numba's typing
     """
-    with numba.objmode(d="datetime_datetime_type"):
+    with bodo.objmode(d="datetime_datetime_type"):
         d = datetime.datetime.today()
     return d
 
@@ -277,7 +279,7 @@ def strptime_impl(date_string, dtformat):  # pragma: no cover
     Untyped pass replaces datetime.datetime.strptime() with this call since class methods are
     not supported in Numba's typing
     """
-    with numba.objmode(d="datetime_datetime_type"):
+    with bodo.objmode(d="datetime_datetime_type"):
         d = datetime.datetime.strptime(date_string, dtformat)
     return d
 
@@ -288,7 +290,7 @@ def _cmp(x, y):  # pragma: no cover
 
 
 def create_cmp_op_overload(op):
-    """ create overload function for comparison operators with datetime_datetime_type. """
+    """create overload function for comparison operators with datetime_datetime_type."""
 
     def overload_datetime_cmp(lhs, rhs):
         if lhs == datetime_datetime_type and rhs == datetime_datetime_type:
@@ -311,7 +313,6 @@ def create_cmp_op_overload(op):
 
 
 def overload_sub_operator_datetime_datetime(lhs, rhs):
-
     if lhs == datetime_datetime_type and rhs == datetime_datetime_type:
 
         def impl(lhs, rhs):  # pragma: no cover

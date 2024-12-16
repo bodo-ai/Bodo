@@ -1,18 +1,22 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
 Helper functions to enable typing.
 """
+
 import copy
 import itertools
 import operator
 import types as pytypes
+import typing
 import warnings
 from inspect import getfullargspec
+from typing import Any
 
 import numba
 import numba.cpython.unicode
+import numba.types
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 from numba.core import cgutils, ir, ir_utils, types
 from numba.core.errors import NumbaError
 from numba.core.imputils import RefType, iternext_impl
@@ -22,6 +26,7 @@ from numba.core.typing.templates import (
     infer_global,
     signature,
 )
+from numba.core.utils import PYVERSION
 from numba.extending import (
     NativeValue,
     box,
@@ -49,13 +54,19 @@ INDEX_SENTINEL = "$_bodo_index_"
 
 
 list_cumulative = {"cumsum", "cumprod", "cummin", "cummax"}
+Index = str | dict | None
+FileSchema = tuple[list[str], list, Index, list[int], list, list, list, pa.Schema]
 
 
 def is_timedelta_type(in_type):
-    return in_type in [
-        bodo.hiframes.datetime_timedelta_ext.pd_timedelta_type,
-        bodo.hiframes.datetime_date_ext.datetime_timedelta_type,
-    ]
+    return (
+        in_type
+        in [
+            bodo.hiframes.datetime_timedelta_ext.pd_timedelta_type,
+            bodo.hiframes.datetime_date_ext.datetime_timedelta_type,
+        ]
+        or in_type == bodo.timedelta64ns
+    )
 
 
 def is_dtype_nullable(in_dtype):
@@ -66,6 +77,12 @@ def is_dtype_nullable(in_dtype):
 def is_nullable(typ):
     return bodo.utils.utils.is_array_typ(typ, False) and (
         not isinstance(typ, types.Array) or is_dtype_nullable(typ.dtype)
+    )
+
+
+def is_nullable_ignore_sentinels(typ) -> bool:
+    return bodo.utils.utils.is_array_typ(typ, False) and (
+        not isinstance(typ, types.Array)
     )
 
 
@@ -99,7 +116,7 @@ def type_has_unknown_cats(typ):
     )
 
 
-def unwrap_typeref(typ):
+def unwrap_typeref(typ: types.Type | types.TypeRef) -> types.Type:
     """return instance type if 'typ' is a TypeRef
 
     Args:
@@ -134,7 +151,6 @@ def decode_if_dict_array_overload(A):
     if isinstance(A, types.List):
 
         def impl(A):  # pragma: no cover
-
             n = 0
             for a in A:
                 n += 1
@@ -196,6 +212,20 @@ def to_str_arr_if_dict_array(t):
     if isinstance(t, bodo.DataFrameType):
         return t.copy(data=tuple(to_str_arr_if_dict_array(t) for t in t.data))
 
+    if isinstance(t, bodo.ArrayItemArrayType):
+        return bodo.ArrayItemArrayType(to_str_arr_if_dict_array(t.dtype))
+
+    if isinstance(t, bodo.StructArrayType):
+        return bodo.StructArrayType(
+            tuple(to_str_arr_if_dict_array(a) for a in t.data), t.names
+        )
+
+    if isinstance(t, bodo.MapArrayType):
+        return bodo.MapArrayType(
+            to_str_arr_if_dict_array(t.key_arr_type),
+            to_str_arr_if_dict_array(t.value_arr_type),
+        )
+
     return t
 
 
@@ -211,7 +241,7 @@ class BodoError(NumbaError):
         else:
             self.locs_in_msg = locs_in_msg
         highlight = numba.core.errors.termcolor().errmsg
-        super(BodoError, self).__init__(highlight(msg), loc)
+        super().__init__(highlight(msg), loc)
 
 
 class BodoException(numba.core.errors.TypingError):
@@ -226,7 +256,7 @@ class BodoConstUpdatedError(Exception):
     """
 
 
-def raise_bodo_error(msg, loc=None):
+def raise_bodo_error(msg, loc=None) -> typing.NoReturn:
     """Raises BodoException during partial typing in case typing transforms can handle
     the issue. Otherwise, raises BodoError.
     """
@@ -274,26 +304,26 @@ class FileInfo:
     def __init__(self):
         # if not None, it is a string that needs to be concatenated to input string in
         # get_schema() to get full path for retrieving schema
-        self._concat_str = None
+        self._concat_str: str | None = None
         # whether _concat_str should be concatenated on the left
-        self._concat_left = None
+        self._concat_left: str | None = None
 
-    def get_schema(self, fname):
-        """get dataset schema from file name"""
+    def get_schema(self, fname: str):
+        """Get dataset schema from file name"""
         full_path = self.get_full_filename(fname)
         return self._get_schema(full_path)
 
     def set_concat(self, concat_str, is_left):
-        """set input string concatenation parameters"""
+        """Set input string concatenation parameters"""
         self._concat_str = concat_str
         self._concat_left = is_left
 
-    def _get_schema(self, fname):
+    def _get_schema(self, fname: str) -> FileSchema:
         # should be implemented in subclasses
         raise NotImplementedError
 
-    def get_full_filename(self, fname):
-        """get full path with concatenation if necessary"""
+    def get_full_filename(self, fname: str):
+        """Get full path with concatenation if necessary"""
         if self._concat_str is None:
             return fname
 
@@ -304,17 +334,19 @@ class FileInfo:
 
 
 class FilenameType(types.Literal):
-    """Arguments of Bodo functions that are a constant literal are
+    """
+    Arguments of Bodo functions that are a constant literal are
     converted to this type instead of plain Literal to allow us
     to reuse the cache for differing file names that have the
     same schema. All FilenameType instances have the same hash
     to allow comparison of different instances. Equality is based
-    on the schema (not the file name)."""
+    on the schema (not the file name).
+    """
 
-    def __init__(self, fname, finfo):
+    def __init__(self, fname, finfo: FileInfo):
         self.fname = fname
         self._schema = finfo.get_schema(fname)
-        super(FilenameType, self).__init__(self.fname)
+        super().__init__(self.fname)
 
     def __hash__(self):
         # fixed number to ensure every FilenameType hashes equally
@@ -339,12 +371,13 @@ class FilenameType(types.Literal):
         return copy.deepcopy(self._schema)
 
 
-types.FilenameType = FilenameType
+types.FilenameType = FilenameType  # type: ignore
 
 # Data model, unboxing and lower cast are the same as fname (unicode or list) to
 # allow passing different file names to compiled code (note that if
 # data model is literal the file name would be part of the binary code)
 # see test_pq_cache_print
+
 
 # datamodel
 @register_model(types.FilenameType)
@@ -355,7 +388,7 @@ class FilenameModel(models.StructModel):
 
     def __init__(self, dmm, fe_type):
         val_model = dmm.lookup(bodo.typeof(fe_type.fname))
-        members = [(a, b) for a, b in zip(val_model._fields, val_model._members)]
+        members = list(zip(val_model._fields, val_model._members))
         super().__init__(dmm, fe_type, members)
 
 
@@ -392,7 +425,7 @@ def is_overload_constant_bool(val):
     return (
         isinstance(val, bool)
         or isinstance(val, types.BooleanLiteral)
-        or ((isinstance(val, types.Omitted) and isinstance(val.value, bool)))
+        or (isinstance(val, types.Omitted) and isinstance(val.value, bool))
     )
 
 
@@ -404,7 +437,7 @@ def is_overload_constant_str(val):
     return (
         isinstance(val, str)
         or (isinstance(val, types.StringLiteral) and isinstance(val.literal_value, str))
-        or ((isinstance(val, types.Omitted) and isinstance(val.value, str)))
+        or (isinstance(val, types.Omitted) and isinstance(val.value, str))
     )
 
 
@@ -414,7 +447,7 @@ def is_overload_constant_bytes(val):
         isinstance(val, bytes)
         # Numba doesn't have a coresponding literal type for byte literals
         # or (isinstance(val, types.BinaryLiteral) and isinstance(val.literal_value, bytes))
-        or ((isinstance(val, types.Omitted) and isinstance(val.value, bytes)))
+        or (isinstance(val, types.Omitted) and isinstance(val.value, bytes))
     )
 
 
@@ -510,7 +543,7 @@ def is_overload_constant_nan(val):
 
 def is_overload_constant_float(val):
     return isinstance(val, float) or (
-        (isinstance(val, types.Omitted) and isinstance(val.value, float))
+        isinstance(val, types.Omitted) and isinstance(val.value, float)
     )
 
 
@@ -522,13 +555,57 @@ def is_overload_float(val):
     return is_overload_constant_float(val) or isinstance(val, types.Float)
 
 
+def is_valid_int_arg(arg):  # pragma: no cover
+    """Verifies that one of the arguments to a SQL function is an integer
+       (scalar or vector)
+
+    Args:
+        arg (dtype): the dtype of the argument being checked
+
+    returns: True if the argument is an integer, False otherwise
+    """
+    return not (
+        arg != types.none
+        and not isinstance(arg, types.Integer)
+        and not (
+            bodo.utils.utils.is_array_typ(arg, True)
+            and isinstance(arg.dtype, types.Integer)
+        )
+        and not is_overload_int(arg)
+    )
+
+
+def is_valid_float_arg(arg):  # pragma: no cover
+    """Verifies that one of the arguments to a SQL function is a float
+        (scalar or vector)
+
+    Args:
+        arg (dtype): the dtype of the argument being checked
+
+    returns: True if the argument is a float, False otherwise
+    """
+    return not (
+        arg != types.none
+        and not isinstance(arg, types.Float)
+        and not (
+            bodo.utils.utils.is_array_typ(arg, True)
+            and isinstance(arg.dtype, types.Float)
+        )
+        and not is_overload_float(arg)
+    )
+
+
+def is_overload_numeric_scalar(val):
+    return is_overload_bool(val) or is_overload_float(val) or is_overload_int(val)
+
+
 def is_overload_constant_int(val):
     return (
         isinstance(val, int)
         or (
             isinstance(val, types.IntegerLiteral) and isinstance(val.literal_value, int)
         )
-        or ((isinstance(val, types.Omitted) and isinstance(val.value, int)))
+        or (isinstance(val, types.Omitted) and isinstance(val.value, int))
     )
 
 
@@ -559,12 +636,16 @@ def is_overload_zero(val):
     return val == 0 or val == types.IntegerLiteral(0) or getattr(val, "value", -1) == 0
 
 
-def is_overload_str(val, const):
+def is_overload_const_str_equal(val, const):
     return (
         val == const
         or val == types.StringLiteral(const)
         or getattr(val, "value", -1) == const
     )
+
+
+def is_overload_str(val):
+    return isinstance(val, types.UnicodeType) or is_overload_constant_str(val)
 
 
 # TODO: refactor with get_literal_value()
@@ -619,6 +700,16 @@ def get_overload_const(val):
     if is_literal_type(val):
         return get_literal_value(val)
     return NOT_CONSTANT
+
+
+def assert_bodo_error(cond, msg=""):
+    """Assertion that raises BodoError instead of regular AssertionError to avoid
+    early compiler termination by Numba and allow iterative typing to continue.
+    For example, using this for checking for constants allows typing pass to try to
+    force the value to be constant.
+    """
+    if not cond:
+        raise BodoError(msg)
 
 
 def element_type(val):
@@ -711,7 +802,9 @@ def check_unsupported_args(
             v1 is NOT_CONSTANT
             or (v1 is not None and v2 is None)
             or (v1 is None and v2 is not None)
-            or v1 != v2
+            or (v1 is not np.nan and v1 != v2)
+            or (v1 is np.nan and v2 is not np.nan)
+            or (v1 is not np.nan and v2 is np.nan)
             or (v1 is not _no_input and v2 is _no_input)
             or (v1 is _no_input and v2 is not _no_input)
         ):
@@ -751,7 +844,7 @@ def check_unsupported_args(
         raise BodoError(error_message)
 
 
-def get_overload_const_tuple(val):
+def get_overload_const_tuple(val) -> tuple | None:
     if isinstance(val, tuple):
         return val
     if isinstance(val, types.Omitted):
@@ -761,7 +854,7 @@ def get_overload_const_tuple(val):
         return tuple(get_overload_const(t) for t in val.types)
 
 
-def get_overload_constant_dict(val):
+def get_overload_constant_dict(val) -> dict:
     """get constant dict values from literal type (stored as const tuple)"""
     # LiteralStrKeyDict with all const values, e.g. {"A": ["B"]}
     # see test_groupby_agg_const_dict::impl4
@@ -798,7 +891,7 @@ def get_overload_const_str_len(val):
         return len(val.value)
 
 
-def get_overload_const_list(val):
+def get_overload_const_list(val) -> list[Any] | tuple[Any, ...] | None:
     """returns a constant list from type 'val', which could be a single value
     literal, a constant list or a constant tuple.
     """
@@ -821,7 +914,7 @@ def get_overload_const_list(val):
         return tuple(get_literal_value(t) for t in val.types)
 
 
-def get_overload_const_str(val):
+def get_overload_const_str(val) -> str:
     if isinstance(val, str):
         return val
     if isinstance(val, types.Omitted):
@@ -831,10 +924,10 @@ def get_overload_const_str(val):
     if isinstance(val, types.StringLiteral):
         assert isinstance(val.literal_value, str)
         return val.literal_value
-    raise BodoError("{} not constant string".format(val))
+    raise BodoError(f"{val} not constant string")
 
 
-def get_overload_const_bytes(val):
+def get_overload_const_bytes(val) -> bytes:
     """Gets the bytes value from the possibly wraped value.
     Val must actually be a constant byte type, or this fn will throw an error
     """
@@ -844,10 +937,10 @@ def get_overload_const_bytes(val):
         assert isinstance(val.value, bytes)
         return val.value
     # Numba has no eqivalent literal type for bytes
-    raise BodoError("{} not constant binary".format(val))
+    raise BodoError(f"{val} not constant binary")
 
 
-def get_overload_const_int(val):
+def get_overload_const_int(val) -> int:
     if isinstance(val, int):
         return val
     if isinstance(val, types.Omitted):
@@ -857,19 +950,19 @@ def get_overload_const_int(val):
     if isinstance(val, types.IntegerLiteral):
         assert isinstance(val.literal_value, int)
         return val.literal_value
-    raise BodoError("{} not constant integer".format(val))
+    raise BodoError(f"{val} not constant integer")
 
 
-def get_overload_const_float(val):
+def get_overload_const_float(val) -> float:
     if isinstance(val, float):
         return val
     if isinstance(val, types.Omitted):
         assert isinstance(val.value, float)
         return val.value
-    raise BodoError("{} not constant float".format(val))
+    raise BodoError(f"{val} not constant float")
 
 
-def get_overload_const_bool(val):
+def get_overload_const_bool(val, f_name=None, a_name=None) -> bool:
     if isinstance(val, bool):
         return val
     if isinstance(val, types.Omitted):
@@ -879,10 +972,17 @@ def get_overload_const_bool(val):
     if isinstance(val, types.BooleanLiteral):
         assert isinstance(val.literal_value, bool)
         return val.literal_value
-    raise BodoError("{} not constant boolean".format(val))
+    raise BodoError(
+        ("" if f_name is None else f"Internal error in {f_name}: ")
+        + (
+            f"{val} not constant boolean"
+            if a_name is None
+            else f"{a_name} must be constant boolean, but get {val}"
+        )
+    )
 
 
-def is_const_func_type(t):
+def is_const_func_type(t) -> bool:
     """check if 't' is a constant function type"""
     return isinstance(
         t,
@@ -900,16 +1000,17 @@ def get_overload_const_func(val, func_ir):
         func = val.literal_value
         # Handle functions that are currently make_function expressions from BodoSQL
         if isinstance(func, ir.Expr) and func.op == "make_function":
-            assert (
-                func_ir is not None
-            ), "Function expression is make_function but there is no existing IR"
+            assert_bodo_error(
+                func_ir is not None,
+                "Function expression is make_function but there is no existing IR",
+            )
             func = numba.core.ir_utils.convert_code_obj_to_function(func, func_ir)
         return func
     if isinstance(val, types.Dispatcher):
         return val.dispatcher.py_func
     if isinstance(val, CPUDispatcher):
         return val.py_func
-    raise BodoError("'{}' not a constant function type".format(val))
+    raise BodoError(f"'{val}' not a constant function type")
 
 
 def is_heterogeneous_tuple_type(t):
@@ -937,13 +1038,13 @@ def parse_dtype(dtype, func_name=None):
     # handle constructor functions, e.g. Series.astype(float)
     if isinstance(dtype, types.Function):
         # TODO: other constructor functions?
-        if dtype.key[0] == float:
+        if dtype.key[0] is float:
             dtype = types.StringLiteral("float")
-        elif dtype.key[0] == int:
+        elif dtype.key[0] is int:
             dtype = types.StringLiteral("int")
-        elif dtype.key[0] == bool:
+        elif dtype.key[0] is bool:
             dtype = types.StringLiteral("bool")
-        elif dtype.key[0] == str:
+        elif dtype.key[0] is str:
             dtype = bodo.string_type
 
     # Handle Pandas Int type directly. This can occur when
@@ -955,8 +1056,29 @@ def parse_dtype(dtype, func_name=None):
     if isinstance(dtype, types.DTypeSpec):
         return dtype.dtype
 
-    # input is array dtype already
-    if isinstance(dtype, types.Number) or dtype == bodo.string_type:
+    # input is array dtype already (see dtype_to_array_type)
+    if isinstance(
+        dtype,
+        (
+            types.Number,
+            types.NPDatetime,
+            bodo.TimestampTZType,
+            bodo.Decimal128Type,
+            bodo.StructType,
+            bodo.MapScalarType,
+            bodo.TimeType,
+            bodo.hiframes.pd_categorical_ext.PDCategoricalDtype,
+            bodo.libs.pd_datetime_arr_ext.PandasDatetimeTZDtype,
+        ),
+    ) or dtype in (
+        bodo.string_type,
+        bodo.bytes_type,
+        bodo.datetime_date_type,
+        bodo.datetime_timedelta_type,
+        bodo.null_dtype,
+        bodo.pd_timestamp_tz_naive_type,
+        bodo.pd_timedelta_type,
+    ):
         return dtype
 
     try:
@@ -965,12 +1087,16 @@ def parse_dtype(dtype, func_name=None):
             return bodo.libs.int_arr_ext.typeof_pd_int_dtype(
                 pd.api.types.pandas_dtype(d_str), None
             )
+        if d_str.startswith("Float"):
+            return bodo.libs.float_arr_ext.typeof_pd_float_dtype(
+                pd.api.types.pandas_dtype(d_str), None
+            )
         if d_str == "boolean":
             return bodo.libs.bool_arr_ext.boolean_dtype
         if d_str == "str":
             return bodo.string_type
         return numba.np.numpy_support.from_dtype(np.dtype(d_str))
-    except:
+    except Exception:
         pass
     if func_name is not None:
         raise BodoError(f"{func_name}(): invalid dtype {dtype}")
@@ -978,13 +1104,15 @@ def parse_dtype(dtype, func_name=None):
         raise BodoError(f"invalid dtype {dtype}")
 
 
-def is_list_like_index_type(t):
+def is_list_like_index_type(
+    t,
+) -> bool:
     """Types that can be similar to list for indexing Arrays, Series, etc.
     Tuples are excluded due to indexing semantics.
     """
     from bodo.hiframes.pd_index_ext import NumericIndexType, RangeIndexType
     from bodo.hiframes.pd_series_ext import SeriesType
-    from bodo.libs.bool_arr_ext import boolean_array
+    from bodo.libs.bool_arr_ext import boolean_array_type
 
     # TODO: include datetimeindex/timedeltaindex?
 
@@ -993,8 +1121,8 @@ def is_list_like_index_type(t):
         or (isinstance(t, types.Array) and t.ndim == 1)
         or isinstance(t, (NumericIndexType, RangeIndexType))
         or isinstance(t, SeriesType)
-        # or isinstance(t, IntegerArrayType)  # TODO: is this necessary?
-        or t == boolean_array
+        or isinstance(t, bodo.IntegerArrayType)
+        or t == boolean_array_type
     )
 
 
@@ -1015,14 +1143,14 @@ def get_index_names(t, func_name, default_name):
     """
     from bodo.hiframes.pd_multi_index_ext import MultiIndexType
 
-    err_msg = "{}: index name should be a constant string".format(func_name)
+    err_msg = f"{func_name}: index name should be a constant string"
 
-    # MultIndex has multiple names
+    # MultiIndex has multiple names
     if isinstance(t, MultiIndexType):
         names = []
         for i, n_typ in enumerate(t.names_typ):
             if n_typ == types.none:
-                names.append("level_{}".format(i))
+                names.append(f"level_{i}")
                 continue
             if not is_overload_constant_str(n_typ):
                 raise BodoError(err_msg)
@@ -1105,9 +1233,8 @@ def get_index_type_from_dtype(t):
     )
 
     if t in [
-        bodo.hiframes.pd_timestamp_ext.pd_timestamp_type,
+        bodo.hiframes.pd_timestamp_ext.pd_timestamp_tz_naive_type,
         bodo.datetime64ns,
-        bodo.datetime_date_type,
     ]:
         return DatetimeIndexType(types.none)
 
@@ -1132,7 +1259,10 @@ def get_index_type_from_dtype(t):
     if t == bodo.bytes_type:
         return BinaryIndexType(types.none)
 
-    if isinstance(t, (types.Integer, types.Float, types.Boolean)):
+    if (
+        isinstance(t, (types.Integer, types.Float, types.Boolean))
+        or t == bodo.datetime_date_type
+    ):
         return NumericIndexType(t, types.none)
 
     if isinstance(t, bodo.hiframes.pd_categorical_ext.PDCategoricalDtype):
@@ -1163,34 +1293,19 @@ def get_index_name_types(t):
     return (t.name_typ,)
 
 
-# Check if boxing if defined for SliceLiteral. If not provide the implementation.
-if types.SliceLiteral in numba.core.pythonapi._boxers.functions:
-    warnings.warn("SliceLiteral boxing has been implemented in Numba")
-else:
+def is_bodosql_context_type(t):
+    """Check for BodoSQLContextType without importing BodoSQL unnecessarily"""
+    if type(t).__name__ == "BodoSQLContextType":
+        try:
+            from bodosql.context_ext import BodoSQLContextType
+        except ImportError:  # pragma: no cover
+            raise ImportError("BodoSQL not installed properly")
+        assert isinstance(
+            t, BodoSQLContextType
+        ), "is_bodosql_context_type: expected BodoSQLContextType"
+        return True
 
-    @box(types.SliceLiteral)
-    def box_slice_literal(typ, val, c):
-        """box slice literal by constructing a slice from start, stop, and step"""
-        slice_val = typ.literal_value
-        slice_fields = []
-        for field_name in ("start", "stop", "step"):
-            field_obj = getattr(typ.literal_value, field_name)
-            field_val = (
-                c.pyapi.make_none()
-                if field_obj is None
-                else c.pyapi.from_native_value(
-                    types.literal(field_obj), field_obj, c.env_manager
-                )
-            )
-            slice_fields.append(field_val)
-        # TODO: Replace with a CPython API once added to pythonapi.py
-        slice_call_obj = c.pyapi.unserialize(c.pyapi.serialize_object(slice))
-        slice_obj = c.pyapi.call_function_objargs(slice_call_obj, slice_fields)
-        # Decref objects
-        for a in slice_fields:
-            c.pyapi.decref(a)
-        c.pyapi.decref(slice_call_obj)
-        return slice_obj
+    return False
 
 
 class ListLiteral(types.Literal):
@@ -1271,27 +1386,49 @@ def unbox_func_literal(typ, obj, c):
 
 
 # groupby.agg() can take a constant dictionary with a UDF in values. Typer of Numba's
-# typed.Dict trys to get the type of the UDF value, which is not possible. This hack
+# typed.Dict tries to get the type of the UDF value, which is not possible. This hack
 # makes a dummy type available to Numba so that type inference works.
 types.MakeFunctionLiteral._literal_type_cache = types.MakeFunctionLiteral(lambda: 0)
+
+
+def _get_key_bool_safe(meta):
+    """Convert bool values to string to use as key since values like (True, False) and
+    (1, 0) are equal in Python, but shouldn't be equal in this context.
+    This causes Numba's type instance interning to assume instances are the same
+    which is wrong.
+    See https://bodo.atlassian.net/browse/BSE-2809
+
+    Args:
+        meta (any): input meta value to convert to key (typically tuple of string or int or bool)
+
+    Returns:
+        any: meta value with bools replaced with string key
+    """
+    if isinstance(meta, bool):
+        return f"_$BODO_BOOL_{meta}"
+    if isinstance(meta, tuple):
+        return tuple(_get_key_bool_safe(a) for a in meta)
+
+    return meta
 
 
 # type used to pass metadata to type inference functions
 # see untyped_pass.py and df.pivot_table()
 class MetaType(types.Type):
     def __init__(self, meta):
+        # TODO: this may not work for custom types, checking __hash__ attribute exists
+        # may be better, but I'm uncertain if that's correct either
+        if not isinstance(meta, typing.Hashable):  # pragma: no cover
+            raise RuntimeError("Internal error: MetaType should be hashable")
         self.meta = meta
-        super(MetaType, self).__init__("MetaType({})".format(meta))
+        super().__init__(f"MetaType({meta})")
 
     def can_convert_from(self, typingctx, other):
         return True
 
     @property
     def key(self):
-        # XXX this is needed for _TypeMetaclass._intern to return the proper
-        # cached instance in case meta is changed
-        # (e.g. TestGroupBy -k pivot -k cross)
-        return tuple(self.meta)
+        return _get_key_bool_safe(self.meta)
 
     @property
     def mangling_args(self):
@@ -1310,10 +1447,13 @@ class MetaType(types.Type):
 
 register_model(MetaType)(models.OpaqueModel)
 
+
 # A subclass of MetaType that is used to pass around column names
 # This has no differences with MetaType, it exists purely to make the code more readable
 class ColNamesMetaType(MetaType):
     def __init__(self, meta):
+        if not isinstance(meta, typing.Hashable):  # pragma: no cover
+            raise RuntimeError("Internal error: ColNamesMetaType should be hashable")
         self.meta = meta
         types.Type.__init__(self, f"ColNamesMetaType({meta})")
 
@@ -1321,15 +1461,30 @@ class ColNamesMetaType(MetaType):
 register_model(ColNamesMetaType)(models.OpaqueModel)
 
 
+# A subclass of MetaType that is used to pass around information
+# when creating a table in Snowflake
+class CreateTableMetaType(MetaType):
+    def __init__(self, table_comment=None, column_comments=None, table_properties=None):
+        self.table_comment = table_comment
+        self.column_comments = column_comments
+        self.table_properties = table_properties
+        meta = (self.table_comment, self.column_comments, self.table_properties)
+        if not isinstance(meta, typing.Hashable):  # pragma: no cover
+            raise RuntimeError("Internal error: ColNamesMetaType should be hashable")
+        self.meta = meta
+        types.Type.__init__(self, f"CreateTableMetaType({meta})")
+
+
+register_model(CreateTableMetaType)(models.OpaqueModel)
+
+
 def is_literal_type(t):
     """return True if 't' represents a data type with known compile-time constant value"""
-    # sometimes Dispatcher objects become TypeRef, see test_groupby_agg_const_dict
-    if isinstance(t, types.TypeRef):
-        t = t.instance_type
     return (
+        isinstance(t, types.TypeRef)
         # LiteralStrKeyDict is not always a literal since its values are not necessarily
         # constant
-        (
+        or (
             isinstance(t, (types.Literal, types.Omitted))
             and not isinstance(t, types.LiteralStrKeyDict)
         )
@@ -1342,6 +1497,7 @@ def is_literal_type(t):
         # dtype literals should be treated as literals
         or isinstance(t, (types.DTypeSpec, types.Function))
         or isinstance(t, bodo.libs.int_arr_ext.IntDtype)
+        or isinstance(t, bodo.libs.float_arr_ext.FloatDtype)
         or t
         in (bodo.libs.bool_arr_ext.boolean_dtype, bodo.libs.str_arr_ext.string_dtype)
         # values like np.sum could be passed as UDFs and are technically literals
@@ -1399,7 +1555,7 @@ def get_literal_value(t):
     # sometimes Dispatcher objects become TypeRef, see test_groupby_agg_const_dict
     if isinstance(t, types.TypeRef):
         t = t.instance_type
-    assert is_literal_type(t)
+    assert_bodo_error(is_literal_type(t))
     if t == types.none:
         return None
     if isinstance(t, types.Literal):
@@ -1425,6 +1581,8 @@ def get_literal_value(t):
         return t
     if isinstance(t, bodo.libs.int_arr_ext.IntDtype):
         return getattr(pd, str(t)[:-2])()
+    if isinstance(t, bodo.libs.float_arr_ext.FloatDtype):  # pragma: no cover
+        return getattr(pd, str(t)[:-2])()
     if t == bodo.libs.bool_arr_ext.boolean_dtype:
         return pd.BooleanDtype()
     if t == bodo.libs.str_arr_ext.string_dtype:
@@ -1449,21 +1607,24 @@ def can_literalize_type(t, pyobject_to_literal=False):
 def dtype_to_array_type(dtype, convert_nullable=False):
     """get default array type for scalar dtype
 
-
     Args:
         dtype (types.Type): scalar data type
     """
     dtype = types.unliteral(dtype)
-
-    # UDFs may return lists, but we store array of array for output
-    if isinstance(dtype, types.List):
-        dtype = dtype_to_array_type(dtype.dtype)
 
     # UDFs may use Optional types for setting array values.
     # These should use the nullable type of the non-null case
     if isinstance(dtype, types.Optional):
         dtype = dtype.type
         convert_nullable = True
+
+    # UDFs may return lists, but we store array of array for output
+    if isinstance(dtype, types.List):
+        dtype = dtype_to_array_type(dtype.dtype, convert_nullable)
+
+    # null array
+    if dtype == bodo.null_dtype or dtype == bodo.none:
+        return bodo.null_array_type
 
     # string array
     if dtype == bodo.string_type:
@@ -1483,14 +1644,23 @@ def dtype_to_array_type(dtype, convert_nullable=False):
     if isinstance(dtype, bodo.libs.int_arr_ext.IntDtype):
         return bodo.IntegerArrayType(dtype.dtype)
 
-    if dtype == types.bool_:
-        return bodo.boolean_array
+    if isinstance(dtype, bodo.libs.float_arr_ext.FloatDtype):  # pragma: no cover
+        return bodo.FloatingArrayType(dtype.dtype)
+
+    if dtype == types.boolean:
+        return bodo.boolean_array_type
 
     if dtype == bodo.datetime_date_type:
         return bodo.hiframes.datetime_date_ext.datetime_date_array_type
 
+    if isinstance(dtype, bodo.libs.pd_datetime_arr_ext.PandasDatetimeTZDtype):
+        return bodo.libs.pd_datetime_arr_ext.DatetimeArrayType(dtype.tz)
+
     if isinstance(dtype, bodo.TimeType):
         return bodo.hiframes.time_ext.TimeArrayType(dtype.precision)
+
+    if dtype == bodo.timestamptz_type:
+        return bodo.hiframes.timestamptz_ext.timestamptz_array_type
 
     if isinstance(dtype, bodo.Decimal128Type):
         return bodo.DecimalArrayType(dtype.precision, dtype.scale)
@@ -1503,22 +1673,33 @@ def dtype_to_array_type(dtype, convert_nullable=False):
 
     # tuple array
     if isinstance(dtype, types.BaseTuple):
-        return bodo.TupleArrayType(tuple(dtype_to_array_type(t) for t in dtype.types))
+        return bodo.TupleArrayType(
+            tuple(dtype_to_array_type(t, convert_nullable) for t in dtype.types)
+        )
 
     # map array
+    if isinstance(dtype, bodo.libs.map_arr_ext.MapScalarType):
+        return bodo.MapArrayType(
+            dtype.key_arr_type,
+            dtype.value_arr_type,
+        )
+
     if isinstance(dtype, types.DictType):
         return bodo.MapArrayType(
-            dtype_to_array_type(dtype.key_type),
-            dtype_to_array_type(dtype.value_type),
+            dtype_to_array_type(dtype.key_type, convert_nullable),
+            dtype_to_array_type(dtype.value_type, convert_nullable),
         )
 
     # DatetimeTZDtype are stored as pandas Datetime array
     if isinstance(dtype, bodo.libs.pd_datetime_arr_ext.PandasDatetimeTZDtype):
         return bodo.DatetimeArrayType(dtype.tz)
 
+    if isinstance(dtype, bodo.PandasTimestampType) and dtype.tz is not None:
+        return bodo.DatetimeArrayType(dtype.tz)
+
     # Timestamp/datetime are stored as dt64 array
     if dtype in (
-        bodo.pd_timestamp_type,
+        bodo.pd_timestamp_tz_naive_type,
         bodo.hiframes.datetime_datetime_ext.datetime_datetime_type,
     ):
         return types.Array(bodo.datetime64ns, 1, "C")
@@ -1531,16 +1712,15 @@ def dtype_to_array_type(dtype, convert_nullable=False):
         return types.Array(bodo.timedelta64ns, 1, "C")
 
     # regular numpy array
-    if isinstance(
-        dtype, (types.Number, types.Boolean, types.NPDatetime, types.NPTimedelta)
-    ):
+    if isinstance(dtype, (types.Number, types.NPDatetime, types.NPTimedelta)):
         arr = types.Array(dtype, 1, "C")
         # If this comes from an optional type try converting to
         # nullable.
         if convert_nullable:
             return to_nullable_type(arr)
         return arr
-
+    if isinstance(dtype, bodo.MapScalarType):
+        return bodo.MapArrayType(dtype.key_arr_type, dtype.value_arr_type)
     raise BodoError(f"dtype {dtype} cannot be stored in arrays")  # pragma: no cover
 
 
@@ -1554,12 +1734,13 @@ def get_udf_out_arr_type(f_return_type, return_nullable=False):
         f_return_type = f_return_type.type
         return_nullable = True
 
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
-        f_return_type, "Series.apply"
-    )
+    # Needed for MapArrayType since we use MapScalarType in getitem, not Dict
+    # See test_map_array.py::test_map_apply_simple
+    if isinstance(f_return_type, types.DictType):
+        return_nullable = True
 
     # unbox Timestamp to dt64 in Series
-    if f_return_type == bodo.hiframes.pd_timestamp_ext.pd_timestamp_type:
+    if f_return_type == bodo.hiframes.pd_timestamp_ext.pd_timestamp_tz_naive_type:
         f_return_type = types.NPDatetime("ns")
 
     # unbox Timedelta to timedelta64 in Series
@@ -1599,7 +1780,7 @@ def types_equality_exists(t1, t2):
         # know it is a no-op.
         typing_context.resolve_function_type(operator.eq, (t1, t2), {})
         return True
-    except:
+    except Exception:
         return False
 
 
@@ -1631,17 +1812,18 @@ def is_hashable_type(t):
     try:
         typing_context.resolve_function_type(hash, (t,), {})
         return True
-    except:  # pragma: no cover
+    except Exception:  # pragma: no cover
         return False
 
 
 def to_nullable_type(t):
     """Converts types that cannot hold NAs to corresponding nullable types.
-    For example, boolean_array is returned for Numpy array(bool_) and IntegerArray is
+    For example, boolean_array_type is returned for Numpy array(bool_) and IntegerArray is
     returned for Numpy array(int).
     Converts data in DataFrame and Series types as well.
     """
     from bodo.hiframes.pd_dataframe_ext import DataFrameType
+    from bodo.hiframes.pd_index_ext import NumericIndexType
     from bodo.hiframes.pd_series_ext import SeriesType
 
     if isinstance(t, DataFrameType):
@@ -1649,14 +1831,33 @@ def to_nullable_type(t):
         return DataFrameType(new_data, t.index, t.columns, t.dist, t.is_table_format)
 
     if isinstance(t, SeriesType):
-        return SeriesType(t.dtype, to_nullable_type(t.data), t.index, t.name_typ)
+        return SeriesType(
+            t.dtype, to_nullable_type(t.data), t.index, t.name_typ, t.dist
+        )
+
+    if isinstance(t, NumericIndexType):
+        return NumericIndexType(t.dtype, t.name_typ, to_nullable_type(t.data))
 
     if isinstance(t, types.Array):
         if t.dtype == types.bool_:
-            return bodo.libs.bool_arr_ext.boolean_array
+            return bodo.libs.bool_arr_ext.boolean_array_type
 
         if isinstance(t.dtype, types.Integer):
             return bodo.libs.int_arr_ext.IntegerArrayType(t.dtype)
+
+        if isinstance(t.dtype, types.Float):
+            return bodo.libs.float_arr_ext.FloatingArrayType(t.dtype)
+
+    if isinstance(t, bodo.ArrayItemArrayType):
+        return bodo.ArrayItemArrayType(to_nullable_type(t.dtype))
+
+    if isinstance(t, bodo.StructArrayType):
+        return bodo.StructArrayType(tuple(to_nullable_type(a) for a in t.data), t.names)
+
+    if isinstance(t, bodo.MapArrayType):
+        return bodo.MapArrayType(
+            to_nullable_type(t.key_arr_type), to_nullable_type(t.value_arr_type)
+        )
 
     return t
 
@@ -1688,18 +1889,21 @@ def is_iterable_type(t):
     )
 
 
-def is_scalar_type(t):
+def is_scalar_type(t: types.Type) -> bool:
     """
-    returns True if 't' is a scalar type like integer, boolean, string, ...
+    Returns True if 't' is a scalar type like integer, boolean, string, ...
     """
     return isinstance(
         t,
         (
             types.Boolean,
             types.Number,
+            types.IntegerLiteral,
+            types.BooleanLiteral,
             types.StringLiteral,
             bodo.hiframes.pd_timestamp_ext.PandasTimestampType,
             bodo.TimeType,
+            bodo.Decimal128Type,
         ),
     ) or t in (
         bodo.datetime64ns,
@@ -1714,6 +1918,8 @@ def is_scalar_type(t):
         bodo.week_type,
         bodo.date_offset_type,
         types.none,
+        bodo.null_dtype,
+        bodo.timestamptz_type,
     )
 
 
@@ -1721,66 +1927,268 @@ def is_common_scalar_dtype(scalar_types):
     """Returns True if a list of scalar types share a common
     Numpy type or are equal.
     """
-    (_, found_common_typ) = get_common_scalar_dtype(scalar_types)
-    return found_common_typ
+    common_type, _ = get_common_scalar_dtype(scalar_types)
+    return common_type is not None
 
 
-def get_common_scalar_dtype(scalar_types):
+# Number of significant digits in every major integer size
+# Keys are Numba integer scalar types
+# Values are the number of significant digits (in base 10) that always fit
+# in the specified integer type
+# Always assuming signed integers
+SIGS_IN_INT = {
+    types.int64: 18,
+    types.int32: 9,
+    types.int16: 4,
+    types.int8: 2,
+}
+
+
+def get_common_scalar_dtype(
+    scalar_types: list[types.Type],
+    allow_downcast: bool = False,
+) -> tuple[types.Type | None, bool]:
     """
-    Attempts to unify the list of passed in dtypes. Returns the tuple (common_type, True) on succsess,
-    and (None, False) on failure."""
+    Attempts to unify the list of passed in dtypes, notifying if a downcast
+    has occurred.
+
+    Args:
+        scalar_types: All dtypes to unify
+        allow_downcast: Whether to allow for downcasts, notifying if it occurs.
+            If false, will not allow downcasts and just return None, False
+
+    Returns:
+        types.Type | None: Unified Dtype or None if not possible
+        bool: Whether a downcast has occurred or not (always False when allow_downcast=False)
+    """
     scalar_types = [types.unliteral(a) for a in scalar_types]
 
     if len(scalar_types) == 0:
         raise_bodo_error(
             "Internal error, length of argument passed to get_common_scalar_dtype scalar_types is 0"
         )
+    if all(t == bodo.null_dtype for t in scalar_types):
+        return (bodo.null_dtype, False)
+    # bodo.null_dtype can be cast to any type so remove it from the list.
+    scalar_types = [t for t in scalar_types if t != bodo.null_dtype]
     try:
-        common_dtype = np.find_common_type(
-            [numba.np.numpy_support.as_dtype(t) for t in scalar_types], []
+        common_dtype = np.result_type(
+            *[numba.np.numpy_support.as_dtype(t) for t in scalar_types]
         )
         # If we get an object dtype we do not have a common type.
         # Otherwise, the types can be used together
-        if common_dtype != object:
-            return (numba.np.numpy_support.from_dtype(common_dtype), True)
+        if common_dtype is not object:
+            return (numba.np.numpy_support.from_dtype(common_dtype), False)
 
     # If we have a Bodo or Numba type that isn't implemented in
     # Numpy, we will get a NumbaNotImplementedError
     except numba.core.errors.NumbaNotImplementedError:
         pass
+    # If we get types that aren't compatible in Numpy, we will get a
+    # DTypePromotionError
+    except np.exceptions.DTypePromotionError:
+        pass
 
-    # Timestamp/dt64 can be used interchangably
+    # Timestamp/dt64 can be used interchangeably
     # TODO: Should datetime.datetime also be included?
-    if scalar_types[0] in (bodo.datetime64ns, bodo.pd_timestamp_type):
-        for typ in scalar_types[1:]:
-            if typ not in (bodo.datetime64ns, bodo.pd_timestamp_type):
-                return (None, False)
-        return (bodo.datetime64ns, True)
+    if all(
+        t
+        in (
+            bodo.datetime64ns,
+            bodo.pd_timestamp_tz_naive_type,
+            bodo.pd_datetime_tz_naive_type,
+        )
+        for t in scalar_types
+    ):
+        return (bodo.pd_datetime_tz_naive_type, False)
 
-    # Timedelta/td64 can be used interchangably
-    # TODO: Should datetime.timedelta also be included?
-    if scalar_types[0] in (bodo.timedelta64ns, bodo.pd_timedelta_type):
-        for typ in scalar_types[1:]:
-            if scalar_types[0] not in (bodo.timedelta64ns, bodo.pd_timedelta_type):
+    if all(
+        t
+        in (
+            bodo.timedelta64ns,
+            bodo.pd_timedelta_type,
+        )
+        for t in scalar_types
+    ):
+        return (bodo.timedelta64ns, False)
+
+    # Datetime+timezone-aware and timestamp+timezone-aware can be converted to be the same
+    # if they both have the same timezone value.
+    if all(
+        isinstance(t, bodo.libs.pd_datetime_arr_ext.PandasDatetimeTZDtype)
+        or (isinstance(t, bodo.PandasTimestampType) and t.tz is not None)
+        for t in scalar_types
+    ):
+        timezones = [t.tz for t in scalar_types]
+        for tz in timezones:
+            if tz != timezones[0]:
                 return (None, False)
-        return (bodo.timedelta64ns, True)
+        return (bodo.PandasTimestampType(timezones[0]), False)
+    # If all are Numeric types and one is Decimal128Type, then:
+    # - We attempt to combine lossless-ly and reduce to closest non-Decimal type
+    # - If too large, we default to closes Decimal128 type expecting lossy conversion
+    if any(isinstance(t, bodo.Decimal128Type) for t in scalar_types):
+        if any(
+            not isinstance(t, (types.Number, bodo.Decimal128Type)) for t in scalar_types
+        ):
+            return None, False
+
+        # First, determine the max # of digits needed to store the
+        # digits before and after the decimal place
+        # Only for Decimal and Integers, Floats are handled after
+        max_float = None
+        num_before_digits = 0
+        scale = 0
+
+        for t in scalar_types:
+            if isinstance(t, types.Float):
+                max_float = t if max_float is None else max(max_float, t)
+            elif isinstance(t, types.Integer):
+                num_before_digits = max(num_before_digits, SIGS_IN_INT[t])
+            else:
+                assert isinstance(t, bodo.Decimal128Type)
+                num_before_digits = max(num_before_digits, t.precision - t.scale)
+                scale = max(scale, t.scale)
+
+        precision = num_before_digits + scale
+        # Precision can be at most 38
+        # TODO: What to do if precision > 38. For example, with input Decimal128(38, 0) and Decimal128(38, 18)
+        if precision > 38:
+            out = (
+                types.float64
+                if max_float is not None
+                else bodo.Decimal128Type(38, scale)
+            )
+            return (out, True) if allow_downcast else (None, False)
+        elif precision <= 18 and scale == 0:
+            if precision <= 2:
+                base_out = types.int8
+            elif precision <= 4:
+                base_out = types.int16
+            elif precision <= 9:
+                base_out = types.int32
+            else:
+                base_out = types.int64
+        # 23 bits for float32 mantissa -> 6 sig figs
+        elif precision <= 6:
+            base_out = types.float32
+        # 52 bits for float64 mantissa -> 15 sig figs
+        elif precision <= 15:
+            base_out = types.float64
+        else:
+            base_out = bodo.Decimal128Type(precision, scale)
+
+        if max_float is None:
+            return (base_out, False)
+
+        if allow_downcast and isinstance(base_out, bodo.Decimal128Type):
+            return (types.float64, True)
+
+        # Combine max_float (float) and base_out (float or int) types
+        return get_common_scalar_dtype([max_float, base_out])
+
+    # If we have a mix of MapScalarTypes and DictTypes, then we first convert
+    # all DictTypes to MapScalarType.
+    if any(isinstance(t, types.DictType) for t in scalar_types) and any(
+        isinstance(t, bodo.MapScalarType) for t in scalar_types
+    ):
+        new_types = []
+        for t in scalar_types:
+            if isinstance(t, types.DictType):
+                equivalent_map_type = bodo.MapScalarType(
+                    dtype_to_array_type(t.key_type), dtype_to_array_type(t.value_type)
+                )
+                new_types.append(equivalent_map_type)
+            else:
+                new_types.append(t)
+        scalar_types = new_types
+
+    # MapScalarType types are combinable if their key types and value types are
+    # also combinable.
+    if all(isinstance(t, bodo.MapScalarType) for t in scalar_types):
+        key_type, key_downcast = get_common_scalar_dtype(
+            [t.key_arr_type.dtype for t in scalar_types]
+        )
+        val_type, val_downcast = get_common_scalar_dtype(
+            [t.value_arr_type.dtype for t in scalar_types]
+        )
+        if key_type is None or val_type is None:
+            return (None, False)
+        key_arr_type = dtype_to_array_type(key_type)
+        val_arr_type = dtype_to_array_type(val_type)
+        return (
+            bodo.MapScalarType(key_arr_type, val_arr_type),
+            key_downcast or val_downcast,
+        )
+
+    # Dict types are combinable if their key types and value types
+    # are also combinable.
+    if all(isinstance(t, types.DictType) for t in scalar_types):
+        key_type, key_downcast = get_common_scalar_dtype(
+            [t.key_type for t in scalar_types]
+        )
+        val_type, val_downcast = get_common_scalar_dtype(
+            [t.value_type for t in scalar_types]
+        )
+        if key_type is None or val_type is None:
+            return (None, False)
+        return (types.DictType(key_type, val_type), key_downcast or val_downcast)
+
+    # Struct types are combinable if they have the same field names, and each field type
+    # is combinable with the same filed in all the other types.
+    if all(isinstance(t, bodo.libs.struct_arr_ext.StructType) for t in scalar_types):
+        names = scalar_types[0].names
+        if not all(t.names == names for t in scalar_types):
+            return None, False
+        new_field_types = []
+        downcasted = False
+        for i in range(len(names)):
+            inner_types = [t.data[i] for t in scalar_types]
+            common_dtype, downcast = get_common_scalar_dtype(inner_types)
+            if common_dtype is None:
+                return (None, False)
+            new_field_types.append(common_dtype)
+            downcasted = downcasted or downcast
+        return (
+            bodo.libs.struct_arr_ext.StructType(tuple(new_field_types), names),
+            downcasted,
+        )
 
     # If we don't have a common type, then all types need to be equal.
     # See: https://stackoverflow.com/questions/3844801/check-if-all-elements-in-a-list-are-identical
     grouped_types = itertools.groupby(scalar_types)
     if next(grouped_types, True) and not next(grouped_types, False):
-        return (scalar_types[0], True)
+        return (scalar_types[0], False)
 
     return (None, False)
 
 
 def find_common_np_dtype(arr_types):
-    """finds common numpy dtype of array types using np.find_common_type"""
-    return numba.np.numpy_support.from_dtype(
-        np.find_common_type(
-            [numba.np.numpy_support.as_dtype(t.dtype) for t in arr_types], []
+    """finds common numpy dtype of array types using np.result_type"""
+    try:
+        return numba.np.numpy_support.from_dtype(
+            np.result_type(
+                *[numba.np.numpy_support.as_dtype(t.dtype) for t in arr_types]
+            )
         )
-    )
+    # If we have a Bodo or Numba type that isn't implemented in
+    # Numpy, we will get a NumbaNotImplementedError
+    except numba.core.errors.NumbaNotImplementedError:
+        raise_bodo_error(f"Unable to find a common dtype for types: {arr_types}")
+    # If we get types that aren't compatible in Numpy, we will get a
+    # DTypePromotionError
+    except np.exceptions.DTypePromotionError:
+        raise_bodo_error(f"Unable to find a common dtype for types: {arr_types}")
+
+
+def is_immutable(typ: types.Type) -> bool:
+    """
+    Returns True if typ is an immutable type, like a scalar or
+    tuple of immutable types
+    """
+    if is_tuple_like_type(typ):
+        return all(is_immutable(t) for t in typ.types)
+    return is_scalar_type(typ)
 
 
 def is_immutable_array(typ):
@@ -1804,18 +2212,27 @@ def get_nullable_and_non_nullable_types(array_of_types):
 
     all_types = []
     for typ in array_of_types:
-        if typ == bodo.libs.bool_arr_ext.boolean_array:
+        if typ == bodo.libs.bool_arr_ext.boolean_array_type:
             all_types.append(types.Array(types.bool_, 1, "C"))
 
-        elif isinstance(typ, bodo.libs.int_arr_ext.IntegerArrayType):
+        elif isinstance(
+            typ,
+            (
+                bodo.libs.int_arr_ext.IntegerArrayType,
+                bodo.libs.float_arr_ext.FloatingArrayType,
+            ),
+        ):
             all_types.append(types.Array(typ.dtype, 1, "C"))
 
         elif isinstance(typ, types.Array):
             if typ.dtype == types.bool_:
-                all_types.append(bodo.libs.bool_arr_ext.boolean_array)
+                all_types.append(bodo.libs.bool_arr_ext.boolean_array_type)
 
             if isinstance(typ.dtype, types.Integer):
                 all_types.append(bodo.libs.int_arr_ext.IntegerArrayType(typ.dtype))
+
+            if isinstance(typ.dtype, types.Float):
+                all_types.append(bodo.libs.float_arr_ext.FloatingArrayType(typ.dtype))
 
         all_types.append(typ)
 
@@ -1883,17 +2300,18 @@ def _gen_objmode_overload(
     func_text = f"def overload_impl({sig}):\n"
     func_text += f"    def impl({sig}):\n"
     if single_rank:
-        func_text += f"        if bodo.get_rank() == 0:\n"
+        func_text += "        if bodo.get_rank() == 0:\n"
         extra_indent = "    "
     else:
         extra_indent = ""
-    func_text += f"        {extra_indent}with numba.objmode(res='{type_name}'):\n"
+    # TODO: Should we add a parameter to avoid the objmode warning?
+    func_text += f"        {extra_indent}with bodo.objmode(res='{type_name}'):\n"
     if is_function:
         func_text += f"            {extra_indent}res = {call_str}({args})\n"
     else:
         func_text += f"            {extra_indent}res = {call_str}\n"
-    func_text += f"        return res\n"
-    func_text += f"    return impl\n"
+    func_text += "        return res\n"
+    func_text += "    return impl\n"
 
     loc_vars = {}
     # XXX For some reason numba needs a reference to the module or caching
@@ -1995,7 +2413,7 @@ def from_iterable_impl(A):  # pragma: no cover
 
 
 @intrinsic
-def unliteral_val(typingctx, val=None):
+def unliteral_val(typingctx, val):
     """converts the type of value 'val' to nonliteral"""
 
     def codegen(context, builder, signature, args):
@@ -2008,7 +2426,7 @@ def create_unsupported_overload(fname):
     """Create an overload for unsupported function 'fname' that raises BodoError"""
 
     def overload_f(*a, **kws):
-        raise BodoError("{} not supported yet".format(fname))
+        raise BodoError(f"{fname} not supported yet")
 
     return overload_f
 
@@ -2034,6 +2452,13 @@ def is_builtin_function(func):
     )
 
 
+def is_numpy_function(func):
+    """
+    Determine if func is a builtin function from NumPy.
+    """
+    return isinstance(func, types.Function) and func.typing_key.__module__ == "numpy"
+
+
 def get_builtin_function_name(func):
     """
     Given a builtin function, which is a types.Function,
@@ -2046,7 +2471,7 @@ def get_builtin_function_name(func):
 
 def construct_pysig(arg_names, defaults):
     """generate pysignature object for templates"""
-    func_text = f"def stub("
+    func_text = "def stub("
     for arg in arg_names:
         func_text += arg
         if arg in defaults:
@@ -2147,7 +2572,9 @@ def type_col_to_index(col_names):
         else:
             return bodo.NumericIndexType(types.int64)
     else:
-        return bodo.hiframes.pd_index_ext.HeterogeneousIndexType(col_names)
+        return bodo.hiframes.pd_index_ext.HeterogeneousIndexType(
+            bodo.typeof(tuple(types.literal(c) for c in col_names))
+        )
 
 
 class BodoArrayIterator(types.SimpleIteratorType):
@@ -2161,7 +2588,7 @@ class BodoArrayIterator(types.SimpleIteratorType):
         name = f"iter({arr_type})"
         if yield_type == None:
             yield_type = arr_type.dtype
-        super(BodoArrayIterator, self).__init__(name, yield_type)
+        super().__init__(name, yield_type)
 
 
 @register_model(BodoArrayIterator)
@@ -2172,7 +2599,7 @@ class BodoArrayIteratorModel(models.StructModel):
             ("index", types.EphemeralPointer(types.uintp)),
             ("array", fe_type.arr_type),
         ]
-        super(BodoArrayIteratorModel, self).__init__(dmm, fe_type, members)
+        super().__init__(dmm, fe_type, members)
 
 
 @lower_builtin("iternext", BodoArrayIterator)
@@ -2232,24 +2659,28 @@ def is_safe_arrow_cast(lhs_scalar_typ, rhs_scalar_typ):
     are manually supported.
     """
     # TODO: Support more types
-    # All tests excpet lhs: date are currently marked as slow
+    # All tests except lhs: date are currently marked as slow
     if lhs_scalar_typ == types.unicode_type:  # pragma: no cover
         # Cast is supported between string and timestamp
-        return rhs_scalar_typ in (bodo.datetime64ns, bodo.pd_timestamp_type)
+        return rhs_scalar_typ in (bodo.datetime64ns, bodo.pd_timestamp_tz_naive_type)
     elif rhs_scalar_typ == types.unicode_type:  # pragma: no cover
         # Cast is supported between timestamp and string
-        return lhs_scalar_typ in (bodo.datetime64ns, bodo.pd_timestamp_type)
+        return lhs_scalar_typ in (bodo.datetime64ns, bodo.pd_timestamp_tz_naive_type)
     elif lhs_scalar_typ == bodo.datetime_date_type:
         # Cast is supported between date and timestamp
-        return rhs_scalar_typ in (bodo.datetime64ns, bodo.pd_timestamp_type)
+        return rhs_scalar_typ in (bodo.datetime64ns, bodo.pd_timestamp_tz_naive_type)
     elif rhs_scalar_typ == bodo.datetime_date_type:  # pragma: no cover
         # Cast is supported between date and timestamp
-        return lhs_scalar_typ in (bodo.datetime64ns, bodo.pd_timestamp_type)
+        return lhs_scalar_typ in (bodo.datetime64ns, bodo.pd_timestamp_tz_naive_type)
     return False  # pragma: no cover
 
 
 def register_type(type_name, type_value):
     """register a data type to be used in objmode blocks"""
+    import bodo.submit.spawner
+    from bodo.mpi4py import MPI
+    from bodo.submit.spawner import CommandType
+
     # check input
     if not isinstance(type_name, str):
         raise BodoError(
@@ -2267,6 +2698,13 @@ def register_type(type_name, type_value):
     # add the data type to the "types" module used by Numba for type resolution
     # TODO(ehsan): develop a better solution since this is a bit hacky
     setattr(types, type_name, type_value)
+
+    # TODO[BSE-4170]: simplify test flags
+    if bodo.spawn_mode or bodo.tests.utils.test_spawn_mode_enabled:
+        spawner = bodo.submit.spawner.get_spawner()
+        bcast_root = MPI.ROOT if bodo.get_rank() == 0 else MPI.PROC_NULL
+        spawner.worker_intercomm.bcast(CommandType.REGISTER_TYPE.value, bcast_root)
+        spawner.worker_intercomm.bcast((type_name, type_value), bcast_root)
 
 
 # boxing TypeRef is necessary for passing type to objmode calls
@@ -2418,11 +2856,272 @@ class CasePlaceholderTyper(AbstractTemplate):
     """Typing for BodoSQL CASE placeholder that will be replaced in dataframe pass."""
 
     def generic(self, args, kws):
-        # last argument is the output array type
-        return signature(unwrap_typeref(args[-1]), *args)
+        # last argument is the output array type provided by BodoSQL
+        output_type = unwrap_typeref(args[-1])
+        # Typing pass handles unknown output type for this
+        assert_bodo_error(output_type != types.unknown)
+        return signature(output_type, *args)
 
 
 CasePlaceholderTyper.prefer_literal = True
 
 
-gen_objmode_func_overload(warnings.warn, "none")
+def handle_bodosql_case_init_code(init_code):
+    """Extract variable names in CASE initialization code generated by BodoSQL and check
+    if we can avoid inlining.
+
+    Args:
+        init_code (str): CASE initialization code generated by BodoSQL
+
+    Returns:
+        tuple(list(str), bool): variable names and must_inline flag
+    """
+    # Extract the arrays used in the codegen to verify we can avoid inlining.
+    var_names = []
+    init_lines = init_code.split("\n")
+    must_inline = False
+    for line in init_lines:
+        parts = line.split("=")
+        # If len parts is 1, then this isn't an assignment
+        # Right now everything is required to be an assignment
+        # except empty whitespace at the BodoSQL level or closures.
+        # We don't yet know how to avoid inlining the IR if we have
+        # closures
+        if len(parts) > 1:
+            var_names.append(parts[0].strip())
+        elif parts[0].strip() != "":
+            must_inline = True
+            break
+
+    return var_names, must_inline
+
+
+def gen_bodosql_case_func(
+    init_code,
+    body_code,
+    named_param_args,
+    var_names,
+    arr_variable_name,
+    indexing_variable_name,
+    out_arr_type,
+    func_globals,
+    skip_allocation=False,
+):
+    """Generate a function for BodoSQL CASE statement using provided initialization
+     code, loop body code, etc.
+
+    Args:
+        init_code (str): initialization code
+        body_code (str): loop body code
+        named_param_args (str): named parameter arguments
+        var_names (list(str)): names of variables created in variable  initialization code
+        arr_variable_name (str): output array's variable name
+        indexing_variable_name (str): loop index variable name
+        out_arr_type (types.Type): output type inferred by BodoSQL
+        func_globals (dict): main function's globals
+        skip_allocation (bool, optional): flag to skip output array allocation, used in typing pass to infer the scalar type. Defaults to False.
+
+    Returns:
+        function: generated function
+    """
+    import re
+
+    import bodosql
+
+    # TODO: Support named params
+    func_text = f"def f(arrs, n, {named_param_args}):\n"
+    func_text += init_code
+    call_args = ", ".join(var_names)
+    func_text += f"  return bodosql_case_kernel(({call_args},))\n"
+
+    inner_func_text = "def bodosql_case_kernel(arrs):\n"
+    for i, varname in enumerate(var_names):
+        # Reuse the same variable name as the original query
+        inner_func_text += f"  {varname} = arrs[{i}]\n"
+    # Derive the length from the input array
+    inner_func_text += f"  n = len({var_names[0]})\n"
+    if not skip_allocation:
+        inner_func_text += f"  {arr_variable_name} = bodo.utils.utils.alloc_type(n, out_arr_type, (-1,))\n"
+    inner_func_text += f"  for {indexing_variable_name} in range(n):\n"
+    inner_func_text += body_code
+    inner_func_text += f"  return {arr_variable_name}\n"
+
+    loc_vars = {}
+    inner_glbls = {
+        "pd": pd,
+        "np": np,
+        "re": re,
+        "bodo": bodo,
+        "bodosql": bodosql,
+        "out_arr_type": out_arr_type,
+    }
+    # Globals generated by BodoSQL (accessible from main function) may be
+    # necessary too.
+    # See https://bodo.atlassian.net/browse/BSE-1941
+    inner_glbls.update(func_globals)
+    exec(inner_func_text, inner_glbls, loc_vars)
+    inner_func = loc_vars["bodosql_case_kernel"]
+    inner_jit = bodo.jit(distributed=False)(inner_func)
+    glbls = {
+        "numba": numba,
+        "pd": pd,
+        "np": np,
+        "re": re,
+        "bodo": bodo,
+        "bodosql": bodosql,
+        "bodosql_case_kernel": inner_jit,
+    }
+    # Globals generated by BodoSQL (accessible from main function) may be
+    # necessary too.
+    # See https://bodo.atlassian.net/browse/BSE-1941
+    glbls.update(func_globals)
+    exec(func_text, glbls, loc_vars)
+    f = loc_vars["f"]
+    return f, glbls
+
+
+# NOTE: not using gen_objmode_func_overload since inspect cannot find the function
+# signature for warnings.warn as of Python 3.12
+if PYVERSION >= (3, 12):
+
+    @overload(warnings.warn)
+    def overload_warn(
+        message, category=None, stacklevel=1, source=None, skip_file_prefixes=None
+    ):
+        def impl(
+            message, category=None, stacklevel=1, source=None, skip_file_prefixes=None
+        ):  # pragma: no cover
+            if bodo.get_rank() == 0:
+                with bodo.no_warning_objmode:
+                    if skip_file_prefixes is None:
+                        skip_file_prefixes = ()
+                    warnings.warn(
+                        message,
+                        category,
+                        stacklevel,
+                        source,
+                        skip_file_prefixes=skip_file_prefixes,
+                    )
+
+        return impl
+
+else:
+    gen_objmode_func_overload(warnings.warn, "none")
+
+
+def get_array_getitem_scalar_type(t):
+    """Returns scalar type of the array as returned by its getitem.
+
+    Args:
+        t (types.Type): input array type
+
+    Returns:
+        types.Type: scalar type (e.g int64, Timestamp, etc)
+    """
+    # Scalar type of most arrays is the same as dtype (e.g. int64), except
+    # DatetimeArrayType and null_array_type which have different dtype objects.
+    if isinstance(t, bodo.DatetimeArrayType):
+        return bodo.PandasTimestampType(t.tz)
+
+    if t == bodo.null_array_type:
+        return types.none
+
+    return t.dtype
+
+
+def get_castable_arr_dtype(arr_type: types.Type):
+    """Convert a Bodo array type into a Type representation
+    that can be used for casting an array via fix_arr_dtype.
+
+    Args:
+        arr_type (types.Type): The array type to convert to a castable value.
+
+    Returns:
+        Any: The value used to generate the cast value.
+    """
+    if isinstance(
+        arr_type, (bodo.ArrayItemArrayType, bodo.MapArrayType, bodo.StructArrayType)
+    ):
+        cast_typ = arr_type
+    elif isinstance(arr_type, (bodo.IntegerArrayType, bodo.FloatingArrayType)):
+        cast_typ = arr_type.get_pandas_scalar_type_instance.name
+    elif arr_type == bodo.boolean_array_type:
+        cast_typ = bodo.libs.bool_arr_ext.boolean_dtype
+    elif arr_type == bodo.dict_str_arr_type or isinstance(
+        arr_type, bodo.DatetimeArrayType
+    ):
+        cast_typ = arr_type
+    else:
+        # Most array types cast using the dtype.
+        cast_typ = arr_type.dtype
+    return cast_typ
+
+
+def is_bodosql_integer_arr_type(arr_typ: types.ArrayCompatible) -> bool:
+    """Returns if a given array type may represent
+    an integer type in BodoSQL. This is used when
+    casting is required.
+
+    Args:
+        arr_typ (types.ArrayCompatible): The type to check.
+
+    Returns:
+        bool: Is the array a decimal or integer array (nullable or non-nullable).
+    """
+    return isinstance(arr_typ, bodo.DecimalArrayType) or isinstance(
+        arr_typ.dtype, types.Integer
+    )
+
+
+def get_common_bodosql_integer_arr_type(
+    arr_typs: list[types.ArrayCompatible],
+) -> types.ArrayCompatible:
+    """Returns a common array type for the BodoSQL integer array representations
+    that have already been validated by is_bodosql_integer_type.
+
+    Args:
+        arr_typs (list[types.ArrayCompatible]): A list of integer (nullable or non-nullable) or decimal array to unify.
+
+    Returns:
+        types.ArrayCompatible: The output array with max bidwidth + correct nullability.
+    """
+    # Make sure arrays have the same nullability.
+    to_nullable = any(is_nullable(arr_typ) for arr_typ in arr_typs)
+    bitwidths = [arr_typ.dtype.bitwidth for arr_typ in arr_typs]
+    max_bitwidth = max(bitwidths)
+    typ_idx = bitwidths.index(max_bitwidth)
+    arr_typ = arr_typs[typ_idx]
+    if to_nullable:
+        arr_typ = to_nullable_type(arr_typ)
+    return arr_typ
+
+
+def error_on_unsupported_streaming_arrays(table_type):
+    """Raises an error if input table type has unsupported (Interval) nested arrays
+
+    Args:
+        table_type (TableType|unknown): input table type or unknown
+
+    Raises:
+        BodoError: error on nested arrays in input table type
+    """
+    # ignore unresolved types in typing pass
+    if table_type in (None, types.unknown, types.undefined):
+        return
+
+    assert isinstance(
+        table_type, bodo.TableType
+    ), "error_on_unsupported_streaming_arrays: TableType expected"
+
+    for arr_type in table_type.arr_types:
+        if isinstance(arr_type, bodo.IntervalArrayType):
+            raise BodoError(f"Array type {arr_type} not supported in streaming yet")
+
+
+class ExternalFunctionErrorChecked(types.ExternalFunction):
+    """Same as Numba's ExternalFunction, but lowering checks for Python exceptions"""
+
+    pass
+
+
+register_model(ExternalFunctionErrorChecked)(models.OpaqueModel)

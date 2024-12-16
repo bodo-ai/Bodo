@@ -1,6 +1,4 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
-"""CSR Matrix data type implementation for scipy.sparse.csr_matrix
-"""
+"""CSR Matrix data type implementation for scipy.sparse.csr_matrix"""
 
 import operator
 
@@ -34,7 +32,7 @@ class CSRMatrixType(types.ArrayCompatible):
         self.dtype = dtype
         # idx_dtype is data type of row/column index values, either int32 or int64
         self.idx_dtype = idx_dtype
-        super(CSRMatrixType, self).__init__(name=f"CSRMatrixType({dtype}, {idx_dtype})")
+        super().__init__(name=f"CSRMatrixType({dtype}, {idx_dtype})")
 
     @property
     def as_array(self):
@@ -66,7 +64,7 @@ make_attribute_wrapper(CSRMatrixType, "shape", "shape")
 
 
 @intrinsic
-def init_csr_matrix(typingctx, data_t, indices_t, indptr_t, shape_t=None):
+def init_csr_matrix(typingctx, data_t, indices_t, indptr_t, shape_t):
     """Create a CSR matrix with provided data values."""
     assert isinstance(data_t, types.Array)
     assert isinstance(indices_t, types.Array) and isinstance(

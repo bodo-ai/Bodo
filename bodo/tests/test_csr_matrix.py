@@ -1,6 +1,4 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
-"""Tests for scipy.sparse.csr_matrix data structure
-"""
+"""Tests for scipy.sparse.csr_matrix data structure"""
 
 import numpy as np
 import pytest
@@ -8,6 +6,8 @@ import scipy.sparse
 
 import bodo
 from bodo.tests.utils import check_func
+
+pytestmark = [pytest.mark.ml, pytest.mark.weekly]
 
 
 @pytest.fixture(

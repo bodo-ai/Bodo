@@ -1,7 +1,7 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
 Support for Series.dt attributes and methods
 """
+
 import datetime
 import operator
 
@@ -25,12 +25,20 @@ from bodo.hiframes.pd_series_ext import (
     get_series_name,
     init_series,
 )
+from bodo.ir.argument_checkers import (
+    DatetimeLikeSeriesArgumentChecker,
+    OverloadArgumentsChecker,
+    OverloadAttributeChecker,
+)
+from bodo.ir.declarative_templates import (
+    overload_attribute_declarative,
+    overload_method_declarative,
+)
 from bodo.libs.pd_datetime_arr_ext import PandasDatetimeTZDtype
 from bodo.utils.typing import (
     BodoError,
     ColNamesMetaType,
     check_unsupported_args,
-    create_unsupported_overload,
     raise_bodo_error,
 )
 
@@ -47,22 +55,22 @@ class SeriesDatetimePropertiesType(types.Type):
     # TODO: Timedelta and Period accessors
     def __init__(self, stype):
         self.stype = stype
-        name = "SeriesDatetimePropertiesType({})".format(stype)
-        super(SeriesDatetimePropertiesType, self).__init__(name)
+        name = f"SeriesDatetimePropertiesType({stype})"
+        super().__init__(name)
 
 
 @register_model(SeriesDatetimePropertiesType)
 class SeriesDtModel(models.StructModel):
     def __init__(self, dmm, fe_type):
         members = [("obj", fe_type.stype)]
-        super(SeriesDtModel, self).__init__(dmm, fe_type, members)
+        super().__init__(dmm, fe_type, members)
 
 
 make_attribute_wrapper(SeriesDatetimePropertiesType, "obj", "_obj")
 
 
 @intrinsic
-def init_series_dt_properties(typingctx, obj=None):
+def init_series_dt_properties(typingctx, obj):
     def codegen(context, builder, signature, args):
         (obj_val,) = args
         dt_properties_type = signature.return_type
@@ -94,13 +102,8 @@ def overload_series_dt(s):
 
 def create_date_field_overload(field):
     def overload_field(S_dt):
-        if S_dt.stype.dtype != types.NPDatetime("ns") and not isinstance(
-            S_dt.stype.dtype, PandasDatetimeTZDtype
-        ):  # pragma: no cover
-            return
-        bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
-            S_dt, f"Series.dt.{field}"
-        )
+        has_tz_aware_data = isinstance(S_dt.stype.dtype, PandasDatetimeTZDtype)
+
         func_text = "def impl(S_dt):\n"
         func_text += "    S = S_dt._obj\n"
         func_text += "    arr = bodo.hiframes.pd_series_ext.get_series_data(S)\n"
@@ -117,7 +120,7 @@ def create_date_field_overload(field):
             "is_year_start",
             "is_year_end",
         ):
-            func_text += "    out_arr = np.empty(n, np.bool_)\n"
+            func_text += "    out_arr = bodo.libs.bool_arr_ext.alloc_bool_array(n)\n"
         else:
             func_text += (
                 "    out_arr = bodo.libs.int_arr_ext.alloc_int_array(n, np.int64)\n"
@@ -127,50 +130,16 @@ def create_date_field_overload(field):
         func_text += "        if bodo.libs.array_kernels.isna(arr, i):\n"
         func_text += "            bodo.libs.array_kernels.setna(out_arr, i)\n"
         func_text += "            continue\n"
-        func_text += (
-            "        dt64 = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(arr[i])\n"
-        )
-        # extract year, month, day faster without conversion to Timestamp
-        if field in ("year", "month", "day"):
-            func_text += "        dt, year, days = bodo.hiframes.pd_timestamp_ext.extract_year_days(dt64)\n"
-            if field in ("month", "day"):
-                func_text += "        month, day = bodo.hiframes.pd_timestamp_ext.get_month_day(year, days)\n"
-            func_text += "        out_arr[i] = {}\n".format(field)
-        elif field in (
-            "dayofyear",
-            "day_of_year",
-            "dayofweek",
-            "day_of_week",
-            "weekday",
-        ):
-            funcdict = {
-                "dayofyear": "get_day_of_year",
-                "day_of_year": "get_day_of_year",
-                "dayofweek": "get_day_of_week",
-                "day_of_week": "get_day_of_week",
-                "weekday": "get_day_of_week",
-            }
-            func_text += "        dt, year, days = bodo.hiframes.pd_timestamp_ext.extract_year_days(dt64)\n"
-            func_text += "        month, day = bodo.hiframes.pd_timestamp_ext.get_month_day(year, days)\n"
-            func_text += "        out_arr[i] = bodo.hiframes.pd_timestamp_ext.{}(year, month, day)\n".format(
-                funcdict[field]
-            )
-        elif field == "is_leap_year":
-            func_text += "        dt, year, days = bodo.hiframes.pd_timestamp_ext.extract_year_days(dt64)\n"
-            func_text += "        out_arr[i] = bodo.hiframes.pd_timestamp_ext.is_leap_year(year)\n"
-        elif field in ("daysinmonth", "days_in_month"):
-            funcdict = {
-                "days_in_month": "get_days_in_month",
-                "daysinmonth": "get_days_in_month",
-            }
-            func_text += "        dt, year, days = bodo.hiframes.pd_timestamp_ext.extract_year_days(dt64)\n"
-            func_text += "        month, day = bodo.hiframes.pd_timestamp_ext.get_month_day(year, days)\n"
-            func_text += "        out_arr[i] = bodo.hiframes.pd_timestamp_ext.{}(year, month)\n".format(
-                funcdict[field]
-            )
-        else:
+        if not has_tz_aware_data:
+            func_text += "        dt64 = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(arr[i])\n"
             func_text += "        ts = bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp(dt64)\n"
-            func_text += "        out_arr[i] = ts." + field + "\n"
+            if field == "weekday":
+                func_text += "        out_arr[i] = ts.weekday()\n"
+            else:
+                func_text += "        out_arr[i] = ts." + field + "\n"
+        else:
+            func_text += f"        out_arr[i] = arr[i].{field}\n"
+
         func_text += (
             "    return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)\n"
         )
@@ -182,36 +151,41 @@ def create_date_field_overload(field):
     return overload_field
 
 
+def overload_datetime_field_declarative(field, overload_impl):
+    """
+    Use declarative overload template to create an overload of dt fields that are only
+    implemented for datetimes. This check is performed at compile time and is
+    documenteded using overload_attribute_declarative.
+    """
+    overload_attribute_declarative(
+        SeriesDatetimePropertiesType,
+        field,
+        path=f"pd.Series.dt.{field}",
+        arg_checker=OverloadAttributeChecker(
+            DatetimeLikeSeriesArgumentChecker("S_dt", type="datetime"),
+        ),
+        description=None,
+        inline="always",
+    )(overload_impl)
+
+
 def _install_date_fields():
     for field in bodo.hiframes.pd_timestamp_ext.date_fields:
         overload_impl = create_date_field_overload(field)
-        overload_attribute(SeriesDatetimePropertiesType, field)(overload_impl)
+        # Using overload_attribute_declarative performs check that the Series data is
+        # datetime at compile time and can be used to generate documentation.
+        overload_datetime_field_declarative(field, overload_impl)
 
 
 _install_date_fields()
 
 
-def create_date_method_overload(method):
-    is_str_method = method in ["day_name", "month_name"]
-
+def create_date_method_overload(method, is_str_method):
     if is_str_method:
-        func_text = "def overload_method(S_dt, locale=None):\n"
         # Only string methods both have locale as an argument.
-        func_text += "    unsupported_args = dict(locale=locale)\n"
-        func_text += "    arg_defaults = dict(locale=None)\n"
-        func_text += "    bodo.utils.typing.check_unsupported_args(\n"
-        func_text += f"        'Series.dt.{method}',\n"
-        func_text += "        unsupported_args,\n"
-        func_text += "        arg_defaults,\n"
-        func_text += "        package_name='pandas',\n"
-        func_text += "        module_name='Series',\n"
-        func_text += "    )\n"
+        func_text = "def overload_method(S_dt, locale=None):\n"
     else:
         func_text = "def overload_method(S_dt):\n"
-        func_text += f"    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(S_dt, 'Series.dt.{method}()')\n"
-    # .dt methods only work on datetime64s"""
-    func_text += "    if not (S_dt.stype.dtype == bodo.datetime64ns or isinstance(S_dt.stype.dtype, bodo.libs.pd_datetime_arr_ext.PandasDatetimeTZDtype)):\n"  # pragma: no cover
-    func_text += "        return\n"
     if is_str_method:
         func_text += "    def impl(S_dt, locale=None):\n"
     else:
@@ -246,12 +220,38 @@ def create_date_method_overload(method):
     return overload_method
 
 
+def overload_datetime_method_declarative(method, overload_impl, unsupported_args):
+    """
+    Use declarative overload template to create an overload of dt method that are only
+    implemented for datetimes. This check is performed at compile time and is
+    documenteded using overload_method_declarative.
+    """
+    overload_method_declarative(
+        SeriesDatetimePropertiesType,
+        method,
+        path=f"pd.Series.dt.{method}",
+        unsupported_args=unsupported_args,
+        method_args_checker=OverloadArgumentsChecker(
+            [
+                DatetimeLikeSeriesArgumentChecker(
+                    "S_dt", type="datetime", is_self=True
+                ),
+            ]
+        ),
+        description=None,
+        inline="always",
+    )(overload_impl)
+
+
 def _install_date_methods():
     for method in bodo.hiframes.pd_timestamp_ext.date_methods:
-        overload_impl = create_date_method_overload(method)
-        overload_method(SeriesDatetimePropertiesType, method, inline="always")(
-            overload_impl
-        )
+        is_str_method = method in ["day_name", "month_name"]
+        overload_impl = create_date_method_overload(method, is_str_method)
+        # Only string methods have locale as an argument.
+        unsupported_args = {"locale"} if is_str_method else set()
+        # Using overload_method_declarative performs check that the Series data is
+        # datetime at compile time and can be used to generate documentation.
+        overload_datetime_method_declarative(method, overload_impl, unsupported_args)
 
 
 _install_date_methods()
@@ -288,7 +288,6 @@ def series_dt_date_overload(S_dt):
 
 def create_series_dt_df_output_overload(attr):
     def series_dt_df_output_overload(S_dt):
-
         if not (
             (attr == "components" and S_dt.stype.dtype == types.NPTimedelta("ns"))
             or (
@@ -301,9 +300,7 @@ def create_series_dt_df_output_overload(attr):
         ):  # pragma: no cover
             return
 
-        bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
-            S_dt, f"Series.dt.{attr}"
-        )
+        has_tz_aware_data = isinstance(S_dt.stype.dtype, PandasDatetimeTZDtype)
 
         if attr == "components":
             fields = [
@@ -320,7 +317,11 @@ def create_series_dt_df_output_overload(attr):
             attr_call = attr
         elif attr == "isocalendar":
             fields = ["year", "week", "day"]
-            convert = "convert_datetime64_to_timestamp"
+            if has_tz_aware_data:
+                # We only convert tz-naive data
+                convert = None
+            else:
+                convert = "convert_datetime64_to_timestamp"
             int_type = "bodo.libs.int_arr_ext.alloc_int_array(n, np.uint32)"
             attr_call = attr + "()"
 
@@ -331,24 +332,20 @@ def create_series_dt_df_output_overload(attr):
         func_text += "    numba.parfors.parfor.init_prange()\n"
         func_text += "    n = len(arr)\n"
         for field in fields:
-            func_text += "    {} = {}\n".format(field, int_type)
+            func_text += f"    {field} = {int_type}\n"
         func_text += "    for i in numba.parfors.parfor.internal_prange(n):\n"
         func_text += "        if bodo.libs.array_kernels.isna(arr, i):\n"
         for field in fields:
-            func_text += "            bodo.libs.array_kernels.setna({}, i)\n".format(
-                field
-            )
+            func_text += f"            bodo.libs.array_kernels.setna({field}, i)\n"
         func_text += "            continue\n"
         tuple_vals = "(" + "[i], ".join(fields) + "[i])"
-        func_text += (
-            "        {} = bodo.hiframes.pd_timestamp_ext.{}(arr[i]).{}\n".format(
-                tuple_vals, convert, attr_call
-            )
-        )
+        if convert:
+            getitem_val = f"bodo.hiframes.pd_timestamp_ext.{convert}(arr[i])"
+        else:
+            getitem_val = "arr[i]"
+        func_text += f"        {tuple_vals} = {getitem_val}.{attr_call}\n"
         arr_args = "(" + ", ".join(fields) + ")"
-        func_text += "    return bodo.hiframes.pd_dataframe_ext.init_dataframe({}, index, __col_name_meta_value_series_dt_df_output)\n".format(
-            arr_args
-        )
+        func_text += f"    return bodo.hiframes.pd_dataframe_ext.init_dataframe({arr_args}, index, __col_name_meta_value_series_dt_df_output)\n"
         loc_vars = {}
         exec(
             func_text,
@@ -554,11 +551,11 @@ def create_timedelta_freq_overload(method):
             )
         ):  # pragma: no cover
             return
-        bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
-            S_dt, f"Series.dt.{method}()"
+        is_tz_aware = isinstance(
+            S_dt.stype.dtype, bodo.libs.pd_datetime_arr_ext.PandasDatetimeTZDtype
         )
-        unsupported_args = dict(ambiguous=ambiguous, nonexistent=nonexistent)
-        floor_defaults = dict(ambiguous="raise", nonexistent="raise")
+        unsupported_args = {"ambiguous": ambiguous, "nonexistent": nonexistent}
+        floor_defaults = {"ambiguous": "raise", "nonexistent": "raise"}
         check_unsupported_args(
             f"Series.dt.{method}",
             unsupported_args,
@@ -575,6 +572,8 @@ def create_timedelta_freq_overload(method):
         func_text += "    n = len(A)\n"
         if S_dt.stype.dtype == types.NPTimedelta("ns"):
             func_text += "    B = np.empty(n, np.dtype('timedelta64[ns]'))\n"
+        elif is_tz_aware:
+            func_text += "    B = bodo.libs.pd_datetime_arr_ext.alloc_pd_datetime_array(n, tz_literal)\n"
         else:
             func_text += "    B = np.empty(n, np.dtype('datetime64[ns]'))\n"
         func_text += "    for i in numba.parfors.parfor.internal_prange(n):\n"
@@ -589,16 +588,21 @@ def create_timedelta_freq_overload(method):
                 "bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp"
             )
             back_convert = "bodo.hiframes.pd_timestamp_ext.integer_to_dt64"
-        func_text += "        B[i] = {}({}(A[i]).{}(freq).value)\n".format(
-            back_convert, front_convert, method
-        )
+        if is_tz_aware:
+            func_text += f"        B[i] = A[i].{method}(freq)\n"
+        else:
+            func_text += f"        B[i] = {back_convert}({front_convert}(A[i]).{method}(freq).value)\n"
         func_text += (
             "    return bodo.hiframes.pd_series_ext.init_series(B, index, name)\n"
         )
         loc_vars = {}
+        # Add the tz_literal to the globals for tz-aware data.
+        tz_literal = None
+        if is_tz_aware:
+            tz_literal = S_dt.stype.dtype.tz
         exec(
             func_text,
-            {"numba": numba, "np": np, "bodo": bodo},
+            {"numba": numba, "np": np, "bodo": bodo, "tz_literal": tz_literal},
             loc_vars,
         )
         impl = loc_vars["impl"]
@@ -625,7 +629,6 @@ def create_bin_op_overload(op):
     """
 
     def overload_series_dt_binop(lhs, rhs):
-
         # lhs is series(dt64) and rhs is series(dt64)
         if bodo.hiframes.pd_series_ext.is_dt64_series_typ(
             lhs
@@ -723,7 +726,7 @@ def create_bin_op_overload(op):
         # lhs is series(dt64) and rhs is timestamp
         if (
             bodo.hiframes.pd_series_ext.is_dt64_series_typ(lhs)
-            and rhs == bodo.hiframes.pd_timestamp_ext.pd_timestamp_type
+            and rhs == bodo.hiframes.pd_timestamp_ext.pd_timestamp_tz_naive_type
         ):
             nat = bodo.datetime64ns("NaT")
 
@@ -753,7 +756,7 @@ def create_bin_op_overload(op):
         # lhs is timestamp and rhs is series(dt64)
         if (
             bodo.hiframes.pd_series_ext.is_dt64_series_typ(rhs)
-            and lhs == bodo.hiframes.pd_timestamp_ext.pd_timestamp_type
+            and lhs == bodo.hiframes.pd_timestamp_ext.pd_timestamp_tz_naive_type
         ):
             nat = bodo.datetime64ns("NaT")
 
@@ -1061,7 +1064,7 @@ def create_cmp_op_overload(op):
         # lhs is series(dt64) and rhs is timestamp
         if (
             bodo.hiframes.pd_series_ext.is_dt64_series_typ(lhs)
-            and rhs == bodo.hiframes.pd_timestamp_ext.pd_timestamp_type
+            and rhs == bodo.hiframes.pd_timestamp_ext.pd_timestamp_tz_naive_type
         ):
             nat = bodo.datetime64ns("NaT")
 
@@ -1087,7 +1090,7 @@ def create_cmp_op_overload(op):
 
         # lhs is timestamp and rhs is series(dt64)
         if (
-            lhs == bodo.hiframes.pd_timestamp_ext.pd_timestamp_type
+            lhs == bodo.hiframes.pd_timestamp_ext.pd_timestamp_tz_naive_type
             and bodo.hiframes.pd_series_ext.is_dt64_series_typ(rhs)
         ):
             nat = bodo.datetime64ns("NaT")
@@ -1181,6 +1184,7 @@ series_dt_unsupported_methods = {
     "tz_localize",
     "asfreq",
     "to_timestamp",
+    "as_unit",
 }
 
 series_dt_unsupported_attrs = {
@@ -1193,6 +1197,7 @@ series_dt_unsupported_attrs = {
     "qyear",
     "start_time",
     "end_time",
+    "unit",
 }
 
 
@@ -1201,15 +1206,13 @@ def _install_series_dt_unsupported():
 
     for attr_name in series_dt_unsupported_attrs:
         full_name = "Series.dt." + attr_name
-        overload_attribute(SeriesDatetimePropertiesType, attr_name)(
-            create_unsupported_overload(full_name)
+        bodo.overload_unsupported_attribute(
+            SeriesDatetimePropertiesType, attr_name, full_name
         )
 
     for fname in series_dt_unsupported_methods:
         full_name = "Series.dt." + fname
-        overload_method(SeriesDatetimePropertiesType, fname, no_unliteral=True)(
-            create_unsupported_overload(full_name)
-        )
+        bodo.overload_unsupported_method(SeriesDatetimePropertiesType, fname, full_name)
 
 
 _install_series_dt_unsupported()

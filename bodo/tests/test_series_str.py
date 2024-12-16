@@ -1,12 +1,14 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 import itertools
 
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 import pytest
 
 import bodo
-from bodo.tests.utils import _test_equal, check_func
+from bodo.tests.utils import _test_equal, check_func, pytest_pandas
+
+pytestmark = pytest_pandas
 
 
 @pytest.fixture(
@@ -17,7 +19,7 @@ from bodo.tests.utils import _test_equal, check_func
                     "ABCDD,OSAJD",
                     "a1b2d314f,sdf234",
                     "22!@#,$@#$",
-                    np.nan,
+                    None,
                     "A,C,V,B,B",
                     "AA",
                     "",
@@ -34,7 +36,7 @@ from bodo.tests.utils import _test_equal, check_func
                     "¿abc¡Y tú, quién te crees?",
                     "ÕÕÕú¡úú,úũ¿ééé",
                     "россия очень, холодная страна",
-                    np.nan,
+                    None,
                     "مرحبا, العالم ، هذا هو بودو",
                     "Γειά σου ,Κόσμε",
                     "Español es agra,dable escuchar",
@@ -50,7 +52,7 @@ from bodo.tests.utils import _test_equal, check_func
                 [
                     "아1, 오늘 저녁은 뭐먹지",
                     "나,는 유,니,코,드 테스팅 중",
-                    np.nan,
+                    None,
                     "こんにち,は世界",
                     "大处着眼，小处着手。",
                     "오늘도 피츠버그의 날씨는 매우, 구림",
@@ -68,7 +70,7 @@ from bodo.tests.utils import _test_equal, check_func
                     "😀🐍,⚡😅😂",
                     "🌶🍔,🏈💔💑💕",
                     "𠁆𠁪,𠀓𠄩𠆶",
-                    np.nan,
+                    None,
                     "🏈,💔,𠄩,😅",
                     "🠂,🠋🢇🄐,🞧",
                     "🢇🄐,🏈𠆶💑😅",
@@ -92,7 +94,7 @@ from bodo.tests.utils import _test_equal, check_func
                 "C,ABB,D",
                 "¿abc¡Y tú, quién te cre\t\tes?",
                 "오늘도 피츠버그의 날씨는 매\t우, 구림",
-                np.nan,
+                None,
                 "🏈,💔,𠄩,😅",
                 "大处着眼，小处着手。",
                 "🠂,🠋🢇🄐,🞧",
@@ -158,7 +160,14 @@ def test_unicode(request):
         ),
         pytest.param(
             pd.Series(
-                ["😀🐍,⚡😅😂", "🌶🍔,🏈💔💑💕", "𠁆𠁪,𠀓𠄩𠆶", "🏈,💔,𠄩,😅", "🠂,🠋🢇🄐,🞧", "🢇🄐,🏈𠆶💑😅"],
+                [
+                    "😀🐍,⚡😅😂",
+                    "🌶🍔,🏈💔💑💕",
+                    "𠁆𠁪,𠀓𠄩𠆶",
+                    "🏈,💔,𠄩,😅",
+                    "🠂,🠋🢇🄐,🞧",
+                    "🢇🄐,🏈𠆶💑😅",
+                ],
                 [4, 3, 1, 0, -3, 2],
                 name="A",
             ),
@@ -203,12 +212,26 @@ def test_len(test_unicode, memory_leak_check):
 # TODO: Add memory_leak_check when bugs are resolved.
 @pytest.mark.slow
 def test_split(test_unicode_no_nan):
-    def test_impl(S):
+    def impl_regular(S):
         return S.str.split(",")
+
+    def impl_delim_n(S, n):
+        return S.str.split(", ", n=n)
+
+    def impl_n(S, n):
+        return S.str.split(n=n)
 
     # TODO: more split tests similar to the ones test_hiframes
     # TODO: support and test NA
-    check_func(test_impl, (test_unicode_no_nan,))
+    check_func(impl_regular, (test_unicode_no_nan,))
+    check_func(impl_delim_n, (test_unicode_no_nan, -1))
+    check_func(impl_n, (test_unicode_no_nan, -1))
+    check_func(impl_delim_n, (test_unicode_no_nan, 1))
+    check_func(impl_n, (test_unicode_no_nan, 1))
+    check_func(impl_delim_n, (test_unicode_no_nan, 2))
+    check_func(impl_n, (test_unicode_no_nan, 2))
+    check_func(impl_delim_n, (test_unicode_no_nan, 10))
+    check_func(impl_n, (test_unicode_no_nan, 10))
 
 
 # TODO: Add memory_leak_check when bugs are resolved.
@@ -288,22 +311,22 @@ def test_series_str_split_explode(memory_leak_check):
         return df.A.str.split(",").explode()
 
     df = pd.DataFrame(
-        {"A": pd.array(["A B C", "A", "D E", "A N C E Q  R#R##R#RR F", np.nan] * 5)}
+        {"A": pd.array(["A B C", "A", "D E", "A N C E Q  R#R##R#RR F", None] * 5)}
     )
     check_func(test_impl1, (df,))
     df = pd.DataFrame(
-        {"A": pd.array(["A,B,C", "A", "D,E", "", "A,N,C,E,Q  R#R##R#RR,F", np.nan] * 5)}
+        {"A": pd.array(["A,B,C", "A", "D,E", "", "A,N,C,E,Q  R#R##R#RR,F", None] * 5)}
     )
     check_func(test_impl2, (df,))
 
     df = pd.DataFrame(
-        {"A": pd.array(["Ȩ Ç Ḑ", "ẞ", "Ő Ű", "Å Ů ẘ ẙ Q Ð#Ð##Ð#ÐÐ F", np.nan] * 5)}
+        {"A": pd.array(["Ȩ Ç Ḑ", "ẞ", "Ő Ű", "Å Ů ẘ ẙ Q Ð#Ð##Ð#ÐÐ F", None] * 5)}
     )
 
     check_func(test_impl1, (df,))
 
     df = pd.DataFrame(
-        {"A": pd.array(["Ȩ,Ç,Ḑ", "ẞ", "Ő,Ű", "", "Å,Ů,ẘ,ẙ,Q Ð#Ð##Ð#ÐÐ,F", np.nan] * 5)}
+        {"A": pd.array(["Ȩ,Ç,Ḑ", "ẞ", "Ő,Ű", "", "Å,Ů,ẘ,ẙ,Q Ð#Ð##Ð#ÐÐ,F", None] * 5)}
     )
 
     check_func(test_impl2, (df,))
@@ -525,7 +548,6 @@ def test_cat(test_unicode, sep, memory_leak_check):
 @pytest.mark.slow
 @pytest.mark.parametrize("case", [True, False])
 def test_re_syntax(case, memory_leak_check):
-
     # Test special characters and quantifiers
     def test_impl(S):
         return S.str.contains(r"[a-z]+", regex=True, case=case)
@@ -642,7 +664,7 @@ def test_re_syntax(case, memory_leak_check):
             "ABCDD,OSAJD",
             "a1b2d314f,sdf234",
             "22!@#,$@#$",
-            np.nan,
+            None,
             "A,C,V,B,B",
             "ABcd",
             "",
@@ -744,12 +766,13 @@ def test_extract_noexpand(test_unicode, memory_leak_check):
 # TODO: Add memory_leak_check when problem are resolved.
 def test_extractall():
     """Test Series.str.extractall() with various input cases"""
+
     # ascii input with non-string index, single named group
     def test_impl1(S):
         return S.str.extractall(r"(?P<BBB>[abd]+)\d+")
 
     S = pd.Series(
-        ["a1b1", "b1", np.nan, "a2", "c2", "ddd", "dd4d1", "d22c2"],
+        ["a1b1", "b1", None, "a2", "c2", "ddd", "dd4d1", "d22c2"],
         [4, 3, 5, 1, 0, 2, 6, 11],
         name="AA",
     )
@@ -760,7 +783,7 @@ def test_extractall():
         return S.str.extractall(r"([чен]+)\d+([ст]+)\d+")
 
     S2 = pd.Series(
-        ["чьь1т33", "ьнн2с222", "странаст2", np.nan, "ьнне33ст3"] * 2,
+        ["чьь1т33", "ьнн2с222", "странаст2", None, "ьнне33ст3"] * 2,
         ["е3", "не3", "н2с2", "AA", "C"] * 2,
     )
     check_func(test_impl2, (S2,))
@@ -831,12 +854,38 @@ def test_rfind(test_unicode, memory_leak_check):
     check_func(test_impl2, (test_unicode,), check_dtype=False)
 
 
+@pytest.mark.slow
+def test_encode(memory_leak_check):
+    def test_impl(S):
+        return S.str.encode("ascii")
+
+    S = pd.Series(
+        [
+            "ABCDD,OSAJD",
+            "a1b2d314f,sdf234",
+            "22!@#,$@#$",
+            None,
+            "A,C,V,B,B",
+            "AA",
+            "",
+        ]
+        * 2,
+        [4, 3, 5, 1, 0, -3, 2, -5, 6, 10, -2, 7, -1, -4],
+        name="A",
+    )
+    check_func(
+        test_impl,
+        (S,),
+        check_dtype=False,
+    )
+
+
 @pytest.mark.parametrize(
     "S, sub, start, end",
     [
         (
             pd.Series(
-                ["alpha", "beta", "alphabet", "patatasbravas", np.nan, "houseofcards"]
+                ["alpha", "beta", "alphabet", "patatasbravas", None, "houseofcards"]
             ),
             "a",
             0,
@@ -849,9 +898,7 @@ def test_rfind(test_unicode, memory_leak_check):
             6,
         ),
         (
-            pd.Series(
-                ["bagel", np.nan, "gelatin", "gelato", "angelfish", "evangelist"]
-            ),
+            pd.Series(["bagel", None, "gelatin", "gelato", "angelfish", "evangelist"]),
             "gel",
             0,
             10,
@@ -1088,26 +1135,29 @@ def test_mul_scalar(test_unicode, memory_leak_check):
 @pytest.fixture(
     params=[
         pytest.param(
-            np.array([["a", "bc"], ["a"], ["aaa", "b", "cc"]] * 2, dtype=object),
+            pd.Series(
+                [["a", "bc"], ["a"], ["aaa", "b", "cc"]] * 2,
+                dtype=pd.ArrowDtype(pa.large_list(pa.large_string())),
+            ).values,
             marks=pytest.mark.slow,
         ),
         # empty strings, empty lists, NA
         pytest.param(
-            np.array(
-                [["a", "bc"], ["a"], [], ["aaa", "", "cc"], [""], np.nan] * 2,
-                dtype=object,
-            ),
+            pd.Series(
+                [["a", "bc"], ["a"], [], ["aaa", "", "cc"], [""], None] * 2,
+                dtype=pd.ArrowDtype(pa.large_list(pa.large_string())),
+            ).values,
             marks=pytest.mark.slow,
         ),
         # large array
-        np.array(
+        pd.Series(
             [
                 ["a", "bc"],
                 ["a"],
                 [],
                 ["aaa", "", "cc"],
                 [""],
-                np.nan,
+                None,
                 [
                     "¿abc¡Y tú, quién te crees?",
                     "ÕÕÕú¡úú,úũ¿ééé",
@@ -1122,11 +1172,17 @@ def test_mul_scalar(test_unicode, memory_leak_check):
                     "大处着眼，小处着手。",
                     "오늘도 피츠버그의 날씨는 매우, 구림",
                 ],
-                ["😀🐍,⚡😅😂", "🌶🍔,🏈💔💑💕", "𠁆𠁪,𠀓𠄩𠆶", "🏈,💔,𠄩,😅", "🠂,🠋🢇🄐,🞧"],
+                [
+                    "😀🐍,⚡😅😂",
+                    "🌶🍔,🏈💔💑💕",
+                    "𠁆𠁪,𠀓𠄩𠆶",
+                    "🏈,💔,𠄩,😅",
+                    "🠂,🠋🢇🄐,🞧",
+                ],
             ]
             * 1000,
-            dtype=object,
-        ),
+            dtype=pd.ArrowDtype(pa.large_list(pa.large_string())),
+        ).values,
     ]
 )
 def list_str_arr_value(request):
@@ -1258,11 +1314,12 @@ def test_join(memory_leak_check):
                 "大处着眼，小处着手。",
                 "오늘도 피츠버그의 날씨는 매우, 구림",
             ],
-            np.nan,
+            None,
             ["😀🐍,⚡😅😂", "🌶🍔,🏈💔💑💕", "𠁆𠁪,𠀓𠄩𠆶", "🏈,💔,𠄩,😅", "🠂,🠋🢇🄐,🞧"],
-        ]
+        ],
+        dtype=pd.ArrowDtype(pa.large_list(pa.large_string())),
     )
-    check_func(test_impl, (S,))
+    check_func(test_impl, (S,), py_output=S.astype(object).str.join("-"))
 
 
 def test_split_non_ascii(memory_leak_check):
@@ -1346,5 +1403,207 @@ def test_join_splitview_nan_entry(memory_leak_check):
         B = S.str.split(",")
         return B.str.join("-")
 
-    S = pd.Series(["ABCDD,OSAJD", "a1b2d314f,sdf234", np.nan], [4, 3, 1], name="A")
+    S = pd.Series(["ABCDD,OSAJD", "a1b2d314f,sdf234", None], [4, 3, 1], name="A")
     check_func(test_impl, (S,), check_typing_issues=False)
+
+
+@pytest.mark.parametrize(
+    "substr",
+    [
+        pytest.param("a", id="single_char"),
+        pytest.param("1", id="single_digit", marks=pytest.mark.slow),
+        pytest.param("23", id="multi_digit"),
+    ],
+)
+@pytest.mark.parametrize(
+    "data",
+    [
+        pytest.param(
+            pd.Series([None if i % 7 == i % 6 else str(i) for i in range(1000)]),
+            id="numeric_strings_unique",
+        ),
+        pytest.param(
+            pd.Series(
+                [None if i % 25 == 13 else hex(int(i**0.75))[2:] for i in range(5000)]
+            ),
+            id="hex_strings_duplicates",
+        ),
+    ],
+)
+@pytest.mark.parametrize(
+    "is_prefix",
+    [
+        pytest.param(True, id="prefix"),
+        pytest.param(False, id="suffix"),
+    ],
+)
+def test_remove_prefix_suffix(data, substr, is_prefix):
+    """
+    Tests pd.Series.str.removeprefix and pd.Series.str.removesuffix.
+    """
+
+    def impl_prefix(S, substr):
+        return S.str.removeprefix(substr)
+
+    def impl_suffix(S, substr):
+        return S.str.removesuffix(substr)
+
+    func = impl_prefix if is_prefix else impl_suffix
+
+    check_func(func, (data, substr))
+
+
+@pytest.mark.parametrize(
+    "expand",
+    [
+        pytest.param(True, id="with_expand"),
+        pytest.param(False, id="no_expand", marks=pytest.mark.skip("[BSE-3908]")),
+    ],
+)
+def test_partition(expand, memory_leak_check):
+    """
+    Tests pd.Series.str.partition.
+    """
+
+    data = pd.Series(
+        [
+            "alphabet soup  is delicious",
+            "hello,world",
+            None,
+            "sincerely, your's truest",
+            ",fizzbuzz ",
+            "alphabet soup  is delicious",
+            "alphabet soup  is delicious",
+            "alpha     beta    gamma",
+            "delta,,epsilon,,,,theta",
+            ",fizzbuzz ",
+            ",fizzbuzz ",
+            ",fizzbuzz ",
+        ]
+    )
+
+    def impl_default(S):
+        return S.str.partition()
+
+    def impl_seperator(S):
+        return S.str.partition(sep=",")
+
+    def impl_multichar_seperator(S):
+        return S.str.partition(sep="  ")
+
+    def impl_noexpand(S):
+        return S.str.partition(expand=False)
+
+    if expand:
+        check_func(impl_default, (data,))
+        check_func(impl_seperator, (data,))
+        check_func(impl_multichar_seperator, (data,))
+    else:
+        check_func(impl_noexpand, (data,))
+
+
+@pytest.mark.parametrize(
+    "S",
+    [
+        pytest.param(
+            pd.Series(
+                [
+                    "AAAAaaaAAA",
+                    "12 34",
+                    None,
+                    "Hello",
+                    None,
+                    None,
+                    "good bye",
+                    "Hiß GoodBye1",
+                    "ßßßßßßßßß",
+                ]
+            ),
+            id="simple_str",
+        ),
+        pytest.param(
+            pd.Series(
+                [
+                    "Hello hiß!",
+                    "Hello hiß!",
+                    "Hello hiss",
+                    "Hello hiss",
+                    None,
+                    "goodbye",
+                    "GooDBYe",
+                ]
+            ),
+            id="duplicates",
+        ),
+        pytest.param(
+            pd.Series(
+                [
+                    "아1, 오늘 저녁은 뭐먹지",
+                    "¿abc¡Y tú, quién te crees?",
+                    "ÕÕÕú¡úú,úũ¿ééé",
+                    "россия очень, холодная страна",
+                    None,
+                    "@$!@*()$D" "مرحبا, العالم ، هذا هو بودو",
+                    "Γειά σου ,Κόσμε",
+                    "Español es agra,dable escuchar",
+                    "😀🐍,⚡😅😂",
+                    "🌶🍔,🏈💔💑💕",
+                    "𠁆𠁪,𠀓𠄩𠆶",
+                    None,
+                    "🏈,💔,𠄩,😅\t\t",
+                    "🠂,🠋🢇🄐,🞧",
+                    "🢇🄐,🏈𠆶💑😅",
+                ]
+            ),
+            id="unicode",
+        ),
+    ],
+)
+def test_casefold(S, memory_leak_check):
+    """
+    Tests Series.str.casefold
+    """
+
+    def impl(S):
+        return S.str.casefold()
+
+    check_func(impl, (S,))
+
+
+@pytest.mark.parametrize(
+    "case", [pytest.param(True, id="use_case"), pytest.param(False, id="ignore_case")]
+)
+@pytest.mark.parametrize(
+    "pattern",
+    [
+        pytest.param("ab|abcdef", id="ab_or"),
+        pytest.param("ab.*", id="ab_kleene"),
+        pytest.param("[a-b | \d]+", id="letters_numbers"),
+        pytest.param("🏈.+", id="emoji"),
+        pytest.param(".*구림", id="korean"),
+    ],
+)
+def test_fullmatch(pattern, case, memory_leak_check):
+    S = pd.Series(
+        [
+            "abcdef",
+            "ab",
+            "abce",
+            None,
+            "ABCDEf",
+            "AB!@#$S",
+            "¿abc¡Y tú, quién te cre\t\tes?",
+            "오늘도 피츠버그의 날씨는 매\t우, 구림",
+            None,
+            "🏈,💔,𠄩,😅",
+            "大处着眼，小处着手。",
+            "🠂,🠋🢇🄐,🞧",
+            "abcd1234",
+            "россия очень, холодная страна",
+        ]
+    )
+
+    def test_impl(S):
+        return S.str.fullmatch(pattern, case=case)
+
+    check_func(test_impl, (S,))

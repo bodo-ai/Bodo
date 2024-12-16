@@ -1,17 +1,28 @@
-// Copyright (C) 2019 Bodo Inc. All rights reserved.
 
 // Functions to write Bodo arrays to parquet
 
+#include <arrow/filesystem/filesystem.h>
+#include <aws/core/auth/AWSCredentialsProvider.h>
 #if _MSC_VER >= 1900
 #undef timezone
 #endif
 
 #include "parquet_write.h"
+
+#include <arrow/compute/cast.h>
+#include <arrow/ipc/writer.h>
+#include <arrow/table.h>
+#include <arrow/type.h>
+#include <arrow/util/base64.h>
+#include <arrow/util/key_value_metadata.h>
+#include <parquet/arrow/schema.h>
+#include <parquet/arrow/writer.h>
+#include <parquet/file_writer.h>
+
 #include "../libs/_array_hash.h"
 #include "../libs/_bodo_common.h"
 #include "../libs/_bodo_to_arrow.h"
-#include "../libs/_datetime_utils.h"
-#include "../libs/_shuffle.h"
+#include "../libs/_dict_builder.h"
 #include "_fs_io.h"
 
 // In general, when reading a parquet dataset we want it to have at least
@@ -37,6 +48,7 @@ constexpr int64_t DEFAULT_ROW_GROUP_SIZE = 1000000;  // in number of rows
 // if status of arrow::Result is not ok, form an err msg and raise a
 // runtime_error with it. If it is ok, get value using ValueOrDie
 // and assign it to lhs using std::move
+#undef CHECK_ARROW_AND_ASSIGN
 #define CHECK_ARROW_AND_ASSIGN(res, msg, lhs) \
     CHECK_ARROW(res.status(), msg)            \
     lhs = std::move(res).ValueOrDie();
@@ -104,14 +116,15 @@ static arrow::Status GetSchemaMetadata(
 }
 
 // This function is copied from Arrow.
+// (https://github.com/apache/arrow/blob/apache-arrow-11.0.0/cpp/src/parquet/arrow/writer.cc#L521)
 // Bodo change: pass a different schema for metadata (added schema_for_metadata
 // parameter)
-static arrow::Status OpenFileWriter(
+static arrow::Result<std::unique_ptr<parquet::arrow::FileWriter>>
+FileWrite_Open(
     const ::arrow::Schema &schema, const ::arrow::Schema &schema_for_metadata,
     ::arrow::MemoryPool *pool, std::shared_ptr<::arrow::io::OutputStream> sink,
     std::shared_ptr<parquet::WriterProperties> properties,
-    std::shared_ptr<parquet::ArrowWriterProperties> arrow_properties,
-    std::unique_ptr<parquet::arrow::FileWriter> *writer) {
+    std::shared_ptr<parquet::ArrowWriterProperties> arrow_properties) {
     std::shared_ptr<parquet::SchemaDescriptor> parquet_schema;
     RETURN_NOT_OK(parquet::arrow::ToParquetSchema(
         &schema, *properties, *arrow_properties, &parquet_schema));
@@ -130,14 +143,17 @@ static arrow::Status OpenFileWriter(
                              std::move(sink), schema_node,
                              std::move(properties), std::move(metadata)));
 
+    std::unique_ptr<parquet::arrow::FileWriter> writer;
     auto schema_ptr = std::make_shared<::arrow::Schema>(schema);
-    return parquet::arrow::FileWriter::Make(
+    RETURN_NOT_OK(parquet::arrow::FileWriter::Make(
         pool, std::move(base_writer), std::move(schema_ptr),
-        std::move(arrow_properties), writer);
+        std::move(arrow_properties), &writer));
+    return writer;
 }
 
 // This function is copied from Arrow.
-// Bodo change: passing through schema_for_metadata to OpenFileWriter
+// (https://github.com/apache/arrow/blob/apache-arrow-11.0.0/cpp/src/parquet/arrow/writer.cc#L560)
+// Bodo change: passing through schema_for_metadata to FileWrite_Open
 static arrow::Status WriteTable(
     const ::arrow::Table &table, ::arrow::MemoryPool *pool,
     std::shared_ptr<::arrow::io::OutputStream> sink, int64_t chunk_size,
@@ -145,57 +161,61 @@ static arrow::Status WriteTable(
     std::shared_ptr<parquet::ArrowWriterProperties> arrow_properties,
     std::shared_ptr<arrow::Schema> schema_for_metadata) {
     std::unique_ptr<parquet::arrow::FileWriter> writer;
-    RETURN_NOT_OK(OpenFileWriter(*table.schema(), *schema_for_metadata, pool,
-                                 std::move(sink), std::move(properties),
-                                 std::move(arrow_properties), &writer));
+    ARROW_ASSIGN_OR_RAISE(
+        writer, FileWrite_Open(*table.schema(), *schema_for_metadata, pool,
+                               std::move(sink), std::move(properties),
+                               std::move(arrow_properties)));
     RETURN_NOT_OK(writer->WriteTable(table, chunk_size));
     return writer->Close();
 }
 // ----------------------------------------------------------------------------
 
-int64_t pq_write(
-    const char *_path_name, const table_info *table,
-    const array_info *col_names_arr, const array_info *index, bool write_index,
-    const char *metadata, const char *compression, bool is_parallel,
-    bool write_rangeindex_to_metadata, const int ri_start, const int ri_stop,
-    const int ri_step, const char *idx_name, const char *bucket_region,
-    int64_t row_group_size, const char *prefix, std::string tz,
-    arrow::TimeUnit::type time_unit,
-    std::unordered_map<std::string, std::string> schema_metadata_pairs,
-    std::string filename) {
+void pq_write_create_dir_py_entry(const char *_path_name) {
+    try {
+        int myrank, num_ranks;
+        MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+        MPI_Comm_size(MPI_COMM_WORLD, &num_ranks);
+        std::string orig_path(_path_name);
+        std::string path_name;
+        std::string dirname;
+        std::string fname;
+        std::shared_ptr<::arrow::io::OutputStream> out_stream;
+        Bodo_Fs::FsEnum fs_option;
+        bool is_parallel = true;
+        const char *prefix = "";
+
+        extract_fs_dir_path(_path_name, is_parallel, prefix, ".parquet", myrank,
+                            num_ranks, &fs_option, &dirname, &fname, &orig_path,
+                            &path_name);
+
+        create_dir_parallel(fs_option, myrank, dirname, path_name, orig_path,
+                            "parquet");
+    } catch (const std::exception &e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+    }
+}
+
+int64_t pq_write(const char *_path_name,
+                 const std::shared_ptr<arrow::Table> &table,
+                 const char *compression, bool is_parallel,
+                 const char *bucket_region, int64_t row_group_size,
+                 const char *prefix,
+                 std::vector<bodo_array_type::arr_type_enum> bodo_array_types,
+                 bool create_dir, std::string filename,
+                 arrow::fs::FileSystem *arrow_fs, bool force_hdfs) {
     tracing::Event ev("pq_write", is_parallel);
     ev.add_attribute("g_path", _path_name);
-    ev.add_attribute("g_write_index", write_index);
-    ev.add_attribute("g_metadata", metadata);
     ev.add_attribute("g_compression", compression);
-    ev.add_attribute("g_write_rangeindex_to_metadata",
-                     write_rangeindex_to_metadata);
-    ev.add_attribute("nrows", table->nrows());
+    ev.add_attribute("nrows", table->num_rows());
     ev.add_attribute("prefix", prefix);
-    ev.add_attribute("tz", tz);
     ev.add_attribute("filename", filename);
-    // Write actual values of start, stop, step to the metadata which is a
-    // string that contains %d
-    int check;
-    std::vector<char> new_metadata;
-    if (write_rangeindex_to_metadata) {
-        new_metadata.resize((strlen(metadata) + strlen(idx_name) + 50));
-        check = sprintf(new_metadata.data(), metadata, idx_name, ri_start,
-                        ri_stop, ri_step);
-    } else {
-        new_metadata.resize((strlen(metadata) + 1 + (strlen(idx_name) * 4)));
-        check = sprintf(new_metadata.data(), metadata, idx_name, idx_name,
-                        idx_name, idx_name);
-    }
-    if (size_t(check + 1) > new_metadata.size())
-        throw std::runtime_error(
-            "Fatal error: number of written char for metadata is greater "
-            "than new_metadata size");
 
-    if (row_group_size == -1) row_group_size = DEFAULT_ROW_GROUP_SIZE;
-    if (row_group_size <= 0)
+    if (row_group_size == -1) {
+        row_group_size = DEFAULT_ROW_GROUP_SIZE;
+    } else if (row_group_size <= 0) {
         throw std::runtime_error(
             "to_parquet(): row_group_size must be greater than 0");
+    }
     ev.add_attribute("g_row_group_size", row_group_size);
 
     int myrank, num_ranks;
@@ -212,7 +232,7 @@ int64_t pq_write(
 
     extract_fs_dir_path(_path_name, is_parallel, prefix, ".parquet", myrank,
                         num_ranks, &fs_option, &dirname, &fname, &orig_path,
-                        &path_name);
+                        &path_name, force_hdfs);
 
     // If filename is provided, use that instead of the generic one.
     // Currently this is used for Iceberg.
@@ -224,63 +244,47 @@ int64_t pq_write(
 
     // We need to create a directory when writing a distributed
     // table to a posix or hadoop filesystem.
-    if (is_parallel) {
+    if (is_parallel && create_dir) {
         create_dir_parallel(fs_option, myrank, dirname, path_name, orig_path,
                             "parquet");
     }
 
     // Do not write a file if there are no rows to write.
-    if (table->nrows() == 0) {
+    if (table->num_rows() == 0) {
         return 0;
     }
-    open_outstream(fs_option, is_parallel, "parquet", dirname, fname, orig_path,
-                   &out_stream, bucket_region);
 
-    // copy column names to a std::vector<string>
-    std::vector<std::string> col_names;
-    char *cur_str = col_names_arr->data1;
-    offset_t *offsets = (offset_t *)col_names_arr->data2;
-    for (size_t i = 0; i < col_names_arr->length; i++) {
-        size_t len = offsets[i + 1] - offsets[i];
-        col_names.emplace_back(cur_str, len);
-        cur_str += len;
+    // If we already have a filesystem, use it
+    if (arrow_fs != nullptr) {
+        std::filesystem::path out_path(dirname);
+        out_path /= fname;  // append file name to output path
+        arrow::Result<std::shared_ptr<arrow::io::OutputStream>> result =
+            arrow_fs->OpenOutputStream(out_path);
+        CHECK_ARROW_AND_ASSIGN(result, "FileOutputStream::Open", out_stream);
+    } else {
+        open_outstream(fs_option, is_parallel, "parquet", dirname, fname,
+                       orig_path, &out_stream, bucket_region);
     }
 
-    auto pool = ::arrow::default_memory_pool();
+    auto pool = bodo::BufferPool::DefaultPtr();
 
-    // convert Bodo table to Arrow: construct Arrow Schema and ChunkedArray
-    // columns
-    std::vector<std::shared_ptr<arrow::Field>> schema_vector;
     std::vector<std::shared_ptr<arrow::Field>> schema_for_metadata_vector;
-    std::vector<std::shared_ptr<arrow::ChunkedArray>> columns(
-        table->columns.size());
-    for (size_t i = 0; i < table->columns.size(); i++) {
-        auto col = table->columns[i];
-        bodo_array_to_arrow(pool, col, col_names[i], schema_vector, &columns[i],
-                            tz, time_unit, false);
-    }
-
-    // dictionary-encoded column handling
-    // See comments on top of GetSchemaMetadata for why we generate a different
-    // schema for the Arrow metadata string
-    if (schema_vector.size() != table->ncols())
-        throw std::runtime_error(
-            "to_parquet: number of fields in schema doesn't match number of "
-            "columns in Bodo table");
     bool has_dictionary_columns = false;
     std::shared_ptr<arrow::Field> dict_str_field;
-    for (size_t i = 0; i < schema_vector.size(); i++) {
-        auto field = schema_vector[i];
-        if (table->columns[i]->arr_type == bodo_array_type::DICT) {
-            if (!arrow::is_dictionary(field->type()->id()))
+    for (int i = 0; i < table->num_columns(); i++) {
+        auto field = table->field(i);
+        if (bodo_array_types[i] == bodo_array_type::DICT) {
+            if (!arrow::is_dictionary(field->type()->id())) {
                 throw std::runtime_error(
                     "to_parquet: Arrow type of dictionary-encoded column is "
                     "not dictionary");
+            }
             // For the custom metadata that Arrow puts in the parquet file, we
             // will indicate that this is a string column, so Arrow doesn't
             // identify it as dictionary when reading the written parquet file
             schema_for_metadata_vector.push_back(
-                arrow::field(col_names[i], arrow::utf8()));
+                arrow::field(field->name(), arrow::utf8(), /*nullable=*/true,
+                             field->metadata()));
             has_dictionary_columns = true;
             dict_str_field = field;
         } else {
@@ -288,39 +292,10 @@ int64_t pq_write(
         }
     }
 
-    if (write_index) {
-        // if there is an index, construct ChunkedArray index column and add
-        // metadata to the schema
-        std::shared_ptr<arrow::ChunkedArray> chunked_arr;
-        if (strcmp(idx_name, "null") != 0)
-            bodo_array_to_arrow(pool, index, idx_name, schema_vector,
-                                &chunked_arr, tz, time_unit, false);
-        else
-            bodo_array_to_arrow(pool, index, "__index_level_0__", schema_vector,
-                                &chunked_arr, tz, time_unit, false);
-        columns.push_back(chunked_arr);
-    }
-
-    std::shared_ptr<arrow::KeyValueMetadata> schema_metadata;
-    if (new_metadata.size() > 0 && new_metadata[0] != 0) {
-        schema_metadata_pairs.insert(
-            std::make_pair("pandas", new_metadata.data()));
-    }
-    if (schema_metadata_pairs.size() > 0)
-        schema_metadata = ::arrow::key_value_metadata(schema_metadata_pairs);
-
-    // make Arrow Schema object
-    std::shared_ptr<arrow::Schema> schema =
-        std::make_shared<arrow::Schema>(schema_vector, schema_metadata);
+    // Make metadata Schema object
     std::shared_ptr<arrow::Schema> schema_for_metadata =
         std::make_shared<arrow::Schema>(schema_for_metadata_vector,
-                                        schema_metadata);
-
-    // make Arrow table from Schema and ChunkedArray columns
-    // Since we reuse Bodo buffers, the row group size of the Arrow table
-    // has to be the same as the local number of rows of the Bodo table
-    std::shared_ptr<arrow::Table> arrow_table =
-        arrow::Table::Make(schema, columns, /*row_group_size=*/table->nrows());
+                                        table->schema()->metadata());
 
     // set compression option
     ::arrow::Compression::type codec_type;
@@ -353,6 +328,8 @@ int64_t pq_write(
         // type BYTE_ARRAY / String, because in the Arrow schema that is
         // inserted in the parquet metadata we are saying that it's a string
         // column
+        // XXX This only checks it for the last dict column, is that
+        // sufficient??
         std::shared_ptr<parquet::schema::Node> node;
         arrow::Status arrowOpStatus =
             parquet::arrow::FieldToNode(dict_str_field, *writer_properties,
@@ -378,7 +355,7 @@ int64_t pq_write(
 
     // open file and write table
     arrow::Status status = /*parquet::arrow::*/ WriteTable(
-        *arrow_table, pool, out_stream, row_group_size, writer_properties,
+        *table, pool, out_stream, row_group_size, writer_properties,
         // store_schema() = true is needed to write the schema metadata to
         // file
         // .coerce_timestamps(::arrow::TimeUnit::MICRO)->allow_truncated_timestamps()
@@ -393,21 +370,99 @@ int64_t pq_write(
     return file_size;
 }
 
-int64_t pq_write_py_entry(const char *_path_name, const table_info *table,
-                          const array_info *col_names_arr,
-                          const array_info *index, bool write_index,
-                          const char *metadata, const char *compression,
-                          bool is_parallel, bool write_rangeindex_to_metadata,
-                          const int ri_start, const int ri_stop,
-                          const int ri_step, const char *idx_name,
-                          const char *bucket_region, int64_t row_group_size,
-                          const char *prefix, const char *tz) {
+/**
+ * @brief Generate the metadata for the parquet schema based on the
+ * string metadata provided from Python. Optionally this may extend
+ * the metadata with RangeIndex information.
+ *
+ * @param metadata The string metadata provided from Python.
+ * @param idx_name The name of the index column.
+ * @param ri_start The start value of the RangeIndex.
+ * @param ri_stop The stop value of the RangeIndex.
+ * @param ri_step The step value of the RangeIndex.
+ * @param write_rangeindex_to_metadata Whether to write the RangeIndex to the
+ * metadata.
+ *
+ * @return std::shared_ptr<arrow::KeyValueMetadata>
+ */
+std::shared_ptr<arrow::KeyValueMetadata> compute_parquet_schema_metadata(
+    const char *metadata, const char *idx_name, int ri_start, int ri_stop,
+    int ri_step, bool write_rangeindex_to_metadata) {
+    int check;
+    std::vector<char> new_metadata;
+    if (write_rangeindex_to_metadata) {
+        new_metadata.resize((strlen(metadata) + strlen(idx_name) + 50));
+        check = snprintf(new_metadata.data(), new_metadata.size(), metadata,
+                         idx_name, ri_start, ri_stop, ri_step);
+    } else {
+        new_metadata.resize((strlen(metadata) + 1 + (strlen(idx_name) * 4)));
+        check = snprintf(new_metadata.data(), new_metadata.size(), metadata,
+                         idx_name, idx_name, idx_name, idx_name);
+    }
+    if (size_t(check + 1) > new_metadata.size()) {
+        throw std::runtime_error(
+            "Fatal error: number of written char for metadata is greater "
+            "than new_metadata size");
+    }
+    std::shared_ptr<arrow::KeyValueMetadata> schema_metadata;
+    if (new_metadata.size() > 0 && new_metadata[0] != 0) {
+        std::unordered_map<std::string, std::string> new_metadata_map = {
+            {"pandas", new_metadata.data()}};
+        schema_metadata = ::arrow::key_value_metadata(new_metadata_map);
+    }
+    return schema_metadata;
+}
+
+int64_t pq_write_py_entry(const char *_path_name, table_info *table,
+                          array_info *col_names_arr, array_info *index,
+                          bool write_index, const char *metadata,
+                          const char *compression, bool is_parallel,
+                          bool write_rangeindex_to_metadata, const int ri_start,
+                          const int ri_stop, const int ri_step,
+                          const char *idx_name, const char *bucket_region,
+                          int64_t row_group_size, const char *prefix,
+                          bool convert_timedelta_to_int64, const char *tz,
+                          bool downcast_time_ns_to_us, bool create_dir,
+                          bool force_hdfs) {
     try {
+        tracing::Event ev("pq_write_py_entry", is_parallel);
+        ev.add_attribute("g_metadata", metadata);
+        ev.add_attribute("g_write_index", write_index);
+        ev.add_attribute("g_write_rangeindex_to_metadata",
+                         write_rangeindex_to_metadata);
+
+        std::shared_ptr<table_info> table_ptr =
+            std::shared_ptr<table_info>(table);
+        std::shared_ptr<array_info> col_names_arr_ptr =
+            std::shared_ptr<array_info>(col_names_arr);
+        std::vector<std::string> col_names =
+            array_to_string_vector(col_names_arr_ptr);
+        // Append the index to the table for simpler conversion.
+        std::shared_ptr<array_info> index_ptr =
+            std::shared_ptr<array_info>(index);
+        if (write_index) {
+            table->columns.push_back(index_ptr);
+            const char *used_name =
+                strcmp(idx_name, "null") != 0 ? idx_name : "__index_level_0__";
+            col_names.emplace_back(used_name);
+        }
+        // Generate the metadata for the arrow table, including any index
+        // metadata.
+        std::shared_ptr<arrow::KeyValueMetadata> schema_metadata =
+            compute_parquet_schema_metadata(metadata, idx_name, ri_start,
+                                            ri_stop, ri_step,
+                                            write_rangeindex_to_metadata);
+        std::shared_ptr<arrow::Table> arrow_table = bodo_table_to_arrow(
+            table_ptr, col_names, schema_metadata, convert_timedelta_to_int64,
+            tz, arrow::TimeUnit::NANO, downcast_time_ns_to_us);
+        std::vector<bodo_array_type::arr_type_enum> bodo_array_types;
+        for (auto col : table_ptr->columns) {
+            bodo_array_types.emplace_back(col->arr_type);
+        }
         int64_t file_size =
-            pq_write(_path_name, table, col_names_arr, index, write_index,
-                     metadata, compression, is_parallel,
-                     write_rangeindex_to_metadata, ri_start, ri_stop, ri_step,
-                     idx_name, bucket_region, row_group_size, prefix, tz);
+            pq_write(_path_name, arrow_table, compression, is_parallel,
+                     bucket_region, row_group_size, prefix, bodo_array_types,
+                     create_dir, "", nullptr, force_hdfs);
         return file_size;
     } catch (const std::exception &e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
@@ -415,14 +470,12 @@ int64_t pq_write_py_entry(const char *_path_name, const table_info *table,
     }
 }
 
-void pq_write_partitioned(const char *_path_name, table_info *table,
-                          const array_info *col_names_arr,
-                          const array_info *col_names_arr_no_partitions,
-                          table_info *categories_table, int *partition_cols_idx,
-                          int num_partition_cols, const char *compression,
-                          bool is_parallel, const char *bucket_region,
-                          int64_t row_group_size, const char *prefix,
-                          const char *tz) {
+void pq_write_partitioned_py_entry(
+    const char *_path_name, table_info *in_table, array_info *in_col_names_arr,
+    array_info *in_col_names_arr_no_partitions, table_info *in_categories_table,
+    int *partition_cols_idx, const int num_partition_cols,
+    const char *compression, bool is_parallel, const char *bucket_region,
+    int64_t row_group_size, const char *prefix, const char *tz) {
     // TODOs
     // - Do is parallel here?
     // - sequential (only rank 0 writes, or all write with same name -which?-)
@@ -438,21 +491,32 @@ void pq_write_partitioned(const char *_path_name, table_info *table,
             throw std::runtime_error(
                 "to_parquet partitioned not implemented in sequential mode");
 
+        // convert raw pointers to smart pointers to enable automatic
+        // refcounting
+        std::shared_ptr<table_info> table =
+            std::shared_ptr<table_info>(in_table);
+        std::shared_ptr<array_info> col_names_arr =
+            std::shared_ptr<array_info>(in_col_names_arr);
+        std::shared_ptr<array_info> col_names_arr_no_partitions =
+            std::shared_ptr<array_info>(in_col_names_arr_no_partitions);
+        std::shared_ptr<table_info> categories_table =
+            std::shared_ptr<table_info>(in_categories_table);
+
         // new_table will have partition columns at the beginning and the rest
         // after (to use multi_col_key for hashing which assumes that keys are
         // at the beginning), and we will then drop the partition columns from
         // it for writing
-        table_info *new_table = new table_info();
+        std::shared_ptr<table_info> new_table = std::make_shared<table_info>();
         std::vector<bool> is_part_col(table->ncols(), false);
-        std::vector<array_info *> partition_cols;
+        std::vector<std::shared_ptr<array_info>> partition_cols;
         std::vector<std::string> part_col_names;
-        offset_t *offsets = (offset_t *)col_names_arr->data2;
+        offset_t *offsets = (offset_t *)col_names_arr->data2();
         for (int i = 0; i < num_partition_cols; i++) {
             int j = partition_cols_idx[i];
             is_part_col[j] = true;
             partition_cols.push_back(table->columns[j]);
             new_table->columns.push_back(table->columns[j]);
-            char *cur_str = col_names_arr->data1 + offsets[j];
+            char *cur_str = col_names_arr->data1() + offsets[j];
             size_t len = offsets[j + 1] - offsets[j];
             part_col_names.emplace_back(cur_str, len);
         }
@@ -461,20 +525,20 @@ void pq_write_partitioned(const char *_path_name, table_info *table,
                 new_table->columns.push_back(table->columns[i]);
         }
         // Convert all local dictionaries to global for dict columns.
-        // to enable hashing.
-        if (is_parallel) {
-            for (auto a : partition_cols) {
-                if ((a->arr_type == bodo_array_type::DICT) &&
-                    !a->has_global_dictionary) {
-                    convert_local_dictionary_to_global(a);
-                }
+        // to enable hashing. Here we need a global dictionary with
+        // unique values.
+        // TODO: Does parquet actually require global values
+        for (auto a : partition_cols) {
+            if (a->arr_type == bodo_array_type::DICT) {
+                make_dictionary_global_and_unique(a, is_parallel);
             }
         }
 
         const uint32_t seed = SEED_HASH_PARTITION;
-        uint32_t *hashes = hash_keys(partition_cols, seed, is_parallel);
-        UNORD_MAP_CONTAINER<multi_col_key, partition_write_info,
-                            multi_col_key_hash>
+        std::shared_ptr<uint32_t[]> hashes =
+            hash_keys(partition_cols, seed, is_parallel);
+        bodo::unord_map_container<multi_col_key, partition_write_info,
+                                  multi_col_key_hash>
             key_to_partition;
 
         // TODO nullable partition cols?
@@ -482,14 +546,14 @@ void pq_write_partitioned(const char *_path_name, table_info *table,
         std::string fname = gen_pieces_file_name(
             dist_get_rank(), dist_get_size(), prefix, ".parquet");
 
-        new_table->num_keys = num_partition_cols;
         for (uint64_t i = 0; i < new_table->nrows(); i++) {
-            multi_col_key key(hashes[i], new_table, i);
+            multi_col_key key(hashes[i], new_table, i, num_partition_cols);
             partition_write_info &p = key_to_partition[key];
             if (p.rows.size() == 0) {
                 // generate output file name
                 p.fpath = std::string(_path_name);
-                if (p.fpath.back() != '/') p.fpath += "/";
+                if (p.fpath.back() != '/')
+                    p.fpath += "/";
                 int64_t cat_col_idx = 0;
                 for (int j = 0; j < num_partition_cols; j++) {
                     auto part_col = partition_cols[j];
@@ -502,26 +566,44 @@ void pq_write_partitioned(const char *_path_name, table_info *table,
                                         ->val_to_str(code);
                     } else if (part_col->arr_type == bodo_array_type::DICT) {
                         // check nullable bitmask and set string to empty
-                        // if nan
+                        // if nan. Since we called
+                        // `make_dictionary_global_and_unique` on all dict
+                        // encoded arrays, we can be sure that there's no nulls
+                        // in the dictionary of the dict-encoded arrays (since
+                        // `is_local_unique` means no nulls in the
+                        // dict)
+                        // TODO(njriasan): Simplify/remove this assumption by
+                        // having a null count in individual arrays we can just
+                        // check.
                         bool isna = !GetBit(
-                            (uint8_t *)part_col->info2->null_bitmask, i);
-                        if (isna)
+                            (uint8_t *)part_col->child_arrays[1]
+                                ->null_bitmask<
+                                    bodo_array_type::NULLABLE_INT_BOOL>(),
+                            i);
+                        if (isna) {
                             value_str = "null";
-                        else {
+                        } else {
                             int32_t dict_ind =
-                                ((int32_t *)part_col->info2->data1)[i];
+                                ((int32_t *)part_col->child_arrays[1]
+                                     ->data1<bodo_array_type::
+                                                 NULLABLE_INT_BOOL>())[i];
                             // get start_offset and end_offset of the string
                             // value referred to by dict_index i
                             offset_t start_offset =
-                                ((offset_t *)part_col->info1->data2)[dict_ind];
+                                ((offset_t *)part_col->child_arrays[0]
+                                     ->data2<
+                                         bodo_array_type::STRING>())[dict_ind];
                             offset_t end_offset =
-                                ((offset_t *)
-                                     part_col->info1->data2)[dict_ind + 1];
+                                ((offset_t *)part_col->child_arrays[0]
+                                     ->data2<bodo_array_type::STRING>())
+                                    [dict_ind + 1];
                             // get length of the string value
                             offset_t len = end_offset - start_offset;
                             // extract string value from string buffer
                             std::string val(
-                                &((char *)part_col->info1->data1)[start_offset],
+                                &((char *)part_col->child_arrays[0]
+                                      ->data1<bodo_array_type::STRING>())
+                                    [start_offset],
                                 len);
                             value_str = val;
                         }
@@ -534,7 +616,7 @@ void pq_write_partitioned(const char *_path_name, table_info *table,
             }
             p.rows.push_back(i);
         }
-        delete[] hashes;
+        hashes.reset();
 
         // drop partition columns from new_table (they are not written to
         // parquet)
@@ -542,15 +624,14 @@ void pq_write_partitioned(const char *_path_name, table_info *table,
             new_table->columns.begin(),
             new_table->columns.begin() + num_partition_cols);
 
-        for (auto it = key_to_partition.begin(); it != key_to_partition.end();
-             it++) {
-            const partition_write_info &p = it->second;
-            // RetrieveTable steals the reference but we still need them
-            for (auto a : new_table->columns) incref_array(a);
-            table_info *part_table =
+        std::vector<std::string> arrow_column_names =
+            array_to_string_vector(col_names_arr_no_partitions);
+        for (auto &it : key_to_partition) {
+            const partition_write_info &p = it.second;
+            std::shared_ptr<table_info> part_table =
                 RetrieveTable(new_table, p.rows, new_table->ncols());
-            // NOTE: we pass is_parallel=False because we already took care of
-            // is_parallel here
+            // NOTE: we pass is_parallel=False because we already took care
+            // of is_parallel here
             Bodo_Fs::FsEnum fs_type = filesystem_type(p.fpath.c_str());
             if (fs_type == Bodo_Fs::FsEnum::posix) {
                 // s3 and hdfs create parent directories automatically when
@@ -558,13 +639,18 @@ void pq_write_partitioned(const char *_path_name, table_info *table,
                 std::filesystem::path path = p.fpath;
                 std::filesystem::create_directories(path.parent_path());
             }
-            pq_write(p.fpath.c_str(), part_table, col_names_arr_no_partitions,
-                     nullptr, /*TODO*/ false, /*TODO*/ "", compression, false,
-                     false, -1, -1, -1, /*TODO*/ "", bucket_region,
-                     row_group_size, prefix, tz);
-            delete_table_decref_arrays(part_table);
+            std::shared_ptr<arrow::Table> arrow_table = bodo_table_to_arrow(
+                part_table, arrow_column_names, {},
+                false /* TODO: convert_timedelta_to_int64*/, tz,
+                arrow::TimeUnit::NANO, false /* TODO: downcast_time_ns_to_us*/
+            );
+            std::vector<bodo_array_type::arr_type_enum> bodo_array_types;
+            for (auto col : part_table->columns) {
+                bodo_array_types.emplace_back(col->arr_type);
+            }
+            pq_write(p.fpath.c_str(), arrow_table, compression, false,
+                     bucket_region, row_group_size, prefix, bodo_array_types);
         }
-        delete new_table;
 
     } catch (const std::exception &e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());

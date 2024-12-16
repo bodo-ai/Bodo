@@ -1,4 +1,3 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
 Tests of series.map and dataframe.apply used for parity
 with pyspark.sql.functions that operation on maps as
@@ -7,7 +6,7 @@ column elements.
 Test names refer to the names of the spark function they map to.
 
 These will need to consist of tests for both Struct Array types
-and map array types, as both are represented with dictionaries 
+and map array types, as both are represented with dictionaries
 in Python.
 """
 

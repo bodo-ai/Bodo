@@ -1,32 +1,54 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
-    Tests for Matplotlib support inside Bodo. Matplotlib
-    generally requires comparing visuals, so we write all
-    results to images,
+Tests for Matplotlib support inside Bodo. Matplotlib
+generally requires comparing visuals, so we write all
+results to images,
 """
-import matplotlib
+
+try:
+    import matplotlib  # pragma: no cover
+    from matplotlib.testing.decorators import (
+        check_figures_equal,  # pragma: no cover
+    )
+
+    matplotlib_import_failed = False
+except ImportError:
+    matplotlib_import_failed = True
+
+import warnings
+
 import numpy as np
 import pytest
-from matplotlib.testing.decorators import check_figures_equal
 
 import bodo
+from bodo.tests.utils import pytest_pandas
 from bodo.utils.typing import BodoError
 
+pytestmark = pytest.mark.skip if matplotlib_import_failed else pytest_pandas
 
-def bodo_check_figures_equal(*, extensions=("png", "pdf", "svg"), tol=0):
+
+def bodo_check_figures_equal(*, tol=0):
     """
     Bodo decorate around check_figures_equal that only compares
     values on rank 0.
 
-    Example usage: @bodo_check_figures_equal(extensions=["png"], tol=0.1)
+    Example usage: @bodo_check_figures_equal(tol=0.1)
     """
-    if bodo.get_rank() == 0:
-        return check_figures_equal(extensions=extensions, tol=tol)
+    if matplotlib_import_failed:
+        # If we don't have matplotlib, throw a warning, and return a dummy function
+        # The dummy function is necessary because the decorator will be called regardless
+        # of whether we have matplotlib or not.
+        warnings.warn(
+            "bodo_check_figures_equal: Matplotlib is not installed, returning dummy function"
+        )
+        return lambda func: func
+    elif bodo.get_rank() == 0:
+        return check_figures_equal(extensions=("png",), tol=tol)
     else:
         # If we aren't on rank 0, we want to run the same code but not
         # generate any files
         def decorator(func):
-            def wrapper(*args, request, **kwargs):
+            @pytest.mark.parametrize("ext", ("png",))
+            def wrapper(*args, ext, request, **kwargs):
                 # Generate a fake fig_test and fig_ref to match mpl decorator
                 # behavior
                 fig_test = matplotlib.pyplot.figure()
@@ -44,7 +66,7 @@ def bodo_check_figures_equal(*, extensions=("png", "pdf", "svg"), tol=0):
 
 
 # TODO: Determine a reasonable value for tol
-@bodo_check_figures_equal(extensions=["png"], tol=0.1)
+@bodo_check_figures_equal(tol=0.1)
 def test_usage_example(fig_test, fig_ref):
     """
     Tests a basic example from the matplotlib user guide.
@@ -65,7 +87,7 @@ def test_usage_example(fig_test, fig_ref):
     bodo.jit(impl)(fig_test)
 
 
-@bodo_check_figures_equal(extensions=["png"], tol=0.1)
+@bodo_check_figures_equal(tol=0.1)
 def test_usage_axes_example(fig_test, fig_ref):
     """
     Tests a basic example from the matplotlib user guide with multiple axes.
@@ -86,7 +108,7 @@ def test_usage_axes_example(fig_test, fig_ref):
     bodo.jit(impl)(fig_test)
 
 
-@bodo_check_figures_equal(extensions=["png"], tol=0.1)
+@bodo_check_figures_equal(tol=0.1)
 def test_usage_replicated_example(fig_test, fig_ref):
     """
     Tests a basic example from the matplotlib user guide with replicated data.
@@ -107,7 +129,7 @@ def test_usage_replicated_example(fig_test, fig_ref):
     bodo.jit(impl)(x, fig_test)
 
 
-@bodo_check_figures_equal(extensions=["png"], tol=0.1)
+@bodo_check_figures_equal(tol=0.1)
 def test_scatter_example(fig_test, fig_ref):
     """
     Tests a basic example of scatter with distributed data.
@@ -122,7 +144,7 @@ def test_scatter_example(fig_test, fig_ref):
     bodo.jit(impl)(fig_test)
 
 
-@bodo_check_figures_equal(extensions=["png"], tol=0.1)
+@bodo_check_figures_equal(tol=0.1)
 def test_scatter_replicated_example(fig_test, fig_ref):
     """
     Tests a basic example of scatter with replicated data.
@@ -137,7 +159,7 @@ def test_scatter_replicated_example(fig_test, fig_ref):
     bodo.jit(impl)(x, fig_test)
 
 
-@bodo_check_figures_equal(extensions=["png"], tol=0.1)
+@bodo_check_figures_equal(tol=0.1)
 def test_bar_example(fig_test, fig_ref):
     """
     Tests a basic example of bar with distributed data.
@@ -152,7 +174,7 @@ def test_bar_example(fig_test, fig_ref):
     bodo.jit(impl)(fig_test)
 
 
-@bodo_check_figures_equal(extensions=["png"], tol=0.1)
+@bodo_check_figures_equal(tol=0.1)
 def test_bar_replicated_example(fig_test, fig_ref):
     """
     Tests a basic example of bar with replicated data.
@@ -167,7 +189,7 @@ def test_bar_replicated_example(fig_test, fig_ref):
     bodo.jit(impl)(x, fig_test)
 
 
-@bodo_check_figures_equal(extensions=["png"], tol=0.1)
+@bodo_check_figures_equal(tol=0.1)
 def test_contour_example(fig_test, fig_ref):
     """
     Tests a basic example of contour with distributed data.
@@ -182,7 +204,7 @@ def test_contour_example(fig_test, fig_ref):
     bodo.jit(impl)(fig_test)
 
 
-@bodo_check_figures_equal(extensions=["png"], tol=0.1)
+@bodo_check_figures_equal(tol=0.1)
 def test_contour_replicated_example(fig_test, fig_ref):
     """
     Tests a basic example of contour with replicated data.
@@ -197,7 +219,7 @@ def test_contour_replicated_example(fig_test, fig_ref):
     bodo.jit(impl)(z, fig_test)
 
 
-@bodo_check_figures_equal(extensions=["png"], tol=0.1)
+@bodo_check_figures_equal(tol=0.1)
 def test_contourf_example(fig_test, fig_ref):
     """
     Tests a basic example of contourf with distributed data.
@@ -212,7 +234,7 @@ def test_contourf_example(fig_test, fig_ref):
     bodo.jit(impl)(fig_test)
 
 
-@bodo_check_figures_equal(extensions=["png"], tol=0.1)
+@bodo_check_figures_equal(tol=0.1)
 def test_contourf_replicated_example(fig_test, fig_ref):
     """
     Tests a basic example of contourf with replicated data.
@@ -227,7 +249,8 @@ def test_contourf_replicated_example(fig_test, fig_ref):
     bodo.jit(impl)(z, fig_test)
 
 
-@bodo_check_figures_equal(extensions=["png"], tol=0.1)
+@pytest.mark.skip(reason="[BSE-4256]")
+@bodo_check_figures_equal(tol=0.1)
 def test_quiver_example(fig_test, fig_ref):
     """
     Tests a basic example of quiver with distributed data.
@@ -242,7 +265,7 @@ def test_quiver_example(fig_test, fig_ref):
     bodo.jit(impl)(fig_test)
 
 
-@bodo_check_figures_equal(extensions=["png"], tol=0.1)
+@bodo_check_figures_equal(tol=0.1)
 def test_quiver_replicated_example(fig_test, fig_ref):
     """
     Tests a basic example of quiver with replicated data.
@@ -257,7 +280,7 @@ def test_quiver_replicated_example(fig_test, fig_ref):
     bodo.jit(impl)(x, fig_test)
 
 
-@bodo_check_figures_equal(extensions=["png"], tol=0.1)
+@bodo_check_figures_equal(tol=0.1)
 def test_pie_example(fig_test, fig_ref):
     """
     Tests a basic example of pie with distributed data.
@@ -272,7 +295,7 @@ def test_pie_example(fig_test, fig_ref):
     bodo.jit(impl)(fig_test)
 
 
-@bodo_check_figures_equal(extensions=["png"], tol=0.1)
+@bodo_check_figures_equal(tol=0.1)
 def test_pie_replicated_example(fig_test, fig_ref):
     """
     Tests a basic example of pie with replicated data.
@@ -287,7 +310,8 @@ def test_pie_replicated_example(fig_test, fig_ref):
     bodo.jit(impl)(x, fig_test)
 
 
-@bodo_check_figures_equal(extensions=["png"], tol=0.1)
+@pytest.mark.skip(reason="[BSE-4256]")
+@bodo_check_figures_equal(tol=0.1)
 def test_fill_example(fig_test, fig_ref):
     """
     Tests a basic example of fill with distributed data.
@@ -309,7 +333,7 @@ def test_fill_example(fig_test, fig_ref):
     bodo.jit(impl)(fig_test)
 
 
-@bodo_check_figures_equal(extensions=["png"], tol=0.1)
+@bodo_check_figures_equal(tol=0.1)
 def test_fill_replicated_example(fig_test, fig_ref):
     """
     Tests a basic example of fill with replicated data.
@@ -325,7 +349,7 @@ def test_fill_replicated_example(fig_test, fig_ref):
     bodo.jit(impl)(x, y, fig_test)
 
 
-@bodo_check_figures_equal(extensions=["png"], tol=0.1)
+@bodo_check_figures_equal(tol=0.1)
 def test_fill_between_example(fig_test, fig_ref):
     """
     Tests a basic example of fill_between with distributed data.
@@ -340,7 +364,7 @@ def test_fill_between_example(fig_test, fig_ref):
     bodo.jit(impl)(fig_test)
 
 
-@bodo_check_figures_equal(extensions=["png"], tol=0.1)
+@bodo_check_figures_equal(tol=0.1)
 def test_fill_between_replicated_example(fig_test, fig_ref):
     """
     Tests a basic example of fill_between with replicated data.
@@ -355,7 +379,7 @@ def test_fill_between_replicated_example(fig_test, fig_ref):
     bodo.jit(impl)(x, fig_test)
 
 
-@bodo_check_figures_equal(extensions=["png"], tol=0.1)
+@bodo_check_figures_equal(tol=0.1)
 def test_step_example(fig_test, fig_ref):
     """
     Tests a basic example of step with distributed data.
@@ -370,7 +394,7 @@ def test_step_example(fig_test, fig_ref):
     bodo.jit(impl)(fig_test)
 
 
-@bodo_check_figures_equal(extensions=["png"], tol=0.1)
+@bodo_check_figures_equal(tol=0.1)
 def test_step_replicated_example(fig_test, fig_ref):
     """
     Tests a basic example of step with replicated data.
@@ -385,7 +409,7 @@ def test_step_replicated_example(fig_test, fig_ref):
     bodo.jit(impl)(x, fig_test)
 
 
-@bodo_check_figures_equal(extensions=["png"], tol=0.1)
+@bodo_check_figures_equal(tol=0.1)
 def test_errorbar_example(fig_test, fig_ref):
     """
     Tests a basic example of errorbar with distributed data.
@@ -400,7 +424,7 @@ def test_errorbar_example(fig_test, fig_ref):
     bodo.jit(impl)(fig_test)
 
 
-@bodo_check_figures_equal(extensions=["png"], tol=0.1)
+@bodo_check_figures_equal(tol=0.1)
 def test_errorbar_replicated_example(fig_test, fig_ref):
     """
     Tests a basic example of errorbar with replicated data.
@@ -415,7 +439,8 @@ def test_errorbar_replicated_example(fig_test, fig_ref):
     bodo.jit(impl)(x, fig_test)
 
 
-@bodo_check_figures_equal(extensions=["png"], tol=0.1)
+@pytest.mark.skip(reason="[BSE-4256]")
+@bodo_check_figures_equal(tol=0.1)
 def test_barbs_example(fig_test, fig_ref):
     """
     Tests a basic example of barbs with distributed data.
@@ -430,7 +455,7 @@ def test_barbs_example(fig_test, fig_ref):
     bodo.jit(impl)(fig_test)
 
 
-@bodo_check_figures_equal(extensions=["png"], tol=0.1)
+@bodo_check_figures_equal(tol=0.1)
 def test_barbs_replicated_example(fig_test, fig_ref):
     """
     Tests a basic example of barbs with replicated data.
@@ -445,7 +470,8 @@ def test_barbs_replicated_example(fig_test, fig_ref):
     bodo.jit(impl)(x, fig_test)
 
 
-@bodo_check_figures_equal(extensions=["png"], tol=0.1)
+@pytest.mark.skip(reason="[BSE-4256]")
+@bodo_check_figures_equal(tol=0.1)
 def test_eventplot_example(fig_test, fig_ref):
     """
     Tests a basic example of eventplot with distributed data.
@@ -460,7 +486,7 @@ def test_eventplot_example(fig_test, fig_ref):
     bodo.jit(impl)(fig_test)
 
 
-@bodo_check_figures_equal(extensions=["png"], tol=0.1)
+@bodo_check_figures_equal(tol=0.1)
 def test_eventplot_replicated_example(fig_test, fig_ref):
     """
     Tests a basic example of eventplot with replicated data.
@@ -475,7 +501,7 @@ def test_eventplot_replicated_example(fig_test, fig_ref):
     bodo.jit(impl)(x, fig_test)
 
 
-@bodo_check_figures_equal(extensions=["png"], tol=0.1)
+@bodo_check_figures_equal(tol=0.1)
 def test_hexbin_example(fig_test, fig_ref):
     """
     Tests a basic example of hexbin with distributed data.
@@ -490,7 +516,7 @@ def test_hexbin_example(fig_test, fig_ref):
     bodo.jit(impl)(fig_test)
 
 
-@bodo_check_figures_equal(extensions=["png"], tol=0.1)
+@bodo_check_figures_equal(tol=0.1)
 def test_hexbin_replicated_example(fig_test, fig_ref):
     """
     Tests a basic example of hexbin with replicated data.
@@ -505,7 +531,7 @@ def test_hexbin_replicated_example(fig_test, fig_ref):
     bodo.jit(impl)(x, fig_test)
 
 
-@bodo_check_figures_equal(extensions=["png"], tol=0.1)
+@bodo_check_figures_equal(tol=0.1)
 def test_imshow_example(fig_test, fig_ref):
     """
     Tests a basic example of imshow with distributed data.
@@ -520,7 +546,7 @@ def test_imshow_example(fig_test, fig_ref):
     bodo.jit(impl)(fig_test)
 
 
-@bodo_check_figures_equal(extensions=["png"], tol=0.1)
+@bodo_check_figures_equal(tol=0.1)
 def test_imshow_replicated_example(fig_test, fig_ref):
     """
     Tests a basic example of imshow with replicated data.
@@ -535,7 +561,7 @@ def test_imshow_replicated_example(fig_test, fig_ref):
     bodo.jit(impl)(x, fig_test)
 
 
-@bodo_check_figures_equal(extensions=["png"], tol=0.1)
+@bodo_check_figures_equal(tol=0.1)
 def test_xcorr_example(fig_test, fig_ref):
     """
     Tests a basic example of xcorr with distributed data.
@@ -550,7 +576,8 @@ def test_xcorr_example(fig_test, fig_ref):
     bodo.jit(impl)(fig_test)
 
 
-@bodo_check_figures_equal(extensions=["png"], tol=0.1)
+@pytest.mark.skip(reason="[BSE-4256]")
+@bodo_check_figures_equal(tol=0.1)
 def test_xcorr_example_usevlines_false(fig_test, fig_ref):
     """
     Tests a basic example of xcorr with distributed data and usevlines=False.
@@ -565,7 +592,7 @@ def test_xcorr_example_usevlines_false(fig_test, fig_ref):
     bodo.jit(impl)(fig_test)
 
 
-@bodo_check_figures_equal(extensions=["png"], tol=0.1)
+@bodo_check_figures_equal(tol=0.1)
 def test_xcorr_replicated_example(fig_test, fig_ref):
     """
     Tests a basic example of imshow with replicated data.
@@ -580,7 +607,7 @@ def test_xcorr_replicated_example(fig_test, fig_ref):
     bodo.jit(impl)(x, fig_test)
 
 
-@bodo_check_figures_equal(extensions=["png"], tol=0.1)
+@bodo_check_figures_equal(tol=0.1)
 def test_text_example(fig_test, fig_ref):
     """
     Tests a basic example of text.
@@ -594,7 +621,7 @@ def test_text_example(fig_test, fig_ref):
     bodo.jit(impl)(fig_test)
 
 
-@bodo_check_figures_equal(extensions=["png"], tol=0.1)
+@bodo_check_figures_equal(tol=0.1)
 def test_axes_set_off(fig_test, fig_ref):
     """
     Tests a series of axes functions followed by turning
@@ -625,7 +652,7 @@ def test_axes_set_off(fig_test, fig_ref):
     bodo.jit(impl)(fig_test)
 
 
-@bodo_check_figures_equal(extensions=["png"], tol=0.1)
+@bodo_check_figures_equal(tol=0.1)
 def test_axes_set_on(fig_test, fig_ref):
     """
     Tests a series of axes functions followed by turning

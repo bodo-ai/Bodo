@@ -1,16 +1,15 @@
 import os
 
-import bodosql
 import pytest
 
 import bodo
+import bodosql
+from bodo.tests.utils import pytest_snowflake
 from bodo.utils.typing import BodoError
 
+pytestmark = pytest_snowflake
 
-@pytest.mark.skipif(
-    "AGENT_NAME" not in os.environ,
-    reason="requires Azure Pipelines",
-)
+
 def test_snowflake_catalog_invalid_credentials_err():
     def impl(bc, query):
         return bc.sql(query)
@@ -46,17 +45,13 @@ def test_snowflake_catalog_invalid_credentials_err():
         bodo.jit(impl)(bc, query)
 
 
-@pytest.mark.skipif(
-    "AGENT_NAME" not in os.environ,
-    reason="requires Azure Pipelines",
-)
 def test_snowflake_catalog_data_not_found_err():
     def impl(bc, query):
         return bc.sql(query)
 
     bc = bodosql.BodoSQLContext(
         catalog=bodosql.SnowflakeCatalog(
-            os.environ["SF_USER"],
+            os.environ["SF_USERNAME"],
             os.environ["SF_PASSWORD"],
             "bodopartner.us-east-1",
             "DEMO_WH",

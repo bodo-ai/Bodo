@@ -1,19 +1,29 @@
 import atexit
 import os
 import time
+import warnings
+
 import numpy as np
-from mpi4py.libmpi cimport MPI_COMM_WORLD, MPI_Comm_rank, MPI_Comm_size, MPI_Barrier
+
+from bodo.mpi4py.libmpi cimport (
+    MPI_COMM_WORLD,
+    MPI_Barrier,
+    MPI_Comm_rank,
+    MPI_Comm_size,
+)
+
+from bodo.utils.typing import BodoWarning
+
 
 # We don't want to expose these variables outside this module (cdef
 # variables can't be accessed directly from Python). Also, variables with
 # basic C types allow for code with less overhead compared to using Python objects
 cdef bint TRACING = 0  # 1 if started tracing, else 0
 cdef list traceEvents = []  # list of tracing events
-IF BODO_DEV_BUILD:
-    cdef str trace_filename = "bodo_trace.json"
-ELSE:
-    cdef str trace_filename = "bodo_trace.dat"
+cdef str trace_filename = "bodo_trace.json" if BODO_DEV_BUILD else "bodo_trace.dat"
 cdef object time_start = time.time()  # time at which tracing starts
+
+TRACING_MEM_WARN = "Tracing is still experimental and has been known to have memory related issues. In our testing we have at times seen 1-2 GB be used per rank to support tracing. If you are running out of memory or you are attempted to document the memory footprint for a workload, please disable tracing."
 
 # Events are stored in Google's trace event format:
 # https://docs.google.com/document/d/1CvAClvFfyA5R-PhYUmn5OOQtYMH4h6I0nSsKchNAySU/edit?pli=1
@@ -25,11 +35,11 @@ cdef object time_start = time.time()  # time at which tracing starts
 
 
 cdef inline tracing_supported():
-    IF BODO_DEV_BUILD:
+    if BODO_DEV_BUILD:
         return True
-    ELSE:
+    else:
         key1 = b"{\xd5'*\xc1N\x90\xf1\xf9\xbfy\xc7\xf4\xc0"
-        key2 = b'9\x9ace\x9e\x1a\xc2\xb0\xba\xfa&\x83\xb1\x96'
+        key2 = b"9\x9ace\x9e\x1a\xc2\xb0\xba\xfa&\x83\xb1\x96"
         # bitwise_xor(key1, key2) == b"BODO_TRACE_DEV"
         # BODO_TRACE_DEV is an undocumented environment variable that we don't
         # provide to everyone. This is a way of not revealing the name in the
@@ -64,6 +74,11 @@ def reset(trace_fname=None):
 
 
 def start(trace_fname=None):
+    from bodo.mpi4py import MPI
+    comm = MPI.COMM_WORLD
+    if comm.Get_rank() == 0:
+        warnings.warn(TRACING_MEM_WARN, BodoWarning)
+
     reset(trace_fname)
 
 
@@ -111,23 +126,25 @@ def dump(fname=None, clear_traces=True):
             )
             trace_obj = {"num_ranks": num_ranks}
             trace_obj["num_nodes"] = num_nodes
-            import bodo
             import json
+
+            import bodo
             trace_obj["bodo_version"] = bodo.__version__
             for var in os.environ:
                 if "MPI" in var or var.startswith("FI_") or var.startswith("BODO"):
                     trace_obj[var] = os.environ[var]
             trace_obj["traceEvents"] = traceEvents
-            IF BODO_DEV_BUILD:
+            if BODO_DEV_BUILD:
                 with open(fname, "w") as f:
                     json.dump(trace_obj, f)
-            ELSE:
+            else:
                 # write obscured traces by compressing with zlib without zlib
                 # header and writing to a binary file (the `file` command will
                 # only identify as "data")
-                # To decompress, use obfuscation/decompress_traces.py
+                # To decompress, use buildscripts/decompress_traces.py
                 with open(fname, "wb") as f:
                     import zlib
+
                     # wbits=-15 won't add a header, so output will just be a
                     # raw binary stream
                     c = zlib.compressobj(9, wbits=-15)
@@ -145,16 +162,17 @@ cdef inline object get_timestamp():
     return (time.time() - time_start) * 1e6  # convert to us
 
 
-# On exit, call dump
-atexit.register(dump)
+# On exit, call dump if tracing is set
+if is_tracing():
+    atexit.register(dump)
 
 
 cdef aggregate_helper(values, arg_name, out):
     index_min = int(np.argmin(values))
     index_max = int(np.argmax(values))
-    out["args"][arg_name + "_min"] = values[index_min]
-    out["args"][arg_name + "_avg"] = values.mean()
-    out["args"][arg_name + "_max"] = values[index_max]
+    out["args"][arg_name + "_min"] = values[index_min].item()
+    out["args"][arg_name + "_avg"] = values.mean().item()
+    out["args"][arg_name + "_max"] = values[index_max].item()
     out["args"][arg_name + "_min_rank"] = index_min
     out["args"][arg_name + "_max_rank"] = index_max
 
@@ -165,9 +183,10 @@ cdef generic_aggregate_func(object traces_all):
     if "args" in result:
         args = list(result["args"].keys())
         for arg in args:
-            if arg.startswith("g_") or isinstance(result["args"][arg], (str, list)):
+            if arg.startswith("g_") or isinstance(result["args"][arg], (str, list)) or arg == "resumable":
                 # attributes called g_xxx are global and don't need aggregation
                 # and we don't aggregate string or list values
+                # "resumable" identifies the type of event and doesn't need aggregation
                 continue
             # We use .get and default to 0 since it's possible that some ranks don't have
             # some attributes.
@@ -184,7 +203,7 @@ cdef generic_aggregate_func(object traces_all):
 
 
 cdef aggregate_events():
-    from mpi4py import MPI
+    from bodo.mpi4py import MPI
     comm = MPI.COMM_WORLD
     cdef int rank
     MPI_Comm_rank(MPI_COMM_WORLD, &rank)
@@ -194,7 +213,7 @@ cdef aggregate_events():
     # The event aggregation code below hangs if there are a different number
     # of events with `_bodo_aggr == 1` on each rank.
     # Detect that error condition beforehand and raise a programming error.
-    from bodo.libs.distributed_api import dist_reduce, Reduce_Type
+    from bodo.libs.distributed_api import Reduce_Type, dist_reduce
 
     err = None  # Forward declaration
     aggr_events = [e["name"] for e in traceEvents if "_bodo_aggr" in e]
@@ -255,7 +274,7 @@ cdef aggregate_events():
             events_all = comm.gather(e)
             new_e = generic_aggregate_func(events_all)
             durations = np.array([t["dur"] for t in events_all])
-            new_e["dur"] = durations.max()
+            new_e["dur"] = durations.max().item()
             aggregate_helper(durations, "dur", new_e)
             traceEvents[i] = new_e
         else:
@@ -272,13 +291,16 @@ cdef aggregate_events():
         traceEvents = []
 
 
-cdef class Event:
+ITERATION_STACK = []
+
+
+cdef class EventBase:
 
     cdef bint is_parallel  # True if refers to parallel event, False if replicated
     cdef bint sync # Should we sync the event
     cdef dict trace  # dictionary with event data
 
-    def __cinit__(self, name not None, bint is_parallel=1, bint sync=1):
+    def __cinit__(self, name not None, bint is_parallel=1, bint sync=1, bint is_batchable=1): # Base
         """ Start event named 'name'
             is_parallel=True indicates a parallel event, otherwise replicated
             If sync=True do a barrier before creating the event
@@ -322,4 +344,27 @@ cdef class Event:
             MPI_Barrier(MPI_COMM_WORLD)
         if aggregate and self.is_parallel:
             self.trace["_bodo_aggr"] = 1
-        traceEvents.append(self.trace)
+
+
+cdef class Event(EventBase):
+
+    cdef object parent_event
+
+    def __cinit__(self, name not None, bint is_parallel=1, bint sync=1, bint is_batchable=1):  # Event
+        """Create an event and determine if we're going to batch this event within an existing iteration."""
+        super().__init__(name, is_parallel, sync)
+        if TRACING == 0:
+            return  # nop
+        if is_batchable and len(ITERATION_STACK) > 0:
+            self.parent_event = ITERATION_STACK[-1].get_or_create_child_event(name, is_parallel)
+            self.parent_event.start_iteration()
+        else:
+            self.parent_event = None
+
+    def finalize(self, bint aggregate=True):
+        super().finalize(aggregate)
+
+        if self.parent_event is not None:
+            self.parent_event.end_iteration()
+        else:  # No parent, behave as normal
+            traceEvents.append(self.trace)

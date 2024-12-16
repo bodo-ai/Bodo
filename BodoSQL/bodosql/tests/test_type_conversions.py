@@ -1,9 +1,10 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
 Test correctness of SQL casting
 """
+
 import pandas as pd
 import pytest
+
 from bodosql.tests.utils import check_query
 
 
@@ -12,7 +13,7 @@ def test_simple_cast(basic_df, spark_info, memory_leak_check):
     Checks that integer casting of constants behaves as expected
     """
     query = "SELECT CAST(1.0 AS integer)"
-    check_query(query, basic_df, spark_info, check_names=False)
+    check_query(query, basic_df, spark_info, check_names=False, check_dtype=False)
 
 
 @pytest.mark.slow
@@ -22,16 +23,12 @@ def test_float_to_int_cast(
     """
     Checks that numeric casting of constants behaves as expected
     """
-    # SparkSQL outputs Decimal type as object type
-    if sql_numeric_typestrings == "DECIMAL":
-        check_dtype = False
-    else:
-        check_dtype = True
-    # Spark converts this to 0, but Bodo uses Decimal and Double interchangably
+    # Spark converts this to 0, but Bodo uses Decimal and Double interchangeably
     if sql_numeric_typestrings == "DECIMAL" and numeric_values == 0.001:
         return
     query = f"SELECT CAST({numeric_values} AS {sql_numeric_typestrings})"
-    check_query(query, basic_df, spark_info, check_names=False, check_dtype=check_dtype)
+    # check_dtype=False since Bodo returns nullable columns by default
+    check_query(query, basic_df, spark_info, check_names=False, check_dtype=False)
 
 
 def test_numeric_column_casting(
@@ -83,6 +80,7 @@ def test_interval_numeric_column_casting(
     check_query(query, bodosql_interval_types, spark_info, check_dtype=False)
 
 
+@pytest.mark.slow
 def test_varchar_to_numeric_cast(
     sql_numeric_typestrings, spark_info, memory_leak_check
 ):
@@ -98,31 +96,30 @@ def test_varchar_to_numeric_cast(
     str_data = {
         "A": ["1", "2", "3"] * 4,
     }
-    ctx = {"table1": pd.DataFrame(str_data)}
+    ctx = {"TABLE1": pd.DataFrame(str_data)}
     check_query(query, ctx, spark_info, check_dtype=False, check_names=False)
 
 
-def test_numeric_to_varchar_nullable(
-    bodosql_nullable_numeric_types, spark_info, memory_leak_check
-):
+def test_numeric_to_varchar_nullable(bodosql_nullable_numeric_types, memory_leak_check):
     """
     Checks that casting strings to numeric values behaves as expected
     """
-    query = f"""
+    query = """
     SELECT
         CAST(A AS VARCHAR) as col
-    FROM
-        table1
-    """
-    spark_query = f"""
-    SELECT
-        CAST(A AS STRING) as col
     FROM
         table1
     """
     check_query(
         query,
         bodosql_nullable_numeric_types,
-        spark_info,
-        equivalent_spark_query=spark_query,
+        None,
+        expected_output=pd.DataFrame(
+            {
+                "COL": bodosql_nullable_numeric_types["TABLE1"]["A"]
+                .astype(str)
+                .replace("<NA>", None)
+                .replace("<NA", None)
+            }
+        ),
     )

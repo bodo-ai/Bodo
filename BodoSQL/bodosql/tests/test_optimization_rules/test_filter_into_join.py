@@ -1,8 +1,9 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
 Test correctness of the filter into join optimization rule used by BodoSQL
 """
+
 import pytest
+
 from bodosql.tests.utils import check_query
 
 
@@ -17,7 +18,7 @@ from bodosql.tests.utils import check_query
     ]
 )
 def filter_into_join_queries(request):
-    """fixture that supplies queries for the Flter Into Join tests
+    """fixture that supplies queries for the Filter Into Join tests
 
     This rule matches on a filter whose input is a join.
 

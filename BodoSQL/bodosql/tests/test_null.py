@@ -2,14 +2,15 @@
 Test that SQL is Null/Not Null and IS_TRUE builtins work with Columns, scalars, and NULL values.
 Also tests that arithmatic and logical operators work with NULL values
 """
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
-
 
 import numpy as np
 import pandas as pd
 import pytest
-from bodosql.tests.utils import check_query
 from pyspark.sql.functions import lit
+
+import bodo
+from bodo.mpi4py import MPI
+from bodosql.tests.utils import check_query
 
 
 # This is mostly copied from bodosql.tests.utils, just needed to
@@ -17,19 +18,24 @@ from pyspark.sql.functions import lit
 # Spark knows the type
 # TODO: should refactor this into utils eventually
 def get_expected_output_with_null_col_b(s_info, ctx, query, typestr):
-    for table_name, df in ctx.items():
-        s_info.catalog.dropTempView(table_name)
-        s_info.createDataFrame(df).withColumn(
-            "B", lit(None).cast(typestr)
-        ).createTempView(table_name)
-    expected_output = s_info.sql(query).toPandas()
+    if bodo.get_rank() == 0:
+        for table_name, df in ctx.items():
+            s_info.catalog.dropTempView(table_name)
+            s_info.createDataFrame(df).withColumn(
+                "B", lit(None).cast(typestr)
+            ).createTempView(table_name)
+        expected_output = s_info.sql(query).toPandas()
+    else:
+        expected_output = None
+    comm = MPI.COMM_WORLD
+    expected_output = comm.bcast(expected_output)
     return expected_output
 
 
 @pytest.fixture(
     params=[
         {
-            "table1": pd.DataFrame(
+            "TABLE1": pd.DataFrame(
                 {
                     "A": ["hello", "world", "how"] * 4,
                     "B": pd.Series([None, None, None] * 4, dtype="string"),
@@ -46,7 +52,7 @@ def bodosql_null_string_df(request):
 @pytest.fixture(
     params=[
         {
-            "table1": pd.DataFrame(
+            "TABLE1": pd.DataFrame(
                 {
                     "A": [True, False, True] * 4,
                     "B": pd.Series([None, None, None] * 4, dtype="boolean"),
@@ -63,7 +69,7 @@ def bodosql_null_bool_df(request):
 @pytest.fixture(
     params=[
         {
-            "table1": pd.DataFrame(
+            "TABLE1": pd.DataFrame(
                 {
                     "A": [
                         pd.Timestamp(2021, 5, 19),
@@ -93,7 +99,7 @@ def bodosql_null_timestamp_df(request):
 @pytest.fixture(
     params=[
         {
-            "table1": pd.DataFrame(
+            "TABLE1": pd.DataFrame(
                 {
                     "A": [1, 2, 3] * 4,
                     "B": pd.Series([None, None, None] * 4, dtype="Int32"),
@@ -138,42 +144,6 @@ def test_is_not_null_str_cols(bodosql_null_string_df, spark_info, memory_leak_ch
         expected_output=expected,
         check_names=False,
         check_dtype=False,
-    )
-
-
-@pytest.mark.slow
-def test_is_null_str_scalar(bodosql_null_string_df, spark_info, memory_leak_check):
-    """tests is_null on str scalars"""
-    query = "Select CASE WHEN B is NULL then TRUE ELSE FALSE END, CASE WHEN A is NULL then TRUE ELSE FALSE END from table1"
-
-    expected = get_expected_output_with_null_col_b(
-        spark_info, bodosql_null_string_df, query, "string"
-    )
-    check_query(
-        query,
-        bodosql_null_string_df,
-        spark_info,
-        expected_output=expected,
-        check_names=False,
-        check_dtype=False,
-        optimize_calcite_plan=False,
-        only_python=True,
-    )
-
-
-@pytest.mark.slow
-def test_null_binary_scalar(bodosql_binary_types, spark_info, memory_leak_check):
-    """tests is_null on binary scalars"""
-    query = "Select CASE WHEN B is NULL then TRUE ELSE FALSE END, CASE WHEN A is not NULL then TRUE ELSE FALSE END from table1"
-
-    check_query(
-        query,
-        bodosql_binary_types,
-        spark_info,
-        check_names=False,
-        check_dtype=False,
-        optimize_calcite_plan=False,
-        only_python=True,
     )
 
 
@@ -245,7 +215,7 @@ def test_is_not_null_bool_scalar(bodosql_null_bool_df, spark_info, memory_leak_c
     )
 
 
-@pytest.mark.skip("TODO: issue with Spark infering the type")
+@pytest.mark.skip("TODO: issue with Spark inferring the type")
 def test_is_null_timestamp_cols(
     bodosql_null_timestamp_df, spark_info, memory_leak_check
 ):
@@ -264,7 +234,7 @@ def test_is_null_timestamp_cols(
     )
 
 
-@pytest.mark.skip("TODO: issue with Spark infering the type")
+@pytest.mark.skip("TODO: issue with Spark inferring the type")
 @pytest.mark.slow
 def test_is_not_null_timestamp_cols(
     bodosql_null_timestamp_df, spark_info, memory_leak_check
@@ -284,11 +254,11 @@ def test_is_not_null_timestamp_cols(
     )
 
 
-@pytest.mark.skip("TODO: issue with Spark infering the type")
+@pytest.mark.skip("TODO: issue with Spark inferring the type")
 def test_is_null_timestamp_scalar(
     bodosql_null_timestamp_df, spark_info, memory_leak_check
 ):
-    """tests is_null on timestampean normal/nullscalars"""
+    """tests is_null on timestamp normal/nullscalars"""
     query = "Select (CASE WHEN B is Null THEN True ELSE false) from table1"
     expected = get_expected_output_with_null_col_b(
         spark_info, bodosql_null_timestamp_df, query, "timestamp"
@@ -303,7 +273,7 @@ def test_is_null_timestamp_scalar(
     )
 
 
-@pytest.mark.skip("TODO: issue with Spark infering the type")
+@pytest.mark.skip("TODO: issue with Spark inferring the type")
 @pytest.mark.slow
 def test_is_not_null_timestamp_scalar(
     bodosql_null_timestamp_df, spark_info, memory_leak_check
@@ -323,7 +293,6 @@ def test_is_not_null_timestamp_scalar(
     )
 
 
-@pytest.mark.skip("[BS-162] BodoSQL Null and's/or's not equivalent to Spark's'")
 def test_boolean_null_comparisons_column(
     bodosql_null_bool_df, spark_info, memory_leak_check
 ):
@@ -348,6 +317,7 @@ def test_boolean_null_comparisons_scalar(
 ):
     """tests logical operators work between a scalar and a column"""
     query = "Select CASE WHEN A and B THEN TRUE ELSE FALSE END, CASE WHEN A or B THEN TRUE ELSE FALSE END from table1"
+
     expected = get_expected_output_with_null_col_b(
         spark_info, bodosql_null_bool_df, query, "boolean"
     )
@@ -390,7 +360,6 @@ def test_is_true_cols(bodosql_null_bool_df, spark_info, memory_leak_check):
 
 
 @pytest.mark.slow
-@pytest.mark.skip("[BS-187] is true/false unsupported in the null literal case")
 def test_is_true_scalar(bodosql_null_bool_df, spark_info, memory_leak_check):
     """tests is_true works on nullable boolean scalars"""
     query = "Select (CASE WHEN A is TRUE THEN True ELSE false END), (CASE WHEN B is TRUE THEN True ELSE false END) from table1"
@@ -425,7 +394,6 @@ def test_is_false_cols(bodosql_null_bool_df, spark_info, memory_leak_check):
 
 
 @pytest.mark.slow
-@pytest.mark.skip("[BS-187] is true/false unsupported in the null literal case")
 def test_is_false_scalar(bodosql_null_bool_df, spark_info, memory_leak_check):
     """tests is_true works on nullable boolean scalars"""
     query = "Select (CASE WHEN A is false THEN True ELSE false END), (CASE WHEN B is false THEN True ELSE false END) from table1"
@@ -443,7 +411,7 @@ def test_is_false_scalar(bodosql_null_bool_df, spark_info, memory_leak_check):
 
 
 def test_is_null_integer_cols(bodosql_null_integer_df, spark_info, memory_leak_check):
-    """tests is null on interger columns"""
+    """tests is null on integer columns"""
     query = "Select A is null, B is null from table1"
     expected = get_expected_output_with_null_col_b(
         spark_info, bodosql_null_integer_df, query, "Int"
@@ -463,7 +431,7 @@ def test_is_null_integer_cols(bodosql_null_integer_df, spark_info, memory_leak_c
 def test_is_not_null_integer_cols(
     bodosql_null_integer_df, spark_info, memory_leak_check
 ):
-    """tests is not null on interger columns"""
+    """tests is not null on integer columns"""
     query = "Select A, A is not null from table1"
     expected = get_expected_output_with_null_col_b(
         spark_info, bodosql_null_integer_df, query, "Int"
@@ -478,11 +446,10 @@ def test_is_not_null_integer_cols(
     )
 
 
-@pytest.mark.skip("[BS-149]")
 @pytest.mark.slow
 def test_is_null_int_scalars(bodosql_null_integer_df, spark_info, memory_leak_check):
-    """tests is null works with arithmatic scalars"""
-    query = "Select (CASE WHEN A is Null THEN True ELSE false) from table1"
+    """tests is null works with numeric scalars"""
+    query = "Select (CASE WHEN A is Null THEN True ELSE false END) as col1 from table1"
     expected = get_expected_output_with_null_col_b(
         spark_info, bodosql_null_integer_df, query, "Int"
     )
@@ -496,13 +463,14 @@ def test_is_null_int_scalars(bodosql_null_integer_df, spark_info, memory_leak_ch
     )
 
 
-@pytest.mark.skip("[BS-149]")
 @pytest.mark.slow
 def test_is_not_null_int_scalars(
     bodosql_null_integer_df, spark_info, memory_leak_check
 ):
-    """tests arithmatic is not null works with arithmatic scalars"""
-    query = "Select (CASE WHEN A is not Null THEN True ELSE false) from table1"
+    """tests is not null works with numeric scalars"""
+    query = (
+        "Select (CASE WHEN A is not Null THEN True ELSE false END) as col1 from table1"
+    )
     expected = get_expected_output_with_null_col_b(
         spark_info, bodosql_null_integer_df, query, "Int"
     )
@@ -516,11 +484,10 @@ def test_is_not_null_int_scalars(
     )
 
 
-@pytest.mark.skip("[BS-149]")
-def test_numeric_null_arithmatic_cols(
+def test_numeric_null_arithmetic_cols(
     bodosql_null_integer_df, arith_ops, spark_info, memory_leak_check
 ):
-    """tests arithmatic with Null columns works as intended"""
+    """tests arithmetic with Null columns works as intended"""
     query1 = f"Select A {arith_ops} B from table1"
     expected = get_expected_output_with_null_col_b(
         spark_info, bodosql_null_integer_df, query1, "int"
@@ -535,13 +502,12 @@ def test_numeric_null_arithmatic_cols(
     )
 
 
-@pytest.mark.skip("[BS-149]")
 @pytest.mark.slow
-def test_numeric_null_arithmatic_scalar(
+def test_numeric_null_arithmetic_scalar(
     bodosql_null_integer_df, arith_ops, spark_info, memory_leak_check
 ):
-    """tests arithmatic with Null scalars works as intended"""
-    query = f"Select CASE WHEN A {arith_ops} B > 0 THEN 1 WHEN A {arith_ops} B <= 0 THEN 0 END From table1"
+    """tests arithmetic with Null scalars works as intended"""
+    query = f"Select CASE WHEN (A {arith_ops} B) > 0 THEN 1 WHEN (A {arith_ops} B) <= 0 THEN 0 END From table1"
     expected = get_expected_output_with_null_col_b(
         spark_info, bodosql_null_integer_df, query, "int"
     )
@@ -555,7 +521,6 @@ def test_numeric_null_arithmatic_scalar(
     )
 
 
-@pytest.mark.skip("[BS-149]")
 def test_numeric_null_comparison_cols(
     bodosql_null_integer_df, comparison_ops, spark_info, memory_leak_check
 ):
@@ -574,7 +539,6 @@ def test_numeric_null_comparison_cols(
     )
 
 
-@pytest.mark.skip("[BS-149]")
 @pytest.mark.slow
 def test_numeric_null_comparisons_scalar(
     bodosql_null_integer_df, comparison_ops, spark_info, memory_leak_check

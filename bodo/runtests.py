@@ -1,52 +1,19 @@
-import json
 import os
 import re
 import subprocess
 import sys
 
-# first arg is the number of processes to run the tests with
-num_processes = int(sys.argv[1])
+# first arg is the name of the testing pipeline
+pipeline_name = sys.argv[1]
+# second arg is the number of processes to run the tests with
+num_processes = int(sys.argv[2])
 # all other args go to pytest
-pytest_args = sys.argv[2:]
+pytest_args = sys.argv[3:]
+# Get File-Level Timeout Info from Environment Variable (in seconds)
+file_timeout = int(os.environ.get("BODO_RUNTESTS_TIMEOUT", 7200))
 
-logfile_name = "splitting_logs/logfile-07-18-22.txt"
-
-# If in AWS Codebuild partition tests
-if "CODEBUILD_BUILD_ID" in os.environ:
-    import buildscripts.aws.select_timing_from_logs
-
-    # Load the logfile for splitting tests
-    result = subprocess.call(
-        [
-            "python",
-            "buildscripts/aws/download_s3paths_with_prefix.py",
-            "bodo-pr-testing-logs",
-            logfile_name,
-        ]
-    )
-    if result != 0:
-        raise Exception(
-            "buildscripts/aws/download_s3_prefixes.py fails trying to download log file."
-        )
-    if not os.path.exists(logfile_name):
-        raise Exception("Log file download unsuccessful, exiting with failure.")
-    # Select the markers that may be needed.
-    marker_groups = buildscripts.aws.select_timing_from_logs.generate_marker_groups(
-        logfile_name, int(os.environ["NUMBER_GROUPS_SPLIT"])
-    )
-
-    # Generate the marker file.
-    with open("bodo/pytest.ini", "a") as f:
-        indent = " " * 4
-        for marker in set(marker_groups.values()):
-            print(
-                "{0}{1}: Group {1} for running distributed tests\n".format(
-                    indent, marker, file=f
-                )
-            )
-
-    with open("testtiming.json", "w") as f:
-        json.dump(marker_groups, f)
+# Pipeline name is only used when testing on Azure
+use_run_name = "AGENT_NAME" in os.environ
 
 # run pytest with --collect-only to find Python modules containing tests
 # (this doesn't execute any tests)
@@ -61,13 +28,20 @@ except subprocess.CalledProcessError as e:
 
 # get the list of test modules (test file names) to run
 # omit caching tests, as those will be run in a separate pipeline
-pytest_module_regexp = re.compile(r"<Module ((?!tests/caching_tests/)\S+.py)>")
-modules = []
+pytest_module_regexp = re.compile(
+    r"<(?:Module|CppTestFile) ((?!tests/caching_tests/)\S+.(?:py|cpp))>"
+)
+all_modules = []
+
 for l in output.decode().split("\n"):
     m = pytest_module_regexp.search(l)
     if m:
         filename = m.group(1).split("/")[-1]
-        modules.append(filename)
+        all_modules.append(filename)
+
+# We don't run HDFS tests on CI, so exclude them.
+modules = list(set(all_modules) - {"test_hdfs.py"})
+
 
 # The '--cov-report=' option passed to pytest means that we want pytest-cov to
 # generate coverage files (".coverage" files used by `coverage` to generate
@@ -97,6 +71,7 @@ for i, m in enumerate(modules):
         mod_pytest_args[mark_arg_idx + 1] += " and single_mod"
     except ValueError:
         mod_pytest_args += ["-m", "single_mod"]
+
     # run tests with mpiexec + pytest always. If you just use
     # pytest then out of memory won't tell you which test failed.
     cmd = [
@@ -105,10 +80,21 @@ for i, m in enumerate(modules):
         "-n",
         str(num_processes),
         "pytest",
-    ] + mod_pytest_args
+        "-Wignore",
+        # junitxml generates test report file that can be displayed by CodeBuild website
+        # use PYTEST_MARKER and module name to generate a unique filename for each group of tests as identified
+        # by markers and test filename.
+        f"--junitxml=pytest-report-{m.split('.')[0]}-{os.environ['PYTEST_MARKER'].replace(' ','-')}.xml",
+    ]
+    if use_run_name:
+        cmd.append(
+            f"--test-run-title={pipeline_name}",
+        )
+    cmd += mod_pytest_args
     print("Running", " ".join(cmd))
     p = subprocess.Popen(cmd, shell=False)
-    rc = p.wait()
+    rc = p.wait(timeout=file_timeout)
+
     if rc not in (0, 5):  # pytest returns error code 5 when no tests found
         # raise RuntimeError("An error occurred when running the command " + str(cmd))
         tests_failed = True

@@ -1,19 +1,17 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
-
+import typing as pt
 from collections import defaultdict
 
 import numba
 import numpy as np  # noqa
 import pandas as pd  # noqa
 from llvmlite import ir as lir
-from mpi4py import MPI
 from numba.core import cgutils, ir, ir_utils, typeinfer, types
 from numba.core.ir_utils import compile_to_numba_ir, replace_arg_nodes
 from numba.extending import intrinsic
 
 import bodo
 import bodo.ir.connector
-from bodo import objmode  # noqa
+import bodo.user_logging
 from bodo.hiframes.datetime_date_ext import datetime_date_type
 from bodo.hiframes.pd_categorical_ext import (
     CategoricalArrayType,
@@ -24,30 +22,40 @@ from bodo.io.fs_io import (
     get_storage_options_pyobject,
     storage_options_dict_type,
 )
+from bodo.ir.connector import Connector
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
-from bodo.libs.bool_arr_ext import boolean_array
+from bodo.libs.bool_arr_ext import boolean_array_type
+from bodo.libs.float_arr_ext import FloatingArrayType
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.str_arr_ext import StringArrayType, string_array_type
 from bodo.libs.str_ext import string_type
+from bodo.mpi4py import MPI
 from bodo.transforms import distributed_analysis, distributed_pass
 from bodo.transforms.table_column_del_pass import (
     ir_extension_table_column_use,
     remove_dead_column_extensions,
 )
 from bodo.utils.typing import BodoError
-from bodo.utils.utils import check_java_installation  # noqa
-from bodo.utils.utils import check_and_propagate_cpp_exception, sanitize_varname
+from bodo.utils.utils import (
+    check_java_installation,  # noqa
+    sanitize_varname,
+)
+
+if pt.TYPE_CHECKING:  # pragma: no cover
+    from bodo.io.csv_iterator_ext import CSVIteratorType
 
 
-class CsvReader(ir.Stmt):
+class CsvReader(Connector):
+    connector_typ = "csv"
+
     def __init__(
         self,
         file_name,
-        df_out,
+        df_out_varname: str,
         sep,
-        df_colnames,
-        out_vars,
-        out_types,
+        out_table_col_names: list[str],
+        out_vars: list[ir.Var],
+        out_table_col_types: list[types.ArrayCompatible],
         usecols,
         loc,
         header,
@@ -55,6 +63,7 @@ class CsvReader(ir.Stmt):
         nrows,
         skiprows,
         chunksize,
+        chunk_iterator: pt.Optional["CSVIteratorType"],
         is_skiprows_list,
         low_memory,
         escapechar,
@@ -62,13 +71,12 @@ class CsvReader(ir.Stmt):
         index_column_index=None,
         index_column_typ=types.none,
     ):
-        self.connector_typ = "csv"
         self.file_name = file_name
-        self.df_out = df_out  # used only for printing
+        self.df_out_varname = df_out_varname  # used only for printing
         self.sep = sep
-        self.df_colnames = df_colnames
+        self.out_table_col_names = out_table_col_names
         self.out_vars = out_vars
-        self.out_types = out_types
+        self.out_table_col_types = out_table_col_types
         self.usecols = usecols
         self.loc = loc
         self.skiprows = skiprows
@@ -78,6 +86,7 @@ class CsvReader(ir.Stmt):
         # If this value is not None, we return an iterator instead of a DataFrame.
         # When this happens the out_vars are a list with a single CSVReaderType.
         self.chunksize = chunksize
+        self.chunk_iterator = chunk_iterator
         # skiprows list
         self.is_skiprows_list = is_skiprows_list
         self.pd_low_memory = low_memory
@@ -92,22 +101,16 @@ class CsvReader(ir.Stmt):
         self.out_used_cols = list(range(len(usecols)))
 
     def __repr__(self):  # pragma: no cover
-        return "{} = ReadCsv(file={}, col_names={}, types={}, vars={}, nrows={}, skiprows={}, chunksize={}, is_skiprows_list={}, pd_low_memory={}, escapechar={}, storage_options={}, index_column_index={}, index_colum_typ = {}, out_used_colss={})".format(
-            self.df_out,
-            self.file_name,
-            self.df_colnames,
-            self.out_types,
-            self.out_vars,
-            self.nrows,
-            self.skiprows,
-            self.chunksize,
-            self.is_skiprows_list,
-            self.pd_low_memory,
-            self.escapechar,
-            self.storage_options,
-            self.index_column_index,
-            self.index_column_typ,
-            self.out_used_cols,
+        return f"{self.df_out_varname} = ReadCsv(file={self.file_name}, col_names={self.out_table_col_names}, col_types={self.out_table_col_types}, vars={self.out_vars}, nrows={self.nrows}, skiprows={self.skiprows}, chunksize={self.chunksize}, is_skiprows_list={self.is_skiprows_list}, pd_low_memory={self.pd_low_memory}, escapechar={self.escapechar}, storage_options={self.storage_options}, index_column_index={self.index_column_index}, index_colum_typ = {self.index_column_typ}, out_used_colss={self.out_used_cols})"
+
+    def out_vars_and_types(self) -> list[tuple[str, types.Type]]:
+        return (
+            [(self.out_vars[0].name, self.chunk_iterator)]
+            if self.is_streaming
+            else [
+                (self.out_vars[0].name, TableType(tuple(self.out_table_col_types))),
+                (self.out_vars[1].name, self.index_column_typ),
+            ]
         )
 
 
@@ -130,7 +133,7 @@ def check_node_typing(node, typemap):
         skiprows_typ = typemap[node.skiprows.name]
         if isinstance(skiprows_typ, types.Dispatcher):
             raise BodoError(
-                f"pd.read_csv(): 'skiprows' callable not supported yet.",
+                "pd.read_csv(): 'skiprows' callable not supported yet.",
                 node.file_name.loc,
             )
             # is_overload_constant_list
@@ -219,9 +222,8 @@ def csv_file_chunk_reader(
             builder.module, fnty, name="csv_file_chunk_reader"
         )
         obj = builder.call(fn_tp, args)
-        context.compile_internal(
-            builder, lambda: check_and_propagate_cpp_exception(), types.none(), []
-        )  # pragma: no cover
+
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
         # csv_file_chunk_reader returns a pyobject. We need to wrap the result in the
         # proper return type and create a meminfo.
         ret = cgutils.create_struct_proxy(types.stream_reader_type)(context, builder)
@@ -256,7 +258,13 @@ def csv_file_chunk_reader(
 
 
 def remove_dead_csv(
-    csv_node, lives_no_aliases, lives, arg_aliases, alias_map, func_ir, typemap
+    csv_node: CsvReader,
+    lives_no_aliases,
+    lives,
+    arg_aliases,
+    alias_map,
+    func_ir,
+    typemap,
 ):
     """
     Function to determine to remove the returned variables
@@ -287,14 +295,14 @@ def remove_dead_csv(
         # so that it doesn't get loaded from CSV
         elif table_var.name not in lives:
             csv_node.usecols = []
-            csv_node.out_types = []
+            csv_node.out_table_col_types = []
             csv_node.out_used_cols = []
 
     return csv_node
 
 
 def csv_distributed_run(
-    csv_node, array_dists, typemap, calltypes, typingctx, targetctx
+    csv_node: CsvReader, array_dists, typemap, calltypes, typingctx, targetctx
 ):
     """
     Generate that actual code for this ReadCSV Node during distributed pass.
@@ -310,20 +318,19 @@ def csv_distributed_run(
     )
     if csv_node.chunksize is not None:
         # parallel read flag
-        parallel = False
         # Add debug info about column pruning. Chunksize doesn't yet prune
         # any columns.
         if bodo.user_logging.get_verbose_level() >= 1:
             msg = "Finish column pruning on read_csv node:\n%s\nColumns loaded %s\n"
             csv_source = csv_node.loc.strformat()
-            csv_cols = csv_node.df_colnames
+            csv_cols = csv_node.out_table_col_names
             bodo.user_logging.log_message("Column Pruning", msg, csv_source, csv_cols)
 
             # Log if any columns use dictionary encoded arrays.
-            col_types = csv_node.out_types[0].yield_type.data
+            col_types = csv_node.out_table_col_types
             dict_encoded_cols = [
                 c
-                for i, c in enumerate(csv_node.df_colnames)
+                for i, c in enumerate(csv_node.out_table_col_names)
                 if isinstance(col_types[i], bodo.libs.dict_arr_ext.DictionaryArrayType)
             ]
             if dict_encoded_cols:
@@ -335,21 +342,17 @@ def csv_distributed_run(
                     dict_encoded_cols,
                 )
 
-        if array_dists is not None:
-            # Parallel flag for iterator is based on the single var.
-            iterator_varname = csv_node.out_vars[0].name
-            parallel = array_dists[iterator_varname] in (
-                distributed_pass.Distribution.OneD,
-                distributed_pass.Distribution.OneD_Var,
-            )
+        parallel = bodo.ir.connector.is_chunked_connector_table_parallel(
+            csv_node, array_dists, "CSVReader"
+        )
 
         # Iterator Case
 
         # Create a wrapper function that will be compiled. This will return
         # an iterator.
         func_text = "def csv_iterator_impl(fname, nrows, skiprows):\n"
-        func_text += f"    reader = _csv_reader_init(fname, nrows, skiprows)\n"
-        func_text += f"    iterator = init_csv_iterator(reader, csv_iterator_type)\n"
+        func_text += "    reader = _csv_reader_init(fname, nrows, skiprows)\n"
+        func_text += "    iterator = init_csv_iterator(reader, csv_iterator_type)\n"
         loc_vars = {}
         from bodo.io.csv_iterator_ext import init_csv_iterator
 
@@ -414,7 +417,7 @@ def csv_distributed_run(
     # TODO: rebalance if output distributions are 1D instead of 1D_Var
     # get column variables
     func_text = "def csv_impl(fname, nrows, skiprows):\n"
-    func_text += f"    (table_val, idx_col) = _csv_reader_py(fname, nrows, skiprows)\n"
+    func_text += "    (table_val, idx_col) = _csv_reader_py(fname, nrows, skiprows)\n"
 
     loc_vars = {}
     exec(func_text, {}, loc_vars)
@@ -451,10 +454,11 @@ def csv_distributed_run(
             # We use csv_node.out_used_cols because this is the actual
             # offset into the type.
             for i in csv_node.out_used_cols:
-                colname = csv_node.df_colnames[i]
+                colname = csv_node.out_table_col_names[i]
                 csv_cols.append(colname)
                 if isinstance(
-                    csv_node.out_types[i], bodo.libs.dict_arr_ext.DictionaryArrayType
+                    csv_node.out_table_col_types[i],
+                    bodo.libs.dict_arr_ext.DictionaryArrayType,
                 ):
                     dict_encoded_cols.append(colname)
         bodo.user_logging.log_message("Column Pruning", msg, csv_source, csv_cols)
@@ -469,8 +473,8 @@ def csv_distributed_run(
             )
 
     csv_reader_py = _gen_csv_reader_py(
-        csv_node.df_colnames,
-        csv_node.out_types,
+        csv_node.out_table_col_names,
+        csv_node.out_table_col_types,
         final_usecols,
         csv_node.out_used_cols,
         csv_node.sep,
@@ -550,25 +554,25 @@ def csv_remove_dead_column(csv_node, column_live_map, equiv_vars, typemap):
     )
 
 
-numba.parfors.array_analysis.array_analysis_extensions[
-    CsvReader
-] = bodo.ir.connector.connector_array_analysis
-distributed_analysis.distributed_analysis_extensions[
-    CsvReader
-] = bodo.ir.connector.connector_distributed_analysis
+numba.parfors.array_analysis.array_analysis_extensions[CsvReader] = (
+    bodo.ir.connector.connector_array_analysis
+)
+distributed_analysis.distributed_analysis_extensions[CsvReader] = (
+    bodo.ir.connector.connector_distributed_analysis
+)
 typeinfer.typeinfer_extensions[CsvReader] = bodo.ir.connector.connector_typeinfer
 ir_utils.visit_vars_extensions[CsvReader] = bodo.ir.connector.visit_vars_connector
 ir_utils.remove_dead_extensions[CsvReader] = remove_dead_csv
-numba.core.analysis.ir_extension_usedefs[
-    CsvReader
-] = bodo.ir.connector.connector_usedefs
+numba.core.analysis.ir_extension_usedefs[CsvReader] = (
+    bodo.ir.connector.connector_usedefs
+)
 ir_utils.copy_propagate_extensions[CsvReader] = bodo.ir.connector.get_copies_connector
-ir_utils.apply_copy_propagate_extensions[
-    CsvReader
-] = bodo.ir.connector.apply_copies_connector
-ir_utils.build_defs_extensions[
-    CsvReader
-] = bodo.ir.connector.build_connector_definitions
+ir_utils.apply_copy_propagate_extensions[CsvReader] = (
+    bodo.ir.connector.apply_copies_connector
+)
+ir_utils.build_defs_extensions[CsvReader] = (
+    bodo.ir.connector.build_connector_definitions
+)
 distributed_pass.distributed_run_extensions[CsvReader] = csv_distributed_run
 remove_dead_column_extensions[CsvReader] = csv_remove_dead_column
 ir_extension_table_column_use[CsvReader] = bodo.ir.connector.connector_table_column_use
@@ -591,18 +595,24 @@ def _get_dtype_str(t):
     if t == string_array_type:
         # HACK: add string_array_type to numba.core.types
         # FIXME: fix after Numba #3372 is resolved
-        types.string_array_type = string_array_type
+        types.string_array_type = string_array_type  # type: ignore
         return "string_array_type"
 
     if isinstance(t, IntegerArrayType):
         # HACK: same issue as above
-        t_name = "int_arr_{}".format(dtype)
+        t_name = f"int_arr_{dtype}"
         setattr(types, t_name, t)
         return t_name
 
-    if t == boolean_array:
-        types.boolean_array = boolean_array
-        return "boolean_array"
+    if isinstance(t, FloatingArrayType):
+        # HACK: same issue as above
+        t_name = f"float_arr_{dtype}"
+        setattr(types, t_name, t)
+        return t_name
+
+    if t == boolean_array_type:
+        types.boolean_array_type = boolean_array_type  # type: ignore
+        return "boolean_array_type"
 
     if dtype == types.bool_:
         dtype = "bool_"
@@ -618,7 +628,7 @@ def _get_dtype_str(t):
         setattr(types, typ_name, t)
         return typ_name
 
-    return "{}[::1]".format(dtype)
+    return f"{dtype}[::1]"
 
 
 def _get_pd_dtype_str(t):
@@ -633,7 +643,7 @@ def _get_pd_dtype_str(t):
     dtype = t.dtype
 
     if isinstance(dtype, PDCategoricalDtype):
-        return "pd.CategoricalDtype({})".format(dtype.categories)
+        return f"pd.CategoricalDtype({dtype.categories})"
 
     if dtype == types.NPDatetime("ns"):
         return "str"
@@ -646,7 +656,12 @@ def _get_pd_dtype_str(t):
     if isinstance(t, IntegerArrayType):
         return '"{}Int{}"'.format("" if dtype.signed else "U", dtype.bitwidth)
 
-    if t == boolean_array:
+    # nullable float
+    if isinstance(t, FloatingArrayType):
+        # Float32 or Float64
+        return f'"{t.get_pandas_scalar_type_instance.name}"'
+
+    if t == boolean_array_type or t == types.Array(types.bool_, 1, "C"):
         return "np.bool_"
 
     if isinstance(t, ArrayItemArrayType) and isinstance(
@@ -654,7 +669,7 @@ def _get_pd_dtype_str(t):
     ):
         return "object"
 
-    return "np.{}".format(dtype)
+    return f"np.{dtype}"
 
 
 # XXX: temporary fix pending Numba's #3378
@@ -754,7 +769,7 @@ def _gen_csv_file_reader_init(
     # check_java_installation is a check for hdfs that java is installed
     func_text += "  check_java_installation(fname)\n"
     # if it's an s3 url, get the region and pass it into the c++ code
-    func_text += f"  bucket_region = bodo.io.fs_io.get_s3_bucket_region_njit(fname, parallel={parallel})\n"
+    func_text += f"  bucket_region = bodo.io.fs_io.get_s3_bucket_region_wrapper(fname, parallel={parallel})\n"
     # Add a dummy variable to the dict (empty dicts are not yet supported in numba).
     if storage_options is None:
         storage_options = {}
@@ -765,14 +780,7 @@ def _gen_csv_file_reader_init(
     func_text += "  f_reader = bodo.ir.csv_ext.csv_file_chunk_reader(bodo.libs.str_ext.unicode_to_utf8(fname), "
     # change skiprows to array
     # pass how many elements in the list as well or 0 if just an integer not a list
-    func_text += "    {}, bodo.utils.conversion.coerce_to_ndarray(skiprows, scalar_to_arr_len=1).ctypes, nrows, {}, bodo.libs.str_ext.unicode_to_utf8('{}'), bodo.libs.str_ext.unicode_to_utf8(bucket_region), storage_options_py, {}, {}, skiprows_list_len, {})\n".format(
-        parallel,
-        has_header,
-        compression,
-        chunksize,
-        is_skiprows_list,
-        pd_low_memory,
-    )
+    func_text += f"    {parallel}, bodo.utils.conversion.coerce_to_ndarray(skiprows, scalar_to_arr_len=1).ctypes, nrows, {has_header}, bodo.libs.str_ext.unicode_to_utf8('{compression}'), bodo.libs.str_ext.unicode_to_utf8(bucket_region), storage_options_py, {chunksize}, {is_skiprows_list}, skiprows_list_len, {pd_low_memory})\n"
     # TODO: unrelated to skiprows list PR
     # This line is printed even if failure is because of another check
     # Commenting it gives another compiler error.
@@ -842,7 +850,7 @@ def _gen_read_csv_objmode(
 
     # add idx col if needed
     if idx_col_typ == types.NPDatetime("ns"):
-        assert not idx_col_index is None
+        assert idx_col_index is not None
         date_inds_strs.append(str(idx_col_index))
 
     date_inds = ", ".join(date_inds_strs)
@@ -913,11 +921,11 @@ def _gen_read_csv_objmode(
 
     if idx_col_index != None:
         # idx_array_typ is added to the globals at a higher level
-        func_text += f"  with objmode(T=table_type_{call_id}, idx_arr=idx_array_typ, {par_var_typ_str}):\n"
+        func_text += f"  with bodo.no_warning_objmode(T=table_type_{call_id}, idx_arr=idx_array_typ, {par_var_typ_str}):\n"
     else:
-        func_text += f"  with objmode(T=table_type_{call_id}, {par_var_typ_str}):\n"
+        func_text += f"  with bodo.no_warning_objmode(T=table_type_{call_id}, {par_var_typ_str}):\n"
     # create typemap for `df.astype` in runtime
-    func_text += f"    typemap = {{}}\n"
+    func_text += "    typemap = {}\n"
     for i, t_str in enumerate(typ_map.keys()):
         func_text += (
             f"    typemap.update({{i:{t_str} for i in t_arr_{i}_{call_id}_2}})\n"
@@ -935,7 +943,7 @@ def _gen_read_csv_objmode(
     # this pd.read_csv() happens at runtime and is passing a file reader(f_reader)
     # to pandas. f_reader skips the header, so we have to tell pandas header=None.
     func_text += "        header=None,\n"
-    func_text += "        parse_dates=[{}],\n".format(date_inds)
+    func_text += f"        parse_dates=[{date_inds}],\n"
     # Check explanation near top of the function for why we specify
     # only some types here directly
     # NOTE: this works for dict-encoded string arrays too since Bodo's unboxing calls
@@ -945,7 +953,7 @@ def _gen_read_csv_objmode(
     )
     # NOTE: using repr() for sep to support cases like "\n" properly
     # and escapechar to support `\\` properly.
-    func_text += f"        usecols=usecols_arr_{call_id}_2, sep={sep!r}, low_memory=False, escapechar={escapechar!r})\n"
+    func_text += f"        usecols=[int(i) for i in usecols_arr_{call_id}_2], sep={sep!r}, low_memory=False, escapechar={escapechar!r})\n"
     # _gen_read_csv_objmode() may be called from iternext_impl which doesn't
     # have access to the parallel flag in the CSVNode so we retrieve it from
     # the file reader.
@@ -966,11 +974,11 @@ def _gen_read_csv_objmode(
     # if usecols is empty, the table is dead, see remove_dead_csv.
     # In this case, we simply return None
     if len(usecols) == 0:
-        func_text += f"    T = None\n"
+        func_text += "    T = None\n"
     else:
-        func_text += f"    arrs = []\n"
-        func_text += f"    for i in range(df.shape[1]):\n"
-        func_text += f"      arrs.append(df.iloc[:, i].values)\n"
+        func_text += "    arrs = []\n"
+        func_text += "    for i in range(df.shape[1]):\n"
+        func_text += "      arrs.append(df.iloc[:, i].values)\n"
         # Bodo preserves all of the original types needed at typing in col_typs
         func_text += f"    T = Table(arrs, type_usecols_offsets_arr_{call_id}_2, {len(col_names)})\n"
     return func_text
@@ -1031,7 +1039,7 @@ def _gen_csv_reader_py(
     # 'pd': pd, 'np': np}
     # objmode type variable used in _gen_read_csv_objmode
     if idx_col_typ != types.none:
-        glbls[f"idx_array_typ"] = idx_col_typ
+        glbls["idx_array_typ"] = idx_col_typ
 
     # in the case that usecols is empty, the table is dead.
     # in this case, we simply return the

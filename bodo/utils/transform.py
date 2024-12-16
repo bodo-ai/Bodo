@@ -1,17 +1,17 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
 Helper functions for transformations.
 """
+
 import itertools
 import math
 import operator
-import types as pytypes
+import typing as pt
 from collections import namedtuple
 
 import numba
 import numpy as np
 import pandas as pd
-from numba.core import ir, ir_utils, types
+from numba.core import event, ir, ir_utils, types
 from numba.core.ir_utils import (
     GuardException,
     build_definitions,
@@ -44,6 +44,7 @@ from bodo.utils.typing import (
     get_overload_const_list,
     is_literal_type,
     is_overload_constant_bool,
+    raise_bodo_error,
 )
 from bodo.utils.utils import is_array_typ, is_assign, is_call, is_expr
 
@@ -72,6 +73,7 @@ bodo_types_with_params = {
     "Decimal128Type",
     "DecimalArrayType",
     "IntegerArrayType",
+    "FloatingArrayType",
     "IntervalArrayType",
     "IntervalIndexType",
     "List",
@@ -125,6 +127,11 @@ no_side_effect_call_tuples = {
     (bool,),
     (str,),
     ("ceil", math),
+    # Pandas APIs
+    ("Int32Dtype", pd),
+    ("Int64Dtype", pd),
+    ("Timestamp", pd),
+    ("Week", "offsets", "tseries", pd),
     # Series
     ("init_series", "pd_series_ext", "hiframes", bodo),
     ("get_series_data", "pd_series_ext", "hiframes", bodo),
@@ -146,15 +153,21 @@ no_side_effect_call_tuples = {
     ("get_int_arr_bitmap", "int_arr_ext", "libs", bodo),
     ("init_integer_array", "int_arr_ext", "libs", bodo),
     ("alloc_int_array", "int_arr_ext", "libs", bodo),
+    # Float array
+    ("init_float_array", "float_arr_ext", "libs", bodo),
+    ("alloc_float_array", "float_arr_ext", "libs", bodo),
     # str array
     ("inplace_eq", "str_arr_ext", "libs", bodo),
     # bool array
-    ("get_bool_arr_data", "bool_arr_ext", "libs", bodo),
-    ("get_bool_arr_bitmap", "bool_arr_ext", "libs", bodo),
     ("init_bool_array", "bool_arr_ext", "libs", bodo),
     ("alloc_bool_array", "bool_arr_ext", "libs", bodo),
+    ("alloc_false_bool_array", "bool_arr_ext", "libs", bodo),
+    ("alloc_true_bool_array", "bool_arr_ext", "libs", bodo),
     # Datetime array
     ("datetime_date_arr_to_dt64_arr", "pd_timestamp_ext", "hiframes", bodo),
+    # tz-aware array
+    ("alloc_pd_datetime_array", "pd_datetime_arr_ext", "libs", bodo),
+    ("init_datetime_array", "pd_datetime_arr_ext", "libs", bodo),
     # Both of these functions are set as global imports.
     (bodo.libs.bool_arr_ext.compute_or_body,),
     (bodo.libs.bool_arr_ext.compute_and_body,),
@@ -182,7 +195,8 @@ no_side_effect_call_tuples = {
     ("_sem_handle_nan", "series_kernels", "hiframes", bodo),
     ("dist_return", "distributed_api", "libs", bodo),
     ("rep_return", "distributed_api", "libs", bodo),
-    # dataframe
+    ("distributed_transpose", "distributed_api", "libs", bodo),
+    # DataFrame
     ("init_dataframe", "pd_dataframe_ext", "hiframes", bodo),
     ("get_dataframe_data", "pd_dataframe_ext", "hiframes", bodo),
     ("get_dataframe_all_data", "pd_dataframe_ext", "hiframes", bodo),
@@ -252,6 +266,8 @@ no_side_effect_call_tuples = {
     (bodo.libs.array_item_arr_ext.pre_alloc_array_item_array,),
     ("dist_reduce", "distributed_api", "libs", bodo),
     (bodo.libs.distributed_api.dist_reduce,),
+    ("get_chunk_bounds", "distributed_api", "libs", bodo),
+    (bodo.libs.distributed_api.get_chunk_bounds,),
     ("pre_alloc_string_array", "str_arr_ext", "libs", bodo),
     (bodo.libs.str_arr_ext.pre_alloc_string_array,),
     ("pre_alloc_binary_array", "binary_arr_ext", "libs", bodo),
@@ -307,6 +323,8 @@ no_side_effect_call_tuples = {
     (bodo.prange,),
     ("objmode", bodo),
     (bodo.objmode,),
+    ("no_warning_objmode", bodo),
+    (bodo.no_warning_objmode,),
     # Helper functions, inlined in astype
     ("get_label_dict_from_categories", "pd_categorial_ext", "hiframes", bodo),
     (
@@ -321,11 +339,15 @@ no_side_effect_call_tuples = {
     ("generate_mappable_table_func", "table_utils", "utils", bodo),
     ("table_astype", "table_utils", "utils", bodo),
     ("table_concat", "table_utils", "utils", bodo),
+    ("concat_tables", "table_utils", "utils", bodo),
     ("table_filter", "table", "hiframes", bodo),
+    ("table_local_filter", "table", "hiframes", bodo),
     ("table_subset", "table", "hiframes", bodo),
+    ("local_len", "table", "hiframes", bodo),
     ("logical_table_to_table", "table", "hiframes", bodo),
     ("set_table_data", "table", "hiframes", bodo),
     ("set_table_null", "table", "hiframes", bodo),
+    ("create_empty_table", "table", "hiframes", bodo),
     # Series.str/string
     ("startswith",),
     ("endswith",),
@@ -333,6 +355,33 @@ no_side_effect_call_tuples = {
     ("lower",),
     # BodoSQL
     ("__bodosql_replace_columns_dummy", "dataframe_impl", "hiframes", bodo),
+    # Indexing
+    ("scalar_optional_getitem", "indexing", "utils", bodo),
+    ("bitmap_size", "indexing", "utils", bodo),
+    ("get_dt64_bitmap_fill", "indexing", "utils", bodo),
+    # Streaming state init functions
+    ("init_join_state", "join", "streaming", "libs", bodo),
+    ("init_groupby_state", "groupby", "streaming", "libs", bodo),
+    ("init_grouping_sets_state", "groupby", "streaming", "libs", bodo),
+    ("init_union_state", "union", "streaming", "libs", bodo),
+    ("init_window_state", "window", "streaming", "libs", bodo),
+    ("init_stream_sort_state", "sort", "streaming", "libs", bodo),
+    ("init_dict_encoding_state", "dict_encoding", "streaming", "libs", bodo),
+    ("init_table_builder_state", "table_builder", "libs", bodo),
+    ("iceberg_writer_init", "stream_iceberg_write", "io", bodo),
+    ("snowflake_writer_init", "snowflake_write", "io", bodo),
+    # Datetime utils
+    # TODO(njriasan): Move all "pure" datetime_date_ext functions
+    # to the same file so can have file level DCE.
+    ("now_date", "datetime_date_ext", "hiframes", bodo),
+    ("now_date_wrapper", "datetime_date_ext", "hiframes", bodo),
+    ("now_date_wrapper_consistent", "datetime_date_ext", "hiframes", bodo),
+    ("today_rank_consistent", "datetime_date_ext", "hiframes", bodo),
+    ("now_impl_consistent", "pd_timestamp_ext", "hiframes", bodo),
+    # Filter Expression
+    ("make_scalar", "filter", "ir", bodo),
+    ("make_ref", "filter", "ir", bodo),
+    ("make_op", "filter", "ir", bodo),
 }
 
 
@@ -362,26 +411,12 @@ def remove_hiframes(rhs, lives, call_list):
     if call_tuple == (bodo.hiframes.pd_index_ext.init_range_index,):
         return True
 
-    # TODO: probably not reachable here since always inlined?
     if len(call_list) == 4 and call_list[1:] == [
         "conversion",
         "utils",
         bodo,
     ]:  # pragma: no cover
         # all conversion functions are side effect-free
-        return True
-
-    # Check the name of the BodoSQL module to avoid importing bodosql.
-    if (
-        isinstance(call_list[-1], pytypes.ModuleType)
-        and call_list[-1].__name__ == "bodosql"
-    ):  # pragma: no cover
-        # all bodosql functions are side effect-free
-        return True
-
-    # Check for all bodosql array kernels.
-    if call_list[1:] == ["bodosql_array_kernels", "libs", bodo]:  # pragma: no cover
-        # all bodosql array kernels are side effect-free
         return True
 
     # TODO: handle copy() of the relevant types properly
@@ -401,7 +436,12 @@ def remove_hiframes(rhs, lives, call_list):
 
     # the call is dead if the updated array is dead
     if (
-        call_list == ["setna", "array_kernels", "libs", bodo]
+        call_list
+        in (
+            ["setna", "array_kernels", "libs", bodo],
+            ["copy_array_element", "array_kernels", "libs", bodo],
+            ["get_str_arr_item_copy", "str_arr_ext", "libs", bodo],
+        )
         and rhs.args[0].name not in lives
     ):
         return True
@@ -425,24 +465,27 @@ def remove_hiframes(rhs, lives, call_list):
     if len(call_tuple) == 1 and tuple in getattr(call_tuple[0], "__mro__", ()):
         return True
 
+    # Note: Numba will try the other call handlers if this returns False
     return False
 
 
+# Note: To register additional handling for removing unused functions
+# you can append to numba.core.ir_utils.remove_call_handlers.
 numba.core.ir_utils.remove_call_handlers.append(remove_hiframes)
 
 
 def compile_func_single_block(
-    func,
+    func: pt.Callable,
     args,
-    ret_var,
+    ret_var: ir.Var,
     typing_info=None,
-    extra_globals=None,
-    infer_types=True,
-    run_untyped_pass=False,
+    extra_globals: dict[str, pt.Any] | None = None,
+    infer_types: bool = True,
+    run_untyped_pass: bool = False,
     flags=None,
-    replace_globals=False,
-    add_default_globals=True,
-):
+    replace_globals: bool = False,
+    add_default_globals: bool = True,
+) -> list[ir.Stmt]:
     """compiles functions that are just a single basic block.
     Does not handle defaults, freevars etc.
     typing_info is a structure that has typingctx, typemap, calltypes
@@ -520,7 +563,7 @@ def update_locs(node_list, loc):
 
 def get_stmt_defs(stmt):
     if is_assign(stmt):
-        return set([stmt.target.name])
+        return {stmt.target.name}
 
     if type(stmt) in numba.core.analysis.ir_extension_usedefs:
         def_func = numba.core.analysis.ir_extension_usedefs[type(stmt)]
@@ -772,9 +815,7 @@ def get_const_value_inner(
         dict_varname = call_name[1].name
         if updated_containers and dict_varname in updated_containers:
             raise BodoConstUpdatedError(
-                "variable '{}' is updated inplace using '{}'".format(
-                    dict_varname, updated_containers[dict_varname]
-                )
+                f"variable '{dict_varname}' is updated inplace using '{updated_containers[dict_varname]}'"
             )
         require(is_expr(var_def, "build_map"))
         vals = [v[0] for v in var_def.items]
@@ -1071,6 +1112,16 @@ def get_const_value_inner(
         require(_func_is_pure(py_func, arg_types, kw_types))
         return py_func(*args, **kwargs)
 
+    # BodoSQL optional getitem
+    if call_name == ("scalar_optional_getitem", "bodo.utils.indexing"):
+        value = get_const_value_inner(
+            func_ir, var_def.args[0], arg_types, typemap, updated_containers
+        )
+        index = get_const_value_inner(
+            func_ir, var_def.args[1], arg_types, typemap, updated_containers
+        )
+        return value[index]
+
     raise GuardException("Constant value not found")
 
 
@@ -1079,10 +1130,7 @@ def _func_is_pure(py_func, arg_types, kw_types):
     (e.g. no I/O) and has no side-effects"""
     from bodo.hiframes.pd_dataframe_ext import DataFrameType
     from bodo.hiframes.pd_series_ext import SeriesType
-    from bodo.ir.csv_ext import CsvReader
-    from bodo.ir.json_ext import JsonReader
-    from bodo.ir.parquet_ext import ParquetReader
-    from bodo.ir.sql_ext import SqlReader
+    from bodo.ir.connector import Connector
 
     f_ir, typemap, _, _ = bodo.compiler.get_func_type_info(py_func, arg_types, kw_types)
     for block in f_ir.blocks.values():
@@ -1091,7 +1139,7 @@ def _func_is_pure(py_func, arg_types, kw_types):
             if isinstance(stmt, ir.Print):
                 return False
             # I/O nodes
-            if isinstance(stmt, (CsvReader, JsonReader, ParquetReader, SqlReader)):
+            if isinstance(stmt, Connector):
                 return False
             # setitem of input arguments like lists causes reflection
             if is_setitem(stmt) and isinstance(
@@ -1256,6 +1304,7 @@ def get_const_func_output_type(
         # run SeriesPass to simplify Series calls (e.g. pd.Series)
         typingctx = numba.core.registry.cpu_target.typing_context
         targetctx = numba.core.registry.cpu_target.target_context
+        # TODO: Can we capture parfor_metadata for error messages?
         series_pass = bodo.transforms.series_pass.SeriesPass(
             f_ir,
             typingctx,
@@ -1345,7 +1394,7 @@ def extract_keyvals_from_struct_map(f_ir, build_map, loc, scope, typemap=None):
     keys = []
     key_strs = []
     values = []
-    for (k, v) in build_map.items:
+    for k, v in build_map.items:
         k_str = find_const(f_ir, k)
         require(isinstance(k_str, str))
         key_strs.append(k_str)
@@ -1469,15 +1518,15 @@ def gen_const_val_str(c):
     # elements are from the nested tuple. Supports only one level nesting
     # TODO: fix nested const tuple handling in Numba
     if isinstance(c, tuple):
-        return "'{}{}', ".format(NESTED_TUP_SENTINEL, len(c)) + ", ".join(
+        return f"'{NESTED_TUP_SENTINEL}{len(c)}', " + ", ".join(
             gen_const_val_str(v) for v in c
         )
     if isinstance(c, str):
-        return "'{}'".format(c)
+        return f"'{c}'"
     # TODO: Support actual timestamp, timedelta, float values
     if isinstance(c, (pd.Timestamp, pd.Timedelta, float)):
         # Timestamp has a space
-        return "'{}'".format(c)
+        return f"'{c}'"
     return str(c)
 
 
@@ -1519,6 +1568,53 @@ def _get_original_nested_tups(vals):
     return tuple(vals)
 
 
+# dummy sentinel singleton to designate constant value not found for variable
+class ConstNotFound:
+    pass
+
+
+CONST_NOT_FOUND = ConstNotFound()
+
+
+def get_const_arg(
+    f_name,
+    args,
+    kws,
+    func_ir,
+    func_arg_types,
+    arg_no,
+    arg_name,
+    loc,
+    default=None,
+    err_msg: str | None = None,
+    typ: str | None = None,
+    use_default: bool = False,
+):
+    """Get constant value for a function call argument. Raise error if the value is
+    not constant.
+    """
+    typ = "str" if typ is None else typ
+    arg = CONST_NOT_FOUND
+    if err_msg is None:
+        err_msg = f"{f_name} requires '{arg_name}' argument as a constant {typ}"
+
+    arg_var = get_call_expr_arg(f_name, args, kws, arg_no, arg_name, "")
+
+    try:
+        arg = get_const_value_inner(func_ir, arg_var, arg_types=func_arg_types)
+    except GuardException:
+        # raise error if argument specified but not constant
+        if arg_var != "":
+            raise BodoError(err_msg, loc=loc)
+
+    if arg is CONST_NOT_FOUND:
+        # Provide use_default to allow letting None be the default value
+        if use_default or default is not None:
+            return default
+        raise BodoError(err_msg, loc=loc)
+    return arg
+
+
 def get_call_expr_arg(
     f_name, args, kws, arg_no, arg_name, default=None, err_msg=None, use_default=False
 ):
@@ -1541,7 +1637,7 @@ def get_call_expr_arg(
         if use_default or default is not None:
             return default
         if err_msg is None:
-            err_msg = "{} requires '{}' argument".format(f_name, arg_name)
+            err_msg = f"{f_name} requires '{arg_name}' argument"
         raise BodoError(err_msg)
     return arg
 
@@ -1559,6 +1655,60 @@ def set_call_expr_arg(var, args, kws, arg_no, arg_name, add_if_missing=False):
         raise BodoError(
             "cannot set call argument since does not exist"
         )  # pragma: no cover
+
+
+def set_ith_arg_to_omitted_value(
+    pass_info,
+    rhs: ir.Expr,
+    i: int,
+    new_value: pt.Any,
+    expected_existing_value: pt.Any,
+):
+    """
+    Sets the last argument of call expr 'rhs' to True, assuming that it is an Omitted
+    value with the given expected_existing_value. This is done by modifying pass_info's
+    typing information directly.
+
+    This is usually used for Bodo overloads that have an extra flag as last argument
+    to enable parallelism but more generic to allow communicating more complex parallelism
+    semantics, such as a tuple of values.
+
+    Args:
+        pass_info (_type_): The pass information used to grab the call type.
+        rhs (ir.Expr): The rhs call expression to modify.
+        i (int): The index of the argument to replace using Python integer indexing.
+        new_value (pt.Any): The new value for the last argument without wrapping the result
+          in any "optional".
+        expected_existing_value (pt.Any): The existing value of the last argument that
+          should be replaced. This is used for assertion check.
+    """
+    call_type = pass_info.calltypes.pop(rhs)
+    # normalize to simplify slicing.
+    pos_idx = i if i >= 0 else len(call_type.args) + i
+    assert call_type.args[pos_idx] == types.Omitted(
+        expected_existing_value
+    ), f"Omitted({expected_existing_value}) {pos_idx}th argument expected"
+    pass_info.calltypes[rhs] = pass_info.typemap[rhs.func.name].get_call_type(
+        pass_info.typingctx,
+        call_type.args[:pos_idx]
+        + (types.Omitted(new_value),)
+        + call_type.args[pos_idx + 1 :],
+        {},
+    )
+
+
+def set_last_arg_to_true(pass_info, rhs):
+    """set last argument of call expr 'rhs' to True, assuming that it is an Omitted
+    arg with value of False.
+    This is usually used for Bodo overloads that have an extra flag as last argument
+    to enable parallelism.
+    """
+    set_ith_arg_to_omitted_value(pass_info, rhs, -1, True, False)
+
+
+def set_2nd_to_last_arg_to_true(pass_info, rhs):
+    """Same as above but sets second to last argument to True"""
+    set_ith_arg_to_omitted_value(pass_info, rhs, -2, True, False)
 
 
 def avoid_udf_inline(py_func, arg_types, kw_types):
@@ -1583,7 +1733,8 @@ def avoid_udf_inline(py_func, arg_types, kw_types):
 
     for block in f_ir.blocks.values():
         # assertions
-        if isinstance(block.body[-1], (ir.Raise, ir.StaticRaise)):
+        # TODO(ehsan): add TryRaise/StaticTryRaise/DynamicTryRaise?
+        if isinstance(block.body[-1], (ir.Raise, ir.StaticRaise, ir.DynamicRaise)):
             return True
         # has context manager
         for stmt in block.body:
@@ -1611,7 +1762,7 @@ def replace_func(
     func.__globals__.update(glbls)
 
     # create explicit arg variables for defaults if func has any
-    # XXX: inine_closure_call() can't handle defaults properly
+    # XXX: inline_closure_call() can't handle defaults properly
     if pysig is not None:
         pre_nodes = [] if pre_nodes is None else pre_nodes
         scope = next(iter(pass_info.func_ir.blocks.values())).scope
@@ -1625,7 +1776,7 @@ def replace_func(
             # try to use a literal type if possible (as required by some overloads)
             try:
                 pass_info.typemap[d_var.name] = types.literal(default)
-            except:
+            except Exception:
                 pass_info.typemap[d_var.name] = numba.typeof(default)
             node = ir.Assign(ir.Const(default, loc), d_var, loc)
             pre_nodes.append(node)
@@ -1674,11 +1825,11 @@ def gen_init_varsize_alloc_sizes(t):
     """
     # TODO: handle all possible array types and nested cases, e.g. struct
     if t == string_array_type:
-        vname = "num_chars_{}".format(ir_utils.next_label())
+        vname = f"num_chars_{ir_utils.next_label()}"
         return f"  {vname} = 0\n", (vname,)
     if isinstance(t, ArrayItemArrayType):
         inner_code, inner_vars = gen_init_varsize_alloc_sizes(t.dtype)
-        vname = "num_items_{}".format(ir_utils.next_label())
+        vname = f"num_items_{ir_utils.next_label()}"
         return f"  {vname} = 0\n" + inner_code, (vname,) + inner_vars
     return "", ()
 
@@ -1689,13 +1840,11 @@ def gen_varsize_item_sizes(t, item, var_names):
     """
     # TODO: handle all possible array types and nested cases, e.g. struct
     if t == string_array_type:
-        return "    {} += bodo.libs.str_arr_ext.get_utf8_size({})\n".format(
-            var_names[0], item
-        )
+        return f"    {var_names[0]} += bodo.libs.str_arr_ext.get_utf8_size({item})\n"
     if isinstance(t, ArrayItemArrayType):
-        return "    {} += len({})\n".format(
-            var_names[0], item
-        ) + gen_varsize_array_counts(t.dtype, item, var_names[1:])
+        return f"    {var_names[0]} += len({item})\n" + gen_varsize_array_counts(
+            t.dtype, item, var_names[1:]
+        )
     return ""
 
 
@@ -1705,8 +1854,8 @@ def gen_varsize_array_counts(t, item, var_names):
     """
     # TODO: other arrays
     if t == string_array_type:
-        return "    {} += bodo.libs.str_arr_ext.get_num_total_chars({})\n".format(
-            var_names[0], item
+        return (
+            f"    {var_names[0]} += bodo.libs.str_arr_ext.get_num_total_chars({item})\n"
         )
     return ""
 
@@ -1718,7 +1867,10 @@ def get_type_alloc_counts(t):
     if isinstance(t, (StructArrayType, TupleArrayType)):
         return 1 + sum(get_type_alloc_counts(d.dtype) for d in t.data)
 
-    if isinstance(t, ArrayItemArrayType) or t == string_array_type:
+    if t == string_array_type or t == bodo.binary_array_type:
+        return 2
+
+    if isinstance(t, ArrayItemArrayType):
         return 1 + get_type_alloc_counts(t.dtype)
 
     if isinstance(t, MapArrayType):
@@ -1889,6 +2041,38 @@ def dict_to_const_keys_var_values_lists(
     return keys, values
 
 
+def list_to_vars_value_list(list_var, func_ir):
+    """
+    Takes a list variable, which should be created
+    via build_list and returns a list of values.
+
+    This is used for the case where the list must be a literal to
+    determine the variables, but the variables don't need to be constant.
+    """
+    # Influenced by numba.core.ir_utils.find_build_sequence
+    require(isinstance(list_var, ir.Var))
+    list_def = get_definition(func_ir, list_var)
+    require(isinstance(list_def, ir.Expr))
+    require(list_def.op == "build_list")
+    return list_def.items
+
+
+def tuples_to_vars_value_list(tuple_var, func_ir):
+    """
+    Takes a tuple variable, which should be created
+    via build_tuple and returns a list of values.
+
+    This is used for the case where the list must be a literal to
+    determine the variables, but the variables don't need to be constant.
+    """
+    # Influenced by numba.core.ir_utils.find_build_sequence
+    require(isinstance(tuple_var, ir.Var))
+    tuple_def = get_definition(func_ir, tuple_var)
+    require(isinstance(tuple_def, ir.Expr))
+    require(tuple_def.op == "build_tuple")
+    return tuple_def.items
+
+
 def _get_const_keys_from_dict(args, func_ir, build_map, err_msg, loc):
     # check keys to be string/int
     try:
@@ -1915,7 +2099,8 @@ def _convert_const_key_dict(
     """converts a constant key dictionary build_map into either a tuple with sentinel, or two tuples
     of keys/values as a workaround to extract key/values in overloads
     """
-
+    # TODO[BSE-4021]: Check if the build map is updated in the IR as this may change the constant
+    # value.
     keys = _get_const_keys_from_dict(args, func_ir, build_map, err_msg, loc)
 
     new_nodes = []
@@ -1947,3 +2132,90 @@ def _convert_const_key_dict(
         )
 
         return (val_tup_var, idx_tup_var), new_nodes
+
+
+def get_runtime_join_filter_terms(
+    func_ir: ir.FunctionIR, _bodo_runtime_join_filters_arg: ir.Expr | None
+) -> list[tuple[ir.Var, tuple[int], tuple[int, int, str]]] | None:
+    """
+    Takes a function IR and an expression for the runtime join filters argument to the function.
+    Extracts the join state variables and column indices from the runtime join filters argument so
+    we can access them at compile time to generate code to apply the runtime join filters.
+    """
+    if _bodo_runtime_join_filters_arg is None:
+        # If the tuple is absent, then no runtime
+        # join filters were provided so we can skip the codepath.
+        rtjf_terms = None
+    else:
+        _bodo_runtime_join_filters_defn = numba.core.ir_utils.get_definition(
+            func_ir,
+            _bodo_runtime_join_filters_arg,
+        )
+        if (
+            isinstance(_bodo_runtime_join_filters_defn, ir.Const)
+            and _bodo_runtime_join_filters_defn.value is None
+        ):
+            # If the tuple is explicitly set to None, then no runtime
+            # join filters were provided so we can skip the codepath.
+            rtjf_terms = None
+        else:
+            # Otherwise, we create a list of (state_var, indices)
+            # tuples from the raw arguments and store in the SqlReader
+            rtjf_terms = []
+            for rtjf_tuple in _bodo_runtime_join_filters_defn.items:
+                tup_defn = numba.core.ir_utils.get_definition(func_ir, rtjf_tuple)
+                # Verify that the tuple is well formed
+                if len(tup_defn.items) != 3:
+                    raise_bodo_error(
+                        f"Invalid runtime join filter tuple. Expected 2 elements per tuple, instead had {len(tup_defn.items)}"
+                    )
+                # Extract the state variable
+                state_var = tup_defn.items[0]
+                if not isinstance(state_var, ir.Var):
+                    raise_bodo_error(
+                        f"Invalid runtime join filter tuple. Expected the first argument to be a Var, instead got {state_var}."
+                    )
+                # Extract the column indices
+                col_indices_meta = numba.core.ir_utils.get_definition(
+                    func_ir, tup_defn.items[1]
+                )
+                if not isinstance(col_indices_meta, ir.Global) or not isinstance(
+                    col_indices_meta.value, bodo.utils.typing.MetaType
+                ):
+                    raise_bodo_error(
+                        f"Invalid runtime join filter tuple. Expected the second argument to be a global MetaType tuple, instead got {col_indices_meta}."
+                    )
+                col_indices_tup = col_indices_meta.value.meta
+                non_equality_meta = numba.core.ir_utils.get_definition(
+                    func_ir, tup_defn.items[2]
+                )
+                if not isinstance(non_equality_meta, ir.Global) or not isinstance(
+                    non_equality_meta.value, bodo.utils.typing.MetaType
+                ):
+                    raise_bodo_error(
+                        f"Invalid runtime join filter tuple. Expected the second argument to be a global MetaType tuple, instead got {non_equality_meta}."
+                    )
+                non_equality_tup = non_equality_meta.value.meta
+                rtjf_terms.append((state_var, col_indices_tup, non_equality_tup))
+    return rtjf_terms
+
+
+def create_nested_run_pass_event(pass_name: str, state, pass_obj):
+    """
+    Creates a nested call to "run_pass" from inside another Bodo compiler
+    pass.
+
+    Args:
+        pass_name (str): The name of the pass for logging purposes.
+        state (StateDict): The state object that contains the IR and type information and is used for invoking
+        "run_pass" on the given state.
+        pass_obj (_type_): Any compiler pass object that can invoke "run_pass" on the given
+        state.
+    """
+    # Code is translated from Numba:
+    # https://github.com/numba/numba/blob/53e976f1b0c6683933fa0a93738362914bffc1cd/numba/core/compiler_machinery.py#L307
+    # Note we removed most of the event details because they are unused and some of our calls may not have all of
+    # of the necessary information.
+    ev_details = {"name": f"{pass_name} [...]"}
+    with event.trigger_event("numba:run_pass", data=ev_details):
+        pass_obj.run_pass(state)

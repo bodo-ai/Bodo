@@ -1,14 +1,13 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
-
 """
-    Tests the logging done with the verbose JIT flag.
-    This set of tests is focused on log input, NOT
-    the correctness of the JIT code, which is presumed
-    to be tested elsewhere.
+Tests the logging done with the verbose JIT flag.
+This set of tests is focused on log input, NOT
+the correctness of the JIT code, which is presumed
+to be tested elsewhere.
 
-    All logs are written solely on rank 0, and tests are
-    written accordingly.
+All logs are written solely on rank 0, and tests are
+written accordingly.
 """
+
 import io
 import os
 
@@ -20,7 +19,12 @@ from bodo.tests.user_logging_utils import (
     create_string_io_logger,
     set_logging_stream,
 )
-from bodo.tests.utils import sql_user_pass_and_hostname
+from bodo.tests.utils import (
+    check_func,
+    get_snowflake_connection_string,
+    pytest_mark_snowflake,
+    sql_user_pass_and_hostname,
+)
 
 
 def test_json_column_pruning(datapath, memory_leak_check):
@@ -244,3 +248,34 @@ def test_pq_dict_arrays(memory_leak_check):
     finally:
         if bodo.get_rank() == 0:
             os.remove(fname)
+
+
+@pytest_mark_snowflake
+def test_read_schema_timeout(memory_leak_check):
+    """Tests that reading Number types from Snowflake
+    with a small timeout produces a logging message.
+    """
+    import bodo.io.snowflake
+
+    def test_impl(conn):
+        # We use SYSTEM$WAIT to pause execution for 2s, giving time for the
+        # timeout to kick in and cancel the query
+        return pd.read_sql(
+            "Select SYSTEM$WAIT(2) as x, L_TAX FROM LINEITEM ORDER BY L_TAX LIMIT 10",
+            conn,
+        )
+
+    db = "SNOWFLAKE_SAMPLE_DATA"
+    schema = "TPCH_SF1"
+    conn = get_snowflake_connection_string(db, schema)
+    try:
+        old_schema_probe_timeout = bodo.io.snowflake.SF_READ_SCHEMA_PROBE_TIMEOUT
+        # Set a small timeout so we are stuck with Decimal types
+        bodo.io.snowflake.SF_READ_SCHEMA_PROBE_TIMEOUT = 0.01
+        stream = io.StringIO()
+        logger = create_string_io_logger(stream)
+        with set_logging_stream(logger, 2):
+            check_func(test_impl, (conn,), check_dtype=False)
+            check_logger_msg(stream, "schema probing query for Number types")
+    finally:
+        bodo.io.snowflake.SF_READ_SCHEMA_PROBE_TIMEOUT = old_schema_probe_timeout

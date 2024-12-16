@@ -1,7 +1,7 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
 Implementation of Series attributes and methods using overload.
 """
+
 import operator
 
 import numba
@@ -18,10 +18,16 @@ from numba.extending import (
 )
 
 import bodo
-from bodo.hiframes.datetime_datetime_ext import datetime_datetime_type
+from bodo.hiframes.datetime_date_ext import DatetimeDateArrayType
+from bodo.hiframes.datetime_datetime_ext import (
+    datetime_datetime_type,
+)
 from bodo.hiframes.datetime_timedelta_ext import (
     PDTimeDeltaType,
     datetime_timedelta_type,
+)
+from bodo.hiframes.generic_pandas_coverage import (
+    generate_simple_series_impl,
 )
 from bodo.hiframes.pd_categorical_ext import (
     CategoricalArrayType,
@@ -36,18 +42,29 @@ from bodo.hiframes.pd_series_ext import (
 )
 from bodo.hiframes.pd_timestamp_ext import (
     PandasTimestampType,
-    pd_timestamp_type,
+    convert_val_to_timestamp,
+    pd_timestamp_tz_naive_type,
 )
 from bodo.hiframes.rolling import is_supported_shift_array_type
+from bodo.ir.argument_checkers import (
+    NumericScalarArgumentChecker,
+    NumericSeriesArgumentChecker,
+    NumericSeriesBinOpChecker,
+    OptionalArgumentChecker,
+    OverloadArgumentsChecker,
+)
+from bodo.ir.declarative_templates import overload_method_declarative
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.libs.binary_arr_ext import (
     BinaryArrayType,
     binary_array_type,
     bytes_type,
 )
-from bodo.libs.bool_arr_ext import BooleanArrayType, boolean_array
+from bodo.libs.bool_arr_ext import BooleanArrayType, boolean_array_type
 from bodo.libs.decimal_arr_ext import Decimal128Type, DecimalArrayType
+from bodo.libs.float_arr_ext import FloatingArrayType
 from bodo.libs.int_arr_ext import IntegerArrayType
+from bodo.libs.pd_datetime_arr_ext import unwrap_tz_array
 from bodo.libs.str_arr_ext import StringArrayType
 from bodo.libs.str_ext import string_type
 from bodo.utils.transform import is_var_size_item_array_type
@@ -61,6 +78,7 @@ from bodo.utils.typing import (
     get_common_scalar_dtype,
     get_index_names,
     get_literal_value,
+    get_overload_const_bool,
     get_overload_const_bytes,
     get_overload_const_int,
     get_overload_const_str,
@@ -114,8 +132,6 @@ def overload_series_dtype(s):
     if s.dtype == bodo.string_type:
         raise BodoError("Series.dtype not supported for string Series yet")
 
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(s, "Series.dtype")
-
     return lambda s: bodo.hiframes.pd_series_ext.get_series_data(
         s
     ).dtype  # pragma: no cover
@@ -164,7 +180,6 @@ def overload_series_empty(s):
 
 @overload_attribute(SeriesType, "dtypes", inline="always")
 def overload_series_dtypes(s):
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(s, "Series.dtypes")
     return lambda s: s.dtype  # pragma: no cover
 
 
@@ -220,13 +235,11 @@ def overload_series_copy(S, deep=True):
 @overload_method(SeriesType, "to_list", no_unliteral=True)
 @overload_method(SeriesType, "tolist", no_unliteral=True)
 def overload_series_to_list(S):
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(S, "Series.tolist()")
-
     # TODO: test all Series data types
     if isinstance(S.dtype, types.Float):
 
         def impl_float(S):  # pragma: no cover
-            l = list()
+            l = []
             for i in range(len(S)):
                 l.append(S.iat[i])
             return l
@@ -234,7 +247,7 @@ def overload_series_to_list(S):
         return impl_float
 
     def impl(S):  # pragma: no cover
-        l = list()
+        l = []
         for i in range(len(S)):
             if bodo.libs.array_kernels.isna(S.values, i):
                 # TODO: [BE-498] Correctly convert nan
@@ -250,9 +263,8 @@ def overload_series_to_list(S):
 
 @overload_method(SeriesType, "to_numpy", inline="always", no_unliteral=True)
 def overload_series_to_numpy(S, dtype=None, copy=False, na_value=None):
-
-    unsupported_args = dict(dtype=dtype, copy=copy, na_value=na_value)
-    arg_defaults = dict(dtype=None, copy=False, na_value=None)
+    unsupported_args = {"dtype": dtype, "copy": copy, "na_value": na_value}
+    arg_defaults = {"dtype": None, "copy": False, "na_value": None}
     check_unsupported_args(
         "Series.to_numpy",
         unsupported_args,
@@ -274,8 +286,8 @@ def overload_series_reset_index(S, level=None, drop=False, name=None, inplace=Fa
     work in very specific cases where these are known at compile time
     (e.g. groupby("A")["B"].sum().reset_index())"""
 
-    unsupported_args = dict(name=name, inplace=inplace)
-    arg_defaults = dict(name=None, inplace=False)
+    unsupported_args = {"name": name, "inplace": inplace}
+    arg_defaults = {"name": None, "inplace": False}
     check_unsupported_args(
         "Series.reset_index",
         unsupported_args,
@@ -327,15 +339,13 @@ def overload_series_reset_index(S, level=None, drop=False, name=None, inplace=Fa
     # TODO: [BE-100] Support name argument with a constant string.
     series_name = get_name_literal(S.name_typ)
     if isinstance(S.index, bodo.hiframes.pd_multi_index_ext.MultiIndexType):
-        ind_arrs = ", ".join(
-            ["index_arrs[{}]".format(i) for i in range(S.index.nlevels)]
-        )
+        ind_arrs = ", ".join([f"index_arrs[{i}]" for i in range(S.index.nlevels)])
     else:
         ind_arrs = "    bodo.utils.conversion.index_to_array(index)\n"
 
     default_name = "index" if "index" != series_name else "level_0"
     index_names = get_index_names(S.index, "Series.reset_index()", default_name)
-    columns = [name for name in index_names]
+    columns = list(index_names)
     columns.append(series_name)
 
     func_text = "def _impl(S, level=None, drop=False, name=None, inplace=False):\n"
@@ -381,9 +391,6 @@ def overload_series_isna(S):
 
 @overload_method(SeriesType, "round", inline="always", no_unliteral=True)
 def overload_series_round(S, decimals=0):
-    # TODO [BE-2453]: Better errorchecking in general?
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(S, "Series.round()")
-
     def impl(S, decimals=0):  # pragma: no cover
         arr = bodo.hiframes.pd_series_ext.get_series_data(S)
         index = bodo.hiframes.pd_series_ext.get_series_index(S)
@@ -407,9 +414,8 @@ def overload_series_round(S, decimals=0):
 def overload_series_sum(
     S, axis=None, skipna=True, level=None, numeric_only=None, min_count=0
 ):
-
-    unsupported_args = dict(level=level, numeric_only=numeric_only)
-    arg_defaults = dict(level=None, numeric_only=None)
+    unsupported_args = {"level": level, "numeric_only": numeric_only}
+    arg_defaults = {"level": None, "numeric_only": None}
     check_unsupported_args(
         "Series.sum",
         unsupported_args,
@@ -427,9 +433,6 @@ def overload_series_sum(
     if not is_overload_int(min_count):
         raise BodoError("Series.sum(): min_count argument must be an integer")
 
-    # TODO [BE-2453]: Better errorchecking in general?
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(S, "Series.sum()")
-
     def impl(
         S, axis=None, skipna=True, level=None, numeric_only=None, min_count=0
     ):  # pragma: no cover)
@@ -444,9 +447,8 @@ def overload_series_sum(
 def overload_series_prod(
     S, axis=None, skipna=True, level=None, numeric_only=None, min_count=0
 ):
-
-    unsupported_args = dict(level=level, numeric_only=numeric_only)
-    arg_defaults = dict(level=None, numeric_only=None)
+    unsupported_args = {"level": level, "numeric_only": numeric_only}
+    arg_defaults = {"level": None, "numeric_only": None}
     check_unsupported_args(
         "Series.product",
         unsupported_args,
@@ -461,9 +463,6 @@ def overload_series_prod(
     if not is_overload_bool(skipna):
         raise BodoError("Series.product(): skipna argument must be a boolean")
 
-    # TODO [BE-2453]: Better errorchecking in general?
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(S, "Series.product()")
-
     def impl(
         S, axis=None, skipna=True, level=None, numeric_only=None, min_count=0
     ):  # pragma: no cover
@@ -473,23 +472,20 @@ def overload_series_prod(
     return impl
 
 
-@overload_method(SeriesType, "any", inline="always", no_unliteral=True)
-def overload_series_any(S, axis=0, bool_only=None, skipna=True, level=None):
-
-    unsupported_args = dict(axis=axis, bool_only=bool_only, skipna=skipna, level=level)
-    arg_defaults = dict(axis=0, bool_only=None, skipna=True, level=None)
-    check_unsupported_args(
-        "Series.any",
-        unsupported_args,
-        arg_defaults,
-        package_name="pandas",
-        module_name="Series",
-    )
-
-    # TODO [BE-2453]: Better errorchecking in general?
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(S, "Series.any()")
-
-    def impl(S, axis=0, bool_only=None, skipna=True, level=None):  # pragma: no cover
+@overload_method_declarative(
+    SeriesType,
+    "any",
+    path="pd.Series.any",
+    unsupported_args={"axis", "bool_only", "skipna"},
+    description="""!!! note
+    Bodo does not accept any additional arguments for Numpy
+    compatibility""",
+    changed_defaults={"bool_only"},
+    inline="always",
+    no_unliteral=True,
+)
+def overload_series_any(S, axis=0, bool_only=None, skipna=True):
+    def impl(S, axis=0, bool_only=None, skipna=True):  # pragma: no cover
         A = bodo.hiframes.pd_series_ext.get_series_data(S)
         return bodo.libs.array_ops.array_op_any(A)
 
@@ -508,9 +504,6 @@ def overload_series_equals(S, other):
         raise BodoError(
             "Series.equals() not supported for Series where each element is an array or list"
         )
-
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(S, "Series.equals()")
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(other, "Series.equals()")
 
     # https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.Series.equals.html#pandas.Series.equals
     # From the docs: "DataFrames df and different_data_type have different types for the same values for their
@@ -547,9 +540,13 @@ def overload_series_equals(S, other):
 
 @overload_method(SeriesType, "all", inline="always", no_unliteral=True)
 def overload_series_all(S, axis=0, bool_only=None, skipna=True, level=None):
-
-    unsupported_args = dict(axis=axis, bool_only=bool_only, skipna=skipna, level=level)
-    arg_defaults = dict(axis=0, bool_only=None, skipna=True, level=None)
+    unsupported_args = {
+        "axis": axis,
+        "bool_only": bool_only,
+        "skipna": skipna,
+        "level": level,
+    }
+    arg_defaults = {"axis": 0, "bool_only": None, "skipna": True, "level": None}
     check_unsupported_args(
         "Series.all",
         unsupported_args,
@@ -558,76 +555,9 @@ def overload_series_all(S, axis=0, bool_only=None, skipna=True, level=None):
         module_name="Series",
     )
 
-    # TODO [BE-2453]: Better errorchecking in general?
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(S, "Series.all()")
-
     def impl(S, axis=0, bool_only=None, skipna=True, level=None):  # pragma: no cover
         A = bodo.hiframes.pd_series_ext.get_series_data(S)
         return bodo.libs.array_ops.array_op_all(A)
-
-    return impl
-
-
-@overload_method(SeriesType, "mad", inline="always", no_unliteral=True)
-def overload_series_mad(S, axis=None, skipna=True, level=None):
-
-    unsupported_args = dict(level=level)
-    arg_defaults = dict(level=None)
-    check_unsupported_args(
-        "Series.mad",
-        unsupported_args,
-        arg_defaults,
-        package_name="pandas",
-        module_name="Series",
-    )
-
-    if not is_overload_bool(skipna):
-        raise BodoError("Series.mad(): 'skipna' argument must be a boolean")
-
-    if not (is_overload_none(axis) or is_overload_zero(axis)):  # pragma: no cover
-        raise_bodo_error("Series.mad(): axis argument not supported")
-
-    # see core/nanops.py/nanmean() for output types
-    # TODO: more accurate port of dtypes from pandas
-    sum_dtype = types.float64
-    count_dtype = types.float64
-    if S.dtype == types.float32:
-        sum_dtype = types.float32
-        count_dtype = types.float32
-
-    val_0 = sum_dtype(0)
-    count_0 = count_dtype(0)
-    count_1 = count_dtype(1)
-
-    # TODO [BE-2453]: Better errorchecking in general?
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(S, "Series.mad()")
-
-    def impl(S, axis=None, skipna=True, level=None):  # pragma: no cover
-        A = bodo.hiframes.pd_series_ext.get_series_data(S)
-        numba.parfors.parfor.init_prange()
-        # First computing the mean
-        s_mean = val_0
-        count = count_0
-        for i in numba.parfors.parfor.internal_prange(len(A)):
-            val = val_0
-            count_val = count_0
-            if not bodo.libs.array_kernels.isna(A, i) or not skipna:
-                val = A[i]
-                count_val = count_1
-            s_mean += val
-            count += count_val
-
-        res_mean = bodo.hiframes.series_kernels._mean_handle_nan(s_mean, count)
-        # Second computing the mad
-        s_mad = val_0
-        for i in numba.parfors.parfor.internal_prange(len(A)):
-            val = val_0
-            if not bodo.libs.array_kernels.isna(A, i) or not skipna:
-                val = abs(A[i] - res_mean)
-            s_mad += val
-
-        res_mad = bodo.hiframes.series_kernels._mean_handle_nan(s_mad, count)
-        return res_mad
 
     return impl
 
@@ -640,8 +570,8 @@ def overload_series_mean(S, axis=None, skipna=None, level=None, numeric_only=Non
         types.bool_,
     ]:
         raise BodoError(f"Series.mean(): Series with type '{S}' not supported")
-    unsupported_args = dict(skipna=skipna, level=level, numeric_only=numeric_only)
-    arg_defaults = dict(skipna=None, level=None, numeric_only=None)
+    unsupported_args = {"skipna": skipna, "level": level, "numeric_only": numeric_only}
+    arg_defaults = {"skipna": None, "level": None, "numeric_only": None}
     check_unsupported_args(
         "Series.mean",
         unsupported_args,
@@ -652,9 +582,6 @@ def overload_series_mean(S, axis=None, skipna=None, level=None, numeric_only=Non
 
     if not (is_overload_none(axis) or is_overload_zero(axis)):  # pragma: no cover
         raise_bodo_error("Series.mean(): axis argument not supported")
-
-    # TODO [BE-2453]: Better errorchecking in general?
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(S, "Series.mean()")
 
     def impl(
         S, axis=None, skipna=None, level=None, numeric_only=None
@@ -669,9 +596,8 @@ def overload_series_mean(S, axis=None, skipna=None, level=None, numeric_only=Non
 def overload_series_sem(
     S, axis=None, skipna=True, level=None, ddof=1, numeric_only=None
 ):
-
-    unsupported_args = dict(level=level, numeric_only=numeric_only)
-    arg_defaults = dict(level=None, numeric_only=None)
+    unsupported_args = {"level": level, "numeric_only": numeric_only}
+    arg_defaults = {"level": None, "numeric_only": None}
     check_unsupported_args(
         "Series.sem",
         unsupported_args,
@@ -688,9 +614,6 @@ def overload_series_sem(
 
     if not is_overload_int(ddof):
         raise BodoError("Series.sem(): ddof argument must be an integer")
-
-    # TODO [BE-2453]: Better errorchecking in general?
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(S, "Series.sem()")
 
     def impl(
         S, axis=None, skipna=True, level=None, ddof=1, numeric_only=None
@@ -725,9 +648,8 @@ def overload_series_sem(
 @overload_method(SeriesType, "kurt", inline="always", no_unliteral=True)
 @overload_method(SeriesType, "kurtosis", inline="always", no_unliteral=True)
 def overload_series_kurt(S, axis=None, skipna=True, level=None, numeric_only=None):
-
-    unsupported_args = dict(level=level, numeric_only=numeric_only)
-    arg_defaults = dict(level=None, numeric_only=None)
+    unsupported_args = {"level": level, "numeric_only": numeric_only}
+    arg_defaults = {"level": None, "numeric_only": None}
     check_unsupported_args(
         "Series.kurtosis",
         unsupported_args,
@@ -741,9 +663,6 @@ def overload_series_kurt(S, axis=None, skipna=True, level=None, numeric_only=Non
 
     if not is_overload_bool(skipna):
         raise BodoError("Series.kurtosis(): 'skipna' argument must be a boolean")
-
-    # TODO [BE-2453]: Better errorchecking in general?
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(S, "Series.kurtosis()")
 
     def impl(
         S, axis=None, skipna=True, level=None, numeric_only=None
@@ -779,9 +698,8 @@ def overload_series_kurt(S, axis=None, skipna=True, level=None, numeric_only=Non
 # Precise formula taken from ./pandas/core/nanops.py [nanskew]
 @overload_method(SeriesType, "skew", inline="always", no_unliteral=True)
 def overload_series_skew(S, axis=None, skipna=True, level=None, numeric_only=None):
-
-    unsupported_args = dict(level=level, numeric_only=numeric_only)
-    arg_defaults = dict(level=None, numeric_only=None)
+    unsupported_args = {"level": level, "numeric_only": numeric_only}
+    arg_defaults = {"level": None, "numeric_only": None}
     check_unsupported_args(
         "Series.skew",
         unsupported_args,
@@ -795,9 +713,6 @@ def overload_series_skew(S, axis=None, skipna=True, level=None, numeric_only=Non
 
     if not is_overload_bool(skipna):
         raise BodoError("Series.skew(): skipna argument must be a boolean")
-
-    # TODO [BE-2453]: Better errorchecking in general?
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(S, "Series.skew()")
 
     def impl(
         S, axis=None, skipna=True, level=None, numeric_only=None
@@ -830,9 +745,8 @@ def overload_series_skew(S, axis=None, skipna=True, level=None, numeric_only=Non
 def overload_series_var(
     S, axis=None, skipna=True, level=None, ddof=1, numeric_only=None
 ):
-
-    unsupported_args = dict(level=level, numeric_only=numeric_only)
-    arg_defaults = dict(level=None, numeric_only=None)
+    unsupported_args = {"level": level, "numeric_only": numeric_only}
+    arg_defaults = {"level": None, "numeric_only": None}
     check_unsupported_args(
         "Series.var",
         unsupported_args,
@@ -850,9 +764,6 @@ def overload_series_var(
     if not is_overload_int(ddof):
         raise BodoError("Series.var(): ddof argument must be an integer")
 
-    # TODO [BE-2453]: Better errorchecking in general?
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(S, "Series.var()")
-
     def impl(
         S, axis=None, skipna=True, level=None, ddof=1, numeric_only=None
     ):  # pragma: no cover
@@ -866,9 +777,8 @@ def overload_series_var(
 def overload_series_std(
     S, axis=None, skipna=True, level=None, ddof=1, numeric_only=None
 ):
-
-    unsupported_args = dict(level=level, numeric_only=numeric_only)
-    arg_defaults = dict(level=None, numeric_only=None)
+    unsupported_args = {"level": level, "numeric_only": numeric_only}
+    arg_defaults = {"level": None, "numeric_only": None}
     check_unsupported_args(
         "Series.std",
         unsupported_args,
@@ -886,9 +796,6 @@ def overload_series_std(
     if not is_overload_int(ddof):
         raise BodoError("Series.std(): ddof argument must be an integer")
 
-    # TODO [BE-2453]: Better errorchecking in general?
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(S, "Series.std()")
-
     def impl(
         S, axis=None, skipna=True, level=None, ddof=1, numeric_only=None
     ):  # pragma: no cover
@@ -900,11 +807,6 @@ def overload_series_std(
 
 @overload_method(SeriesType, "dot", inline="always", no_unliteral=True)
 def overload_series_dot(S, other):
-
-    # TODO [BE-2453]: Better errorchecking in general?
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(S, "Series.dot()")
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(other, "Series.dot()")
-
     def impl(S, other):  # pragma: no cover
         A1 = bodo.hiframes.pd_series_ext.get_series_data(S)
         A2 = bodo.hiframes.pd_series_ext.get_series_data(other)
@@ -922,9 +824,8 @@ def overload_series_dot(S, other):
 
 @overload_method(SeriesType, "cumsum", inline="always", no_unliteral=True)
 def overload_series_cumsum(S, axis=None, skipna=True):
-
-    unsupported_args = dict(skipna=skipna)
-    arg_defaults = dict(skipna=True)
+    unsupported_args = {"skipna": skipna}
+    arg_defaults = {"skipna": True}
     check_unsupported_args(
         "Series.cumsum",
         unsupported_args,
@@ -936,24 +837,22 @@ def overload_series_cumsum(S, axis=None, skipna=True):
     if not (is_overload_none(axis) or is_overload_zero(axis)):  # pragma: no cover
         raise_bodo_error("Series.cumsum(): axis argument not supported")
 
-    # TODO [BE-2453]: Better errorchecking in general?
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(S, "Series.cumsum()")
-
     # TODO: support skipna
     def impl(S, axis=None, skipna=True):  # pragma: no cover
         A = bodo.hiframes.pd_series_ext.get_series_data(S)
         index = bodo.hiframes.pd_series_ext.get_series_index(S)
         name = bodo.hiframes.pd_series_ext.get_series_name(S)
-        return bodo.hiframes.pd_series_ext.init_series(A.cumsum(), index, name)
+        return bodo.hiframes.pd_series_ext.init_series(
+            bodo.libs.array_kernels.accum_func(A, "cumsum"), index, name
+        )
 
     return impl
 
 
 @overload_method(SeriesType, "cumprod", inline="always", no_unliteral=True)
 def overload_series_cumprod(S, axis=None, skipna=True):
-
-    unsupported_args = dict(skipna=skipna)
-    arg_defaults = dict(skipna=True)
+    unsupported_args = {"skipna": skipna}
+    arg_defaults = {"skipna": True}
     check_unsupported_args(
         "Series.cumprod",
         unsupported_args,
@@ -965,23 +864,22 @@ def overload_series_cumprod(S, axis=None, skipna=True):
     if not (is_overload_none(axis) or is_overload_zero(axis)):  # pragma: no cover
         raise_bodo_error("Series.cumprod(): axis argument not supported")
 
-    # TODO [BE-2453]: Better errorchecking in general?
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(S, "Series.cumprod()")
-
     # TODO: support skipna
     def impl(S, axis=None, skipna=True):  # pragma: no cover
         A = bodo.hiframes.pd_series_ext.get_series_data(S)
         index = bodo.hiframes.pd_series_ext.get_series_index(S)
         name = bodo.hiframes.pd_series_ext.get_series_name(S)
-        return bodo.hiframes.pd_series_ext.init_series(A.cumprod(), index, name)
+        return bodo.hiframes.pd_series_ext.init_series(
+            bodo.libs.array_kernels.accum_func(A, "cumprod"), index, name
+        )
 
     return impl
 
 
 @overload_method(SeriesType, "cummin", inline="always", no_unliteral=True)
 def overload_series_cummin(S, axis=None, skipna=True):
-    unsupported_args = dict(skipna=skipna)
-    arg_defaults = dict(skipna=True)
+    unsupported_args = {"skipna": skipna}
+    arg_defaults = {"skipna": True}
     check_unsupported_args(
         "Series.cummin",
         unsupported_args,
@@ -993,23 +891,13 @@ def overload_series_cummin(S, axis=None, skipna=True):
     if not (is_overload_none(axis) or is_overload_zero(axis)):  # pragma: no cover
         raise_bodo_error("Series.cummin(): axis argument not supported")
 
-    # TODO [BE-2453]: Better errorchecking in general?
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(S, "Series.cummin()")
-
     # TODO: support skipna
-    #
-    # The big difference between cumsum/cumprod and cummin/cummax
-    # is that cumsum/cumprod are part of numpy and implemented in NUMBA,
-    # but cummin/cummax are not implemented in numpy and therefore not in numba.
-    # Thus for cummin/cummax we need to roll out our own implementation.
-    # We cannot use parfor as it is not easily parallelizable and thus requires a
-    # hand crafted parallelization (see dist_cummin/dist_cummax)
     def impl(S, axis=None, skipna=True):  # pragma: no cover
         arr = bodo.hiframes.pd_series_ext.get_series_data(S)
         index = bodo.hiframes.pd_series_ext.get_series_index(S)
         name = bodo.hiframes.pd_series_ext.get_series_name(S)
         return bodo.hiframes.pd_series_ext.init_series(
-            bodo.libs.array_kernels.cummin(arr), index, name
+            bodo.libs.array_kernels.accum_func(arr, "cummin"), index, name
         )
 
     return impl
@@ -1017,9 +905,8 @@ def overload_series_cummin(S, axis=None, skipna=True):
 
 @overload_method(SeriesType, "cummax", inline="always", no_unliteral=True)
 def overload_series_cummax(S, axis=None, skipna=True):
-
-    unsupported_args = dict(skipna=skipna)
-    arg_defaults = dict(skipna=True)
+    unsupported_args = {"skipna": skipna}
+    arg_defaults = {"skipna": True}
     check_unsupported_args(
         "Series.cummax",
         unsupported_args,
@@ -1031,9 +918,6 @@ def overload_series_cummax(S, axis=None, skipna=True):
     if not (is_overload_none(axis) or is_overload_zero(axis)):  # pragma: no cover
         raise_bodo_error("Series.cummax(): axis argument not supported")
 
-    # TODO [BE-2453]: Better errorchecking in general?
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(S, "Series.cummax()")
-
     # Remarks for cummin applies here.
     # TODO: support skipna
     def impl(S, axis=None, skipna=True):  # pragma: no cover
@@ -1041,7 +925,7 @@ def overload_series_cummax(S, axis=None, skipna=True):
         index = bodo.hiframes.pd_series_ext.get_series_index(S)
         name = bodo.hiframes.pd_series_ext.get_series_name(S)
         return bodo.hiframes.pd_series_ext.init_series(
-            bodo.libs.array_kernels.cummax(arr), index, name
+            bodo.libs.array_kernels.accum_func(arr, "cummax"), index, name
         )
 
     return impl
@@ -1057,8 +941,13 @@ def overload_series_rename(
     if not (index == bodo.string_type or isinstance(index, types.StringLiteral)):
         raise BodoError("Series.rename() 'index' can only be a string")
 
-    unsupported_args = dict(copy=copy, inplace=inplace, level=level, errors=errors)
-    arg_defaults = dict(copy=True, inplace=False, level=None, errors="ignore")
+    unsupported_args = {
+        "copy": copy,
+        "inplace": inplace,
+        "level": level,
+        "errors": errors,
+    }
+    arg_defaults = {"copy": True, "inplace": False, "level": None, "errors": "ignore"}
     check_unsupported_args(
         "Series.rename",
         unsupported_args,
@@ -1086,10 +975,20 @@ def overload_series_rename(
 def overload_series_rename_axis(
     S, mapper=None, index=None, columns=None, axis=None, copy=True, inplace=False
 ):
-    unsupported_args = dict(
-        index=index, columns=columns, axis=axis, copy=copy, inplace=inplace
-    )
-    arg_defaults = dict(index=None, columns=None, axis=None, copy=True, inplace=False)
+    unsupported_args = {
+        "index": index,
+        "columns": columns,
+        "axis": axis,
+        "copy": copy,
+        "inplace": inplace,
+    }
+    arg_defaults = {
+        "index": None,
+        "columns": None,
+        "axis": None,
+        "copy": True,
+        "inplace": False,
+    }
     check_unsupported_args(
         "Series.rename_axis",
         unsupported_args,
@@ -1117,25 +1016,30 @@ def overload_series_rename_axis(
 
 @overload_method(SeriesType, "abs", inline="always", no_unliteral=True)
 def overload_series_abs(S):
-
-    # TODO [BE-2453]: Better errorchecking in general?
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(S, "Series.abs()")
+    out_arr_type = S.data
 
     # TODO: timedelta
     def impl(S):  # pragma: no cover
         A = bodo.hiframes.pd_series_ext.get_series_data(S)
         index = bodo.hiframes.pd_series_ext.get_series_index(S)
         name = bodo.hiframes.pd_series_ext.get_series_name(S)
-        return bodo.hiframes.pd_series_ext.init_series(np.abs(A), index, name)
+        numba.parfors.parfor.init_prange()
+        n = len(A)
+        out_arr = bodo.utils.utils.alloc_type(n, out_arr_type, (-1,))
+        for i in numba.parfors.parfor.internal_prange(n):
+            if bodo.libs.array_kernels.isna(A, i):
+                bodo.libs.array_kernels.setna(out_arr, i)
+                continue
+            out_arr[i] = np.abs(A[i])
+        return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
     return impl
 
 
 @overload_method(SeriesType, "count", no_unliteral=True)
 def overload_series_count(S, level=None):
-
-    unsupported_args = dict(level=level)
-    arg_defaults = dict(level=None)
+    unsupported_args = {"level": level}
+    arg_defaults = {"level": None}
     check_unsupported_args(
         "Series.count",
         unsupported_args,
@@ -1153,9 +1057,8 @@ def overload_series_count(S, level=None):
 
 @overload_method(SeriesType, "corr", inline="always", no_unliteral=True)
 def overload_series_corr(S, other, method="pearson", min_periods=None):
-
-    unsupported_args = dict(method=method, min_periods=min_periods)
-    arg_defaults = dict(method="pearson", min_periods=None)
+    unsupported_args = {"method": method, "min_periods": min_periods}
+    arg_defaults = {"method": "pearson", "min_periods": None}
     check_unsupported_args(
         "Series.corr",
         unsupported_args,
@@ -1163,10 +1066,6 @@ def overload_series_corr(S, other, method="pearson", min_periods=None):
         package_name="pandas",
         module_name="Series",
     )
-
-    # TODO [BE-2453]: Better errorchecking in general?
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(S, "Series.corr()")
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(other, "Series.corr()")
 
     def impl(S, other, method="pearson", min_periods=None):  # pragma: no cover
         n = S.count()
@@ -1186,9 +1085,8 @@ def overload_series_corr(S, other, method="pearson", min_periods=None):
 
 @overload_method(SeriesType, "cov", inline="always", no_unliteral=True)
 def overload_series_cov(S, other, min_periods=None, ddof=1):
-
-    unsupported_args = dict(min_periods=min_periods)
-    arg_defaults = dict(min_periods=None)
+    unsupported_args = {"min_periods": min_periods}
+    arg_defaults = {"min_periods": None}
     check_unsupported_args(
         "Series.cov",
         unsupported_args,
@@ -1196,10 +1094,6 @@ def overload_series_cov(S, other, min_periods=None, ddof=1):
         package_name="pandas",
         module_name="Series",
     )
-
-    # TODO [BE-2453]: Better errorchecking in general?
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(S, "Series.cov()")
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(other, "Series.cov()")
 
     # TODO: use online algorithm, e.g. StatFunctions.scala
     # https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance
@@ -1240,9 +1134,8 @@ def _overload_series_cov_helper(sum_val, N, nonzero_len):
 
 @overload_method(SeriesType, "min", inline="always", no_unliteral=True)
 def overload_series_min(S, axis=None, skipna=None, level=None, numeric_only=None):
-
-    unsupported_args = dict(skipna=skipna, level=level, numeric_only=numeric_only)
-    arg_defaults = dict(skipna=None, level=None, numeric_only=None)
+    unsupported_args = {"skipna": skipna, "level": level, "numeric_only": numeric_only}
+    arg_defaults = {"skipna": None, "level": None, "numeric_only": None}
     check_unsupported_args(
         "Series.min",
         unsupported_args,
@@ -1259,7 +1152,18 @@ def overload_series_min(S, axis=None, skipna=None, level=None, numeric_only=None
             raise BodoError("Series.min(): only ordered categoricals are possible")
 
     # TODO [BE-2453]: Better errorchecking in general?
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(S, "Series.min()")
+
+    if isinstance(S.dtype, bodo.libs.pd_datetime_arr_ext.PandasDatetimeTZDtype):
+        tz = S.dtype.tz
+
+        def impl(
+            S, axis=None, skipna=None, level=None, numeric_only=None
+        ):  # pragma: no cover
+            arr = unwrap_tz_array(bodo.hiframes.pd_series_ext.get_series_data(S))
+            min_val = bodo.libs.array_ops.array_op_min(arr)
+            return convert_val_to_timestamp(min_val.value, tz=tz)
+
+        return impl
 
     def impl(
         S, axis=None, skipna=None, level=None, numeric_only=None
@@ -1314,9 +1218,8 @@ def overload_series_np_prod(S):
 
 @overload_method(SeriesType, "max", inline="always", no_unliteral=True)
 def overload_series_max(S, axis=None, skipna=None, level=None, numeric_only=None):
-
-    unsupported_args = dict(skipna=skipna, level=level, numeric_only=numeric_only)
-    arg_defaults = dict(skipna=None, level=None, numeric_only=None)
+    unsupported_args = {"skipna": skipna, "level": level, "numeric_only": numeric_only}
+    arg_defaults = {"skipna": None, "level": None, "numeric_only": None}
     check_unsupported_args(
         "Series.max",
         unsupported_args,
@@ -1333,7 +1236,18 @@ def overload_series_max(S, axis=None, skipna=None, level=None, numeric_only=None
             raise BodoError("Series.max(): only ordered categoricals are possible")
 
     # TODO [BE-2453]: Better errorchecking in general?
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(S, "Series.max()")
+
+    if isinstance(S.dtype, bodo.libs.pd_datetime_arr_ext.PandasDatetimeTZDtype):
+        tz = S.dtype.tz
+
+        def impl(
+            S, axis=None, skipna=None, level=None, numeric_only=None
+        ):  # pragma: no cover
+            arr = unwrap_tz_array(bodo.hiframes.pd_series_ext.get_series_data(S))
+            max_val = bodo.libs.array_ops.array_op_max(arr)
+            return convert_val_to_timestamp(max_val.value, tz=tz)
+
+        return impl
 
     def impl(
         S, axis=None, skipna=None, level=None, numeric_only=None
@@ -1346,9 +1260,8 @@ def overload_series_max(S, axis=None, skipna=None, level=None, numeric_only=None
 
 @overload_method(SeriesType, "idxmin", inline="always", no_unliteral=True)
 def overload_series_idxmin(S, axis=0, skipna=True):
-
-    unsupported_args = dict(axis=axis, skipna=skipna)
-    arg_defaults = dict(axis=0, skipna=True)
+    unsupported_args = {"axis": axis, "skipna": skipna}
+    arg_defaults = {"axis": 0, "skipna": True}
     check_unsupported_args(
         "Series.idxmin",
         unsupported_args,
@@ -1356,10 +1269,6 @@ def overload_series_idxmin(S, axis=0, skipna=True):
         package_name="pandas",
         module_name="Series",
     )
-
-    # TODO [BE-2453]: Better errorchecking in general?
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(S, "Series.idxmin()")
-
     # TODO: Make sure we handle the issue with numpy library leading to argmin
     # https://github.com/pandas-dev/pandas/blob/7d32926db8f7541c356066dcadabf854487738de/pandas/compat/numpy/function.py#L91
 
@@ -1376,8 +1285,16 @@ def overload_series_idxmin(S, axis=0, skipna=True):
                 or isinstance(S.dtype, (types.Number, types.Boolean))
             )
         )
-        or isinstance(S.data, (bodo.IntegerArrayType, bodo.CategoricalArrayType))
-        or S.data in [bodo.boolean_array, bodo.datetime_date_array_type]
+        or isinstance(
+            S.data,
+            (
+                bodo.IntegerArrayType,
+                bodo.FloatingArrayType,
+                bodo.CategoricalArrayType,
+                bodo.DatetimeArrayType,
+            ),
+        )
+        or S.data in [bodo.boolean_array_type, bodo.datetime_date_array_type]
     ):
         raise BodoError(
             f"Series.idxmin() only supported for numeric array types. Array type: {S.data} not supported."
@@ -1396,9 +1313,8 @@ def overload_series_idxmin(S, axis=0, skipna=True):
 
 @overload_method(SeriesType, "idxmax", inline="always", no_unliteral=True)
 def overload_series_idxmax(S, axis=0, skipna=True):
-
-    unsupported_args = dict(axis=axis, skipna=skipna)
-    arg_defaults = dict(axis=0, skipna=True)
+    unsupported_args = {"axis": axis, "skipna": skipna}
+    arg_defaults = {"axis": 0, "skipna": True}
     check_unsupported_args(
         "Series.idxmax",
         unsupported_args,
@@ -1406,9 +1322,6 @@ def overload_series_idxmax(S, axis=0, skipna=True):
         package_name="pandas",
         module_name="Series",
     )
-
-    # TODO [BE-2453]: Better errorchecking in general?
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(S, "Series.idxmax()")
 
     # TODO: Make sure we handle the issue with numpy library leading to argmax
     # https://github.com/pandas-dev/pandas/blob/7d32926db8f7541c356066dcadabf854487738de/pandas/compat/numpy/function.py#L103
@@ -1426,8 +1339,16 @@ def overload_series_idxmax(S, axis=0, skipna=True):
                 or isinstance(S.dtype, (types.Number, types.Boolean))
             )
         )
-        or isinstance(S.data, (bodo.IntegerArrayType, bodo.CategoricalArrayType))
-        or S.data in [bodo.boolean_array, bodo.datetime_date_array_type]
+        or isinstance(
+            S.data,
+            (
+                bodo.IntegerArrayType,
+                bodo.FloatingArrayType,
+                bodo.CategoricalArrayType,
+                bodo.DatetimeArrayType,
+            ),
+        )
+        or S.data in [bodo.boolean_array_type, bodo.datetime_date_array_type]
     ):
         raise BodoError(
             f"Series.idxmax() only supported for numeric array types. Array type: {S.data} not supported."
@@ -1444,6 +1365,110 @@ def overload_series_idxmax(S, axis=0, skipna=True):
     return impl
 
 
+def check_argmax_min_args(func_name, S):
+    """Verifies that underlying data of S is compatible with argmin/argmax array kernels
+
+    Args:
+        func_name (str): The name of the function
+        S (SeriesType): The input Series
+
+    Raises:
+
+        BodoError: When argument is not numeric/categorical with order supported.
+    """
+    # TODO: Make sure we handle the issue with numpy library leading to argmax
+    # https://github.com/pandas-dev/pandas/blob/7d32926db8f7541c356066dcadabf854487738de/pandas/compat/numpy/function.py#L103
+
+    # Bodo restrictions:
+    # Only supported for numeric types with numpy arrays
+    # - int, floats, bool, dt64, td64. (maybe complex)
+    # We also support categorical and nullable arrays
+    if not (
+        S.dtype == types.none
+        or (
+            bodo.utils.utils.is_np_array_typ(S.data)
+            and (
+                S.dtype in [bodo.datetime64ns, bodo.timedelta64ns]
+                or isinstance(S.dtype, (types.Number, types.Boolean))
+            )
+        )
+        or isinstance(
+            S.data,
+            (
+                bodo.IntegerArrayType,
+                bodo.FloatingArrayType,
+                bodo.CategoricalArrayType,
+                bodo.DecimalArrayType,
+                bodo.DatetimeArrayType,
+            ),
+        )
+        or S.data in [bodo.boolean_array_type, bodo.datetime_date_array_type]
+    ):
+        raise BodoError(
+            f"Series.{func_name}() only supported for numeric array types. Array type: {S.data} not supported."
+        )
+    if isinstance(S.data, bodo.CategoricalArrayType) and not S.dtype.ordered:
+        raise BodoError(f"Series.{func_name}(): only ordered categoricals are possible")
+
+
+@overload_method(SeriesType, "argmin", inline="always", no_unliteral=True)
+def overload_series_argmin(S, axis=None, skipna=True):
+    unsupported_args = {"axis": axis, "skipna": skipna}
+    arg_defaults = {"axis": None, "skipna": True}
+    check_unsupported_args(
+        "Series.argmin",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="Series",
+    )
+
+    check_argmax_min_args("argmin", S)
+
+    if isinstance(S.dtype, bodo.libs.pd_datetime_arr_ext.PandasDatetimeTZDtype):
+
+        def impl(S, axis=None, skipna=True):  # pragma: no cover
+            arr = unwrap_tz_array(bodo.hiframes.pd_series_ext.get_series_data(S))
+            return bodo.libs.array_kernels._nan_argmin(arr)
+
+        return impl
+
+    def impl(S, axis=None, skipna=True):  # pragma: no cover
+        arr = bodo.hiframes.pd_series_ext.get_series_data(S)
+        return bodo.libs.array_kernels._nan_argmin(arr)
+
+    return impl
+
+
+@overload_method(SeriesType, "argmax", inline="always", no_unliteral=True)
+def overload_series_argmax(S, axis=None, skipna=True):
+    unsupported_args = {"axis": axis, "skipna": skipna}
+    arg_defaults = {"axis": None, "skipna": True}
+    check_unsupported_args(
+        "Series.argmax",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="Series",
+    )
+
+    check_argmax_min_args("argmax", S)
+
+    if isinstance(S.dtype, bodo.libs.pd_datetime_arr_ext.PandasDatetimeTZDtype):
+
+        def impl(S, axis=None, skipna=True):  # pragma: no cover
+            arr = unwrap_tz_array(bodo.hiframes.pd_series_ext.get_series_data(S))
+            return bodo.libs.array_kernels._nan_argmax(arr)
+
+        return impl
+
+    def impl(S, axis=None, skipna=True):  # pragma: no cover
+        arr = bodo.hiframes.pd_series_ext.get_series_data(S)
+        return bodo.libs.array_kernels._nan_argmax(arr)
+
+    return impl
+
+
 @overload_method(SeriesType, "infer_objects", inline="always")
 def overload_series_infer_objects(S):
     """
@@ -1454,14 +1479,8 @@ def overload_series_infer_objects(S):
     return lambda S: S.copy()  # pragma: no cover
 
 
-@overload_attribute(SeriesType, "is_monotonic", inline="always")
 @overload_attribute(SeriesType, "is_monotonic_increasing", inline="always")
 def overload_series_is_monotonic_increasing(S):
-    # TODO [BE-2453]: Better errorchecking in general?
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
-        S, "Series.is_monotonic_increasing"
-    )
-
     return lambda S: bodo.libs.array_kernels.series_monotonicity(
         bodo.hiframes.pd_series_ext.get_series_data(S), 1
     )
@@ -1469,11 +1488,6 @@ def overload_series_is_monotonic_increasing(S):
 
 @overload_attribute(SeriesType, "is_monotonic_decreasing", inline="always")
 def overload_series_is_monotonic_decreasing(S):
-    # TODO [BE-2453]: Better errorchecking in general?
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
-        S, "Series.is_monotonic_decreasing"
-    )
-
     return lambda S: bodo.libs.array_kernels.series_monotonicity(
         bodo.hiframes.pd_series_ext.get_series_data(S), 2
     )
@@ -1496,8 +1510,8 @@ def overload_series_autocorr(S, lag=1):
 
 @overload_method(SeriesType, "median", inline="always", no_unliteral=True)
 def overload_series_median(S, axis=None, skipna=True, level=None, numeric_only=None):
-    unsupported_args = dict(level=level, numeric_only=numeric_only)
-    arg_defaults = dict(level=None, numeric_only=None)
+    unsupported_args = {"level": level, "numeric_only": numeric_only}
+    arg_defaults = {"level": None, "numeric_only": None}
     check_unsupported_args(
         "Series.median",
         unsupported_args,
@@ -1512,8 +1526,14 @@ def overload_series_median(S, axis=None, skipna=True, level=None, numeric_only=N
     if not is_overload_bool(skipna):
         raise BodoError("Series.median(): skipna argument must be a boolean")
 
-    return lambda S, axis=None, skipna=True, level=None, numeric_only=None: bodo.libs.array_ops.array_op_median(
-        bodo.hiframes.pd_series_ext.get_series_data(S), skipna
+    return (
+        lambda S,
+        axis=None,
+        skipna=True,
+        level=None,
+        numeric_only=None: bodo.libs.array_ops.array_op_median(
+            bodo.hiframes.pd_series_ext.get_series_data(S), skipna
+        )
     )  # pragma: no cover
 
 
@@ -1528,6 +1548,156 @@ def overload_series_head(S, n=5):
         return bodo.hiframes.pd_series_ext.init_series(new_data, new_index, name)
 
     return impl
+
+
+@overload_method(SeriesType, "clip", inline="always", no_unliteral=True)
+def overload_series_clip(
+    S,
+    lower=None,
+    upper=None,
+    axis=None,
+    inplace=False,
+):
+    unsupported_args = {
+        "axis": axis,
+        "inplace": inplace,
+    }
+    arg_defaults = {
+        "axis": None,
+        "inplace": False,
+    }
+    check_unsupported_args(
+        "Series.clip",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="Series",
+    )
+
+    if not (
+        (
+            bodo.utils.utils.is_np_array_typ(S.data)
+            and (
+                S.dtype in [bodo.datetime64ns, bodo.timedelta64ns]
+                or isinstance(S.dtype, (types.Number, types.Boolean))
+            )
+        )
+        or S.data == bodo.dict_str_arr_type
+        or isinstance(
+            S.data,
+            (
+                IntegerArrayType,
+                FloatingArrayType,
+                DecimalArrayType,
+                DatetimeDateArrayType,
+                bodo.DatetimeArrayType,
+                BooleanArrayType,
+                StringArrayType,
+                BinaryArrayType,
+            ),
+        )
+    ):
+        raise BodoError(f"Series.clip() does not support series type: {S.data}.")
+
+    def coercible(l, r):
+        return l == r or (
+            isinstance(l, types.Integer)
+            and isinstance(r, (types.Float, Decimal128Type))
+        )
+
+    def element_type_check(S, bound):
+        series_type = element_type(S.data)
+        if bound != types.none:
+            return coercible(types.unliteral(element_type(bound)), series_type)
+        return True
+
+    def bound_type_check(bound):
+        return (
+            is_overload_constant_nan(bound)
+            or is_scalar_type(bound)
+            or isinstance(bound, SeriesType)
+            or isinstance(bound, types.Array)
+        )
+
+    if not (bound_type_check(lower) and element_type_check(S, lower)):
+        raise BodoError(
+            f"Series.clip() requires lower to be of the same type as its series of {element_type(S.data)}. Lower type: {lower.data if isinstance(lower, SeriesType) else lower} not supported."
+        )
+
+    if not (bound_type_check(upper) and element_type_check(S, upper)):
+        raise BodoError(
+            f"Series.clip() requires upper to be of the same type as its series of {element_type(S.data)}. Upper type: {upper.data if isinstance(upper, SeriesType) else upper} not supported."
+        )
+
+    if lower != types.none and upper != types.none:
+        scalar_text = "  if data[i] < lower:\n"
+        scalar_text += "    result[i] = lower\n"
+        scalar_text += "  elif data[i] > upper:\n"
+        scalar_text += "    result[i] = upper\n"
+        scalar_text += "  else:\n"
+        scalar_text += "    result[i] = data[i]\n"
+    elif lower != types.none:
+        scalar_text = "  if data[i] < lower:\n"
+        scalar_text += "    result[i] = lower\n"
+        scalar_text += "  else:\n"
+        scalar_text += "    result[i] = data[i]\n"
+    elif upper != types.none:
+        scalar_text = "  if data[i] > upper:\n"
+        scalar_text += "    result[i] = upper\n"
+        scalar_text += "  else:\n"
+        scalar_text += "    result[i] = data[i]\n"
+    else:
+        scalar_text = "  result[i] = data[i]\n"
+    na_check = "if bodo.libs.array_kernels.isna(data, i):\n"
+    na_check += "  bodo.libs.array_kernels.setna(result, i)\n"
+    na_check += "else:\n"
+    scalar_text = na_check + scalar_text
+
+    iterate_over_dict = True
+    # element-wise bound
+    preprocess_text = "def len_check(data, bound):\n"
+    preprocess_text += "  assert len(data) == len(bound), 'clip() requires bound to be of the same length as its series'\n"
+    if lower != types.none and isinstance(lower, SeriesType):
+        iterate_over_dict = False
+        preprocess_text += (
+            "lower_data = bodo.hiframes.pd_series_ext.get_series_data(lower)\n"
+        )
+        preprocess_text += "len_check(data, lower_data)\n"
+        scalar_text = scalar_text.replace(
+            "if data[i] < lower:",
+            "if not bodo.libs.array_kernels.isna(lower_data, i) and data[i] < lower_data[i]:",
+        )
+        scalar_text = scalar_text.replace(
+            "result[i] = lower", "result[i] = lower_data[i]"
+        )
+    if upper != types.none and isinstance(upper, SeriesType):
+        iterate_over_dict = False
+        preprocess_text += (
+            "upper_data = bodo.hiframes.pd_series_ext.get_series_data(upper)\n"
+        )
+        preprocess_text += "len_check(data, upper_data)\n"
+        scalar_text = scalar_text.replace(
+            "if data[i] > upper:",
+            "if not bodo.libs.array_kernels.isna(upper_data, i) and data[i] > upper_data[i]:",
+        )
+        scalar_text = scalar_text.replace(
+            "result[i] = upper", "result[i] = upper_data[i]"
+        )
+
+    return generate_simple_series_impl(
+        ("S", "lower", "upper", "axis", "inplace"),
+        (S, lower, upper, axis, inplace),
+        S,
+        scalar_text,
+        preprocess_text,
+        arg_defaults={
+            "lower": None,
+            "upper": None,
+            "axis": None,
+            "inplace": False,
+        },
+        iterate_over_dict=iterate_over_dict,
+    )
 
 
 # Include lowering for safety.
@@ -1576,9 +1746,6 @@ def overload_series_first(S, offset):
     if types.unliteral(offset) not in supp_types:
         raise BodoError("Series.first(): 'offset' must be a string or a DateOffset")
 
-    # TODO [BE-2453]: Better errorchecking in general?
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(S, "Series.first()")
-
     def impl(S, offset):  # pragma: no cover
         arr = bodo.hiframes.pd_series_ext.get_series_data(S)
         index = bodo.hiframes.pd_series_ext.get_series_index(S)
@@ -1609,9 +1776,6 @@ def overload_series_last(S, offset):
     )
     if types.unliteral(offset) not in supp_types:
         raise BodoError("Series.last(): 'offset' must be a string or a DateOffset")
-
-    # TODO [BE-2453]: Better errorchecking in general?
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(S, "Series.last()")
 
     def impl(S, offset):  # pragma: no cover
         arr = bodo.hiframes.pd_series_ext.get_series_data(S)
@@ -1665,8 +1829,8 @@ def overload_series_nlargest(S, n=5, keep="first"):
     # TODO: cache implementation
     # TODO: strings, categoricals
     # TODO: support and test keep semantics
-    unsupported_args = dict(keep=keep)
-    arg_defaults = dict(keep="first")
+    unsupported_args = {"keep": keep}
+    arg_defaults = {"keep": "first"}
     check_unsupported_args(
         "Series.nlargest",
         unsupported_args,
@@ -1684,7 +1848,7 @@ def overload_series_nlargest(S, n=5, keep="first"):
     def impl(S, n=5, keep="first"):  # pragma: no cover
         arr = bodo.hiframes.pd_series_ext.get_series_data(S)
         index = bodo.hiframes.pd_series_ext.get_series_index(S)
-        index_arr = bodo.utils.conversion.coerce_to_ndarray(index)
+        index_arr = bodo.utils.conversion.coerce_to_array(index)
         name = bodo.hiframes.pd_series_ext.get_series_name(S)
         out_arr, out_ind_arr = bodo.libs.array_kernels.nlargest(
             arr, index_arr, n, True, bodo.hiframes.series_kernels.gt_f
@@ -1699,8 +1863,8 @@ def overload_series_nlargest(S, n=5, keep="first"):
 def overload_series_nsmallest(S, n=5, keep="first"):
     # TODO: cache implementation
 
-    unsupported_args = dict(keep=keep)
-    arg_defaults = dict(keep="first")
+    unsupported_args = {"keep": keep}
+    arg_defaults = {"keep": "first"}
     check_unsupported_args(
         "Series.nsmallest",
         unsupported_args,
@@ -1718,7 +1882,7 @@ def overload_series_nsmallest(S, n=5, keep="first"):
     def impl(S, n=5, keep="first"):  # pragma: no cover
         arr = bodo.hiframes.pd_series_ext.get_series_data(S)
         index = bodo.hiframes.pd_series_ext.get_series_index(S)
-        index_arr = bodo.utils.conversion.coerce_to_ndarray(index)
+        index_arr = bodo.utils.conversion.coerce_to_array(index)
         name = bodo.hiframes.pd_series_ext.get_series_name(S)
         out_arr, out_ind_arr = bodo.libs.array_kernels.nlargest(
             arr, index_arr, n, False, bodo.hiframes.series_kernels.lt_f
@@ -1739,9 +1903,8 @@ def overload_series_notna(S):
 @overload_method(SeriesType, "astype", inline="always", no_unliteral=True)
 @overload_method(HeterogeneousSeriesType, "astype", inline="always", no_unliteral=True)
 def overload_series_astype(S, dtype, copy=True, errors="raise", _bodo_nan_to_str=True):
-
-    unsupported_args = dict(errors=errors)
-    arg_defaults = dict(errors="raise")
+    unsupported_args = {"errors": errors}
+    arg_defaults = {"errors": "raise"}
     check_unsupported_args(
         "Series.astype",
         unsupported_args,
@@ -1755,9 +1918,6 @@ def overload_series_astype(S, dtype, copy=True, errors="raise", _bodo_nan_to_str
         raise_bodo_error(
             "Series.astype(): 'dtype' when passed as string must be a constant value"
         )
-
-    # TODO [BE-2453]: Better errorchecking in general?
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(S, "Series.astype()")
 
     # TODO: other data types like datetime, records/tuples
     def impl(
@@ -1779,8 +1939,8 @@ def overload_series_take(S, indices, axis=0, is_copy=True):
     # TODO: Pandas accepts but ignores additional kwargs from Numpy
     # https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.Series.take.html
 
-    unsupported_args = dict(axis=axis, is_copy=is_copy)
-    arg_defaults = dict(axis=0, is_copy=True)
+    unsupported_args = {"axis": axis, "is_copy": is_copy}
+    arg_defaults = {"axis": 0, "is_copy": True}
     check_unsupported_args(
         "Series.take",
         unsupported_args,
@@ -1814,8 +1974,8 @@ def overload_series_argsort(S, axis=0, kind="quicksort", order=None):
     # TODO: categorical, etc.
     # TODO: optimize the if path of known to be no NaNs (e.g. after fillna)
 
-    unsupported_args = dict(axis=axis, kind=kind, order=order)
-    arg_defaults = dict(axis=0, kind="quicksort", order=None)
+    unsupported_args = {"axis": axis, "kind": kind, "order": order}
+    arg_defaults = {"axis": 0, "kind": "quicksort", "order": None}
     check_unsupported_args(
         "Series.argsort",
         unsupported_args,
@@ -1854,11 +2014,11 @@ def overload_series_rank(
     Support for Series.rank(). Currently only has replicated support because rank kernel from array_kernels
     onyl has replicated support. This is the needed functionality for SQL since SQL does rank within groupby.apply.
     """
-    unsupported_args = dict(
-        axis=axis,
-        numeric_only=numeric_only,
-    )
-    arg_defaults = dict(axis=0, numeric_only=None)
+    unsupported_args = {
+        "axis": axis,
+        "numeric_only": numeric_only,
+    }
+    arg_defaults = {"axis": 0, "numeric_only": None}
     check_unsupported_args(
         "Series.rank",
         unsupported_args,
@@ -1906,24 +2066,24 @@ def overload_series_sort_index(
     ignore_index=False,
     key=None,
 ):
-    unsupported_args = dict(
-        axis=axis,
-        level=level,
-        inplace=inplace,
-        kind=kind,
-        sort_remaining=sort_remaining,
-        ignore_index=ignore_index,
-        key=key,
-    )
-    arg_defaults = dict(
-        axis=0,
-        level=None,
-        inplace=False,
-        kind="quicksort",
-        sort_remaining=True,
-        ignore_index=False,
-        key=None,
-    )
+    unsupported_args = {
+        "axis": axis,
+        "level": level,
+        "inplace": inplace,
+        "kind": kind,
+        "sort_remaining": sort_remaining,
+        "ignore_index": ignore_index,
+        "key": key,
+    }
+    arg_defaults = {
+        "axis": 0,
+        "level": None,
+        "inplace": False,
+        "kind": "quicksort",
+        "sort_remaining": True,
+        "ignore_index": False,
+        "key": None,
+    }
     check_unsupported_args(
         "Series.sort_index",
         unsupported_args,
@@ -1989,20 +2149,20 @@ def overload_series_sort_values(
     ignore_index=False,
     key=None,
 ):
-    unsupported_args = dict(
-        axis=axis,
-        inplace=inplace,
-        kind=kind,
-        ignore_index=ignore_index,
-        key=key,
-    )
-    arg_defaults = dict(
-        axis=0,
-        inplace=False,
-        kind="quicksort",
-        ignore_index=False,
-        key=None,
-    )
+    unsupported_args = {
+        "axis": axis,
+        "inplace": inplace,
+        "kind": kind,
+        "ignore_index": ignore_index,
+        "key": key,
+    }
+    arg_defaults = {
+        "axis": 0,
+        "inplace": False,
+        "kind": "quicksort",
+        "ignore_index": False,
+        "key": None,
+    }
     check_unsupported_args(
         "Series.sort_values",
         unsupported_args,
@@ -2024,6 +2184,7 @@ def overload_series_sort_values(
         )
 
     __col_name_meta_value_series_sort_values = ColNamesMetaType(("$_bodo_col_",))
+
     # reusing dataframe sort_values() in implementation.
     # TODO(ehsan): use a direct kernel to avoid compilation overhead
     def impl(
@@ -2090,7 +2251,7 @@ def overload_get_bin_inds(bins, arr, is_nullable=True, include_lowest=True):
     func_text += "      ind = 1\n"
     func_text += "    else:\n"
     func_text += "      ind = np.searchsorted(bins, val)\n"
-    # searchsorted() returns 0 or len(bins) if val is not in any bins
+    # np.searchsorted() returns 0 or len(bins) if val is not in any bins
     func_text += "    if ind == 0 or ind == len(bins):\n"
     if gen_nullable:
         func_text += "      bodo.libs.array_kernels.setna(out_arr, i)\n"
@@ -2101,7 +2262,11 @@ def overload_get_bin_inds(bins, arr, is_nullable=True, include_lowest=True):
     func_text += "  return out_arr\n"
 
     loc_vars = {}
-    exec(func_text, {"bodo": bodo, "np": np, "numba": numba}, loc_vars)
+    exec(
+        func_text,
+        {"bodo": bodo, "np": np, "numba": numba},
+        loc_vars,
+    )
     impl = loc_vars["impl"]
     return impl
 
@@ -2163,8 +2328,10 @@ def overload_get_bin_labels(bins, right=True, include_lowest=True):
             if right and include_lowest:
                 # adjust first interval by precision to account for being right closed
                 breaks[0] = breaks[0] - td64_1
+            # Copying inputs since interval array doesn't support buffer offsets which
+            # are created by slicing yet. See [BSE-1260].
             interval_arr = bodo.libs.interval_arr_ext.init_interval_array(
-                breaks[:-1], breaks[1:]
+                breaks[:-1].copy(), breaks[1:].copy()
             )
             return bodo.hiframes.pd_index_ext.init_interval_index(interval_arr, None)
 
@@ -2177,8 +2344,10 @@ def overload_get_bin_labels(bins, right=True, include_lowest=True):
         if right and include_lowest:
             # adjust lhs of first interval by precision to account for being right closed
             breaks[0] = breaks[0] - 10.0 ** (-precision)
+        # Copying inputs since interval array doesn't support buffer offsets which
+        # are created by slicing yet. See [BSE-1260].
         interval_arr = bodo.libs.interval_arr_ext.init_interval_array(
-            breaks[:-1], breaks[1:]
+            breaks[:-1].copy(), breaks[1:].copy()
         )
         return bodo.hiframes.pd_index_ext.init_interval_index(interval_arr, None)
 
@@ -2254,10 +2423,9 @@ def overload_series_value_counts(
     ascending=False,
     bins=None,
     dropna=True,
-    _index_name=None,  # bodo argument. See groupby.value_counts
 ):
-    unsupported_args = dict(dropna=dropna)
-    arg_defaults = dict(dropna=True)
+    unsupported_args = {"dropna": dropna}
+    arg_defaults = {"dropna": True}
     check_unsupported_args(
         "Series.value_counts",
         unsupported_args,
@@ -2283,11 +2451,6 @@ def overload_series_value_counts(
 
     is_bins = not is_overload_none(bins)
 
-    # TODO [BE-2453]: Better errorchecking in general?
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
-        S, "Series.value_counts()"
-    )
-
     # reusing aggregate/count
     # TODO(ehsan): write optimized implementation
     func_text = "def impl(\n"
@@ -2297,7 +2460,6 @@ def overload_series_value_counts(
     func_text += "    ascending=False,\n"
     func_text += "    bins=None,\n"
     func_text += "    dropna=True,\n"
-    func_text += "    _index_name=None,  # bodo argument. See groupby.value_counts\n"
     func_text += "):\n"
 
     func_text += "    arr = bodo.hiframes.pd_series_ext.get_series_data(S)\n"
@@ -2331,11 +2493,12 @@ def overload_series_value_counts(
             "        bodo.hiframes.pd_series_ext.get_series_index(count_series)\n"
         )
         func_text += "    )\n"
-        func_text += "    index = bodo.utils.conversion.index_from_array(ind_arr, name=_index_name)\n"
+        func_text += (
+            "    index = bodo.utils.conversion.index_from_array(ind_arr, name=name)\n"
+        )
 
-    func_text += (
-        "    res = bodo.hiframes.pd_series_ext.init_series(count_arr, index, name)\n"
-    )
+    series_name = "proportion" if is_overload_true(normalize) else "count"
+    func_text += f"    res = bodo.hiframes.pd_series_ext.init_series(count_arr, index, '{series_name}')\n"
     if is_overload_true(sort):
         func_text += "    res = res.sort_values(ascending=ascending)\n"
     if is_overload_true(normalize):
@@ -2401,22 +2564,22 @@ def overload_cut(
     duplicates="raise",
     ordered=True,
 ):
-    unsupported_args = dict(
-        right=right,
-        labels=labels,
-        retbins=retbins,
-        precision=precision,
-        duplicates=duplicates,
-        ordered=ordered,
-    )
-    arg_defaults = dict(
-        right=True,
-        labels=None,
-        retbins=False,
-        precision=3,
-        duplicates="raise",
-        ordered=True,
-    )
+    unsupported_args = {
+        "right": right,
+        "labels": labels,
+        "retbins": retbins,
+        "precision": precision,
+        "duplicates": duplicates,
+        "ordered": ordered,
+    }
+    arg_defaults = {
+        "right": True,
+        "labels": None,
+        "retbins": False,
+        "precision": 3,
+        "duplicates": "raise",
+        "ordered": True,
+    }
     check_unsupported_args(
         "pandas.cut",
         unsupported_args,
@@ -2533,18 +2696,18 @@ def overload_qcut(
     precision=3,
     duplicates="raise",
 ):
-    unsupported_args = dict(
-        labels=labels,
-        retbins=retbins,
-        precision=precision,
-        duplicates=duplicates,
-    )
-    arg_defaults = dict(
-        labels=None,
-        retbins=False,
-        precision=3,
-        duplicates="raise",
-    )
+    unsupported_args = {
+        "labels": labels,
+        "retbins": retbins,
+        "precision": precision,
+        "duplicates": duplicates,
+    }
+    arg_defaults = {
+        "labels": None,
+        "retbins": False,
+        "precision": 3,
+        "duplicates": "raise",
+    }
     check_unsupported_args(
         "pandas.qcut",
         unsupported_args,
@@ -2587,17 +2750,22 @@ def overload_series_groupby(
     observed=True,
     dropna=True,
 ):
-    unsupported_args = dict(
-        axis=axis,
-        sort=sort,
-        group_keys=group_keys,
-        squeeze=squeeze,
-        observed=observed,
-        dropna=dropna,
-    )
-    arg_defaults = dict(
-        axis=0, sort=True, group_keys=True, squeeze=False, observed=True, dropna=True
-    )
+    unsupported_args = {
+        "axis": axis,
+        "sort": sort,
+        "group_keys": group_keys,
+        "squeeze": squeeze,
+        "observed": observed,
+        "dropna": dropna,
+    }
+    arg_defaults = {
+        "axis": 0,
+        "sort": True,
+        "group_keys": True,
+        "squeeze": False,
+        "observed": True,
+        "dropna": True,
+    }
     check_unsupported_args(
         "Series.groupby",
         unsupported_args,
@@ -2707,57 +2875,8 @@ def overload_series_groupby(
     return impl
 
 
-@overload_method(SeriesType, "append", inline="always", no_unliteral=True)
-def overload_series_append(S, to_append, ignore_index=False, verify_integrity=False):
-    unsupported_args = dict(verify_integrity=verify_integrity)
-    arg_defaults = dict(verify_integrity=False)
-    check_unsupported_args(
-        "Series.append",
-        unsupported_args,
-        arg_defaults,
-        package_name="pandas",
-        module_name="Series",
-    )
-
-    # TODO [BE-2453]: Better errorchecking in general?
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(S, "Series.append()")
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
-        to_append, "Series.append()"
-    )
-
-    # call pd.concat()
-    # single Series case
-    if isinstance(to_append, SeriesType):
-        return (
-            lambda S, to_append, ignore_index=False, verify_integrity=False: pd.concat(
-                (S, to_append),
-                ignore_index=ignore_index,
-                verify_integrity=verify_integrity,
-            )
-        )  # pragma: no cover
-
-    # tuple case
-    if isinstance(to_append, types.BaseTuple):
-        return (
-            lambda S, to_append, ignore_index=False, verify_integrity=False: pd.concat(
-                (S,) + to_append,
-                ignore_index=ignore_index,
-                verify_integrity=verify_integrity,
-            )
-        )  # pragma: no cover
-
-    # list/other cases
-    return lambda S, to_append, ignore_index=False, verify_integrity=False: pd.concat(
-        [S] + to_append, ignore_index=ignore_index, verify_integrity=verify_integrity
-    )  # pragma: no cover
-
-
 @overload_method(SeriesType, "isin", inline="always", no_unliteral=True)
 def overload_series_isin(S, values):
-    # TODO [BE-2453]: Better errorchecking in general?
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(S, "Series.isin()")
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(values, "Series.isin()")
-
     # if input is Series or array, special implementation is necessary since it may
     # require hash-based shuffling of both inputs for parallelization
     if bodo.utils.utils.is_array_typ(values):
@@ -2768,7 +2887,7 @@ def overload_series_isin(S, values):
             index = bodo.hiframes.pd_series_ext.get_series_index(S)
             name = bodo.hiframes.pd_series_ext.get_series_name(S)
             n = len(A)
-            out_arr = np.empty(n, np.bool_)
+            out_arr = bodo.libs.bool_arr_ext.alloc_false_bool_array(n)
             bodo.libs.array.array_isin(out_arr, A, values_arr, False)
             return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
@@ -2790,9 +2909,8 @@ def overload_series_isin(S, values):
 
 @overload_method(SeriesType, "quantile", inline="always", no_unliteral=True)
 def overload_series_quantile(S, q=0.5, interpolation="linear"):
-
-    unsupported_args = dict(interpolation=interpolation)
-    arg_defaults = dict(interpolation="linear")
+    unsupported_args = {"interpolation": interpolation}
+    arg_defaults = {"interpolation": "linear"}
     check_unsupported_args(
         "Series.quantile",
         unsupported_args,
@@ -2800,9 +2918,6 @@ def overload_series_quantile(S, q=0.5, interpolation="linear"):
         package_name="pandas",
         module_name="Series",
     )
-
-    # TODO [BE-2453]: Better errorchecking in general?
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(S, "Series.quantile()")
 
     # TODO: [BE-623] q value should be between 0 and 1 only
     # Pandas API says float or iterable of floats. It allows 0 and 1.
@@ -2827,7 +2942,7 @@ def overload_series_quantile(S, q=0.5, interpolation="linear"):
         return impl
     else:
         raise BodoError(
-            f"Series.quantile() q type must be float or iterable of floats only."
+            "Series.quantile() q type must be float or iterable of floats only."
         )
 
 
@@ -2855,25 +2970,17 @@ def overload_series_unique(S):
 
 
 @overload_method(SeriesType, "describe", inline="always", no_unliteral=True)
-def overload_series_describe(
-    S, percentiles=None, include=None, exclude=None, datetime_is_numeric=True
-):
+def overload_series_describe(S, percentiles=None, include=None, exclude=None):
     """
     Support S.describe with numeric and datetime column.
-    For datetime: Bodo mimic's Pandas future behavior
-    (treating it like numeric rather than categorical).
-    Hence, datetime_is_numeric is set to True as default value.
     """
 
-    unsupported_args = dict(
-        percentiles=percentiles,
-        include=include,
-        exclude=exclude,
-        datetime_is_numeric=datetime_is_numeric,
-    )
-    arg_defaults = dict(
-        percentiles=None, include=None, exclude=None, datetime_is_numeric=True
-    )
+    unsupported_args = {
+        "percentiles": percentiles,
+        "include": include,
+        "exclude": exclude,
+    }
+    arg_defaults = {"percentiles": None, "include": None, "exclude": None}
     check_unsupported_args(
         "Series.describe",
         unsupported_args,
@@ -2881,7 +2988,6 @@ def overload_series_describe(
         package_name="pandas",
         module_name="Series",
     )
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(S, "Series.describe()")
 
     # This check is needed for S.describe(), even though it's redundant if coming from df.describe()
     # Bodo limitations for supported types
@@ -2893,7 +2999,7 @@ def overload_series_describe(
             isinstance(S.data.dtype, (types.Number))
             or S.data.dtype == bodo.datetime64ns
         )
-    ) and not isinstance(S.data, IntegerArrayType):
+    ) and not isinstance(S.data, (IntegerArrayType, FloatingArrayType)):
         raise BodoError(f"describe() column input type {S.data} not supported.")
 
     # TODO: Support non-numeric columns set columns (e.g. categorical, BooleanArrayType, string)
@@ -2904,7 +3010,7 @@ def overload_series_describe(
     if S.data.dtype == bodo.datetime64ns:
 
         def impl_dt(
-            S, percentiles=None, include=None, exclude=None, datetime_is_numeric=True
+            S, percentiles=None, include=None, exclude=None
         ):  # pragma: no cover
             arr = bodo.hiframes.pd_series_ext.get_series_data(S)
             name = bodo.hiframes.pd_series_ext.get_series_name(S)
@@ -2919,9 +3025,7 @@ def overload_series_describe(
         return impl_dt
 
     # This is for numeric columns only
-    def impl(
-        S, percentiles=None, include=None, exclude=None, datetime_is_numeric=True
-    ):  # pragma: no cover
+    def impl(S, percentiles=None, include=None, exclude=None):  # pragma: no cover
         arr = bodo.hiframes.pd_series_ext.get_series_data(S)
         name = bodo.hiframes.pd_series_ext.get_series_name(S)
         return bodo.hiframes.pd_series_ext.init_series(
@@ -2966,7 +3070,6 @@ def overload_series_memory_usage(S, index=True, deep=False):
 # TODO: handle string array reflection
 # TODO: handle init_series() optimization guard for mutability
 def binary_str_fillna_inplace_series_impl(is_binary=False):
-
     if is_binary:
         alloc_fn = "bodo.libs.binary_arr_ext.pre_alloc_binary_array"
     else:
@@ -3000,7 +3103,7 @@ def binary_str_fillna_inplace_series_impl(is_binary=False):
         )
     )
 
-    locs = dict()
+    locs = {}
     exec(
         func_text,
         {
@@ -3019,7 +3122,6 @@ def binary_str_fillna_inplace_series_impl(is_binary=False):
 # TODO: handle string array reflection
 # TODO: handle init_series() optimization guard for mutability
 def binary_str_fillna_inplace_impl(is_binary=False):
-
     if is_binary:
         alloc_fn = "bodo.libs.binary_arr_ext.pre_alloc_binary_array"
     else:
@@ -3045,7 +3147,7 @@ def binary_str_fillna_inplace_impl(is_binary=False):
         "    bodo.libs.str_arr_ext.move_str_binary_arr_payload(in_arr, out_arr)\n"
     )
 
-    locs = dict()
+    locs = {}
     exec(
         func_text,
         {
@@ -3156,8 +3258,8 @@ def fillna_series_impl(
 def overload_series_fillna(
     S, value=None, method=None, axis=None, inplace=False, limit=None, downcast=None
 ):
-    unsupported_args = dict(limit=limit, downcast=downcast)
-    arg_defaults = dict(limit=None, downcast=None)
+    unsupported_args = {"limit": limit, "downcast": downcast}
+    arg_defaults = {"limit": None, "downcast": None}
     check_unsupported_args(
         "Series.fillna",
         unsupported_args,
@@ -3207,9 +3309,6 @@ def overload_series_fillna(
         ):
             raise BodoError(err_msg)
 
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(S, "Series.fillna()")
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(value, "Series.fillna()")
-
     series_type = element_type(S.data)
     value_type = None
     if is_value_provided:
@@ -3229,8 +3328,16 @@ def overload_series_fillna(
 
             # optimization: just set null bit if fill is empty
             if is_overload_constant_str(value) and get_overload_const_str(value) == "":
-                return lambda S, value=None, method=None, axis=None, inplace=False, limit=None, downcast=None: bodo.libs.str_arr_ext.set_null_bits_to_value(
-                    bodo.hiframes.pd_series_ext.get_series_data(S), -1
+                return (
+                    lambda S,
+                    value=None,
+                    method=None,
+                    axis=None,
+                    inplace=False,
+                    limit=None,
+                    downcast=None: bodo.libs.str_arr_ext.set_null_bits_to_value(
+                        bodo.hiframes.pd_series_ext.get_series_data(S), -1
+                    )
                 )
 
             # value is a Series
@@ -3244,9 +3351,16 @@ def overload_series_fillna(
                 is_overload_constant_bytes(value)
                 and get_overload_const_bytes(value) == b""
             ):
-
-                return lambda S, value=None, method=None, axis=None, inplace=False, limit=None, downcast=None: bodo.libs.str_arr_ext.set_null_bits_to_value(
-                    bodo.hiframes.pd_series_ext.get_series_data(S), -1
+                return (
+                    lambda S,
+                    value=None,
+                    method=None,
+                    axis=None,
+                    inplace=False,
+                    limit=None,
+                    downcast=None: bodo.libs.str_arr_ext.set_null_bits_to_value(
+                        bodo.hiframes.pd_series_ext.get_series_data(S), -1
+                    )
                 )
 
             # value is a Series
@@ -3287,17 +3401,18 @@ def overload_series_fillna(
                         bodo.libs.array_kernels.setna(out_arr, i)
                         continue
                     if bodo.libs.array_kernels.isna(in_arr, i):
-                        out_arr[i] = bodo.utils.conversion.unbox_if_timestamp(
+                        out_arr[i] = bodo.utils.conversion.unbox_if_tz_naive_timestamp(
                             fill_arr[i]
                         )
                         continue
-                    out_arr[i] = bodo.utils.conversion.unbox_if_timestamp(in_arr[i])
+                    out_arr[i] = bodo.utils.conversion.unbox_if_tz_naive_timestamp(
+                        in_arr[i]
+                    )
                 return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
             return fillna_series_impl
 
         if is_method_provided:
-
             valid_obj_types = (
                 types.unicode_type,
                 types.bool_,
@@ -3338,14 +3453,14 @@ def overload_series_fillna(
             limit=None,
             downcast=None,
         ):  # pragma: no cover
-            value = bodo.utils.conversion.unbox_if_timestamp(value)
+            value = bodo.utils.conversion.unbox_if_tz_naive_timestamp(value)
             in_arr = bodo.hiframes.pd_series_ext.get_series_data(S)
             index = bodo.hiframes.pd_series_ext.get_series_index(S)
             name = bodo.hiframes.pd_series_ext.get_series_name(S)
             n = len(in_arr)
             out_arr = bodo.utils.utils.alloc_type(n, _dtype, (-1,))
             for i in numba.parfors.parfor.internal_prange(n):
-                s = bodo.utils.conversion.unbox_if_timestamp(in_arr[i])
+                s = bodo.utils.conversion.unbox_if_tz_naive_timestamp(in_arr[i])
                 if bodo.libs.array_kernels.isna(in_arr, i):
                     s = value
                 out_arr[i] = s
@@ -3364,8 +3479,8 @@ def create_fillna_specific_method_overload(overload_name):
             "pad": "ffill",
             "backfill": "bfill",
         }[overload_name]
-        unsupported_args = dict(limit=limit, downcast=downcast)
-        arg_defaults = dict(limit=None, downcast=None)
+        unsupported_args = {"limit": limit, "downcast": downcast}
+        arg_defaults = {"limit": None, "downcast": None}
         check_unsupported_args(
             f"Series.{overload_name}",
             unsupported_args,
@@ -3447,8 +3562,18 @@ def check_unsupported_types(S, to_replace, value):
 
 def series_replace_error_checking(S, to_replace, value, inplace, limit, regex, method):
     """Carry out error checking for Series.replace()"""
-    unsupported_args = dict(inplace=inplace, limit=limit, regex=regex, method=method)
-    replace_defaults = dict(inplace=False, limit=None, regex=False, method="pad")
+    unsupported_args = {
+        "inplace": inplace,
+        "limit": limit,
+        "regex": regex,
+        "method": method,
+    }
+    replace_defaults = {
+        "inplace": False,
+        "limit": None,
+        "regex": False,
+        "method": "pad",
+    }
     check_unsupported_args(
         "Series.replace",
         unsupported_args,
@@ -3469,7 +3594,6 @@ def overload_series_replace(
     regex=False,
     method="pad",
 ):
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(S, "Series.replace()")
     series_replace_error_checking(S, to_replace, value, inplace, limit, regex, method)
     series_type = element_type(S.data)
     if isinstance(to_replace, types.DictType):
@@ -3575,7 +3699,6 @@ def overload_series_replace(
         regex=False,
         method="pad",
     ):  # pragma: no cover
-
         in_arr = bodo.hiframes.pd_series_ext.get_series_data(S)
         index = bodo.hiframes.pd_series_ext.get_series_index(S)
         name = bodo.hiframes.pd_series_ext.get_series_name(S)
@@ -3637,7 +3760,6 @@ def _build_replace_dict(to_replace, value, key_dtype_conv):
 
     # List, Scalar case
     if is_iterable_replace and is_scalar_value:
-
         if not is_overload_none(key_dtype_conv):
 
             def impl_cast(to_replace, value, key_dtype_conv):  # pragma: no cover
@@ -3658,7 +3780,6 @@ def _build_replace_dict(to_replace, value, key_dtype_conv):
 
     # List, List case
     if is_iterable_replace and is_iterable_value:
-
         if not is_overload_none(key_dtype_conv):
 
             def impl_cast(to_replace, value, key_dtype_conv):  # pragma: no cover
@@ -3690,9 +3811,7 @@ def _build_replace_dict(to_replace, value, key_dtype_conv):
         return lambda to_replace, value, key_dtype_conv: to_replace  # pragma: no cover
 
     raise BodoError(
-        "Series.replace(): Not supported for types to_replace={} and value={}".format(
-            to_replace, value
-        )
+        f"Series.replace(): Not supported for types to_replace={to_replace} and value={value}"
     )
     # List, List case
 
@@ -3700,13 +3819,12 @@ def _build_replace_dict(to_replace, value, key_dtype_conv):
 @overload_method(SeriesType, "diff", inline="always", no_unliteral=True)
 def overload_series_diff(S, periods=1):
     """Series.diff() support which is the same as S - S.shift(periods)"""
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(S, "Series.diff()")
 
     # TODO: Support nullable integer/float types
     # Bodo specific limitations for supported types
     # Currently only float (not nullable), int (not nullable), and dt64 are supported
     if not (
-        isinstance(S.data, types.Array)
+        isinstance(S.data, (types.Array, IntegerArrayType, FloatingArrayType))
         and (
             isinstance(S.data.dtype, (types.Number))
             or S.data.dtype == bodo.datetime64ns
@@ -3747,8 +3865,8 @@ def overload_series_diff(S, periods=1):
 def overload_series_explode(S, ignore_index=False):
     from bodo.hiframes.split_impl import string_array_split_view_type
 
-    unsupported_args = dict(ignore_index=ignore_index)
-    merge_defaults = dict(ignore_index=False)
+    unsupported_args = {"ignore_index": ignore_index}
+    merge_defaults = {"ignore_index": False}
     check_unsupported_args(
         "Series.explode",
         unsupported_args,
@@ -3829,17 +3947,32 @@ def argmin_overload(a, axis=None, out=None):
 
 
 def overload_series_np_dot(a, b, out=None):
-
     if (
         isinstance(a, SeriesType) or isinstance(b, SeriesType)
     ) and not is_overload_none(out):
         raise BodoError("np.dot(): 'out' parameter not supported yet")
 
     # just call np.dot on underlying arrays
+    if isinstance(a, SeriesType) and isinstance(b, SeriesType):
+
+        def impl(a, b, out=None):  # pragma: no cover
+            arr = bodo.utils.conversion.ndarray_if_nullable_arr(
+                bodo.hiframes.pd_series_ext.get_series_data(a)
+            )
+            arr2 = bodo.utils.conversion.ndarray_if_nullable_arr(
+                bodo.hiframes.pd_series_ext.get_series_data(b)
+            )
+            return np.dot(arr, arr2)
+
+        return impl
+
     if isinstance(a, SeriesType):
 
         def impl(a, b, out=None):  # pragma: no cover
-            arr = bodo.hiframes.pd_series_ext.get_series_data(a)
+            arr = bodo.utils.conversion.ndarray_if_nullable_arr(
+                bodo.hiframes.pd_series_ext.get_series_data(a)
+            )
+            b = bodo.utils.conversion.ndarray_if_nullable_arr(b)
             return np.dot(arr, b)
 
         return impl
@@ -3847,7 +3980,10 @@ def overload_series_np_dot(a, b, out=None):
     if isinstance(b, SeriesType):
 
         def impl(a, b, out=None):  # pragma: no cover
-            arr = bodo.hiframes.pd_series_ext.get_series_data(b)
+            a = bodo.utils.conversion.ndarray_if_nullable_arr(a)
+            arr = bodo.utils.conversion.ndarray_if_nullable_arr(
+                bodo.hiframes.pd_series_ext.get_series_data(b)
+            )
             return np.dot(a, arr)
 
         return impl
@@ -3860,9 +3996,8 @@ overload(operator.matmul, inline="always", no_unliteral=True)(overload_series_np
 
 @overload_method(SeriesType, "dropna", inline="always", no_unliteral=True)
 def overload_series_dropna(S, axis=0, inplace=False, how=None):
-
-    unsupported_args = dict(axis=axis, inplace=inplace, how=how)
-    default_args = dict(axis=0, inplace=False, how=None)
+    unsupported_args = {"axis": axis, "inplace": inplace, "how": how}
+    default_args = {"axis": 0, "inplace": False, "how": None}
     check_unsupported_args(
         "Series.dropna",
         unsupported_args,
@@ -3870,8 +4005,6 @@ def overload_series_dropna(S, axis=0, inplace=False, how=None):
         package_name="pandas",
         module_name="Series",
     )
-
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(S, "Series.dropna()")
 
     if S.dtype == bodo.string_type:
 
@@ -3903,9 +4036,8 @@ def overload_series_dropna(S, axis=0, inplace=False, how=None):
 
 @overload_method(SeriesType, "shift", inline="always", no_unliteral=True)
 def overload_series_shift(S, periods=1, freq=None, axis=0, fill_value=None):
-
-    unsupported_args = dict(freq=freq, axis=axis)
-    arg_defaults = dict(freq=None, axis=0)
+    unsupported_args = {"freq": freq, "axis": axis}
+    arg_defaults = {"freq": None, "axis": 0}
     check_unsupported_args(
         "Series.shift",
         unsupported_args,
@@ -3913,8 +4045,6 @@ def overload_series_shift(S, periods=1, freq=None, axis=0, fill_value=None):
         package_name="pandas",
         module_name="Series",
     )
-
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(S, "Series.shift()")
 
     # Bodo specific limitations for supported types
     # Currently only float (not nullable), int, dt64, nullable int/bool/decimal/date,
@@ -3941,9 +4071,8 @@ def overload_series_shift(S, periods=1, freq=None, axis=0, fill_value=None):
 
 @overload_method(SeriesType, "pct_change", inline="always", no_unliteral=True)
 def overload_series_pct_change(S, periods=1, fill_method="pad", limit=None, freq=None):
-
-    unsupported_args = dict(fill_method=fill_method, limit=limit, freq=freq)
-    arg_defaults = dict(fill_method="pad", limit=None, freq=None)
+    unsupported_args = {"fill_method": fill_method, "limit": limit, "freq": freq}
+    arg_defaults = {"fill_method": "pad", "limit": None, "freq": None}
     check_unsupported_args(
         "Series.pct_change",
         unsupported_args,
@@ -3954,9 +4083,6 @@ def overload_series_pct_change(S, periods=1, fill_method="pad", limit=None, freq
 
     if not is_overload_int(periods):
         raise BodoError("Series.pct_change(): periods argument must be an Integer")
-
-    # TODO [BE-2453]: Better errorchecking in general?
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(S, "Series.pct_change()")
 
     # TODO: handle dt64, strings
     def impl(
@@ -3986,12 +4112,6 @@ def create_series_mask_where_overload(func_name):
         Overload Series.mask or Series.where. It replaces element with other depending on cond
         (if Series.where, will replace iff cond is False; if Series.mask, will replace iff cond is True).
         """
-        bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
-            S, f"Series.{func_name}()"
-        )
-        bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
-            other, f"Series.{func_name}()"
-        )
 
         # Validate the inputs
         _validate_arguments_mask_where(
@@ -4058,10 +4178,18 @@ def _validate_arguments_mask_where(
     Helper function to perform the necessary error checking for
     Series.where(), Index.where(), Series.mask() and Index.putmask().
     """
-    unsupported_args = dict(
-        inplace=inplace, level=level, errors=errors, try_cast=try_cast
-    )
-    arg_defaults = dict(inplace=False, level=None, errors="raise", try_cast=False)
+    unsupported_args = {
+        "inplace": inplace,
+        "level": level,
+        "errors": errors,
+        "try_cast": try_cast,
+    }
+    arg_defaults = {
+        "inplace": False,
+        "level": None,
+        "errors": "raise",
+        "try_cast": False,
+    }
     check_unsupported_args(
         f"{func_name}",
         unsupported_args,
@@ -4108,6 +4236,7 @@ def _validate_self_other_mask_where(
         isinstance(arr, types.Array)
         or isinstance(arr, BooleanArrayType)
         or isinstance(arr, IntegerArrayType)
+        or isinstance(arr, FloatingArrayType)
         or (
             bodo.utils.utils.is_array_typ(arr, False)
             and (arr.dtype in [bodo.string_type, bodo.bytes_type])
@@ -4119,7 +4248,7 @@ def _validate_self_other_mask_where(
             not in [
                 bodo.datetime64ns,
                 bodo.timedelta64ns,
-                bodo.pd_timestamp_type,
+                bodo.pd_timestamp_tz_naive_type,
                 bodo.pd_timedelta_type,
             ]
         )
@@ -4135,7 +4264,7 @@ def _validate_self_other_mask_where(
     # - a Series or 1-dim Numpy array with the "same" type as S
 
     # Bodo Limitation. Where is only supported for binary/string arrays and numpy arrays
-    # Nullable int/bool arrays can be used, but they may have the wrong type or
+    # Nullable int/float/bool arrays can be used, but they may have the wrong type or
     # drop NaN values.
     val_is_nan = is_overload_constant_nan(other)
     if not (
@@ -4144,7 +4273,10 @@ def _validate_self_other_mask_where(
         or val_is_nan
         or is_scalar_type(other)
         or (
-            isinstance(other, types.Array)
+            isinstance(
+                other,
+                (types.Array, IntegerArrayType, FloatingArrayType, BooleanArrayType),
+            )
             and other.ndim >= 1
             and other.ndim <= max_ndim
         )
@@ -4187,11 +4319,11 @@ def _validate_self_other_mask_where(
                     and (
                         (
                             bodo.utils.utils.is_array_typ(other)
-                            and isinstance(other.dtype, types.Integer)
+                            and isinstance(other.dtype, (types.Integer, types.Float))
                         )
                         or (
                             is_series_type(other)
-                            and isinstance(other.dtype, types.Integer)
+                            and isinstance(other.dtype, (types.Integer, types.Float))
                         )
                     )
                 )
@@ -4200,10 +4332,11 @@ def _validate_self_other_mask_where(
                     or (is_series_type(other) and arr.dtype == other.dtype)
                 )
             )
-            and (isinstance(arr, BooleanArrayType) or isinstance(arr, IntegerArrayType))
+            and (
+                isinstance(arr, (BooleanArrayType, IntegerArrayType, FloatingArrayType))
+            )
         )
     ):
-
         raise BodoError(
             f"{func_name}() 'other' must be a scalar, non-categorical series, 1-dim numpy array or StringArray with a matching type for {module_name}."
         )
@@ -4235,10 +4368,10 @@ def create_explicit_binary_op_overload(op):
     def overload_series_explicit_binary_op(
         S, other, level=None, fill_value=None, axis=0
     ):
-        unsupported_args = dict(level=level, axis=axis)
-        arg_defaults = dict(level=None, axis=0)
+        unsupported_args = {"level": level, "axis": axis}
+        arg_defaults = {"level": None, "axis": 0}
         check_unsupported_args(
-            "series.{}".format(op.__name__),
+            f"series.{op.__name__}",
             unsupported_args,
             arg_defaults,
             package_name="pandas",
@@ -4260,7 +4393,7 @@ def create_explicit_binary_op_overload(op):
         )
         is_other_datetime_iter = is_iterable_type(other) and (
             other.dtype == datetime_datetime_type
-            or other.dtype == pd_timestamp_type
+            or other.dtype == pd_timestamp_tz_naive_type
             or other.dtype == bodo.datetime64ns
         )
 
@@ -4282,11 +4415,11 @@ def create_explicit_binary_op_overload(op):
         if is_scalar_type(other):
             args = (S.data, other)
             ret_dtype = typing_context.resolve_function_type(op, args, {}).return_type
-            # Pandas 1.0 returns nullable bool array for nullable int array
-            if isinstance(S.data, IntegerArrayType) and ret_dtype == types.Array(
-                types.bool_, 1, "C"
-            ):
-                ret_dtype = boolean_array
+            # Pandas 1.0 returns nullable bool array for nullable array
+            if isinstance(
+                S.data, (IntegerArrayType, FloatingArrayType)
+            ) and ret_dtype == types.Array(types.bool_, 1, "C"):
+                ret_dtype = boolean_array_type
 
             def impl_scalar(
                 S, other, level=None, fill_value=None, axis=0
@@ -4296,7 +4429,7 @@ def create_explicit_binary_op_overload(op):
                 name = bodo.hiframes.pd_series_ext.get_series_name(S)
                 numba.parfors.parfor.init_prange()
                 # Unbox other if necessary.
-                other = bodo.utils.conversion.unbox_if_timestamp(other)
+                other = bodo.utils.conversion.unbox_if_tz_naive_timestamp(other)
                 n = len(arr)
                 out_arr = bodo.utils.utils.alloc_type(n, ret_dtype, (-1,))
                 for i in numba.parfors.parfor.internal_prange(n):
@@ -4315,11 +4448,11 @@ def create_explicit_binary_op_overload(op):
 
         args = (S.data, types.Array(other.dtype, 1, "C"))
         ret_dtype = typing_context.resolve_function_type(op, args, {}).return_type
-        # Pandas 1.0 returns nullable bool array for nullable int array
-        if isinstance(S.data, IntegerArrayType) and ret_dtype == types.Array(
-            types.bool_, 1, "C"
-        ):
-            ret_dtype = boolean_array
+        # Pandas 1.0 returns nullable bool array for nullable array
+        if isinstance(
+            S.data, (IntegerArrayType, FloatingArrayType)
+        ) and ret_dtype == types.Array(types.bool_, 1, "C"):
+            ret_dtype = boolean_array_type
 
         def impl(S, other, level=None, fill_value=None, axis=0):  # pragma: no cover
             arr = bodo.hiframes.pd_series_ext.get_series_data(S)
@@ -4377,11 +4510,11 @@ def create_explicit_binary_reverse_op_overload(op):
         if isinstance(other, types.Number):
             args = (other, S.data)
             ret_dtype = typing_context.resolve_function_type(op, args, {}).return_type
-            # Pandas 1.0 returns nullable bool array for nullable int array
-            if isinstance(S.data, IntegerArrayType) and ret_dtype == types.Array(
-                types.bool_, 1, "C"
-            ):
-                ret_dtype = boolean_array
+            # Pandas 1.0 returns nullable bool array for nullable array
+            if isinstance(
+                S.data, (IntegerArrayType, FloatingArrayType)
+            ) and ret_dtype == types.Array(types.bool_, 1, "C"):
+                ret_dtype = boolean_array_type
 
             def impl_scalar(
                 S, other, level=None, fill_value=None, axis=0
@@ -4409,18 +4542,18 @@ def create_explicit_binary_reverse_op_overload(op):
 
         args = (types.Array(other.dtype, 1, "C"), S.data)
         ret_dtype = typing_context.resolve_function_type(op, args, {}).return_type
-        # Pandas 1.0 returns nullable bool array for nullable int array
-        if isinstance(S.data, IntegerArrayType) and ret_dtype == types.Array(
-            types.bool_, 1, "C"
-        ):
-            ret_dtype = boolean_array
+        # Pandas 1.0 returns nullable bool array for nullable array
+        if isinstance(
+            S.data, (IntegerArrayType, FloatingArrayType)
+        ) and ret_dtype == types.Array(types.bool_, 1, "C"):
+            ret_dtype = boolean_array_type
 
         def impl(S, other, level=None, fill_value=None, axis=0):  # pragma: no cover
             arr = bodo.hiframes.pd_series_ext.get_series_data(S)
             index = bodo.hiframes.pd_series_ext.get_series_index(S)
             name = bodo.hiframes.pd_series_ext.get_series_name(S)
             # other could be tuple, list, array, Index, or Series
-            other_arr = bodo.hiframes.pd_series_ext.get_series_data(other)
+            other_arr = bodo.utils.conversion.coerce_to_array(other)
             numba.parfors.parfor.init_prange()
             n = len(arr)
             out_arr = bodo.utils.utils.alloc_type(n, ret_dtype, None)
@@ -4475,6 +4608,28 @@ split_logical_binops_funcs = [
     operator.and_,
 ]
 
+# These explicit binops use overload_method_declarative to generate documentation
+# as well as perform check that the arguments are valid at compile time
+binop_overload_declarative_prototypes = ["pow"]
+
+
+def overload_binop_declarative(name, overload_impl):
+    """Create overload declarative method template prototype for binop **name**"""
+    overload_method_declarative(
+        SeriesType,
+        name,
+        f"pd.Series.{name}",
+        unsupported_args={"level", "axis"},
+        method_args_checker=OverloadArgumentsChecker(
+            [
+                NumericSeriesArgumentChecker("S", is_self=True),
+                NumericSeriesBinOpChecker("other"),
+                OptionalArgumentChecker(NumericScalarArgumentChecker("fill_value")),
+            ]
+        ),
+        description=None,
+    )(overload_impl)
+
 
 def _install_explicit_binary_ops():
     for op, list_name in explicit_binop_funcs_two_ways.items():
@@ -4482,10 +4637,14 @@ def _install_explicit_binary_ops():
             overload_impl = create_explicit_binary_op_overload(op)
             overload_reverse_impl = create_explicit_binary_reverse_op_overload(op)
             r_name = "r" + name
-            overload_method(SeriesType, name, no_unliteral=True)(overload_impl)
-            overload_method(SeriesType, r_name, no_unliteral=True)(
-                overload_reverse_impl
-            )
+            if name in binop_overload_declarative_prototypes:
+                overload_binop_declarative(name, overload_impl)
+                overload_binop_declarative(r_name, overload_reverse_impl)
+            else:
+                overload_method(SeriesType, name, no_unliteral=True)(overload_impl)
+                overload_method(SeriesType, r_name, no_unliteral=True)(
+                    overload_reverse_impl
+                )
             explicit_binop_funcs.add(name)
     for op, name in explicit_binop_funcs_single.items():
         overload_impl = create_explicit_binary_op_overload(op)
@@ -4568,7 +4727,6 @@ def create_binary_op_overload(op):
 
         # left arg is series
         if isinstance(lhs, SeriesType):
-
             # left arg is dt64/td64 series, may need to unbox RHS
             if lhs.dtype in [bodo.datetime64ns, bodo.timedelta64ns]:
 
@@ -4578,7 +4736,9 @@ def create_binary_op_overload(op):
                     name = bodo.hiframes.pd_series_ext.get_series_name(lhs)
                     rhs_arr = bodo.utils.conversion.get_array_if_series_or_index(rhs)
                     # Unbox the other value in case its a scalar
-                    out_arr = op(arr, bodo.utils.conversion.unbox_if_timestamp(rhs_arr))
+                    out_arr = op(
+                        arr, bodo.utils.conversion.unbox_if_tz_naive_timestamp(rhs_arr)
+                    )
                     return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
                 return impl
@@ -4595,7 +4755,6 @@ def create_binary_op_overload(op):
 
         # right arg is Series
         if isinstance(rhs, SeriesType):
-
             # right arg is dt64/td64 series, may need to unbox LHS
             if rhs.dtype in [bodo.datetime64ns, bodo.timedelta64ns]:
 
@@ -4605,7 +4764,9 @@ def create_binary_op_overload(op):
                     name = bodo.hiframes.pd_series_ext.get_series_name(rhs)
                     lhs_arr = bodo.utils.conversion.get_array_if_series_or_index(lhs)
                     # Unbox the other value in case its a scalar
-                    out_arr = op(bodo.utils.conversion.unbox_if_timestamp(lhs_arr), arr)
+                    out_arr = op(
+                        bodo.utils.conversion.unbox_if_tz_naive_timestamp(lhs_arr), arr
+                    )
                     return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
                 return impl
@@ -4806,7 +4967,7 @@ def overload_argsort(A):
         n = len(A)
         l_key_arrs = bodo.libs.str_arr_ext.to_list_if_immutable_arr((A.copy(),))
         data = (np.arange(n),)
-        bodo.libs.timsort.sort(l_key_arrs, 0, n, data)
+        bodo.libs.vendored.timsort.sort(l_key_arrs, 0, n, data)
         return data[0]
 
     return impl
@@ -4826,7 +4987,7 @@ def overload_to_numeric(arg_a, errors="raise", downcast=None):
         in ("integer", "signed", "unsigned", "float")
     ):  # pragma: no cover
         raise BodoError(
-            "pd.to_numeric(): invalid downcasting method provided {}".format(downcast)
+            f"pd.to_numeric(): invalid downcasting method provided {downcast}"
         )
 
     # find output dtype
@@ -4839,11 +5000,6 @@ def overload_to_numeric(arg_a, errors="raise", downcast=None):
             out_dtype = types.uint64
         else:
             assert downcast_str == "float"
-
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
-        arg_a, "pandas.to_numeric()"
-    )
-
     # just return numeric array
     # TODO: handle dt64/td64 to int64 conversion
     if isinstance(arg_a, (types.Array, IntegerArrayType)):
@@ -4868,8 +5024,12 @@ def overload_to_numeric(arg_a, errors="raise", downcast=None):
 
     # optimized path for dict-encoded string arrays
     if arg_a == bodo.dict_str_arr_type:
-        return lambda arg_a, errors="raise", downcast=None: bodo.libs.dict_arr_ext.dict_arr_to_numeric(
-            arg_a, errors, downcast
+        return (
+            lambda arg_a,
+            errors="raise",
+            downcast=None: bodo.libs.dict_arr_ext.dict_arr_to_numeric(
+                arg_a, errors, downcast
+            )
         )  # pragma: no cover
 
     _arr_typ = (
@@ -5012,13 +5172,21 @@ def overload_np_where(condition, x, y):
     if y_data == types.none:
         # X is always an array if other input is None.
         # TODO: add proper error checking for np.where
-        if isinstance(x_dtype, types.Number):
+        if isinstance(x, FloatingArrayType):
+            out_dtype = x
+        elif isinstance(x_dtype, types.Number):
             # Pandas converts integers to floats
             out_dtype = types.Array(types.float64, 1, "C")
         else:
             out_dtype = to_nullable_type(x)
     elif x_data == y_data and not is_nullable:
-        out_dtype = dtype_to_array_type(x_dtype)
+        # dtype_to_array_type uses nullable bool array by default which is wrong here
+        # (see test_numpy_array.py::test_np_select_set_default[arr_tuple_val0])
+        out_dtype = (
+            types.Array(types.bool_, 1, "C")
+            if x_dtype == types.bool_
+            else dtype_to_array_type(x_dtype)
+        )
     # output is string if any input is string
     elif x_dtype == string_type or y_dtype == string_type:
         out_dtype = bodo.string_array_type
@@ -5079,10 +5247,8 @@ def overload_np_where(condition, x, y):
     if isinstance(x_dtype, bodo.PDCategoricalDtype):
         func_text += "      out_codes[j] = x_codes[j]\n"
     else:
-        func_text += (
-            "      out_arr[j] = bodo.utils.conversion.unbox_if_timestamp({})\n".format(
-                "x[j]" if is_x_arr else "x"
-            )
+        func_text += "      out_arr[j] = bodo.utils.conversion.unbox_if_tz_naive_timestamp({})\n".format(
+            "x[j]" if is_x_arr else "x"
         )
     func_text += "    else:\n"
     if is_y_arr:
@@ -5095,10 +5261,8 @@ def overload_np_where(condition, x, y):
         else:
             func_text += "      setna(out_arr, j)\n"
     else:
-        func_text += (
-            "      out_arr[j] = bodo.utils.conversion.unbox_if_timestamp({})\n".format(
-                "y[j]" if is_y_arr else "y"
-            )
+        func_text += "      out_arr[j] = bodo.utils.conversion.unbox_if_tz_naive_timestamp({})\n".format(
+            "y[j]" if is_y_arr else "y"
         )
     func_text += "  return out_arr\n"
     loc_vars = {}
@@ -5118,7 +5282,6 @@ def overload_np_where(condition, x, y):
 
 
 def _verify_np_select_arg_typs(condlist, choicelist, default):
-
     # Check condlist
     if isinstance(condlist, (types.List, types.UniTuple)):
         if not (
@@ -5212,6 +5375,7 @@ def _verify_np_select_arg_typs(condlist, choicelist, default):
         isinstance(choicelist_array_typ, types.Array)
         or isinstance(choicelist_array_typ, BooleanArrayType)
         or isinstance(choicelist_array_typ, IntegerArrayType)
+        or isinstance(choicelist_array_typ, FloatingArrayType)
         or (
             bodo.utils.utils.is_array_typ(choicelist_array_typ, False)
             and (choicelist_array_typ.dtype in [bodo.string_type, bodo.bytes_type])
@@ -5224,7 +5388,6 @@ def _verify_np_select_arg_typs(condlist, choicelist, default):
 
 @overload(np.select)
 def overload_np_select(condlist, choicelist, default=0):
-
     _verify_np_select_arg_typs(condlist, choicelist, default)
 
     # check if both condlist/choicelist are uni-type. If not, we will need to manually do loop unrolling
@@ -5258,8 +5421,8 @@ def overload_np_select(condlist, choicelist, default=0):
                 )
             typs.append(dtyp)
 
-        (unified_scalar_typ, found_unified_typ) = get_common_scalar_dtype(typs)
-        if not found_unified_typ:
+        unified_scalar_typ, _ = get_common_scalar_dtype(typs)
+        if unified_scalar_typ is None:
             raise BodoError("Internal error in overload_np_select")
         unified_array_typ = dtype_to_array_type(unified_scalar_typ)
 
@@ -5326,10 +5489,10 @@ def overload_np_select(condlist, choicelist, default=0):
         for i in range(len(choicelist) - 1, -1, -1):
             func_text += f"  cond = condlist[{i}]\n"
             func_text += f"  choice = choicelist[{i}]\n"
-            func_text += f"  out = np.where(cond, choice, out)\n"
+            func_text += "  out = np.where(cond, choice, out)\n"
     func_text += "  return out"
 
-    loc_vars = dict()
+    loc_vars = {}
     exec(
         func_text,
         {
@@ -5364,8 +5527,27 @@ def overload_series_duplicated(S, keep="first"):
 @overload_method(SeriesType, "drop_duplicates", inline="always", no_unliteral=True)
 def overload_series_drop_duplicates(S, subset=None, keep="first", inplace=False):
     # TODO: support inplace
-    unsupported_args = dict(subset=subset, keep=keep, inplace=inplace)
-    arg_defaults = dict(subset=None, keep="first", inplace=False)
+    unsupported_args = {"subset": subset, "inplace": inplace}
+    arg_defaults = {"subset": None, "inplace": False}
+
+    # keep: "first" => 0, "last" => 1, False => 2
+    if is_overload_constant_str(keep):
+        keep_str = get_overload_const_str(keep)
+        if keep_str == "first":
+            keep_i = 0
+        elif keep_str == "last":
+            keep_i = 1
+        else:  # pragma: no cover
+            raise_bodo_error(
+                "Series.drop_duplicates(): keep must be 'first', 'last', or False"
+            )
+    elif is_overload_constant_bool(keep) and get_overload_const_bool(keep) == False:
+        keep_i = 2
+    else:  # pragma: no cover
+        raise_bodo_error(
+            "Series.drop_duplicates(): keep must be 'first', 'last', or False"
+        )
+
     check_unsupported_args(
         "Series.drop_duplicates",
         unsupported_args,
@@ -5384,7 +5566,7 @@ def overload_series_drop_duplicates(S, subset=None, keep="first", inplace=False)
         )
         name = bodo.hiframes.pd_series_ext.get_series_name(S)
         (data_0,), index_arr = bodo.libs.array_kernels.drop_duplicates(
-            (data_0,), index, 1
+            (data_0,), index, 1, keep_i
         )
         index = bodo.utils.conversion.index_from_array(index_arr)
         return bodo.hiframes.pd_series_ext.init_series(data_0, index, name)
@@ -5394,11 +5576,6 @@ def overload_series_drop_duplicates(S, subset=None, keep="first", inplace=False)
 
 @overload_method(SeriesType, "between", inline="always", no_unliteral=True)
 def overload_series_between(S, left, right, inclusive="both"):
-
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(S, "Series.between()")
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(left, "Series.between()")
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(right, "Series.between()")
-
     series_scalar_type = element_type(S.data)
     # TODO: Update check to check comparison <
     # is_common_scalar_dtype does an equality check.
@@ -5426,8 +5603,11 @@ def overload_series_between(S, left, right, inclusive="both"):
         name = bodo.hiframes.pd_series_ext.get_series_name(S)
         numba.parfors.parfor.init_prange()
         n = len(arr)
-        out_arr = np.empty(n, np.bool_)
+        out_arr = bodo.libs.bool_arr_ext.alloc_bool_array(n)
         for i in numba.parfors.parfor.internal_prange(n):
+            if bodo.libs.array_kernels.isna(arr, i):
+                bodo.libs.array_kernels.setna(out_arr, i)
+                continue
             val = bodo.utils.conversion.box_if_dt64(arr[i])
             if inclusive == "both":
                 out_arr[i] = val <= right and val >= left
@@ -5441,9 +5621,8 @@ def overload_series_between(S, left, right, inclusive="both"):
 
 @overload_method(SeriesType, "repeat", inline="always", no_unliteral=True)
 def overload_series_repeat(S, repeats, axis=None):
-
-    unsupported_args = dict(axis=axis)
-    arg_defaults = dict(axis=None)
+    unsupported_args = {"axis": axis}
+    arg_defaults = {"axis": None}
     check_unsupported_args(
         "Series.repeat",
         unsupported_args,
@@ -5451,7 +5630,6 @@ def overload_series_repeat(S, repeats, axis=None):
         package_name="pandas",
         module_name="Series",
     )
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(S, "Series.repeat()")
 
     # repeats can be int or array of int
     if not (

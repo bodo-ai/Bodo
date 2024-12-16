@@ -1,29 +1,39 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
 S3 & Hadoop file system supports, and file system dependent calls
 """
+
 import glob
 import os
 import warnings
 from urllib.parse import urlparse
 
 import llvmlite.binding as ll
-import numba
 import numpy as np
 from fsspec.implementations.arrow import (
     ArrowFile,
     ArrowFSWrapper,
     wrap_exceptions,
 )
-from numba.core import types
-from numba.extending import NativeValue, models, overload, register_model, unbox
+from llvmlite import ir as lir
+from numba.core import cgutils, types
+from numba.extending import (
+    NativeValue,
+    box,
+    intrinsic,
+    models,
+    overload,
+    register_model,
+    unbox,
+)
 
 import bodo
+from bodo.ext import arrow_cpp
 from bodo.io import csv_cpp
+from bodo.io.pyfs import get_pyarrow_fs_from_ptr
 from bodo.libs.distributed_api import Reduce_Type
 from bodo.libs.str_ext import unicode_to_utf8, unicode_to_utf8_and_len
 from bodo.utils.typing import BodoError, BodoWarning, get_overload_constant_dict
-from bodo.utils.utils import check_java_installation
+from bodo.utils.utils import AWSCredentials, check_java_installation
 
 
 # ----- monkey-patch fsspec.implementations.arrow.ArrowFSWrapper._open --------
@@ -32,7 +42,7 @@ def fsspec_arrowfswrapper__open(self, path, mode="rb", block_size=None, **kwargs
         try:  # Bodo change: try to open the file for random access first
             # We need random access to read parquet file metadata
             stream = self.fs.open_input_file(path)
-        except:  # pragma: no cover
+        except Exception:  # pragma: no cover
             stream = self.fs.open_input_stream(path)
     elif mode == "wb":  # pragma: no cover
         stream = self.fs.open_output_stream(path)
@@ -63,8 +73,8 @@ ll.add_symbol("csv_write", csv_cpp.csv_write)
 bodo_error_msg = """
     Some possible causes:
         (1) Incorrect path: Specified file/directory doesn't exist or is unreachable.
-        (2) Missing credentials: You haven't provided S3 credentials, neither through 
-            environment variables, nor through a local AWS setup 
+        (2) Missing credentials: You haven't provided S3 credentials, neither through
+            environment variables, nor through a local AWS setup
             that makes the credentials available at ~/.aws/credentials.
         (3) Incorrect credentials: Your S3 credentials are incorrect or do not have
             the correct permissions.
@@ -90,7 +100,39 @@ def get_proxy_uri_from_env_vars():
     )
 
 
-def get_s3_fs(region=None, storage_options=None):
+def validate_s3fs_installed():
+    """
+    Validate that s3fs is installed. An error is raised
+    when this is not the case.
+    """
+    try:
+        import s3fs  # noqa
+    except ImportError:
+        raise BodoError(
+            "Couldn't import s3fs, which is required for certain types of S3 access."
+            " s3fs can be installed by calling"
+            " 'conda install -c conda-forge s3fs'.\n"
+        )
+
+
+def validate_gcsfs_installed():
+    """
+    Validate that gcsfs is installed. An error is raised
+    when this is not the case.
+    """
+    try:
+        import gcsfs  # noqa
+    except ImportError:
+        raise BodoError(
+            "Couldn't import gcsfs, which is required for Google cloud access."
+            " gcsfs can be installed by calling"
+            " 'conda install -c conda-forge gcsfs'.\n"
+        )
+
+
+def get_s3_fs(
+    region=None, storage_options=None, aws_credentials: AWSCredentials | None = None
+):
     """
     initialize S3FileSystem with credentials
     """
@@ -110,6 +152,9 @@ def get_s3_fs(region=None, storage_options=None):
         region=region,
         endpoint_override=custom_endpoint,
         proxy_options=proxy_options,
+        access_key=aws_credentials.access_key if aws_credentials else None,
+        secret_key=aws_credentials.secret_key if aws_credentials else None,
+        session_token=aws_credentials.session_token if aws_credentials else None,
     )
 
 
@@ -144,7 +189,11 @@ def get_s3_subtree_fs(bucket_name, region=None, storage_options=None):
     return SubTreeFileSystem(bucket_name, fs)
 
 
-def get_s3_fs_from_path(path, parallel=False, storage_options=None):
+def get_s3_fs_from_path(
+    path,
+    parallel=False,
+    storage_options=None,
+):
     """
     Get a pyarrow.fs.S3FileSystem object from an S3
     path, i.e. determine the region and
@@ -153,7 +202,7 @@ def get_s3_fs_from_path(path, parallel=False, storage_options=None):
     This function is usually called on just rank 0 during compilation,
     hence parallel=False by default.
     """
-    region = get_s3_bucket_region_njit(path, parallel=parallel)
+    region = get_s3_bucket_region_wrapper(path, parallel=parallel)
     if region == "":
         region = None
     return get_s3_fs(region, storage_options)
@@ -172,20 +221,19 @@ def get_hdfs_fs(path):  # pragma: no cover
     if options.scheme in ("abfs", "abfss"):
         # need to pass the full URI as host to libhdfs
         host = path
-        if options.port is None:
-            port = 0
-        else:
-            port = options.port
         user = None
     else:
         host = options.hostname
-        port = options.port
         user = options.username
+    if options.port is None:
+        port = 0
+    else:
+        port = options.port
     # creates a new Hadoop file system from uri
     try:
         fs = HdFS(host=host, port=port, user=user)
     except Exception as e:
-        raise BodoError("Hadoop file system cannot be created: {}".format(e))
+        raise BodoError(f"Hadoop file system cannot be created: {e}")
 
     return fs
 
@@ -220,13 +268,11 @@ def s3_is_directory(fs, path):
         path_ = (options.netloc + options.path).rstrip("/")
         path_info = fs.get_file_info(path_)
         if path_info.type in (pa_fs.FileType.NotFound, pa_fs.FileType.Unknown):
-            raise FileNotFoundError(
-                "{} is a non-existing or unreachable file".format(path)
-            )
+            raise FileNotFoundError(f"{path} is a non-existing or unreachable file")
         if (not path_info.size) and path_info.type == pa_fs.FileType.Directory:
             return True
         return False
-    except (FileNotFoundError, OSError) as e:
+    except (FileNotFoundError, OSError):
         raise
     except BodoError:  # pragma: no cover
         raise
@@ -304,12 +350,12 @@ def hdfs_is_directory(path):
     try:
         hdfs = HadoopFileSystem.from_uri(path)
     except Exception as e:
-        raise BodoError(" Hadoop file system cannot be created: {}".format(e))
+        raise BodoError(f" Hadoop file system cannot be created: {e}")
     # target stat of the path: file or just the directory itself
     target_stat = hdfs.get_file_info([hdfs_path])
 
     if target_stat[0].type in (FileType.NotFound, FileType.Unknown):
-        raise BodoError("{} is a " "non-existing or unreachable file".format(path))
+        raise BodoError(f"{path} is a " "non-existing or unreachable file")
 
     if (not target_stat[0].size) and target_stat[0].type == FileType.Directory:
         return hdfs, True
@@ -340,7 +386,7 @@ def hdfs_list_dir_fnames(path):  # pragma: no cover
             file_stats = hdfs.get_file_info(file_selector)
         except Exception as e:
             raise BodoError(
-                "Exception on getting directory info " "of {}: {}".format(hdfs_path, e)
+                "Exception on getting directory info " f"of {hdfs_path}: {e}"
             )
         file_names = [file_stat.base_name for file_stat in file_stats]
 
@@ -357,7 +403,7 @@ def abfs_is_directory(path):  # pragma: no cover
         # target stat of the path: file or just the directory itself
         target_stat = hdfs.info(path)
     except OSError:
-        raise BodoError("{} is a " "non-existing or unreachable file".format(path))
+        raise BodoError(f"{path} is a " "non-existing or unreachable file")
 
     if (target_stat["size"] == 0) and target_stat["kind"].lower() == "directory":
         return hdfs, True
@@ -385,11 +431,67 @@ def abfs_list_dir_fnames(path):  # pragma: no cover
             files = hdfs.ls(hdfs_path)
         except Exception as e:
             raise BodoError(
-                "Exception on getting directory info " "of {}: {}".format(hdfs_path, e)
+                "Exception on getting directory info " f"of {hdfs_path}: {e}"
             )
         file_names = [fname[fname.rindex("/") + 1 :] for fname in files]
 
     return (hdfs, file_names)
+
+
+def abfs_get_fs(storage_options: dict[str, str] | None):  # pragma: no cover
+    from pyarrow.fs import AzureFileSystem
+
+    def get_attr(opt_key: str, env_key: str) -> str | None:
+        opt_val = storage_options.get(opt_key) if storage_options else None
+        if (
+            opt_val is not None
+            and os.environ.get(env_key) is not None
+            and opt_val != os.environ.get(env_key)
+        ):
+            warnings.warn(
+                BodoWarning(
+                    f"abfs_get_fs: Both {opt_key} in storage_options and {env_key} in environment variables are set. The value in storage_options will be used ({opt_val})."
+                )
+            )
+        return opt_val or os.environ.get(env_key)
+
+    # account_name is always required, until PyArrow or we support
+    # - anonymous access
+    # - parsing a connection string
+    account_name = get_attr("account_name", "AZURE_STORAGE_ACCOUNT_NAME")
+    # PyArrow currently only supports:
+    # - Passing in Account Key Directly
+    # - Default Credential Chain, i.e. ENVs, shared config, VM identity, etc.
+    #   when nothing else is provided
+    # To support other credential formats like SAS tokens, we need to use ENVs
+    account_key = get_attr("account_key", "AZURE_STORAGE_ACCOUNT_KEY")
+
+    if account_name is None:
+        raise BodoError(
+            "abfs_get_fs: Azure storage account name is not provided. Please set either the account_name in the storage_options or the AZURE_STORAGE_ACCOUNT_NAME environment variable."
+        )
+
+    # Note, Azure validates credentials at use-time instead of at
+    # initialization
+    return AzureFileSystem(account_name, account_key=account_key)
+
+
+"""
+Based on https://github.com/apache/arrow/blob/ab432b1362208696e60824b45a5599a4e91e6301/cpp/src/arrow/filesystem/azurefs.cc#L68
+"""
+
+
+def azure_storage_account_from_path(path: str) -> str | None:
+    parsed = urlparse(path)
+    host = parsed.hostname
+    if host is None:
+        return None
+
+    if host.endswith(".blob.core.windows.net"):
+        return host[: len(host) - len(".blob.core.windows.net")]
+    if host.endswith(".dfs.core.windows.net"):
+        return host[: len(host) - len(".dfs.core.windows.net")]
+    return parsed.username
 
 
 def directory_of_files_common_filter(fname):
@@ -551,13 +653,9 @@ def get_s3_bucket_region(s3_filepath, parallel):
     PyArrow's region detection only works for actual S3 buckets.
     Returns an empty string in case region cannot be determined.
     """
+    from pyarrow import fs as pa_fs
 
-    try:
-        from pyarrow import fs as pa_fs
-    except:  # pragma: no cover
-        raise BodoError("Reading from s3 requires pyarrow currently.")
-
-    from mpi4py import MPI
+    from bodo.mpi4py import MPI
 
     comm = MPI.COMM_WORLD
 
@@ -580,24 +678,32 @@ def get_s3_bucket_region(s3_filepath, parallel):
     return bucket_loc
 
 
-@numba.njit()
-def get_s3_bucket_region_njit(s3_filepath, parallel):  # pragma: no cover
+def get_s3_bucket_region_wrapper(s3_filepath, parallel):  # pragma: no cover
     """
-    njit wrapper around get_s3_bucket_region
+    Wrapper around get_s3_bucket_region that handles list input and non-S3 paths.
     parallel: True when called on all processes (usually runtime),
     False when called on just one process independent of the others
     (usually compile-time).
     """
-    with numba.objmode(bucket_loc="unicode_type"):
-        bucket_loc = ""
-        # The parquet read path might call this function with a list of files,
-        # in which case we retrieve the region of the first one. We assume
-        # every file is in the same region
-        if isinstance(s3_filepath, list):
-            s3_filepath = s3_filepath[0]
-        if s3_filepath.startswith("s3://"):
-            bucket_loc = get_s3_bucket_region(s3_filepath, parallel)
+    bucket_loc = ""
+    # The parquet read path might call this function with a list of files,
+    # in which case we retrieve the region of the first one. We assume
+    # every file is in the same region
+    if isinstance(s3_filepath, list):
+        s3_filepath = s3_filepath[0]
+    if s3_filepath.startswith("s3://"):
+        bucket_loc = get_s3_bucket_region(s3_filepath, parallel)
     return bucket_loc
+
+
+@overload(get_s3_bucket_region_wrapper)
+def overload_get_s3_bucket_region_wrapper(s3_filepath, parallel):
+    def impl(s3_filepath, parallel):
+        with bodo.no_warning_objmode(bucket_loc="unicode_type"):
+            bucket_loc = get_s3_bucket_region_wrapper(s3_filepath, parallel)
+        return bucket_loc
+
+    return impl
 
 
 def csv_write(path_or_buf, D, filename_prefix, is_parallel=False):  # pragma: no cover
@@ -609,7 +715,7 @@ def csv_write(path_or_buf, D, filename_prefix, is_parallel=False):  # pragma: no
 def csv_write_overload(path_or_buf, D, filename_prefix, is_parallel=False):
     def impl(path_or_buf, D, filename_prefix, is_parallel=False):  # pragma: no cover
         # Assuming that path_or_buf is a string
-        bucket_region = get_s3_bucket_region_njit(path_or_buf, parallel=is_parallel)
+        bucket_region = get_s3_bucket_region_wrapper(path_or_buf, parallel=is_parallel)
         # TODO: support non-ASCII file names?
         utf8_str, utf8_len = unicode_to_utf8_and_len(D)
         offset = 0
@@ -634,11 +740,11 @@ def csv_write_overload(path_or_buf, D, filename_prefix, is_parallel=False):
 
 class StorageOptionsDictType(types.Opaque):
     def __init__(self):
-        super(StorageOptionsDictType, self).__init__(name="StorageOptionsDictType")
+        super().__init__(name="StorageOptionsDictType")
 
 
 storage_options_dict_type = StorageOptionsDictType()
-types.storage_options_dict_type = storage_options_dict_type
+types.storage_options_dict_type = storage_options_dict_type  # type: ignore
 register_model(StorageOptionsDictType)(models.OpaqueModel)
 
 
@@ -658,11 +764,60 @@ def overload_get_storage_options_pyobject(storage_options):
     """generate a pyobject for the storage_options to pass to C++"""
     storage_options_val = get_overload_constant_dict(storage_options)
     func_text = "def impl(storage_options):\n"
-    func_text += (
-        "  with numba.objmode(storage_options_py='storage_options_dict_type'):\n"
-    )
+    func_text += "  with bodo.no_warning_objmode(storage_options_py='storage_options_dict_type'):\n"
     func_text += f"    storage_options_py = {str(storage_options_val)}\n"
     func_text += "  return storage_options_py\n"
     loc_vars = {}
     exec(func_text, globals(), loc_vars)
     return loc_vars["impl"]
+
+
+class ArrowFs(types.Type):
+    def __init__(self, name=""):  # pragma: no cover
+        super().__init__(name=f"ArrowFs({name})")
+
+
+register_model(ArrowFs)(models.OpaqueModel)
+
+
+@box(ArrowFs)
+def box_ArrowFs(typ, val, c):
+    fs_ptr_obj = c.pyapi.from_native_value(types.RawPointer("fs_ptr"), val)
+    get_fs_obj = c.pyapi.unserialize(c.pyapi.serialize_object(get_pyarrow_fs_from_ptr))
+    fs_obj = c.pyapi.call_function_objargs(get_fs_obj, [fs_ptr_obj])
+    c.pyapi.decref(fs_ptr_obj)
+    c.pyapi.decref(get_fs_obj)
+    return fs_obj
+
+
+ll.add_symbol("arrow_filesystem_del_py_entry", arrow_cpp.arrow_filesystem_del_py_entry)
+
+
+@intrinsic
+def _arrow_filesystem_del(typingctx, fs_instance):
+    def codegen(context, builder, sig, args):
+        fnty = lir.FunctionType(
+            lir.VoidType(),
+            [lir.LiteralStructType([lir.IntType(8).as_pointer(), lir.IntType(1)])],
+        )
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module, fnty, name="arrow_filesystem_del_py_entry"
+        )
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        builder.call(fn_tp, args)
+
+    return types.void(types.optional(ArrowFs())), codegen
+
+
+def arrow_filesystem_del(fs_instance):
+    pass
+
+
+@overload(arrow_filesystem_del)
+def overload_arrow_filesystem_del(fs_instance):
+    """Delete ArrowFs instance"""
+
+    def impl(fs_instance):
+        return _arrow_filesystem_del(fs_instance)
+
+    return impl

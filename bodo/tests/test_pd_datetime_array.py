@@ -1,11 +1,13 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
-
+import datetime
 
 import pandas as pd
 import pytest
 
 import bodo
-from bodo.tests.utils import check_func
+from bodo.libs.pd_datetime_arr_ext import PandasDatetimeTZDtype
+from bodo.tests.timezone_common import sample_tz  # noqa
+from bodo.tests.utils import check_func, generate_comparison_ops_func
+from bodo.utils.typing import BodoError
 
 _timestamp_strs = [
     "2019-01-01",
@@ -63,6 +65,16 @@ def test_pd_datetime_arr_boxing(arr, memory_leak_check):
         return arr
 
     check_func(test_impl, (arr,))
+
+
+def test_pd_datetime_arr_invalid_tz():
+    with pytest.raises(
+        BodoError,
+        match="Timezone must be either a valid pytz type with a zone, a fixed offset, or None",
+    ):
+        # Make sure the timezone type returns a proper error.
+        # Can't do this via Numba since Pandas won't let us construct a mis-typed array
+        PandasDatetimeTZDtype(tz=())
 
 
 @pytest.mark.parametrize("arr", _dt_arrs)
@@ -323,3 +335,234 @@ def test_setna_compiles(memory_leak_check):
 
     arr = pd.date_range(start="1/1/2022", freq="16D5H", periods=30, tz="Poland").array
     impl(arr)
+
+
+def test_tz_array_tz_scalar_comparison(cmp_op, memory_leak_check):
+    """Check that comparison operators work between
+    the tz-aware array and a tz-aware scalar with the same timezone.
+    """
+    func = generate_comparison_ops_func(cmp_op)
+    arr = pd.date_range(start="1/1/2022", freq="16D5H", periods=30, tz="Poland").array
+    ts = pd.Timestamp("4/4/2022", tz="Poland")
+    check_func(func, (arr, ts))
+    check_func(func, (ts, arr))
+
+
+def test_tz_aware_array_tz_naive_scalar_comparison(cmp_op, memory_leak_check):
+    """Check that comparison operators work between
+    the tz-aware array and a tz-naive scalar
+    """
+    func = generate_comparison_ops_func(cmp_op)
+    arr = pd.date_range(start="1/1/2022", freq="16D5H", periods=30, tz="Poland").array
+    ts = pd.Timestamp("4/4/2022")
+    py_output = pd.array(
+        [cmp_op(arr[i].tz_localize(None), ts) for i in range(len(arr))]
+    )
+    check_func(func, (arr, ts), py_output=py_output)
+    py_output = pd.array(
+        [cmp_op(ts, arr[i].tz_localize(None)) for i in range(len(arr))]
+    )
+    check_func(func, (ts, arr), py_output=py_output)
+
+
+def test_scalar_different_tz_unsupported(cmp_op, memory_leak_check):
+    """Check that comparison operators work between
+    the tz-aware array and a tz-aware scalar with the same timezone.
+    """
+    func = bodo.jit(generate_comparison_ops_func(cmp_op))
+    arr = pd.date_range(start="1/1/2022", freq="16D5H", periods=30, tz="Poland").array
+    # Check different timezones aren't supported
+    ts1 = pd.Timestamp("4/4/2022", tz="US/Pacific")
+    with pytest.raises(
+        BodoError, match="requires both Timestamps share the same timezone"
+    ):
+        func(arr, ts1)
+    with pytest.raises(
+        BodoError, match="requires both Timestamps share the same timezone"
+    ):
+        func(ts1, arr)
+
+
+def test_tz_array_date_scalar_comparison(sample_tz, cmp_op, memory_leak_check):
+    """Check that comparison operators work between
+    the timestamp array and a date scalar.
+    """
+    func = generate_comparison_ops_func(cmp_op)
+    d_range = pd.date_range(start="1/1/2022", freq="16D5H", periods=30, tz=sample_tz)
+    if sample_tz is None:
+        arr = d_range.values
+    else:
+        arr = d_range.array
+    d = datetime.date(2022, 4, 4)
+    # Use the casting for the generated output.
+    d_ts = pd.Timestamp(year=d.year, month=d.month, day=d.day, tz=sample_tz)
+    # This isn't supported in pandas so generate a py output.
+    py_output = pd.array([False] * len(arr), dtype="boolean")
+    for i, elem in enumerate(arr):
+        # Wrap elem in pd.Timestamp to protect against dt64 array.
+        py_output[i] = cmp_op(pd.Timestamp(elem), d_ts)
+    check_func(func, (arr, d), py_output=py_output)
+    # Update the py_output
+    for i, elem in enumerate(arr):
+        py_output[i] = cmp_op(d_ts, pd.Timestamp(elem))
+    check_func(func, (d, arr), py_output=py_output)
+
+
+def test_tz_array_tz_array_comparison(cmp_op, memory_leak_check):
+    """Check that comparison operators work between
+    two tz-aware arrays with the same timezone.
+    """
+    func = generate_comparison_ops_func(cmp_op)
+    arr1 = pd.date_range(start="1/1/2022", freq="16D5H", periods=30, tz="Poland").array
+    arr2 = pd.date_range(
+        start="2/1/2022", freq="8D2H30T", periods=30, tz="Poland"
+    ).array
+    check_func(func, (arr1, arr2))
+    check_func(func, (arr2, arr1))
+
+
+def test_tz_array_date_array_comparison(sample_tz, cmp_op, memory_leak_check):
+    """Check that comparison operators work between
+    a tz-aware array and a date array.
+    """
+    func = generate_comparison_ops_func(cmp_op)
+    d_range = pd.date_range(start="1/1/2022", freq="16D5H", periods=30, tz=sample_tz)
+    if sample_tz is None:
+        arr1 = d_range.values
+    else:
+        arr1 = d_range.array
+    arr2 = (
+        pd.date_range(start="2/1/2022", freq="8D2H30T", periods=30, tz=sample_tz)
+        .to_series()
+        .dt.date.values
+    )
+
+    # This isn't supported in pandas so generate a py output.
+    py_output = pd.array([False] * len(arr1), dtype="boolean")
+    for i in range(len(arr1)):
+        d = arr2[i]
+        d_ts = pd.Timestamp(year=d.year, month=d.month, day=d.day, tz=sample_tz)
+        py_output[i] = cmp_op(pd.Timestamp(arr1[i]), d_ts)
+    check_func(func, (arr1, arr2), py_output=py_output)
+    for i in range(len(arr1)):
+        d = arr2[i]
+        d_ts = pd.Timestamp(year=d.year, month=d.month, day=d.day, tz=sample_tz)
+        py_output[i] = cmp_op(d_ts, pd.Timestamp(arr1[i]))
+    check_func(func, (arr2, arr1), py_output=py_output)
+
+
+def test_tz_array_date_series_comparison(sample_tz, cmp_op, memory_leak_check):
+    """Check that comparison operators work between
+    a tz-aware array and a date array.
+    """
+    func = generate_comparison_ops_func(cmp_op)
+    d_range = pd.date_range(start="1/1/2022", freq="16D5H", periods=30, tz=sample_tz)
+    if sample_tz is None:
+        arr = d_range.values
+    else:
+        arr = d_range.array
+    S = (
+        pd.date_range(start="2/1/2022", freq="8D2H30T", periods=30, tz=sample_tz)
+        .to_series()
+        .reset_index(drop=True)
+        .dt.date
+    )
+
+    # This isn't supported in pandas so generate a py output.
+    py_output = pd.array([False] * len(arr), dtype="boolean")
+    for i in range(len(arr)):
+        d = S[i]
+        d_ts = pd.Timestamp(year=d.year, month=d.month, day=d.day, tz=sample_tz)
+        py_output[i] = cmp_op(pd.Timestamp(arr[i]), d_ts)
+    check_func(func, (arr, S), py_output=pd.Series(py_output))
+    for i in range(len(arr)):
+        d = S[i]
+        d_ts = pd.Timestamp(year=d.year, month=d.month, day=d.day, tz=sample_tz)
+        py_output[i] = cmp_op(d_ts, pd.Timestamp(arr[i]))
+    check_func(func, (S, arr), py_output=pd.Series(py_output))
+
+
+def test_aware_array_tz_naive_array_comparison(cmp_op, memory_leak_check):
+    """Check that comparison operators throw exceptions between
+    the 2 arrays with different timezones.
+    """
+    func = generate_comparison_ops_func(cmp_op)
+    arr1 = pd.date_range(start="1/1/2022", freq="16D5H", periods=30, tz="Poland").array
+    arr2 = pd.date_range(start="2/1/2022", freq="8D2H30T", periods=30).values
+    py_output = pd.array(
+        [cmp_op(arr1[i].tz_localize(None), arr2[i]) for i in range(len(arr1))]
+    )
+    check_func(func, (arr1, arr2), py_output=py_output)
+    py_output = pd.array(
+        [cmp_op(arr2[i], arr1[i].tz_localize(None)) for i in range(len(arr1))]
+    )
+    check_func(func, (arr2, arr1), py_output=py_output)
+
+
+def test_array_different_tz_unsupported(cmp_op, memory_leak_check):
+    """Check that comparison operators throw exceptions between
+    the 2 arrays with different timezones.
+    """
+    func = bodo.jit(generate_comparison_ops_func(cmp_op))
+    arr1 = pd.date_range(start="1/1/2022", freq="16D5H", periods=30, tz="Poland").array
+    arr2 = pd.date_range(
+        start="2/1/2022", freq="8D2H30T", periods=30, tz="US/Pacific"
+    ).array
+    # Check that comparison is not support between tz-aware and naive
+    with pytest.raises(
+        BodoError, match="requires both Timestamps share the same timezone"
+    ):
+        func(arr1, arr2)
+    with pytest.raises(
+        BodoError, match="requires both Timestamps share the same timezone"
+    ):
+        func(arr2, arr1)
+
+
+def test_tz_convert_none(memory_leak_check):
+    """
+    Test tz_convert with argument None on a timezone aware array.
+    """
+
+    def impl(arr):
+        return arr.tz_convert(None)
+
+    arr = pd.date_range(start="1/1/2022", freq="16D5H", periods=30, tz="Poland").array
+    # Python will have a different output type until we handle no timezone in Datetime array
+    py_output = arr.tz_convert(None)
+    check_func(impl, (arr,), py_output=py_output)
+
+
+@pytest.mark.parametrize(
+    "idx",
+    [
+        pytest.param([0, 4, 15, 2, 11, 16], id="int_list"),
+        pytest.param([False, False, True, False, False] * 6, id="bool_list"),
+        pytest.param(slice(11, 17, 1), id="slice"),
+    ],
+)
+@pytest.mark.parametrize(
+    "val",
+    [
+        pytest.param(
+            pd.Timestamp(year=2024, month=1, day=11, tz="Poland"), id="scalar"
+        ),
+        pytest.param(
+            pd.date_range(start="1/1/2025", freq="4h", periods=6, tz="Poland").array,
+            id="arr",
+            marks=pytest.mark.slow,
+        ),
+    ],
+)
+def test_setitem(idx, val, memory_leak_check):
+    """
+    Tests all of the supported setitem cases.
+    """
+
+    def impl(arr, idx, val):
+        arr[idx] = val
+        return arr
+
+    arr = pd.date_range(start="1/1/2022", freq="16D5H", periods=30, tz="Poland").array
+    # We only test sequence inputs for now
+    check_func(impl, (arr, idx, val), copy_input=True, only_seq=True)

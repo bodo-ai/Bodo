@@ -7,7 +7,7 @@ import pandas as pd
 import pytest
 
 import bodo
-from bodo.tests.utils import check_func
+from bodo.tests.utils import check_func, no_default
 from bodo.utils.typing import BodoError
 
 
@@ -704,28 +704,50 @@ def test_np_random_multivariate_normal(memory_leak_check):
 
 @pytest.fixture(
     params=[
-        pd.arrays.IntegerArray(
-            np.array([1, -3, 2, 3, 10] * 2, np.int8),
-            np.array([False, True, True, False, False] * 2),
+        pytest.param(
+            pd.arrays.IntegerArray(
+                np.array([1, -3, 2, 3, 10] * 2, np.int8),
+                np.array([False, True, True, False, False] * 2),
+            ),
+            id="IntegerArray",
         ),
-        pd.array([True, False, True, pd.NA, False] * 2),
-        np.array(
-            [
-                Decimal("1.6"),
-                None,
-                Decimal("-0.222"),
-                Decimal("1111.316"),
-                Decimal("5.1"),
-            ]
-            * 2
+        pytest.param(
+            pd.arrays.FloatingArray(
+                np.array([1.0, -3.0, 2.0, 3.0, 10.0] * 2, np.float64),
+                np.array([False, True, True, False, False] * 2),
+            ),
+            id="FloatingArray",
+            marks=pytest.mark.skip(reason="FloatingArray not fully implemented"),
         ),
-        np.append(pd.date_range("2020-01-14", "2020-01-22").date, [None]),
-        np.append(
-            [
-                datetime.timedelta(days=5, seconds=4, weeks=4),
-                datetime.timedelta(days=2, microseconds=121),
-            ],
-            [None, datetime.timedelta(microseconds=100000001213131, hours=5)] * 4,
+        pytest.param(
+            pd.array([True, False, True, pd.NA, False] * 2), id="BooleanArray"
+        ),
+        pytest.param(
+            np.array(
+                [
+                    Decimal("1.6"),
+                    None,
+                    Decimal("-0.222"),
+                    Decimal("1111.316"),
+                    Decimal("5.1"),
+                ]
+                * 2
+            ),
+            id="DecimalArray",
+        ),
+        pytest.param(
+            np.append(pd.date_range("2020-01-14", "2020-01-22").date, [None]),
+            id="DateArray",
+        ),
+        pytest.param(
+            np.append(
+                [
+                    datetime.timedelta(days=5, seconds=4, weeks=4),
+                    datetime.timedelta(days=2, microseconds=121),
+                ],
+                [None, datetime.timedelta(microseconds=100000001213131, hours=5)] * 4,
+            ),
+            id="TimedeltaArray",
         ),
         pytest.param(pd.Categorical([1, 2, 5, None, 2] * 2), marks=pytest.mark.slow),
         pytest.param(pd.Categorical(["AA", "BB", "", "AA", None] * 2)),
@@ -896,7 +918,7 @@ def test_getitem(mutable_bodo_arr, memory_leak_check):
         idx[-1] = False
         py_output = mutable_bodo_arr[idx]
     else:
-        py_output = None
+        py_output = no_default
     idx = pd.array(idx)
     idx[1] = None
     idx[-1] = None
@@ -944,7 +966,7 @@ def test_isna_check(mutable_bodo_arr, memory_leak_check):
         # fails.
         py_output = mutable_bodo_arr
     else:
-        py_output = None
+        py_output = no_default
     check_func(test_impl, (pd.Series(mutable_bodo_arr),), py_output=py_output)
 
 
@@ -1008,7 +1030,10 @@ def test_bad_setitem(mutable_bodo_arr):
         error_msg = "received an incorrect 'value' type"
 
     # we support setting a float scalar value to IntegerArray (see int_arr_setitem)
-    if not isinstance(mutable_bodo_arr, pd.arrays.IntegerArray):
+    if not (
+        isinstance(mutable_bodo_arr, pd.arrays.IntegerArray)
+        or isinstance(mutable_bodo_arr[0], Decimal)
+    ):
         with pytest.raises(err_typ, match=error_msg):
             bodo.jit(test_impl_scalar)(mutable_bodo_arr)
 
@@ -1082,21 +1107,23 @@ def test_np_select(arr_tuple_val, memory_leak_check):
     def na_impl(A1, A2, cond1, cond2):
         choicelist = [A1, A2]
         condlist = [cond1, cond2]
-        return np.select(condlist, choicelist, default=np.NAN)
+        return np.select(condlist, choicelist, default=None)
 
-    if not isinstance(
-        arr_tuple_val[0][0], (np.integer, np.bool_, np.float64, np.float32)
-    ):
-        py_out = na_impl(
-            arr_tuple_val[0][:minsize], arr_tuple_val[1][:minsize], cond1, cond2
-        )
+    A1 = arr_tuple_val[0][:minsize]
+    A2 = arr_tuple_val[1][:minsize]
+
+    if not isinstance(A1[0], (np.integer, np.bool_, np.float64, np.float32)):
+        py_out = na_impl(A1, A2, cond1, cond2)
     else:
-        py_out = None
+        py_out = np.select([cond1, cond2], [A1, A2])
+
+    if isinstance(A1, pd.arrays.IntegerArray):
+        py_out = pd.array(py_out, A1.dtype)
 
     for impl in [impl_1, impl_2, impl_3, impl_4]:
         check_func(
             impl,
-            (arr_tuple_val[0][:minsize], arr_tuple_val[1][:minsize], cond1, cond2),
+            (A1, A2, cond1, cond2),
             check_dtype=False,
             py_output=py_out,
         )
@@ -1141,21 +1168,24 @@ def test_np_select_nullable(arr_tuple_val, memory_leak_check):
     def na_impl(A1, A2, cond1, cond2):
         choicelist = [A1, A2]
         condlist = [cond1, cond2]
-        return np.select(condlist, choicelist, default=np.NAN)
-
-    if not isinstance(
-        arr_tuple_val[0][0], (np.integer, np.bool_, np.float64, np.float32)
-    ):
-        py_out = na_impl(
-            arr_tuple_val[0][:minsize], arr_tuple_val[1][:minsize], cond1, cond2
-        )
-    else:
-        py_out = None
+        return np.select(condlist, choicelist, default=None)
 
     A1 = pd.array(arr_tuple_val[0][:minsize])
     A2 = pd.array(arr_tuple_val[1][:minsize])
-    A1[np.random.choice([True, False], size=minsize, p=[0.5, 0.5])] = np.NaN
-    A2[np.random.choice([True, False], size=minsize, p=[0.5, 0.5])] = np.NaN
+    val0 = A1[0]
+    A1[np.random.choice([True, False], size=minsize, p=[0.5, 0.5])] = None
+    A2[np.random.choice([True, False], size=minsize, p=[0.5, 0.5])] = None
+
+    if not isinstance(val0, (np.integer, np.bool_, np.float64, np.float32)):
+        py_out = na_impl(A1, A2, cond1, cond2)
+    else:
+        default = 0
+        if isinstance(val0, np.bool_):
+            default = False
+        py_out = np.select([cond1, cond2], [A1, A2], default=default)
+
+    if isinstance(A1, (pd.arrays.IntegerArray, pd.arrays.BooleanArray)):
+        py_out = pd.array(py_out, A1.dtype)
 
     if isinstance(A1, pd.arrays.FloatingArray) or isinstance(
         A2, pd.arrays.FloatingArray
@@ -1197,15 +1227,15 @@ def test_np_where_impl_nullable(arr_tuple_val, memory_leak_check):
 
     cond = np.random.randint(2, size=minsize).astype(bool)
 
-    cond[np.random.choice([True, False], size=minsize, p=[0.5, 0.5])] = np.NaN
+    cond[np.random.choice([True, False], size=minsize, p=[0.5, 0.5])] = np.nan
 
     def impl(A1, A2, cond):
         return np.where(cond, A1, A2)
 
     A1 = pd.array(arr_tuple_val[0][:minsize])
     A2 = pd.array(arr_tuple_val[1][:minsize])
-    A1[np.random.choice([True, False], size=minsize, p=[0.5, 0.5])] = np.NaN
-    A2[np.random.choice([True, False], size=minsize, p=[0.5, 0.5])] = np.NaN
+    A1[np.random.choice([True, False], size=minsize, p=[0.5, 0.5])] = np.nan
+    A2[np.random.choice([True, False], size=minsize, p=[0.5, 0.5])] = np.nan
 
     if isinstance(A1, pd.arrays.FloatingArray) or isinstance(
         A2, pd.arrays.FloatingArray
@@ -1214,7 +1244,11 @@ def test_np_where_impl_nullable(arr_tuple_val, memory_leak_check):
             "Needs support for nullable floating point arrays in Bodo. See BE-41"
         )
 
-    check_func(impl, (A1, A2, cond))
+    py_out = np.where(cond, A1, A2)
+    if isinstance(A1, (pd.arrays.IntegerArray, pd.arrays.BooleanArray)):
+        py_out = pd.array(py_out, A1.dtype)
+
+    check_func(impl, (A1, A2, cond), py_output=py_out)
 
 
 def test_np_select_none_default(arr_tuple_val, memory_leak_check):
@@ -1240,7 +1274,7 @@ def test_np_select_none_default(arr_tuple_val, memory_leak_check):
     def py_impl(A1, A2, cond1, cond2):
         choicelist = [A1, A2]
         condlist = [cond1, cond2]
-        return np.select(condlist, choicelist, default=pd.NA)
+        return np.select(condlist, choicelist, default=None)
 
     py_out = py_impl(
         arr_tuple_val[0][:minsize], arr_tuple_val[1][:minsize], cond1, cond2
@@ -1249,6 +1283,9 @@ def test_np_select_none_default(arr_tuple_val, memory_leak_check):
     if arr_tuple_val[0].dtype.name.startswith("float"):
         py_out[pd.isna(py_out)] = np.NAN
         py_out = py_out.astype(float)
+
+    if isinstance(py_out[0], bool):
+        py_out = pd.array(py_out)
 
     check_func(
         impl,

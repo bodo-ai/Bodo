@@ -1,17 +1,21 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
 Test correctness of SQL bitwise functions on BodoSQL
 """
 
 import pandas as pd
 import pytest
+
+from bodo.tests.utils import pytest_slow_unless_codegen
 from bodosql.tests.utils import check_query
+
+# Skip unless any codegen files were changed
+pytestmark = pytest_slow_unless_codegen
 
 
 @pytest.fixture
 def bitwise_df():
     return {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
                 "A": pd.Series(
                     [0, 1, 42, 2147483647, -2147483648, None], dtype=pd.Int32Dtype()
@@ -322,11 +326,11 @@ def test_bitxor(args, bitwise_df, spark_info, memory_leak_check):
                         # support unsigned int properly. See [BE-3419].
                         0: pd.Series(
                             [
-                                -9223372036854775808,
-                                -9223372036854775808,
-                                -9223372036854775808,
-                                -9223372036854775808,
                                 0,
+                                -128,
+                                -43,
+                                -129,
+                                -14,
                                 0,
                             ],
                         )
@@ -382,7 +386,7 @@ def test_bitnot(args, bitwise_df, spark_info, memory_leak_check):
                         # NOTE: Calcite makes the result signed int64 and doesn't really
                         # support unsigned int properly. See [BE-3419].
                         0: pd.Series(
-                            [-9223372036854775808, 0, 1664, 5376, 16256, 16384],
+                            [-128, 0, 1664, 5376, 16256, 16384],
                         )
                     }
                 ),

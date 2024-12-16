@@ -2,20 +2,35 @@
 Tests helper functions used in our MERGE_INTO implementation, specifically those defined
 at BodoSQL/bodosql/libs/merge_into.py
 """
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 
+import io
 import random
 
+import numpy as np
+import pandas as pd
 import pytest
-from bodosql.libs.iceberg_merge_into import *  # noqa
-from bodosql.tests.named_params_common import *  # noqa
 
+import bodo
+from bodo.tests.conftest import iceberg_database, iceberg_table_conn  # noqa
+from bodo.tests.user_logging_utils import (
+    check_logger_msg,
+    create_string_io_logger,
+    set_logging_stream,
+)
 from bodo.tests.utils import (
     check_func,
     gen_nonascii_list,
     gen_random_string_binary_array,
 )
 from bodo.utils.typing import BodoError
+from bodosql.libs.iceberg_merge_into import (
+    DELETE_ENUM,
+    INSERT_ENUM,
+    MERGE_ACTION_ENUM_COL_NAME,
+    ROW_ID_COL_NAME,
+    UPDATE_ENUM,
+    do_delta_merge_with_target,
+)
 
 small_df_len = 12
 
@@ -111,33 +126,33 @@ delete_everything_and_insert_some_stuff_df_string = pd.DataFrame(
 np.random.seed(42)
 stress_test_base_df = pd.DataFrame(
     {
-        "int_col": np.random.randint(-1000000, 1000000, size=100),
-        "str_col": gen_random_string_binary_array(100, is_binary=False),
-        "non_ascii_str_col": gen_nonascii_list(100),
-        "bytes_col": gen_random_string_binary_array(100, is_binary=True),
-        "ts_col": pd.date_range(start="2011-02-24", end="2013-01-1", periods=100),
-        "td_col": pd.Series(np.random.randint(-1000000, 1000000, size=100)).astype(
-            "timedelta64[s]"
+        "INT_COL": np.random.randint(-1000000, 1000000, size=100),
+        "STR_COL": gen_random_string_binary_array(100, is_binary=False),
+        "NON_ASCII_STR_COL": gen_nonascii_list(100),
+        "BYTES_COL": gen_random_string_binary_array(100, is_binary=True),
+        "TS_COL": pd.date_range(start="2011-02-24", end="2013-01-1", periods=100),
+        "TD_COL": pd.Series(np.random.randint(-1000000, 1000000, size=100)).astype(
+            "timedelta64[ns]"
         ),
-        "bool_col": np.random.randint(0, 2, size=100).astype(bool),
-        "float_col": np.random.uniform(-1000000, 1000000, size=100),
+        "BOOL_COL": np.random.randint(0, 2, size=100).astype(bool),
+        "FLOAT_COL": np.random.uniform(-1000000, 1000000, size=100),
     }
 )
 
 stress_test_delta_df = pd.DataFrame(
     {
-        "int_col": np.random.randint(-1000000, 1000000, size=75),
+        "INT_COL": np.random.randint(-1000000, 1000000, size=75),
         # Flip the values for str and non-ascii, so we can be sure that we can
         # insert/update non-ascii string into normal str array, and visa versa
-        "str_col": gen_nonascii_list(75),
-        "non_ascii_str_col": gen_random_string_binary_array(75, is_binary=False),
-        "bytes_col": gen_random_string_binary_array(75, is_binary=True),
-        "ts_col": pd.date_range(start="2011-02-24", end="2013-01-1", periods=75),
-        "td_col": pd.Series(np.random.randint(-1000000, 1000000, size=75)).astype(
-            "timedelta64[s]"
+        "STR_COL": gen_nonascii_list(75),
+        "NON_ASCII_STR_COL": gen_random_string_binary_array(75, is_binary=False),
+        "BYTES_COL": gen_random_string_binary_array(75, is_binary=True),
+        "TS_COL": pd.date_range(start="2011-02-24", end="2013-01-1", periods=75),
+        "TD_COL": pd.Series(np.random.randint(-1000000, 1000000, size=75)).astype(
+            "timedelta64[ns]"
         ),
-        "bool_col": np.random.randint(0, 2, size=75).astype(bool),
-        "float_col": np.random.uniform(-1000000, 1000000, size=75),
+        "BOOL_COL": np.random.randint(0, 2, size=75).astype(bool),
+        "FLOAT_COL": np.random.uniform(-1000000, 1000000, size=75),
     }
 )
 
@@ -163,10 +178,10 @@ def delta_merge_equiv(orig_base_df, delta_df):
     test_do_delta_merge_with_target
 
     Args:
-        base_df (dataframe): The original/target dataframe, to apply the changes to.
+        base_df (DataFrame): The original/target DataFrame, to apply the changes to.
                              must have a row id column with name ROW_ID_COL_NAME.
-        delta_df (dataframe): The delta dataframe, containing the changes to apply to
-                              the target dataframe. Must have a row id column with
+        delta_df (DataFrame): The delta DataFrame, containing the changes to apply to
+                              the target DataFrame. Must have a row id column with
                               name ROW_ID_COL_NAME, and a action enum colum with name
                               MERGE_ACTION_ENUM_COL_NAME.
     """
@@ -178,7 +193,7 @@ def delta_merge_equiv(orig_base_df, delta_df):
     delta_df_delete = delta_df[delta_df[MERGE_ACTION_ENUM_COL_NAME] == DELETE_ENUM]
 
     base_df = base_df.set_index(ROW_ID_COL_NAME, drop=True)
-    for _idx, row in delta_df_update.iterrows():
+    for _, row in delta_df_update.iterrows():
         cur_update_id = row[ROW_ID_COL_NAME]
         base_df.loc[cur_update_id] = row
 
@@ -196,6 +211,7 @@ def do_delta_merge_with_target_py_wrapper(target_df, delta_df):
     return do_delta_merge_with_target(target_df, delta_df)
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize(
     "args",
     [
@@ -257,11 +273,9 @@ def do_delta_merge_with_target_py_wrapper(target_df, delta_df):
         False,
     ],
 )
-def test_do_delta_merge_with_target_dist(args, use_table_format, memory_leak_check):
+def test_do_delta_merge_with_target(args, use_table_format, memory_leak_check):
     """
     Tests our helper functions used in the distributed MERGE INTO case.
-    The distributed tests are separated from the replicated tests due to a memory
-    leak in sort with _bodo_chunk_bounds: https://bodo.atlassian.net/browse/BE-3775
     """
     target_df, delta_df = args
     expected_output = delta_merge_equiv(target_df, delta_df)
@@ -273,103 +287,11 @@ def test_do_delta_merge_with_target_dist(args, use_table_format, memory_leak_che
         reset_index=True,
         sort_output=True,
         check_dtype=False,
-        only_1DVar=True,
-        use_table_format=use_table_format,
-    )
-    check_func(
-        do_delta_merge_with_target_py_wrapper,
-        (target_df, delta_df),
-        py_output=expected_output,
-        reset_index=True,
-        sort_output=True,
-        check_dtype=False,
-        only_1D=True,
         use_table_format=use_table_format,
     )
 
 
-@pytest.mark.parametrize(
-    "args",
-    [
-        pytest.param(
-            (
-                base_df_int,
-                delta_df_int,
-            ),
-            id="base_df_int_with_delta_df_int",
-        ),
-        pytest.param(
-            (
-                base_df_int,
-                delete_everything_and_insert_some_stuff_df_int,
-            ),
-            id="base_df_int_with_delete_all_and_insert_df_int",
-        ),
-        pytest.param(
-            (
-                base_df_int,
-                delete_everything_df_int,
-            ),
-            id="base_df_int_with_delete_everything_df_int",
-        ),
-        pytest.param(
-            (
-                base_df_string,
-                delta_df_string,
-            ),
-            id="base_df_string_with_delta_df_string",
-        ),
-        pytest.param(
-            (
-                base_df_string,
-                delete_everything_and_insert_some_stuff_df_string,
-            ),
-            id="base_df_string_with_delete_all_and_insert_df_string",
-        ),
-        pytest.param(
-            (
-                base_df_string,
-                delete_everything_df_string,
-            ),
-            id="base_df_string_with_delete_everything_df_string",
-        ),
-        pytest.param(
-            (
-                stress_test_base_df,
-                stress_test_delta_df,
-            ),
-            id="stress_test_df",
-        ),
-    ],
-)
-@pytest.mark.parametrize(
-    "use_table_format",
-    [
-        True,
-        False,
-    ],
-)
-def test_do_delta_merge_with_target_seq(args, use_table_format):
-    """
-    Tests our helper functions used in the replicated MERGE INTO case.
-    The distributed tests are separated from the replicated tests due to a memory
-    leak in sort with _bodo_chunk_bounds: https://bodo.atlassian.net/browse/BE-3775
-    """
-    target_df, delta_df = args
-    expected_output = delta_merge_equiv(target_df, delta_df)
-
-    check_func(
-        do_delta_merge_with_target_py_wrapper,
-        (target_df, delta_df),
-        py_output=expected_output,
-        reset_index=True,
-        sort_output=True,
-        check_dtype=False,
-        only_seq=True,
-        use_table_format=use_table_format,
-    )
-
-
+@pytest.mark.slow
 def test_do_delta_merge_failure():
     """
     Tests our helper functions used in MERGE INTO throw a reasonable error
@@ -393,9 +315,10 @@ def test_do_delta_merge_failure():
         BodoError,
         match="Error in MERGE INTO: Found multiple actions to apply to the same row in the target table",
     ):
-        out_val = do_delta_merge_with_target(target_df, delta_df)
+        do_delta_merge_with_target(target_df, delta_df)
 
 
+@pytest.mark.slow
 def test_do_delta_merge_disallow_multiple_delete():
     """
     Tests our helper functions in MERGE INTO does not allow multiple delete actions for the same row.
@@ -420,3 +343,42 @@ def test_do_delta_merge_disallow_multiple_delete():
         match="Error in MERGE INTO: Found multiple actions to apply to the same row in the target table",
     ):
         do_delta_merge_with_target(target_df, delta_df)
+
+
+@pytest.mark.slow
+def test_do_delta_merge_with_target_filter_pushdown_simple(
+    iceberg_database, iceberg_table_conn
+):
+    """
+    Tests that do_delta_merge_with_target doesn't 'use' target_df, for purposes of filter
+    pushdown.
+    #TODO: Add a more extensive E2E test consisting of actual BodoSQL IR once we have codegen working
+    """
+
+    table_name = "SIMPLE_NUMERIC_TABLE"
+    db_schema, warehouse_loc = iceberg_database(table_name)
+    conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
+
+    def impl(table_name, conn, db_schema):
+        orig_df, _, _ = pd.read_sql_table(
+            table_name, conn, db_schema, _bodo_merge_into=True
+        )  # type: ignore
+        # Normally, this section would be a join on some secondary source table to
+        # produce a delta table
+        # For now, we're just deleting columns where B = 2 using do_delta_merge_with_target
+        filtered_orig_df = orig_df[orig_df.B == 2]
+        filtered_orig_df[ROW_ID_COL_NAME] = np.arange(len(filtered_orig_df))
+
+        delta_table = filtered_orig_df
+        delta_table[MERGE_ACTION_ENUM_COL_NAME] = 0
+        output_df = do_delta_merge_with_target(filtered_orig_df, delta_table)
+        return output_df
+
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        bodo.jit(impl)(table_name, conn, db_schema)
+    check_logger_msg(
+        stream, "Columns loaded ['A', 'B', 'C', 'D', 'E', 'F', '_BODO_ROW_ID']"
+    )
+    check_logger_msg(stream, "Filter pushdown successfully performed")

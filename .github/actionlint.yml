@@ -1,0 +1,9 @@
+self-hosted-runner:
+  labels:
+    - small
+    - medium
+    - large
+    - xlarge
+    - self-hosted-small
+    - self-hosted-medium
+    - self-hosted-large

@@ -9,9 +9,10 @@ from bodo.tests.iceberg_database_helpers.utils import (
     get_spark,
 )
 
+TABLE_NAME = "FILTER_PUSHDOWN_TEST_TABLE"
 
-def create_table(table_name="filter_pushdown_test_table", spark=None):
 
+def create_table(table_name=TABLE_NAME, spark=None):
     if spark is None:
         spark = get_spark()
 
@@ -37,12 +38,13 @@ def create_table(table_name="filter_pushdown_test_table", spark=None):
         ("B", "long", True),
         ("C", "string", False),
     ]
-    create_iceberg_table(df, sql_schema, table_name, spark)
+    if create_iceberg_table(df, sql_schema, table_name, spark) is None:
+        return
 
     # Change to partition on year
     print("Adding partition field (year)...")
     spark.sql(
-        f""" 
+        f"""
         ALTER TABLE hadoop_prod.{DATABASE_NAME}.{table_name}
         ADD PARTITION FIELD years(A)
     """
@@ -71,13 +73,13 @@ def create_table(table_name="filter_pushdown_test_table", spark=None):
     # Change to partition on month
     print("Modifying partition field (year --> month)...")
     spark.sql(
-        f""" 
+        f"""
         ALTER TABLE hadoop_prod.{DATABASE_NAME}.{table_name}
         DROP PARTITION FIELD years(A)
     """
     )
     spark.sql(
-        f""" 
+        f"""
         ALTER TABLE hadoop_prod.{DATABASE_NAME}.{table_name}
         ADD PARTITION FIELD months(A)
     """
@@ -97,13 +99,13 @@ def create_table(table_name="filter_pushdown_test_table", spark=None):
     # Change to partition on day
     print("Modifying partition field (month --> day)...")
     spark.sql(
-        f""" 
+        f"""
         ALTER TABLE hadoop_prod.{DATABASE_NAME}.{table_name}
         DROP PARTITION FIELD months(A)
     """
     )
     spark.sql(
-        f""" 
+        f"""
         ALTER TABLE hadoop_prod.{DATABASE_NAME}.{table_name}
         ADD PARTITION FIELD days(A)
     """
@@ -132,7 +134,7 @@ def create_table(table_name="filter_pushdown_test_table", spark=None):
     # Remove partition (but not the column, assuming this is possible)
     print("Removing partition field days(A)...")
     spark.sql(
-        f""" 
+        f"""
         ALTER TABLE hadoop_prod.{DATABASE_NAME}.{table_name}
         DROP PARTITION FIELD days(A)
     """

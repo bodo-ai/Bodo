@@ -1,218 +1,165 @@
 package com.bodosql.calcite.application.BodoSQLCodeGen;
 
-import static com.bodosql.calcite.application.Utils.Utils.*;
-
-import com.bodosql.calcite.application.RexNodeVisitorInfo;
+import com.bodosql.calcite.ir.Expr;
+import com.bodosql.calcite.ir.ExprKt;
+import java.util.ArrayList;
 import java.util.List;
+import kotlin.Pair;
 
 public class RegexpCodeGen {
-
-  /**
-   * Extracts the name from a specific argument in a list of operands, or a default value if there
-   * are not enough operands.
-   *
-   * @param operandsInfo the list of operands
-   * @param i the operand whose name is to be extracted
-   * @param defaultValue the value to return if there are not enough operands
-   * @return either the name of operand i, or the default value
-   */
-  public static String getNameWithDefault(
-      List<RexNodeVisitorInfo> operandsInfo, int i, String defaultValue) {
-    if (i >= operandsInfo.size()) {
-      return defaultValue;
-    }
-    return operandsInfo.get(i).getName();
-  }
 
   /**
    * Extracts the code from a specific argument in a list of operands, or a default value if there
    * are not enough operands.
    *
-   * @param operandsInfo the list of operands
+   * @param operands the list of operands
    * @param i the operand whose code is to be extracted
    * @param defaultValue the value to return if there are not enough operands
    * @return either the code of operand i, or the default value
    */
-  public static String getCodeWithDefault(
-      List<RexNodeVisitorInfo> operandsInfo, int i, String defaultValue) {
-    if (i >= operandsInfo.size()) {
+  public static Expr getCodeWithDefault(List<Expr> operands, int i, Expr defaultValue) {
+    if (i >= operands.size()) {
       return defaultValue;
     }
-    return operandsInfo.get(i).getExprCode();
+    return operands.get(i);
   }
 
   /**
    * Function that returns the rexInfo for a REGEXP_LIKE Function call
    *
-   * @param operandsInfo the information about the 2-3 arguments
-   * @return The RexNodeVisitorInfo corresponding to the function call
+   * @param operands the information about the 2-3 arguments
+   * @param streamingNamedArgs The additional arguments used for streaming. This is an empty list if
+   *     we aren't in a streaming context.
+   * @return The Expr corresponding to the function call
    */
-  public static RexNodeVisitorInfo generateRegexpLikeInfo(List<RexNodeVisitorInfo> operandsInfo) {
-    StringBuilder name = new StringBuilder();
-    StringBuilder expr_code = new StringBuilder();
-
-    RexNodeVisitorInfo source = operandsInfo.get(0);
-    RexNodeVisitorInfo pattern = operandsInfo.get(1);
-
-    name.append("REGEXP_LIKE(");
-    name.append(source.getName()).append(", ");
-    name.append(pattern.getName()).append(", ");
-    name.append(getNameWithDefault(operandsInfo, 2, makeQuoted(""))).append(")");
-
-    expr_code.append("bodo.libs.bodosql_array_kernels.regexp_like(");
-    expr_code.append(source.getExprCode()).append(", ");
-    expr_code.append(pattern.getExprCode()).append(", ");
-    expr_code.append(getCodeWithDefault(operandsInfo, 2, makeQuoted(""))).append(")");
-
-    return new RexNodeVisitorInfo(name.toString(), expr_code.toString());
+  public static Expr generateRegexpLikeInfo(
+      List<Expr> operands, List<Pair<String, Expr>> streamingNamedArgs) {
+    List<Expr> args = new ArrayList<>();
+    args.add(operands.get(0));
+    args.add(operands.get(1));
+    args.add(getCodeWithDefault(operands, 2, new Expr.StringLiteral("")));
+    return ExprKt.bodoSQLKernel("regexp_like", args, streamingNamedArgs);
   }
 
   /**
-   * Function that returns the rexInfo for a REGEXP_COUNT Function call
+   * Function that returns the Code generated for a REGEXP_COUNT Function call
    *
-   * @param operandsInfo the information about the 2-4 arguments
-   * @return The RexNodeVisitorInfo corresponding to the function call
+   * @param operands the information about the 2-4 arguments
+   * @param streamingNamedArgs The additional arguments used for streaming. This is an empty list if
+   *     we aren't in a streaming context.
+   * @return The Expr corresponding to the function call
    */
-  public static RexNodeVisitorInfo generateRegexpCountInfo(List<RexNodeVisitorInfo> operandsInfo) {
-    StringBuilder name = new StringBuilder();
-    StringBuilder expr_code = new StringBuilder();
-
-    RexNodeVisitorInfo source = operandsInfo.get(0);
-    RexNodeVisitorInfo pattern = operandsInfo.get(1);
-
-    name.append("REGEXP_COUNT(");
-    name.append(source.getName()).append(", ");
-    name.append(pattern.getName()).append(", ");
-    name.append(getNameWithDefault(operandsInfo, 2, "1")).append(",");
-    name.append(getNameWithDefault(operandsInfo, 3, makeQuoted(""))).append(")");
-
-    expr_code.append("bodo.libs.bodosql_array_kernels.regexp_count(");
-    expr_code.append(source.getExprCode()).append(", ");
-    expr_code.append(pattern.getExprCode()).append(", ");
-    expr_code.append(getCodeWithDefault(operandsInfo, 2, "1")).append(",");
-    expr_code.append(getCodeWithDefault(operandsInfo, 3, makeQuoted(""))).append(")");
-
-    return new RexNodeVisitorInfo(name.toString(), expr_code.toString());
+  public static Expr generateRegexpCountInfo(
+      List<Expr> operands, List<Pair<String, Expr>> streamingNamedArgs) {
+    List<Expr> args = new ArrayList<>();
+    args.add(operands.get(0));
+    args.add(operands.get(1));
+    args.add(getCodeWithDefault(operands, 2, Expr.Companion.getOne()));
+    args.add(getCodeWithDefault(operands, 3, new Expr.StringLiteral("")));
+    return ExprKt.bodoSQLKernel("regexp_count", args, streamingNamedArgs);
   }
 
   /**
    * Function that returns the rexInfo for a REGEXP_REPLACE Function call
    *
-   * @param operandsInfo the information about the 2-6 arguments
-   * @return The RexNodeVisitorInfo corresponding to the function call
+   * @param operands the information about the 2-6 arguments
+   * @param streamingNamedArgs The additional arguments used for streaming. This is an empty list if
+   *     we aren't in a streaming context.
+   * @return The Expr corresponding to the function call
    */
-  public static RexNodeVisitorInfo generateRegexpReplaceInfo(
-      List<RexNodeVisitorInfo> operandsInfo) {
-    StringBuilder name = new StringBuilder();
-    StringBuilder expr_code = new StringBuilder();
-
-    RexNodeVisitorInfo source = operandsInfo.get(0);
-    RexNodeVisitorInfo pattern = operandsInfo.get(1);
-
-    name.append("REGEXP_REPLACE(");
-    name.append(source.getName()).append(", ");
-    name.append(pattern.getName()).append(", ");
-    name.append(getNameWithDefault(operandsInfo, 2, makeQuoted(""))).append(",");
-    name.append(getNameWithDefault(operandsInfo, 3, "1")).append(",");
-    name.append(getNameWithDefault(operandsInfo, 4, "0")).append(",");
-    name.append(getNameWithDefault(operandsInfo, 5, makeQuoted(""))).append(")");
-
-    expr_code.append("bodo.libs.bodosql_array_kernels.regexp_replace(");
-    expr_code.append(source.getExprCode()).append(", ");
-    expr_code.append(pattern.getExprCode()).append(", ");
-    expr_code.append(getCodeWithDefault(operandsInfo, 2, makeQuoted(""))).append(",");
-    expr_code.append(getCodeWithDefault(operandsInfo, 3, "1")).append(",");
-    expr_code.append(getCodeWithDefault(operandsInfo, 4, "0")).append(",");
-    expr_code.append(getCodeWithDefault(operandsInfo, 5, makeQuoted(""))).append(")");
-
-    return new RexNodeVisitorInfo(name.toString(), expr_code.toString());
+  public static Expr generateRegexpReplaceInfo(
+      List<Expr> operands, List<Pair<String, Expr>> streamingNamedArgs) {
+    List<Expr> args = new ArrayList<>();
+    args.add(operands.get(0));
+    args.add(operands.get(1));
+    args.add(getCodeWithDefault(operands, 2, new Expr.StringLiteral("")));
+    args.add(getCodeWithDefault(operands, 3, Expr.Companion.getOne()));
+    args.add(getCodeWithDefault(operands, 4, Expr.Companion.getZero()));
+    args.add(getCodeWithDefault(operands, 5, new Expr.StringLiteral("")));
+    return ExprKt.bodoSQLKernel("regexp_replace", args, streamingNamedArgs);
   }
 
   /**
    * Function that returns the rexInfo for a REGEXP_SUBSTR Function call
    *
-   * @param operandsInfo the information about the 2-6 arguments
-   * @return The RexNodeVisitorInfo corresponding to the function call
+   * @param operands the information about the 2-6 arguments
+   * @param streamingNamedArgs The additional arguments used for streaming. This is an empty list if
+   *     we aren't in a streaming context.
+   * @return The Expr corresponding to the function call
    */
-  public static RexNodeVisitorInfo generateRegexpSubstrInfo(List<RexNodeVisitorInfo> operandsInfo) {
-    StringBuilder name = new StringBuilder();
-    StringBuilder expr_code = new StringBuilder();
+  public static Expr generateRegexpSubstrInfo(
+      List<Expr> operands, List<Pair<String, Expr>> streamingNamedArgs) {
+    List<Expr> args = new ArrayList<>();
+    args.add(operands.get(0));
+    args.add(operands.get(1));
+    args.add(getCodeWithDefault(operands, 2, Expr.Companion.getOne()));
+    args.add(getCodeWithDefault(operands, 3, Expr.Companion.getOne()));
+    args.add(getCodeWithDefault(operands, 4, new Expr.StringLiteral("c")));
+    args.add(getCodeWithDefault(operands, 5, Expr.Companion.getZero()));
 
-    RexNodeVisitorInfo source = operandsInfo.get(0);
-    RexNodeVisitorInfo pattern = operandsInfo.get(1);
+    int regexpParamsIndex = 4;
+    int groupNumIndex = 5;
 
-    name.append("REGEXP_SUBSTR(");
-    name.append(source.getName()).append(", ");
-    name.append(pattern.getName()).append(", ");
-    name.append(getNameWithDefault(operandsInfo, 2, "1")).append(",");
-    name.append(getNameWithDefault(operandsInfo, 3, "1")).append(",");
-    // If a group was provided, ensure that the flags contain 'e' since providing
-    // a group number implies that extraction should be done
-    if (operandsInfo.size() == 6) {
-      name.append(operandsInfo.get(4).getName() + "+" + makeQuoted("e")).append(",");
-    } else {
-      name.append(getNameWithDefault(operandsInfo, 4, makeQuoted(""))).append(",");
+    String regexpParams = args.get(regexpParamsIndex).emit();
+    String groupNum = args.get(groupNumIndex).emit();
+
+    // Edge case: if regex parameters exist and the group
+    // number is unspecified, <group_num> defaults to 1
+    if (regexpParams.contains("e") && groupNum.equals("0")) {
+      args.set(groupNumIndex, Expr.Companion.getOne());
     }
-    name.append(getNameWithDefault(operandsInfo, 5, "1")).append(")");
 
-    expr_code.append("bodo.libs.bodosql_array_kernels.regexp_substr(");
-    expr_code.append(source.getExprCode()).append(", ");
-    expr_code.append(pattern.getExprCode()).append(", ");
-    expr_code.append(getCodeWithDefault(operandsInfo, 2, "1")).append(",");
-    expr_code.append(getCodeWithDefault(operandsInfo, 3, "1")).append(",");
-    // If a group was provided, ensure that the flags contain 'e'
-    if (operandsInfo.size() == 6) {
-      expr_code.append(operandsInfo.get(4).getExprCode() + "+" + makeQuoted("e")).append(",");
-    } else {
-      expr_code.append(getNameWithDefault(operandsInfo, 4, makeQuoted(""))).append(",");
+    // Edge case: if <group_num> is specified, Snowflake
+    // allows extraction even if "e" is not present in the
+    // regex parameters arg.
+    if (!groupNum.equals("0") && !regexpParams.contains("e")) {
+      args.set(
+          regexpParamsIndex,
+          new Expr.Binary("+", args.get(regexpParamsIndex), new Expr.StringLiteral("e")));
     }
-    expr_code.append(getCodeWithDefault(operandsInfo, 5, "1")).append(")");
-
-    return new RexNodeVisitorInfo(name.toString(), expr_code.toString());
+    return ExprKt.bodoSQLKernel("regexp_substr", args, streamingNamedArgs);
   }
 
   /**
    * Function that returns the rexInfo for a REGEXP_INSTR Function call
    *
-   * @param operandsInfo the information about the 2-7 arguments
-   * @return The RexNodeVisitorInfo corresponding to the function call
+   * @param operands the information about the 2-7 arguments
+   * @param streamingNamedArgs The additional arguments used for streaming. This is an empty list if
+   *     we aren't in a streaming context.
+   * @return The Expr corresponding to the function call
    */
-  public static RexNodeVisitorInfo generateRegexpInstrInfo(List<RexNodeVisitorInfo> operandsInfo) {
-    StringBuilder name = new StringBuilder();
-    StringBuilder expr_code = new StringBuilder();
+  public static Expr generateRegexpInstrInfo(
+      List<Expr> operands, List<Pair<String, Expr>> streamingNamedArgs) {
 
-    RexNodeVisitorInfo source = operandsInfo.get(0);
-    RexNodeVisitorInfo pattern = operandsInfo.get(1);
+    List<Expr> args = new ArrayList<>();
+    args.add(operands.get(0)); // source
+    args.add(operands.get(1)); // pattern
+    args.add(getCodeWithDefault(operands, 2, Expr.Companion.getOne())); // position
+    args.add(getCodeWithDefault(operands, 3, Expr.Companion.getOne())); // occurrence
+    args.add(getCodeWithDefault(operands, 4, Expr.Companion.getZero())); // option
+    args.add(getCodeWithDefault(operands, 5, new Expr.StringLiteral("c"))); // Regex parameters
+    args.add(getCodeWithDefault(operands, 6, Expr.Companion.getZero())); // group number
 
-    name.append("REGEXP_INSTR(");
-    name.append(source.getName()).append(", ");
-    name.append(pattern.getName()).append(", ");
-    name.append(getNameWithDefault(operandsInfo, 2, "1")).append(",");
-    name.append(getNameWithDefault(operandsInfo, 3, "1")).append(",");
-    name.append(getNameWithDefault(operandsInfo, 4, "0")).append(",");
-    // If a group was provided, ensure that the flags contain 'e' since providing
-    // a group number implies that extraction should be done
-    if (operandsInfo.size() == 7) {
-      name.append(operandsInfo.get(5).getName() + "+" + makeQuoted("e")).append(",");
-    } else {
-      name.append(getNameWithDefault(operandsInfo, 5, makeQuoted(""))).append(",");
+    int regexpParamsIndex = 5;
+    int groupNumIndex = 6;
+
+    String regexpParams = args.get(regexpParamsIndex).emit();
+    String groupNum = args.get(groupNumIndex).emit();
+
+    // Edge case: if regex parameters exist and the group
+    // number is unspecified, <group_num> defaults to 1
+    if (regexpParams.contains("e") && groupNum.equals("0")) {
+      args.set(groupNumIndex, Expr.Companion.getOne());
     }
-    name.append(getNameWithDefault(operandsInfo, 6, "1")).append(")");
 
-    expr_code.append("bodo.libs.bodosql_array_kernels.regexp_instr(");
-    expr_code.append(source.getExprCode()).append(", ");
-    expr_code.append(pattern.getExprCode()).append(", ");
-    expr_code.append(getCodeWithDefault(operandsInfo, 2, "1")).append(",");
-    expr_code.append(getCodeWithDefault(operandsInfo, 3, "1")).append(",");
-    expr_code.append(getCodeWithDefault(operandsInfo, 4, "0")).append(",");
-    // If a group was provided, ensure that the flags contain 'e'
-    if (operandsInfo.size() == 7) {
-      expr_code.append(operandsInfo.get(5).getExprCode() + "+" + makeQuoted("e")).append(",");
-    } else {
-      expr_code.append(getNameWithDefault(operandsInfo, 5, makeQuoted(""))).append(",");
+    // Edge case: if <group_num> is specified, Snowflake
+    // allows extraction even if "e" is not present in the
+    // regex parameters arg.
+    if (!groupNum.equals("0") && !regexpParams.contains("e")) {
+      args.set(
+          regexpParamsIndex,
+          new Expr.Binary("+", args.get(regexpParamsIndex), new Expr.StringLiteral("e")));
     }
-    expr_code.append(getCodeWithDefault(operandsInfo, 6, "1")).append(")");
-
-    return new RexNodeVisitorInfo(name.toString(), expr_code.toString());
+    return ExprKt.bodoSQLKernel("regexp_instr", args, streamingNamedArgs);
   }
 }

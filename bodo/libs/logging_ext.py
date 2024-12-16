@@ -1,14 +1,15 @@
 """
 JIT support for Python's logging module
 """
+
 import logging
 
 import numba
 from numba.core import types
 from numba.core.imputils import lower_constant
-from numba.core.typing.templates import bound_function  # noqa
 from numba.core.typing.templates import (
     AttributeTemplate,
+    bound_function,  # noqa
     infer_getattr,
     signature,
 )
@@ -16,15 +17,13 @@ from numba.extending import (
     NativeValue,
     box,
     models,
-    overload_attribute,
-    overload_method,
     register_model,
     typeof_impl,
     unbox,
 )
 
+import bodo
 from bodo.utils.typing import (
-    create_unsupported_overload,
     gen_objmode_attr_overload,
 )
 
@@ -35,9 +34,7 @@ class LoggingLoggerType(types.Type):
     def __init__(self, is_root=False):
         # TODO: flag is unused, remove?
         self.is_root = is_root
-        super(LoggingLoggerType, self).__init__(
-            name=f"LoggingLoggerType(is_root={is_root})"
-        )
+        super().__init__(name=f"LoggingLoggerType(is_root={is_root})")
 
 
 @typeof_impl.register(logging.RootLogger)
@@ -94,10 +91,10 @@ class LoggingLoggerAttribute(AttributeTemplate):
     def _resolve_helper(self, logger_typ, args, kws):
         kws = dict(kws)
         # add dummy default value for kws to avoid errors
-        arg_names = ", ".join("e{}".format(i) for i in range(len(args)))
+        arg_names = ", ".join(f"e{i}" for i in range(len(args)))
         if arg_names:
             arg_names += ", "
-        kw_names = ", ".join("{} = ''".format(a) for a in kws.keys())
+        kw_names = ", ".join(f"{a} = ''" for a in kws.keys())
         func_text = f"def format_stub(string, {arg_names} {kw_names}):\n"
         func_text += "    pass\n"
         loc_vars = {}
@@ -155,15 +152,11 @@ def _install_logging_logger_unsupported_objects():
     # Installs overload for logger.Logger
     for attr_name in logging_logger_unsupported_attrs:
         full_name = "logging.Logger." + attr_name
-        overload_attribute(LoggingLoggerType, attr_name)(
-            create_unsupported_overload(full_name)
-        )
+        bodo.overload_unsupported_attribute(LoggingLoggerType, attr_name, full_name)
 
     for fname in logging_logger_unsupported_methods:
         full_name = "logging.Logger." + fname
-        overload_method(LoggingLoggerType, fname)(
-            create_unsupported_overload(full_name)
-        )
+        bodo.overload_unsupported_method(LoggingLoggerType, fname, full_name)
 
 
 _install_logging_logger_unsupported_objects()

@@ -8,11 +8,13 @@ import numpy as np
 import pandas as pd
 import pyarrow as pa
 import pytest
-from mpi4py import MPI
 from numba import types
 from pandas.core.dtypes.common import is_list_like
 
 import bodo
+import bodo.tests
+import bodo.tests.utils
+from bodo.mpi4py import MPI
 from bodo.tests.dataframe_common import df_value  # noqa
 from bodo.tests.user_logging_utils import (
     check_logger_msg,
@@ -25,9 +27,13 @@ from bodo.tests.utils import (
     _get_dist_arg,
     _test_equal_guard,
     check_func,
+    no_default,
+    pytest_pandas,
     reduce_sum,
 )
 from bodo.utils.typing import BodoError
+
+pytestmark = pytest_pandas
 
 
 def test_dataframe_apply_method_str(memory_leak_check):
@@ -281,7 +287,7 @@ def test_describe_many_columns(memory_leak_check):
     import time
 
     t0 = time.time()
-    check_func(impl, (df,), is_out_distributed=False)
+    check_func(impl, (df,), is_out_distributed=False, check_dtype=False)
     compilation_time = time.time() - t0
     # Determine the max compilation time on any rank to avoid hangs.
     comm = MPI.COMM_WORLD
@@ -396,6 +402,9 @@ def test_categorical_astype(memory_leak_check):
     check_func(impl, (df,))
 
 
+@pytest.mark.skip(
+    "[BSE-2776] Support list comprehension unrolling with condition for Python 3.12"
+)
 def test_avoid_static_getitem_const(memory_leak_check):
     """Test for avoiding Numba's static_getitem const idx inference bug in typing pass.
     See https://github.com/numba/numba/issues/7592
@@ -474,8 +483,27 @@ def test_map_array_concat(memory_leak_check):
     # Test correctness sequentially, where ordering matters.
     # We cannot test parallel right now because we would need to sort
     # the output.
-    check_func(impl, (df, n), is_out_distributed=False, only_seq=True)
-    check_func(impl_str, (df, n), is_out_distributed=False, only_seq=True)
+    check_func(
+        impl,
+        (df, n),
+        is_out_distributed=False,
+        only_seq=True,
+        py_output=impl(df, n).astype(
+            {"A": "int64", "B": pd.ArrowDtype(pa.map_(pa.int64(), pa.int64()))}
+        ),
+    )
+    check_func(
+        impl_str,
+        (df, n),
+        is_out_distributed=False,
+        only_seq=True,
+        py_output=impl_str(df, n).astype(
+            {
+                "A": "int64",
+                "B": pd.ArrowDtype(pa.map_(pa.large_string(), pa.large_string())),
+            }
+        ),
+    )
 
 
 def test_update_df_type(memory_leak_check):
@@ -712,7 +740,11 @@ pd_supported_merge_cols = [
         id="DecimalArrayType",
     ),
     pytest.param(
-        pd.Series(({1: 1, 2: 2}, {2: 2}, {3: 3}, {4: 4}, {5: 5})), id="MapArrayType"
+        pd.Series(
+            ({1: 1, 2: 2}, {2: 2}, {3: 3}, {4: 4}, {5: 5}),
+            dtype=pd.ArrowDtype(pa.map_(pa.int64(), pa.int64())),
+        ),
+        id="MapArrayType",
     ),
     pytest.param(("a", "b", "c", "d", "e"), id="StringArrayType"),
     pytest.param((b"a", b"b", b"c", b"d", b"e"), id="BinaryArrayType"),
@@ -746,10 +778,18 @@ pd_supported_merge_cols = [
 
 bodo_only_merge_cols = [
     pytest.param(
-        pd.Series(({"a": 1}, {"a": 2}, {"a": 3}, {"a": 4}, {"a": 5})),
+        pd.Series(
+            ({"a": 1}, {"a": 2}, {"a": 3}, {"a": 4}, {"a": 5}),
+            dtype=pd.ArrowDtype(pa.struct([pa.field("a", pa.int64())])),
+        ),
         id="StructArrayType",
     ),
-    pytest.param(pd.Series(([1], [2], [3], [4], [5])), id="ArrayItemArrayType"),
+    pytest.param(
+        pd.Series(
+            ([1], [2], [3], [4], [5]), dtype=pd.ArrowDtype(pa.large_list(pa.int64()))
+        ),
+        id="ArrayItemArrayType",
+    ),
 ]
 
 
@@ -761,11 +801,14 @@ def test_df_merge_col_key_types(key, memory_leak_check):
     df1 = pd.DataFrame({"key": key, "value": [1, 2, 3, 4, 5]})
     df2 = pd.DataFrame({"key": key, "value": [5, 6, 7, 8, 9]})
 
-    try:
-        check_func(impl, (df1, df2), reset_index=True, sort_output=True)
-    except TypeError:
-        with pytest.raises(BodoError, match=r".* MapArrayType unsupported(.|\n)*"):
-            bodo.jit(impl)(df1, df2)
+    # Map arrays aren't supported as keys (both Pandas and Bodo)
+    key_dtype = df1.key.dtype
+    if isinstance(key_dtype, pd.ArrowDtype) and pa.types.is_map(
+        key_dtype.pyarrow_dtype
+    ):
+        return
+
+    check_func(impl, (df1, df2), reset_index=True, sort_output=True)
 
 
 @pytest.mark.parametrize("val", pd_supported_merge_cols + bodo_only_merge_cols)
@@ -855,7 +898,7 @@ def test_table_head_tail(method_name, datapath, memory_leak_check):
     exec(func_text, globals(), local_vars)
     impl = local_vars["impl"]
 
-    check_func(impl, ())
+    check_func(impl, (), check_dtype=False)
     stream = io.StringIO()
     logger = create_string_io_logger(stream)
     with set_logging_stream(logger, 1):
@@ -1047,12 +1090,12 @@ def test_df_mask_where_df(df_value, memory_leak_check):
     if "category" in df_value.dtypes.apply(str).values:
         with pytest.raises(
             BodoError,
-            match=f"DataFrame.where.* 'other' must be a scalar, non-categorical series, 1-dim numpy array or StringArray with a matching type for Series.",
+            match="DataFrame.where.* 'other' must be a scalar, non-categorical series, 1-dim numpy array or StringArray with a matching type for Series.",
         ):
             bodo.jit(test_where)(df_value, cond, df_value)
         with pytest.raises(
             BodoError,
-            match=f"DataFrame.mask.* 'other' must be a scalar, non-categorical series, 1-dim numpy array or StringArray with a matching type for Series.",
+            match="DataFrame.mask.* 'other' must be a scalar, non-categorical series, 1-dim numpy array or StringArray with a matching type for Series.",
         ):
             bodo.jit(test_mask)(df_value, cond, df_value)
         return
@@ -1083,6 +1126,7 @@ def test_df_mask_where_df(df_value, memory_leak_check):
             df_renamed,
         ),
         copy_input=True,
+        check_dtype=False,
     )
     check_func(
         test_mask,
@@ -1092,6 +1136,7 @@ def test_df_mask_where_df(df_value, memory_leak_check):
             df_renamed,
         ),
         copy_input=True,
+        check_dtype=False,
     )
 
 
@@ -1132,7 +1177,7 @@ def test_df_mask_where_series_other(memory_leak_check):
     )
     with pytest.raises(
         BodoError,
-        match=f"DataFrame.where.* series and 'other' must share a common type.",
+        match="DataFrame.where.* series and 'other' must share a common type.",
     ):
         check_func(
             test_where,
@@ -1142,7 +1187,7 @@ def test_df_mask_where_series_other(memory_leak_check):
         )
     with pytest.raises(
         BodoError,
-        match=f"DataFrame.mask.* series and 'other' must share a common type.",
+        match="DataFrame.mask.* series and 'other' must share a common type.",
     ):
         check_func(
             test_mask,
@@ -1199,9 +1244,9 @@ def test_df_first_last(memory_leak_check, offset):
         else:
             py_output = df.loc[:end]
     else:
-        py_output = None
+        py_output = no_default
 
-    check_func(impl_first, (df,), py_output=py_output)
+    check_func(impl_first, (df,), py_output=py_output, check_dtype=False)
     check_func(impl_last, (df,))
 
 
@@ -1242,6 +1287,7 @@ def test_dataframe_explode():
     """
     Tests for df.explode() on single and multiple columns.
     """
+
     # NOTE: a helper is necessary as Pandas df.explode() will fail for the tests below
     # because the `mylen` function used by Pandas internally marks scalars/NAs as having
     # length -1 and takes empty arrays as 0 despite each of the aforementioned taking up
@@ -1252,10 +1298,12 @@ def test_dataframe_explode():
         assert all(all(counts == df[c].apply(mylen)) for c in cols)
         res = pd.DataFrame(
             {
-                c: df[c].explode() if c in cols else df[c].repeat(counts)
+                c: df[c].astype(object).explode().values
+                if c in cols
+                else df[c].repeat(counts).values
                 for c in df.columns
             },
-            index=df[cols[0]].explode().index,
+            index=df[cols[0]].astype(object).explode().index,
         )
         return res
 
@@ -1277,9 +1325,15 @@ def test_dataframe_explode():
 
     df = pd.DataFrame(
         {
-            "A": [[0, 1, 2], [5], [], [3, 4]] * 3,
+            "A": pd.Series(
+                [[0, 1, 2], [5], [], [3, 4]] * 3,
+                dtype=pd.ArrowDtype(pa.large_list(pa.int64())),
+            ),
             "B": [1, 7, 2, 4] * 3,
-            "C": [[1, 2, 3], np.nan, [], [1, 2]] * 3,
+            "C": pd.Series(
+                [[1, 2, 3], None, [], [1, 2]] * 3,
+                dtype=pd.ArrowDtype(pa.large_list(pa.int64())),
+            ),
         }
     )
     S = pd.Series(["a b c", "d e", "f", "g h"] * 3)
@@ -1320,6 +1374,11 @@ def test_empty_dataframe_creation(memory_leak_check):
     check_func(impl, (), check_dtype=False)
 
 
+@pytest.mark.parquet
+@pytest.mark.skipif(
+    bodo.tests.utils.test_spawn_mode_enabled,
+    reason="Spawn workers don't set _use_dict_str_type and READ_STR_AS_DICT_THRESHOLD",
+)
 def test_unify_dict_string_dataframes():
     """
     Tests unifying DataFrames when the inputs consist of
@@ -1578,18 +1637,18 @@ def test_df_table_memory_usage(use_index, datapath, memory_leak_check):
     if use_index:
         # Append the index num bytes, which should just be a range index,
         # so 3 integers per rank.
-        nbytes_list.append((8 * 3 * bodo.get_size()))
+        nbytes_list.append(8 * 3 * bodo.get_size())
     for i in range(33):
         # Int columns are nullable integers
         nbytes_list.append(total_int_data + null_bytes)
         nbytes_list.append(total_float_data)
         # Rows: 0, 14, 21, 57 contain null data
-        null_data_rows = set([0, 14, 21, 57])
+        null_data_rows = {0, 14, 21, 57}
         # Calculate the data field
         total_string_data = sum(
             [
                 len(f"value{k}")
-                for j, k in enumerate((np.arange(num_rows) * (i + 1)))
+                for j, k in enumerate(np.arange(num_rows) * (i + 1))
                 if j not in null_data_rows
             ]
         )
@@ -1689,7 +1748,13 @@ def test_df_rank(method, na_option, ascending, pct):
                     method=method, na_option=na_option, ascending=ascending, pct=pct
                 )
             )
-            check_func(impl, (df,), dist_test=False, py_output=py_output)
+            check_func(
+                impl,
+                (df,),
+                dist_test=False,
+                py_output=py_output,
+                convert_to_nullable_float=False,
+            )
     else:
         check_func(impl, (df,), dist_test=False)
 
@@ -1720,6 +1785,7 @@ def test_concat_1d_1dvar():
     )
 
 
+@pytest.mark.tz_aware
 def test_tz_aware_dataframe_getitem(memory_leak_check):
     def impl_iat(df):
         return df.iat[2, 0]

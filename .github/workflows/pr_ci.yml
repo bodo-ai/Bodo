@@ -1,0 +1,200 @@
+name: PR CI
+on:
+  pull_request:
+
+# Limit CI to cancel previous runs in the same PR
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }} 
+  cancel-in-progress: true
+
+jobs:
+
+  # 1) Validate changes and commit message
+  validate:
+    name: Validate
+    runs-on: ubuntu-latest
+    outputs:
+      # https://docs.github.com/en/actions/learn-github-actions/expressions#contains
+      # contains is case-insensitive
+      run_tests: ${{ contains(steps.check_msg.outputs.commit_message, '[run ci]') }}
+      run_bodosql_customer_tests: ${{ steps.changes.outputs.bodosql_customer_tests }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+          fetch-depth: "0"
+
+      - name: Validate Changes
+        id: changes
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            bodosql_customer_tests:
+              - 'BodoSQL/calcite_sql/**'
+
+      # Fetch the PR branch for the commit history
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          sparse-checkout: .
+
+      - name: Check Commit Message
+        id: check_msg
+        run: |
+          set -xe pipefail
+          echo "commit_message=$(git log -1 --pretty=format:'%s')" >> $GITHUB_OUTPUT
+
+  # 2) Trigger BodoSQL Customer tests
+  bodosql-customer-tests:
+    needs: [validate]
+    name: BodoSQL Customer Tests
+    runs-on: ubuntu-latest
+    if: |
+      needs.validate.outputs.run_tests == 'true' &&
+      needs.validate.outputs.run_bodosql_customer_tests == 'true'
+
+    steps:
+      - uses: convictional/trigger-workflow-and-wait@v1.6.1
+        with:
+          owner: bodo-ai
+          repo: customer-sample-code
+          github_token: ${{ secrets.BOT_HERMAN_GITHUB_TOKEN }}
+          workflow_file_name: customer_bodosql_ci.yaml
+          ref: master
+          client_payload: '{ "branch" : "${{ github.head_ref || github.ref_name }}" }'
+
+  
+  # 3) Pre-Build Bodo to save build artifacts to sccache
+  compile-bodo:
+    needs: [validate]
+    name: Pre-Build Bodo for Cache
+    runs-on: [self-hosted, large]
+    if: needs.validate.outputs.run_tests == 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build from Source
+        uses: ./.github/actions/build-source
+        with:
+          build-all: false
+      - name: Load and Save Hadoop to Cache
+        id: hadoop-cache
+        uses: actions/cache@v4
+        with:
+          path: hadoop.tar.gz
+          key: hadoop-3.3.2-${{ runner.os }}
+      - name: Download Hadoop for SAS
+        if: steps.hadoop-cache.outputs.cache-hit != 'true'
+        run: |
+          wget -O hadoop.tar.gz "https://www.apache.org/dyn/mirrors/mirrors.cgi?action=download&filename=hadoop/common/hadoop-3.3.2/hadoop-3.3.2.tar.gz"
+
+  # 4) Actually run tests
+  pr-ci:
+    needs: [compile-bodo]
+    name: Test
+    strategy:
+      matrix:
+        batch: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+      # Don't cancel other jobs if one fails
+      fail-fast: false
+    uses: ./.github/workflows/_test_python_source.yml
+    with:
+      batch: ${{ matrix.batch }}
+      total-batches: 12
+      pytest-marker: "not slow and not weekly or smoke"
+      collect-coverage: true
+    secrets: inherit
+
+  spawn-ci:
+    needs: [compile-bodo]
+    name: Test Spawn
+    uses: ./.github/workflows/_test_python_source.yml
+    with:
+      batch: 1
+      total-batches: 1
+      pytest-marker: "spawn_mode"
+      collect-coverage: false
+    secrets: inherit
+
+  # 5) Collect and combine any results from runs
+  collect-results:
+    needs: [pr-ci]
+    name: Collect Results
+    runs-on: ubuntu-latest
+    if: success() || failure()
+    steps:
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: 3.12
+      # Get all source code for mapping coverage to LOC
+      - uses: actions/checkout@v4
+        with:
+          # Disable shallow clones for better coverage reporting
+          fetch-depth: 0
+      # Download timing and coverage info
+      - name: Download Timings
+        uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+
+      # Merging
+      - name: Merge Files
+        run: |
+          set -exo pipefail
+          mkdir outputs
+          python -m pip install pytest-split coverage
+
+          # -S to sort by key, -s to read as arrays, 'add' to merge
+          jq -S -s 'add' test_dur_bodo_*.json > outputs/test_dur_bodo.json
+          jq -S -s 'add' test_dur_bodosql_*.json > outputs/test_dur_bodosql.json
+          
+          printf "Slowest Bodo Tests"  
+          slowest-tests --durations-path outputs/test_dur_bodo.json -c 20
+          printf "Slowest BodoSQL Tests"
+          slowest-tests --durations-path outputs/test_dur_bodosql.json -c 20
+
+          coverage combine .coverage_*
+          coverage report
+          coverage xml -i --omit bodo/runtests.py
+          cp coverage.xml outputs/coverage.xml
+          cp .coverage outputs/.coverage
+      - name: Upload Combined
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-durations
+          path: outputs/
+          include-hidden-files: true
+
+      # Upload to SonarQube
+      # TODO: Replace with Sonarqube GitHub Action when we upgrade the server
+      - name: Load Sonar Scanner CLI from cache
+        id: sonar-scanner-cli
+        uses: actions/cache@v4
+        with:
+          path: sonar-scanner-cli-4.8
+          key: sonar-scanner-cli-4.8
+      - name: Install Sonar Scanner CLI
+        if: steps.sonar-scanner-cli.outputs.cache-hit != 'true'
+        run: |
+          set -eou pipefail
+          wget https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-4.8.1.3023-linux.zip
+          unzip sonar-scanner-cli-4.8.1.3023-linux.zip
+      - name: SonarQube Scan
+        run: |
+          ls -alh
+          ./sonar-scanner-4.8.1.3023-linux/bin/sonar-scanner \
+            -Dsonar.projectBaseDir=. \
+            -Dsonar.pullrequest.key=${{ github.event.pull_request.number }} \
+            -Dsonar.pullrequest.branch=$HEAD_REF
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ vars.SONAR_HOST_URL }}
+          HEAD_REF: ${{ github.head_ref }}
+
+      # Notify GitHub Checks
+      # If any test runs failed, this step should fail
+      # This step failing will block the PR from being merged
+      - name: Check Test Runs
+        if: ${{ needs.pr-ci.result != 'success' }}
+        run: exit 1

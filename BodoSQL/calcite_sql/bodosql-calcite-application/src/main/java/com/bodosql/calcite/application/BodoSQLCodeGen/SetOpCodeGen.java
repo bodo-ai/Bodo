@@ -1,8 +1,17 @@
 package com.bodosql.calcite.application.BodoSQLCodeGen;
 
-import static com.bodosql.calcite.application.Utils.Utils.*;
+import static com.bodosql.calcite.application.utils.Utils.getBodoIndent;
+import static com.bodosql.calcite.application.utils.Utils.getDummyColNameBase;
+import static com.bodosql.calcite.application.utils.Utils.makeQuoted;
+import static com.bodosql.calcite.application.utils.Utils.renameColumns;
 
-import com.bodosql.calcite.application.BodoSQLCodegenException;
+import com.bodosql.calcite.adapter.bodo.BodoPhysicalRel;
+import com.bodosql.calcite.application.BodoCodeGenVisitor;
+import com.bodosql.calcite.ir.Expr;
+import com.bodosql.calcite.ir.Expr.IntegerLiteral;
+import com.bodosql.calcite.ir.Op;
+import com.bodosql.calcite.ir.Variable;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 
@@ -14,79 +23,43 @@ public class SetOpCodeGen {
   /**
    * Function that return the necessary generated code for a Union expression.
    *
-   * @param outVar The output variable.
+   * @param outputColumnNames a list containing the expected output column names
    * @param childExprs The child expressions to be Unioned together. The expressions must all be
    *     dataframes
-   * @param childExprColumns the columns of each of the child expressions. Must be the same length
-   *     as childExprs
    * @param isAll Is the union a UnionAll Expression.
-   * @param outputColumnNames a list containing the expected output column names
+   * @param ctx BuildContext used to create global variables.
    * @return The code generated for the Union expression.
    */
-  public static String generateUnionCode(
-      String outVar,
+  public static Expr generateUnionCode(
       List<String> outputColumnNames,
-      List<String> childExprs,
-      List<List<String>> childExprColumns,
-      boolean isAll) {
-    StringBuilder unionBuilder = new StringBuilder();
+      List<Variable> childExprs,
+      boolean isAll,
+      BodoPhysicalRel.BuildContext ctx) {
 
-    // check that the number of child column name lists passed in is equal to the number of child
-    // expressions
-    assert childExprColumns.size() == childExprs.size();
+    Expr.Tuple dfTup = new Expr.Tuple(childExprs);
 
-    // check that the number of columns in each input table is equal to the number of columns we
-    // expect to see in the output
-    assert (childExprColumns.size() == 0
-        || childExprColumns.get(0).size() == outputColumnNames.size());
+    // (isAll = True) -> False
+    Expr.BooleanLiteral dropDuplicates = new Expr.BooleanLiteral(!isAll);
 
-    final String indent = getBodoIndent();
-
-    // Panda's Concat function can concatenate along the row index such that
-    // the new table will have all of the rows of both the tables, with nulls filled in
-    // where one table doesn't have a value for a particular column
-    // IE  A  C CONCAT  B  C  --->      A    B   C
-    //     1  2         2  3            1   NA   2
-    //                                  NA   2   3
-    //
-    // Therefore, in order to get the concatenation function to behave like a union,
-    // before I concat the two tables, I need to set the column names as being equal
-
-    // perform the concat, renaming each table to have the output column names
-    unionBuilder.append(indent).append(outVar).append(" = ").append("pd.concat((");
-    for (int i = 0; i < childExprs.size(); i++) {
-      String expr = childExprs.get(i);
-      HashMap<String, String> renameMap = new HashMap<>();
-      List<String> colNames = childExprColumns.get(i);
-      for (int j = 0; j < colNames.size(); j++) {
-        if (!colNames.get(j).equals(outputColumnNames.get(j))) {
-          renameMap.put(colNames.get(j), outputColumnNames.get(j));
-        }
-      }
-      unionBuilder.append(expr);
-      if (!renameMap.isEmpty()) {
-        unionBuilder
-            .append(".rename(columns=")
-            .append(renameColumns(renameMap))
-            .append(", copy=False)");
-      }
-      /* Union All includes duplicates, Union doesn't. preemptively dropping duplicate here to reduce size of the concat */
-      if (!isAll) {
-        unionBuilder.append(".drop_duplicates()");
-      }
-      unionBuilder.append(",");
+    // generate output column names for ColNamesMetaType
+    StringBuilder colNameTupleString = new StringBuilder("(");
+    for (String colName : outputColumnNames) {
+      colNameTupleString.append(makeQuoted(colName)).append(", ");
     }
-    // We set ignore_index=True for faster runtime performance, as we don't care about the index in
-    // BodoSQL
-    unionBuilder.append("), ignore_index=True)");
-
-    /* Need to perform a final drop to account for values in both tables */
-    if (!isAll) {
-      unionBuilder.append(".drop_duplicates()");
+    colNameTupleString.append(")");
+    List<Expr.StringLiteral> colNamesExpr = new ArrayList<>();
+    for (String colName : outputColumnNames) {
+      colNamesExpr.add(new Expr.StringLiteral(colName));
     }
-    unionBuilder.append("\n");
+    Expr.Tuple colNameTuple = new Expr.Tuple(colNamesExpr);
+    Variable globalVarName = ctx.lowerAsColNamesMetaType(colNameTuple);
 
-    return unionBuilder.toString();
+    Expr.Call unionExpr =
+        new Expr.Call(
+            "bodo.hiframes.pd_dataframe_ext.union_dataframes",
+            List.of(dfTup, dropDuplicates, globalVarName));
+
+    return unionExpr;
   }
 
   /**
@@ -94,88 +67,411 @@ public class SetOpCodeGen {
    *
    * @param outVar The output variable.
    * @param lhsExpr The expression of the left hand table
-   * @param rhsExpr The expression of the left right hand table
-   * @param rhsColNames The names of columns of the left hand table
    * @param lhsColNames The names of columns of the left hand table
+   * @param rhsExpr The expression of the right hand table
+   * @param rhsColNames The names of columns of the right hand table
    * @param columnNames a list containing the expected output column names
+   * @param isAll Is this intersect an IntersectAll expression.
+   * @param bodoVisitorClass The calling Bodo visitor class, used to generate temp var names
    * @return The code generated for the Intersect expression.
    */
-  public static String generateIntersectCode(
-      String outVar,
-      String lhsExpr,
+  public static List<Op> generateIntersectCode(
+      Variable outVar,
+      Variable lhsExpr,
       List<String> lhsColNames,
-      String rhsExpr,
+      Variable rhsExpr,
       List<String> rhsColNames,
-      List<String> columnNames) {
-    // we need there to be at least one column, in the right/left table, so we can perform the merge
+      List<String> columnNames,
+      boolean isAll,
+      BodoCodeGenVisitor bodoVisitorClass) {
+    // We need there to be at least one column, in the right/left table, so we can
+    // perform the merge
     // This may be incorrect if Calcite does not optimize out empty intersects
     assert lhsColNames.size() == rhsColNames.size()
         && lhsColNames.size() == columnNames.size()
         && lhsColNames.size() > 0;
 
-    StringBuilder intersectBuilder = new StringBuilder();
-
-    final String indent = getBodoIndent();
-    // For this, we rename all the columns to be the same as the expected output columns,
-    // and perform an inner merge on each of the columns.
+    // Rename all lhs and rhs columns to match the expected output columns
     HashMap<String, String> lhsRenameMap = new HashMap<>();
     HashMap<String, String> rhsRenameMap = new HashMap<>();
     for (int i = 0; i < lhsColNames.size(); i++) {
-      lhsRenameMap.put(rhsColNames.get(i), columnNames.get(i));
+      lhsRenameMap.put(lhsColNames.get(i), columnNames.get(i));
       rhsRenameMap.put(rhsColNames.get(i), columnNames.get(i));
     }
 
-    intersectBuilder
-        .append(indent)
-        .append(outVar)
-        .append(" = ")
-        .append(lhsExpr)
-        .append(".rename(columns=")
-        .append(renameColumns(lhsRenameMap))
-        .append(", copy=False)")
-        .append(".merge(")
-        .append(rhsExpr)
-        .append(".rename(columns=")
-        .append(renameColumns(rhsRenameMap))
-        .append(", copy=False), on = [");
+    final String indent = getBodoIndent();
+    List<Op> outputOperations = new ArrayList<>();
 
-    for (int i = 0; i < lhsColNames.size(); i++) {
-      intersectBuilder.append(makeQuoted(columnNames.get(i))).append(", ");
+    if (isAll) {
+      // For IntersectAll, we use groupby to compute a unique cumulative count per
+      // row,
+      // then we perform an inner join on all the columns as well as the cumcount.
+      // Rows with x copies in lhsExpr and y copies in rhsExpr will have min(x, y)
+      // copies in outVar
+      //
+      // Simply avoiding drop_duplicates is not enough: pd.merge(x * [1], y * [1])
+      // gives (x * y) * [1], rather than min(x, y) * [1] which is correct.
+      //
+      // Example Codegen:
+      // outVar = lhsDfCnt.rename(columns={...lhsRenameMap...}, copy=False)
+      // .merge(rhsDfCnt.rename(columns={...rhsRenameMap...}, copy=False),
+      // on=[...columnNames..., "__bodo_dummy__"])
+      // .drop(columns="__bodo_dummy__"])
+      // where lhsDfCnt and rhsDfCnt are generated by generateCumcountDf().
+
+      // Generate temp vars
+      final Variable lhsDfCnt = bodoVisitorClass.genDfVar();
+      final Variable rhsDfCnt = bodoVisitorClass.genDfVar();
+
+      Op lhsCumcountCode = generateCumcountDf(lhsDfCnt, lhsExpr, lhsColNames, bodoVisitorClass);
+      Op rhsCumcountCode = generateCumcountDf(rhsDfCnt, rhsExpr, rhsColNames, bodoVisitorClass);
+      outputOperations.add(lhsCumcountCode);
+      outputOperations.add(rhsCumcountCode);
+
+      // Generate list of output column names
+      StringBuilder dummyColumnNamesListString = new StringBuilder("[");
+      for (int i = 0; i < columnNames.size(); i++) {
+        dummyColumnNamesListString.append(makeQuoted(columnNames.get(i))).append(", ");
+      }
+      dummyColumnNamesListString.append(makeQuoted(getDummyColNameBase())).append(",]");
+      String dummyColumnNamesList = dummyColumnNamesListString.toString();
+
+      outputOperations.add(
+          new Op.Code(
+              new StringBuilder()
+                  .append(indent)
+                  .append(outVar.emit())
+                  .append(" = ")
+                  .append(lhsDfCnt.emit())
+                  .append(".rename(columns=")
+                  .append(renameColumns(lhsRenameMap))
+                  .append(", copy=False).merge(")
+                  .append(rhsDfCnt.emit())
+                  .append(".rename(columns=")
+                  .append(renameColumns(rhsRenameMap))
+                  .append(", copy=False), on=")
+                  .append(dummyColumnNamesList)
+                  .append(").drop(columns=[")
+                  .append(makeQuoted(getDummyColNameBase()))
+                  .append("])\n")
+                  .toString()));
+
+    } else {
+      // For Intersect, we drop duplicates in lhsExpr and rhsExpr, then perform an
+      // inner join
+      // on all the columns. Need to perform a final drop to account for values in
+      // both tables.
+      //
+      // Example Codegen:
+      // df_out = <LHS>.merge(<RHS>, on=[...columnNames...]).drop_duplicates()
+      // where <LHS> = df_lhs.drop_duplicates().rename(columns={...lhsRenameMap...},
+      // copy=False)
+      // and <RHS> = df_rhs.drop_duplicates().rename(columns={...rhsRenameMap...},
+      // copy=False)
+
+      // Generate list of output column names
+      StringBuilder columnNamesListString = new StringBuilder("[");
+      for (int i = 0; i < columnNames.size(); i++) {
+        columnNamesListString.append(makeQuoted(columnNames.get(i))).append(", ");
+      }
+      columnNamesListString.append("]");
+      String columnNamesList = columnNamesListString.toString();
+
+      outputOperations.add(
+          new Op.Code(
+              new StringBuilder()
+                  .append(indent)
+                  .append(outVar.emit())
+                  .append(" = ")
+                  .append(lhsExpr.emit())
+                  .append(".drop_duplicates(ignore_index=True).rename(columns=")
+                  .append(renameColumns(lhsRenameMap))
+                  .append(", copy=False).merge(")
+                  .append(rhsExpr.emit())
+                  .append(".drop_duplicates(ignore_index=True).rename(columns=")
+                  .append(renameColumns(rhsRenameMap))
+                  .append(", copy=False), on=")
+                  .append(columnNamesList)
+                  .append(").drop_duplicates(ignore_index=True)\n")
+                  .toString()));
     }
-    // Intersect removes duplicate entries
-    intersectBuilder.append("]).drop_duplicates()\n");
 
-    return intersectBuilder.toString();
+    return outputOperations;
   }
 
   /**
    * Function that return the necessary generated code for a Except expression.
    *
    * @param outVar The output variable.
-   * @param throwAwayVar a non conflicting variable name that can be used for intermediate steps in
-   *     the Except code
    * @param lhsExpr The expression of the left hand table
-   * @param rhsExpr The expression of the left right hand table
-   * @param rhsColNames The names of columns of the left hand table
    * @param lhsColNames The names of columns of the left hand table
-   * @param columnNames an empty list into which the column names of the output of the Except will
-   *     be stored
-   * @return The code generated for the Intersect expression.
+   * @param rhsExpr The expression of the right hand table
+   * @param rhsColNames The names of columns of the right hand table
+   * @param columnNames a list containing the expected output column names
+   * @param isAll Is the except an ExceptAll expression.
+   * @param bodoVisitorClass The calling Bodo visitor class, used to generate temp var names
+   * @return The code generated for the Except expression.
    */
-  public static String generateExceptCode(
-      String outVar,
-      String throwAwayVar,
-      String lhsExpr,
+  public static List<Op> generateExceptCode(
+      Variable outVar,
+      Variable lhsExpr,
       List<String> lhsColNames,
-      String rhsExpr,
+      Variable rhsExpr,
       List<String> rhsColNames,
-      List<String> columnNames) {
-    StringBuilder exceptBuilder = new StringBuilder();
-    final String indent = getBodoIndent();
-    assert lhsColNames.size() == rhsColNames.size()
-        && lhsColNames.size() > 0
-        && columnNames.size() == 0;
+      List<String> columnNames,
+      boolean isAll,
+      BodoCodeGenVisitor bodoVisitorClass) {
+    assert lhsColNames.size() == rhsColNames.size() && lhsColNames.size() == columnNames.size();
 
-    throw new BodoSQLCodegenException("Error, except not yet supported");
+    // Rename all lhs and rhs columns to match the expected output columns
+    HashMap<String, String> lhsRenameMap = new HashMap<>();
+    HashMap<String, String> rhsRenameMap = new HashMap<>();
+    for (int i = 0; i < lhsColNames.size(); i++) {
+      lhsRenameMap.put(lhsColNames.get(i), columnNames.get(i));
+      rhsRenameMap.put(rhsColNames.get(i), columnNames.get(i));
+    }
+
+    final String indent = getBodoIndent();
+    List<Op> outputOperations = new ArrayList<>();
+
+    if (isAll) {
+      // For ExceptAll, we use groupby to compute a unique cumulative count per row.
+      // Then, we concatenate the dataframes [lhsExpr, rhsExpr, rhsExpr] and use
+      // drop_duplicates
+      // with `keep=False` to remove rows present in rhsExpr. We rely on the
+      // cumulative count
+      // column to avoid dropping rows that repeat in lhsExpr but aren't found in
+      // rhsExpr.
+      // Rows with x copies in lhsExpr and y copies in rhsExpr will have x - y copies
+      // in outVar,
+      // or zero copies if x - y is negative.
+      //
+      // Example Codegen:
+      // rhsDfTmp = rhsDfCnt.rename(columns={...rhsRenameMap...}, copy=False)
+      // outVar = pd.concat([
+      // lhsDfCnt.rename(columns={...lhsRenameMap...}, copy=False),
+      // rhsDfTmp,
+      // rhsDfTmp
+      // ]).drop_duplicates(keep=False).drop(columns=["__bodo_dummy__"])
+      // where lhsDfCnt and rhsDfCnt are generated by generateCumcountDf().
+
+      // Generate temp vars
+      final Variable lhsDfCnt = bodoVisitorClass.genDfVar();
+      final Variable rhsDfCnt = bodoVisitorClass.genDfVar();
+      final Variable rhsDfTmp = bodoVisitorClass.genDfVar();
+
+      Op lhsCumcountCode = generateCumcountDf(lhsDfCnt, lhsExpr, lhsColNames, bodoVisitorClass);
+      Op rhsCumcountCode = generateCumcountDf(rhsDfCnt, rhsExpr, rhsColNames, bodoVisitorClass);
+      outputOperations.add(lhsCumcountCode);
+      outputOperations.add(rhsCumcountCode);
+
+      outputOperations.add(
+          new Op.Code(
+              new StringBuilder()
+                  .append(indent)
+                  .append(rhsDfTmp.emit())
+                  .append(" = ")
+                  .append(rhsDfCnt.emit())
+                  .append(".rename(columns=")
+                  .append(renameColumns(rhsRenameMap))
+                  .append(", copy=False)\n")
+                  .append(indent)
+                  .append(outVar.emit())
+                  .append(" = pd.concat([")
+                  .append(lhsDfCnt.emit())
+                  .append(".rename(columns=")
+                  .append(renameColumns(lhsRenameMap))
+                  .append(", copy=False), ")
+                  .append(rhsDfTmp.emit())
+                  .append(", ")
+                  .append(rhsDfTmp.emit())
+                  .append("]).drop_duplicates(keep=False, ignore_index=True).drop(columns=[")
+                  .append(makeQuoted(getDummyColNameBase()))
+                  .append("])\n")
+                  .toString()));
+
+    } else {
+      // For Except, we concatenate the dataframes [lhsExpr, rhsExpr, rhsExpr] and use
+      // drop_duplicates with `keep=False` to remove rows present in rhsExpr.
+      //
+      // Example Codegen:
+      // rhsDfTmp = rhsExpr.rename(columns={...rhsRenameMap...},
+      // copy=False).drop_duplicates()
+      // outVar = pd.concat([
+      // lhsExpr.rename(columns={...lhsRenameMap...}, copy=False).drop_duplicates(),
+      // rhsDfTmp,
+      // rhsDfTmp
+      // ]).drop_duplicates(keep=False)
+
+      // Generate temp vars
+      final Variable rhsDfTmp = bodoVisitorClass.genDfVar();
+
+      outputOperations.add(
+          new Op.Code(
+              new StringBuilder()
+                  .append(indent)
+                  .append(rhsDfTmp.emit())
+                  .append(" = ")
+                  .append(rhsExpr.emit())
+                  .append(".rename(columns=")
+                  .append(renameColumns(rhsRenameMap))
+                  .append(", copy=False).drop_duplicates(ignore_index=True)\n")
+                  .append(indent)
+                  .append(outVar.emit())
+                  .append(" = pd.concat([")
+                  .append(lhsExpr.emit())
+                  .append(".rename(columns=")
+                  .append(renameColumns(lhsRenameMap))
+                  .append(", copy=False).drop_duplicates(ignore_index=True), ")
+                  .append(rhsDfTmp.emit())
+                  .append(", ")
+                  .append(rhsDfTmp.emit())
+                  .append("]).drop_duplicates(keep=False, ignore_index=True)\n")
+                  .toString()));
+    }
+
+    return outputOperations;
+  }
+
+  /**
+   * Helper function that inserts a new column of cumulative counts into an existing dataframe. Used
+   * in INTERSECT ALL and EXCEPT ALL codegen. Cumulative counts are stored in a new column named
+   * getDummyColNameBase().
+   *
+   * @param outVar The output variable.
+   * @param inputDfVar The expression of the input dataframe
+   * @param colNames The names of columns in the input dataframe
+   * @param bodoVisitorClass Bodo Visitor used to create temps and global variables
+   */
+  private static Op generateCumcountDf(
+      Variable outVar,
+      Variable inputDfVar,
+      List<String> colNames,
+      BodoCodeGenVisitor bodoVisitorClass) {
+    StringBuilder cumcountBuilder = new StringBuilder();
+    final String indent = getBodoIndent();
+
+    // Since cumcount currently lacks JIT support, we use cumsum on a column of
+    // one's instead.
+    // We use init_dataframe to efficiently add columns in place to an existing
+    // table.
+    // Since BodoSQL never uses Index values, we replace the index with a dummy
+    // RangeIndex:
+    // this avoids MultiIndex issues and allows Bodo to optimize more.
+    // We also replace the Groupby index to inform the compiler that len(inputDfVar)
+    // ==
+    // len(groupby).
+    //
+    // Example Codegen:
+    // colOnes = np.ones((len(inputDfVar),), dtype=np.int64)
+    // tableOnes = logical_table_to_table(get_dataframe_all_data(inputDfVar),
+    // (colOnes,),
+    // MetaType(...dummyColIdxs...), inputDfVar.shape[1])
+    // dfOnes = init_dataframe((tableOnes,), init_range_index(0, len(inputDfVar), 1, None),
+    // ColNamesMetaType(...colNames..., "__bodo_dummy__"))
+    // colCnt = dfOnes.groupby([...colNames...],
+    // dropna=False).cumsum()["__bodo_dummy__"]
+    // tableCnt = logical_table_to_table(get_dataframe_all_data(inputDfVar),
+    // (colCnt,),
+    // MetaType(...dummyColIdxs...), inputDfVar.shape[1])
+    // dfCnt = init_dataframe((tableCnt,), init_range_index(0, len(inputDfVar), 1, None),
+    // ColNamesMetaType(...colNames..., "__bodo_dummy__"))
+
+    // Generate temp vars
+    final Variable colOnes = bodoVisitorClass.genSeriesVar();
+    final Variable tableOnes = bodoVisitorClass.genTableVar();
+    final Variable dfOnes = bodoVisitorClass.genDfVar();
+    final Variable colCnt = bodoVisitorClass.genSeriesVar();
+    final Variable tableCnt = bodoVisitorClass.genTableVar();
+    final Variable dfCnt = outVar;
+
+    // Generate dummyColIdxsGlobal, dummyColNamesGlobal, and colNamesList
+    List<IntegerLiteral> dummmyColIdxs = new ArrayList<>();
+    List<Expr.StringLiteral> dummyColNameExprs = new ArrayList<>();
+    List<Expr.StringLiteral> colNameExprs = new ArrayList<>();
+
+    for (int i = 0; i < colNames.size(); i++) {
+      dummmyColIdxs.add(new Expr.IntegerLiteral(i));
+      Expr.StringLiteral colName = new Expr.StringLiteral(colNames.get(i));
+      dummyColNameExprs.add(colName);
+      colNameExprs.add(colName);
+    }
+    dummmyColIdxs.add(new IntegerLiteral(colNames.size()));
+    Expr.StringLiteral dummyColNameExpr = new Expr.StringLiteral(getDummyColNameBase());
+    dummyColNameExprs.add(dummyColNameExpr);
+
+    // Create tuples
+    Expr.Tuple dummyColIdxsTuple = new Expr.Tuple(dummmyColIdxs);
+    Expr.Tuple dummyColNamesTuple = new Expr.Tuple(dummyColNameExprs);
+    // Create a list
+    Expr.List colNamesList = new Expr.List(colNameExprs);
+
+    Variable dummyColIdxsGlobal = bodoVisitorClass.lowerAsMetaType(dummyColIdxsTuple);
+    Variable dummyColNamesGlobal = bodoVisitorClass.lowerAsColNamesMetaType(dummyColNamesTuple);
+
+    // TODO: Refactor to use Exprs
+    // Compute dfOnes
+    cumcountBuilder
+        .append(indent)
+        .append(colOnes.emit())
+        .append(" = np.ones((len(")
+        .append(inputDfVar.emit())
+        .append("),), dtype=np.int64)\n")
+        .append(indent)
+        .append(tableOnes.emit())
+        .append(" = bodo.hiframes.table.logical_table_to_table(")
+        .append("bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(")
+        .append(inputDfVar.emit())
+        .append("), (")
+        .append(colOnes.emit())
+        .append(",), ")
+        .append(dummyColIdxsGlobal.getName())
+        .append(", ")
+        .append(inputDfVar.emit())
+        .append(".shape[1])\n")
+        .append(indent)
+        .append(dfOnes.emit())
+        .append(" = bodo.hiframes.pd_dataframe_ext.init_dataframe((")
+        .append(tableOnes.emit())
+        .append(",), bodo.hiframes.pd_index_ext.init_range_index(0, len(")
+        .append(inputDfVar.emit())
+        .append("), 1, None), ")
+        .append(dummyColNamesGlobal.getName())
+        .append(")\n");
+
+    // Compute dfCnt
+    cumcountBuilder
+        .append(indent)
+        .append(colCnt.emit())
+        .append(" = ")
+        .append(dfOnes.emit())
+        .append(".groupby(")
+        .append(colNamesList.emit())
+        .append(", dropna=False).cumsum()[")
+        .append(makeQuoted(getDummyColNameBase()))
+        .append("]\n")
+        .append(indent)
+        .append(tableCnt.emit())
+        .append(" = bodo.hiframes.table.logical_table_to_table(")
+        .append("bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(")
+        .append(inputDfVar.emit())
+        .append("), (")
+        .append(colCnt.emit())
+        .append(",), ")
+        .append(dummyColIdxsGlobal.getName())
+        .append(", ")
+        .append(inputDfVar.emit())
+        .append(".shape[1])\n")
+        .append(indent)
+        .append(dfCnt.emit())
+        .append(" = bodo.hiframes.pd_dataframe_ext.init_dataframe((")
+        .append(tableCnt.emit())
+        .append(",), bodo.hiframes.pd_index_ext.init_range_index(0, len(")
+        .append(inputDfVar.emit())
+        .append("), 1, None), ")
+        .append(dummyColNamesGlobal.getName())
+        .append(")\n");
+
+    return new Op.Code(cumcountBuilder.toString());
   }
 }

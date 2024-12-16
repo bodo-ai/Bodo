@@ -1,8 +1,8 @@
 package com.bodo.iceberg;
 
 import java.util.List;
+import java.util.Map;
 import org.apache.iceberg.*;
-import org.apache.iceberg.arrow.ArrowSchemaUtil;
 
 public class TableInfo {
   /** Class that holds the minimal Table info needed by Bodo */
@@ -12,6 +12,7 @@ public class TableInfo {
   private final String loc;
   private final List<SortField> sortFields;
   private final List<PartitionField> partitionFields;
+  private final Map<String, String> properties;
 
   TableInfo(Table table) {
     schemaID = table.schema().schemaId();
@@ -19,6 +20,7 @@ public class TableInfo {
     sortFields = table.sortOrder().fields();
     partitionFields = table.spec().fields();
     loc = table.location();
+    properties = table.properties();
   }
 
   public int getSchemaID() {
@@ -34,7 +36,7 @@ public class TableInfo {
   }
 
   public org.apache.arrow.vector.types.pojo.Schema getArrowSchema() {
-    return ArrowSchemaUtil.convert(icebergSchema);
+    return BodoArrowSchemaUtil.convert(icebergSchema);
   }
 
   public List<SortField> getSortFields() {
@@ -47,5 +49,9 @@ public class TableInfo {
 
   public String getLoc() {
     return loc;
+  }
+
+  public Map<String, String> getProperties() {
+    return properties;
   }
 }

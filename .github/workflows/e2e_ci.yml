@@ -1,0 +1,149 @@
+name: Nightly Tests CI
+on:
+  # Run Every Weekday on main Branch at 2AM EST
+  schedule:
+    - cron: '00 7 * * 1,2,3,4,5'
+
+  # Manual Trigger
+  workflow_dispatch:
+    inputs:
+      pytest_addopts:
+        description: 'Value to Pass to PYTEST_ADDOPTS Env: https://docs.pytest.org/en/stable/reference/reference.html#envvar-PYTEST_ADDOPTS'
+        required: false
+        type: string
+        default: ''
+
+jobs:
+  run-e2e:
+    name: Run E2E
+    runs-on: [self-hosted, xlarge]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: prefix-dev/setup-pixi@v0.8.1
+        with:
+          pixi-version: v0.34.0
+          cache: true
+          cache-write: ${{ github.event_name == 'schedule' }}
+          environments: 'default'
+          activate-environment: true
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: us-east-2
+          role-to-assume: arn:aws:iam::427443013497:role/BodoEngineNightlyRole
+          role-session-name: BodoEngineNightlySession
+          role-skip-session-tagging: true
+
+      - name: Load and Save Hadoop to Cache
+        uses: actions/cache@v4
+        with:
+          path: hadoop.tar.gz
+          key: hadoop-3.3.2-${{ runner.os }}
+
+      # TODO: Once stable, inline all the scripts
+      - name: Install Bodo Packages
+        env:
+          # Build with support for javascript udfs
+          BUILD_WITH_V8: 1
+          # Use sccache over ccache
+          DISABLE_CCACHE: 1
+        run: |
+          pixi run build
+          # Azure SAS Provider Install
+          ./buildscripts/install_azurefs_sas_token_provider.sh
+
+      - name: Disable AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          unset-current-credentials: true
+          aws-region: us-east-2
+
+      - name: Run Tests
+        run: |
+          set -eo pipefail
+
+          # ------ Setup Hadoop (and Arrow) environment variables ------
+          export HADOOP_HOME=/tmp/hadoop-3.3.2
+          export HADOOP_INSTALL=$HADOOP_HOME
+          export HADOOP_MAPRED_HOME=$HADOOP_HOME
+          export HADOOP_COMMON_HOME=$HADOOP_HOME
+          export HADOOP_HDFS_HOME=$HADOOP_HOME
+          export YARN_HOME=$HADOOP_HOME
+          export HADOOP_COMMON_LIB_NATIVE_DIR=$HADOOP_HOME/lib/native
+          export HADOOP_OPTS='-Djava.library.path=$HADOOP_HOME/lib'
+          export HADOOP_OPTIONAL_TOOLS=hadoop-azure
+          export ARROW_LIBHDFS_DIR=$HADOOP_HOME/lib/native
+          export CLASSPATH=`$HADOOP_HOME/bin/hdfs classpath --glob`
+
+          # ------ Clean Maven and Spark Ivy Cache ------
+          rm -rf $HOME/.ivy2/cache $HOME/.ivy2/jars $HOME/.m2/repository
+
+          # --------- Run Tests -----------
+          cd e2e-tests
+          pytest -s -v --durations=0
+          cd ..
+          pytest -s -v --durations=0 bodo/tests/test_javascript*
+
+        env:
+          PYTEST_ADDOPTS: ${{ github.event.inputs.pytest_addopts }}
+          SF_USERNAME: ${{ secrets.SF_USERNAME }}
+          SF_PASSWORD: ${{ secrets.SF_PASSWORD }}
+          SF_ACCOUNT: ${{ secrets.SF_ACCOUNT }}
+          SF_AZURE_USER: ${{ secrets.SF_AZURE_USER }}
+          SF_AZURE_PASSWORD: ${{ secrets.SF_AZURE_PASSWORD }}
+          SF_AZURE_ACCOUNT: ${{ secrets.SF_AZURE_ACCOUNT }}
+          NESSIE_AUTH_TOKEN: ${{ secrets.NESSIE_AUTH_TOKEN }}
+
+  run-examples:
+    name: Run Examples
+    runs-on: [self-hosted, large]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: prefix-dev/setup-pixi@v0.8.1
+        with:
+          pixi-version: v0.34.0
+          cache: true
+          cache-write: ${{ github.event_name == 'schedule' }}
+          environments: 'default'
+          activate-environment: true
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: us-east-2
+          role-to-assume: arn:aws:iam::427443013497:role/BodoEngineNightlyRole
+          role-session-name: BodoEngineNightlySession
+          role-skip-session-tagging: true
+
+      - name: Load and Save Hadoop to Cache
+        uses: actions/cache@v4
+        with:
+          path: hadoop.tar.gz
+          key: hadoop-3.3.2-${{ runner.os }}
+
+      - name: Convert Notebooks scripts to Python
+        run: |
+          pip install nbconvert
+          jupyter nbconvert --to script examples/*.ipynb
+
+      - name: Install Bodo Packages
+        env:
+          # Build with support for javascript udfs
+          BUILD_WITH_V8: 1
+          # Use sccache over ccache
+          DISABLE_CCACHE: 1
+        run: |
+          pixi run build
+          # Azure SAS Provider Install
+          ./buildscripts/install_azurefs_sas_token_provider.sh
+
+      - name: Run Python Examples
+        working-directory: ./examples
+        env:
+          SF_USERNAME: ${{ secrets.SF_USERNAME }}
+          SF_PASSWORD: ${{ secrets.SF_PASSWORD }}
+          SF_ACCOUNT: ${{ secrets.SF_ACCOUNT }}
+        run: |
+          set -eo pipefail
+          ls *.py | xargs -n 1 -P 1 python

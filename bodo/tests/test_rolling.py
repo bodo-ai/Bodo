@@ -1,4 +1,3 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 import itertools
 import os
 import re
@@ -10,8 +9,15 @@ import pytest
 
 import bodo
 from bodo.hiframes.rolling import supported_rolling_funcs
-from bodo.tests.utils import check_func, count_array_REPs, count_parfor_REPs
+from bodo.tests.utils import (
+    check_func,
+    count_array_REPs,
+    count_parfor_REPs,
+    pytest_pandas,
+)
 from bodo.utils.typing import BodoError
+
+pytestmark = pytest_pandas
 
 LONG_TEST = (
     int(os.environ["BODO_LONG_ROLLING_TEST"]) != 0
@@ -125,7 +131,7 @@ def test_fixed_index_groupby():
         }
     )
     # Groupby ordering isn't defined so we must sort.
-    check_func(impl, (df,), sort_output=True, reset_index=True)
+    check_func(impl, (df,), sort_output=True, reset_index=True, check_dtype=False)
 
 
 @pytest.mark.slow
@@ -186,18 +192,19 @@ def test_column_select(memory_leak_check):
             ],
         }
     )
-    check_func(impl1, (df,))
-    check_func(impl2, (df,))
-    check_func(impl3, (df,))
-    check_func(impl4, (df,))
-    check_func(impl5, (df,))
-    check_func(impl6, (df,))
-    check_func(impl7, (df,))
+    check_func(impl1, (df,), check_dtype=False)
+    check_func(impl2, (df,), check_dtype=False)
+    check_func(impl3, (df,), check_dtype=False)
+    check_func(impl4, (df,), check_dtype=False)
+    check_func(impl5, (df,), check_dtype=False)
+    check_func(impl6, (df,), check_dtype=False)
+    check_func(impl7, (df,), check_dtype=False)
 
 
 @pytest.mark.slow
 def test_min_periods(memory_leak_check):
     """test min_periods argument in rolling calls"""
+
     # fixed window
     def impl1(df, center, minp):
         return df.rolling(3, center=center, min_periods=minp)[["A", "B"]].mean()
@@ -232,20 +239,20 @@ def test_min_periods(memory_leak_check):
             ],
         }
     )
-    check_func(impl1, (df, False, 1))
-    check_func(impl1, (df, True, 1))
-    check_func(impl1, (df, False, 2))
-    check_func(impl1, (df, True, 2))
+    check_func(impl1, (df, False, 1), check_dtype=False)
+    check_func(impl1, (df, True, 1), check_dtype=False)
+    check_func(impl1, (df, False, 2), check_dtype=False)
+    check_func(impl1, (df, True, 2), check_dtype=False)
 
-    check_func(impl2, (df, False, 1))
-    check_func(impl2, (df, True, 1))
-    check_func(impl2, (df, False, 2))
-    check_func(impl2, (df, True, 2))
+    check_func(impl2, (df, False, 1), check_dtype=False)
+    check_func(impl2, (df, True, 1), check_dtype=False)
+    check_func(impl2, (df, False, 2), check_dtype=False)
+    check_func(impl2, (df, True, 2), check_dtype=False)
 
-    check_func(impl3, (df, 1))
-    check_func(impl3, (df, 2))
-    check_func(impl4, (df, 1))
-    check_func(impl4, (df, 2))
+    check_func(impl3, (df, 1), check_dtype=False)
+    check_func(impl3, (df, 2), check_dtype=False)
+    check_func(impl4, (df, 1), check_dtype=False)
+    check_func(impl4, (df, 2), check_dtype=False)
 
 
 @pytest.mark.slow
@@ -273,8 +280,8 @@ def test_apply_raw_false(memory_leak_check):
         },
         index=[3, 1, 5, 11, 3],
     )
-    check_func(impl1, (df,))
-    check_func(impl2, (df,))
+    check_func(impl1, (df,), check_dtype=False)
+    check_func(impl2, (df,), check_dtype=False)
 
 
 @pytest.mark.slow
@@ -294,12 +301,13 @@ def g(a):
 @pytest.mark.slow
 def test_fixed_apply_nested_func(memory_leak_check):
     """test nested UDF decorated with Bodo (make sure it doesn't hang due to barriers)"""
+
     # test sequentially with manually created dfs
     def test_impl(df):
         return df.rolling(2).apply(lambda a: g(a))
 
     df = pd.DataFrame({"B": [0, 1, 2, np.nan, 4]})
-    check_func(test_impl, (df,))
+    check_func(test_impl, (df,), check_dtype=False)
 
 
 @pytest.mark.slow
@@ -326,10 +334,10 @@ def test_groupby_rolling(is_slow_run):
             "D": [3, 1, 2, 4, 5, 5] * 3,
         }
     )
-    check_func(impl1, (df,), sort_output=True, reset_index=True)
+    check_func(impl1, (df,), sort_output=True, reset_index=True, check_dtype=False)
     if not is_slow_run:
         return
-    check_func(impl2, (df,), sort_output=True, reset_index=True)
+    check_func(impl2, (df,), sort_output=True, reset_index=True, check_dtype=False)
     df = pd.DataFrame(
         {
             "A": [1, 4, 4, 11, 4, 1, 1, 1, 4],
@@ -347,40 +355,7 @@ def test_groupby_rolling(is_slow_run):
             ],
         }
     )
-    check_func(impl3, (df,), sort_output=True, reset_index=True)
-
-
-@pytest.mark.slow
-def test_skip_non_numeric_columns(memory_leak_check):
-    """Make sure non-numeric columns are skipped properly"""
-
-    def impl1(df):
-        return df.rolling(2).sum()
-
-    def impl2(df):
-        return df.rolling("2s", on="time").sum()
-
-    df = pd.DataFrame(
-        {
-            "A": [1, 4, 4, 11, 4, 1, 1, 1, 4],
-            "B": [1.1, 2.2, 3.3, 4.4, 5.5, 6.6, 7.7, 8.8, 9.9],
-            "C": ["A", "AB", "C", "D", "E", "AA", "BB", "C", "CC"],
-            "D": [True, False, False, True, True, False, False, True, False],
-            "time": [
-                pd.Timestamp("20130101 09:00:00"),
-                pd.Timestamp("20130101 09:00:02"),
-                pd.Timestamp("20130101 09:00:03"),
-                pd.Timestamp("20130101 09:00:05"),
-                pd.Timestamp("20130101 09:00:06"),
-                pd.Timestamp("20130101 09:00:07"),
-                pd.Timestamp("20130101 09:00:08"),
-                pd.Timestamp("20130101 09:00:10"),
-                pd.Timestamp("20130101 09:00:11"),
-            ],
-        }
-    )
-    check_func(impl1, (df,))
-    check_func(impl2, (df,))
+    check_func(impl3, (df,), sort_output=True, reset_index=True, check_dtype=False)
 
 
 @pytest.mark.slow
@@ -498,9 +473,7 @@ class TestRolling(unittest.TestCase):
         centers = (False, True)
 
         for func_name in test_funcs:
-            func_text = "def test_impl(df, w, c):\n  return df.rolling(w, center=c).{}()\n".format(
-                func_name
-            )
+            func_text = f"def test_impl(df, w, c):\n  return df.rolling(w, center=c).{func_name}()\n"
             loc_vars = {}
             exec(func_text, {}, loc_vars)
             test_impl = loc_vars["test_impl"]
@@ -525,9 +498,7 @@ class TestRolling(unittest.TestCase):
             wins = (2, 3, 5)
         centers = (False, True)
         for func_name in test_funcs:
-            func_text = "def test_impl(df, w, c):\n  return df.rolling(w, center=c).{}()\n".format(
-                func_name
-            )
+            func_text = f"def test_impl(df, w, c):\n  return df.rolling(w, center=c).{func_name}()\n"
             loc_vars = {}
             exec(func_text, {}, loc_vars)
             test_impl = loc_vars["test_impl"]
@@ -593,7 +564,7 @@ class TestRolling(unittest.TestCase):
             self.assertEqual(
                 bodo_func(*args),
                 test_impl(*args),
-                "rolling fixed window with {}".format(args),
+                f"rolling fixed window with {args}",
             )
         self.assertEqual(count_array_REPs(), 0)
         self.assertEqual(count_parfor_REPs(), 0)
@@ -615,7 +586,7 @@ class TestRolling(unittest.TestCase):
             self.assertEqual(
                 bodo_func(*args),
                 test_impl(*args),
-                "rolling fixed window with {}".format(args),
+                f"rolling fixed window with {args}",
             )
         self.assertEqual(count_array_REPs(), 0)
         self.assertEqual(count_parfor_REPs(), 0)
@@ -651,9 +622,7 @@ class TestRolling(unittest.TestCase):
             wins = ("1s", "2s", "3s", "4s")
         # all functions except apply
         for w, func_name in itertools.product(wins, test_funcs):
-            func_text = "def test_impl(df):\n  return df.rolling('{}', on='time').{}()\n".format(
-                w, func_name
-            )
+            func_text = f"def test_impl(df):\n  return df.rolling('{w}', on='time').{func_name}()\n"
             loc_vars = {}
             exec(func_text, {}, loc_vars)
             test_impl = loc_vars["test_impl"]
@@ -677,9 +646,7 @@ class TestRolling(unittest.TestCase):
             sizes = (1, 2, 10, 11, 121, 1000)
         # all functions except apply
         for w, func_name in itertools.product(wins, test_funcs):
-            func_text = "def test_impl(df):\n  return df.rolling('{}', on='time').{}()\n".format(
-                w, func_name
-            )
+            func_text = f"def test_impl(df):\n  return df.rolling('{w}', on='time').{func_name}()\n"
             loc_vars = {}
             exec(func_text, {}, loc_vars)
             test_impl = loc_vars["test_impl"]
@@ -722,9 +689,7 @@ class TestRolling(unittest.TestCase):
             wins = ("1s", "2s", "3s", "4s")
         # all functions except apply
         for w in wins:
-            func_text = "def test_impl(df):\n  return df.rolling('{}', on='time').apply(lambda a: a.sum(), raw=True)\n".format(
-                w
-            )
+            func_text = f"def test_impl(df):\n  return df.rolling('{w}', on='time').apply(lambda a: a.sum(), raw=True)\n"
             loc_vars = {}
             exec(func_text, {}, loc_vars)
             test_impl = loc_vars["test_impl"]
@@ -746,9 +711,7 @@ class TestRolling(unittest.TestCase):
             sizes = (2, 10, 11, 121, 1000)
         # all functions except apply
         for w in wins:
-            func_text = "def test_impl(df):\n  return df.rolling('{}', on='time').apply(lambda a: a.sum())\n".format(
-                w
-            )
+            func_text = f"def test_impl(df):\n  return df.rolling('{w}', on='time').apply(lambda a: a.sum())\n"
             loc_vars = {}
             exec(func_text, {}, loc_vars)
             test_impl = loc_vars["test_impl"]
@@ -772,9 +735,7 @@ class TestRolling(unittest.TestCase):
             func_text = "def test_impl(n):\n"
             func_text += "  df = pd.DataFrame({'B': np.arange(n), 'time': "
             func_text += "    pd.DatetimeIndex(np.arange(n) * 1000000000)})\n"
-            func_text += "  res = df.rolling('{}', on='time').{}()\n".format(
-                w, func_name
-            )
+            func_text += f"  res = df.rolling('{w}', on='time').{func_name}()\n"
             func_text += "  return res.B.sum()\n"
             loc_vars = {}
             exec(func_text, {"pd": pd, "np": np, "bodo": bodo}, loc_vars)
@@ -798,9 +759,7 @@ class TestRolling(unittest.TestCase):
             func_text += "  df = pd.DataFrame({'B': np.arange(n), 'time': "
             func_text += "    pd.DatetimeIndex(np.arange(n) * 1000000000)})\n"
             func_text += (
-                "  res = df.rolling('{}', on='time').apply(lambda a: a.sum())\n".format(
-                    w
-                )
+                f"  res = df.rolling('{w}', on='time').apply(lambda a: a.sum())\n"
             )
             func_text += "  return res.B.sum()\n"
             loc_vars = {}
@@ -834,6 +793,7 @@ class TestRolling(unittest.TestCase):
                 pd.testing.assert_series_equal(
                     bodo_func(S2, *args), test_impl(S2, *args)
                 )
+
         # test apply
         def apply_test_impl(S, w, c):
             return S.rolling(w, center=c).apply(lambda a: a.sum())

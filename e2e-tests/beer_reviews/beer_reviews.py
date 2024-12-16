@@ -1,6 +1,7 @@
 """
-See https://github.com/Bodo-inc/examples-dev/blob/main/beer_reviews.py
+See https://github.com/bodo-ai/examples-dev/blob/main/beer_reviews.py
 """
+
 import sys
 import time
 
@@ -9,7 +10,7 @@ import pandas as pd
 
 import bodo
 
-with open("nltk-stopwords.txt", "r") as fh:
+with open("nltk-stopwords.txt") as fh:
     STOPWORDS = list(map(str.strip, fh.readlines()))
 
 
@@ -30,7 +31,7 @@ def preprocess(reviews):
     return reviews
 
 
-@bodo.jit(cache=True)
+@bodo.jit(cache=True, spawn=True)
 def find_top_words(review_filename):
     # Load in the data
     t_start = time.time()

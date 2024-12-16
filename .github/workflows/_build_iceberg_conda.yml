@@ -1,0 +1,46 @@
+name: Build and Publish Iceberg Binary
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: [self-hosted, small]
+    timeout-minutes: 240
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Create Micromamba Environment
+        uses: mamba-org/setup-micromamba@v1
+        with:
+          environment-name: iceberg_build
+          create-args: boa anaconda-client setuptools_scm -c conda-forge
+          cache-environment: true
+          generate-run-shell: true
+          init-shell: bash
+          condarc: |
+            channels:
+              - conda-forge
+            remote_max_retries: 5
+            remote_backoff_factor: 60
+            aggressive_update_packages: []
+            conda_build:
+              pkg_format: 2
+
+      - name: 'Set Secret File Permissions and Conda Build and Publish Iceberg Binary to Artifactory'
+        run: |
+          set -eo pipefail
+          echo "${{ secrets.PUBLISH_BINARY_SECRETS }}" > $HOME/secret_file
+          sudo chmod a+r $HOME/secret_file
+
+          artifactory_channel=`./buildscripts/iceberg/get_channel.sh`
+          echo "artifactory_channel: $artifactory_channel"
+          ./buildscripts/iceberg/publish_binary.sh $artifactory_channel
+        shell: bash
+        env:
+          USERNAME: ${{ secrets.ARTIFACTORY_USERNAME }}
+          TOKEN: ${{ secrets.ARTIFACTORY_TOKEN }}
+          ANACONDA_TOKEN: ${{ secrets.ANACONDA_TOKEN }}

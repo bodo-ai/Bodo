@@ -1,33 +1,46 @@
 package com.bodosql.calcite.application.BodoSQLCodeGen;
 
-import static com.bodosql.calcite.application.Utils.DateTimeHelpers.*;
-import static com.bodosql.calcite.application.Utils.Utils.*;
+import static com.bodosql.calcite.application.utils.DateTimeHelpers.convertMySQLFormatStringToPython;
+import static com.bodosql.calcite.application.utils.DateTimeHelpers.isStringLiteral;
 
 import com.bodosql.calcite.application.BodoSQLCodegenException;
-import com.bodosql.calcite.application.BodoSQLExprType;
-import com.bodosql.calcite.application.RexNodeVisitorInfo;
-import com.bodosql.calcite.application.Utils.BodoCtx;
-import java.util.*;
+import com.bodosql.calcite.ir.Expr;
+import com.bodosql.calcite.ir.ExprKt;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.List;
+import kotlin.Pair;
+import org.apache.calcite.rex.RexNode;
+import org.apache.calcite.sql.type.BodoTZInfo;
 import org.apache.calcite.sql.type.SqlTypeName;
 
 public class DatetimeFnCodeGen {
   static List<String> fnList =
       Arrays.asList(
           "DAYNAME",
-          "LAST_DAY",
           "MONTHNAME",
+          "MONTH_NAME",
           "NEXT_DAY",
           "PREVIOUS_DAY",
           "WEEKDAY",
+          "TIME_SLICE",
+          "YEAROFWEEK",
           "YEAROFWEEKISO");
 
-  // HashMap of all trig functions which maps to array kernels
+  // HashMap of all datetime functions which maps to array kernels
   // which handle all combinations of scalars/arrays/nulls.
   static HashMap<String, String> equivalentFnMap = new HashMap<>();
 
   static {
     for (String fn : fnList) {
-      equivalentFnMap.put(fn, "bodo.libs.bodosql_array_kernels." + fn.toLowerCase());
+      if (fn.equals("YEAROFWEEK")) {
+        equivalentFnMap.put(fn, "get_year");
+      } else if (fn.equals("MONTH_NAME")) {
+        equivalentFnMap.put(fn, "monthname");
+      } else {
+        equivalentFnMap.put(fn, fn.toLowerCase());
+      }
     }
   }
 
@@ -36,31 +49,12 @@ public class DatetimeFnCodeGen {
    *
    * @param fnName The name of the function
    * @param arg1Expr The string expression of arg1
-   * @param arg1Name The name of arg1
-   * @param isSingleRow boolean value that determines if this function call is taking place within
-   *     an apply
-   * @return The RexNodeVisitorInfo corresponding to the function call
+   * @return The Expr corresponding to the function call
    */
-  public static RexNodeVisitorInfo getSingleArgDatetimeFnInfo(
-      String fnName, String inputVar, String arg1Expr, String arg1Name, boolean isSingleRow) {
-    StringBuilder name = new StringBuilder();
-    name.append(fnName).append("(").append(arg1Name).append(")");
-    StringBuilder expr_code = new StringBuilder();
-
+  public static Expr getSingleArgDatetimeFnInfo(String fnName, Expr arg1) {
     // If the functions has a broadcasted array kernel, always use it
     if (equivalentFnMap.containsKey(fnName)) {
-      if (isSingleRow) {
-        expr_code
-            .append("bodo.utils.conversion.box_if_dt64(")
-            .append(equivalentFnMap.get(fnName))
-            .append("(")
-            .append("bodo.utils.conversion.unbox_if_timestamp(")
-            .append(arg1Expr)
-            .append(")))");
-      } else {
-        expr_code.append(equivalentFnMap.get(fnName)).append("(").append(arg1Expr).append(")");
-      }
-      return new RexNodeVisitorInfo(name.toString(), expr_code.toString());
+      return ExprKt.bodoSQLKernel(equivalentFnMap.get(fnName), List.of(arg1), List.of());
     }
 
     // If we made it here, something has gone very wrong
@@ -72,45 +66,13 @@ public class DatetimeFnCodeGen {
    *
    * @param fnName The name of the function
    * @param arg1Expr The string expression of arg1
-   * @param arg1Name The name of arg1
-   * @param isSingleRow boolean value that determines if this function call is taking place within
-   *     an apply
-   * @return The RexNodeVisitorInfo corresponding to the function call
+   * @param arg2Expr The string expression of arg2
+   * @return The Expr corresponding to the function call
    */
-  public static RexNodeVisitorInfo getDoubleArgDatetimeFnInfo(
-      String fnName,
-      String inputVar,
-      String arg1Expr,
-      String arg1Name,
-      String arg2Expr,
-      String arg2Name,
-      boolean isSingleRow) {
-    StringBuilder name = new StringBuilder();
-    name.append(fnName).append("(").append(arg1Name).append(")");
-    StringBuilder expr_code = new StringBuilder();
-
-    // If the functions has a broadcasted array kernel, always use it
+  public static Expr getDoubleArgDatetimeFnInfo(String fnName, Expr arg1, Expr arg2) {
+    // If the functions have a broadcasted array kernel, always use it
     if (equivalentFnMap.containsKey(fnName)) {
-      if (isSingleRow) {
-        expr_code
-            .append("bodo.utils.conversion.box_if_dt64(")
-            .append(equivalentFnMap.get(fnName))
-            .append("(")
-            .append("bodo.utils.conversion.unbox_if_timestamp(")
-            .append(arg1Expr)
-            .append("),bodo.utils.conversion.unbox_if_timestamp(")
-            .append(arg2Expr)
-            .append(")))");
-      } else {
-        expr_code
-            .append(equivalentFnMap.get(fnName))
-            .append("(")
-            .append(arg1Expr)
-            .append(",")
-            .append(arg2Expr)
-            .append(")");
-      }
-      return new RexNodeVisitorInfo(name.toString(), expr_code.toString());
+      return ExprKt.bodoSQLKernel(equivalentFnMap.get(fnName), List.of(arg1, arg2), List.of());
     }
 
     // If we made it here, something has gone very wrong
@@ -120,310 +82,537 @@ public class DatetimeFnCodeGen {
   /**
    * Helper function that handles codegen for makedate
    *
-   * @param inputVar Name of dataframe which Columns expressions reference
    * @param arg1Info The VisitorInfo for the first argument
    * @param arg2Info The VisitorInfo for the second argument
-   * @return The RexNodeVisitorInfo corresponding to the function call
+   * @return The Expr corresponding to the function call
    */
-  public static RexNodeVisitorInfo generateMakeDateInfo(
-      String inputVar,
-      RexNodeVisitorInfo arg1Info,
-      RexNodeVisitorInfo arg2Info,
-      boolean isSingleRow,
-      BodoCtx ctx) {
-    String name = "MAKEDATE(" + arg1Info.getName() + ", " + arg2Info.getName() + ")";
+  public static Expr generateMakeDateInfo(Expr arg1Info, Expr arg2Info) {
+    return ExprKt.bodoSQLKernel("makedate", List.of(arg1Info, arg2Info), List.of());
+  }
 
-    String outputExpr =
-        "bodo.libs.bodosql_array_kernels.makedate("
-            + arg1Info.getExprCode()
-            + ", "
-            + arg2Info.getExprCode()
-            + ")";
-    if (isSingleRow) {
-      outputExpr = "bodo.utils.conversion.box_if_dt64(" + outputExpr + ")";
+  /**
+   * Generate code for computing a timestamp for the current time in the default timezone.
+   *
+   * @param tzInfoExpr The Timezone information with which to create the Timestamp.
+   * @param makeConsistent Should a function call be generated that ensures the data is consistent
+   *     on all ranks. This is False if used within a case statement.
+   * @return The generated code.
+   */
+  public static Expr generateCurrTimestampCode(Expr tzInfoExpr, boolean makeConsistent) {
+    String fnName;
+    if (makeConsistent) {
+      fnName = "bodo.hiframes.pd_timestamp_ext.now_impl_consistent";
+    } else {
+      fnName = "pd.Timestamp.now";
     }
-    return new RexNodeVisitorInfo(name, outputExpr);
+    return new Expr.Call(fnName, tzInfoExpr);
   }
 
-  public static RexNodeVisitorInfo generateCurtimeCode(String opName) {
-    String fnName = opName + "()";
-    String fnExpression = "pd.Timestamp.now()";
-    return new RexNodeVisitorInfo(fnName, fnExpression);
+  /**
+   * Generate code for computing a time value for the current time in the default timezone.
+   *
+   * @param tzInfo The Timezone information with which to create the Time.
+   * @param makeConsistent Should a function call be generated that ensures the data is consistent
+   *     on all ranks. This is False if used within a case statement.
+   * @return The generated code.
+   */
+  public static Expr generateCurrTimeCode(BodoTZInfo tzInfo, boolean makeConsistent) {
+    Expr tzArg = tzInfo == null ? Expr.None.INSTANCE : tzInfo.getZoneExpr();
+    String fnName;
+    if (makeConsistent) {
+      fnName = "bodo.hiframes.pd_timestamp_ext.now_impl_consistent";
+    } else {
+      fnName = "pd.Timestamp.now";
+    }
+    Expr nowCall = new Expr.Call(fnName, tzArg);
+    List<Pair<String, Expr>> namedArgs =
+        List.of(
+            new Pair<>("format_str", Expr.None.INSTANCE),
+            new Pair<>("_try", Expr.BooleanLiteral.True.INSTANCE));
+    return ExprKt.bodoSQLKernel("to_time", List.of(nowCall), namedArgs);
   }
 
-  public static RexNodeVisitorInfo generateUTCTimestampCode() {
-    String fnName = "UTC_TIMESTAMP()";
-    // use utcnow if/when we decide to support timezones
-    String fnExpression = "pd.Timestamp.now()";
-    return new RexNodeVisitorInfo(fnName, fnExpression);
+  /**
+   * Generate the code for the Timestamp in UTC.
+   *
+   * @param makeConsistent Should a function call be generated that ensures the data is consistent
+   *     on all ranks. This is False if used within a case statement.
+   * @return The generated code.
+   */
+  public static Expr generateUTCTimestampCode(boolean makeConsistent) {
+    String fnName;
+    if (makeConsistent) {
+      fnName = "bodo.hiframes.pd_timestamp_ext.now_impl_consistent";
+    } else {
+      fnName = "pd.Timestamp.now";
+    }
+    return new Expr.Call(fnName);
   }
 
-  public static RexNodeVisitorInfo generateUTCDateCode() {
-    String fnName = "UTC_Date()";
-    // use utcnow if/when we decide to support timezones
-    String fnExpression = "pd.Timestamp.now().floor(freq=\"D\")";
-    return new RexNodeVisitorInfo(fnName, fnExpression);
+  /**
+   * Generate the code for the current date in UTC.
+   *
+   * @param makeConsistent Should a function call be generated that ensures the data is consistent
+   *     on all ranks. This is False if used within a case statement.
+   * @return The generated code.
+   */
+  public static Expr generateUTCDateCode(boolean makeConsistent) {
+    String fnName;
+    if (makeConsistent) {
+      fnName = "bodo.hiframes.datetime_date_ext.today_rank_consistent";
+    } else {
+      fnName = "datetime.date.today";
+    }
+    return new Expr.Call(fnName);
   }
 
   /**
    * Helper function handles the codegen for Date_Trunc
    *
-   * @param arg1Info The VisitorInfo for the first argument. Currently, this is required to be a *
-   *     constant string literal.
-   * @param arg2Info The VisitorInfo for the second argument.
-   * @param arg2ExprType Is arg2 a column or scalar?
-   * @param isSingleRow boolean value that determines if this function call is taking place within
-   *     an apply
-   * @return the rexNodeVisitorInfo for the result.
+   * @param unit A constant string literal, the time unit to truncate.
+   * @param arg2Info The VisitorInfo for the second argument. = * @return the rexNodeVisitorInfo for
+   *     the result.
    */
-  public static RexNodeVisitorInfo generateDateTruncCode(
-      RexNodeVisitorInfo arg1Info,
-      RexNodeVisitorInfo arg2Info,
-      BodoSQLExprType.ExprType arg2ExprType,
-      boolean isSingleRow) {
-    if (!isStringLiteral(arg1Info.getExprCode())) {
-      throw new BodoSQLCodegenException(
-          "DATE_TRUNC(): Argument 0 must be a constant literal String");
-    }
-
-    String name = "DATE_TRUNC(" + arg1Info.getName() + ", " + arg2Info.getName() + ")";
-    // Extract the literal and ensure its not case sensitive
-    String truncVal = getStringLiteralValue(arg1Info.getExprCode()).toUpperCase();
-    // Valid DATE_TRUNC values:
-    // https://docs.snowflake.com/en/sql-reference/functions-date-time.html#supported-date-and-time-parts
-    String outputExpression;
-
-    if (arg2ExprType == BodoSQLExprType.ExprType.SCALAR || isSingleRow) {
-      // TODO [BS-638]: Support Scalar Values
-      throw new BodoSQLCodegenException("DATE_TRUNC(): Not supported on scalar values.");
-    } else {
-      switch (truncVal) {
-          // For offset values we need to use DateOffset.
-        case "YEAR":
-          // TODO [BE-2304]: Support YearBegin in the Engine
-          throw new BodoSQLCodegenException(
-              "DATE_TRUNC(): Specifying 'YEAR' for <date_or_time_part> not supported.");
-        case "MONTH":
-          // Month rounds down to the start of the Month.
-          // We add 1 Day to avoid boundaries
-          outputExpression =
-              "((pd.Series("
-                  + arg2Info.getExprCode()
-                  + ") + pd.Timedelta(days=1)) - pd.tseries.offsets.MonthBegin(n=1,"
-                  + " normalize=True)).values";
-          break;
-        case "WEEK":
-          // Week rounds down to the Monday of that week.
-          // We add 1 Day to avoid boundaries
-          outputExpression =
-              "((pd.Series("
-                  + arg2Info.getExprCode()
-                  + ") + pd.Timedelta(days=1)) - pd.tseries.offsets.Week(n=1, weekday=0,"
-                  + " normalize=True)).values";
-          break;
-        case "QUARTER":
-          // TODO [BE-2305]: Support QuarterBegin in the Engine
-          throw new BodoSQLCodegenException(
-              "DATE_TRUNC(): Specifying 'Quarter' for <date_or_time_part> not supported.");
-        case "DAY":
-          // For all timedelta valid values we can use .dt.floor
-          outputExpression = "pd.Series(" + arg2Info.getExprCode() + ").dt.floor(\"D\").values";
-          break;
-        case "HOUR":
-          outputExpression = "pd.Series(" + arg2Info.getExprCode() + ").dt.floor(\"H\").values";
-          break;
-        case "MINUTE":
-          outputExpression = "pd.Series(" + arg2Info.getExprCode() + ").dt.floor(\"min\").values";
-          break;
-        case "SECOND":
-          outputExpression = "pd.Series(" + arg2Info.getExprCode() + ").dt.floor(\"S\").values";
-          break;
-        case "MILLISECOND":
-          outputExpression = "pd.Series(" + arg2Info.getExprCode() + ").dt.floor(\"ms\").values";
-          break;
-        case "MICROSECOND":
-          outputExpression = "pd.Series(" + arg2Info.getExprCode() + ").dt.floor(\"us\").values";
-          break;
-        case "NANOSECOND":
-          // Timestamps have nanosecond precision so we don't need to round.
-          outputExpression = arg2Info.getExprCode();
-          break;
-        default:
-          throw new BodoSQLCodegenException(
-              String.format("DATE_TRUNC(): Invalid <date_or_time_part> '%s'", truncVal));
-      }
-    }
-
-    return new RexNodeVisitorInfo(name, outputExpression);
+  public static Expr generateDateTruncCode(String unit, Expr arg2Info) {
+    return ExprKt.bodoSQLKernel(
+        "date_trunc", List.of(new Expr.StringLiteral(unit), arg2Info), List.of());
   }
 
   /**
    * Helper function that handles the codegen for Date format
    *
    * @param arg1Info The VisitorInfo for the first argument.
-   * @param arg1ExprType Is arg1 a column or scalar?
    * @param arg2Info The VisitorInfo for the second argument. Currently, this is required to be a
    *     constant string literal.
-   * @param isSingleRow boolean value that determines if this function call is taking place within
-   *     an apply
    * @return the rexNodeVisitorInfo for the result.
    */
-  public static RexNodeVisitorInfo generateDateFormatCode(
-      RexNodeVisitorInfo arg1Info,
-      BodoSQLExprType.ExprType arg1ExprType,
-      RexNodeVisitorInfo arg2Info,
-      boolean isSingleRow) {
-    String name = "DATE_FORMAT(" + arg1Info.getName() + ", " + arg2Info.getName() + ")";
+  public static Expr generateDateFormatCode(Expr arg1Info, Expr arg2Info) {
+    assert isStringLiteral(arg2Info.emit());
+    Expr pythonFormatString = new Expr.Raw(convertMySQLFormatStringToPython(arg2Info.emit()));
 
-    assert isStringLiteral(arg2Info.getExprCode());
-    String pythonFormatString = convertMySQLFormatStringToPython(arg2Info.getExprCode());
-    String outputExpression;
+    return ExprKt.bodoSQLKernel("date_format", List.of(arg1Info, pythonFormatString), List.of());
+  }
 
-    if (arg1ExprType == BodoSQLExprType.ExprType.SCALAR || isSingleRow) {
-      outputExpression =
-          "bodosql.libs.generated_lib.sql_null_checking_strftime("
-              + arg1Info.getExprCode()
-              + ", "
-              + pythonFormatString
-              + ")";
-    } else {
-      outputExpression =
-          "pd.Series("
-              + arg1Info.getExprCode()
-              + ").dt.strftime("
-              + pythonFormatString
-              + ").values";
-    }
-
-    return new RexNodeVisitorInfo(name, outputExpression);
+  public static Expr generateCombineIntervalsCode(List<Expr> operands) {
+    return new Expr.Binary("+", operands.get(0), operands.get(1));
   }
 
   /**
-   * Helper function that handles codegen for CURDATE and CURRENTDATE
+   * Helper function that handles codegen for CONVERT_TIMEZONE.
    *
-   * @param opName The name of the function
-   * @return The RexNodeVisitorInfo corresponding to the function call
+   * @param operands The list of expressions for the arguments.
+   * @param argsInfo The list of the original rex nodes for the args.
+   * @param defaultTz The default timezone to use for the session.
+   * @return The Expr corresponding to the function call
    */
-  public static RexNodeVisitorInfo generateCurdateCode(String opName) {
-    String fnName = opName + "()";
-    String fnExpression = "pd.Timestamp.now().floor(freq=\"D\")";
-    return new RexNodeVisitorInfo(fnName, fnExpression);
+  public static Expr generateConvertTimezoneCode(
+      List<Expr> operands, List<RexNode> argsInfo, BodoTZInfo defaultTz) {
+    List<Expr> args = new ArrayList<>();
+    String kernel;
+    if (operands.size() == 2) {
+      // 2 arguments = switching a timestamp to use the offset of
+      // another timezone but in the same epoch moment.
+      args.add(operands.get(0));
+      Expr timestampArg = operands.get(1);
+      if (argsInfo.get(1).getType().getSqlTypeName() != SqlTypeName.TIMESTAMP_TZ) {
+        // If the conversion data argument is not already a timestamp_TZ,
+        // cast it to one.
+        List<Expr> castArgs = List.of(timestampArg, defaultTz.getZoneExpr());
+
+        timestampArg = ExprKt.bodoSQLKernel("to_timestamptz", castArgs, List.of());
+      }
+      args.add(timestampArg);
+      kernel = "convert_timezone_tz";
+    } else {
+      // 3 arguments = converting a timestamp_ntz from its wallclock time
+      // in one time zone to the wallclock time at the same epoch moment
+      // in another time zone.
+      args.add(operands.get(0));
+      args.add(operands.get(1));
+      Expr timestampArg = operands.get(2);
+      if (argsInfo.get(2).getType().getSqlTypeName() != SqlTypeName.TIMESTAMP) {
+        // If the conversion data argument is not already a timestamp_ntz,
+        // cast it to one.
+        List<Expr> castArgs =
+            List.of(
+                timestampArg, Expr.None.INSTANCE, Expr.None.INSTANCE, new Expr.IntegerLiteral(9));
+
+        timestampArg = ExprKt.bodoSQLKernel("to_timestamp", castArgs, List.of());
+      }
+      args.add(timestampArg);
+      kernel = "convert_timezone_ntz";
+    }
+    return ExprKt.bodoSQLKernel(kernel, args, List.of());
   }
 
-  public static RexNodeVisitorInfo getYearWeekFnInfo(
-      RexNodeVisitorInfo arg0Info, boolean isScalar) {
+  /**
+   * Helper function that handles codegen for CURDATE and CURRENTDATE. CURRENT_DATE actually returns
+   * the date from the Timestamp in the system's local timezone.
+   * https://docs.snowflake.com/en/sql-reference/functions/current_date
+   *
+   * <p>As a result, if the timezone isn't in UTC we need to pass that information.
+   *
+   * @param defaultTZInfo The timezone to use for the date information.
+   * @param makeConsistent Should a function call be generated that ensures the data is consistent
+   *     on all ranks. This is False if used within a case statement.
+   * @return The Expr corresponding to the function call
+   */
+  public static Expr generateCurrentDateCode(BodoTZInfo defaultTZInfo, boolean makeConsistent) {
+    String fnName;
+    if (makeConsistent) {
+      fnName = "bodo.hiframes.datetime_date_ext.now_date_wrapper_consistent";
+    } else {
+      fnName = "bodo.hiframes.datetime_date_ext.now_date_wrapper";
+    }
+    return new Expr.Call(fnName, defaultTZInfo.getZoneExpr());
+  }
 
-    String outputExpr;
-    String arg0Expr = arg0Info.getExprCode();
+  /**
+   * Helper function that handles codegen for YearWeek
+   *
+   * @param arg0Info The name and codegen for the argument.
+   * @return The Expr corresponding to the function call
+   */
+  public static Expr getYearWeekFnInfo(Expr arg0Info) {
+    String arg0Expr = arg0Info.emit();
 
     // performs yearNum * 100 + week num
-    if (isScalar) {
-      // TODO: Null check this
-      outputExpr =
-          "(bodosql.libs.generated_lib.sql_null_checking_year("
-              + arg0Expr
-              + ") * 100 + bodosql.libs.generated_lib.sql_null_checking_weekofyear("
-              + arg0Expr
-              + "))";
-    } else {
-      outputExpr =
-          "(pd.Series("
-              + arg0Expr
-              + ").dt.year * 100 + pd.Series("
-              + arg0Expr
-              + ").dt.isocalendar().week).values";
-    }
-
-    String name = "YEARWEEK(" + arg0Info.getName() + ")";
-    return new RexNodeVisitorInfo(name, outputExpr);
-  }
-
-  public static String intExprToIntervalDays(String expr, boolean useScalar) {
-    String arg1Expr;
-    if (useScalar) {
-      arg1Expr =
-          "bodo.utils.conversion.box_if_dt64(bodo.libs.bodosql_array_kernels.int_to_days("
-              + expr
-              + "))";
-    } else {
-      arg1Expr = "bodo.libs.bodosql_array_kernels.int_to_days(" + expr + ")";
-    }
-    return arg1Expr;
+    // TODO: Add proper null checking on scalars by converting * and +
+    // to an array kernel
+    Expr getYear = ExprKt.bodoSQLKernel("get_year", List.of(arg0Info), List.of());
+    Expr getYearTimes100 =
+        ExprKt.bodoSQLKernel(
+            "multiply_numeric", List.of(getYear, new Expr.IntegerLiteral(100)), List.of());
+    Expr weekNum = ExprKt.bodoSQLKernel("get_weekofyear", List.of(arg0Info), List.of());
+    return ExprKt.bodoSQLKernel("add_numeric", List.of(getYearTimes100, weekNum), List.of());
   }
 
   /**
-   * Helper function that handles the codegen for snowflake SQL's TIME and TO_TIME
+   * Helper function that handles the codegen for snowflake SQL's TIME, TO_TIME, and TRY_TO_TIME
    *
-   * @param arg1Type The type of the first argument.
-   * @param arg1Info The VisitorInfo for the first argument.
-   * @param opName should be either "TIME" or "TO_TIME"
+   * @param operands The function arguments.
+   * @param opName should be either "TIME", "TO_TIME", or "TRY_TO_TIME"
    * @return the rexNodeVisitorInfo for the function call
    */
-  public static RexNodeVisitorInfo generateToTimeCode(
-      SqlTypeName arg1Type, RexNodeVisitorInfo arg1Info, String opName) {
-    String name = opName + "(" + arg1Info.getName() + ")";
-    String outputExpression =
-        "bodo.libs.bodosql_array_kernels."
-            + opName.toLowerCase()
-            + "_util("
-            + arg1Info.getExprCode()
-            + ")";
-    return new RexNodeVisitorInfo(name, outputExpression);
+  public static Expr generateToTimeCode(
+      List<Expr> operands, String opName, List<Pair<String, Expr>> streamingNamedArgs) {
+    assert operands.size() == 1;
+    List<Expr> args = new ArrayList<>();
+    args.addAll(operands);
+    if (args.size() == 1) {
+      // Add the format string
+      args.add(Expr.None.INSTANCE);
+    }
+    // Add the try arg.
+    args.add(new Expr.BooleanLiteral(opName.contains("TRY")));
+    return ExprKt.bodoSQLKernel("to_time", args, streamingNamedArgs);
   }
 
   /**
-   * Helper function that handles the codegen for snowflake SQL's TIME_FROM_PARTS
+   * Helper function that handles the codegen for snowflake SQL's LAST_DAY
+   *
+   * @param arg0 A date or timestamp expression.
+   * @param unit The time unit for calculating the last day.
+   * @return the rexNodeVisitorInfo for the function call
+   */
+  public static Expr generateLastDayCode(Expr arg0, String unit) {
+    return ExprKt.bodoSQLKernel("last_day_" + unit, List.of(arg0), List.of());
+  }
+
+  public static Expr generateTimeSliceFnCode(List<Expr> operandsInfo, Integer weekStart) {
+    assert (operandsInfo.size() == 3 || operandsInfo.size() == 4);
+
+    List<Expr> args = new ArrayList<>(operandsInfo);
+    if (operandsInfo.size() == 3) {
+      args.add(new Expr.StringLiteral("START"));
+    }
+    args.add(new Expr.IntegerLiteral(weekStart));
+    return ExprKt.bodoSQLKernel("time_slice", args, List.of());
+  }
+
+  /**
+   * Helper function that handles the codegen for DATE_FROM_PARTS, TIME_FROM_PARTS,
+   * TIMESTAMP_FROM_PARTS and all of their variants/aliases
    *
    * @return the rexNodeVisitorInfo for the function call
    */
-  public static RexNodeVisitorInfo generateTimeFromPartsCode(
-      RexNodeVisitorInfo arg1Info,
-      RexNodeVisitorInfo arg2Info,
-      RexNodeVisitorInfo arg3Info,
-      RexNodeVisitorInfo arg4Info) {
-    String name;
-    String outputExpression;
+  public static Expr generateDateTimeTypeFromPartsCode(
+      final String fnName, List<Expr> operandsInfo, final Expr tzExpr) {
+    boolean time_mode = false;
+    boolean date_mode = false;
+    boolean timestamp_mode = false;
+    boolean tz_mode = false;
+    boolean timestamp_from_date_time_mode = false;
 
-    if (arg4Info == null) {
-      name =
-          "TIME_FROM_PARTS("
-              + arg1Info.getName()
-              + ", "
-              + arg2Info.getName()
-              + ", "
-              + arg3Info.getName()
-              + ")";
-      outputExpression =
-          "bodo.libs.bodosql_array_kernels.time_from_parts_util("
-              + arg1Info.getExprCode()
-              + ", "
-              + arg2Info.getExprCode()
-              + ", "
-              + arg3Info.getExprCode()
-              + ", 0)";
-    } else {
-      name =
-          "TIME_FROM_PARTS("
-              + arg1Info.getName()
-              + ", "
-              + arg2Info.getName()
-              + ", "
-              + arg3Info.getName()
-              + ", "
-              + arg4Info.getName()
-              + ")";
-      outputExpression =
-          "bodo.libs.bodosql_array_kernels.time_from_parts_util("
-              + arg1Info.getExprCode()
-              + ", "
-              + arg2Info.getExprCode()
-              + ", "
-              + arg3Info.getExprCode()
-              + ", "
-              + arg4Info.getExprCode()
-              + ")";
+    int numArgs = operandsInfo.size();
+
+    switch (fnName) {
+      case "TIME_FROM_PARTS":
+        time_mode = true;
+        break;
+      case "DATE_FROM_PARTS":
+        date_mode = true;
+        break;
+      case "TIMESTAMP_TZ_FROM_PARTS":
+        timestamp_mode = true;
+        tz_mode = true;
+        break;
+      case "TIMESTAMP_LTZ_FROM_PARTS":
+        // the TZ/LTZ versions cannot use the two argument constructor which always
+        // produces NTZ values.
+        timestamp_mode = true;
+        break;
+      default:
+        timestamp_mode = numArgs >= 6;
+        timestamp_from_date_time_mode = !timestamp_mode;
+    }
+    String generateFnName;
+    if (time_mode) {
+      generateFnName = "time_from_parts";
+    } else if (date_mode) {
+      generateFnName = "date_from_parts";
+    } else if (timestamp_from_date_time_mode) {
+      generateFnName = "timestamp_from_date_and_time";
+    } else if (tz_mode) { // timestamp_mode
+      generateFnName = "timestamp_tz_from_parts";
+    } else { // timestamp_mode
+      generateFnName = "construct_timestamp";
     }
 
-    return new RexNodeVisitorInfo(name, outputExpression);
+    // Copy the arguments because we will need to append.
+    List<Expr> args = new ArrayList<>(operandsInfo);
+
+    // For time, add the nanosecond argument if necessary
+    if (time_mode && numArgs == 3) {
+      args.add(Expr.Companion.getZero());
+    }
+    // For timestamp, fill in the nanosecond argument if necessary
+    if (timestamp_mode && numArgs < 7) {
+      args.add(Expr.Companion.getZero());
+    }
+    // For timestamp, fill in the time_zone argument if necessary
+    if (timestamp_mode && numArgs < 8) {
+      args.add(tzExpr);
+    }
+
+    return ExprKt.bodoSQLKernel(generateFnName, args, List.of());
+  }
+
+  public static ArrayList<String> TIME_PART_UNITS =
+      new ArrayList<>(
+          Arrays.asList("hour", "minute", "second", "millisecond", "microsecond", "nanosecond"));
+
+  public enum DateTimeType {
+    TIMESTAMP,
+    TIME,
+    DATE,
+  }
+
+  /**
+   * Helper function that verifies and determines the type of date or time expression
+   *
+   * @param rexNode RexNode of the expression
+   * @return The expression is a timestamp, time or date object
+   */
+  public static DateTimeType getDateTimeDataType(RexNode rexNode) {
+    if (rexNode.getType().getSqlTypeName() == SqlTypeName.TIME) {
+      return DateTimeType.TIME;
+    }
+    if (rexNode.getType().getSqlTypeName() == SqlTypeName.DATE) {
+      return DateTimeType.DATE;
+    }
+    return DateTimeType.TIMESTAMP;
+  }
+
+  /**
+   * Helper function that verifies and standardizes the time unit input
+   *
+   * @param fnName the function which takes this time unit as input
+   * @param inputTimeStr the input time unit string
+   * @param dateTimeDataType if the time expression is Bodo.Time object, the time unit should be
+   *     smaller or equal to hour if the time expression is date object, the time unit should be
+   *     larger or equal to day
+   * @return the standardized time unit string
+   */
+  public static String standardizeTimeUnit(
+      String fnName, String inputTimeStr, DateTimeType dateTimeDataType) {
+    String unit;
+    switch (inputTimeStr.toLowerCase()) {
+      case "\"year\"":
+      case "\"y\"":
+      case "\"yy\"":
+      case "\"yyy\"":
+      case "\"yyyy\"":
+      case "\"yr\"":
+      case "\"years\"":
+      case "\"yrs\"":
+      case "year":
+      case "y":
+      case "yy":
+      case "yyy":
+      case "yyyy":
+      case "yr":
+      case "years":
+      case "yrs":
+        if (dateTimeDataType == DateTimeType.TIME)
+          throw new BodoSQLCodegenException(
+              "Unsupported unit for " + fnName + " with TIME input: " + inputTimeStr);
+        unit = "year";
+        break;
+
+      case "\"month\"":
+      case "\"mm\"":
+      case "\"mon\"":
+      case "\"mons\"":
+      case "\"months\"":
+      case "month":
+      case "mm":
+      case "mon":
+      case "mons":
+      case "months":
+        if (dateTimeDataType == DateTimeType.TIME)
+          throw new BodoSQLCodegenException(
+              "Unsupported unit for " + fnName + " with TIME input: " + inputTimeStr);
+        unit = "month";
+        break;
+
+      case "\"day\"":
+      case "\"d\"":
+      case "\"dd\"":
+      case "\"days\"":
+      case "\"dayofmonth\"":
+      case "day":
+      case "d":
+      case "dd":
+      case "days":
+      case "dayofmonth":
+        if (dateTimeDataType == DateTimeType.TIME)
+          throw new BodoSQLCodegenException(
+              "Unsupported unit for " + fnName + " with TIME input: " + inputTimeStr);
+        unit = "day";
+        break;
+
+      case "\"week\"":
+      case "\"w\"":
+      case "\"wk\"":
+      case "\"weekofyear\"":
+      case "\"woy\"":
+      case "\"wy\"":
+      case "week":
+      case "w":
+      case "wk":
+      case "weekofyear":
+      case "woy":
+      case "wy":
+        if (dateTimeDataType == DateTimeType.TIME)
+          throw new BodoSQLCodegenException(
+              "Unsupported unit for " + fnName + " with TIME input: " + inputTimeStr);
+        unit = "week";
+        break;
+
+      case "\"quarter\"":
+      case "\"q\"":
+      case "\"qtr\"":
+      case "\"qtrs\"":
+      case "\"quarters\"":
+      case "quarter":
+      case "q":
+      case "qtr":
+      case "qtrs":
+      case "quarters":
+        if (dateTimeDataType == DateTimeType.TIME)
+          throw new BodoSQLCodegenException(
+              "Unsupported unit for " + fnName + " with TIME input: " + inputTimeStr);
+        unit = "quarter";
+        break;
+
+      case "\"hour\"":
+      case "\"h\"":
+      case "\"hh\"":
+      case "\"hr\"":
+      case "\"hours\"":
+      case "\"hrs\"":
+      case "hour":
+      case "h":
+      case "hh":
+      case "hr":
+      case "hours":
+      case "hrs":
+        unit = "hour";
+        break;
+
+      case "\"minute\"":
+      case "\"m\"":
+      case "\"mi\"":
+      case "\"min\"":
+      case "\"minutes\"":
+      case "\"mins\"":
+      case "minute":
+      case "m":
+      case "mi":
+      case "min":
+      case "minutes":
+      case "mins":
+        unit = "minute";
+        break;
+
+      case "\"second\"":
+      case "\"s\"":
+      case "\"sec\"":
+      case "\"seconds\"":
+      case "\"secs\"":
+      case "second":
+      case "s":
+      case "sec":
+      case "seconds":
+      case "secs":
+        unit = "second";
+        break;
+
+      case "\"millisecond\"":
+      case "\"ms\"":
+      case "\"msec\"":
+      case "\"milliseconds\"":
+      case "millisecond":
+      case "ms":
+      case "msec":
+      case "milliseconds":
+        unit = "millisecond";
+        break;
+
+      case "\"microsecond\"":
+      case "\"us\"":
+      case "\"usec\"":
+      case "\"microseconds\"":
+      case "microsecond":
+      case "us":
+      case "usec":
+      case "microseconds":
+        unit = "microsecond";
+        break;
+
+      case "\"nanosecond\"":
+      case "\"ns\"":
+      case "\"nsec\"":
+      case "\"nanosec\"":
+      case "\"nsecond\"":
+      case "\"nanoseconds\"":
+      case "\"nanosecs\"":
+      case "\"nseconds\"":
+      case "nanosecond":
+      case "ns":
+      case "nsec":
+      case "nanosec":
+      case "nsecond":
+      case "nanoseconds":
+      case "nanosecs":
+      case "nseconds":
+        unit = "nanosecond";
+        break;
+
+      default:
+        throw new BodoSQLCodegenException("Unsupported unit for " + fnName + ": " + inputTimeStr);
+    }
+    return unit;
   }
 }

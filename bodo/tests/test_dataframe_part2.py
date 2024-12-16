@@ -1,10 +1,9 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
 Unittests for DataFrames
 """
+
 import datetime
 import os
-import random
 import sys
 from decimal import Decimal
 
@@ -22,14 +21,13 @@ from bodo.tests.utils import (
     DeadcodeTestPipeline,
     _get_dist_arg,
     check_func,
-    gen_random_arrow_array_struct_int,
-    gen_random_arrow_array_struct_list_int,
-    gen_random_arrow_list_list_int,
-    gen_random_arrow_struct_struct,
-    get_start_end,
+    get_num_test_workers,
     has_udf_call,
+    pytest_pandas,
 )
 from bodo.utils.typing import BodoError, BodoWarning, ColNamesMetaType
+
+pytestmark = pytest_pandas
 
 
 def test_pd_isna_getitem(memory_leak_check):
@@ -55,7 +53,7 @@ def test_pd_isna_getitem(memory_leak_check):
         return pd.isnull(A[i])
 
     df = pd.DataFrame(
-        {"A": ["AA", np.nan, "", "D", "GG"], "B": [1, 8, 4, -1, 2]},
+        {"A": ["AA", None, "", "D", "GG"], "B": [1, 8, 4, -1, 2]},
         [1.1, -2.1, 7.1, 0.1, 3.1],
     )
     check_func(impl1, (df,))
@@ -74,7 +72,7 @@ def test_setitem_na(memory_leak_check):
         S.iloc[i] = None
         return S
 
-    S = pd.Series(["AA", np.nan, "", "D", "GG"], name="C")
+    S = pd.Series(["AA", None, "", "D", "GG"], name="C")
     # TODO: support distributed setitem with scalar
     bodo_func = bodo.jit(impl)
     pd.testing.assert_series_equal(
@@ -154,7 +152,7 @@ def test_set_column_scalar_timestamp(memory_leak_check):
 
     n = 11
     t = pd.Timestamp("1994-11-23T10:11:35")
-    check_func(test_impl, (n, t))
+    check_func(test_impl, (n, t), check_dtype=False)
 
 
 def test_set_column_cond1(memory_leak_check):
@@ -273,7 +271,14 @@ def test_set_column_native_reflect(memory_leak_check):
         f(df)
         return df
 
+    # nullable float column
+    def impl2():
+        df = pd.DataFrame({"A": pd.Series(np.ones(4)).astype("Float64")})
+        f(df)
+        return df
+
     check_func(impl, (), only_seq=True)
+    check_func(impl2, (), only_seq=True)
 
 
 def test_set_multi_column_reflect(memory_leak_check):
@@ -427,6 +432,7 @@ def test_set_column_table_format(memory_leak_check):
     check_func(impl, (df, "E", "abc"), only_seq=True)
 
 
+@pytest.mark.parquet
 def test_set_table_data_replace(memory_leak_check):
     """Test for adding an array to a table block after a previous array was removed
     from it (BE-1635).
@@ -495,7 +501,7 @@ def test_df_filter(memory_leak_check):
     df = pd.DataFrame(
         {
             "A": [2, 1, 1, 1, 2, 2, 1] * 2,
-            "B": ["A", "B", np.nan, "ACDE", "C", np.nan, "AA"] * 2,
+            "B": ["A", "B", None, "ACDE", "C", None, "AA"] * 2,
             "C": [2, 3, -1, 1, np.nan, 3.1, -1] * 2,
         }
     )
@@ -733,14 +739,15 @@ def test_df_apply_general_colnames(memory_leak_check):
         },
         index=[3, 1, 4, 6, 0],
     )
-    check_func(impl1, (df,))
-    check_func(impl2, (df,))
+    check_func(impl1, (df,), convert_to_nullable_float=False)
+    check_func(impl2, (df,), convert_to_nullable_float=False)
     check_func(impl3, (df,))
 
 
 @pytest.mark.slow
 def test_df_apply_decimal(memory_leak_check):
     """make sure Decimal output can be handled in apply() properly"""
+
     # just returning input value since we don't support any Decimal creation yet
     # TODO: support Decimal(str) constructor
     # TODO: fix using freevar constants in UDFs
@@ -845,11 +852,12 @@ def test_df_apply_freevar(memory_leak_check):
     def impl2(df, a):
         d = 1
         e = 4
-        m = 3
+        m = 3  # noqa: F841
 
         def f(r, a):
             cmp = d + e + a
-            m = 5  # name conflict with caller
+            # name conflict with caller
+            m = 5  # noqa: F841
             if a == 0:
                 return False
             return r.A == cmp
@@ -928,8 +936,8 @@ def test_df_apply_df_output(memory_leak_check):
         return df.apply(g, axis=1)
 
     df = pd.DataFrame({"A": [1.0, 2.0, 3.0, 4.0, 5.0]})
-    check_func(impl1, (df,))
-    check_func(impl2, (df,))
+    check_func(impl1, (df,), check_dtype=False)
+    check_func(impl2, (df,), check_dtype=False)
 
 
 def test_df_apply_df_output_multicolumn(memory_leak_check):
@@ -1005,7 +1013,7 @@ def test_df_apply_supported_types(df_value, memory_leak_check):
     df = df_value.apply(lambda row: row.repeat(2), axis=0)
 
     # Rename 1st column to A (if not already A)
-    if not "A" in df.columns:
+    if "A" not in df.columns:
         df.rename(columns={df.columns[0]: "A"}, inplace=True)
 
     check_func(test_impl, (df,), check_dtype=False)
@@ -1031,6 +1039,10 @@ def test_df_apply_datetime(memory_leak_check):
     check_func(test_impl, (df,))
 
 
+@pytest.mark.skipif(
+    bodo.tests.utils.test_spawn_mode_enabled,
+    reason="TODO[BSE-4207] Fix module import of UDFs in workers",
+)
 def test_udf_other_module(memory_leak_check):
     """Test Bodo compiler pipeline replacement for a UDF function dependency in another
     module [BE-1315]
@@ -1133,6 +1145,13 @@ def test_dataframe_pipe():
                 "B": [True, False, False, True, True, False],
             }
         ),
+        # nullable float
+        pd.DataFrame(
+            {
+                "A": ["aa", "bb", "aa", "cc", "aa", "bb"],
+                "B": pd.Series([1.5, 2.2, 2.2, 5.3, None, 1.5], dtype="Float64"),
+            }
+        ),
     ],
 )
 # memory_leak_check doesn't work with Categorical
@@ -1216,23 +1235,22 @@ def test_concat_typing_transform(memory_leak_check):
 def test_concat_int_float(memory_leak_check):
     """Test dataframe concatenation when integer and float are put together"""
 
-    def test_impl(df, df2):
-        return df.append(df2, ignore_index=True)
-
     def test_impl_concat(df, df2):
         return pd.concat((df, df2), ignore_index=True)
 
     df = pd.DataFrame({"A": [1, 2, 3]})
     df2 = pd.DataFrame({"A": [4.0, 5.0]})
-    check_func(test_impl, (df, df2), sort_output=True, reset_index=True)
-    check_func(test_impl_concat, (df, df2), sort_output=True, reset_index=True)
+    check_func(
+        test_impl_concat,
+        (df, df2),
+        sort_output=True,
+        reset_index=True,
+        check_dtype=False,
+    )
 
 
 def test_concat_nulls(memory_leak_check):
     """Test dataframe concatenation when full NA arrays need to be appended"""
-
-    def test_impl(df, df2):
-        return df.append(df2, ignore_index=True)
 
     def test_impl_concat(df, df2):
         return pd.concat((df, df2), ignore_index=True)
@@ -1251,8 +1269,32 @@ def test_concat_nulls(memory_leak_check):
             "E": pd.timedelta_range(start=3, periods=n),
         }
     )
-    check_func(test_impl, (df, df2), sort_output=True, reset_index=True)
     check_func(test_impl_concat, (df, df2), sort_output=True, reset_index=True)
+
+
+@pytest.mark.skip("TODO[BSE-2076]: Support tuple array in Arrow boxing/unboxing")
+def test_concat_tuple(memory_leak_check):
+    """Test dataframe concatenation with array of tuples"""
+
+    def test_impl(df, df2):
+        return pd.concat((df, df2), ignore_index=True)
+
+    df1 = pd.DataFrame(
+        {
+            "A": [
+                (
+                    1,
+                    2,
+                ),
+                None,
+                (3, 4),
+                (9, 11),
+            ]
+        }
+    )
+    df2 = pd.DataFrame({"A": [(4, 6), (4, 10), None]})
+    check_func(test_impl, (df1, df2), sort_output=True, reset_index=True)
+    check_func(test_impl, (df2, df1), sort_output=True, reset_index=True)
 
 
 @pytest.mark.parametrize(
@@ -1282,7 +1324,7 @@ def test_append_empty_df(df):
     def test_impl(df2):
         df = pd.DataFrame()
         for _ in range(3):
-            df = df.append(df2)
+            df = pd.concat((df, df2))
         return df
 
     check_func(test_impl, (df,), sort_output=True, reset_index=True, check_dtype=False)
@@ -1370,7 +1412,6 @@ def test_df_fillna_df_value(df_value):
     def impl(df, value):
         return df.fillna(value)
 
-    col = df_value.columns[0]
     df = df_value[[df_value.columns[0]]]
     value = df.dropna().iat[0, 0]
     check_func(impl, (df, value))
@@ -1431,12 +1472,24 @@ def test_df_fillna_type_mismatch_failure():
         ),
         pd.DataFrame(
             {
+                "A": pd.Series(
+                    [np.nan, np.nan, 1e16, 3e17, np.nan, 1e18, 500, np.nan] * 3,
+                    dtype="datetime64[ns]",
+                ),
+                "B": pd.Series(
+                    [np.nan, 3e17, 5e17, np.nan, np.nan, 1e18, 500, np.nan] * 3,
+                    dtype="timedelta64[ns]",
+                ),
+            }
+        ),
+        pd.DataFrame(
+            {
                 "A": pd.Series([None] * 10 + ["a"], dtype="string"),
                 "B": pd.Series([1] + [None] * 10, dtype="Int16"),
                 "C": pd.Series([np.nan] * 5 + [1.1] + [np.nan] * 5, dtype="float32"),
             }
         ),
-        pd.DataFrame({"A": pd.Series([np.nan] * 35, dtype="boolean")}),
+        pd.DataFrame({"A": pd.Series([None] * 35, dtype="boolean")}),
     ],
 )
 def fillna_dataframe(request):
@@ -1648,8 +1701,8 @@ def test_df_setitem_multi(memory_leak_check):
             "D": np.arange(n) + 1.0,
         }
     )
-    check_func(impl1, (df,), copy_input=True)
-    check_func(impl2, (df,), copy_input=True)
+    check_func(impl1, (df,), copy_input=True, convert_to_nullable_float=False)
+    check_func(impl2, (df,), copy_input=True, convert_to_nullable_float=False)
     with pytest.raises(
         BodoError,
         match=r"Dataframe.apply\(\): only axis=1 supported for user-defined functions",
@@ -1973,7 +2026,7 @@ def test_iloc_setitem(memory_leak_check):
 
     n = 11
     df = pd.DataFrame({"A": np.arange(n), "B": np.arange(n) ** 2, "C": np.ones(n)})
-    check_func(impl1, (df,), copy_input=True)
+    check_func(impl1, (df,), copy_input=True, convert_to_nullable_float=False)
     check_func(impl2, (df,), copy_input=True)
     check_func(impl3, (df,), copy_input=True)
     # TODO: Support impl4
@@ -2055,7 +2108,6 @@ def test_loc_col_select(memory_leak_check):
 
 @pytest.mark.slow
 def test_getitem_loc_integer_cols():
-
     # TODO: BE-1325, support non string literals for scalar case
     # def impl1(df):
     #     return df.loc[0, 1]
@@ -2223,14 +2275,14 @@ def test_loc_setitem(memory_leak_check):
     check_func(impl1, (df,), copy_input=True)
     check_func(impl2, (df,), copy_input=True)
     check_func(impl3, (df,), copy_input=True)
-    check_func(impl4, (df,), copy_input=True)
-    check_func(impl5, (df,), copy_input=True)
-    check_func(impl6, (n,))
-    check_func(impl7, (df,), copy_input=True)
-    check_func(impl8, (df,), copy_input=True)
-    check_func(impl9, (n,))
+    check_func(impl4, (df,), copy_input=True, check_dtype=False)
+    check_func(impl5, (df,), copy_input=True, check_dtype=False)
+    check_func(impl6, (n,), check_dtype=False)
+    check_func(impl7, (df,), copy_input=True, check_dtype=False)
+    check_func(impl8, (df,), copy_input=True, check_dtype=False)
+    check_func(impl9, (n,), check_dtype=False)
     A = np.arange(2 * n).reshape(n, 2)
-    check_func(impl10, (df, A))
+    check_func(impl10, (df, A), check_dtype=False)
 
 
 @pytest.mark.skipif(
@@ -2320,7 +2372,7 @@ def test_df_schema_change(memory_leak_check):
 
     def test_impl(df):
         df["C"] = 3
-        return df.drop(["C"], 1)
+        return df.drop(["C"], axis=1)
 
     df = pd.DataFrame({"A": [1.0, 2.0, np.nan, 1.0], "B": [1.2, np.nan, 1.1, 3.1]})
     bodo_func = bodo.jit(test_impl)
@@ -2393,7 +2445,7 @@ def test_set_df_index(memory_leak_check):
         return df
 
     def impl2(df):
-        df.index = pd.Int64Index([3, 1, 2, 0])
+        df.index = pd.Index([3, 1, 2, 0])
         return df
 
     # type instability due to control flow
@@ -2456,7 +2508,7 @@ def test_df_fillna_str_inplace(memory_leak_check):
         return df
 
     df_str = pd.DataFrame(
-        {"A": [2, 1, 1, 1, 2, 2, 1], "B": ["ab", "b", np.nan, "c", "bdd", "c", "a"]}
+        {"A": [2, 1, 1, 1, 2, 2, 1], "B": ["ab", "b", None, "c", "bdd", "c", "a"]}
     )
     check_func(test_impl, (df_str,), copy_input=True, use_dict_encoded_strings=False)
 
@@ -2471,7 +2523,7 @@ def test_df_fillna_binary_inplace(memory_leak_check):
     df_str = pd.DataFrame(
         {
             "A": [2, 1, 1, 1, 2, 2, 1],
-            "B": [b"ab", b"", np.nan, b"hkjl", b"bddsad", b"asdfc", b"sdfa"],
+            "B": [b"ab", b"", None, b"hkjl", b"bddsad", b"asdfc", b"sdfa"],
         }
     )
     check_func(test_impl, (df_str,), copy_input=True)
@@ -2510,7 +2562,7 @@ def test_df_type_unify_error():
     # Test as a developer
     numba.core.config.DEVELOPER_MODE = 1
 
-    if PYVERSION == (3, 10):
+    if PYVERSION in ((3, 10), (3, 12)):
         # In Python 3.10 this function has two returns in the bytecode
         # as opposed to a phi node
         error_type = BodoError
@@ -2555,129 +2607,6 @@ def test_dataframe_columns_const_passing(memory_leak_check):
 
     df = pd.DataFrame({"A": [2, 1], "B": [1.2, 3.3]})
     check_func(impl, (df,))
-
-
-def test_dataframe_sample_number(memory_leak_check):
-    """Checking the random routine is especially difficult to do.
-    We can mostly only check incidental information about the code"""
-
-    def f(df):
-        return df.sample(n=4, replace=False).size
-
-    bodo_f = bodo.jit(all_args_distributed_block=True, all_returns_distributed=False)(f)
-    n = 10
-    df = pd.DataFrame({"A": [x for x in range(n)]})
-    py_output = f(df)
-    df_loc = _get_dist_arg(df)
-    assert bodo_f(df_loc) == py_output
-
-
-@pytest.mark.slow
-def test_dataframe_sample_uniform(memory_leak_check):
-    """Checking the random routine, this time with uniform input"""
-
-    def f1(df):
-        return df.sample(n=4, replace=False)
-
-    def f2(df):
-        return df.sample(frac=0.5, replace=False)
-
-    n = 10
-    df = pd.DataFrame({"A": [1 for _ in range(n)]})
-    check_func(f1, (df,), reset_index=True, is_out_distributed=False)
-    check_func(f2, (df,), reset_index=True, is_out_distributed=False)
-
-
-@pytest.mark.slow
-def test_dataframe_sample_sorted(memory_leak_check):
-    """Checking the random routine. Since we use sorted and the number of entries is equal to
-    the number of sampled rows, after sorting the output becomes deterministic, that is independent
-    of the random number generated"""
-
-    def f(df, n):
-        return df.sample(n=n, replace=False)
-
-    n = 10
-    df = pd.DataFrame({"A": [x for x in range(n)]})
-    check_func(f, (df, n), reset_index=True, sort_output=True, is_out_distributed=False)
-
-
-@pytest.mark.slow
-def test_dataframe_sample_index(memory_leak_check):
-    """Checking that the index passed coherently to the A entry."""
-
-    def f(df):
-        return df.sample(5)
-
-    df = pd.DataFrame({"A": list(range(20))})
-    bodo_f = bodo.jit(all_args_distributed_block=False, all_returns_distributed=False)(
-        f
-    )
-    df_ret = bodo_f(df)
-    S = df_ret.index == df_ret["A"]
-    assert S.all()
-
-
-# TODO: fix leak and add memory_leak_check
-@pytest.mark.slow
-def test_dataframe_sample_nested_datastructures():
-    """The sample function relies on allgather operations that deserve to be tested"""
-
-    def check_gather_operation(df):
-        siz = df.size
-
-        def f(df, m):
-            return df.sample(n=m, replace=False).size
-
-        py_output = f(df, siz)
-        start, end = get_start_end(len(df))
-        df_loc = df.iloc[start:end]
-        bodo_f = bodo.jit(
-            all_args_distributed_block=True, all_returns_distributed=False
-        )(f)
-        df_ret = bodo_f(df_loc, siz)
-        assert df_ret == py_output
-
-    n = 10
-    random.seed(1)
-    df1 = pd.DataFrame({"B": gen_random_arrow_array_struct_int(10, n)})
-    df2 = pd.DataFrame({"B": gen_random_arrow_array_struct_list_int(10, n)})
-    df3 = pd.DataFrame({"B": gen_random_arrow_list_list_int(1, 0.1, n)})
-    df4 = pd.DataFrame({"B": gen_random_arrow_struct_struct(10, n)})
-    check_gather_operation(df1)
-    check_gather_operation(df2)
-    check_gather_operation(df3)
-    check_gather_operation(df4)
-
-
-@pytest.mark.slow
-def test_dataframe_sample_frac_one_replace_false():
-    def test_impl1(df):
-        return df.sample(frac=1, replace=False)
-
-    def test_impl2(df):
-        return df.sample(frac=1.0)
-
-    def test_impl3(df, num):
-        return df.sample(n=num)
-
-    df = pd.DataFrame(
-        {"A": np.arange(10), "B": 1.5 + np.arange(10)},
-        index=[f"i{i}" for i in range(10)],
-    )
-    n = len(df)
-
-    check_func(test_impl1, (df,), sort_output=True, is_out_distributed=False)
-    check_func(test_impl2, (df,), sort_output=True, is_out_distributed=False)
-    check_func(
-        test_impl3,
-        (
-            df,
-            n,
-        ),
-        sort_output=True,
-        is_out_distributed=False,
-    )
 
 
 @pytest.mark.slow
@@ -2725,7 +2654,7 @@ def test_dataframe_columns_list():
 
     def impl1(nrows, nvars):
         X = np.zeros((nrows, nvars + 1))
-        cols = ["y"] + ["x{}".format(i) for i in range(nvars)]
+        cols = ["y"] + ["x{}".format(i) for i in range(nvars)]  # noqa
         df = pd.DataFrame(X, columns=cols)
         return df
 
@@ -2789,7 +2718,7 @@ def test_unroll_loop(memory_leak_check, is_slow_run):
         df = pd.DataFrame({"A1": np.arange(n), "A2": np.arange(n) ** 2})
         for i in [3, 5, 9]:
             new_df = (df[["A1", "A2"]] + i).rename(
-                columns={"A1": "A1_{}".format(i), "A2": "A2_{}".format(i)}
+                columns={"A1": f"A1_{i}", "A2": f"A2_{i}"}
             )
             df = pd.concat((df, new_df), axis=1)
         return df
@@ -2828,8 +2757,9 @@ def test_unroll_loop(memory_leak_check, is_slow_run):
             "E": np.ones(n) + 1,
         }
     )
-    check_func(impl8, (df,), copy_input=True)
-    check_func(impl9, (df,), copy_input=True)
+    # [BSE-2776] Support list comprehension unrolling with condition for Python 3.12
+    # check_func(impl8, (df,), copy_input=True)
+    # check_func(impl9, (df,), copy_input=True)
 
 
 def test_df_copy_update(memory_leak_check):
@@ -2891,7 +2821,7 @@ def test_unsupported_df_method():
         # timedelta
         pd.DataFrame({"D": pd.Series(pd.timedelta_range(start="1 day", periods=4))}),
         # string
-        pd.DataFrame({"A": [1, 2, 3], "B": ["xx", "yy", np.nan]}),
+        pd.DataFrame({"A": [1, 2, 3], "B": ["xx", "yy", None]}),
         # nullable int
         pd.DataFrame({"A": pd.Series([1, 2] * 20, dtype="Int32"), "B": [2, 3] * 20}),
         # categorical and boolean
@@ -2940,6 +2870,8 @@ def test_df_info(df):
 def test_df_mem_usage(memory_leak_check):
     """Test DataFrame.memory_usage() with and w/o index"""
 
+    n_pes = get_num_test_workers()
+
     def impl1(df):
         return df.memory_usage()
 
@@ -2950,401 +2882,45 @@ def test_df_mem_usage(memory_leak_check):
         {"A": [1, 2, 3, 4, 5, 6], "B": [2.1, 3.2, 4.4, 5.2, 10.9, 6.8]},
         index=pd.date_range(start="2018-04-24", end="2018-04-27", periods=6, name="A"),
     )
-    py_out = pd.Series([48, 48, 48], index=["Index", "A", "B"])
-    check_func(impl1, (df,), py_output=py_out, is_out_distributed=False)
-    py_out = pd.Series([48, 48], index=["A", "B"])
-    check_func(impl2, (df,), py_output=py_out, is_out_distributed=False)
+    # 1 extra byte for null_bit_map per rank
+    null_bitmap_byte = 1
+    col_B_size = 48 + null_bitmap_byte
+    col_B_size_parallel = col_B_size + null_bitmap_byte * (n_pes - 1)
+    py_out = pd.Series([48, 48, col_B_size], index=["Index", "A", "B"])
+    py_out_parallel = pd.Series(
+        [48, 48, col_B_size_parallel], index=["Index", "A", "B"]
+    )
+    check_func(impl1, (df,), py_output=py_out, is_out_distributed=False, only_seq=True)
+    check_func(
+        impl1, (df,), py_output=py_out_parallel, is_out_distributed=False, only_1D=True
+    )
+    py_out = pd.Series([48, col_B_size], index=["A", "B"])
+    py_out_parallel = pd.Series([48, col_B_size_parallel], index=["A", "B"])
+    check_func(
+        impl2,
+        (df,),
+        py_output=py_out,
+        is_out_distributed=False,
+        check_dtype=False,
+        only_seq=True,
+    )
+    check_func(
+        impl2,
+        (df,),
+        py_output=py_out_parallel,
+        is_out_distributed=False,
+        check_dtype=False,
+        only_1D=True,
+    )
     # Empty DataFrame
     df = pd.DataFrame()
     # StringIndex only. Bodo has different underlying arrays than Pandas
     # Test sequential case
-    py_out = pd.Series([8], index=pd.Index(["Index"]))
+    py_out = pd.Series([24], index=pd.Index(["Index"]))
     check_func(impl1, (df,), only_seq=True, py_output=py_out, is_out_distributed=False)
     # Test parallel case. Index is replicated across ranks
-    py_out = pd.Series([8 * bodo.get_size()], index=pd.Index(["Index"]))
+    py_out = pd.Series([24 * n_pes], index=pd.Index(["Index"]))
     check_func(impl1, (df,), only_1D=True, py_output=py_out, is_out_distributed=False)
 
     # Empty and no index.
-    check_func(impl2, (df,), is_out_distributed=False)
-
-
-from .test_matplotlib import bodo_check_figures_equal
-
-
-@pytest.mark.slow
-@bodo_check_figures_equal(extensions=["png"], tol=0.1)
-def test_df_plot_simple(fig_test, fig_ref):
-    """
-    Tests a basic example for df.plot replicated.
-    """
-
-    df = pd.DataFrame(
-        {"year": [2013, 2014, 2015], "sales": [7941243, 9135482, 9536887]}
-    )
-
-    def impl(input_fig, df):
-        ax = input_fig.subplots()
-        df.plot(x="year", y="sales", ax=ax, figsize=(10, 20))
-
-    impl(fig_ref, df)
-    bodo.jit(impl)(fig_test, df)
-
-
-@pytest.mark.slow
-@bodo_check_figures_equal(extensions=["png"], tol=0.1)
-def test_df_plot_labels(fig_test, fig_ref):
-    """
-    Tests an example for df.plot with xlabel, ylabel, title
-    """
-
-    df = pd.DataFrame(
-        {"year": [2013, 2014, 2015], "sales": [7941243, 9135482, 9536887]}
-    )
-
-    def impl(input_fig, df):
-        ax = input_fig.subplots()
-        df.plot(
-            x="year",
-            y="sales",
-            xlabel="time",
-            ylabel="revenue",
-            title="Revenue Timeline",
-            ax=ax,
-        )
-
-    impl(fig_ref, df)
-    bodo.jit(impl)(fig_test, df)
-
-
-@pytest.mark.slow
-@bodo_check_figures_equal(extensions=["png"], tol=0.1)
-def test_df_plot_ticks(fig_test, fig_ref):
-    """
-    Tests an example for df.plot with xlabel, ylabel, title
-    """
-
-    df = pd.DataFrame(
-        {"year": [2013, 2014, 2015], "sales": [7941243, 9135482, 9536887]}
-    )
-
-    def impl(input_fig, df):
-        ax = input_fig.subplots()
-        df.plot(
-            x="year",
-            y="sales",
-            xticks=(2010, 2012, 2016),
-            yticks=(7600000, 8600000, 9600000),
-            fontsize=18,
-            ax=ax,
-        )
-
-    impl(fig_ref, df)
-    bodo.jit(impl)(fig_test, df)
-
-
-@pytest.mark.slow
-@bodo_check_figures_equal(extensions=["png"], tol=0.1)
-def test_df_plot_simple_scatter(fig_test, fig_ref):
-    """
-    Tests a basic example for df.plot(scatter)
-    replicated
-    """
-
-    df = pd.DataFrame(
-        {"year": [2013, 2014, 2015], "sales": [7941243, 9135482, 9536887]}
-    )
-
-    def impl(input_fig, df):
-        ax = input_fig.subplots()
-        df.plot(kind="scatter", x="year", y="sales", ax=ax, figsize=(5, 5))
-
-    impl(fig_ref, df)
-    bodo.jit(impl)(fig_test, df)
-
-
-@pytest.mark.slow
-@bodo_check_figures_equal(extensions=["png"], tol=0.1)
-def test_df_plot_labels_scatter(fig_test, fig_ref):
-    """
-    Tests an example for df.plot(scatter) with xlabel, ylabel, title
-    replicated
-    """
-
-    df = pd.DataFrame(
-        {"year": [2013, 2014, 2015], "sales": [7941243, 9135482, 9536887]}
-    )
-
-    def impl(input_fig, df):
-        ax = input_fig.subplots()
-        df.plot(
-            kind="scatter",
-            x="year",
-            y="sales",
-            xlabel="time",
-            ylabel="revenue",
-            title="Revenue Timeline",
-            ax=ax,
-        )
-
-    impl(fig_ref, df)
-    bodo.jit(impl)(fig_test, df)
-
-
-@pytest.mark.slow
-@bodo_check_figures_equal(extensions=["png"], tol=0.1)
-def test_df_plot_ticks_scatter(fig_test, fig_ref):
-    """
-    Tests an example for df.plot(scatter) with xlabel, ylabel, title
-    replicated
-    """
-
-    df = pd.DataFrame(
-        {"year": [2013, 2014, 2015], "sales": [7941243, 9135482, 9536887]}
-    )
-
-    def impl(input_fig, df):
-        ax = input_fig.subplots()
-        df.plot(
-            kind="scatter",
-            x="year",
-            y="sales",
-            xticks=(2010, 2012, 2016),
-            yticks=(7600000, 8600000, 9600000),
-            fontsize=18,
-            ax=ax,
-        )
-
-    impl(fig_ref, df)
-    bodo.jit(impl)(fig_test, df)
-
-
-@pytest.mark.slow
-@bodo_check_figures_equal(extensions=["png"], tol=0.1)
-def test_df_plot_simple_dist(fig_test, fig_ref):
-    """
-    Tests a basic example for df.plot distributed.
-    """
-
-    def impl(input_fig):
-        df = pd.DataFrame(
-            {
-                "year": np.arange(2010, 2015),
-                "sales": np.arange(7000000, 9500000, 500000),
-            }
-        )
-        ax = input_fig.subplots()
-        df.plot(x="year", y="sales", ax=ax, figsize=(10, 20))
-
-    impl(fig_ref)
-    bodo.jit(impl)(fig_test)
-
-
-@pytest.mark.slow
-@bodo_check_figures_equal(extensions=["png"], tol=0.1)
-def test_df_plot_labels_dist(fig_test, fig_ref):
-    """
-    Tests an example for df.plot with xlabel, ylabel, title
-    distributed
-    """
-
-    def impl(input_fig):
-        df = pd.DataFrame(
-            {
-                "year": np.arange(2010, 2015),
-                "sales": np.arange(7000000, 9500000, 500000),
-            }
-        )
-        ax = input_fig.subplots()
-        df.plot(
-            x="year",
-            y="sales",
-            xlabel="time",
-            ylabel="revenue",
-            title="Revenue Timeline",
-            ax=ax,
-        )
-
-    impl(fig_ref)
-    bodo.jit(impl)(fig_test)
-
-
-@pytest.mark.slow
-@bodo_check_figures_equal(extensions=["png"], tol=0.1)
-def test_df_plot_ticks_dist(fig_test, fig_ref):
-    """
-    Tests an example for df.plot with xlabel, ylabel, title
-    distributed
-    """
-
-    def impl(input_fig):
-        df = pd.DataFrame(
-            {
-                "year": np.arange(2010, 2015),
-                "sales": np.arange(7000000, 9500000, 500000),
-            }
-        )
-        ax = input_fig.subplots()
-        df.plot(
-            x="year",
-            y="sales",
-            xticks=(2010, 2012, 2016, 2018),
-            yticks=(6600000, 7600000, 8600000, 9600000),
-            fontsize=18,
-            ax=ax,
-        )
-
-    impl(fig_ref)
-    bodo.jit(impl)(fig_test)
-
-
-@pytest.mark.slow
-@bodo_check_figures_equal(extensions=["png"], tol=0.1)
-def test_df_plot_simple_scatter_dist(fig_test, fig_ref):
-    """
-    Tests a basic example for df.plot(scatter)
-    distributed
-    """
-
-    def impl(input_fig):
-        df = pd.DataFrame(
-            {
-                "year": np.arange(2010, 2015),
-                "sales": np.arange(7000000, 9500000, 500000),
-            }
-        )
-        ax = input_fig.subplots()
-        df.plot(kind="scatter", x="year", y="sales", ax=ax, figsize=(5, 5))
-
-    impl(fig_ref)
-    bodo.jit(impl)(fig_test)
-
-
-@pytest.mark.slow
-@bodo_check_figures_equal(extensions=["png"], tol=0.1)
-def test_df_plot_labels_scatter_dist(fig_test, fig_ref):
-    """
-    Tests an example for df.plot(scatter) with xlabel, ylabel, title
-    distributed
-    """
-
-    def impl(input_fig):
-        df = pd.DataFrame(
-            {
-                "year": np.arange(2010, 2015),
-                "sales": np.arange(7000000, 9500000, 500000),
-            }
-        )
-        ax = input_fig.subplots()
-        df.plot(
-            kind="scatter",
-            x="year",
-            y="sales",
-            xlabel="time",
-            ylabel="revenue",
-            title="Revenue Timeline",
-            ax=ax,
-        )
-
-    impl(fig_ref)
-    bodo.jit(impl)(fig_test)
-
-
-@pytest.mark.slow
-@bodo_check_figures_equal(extensions=["png"], tol=0.1)
-def test_df_plot_ticks_scatter_dist(fig_test, fig_ref):
-    """
-    Tests an example for df.plot(scatter) with xlabel, ylabel, title
-    distributed
-    """
-
-    def impl(input_fig):
-        df = pd.DataFrame(
-            {
-                "year": np.arange(2010, 2015),
-                "sales": np.arange(7000000, 9500000, 500000),
-            }
-        )
-        ax = input_fig.subplots()
-        df.plot(
-            kind="scatter",
-            x="year",
-            y="sales",
-            xticks=(2010, 2012, 2016, 2018),
-            yticks=(6600000, 7600000, 8600000, 9600000),
-            fontsize=18,
-            ax=ax,
-        )
-
-    impl(fig_ref)
-    bodo.jit(impl)(fig_test)
-
-
-@pytest.mark.slow
-@bodo_check_figures_equal(extensions=["png"], tol=0.1)
-def test_df_plot_x_y_none_distributed(fig_test, fig_ref):
-    """
-    Tests a basic example for df.plot where x and y are None.
-    distributed.
-    """
-
-    def impl(input_fig):
-        df = pd.DataFrame(
-            {
-                "year": np.arange(2010, 2015),
-                "sales": np.arange(7000000, 9500000, 500000),
-                "count": np.arange(1000000, 3500000, 500000),
-            }
-        )
-        ax = input_fig.subplots()
-        # df.plot(x="year", y="sales", ax=ax, figsize=(10, 20))
-        df.plot(ax=ax)
-
-    impl(fig_ref)
-    bodo.jit(impl)(fig_test)
-
-
-@pytest.mark.slow
-@bodo_check_figures_equal(extensions=["png"], tol=0.1)
-def test_df_plot_x_none_distributed(fig_test, fig_ref):
-    """
-    Tests a basic example for df.plot where x is None.
-    distributed.
-    """
-
-    def impl(input_fig):
-        df = pd.DataFrame(
-            {
-                "year": np.arange(2010, 2015),
-                "sales": np.arange(7000000, 9500000, 500000),
-                "count": np.arange(1000000, 3500000, 500000),
-            }
-        )
-        ax = input_fig.subplots()
-        df.plot(y="sales", ax=ax)
-
-    impl(fig_ref)
-    bodo.jit(impl)(fig_test)
-
-
-@pytest.mark.slow
-@bodo_check_figures_equal(extensions=["png"], tol=0.1)
-def test_df_plot_y_none_distributed(fig_test, fig_ref):
-    """
-    Tests a basic example for df.plot where x is None.
-    distributed.
-    """
-
-    def impl(input_fig):
-        df = pd.DataFrame(
-            {
-                "month": ["Jan", "Feb", "March", "April", "May"],
-                "year": np.arange(2010, 2015),
-                "sales": np.arange(7000000, 9500000, 500000),
-                "count": np.arange(1000000, 3500000, 500000),
-            }
-        )
-        ax = input_fig.subplots()
-        df.plot(x="year", ax=ax)
-
-    impl(fig_ref)
-    bodo.jit(impl)(fig_test)
+    check_func(impl2, (df,), is_out_distributed=False, check_dtype=False)

@@ -1,102 +1,57 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
-    Test file for tests related to alias operations. Some tests
-    looks at the plans that are generated and check correctness.
+Test file for tests related to alias operations. Some tests
+looks at the plans that are generated and check correctness.
 """
+
 import pandas as pd
 import pytest
-from bodosql.tests.utils import check_plan_length, check_query
+
+from bodosql.tests.utils import check_query
 
 
-@pytest.mark.slow
-def test_trival_project_removed(basic_df, spark_info, memory_leak_check):
-    """
-    Test that verifies that trivial project nodes are removed
-    """
-    query1 = "select * from table1"
-    query2 = "select A, B, C from table1"
-    check_plan_length(query1, basic_df, 1)
-    check_query(query1, basic_df, spark_info)
-    check_plan_length(query2, basic_df, 1)
-    check_query(query2, basic_df, spark_info)
-
-
-@pytest.mark.slow
-def test_trival_nested_removed(basic_df, spark_info, memory_leak_check):
-    """
-    Test that verifies that all trivial project nodes are removed
-    """
-    query = "select * from (select * from table1)"
-    check_plan_length(query, basic_df, 1)
-    check_query(query, basic_df, spark_info)
-
-
-@pytest.mark.slow
-def test_simplified_projection(basic_df, spark_info, memory_leak_check):
-    """
-    Test that verifies that projections are merged or removed.
-    """
-    query1 = "select * from (select A, B from table1)"
-    query2 = "select A, B from (select A, B from table1)"
-    check_plan_length(query1, basic_df, 2)
-    check_query(query1, basic_df, spark_info)
-    check_plan_length(query2, basic_df, 2)
-    check_query(query2, basic_df, spark_info)
-
-
-@pytest.mark.slow
-def test_necessary_projection(basic_df, spark_info, memory_leak_check):
-    """
-    Test that verifies that necessary projections aren't removed.
-    """
-    query1 = "select A, C from table1"
-    query2 = "select C, A, B from table1"
-    query3 = "select A, B as D, C from table1"
-    check_plan_length(query1, basic_df, 2)
-    check_query(query1, basic_df, spark_info)
-    check_plan_length(query2, basic_df, 2)
-    check_query(query2, basic_df, spark_info)
-    check_plan_length(query3, basic_df, 2)
-    check_query(query3, basic_df, spark_info)
-
-
-@pytest.mark.slow
-def test_renamed_projection(basic_df, spark_info, memory_leak_check):
-    """
-    Test that verifies that simple projections that just rename
-    are fused together.
-    """
-    query = "select A, B as C from (select A, B from table1)"
-    check_plan_length(query, basic_df, 2)
-    check_query(query, basic_df, spark_info)
-
-
-def test_aliasing_numeric(bodosql_numeric_types, spark_info, memory_leak_check):
+def test_aliasing_numeric(bodosql_numeric_types, memory_leak_check):
     """test aliasing in queries"""
+    table1 = bodosql_numeric_types["TABLE1"]
     check_query(
         "select A as testCol, C from table1",
         bodosql_numeric_types,
-        spark_info,
+        None,
         check_dtype=False,
+        expected_output=pd.DataFrame({"TESTCOL": table1["A"], "C": table1["C"]}),
     )
     check_query(
         "select sum(B) as testCol from table1",
         bodosql_numeric_types,
-        spark_info,
+        None,
         check_dtype=False,
         is_out_distributed=False,
+        expected_output=pd.DataFrame({"TESTCOL": [table1["B"].sum()]}),
+    )
+    expected_output = (
+        table1.groupby("A")
+        .agg({"B": "sum", "C": "sum"})
+        .rename({"B": "TESTCOL1", "C": "TESTCOL2"}, axis=1)
     )
     check_query(
         "select sum(B) as testCol1, sum(C) as testCol2 from table1 group by A",
         bodosql_numeric_types,
-        spark_info,
+        None,
         check_dtype=False,
+        expected_output=expected_output,
+    )
+    filtered_output = table1[(table1.A > 1) & (table1.A < 3)]
+    grouped_output = filtered_output.groupby("A", as_index=False).agg({"B": "sum"})
+    expected_output = (
+        grouped_output.rename({"B": "TESTCOL"}, axis=1)
+        .sort_values("TESTCOL", ascending=False)
+        .head(10)
     )
     check_query(
         "select A, sum(b) as testCol from table1 where (A > 1 and A < 3) group by A order by testCol desc limit 10",
         bodosql_numeric_types,
-        spark_info,
+        None,
         check_dtype=False,
+        expected_output=expected_output,
     )
 
 
@@ -106,19 +61,8 @@ def test_as_on_colnames(join_dataframes, spark_info, memory_leak_check):
     Tests that the as operator is working correctly for aliasing columns
     """
     if any(
-        [
-            isinstance(x, pd.core.arrays.integer._IntegerDtype)
-            for x in join_dataframes["table1"].dtypes
-        ]
-    ):
-        check_dtype = False
-    else:
-        check_dtype = True
-    if any(
-        [
-            isinstance(join_dataframes["table1"][colname].values[0], bytes)
-            for colname in join_dataframes["table1"].columns
-        ]
+        isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
+        for colname in join_dataframes["TABLE1"].columns
     ):
         convert_columns_bytearray1 = ["X"]
         convert_columns_bytearray2 = ["X", "Y"]
@@ -149,21 +93,18 @@ def test_as_on_colnames(join_dataframes, spark_info, memory_leak_check):
         query1,
         join_dataframes,
         spark_info,
-        check_dtype=check_dtype,
         convert_columns_bytearray=convert_columns_bytearray1,
     )
     check_query(
         query2,
         join_dataframes,
         spark_info,
-        check_dtype=check_dtype,
         convert_columns_bytearray=convert_columns_bytearray2,
     )
     check_query(
         query3,
         join_dataframes,
         spark_info,
-        check_dtype=check_dtype,
         convert_columns_bytearray=convert_columns_bytearray3,
     )
 
@@ -171,22 +112,11 @@ def test_as_on_colnames(join_dataframes, spark_info, memory_leak_check):
 @pytest.mark.slow
 def test_as_on_tablenames(join_dataframes, spark_info, memory_leak_check):
     """
-    Tests that the as operator is working correctly for aliasing tablenames
+    Tests that the as operator is working correctly for aliasing table names
     """
     if any(
-        [
-            isinstance(x, pd.core.arrays.integer._IntegerDtype)
-            for x in join_dataframes["table1"].dtypes
-        ]
-    ):
-        check_dtype = False
-    else:
-        check_dtype = True
-    if any(
-        [
-            isinstance(join_dataframes["table1"][colname].values[0], bytes)
-            for colname in join_dataframes["table1"].columns
-        ]
+        isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
+        for colname in join_dataframes["TABLE1"].columns
     ):
         convert_columns_bytearray1 = ["A"]
         convert_columns_bytearray2 = ["A", "B"]
@@ -217,21 +147,18 @@ def test_as_on_tablenames(join_dataframes, spark_info, memory_leak_check):
         query1,
         join_dataframes,
         spark_info,
-        check_dtype=check_dtype,
         convert_columns_bytearray=convert_columns_bytearray1,
     )
     check_query(
         query2,
         join_dataframes,
         spark_info,
-        check_dtype=check_dtype,
         convert_columns_bytearray=convert_columns_bytearray2,
     )
     check_query(
         query3,
         join_dataframes,
         spark_info,
-        check_dtype=check_dtype,
         convert_columns_bytearray=convert_columns_bytearray3,
     )
 
@@ -242,19 +169,8 @@ def test_cyclic_alias(join_dataframes, spark_info, memory_leak_check):
     Tests that aliasing that could be interpreted as cyclic works as intended
     """
     if any(
-        [
-            isinstance(x, pd.core.arrays.integer._IntegerDtype)
-            for x in join_dataframes["table1"].dtypes
-        ]
-    ):
-        check_dtype = False
-    else:
-        check_dtype = True
-    if any(
-        [
-            isinstance(join_dataframes["table1"][colname].values[0], bytes)
-            for colname in join_dataframes["table1"].columns
-        ]
+        isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
+        for colname in join_dataframes["TABLE1"].columns
     ):
         convert_columns_bytearray = ["B", "C", "A"]
     else:
@@ -270,7 +186,6 @@ def test_cyclic_alias(join_dataframes, spark_info, memory_leak_check):
         join_dataframes,
         spark_info,
         check_names=False,
-        check_dtype=check_dtype,
         convert_columns_bytearray=convert_columns_bytearray,
     )
 
@@ -281,34 +196,22 @@ def test_col_aliased_to_tablename(join_dataframes, spark_info, memory_leak_check
     Tests that bodosql works correctly when the column names are aliased to table names
     """
     if any(
-        [
-            isinstance(x, pd.core.arrays.integer._IntegerDtype)
-            for x in join_dataframes["table1"].dtypes
-        ]
+        isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
+        for colname in join_dataframes["TABLE1"].columns
     ):
-        check_dtype = False
-    else:
-        check_dtype = True
-    if any(
-        [
-            isinstance(join_dataframes["table1"][colname].values[0], bytes)
-            for colname in join_dataframes["table1"].columns
-        ]
-    ):
-        convert_columns_bytearray = ["table2", "table1"]
+        convert_columns_bytearray = ["TABLE2", "TABLE1"]
     else:
         convert_columns_bytearray = None
     query = """
         SELECT
-           table1.C as table2, table2.A as table1
+           TABLE1.C as TABLE2, TABLE2.A as TABLE1
         FROM
-            table1, table2
+            TABLE1, TABLE2
         """
     check_query(
         query,
         join_dataframes,
         spark_info,
-        check_dtype=check_dtype,
         convert_columns_bytearray=convert_columns_bytearray,
     )
 
@@ -319,19 +222,8 @@ def test_table_aliased_to_colname(join_dataframes, spark_info, memory_leak_check
     Tests that bodosql works correctly when the table names are aliased to column names
     """
     if any(
-        [
-            isinstance(x, pd.core.arrays.integer._IntegerDtype)
-            for x in join_dataframes["table1"].dtypes
-        ]
-    ):
-        check_dtype = False
-    else:
-        check_dtype = True
-    if any(
-        [
-            isinstance(join_dataframes["table1"][colname].values[0], bytes)
-            for colname in join_dataframes["table1"].columns
-        ]
+        isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
+        for colname in join_dataframes["TABLE1"].columns
     ):
         convert_columns_bytearray = ["C", "A"]
     else:
@@ -346,30 +238,18 @@ def test_table_aliased_to_colname(join_dataframes, spark_info, memory_leak_check
         query,
         join_dataframes,
         spark_info,
-        check_dtype=check_dtype,
         convert_columns_bytearray=convert_columns_bytearray,
     )
 
 
-def test_multitable_renamed_projection(join_dataframes, spark_info, memory_leak_check):
+def test_multi_table_renamed_projection(join_dataframes, spark_info, memory_leak_check):
     """
     Test that verifies that aliased projections from two different tables
     behave as expected.
     """
     if any(
-        [
-            isinstance(x, pd.core.arrays.integer._IntegerDtype)
-            for x in join_dataframes["table1"].dtypes
-        ]
-    ):
-        check_dtype = False
-    else:
-        check_dtype = True
-    if any(
-        [
-            isinstance(join_dataframes["table1"][colname].values[0], bytes)
-            for colname in join_dataframes["table1"].columns
-        ]
+        isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
+        for colname in join_dataframes["TABLE1"].columns
     ):
         convert_columns_bytearray1 = ["A", "Y"]
         convert_columns_bytearray2 = ["Y", "B"]
@@ -386,44 +266,30 @@ def test_multitable_renamed_projection(join_dataframes, spark_info, memory_leak_
         query,
         join_dataframes,
         spark_info,
-        check_dtype=check_dtype,
         convert_columns_bytearray=convert_columns_bytearray1,
     )
     check_query(
         query2,
         join_dataframes,
         spark_info,
-        check_dtype=check_dtype,
         convert_columns_bytearray=convert_columns_bytearray2,
     )
     check_query(
         query3,
         join_dataframes,
         spark_info,
-        check_dtype=check_dtype,
         convert_columns_bytearray=convert_columns_bytearray3,
     )
 
 
 @pytest.mark.slow
-def test_implicite_table_alias(join_dataframes, spark_info, memory_leak_check):
+def test_implicit_table_alias(join_dataframes, spark_info, memory_leak_check):
     """
     Test that aliasing tables with the implicit syntax works as intended
     """
     if any(
-        [
-            isinstance(x, pd.core.arrays.integer._IntegerDtype)
-            for x in join_dataframes["table1"].dtypes
-        ]
-    ):
-        check_dtype = False
-    else:
-        check_dtype = True
-    if any(
-        [
-            isinstance(join_dataframes["table1"][colname].values[0], bytes)
-            for colname in join_dataframes["table1"].columns
-        ]
+        isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
+        for colname in join_dataframes["TABLE1"].columns
     ):
         convert_columns_bytearray1 = ["A"]
         convert_columns_bytearray2 = ["Y", "B"]
@@ -436,13 +302,202 @@ def test_implicite_table_alias(join_dataframes, spark_info, memory_leak_check):
         query,
         join_dataframes,
         spark_info,
-        check_dtype=check_dtype,
         convert_columns_bytearray=convert_columns_bytearray1,
     )
     check_query(
         query2,
         join_dataframes,
         spark_info,
-        check_dtype=check_dtype,
         convert_columns_bytearray=convert_columns_bytearray2,
+    )
+
+
+@pytest.mark.slow
+def test_unreserved_kw(spark_info, memory_leak_check):
+    """Test that language/lead/user/method/rank"""
+    query = "SELECT t.LANGUAGE, t.LEAD, t.USER, t.METHOD, t.RANK AS A FROM table1 t"
+    check_query(
+        query,
+        {
+            "TABLE1": pd.DataFrame(
+                {
+                    "LANGUAGE": ["A", "B", "C", "D", "E"],
+                    "LEAD": ["A", "B", "C", "D", "E"],
+                    "USER": ["A", "B", "C", "D", "E"],
+                    "METHOD": ["A", "B", "C", "D", "E"],
+                    "RANK": ["A", "B", "C", "D", "E"],
+                }
+            )
+        },
+        spark_info,
+        expected_output=pd.DataFrame(
+            {
+                "A": ["A", "B", "C", "D", "E"],
+                "LEAD": ["A", "B", "C", "D", "E"],
+                "USER": ["A", "B", "C", "D", "E"],
+                "METHOD": ["A", "B", "C", "D", "E"],
+                "RANK": ["A", "B", "C", "D", "E"],
+            }
+        ),
+        check_names=False,
+    )
+
+
+@pytest.mark.slow
+def test_unreserved_kw_pt2(spark_info, memory_leak_check):
+    """Test that "OUT", "FILTER", "CONDITION", "TRANSLATION", "POSITION"
+    can be columns
+    """
+    query = "SELECT t.OUT, t.FILTER, t.CONDITION, t.TRANSLATION, t.POSITION AS A FROM table1 t"
+    check_query(
+        query,
+        {
+            "TABLE1": pd.DataFrame(
+                {
+                    "OUT": ["A", "B", "C", "D", "E"],
+                    "FILTER": ["A", "B", "C", "D", "E"],
+                    "CONDITION": ["A", "B", "C", "D", "E"],
+                    "TRANSLATION": ["A", "B", "C", "D", "E"],
+                    "POSITION": ["A", "B", "C", "D", "E"],
+                }
+            )
+        },
+        spark_info,
+        expected_output=pd.DataFrame(
+            {
+                "OUT": ["A", "B", "C", "D", "E"],
+                "FILTER": ["A", "B", "C", "D", "E"],
+                "CONDITION": ["A", "B", "C", "D", "E"],
+                "TRANSLATION": ["A", "B", "C", "D", "E"],
+                "POSITION": ["A", "B", "C", "D", "E"],
+            }
+        ),
+        check_names=False,
+    )
+
+
+@pytest.mark.slow
+def test_unreserved_kw_pt3(spark_info, memory_leak_check):
+    """Test that "ROW_NUMBER", "INTERVAL", "PERCENT", "COUNT", "TRANSLATE", "ROLLUP", "MATCHES", "ABS", "LAG", "MATCH_NUMBER",
+    can be columns, aliases, or table names
+    """
+    query = "SELECT abs.AB as row_number, abs.count, abs.percent, abs.TRANSLATE as interval, abs.rollup, abs.matches as match_number FROM LAG abs"
+    check_query(
+        query,
+        {
+            "LAG": pd.DataFrame(
+                {
+                    "AB": ["A", "B", "C", "D", "E"],
+                    "COUNT": ["A", "B", "C", "D", "E"],
+                    "PERCENT": ["A", "B", "C", "D", "E"],
+                    "TRANSLATE": ["A", "B", "C", "D", "E"],
+                    "ROLLUP": ["A", "B", "C", "D", "E"],
+                    "MATCHES": ["A", "B", "C", "D", "E"],
+                }
+            )
+        },
+        spark_info,
+        expected_output=pd.DataFrame(
+            {
+                "AB": ["A", "B", "C", "D", "E"],
+                "COUNT": ["A", "B", "C", "D", "E"],
+                "PERCENT": ["A", "B", "C", "D", "E"],
+                "TRANSLATE": ["A", "B", "C", "D", "E"],
+                "ROLLUP": ["A", "B", "C", "D", "E"],
+                "MATCHES": ["A", "B", "C", "D", "E"],
+            }
+        ),
+        check_names=False,
+    )
+
+
+@pytest.mark.slow
+def test_unreserved_kw_agg_fns(spark_info, memory_leak_check):
+    """Test that no aggregation functions are reserved"""
+
+    # Copied from https://docs.snowflake.com/en/sql-reference/functions-aggregation
+    agg_fns = [
+        "ANY_VALUE",
+        "AVG",
+        "CORR",
+        "COUNT",
+        "COUNT_IF",
+        "COVAR_POP",
+        "COVAR_SAMP",
+        "LISTAGG",
+        "MAX",
+        "MAX_BY",
+        "MEDIAN",
+        "MIN",
+        "MIN_BY",
+        "MODE",
+        "PERCENTILE_CONT",
+        "PERCENTILE_DISC",
+        "STDDEV",
+        "STDDEV_POP",
+        "STDDEV_SAMP",
+        "SUM",
+        "VAR_POP",
+        "VAR_SAMP",
+        "VARIANCE_POP",
+        "VARIANCE",
+        "VARIANCE_SAMP",
+        "BITAND_AGG",
+        "BITOR_AGG",
+        "BITXOR_AGG",
+        "BOOLAND_AGG",
+        "BOOLOR_AGG",
+        "BOOLXOR_AGG",
+        "HASH_AGG",
+        "ARRAY_AGG",
+        "OBJECT_AGG",
+        "REGR_AVGX",
+        "REGR_AVGY",
+        "REGR_COUNT",
+        "REGR_INTERCEPT",
+        "REGR_R2",
+        "REGR_SLOPE",
+        "REGR_SXX",
+        "REGR_SXY",
+        "REGR_SYY",
+        "KURTOSIS",
+        "SKEW",
+        "ARRAY_UNION_AGG",
+        "ARRAY_UNIQUE_AGG",
+        "BITMAP_BIT_POSITION",
+        "BITMAP_BUCKET_NUMBER",
+        "BITMAP_COUNT",
+        "BITMAP_CONSTRUCT_AGG",
+        "BITMAP_OR_AGG",
+        "APPROX_COUNT_DISTINCT",
+        "HLL",
+        "HLL_ACCUMULATE",
+        "HLL_COMBINE",
+        "HLL_ESTIMATE",
+        "HLL_EXPORT",
+        "HLL_IMPORT",
+        "APPROXIMATE_JACCARD_INDEX",
+        "APPROXIMATE_SIMILARITY",
+        "MINHASH",
+        "MINHASH_COMBINE",
+        "APPROX_TOP_K",
+        "APPROX_TOP_K_ACCUMULATE",
+        "APPROX_TOP_K_COMBINE",
+        "APPROX_TOP_K_ESTIMATE",
+        "APPROX_PERCENTILE",
+        "APPROX_PERCENTILE_ACCUMULATE",
+        "APPROX_PERCENTILE_COMBINE",
+        "APPROX_PERCENTILE_ESTIMATE",
+        "GROUPING",
+        "GROUPING_ID",
+    ]
+    projection_template = "table1.{fn} as {fn}"
+    projections = [projection_template.format(fn=fn) for fn in agg_fns]
+    query = "SELECT " + ", ".join(projections) + " FROM table1"
+    check_query(
+        query,
+        {"TABLE1": pd.DataFrame({fn: [0, 1, 2, 3, 4] for fn in agg_fns})},
+        spark_info,
+        expected_output=pd.DataFrame({fn: [0, 1, 2, 3, 4] for fn in agg_fns}),
+        check_names=False,
     )

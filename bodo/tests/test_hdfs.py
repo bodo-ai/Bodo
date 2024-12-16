@@ -1,17 +1,16 @@
-# Copyright (C) 2019 Bodo Inc.
-
 import numpy as np
 import pandas as pd
 import pytest
-from mpi4py import MPI
 
 import bodo
-from bodo.tests.utils import _get_dist_arg, check_func
+from bodo.mpi4py import MPI
+from bodo.tests.utils import _get_dist_arg, check_func, pytest_mark_one_rank
 from bodo.utils.testing import ensure_clean2
 
-pytestmark = pytest.mark.hdfs
+pytestmark = [pytest.mark.hdfs, pytest.mark.weekly]
 
 
+@pytest.mark.parquet
 def test_partition_cols(hdfs_datapath):
     """Test hdfs to_parquet partition_cols."""
     bd_fname = hdfs_datapath("bd_file.pq")
@@ -29,6 +28,7 @@ def test_partition_cols(hdfs_datapath):
     pd.testing.assert_frame_equal(bd_out, pd_out, check_column_type=False)
 
 
+@pytest.mark.parquet
 def test_hdfs_write_parquet_no_empty_files(hdfs_datapath, memory_leak_check):
     """Test that when a rank has no data, it doesn't write a file"""
     # The test is most useful when run with multiple ranks
@@ -63,6 +63,7 @@ def test_hdfs_write_parquet_no_empty_files(hdfs_datapath, memory_leak_check):
         assert len(file_stats) == 1
 
 
+@pytest.mark.parquet
 def test_hdfs_pq_groupby3(datapath, hdfs_datapath):
     """
     test hdfs read_parquet
@@ -79,6 +80,7 @@ def test_hdfs_pq_groupby3(datapath, hdfs_datapath):
     check_func(test_impl, (hdfs_fname,), py_output=py_output)
 
 
+@pytest.mark.parquet
 def test_hdfs_pq_asof1(datapath, hdfs_datapath):
     """
     test hdfs read_parquet
@@ -91,10 +93,12 @@ def test_hdfs_pq_asof1(datapath, hdfs_datapath):
 
     fname = datapath("asof1.pq")
     py_output = pd.read_parquet(fname)
+    py_output["time"] = py_output["time"].astype("datetime64[ns, UTC]")
 
     check_func(test_impl, (hdfs_fname,), py_output=py_output)
 
 
+@pytest.mark.parquet
 def test_hdfs_pq_int_nulls_multi(datapath, hdfs_datapath):
     """
     test hdfs read_parquet of a directory containing multiple files
@@ -144,7 +148,8 @@ def test_csv_data1(datapath, hdfs_datapath):
         dtype={"A": int, "B": float, "C": float, "D": int},
     )
 
-    check_func(test_impl, (hdfs_fname,), py_output=py_output)
+    # Need check_dtype=False because of nullable floats
+    check_func(test_impl, (hdfs_fname,), py_output=py_output, check_dtype=False)
 
 
 def test_csv_data_date1(datapath, hdfs_datapath):
@@ -158,7 +163,7 @@ def test_csv_data_date1(datapath, hdfs_datapath):
         return pd.read_csv(
             hdfs_fname,
             names=["A", "B", "C", "D"],
-            dtype={"A": int, "B": float, "C": str, "D": int},
+            dtype={"A": int, "B": float, "D": int},
             parse_dates=[2],
         )
 
@@ -166,11 +171,12 @@ def test_csv_data_date1(datapath, hdfs_datapath):
     py_output = pd.read_csv(
         fname,
         names=["A", "B", "C", "D"],
-        dtype={"A": int, "B": float, "C": str, "D": int},
+        dtype={"A": int, "B": float, "D": int},
         parse_dates=[2],
     )
 
-    check_func(test_impl, (hdfs_fname,), py_output=py_output)
+    # Need check_dtype=False because of nullable floats
+    check_func(test_impl, (hdfs_fname,), py_output=py_output, check_dtype=False)
 
 
 def test_hdfs_read_json(datapath, hdfs_datapath):
@@ -654,7 +660,8 @@ def test_hdfs_np_fromfile_seq_large_count(hdfs_datapath, test_np_arr):
     check_func(test_read, (hdfs_fname,), py_output=test_np_arr[:count])
 
 
-@pytest.mark.skipif(bodo.get_size() > 1, reason="Observing errors in hadoop fs")
+# Note: There are hadoop fs errors with more than 1 processor.
+@pytest_mark_one_rank
 def test_hdfs_np_fromfile_seq_large_offset(hdfs_datapath, test_np_arr):
     """
     fromfile with offset larger than the length of the data

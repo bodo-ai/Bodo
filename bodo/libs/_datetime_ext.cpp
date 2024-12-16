@@ -1,4 +1,3 @@
-// Copyright (C) 2019 Bodo Inc. All rights reserved.
 #include <Python.h>
 #define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
 #include <numpy/arrayobject.h>
@@ -18,8 +17,6 @@ int64_t dayofweek(int64_t y, int64_t m, int64_t d);
 void get_isocalendar(int64_t year, int64_t month, int64_t day,
                      int64_t* year_res, int64_t* week_res, int64_t* dow_res);
 void extract_year_days(npy_datetime* dt, int64_t* year, int64_t* days);
-void get_month_day(npy_int64 year, npy_int64 days, npy_int64* month,
-                   npy_int64* day);
 npy_int64 get_datetimestruct_days(int64_t dt_year, int dt_month, int dt_day);
 npy_datetime npy_datetimestruct_to_datetime(int64_t year, int month, int day,
                                             int hour, int min, int sec, int us);
@@ -144,33 +141,6 @@ void extract_year_days(npy_datetime* dt, int64_t* year, int64_t* days) {
     *year = days_to_yearsdays(days);
 }
 
-/**
- * @brief Get extracts month and day from days offset within a year
- * from Pandas:
- * https://github.com/pandas-dev/pandas/blob/844dc4a4fb8d213303085709aa4a3649400ed51a/pandas/_libs/tslibs/src/datetime/np_datetime.c#L230
- * @param year[in]
- * @param days[in]
- * @param month[out]
- * @param day[out]
- */
-void get_month_day(npy_int64 year, npy_int64 days, npy_int64* month,
-                   npy_int64* day) {
-    const int* month_lengths;
-    int i;
-
-    month_lengths = days_per_month_table[is_leapyear(year)];
-
-    for (i = 0; i < 12; ++i) {
-        if (days < month_lengths[i]) {
-            *month = i + 1;
-            *day = days + 1;
-            return;
-        } else {
-            days -= month_lengths[i];
-        }
-    }
-}
-
 // copeid from Pandas, but input is changed from npy_datetime to year/month/day
 // fields
 // https://github.com/pandas-dev/pandas/blob/b8043724c48890e86fda0265ad5b6ac3d31f1940/pandas/_libs/tslibs/src/datetime/np_datetime.c#L106
@@ -233,7 +203,7 @@ npy_int64 get_datetimestruct_days(int64_t dt_year, int dt_month, int dt_day) {
     return days;
 }
 
-// copeid from Pandas, but input is changed from npy_datetime to
+// copied from Pandas, but input is changed from npy_datetime to
 // year/month/day/... fields only the ns frequency is used
 // https://github.com/pandas-dev/pandas/blob/b8043724c48890e86fda0265ad5b6ac3d31f1940/pandas/_libs/tslibs/src/datetime/np_datetime.c#L405
 /*
@@ -255,10 +225,11 @@ npy_datetime npy_datetimestruct_to_datetime(int64_t year, int month, int day,
  * @return Numpy object array of datetime.date
  * @param[in] n number of values
  * @param[in] data pointer to 64-bit values
- * @param[in] null_bitmap bitvector representing nulls (Arrow format)
+ * @param[in] null_bitmap bit vector representing nulls (Arrow format)
  */
-void* box_datetime_date_array(int64_t n, const int64_t* data,
+void* box_datetime_date_array(int64_t n, const int32_t* data,
                               const uint8_t* null_bitmap) {
+#undef CHECK
 #define CHECK(expr, msg)               \
     if (!(expr)) {                     \
         std::cerr << msg << std::endl; \
@@ -284,10 +255,11 @@ void* box_datetime_date_array(int64_t n, const int64_t* data,
         auto p = PyArray_GETPTR1((PyArrayObject*)ret, i);
         CHECK(p, "getting offset in numpy array failed");
         if (!is_na(null_bitmap, i)) {
-            int64_t val = data[i];
-            int64_t year = val >> 32;
-            int64_t month = (val >> 16) & 0xFFFF;
-            int64_t day = val & 0xFFFF;
+            int64_t day = data[i], month = 0;
+
+            int64_t year = days_to_yearsdays(&day);
+            get_month_day(year, day, &month, &day);
+
             PyObject* d = PyObject_CallFunction(datetime_date_constructor,
                                                 "LLL", year, month, day);
             err = PyArray_SETITEM((PyArrayObject*)ret, (char*)p, d);
@@ -313,17 +285,19 @@ void* box_datetime_date_array(int64_t n, const int64_t* data,
  *
  * @param obj ndarray object of datetime.date objects
  * @param n number of values
- * @param data pointer to 64-bit data buffer
+ * @param data pointer to 32-bit data buffer
  * @param null_bitmap pointer to null_bitmap buffer
  */
-void unbox_datetime_date_array(PyObject* obj, int64_t n, int64_t* data,
+void unbox_datetime_date_array(PyObject* obj, int64_t n, int32_t* data,
                                uint8_t* null_bitmap) {
+#undef CHECK
 #define CHECK(expr, msg)               \
     if (!(expr)) {                     \
         std::cerr << msg << std::endl; \
         PyGILState_Release(gilstate);  \
         return;                        \
     }
+#undef CHECK_ARROW_AND_ASSIGN
 #define CHECK_ARROW_AND_ASSIGN(res, msg, lhs) \
     CHECK(res.status().ok(), msg)             \
     lhs = std::move(res).ValueOrDie();
@@ -352,13 +326,13 @@ void unbox_datetime_date_array(PyObject* obj, int64_t n, int64_t* data,
         CHECK(s, "getting element failed");
         // Pandas stores NA as either None, nan, or pd.NA
         bool value_bitmap;
-        int64_t value_data;
+        int32_t value_data;
         if (s == Py_None ||
             (PyFloat_Check(s) && std::isnan(PyFloat_AsDouble(s))) ||
             s == C_NA || s == C_NAT) {
             value_bitmap = false;
             // Set na data to a legal value for array getitem.
-            value_data = (1970L << 32) + (1L << 16) + 1L;
+            value_data = 0;
         } else {
             PyObject* year_obj = PyObject_GetAttrString(s, "year");
             PyObject* month_obj = PyObject_GetAttrString(s, "month");
@@ -367,7 +341,7 @@ void unbox_datetime_date_array(PyObject* obj, int64_t n, int64_t* data,
             int64_t year = PyLong_AsLongLong(year_obj);
             int64_t month = PyLong_AsLongLong(month_obj);
             int64_t day = PyLong_AsLongLong(day_obj);
-            value_data = (year << 32) + (month << 16) + day;
+            value_data = (int32_t)get_days_from_date(year, month, day);
             Py_DECREF(year_obj);
             Py_DECREF(month_obj);
             Py_DECREF(day_obj);
@@ -407,11 +381,12 @@ const static int64_t _NANOS_PER_HOUR = 60 * _NANOS_PER_MINUTE;
  * @return Numpy object array of bodo.Time
  * @param[in] n number of values
  * @param[in] data pointer to 64-bit values
- * @param[in] null_bitmap bitvector representing nulls (Arrow format)
+ * @param[in] null_bitmap bit vector representing nulls (Arrow format)
  * @param[in] precision number of decimal places to use for Time values
  */
 void* box_time_array(int64_t n, const int64_t* data, const uint8_t* null_bitmap,
                      uint8_t precision) {
+#undef CHECK
 #define CHECK(expr, msg)               \
     if (!(expr)) {                     \
         std::cerr << msg << std::endl; \
@@ -474,12 +449,14 @@ void* box_time_array(int64_t n, const int64_t* data, const uint8_t* null_bitmap,
  */
 void unbox_time_array(PyObject* obj, int64_t n, int64_t* data,
                       uint8_t* null_bitmap) {
+#undef CHECK
 #define CHECK(expr, msg)               \
     if (!(expr)) {                     \
         std::cerr << msg << std::endl; \
         PyGILState_Release(gilstate);  \
         return;                        \
     }
+#undef CHECK_ARROW_AND_ASSIGN
 #define CHECK_ARROW_AND_ASSIGN(res, msg, lhs) \
     CHECK(res.status().ok(), msg)             \
     lhs = std::move(res).ValueOrDie();
@@ -500,6 +477,9 @@ void unbox_time_array(PyObject* obj, int64_t n, int64_t* data,
     // Pandas usually stores NaT for date arrays
     PyObject* C_NAT = PyObject_GetAttrString(pd_mod, "NaT");
     CHECK(C_NAT, "getting pd.NaT failed");
+    PyObject* datetime = PyImport_ImportModule("datetime");
+    CHECK(datetime, "importing datetime module failed");
+    PyObject* datetime_time_class = PyObject_GetAttrString(datetime, "time");
 
     arrow::Status status;
 
@@ -516,9 +496,32 @@ void unbox_time_array(PyObject* obj, int64_t n, int64_t* data,
             // Set na data to a legal value for array getitem.
             value_data = 0;
         } else {
-            PyObject* value_obj = PyObject_GetAttrString(s, "value");
-            value_data = PyLong_AsLongLong(value_obj);
-            Py_DECREF(value_obj);
+            // Pyarrow boxes into datetime.time objects.
+            // TODO: Determine how to get the underlying arrow data.
+            if (PyObject_IsInstance(s, datetime_time_class)) {
+                PyObject* hour_obj = PyObject_GetAttrString(s, "hour");
+                PyObject* minute_obj = PyObject_GetAttrString(s, "minute");
+                PyObject* second_obj = PyObject_GetAttrString(s, "second");
+                PyObject* microsecond_obj =
+                    PyObject_GetAttrString(s, "microsecond");
+
+                int64_t hour = PyLong_AsLongLong(hour_obj);
+                int64_t minute = PyLong_AsLongLong(minute_obj);
+                int64_t second = PyLong_AsLongLong(second_obj);
+                int64_t microsecond = PyLong_AsLongLong(microsecond_obj);
+
+                value_data =
+                    hour * _NANOS_PER_HOUR + minute * _NANOS_PER_MINUTE +
+                    second * _NANOS_PER_SECOND + microsecond * _NANOS_PER_MICRO;
+                Py_DECREF(hour_obj);
+                Py_DECREF(minute_obj);
+                Py_DECREF(second_obj);
+                Py_DECREF(microsecond_obj);
+            } else {
+                PyObject* value_obj = PyObject_GetAttrString(s, "value");
+                value_data = PyLong_AsLongLong(value_obj);
+                Py_DECREF(value_obj);
+            }
             value_bitmap = true;
         }
         data[i] = value_data;
@@ -530,6 +533,8 @@ void unbox_time_array(PyObject* obj, int64_t n, int64_t* data,
         Py_DECREF(s);
     }
 
+    Py_DECREF(datetime_time_class);
+    Py_DECREF(datetime);
     Py_DECREF(C_NA);
     Py_DECREF(C_NAT);
     Py_DECREF(pd_mod);
@@ -548,12 +553,13 @@ void unbox_time_array(PyObject* obj, int64_t n, int64_t* data,
  * @param[in] days_data pointer to 64-bit values for days
  * @param[in] seconds_data pointer to 64-bit values for seconds
  * @param[in] microseconds_data pointer to 64-bit values for microseconds
- * @param[in] null_bitmap bitvector representing nulls (Arrow format)
+ * @param[in] null_bitmap bit vector representing nulls (Arrow format)
  */
 void* box_datetime_timedelta_array(int64_t n, const int64_t* days_data,
                                    const int64_t* seconds_data,
                                    const int64_t* microseconds_data,
                                    const uint8_t* null_bitmap) {
+#undef CHECK
 #define CHECK(expr, msg)               \
     if (!(expr)) {                     \
         std::cerr << msg << std::endl; \
@@ -620,12 +626,14 @@ void unbox_datetime_timedelta_array(PyObject* obj, int64_t n,
                                     int64_t* days_data, int64_t* seconds_data,
                                     int64_t* microseconds_data,
                                     uint8_t* null_bitmap) {
+#undef CHECK
 #define CHECK(expr, msg)               \
     if (!(expr)) {                     \
         std::cerr << msg << std::endl; \
         PyGILState_Release(gilstate);  \
         return;                        \
     }
+#undef CHECK_ARROW_AND_ASSIGN
 #define CHECK_ARROW_AND_ASSIGN(res, msg, lhs) \
     CHECK(res.status().ok(), msg)             \
     lhs = std::move(res).ValueOrDie();
@@ -716,6 +724,7 @@ void unbox_datetime_timedelta_array(PyObject* obj, int64_t n,
  */
 PyObject* box_date_offset(int64_t n, bool normalize, int64_t fields_arr[18],
                           bool has_kws) {
+#undef CHECK
 #define CHECK(expr, msg)               \
     if (!(expr)) {                     \
         std::cerr << msg << std::endl; \
@@ -798,6 +807,7 @@ PyObject* box_date_offset(int64_t n, bool normalize, int64_t fields_arr[18],
  * @param fields_arr Array of fields that must be initialized
  */
 bool unbox_date_offset(PyObject* obj, int64_t fields_arr[18]) {
+#undef CHECK
 #define CHECK(expr, msg)               \
     if (!(expr)) {                     \
         std::cerr << msg << std::endl; \
@@ -838,13 +848,176 @@ bool unbox_date_offset(PyObject* obj, int64_t fields_arr[18]) {
 #undef CHECK
 }
 
+/**
+ * @brief unbox ndarray of TimestampTZ objects into native int64/int64 arrays
+ *
+ * @param obj ndarray object of Time objects
+ * @param n number of values
+ * @param data pointer to 64-bit timestamp buffer
+ * @param data pointer to 16-bit offset buffer
+ * @param null_bitmap pointer to null_bitmap buffer
+ */
+void unbox_timestamptz_array(PyObject* obj, int64_t n, int64_t* data_ts,
+                             int16_t* data_offset, uint8_t* null_bitmap) {
+#undef CHECK
+#define CHECK(expr, msg)               \
+    if (!(expr)) {                     \
+        std::cerr << msg << std::endl; \
+        PyGILState_Release(gilstate);  \
+        return;                        \
+    }
+#undef CHECK_ARROW_AND_ASSIGN
+#define CHECK_ARROW_AND_ASSIGN(res, msg, lhs) \
+    CHECK(res.status().ok(), msg)             \
+    lhs = std::move(res).ValueOrDie();
+
+    auto gilstate = PyGILState_Ensure();
+
+    CHECK(PySequence_Check(obj), "expecting a PySequence");
+    CHECK(n >= 0 && data_ts && data_offset && null_bitmap,
+          "output arguments must not be NULL");
+
+    // get pd.NA object to check for new NA kind
+    // simple equality check is enough since the object is a singleton
+    // example:
+    // https://github.com/pandas-dev/pandas/blob/fcadff30da9feb3edb3acda662ff6143b7cb2d9f/pandas/_libs/missing.pyx#L57
+    PyObject* pd_mod = PyImport_ImportModule("pandas");
+    CHECK(pd_mod, "importing pandas module failed");
+    PyObject* C_NA = PyObject_GetAttrString(pd_mod, "NA");
+    CHECK(C_NA, "getting pd.NA failed");
+    // Pandas usually stores NaT for date arrays
+    PyObject* C_NAT = PyObject_GetAttrString(pd_mod, "NaT");
+    CHECK(C_NAT, "getting pd.NaT failed");
+
+    arrow::Status status;
+
+    for (int64_t i = 0; i < n; ++i) {
+        PyObject* s = PySequence_GetItem(obj, i);
+        CHECK(s, "getting element failed");
+        // Pandas stores NA as either None, nan, or pd.NA
+        bool value_bitmap;
+        int64_t ts_data;
+        int16_t ts_offset;
+        if (s == Py_None ||
+            (PyFloat_Check(s) && std::isnan(PyFloat_AsDouble(s))) ||
+            s == C_NA || s == C_NAT) {
+            value_bitmap = false;
+            // Set na data to a legal value for array getitem.
+            ts_data = 0;
+            ts_offset = 0;
+        } else {
+            PyObject* ts_obj = PyObject_GetAttrString(s, "utc_timestamp");
+            PyObject* ts_value_obj = PyObject_GetAttrString(ts_obj, "value");
+            ts_data = PyLong_AsLongLong(ts_value_obj);
+            Py_DECREF(ts_value_obj);
+            Py_DECREF(ts_obj);
+
+            PyObject* ts_offset_obj =
+                PyObject_GetAttrString(s, "offset_minutes");
+            ts_offset = (int16_t)PyLong_AsLongLong(ts_offset_obj);
+            Py_DECREF(ts_offset_obj);
+
+            value_bitmap = true;
+        }
+        data_ts[i] = ts_data;
+        data_offset[i] = ts_offset;
+        if (value_bitmap) {
+            ::arrow::bit_util::SetBit(null_bitmap, i);
+        } else {
+            ::arrow::bit_util::ClearBit(null_bitmap, i);
+        }
+        Py_DECREF(s);
+    }
+
+    Py_DECREF(C_NA);
+    Py_DECREF(C_NAT);
+    Py_DECREF(pd_mod);
+
+    PyGILState_Release(gilstate);
+
+    return;
+#undef CHECK
+}
+
+/**
+ * @brief Box native timestamptz_array data to Numpy object array of
+ * bodo.TimestampTZ items
+ * @return Numpy object array of bodo.TimestampTZ
+ * @param[in] n number of values
+ * @param[in] data timestamp pointer to 64-bit values
+ * @param[in] data offset pointer to 64-bit values
+ * @param[in] null_bitmap bit vector representing nulls (Arrow format)
+ */
+void* box_timestamptz_array(int64_t n, const int64_t* data_ts,
+                            const int16_t* data_offset,
+                            const uint8_t* null_bitmap, uint8_t precision) {
+#undef CHECK
+#define CHECK(expr, msg)               \
+    if (!(expr)) {                     \
+        std::cerr << msg << std::endl; \
+        PyGILState_Release(gilstate);  \
+        return NULL;                   \
+    }
+
+    auto gilstate = PyGILState_Ensure();
+
+    npy_intp dims[] = {n};
+    PyObject* ret = PyArray_SimpleNew(1, dims, NPY_OBJECT);
+    CHECK(ret, "allocating numpy array failed");
+    int err;
+
+    // get pd.Timestamp constructor
+    PyObject* pandas = PyImport_ImportModule("pandas");
+    CHECK(pandas, "importing bodo module failed");
+    PyObject* timestamp_constructor =
+        PyObject_GetAttrString(pandas, "Timestamp");
+    CHECK(timestamp_constructor, "getting pandas.Timestamp failed");
+
+    // get bodo.TimestampTZ constructor
+    PyObject* bodo = PyImport_ImportModule("bodo");
+    CHECK(bodo, "importing bodo module failed");
+    PyObject* bodo_timestamptz_constructor =
+        PyObject_GetAttrString(bodo, "TimestampTZ");
+    CHECK(bodo_timestamptz_constructor, "getting bodo.TimestampTZ failed");
+
+    for (int64_t i = 0; i < n; ++i) {
+        auto p = PyArray_GETPTR1((PyArrayObject*)ret, i);
+        CHECK(p, "getting offset in numpy array failed");
+        if (!is_na(null_bitmap, i)) {
+            int64_t ts_val = data_ts[i];
+            PyObject* ts =
+                PyObject_CallFunction(timestamp_constructor, "L", ts_val);
+
+            int16_t offset = data_offset[i];
+            PyObject* ts_tz = PyObject_CallFunction(
+                bodo_timestamptz_constructor, "OL", ts, offset);
+            err = PyArray_SETITEM((PyArrayObject*)ret, (char*)p, ts_tz);
+
+            Py_DECREF(ts);
+            Py_DECREF(ts_tz);
+        } else {
+            // TODO: replace None with pd.NA when Pandas switch to pd.NA
+            err = PyArray_SETITEM((PyArrayObject*)ret, (char*)p, Py_None);
+        }
+        CHECK(err == 0, "setting item in numpy array failed");
+    }
+
+    Py_DECREF(bodo_timestamptz_constructor);
+    Py_DECREF(bodo);
+    Py_DECREF(timestamp_constructor);
+    Py_DECREF(pandas);
+
+    PyGILState_Release(gilstate);
+
+    return ret;
+#undef CHECK
+}
+
 PyMODINIT_FUNC PyInit_hdatetime_ext(void) {
     PyObject* m;
-    static struct PyModuleDef moduledef = {
-        PyModuleDef_HEAD_INIT, "hdatetime_ext", "No docs", -1, NULL,
-    };
-    m = PyModule_Create(&moduledef);
-    if (m == NULL) return NULL;
+    MOD_DEF(m, "hdatetime_ext", "No docs", nullptr);
+    if (m == nullptr)
+        return nullptr;
 
     // init numpy
     import_array();
@@ -854,46 +1027,21 @@ PyMODINIT_FUNC PyInit_hdatetime_ext(void) {
 
     // These are all C functions, so they don't throw any exceptions.
     // We might still need to add better error handling in the future.
-
-    PyObject_SetAttrString(m, "get_isocalendar",
-                           PyLong_FromVoidPtr((void*)(&get_isocalendar)));
-    PyObject_SetAttrString(m, "extract_year_days",
-                           PyLong_FromVoidPtr((void*)(&extract_year_days)));
-
-    PyObject_SetAttrString(m, "get_month_day",
-                           PyLong_FromVoidPtr((void*)(&get_month_day)));
-
-    PyObject_SetAttrString(
-        m, "npy_datetimestruct_to_datetime",
-        PyLong_FromVoidPtr((void*)(&npy_datetimestruct_to_datetime)));
-
-    PyObject_SetAttrString(
-        m, "box_datetime_date_array",
-        PyLong_FromVoidPtr((void*)(&box_datetime_date_array)));
-
-    PyObject_SetAttrString(
-        m, "unbox_datetime_date_array",
-        PyLong_FromVoidPtr((void*)(&unbox_datetime_date_array)));
-
-    PyObject_SetAttrString(m, "box_time_array",
-                           PyLong_FromVoidPtr((void*)(&box_time_array)));
-
-    PyObject_SetAttrString(m, "unbox_time_array",
-                           PyLong_FromVoidPtr((void*)(&unbox_time_array)));
-
-    PyObject_SetAttrString(
-        m, "box_datetime_timedelta_array",
-        PyLong_FromVoidPtr((void*)(&box_datetime_timedelta_array)));
-
-    PyObject_SetAttrString(
-        m, "unbox_datetime_timedelta_array",
-        PyLong_FromVoidPtr((void*)(&unbox_datetime_timedelta_array)));
-
-    PyObject_SetAttrString(m, "unbox_date_offset",
-                           PyLong_FromVoidPtr((void*)(&unbox_date_offset)));
-
-    PyObject_SetAttrString(m, "box_date_offset",
-                           PyLong_FromVoidPtr((void*)(&box_date_offset)));
+    SetAttrStringFromVoidPtr(m, get_isocalendar);
+    SetAttrStringFromVoidPtr(m, extract_year_days);
+    SetAttrStringFromVoidPtr(m, get_month_day);
+    SetAttrStringFromVoidPtr(m, npy_datetimestruct_to_datetime);
+    SetAttrStringFromVoidPtr(m, box_datetime_date_array);
+    SetAttrStringFromVoidPtr(m, unbox_datetime_date_array);
+    SetAttrStringFromVoidPtr(m, box_time_array);
+    SetAttrStringFromVoidPtr(m, unbox_time_array);
+    SetAttrStringFromVoidPtr(m, box_datetime_timedelta_array);
+    SetAttrStringFromVoidPtr(m, unbox_datetime_timedelta_array);
+    SetAttrStringFromVoidPtr(m, unbox_date_offset);
+    SetAttrStringFromVoidPtr(m, box_date_offset);
+    SetAttrStringFromVoidPtr(m, get_days_from_date);
+    SetAttrStringFromVoidPtr(m, unbox_timestamptz_array);
+    SetAttrStringFromVoidPtr(m, box_timestamptz_array);
 
     return m;
 }

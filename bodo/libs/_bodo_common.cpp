@@ -1,8 +1,51 @@
 #include "_bodo_common.h"
+
+#include <arrow/array.h>
+#include <zstd.h>
+#include <complex>
+#include <memory>
+#include <string>
+
+#include <fmt/format.h>
+#include "_bodo_to_arrow.h"
+#include "_datetime_utils.h"
 #include "_distributed.h"
 
-std::vector<size_t> numpy_item_size(Bodo_CTypes::_numtypes);
-
+// for numpy arrays, this maps dtype to sizeof(dtype)
+// Order should match Bodo_CTypes::CTypeEnum
+const std::vector<size_t> numpy_item_size({
+    sizeof(int8_t),    // INT8
+    sizeof(uint8_t),   // UINT8
+    sizeof(int32_t),   // INT32
+    sizeof(uint32_t),  // UINT32
+    sizeof(int64_t),   // INT64
+    sizeof(float),     // FLOAT32
+    sizeof(double),    // FLOAT64
+    sizeof(uint64_t),  // UINT64
+    sizeof(int16_t),   // INT16
+    sizeof(uint16_t),  // UINT16
+    0,                 // STRING
+    // Note: This is only true for Numpy Boolean arrays
+    // and should be removed when we purge Numpy Boolean arrays
+    // from C++.
+    sizeof(bool),       // _BOOL
+    BYTES_PER_DECIMAL,  // DECIMAL
+    sizeof(int32_t),    // DATE
+    // TODO: [BE-4106] TIME size should depend on precision.
+    sizeof(int64_t),    // TIME
+    sizeof(int64_t),    // DATETIME
+    sizeof(int64_t),    // TIMEDELTA
+    BYTES_PER_DECIMAL,  // INT128
+    0,                  // LIST
+    0,                  // STRUCT
+    0,                  // BINARY
+    // std::complex is bit compatible with fftw_complex and C99 fftw_complex
+    // https://www.fftw.org/fftw3_doc/Complex-numbers.html
+    sizeof(std::complex<float>),   // COMPLEX64
+    sizeof(std::complex<double>),  // COMPLEX128
+    0,                             // MAP
+    sizeof(int64_t),               // TIMESTAMPTZ data1
+});
 void bodo_common_init() {
     static bool initialized = false;
     if (initialized) {
@@ -10,27 +53,16 @@ void bodo_common_init() {
     }
     initialized = true;
 
-    numpy_item_size[Bodo_CTypes::_BOOL] = sizeof(bool);
-    numpy_item_size[Bodo_CTypes::INT8] = sizeof(int8_t);
-    numpy_item_size[Bodo_CTypes::UINT8] = sizeof(uint8_t);
-    numpy_item_size[Bodo_CTypes::INT16] = sizeof(int16_t);
-    numpy_item_size[Bodo_CTypes::UINT16] = sizeof(uint16_t);
-    numpy_item_size[Bodo_CTypes::INT32] = sizeof(int32_t);
-    numpy_item_size[Bodo_CTypes::UINT32] = sizeof(uint32_t);
-    numpy_item_size[Bodo_CTypes::INT64] = sizeof(int64_t);
-    numpy_item_size[Bodo_CTypes::UINT64] = sizeof(uint64_t);
-    numpy_item_size[Bodo_CTypes::FLOAT32] = sizeof(float);
-    numpy_item_size[Bodo_CTypes::FLOAT64] = sizeof(double);
-    numpy_item_size[Bodo_CTypes::DECIMAL] = BYTES_PER_DECIMAL;
-    numpy_item_size[Bodo_CTypes::DATETIME] = sizeof(int64_t);
-    numpy_item_size[Bodo_CTypes::DATE] = sizeof(int64_t);
-    numpy_item_size[Bodo_CTypes::TIMEDELTA] = sizeof(int64_t);
-    numpy_item_size[Bodo_CTypes::INT128] = BYTES_PER_DECIMAL;
+    if (numpy_item_size.size() != Bodo_CTypes::_numtypes) {
+        Bodo_PyErr_SetString(PyExc_RuntimeError,
+                             "Incorrect number of bodo item sizes!");
+        return;
+    }
 
     PyObject* np_mod = PyImport_ImportModule("numpy");
     PyObject* dtype_obj = PyObject_CallMethod(np_mod, "dtype", "s", "bool");
     if ((size_t)PyNumber_AsSsize_t(
-            PyObject_GetAttrString(dtype_obj, "itemsize"), NULL) !=
+            PyObject_GetAttrString(dtype_obj, "itemsize"), nullptr) !=
         sizeof(bool)) {
         Bodo_PyErr_SetString(PyExc_RuntimeError,
                              "bool size mismatch between C++ and NumPy!");
@@ -38,7 +70,7 @@ void bodo_common_init() {
     }
     dtype_obj = PyObject_CallMethod(np_mod, "dtype", "s", "float32");
     if ((size_t)PyNumber_AsSsize_t(
-            PyObject_GetAttrString(dtype_obj, "itemsize"), NULL) !=
+            PyObject_GetAttrString(dtype_obj, "itemsize"), nullptr) !=
         sizeof(float)) {
         Bodo_PyErr_SetString(PyExc_RuntimeError,
                              "float32 size mismatch between C++ and NumPy!");
@@ -46,19 +78,21 @@ void bodo_common_init() {
     }
     dtype_obj = PyObject_CallMethod(np_mod, "dtype", "s", "float64");
     if ((size_t)PyNumber_AsSsize_t(
-            PyObject_GetAttrString(dtype_obj, "itemsize"), NULL) !=
+            PyObject_GetAttrString(dtype_obj, "itemsize"), nullptr) !=
         sizeof(double)) {
         Bodo_PyErr_SetString(PyExc_RuntimeError,
                              "float64 size mismatch between C++ and NumPy!");
         return;
     }
-    // initalize memory alloc/tracking system in _meminfo.h
-    NRT_MemSys_init();
 }
 
-Bodo_CTypes::CTypeEnum arrow_to_bodo_type(
-    std::shared_ptr<arrow::DataType> type) {
-    switch (type->id()) {
+void Bodo_PyErr_SetString(PyObject* type, const char* message) {
+    PyErr_SetString(type, message);
+    throw std::runtime_error(message);
+}
+
+Bodo_CTypes::CTypeEnum arrow_to_bodo_type(arrow::Type::type type) {
+    switch (type) {
         case arrow::Type::INT8:
             return Bodo_CTypes::INT8;
         case arrow::Type::UINT8:
@@ -101,160 +135,967 @@ Bodo_CTypes::CTypeEnum arrow_to_bodo_type(
             return Bodo_CTypes::TIME;
         case arrow::Type::BOOL:
             return Bodo_CTypes::_BOOL;
-        // TODO Date, Datetime, Timedelta, String, Bool
+        // TODO Timedelta
         default: {
-            throw std::runtime_error("arrow_to_bodo_type : Unsupported type " +
-                                     type->ToString());
+            // TODO: Construct the type from the id
+            throw std::runtime_error("arrow_to_bodo_type");
         }
     }
 }
 
-array_info& array_info::operator=(array_info&& other) noexcept {
-    if (this != &other) {
-        // delete this array's original data
-        decref_array(this);
-
-        // copy the other array's pointers into this array_info
-        this->length = other.length;
-        this->arr_type = other.arr_type;
-        this->dtype = other.dtype;
-        this->n_sub_elems = other.n_sub_elems;
-        this->n_sub_sub_elems = other.n_sub_sub_elems;
-        this->data1 = other.data1;
-        this->data2 = other.data2;
-        this->data3 = other.data3;
-        this->null_bitmask = other.null_bitmask;
-        this->sub_null_bitmask = other.sub_null_bitmask;
-        this->meminfo = other.meminfo;
-        this->meminfo_bitmask = other.meminfo_bitmask;
-        this->array = other.array;
-        this->precision = other.precision;
-        this->scale = other.scale;
-        this->num_categories = other.num_categories;
-        this->has_global_dictionary = other.has_global_dictionary;
-        this->has_sorted_dictionary = other.has_sorted_dictionary;
-        this->info1 = other.info1;
-        this->info2 = other.info2;
-
-        // reset the other array_info's pointers
-        other.data1 = nullptr;
-        other.data2 = nullptr;
-        other.data3 = nullptr;
-        other.null_bitmask = nullptr;
-        other.sub_null_bitmask = nullptr;
-        other.meminfo = nullptr;
-        other.meminfo_bitmask = nullptr;
-        other.array = nullptr;
-        other.info1 = nullptr;
-        other.info2 = nullptr;
+int32_t decimal_precision_to_integer_bytes(int32_t precision) {
+    if (precision < 3) {
+        return 1;
     }
-    return *this;
+    if (precision < 5) {
+        return 2;
+    }
+    if (precision < 9) {
+        return 4;
+    }
+    if (precision < 18) {
+        return 8;
+    }
+    return 16;
 }
 
-array_info* alloc_numpy(int64_t length, Bodo_CTypes::CTypeEnum typ_enum) {
+// --------------------- bodo::DataType and bodo::Schema ---------------------
+
+static const char* arr_type_to_str(bodo_array_type::arr_type_enum arr_type) {
+    if (arr_type == bodo_array_type::NUMPY) {
+        return "NUMPY";
+    } else if (arr_type == bodo_array_type::STRING) {
+        return "STRING";
+    } else if (arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
+        return "NULLABLE";
+    } else if (arr_type == bodo_array_type::ARRAY_ITEM) {
+        return "ARRAY_ITEM";
+    } else if (arr_type == bodo_array_type::STRUCT) {
+        return "STRUCT";
+    } else if (arr_type == bodo_array_type::MAP) {
+        return "MAP";
+    } else if (arr_type == bodo_array_type::CATEGORICAL) {
+        return "CATEGORICAL";
+    } else if (arr_type == bodo_array_type::DICT) {
+        return "DICT";
+    } else if (arr_type == bodo_array_type::TIMESTAMPTZ) {
+        return "TIMESTAMPTZ";
+    } else {
+        return "UNKNOWN";
+    }
+}
+
+static const char* dtype_to_str(Bodo_CTypes::CTypeEnum dtype) {
+    if (dtype == Bodo_CTypes::INT8) {
+        return "INT8";
+    } else if (dtype == Bodo_CTypes::UINT8) {
+        return "UINT8";
+    } else if (dtype == Bodo_CTypes::INT16) {
+        return "INT16";
+    } else if (dtype == Bodo_CTypes::UINT16) {
+        return "UINT16";
+    } else if (dtype == Bodo_CTypes::INT32) {
+        return "INT32";
+    } else if (dtype == Bodo_CTypes::UINT32) {
+        return "UINT32";
+    } else if (dtype == Bodo_CTypes::INT64) {
+        return "INT64";
+    } else if (dtype == Bodo_CTypes::UINT64) {
+        return "UINT64";
+    } else if (dtype == Bodo_CTypes::FLOAT32) {
+        return "FLOAT32";
+    } else if (dtype == Bodo_CTypes::FLOAT64) {
+        return "FLOAT64";
+    } else if (dtype == Bodo_CTypes::STRING) {
+        return "STRING";
+    } else if (dtype == Bodo_CTypes::BINARY) {
+        return "BINARY";
+    } else if (dtype == Bodo_CTypes::_BOOL) {
+        return "_BOOL";
+    } else if (dtype == Bodo_CTypes::DECIMAL) {
+        return "DECIMAL";
+    } else if (dtype == Bodo_CTypes::INT128) {
+        return "INT128";
+    } else if (dtype == Bodo_CTypes::DATE) {
+        return "DATE";
+    } else if (dtype == Bodo_CTypes::DATETIME) {
+        return "DATETIME";
+    } else if (dtype == Bodo_CTypes::TIMEDELTA) {
+        return "TIMEDELTA";
+    } else if (dtype == Bodo_CTypes::TIME) {
+        return "TIME";
+    } else if (dtype == Bodo_CTypes::LIST) {
+        return "LIST";
+    } else if (dtype == Bodo_CTypes::STRUCT) {
+        return "STRUCT";
+    } else if (dtype == Bodo_CTypes::MAP) {
+        return "MAP";
+    } else if (dtype == Bodo_CTypes::COMPLEX64) {
+        return "COMPLEX64";
+    } else if (dtype == Bodo_CTypes::COMPLEX128) {
+        return "COMPLEX128";
+    } else if (dtype == Bodo_CTypes::TIMESTAMPTZ) {
+        return "TIMESTAMPTZ";
+    } else {
+        return "UNKNOWN";
+    }
+}
+
+std::string GetDtype_as_string(Bodo_CTypes::CTypeEnum const& dtype) {
+    return dtype_to_str(dtype);
+}
+
+std::string GetArrType_as_string(bodo_array_type::arr_type_enum arr_type) {
+    return arr_type_to_str(arr_type);
+}
+
+namespace bodo {
+
+std::unique_ptr<DataType> DataType::copy() const {
+    if (this->is_array()) {
+        const ArrayType* this_as_array = static_cast<const ArrayType*>(this);
+        return std::make_unique<ArrayType>(this_as_array->value_type->copy());
+
+    } else if (this->is_map()) {
+        const MapType* this_as_map = static_cast<const MapType*>(this);
+        return std::make_unique<MapType>(this_as_map->key_type->copy(),
+                                         this_as_map->value_type->copy());
+    } else if (this->is_struct()) {
+        const StructType* this_as_struct = static_cast<const StructType*>(this);
+        std::vector<std::unique_ptr<DataType>> new_child_types;
+        new_child_types.reserve(this_as_struct->child_types.size());
+        for (const auto& t : this_as_struct->child_types) {
+            new_child_types.push_back(t->copy());
+        }
+        return std::make_unique<StructType>(std::move(new_child_types));
+
+    } else {
+        return std::make_unique<DataType>(this->array_type, this->c_type,
+                                          this->precision, this->scale);
+    }
+}
+
+std::unique_ptr<DataType> DataType::to_nullable_type() const {
+    if (this->is_array()) {
+        const ArrayType* this_as_array = static_cast<const ArrayType*>(this);
+        return std::make_unique<ArrayType>(
+            this_as_array->value_type->to_nullable_type());
+
+    } else if (this->is_map()) {
+        const MapType* this_as_map = static_cast<const MapType*>(this);
+        return std::make_unique<MapType>(
+            this_as_map->key_type->to_nullable_type(),
+            this_as_map->value_type->to_nullable_type());
+    } else if (this->is_struct()) {
+        const StructType* this_as_struct = static_cast<const StructType*>(this);
+        std::vector<std::unique_ptr<DataType>> new_child_types;
+        new_child_types.reserve(this_as_struct->child_types.size());
+        for (const auto& t : this_as_struct->child_types) {
+            new_child_types.push_back(t->to_nullable_type());
+        }
+        return std::make_unique<StructType>(std::move(new_child_types));
+
+    } else {
+        bodo_array_type::arr_type_enum arr_type = this->array_type;
+        Bodo_CTypes::CTypeEnum dtype = this->c_type;
+        if ((arr_type == bodo_array_type::NUMPY) &&
+            (is_integer(dtype) || is_float(dtype) ||
+             dtype == Bodo_CTypes::_BOOL)) {
+            arr_type = bodo_array_type::NULLABLE_INT_BOOL;
+        }
+        return std::make_unique<DataType>(arr_type, dtype, this->precision,
+                                          this->scale);
+    }
+}
+
+void DataType::to_string_inner(std::string& out) {
+    out += arr_type_to_str(this->array_type);
+    out += "[";
+    out += dtype_to_str(this->c_type);
+    // for decimals we want to add the precision and scale as well
+    if (this->c_type == Bodo_CTypes::DECIMAL) {
+        out += fmt::format("({},{})", this->precision, this->scale);
+    }
+    out += "]";
+}
+
+void ArrayType::to_string_inner(std::string& out) {
+    out += arr_type_to_str(this->array_type);
+    out += "[";
+    this->value_type->to_string_inner(out);
+    out += "]";
+}
+
+void StructType::to_string_inner(std::string& out) {
+    out += arr_type_to_str(this->array_type);
+    out += "[";
+
+    for (size_t i = 0; i < child_types.size(); i++) {
+        if (i != 0) {
+            out += ", ";
+        }
+        out += std::to_string(i);
+        out += ": ";
+        child_types[i]->to_string_inner(out);
+    }
+
+    out += "]";
+}
+
+void MapType::to_string_inner(std::string& out) {
+    out += arr_type_to_str(this->array_type);
+    out += "[";
+    this->key_type->to_string_inner(out);
+    out += ", ";
+    this->value_type->to_string_inner(out);
+    out += "]";
+}
+
+void DataType::Serialize(std::vector<int8_t>& arr_array_types,
+                         std::vector<int8_t>& arr_c_types) const {
+    arr_array_types.push_back(array_type);
+    arr_c_types.push_back(c_type);
+    // if it is a type decimal also push back the scale and precision
+    if (c_type == Bodo_CTypes::DECIMAL) {
+        arr_array_types.push_back(precision);
+        arr_array_types.push_back(scale);
+        arr_c_types.push_back(precision);
+        arr_c_types.push_back(scale);
+    }
+}
+
+void ArrayType::Serialize(std::vector<int8_t>& arr_array_types,
+                          std::vector<int8_t>& arr_c_types) const {
+    arr_array_types.push_back(array_type);
+    arr_c_types.push_back(c_type);
+    value_type->Serialize(arr_array_types, arr_c_types);
+}
+
+void StructType::Serialize(std::vector<int8_t>& arr_array_types,
+                           std::vector<int8_t>& arr_c_types) const {
+    arr_array_types.push_back(array_type);
+    arr_c_types.push_back(c_type);
+    arr_array_types.push_back(child_types.size());
+    arr_c_types.push_back(child_types.size());
+
+    for (auto& child_type : child_types) {
+        child_type->Serialize(arr_array_types, arr_c_types);
+    }
+}
+
+void MapType::Serialize(std::vector<int8_t>& arr_array_types,
+                        std::vector<int8_t>& arr_c_types) const {
+    arr_array_types.push_back(array_type);
+    arr_c_types.push_back(c_type);
+    key_type->Serialize(arr_array_types, arr_c_types);
+    value_type->Serialize(arr_array_types, arr_c_types);
+}
+
+static std::unique_ptr<DataType> from_byte_helper(
+    const std::span<const int8_t> arr_array_types,
+    const std::span<const int8_t> arr_c_types, size_t& i) {
+    auto array_type =
+        static_cast<bodo_array_type::arr_type_enum>(arr_array_types[i]);
+    auto c_type = static_cast<Bodo_CTypes::CTypeEnum>(arr_c_types[i]);
+    i += 1;
+
+    if (array_type == bodo_array_type::ARRAY_ITEM) {
+        auto inner_arr = from_byte_helper(arr_array_types, arr_c_types, i);
+        return std::make_unique<ArrayType>(std::move(inner_arr));
+
+    } else if (array_type == bodo_array_type::STRUCT) {
+        std::vector<std::unique_ptr<DataType>> child_types;
+        size_t num_fields = static_cast<size_t>(arr_array_types[i]);
+        i += 1;
+
+        for (size_t j = 0; j < num_fields; j++) {
+            child_types.push_back(
+                from_byte_helper(arr_array_types, arr_c_types, i));
+        }
+        return std::make_unique<StructType>(std::move(child_types));
+    } else if (array_type == bodo_array_type::MAP) {
+        std::unique_ptr<DataType> key_arr =
+            from_byte_helper(arr_array_types, arr_c_types, i);
+        std::unique_ptr<DataType> value_arr =
+            from_byte_helper(arr_array_types, arr_c_types, i);
+        return std::make_unique<MapType>(std::move(key_arr),
+                                         std::move(value_arr));
+    } else if (c_type == Bodo_CTypes::DECIMAL) {
+        uint8_t precision = arr_c_types[i];
+        uint8_t scale = arr_c_types[i + 1];
+        i += 2;
+        return std::make_unique<DataType>(array_type, c_type, precision, scale);
+    } else {
+        return std::make_unique<DataType>(array_type, c_type);
+    }
+}
+
+std::unique_ptr<DataType> DataType::Deserialize(
+    const std::span<const int8_t> arr_array_types,
+    const std::span<const int8_t> arr_c_types) {
+    size_t i = 0;
+    return from_byte_helper(arr_array_types, arr_c_types, i);
+}
+
+Schema::Schema() : column_types() {}
+Schema::Schema(const Schema& other) {
+    this->column_types.reserve(other.column_types.size());
+    for (const auto& t : other.column_types) {
+        this->column_types.push_back(t->copy());
+    }
+}
+
+Schema::Schema(Schema&& other) {
+    this->column_types = std::move(other.column_types);
+}
+
+Schema::Schema(std::vector<std::unique_ptr<bodo::DataType>>&& column_types_)
+    : column_types(std::move(column_types_)) {}
+void Schema::insert_column(const int8_t arr_array_type, const int8_t arr_c_type,
+                           const size_t idx) {
+    size_t i = 0;
+    this->insert_column(from_byte_helper(std::vector<int8_t>({arr_array_type}),
+                                         std::vector<int8_t>({arr_c_type}), i),
+                        idx);
+}
+
+void Schema::insert_column(std::unique_ptr<DataType>&& col, const size_t idx) {
+    this->column_types.insert(column_types.begin() + idx, std::move(col));
+}
+
+void Schema::append_column(std::unique_ptr<DataType>&& col) {
+    this->column_types.emplace_back(std::move(col));
+}
+void Schema::append_column(const int8_t arr_array_type,
+                           const int8_t arr_c_type) {
+    size_t i = 0;
+    this->append_column(from_byte_helper(std::vector<int8_t>({arr_array_type}),
+                                         std::vector<int8_t>({arr_c_type}), i));
+}
+
+void Schema::append_schema(std::unique_ptr<Schema>&& other_schema) {
+    for (auto& col : other_schema->column_types) {
+        this->column_types.push_back(std::move(col));
+    }
+}
+size_t Schema::ncols() const { return this->column_types.size(); }
+
+std::unique_ptr<Schema> Schema::Deserialize(
+    const std::span<const int8_t> arr_array_types,
+    const std::span<const int8_t> arr_c_types) {
+    std::unique_ptr<Schema> schema = std::make_unique<Schema>();
+    schema->column_types.reserve(arr_array_types.size());
+    size_t i = 0;
+
+    while (i < arr_array_types.size()) {
+        schema->column_types.push_back(
+            from_byte_helper(arr_array_types, arr_c_types, i));
+    }
+
+    return schema;
+}
+
+std::pair<std::vector<int8_t>, std::vector<int8_t>> Schema::Serialize() const {
+    std::vector<int8_t> arr_array_types;
+    std::vector<int8_t> arr_c_types;
+
+    for (auto& arr_type : column_types) {
+        arr_type->Serialize(arr_array_types, arr_c_types);
+    }
+
+    return std::pair(arr_array_types, arr_c_types);
+}
+
+std::string Schema::ToString() {
+    std::string out;
+    for (size_t i = 0; i < this->column_types.size(); i++) {
+        if (i > 0) {
+            out += "\n";
+        }
+        out += fmt::format("{}: {}", i, this->column_types[i]->ToString());
+    }
+    return out;
+}
+
+std::unique_ptr<Schema> Schema::Project(size_t first_n) const {
+    std::vector<std::unique_ptr<DataType>> dtypes;
+    dtypes.reserve(first_n);
+    for (size_t i = 0; i < std::min(first_n, this->column_types.size()); i++) {
+        dtypes.push_back(this->column_types[i]->copy());
+    }
+    return std::make_unique<Schema>(std::move(dtypes));
+}
+
+std::unique_ptr<Schema> Schema::Project(
+    const std::span<const int64_t> column_indices) const {
+    std::vector<std::unique_ptr<DataType>> dtypes;
+    dtypes.reserve(column_indices.size());
+    for (int64_t col_idx : column_indices) {
+        assert((size_t)col_idx < this->column_types.size());
+        dtypes.push_back(this->column_types[col_idx]->copy());
+    }
+    return std::make_unique<Schema>(std::move(dtypes));
+}
+
+}  // namespace bodo
+
+// ---------------------------------------------------------------------------
+
+std::shared_ptr<arrow::Array> to_arrow(const std::shared_ptr<array_info> arr) {
+    arrow::TimeUnit::type time_unit = arrow::TimeUnit::NANO;
+    return bodo_array_to_arrow(bodo::BufferPool::DefaultPtr(), std::move(arr),
+                               false /*convert_timedelta_to_int64*/, "",
+                               time_unit, false /*downcast_time_ns_to_us*/,
+                               bodo::default_buffer_memory_manager());
+}
+
+std::unique_ptr<BodoBuffer> AllocateBodoBuffer(
+    const int64_t size, bodo::IBufferPool* const pool,
+    const std::shared_ptr<::arrow::MemoryManager> mm) {
+    NRT_MemInfo* meminfo =
+        NRT_MemInfo_alloc_safe_aligned_pool(size, ALIGNMENT, pool);
+    return std::make_unique<BodoBuffer>((uint8_t*)meminfo->data, size, meminfo,
+                                        false, pool, std::move(mm));
+}
+
+std::unique_ptr<BodoBuffer> AllocateBodoBuffer(
+    const int64_t length, Bodo_CTypes::CTypeEnum typ_enum,
+    bodo::IBufferPool* const pool,
+    const std::shared_ptr<::arrow::MemoryManager> mm) {
+    int64_t itemsize = numpy_item_size[typ_enum];
+    int64_t size = length * itemsize;
+    return AllocateBodoBuffer(size, pool, std::move(mm));
+}
+
+std::string array_info::val_to_str(size_t idx) {
+    switch (dtype) {
+        case Bodo_CTypes::INT8:
+            return std::to_string(this->at<int8_t>(idx));
+        case Bodo_CTypes::UINT8:
+            return std::to_string(this->at<uint8_t>(idx));
+        case Bodo_CTypes::INT32:
+            return std::to_string(this->at<int32_t>(idx));
+        case Bodo_CTypes::UINT32:
+            return std::to_string(this->at<uint32_t>(idx));
+        case Bodo_CTypes::INT64:
+            return std::to_string(this->at<int64_t>(idx));
+        case Bodo_CTypes::UINT64:
+            return std::to_string(this->at<uint64_t>(idx));
+        case Bodo_CTypes::FLOAT32:
+            return std::to_string(this->at<float>(idx));
+        case Bodo_CTypes::FLOAT64:
+            return std::to_string(this->at<double>(idx));
+        case Bodo_CTypes::INT16:
+            return std::to_string(this->at<int16_t>(idx));
+        case Bodo_CTypes::UINT16:
+            return std::to_string(this->at<uint16_t>(idx));
+        case Bodo_CTypes::STRING: {
+            if (this->arr_type == bodo_array_type::DICT) {
+                // In case of dictionary encoded string array
+                // get the string value by indexing into the dictionary
+                return this->child_arrays[0]->val_to_str(
+                    this->child_arrays[1]
+                        ->at<dict_indices_t,
+                             bodo_array_type::NULLABLE_INT_BOOL>(idx));
+            }
+            offset_t* offsets =
+                (offset_t*)this->data2<bodo_array_type::STRING>();
+            return std::string(
+                this->data1<bodo_array_type::STRING>() + offsets[idx],
+                offsets[idx + 1] - offsets[idx]);
+        }
+        case Bodo_CTypes::DATE: {
+            int64_t day = this->at<int32_t>(idx);
+            int64_t year = days_to_yearsdays(&day);
+            int64_t month;
+            get_month_day(year, day, &month, &day);
+            std::string date_str;
+            date_str.reserve(10);
+            date_str += std::to_string(year) + "-";
+            if (month < 10)
+                date_str += "0";
+            date_str += std::to_string(month) + "-";
+            if (day < 10)
+                date_str += "0";
+            date_str += std::to_string(day);
+            return date_str;
+        }
+        case Bodo_CTypes::_BOOL:
+            bool val;
+            if (this->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
+                val = GetBit(
+                    (uint8_t*)this->data1<bodo_array_type::NULLABLE_INT_BOOL>(),
+                    idx);
+            } else {
+                val = this->at<bool>(idx);
+            }
+            if (val) {
+                return "True";
+            } else {
+                return "False";
+            }
+        default: {
+            std::vector<char> error_msg(100);
+            snprintf(error_msg.data(), error_msg.size(),
+                     "val_to_str not implemented for dtype %d", dtype);
+            throw std::runtime_error(error_msg.data());
+        }
+    }
+}
+
+std::unique_ptr<array_info> alloc_numpy(
+    int64_t length, Bodo_CTypes::CTypeEnum typ_enum,
+    bodo::IBufferPool* const pool,
+    const std::shared_ptr<::arrow::MemoryManager> mm) {
     int64_t size = length * numpy_item_size[typ_enum];
-    NRT_MemInfo* meminfo = NRT_MemInfo_alloc_safe_aligned(size, ALIGNMENT);
-    char* data = (char*)meminfo->data;
-    return new array_info(bodo_array_type::NUMPY, typ_enum, length, -1, -1,
-                          data, NULL, NULL, NULL, NULL, meminfo, NULL);
+    std::unique_ptr<BodoBuffer> buffer =
+        AllocateBodoBuffer(size, pool, std::move(mm));
+    return std::make_unique<array_info>(
+        bodo_array_type::NUMPY, typ_enum, length,
+        std::vector<std::shared_ptr<BodoBuffer>>({std::move(buffer)}));
 }
 
-array_info* alloc_interval_array(int64_t length,
-                                 Bodo_CTypes::CTypeEnum typ_enum) {
+std::unique_ptr<array_info> alloc_numpy_array_all_nulls(
+    int64_t length, Bodo_CTypes::CTypeEnum typ_enum,
+    bodo::IBufferPool* const pool,
+    const std::shared_ptr<::arrow::MemoryManager> mm) {
+    // Note: This check is derived from SQLNASentinelDtype
+    if (typ_enum == Bodo_CTypes::DATETIME ||
+        typ_enum == Bodo_CTypes::TIMEDELTA) {
+        std::unique_ptr<array_info> arr =
+            alloc_numpy(length, typ_enum, pool, mm);
+        int64_t* data = (int64_t*)arr->data1<bodo_array_type::NUMPY>();
+        for (int64_t i = 0; i < length; i++) {
+            // Set all values to the sentinel NULL value.
+            data[i] = std::numeric_limits<int64_t>::min();
+        }
+        return arr;
+    } else {
+        throw std::runtime_error(
+            "alloc_numpy_array_all_nulls called on a NUMPY array without null "
+            "support. Possible type mismatch.");
+    }
+}
+
+std::unique_ptr<array_info> alloc_interval_array(
+    int64_t length, Bodo_CTypes::CTypeEnum typ_enum,
+    bodo::IBufferPool* const pool,
+    const std::shared_ptr<::arrow::MemoryManager> mm) {
     int64_t size = length * numpy_item_size[typ_enum];
-    NRT_MemInfo* left_meminfo = NRT_MemInfo_alloc_safe_aligned(size, ALIGNMENT);
-    NRT_MemInfo* right_meminfo =
-        NRT_MemInfo_alloc_safe_aligned(size, ALIGNMENT);
-    char* left_data = (char*)left_meminfo->data;
-    char* right_data = (char*)right_meminfo->data;
-    return new array_info(bodo_array_type::INTERVAL, typ_enum, length, -1, -1,
-                          left_data, right_data, NULL, NULL, NULL, left_meminfo,
-                          right_meminfo);
+    std::unique_ptr<BodoBuffer> left_buffer =
+        AllocateBodoBuffer(size, pool, mm);
+    std::unique_ptr<BodoBuffer> right_buffer =
+        AllocateBodoBuffer(size, pool, std::move(mm));
+    return std::make_unique<array_info>(
+        bodo_array_type::INTERVAL, typ_enum, length,
+        std::vector<std::shared_ptr<BodoBuffer>>(
+            {std::move(left_buffer), std::move(right_buffer)}));
 }
 
-array_info* alloc_categorical(int64_t length, Bodo_CTypes::CTypeEnum typ_enum,
-                              int64_t num_categories) {
-    int64_t size = length * numpy_item_size[typ_enum];
-    NRT_MemInfo* meminfo = NRT_MemInfo_alloc_safe_aligned(size, ALIGNMENT);
-    char* data = (char*)meminfo->data;
-    return new array_info(bodo_array_type::CATEGORICAL, typ_enum, length, -1,
-                          -1, data, NULL, NULL, NULL, NULL, meminfo, NULL, NULL,
-                          0, 0, num_categories);
+std::unique_ptr<array_info> alloc_array_item(
+    int64_t n_arrays, std::shared_ptr<array_info> inner_arr,
+    int64_t extra_null_bytes, bodo::IBufferPool* const pool,
+    const std::shared_ptr<::arrow::MemoryManager> mm) {
+    std::unique_ptr<BodoBuffer> offsets_buffer =
+        AllocateBodoBuffer(n_arrays + 1, Bodo_CType_offset, pool, mm);
+    int64_t n_bytes = ((n_arrays + 7) >> 3) + extra_null_bytes;
+    std::unique_ptr<BodoBuffer> null_bitmap_buffer =
+        AllocateBodoBuffer(n_bytes, Bodo_CTypes::UINT8, pool, std::move(mm));
+    // Set offset buffer to all zeros. Not setting this will result in known
+    // errors as we use offsets[size] as a reference when appending new rows.
+    memset(offsets_buffer->mutable_data(), 0,
+           (n_arrays + 1) * sizeof(offset_t));
+    // Set null bitmask to all ones to avoid unexpected issues
+    memset(null_bitmap_buffer->mutable_data(), 0xff, n_bytes);
+    return std::make_unique<array_info>(
+        bodo_array_type::ARRAY_ITEM, Bodo_CTypes::LIST, n_arrays,
+        std::vector<std::shared_ptr<BodoBuffer>>(
+            {std::move(offsets_buffer), std::move(null_bitmap_buffer)}),
+        std::vector<std::shared_ptr<array_info>>({inner_arr}));
 }
 
-array_info* alloc_nullable_array(int64_t length,
-                                 Bodo_CTypes::CTypeEnum typ_enum,
-                                 int64_t extra_null_bytes) {
+std::unique_ptr<array_info> alloc_array_item_all_nulls(
+    int64_t n_arrays, std::shared_ptr<array_info> inner_arr,
+    int64_t extra_null_bytes, bodo::IBufferPool* const pool,
+    const std::shared_ptr<::arrow::MemoryManager> mm) {
+    std::unique_ptr<array_info> arr = alloc_array_item(
+        n_arrays, inner_arr, extra_null_bytes, pool, std::move(mm));
+    int64_t n_bytes = ((n_arrays + 7) >> 3) + extra_null_bytes;
+    // set to all null
+    memset(arr->null_bitmask<bodo_array_type::ARRAY_ITEM>(), 0x00, n_bytes);
+    // set offsets to all 0
+    offset_t* offsets_ptr =
+        (offset_t*)arr->data1<bodo_array_type::ARRAY_ITEM>();
+    memset(offsets_ptr, 0, (n_arrays + 1) * sizeof(offset_t));
+    return arr;
+}
+
+std::unique_ptr<array_info> alloc_struct(
+    int64_t length, std::vector<std::shared_ptr<array_info>> child_arrays,
+    int64_t extra_null_bytes, bodo::IBufferPool* const pool,
+    std::shared_ptr<::arrow::MemoryManager> mm) {
     int64_t n_bytes = ((length + 7) >> 3) + extra_null_bytes;
-    int64_t size = length * numpy_item_size[typ_enum];
-    NRT_MemInfo* meminfo = NRT_MemInfo_alloc_safe_aligned(size, ALIGNMENT);
-    char* data = (char*)meminfo->data;
-    NRT_MemInfo* meminfo_bitmask =
-        NRT_MemInfo_alloc_safe_aligned(n_bytes * sizeof(uint8_t), ALIGNMENT);
-    char* null_bitmap = (char*)meminfo_bitmask->data;
-    return new array_info(bodo_array_type::NULLABLE_INT_BOOL, typ_enum, length,
-                          -1, -1, data, NULL, NULL, null_bitmap, NULL, meminfo,
-                          meminfo_bitmask);
+    std::unique_ptr<BodoBuffer> buffer_bitmask =
+        AllocateBodoBuffer(n_bytes, pool, std::move(mm));
+    // Set null bitmask to all ones to avoid unexpected issues
+    memset(buffer_bitmask->mutable_data(), 0xff, n_bytes);
+    return std::make_unique<array_info>(
+        bodo_array_type::STRUCT, Bodo_CTypes::CTypeEnum::STRUCT, length,
+        std::vector<std::shared_ptr<BodoBuffer>>({std::move(buffer_bitmask)}),
+        std::move(child_arrays));
 }
 
-array_info* alloc_nullable_array_no_nulls(int64_t length,
-                                          Bodo_CTypes::CTypeEnum typ_enum,
-                                          int64_t extra_null_bytes) {
+std::unique_ptr<array_info> alloc_map(int64_t n_rows,
+                                      std::shared_ptr<array_info> inner_arr) {
+    return std::make_unique<array_info>(
+        bodo_array_type::MAP, Bodo_CTypes::MAP, n_rows,
+        std::vector<std::shared_ptr<BodoBuffer>>({}),
+        std::vector<std::shared_ptr<array_info>>({std::move(inner_arr)}));
+}
+
+std::unique_ptr<array_info> alloc_categorical(
+    int64_t length, Bodo_CTypes::CTypeEnum typ_enum, int64_t num_categories,
+    bodo::IBufferPool* const pool,
+    const std::shared_ptr<::arrow::MemoryManager> mm) {
+    int64_t size = length * numpy_item_size[typ_enum];
+    std::unique_ptr<BodoBuffer> buffer =
+        AllocateBodoBuffer(size, pool, std::move(mm));
+    return std::make_unique<array_info>(
+        bodo_array_type::CATEGORICAL, typ_enum, length,
+        std::vector<std::shared_ptr<BodoBuffer>>({std::move(buffer)}),
+        std::vector<std::shared_ptr<array_info>>({}), 0, 0, num_categories);
+}
+
+std::unique_ptr<array_info> alloc_categorical_array_all_nulls(
+    int64_t length, Bodo_CTypes::CTypeEnum typ_enum, int64_t num_categories,
+    bodo::IBufferPool* const pool,
+    const std::shared_ptr<::arrow::MemoryManager> mm) {
+    std::unique_ptr<array_info> arr = alloc_categorical(
+        length, typ_enum, num_categories, pool, std::move(mm));
+    int64_t size = length * numpy_item_size[typ_enum];
+    // Null is -1 for Categorical arrays, so set all values to -1.
+    memset(arr->data1<bodo_array_type::CATEGORICAL>(), 0xff, size);
+    return arr;
+}
+
+std::unique_ptr<array_info> alloc_nullable_array(
+    int64_t length, Bodo_CTypes::CTypeEnum typ_enum, int64_t extra_null_bytes,
+    bodo::IBufferPool* const pool,
+    const std::shared_ptr<::arrow::MemoryManager> mm) {
+    int64_t n_bytes = ((length + 7) >> 3) + extra_null_bytes;
+    int64_t size;
+    if (typ_enum == Bodo_CTypes::_BOOL) {
+        // Boolean arrays store 1 bit per element.
+        // Note extra_null_bytes are used for padding when we need
+        // to shuffle and split the entries into separate bytes, so
+        // we need these for the data as well.
+        size = n_bytes;
+    } else {
+        size = length * numpy_item_size[typ_enum];
+    }
+    std::unique_ptr<BodoBuffer> buffer = AllocateBodoBuffer(size, pool, mm);
+    std::unique_ptr<BodoBuffer> buffer_bitmask =
+        AllocateBodoBuffer(n_bytes * sizeof(uint8_t), pool, std::move(mm));
+    return std::make_unique<array_info>(
+        bodo_array_type::NULLABLE_INT_BOOL, typ_enum, length,
+        std::vector<std::shared_ptr<BodoBuffer>>(
+            {std::move(buffer), std::move(buffer_bitmask)}));
+}
+
+std::unique_ptr<array_info> alloc_nullable_array_no_nulls(
+    int64_t length, Bodo_CTypes::CTypeEnum typ_enum, int64_t extra_null_bytes,
+    bodo::IBufferPool* const pool,
+    const std::shared_ptr<::arrow::MemoryManager> mm) {
     // Same as alloc_nullable_array but we set the null_bitmask
     // such that there are no null values in the output.
     // Useful for cases like allocating indices array of dictionary-encoded
     // string arrays such as input_file_name column where nulls are not possible
-    array_info* arr = alloc_nullable_array(length, typ_enum, extra_null_bytes);
+    std::unique_ptr<array_info> arr = alloc_nullable_array(
+        length, typ_enum, extra_null_bytes, pool, std::move(mm));
     size_t n_bytes = ((length + 7) >> 3) + extra_null_bytes;
-    memset(arr->null_bitmask, 0xff, n_bytes);  // null not possible
+    memset(arr->null_bitmask<bodo_array_type::NULLABLE_INT_BOOL>(), 0xff,
+           n_bytes);  // null not possible
     return arr;
 }
 
-array_info* alloc_nullable_array_all_nulls(int64_t length,
-                                           Bodo_CTypes::CTypeEnum typ_enum,
-                                           int64_t extra_null_bytes) {
+std::unique_ptr<array_info> alloc_nullable_array_all_nulls(
+    int64_t length, Bodo_CTypes::CTypeEnum typ_enum, int64_t extra_null_bytes,
+    bodo::IBufferPool* const pool,
+    const std::shared_ptr<::arrow::MemoryManager> mm) {
     // Same as alloc_nullable_array but we set the null_bitmask
     // such that all values are null values in the output.
     // Useful for cases like the iceberg void transform.
-    array_info* arr = alloc_nullable_array(length, typ_enum, extra_null_bytes);
+    std::unique_ptr<array_info> arr = alloc_nullable_array(
+        length, typ_enum, extra_null_bytes, pool, std::move(mm));
     size_t n_bytes = ((length + 7) >> 3) + extra_null_bytes;
-    memset(arr->null_bitmask, 0x00, n_bytes);  // all nulls
+    memset(arr->null_bitmask<bodo_array_type::NULLABLE_INT_BOOL>(), 0x00,
+           n_bytes);  // all nulls
     return arr;
 }
 
-array_info* alloc_string_array(int64_t length, int64_t n_chars,
-                               int64_t extra_null_bytes) {
-    // allocate underlying array(item) data array
-    array_info* data_arr = alloc_array(
-        length, n_chars, -1, bodo_array_type::arr_type_enum::ARRAY_ITEM,
-        Bodo_CTypes::UINT8, extra_null_bytes, 0);
+std::unique_ptr<array_info> alloc_string_array(
+    Bodo_CTypes::CTypeEnum typ_enum, int64_t length, int64_t n_chars,
+    int64_t array_id, int64_t extra_null_bytes, bool is_globally_replicated,
+    bool is_locally_unique, bool is_locally_sorted,
+    bodo::IBufferPool* const pool, std::shared_ptr<::arrow::MemoryManager> mm) {
+    // allocate data/offsets/null_bitmap arrays
+    std::unique_ptr<BodoBuffer> data_buffer =
+        AllocateBodoBuffer(n_chars, Bodo_CTypes::UINT8, pool, mm);
+    std::unique_ptr<BodoBuffer> offsets_buffer =
+        AllocateBodoBuffer(length + 1, Bodo_CType_offset, pool, mm);
+    int64_t n_bytes = ((length + 7) >> 3) + extra_null_bytes;
+    std::unique_ptr<BodoBuffer> null_bitmap_buffer =
+        AllocateBodoBuffer(n_bytes, Bodo_CTypes::UINT8, pool, std::move(mm));
+    // setting all to non-null to avoid unexpected issues
+    memset(null_bitmap_buffer->mutable_data(), 0xff, n_bytes);
 
-    NRT_MemInfo* out_meminfo = data_arr->meminfo;
-    array_item_arr_numpy_payload* payload =
-        (array_item_arr_numpy_payload*)(out_meminfo->data);
+    // set offsets for boundaries
+    offset_t* offsets_ptr = (offset_t*)offsets_buffer->mutable_data();
+    offsets_ptr[0] = 0;
+    offsets_ptr[length] = n_chars;
 
-    array_info* out_arr = new array_info(
-        bodo_array_type::STRING, Bodo_CTypes::STRING, length, n_chars, -1,
-        payload->data.data, (char*)payload->offsets.data, NULL,
-        (char*)payload->null_bitmap.data, NULL, out_meminfo, NULL);
-    delete data_arr;
-    return out_arr;
+    // Generate a valid array id
+    if (array_id < 0) {
+        array_id = generate_array_id(length);
+    }
+
+    return std::make_unique<array_info>(
+        bodo_array_type::STRING, typ_enum, length,
+        std::vector<std::shared_ptr<BodoBuffer>>(
+            {std::move(data_buffer), std::move(offsets_buffer),
+             std::move(null_bitmap_buffer)}),
+        std::vector<std::shared_ptr<array_info>>({}), 0, 0, 0, array_id,
+        is_globally_replicated, is_locally_unique, is_locally_sorted);
 }
 
-array_info* alloc_dict_string_array(int64_t length, int64_t n_keys,
-                                    int64_t n_chars_keys,
-                                    bool has_global_dictionary) {
-    // dictionary
-    array_info* dict_data_arr = alloc_string_array(n_keys, n_chars_keys, 0);
-    // indices
-    array_info* indices_data_arr =
-        alloc_nullable_array(length, Bodo_CTypes::INT32, 0);
+std::unique_ptr<array_info> alloc_string_array_all_nulls(
+    Bodo_CTypes::CTypeEnum typ_enum, int64_t length, int64_t extra_null_bytes,
+    bodo::IBufferPool* const pool, std::shared_ptr<::arrow::MemoryManager> mm) {
+    std::unique_ptr<array_info> arr =
+        alloc_string_array(typ_enum, length, 0, -1, extra_null_bytes, false,
+                           false, false, pool, std::move(mm));
+    int64_t n_bytes = ((length + 7) >> 3) + extra_null_bytes;
+    // set to all null
+    memset(arr->null_bitmask(), 0x00, n_bytes);
+    // set offsets to all 0
+    offset_t* offsets_ptr = (offset_t*)arr->data2<bodo_array_type::STRING>();
+    memset(offsets_ptr, 0, (length + 1) * sizeof(offset_t));
+    return arr;
+}
 
-    return new array_info(bodo_array_type::DICT, Bodo_CTypes::CTypeEnum::STRING,
-                          length, -1, -1, NULL, NULL, NULL,
-                          indices_data_arr->null_bitmask, NULL, NULL, NULL,
-                          NULL, 0, 0, 0, has_global_dictionary, false,
-                          dict_data_arr, indices_data_arr);
+std::unique_ptr<array_info> alloc_dict_string_array(
+    int64_t length, int64_t n_keys, int64_t n_chars_keys,
+    int64_t extra_null_bytes, bodo::IBufferPool* const pool,
+    std::shared_ptr<::arrow::MemoryManager> mm) {
+    // dictionary
+    std::shared_ptr<array_info> dict_data_arr =
+        alloc_string_array(Bodo_CTypes::CTypeEnum::STRING, n_keys, n_chars_keys,
+                           -1, 0, false, false, false, pool, mm);
+    // indices
+    std::shared_ptr<array_info> indices_data_arr = alloc_nullable_array(
+        length, Bodo_CTypes::INT32, extra_null_bytes, pool, std::move(mm));
+
+    return std::make_unique<array_info>(
+        bodo_array_type::DICT, Bodo_CTypes::CTypeEnum::STRING, length,
+        std::vector<std::shared_ptr<BodoBuffer>>({}),
+        std::vector<std::shared_ptr<array_info>>(
+            {dict_data_arr, indices_data_arr}));
+}
+
+std::unique_ptr<array_info> alloc_dict_string_array_all_nulls(
+    int64_t length, int64_t extra_null_bytes, bodo::IBufferPool* const pool,
+    std::shared_ptr<::arrow::MemoryManager> mm) {
+    std::unique_ptr<array_info> arr = alloc_dict_string_array(
+        length, 0, 0, extra_null_bytes, pool, std::move(mm));
+    size_t n_bytes = ((length + 7) >> 3) + extra_null_bytes;
+    memset(arr->null_bitmask<bodo_array_type::DICT>(), 0x00, n_bytes);
+    return arr;
+}
+
+std::unique_ptr<array_info> alloc_timestamptz_array(
+    int64_t length, int64_t extra_null_bytes, bodo::IBufferPool* const pool,
+    std::shared_ptr<::arrow::MemoryManager> mm) {
+    auto timestamp_buffer =
+        AllocateBodoBuffer(length, Bodo_CTypes::CTypeEnum::DATETIME, pool, mm);
+    // tz offset in ns
+    auto offset_buffer =
+        AllocateBodoBuffer(length, Bodo_CTypes::CTypeEnum::INT16, pool, mm);
+
+    int64_t n_bytes = ((length + 7) >> 3) + extra_null_bytes;
+    auto null_bitmap_buffer =
+        AllocateBodoBuffer(n_bytes * sizeof(uint8_t), pool, mm);
+    // setting all to non-null to avoid unexpected issues
+    memset(null_bitmap_buffer->mutable_data(), 0xff, n_bytes);
+
+    auto arr_type = bodo_array_type::arr_type_enum::TIMESTAMPTZ;
+    auto dtype = Bodo_CTypes::CTypeEnum::TIMESTAMPTZ;
+    return std::make_unique<array_info>(
+        arr_type, dtype, length,
+        std::vector<std::shared_ptr<BodoBuffer>>(
+            {std::move(timestamp_buffer), std::move(offset_buffer),
+             std::move(null_bitmap_buffer)}),
+        std::vector<std::shared_ptr<array_info>>({}));
+}
+
+std::unique_ptr<array_info> alloc_timestamptz_array_all_nulls(
+    int64_t length, int64_t extra_null_bytes, bodo::IBufferPool* const pool,
+    std::shared_ptr<::arrow::MemoryManager> mm) {
+    std::unique_ptr<array_info> arr =
+        alloc_timestamptz_array(length, extra_null_bytes, pool, std::move(mm));
+    size_t n_bytes = ((length + 7) >> 3) + extra_null_bytes;
+    memset(arr->null_bitmask<bodo_array_type::TIMESTAMPTZ>(), 0x00, n_bytes);
+    return arr;
+}
+
+std::unique_ptr<array_info> alloc_all_null_array_top_level(
+    int64_t length, bodo_array_type::arr_type_enum arr_type,
+    Bodo_CTypes::CTypeEnum dtype, int64_t extra_null_bytes,
+    int64_t num_categories, bodo::IBufferPool* const pool,
+    std::shared_ptr<::arrow::MemoryManager> mm) {
+    switch (arr_type) {
+        case bodo_array_type::NUMPY:
+            return alloc_numpy_array_all_nulls(length, dtype, pool, mm);
+        case bodo_array_type::STRING:
+            return alloc_string_array_all_nulls(dtype, length, extra_null_bytes,
+                                                pool, mm);
+        case bodo_array_type::NULLABLE_INT_BOOL:
+            return alloc_nullable_array_all_nulls(length, dtype,
+                                                  extra_null_bytes, pool, mm);
+        case bodo_array_type::CATEGORICAL:
+            return alloc_categorical_array_all_nulls(length, dtype,
+                                                     num_categories, pool, mm);
+        case bodo_array_type::DICT:
+            return alloc_dict_string_array_all_nulls(length, dtype, pool, mm);
+        case bodo_array_type::TIMESTAMPTZ:
+            return alloc_timestamptz_array_all_nulls(length, extra_null_bytes,
+                                                     pool, mm);
+        default:
+            // Interval arrays don't seem to have a valid "null" representation.
+            // TODO: How do we handle array item array? We can make the output
+            // null easily, but it seems like we need the inner array to have a
+            // consistent type.
+            // TODO: How do we handle struct? Conceptually it seems like Python
+            // will expect n arrays of all nulls rather than nulls at the upper
+            // most level.
+            throw std::runtime_error("Unsupported array type");
+    }
+}
+
+std::unique_ptr<array_info> create_string_array(
+    Bodo_CTypes::CTypeEnum typ_enum, bodo::vector<uint8_t> const& null_bitmap,
+    bodo::vector<std::string> const& list_string, int64_t array_id,
+    bodo::IBufferPool* const pool, std::shared_ptr<::arrow::MemoryManager> mm) {
+    size_t len = list_string.size();
+    // Calculate the number of characters for allocating the string.
+    size_t nb_char = 0;
+    bodo::vector<std::string>::const_iterator iter = list_string.begin();
+    for (size_t i_grp = 0; i_grp < len; i_grp++) {
+        if (GetBit(null_bitmap.data(), i_grp)) {
+            nb_char += iter->size();
+        }
+        iter++;
+    }
+    std::unique_ptr<array_info> out_col =
+        alloc_string_array(typ_enum, len, nb_char, array_id, 0, false, false,
+                           false, pool, std::move(mm));
+    // update string array payload to reflect change
+    char* data_o = out_col->data1<bodo_array_type::STRING>();
+    offset_t* offsets_o = (offset_t*)out_col->data2<bodo_array_type::STRING>();
+    offset_t pos = 0;
+    iter = list_string.begin();
+    for (size_t i_grp = 0; i_grp < len; i_grp++) {
+        offsets_o[i_grp] = pos;
+        bool bit = GetBit(null_bitmap.data(), i_grp);
+        if (bit) {
+            size_t len_str = size_t(iter->size());
+            memcpy(data_o, iter->data(), len_str);
+            data_o += len_str;
+            pos += len_str;
+        }
+        out_col->set_null_bit<bodo_array_type::STRING>(i_grp, bit);
+        iter++;
+    }
+    offsets_o[len] = pos;
+    return out_col;
+}
+
+std::unique_ptr<array_info> create_list_string_array(
+    bodo::vector<uint8_t> const& null_bitmap,
+    bodo::vector<bodo::vector<std::pair<std::string, bool>>> const&
+        list_list_pair) {
+    size_t len = list_list_pair.size();
+    // Determining the number of characters in output.
+    size_t nb_string = 0;
+    size_t nb_char = 0;
+    bodo::vector<bodo::vector<std::pair<std::string, bool>>>::const_iterator
+        iter = list_list_pair.begin();
+    for (size_t i_grp = 0; i_grp < len; i_grp++) {
+        if (GetBit(null_bitmap.data(), i_grp)) {
+            bodo::vector<std::pair<std::string, bool>> e_list = *iter;
+            nb_string += e_list.size();
+            for (auto& e_str : e_list) {
+                nb_char += e_str.first.size();
+            }
+        }
+        iter++;
+    }
+    // Allocation needs to be done through alloc_array_item, which allocates
+    // with meminfos and same data structs that Python uses. We need to
+    // re-allocate here because number of strings and chars has been determined
+    // here (previous out_col was just an empty dummy allocation).
+
+    std::unique_ptr<array_info> new_out_col = alloc_array_item(
+        len,
+        alloc_string_array(Bodo_CTypes::CTypeEnum::STRING, nb_string, nb_char));
+
+    uint8_t* sub_null_bitmask_o = (uint8_t*)new_out_col->child_arrays[0]
+                                      ->null_bitmask<bodo_array_type::STRING>();
+    char* data_o =
+        new_out_col->child_arrays[0]->data1<bodo_array_type::STRING>();
+    offset_t* data_offsets_o = (offset_t*)new_out_col->child_arrays[0]
+                                   ->data2<bodo_array_type::STRING>();
+    offset_t* index_offsets_o =
+        (offset_t*)new_out_col->data1<bodo_array_type::ARRAY_ITEM>();
+
+    // Writing the list_strings in output
+    data_offsets_o[0] = 0;
+    offset_t pos_index = 0;
+    offset_t pos_data = 0;
+    iter = list_list_pair.begin();
+    for (size_t i_grp = 0; i_grp < len; i_grp++) {
+        bool bit = GetBit(null_bitmap.data(), i_grp);
+        new_out_col->set_null_bit<bodo_array_type::ARRAY_ITEM>(i_grp, bit);
+        index_offsets_o[i_grp] = pos_index;
+        if (bit) {
+            bodo::vector<std::pair<std::string, bool>> e_list = *iter;
+            offset_t n_string = e_list.size();
+            for (offset_t i_str = 0; i_str < n_string; i_str++) {
+                std::string& estr = e_list[i_str].first;
+                offset_t n_char = estr.size();
+                memcpy(data_o, estr.data(), n_char);
+                data_o += n_char;
+                pos_data++;
+                data_offsets_o[pos_data] =
+                    data_offsets_o[pos_data - 1] + n_char;
+                bool bit = e_list[i_str].second;
+                SetBitTo(sub_null_bitmask_o, pos_index + i_str, bit);
+            }
+            pos_index += n_string;
+        }
+        iter++;
+    }
+    index_offsets_o[len] = pos_index;
+    return new_out_col;
+}
+
+std::unique_ptr<array_info> create_dict_string_array(
+    std::shared_ptr<array_info> dict_arr,
+    std::shared_ptr<array_info> indices_arr) {
+    std::unique_ptr<array_info> out_col = std::make_unique<array_info>(
+        bodo_array_type::DICT, Bodo_CTypes::CTypeEnum::STRING,
+        indices_arr->length, std::vector<std::shared_ptr<BodoBuffer>>({}),
+        std::vector<std::shared_ptr<array_info>>({dict_arr, indices_arr}));
+    return out_col;
 }
 
 /**
@@ -262,75 +1103,6 @@ array_info* alloc_dict_string_array(int64_t length, int64_t n_keys,
  */
 NRT_MemInfo* alloc_meminfo(int64_t length) {
     return NRT_MemInfo_alloc_safe(length);
-}
-
-/**
- * @brief destrcutor for array(item) array meminfo. Decrefs the underlying data,
- * offsets and null_bitmap arrays.
- *
- * Note: duplicate of dtor_array_item_array but with array_item_arr_payload
- * TODO: refactor
- *
- * @param payload array(item) array meminfo payload
- * @param size payload size (ignored)
- * @param in extra info (ignored)
- */
-void dtor_array_item_arr(array_item_arr_payload* payload, int64_t size,
-                         void* in) {
-    if (payload->data->refct != -1) payload->data->refct--;
-    if (payload->data->refct == 0) NRT_MemInfo_call_dtor(payload->data);
-
-    if (payload->offsets.meminfo->refct != -1)
-        payload->offsets.meminfo->refct--;
-    if (payload->offsets.meminfo->refct == 0)
-        NRT_MemInfo_call_dtor(payload->offsets.meminfo);
-
-    if (payload->null_bitmap.meminfo->refct != -1)
-        payload->null_bitmap.meminfo->refct--;
-    if (payload->null_bitmap.meminfo->refct == 0)
-        NRT_MemInfo_call_dtor(payload->null_bitmap.meminfo);
-}
-
-array_info* alloc_list_string_array(int64_t n_lists, array_info* string_arr,
-                                    int64_t extra_null_bytes) {
-    int64_t n_strings = string_arr->length;
-    int64_t n_chars = string_arr->n_sub_elems;
-    NRT_MemInfo* meminfo_string_array = string_arr->meminfo;
-    delete string_arr;
-
-    // allocate array(item) array payload
-    NRT_MemInfo* meminfo_array_item = NRT_MemInfo_alloc_dtor_safe(
-        sizeof(array_item_arr_payload), (NRT_dtor_function)dtor_array_item_arr);
-    array_item_arr_payload* payload =
-        (array_item_arr_payload*)(meminfo_array_item->data);
-    payload->n_arrays = n_lists;
-    payload->offsets = allocate_numpy_payload(n_lists + 1, Bodo_CType_offset);
-    int64_t n_bytes = (int64_t)((n_lists + 7) / 8) + extra_null_bytes;
-    payload->null_bitmap =
-        allocate_numpy_payload(n_bytes, Bodo_CTypes::CTypeEnum::UINT8);
-    payload->data = meminfo_string_array;
-    // setting all to non-null to avoid unexpected issues
-    memset(payload->null_bitmap.data, 0xff, n_bytes);
-
-    array_item_arr_numpy_payload* sub_payload =
-        (array_item_arr_numpy_payload*)(meminfo_string_array->data);
-
-    return new array_info(
-        bodo_array_type::LIST_STRING, Bodo_CTypes::LIST_STRING, n_lists,
-        n_strings, n_chars, (char*)sub_payload->data.data,
-        (char*)sub_payload->offsets.data, (char*)payload->offsets.data,
-        (char*)payload->null_bitmap.data, (char*)sub_payload->null_bitmap.data,
-        meminfo_array_item, NULL);
-}
-
-array_info* alloc_list_string_array(int64_t n_lists, int64_t n_strings,
-                                    int64_t n_chars, int64_t extra_null_bytes) {
-    // allocate string data array
-    array_info* data_arr = alloc_array(
-        n_strings, n_chars, -1, bodo_array_type::arr_type_enum::ARRAY_ITEM,
-        Bodo_CTypes::UINT8, extra_null_bytes, 0);
-
-    return alloc_list_string_array(n_lists, data_arr, extra_null_bytes);
 }
 
 /**
@@ -346,7 +1118,7 @@ numpy_arr_payload allocate_numpy_payload(int64_t length,
     int64_t size = length * itemsize;
     NRT_MemInfo* meminfo = NRT_MemInfo_alloc_safe_aligned(size, ALIGNMENT);
     char* data = (char*)meminfo->data;
-    return make_numpy_array_payload(meminfo, NULL, length, itemsize, data,
+    return make_numpy_array_payload(meminfo, nullptr, length, itemsize, data,
                                     length, itemsize);
 }
 
@@ -357,138 +1129,54 @@ numpy_arr_payload allocate_numpy_payload(int64_t length,
  * @param arr
  */
 void decref_numpy_payload(numpy_arr_payload arr) {
-    if (arr.meminfo->refct != -1) arr.meminfo->refct--;
-    if (arr.meminfo->refct == 0) NRT_MemInfo_call_dtor(arr.meminfo);
+    if (arr.meminfo->refct != -1) {
+        arr.meminfo->refct--;
+    }
+    if (arr.meminfo->refct == 0) {
+        NRT_MemInfo_call_dtor(arr.meminfo);
+    }
 }
 
-/**
- * @brief destrcutor for array(item) array meminfo. Decrefs the underlying data,
- * offsets and null_bitmap arrays.
- *
- * @param payload array(item) array meminfo payload
- * @param size payload size (ignored)
- * @param in extra info (ignored)
- */
-void dtor_array_item_array(array_item_arr_numpy_payload* payload, int64_t size,
-                           void* in) {
-    if (payload->data.meminfo->refct != -1) payload->data.meminfo->refct--;
-    if (payload->data.meminfo->refct == 0)
-        NRT_MemInfo_call_dtor(payload->data.meminfo);
-
-    if (payload->offsets.meminfo->refct != -1)
-        payload->offsets.meminfo->refct--;
-    if (payload->offsets.meminfo->refct == 0)
-        NRT_MemInfo_call_dtor(payload->offsets.meminfo);
-
-    if (payload->null_bitmap.meminfo->refct != -1)
-        payload->null_bitmap.meminfo->refct--;
-    if (payload->null_bitmap.meminfo->refct == 0)
-        NRT_MemInfo_call_dtor(payload->null_bitmap.meminfo);
-}
-
-/**
- * @brief create a meminfo for array(item) array
- *
- * @return NRT_MemInfo*
- */
-NRT_MemInfo* alloc_array_item_arr_meminfo() {
-    return NRT_MemInfo_alloc_dtor_safe(
-        sizeof(array_item_arr_numpy_payload),
-        (NRT_dtor_function)dtor_array_item_array);
-}
-
-/**
- * @brief allocate an array(item) array and wrap in an array_info*
- * TODO: generalize beyond Numpy arrays
- *
- * @param n_arrays number of array elements
- * @param n_total_items total number of data elements
- * @param dtype dtype of data elements
- * @return array_info*
- */
-array_info* alloc_array_item(int64_t n_arrays, int64_t n_total_items,
-                             Bodo_CTypes::CTypeEnum dtype,
-                             int64_t extra_null_bytes) {
-    // allocate payload
-    NRT_MemInfo* meminfo_array_item =
-        NRT_MemInfo_alloc_dtor_safe(sizeof(array_item_arr_numpy_payload),
-                                    (NRT_dtor_function)dtor_array_item_array);
-    array_item_arr_numpy_payload* payload =
-        (array_item_arr_numpy_payload*)(meminfo_array_item->data);
-
-    payload->n_arrays = n_arrays;
-
-    // allocate data array
-    // TODO: support non-numpy data
-    payload->data = allocate_numpy_payload(n_total_items, dtype);
-    // TODO: support 64-bit offsets case
-    payload->offsets = allocate_numpy_payload(n_arrays + 1, Bodo_CType_offset);
-    int64_t n_bytes = (int64_t)((n_arrays + 7) / 8) + extra_null_bytes;
-    payload->null_bitmap =
-        allocate_numpy_payload(n_bytes, Bodo_CTypes::CTypeEnum::UINT8);
-    // setting all to non-null to avoid unexpected issues
-    memset(payload->null_bitmap.data, 0xff, n_bytes);
-
-    // set offsets for boundaries
-    offset_t* offsets_ptr = (offset_t*)payload->offsets.data;
-    offsets_ptr[0] = 0;
-    offsets_ptr[n_arrays] = n_total_items;
-
-    return new array_info(bodo_array_type::ARRAY_ITEM, dtype, n_arrays,
-                          n_total_items, -1, NULL, NULL, NULL, NULL, NULL,
-                          meminfo_array_item, NULL);
-}
-
-/**
- * The allocations array function for the function.
- *
- * In the case of NUMPY/CATEGORICAL or NULLABLE_INT_BOOL,
- * -- length is the number of rows, and n_sub_elems, n_sub_sub_elems do not
- * matter. In the case of STRING:
- * -- length is the number of rows (= number of strings)
- * -- n_sub_elems is the total number of characters.
- * In the case of LIST_STRING:
- * -- length is the number of rows.
- * -- n_sub_elems is the number of strings.
- * -- n_sub_sub_elems is the total number of characters.
- * In the case of DICT:
- * -- length is the number of rows (same as the number of indices)
- * -- n_sub_elems is the number of keys in the dictionary
- * -- n_sub_sub_elems is the total number of characters for
- *    the keys in the dictionary
- */
-array_info* alloc_array(int64_t length, int64_t n_sub_elems,
-                        int64_t n_sub_sub_elems,
-                        bodo_array_type::arr_type_enum arr_type,
-                        Bodo_CTypes::CTypeEnum dtype, int64_t extra_null_bytes,
-                        int64_t num_categories) {
-    if (arr_type == bodo_array_type::LIST_STRING)
-        return alloc_list_string_array(length, n_sub_elems, n_sub_sub_elems,
-                                       extra_null_bytes);
-
-    if (arr_type == bodo_array_type::STRING)
-        return alloc_string_array(length, n_sub_elems, extra_null_bytes);
-
-    if (arr_type == bodo_array_type::NULLABLE_INT_BOOL)
-        return alloc_nullable_array(length, dtype, extra_null_bytes);
-
-    if (arr_type == bodo_array_type::INTERVAL)
-        return alloc_interval_array(length, dtype);
-
-    if (arr_type == bodo_array_type::NUMPY) return alloc_numpy(length, dtype);
-
-    if (arr_type == bodo_array_type::CATEGORICAL)
-        return alloc_categorical(length, dtype, num_categories);
-
-    if (arr_type == bodo_array_type::ARRAY_ITEM)
-        return alloc_array_item(length, n_sub_elems, dtype, extra_null_bytes);
-
-    if (arr_type == bodo_array_type::DICT)
-        return alloc_dict_string_array(length, n_sub_elems, n_sub_sub_elems,
-                                       false);
-
-    Bodo_PyErr_SetString(PyExc_RuntimeError, "Type not covered in alloc_array");
-    return nullptr;
+std::unique_ptr<array_info> alloc_array_like(
+    std::shared_ptr<array_info> in_arr, bool reuse_dictionaries,
+    bodo::IBufferPool* const pool, std::shared_ptr<::arrow::MemoryManager> mm) {
+    bodo_array_type::arr_type_enum arr_type = in_arr->arr_type;
+    Bodo_CTypes::CTypeEnum dtype = in_arr->dtype;
+    if (arr_type == bodo_array_type::ARRAY_ITEM) {
+        return alloc_array_item(
+            0, alloc_array_like(in_arr->child_arrays.front(), true, pool, mm),
+            0, pool, mm);
+    } else if (arr_type == bodo_array_type::STRUCT) {
+        std::vector<std::shared_ptr<array_info>> child_arrays;
+        child_arrays.reserve(in_arr->child_arrays.size());
+        for (std::shared_ptr<array_info> child_array : in_arr->child_arrays) {
+            child_arrays.push_back(
+                alloc_array_like(child_array, true, pool, mm));
+        }
+        return alloc_struct(0, std::move(child_arrays));
+    } else if (arr_type == bodo_array_type::MAP) {
+        std::unique_ptr<array_info> array_item_arr = alloc_array_item(
+            0,
+            alloc_array_like(in_arr->child_arrays.front()->child_arrays.front(),
+                             true, pool, mm),
+            0, pool, mm);
+        return std::make_unique<array_info>(
+            bodo_array_type::MAP, Bodo_CTypes::MAP, 0,
+            std::vector<std::shared_ptr<BodoBuffer>>({}),
+            std::vector<std::shared_ptr<array_info>>(
+                {std::move(array_item_arr)}));
+    } else {
+        std::unique_ptr<array_info> out_arr = alloc_array_top_level(
+            0, 0, 0, arr_type, dtype, -1, 0, 0, false, false, false, pool, mm);
+        out_arr->precision = in_arr->precision;
+        out_arr->scale = in_arr->scale;
+        // For dict encoded columns, re-use the same dictionary if
+        // reuse_dictionaries = true
+        if (reuse_dictionaries && (arr_type == bodo_array_type::DICT)) {
+            out_arr->child_arrays.front() = in_arr->child_arrays.front();
+        }
+        return out_arr;
+    }
 }
 
 int64_t arrow_array_memory_size(std::shared_ptr<arrow::Array> arr) {
@@ -508,6 +1196,16 @@ int64_t arrow_array_memory_size(std::shared_ptr<arrow::Array> arr) {
         std::shared_ptr<arrow::Array> arr_values = list_arr->values();
         return siz_offset + siz_null_bitmap +
                arrow_array_memory_size(arr_values);
+    }
+    if (arr->type_id() == arrow::Type::MAP) {
+        std::shared_ptr<arrow::MapArray> map_arr =
+            std::dynamic_pointer_cast<arrow::MapArray>(arr);
+        int64_t siz_offset = sizeof(uint32_t) * (n_rows + 1);
+        int64_t siz_null_bitmap = n_bytes;
+        int64_t total_siz = siz_offset + siz_null_bitmap;
+        total_siz += arrow_array_memory_size(map_arr->keys());
+        total_siz += arrow_array_memory_size(map_arr->items());
+        return total_siz;
     }
     if (arr->type_id() == arrow::Type::STRUCT) {
         std::shared_ptr<arrow::StructArray> struct_arr =
@@ -537,202 +1235,467 @@ int64_t arrow_array_memory_size(std::shared_ptr<arrow::Array> arr) {
         int64_t siz_null_bitmap = n_bytes;
         std::shared_ptr<arrow::PrimitiveArray> prim_arr =
             std::dynamic_pointer_cast<arrow::PrimitiveArray>(arr);
-        Bodo_CTypes::CTypeEnum bodo_typ = arrow_to_bodo_type(prim_arr->type());
-        int64_t siz_typ = numpy_item_size[bodo_typ];
-        int64_t siz_primitive_data = siz_typ * n_rows;
+        std::shared_ptr<arrow::DataType> arrow_type = prim_arr->type();
+        int64_t siz_primitive_data;
+        if (arrow_type->id() == arrow::Type::BOOL) {
+            // Arrow boolean arrays store 1 bit per boolean
+            siz_primitive_data = n_bytes;
+        } else {
+            Bodo_CTypes::CTypeEnum bodo_typ =
+                arrow_to_bodo_type(prim_arr->type()->id());
+            int64_t siz_typ = numpy_item_size[bodo_typ];
+            siz_primitive_data = siz_typ * n_rows;
+        }
         return siz_null_bitmap + siz_primitive_data;
     }
 }
 
-int64_t array_memory_size(array_info* earr) {
+int64_t array_memory_size(std::shared_ptr<array_info> earr,
+                          bool include_dict_size, bool include_children,
+                          bool approximate_string_size) {
     if (earr->arr_type == bodo_array_type::NUMPY ||
         earr->arr_type == bodo_array_type::CATEGORICAL) {
         uint64_t siztype = numpy_item_size[earr->dtype];
         return siztype * earr->length;
-    }
-    if (earr->arr_type == bodo_array_type::NULLABLE_INT_BOOL ||
-        earr->arr_type == bodo_array_type::DICT) {
-        if (earr->arr_type == bodo_array_type::DICT)
-            // TODO also contribute dictionary size, but note that when
-            // table_global_memory_size() calls this function, it's not supposed
-            // to add the size of dictionaries of all ranks
-            earr = earr->info2;
-        uint64_t siztype = numpy_item_size[earr->dtype];
+    } else if (earr->arr_type == bodo_array_type::DICT) {
+        // Not all functions want to consider the size of the dictionary.
+        int64_t dict_size =
+            include_dict_size
+                ? array_memory_size(earr->child_arrays[0], include_dict_size,
+                                    include_children, approximate_string_size)
+                : 0;
+        return dict_size +
+               array_memory_size(earr->child_arrays[1], include_dict_size,
+                                 include_children, approximate_string_size);
+    } else if (earr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
         int64_t n_bytes = ((earr->length + 7) >> 3);
-        return n_bytes + siztype * earr->length;
-    }
-    if (earr->arr_type == bodo_array_type::STRING) {
+        if (earr->dtype == Bodo_CTypes::_BOOL) {
+            // Nullable boolean arrays store 1 bit per boolean.
+            return n_bytes * 2;
+        } else {
+            uint64_t siztype = numpy_item_size[earr->dtype];
+            return n_bytes + siztype * earr->length;
+        }
+    } else if (earr->arr_type == bodo_array_type::TIMESTAMPTZ) {
+        int64_t timestamp_bytes =
+            earr->length * numpy_item_size[Bodo_CTypes::INT64];
+        int64_t offset_bytes =
+            earr->length * numpy_item_size[Bodo_CTypes::INT16];
+        int64_t null_bytes = arrow::bit_util::BytesForBits(earr->length);
+        return timestamp_bytes + offset_bytes + null_bytes;
+    } else if (earr->arr_type == bodo_array_type::STRING) {
         int64_t n_bytes = ((earr->length + 7) >> 3);
-        return earr->n_sub_elems + sizeof(offset_t) * (earr->length + 1) +
-               n_bytes;
-    }
-    if (earr->arr_type == bodo_array_type::LIST_STRING) {
+        int64_t num_chars = 0;
+        if (approximate_string_size) {
+            num_chars = earr->buffers[0]->getMeminfo()->size - earr->offset;
+        } else {
+            num_chars = earr->n_sub_elems();
+        }
+        return num_chars + sizeof(offset_t) * (earr->length + 1) + n_bytes;
+    } else if (earr->arr_type == bodo_array_type::ARRAY_ITEM) {
         int64_t n_bytes = ((earr->length + 7) >> 3);
-        int64_t n_sub_bytes = ((earr->n_sub_elems + 7) >> 3);
-        return earr->n_sub_sub_elems +
-               sizeof(offset_t) * (earr->n_sub_elems + 1) +
-               sizeof(offset_t) * (earr->length + 1) + n_bytes + n_sub_bytes;
+        return n_bytes + sizeof(offset_t) * (earr->length + 1) +
+               (include_children
+                    ? array_memory_size(earr->child_arrays.front(),
+                                        include_dict_size, include_children)
+                    : 0);
+    } else if (earr->arr_type == bodo_array_type::STRUCT) {
+        int64_t n_bytes = ((earr->length + 7) >> 3), child_array_size = 0;
+        if (include_children) {
+            for (const std::shared_ptr<array_info>& child_array :
+                 earr->child_arrays) {
+                child_array_size += array_memory_size(
+                    child_array, include_dict_size, include_children,
+                    approximate_string_size);
+            }
+        }
+        return n_bytes + child_array_size;
+    } else if (earr->arr_type == bodo_array_type::MAP) {
+        return include_children
+                   ? array_memory_size(earr->child_arrays.front(),
+                                       include_dict_size, include_children,
+                                       approximate_string_size)
+                   : 0;
     }
-    if (earr->arr_type == bodo_array_type::ARROW) {
-        return arrow_array_memory_size(earr->array);
+    throw std::runtime_error(
+        "Array Type: " + GetArrType_as_string(earr->arr_type) +
+        " not covered in array_memory_size()");
+}
+
+int64_t array_dictionary_memory_size(std::shared_ptr<array_info> earr) {
+    if (earr->arr_type == bodo_array_type::DICT) {
+        return array_memory_size(earr->child_arrays[0], true, true);
+    } else if (earr->arr_type == bodo_array_type::MAP) {
+        return array_dictionary_memory_size(earr->child_arrays.front());
+    } else if (earr->arr_type == bodo_array_type::ARRAY_ITEM) {
+        return array_dictionary_memory_size(earr->child_arrays.front());
+    } else if (earr->arr_type == bodo_array_type::STRUCT) {
+        int64_t dict_size = 0;
+        for (auto& child_arr : earr->child_arrays) {
+            dict_size += array_dictionary_memory_size(child_arr);
+        }
+        return dict_size;
     }
-    Bodo_PyErr_SetString(PyExc_RuntimeError,
-                         "Type not covered in array_memory_size");
     return 0;
 }
 
-int64_t table_global_memory_size(table_info* table) {
+int64_t table_local_memory_size(const std::shared_ptr<table_info>& table,
+                                bool include_dict_size,
+                                bool approximate_string_size) {
     int64_t local_size = 0;
-    for (auto& earr : table->columns) local_size += array_memory_size(earr);
+    for (auto& arr : table->columns) {
+        local_size += array_memory_size(arr, include_dict_size, true,
+                                        approximate_string_size);
+    }
+    return local_size;
+}
+
+int64_t table_local_dictionary_memory_size(
+    const std::shared_ptr<table_info>& table) {
+    int64_t local_size = 0;
+    for (auto& arr : table->columns) {
+        local_size += array_dictionary_memory_size(arr);
+    }
+    return local_size;
+}
+
+int64_t table_global_memory_size(const std::shared_ptr<table_info>& table) {
+    int64_t local_size = table_local_memory_size(table, false);
     int64_t global_size;
-    MPI_Allreduce(&local_size, &global_size, 1, MPI_LONG_LONG_INT, MPI_SUM,
-                  MPI_COMM_WORLD);
+    CHECK_MPI(MPI_Allreduce(&local_size, &global_size, 1, MPI_LONG_LONG_INT,
+                            MPI_SUM, MPI_COMM_WORLD),
+              "table_global_memory_size: MPI error on MPI_Allreduce:");
     return global_size;
 }
 
-array_info* copy_array(array_info* earr) {
-    int64_t extra_null_bytes = 0;
-    array_info* farr;
+std::shared_ptr<array_info> copy_array(std::shared_ptr<array_info> earr,
+                                       bool shallow_copy_child_arrays) {
+    std::shared_ptr<array_info> farr;
+    // Copy child arrays
     if (earr->arr_type == bodo_array_type::DICT) {
-        array_info* dictionary = copy_array(earr->info1);
-        array_info* indices = copy_array(earr->info2);
-        farr = new array_info(bodo_array_type::DICT, earr->dtype,
-                              indices->length, -1, -1, NULL, NULL, NULL,
-                              indices->null_bitmask, NULL, NULL, NULL, NULL, 0,
-                              0, 0, earr->has_global_dictionary,
-                              earr->has_sorted_dictionary, dictionary, indices);
+        std::shared_ptr<array_info> dictionary =
+            copy_array(earr->child_arrays[0]);
+        std::shared_ptr<array_info> indices = copy_array(earr->child_arrays[1]);
+        farr = create_dict_string_array(dictionary, indices);
+    } else if (earr->arr_type == bodo_array_type::ARRAY_ITEM) {
+        farr = alloc_array_item(earr->length,
+                                shallow_copy_child_arrays
+                                    ? earr->child_arrays.front()
+                                    : copy_array(earr->child_arrays.front()));
+    } else if (earr->arr_type == bodo_array_type::STRUCT) {
+        std::vector<std::shared_ptr<array_info>> child_arrays(
+            earr->child_arrays);
+        if (!shallow_copy_child_arrays) {
+            for (size_t i = 0; i < child_arrays.size(); ++i) {
+                child_arrays[i] = copy_array(earr->child_arrays[i]);
+            }
+        }
+        farr = alloc_struct(earr->length, child_arrays);
+    } else if (earr->arr_type == bodo_array_type::MAP) {
+        std::shared_ptr<array_info> arr_item_arr =
+            shallow_copy_child_arrays ? earr->child_arrays.front()
+                                      : copy_array(earr->child_arrays.front());
+        farr = alloc_map(arr_item_arr->length, arr_item_arr);
     } else {
-        farr = alloc_array(earr->length, earr->n_sub_elems,
-                           earr->n_sub_sub_elems, earr->arr_type, earr->dtype,
-                           extra_null_bytes, earr->num_categories);
+        farr = alloc_array_top_level(
+            earr->length, earr->n_sub_elems(), 0, earr->arr_type, earr->dtype,
+            earr->arr_type == bodo_array_type::STRING ? earr->array_id : -1, 0,
+            earr->num_categories, earr->is_globally_replicated,
+            earr->is_locally_unique, earr->is_locally_sorted);
+        farr->scale = earr->scale;
+        farr->precision = earr->precision;
     }
+    // Copy buffers
     if (earr->arr_type == bodo_array_type::NUMPY ||
         earr->arr_type == bodo_array_type::CATEGORICAL) {
         uint64_t siztype = numpy_item_size[earr->dtype];
-        memcpy(farr->data1, earr->data1, siztype * earr->length);
-    }
-    if (earr->arr_type == bodo_array_type::INTERVAL) {
+        memcpy(farr->data1(), earr->data1(), siztype * earr->length);
+    } else if (earr->arr_type == bodo_array_type::INTERVAL) {
         uint64_t siztype = numpy_item_size[earr->dtype];
-        memcpy(farr->data1, earr->data1, siztype * earr->length);
-        memcpy(farr->data2, earr->data2, siztype * earr->length);
-    }
-    if (earr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
-        uint64_t siztype = numpy_item_size[earr->dtype];
-        memcpy(farr->data1, earr->data1, siztype * earr->length);
+        memcpy(farr->data1<bodo_array_type::INTERVAL>(),
+               earr->data1<bodo_array_type::INTERVAL>(),
+               siztype * earr->length);
+        memcpy(farr->data2<bodo_array_type::INTERVAL>(),
+               earr->data2<bodo_array_type::INTERVAL>(),
+               siztype * earr->length);
+    } else if (earr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
+        int64_t data_copy_size;
         int64_t n_bytes = ((earr->length + 7) >> 3);
-        memcpy(farr->null_bitmask, earr->null_bitmask, n_bytes);
-    }
-    if (earr->arr_type == bodo_array_type::STRING) {
-        memcpy(farr->data1, earr->data1, earr->n_sub_elems);
-        memcpy(farr->data2, earr->data2, sizeof(offset_t) * (earr->length + 1));
+        if (earr->dtype == Bodo_CTypes::_BOOL) {
+            data_copy_size = n_bytes;
+        } else {
+            data_copy_size = earr->length * numpy_item_size[earr->dtype];
+        }
+        memcpy(farr->data1<bodo_array_type::NULLABLE_INT_BOOL>(),
+               earr->data1<bodo_array_type::NULLABLE_INT_BOOL>(),
+               data_copy_size);
+        memcpy(farr->null_bitmask<bodo_array_type::NULLABLE_INT_BOOL>(),
+               earr->null_bitmask<bodo_array_type::NULLABLE_INT_BOOL>(),
+               n_bytes);
+    } else if (earr->arr_type == bodo_array_type::TIMESTAMPTZ) {
+        int64_t timestamp_bytes =
+            earr->length * numpy_item_size[Bodo_CTypes::TIMESTAMPTZ];
+        int64_t offset_bytes =
+            earr->length * numpy_item_size[Bodo_CTypes::INT16];
         int64_t n_bytes = ((earr->length + 7) >> 3);
-        memcpy(farr->null_bitmask, earr->null_bitmask, n_bytes);
-    }
-    if (earr->arr_type == bodo_array_type::LIST_STRING) {
-        memcpy(farr->data1, earr->data1, earr->n_sub_sub_elems);
-        memcpy(farr->data2, earr->data2,
-               sizeof(offset_t) * (earr->n_sub_elems + 1));
-        memcpy(farr->data3, earr->data3, sizeof(offset_t) * (earr->length + 1));
+        memcpy(farr->data1<bodo_array_type::TIMESTAMPTZ>(),
+               earr->data1<bodo_array_type::TIMESTAMPTZ>(), timestamp_bytes);
+        memcpy(farr->data2<bodo_array_type::TIMESTAMPTZ>(),
+               earr->data2<bodo_array_type::TIMESTAMPTZ>(), offset_bytes);
+        memcpy(farr->null_bitmask<bodo_array_type::TIMESTAMPTZ>(),
+               earr->null_bitmask<bodo_array_type::TIMESTAMPTZ>(), n_bytes);
+    } else if (earr->arr_type == bodo_array_type::STRING) {
+        memcpy(farr->data1<bodo_array_type::STRING>(),
+               earr->data1<bodo_array_type::STRING>(), earr->n_sub_elems());
+        memcpy(farr->data2<bodo_array_type::STRING>(),
+               earr->data2<bodo_array_type::STRING>(),
+               sizeof(offset_t) * (earr->length + 1));
         int64_t n_bytes = ((earr->length + 7) >> 3);
-        memcpy(farr->null_bitmask, earr->null_bitmask, n_bytes);
-        int64_t n_sub_bytes = ((earr->n_sub_elems + 7) >> 3);
-        memcpy(farr->sub_null_bitmask, earr->sub_null_bitmask, n_sub_bytes);
+        memcpy(farr->null_bitmask<bodo_array_type::STRING>(),
+               earr->null_bitmask<bodo_array_type::STRING>(), n_bytes);
+    } else if (earr->arr_type == bodo_array_type::ARRAY_ITEM) {
+        memcpy(farr->data1<bodo_array_type::ARRAY_ITEM>(),
+               earr->data1<bodo_array_type::ARRAY_ITEM>(),
+               sizeof(offset_t) * (earr->length + 1));
+        int64_t n_bytes = ((earr->length + 7) >> 3);
+        memcpy(farr->null_bitmask<bodo_array_type::ARRAY_ITEM>(),
+               earr->null_bitmask<bodo_array_type::ARRAY_ITEM>(), n_bytes);
+    } else if (earr->arr_type == bodo_array_type::MAP) {
+        // Map array has no buffers to copy
+    } else if (earr->arr_type == bodo_array_type::STRUCT) {
+        int64_t n_bytes = ((earr->length + 7) >> 3);
+        memcpy(farr->null_bitmask<bodo_array_type::STRUCT>(),
+               earr->null_bitmask<bodo_array_type::STRUCT>(), n_bytes);
+    } else {
+        throw std::runtime_error(
+            "copy_array: " + GetArrType_as_string(earr->arr_type) +
+            " array not supported yet!");
     }
     return farr;
 }
 
-/**
- * Free underlying array of array_info pointer and delete the pointer
- */
-void delete_info_decref_array(array_info* arr) {
-    decref_array(arr);
-    delete arr;
-}
-
-/**
- * delete table pointer and its column array_info pointers (but not the arrays).
- */
-void delete_table(table_info* table) {
-    for (array_info* a : table->columns) {
-        delete a;
+size_t get_expected_bits_per_entry(bodo_array_type::arr_type_enum arr_type,
+                                   Bodo_CTypes::CTypeEnum c_type) {
+    // TODO: Handle nested data structure and categorical data types seperately
+    size_t nullable;
+    switch (arr_type) {
+        case bodo_array_type::DICT:
+            return 33;  // Dictionaries are fixed 32 bits + 1 null bit
+        case bodo_array_type::NUMPY:
+        case bodo_array_type::INTERVAL:
+        case bodo_array_type::CATEGORICAL:
+            nullable = 0;
+            break;
+        case bodo_array_type::STRING:
+        case bodo_array_type::NULLABLE_INT_BOOL:
+        case bodo_array_type::TIMESTAMPTZ:
+        case bodo_array_type::STRUCT:
+        case bodo_array_type::ARRAY_ITEM:
+        case bodo_array_type::MAP:
+            nullable = 1;
+            break;
+        default:
+            throw std::runtime_error(
+                "get_expected_bits_per_entry: Invalid array type!");
     }
-    delete table;
+    switch (c_type) {
+        case Bodo_CTypes::_BOOL:
+            return nullable + (arr_type == bodo_array_type::NUMPY ? 8 : 1);
+        case Bodo_CTypes::INT8:
+        case Bodo_CTypes::UINT8:
+        case Bodo_CTypes::INT16:
+        case Bodo_CTypes::UINT16:
+        case Bodo_CTypes::INT32:
+        case Bodo_CTypes::UINT32:
+        case Bodo_CTypes::INT64:
+        case Bodo_CTypes::UINT64:
+        case Bodo_CTypes::INT128:
+        case Bodo_CTypes::FLOAT32:
+        case Bodo_CTypes::FLOAT64:
+        case Bodo_CTypes::DECIMAL:
+        case Bodo_CTypes::DATE:
+        case Bodo_CTypes::TIME:
+        case Bodo_CTypes::DATETIME:
+        case Bodo_CTypes::TIMEDELTA:
+        case Bodo_CTypes::TIMESTAMPTZ:
+            return nullable + (numpy_item_size[c_type] * 8);
+        case Bodo_CTypes::STRING:
+        case Bodo_CTypes::LIST:
+        case Bodo_CTypes::MAP:
+        case Bodo_CTypes::STRUCT:
+        case Bodo_CTypes::BINARY:
+            return nullable +
+                   256;  // 32 bytes estimate for unknown or variable size types
+        default:
+            throw std::runtime_error(
+                "get_expected_bits_per_entry: Invalid C type!");
+    }
+}
+
+size_t get_row_bytes(const std::shared_ptr<bodo::Schema>& schema) {
+    size_t row_bits = 0;
+    for (const std::unique_ptr<bodo::DataType>& data_type :
+         schema->column_types) {
+        row_bits += get_expected_bits_per_entry(data_type->array_type,
+                                                data_type->c_type);
+    }
+    return (row_bits + 7) >> 3;
 }
 
 /**
- * Free all arrays of a table and delete the table.
+ * Free underlying array of array_info pointer and delete the pointer.
+ * Called from Python.
  */
-void delete_table_decref_arrays(table_info* table) {
-    for (array_info* a : table->columns) {
-        if (a != NULL) {
-            decref_array(a);
-            delete a;
+void delete_info(array_info* arr) { delete arr; }
+
+/**
+ * Delete table pointer and its column array_info pointers (but not the arrays).
+ * Called from Python.
+ */
+void delete_table(table_info* table) { delete table; }
+
+table_info* cpp_table_map_to_list(table_info* table) {
+    std::vector<std::shared_ptr<array_info>> new_columns;
+    for (std::shared_ptr<array_info>& v : table->columns) {
+        // Get underlying list(struct) array for map array
+        if (v->arr_type == bodo_array_type::MAP) {
+            new_columns.emplace_back(v->child_arrays[0]);
+        } else {
+            new_columns.emplace_back(v);
         }
     }
+    table_info* out_table = new table_info(new_columns);
     delete table;
+    return out_table;
+}
+
+void decref_meminfo(MemInfo* meminfo) {
+    if (meminfo != nullptr && meminfo->refct != -1) {
+        meminfo->refct--;
+        if (meminfo->refct == 0) {
+            NRT_MemInfo_call_dtor(meminfo);
+        }
+    }
+}
+
+void incref_meminfo(MemInfo* meminfo) {
+    if (meminfo != nullptr && meminfo->refct != -1) {
+        meminfo->refct++;
+    }
+}
+
+void reset_col_if_last_table_ref(std::shared_ptr<table_info> const& table,
+                                 size_t col_idx) {
+    if (table.use_count() == 1) {
+        table->columns[col_idx].reset();
+    }
+}
+
+void clear_all_cols_if_last_table_ref(
+    std::shared_ptr<table_info> const& table) {
+    if (table.use_count() == 1) {
+        table->columns.clear();
+    }
+}
+
+std::tuple<std::vector<int8_t>, std::vector<int8_t>>
+get_dtypes_arr_types_from_table(const std::shared_ptr<table_info>& table) {
+    std::vector<int8_t> arr_c_types;
+    std::vector<int8_t> arr_array_types;
+
+    for (const auto& column : table->columns) {
+        _get_dtypes_arr_types_from_array(column, arr_c_types, arr_array_types);
+    }
+    return std::make_tuple(arr_c_types, arr_array_types);
+}
+
+void _get_dtypes_arr_types_from_array(const std::shared_ptr<array_info>& array,
+                                      std::vector<int8_t>& arr_c_types,
+                                      std::vector<int8_t>& arr_array_types) {
+    arr_c_types.push_back((int8_t)array->dtype);
+    arr_array_types.push_back((int8_t)array->arr_type);
+
+    if (array->arr_type == bodo_array_type::STRUCT) {
+        arr_c_types.push_back(array->child_arrays.size());
+        arr_array_types.push_back(array->child_arrays.size());
+        for (auto child : array->child_arrays) {
+            _get_dtypes_arr_types_from_array(child, arr_c_types,
+                                             arr_array_types);
+        }
+    }
+    if (array->arr_type == bodo_array_type::ARRAY_ITEM) {
+        _get_dtypes_arr_types_from_array(array->child_arrays[0], arr_c_types,
+                                         arr_array_types);
+    }
+    if (array->arr_type == bodo_array_type::MAP) {
+        // Handle key and value arrays
+        _get_dtypes_arr_types_from_array(
+            array->child_arrays[0]->child_arrays[0]->child_arrays[0],
+            arr_c_types, arr_array_types);
+        _get_dtypes_arr_types_from_array(
+            array->child_arrays[0]->child_arrays[0]->child_arrays[1],
+            arr_c_types, arr_array_types);
+    }
+}
+
+std::tuple<std::vector<int8_t>, std::vector<int8_t>>
+get_dtypes_arr_types_from_array(const std::shared_ptr<array_info>& array) {
+    std::vector<int8_t> arr_c_types, arr_array_types;
+    _get_dtypes_arr_types_from_array(array, arr_c_types, arr_array_types);
+    return {arr_c_types, arr_array_types};
 }
 
 /**
- * Free an array of a table
+ * @brief Get start index of next column e.g. given the following inputs:
+ * arr_array_types = [ARRAY_ITEM, NULLABLE_INT_BOOL, ARRAY_ITEM, ARRAY_ITEM,
+ * NULLABLE_INT_BOOL, NULLABLE_INT_BOOL] idx = 2 The function will output 5
+ *
+ * @param arr_array_types The span of array types
+ * @param idx The index of the current column
+ * @return The index of next column
  */
-void decref_table_array(table_info* table, int arr_no) {
-    array_info* a = table->columns[arr_no];
-    if (a != NULL) {
-        decref_array(a);
+size_t get_next_col_idx(const std::span<const int8_t>& arr_array_types,
+                        size_t idx) {
+    if (idx >= arr_array_types.size()) {
+        throw std::runtime_error("get_next_col_idx: index " +
+                                 std::to_string(idx) + " out of bound!");
+    }
+    if (arr_array_types[idx] == bodo_array_type::ARRAY_ITEM) {
+        do {
+            ++idx;
+        } while (idx < arr_array_types.size() &&
+                 arr_array_types[idx] == bodo_array_type::ARRAY_ITEM);
+        if (idx >= arr_array_types.size()) {
+            throw std::runtime_error(
+                "The last array type cannot be ARRAY_ITEM: inner array type "
+                "needs to be provided!");
+        }
+        return get_next_col_idx(arr_array_types, idx);
+    } else if (arr_array_types[idx] == bodo_array_type::STRUCT) {
+        int8_t tot = arr_array_types[idx + 1];
+        idx += 2;
+        while (tot--) {
+            idx = get_next_col_idx(arr_array_types, idx);
+        }
+        return idx;
+    } else if (arr_array_types[idx] == bodo_array_type::MAP) {
+        idx++;
+        idx = get_next_col_idx(arr_array_types, idx);
+        idx = get_next_col_idx(arr_array_types, idx);
+        return idx;
+    } else {
+        return idx + 1;
     }
 }
 
-/*
-  Decreases refcount and frees array if refcount is zero.
-  This is more complicated than one might expect since the structure needs to be
-  coherent with the Python side.
-  *
-  On the Python side, Numba uses this function:
-  def _define_nrt_decref(module, atomic_decr):
-  from
-  https://github.com/numba/numba/blob/ce2139c7dd93127efb04b35f28f4bebc7f44dfd5/numba/core/runtime/nrtdynmod.py#L64
-  *
-  On the C++ side, we cannot call this function directly. But we have to
-  manually call the destructor. We cannot do operations directly on the
-  arrays. For example deallocating data1 and then reallocating it is deadly,
-  since the Python side tries to deallocate again the data1 (double free error)
-  and leaves the current allocation intact.
-  *
-  The entries to be called are the NRT_MemInfo*
-  An array_info contains two NRT_MemInfo*: meminfo and meminfo_bitmask
-  Thus we have two calls for destructors when they are not NULL.
- */
-void decref_array(array_info* arr) {
-    // dictionary-encoded string array uses nested infos
-    if (arr->arr_type == bodo_array_type::DICT) {
-        if (arr->info1 != nullptr) decref_array(arr->info1);
-        if (arr->info2 != nullptr) decref_array(arr->info2);
-        return;
+std::vector<size_t> get_col_idx_map(
+    const std::span<const int8_t>& arr_array_types) {
+    std::vector<size_t> col_idx_map;
+    for (size_t i = 0; i < arr_array_types.size();
+         i = get_next_col_idx(arr_array_types, i)) {
+        col_idx_map.push_back(i);
     }
-
-    if (arr->meminfo != NULL && arr->meminfo->refct != -1) {
-        arr->meminfo->refct--;
-        if (arr->meminfo->refct == 0) NRT_MemInfo_call_dtor(arr->meminfo);
-    }
-    if (arr->meminfo_bitmask != NULL && arr->meminfo_bitmask->refct != -1) {
-        arr->meminfo_bitmask->refct--;
-        if (arr->meminfo_bitmask->refct == 0)
-            NRT_MemInfo_call_dtor(arr->meminfo_bitmask);
-    }
-}
-
-void incref_array(array_info* arr) {
-    // dictionary-encoded string array uses nested infos
-    if (arr->arr_type == bodo_array_type::DICT) {
-        if (arr->info1 != nullptr) incref_array(arr->info1);
-        if (arr->info2 != nullptr) incref_array(arr->info2);
-        return;
-    }
-
-    if (arr->meminfo != NULL && arr->meminfo->refct != -1)
-        arr->meminfo->refct++;
-    if (arr->meminfo_bitmask != NULL && arr->meminfo_bitmask->refct != -1)
-        arr->meminfo_bitmask->refct++;
+    return col_idx_map;
 }
 
 // get memory alloc/free info from _meminfo.h
@@ -741,171 +1704,118 @@ size_t get_stats_free() { return NRT_MemSys_get_stats_free(); }
 size_t get_stats_mi_alloc() { return NRT_MemSys_get_stats_mi_alloc(); }
 size_t get_stats_mi_free() { return NRT_MemSys_get_stats_mi_free(); }
 
+// Dictionary utilities
+
 /**
- * Given an Arrow array, populate array of lengths and array of array_info*
- * with the data from the array and all of its descendant arrays.
- * This is called recursively, and will create one array_info for each
- * individual buffer (offsets, null_bitmaps, data).
- * @param array: The input Arrow array
- * @param lengths: The lengths array to fill
- * @param infos: The array_info* array to fill
- * @param lengths_pos: current position in lengths (this is passed by reference
- *        because we are traversing an arbitrary tree of arrays. Some arrays
- *        (like StructArray) have multiple children and upon returning from
- *        one of the child subtrees we need to know the current position in
- *        lengths.
- * @param infos_pos: same as lengths_pos but tracks the position in infos array
+ * @brief Generate a new local id for a dictionary. These
+ * can be used to identify if dictionaries are "equivalent"
+ * because they share an id. Other than ==, a particular
+ * id has no significance.
+ *
+ * @param length The length of the dictionary being assigned
+ * the id. All dictionaries of length 0 should get the same
+ * id.
+ * @return int64_t The new id that is generated.
  */
-void nested_array_to_c(std::shared_ptr<arrow::Array> array, int64_t* lengths,
-                       array_info** infos, int64_t& lengths_pos,
-                       int64_t& infos_pos) {
-    if (array->type_id() == arrow::Type::LARGE_LIST) {
-        // TODO should print error or warning if OFFSET_BITWIDTH==32
-        std::shared_ptr<arrow::LargeListArray> list_array =
-            std::dynamic_pointer_cast<arrow::LargeListArray>(array);
-        lengths[lengths_pos++] = list_array->length();
-
-        // allocate output arrays and copy data
-        array_info* offsets = alloc_array(list_array->length() + 1, -1, -1,
-                                          bodo_array_type::arr_type_enum::NUMPY,
-                                          Bodo_CType_offset, 0, 0);
-        int64_t n_null_bytes = (list_array->length() + 7) >> 3;
-        array_info* nulls = alloc_array(n_null_bytes, -1, -1,
-                                        bodo_array_type::arr_type_enum::NUMPY,
-                                        Bodo_CTypes::UINT8, 0, 0);
-
-        // NOTE: this should just do a memcpy if the bidwidths of input and
-        // output match
-        std::copy_n((int64_t*)(list_array->value_offsets()->data()),
-                    list_array->length() + 1, (offset_t*)offsets->data1);
-        memset(nulls->data1, 0, n_null_bytes);
-        for (int64_t i = 0; i < list_array->length(); i++) {
-            if (!list_array->IsNull(i))
-                SetBitTo((uint8_t*)nulls->data1, i, true);
-        }
-
-        infos[infos_pos++] = offsets;
-        infos[infos_pos++] = nulls;
-        nested_array_to_c(list_array->values(), lengths, infos, lengths_pos,
-                          infos_pos);
-    } else if (array->type_id() == arrow::Type::LIST) {
-        std::shared_ptr<arrow::ListArray> list_array =
-            std::dynamic_pointer_cast<arrow::ListArray>(array);
-        lengths[lengths_pos++] = list_array->length();
-
-        // allocate output arrays and copy data
-        array_info* offsets = alloc_array(list_array->length() + 1, -1, -1,
-                                          bodo_array_type::arr_type_enum::NUMPY,
-                                          Bodo_CType_offset, 0, 0);
-        int64_t n_null_bytes = (list_array->length() + 7) >> 3;
-        array_info* nulls = alloc_array(n_null_bytes, -1, -1,
-                                        bodo_array_type::arr_type_enum::NUMPY,
-                                        Bodo_CTypes::UINT8, 0, 0);
-
-        std::copy_n((int32_t*)(list_array->value_offsets()->data()),
-                    list_array->length() + 1, (offset_t*)offsets->data1);
-        memset(nulls->data1, 0, n_null_bytes);
-        for (int64_t i = 0; i < list_array->length(); i++) {
-            if (!list_array->IsNull(i))
-                SetBitTo((uint8_t*)nulls->data1, i, true);
-        }
-
-        infos[infos_pos++] = offsets;
-        infos[infos_pos++] = nulls;
-        nested_array_to_c(list_array->values(), lengths, infos, lengths_pos,
-                          infos_pos);
-    } else if (array->type_id() == arrow::Type::STRUCT) {
-        auto struct_array =
-            std::dynamic_pointer_cast<arrow::StructArray>(array);
-        auto struct_type =
-            std::dynamic_pointer_cast<arrow::StructType>(struct_array->type());
-        lengths[lengths_pos++] = struct_array->length();
-
-        // allocate output arrays and copy data
-        int64_t n_null_bytes = (struct_array->length() + 7) >> 3;
-        array_info* nulls = alloc_array(n_null_bytes, -1, -1,
-                                        bodo_array_type::arr_type_enum::NUMPY,
-                                        Bodo_CTypes::UINT8, 0, 0);
-        memset(nulls->data1, 0, n_null_bytes);
-        for (int64_t i = 0; i < struct_array->length(); i++) {
-            if (!struct_array->IsNull(i))
-                SetBitTo((uint8_t*)nulls->data1, i, true);
-        }
-        infos[infos_pos++] = nulls;
-        // Now outputing the fields.
-        for (int i = 0; i < struct_type->num_fields();
-             i++) {  // each field is an array
-            nested_array_to_c(struct_array->field(i), lengths, infos,
-                              lengths_pos, infos_pos);
-        }
-    } else if (array->type_id() == arrow::Type::LARGE_STRING) {
-        // TODO should print error or warning if OFFSET_BITWIDTH==32
-        auto str_array =
-            std::dynamic_pointer_cast<arrow::LargeStringArray>(array);
-        lengths[lengths_pos++] = str_array->length();
-        int64_t n_strings = str_array->length();
-        int64_t n_chars =
-            ((int64_t*)str_array->value_offsets()->data())[n_strings];
-        array_info* str_arr_info = alloc_string_array(n_strings, n_chars, 0);
-        memcpy(str_arr_info->data1, str_array->value_data()->data(),
-               sizeof(char) * n_chars);  // data
-        // NOTE: this should just do a memcpy if the bidwidths of input and
-        // output match
-        std::copy_n((int64_t*)(str_array->value_offsets()->data()),
-                    n_strings + 1, (offset_t*)str_arr_info->data2);
-        int64_t n_null_bytes = (n_strings + 7) >> 3;
-        memset(str_arr_info->null_bitmask, 0, n_null_bytes);
-        for (int64_t i = 0; i < n_strings; i++) {
-            if (!str_array->IsNull(i))
-                SetBitTo((uint8_t*)str_arr_info->null_bitmask, i, true);
-        }
-        infos[infos_pos++] = str_arr_info;
-    } else if (array->type_id() == arrow::Type::STRING) {
-        auto str_array = std::dynamic_pointer_cast<arrow::StringArray>(array);
-        lengths[lengths_pos++] = str_array->length();
-        int64_t n_strings = str_array->length();
-        int64_t n_chars =
-            ((uint32_t*)str_array->value_offsets()->data())[n_strings];
-        array_info* str_arr_info = alloc_string_array(n_strings, n_chars, 0);
-        memcpy(str_arr_info->data1, str_array->value_data()->data(),
-               sizeof(char) * n_chars);  // data
-        std::copy_n((int32_t*)(str_array->value_offsets()->data()),
-                    n_strings + 1, (offset_t*)str_arr_info->data2);
-        int64_t n_null_bytes = (n_strings + 7) >> 3;
-        memset(str_arr_info->null_bitmask, 0, n_null_bytes);
-        for (int64_t i = 0; i < n_strings; i++) {
-            if (!str_array->IsNull(i))
-                SetBitTo((uint8_t*)str_arr_info->null_bitmask, i, true);
-        }
-        infos[infos_pos++] = str_arr_info;
+static int64_t generate_array_id_state(int64_t length) {
+    static int64_t id_counter = 1;
+    if (length == 0) {
+        // Ensure we can identify all length 0 dictionaries
+        // and that all can be unified without transposing.
+        return 0;
     } else {
-        auto primitive_array =
-            std::dynamic_pointer_cast<arrow::PrimitiveArray>(array);
-        lengths[lengths_pos++] = primitive_array->length();
-
-        Bodo_CTypes::CTypeEnum dtype =
-            arrow_to_bodo_type(primitive_array->type());
-
-        // allocate output arrays and copy data
-        array_info* data =
-            alloc_array(primitive_array->length(), -1, -1,
-                        bodo_array_type::arr_type_enum::NUMPY, dtype, 0, 0);
-        int64_t n_null_bytes = (primitive_array->length() + 7) >> 3;
-        array_info* nulls = alloc_array(n_null_bytes, -1, -1,
-                                        bodo_array_type::arr_type_enum::NUMPY,
-                                        Bodo_CTypes::UINT8, 0, 0);
-        uint64_t siztype = numpy_item_size[dtype];
-        memcpy(data->data1, primitive_array->values()->data(),
-               siztype * primitive_array->length());
-        memset(nulls->data1, 0, n_null_bytes);
-        std::vector<char> vectNaN = RetrieveNaNentry(dtype);
-        for (int64_t i = 0; i < primitive_array->length(); i++) {
-            if (!primitive_array->IsNull(i))
-                SetBitTo((uint8_t*)nulls->data1, i, true);
-            else
-                memcpy(data->data1 + siztype * i, vectNaN.data(), siztype);
-        }
-        infos[infos_pos++] = nulls;
-        infos[infos_pos++] = data;
+        return id_counter++;
     }
 }
+
+int64_t generate_array_id(int64_t length) {
+    return generate_array_id_state(length);
+}
+
+std::string get_bodo_version() {
+    // Load the module
+    PyObject* bodo_mod = PyImport_ImportModule("bodo");
+
+    // Get the version attribute
+    PyObject* version = PyObject_GetAttrString(bodo_mod, "__version__");
+    if (version == nullptr) {
+        throw std::runtime_error("Unable to retrieve bodo version");
+    }
+
+    // Convert to C++
+    const char* version_str = (char*)PyUnicode_DATA(version);
+    size_t version_length = PyUnicode_GET_LENGTH(version);
+    std::string result(version_str, version_length);
+
+    Py_DECREF(bodo_mod);
+    Py_DECREF(version);
+    return result;
+}
+
+std::string decode_zstd(std::string blob) {
+    auto const est_decomp_size =
+        ZSTD_getFrameContentSize(blob.data(), blob.size());
+    std::string decomp_buffer{};
+    decomp_buffer.resize(est_decomp_size);
+    size_t const decomp_size = ZSTD_decompress(
+        (void*)decomp_buffer.data(), est_decomp_size, blob.data(), blob.size());
+    if (decomp_size == ZSTD_CONTENTSIZE_UNKNOWN ||
+        decomp_size == ZSTD_CONTENTSIZE_ERROR) {
+        throw std::runtime_error("Malformed ZSTD decompression");
+    }
+    return decomp_buffer;
+}
+
+extern "C" {
+
+PyMODINIT_FUNC PyInit_ext(void) {
+    PyObject* m;
+    MOD_DEF(m, "ext", "No docs", nullptr);
+    if (m == nullptr)
+        return nullptr;
+
+    bodo_common_init();
+
+    SetAttrStringFromPyInit(m, hdist);
+    SetAttrStringFromPyInit(m, hstr_ext);
+    SetAttrStringFromPyInit(m, decimal_ext);
+    SetAttrStringFromPyInit(m, quantile_alg);
+    SetAttrStringFromPyInit(m, lateral_cpp);
+    SetAttrStringFromPyInit(m, theta_sketches);
+    SetAttrStringFromPyInit(m, puffin_file);
+    SetAttrStringFromPyInit(m, lead_lag);
+    SetAttrStringFromPyInit(m, crypto_funcs);
+    SetAttrStringFromPyInit(m, hdatetime_ext);
+    SetAttrStringFromPyInit(m, hio);
+    SetAttrStringFromPyInit(m, array_ext);
+    SetAttrStringFromPyInit(m, s3_reader);
+    SetAttrStringFromPyInit(m, fsspec_reader);
+    SetAttrStringFromPyInit(m, hdfs_reader);
+
+    SetAttrStringFromPyInit(m, _hdf5);
+    SetAttrStringFromPyInit(m, arrow_cpp);
+    SetAttrStringFromPyInit(m, csv_cpp);
+    SetAttrStringFromPyInit(m, json_cpp);
+    SetAttrStringFromPyInit(m, memory_budget_cpp);
+    SetAttrStringFromPyInit(m, stream_join_cpp);
+    SetAttrStringFromPyInit(m, stream_groupby_cpp);
+    SetAttrStringFromPyInit(m, stream_window_cpp);
+    SetAttrStringFromPyInit(m, stream_dict_encoding_cpp);
+    SetAttrStringFromPyInit(m, stream_sort_cpp);
+    SetAttrStringFromPyInit(m, table_builder_cpp);
+    SetAttrStringFromPyInit(m, query_profile_collector_cpp);
+    SetAttrStringFromPyInit(m, uuid_cpp);
+#ifdef BUILD_WITH_V8
+    SetAttrStringFromPyInit(m, javascript_udf_cpp);
+#endif
+
+#ifdef IS_TESTING
+    SetAttrStringFromPyInit(m, test_cpp);
+#endif
+
+    SetAttrStringFromPyInit(m, listagg);
+    SetAttrStringFromPyInit(m, memory_cpp);
+    return m;
+}
+
+} /* extern "C" */

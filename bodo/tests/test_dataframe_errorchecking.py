@@ -5,10 +5,14 @@ from decimal import Decimal
 import numba
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 import pytest
 
 import bodo
+from bodo.tests.utils import pytest_pandas
 from bodo.utils.typing import BodoError
+
+pytestmark = pytest_pandas
 
 
 @pytest.fixture(params=bodo.hiframes.pd_dataframe_ext.dataframe_unsupported)
@@ -626,25 +630,13 @@ def test_df_drop_errors(memory_leak_check):
 def test_df_drop_duplicates_errors(memory_leak_check):
     def impl1():
         df = pd.DataFrame({"A": np.random.randn(10), "B": np.arange(10)})
-        return df.drop_duplicates(keep="last")
-
-    def impl2():
-        df = pd.DataFrame({"A": np.random.randn(10), "B": np.arange(10)})
         df.drop_duplicates(inplace=True)
-
-    def impl3():
-        df = pd.DataFrame({"A": np.random.randn(10), "B": np.arange(10)})
-        return df.drop_duplicates(ignore_index=True)
 
     unsupported_arg_err_msg = (
         "DataFrame.drop_duplicates.* parameter only supports default value"
     )
     with pytest.raises(BodoError, match=unsupported_arg_err_msg):
         bodo.jit(impl1)()
-    with pytest.raises(BodoError, match=unsupported_arg_err_msg):
-        bodo.jit(impl2)()
-    with pytest.raises(BodoError, match=unsupported_arg_err_msg):
-        bodo.jit(impl3)()
 
 
 @pytest.mark.slow
@@ -742,9 +734,6 @@ def test_describe_args(memory_leak_check):
     def impl_exclude(df):
         return df.describe(exclude=[np.number])
 
-    def impl_datetime_is_numeric(df):
-        return df.describe(datetime_is_numeric=False)
-
     df = pd.DataFrame(
         {
             "A": [16, 1, 1, 1, 16, 16, 1, 40],
@@ -758,8 +747,6 @@ def test_describe_args(memory_leak_check):
         bodo.jit(impl_include)(df)
     with pytest.raises(BodoError, match=err_msg):
         bodo.jit(impl_exclude)(df)
-    with pytest.raises(BodoError, match=err_msg):
-        bodo.jit(impl_datetime_is_numeric)(df)
 
 
 @pytest.mark.slow
@@ -774,7 +761,7 @@ def test_describe_args(memory_leak_check):
                         Decimal("1.6"),
                         Decimal("-0.2"),
                         Decimal("44.2"),
-                        np.nan,
+                        None,
                         Decimal("0"),
                     ]
                 ),
@@ -881,7 +868,7 @@ def test_dataframe_iloc_bad_index(memory_leak_check):
 
 def test_non_numba_err(memory_leak_check):
     def test():
-        return x
+        return x  # noqa: F821
 
     with pytest.raises(
         numba.TypingError,
@@ -1000,7 +987,6 @@ def test_concat_const_args(memory_leak_check):
 
 
 def test_df_getitem_non_const_columname_error(memory_leak_check):
-
     g = bodo.jit(lambda a: a)
 
     @bodo.jit
@@ -1181,177 +1167,6 @@ def test_df_iat_setitem_non_const_error(memory_leak_check):
         f(df, 0)
 
 
-@pytest.mark.slow
-def test_df_plot_args(memory_leak_check):
-    """
-    Error checking for types/values of df.plot supported arguments
-    """
-
-    def impl1():
-        x = np.arange(100)
-        y = np.arange(100)
-        df = pd.DataFrame({"A": x, "B": y})
-        df.plot(x=1.2, y="B")
-
-    err_msg = "x must be a constant column name, constant integer, or None"
-    with pytest.raises(BodoError, match=err_msg):
-        bodo.jit(impl1)()
-
-    err_msg = "x must be a constant column name, constant integer, or None"
-    with pytest.raises(BodoError, match=err_msg):
-        bodo.jit(impl1)()
-
-    def impl2():
-        x = np.arange(100)
-        y = np.arange(100)
-        df = pd.DataFrame({"A": x, "B": y})
-        df.plot(y="m")
-
-    err_msg = "column not found"
-    with pytest.raises(BodoError, match=err_msg):
-        bodo.jit(impl2)()
-
-    def impl3():
-        x = np.arange(100)
-        y = np.arange(100)
-        df = pd.DataFrame({"A": x, "B": y})
-        df.plot(x="A", y=12)
-
-    err_msg = "is out of bounds"
-    with pytest.raises(BodoError, match=err_msg):
-        bodo.jit(impl3)()
-
-    def impl4():
-        x = np.arange(100)
-        y = np.arange(100)
-        df = pd.DataFrame({"A": x, "B": y})
-        df.plot(kind="pie")
-
-    err_msg = "pie plot is not supported"
-    with pytest.raises(BodoError, match=err_msg):
-        bodo.jit(impl4)()
-
-    def impl5():
-        x = np.arange(100)
-        y = np.arange(100)
-        df = pd.DataFrame({"A": x, "B": y})
-        df.plot(figsize=10)
-
-    err_msg = "figsize must be a constant numeric tuple"
-    with pytest.raises(BodoError, match=err_msg):
-        bodo.jit(impl5)()
-
-    def impl6():
-        x = np.arange(100)
-        y = np.arange(100)
-        df = pd.DataFrame({"A": x, "B": y})
-        df.plot(title=True)
-
-    err_msg = "title must be a constant string"
-    with pytest.raises(BodoError, match=err_msg):
-        bodo.jit(impl6)()
-
-    def impl7():
-        x = np.arange(100)
-        y = np.arange(100)
-        df = pd.DataFrame({"A": x, "B": y})
-        df.plot(legend="X")
-
-    err_msg = "legend must be a boolean type"
-    with pytest.raises(BodoError, match=err_msg):
-        bodo.jit(impl7)()
-
-    def impl8():
-        x = np.arange(100)
-        y = np.arange(100)
-        df = pd.DataFrame({"A": x, "B": y})
-        df.plot(legend="X")
-
-    err_msg = "legend must be a boolean type"
-    with pytest.raises(BodoError, match=err_msg):
-        bodo.jit(impl8)()
-
-    def impl9():
-        x = np.arange(100)
-        y = np.arange(100)
-        df = pd.DataFrame({"A": x, "B": y})
-        df.plot(xticks=3)
-
-    err_msg = "xticks must be a constant tuple"
-    with pytest.raises(BodoError, match=err_msg):
-        bodo.jit(impl9)()
-
-    def impl10():
-        x = np.arange(100)
-        y = np.arange(100)
-        df = pd.DataFrame({"A": x, "B": y})
-        df.plot(yticks=2)
-
-    err_msg = "yticks must be a constant tuple"
-    with pytest.raises(BodoError, match=err_msg):
-        bodo.jit(impl10)()
-
-    def impl11():
-        x = np.arange(100)
-        y = np.arange(100)
-        df = pd.DataFrame({"A": x, "B": y})
-        df.plot(fontsize=3.4)
-
-    err_msg = "fontsize must be an integer"
-    with pytest.raises(BodoError, match=err_msg):
-        bodo.jit(impl11)()
-
-    def impl12():
-        x = np.arange(100)
-        y = np.arange(100)
-        df = pd.DataFrame({"A": x, "B": y})
-        df.plot(xlabel=10)
-
-    err_msg = "xlabel must be a constant string"
-    with pytest.raises(BodoError, match=err_msg):
-        bodo.jit(impl12)()
-
-    def impl13():
-        x = np.arange(100)
-        y = np.arange(100)
-        df = pd.DataFrame({"A": x, "B": y})
-        df.plot(ylabel=10)
-
-    err_msg = "ylabel must be a constant string"
-    with pytest.raises(BodoError, match=err_msg):
-        bodo.jit(impl13)()
-
-    def impl14():
-        x = np.arange(100)
-        y = np.arange(100)
-        df = pd.DataFrame({"A": x, "B": y})
-        df.plot(kind="scatter")
-
-    err_msg = "requires an x and y column"
-    with pytest.raises(BodoError, match=err_msg):
-        bodo.jit(impl14)()
-
-    def impl15():
-        x = np.arange(100)
-        y = np.arange(100)
-        df = pd.DataFrame({"A": x, "B": y})
-        df.plot(kind="scatter", y="B")
-
-    err_msg = "x column is missing."
-    with pytest.raises(BodoError, match=err_msg):
-        bodo.jit(impl15)()
-
-    def impl16():
-        x = np.arange(100)
-        y = np.arange(100)
-        df = pd.DataFrame({"A": x, "B": y})
-        df.plot(kind="scatter", x="A")
-
-    err_msg = "y column is missing."
-    with pytest.raises(BodoError, match=err_msg):
-        bodo.jit(impl16)()
-
-
 def test_invalid_replace_col_data(memory_leak_check):
     """Checks that DataFrameType.replace_col_type throws a reasonable error
     if the column doesn't exist."""
@@ -1366,7 +1181,7 @@ def test_invalid_replace_col_data(memory_leak_check):
         ValueError,
         match="DataFrameType.replace_col_type replaced column must be found in the DataFrameType",
     ):
-        new_dtype = infered_dtype.replace_col_type("C", bodo.string_array_type)
+        infered_dtype.replace_col_type("C", bodo.string_array_type)
 
 
 def test_dd_map_array_drop_subset(memory_leak_check):
@@ -1464,9 +1279,9 @@ def test_df_plot_submethods():
     df = pd.DataFrame({"A": [1, 2, 3], "B": [4, 5, 6]})
 
     def impl_1(df):
-        foo = df.plot.area()
+        df.plot.area()
 
-    err_msg1 = f"pandas.Dataframe.plot (the attribute, not the bound function) not yet supported"
+    err_msg1 = "pandas.Dataframe.plot (the attribute, not the bound function) not yet supported"
     with pytest.raises(
         BodoError,
         match=err_msg1,
@@ -1508,7 +1323,7 @@ def test_df_abs_err():
     """Tests that df.abs() throws a reasonable error on non numeric/timedelta dfs"""
 
     def impl():
-        foo = pd.DataFrame({"A": ["hi"]}).abs()
+        pd.DataFrame({"A": ["hi"]}).abs()
 
     with pytest.raises(
         BodoError,
@@ -1524,7 +1339,7 @@ def test_df_corr_err():
     """Tests that df.corr() throws a reasonable error for empty dataframe"""
 
     def impl():
-        foo = pd.DataFrame().corr()
+        pd.DataFrame().corr()
 
     with pytest.raises(
         BodoError,
@@ -1538,7 +1353,7 @@ def test_df_cov_err():
     """Tests that df.cov() throws a reasonable error for empty dataframe"""
 
     def impl():
-        foo = pd.DataFrame().cov()
+        pd.DataFrame().cov()
 
     with pytest.raises(
         BodoError,
@@ -1550,7 +1365,7 @@ def test_df_cov_err():
 @pytest.mark.slow
 def test_df_rolling_unsupported():
     def impl():
-        df = pd.DataFrame({"B": [1, 2, 3, 4, 5, 6]}).rolling(1).kurt()
+        pd.DataFrame({"B": [1, 2, 3, 4, 5, 6]}).rolling(1).kurt()
 
     err_msg = re.escape("pandas.core.window.rolling.Rolling.kurt() not supported yet")
     with pytest.raises(
@@ -1644,9 +1459,15 @@ def test_df_explode_invalid_cols():
 
     df = pd.DataFrame(
         {
-            "A": [[0, 1, 2], [5], [], [3, 4]] * 3,
+            "A": pd.Series(
+                [[0, 1, 2], [5], [], [3, 4]] * 3,
+                dtype=pd.ArrowDtype(pa.large_list(pa.int64())),
+            ),
             "B": [1, 7, 2, 4] * 3,
-            "C": [[1, 2, 3], np.nan, [], [1, 2]] * 3,
+            "C": pd.Series(
+                [[1, 2, 3], None, [], [1, 2]] * 3,
+                dtype=pd.ArrowDtype(pa.large_list(pa.int64())),
+            ),
         }
     )
     with pytest.raises(
@@ -1657,9 +1478,18 @@ def test_df_explode_invalid_cols():
 
     df2 = pd.DataFrame(
         {
-            "A": [[0, 1, 2], [5], [], [3, 4]] * 3,
-            "B": [[1, 2], [3], [], [1, 2]] * 3,
-            "C": [[1, 2, 3], np.nan, [], [1, 2]] * 3,
+            "A": pd.Series(
+                [[0, 1, 2], [5], [], [3, 4]] * 3,
+                dtype=pd.ArrowDtype(pa.large_list(pa.int64())),
+            ),
+            "B": pd.Series(
+                [[1, 2], [3], [], [1, 2]] * 3,
+                dtype=pd.ArrowDtype(pa.large_list(pa.int64())),
+            ),
+            "C": pd.Series(
+                [[1, 2, 3], None, [], [1, 2]] * 3,
+                dtype=pd.ArrowDtype(pa.large_list(pa.int64())),
+            ),
         }
     )
     with pytest.raises(

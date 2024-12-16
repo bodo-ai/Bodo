@@ -1,7 +1,5 @@
-// Copyright (C) 2021 Bodo Inc. All rights reserved.
 #include <Python.h>
 #include <cstddef>
-#include <iostream>
 #include <unordered_map>
 
 #include <arrow/filesystem/filesystem.h>
@@ -11,8 +9,13 @@
 #include <arrow/status.h>
 
 #include "../libs/_bodo_common.h"
-#include "_bodo_file_reader.h"
+
+// Silence warnings from including generated code
+PUSH_IGNORED_COMPILER_ERROR("-Wreturn-type-c-linkage")
+PUSH_IGNORED_COMPILER_ERROR("-Wunused-variable")
+PUSH_IGNORED_COMPILER_ERROR("-Wunused-function")
 #include "pyfs.cpp"
+POP_IGNORED_COMPILER_ERROR()
 
 using std::string;
 
@@ -28,6 +31,7 @@ using std::string;
 // if status of arrow::Result is not ok, form an err msg and raise a
 // runtime_error with it. If it is ok, get value using ValueOrDie
 // and assign it to lhs using std::move
+#undef CHECK_ARROW_AND_ASSIGN
 #define CHECK_ARROW_AND_ASSIGN(res, msg, lhs) \
     CHECK_ARROW(res.status(), msg)            \
     lhs = std::move(res).ValueOrDie();
@@ -100,7 +104,8 @@ void gcs_get_fs(std::shared_ptr<arrow::py::fs::PyFileSystem> *fs) {
     }
 }
 
-std::shared_ptr<arrow::py::fs::PyFileSystem> get_fsspec_fs(const std::string &protocol) {
+std::shared_ptr<arrow::py::fs::PyFileSystem> get_fsspec_fs(
+    const std::string &protocol) {
     // Get the fsspec filesystem
     if (!pyfs[protocol]) {
         PyObject *fsspec = PyImport_ImportModule("fsspec");
@@ -154,15 +159,35 @@ int32_t finalize_fsspec() {
     return 0;
 }
 
+/**
+ * @brief Wrapper around finalize_fsspec() to be called from Python (avoids
+ Numba JIT overhead and makes compiler debugging easier by eliminating extra
+ compilation)
+ *
+ */
+static PyObject *finalize_fsspec_py_wrapper(PyObject *self, PyObject *args) {
+    if (PyTuple_Size(args) != 0) {
+        PyErr_SetString(PyExc_TypeError,
+                        "finalize_fsspec() does not take arguments");
+        return nullptr;
+    }
+    PyObject *ret_obj = PyLong_FromLong(finalize_fsspec());
+    return ret_obj;
+}
+
+static PyMethodDef ext_methods[] = {
+#define declmethod(func) {#func, (PyCFunction)func, METH_VARARGS, NULL}
+    declmethod(finalize_fsspec_py_wrapper),
+    {nullptr},
+#undef declmethod
+};
+
 PyMODINIT_FUNC PyInit_fsspec_reader(void) {
     PyObject *m;
-    static struct PyModuleDef moduledef = {
-        PyModuleDef_HEAD_INIT, "fsspec_reader", "No docs", -1, NULL,
-    };
-    m = PyModule_Create(&moduledef);
-    if (m == NULL) return NULL;
-    PyObject_SetAttrString(m, "finalize_fsspec",
-                           PyLong_FromVoidPtr((void *)(&finalize_fsspec)));
+    MOD_DEF(m, "fsspec_reader", "No docs", ext_methods);
+    if (m == nullptr)
+        return nullptr;
+
     return m;
 }
 

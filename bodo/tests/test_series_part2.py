@@ -1,10 +1,10 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 import datetime
 import random
 from decimal import Decimal
 
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 import pytest
 
 import bodo
@@ -19,9 +19,14 @@ from bodo.tests.utils import (
     AnalysisTestPipeline,
     _get_dist_arg,
     check_func,
+    get_num_test_workers,
     is_bool_object_series,
+    no_default,
+    pytest_pandas,
 )
 from bodo.utils.typing import BodoError
+
+pytestmark = pytest_pandas
 
 
 @pytest.mark.parametrize(
@@ -78,7 +83,7 @@ def test_series_map_none_str(memory_leak_check):
     def test_impl(S):
         return S.map(lambda a: a + "2" if not pd.isna(a) else None)
 
-    S = pd.Series(["AA", "B", np.nan, "D", "CDE"] * 4)
+    S = pd.Series(["AA", "B", None, "D", "CDE"] * 4)
     check_func(test_impl, (S,), check_dtype=False, only_1DVar=True)
 
 
@@ -144,6 +149,7 @@ def test_series_map_func_cases1(memory_leak_check):
     """test map() called with a function defined as global/freevar outside or passed as
     argument.
     """
+
     # const function defined as global
     def test_impl1(S):
         return S.map(g1)
@@ -195,6 +201,7 @@ def test_series_map_global_jit(memory_leak_check):
 
 
 # TODO: add memory_leak_check
+@pytest.mark.skip("TODO[BSE-2076]: Support tuple array in Arrow boxing/unboxing")
 @pytest.mark.slow
 def test_series_map_tup1():
     def test_impl(S):
@@ -370,6 +377,7 @@ def test_series_map_timestamp(memory_leak_check):
 
 def test_series_map_decimal(memory_leak_check):
     """make sure Decimal output can be handled in map() properly"""
+
     # just returning input value since we don't support any Decimal creation yet
     # TODO: support Decimal(str) constructor
     # TODO: fix using freevar constants in UDFs
@@ -449,9 +457,6 @@ def test_monotonicity(memory_leak_check):
     def f2(S):
         return S.is_monotonic_decreasing
 
-    def f3(S):
-        return S.is_monotonic
-
     random.seed(5)
     n = 100
     e_list = [random.randint(1, 10) for _ in range(n)]
@@ -465,12 +470,9 @@ def test_monotonicity(memory_leak_check):
     S_inc_fail = Srand2.cumsum()
     check_func(f1, (S_inc,))
     check_func(f2, (S_inc,))
-    check_func(f3, (S_inc,))
     check_func(f1, (S_dec,))
     check_func(f2, (S_dec,))
-    check_func(f3, (S_dec,))
     check_func(f1, (S_inc_fail,))
-    check_func(f3, (S_inc_fail,))
 
 
 def test_series_map_error_check(memory_leak_check):
@@ -601,8 +603,8 @@ def test_series_min(series_val, memory_leak_check):
     if isinstance(series_val.values[0], Decimal):
         return
 
-    # skip strings, TODO: handle strings
-    if isinstance(series_val.values[0], str):
+    # TODO: support categorical
+    if isinstance(series_val.dtype, pd.CategoricalDtype):
         return
 
     # skip binary, TODO: handle binary min BE-1253
@@ -633,8 +635,8 @@ def test_series_max(series_val, memory_leak_check):
     if isinstance(series_val.values[0], Decimal):
         return
 
-    # skip strings, TODO: handle strings
-    if isinstance(series_val.values[0], str):
+    # TODO: support categorical
+    if isinstance(series_val.dtype, pd.CategoricalDtype):
         return
 
     # skip binary, TODO: handle binary max BE-1253
@@ -645,6 +647,27 @@ def test_series_max(series_val, memory_leak_check):
         return A.max()
 
     check_func(test_impl, (series_val,))
+
+
+def test_tz_aware_series_max_min(memory_leak_check):
+    series_val = pd.Series(
+        [
+            pd.Timestamp("2018-08-17", tz="America/New_York"),
+            pd.Timestamp("2020-10-01", tz="America/New_York"),
+            pd.Timestamp("2021-12-31", tz="America/New_York"),
+            pd.Timestamp("2022-01-01", tz="America/New_York"),
+        ]
+        * 4
+    )
+
+    def max_impl(A):
+        return A.max()
+
+    def min_impl(A):
+        return A.min()
+
+    check_func(max_impl, (series_val,))
+    check_func(min_impl, (series_val,))
 
 
 @pytest.mark.slow
@@ -701,7 +724,6 @@ def test_series_min_max_int_output_type(memory_leak_check):
 
 @pytest.mark.slow
 def test_series_idxmin(series_val, memory_leak_check):
-
     # Binary not supported in pandas
     if isinstance(series_val.values[0], bytes):
         return
@@ -744,15 +766,14 @@ def test_series_idxmin(series_val, memory_leak_check):
         )
         na_dropped = series_val.dropna()
         py_output = na_dropped.index[na_dropped.values.codes.argmin()]
-    elif isinstance(series_val.dtype, pd.core.arrays.integer._IntegerDtype):
+    elif isinstance(series_val.dtype, pd.core.arrays.integer.IntegerDtype):
         py_output = test_impl(series_val.dropna().astype(series_val.dtype.numpy_dtype))
     else:
-        py_output = None
+        py_output = no_default
     check_func(test_impl, (series_val,), py_output=py_output)
 
 
 def test_series_idxmax(series_val, memory_leak_check):
-
     # Binary not supported in pandas
     if isinstance(series_val.values[0], bytes):
         return
@@ -795,11 +816,187 @@ def test_series_idxmax(series_val, memory_leak_check):
         )
         na_dropped = series_val.dropna()
         py_output = na_dropped.index[na_dropped.values.codes.argmax()]
-    elif isinstance(series_val.dtype, pd.core.arrays.integer._IntegerDtype):
+    elif isinstance(series_val.dtype, pd.core.arrays.integer.IntegerDtype):
         py_output = test_impl(series_val.dropna().astype(series_val.dtype.numpy_dtype))
     else:
-        py_output = None
+        py_output = no_default
     check_func(test_impl, (series_val,), py_output=py_output)
+
+
+@pytest.mark.parametrize(
+    "is_argmin", [pytest.param(True, id="argmin"), pytest.param(False, id="argmax")]
+)
+@pytest.mark.parametrize(
+    "S",
+    [
+        pytest.param(
+            pd.Series([None, None, 1.2, 0.1, 3.4, 6.8], dtype=pd.Float32Dtype()),
+            id="float",
+        ),
+        pytest.param(
+            pd.Series([1, 2, 3, None, 4, -2, 6], dtype=pd.Int32Dtype()),
+            id="nullable-int",
+        ),
+        pytest.param(
+            pd.Series([True, True, True, False, True], dtype=pd.BooleanDtype()),
+            id="bool",
+        ),
+        pytest.param(
+            pd.Series(
+                [
+                    Decimal(
+                        "-"
+                        + str(((i + 7) ** 3) % 100) * 6
+                        + "."
+                        + str(((i + 7) ** 3) % 100) * 4
+                    )
+                    for i in range(100)
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(32, 12)),
+            ),
+            id="decimal",
+        ),
+        pytest.param(
+            pd.Series(["f", "a", "b", "c", "d", "e"], dtype=pd.StringDtype()),
+            id="string",
+            marks=pytest.mark.skip(
+                "[BSE-3879]: Support argmin/argmax with String/binary Series"
+            ),
+        ),
+        pytest.param(
+            pd.Series(pd.Categorical([1, 1, 0, 5, 0, 2], ordered=True)),
+            id="categorical",
+        ),
+        pytest.param(
+            pd.Series(
+                [datetime.date(2020 + 9 - i, 9 - i + 1, i + 1) for i in range(10)]
+            ),
+            id="date",
+        ),
+        pytest.param(
+            pd.Series(
+                [
+                    "2024-01-14",
+                    "2024-01-15",
+                    "2024-02-16",
+                    "2024-01-17",
+                    "2024-01-17",
+                    "2000-02-24",
+                ],
+                dtype="datetime64[ns]",
+            ),
+            id="datetime64ns",
+        ),
+        pytest.param(
+            pd.Series(
+                [
+                    pd.Timestamp(
+                        f"200{i % 10}-{i % 12 + 1}-{i % 28 + 1} {(i + 6) % 24}:{(i + 16) % 60}:{(i + 3) % 60}",
+                        tz="US/Pacific",
+                    )
+                    for i in range(10)
+                ]
+            ),
+            id="timestamp_w_tz",
+        ),
+        pytest.param(
+            pd.Series(
+                [
+                    pd.Timestamp(
+                        f"200{9-i % 10}-{i % 12 + 1}-{i % 28 + 1} {(i + 6) % 24}:{(i + 16) % 60}:{(i + 3) % 60}"
+                    )
+                    for i in range(10)
+                ]
+            ),
+            id="timestamp",
+        ),
+    ],
+)
+def test_series_argmin_max(S, is_argmin, memory_leak_check):
+    def test_argmin_impl(S):
+        return S.argmin()
+
+    def test_argmax_impl(S):
+        return S.argmax()
+
+    if is_argmin:
+        check_func(test_argmin_impl, (S,))
+    else:
+        check_func(test_argmax_impl, (S,))
+
+
+@pytest.mark.parametrize(
+    "precision, scale",
+    [
+        pytest.param(38, 18, id="p_38-s_18"),
+        pytest.param(38, 0, id="p_38-s_0"),
+        pytest.param(18, 3, id="p_18-s_3", marks=pytest.mark.slow),
+        pytest.param(12, 11, id="p_12-s_10", marks=pytest.mark.slow),
+    ],
+)
+@pytest.mark.parametrize(
+    "function",
+    [
+        pytest.param("argmin", id="argmin"),
+        pytest.param("argmax", id="argmax"),
+        pytest.param("min", id="min"),
+        pytest.param("max", id="max"),
+    ],
+)
+def test_series_min_max_argmin_argmax_decimal(
+    precision, scale, function, memory_leak_check
+):
+    """
+    Tests that argmin/max works on decimal series of varying scales/precisions
+    """
+
+    digits_before_decimal = precision - scale
+
+    # answers: argmin = 3, argmax = 92
+    S = pd.Series(
+        [
+            None
+            if i % 10 == 7
+            else Decimal(
+                str(((i + 7) ** 3) % 100) * (digits_before_decimal // 2)
+                + "."
+                + str(((i + 7) ** 3) % 100) * (scale // 2)
+            )
+            for i in range(100)
+        ],
+        dtype=pd.ArrowDtype(pa.decimal128(precision, scale)),
+    )
+
+    # Test that the min/max value for that decimal at the specified scale / precision
+    max_string = "9" * digits_before_decimal + "." + "9" * scale
+    max_or_min_str = "-" + max_string if ("min" in function) else max_string
+    S_max_or_min = pd.Series(
+        [Decimal(max_or_min_str) for _ in range(15)],
+        dtype=pd.ArrowDtype(pa.decimal128(precision, scale)),
+    )
+
+    def test_argmin_impl(S):
+        return S.argmin()
+
+    def test_argmax_impl(S):
+        return S.argmax()
+
+    def test_min_impl(S):
+        return S.min()
+
+    def test_max_impl(S):
+        return S.max()
+
+    impls = {
+        "argmin": test_argmin_impl,
+        "argmax": test_argmax_impl,
+        "min": test_min_impl,
+        "max": test_max_impl,
+    }
+
+    impl = impls[function]
+    check_func(impl, (S,))
+    check_func(impl, (S_max_or_min,))
 
 
 @pytest.mark.parametrize(
@@ -833,7 +1030,7 @@ def test_series_infer_objects(S, memory_leak_check):
                     Decimal("2"),
                     Decimal("4.5"),
                     Decimal("5"),
-                    np.nan,
+                    None,
                     Decimal("4.9"),
                 ]
             ),
@@ -875,8 +1072,15 @@ def test_series_equals(memory_leak_check):
 
     S1 = pd.Series([0] + list(range(20)))
     S2 = pd.Series([1] + list(range(20)))
+    S3 = pd.date_range(
+        start="1/1/2018", end="1/08/2018", tz="America/Los_Angeles"
+    ).to_series()
+    S4 = pd.date_range(
+        start="1/1/2018", end="1/08/2018", tz="America/New_York"
+    ).to_series()
     check_func(f, (S1, S1))
     check_func(f, (S1, S2))
+    check_func(f, (S3, S4))
 
 
 @pytest.mark.slow
@@ -975,7 +1179,7 @@ def test_series_tail_zero(memory_leak_check):
         (pd.Series([3, 2, np.nan, 2, 7], [3, 4, 2, 1, 0], name="A"), [2.0, 3.0]),
         (
             pd.Series(
-                ["aa", "b", "ccc", "A", np.nan, "b"], [3, 4, 2, 1, 0, -1], name="A"
+                ["aa", "b", "ccc", "A", None, "b"], [3, 4, 2, 1, 0, -1], name="A"
             ),
             ["aa", "b"],
         ),
@@ -993,13 +1197,11 @@ def test_series_isin(S, values, memory_leak_check):
     def test_impl(S, values):
         return S.isin(values)
 
-    check_func(test_impl, (S, values))
+    check_func(test_impl, (S, values), check_dtype=False)
 
 
-# TODO: Readd the memory leak check when constant lower leak is fixed
-# This leak results from Categorical Constant lowering
 @pytest.mark.slow
-def test_series_isin_true(series_val):
+def test_series_isin_true(series_val, memory_leak_check):
     """
     Checks Series.isin() works with a variety of Series types.
     This aims at ensuring everything can compile because all
@@ -1019,15 +1221,8 @@ def test_series_isin_true(series_val):
         py_output = pd.Series(
             [True, True] + [False] * (len(series_val) - 2), index=series_val.index
         )
-    elif isinstance(series_val.dtype, pd.CategoricalDtype) and isinstance(
-        series_val.dtype.categories, (pd.TimedeltaIndex, pd.DatetimeIndex)
-    ):
-        # Bug in Pandas https://github.com/pandas-dev/pandas/issues/36550
-        py_output = pd.Series(
-            [True, True] + [False] * (len(series_val) - 2), index=series_val.index
-        )
     else:
-        py_output = None
+        py_output = no_default
     # TODO: Check distributed
     # setting check_dtype to False because as bodo returns a series with non-nullable boolean type
     # as opposed to nullable pandas type. See [BE-1162]
@@ -1037,6 +1232,9 @@ def test_series_isin_true(series_val):
         py_output=py_output,
         dist_test=False,
         check_dtype=False,
+        # Pandas correctly outputs a different result with nullable and non-nullable
+        # float.
+        convert_to_nullable_float=False,
     )
 
 
@@ -1062,13 +1260,13 @@ def test_series_isin_large_random(memory_leak_check):
 @pytest.mark.parametrize("k", [0, 1, 2, 3])
 def test_series_nlargest(numeric_series_val, k, memory_leak_check):
     # TODO: support nullable int
-    if isinstance(numeric_series_val.dtype, pd.core.arrays.integer._IntegerDtype):
+    if isinstance(numeric_series_val.dtype, pd.core.arrays.integer.IntegerDtype):
         return
 
     def test_impl(S, k):
         return S.nlargest(k)
 
-    check_func(test_impl, (numeric_series_val, k), False)
+    check_func(test_impl, (numeric_series_val, k), False, check_dtype=False)
 
 
 @pytest.mark.slow
@@ -1087,13 +1285,13 @@ def test_series_nlargest_non_index(memory_leak_check):
 @pytest.mark.parametrize("k", [0, 1, 2, 3])
 def test_series_nsmallest(numeric_series_val, k, memory_leak_check):
     # TODO: support nullable int
-    if isinstance(numeric_series_val.dtype, pd.core.arrays.integer._IntegerDtype):
+    if isinstance(numeric_series_val.dtype, pd.core.arrays.integer.IntegerDtype):
         return
 
     def test_impl(S, k):
         return S.nsmallest(k)
 
-    check_func(test_impl, (numeric_series_val, k), False)
+    check_func(test_impl, (numeric_series_val, k), False, check_dtype=False)
 
 
 def test_series_nsmallest_non_index(memory_leak_check):
@@ -1136,7 +1334,6 @@ def test_series_argsort_fast(memory_leak_check):
 
 @pytest.mark.slow
 def test_series_argsort(series_val, memory_leak_check):
-
     # not supported for list(string) and array(item)
     if isinstance(series_val.values[0], list):
         return
@@ -1220,72 +1417,9 @@ def test_series_repeat(series_val):
     check_func(test_impl, (series_val, np.arange(len(series_val))))
 
 
-@pytest.mark.parametrize("ignore_index", [True, False])
-def test_series_append_single(series_val, ignore_index, memory_leak_check):
-    # not supported for list(string) and array(item)
-    if isinstance(series_val.values[0], list):
-        return
-
-    # not supported for Datetime.date yet, TODO: support and test
-    if isinstance(series_val.values[0], datetime.date):
-        return
-
-    # not supported for Decimal yet, TODO: support and test
-    if isinstance(series_val.values[0], Decimal):
-        return
-
-    func_text = "def test_impl(A, B):\n"
-    func_text += "  return A.append(B, {})\n".format(ignore_index)
-    loc_vars = {}
-    exec(func_text, {"bodo": bodo}, loc_vars)
-    test_impl = loc_vars["test_impl"]
-
-    bodo_func = bodo.jit(test_impl)
-    pd.testing.assert_series_equal(
-        bodo_func(series_val, series_val),
-        test_impl(series_val, series_val),
-        check_dtype=False,
-        check_names=False,
-        check_index_type=False,
-        check_categorical=False,
-    )  # XXX append can't set name yet
-
-
-@pytest.mark.parametrize("ignore_index", [True, False])
-def test_series_append_multi(series_val, ignore_index, memory_leak_check):
-    # not supported for list(string) and array(item)
-    if isinstance(series_val.values[0], list):
-        return
-
-    # not supported for Datetime.date yet, TODO: support and test
-    if isinstance(series_val.values[0], datetime.date):
-        return
-
-    # not supported for Decimal yet, TODO: support and test
-    if isinstance(series_val.values[0], Decimal):
-        return
-
-    func_text = "def test_impl(A, B, C):\n"
-    func_text += "  return A.append([B, C], {})\n".format(ignore_index)
-    loc_vars = {}
-    exec(func_text, {"bodo": bodo}, loc_vars)
-    test_impl = loc_vars["test_impl"]
-
-    bodo_func = bodo.jit(test_impl)
-    pd.testing.assert_series_equal(
-        bodo_func(series_val, series_val, series_val),
-        test_impl(series_val, series_val, series_val),
-        check_dtype=False,
-        check_names=False,
-        check_index_type=False,
-        check_categorical=False,
-    )  # XXX append can't set name yet
-
-
 @pytest.mark.slow
 def test_series_quantile(numeric_series_val, memory_leak_check):
-
-    if isinstance(numeric_series_val.dtype, pd.core.arrays.integer._IntegerDtype):
+    if isinstance(numeric_series_val.dtype, pd.core.arrays.integer.IntegerDtype):
         # as of Pandas 1.3, quantile throws an error when called on nullable integer Series
         # In bodo, this doesn't cause an error at the moment.
         py_out = (
@@ -1294,7 +1428,7 @@ def test_series_quantile(numeric_series_val, memory_leak_check):
             .quantile(0.30)
         )
     else:
-        py_out = None
+        py_out = no_default
 
     def test_impl(A):
         return A.quantile(0.30)
@@ -1314,18 +1448,18 @@ def test_series_quantile_q(memory_leak_check):
 
     S = pd.Series([1.2, 3.4, 4.5, 32.3, 67.8, 100])
 
-    check_func(test_impl, (S,), is_out_distributed=False, atol=1e-4)
+    check_func(test_impl, (S,), is_out_distributed=False, atol=1e-4, check_dtype=False)
 
     # dt64
     S = pd.Series(pd.date_range("2030-01-1", periods=11))
-    check_func(test_impl, (S,), is_out_distributed=False, atol=1e-4)
+    check_func(test_impl, (S,), is_out_distributed=False, atol=1e-4, check_dtype=False)
 
     # int
     def test_int(S):
         ans = S.quantile(0)
         return ans
 
-    check_func(test_int, (S,))
+    check_func(test_int, (S,), check_dtype=False)
 
     def test_str(S):
         ans = S.quantile("aa")
@@ -1396,9 +1530,10 @@ def test_series_unique(series_val, memory_leak_check):
 @pytest.mark.slow
 def test_series_describe(numeric_series_val, memory_leak_check):
     def test_impl(A):
-        return A.describe(datetime_is_numeric=True)
+        return A.describe()
 
-    check_func(test_impl, (numeric_series_val,), False)
+    # Pandas 1.5 makes the output nullable Float64 for some reason
+    check_func(test_impl, (numeric_series_val,), False, check_dtype=False)
 
 
 @pytest.mark.slow
@@ -1542,7 +1677,10 @@ def test_series_fillna_method(fillna_series, method, memory_leak_check):
     "name,test_impl",
     [
         ("bfill", lambda S: S.bfill()),
-        ("backfill", lambda S: S.backfill()),
+        (
+            "backfill",
+            lambda S: S.bfill(),
+        ),  # S.backfill() is a deprecated alias for S.bfill()
         ("ffill", lambda S: S.ffill()),
         ("pad", lambda S: S.pad()),
     ],
@@ -1585,6 +1723,13 @@ def test_series_fillna_inplace(S, value, memory_leak_check):
     [
         pd.Series([1.0, 2.0, np.nan, 1.0], [3, 4, 2, 1], name="A"),
         pd.Series(["aa", "b", "AA", None, "ccc"], [3, 4, -1, 2, 1], name="A"),
+        pd.Series(
+            [
+                pd.Timestamp("2018-08-19", tz="America/New_York"),
+                pd.Timestamp("2022-09-28", tz="America/New_York"),
+                pd.Timestamp("2020-01-01", tz="America/New_York"),
+            ]
+        ),
     ],
 )
 def test_series_dropna(S, memory_leak_check):
@@ -1596,6 +1741,7 @@ def test_series_dropna(S, memory_leak_check):
 
 def test_series_to_frame(memory_leak_check):
     """test Series.to_frame(). Series name should be known at compile time"""
+
     # Series name is constant
     def impl1():
         S = pd.Series([1, 2, 3], name="A")
@@ -1747,7 +1893,7 @@ def test_series_replace_list_scalar(S, to_replace_list, value, memory_leak_check
         return A.replace(to_replace, val)
 
     # Pandas 1.2.0 seems to convert the array from Int64 to int64.
-    if isinstance(S.dtype, pd.core.arrays.integer._IntegerDtype):
+    if isinstance(S.dtype, pd.core.arrays.integer.IntegerDtype):
         check_dtype = False
     else:
         check_dtype = True
@@ -1906,7 +2052,7 @@ def test_series_pct_change(numeric_series_val, periods, memory_leak_check):
         return
 
     # TODO: support nullable int
-    if isinstance(numeric_series_val.dtype, pd.core.arrays.integer._IntegerDtype):
+    if isinstance(numeric_series_val.dtype, pd.core.arrays.integer.IntegerDtype):
         return
 
     def test_impl(A, periods):
@@ -2021,7 +2167,9 @@ def test_series_value_counts(memory_leak_check):
 
     S_str = pd.Series(["AA", "BB", "C", "AA", "C", "AA"])
     check_func(impl1, (S_str, True, False))
-    check_func(impl1, (S_str, False, True), sort_output=True)
+    check_func(
+        impl1, (S_str, False, True), sort_output=True, convert_to_nullable_float=False
+    )
     S_float = pd.Series([1.1, 2.2, 1.3, 4.4, 3.0, 1.7, np.nan, 6.6, 4.3, np.nan])
     check_func(
         impl2, (S_float, True, False), check_dtype=False, is_out_distributed=False
@@ -2127,7 +2275,7 @@ def test_random_series_all(memory_leak_check):
             if val == 1:
                 val_B = False
             if val == 2:
-                val_B = np.nan
+                val_B = None
             eList.append(val_B)
         return pd.Series(eList)
 
@@ -2151,7 +2299,7 @@ def test_random_series_any(memory_leak_check):
             if val == 1:
                 val_B = False
             if val == 2:
-                val_B = np.nan
+                val_B = None
             eList.append(val_B)
         return pd.Series(eList)
 
@@ -2215,10 +2363,10 @@ def test_series_np_where_binary(memory_leak_check):
         return np.where(S == b"aa")
 
     S1 = pd.Series(
-        [b"aa", b"asdfa", b"aa", np.NaN, b"s", b"aa", b"asdgs"] * 2,
+        [b"aa", b"asdfa", b"aa", None, b"s", b"aa", b"asdgs"] * 2,
     )
     S2 = pd.Series(
-        [np.NaN, b"asdga", b"alsdnf", np.NaN, b"aa", b"aa", b"mnbhju"] * 2,
+        [None, b"asdga", b"alsdnf", None, b"aa", b"aa", b"mnbhju"] * 2,
     )
 
     check_func(test_impl1, (S1, S2, b"nabjhij"))
@@ -2234,14 +2382,14 @@ def test_series_np_where_num(memory_leak_check):
         return np.where((S == 2.0), S, 11.0)
 
     def test_impl2(S, a, cond):
-        # cond.values to test boolean_array
+        # cond.values to test boolean_array_type
         return np.where(cond.values, a, S.values)
 
     S = pd.Series(
         [4.0, 2.0, 1.1, 9.1, 2.0, np.nan, 2.5], [5, 1, 2, 0, 3, 4, 9], name="AA"
     )
     cond = S == 2.0
-    check_func(test_impl1, (S,))
+    check_func(test_impl1, (S,), py_output=pd.array(np.where(cond, S, 11.0)))
     check_func(test_impl2, (S, 12, cond))
 
 
@@ -2320,7 +2468,7 @@ def test_series_where_series(series_val, memory_leak_check):
 
     # TODO: support series.where with two categorical inputs
     if series_val.dtype.name == "category":
-        cat_err_msg = f"Series.where.* 'other' must be a scalar, non-categorical series, 1-dim numpy array or StringArray with a matching type for Series."
+        cat_err_msg = "Series.where.* 'other' must be a scalar, non-categorical series, 1-dim numpy array or StringArray with a matching type for Series."
         with pytest.raises(BodoError, match=cat_err_msg):
             bodo.jit(test_impl)(series_val, cond, series_val)
         return
@@ -2380,7 +2528,7 @@ def test_series_mask_series(series_val, memory_leak_check):
 
     # TODO: support series.where with two categorical inputs
     if series_val.dtype.name == "category":
-        cat_err_msg = f"Series.mask.* 'other' must be a scalar, non-categorical series, 1-dim numpy array or StringArray with a matching type for Series."
+        cat_err_msg = "Series.mask.* 'other' must be a scalar, non-categorical series, 1-dim numpy array or StringArray with a matching type for Series."
         with pytest.raises(BodoError, match=cat_err_msg):
             bodo.jit(test_impl)(series_val, cond, series_val)
         return
@@ -2490,10 +2638,10 @@ def test_series_where_binary(memory_leak_check):
         return S.where(S == b"hello", v)
 
     S = pd.Series(
-        [b"hello", b"b", b"hello world", b"csjk", np.nan, b"aa", b"hello"] * 3,
+        [b"hello", b"b", b"hello world", b"csjk", None, b"aa", b"hello"] * 3,
     )
     S2 = pd.Series(
-        [b"hello", b"b", b"hello world", b"csjk", np.nan, b"aa", b"hello"] * 3,
+        [b"hello", b"b", b"hello world", b"csjk", None, b"aa", b"hello"] * 3,
     )
     A = np.array(
         [b"adsgk", b"", b"ags", b"", b"askjdga", None, b"asdf"] * 3, dtype=object
@@ -2576,7 +2724,7 @@ def test_series_mask(memory_leak_check):
     )
     cond = S == 2.0
     check_func(test_impl, (S, cond, 12))
-    check_func(test_impl_nan, (S, cond))
+    check_func(test_impl_nan, (S, cond), check_dtype=False)
 
 
 def test_series_mask_arr(memory_leak_check):
@@ -2603,10 +2751,10 @@ def test_series_mask_binary(memory_leak_check):
         return S.mask(S != b"hsjldf", val)
 
     S = pd.Series(
-        np.array([np.NaN, bytes(2), b"hsjldf", b"asdgfa", b"nsldgjh"], dtype=object)
+        np.array([None, bytes(2), b"hsjldf", b"asdgfa", b"nsldgjh"], dtype=object)
     )
-    other_series = pd.Series([b"sadkjf", b"asdf", b"nkjhg", np.nan, b"sdlfj"])
-    other_arr = np.array([b"sadkjf", b"asdf", b"nkjhg", np.NaN, b"sdlfj"], dtype=object)
+    other_series = pd.Series([b"sadkjf", b"asdf", b"nkjhg", None, b"sdlfj"])
+    other_arr = np.array([b"sadkjf", b"asdf", b"nkjhg", None, b"sdlfj"], dtype=object)
     np.random.seed(0)
 
     check_func(test_impl, (S, b"sasadgk"))
@@ -2637,7 +2785,7 @@ def test_series_mask_cat_literal(memory_leak_check):
         return S.mask(cond, "AB")
 
     S = pd.Series(
-        ["AB", "AA", "AB", np.nan, "A", "AA", "AB"], [5, 1, 2, 0, 3, 4, 9], name="AA"
+        ["AB", "AA", "AB", None, "A", "AA", "AB"], [5, 1, 2, 0, 3, 4, 9], name="AA"
     ).astype("category")
     cond = S == "AA"
     check_func(test_impl, (S, cond))
@@ -2674,7 +2822,6 @@ def test_cut():
         ["a1", "a2", "a3", "a4", "a5", "a6", "a7", "a8", "a9"],
         name="ABC",
     )
-    A = pd.date_range("2017-01-03", "2017-02-11")
     check_func(impl, (S, [1, 5, 20], True), check_dtype=False)
     # categorical types may be different in interval boundaries (int vs float)
     check_func(impl, (S, [1, 5, 20], False), check_dtype=False, check_categorical=False)
@@ -2683,6 +2830,7 @@ def test_cut():
     )
     check_func(impl, (S, 4, False), check_dtype=False)
     # TODO(ehsan): enable when DatetimeArray is supported [BE-1242]
+    # A = pd.date_range("2017-01-03", "2017-02-11")
     # check_func(impl, (A, 4, False), check_dtype=False)
 
 
@@ -2701,17 +2849,6 @@ def test_qcut(memory_leak_check):
     check_func(impl, (S, [0.1, 0.4, 0.9]), check_dtype=False, check_categorical=False)
     with pytest.raises(BodoError, match="should be an integer or a list"):
         bodo.jit(impl)(S, "ABC")
-
-
-def test_series_mad(series_stat, memory_leak_check):
-    def f(S):
-        return S.mad()
-
-    def f_skip(S):
-        return S.mad(skipna=False)
-
-    check_func(f, (series_stat,))
-    check_func(f_skip, (series_stat,))
 
 
 def test_series_skew(series_stat, memory_leak_check):
@@ -2855,10 +2992,10 @@ def test_series_var(memory_leak_check):
 
     S = pd.Series([np.nan, 2.0, 3.0, 4.0, 5.0])
     check_func(f, (S,))
-    check_func(f_skipna, (S,))
+    check_func(f_skipna, (S,), py_output=True)
     check_func(f_ddof, (S,))
     # Empty Series
-    S_empty = pd.Series()
+    S_empty = pd.Series([], dtype=np.float64)
     check_func(f, (S_empty,))
 
 
@@ -2876,10 +3013,10 @@ def test_series_sem(memory_leak_check):
 
     S = pd.Series([np.nan, 2.0, 3.0, 4.0, 5.0])
     check_func(f, (S,))
-    check_func(f_skipna, (S,))
+    check_func(f_skipna, (S,), py_output=True)
     check_func(f_ddof, (S,))
     # Empty Series
-    S_empty = pd.Series()
+    S_empty = pd.Series([], dtype=np.float64)
     check_func(f, (S_empty,))
 
 
@@ -2901,22 +3038,6 @@ def test_np_pd_timedelta_truediv(memory_leak_check):
     check_func(test_impl, (S, val3))
 
 
-def test_datetime_date_pd_timedelta_ge(memory_leak_check):
-    """
-    Test that Series.ge works between a Series of datetimedate
-    and a pd.Timestamp type.
-    """
-
-    def test_impl(S, val):
-        return S >= val
-
-    S = pd.Series(pd.date_range(start="1/1/2018", end="1/08/2018").date)
-    val1 = pd.Timestamp("1/1/2018")
-    val2 = pd.Timestamp("1/1/2021")
-    check_func(test_impl, (S, val1))
-    check_func(test_impl, (S, val2))
-
-
 def test_series_std(memory_leak_check):
     def f(S):
         return S.std()
@@ -2929,10 +3050,10 @@ def test_series_std(memory_leak_check):
 
     S = pd.Series([np.nan, 2.0, 3.0, 4.0, 5.0])
     check_func(f, (S,))
-    check_func(f_skipna, (S,))
+    check_func(f_skipna, (S,), py_output=True)
     check_func(f_ddof, (S,))
     # Empty Series
-    S_empty = pd.Series()
+    S_empty = pd.Series([], dtype=np.float64)
     check_func(f, (S_empty,))
 
 
@@ -3049,8 +3170,8 @@ def test_series_astype_num_constructors(memory_leak_check):
     def impl1(A):
         return A.astype(float)
 
-    S = pd.Series(["3.2", "1", "3.2", np.nan, "5.1"])
-    check_func(impl1, (S,))
+    S = pd.Series(["3.2", "1", "3.2", None, "5.1"])
+    check_func(impl1, (S,), convert_to_nullable_float=False)
 
     def impl2(A):
         return A.astype(int)
@@ -3078,6 +3199,7 @@ def test_series_round(S, d, memory_leak_check):
 @pytest.mark.slow
 def test_series_unsupported_error_checking(memory_leak_check):
     """make sure BodoError is raised for unsupported Series attributes and methods"""
+
     # test an example attribute
     def test_attr(S):
         return S.axes
@@ -3139,20 +3261,20 @@ def test_series_mem_usage(memory_leak_check):
     def impl2(S):
         return S.memory_usage(index=False)
 
-    S = pd.Series([1, 2, 3, 4, 5, 6], index=pd.Int64Index([10, 12, 24, 30, -10, 40]))
+    S = pd.Series([1, 2, 3, 4, 5, 6], index=pd.Index([10, 12, 24, 30, -10, 40]))
     py_out = 96
     check_func(impl1, (S,), py_output=py_out)
     py_out = 48
     check_func(impl2, (S,), py_output=py_out)
 
     # Empty Series
-    S = pd.Series()
+    S = pd.Series([], dtype=np.float64)
     # StringIndex only. Bodo has different underlying arrays than Pandas
     # Test sequential case
-    py_out = 8
+    py_out = 24
     check_func(impl1, (S,), only_seq=True, py_output=py_out, is_out_distributed=False)
     # Test parallel case. Index is replicated across ranks
-    py_out = 8 * bodo.get_size()
+    py_out = 24 * get_num_test_workers()
     check_func(impl1, (S,), only_1D=True, py_output=py_out, is_out_distributed=False)
 
     # Empty and no index.
@@ -3185,7 +3307,7 @@ def is_where_mask_supported_series(S):
     return True
 
 
-def test_series_np_select(series_val, memory_leak_check):
+def test_series_np_select(series_val):
     """tests np select for nullable series"""
     np.random.seed(42)
 
@@ -3237,7 +3359,7 @@ def test_series_np_select(series_val, memory_leak_check):
     def na_impl(A1, A2, cond1, cond2):
         choicelist = [A1, A2]
         condlist = [cond1, cond2]
-        return np.select(condlist, choicelist, default=pd.NA)
+        return np.select(condlist, choicelist, default=None)
 
     from numba.core import types
 
@@ -3251,9 +3373,17 @@ def test_series_np_select(series_val, memory_leak_check):
         if infered_typ == bodo.timedelta64ns:
             # need to do a bit of conversion in this case, numpy does a cast to int
             # when the np output is an object array
-            py_out = np.array(pd.Series(py_out).astype("timedelta64[ns]"))
+            py_out = np.array(
+                pd.Series(py_out).replace(pd.NA, np.nan).astype("timedelta64[ns]")
+            )
     else:
-        py_out = None
+        default = 0
+        if infered_typ == bodo.bool_:
+            default = False
+        py_out = np.select([cond1, cond2], [A1, A2], default=default)
+
+    if isinstance(A1.values, (pd.arrays.IntegerArray, pd.arrays.BooleanArray)):
+        py_out = pd.array(py_out, A1.dtype)
 
     for impl in [impl1, impl2, impl3, impl4]:
         check_func(
@@ -3276,7 +3406,7 @@ def test_series_np_select_non_unitype(series_val, memory_leak_check):
     sorted_series = series_val.sort_values(ignore_index=True)
     fill_val = sorted_series.loc[sorted_series.first_valid_index()]
     # na_value doesn't play nice with iterables, so just use the nullable array type
-    if isinstance(fill_val, list):
+    if isinstance(fill_val, (list, pd.Series)):
         fill_val = None
     A2 = sorted_series.to_numpy(na_value=fill_val)
 
@@ -3298,7 +3428,7 @@ def test_series_np_select_non_unitype(series_val, memory_leak_check):
     def na_impl(A1, A2, cond1, cond2):
         choicelist = (A1, A2)
         condlist = (cond1, cond2)
-        return np.select(condlist, choicelist, default=pd.NA)
+        return np.select(condlist, choicelist, default=None)
 
     from numba.core import types
 
@@ -3311,7 +3441,9 @@ def test_series_np_select_non_unitype(series_val, memory_leak_check):
             py_out = np.array(pd.Series(py_out).astype("datetime64[ns]"))
         if infered_typ == bodo.timedelta64ns:
             # need to do a bit of conversion in this case, again, numpy does a wierd conversion
-            py_out = np.array(pd.Series(py_out).astype("timedelta64[ns]"))
+            py_out = np.array(
+                pd.Series(py_out).replace(pd.NA, np.nan).astype("timedelta64[ns]")
+            )
         if isinstance(infered_typ, bodo.PDCategoricalDtype):
             if isinstance(
                 series_val.dtype.categories, (pd.TimedeltaIndex, pd.DatetimeIndex)
@@ -3324,7 +3456,10 @@ def test_series_np_select_non_unitype(series_val, memory_leak_check):
             else:
                 py_out = pd.array(pd.Series(py_out).astype(series_val.dtype))
     else:
-        py_out = None
+        default = 0
+        if infered_typ == bodo.bool_:
+            default = False
+        py_out = np.select([cond1, cond2], [A1, A2], default=default)
 
     check_func(
         impl,
@@ -3346,7 +3481,7 @@ def test_series_np_select_non_unitype_none_default(series_val, memory_leak_check
     sorted_series = series_val.sort_values(ignore_index=True)
     fill_val = sorted_series.loc[sorted_series.first_valid_index()]
     # na_value doesn't play nice with iterables, so just use the nullable array type
-    if isinstance(fill_val, list):
+    if isinstance(fill_val, (list, pd.Series)):
         fill_val = None
     A2 = sorted_series.to_numpy(na_value=fill_val)
 
@@ -3368,14 +3503,14 @@ def test_series_np_select_non_unitype_none_default(series_val, memory_leak_check
     def na_impl(A1, A2, cond1, cond2):
         choicelist = (A1, A2)
         condlist = (cond1, cond2)
-        return np.select(condlist, choicelist, default=pd.NA)
+        return np.select(condlist, choicelist, default=None)
 
     if series_val.dtype.name.startswith("float"):
         py_out = impl(A1, A2, cond1, cond2)
         py_out[pd.isna(py_out)] = np.NAN
         py_out = py_out.astype(float)
     else:
-        py_out = None
+        py_out = no_default
 
     check_func(
         impl,
@@ -3388,6 +3523,10 @@ def test_series_np_select_non_unitype_none_default(series_val, memory_leak_check
 def test_series_np_select_non_unitype_set_default(series_val, memory_leak_check):
     """tests np select when passed a non unitype choicelist"""
     np.random.seed(42)
+
+    # Avoid testing errors with categoricals
+    if isinstance(series_val.dtype, pd.CategoricalDtype):
+        return
 
     cond1 = np.random.randint(2, size=len(series_val)).astype(bool)
     cond2 = np.random.randint(2, size=len(series_val)).astype(bool)
@@ -3443,3 +3582,161 @@ def test_series_keys(S, memory_leak_check):
         return A.keys()
 
     check_func(test_impl, (S,))
+
+
+@pytest.mark.parametrize(
+    "S, lower, upper",
+    [
+        pytest.param(
+            pd.Series([1.0, 2.0, 3.0, np.nan, 5.0]),
+            2.0,
+            4.0,
+            id="float-scalar-float-bound",
+        ),
+        pytest.param(
+            pd.Series([1.0, 2.0, 3.0, np.nan, 5.0]), 0, 7, id="float-scalar-int-bound"
+        ),
+        pytest.param(
+            pd.Series([1.0, 2.0, 3.0, np.nan, 5.0]), 3.0, None, id="upper-None"
+        ),
+        pytest.param(pd.Series([1.0, 2.0, 3.0, np.nan, 5.0]), None, 2, id="lower-None"),
+        pytest.param(
+            pd.Series([1.0, 2.0, 3.0, np.nan, 5.0]), None, None, id="no-bound"
+        ),
+        pytest.param(
+            pd.Series([1.0, np.nan, 3.0, 4.0, 5.0]),
+            pd.Series([3.0, 3.0, np.nan, 2.0, 2.0]),
+            pd.Series([4.0, np.nan, 4.0, 3.0, 3.0]),
+            id="float-series-float-bound",
+        ),
+        pytest.param(
+            pd.Series([1.0, 2.0, 3.0, 4.0, 5.0]),
+            pd.Series([3, 3, 3, 2, 2], dtype=pd.Int32Dtype()),
+            pd.Series([4, 4, 4, 3, 3], dtype=pd.Int32Dtype()),
+            id="float-series-int-bound",
+        ),
+        pytest.param(
+            pd.Series([1.0, np.nan, 3.0, 4.0, 5.0]),
+            2,
+            pd.Series([4.0, np.nan, 4.0, 3.0, 3.0]),
+            id="scalar-series-mix-bound",
+        ),
+        pytest.param(
+            pd.Series(
+                [1.0, 2.0, 3.0, 4.0, 5.0], dtype=pd.ArrowDtype(pa.decimal128(10, 4))
+            ),
+            pd.Series(
+                [3.0, 3.0, 2.0, 2.0, 2.0], dtype=pd.ArrowDtype(pa.decimal128(10, 4))
+            ),
+            pd.Series(
+                [4.0, 4.0, 4.0, 3.0, 3.0], dtype=pd.ArrowDtype(pa.decimal128(10, 4))
+            ),
+            id="decimal128-series-bound",
+        ),
+        pytest.param(
+            pd.Series(
+                [
+                    Decimal("1.0"),
+                    Decimal("2.0"),
+                    Decimal("3.0"),
+                    Decimal("4.0"),
+                    Decimal("5.0"),
+                ]
+            ),
+            Decimal("2.0"),
+            Decimal("4.0"),
+            id="decimal-scalar-bound",
+        ),
+        pytest.param(
+            pd.Series(
+                [
+                    Decimal("1.0"),
+                    Decimal("2.0"),
+                    Decimal("3.0"),
+                    Decimal("4.0"),
+                    Decimal("5.0"),
+                ]
+            ),
+            pd.Series([2, 2, 3, 3, 3]),
+            4,
+            id="decimal-series-and-scalar-int-bound",
+        ),
+        pytest.param(
+            pd.Series([True, True, True, True, True]), None, False, id="boolean"
+        ),
+        pytest.param(
+            pd.Series([datetime.date(2020 + i, i, i) for i in range(1, 6)]),
+            datetime.date(2023, 1, 1),
+            datetime.date(2024, 1, 1),
+            id="date-scalar-bound",
+        ),
+        pytest.param(
+            pd.Series([datetime.timedelta(days=i) for i in range(1, 6)]),
+            np.timedelta64(2, "D").astype("timedelta64[ns]"),
+            np.timedelta64(4, "D").astype("timedelta64[ns]"),
+            id="timedelta-scalar-bound",
+        ),
+        pytest.param(
+            pd.Series([datetime.timedelta(days=i) for i in range(1, 6)]),
+            pd.Series([datetime.timedelta(days=2) for i in range(1, 6)]),
+            pd.Series([datetime.timedelta(days=4) for i in range(1, 6)]),
+            id="timedelta-series-bound",
+        ),
+        pytest.param(
+            pd.Series(
+                [
+                    pd.Timestamp(
+                        f"200{i % 10}-{i % 12 + 1}-{i % 28 + 1} {(i + 6) % 24}:{(i + 16) % 60}:{(i + 3) % 60}",
+                        tz="US/Pacific",
+                    )
+                    for i in range(10)
+                ]
+            ),
+            pd.Series(
+                [pd.Timestamp("2002-3-3 8:18:5", tz="US/Pacific") for i in range(10)]
+            ),
+            pd.Series(
+                [pd.Timestamp("2002-7-7 8:18:5", tz="US/Pacific") for i in range(10)]
+            ),
+            id="timestamp-tz-series-bound",
+        ),
+        pytest.param(
+            pd.Series([pd.Timestamp(f"2017-01-{i+1}") for i in range(10)]),
+            pd.Series([pd.Timestamp("2017-01-3") for i in range(10)]),
+            pd.Series([pd.Timestamp("2017-01-7") for i in range(10)]),
+            id="timestamp-series-bound",
+        ),
+        pytest.param(
+            pd.Series([bytes(i) for i in range(10)]),
+            pd.Series([bytes(3) for i in range(10)]),
+            pd.Series([bytes(7) for i in range(10)]),
+            id="binary-series-bound",
+        ),
+        pytest.param(
+            pd.Series([bytes(i) for i in range(10)]),
+            b"\x03",
+            b"\x07",
+            id="binary-scalar-bound",
+        ),
+        pytest.param(
+            pd.Series(["A", "A", "B", "D", "D"]),
+            pd.Series(["A", "B", "B", "B", "B"]),
+            pd.Series(["C", "C", "C", "C", "D"]),
+            id="string-series-bound",
+        ),
+        pytest.param(
+            pd.Series(["A", "A", "B", "D", "D"]), "B", "C", id="string-scalar-bound"
+        ),
+        pytest.param(
+            pd.Series(["A", None, "D", "E", "Z"]),
+            "B",
+            "Q",
+            id="string-scalar-bound-2",
+        ),
+    ],
+)
+def test_series_clip(S, lower, upper):
+    def test_impl(S, lower, upper):
+        return S.clip(lower, upper)
+
+    check_func(test_impl, (S, lower, upper))

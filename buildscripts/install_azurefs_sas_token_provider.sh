@@ -1,23 +1,13 @@
 #!/bin/bash
 set -exo pipefail
 
-export PATH=$HOME/miniconda3/bin:$PATH
-
-
-# ---- Create Conda Env ----
-MAMBA_INSTALL="mamba install -q -y"
-# Deactivate if another script has already activated the env
-source deactivate || true
-
-# Set 5 retries with 1 minute in between to try avoid HTTP errors
-conda config --set remote_max_retries 5
-conda config --set remote_backoff_factor 60
-source activate $CONDA_ENV
-
 # Setup Hadoop
-$MAMBA_INSTALL -c conda-forge 'openjdk=11' maven
-wget -q -O - "https://www.apache.org/dyn/mirrors/mirrors.cgi?action=download&filename=hadoop/common/hadoop-3.3.2/hadoop-3.3.2.tar.gz" | tar -xzf - -C /opt
-export HADOOP_HOME=/opt/hadoop-3.3.2
+if [[ ! -f hadoop.tar.gz ]]; then
+    wget -O hadoop.tar.gz "https://www.apache.org/dyn/mirrors/mirrors.cgi?action=download&filename=hadoop/common/hadoop-3.3.2/hadoop-3.3.2.tar.gz"
+fi
+tar -xzf hadoop.tar.gz -C /tmp
+
+export HADOOP_HOME=/tmp/hadoop-3.3.2
 export HADOOP_INSTALL=$HADOOP_HOME
 export HADOOP_MAPRED_HOME=$HADOOP_HOME
 export HADOOP_COMMON_HOME=$HADOOP_HOME
@@ -30,5 +20,5 @@ export ARROW_LIBHDFS_DIR=$HADOOP_HOME/lib/native
 export CLASSPATH=`$HADOOP_HOME/bin/hdfs classpath --glob`
 
 cd azurefs-sas-token-provider
-pip install -v .
+pip install .
 cd ..

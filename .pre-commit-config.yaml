@@ -1,38 +1,54 @@
+# Pre-Commit CI Config
+ci:
+  autoupdate_schedule: monthly
+  skip: [pretty-format-java, pretty-format-kotlin]
+
+# We should never format the copied Calcite files, in order to avoid massive diffs when Calcite is updated.
+# See https://bodo.atlassian.net/wiki/spaces/B/pages/1415970823/Bodo+s+Calcite+Fork#Managing-the-Fork
+exclude: ^BodoSQL/calcite_sql/bodosql-calcite-application/src/main/java/org/apache/calcite/|^BodoSQL/calcite_sql/bodosql-calcite-application/src/test/resources
 repos:
-  - repo: https://github.com/psf/black
-    rev: 22.3.0
+  # Basics
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
     hooks:
-      - id: black
-        language_version: python3
-  - repo: https://gitlab.com/pycqa/flake8
-    rev: 3.8.3
+      - id: check-toml
+      - id: debug-statements
+        exclude: bodo-platform-image/ansible/roles/ipython/files/load_bodo_platform_extensions_magics.py
+      - id: detect-aws-credentials
+        args: [--allow-missing-credentials]
+  # Python
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.8.0
     hooks:
-      - id: flake8
-        language: python_venv
-        additional_dependencies: [flake8-comprehensions>=3.1.0]
-  - repo: https://github.com/PyCQA/isort
-    rev: 5.5.2
+      - id: ruff
+        args: [ --fix, --exit-non-zero-on-fix ]
+      - id: ruff-format
+  # Cython
+  - repo: https://github.com/MarcoGorelli/cython-lint
+    rev: v0.16.2
     hooks:
-      - id: isort
-        language: python_venv
-  - repo: https://github.com/myint/autoflake
-    rev: v1.4
-    hooks:
-      - id: autoflake
-        args:
-          [
-            "--in-place",
-            "--remove-all-unused-imports",
-            "--exclude",
-            "bodo/__init__.py, iceberg/bodo_iceberg_connector/__init__.py, BodoSQL/bodosql/__init__.py",
-          ]
+      - id: cython-lint
+        args: [--no-pycodestyle]  # Because it doesn't autofix, it would be too annoying
+      - id: double-quote-cython-strings
+  # Java and Kotlin
   - repo: https://github.com/macisamuele/language-formatters-pre-commit-hooks
-    rev: v2.3.0
+    rev: v2.14.0
     hooks:
       - id: pretty-format-java
-        args: ["--autofix", "--google-java-formatter-version", "1.9"]
+        args: ["--autofix", "--google-java-formatter-version", "1.24.0"]
+      - id: pretty-format-kotlin
+        args: ["--autofix"]
+  # C++
   - repo: https://github.com/pre-commit/mirrors-clang-format
-    rev: v14.0.5
+    rev: v18.1.8
     hooks:
       - id: clang-format
         types_or: [c++]
+        exclude: |
+          (?x)^(bodo/libs/vendored/.*)$
+  # GitHub Actions
+  - repo: https://github.com/rhysd/actionlint
+    rev: v1.7.4
+    hooks:
+      - id: actionlint
+

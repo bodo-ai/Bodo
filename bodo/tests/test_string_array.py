@@ -1,6 +1,5 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
-"""Test Bodo's string array data type
-"""
+"""Test Bodo's string array data type"""
+
 import numba
 import numpy as np
 import pandas as pd
@@ -12,6 +11,7 @@ from bodo.tests.utils import (
     check_func,
     dist_IR_contains,
     gen_nonascii_list,
+    get_num_test_workers,
 )
 from bodo.utils.typing import BodoError
 
@@ -80,7 +80,7 @@ def test_np_unique(memory_leak_check):
         return np.unique(arr)
 
     # Create an array here because np.unique fails on NA in pandas
-    arr = pd.array((["AB", "", "ABC", "abcd", "ab", "AB"] + gen_nonascii_list(2)))
+    arr = pd.array(["AB", "", "ABC", "abcd", "ab", "AB"] + gen_nonascii_list(2))
 
     check_func(impl, (arr,), sort_output=True, is_out_distributed=False)
 
@@ -116,7 +116,7 @@ def test_constant_lowering_refcount(memory_leak_check):
     called leading to a segfault.
     """
     arr = np.array(
-        (["AB", "", "ABC", None, "C", "D", "abcd", "ABCD"] + gen_nonascii_list(2))
+        ["AB", "", "ABC", None, "C", "D", "abcd", "ABCD"] + gen_nonascii_list(2)
     )
 
     @bodo.jit(distributed=False)
@@ -160,7 +160,7 @@ def test_getitem_int(str_arr_value, memory_leak_check):
 
 
 @pytest.mark.slow
-def test_getitem_int_arr(str_arr_value, memory_leak_check):
+def test_getitem_int_arr(str_arr_value):
     """
     Test operator.getitem on String array with an integer list ind
     """
@@ -178,6 +178,11 @@ def test_getitem_int_arr(str_arr_value, memory_leak_check):
         check_dtype=False,
         dist_test=False,
     )
+    with pytest.raises(
+        ValueError, match="Cannot index with an integer indexer containing NA values"
+    ):
+        ind = pd.array([0, pd.NA], "Int64")
+        bodo.jit(test_impl)(str_arr_value, ind)
 
 
 @pytest.mark.slow
@@ -447,17 +452,21 @@ def test_nbytes(memory_leak_check):
         return arr.nbytes
 
     A = np.array(["AA", "B"] * 4, object)
-    py_output = 8 * (8 + bodo.get_size()) + 12 + bodo.get_size()
+    n_pes = get_num_test_workers()
+    py_output = 8 * (8 + n_pes) + 12 + n_pes
     if bodo.hiframes.boxing._use_dict_str_type:
         # Each rank has a dictionary with 3 8-byte offsets, 3 characters and a null byte
         # There is also an index array with 8 4-byte offsets
-        py_output = (8 * 3 + 3 + 1) * bodo.get_size() + 8 * 4 + bodo.get_size()
+        py_output = (8 * 3 + 3 + 1) * n_pes + 8 * 4 + n_pes
 
     # set use_dict_encoded_strings to avoid automatic testing of dict-encoded strings
     # since py_output will be different leading to errors
     check_func(
         impl,
         (A,),
+        # Number of may vary depdending on distribution,
+        # so we elect to only test with 1DVar
+        only_1DVar=True,
         py_output=py_output,
         use_dict_encoded_strings=bodo.hiframes.boxing._use_dict_str_type,
     )

@@ -1,6 +1,4 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
-"""Tests I/O error checking for CSV, Parquet, HDF5, etc.
-"""
+"""Tests I/O error checking for CSV, Parquet, HDF5, etc."""
 # TODO: Move error checking tests from test_io to here.
 
 import os
@@ -12,12 +10,14 @@ import pandas as pd
 import pytest
 
 import bodo
+from bodo.tests.utils import pytest_mark_one_rank
 from bodo.utils.testing import ensure_clean
 from bodo.utils.typing import BodoError, BodoWarning
 
 
 def test_unsupported_error_checking(memory_leak_check):
     """make sure BodoError is raised for unsupported call"""
+
     # test an example I/O call
     def test_impl():
         return pd.read_spss("data.dat")
@@ -65,131 +65,6 @@ def test_csv_repeat_args(memory_leak_check):
         bodo.jit(test_impl)()
 
 
-def test_read_parquet_unsupported_arg(memory_leak_check):
-    """
-    test that an error is raised when unsupported arg is passed.
-    """
-
-    def test_impl():
-        df = pd.read_parquet("some_file.pq", invalid_arg="invalid")
-        return df
-
-    with pytest.raises(
-        BodoError, match=r"read_parquet\(\) arguments {'invalid_arg'} not supported yet"
-    ):
-        bodo.jit(distributed=["df"])(test_impl)()
-
-
-def test_read_parquet_unsupported_storage_options_arg(memory_leak_check):
-    """
-    test that an error is raised when unsupported arg for storage_options is passed.
-    """
-
-    def test_impl1():
-        df = pd.read_parquet("some_file.pq", storage_options={"invalid_arg": "invalid"})
-        return df
-
-    def test_impl2():
-        df = pd.read_parquet(
-            "some_file.pq", storage_options={"invalid_arg": "invalid", "anon": True}
-        )
-        return df
-
-    def test_impl3():
-        df = pd.read_parquet("some_file.pq", storage_options="invalid")
-        return df
-
-    with pytest.raises(
-        BodoError,
-        match=r"read_parquet\(\) arguments {'invalid_arg'} for 'storage_options' not supported yet",
-    ):
-        bodo.jit(distributed=["df"])(test_impl1)()
-
-    with pytest.raises(
-        BodoError,
-        match=r"read_parquet\(\) arguments {'invalid_arg'} for 'storage_options' not supported yet",
-    ):
-        bodo.jit(distributed=["df"])(test_impl2)()
-
-    with pytest.raises(
-        BodoError,
-        match=re.escape(
-            "read_parquet(): 'storage_options' must be a constant dictionary"
-        ),
-    ):
-        bodo.jit(distributed=["df"])(test_impl3)()
-
-
-def test_read_parquet_non_bool_storage_options_anon(memory_leak_check):
-    """
-    test that an error is raised when non-boolean is passed in for anon in storage_options
-    """
-
-    def test_impl():
-        df = pd.read_parquet("some_file.pq", storage_options={"anon": "True"})
-        return df
-
-    with pytest.raises(
-        BodoError,
-        match=re.escape(
-            "read_parquet(): 'anon' in 'storage_options' must be a constant boolean value"
-        ),
-    ):
-        bodo.jit(distributed=["df"])(test_impl)()
-
-
-# TODO: Not sure why this fails with memory_leak_check. Seems like the
-# exception returned from pq_read prevents the code that follows from
-# freeing something
-def test_read_parquet_invalid_path():
-    """test error raise when parquet file path is invalid in C++ code."""
-
-    def test_impl():
-        df = pd.read_parquet("I_dont_exist.pq")
-        return df
-
-    with pytest.raises(BodoError, match="error from pyarrow: FileNotFoundError"):
-        bodo.jit(locals={"df": {"A": bodo.int64[:]}})(test_impl)()
-
-
-def test_read_parquet_invalid_path_glob():
-    def test_impl():
-        df = pd.read_parquet("I*dont*exist")
-        return df
-
-    with pytest.raises(BodoError, match="No files found matching glob pattern"):
-        bodo.jit(locals={"df": {"A": bodo.int64[:]}})(test_impl)()
-
-
-def test_read_parquet_invalid_list_of_files(datapath):
-    def test_impl(fnames):
-        df = pd.read_parquet(fnames)
-        return df
-
-    with pytest.raises(
-        BodoError,
-        match=re.escape(
-            "Make sure the list/glob passed to read_parquet() only contains paths to files (no directories)"
-        ),
-    ):
-        fnames = [datapath("decimal1.pq"), datapath("dask_data.parquet")]
-        bodo.jit(test_impl)(fnames)
-
-    with pytest.raises(
-        BodoError,
-        match=re.escape(
-            "Make sure the list/glob passed to read_parquet() only contains paths to files (no directories)"
-        ),
-    ):
-        fnames = []
-        fnames.append(
-            datapath("decimal1.pq")
-            + "/part-00000-053de46f-b6f6-47bc-b732-fa60df446076-c000.snappy.parquet"
-        )
-        fnames.append(datapath("decimal1.pq"))
-        bodo.jit(test_impl)(fnames)
-
-
 def test_read_csv_incorrect_s3_credentials(memory_leak_check):
     """test error raise when AWS credentials are incorrect for csv
     file path passed by another bodo.jit function"""
@@ -216,6 +91,7 @@ def test_read_csv_incorrect_s3_credentials(memory_leak_check):
     numba.core.config.DEVELOPER_MODE = default_mode
 
 
+@pytest.mark.parquet
 def test_io_error_nested_calls(memory_leak_check):
     """Test with passing incorrect filename from bodo to bodo call
     with local file"""
@@ -252,70 +128,6 @@ def test_io_error_nested_calls(memory_leak_check):
     numba.core.config.DEVELOPER_MODE = default_mode
 
 
-def test_read_parquet_incorrect_s3_credentials(memory_leak_check):
-    """test error raise when AWS credentials are incorrect for parquet
-    file path passed by another bodo.jit function"""
-
-    filename = "s3://test-pq-2/item.pq"
-    # Save default developer mode value
-    default_mode = numba.core.config.DEVELOPER_MODE
-    # Test as a user
-    numba.core.config.DEVELOPER_MODE = 0
-
-    @bodo.jit
-    def read(filename):
-        df = pd.read_parquet(filename)
-        return df
-
-    # Test CallConstraint error
-    def test_impl(filename):
-        return read(filename)
-
-    with pytest.raises(BodoError, match="No response body"):
-        bodo.jit(test_impl)(filename)
-
-    # Test ForceLiteralArg error
-    def test_impl2(filename):
-        df = pd.read_parquet(filename)
-        return df
-
-    with pytest.raises(BodoError, match="No response body"):
-        bodo.jit(test_impl2)(filename)
-
-    # Reset developer mode
-    numba.core.config.DEVELOPER_MODE = default_mode
-
-
-def test_read_parquet_invalid_path_const(memory_leak_check):
-    """test error raise when parquet file path provided as constant but is invalid."""
-
-    def test_impl():
-        return pd.read_parquet("I_dont_exist.pq")
-
-    with pytest.raises(BodoError, match="error from pyarrow: FileNotFoundError"):
-        bodo.jit(test_impl)()
-
-
-@pytest.mark.slow
-def test_read_parquet_path_hive_naming(datapath):
-    """
-    Test error raise when parquet file path provided as constant but is invalid
-    because the path uses the hive naming convention which leads to incorrectly
-    inferred schema. In this case we use _bodo_use_hive=False to disable reading
-    with the hive naming convention.
-    """
-    filepath = os.path.join(os.path.dirname(__file__), "data/hive-part-sample-pq/data/")
-
-    def test_impl():
-        return pd.read_parquet(filepath, _bodo_use_hive=True)
-
-    with pytest.raises(
-        BodoError,
-        match="error from pyarrow: ArrowInvalid: Unable to merge: Field test_date has incompatible types:",
-    ):
-        bodo.jit(test_impl)()
-
-
 # TODO(Nick): Add a test for Parallel version with both offset and count.
 @pytest.mark.slow
 def test_np_io_sep_unsupported(datapath, memory_leak_check):
@@ -331,16 +143,6 @@ def test_np_io_sep_unsupported(datapath, memory_leak_check):
     ):
         # Test that we cannot swap the value of sep.
         bodo_func()
-
-
-def test_pq_invalid_column_selection(datapath, memory_leak_check):
-    """test error raise when selected column is not in file schema"""
-
-    def test_impl(fname):
-        return pd.read_parquet(fname, columns=["C"])
-
-    with pytest.raises(BodoError, match="C not in Parquet file schema"):
-        bodo.jit(test_impl)(datapath("nested_struct_example.pq"))
 
 
 @pytest.mark.slow
@@ -360,6 +162,7 @@ def test_csv_infer_type_error(datapath):
             bodo.jit(lambda: pd.read_csv(filepath), distributed=False)()
 
 
+@pytest.mark.parquet
 def test_pseudo_exception(datapath, memory_leak_check):
     """Test removal of ForceLiteralArg message"""
 
@@ -385,34 +188,6 @@ def test_pseudo_exception(datapath, memory_leak_check):
 
     pq_track = excinfo.getrepr(style="native")
     assert "Pseudo-exception" not in str(pq_track)
-
-
-def test_pq_multiIdx_errcheck(memory_leak_check):
-    """Remove this test when multi index is supported for read_parquet"""
-    np.random.seed(0)
-
-    def impl():
-        df = pd.read_parquet("multi_idx_parquet.pq")
-
-    try:
-        if bodo.libs.distributed_api.get_rank() == 0:
-            arrays = [
-                ["bar", "bar", "baz", "baz", "foo", "foo", "qux", "qux"],
-                ["one", "two", "one", "two", "one", "two", "one", "two"],
-            ]
-            tuples = list(zip(*arrays))
-            idx = pd.MultiIndex.from_tuples(tuples, names=["first", "second"])
-            df = pd.DataFrame(np.random.randn(8, 2), index=idx, columns=["A", "B"])
-            df.to_parquet("multi_idx_parquet.pq")
-        bodo.barrier()
-        with pytest.raises(
-            BodoError, match="read_parquet: MultiIndex not supported yet"
-        ):
-            bodo.jit(impl)()
-        bodo.barrier()
-    finally:
-        if bodo.libs.distributed_api.get_rank() == 0:
-            os.remove("multi_idx_parquet.pq")
 
 
 @pytest.mark.slow
@@ -802,14 +577,23 @@ def test_csv_unsupported_arg_kwarg(memory_leak_check):
     fname = os.path.join("bodo", "tests", "data", "example.csv")
 
     def impl():
-        # squeeze is repeated
+        # usecols is repeated
         return pd.read_csv(
-            fname, ",", None, "infer", ["A", "B", "C"], None, None, False, squeeze=False
+            fname,
+            ",",
+            None,
+            "infer",
+            ["A", "B", "C"],
+            None,
+            None,
+            None,
+            None,
+            engine=None,
         )
 
     with pytest.raises(
         BodoError,
-        match="pd.read_csv\\(\\) got multiple values for argument 'squeeze'.",
+        match="pd.read_csv\\(\\) got multiple values for argument 'engine'.",
     ):
         bodo.jit(impl)()
 
@@ -852,12 +636,13 @@ def test_csv_unsupported_arg_mismatch(memory_leak_check):
             ["A", "B", "C", "D", "E"],
             None,
             None,
-            True,  # squeeze argument is here
+            None,
+            "pyarrow",  # engine argument is here
         )
 
     with pytest.raises(
         BodoError,
-        match="pd.read_csv\\(\\) arguments \\['squeeze'\\] not supported yet",
+        match="pd.read_csv\\(\\) arguments \\['engine'\\] not supported yet",
     ):
         bodo.jit(impl)()
 
@@ -1009,50 +794,6 @@ def test_csv_compression_unsupported(memory_leak_check):
 
 
 @pytest.mark.slow
-def test_to_parquet_engine(datapath):
-    msg = r".*DataFrame.to_parquet\(\): only pyarrow engine supported.*"
-
-    @bodo.jit
-    def impl(df):
-        df.to_parquet("test.pq", engine="fastparquet")
-
-    df = pd.DataFrame({"A": np.arange(10)})
-    with pytest.raises(BodoError, match=msg):
-        bodo.jit(lambda f: impl(df))(df)
-
-
-@pytest.mark.slow
-def test_to_parquet_row_group_size(datapath):
-    msg = r".*to_parquet\(\): row_group_size must be integer.*"
-
-    @bodo.jit
-    def impl(df):
-        df.to_parquet("test.pq", row_group_size="3")
-
-    df = pd.DataFrame({"A": np.arange(10)})
-    with pytest.raises(BodoError, match=msg):
-        bodo.jit(lambda f: impl(df))(df)
-
-
-@pytest.mark.slow
-def test_to_pq_multiIdx_errcheck(memory_leak_check):
-    """Test unsupported to_parquet with MultiIndexType"""
-    arrays = [
-        ["bar", "bar", "baz", "baz", "foo", "foo", "qux", "qux"],
-        ["one", "two", "one", "two", "one", "two", "one", "two"],
-    ]
-    tuples = list(zip(*arrays))
-    idx = pd.MultiIndex.from_tuples(tuples, names=["first", "second"])
-    df = pd.DataFrame(np.random.randn(8, 2), index=idx, columns=["A", "B"])
-
-    def impl(df):
-        df.to_parquet("multi_idx_parquet.pq")
-
-    with pytest.raises(BodoError, match="to_parquet: MultiIndex not supported yet"):
-        bodo.jit(impl)(df)
-
-
-@pytest.mark.slow
 def test_csv_escapechar_value():
     """
     Test read_csv(): 'escapechar' wrong value or type
@@ -1083,29 +824,6 @@ def test_csv_escapechar_value():
         bodo.jit(impl3)()
     with pytest.raises(BodoError, match="newline as 'escapechar' is not supported"):
         bodo.jit(impl4)()
-
-
-@pytest.mark.slow
-def test_to_parquet_missing_arg(memory_leak_check):
-    """test error raise when user didn't provide all required arguments
-    in Bodo supported method"""
-
-    # Save default developer mode value
-    default_mode = numba.core.config.DEVELOPER_MODE
-    # Test as a user
-    numba.core.config.DEVELOPER_MODE = 0
-
-    def impl1():
-        df = pd.DataFrame({"A": np.arange(10)})
-        df.to_parquet()
-
-    with pytest.raises(
-        numba.core.errors.TypingError, match="missing a required argument"
-    ):
-        bodo.jit(impl1)()
-
-    # Reset developer mode
-    numba.core.config.DEVELOPER_MODE = default_mode
 
 
 @pytest.mark.slow
@@ -1243,6 +961,7 @@ def test_read_csv_sample_nrows_error(datapath):
 
 
 # TODO: fix memory_leak_check
+@pytest_mark_one_rank
 @pytest.mark.slow
 def test_read_json_sample_nrows_error(datapath):
     """Test read_json with sample_nrows argument where data type change
@@ -1254,10 +973,7 @@ def test_read_json_sample_nrows_error(datapath):
         memory_leak_check (fixture function): check memory leak in the test.
 
     """
-    # run only on 1 processor
-    # TODO: [BE-3260]
-    if bodo.get_size() != 1:
-        return
+    # Enable multiple processes: [BE-3260]
     fname = datapath("large_data.json")
 
     def impl1():

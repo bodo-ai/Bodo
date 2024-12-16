@@ -1,21 +1,39 @@
-// Copyright (C) 2019 Bodo Inc. All rights reserved.
 #include <Python.h>
-#include <arrow/io/api.h>
 #include <filesystem>
 #include <iostream>
 #include <sstream>
 #include <string>
 
-#include "../libs/_bodo_common.h"
-#include "_fs_io.h"
-#include "arrow/filesystem/filesystem.h"
-#include "arrow/filesystem/s3fs.h"
-#include "arrow/result.h"
-#include "mpi.h"
+#include <arrow/filesystem/azurefs.h>
+#include <arrow/filesystem/filesystem.h>
+#include <arrow/filesystem/localfs.h>
+#include <arrow/filesystem/s3fs.h>
+#include <arrow/io/api.h>
+#include <arrow/result.h>
+#include <arrow/util/uri.h>
+#include <mpi.h>
 
-// decimal_mpi_type declared in _distributed.h as extern has
-// to be defined in each extension module that includes it
-MPI_Datatype decimal_mpi_type = MPI_DATATYPE_NULL;
+#include "../libs/_distributed.h"
+#include "_fs_io.h"
+#include "arrow_compat.h"
+
+// Helper to ensure that the pyarrow wrappers have been imported.
+// We use a static variable to make sure we only do the import once.
+static bool imported_pyarrow_wrappers = false;
+static void ensure_pa_wrappers_imported() {
+#define CHECK(expr, msg)                                        \
+    if (expr) {                                                 \
+        throw std::runtime_error(std::string("fs_io: ") + msg); \
+    }
+    if (imported_pyarrow_wrappers) {
+        return;
+    }
+    CHECK(arrow::py::import_pyarrow_wrappers(),
+          "importing pyarrow_wrappers failed!");
+    imported_pyarrow_wrappers = true;
+
+#undef CHECK
+}
 
 // if expr is not true, form an err msg and raise a
 // runtime_error with it
@@ -35,21 +53,10 @@ MPI_Datatype decimal_mpi_type = MPI_DATATYPE_NULL;
         return;                                                            \
     }
 
-#define CHECK_MPI(ierr, err_class, err_string, err_len, file_name)         \
-    if (ierr != 0) {                                                       \
-        MPI_Error_class(ierr, &err_class);                                 \
-        MPI_Error_string(ierr, err_string, err_len);                       \
-        printf("Error %s\n", err_string);                                  \
-        fflush(stdout);                                                    \
-        Bodo_PyErr_SetString(                                              \
-            PyExc_RuntimeError,                                            \
-            ("File write error: " + std::to_string(err_class) + file_name) \
-                .c_str());                                                 \
-    }
-
 // if status of arrow::Result is not ok, form an err msg and raise a
 // runtime_error with it. If it is ok, get value using ValueOrDie
 // and assign it to lhs using std::move
+#undef CHECK_ARROW_AND_ASSIGN
 #define CHECK_ARROW_AND_ASSIGN(res, msg, lhs, file_type)                   \
     if (!(res.status().ok())) {                                            \
         std::string err_msg = std::string("Error in arrow ") + file_type + \
@@ -79,15 +86,16 @@ void extract_fs_dir_path(const char *_path_name, bool is_parallel,
                          const std::string &prefix, const std::string &suffix,
                          int myrank, int num_ranks, Bodo_Fs::FsEnum *fs_option,
                          std::string *dirname, std::string *fname,
-                         std::string *orig_path, std::string *path_name) {
+                         std::string *orig_path, std::string *path_name,
+                         bool force_hdfs) {
     *path_name = std::string(_path_name);
 
     if (strncmp(_path_name, "s3://", 5) == 0) {
         *fs_option = Bodo_Fs::s3;
         *path_name = std::string(_path_name + 5);  // remove s3://
-    } else if (strncmp(_path_name, "abfs://", 7) == 0 ||
-               strncmp(_path_name, "abfss://", 8) == 0) {
-        *fs_option = Bodo_Fs::hdfs;
+    } else if ((strncmp(_path_name, "abfs://", 7) == 0 ||
+                strncmp(_path_name, "abfss://", 8) == 0)) {
+        *fs_option = force_hdfs ? Bodo_Fs::hdfs : Bodo_Fs::abfs;
     } else if (strncmp(_path_name, "hdfs://", 7) == 0) {
         *fs_option = Bodo_Fs::hdfs;
         arrow::Result<std::shared_ptr<arrow::fs::FileSystem>> tempRes =
@@ -113,18 +121,62 @@ void extract_fs_dir_path(const char *_path_name, bool is_parallel,
     }
 }
 
+std::pair<std::shared_ptr<arrow::fs::FileSystem>, std::string>
+get_reader_file_system(std::string file_path, std::string s3_bucket_region,
+                       bool s3fs_anon) {
+    bool is_hdfs = file_path.starts_with("hdfs://") ||
+                   file_path.starts_with("abfs://") ||
+                   file_path.starts_with("abfss://");
+    bool is_s3 = file_path.starts_with("s3://");
+    std::shared_ptr<arrow::fs::FileSystem> fs;
+    if (is_s3 || is_hdfs) {
+        arrow::util::Uri uri;
+        (void)uri.Parse(file_path);
+        PyObject *fs_mod = nullptr;
+        PyObject *func_obj = nullptr;
+        if (is_s3) {
+            import_fs_module(Bodo_Fs::s3, "", fs_mod);
+            get_get_fs_pyobject(Bodo_Fs::s3, "", fs_mod, func_obj);
+            s3_get_fs_t s3_get_fs =
+                (s3_get_fs_t)PyNumber_AsSsize_t(func_obj, nullptr);
+            std::shared_ptr<arrow::fs::S3FileSystem> s3_fs;
+            s3_get_fs(&s3_fs, s3_bucket_region, s3fs_anon);
+            fs = s3_fs;
+            // remove s3:// prefix from file_path
+            file_path = file_path.substr(strlen("s3://"));
+        } else if (is_hdfs) {
+            import_fs_module(Bodo_Fs::hdfs, "", fs_mod);
+            get_get_fs_pyobject(Bodo_Fs::hdfs, "", fs_mod, func_obj);
+            hdfs_get_fs_t hdfs_get_fs =
+                (hdfs_get_fs_t)PyNumber_AsSsize_t(func_obj, nullptr);
+            std::shared_ptr<::arrow::fs::HadoopFileSystem> hdfs_fs;
+            hdfs_get_fs(file_path, &hdfs_fs);
+            fs = hdfs_fs;
+            // remove hdfs://host:port prefix from file_path
+            file_path = uri.path();
+        }
+        Py_DECREF(fs_mod);
+        Py_DECREF(func_obj);
+    } else {
+        fs = std::make_shared<arrow::fs::LocalFileSystem>();
+    }
+    return std::pair(fs, file_path);
+}
+
 void import_fs_module(Bodo_Fs::FsEnum fs_option, const std::string &file_type,
                       PyObject *&f_mod) {
+    PyObject *ext_mod = PyImport_ImportModule("bodo.ext");
     if (fs_option == Bodo_Fs::s3) {
-        f_mod = PyImport_ImportModule("bodo.io.s3_reader");
-        CHECK(f_mod, "importing bodo.io.s3_reader module failed", file_type);
+        f_mod = PyObject_GetAttrString(ext_mod, "s3_reader");
+        CHECK(f_mod, "importing bodo.ext.s3_reader module failed", file_type);
     } else if (fs_option == Bodo_Fs::gcs) {
-        f_mod = PyImport_ImportModule("bodo.io.gcs_reader");
-        CHECK(f_mod, "importing bodo.io.gcs_reader module failed", file_type);
+        f_mod = PyObject_GetAttrString(ext_mod, "gcs_reader");
+        CHECK(f_mod, "importing bodo.ext.gcs_reader module failed", file_type);
     } else if (fs_option == Bodo_Fs::hdfs) {
-        f_mod = PyImport_ImportModule("bodo.io.hdfs_reader");
-        CHECK(f_mod, "importing bodo.io.hdfs_reader module failed", file_type);
+        f_mod = PyObject_GetAttrString(ext_mod, "hdfs_reader");
+        CHECK(f_mod, "importing bodo.ext.hdfs_reader module failed", file_type);
     }
+    Py_DECREF(ext_mod);
 }
 
 void get_fs_reader_pyobject(Bodo_Fs::FsEnum fs_option,
@@ -133,6 +185,9 @@ void get_fs_reader_pyobject(Bodo_Fs::FsEnum fs_option,
     if (fs_option == Bodo_Fs::s3) {
         func_obj = PyObject_GetAttrString(f_mod, "init_s3_reader");
         CHECK(func_obj, "getting s3_reader func_obj failed", file_type);
+    } else if (fs_option == Bodo_Fs::gcs) {
+        func_obj = PyObject_GetAttrString(f_mod, "init_gcs_reader");
+        CHECK(func_obj, "getting gcs_reader func_obj failed", file_type);
     } else if (fs_option == Bodo_Fs::hdfs) {
         func_obj = PyObject_GetAttrString(f_mod, "init_hdfs_reader");
         CHECK(func_obj, "getting hdfs_reader func_obj failed", file_type);
@@ -208,14 +263,17 @@ void create_dir_posix(int myrank, std::string &dirname,
     // create output directory
     int error = 0;
     if (std::filesystem::exists(dirname)) {
-        if (!std::filesystem::is_directory(dirname)) error = 1;
+        if (!std::filesystem::is_directory(dirname))
+            error = 1;
     } else {
         // for the parallel case, 'dirname' is the directory where the
         // different parts of the distributed table are stored (each as
         // a file)
         std::filesystem::create_directories(dirname);
     }
-    MPI_Allreduce(MPI_IN_PLACE, &error, 1, MPI_INT, MPI_LOR, MPI_COMM_WORLD);
+    CHECK_MPI(MPI_Allreduce(MPI_IN_PLACE, &error, 1, MPI_INT, MPI_LOR,
+                            MPI_COMM_WORLD),
+              "create_dir_posix: MPI error on MPI_Allreduce:");
     if (error) {
         if (myrank == 0)
             std::cerr << "Bodo parquet write ERROR: a process reports "
@@ -233,7 +291,7 @@ void create_dir_hdfs(int myrank, std::string &dirname, std::string &orig_path,
     import_fs_module(Bodo_Fs::hdfs, file_type, f_mod);
     get_get_fs_pyobject(Bodo_Fs::hdfs, file_type, f_mod, hdfs_func_obj);
     hdfs_get_fs_t hdfs_get_fs =
-        (hdfs_get_fs_t)PyNumber_AsSsize_t(hdfs_func_obj, NULL);
+        (hdfs_get_fs_t)PyNumber_AsSsize_t(hdfs_func_obj, nullptr);
     arrow::Status status;
     std::shared_ptr<::arrow::fs::HadoopFileSystem> hdfs_fs;
     hdfs_get_fs(orig_path, &hdfs_fs);
@@ -241,7 +299,8 @@ void create_dir_hdfs(int myrank, std::string &dirname, std::string &orig_path,
         status = hdfs_fs->CreateDir(dirname);
         CHECK_ARROW(status, "Hdfs::MakeDirectory", file_type);
     }
-    MPI_Barrier(MPI_COMM_WORLD);
+    CHECK_MPI(MPI_Barrier(MPI_COMM_WORLD),
+              "create_dir_hdfs: MPI error on MPI_Barrier:");
     Py_DECREF(f_mod);
     Py_DECREF(hdfs_func_obj);
 }
@@ -262,92 +321,140 @@ void open_outstream(Bodo_Fs::FsEnum fs_option, bool is_parallel,
                     std::shared_ptr<::arrow::io::OutputStream> *out_stream,
                     const std::string &bucket_region) {
     PyObject *f_mod = nullptr;
-    if (fs_option == Bodo_Fs::posix) {
-        if (file_type == "csv") {
-            // csv does not need to open_outstream for posix
-            // in fact, this function, open_outstream,
-            // should never be called in such case
+    switch (fs_option) {
+        case Bodo_Fs::posix: {
+            if (file_type == "csv") {
+                // csv does not need to open_outstream for posix
+                // in fact, this function, open_outstream,
+                // should never be called in such case
+                return;
+            }
+            if (is_parallel) {
+                // assumes that the directory has already been created
+                std::filesystem::path out_path(dirname);
+                out_path /= fname;  // append file name to output path
+                posix_open_file_outstream(file_type, out_path.string(),
+                                          out_stream);
+            } else {
+                posix_open_file_outstream(file_type, fname, out_stream);
+            }
             return;
-        }
-        if (is_parallel) {
-            // assumes that the directory has already been created
-            std::filesystem::path out_path(dirname);
-            out_path /= fname;  // append file name to output path
-            posix_open_file_outstream(file_type, out_path.string(), out_stream);
-        } else {
-            posix_open_file_outstream(file_type, fname, out_stream);
-        }
-        return;
-    } else if (fs_option == Bodo_Fs::s3) {
-        // get s3_get_fs function
-        PyObject *s3_func_obj = nullptr;
-        import_fs_module(fs_option, file_type, f_mod);
-        get_get_fs_pyobject(fs_option, file_type, f_mod, s3_func_obj);
-        s3_get_fs_t s3_get_fs =
-            (s3_get_fs_t)PyNumber_AsSsize_t(s3_func_obj, NULL);
+        } break;
+        case Bodo_Fs::s3: {
+            // get s3_get_fs function
+            PyObject *s3_func_obj = nullptr;
+            import_fs_module(fs_option, file_type, f_mod);
+            get_get_fs_pyobject(fs_option, file_type, f_mod, s3_func_obj);
+            s3_get_fs_t s3_get_fs =
+                (s3_get_fs_t)PyNumber_AsSsize_t(s3_func_obj, nullptr);
 
-        s3_get_fs(&s3_fs, bucket_region, false);
-        if (is_parallel) {
-            std::filesystem::path out_path(dirname);
-            out_path /= fname;  // append file name to output path
-            open_file_outstream(fs_option, file_type, out_path.string(), s3_fs,
-                                NULL, out_stream);
-        } else {
-            open_file_outstream(fs_option, file_type, fname, s3_fs, NULL,
-                                out_stream);
-        }
-
-        Py_DECREF(f_mod);
-        Py_DECREF(s3_func_obj);
-        return;
-    } else if (fs_option == Bodo_Fs::hdfs) {
-        // get hdfs_get_fs function
-        PyObject *hdfs_func_obj = nullptr;
-        import_fs_module(fs_option, file_type, f_mod);
-        get_get_fs_pyobject(fs_option, file_type, f_mod, hdfs_func_obj);
-        hdfs_get_fs_t hdfs_get_fs =
-            (hdfs_get_fs_t)PyNumber_AsSsize_t(hdfs_func_obj, NULL);
-
-        std::shared_ptr<::arrow::io::HdfsOutputStream> hdfs_out_stream;
-        arrow::Status status;
-        std::shared_ptr<::arrow::fs::HadoopFileSystem> hdfs_fs;
-        hdfs_get_fs(orig_path, &hdfs_fs);
-        if (is_parallel) {
-            // assumes that the directory has already been created
-            std::filesystem::path out_path(dirname);
-            out_path /= fname;
-            open_file_outstream(fs_option, file_type, out_path.string(), NULL,
-                                hdfs_fs, out_stream);
-        } else {
-            open_file_outstream(fs_option, file_type, fname, NULL, hdfs_fs,
-                                out_stream);
-        }
-
-        Py_DECREF(f_mod);
-        Py_DECREF(hdfs_func_obj);
-        return;
-    } else if (fs_option == Bodo_Fs::gcs) {
-        PyObject *gcs_func_obj = nullptr;
-        import_fs_module(fs_option, file_type, f_mod);
-        get_get_fs_pyobject(fs_option, file_type, f_mod, gcs_func_obj);
-        gcs_get_fs_t gcs_get_fs =
-            (gcs_get_fs_t)PyNumber_AsSsize_t(gcs_func_obj, NULL);
-        std::shared_ptr<::arrow::py::fs::PyFileSystem> fs;
-        gcs_get_fs(&fs);
-        if (is_parallel) {
-            std::filesystem::path out_path(dirname);
-            out_path /= fname;
-            open_file_outstream_gcs(fs_option, file_type, out_path.string(), fs,
+            s3_get_fs(&s3_fs, bucket_region, false);
+            if (is_parallel) {
+                std::filesystem::path out_path(dirname);
+                out_path /= fname;  // append file name to output path
+                open_file_outstream(fs_option, file_type, out_path.string(),
+                                    s3_fs, nullptr, out_stream);
+            } else {
+                open_file_outstream(fs_option, file_type, fname, s3_fs, nullptr,
                                     out_stream);
-        } else {
-            open_file_outstream_gcs(fs_option, file_type, fname, fs,
-                                    out_stream);
-        }
+            }
 
-        Py_DECREF(f_mod);
-        Py_DECREF(gcs_func_obj);
-    } else {
-        throw std::runtime_error("open output stream: unrecognized filesystem");
+            Py_DECREF(f_mod);
+            Py_DECREF(s3_func_obj);
+            return;
+        } break;
+        case Bodo_Fs::hdfs: {
+            // get hdfs_get_fs function
+            PyObject *hdfs_func_obj = nullptr;
+            import_fs_module(fs_option, file_type, f_mod);
+            get_get_fs_pyobject(fs_option, file_type, f_mod, hdfs_func_obj);
+            hdfs_get_fs_t hdfs_get_fs =
+                (hdfs_get_fs_t)PyNumber_AsSsize_t(hdfs_func_obj, nullptr);
+
+            std::shared_ptr<::arrow::io::HdfsOutputStream> hdfs_out_stream;
+            arrow::Status status;
+            // TODO: Do I need to make this Buffer Pool aware?
+            std::shared_ptr<::arrow::fs::HadoopFileSystem> hdfs_fs;
+            hdfs_get_fs(orig_path, &hdfs_fs);
+            if (is_parallel) {
+                // assumes that the directory has already been created
+                std::filesystem::path out_path(dirname);
+                out_path /= fname;
+                open_file_outstream(fs_option, file_type, out_path.string(),
+                                    nullptr, hdfs_fs, out_stream);
+            } else {
+                open_file_outstream(fs_option, file_type, fname, nullptr,
+                                    hdfs_fs, out_stream);
+            }
+
+            Py_DECREF(f_mod);
+            Py_DECREF(hdfs_func_obj);
+            return;
+        } break;
+        case Bodo_Fs::abfs: {
+            ensure_pa_wrappers_imported();
+
+            std::string path =
+                is_parallel ? (std::filesystem::path(dirname) / fname).string()
+                            : fname;
+            arrow::fs::AzureOptions opts;
+            arrow::Result<arrow::fs::AzureOptions> opts_res =
+                arrow::fs::AzureOptions::FromUri(path, &path);
+            CHECK_ARROW_AND_ASSIGN(opts_res, "AzureOptions::FromUri", opts,
+                                   file_type);
+
+            PyObject *fs_io_mod = PyImport_ImportModule("bodo.io.fs_io");
+            PyObject *abfs_get_fs =
+                PyObject_GetAttrString(fs_io_mod, "abfs_get_fs");
+            PyObject *storage_options = PyDict_New();
+            if (opts.account_name != "") {
+                PyObject *storage_account_py_str =
+                    PyUnicode_FromString(opts.account_name.c_str());
+                PyDict_SetItemString(storage_options, "account_name",
+                                     storage_account_py_str);
+                Py_DECREF(storage_account_py_str);
+            }
+            PyObject *fs_pyobject =
+                PyObject_CallFunction(abfs_get_fs, "O", storage_options);
+            std::shared_ptr<::arrow::fs::FileSystem> fs;
+            CHECK_ARROW_AND_ASSIGN(arrow::py::unwrap_filesystem(fs_pyobject),
+                                   "AzureFileSystem::unwrap_filesystem", fs,
+                                   file_type);
+
+            Py_DECREF(fs_pyobject);
+            Py_DECREF(storage_options);
+            Py_DECREF(abfs_get_fs);
+            Py_DECREF(fs_io_mod);
+            arrow::Result<std::shared_ptr<arrow::io::OutputStream>> result =
+                fs->OpenOutputStream(path);
+            CHECK_ARROW_AND_ASSIGN(result, "AzureFileSystem::OpenOutputStream",
+                                   *out_stream, file_type)
+        } break;
+        case Bodo_Fs::gcs: {
+            PyObject *gcs_func_obj = nullptr;
+            import_fs_module(fs_option, file_type, f_mod);
+            get_get_fs_pyobject(fs_option, file_type, f_mod, gcs_func_obj);
+            gcs_get_fs_t gcs_get_fs =
+                (gcs_get_fs_t)PyNumber_AsSsize_t(gcs_func_obj, nullptr);
+            std::shared_ptr<::arrow::py::fs::PyFileSystem> fs;
+            gcs_get_fs(&fs);
+            if (is_parallel) {
+                std::filesystem::path out_path(dirname);
+                out_path /= fname;
+                open_file_outstream_gcs(fs_option, file_type, out_path.string(),
+                                        fs, out_stream);
+            } else {
+                open_file_outstream_gcs(fs_option, file_type, fname, fs,
+                                        out_stream);
+            }
+
+            Py_DECREF(f_mod);
+            Py_DECREF(gcs_func_obj);
+        } break;
+        default: {
+            throw std::runtime_error(
+                "open output stream: unrecognized filesystem");
+        }
     }
 }
 
@@ -356,7 +463,7 @@ void parallel_in_order_write(
     const std::string &fname, char *buff, int64_t count, int64_t elem_size,
     std::shared_ptr<arrow::fs::S3FileSystem> s3_fs,
     std::shared_ptr<::arrow::fs::HadoopFileSystem> hdfs_fs) {
-    int myrank, num_ranks, ierr, err_len, err_class;
+    int myrank, num_ranks;
     std::shared_ptr<::arrow::io::OutputStream> out_stream;
 
     int token_tag = 0;
@@ -364,9 +471,8 @@ void parallel_in_order_write(
     int64_t buff_size = count * elem_size;
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
     MPI_Comm_size(MPI_COMM_WORLD, &num_ranks);
-    char err_string[MPI_MAX_ERROR_STRING];
-    err_string[MPI_MAX_ERROR_STRING - 1] = '\0';
-    MPI_Errhandler_set(MPI_COMM_WORLD, MPI_ERRORS_RETURN);
+    CHECK_MPI(MPI_Errhandler_set(MPI_COMM_WORLD, MPI_ERRORS_RETURN),
+              "parallel_in_order_write: MPI error on MPI_Errhandler_set:");
 
     if (fs_option == Bodo_Fs::s3) {
         int size_tag = 1;
@@ -382,14 +488,15 @@ void parallel_in_order_write(
         // then send buff to rank 0
         if (myrank != 0) {
             // first receives signal from rank 0
-            MPI_Recv(&token, 1, MPI_INT, 0, token_tag, MPI_COMM_WORLD,
-                     MPI_STATUS_IGNORE);
+            CHECK_MPI(MPI_Recv(&token, 1, MPI_INT, 0, token_tag, MPI_COMM_WORLD,
+                               MPI_STATUS_IGNORE),
+                      "parallel_in_order_write: MPI error on MPI_Recv:");
             do {
                 // Always send complete in case our rank has no data.
                 complete = sent_size >= buff_size;
-                ierr = MPI_Send(&complete, 1, MPI_INT, 0, complete_tag,
-                                MPI_COMM_WORLD);
-                CHECK_MPI(ierr, err_class, err_string, &err_len, fname);
+                CHECK_MPI(MPI_Send(&complete, 1, MPI_INT, 0, complete_tag,
+                                   MPI_COMM_WORLD),
+                          "parallel_in_order_write: MPI error on MPI_Send:");
                 if (!complete) {
                     // send buff in chunks no bigger than INT_MAX
                     if (buff_size - sent_size > INT_MAX) {
@@ -398,20 +505,21 @@ void parallel_in_order_write(
                         send_size = buff_size - sent_size;
                     }
                     // send chunk size
-                    ierr = MPI_Send(&send_size, 1, MPI_INT, 0, size_tag,
-                                    MPI_COMM_WORLD);
-
-                    CHECK_MPI(ierr, err_class, err_string, &err_len, fname);
+                    CHECK_MPI(
+                        MPI_Send(&send_size, 1, MPI_INT, 0, size_tag,
+                                 MPI_COMM_WORLD),
+                        "parallel_in_order_write: MPI error on MPI_Send:");
                     // send chunk data;
-                    ierr = MPI_Send(buff + sent_size, send_size, MPI_CHAR, 0,
-                                    data_tag, MPI_COMM_WORLD);
-                    CHECK_MPI(ierr, err_class, err_string, &err_len, fname);
+                    CHECK_MPI(
+                        MPI_Send(buff + sent_size, send_size, MPI_CHAR, 0,
+                                 data_tag, MPI_COMM_WORLD),
+                        "parallel_in_order_write: MPI error on MPI_Send:");
                     sent_size += send_size;
                 }
             } while (!complete);
         } else {
             // 0 rank open outstream first
-            open_file_outstream(Bodo_Fs::s3, "", fname, s3_fs, NULL,
+            open_file_outstream(Bodo_Fs::s3, "", fname, s3_fs, nullptr,
                                 &out_stream);
             // 0 rank use vector `recv_buffer` to store buff
             std::vector<char> recv_buffer;
@@ -426,26 +534,27 @@ void parallel_in_order_write(
                 } else {
                     do {
                         // receive whether the entire buff is received
-                        ierr =
+                        CHECK_MPI(
                             MPI_Recv(&complete, 1, MPI_INT, rank, complete_tag,
-                                     MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-                        CHECK_MPI(ierr, err_class, err_string, &err_len, fname);
+                                     MPI_COMM_WORLD, MPI_STATUS_IGNORE),
+                            "parallel_in_order_write: MPI error on MPI_Recv:");
                         if (!complete) {
                             // first receive size of incoming data
-                            ierr = MPI_Recv(&recv_buff_size, 1, MPI_INT, rank,
-                                            size_tag, MPI_COMM_WORLD,
-                                            MPI_STATUS_IGNORE);
-                            CHECK_MPI(ierr, err_class, err_string, &err_len,
-                                      fname);
+                            CHECK_MPI(MPI_Recv(&recv_buff_size, 1, MPI_INT,
+                                               rank, size_tag, MPI_COMM_WORLD,
+                                               MPI_STATUS_IGNORE),
+                                      "parallel_in_order_write: MPI error on "
+                                      "MPI_Recv:");
                             // resize recv_buffer to fit incoming data
                             recv_buffer.resize(recv_buff_size);
                             // receive buffer data
 
-                            ierr = MPI_Recv(&recv_buffer[0], recv_buff_size,
-                                            MPI_CHAR, rank, data_tag,
-                                            MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-                            CHECK_MPI(ierr, err_class, err_string, &err_len,
-                                      fname);
+                            CHECK_MPI(
+                                MPI_Recv(&recv_buffer[0], recv_buff_size,
+                                         MPI_CHAR, rank, data_tag,
+                                         MPI_COMM_WORLD, MPI_STATUS_IGNORE),
+                                "parallel_in_order_write: MPI error on "
+                                "MPI_Recv:");
                             CHECK_ARROW(out_stream->Write(recv_buffer.data(),
                                                           recv_buff_size),
                                         "arrow::io::S3OutputStream::Write",
@@ -454,9 +563,10 @@ void parallel_in_order_write(
                     } while (!complete);
                 }
                 if (rank != num_ranks - 1) {
-                    ierr = MPI_Send(&token, 1, MPI_INT, rank + 1, token_tag,
-                                    MPI_COMM_WORLD);
-                    CHECK_MPI(ierr, err_class, err_string, &err_len, fname);
+                    CHECK_MPI(
+                        MPI_Send(&token, 1, MPI_INT, rank + 1, token_tag,
+                                 MPI_COMM_WORLD),
+                        "parallel_in_order_write: MPI error on MPI_Send:");
                 }
             }
             CHECK_ARROW(out_stream->Close(), "arrow::io::S3OutputStream::Close",
@@ -466,13 +576,13 @@ void parallel_in_order_write(
         // all but the first rank receive message first
         // then open append stream
         if (myrank != 0) {
-            ierr = MPI_Recv(&token, 1, MPI_INT, myrank - 1, token_tag,
-                            MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-            CHECK_MPI(ierr, err_class, err_string, &err_len, fname);
+            CHECK_MPI(MPI_Recv(&token, 1, MPI_INT, myrank - 1, token_tag,
+                               MPI_COMM_WORLD, MPI_STATUS_IGNORE),
+                      "parallel_in_order_write: MPI error on MPI_Recv:");
             open_file_appendstream(file_type, fname, hdfs_fs, &out_stream);
         } else {  // 0 rank open outstream instead
-            open_file_outstream(Bodo_Fs::hdfs, file_type, fname, NULL, hdfs_fs,
-                                &out_stream);
+            open_file_outstream(Bodo_Fs::hdfs, file_type, fname, nullptr,
+                                hdfs_fs, &out_stream);
         }
 
         // all ranks write & close stream
@@ -483,10 +593,11 @@ void parallel_in_order_write(
 
         // all but the last rank send message
         if (myrank != num_ranks - 1) {
-            ierr = MPI_Send(&token, 1, MPI_INT, myrank + 1, token_tag,
-                            MPI_COMM_WORLD);
-            CHECK_MPI(ierr, err_class, err_string, &err_len, fname);
+            CHECK_MPI(MPI_Send(&token, 1, MPI_INT, myrank + 1, token_tag,
+                               MPI_COMM_WORLD),
+                      "parallel_in_order_write: MPI error on MPI_Send:");
         }
     }
-    MPI_Barrier(MPI_COMM_WORLD);
+    CHECK_MPI(MPI_Barrier(MPI_COMM_WORLD),
+              "parallel_in_order_write: MPI error on MPI_Barrier:");
 }

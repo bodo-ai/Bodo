@@ -1,5 +1,3 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
-
 import re
 from decimal import Decimal
 
@@ -8,7 +6,10 @@ import pandas as pd
 import pytest
 
 import bodo
+from bodo.tests.utils import pytest_pandas
 from bodo.utils.typing import BodoError
+
+pytestmark = pytest_pandas
 
 # ------------------------------ df.groupby() ------------------------------ #
 
@@ -318,7 +319,9 @@ def test_groupby_agg_funcs_udf(memory_leak_check):
         return df.groupby(by=["A"]).B.agg((np.sum, np.sum))
 
     df = pd.DataFrame({"A": [1, 2, 2], "B": [1, 2, 2], "C": ["aba", "aba", "aba"]})
-    with pytest.raises(BodoError, match=".* 'func' must be user defined function"):
+    with pytest.raises(
+        BodoError, match="unsupported numpy method for use as an aggregate function"
+    ):
         bodo.jit(impl)(df)
 
 
@@ -373,7 +376,9 @@ def test_groupby_aggregate_funcs_udf(memory_leak_check):
         return df.groupby(by=["A"]).B.aggregate((np.sum, np.sum))
 
     df = pd.DataFrame({"A": [1, 2, 2], "B": [1, 2, 2], "C": ["aba", "aba", "aba"]})
-    with pytest.raises(BodoError, match=".* 'func' must be user defined function"):
+    with pytest.raises(
+        BodoError, match="unsupported numpy method for use as an aggregate function"
+    ):
         bodo.jit(impl)(df)
 
 
@@ -667,7 +672,7 @@ def test_first_args(memory_leak_check):
     df_bool = pd.DataFrame(
         {
             "A": [16, 1, 1, 1, 16, 16, 1, 40],
-            "B": [True, np.nan, False, True, np.nan, False, False, True],
+            "B": [True, None, False, True, None, False, False, True],
             "C": [True, True, False, True, True, False, False, False],
         }
     )
@@ -692,7 +697,7 @@ def test_last_args(memory_leak_check):
     df_bool = pd.DataFrame(
         {
             "A": [16, 1, 1, 1, 16, 16, 1, 40],
-            "B": [True, np.nan, False, True, np.nan, False, False, True],
+            "B": [True, None, False, True, None, False, False, True],
             "C": [True, True, False, True, True, False, False, False],
         }
     )
@@ -703,14 +708,10 @@ def test_last_args(memory_leak_check):
 
 
 @pytest.mark.slow
-def test_first_last_unsupported_types(memory_leak_check):
-    """Test first/last with unsupported Bodo types"""
+def test_last_unsupported_types(memory_leak_check):
+    """Test last with unsupported Bodo types"""
 
-    def impl1(df):
-        A = df.groupby("A").first()
-        return A
-
-    def impl2(df):
+    def impl(df):
         A = df.groupby("A").last()
         return A
 
@@ -733,18 +734,9 @@ def test_first_last_unsupported_types(memory_leak_check):
         }
     )
     err_msg = "not supported in groupby"
-    with pytest.raises(BodoError, match=err_msg):
-        bodo.jit(impl1)(df_list_int)
-    with pytest.raises(BodoError, match=err_msg):
-        bodo.jit(impl2)(df_list_int)
-    with pytest.raises(BodoError, match=err_msg):
-        bodo.jit(impl1)(df_list_float)
-    with pytest.raises(BodoError, match=err_msg):
-        bodo.jit(impl2)(df_list_float)
-    with pytest.raises(BodoError, match=err_msg):
-        bodo.jit(impl1)(df_list_bool)
-    with pytest.raises(BodoError, match=err_msg):
-        bodo.jit(impl2)(df_list_bool)
+    for df in [df_list_int, df_list_bool, df_list_float]:
+        with pytest.raises(BodoError, match=err_msg):
+            bodo.jit(impl)(df)
 
 
 # ------------------------------ df.groupby().mean()/median()------------------------------ #
@@ -828,7 +820,7 @@ def test_sum_args(memory_leak_check):
     df_bool = pd.DataFrame(
         {
             "A": [16, 1, 1, 1, 16, 16, 1, 40],
-            "B": [True, np.nan, False, True, np.nan, False, False, True],
+            "B": [True, None, False, True, None, False, False, True],
             "C": [True, True, False, True, True, False, False, False],
         }
     )
@@ -861,7 +853,7 @@ def test_prod_args(memory_leak_check):
     df_bool = pd.DataFrame(
         {
             "A": [16, 1, 1, 1, 16, 16, 1, 40],
-            "B": [True, np.nan, False, True, np.nan, False, False, True],
+            "B": [True, None, False, True, None, False, False, True],
             "C": [True, True, False, True, True, False, False, False],
         }
     )
@@ -925,7 +917,7 @@ def test_prod_args(memory_leak_check):
         pd.DataFrame(
             {
                 "A": [16, 1, 1, 1, 16, 16, 1, 40],
-                "B": [True, np.nan, False, True, np.nan, False, False, True],
+                "B": [True, None, False, True, None, False, False, True],
                 "C": [True, True, False, True, True, False, False, True],
             }
         ),
@@ -993,7 +985,7 @@ def test_mean_median_unsupported_types(df, memory_leak_check):
                         Decimal("1.6"),
                         Decimal("-0.2"),
                         Decimal("44.2"),
-                        np.nan,
+                        None,
                         Decimal("0"),
                     ]
                 ),
@@ -1045,8 +1037,10 @@ def test_sum_prod_unsupported_types(df, memory_leak_check):
 
     err_msg = "not supported in groupby"
 
-    with pytest.raises(BodoError, match=err_msg):
-        bodo.jit(impl1)(df)
+    # Groupby sum of decimal is supported now
+    if not isinstance(df.iloc[0, 1], Decimal):
+        with pytest.raises(BodoError, match=err_msg):
+            bodo.jit(impl1)(df)
 
     with pytest.raises(BodoError, match=err_msg):
         bodo.jit(impl2)(df)
@@ -1076,7 +1070,7 @@ def test_min_args(memory_leak_check):
     df_bool = pd.DataFrame(
         {
             "A": [16, 1, 1, 1, 16, 16, 1, 40],
-            "B": [True, np.nan, False, True, np.nan, False, False, True],
+            "B": [True, None, False, True, None, False, False, True],
             "C": [True, True, False, True, True, False, False, False],
         }
     )
@@ -1110,7 +1104,7 @@ def test_max_args(memory_leak_check):
     df_bool = pd.DataFrame(
         {
             "A": [16, 1, 1, 1, 16, 16, 1, 40],
-            "B": [True, np.nan, False, True, np.nan, False, False, True],
+            "B": [True, None, False, True, None, False, False, True],
             "C": [True, True, False, True, True, False, False, False],
         }
     )
@@ -1342,7 +1336,7 @@ def test_idxmax_args(memory_leak_check):
         pd.DataFrame(
             {
                 "A": [16, 1, 1, 1, 16, 16, 1, 40],
-                "B": [True, np.nan, False, True, np.nan, False, False, True],
+                "B": [True, None, False, True, None, False, False, True],
                 "C": [True, True, False, True, True, False, False, True],
             }
         ),
@@ -1390,7 +1384,7 @@ def test_var_std_unsupported_types(df, memory_leak_check):
                         Decimal("1.6"),
                         Decimal("-0.2"),
                         Decimal("44.2"),
-                        np.nan,
+                        None,
                         Decimal("0"),
                     ]
                 ),
@@ -1573,7 +1567,7 @@ def test_cumultative_args(memory_leak_check):
                             Decimal("1.6"),
                             Decimal("-0.2"),
                             Decimal("44.2"),
-                            np.nan,
+                            None,
                             Decimal("0"),
                         ]
                     ),
@@ -1765,10 +1759,6 @@ def test_count_size_args(memory_leak_check):
 @pytest.mark.parametrize(
     "df",
     [
-        # [BE-416] Support with list
-        pd.DataFrame(
-            {"A": [2, 1, 1, 2], "B": pd.Series([[1, 2], [3], [5, 4, 6], [-1, 3, 4]])}
-        ),
         # Tuple
         pd.DataFrame(
             {"A": [2, 1, 1, 2], "B": pd.Series([(1, 2), (3), (5, 4, 6), (-1, 3, 4)])}
@@ -1889,7 +1879,7 @@ def test_agg_unsupported_types(test_cumulatives_df, memory_leak_check):
     """Test groupby.agg with unsupported types"""
 
     def impl1(df):
-        A = df.groupby("A").agg(lambda x: x.sum())
+        A = df.groupby("A").agg(lambda x: x.prod())
         return A
 
     err_msg = "is unsupported/not a valid input type"
@@ -2022,7 +2012,7 @@ def test_unsupported_attr(memory_leak_check):
     def impl(df):
         return df.groupby(by=["A"]).get_group()
 
-    msg = re.escape("DataFrameGroupBy.get_group not supported yet")
+    msg = re.escape("DataFrameGroupBy.get_group() not supported yet")
     df = pd.DataFrame({"A": [1, 2, 2], "C": ["aa", "b", "c"]})
     with pytest.raises(BodoError, match=msg):
         bodo.jit(impl)(df)
@@ -2033,7 +2023,7 @@ def test_unsupported_series_method(memory_leak_check):
     def impl(S):
         return S.groupby(level=0).nlargest()
 
-    msg = re.escape("SeriesGroupBy.nlargest not supported yet")
+    msg = re.escape("SeriesGroupBy.nlargest() not supported yet")
     S = pd.Series([1, 2, 2])
     with pytest.raises(BodoError, match=msg):
         bodo.jit(impl)(S)
@@ -2055,7 +2045,7 @@ def test_unsupported_df_method(memory_leak_check):
     def impl(df):
         return df.groupby(by=["A"]).corrwith()
 
-    msg = re.escape("DataFrameGroupBy.corrwith not supported yet")
+    msg = re.escape("DataFrameGroupBy.corrwith() not supported yet")
     df = pd.DataFrame({"A": [1, 2, 2], "C": ["aa", "b", "c"]})
     with pytest.raises(BodoError, match=msg):
         bodo.jit(impl)(df)

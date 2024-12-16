@@ -11,21 +11,18 @@ build:
 
 requirements:
   host:
-    - python >=3.8,<3.11
-    # setuptools>=65 removes the msvc compilers that
-    # distutils/extension uses.
-    # TODO[BE-3467]: remove distutils
-    - setuptools <60
+    - python >=3.10,<3.13
+    - setuptools
     - openjdk >=9.0,<12
     - maven
     - ninja
 
   run:
-    - python >=3.8,<3.11
+    - python >=3.10,<3.13
     - openjdk >=9.0,<12
 
 about:
 home: https://bodo.ai/
-license: Proprietary
-license_file: LICENSE.md
+license: Apache-2.0
+license_file: LICENSE
 summary: Bodo AzureFS SAS Token Provider

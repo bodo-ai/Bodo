@@ -1,4 +1,3 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 import logging
 
 import pandas as pd
@@ -75,7 +74,7 @@ def test_format_cache(fn_distribution, is_cached, memory_leak_check):
     """
 
     def impl():
-        return "{}".format(3)
+        return "{}".format(3)  # noqa  # Dont auto-convert to f-string
 
     check_caching(impl, (), is_cached, fn_distribution, is_out_dist=False)
 

@@ -1,528 +1,287 @@
+import datetime
+from decimal import Decimal
+
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 import pytest
-from bodosql.tests.test_window.window_common import (  # noqa
-    null_respect_string,
-    testing_locally,
-)
+
+import bodo
+from bodo import Time, TimestampTZ
+from bodo.tests.utils import pytest_slow_unless_window, temp_config_override
+from bodosql.tests.test_window.window_common import count_window_applies
 from bodosql.tests.utils import check_query
 
-
-@pytest.fixture(params=["LEAD", "LAG"])
-def lead_or_lag(request):
-    return request.param
+# Skip unless any window-related files were changed
+pytestmark = pytest_slow_unless_window
 
 
-def gen_lead_lag_queries(
-    window,
-    fill_value,
-    df_len,
-    lead_or_lag_value,
-    null_respect_string,
-    use_fill_repr=True,
-):
-    """Helper function, that generates a string of lead/lag queries"""
-
-    shiftval_name_list = [
-        (0, "0"),
-        (1, "1"),
-        (-1, "negative_1"),
-        (3, "3"),
-        (df_len, f"{df_len}"),
-        (-df_len, f"negative_{df_len}"),
-        (df_len * 2, f"{df_len*2}"),
-        (-df_len * 2, f"negative_{df_len*2}"),
+def test_lead_lag_mixed(spark_info, memory_leak_check):
+    """Tests the window functions LEAD/LAG with a minimal set of combinations
+    that cover the essential of behavior."""
+    selects = [
+        "LEAD(I) RESPECT NULLS OVER (PARTITION BY P ORDER BY O)",
+        "LAG(S, 10) RESPECT NULLS OVER (PARTITION BY P ORDER BY O)",
+        "LEAD(I, 5, 0) RESPECT NULLS OVER (PARTITION BY P ORDER BY O)",
+        "LEAD(S, 3) IGNORE NULLS OVER (PARTITION BY P ORDER BY O)",
+        "LAG(I, 7, -1) IGNORE NULLS OVER (PARTITION BY P ORDER BY O)",
+        "LEAD(S, 1, 'hello') IGNORE NULLS OVER (PARTITION BY P ORDER BY O)",
     ]
-    if fill_value is not None:
-        fill_input = repr(fill_value) if use_fill_repr else fill_value
-        lead_lag_queries = ", ".join(
-            [
-                f"{lead_or_lag_value}(A, {x}, {fill_input}) {null_respect_string} OVER {window} as {lead_or_lag_value}_{name}"
-                for x, name in shiftval_name_list
-            ]
-        )
-    else:
-        lead_lag_queries = ", ".join(
-            [
-                f"{lead_or_lag_value}(A, {x}) {null_respect_string} OVER {window} as {lead_or_lag_value}_{name}"
-                for x, name in shiftval_name_list
-            ]
-            + [
-                f"{lead_or_lag_value}(A) {null_respect_string} OVER {window} as {lead_or_lag_value}_default_shift",
-            ]
-        )
-    return lead_lag_queries
-
-
-@pytest.mark.parametrize(
-    "fill_value",
-    [
-        pytest.param(None, id="No_fill"),
-        pytest.param(1, id="With_fill"),
-        pytest.param("NULL", id="With_NULL_fill"),
-    ],
-)
-def test_lead_lag_consts(
-    bodosql_numeric_types,
-    lead_or_lag,
-    spark_info,
-    fill_value,
-    null_respect_string,
-    memory_leak_check,
-):
-    """tests the lead and lag aggregation functions"""
-
-    # remove once memory leak is resolved
-    df_dtype = bodosql_numeric_types["table1"]["A"].dtype
-    if not (
-        testing_locally
-        or np.issubdtype(df_dtype, np.float64)
-        or np.issubdtype(df_dtype, np.int64)
-    ):
-        pytest.skip("Skipped due to memory leak")
-
-    window = "(PARTITION BY B ORDER BY C)"
-
-    lead_lag_queries = gen_lead_lag_queries(
-        window,
-        fill_value,
-        len(bodosql_numeric_types["table1"]["A"]),
-        lead_or_lag,
-        null_respect_string,
-        use_fill_repr=False,
-    )
-
-    query = f"select A, B, C, {lead_lag_queries} from table1 ORDER BY B, C"
-
-    check_query(
-        query,
-        bodosql_numeric_types,
-        spark_info,
-        check_dtype=False,
-        check_names=False,
-        only_jit_1DVar=True,
-    )
-
-
-@pytest.mark.slow
-@pytest.mark.parametrize(
-    "fill_value",
-    [
-        pytest.param(None, id="No_fill"),
-        pytest.param("TIMESTAMP '2022-02-18'", id="With_fill"),
-        pytest.param("NULL", id="With_NULL_fill"),
-    ],
-)
-def test_lead_lag_consts_datetime(
-    bodosql_datetime_types,
-    lead_or_lag,
-    spark_info,
-    fill_value,
-    null_respect_string,
-    memory_leak_check,
-):
-    """tests the lead and lag aggregation functions on datetime types"""
-
-    window = "(PARTITION BY B ORDER BY C)"
-    lead_lag_queries = gen_lead_lag_queries(
-        window,
-        fill_value,
-        len(bodosql_datetime_types["table1"]["A"]),
-        lead_or_lag,
-        null_respect_string,
-        use_fill_repr=False,
-    )
-    query = f"select A, B, C, {lead_lag_queries} from table1 ORDER BY B, C"
-
-    check_query(
-        query,
-        bodosql_datetime_types,
-        spark_info,
-        check_dtype=False,
-        check_names=False,
-        only_jit_1DVar=True,
-    )
-
-
-@pytest.mark.slow
-@pytest.mark.parametrize(
-    "fill_value",
-    [
-        pytest.param(None, id="No_fill"),
-        pytest.param("foo", id="With_fill"),
-        pytest.param("NULL", id="With_NULL_fill"),
-    ],
-)
-def test_lead_lag_consts_string(
-    bodosql_string_types,
-    lead_or_lag,
-    spark_info,
-    fill_value,
-    null_respect_string,
-    memory_leak_check,
-):
-    """tests the lead and lag aggregation functions on datetime types"""
-
-    window = "(PARTITION BY B ORDER BY C)"
-
-    lead_lag_queries = gen_lead_lag_queries(
-        window,
-        fill_value,
-        len(bodosql_string_types["table1"]["A"]),
-        lead_or_lag,
-        null_respect_string,
-        use_fill_repr=fill_value != "NULL",
-    )
-
-    query = f"select A, B, C, {lead_lag_queries} from table1 ORDER BY B, C"
-
-    check_query(
-        query,
-        bodosql_string_types,
-        spark_info,
-        check_dtype=False,
-        check_names=False,
-        only_jit_1DVar=True,
-    )
-
-
-@pytest.mark.slow
-@pytest.mark.parametrize(
-    "fill_value",
-    [
-        pytest.param(None, id="No_fill"),
-        pytest.param(
-            "X'412412'",
-            id="With_fill",
-            marks=pytest.mark.skip("BE-3304, no support for binary literals"),
-        ),
-        pytest.param("NULL", id="With_NULL_fill"),
-    ],
-)
-def test_lead_lag_consts_binary(
-    bodosql_binary_types,
-    lead_or_lag,
-    spark_info,
-    fill_value,
-    null_respect_string,
-    memory_leak_check,
-):
-    """tests the lead and lag aggregation functions on datetime types"""
-
-    cols_that_need_bytearray_conv = [
-        "A",
-        "B",
-        "C",
-        f"{lead_or_lag}_0",
-        f"{lead_or_lag}_1",
-        f"{lead_or_lag}_negative_1",
-        f"{lead_or_lag}_3",
-        f"{lead_or_lag}_12",
-        f"{lead_or_lag}_negative_12",
-        f"{lead_or_lag}_24",
-        f"{lead_or_lag}_negative_24",
-    ]
-    if fill_value is None:
-        cols_that_need_bytearray_conv.append(f"{lead_or_lag}_default_shift")
-
-    window = "(PARTITION BY B ORDER BY C)"
-    lead_lag_queries = gen_lead_lag_queries(
-        window,
-        fill_value,
-        len(bodosql_binary_types["table1"]["A"]),
-        lead_or_lag,
-        null_respect_string,
-        use_fill_repr=False,
-    )
-    query = f"select A, B, C, {lead_lag_queries} from table1 ORDER BY B, C"
-
-    check_query(
-        query,
-        bodosql_binary_types,
-        spark_info,
-        check_dtype=False,
-        check_names=False,
-        only_jit_1DVar=True,
-        convert_columns_bytearray=cols_that_need_bytearray_conv,
-    )
-
-
-@pytest.mark.slow
-@pytest.mark.parametrize(
-    "fill_values",
-    [
-        pytest.param((None, None), id="No_fill"),
-        pytest.param(("Interval 3 DAYS", "259200000000000"), id="With_fill"),
-        pytest.param(("NULL", "NULL"), id="With_NULL_fill"),
-    ],
-)
-def test_lead_lag_consts_timedelta(
-    bodosql_interval_types,
-    lead_or_lag,
-    spark_info,
-    fill_values,
-    null_respect_string,
-    memory_leak_check,
-):
-    """tests the lead and lag aggregation functions on timedelta types"""
-    fill_value, spark_fill_value = fill_values
-
-    cols_that_need_timedelta_conv = [
-        "A",
-        "B",
-        "C",
-        f"{lead_or_lag}_0",
-        f"{lead_or_lag}_1",
-        f"{lead_or_lag}_3",
-        f"{lead_or_lag}_negative_1",
-        f"{lead_or_lag}_12",
-        f"{lead_or_lag}_negative_12",
-        f"{lead_or_lag}_24",
-        f"{lead_or_lag}_negative_24",
-    ]
-    if fill_value is None:
-        cols_that_need_timedelta_conv.append(f"{lead_or_lag}_default_shift")
-
-    window = "(PARTITION BY B ORDER BY C)"
-    lead_lag_queries = gen_lead_lag_queries(
-        window,
-        fill_value,
-        len(bodosql_interval_types["table1"]["A"]),
-        lead_or_lag,
-        null_respect_string,
-        use_fill_repr=False,
-    )
-    query = f"select A, B, C, {lead_lag_queries} from table1 ORDER BY B, C"
-    if fill_value is not None:
-        # Pyspark treats timedelta as a regular integer. Convert days to nanoseconds
-        spark_query = query.replace(fill_value, spark_fill_value)
-    else:
-        spark_query = query
-
-    check_query(
-        query,
-        bodosql_interval_types,
-        spark_info,
-        check_dtype=False,
-        check_names=False,
-        convert_columns_timedelta=cols_that_need_timedelta_conv,
-        only_jit_1DVar=True,
-        equivalent_spark_query=spark_query,
-    )
-
-
-@pytest.mark.slow
-@pytest.mark.parametrize(
-    "fill_value",
-    [
-        pytest.param(None, id="No_fill"),
-        pytest.param("TRUE", id="With_fill"),
-        pytest.param("NULL", id="With_NULL_fill"),
-    ],
-)
-def test_lead_lag_consts_boolean(
-    bodosql_boolean_types,
-    lead_or_lag,
-    spark_info,
-    fill_value,
-    null_respect_string,
-    memory_leak_check,
-):
-    """tests the lead and lag aggregation functions on boolean types"""
-
-    window = "(PARTITION BY B ORDER BY C)"
-    lead_lag_queries = gen_lead_lag_queries(
-        window,
-        fill_value,
-        len(bodosql_boolean_types["table1"]["A"]),
-        lead_or_lag,
-        null_respect_string,
-        use_fill_repr=False,
-    )
-
-    query = f"select A, B, C, {lead_lag_queries} from table1 ORDER BY B, C"
-
-    check_query(
-        query,
-        bodosql_boolean_types,
-        spark_info,
-        check_dtype=False,
-        check_names=False,
-        only_jit_1DVar=True,
-    )
-
-
-def test_lead_lag_case_null_literal(
-    major_types_nullable,
-    lead_or_lag,
-    spark_info,
-    null_respect_string,
-    memory_leak_check,
-):
-    """
-    Tests support for passing a null literal as the fill_value within
-    a lead/lag used in a case statement. See the usage example within
-    [BE-3564]
-    """
-    window = "(PARTITION BY B ORDER BY ORDERBY_COl)"
-    query = f"""
-        Select
-            B,
-            CASE WHEN COND_COL THEN {lead_or_lag}(C, 1, NULL) {null_respect_string} OVER {window} ELSE NULL END as CASE_COL
-        FROM
-            Table1
-    """
-    output_cols = ["B", "CASE_COL"]
-    convert_columns_bytearray = None
-    convert_columns_bool = None
-    convert_columns_timedelta = None
-    if isinstance(major_types_nullable["table1"]["A"].values[0], bytes):
-        convert_columns_bytearray = output_cols
-    elif isinstance(major_types_nullable["table1"]["A"].values[0], bool):
-        convert_columns_bool = output_cols
-    elif isinstance(major_types_nullable["table1"]["A"].values[0], np.timedelta64):
-        convert_columns_timedelta = output_cols
-    check_query(
-        query,
-        major_types_nullable,
-        spark_info,
-        check_dtype=False,
-        only_jit_1DVar=True,
-        convert_columns_bytearray=convert_columns_bytearray,
-        convert_columns_bool=convert_columns_bool,
-        convert_columns_timedelta=convert_columns_timedelta,
-    )
-
-
-@pytest.mark.parametrize(
-    "windows",
-    [
-        pytest.param([("B", "C")] * 4, id="all_same"),
-        pytest.param([("B", "C"), ("C", "B")] * 2, id="half_new_part"),
-        pytest.param(
-            [("B", "C")] * 2 + [("C", "B")] * 2,
-            id="half_new_order",
-            marks=pytest.mark.slow,
-        ),
-    ],
-)
-@pytest.mark.parametrize(
-    "lead_lag",
-    [
-        pytest.param(
-            ["lead(A)", "lead(A, 2)", "lead(A, 3, 0)", "lead(A, 4)"], id="all_lead"
-        ),
-        pytest.param(
-            ["lead(A)", "lag(A, 2)", "lead(A, 3, 0)", "lag(A, 4)"],
-            id="half_lead",
-            marks=pytest.mark.slow,
-        ),
-        pytest.param(
-            ["lag(A)", "lag(A, 2)", "lag(A, 3, 0)", "lag(A, 4)"], id="all_lag"
-        ),
-    ],
-)
-def test_lead_lag_fusion(
-    windows,
-    lead_lag,
-    spark_info,
-    memory_leak_check,
-):
-    """tests the lead and lag aggregation functions with various fusion cases"""
-
-    assert len(windows) == len(lead_lag) == 4
-
-    clauses = []
-    for i in range(len(windows)):
-        partition, order = windows[i]
-        calculation = lead_lag[i]
-        clauses.append(
-            f"{calculation} OVER (PARTITION BY {partition} ORDER BY {order})"
-        )
-    query = f"SELECT {', '.join(clauses)} FROM table1"
-
+    query = f"SELECT I, P, O, {', '.join(selects)} FROM table1"
     ctx = {
-        "table1": pd.DataFrame(
-            {"A": list(range(20)), "B": list("ABCDE") * 4, "C": list("XXYXXYZYXX") * 2}
+        "TABLE1": pd.DataFrame(
+            {
+                "I": pd.Series(
+                    [None if (i**2) % 6 < 2 else i for i in range(500)],
+                    dtype=pd.Int32Dtype(),
+                ),
+                "S": pd.Series(
+                    [None if (i**3) % 17 > 10 else str(i) for i in range(500)]
+                ),
+                "P": pd.Series(["A", "B", "C", "D", "E"] * 100),
+                "O": pd.Series([np.tan(i) for i in range(500)]),
+            }
         )
     }
-
-    # Calculate the number of grouby-apply calls that should appear
-    # (needs to be updated as fusion improves)
-    cases = set()
-    for i in range(len(windows)):
-        cases.add((windows[i], lead_lag[i][:3]))
-    expected_closures = len(cases)
-
-    codegen = check_query(
+    pandas_code = check_query(
         query,
         ctx,
         spark_info,
+        sort_output=True,
         check_dtype=False,
         check_names=False,
         return_codegen=True,
     )["pandas_code"]
 
-    # Verify that the number of closures matches the expected behavior
-    assert (
-        codegen.count("def __bodo_dummy___sql_windowed_apply_fn") == expected_closures
+    # Verify that fusion is working correctly so only one closure is produced
+    count_window_applies(pandas_code, 1, ["LEAD", "LAG"])
+
+
+@pytest.mark.skipif(
+    bodo.tests.utils.test_spawn_mode_enabled,
+    reason="capfd doesn't work for spawn",
+)
+@pytest.mark.parametrize(
+    "func, shift_amt",
+    [
+        pytest.param("LEAD", 3, id="lead_3"),
+        pytest.param("LAG", 3, id="lag_3"),
+        pytest.param("LEAD", 57, id="lead_57", marks=pytest.mark.slow),
+        pytest.param("LAG", 57, id="lag_57", marks=pytest.mark.slow),
+        pytest.param("LEAD", 9999, id="lead_large_shift", marks=pytest.mark.slow),
+        pytest.param("LAG", 9999, id="lag_large_shift", marks=pytest.mark.slow),
+        pytest.param("LEAD", -2, id="lead_negative", marks=pytest.mark.slow),
+    ],
+)
+def test_lead_lag_shift(func, shift_amt, spark_info, capfd):
+    """
+    Test different values for lead/lag with a pass through column,
+    not keeping the input
+    """
+    from bodo.mpi4py import MPI
+    from bodo.tests.utils import temp_env_override
+
+    df = pd.DataFrame(
+        {
+            "C": np.arange(1000),
+            "D": ["shoes", "pants", "shirt", "jacket", "tie"] * 200,
+            "B": np.arange(1000),
+            "A": ["A"] * 1 + ["B"] * 17 + ["C"] * 255 + ["D"] * 727,
+        }
     )
 
+    rng = np.random.default_rng(42)
+    perm = rng.permutation(len(df))
+    df = df.iloc[perm, :]
 
-# @pytest.mark.skip(
-#     "specifying non constant arg1 for lead/lag is not supported in spark, but currently allowed in Calcite. Can revisit this later if needed for a customer"
-# )
-# def test_lead_lag_variable_len(basic_df, lead_or_lag, spark_info, memory_leak_check):
-#     """tests the lead and lag aggregation functions"""
+    # default is NULL
+    query = f"SELECT B, {func}(C, {shift_amt}) OVER(PARTITION BY A ORDER BY B ASC NULLS LAST), D FROM TABLE1"
+    expected_log_message = "[DEBUG] GroupbyState::FinalizeBuild:"
 
-#     query = f"select A, B, C, {lead_or_lag}(A, B) OVER (PARTITION BY B ORDER BY C) AS LEAD_LAG_COL from table1 ORDER BY B, C"
+    with temp_env_override(
+        {
+            "BODO_DEBUG_STREAM_GROUPBY_PARTITIONING": "1",
+        }
+    ):
+        check_query(
+            query,
+            {"TABLE1": df},
+            spark_info,
+            check_names=False,
+            sort_output=True,
+            check_dtype=False,
+        )
 
-#     cols_to_cast = [("LEAD_LAG_COL", "float64")]
-#     check_query(
-#         query,
-#         basic_df,
-#         spark_info,
-#         check_dtype=False,
-#         check_names=False,
-#         spark_output_cols_to_cast=cols_to_cast,
-#         only_jit_1DVar=True,
-#     )
+    comm = MPI.COMM_WORLD
+    _, err = capfd.readouterr()
+    assert_success = expected_log_message in err
+    assert_success = comm.allreduce(assert_success, op=MPI.LAND)
 
-
-# @pytest.mark.skip(
-#     """TODO: Spark requires frame bound to be literal, Calcite does not have this restriction.
-#     I think that adding this capability should be fairly easy, should it be needed in the future"""
-# )
-# def test_windowed_agg_nonconstant_values(
-#     basic_df,
-#     numeric_agg_funcs_subset,
-#     over_clause_bounds,
-#     spark_info,
-#     memory_leak_check,
-# ):
-#     """Tests windowed aggregations works when performing aggregations, sorting by, and bounding by non constant values"""
-
-#     # doing an orderby and calculating extra rows in the query so it's easier to tell what the error is by visual comparison
-#     query = f"select A, B, C, (A + B + C) as AGG_SUM, (C + B) as ORDER_SUM, {numeric_agg_funcs_subset}(A + B + C) OVER (PARTITION BY B ORDER BY (C+B) ASC ROWS BETWEEN A PRECEDING AND C FOLLOWING) as WINDOW_AGG FROM table1 ORDER BY B, C"
-
-#     # spark windowed min/max on integers returns an integer col.
-#     # pandas rolling min/max on integer series returns a float col
-#     # (and the method that we currently use returns a float col)
-#     cols_to_cast = [("WINDOW_AGG", "float64")]
-#     check_query(
-#         query,
-#         basic_df,
-#         spark_info,
-#         sort_output=False,
-#         check_dtype=False,
-#         check_names=False,
-#         spark_output_cols_to_cast=cols_to_cast,
-#         only_jit_1DVar=True,
-#     )
+    assert assert_success
 
 
-# Some problematic queries that will need to be dealt with eventually:
-# "SELECT CASE WHEN A > 1 THEN A * SUM(D) OVER (ORDER BY A ROWS BETWEEN 1 PRECEDING and 1 FOLLOWING) ELSE -1 END from table1"
-# "SELECT MAX(A) OVER (ORDER BY A ROWS BETWEEN A PRECEDING and 1 FOLLOWING) from table1"
-# "SELECT MAX(A) OVER (ORDER BY A+D ROWS BETWEEN CURRENT ROW and 1 FOLLOWING) from table1"
-# SELECT 1 + MAX(A) OVER (ORDER BY A ROWS BETWEEN CURRENT ROW and 1 FOLLOWING) from table1
+@pytest.mark.parametrize(
+    "use_default",
+    [
+        pytest.param(False, id="no_default"),
+        pytest.param(True, id="use_default"),
+    ],
+)
+@pytest.mark.parametrize(
+    "input_arr, default, default_str",
+    [
+        pytest.param(
+            pd.array(
+                [datetime.date(2020, i % 12 + 1, i % 28 + 1) for i in range(1000)]
+            ),
+            datetime.date(2000, 1, 1),
+            "'2000-01-01' :: DATE",
+            id="date",
+        ),
+        pytest.param(
+            pd.array(list(range(1000)), dtype=pd.Int32Dtype), -1, -1, id="int"
+        ),
+        pytest.param(
+            pd.array(
+                [
+                    pd.Timestamp(
+                        f"200{i % 10}-{i % 12 + 1}-{i % 28 + 1} {(i + 6) % 24}:{(i + 16) % 60}:{(i + 3) % 60}"
+                    )
+                    for i in range(1000)
+                ]
+            ),
+            pd.Timestamp("2000-01-01 00:00:00"),
+            "'2000-01-01 00:00:00' :: TIMESTAMP_NTZ",
+            id="timestamp_ntz",
+        ),
+        pytest.param(
+            pd.array(
+                [
+                    TimestampTZ(
+                        pd.Timestamp(
+                            f"200{i % 10}-{i % 12 + 1}-{i % 28 + 1} {(i + 6) % 24}:{(i + 16) % 60}:{(i + 3) % 60}"
+                        ),
+                        i,
+                    )
+                    for i in range(1000)
+                ]
+            ),
+            TimestampTZ(pd.Timestamp("2000-01-01 11:00:00"), 60),
+            "'2000-01-01 12:00:00+0100'::TIMESTAMP WITH TIME ZONE",
+            id="timestamptz",
+        ),
+        pytest.param(
+            pd.array(
+                [
+                    pd.Timestamp(
+                        f"200{i % 10}-{i % 12 + 1}-{i % 28 + 1} {(i + 6) % 24}:{(i + 16) % 60}:{(i + 3) % 60}",
+                        tz="US/Pacific",
+                    )
+                    for i in range(1000)
+                ]
+            ),
+            pd.Timestamp("2000-01-01 00:00:00", tz="US/Pacific"),
+            "'2000-01-01 00:00:00' :: TIMESTAMP_LTZ",
+            id="timestamp_ltz",
+        ),
+        pytest.param(
+            pd.array(
+                [Time(hour=i % 100, minute=i % 60, second=i % 60) for i in range(1000)]
+            ),
+            Time(hour=12, minute=0, second=0),
+            "'12:00:00' :: Time(9)",
+            id="time",
+        ),
+        pytest.param(
+            pd.array([bytes(i) for i in range(1000)]),
+            b"\xc0\xff\xee",
+            "X'C0FFEE'",
+            id="binary",
+        ),
+        pytest.param(
+            pd.array([f"{i}{i+1}{i+3}" for i in range(1000)]),
+            "hello",
+            "'hello'",
+            id="string",
+        ),
+        pytest.param(
+            pd.array(
+                [Decimal(str(f"{i+1}{i+2}{i+3}")) for i in range(1000)],
+                dtype=pd.ArrowDtype(pa.decimal128(38, 0)),
+            ),
+            Decimal("-1"),
+            "-1::NUMBER(38,0)",
+            id="decimal",
+        ),
+    ],
+)
+def test_lead_lag_defaults(input_arr, default, default_str, use_default):
+    """
+    Tests that lead/lag works with different literal types
+    """
+
+    shift_amt = 10
+
+    if not use_default:
+        default = None
+
+    partition_col = ["A"] * 1 + ["B"] * 17 + ["C"] * 255 + ["D"] * 727
+    order_col = np.arange(1000)
+
+    in_df = pd.DataFrame({"A": partition_col, "B": order_col, "C": input_arr})
+
+    output_col = pd.array(
+        [
+            (
+                default
+                if i + shift_amt >= len(partition_col)
+                or partition_col[i] != partition_col[i + shift_amt]
+                else input_arr[i + shift_amt]
+            )
+            for i in range(len(partition_col))
+        ],
+    )
+
+    out_df = pd.DataFrame({"OUT": output_col})
+
+    query = (
+        f"SELECT LEAD(C,10, {default_str}) OVER (PARTITION BY A ORDER BY B) FROM TABLE1"
+    )
+    query_no_default = "SELECT LEAD(C,10) OVER (PARTITION BY A ORDER BY B) FROM TABLE1"
+
+    with temp_config_override("bodo_use_decimal", True):
+        check_query(
+            query if use_default else query_no_default,
+            {"TABLE1": in_df},
+            None,
+            expected_output=out_df,
+            check_names=False,
+            check_dtype=False,
+            sort_output=True,
+            session_tz="US/Pacific",
+            enable_timestamp_tz=True,
+        )
+
+
+def test_lead_lag_multiple(spark_info, memory_leak_check):
+    """Tests multiple lead/lag computations alongside other functions that can be done together."""
+    window = "OVER (PARTITION BY P ORDER BY O)"
+    query = f"SELECT T, I, LEAD(S, 12, '') {window}, ROW_NUMBER() {window}, LAG(I) {window}, LEAD(T, 1, 'foobar') {window} FROM TABLE1"
+    n_rows = 8000
+    df = pd.DataFrame(
+        {
+            "P": [int(np.tan(i)) for i in range(n_rows)],
+            "O": [np.tan(i) for i in range(n_rows)],
+            "I": range(n_rows),
+            "S": [None if i % 7 == 1 else str(i)[2:] for i in range(n_rows)],
+            "T": [None if (i % 6) == (i % 7) else hex(i % 500) for i in range(n_rows)],
+        }
+    )
+    check_query(
+        query,
+        {"TABLE1": df},
+        spark_info,
+        check_names=False,
+        check_dtype=False,
+        only_jit_1DVar=True,
+    )

@@ -1,9 +1,9 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
 File to support the numpy file IO API (np.fromfile(), np.tofile()).
 The actual definition of fromfile is inside untyped pass with the
 other IO operations.
 """
+
 import llvmlite.binding as ll
 import numpy as np
 from numba.core import types
@@ -17,8 +17,8 @@ from bodo.utils.utils import check_java_installation
 ll.add_symbol("get_file_size", hio.get_file_size)
 ll.add_symbol("file_read", hio.file_read)
 ll.add_symbol("file_read_parallel", hio.file_read_parallel)
-ll.add_symbol("file_write", hio.file_write)
-ll.add_symbol("file_write_parallel", hio.file_write_parallel)
+ll.add_symbol("file_write", hio.file_write_py_entrypt)
+ll.add_symbol("file_write_parallel", hio.file_write_parallel_py_entrypt)
 
 
 _get_file_size = types.ExternalFunction("get_file_size", types.int64(types.voidptr))
@@ -53,7 +53,6 @@ def get_dtype_size(typingctx, dtype=None):
 
 @overload_method(types.Array, "tofile")
 def tofile_overload(arr, fname):
-
     # TODO: fix Numba to convert literal
     if fname == string_type or isinstance(fname, types.StringLiteral):
 

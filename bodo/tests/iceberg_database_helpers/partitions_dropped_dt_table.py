@@ -15,9 +15,10 @@ dropped rather than just updated, changing what can be determined
 from the partition spec.
 """
 
+TABLE_NAME = "partitions_dropped_dt_table"
 
-def create_table(table_name="partitions_dropped_dt_table", spark=None):
 
+def create_table(table_name=TABLE_NAME, spark=None):
     if spark is None:
         spark = get_spark()
 

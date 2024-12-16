@@ -1,4 +1,5 @@
 import argparse
+import json
 import math
 import zlib
 
@@ -37,16 +38,12 @@ def input01input02ToDescriptorId(input01, input02, z):
     x = np.int32((input02 + 180.0) / 360.0 * n)
     y = np.int32(
         (
-            (
-                1.0
-                - math.log(
-                    math.tan(input01_radians) + (1.0 / math.cos(input01_radians))
-                )
-                / math.pi
-            )
-            / 2.0
-            * n
+            1.0
+            - math.log(math.tan(input01_radians) + (1.0 / math.cos(input01_radians)))
+            / math.pi
         )
+        / 2.0
+        * n
     )
     return descriptorToLong(x, y, z)
 
@@ -180,7 +177,7 @@ def convertToOutputString(columns):
     return "".join(output_arr)
 
 
-@bodo.jit(cache=True)
+@bodo.jit(cache=True, spawn=True)
 def sequences(in_file, chosen_type, out_file, maxseqlength):
     df = pd.read_csv(in_file, sep="$", header=None, names=["A"])
     S1 = df.A.apply(transformationFunction01, args=(maxseqlength,))
@@ -221,17 +218,7 @@ def sequences(in_file, chosen_type, out_file, maxseqlength):
     # Compute a reduction to compute correctness. The strings should always be the same, only the order changes.
     # So any operation that commutes should work
 
-    # TODO: Replace with Bodo code when binary arrays are supported.
-    def f(series):
-        with bodo.objmode(res="uint32"):
-            res = g(series["A"])
-        return res
-
-    print(df6.apply(lambda x: f(x), axis=1).sum())
-
-
-def g(string):
-    return zlib.crc32(bytes(string[0], encoding="utf-8"))
+    return df6.A.str.encode("utf-8").map(lambda x: zlib.crc32(x)).sum()
 
 
 if __name__ == "__main__":
@@ -245,9 +232,25 @@ if __name__ == "__main__":
     parser.add_argument("--chosentype", type=int, help="", default=0)
     parser.add_argument("--maxseqlength", type=int, help="", default=4194304)
     parser.add_argument("--require_cache", action="store_true", default=False)
+    parser.add_argument(
+        "--checksum_loc",
+        type=str,
+        help="output path to put the json file with checksum in",
+        default="checksum_out.json",
+    )
     args = parser.parse_args()
+    checksum_out_path = args.checksum_loc
 
-    sequences(args.input, args.chosentype, args.output, args.maxseqlength)
+    final_checksum = sequences(
+        args.input, args.chosentype, args.output, args.maxseqlength
+    )
+
+    # Only print on rank 0
+    print("Final checksum: ", final_checksum)
+    print("Writing checksum to ", checksum_out_path)
+    with open(checksum_out_path, "w") as f:
+        json.dump({"checksum": final_checksum}, f)
+
     if args.require_cache and isinstance(sequences, numba.core.dispatcher.Dispatcher):
         assert (
             sequences._cache_hits[sequences.signatures[0]] == 1

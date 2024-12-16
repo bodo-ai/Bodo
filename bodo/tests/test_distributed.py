@@ -1,14 +1,19 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 import datetime
 import random
+import sys
 from decimal import Decimal
 
 import numpy as np
 import pandas as pd
+import psutil
+import pyarrow as pa
 import pytest
 from numba.core.ir_utils import find_callname, guard
 
 import bodo
+import bodo.submit.spawner
+from bodo.mpi4py import MPI
+from bodo.submit.spawner import CommandType
 from bodo.tests.dataframe_common import df_value  # noqa
 from bodo.tests.test_numpy_array import arr_tuple_val  # noqa
 from bodo.tests.utils import (
@@ -25,6 +30,7 @@ from bodo.tests.utils import (
     dist_IR_contains,
     gen_random_string_binary_array,
     get_start_end,
+    pytest_mark_spawn_mode,
     reduce_sum,
 )
 from bodo.transforms.distributed_analysis import Distribution, is_REP
@@ -150,7 +156,7 @@ def test_array_nbytes(A, memory_leak_check):
     def impl(A):
         return A.nbytes
 
-    check_func(impl, (A,))
+    check_func(impl, (A,), convert_to_nullable_float=False)
 
 
 def test_concat_axis_1(memory_leak_check):
@@ -378,6 +384,60 @@ def test_range_index_1D_Var(memory_leak_check):
 
     df = pd.DataFrame({"A": [3, 3, 3, 3, 3], "B": [1, 2, 3, 4, 5]})
     check_func(impl, (df,), only_1DVar=True)
+
+
+def test_groupby_cumsum_dist(memory_leak_check):
+    """Make sure groupby transforms like cumsum don't cause 1D_Var output, leading to
+    errors.
+    Reproducer from BodoSQL INTERSECT ALL test: SELECT 1,2 INTERSECT ALL SELECT 1,2
+    """
+    from bodo.utils.typing import ColNamesMetaType, MetaType
+
+    global_2 = bodo.int32[::1]
+    global_1 = bodo.int32[::1]
+    global_6 = ColNamesMetaType(("EXPR$0", "EXPR$1", "__bodo_dummy__"))
+    global_5 = MetaType((0, 1, 2))
+
+    @bodo.jit
+    def impl():
+        df1 = pd.DataFrame(
+            {
+                "EXPR$0": bodo.utils.conversion.coerce_scalar_to_array(
+                    np.int32(1), 1, global_1
+                ),
+                "EXPR$1": bodo.utils.conversion.coerce_scalar_to_array(
+                    np.int32(2), 1, global_2
+                ),
+            },
+            index=bodo.hiframes.pd_index_ext.init_range_index(0, 1, 1, None),
+        )
+        S6 = np.ones((len(df1),), dtype=np.int64)
+        T7 = bodo.hiframes.table.logical_table_to_table(
+            bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(df1),
+            (S6,),
+            global_5,
+            df1.shape[1],
+        )
+        df8 = bodo.hiframes.pd_dataframe_ext.init_dataframe(
+            (T7,), pd.RangeIndex(0, len(df1), 1), global_6
+        )
+        S9 = df8.groupby(
+            [
+                "EXPR$0",
+                "EXPR$1",
+            ],
+            dropna=False,
+        ).cumsum()["__bodo_dummy__"]
+        T10 = bodo.hiframes.table.logical_table_to_table(
+            bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(df1),
+            (S9,),
+            global_5,
+            df1.shape[1],
+        )
+        return T10
+
+    impl()
+    assert count_array_OneD_Vars() == 0, "invalid distributions"
 
 
 def test_bodo_func_dist_call1(memory_leak_check):
@@ -831,7 +891,7 @@ def test_dist_list_mul_concat(memory_leak_check):
         return pd.concat([df] * n)
 
     def impl2(df, n):
-        return pd.concat(n * [df])
+        return pd.concat(n * [df], ignore_index=True)
 
     df = pd.DataFrame(
         {
@@ -896,7 +956,6 @@ def test_getitem_slice(A, s, memory_leak_check):
     check_func(impl1, (A, s), check_typing_issues=False)
 
 
-# TODO: np.arange(33).reshape(11, 3)
 @pytest.mark.parametrize(
     "A", [pd.Series(np.arange(11)), pd.Series(["aafa", "bbac", "cff"] * 4)]
 )
@@ -915,7 +974,6 @@ def test_getitem_int_1D(A, s, memory_leak_check):
     assert count_array_OneDs() > 0
 
 
-# TODO: np.arange(33).reshape(11, 3)
 @pytest.mark.parametrize("A", [pd.Series(np.arange(11))])
 #    pd.Series(['aafa', 'bbac', 'cff']*4)])
 @pytest.mark.parametrize("s", [0, 1, 3, -1, -2])
@@ -937,6 +995,23 @@ def test_getitem_int_1D_Var(A, s, memory_leak_check):
     assert count_array_OneD_Vars() > 0
 
 
+def test_getitem_int_multi_dim(memory_leak_check):
+    """Test distributed int getitem on multi-dimensional array"""
+
+    def impl1(A, ind):
+        return A[ind, 1]
+
+    A = np.arange(33).reshape(11, 3)
+    ind = 5
+    start, end = get_start_end(len(A))
+    bodo_func = bodo.jit(distributed_block={"A"})(impl1)
+    assert bodo_func(A[start:end], ind) == A[ind, 1]
+    assert count_array_OneDs() > 0
+    bodo_func = bodo.jit(distributed={"A"})(impl1)
+    assert bodo_func(A[start:end], ind) == A[ind, 1]
+    assert count_array_OneD_Vars() > 0
+
+
 def test_getitem_const_slice_multidim(memory_leak_check):
     """test getitem of multi-dim distributed array with a constant slice in first
     dimension.
@@ -954,6 +1029,7 @@ def test_getitem_slice_const_size(memory_leak_check):
     """test getitem of multi-dim distributed array with a constant slice in first
     dimension.
     """
+
     # setitem without stride
     def impl1():
         N = 10
@@ -1073,6 +1149,7 @@ def test_setitem_scalar(memory_leak_check):
 @pytest.mark.parametrize("dtype", [np.float32, np.uint8, np.int64])
 def test_arr_reshape(dtype, memory_leak_check):
     """test reshape of multi-dim distributed arrays"""
+
     # reshape to more dimensions
     def impl1(A, n):
         return A.reshape(3, n // 3)
@@ -1106,16 +1183,70 @@ def test_arr_reshape(dtype, memory_leak_check):
         return A.reshape(n, 1)
 
     A = np.arange(12, dtype=dtype)
-    check_func(impl1, (A, 12))
-    check_func(impl2, (A, 12))
-    check_func(impl3, (A, 12))
+    check_func(impl1, (A, 12), convert_to_nullable_float=False)
+    check_func(impl2, (A, 12), convert_to_nullable_float=False)
+    check_func(impl3, (A, 12), convert_to_nullable_float=False)
     A = np.arange(12, dtype=dtype).reshape(2, 3, 2)
-    check_func(impl4, (A, 12))
-    check_func(impl5, (A, 12))
+    check_func(impl4, (A, 12), convert_to_nullable_float=False)
+    check_func(impl5, (A, 12), convert_to_nullable_float=False)
     A = np.arange(12, dtype=dtype).reshape(3, 4)
-    check_func(impl6, (A, 12))
-    check_func(impl7, (A, 12))
-    check_func(impl8, (np.arange(12, dtype=dtype), 12))
+    check_func(impl6, (A, 12), convert_to_nullable_float=False)
+    check_func(impl7, (A, 12), convert_to_nullable_float=False)
+    check_func(impl8, (np.arange(12, dtype=dtype), 12), convert_to_nullable_float=False)
+
+
+def test_arr_reshape_consts(memory_leak_check):
+    """Test reshape with constant new shape values"""
+
+    def impl1(A):
+        return A.reshape((6, 3))
+
+    # Test optimized path for shape[1] == 1
+    def impl2(A):
+        return A.reshape((18, 1))
+
+    A = np.array([1, 2, 3, 4, 5, 6] * 3)
+    check_func(impl1, (A,))
+    check_func(impl2, (A,))
+
+
+@pytest.mark.parametrize(
+    "nrows, ncols",
+    [(1, 1), (1, 10), (3, 4), (10, 11), (1111, 33), (4321, 5432)],
+)
+def test_array_transpose(nrows, ncols, memory_leak_check):
+    """test distributed array transpose"""
+
+    def impl(A):
+        return A.T
+
+    np.random.seed(1)
+    A = np.random.ranf((nrows, ncols))
+    check_func(impl, (A,), convert_to_nullable_float=False)
+
+
+@pytest.mark.skip(reason="TODO[BE-2435]: fix distributed handling")
+def test_array_transpose_dist_matching(memory_leak_check):
+    """Make sure distribution matching of equivalent arrays works for transposed arrays"""
+
+    def impl(A, v, w):
+        n = A.shape[0]
+        m = A.shape[1]
+        C = np.empty((n, m), A.dtype)
+        for i in bodo.prange(n):
+            C[i, :] = A[i, :] + v
+        B = A.T
+        D = np.empty((m, n), B.dtype)
+        for i in bodo.prange(m):
+            D[i, :] = B[i, :] + w
+        return C, D
+
+    nrows = 4
+    ncols = 5
+    A = np.arange(nrows * ncols).reshape((nrows, ncols))
+    v = np.arange(ncols)
+    w = np.arange(nrows) * 2
+    check_func(impl, (A, v, w), distributed=[("A", 0)])
 
 
 def test_np_dot(is_slow_run, memory_leak_check):
@@ -1145,11 +1276,11 @@ def test_np_dot(is_slow_run, memory_leak_check):
     np.random.seed(1)
     X = np.random.ranf((n, d))
     Y = np.arange(n, dtype=np.float64)
-    check_func(impl1, (X, Y), is_out_distributed=False)
-    check_func(impl2, (X, d))
-    check_func(impl3, (X, d))
+    check_func(impl1, (X, Y), is_out_distributed=False, convert_to_nullable_float=False)
+    check_func(impl2, (X, d), convert_to_nullable_float=False)
+    check_func(impl3, (X, d), convert_to_nullable_float=False)
     if is_slow_run:
-        check_func(impl4, (Y,))
+        check_func(impl4, (Y,), convert_to_nullable_float=False)
 
 
 def test_dist_tuple1(memory_leak_check):
@@ -1346,6 +1477,7 @@ def test_dist_dict_setitem1(memory_leak_check):
 
 def test_return_maybe_dist(memory_leak_check):
     """test returns_maybe_distributed jit flag"""
+
     # tuple return
     def impl1(n):
         df = pd.DataFrame({"A": np.arange(n), "B": np.ones(n)})
@@ -1391,6 +1523,21 @@ def test_return_maybe_dist(memory_leak_check):
     )
 
 
+def test_return_dist_block_flag(memory_leak_check):
+    """Make sure setting tuple return to distributed_block works"""
+
+    @bodo.jit(distributed_block=["df"])
+    def impl(df):
+        return df, df.A + 1
+
+    n = 11
+    df = pd.DataFrame({"A": np.arange(n)})
+    impl(df)
+    sig = impl.signatures[0]
+    is_distributed = impl.overloads[sig].metadata["is_return_distributed"]
+    assert is_distributed == [True, True]
+
+
 # TODO: Add memory_leak_check when bug is solved
 def test_concat_reduction():
     """test dataframe concat reduction, which produces distributed output"""
@@ -1398,7 +1545,7 @@ def test_concat_reduction():
     def impl(n):
         df = pd.DataFrame()
         for i in bodo.prange(n):
-            df = df.append(pd.DataFrame({"A": np.arange(i)}))
+            df = pd.concat((df, pd.DataFrame({"A": np.arange(i)})))
 
         return df
 
@@ -1413,7 +1560,7 @@ def test_series_concat_reduction():
     def impl(n):
         S = pd.Series(np.empty(0, np.int64))
         for i in bodo.prange(n):
-            S = S.append(pd.Series(np.arange(i)))
+            S = pd.concat((S, pd.Series(np.arange(i))), ignore_index=True)
 
         return S
 
@@ -1771,12 +1918,11 @@ def test_diagnostics_trace(capsys, memory_leak_check):
     def f(A):
         return A.sum()
 
-    @bodo.jit
+    @bodo.jit(distributed_diagnostics=True)
     def g():
         return f(np.arange(10))
 
     g()
-    g.distributed_diagnostics()
     if bodo.get_rank() == 0:
         assert (
             "input of another Bodo call without distributed flag"
@@ -1799,6 +1945,7 @@ def test_diagnostics_list(capsys, memory_leak_check):
 
 def test_sort_output_1D_Var_size(memory_leak_check):
     """Test using size variable of an output 1D_Var array of a Sort node"""
+
     # RangeIndex of output Series needs size of Sort output array
     def impl(S):
         res = pd.Series(S.sort_values().values)
@@ -1837,6 +1984,7 @@ def check_dist_meta(df, dist):
     )
 
 
+@pytest.mark.parquet
 def test_bodo_meta(memory_leak_check, datapath):
     """Test Bodo metadata on data structures returned from JIT functions"""
     fname = datapath("example.parquet")
@@ -2095,7 +2243,7 @@ def _check_scatterv_gatherv_allgatherv(orig_data, n):
     n_passed = reduce_sum(passed)
     assert n_passed == n_pes
 
-    # check data with gatherv
+    # check data with allgatherv
     allgathered_data = bodo.allgatherv(recv_data)
     passed = _test_equal_guard(allgathered_data, orig_data)
     n_passed = reduce_sum(passed)
@@ -2113,6 +2261,11 @@ def get_random_integerarray(n):
     )
 
 
+def get_random_floatingarray(n):
+    np.random.seed(5)
+    return pd.arrays.FloatingArray(np.random.ranf(n), np.random.ranf(n) < 0.30)
+
+
 def get_random_booleanarray(n):
     np.random.seed(5)
     return pd.arrays.BooleanArray(np.random.ranf(n) < 0.50, np.random.ranf(n) < 0.30)
@@ -2128,9 +2281,8 @@ def get_random_int64index(n):
     return pd.Index(np.random.randint(0, 10, n), dtype="Int64")
 
 
-@pytest.mark.parametrize(
-    "data",
-    [
+@pytest.fixture(
+    params=[
         np.arange(n, dtype=np.float32),  # 1D np array
         pytest.param(
             np.arange(n * n_col).reshape(n, n_col), marks=pytest.mark.slow
@@ -2142,17 +2294,21 @@ def get_random_int64index(n):
             gen_random_string_binary_array(n, is_binary=True), marks=pytest.mark.slow
         ),  # binary array
         pytest.param(get_random_integerarray(n), marks=pytest.mark.slow),
+        pytest.param(get_random_floatingarray(n), marks=pytest.mark.slow),
         pytest.param(get_random_booleanarray(n), marks=pytest.mark.slow),
         pytest.param(get_random_decimalarray(n), marks=pytest.mark.slow),
         pytest.param(
             pd.date_range("2017-01-13", periods=n).date, marks=pytest.mark.slow
         ),  # date array
-        pytest.param(
-            pd.RangeIndex(n), marks=pytest.mark.slow
-        ),  # RangeIndex, TODO: test non-trivial start/step when gatherv() supports them
+        pytest.param(pd.RangeIndex(n), marks=pytest.mark.slow),  # RangeIndex
         pytest.param(
             pd.RangeIndex(n, name="A"), marks=pytest.mark.slow
         ),  # RangeIndex with name
+        pytest.param(
+            pd.RangeIndex(100, -100, -5),
+            marks=pytest.mark.slow,
+            id="range_index_negative",
+        ),
         pytest.param(get_random_int64index(n), marks=pytest.mark.slow),
         pytest.param(
             pd.Index(gen_random_string_binary_array(n), name="A"),
@@ -2203,35 +2359,38 @@ def get_random_int64index(n):
         # unboxing crashes for case below (issue #812)
         # pd.Series(gen_random_string_binary_array(n)).map(lambda a: None if pd.isna(a) else [a, "A"]).values
         pytest.param(
-            pd.Series(["A"] * n).map(lambda a: None if pd.isna(a) else [a, "A"]).values,
+            pd.Series(["A"] * n)
+            .map(lambda a: None if pd.isna(a) else [a, "A"])
+            .astype(dtype=pd.ArrowDtype(pa.large_list(pa.large_string())))
+            .values,
             marks=pytest.mark.slow,
         ),
         pytest.param(
-            np.array(
+            pd.Series(
                 [
                     [1, 3],
                     [2],
-                    np.nan,
+                    None,
                     [4, 5, 6],
                     [],
                     [1, 1753],
                     [],
                     [-10],
                     [4, 10],
-                    np.nan,
+                    None,
                     [42],
                 ]
                 * 2,
-                dtype=object,
-            ),
+                dtype=pd.ArrowDtype(pa.large_list(pa.float64())),
+            ).values,
             marks=pytest.mark.slow,
         ),
         pytest.param(
-            np.array(
+            pd.Series(
                 [
                     [2.0, -3.2],
                     [2.2, 1.3],
-                    np.nan,
+                    None,
                     [4.1, 5.2, 6.3],
                     [],
                     [1.1, 1.2],
@@ -2239,31 +2398,152 @@ def get_random_int64index(n):
                     [-42.0],
                     [3.14],
                     [2.0, 3.0],
-                    np.nan,
+                    None,
                 ]
                 * 2,
+                dtype=pd.ArrowDtype(pa.large_list(pa.float64())),
+            ).values,
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.Series(
+                [
+                    ["AB", "ABC"],
+                    ["a1", "a2"],
+                    None,
+                    ["a", "bb", None, "ccc"],
+                    [],
+                    ["d1", "d12"],
+                    [None],
+                    ["E"],
+                    ["f"],
+                    ["12", "3"],
+                    None,
+                ]
+                * 2,
+                dtype=pd.ArrowDtype(pa.large_list(pa.large_string())),
+            ).values,
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.Series(
+                [
+                    [{"A": 0, "B": 1}, {"A": 0, "B": 1, "C": 2}],
+                    [{}, {"A": 0}],
+                    [
+                        {"A": 1, "B": 0},
+                    ],
+                    None,
+                    [{}, {"B": 1, "A": 0}],
+                ],
+                dtype=pd.ArrowDtype(
+                    pa.large_list(pa.map_(pa.large_string(), pa.int16()))
+                ),
+            )
+            .repeat(5)
+            .values,
+            marks=pytest.mark.slow,
+            id="map",
+        ),
+        pytest.param(
+            pd.Series(
+                [{"A": 0, "B": 1}] * 3 + [{"A": 1, "B": 0}] * 3,
+                dtype=pd.ArrowDtype(
+                    pa.struct([pa.field("A", pa.int32()), pa.field("B", pa.int32())])
+                ),
+            ),
+            marks=pytest.mark.slow,
+            id="struct",
+        ),
+        pytest.param(
+            pd.Series(
+                [
+                    (1, 3.1),
+                    (2, 1.1),
+                    None,
+                    (-1, 7.8),
+                    (3, 4.0),
+                    (-3, -1.2),
+                    (6, 9.0),
+                ],
                 dtype=object,
             ),
             marks=pytest.mark.slow,
+            id="tuple",
+        ),
+        pytest.param(
+            pd.Series(
+                [
+                    bodo.Time(17, 33, 26, 91, 8, 79),
+                    bodo.Time(0, 24, 43, 365, 18, 74),
+                    bodo.Time(3, 59, 6, 25, 757, 3),
+                    bodo.Time(),
+                    bodo.Time(4),
+                    bodo.Time(6, 41),
+                    bodo.Time(22, 13, 57),
+                    bodo.Time(17, 34, 29, 90),
+                    bodo.Time(7, 3, 45, 876, 234),
+                    None,
+                ],
+                dtype=object,
+            ),
+            marks=pytest.mark.slow,
+            id="time",
+        ),
+        pytest.param(
+            np.append(
+                datetime.timedelta(days=5, seconds=4, weeks=4),
+                [None, datetime.timedelta(microseconds=100000001213131, hours=5)] * 5,
+            ),
+            marks=pytest.mark.slow,
+            id="timedelta",
+        ),
+        pytest.param(
+            pd.arrays.ArrowExtensionArray(pa.nulls(10)),
+            marks=pytest.mark.slow,
+            id="null",
+        ),
+        pytest.param(
+            np.matrix(
+                [
+                    [0.2, 1.5, 0.2, 0.1],
+                    [0.4, 0.4, 0.1, 0.1],
+                    [0.0, 3.0, 0.5, 0.5],
+                    [1.2, 0.0, 0.25, 0.75],
+                ],
+                dtype=np.float64,
+            ),
+            marks=pytest.mark.slow,
+            id="matrix",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {"A": [1, 8, 4, 11, -3], "B": [1.1, np.nan, 4.2, 3.1, -1.1]}
+            ).rename({"A": "a", "B": "a"}, axis=1),
+            marks=pytest.mark.slow,
+            id="df_duplicate_names",
         ),
     ],
 )
-# TODO: Add memory_leak_check when bug is resolved (failed on data13)
-def test_scatterv_gatherv_allgatherv_python(data):
+def scatter_gather_data(request):
+    return request.param
+
+
+def test_scatterv_gatherv_allgatherv_python(scatter_gather_data, memory_leak_check):
     """Test bodo.scatterv(), gatherv(), and allgatherv() for Bodo distributed data types"""
-    n = len(data)
+    n = len(scatter_gather_data)
 
-    _check_scatterv_gatherv_allgatherv(data, n)
-    # check it works in a tuple aswell
-    _check_scatterv_gatherv_allgatherv((data,), n)
+    _check_scatterv_gatherv_allgatherv(scatter_gather_data, n)
+    # check it works in a tuple as well
+    _check_scatterv_gatherv_allgatherv((scatter_gather_data,), n)
 
 
-def test_scatterv_gatherv_allgatherv_df_python(df_value):
+def test_scatterv_gatherv_allgatherv_df_python(df_value, memory_leak_check):
     """Test bodo.scatterv(), gatherv(), and allgatherv() for all supported dataframe types"""
     n = len(df_value)
 
     _check_scatterv_gatherv_allgatherv(df_value, n)
-    # check it works in a tuple aswell
+    # check it works in a tuple as well
     _check_scatterv_gatherv_allgatherv((df_value,), n)
 
 
@@ -2320,7 +2600,9 @@ def test_gatherv_empty_df(memory_leak_check):
 
     df = pd.DataFrame()
     df_gathered = bodo.jit()(impl)(df)
-    pd.testing.assert_frame_equal(df, df_gathered, check_column_type=False)
+    pd.testing.assert_frame_equal(
+        df, df_gathered, check_column_type=False, check_index_type=False
+    )
 
 
 def test_gatherv_str(memory_leak_check):
@@ -2433,7 +2715,6 @@ def test_bcast_scalar(val1, val2):
 
 @pytest.mark.slow
 def test_bcast_tuple():
-
     dt_val1, dt_val2 = (
         np.datetime64("2005-02-25").astype("datetime64[ns]"),
         np.datetime64("2000-01-01").astype("datetime64[ns]"),
@@ -2503,7 +2784,7 @@ def test_send_recv(val):
 
 
 @pytest.mark.slow
-def test_bcast(arr_tuple_val):
+def test_bcast_preallocated(arr_tuple_val):
     import datetime
 
     if not isinstance(arr_tuple_val[0], np.ndarray) or isinstance(
@@ -2517,7 +2798,7 @@ def test_bcast(arr_tuple_val):
             arr_val = A
         else:
             arr_val = np.empty(len(A), A.dtype)
-        bodo.libs.distributed_api.bcast(arr_val)
+        bodo.libs.distributed_api.bcast_preallocated(arr_val)
         return arr_val
 
     check_func(
@@ -2526,6 +2807,18 @@ def test_bcast(arr_tuple_val):
         py_output=arr_tuple_val[0],
         is_out_distributed=False,
     )
+
+
+@pytest.mark.slow
+def test_bcast_df_dict(memory_leak_check):
+    """Test bcast() with a dataframe that has a dict-encoded column"""
+    dict_arr = pa.array(
+        ["ab", "abc", "ab", "abc", "ab", "c"],
+        type=pa.dictionary(pa.int32(), pa.string()),
+    )
+    df = pd.DataFrame({"A": np.arange(6), "B": dict_arr})
+    df2 = bodo.libs.distributed_api.bcast(df if bodo.get_rank() == 0 else None)
+    assert _test_equal_guard(df2, df)
 
 
 @pytest.mark.slow
@@ -2550,7 +2843,6 @@ def test_bcast(arr_tuple_val):
     ],
 )
 def test_all_to_all(val0, val1, val2, val3):
-
     if bodo.get_size() > 4:
         return
 
@@ -2591,13 +2883,11 @@ def test_all_to_all(val0, val1, val2, val3):
 
 @pytest.mark.slow
 def test_barrier_error():
-    import numba
-
     def f():
         bodo.barrier("foo")
 
     with pytest.raises(
-        numba.core.errors.TypingError,
+        TypeError,
         match=r"too many positional arguments",
     ):
         bodo.jit(f)()
@@ -2639,6 +2929,7 @@ def test_bcast_scalar_root(val1, val2, root):
 
 
 # @pytest.mark.slow
+@pytest.mark.skip("TODO[BSE-4027] Fix segfault")
 @pytest.mark.parametrize(
     "val1, val2",
     [
@@ -2705,6 +2996,31 @@ def test_bcast_tuple_root(val1, val2, root):
             np.array(
                 [1.121, 0.0, 5.1, -2.42, 32.2],
                 dtype=np.float32,
+            ),
+        ),
+        # Nullable float
+        (
+            pd.array(
+                [
+                    1.121,
+                    0.0,
+                    35.13431,
+                    -2414.4242,
+                    23211.22,
+                    None,
+                ],
+                dtype=pd.Float64Dtype(),
+            ),
+            pd.array(
+                [
+                    1.121,
+                    0.0,
+                    5.1,
+                    -2.42,
+                    32.2,
+                    None,
+                ],
+                dtype=pd.Float64Dtype(),
             ),
         ),
         # Nullable boolean
@@ -2787,7 +3103,7 @@ def test_bcast(val1, val2, root):
             val = val1
         else:
             val = val2
-        bodo.libs.distributed_api.bcast(val, root)
+        bodo.libs.distributed_api.bcast_preallocated(val, root)
         return val
 
     check_func(impl, (), py_output=val1, is_out_distributed=False)
@@ -2813,9 +3129,9 @@ def test_gatherv_global(memory_leak_check):
     np.testing.assert_array_equal(impl2(), arr)
 
 
-def test_dist_flag_info_propogation(memory_leak_check):
+def test_dist_flag_info_propagation(memory_leak_check):
     """
-    Tests that distribution information is properly propogated when calling nested Bodo functions with
+    Tests that distribution information is properly propagated when calling nested Bodo functions with
     flags specifying distribution information
     """
     df = pd.DataFrame({"A": np.arange(12)})
@@ -2828,3 +3144,165 @@ def test_dist_flag_info_propogation(memory_leak_check):
         return inner_fn(argument_df)
 
     check_func(outer_fn, (df,))
+
+
+def test_dist_scalar_struct_to_arr(memory_leak_check):
+    """Make sure coerce_scalar_to_array for struct array works for distributed output"""
+
+    global_1 = bodo.StructArrayType(
+        (bodo.IntegerArrayType(bodo.int64), bodo.bodo.IntegerArrayType(bodo.int32)),
+        ("A", "B"),
+    )
+
+    def impl(n):
+        a = bodo.libs.struct_arr_ext.init_struct((1, 2), ("A", "B"))
+        return pd.Series(bodo.utils.conversion.coerce_scalar_to_array(a, n, global_1))
+
+    n = 10
+    out = pd.Series(
+        [{"A": 1, "B": 2}] * n,
+        dtype=pd.ArrowDtype(
+            pa.struct([pa.field("A", pa.int64()), pa.field("B", pa.int32())])
+        ),
+    )
+    check_func(impl, (n,), py_output=out)
+
+
+def test_dist_scalar_map_to_arr(memory_leak_check):
+    """Make sure coerce_scalar_to_array for map array works for distributed output"""
+
+    global_1 = bodo.MapArrayType(
+        bodo.IntegerArrayType(bodo.int64), bodo.bodo.IntegerArrayType(bodo.int32)
+    )
+
+    def impl(a, n):
+        return pd.Series(bodo.utils.conversion.coerce_scalar_to_array(a, n, global_1))
+
+    a = {1: 3}
+    n = 10
+    out = pd.Series([a] * n, dtype=pd.ArrowDtype(pa.map_(pa.int64(), pa.int32())))
+    check_func(impl, (a, n), py_output=out)
+
+
+def test_complex_arr_attr(memory_leak_check):
+    """Test accessing a complex array's component"""
+
+    def impl(A):
+        n = A.shape[0]
+        B = np.empty((n, A.shape[1]), np.float64)
+        for i in bodo.prange(n):
+            B[i, :] = A.real[i, :]
+        return B
+
+    A = np.arange(6).reshape((2, 3)) + 1j
+    check_func(impl, (A,))
+
+
+@pytest.mark.skipif(
+    (not sys.platform.startswith("linux")) and (not sys.platform.startswith("darwin")),
+    reason="get_cpu_id only works on Mac/Linux",
+)
+def test_get_cpu_id(memory_leak_check):
+    """
+    Test that the get_cpu_id function returns a valid
+    CPU ID on Mac/Linux
+    """
+
+    def impl():
+        return bodo.libs.distributed_api.get_cpu_id()
+
+    n_logical_cpus = psutil.cpu_count(logical=True)
+
+    non_jit_out = impl()
+    assert 0 <= non_jit_out < n_logical_cpus
+
+    jit_out = bodo.jit(impl)()
+    assert 0 <= jit_out < n_logical_cpus
+
+
+def bcast_intercomm(data):
+    """broadcast data using spawner's intercomm"""
+    spawner = bodo.submit.spawner.get_spawner()
+    bcast_root = MPI.ROOT if bodo.get_rank() == 0 else MPI.PROC_NULL
+    spawner.worker_intercomm.bcast(CommandType.BROADCAST.value, bcast_root)
+    bodo.libs.distributed_api.bcast(
+        data, root=bcast_root, comm=spawner.worker_intercomm
+    )
+
+
+@pytest_mark_spawn_mode
+def test_bcast_intercomm():
+    """Make sure intercomm support of bcast() works"""
+    # TODO(ehsan): check received output on workers (when infrastructure is available)
+    bcast_intercomm(np.arange(6, dtype=np.int64).reshape(2, 3))
+    bcast_intercomm(pd.DataFrame({"A": np.arange(4), "B": ["a1", "a23", "a34", "a66"]}))
+
+
+@pytest_mark_spawn_mode
+def test_scatterv_intercomm(scatter_gather_data, memory_leak_check):
+    """Test scatterv's intercomm support in spawn mode"""
+
+    spawner = bodo.submit.spawner.get_spawner()
+    bcast_root = MPI.ROOT if bodo.get_rank() == 0 else MPI.PROC_NULL
+    spawner.worker_intercomm.bcast(CommandType.SCATTER.value, bcast_root)
+    bodo.libs.distributed_api.scatterv(
+        scatter_gather_data, root=bcast_root, comm=spawner.worker_intercomm
+    )
+    _res_id = spawner.worker_intercomm.recv(None, source=0)
+
+
+@pytest_mark_spawn_mode
+def test_gatherv_intercomm(scatter_gather_data, memory_leak_check):
+    """Test gatherv's intercomm support in spawn mode"""
+
+    # Scatter the data to workers then gather
+    spawner = bodo.submit.spawner.get_spawner()
+    bcast_root = MPI.ROOT if bodo.get_rank() == 0 else MPI.PROC_NULL
+    spawner.worker_intercomm.bcast(CommandType.SCATTER.value, bcast_root)
+    bodo.libs.distributed_api.scatterv(
+        scatter_gather_data, root=bcast_root, comm=spawner.worker_intercomm
+    )
+    res_id = spawner.worker_intercomm.recv(None, source=0)
+
+    spawner.worker_intercomm.bcast(CommandType.GATHER.value, bcast_root)
+    spawner.worker_intercomm.bcast(res_id, bcast_root)
+    out = bodo.libs.distributed_api.gatherv(
+        None, root=bcast_root, comm=spawner.worker_intercomm
+    )
+    _test_equal(out, scatter_gather_data)
+
+
+@pytest.mark.parametrize(
+    "dtype",
+    [
+        bodo.MapArrayType(bodo.dict_str_arr_type, bodo.FloatingArrayType(bodo.float32)),
+        bodo.StructArrayType(
+            (
+                bodo.ArrayItemArrayType(bodo.dict_str_arr_type),
+                bodo.MapArrayType(
+                    bodo.IntegerArrayType(bodo.int32), bodo.DatetimeArrayType(None)
+                ),
+            ),
+            ("A", "B"),
+        ),
+    ],
+)
+def test_get_value_for_type(dtype):
+    """Make sure get_value_for_type() produces correct sample data that matches input
+    data type.
+    """
+    data = bodo.libs.distributed_api.get_value_for_type(dtype)
+    assert bodo.typeof(data) == dtype
+
+
+@pytest.mark.slow
+def test_no_bodosql_import(memory_leak_check):
+    """Make sure BodoSQL isn't imported unnecessarily during compilation"""
+
+    @bodo.jit(spawn=False)
+    def f(df):
+        return (df.A.unique(), 3)
+
+    df = pd.DataFrame({"A": np.arange(10)})
+    f(df)
+    assert "bodosql" not in sys.modules

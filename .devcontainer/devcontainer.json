@@ -1,0 +1,27 @@
+{
+    "name": "bodo",
+    "build": {
+      "dockerfile": "Dockerfile",
+      "context": ".."
+    },
+    "customizations": {
+      "vscode": {
+        "settings": {},
+        "extensions": [
+            // Python
+            "ms-python.python",
+            "ms-python.vscode-pylance",
+            "tcwalther.cython",
+            // C++
+            "llvm-vs-code-extensions.vscode-clangd",
+            // Copilot
+            "GitHub.copilot"
+        ]
+      }
+    },
+    "features": {
+      "ghcr.io/devcontainers/features/docker-in-docker:2": {}
+    },
+    "mounts": ["source=${localWorkspaceFolderBasename}-pixi,target=${containerWorkspaceFolder}/.pixi,type=volume"],
+    "postCreateCommand": "sudo chown -R vscode .pixi && pixi install"
+}

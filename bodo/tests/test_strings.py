@@ -1,21 +1,21 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
-# -*- coding: utf-8 -*-
-
 import gc
 import glob
-import operator
 import os
 import re
 import unittest
 
-import numba
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 import pytest
 
 import bodo
 from bodo.libs.str_arr_ext import str_arr_from_sequence
-from bodo.tests.utils import check_func, gen_nonascii_list
+from bodo.tests.utils import (
+    check_func,
+    gen_nonascii_list,
+    generate_comparison_ops_func,
+)
 from bodo.utils.typing import BodoError
 
 
@@ -121,26 +121,19 @@ def test_string_base16_cast(memory_leak_check):
     check_func(test_impl, ("a2432c",))
 
 
-@pytest.mark.parametrize(
-    "op", (operator.eq, operator.ne, operator.ge, operator.gt, operator.le, operator.lt)
-)
-def test_cmp_binary_op(op, memory_leak_check):
-    op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
-    func_text = "def test_impl(A, other):\n"
-    func_text += f"  return A {op_str} other\n"
-    loc_vars = {}
-    exec(func_text, {}, loc_vars)
-    test_impl = loc_vars["test_impl"]
+def test_cmp_binary_op(cmp_op, memory_leak_check):
+    func = generate_comparison_ops_func(cmp_op)
 
-    A1 = pd.array(["A", np.nan, "CC", "DD", np.nan, "ABC"])
-    A2 = pd.array(["A", np.nan, "CCD", "AADD", "DAA", "ABCE"])
-    check_func(test_impl, (A1, A2))
-    check_func(test_impl, (A1, "DD"))
-    check_func(test_impl, ("CCD", A2))
+    A1 = pd.array(["A", None, "CC", "DD", None, "ABC"])
+    A2 = pd.array(["A", None, "CCD", "AADD", "DAA", "ABCE"])
+    check_func(func, (A1, A2))
+    check_func(func, (A1, "DD"))
+    check_func(func, ("CCD", A2))
 
 
 def test_f_strings():
     """test f-string support, which requires bytecode handling"""
+
     # requires formatting (FORMAT_VALUE) and concatenation (BUILD_STRINGS)
     def impl1(a):
         return f"AA_{a+3}_B"
@@ -167,7 +160,13 @@ def test_get_list_string(memory_leak_check):
         value = df1["A"].iat[1]
         return value
 
-    df1 = pd.DataFrame({"A": [["A"], np.nan, ["AB", "CD"]]})
+    df1 = pd.DataFrame(
+        {
+            "A": pd.Series(
+                [["A"], None, ["AB", "CD"]], dtype=pd.ArrowDtype(pa.list_(pa.string()))
+            )
+        }
+    )
     np.testing.assert_array_equal(bodo.jit(test_impl)(df1), [])
 
 
@@ -184,7 +183,7 @@ def test_string_array_getitem_na(ind, memory_leak_check):
         return S.iloc[index]
 
     bodo_func = bodo.jit(impl)
-    S = pd.Series((["A", np.nan, "CC", "DD"] + gen_nonascii_list(2)))
+    S = pd.Series(["A", None, "CC", "DD"] + gen_nonascii_list(2))
     pd.testing.assert_series_equal(impl(S, ind), bodo_func(S, ind), check_dtype=False)
     pd.testing.assert_series_equal(impl(S, ind), bodo_func(S, ind), check_dtype=False)
 
@@ -394,7 +393,7 @@ def test_re_findall():
     check_func(test_impl2, (in_str,), only_seq=True)
 
 
-def test_pat_findall(memory_leak_check):
+def test_pat_findall():
     """make sure Pattern.findall returns proper output (list of strings)"""
 
     def test_impl(pat, in_str):
@@ -789,7 +788,7 @@ def test_binary_format_literal(memory_leak_check):
     """tests format string on binary strings"""
 
     def test_impl(val):
-        return "{0:b}".format(val)
+        return f"{val:b}"
 
     check_func(test_impl, (121311,))
     check_func(test_impl, (-1,))
@@ -818,7 +817,7 @@ def test_format_numbered_args(memory_leak_check):
     """tests format string with numbered args"""
 
     def test_impl():
-        return "I like {1} and {0}".format("Java", "Python")
+        return "I like {} and {}".format("Python", "Java")
 
     check_func(test_impl, ())
 
@@ -853,7 +852,7 @@ def test_format_args_kwargs(memory_leak_check):
         lambda x: np.float64(x),
     ],
 )
-def test_invalid_runtime_conversion(impl, memory_leak_check):
+def test_invalid_runtime_conversion(impl):
     str_val = "a"
     error_msg = "invalid string to .* conversion"
     with pytest.raises(RuntimeError, match=error_msg):
@@ -895,7 +894,7 @@ class TestString(unittest.TestCase):
         ]
         for method in str2str_methods:
             func_text = "def test_impl(_str):\n"
-            func_text += "  return _str.{}()\n".format(method)
+            func_text += f"  return _str.{method}()\n"
             loc_vars = {}
             exec(func_text, {}, loc_vars)
             test_impl = loc_vars["test_impl"]
@@ -915,13 +914,13 @@ class TestString(unittest.TestCase):
             loc_vars = {}
             globs = {}
             func_text1 = "def test_impl1(_str):\n"
-            func_text1 += "  return _str.{}(' ')\n".format(method)
+            func_text1 += f"  return _str.{method}(' ')\n"
             exec(func_text1, globs, loc_vars)
             test_impl1 = loc_vars["test_impl1"]
 
             loc_vars = {}
             func_text2 = "def test_impl2(_str):\n"
-            func_text2 += "  return _str.{}('\\n')\n".format(method)
+            func_text2 += f"  return _str.{method}('\\n')\n"
             exec(func_text2, globs, loc_vars)
             test_impl2 = loc_vars["test_impl2"]
 
@@ -944,7 +943,7 @@ class TestString(unittest.TestCase):
         ]
         for method in str2bool_methods:
             func_text = "def test_impl(_str):\n"
-            func_text += "  return _str.{}()\n".format(method)
+            func_text += f"  return _str.{method}()\n"
             loc_vars = {}
             exec(func_text, {}, loc_vars)
             test_impl = loc_vars["test_impl"]
@@ -1145,7 +1144,9 @@ class TestString(unittest.TestCase):
             return S[0], S[1], S[2]
 
         bodo_func = bodo.jit(test_impl)
-        S = pd.Series(["abc¡Y tú quién te crees?", "dd2🐍⚡", "22 大处着眼，小处着手。"])
+        S = pd.Series(
+            ["abc¡Y tú quién te crees?", "dd2🐍⚡", "22 大处着眼，小处着手。"]
+        )
         self.assertEqual(bodo_func(S), test_impl(S))
 
     def test_encode_unicode1(self):

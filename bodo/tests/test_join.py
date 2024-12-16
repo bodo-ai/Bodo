@@ -1,6 +1,5 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
-"""Test join operations like df.merge(), df.join(), pd.merge_asof() ...
-"""
+"""Test join operations like df.merge(), df.join(), pd.merge_asof() ..."""
+
 import io
 import os
 import random
@@ -11,16 +10,22 @@ from decimal import Decimal
 import numba
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 import pytest
 
 import bodo
+from bodo.tests.dataframe_common import df_value  # noqa
 from bodo.tests.user_logging_utils import (
     check_logger_msg,
+    check_logger_no_msg,
     create_string_io_logger,
     set_logging_stream,
 )
 from bodo.tests.utils import (
     DeadcodeTestPipeline,
+    _gather_output,
+    _get_dist_arg,
+    _test_equal,
     check_func,
     count_array_REPs,
     count_parfor_REPs,
@@ -28,6 +33,8 @@ from bodo.tests.utils import (
     gen_random_decimal_array,
     gen_random_list_string_array,
     get_start_end,
+    pytest_mark_pandas,
+    temp_env_override,
 )
 
 
@@ -232,7 +239,7 @@ def _gen_df_str(n):
     for _ in range(n):
         # store NA with 30% chance
         if random.random() < 0.3:
-            str_vals.append(np.nan)
+            str_vals.append(None)
             continue
 
         k = random.randint(1, 10)
@@ -246,10 +253,10 @@ def _gen_df_str(n):
 
 def _gen_df_binary(n, seed=None):
     """
-    helper function that generate dataframe with int and binary columns.
+    helper function that generate DataFrame with int and binary columns.
     Takes an optional seed argument for use with np.random.seed.
     """
-    if seed == None:
+    if seed is None:
         np.random.seed(14)
     else:
         np.random.seed(seed)
@@ -258,7 +265,7 @@ def _gen_df_binary(n, seed=None):
     for _ in range(n):
         # store NA with 30% chance
         if np.random.ranf() < 0.3:
-            bin_vals.append(np.nan)
+            bin_vals.append(None)
             continue
 
         bin_vals.append(bytes(np.random.randint(1, 100)))
@@ -269,6 +276,7 @@ def _gen_df_binary(n, seed=None):
 
 
 # ------------------------------ merge() ------------------------------ #
+@pytest_mark_pandas
 def test_merge_nonascii_values(memory_leak_check):
     """
     Test merge(): make sure merge works with non-ASCII key and data values
@@ -301,6 +309,7 @@ def test_merge_nonascii_values(memory_leak_check):
         check_func(test_impl3, (left, right), sort_output=True, reset_index=True)
 
 
+@pytest_mark_pandas
 def test_merge_key_change(memory_leak_check):
     """
     Test merge(): make sure const list typing doesn't replace const key values
@@ -330,6 +339,7 @@ def test_merge_key_change(memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest_mark_pandas
 def test_merge_suffixes_bracket(memory_leak_check):
     """
     Test merge(): test the suffixes functionality for inner/left/right/outer with bracket
@@ -365,6 +375,7 @@ def test_merge_suffixes_bracket(memory_leak_check):
     )
 
 
+@pytest_mark_pandas
 def test_merge_suffixes_parenthesis(memory_leak_check):
     """
     Test merge(): test the suffixes functionality with parenthesis
@@ -379,6 +390,7 @@ def test_merge_suffixes_parenthesis(memory_leak_check):
     check_func(test_impl, (df1, df2), sort_output=True, reset_index=True)
 
 
+@pytest_mark_pandas
 def test_merge_join_datetime(memory_leak_check):
     """
     merging with some missing datetime and date.
@@ -404,6 +416,7 @@ def test_merge_join_datetime(memory_leak_check):
     check_func(test_impl, (df1_date, df2), sort_output=True, reset_index=True)
 
 
+@pytest_mark_pandas
 def test_merge_decimal(memory_leak_check):
     def f(df1, df2):
         df3 = df1.merge(df2, on="A")
@@ -426,9 +439,10 @@ def test_merge_decimal(memory_leak_check):
     check_func(f, (df1, df2), sort_output=True, reset_index=True)
 
 
+@pytest_mark_pandas
 def test_merge_empty_suffix_keys(memory_leak_check):
     """
-    Test merge(): merging on keys and having an empty sufix.
+    Test merge(): merging on keys and having an empty suffix.
     """
 
     def f1(df1, df2):
@@ -492,6 +506,7 @@ def test_merge_empty_suffix_keys(memory_leak_check):
         assert confirmed_dead_index, "Index not confirmed dead in join node"
 
 
+@pytest_mark_pandas
 def test_merge_left_right_index(memory_leak_check):
     """
     Test merge(): merging on index and use of suffices on output.
@@ -517,6 +532,7 @@ def test_merge_left_right_index(memory_leak_check):
     check_func(f, (df1, df2), sort_output=True)
 
 
+@pytest_mark_pandas
 def test_merge_left_index_dce(memory_leak_check):
     """
     Test merge(): merging on left_index and only returning
@@ -583,6 +599,7 @@ def test_merge_left_index_dce(memory_leak_check):
         assert confirmed_live_index, "Index not confirmed alive in join node"
 
 
+@pytest_mark_pandas
 def test_merge_right_index_dce(memory_leak_check):
     """
     Test merge(): merging on right_index and only returning
@@ -649,6 +666,7 @@ def test_merge_right_index_dce(memory_leak_check):
         assert confirmed_live_index, "Index not confirmed alive in join node"
 
 
+@pytest_mark_pandas
 def test_merge_left_right_index_dce(memory_leak_check):
     """
     Test merge(): merging on index and only returning
@@ -692,6 +710,7 @@ def test_merge_left_right_index_dce(memory_leak_check):
     assert confirmed_dead_index, "Index not confirmed dead in join node"
 
 
+@pytest_mark_pandas
 def test_merge_left_right_only_index(memory_leak_check):
     """
     Test merge(): merging on index and only returning
@@ -744,6 +763,7 @@ def test_merge_left_right_only_index(memory_leak_check):
     assert confirmed_dead_right_table, "Right Table not confirmed dead in join node"
 
 
+@pytest_mark_pandas
 def test_list_string_array_type_specific(memory_leak_check):
     """Test with the column type of type  list_string_array"""
 
@@ -751,13 +771,32 @@ def test_list_string_array_type_specific(memory_leak_check):
         df3 = df1.merge(df2, on="A", how="outer")
         return df3
 
-    df1 = pd.DataFrame({"A": [["AB"], np.nan, ["A", "B", "C"]], "C": [1, 2, 3]})
-    df2 = pd.DataFrame({"A": [["A", "B", "C"], ["AB", "EF"], np.nan], "D": [4, 5, 6]})
+    df1 = pd.DataFrame(
+        {
+            "A": pd.Series(
+                [["AB"], None, ["A", "B", "C"]],
+                dtype=pd.ArrowDtype(pa.large_list(pa.large_string())),
+            ),
+            "C": [1, 2, 3],
+        }
+    )
+    df2 = pd.DataFrame(
+        {
+            "A": pd.Series(
+                [["A", "B", "C"], ["AB", "EF"], None],
+                dtype=pd.ArrowDtype(pa.large_list(pa.large_string())),
+            ),
+            "D": [4, 5, 6],
+        }
+    )
     bodo_impl = bodo.jit(test_impl)
     df3_bodo = bodo_impl(df1, df2)
     df3_target = pd.DataFrame(
         {
-            "A": [["AB"], np.nan, ["A", "B", "C"], ["AB", "EF"]],
+            "A": pd.Series(
+                [["AB"], None, ["A", "B", "C"], ["AB", "EF"]],
+                dtype=pd.ArrowDtype(pa.large_list(pa.large_string())),
+            ),
             "C": [1, 2, 3, np.nan],
             "D": [np.nan, 6, 4, 5],
         }
@@ -771,6 +810,7 @@ def test_list_string_array_type_specific(memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest_mark_pandas
 def test_list_string_array_type_random(memory_leak_check):
     def test_impl(df1, df2):
         df3 = df1.merge(df2, on="A")
@@ -800,6 +840,7 @@ def test_list_string_array_type_random(memory_leak_check):
     )
 
 
+@pytest_mark_pandas
 def test_merge_left_right_nontrivial_index(memory_leak_check):
     """
     Test merge(): merging on non-trivial index and use of suffices on output.
@@ -816,6 +857,7 @@ def test_merge_left_right_nontrivial_index(memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest_mark_pandas
 def test_merge_empty_suffix_underscore(memory_leak_check):
     """
     Test merge(): test the suffixes functionality with a pathological example
@@ -830,6 +872,7 @@ def test_merge_empty_suffix_underscore(memory_leak_check):
     check_func(test_impl, (df1, df2), sort_output=True, reset_index=True)
 
 
+@pytest_mark_pandas
 @pytest.mark.parametrize(
     "df1",
     [
@@ -874,7 +917,572 @@ def test_merge_common_cols(df1, df2, memory_leak_check):
     )
 
 
+@pytest_mark_pandas
+def test_merge_cross(memory_leak_check, df_value):
+    """
+    Test merge() with how="cross" with various data types and values
+    """
+
+    def test_impl1(df1, df2):
+        return df1.merge(df2, how="cross")
+
+    rng = np.random.default_rng(100)
+    df2 = pd.DataFrame({"RAND": rng.integers(11, 33, 6)})
+    check_func(test_impl1, (df_value, df2), sort_output=True, reset_index=True)
+    check_func(test_impl1, (df2, df_value), sort_output=True, reset_index=True)
+
+
+@pytest_mark_pandas
+def test_merge_cross_len_only(memory_leak_check):
+    """
+    Test merge() with how="cross" with only length of output used (corner case)
+    """
+
+    def impl(df1, df2):
+        return len(df1.merge(df2, how="cross"))
+
+    df1 = pd.DataFrame({"A": [1, 2, 3, 4], "B": [1, 3, 4, 11]})
+    df2 = pd.DataFrame({"C": [3, 4, 5], "D": [6, 7, 8]})
+    check_func(impl, (df1, df2))
+
+    # test only one side being distributed
+    py_out = len(df1) * len(df2)
+    bodo_out = bodo.jit(distributed=["df1"])(impl)(_get_dist_arg(df1, True, True), df2)
+    assert bodo_out == py_out
+    bodo_out = bodo.jit(distributed=["df2"])(impl)(df1, _get_dist_arg(df2, True, True))
+    assert bodo_out == py_out
+
+
+@pytest_mark_pandas
+def test_merge_cross_dead_input(memory_leak_check):
+    """
+    Test merge() with how="cross" when all columns from one side are dead
+    """
+
+    # left side is dead
+    def impl1(df1, df2):
+        df3 = df1.merge(df2, how="cross")
+        return df3[["D"]]
+
+    # right side is dead
+    def impl2(df1, df2):
+        df3 = df1.merge(df2, how="cross")
+        return df3[["A"]]
+
+    df1 = pd.DataFrame({"A": [1, 2, 3, 4], "B": [1, 3, 4, 11]})
+    df2 = pd.DataFrame({"C": [3, 4, 5], "D": [6, 7, 8]})
+    check_func(impl1, (df1, df2), sort_output=True, reset_index=True, check_dtype=False)
+    check_func(impl2, (df1, df2), sort_output=True, reset_index=True, check_dtype=False)
+
+    # test only one side being distributed
+    out_df = _gather_output(
+        bodo.jit(distributed=["df1"])(impl1)(_get_dist_arg(df1, True, True), df2)
+    )
+    if bodo.get_rank() == 0:
+        _test_equal(
+            out_df,
+            impl1(df1, df2),
+            sort_output=True,
+            reset_index=True,
+            check_dtype=False,
+        )
+    out_df = _gather_output(
+        bodo.jit(distributed=["df2"])(impl2)(df1, _get_dist_arg(df2, True, True))
+    )
+    if bodo.get_rank() == 0:
+        _test_equal(
+            out_df,
+            impl2(df1, df2),
+            sort_output=True,
+            reset_index=True,
+            check_dtype=False,
+        )
+
+
+@pytest_mark_pandas
+def test_interval_join_detection(memory_leak_check):
+    """
+    Make sure interval join detection works as expected (no false positives or false
+    negatives)
+    """
+
+    def impl1(df1, df2, on_str):
+        df3 = df1.merge(df2, on=on_str, how="inner")
+        return df3
+
+    def impl1_one_col(df1, df2, on_str):
+        df3 = df1.merge(df2, on=on_str, how="inner")
+        return df3[["B"]]
+
+    def impl2(df1, df2, on_str, how):
+        df3 = df1.merge(df2, on=on_str, how=how)
+        return df3
+
+    df1 = pd.DataFrame(
+        {"C": ["a1", "b1"], "P": [3, 1], "E": [2, 3], "F": [3.3, 4.4], "G": [4.6, 9]}
+    )
+    df2 = pd.DataFrame(
+        {"B": [12, 2, 4, 10], "A": [11, 2, 8, 0], "D": [1.1, 2.2, 3.3, 4.4]}
+    )
+    df1_type = bodo.typeof(df1)
+    df2_type = bodo.typeof(df2)
+
+    # detect interval join cases
+    on_interval = [
+        # point in interval
+        "((left.`P` >= right.`A`) & (left.`P` < right.`B`))",
+        "((right.`D` < left.`G`) & (left.`F` < right.`D`))",
+    ]
+
+    for on_str in on_interval:
+        stream = io.StringIO()
+        logger = create_string_io_logger(stream)
+        lit_type = numba.types.literal(on_str)
+        with set_logging_stream(logger, 1):
+            # Only Compile with Given Types
+            bodo.jit((df1_type, df2_type, lit_type))(impl1)
+            check_logger_msg(stream, "Using optimized interval range join")
+        with set_logging_stream(logger, 1):
+            bodo.jit((df1_type, df2_type, lit_type))(impl1_one_col)
+            check_logger_msg(stream, "Using optimized interval range join")
+
+    # avoid non-interval join cases
+    on_not_interval = [
+        # equality condition
+        "((left.`P` >= right.`A`) & (left.`P` < right.`B`) & (left.`E` == right.`B`))",
+        # extra condition
+        "((left.`P` >= right.`A`) & (left.`P` < right.`B`) & (left.`F` > right.`D`))",
+        # different data types
+        "((left.`P` >= right.`A`) & (left.`P` < right.`D`))",
+        # not AND
+        "((left.`P` >= right.`A`) | (left.`P` < right.`B`))",
+        # not direct column access
+        "((left.`P` >= right.`A`) | (left.`P` < right.`B` + 1))",
+        # invalid point comparison case (less-than two other columns)
+        "((left.`P` <= right.`A`) | (left.`P` < right.`B`))",
+        # invalid interval comparison case (both left less-than right)
+        "((left.`P` <= right.`A`) & (left.`E` < right.`B`))",
+    ]
+
+    for on_str in on_not_interval:
+        stream = io.StringIO()
+        logger = create_string_io_logger(stream)
+        lit_type = numba.types.literal(on_str)
+        with set_logging_stream(logger, 1):
+            # Only Compile with Given Types
+            bodo.jit((df1_type, df2_type, lit_type))(impl1)
+            check_logger_no_msg(stream, "Using optimized interval range join")
+        with set_logging_stream(logger, 1):
+            bodo.jit((df1_type, df2_type, lit_type))(impl1_one_col)
+            check_logger_no_msg(stream, "Using optimized interval range join")
+
+    # outer not on the points side
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        on_str = "((left.`P` >= right.`A`) & (left.`P` < right.`B`))"
+        lit_on_str = numba.types.literal(on_str)
+        lit_right = numba.types.literal("right")
+        bodo.jit((df1_type, df2_type, lit_on_str, lit_right))(impl2)
+        check_logger_no_msg(stream, "Using optimized interval range join")
+
+    # outer join -- should not pick interval join
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        on_str = "((left.`P` >= right.`A`) & (left.`P` < right.`B`))"
+        lit_on_str = numba.types.literal(on_str)
+        lit_right = numba.types.literal("outer")
+        bodo.jit((df1_type, df2_type, lit_on_str, lit_right))(impl2)
+        check_logger_no_msg(stream, "Using optimized interval range join")
+
+
+@pytest.fixture(
+    ids=["int", "double", "decimal", "time", "datetime", "date", "timedelta"],
+    params=[
+        (
+            pd.DataFrame(
+                {
+                    "C": ["a1", "b1"] * 5,
+                    "P": pd.Series([3, 1, 3, 1, None] * 2, dtype="Int64"),
+                    "E": pd.Series([2, 3] * 5, dtype="Int64"),
+                    "F": [3.3, 4.4] * 5,
+                    "G": [4.6, 9] * 5,
+                }
+            ),
+            pd.DataFrame(
+                {
+                    "B": pd.Series([12, 2, 8, 10] * 5, dtype="Int64"),
+                    "A": pd.Series([11, 2, 4, 0] * 5, dtype="Int64"),
+                    "D": [1.1, 2.2, 3.3, 4.4] * 5,
+                }
+            ),
+        ),
+        pytest.param(
+            (
+                pd.DataFrame(
+                    {
+                        "P": pd.array([1.21, 2.37, None] * 3, dtype="Float64"),
+                        "E": pd.array(
+                            [None, -1.0, 2.4, None, 6.0, 7.3, 1.1, None, None],
+                            dtype="Float64",
+                        ),
+                        "G": ["some", "string", "."] * 3,
+                    }
+                ),
+                pd.DataFrame(
+                    {
+                        "A": pd.array([1.0, 2.0, 3.0, 4.0] * 5, dtype="Float64"),
+                        "B": pd.array([1.1, 2.2, 3.3, 4.4, 5.5] * 4, dtype="Float64"),
+                    }
+                ),
+            ),
+            marks=pytest.mark.slow,
+        ),
+        # TODO: General Join does not support Decimal128 yet
+        pytest.param(
+            (
+                pd.DataFrame(
+                    {
+                        "P": np.array([Decimal(1.21), Decimal(2.37), None] * 3),
+                        "E": np.array(
+                            [
+                                None,
+                                Decimal(-1.0),
+                                Decimal(2.4),
+                                None,
+                                Decimal(6.0),
+                                Decimal(7.3),
+                                Decimal(1.1),
+                                None,
+                                None,
+                            ]
+                        ),
+                        "G": [1.1, 2.3, 4.5] * 3,
+                    }
+                ),
+                pd.DataFrame(
+                    {
+                        "A": np.array(
+                            [Decimal(1.0), Decimal(2.0), Decimal(3.0), Decimal(4.0)] * 5
+                        ),
+                        "B": np.array(
+                            [
+                                Decimal(1.1),
+                                Decimal(2.2),
+                                Decimal(3.3),
+                                Decimal(4.4),
+                                Decimal(5.5),
+                            ]
+                            * 4
+                        ),
+                    }
+                ),
+            ),
+            marks=pytest.mark.skip("[BE-4251] Support Decimal in Joins"),
+        ),
+        pytest.param(
+            (
+                pd.DataFrame(
+                    {
+                        "P": [bodo.Time(x, 0, 0, x, precision=9) for x in range(8)]
+                        + [None, None],
+                        "E": (
+                            [bodo.Time(4 * x, 0, 0, precision=9) for x in range(4)]
+                            + [None]
+                        )
+                        * 2,
+                    }
+                ),
+                pd.DataFrame(
+                    {
+                        "A": [bodo.Time(x, 0, 0, precision=9) for x in range(4)] * 5,
+                        "B": [None, None]
+                        + [bodo.Time(x % 24, 0, 0, precision=9) for x in range(18)],
+                        "D": [1.1, 2.2, 3.3, 4.4] * 5,
+                    }
+                ),
+            ),
+            marks=pytest.mark.slow,
+        ),
+        (
+            pd.DataFrame(
+                {
+                    "P": pd.date_range(
+                        start="2018-04-24", end="2018-04-27", periods=10
+                    ),
+                    "E": pd.date_range("2018-04-23", periods=10, freq="D"),
+                }
+            ),
+            pd.DataFrame(
+                {
+                    "A": pd.date_range(start="2018-04-24", freq="D", periods=4).tolist()
+                    * 5,
+                    "B": pd.date_range(
+                        start="2018-04-24", end="2018-04-27", periods=5
+                    ).tolist()
+                    * 4,
+                    "D": [1.1, 2.2, 3.3, 4.4] * 5,
+                }
+            ),
+        ),
+        (
+            pd.DataFrame(
+                {
+                    "P": [None, None]
+                    + pd.date_range(
+                        start="2018-04-20", freq="2D", periods=10
+                    ).date.tolist(),
+                    "E": pd.date_range(
+                        "2018-04-10", periods=10, freq="10D"
+                    ).date.tolist()
+                    + [None, None],
+                }
+            ),
+            pd.DataFrame(
+                {
+                    "A": pd.date_range(
+                        start="2018-04-24", freq="D", periods=4
+                    ).date.tolist()
+                    * 5,
+                    "B": pd.date_range(
+                        start="2018-04-24", freq="2D", periods=5
+                    ).date.tolist()
+                    * 4,
+                    "D": [1.1, 2.2, 3.3, 4.4] * 5,
+                }
+            ),
+        ),
+        pytest.param(
+            (
+                pd.DataFrame(
+                    {
+                        "P": pd.timedelta_range(start="1 day", periods=8).tolist()
+                        + [None, None],
+                        "E": pd.timedelta_range(start="1 day", freq="18h", periods=10),
+                        "G": [1, 2, 3, 4, 5] * 2,
+                    }
+                ),
+                pd.DataFrame(
+                    {
+                        "A": pd.Series(
+                            pd.to_timedelta(["5D", None, "1D", "0D", None, "7D"] * 3),
+                        ),
+                        "B": pd.Series(
+                            pd.to_timedelta(["6D", None, "0D", "10D", "4D", "7D"] * 3),
+                        ),
+                        "C": ["hello", "world"] * 9,
+                    }
+                ),
+            ),
+            marks=pytest.mark.skip(
+                "[BE-4102] Support Converting Timedelta to Arrow's Duration Type"
+            ),
+        ),
+    ],
+)
+def interval_join_test_tables(request):
+    ldf, rdf = request.param
+    cross_df = ldf.merge(rdf, how="cross")
+    return (ldf, rdf, cross_df)
+
+
+@pytest_mark_pandas
+@pytest.mark.parametrize(
+    "lcond,rcond",
+    [
+        (">=", "<"),
+        (">", "<="),
+        pytest.param(">", "<", marks=pytest.mark.slow),
+        pytest.param(">=", "<=", marks=pytest.mark.slow),
+    ],
+)
+@pytest.mark.parametrize(
+    "distributed", [None, [("point_df", 0)], [("range_df", 1)], False]
+)
+@pytest.mark.parametrize("how", ["inner", "left"])
+@pytest.mark.parametrize("broadcast", [True, False])
+def test_point_in_interval_join(
+    interval_join_test_tables: tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame],
+    lcond: str,
+    rcond: str,
+    distributed: list[tuple[str, int]] | bool | None,
+    how: str,
+    broadcast: bool,
+    memory_leak_check,
+):
+    """
+    Test Specialized Point-in-Interval Join Operation
+    The condition must be in the form A (< or <=) P (< or <=) B
+    where A, B in one table and P in the other table.
+    Tests different datatypes, condition equalities, and distributions
+    """
+    if broadcast and (distributed is not None):
+        pytest.skip(
+            "Broadcast Join only makes sense in the case where both sides are parallel."
+        )
+
+    point_df, range_df, cross_df = interval_join_test_tables
+
+    def impl(point_df, range_df, on_str, how):
+        df3 = point_df.merge(range_df, on=on_str, how=how)
+        return df3
+
+    on_str = f"((left.`P` {lcond} right.`A`) & (left.`P` {rcond} right.`B`))"
+    on_str_py = f"P {lcond} A & P {rcond} B"
+    py_out = cross_df.query(on_str_py)
+    if how == "left":
+        unused_point_rows = point_df[~point_df["P"].isin(py_out["P"].unique())]
+        py_out = pd.concat([py_out, unused_point_rows], ignore_index=True)
+
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    point_df_type = bodo.typeof(point_df)
+    range_df_type = bodo.typeof(range_df)
+    on_str_type = numba.types.literal(on_str)
+    how_type = numba.types.literal(how)
+    with set_logging_stream(logger, 2):
+        bodo.jit((point_df_type, range_df_type, on_str_type, how_type))(impl)
+        check_logger_msg(stream, "Using optimized interval range join")
+
+    # Set BODO_BCAST_JOIN_THRESHOLD to 0 to force non-broadcast (fully-parallel) case,
+    # and to 1GiB to force the broadcast join case.
+    with temp_env_override(
+        {"BODO_BCAST_JOIN_THRESHOLD": "0" if not broadcast else str(1024 * 1024 * 1024)}
+    ):
+        check_func(
+            impl,
+            (point_df, range_df, on_str, how),
+            py_output=py_out,
+            sort_output=True,
+            reset_index=True,
+            check_dtype=False,
+            distributed=distributed,
+            is_out_distributed=False if distributed is False else None,
+        )
+
+
+@pytest_mark_pandas
+@pytest.mark.parametrize(
+    "point_df",
+    [
+        pd.DataFrame({"P": pd.Series([], dtype="int64")}),
+        pd.DataFrame({"P": pd.Series([1, 2, 3, 4, 5], dtype="int64")}),
+    ],
+)
+@pytest.mark.parametrize(
+    "range_df",
+    [
+        pd.DataFrame(
+            {"A": pd.Series([], dtype="int64"), "B": pd.Series([], dtype="int64")}
+        ),
+        pd.DataFrame(
+            {
+                "A": pd.Series([1, 2], dtype="int64"),
+                "B": pd.Series([1, 2], dtype="int64"),
+            }
+        ),
+    ],
+)
+@pytest.mark.parametrize("how", ["inner", "left"])
+def test_point_in_interval_join_empty(point_df, range_df, how, memory_leak_check):
+    """
+    Test if Point-in-Interval Join works with empty tables.
+    We especially want to test when
+    - Point Table is Empty
+    - Point Table is Not Empty and Left Join
+    """
+    if len(point_df) != 0 and len(range_df) != 0:
+        pytest.skip("Already testing this case")
+
+    points = point_df["P"] if how == "left" else pd.Series([], dtype="int64")
+    out_df = pd.DataFrame(
+        {
+            "P": points,
+            "A": pd.Series([pd.NA] * len(points), dtype="Int64"),
+            "B": pd.Series([pd.NA] * len(points), dtype="Int64"),
+        }
+    )
+
+    def impl(point_df, range_df, on_str, how):
+        df3 = point_df.merge(range_df, on=on_str, how=how)
+        return df3
+
+    on_str = "((left.`P` > right.`A`) & (left.`P` < right.`B`))"
+
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    point_df_type = bodo.typeof(point_df)
+    range_df_type = bodo.typeof(range_df)
+    on_str_type = numba.types.literal(on_str)
+    how_str_type = numba.types.literal(how)
+    with set_logging_stream(logger, 2):
+        bodo.jit((point_df_type, range_df_type, on_str_type, how_str_type))(impl)
+        check_logger_msg(stream, "Using optimized interval range join")
+
+    check_func(
+        impl,
+        (point_df, range_df, on_str, how),
+        py_output=out_df,
+        sort_output=True,
+        reset_index=True,
+        check_dtype=False,
+    )
+
+
+@pytest_mark_pandas
+@pytest.mark.parametrize(
+    "lcond,rcond",
+    [
+        (">=", "<"),
+        (">", "<"),
+        (">", "<="),
+        (">=", "<="),
+    ],
+)
+@pytest.mark.parametrize(
+    "distributed", [None, [("left_df", 0)], [("right_df", 1)], False]
+)
+def test_interval_overlap_join(
+    interval_join_test_tables: tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame],
+    lcond: str,
+    rcond: str,
+    distributed: list[tuple[str, int]] | bool | None,
+    memory_leak_check: None,
+):
+    """
+    Test Interval Overlap Join Operation
+    The condition must be in the form A (< or <=) P and E (< or <=) B
+    where A, B in one table and P, E in the other table.
+    Tests different datatypes, condition equalities, and distributions.
+    This goes through regular cross join but might get a specialized implementation
+    in the future.
+    """
+
+    left_df, right_df, cross_df = interval_join_test_tables
+
+    def impl(left_df, right_df, on_str, how):
+        df3 = left_df.merge(right_df, on=on_str, how=how)
+        return df3
+
+    on_str = f"((left.`P` {lcond} right.`A`) & (left.`E` {rcond} right.`B`))"
+    on_str_py = f"P {lcond} A & E {rcond} B"
+    py_out = cross_df.query(on_str_py)
+
+    check_func(
+        impl,
+        (left_df, right_df, on_str, "inner"),
+        py_output=py_out,
+        sort_output=True,
+        reset_index=True,
+        check_dtype=False,
+        distributed=distributed,
+        is_out_distributed=False if distributed is False else None,
+    )
+
+
 @pytest.mark.slow
+@pytest_mark_pandas
 def test_merge_suffix_included(memory_leak_check):
     """
     Merge between two data columns that would conflict
@@ -909,6 +1517,7 @@ def test_merge_suffix_included(memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest_mark_pandas
 def test_merge_suffix_collision(memory_leak_check):
     """
     Merge between two data columns where a suffix
@@ -937,6 +1546,7 @@ def test_merge_suffix_collision(memory_leak_check):
     check_func(impl, (df_left, df_right), sort_output=True, reset_index=True)
 
 
+@pytest_mark_pandas
 def test_merge_disjoint_keys1(memory_leak_check):
     """
     Test merge(): 'how' = inner on specified integer column
@@ -952,6 +1562,7 @@ def test_merge_disjoint_keys1(memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest_mark_pandas
 def test_merge_disjoint_keys2(memory_leak_check):
     """
     Test merge(): 'how' = inner on specified integer column
@@ -983,6 +1594,7 @@ def test_merge_inner(memory_leak_check):
     check_func(test_impl, (df1, df2), sort_output=True, reset_index=True)
 
 
+@pytest_mark_pandas
 def test_merge_left1(memory_leak_check):
     """
     Test merge(): 'how' = left on specified integer column
@@ -1000,6 +1612,7 @@ def test_merge_left1(memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest_mark_pandas
 def test_merge_left2(memory_leak_check):
     """
     Test merge(): 'how' = left on specified integer column
@@ -1017,6 +1630,7 @@ def test_merge_left2(memory_leak_check):
     check_func(test_impl, (df1, df2), sort_output=True, reset_index=True)
 
 
+@pytest_mark_pandas
 def test_merge_right(memory_leak_check):
     """
     Test merge(): 'how' = right on specified integer column
@@ -1033,6 +1647,7 @@ def test_merge_right(memory_leak_check):
     check_func(test_impl, (df1, df2), sort_output=True, reset_index=True)
 
 
+@pytest_mark_pandas
 def test_merge_outer(memory_leak_check):
     """
     Test merge(): 'how' = outer on specified integer column
@@ -1049,6 +1664,7 @@ def test_merge_outer(memory_leak_check):
     check_func(test_impl, (df1, df2), sort_output=True, reset_index=True)
 
 
+@pytest_mark_pandas
 def test_merge_overlap(memory_leak_check):
     """
     Test merge(): column overlapping behavior
@@ -1063,6 +1679,7 @@ def test_merge_overlap(memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest_mark_pandas
 @pytest.mark.parametrize("n", [11, 11111])
 def test_merge_int_key(n, memory_leak_check):
     """
@@ -1078,6 +1695,7 @@ def test_merge_int_key(n, memory_leak_check):
     check_func(test_impl, (df1, df2), sort_output=True, reset_index=True)
 
 
+@pytest_mark_pandas
 @pytest.mark.parametrize(
     "n1, n2, len_siz",
     [
@@ -1133,6 +1751,7 @@ def test_merge_nullable_int_bool(n1, n2, len_siz, memory_leak_check):
     check_func(test_impl4, (df1, df2), sort_output=True, reset_index=True)
 
 
+@pytest_mark_pandas
 def test_merge_multi_int_key(memory_leak_check):
     """
     Test merge(): sequentially merge on more than one integer key columns
@@ -1149,7 +1768,7 @@ def test_merge_multi_int_key(memory_leak_check):
 
     # test constant list inference for join keys
     def test_impl3(df1, df2):
-        df3 = df1.merge(df2, on=list(set(df1.columns) - set(["C"])))
+        df3 = df1.merge(df2, on=list(set(df1.columns) - {"C"}))
         return df3
 
     df1 = pd.DataFrame(
@@ -1166,6 +1785,7 @@ def test_merge_multi_int_key(memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest_mark_pandas
 def test_merge_literal_arg(memory_leak_check):
     """
     Test forcing merge() args to be literals if jit arguments
@@ -1196,6 +1816,7 @@ def test_merge_literal_arg(memory_leak_check):
     # check_func(test_impl2, (df1, df2.set_index("A"), "A", True, "inner"), sort_output=True)
 
 
+@pytest_mark_pandas
 def test_merge_right_index_rm_dead(memory_leak_check):
     """test joins with an index (rm dead bug reported by user)"""
 
@@ -1222,9 +1843,11 @@ def test_merge_right_index_rm_dead(memory_leak_check):
         cal_average_by_payment_type,
         (df,),
         sort_output=True,
+        check_dtype=False,
     )
 
 
+@pytest_mark_pandas
 def test_merge_right_key_nullable(memory_leak_check):
     """Tests a bug where converting right key to nullable in left join output would
     throw an error.
@@ -1244,6 +1867,7 @@ def test_merge_right_key_nullable(memory_leak_check):
     )
 
 
+@pytest_mark_pandas
 def test_merge_bool_to_nullable(memory_leak_check):
     """Tests converting non-nullable bool input to nullable bool in output"""
 
@@ -1263,6 +1887,7 @@ def test_merge_bool_to_nullable(memory_leak_check):
     )
 
 
+@pytest_mark_pandas
 def test_merge_key_type_change(memory_leak_check):
     """
     Test merge() key type check when key type changes in the program (handled in partial
@@ -1285,6 +1910,7 @@ def test_merge_key_type_change(memory_leak_check):
     )
 
 
+@pytest_mark_pandas
 def test_merge_schema_change(memory_leak_check):
     """
     Test merge() key check when schema changes in the program (handled in partial
@@ -1305,6 +1931,7 @@ def test_merge_schema_change(memory_leak_check):
     )
 
 
+@pytest_mark_pandas
 def test_merge_str_key(memory_leak_check):
     """
     Test merge(): sequentially merge on key column of type string
@@ -1321,6 +1948,7 @@ def test_merge_str_key(memory_leak_check):
     assert set(bodo_func(df1, df2)) == set(test_impl(df1, df2))
 
 
+@pytest_mark_pandas
 def test_merge_str_nan1(memory_leak_check):
     """
     test merging dataframes containing string columns with nan values
@@ -1332,13 +1960,13 @@ def test_merge_str_nan1(memory_leak_check):
     df1 = pd.DataFrame(
         {
             "key1": ["foo", "bar", "baz", "baz", "c4", "c7"],
-            "A": ["b", "", "ss", "a", "b2", np.nan],
+            "A": ["b", "", "ss", "a", "b2", None],
         }
     )
     df2 = pd.DataFrame(
         {
             "key2": ["baz", "bar", "baz", "foo", "c4", "c7"],
-            "B": ["b", np.nan, "", "AA", "c", "a1"],
+            "B": ["b", None, "", "AA", "c", "a1"],
         }
     )
 
@@ -1346,6 +1974,7 @@ def test_merge_str_nan1(memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest_mark_pandas
 def test_merge_str_nan2(memory_leak_check):
     """
     test merging dataframes containing string columns with nan values
@@ -1364,6 +1993,7 @@ def test_merge_str_nan2(memory_leak_check):
     check_func(test_impl, (df1, df2), sort_output=True, reset_index=True)
 
 
+@pytest_mark_pandas
 def test_merge_binary_key(memory_leak_check):
     """
     Test merge(): sequentially merge on key column of type binary
@@ -1378,10 +2008,10 @@ def test_merge_binary_key(memory_leak_check):
         {"key2": [b"baz", b"bar", b"baz"] * 3, "B": [b"b", b"zzz", b"ss"] * 3}
     )
 
-    bodo_func = bodo.jit(test_impl)
     check_func(test_impl, (df1, df2), sort_output=True, reset_index=True)
 
 
+@pytest_mark_pandas
 def test_merge_binary_nan1(memory_leak_check):
     """
     test merging dataframes containing binary columns with nan values
@@ -1393,13 +2023,13 @@ def test_merge_binary_nan1(memory_leak_check):
     df1 = pd.DataFrame(
         {
             "key1": [b"foo", b"bar", b"baz", b"baz", b"c4", b"c7"],
-            "A": [b"b", b"", b"ss", b"a", b"b2", np.nan],
+            "A": [b"b", b"", b"ss", b"a", b"b2", None],
         }
     )
     df2 = pd.DataFrame(
         {
             "key2": [b"baz", b"bar", b"baz", b"foo", b"c4", b"c7"],
-            "B": [b"b", np.nan, b"", b"AA", b"c", b"a1"],
+            "B": [b"b", None, b"", b"AA", b"c", b"a1"],
         }
     )
 
@@ -1407,6 +2037,7 @@ def test_merge_binary_nan1(memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest_mark_pandas
 def test_merge_binary_nan2(memory_leak_check):
     """
     test merging dataframes containing binary columns with nan values
@@ -1423,6 +2054,7 @@ def test_merge_binary_nan2(memory_leak_check):
     check_func(test_impl, (df1, df2), sort_output=True, reset_index=True)
 
 
+@pytest_mark_pandas
 def test_merge_bool_nan(memory_leak_check):
     """
     test merging dataframes containing boolean columns with nan values
@@ -1437,14 +2069,14 @@ def test_merge_bool_nan(memory_leak_check):
     df1 = pd.DataFrame(
         {
             "A": [3, 1, 1, 3, 4, 2, 4, 11],
-            "B": [True, False, True, False, np.nan, True, False, True],
+            "B": [True, False, True, False, None, True, False, True],
         }
     )
 
     df2 = pd.DataFrame(
         {
             "A": [2, 1, 4, 4, 3, 2, 4, 11],
-            "C": [False, True, np.nan, False, False, True, False, True],
+            "C": [False, True, None, False, False, True, False, True],
         }
     )
     check_func(
@@ -1452,6 +2084,7 @@ def test_merge_bool_nan(memory_leak_check):
     )
 
 
+@pytest_mark_pandas
 def test_merge_nontrivial_index(memory_leak_check):
     """
     Test merge(): merging on columns with dataframe having non-trivial indexes.
@@ -1471,6 +2104,7 @@ def test_merge_nontrivial_index(memory_leak_check):
     check_func(test_impl, (df1, df2), sort_output=True, reset_index=True)
 
 
+@pytest_mark_pandas
 def test_merge_out_str_na(memory_leak_check):
     """
     Test merge(): setting NA in output string data column.
@@ -1508,6 +2142,7 @@ def test_merge_out_str_na(memory_leak_check):
     check_func(test_impl2, (df1, df2), check_typing_issues=False)
 
 
+@pytest_mark_pandas
 def test_merge_out_binary_na(memory_leak_check):
     """
     Test merge(): setting NA in output binary data column.
@@ -1532,6 +2167,7 @@ def test_merge_out_binary_na(memory_leak_check):
     check_func(test_impl, (df1, df2), sort_output=True, reset_index=True)
 
 
+@pytest_mark_pandas
 def test_merge_datetime(memory_leak_check):
     """
     Test merge(): merge on key column of type DatetimeIndex
@@ -1556,6 +2192,7 @@ def test_merge_datetime(memory_leak_check):
     check_func(test_impl, (df1, df2), sort_output=True, reset_index=True)
 
 
+@pytest_mark_pandas
 def test_merge_datetime_parallel(memory_leak_check):
     """
     Test merge(): merge on key column of type DatetimeIndex
@@ -1589,6 +2226,7 @@ def test_merge_datetime_parallel(memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest_mark_pandas
 @pytest.mark.parametrize(
     "df1",
     [
@@ -1622,6 +2260,7 @@ def test_merge_suffix(df1, df2, memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest_mark_pandas
 @pytest.mark.parametrize(
     "df1",
     [
@@ -1652,6 +2291,7 @@ def test_merge_index1(df1, df2, memory_leak_check):
     check_func(impl1, (df1, df2), sort_output=True)
 
 
+@pytest_mark_pandas
 def test_merge_index_left(memory_leak_check):
     """
     test merge(): with left_index and right_index specified
@@ -1668,6 +2308,7 @@ def test_merge_index_left(memory_leak_check):
     check_func(impl, (df1, df2), sort_output=True, check_dtype=False)
 
 
+@pytest_mark_pandas
 def test_merge_index_right(memory_leak_check):
     """
     test merge(): with left_index and right_index specified
@@ -1683,6 +2324,7 @@ def test_merge_index_right(memory_leak_check):
     check_func(impl, (df1, df2), sort_output=True, check_dtype=False)
 
 
+@pytest_mark_pandas
 def test_merge_index_outer(memory_leak_check):
     """
     test merge(): with left_index and right_index specified
@@ -1700,6 +2342,7 @@ def test_merge_index_outer(memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest_mark_pandas
 @pytest.mark.parametrize(
     "df1, df2",
     [
@@ -1748,6 +2391,7 @@ def test_merge_non_unique_index(df1, df2, memory_leak_check):
 
 
 # TODO: Add memory leak check when constant lowering memory leak is fixed
+@pytest_mark_pandas
 def test_indicator_true():
     """
     test merge(): indicator=True
@@ -1783,6 +2427,7 @@ def test_indicator_true():
     check_func(impl4, (df1, df2), sort_output=True, reset_index=True)
 
 
+@pytest_mark_pandas
 def test_indicator_true_deadcol(memory_leak_check):
     """
     test merge(): indicator=True where the indicator column can be optimized out
@@ -1825,6 +2470,7 @@ def test_indicator_true_deadcol(memory_leak_check):
     assert confirmed_dead_index, "Index not confirmed dead in join node"
 
 
+@pytest_mark_pandas
 def test_merge_all_nan_cols(memory_leak_check):
     """
     test merge(): all columns to merge on are null
@@ -1838,6 +2484,58 @@ def test_merge_all_nan_cols(memory_leak_check):
     df2 = pd.DataFrame({"A": [np.nan, np.nan, np.nan], "B": [0, 1, 2]})
 
     check_func(impl, (df1, df2), sort_output=True, reset_index=True)
+
+
+def merge_general_outer_helper(
+    df1: pd.DataFrame, df2: pd.DataFrame, how, eq_keys: list[str], cond
+):
+    """
+    Helper function to perform SQL-like outer non-equijoins using Pandas operations
+    Essentially performs a:
+    1) Normal Join with Equality Keys
+    2) Filter using non-equi condition
+    3) Extra Joins on the Index and Coalesce (combine_first) to fill in missing rows
+
+    Note: This is implemented to specifically avoid using Spark in testing.
+    TODO: Consider using DuckDB or Polars for testing instead
+    """
+
+    idf1 = df1.reset_index(names=["lidx"])
+    idf2 = df2.reset_index(names=["ridx"])
+    df1_cols = list(df1.columns)
+    df2_cols = list(df2.columns)
+
+    # Perform initial join
+    if eq_keys:
+        # Pandas joins NULL rows, SQL doesn't
+        idf1_notna = idf1.dropna(subset=eq_keys)
+        idf2_notna = idf2.dropna(subset=eq_keys)
+        py_out = idf1_notna.merge(idf2_notna, how=how, on=eq_keys)
+    else:
+        py_out = idf1.merge(idf2, how="cross")
+    # Filter using condition
+    py_out = py_out.query(cond)
+    # Fix outer rows
+    if how in ("left", "outer"):
+        py_out = idf1.merge(py_out, on="lidx", how="left")
+        for col in df1_cols:
+            py_out[col] = py_out[f"{col}_x"].combine_first(py_out[f"{col}_y"])
+            py_out = py_out.drop(columns=[f"{col}_x", f"{col}_y"])
+    if how in ("right", "outer"):
+        in_how = "left" if how == "right" else "outer"
+        py_out = idf2.merge(py_out, on="ridx", how=in_how)
+        for col in df2_cols:
+            py_out[col] = py_out[f"{col}_x"].combine_first(py_out[f"{col}_y"])
+            py_out = py_out.drop(columns=[f"{col}_x", f"{col}_y"])
+
+    py_out = py_out.drop(columns=["lidx", "ridx"])
+    py_out = py_out.reset_index(drop=True)
+
+    # Remove to avoid duplicating columns
+    for col in eq_keys:
+        df2_cols.remove(col)
+    py_out = py_out[df1_cols + df2_cols]
+    return py_out
 
 
 def test_merge_general_cond(memory_leak_check):
@@ -1871,6 +2569,18 @@ def test_merge_general_cond(memory_leak_check):
             how=how,
         )
 
+    # single non-equality term, no equality
+    def impl6(df1, df2):
+        return df1.merge(df2, on="right.D <= left.B + 1")
+
+    # multiple non-equality terms, no equality
+    def impl7(df1, df2, how):
+        return df1.merge(
+            df2,
+            on="(right.D < left.B + 1 | right.C > left.B)",
+            how=how,
+        )
+
     df1 = pd.DataFrame({"A": [1, 2, 1, 1, 3, 2, 3], "B": [1, 2, 3, 1, 2, 3, 1]})
     df2 = pd.DataFrame(
         {
@@ -1882,6 +2592,20 @@ def test_merge_general_cond(memory_leak_check):
     # larger tables to test short/long table control flow in _join.cpp
     df3 = pd.concat([df1] * 10)
     df4 = pd.concat([df2] * 10)
+    # nullable float
+    df5 = pd.DataFrame(
+        {
+            "A": pd.array([1, 2, 1, 1, 3, 2, 3], "Float64"),
+            "B": pd.array([1, 2, 3, 1, 2, 3, 1], "Float32"),
+        }
+    )
+    df6 = pd.DataFrame(
+        {
+            "A": pd.array([4, 1, 2, 3, 2, 1, 4], "Float64"),
+            "C": pd.array([3, 2, 1, 3, 2, 1, 2], "Float32"),
+            "D": pd.array([1, 2, 3, 4, 5, 6, 7], "Float64"),
+        }
+    )
 
     py_out = df1.merge(df2, on="A")
     check_func(
@@ -1932,7 +2656,7 @@ def test_merge_general_cond(memory_leak_check):
         py_output=py_out,
     )
 
-    # # hit corner case
+    # hit corner case
     df11 = pd.DataFrame({"A": [1, 1], "B": [1, 3]})
     df22 = pd.DataFrame(
         {
@@ -1952,27 +2676,89 @@ def test_merge_general_cond(memory_leak_check):
         py_output=py_out,
     )
 
-    # # test left/right/outer cases, needs Spark to generate reference output
-    from pyspark.sql import SparkSession
+    py_out = df1.merge(df2, how="cross")
+    py_out = py_out.query("D <= B + 1")
+    check_func(
+        impl6,
+        (df1, df2),
+        sort_output=True,
+        reset_index=True,
+        check_dtype=False,
+        py_output=py_out,
+    )
 
-    spark = SparkSession.builder.getOrCreate()
-    sdf1 = spark.createDataFrame(df1)
-    sdf2 = spark.createDataFrame(df2)
-    sdf1.createOrReplaceTempView("table1")
-    sdf2.createOrReplaceTempView("table2")
+    py_out = df1.merge(df4, how="cross")
+    py_out = py_out.query("D < B + 1 | C > B")
+    check_func(
+        impl7,
+        (df1, df4, "inner"),
+        sort_output=True,
+        reset_index=True,
+        check_dtype=False,
+        py_output=py_out,
+    )
+
+    # testing left/right/outer cases needs Spark to generate reference output
+    # avoid duplicated names for non-equi case
+    df3 = df2.rename(columns={"A": "A1"})
+    df7 = df6.rename(columns={"A": "A1"})
+
     for how in ("left", "right", "outer"):
-        # Spark requires "full outer" for some reason
-        spark_how = "full outer" if how == "outer" else how
-        py_out = spark.sql(
-            f"select * from table1 {spark_how} join table2 on (table2.D < table1.B + 1 or table2.C > table1.B) and table1.A == table2.A"
-        ).toPandas()
-        # spark duplicates key columns with nulls
-        py_out_A = py_out.A.iloc[:, 0].combine_first(py_out.A.iloc[:, 1])
-        py_out = py_out.drop(columns="A")
-        py_out.insert(0, "A", py_out_A)
+        # test with equality
+        py_out = merge_general_outer_helper(df1, df2, how, ["A"], "D < B + 1 | C > B")
         check_func(
             impl5,
             (df1, df2, how),
+            sort_output=True,
+            reset_index=True,
+            check_dtype=False,
+            py_output=py_out,
+        )
+        # test without equality
+        py_out = merge_general_outer_helper(df1, df3, how, [], "D < B + 1 | C > B")
+        check_func(
+            impl7,
+            (df1, df3, how),
+            sort_output=True,
+            reset_index=True,
+            check_dtype=False,
+            py_output=py_out,
+        )
+        # test only one side being distributed
+        out_df = _gather_output(
+            bodo.jit(distributed=["df1"])(impl7)(
+                _get_dist_arg(df1, True, True), df3, how
+            )
+        )
+        if bodo.get_rank() == 0:
+            _test_equal(
+                out_df, py_out, sort_output=True, reset_index=True, check_dtype=False
+            )
+        out_df = _gather_output(
+            bodo.jit(distributed=["df2"])(impl7)(
+                df1, _get_dist_arg(df3, True, True), how
+            )
+        )
+        if bodo.get_rank() == 0:
+            _test_equal(
+                out_df, py_out, sort_output=True, reset_index=True, check_dtype=False
+            )
+        # ---- Test nullable float arrays ----
+        # test with equality
+        py_out = merge_general_outer_helper(df5, df6, how, ["A"], "D < B + 1 | C > B")
+        check_func(
+            impl5,
+            (df5, df6, how),
+            sort_output=True,
+            reset_index=True,
+            check_dtype=False,
+            py_output=py_out,
+        )
+        # test without equality
+        py_out = merge_general_outer_helper(df5, df7, how, [], "D < B + 1 | C > B")
+        check_func(
+            impl7,
+            (df5, df7, how),
             sort_output=True,
             reset_index=True,
             check_dtype=False,
@@ -2094,6 +2880,20 @@ def test_merge_general_cond_na_float(memory_leak_check):
     # larger tables to test short/long table control flow in _join.cpp
     df3 = pd.concat([df1] * 10)
     df4 = pd.concat([df2] * 10)
+    # nullable float input
+    df5 = pd.DataFrame(
+        {
+            "A": [1, 2, 1, 1, 3, 2, 3],
+            "B": pd.Series([1, None, 3, None, 2, 3, 1], dtype="Float64"),
+        }
+    )
+    df6 = pd.DataFrame(
+        {
+            "A": [4, 1, 2, 3, 2, 1, 4],
+            "C": [3, 2, 1, 3, 2, 1, 2],
+            "D": pd.Series([None, 2, 3, 4, 5, 6, 7], dtype="Float32"),
+        }
+    )
 
     py_out = df1.merge(df2, left_on=["A"], right_on=["A"])
     # Note we can't use df.query in Pandas because it can't
@@ -2108,6 +2908,19 @@ def test_merge_general_cond_na_float(memory_leak_check):
         check_dtype=False,
         py_output=py_out,
     )
+
+    py_out = df5.merge(df6, left_on=["A"], right_on=["A"])
+    filter_cond = py_out["D"] <= (py_out["B"] + 1)
+    py_out = py_out[filter_cond]
+    check_func(
+        impl1,
+        (df5, df6),
+        sort_output=True,
+        reset_index=True,
+        check_dtype=False,
+        py_output=py_out,
+    )
+
     py_out = df3.merge(df2, left_on=["A"], right_on=["A"])
     filter_cond = (py_out["C"] + py_out["D"] - 5) >= py_out["B"]
     py_out = py_out[filter_cond]
@@ -2341,30 +3154,8 @@ def test_merge_general_cond_binary(memory_leak_check):
         py_output=py_out,
     )
 
-    # test left/right/outer cases, needs Spark to generate reference output
-    from pyspark.sql import SparkSession
-
-    spark = SparkSession.builder.getOrCreate()
-    sdf1 = spark.createDataFrame(df1)
-    sdf2 = spark.createDataFrame(df2)
-    sdf1.createOrReplaceTempView("table1")
-    sdf2.createOrReplaceTempView("table2")
     for how in ("left", "right", "outer"):
-        # Spark requires "full outer" for some reason
-        spark_how = "full outer" if how == "outer" else how
-        py_out = spark.sql(
-            f"select * from table1 {spark_how} join table2 on (table2.D < table1.B or table2.C < table1.B) and table1.A == table2.A"
-        ).toPandas()
-        # spark duplicates key columns with nulls
-        py_out_A = py_out.A.iloc[:, 0].combine_first(py_out.A.iloc[:, 1])
-        py_out = py_out.drop(columns="A")
-        py_out.insert(0, "A", py_out_A)
-        # Spark uses a different array type from Bodo
-        py_out[py_out.columns] = py_out[py_out.columns].apply(
-            lambda x: [bytes(y) if isinstance(y, bytearray) else y for y in x],
-            axis=1,
-            result_type="expand",
-        )
+        py_out = merge_general_outer_helper(df1, df2, how, ["A"], "D < B | C < B")
         check_func(
             impl6,
             (df1, df2, how),
@@ -2498,24 +3289,9 @@ def test_merge_general_cond_strings(memory_leak_check):
         py_output=py_out,
     )
 
-    # test left/right/outer cases, needs Spark to generate reference output
-    from pyspark.sql import SparkSession
-
-    spark = SparkSession.builder.getOrCreate()
-    sdf1 = spark.createDataFrame(df1)
-    sdf2 = spark.createDataFrame(df2)
-    sdf1.createOrReplaceTempView("table1")
-    sdf2.createOrReplaceTempView("table2")
     for how in ("left", "right", "outer"):
-        # Spark requires "full outer" for some reason
-        spark_how = "full outer" if how == "outer" else how
-        py_out = spark.sql(
-            f"select * from table1 {spark_how} join table2 on (table2.D < table1.B or table2.C < table1.B) and table1.A == table2.A"
-        ).toPandas()
-        # spark duplicates key columns with nulls
-        py_out_A = py_out.A.iloc[:, 0].combine_first(py_out.A.iloc[:, 1])
-        py_out = py_out.drop(columns="A")
-        py_out.insert(0, "A", py_out_A)
+        py_out = merge_general_outer_helper(df1, df2, how, ["A"], "D < B | C < B")
+
         check_func(
             impl5,
             (df1, df2, how),
@@ -2531,6 +3307,7 @@ def test_merge_general_cond_all_keys(memory_leak_check):
     test merge(): with general condition expressions where all non-equal
     conditions use only key columns.
     """
+
     # single equality term
     def impl(df1, df2):
         return df1.merge(
@@ -2572,6 +3349,10 @@ def test_merge_general_cond_rm_dead(memory_leak_check):
         df3 = df1.merge(df2, on="right.D2-5 >= left.C & left.A == right.A2")
         return df3[["A2", "B", "C", "E"]]
 
+    def impl2(df1, df2):
+        df3 = df1.merge(df2, on="right.D2-5 >= left.C")
+        return df3[["A2", "B", "C", "E"]]
+
     df1 = pd.DataFrame(
         {
             "A": [1, 2, 1, 1, 3, 2, 3],
@@ -2600,8 +3381,19 @@ def test_merge_general_cond_rm_dead(memory_leak_check):
         check_dtype=False,
         py_output=py_out,
     )
+    py_out = df1.merge(df2, how="cross")
+    py_out = py_out.query("D2-5 >= C")[["A2", "B", "C", "E"]]
+    check_func(
+        impl2,
+        (df1, df2),
+        sort_output=True,
+        reset_index=True,
+        check_dtype=False,
+        py_output=py_out,
+    )
 
 
+@pytest_mark_pandas
 def test_merge_general_eq_cond(memory_leak_check):
     """
     test equality condition that can't be extracted in merge() with general condition
@@ -2639,6 +3431,7 @@ def test_merge_general_eq_cond(memory_leak_check):
     )
 
 
+@pytest_mark_pandas
 def test_merge_general_non_identifier_columns(memory_leak_check):
     """
     tests merge() with columns that are not valid python identifiers,
@@ -2673,6 +3466,7 @@ def test_merge_general_non_identifier_columns(memory_leak_check):
     )
 
 
+@pytest_mark_pandas
 def test_merge_general_non_identifier_cond_columns(memory_leak_check):
     """
     Test non-identifier columns used directly as a condition rather than in a comparison.
@@ -2705,6 +3499,7 @@ def test_merge_general_non_identifier_cond_columns(memory_leak_check):
     )
 
 
+@pytest_mark_pandas
 def test_merge_general_bool_columns(memory_leak_check):
     """
     tests merge() with boolean columns
@@ -2738,6 +3533,7 @@ def test_merge_general_bool_columns(memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest_mark_pandas
 def test_merge_match_key_types(memory_leak_check):
     """
     test merge(): where key types mismatch but values can be equal
@@ -2765,6 +3561,7 @@ def test_merge_match_key_types(memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest_mark_pandas
 def test_merge_match_key_types2(memory_leak_check):
     """
     test merge(): where key types mismatch in precision
@@ -2791,6 +3588,7 @@ def test_merge_match_key_types2(memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest_mark_pandas
 def test_merge_match_key_types_nullable(memory_leak_check):
     """
     test merge(): where key types mismatch in precision and one is nullable
@@ -2816,6 +3614,7 @@ def test_merge_match_key_types_nullable(memory_leak_check):
     check_func(test_impl2, (df2, df1), sort_output=True, reset_index=True)
 
 
+@pytest_mark_pandas
 def test_merge_cat_identical(memory_leak_check):
     """
     Test merge(): merge identical dataframes on categorical column
@@ -2833,6 +3632,7 @@ def test_merge_cat_identical(memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest_mark_pandas
 def test_merge_cat_multi_cols(memory_leak_check):
     """
     Test merge(): merge dataframes containing mutilple categorical cols
@@ -2856,12 +3656,13 @@ def test_merge_cat_multi_cols(memory_leak_check):
             "C3": ["A"],
         }
     )
-    df1 = df1.append((df3, df1))
-    df2 = df2.append((df3, df2))
+    df1 = pd.concat((df1, df3, df1))
+    df2 = pd.concat((df2, df3, df2))
     check_func(test_impl, (df1, df2), sort_output=True, reset_index=True)
 
 
 @pytest.mark.slow
+@pytest_mark_pandas
 def test_merge_cat1_inner(memory_leak_check):
     """
     Test merge(): merge dataframes containing categorical values
@@ -2882,6 +3683,7 @@ def test_merge_cat1_inner(memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest_mark_pandas
 def test_merge_cat1_right_2cols1(memory_leak_check):
     """
     Test merge(): setting NaN in categorical array
@@ -2902,6 +3704,7 @@ def test_merge_cat1_right_2cols1(memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest_mark_pandas
 def test_merge_cat1_right_2cols2(memory_leak_check):
     """
     Test merge(): setting NaN in categorical array
@@ -2923,6 +3726,7 @@ def test_merge_cat1_right_2cols2(memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest_mark_pandas
 def test_merge_cat1_right(memory_leak_check):
     """
     Test merge(): setting NaN in categorical array
@@ -2943,6 +3747,7 @@ def test_merge_cat1_right(memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest_mark_pandas
 @pytest.mark.parametrize("n", [11, 11111])
 def test_merge_parallel_optimize(n, memory_leak_check):
     """
@@ -2956,11 +3761,14 @@ def test_merge_parallel_optimize(n, memory_leak_check):
         return df3.B.sum()
 
     check_func(test_impl, (n,))
-    assert count_array_REPs() == 0  # assert parallelism
-    assert count_parfor_REPs() == 0  # assert parallelism
+    # Compilation info not available in check_func spawn testing mode
+    if not bodo.tests.utils.test_spawn_mode_enabled:
+        assert count_array_REPs() == 0  # assert parallelism
+        assert count_parfor_REPs() == 0  # assert parallelism
 
 
 @pytest.mark.slow
+@pytest_mark_pandas
 def test_merge_left_parallel(memory_leak_check):
     """
     Test merge(): merge with only left dataframe columns distributed
@@ -2983,6 +3791,7 @@ def test_merge_left_parallel(memory_leak_check):
     assert test_impl(df1, df2) == bodo_func(df1.iloc[start:end], df2)
 
 
+@pytest_mark_pandas
 def test_join_rm_dead_data_name_overlap1(memory_leak_check):
     """
     Test join dead code elimination when there are matching names in data columns of
@@ -2998,6 +3807,7 @@ def test_join_rm_dead_data_name_overlap1(memory_leak_check):
     assert bodo.jit(test_impl)(df1, df2) == test_impl(df1, df2)
 
 
+@pytest_mark_pandas
 def test_join_rm_dead_data_name_overlap2(memory_leak_check):
     """
     Test join dead code elimination when there are matching names in data columns of
@@ -3012,6 +3822,7 @@ def test_join_rm_dead_data_name_overlap2(memory_leak_check):
     check_func(test_impl, (df1, df2), sort_output=True, reset_index=True)
 
 
+@pytest_mark_pandas
 def test_join_deadcode_cleanup(memory_leak_check):
     """
     Test join dead code elimination when a merged dataframe is never used,
@@ -3019,7 +3830,7 @@ def test_join_deadcode_cleanup(memory_leak_check):
     """
 
     def test_impl(df1, df2):  # pragma: no cover
-        df3 = df1.merge(df2, on=["A"])
+        df1.merge(df2, on=["A"])
         return
 
     def test_impl_with_join(df1, df2):  # pragma: no cover
@@ -3103,6 +3914,7 @@ def test_join_call(df1, df2, memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest_mark_pandas
 @pytest.mark.parametrize(
     "df1",
     [
@@ -3153,6 +3965,7 @@ def test_join_how(df1, df2, memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest_mark_pandas
 @pytest.mark.parametrize(
     "df1",
     [
@@ -3212,6 +4025,7 @@ def test_merge_index_column_second(df1, df2, memory_leak_check):
     check_func(f, (df1, df2), sort_output=True)
 
 
+@pytest_mark_pandas
 def test_merge_index_column(memory_leak_check):
     """
     Test merge(): test the merging with one key on the index and the other on the column
@@ -3232,6 +4046,7 @@ def test_merge_index_column(memory_leak_check):
     check_func(f2, (df1, df2), sort_output=True, check_typing_issues=False)
 
 
+@pytest_mark_pandas
 def test_merge_index_column_returning_empty(memory_leak_check):
     """
     Test merge(): Same as first, but returning empty dataframe
@@ -3251,6 +4066,7 @@ def test_merge_index_column_returning_empty(memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest_mark_pandas
 def test_merge_index_column_nontrivial_index(memory_leak_check):
     """
     Test merge(): Same as first but with a non-trivial index
@@ -3267,6 +4083,7 @@ def test_merge_index_column_nontrivial_index(memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest_mark_pandas
 def test_merge_index_column_double_index(memory_leak_check):
     """
     Test merge(): Same as first but with an index being double.
@@ -3283,6 +4100,7 @@ def test_merge_index_column_double_index(memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest_mark_pandas
 def test_merge_index_column_string_index(memory_leak_check):
     """
     Test merge(): Same as first but with a string index
@@ -3298,6 +4116,7 @@ def test_merge_index_column_string_index(memory_leak_check):
     check_func(f1, (df1, df2), sort_output=True, check_typing_issues=False)
 
 
+@pytest_mark_pandas
 def test_merge_index_column_binary_index(memory_leak_check):
     """
     Test merge(): Same as first but with a binary index
@@ -3319,6 +4138,7 @@ def test_merge_index_column_binary_index(memory_leak_check):
     check_func(f1, (df1, df2), sort_output=True)
 
 
+@pytest_mark_pandas
 def test_merge_index_column_how(memory_leak_check):
     """
     Test merge(): Same as first but with a variety of how merging.
@@ -3363,6 +4183,7 @@ def test_merge_index_column_how(memory_leak_check):
     check_func(f4, (df1, df2), sort_output=True, check_dtype=False)
 
 
+@pytest_mark_pandas
 def test_merge_partial_distributed(memory_leak_check):
     """Only one dataframe is distributed, the other fixed.
     In that case in principle we do not need shuffle exchanges.
@@ -3416,6 +4237,7 @@ def _gen_df_rand_col_names():
     return df
 
 
+@pytest_mark_pandas
 def test_merge_common_col_ordering(memory_leak_check):
     """
     Test merge() with several common column names as keys to make sure ordering of set
@@ -3433,8 +4255,8 @@ def test_merge_common_col_ordering(memory_leak_check):
     check_func(impl, (df1, df2), sort_output=True, reset_index=True)
 
 
-# TODO: add memory_leak_check
-def test_merge_nested_arrays_non_keys(nested_arrays_value):
+@pytest_mark_pandas
+def test_merge_nested_arrays_non_keys(nested_arrays_value, memory_leak_check):
     def test_impl(df1, df2):
         df3 = df1.merge(df2, on="A")
         return df3
@@ -3459,6 +4281,7 @@ def test_merge_nested_arrays_non_keys(nested_arrays_value):
 
 
 @pytest.mark.skip("[BE-3083] asof needs to be supported with table format")
+@pytest_mark_pandas
 def test_merge_asof_seq(memory_leak_check):
     """
     Test merge_asof(): merge_asof sequencially on key column of type DatetimeIndex
@@ -3488,6 +4311,7 @@ def test_merge_asof_seq(memory_leak_check):
 
 
 @pytest.mark.skip("[BE-3083] asof needs to be supported with table format")
+@pytest_mark_pandas
 def test_merge_asof_parallel(datapath, memory_leak_check):
     """
     Test merge_asof(): merge_asof in parallel on key column of type DatetimeIndex
@@ -3552,6 +4376,29 @@ def test_merge_asof_parallel(datapath, memory_leak_check):
                         [1, 1, None, None, None, None, 1, 1], dtype="Int64"
                     ),
                     "B2": pd.Series([2, 3, 2, 3, 2, 3, 2, 3], dtype="Int64"),
+                }
+            ),
+        ),
+        (
+            pd.DataFrame(
+                {
+                    "A": pd.Series([5, None, 1, 0, None, 7] * 2, dtype="Float64"),
+                    "B1": pd.Series([1, 2, None, 3] * 3, dtype="Float64"),
+                }
+            ),
+            pd.DataFrame(
+                {
+                    "A": pd.Series([2, 5, 6, 6, None, 1] * 2, dtype="Float64"),
+                    "B2": pd.Series([None, 2, 4, 3] * 3, dtype="Float64"),
+                }
+            ),
+            pd.DataFrame(
+                {
+                    "A": pd.Series([5, 5, 5, 5, 1, 1, 1, 1], dtype="Float64"),
+                    "B1": pd.Series(
+                        [1, 1, None, None, None, None, 1, 1], dtype="Float64"
+                    ),
+                    "B2": pd.Series([2, 3, 2, 3, 2, 3, 2, 3], dtype="Float64"),
                 }
             ),
         ),
@@ -3741,6 +4588,7 @@ def test_merge_nan_ne(df1, df2, expected_output, memory_leak_check):
     )
 
 
+@pytest_mark_pandas
 def test_merge_dead_keys(memory_leak_check):
     """tests pd.merge when eliminating dead keys"""
 
@@ -3758,6 +4606,7 @@ def test_merge_dead_keys(memory_leak_check):
     )
 
 
+@pytest_mark_pandas
 def test_merge_repeat_key(memory_leak_check):
     """tests pd.merge when the same key is repeated twice"""
 
@@ -3806,6 +4655,7 @@ def test_merge_repeat_key(memory_leak_check):
     check_func(impl8, (df1, df2), sort_output=True, reset_index=True)
 
 
+@pytest_mark_pandas
 def test_merge_repeat_key_same_frame(memory_leak_check):
     """tests pd.merge when the same key is repeated twice and keys
     aren't shared between DataFrames."""
@@ -3839,7 +4689,43 @@ def test_merge_repeat_key_same_frame(memory_leak_check):
     check_func(impl4, (df1, df2), sort_output=True, reset_index=True)
 
 
+@pytest_mark_pandas
+def test_merge_output_cast_key_order(memory_leak_check):
+    """Test for the issue in [BE-3979], where a key in the output
+    needs to be cast back to a smaller type but the key number and
+    input column numbers differ.
+    """
+
+    def impl(df1, df2):
+        return df1.merge(df2, left_on=["l1", "l0"], right_on=["r0", "r1"], how="outer")
+
+    df1 = pd.DataFrame(
+        {
+            "l0": pd.arrays.ArrowStringArray(
+                pa.array(
+                    ["abc", "b", "h", "abc", "h", "b", "cde"],
+                    type=pa.dictionary(pa.int32(), pa.string()),
+                )
+            ),
+            "l1": pd.Series([1, 2, 3, 4, 5, 6, 7], dtype="Int32"),
+        }
+    )
+    df2 = pd.DataFrame(
+        {
+            "r0": pd.Series([1, 2, 3, 4, 5, 6, 7], dtype="Int64"),
+            "r1": pd.arrays.ArrowStringArray(
+                pa.array(
+                    ["abc", "b", "h", "abc", "h", "b", "cde"],
+                    type=pa.dictionary(pa.int32(), pa.string()),
+                )
+            ),
+        }
+    )
+    check_func(impl, (df1, df2), sort_output=True, reset_index=True)
+
+
 @pytest.mark.slow
+@pytest_mark_pandas
 class TestJoin(unittest.TestCase):
     def test_join_parallel(self):
         """

@@ -1,9 +1,8 @@
-// Copyright (C) 2021 Bodo Inc. All rights reserved.
 #include <Python.h>
 #include <string>
 #include <unordered_map>
 
-#include <arrow/io/api.h>
+#include <arrow/io/interfaces.h>
 
 extern std::unordered_map<std::string, PyObject *> pyfs;
 

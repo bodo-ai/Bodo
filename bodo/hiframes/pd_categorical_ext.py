@@ -1,4 +1,3 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 import enum
 import operator
 
@@ -62,7 +61,7 @@ class PDCategoricalDtype(types.Opaque):
         # we need to set explicitly
         self.int_type = int_type
         name = f"PDCategoricalDtype({self.categories}, {self.elem_type}, {self.ordered}, {self.data}, {self.int_type})"
-        super(PDCategoricalDtype, self).__init__(name=name)
+        super().__init__(name=name)
 
     @property
     def mangling_args(self):
@@ -77,7 +76,7 @@ class PDCategoricalDtype(types.Opaque):
 
 @typeof_impl.register(pd.CategoricalDtype)
 def _typeof_pd_cat_dtype(val, c):
-    cats = tuple(val.categories.values)
+    cats = tuple(val.categories)
     # Using array.dtype instead of typeof(cats[0]) since Interval values are not
     # supported yet (see test_cut)
     elem_type = None if len(cats) == 0 else bodo.typeof(val.categories.values).dtype
@@ -97,7 +96,6 @@ def _get_cat_index_type(elem_type):
 
 @lower_constant(PDCategoricalDtype)
 def lower_constant_categorical_type(context, builder, typ, pyval):
-
     categories = context.get_constant_generic(
         builder, bodo.typeof(pyval.categories), pyval.categories
     )
@@ -125,8 +123,8 @@ make_attribute_wrapper(PDCategoricalDtype, "categories", "categories")
 make_attribute_wrapper(PDCategoricalDtype, "ordered", "ordered")
 
 
-@intrinsic
-def init_cat_dtype(typingctx, categories_typ, ordered_typ, int_type, cat_vals_typ=None):
+@intrinsic(prefer_literal=True)
+def init_cat_dtype(typingctx, categories_typ, ordered_typ, int_type, cat_vals_typ):
     """Create a CategoricalDtype from categories array and ordered flag"""
     assert bodo.hiframes.pd_index_ext.is_index_type(
         categories_typ
@@ -221,9 +219,7 @@ def pd_categorical_nbytes_overload(A):
 class CategoricalArrayType(types.ArrayCompatible):
     def __init__(self, dtype):
         self.dtype = dtype
-        super(CategoricalArrayType, self).__init__(
-            name=f"CategoricalArrayType({dtype})"
-        )
+        super().__init__(name=f"CategoricalArrayType({dtype})")
 
     @property
     def as_array(self):
@@ -254,7 +250,7 @@ class CategoricalArrayModel(models.StructModel):
     def __init__(self, dmm, fe_type):
         int_dtype = get_categories_int_type(fe_type.dtype)
         members = [("dtype", fe_type.dtype), ("codes", types.Array(int_dtype, 1, "C"))]
-        super(CategoricalArrayModel, self).__init__(dmm, fe_type, members)
+        super().__init__(dmm, fe_type, members)
 
 
 make_attribute_wrapper(CategoricalArrayType, "codes", "codes")
@@ -494,7 +490,7 @@ def overload_cat_arr_astype(A, dtype, copy=True, _bodo_nan_to_str=True):
                         bodo.libs.array_kernels.setna(out_arr, i)
                     continue
                 out_arr[i] = str(
-                    bodo.utils.conversion.unbox_if_timestamp(categories[s])
+                    bodo.utils.conversion.unbox_if_tz_naive_timestamp(categories[s])
                 )
             return out_arr
 
@@ -512,7 +508,9 @@ def overload_cat_arr_astype(A, dtype, copy=True, _bodo_nan_to_str=True):
             if s == -1:
                 bodo.libs.array_kernels.setna(out_arr, i)
                 continue
-            out_arr[i] = bodo.utils.conversion.unbox_if_timestamp(categories[s])
+            out_arr[i] = bodo.utils.conversion.unbox_if_tz_naive_timestamp(
+                categories[s]
+            )
         return out_arr
 
     return impl
@@ -526,7 +524,7 @@ def cat_overload_dummy(val_list):
 
 
 @intrinsic
-def init_categorical_array(typingctx, codes, cat_dtype=None):
+def init_categorical_array(typingctx, codes, cat_dtype):
     """Create a CategoricalArrayType with codes array (integers) and categories dtype"""
     assert isinstance(codes, types.Array) and isinstance(codes.dtype, types.Integer)
 
@@ -557,9 +555,7 @@ def init_categorical_array_equiv(self, scope, equiv_set, loc, args, kws):
     return None
 
 
-ArrayAnalysis._analyze_op_call_bodo_hiframes_pd_categorical_ext_init_categorical_array = (
-    init_categorical_array_equiv
-)
+ArrayAnalysis._analyze_op_call_bodo_hiframes_pd_categorical_ext_init_categorical_array = init_categorical_array_equiv
 
 
 def alloc_categorical_array(n, cat_dtype):  # pragma: no cover
@@ -581,16 +577,14 @@ def _alloc_categorical_array(n, cat_dtype):
 
 
 def alloc_categorical_array_equiv(self, scope, equiv_set, loc, args, kws):
-    """Array analysis function for alloc_int_array() passed to Numba's array analysis
+    """Array analysis function for alloc_categorical_array() passed to Numba's array analysis
     extension. Assigns output array's size as equivalent to the input size variable.
     """
     assert len(args) == 2 and not kws
     return ArrayAnalysis.AnalyzeResult(shape=args[0], pre=[])
 
 
-ArrayAnalysis._analyze_op_call_bodo_hiframes_pd_categorical_ext_alloc_categorical_array = (
-    alloc_categorical_array_equiv
-)
+ArrayAnalysis._analyze_op_call_bodo_hiframes_pd_categorical_ext_alloc_categorical_array = alloc_categorical_array_equiv
 
 
 # using a function for getting data to enable extending various analysis
@@ -633,7 +627,7 @@ def build_replace_dicts(to_replace, value, categories):  # pragma: no cover
     mapping to yourself serve as a deletion. This results in 3 return values:
     category_dict, codes_arr, num_deleted
     """
-    return dict(), np.empty(len(categories) + 1), 0
+    return {}, np.empty(len(categories) + 1), 0
 
 
 @overload(build_replace_dicts, no_unliteral=True)
@@ -770,7 +764,7 @@ def cat_replace_overload(arr, to_replace, value):
         # create the new categorical dtype inside the function instead of passing as
         # constant. This avoids constant lowered Index inside the dtype, which can be
         # slow since it cannot have a dictionary.
-        # see https://github.com/Bodo-inc/Bodo/pull/3563
+        # see https://github.com/bodo-ai/Bodo/pull/3563
         new_categories = bodo.utils.utils.create_categorical_type(
             cats_list, arr.dtype.data.data, _ordered
         )
@@ -909,7 +903,7 @@ def get_label_dict_from_categories(vals):  # pragma: no cover
     """Generates the dictionairy mapping categorical values to their integer code value, from a
     collection of collection of categorical values that may contain dupliicates.
     """
-    labels = dict()
+    labels = {}
 
     curr_ind = 0
     for i in range(len(vals)):
@@ -927,7 +921,7 @@ def get_label_dict_from_categories_no_duplicates(vals):  # pragma: no cover
     """Generates the dictionairy mapping categorical values to their integer code value, from a
     collection of collection of categorical values containing no dupliicates.
     """
-    labels = dict()
+    labels = {}
     for i in range(len(vals)):
         val = vals[i]
         labels[val] = i
@@ -945,8 +939,8 @@ def pd_categorical_overload(
     dtype=None,
     fastpath=False,
 ):
-    unsupported_args = dict(fastpath=fastpath)
-    arg_defaults = dict(fastpath=False)
+    unsupported_args = {"fastpath": fastpath}
+    arg_defaults = {"fastpath": False}
     check_unsupported_args("pd.Categorical", unsupported_args, arg_defaults)
 
     # categorical dtype is provided
@@ -976,7 +970,7 @@ def pd_categorical_overload(
             # create the new categorical dtype inside the function instead of passing as
             # constant. This avoids constant lowered Index inside the dtype, which can
             # be slow since it cannot have a dictionary.
-            # see https://github.com/Bodo-inc/Bodo/pull/3563
+            # see https://github.com/bodo-ai/Bodo/pull/3563
             new_cats_arr = pd.CategoricalDtype(
                 pd.array(const_categories), is_ordered
             ).categories.array
@@ -1043,7 +1037,7 @@ def categorical_array_getitem(arr, ind):
 
         return categorical_getitem_impl
 
-    # bool/int/slice arr indexing
+    # bool/int/slice arr indexing.
     if is_list_like_index_type(ind) or isinstance(ind, types.SliceType):
 
         def impl_bool(arr, ind):  # pragma: no cover
@@ -1054,7 +1048,7 @@ def categorical_array_getitem(arr, ind):
     # This should be the only CategoricalArrayType implementation.
     # We only expect to reach this case if more idx options are added.
     raise BodoError(
-        f"getitem for CategoricalArrayType with indexing type {ind} not supported."
+        f"getitem for CategoricalArray with indexing type {ind} not supported."
     )  # pragma: no cover
 
 
@@ -1158,7 +1152,6 @@ def categorical_array_setitem(arr, ind, val):
 
     # scalar case
     if isinstance(ind, types.Integer):
-
         if not is_scalar_match:
             raise BodoError(typ_err_msg)
 
@@ -1174,7 +1167,6 @@ def categorical_array_setitem(arr, ind, val):
 
     # array of int indices
     if is_list_like_index_type(ind) and isinstance(ind.dtype, types.Integer):
-
         if not (
             is_scalar_match
             or is_arr_rhs
@@ -1228,7 +1220,7 @@ def categorical_array_setitem(arr, ind, val):
                 for j in range(n):
                     # Timestamp/Timedelta are stored internally as dt64 but inside the index as
                     # Timestamp and Timedelta
-                    new_val = bodo.utils.conversion.unbox_if_timestamp(val[j])
+                    new_val = bodo.utils.conversion.unbox_if_tz_naive_timestamp(val[j])
                     if new_val not in categories:
                         raise ValueError(
                             "Cannot setitem on a Categorical with a new category, set the categories first"
@@ -1240,7 +1232,6 @@ def categorical_array_setitem(arr, ind, val):
 
     # bool array
     if is_list_like_index_type(ind) and ind.dtype == types.bool_:
-
         if not (
             is_scalar_match
             or is_arr_rhs
@@ -1302,7 +1293,9 @@ def categorical_array_setitem(arr, ind, val):
                     if ind[j]:
                         # Timestamp/Timedelta are stored internally as dt64 but inside the index as
                         # Timestamp and Timedelta
-                        new_val = bodo.utils.conversion.unbox_if_timestamp(val[val_ind])
+                        new_val = bodo.utils.conversion.unbox_if_tz_naive_timestamp(
+                            val[val_ind]
+                        )
                         if new_val not in categories:
                             raise ValueError(
                                 "Cannot setitem on a Categorical with a new category, set the categories first"
@@ -1315,7 +1308,6 @@ def categorical_array_setitem(arr, ind, val):
 
     # slice case
     if isinstance(ind, types.SliceType):
-
         if not (
             is_scalar_match
             or is_arr_rhs
@@ -1366,7 +1358,9 @@ def categorical_array_setitem(arr, ind, val):
                 for j in range(slice_ind.start, slice_ind.stop, slice_ind.step):
                     # Timestamp/Timedelta are stored internally as dt64 but inside the index as
                     # Timestamp and Timedelta
-                    new_val = bodo.utils.conversion.unbox_if_timestamp(val[val_ind])
+                    new_val = bodo.utils.conversion.unbox_if_tz_naive_timestamp(
+                        val[val_ind]
+                    )
                     if new_val not in categories:
                         raise ValueError(
                             "Cannot setitem on a Categorical with a new category, set the categories first"

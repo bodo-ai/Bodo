@@ -1,4 +1,3 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
 Implements support for matplotlib extensions such as pyplot.plot.
 """
@@ -149,6 +148,8 @@ def _install_mpl_types():
 
 
 _install_mpl_types()
+MplFigureType = this_module.MplFigureType
+MplAxesType = this_module.MplAxesType
 
 
 def generate_matplotlib_signature(return_typ, args, kws, obj_typ=None):
@@ -665,6 +666,7 @@ def overload_savefig(
     it doesn't need to), which fails assertion checks in
     gen_objmode_func_overload.
     """
+
     # Note: We omit papertype and frameon because these arguments are deprecated and will be removed in 2 minor releases.
     def impl(
         fname,
@@ -678,7 +680,7 @@ def overload_savefig(
         pad_inches=0.1,
         metadata=None,
     ):  # pragma: no cover
-        with bodo.objmode():
+        with bodo.no_warning_objmode():
             plt.savefig(
                 fname=fname,
                 dpi=dpi,
@@ -730,7 +732,7 @@ def overload_subplots(
         subplot_kw=None,
         gridspec_kw=None,
     ):
-        with numba.objmode(axes="{type_name}"):
+        with bodo.no_warning_objmode(axes="{type_name}"):
             axes = fig.subplots(
                 nrows=nrows,
                 ncols=ncols,
@@ -745,7 +747,7 @@ def overload_subplots(
         return axes
     """
     loc_vars = {}
-    exec(func_text, {"numba": numba, "np": np}, loc_vars)
+    exec(func_text, {"bodo": bodo, "np": np}, loc_vars)
     impl = loc_vars["impl"]
     return impl
 

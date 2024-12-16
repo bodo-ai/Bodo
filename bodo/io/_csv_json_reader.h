@@ -1,9 +1,6 @@
-// Copyright (C) 2019 Bodo Inc. All rights reserved.
-#ifndef _CSV_JSON_READER_H_INCLUDED
-#define _CSV_JSON_READER_H_INCLUDED
+#pragma once
 
 #include <Python.h>
-#include <string>
 
 // CSV exports some stuff to the io module
 extern "C" void PyInit_csv(PyObject *);
@@ -18,7 +15,7 @@ extern "C" void PyInit_json(PyObject *);
  *
  * @param[in]  f   the input file name
  * @param[in]  is_parallel   if parallel read of different chunks required
- * @param[in]  skiprows   number of rows to skip at the beginnning
+ * @param[in]  skiprows   number of rows to skip at the beginning
  * @param[in]  nrows   numebr of rows to read
  * @param[in]  header   whether csv file(s) contain header(s)
  * @param[in]  compression   compression scheme of file(s)
@@ -95,5 +92,3 @@ extern "C" void initialize_csv_reader(PyObject *reader);
  **/
 // extern "C" PyObject* csv_string_chunk_reader(const std::string * str, bool
 // is_parallel);
-
-#endif  // _CSV_JSON_READER_H_INCLUDED

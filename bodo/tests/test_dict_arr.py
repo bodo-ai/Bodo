@@ -1,6 +1,3 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
-
-
 import os
 import re
 
@@ -161,6 +158,14 @@ def test_unbox(dict_arr_value, memory_leak_check):
 
 
 @pytest.mark.slow
+def test_lower_constant(dict_arr_value, memory_leak_check):
+    def impl():
+        return dict_arr_value
+
+    check_func(impl, (), only_seq=True)
+
+
+@pytest.mark.slow
 def test_len(dict_arr_value, memory_leak_check):
     def test_impl(A):
         return len(A)
@@ -210,7 +215,6 @@ def test_all_null_pa_bug(memory_leak_check):
 
     def test_impl(A):
         df = pd.DataFrame({"A": A})
-        print(df)
         return df
 
     A = pd.arrays.ArrowStringArray(
@@ -285,7 +289,7 @@ def test_cmp_opt(dict_arr_value, memory_leak_check):
 
 @pytest.mark.slow
 def test_int_convert_opt(memory_leak_check):
-    """test optimizaton of integer conversion for dict array"""
+    """test optimization of integer conversion for dict array"""
 
     def impl(A):
         return pd.Series(A).astype("Int32")
@@ -300,6 +304,29 @@ def test_int_convert_opt(memory_leak_check):
     bodo_func(A)
     f_ir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
     assert dist_IR_contains(f_ir, "convert_dict_arr_to_int")
+
+
+def test_str_to_dict_astype(memory_leak_check):
+    """Test .astype() Casting from String to Dict Array"""
+
+    def impl(S):
+        return S.astype(bodo.dict_str_arr_type)
+
+    data = ["a", "b", "a", "c", "a", "b", "c"] * 20
+    py_out = pd.Series(
+        pd.arrays.ArrowStringArray(
+            pa.array(data, type=pa.dictionary(pa.int32(), pa.string())).cast(
+                pa.dictionary(pa.int32(), pa.large_string())
+            )
+        )
+    )
+
+    check_func(
+        impl,
+        (pd.Series(data, dtype="string"),),
+        py_output=py_out,
+        use_dict_encoded_strings=False,
+    )
 
 
 @pytest.mark.slow
@@ -387,7 +414,16 @@ def test_str_replace(memory_leak_check):
         return pd.Series(A).str.replace("AB", "EE", regex=False)
 
     data1 = ["AB", None, "ABCD", "CDE", None, "ABBB", "ABB", "AC"]
-    data2 = ["피츠", None, "피츠뉴욕의", "뉴욕의", None, "뉴욕의뉴욕의", "피츠츠츠", "츠"]
+    data2 = [
+        "피츠",
+        None,
+        "피츠뉴욕의",
+        "뉴욕의",
+        None,
+        "뉴욕의뉴욕의",
+        "피츠츠츠",
+        "츠",
+    ]
     A1 = pa.array(data1, type=pa.dictionary(pa.int32(), pa.string()))
     A2 = pa.array(data2, type=pa.dictionary(pa.int32(), pa.string()))
 
@@ -395,7 +431,9 @@ def test_str_replace(memory_leak_check):
         impl1, (A1,), py_output=pd.Series(data1).str.replace("AB*", "EE", regex=True)
     )
     check_func(
-        impl2, (A2,), py_output=pd.Series(data2).str.replace("피츠*", "뉴욕의", regex=True)
+        impl2,
+        (A2,),
+        py_output=pd.Series(data2).str.replace("피츠*", "뉴욕의", regex=True),
     )
     check_func(
         impl3, (A1,), py_output=pd.Series(data1).str.replace("AB", "EE", regex=False)
@@ -1336,6 +1374,7 @@ def test_str_extract(memory_leak_check, test_unicode_dict_str_arr):
 
 def test_str_extractall(memory_leak_check):
     """test optimizaton of Series.str.extractall() for dict array"""
+
     # non-string index, single group
     def impl1(A):
         return pd.Series(A, name="AA").str.extractall(r"(?P<BBB>[abd]+)\d+")
@@ -1353,12 +1392,12 @@ def test_str_extractall(memory_leak_check):
         return pd.Series(data=A, index=I).str.extractall(r"([чен]+)\d+([ст]+)\d+")
 
     S1 = pd.Series(
-        ["a1b1", "b1", np.nan, "a2", "c2", "ddd", "dd4d1", "d22c2"],
+        ["a1b1", "b1", None, "a2", "c2", "ddd", "dd4d1", "d22c2"],
         [4, 3, 5, 1, 0, 2, 6, 11],
         name="AA",
     )
     S2 = pd.Series(
-        ["чьь1т33", "ьнн2с222", "странаст2", np.nan, "ьнне33ст3"] * 2,
+        ["чьь1т33", "ьнн2с222", "странаст2", None, "ьнне33ст3"] * 2,
         ["е3", "не3", "н2с2", "AA", "C"] * 2,
     )
     A1 = pa.array(S1, type=pa.dictionary(pa.int32(), pa.string()))
@@ -1415,6 +1454,7 @@ def test_str_extractall(memory_leak_check):
     assert dist_IR_contains(f_ir, "str_extractall_multi")
 
 
+@pytest.mark.parquet
 def test_concat(memory_leak_check):
     """test pd.concat() for dict arrays"""
     A1 = pa.array(

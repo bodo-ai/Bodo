@@ -1,4 +1,3 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 import operator
 
 import llvmlite.binding as ll
@@ -26,10 +25,10 @@ from bodo.libs.str_arr_ext import (
     _memcpy,
     char_arr_type,
     get_data_ptr,
-    null_bitmap_arr_type,
-    offset_arr_type,
+    get_data_ptr_cg,
     string_array_type,
 )
+from bodo.utils.typing import BodoError, is_list_like_index_type
 
 ll.add_symbol("array_setitem", hstr_ext.array_setitem)
 ll.add_symbol("array_getptr1", hstr_ext.array_getptr1)
@@ -48,9 +47,7 @@ offset_ctypes_type = types.ArrayCTypes(types.Array(offset_type, 1, "C"))
 # index_offsets array includes offsets to data_offsets array to identify lists
 class StringArraySplitViewType(types.ArrayCompatible):
     def __init__(self):
-        super(StringArraySplitViewType, self).__init__(
-            name="StringArraySplitViewType()"
-        )
+        super().__init__(name="StringArraySplitViewType()")
 
     @property
     def as_array(self):
@@ -69,9 +66,7 @@ string_array_split_view_type = StringArraySplitViewType()
 
 class StringArraySplitViewPayloadType(types.Type):
     def __init__(self):
-        super(StringArraySplitViewPayloadType, self).__init__(
-            name="StringArraySplitViewPayloadType()"
-        )
+        super().__init__(name="StringArraySplitViewPayloadType()")
 
 
 str_arr_split_view_payload_type = StringArraySplitViewPayloadType()
@@ -108,7 +103,6 @@ str_arr_model_members = [
 @register_model(StringArraySplitViewType)
 class StringArrayModel(models.StructModel):
     def __init__(self, dmm, fe_type):
-
         models.StructModel.__init__(self, dmm, fe_type, str_arr_model_members)
 
 
@@ -143,8 +137,8 @@ def construct_str_arr_split_view(context, builder):
     return meminfo, meminfo_data_ptr
 
 
-@intrinsic
-def compute_split_view(typingctx, str_arr_typ, sep_typ=None):
+@intrinsic(prefer_literal=True)
+def compute_split_view(typingctx, str_arr_typ, sep_typ):
     assert str_arr_typ == string_array_type and isinstance(sep_typ, types.StringLiteral)
 
     def codegen(context, builder, sig, args):
@@ -172,13 +166,13 @@ def compute_split_view(typingctx, str_arr_typ, sep_typ=None):
             builder.module, fnty, name="str_arr_split_view_impl"
         )
 
-        offsets = context.make_helper(
-            builder, offset_arr_type, in_str_arr_payload.offsets
-        ).data
-        data = context.make_helper(builder, char_arr_type, in_str_arr_payload.data).data
-        null_bitmap = context.make_helper(
-            builder, null_bitmap_arr_type, in_str_arr_payload.null_bitmap
-        ).data
+        offsets = builder.bitcast(
+            context.nrt.meminfo_data(builder, in_str_arr_payload.offsets),
+            context.get_data_type(offset_type).as_pointer(),
+        )
+        data_arr = context.make_helper(builder, char_arr_type, in_str_arr_payload.data)
+        data_ptr = get_data_ptr_cg(context, builder, data_arr)
+        null_bitmap = context.nrt.meminfo_data(builder, in_str_arr_payload.null_bitmap)
 
         sep_val = context.get_constant(types.int8, ord(sep_typ.literal_value))
         builder.call(
@@ -187,7 +181,7 @@ def compute_split_view(typingctx, str_arr_typ, sep_typ=None):
                 meminfo_data_ptr,
                 in_str_arr_payload.n_arrays,
                 offsets,
-                data,
+                data_ptr,
                 null_bitmap,
                 sep_val,
             ],
@@ -322,7 +316,10 @@ def box_str_arr_split_view(typ, val, c):
 
 @intrinsic
 def pre_alloc_str_arr_view(typingctx, num_items_t, num_offsets_t, data_t=None):
-    assert num_items_t == types.intp and num_offsets_t == types.intp
+    assert (
+        types.unliteral(num_items_t) == types.intp
+        and types.unliteral(num_offsets_t) == types.intp
+    )
 
     def codegen(context, builder, sig, args):
         num_items, num_offsets, data_ptr = args
@@ -361,7 +358,7 @@ def pre_alloc_str_arr_view(typingctx, num_items_t, num_offsets_t, data_t=None):
 
 
 @intrinsic
-def get_c_arr_ptr(typingctx, c_arr, ind_t=None):
+def get_c_arr_ptr(typingctx, c_arr, ind_t):
     assert isinstance(c_arr, (types.CPointer, types.ArrayCTypes))
 
     def codegen(context, builder, sig, args):
@@ -375,7 +372,7 @@ def get_c_arr_ptr(typingctx, c_arr, ind_t=None):
 
 
 @intrinsic
-def getitem_c_arr(typingctx, c_arr, ind_t=None):
+def getitem_c_arr(typingctx, c_arr, ind_t):
     def codegen(context, builder, sig, args):
         in_arr, ind = args
         if isinstance(sig.args[0], types.ArrayCTypes):
@@ -386,7 +383,7 @@ def getitem_c_arr(typingctx, c_arr, ind_t=None):
 
 
 @intrinsic
-def setitem_c_arr(typingctx, c_arr, ind_t, item_t=None):
+def setitem_c_arr(typingctx, c_arr, ind_t, item_t):
     def codegen(context, builder, sig, args):
         in_arr, ind, item = args
         ptr = builder.gep(in_arr, [ind])
@@ -396,7 +393,7 @@ def setitem_c_arr(typingctx, c_arr, ind_t, item_t=None):
 
 
 @intrinsic
-def get_array_ctypes_ptr(typingctx, arr_ctypes_t, ind_t=None):
+def get_array_ctypes_ptr(typingctx, arr_ctypes_t, ind_t):
     def codegen(context, builder, sig, args):
         in_arr_ctypes, ind = args
 
@@ -466,8 +463,7 @@ def overload_split_view_arr_shape(A):
 def str_arr_split_view_getitem_overload(A, ind):
     if A != string_array_split_view_type:
         return
-    if A == string_array_split_view_type and isinstance(ind, types.Integer):
-        kind = numba.cpython.unicode.PY_UNICODE_1BYTE_KIND
+    if isinstance(ind, types.Integer):
 
         def _impl(A, ind):  # pragma: no cover
             # In the case of missing data, we return an empty array [] instead of np.nan
@@ -497,7 +493,7 @@ def str_arr_split_view_getitem_overload(A, ind):
 
         return _impl
 
-    if A == string_array_split_view_type and ind == types.Array(types.bool_, 1, "C"):
+    if is_list_like_index_type(ind) and ind.dtype == types.bool_:
         n_bytes_per_offset = offset_type.bitwidth // 8
 
         def _impl(A, ind):  # pragma: no cover
@@ -510,7 +506,7 @@ def str_arr_split_view_getitem_overload(A, ind):
             num_items = 0
             num_offsets = 0
             for i in range(n):
-                if ind[i]:
+                if not bodo.libs.array_kernels.isna(ind, i) and ind[i]:
                     num_items += 1
                     start_index = getitem_c_arr(A._index_offsets, i)
                     end_index = getitem_c_arr(A._index_offsets, i + 1)
@@ -520,7 +516,7 @@ def str_arr_split_view_getitem_overload(A, ind):
             item_ind = 0
             offset_ind = 0
             for i in range(n):
-                if ind[i]:
+                if not bodo.libs.array_kernels.isna(ind, i) and ind[i]:
                     start_index = getitem_c_arr(A._index_offsets, i)
                     end_index = getitem_c_arr(A._index_offsets, i + 1)
                     n_offsets = end_index - start_index
@@ -541,3 +537,7 @@ def str_arr_split_view_getitem_overload(A, ind):
             return out_arr
 
         return _impl
+
+    raise BodoError(
+        f"getitem for StringArraySplitView with indexing type {ind} not supported."
+    )  # pragma: no cover

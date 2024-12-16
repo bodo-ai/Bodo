@@ -1,0 +1,48 @@
+[build-system]
+requires = ["setuptools", "setuptools_scm"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bodo-iceberg-connector"
+dynamic = ["version"]
+description = "Bodo Connector for Iceberg"
+readme = "README_pypi.md"
+requires-python = ">=3.10,<3.13"
+keywords = ["data", "analytics", "cluster"]
+authors = [{ name = "Bodo.ai" }]
+
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Compilers",
+    "Topic :: System :: Distributed Computing",
+]
+
+dependencies = [
+    "py4j==0.10.9.7",
+    "pyarrow==18.1.0",
+    "numpy>=1.24,<1.27",
+    "pandas>=2.2,<2.3",
+]
+
+[project.urls]
+Homepage = "https://bodo.ai"
+Documentation = "https://docs.bodo.ai"
+
+[tool.setuptools]
+packages = ["bodo_iceberg_connector"]
+include-package-data = false
+
+[tool.setuptools.package-data]
+bodo_iceberg_connector = ["jars/bodo-iceberg-reader.jar", "jars/libs/*.jar"]
+
+[tool.setuptools.exclude-package-data]
+bodo_iceberg_connector = ["iceberg-java"]
+
+[tool.setuptools_scm]
+root = ".."

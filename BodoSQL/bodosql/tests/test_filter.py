@@ -1,12 +1,13 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
 Test correctness of SQL filter queries on BodoSQL
 """
 
 import pytest
+
 from bodosql.tests.utils import check_query
 
 
+@pytest.mark.slow
 def test_filter_numeric(bodosql_numeric_types, spark_info, memory_leak_check):
     """test filter queries"""
 
@@ -96,6 +97,7 @@ def test_filter_numeric(bodosql_numeric_types, spark_info, memory_leak_check):
     )
 
 
+@pytest.mark.slow
 def test_filter_null_numeric(bodosql_numeric_types, spark_info, memory_leak_check):
     """test is null on numeric columns"""
     query1 = "select A,C from table1 where A is NULL"
@@ -150,23 +152,24 @@ def test_filter_null_datetime(bodosql_datetime_types, spark_info, memory_leak_ch
     check_query(query2, bodosql_datetime_types, spark_info, check_dtype=False)
 
 
-def test_filter_null_interval(bodosql_interval_types, spark_info, memory_leak_check):
+def test_filter_null_interval(bodosql_interval_types, memory_leak_check):
     """test is null on Interval columns"""
     query1 = "select A,C from table1 where B is NULL"
     query2 = "select C from table1 where B is not null"
+    df = bodosql_interval_types["TABLE1"]
     check_query(
         query1,
         bodosql_interval_types,
-        spark_info,
+        None,
         check_dtype=False,
-        convert_columns_timedelta=["A", "C"],
+        expected_output=df[df.B.isna()][["A", "C"]],
     )
     check_query(
         query2,
         bodosql_interval_types,
-        spark_info,
+        None,
         check_dtype=False,
-        convert_columns_timedelta=["C"],
+        expected_output=df[df.B.notna()][["C"]],
     )
 
 
@@ -199,6 +202,7 @@ def test_filter_boolean_3(bodosql_boolean_types, spark_info, memory_leak_check):
     )
 
 
+@pytest.mark.slow
 def test_filter_boolean_4(bodosql_boolean_types, spark_info, memory_leak_check):
     check_query(
         "select A,C from table1 where A = C",
@@ -228,9 +232,6 @@ def test_filter_boolean_6(bodosql_boolean_types, spark_info, memory_leak_check):
     )
 
 
-@pytest.mark.skip(
-    "BS-162, this test currently fails due to the difference between Spark and BodoSQL's handling of NULL or True"
-)
 def test_filter_boolean_7(bodosql_boolean_types, spark_info, memory_leak_check):
     check_query(
         "select A,C from table1 where A or B = FALSE and Not FALSE",

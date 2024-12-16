@@ -1,50 +1,46 @@
 package com.bodosql.calcite.application;
 
-import com.bodosql.calcite.application.BodoSQLOperatorTables.*;
+import com.bodosql.calcite.adapter.bodo.BodoPhysicalRel;
+import com.bodosql.calcite.adapter.bodo.BodoUtilKt;
 import com.bodosql.calcite.application.BodoSQLTypeSystems.BodoSQLRelDataTypeSystem;
-import com.bodosql.calcite.application.bodo_sql_rules.*;
+import com.bodosql.calcite.application.utils.RelCostAndMetaDataWriter;
 import com.bodosql.calcite.catalog.BodoSQLCatalog;
+import com.bodosql.calcite.ddl.DDLExecutionResult;
+import com.bodosql.calcite.ddl.GenerateDDLTypes;
+import com.bodosql.calcite.prepare.AbstractPlannerImpl;
+import com.bodosql.calcite.prepare.PlannerImpl;
+import com.bodosql.calcite.prepare.PlannerType;
 import com.bodosql.calcite.schema.BodoSqlSchema;
-import com.bodosql.calcite.schema.CatalogSchemaImpl;
-import java.sql.Connection;
-import java.sql.DriverManager;
+import com.bodosql.calcite.schema.RootSchema;
+import com.bodosql.calcite.table.ColumnDataTypeInfo;
+import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.ImmutableList;
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
-import java.util.Properties;
-import java.util.Set;
-import javax.annotation.Nullable;
-import org.apache.calcite.avatica.util.Casing;
-import org.apache.calcite.avatica.util.Quoting;
-import org.apache.calcite.config.CalciteConnectionConfigImpl;
-import org.apache.calcite.config.NullCollation;
-import org.apache.calcite.jdbc.CalciteConnection;
-import org.apache.calcite.jdbc.CalciteSchema;
-import org.apache.calcite.jdbc.JavaTypeFactoryImpl;
-import org.apache.calcite.plan.RelOptRule;
-import org.apache.calcite.plan.RelOptUtil;
-import org.apache.calcite.plan.hep.HepPlanner;
-import org.apache.calcite.plan.hep.HepProgram;
-import org.apache.calcite.plan.hep.HepProgramBuilder;
-import org.apache.calcite.prepare.CalciteCatalogReader;
+import java.util.Locale;
+import java.util.Map;
+import java.util.function.BiConsumer;
+import java.util.stream.Collectors;
+import org.apache.calcite.plan.RelTraitSet;
 import org.apache.calcite.rel.RelNode;
-import org.apache.calcite.rel.rules.*;
+import org.apache.calcite.rel.RelRoot;
+import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeSystem;
-import org.apache.calcite.rex.RexExecutorImpl;
-import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.schema.SchemaPlus;
+import org.apache.calcite.sql.SqlKind;
+import org.apache.calcite.sql.SqlMerge;
 import org.apache.calcite.sql.SqlNode;
-import org.apache.calcite.sql.SqlOperatorTable;
-import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.apache.calcite.sql.parser.SqlParseException;
-import org.apache.calcite.sql.parser.SqlParser;
-import org.apache.calcite.sql.util.ChainedSqlOperatorTable;
-import org.apache.calcite.sql.validate.SqlConformanceEnum;
-import org.apache.calcite.sql.validate.SqlValidator;
-import org.apache.calcite.sql2rel.SqlToRelConverter;
-import org.apache.calcite.sql2rel.StandardConvertletTable;
-import org.apache.calcite.sql2rel.StandardConvertletTableConfig;
-import org.apache.calcite.tools.*;
+import org.apache.calcite.sql.pretty.SqlPrettyWriter;
+import org.apache.calcite.sql.type.BodoTZInfo;
+import org.apache.calcite.tools.RelConversionException;
+import org.apache.calcite.tools.ValidationException;
+import org.apache.commons.lang3.tuple.Pair;
+import org.checkerframework.checker.nullness.qual.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -56,6 +52,21 @@ import org.slf4j.LoggerFactory;
  * The purpose of this class is to hold the planner, the program, and the configuration for reuse
  * based on a schema that is provided. It can then take sql and convert it to relational algebra.
  *
+ * <p>TODO(jsternberg): This class needs a future refactor, but it's also closely tied to the Python
+ * code and how it interacts with the Java code. That means that methods defined here can be invoked
+ * from the Python code without having an equivalent Java invocation.
+ *
+ * <p>In order to simplify modifications of this class, the <b>only</b> methods that should be
+ * public are ones that Python directly interacts with. Everything else should be private. All
+ * public methods should be treated as an API contract and should not be broken or modified without
+ * due diligence to transition outside callers.
+ *
+ * <p>The reason why this class needs a refactor is because this class has a decent amount of
+ * mutable state and poorly defined interactions with outside callers. It's not thread-safe and it
+ * exposes some APIs for testing that shouldn't be external such as the specific way plans are
+ * constructed or processed. It also keeps and handles resources like database connections but
+ * doesn't clearly label the lifetimes and ownerships of these resources.
+ *
  * @author Bodo
  * @version 1.0
  * @since 2018-10-31
@@ -64,149 +75,98 @@ public class RelationalAlgebraGenerator {
   static final Logger LOGGER = LoggerFactory.getLogger(RelationalAlgebraGenerator.class);
 
   /** Planner that converts sql to relational algebra. */
-  private Planner planner;
-  /** Program which takes relational algebra and optimizes it */
-  private HepProgram program;
-  /** Stores the context for the program hep planner. E.G. it stores the schema. */
-  private FrameworkConfig config;
+  private AbstractPlannerImpl planner;
+
   /**
    * Stores the output of parsing the given SQL query. This is done to allow separating parsing from
    * other steps.
    */
   private SqlNode parseNode = null;
 
-  private List<RelOptRule> rules;
-
   /*
   Hashmap containing globals that need to be lowered into the resulting func_text. Used for lowering
-  metadata types to improve compilation speed. Populated by the pandas visitor class.
+  metadata types to improve compilation speed. Populated by the Bodo visitor class.
   */
   private HashMap<String, String> loweredGlobalVariables;
 
   /** Store the catalog being used to close any connections after processing a query. */
   private BodoSQLCatalog catalog;
 
+  /** Store the type system being used to access timezone info during Bodo codegen */
+  private final RelDataTypeSystem typeSystem;
+
+  /** Which planner should be utilized. */
+  private final PlannerType plannerType;
+
+  /** The Bodo verbose level. This is used to control code generated and/or compilation info. */
+  private final int verboseLevel;
+
+  /** The Bodo tracing level. This is used to control code generated and/or compilation info. */
+  private final int tracingLevel;
+
+  /** The batch size used for streaming. This is configurable for testing purposes. */
+  public static int streamingBatchSize = 4096;
+
   /**
-   * Helper method for RelationalAlgebraGenerator constructor to create a Connection object so that
-   * SQL queries can be executed within its context.
+   * The ratio of distinct rows versus total rows required for dictionary encoding. If the ratio is
+   * less than or equal to this value, then dictionary encoding is used for string columns.
    */
-  public @Nullable CalciteConnection setupCalciteConnection() {
-    CalciteConnection calciteConnection = null;
-    try {
-      Class.forName("org.apache.calcite.jdbc.Driver");
+  public static double READ_DICT_THRESHOLD = 0.5;
 
-      Properties info = new Properties();
-      info.setProperty("lex", "JAVA");
-      Connection connection = DriverManager.getConnection("jdbc:calcite:", info);
-      calciteConnection = connection.unwrap(CalciteConnection.class);
+  /**
+   * Hide credential information in any generated code. This is used for code generated in Python by
+   * convert_to_pandas() or Java tests so the generated code can be shared.
+   */
+  public static boolean hideCredentials = false;
 
-    } catch (Exception e) {
-      throw new RuntimeException(
-          String.format(
-              "Internal Error: JDBC Driver unable to obtain database connection. Error message: %s",
-              e));
-    }
-    return calciteConnection;
-  }
+  /** Should we try read Snowflake tables as Iceberg tables? */
+  public static boolean enableSnowflakeIcebergTables = false;
+
+  /** Should we read TIMESTAMP_TZ as its own type instead of TIMESTAMP_LTZ */
+  public static boolean enableTimestampTz = false;
+
+  /** Should we enabled planner nodes to insert runtime filters for Joins */
+  public static boolean enableRuntimeJoinFilters = false;
+
+  /**
+   * Should we insert placeholders for operator IDs to minimize codegen changes with respect to plan
+   * changes *
+   */
+  public static boolean hideOperatorIDs = false;
+
+  /**
+   * Which sql dialect should Bodo emulate default from? Currently supported modes: SNOWFLAKE
+   * (default) and SPARK.
+   */
+  public static String sqlStyle = "SNOWFLAKE";
+
+  /** Should we use the covering expression approach to cache or only exact matches. */
+  public static boolean coveringExpressionCaching = false;
+
+  /** Should we prefetch metadata location for Snowflake-managed Iceberg tables. */
+  public static boolean prefetchSFIceberg = false;
 
   /**
    * Helper method for RelationalAlgebraGenerator constructors to create a SchemaPlus object from a
    * list of BodoSqlSchemas.
    */
-  public SchemaPlus setupSchema(
-      CalciteConnection calciteConnection, List<BodoSqlSchema> newSchemas) {
-    SchemaPlus schema = null;
-    try {
-      schema = calciteConnection.getRootSchema();
-      for (BodoSqlSchema newSchema : newSchemas) {
-        schema.add(newSchema.getName(), newSchema);
-      }
-    } catch (Exception e) {
-      throw new RuntimeException(
-          String.format("Internal Error: Unable to add schemas to database. Error message: %s", e));
-    }
-    return schema;
+  private List<SchemaPlus> setupSchema(
+      BiConsumer<SchemaPlus, ImmutableList.Builder<SchemaPlus>> setup) {
+    final SchemaPlus root = RootSchema.Companion.createRootSchema(this.catalog);
+    ImmutableList.Builder<SchemaPlus> defaults = ImmutableList.builder();
+    setup.accept(root, defaults);
+    return defaults.build();
   }
 
   /**
    * Helper method for both RelationalAlgebraGenerator constructors to build and set the Config and
    * the Planner member variables.
    */
-  public void setupPlanner(
-      List<SchemaPlus> defaultSchemas, SchemaPlus schema, String namedParamTableName) {
+  private void setupPlanner(List<SchemaPlus> defaultSchemas, RelDataTypeSystem typeSystem) {
+    PlannerImpl.Config config =
+        new PlannerImpl.Config(defaultSchemas, typeSystem, plannerType, sqlStyle);
     try {
-      // Generate the schema paths for the operator table.
-      List<List<String>> defaultSchemaList = new ArrayList<>();
-      for (SchemaPlus defaultSchema : defaultSchemas) {
-        defaultSchemaList.add(CalciteSchema.from(defaultSchema).path(null));
-      }
-      RelDataTypeSystem typeSystem = new BodoSQLRelDataTypeSystem();
-      Properties props = new Properties();
-      List<SqlOperatorTable> sqlOperatorTables = new ArrayList<>();
-      // TODO: Replace this code. Deprecated?
-      sqlOperatorTables.add(SqlStdOperatorTable.instance());
-      sqlOperatorTables.add(
-          new CalciteCatalogReader(
-              CalciteSchema.from(schema),
-              defaultSchemaList,
-              defaultSchemaList.size(),
-              new JavaTypeFactoryImpl(typeSystem),
-              new CalciteConnectionConfigImpl(props)));
-      sqlOperatorTables.add(DatetimeOperatorTable.instance());
-      sqlOperatorTables.add(NumericOperatorTable.instance());
-      sqlOperatorTables.add(StringOperatorTable.instance());
-      sqlOperatorTables.add(CondOperatorTable.instance());
-      sqlOperatorTables.add(SinceEpochFnTable.instance());
-      sqlOperatorTables.add(ThreeOperatorStringTable.instance());
-      sqlOperatorTables.add(CastingOperatorTable.instance());
-      config =
-          Frameworks.newConfigBuilder()
-              .defaultSchemas(defaultSchemas)
-              .operatorTable(new ChainedSqlOperatorTable(sqlOperatorTables))
-              .typeSystem(typeSystem)
-              // Currently, Calcite only supports SOME/ANY/ALL if isExpand = false.
-              // The threshold value is used to determine, when handling a SOME/ANY/ALL clause,
-              // at what point the converter switches from simply creating a sequence of and's and
-              // or's,
-              // and instead do an inner join/filter on the values. See BS-553.
-              .sqlToRelConverterConfig(
-                  SqlToRelConverter.config().withInSubQueryThreshold(Integer.MAX_VALUE))
-              .parserConfig(
-                  SqlParser.Config.DEFAULT
-                      .withCaseSensitive(false)
-                      .withQuoting(Quoting.BACK_TICK)
-                      .withQuotedCasing(Casing.UNCHANGED)
-                      .withUnquotedCasing(Casing.UNCHANGED)
-                      .withConformance(SqlConformanceEnum.LENIENT))
-              .convertletTable(
-                  new StandardConvertletTable(new StandardConvertletTableConfig(false, false)))
-              .sqlValidatorConfig(
-                  SqlValidator.Config.DEFAULT
-                      .withNamedParamTableName(namedParamTableName)
-                      .withDefaultNullCollation(NullCollation.LOW)
-                      .withCallRewrite(
-                          false)) /* setting with withCallRewrite to false disables the rewriting of
-                                  "macro-like" functions. Namely:
-                                  COALESCE
-                                  DAYOFMONTH
-                                  DAYOFWEEK
-                                  DAYOFYEAR
-                                  HOUR
-                                  MICROSECOND
-                                  MINUTE
-                                  MONTH
-                                  NULLIF
-                                  QUARTER
-                                  SECOND
-                                  WEEK
-                                  WEEKDAY
-                                  WEEKISO
-                                  WEEKOFYEAR
-                                  YEAR
-                                  There are likely others, but there are the ones we have encountered so far.
-                                   */
-              .build();
-      planner = Frameworks.getPlanner(config);
+      this.planner = new PlannerImpl(config);
     } catch (Exception e) {
       throw new RuntimeException(
           String.format(
@@ -216,66 +176,252 @@ public class RelationalAlgebraGenerator {
     }
   }
 
+  public static final int VOLCANO_PLANNER = 0;
+  public static final int STREAMING_PLANNER = 1;
+
   /**
    * Constructor for the relational algebra generator class. It will take the schema store it in the
-   * {@link #config} and then set up the {@link #program} for optimizing and the {@link #planner}
-   * for parsing.
+   * config and then set up the program for optimizing and the {@link #planner} for parsing.
    *
-   * @param newSchema This is the schema which we will be using to validate our query against. This
-   *     gets stored in the {@link #config}
+   * @param localSchema This is the schema which contains any of our local tables.
    */
-  public RelationalAlgebraGenerator(BodoSqlSchema newSchema, String namedParamTableName) {
+  public RelationalAlgebraGenerator(
+      BodoSqlSchema localSchema,
+      int plannerType,
+      int verboseLevel,
+      int tracingLevel,
+      int streamingBatchSize,
+      boolean hideCredentials,
+      boolean enableSnowflakeIcebergTables,
+      boolean enableTimestampTz,
+      boolean enableRuntimeJoinFilters,
+      boolean enableStreamingSort,
+      boolean enableStreamingSortLimitOffset,
+      String sqlStyle,
+      boolean coveringExpressionCaching,
+      boolean prefetchSFIceberg) {
     this.catalog = null;
+    this.plannerType = choosePlannerType(plannerType);
+    this.verboseLevel = verboseLevel;
+    this.tracingLevel = tracingLevel;
+    this.streamingBatchSize = streamingBatchSize;
     System.setProperty("calcite.default.charset", "UTF-8");
-    CalciteConnection calciteConnection = setupCalciteConnection();
-    List<BodoSqlSchema> newSchemas = new ArrayList<BodoSqlSchema>();
-    newSchemas.add(newSchema);
-    SchemaPlus schema = setupSchema(calciteConnection, newSchemas);
+    List<SchemaPlus> defaultSchemas =
+        setupSchema(
+            (root, defaults) -> {
+              defaults.add(root.add(localSchema.getName(), localSchema));
+            });
+    RelDataTypeSystem typeSystem =
+        new BodoSQLRelDataTypeSystem(enableStreamingSort, enableStreamingSortLimitOffset);
+    this.typeSystem = typeSystem;
+    this.sqlStyle = sqlStyle;
+    setupPlanner(defaultSchemas, typeSystem);
+    this.hideCredentials = hideCredentials;
+    this.enableSnowflakeIcebergTables = enableSnowflakeIcebergTables;
+    this.enableTimestampTz = enableTimestampTz;
+    this.enableRuntimeJoinFilters = enableRuntimeJoinFilters;
+    this.coveringExpressionCaching = coveringExpressionCaching;
+    this.prefetchSFIceberg = prefetchSFIceberg;
+  }
 
-    List<SchemaPlus> defaultSchemas = new ArrayList();
-    defaultSchemas.add(schema.getSubSchema(newSchema.getName()));
-    setupPlanner(defaultSchemas, schema, namedParamTableName);
+  /** Constructor for the relational algebra generator class that takes in the default timezone. */
+  public RelationalAlgebraGenerator(
+      BodoSqlSchema localSchema,
+      int plannerType,
+      int verboseLevel,
+      int tracingLevel,
+      int streamingBatchSize,
+      boolean hideCredentials,
+      boolean enableSnowflakeIcebergTables,
+      boolean enableTimestampTz,
+      boolean enableRuntimeJoinFilters,
+      boolean enableStreamingSort,
+      boolean enableStreamingSortLimitOffset,
+      String sqlStyle,
+      boolean coveringExpressionCaching,
+      boolean prefetchSFIceberg,
+      String defaultTz) {
+    this.catalog = null;
+    this.plannerType = choosePlannerType(plannerType);
+    this.verboseLevel = verboseLevel;
+    this.tracingLevel = tracingLevel;
+    this.streamingBatchSize = streamingBatchSize;
+    System.setProperty("calcite.default.charset", "UTF-8");
+    List<SchemaPlus> defaultSchemas =
+        setupSchema(
+            (root, defaults) -> {
+              defaults.add(root.add(localSchema.getName(), localSchema));
+            });
+    BodoTZInfo tzInfo = new BodoTZInfo(defaultTz, "str");
+    RelDataTypeSystem typeSystem =
+        new BodoSQLRelDataTypeSystem(
+            tzInfo, 0, 0, null, enableStreamingSort, enableStreamingSortLimitOffset);
+    this.typeSystem = typeSystem;
+    this.sqlStyle = sqlStyle;
+    setupPlanner(defaultSchemas, typeSystem);
+    this.hideCredentials = hideCredentials;
+    this.enableSnowflakeIcebergTables = enableSnowflakeIcebergTables;
+    this.enableTimestampTz = enableTimestampTz;
+    this.enableRuntimeJoinFilters = enableRuntimeJoinFilters;
+    this.coveringExpressionCaching = coveringExpressionCaching;
+    this.prefetchSFIceberg = prefetchSFIceberg;
   }
 
   /**
    * Constructor for the relational algebra generator class that accepts a Catalog and Schema
    * objects. It will take the schema objects in the Catalog as well as the Schema object store it
-   * in the {@link #config} and then set up the {@link #program} for optimizing and the {@link
-   * #planner} for parsing.
+   * in the schemas and then set up the program for optimizing and the {@link #planner} for parsing.
    */
   public RelationalAlgebraGenerator(
-      BodoSQLCatalog catalog, BodoSqlSchema newSchema, String namedParamTableName) {
+      BodoSQLCatalog catalog,
+      BodoSqlSchema localSchema,
+      // int is a bad choice for this variable, but we're limited by either
+      // forcing py4j to initialize another Java object or use some plain old data
+      // that it can use so we're choosing the latter.
+      // Something like this can be replaced with a more formal API like GRPC and protobuf.
+      int plannerType,
+      int verboseLevel,
+      int tracingLevel,
+      int streamingBatchSize,
+      boolean hideCredentials,
+      boolean enableSnowflakeIcebergTables,
+      boolean enableTimestampTz,
+      boolean enableRuntimeJoinFilters,
+      boolean enableStreamingSort,
+      boolean enableStreamingSortLimitOffset,
+      String sqlStyle,
+      boolean coveringExpressionCaching,
+      boolean prefetchSFIceberg) {
     this.catalog = catalog;
+    this.plannerType = choosePlannerType(plannerType);
+    this.verboseLevel = verboseLevel;
+    this.tracingLevel = tracingLevel;
+    this.streamingBatchSize = streamingBatchSize;
+    this.hideCredentials = hideCredentials;
+    this.enableSnowflakeIcebergTables = enableSnowflakeIcebergTables;
+    this.enableTimestampTz = enableTimestampTz;
+    this.enableRuntimeJoinFilters = enableRuntimeJoinFilters;
+    this.sqlStyle = sqlStyle;
+    this.coveringExpressionCaching = coveringExpressionCaching;
+    this.prefetchSFIceberg = prefetchSFIceberg;
     System.setProperty("calcite.default.charset", "UTF-8");
-    CalciteConnection calciteConnection = setupCalciteConnection();
-    Set<String> schemaNames = catalog.getSchemaNames();
-    List<BodoSqlSchema> newSchemas = new ArrayList();
-
-    newSchemas.add(newSchema);
-    for (String schemaName : schemaNames) {
-      newSchemas.add(new CatalogSchemaImpl(schemaName, catalog));
+    List<String> catalogDefaultSchema = catalog.getDefaultSchema(0);
+    final @Nullable String currentDatabase;
+    if (catalogDefaultSchema.isEmpty()) {
+      currentDatabase = null;
+    } else {
+      currentDatabase = catalogDefaultSchema.get(0);
     }
-    SchemaPlus schema = setupSchema(calciteConnection, newSchemas);
+    List<SchemaPlus> defaultSchemas =
+        setupSchema(
+            (root, defaults) -> {
+              // Create a schema object with the name of the catalog,
+              // and register all the schemas with this catalog as sub-schemas
+              // Note that the order of adding to default matters. Earlier
+              // elements are given higher priority during resolution.
+              // The correct attempted order of resolution should be:
+              //     catalog_default_path1.(table_identifier)
+              //     catalog_default_path2.(table_identifier)
+              //     ...
+              //     __BODOLOCAL__.(table_identifier)
+              //     (table_identifier) (Note: this case will never yield a match,
+              //     as the root schema is currently always empty. This may change
+              //     in the future)
 
-    List<SchemaPlus> defaultSchemas = new ArrayList();
-    List<BodoSqlSchema> defaultCatalogSchema = catalog.getDefaultSchema();
-    for (BodoSqlSchema catalogDefaultSchema : defaultCatalogSchema) {
-      // Fetch the path from the root schema.
-      defaultSchemas.add(schema.getSubSchema(catalogDefaultSchema.getName()));
-    }
-    defaultSchemas.add(schema.getSubSchema(newSchema.getName()));
-    setupPlanner(defaultSchemas, schema, namedParamTableName);
+              List<SchemaPlus> schemas = new ArrayList();
+              int numLevels = catalog.numDefaultSchemaLevels();
+              SchemaPlus parent = root;
+              for (int i = 0; i < catalog.numDefaultSchemaLevels(); i++) {
+                List<String> schemaNames = catalog.getDefaultSchema(i);
+                // The current default schema API is awkward and needs to be
+                // rewritten. Snowflake allows there to be multiple current
+                // schemas, but this doesn't generalize to other catalogs as
+                // this can lead to diverging paths. We add this check as a
+                // temporary fix and will revisit the API later.
+                // TODO: Fix the API.
+                if ((i + 1) != numLevels && schemaNames.size() > 1) {
+                  throw new RuntimeException(
+                      String.format(
+                          Locale.ROOT,
+                          "BodoSQL only supports multiple default schema paths that differ in the"
+                              + " last level"));
+                }
+                SchemaPlus newParent = parent;
+                for (int j = schemaNames.size() - 1; j >= 0; j--) {
+                  String schemaName = schemaNames.get(j);
+                  SchemaPlus newSchema = parent.getSubSchema(schemaName);
+                  if (newSchema == null) {
+                    throw new RuntimeException(
+                        String.format(
+                            Locale.ROOT, "Unable to find default schema: %s", schemaName));
+                  }
+                  schemas.add(newSchema);
+                  newParent = newSchema;
+                }
+                parent = newParent;
+              }
+              // Add the list in reverse order.
+              for (int i = schemas.size() - 1; i >= 0; i--) {
+                defaults.add(schemas.get(i));
+              }
+              // Add the local schema to the list of schemas.
+              defaults.add(root.add(localSchema.getName(), localSchema));
+            });
+
+    // Create a type system with the correct default Timezone.
+    BodoTZInfo tzInfo = catalog.getDefaultTimezone();
+    Integer weekStart = catalog.getWeekStart();
+    Integer weekOfYearPolicy = catalog.getWeekOfYearPolicy();
+    RelDataTypeSystem typeSystem =
+        new BodoSQLRelDataTypeSystem(
+            tzInfo,
+            weekStart,
+            weekOfYearPolicy,
+            new BodoSQLRelDataTypeSystem.CatalogContext(currentDatabase, catalog.getAccountName()),
+            enableStreamingSort,
+            enableStreamingSortLimitOffset);
+    this.typeSystem = typeSystem;
+    setupPlanner(defaultSchemas, typeSystem);
   }
 
-  public void setRules(List<RelOptRule> rules) {
-    this.rules = rules;
+  // TODO: Determine a better location for this.
+  public static final EnumSet<SqlKind> OTHER_NON_COMPUTE_SET =
+      EnumSet.of(
+          SqlKind.DESCRIBE_TABLE,
+          SqlKind.DESCRIBE_SCHEMA,
+          SqlKind.DESCRIBE_VIEW,
+          SqlKind.SHOW_SCHEMAS,
+          SqlKind.SHOW_OBJECTS,
+          SqlKind.SHOW_TABLES,
+          SqlKind.SHOW_VIEWS,
+          SqlKind.SHOW_TBLPROPERTIES);
+
+  /**
+   * Return if a SQLKind generates compute. This includes CREATE_TABLE because of CTAS right now.
+   *
+   * @param kind The SQLKind to check
+   * @return True if the SQLKind generates compute.
+   */
+  public static boolean isComputeKind(SqlKind kind) {
+    return (!OTHER_NON_COMPUTE_SET.contains(kind) && !SqlKind.DDL.contains(kind))
+        || (kind == SqlKind.CREATE_TABLE);
+  }
+
+  /**
+   * Calls "RESET" on the current planner and clears any cached state need to compile a single query
+   * (but not configuration).
+   *
+   * <p>Note: This is exposed to Python.
+   */
+  public void resetPlanner() {
+    this.planner.close();
+    this.parseNode = null;
   }
 
   /**
    * Parses the SQL query into a SQLNode and updates the relational Algebra Generator's state
    *
-   * @param sql Query to parse
-   * @return The generated SQLNode
+   * @param sql Query to parse Sets parseNode to the generated SQLNode
    * @throws SqlSyntaxException if the SQL syntax is incorrect.
    */
   public void parseQuery(String sql) throws SqlSyntaxException {
@@ -287,216 +433,53 @@ public class RelationalAlgebraGenerator {
     }
   }
 
-  public SqlNode validateQuery(String sql) throws SqlSyntaxException, SqlValidationException {
+  private SqlNode validateQuery(
+      String sql,
+      List<ColumnDataTypeInfo> dynamicParamTypes,
+      Map<String, ColumnDataTypeInfo> namedParamTypeMap)
+      throws SqlSyntaxException, SqlValidationException {
     if (this.parseNode == null) {
       parseQuery(sql);
     }
     SqlNode parseNode = this.parseNode;
     // Clear the parseNode because we will advance the planner
     this.parseNode = null;
-    SqlNode validatedSqlNode;
     try {
-      validatedSqlNode = planner.validate(parseNode);
+      if (isComputeKind(parseNode.getKind())) {
+        return planner.validate(parseNode, dynamicParamTypes, namedParamTypeMap);
+      } else {
+        // No need to validate DDL statements. We handle
+        // them separately in execution.
+        return parseNode;
+      }
     } catch (ValidationException e) {
-      planner.close();
       throw new SqlValidationException(sql, e);
     }
-    return validatedSqlNode;
   }
 
-  public RelNode getNonOptimizedRelationalAlgebra(String sql, boolean closePlanner)
-      throws SqlSyntaxException, SqlValidationException, RelConversionException {
-    SqlNode validatedSqlNode = validateQuery(sql);
-    RelNode result = planner.rel(validatedSqlNode).project();
-    if (closePlanner) {
-      planner.close();
-    }
-    // Close any open connections from catalogs
-    if (catalog != null) {
-      catalog.closeConnections();
-    }
-    return result;
-  }
-
-  public RelNode getOptimizedRelationalAlgebra(RelNode nonOptimizedPlan)
+  private Pair<RelRoot, Map<Integer, Integer>> sqlToRel(SqlNode validatedSqlNode)
       throws RelConversionException {
-    if (rules == null) {
-      program =
-          new HepProgramBuilder()
-              /*
-              Planner rule that, given a Project node that merely returns its input, converts the node into its child.
-              */
-              .addRuleInstance(ProjectUnaliasedRemoveRule.Config.DEFAULT.toRule())
-              /*
-              Planner rule that combines two LogicalFilters.
-              */
-              .addRuleInstance(FilterMergeRule.Config.DEFAULT.toRule())
-              /*
-                 Planner rule that merges a Project into another Project,
-                 provided the projects aren't projecting identical sets of input references.
-              */
-              .addRuleInstance(ProjectMergeRule.Config.DEFAULT.toRule())
-              /*
-              Planner rule that pushes a Filter past a Aggregate.
-                 */
-              .addRuleInstance(FilterAggregateTransposeRule.Config.DEFAULT.toRule())
-              /*
-               * Planner rule that matches an {@link org.apache.calcite.rel.core.Aggregate}
-               * on a {@link org.apache.calcite.rel.core.Join} and removes the join
-               * provided that the join is a left join or right join and it computes no
-               * aggregate functions or all the aggregate calls have distinct.
-               *
-               * <p>For instance,</p>
-               *
-               * <blockquote>
-               * <pre>select distinct s.product_id from
-               * sales as s
-               * left join product as p
-               * on s.product_id = p.product_id</pre></blockquote>
-               *
-               * <p>becomes
-               *
-               * <blockquote>
-               * <pre>select distinct s.product_id from sales as s</pre></blockquote>
-               */
-              .addRuleInstance(AggregateJoinRemoveRule.Config.DEFAULT.toRule())
-              /*
-                 Planner rule that pushes an Aggregate past a join
-              */
-              .addRuleInstance(AggregateJoinTransposeRule.Config.EXTENDED.toRule())
-              /*
-              Rule that tries to push filter expressions into a join condition and into the inputs of the join.
-              */
-              .addRuleInstance(
-                  FilterJoinRule.FilterIntoJoinRule.FilterIntoJoinRuleConfig.DEFAULT.toRule())
-              /*
-              Rule that applies moves any filters that depend on a single table before the join in
-              which they occur.
-               */
-              .addRuleInstance(
-                  FilterJoinRule.JoinConditionPushRule.JoinConditionPushRuleConfig.DEFAULT.toRule())
-              /*
-              Filters tables for unused columns before join.
-              */
-              .addRuleInstance(AliasPreservingProjectJoinTransposeRule.Config.DEFAULT.toRule())
-              /*
-              This reduces expressions inside of the conditions of filter statements.
-              Ex condition($0 = 1 and $0 = 2) ==> condition(FALSE)
-              TODO(Ritwika: figure out SEARCH handling later. SARG attributes do not have public access methods.
-              */
-              .addRuleInstance(
-                  ReduceExpressionsRule.FilterReduceExpressionsRule
-                      .FilterReduceExpressionsRuleConfig.DEFAULT
-                      .toRule())
-              /*
-              Pushes predicates that are used on one side of equality in a join to
-              the other side of the join as well, enabling further filter pushdown
-              and reduce the amount of data joined.
-
-              For example, consider the query:
-
-              select t1.a, t2.b from table1 t1, table2 t2 where t1.a = 1 AND t1.a = t2.b
-
-              This produces a plan like
-
-              LogicalProject(a=[$0], b=[$1])
-                LogicalJoin(condition=[=($0, $1)], joinType=[inner])
-                  LogicalProject(A=[$0])
-                    LogicalFilter(condition=[=($0, 1)])
-                      LogicalTableScan(table=[[main, table1]])
-                  LogicalProject(B=[$1])
-                      LogicalFilter(condition=[=($1, 1)])
-                        LogicalTableScan(table=[[main, table2]])
-
-               So both table1 and table2 filter on col = 1.
-               */
-              .addRuleInstance(JoinPushTransitivePredicatesRule.Config.DEFAULT.toRule())
-              /*
-               * Planner rule that removes
-               * a {@link org.apache.calcite.rel.core.Aggregate}
-               * if it computes no aggregate functions
-               * (that is, it is implementing {@code SELECT DISTINCT}),
-               * or all the aggregate functions are splittable,
-               * and the underlying relational expression is already distinct.
-               *
-               */
-              .addRuleInstance(AggregateRemoveRule.Config.DEFAULT.toRule())
-              /*
-               * Planner rule that matches an {@link org.apache.calcite.rel.core.Aggregate}
-               * on a {@link org.apache.calcite.rel.core.Join} and removes the left input
-               * of the join provided that the left input is also a left join if possible.
-               *
-               * <p>For instance,
-               *
-               * <blockquote>
-               * <pre>select distinct s.product_id, pc.product_id
-               * from sales as s
-               * left join product as p
-               *   on s.product_id = p.product_id
-               * left join product_class pc
-               *   on s.product_id = pc.product_id</pre></blockquote>
-               *
-               * <p>becomes
-               *
-               * <blockquote>
-               * <pre>select distinct s.product_id, pc.product_id
-               * from sales as s
-               * left join product_class pc
-               *   on s.product_id = pc.product_id</pre></blockquote>
-               *
-               * @see CoreRules#AGGREGATE_JOIN_JOIN_REMOVE
-               */
-              .addRuleInstance(AggregateJoinJoinRemoveRule.Config.DEFAULT.toRule()) /*
-              /*
-               * Planner rule that merges an Aggregate into a projection when possible,
-               * maintaining any aliases.
-               */
-              .addRuleInstance(AliasPreservingAggregateProjectMergeRule.Config.DEFAULT.toRule())
-              /*
-               * Planner rule that merges a Projection into an Aggregate when possible,
-               * maintaining any aliases.
-               */
-              .addRuleInstance(ProjectAggregateMergeRule.Config.DEFAULT.toRule())
-              /*
-               * Planner rule that ensures filter is always pushed into join. This is needed
-               * for complex queries.
-               */
-              .addRuleInstance(FilterProjectTransposeRule.Config.DEFAULT.toRule())
-              // Prune trivial cross-joins
-              .addRuleInstance(InnerJoinRemoveRule.Config.DEFAULT.toRule())
-              // Rewrite filters in either Filter or Join to convert OR with shared subexpression
-              // into
-              // an AND and then OR. For example
-              // OR(AND(A > 1, B < 10), AND(A > 1, A < 5)) -> AND(A > 1, OR(B < 10 , A < 5))
-              // Another rule pushes filters into join and we do not know if the LogicalFilter
-              // optimization will get to run before its pushed into the join. As a result,
-              // we write a duplicate rule that operates directly on the condition of the join.
-              .addRuleInstance(JoinReorderConditionRule.Config.DEFAULT.toRule())
-              .addRuleInstance(LogicalFilterReorderConditionRule.Config.DEFAULT.toRule())
-              // Push a limit before a project (e.g. select col as alias from table limit 10)
-              .addRuleInstance(LimitProjectTransposeRule.Config.DEFAULT.toRule())
-              .build();
-
-    } else {
-      HepProgramBuilder programBuilder = new HepProgramBuilder();
-      for (RelOptRule rule : rules) {
-        programBuilder = programBuilder.addRuleInstance(rule);
-      }
-      program = programBuilder.build();
+    if (!isComputeKind(validatedSqlNode.getKind())) {
+      throw new RelConversionException(
+          "DDL statements are not supported by the Relational Algebra Generator");
     }
-
-    final HepPlanner hepPlanner = new HepPlanner(program, config.getContext());
-    nonOptimizedPlan.getCluster().getPlanner().setExecutor(new RexExecutorImpl(null));
-    hepPlanner.setRoot(nonOptimizedPlan);
-
-    planner.close();
-
-    return hepPlanner.findBestExp();
+    RelRoot baseResult = planner.rel(validatedSqlNode);
+    RelRoot unoptimizedPlan =
+        baseResult.withRel(planner.transform(0, planner.getEmptyTraitSet(), baseResult.rel));
+    RelTraitSet requiredOutputTraits =
+        planner.getEmptyTraitSet().replace(BodoPhysicalRel.CONVENTION);
+    RelRoot optimizedPlan =
+        unoptimizedPlan.withRel(planner.transform(1, requiredOutputTraits, unoptimizedPlan.rel));
+    RelIDToOperatorIDVisitor s = new RelIDToOperatorIDVisitor();
+    s.visit(optimizedPlan.rel, 0, null);
+    Map<Integer, Integer> idMapping = s.getIDMapping();
+    return Pair.of(optimizedPlan, idMapping);
   }
 
   /**
    * Takes a sql statement and converts it into an optimized relational algebra node. The result of
-   * this function is a logical plan that has been optimized using a rule based optimizer.
+   * this function is a logical plan that has been optimized using a rule based optimizer. This is
+   * used when we just want to get the optimized plan and not the pandas code.
    *
    * @param sql a string sql query that is to be parsed, converted into relational algebra, then
    *     optimized
@@ -504,114 +487,290 @@ public class RelationalAlgebraGenerator {
    *     provided after an optimization step has been completed.
    * @throws SqlSyntaxException, SqlValidationException, RelConversionException
    */
-  public RelNode getRelationalAlgebra(String sql, boolean performOptimizations)
+  @VisibleForTesting
+  public Pair<RelRoot, Map<Integer, Integer>> getRelationalAlgebra(String sql)
       throws SqlSyntaxException, SqlValidationException, RelConversionException {
-    RelNode nonOptimizedPlan = getNonOptimizedRelationalAlgebra(sql, !performOptimizations);
-    LOGGER.debug("non optimized\n" + RelOptUtil.toString(nonOptimizedPlan));
-
-    if (!performOptimizations) {
-      return nonOptimizedPlan;
-    }
-
-    RelNode lastOptimizedPlan = nonOptimizedPlan;
-    RelNode curOptimizedPlan = getOptimizedRelationalAlgebra(nonOptimizedPlan);
-
-    // Set an arbitrary upper bound for apply the optimization rules in case
-    // for some reason a plan doesn't converge. While we should always converge,
-    // its more desirable to have a suboptimal plan than an infinite loop.
-    final int maxIterations = 25;
-
-    int currIteration = 0;
-
-    while (!curOptimizedPlan.deepEquals(lastOptimizedPlan) && (currIteration < maxIterations)) {
-      lastOptimizedPlan = curOptimizedPlan;
-      curOptimizedPlan = getOptimizedRelationalAlgebra(lastOptimizedPlan);
-      currIteration++;
-    }
-
-    LOGGER.debug("optimized\n" + RelOptUtil.toString(curOptimizedPlan));
-
-    return curOptimizedPlan;
+    return getRelationalAlgebra(sql, List.of(), Map.of());
   }
 
-  public String getRelationalAlgebraString(String sql, boolean optimizePlan)
+  @VisibleForTesting
+  public Pair<RelRoot, Map<Integer, Integer>> getRelationalAlgebra(
+      String sql,
+      List<ColumnDataTypeInfo> dynamicParamTypes,
+      Map<String, ColumnDataTypeInfo> namedParamTypeMap)
       throws SqlSyntaxException, SqlValidationException, RelConversionException {
-    String response = "";
-
     try {
-      response = RelOptUtil.toString(getRelationalAlgebra(sql, optimizePlan));
-    } catch (SqlValidationException ex) {
-      // System.out.println(ex.getMessage());
-      // System.out.println("Found validation err!");
-      throw ex;
-      // return "fail: \n " + ex.getMessage();
-    } catch (SqlSyntaxException ex) {
-      // System.out.println(ex.getMessage());
-      // System.out.println("Found syntax err!");
-      throw ex;
-      // return "fail: \n " + ex.getMessage();
-    } catch (RelConversionException ex) {
-      throw ex;
-    } catch (Exception ex) {
-      // System.out.println(ex.toString());
-      // System.out.println(ex.getMessage());
-      ex.printStackTrace();
-
-      LOGGER.error(ex.getMessage());
-      return "fail: \n " + ex.getMessage();
+      SqlNode validatedSqlNode = validateQuery(sql, dynamicParamTypes, namedParamTypeMap);
+      return sqlToRel(validatedSqlNode);
+    } finally {
+      planner.close();
+      // Close any open connections from catalogs
+      if (catalog != null) {
+        catalog.closeConnections();
+      }
     }
-
-    return response;
   }
 
-  public String getPandasString(String sql, boolean debugDeltaTable) throws Exception {
-    RelNode optimizedPlan = getRelationalAlgebra(sql, true);
-    return getPandasStringFromPlan(optimizedPlan, sql, debugDeltaTable);
+  private String getOptimizedPlanStringFromRoot(
+      Pair<RelRoot, Map<Integer, Integer>> root, Boolean includeCosts) {
+    RelNode newRoot = BodoUtilKt.bodoPhysicalProject(root.getLeft());
+    StringWriter sw = new StringWriter();
+    RelCostAndMetaDataWriter costWriter =
+        new RelCostAndMetaDataWriter(
+            new PrintWriter(sw), newRoot, root.getRight(), includeCosts, hideOperatorIDs);
+    newRoot.explain(costWriter);
+    costWriter.explainCachedNodes();
+    return sw.toString();
   }
 
-  //Default debugDeltaTable to false
-  public String getPandasString(String sql) throws Exception {
-    return getPandasString(sql, false);
+  /**
+   * Generate the DDL representation. Here we just unparse to SQL filling in any default values.
+   *
+   * @param ddlNode The DDLNode to represent.
+   * @return The DDL representation as a string.
+   */
+  private String getDDLPlanString(SqlNode ddlNode) {
+    StringBuilder sb = new StringBuilder();
+    SqlPrettyWriter writer =
+        new SqlPrettyWriter(SqlPrettyWriter.config().withAlwaysUseParentheses(true), sb);
+    ddlNode.unparse(writer, 0, 0);
+    return sb.toString();
   }
 
-  public String getPandasStringUnoptimized(String sql, boolean debugDeltaTable) throws Exception {
-    RelNode unOptimizedPlan = getNonOptimizedRelationalAlgebra(sql, true);
-    return getPandasStringFromPlan(unOptimizedPlan, sql, debugDeltaTable);
+  private String getDDLPandasString(
+      SqlNode ddlNode,
+      String originalSQL,
+      List<ColumnDataTypeInfo> dynamicParamTypes,
+      Map<String, ColumnDataTypeInfo> namedParamTypeMap) {
+    // Note: We can't use dynamic params in DDL yet, but we pass the types, so we can generate a
+    // cleaner error message.
+    List<RelDataType> dynamicTypes =
+        dynamicParamTypes.stream()
+            .map(x -> x.convertToSqlType(planner.getTypeFactory()))
+            .collect(Collectors.toList());
+    Map<String, RelDataType> namedParamTypes =
+        namedParamTypeMap.entrySet().stream()
+            .collect(
+                Collectors.toMap(
+                    Map.Entry::getKey,
+                    x -> x.getValue().convertToSqlType(planner.getTypeFactory())));
+    this.loweredGlobalVariables = new HashMap<>();
+    BodoCodeGenVisitor codegen =
+        new BodoCodeGenVisitor(
+            this.loweredGlobalVariables,
+            originalSQL,
+            this.typeSystem,
+            this.verboseLevel,
+            this.tracingLevel,
+            this.streamingBatchSize,
+            dynamicTypes,
+            namedParamTypes,
+            Map.of(),
+            this.hideOperatorIDs,
+            this.prefetchSFIceberg);
+    codegen.generateDDLCode(ddlNode, new GenerateDDLTypes(this.planner.getTypeFactory()));
+    return codegen.getGeneratedCode();
   }
 
-  //default debugDeltaTable to false
-  public String getPandasStringUnoptimized(String sql) throws Exception {
-    return getPandasStringUnoptimized(sql, false);
-  }
-
-
-  private String getPandasStringFromPlan(RelNode plan, String originalSQL, boolean debugDeltaTable) throws Exception {
-    /**
+  private String getPandasStringFromPlan(
+      Pair<RelRoot, Map<Integer, Integer>> plan,
+      String originalSQL,
+      List<ColumnDataTypeInfo> dynamicParamTypes,
+      Map<String, ColumnDataTypeInfo> namedParamTypeMap) {
+    /*
      * HashMap that maps a Calcite Node using a unique identifier for different "values". To do
      * this, we use two components. First, each RelNode comes with a unique id, which This is used
      * to track exprTypes before code generation.
      */
-    HashMap<String, BodoSQLExprType.ExprType> exprTypes = new HashMap<>();
-    // Map from search unique id to the expanded code generated
-    HashMap<String, RexNode> searchMap = new HashMap<>();
-    ExprTypeVisitor.determineRelNodeExprType(plan, exprTypes, searchMap);
+    List<RelDataType> dynamicTypes =
+        dynamicParamTypes.stream()
+            .map(x -> x.convertToSqlType(planner.getTypeFactory()))
+            .collect(Collectors.toList());
+    Map<String, RelDataType> namedParamTypes =
+        namedParamTypeMap.entrySet().stream()
+            .collect(
+                Collectors.toMap(
+                    Map.Entry::getKey,
+                    x -> x.getValue().convertToSqlType(planner.getTypeFactory())));
+    RelNode rel = BodoUtilKt.bodoPhysicalProject(plan.getLeft());
+    // Create a mapping for the new root/newly created nodes - this is a bit of a hack, and long
+    // term we probably want
+    // something that's part of the RelNode itself instead of an auxiliary map to make this safer.
+    RelIDToOperatorIDVisitor v = new RelIDToOperatorIDVisitor(new HashMap<>(plan.getRight()));
+    v.visit(rel, 0, null);
+
     this.loweredGlobalVariables = new HashMap<>();
-    PandasCodeGenVisitor codegen =
-        new PandasCodeGenVisitor(exprTypes, searchMap, this.loweredGlobalVariables, originalSQL, debugDeltaTable);
-    codegen.go(plan);
-    String pandas_code = codegen.getGeneratedCode();
-    return pandas_code;
-  }
-
-  public String getOptimizedPlanString(String sql) throws Exception {
-    return RelOptUtil.toString(getRelationalAlgebra(sql, true));
-  }
-
-  public String getUnoptimizedPlanString(String sql) throws Exception {
-    return RelOptUtil.toString(getRelationalAlgebra(sql, false));
+    BodoCodeGenVisitor codegen =
+        new BodoCodeGenVisitor(
+            this.loweredGlobalVariables,
+            originalSQL,
+            this.typeSystem,
+            this.verboseLevel,
+            this.tracingLevel,
+            this.streamingBatchSize,
+            dynamicTypes,
+            namedParamTypes,
+            v.getIDMapping(),
+            this.hideOperatorIDs,
+            this.prefetchSFIceberg);
+    codegen.go(rel);
+    return codegen.getGeneratedCode();
   }
 
   public HashMap<String, String> getLoweredGlobalVariables() {
     return this.loweredGlobalVariables;
+  }
+
+  private static PlannerType choosePlannerType(int plannerType) {
+    switch (plannerType) {
+      case VOLCANO_PLANNER:
+        return PlannerType.VOLCANO;
+      case STREAMING_PLANNER:
+        return PlannerType.STREAMING;
+      default:
+        throw new RuntimeException("Unexpected Planner option");
+    }
+  }
+
+  // ~~~~~~~~~~~~~PYTHON EXPOSED APIS~~~~~~~~~~~~~~
+  public String getOptimizedPlanString(String sql, Boolean includeCosts) throws Exception {
+    return getOptimizedPlanString(sql, includeCosts, List.of(), Map.of());
+  }
+
+  public String getOptimizedPlanString(
+      String sql,
+      Boolean includeCosts,
+      List<ColumnDataTypeInfo> dynamicParamTypes,
+      Map<String, ColumnDataTypeInfo> namedParamTypeMap)
+      throws Exception {
+    try {
+      SqlNode validatedSqlNode = validateQuery(sql, dynamicParamTypes, namedParamTypeMap);
+      if (isComputeKind(validatedSqlNode.getKind())) {
+        Pair<RelRoot, Map<Integer, Integer>> root = sqlToRel(validatedSqlNode);
+        return getOptimizedPlanStringFromRoot(root, includeCosts);
+      } else {
+        return getDDLPlanString(validatedSqlNode);
+      }
+    } finally {
+      planner.close();
+      // Close any open connections from catalogs
+      if (catalog != null) {
+        catalog.closeConnections();
+      }
+    }
+  }
+
+  public PandasCodeSqlPlanPair getPandasAndPlanString(String sql, boolean includeCosts)
+      throws Exception {
+    return getPandasAndPlanString(sql, includeCosts, List.of(), Map.of());
+  }
+
+  public PandasCodeSqlPlanPair getPandasAndPlanString(
+      String sql,
+      boolean includeCosts,
+      List<ColumnDataTypeInfo> dynamicParamTypes,
+      Map<String, ColumnDataTypeInfo> namedParamTypeMap)
+      throws Exception {
+    try {
+      SqlNode validatedSqlNode = validateQuery(sql, dynamicParamTypes, namedParamTypeMap);
+      if (isComputeKind(validatedSqlNode.getKind())) {
+        Pair<RelRoot, Map<Integer, Integer>> optimizedPlan = sqlToRel(validatedSqlNode);
+        String pandasString =
+            getPandasStringFromPlan(optimizedPlan, sql, dynamicParamTypes, namedParamTypeMap);
+        String planString = getOptimizedPlanStringFromRoot(optimizedPlan, includeCosts);
+        return new PandasCodeSqlPlanPair(pandasString, planString);
+      } else {
+        String pandasString =
+            getDDLPandasString(validatedSqlNode, sql, dynamicParamTypes, namedParamTypeMap);
+        String planString = getDDLPlanString(validatedSqlNode);
+        return new PandasCodeSqlPlanPair(pandasString, planString);
+      }
+    } finally {
+      planner.close();
+      // Close any open connections from catalogs
+      if (catalog != null) {
+        catalog.closeConnections();
+      }
+    }
+  }
+
+  public String getPandasString(String sql) throws Exception {
+    return getPandasString(sql, List.of(), Map.of());
+  }
+
+  public String getPandasString(
+      String sql,
+      List<ColumnDataTypeInfo> dynamicParamTypes,
+      Map<String, ColumnDataTypeInfo> namedParamTypeMap)
+      throws Exception {
+    try {
+      SqlNode validatedSqlNode = validateQuery(sql, dynamicParamTypes, namedParamTypeMap);
+      if (isComputeKind(validatedSqlNode.getKind())) {
+        Pair<RelRoot, Map<Integer, Integer>> optimizedPlan = sqlToRel(validatedSqlNode);
+        return getPandasStringFromPlan(optimizedPlan, sql, dynamicParamTypes, namedParamTypeMap);
+      } else {
+        return getDDLPandasString(validatedSqlNode, sql, dynamicParamTypes, namedParamTypeMap);
+      }
+    } finally {
+      planner.close();
+      // Close any open connections from catalogs
+      if (catalog != null) {
+        catalog.closeConnections();
+      }
+    }
+  }
+
+  /**
+   * Determine the "type" of write produced by this node. The write operation is always assumed to
+   * be the top level of the parsed query. It returns the name of operation in question to enable
+   * passing the correct write API to the table.
+   *
+   * <p>Currently supported write types: "MERGE": Merge into "INSERT": Insert Into
+   *
+   * @param sql The SQL query to parse.
+   * @return A string representing the type of write.
+   */
+  public String getWriteType(String sql) throws Exception {
+    // Parse the query if we haven't already
+    if (this.parseNode == null) {
+      parseQuery(sql);
+    }
+    if (this.parseNode instanceof SqlMerge) {
+      return "MERGE";
+    } else {
+      // Default to insert into for the write type.
+      // If there is no write then the return value
+      // doesn't matter.
+      return "INSERT";
+    }
+  }
+
+  public DDLExecutionResult executeDDL(String sql) throws Exception {
+    try {
+      // DDL doesn't support dynamic or named parameters at this time.
+      SqlNode validatedSqlNode = validateQuery(sql, List.of(), Map.of());
+      if (RelationalAlgebraGenerator.isComputeKind(validatedSqlNode.getKind())) {
+        throw new RuntimeException("Only DDL statements are supported by executeDDL");
+      }
+      return planner.executeDDL(validatedSqlNode);
+    } finally {
+      planner.close();
+      // Close any open connections from catalogs
+      if (catalog != null) {
+        catalog.closeConnections();
+      }
+    }
+  }
+
+  /**
+   * Determine if the active query is a DDL query that is not treated like compute (not CTAS).
+   *
+   * @return Is the query DDL?
+   */
+  public boolean isDDLProcessedQuery() {
+    if (this.parseNode == null) {
+      throw new RuntimeException("No SQL query has been parsed yet. Cannot determine query type");
+    }
+    return !isComputeKind(this.parseNode.getKind());
   }
 }

@@ -1,38 +1,48 @@
-// Copyright (C) 2019 Bodo Inc. All rights reserved.
 #include <Python.h>
 #define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
-#include <numpy/arrayobject.h>
-#include <boost/algorithm/string/replace.hpp>
+
+#include <algorithm>
 #include <iostream>
+#include <set>
 #include <string>
 #include <vector>
 
 #include <arrow/python/pyarrow.h>
+#include <numpy/arrayobject.h>
+
 #include "_bodo_common.h"
 #include "_bodo_to_arrow.h"
-
-#include "_str_decode.cpp"
+#include "_stl.h"
 
 #include <boost/lexical_cast.hpp>
 
-extern "C" {
+#include "_str_decode.cpp"
 
-// taken from Arrow bin-util.h
-// the bitwise complement version of kBitmask
-static constexpr uint8_t kFlippedBitmask[] = {254, 253, 251, 247,
-                                              239, 223, 191, 127};
+extern "C" {
 
 // Map of integers to hex values. Note we use an array because the keys are 0-15
 static constexpr char hex_values[] = {'0', '1', '2', '3', '4', '5', '6', '7',
                                       '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'};
 
-static inline void ClearBit(uint8_t* bits, int64_t i) {
-    bits[i / 8] &= kFlippedBitmask[i % 8];
-}
-
-static inline void SetBit(uint8_t* bits, int64_t i) {
-    bits[i / 8] |= kBitmask[i % 8];
-}
+// Copied _PyLong_DigitValue from CPython internals (seems not exported in
+// Python 3.11, causing compilation errors).
+// https://github.com/python/cpython/blob/869f177b5cd5c2a2a015e4658cbbb0e9566210f7/Objects/longobject.c#L2203
+unsigned char _DigitValue[256] = {
+    37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37,
+    37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37,
+    37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 0,  1,  2,  3,  4,  5,  6,  7,  8,
+    9,  37, 37, 37, 37, 37, 37, 37, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
+    21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 37, 37, 37, 37,
+    37, 37, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26,
+    27, 28, 29, 30, 31, 32, 33, 34, 35, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37,
+    37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37,
+    37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37,
+    37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37,
+    37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37,
+    37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37,
+    37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37,
+    37, 37, 37, 37, 37, 37, 37, 37, 37,
+};
 
 void* init_string_const(char* in_str, int64_t size);
 void dtor_str_arr_split_view(str_arr_split_view_payload* in_str_arr,
@@ -51,19 +61,14 @@ double str_to_float64(std::string* str);
 float str_to_float32(std::string* str);
 int64_t get_str_len(std::string* str);
 
-void* np_array_from_string_array(int64_t no_strings,
-                                 const offset_t* offset_table,
-                                 const char* buffer, const uint8_t* null_bitmap,
-                                 const int is_bytes);
-void* pd_array_from_string_array(int64_t no_strings,
-                                 const offset_t* offset_table,
-                                 const char* buffer,
-                                 const uint8_t* null_bitmap);
-void* pd_pyarrow_array_from_string_array(const array_info* str_arr);
+void* pd_pyarrow_array_from_string_array(array_info* str_arr,
+                                         const int is_bytes);
 
 void setitem_string_array(offset_t* offsets, char* data, uint64_t n_bytes,
                           char* str, int64_t len, int kind, int is_ascii,
                           int64_t index);
+void setitem_binary_array(offset_t* offsets, char* data, uint64_t n_bytes,
+                          char* str, int64_t len, int64_t index);
 int64_t get_utf8_size(char* str, int64_t len, int kind);
 
 void set_string_array_range(offset_t* out_offsets, char* out_data,
@@ -88,11 +93,8 @@ int is_np_array(PyObject* obj);
 npy_intp array_size(PyArrayObject* arr);
 void* array_getptr1(PyArrayObject* arr, npy_intp ind);
 void array_setitem(PyArrayObject* arr, char* p, PyObject* s);
+void bool_arr_to_bitmap(uint8_t* bitmap_arr, uint8_t* bool_arr, int64_t n);
 void mask_arr_to_bitmap(uint8_t* bitmap_arr, uint8_t* mask_arr, int64_t n);
-int is_bool_array(PyArrayObject* arr);
-int is_pd_boolean_array(PyObject* arr);
-void unbox_bool_array_obj(PyArrayObject* arr, uint8_t* data, uint8_t* bitmap,
-                          int64_t n);
 void print_str_arr(uint64_t n, uint64_t n_chars, offset_t* offsets,
                    uint8_t* data);
 void print_list_str_arr(uint64_t n, const char* data,
@@ -103,16 +105,25 @@ void bytes_to_hex(char* output, char* data, int64_t data_len);
 int64_t bytes_fromhex(unsigned char* output, unsigned char* data,
                       int64_t data_len);
 void int_to_hex(char* output, int64_t output_len, uint64_t int_val);
-void* box_dict_str_array(int64_t n, PyArrayObject* dict_arr,
-                         const int32_t* indices, const uint8_t* null_bitmap);
+array_info* str_to_dict_str_array(array_info* str_arr);
+int64_t re_escape_length_kind1(char* pattern, int64_t length);
+int64_t re_escape_length_kind2(char* pattern, int64_t length);
+int64_t re_escape_length_kind4(char* pattern, int64_t length);
+int64_t re_escape_length(char* pattern, int64_t length, int32_t kind);
+void re_escape_with_output_kind1(char* pattern, int64_t length,
+                                 char* out_pattern);
+void re_escape_with_output_kind2(char* pattern, int64_t length,
+                                 char* out_pattern);
+void re_escape_with_output_kind4(char* pattern, int64_t length,
+                                 char* out_pattern);
+void re_escape_with_output(char* pattern, int64_t length, char* out_pattern,
+                           int32_t kind);
 
 PyMODINIT_FUNC PyInit_hstr_ext(void) {
     PyObject* m;
-    static struct PyModuleDef moduledef = {
-        PyModuleDef_HEAD_INIT, "hstr_ext", "No docs", -1, NULL,
-    };
-    m = PyModule_Create(&moduledef);
-    if (m == NULL) return NULL;
+    MOD_DEF(m, "hstr_ext", "No docs", nullptr);
+    if (m == nullptr)
+        return nullptr;
 
     // init numpy
     import_array();
@@ -124,95 +135,49 @@ PyMODINIT_FUNC PyInit_hstr_ext(void) {
     // using exceptions, but most of those occur in box/unbox which we don't
     // know how to handle on the python side yet.
 
-    PyObject_SetAttrString(m, "init_string_const",
-                           PyLong_FromVoidPtr((void*)(&init_string_const)));
-    PyObject_SetAttrString(
-        m, "dtor_str_arr_split_view",
-        PyLong_FromVoidPtr((void*)(&dtor_str_arr_split_view)));
-    PyObject_SetAttrString(
-        m, "str_arr_split_view_alloc",
-        PyLong_FromVoidPtr((void*)(&str_arr_split_view_alloc)));
-    PyObject_SetAttrString(
-        m, "str_arr_split_view_impl",
-        PyLong_FromVoidPtr((void*)(&str_arr_split_view_impl)));
-    PyObject_SetAttrString(m, "get_c_str",
-                           PyLong_FromVoidPtr((void*)(&get_c_str)));
+    SetAttrStringFromVoidPtr(m, init_string_const);
+    SetAttrStringFromVoidPtr(m, dtor_str_arr_split_view);
+    SetAttrStringFromVoidPtr(m, str_arr_split_view_alloc);
+    SetAttrStringFromVoidPtr(m, str_arr_split_view_impl);
+    SetAttrStringFromVoidPtr(m, get_c_str);
 
-    PyObject_SetAttrString(m, "str_to_int64",
-                           PyLong_FromVoidPtr((void*)(&str_to_int64)));
-    PyObject_SetAttrString(m, "str_to_uint64",
-                           PyLong_FromVoidPtr((void*)(&str_to_uint64)));
-    PyObject_SetAttrString(m, "str_to_int64_base",
-                           PyLong_FromVoidPtr((void*)(&str_to_int64_base)));
-    PyObject_SetAttrString(m, "str_to_float64",
-                           PyLong_FromVoidPtr((void*)(&str_to_float64)));
-    PyObject_SetAttrString(m, "str_to_float32",
-                           PyLong_FromVoidPtr((void*)(&str_to_float32)));
-    PyObject_SetAttrString(m, "get_str_len",
-                           PyLong_FromVoidPtr((void*)(&get_str_len)));
-    PyObject_SetAttrString(
-        m, "pd_array_from_string_array",
-        PyLong_FromVoidPtr((void*)(&pd_array_from_string_array)));
-    PyObject_SetAttrString(
-        m, "pd_pyarrow_array_from_string_array",
-        PyLong_FromVoidPtr((void*)(&pd_pyarrow_array_from_string_array)));
-    PyObject_SetAttrString(
-        m, "np_array_from_string_array",
-        PyLong_FromVoidPtr((void*)(&np_array_from_string_array)));
-    PyObject_SetAttrString(m, "setitem_string_array",
-                           PyLong_FromVoidPtr((void*)(&setitem_string_array)));
-    PyObject_SetAttrString(
-        m, "set_string_array_range",
-        PyLong_FromVoidPtr((void*)(&set_string_array_range)));
-    PyObject_SetAttrString(
-        m, "convert_len_arr_to_offset32",
-        PyLong_FromVoidPtr((void*)(&convert_len_arr_to_offset32)));
-    PyObject_SetAttrString(
-        m, "convert_len_arr_to_offset",
-        PyLong_FromVoidPtr((void*)(&convert_len_arr_to_offset)));
-    PyObject_SetAttrString(m, "print_str_arr",
-                           PyLong_FromVoidPtr((void*)(&print_str_arr)));
-    PyObject_SetAttrString(m, "str_arr_to_int64",
-                           PyLong_FromVoidPtr((void*)(&str_arr_to_int64)));
-    PyObject_SetAttrString(m, "str_arr_to_float64",
-                           PyLong_FromVoidPtr((void*)(&str_arr_to_float64)));
-    PyObject_SetAttrString(m, "str_from_float32",
-                           PyLong_FromVoidPtr((void*)(&str_from_float32)));
-    PyObject_SetAttrString(m, "str_from_float64",
-                           PyLong_FromVoidPtr((void*)(&str_from_float64)));
-    PyObject_SetAttrString(m, "inplace_int64_to_str",
-                           PyLong_FromVoidPtr((void*)(&inplace_int64_to_str)));
-    PyObject_SetAttrString(m, "is_na", PyLong_FromVoidPtr((void*)(&is_na)));
-    PyObject_SetAttrString(m, "del_str", PyLong_FromVoidPtr((void*)(&del_str)));
-    PyObject_SetAttrString(m, "array_size",
-                           PyLong_FromVoidPtr((void*)(&array_size)));
-    PyObject_SetAttrString(m, "is_np_array",
-                           PyLong_FromVoidPtr((void*)(&is_np_array)));
-    PyObject_SetAttrString(m, "unicode_to_utf8",
-                           PyLong_FromVoidPtr((void*)(&unicode_to_utf8)));
-    PyObject_SetAttrString(m, "array_getptr1",
-                           PyLong_FromVoidPtr((void*)(&array_getptr1)));
-    PyObject_SetAttrString(m, "array_setitem",
-                           PyLong_FromVoidPtr((void*)(&array_setitem)));
-    PyObject_SetAttrString(m, "get_utf8_size",
-                           PyLong_FromVoidPtr((void*)(&get_utf8_size)));
-    PyObject_SetAttrString(m, "mask_arr_to_bitmap",
-                           PyLong_FromVoidPtr((void*)(&mask_arr_to_bitmap)));
-    PyObject_SetAttrString(m, "is_bool_array",
-                           PyLong_FromVoidPtr((void*)(&is_bool_array)));
-    PyObject_SetAttrString(m, "is_pd_boolean_array",
-                           PyLong_FromVoidPtr((void*)(&is_pd_boolean_array)));
-    PyObject_SetAttrString(m, "unbox_bool_array_obj",
-                           PyLong_FromVoidPtr((void*)(&unbox_bool_array_obj)));
-    PyObject_SetAttrString(m, "memcmp", PyLong_FromVoidPtr((void*)(&memcmp)));
-    PyObject_SetAttrString(m, "bytes_to_hex",
-                           PyLong_FromVoidPtr((void*)(&bytes_to_hex)));
-    PyObject_SetAttrString(m, "bytes_fromhex",
-                           PyLong_FromVoidPtr((void*)(&bytes_fromhex)));
-    PyObject_SetAttrString(m, "int_to_hex",
-                           PyLong_FromVoidPtr((void*)(&int_to_hex)));
-    PyObject_SetAttrString(m, "box_dict_str_array",
-                           PyLong_FromVoidPtr((void*)(&box_dict_str_array)));
+    SetAttrStringFromVoidPtr(m, str_to_int64);
+    SetAttrStringFromVoidPtr(m, str_to_uint64);
+    SetAttrStringFromVoidPtr(m, str_to_int64_base);
+    SetAttrStringFromVoidPtr(m, str_to_float64);
+    SetAttrStringFromVoidPtr(m, str_to_float32);
+    SetAttrStringFromVoidPtr(m, get_str_len);
+    SetAttrStringFromVoidPtr(m, pd_pyarrow_array_from_string_array);
+    SetAttrStringFromVoidPtr(m, setitem_string_array);
+    SetAttrStringFromVoidPtr(m, setitem_binary_array);
+
+    SetAttrStringFromVoidPtr(m, set_string_array_range);
+    SetAttrStringFromVoidPtr(m, convert_len_arr_to_offset32);
+    SetAttrStringFromVoidPtr(m, convert_len_arr_to_offset);
+    SetAttrStringFromVoidPtr(m, print_str_arr);
+    SetAttrStringFromVoidPtr(m, str_arr_to_int64);
+    SetAttrStringFromVoidPtr(m, str_arr_to_float64);
+    SetAttrStringFromVoidPtr(m, str_from_float32);
+    SetAttrStringFromVoidPtr(m, str_from_float64);
+    SetAttrStringFromVoidPtr(m, inplace_int64_to_str);
+    SetAttrStringFromVoidPtr(m, is_na);
+    SetAttrStringFromVoidPtr(m, del_str);
+    SetAttrStringFromVoidPtr(m, array_size);
+    SetAttrStringFromVoidPtr(m, is_np_array);
+    SetAttrStringFromVoidPtr(m, unicode_to_utf8);
+    SetAttrStringFromVoidPtr(m, array_getptr1);
+    SetAttrStringFromVoidPtr(m, array_setitem);
+    SetAttrStringFromVoidPtr(m, get_utf8_size);
+    SetAttrStringFromVoidPtr(m, bool_arr_to_bitmap);
+    SetAttrStringFromVoidPtr(m, mask_arr_to_bitmap);
+    SetAttrStringFromVoidPtr(m, memcmp);
+    SetAttrStringFromVoidPtr(m, bytes_to_hex);
+    SetAttrStringFromVoidPtr(m, bytes_fromhex);
+    SetAttrStringFromVoidPtr(m, int_to_hex);
+    SetAttrStringFromVoidPtr(m, str_to_dict_str_array);
+    SetAttrStringFromVoidPtr(m, re_escape_length);
+    SetAttrStringFromVoidPtr(m, re_escape_with_output);
+
     return m;
 }
 
@@ -255,7 +220,7 @@ void str_arr_split_view_impl(str_arr_split_view_payload* out_view,
     offset_t total_chars = offsets[n_strs];
     // printf("n_strs %d sep %c total chars:%d\n", n_strs, sep, total_chars);
     offset_t* index_offsets = new offset_t[n_strs + 1];
-    std::vector<offset_t> data_offs;
+    bodo::vector<offset_t> data_offs;
 
     data_offs.push_back(-1);
     index_offsets[0] = 0;
@@ -271,7 +236,8 @@ void str_arr_split_view_impl(str_arr_split_view_payload* out_view,
             data_offs.push_back(data_ind);
             index_offsets[str_ind + 1] = data_offs.size();
             str_ind++;
-            if (str_ind == n_strs) break;  // all finished
+            if (str_ind == n_strs)
+                break;  // all finished
             // start new string
             data_offs.push_back(data_ind - 1);
             continue;  // stay on same data_ind for start of next string
@@ -284,7 +250,7 @@ void str_arr_split_view_impl(str_arr_split_view_payload* out_view,
     out_view->index_offsets = index_offsets;
     out_view->data_offsets = new offset_t[data_offs.size()];
     // TODO: avoid copy
-    std::copy(data_offs.cbegin(), data_offs.cend(), out_view->data_offsets);
+    std::ranges::copy(data_offs, out_view->data_offsets);
 
     // copying the null_bitmap. Maybe we can avoid that
     // in some cases.
@@ -312,8 +278,9 @@ double str_to_float64(std::string* str) {
     try {
         return std::stod(*str);
     } catch (const std::invalid_argument&) {
-        PyErr_SetString(PyExc_RuntimeError,
-                        "invalid string to float conversion");
+        PyErr_SetString(
+            PyExc_RuntimeError,
+            ("invalid string to float conversion: " + *str).c_str());
     } catch (const std::out_of_range&) {
         PyErr_SetString(PyExc_RuntimeError,
                         "out of range string to float conversion");
@@ -343,13 +310,15 @@ int64_t get_str_len(std::string* str) {
 void setitem_string_array(offset_t* offsets, char* data, uint64_t n_bytes,
                           char* str, int64_t len, int kind, int is_ascii,
                           int64_t index) {
+#undef CHECK
 #define CHECK(expr, msg)               \
     if (!(expr)) {                     \
         std::cerr << msg << std::endl; \
         return;                        \
     }
     // std::cout << "setitem str: " << *str << " " << index << std::endl;
-    if (index == 0) offsets[index] = 0;
+    if (index == 0)
+        offsets[index] = 0;
     offset_t start = offsets[index];
     offset_t utf8_len = 0;
     // std::cout << "start " << start << " len " << len << std::endl;
@@ -369,8 +338,34 @@ void setitem_string_array(offset_t* offsets, char* data, uint64_t n_bytes,
 #undef CHECK
 }
 
+void setitem_binary_array(offset_t* offsets, char* data, uint64_t n_bytes,
+                          char* str, int64_t len, int64_t index) {
+#undef CHECK
+#define CHECK(expr, msg)               \
+    if (!(expr)) {                     \
+        std::cerr << msg << std::endl; \
+        return;                        \
+    }
+    offset_t utf8_len = (offset_t)len;
+
+    if (index == 0)
+        offsets[index] = 0;
+    offset_t start = offsets[index];
+
+    // Bytes objects in python are always just an array of chars,
+    // so we should never need to do any decoding
+    memcpy(&data[start], str, len);
+
+    CHECK(utf8_len < std::numeric_limits<offset_t>::max(),
+          "string array too large");
+    CHECK(start + utf8_len <= n_bytes, "out of bounds string array setitem");
+    offsets[index + 1] = start + utf8_len;
+    return;
+#undef CHECK
+}
+
 int64_t get_utf8_size(char* str, int64_t len, int kind) {
-    return unicode_to_utf8(NULL, str, len, kind);
+    return unicode_to_utf8(nullptr, str, len, kind);
 }
 
 void set_string_array_range(offset_t* out_offsets, char* out_data,
@@ -379,7 +374,8 @@ void set_string_array_range(offset_t* out_offsets, char* out_data,
                             int64_t num_strs, int64_t num_chars) {
     // printf("%d %d\n", start_str_ind, start_chars_ind); fflush(stdout);
     offset_t curr_offset = 0;
-    if (start_str_ind != 0) curr_offset = out_offsets[start_str_ind];
+    if (start_str_ind != 0)
+        curr_offset = out_offsets[start_str_ind];
 
     // set offsets
     for (size_t i = 0; i < (size_t)num_strs; i++) {
@@ -489,9 +485,15 @@ int64_t str_to_int64_base(char* data, int64_t length, int64_t base) {
     return l;
 }
 
-void str_from_float32(char* s, float in) { sprintf(s, "%f", in); }
+void str_from_float32(char* s, float in) {
+    // Use 1024 as arbitrary buffer size to make compiler happy
+    snprintf(s, 1024, "%f", in);
+}
 
-void str_from_float64(char* s, double in) { sprintf(s, "%f", in); }
+void str_from_float64(char* s, double in) {
+    // Use 1024 as arbitrary buffer size to make compiler happy
+    snprintf(s, 1024, "%f", in);
+}
 
 /**
  * @brief convert int64 value to string and write to string pointer
@@ -517,121 +519,19 @@ void inplace_int64_to_str(char* str, int64_t l, int64_t value) {
     }
 }
 
-/// @brief  From a StringArray create a numpy array of string objects
-/// @return numpy array of str objects
-/// @param[in] no_strings number of strings found in buffer
-/// @param[in] offset_table offsets for strings in buffer
-/// @param[in] buffer with concatenated strings (from StringArray)
-void* np_array_from_string_array(int64_t no_strings,
-                                 const offset_t* offset_table,
-                                 const char* buffer, const uint8_t* null_bitmap,
-                                 const int is_bytes) {
-#define CHECK(expr, msg)               \
-    if (!(expr)) {                     \
-        std::cerr << msg << std::endl; \
-        PyGILState_Release(gilstate);  \
-        return NULL;                   \
-    }
-    auto gilstate = PyGILState_Ensure();
-
-    npy_intp dims[] = {no_strings};
-    PyObject* ret = PyArray_SimpleNew(1, dims, NPY_OBJECT);
-    CHECK(ret, "allocating numpy array failed");
-    int err;
-    PyObject* np_mod = PyImport_ImportModule("numpy");
-    CHECK(np_mod, "importing numpy module failed");
-    PyObject* nan_obj = PyObject_GetAttrString(np_mod, "nan");
-    CHECK(nan_obj, "getting np.nan failed");
-
-    for (int64_t i = 0; i < no_strings; ++i) {
-        auto p = PyArray_GETPTR1((PyArrayObject*)ret, i);
-        CHECK(p, "getting offset in numpy array failed");
-        if (is_na(null_bitmap, i)) {
-            err = PyArray_SETITEM((PyArrayObject*)ret, (char*)p, nan_obj);
-        } else {
-            PyObject* s;
-            if (is_bytes) {
-                s = PyBytes_FromStringAndSize(
-                    buffer + offset_table[i],
-                    offset_table[i + 1] - offset_table[i]);
-            } else {
-                s = PyUnicode_FromStringAndSize(
-                    buffer + offset_table[i],
-                    offset_table[i + 1] - offset_table[i]);
-            }
-            CHECK(s, "creating Python string/unicode object failed");
-            err = PyArray_SETITEM((PyArrayObject*)ret, (char*)p, s);
-            Py_DECREF(s);
-        }
-        CHECK(err == 0, "setting item in numpy array failed");
-    }
-
-    Py_DECREF(np_mod);
-    Py_DECREF(nan_obj);
-    PyGILState_Release(gilstate);
-    return ret;
+/**
+ * @brief Create Pandas ArrowStringArray from Bodo's packed StringArray or
+ * dict-encoded string array. Creates ArrowExtensionArray for binary arrays if
+ * is_bytes is set.
+ *
+ * @param str_arr input string array, dict-encoded string array, or binary array
+ * (deleted by function after use)
+ * @param is_bytes 1 if input is binary array otherwise 0
+ * @return void* Pandas ArrowStringArray or ArrowExtensionArray
+ */
+void* pd_pyarrow_array_from_string_array(array_info* str_arr,
+                                         const int is_bytes) {
 #undef CHECK
-}
-
-/// @brief  Create Pandas StringArray from Bodo's packed StringArray
-/// @return Pandas StringArray of str objects
-/// @param[in] no_strings number of strings found in buffer
-/// @param[in] offset_table offsets for strings in buffer
-/// @param[in] buffer with concatenated strings (from StringArray)
-void* pd_array_from_string_array(int64_t no_strings,
-                                 const offset_t* offset_table,
-                                 const char* buffer,
-                                 const uint8_t* null_bitmap) {
-#define CHECK(expr, msg)               \
-    if (!(expr)) {                     \
-        std::cerr << msg << std::endl; \
-        PyGILState_Release(gilstate);  \
-        return NULL;                   \
-    }
-    auto gilstate = PyGILState_Ensure();
-
-    npy_intp dims[] = {no_strings};
-    PyObject* ret = PyArray_SimpleNew(1, dims, NPY_OBJECT);
-    CHECK(ret, "allocating numpy array failed");
-    int err;
-
-    PyObject* pd_mod = PyImport_ImportModule("pandas");
-    CHECK(pd_mod, "importing pandas module failed");
-    PyObject* na_obj = PyObject_GetAttrString(pd_mod, "NA");
-    CHECK(na_obj, "getting pd.NA failed");
-
-    for (int64_t i = 0; i < no_strings; ++i) {
-        auto p = PyArray_GETPTR1((PyArrayObject*)ret, i);
-        CHECK(p, "getting offset in numpy array failed");
-        if (is_na(null_bitmap, i)) {
-            err = PyArray_SETITEM((PyArrayObject*)ret, (char*)p, na_obj);
-        } else {
-            PyObject* s = PyUnicode_FromStringAndSize(
-                buffer + offset_table[i],
-                offset_table[i + 1] - offset_table[i]);
-            CHECK(s, "creating Python string/unicode object failed");
-            err = PyArray_SETITEM((PyArrayObject*)ret, (char*)p, s);
-            Py_DECREF(s);
-        }
-        CHECK(err == 0, "setting item in numpy array failed");
-    }
-
-    PyObject* str_arr_obj =
-        PyObject_CallMethod(pd_mod, "array", "Osl", ret, "string", 0);
-
-    Py_DECREF(pd_mod);
-    Py_DECREF(na_obj);
-    Py_DECREF(ret);
-    PyGILState_Release(gilstate);
-    return str_arr_obj;
-#undef CHECK
-}
-
-/// @brief  Create Pandas ArrowStringArray from Bodo's packed StringArray or
-/// dict-encoded string array
-/// @return Pandas ArrowStringArray
-/// @param[in] str_arr input string array or dict-encoded string array
-void* pd_pyarrow_array_from_string_array(const array_info* str_arr) {
 #define CHECK(expr, msg)               \
     if (!(expr)) {                     \
         std::cerr << msg << std::endl; \
@@ -640,20 +540,18 @@ void* pd_pyarrow_array_from_string_array(const array_info* str_arr) {
 
     // convert to Arrow array with copy (since passing to Pandas)
     // only str_arr and true arguments are relevant here
-    std::vector<std::shared_ptr<arrow::Field>> schema_vector;
-    std::shared_ptr<arrow::ChunkedArray> arrow_arr;
     arrow::TimeUnit::type time_unit = arrow::TimeUnit::NANO;
-    bodo_array_to_arrow(::arrow::default_memory_pool(), str_arr, "_bodo_array",
-                        schema_vector, &arrow_arr, "", time_unit, true);
-
-    // Bodo arrays are single chunk currently
-    CHECK(arrow_arr->num_chunks() == 1, "single chunk Arrow array expected");
+    auto arrow_arr = bodo_array_to_arrow(
+        bodo::BufferPool::DefaultPtr(), std::shared_ptr<array_info>(str_arr),
+        false /*convert_timedelta_to_int64*/, "", time_unit,
+        false /*downcast_time_ns_to_us*/,
+        bodo::default_buffer_memory_manager());
 
     // https://arrow.apache.org/docs/python/integration/extending.html
     CHECK(!arrow::py::import_pyarrow(), "importing pyarrow failed");
 
     // convert Arrow C++ to PyArrow
-    PyObject* pyarrow_arr = arrow::py::wrap_array(arrow_arr->chunk(0));
+    PyObject* pyarrow_arr = arrow::py::wrap_array(arrow_arr);
 
     // call pd.arrays.ArrowStringArray(pyarrow_arr) which avoids copy
     PyObject* pd_mod = PyImport_ImportModule("pandas");
@@ -662,7 +560,8 @@ void* pd_pyarrow_array_from_string_array(const array_info* str_arr) {
     CHECK(pd_arrays_mod, "importing pandas.arrays module failed");
 
     PyObject* str_arr_obj = PyObject_CallMethod(
-        pd_arrays_mod, "ArrowStringArray", "O", pyarrow_arr);
+        pd_arrays_mod, is_bytes ? "ArrowExtensionArray" : "ArrowStringArray",
+        "O", pyarrow_arr);
 
     Py_DECREF(pd_mod);
     Py_DECREF(pd_arrays_mod);
@@ -681,6 +580,7 @@ void* array_getptr1(PyArrayObject* arr, npy_intp ind) {
 }
 
 void array_setitem(PyArrayObject* arr, char* p, PyObject* s) {
+#undef CHECK
 #define CHECK(expr, msg)               \
     if (!(expr)) {                     \
         std::cerr << msg << std::endl; \
@@ -692,110 +592,22 @@ void array_setitem(PyArrayObject* arr, char* p, PyObject* s) {
 #undef CHECK
 }
 
+void bool_arr_to_bitmap(uint8_t* bitmap_arr, uint8_t* bool_arr, int64_t n) {
+    for (int i = 0; i < n; i++) {
+        bitmap_arr[i / 8] ^=
+            static_cast<uint8_t>(-static_cast<uint8_t>(bool_arr[i] != 0) ^
+                                 bitmap_arr[i / 8]) &
+            kBitmask[i % 8];
+    }
+}
+
 void mask_arr_to_bitmap(uint8_t* bitmap_arr, uint8_t* mask_arr, int64_t n) {
-    for (int i = 0; i < n; i++)
+    for (int i = 0; i < n; i++) {
         bitmap_arr[i / 8] ^=
             static_cast<uint8_t>(-static_cast<uint8_t>(mask_arr[i] == 0) ^
                                  bitmap_arr[i / 8]) &
             kBitmask[i % 8];
-}
-
-int is_bool_array(PyArrayObject* arr) {
-#define CHECK(expr, msg)               \
-    if (!(expr)) {                     \
-        std::cerr << msg << std::endl; \
-        PyGILState_Release(gilstate);  \
-        return false;                  \
     }
-    auto gilstate = PyGILState_Ensure();
-
-    PyArray_Descr* dtype = PyArray_DTYPE(arr);
-    CHECK(dtype, "getting dtype failed");
-    // printf("dtype kind %c type %c\n", dtype->kind, dtype->type);
-
-    // returning int instead of bool to avoid potential bool call convention
-    // issues
-    int res = dtype->kind == 'b';
-    PyGILState_Release(gilstate);
-    return res;
-#undef CHECK
-}
-
-int is_pd_boolean_array(PyObject* arr) {
-#define CHECK(expr, msg)               \
-    if (!(expr)) {                     \
-        std::cerr << msg << std::endl; \
-        PyGILState_Release(gilstate);  \
-        return false;                  \
-    }
-
-    auto gilstate = PyGILState_Ensure();
-    // pd.arrays.BooleanArray
-    PyObject* pd_mod = PyImport_ImportModule("pandas");
-    CHECK(pd_mod, "importing pandas module failed");
-    PyObject* pd_arrays_obj = PyObject_GetAttrString(pd_mod, "arrays");
-    CHECK(pd_arrays_obj, "getting pd.arrays failed");
-    PyObject* pd_arrays_bool_arr_obj =
-        PyObject_GetAttrString(pd_arrays_obj, "BooleanArray");
-    CHECK(pd_arrays_obj, "getting pd.arrays.BooleanArray failed");
-
-    // isinstance(arr, BooleanArray)
-    int ret = PyObject_IsInstance(arr, pd_arrays_bool_arr_obj);
-    CHECK(ret >= 0, "isinstance fails");
-
-    Py_DECREF(pd_mod);
-    Py_DECREF(pd_arrays_obj);
-    Py_DECREF(pd_arrays_bool_arr_obj);
-    PyGILState_Release(gilstate);
-    return ret;
-
-#undef CHECK
-}
-
-void unbox_bool_array_obj(PyArrayObject* arr, uint8_t* data, uint8_t* bitmap,
-                          int64_t n) {
-#define CHECK(expr, msg)               \
-    if (!(expr)) {                     \
-        std::cerr << msg << std::endl; \
-        PyGILState_Release(gilstate);  \
-        return;                        \
-    }
-    auto gilstate = PyGILState_Ensure();
-
-    // get pd.NA object to check for new NA kind
-    // simple equality check is enough since the object is a singleton
-    // example:
-    // https://github.com/pandas-dev/pandas/blob/fcadff30da9feb3edb3acda662ff6143b7cb2d9f/pandas/_libs/missing.pyx#L57
-    PyObject* pd_mod = PyImport_ImportModule("pandas");
-    CHECK(pd_mod, "importing pandas module failed");
-    PyObject* C_NA = PyObject_GetAttrString(pd_mod, "NA");
-    CHECK(C_NA, "getting pd.NA failed");
-
-    for (uint64_t i = 0; i < uint64_t(n); ++i) {
-        auto p = PyArray_GETPTR1((PyArrayObject*)arr, i);
-        CHECK(p, "getting offset in numpy array failed");
-        PyObject* s = PyArray_GETITEM(arr, (const char*)p);
-        CHECK(s, "getting element failed");
-        // Pandas stores NA as either None or nan
-        if (s == Py_None ||
-            (PyFloat_Check(s) && std::isnan(PyFloat_AsDouble(s))) ||
-            s == C_NA) {
-            // null bit
-            ClearBit(bitmap, i);
-            data[i] = 0;
-        } else {
-            SetBit(bitmap, i);
-            int is_true = PyObject_IsTrue(s);
-            CHECK(is_true != -1, "invalid bool element");
-            data[i] = (uint8_t)is_true;
-        }
-        Py_DECREF(s);
-    }
-
-    Py_DECREF(pd_mod);
-    Py_DECREF(C_NA);
-    PyGILState_Release(gilstate);
-#undef CHECK
 }
 
 void print_str_arr(uint64_t n, uint64_t n_chars, offset_t* offsets,
@@ -848,7 +660,7 @@ void bytes_to_hex(char* output, char* data, int64_t data_len) {
     // and a null terminator at the end that is already set.
     for (int i = 0; i < data_len; i++) {
         char c = data[i];
-        output[2 * i] = hex_values[c >> 4];
+        output[2 * i] = hex_values[(c >> 4) & 0x0f];
         output[(2 * i) + 1] = hex_values[c & 0x0f];
     }
 }
@@ -866,6 +678,7 @@ int64_t bytes_fromhex(unsigned char* output, unsigned char* data,
         We assume we have already error checked an allocated the data in Python.
 
     */
+#undef CHECK
 #define CHECK(expr, msg)               \
     if (!(expr)) {                     \
         std::cerr << msg << std::endl; \
@@ -885,12 +698,13 @@ int64_t bytes_fromhex(unsigned char* output, unsigned char* data,
                 data++;
             } while (Py_ISSPACE(*data));
             // This break is taken if we end with a space character
-            if (data >= end) break;
+            if (data >= end)
+                break;
         }
         CHECK((end - data) >= 2,
               "bytes.fromhex, must provide two hex values per byte");
-        top = _PyLong_DigitValue[*data++];
-        bot = _PyLong_DigitValue[*data++];
+        top = _DigitValue[*data++];
+        bot = _DigitValue[*data++];
         CHECK(top < 16, "bytes.fromhex: unsupport character");
         CHECK(bot < 16, "bytes.fromhex: unsupport character");
         output[length++] = (unsigned char)((top << 4) + bot);
@@ -914,47 +728,261 @@ void int_to_hex(char* output, int64_t output_len, uint64_t int_val) {
 }  // extern "C"
 
 /**
- * @brief Box native dictionary encoded string array data to Numpy object array
- * of string items. To reduce memory usage we do string interning using the
- * dictionary encoding and have only boxed the dictionary array.
- * @return Numpy object array of strings
- * @param[in] n number of values
- * @param[in] dict_arr PyArrayObject containing the boxed dictionary
- * @param[in] indices Native int32 of dictionary indices for the strings.
- * @param[in] null_bitmap bitvector representing nulls (Arrow format)
+ * @brief Kernel to Convert String Arrays to Dictionary String Arrays
+ * Most of the logic is shared with DictionaryEncodedFromStringBuilder
+ * (TableBuilder::BuilderColumn subclass in arrow_reader.cpp)
+ *
+ * @param str_arr Input String Array (deleted by function after use)
+ * @return array_info* Output Dictionary Array with Copied Contents
  */
-void* box_dict_str_array(int64_t n, PyArrayObject* dict_arr,
-                         const int32_t* indices, const uint8_t* null_bitmap) {
-#define CHECK(expr, msg)               \
-    if (!(expr)) {                     \
-        std::cerr << msg << std::endl; \
-        return NULL;                   \
-    }
+array_info* str_to_dict_str_array(array_info* str_arr) {
+    assert(str_arr->arr_type == bodo_array_type::STRING);
+    const auto arr_len = str_arr->length;
+    const auto num_null_bitmask_bytes = (arr_len + 7) >> 3;
 
-    npy_intp dims[] = {n};
-    PyObject* ret = PyArray_SimpleNew(1, dims, NPY_OBJECT);
-    CHECK(ret, "allocating numpy array failed");
-    int err;
+    // Dictionary Indices Array
+    std::shared_ptr<array_info> indices_arr =
+        alloc_nullable_array(arr_len, Bodo_CTypes::INT32);
+    memcpy(indices_arr->null_bitmask<bodo_array_type::NULLABLE_INT_BOOL>(),
+           str_arr->null_bitmask<bodo_array_type::STRING>(),
+           num_null_bitmask_bytes);
 
-    for (int64_t i = 0; i < n; ++i) {
-        auto store_offset = PyArray_GETPTR1((PyArrayObject*)ret, i);
-        CHECK(store_offset, "getting offset in numpy array failed");
-        if (!is_na(null_bitmap, i)) {
-            int32_t index = indices[i];
-            auto load_offset = PyArray_GETPTR1(dict_arr, index);
-            PyObject* str = PyArray_GETITEM(dict_arr, (char*)load_offset);
-            CHECK(str, "Loading string from dictionary failed");
-            err =
-                PyArray_SETITEM((PyArrayObject*)ret, (char*)store_offset, str);
-            // Both PyArray_GETITEM and PyArray_SETITEM increment the refcount,
-            // so decref the getitem.
-            Py_DECREF(str);
+    // Map string to its new index in dictionary values array
+    bodo::unord_map_container<std::string, std::pair<int32_t, uint64_t>,
+                              string_hash, std::equal_to<>>
+        str_to_ind;
+    uint32_t num_dict_strs = 0;
+    uint64_t total_dict_chars = 0;
+
+    offset_t* offsets = (offset_t*)str_arr->data2<bodo_array_type::STRING>();
+    for (uint64_t i = 0; i < arr_len; i++) {
+        if (!str_arr->get_null_bit<bodo_array_type::STRING>(i))
+            continue;
+        std::string_view elem(
+            str_arr->data1<bodo_array_type::STRING>() + offsets[i],
+            offsets[i + 1] - offsets[i]);
+
+        int32_t elem_idx;
+        if (!str_to_ind.contains(elem)) {
+            std::pair<int32_t, uint64_t> ind_offset_len =
+                std::make_pair(num_dict_strs, total_dict_chars);
+            // TODO: remove std::string() after upgrade to C++23
+            str_to_ind[std::string(elem)] = ind_offset_len;
+            total_dict_chars += elem.length();
+            elem_idx = num_dict_strs++;
         } else {
-            err = PyArray_SETITEM((PyArrayObject*)ret, (char*)store_offset,
-                                  Py_None);
+            elem_idx = str_to_ind.find(elem)->second.first;
         }
-        CHECK(err == 0, "setting item in numpy array failed");
+
+        indices_arr->at<int32_t, bodo_array_type::NULLABLE_INT_BOOL>(i) =
+            elem_idx;
     }
-    return ret;
-#undef CHECK
+    delete str_arr;
+
+    // Create Dictionary String Values
+    int64_t dict_id = generate_array_id(num_dict_strs);
+    std::shared_ptr<array_info> values_arr = alloc_string_array(
+        Bodo_CTypes::STRING, num_dict_strs, total_dict_chars, dict_id);
+    int64_t n_null_bytes = (num_dict_strs + 7) >> 3;
+    memset(values_arr->null_bitmask<bodo_array_type::STRING>(), 0xFF,
+           n_null_bytes);  // No nulls
+
+    offset_t* out_offsets =
+        (offset_t*)values_arr->data2<bodo_array_type::STRING>();
+    out_offsets[0] = 0;
+    for (auto& it : str_to_ind) {
+        memcpy(values_arr->data1<bodo_array_type::STRING>() + it.second.second,
+               it.first.c_str(), it.first.size());
+        out_offsets[it.second.first] = it.second.second;
+    }
+    out_offsets[num_dict_strs] = static_cast<offset_t>(total_dict_chars);
+
+    // Python is responsible for deleting pointer
+    return new array_info(bodo_array_type::DICT, Bodo_CTypes::CTypeEnum::STRING,
+                          arr_len, {}, {values_arr, indices_arr});
+}
+
+// Inspired by the Cpython implementation
+// https://github.com/python/cpython/blob/89442e18e1e17c0eb0eb06e5da489e1cb2d4219d/Lib/re/__init__.py#L251
+// However Numba doesn't support translate so we implement an optimized kernel
+// for the dictionary. This set is _special_chars_map from Cpython but we always
+// map to `\\` so we don't need a dict
+static const std::set<char> escapes{
+    '(', ')',  '[', ']', '{', '}', '?', '*',  '+',  '-',  '|',  '^',
+    '$', '\\', '.', '&', '~', '#', ' ', '\t', '\n', '\r', '\v', '\f'};
+
+/**
+ * @brief Get the string length of a 1 byte width string escaped by
+ * re.escape.
+ *
+ * @param pattern The input pattern to escape
+ * @param length The number of elements in the string.
+ * @return int64_t Length of the escaped string.
+ */
+int64_t re_escape_length_kind1(char* pattern, int64_t length) {
+    int64_t num_escapes = 0;
+    for (int i = 0; i < length; i++) {
+        // Count the number of escapes.
+        num_escapes += int(escapes.contains(pattern[i]));
+    }
+    return length + num_escapes;
+}
+
+/**
+ * @brief Get the string length of a 2 byte width string escaped by
+ * re.escape. Note the number of bytes = 2 * length.
+ *
+ * @param pattern The input pattern to escape
+ * @param length The number of elements in the string.
+ * @return int64_t Length of the escaped string. This is not the number
+ * of bytes.
+ */
+int64_t re_escape_length_kind2(char* pattern, int64_t length) {
+    int64_t num_escapes = 0;
+    for (int i = 0; i < length; i++) {
+        int16_t char_val = *((int16_t*)(pattern) + i);
+        // All the escaped characters fit in 1 byte.
+        if (char_val < 0xff) {
+            char to_check = (char)char_val;
+            num_escapes += int(escapes.contains(to_check));
+        }
+    }
+    return length + num_escapes;
+}
+
+/**
+ * @brief Get the string length of a 4 byte width string escaped by
+ * re.escape. Note the number of bytes = 4 * length.
+ *
+ * @param pattern The input pattern to escape
+ * @param length The number of elements in the string.
+ * @return int64_t Length of the escaped string. This is not the number
+ * of bytes.
+ */
+int64_t re_escape_length_kind4(char* pattern, int64_t length) {
+    int64_t num_escapes = 0;
+    for (int i = 0; i < length; i++) {
+        int32_t char_val = *((int32_t*)(pattern) + i);
+        // All the escaped characters fit in 1 byte.
+        if (char_val < 0xff) {
+            // Count the number of escapes.
+            char to_check = (char)char_val;
+            num_escapes += int(escapes.contains(to_check));
+        }
+    }
+    return length + num_escapes;
+}
+
+/**
+ * @brief Get the string length of a string escaped by
+ * re.escape. Note this is not the number of bytes!
+ *
+ * @param pattern The input pattern to escape
+ * @param length The number of elements in the string.
+ * @param kind The number of bytes per element in pattern.
+ * @return int64_t Length of the escaped string. This is not the number
+ * of bytes.
+ */
+int64_t re_escape_length(char* pattern, int64_t length, int32_t kind) {
+    if (kind == PyUnicode_1BYTE_KIND) {
+        return re_escape_length_kind1(pattern, length);
+    } else if (kind == PyUnicode_2BYTE_KIND) {
+        return re_escape_length_kind2(pattern, length);
+    } else {
+        return re_escape_length_kind4(pattern, length);
+    }
+}
+
+/**
+ * @brief Perform re.escape on pattern and store the output in
+ * out_pattern. This is written for 1 byte per element strings.
+ *
+ * @param pattern The input pattern to escape.
+ * @param length The number of elements in the input string.
+ * @param[out] out_pattern The character array to store output characters.
+ * It is already allocated with the correct length.
+ */
+void re_escape_with_output_kind1(char* pattern, int64_t length,
+                                 char* out_pattern) {
+    int j = 0;
+    for (int i = 0; i < length; i++) {
+        if (escapes.contains(pattern[i])) {
+            out_pattern[j++] = '\\';
+        }
+        out_pattern[j++] = pattern[i];
+    }
+}
+
+/**
+ * @brief Perform re.escape on pattern and store the output in
+ * out_pattern. This is written for 2 byte per element strings.
+ *
+ * @param pattern The input pattern to escape.
+ * @param length The number of elements in the input string. Note this is
+ * not the number of bytes.
+ * @param[out] out_pattern The character array to store output characters.
+ * It is already allocated with the correct length.
+ */
+void re_escape_with_output_kind2(char* pattern, int64_t length,
+                                 char* out_pattern) {
+    int j = 0;
+    int16_t* in_cast = ((int16_t*)pattern);
+    int16_t* out_cast = ((int16_t*)out_pattern);
+    for (int i = 0; i < length; i++) {
+        int16_t in_val = in_cast[i];
+        // All the escaped characters fit in 1 byte.
+        if (in_val < 0xff && escapes.contains(in_val)) {
+            // \ is 0x5C
+            out_cast[j++] = 0x5C;
+        }
+        out_cast[j++] = in_val;
+    }
+}
+
+/**
+ * @brief Perform re.escape on pattern and store the output in
+ * out_pattern. This is written for 4 byte per element strings.
+ *
+ * @param pattern The input pattern to escape.
+ * @param length The number of elements in the input string. Note this is
+ * not the number of bytes.
+ * @param[out] out_pattern The character array to store output characters.
+ * It is already allocated with the correct length.
+ */
+void re_escape_with_output_kind4(char* pattern, int64_t length,
+                                 char* out_pattern) {
+    int j = 0;
+    int32_t* in_cast = ((int32_t*)pattern);
+    int32_t* out_cast = ((int32_t*)out_pattern);
+    for (int i = 0; i < length; i++) {
+        int32_t in_val = in_cast[i];
+        // All the escaped characters fit in 1 byte.
+        if (in_val < 0xff && escapes.contains(in_val)) {
+            // \ is 0x5C
+            out_cast[j++] = 0x5C;
+        }
+        out_cast[j++] = in_val;
+    }
+}
+
+/**
+ * @brief Perform re.escape on pattern and store the output in
+ * out_pattern.
+ *
+ * @param pattern The input pattern to escape.
+ * @param length The number of elements in the input string. Note this is
+ * not the number of bytes.
+ * @param[out] out_pattern The character array to store output characters.
+ * It is already allocated with the correct length.
+ * @param kind The number of bytes per element in pattern and out_pattern.
+ */
+void re_escape_with_output(char* pattern, int64_t length, char* out_pattern,
+                           int32_t kind) {
+    if (kind == PyUnicode_1BYTE_KIND) {
+        re_escape_with_output_kind1(pattern, length, out_pattern);
+    } else if (kind == PyUnicode_2BYTE_KIND) {
+        re_escape_with_output_kind2(pattern, length, out_pattern);
+    } else {
+        re_escape_with_output_kind4(pattern, length, out_pattern);
+    }
 }

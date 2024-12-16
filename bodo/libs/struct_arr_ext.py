@@ -1,4 +1,3 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """Array implementation for structs of values.
 Corresponds to Spark's StructType: https://spark.apache.org/docs/latest/sql-reference.html
 Corresponds to Arrow's Struct arrays: https://arrow.apache.org/docs/format/Columnar.html
@@ -7,17 +6,21 @@ The values are stored in contiguous data arrays; one array per field. For exampl
 A:             ["AA", "B", "C"]
 B:             [1, 2, 4]
 """
+
 import operator
 
-import llvmlite.binding as ll
+import numba
 import numpy as np
+import pandas as pd
 from llvmlite import ir as lir
+from numba import generated_jit
 from numba.core import cgutils, types
 from numba.core.imputils import impl_ret_borrowed
 from numba.extending import (
     NativeValue,
     box,
     intrinsic,
+    lower_cast,
     models,
     overload,
     overload_attribute,
@@ -29,45 +32,37 @@ from numba.parfors.array_analysis import ArrayAnalysis
 from numba.typed.typedobjectutils import _cast
 
 import bodo
-from bodo.hiframes.datetime_date_ext import datetime_date_type
-from bodo.hiframes.time_ext import TimeType
-from bodo.libs import array_ext
+from bodo.libs import array_ext  # noqa: F401
 from bodo.utils.cg_helpers import (
     gen_allocate_array,
-    get_array_elem_counts,
-    get_bitmap_bit,
     is_na_value,
-    pyarray_setitem,
-    seq_getitem,
-    set_bitmap_bit,
-    to_arr_obj_if_list_obj,
 )
 from bodo.utils.typing import (
     BodoError,
     dtype_to_array_type,
+    get_array_getitem_scalar_type,
     get_overload_const_int,
     get_overload_const_str,
     is_list_like_index_type,
     is_overload_constant_int,
     is_overload_constant_str,
     is_overload_none,
+    unwrap_typeref,
 )
-
-ll.add_symbol("struct_array_from_sequence", array_ext.struct_array_from_sequence)
-ll.add_symbol("np_array_from_struct_array", array_ext.np_array_from_struct_array)
 
 
 class StructArrayType(types.ArrayCompatible):
     """Data type for arrays of structs"""
 
+    data: tuple[types.ArrayCompatible, ...]
+    names: tuple[str, ...]
+
     def __init__(self, data, names=None):
         # data is tuple of Array types
         # names is a tuple of field names
-        assert (
-            isinstance(data, tuple)
-            and len(data) > 0
-            and all(bodo.utils.utils.is_array_typ(a, False) for a in data)
-        )
+        assert isinstance(data, tuple) and all(
+            bodo.utils.utils.is_array_typ(a, False) for a in data
+        ), "Internal error in StructArrayType: Data does not have the correct format"
         if names is not None:
             assert (
                 isinstance(names, tuple)
@@ -75,13 +70,11 @@ class StructArrayType(types.ArrayCompatible):
                 and len(names) == len(data)
             )
         else:
-            names = tuple("f{}".format(i) for i in range(len(data)))
+            names = tuple(f"f{i}" for i in range(len(data)))
 
         self.data = data
         self.names = names
-        super(StructArrayType, self).__init__(
-            name="StructArrayType({}, {})".format(data, names)
-        )
+        super().__init__(name=f"StructArrayType({data}, {names})")
 
     @property
     def as_array(self):
@@ -92,7 +85,13 @@ class StructArrayType(types.ArrayCompatible):
         # TODO: consider enabling dict return if possible
         # if types.is_homogeneous(*self.data):
         #     return types.DictType(bodo.string_type, self.data[0].dtype)
-        return StructType(tuple(t.dtype for t in self.data), self.names)
+
+        # NOTE: the scalar type of most arrays is the same as dtype (e.g. int64), except
+        # DatetimeArrayType and null_array_type which have different dtype objects.
+        # Therefore, we have to use get_array_getitem_scalar_type instead of dtype here
+        return StructType(
+            tuple(get_array_getitem_scalar_type(t) for t in self.data), self.names
+        )
 
     @classmethod
     def from_dict(cls, d):
@@ -122,9 +121,7 @@ class StructArrayPayloadType(types.Type):
             bodo.utils.utils.is_array_typ(a, False) for a in data
         )
         self.data = data
-        super(StructArrayPayloadType, self).__init__(
-            name="StructArrayPayloadType({})".format(data)
-        )
+        super().__init__(name=f"StructArrayPayloadType({data})")
 
     @property
     def mangling_args(self):
@@ -141,6 +138,8 @@ class StructArrayPayloadType(types.Type):
 class StructArrayPayloadModel(models.StructModel):
     def __init__(self, dmm, fe_type):
         members = [
+            # Keeping the number of rows is necessary for arrays with no fields
+            ("n_structs", types.int64),
             ("data", types.BaseTuple.from_types(fe_type.data)),
             ("null_bitmap", types.Array(types.uint8, 1, "C")),
         ]
@@ -167,9 +166,7 @@ def define_struct_arr_dtor(context, builder, struct_arr_type, payload_type):
     fn = cgutils.get_or_insert_function(
         mod,
         fnty,
-        name=".dtor.struct_arr.{}.{}.".format(
-            struct_arr_type.data, struct_arr_type.names
-        ),
+        name=f".dtor.struct_arr.{struct_arr_type.data}.{struct_arr_type.names}.",
     )
 
     # End early if the dtor is already defined
@@ -196,7 +193,7 @@ def define_struct_arr_dtor(context, builder, struct_arr_type, payload_type):
 
 
 def construct_struct_array(
-    context, builder, struct_arr_type, n_structs, n_elems, c=None
+    context, builder, struct_arr_type, n_structs, n_elems, dict_ref_arr=None, c=None
 ):
     """Creates meminfo and sets dtor, and allocates buffers for struct array"""
     # create payload type
@@ -216,11 +213,17 @@ def construct_struct_array(
 
     # alloc values in payload
     payload = cgutils.create_struct_proxy(payload_type)(context, builder)
+    payload.n_structs = n_structs
 
     # alloc data
     arrs = []
     curr_count_ind = 0
-    for arr_typ in struct_arr_type.data:
+    ref_data = (
+        _get_struct_arr_payload(context, builder, struct_arr_type, dict_ref_arr).data
+        if dict_ref_arr
+        else None
+    )
+    for data_ind, arr_typ in enumerate(struct_arr_type.data):
         n_nested_count_t = bodo.utils.transform.get_type_alloc_counts(arr_typ.dtype)
         n_all_elems = cgutils.pack_array(
             builder,
@@ -230,7 +233,8 @@ def construct_struct_array(
                 for i in range(curr_count_ind, curr_count_ind + n_nested_count_t)
             ],
         )
-        arr = gen_allocate_array(context, builder, arr_typ, n_all_elems, c)
+        ref_arg = builder.extract_value(ref_data, data_ind) if ref_data else None
+        arr = gen_allocate_array(context, builder, arr_typ, n_all_elems, ref_arg, c)
         arrs.append(arr)
         curr_count_ind += n_nested_count_t
 
@@ -256,222 +260,12 @@ def construct_struct_array(
     return meminfo, payload.data, null_bitmap_ptr
 
 
-def _get_C_API_ptrs(c, data_tup, data_typ, names):
-    """convert struct array info into pointers to pass to C API"""
-
-    data_ptrs = []
-    assert len(data_typ) > 0
-    # TODO: support non-Numpy arrays
-    for i, arr_typ in enumerate(data_typ):
-        arr_ptr = c.builder.extract_value(data_tup, i)
-        arr = c.context.make_array(arr_typ)(c.context, c.builder, value=arr_ptr)
-        data_ptrs.append(arr.data)
-
-    # get pointer to a tuple of data pointers to pass to C
-    data_ptr_tup = (
-        cgutils.pack_array(c.builder, data_ptrs)
-        if types.is_homogeneous(*data_typ)
-        else cgutils.pack_struct(c.builder, data_ptrs)
-    )
-    data_ptr_tup_ptr = cgutils.alloca_once_value(c.builder, data_ptr_tup)
-    # get pointer to a tuple of c type enums to pass to C
-    c_types = [
-        c.context.get_constant(types.int32, bodo.utils.utils.numba_to_c_type(a.dtype))
-        for a in data_typ
-    ]
-    c_types_ptr = cgutils.alloca_once_value(
-        c.builder, cgutils.pack_array(c.builder, c_types)
-    )
-    # get pointer to a tuple of field names to pass to C
-    field_names = cgutils.pack_array(
-        c.builder, [c.context.insert_const_string(c.builder.module, a) for a in names]
-    )
-    field_names_ptr = cgutils.alloca_once_value(c.builder, field_names)
-    return data_ptr_tup_ptr, c_types_ptr, field_names_ptr
-
-
 @unbox(StructArrayType)
-def unbox_struct_array(typ, val, c, is_tuple_array=False):
+def unbox_struct_array(typ, val, c):
     """
-    Unbox a numpy array with list of data values.
-    'is_tuple_array' enables reusing this code for unboxing tuple arrays.
+    Unbox an array with struct values.
     """
-    from bodo.libs.tuple_arr_ext import TupleArrayType
-
-    # get length
-    n_structs = bodo.utils.utils.object_length(c, val)
-
-    # can be handled in C if all data arrays are Numpy and in handled dtypes
-    handle_in_c = all(
-        isinstance(t, types.Array)
-        and (
-            t.dtype
-            in (
-                types.int64,
-                types.float64,
-                types.bool_,
-                datetime_date_type,
-            )
-            or isinstance(t.dtype, TimeType)
-        )
-        for t in typ.data
-    )
-
-    if handle_in_c:
-        n_elems = cgutils.pack_array(c.builder, [], lir.IntType(64))
-    else:
-        n_elems_all = get_array_elem_counts(
-            c,
-            c.builder,
-            c.context,
-            val,
-            TupleArrayType(typ.data) if is_tuple_array else typ,
-        )
-        # ignore first value in tuple which is array length
-        n_elems = cgutils.pack_array(
-            c.builder,
-            [
-                c.builder.extract_value(n_elems_all, i)
-                for i in range(1, n_elems_all.type.count)
-            ],
-            lir.IntType(64),
-        )
-
-    # create struct array
-    meminfo, data_tup, null_bitmap_ptr = construct_struct_array(
-        c.context, c.builder, typ, n_structs, n_elems, c
-    )
-
-    if handle_in_c:
-        data_ptr_tup_ptr, c_types_ptr, field_names_ptr = _get_C_API_ptrs(
-            c, data_tup, typ.data, typ.names
-        )
-
-        # function signature of struct_array_from_sequence
-        fnty = lir.FunctionType(
-            lir.VoidType(),
-            [
-                lir.IntType(8).as_pointer(),  # obj
-                lir.IntType(32),  # number of arrays
-                lir.IntType(8).as_pointer(),  # data
-                lir.IntType(8).as_pointer(),  # null_bitmap
-                lir.IntType(8).as_pointer(),  # c types
-                lir.IntType(8).as_pointer(),  # field names
-                lir.IntType(1),  # is_tuple_array
-            ],
-        )
-        fn = cgutils.get_or_insert_function(
-            c.builder.module, fnty, name="struct_array_from_sequence"
-        )
-
-        c.builder.call(
-            fn,
-            [
-                val,
-                c.context.get_constant(types.int32, len(typ.data)),
-                c.builder.bitcast(data_ptr_tup_ptr, lir.IntType(8).as_pointer()),
-                null_bitmap_ptr,
-                c.builder.bitcast(c_types_ptr, lir.IntType(8).as_pointer()),
-                c.builder.bitcast(field_names_ptr, lir.IntType(8).as_pointer()),
-                c.context.get_constant(types.bool_, is_tuple_array),
-            ],
-        )
-    else:
-        _unbox_struct_array_generic(
-            typ, val, c, n_structs, data_tup, null_bitmap_ptr, is_tuple_array
-        )
-
-    struct_array = c.context.make_helper(c.builder, typ)
-    struct_array.meminfo = meminfo
-
-    is_error = cgutils.is_not_null(c.builder, c.pyapi.err_occurred())
-    return NativeValue(struct_array._getvalue(), is_error=is_error)
-
-
-def _unbox_struct_array_generic(
-    typ, val, c, n_structs, data_tup, null_bitmap_ptr, is_tuple_array=False
-):
-    """unbox struct array using generic Numba unboxing to handle all item types
-    that can be unboxed.
-    """
-    context = c.context
-    builder = c.builder
-
-    # TODO: error checking for pyapi calls
-    # get pd.NA object to check for new NA kind
-    mod_name = context.insert_const_string(builder.module, "pandas")
-    pd_mod_obj = c.pyapi.import_module_noblock(mod_name)
-    C_NA = c.pyapi.object_getattr_string(pd_mod_obj, "NA")
-
-    # pseudocode for code generation:
-    # for i in range(len(A)):
-    #   dict_obj = A[i]
-    #   if isna(dict_obj):
-    #     set null_bitmap i'th bit to 0
-    #   else:
-    #     set null_bitmap i'th bit to 1
-    #     for j, name in enumerate(field_names):
-    #        val_obj = dict_obj[name]
-    #        A.data[j] = unbox(val_obj)
-
-    # for each struct
-    with cgutils.for_range(builder, n_structs) as loop:
-        struct_ind = loop.index
-
-        # dict_obj = A[i]
-        dict_obj = seq_getitem(builder, context, val, struct_ind)
-
-        # set NA bit to 0
-        set_bitmap_bit(builder, null_bitmap_ptr, struct_ind, 0)
-        # set field values to NA (will be overwritten below if not NA)
-        # this approach is used to avoid if/else which can be buggy
-        for j in range(len(typ.data)):
-            arr_typ = typ.data[j]
-            data_arr = builder.extract_value(data_tup, j)
-
-            def set_na(data_arr, i):
-                bodo.libs.array_kernels.setna(data_arr, i)
-
-            sig = types.none(arr_typ, types.int64)
-            _is_error, _res = c.pyapi.call_jit_code(set_na, sig, [data_arr, struct_ind])
-
-        # check for NA
-        is_na = is_na_value(builder, context, dict_obj, C_NA)
-        is_na_cond = builder.icmp_unsigned("!=", is_na, lir.Constant(is_na.type, 1))
-        with builder.if_then(is_na_cond):
-            # set NA bit to 1
-            set_bitmap_bit(builder, null_bitmap_ptr, struct_ind, 1)
-            for j in range(len(typ.data)):
-                arr_typ = typ.data[j]
-                if is_tuple_array:
-                    val_obj = c.pyapi.tuple_getitem(dict_obj, j)
-                else:
-                    val_obj = c.pyapi.dict_getitem_string(dict_obj, typ.names[j])
-                # check for NA
-                is_na = is_na_value(builder, context, val_obj, C_NA)
-                is_na_cond = builder.icmp_unsigned(
-                    "!=", is_na, lir.Constant(is_na.type, 1)
-                )
-                with builder.if_then(is_na_cond):
-                    val_obj = to_arr_obj_if_list_obj(
-                        c, context, builder, val_obj, arr_typ.dtype
-                    )
-                    field_val = c.pyapi.to_native_value(arr_typ.dtype, val_obj).value
-                    data_arr = builder.extract_value(data_tup, j)
-
-                    def set_data(data_arr, i, field_val):
-                        data_arr[i] = field_val
-
-                    sig = types.none(arr_typ, types.int64, arr_typ.dtype)
-                    _is_error, _res = c.pyapi.call_jit_code(
-                        set_data, sig, [data_arr, struct_ind, field_val]
-                    )
-                    c.context.nrt.decref(builder, arr_typ.dtype, field_val)
-                # no need to decref val_obj, dict_getitem_string returns borrowed ref
-        c.pyapi.decref(dict_obj)
-
-    c.pyapi.decref(pd_mod_obj)
-    c.pyapi.decref(C_NA)
+    return bodo.libs.array.unbox_array_using_arrow(typ, val, c)
 
 
 def _get_struct_arr_payload(context, builder, arr_typ, arr):
@@ -489,167 +283,9 @@ def _get_struct_arr_payload(context, builder, arr_typ, arr):
 
 
 @box(StructArrayType)
-def box_struct_arr(typ, val, c, is_tuple_array=False):
-    """box struct array into python objects.
-    'is_tuple_array' enables reusing this code for boxing tuple arrays.
-    """
-    payload = _get_struct_arr_payload(c.context, c.builder, typ, val)
-    _is_error, length = c.pyapi.call_jit_code(lambda A: len(A), types.int64(typ), [val])
-    null_bitmap_ptr = c.context.make_helper(
-        c.builder, types.Array(types.uint8, 1, "C"), payload.null_bitmap
-    ).data
-
-    # can be handled in C if all data arrays are Numpy and in handled dtypes
-    handle_in_c = all(
-        isinstance(t, types.Array)
-        and (
-            t.dtype
-            in (
-                types.int64,
-                types.float64,
-                types.bool_,
-                datetime_date_type,
-            )
-            or (isinstance(t.dtype, TimeType))
-        )
-        for t in typ.data
-    )
-
-    if handle_in_c:
-        data_ptr_tup_ptr, c_types_ptr, field_names_ptr = _get_C_API_ptrs(
-            c, payload.data, typ.data, typ.names
-        )
-
-        fnty = lir.FunctionType(
-            c.context.get_argument_type(types.pyobject),
-            [
-                lir.IntType(64),  # length
-                lir.IntType(32),  # number of arrays
-                lir.IntType(8).as_pointer(),  # data
-                lir.IntType(8).as_pointer(),  # null_bitmap
-                lir.IntType(8).as_pointer(),  # c types
-                lir.IntType(8).as_pointer(),  # field names
-                lir.IntType(1),  # is_tuple_array
-            ],
-        )
-        fn_get = cgutils.get_or_insert_function(
-            c.builder.module, fnty, name="np_array_from_struct_array"
-        )
-
-        arr = c.builder.call(
-            fn_get,
-            [
-                length,
-                c.context.get_constant(types.int32, len(typ.data)),
-                c.builder.bitcast(data_ptr_tup_ptr, lir.IntType(8).as_pointer()),
-                null_bitmap_ptr,
-                c.builder.bitcast(c_types_ptr, lir.IntType(8).as_pointer()),
-                c.builder.bitcast(field_names_ptr, lir.IntType(8).as_pointer()),
-                c.context.get_constant(types.bool_, is_tuple_array),
-            ],
-        )
-    else:
-        arr = _box_struct_array_generic(
-            typ, c, length, payload.data, null_bitmap_ptr, is_tuple_array
-        )
-
-    c.context.nrt.decref(c.builder, typ, val)
-    return arr
-
-
-def _box_struct_array_generic(
-    typ, c, length, data_arrs_tup, null_bitmap_ptr, is_tuple_array=False
-):
-    """box struct array using generic Numba boxing to handle all item types
-    that can be boxed.
-    """
-    context = c.context
-    builder = c.builder
-    # TODO: error checking for pyapi calls
-
-    # pseudocode for code generation:
-    # out_arr = np.ndarray(n, np.object_)
-    # for i in range(n):
-    #   if isna(A[i]):
-    #     out_arr[i] = np.nan
-    #   else:
-    #     dict_obj = dict_new(n_items)
-    #     for j in range(n_items):
-    #        dict_obj[field_names[i]] = A.data[j]
-
-    # create array of objects with num_items shape
-    mod_name = context.insert_const_string(builder.module, "numpy")
-    np_class_obj = c.pyapi.import_module_noblock(mod_name)
-    dtype_obj = c.pyapi.object_getattr_string(np_class_obj, "object_")
-    num_items_obj = c.pyapi.long_from_longlong(length)
-    out_arr = c.pyapi.call_method(np_class_obj, "ndarray", (num_items_obj, dtype_obj))
-    # get np.nan to set NA
-    nan_obj = c.pyapi.object_getattr_string(np_class_obj, "nan")
-
-    # for each struct
-    with cgutils.for_range(builder, length) as loop:
-        struct_ind = loop.index
-        # A[i] = np.nan
-        pyarray_setitem(builder, context, out_arr, struct_ind, nan_obj)
-        # check for NA
-        na_bit = get_bitmap_bit(builder, null_bitmap_ptr, struct_ind)
-        not_na_cond = builder.icmp_unsigned(
-            "!=", na_bit, lir.Constant(lir.IntType(8), 0)
-        )
-        with builder.if_then(not_na_cond):
-            # create dict obj
-            if is_tuple_array:
-                dict_obj = c.pyapi.tuple_new(len(typ.data))
-            else:
-                dict_obj = c.pyapi.dict_new(len(typ.data))
-
-            # set field values
-            for i, arr_typ in enumerate(typ.data):
-                # set NA as default
-                if is_tuple_array:
-                    c.pyapi.incref(nan_obj)  # tuple_setitem steals a reference
-                    c.pyapi.tuple_setitem(dict_obj, i, nan_obj)
-                else:
-                    c.pyapi.dict_setitem_string(dict_obj, typ.names[i], nan_obj)
-
-                # is_not_na_val = not isna(data_arr, struct_ind)
-                data_arr = c.builder.extract_value(data_arrs_tup, i)
-                _is_error, is_not_na_val = c.pyapi.call_jit_code(
-                    lambda data_arr, ind: not bodo.libs.array_kernels.isna(
-                        data_arr, ind
-                    ),
-                    types.bool_(arr_typ, types.int64),
-                    [data_arr, struct_ind],
-                )
-
-                # if value is not NA
-                with builder.if_then(is_not_na_val):
-                    # field_val = data_arr[struct_ind]
-                    _is_error, field_val = c.pyapi.call_jit_code(
-                        lambda data_arr, ind: data_arr[ind],
-                        (arr_typ.dtype)(arr_typ, types.int64),
-                        [data_arr, struct_ind],
-                    )
-
-                    # dict_obj[field_name] = field_val
-                    field_val_obj = c.pyapi.from_native_value(
-                        arr_typ.dtype, field_val, c.env_manager
-                    )
-                    if is_tuple_array:
-                        c.pyapi.tuple_setitem(dict_obj, i, field_val_obj)
-                    else:
-                        c.pyapi.dict_setitem_string(
-                            dict_obj, typ.names[i], field_val_obj
-                        )
-                        c.pyapi.decref(field_val_obj)
-            pyarray_setitem(builder, context, out_arr, struct_ind, dict_obj)
-            c.pyapi.decref(dict_obj)
-
-    c.pyapi.decref(np_class_obj)
-    c.pyapi.decref(dtype_obj)
-    c.pyapi.decref(num_items_obj)
-    c.pyapi.decref(nan_obj)
-    return out_arr
+def box_struct_arr(typ, val, c):
+    """box struct array into python objects."""
+    return bodo.libs.array.box_array_using_arrow(typ, val, c)
 
 
 def _fix_nested_counts(nested_counts, struct_arr_type, nested_counts_type, builder):
@@ -682,9 +318,14 @@ def _fix_nested_counts(nested_counts, struct_arr_type, nested_counts_type, build
     return nested_counts
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def pre_alloc_struct_array(
-    typingctx, num_structs_typ, nested_counts_typ, dtypes_typ, names_typ=None
+    typingctx,
+    num_structs_typ,
+    nested_counts_typ,
+    dtypes_typ,
+    names_typ,
+    dict_ref_arr_typ,
 ):
     assert isinstance(num_structs_typ, types.Integer) and isinstance(
         dtypes_typ, types.BaseTuple
@@ -697,22 +338,25 @@ def pre_alloc_struct_array(
     struct_arr_type = StructArrayType(arr_typs, names)
 
     def codegen(context, builder, sig, args):
-        num_structs, nested_counts, _, _ = args
+        num_structs, nested_counts, _, _, dict_ref_arr = args
 
         nested_counts_type = sig.args[1]
         nested_counts = _fix_nested_counts(
             nested_counts, struct_arr_type, nested_counts_type, builder
         )
 
+        dict_ref_arg = None if is_overload_none(dict_ref_arr_typ) else dict_ref_arr
         meminfo, _, _ = construct_struct_array(
-            context, builder, struct_arr_type, num_structs, nested_counts
+            context, builder, struct_arr_type, num_structs, nested_counts, dict_ref_arg
         )
         struct_array = context.make_helper(builder, struct_arr_type)
         struct_array.meminfo = meminfo
         return struct_array._getvalue()
 
     return (
-        struct_arr_type(num_structs_typ, nested_counts_typ, dtypes_typ, names_typ),
+        struct_arr_type(
+            num_structs_typ, nested_counts_typ, dtypes_typ, names_typ, dict_ref_arr_typ
+        ),
         codegen,
     )
 
@@ -724,7 +368,7 @@ def pre_alloc_struct_array_equiv(
     analysis extension. Assigns output array's size as equivalent to the input size
     variable.
     """
-    assert len(args) == 4 and not kws
+    assert len(args) > 0
     return ArrayAnalysis.AnalyzeResult(shape=args[0], pre=[])
 
 
@@ -743,7 +387,7 @@ class StructType(types.Type):
     def __init__(self, data, names):
         # data is tuple of scalar types
         # names is a tuple of field names
-        assert isinstance(data, tuple) and len(data) > 0
+        assert isinstance(data, tuple)
         assert (
             isinstance(names, tuple)
             and all(isinstance(a, str) for a in names)
@@ -752,7 +396,20 @@ class StructType(types.Type):
 
         self.data = data
         self.names = names
-        super(StructType, self).__init__(name="StructType({}, {})".format(data, names))
+        super().__init__(name=f"StructType({data}, {names})")
+
+    def unify(self, typingctx, other):
+        """Unify struct types with same field names but different data types
+        (e.g. optional vs non-optional type in BodoSQL)
+        """
+        if isinstance(other, StructType) and other.names == self.names:
+            data = []
+            for t1, t2 in zip(self.data, other.data):
+                out_t = t1.unify(typingctx, t2)
+                if out_t is None and (t1 is not None or t2 is not None):
+                    return
+                data.append(out_t)
+            return StructType(tuple(data), self.names)
 
     @property
     def mangling_args(self):
@@ -769,9 +426,7 @@ class StructPayloadType(types.Type):
     def __init__(self, data):
         assert isinstance(data, tuple)
         self.data = data
-        super(StructPayloadType, self).__init__(
-            name="StructPayloadType({})".format(data)
-        )
+        super().__init__(name=f"StructPayloadType({data})")
 
     @property
     def mangling_args(self):
@@ -814,7 +469,7 @@ def define_struct_dtor(context, builder, struct_type, payload_type):
     fn = cgutils.get_or_insert_function(
         mod,
         fnty,
-        name=".dtor.struct.{}.{}.".format(struct_type.data, struct_type.names),
+        name=f".dtor.struct.{struct_type.data}.{struct_type.names}.",
     )
 
     # End early if the dtor is already defined
@@ -913,7 +568,6 @@ def box_struct(typ, val, c):
     out_dict = c.pyapi.dict_new(len(typ.data))
     payload, _ = _get_struct_payload(c.context, c.builder, typ, val)
 
-    assert len(typ.data) > 0
     for i, val_typ in enumerate(typ.data):
         # set None as default
         c.pyapi.dict_setitem_string(out_dict, typ.names[i], c.pyapi.borrow_none())
@@ -934,8 +588,8 @@ def box_struct(typ, val, c):
     return out_dict
 
 
-@intrinsic
-def init_struct(typingctx, data_typ, names_typ=None):
+@intrinsic(prefer_literal=True)
+def init_struct(typingctx, data_typ, names_typ):
     """create a new struct from input data tuple and names."""
     names = tuple(get_overload_const_str(t) for t in names_typ.types)
     struct_type = StructType(data_typ.types, names)
@@ -963,9 +617,11 @@ def init_struct(typingctx, data_typ, names_typ=None):
         payload.data = data
         # assuming all values are non-NA
         # TODO: support setting NA values in this function (maybe new arg for mask)
+        # NOTE: passing type to pack_array() is necessary in case value list is empty
         payload.null_bitmap = cgutils.pack_array(
             builder,
             [context.get_constant(types.uint8, 1) for _ in range(len(data_typ.types))],
+            context.get_data_type(types.uint8),
         )
 
         builder.store(payload._getvalue(), meminfo_data_ptr)
@@ -978,8 +634,47 @@ def init_struct(typingctx, data_typ, names_typ=None):
     return struct_type(data_typ, names_typ), codegen
 
 
+@generated_jit(nopython=True)
+def init_struct_with_nulls(values, nulls, names):
+    """
+    Creates a struct and sets certain fields to null.
+
+    Args:
+        values: tuple of data items to pack into a struct
+        nulls: array of booleans where True indicates that the
+        current field is null.
+        names: tuple of the names of each struct field
+
+    Returns:
+        The values packed into a struct with the specified names
+        and the specified indices as nulls.
+    """
+    names_unwrapped = unwrap_typeref(names)
+    assert isinstance(
+        names_unwrapped, bodo.utils.typing.ColNamesMetaType
+    ), f"Internal error in init_struct_with_nulls: 'names' must be a ColNamesMetaType. Got: {names}"
+    names_tup = names_unwrapped.meta
+    func_text = "def impl(values, nulls, names):\n"
+    func_text += f"  s = init_struct(values, {names_tup})\n"
+    for i in range(len(names_tup)):
+        func_text += f"  if nulls[{i}]:\n"
+        func_text += f"    set_struct_field_to_null(s, {i})\n"
+    func_text += "  return s\n"
+    loc_vars = {}
+    exec(
+        func_text,
+        {
+            "init_struct": init_struct,
+            "set_struct_field_to_null": set_struct_field_to_null,
+        },
+        loc_vars,
+    )
+    impl = loc_vars["impl"]
+    return impl
+
+
 @intrinsic
-def get_struct_data(typingctx, struct_typ=None):
+def get_struct_data(typingctx, struct_typ):
     """get data values of struct as tuple"""
     assert isinstance(struct_typ, StructType)
 
@@ -992,7 +687,7 @@ def get_struct_data(typingctx, struct_typ=None):
 
 
 @intrinsic
-def get_struct_null_bitmap(typingctx, struct_typ=None):
+def get_struct_null_bitmap(typingctx, struct_typ):
     """get null bitmap tuple of struct value"""
     assert isinstance(struct_typ, StructType)
 
@@ -1005,8 +700,8 @@ def get_struct_null_bitmap(typingctx, struct_typ=None):
     return ret_typ(struct_typ), codegen
 
 
-@intrinsic
-def set_struct_data(typingctx, struct_typ, field_ind_typ, val_typ=None):
+@intrinsic(prefer_literal=True)
+def set_struct_data(typingctx, struct_typ, field_ind_typ, val_typ):
     """set a field in struct to value. needs to replace the whole payload."""
     assert isinstance(struct_typ, StructType) and is_overload_constant_int(
         field_ind_typ
@@ -1030,20 +725,91 @@ def set_struct_data(typingctx, struct_typ, field_ind_typ, val_typ=None):
     return types.none(struct_typ, field_ind_typ, val_typ), codegen
 
 
+@intrinsic(prefer_literal=True)
+def set_struct_field_to_null(typingctx, struct_typ, field_ind_typ):
+    """set a field in struct null."""
+    assert isinstance(struct_typ, StructType) and is_overload_constant_int(
+        field_ind_typ
+    )
+    field_ind = get_overload_const_int(field_ind_typ)
+    null_tup_typ = types.UniTuple(types.int8, len(struct_typ.names))
+    data_tup_typ = types.BaseTuple.from_types(struct_typ.data)
+    zero = lir.Constant(lir.IntType(8), 0)
+
+    def codegen(context, builder, sig, args):
+        (struct, _) = args
+        payload, meminfo_data_ptr = _get_struct_payload(
+            context, builder, struct_typ, struct
+        )
+        old_nulls = payload.null_bitmap
+        new_nulls = builder.insert_value(old_nulls, zero, field_ind)
+        context.nrt.decref(builder, null_tup_typ, old_nulls)
+        context.nrt.incref(builder, null_tup_typ, new_nulls)
+
+        # Decref old data element to avoid memory leak since
+        # destructor ignores null elements
+        old_data = payload.data
+        data_elem_null = context.get_constant_null(data_tup_typ[field_ind])
+        new_data = builder.insert_value(old_data, data_elem_null, field_ind)
+        context.nrt.decref(builder, data_tup_typ, old_data)
+        context.nrt.incref(builder, data_tup_typ, new_data)
+
+        payload.null_bitmap = new_nulls
+        payload.data = new_data
+        builder.store(payload._getvalue(), meminfo_data_ptr)
+        return context.get_dummy_value()
+
+    return types.none(struct_typ, field_ind_typ), codegen
+
+
+@lower_cast(StructType, StructType)
+def cast_struct_type(context, builder, fromty, toty, val):
+    """Support casting struct values where data elements could have different types
+    and need casting.
+    """
+    payload, _ = _get_struct_payload(context, builder, fromty, val)
+
+    # Create data and null values for output struct
+    null_vals = []
+    data_vals = []
+    for i, val_typ in enumerate(fromty.data):
+        # check for not NA
+        null_mask = builder.extract_value(payload.null_bitmap, i)
+        null_vals.append(null_mask)
+        not_na_cond = builder.icmp_unsigned(
+            "==", null_mask, lir.Constant(null_mask.type, 1)
+        )
+        data_val_ptr = cgutils.alloca_once_value(
+            builder, context.get_constant_null(toty.data[i])
+        )
+        with builder.if_then(not_na_cond):
+            data_val = builder.extract_value(payload.data, i)
+            # Cast data element to target type if necessary
+            if val_typ != toty.data[i]:
+                new_data_val = context.cast(builder, data_val, val_typ, toty.data[i])
+            else:
+                new_data_val = data_val
+            builder.store(new_data_val, data_val_ptr)
+        data_vals.append(builder.load(data_val_ptr))
+
+    meminfo = construct_struct(context, builder, toty, data_vals, null_vals)
+    struct = context.make_helper(builder, toty)
+    struct.meminfo = meminfo
+    return struct._getvalue()
+
+
 def _get_struct_field_ind(struct, ind, op):
     """find struct field index for 'ind' (a const str type) for operation 'op'.
     Raise error if not possible.
     """
     if not is_overload_constant_str(ind):  # pragma: no cover
         raise BodoError(
-            "structs (from struct array) only support constant strings for {}, not {}".format(
-                op, ind
-            )
+            f"structs (from struct array) only support constant strings for {op}, not {ind}"
         )
 
     ind_str = get_overload_const_str(ind)
     if ind_str not in struct.names:  # pragma: no cover
-        raise BodoError("Field {} does not exist in struct {}".format(ind_str, struct))
+        raise BodoError(f"Field {ind_str} does not exist in struct {struct}")
 
     return struct.names.index(ind_str)
 
@@ -1118,21 +884,24 @@ def construct_struct(context, builder, struct_type, values, nulls):
         else cgutils.pack_struct(builder, values)
     )
 
-    payload.null_bitmap = cgutils.pack_array(builder, nulls)
+    payload.null_bitmap = cgutils.pack_array(builder, nulls, lir.IntType(8))
 
     builder.store(payload._getvalue(), meminfo_data_ptr)
     return meminfo
 
 
 @intrinsic
-def struct_array_get_struct(typingctx, struct_arr_typ, ind_typ=None):
+def struct_array_get_struct(typingctx, struct_arr_typ, ind_typ):
     """get struct from struct array, e.g. A[i]
     Returns a dictionary of value types are the same, otherwise a StructType
     """
     assert isinstance(struct_arr_typ, StructArrayType) and isinstance(
         ind_typ, types.Integer
     )
-    data_types = tuple(d.dtype for d in struct_arr_typ.data)
+    # NOTE: the scalar type of most arrays is the same as dtype (e.g. int64), except
+    # DatetimeArrayType and null_array_type which have different dtype objects.
+    # Therefore, we have to use get_array_getitem_scalar_type instead of dtype here
+    data_types = tuple(get_array_getitem_scalar_type(d) for d in struct_arr_typ.data)
     # TODO: consider enabling dict return if possible
     # # return a regular dictionary if values have the same type, otherwise struct
     # if types.is_homogeneous(*struct_arr_typ.data):
@@ -1160,8 +929,12 @@ def struct_array_get_struct(typingctx, struct_arr_typ, ind_typ=None):
             )
             null_vals.append(na_val)
 
+            # NOTE: the scalar type of most arrays is the same as dtype (e.g. int64), except
+            # DatetimeArrayType and null_array_type which have different dtype objects.
+            # Therefore, we have to use get_array_getitem_scalar_type instead of dtype
             data_val_ptr = cgutils.alloca_once_value(
-                builder, context.get_constant_null(arr_typ.dtype)
+                builder,
+                context.get_constant_null(get_array_getitem_scalar_type(arr_typ)),
             )
             # check for not NA
             not_na_cond = builder.icmp_unsigned(
@@ -1171,7 +944,7 @@ def struct_array_get_struct(typingctx, struct_arr_typ, ind_typ=None):
                 data_val = context.compile_internal(
                     builder,
                     lambda arr, ind: arr[ind],
-                    arr_typ.dtype(arr_typ, types.int64),
+                    get_array_getitem_scalar_type(arr_typ)(arr_typ, types.int64),
                     [arr_ptr, ind],
                 )
                 builder.store(data_val, data_val_ptr)
@@ -1184,6 +957,7 @@ def struct_array_get_struct(typingctx, struct_arr_typ, ind_typ=None):
             ]
             val_tup = cgutils.pack_array(builder, data_vals)
             names_tup = cgutils.pack_array(builder, names_consts)
+
             # TODO: support NA values as optional type?
             def impl(names, vals):
                 d = {}
@@ -1217,7 +991,7 @@ def struct_array_get_struct(typingctx, struct_arr_typ, ind_typ=None):
 
 
 @intrinsic
-def get_data(typingctx, arr_typ=None):
+def get_data(typingctx, arr_typ):
     """get data arrays of struct array as tuple"""
     assert isinstance(arr_typ, StructArrayType)
 
@@ -1230,7 +1004,7 @@ def get_data(typingctx, arr_typ=None):
 
 
 @intrinsic
-def get_null_bitmap(typingctx, arr_typ=None):
+def get_null_bitmap(typingctx, arr_typ):
     """get null bitmap array of struct array"""
     assert isinstance(arr_typ, StructArrayType)
 
@@ -1243,13 +1017,26 @@ def get_null_bitmap(typingctx, arr_typ=None):
 
 
 @intrinsic
-def init_struct_arr(typingctx, data_typ, null_bitmap_typ, names_typ=None):
+def get_n_structs(typingctx, arr_typ):
+    """get length of struct array"""
+    assert isinstance(arr_typ, StructArrayType), "get_n_structs: struct array expected"
+
+    def codegen(context, builder, sig, args):
+        (arr,) = args
+        payload = _get_struct_arr_payload(context, builder, arr_typ, arr)
+        return payload.n_structs
+
+    return types.int64(arr_typ), codegen
+
+
+@intrinsic(prefer_literal=True)
+def init_struct_arr(typingctx, n_structs_t, data_typ, null_bitmap_typ, names_typ):
     """create a new struct array from input data array tuple, null bitmap, and names."""
     names = tuple(get_overload_const_str(t) for t in names_typ.types)
     struct_arr_type = StructArrayType(data_typ.types, names)
 
     def codegen(context, builder, sig, args):
-        data, null_bitmap, _names = args
+        n_structs, data, null_bitmap, _names = args
         # TODO: refactor to avoid duplication with construct_struct
         # create payload type
         payload_type = StructArrayPayloadType(struct_arr_type.data)
@@ -1272,6 +1059,7 @@ def init_struct_arr(typingctx, data_typ, null_bitmap_typ, names_typ=None):
         payload = cgutils.create_struct_proxy(payload_type)(context, builder)
         payload.data = data
         payload.null_bitmap = null_bitmap
+        payload.n_structs = n_structs
         builder.store(payload._getvalue(), meminfo_data_ptr)
         context.nrt.incref(builder, data_typ, data)
         context.nrt.incref(builder, null_bitmap_typ, null_bitmap)
@@ -1280,7 +1068,7 @@ def init_struct_arr(typingctx, data_typ, null_bitmap_typ, names_typ=None):
         struct_array.meminfo = meminfo
         return struct_array._getvalue()
 
-    return struct_arr_type(data_typ, null_bitmap_typ, names_typ), codegen
+    return struct_arr_type(types.int64, data_typ, null_bitmap_typ, names_typ), codegen
 
 
 @overload(operator.getitem, no_unliteral=True)
@@ -1297,41 +1085,62 @@ def struct_arr_getitem(arr, ind):
 
         return struct_arr_getitem_impl
 
-    # other getitem cases return an array, so just call getitem on underlying arrays
-    n_fields = len(arr.data)
-    func_text = "def impl(arr, ind):\n"
-    func_text += "  data = get_data(arr)\n"
-    func_text += "  null_bitmap = get_null_bitmap(arr)\n"
-    if is_list_like_index_type(ind) and ind.dtype == types.bool_:
-        func_text += "  out_null_bitmap = get_new_null_mask_bool_index(null_bitmap, ind, len(data[0]))\n"
-    elif is_list_like_index_type(ind) and isinstance(ind.dtype, types.Integer):
-        func_text += "  out_null_bitmap = get_new_null_mask_int_index(null_bitmap, ind, len(data[0]))\n"
-    elif isinstance(ind, types.SliceType):
-        func_text += "  out_null_bitmap = get_new_null_mask_slice_index(null_bitmap, ind, len(data[0]))\n"
-    else:  # pragma: no cover
-        raise BodoError("invalid index {} in struct array indexing".format(ind))
-    func_text += "  return init_struct_arr(({},), out_null_bitmap, ({},))\n".format(
-        ", ".join(
-            "ensure_contig_if_np(data[{}][ind])".format(i) for i in range(n_fields)
-        ),
-        ", ".join("'{}'".format(name) for name in arr.names),
-    )
-    loc_vars = {}
-    exec(
-        func_text,
-        {
-            "init_struct_arr": init_struct_arr,
-            "get_data": get_data,
-            "get_null_bitmap": get_null_bitmap,
-            "ensure_contig_if_np": bodo.utils.conversion.ensure_contig_if_np,
-            "get_new_null_mask_bool_index": bodo.utils.indexing.get_new_null_mask_bool_index,
-            "get_new_null_mask_int_index": bodo.utils.indexing.get_new_null_mask_int_index,
-            "get_new_null_mask_slice_index": bodo.utils.indexing.get_new_null_mask_slice_index,
-        },
-        loc_vars,
-    )
-    impl = loc_vars["impl"]
-    return impl
+    # Boolean array handling.
+    if is_list_like_index_type(ind) or isinstance(ind, types.SliceType):
+        # other getitem cases return an array, so just call getitem on underlying arrays
+        n_fields = len(arr.data)
+        func_text = "def impl(arr, ind):\n"
+        func_text += "  data = get_data(arr)\n"
+        func_text += "  null_bitmap = get_null_bitmap(arr)\n"
+        func_text += "  n = len(arr)\n"
+        if is_list_like_index_type(ind) and ind.dtype == types.bool_:
+            func_text += "  out_null_bitmap = get_new_null_mask_bool_index(null_bitmap, ind, n)\n"
+            func_text += "  n_out = pd.Series(ind).sum()\n"
+        elif is_list_like_index_type(ind) and isinstance(ind.dtype, types.Integer):
+            func_text += (
+                "  out_null_bitmap = get_new_null_mask_int_index(null_bitmap, ind, n)\n"
+            )
+            func_text += "  n_out = len(ind)\n"
+        elif isinstance(ind, types.SliceType):
+            func_text += "  out_null_bitmap = get_new_null_mask_slice_index(null_bitmap, ind, n)\n"
+            func_text += (
+                "  slice_idx = numba.cpython.unicode._normalize_slice(ind, n)\n"
+            )
+            func_text += "  n_out = numba.cpython.unicode._slice_span(slice_idx)\n"
+        else:  # pragma: no cover
+            raise BodoError(f"invalid index {ind} in struct array indexing")
+        func_text += (
+            "  return init_struct_arr(n_out, ({}{}), out_null_bitmap, ({}{}))\n".format(
+                ", ".join(
+                    f"ensure_contig_if_np(data[{i}][ind])" for i in range(n_fields)
+                ),
+                "," if n_fields else "",
+                ", ".join(f"'{name}'" for name in arr.names),
+                "," if n_fields else "",
+            )
+        )
+        loc_vars = {}
+        exec(
+            func_text,
+            {
+                "pd": pd,
+                "numba": numba,
+                "init_struct_arr": init_struct_arr,
+                "get_data": get_data,
+                "get_null_bitmap": get_null_bitmap,
+                "ensure_contig_if_np": bodo.utils.conversion.ensure_contig_if_np,
+                "get_new_null_mask_bool_index": bodo.utils.indexing.get_new_null_mask_bool_index,
+                "get_new_null_mask_int_index": bodo.utils.indexing.get_new_null_mask_int_index,
+                "get_new_null_mask_slice_index": bodo.utils.indexing.get_new_null_mask_slice_index,
+            },
+            loc_vars,
+        )
+        impl = loc_vars["impl"]
+        return impl
+
+    raise BodoError(
+        f"getitem for StructArray with indexing type {ind} not supported."
+    )  # pragma: no cover
 
 
 @overload(operator.setitem, no_unliteral=True)
@@ -1344,7 +1153,6 @@ def struct_arr_setitem(arr, ind, val):
         return
 
     if isinstance(ind, types.Integer):
-
         n_fields = len(arr.data)
         func_text = "def impl(arr, ind, val):\n"
         func_text += "  data = get_data(arr)\n"
@@ -1352,16 +1160,12 @@ def struct_arr_setitem(arr, ind, val):
         func_text += "  set_bit_to_arr(null_bitmap, ind, 1)\n"
         for i in range(n_fields):
             if isinstance(val, StructType):
-                func_text += "  if is_field_value_null(val, '{}'):\n".format(
-                    arr.names[i]
-                )
-                func_text += (
-                    "    bodo.libs.array_kernels.setna(data[{}], ind)\n".format(i)
-                )
+                func_text += f"  if is_field_value_null(val, '{arr.names[i]}'):\n"
+                func_text += f"    bodo.libs.array_kernels.setna(data[{i}], ind)\n"
                 func_text += "  else:\n"
-                func_text += "    data[{}][ind] = val['{}']\n".format(i, arr.names[i])
+                func_text += f"    data[{i}][ind] = val['{arr.names[i]}']\n"
             else:
-                func_text += "  data[{}][ind] = val['{}']\n".format(i, arr.names[i])
+                func_text += f"  data[{i}][ind] = val['{arr.names[i]}']\n"
 
         loc_vars = {}
         exec(
@@ -1389,7 +1193,7 @@ def struct_arr_setitem(arr, ind, val):
         func_text += "  val_null_bitmap = get_null_bitmap(val)\n"
         func_text += "  setitem_slice_index_null_bits(null_bitmap, val_null_bitmap, ind, len(arr))\n"
         for i in range(n_fields):
-            func_text += "  data[{0}][ind] = val_data[{0}]\n".format(i)
+            func_text += f"  data[{i}][ind] = val_data[{i}]\n"
 
         loc_vars = {}
         exec(
@@ -1414,11 +1218,15 @@ def struct_arr_setitem(arr, ind, val):
 @overload(len, no_unliteral=True)
 def overload_struct_arr_len(A):
     if isinstance(A, StructArrayType):
+        if len(A.data) == 0:
+            return lambda A: get_n_structs(A)  # pragma: no cover
         return lambda A: len(get_data(A)[0])  # pragma: no cover
 
 
 @overload_attribute(StructArrayType, "shape")
 def overload_struct_arr_shape(A):
+    if len(A.data) == 0:
+        return lambda A: (get_n_structs(A),)  # pragma: no cover
     return lambda A: (len(get_data(A)[0]),)  # pragma: no cover
 
 
@@ -1465,7 +1273,7 @@ def overload_struct_arr_copy(A):
         out_data_arrs = bodo.libs.struct_arr_ext.copy_arr_tup(data)
         out_null_bitmap = null_bitmap.copy()
 
-        return init_struct_arr(out_data_arrs, out_null_bitmap, names)
+        return init_struct_arr(len(A), out_data_arrs, out_null_bitmap, names)
 
     return copy_impl
 
@@ -1481,11 +1289,42 @@ def copy_arr_tup_overload(arrs):
     """
     count = arrs.count
     func_text = "def f(arrs):\n"
-    func_text += "  return ({},)\n".format(
-        ",".join("arrs[{}].copy()".format(i) for i in range(count))
+    func_text += "  return ({}{})\n".format(
+        ",".join(f"arrs[{i}].copy()" for i in range(count)),
+        "," if count else "",
     )
 
     loc_vars = {}
     exec(func_text, {}, loc_vars)
     impl = loc_vars["f"]
+    return impl
+
+
+def scalar_to_struct_array(scalar_val, length, _arr_typ):
+    pass
+
+
+@overload(scalar_to_struct_array)
+def overload_scalar_to_struct_array(scalar_val, length, _arr_typ):
+    """
+    Create an StructArray of length `length` by repeating scalar_val `length` times
+
+    Args:
+        scalar_val (StructType): The struct value to be repeated
+        length (int): Length of the output StructArray
+        _arr_typ (types.Type): StructArrayType for output
+    Returns:
+        An StructArray of length `length`
+    """
+
+    arr_type = unwrap_typeref(_arr_typ)
+    dtypes = arr_type.data
+    names = arr_type.names
+
+    def impl(scalar_val, length, _arr_typ):  # pragma: no cover
+        out_arr = pre_alloc_struct_array(length, (-1,), dtypes, names, None)
+        for i in range(length):
+            out_arr[i] = scalar_val
+        return out_arr
+
     return impl

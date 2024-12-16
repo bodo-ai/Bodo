@@ -1,8 +1,9 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
 Test correctness of the aggregate join transpose optimization rule used by BodoSQL
 """
+
 import pytest
+
 from bodosql.tests.utils import check_query
 
 
@@ -12,15 +13,24 @@ from bodosql.tests.utils import check_query
         # to not be applied
         # These tests apply the rule, but don't do aliasing
         # tests just groupby
-        "SELECT t3.B, t3.A from (SELECT t2.B, t1.A from (SELECT table1.A from table1) as t1, (SELECT table2.B from table2) as t2) as t3 GROUP BY t3.A, t3.B",
+        pytest.param(
+            "SELECT t3.B, t3.A from (SELECT t2.B, t1.A from (SELECT table1.A from table1) as t1, (SELECT table2.B from table2) as t2) as t3 GROUP BY t3.A, t3.B",
+            id="query1",
+        ),
         # tests max aggregation function
-        "SELECT Max(t3.B) as m, t3.A from (SELECT t1.A, t2.B from (SELECT table1.A from table1) as t1, (SELECT table2.B from table2) as t2) as t3 GROUP BY t3.A",
+        pytest.param(
+            "SELECT Max(t3.B) as M, t3.A from (SELECT t1.A, t2.B from (SELECT table1.A from table1) as t1, (SELECT table2.B from table2) as t2) as t3 GROUP BY t3.A",
+            id="query2",
+        ),
         # tests that distinct doesn't cause any issues (It should simply cause the rule to not be applied)
-        "SELECT DISTINCT Max(t3.B) as m, t3.A from (SELECT t2.B, t1.A from (SELECT table1.A from table1) as t1, (SELECT table2.B from table2) as t2) as t3 GROUP BY t3.A",
+        pytest.param(
+            "SELECT DISTINCT Max(t3.B) as M, t3.A from (SELECT t2.B, t1.A from (SELECT table1.A from table1) as t1, (SELECT table2.B from table2) as t2) as t3 GROUP BY t3.A",
+            id="query3",
+        ),
     ]
 )
 def aggregate_join_transpose_queries(request):
-    """fixture that supplies queriees for the aggregate join transpose rule
+    """fixture that supplies queries for the aggregate join transpose rule
 
     This rule matches on an Aggregation whose inputs consist of exactly one Join node. The aggregations must also
     be allowed to be transposed. In the default configuration (the one we are using on master), pushing down aggregation functions is
@@ -36,7 +46,7 @@ def aggregate_join_transpose_queries(request):
     I don't even think it does that, due to a bug workaround in the source code. For the purposes of testing, I've used the extended version
     of the rule, which does push agg functions.
 
-    Also, noticably, due to our implementation of Project Join transpose, if the select statment doing the aggregation does any amount of aliasing,
+    Also, noticeably, due to our implementation of Project Join transpose, if the select statement doing the aggregation does any amount of aliasing,
     this rule will not get applied, due to the header project that performs the aliasing.
 
     Source code here:
@@ -55,5 +65,5 @@ def test_aggregate_join_transpose(
         aggregate_join_transpose_queries,
         simple_join_fixture,
         spark_info,
-        check_dtype=False
+        check_dtype=False,
     )

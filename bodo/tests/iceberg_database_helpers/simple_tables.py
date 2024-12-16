@@ -1,6 +1,5 @@
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Dict, List, Tuple
 
 import numpy as np
 import pandas as pd
@@ -20,12 +19,12 @@ from bodo.tests.iceberg_database_helpers.utils import (
 #   whether or not Pandas treats it a nullable or not
 # - Decimal: Bodo / Python doesn't support custom precisions and scale. It works
 #   reads, but not for writes, which is why we have separate tables.
-BASE_MAP: Dict[str, Tuple[Dict, List]] = {
-    "bool_binary_table": (
+BASE_MAP: dict[str, tuple[dict, list]] = {
+    "BOOL_BINARY_TABLE": (
         {
             "A": np.array([True, False, True, True] * 25, dtype=np.bool_),
             "B": pd.Series([False, None, True, False, None] * 20, dtype="boolean"),
-            "C": np.array([1, 1, 0, 1, 0] * 20).tobytes(),
+            "C": np.array([b"1", b"1", b"0", b"1", b"0"] * 20, dtype=object),
         },
         [
             ("A", "boolean", True),
@@ -33,7 +32,7 @@ BASE_MAP: Dict[str, Tuple[Dict, List]] = {
             ("C", "binary", True),
         ],
     ),
-    "dt_tsz_table": (
+    "DT_TSZ_TABLE": (
         {
             "A": pd.Series(
                 [
@@ -59,7 +58,7 @@ BASE_MAP: Dict[str, Tuple[Dict, List]] = {
                     datetime.strptime("13/11/2018", "%d/%m/%Y"),
                 ]
                 * 10
-            ),
+            ).dt.tz_localize("UTC"),
             "C": np.arange(50, dtype=np.int32),
         },
         [
@@ -68,11 +67,20 @@ BASE_MAP: Dict[str, Tuple[Dict, List]] = {
             ("C", "int", False),
         ],
     ),
-    "dtype_list_table": (
+    # TODO figure out why pyspark won't accept series with a pyarrow list type
+    "DTYPE_LIST_TABLE": (
         {
-            "A": pd.Series([[0, 1, 2], [3, 4]] * 25, dtype=object),
-            "B": pd.Series([["abc", "rtf"], ["def", "xyz", "typ"]] * 25, dtype=object),
-            "C": pd.Series([[0.0, 1.0, 2.0], [3.0, 4.0]] * 25, dtype=object),
+            "A": pd.Series(
+                [[0, 1, 2], [3, 4]] * 25, dtype=pd.ArrowDtype(pa.large_list(pa.int64()))
+            ),
+            "B": pd.Series(
+                [["abc", "rtf"], ["def", "xyz", "typ"]] * 25,
+                dtype=pd.ArrowDtype(pa.large_list(pa.string())),
+            ),
+            "C": pd.Series(
+                [[0.0, 1.0, 2.0], [3.0, 4.0]] * 25,
+                dtype=pd.ArrowDtype(pa.large_list(pa.float64())),
+            ),
         },
         [
             ("A", "ARRAY<long>", True),
@@ -80,13 +88,26 @@ BASE_MAP: Dict[str, Tuple[Dict, List]] = {
             ("C", "ARRAY<double>", True),
         ],
     ),
-    "list_table": (
+    "LIST_TABLE": (
         {
-            "A": pd.Series([[0, 1, 2], [3, 4]] * 25, dtype=object),
-            "B": pd.Series([["abc", "rtf"], ["def", "xyz", "typ"]] * 25, dtype=object),
-            "C": pd.Series([[0, 1, 2], [3, 4]] * 25, dtype=object),
-            "D": pd.Series([[0.0, 1.0, 2.0], [3.0, 4.0]] * 25, dtype=object),
-            "E": pd.Series([[0.0, 1.0, 2.0], [3.0, 4.0]] * 25, dtype=object),
+            "A": pd.Series(
+                [[0, 1, 2], [3, 4]] * 25, dtype=pd.ArrowDtype(pa.large_list(pa.int64()))
+            ),
+            "B": pd.Series(
+                [["abc", "rtf"], ["def", "xyz", "typ"]] * 25,
+                dtype=pd.ArrowDtype(pa.large_list(pa.string())),
+            ),
+            "C": pd.Series(
+                [[0, 1, 2], [3, 4]] * 25, dtype=pd.ArrowDtype(pa.large_list(pa.int32()))
+            ),
+            "D": pd.Series(
+                [[0.0, 1.0, 2.0], [3.0, 4.0]] * 25,
+                dtype=pd.ArrowDtype(pa.large_list(pa.float32())),
+            ),
+            "E": pd.Series(
+                [[0.0, 1.0, 2.0], [3.0, 4.0]] * 25,
+                dtype=pd.ArrowDtype(pa.large_list(pa.float64())),
+            ),
         },
         [
             ("A", "ARRAY<long>", True),
@@ -96,25 +117,31 @@ BASE_MAP: Dict[str, Tuple[Dict, List]] = {
             ("E", "ARRAY<double>", True),
         ],
     ),
-    "map_table": (
+    # https://spark.apache.org/docs/3.0.1/sql-pyspark-pandas-with-arrow.html#supported-sql-types
+    # MapArray types not supported
+    # Arrow Maps only support string or byte keys
+    "MAP_TABLE": (
         {
             "A": pd.Series([{"a": 10}, {"c": 13}] * 25, dtype=object),
+            # dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.int64())),
             "B": pd.Series([{"ERT": 10.0}, {"ASD": 23.87}] * 25, dtype=object),
+            # dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.float64())),
             "C": pd.Series(
-                [{10: Decimal(5.6)}, {65: Decimal(34.6)}] * 25, dtype=object
+                [{"10": Decimal("005.60")}, {"65": Decimal("034.60")}] * 25,
+                dtype=object,
             ),
-            "D": pd.Series(
-                [{Decimal(54.67): 54}, {Decimal(32.90): 32}] * 25, dtype=object
-            ),
+            # kdtype=pd.ArrowDtype(pa.map_(pa.string(), pa.decimal128(5, 2))),
+            "D": pd.Series([{"54.67": 54}, {"32.90": 32}] * 25, dtype=object),
+            # dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.int32())),
         },
         [
-            ("A", "MAP<string, long>", True),
+            ("A", "MAP<string, int>", True),
             ("B", "MAP<string, double>", True),
-            ("C", "MAP<int, decimal(5,2)>", True),
-            ("D", "MAP<decimal(5,2), int>", True),
+            ("C", "MAP<string, decimal(5,2)>", True),
+            ("D", "MAP<string, int>", True),
         ],
     ),
-    "numeric_table": (
+    "NUMERIC_TABLE": (
         {
             "A": pd.Series([1, 2, 3, 4, 5] * 10, dtype="int32"),
             "B": pd.Series([1, 2, 3, 4, 5] * 10, dtype="int64"),
@@ -132,21 +159,19 @@ BASE_MAP: Dict[str, Tuple[Dict, List]] = {
             ("F", "long", True),
         ],
     ),
-    "string_table": (
+    "STRING_TABLE": (
         {
             "A": np.array(["A", "B", "C", "D"] * 25),
             "B": np.array(["lorem", "ipsum", "loden", "ion"] * 25),
             "C": np.array((["A"] * 10) + (["b"] * 90)),
             "D": np.array(
-                (
-                    ["four hundred"] * 10
-                    + ["five"] * 20
-                    + [None] * 10
-                    + ["forty-five"] * 10
-                    + ["four"] * 20
-                    + ["fifeteen"] * 20
-                    + ["f"] * 10
-                )
+                ["four hundred"] * 10
+                + ["five"] * 20
+                + [None] * 10
+                + ["forty-five"] * 10
+                + ["four"] * 20
+                + ["fifeteen"] * 20
+                + ["f"] * 10
             ),
         },
         [
@@ -156,7 +181,7 @@ BASE_MAP: Dict[str, Tuple[Dict, List]] = {
             ("D", "string", True),
         ],
     ),
-    "dict_encoded_string_table": (
+    "DICT_ENCODED_STRING_TABLE": (
         {
             "A": pa.array(
                 ["abc", "b", "c", "abc", "peach", "b", "cde"] * 20,
@@ -172,24 +197,32 @@ BASE_MAP: Dict[str, Tuple[Dict, List]] = {
             ("B", "string", True),
         ],
     ),
-    "struct_table": (
+    "STRUCT_TABLE": (
         {
-            "A": pd.Series([{"a": 1, "b": 3}, {"a": 2, "b": 666}] * 25, dtype=object),
+            "A": pd.Series(
+                [{"a": 1, "b": 3}, {"a": 2, "b": 666}] * 25,
+                dtype=pd.ArrowDtype(pa.struct([("a", pa.int32()), ("b", pa.int64())])),
+            ),
             "B": pd.Series(
                 [{"a": 2.0, "b": 5, "c": 78.23}, {"a": 1.98, "b": 45, "c": 12.90}] * 25,
-                dtype=object,
+                dtype=pd.ArrowDtype(
+                    pa.struct(
+                        [("a", pa.float64()), ("b", pa.int64()), ("c", pa.float64())]
+                    )
+                ),
             ),
             # TODO Add timestamp, datetime, etc. (might not be possible through Spark)
         },
         [
-            ("A", "STRUCT<a: long, b: long>", True),
+            ("A", "STRUCT<a: int, b: long>", True),
             ("B", "STRUCT<a: double, b: long, c: double>", True),
         ],
     ),
-    "struct_dtype_table": (
+    "STRUCT_DTYPE_TABLE": (
         {
             "A": pd.Series(
-                [{"a": 1, "b": "one"}, {"a": 2, "b": "two"}] * 25, dtype=object
+                [{"a": 1, "b": "one"}, {"a": 2, "b": "two"}] * 25,
+                dtype=pd.ArrowDtype(pa.struct([("a", pa.int64()), ("b", pa.string())])),
             ),
             "B": pd.Series(
                 [
@@ -197,7 +230,11 @@ BASE_MAP: Dict[str, Tuple[Dict, List]] = {
                     {"a": True, "b": date(2021, 10, 10), "c": 12.90},
                 ]
                 * 25,
-                dtype=object,
+                dtype=pd.ArrowDtype(
+                    pa.struct(
+                        [("a", pa.bool_()), ("b", pa.date32()), ("c", pa.float64())]
+                    )
+                ),
             ),
         },
         [
@@ -205,24 +242,36 @@ BASE_MAP: Dict[str, Tuple[Dict, List]] = {
             ("B", "STRUCT<a: boolean, b: date, c: double>", True),
         ],
     ),
-    "decimals_table": (
-        {"A": np.array([Decimal(1.0), Decimal(2.0)] * 25)},
-        [("A", "decimal(10,5)", True)],
+    "DECIMALS_TABLE": (
+        {
+            "A": np.array([Decimal(1.0), Decimal(2.0)] * 25),
+            "B": np.array([Decimal(5.0), Decimal(10.0)] * 25),
+        },
+        [("A", "decimal(10,5)", True), ("B", "decimal(38,18)", True)],
     ),
-    "decimals_list_table": (
+    # TODO figure out why pyspark won't accept series with a pyarrow list type
+    "DECIMALS_LIST_TABLE": (
         {
             "A": pd.Series(
                 [
-                    [Decimal(0.3), Decimal(1.5), Decimal(2.9)],
-                    [Decimal(3.4), Decimal(4.8)],
+                    [Decimal("000.30"), Decimal("001.50"), Decimal("002.90")],
+                    [Decimal("003.40"), Decimal("004.80")],
                 ]
                 * 25,
-                dtype=object,
+                dtype=pd.ArrowDtype(pa.large_list(pa.decimal128(5, 2))),
+            ),
+            "B": pd.Series(
+                [
+                    [Decimal("000.34"), Decimal("021.50"), Decimal("202.90")],
+                    [Decimal("013.40"), Decimal("004.90")],
+                ]
+                * 25,
+                dtype=object,  # pd.ArrowDtype(pa.large_list(pa.decimal128(5, 2))),
             ),
         },
-        [("A", "ARRAY<decimal(5,2)>", True)],
+        [("A", "ARRAY<decimal(5,2)>", True), ("B", "ARRAY<decimal(5,2)>", True)],
     ),
-    "tz_aware_table": (
+    "TZ_AWARE_TABLE": (
         {
             "A": pd.arrays.DatetimeArray(
                 pd.Series(
@@ -246,7 +295,7 @@ BASE_MAP: Dict[str, Tuple[Dict, List]] = {
             ("B", "timestamp", True),
         ],
     ),
-    "primitives_table": (
+    "PRIMITIVES_TABLE": (
         {
             "A": pd.date_range(
                 start="1/1/2019", periods=200, freq="10D", tz="US/Eastern"
@@ -272,10 +321,46 @@ BASE_MAP: Dict[str, Tuple[Dict, List]] = {
             ),
         },
         [
-            ("A", "timestamp", False),
+            ("A", "timestamp", True),
             ("B", "long", True),
             ("C", "boolean", True),
             ("D", "string", True),
+        ],
+    ),
+    "OPTIONAL_TABLE": (
+        {
+            "A": np.array([1, 2] * 25, np.int32),
+            "B": np.array(["a", "b"] * 25),
+        },
+        [
+            ("A", "int", False),
+            ("B", "string", True),
+        ],
+    ),
+    "OPTIONAL_TABLE_MIDDLE": (
+        {
+            "A": np.array([1, 2] * 25, np.int32),
+            "B": np.array(["a", "b"] * 25),
+            "C": pd.Series(
+                [{"f1": 1.0, "f2": "A", "f3": 3.0}, {"f1": 4.0, "f2": "b", "f3": 6.0}]
+                * 25,
+                dtype=pd.ArrowDtype(
+                    pa.struct(
+                        [
+                            ("f1", pa.float64()),
+                            ("f2", pa.string()),
+                            ("f3", pa.float64()),
+                        ]
+                    )
+                ),
+            ),
+            "D": np.array([1, 2] * 25, np.int64),
+        },
+        [
+            ("A", "int", False),
+            ("B", "string", True),
+            ("C", "STRUCT<f1: double, f2: string, f3: double>", True),
+            ("D", "long", False),
         ],
     ),
 }
@@ -286,12 +371,12 @@ def build_map(base_map):
 
     for key, (a, b) in base_map.items():
         df = pd.DataFrame(a)
-        table_map[key] = (df, b)
+        table_map[f"SIMPLE_{key}"] = (df, b)
 
     return table_map
 
 
-TABLE_MAP: Dict[str, Tuple[pd.DataFrame, List]] = build_map(BASE_MAP)
+TABLE_MAP: dict[str, tuple[pd.DataFrame, list]] = build_map(BASE_MAP)
 
 
 def create_table(base_name: str, spark=None):
@@ -300,22 +385,23 @@ def create_table(base_name: str, spark=None):
 
     assert base_name in TABLE_MAP, f"Didn't find table definition for {base_name}."
     df, sql_schema = TABLE_MAP[base_name]
-    create_iceberg_table(df, sql_schema, f"simple_{base_name}", spark)
+    create_iceberg_table(df, sql_schema, base_name, spark)
 
 
-def create_all_simple_tables(spark=None):
+def create_simple_tables(tables: list[str], spark=None):
     if spark is None:
         spark = get_spark()
 
-    for base_table_name in TABLE_MAP:
-        create_table(base_table_name, spark)
+    for table in tables:
+        if table in TABLE_MAP:
+            create_table(table, spark)
 
 
 if __name__ == "__main__":
     import sys
 
     if len(sys.argv) == 1:
-        create_all_simple_tables()
+        create_simple_tables(list(TABLE_MAP.keys()))
 
     elif len(sys.argv) == 2:
         create_table(sys.argv[1])

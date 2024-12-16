@@ -1,4 +1,3 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
 Test correctness of Timestamp operations that
 include timezone information.
@@ -6,11 +5,18 @@ include timezone information.
 Note: Because Spark does not contain timezones we cannot
 compart with SparkSQL for correctness
 """
-import pandas as pd
 
+import pandas as pd
+import pytest
+
+from bodo.tests.utils import pytest_slow_unless_codegen
 from bodosql.tests.utils import check_query
 
+# Skip unless any codegen files were changed
+pytestmark = pytest_slow_unless_codegen
 
+
+@pytest.mark.slow
 def test_select(memory_leak_check):
     """
     Test a simple select statement with a table including
@@ -25,5 +31,5 @@ def test_select(memory_leak_check):
         }
     )
     expected_output = df[["B"]]
-    ctx = {"table1": df}
+    ctx = {"TABLE1": df}
     check_query(query, ctx, None, expected_output=expected_output)

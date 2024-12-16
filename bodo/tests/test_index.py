@@ -1,8 +1,9 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
 Tests for pd.Index functionality
 """
+
 import datetime
+import decimal
 import operator
 
 import numba
@@ -11,8 +12,15 @@ import pandas as pd
 import pytest
 
 import bodo
-from bodo.tests.utils import AnalysisTestPipeline, check_func
+from bodo.tests.utils import (
+    AnalysisTestPipeline,
+    check_func,
+    get_num_test_workers,
+    pytest_pandas,
+)
 from bodo.utils.typing import BodoError
+
+pytestmark = pytest_pandas
 
 
 @pytest.mark.slow
@@ -55,7 +63,7 @@ def test_range_index_constructor(memory_leak_check, is_slow_run):
     check_func(impl6, (5, 10, 2), only_seq=True)
 
     def impl7(r):  # unbox
-        return r._start, r._stop, r._step
+        return r.start, r.stop, r.step
 
     r = pd.RangeIndex(3, 10, 2)
     check_func(impl7, (r,), only_seq=True)
@@ -313,7 +321,8 @@ def test_generic_index_constructor(data):
         return pd.Index(data)
 
     # parallel with no dtype
-    check_func(impl, (data,))
+    # check_dtype=False since Bodo uses nullable arrays
+    check_func(impl, (data,), check_dtype=False)
 
 
 @pytest.mark.slow
@@ -327,7 +336,7 @@ def test_binary_infer(memory_leak_check):
         impl,
         (
             pd.Index(
-                pd.array([b"ajkshdg", b"jhasdgf", b"asdfajd", np.NaN] * 3),
+                np.array([b"ajkshdg", b"jhasdgf", b"asdfajd", None] * 3),
                 name="my_index",
             ),
         ),
@@ -352,7 +361,7 @@ def test_generic_index_constructor_with_dtype(data, dtype):
     def impl(data, dtype):
         return pd.Index(data, dtype=dtype)
 
-    check_func(impl, (data, dtype))
+    check_func(impl, (data, dtype), check_dtype=False)
 
 
 @pytest.mark.slow
@@ -375,73 +384,6 @@ def test_generic_index_constructor_sequential(data):
 
 
 @pytest.mark.slow
-def test_numeric_index_constructor(memory_leak_check, is_slow_run):
-    """
-    Test pd.Int64Index/UInt64Index/Float64Index objects
-    """
-
-    def impl1():  # list input
-        return pd.Int64Index([10, 12])
-
-    check_func(impl1, (), only_seq=True)
-
-    if not is_slow_run:
-        return
-
-    def impl2():  # list input with name
-        return pd.Int64Index([10, 12], name="A")
-
-    check_func(impl2, (), only_seq=True)
-
-    def impl3():  # array input
-        return pd.Int64Index(np.arange(3))
-
-    check_func(impl3, (), only_seq=True)
-
-    def impl4():  # array input different type
-        return pd.Int64Index(np.ones(3, dtype=np.int32))
-
-    check_func(impl4, (), only_seq=True)
-
-    def impl5():  # uint64: list input
-        return pd.UInt64Index([10, 12])
-
-    check_func(impl5, (), only_seq=True)
-
-    def impl6():  # uint64: array input different type
-        return pd.UInt64Index(np.ones(3, dtype=np.int32))
-
-    check_func(impl6, (), only_seq=True)
-
-    def impl7():  # float64: list input
-        return pd.Float64Index([10.1, 12.1])
-
-    check_func(impl7, (), only_seq=True)
-
-    def impl8():  # float64: array input different type
-        return pd.Float64Index(np.ones(3, dtype=np.int32))
-
-    check_func(impl8, (), only_seq=True)
-
-
-def test_init_numeric_index_array_analysis(memory_leak_check):
-    """make sure shape equivalence for init_numeric_index() is applied correctly"""
-    import numba.tests.test_array_analysis
-
-    def impl(d):
-        I = pd.Int64Index(d)
-        return I
-
-    test_func = numba.njit(pipeline_class=AnalysisTestPipeline, parallel=True)(impl)
-    test_func(np.arange(10))
-    array_analysis = test_func.overloads[test_func.signatures[0]].metadata[
-        "preserved_array_analysis"
-    ]
-    eq_set = array_analysis.equiv_sets[0]
-    assert eq_set._get_ind("I#0") == eq_set._get_ind("d#0")
-
-
-@pytest.mark.slow
 @pytest.mark.parametrize(
     "index",
     [
@@ -460,7 +402,7 @@ def test_array_index_box(index, memory_leak_check):
     # convert ArrowStringArray to regular Numpy
     if bodo_out.dtype == pd.StringDtype("pyarrow"):
         bodo_out = pd.Index(bodo_out.to_numpy())
-    pd.testing.assert_index_equal(bodo_out, index)
+    pd.testing.assert_index_equal(bodo_out, index, exact=False, check_exact=False)
 
 
 @pytest.mark.slow
@@ -507,8 +449,8 @@ def test_index_values(index, memory_leak_check):
         (pd.Index([1.0, 1.5, 1.2, 1.7, 2.9, 1.2]), pd.Index([1.0, 1.1, 1.2, 1.3])),
         (pd.Index(list("ABCDEFGHIJKLMNOPQRSTUVWX")), pd.Index(list("AEIOUY"))),  # FAILS
         (
-            pd.date_range("2018-01-01", "2018-12-01", freq="M"),
-            pd.date_range("2018-06-01", "2019-06-01", freq="M"),
+            pd.date_range("2018-01-01", "2018-12-01", freq="ME"),
+            pd.date_range("2018-06-01", "2019-06-01", freq="ME"),
         ),
         (
             pd.TimedeltaIndex(
@@ -578,6 +520,7 @@ def test_index_set_operations(args):
         py_output=I.append(pd.Index(J)).unique(),
         sort_output=True,
         dist_test=dist_test,
+        check_dtype=False,
     )
 
     # Bodo diverges from the Pandas API for intersection by returning in a possibly
@@ -590,14 +533,21 @@ def test_index_set_operations(args):
         sort_output=True,
         dist_test=dist_test,
         only_1D=True,
+        check_dtype=False,
     )
 
     # Bodo diverges from the Pandas API for difference and symmetric_difference
     # by returning in a possibly different order, and always converting RangeIndex
     # to NumericIndex.
-    check_func(impl3, (I, J), sort_output=True, dist_test=dist_test)
-    check_func(impl3, (pd.Index(J), I), sort_output=True, dist_test=dist_test)
-    check_func(impl4, (I, J), sort_output=True, dist_test=dist_test)
+    check_func(impl3, (I, J), sort_output=True, dist_test=dist_test, check_dtype=False)
+    check_func(
+        impl3,
+        (pd.Index(J), I),
+        sort_output=True,
+        dist_test=dist_test,
+        check_dtype=False,
+    )
+    check_func(impl4, (I, J), sort_output=True, dist_test=dist_test, check_dtype=False)
 
 
 @pytest.mark.parametrize(
@@ -700,24 +650,38 @@ def test_index_to_series(args):
     dist_test_A = isinstance(index, pd.RangeIndex) and index.step < 0
     dist_test_B = isinstance(index, pd.RangeIndex) and index.step < 0
 
-    check_func(impl1, (index,), dist_test=dist_test_A)
-    check_func(impl2, (index,), dist_test=dist_test_A)
-    check_func(impl3, (index, other), dist_test=dist_test_A)
-    check_func(impl4, (index, other), dist_test=dist_test_A)
+    check_func(impl1, (index,), dist_test=dist_test_A, check_dtype=False)
+    check_func(impl2, (index,), dist_test=dist_test_A, check_dtype=False)
+    check_func(impl3, (index, other), dist_test=dist_test_A, check_dtype=False)
+    check_func(impl4, (index, other), dist_test=dist_test_A, check_dtype=False)
     if not isinstance(other, pd.MultiIndex):
-        check_func(impl3, (other, index), dist_test=dist_test_B)
+        check_func(impl3, (other, index), dist_test=dist_test_B, check_dtype=False)
 
     # Passing in other iterables for index not supported for Timedelta or Binary.
     # Lists/tuples not supported for distributed tests.
     if not isinstance(other[0], (bytes, pd._libs.tslibs.timedeltas.Timedelta)):
-        check_func(impl3, (index, list(other)), dist_test=False)
-        check_func(impl3, (index, pd.Series(other)), dist_test=dist_test_A)
-        check_func(impl3, (index, other.to_numpy()), dist_test=dist_test_A)
+        check_func(impl3, (index, list(other)), dist_test=False, check_dtype=False)
+        check_func(
+            impl3, (index, pd.Series(other)), dist_test=dist_test_A, check_dtype=False
+        )
+        check_func(
+            impl3, (index, other.to_numpy()), dist_test=dist_test_A, check_dtype=False
+        )
     if not isinstance(index[0], (bytes, pd._libs.tslibs.timedeltas.Timedelta)):
-        check_func(impl3, (other, tuple(index)), dist_test=False)
+        check_func(impl3, (other, tuple(index)), dist_test=False, check_dtype=False)
         if not isinstance(other, pd.MultiIndex):
-            check_func(impl4, (other, pd.Series(index)), dist_test=dist_test_B)
-            check_func(impl4, (other, index.to_numpy()), dist_test=dist_test_B)
+            check_func(
+                impl4,
+                (other, pd.Series(index)),
+                dist_test=dist_test_B,
+                check_dtype=False,
+            )
+            check_func(
+                impl4,
+                (other, index.to_numpy()),
+                dist_test=dist_test_B,
+                check_dtype=False,
+            )
 
 
 @pytest.mark.parametrize(
@@ -772,18 +736,18 @@ def test_index_to_frame(index):
         return index.to_frame(name=[7, "r", 13], index=False)
 
     dist_test = not (isinstance(index, pd.RangeIndex) and index.step < 0)
-    check_func(impl1, (index,), dist_test=dist_test)
-    check_func(impl2, (index,), dist_test=dist_test)
+    check_func(impl1, (index,), dist_test=dist_test, check_dtype=False)
+    check_func(impl2, (index,), dist_test=dist_test, check_dtype=False)
     if not isinstance(index, pd.MultiIndex):
-        check_func(impl3, (index,), dist_test=dist_test)
-        check_func(impl4, (index,), dist_test=dist_test)
+        check_func(impl3, (index,), dist_test=dist_test, check_dtype=False)
+        check_func(impl4, (index,), dist_test=dist_test, check_dtype=False)
     else:
         if len(index.levels) == 2:
-            check_func(impl5, (index,), dist_test=dist_test)
-            check_func(impl6, (index,), dist_test=dist_test)
+            check_func(impl5, (index,), dist_test=dist_test, check_dtype=False)
+            check_func(impl6, (index,), dist_test=dist_test, check_dtype=False)
         elif len(index.levels) == 3:
-            check_func(impl7, (index,), dist_test=dist_test)
-            check_func(impl8, (index,), dist_test=dist_test)
+            check_func(impl7, (index,), dist_test=dist_test, check_dtype=False)
+            check_func(impl8, (index,), dist_test=dist_test, check_dtype=False)
 
 
 @pytest.mark.parametrize(
@@ -988,20 +952,20 @@ def test_index_sort_values(index):
 
     # RangeIndex distributed sort_values not supported yet [BE-2944] & [BE-3008]
     dist_test = not (isinstance(index, pd.RangeIndex))
-    check_func(impl1, (index,), dist_test=dist_test)
-    check_func(impl2, (index,), dist_test=dist_test)
+    check_func(impl1, (index,), dist_test=dist_test, check_dtype=False)
+    check_func(impl2, (index,), dist_test=dist_test, check_dtype=False)
     # If the Index is numerical, test alternative placement of nulls and
     # verify nondestructiveness
-    if isinstance(index, pd.core.indexes.numeric.Int64Index):
-        check_func(impl3, (index,), dist_test=dist_test)
-        check_func(impl4, (index,), dist_test=dist_test)
-        check_func(impl5, (index,), dist_test=False)
+    if index.dtype == np.int64:
+        check_func(impl3, (index,), dist_test=dist_test, check_dtype=False)
+        check_func(impl4, (index,), dist_test=dist_test, check_dtype=False)
+        check_func(impl5, (index,), dist_test=False, check_dtype=False)
 
 
 @pytest.mark.parametrize(
     "index",
     [
-        pd.Index([13, -21, 0, 1, 1, 34, -2, 3, 55, 5, 88, -8]),
+        pd.Index([13, -21, 0, 1, 4, 34, -2, 3, 55, 5, 88, -8]),
         pd.Index(
             pd.array(
                 [
@@ -1038,8 +1002,8 @@ def test_index_sort_values(index):
                 0.6825334098773845,
             ]
         ),
-        pd.Index([True, True, True, True, False, False, True]),
-        pd.Index(["a", "A", "alpha", "AAA", "a", "aaa", "alphabet", ""]),
+        pd.Index([True, False]),
+        pd.Index(["a", "A", "alpha", "AAA", "b", "aaa", "alphabet", ""]),
         pd.Index(
             [
                 b"c",
@@ -1047,8 +1011,8 @@ def test_index_sort_values(index):
                 b"CCC",
                 b"cookies",
                 b"COOKIE",
-                b"cookie",
-                b"CoOkIe",
+                b"cookie2",
+                b"CoOkIe3",
                 b"ccc",
             ]
         ),
@@ -1072,11 +1036,13 @@ def test_index_sort_values(index):
                 "2 seconds",
                 "10 minutes",
                 "10 days",
-                "10 minutes",
+                "15 minutes",
                 "5 seconds",
             ]
         ),
-        pd.date_range(start="2018-01-10", end="2019-01-10", periods=13),
+        pytest.param(
+            pd.date_range(start="2018-01-10", end="2019-01-10", periods=13),
+        ),
         pd.DatetimeIndex(
             pd.array(
                 [
@@ -1088,26 +1054,26 @@ def test_index_sort_values(index):
                 ]
             )
         ),
-        pd.CategoricalIndex([1, 5, 2, 1, 0, 1, 5, 2, 1, 3, 1, 5, 2, 5, 1]),
         pytest.param(
-            pd.CategoricalIndex(pd.array([None, 15, 14, 14, 14, 11, 12, 10, 15, None])),
+            pd.CategoricalIndex([1, 5, 2, 0]),
+        ),
+        pytest.param(
+            pd.CategoricalIndex(pd.array([None, 15, 14, 11, 12, 10, None])),
             marks=pytest.mark.slow,
         ),
         pytest.param(
-            pd.CategoricalIndex(
-                [0.5, 0.18, 0.5, 0.18, 0.07, 0.46, 0.46, 0.5, 0.72, 0.5]
-            ),
+            pd.CategoricalIndex([0.5, 0.18, 0.07, 0.46, 0.72]),
             marks=pytest.mark.slow,
         ),
         pytest.param(
-            pd.CategoricalIndex(["A", "B", "c", "a", "a", "C", "A", "B"]),
+            pd.CategoricalIndex(["A", "B", "c", "a", "C"]),
             marks=pytest.mark.slow,
         ),
         pytest.param(
-            pd.CategoricalIndex([True, False, False, False, False]),
+            pd.CategoricalIndex([True, False]),
             marks=pytest.mark.slow,
         ),
-        pd.PeriodIndex(
+        pd.PeriodIndex.from_fields(
             year=[2000, 2002, 2001, 2001, 2001, 2004], quarter=[1, 1, 1, 3, 2, 1]
         ),
         pytest.param(
@@ -1263,10 +1229,12 @@ def test_index_get_loc_error_checking():
         pd.TimedeltaIndex(
             ["1 days", "2 days", "3 days", "2 days", "3 hours", "2 minutes"]
         ),
-        pd.PeriodIndex(
+        pd.PeriodIndex.from_fields(
             year=[2000, 2000, 2001, 2001, 2000, 2004], quarter=[2, 2, 2, 3, 1, 1]
         ),
-        pd.period_range(start="2017-01-01", end="2018-01-01", freq="M"),
+        pytest.param(
+            pd.period_range(start="2017-01-01", end="2018-01-01", freq="M"),
+        ),
     ],
 )
 def test_index_argminmax(index, memory_leak_check):
@@ -1286,20 +1254,133 @@ def test_index_argminmax(index, memory_leak_check):
 @pytest.mark.parametrize(
     "index",
     [
-        pd.Index([1, 5, 2, 1, 0]),
-        pd.Index([0.5, -13.0, -0.5, 2.75, 0.5, 64.1]),
-        pd.Index(pd.array([None, 1, None, 5, 2, 1, 3, None, None])),
-        pd.Index([True, True, True, False, True]),
-        pd.Index(pd.array([True, True, True, False, True])),
-        pd.RangeIndex(0, 10, 1),
-        pd.RangeIndex(-100, 100, 7),
-        pd.RangeIndex(100, -100, -9),
-        pd.RangeIndex(0, 10, -1),
-        pd.CategoricalIndex([1, 5, 1, 1, 2, 1, 5, 2, 1, 3], ordered=True),
-        pd.CategoricalIndex(list("ZEBRALIBRARY"), ordered=True),
+        pytest.param(
+            pd.Index([1, 5, 2, 1, 0, None], dtype=pd.Int32Dtype()), id="integer"
+        ),
+        pytest.param(pd.Index([0.5, -13.0, -0.5, 2.75, 0.5, 64.1]), id="float"),
+        pytest.param(
+            pd.Index(
+                [None, True, None, False, False, True, None, None],
+                dtype=pd.BooleanDtype(),
+            ),
+            id="boolean",
+        ),
+        pytest.param(pd.RangeIndex(0, 10, 1), id="range_simple"),
+        pytest.param(pd.RangeIndex(-100, 100, 7), id="range_skip"),
+        pytest.param(pd.RangeIndex(100, -100, -9), id="range_reverse_skip"),
+        pytest.param(pd.RangeIndex(0, 10, -1), id="range_reverse_simple"),
+        pytest.param(
+            pd.Index([hex(3**i) for i in range(10)]),
+            id="string",
+            marks=pytest.mark.skip(reason="min/max on string index unsupported"),
+        ),
+        pytest.param(
+            pd.Index([bytes(hex(5**i), encoding="utf-8") for i in range(10)]),
+            id="binary",
+            marks=pytest.mark.skip(reason="min/max on binary index unsupported"),
+        ),
+        pytest.param(
+            pd.Index(
+                [
+                    decimal.Decimal("2014.1"),
+                    None,
+                    decimal.Decimal("-3.1415"),
+                    decimal.Decimal("128"),
+                    decimal.Decimal("125.81103"),
+                ]
+            ),
+            id="decimal",
+        ),
+        pytest.param(
+            pd.Index([bodo.Time(nanosecond=10**i) for i in range(12)]), id="time"
+        ),
+        pytest.param(
+            pd.Index([datetime.date.fromordinal(738886 + i**2) for i in range(12)]),
+            id="date",
+        ),
+        pytest.param(
+            pd.Index([pd.Timedelta(hours=2**i) for i in range(12)]), id="timedelta"
+        ),
+        pytest.param(
+            pd.Index(
+                [
+                    pd.Timestamp("2020", tz="US/Pacific") + pd.Timedelta(hours=3**i)
+                    for i in range(12)
+                ]
+            ),
+            id="timestamp_naive",
+        ),
+        pytest.param(
+            pd.Index(
+                [pd.Timestamp("2020") + pd.Timedelta(hours=3**i) for i in range(12)]
+            ),
+            id="timestamp_timezone",
+        ),
+        pytest.param(
+            pd.CategoricalIndex([1, 5, 1, 1, 2, 1, 5, 2, 1, 3], ordered=True),
+            id="ord_cat_int",
+        ),
+        pytest.param(
+            pd.CategoricalIndex(list("ZEBRALIBRARY"), ordered=True), id="ord_cat_str"
+        ),
+        pytest.param(
+            pd.CategoricalIndex(
+                [bytes(hex(5**i), encoding="utf-8") for i in range(10)], ordered=True
+            ),
+            id="ord_cat_binary",
+        ),
+        pytest.param(
+            pd.CategoricalIndex(
+                [
+                    decimal.Decimal("2014.1"),
+                    None,
+                    decimal.Decimal("-3.1415"),
+                    decimal.Decimal("128"),
+                    decimal.Decimal("125.81103"),
+                ],
+                ordered=True,
+            ),
+            id="ord_cat_decimal",
+        ),
+        pytest.param(
+            pd.CategoricalIndex(
+                [bodo.Time(nanosecond=10**i) for i in range(12)], ordered=True
+            ),
+            id="ord_cat_time",
+        ),
+        pytest.param(
+            pd.CategoricalIndex(
+                [datetime.date.fromordinal(738886 + i**2) for i in range(12)],
+                ordered=True,
+            ),
+            id="ord_cat_date",
+        ),
+        pytest.param(
+            pd.CategoricalIndex(
+                [pd.Timedelta(hours=2**i) for i in range(12)], ordered=True
+            ),
+            id="ord_cat_timedelta",
+        ),
+        pytest.param(
+            pd.CategoricalIndex(
+                [
+                    pd.Timestamp("2020", tz="US/Pacific") + pd.Timedelta(hours=3**i)
+                    for i in range(12)
+                ],
+                ordered=True,
+            ),
+            id="ord_cat_timestamp_naive",
+        ),
+        pytest.param(
+            pd.CategoricalIndex(
+                [pd.Timestamp("2020") + pd.Timedelta(hours=3**i) for i in range(12)],
+                ordered=True,
+            ),
+            id="ord_cat_timestamp_timezone",
+        ),
     ],
 )
-def test_numeric_range_min_max(index):
+def test_index_min_max(index):
     def impl1(I):
         return I.min()
 
@@ -1559,7 +1640,7 @@ def test_range_index_malformed(args):
         pd.RangeIndex(11),
         # pd.RangeIndex(3, 10, 2), # TODO: support
         pd.date_range(start="2018-04-24", end="2018-04-27", periods=3, name="A"),
-        pd.PeriodIndex(
+        pd.PeriodIndex.from_fields(
             year=[2015, 2015, 2016, 1026, 2018, 2018, 2019],
             month=[1, 2, 3, 1, 2, 3, 4],
             freq="M",
@@ -1605,7 +1686,7 @@ def test_datetime_field(dti_val, field, memory_leak_check):
     """tests datetime index.field. This should be inlined in series pass"""
 
     func_text = "def impl(A):\n"
-    func_text += "  return A.{}\n".format(field)
+    func_text += f"  return A.{field}\n"
     loc_vars = {}
     exec(func_text, {}, loc_vars)
     impl = loc_vars["impl"]
@@ -1638,8 +1719,31 @@ def test_datetime_max(dti_val, memory_leak_check):
     np.testing.assert_array_equal(bodo_func(dti_val), impl(dti_val))
 
 
+def test_tz_aware_datetime_max_min(memory_leak_check):
+    def max_impl(A):
+        return A.max()
+
+    def min_impl(A):
+        return A.min()
+
+    dti_val = pd.date_range(
+        start="2018-04-24",
+        end="2018-04-30",
+        periods=10,
+        name="A",
+        tz="America/Los_Angeles",
+    )
+
+    bodo_func = bodo.jit(min_impl)
+    np.testing.assert_array_equal(bodo_func(dti_val), min_impl(dti_val))
+
+    bodo_func = bodo.jit(max_impl)
+    np.testing.assert_array_equal(bodo_func(dti_val), max_impl(dti_val))
+
+
 def test_datetime_sub(dti_val, memory_leak_check):
     t = dti_val.min()  # Timestamp object
+
     # DatetimeIndex - Timestamp
     def impl(A, t):
         return A - t
@@ -1722,11 +1826,11 @@ def test_binary_index_constant_lowering(memory_leak_check):
         return si
 
     bodo_func = bodo.jit(distributed=False)(impl)
-    pd.testing.assert_index_equal(bodo_func(), impl())
+    pd.testing.assert_index_equal(bodo_func(), impl(), exact=False, check_exact=False)
 
 
 def test_int64_index_constant_lowering(memory_leak_check):
-    idx = pd.Int64Index([-1, 43, 54, 65, 123])
+    idx = pd.Index([-1, 43, 54, 65, 123])
 
     def impl():
         return idx
@@ -1736,7 +1840,7 @@ def test_int64_index_constant_lowering(memory_leak_check):
 
 
 def test_uint64_index_constant_lowering(memory_leak_check):
-    idx = pd.UInt64Index([1, 43, 54, 65, 123])
+    idx = pd.Index([1, 43, 54, 65, 123])
 
     def impl():
         return idx
@@ -1746,7 +1850,7 @@ def test_uint64_index_constant_lowering(memory_leak_check):
 
 
 def test_float64_index_constant_lowering(memory_leak_check):
-    idx = pd.Float64Index([1.2, 43.4, 54.7, 65, 123])
+    idx = pd.Index([1.2, 43.4, 54.7, 65, 123])
 
     def impl():
         return idx
@@ -1792,7 +1896,7 @@ def test_datetime_getitem(dti_val, memory_leak_check):
 def test_datetime_str_comp(dti_val, comp, memory_leak_check):
     # string literal
     func_text = "def impl(A):\n"
-    func_text += '  return A {} "2015-01-23"\n'.format(comp)
+    func_text += f'  return A {comp} "2015-01-23"\n'
     loc_vars = {}
     exec(func_text, {}, loc_vars)
     impl = loc_vars["impl"]
@@ -1802,7 +1906,7 @@ def test_datetime_str_comp(dti_val, comp, memory_leak_check):
 
     # string passed in
     func_text = "def impl(A, s):\n"
-    func_text += "  return A {} s\n".format(comp)
+    func_text += f"  return A {comp} s\n"
     loc_vars = {}
     exec(func_text, {}, loc_vars)
     impl = loc_vars["impl"]
@@ -1855,6 +1959,7 @@ def test_init_datetime_index_array_analysis(memory_leak_check):
 
 def test_pd_date_range(memory_leak_check):
     """test pd.date_range() support with various argument combinations"""
+
     # start/end provided (default freq="D")
     def impl():
         return pd.date_range(start="2018-01-01", end="2018-01-08")
@@ -1980,10 +2085,10 @@ def test_init_timedelta_index_array_analysis(memory_leak_check):
 
 @pytest.mark.parametrize("field", bodo.hiframes.pd_timestamp_ext.timedelta_fields)
 def test_timedelta_field(timedelta_index_val, field, memory_leak_check):
-    """tests timdelta index.field. This should be inlined in series pass"""
+    """tests timedelta index.field. This should be inlined in series pass"""
 
     func_text = "def impl(A):\n"
-    func_text += "  return A.{}\n".format(field)
+    func_text += f"  return A.{field}\n"
     loc_vars = {}
     exec(func_text, {}, loc_vars)
     impl = loc_vars["impl"]
@@ -2041,9 +2146,11 @@ def test_interval_index_box(interval_index, memory_leak_check):
 @pytest.mark.parametrize(
     "period_index",
     [
-        pd.PeriodIndex(year=[2015, 2016, 2018], quarter=[1, 2, 3]),
+        pd.PeriodIndex.from_fields(year=[2015, 2016, 2018], quarter=[1, 2, 3]),
         pytest.param(
-            pd.PeriodIndex(year=[2015, 2016, 2018], month=[1, 2, 3], freq="M"),
+            pd.PeriodIndex.from_fields(
+                year=[2015, 2016, 2018], month=[1, 2, 3], freq="M"
+            ),
             marks=pytest.mark.slow,
         ),
     ],
@@ -2422,14 +2529,14 @@ def test_map(index, memory_leak_check):
 @pytest.mark.parametrize(
     "index",
     [
-        pd.Index([i for i in range(100)]),
+        pd.Index(list(range(100))),
         pytest.param(
-            pd.Index([i for i in range(100)], dtype="UInt64"), marks=pytest.mark.slow
+            pd.Index(list(range(100)), dtype="UInt64"), marks=pytest.mark.slow
         ),
         pytest.param(
-            pd.Index([i for i in range(100)], dtype="float64"), marks=pytest.mark.slow
+            pd.Index(list(range(100)), dtype="float64"), marks=pytest.mark.slow
         ),
-        pd.Index([i for i in range(100, -1, -1)]),
+        pd.Index(list(range(100, -1, -1))),
         pd.Index([1, 4, 3, 2, 5, 6, 4]),
         pytest.param(
             pd.date_range(start="2018-04-24", end="2018-04-27", periods=10),
@@ -2470,22 +2577,18 @@ def test_map(index, memory_leak_check):
 )
 def test_monotonicity(index, memory_leak_check):
     """
-    Test is_monotonic, is_monotonic_increasing, and is_monotonic_decreasing attributes for indices
+    Test is_monotonic_increasing, and is_monotonic_decreasing attributes for indices
     of type Int64Index, UInt64Index, Float64Index, DatetimeIndex, TimedeltaIndex, and RangeIndex.
     """
 
     def f1(index):
-        return index.is_monotonic
-
-    def f2(index):
         return index.is_monotonic_increasing
 
-    def f3(index):
+    def f2(index):
         return index.is_monotonic_decreasing
 
     check_func(f1, (index,))
     check_func(f2, (index,))
-    check_func(f3, (index,))
 
 
 def test_range_index_dce(memory_leak_check):
@@ -2506,7 +2609,7 @@ def test_range_index_dce(memory_leak_check):
             {"EXPR$0": S0.max(), "__bodo_dummy__1": S1.max()},
             index=pd.RangeIndex(0, 1, 1, name="my_copied_name"),
         )
-        df3 = df2[((df2["__bodo_dummy__1"] != 200))]
+        df3 = df2[(df2["__bodo_dummy__1"] != 200)]
         df4 = df3.loc[
             :,
             [
@@ -2612,7 +2715,7 @@ def test_range_index_dce(memory_leak_check):
         pd.RangeIndex(start=100, stop=0, step=-10),
         # Unskip after [BE-2812] is resolved (PeriodIndex.unique())
         pytest.param(
-            pd.PeriodIndex(
+            pd.PeriodIndex.from_fields(
                 year=[2000, 2000, 2001, 2001, 2001], quarter=[1, 1, 1, 3, 2]
             ),
             marks=pytest.mark.skip,
@@ -2706,7 +2809,7 @@ def test_index_unique(idx):
         ),
         pytest.param(
             (
-                pd.Index([1.0, 2.0, 3.0, 2.0, 1.0]),
+                pd.Index([1.0, 2.0, 3.0, 2.0, 1.0], dtype="Float64"),
                 pd.array([True, True, False, False, False]),
                 pd.Series([0.1, 0.2, 0.3, 0.4, 0.5]),
             ),
@@ -2861,11 +2964,11 @@ def test_index_unique(idx):
                 pd.array([True, False, False, True, True]),
                 pd.Series([0.1, 0.2, 0.3, 0.4, 0.5]),
             ),
-            marks=pytest.mark.slow,
+            marks=pytest.mark.skip(reason="Pandas still uses deprecated Float64Index"),
         ),
         pytest.param(
             (
-                pd.Index([0.1, 0.2, 0.3, 0.4, 0.5]),
+                pd.Index([0.1, 0.2, 0.3, 0.4, 0.5], dtype="Float64"),
                 pd.array([False, True, True, False, True]),
                 pd.Series([1, 2, 3, 4, 5]),
             ),
@@ -2897,13 +3000,8 @@ def test_index_where_putmask(args):
         isinstance(idx, pd.RangeIndex) and (idx.start != 0 or idx.step != 1)
     )
     check_func(impl1, (idx, con), dist_test=dist_test)
-    if isinstance(
-        idx,
-        (
-            pd.core.indexes.numeric.Int64Index,
-            pd.core.indexes.numeric.Float64Index,
-            pd.RangeIndex,
-        ),
+    if isinstance(idx, pd.RangeIndex) or isinstance(
+        bodo.typeof(idx), bodo.NumericIndexType
     ):
         check_func(impl2, (idx, con, np.nan), dist_test=dist_test)
     check_func(impl2, (idx, con, oth), dist_test=dist_test)
@@ -2999,7 +3097,7 @@ def test_index_where_putmask(args):
         pytest.param(
             pd.RangeIndex(start=100, stop=0, step=-10), marks=pytest.mark.slow
         ),
-        pd.PeriodIndex(
+        pd.PeriodIndex.from_fields(
             year=[2000, 2000, 2001, 2001, 2001, 2001], quarter=[1, 1, 1, 3, 3, 2]
         ),
         pd.period_range(start="2017-01-01", end="2018-01-01", freq="M"),
@@ -3408,6 +3506,7 @@ def test_index_unsupported(data):
 
 def test_heter_index_binop():
     """test binary operations on heterogeneous Index values"""
+
     # TODO(ehsan): fix Numba bugs for passing list literal to pd.Index
     def impl1():
         A = pd.Index(("A", 2))
@@ -3515,7 +3614,7 @@ def test_index_any_all(index):
 def test_index_cmp_ops(op, memory_leak_check):
     op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
     func_text = "def test_impl(S, other):\n"
-    func_text += "  return S {} other\n".format(op_str)
+    func_text += f"  return S {op_str} other\n"
     loc_vars = {}
     exec(func_text, {}, loc_vars)
     test_impl = loc_vars["test_impl"]
@@ -3534,7 +3633,7 @@ def test_index_cmp_ops(op, memory_leak_check):
     "index",
     [
         pd.Index([10, 12], dtype="Int64"),
-        pd.Index([10.1, 12.1], dtype="float64"),
+        pd.Index([10.1, 12.1], dtype="Float64"),
         pd.Index([10, 12], dtype="UInt64"),
         pd.date_range(start="2018-04-24", end="2018-04-27", periods=3, name="A"),
         pd.timedelta_range(start="1D", end="3D", name="A"),
@@ -3543,7 +3642,7 @@ def test_index_cmp_ops(op, memory_leak_check):
             pd.Index([b"sdhfa", b"asdf", bytes(5), b"", b"A", b"abjfdsb", b"ABCDF"]),
             id="binary_case",
         ),
-        pd.PeriodIndex(year=[2015, 2016, 2018], month=[1, 2, 3], freq="M"),
+        pd.PeriodIndex.from_fields(year=[2015, 2016, 2018], month=[1, 2, 3], freq="M"),
         pd.RangeIndex(10),
     ],
 )
@@ -3553,12 +3652,14 @@ def test_index_nbytes(index, memory_leak_check):
     def impl(idx):
         return idx.nbytes
 
+    n_pes = get_num_test_workers()
+
     # RangeIndexType has three int64 values, so the total is 24 bytes on
     # each rank.
     if isinstance(index, pd.RangeIndex):
         py_out = 24
         check_func(impl, (index,), py_output=py_out, dist_test=False)
-        check_func(impl, (index,), py_output=py_out * bodo.get_size(), only_1D=True)
+        check_func(impl, (index,), py_output=py_out * n_pes, only_1D=True)
     # String/BinaryIndex has three 3 underlying arrays (data, offsets, null_bit_map)
 
     # In the String example: 15 characters,
@@ -3569,7 +3670,7 @@ def test_index_nbytes(index, memory_leak_check):
     # + 9 (For each rank we get an extra 8 bytes for offset
     # and 1 byte for null_bit_map)
     elif isinstance(index[0], str):
-        py_out = 80 + (bodo.get_size() - 1) * 9
+        py_out = 80 + (n_pes - 1) * 9
         check_func(impl, (index,), py_output=py_out, only_1D=True)
 
     # In the Binary example:
@@ -3579,7 +3680,7 @@ def test_index_nbytes(index, memory_leak_check):
     # Total = 92 bytes for sequential case
     # + 9 (For each rank we get an extra 8 bytes for offset
     elif isinstance(index[0], bytes):
-        py_out = 92 + (bodo.get_size() - 1) * 9
+        py_out = 92 + (n_pes - 1) * 9
         check_func(impl, (index,), py_output=py_out, only_1D=True)
 
     # PeriodIndex example:
@@ -3587,15 +3688,19 @@ def test_index_nbytes(index, memory_leak_check):
     # null_bit_map= 1 byte per rank
     # Total = 24 + num_ranks bytes
     elif isinstance(index, pd.PeriodIndex):
-        py_out = 24 + bodo.get_size()
+        py_out = 24 + n_pes
         check_func(impl, (index,), py_output=py_out, only_1D=True)
 
     # Nullable int index example:
     # data = 16 bytes
     # null_bit_map= 1 byte if 1 rank, 2 bytes if > 1 rank
     # Total = 16 + num_ranks bytes
-    elif isinstance(index, pd.Index) and str(index.dtype) in ["Int64", "UInt64"]:
-        py_out = 16 + (1 if bodo.get_size() == 1 else 2)
+    elif isinstance(index, pd.Index) and str(index.dtype) in [
+        "Int64",
+        "UInt64",
+        "Float64",
+    ]:
+        py_out = 16 + (1 if n_pes == 1 else 2)
         check_func(impl, (index,), py_output=py_out, only_1D=True)
 
     else:
@@ -3644,7 +3749,6 @@ def test_index_simple_attributes(index):
             idx.ndim,
             idx.nlevels,
             idx.empty,
-            idx.is_all_dates,
             idx.inferred_type,
             idx.name,
             idx.names,
@@ -3668,7 +3772,9 @@ def test_index_simple_attributes(index):
     # Bodo diverges from the Pandas API by always returning the numpy dtype in
     # ambiguous cases.
     if isinstance(index.dtype, np.dtype):
-        check_func(impl3, (index,), dist_test=dist_test)
+        check_func(
+            impl3, (index,), dist_test=dist_test, convert_to_nullable_float=False
+        )
 
 
 @pytest.mark.parametrize(
@@ -3696,7 +3802,6 @@ def test_interval_index_simple_attributes(index):
             idx.ndim,
             idx.nlevels,
             idx.empty,
-            idx.is_all_dates,
             idx.inferred_type,
             idx.name,
             idx.names,
@@ -3737,7 +3842,6 @@ def test_period_index_simple_attributes(index):
             idx.ndim,
             idx.nlevels,
             idx.empty,
-            idx.is_all_dates,
             idx.inferred_type,
             idx.name,
             idx.names,
@@ -3825,7 +3929,7 @@ def test_timedelta_max_all_na():
     [
         pd.Index([1, 2, 3, 4, 5]),
         pd.Index([-5.0, -6.1, -7.2, 3.8, -6.1], name="f"),
-        pd.date_range("2018-01-01", "2018-06-01", freq="M"),
+        pd.date_range("2018-01-01", "2018-06-01", freq="ME"),
         pd.timedelta_range("1D", "7D"),
         pd.Index(["A", "E", "I", "O", "U", "A"]),
         pd.CategoricalIndex([1, 1, 2, 1, 1, 2, 3, 2, 1]),
@@ -3849,11 +3953,14 @@ def test_index_repeat(index):
         return index.repeat(n)
 
     dist_test = not (isinstance(index, pd.RangeIndex) and index.step < 0)
-    check_func(impl, (index, 1), dist_test=dist_test)
-    check_func(impl, (index, 3), dist_test=dist_test)
-    check_func(impl, (index, 0), dist_test=dist_test)
+    check_func(impl, (index, 1), dist_test=dist_test, check_dtype=False)
+    check_func(impl, (index, 3), dist_test=dist_test, check_dtype=False)
+    check_func(impl, (index, 0), dist_test=dist_test, check_dtype=False)
     check_func(
-        impl, (index, np.array([i % 3 for i in range(len(index))])), dist_test=dist_test
+        impl,
+        (index, np.array([i % 3 for i in range(len(index))])),
+        dist_test=dist_test,
+        check_dtype=False,
     )
 
 
@@ -3867,7 +3974,7 @@ def test_index_repeat(index):
             pd.Index([b"a", b"b", b"c", b"d", b"e"]), "a", id="BinaryIndexType"
         ),
         pytest.param(
-            pd.PeriodIndex(
+            pd.PeriodIndex.from_fields(
                 year=[2000, 2001, 2002, 2003, 2004], quarter=[1, 2, 3, 2, 1]
             ),
             "a",
@@ -3962,6 +4069,10 @@ def test_index_rename_heter():
                 ],
             ),
             id="PeriodIndexType",
+            marks=pytest.mark.skipif(
+                bodo.tests.utils.test_spawn_mode_enabled,
+                reason="[BSE-4148] need boxing support for PeriodIndex with nulls",
+            ),
         ),
         pytest.param(
             pd.DatetimeIndex(

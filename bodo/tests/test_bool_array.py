@@ -1,13 +1,12 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 import operator
 
 import numba
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 import pytest
 
-import bodo
-from bodo.tests.utils import check_func
+from bodo.tests.utils import check_func, get_num_test_workers
 
 
 @pytest.fixture(
@@ -74,6 +73,18 @@ def test_unbox(bool_arr_value, memory_leak_check):
 
 
 @pytest.mark.slow
+def test_unbox_arrow_ext(memory_leak_check):
+    """Make sure boxing/unboxing works for ArrowExtensionArray input"""
+
+    # unbox and box
+    def impl(arr_arg):
+        return arr_arg
+
+    A = pd.arrays.ArrowExtensionArray(pa.array([True, None, False, True, True]))
+    check_func(impl, (A,))
+
+
+@pytest.mark.slow
 def test_boolean_dtype(memory_leak_check):
     # unbox and box
     def impl(d):
@@ -104,7 +115,7 @@ def test_cmp(op, memory_leak_check):
     """Test comparison of two boolean arrays"""
     op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
     func_text = "def test_impl(A1, A2):\n"
-    func_text += "  return A1.values {} A2.values\n".format(op_str)
+    func_text += f"  return A1.values {op_str} A2.values\n"
     loc_vars = {}
     exec(func_text, {}, loc_vars)
     test_impl = loc_vars["test_impl"]
@@ -195,9 +206,7 @@ def test_constant_lowering(bool_arr_value, memory_leak_check):
     def impl():
         return bool_arr_value
 
-    pd.testing.assert_series_equal(
-        pd.Series(bodo.jit(impl)()), pd.Series(bool_arr_value), check_dtype=False
-    )
+    check_func(impl, (), check_dtype=False, only_seq=True)
 
 
 @pytest.mark.smoke
@@ -263,9 +272,10 @@ def test_bool_arr_nbytes(bool_arr_value, memory_leak_check):
     def impl(A):
         return A.nbytes
 
-    py_out = 5 + bodo.get_size()  # 1 extra byte for null_bit_map per rank
+    # 1 byte per rank for data and 1 per null bitmap
+    py_out = 2 * get_num_test_workers()
     check_func(impl, (bool_arr_value,), py_output=py_out, only_1D=True)
-    check_func(impl, (bool_arr_value,), py_output=6, only_seq=True)
+    check_func(impl, (bool_arr_value,), py_output=2, only_seq=True)
 
 
 def test_or_null(memory_leak_check):
@@ -361,3 +371,70 @@ def test_and_null_scalar(memory_leak_check):
     check_func(test_impl, (arr, False))
     check_func(test_impl, (True, arr))
     check_func(test_impl, (False, arr))
+
+
+@pytest.mark.parametrize(
+    "arr",
+    [
+        pytest.param(pd.array([True] * 10, dtype="boolean"), id="true"),
+        pytest.param(
+            pd.array([True, False] + [True] * 10, dtype="boolean"),
+            id="false",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.array([True] * 10 + [None], dtype="boolean"),
+            id="true-na",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.array([True, False] + [True] * 10 + [None], dtype="boolean"),
+            id="false-na",
+        ),
+        pytest.param(
+            pd.array([None] * 10, dtype="boolean"), id="all-na", marks=pytest.mark.slow
+        ),
+        pytest.param(pd.array([], dtype="boolean"), id="empty", marks=pytest.mark.slow),
+    ],
+)
+@pytest.mark.slow
+def test_all(arr, memory_leak_check):
+    """Test BooleanArray.all()"""
+
+    def impl(A):
+        return A.all()
+
+    check_func(impl, (arr,))
+
+
+def test_to_numpy(memory_leak_check):
+    """Test BooleanArray.to_numpy()"""
+
+    # Note: we don't test with NAs because currently we cast null to False,
+    # which won't match pandas
+    arr = pd.array([True] * 10 + [False] * 10, dtype="boolean")
+
+    def impl(A):
+        return A.to_numpy()
+
+    check_func(impl, (arr,))
+
+
+def test_arr_astype_same(memory_leak_check):
+    """Test BooleanArray.astype(pd.BooleanDtype()) is supported."""
+
+    def impl(A):
+        return A.astype(pd.BooleanDtype())
+
+    arr = pd.array([True] * 10 + [False] * 10, dtype="boolean")
+    check_func(impl, (arr,))
+
+
+def test_series_astype_same(memory_leak_check):
+    """Test BooleanSeries.astype(pd.BooleanDtype()) is supported."""
+
+    def impl(S):
+        return S.astype(pd.BooleanDtype())
+
+    S = pd.Series([True] * 10 + [False] * 10, dtype="boolean")
+    check_func(impl, (S,))

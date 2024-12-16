@@ -1,7 +1,6 @@
-from typing import List
-
 import pyarrow as pa
 import pyarrow.jvm
+
 from bodo_iceberg_connector.errors import IcebergError
 from bodo_iceberg_connector.py4j_support import (
     convert_list_to_java,
@@ -10,12 +9,24 @@ from bodo_iceberg_connector.py4j_support import (
     launch_jvm,
 )
 
+# This is the key used for storing the Iceberg Field ID in the
+# metadata of the Arrow fields.
+# Taken from: https://github.com/apache/arrow/blob/c23a097965b5c626cbc91b229c76a6c13d36b4e8/cpp/src/parquet/arrow/schema.cc#L245.
+# Must match the value used in BodoArrowSchemaUtil.java and
+# bodo/io/iceberg.py.
+ICEBERG_FIELD_ID_MD_KEY = "PARQUET:field_id"
+
+# PyArrow stores the metadata keys and values as bytes, so we need
+# to use this encoded version when trying to access existing
+# metadata in fields.
+b_ICEBERG_FIELD_ID_MD_KEY = str.encode(ICEBERG_FIELD_ID_MD_KEY)
+
 
 def pyarrow_to_iceberg_schema_str(arrow_schema: pa.Schema) -> str:
     """Convert a PyArrow schema to an JSON-encoded Iceberg schema string"""
     gateway = launch_jvm()
     schema = arrow_to_iceberg_schema(arrow_schema)
-    return gateway.jvm.org.apache.iceberg.SchemaParser.toJson(schema)
+    return gateway.jvm.org.apache.iceberg.SchemaParser.toJson(schema)  # type: ignore
 
 
 def arrow_schema_j2py(jvm_schema) -> pa.Schema:
@@ -125,53 +136,121 @@ def arrow_type_j2py(jvm_field) -> pa.DataType:
         return pa.struct(fields)
 
     elif type_str == "Map":
-        # For some reason, the first child field of a Map is another Map
-        # The second Map contains the key and value types
-        # TODO: Check if we can pass in fields to pyarrow.map_ or pyarrow.MapType for key and value
-        # Would no longer need arrow_type_j2py and could only have arrow_field_j2py
-        # implement conversion for complex types
-        key_value = jvm_field.getChildren()[0].getChildren()
-        key = arrow_type_j2py(key_value[0])
-        value = arrow_type_j2py(key_value[1])
+        key_value = jvm_field.getChildren()
+        key = arrow_field_j2py(key_value[0])
+        value = arrow_field_j2py(key_value[1])
         return pa.map_(key, value)
 
-    # Union, Dictionary and FixedSizeList should not be relavent to Iceberg
+    # Union, Dictionary and FixedSizeList should not be relevant to Iceberg
     else:
         raise IcebergError(f"Unsupported Java Arrow type: {type_str}")
 
 
-def arrow_to_iceberg_schema(schema: pa.Schema):
+def convert_arrow_field_to_large_types(field: pa.Field) -> pa.Field:
+    """
+    Convert an Arrow field to the corresponding large type for all
+    non-large BINARY, STRING, and LIST types.
+
+    Args:
+        field (pa.Field): The field to convert.
+
+    Returns:
+        pa.Field: The new field with possibly the type information modified.
+    """
+    field_type = field.type
+    if pa.types.is_struct(field_type):
+        new_fields = [convert_arrow_field_to_large_types(f) for f in field_type]
+        new_type = pa.struct(new_fields)
+    elif pa.types.is_map(field_type):
+        key_field = convert_arrow_field_to_large_types(field_type.key_field)
+        item_field = convert_arrow_field_to_large_types(field_type.item_field)
+        new_type = pa.map_(key_field, item_field)
+    elif (
+        pa.types.is_list(field_type)
+        or pa.types.is_large_list(field_type)
+        or pa.types.is_fixed_size_list(field_type)
+    ):
+        elem_field = convert_arrow_field_to_large_types(field_type.field(0))
+        new_type = pa.large_list(elem_field)
+    elif pa.types.is_binary(field_type) or pa.types.is_fixed_size_binary(field_type):
+        new_type = pa.large_binary()
+    elif pa.types.is_string(field_type):
+        new_type = pa.large_string()
+    else:
+        new_type = field_type
+    return field.with_type(new_type)
+
+
+def convert_arrow_schema_to_large_types(schema: pa.Schema) -> pa.Schema:
+    """
+    Converts an arrow schema derived from an Iceberg table's type
+    information and converts all non-large BINARY, STRING, and LIST
+    types to the "LARGE" variant.
+
+    Args:
+        schema (pa.Schema): The original schema to convert.
+
+    Returns:
+        pa.Schema: The new schema with the converted types.
+    """
+    new_fields = [convert_arrow_field_to_large_types(f) for f in schema]
+    return pa.schema(new_fields)
+
+
+def arrow_to_iceberg_schema(
+    schema: pa.Schema, column_comments: list[str | None] | None = None
+):
     """
     Construct an Iceberg Java Schema object from a PyArrow Schema instance.
     Unlike reading where we convert from Iceberg to Java Arrow to PyArrow,
     we will directory convert from PyArrow to Iceberg.
 
     :param schema: PyArrow schema to convert
+    :column_comments: Column comments to include. None means no comments are provided.
+    If not None, column_comments[i] = None means no comments for i-th column.
+    If len(column_comments) < # columns, column_comments[i] are treated as None for i >= len(column_comments)
     :return: Equivalent org.apache.iceberg.Schema object
     """
-    field_id_count = [len(schema) + 1]  # Hack in order to pass int by reference
     nested_fields = []
     for id in range(len(schema)):
         field = schema.field(id)
-        nested_fields.append(arrow_to_iceberg_field(id + 1, field, field_id_count))
+        nested_fields.append(
+            arrow_to_iceberg_field(
+                field,
+                None
+                if (column_comments is None or len(column_comments) <= id)
+                else column_comments[id],
+            )
+        )
 
     IcebergSchema = get_iceberg_schema_class()
     return IcebergSchema(convert_list_to_java(nested_fields))
 
 
-def arrow_to_iceberg_field(id: int, field: pa.Field, field_id_count: List[int]):
+def arrow_to_iceberg_field(field: pa.Field, column_comment=None):
     IcebergTypes = get_iceberg_type_class()
-    return IcebergTypes.NestedField.of(
-        id,
-        field.nullable,
-        field.name,
-        arrow_to_iceberg_type(field.type, field_id_count),
+    iceberg_field_id = int(field.metadata[b_ICEBERG_FIELD_ID_MD_KEY])
+    return (
+        IcebergTypes.NestedField.of(
+            iceberg_field_id,
+            field.nullable,
+            field.name,
+            arrow_to_iceberg_type(field.type),
+        )
+        if column_comment is None
+        else IcebergTypes.NestedField.of(
+            iceberg_field_id,
+            field.nullable,
+            field.name,
+            arrow_to_iceberg_type(field.type),
+            column_comment,
+        )
     )
 
 
-def arrow_to_iceberg_type(field_type: pa.DataType, field_id_count: List[int]):
+def arrow_to_iceberg_type(field_type: pa.DataType):
     """
-    Convert a PyArrow data type to the correspoding Iceberg type.
+    Convert a PyArrow data type to the corresponding Iceberg type.
     Handling cases when some PyArrow types are not supported in Iceberg.
 
     :param field_type: PyArrow DataType to convert
@@ -181,17 +260,23 @@ def arrow_to_iceberg_type(field_type: pa.DataType, field_id_count: List[int]):
 
     if pa.types.is_null(field_type):
         raise IcebergError("Currently Cant Handle Purely Null Fields")
-    elif pa.types.is_int32(field_type):
+    elif (
+        pa.types.is_int32(field_type)
+        or pa.types.is_int16(field_type)
+        or pa.types.is_int8(field_type)
+        or pa.types.is_uint16(field_type)
+        or pa.types.is_uint8(field_type)
+    ):
         return IcebergTypes.IntegerType.get()
-    elif pa.types.is_int64(field_type):
+    elif pa.types.is_int64(field_type) or pa.types.is_uint32(field_type):
         return IcebergTypes.LongType.get()
     elif pa.types.is_float32(field_type):
         return IcebergTypes.FloatType.get()
     elif pa.types.is_float64(field_type):
         return IcebergTypes.DoubleType.get()
-    elif pa.types.is_string(field_type):
+    elif pa.types.is_string(field_type) or pa.types.is_large_string(field_type):
         return IcebergTypes.StringType.get()
-    elif pa.types.is_binary(field_type):
+    elif pa.types.is_binary(field_type) or pa.types.is_large_binary(field_type):
         return IcebergTypes.BinaryType.get()
     elif pa.types.is_fixed_size_binary(field_type):
         return IcebergTypes.BinaryType.ofLength(field_type.byte_width)
@@ -210,27 +295,40 @@ def arrow_to_iceberg_type(field_type: pa.DataType, field_id_count: List[int]):
         return IcebergTypes.DecimalType.of(field_type.precision, field_type.scale)
 
     # Complex Types
-    elif pa.types.is_list(field_type) or pa.types.is_fixed_size_list(field_type):
-        iceberg_type = arrow_to_iceberg_type(field_type.value_type, field_id_count)
-        field_id = field_id_count[0]
-        field_id_count[0] += 1
+    elif (
+        pa.types.is_list(field_type)
+        or pa.types.is_fixed_size_list(field_type)
+        or pa.types.is_large_list(field_type)
+    ):
+        value_iceberg_type = arrow_to_iceberg_type(field_type.value_type)
+        value_field_id = int(field_type.value_field.metadata[b_ICEBERG_FIELD_ID_MD_KEY])
         return (
-            IcebergTypes.ListType.ofOptional(field_id, iceberg_type)
+            IcebergTypes.ListType.ofOptional(value_field_id, value_iceberg_type)
             if field_type.value_field.nullable
-            else IcebergTypes.ListType.ofRequired(field_id, iceberg_type)
+            else IcebergTypes.ListType.ofRequired(value_field_id, value_iceberg_type)
         )
-
     elif pa.types.is_struct(field_type):
-        id_offset = field_id_count[0]
         fields = []
-        for id, field in enumerate(field_type):
-            fields.append(arrow_to_iceberg_field(id + id_offset, field, field_id_count))
+        for i in range(field_type.num_fields):
+            fields.append(arrow_to_iceberg_field(field_type.field(i)))
 
-        field_id_count[0] += len(fields)
         struct_fields = convert_list_to_java(fields)
         return IcebergTypes.StructType.of(struct_fields)
+    elif pa.types.is_map(field_type):
+        key_iceberg_type = arrow_to_iceberg_type(field_type.key_type)
+        key_field_id = int(field_type.key_field.metadata[b_ICEBERG_FIELD_ID_MD_KEY])
+        item_iceberg_type = arrow_to_iceberg_type(field_type.item_type)
+        item_field_id = int(field_type.item_field.metadata[b_ICEBERG_FIELD_ID_MD_KEY])
 
+        return (
+            IcebergTypes.MapType.ofOptional(
+                key_field_id, item_field_id, key_iceberg_type, item_iceberg_type
+            )
+            if field_type.item_field.nullable
+            else IcebergTypes.MapType.ofRequired(
+                key_field_id, item_field_id, key_iceberg_type, item_iceberg_type
+            )
+        )
     # Other types unable to convert.
-    # Map is impossible due to no support in Bodo
     else:
-        raise IcebergError(f"Unsupported PyArrow DataType")
+        raise IcebergError(f"Unsupported PyArrow DataType: {field_type}")

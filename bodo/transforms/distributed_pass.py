@@ -1,13 +1,12 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
 Parallelizes the IR for distributed execution and inserts MPI calls.
 """
+
 import copy
 import hashlib
 import inspect
 import operator
 import sys
-import types as pytypes  # avoid confusion with numba.core.types
 import warnings
 from collections import defaultdict
 
@@ -46,7 +45,9 @@ import bodo
 import bodo.utils.utils
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.hiframes.pd_series_ext import SeriesType
+from bodo.hiframes.time_ext import TimeType
 from bodo.io import csv_cpp
+from bodo.ir.connector import log_limit_pushdown
 from bodo.libs.distributed_api import Reduce_Type
 from bodo.libs.str_ext import (
     string_type,
@@ -57,6 +58,7 @@ from bodo.transforms.distributed_analysis import (
     DistributedAnalysis,
     Distribution,
     _get_array_accesses,
+    _is_transposed_array,
     get_reduce_op,
 )
 from bodo.transforms.table_column_del_pass import remove_dead_table_columns
@@ -65,6 +67,7 @@ from bodo.utils.transform import (
     get_call_expr_arg,
     get_const_value_inner,
     set_call_expr_arg,
+    set_last_arg_to_true,
 )
 from bodo.utils.typing import (
     BodoError,
@@ -84,6 +87,7 @@ from bodo.utils.utils import (
     is_call,
     is_call_assign,
     is_expr,
+    is_ml_support_loaded,
     is_np_array_typ,
     is_slice_equiv_arr,
     is_whole_slice,
@@ -142,7 +146,7 @@ class DistributedPass:
 
     def __init__(
         self,
-        func_ir,
+        func_ir: ir.FunctionIR,
         typingctx,
         targetctx,
         typemap,
@@ -166,7 +170,6 @@ class DistributedPass:
         )
 
         self._dist_analysis = None
-        self._T_arrs = None  # set of transposed arrays (taken from analysis)
         # For each 1D parfor, map index variable name for the first dimension loop to
         # distributed start variable of the parfor
         self._1D_parfor_starts = {}
@@ -211,7 +214,6 @@ class DistributedPass:
         )
         self._dist_analysis = dist_analysis_pass.run()
 
-        self._T_arrs = dist_analysis_pass._T_arrs
         self._parallel_accesses = dist_analysis_pass._parallel_accesses
         if debug_prints():  # pragma: no cover
             print("distributions: ", self._dist_analysis)
@@ -241,7 +243,7 @@ class DistributedPass:
             deadcode_eliminated = False
             # If dead columns are pruned, run dead code elimination until there are no changes
             if deadcode_elim_can_make_changes:
-                # We extend numba's dead code eleminiation, through both remove_dead_extensions and in numba_compat.
+                # We extend numba's dead code elimination, through both remove_dead_extensions and in numba_compat.
                 # So we can use their remove_dead
                 while remove_dead(
                     self.func_ir.blocks,
@@ -251,7 +253,7 @@ class DistributedPass:
                 ):
                     deadcode_eliminated |= True
             # If we eliminated dead code, run these two passes again, and mark that we may need to
-            # rerun typing pass to perfrom filter pushdown
+            # rerun typing pass to perform filter pushdown
             flag = deadcode_eliminated
 
         # transform
@@ -297,9 +299,18 @@ class DistributedPass:
                 out_nodes = None
                 if type(inst) in distributed_run_extensions:
                     f = distributed_run_extensions[type(inst)]
-                    if isinstance(inst, bodo.ir.parquet_ext.ParquetReader) or (
+                    if isinstance(
+                        inst,
+                        (
+                            bodo.ir.parquet_ext.ParquetReader,
+                            bodo.ir.iceberg_ext.IcebergReader,
+                        ),
+                    ) or (
                         isinstance(inst, bodo.ir.sql_ext.SqlReader)
-                        and inst.db_type in ("iceberg", "snowflake")
+                        and inst.db_type == "snowflake"
+                        # If streaming SQL has pushed down another limit its not necessarily
+                        # safe to push down another limit as there may be a filter in the query.
+                        and (inst.chunksize is None or inst.limit is None)
                     ):
                         # check if getting shape and/or head of parquet dataset is
                         # enough for the program
@@ -313,7 +324,8 @@ class DistributedPass:
                             self.calltypes,
                             self.typingctx,
                             self.targetctx,
-                            meta_head_only_info,
+                            is_independent=False,  # is_independent is False by default
+                            meta_head_only_info=meta_head_only_info,
                         )
                     else:
                         out_nodes = f(
@@ -396,6 +408,16 @@ class DistributedPass:
         ):
             return self._run_array_size(inst.target, rhs.value, equiv_set, avail_vars)
 
+        # array.T on 2D array
+        if (
+            rhs.op == "getattr"
+            and rhs.attr == "T"
+            and self._is_1D_or_1D_Var_arr(rhs.value.name)
+            and isinstance(self.typemap[rhs.value.name], types.Array)
+            and self.typemap[rhs.value.name].ndim == 2
+        ):
+            return self._run_array_transpose(inst, rhs.value)
+
         # index.nbytes,
         # bodo_arrays.nbytes
         # (BooleanArrayType, DecimalArrayType, IntegerArrayType, ...)
@@ -449,7 +471,7 @@ class DistributedPass:
 
         return [inst]
 
-    def _run_call(self, assign, equiv_set, avail_vars):
+    def _run_call(self, assign: ir.Assign, equiv_set, avail_vars):
         lhs = assign.target.name
         rhs = assign.value
         scope = assign.target.scope
@@ -468,6 +490,9 @@ class DistributedPass:
             return out
         else:
             func_name, func_mod = fdef
+
+        if fdef == ("scalar_optional_getitem", "bodo.utils.indexing"):
+            return self._run_getitem_scalar_optional(assign, equiv_set, avail_vars)
 
         if (
             fdef == ("table_filter", "bodo.hiframes.table")
@@ -503,112 +528,187 @@ class DistributedPass:
             del self.calltypes[rhs]
             return nodes + new_nodes + [new_assign]
 
+        if fdef == ("interp_bin_search", "bodo.libs.array_kernels"):
+            if self._is_1D_or_1D_Var_arr(rhs.args[0].name):
+                set_last_arg_to_true(self, assign.value)
+
+        if fdef == ("sum_decimal_array", "bodo.libs.decimal_arr_ext"):
+            if self._is_1D_or_1D_Var_arr(rhs.args[0].name):
+                set_last_arg_to_true(self, assign.value)
+
+        if fdef == ("bodosql_listagg", "bodosql.kernels.listagg"):
+            if self._is_1D_or_1D_Var_arr(rhs.args[0].name):
+                set_last_arg_to_true(self, assign.value)
+
         if fdef == (
             "generate_table_nbytes",
             "bodo.utils.table_utils",
         ) and self._is_1D_or_1D_Var_arr(rhs.args[0].name):
-            self._set_last_arg_to_true(assign.value)
+            set_last_arg_to_true(self, assign.value)
+            return [assign]
+
+        if (
+            fdef == ("init_join_state", "bodo.libs.streaming.join")
+            and lhs in self._dist_analysis.array_dists
+        ):
+            build_dist, probe_dist = self._dist_analysis.array_dists[lhs]
+            distributed_dists = (Distribution.OneD, Distribution.OneD_Var)
+            # Check if the build and probe arrays are distributed
+            if build_dist in distributed_dists or probe_dist in distributed_dists:
+                build_parallel = build_dist in distributed_dists
+                probe_parallel = probe_dist in distributed_dists
+                # Whichever is distributed update the args in the signature to True.
+                call_type = self.calltypes.pop(rhs)
+                assert call_type.args[-2] == types.Omitted(False) and call_type.args[
+                    -1
+                ] == types.Omitted(False)
+                self.calltypes[rhs] = self.typemap[rhs.func.name].get_call_type(
+                    self.typingctx,
+                    call_type.args[:-2]
+                    + (types.Omitted(build_parallel), types.Omitted(probe_parallel)),
+                    {},
+                )
+                return [assign]
+
+        if fdef in (
+            (
+                "snowflake_writer_init",
+                "bodo.io.snowflake_write",
+            ),
+            (
+                "iceberg_writer_init",
+                "bodo.io.stream_iceberg_write",
+            ),
+            (
+                "parquet_writer_init",
+                "bodo.io.stream_parquet_write",
+            ),
+            (
+                "init_groupby_state",
+                "bodo.libs.streaming.groupby",
+            ),
+            (
+                "init_grouping_sets_state",
+                "bodo.libs.streaming.groupby",
+            ),
+            (
+                "init_stream_sort_state",
+                "bodo.libs.streaming.sort",
+            ),
+            (
+                "init_union_state",
+                "bodo.libs.streaming.union",
+            ),
+            (
+                "init_window_state",
+                "bodo.libs.streaming.window",
+            ),
+        ) and self._is_1D_or_1D_Var_arr(lhs):
+            set_last_arg_to_true(self, assign.value)
             return [assign]
 
         if (
             func_name == "fit"
-            and "bodo.libs.xgb_ext" in sys.modules
+            and "bodo.ml_support.xgb_ext" in sys.modules
             and isinstance(func_mod, numba.core.ir.Var)
             and isinstance(
                 self.typemap[func_mod.name],
                 (
-                    bodo.libs.xgb_ext.BodoXGBClassifierType,
-                    bodo.libs.xgb_ext.BodoXGBRegressorType,
+                    bodo.ml_support.xgb_ext.BodoXGBClassifierType,
+                    bodo.ml_support.xgb_ext.BodoXGBRegressorType,
                 ),
             )
         ):  # pragma: no cover
             if self._is_1D_or_1D_Var_arr(rhs.args[0].name):
-                self._set_last_arg_to_true(assign.value)
+                set_last_arg_to_true(self, assign.value)
                 return [assign]
 
         if (
             func_name == "fit"
-            and "bodo.libs.sklearn_ext" in sys.modules
+            and is_ml_support_loaded()
             and isinstance(func_mod, numba.core.ir.Var)
             and isinstance(
                 self.typemap[func_mod.name],
                 (
-                    bodo.libs.sklearn_ext.BodoRandomForestClassifierType,
-                    bodo.libs.sklearn_ext.BodoRandomForestRegressorType,
-                    bodo.libs.sklearn_ext.BodoSGDClassifierType,
-                    bodo.libs.sklearn_ext.BodoSGDRegressorType,
-                    bodo.libs.sklearn_ext.BodoKMeansClusteringType,
-                    bodo.libs.sklearn_ext.BodoLogisticRegressionType,
-                    bodo.libs.sklearn_ext.BodoLinearRegressionType,
-                    bodo.libs.sklearn_ext.BodoMultinomialNBType,
-                    bodo.libs.sklearn_ext.BodoLassoType,
-                    bodo.libs.sklearn_ext.BodoRidgeType,
-                    bodo.libs.sklearn_ext.BodoLinearSVCType,
-                    bodo.libs.sklearn_ext.BodoPreprocessingOneHotEncoderType,
-                    bodo.libs.sklearn_ext.BodoPreprocessingStandardScalerType,
-                    bodo.libs.sklearn_ext.BodoPreprocessingMaxAbsScalerType,
-                    bodo.libs.sklearn_ext.BodoPreprocessingMinMaxScalerType,
-                    bodo.libs.sklearn_ext.BodoPreprocessingRobustScalerType,
-                    bodo.libs.sklearn_ext.BodoPreprocessingLabelEncoderType,
+                    bodo.ml_support.sklearn_cluster_ext.BodoKMeansClusteringType,
+                    bodo.ml_support.sklearn_ensemble_ext.BodoRandomForestClassifierType,
+                    bodo.ml_support.sklearn_ensemble_ext.BodoRandomForestRegressorType,
+                    bodo.ml_support.sklearn_linear_model_ext.BodoSGDClassifierType,
+                    bodo.ml_support.sklearn_linear_model_ext.BodoSGDRegressorType,
+                    bodo.ml_support.sklearn_linear_model_ext.BodoLogisticRegressionType,
+                    bodo.ml_support.sklearn_linear_model_ext.BodoLinearRegressionType,
+                    bodo.ml_support.sklearn_linear_model_ext.BodoLassoType,
+                    bodo.ml_support.sklearn_linear_model_ext.BodoRidgeType,
+                    bodo.ml_support.sklearn_naive_bayes_ext.BodoMultinomialNBType,
+                    bodo.ml_support.sklearn_svm_ext.BodoLinearSVCType,
+                    bodo.ml_support.sklearn_preprocessing_ext.BodoPreprocessingOneHotEncoderType,
+                    bodo.ml_support.sklearn_preprocessing_ext.BodoPreprocessingStandardScalerType,
+                    bodo.ml_support.sklearn_preprocessing_ext.BodoPreprocessingMaxAbsScalerType,
+                    bodo.ml_support.sklearn_preprocessing_ext.BodoPreprocessingMinMaxScalerType,
+                    bodo.ml_support.sklearn_preprocessing_ext.BodoPreprocessingRobustScalerType,
+                    bodo.ml_support.sklearn_preprocessing_ext.BodoPreprocessingLabelEncoderType,
                 ),
             )
             and self._is_1D_or_1D_Var_arr(rhs.args[0].name)
         ):
-            self._set_last_arg_to_true(assign.value)
+            set_last_arg_to_true(self, assign.value)
             return [assign]
 
         if (
             func_name == "partial_fit"
-            and "bodo.libs.sklearn_ext" in sys.modules
+            and "bodo.ml_support.sklearn_preprocessing_ext" in sys.modules
             and isinstance(func_mod, numba.core.ir.Var)
             and isinstance(
                 self.typemap[func_mod.name],
-                bodo.libs.sklearn_ext.BodoPreprocessingMaxAbsScalerType,
+                bodo.ml_support.sklearn_preprocessing_ext.BodoPreprocessingMaxAbsScalerType,
             )
             and self._is_1D_or_1D_Var_arr(rhs.args[0].name)
         ):
-            self._set_last_arg_to_true(assign.value)
+            set_last_arg_to_true(self, assign.value)
             return [assign]
 
         if (
             func_name == "score"
-            and "bodo.libs.sklearn_ext" in sys.modules
+            and is_ml_support_loaded()
             and isinstance(func_mod, numba.core.ir.Var)
             and isinstance(
                 self.typemap[func_mod.name],
                 (
-                    bodo.libs.sklearn_ext.BodoRandomForestClassifierType,
-                    bodo.libs.sklearn_ext.BodoRandomForestRegressorType,
-                    bodo.libs.sklearn_ext.BodoSGDClassifierType,
-                    bodo.libs.sklearn_ext.BodoSGDRegressorType,
-                    bodo.libs.sklearn_ext.BodoKMeansClusteringType,
-                    bodo.libs.sklearn_ext.BodoLogisticRegressionType,
-                    bodo.libs.sklearn_ext.BodoLinearRegressionType,
-                    bodo.libs.sklearn_ext.BodoMultinomialNBType,
-                    bodo.libs.sklearn_ext.BodoLassoType,
-                    bodo.libs.sklearn_ext.BodoRidgeType,
-                    bodo.libs.sklearn_ext.BodoLinearSVCType,
+                    bodo.ml_support.sklearn_cluster_ext.BodoKMeansClusteringType,
+                    bodo.ml_support.sklearn_ensemble_ext.BodoRandomForestClassifierType,
+                    bodo.ml_support.sklearn_ensemble_ext.BodoRandomForestRegressorType,
+                    bodo.ml_support.sklearn_linear_model_ext.BodoSGDClassifierType,
+                    bodo.ml_support.sklearn_linear_model_ext.BodoSGDRegressorType,
+                    bodo.ml_support.sklearn_linear_model_ext.BodoLogisticRegressionType,
+                    bodo.ml_support.sklearn_linear_model_ext.BodoLinearRegressionType,
+                    bodo.ml_support.sklearn_linear_model_ext.BodoLassoType,
+                    bodo.ml_support.sklearn_linear_model_ext.BodoRidgeType,
+                    bodo.ml_support.sklearn_naive_bayes_ext.BodoMultinomialNBType,
+                    bodo.ml_support.sklearn_svm_ext.BodoLinearSVCType,
                 ),
             )
         ):
             if self._is_1D_or_1D_Var_arr(rhs.args[0].name):
-                self._set_last_arg_to_true(assign.value)
+                set_last_arg_to_true(self, assign.value)
                 return [assign]
         if (
             func_name == "fit_transform"
-            and "bodo.libs.sklearn_ext" in sys.modules
+            and (
+                "bodo.ml_support.sklearn_feature_extraction_ext" in sys.modules
+                or "bodo.ml_support.sklearn_preprocessing_ext" in sys.modules
+            )
             and isinstance(func_mod, numba.core.ir.Var)
             and isinstance(
                 self.typemap[func_mod.name],
                 (
-                    bodo.libs.sklearn_ext.BodoPreprocessingLabelEncoderType,
-                    bodo.libs.sklearn_ext.BodoFExtractHashingVectorizerType,
-                    bodo.libs.sklearn_ext.BodoFExtractCountVectorizerType,
+                    bodo.ml_support.sklearn_preprocessing_ext.BodoPreprocessingLabelEncoderType,
+                    bodo.ml_support.sklearn_feature_extraction_ext.BodoFExtractHashingVectorizerType,
+                    bodo.ml_support.sklearn_feature_extraction_ext.BodoFExtractCountVectorizerType,
                 ),
             )
         ):
             if self._is_1D_or_1D_Var_arr(rhs.args[0].name):
-                self._set_last_arg_to_true(assign.value)
+                set_last_arg_to_true(self, assign.value)
                 return [assign]
 
         if (
@@ -1043,7 +1143,6 @@ class DistributedPass:
             func_mod in ("sklearn.metrics._regression", "sklearn.metrics")
             and func_name == "mean_squared_error"
         ):
-
             if self._is_1D_or_1D_Var_arr(rhs.args[0].name):
                 import sklearn
 
@@ -1134,7 +1233,6 @@ class DistributedPass:
             func_mod in ("sklearn.metrics._regression", "sklearn.metrics")
             and func_name == "mean_absolute_error"
         ):
-
             if self._is_1D_or_1D_Var_arr(rhs.args[0].name):
                 import sklearn
 
@@ -1211,7 +1309,7 @@ class DistributedPass:
         if func_mod == "sklearn.metrics.pairwise" and func_name == "cosine_similarity":
             # Set last argument to True if X is distributed
             if self._is_1D_or_1D_Var_arr(rhs.args[0].name):
-                self._set_last_arg_to_true(assign.value)
+                set_last_arg_to_true(self, assign.value)
 
             # Set second-to-last argument to True if Y exists and is distributed
             # Y could be passed in as the second positional arg, or a kwarg if not None.
@@ -1228,36 +1326,35 @@ class DistributedPass:
 
         if (
             func_name == "split"
-            and "bodo.libs.sklearn_ext" in sys.modules
+            and "bodo.ml_support.sklearn_model_selection_ext" in sys.modules
             and isinstance(func_mod, numba.core.ir.Var)
             and isinstance(
                 self.typemap[func_mod.name],
-                bodo.libs.sklearn_ext.BodoModelSelectionKFoldType,
+                bodo.ml_support.sklearn_model_selection_ext.BodoModelSelectionKFoldType,
             )
             and self._is_1D_or_1D_Var_arr(rhs.args[0].name)
         ):
             # Not checking get_n_splits for KFold since it might not have a first arg
-            self._set_last_arg_to_true(assign.value)
+            set_last_arg_to_true(self, assign.value)
             return [assign]
 
         if (
             func_name in ("split", "get_n_splits")
-            and "bodo.libs.sklearn_ext" in sys.modules
+            and "bodo.ml_support.sklearn_model_selection_ext" in sys.modules
             and isinstance(func_mod, numba.core.ir.Var)
             and isinstance(
                 self.typemap[func_mod.name],
-                bodo.libs.sklearn_ext.BodoModelSelectionLeavePOutType,
+                bodo.ml_support.sklearn_model_selection_ext.BodoModelSelectionLeavePOutType,
             )
             and self._is_1D_or_1D_Var_arr(rhs.args[0].name)
         ):
-            self._set_last_arg_to_true(assign.value)
+            set_last_arg_to_true(self, assign.value)
             return [assign]
 
         if (
             func_mod in ("sklearn.model_selection._split", "sklearn.model_selection")
             and func_name == "train_test_split"
         ):
-
             if self._is_1D_or_1D_Var_arr(rhs.args[0].name):
                 import sklearn
 
@@ -1340,7 +1437,6 @@ class DistributedPass:
             func_mod in ("sklearn.metrics._regression", "sklearn.metrics")
             and func_name == "r2_score"
         ):
-
             if self._is_1D_or_1D_Var_arr(rhs.args[0].name):
                 import sklearn
 
@@ -1428,12 +1524,16 @@ class DistributedPass:
                 n_char_var = rhs.args[1]
                 if n_char_var.name in self._local_reduce_vars:
                     rhs.args[1] = self._local_reduce_vars[n_char_var.name]
+                    if isinstance(self.typemap[n_char_var.name], types.Literal):
+                        self._set_ith_arg_to_unliteral(rhs, 1)
 
             size_var = rhs.args[0]
             out, new_size_var = self._run_alloc(size_var, scope, loc)
             # empty_inferred is tuple for some reason
             rhs.args = list(rhs.args)
             rhs.args[0] = new_size_var
+            if isinstance(self.typemap[size_var.name], types.Literal):
+                self._set_ith_arg_to_unliteral(rhs, 0)
             out.append(assign)
             return out
 
@@ -1448,6 +1548,8 @@ class DistributedPass:
                 n_char_var = rhs.args[1]
                 if n_char_var.name in self._local_reduce_vars:
                     rhs.args[1] = self._local_reduce_vars[n_char_var.name]
+                    if isinstance(self.typemap[n_char_var.name], types.Literal):
+                        self._set_ith_arg_to_unliteral(rhs, 1)
 
             size_var = rhs.args[0]
             size_def = guard(get_definition, self.func_ir, size_var)
@@ -1462,32 +1564,46 @@ class DistributedPass:
             # empty_inferred is tuple for some reason
             rhs.args = list(rhs.args)
             rhs.args[0] = new_size_var
+            if isinstance(self.typemap[size_var.name], types.Literal):
+                self._set_ith_arg_to_unliteral(rhs, 0)
             out.append(assign)
             return out
 
-        if func_mod == "bodo.libs.array_kernels" and func_name in {"cummin", "cummax"}:
-            if self._is_1D_or_1D_Var_arr(rhs.args[0].name):
-                in_arr_var = rhs.args[0]
-                lhs_var = assign.target
-                # TODO: compute inplace if input array is dead
-                func_text = (
-                    ""
-                    "def impl(A):\n"
-                    "    B = np.empty_like(A)\n"
-                    "    _func(A, B)\n"
-                    "    return B\n"
+        # Distributed handling of list_to_array requires handling similar to a distributed allocation.
+        if fdef == (
+            "list_to_array",
+            "bodo.utils.conversion",
+        ) and self._is_1D_arr(lhs):
+            set_last_arg_to_true(self, assign.value)
+            return [assign]
+
+        # array_to_repeated_array_item_array() is similar to an allocation and its size
+        # argument needs handled similarly
+        if fdef in (
+            (
+                "array_to_repeated_array_item_array",
+                "bodo.libs.array_item_arr_ext",
+            ),
+            (
+                "scalar_to_map_array",
+                "bodo.libs.map_arr_ext",
+            ),
+            (
+                "scalar_to_struct_array",
+                "bodo.libs.struct_arr_ext",
+            ),
+        ):
+            out = []
+            size_var = rhs.args[1]
+            if self._is_1D_arr(lhs):
+                rhs.args[1] = self._get_1D_count(size_var, out)
+            elif self._is_1D_Var_arr(lhs):
+                rhs.args[1] = self._get_1D_Var_size(
+                    size_var, equiv_set, avail_vars, out
                 )
 
-                loc_vars = {}
-                exec(func_text, globals(), loc_vars)
-                func = getattr(bodo.libs.distributed_api, "dist_" + func_name)
-                return compile_func_single_block(
-                    loc_vars["impl"],
-                    [in_arr_var],
-                    lhs_var,
-                    self,
-                    extra_globals={"_func": func},
-                )
+            out.append(assign)
+            return out
 
         # numpy direct functions
         if isinstance(func_mod, str) and func_mod == "numpy":
@@ -1502,6 +1618,13 @@ class DistributedPass:
             return self._run_call_array(
                 lhs, func_mod, func_name, assign, rhs.args, equiv_set, avail_vars
             )
+
+        # BooleanArray.func calls
+        if (
+            isinstance(func_mod, ir.Var)
+            and self.typemap[func_mod.name] == bodo.boolean_array_type
+        ):
+            return self._run_call_boolean_array(func_mod, func_name, assign)
 
         # df.func calls
         if isinstance(func_mod, ir.Var) and isinstance(
@@ -1593,37 +1716,48 @@ class DistributedPass:
             self._file_open_set_parallel(file_varname)
             return nodes
 
+        # Adjust array index variable to be within current processor's data chunk
+        # See docstring of _is_array_access_stmt
         if fdef == (
             "get_split_view_index",
             "bodo.hiframes.split_impl",
         ) and self._dist_arr_needs_adjust(rhs.args[0].name, rhs.args[1].name):
             arr = rhs.args[0]
-            index_var = self._fix_index_var(rhs.args[1])
+            old_ind = rhs.args[1]
+            index_var = self._fix_index_var(old_ind)
             start_var, nodes = self._get_parallel_access_start_var(
                 arr, equiv_set, index_var, avail_vars
             )
             sub_nodes = self._get_ind_sub(index_var, start_var)
             out = nodes + sub_nodes
             rhs.args[1] = sub_nodes[-1].target
+            if isinstance(self.typemap[old_ind.name], types.Literal):
+                self._set_ith_arg_to_unliteral(rhs, 1)
             out.append(assign)
             return out
 
+        # Adjust array index variable to be within current processor's data chunk
+        # See docstring of _is_array_access_stmt
         if fdef == (
             "setitem_str_arr_ptr",
             "bodo.libs.str_arr_ext",
         ) and self._dist_arr_needs_adjust(rhs.args[0].name, rhs.args[1].name):
             arr = rhs.args[0]
-            index_var = self._fix_index_var(rhs.args[1])
+            old_ind = rhs.args[1]
+            index_var = self._fix_index_var(old_ind)
             start_var, nodes = self._get_parallel_access_start_var(
                 arr, equiv_set, index_var, avail_vars
             )
             sub_nodes = self._get_ind_sub(index_var, start_var)
             out = nodes + sub_nodes
             rhs.args[1] = sub_nodes[-1].target
+            if isinstance(self.typemap[old_ind.name], types.Literal):
+                self._set_ith_arg_to_unliteral(rhs, 1)
             out.append(assign)
             return out
 
-        # adjust array index variable to be within current processor's data chunk
+        # Adjust array index variable to be within current processor's data chunk
+        # See docstring of _is_array_access_stmt
         if fdef in (
             (
                 "inplace_eq",
@@ -1634,16 +1768,21 @@ class DistributedPass:
             ("str_arr_set_not_na", "bodo.libs.str_arr_ext"),
         ) and self._dist_arr_needs_adjust(rhs.args[0].name, rhs.args[1].name):
             arr = rhs.args[0]
-            index_var = self._fix_index_var(rhs.args[1])
+            old_ind = rhs.args[1]
+            index_var = self._fix_index_var(old_ind)
             start_var, nodes = self._get_parallel_access_start_var(
                 arr, equiv_set, index_var, avail_vars
             )
             sub_nodes = self._get_ind_sub(index_var, start_var)
             out = nodes + sub_nodes
             rhs.args[1] = sub_nodes[-1].target
+            if isinstance(self.typemap[old_ind.name], types.Literal):
+                self._set_ith_arg_to_unliteral(rhs, 1)
             out.append(assign)
             return out
 
+        # Adjust array index variable to be within current processor's data chunk
+        # See docstring of _is_array_access_stmt
         if fdef == (
             "str_arr_item_to_numeric",
             "bodo.libs.str_arr_ext",
@@ -1652,84 +1791,112 @@ class DistributedPass:
             # output array
             if self._dist_arr_needs_adjust(rhs.args[0].name, rhs.args[1].name):
                 arr = rhs.args[0]
-                index_var = self._fix_index_var(rhs.args[1])
+                old_ind = rhs.args[1]
+                index_var = self._fix_index_var(old_ind)
                 start_var, nodes = self._get_parallel_access_start_var(
                     arr, equiv_set, index_var, avail_vars
                 )
                 sub_nodes = self._get_ind_sub(index_var, start_var)
                 out += nodes + sub_nodes
                 rhs.args[1] = sub_nodes[-1].target
+                if isinstance(self.typemap[old_ind.name], types.Literal):
+                    self._set_ith_arg_to_unliteral(rhs, 1)
             # input string array
             if self._dist_arr_needs_adjust(rhs.args[2].name, rhs.args[3].name):
                 arr = rhs.args[2]
-                index_var = self._fix_index_var(rhs.args[3])
+                old_ind = rhs.args[3]
+                index_var = self._fix_index_var(old_ind)
                 start_var, nodes = self._get_parallel_access_start_var(
                     arr, equiv_set, index_var, avail_vars
                 )
                 sub_nodes = self._get_ind_sub(index_var, start_var)
                 out += nodes + sub_nodes
                 rhs.args[3] = sub_nodes[-1].target
+                if isinstance(self.typemap[old_ind.name], types.Literal):
+                    self._set_ith_arg_to_unliteral(rhs, 3)
             out.append(assign)
             return out
 
-        if fdef == (
-            "get_str_arr_item_copy",
-            "bodo.libs.str_arr_ext",
+        # Adjust array index variable to be within current processor's data chunk
+        # See docstring of _is_array_access_stmt
+        if fdef in (
+            (
+                "get_str_arr_item_copy",
+                "bodo.libs.str_arr_ext",
+            ),
+            ("copy_array_element", "bodo.libs.array_kernels"),
         ):
             out = []
             # output string array
             if self._dist_arr_needs_adjust(rhs.args[0].name, rhs.args[1].name):
                 arr = rhs.args[0]
-                index_var = self._fix_index_var(rhs.args[1])
+                old_ind = rhs.args[1]
+                index_var = self._fix_index_var(old_ind)
                 start_var, nodes = self._get_parallel_access_start_var(
                     arr, equiv_set, index_var, avail_vars
                 )
                 sub_nodes = self._get_ind_sub(index_var, start_var)
                 out += nodes + sub_nodes
                 rhs.args[1] = sub_nodes[-1].target
+                if isinstance(self.typemap[old_ind.name], types.Literal):
+                    self._set_ith_arg_to_unliteral(rhs, 1)
 
             # input string array
             if self._dist_arr_needs_adjust(rhs.args[2].name, rhs.args[3].name):
                 arr = rhs.args[2]
-                index_var = self._fix_index_var(rhs.args[3])
+                old_ind = rhs.args[3]
+                index_var = self._fix_index_var(old_ind)
                 start_var, nodes = self._get_parallel_access_start_var(
                     arr, equiv_set, index_var, avail_vars
                 )
                 sub_nodes = self._get_ind_sub(index_var, start_var)
                 out += nodes + sub_nodes
                 rhs.args[3] = sub_nodes[-1].target
+                if isinstance(self.typemap[old_ind.name], types.Literal):
+                    self._set_ith_arg_to_unliteral(rhs, 3)
 
             out.append(assign)
             return out
 
+        # Adjust array index variable to be within current processor's data chunk
+        # See docstring of _is_array_access_stmt
         if fdef == ("setna", "bodo.libs.array_kernels") and self._dist_arr_needs_adjust(
             rhs.args[0].name, rhs.args[1].name
         ):
             arr = rhs.args[0]
-            index_var = self._fix_index_var(rhs.args[1])
+            old_ind = rhs.args[1]
+            index_var = self._fix_index_var(old_ind)
             start_var, nodes = self._get_parallel_access_start_var(
                 arr, equiv_set, index_var, avail_vars
             )
             sub_nodes = self._get_ind_sub(index_var, start_var)
             out = nodes + sub_nodes
             rhs.args[1] = sub_nodes[-1].target
+            if isinstance(self.typemap[old_ind.name], types.Literal):
+                self._set_ith_arg_to_unliteral(rhs, 1)
             out.append(assign)
             return out
 
+        # Adjust array index variable to be within current processor's data chunk
+        # See docstring of _is_array_access_stmt
         if fdef in (
             ("isna", "bodo.libs.array_kernels"),
             ("get_bit_bitmap_arr", "bodo.libs.int_arr_ext"),
             ("set_bit_to_arr", "bodo.libs.int_arr_ext"),
             ("get_str_arr_str_length", "bodo.libs.str_arr_ext"),
+            ("scalar_optional_getitem", "bodo.utils.indexing"),
         ) and self._dist_arr_needs_adjust(rhs.args[0].name, rhs.args[1].name):
             # fix index in call to isna
             arr = rhs.args[0]
-            ind = self._fix_index_var(rhs.args[1])
+            old_ind = rhs.args[1]
+            ind = self._fix_index_var(old_ind)
             start_var, out = self._get_parallel_access_start_var(
                 arr, equiv_set, ind, avail_vars
             )
             out += self._get_ind_sub(ind, start_var)
             rhs.args[1] = out[-1].target
+            if isinstance(self.typemap[old_ind.name], types.Literal):
+                self._set_ith_arg_to_unliteral(rhs, 1)
             out.append(assign)
 
         if fdef in (
@@ -1742,7 +1909,7 @@ class DistributedPass:
                 "bodo.hiframes.rolling",
             ),
         ) and self._is_1D_or_1D_Var_arr(rhs.args[0].name):
-            self._set_last_arg_to_true(assign.value)
+            set_last_arg_to_true(self, assign.value)
             return [assign]
 
         if (
@@ -1756,6 +1923,11 @@ class DistributedPass:
             rhs.args[2] = true_var
             out = [ir.Assign(ir.Const(True, loc), true_var, loc), assign]
 
+        # Note for both of these functions:
+        # Case 1: DIST DIST -> DIST, is_parallel=True
+        # Case 2: REP  REP  -> REP, is_parallel=False
+        # Case 3: DIST REP  -> DIST, is_parallel=False
+        # Case 4: REP  DIST:   Banned by construction
         if fdef == ("array_isin", "bodo.libs.array") and self._is_1D_or_1D_Var_arr(
             rhs.args[2].name
         ):
@@ -1765,6 +1937,31 @@ class DistributedPass:
                 "    out_arr, in_arr, vals, True"
                 ")"
             )
+            return compile_func_single_block(f, rhs.args, assign.target, self)
+
+        if fdef == (
+            "is_in",
+            "bodosql.kernels",
+        ) and self._is_1D_or_1D_Var_arr(rhs.args[1].name):
+            set_last_arg_to_true(self, assign.value)
+            return
+
+        if (
+            fdef[0]
+            in {
+                "anyvalue_agg",
+                "boolor_agg",
+                "booland_agg",
+                "boolxor_agg",
+                "bitor_agg",
+                "bitand_agg",
+                "bitxor_agg",
+            }
+            and fdef[1] == "bodo.libs.array_kernels"
+            and self._is_1D_or_1D_Var_arr(rhs.args[0].name)
+        ):
+            arr = rhs.args[0]
+            f = eval(f"lambda A: bodo.libs.array_kernels.{fdef[0]}(A, True)")
             return compile_func_single_block(f, rhs.args, assign.target, self)
 
         if fdef == (
@@ -1783,6 +1980,14 @@ class DistributedPass:
             )
             return nodes + compile_func_single_block(f, rhs.args, assign.target, self)
 
+        if fdef in (
+            ("approx_percentile", "bodo.libs.array_kernels"),
+            ("percentile_cont", "bodo.libs.array_kernels"),
+            ("percentile_disc", "bodo.libs.array_kernels"),
+        ) and self._is_1D_or_1D_Var_arr(rhs.args[0].name):
+            set_last_arg_to_true(self, assign.value)
+            return [assign]
+
         if fdef == ("nunique", "bodo.libs.array_kernels") and self._is_1D_or_1D_Var_arr(
             rhs.args[0].name
         ):
@@ -1794,47 +1999,54 @@ class DistributedPass:
         if fdef == ("unique", "bodo.libs.array_kernels") and self._is_1D_or_1D_Var_arr(
             rhs.args[0].name
         ):
-            self._set_last_arg_to_true(assign.value)
+            set_last_arg_to_true(self, assign.value)
+            return [assign]
+
+        if fdef == (
+            "accum_func",
+            "bodo.libs.array_kernels",
+        ) and self._is_1D_or_1D_Var_arr(rhs.args[0].name):
+            set_last_arg_to_true(self, assign.value)
             return [assign]
 
         if fdef == (
             "intersection_mask",
             "bodo.libs.array_kernels",
         ) and self._is_1D_or_1D_Var_arr(rhs.args[0].name):
-            self._set_last_arg_to_true(assign.value)
+            set_last_arg_to_true(self, assign.value)
             return [assign]
 
         if fdef == (
             "first_last_valid_index",
             "bodo.libs.array_kernels",
         ) and self._is_1D_or_1D_Var_arr(rhs.args[0].name):
-            self._set_last_arg_to_true(assign.value)
+            set_last_arg_to_true(self, assign.value)
             return [assign]
 
         if fdef == (
             "get_valid_entries_from_date_offset",
             "bodo.libs.array_kernels",
         ) and self._is_1D_or_1D_Var_arr(rhs.args[0].name):
-            self._set_last_arg_to_true(assign.value)
+            set_last_arg_to_true(self, assign.value)
             return [assign]
 
         if fdef == ("pivot_impl", "bodo.hiframes.pd_dataframe_ext") and (
             self._is_1D_tup(rhs.args[0].name) or self._is_1D_Var_tup(rhs.args[0].name)
         ):
-            self._set_last_arg_to_true(assign.value)
+            set_last_arg_to_true(self, assign.value)
             return [assign]
 
         if fdef == (
             "ffill_bfill_arr",
             "bodo.libs.array_kernels",
         ) and self._is_1D_or_1D_Var_arr(rhs.args[0].name):
-            self._set_last_arg_to_true(assign.value)
+            set_last_arg_to_true(self, assign.value)
             return [assign]
 
         if fdef == ("nonzero", "bodo.libs.array_kernels") and self._is_1D_or_1D_Var_arr(
             rhs.args[0].name
         ):
-            self._set_last_arg_to_true(assign.value)
+            set_last_arg_to_true(self, assign.value)
             return [assign]
 
         if fdef == (
@@ -1851,25 +2063,31 @@ class DistributedPass:
         if fdef == ("nancorr", "bodo.libs.array_kernels") and (
             self._is_1D_or_1D_Var_arr(rhs.args[0].name)
         ):
-            self._set_last_arg_to_true(assign.value)
+            set_last_arg_to_true(self, assign.value)
             return [assign]
 
         if fdef == ("series_monotonicity", "bodo.libs.array_kernels") and (
             self._is_1D_or_1D_Var_arr(rhs.args[0].name)
         ):
-            self._set_last_arg_to_true(assign.value)
+            set_last_arg_to_true(self, assign.value)
             return [assign]
 
         if fdef == ("autocorr", "bodo.libs.array_kernels") and (
             self._is_1D_or_1D_Var_arr(rhs.args[0].name)
         ):
-            self._set_last_arg_to_true(assign.value)
+            set_last_arg_to_true(self, assign.value)
             return [assign]
 
         if fdef == ("array_op_median", "bodo.libs.array_ops") and (
             self._is_1D_or_1D_Var_arr(rhs.args[0].name)
         ):
-            self._set_last_arg_to_true(assign.value)
+            set_last_arg_to_true(self, assign.value)
+            return [assign]
+
+        if fdef == ("str_arr_min_max", "bodo.libs.str_arr_ext") and (
+            self._is_1D_or_1D_Var_arr(rhs.args[0].name)
+        ):
+            set_last_arg_to_true(self, assign.value)
             return [assign]
 
         if fdef == ("array_op_describe", "bodo.libs.array_ops") and (
@@ -1909,20 +2127,33 @@ class DistributedPass:
         if fdef == ("duplicated", "bodo.libs.array_kernels") and (
             self._is_1D_tup(rhs.args[0].name) or self._is_1D_Var_tup(rhs.args[0].name)
         ):
-            self._set_last_arg_to_true(assign.value)
+            set_last_arg_to_true(self, assign.value)
             return [assign]
 
         if fdef == ("drop_duplicates", "bodo.libs.array_kernels") and (
             self._is_1D_tup(rhs.args[0].name) or self._is_1D_Var_tup(rhs.args[0].name)
         ):
-            self._set_last_arg_to_true(assign.value)
+            set_last_arg_to_true(self, assign.value)
+            return [assign]
+
+        if fdef == (
+            "drop_duplicates_table",
+            "bodo.utils.table_utils",
+        ) and self._is_1D_or_1D_Var_arr(rhs.args[0].name):
+            set_last_arg_to_true(self, assign.value)
+            return [assign]
+
+        if fdef == ("union_tables", "bodo.libs.array") and self._is_1D_or_1D_Var_arr(
+            lhs
+        ):
+            set_last_arg_to_true(self, assign.value)
             return [assign]
 
         if fdef == (
             "drop_duplicates_array",
             "bodo.libs.array_kernels",
         ) and self._is_1D_or_1D_Var_arr(rhs.args[0].name):
-            self._set_last_arg_to_true(assign.value)
+            set_last_arg_to_true(self, assign.value)
             return [assign]
 
         if func_name == "rebalance" and func_mod in {
@@ -1930,23 +2161,30 @@ class DistributedPass:
             "bodo",
         }:
             if self._is_1D_or_1D_Var_arr(rhs.args[0].name):
-                self._set_last_arg_to_true(assign.value)
+                set_last_arg_to_true(self, assign.value)
                 return [assign]
             else:
                 warnings.warn("Invoking rebalance on a replicated array has no effect")
+
+        if fdef == (
+            "get_chunk_bounds",
+            "bodo.libs.distributed_api",
+        ) and self._is_1D_or_1D_Var_arr(rhs.args[0].name):
+            set_last_arg_to_true(self, assign.value)
+            return [assign]
 
         if func_name == "random_shuffle" and func_mod in {
             "bodo.libs.distributed_api",
             "bodo",
         }:
             if self._is_1D_or_1D_Var_arr(rhs.args[0].name):
-                self._set_last_arg_to_true(assign.value)
+                set_last_arg_to_true(self, assign.value)
                 return [assign]
 
         if fdef == ("sample_table_operation", "bodo.libs.array_kernels") and (
             self._is_1D_tup(rhs.args[0].name) or self._is_1D_Var_tup(rhs.args[0].name)
         ):
-            self._set_last_arg_to_true(assign.value)
+            set_last_arg_to_true(self, assign.value)
             return [assign]
 
         if fdef == (
@@ -1954,6 +2192,14 @@ class DistributedPass:
             "bodo.hiframes.pd_index_ext",
         ) and self._is_1D_or_1D_Var_arr(lhs):
             return self._run_call_init_range_index(
+                lhs, assign, rhs.args, avail_vars, equiv_set
+            )
+
+        if fdef == (
+            "generate_empty_table_with_rows",
+            "bodo.hiframes.table",
+        ) and self._is_1D_arr(lhs):
+            return self._run_call_generate_empty_table_with_rows(
                 lhs, assign, rhs.args, avail_vars, equiv_set
             )
 
@@ -2107,6 +2353,15 @@ class DistributedPass:
                 self,
             )
 
+        # Iceberg Merge Into
+        if fdef == ("iceberg_merge_cow_py", "bodo.io.iceberg"):
+            # Dataframe is the 3rd argument (counting from 0)
+            df_arg = rhs.args[3].name
+            if not self._is_1D_or_1D_Var_arr(df_arg):
+                raise BodoError(
+                    "Merge Into with Iceberg Tables are only supported on distributed DataFrames"
+                )
+
         # replace get_type_max_value(arr.dtype) since parfors
         # arr.dtype transformation produces invalid code for dt64
         if fdef == ("get_type_max_value", "numba.cpython.builtins"):
@@ -2154,6 +2409,18 @@ class DistributedPass:
                 ).blocks.popitem()[1]
                 out = f_block.body[:-2]
                 out[-1].target = assign.target
+        if (
+            fdef == ("fft2", "scipy.fftpack._basic")
+            or fdef == ("fft2", "scipy.fft._basic")
+        ) and self._is_1D_or_1D_Var_arr(rhs.args[0].name):  # pragma: no cover
+            set_last_arg_to_true(self, assign.value)
+            return [assign]
+        if (
+            fdef == ("fftshift", "numpy.fft")
+            or fdef == ("fftshift", "scipy.fft._helper")
+        ) and self._is_1D_or_1D_Var_arr(rhs.args[0].name):  # pragma: no cover
+            set_last_arg_to_true(self, assign.value)
+            return [assign]
 
         return out
 
@@ -2211,7 +2478,6 @@ class DistributedPass:
                 )
 
             else:
-
                 func_text = (
                     ""
                     "def impl(start, stop, step, name, chunk_start, chunk_end):\n"
@@ -2255,6 +2521,26 @@ class DistributedPass:
                 extra_globals={"_op": np.int32(Reduce_Type.Sum.value)},
             )
 
+    def _run_call_generate_empty_table_with_rows(
+        self, lhs, assign, args, avail_vars, equiv_set
+    ):
+        """transform generate_empty_table_with_rows() calls"""
+        assert len(args) == 1, "invalid generate_empty_table_with_rows() call"
+        size_var = args[0]
+        out = []
+        args[0] = self._get_1D_count(size_var, out)
+        func_text = (
+            ""
+            "def impl(n_rows):\n"
+            "    res = bodo.hiframes.table.generate_empty_table_with_rows(n_rows)\n"
+            "    return res\n"
+        )
+        loc_vars = {}
+        exec(func_text, globals(), loc_vars)
+        return out + compile_func_single_block(
+            loc_vars["impl"], args, assign.target, self
+        )
+
     def _run_call_np(self, lhs, func_name, assign, args, kws, equiv_set):
         """transform np.func() calls"""
         # allocs are handled separately
@@ -2276,7 +2562,7 @@ class DistributedPass:
                 shape_vars = [args[1]]
             else:
                 isinstance(shape_typ, types.BaseTuple)
-                shape_vars = find_build_tuple(self.func_ir, args[1])
+                shape_vars = find_build_tuple(self.func_ir, args[1], True)
             return self._run_np_reshape(assign, args[0], shape_vars, equiv_set)
 
         if func_name in list_cumulative and self._is_1D_or_1D_Var_arr(args[0].name):
@@ -2323,7 +2609,7 @@ class DistributedPass:
             shape_vars = args
             arg_typ = self.typemap[args[0].name]
             if isinstance(arg_typ, types.BaseTuple):
-                shape_vars = find_build_tuple(self.func_ir, args[0])
+                shape_vars = find_build_tuple(self.func_ir, args[0], True)
             return self._run_np_reshape(assign, arr, shape_vars, equiv_set)
 
         # TODO: refactor
@@ -2373,10 +2659,23 @@ class DistributedPass:
 
         return out
 
+    def _run_call_boolean_array(self, arr, func_name, assign):
+        """transform distributed BooleanArray.func calls"""
+        out = [assign]
+        if func_name == "all":
+            if self._is_1D_or_1D_Var_arr(arr.name):
+                reduce_op = Reduce_Type.Logical_And
+                reduce_var = assign.target
+                scope = assign.target.scope
+                loc = assign.loc
+                return out + self._gen_reduce(reduce_var, reduce_op, scope, loc)
+
+        return out
+
     def _run_call_df(self, lhs, df, func_name, assign, args):
         """transform DataFrame calls to be distributed"""
         if func_name in ("to_parquet", "to_sql") and self._is_1D_or_1D_Var_arr(df.name):
-            self._set_last_arg_to_true(assign.value)
+            set_last_arg_to_true(self, assign.value)
             return [assign]
         elif func_name == "to_csv" and self._is_1D_or_1D_Var_arr(df.name):
             # avoid header for non-zero ranks
@@ -2480,7 +2779,7 @@ class DistributedPass:
                 "    utf8_str, utf8_len = unicode_to_utf8_and_len(str_out)\n"
                 "    start = bodo.libs.distributed_api.dist_exscan(utf8_len, _op)\n"
                 "    # Assuming that path_or_buf is a string\n"
-                "    bucket_region = bodo.io.fs_io.get_s3_bucket_region_njit(fname, parallel=True)\n"
+                "    bucket_region = bodo.io.fs_io.get_s3_bucket_region_wrapper(fname, parallel=True)\n"
                 "    # TODO: unicode file name\n"
                 "    _csv_write(\n"
                 "        unicode_to_utf8(fname),\n"
@@ -2519,13 +2818,22 @@ class DistributedPass:
 
             df_typ = self.typemap[df.name]
             rhs = assign.value
-            fname = args[0]
+            kws = dict(rhs.kws)
+            fname = get_call_expr_arg(
+                "to_json",
+                rhs.args,
+                kws,
+                0,
+                "path_or_buf",
+                default=None,
+                use_default=True,
+            )
+            if fname is None or isinstance(self.typemap[fname.name], types.NoneType):
+                return [assign]
             # convert StringLiteral to Unicode to make ._data available
             self.typemap.pop(fname.name)
             self.typemap[fname.name] = string_type
             nodes = []
-
-            kws = dict(rhs.kws)
 
             is_records = False
             if "orient" in kws:
@@ -2540,7 +2848,7 @@ class DistributedPass:
                 lines_var = get_call_expr_arg(
                     "to_json", rhs.args, kws, 7, "lines", None
                 )
-                is_lines = self.typemap[lines_var.name].literal_value
+                is_lines = self.typemap[lines_var.name]
 
             is_records_lines = ir.Var(
                 assign.target.scope, mk_unique_var("is_records_lines"), rhs.loc
@@ -2554,7 +2862,7 @@ class DistributedPass:
 
             if "_bodo_file_prefix" in kws:
                 file_prefix_var = get_call_expr_arg(
-                    "to_csv",
+                    "to_json",
                     rhs.args,
                     kws,
                     14,
@@ -2590,7 +2898,8 @@ class DistributedPass:
             self.typemap[none_var.name] = types.none
             none_assign = ir.Assign(ir.Const(None, rhs.loc), none_var, rhs.loc)
             nodes.append(none_assign)
-            rhs.args[0] = none_var
+            set_call_expr_arg(none_var, rhs.args, kws, 0, "path_or_buf")
+            rhs.kws = kws
 
             # str_out = df.to_json(None)
             str_out = ir.Var(assign.target.scope, mk_unique_var("write_json"), rhs.loc)
@@ -2609,7 +2918,7 @@ class DistributedPass:
                 "    utf8_str, utf8_len = unicode_to_utf8_and_len(str_out)\n"
                 "    start = bodo.libs.distributed_api.dist_exscan(utf8_len, _op)\n"
                 "    # Assuming that path_or_buf is a string\n"
-                "    bucket_region = bodo.io.fs_io.get_s3_bucket_region_njit(fname, parallel=True)\n"
+                "    bucket_region = bodo.io.fs_io.get_s3_bucket_region_wrapper(fname, parallel=True)\n"
                 "    # TODO: unicode file name\n"
                 "    _json_write(\n"
                 "        unicode_to_utf8(fname),\n"
@@ -2644,7 +2953,7 @@ class DistributedPass:
 
     def _run_call_series(self, lhs, series, func_name, assign, args):
         if func_name == "to_csv" and self._is_1D_or_1D_Var_arr(series.name):
-            self._set_last_arg_to_true(assign.value)
+            set_last_arg_to_true(self, assign.value)
         return [assign]
 
     def _gen_csv_header_node(self, cond_var, fname_var):
@@ -2749,6 +3058,26 @@ class DistributedPass:
     #     f_block.body = out + f_block.body
     #     return f_block.body[:-3]
 
+    def _const_to_var(self, v, nodes, scope, loc):
+        """Convert constant value to ir.Var if necessary.
+
+        Args:
+            v (int|ir.Var): input value (int or ir.Var)
+            nodes (list(ir.Stmt)): list of generated IR nodes for appending new nodes
+            scope (ir.Scope): IR scope object
+            loc (ir.Loc): IR loc object
+
+        Returns:
+            ir.Var: new variable for value v
+        """
+        if isinstance(v, ir.Var):
+            return v
+
+        new_var = ir.Var(scope, mk_unique_var("const_var"), loc)
+        self.typemap[new_var.name] = types.literal(v)
+        nodes.append(ir.Assign(ir.Const(v, loc), new_var, loc))
+        return new_var
+
     def _run_np_reshape(self, assign, in_arr, shape_vars, equiv_set):
         """distribute array reshape operation by finding new data offsets on every
         processor and exchanging data using alltoallv.
@@ -2780,14 +3109,24 @@ class DistributedPass:
         if (
             self.typemap[in_arr.name].ndim == 1
             and len(shape_vars) == 2
-            and guard(
-                get_const_value_inner, self.func_ir, shape_vars[1], typemap=self.typemap
+            and (
+                (isinstance(shape_vars[1], int) and shape_vars[1] == 1)
+                or (
+                    guard(
+                        get_const_value_inner,
+                        self.func_ir,
+                        shape_vars[1],
+                        typemap=self.typemap,
+                    )
+                    == 1
+                )
             )
-            == 1
         ):
             return compile_func_single_block(
                 eval("lambda A: A.reshape(len(A), 1)"), [in_arr], lhs, self
             )
+
+        shape_vars = [self._const_to_var(v, nodes, scope, loc) for v in shape_vars]
 
         # get local size for 1st dimension and allocate output array
         # shape_vars[0] is global size
@@ -2821,10 +3160,6 @@ class DistributedPass:
         out = [assign]
         arg0 = args[0].name
         arg1 = args[1].name
-        ndim0 = self.typemap[arg0].ndim
-        ndim1 = self.typemap[arg1].ndim
-        t0 = arg0 in self._T_arrs
-        t1 = arg1 in self._T_arrs
 
         # reduction across dataset
         if self._is_1D_or_1D_Var_arr(arg0) and self._is_1D_or_1D_Var_arr(arg1):
@@ -2884,11 +3219,11 @@ class DistributedPass:
             # see if size_var is a 1D array's shape
             # it is already the local size, no need to transform
             var_def = guard(get_definition, self.func_ir, size_var)
-            oned_varnames = set(
+            oned_varnames = {
                 v
                 for v in self._dist_analysis.array_dists
                 if self._dist_analysis.array_dists[v] == Distribution.OneD
-            )
+            }
             if (
                 isinstance(var_def, ir.Expr)
                 and var_def.op == "getattr"
@@ -3101,6 +3436,23 @@ class DistributedPass:
                         )
                         new_size_var = out[-1].target
 
+            # k = bodo.utils.indexing.bitmap_size(n) is used for calculating
+            # bitmap sizes in pd_datetime_arr
+            if guard(find_callname, self.func_ir, size_def, self.typemap) == (
+                "bitmap_size",
+                "bodo.utils.indexing",
+            ):
+                size = self._get_1D_Var_size(
+                    size_def.args[0], equiv_set, avail_vars, out
+                )
+                out += compile_func_single_block(
+                    eval("lambda n: bodo.utils.indexing.bitmap_size(n)"),
+                    (size,),
+                    None,
+                    self,
+                )
+                new_size_var = out[-1].target
+
             # n_bytes = (n + 7) >> 3 pattern is used for calculating bitmap
             # size in int_arr_ext
             if (
@@ -3129,41 +3481,28 @@ class DistributedPass:
         """transform array.shape to return distributed shape"""
         ndims = self.typemap[arr.name].ndim
 
-        if arr.name not in self._T_arrs:
-            nodes = []
-            size_var = self._get_dist_var_len(arr, nodes, equiv_set, avail_vars)
-            # XXX: array.shape could be generated by array analysis to provide
-            # size_var, so size_var may not be valid yet.
-            # if size_var uses this shape variable, calculate global size
-            size_def = guard(get_definition, self.func_ir, size_var)
-            if (
-                isinstance(size_def, ir.Expr)
-                and size_def.op == "static_getitem"
-                and size_def.value.name == lhs.name
-            ):
-                nodes += self._gen_1D_Var_len(arr)
-                size_var = nodes[-1].target
+        nodes = []
+        size_var = self._get_dist_var_len(arr, nodes, equiv_set, avail_vars)
+        # XXX: array.shape could be generated by array analysis to provide
+        # size_var, so size_var may not be valid yet.
+        # if size_var uses this shape variable, calculate global size
+        size_def = guard(get_definition, self.func_ir, size_var)
+        if (
+            isinstance(size_def, ir.Expr)
+            and size_def.op == "static_getitem"
+            and size_def.value.name == lhs.name
+        ):
+            nodes += self._gen_1D_Var_len(arr)
+            size_var = nodes[-1].target
 
-            if ndims == 1:
-                return nodes + compile_func_single_block(
-                    eval("lambda A, size_var: (size_var,)"), (arr, size_var), lhs, self
-                )
-            else:
-                return nodes + compile_func_single_block(
-                    eval("lambda A, size_var: (size_var,) + A.shape[1:]"),
-                    (arr, size_var),
-                    lhs,
-                    self,
-                )
-
-        # last dimension of transposed arrays is partitioned
-        if arr.name in self._T_arrs:
-            assert not self._is_1D_Var_arr(arr.name), "1D_Var arrays cannot transpose"
-            nodes = []
-            last_size_var = self._get_dist_var_dim_size(arr, (ndims - 1), nodes)
+        if ndims == 1:
             return nodes + compile_func_single_block(
-                eval("lambda A, size_var: A.shape[:-1] + (size_var,)"),
-                (arr, last_size_var),
+                eval("lambda A, size_var: (size_var,)"), (arr, size_var), lhs, self
+            )
+        else:
+            return nodes + compile_func_single_block(
+                eval("lambda A, size_var: (size_var,) + A.shape[1:]"),
+                (arr, size_var),
                 lhs,
                 self,
             )
@@ -3204,6 +3543,54 @@ class DistributedPass:
         nodes[-1].target = lhs
         return nodes
 
+    def _run_array_transpose(self, assign, arr):
+        """transform array.T to distributed (requires all-to-all data redistribution)"""
+        # Distributed transpose is not required if output is only used in np.dot()
+        # with reduction ("np.dot(X.T,Y)" pattern).
+        # See np.dot() handling in distributed analysis.
+        # TODO(ehsan): use DU-chain or other standard compiler infrastructure
+        only_dot_transpose_reduce = True
+        for block in self.func_ir.blocks.values():
+            for inst in block.body:
+                if inst is assign:
+                    continue
+                if (
+                    guard(self._is_dot_transpose_reduce, inst, arr)
+                    and assign.target.name == inst.value.args[0].name
+                ):
+                    continue
+                if any(v.name == assign.target.name for v in inst.list_vars()):
+                    only_dot_transpose_reduce = False
+                    break
+
+        if only_dot_transpose_reduce:
+            return [assign]
+
+        return compile_func_single_block(
+            eval("lambda arr: bodo.libs.distributed_api.distributed_transpose(arr)"),
+            [arr],
+            assign.target,
+            self,
+        )
+
+    def _is_dot_transpose_reduce(self, inst, arr):
+        """Return True if statement 'inst' has the form np.dot(X.T,Y) where X is 'arr'.
+        Returns False or raises GuardException if not.
+        See np.dot() handling in distributed analysis.
+        """
+        require(is_call_assign(inst))
+        require(find_callname(self.func_ir, inst.value) == ("dot", "numpy"))
+        arg0 = inst.value.args[0].name
+        arg1 = inst.value.args[1].name
+        ndim0 = self.typemap[arg0].ndim
+        ndim1 = self.typemap[arg1].ndim
+        t0 = guard(_is_transposed_array, self.func_ir, arg0)
+        t1 = guard(_is_transposed_array, self.func_ir, arg1)
+        require(ndim0 == 2 and ndim1 == 2 and t0 and not t1)
+        arg0_def = get_definition(self.func_ir, arg0)
+        require(is_expr(arg0_def, "getattr") and arg0_def.attr == "T")
+        return arg0_def.value.name == arr.name
+
     def _run_getsetitem(self, arr, index_var, node, full_node, equiv_set, avail_vars):
         """Transform distributed getitem/setitem operations"""
         out = [full_node]
@@ -3240,6 +3627,56 @@ class DistributedPass:
         ):
             return self._run_dist_getitem(
                 node, full_node, arr, index_var, equiv_set, avail_vars, out
+            )
+
+        return out
+
+    def _run_getitem_scalar_optional(self, full_node, equiv_set, avail_vars):
+        """Transform distributed getitem/setitem operations"""
+        out = [full_node]
+        lhs = full_node.target
+        rhs = full_node.value
+        arr = rhs.args[0]
+        index_var = rhs.args[1]
+
+        # adjust parallel access indices (in parfors)
+        # 1D_Var arrays need adjustment if 1D_Var parfor has start adjusted
+        if (
+            self._is_1D_arr(arr.name)
+            or (
+                self._is_1D_Var_arr(arr.name)
+                and arr.name in self._1D_Var_array_accesses
+                and index_var.name in self._1D_Var_array_accesses[arr.name]
+            )
+        ) and (arr.name, index_var.name) in self._parallel_accesses:
+            start_var, nodes = self._get_parallel_access_start_var(
+                arr, equiv_set, index_var, avail_vars
+            )
+            sub_nodes = self._get_ind_sub(index_var, start_var)
+            out = nodes + sub_nodes
+            # Update the index with the modified index.
+            rhs.args[1] = sub_nodes[-1].target
+            # Update the calltypes if the index was a literal.
+            if isinstance(self.typemap[index_var.name], types.Literal):
+                self._set_ith_arg_to_unliteral(rhs, 1)
+            out.append(full_node)
+        # parallel access in 1D_Var case, no need to transform
+        elif (arr.name, index_var.name) in self._parallel_accesses:
+            return out
+        elif self._is_1D_or_1D_Var_arr(arr.name):
+            start_var, nodes = self._get_dist_start_var(arr, equiv_set, avail_vars)
+            size_var = self._get_dist_var_len(arr, nodes, equiv_set, avail_vars)
+            is_1D = self._is_1D_arr(arr.name)
+            return nodes + compile_func_single_block(
+                eval(
+                    "lambda arr, ind, start, tot_len: bodo.libs.distributed_api.int_optional_getitem("
+                    "    arr, ind, start, tot_len, _is_1D"
+                    ")"
+                ),
+                [arr, index_var, start_var, size_var],
+                lhs,
+                self,
+                extra_globals={"_is_1D": is_1D},
             )
 
         return out
@@ -3439,7 +3876,6 @@ class DistributedPass:
             return out
 
         elif isinstance(index_typ, types.SliceType):
-
             start_var, nodes = self._get_dist_start_var(arr, equiv_set, avail_vars)
             arr_len = self._get_dist_var_len(arr, nodes, equiv_set, avail_vars)
 
@@ -3495,7 +3931,6 @@ class DistributedPass:
         return out
 
     def _run_parfor(self, parfor, equiv_set, avail_vars):
-
         # Thread and 1D parfors turn to gufunc in multithread mode
         if (
             bodo.multithread_mode
@@ -3560,7 +3995,7 @@ class DistributedPass:
         array_accesses = _get_array_accesses(
             parfor.loop_body, self.func_ir, self.typemap
         )
-        for (arr, index, is_bitwise) in array_accesses:
+        for arr, index, is_bitwise in array_accesses:
             # XXX avail_vars is used since accessed array could be defined in
             # init_block
             # arrays that are access bitwise don't have the same size
@@ -3588,16 +4023,16 @@ class DistributedPass:
         # TODO: test multi-dim array sizes and complex indexing like slice
         parfor.loop_nests[0].stop = new_stop_var
 
-        for (arr, index, _) in array_accesses:
-            assert (
-                arr not in self._T_arrs
+        for arr, index, _ in array_accesses:
+            assert not guard(
+                _is_transposed_array, self.func_ir, arr
             ), "1D_Var parfor for transposed parallel array not supported"
 
         # see if parfor index is used in compute other than array access
         # (e.g. argmin)
         l_nest = parfor.loop_nests[0]
         ind_varname = l_nest.index_variable.name
-        ind_varnames = set((ind_varname,))
+        ind_varnames = {ind_varname}
         ind_used = False
 
         # traverse parfor body in topo order to find parfor index copies in ind_varnames
@@ -3620,13 +4055,11 @@ class DistributedPass:
                 ):
                     ind_varnames.add(stmt.target.name)
                     continue
-                if not self._is_array_access_stmt(stmt) and ind_varnames & set(
+                if not self._is_array_access_stmt(stmt) and ind_varnames & {
                     v.name for v in stmt.list_vars()
-                ):
+                }:
                     ind_used = True
-                    dprint(
-                        "index of 1D_Var pafor {} used in {}".format(parfor.id, stmt)
-                    )
+                    dprint(f"index of 1D_Var pafor {parfor.id} used in {stmt}")
                     break
 
         # fix parfor start and stop bounds using ex_scan on ranges
@@ -3667,7 +4100,7 @@ class DistributedPass:
             prepend += nodes
             self._1D_Var_parfor_starts[ind_varname] = l_nest.start
 
-            for (arr, index, _) in array_accesses:
+            for arr, index, _ in array_accesses:
                 if self._index_has_par_index(index, ind_varname):
                     self._1D_Var_array_accesses[arr].append(index)
 
@@ -3710,9 +4143,8 @@ class DistributedPass:
         loc = parfor.init_block.loc
         pre = []
         out = []
-        for reduce_varname, (_init_val, reduce_nodes, _op) in sorted(
-            parfor.reddict.items()
-        ):
+        for reduce_varname, _reduce_var_info in sorted(parfor.reddict.items()):
+            reduce_nodes = _reduce_var_info.reduce_nodes
             reduce_op = guard(
                 get_reduce_op, reduce_varname, reduce_nodes, self.func_ir, self.typemap
             )
@@ -4123,18 +4555,15 @@ class DistributedPass:
 
     def _get_ind_sub_slice(self, slice_var, offset_var):
         if isinstance(slice_var, slice):
-            f_text = """def f(offset):
-                return slice({} - offset, {} - offset)
-            """.format(
-                slice_var.start, slice_var.stop
-            )
+            f_text = f"""def f(offset):
+                return slice({slice_var.start} - offset, {slice_var.stop} - offset)
+            """
             loc = {}
             exec(f_text, {}, loc)
             f = loc["f"]
             args = [offset_var]
             arg_typs = (types.intp,)
         else:
-
             func_text = (
                 ""
                 "def f(old_slice, offset):\n"
@@ -4229,6 +4658,8 @@ class DistributedPass:
         if reduce_op in (Reduce_Type.Concat, Reduce_Type.No_Op):
             return []
 
+        extra_globals = {}
+
         red_var_typ = self.typemap[reduce_var.name]
         el_typ = red_var_typ
         if is_np_array_typ(self.typemap[reduce_var.name]):
@@ -4237,7 +4668,7 @@ class DistributedPass:
         user_init_val = self._get_reduce_user_init(reduce_var)
         pre_init_val = ""
 
-        if reduce_op in [Reduce_Type.Sum, Reduce_Type.Or]:
+        if reduce_op in [Reduce_Type.Sum, Reduce_Type.Bit_Or]:
             init_val = str(el_typ(0))
             if user_init_val == el_typ(0):
                 return []
@@ -4250,8 +4681,23 @@ class DistributedPass:
                 init_val = "True"
                 if user_init_val == True:
                     return []
+            elif isinstance(el_typ, bodo.Decimal128Type):
+                extra_globals["_str_to_decimal_scalar"] = (
+                    bodo.libs.decimal_arr_ext._str_to_decimal_scalar
+                )
+                extra_globals["prec"] = el_typ.precision
+                extra_globals["scale"] = el_typ.scale
+                dec_str_setup = "'9' * (prec - scale) + '.' + '9' * scale"
+                pre_init_val = (
+                    f"val, _ = _str_to_decimal_scalar({dec_str_setup}, prec, scale)"
+                )
+                init_val = "val"
             elif el_typ == bodo.datetime_date_type:
                 init_val = "bodo.hiframes.series_kernels._get_date_max_value()"
+            elif isinstance(el_typ, TimeType):
+                init_val = "bodo.hiframes.series_kernels._get_time_max_value()"
+            elif isinstance(el_typ, bodo.TimestampTZType):
+                init_val = "bodo.hiframes.series_kernels._get_timestamptz_max_value()"
             else:
                 init_val = f"numba.cpython.builtins.get_type_max_value(np.ones(1,dtype=np.{el_typ}).dtype)"
         if reduce_op == Reduce_Type.Max:
@@ -4259,8 +4705,23 @@ class DistributedPass:
                 init_val = "False"
                 if user_init_val == False:
                     return []
+            elif isinstance(el_typ, bodo.Decimal128Type):
+                extra_globals["_str_to_decimal_scalar"] = (
+                    bodo.libs.decimal_arr_ext._str_to_decimal_scalar
+                )
+                extra_globals["prec"] = el_typ.precision
+                extra_globals["scale"] = el_typ.scale
+                dec_str_setup = "'-' + '9' * (prec - scale) + '.' + '9' * scale"
+                pre_init_val = (
+                    f"val, _ = _str_to_decimal_scalar({dec_str_setup}, prec, scale)"
+                )
+                init_val = "val"
             elif el_typ == bodo.datetime_date_type:
                 init_val = "bodo.hiframes.series_kernels._get_date_min_value()"
+            elif isinstance(el_typ, TimeType):
+                init_val = "bodo.hiframes.series_kernels._get_time_min_value()"
+            elif isinstance(el_typ, bodo.TimestampTZType):
+                init_val = "bodo.hiframes.series_kernels._get_timestamptz_min_value()"
             else:
                 init_val = f"numba.cpython.builtins.get_type_min_value(np.ones(1,dtype=np.{el_typ}).dtype)"
         if reduce_op in [Reduce_Type.Argmin, Reduce_Type.Argmax]:
@@ -4276,7 +4737,9 @@ class DistributedPass:
 
         f_text = f"def f(s):\n  {pre_init_val}\n  return bodo.libs.distributed_api._root_rank_select(s, {init_val})"
         loc_vars = {}
-        exec(f_text, {"bodo": bodo, "numba": numba, "np": np}, loc_vars)
+        exec(
+            f_text, {"bodo": bodo, "numba": numba, "np": np, **extra_globals}, loc_vars
+        )
         f = loc_vars["f"]
 
         return compile_func_single_block(
@@ -4342,17 +4805,31 @@ class DistributedPass:
         first_block.body = nodes + first_block.body
         return
 
-    def _set_last_arg_to_true(self, rhs):
-        """set last argument of call expr 'rhs' to True, assuming that it is an Omitted
-        arg with value of False.
-        This is usually used for Bodo overloads that have an extra flag as last argument
-        to enable parallelism.
+    def _set_ith_arg_to_unliteral(self, rhs: ir.Expr, i: int) -> None:
+        """Set the ith argument of call expr 'rhs' to a nonliteral version.
+        This assumes the ith input is a literal. This is used for Bodo function replacements
+        that potentially replace an original constant in the IR with a variable.
+
+        For example this would be used if we had to make the following replacment:
+
+            f(0) -> f(int_var)
+
+        Args:
+            rhs (ir.Expr): Call expression with at least i + 1 arguments and the ith argument is
+            a literal.
         """
-        call_type = self.calltypes.pop(rhs)
-        assert call_type.args[-1] == types.Omitted(False)
-        self.calltypes[rhs] = self.typemap[rhs.func.name].get_call_type(
-            self.typingctx, call_type.args[:-1] + (types.Omitted(True),), {}
-        )
+        call_type = self.calltypes[rhs]
+        # In some cases the call type is already not a literal when the argument
+        # is a literal. As a result we only change the call if its a literal.
+        if isinstance(call_type.args[i], types.Literal):
+            self.calltypes.pop(rhs)
+            self.calltypes[rhs] = self.typemap[rhs.func.name].get_call_type(
+                self.typingctx,
+                call_type.args[:i]
+                + (types.unliteral(call_type.args[i]),)
+                + call_type.args[i + 1 :],
+                {},
+            )
 
     def _set_second_last_arg_to_true(self, rhs):
         """set second-to-last argument of call expr 'rhs' to True, assuming that it is an
@@ -4378,6 +4855,27 @@ class DistributedPass:
                 avail_vars.add(stmt.target.name)
 
     def _is_array_access_stmt(self, stmt):
+        """Returns True if input statement is a form of array access, e.g. equivalent to
+        A[i].
+        This allows the compiler to handle 1D_Var parallelism properly without expensive
+        exscan calls.
+        NOTE: all internal array access nodes/functions have to be handled here.
+
+        Example without exscan:
+        for i in range(0, local_len):
+            isna(A, i)
+
+        Example with exscan:
+        prefix = exscan(local_len)
+        for i in range(prefix, prefix + local_len):
+            isna(A, i)
+
+        Args:
+            stmt (ir.Stmt): input statement
+
+        Returns:
+            bool: true if input is an array access statement
+        """
         if is_get_setitem(stmt):
             return True
 
@@ -4392,12 +4890,14 @@ class DistributedPass:
                 ("get_str_arr_str_length", "bodo.libs.str_arr_ext"),
                 ("inplace_eq", "bodo.libs.str_arr_ext"),
                 ("get_str_arr_item_copy", "bodo.libs.str_arr_ext"),
+                ("copy_array_element", "bodo.libs.array_kernels"),
                 ("str_arr_setitem_int_to_str", "bodo.libs.str_arr_ext"),
                 ("str_arr_setitem_NA_str", "bodo.libs.str_arr_ext"),
                 ("str_arr_set_not_na", "bodo.libs.str_arr_ext"),
                 ("get_split_view_index", "bodo.hiframes.split_impl"),
                 ("get_bit_bitmap_arr", "bodo.libs.int_arr_ext"),
                 ("set_bit_to_arr", "bodo.libs.int_arr_ext"),
+                ("scalar_optional_getitem", "bodo.utils.indexing"),
             ):
                 return True
 
@@ -4445,7 +4945,7 @@ class DistributedPass:
         ndims = self.typemap[tup_var.name].count
         f_text = "def f(tup_var):\n"
         for i in range(ndims):
-            f_text += "  val{} = tup_var[{}]\n".format(i, i)
+            f_text += f"  val{i} = tup_var[{i}]\n"
         loc_vars = {}
         exec(f_text, {}, loc_vars)
         f = loc_vars["f"]
@@ -4528,6 +5028,7 @@ class DistributedPass:
                             "table_filter",
                             "bodo.hiframes.table",
                         )
+                        and (rhs.args[0].name in arr_varnames)
                     ) or (is_expr(rhs, "getitem") and rhs.value.name in arr_varnames):
                         if is_call(rhs):
                             # table_format
@@ -4567,6 +5068,19 @@ class DistributedPass:
                     ):
                         arr_varnames.add(stmt.target.name)
                         continue
+                    if (
+                        is_call(rhs)
+                        and guard(find_callname, self.func_ir, rhs)
+                        == (
+                            "set_table_data_null",
+                            "bodo.hiframes.table",
+                        )
+                        and rhs.args[0].name in arr_varnames
+                    ):
+                        # If we are just replacing a column with null then we can
+                        # still safely perform filter pushdown.
+                        arr_varnames.add(stmt.target.name)
+                        continue
                     if isinstance(rhs, ir.Var) and rhs.name in arr_varnames:
                         # If we have a simple alias we just need to track the new lhs
                         arr_varnames.add(stmt.target.name)
@@ -4584,19 +5098,7 @@ class DistributedPass:
         for stmt in shape_nodes:
             stmt.value = ir.Expr.build_tuple([total_len_var], stmt.loc)
 
-        if bodo.user_logging.get_verbose_level() >= 1:
-            if io_node.connector_typ == "sql":
-                node_name = f"{io_node.db_type} sql node"
-            else:
-                node_name = f"{io_node.connector_typ} node"
-            msg = f"Successfully performed limit pushdown on {node_name}: %s\n %s\n"
-            io_source = io_node.loc.strformat()
-            constant_limit_message = (
-                f"Constant limit detected, reading at most {read_size} rows"
-            )
-            bodo.user_logging.log_message(
-                "Limit Pushdown", msg, io_source, constant_limit_message
-            )
+        log_limit_pushdown(io_node, read_size)
 
         return read_size, total_len_var
 
@@ -4770,7 +5272,7 @@ def lower_parfor_sequential(typingctx, func_ir, typemap, calltypes, metadata):
     parfor_found = False
     new_blocks = {}
     scope = next(iter(func_ir.blocks.values())).scope
-    for (block_label, block) in func_ir.blocks.items():
+    for block_label, block in func_ir.blocks.items():
         block_label, parfor_found = _lower_parfor_sequential_block(
             block_label,
             block,

@@ -1,8 +1,7 @@
-""" Support for Spark parity functions in objmode """
+"""Support for Spark parity functions in objmode"""
+
 import math
 import zlib
-
-import numpy as np
 
 from bodo.utils.typing import gen_objmode_func_overload
 
@@ -15,13 +14,11 @@ gen_objmode_func_overload(zlib.crc32, "uint32")
 # Use of factorial is probably uncommon, so we will use object mode due to
 # the complexity needed. Can convert to a native implementation if requested.
 # https://hg.python.org/cpython/file/d42f264f291e/Modules/mathmodule.c#l1218
-# All of these alias for math.factorial
 gen_objmode_func_overload(math.factorial, "int64")
-gen_objmode_func_overload(np.math.factorial, "int64")
 
 try:
     import scipy.special
 
     gen_objmode_func_overload(scipy.special.factorial, "int64")
-except:
+except ImportError:
     pass

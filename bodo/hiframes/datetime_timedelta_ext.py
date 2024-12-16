@@ -1,6 +1,5 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
-"""Numba extension support for datetime.timedelta objects and their arrays.
-"""
+"""Numba extension support for datetime.timedelta objects and their arrays."""
+
 import datetime
 import operator
 from collections import namedtuple
@@ -29,6 +28,7 @@ from numba.extending import (
 from numba.parfors.array_analysis import ArrayAnalysis
 
 import bodo
+import bodo.pandas_compat
 from bodo.hiframes.datetime_datetime_ext import datetime_datetime_type
 from bodo.libs import hdatetime_ext
 from bodo.utils.indexing import (
@@ -52,6 +52,7 @@ ll.add_symbol(
     "unbox_datetime_timedelta_array", hdatetime_ext.unbox_datetime_timedelta_array
 )
 
+
 # sentinel type representing no first input to pd.Timestamp() constructor
 # similar to _no_input object of Pandas in timestamps.pyx
 # https://github.com/pandas-dev/pandas/blob/8806ed7120fed863b3cd7d3d5f377ec4c81739d0/pandas/_libs/tslibs/timestamps.pyx#L38
@@ -65,7 +66,7 @@ _no_input = NoInput()
 
 class NoInputType(types.Type):
     def __init__(self):
-        super(NoInputType, self).__init__(name="NoInput")
+        super().__init__(name="NoInput")
 
 
 register_model(NoInputType)(models.OpaqueModel)
@@ -85,11 +86,12 @@ def constant_no_input(context, builder, ty, pyval):
 #   Define a singleton Numba type instance for a non-parametric type
 class PDTimeDeltaType(types.Type):
     def __init__(self):
-        super(PDTimeDeltaType, self).__init__(name="PDTimeDeltaType()")
+        super().__init__(name="PDTimeDeltaType()")
 
 
 pd_timedelta_type = PDTimeDeltaType()
 types.pd_timedelta_type = pd_timedelta_type
+
 
 # 2.Teach Numba how to infer the Numba type of Python values of a certain class,
 # using typeof_impl.register
@@ -105,7 +107,7 @@ class PDTimeDeltaModel(models.StructModel):
         members = [
             ("value", types.int64),
         ]
-        super(PDTimeDeltaModel, self).__init__(dmm, fe_type, members)
+        super().__init__(dmm, fe_type, members)
 
 
 # 4.Implementing a boxing function for a Numba type using the @box decorator
@@ -125,7 +127,6 @@ def box_pd_timedelta(typ, val, c):
 # using the @unbox decorator and the NativeValue class
 @unbox(PDTimeDeltaType)
 def unbox_pd_timedelta(typ, val, c):
-
     value_obj = c.pyapi.object_getattr_string(val, "value")
 
     valuell = c.pyapi.long_as_longlong(value_obj)
@@ -199,7 +200,7 @@ def pd_timedelta(
             hours=0,
             weeks=0,
         ):  # pragma: no cover
-            with numba.objmode(res="pd_timedelta_type"):
+            with bodo.objmode(res="pd_timedelta_type"):
                 res = pd.Timedelta(value)
             return res
 
@@ -208,7 +209,15 @@ def pd_timedelta(
     # Timedelta type, just return value
     if value == pd_timedelta_type:
         return (
-            lambda value=_no_input, unit="ns", days=0, seconds=0, microseconds=0, milliseconds=0, minutes=0, hours=0, weeks=0: value
+            lambda value=_no_input,
+            unit="ns",
+            days=0,
+            seconds=0,
+            microseconds=0,
+            milliseconds=0,
+            minutes=0,
+            hours=0,
+            weeks=0: value
         )  # pragma: no cover
 
     if value == datetime_timedelta_type:
@@ -224,7 +233,6 @@ def pd_timedelta(
             hours=0,
             weeks=0,
         ):  # pragma: no cover
-
             days = value.days
             seconds = 60 * 60 * 24 * days + value.seconds
             microseconds = 1000 * 1000 * seconds + value.microseconds
@@ -240,10 +248,11 @@ def pd_timedelta(
 
     # internal Pandas API that normalizes variations of unit. e.g. 'seconds' -> 's'
     unit = pd._libs.tslibs.timedeltas.parse_timedelta_unit(get_overload_const_str(unit))
-    # we don't need the precicion value in this case
-    value_to_nanoseconds_multiplier, _ = pd._libs.tslibs.conversion.precision_from_unit(
-        unit
-    )
+    # we don't need the precision value in this case
+    (
+        value_to_nanoseconds_multiplier,
+        _,
+    ) = bodo.pandas_compat.precision_from_unit_to_nanoseconds(unit)
 
     def impl_timedelta(
         value=_no_input,
@@ -278,7 +287,6 @@ make_attribute_wrapper(PDTimeDeltaType, "value", "_value")
 
 # Implement the getters
 @overload_attribute(PDTimeDeltaType, "value")
-@overload_attribute(PDTimeDeltaType, "delta")
 def pd_timedelta_get_value(td):
     def impl(td):  # pragma: no cover
         return td._value
@@ -695,6 +703,26 @@ def overload_mod_operator_timedeltas(lhs, rhs):
         return impl
 
 
+@overload(min, no_unliteral=True)
+def timedelta_min(lhs, rhs):
+    if lhs == pd_timedelta_type and rhs == pd_timedelta_type:
+
+        def impl(lhs, rhs):  # pragma: no cover
+            return lhs if lhs < rhs else rhs
+
+        return impl
+
+
+@overload(max, no_unliteral=True)
+def timedelta_max(lhs, rhs):
+    if lhs == pd_timedelta_type and rhs == pd_timedelta_type:
+
+        def impl(lhs, rhs):  # pragma: no cover
+            return lhs if lhs > rhs else rhs
+
+        return impl
+
+
 def pd_create_cmp_op_overload(op):
     """create overload function for comparison operators with datetime_date_array"""
 
@@ -769,10 +797,11 @@ def pd_timedelta_abs(lhs):
 #   Define a singleton Numba type instance for a non-parametric type
 class DatetimeTimeDeltaType(types.Type):
     def __init__(self):
-        super(DatetimeTimeDeltaType, self).__init__(name="DatetimeTimeDeltaType()")
+        super().__init__(name="DatetimeTimeDeltaType()")
 
 
 datetime_timedelta_type = DatetimeTimeDeltaType()
+
 
 # 2.Teach Numba how to infer the Numba type of Python values of a certain class,
 # using typeof_impl.register
@@ -790,7 +819,7 @@ class DatetimeTimeDeltaModel(models.StructModel):
             ("seconds", types.int64),
             ("microseconds", types.int64),
         ]
-        super(DatetimeTimeDeltaModel, self).__init__(dmm, fe_type, members)
+        super().__init__(dmm, fe_type, members)
 
 
 # 4.Implementing a boxing function for a Numba type using the @box decorator
@@ -816,7 +845,6 @@ def box_datetime_timedelta(typ, val, c):
 # using the @unbox decorator and the NativeValue class
 @unbox(DatetimeTimeDeltaType)
 def unbox_datetime_timedelta(typ, val, c):
-
     days_obj = c.pyapi.object_getattr_string(val, "days")
     seconds_obj = c.pyapi.object_getattr_string(val, "seconds")
     microseconds_obj = c.pyapi.object_getattr_string(val, "microseconds")
@@ -1113,9 +1141,7 @@ def timedelta_to_bool(timedelta):
 
 class DatetimeTimeDeltaArrayType(types.ArrayCompatible):
     def __init__(self):
-        super(DatetimeTimeDeltaArrayType, self).__init__(
-            name="DatetimeTimeDeltaArrayType()"
-        )
+        super().__init__(name="DatetimeTimeDeltaArrayType()")
 
     @property
     def as_array(self):
@@ -1136,6 +1162,7 @@ days_data_type = types.Array(types.int64, 1, "C")
 seconds_data_type = types.Array(types.int64, 1, "C")
 microseconds_data_type = types.Array(types.int64, 1, "C")
 nulls_type = types.Array(types.uint8, 1, "C")
+
 
 # datetime.timedelta has three arrays of integers to store data
 @register_model(DatetimeTimeDeltaArrayType)
@@ -1307,7 +1334,6 @@ def init_datetime_timedelta_array(
 
 @lower_constant(DatetimeTimeDeltaArrayType)
 def lower_constant_datetime_timedelta_arr(context, builder, typ, pyval):
-
     n = len(pyval)
     days_data_arr = np.empty(n, np.int64)
     seconds_data_arr = np.empty(n, np.int64)
@@ -1367,9 +1393,7 @@ def alloc_datetime_timedelta_array_equiv(self, scope, equiv_set, loc, args, kws)
     return ArrayAnalysis.AnalyzeResult(shape=args[0], pre=[])
 
 
-ArrayAnalysis._analyze_op_call_bodo_hiframes_datetime_timedelta_ext_alloc_datetime_timedelta_array = (
-    alloc_datetime_timedelta_array_equiv
-)
+ArrayAnalysis._analyze_op_call_bodo_hiframes_datetime_timedelta_ext_alloc_datetime_timedelta_array = alloc_datetime_timedelta_array_equiv
 
 
 @overload(operator.getitem, no_unliteral=True)
@@ -1391,19 +1415,19 @@ def dt_timedelta_arr_getitem(A, ind):
 
         return impl_int
 
-    # bool arr indexing
+    # bool arr indexing.
     if is_list_like_index_type(ind) and ind.dtype == types.bool_:
 
         def impl_bool(A, ind):  # pragma: no cover
             # Heavily influenced by array_getitem_bool_index.
             # Just replaces calls for new data with all 3 arrays
-            ind_t = bodo.utils.conversion.coerce_to_ndarray(ind)
+            ind_t = bodo.utils.conversion.coerce_to_array(ind)
             old_mask = A._null_bitmap
             new_days_data = A._days_data[ind_t]
             new_seconds_data = A._seconds_data[ind_t]
             new_microseconds_data = A._microseconds_data[ind_t]
             n = len(new_days_data)
-            new_mask = get_new_null_mask_bool_index(old_mask, ind, n)
+            new_mask = get_new_null_mask_bool_index(old_mask, ind_t, n)
             return init_datetime_timedelta_array(
                 new_days_data, new_seconds_data, new_microseconds_data, new_mask
             )
@@ -1416,7 +1440,7 @@ def dt_timedelta_arr_getitem(A, ind):
         def impl(A, ind):  # pragma: no cover
             # Heavily influenced by array_getitem_int_index.
             # Just replaces calls for new data with all 3 arrays
-            ind_t = bodo.utils.conversion.coerce_to_ndarray(ind)
+            ind_t = bodo.utils.conversion.coerce_to_array(ind)
             old_mask = A._null_bitmap
             new_days_data = A._days_data[ind_t]
             new_seconds_data = A._seconds_data[ind_t]
@@ -1467,7 +1491,6 @@ def dt_timedelta_arr_setitem(A, ind, val):
 
     # scalar case
     if isinstance(ind, types.Integer):
-
         if types.unliteral(val) == datetime_timedelta_type:
 
             def impl(A, ind, val):  # pragma: no cover
@@ -1490,7 +1513,6 @@ def dt_timedelta_arr_setitem(A, ind, val):
 
     # array of integers
     if is_list_like_index_type(ind) and isinstance(ind.dtype, types.Integer):
-
         if types.unliteral(val) == datetime_timedelta_type:
 
             def impl_arr_ind_scalar(A, ind, val):  # pragma: no cover
@@ -1525,7 +1547,6 @@ def dt_timedelta_arr_setitem(A, ind, val):
 
     # bool array
     if is_list_like_index_type(ind) and ind.dtype == types.bool_:
-
         if types.unliteral(val) == datetime_timedelta_type:
 
             def impl_bool_ind_mask_scalar(A, ind, val):  # pragma: no cover
@@ -1600,7 +1621,7 @@ def dt_timedelta_arr_setitem(A, ind, val):
 
             return impl_slice_mask
 
-    # This should be the only IntegerArray implementation.
+    # This should be the only DatetimeTimedeltaArray implementation.
     # We only expect to reach this case if more ind options are added.
     raise BodoError(
         f"setitem for DatetimeTimedeltaArray with indexing type {ind} not supported."
@@ -1629,7 +1650,6 @@ def timedelta_arr_nbytes_overload(A):
 
 
 def overload_datetime_timedelta_arr_sub(arg1, arg2):
-
     # datetime_timedelta_array - timedelta
     if arg1 == datetime_timedelta_array_type and arg2 == datetime_timedelta_type:
 
@@ -1729,19 +1749,13 @@ timedelta_unsupported_methods = [
 # pandas.Timedelta.resolution
 
 
-def _intstall_pd_timedelta_unsupported():
-    from bodo.utils.typing import create_unsupported_overload
-
+def _install_pd_timedelta_unsupported():
     for attr_name in timedelta_unsupported_attrs:
         full_name = "pandas.Timedelta." + attr_name
-        overload_attribute(PDTimeDeltaType, attr_name)(
-            create_unsupported_overload(full_name)
-        )
+        bodo.overload_unsupported_attribute(PDTimeDeltaType, attr_name, full_name)
     for fname in timedelta_unsupported_methods:
         full_name = "pandas.Timedelta." + fname
-        overload_method(PDTimeDeltaType, fname)(
-            create_unsupported_overload(full_name + "()")
-        )
+        bodo.overload_unsupported_method(PDTimeDeltaType, fname, full_name)
 
 
-_intstall_pd_timedelta_unsupported()
+_install_pd_timedelta_unsupported()

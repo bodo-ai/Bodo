@@ -1,12 +1,10 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
-"""Tests for array of tuple values.
-"""
+"""Tests for array of tuple values."""
 
 import numpy as np
 import pytest
 
 import bodo
-from bodo.tests.utils import check_func
+from bodo.tests.utils import _test_equal_guard, check_func, get_num_test_workers
 
 
 @pytest.fixture(
@@ -49,15 +47,20 @@ def tuple_arr_value(request):
 @pytest.mark.slow
 def test_unbox(tuple_arr_value, memory_leak_check):
     # just unbox
+    @bodo.jit(distributed=False)
     def impl(arr_arg):
         return True
 
     # unbox and box
+    @bodo.jit(distributed=False)
     def impl2(arr_arg):
         return arr_arg
 
-    check_func(impl, (tuple_arr_value,))
-    check_func(impl2, (tuple_arr_value,))
+    assert impl(tuple_arr_value)
+    assert _test_equal_guard(impl2(tuple_arr_value), tuple_arr_value)
+    # Make sure we return actual object array instead of struct array workaround for
+    # Arrow
+    assert isinstance(impl2(tuple_arr_value)[0], tuple)
 
 
 @pytest.mark.smoke
@@ -110,7 +113,8 @@ def test_setitem_slice(memory_leak_check):
             (-1, 7.8),
             (3, 4.0),
             (-3, -1.2),
-        ]
+        ],
+        object,
     )
     i = slice(1, 3)
     val = A[:2]
@@ -185,8 +189,9 @@ def test_nbytes(memory_leak_check):
             (3.1, 4.1),
             (-3.1, -1.1),
             (5.1, 9.1),
-        ]
+        ],
+        object,
     )
-    check_func(impl, (tuple_value,), py_output=113, only_seq=True)
-    py_out = 112 + bodo.get_size()  # one byte for null_bitmap per rank
+    check_func(impl, (tuple_value,), py_output=115, only_seq=True)
+    py_out = 112 + 3 * get_num_test_workers()  # 3 bytes for null_bitmaps per rank
     check_func(impl, (tuple_value,), py_output=py_out, only_1DVar=True)

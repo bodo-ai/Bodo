@@ -1,5 +1,3 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
-
 import pytest
 
 from bodo.tests.utils import InputDist

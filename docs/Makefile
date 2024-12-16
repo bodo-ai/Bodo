@@ -1,5 +1,6 @@
 SHELL=/bin/bash
 
+
 SYSTEM_PYTHON=python3
 VENV:=venv
 
@@ -9,6 +10,13 @@ PYTHON:=$(VENV)/bin/python3
 $(VENV):
 	$(SYSTEM_PYTHON) -m venv venv
 
+# check if $(PLATFORM_SDK_PATH) is set, if not then throw error
+ifndef PLATFORM_SDK_PATH
+$(error PLATFORM_SDK_PATH is not set)
+endif
+
+
+
 #
 # Dependencies
 #
@@ -16,8 +24,6 @@ $(VENV):
 pip-install: $(VENV)
 	$(PYTHON) -m ensurepip --upgrade
 	$(PIP) install -r requirements.txt
-	$(PIP) install ./extensions/Markdown-GridTables-master.zip
-	$(PIP) install ./extensions/material.zip
 
 
 #
@@ -25,12 +31,26 @@ pip-install: $(VENV)
 #
 .PHONY: mkdocs-build
 mkdocs-build: pip-install
-	$(PYTHON) -m mkdocs build
+	PYTHONPATH=$(PLATFORM_SDK_PATH) $(PYTHON) -m mkdocs build
 
 .PHONY: mkdocs-serve
 mkdocs-serve: pip-install
-	$(PYTHON) -m mkdocs serve
+	PYTHONPATH=$(PLATFORM_SDK_PATH) $(PYTHON) -m mkdocs serve
 
-.PHONY: gen_api
-gen_api: pip-install
-	$(PYTHON) gen_api.py
+
+.PHONY: mike-deploy
+mike-deploy: pip-install
+	PYTHONPATH=$(PLATFORM_SDK_PATH) mike deploy $(version_name)
+
+.PHONY: mike-serve
+mike-serve: pip-install
+	PYTHONPATH=$(PLATFORM_SDK_PATH) mike serve
+
+.PHONY: mike-push
+mike-push: pip-install
+	PYTHONPATH=$(PLATFORM_SDK_PATH) mike deploy $(version_name) --push
+
+.PHONY: mike-push-latest
+mike-push-latest: pip-install
+	PYTHONPATH=$(PLATFORM_SDK_PATH) mike deploy --update-alias $(version_name) latest --push
+

@@ -1,4 +1,3 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 import datetime
 import random
 
@@ -108,7 +107,10 @@ df.to_parquet("index_test2.pq")
 
 
 # test datetime64, spark dates
-dt1 = pd.DatetimeIndex(["2017-03-03 03:23", "1990-10-23", "1993-07-02 10:33:01"])
+dt1 = pd.array(
+    ["2017-03-03 03:23", "1990-10-23", "1993-07-02 10:33:01"],
+    dtype="datetime64[ns, UTC]",
+)
 df = pd.DataFrame({"DT64": dt1, "DATE": dt1.copy()})
 df.to_parquet("pandas_dt.pq")
 
@@ -153,7 +155,7 @@ sdf.write.mode("overwrite").json("int_nulls_single.json")
 
 # copy data file from int_nulls_single.pq directory to make single file
 
-df = pd.DataFrame({"A": [True, False, False, np.nan, True]})
+df = pd.DataFrame({"A": [True, False, False, None, True]})
 df.to_parquet("bool_nulls.pq")
 
 

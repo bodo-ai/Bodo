@@ -1,7 +1,7 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
 Collection of utility functions for indexing implementation (getitem/setitem)
 """
+
 import operator
 
 import numba
@@ -14,16 +14,28 @@ import bodo
 from bodo.utils.typing import BodoError
 
 
+@register_jitable  # do not marke inline as it causes conversion to fail
+def bitmap_size(n: int) -> int:  # pragma: no cover
+    """Get the number of bytes necessary to store an n-bit bitmap."""
+    return (n + 7) >> 3
+
+
+@register_jitable
+def get_dt64_bitmap_fill(dt64_val):  # pragma: no cover
+    """Returns bitmap fill value for nullable dt64 arrays: 0s if null value else 1s."""
+    return 0 if np.isnat(dt64_val) else 0xFF
+
+
 @register_jitable
 def get_new_null_mask_bool_index(old_mask, ind, n):  # pragma: no cover
     """create a new null bitmask for output of indexing using bool index 'ind'.
     'n' is the total number of elements in original array (not bytes).
     """
-    n_bytes = (n + 7) >> 3
+    n_bytes = bitmap_size(n)
     new_mask = np.empty(n_bytes, np.uint8)
     curr_bit = 0
     for i in range(len(ind)):
-        if ind[i]:
+        if not bodo.libs.array_kernels.isna(ind, i) and ind[i]:
             bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(old_mask, i)
             bodo.libs.int_arr_ext.set_bit_to_arr(new_mask, curr_bit, bit)
             curr_bit += 1
@@ -36,7 +48,7 @@ def array_getitem_bool_index(A, ind):  # pragma: no cover
     '_null_bitmap' attribute (e.g. int/bool/decimal/date).
     Covered by test_series_iloc_getitem_array_bool.
     """
-    ind = bodo.utils.conversion.coerce_to_ndarray(ind)
+    ind = bodo.utils.conversion.coerce_to_array(ind)
     old_mask = A._null_bitmap
     new_data = A._data[ind]
     n = len(new_data)
@@ -49,7 +61,7 @@ def get_new_null_mask_int_index(old_mask, ind, n):  # pragma: no cover
     """create a new null bitmask for output of indexing using integer index 'ind'.
     'n' is the total number of elements in original array (not bytes).
     """
-    n_bytes = (n + 7) >> 3
+    n_bytes = bitmap_size(n)
     new_mask = np.empty(n_bytes, np.uint8)
     curr_bit = 0
     for i in range(len(ind)):
@@ -65,7 +77,7 @@ def array_getitem_int_index(A, ind):  # pragma: no cover
     '_null_bitmap' attribute (e.g. int/bool/decimal/date).
     Covered by test_series_iloc_getitem_array_int.
     """
-    ind_t = bodo.utils.conversion.coerce_to_ndarray(ind)
+    ind_t = bodo.utils.conversion.coerce_to_array(ind)
     old_mask = A._null_bitmap
     new_data = A._data[ind_t]
     n = len(new_data)
@@ -80,7 +92,7 @@ def get_new_null_mask_slice_index(old_mask, ind, n):  # pragma: no cover
     """
     slice_idx = numba.cpython.unicode._normalize_slice(ind, n)
     span = numba.cpython.unicode._slice_span(slice_idx)
-    n_bytes = (span + 7) >> 3
+    n_bytes = bitmap_size(span)
     new_mask = np.empty(n_bytes, np.uint8)
     curr_bit = 0
     for i in range(slice_idx.start, slice_idx.stop, slice_idx.step):
@@ -155,6 +167,7 @@ def array_setitem_bool_index_overload(A, idx, val):
     if bodo.utils.utils.is_array_typ(val) or bodo.utils.typing.is_iterable_type(val):
 
         def impl_arr(A, idx, val):  # pragma: no cover
+            idx = bodo.utils.conversion.coerce_to_array(idx)
             val = bodo.utils.conversion.coerce_to_array(val, use_nullable_array=True)
             n = len(idx)
             val_ind = 0
@@ -172,6 +185,7 @@ def array_setitem_bool_index_overload(A, idx, val):
     if bodo.utils.typing.is_scalar_type(val):
 
         def impl_scalar(A, idx, val):  # pragma: no cover
+            idx = bodo.utils.conversion.coerce_to_array(idx)
             n = len(idx)
             val_ind = 0
             for i in range(n):
@@ -252,7 +266,7 @@ def untuple_if_one_tuple(v):
 def untuple_if_one_tuple_overload(v):
     """if 'v' is a single element tuple, return 'v[0]' to avoid unnecessary tuple value."""
     if isinstance(v, types.BaseTuple) and len(v.types) == 1:
-        return lambda v: v[0]
+        return lambda v: v[0]  # pragma: no cover
 
     return lambda v: v
 
@@ -348,7 +362,7 @@ def none_optional_setitem_overload(A, idx, val):
         ):
 
             def setitem_none_int_arr(A, idx, val):  # pragma: no cover
-                idx = bodo.utils.conversion.coerce_to_ndarray(idx)
+                idx = bodo.utils.conversion.coerce_to_array(idx)
                 for i in idx:
                     bodo.libs.array_kernels.setna(A, i)
 
@@ -357,14 +371,13 @@ def none_optional_setitem_overload(A, idx, val):
         elif (
             bodo.utils.typing.is_list_like_index_type(idx) and idx.dtype == types.bool_
         ):
-
             # Handle string array specially because we need to copy the data
             if A == bodo.string_array_type:
 
-                def string_arr_impl(A, idx, val):
+                def string_arr_impl(A, idx, val):  # pragma: no cover
                     n = len(A)
                     # NOTE: necessary to convert potential Series to array
-                    idx = bodo.utils.conversion.coerce_to_ndarray(idx)
+                    idx = bodo.utils.conversion.coerce_to_array(idx)
                     out_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(n, -1)
                     for i in numba.parfors.parfor.internal_prange(n):
                         if idx[i] or bodo.libs.array_kernels.isna(A, i):
@@ -378,7 +391,7 @@ def none_optional_setitem_overload(A, idx, val):
                 return string_arr_impl
 
             def setitem_none_bool_arr(A, idx, val):  # pragma: no cover
-                idx = bodo.utils.conversion.coerce_to_ndarray(idx)
+                idx = bodo.utils.conversion.coerce_to_array(idx)
                 n = len(idx)
                 for i in range(n):
                     if not bodo.libs.array_kernels.isna(idx, i) and idx[i]:
@@ -401,7 +414,6 @@ def none_optional_setitem_overload(A, idx, val):
         )  # pragma: no cover
 
     elif isinstance(val, types.optional):
-
         if isinstance(idx, types.Integer):
 
             def impl_optional(A, idx, val):  # pragma: no cover
@@ -417,7 +429,7 @@ def none_optional_setitem_overload(A, idx, val):
         ):
 
             def setitem_optional_int_arr(A, idx, val):  # pragma: no cover
-                idx = bodo.utils.conversion.coerce_to_ndarray(idx)
+                idx = bodo.utils.conversion.coerce_to_array(idx)
                 for i in idx:
                     if val is None:
                         bodo.libs.array_kernels.setna(A, i)
@@ -429,7 +441,6 @@ def none_optional_setitem_overload(A, idx, val):
         elif (
             bodo.utils.typing.is_list_like_index_type(idx) and idx.dtype == types.bool_
         ):
-
             # Handle string array specially because we need to copy the data
             if A == bodo.string_array_type:
 
@@ -442,7 +453,7 @@ def none_optional_setitem_overload(A, idx, val):
                 return string_arr_impl
 
             def setitem_optional_bool_arr(A, idx, val):  # pragma: no cover
-                idx = bodo.utils.conversion.coerce_to_ndarray(idx)
+                idx = bodo.utils.conversion.coerce_to_array(idx)
                 n = len(idx)
                 for i in range(n):
                     if not bodo.libs.array_kernels.isna(idx, i) and idx[i]:
@@ -488,3 +499,42 @@ def unoptional(typingctx, val_t=None):
         return out_val
 
     return val_t.type(val_t), codegen
+
+
+def scalar_optional_getitem(A, idx):  # pragma: no cover
+    pass
+
+
+@overload(scalar_optional_getitem)
+def overload_scalar_optional_getitem(A, idx):
+    """An implementation of getitem that returns None if the array is NULL. This is
+    used by BodoSQL to select individual elements with correction optional type support
+    inside CASE statements.
+
+    Args:
+        A (types.Type): Input Array
+        idx (types.Integer): Index to fetch in the array.
+
+    Raises:
+        BodoError: The index is not the correct type.
+
+    Returns:
+        types.Type: A[idx] if the data isn't null and otherwise None.
+    """
+    if not isinstance(idx, types.Integer):
+        raise BodoError("scalar_optional_getitem(): Can only select a single element")
+
+    if bodo.utils.typing.is_nullable(A):
+        # If the array type is nullable then have an optional return type.
+        def impl(A, idx):  # pragma: no cover
+            if bodo.libs.array_kernels.isna(A, idx):
+                return None
+            else:
+                return bodo.utils.conversion.box_if_dt64(A[idx])
+
+        return impl
+    else:
+        # If the data isn't nullable we don't need to return an optional type.
+        return lambda A, idx: bodo.utils.conversion.box_if_dt64(
+            A[idx]
+        )  # pragma: no cover

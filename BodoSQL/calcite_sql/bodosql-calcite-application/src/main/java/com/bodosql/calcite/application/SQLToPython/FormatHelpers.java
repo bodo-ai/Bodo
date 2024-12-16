@@ -3,6 +3,7 @@ package com.bodosql.calcite.application.SQLToPython;
 import static java.util.Map.entry;
 
 import com.bodosql.calcite.application.BodoSQLCodegenException;
+import com.bodosql.calcite.ir.Expr;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Map;
@@ -51,9 +52,9 @@ public class FormatHelpers {
    * be interpreted properly by pd.ToDatetime.
    *
    * @param SQLFormatStr The format string with valid SQL syntax.
-   * @return An equivalent format string that can be used by Pandas.
+   * @return An Expr of generated code for an equivalent format string that can be used by Pandas.
    */
-  public static String SQLFormatToPandasToDatetimeFormat(String SQLFormatStr) {
+  public static Expr SQLFormatToPandasToDatetimeFormat(String SQLFormatStr) {
     StringBuilder pythonFormatStr = new StringBuilder();
     int startIndex = 0;
     int endIndex = 0;
@@ -97,6 +98,8 @@ public class FormatHelpers {
     if (startIndex < SQLFormatStr.length()) {
       pythonFormatStr.append(SQLFormatStr, startIndex, SQLFormatStr.length());
     }
-    return pythonFormatStr.toString();
+    // TODO(njriasan): Replace Expr.Raw with Expr.StringLiteral. The given input
+    // was already an Expr, so it is already a valid string wrapped in quotes.
+    return new Expr.Raw(pythonFormatStr.toString());
   }
 }

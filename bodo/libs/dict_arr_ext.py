@@ -1,4 +1,3 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """Dictionary encoded array data type, similar to DictionaryArray of Arrow.
 The purpose is to improve memory consumption and performance over string_array_type for
 string arrays that have a lot of repetitive values (typical in practice).
@@ -18,8 +17,10 @@ import numpy as np
 import pandas as pd
 import pyarrow as pa
 from llvmlite import ir as lir
+from numba import generated_jit
 from numba.core import cgutils, types
 from numba.core.imputils import impl_ret_new_ref, lower_builtin, lower_constant
+from numba.core.typing import signature
 from numba.extending import (
     NativeValue,
     box,
@@ -37,8 +38,8 @@ from numba.extending import (
 )
 
 import bodo
-from bodo.libs import hstr_ext
-from bodo.libs.bool_arr_ext import init_bool_array
+from bodo.ext import stream_join_cpp
+from bodo.hiframes.pd_series_ext import if_series_to_array_type
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.str_arr_ext import (
     StringArrayType,
@@ -49,12 +50,14 @@ from bodo.libs.str_arr_ext import (
 )
 from bodo.utils.typing import (
     BodoArrayIterator,
+    is_list_like_index_type,
     is_overload_none,
     raise_bodo_error,
 )
 from bodo.utils.utils import synchronize_error_njit
 
-ll.add_symbol("box_dict_str_array", hstr_ext.box_dict_str_array)
+ll.add_symbol("generate_array_id", stream_join_cpp.generate_array_id)
+
 
 # we use nullable int32 for dictionary indices to match Arrow for faster and easier IO.
 # more than 2 billion unique values doesn't make sense for a dictionary-encoded array.
@@ -66,9 +69,7 @@ class DictionaryArrayType(types.IterableType, types.ArrayCompatible):
 
     def __init__(self, arr_data_type):
         self.data = arr_data_type
-        super(DictionaryArrayType, self).__init__(
-            name=f"DictionaryArrayType({arr_data_type})"
-        )
+        super().__init__(name=f"DictionaryArrayType({arr_data_type})")
 
     @property
     def as_array(self):
@@ -114,6 +115,13 @@ class DictionaryArrayModel(models.StructModel):
             # to avoid extra communication. This may be false after parquet read but
             # set to true after other operations like shuffle
             ("has_global_dictionary", types.bool_),
+            # flag to indicate whether the dictionary has unique values on this rank.
+            # This is used to support optimized implementations where decisions can be
+            # made just based on indices.
+            ("has_unique_local_dictionary", types.bool_),
+            # Dictionary id that helps identify identical equivalent dictionaries quickly.
+            # This is unique inside a rank but not globally.
+            ("dict_id", types.int64),
         ]
         models.StructModel.__init__(self, dmm, fe_type, members)
 
@@ -123,40 +131,93 @@ make_attribute_wrapper(DictionaryArrayType, "indices", "_indices")
 make_attribute_wrapper(
     DictionaryArrayType, "has_global_dictionary", "_has_global_dictionary"
 )
-
+make_attribute_wrapper(
+    DictionaryArrayType, "has_unique_local_dictionary", "_has_unique_local_dictionary"
+)
+make_attribute_wrapper(DictionaryArrayType, "dict_id", "_dict_id")
 
 lower_builtin("getiter", dict_str_arr_type)(numba.np.arrayobj.getiter_array)
 
 
 @intrinsic
-def init_dict_arr(typingctx, data_t, indices_t, glob_dict_t=None):
+def init_dict_arr(
+    typingctx, data_t, indices_t, glob_dict_t, unique_dict_t, dict_id_if_present_t
+):
     """Create a dictionary-encoded array with provided index and data values."""
 
     assert indices_t == dict_indices_arr_type, "invalid indices type for dict array"
+    assert (
+        is_overload_none(dict_id_if_present_t) or dict_id_if_present_t == types.int64
+    ), "ID must be none if we are generating an ID or an id of a matching dictionary"
+    generate_id = is_overload_none(dict_id_if_present_t)
 
-    def codegen(context, builder, signature, args):
-        data, indices, glob_dict = args
+    def codegen(context, builder, sig, args):
+        data, indices, glob_dict, unique_dict, dict_id = args
         # create dict arr struct and store values
-        dict_arr = cgutils.create_struct_proxy(signature.return_type)(context, builder)
+        dict_arr = cgutils.create_struct_proxy(sig.return_type)(context, builder)
         dict_arr.data = data
         dict_arr.indices = indices
         dict_arr.has_global_dictionary = glob_dict
+        dict_arr.has_unique_local_dictionary = unique_dict
+        if generate_id:
+            # Fetch the length of the data.
+            # TODO: Is this too much compilation?
+            len_sig = signature(types.int64, sig.args[0])
+            nitems = context.compile_internal(
+                builder, lambda a: len(a), len_sig, [data]
+            )
+            new_dict_id = generate_dict_id_codegen(
+                context, builder, signature(types.int64, types.int64), [nitems]
+            )
+            dict_arr.dict_id = new_dict_id
+        else:
+            dict_arr.dict_id = dict_id
 
         # increase refcount of stored values
-        context.nrt.incref(builder, signature.args[0], data)
-        context.nrt.incref(builder, signature.args[1], indices)
+        context.nrt.incref(builder, sig.args[0], data)
+        context.nrt.incref(builder, sig.args[1], indices)
 
         return dict_arr._getvalue()
 
     ret_typ = DictionaryArrayType(data_t)
-    sig = ret_typ(data_t, indices_t, types.bool_)
+    sig = ret_typ(data_t, indices_t, types.bool_, types.bool_, dict_id_if_present_t)
     return sig, codegen
+
+
+def generate_dict_id_codegen(context, builder, sig, args):
+    """Codegen function for generate_dict_id. This is exposed directly
+    to enable inlining into other intrinsics.
+    """
+    (nitems,) = args
+    fnty = lir.FunctionType(lir.IntType(64), [lir.IntType(64)])
+    fn_tp = cgutils.get_or_insert_function(
+        builder.module, fnty, name="generate_array_id"
+    )
+    id_args = [nitems]
+    new_dict_id = builder.call(fn_tp, id_args)
+    return new_dict_id
+
+
+@intrinsic
+def generate_dict_id(typingctx, length_t):
+    """Generate a new id for a dictionary with the
+    given length. This is exposed directly for APIs that can use
+    caching.
+
+    Args:
+        length_t (types.int64): The length of the array.
+
+    Returns:
+        types.int64: The new dict id.
+    """
+    assert length_t == types.int64, "Length must be types.int64"
+    return types.int64(length_t), generate_dict_id_codegen
 
 
 @typeof_impl.register(pa.DictionaryArray)
 def typeof_dict_value(val, c):
     # only support dict-encoded string arrays for now, TODO(ehsan): support other types
-    if val.type.value_type == pa.string():
+    if val.type.value_type == pa.string() or val.type.value_type == pa.large_string():
         return dict_str_arr_type
 
 
@@ -171,16 +232,16 @@ def to_pa_dict_arr(A):
     # Arrow, see test_basic.py::test_dict_scalar_to_array
     if (
         isinstance(A, pd.arrays.ArrowStringArray)
-        and pa.types.is_dictionary(A._data.type)
+        and pa.types.is_dictionary(A._pa_array.type)
         and (
-            pa.types.is_string(A._data.type.value_type)
-            or pa.types.is_large_string(A._data.type.value_type)
+            pa.types.is_string(A._pa_array.type.value_type)
+            or pa.types.is_large_string(A._pa_array.type.value_type)
         )
-        and pa.types.is_int32(A._data.type.index_type)
+        and pa.types.is_int32(A._pa_array.type.index_type)
     ):
-        return A._data.combine_chunks()
+        return A._pa_array.combine_chunks()
 
-    return pd.array(A, "string[pyarrow]")._data.combine_chunks().dictionary_encode()
+    return pd.array(A, "string[pyarrow]")._pa_array.combine_chunks().dictionary_encode()
 
 
 @unbox(DictionaryArrayType)
@@ -219,10 +280,21 @@ def unbox_dict_arr(typ, val, c):
         pd_class_obj, "array", (indices_obj, int32_str_obj)
     )
     dict_arr.indices = c.unbox(dict_indices_arr_type, pd_int_arr_obj).value
-    # assume dictionarys are not the same across all ranks to be conservative
+    # assume dictionaries are not the same across all ranks to be conservative
     dict_arr.has_global_dictionary = c.context.get_constant(types.bool_, False)
+    # assume dictionaries are not unique to be conservative
+    dict_arr.has_unique_local_dictionary = c.context.get_constant(types.bool_, False)
+    # Fetch the length of the dictionary.
+    nitems_obj = c.pyapi.call_method(np_str_arr_obj, "__len__", [])
+    nitems = c.unbox(types.int64, nitems_obj).value
+    # Generate a new id for this dictionary
+    new_dict_id = generate_dict_id_codegen(
+        c.context, c.builder, signature(types.int64, types.int64), [nitems]
+    )
+    dict_arr.dict_id = new_dict_id
 
     c.pyapi.decref(data_obj)
+    c.pyapi.decref(nitems_obj)
     c.pyapi.decref(false_obj)
     c.pyapi.decref(np_str_arr_obj)
     c.pyapi.decref(indices_obj)
@@ -243,65 +315,30 @@ def box_dict_arr(typ, val, c):
     dict_arr = cgutils.create_struct_proxy(typ)(c.context, c.builder, val)
 
     if typ == dict_str_arr_type:
-
         # box to Pandas ArrowStringArray to minimize boxing overhead
-        if bodo.libs.str_arr_ext.use_pd_pyarrow_string_array:
-            from bodo.libs.array import array_info_type, array_to_info_codegen
+        from bodo.libs.array import array_info_type, array_to_info_codegen
 
-            arr_info = array_to_info_codegen(
-                c.context, c.builder, array_info_type(typ), (val,), incref=False
-            )
-            fnty = lir.FunctionType(
-                c.pyapi.pyobj,
-                [
-                    lir.IntType(8).as_pointer(),
-                ],
-            )
-            box_fname = "pd_pyarrow_array_from_string_array"
-            fn_get = cgutils.get_or_insert_function(
-                c.builder.module, fnty, name=box_fname
-            )
-            arr = c.builder.call(
-                fn_get,
-                [
-                    arr_info,
-                ],
-            )
-            c.context.nrt.decref(c.builder, typ, val)
-            return arr
-
-        # Box the dictionary array for string interning
-        c.context.nrt.incref(c.builder, typ.data, dict_arr.data)
-        data_arr_obj = c.box(typ.data, dict_arr.data)
-        index_arr = cgutils.create_struct_proxy(dict_indices_arr_type)(
-            c.context, c.builder, dict_arr.indices
+        arr_info = array_to_info_codegen(
+            c.context, c.builder, array_info_type(typ), (val,)
         )
         fnty = lir.FunctionType(
             c.pyapi.pyobj,
             [
-                lir.IntType(64),
-                c.pyapi.pyobj,
-                lir.IntType(32).as_pointer(),
                 lir.IntType(8).as_pointer(),
+                lir.IntType(32),
             ],
         )
-        fn_get = cgutils.get_or_insert_function(
-            c.builder.module, fnty, name="box_dict_str_array"
+        box_fname = "pd_pyarrow_array_from_string_array"
+        fn_get = cgutils.get_or_insert_function(c.builder.module, fnty, name=box_fname)
+        arr = c.builder.call(
+            fn_get,
+            [arr_info, c.context.get_constant(types.int32, 0)],
         )
-        indices_struct = cgutils.create_struct_proxy(types.Array(types.int32, 1, "C"))(
-            c.context, c.builder, index_arr.data
-        )
-        n = c.builder.extract_value(indices_struct.shape, 0)
-        indices_data = indices_struct.data
-        null_bitmap = cgutils.create_struct_proxy(types.Array(types.int8, 1, "C"))(
-            c.context, c.builder, index_arr.null_bitmap
-        ).data
-        np_str_arr_obj = c.builder.call(
-            fn_get, [n, data_arr_obj, indices_data, null_bitmap]
-        )
-        c.pyapi.decref(data_arr_obj)
+        c.context.nrt.decref(c.builder, typ, val)
+        return arr
+
     else:
-        # create a PyArrow dictionary array fron indices and data
+        # create a PyArrow dictionary array from indices and data
         # pa.DictionaryArray.from_arrays(dict_arr.data, dict_arr.indices)
         mod_name = c.context.insert_const_string(c.builder.module, "pyarrow")
         pa_class_obj = c.pyapi.import_module_noblock(mod_name)
@@ -368,7 +405,11 @@ overload_method(DictionaryArrayType, "astype", no_unliteral=True)(
 def overload_dict_arr_copy(A):
     def copy_impl(A):  # pragma: no cover
         return init_dict_arr(
-            A._data.copy(), A._indices.copy(), A._has_global_dictionary
+            A._data.copy(),
+            A._indices.copy(),
+            A._has_global_dictionary,
+            A._has_unique_local_dictionary,
+            A._dict_id,
         )
 
     return copy_impl
@@ -389,9 +430,13 @@ def lower_constant_dict_arr(context, builder, typ, pyval):
     """embed constant dict array value by getting constant values for underlying
     indices and data arrays.
     """
-
-    if bodo.hiframes.boxing._use_dict_str_type and isinstance(pyval, np.ndarray):
-        pyval = pa.array(pyval).dictionary_encode()
+    if isinstance(pyval, pd.arrays.ArrowStringArray):
+        pyval = pyval._data
+        if isinstance(pyval, pa.ChunkedArray):
+            pyval = pyval.combine_chunks()
+    else:
+        if bodo.hiframes.boxing._use_dict_str_type and isinstance(pyval, np.ndarray):
+            pyval = pa.array(pyval).dictionary_encode()
 
     data_arr = pyval.dictionary.to_numpy(False)
     indices_arr = pd.array(pyval.indices, "Int32")
@@ -402,17 +447,29 @@ def lower_constant_dict_arr(context, builder, typ, pyval):
     )
 
     has_global_dictionary = context.get_constant(types.bool_, False)
-    dic_array = lir.Constant.literal_struct(
-        [data_arr, indices_arr, has_global_dictionary]
+    has_unique_local_dictionary = context.get_constant(types.bool_, False)
+    # TODO(njriasan): FIXME. We cannot call the C++ function because it doesn't
+    # get registered as a global function. There is probably a way to do this
+    # with cgutils.global_constant, but that could mess up the id's properties.
+    # For now, future work with dict_ids so check to ensure they are valid.
+    dict_id = context.get_constant(types.int64, -1)
+
+    dict_array = lir.Constant.literal_struct(
+        [
+            data_arr,
+            indices_arr,
+            has_global_dictionary,
+            has_unique_local_dictionary,
+            dict_id,
+        ]
     )
-    return dic_array
+    return dict_array
 
 
 @overload(operator.getitem, no_unliteral=True)
 def dict_arr_getitem(A, ind):
     if not isinstance(A, DictionaryArrayType):
         return
-
     if isinstance(ind, types.Integer):
 
         def dict_arr_getitem_impl(A, ind):  # pragma: no cover
@@ -428,7 +485,11 @@ def dict_arr_getitem(A, ind):
     # we could also trim down the dictionary in some cases to save memory but doesn't
     # seem to be worth it
     return lambda A, ind: init_dict_arr(
-        A._data, A._indices[ind], A._has_global_dictionary
+        A._data,
+        A._indices[ind],
+        A._has_global_dictionary,
+        A._has_unique_local_dictionary,
+        A._dict_id,
     )  # pragma: no cover
 
 
@@ -470,7 +531,29 @@ def dict_arr_setitem(A, idx, val):
     if not isinstance(A, DictionaryArrayType):
         return
 
-    raise_bodo_error("DictionaryArrayType is read-only and doesn't support setitem yet")
+    if val == types.none or isinstance(val, types.optional):  # pragma: no cover
+        # None/Optional goes through a separate step.
+        return
+
+    # Setitem is supported if input array has the same dictionary as target array.
+    # NOTE: checking dictionary values to be the same can be slow so the setitem caller
+    # needs to make sure this is the case.
+    if val == dict_str_arr_type and (
+        (
+            is_list_like_index_type(idx)
+            and (isinstance(idx.dtype, types.Integer) or idx.dtype == types.bool_)
+        )
+        or isinstance(idx, types.SliceType)
+    ):
+
+        def impl_dict_arr_setitem(A, idx, val):  # pragma: no cover
+            A._indices[idx] = val._indices
+
+        return impl_dict_arr_setitem
+
+    raise_bodo_error(
+        f"DictionaryArrayType setitem not supported for idx type {idx} and value type {val}"
+    )
 
 
 @numba.njit(no_cpython_wrapper=True)
@@ -518,60 +601,74 @@ def find_dict_ind_non_unique(arr, val):  # pragma: no cover
 def dict_arr_eq(arr, val):  # pragma: no cover
     """implements equality comparison between a dictionary array and a scalar value"""
     n = len(arr)
-    if arr._has_global_dictionary:
-        # In bodo, if we have a global dictionary, then we know that
-        # the values in the dictionary are unique.
+    if arr._has_unique_local_dictionary:
         dict_ind = find_dict_ind_unique(arr, val)
         if dict_ind == -1:
-            return init_bool_array(
-                np.full(n, False, np.bool_), arr._indices._null_bitmap.copy()
-            )
+            # TODO: Add an API for just copying the null bitmap?
+            out_arr = bodo.libs.bool_arr_ext.alloc_false_bool_array(n)
+            for i in range(n):
+                if bodo.libs.array_kernels.isna(arr, i):
+                    bodo.libs.array_kernels.setna(out_arr, i)
+            return out_arr
         return arr._indices == dict_ind
     else:
-        # In this case, we may have multiple indicies with a value
+        # In this case, we may have multiple indices with a value
         dict_ind_set = find_dict_ind_non_unique(arr, val)
 
         if len(dict_ind_set) == 0:
-            return init_bool_array(
-                np.full(n, False, np.bool_), arr._indices._null_bitmap.copy()
-            )
+            # TODO: Add an API for just copying the null bitmap?
+            out_arr = bodo.libs.bool_arr_ext.alloc_false_bool_array(n)
+            for i in range(n):
+                if bodo.libs.array_kernels.isna(arr, i):
+                    bodo.libs.array_kernels.setna(out_arr, i)
+            return out_arr
 
-        values_arr = np.empty(n, dtype=np.bool_)
-
-        for i in range(len(arr._indices)):
-            values_arr[i] = arr._indices[i] in dict_ind_set
-
-        return init_bool_array(values_arr, arr._indices._null_bitmap.copy())
+        # TODO: Add an API for just copying the null bitmap?
+        out_arr = bodo.libs.bool_arr_ext.alloc_bool_array(n)
+        for i in range(n):
+            if bodo.libs.array_kernels.isna(arr, i):
+                bodo.libs.array_kernels.setna(out_arr, i)
+                continue
+            out_arr[i] = arr._indices[i] in dict_ind_set
+        return out_arr
 
 
 @numba.njit(no_cpython_wrapper=True)
 def dict_arr_ne(arr, val):  # pragma: no cover
     """implements inequality comparison between a dictionary array and a scalar value"""
     n = len(arr)
-    if arr._has_global_dictionary:
+    if arr._has_unique_local_dictionary:
         # In bodo, if we have a global dictionary, then we know that
         # the values in the dictionary are unique.
         dict_ind = find_dict_ind_unique(arr, val)
         if dict_ind == -1:
-            return init_bool_array(
-                np.full(n, True, np.bool_), arr._indices._null_bitmap.copy()
-            )
+            # TODO: Add an API for just copying the null bitmap?
+            out_arr = bodo.libs.bool_arr_ext.alloc_true_bool_array(n)
+            for i in range(n):
+                if bodo.libs.array_kernels.isna(arr, i):
+                    bodo.libs.array_kernels.setna(out_arr, i)
+            return out_arr
         return arr._indices != dict_ind
     else:
-        # In this case, we may have multiple indicies with a value
+        # In this case, we may have multiple indices with a value
         dict_ind_set = find_dict_ind_non_unique(arr, val)
 
         if len(dict_ind_set) == 0:
-            return init_bool_array(
-                np.full(n, True, np.bool_), arr._indices._null_bitmap.copy()
-            )
+            # TODO: Add an API for just copying the null bitmap?
+            out_arr = bodo.libs.bool_arr_ext.alloc_true_bool_array(n)
+            for i in range(n):
+                if bodo.libs.array_kernels.isna(arr, i):
+                    bodo.libs.array_kernels.setna(out_arr, i)
+            return out_arr
 
-        values_arr = np.empty(n, dtype=np.bool_)
-
-        for i in range(len(arr._indices)):
-            values_arr[i] = arr._indices[i] not in dict_ind_set
-
-        return init_bool_array(values_arr, arr._indices._null_bitmap.copy())
+        # TODO: Add an API for just copying the null bitmap?
+        out_arr = bodo.libs.bool_arr_ext.alloc_bool_array(n)
+        for i in range(n):
+            if bodo.libs.array_kernels.isna(arr, i):
+                bodo.libs.array_kernels.setna(out_arr, i)
+                continue
+            out_arr[i] = arr._indices[i] not in dict_ind_set
+        return out_arr
 
 
 def get_binary_op_overload(op, lhs, rhs):
@@ -678,7 +775,7 @@ def cat_dict_str_overload(arrs, sep):
     func_text += (
         "  out_str_arr = bodo.libs.str_arr_ext.str_arr_from_sequence(out_strs)\n"
     )
-    func_text += "  return bodo.libs.dict_arr_ext.init_dict_arr(out_str_arr, out_indices, False)\n"
+    func_text += "  return bodo.libs.dict_arr_ext.init_dict_arr(out_str_arr, out_indices, False, False, None)\n"
 
     loc_vars = {}
     exec(
@@ -692,6 +789,28 @@ def cat_dict_str_overload(arrs, sep):
     )
     impl = loc_vars["impl"]
     return impl
+
+
+def unset_dict_global(arr):  # pragma: no cover
+    pass
+
+
+@overload(unset_dict_global)
+def overload_unset_global_dict(arr):
+    """Unset global dictionary flag if input is a dictionary-encoded array"""
+    if arr != dict_str_arr_type:
+        return lambda arr: arr  # pragma: no cover
+
+    def impl_unset_global_dict(arr):  # pragma: no cover
+        return init_dict_arr(
+            arr._data,
+            arr._indices,
+            False,
+            arr._has_unique_local_dictionary,
+            arr._dict_id,
+        )
+
+    return impl_unset_global_dict
 
 
 @lower_cast(DictionaryArrayType, StringArrayType)
@@ -761,9 +880,11 @@ def str_replace(arr, pat, repl, flags, regex):  # pragma: no cover
                 continue
             out_str_arr[i] = data_arr[i].replace(pat, repl)
 
-    # NOTE: this operation may introduce non-unqiue values in the dictionary. Therefore,
-    # We have to set _has_global_dictionary to false
-    return init_dict_arr(out_str_arr, arr._indices.copy(), False)
+    # NOTE: this operation may introduce non-unique values in the dictionary. Therefore,
+    # We have to set _has_unique_local_dictionary to false
+    return init_dict_arr(
+        out_str_arr, arr._indices.copy(), arr._has_global_dictionary, False, None
+    )
 
 
 @register_jitable
@@ -847,7 +968,7 @@ def str_series_contains_regex(arr, pat, case, flags, na, regex):  # pragma: no c
     # numpy object array.
     dict_arr_S = pd.Series(dict_arr)
     # Compute the operation on the dictionary and save the output
-    with numba.objmode(dict_arr_out=bodo.boolean_array):
+    with bodo.objmode(dict_arr_out=bodo.boolean_array_type):
         dict_arr_out = pd.array(dict_arr_S.array, "string")._str_contains(
             pat, case, flags, na, regex
         )
@@ -909,7 +1030,7 @@ def str_contains_non_regex(arr, pat, case):  # pragma: no cover
 
 
 @numba.njit
-def str_match(arr, pat, case, flags, na):  # pragma: no cover
+def str_match(arr, pat, case, flags, na, do_full_match=False):  # pragma: no cover
     """Implement optimized string match for dictionary encoded arrays
 
     Args:
@@ -925,8 +1046,13 @@ def str_match(arr, pat, case, flags, na):  # pragma: no cover
     out_arr = bodo.libs.bool_arr_ext.alloc_bool_array(n_indices)
     dict_arr_S = pd.Series(dict_arr)
     # Compute the operation on the dictionary and save the output
-    with numba.objmode(dict_arr_out=bodo.boolean_array):
-        dict_arr_out = dict_arr_S.array._str_match(pat, case, flags, na)
+    dict_arr_out = None
+    if do_full_match:
+        with bodo.objmode(dict_arr_out=bodo.boolean_array_type):
+            dict_arr_out = dict_arr_S.array._str_fullmatch(pat, case, flags, na)
+    else:
+        with bodo.objmode(dict_arr_out=bodo.boolean_array_type):
+            dict_arr_out = dict_arr_S.array._str_match(pat, case, flags, na)
 
     for i in range(n_indices):
         if bodo.libs.array_kernels.isna(arr, i):
@@ -945,7 +1071,7 @@ def create_simple_str2str_methods(func_name, func_args, can_create_non_unique):
     "func_args" is a tuple whose elements are the arguments that the function
     takes in.
     "can_create_non_unique" is a boolean value which indicates if the function
-    in question can create non-unique values in output the dicitonary array
+    in question can create non-unique values in output the dictionary array
     For example: func_name = "center", func_args = ("arr", "width", "fillchar")
     """
     func_text = (
@@ -961,11 +1087,9 @@ def create_simple_str2str_methods(func_name, func_args, can_create_non_unique):
     )
 
     if can_create_non_unique:
-        func_text += (
-            "    return init_dict_arr(out_str_arr, arr._indices.copy(), False)\n"
-        )
+        func_text += "    return init_dict_arr(out_str_arr, arr._indices.copy(), arr._has_global_dictionary, False, None)\n"
     else:
-        func_text += "    return init_dict_arr(out_str_arr, arr._indices.copy(), arr._has_global_dictionary)\n"
+        func_text += "    return init_dict_arr(out_str_arr, arr._indices.copy(), arr._has_global_dictionary, arr._has_unique_local_dictionary, None)\n"
 
     loc_vars = {}
     exec(
@@ -1025,7 +1149,7 @@ _register_simple_str2str_methods()
 @register_jitable
 def str_index(arr, sub, start, end):  # pragma: no cover
     """Implement optimized string index for dictionary encoded arrays
-    The function will return the index of the first occurence of
+    The function will return the index of the first occurrence of
     sub in arr[start, end) if sub is present and raise ValueError instead of -1
      if the value is not found
 
@@ -1064,7 +1188,7 @@ def str_index(arr, sub, start, end):  # pragma: no cover
 @register_jitable
 def str_rindex(arr, sub, start, end):  # pragma: no cover
     """Implement optimized string rindex for dictionary encoded arrays
-    The function will return the index of the last occurence of
+    The function will return the index of the last occurrence of
     sub in arr[start, end) if sub is present and raise ValueError instead of -1
      if the value is not found
 
@@ -1154,7 +1278,7 @@ _register_find_methods()
 def str_count(arr, pat, flags):  # pragma: no cover
     """
     Implement optimized string count for dictionary array
-    Count the number of occurences of pattern in each string
+    Count the number of occurrences of pattern in each string
     """
     data_arr = arr._data
     indices_arr = arr._indices
@@ -1217,8 +1341,10 @@ def str_slice(arr, start, stop, step):  # pragma: no cover
         out_str_arr[i] = data_arr[i][start:stop:step]
 
     # Slice can result in duplicate values in the data array, so we have to set
-    # _has_global_dictionary to False in the output
-    return init_dict_arr(out_str_arr, arr._indices.copy(), False)
+    # _has_unique_local_dictionary to False in the output
+    return init_dict_arr(
+        out_str_arr, arr._indices.copy(), arr._has_global_dictionary, False, None
+    )
 
 
 @register_jitable
@@ -1266,9 +1392,13 @@ def str_repeat_int(arr, repeats):  # pragma: no cover
             continue
         out_str_arr[i] = data_arr[i] * repeats
 
-    # NOTE: this must be false in the case that repeats is 0, as we would generate copies in the data array
+    # NOTE: _has_unique_local_dictionary must be false in the case that repeats is 0, as we would generate copies in the data array
     return init_dict_arr(
-        out_str_arr, arr._indices.copy(), arr._has_global_dictionary and repeats != 0
+        out_str_arr,
+        arr._indices.copy(),
+        arr._has_global_dictionary,
+        arr._has_unique_local_dictionary and repeats != 0,
+        None,
     )
 
 
@@ -1361,8 +1491,14 @@ def str_extract(arr, pat, flags, n_cols):  # pragma: no cover
 
     out_arr_list = [
         # Note: extract can return duplicate values, so we have to
-        # set global dict to false
-        init_dict_arr(out_dict_arr_list[i], out_indices_arr.copy(), False)
+        # set _has_unique_local_dictionary=False
+        init_dict_arr(
+            out_dict_arr_list[i],
+            out_indices_arr.copy(),
+            arr._has_global_dictionary,
+            False,
+            None,
+        )
         for i in range(n_cols)
     ]
 
@@ -1379,12 +1515,12 @@ def create_extractall_methods(is_multi_group):
 
         For example,
         pd.Series(["чьь1т33", "ьнн2с222", "странаст2", np.nan, "ьнне33ст3"] * 2,
-        ["е3", "не3", "н2с2", "AA", "C"] * 2).str.extractall(r"([чен]+)\d+([ст]+)\d+")
+        ["е3", "не3", "н2с2", "AA", "C"] * 2).str.extractall(r"([чен]+)\\d+([ст]+)\\d+")
         will invoke the implementation with is_multi_group set to true since
         the regex expression has two capture groups.
         On the other hand,
         pd.Series(["a1b1", "b1", np.nan, "a2", "c2", "ddd", "dd4d1", "d22c2"],
-        [4, 3, 5, 1, 0, 2, 6, 11]).str.extractall(r"(?P<BBB>[abd]+)\d+")
+        [4, 3, 5, 1, 0, 2, 6, 11]).str.extractall(r"(?P<BBB>[abd]+)\\d+")
         will invoke the implementation with is_multi_group set to False,
         as the regex consists of only one capture group.
     """
@@ -1447,8 +1583,9 @@ def create_extractall_methods(is_multi_group):
         "            out_match_arr[curr_ind] = k\n"
         "            curr_ind += 1\n"
         "    out_arr_list = [\n"
+        # Note: This operation can produce duplicate values.
         "        init_dict_arr(\n"
-        "            out_dict_arr_list[i], out_indices_arr.copy(), False\n"
+        "            out_dict_arr_list[i], out_indices_arr.copy(), arr._has_global_dictionary, False, None\n"
         "        )\n"
         "        for i in range(n_cols)\n"
         "    ]\n"
@@ -1480,3 +1617,24 @@ def _register_extractall_methods():
 
 
 _register_extractall_methods()
+
+
+@generated_jit(nopython=True)
+def is_dict_encoded(t):
+    """This is a testing utility, that can be used to check if a given array/series
+    is dict encoded. This should never be called internally in the engine,
+    you should just check the type at compile time."""
+    t = if_series_to_array_type(t)
+
+    if t == bodo.dict_str_arr_type:
+
+        def impl(t):
+            return True
+
+    else:
+        assert t == bodo.string_array_type
+
+        def impl(t):
+            return False
+
+    return impl

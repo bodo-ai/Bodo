@@ -1,0 +1,87 @@
+"CODE","DEFINITION","MANHATTAN_96_AND_BELOW","ALL_OTHER_AREAS"
+10,"Stopping, standing or parking where a sign, street marking, or traffic control device does not allow stopping.",115,115
+11,"Hotel Loading/Unloading: Standing or parking where standing is not allowed by sign, street marking or; traffic control device.",115,115
+12,"Snow Emergency: Standing or parking where standing is not allowed by sign, street marking or; traffic control device.",95,95
+13,"Taxi Stand: Standing or parking where standing is not allowed by sign, street marking or; traffic control device.",115,115
+14,"General No Standing: Standing or parking where standing is not allowed by sign, street marking or; traffic control device.",115,115
+16,"Truck Loading/Unloading: Standing or parking where standing is not allowed by sign, street marking or; traffic control device.",95,95
+17,"Authorized Vehicles Only: Standing or parking where standing is not allowed by sign, street marking or; traffic control device.",95,95
+18,"Bus Lane: Standing or parking where standing is not allowed by sign, street marking or; traffic control device.",115,115
+19,"Bus Stop: Standing or parking where standing is not allowed by sign, street marking or; traffic control device.",115,115
+20,"General No Parking: No parking where parking is not allowed by sign, street marking or traffic control device.",65,60
+21,"Street Cleaning: No parking where parking is not allowed by sign, street marking or traffic control device.",65,45
+22,"Hotel Loading/Unloading: No parking where parking is not allowed by sign, street marking or traffic control device.",60,60
+23,"Taxi Stand: No parking where parking is not allowed by sign, street marking or traffic control device.",65,60
+24,"Authorized Vehicles Only: No parking where parking is not allowed by sign, street marking or traffic control device.",65,60
+25,"Standing at a commuter van stop, other than temporarily for the purpose of quickly picking up or dropping off passengers.",115,115
+26,"Standing at a for-hire vehicle stop, other than temporarily for the purpose of quickly picking up or dropping off passengers.",115,115
+27,"No parking in a handicapped zone (off-street only) where parking is not allowed by sign, street marking or traffic control device (Note: Includes a $30 New York State Criminal Justice surcharge.)",180,180
+28,"Overtime standing (diplomat)",95,95
+31,"Standing of a non-commercial vehicle in a commercial metered zone.",115,115
+32,"Parking at a broken or missing meter for longer than the maximum time permitted.",65,35
+33,"Feeding Meter -- parking in a metered space for a consecutive period of time longer than allowed, whether or not an additional coin or coins are deposited or another method of payment is used.",65,35
+34,"Expired Meter -- parking in a metered space where the meter works and the time has ended. Drivers get a 5-minute grace period past the expired time on Alternate Side Parking signs and any other parking spaces with specific times listed (i.e.. 8:30am - 9:30am). During the 5-minute grace period, parking tickets cannot be issued.",65,35
+35,"Parking in a meter space for the purpose of displaying, selling, storing, or offering goods for sale.",65,35
+36,"Exceeding the posted speed limit in or near a designated school zone.",50,50
+37,"Muni Meter -- Parking in excess of the allowed time",65,35
+38,"Muni Meter -- Failing to show a receipt or tag in the windshield",65,35
+39,"Parking for longer than the maximum time permitted by sign, street marking or traffic control device.",65,60
+69,"Failing to show a muni-meter receipt, commercial meter zone.",65,65
+40,"Stopping, standing or parking closer than 15 feet of a fire hydrant. Between sunrise and sunset, a passenger vehicle may stand alongside a fire hydrant as long as a driver remains behind the wheel and is ready to move the vehicle if required to do so.",115,115
+42,"Parking in a Muni Metered space in a commercial metered zone in which that Muni Meter is working and indicates the time has ended.",65,35
+43,"Parking in a commercial metered zone in which the meter is working and indicates that the time has ended. (Note: the difference is that 42 is Muni Meter and 43 is Meter)",65,35
+44,"Parking in a commercial metered zone for longer than the maximum time allowed.",65,35
+45,"Stopping, standing or parking in a traffic lane; or if a vehicle extends more than 8 feet from the nearest curb, blocking traffic.",115,115
+46,"Standing or parking on the roadway side of a vehicle stopped, standing or parked at the curb; in other words also known as double parking. However, a person may stand a Commercial Vehicle alongside a vehicle parked at the curb at such locations and during such hours that stopping, standing and parking is allowed when quickly making pickups, deliveries or service calls. This is allowed if there is no parking space or marked loading zone on either side of the street within 100 feet. Double parking any type of vehicle is not allowed in Midtown Manhattan (the area from 14th Street to 60th Street, between First Avenue and Eighth Avenue inclusive). Midtown double parking is not allowed between 7:00am  – 7:00pm daily except Sundays. (See Code 47.)",115,115
+47,"Stopping, standing or parking a vehicle in Midtown Manhattan (the area from 14th Street to 60th Street, between First Avenue and Eighth Avenue) other than parallel or close to the curb.",115,115
+48,"Stopping, standing or parking within a marked bicycle lane.",115,115
+49,"Stopping, standing or parking alongside or opposite any street construction or obstruction and thereby blocking traffic.",95,95
+50,"Stopping, standing or parking in a crosswalk. Note: Crosswalks are not always identified by painted street markings.",115,115
+51,"Stopping, standing or parking on a sidewalk. ",115,115
+52,"Stopping, standing or parking within an intersection.  ",115,115
+53,"Standing or parking in a safety zone, between a safety zone and the nearest curb, or within 30 feet of points on the curb immediately opposite the ends of a safety zone.",115,115
+55,"Stopping, standing or parking within a highway tunnel or on a raised or controlled access roadway.",115,115
+56,"Stopping, standing or parking alongside a barrier or divided highway unless permitted by sign.   ",115,115
+57,"Parking a vehicle within the area designated as The Blue Zone, Monday through Friday 7:00am -7:00pm. The Blue Zone is bounded by the northern property line of Frankfort Street, the northern property line of Dover Street, the eastern property line of South Street, the western property line of State Street, the center line of Broadway and the center line of Park Row.",65,65
+58,"Parking a vehicle on a marginal street or waterfront i.e. any street, road, place, area or way that connects or runs along waterfront property. Parking on a marginal street or waterfront is permitted if authorized by posted sign.",65,45
+59,"Standing or parking at an angle to the curb, except where allowed by rule or sign. Where angle parking is not authorized by a sign, a Commercial Vehicle may stand or park at an angle only for loading or unloading and if it leaves enough space for traffic flow.",115,115
+60,"Standing or parking at an angle to the curb, except where authorized by rule or sign.  ",65,45
+61,"Except where angle parking is allowed, stopping, standing or parking other than parallel to curb or edge of roadway. Or, parking opposite the direction of traffic.    ",65,45
+62,"Standing or parking a vehicle beyond markings on the curb or the pavement  of a street which marks a parking space, except when a vehicle is too large to fit in that marked parking space. Where a vehicle is too large, it shall be parked with its front bumper at the front of the space and the rear bumper extending as little as possible into the next space.",65,45
+63,"Standing or parking a vehicle in any park between one-half hour after sunset and one-half hour before sunrise, except at places allowed for the parking of vehicles.",95,95
+64,"No standing except consul / diplomat plates with Dept. of State decals only.",95,95
+65,"Overtime standing consul / diplomat vehicles 30-minute limit D decals only.",95,95
+66,"Parking a trailer or semi-trailer which is not attached to a motor vehicle used for towing it, unless loading or unloading at an off-street platform.",65,45
+67,"Parking in front of a pedestrian ramp",165,165
+68,"Not parking as marked on a posted sign",65,65
+70,"Standing or parking a vehicle without showing a current registration sticker.",65,65
+71,"Standing or parking a vehicle without showing a current inspection sticker.",65,65
+72,"Standing or parking a vehicle with NY Plates and showing a damaged or fake inspection certificate.",65,65
+73,"Standing or parking a vehicle showing an expired, damaged, void, fake, or incorrect registration sticker.",65,65
+74,"Standing or parking a vehicle without properly showing its current plates on the outside of the vehicle attached tightly not more than 48, or less than 12, inches from the ground, clean, not covered by glass or plastic, with nothing preventing it from being read clearly.",65,65
+75,"Standing or parking a vehicle in which the License Plate number and/or the actual description of the vehicle does not match the information on the registration sticker.",65,65
+77,"Parking a bus, unless allowed by signs. A charter bus may park where parking is permitted at its point of origin or destination. A school bus may park in front of and within the building lines of a school.  ",65,45
+78,"Parking a Commercial Vehicle on a residential street between 9PM and 5AM unless doing business within 3 blocks. Parking is allowed during this time if the vehicle is owned or operated by a gas or oil supplier or maintenance company or by any public utility.",65,65
+79,"For a bus without passengers, waiting at a curb or other street location i.e., a layover; with passengers, waiting at a curb or other street location for more than five minutes, except in locations allowed by sign or by the Commissioner in writing.",115,115
+80,"Standing or parking a vehicle without head lamps, rear lamps, reflectors or other required equipment.",60,45
+81,"No standing except diplomat",95,95
+82,"Standing or parking a Commercial Vehicle unless all seats, except the front seats, and rear seat equipment removed. The name and address of the owner must be on the registration certificate plainly marked on both sides of the vehicle in letters and numerals not less than 3 inches in height. (Vehicles with Commercial Plates are considered to be Commercial Vehicles and must be altered accordingly.",115,115
+83,"Standing or parking a vehicle which is not properly registered.",65,65
+84,"Parking a Commercial Vehicle on any city street with its platform lift in the lowered position while no one is with the vehicle.",65,45
+85,"Parking a Commercial Vehicle more than 3 hours, where parking is allowed.",65,65
+86,"Standing or parking a vehicle to make pickups, deliveries or service calls for more than 3 hours, unless allowed by posted signs, between 7AM and 7PM, except Sundays, in Manhattan from 14th to 60th Streets and First to Eighth Avenues.",115,115
+89,"Standing or parking a vehicle in the Garment District (in Manhattan, from 35th Street to 41st Street, between the Avenues of America and Eighth Avenue) between the hours of 7:00am  – 7:00pm. However, a Commercial Vehicle which is a truck or a van can park temporarily (up to a maximum of 3 hours) while making a pickup, delivery or service call.",115,115
+91,"Parking in order to sell a vehicle by a person who regularly sells vehicles.",65,45
+92,"Parking in order to wash, grease, or repair a vehicle by a person who regularly repairs vehicles.  ",65,45
+93,"Stopping, standing or parking on paved roadway to change a flat tire, unless permitted by posted sign.",65,65
+94,"Vehicle Release Agreement code associated with NYPD's Violation Tow Program.",100,200
+96,"Standing or parking within 50 feet of the nearest rail of a railroad crossing.",95,95
+97,"Parking in a vacant lot. A vehicle may be parked on a vacant lot having a municipally authorized driveway upon written permission of the owner.",65,45
+98,"Standing or parking in front of a public or private driveway. The owner or renter of a lot accessed by a private driveway may park a passenger vehicle registered to him / her at that address in front of the driveway provided the lot does not contain more than 2 dwelling units and that parking does not violate any other rule or restriction.",95,95
+99,"All other parking, standing or stopping violations.",0,0
+4,"Vehicles parked illegally south of Houston Street in Manhattan in metered spaces reserved for buses from 7am - 7pm daily. Vehicles with bus plate types parked longer than the 3 hour maximum and/or not displaying a DOT-issued bus permit.",115,0
+5,"Failure to make a right turn from a bus lane.",115,115
+6,"Parking a tractor-trailer on a residential street between 9PM and 5AM.",265,265
+7,"Vehicles photographed going through a red light at an intersection",50,50
+8,"Vehicle idling in a restricted area.",115,115
+9,"Blocking an Intersection: Obstructing traffic at an intersection also known as Blocking the Box.",115,115

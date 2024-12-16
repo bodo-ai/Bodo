@@ -27,52 +27,41 @@ This class provides implementation of the scikit-learn API for XGBoost classific
 ###  Methods
 
 #### `xgboost.XGBClassifier.fit`
+- `xgboost.XGBClassifier.fit(X, y, sample_weight=None, base_margin=None, eval_set=None, eval_metric=None, early_stopping_rounds=None, verbose=True, xgb_model=None, sample_weight_eval_set=None, feature_weights=None, callbacks=None)`
 
-- <code><apihead>xgboost.XGBClassifier.<apiname>fit</apiname>(X, y, sample_weight=None, base_margin=None, eval_set=None, eval_metric=None, early_stopping_rounds=None, verbose=True, xgb_model=None, sample_weight_eval_set=None, feature_weights=None, callbacks=None)</apihead></code>
-<br><br>
-  ***Supported Arguments***
-
-    +-----------------------------+-----------------------------------------+
+    ***Supported Arguments***
+    
     | argument                    | datatypes                               |
-    +=============================+=========================================+
-    | ``X``                       |  NumPy Array or Pandas Dataframes       |
-    +-----------------------------+-----------------------------------------+
-    | ``y``                       |  NumPy Array or Pandas Dataframes       |
-    +-----------------------------+-----------------------------------------+
+    | ----------------------------|-----------------------------------------|
+    | ``X``                       | NumPy Array or Pandas Dataframes        |
+    | ``y``                       | NumPy Array or Pandas Dataframes        |
 
 #### `xgboost.XGBClassifier.predict`
+- `xgboost.XGBClassifier.predict(X, output_margin=False, ntree_limit=None, validate_features=True, base_margin=None)`
 
-- <code><apihead>xgboost.XGBClassifier.<apiname>predict</apiname>(X, output_margin=False, ntree_limit=None, validate_features=True, base_margin=None)</apihead></code>
-<br><br>
 
     ***Supported Arguments***
 
-    +-----------------------------+-----------------------------------------+
     | argument                    | datatypes                               |
-    +=============================+=========================================+
+    |-----------------------------|-----------------------------------------|
     | ``X``                       |  NumPy Array or Pandas Dataframes       |
-    +-----------------------------+-----------------------------------------+
 
 
 #### `xgboost.XGBClassifier.predict_proba`
+-  `xgboost.XGBClassifier.predict_proba(X, ntree_limit=None, validate_features=True, base_margin=None)`
 
-- <code><apihead>xgboost.XGBClassifier.<apiname>predict_proba</apiname>(X, ntree_limit=None, validate_features=True, base_margin=None)</apihead></code>
-<br><br>
     ***Supported Arguments***
 
-    +-----------------------------+-----------------------------------------+
     | argument                    | datatypes                               |
-    +=============================+=========================================+
+    |-----------------------------|-----------------------------------------|
     | ``X``                       |  NumPy Array or Pandas Dataframes       |
-    +-----------------------------+-----------------------------------------+
 
 
 ### Attributes
 
 #### `xgboost.XGBClassifier.feature_importances_`
+- `xgboost.XGBClassifier.feature_importances_`
 
-- <code><apihead>xgboost.XGBClassifier.<apiname>feature_importances_</apiname></apihead></code>
-<br><br>
 ###  Example Usage:
 ```py
 >>> import bodo
@@ -103,39 +92,31 @@ This class provides implementation of the scikit-learn API for XGBoost regressio
 ###  Methods
 
 #### `xgboost.XGBRegressor.fit`
+- `xgboost.XGBRegressor.fit(X, y, sample_weight=None, base_margin=None, eval_set=None, eval_metric=None, early_stopping_rounds=None, verbose=True, xgb_model=None, sample_weight_eval_set=None, feature_weights=None, callbacks=None)`
 
-- <code><apihead>xgboost.XGBRegressor.<apiname>fit</apiname>(X, y, sample_weight=None, base_margin=None, eval_set=None, eval_metric=None, early_stopping_rounds=None, verbose=True, xgb_model=None, sample_weight_eval_set=None, feature_weights=None, callbacks=None)</apihead></code>
-<br><br>
   ***Supported Arguments***
 
-    +-----------------------------+-----------------------------------------+
     | argument                    | datatypes                               |
-    +=============================+=========================================+
+    |-----------------------------|-----------------------------------------|
     |``X``                        | NumPy Array                             |
-    +-----------------------------+-----------------------------------------+
     |``y``                        | NumPy Array                             |
-    +-----------------------------+-----------------------------------------+
 
 #### `xgboost.XGBRegressor.predict`
 
+- ` xgboost.XGBRegressor.predict(X, output_margin=False, ntree_limit=None, validate_features=True, base_margin=None)`
 
-- <code><apihead> xgboost.XGBRegressor.<apiname>predict</apiname>(X, output_margin=False, ntree_limit=None, validate_features=True, base_margin=None)</apihead></code>
-<br><br>
   ***Supported Arguments***
 
-    +-----------------------------+-----------------------------------------+
     | argument                    | datatypes                               |
-    +=============================+=========================================+
+    |-----------------------------|-----------------------------------------|
     |``X``                        | NumPy Array                             |
-    +-----------------------------+-----------------------------------------+
 
 ###  Attributes
 
 #### `xgboost.XGBRegressor.feature_importances_`
 
+- `xgboost.XGBRegressor.feature_importances_`
 
-- <code><apihead>xgboost.XGBRegressor.<apiname>feature_importances_</apiname></apihead></code>
-<br><br>
 ###  Example Usage
 
 ```py

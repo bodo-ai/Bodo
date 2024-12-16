@@ -1,20 +1,17 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
-"""Test Bodo's binary array data type
-"""
-import operator
+"""Test Bodo's binary array data type"""
 
-import numba
 import numpy as np
 import pandas as pd
 import pytest
 
-from bodo.tests.utils import check_func
+import bodo
+from bodo.tests.utils import check_func, generate_comparison_ops_func
 
 
 @pytest.fixture(
     params=[
         np.array(
-            [b"", b"abc", b"c", np.nan, b"ccdefg", b"abcde", b"poiu", bytes(3)] * 2,
+            [b"", b"abc", b"c", None, b"ccdefg", b"abcde", b"poiu", bytes(3)] * 2,
             object,
         ),
     ]
@@ -102,33 +99,12 @@ def test_bytes_hash(binary_arr_value, memory_leak_check):
     )
 
 
-def generate_comparison_ops_func(op, check_na=False):
-    """
-    Generates a comparison function. If check_na,
-    then we are being called on a scalar value because Pandas
-    can't handle NA values in the array. If so, we return None
-    if either input is NA.
-    """
-    op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
-    func_text = "def test_impl(a, b):\n"
-    if check_na:
-        func_text += f"  if pd.isna(a) or pd.isna(b):\n"
-        func_text += f"    return None\n"
-    func_text += f"  return a {op_str} b\n"
-    loc_vars = {}
-    exec(func_text, {"pd": pd}, loc_vars)
-    return loc_vars["test_impl"]
-
-
 @pytest.mark.slow
-@pytest.mark.parametrize(
-    "op", (operator.eq, operator.ne, operator.ge, operator.gt, operator.le, operator.lt)
-)
-def test_bytes_comparison_ops(op, memory_leak_check):
+def test_bytes_comparison_ops(cmp_op, memory_leak_check):
     """
     Test logical comparisons between bytes values.
     """
-    func = generate_comparison_ops_func(op)
+    func = generate_comparison_ops_func(cmp_op)
     arg1 = b"abc"
     arg2 = b"c0e"
     check_func(func, (arg1, arg1))
@@ -137,17 +113,14 @@ def test_bytes_comparison_ops(op, memory_leak_check):
 
 
 @pytest.mark.slow
-@pytest.mark.parametrize(
-    "op", (operator.eq, operator.ne, operator.ge, operator.gt, operator.le, operator.lt)
-)
-def test_binary_bytes_comparison_ops(binary_arr_value, op, memory_leak_check):
+def test_binary_bytes_comparison_ops(binary_arr_value, cmp_op, memory_leak_check):
     """
     Test logical comparisons between bytes and binary array.
     """
-    func = generate_comparison_ops_func(op)
+    func = generate_comparison_ops_func(cmp_op)
     arg1 = b"abc"
     # Generate a py_output value because pandas doesn't handle null
-    pandas_func = generate_comparison_ops_func(op, check_na=True)
+    pandas_func = generate_comparison_ops_func(cmp_op, check_na=True)
     py_output = pd.array([None] * len(binary_arr_value), dtype="boolean")
     # Update py_output
     for i in range(len(binary_arr_value)):
@@ -159,25 +132,14 @@ def test_binary_bytes_comparison_ops(binary_arr_value, op, memory_leak_check):
     check_func(func, (arg1, binary_arr_value), py_output=py_output)
 
 
-@pytest.mark.parametrize(
-    "op",
-    (
-        operator.eq,
-        pytest.param(operator.ne, marks=pytest.mark.slow),
-        pytest.param(operator.ge, marks=pytest.mark.slow),
-        pytest.param(operator.gt, marks=pytest.mark.slow),
-        pytest.param(operator.le, marks=pytest.mark.slow),
-        pytest.param(operator.lt, marks=pytest.mark.slow),
-    ),
-)
-def test_binary_binary_comparison_ops(binary_arr_value, op, memory_leak_check):
+def test_binary_binary_comparison_ops(binary_arr_value, cmp_op, memory_leak_check):
     """
     Test logical comparisons between binary array and binary array.
     """
-    func = generate_comparison_ops_func(op)
-    arg1 = np.array([b"", b"c", np.nan, bytes(2)] * 4, object)
+    func = generate_comparison_ops_func(cmp_op)
+    arg1 = np.array([b"", b"c", None, bytes(2)] * 4, object)
     # Generate a py_output value because pandas doesn't handle null
-    pandas_func = generate_comparison_ops_func(op, check_na=True)
+    pandas_func = generate_comparison_ops_func(cmp_op, check_na=True)
     py_output = pd.array([None] * len(binary_arr_value), dtype="boolean")
     # Update py_output
     for i in range(len(binary_arr_value)):
@@ -259,3 +221,141 @@ def test_binary_dataframe_apply(binary_arr_value, memory_leak_check):
         test_impl,
         (df,),
     )
+
+
+# Binary setitem tests. Modified from their counterparts in test_string_array.py
+
+
+@pytest.fixture(
+    params=[
+        pytest.param(np.array([b"IJ"] * 5, object), id="array"),
+        pytest.param([b"IJ"] * 5, id="list"),
+        pytest.param(b"IJ", id="scalar"),
+    ],
+)
+def setitem_val(request):
+    return request.param
+
+
+@pytest.mark.slow
+def test_setitem_slice(memory_leak_check, setitem_val):
+    """
+    Test operator.setitem with a slice index. String arrays
+    should only have setitem used during initialization, so
+    we create a new string array in the test.
+    """
+
+    def test_impl(val):
+        A = bodo.libs.str_arr_ext.pre_alloc_binary_array(8, -1)
+        A[0] = b"Afdhui"
+        A[1] = b"CD"
+        A[2:7] = val
+        A[7] = b"GH"
+        return A
+
+    py_output = np.array([b"Afdhui", b"CD"] + [b"IJ"] * 5 + [b"GH"], object)
+    check_func(test_impl, (setitem_val,), dist_test=False, py_output=py_output)
+
+
+@pytest.mark.slow
+def test_setitem_slice_optional(memory_leak_check, setitem_val):
+    """
+    Test operator.setitem with a slice index and an optional type.
+    String arrays should only have setitem used during
+    initialization, so we create a new string array in the test.
+    """
+
+    def test_impl(val, flag):
+        A = bodo.libs.str_arr_ext.pre_alloc_binary_array(8, -1)
+        A[0] = b"AB"
+        A[1] = b"CD"
+        if flag:
+            A[2:7] = val
+        else:
+            A[2:7] = None
+        A[7] = b"GH"
+        return A
+
+    py_output_flag = np.array([b"AB", b"CD"] + [b"IJ"] * 5 + [b"GH"], object)
+    py_output_no_flag = np.array([b"AB", b"CD"] + [None] * 5 + [b"GH"], object)
+
+    check_func(
+        test_impl, (setitem_val, True), dist_test=False, py_output=py_output_flag
+    )
+    check_func(
+        test_impl, (setitem_val, False), dist_test=False, py_output=py_output_no_flag
+    )
+
+
+@pytest.mark.slow
+def test_setitem_slice_none(memory_leak_check):
+    """
+    Test operator.setitem with a slice index and None.
+    String arrays should only have setitem used during
+    initialization, so we create a new string array in the test.
+    """
+
+    def test_impl():
+        A = bodo.libs.str_arr_ext.pre_alloc_binary_array(8, -1)
+        A[0] = b"AB"
+        A[1] = b"CD"
+        A[2:7] = None
+        A[7] = b"GH"
+        return A
+
+    py_output = np.array([b"AB", b"CD"] + [None] * 5 + [b"GH"], object)
+    check_func(test_impl, (), dist_test=False, py_output=py_output)
+
+
+@pytest.mark.smoke
+def test_setitem_int(memory_leak_check):
+    def test_impl(A, idx, val):
+        A[idx] = val
+        return A
+
+    A = np.array([b"AB", b"", b"121", None, b"abcd", bytes(3)], object)
+    idx = 2
+    val = b"212"  # same size as element 2 but different value
+    check_func(test_impl, (A, idx, val), copy_input=True)
+
+
+@pytest.mark.slow
+def test_setitem_none_int(memory_leak_check):
+    def test_impl(n, idx):
+        A = bodo.libs.str_arr_ext.pre_alloc_binary_array(n, n - 1)
+        for i in range(n):
+            if i == idx:
+                A[i] = None
+                continue
+            A[i] = b"A"
+        return A
+
+    py_output = np.array([b"A", None] + [b"A"] * 6, object)
+    check_func(test_impl, (8, 1), copy_input=True, dist_test=False, py_output=py_output)
+
+
+@pytest.mark.slow
+def test_setitem_optional_int(memory_leak_check):
+    def test_impl(n, idx):
+        A = bodo.libs.str_arr_ext.pre_alloc_binary_array(n, n - 1)
+        for i in range(n):
+            if i == idx:
+                value = None
+            else:
+                value = b"A"
+            A[i] = value
+        return A
+
+    py_output = np.array([b"A", None] + [b"A"] * 6, object)
+    check_func(test_impl, (8, 1), copy_input=True, dist_test=False, py_output=py_output)
+
+
+@pytest.mark.slow
+def test_bytes_sum(memory_leak_check):
+    """test sum() on bytes value"""
+
+    def test_impl(b):
+        return sum(b)
+
+    a = b"abc13"
+    check_func(test_impl, (a,), only_seq=True)

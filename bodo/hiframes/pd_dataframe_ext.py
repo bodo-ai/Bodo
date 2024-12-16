@@ -1,10 +1,11 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
 Implement pd.DataFrame typing and data model handling.
 """
+
 import json
 import operator
 import time
+from collections.abc import Sequence
 from functools import cached_property
 
 import llvmlite.binding as ll
@@ -30,7 +31,6 @@ from numba.extending import (
     make_attribute_wrapper,
     models,
     overload,
-    overload_attribute,
     overload_method,
     register_model,
 )
@@ -59,23 +59,19 @@ from bodo.hiframes.time_ext import TimeArrayType
 from bodo.io import json_cpp
 from bodo.libs.array import (
     arr_info_list_to_table,
+    array_from_cpp_table,
     array_to_info,
-    delete_info_decref_array,
     delete_table,
-    delete_table_decref_arrays,
-    info_from_table,
-    info_to_array,
     py_table_to_cpp_table,
     shuffle_table,
 )
-from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.libs.binary_arr_ext import binary_array_type
-from bodo.libs.bool_arr_ext import boolean_array
+from bodo.libs.bool_arr_ext import BooleanArrayType, boolean_array_type
 from bodo.libs.decimal_arr_ext import DecimalArrayType
+from bodo.libs.float_arr_ext import FloatingArrayType
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.str_arr_ext import str_arr_from_sequence
 from bodo.libs.str_ext import string_type, unicode_to_utf8
-from bodo.libs.struct_arr_ext import StructArrayType
 from bodo.utils import tracing
 from bodo.utils.cg_helpers import is_ll_eq
 from bodo.utils.conversion import fix_arr_dtype, index_to_array
@@ -85,10 +81,14 @@ from bodo.utils.typing import (
     BodoError,
     BodoWarning,
     ColNamesMetaType,
+    assert_bodo_error,
     check_unsupported_args,
     create_unsupported_overload,
     decode_if_dict_array,
     dtype_to_array_type,
+    error_on_unsupported_streaming_arrays,
+    get_castable_arr_dtype,
+    get_common_scalar_dtype,
     get_index_data_arr_types,
     get_literal_value,
     get_overload_const,
@@ -101,9 +101,12 @@ from bodo.utils.typing import (
     is_heterogeneous_tuple_type,
     is_iterable_type,
     is_literal_type,
+    is_nullable,
     is_overload_bool,
+    is_overload_const_str_equal,
     is_overload_constant_bool,
     is_overload_constant_int,
+    is_overload_constant_list,
     is_overload_constant_str,
     is_overload_false,
     is_overload_int,
@@ -114,6 +117,7 @@ from bodo.utils.typing import (
     raise_bodo_error,
     to_nullable_type,
     to_str_arr_if_dict_array,
+    unwrap_typeref,
 )
 from bodo.utils.utils import is_null_pointer
 
@@ -140,9 +144,9 @@ class DataFrameType(types.ArrayCompatible):  # TODO: IterableType over column na
 
     def __init__(
         self,
-        data=None,
+        data: Sequence["types.ArrayCompatible"] | None = None,
         index=None,
-        columns=None,
+        columns: Sequence[str] | None = None,
         dist=None,
         is_table_format=False,
     ):
@@ -171,16 +175,14 @@ class DataFrameType(types.ArrayCompatible):  # TODO: IterableType over column na
         self.is_table_format = is_table_format
         # If columns is None, we are determining the number of columns art runtime.
         if columns is None:
-            assert (
-                is_table_format
-            ), "Determining columns at runtime is only supported for DataFrame with table format"
+            assert is_table_format, "Determining columns at runtime is only supported for DataFrame with table format"
             # If we have columns determined at runtime, we change the arguments to create the table.
             self.table_type = TableType(tuple(data[:-1]), True)
         else:
             # save TableType to avoid recreating it in other places like column unbox & dtor
             self.table_type = TableType(data) if is_table_format else None
 
-        super(DataFrameType, self).__init__(
+        super().__init__(
             name=f"dataframe({data}, {index}, {columns}, {dist}, {is_table_format}, {self.has_runtime_cols})"
         )
 
@@ -413,9 +415,7 @@ def check_runtime_cols_unsupported(df, func_name):
 class DataFramePayloadType(types.Type):
     def __init__(self, df_type):
         self.df_type = df_type
-        super(DataFramePayloadType, self).__init__(
-            name=f"DataFramePayloadType({df_type})"
-        )
+        super().__init__(name=f"DataFramePayloadType({df_type})")
 
     @property
     def mangling_args(self):
@@ -449,7 +449,7 @@ class DataFramePayloadModel(models.StructModel):
         ]
         if fe_type.df_type.has_runtime_cols:
             members.append(("columns", fe_type.df_type.runtime_colname_typ))
-        super(DataFramePayloadModel, self).__init__(dmm, fe_type, members)
+        super().__init__(dmm, fe_type, members)
 
 
 @register_model(DataFrameType)
@@ -463,7 +463,7 @@ class DataFrameModel(models.StructModel):
             # for boxed DataFrames, enables updating original DataFrame object
             ("parent", types.pyobject),
         ]
-        super(DataFrameModel, self).__init__(dmm, fe_type, members)
+        super().__init__(dmm, fe_type, members)
 
 
 # Export meminfo for null checks
@@ -559,8 +559,8 @@ class DataFrameAttribute(OverloadedKeyAttributeTemplate):
         result_type = args[3] if len(args) > 3 else kws.pop("result_type", types.none)
         f_args = args[4] if len(args) > 4 else kws.pop("args", types.Tuple([]))
 
-        unsupported_args = dict(raw=raw, result_type=result_type)
-        merge_defaults = dict(raw=False, result_type=None)
+        unsupported_args = {"raw": raw, "result_type": result_type}
+        merge_defaults = {"raw": False, "result_type": None}
         check_unsupported_args(
             "Dataframe.apply",
             unsupported_args,
@@ -574,7 +574,7 @@ class DataFrameAttribute(OverloadedKeyAttributeTemplate):
         if types.unliteral(func) == types.unicode_type:
             if not is_overload_constant_str(func):
                 raise BodoError(
-                    f"DataFrame.apply(): string argument (for builtins) must be a compile time constant"
+                    "DataFrame.apply(): string argument (for builtins) must be a compile time constant"
                 )
             is_udf = False
 
@@ -608,7 +608,6 @@ class DataFrameAttribute(OverloadedKeyAttributeTemplate):
         # name_type = self.context.resolve_function_type(
         #     operator.getitem, (df.index, types.int64), {}
         # ).return_type
-        name_type = types.none
         # the Index has constant column name values
         index_type = HeterogeneousIndexType(
             types.BaseTuple.from_types(tuple(types.literal(c) for c in df.columns)),
@@ -618,11 +617,8 @@ class DataFrameAttribute(OverloadedKeyAttributeTemplate):
         null_tup_type = types.Tuple([types.bool_] * len(data_type))
         nullable_dtype = bodo.NullableTupleType(data_type, null_tup_type)
         name_dtype = df.index.dtype
-        bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
-            df.index, "DataFrame.apply()"
-        )
         if name_dtype == types.NPDatetime("ns"):
-            name_dtype = bodo.pd_timestamp_type
+            name_dtype = bodo.pd_timestamp_tz_naive_type
         if name_dtype == types.NPTimedelta("ns"):
             name_dtype = bodo.pd_timedelta_type
         if is_heterogeneous_tuple_type(data_type):
@@ -712,7 +708,7 @@ class DataFrameAttribute(OverloadedKeyAttributeTemplate):
             ret_type = f_return_type
 
         # add dummy default value for UDF kws to avoid errors
-        kw_names = ", ".join("{} = ''".format(a) for a in kws.keys())
+        kw_names = ", ".join(f"{a} = ''" for a in kws.keys())
         func_text = f"def apply_stub(func, axis=0, raw=False, result_type=None, args=(), {kw_names}):\n"
         func_text += "    pass\n"
         loc_vars = {}
@@ -963,7 +959,7 @@ class DataFrameAttribute(OverloadedKeyAttributeTemplate):
 
 
 # don't convert literal types to non-literal and rerun the typing template
-DataFrameAttribute._no_unliteral = True
+DataFrameAttribute._no_unliteral = True  # type: ignore
 
 
 # workaround to support row["A"] case in df.apply()
@@ -1008,7 +1004,7 @@ def define_df_dtor(context, builder, df_type, payload_type):
     # Declare dtor
     fnty = lir.FunctionType(lir.VoidType(), [cgutils.voidptr_t])
     # TODO(ehsan): do we need to sanitize the name in any case?
-    fn = cgutils.get_or_insert_function(mod, fnty, name=".dtor.df.{}".format(df_type))
+    fn = cgutils.get_or_insert_function(mod, fnty, name=f".dtor.df.{df_type}")
 
     # End early if the dtor is already defined
     if not fn.is_declaration:
@@ -1047,9 +1043,7 @@ def construct_dataframe(
     dataframe_payload.data = data_tup
     dataframe_payload.index = index_val
     if colnames is not None:
-        assert (
-            df_type.has_runtime_cols
-        ), "construct_dataframe can only provide colnames if columns are determined at runtime"
+        assert df_type.has_runtime_cols, "construct_dataframe can only provide colnames if columns are determined at runtime"
         dataframe_payload.columns = colnames
 
     # create meminfo and store payload
@@ -1084,9 +1078,7 @@ def construct_dataframe(
 
 
 @intrinsic
-def init_runtime_cols_dataframe(
-    typingctx, data_typ, index_typ, colnames_index_typ=None
-):
+def init_runtime_cols_dataframe(typingctx, data_typ, index_typ, colnames_index_typ):
     """Create a DataFrame from the provided table, index, and column
     names when the number of columns is determined at runtime.
     """
@@ -1103,7 +1095,7 @@ def init_runtime_cols_dataframe(
     if isinstance(data_typ.dtype.arr_types, types.UniTuple):
         arr_types = [data_typ.dtype.arr_types.dtype] * len(data_typ.dtype.arr_types)
     else:
-        arr_types = [t for t in data_typ.dtype.arr_types]
+        arr_types = list(data_typ.dtype.arr_types)
 
     ret_typ = DataFrameType(
         tuple(arr_types + [colnames_index_typ]),
@@ -1145,14 +1137,11 @@ def init_dataframe(typingctx, data_tup_typ, index_typ, col_names_typ):
     if n_cols == 0:
         column_names = ()
 
-    untyperefed_col_names_typ = (
-        col_names_typ.instance_type
-        if isinstance(col_names_typ, types.TypeRef)
-        else col_names_typ
-    )
+    untyperefed_col_names_typ = unwrap_typeref(col_names_typ)
 
-    assert isinstance(untyperefed_col_names_typ, ColNamesMetaType) and isinstance(
-        untyperefed_col_names_typ.meta, tuple
+    assert (
+        isinstance(untyperefed_col_names_typ, ColNamesMetaType)
+        and isinstance(untyperefed_col_names_typ.meta, tuple)
     ), "Third argument to init_dataframe must be of type ColNamesMetaType, and must contain a tuple of column names"
     column_names = untyperefed_col_names_typ.meta
 
@@ -1199,8 +1188,35 @@ def init_dataframe(typingctx, data_tup_typ, index_typ, col_names_typ):
     return sig, codegen
 
 
+def pushdown_safe_init_df(table, colNames):  # pragma: no cover
+    # Dummy function used for overload
+    pass
+
+
+@overload(pushdown_safe_init_df, inline="never")
+def overload_pushdown_safe_init_df(table, colNames):
+    """
+    A wrapper for init_dataframe to coerce a table to a DataFrame while preventing filter pushdown
+    from tracking this function call as a "use" of the table variable. This is not to be used
+    outside of merge into.
+
+    Args:
+        table [TableType]: the table that is to be coerced to a DataFrame
+        colNames [ColNamesMetaType]: the names of the columns of the DataFrame
+
+    Returns:
+        [DataFrame] the data from the table wrapped in a DataFrame.
+    """
+
+    def impl(table, colNames):
+        index = bodo.hiframes.pd_index_ext.init_range_index(0, len(table), 1, None)
+        return bodo.hiframes.pd_dataframe_ext.init_dataframe((table,), index, colNames)
+
+    return impl
+
+
 @intrinsic
-def has_parent(typingctx, df=None):
+def has_parent(typingctx, df):
     check_runtime_cols_unsupported(df, "has_parent")
 
     def codegen(context, builder, sig, args):
@@ -1212,8 +1228,8 @@ def has_parent(typingctx, df=None):
     return signature(types.bool_, df), codegen
 
 
-@intrinsic
-def _column_needs_unboxing(typingctx, df_typ, i_typ=None):
+@intrinsic(prefer_literal=True)
+def _column_needs_unboxing(typingctx, df_typ, i_typ):
     check_runtime_cols_unsupported(df_typ, "_column_needs_unboxing")
     assert isinstance(df_typ, DataFrameType) and is_overload_constant_int(i_typ)
 
@@ -1257,7 +1273,7 @@ def get_dataframe_payload(context, builder, df_type, value):
 
 
 @intrinsic
-def _get_dataframe_data(typingctx, df_typ=None):
+def _get_dataframe_data(typingctx, df_typ):
     check_runtime_cols_unsupported(df_typ, "_get_dataframe_data")
     ret_typ = types.Tuple(df_typ.data)
     if df_typ.is_table_format:
@@ -1277,7 +1293,7 @@ def _get_dataframe_data(typingctx, df_typ=None):
 
 
 @intrinsic
-def get_dataframe_index(typingctx, df_typ=None):
+def get_dataframe_index(typingctx, df_typ):
     def codegen(context, builder, signature, args):
         dataframe_payload = get_dataframe_payload(
             context, builder, signature.args[0], args[0]
@@ -1333,7 +1349,7 @@ def get_dataframe_data_impl(df, i):
 
 
 @intrinsic
-def get_dataframe_table(typingctx, df_typ=None):
+def get_dataframe_table(typingctx, df_typ):
     """return internal data table for dataframe with table format"""
     assert df_typ.is_table_format, "get_dataframe_table() expects table format"
 
@@ -1381,7 +1397,7 @@ def get_dataframe_all_data_impl(df):
         f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i})"
         for i in range(len(df.columns))
     )
-    comma = "," if len(df.columns) > 1 else ""
+    comma = "," if len(df.columns) != 0 else ""
     return eval(f"lambda df: ({data}{comma})", {"bodo": bodo})
 
 
@@ -1414,7 +1430,7 @@ def lower_get_dataframe_all_data(context, builder, sig, args):
 
 
 @intrinsic
-def get_dataframe_column_names(typingctx, df_typ=None):
+def get_dataframe_column_names(typingctx, df_typ):
     """return internal column names for dataframe with runtime columns"""
     assert (
         df_typ.has_runtime_cols
@@ -1502,7 +1518,7 @@ def init_dataframe_equiv(self, scope, equiv_set, loc, args, kws):
     return None
 
 
-ArrayAnalysis._analyze_op_call_bodo_hiframes_pd_dataframe_ext_init_dataframe = (
+ArrayAnalysis._analyze_op_call_bodo_hiframes_pd_dataframe_ext_init_dataframe = (  # type: ignore
     init_dataframe_equiv
 )
 
@@ -1524,7 +1540,7 @@ def get_dataframe_data_equiv(self, scope, equiv_set, loc, args, kws):
     return None
 
 
-ArrayAnalysis._analyze_op_call_bodo_hiframes_pd_dataframe_ext_get_dataframe_data = (
+ArrayAnalysis._analyze_op_call_bodo_hiframes_pd_dataframe_ext_get_dataframe_data = (  # type: ignore
     get_dataframe_data_equiv
 )
 
@@ -1548,7 +1564,7 @@ def get_dataframe_index_equiv(self, scope, equiv_set, loc, args, kws):
     return None
 
 
-ArrayAnalysis._analyze_op_call_bodo_hiframes_pd_dataframe_ext_get_dataframe_index = (
+ArrayAnalysis._analyze_op_call_bodo_hiframes_pd_dataframe_ext_get_dataframe_index = (  # type: ignore
     get_dataframe_index_equiv
 )
 
@@ -1564,7 +1580,7 @@ def get_dataframe_table_equiv(self, scope, equiv_set, loc, args, kws):
         return ArrayAnalysis.AnalyzeResult(shape=equiv_set.get_shape(var), pre=[])
 
 
-ArrayAnalysis._analyze_op_call_bodo_hiframes_pd_dataframe_ext_get_dataframe_table = (
+ArrayAnalysis._analyze_op_call_bodo_hiframes_pd_dataframe_ext_get_dataframe_table = (  # type: ignore
     get_dataframe_table_equiv
 )
 
@@ -1581,16 +1597,16 @@ def get_dataframe_column_names_equiv(self, scope, equiv_set, loc, args, kws):
     return None
 
 
-ArrayAnalysis._analyze_op_call_bodo_hiframes_pd_dataframe_ext_get_dataframe_column_names = (
+ArrayAnalysis._analyze_op_call_bodo_hiframes_pd_dataframe_ext_get_dataframe_column_names = (  # type: ignore
     get_dataframe_column_names_equiv
 )
 
 
-@intrinsic
-def set_dataframe_data(typingctx, df_typ, c_ind_typ, arr_typ=None):
+@intrinsic(prefer_literal=True)
+def set_dataframe_data(typingctx, df_typ, c_ind_typ, arr_typ):
     """set column data of a dataframe inplace"""
     check_runtime_cols_unsupported(df_typ, "set_dataframe_data")
-    assert is_overload_constant_int(c_ind_typ)
+    assert_bodo_error(is_overload_constant_int(c_ind_typ))
     col_ind = get_overload_const_int(c_ind_typ)
 
     # make sure dataframe column data type is not changed (avoids lowering error)
@@ -1641,7 +1657,7 @@ def set_dataframe_data(typingctx, df_typ, c_ind_typ, arr_typ=None):
 
 
 @intrinsic
-def set_df_index(typingctx, df_t, index_t=None):
+def set_df_index(typingctx, df_t, index_t):
     """used in very limited cases like distributed to_csv() to create a new
     dataframe with index
     """
@@ -1677,13 +1693,13 @@ def set_df_index(typingctx, df_t, index_t=None):
     return sig, codegen
 
 
-@intrinsic
-def set_df_column_with_reflect(typingctx, df_type, cname_type, arr_type=None):
+@intrinsic(prefer_literal=True)
+def set_df_column_with_reflect(typingctx, df_type, cname_type, arr_type_t):
     """Set df column and reflect to parent Python object
     return a new df.
     """
     check_runtime_cols_unsupported(df_type, "set_df_column_with_reflect")
-    assert is_literal_type(cname_type), "constant column name expected"
+    assert_bodo_error(is_literal_type(cname_type), "constant column name expected")
     col_name = get_literal_value(cname_type)
     n_cols = len(df_type.columns)
     new_n_cols = n_cols
@@ -1692,18 +1708,42 @@ def set_df_column_with_reflect(typingctx, df_type, cname_type, arr_type=None):
     index_typ = df_type.index
     is_new_col = col_name not in df_type.columns
     col_ind = n_cols
+    cast_arr_to_nullable = False
+    arr_type = arr_type_t
+
     if is_new_col:
         data_typs += (arr_type,)
         column_names += (col_name,)
         new_n_cols += 1
     else:
         col_ind = df_type.columns.index(col_name)
+        # handle setting non-nullable array to nullable column
+        if (
+            isinstance(
+                data_typs[col_ind],
+                (FloatingArrayType, IntegerArrayType, BooleanArrayType),
+            )
+            and isinstance(arr_type, types.Array)
+            and arr_type.dtype == data_typs[col_ind].dtype
+        ):
+            arr_type = data_typs[col_ind]
+            cast_arr_to_nullable = True
         data_typs = tuple(
             (arr_type if i == col_ind else data_typs[i]) for i in range(n_cols)
         )
 
     def codegen(context, builder, signature, args):
         df_arg, _, arr_arg = args
+
+        if cast_arr_to_nullable:
+            arr_arg = context.compile_internal(
+                builder,
+                lambda A: bodo.utils.conversion.coerce_to_array(
+                    A, use_nullable_array=True
+                ),
+                arr_type(arr_type_t),
+                [arr_arg],
+            )
 
         in_dataframe_payload = get_dataframe_payload(context, builder, df_type, df_arg)
         in_dataframe = cgutils.create_struct_proxy(df_type)(
@@ -1817,12 +1857,15 @@ def set_df_column_with_reflect(typingctx, df_type, cname_type, arr_type=None):
 
             pyapi.gil_release(gil_state)  # release GIL
 
+        if cast_arr_to_nullable:
+            context.nrt.decref(builder, arr_type, arr_arg)
+
         return out_dataframe
 
     ret_typ = DataFrameType(
         data_typs, index_typ, column_names, df_type.dist, df_type.is_table_format
     )
-    sig = signature(ret_typ, df_type, cname_type, arr_type)
+    sig = signature(ret_typ, df_type, cname_type, arr_type_t)
     return sig, codegen
 
 
@@ -2233,9 +2276,7 @@ def pd_dataframe_overload(data=None, index=None, columns=None, dtype=None, copy=
     func_text = (
         "def _init_df(data=None, index=None, columns=None, dtype=None, copy=False):\n"
     )
-    func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe({}, {}, __col_name_meta_value_pd_overload)\n".format(
-        data_args, index_arg
-    )
+    func_text += f"  return bodo.hiframes.pd_dataframe_ext.init_dataframe({data_args}, {index_arg}, __col_name_meta_value_pd_overload)\n"
     loc_vars = {}
     exec(
         func_text,
@@ -2338,18 +2379,14 @@ def _get_df_args(data, index, columns, dtype, copy):
         n_cols = (len(data.types) - 1) // 2
         data_keys = [t.literal_value for t in data.types[1 : n_cols + 1]]
         data_val_types = dict(zip(data_keys, data.types[n_cols + 1 :]))
-        data_arrs = ["data[{}]".format(i) for i in range(n_cols + 1, 2 * n_cols + 1)]
+        data_arrs = [f"data[{i}]" for i in range(n_cols + 1, 2 * n_cols + 1)]
         data_dict = dict(zip(data_keys, data_arrs))
         # if no index provided and there are Series inputs, get index from them
         # XXX cannot handle alignment of multiple Series
         if is_overload_none(index):
             for i, t in enumerate(data.types[n_cols + 1 :]):
                 if isinstance(t, SeriesType):
-                    index_arg = (
-                        "bodo.hiframes.pd_series_ext.get_series_index(data[{}])".format(
-                            n_cols + 1 + i
-                        )
-                    )
+                    index_arg = f"bodo.hiframes.pd_series_ext.get_series_index(data[{n_cols + 1 + i}])"
                     index_is_none = False
                     break
     # empty dataframe
@@ -2371,15 +2408,19 @@ def _get_df_args(data, index, columns, dtype, copy):
             )
         copy_str = ".copy()" if copy else ""
         columns_consts = get_overload_const_list(columns)
+        if columns_consts is None:
+            raise_bodo_error("pd.DataFrame(): constant column names required")
         n_cols = len(columns_consts)
         data_val_types = {c: data.copy(ndim=1) for c in columns_consts}
-        data_arrs = ["data[:,{}]{}".format(i, copy_str) for i in range(n_cols)]
+        data_arrs = [f"data[:,{i}]{copy_str}" for i in range(n_cols)]
         data_dict = dict(zip(columns_consts, data_arrs))
 
     if is_overload_none(columns):
         col_names = data_dict.keys()
     else:
         col_names = get_overload_const_list(columns)
+        if col_names is None:
+            raise_bodo_error("pd.DataFrame(): constant column names required")
 
     df_len = _get_df_len_from_info(
         data_dict, data_val_types, col_names, index_is_none, index_arg
@@ -2393,15 +2434,11 @@ def _get_df_args(data, index, columns, dtype, copy):
             index_arg = "bodo.hiframes.pd_index_ext.init_binary_str_index(bodo.libs.str_arr_ext.pre_alloc_string_array(0, 0))"
         else:
             index_arg = (
-                "bodo.hiframes.pd_index_ext.init_range_index(0, {}, 1, None)".format(
-                    df_len
-                )
+                f"bodo.hiframes.pd_index_ext.init_range_index(0, {df_len}, 1, None)"
             )
     data_args = "({},)".format(
         ", ".join(
-            "bodo.utils.conversion.coerce_to_array({}, True, scalar_to_arr_len={}){}".format(
-                data_dict[c], df_len, astype_str
-            )
+            f"bodo.utils.conversion.coerce_to_array({data_dict[c]}, True, scalar_to_arr_len={df_len}){astype_str}"
             for c in col_names
         )
     )
@@ -2420,7 +2457,7 @@ def _get_df_len_from_info(
     df_len = "0"
     for c in col_names:
         if c in data_dict and is_iterable_type(data_val_types[c]):
-            df_len = "len({})".format(data_dict[c])
+            df_len = f"len({data_dict[c]})"
             break
 
     # If we haven't found a length, rely on the index
@@ -2452,7 +2489,7 @@ def _fill_null_arrays(data_dict, col_names, df_len, dtype):
         dtype = "bodo.utils.conversion.array_type_from_dtype(dtype)"
 
     # array with NaNs
-    null_arr = "bodo.libs.array_kernels.gen_na_array({}, {})".format(df_len, dtype)
+    null_arr = f"bodo.libs.array_kernels.gen_na_array({df_len}, {dtype})"
     for c in col_names:
         if c not in data_dict:
             data_dict[c] = null_arr
@@ -2558,13 +2595,13 @@ def getitem_tuple_lower(context, builder, sig, args):
         if idx < 0:
             idx += len(tupty)
         if not 0 <= idx < len(tupty):
-            raise IndexError("cannot index at %d in %s" % (idx, tupty))
+            raise IndexError(f"cannot index at {idx} in {tupty}")
         res = builder.extract_value(tup, idx)
     elif isinstance(idx, slice):
         items = cgutils.unpack_tuple(builder, tup)[idx]
         res = context.make_tuple(builder, sig.return_type, items)
     else:
-        raise NotImplementedError("unexpected index %r for %s" % (idx, sig.args[0]))
+        raise NotImplementedError(f"unexpected index {idx!r} for {sig.args[0]}")
     return impl_ret_borrowed(context, builder, sig.return_type, res)
 
 
@@ -2580,6 +2617,7 @@ def join_dummy(
     is_join,
     indicator,
     _bodo_na_equal,
+    _bodo_rebalance_output_if_skewed,
     gen_cond,
 ):  # pragma: no cover
     return left_df
@@ -2588,9 +2626,6 @@ def join_dummy(
 @infer_global(join_dummy)
 class JoinTyper(AbstractTemplate):
     def generic(self, args, kws):
-        from bodo.hiframes.pd_dataframe_ext import DataFrameType
-        from bodo.utils.typing import is_overload_str
-
         assert not kws
         (
             left_df,
@@ -2604,7 +2639,19 @@ class JoinTyper(AbstractTemplate):
             indicator,
             _,
             _,
+            _,
         ) = args
+
+        how = get_overload_const_str(how_var)
+
+        # cross join output has all left/right input columns
+        if how == "cross":
+            data = left_df.data + right_df.data
+            columns = left_df.columns + right_df.columns
+            out_df = DataFrameType(
+                data, RangeIndexType(types.none), columns, is_table_format=True
+            )
+            return signature(out_df, *args)
 
         left_on = get_overload_const_list(left_on)
         right_on = get_overload_const_list(right_on)
@@ -2625,21 +2672,26 @@ class JoinTyper(AbstractTemplate):
         right_index = "$_bodo_index_" in right_on
 
         # Determine if this is a left outer join or a right outer join.
-        how = get_overload_const_str(how_var)
         is_left = how in {"left", "outer"}
         is_right = how in {"right", "outer"}
+
         columns = []
         data = []
-        if left_index:
-            left_key_type = bodo.utils.typing.get_index_data_arr_types(left_df.index)[0]
-        else:
-            left_key_type = left_df.data[left_df.column_index[left_on[0]]]
-        if right_index:
-            right_key_type = bodo.utils.typing.get_index_data_arr_types(right_df.index)[
-                0
-            ]
-        else:
-            right_key_type = right_df.data[right_df.column_index[right_on[0]]]
+
+        # get key data types for merge on index cases
+        if left_index or right_index:
+            if left_index:
+                left_key_type = bodo.utils.typing.get_index_data_arr_types(
+                    left_df.index
+                )[0]
+            else:
+                left_key_type = left_df.data[left_df.column_index[left_on[0]]]
+            if right_index:
+                right_key_type = bodo.utils.typing.get_index_data_arr_types(
+                    right_df.index
+                )[0]
+            else:
+                right_key_type = right_df.data[right_df.column_index[right_on[0]]]
 
         # merge between left_index and right column requires special
         # handling if the column also exists in left.
@@ -2742,15 +2794,23 @@ class JoinTyper(AbstractTemplate):
         index_typ = RangeIndexType(types.none)
         # Convert range index to numeric index
         convert_range = False
-        if left_index and right_index and not is_overload_str(how, "asof"):
+        index_to_nullable = False
+        if left_index and right_index and not is_overload_const_str_equal(how, "asof"):
             index_typ = left_df.index
             convert_range = True
         elif left_index and not right_index:
             index_typ = right_df.index
             convert_range = True
+            if is_left:
+                # for left join on left Index, the output array corresponding to right
+                # Index becomes the output dataframe's Index, which should be nullable
+                # since left join may insert nulls.
+                index_to_nullable = True
         elif right_index and not left_index:
             index_typ = left_df.index
             convert_range = True
+            if is_right:
+                index_to_nullable = True
 
         if convert_range and isinstance(
             index_typ, bodo.hiframes.pd_index_ext.RangeIndexType
@@ -2759,13 +2819,16 @@ class JoinTyper(AbstractTemplate):
             # as the entries will be shuffled
             index_typ = bodo.hiframes.pd_index_ext.NumericIndexType(types.int64)
 
+        if index_to_nullable:
+            index_typ = to_nullable_type(index_typ)
+
         out_df = DataFrameType(
             tuple(data), index_typ, tuple(columns), is_table_format=True
         )
         return signature(out_df, *args)
 
 
-JoinTyper._no_unliteral = True
+JoinTyper._no_unliteral = True  # type: ignore
 
 
 # dummy lowering to avoid overload errors, remove after overload inline PR
@@ -2802,27 +2865,27 @@ def concat_overload(
     axis = get_overload_const_int(axis)
     ignore_index = is_overload_true(ignore_index)
 
-    unsupported_args = dict(
-        join=join,
-        join_axes=join_axes,
-        keys=keys,
-        levels=levels,
-        names=names,
-        verify_integrity=verify_integrity,
-        sort=sort,
-        copy=copy,
-    )
+    unsupported_args = {
+        "join": join,
+        "join_axes": join_axes,
+        "keys": keys,
+        "levels": levels,
+        "names": names,
+        "verify_integrity": verify_integrity,
+        "sort": sort,
+        "copy": copy,
+    }
 
-    arg_defaults = dict(
-        join="outer",
-        join_axes=None,
-        keys=None,
-        levels=None,
-        names=None,
-        verify_integrity=False,
-        sort=None,
-        copy=True,
-    )
+    arg_defaults = {
+        "join": "outer",
+        "join_axes": None,
+        "keys": None,
+        "levels": None,
+        "names": None,
+        "verify_integrity": False,
+        "sort": None,
+        "copy": True,
+    }
     check_unsupported_args(
         "pandas.concat",
         unsupported_args,
@@ -2848,23 +2911,18 @@ def concat_overload(
         for i, obj in enumerate(objs.types):
             assert isinstance(obj, (SeriesType, DataFrameType))
             check_runtime_cols_unsupported(obj, "pandas.concat()")
-            bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
-                obj, "pandas.concat()"
-            )
             if isinstance(obj, SeriesType):
                 # TODO: use Series name if possible
                 names.append(str(col_no))
                 col_no += 1
                 data_args.append(
-                    "bodo.hiframes.pd_series_ext.get_series_data(objs[{}])".format(i)
+                    f"bodo.hiframes.pd_series_ext.get_series_data(objs[{i}])"
                 )
             else:  # DataFrameType
                 names.extend(obj.columns)
                 for j in range(len(obj.data)):
                     data_args.append(
-                        "bodo.hiframes.pd_dataframe_ext.get_dataframe_data(objs[{}], {})".format(
-                            i, j
-                        )
+                        f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(objs[{i}], {j})"
                     )
         return bodo.hiframes.dataframe_impl._gen_init_df(
             func_text, names, ", ".join(data_args), index
@@ -2881,9 +2939,6 @@ def concat_overload(
         all_colnames = []
         for df in objs.types:
             check_runtime_cols_unsupported(df, "pandas.concat()")
-            bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
-                df, "pandas.concat()"
-            )
             all_colnames.extend(df.columns)
 
         # remove duplicates but keep original order
@@ -2899,22 +2954,17 @@ def concat_overload(
         assert len(arr_types) == len(all_colnames)
 
         # generate concat for each output column
-        out_data = []
         for col_no, c in enumerate(all_colnames):
             args = []
             for i, df in enumerate(objs.types):
                 if c in df.column_index:
                     col_ind = df.column_index[c]
                     args.append(
-                        "bodo.hiframes.pd_dataframe_ext.get_dataframe_data(objs[{}], {})".format(
-                            i, col_ind
-                        )
+                        f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(objs[{i}], {col_ind})"
                     )
                 else:
                     args.append(
-                        "bodo.libs.array_kernels.gen_na_array(len(objs[{}]), arr_typ{})".format(
-                            i, col_no
-                        )
+                        f"bodo.libs.array_kernels.gen_na_array(len(objs[{i}]), arr_typ{col_no})"
                     )
             func_text += "  A{} = bodo.libs.array_kernels.concat(({},))\n".format(
                 col_no, ", ".join(args)
@@ -2924,9 +2974,7 @@ def concat_overload(
         else:
             index = "bodo.utils.conversion.index_from_array(bodo.libs.array_kernels.concat(({},)))\n".format(
                 ", ".join(
-                    "bodo.utils.conversion.index_to_array(bodo.hiframes.pd_dataframe_ext.get_dataframe_index(objs[{}]))".format(
-                        i
-                    )
+                    f"bodo.utils.conversion.index_to_array(bodo.hiframes.pd_dataframe_ext.get_dataframe_index(objs[{i}]))"
                     # ignore dummy string index of empty dataframes (test_append_empty_df)
                     for i in range(len(objs.types))
                     if len(objs[i].columns) > 0
@@ -2935,7 +2983,7 @@ def concat_overload(
         return bodo.hiframes.dataframe_impl._gen_init_df(
             func_text,
             all_colnames,
-            ", ".join("A{}".format(i) for i in range(len(all_colnames))),
+            ", ".join(f"A{i}" for i in range(len(all_colnames))),
             index,
             arr_types,
         )
@@ -2946,7 +2994,7 @@ def concat_overload(
         # TODO: index and name
         func_text += "  out_arr = bodo.libs.array_kernels.concat(({},))\n".format(
             ", ".join(
-                "bodo.hiframes.pd_series_ext.get_series_data(objs[{}])".format(i)
+                f"bodo.hiframes.pd_series_ext.get_series_data(objs[{i}])"
                 for i in range(len(objs.types))
             )
         )
@@ -2955,9 +3003,7 @@ def concat_overload(
         else:
             func_text += "  index = bodo.utils.conversion.index_from_array(bodo.libs.array_kernels.concat(({},)))\n".format(
                 ", ".join(
-                    "bodo.utils.conversion.index_to_array(bodo.hiframes.pd_series_ext.get_series_index(objs[{}]))".format(
-                        i
-                    )
+                    f"bodo.utils.conversion.index_to_array(bodo.hiframes.pd_series_ext.get_series_index(objs[{i}]))"
                     for i in range(len(objs.types))
                 )
             )
@@ -2971,27 +3017,31 @@ def concat_overload(
     # list of dataframes
     if isinstance(objs, types.List) and isinstance(objs.dtype, DataFrameType):
         check_runtime_cols_unsupported(objs.dtype, "pandas.concat()")
-        bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
-            objs.dtype, "pandas.concat()"
-        )
-        # TODO(ehsan): index
         df_type = objs.dtype
-        for col_no, c in enumerate(df_type.columns):
-            func_text += "  arrs{} = []\n".format(col_no)
+
+        # create output data columns
+        if df_type.is_table_format:
+            func_text += "  in_tables = []\n"
             func_text += "  for i in range(len(objs)):\n"
             func_text += "    df = objs[i]\n"
-            func_text += "    arrs{0}.append(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {0}))\n".format(
-                col_no
-            )
+            func_text += "    in_tables.append(bodo.hiframes.pd_dataframe_ext.get_dataframe_table(df))\n"
             func_text += (
-                "  out_arr{0} = bodo.libs.array_kernels.concat(arrs{0})\n".format(
-                    col_no
-                )
+                "  out_table = bodo.utils.table_utils.concat_tables(in_tables)\n"
             )
+            data_args = "out_table"
+        else:
+            for col_no, c in enumerate(df_type.columns):
+                func_text += f"  arrs{col_no} = []\n"
+                func_text += "  for i in range(len(objs)):\n"
+                func_text += "    df = objs[i]\n"
+                func_text += f"    arrs{col_no}.append(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {col_no}))\n"
+                func_text += f"  out_arr{col_no} = bodo.libs.array_kernels.concat(arrs{col_no})\n"
+            data_args = ", ".join(f"out_arr{i}" for i in range(len(df_type.columns)))
+
+        # create output Index
         if ignore_index:
-            index = (
-                "bodo.hiframes.pd_index_ext.init_range_index(0, len(out_arr0), 1, None)"
-            )
+            out_name = "out_table" if df_type.is_table_format else "out_arr0"
+            index = f"bodo.hiframes.pd_index_ext.init_range_index(0, len({out_name}), 1, None)"
         else:
             func_text += "  arrs_index = []\n"
             func_text += "  for i in range(len(objs)):\n"
@@ -3003,10 +3053,11 @@ def concat_overload(
             else:
                 name = objs.dtype.index.name_typ.literal_value
             index = f"bodo.utils.conversion.index_from_array(bodo.libs.array_kernels.concat(arrs_index), {name!r})\n"
+
         return bodo.hiframes.dataframe_impl._gen_init_df(
             func_text,
             df_type.columns,
-            ", ".join("out_arr{}".format(i) for i in range(len(df_type.columns))),
+            data_args,
             index,
         )
 
@@ -3034,11 +3085,17 @@ def concat_overload(
         return loc_vars["impl"]
 
     # TODO: handle other iterables like arrays, lists, ...
-    raise BodoError("pd.concat(): input type {} not supported yet".format(objs))
+    raise BodoError(f"pd.concat(): input type {objs} not supported yet")
 
 
 def sort_values_dummy(
-    df, by, ascending, inplace, na_position, _bodo_chunk_bounds
+    df,
+    by,
+    ascending,
+    inplace,
+    na_position,
+    _bodo_chunk_bounds,
+    _bodo_interval_sort,
 ):  # pragma: no cover
     pass
 
@@ -3057,7 +3114,7 @@ class SortDummyTyper(AbstractTemplate):
         return signature(ret_typ, *args)
 
 
-SortDummyTyper._no_unliteral = True
+SortDummyTyper._no_unliteral = True  # type: ignore
 
 
 # dummy lowering to avoid overload errors, remove after overload inline PR
@@ -3076,8 +3133,8 @@ def lower_sort_values_dummy(context, builder, sig, args):
 @overload_method(DataFrameType, "itertuples", inline="always", no_unliteral=True)
 def itertuples_overload(df, index=True, name="Pandas"):
     check_runtime_cols_unsupported(df, "DataFrame.itertuples()")
-    unsupported_args = dict(index=index, name=name)
-    arg_defaults = dict(index=True, name="Pandas")
+    unsupported_args = {"index": index, "name": name}
+    arg_defaults = {"index": True, "name": "Pandas"}
     check_unsupported_args(
         "DataFrame.itertuples",
         unsupported_args,
@@ -3159,7 +3216,7 @@ def lower_val_isin_dummy(context, builder, sig, args):
     return out_obj._getvalue()
 
 
-@numba.generated_jit(nopython=True)
+@numba.generated_jit(nopython=True, no_unliteral=True)
 def pivot_impl(
     index_tup,
     columns_tup,
@@ -3273,22 +3330,23 @@ def pivot_impl(
         )
         func_text += f"        info_list = [{array_to_infos}]\n"
         func_text += "        cpp_table = arr_info_list_to_table(info_list)\n"
+        # NOTE: C++ will delete cpp_table pointer
         func_text += f"        out_cpp_table = shuffle_table(cpp_table, {len(index_tup)}, parallel, 0)\n"
         index_info_to_arrays = ", ".join(
             [
-                f"info_to_array(info_from_table(out_cpp_table, {i}), index_tup[{i}])"
+                f"array_from_cpp_table(out_cpp_table, {i}, index_tup[{i}])"
                 for i in range(len(index_tup))
             ]
         )
         columns_info_to_arrays = ", ".join(
             [
-                f"info_to_array(info_from_table(out_cpp_table, {i + len(index_tup)}), columns_tup[{i}])"
+                f"array_from_cpp_table(out_cpp_table, {i + len(index_tup)}, columns_tup[{i}])"
                 for i in range(len(columns_tup))
             ]
         )
         values_info_to_arrays = ", ".join(
             [
-                f"info_to_array(info_from_table(out_cpp_table, {i + len(index_tup) + len(columns_tup)}), values_tup[{i}])"
+                f"array_from_cpp_table(out_cpp_table, {i + len(index_tup) + len(columns_tup)}, values_tup[{i}])"
                 for i in range(len(values_tup))
             ]
         )
@@ -3296,7 +3354,6 @@ def pivot_impl(
         func_text += f"        columns_tup = ({columns_info_to_arrays},)\n"
         func_text += f"        values_tup = ({values_info_to_arrays},)\n"
         # Delete the tables
-        func_text += "        delete_table(cpp_table)\n"
         func_text += "        delete_table(out_cpp_table)\n"
         func_text += "        ev_shuffle.finalize()\n"
     # Load the index and column arrays. Move value arrays to a
@@ -3379,7 +3436,7 @@ def pivot_impl(
                     )
 
     # Allocate the data arrays. If we have string data we use the info from the first pass
-    func_text += f"    ev_alloc.add_attribute('num_rows', n_rows)\n"
+    func_text += "    ev_alloc.add_attribute('num_rows', n_rows)\n"
     for i, data_arr_typ in enumerate(data_arr_typs):
         if is_str_arr_type(data_arr_typ):
             func_text += f"    data_arrs_{i} = [\n"
@@ -3388,8 +3445,8 @@ def pivot_impl(
             func_text += "        )\n"
             func_text += "        for i in range(n_cols)\n"
             func_text += "    ]\n"
-            func_text += f"    if tracing.is_tracing():\n"
-            func_text += "         for i in range(n_cols):"
+            func_text += "    if tracing.is_tracing():\n"
+            func_text += "         for i in range(n_cols):\n"
             func_text += f"            ev_alloc.add_attribute('total_str_chars_out_column_{i}_' + str(i), total_lens_{i}[i])\n"
         else:
             func_text += f"    data_arrs_{i} = [\n"
@@ -3428,22 +3485,12 @@ def pivot_impl(
         func_text += "            col_idx = (j * len(pivot_values)) + pivot_idx\n"
         func_text += "            col_arr = data_arrs_0[col_idx]\n"
         func_text += "            values_arr = values_arrs[j]\n"
-        func_text += "            if bodo.libs.array_kernels.isna(values_arr, i):\n"
-        func_text += "                bodo.libs.array_kernels.setna(col_arr, row_idx)\n"
-        func_text += "            else:\n"
-        func_text += "                col_arr[row_idx] = values_arr[i]\n"
+        func_text += "            bodo.libs.array_kernels.copy_array_element(col_arr, row_idx, values_arr, i)\n"
     else:
         # If we need to generate multiple lists, generate code per list
         for i, data_arr_typ in enumerate(data_arr_typs):
             func_text += f"        col_arr_{i} = data_arrs_{i}[pivot_idx]\n"
-            func_text += (
-                f"        if bodo.libs.array_kernels.isna(values_tup[{i}], i):\n"
-            )
-            func_text += (
-                f"            bodo.libs.array_kernels.setna(col_arr_{i}, row_idx)\n"
-            )
-            func_text += f"        else:\n"
-            func_text += f"            col_arr_{i}[row_idx] = values_tup[{i}][i]\n"
+            func_text += f"        bodo.libs.array_kernels.copy_array_element(col_arr_{i}, row_idx, values_tup[{i}], i)\n"
     # Convert the index array to a proper index.
     if len(index_names) == 1:
         func_text += "    index = bodo.utils.conversion.index_from_array(unique_index_arr_tup[0], index_names_lit)\n"
@@ -3452,9 +3499,9 @@ def pivot_impl(
     else:
         func_text += "    index = bodo.hiframes.pd_multi_index_ext.init_multi_index(unique_index_arr_tup, index_names_lit, None)\n"
         index_names_lit = tuple(index_names.meta)
-    func_text += f"    if tracing.is_tracing():\n"
-    func_text += f"        index_nbytes = index.nbytes\n"
-    func_text += f"        ev.add_attribute('index_nbytes', index_nbytes)\n"
+    func_text += "    if tracing.is_tracing():\n"
+    func_text += "        index_nbytes = index.nbytes\n"
+    func_text += "        ev.add_attribute('index_nbytes', index_nbytes)\n"
     if not has_compile_time_columns:
         columns_name_lit = columns_name.meta[0]
         # Convert the columns to a proper index. if they are not known at compile time.
@@ -3468,7 +3515,7 @@ def pivot_impl(
                 value_names_lit = np.array(value_names_lit, "int64")
             else:
                 raise BodoError(
-                    f"pivot(): column names selected for 'values' must all share a common int or string type. Please convert your names to a common type using DataFrame.rename()"
+                    "pivot(): column names selected for 'values' must all share a common int or string type. Please convert your names to a common type using DataFrame.rename()"
                 )
 
             if isinstance(value_names_lit.dtype, pd.StringDtype):
@@ -3521,8 +3568,8 @@ def pivot_impl(
         # Create the table type
         table_type = TableType(data_values)
         # Generate a table with constant types.
-        func_text += f"    table = bodo.hiframes.table.init_table(table_type, False)\n"
-        func_text += f"    table = bodo.hiframes.table.set_table_len(table, n_rows)\n"
+        func_text += "    table = bodo.hiframes.table.init_table(table_type, False)\n"
+        func_text += "    table = bodo.hiframes.table.set_table_len(table, n_rows)\n"
         for i, typ in enumerate(data_arr_typs):
             # We support constant columns with multiple values
             func_text += f"    table = bodo.hiframes.table.set_table_block(table, data_arrs_{i}, {table_type.type_to_blk[typ]})\n"
@@ -3550,9 +3597,8 @@ def pivot_impl(
         "array_to_info": array_to_info,
         "arr_info_list_to_table": arr_info_list_to_table,
         "shuffle_table": shuffle_table,
-        "info_to_array": info_to_array,
+        "array_from_cpp_table": array_from_cpp_table,
         "delete_table": delete_table,
-        "info_from_table": info_from_table,
         "table_type": table_type,
         "columns_typ": columns_typ,
         "index_names_lit": index_names_lit,
@@ -3603,7 +3649,7 @@ def gen_pandas_parquet_metadata(
             else:
                 tz = pd.DatetimeTZDtype(tz=col_type.tz).tz
             metadata = {"timezone": pa.lib.tzinfo_to_string(tz)}
-        elif isinstance(col_type, types.Array) or col_type == boolean_array:
+        elif isinstance(col_type, types.Array) or col_type == boolean_array_type:
             pandas_type = numpy_type = col_type.dtype.name
             if numpy_type.startswith("datetime"):
                 pandas_type = "datetime"
@@ -3617,27 +3663,40 @@ def gen_pandas_parquet_metadata(
             pandas_type = numpy_type = "object"
         elif isinstance(col_type, IntegerArrayType):
             dtype_name = col_type.dtype.name
+            # Pandas dtype is int8/uint8/int16/...
+            # numpy dtype is Int8/UInt8/Int16/... (capitalize to specify nullable array)
             if dtype_name.startswith("int"):
-                pandas_type = "Int" + dtype_name[3:]
+                numpy_type = "Int" + dtype_name[3:]
             elif dtype_name.startswith("uint"):
-                pandas_type = "UInt" + dtype_name[4:]
+                numpy_type = "UInt" + dtype_name[4:]
             else:  # pragma: no cover
                 if is_runtime_columns:
                     # If columns are determined at runtime we don't have names
                     col_name = "Runtime determined column of type"
                 raise BodoError(
-                    "to_parquet(): unknown dtype in nullable Integer column {} {}".format(
-                        col_name, col_type
-                    )
+                    f"to_parquet(): unknown dtype in nullable Integer column {col_name} {col_type}"
                 )
-            numpy_type = col_type.dtype.name
+            pandas_type = col_type.dtype.name
+        elif isinstance(col_type, bodo.FloatingArrayType):
+            dtype_name = col_type.dtype.name
+            # Pandas dtype is float32/float64
+            # numpy dtype is Float32/Float64 (capitalize to specify nullable array)
+            pandas_type = dtype_name
+            numpy_type = dtype_name.capitalize()
         elif col_type == datetime_date_array_type:
             pandas_type = "datetime"
             numpy_type = "object"
         elif isinstance(col_type, TimeArrayType):
             pandas_type = "datetime"
             numpy_type = "object"
-        elif isinstance(col_type, (StructArrayType, ArrayItemArrayType)):
+        elif isinstance(
+            col_type,
+            (
+                bodo.ArrayItemArrayType,
+                bodo.StructArrayType,
+                bodo.MapArrayType,
+            ),
+        ):
             # TODO: provide meaningful pandas_type when possible.
             # For example "pandas_type": "list[list[int64]]", "numpy_type": "object"
             # can occur
@@ -3649,9 +3708,7 @@ def gen_pandas_parquet_metadata(
                 # If columns are determined at runtime we don't have names
                 col_name = "Runtime determined column of type"
             raise BodoError(
-                "to_parquet(): unsupported column type for metadata generation : {} {}".format(
-                    col_name, col_type
-                )
+                f"to_parquet(): unsupported column type for metadata generation : {col_name} {col_type}"
             )
 
         col_metadata = {
@@ -3729,24 +3786,31 @@ def to_parquet_overload(
     # time.
     if df.has_runtime_cols and not is_overload_none(partition_cols):
         raise BodoError(
-            f"DataFrame.to_parquet(): Providing 'partition_cols' on DataFrames with columns determined at runtime is not yet supported. Please return the DataFrame to regular Python to update typing information."
+            "DataFrame.to_parquet(): Providing 'partition_cols' on DataFrames with columns determined at runtime is not yet supported. Please return the DataFrame to regular Python to update typing information."
         )
-
-    if not is_overload_none(engine) and get_overload_const_str(engine) not in (
-        "auto",
-        "pyarrow",
+    if (
+        not is_overload_none(engine)
+        and is_overload_constant_str(engine)
+        and get_overload_const_str(engine)
+        not in (
+            "auto",
+            "pyarrow",
+        )
     ):  # pragma: no cover
         raise BodoError("DataFrame.to_parquet(): only pyarrow engine supported")
 
-    if not is_overload_none(compression) and get_overload_const_str(
-        compression
-    ) not in {"snappy", "gzip", "brotli"}:
+    if (
+        not is_overload_none(compression)
+        and is_overload_constant_str(compression)
+        and get_overload_const_str(compression) not in {"snappy", "gzip", "brotli"}
+    ):
         raise BodoError(
             "to_parquet(): Unsupported compression: "
             + str(get_overload_const_str(compression))
         )
 
     if not is_overload_none(partition_cols):
+        assert_bodo_error(is_overload_constant_list(partition_cols))
         partition_cols = get_overload_const_list(partition_cols)
         part_col_idxs = []
         for part_col_name in partition_cols:
@@ -3875,22 +3939,33 @@ def to_parquet_overload(
             # wrap the name with quotation mark to indicate it is a string
             pandas_metadata_str = pandas_metadata_str.replace('"%s"', "%s")
 
-    # convert dataframe columns to array_info
-    if not df.is_table_format:
-        data_args = ", ".join(
-            "array_to_info(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {}))".format(
-                i
-            )
-            for i in range(len(df.columns))
-        )
-
     func_text = "def df_to_parquet(df, path, engine='auto', compression='snappy', index=None, partition_cols=None, storage_options=None, row_group_size=-1, _bodo_file_prefix='part-', _bodo_timestamp_tz=None, _is_parallel=False):\n"
+
+    # Why we are calling drop_duplicates_local_dictionary on all dict encoded arrays?
+    # Arrow doesn't support writing DictionaryArrays with nulls in the dictionary.
+    # In most cases, we shouldn't end up with nulls in the dictionary, but it might
+    # still happen in some array kernels.
+    # `has_unique_local_dictionary` means there's no nulls in the dictionary.
+    # It might be false even when there aren't any nulls, but even in those cases,
+    # deduplicating locally shouldn't be very expensive.
+    # TODO [BE-4383] Handle dict encoded array deduplication for runtime columns case
+
     # put arrays in table_info
+    extra_globals = {}
     if df.is_table_format:
         func_text += "    py_table = get_dataframe_table(df)\n"
+        if not df.has_runtime_cols:
+            output_arr_typ = types.none
+            extra_globals.update({"output_arr_typ": output_arr_typ})
+            func_text += "    py_table = bodo.utils.table_utils.generate_mappable_table_func(py_table, 'bodo.libs.array_ops.drop_duplicates_local_dictionary_if_dict', output_arr_typ, False)\n"
         func_text += "    table = py_table_to_cpp_table(py_table, py_table_typ)\n"
     else:
-        func_text += "    info_list = [{}]\n".format(data_args)
+        for i in range(len(df.data)):
+            func_text += f"    arr{i} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i})\n"
+            if df.data[i] == bodo.dict_str_arr_type:
+                func_text += f"    arr{i} = bodo.libs.array.drop_duplicates_local_dictionary(arr{i}, False)\n"
+        data_args = ", ".join(f"array_to_info(arr{i})" for i in range(len(df.columns)))
+        func_text += f"    info_list = [{data_args}]\n"
         func_text += "    table = arr_info_list_to_table(info_list)\n"
     if df.has_runtime_cols:
         func_text += "    columns_index = get_dataframe_column_names(df)\n"
@@ -3899,12 +3974,15 @@ def to_parquet_overload(
         func_text += "    col_names = array_to_info(names_arr)\n"
     else:
         func_text += "    col_names = array_to_info(col_names_arr)\n"
-    if is_overload_true(index) or (is_overload_none(index) and write_non_rangeindex):
-        func_text += "    index_col = array_to_info(index_to_array(bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)))\n"
-        write_index = True
-    else:
-        func_text += "    index_col = array_to_info(np.empty(0))\n"
-        write_index = False
+    if not partition_cols:
+        if is_overload_true(index) or (
+            is_overload_none(index) and write_non_rangeindex
+        ):
+            func_text += "    index_col = array_to_info(index_to_array(bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)))\n"
+            write_index = True
+        else:
+            func_text += "    index_col = array_to_info(np.empty(0, dtype=np.int64))\n"
+            write_index = False
     if df.has_runtime_cols:
         # Compute the metadata string at runtime.
         func_text += "    columns_lst = []\n"
@@ -3940,7 +4018,7 @@ def to_parquet_overload(
     func_text += "    else:\n"
     func_text += "        name_ptr = 'null'\n"
     # if it's an s3 url, get the region and pass it into the c++ code
-    func_text += f"    bucket_region = bodo.io.fs_io.get_s3_bucket_region_njit(path, parallel=_is_parallel)\n"
+    func_text += "    bucket_region = bodo.io.fs_io.get_s3_bucket_region_wrapper(path, parallel=_is_parallel)\n"
     col_names_no_parts_arr = None
     if partition_cols:
         col_names_no_parts_arr = pd.array(
@@ -3955,10 +4033,10 @@ def to_parquet_overload(
             if isinstance(df.data[i], CategoricalArrayType) and (i in part_col_idxs)
         )
         if categories_args:
-            func_text += "    cat_info_list = [{}]\n".format(categories_args)
+            func_text += f"    cat_info_list = [{categories_args}]\n"
             func_text += "    cat_table = arr_info_list_to_table(cat_info_list)\n"
         else:
-            func_text += "    cat_table = table\n"  # hack to avoid typing issue
+            func_text += "    cat_table = 0\n"
         func_text += (
             "    col_names_no_partitions = array_to_info(col_names_no_parts_arr)\n"
         )
@@ -3976,12 +4054,6 @@ def to_parquet_overload(
         func_text += (
             "                            unicode_to_utf8(_bodo_timestamp_tz))\n"
         )
-        func_text += "    delete_table_decref_arrays(table)\n"
-        func_text += "    delete_info_decref_array(index_col)\n"
-        func_text += "    delete_info_decref_array(col_names_no_partitions)\n"
-        func_text += "    delete_info_decref_array(col_names)\n"
-        if categories_args:
-            func_text += "    delete_table_decref_arrays(cat_table)\n"
     elif write_rangeindex_to_metadata:
         func_text += "    parquet_write_table_cpp(unicode_to_utf8(path),\n"
         func_text += "                            table, col_names, index_col,\n"
@@ -3995,11 +4067,13 @@ def to_parquet_overload(
         func_text += "                            row_group_size,\n"
         func_text += "                            unicode_to_utf8(_bodo_file_prefix),\n"
         func_text += (
-            "                            unicode_to_utf8(_bodo_timestamp_tz))\n"
+            "                              False,\n"  # convert_timedelta_to_int64
         )
-        func_text += "    delete_table_decref_arrays(table)\n"
-        func_text += "    delete_info_decref_array(index_col)\n"
-        func_text += "    delete_info_decref_array(col_names)\n"
+        func_text += (
+            "                            unicode_to_utf8(_bodo_timestamp_tz),\n"
+        )
+        func_text += "                              False,\n"  # downcast_time_ns_to_us
+        func_text += "                              True)\n"  # create_dir
     else:
         func_text += "    parquet_write_table_cpp(unicode_to_utf8(path),\n"
         func_text += "                            table, col_names, index_col,\n"
@@ -4012,11 +4086,13 @@ def to_parquet_overload(
         func_text += "                            row_group_size,\n"
         func_text += "                            unicode_to_utf8(_bodo_file_prefix),\n"
         func_text += (
-            "                            unicode_to_utf8(_bodo_timestamp_tz))\n"
+            "                              False,\n"  # convert_timedelta_to_int64
         )
-        func_text += "    delete_table_decref_arrays(table)\n"
-        func_text += "    delete_info_decref_array(index_col)\n"
-        func_text += "    delete_info_decref_array(col_names)\n"
+        func_text += (
+            "                            unicode_to_utf8(_bodo_timestamp_tz),\n"
+        )
+        func_text += "                              False,\n"  # downcast_time_ns_to_us
+        func_text += "                              True)\n"  # create_dir
 
     loc_vars = {}
     if df.has_runtime_cols:
@@ -4032,30 +4108,31 @@ def to_parquet_overload(
                     "DataFrame.to_parquet(): parquet must have string column names"
                 )
         col_names_arr = pd.array(df.columns)
+
+    glbls = {
+        "np": np,
+        "bodo": bodo,
+        "unicode_to_utf8": unicode_to_utf8,
+        "array_to_info": array_to_info,
+        "arr_info_list_to_table": arr_info_list_to_table,
+        "str_arr_from_sequence": str_arr_from_sequence,
+        "parquet_write_table_cpp": parquet_write_table_cpp,
+        "parquet_write_table_partitioned_cpp": parquet_write_table_partitioned_cpp,
+        "index_to_array": index_to_array,
+        "col_names_arr": col_names_arr,
+        "py_table_to_cpp_table": py_table_to_cpp_table,
+        "py_table_typ": df.table_type,
+        "get_dataframe_table": get_dataframe_table,
+        "col_names_no_parts_arr": col_names_no_parts_arr,
+        "get_dataframe_column_names": get_dataframe_column_names,
+        "fix_arr_dtype": fix_arr_dtype,
+        "decode_if_dict_array": decode_if_dict_array,
+        "decode_if_dict_table": decode_if_dict_table,
+    }
+    glbls.update(extra_globals)
     exec(
         func_text,
-        {
-            "np": np,
-            "bodo": bodo,
-            "unicode_to_utf8": unicode_to_utf8,
-            "array_to_info": array_to_info,
-            "arr_info_list_to_table": arr_info_list_to_table,
-            "str_arr_from_sequence": str_arr_from_sequence,
-            "parquet_write_table_cpp": parquet_write_table_cpp,
-            "parquet_write_table_partitioned_cpp": parquet_write_table_partitioned_cpp,
-            "index_to_array": index_to_array,
-            "delete_info_decref_array": delete_info_decref_array,
-            "delete_table_decref_arrays": delete_table_decref_arrays,
-            "col_names_arr": col_names_arr,
-            "py_table_to_cpp_table": py_table_to_cpp_table,
-            "py_table_typ": df.table_type,
-            "get_dataframe_table": get_dataframe_table,
-            "col_names_no_parts_arr": col_names_no_parts_arr,
-            "get_dataframe_column_names": get_dataframe_column_names,
-            "fix_arr_dtype": fix_arr_dtype,
-            "decode_if_dict_array": decode_if_dict_array,
-            "decode_if_dict_table": decode_if_dict_table,
-        },
+        glbls,
         loc_vars,
     )
     df_to_parquet = loc_vars["df_to_parquet"]
@@ -4140,6 +4217,11 @@ def to_sql_exception_guard(
                         bodo.dict_str_arr_type,
                     ) and (not disable_varchar2 or disable_varchar2 == "0"):
                         dtyp[c] = VARCHAR2(4000)
+                # workaround to avoid issue with Oracle and Float values
+                # See discussion https://github.com/sqlalchemy/sqlalchemy/discussions/9667
+                # Ticket in Pandas https://github.com/pandas-dev/pandas/issues/52715
+                elif df[c].dtype in ["float", "float64"]:
+                    dtyp[c] = sa.FLOAT
             dtype = dtyp
 
         try:
@@ -4188,7 +4270,7 @@ def to_sql_exception_guard_encaps(
     _is_parallel=False,
 ):  # pragma: no cover
     ev = tracing.Event("to_sql_exception_guard_encaps", is_parallel=_is_parallel)
-    with numba.objmode(out="unicode_type"):
+    with bodo.no_warning_objmode(out="unicode_type"):
         ev_objmode = tracing.Event(
             "to_sql_exception_guard_encaps:objmode", is_parallel=_is_parallel
         )
@@ -4223,21 +4305,30 @@ def to_sql_overload(
     chunksize=None,
     dtype=None,
     method=None,
+    # Custom Bodo Arguments
+    _bodo_allow_downcasting=False,
+    _bodo_create_table_type="",
     # Additional entry
     _is_parallel=False,
 ):
+    """
+    _bodo_create_table_type: str. Only used when creating a snowflake table. Must be one of "", "TRANSIENT", or "TEMPORARY"
+    """
+
     import warnings
 
+    # Currently to_sql (Iceberg, Snowflake, SQL writes) does not support
+    # writing dfs with runtime columns. DataFrameType has the invariant:
+    # df.columns is None and df.data is None iff df.has_runtime_columns
     check_runtime_cols_unsupported(df, "DataFrame.to_sql()")
     df: DataFrameType = df
+    assert df.columns is not None and df.data is not None
 
     if is_overload_none(schema):
         if bodo.get_rank() == 0:
-            import warnings
-
             warnings.warn(
                 BodoWarning(
-                    f"DataFrame.to_sql(): schema argument is recommended to avoid permission issues when writing the table."
+                    "DataFrame.to_sql(): schema argument is recommended to avoid permission issues when writing the table."
                 )
             )
 
@@ -4249,77 +4340,82 @@ def to_sql_overload(
     # Snowflake write imports
     # We need to import so that the types are in numba's type registry
     # when executing the code.
-    from bodo.io.helpers import exception_propagating_thread_type  # noqa
     from bodo.io.parquet_pio import parquet_write_table_cpp
     from bodo.io.snowflake import snowflake_connector_cursor_python_type  # noqa
 
-    if df.has_runtime_cols:
-        # TODO: We can also check the type of runtime column names with
-        # df.runtime_colname_typ, to make sure they aren't strings.
-        # Not critical since this code path is unlikely
-        col_names_arr = None
-    else:
-        # Pandas raises a ValueError if columns aren't strings.
-        # Similarly if columns aren't strings we have a segfault in C++.
-        for col in df.columns:
-            if not isinstance(col, str):
-                # This is the Pandas error message
-                raise BodoError(
-                    "DataFrame.to_sql(): input dataframe must have string column names. "
-                    "Please return the DataFrame with runtime column names to regular "
-                    "Python to modify column names."
-                )
-        col_names_arr = pd.array(df.columns)
+    extra_globals = {}
 
-    func_text = "def df_to_sql(\n"
-    func_text += "    df, name, con,\n"
-    func_text += "    schema=None, if_exists='fail', index=True, index_label=None,\n"
-    func_text += "    chunksize=None, dtype=None, method=None, _is_parallel=False,\n"
-    func_text += "):\n"
+    # Pandas raises a ValueError if columns aren't strings.
+    # Similarly if columns aren't strings we have a segfault in C++.
+    for col in df.columns:
+        if not isinstance(col, str):
+            # This is the Pandas error message
+            raise BodoError(
+                "DataFrame.to_sql(): input dataframe must have string column names. "
+                "Please return the DataFrame with runtime column names to regular "
+                "Python to modify column names."
+            )
+    col_names_arr = pd.array(df.columns)
+    n_cols = len(col_names_arr)
+
+    func_text = (
+        "def df_to_sql(\n"
+        "    df, name, con,\n"
+        "    schema=None, if_exists='fail', index=True,\n"
+        "    index_label=None, chunksize=None, dtype=None,\n"
+        '    method=None, _bodo_allow_downcasting=False, _bodo_create_table_type="",\n'
+        "    _is_parallel=False,\n"
+        "):\n"
+    )
 
     # ------------------------------ Iceberg Write -----------------------------
-    func_text += f"    if con.startswith('iceberg'):\n"
-    func_text += f"        con_str = bodo.io.iceberg.format_iceberg_conn_njit(con)\n"
-    func_text += f"        if schema is None:\n"
-    func_text += f"            raise ValueError('DataFrame.to_sql(): schema must be provided when writing to an Iceberg table.')\n"
-    func_text += f"        if chunksize is not None:\n"
-    func_text += f"            raise ValueError('DataFrame.to_sql(): chunksize not supported for Iceberg tables.')\n"
-    func_text += f"        if index and bodo.get_rank() == 0:\n"
-    func_text += f"            warnings.warn('index is not supported for Iceberg tables.')      \n"
-    func_text += f"        if index_label is not None and bodo.get_rank() == 0:\n"
-    func_text += f"            warnings.warn('index_label is not supported for Iceberg tables.')\n"
+    func_text += (
+        "    if con.startswith('iceberg'):\n"
+        "        con_str = bodo.io.iceberg.format_iceberg_conn_njit(con)\n"
+        "        if schema is None:\n"
+        "            raise ValueError('DataFrame.to_sql(): schema must be provided when writing to an Iceberg table.')\n"
+        "        if chunksize is not None:\n"
+        "            raise ValueError('DataFrame.to_sql(): chunksize not supported for Iceberg tables.')\n"
+        "        if index and bodo.get_rank() == 0:\n"
+        "            warnings.warn('index is not supported for Iceberg tables.')      \n"
+        "        if index_label is not None and bodo.get_rank() == 0:\n"
+        "            warnings.warn('index_label is not supported for Iceberg tables.')\n"
+    )
 
     # XXX A lot of this is copied from the to_parquet impl, so might be good to refactor
 
     if df.is_table_format:
-        func_text += f"        py_table = get_dataframe_table(df)\n"
-        func_text += f"        table = py_table_to_cpp_table(py_table, py_table_typ)\n"
+        func_text += "        py_table = get_dataframe_table(df)\n"
+        if not df.has_runtime_cols:
+            output_arr_typ = types.none
+            extra_globals.update({"output_arr_typ": output_arr_typ})
+            # Call drop_duplicates_local_dictionary on all dict-encoded arrays.
+            # See note in `to_parquet_overload` (Why we are calling drop_duplicates_local_dictionary
+            # on all dict encoded arrays?) for why this is important.
+            func_text += "        py_table = bodo.utils.table_utils.generate_mappable_table_func(py_table, 'bodo.libs.array_ops.drop_duplicates_local_dictionary_if_dict', output_arr_typ, False)\n"
+        func_text += "        table = py_table_to_cpp_table(py_table, py_table_typ)\n"
     else:
-        # convert dataframe columns to array_info
-        data_args = ", ".join(
-            f"array_to_info(get_dataframe_data(df, {i}))"
-            for i in range(len(df.columns))
-        )
+        for i in range(len(df.data)):
+            func_text += f"        arr{i} = get_dataframe_data(df, {i})\n"
+            # Call drop_duplicates_local_dictionary on all dict-encoded arrays.
+            # See note in `to_parquet_overload` (Why we are calling drop_duplicates_local_dictionary
+            # on all dict encoded arrays?) for why this is important.
+            if df.data[i] == bodo.dict_str_arr_type:
+                func_text += f"        arr{i} = bodo.libs.array.drop_duplicates_local_dictionary(arr{i}, False)\n"
+        data_args = ", ".join(f"array_to_info(arr{i})" for i in range(len(df.columns)))
         func_text += f"        info_list = [{data_args}]\n"
-        func_text += f"        table = arr_info_list_to_table(info_list)\n"
-
-    if df.has_runtime_cols:  # pragma: no cover
-        func_text += f"        raise Exception('Writing dataframes with runtime columns to an Iceberg table is not supported yet.')\n"
-    else:
-        func_text += f"        col_names = array_to_info(col_names_arr)\n"
+        func_text += "        table = arr_info_list_to_table(info_list)\n"
 
     # We don't write pandas metadata for Iceberg (at least for now)
-
     # Partition columns not supported through this API.
-
     func_text += (
+        "        col_names = array_to_info(col_names_arr)\n"
         "        bodo.io.iceberg.iceberg_write(\n"
-        "            name, con_str, schema, table, col_names, col_names_arr,\n"
-        "            if_exists, _is_parallel, pyarrow_table_schema,\n"
+        "            con_str, schema, name, table, col_names,\n"
+        "            None, if_exists, _is_parallel, pyarrow_table_schema,\n"
+        f"            {n_cols}, _bodo_allow_downcasting,\n"
         "        )\n"
     )
-    func_text += f"        delete_table_decref_arrays(table)\n"
-    func_text += f"        delete_info_decref_array(col_names)\n"
 
     # ----------------------------- Snowflake Write ----------------------------
     # Design doc link: https://bodo.atlassian.net/wiki/spaces/B/pages/1077280785/Snowflake+Distributed+Write
@@ -4329,6 +4425,8 @@ def to_sql_overload(
         "            warnings.warn('index is not supported for Snowflake tables.')      \n"
         "        if index_label is not None and bodo.get_rank() == 0:\n"
         "            warnings.warn('index_label is not supported for Snowflake tables.')\n"
+        "        if _bodo_allow_downcasting and bodo.get_rank() == 0:\n"
+        "            warnings.warn('_bodo_allow_downcasting is not supported for Snowflake tables.')\n"
         "        ev = tracing.Event('snowflake_write_impl', sync=False)\n"
     )
 
@@ -4336,13 +4434,13 @@ def to_sql_overload(
     func_text += "        location = ''\n"
     if not is_overload_none(schema):
         func_text += "        location += '\"' + schema + '\".'\n"
-    func_text += "        location += '\"' + name + '\"'\n"
+    func_text += "        location += name\n"
     func_text += "        my_rank = bodo.get_rank()\n"
 
     # In object mode: Connect to snowflake, create internal stage, and
     # get internal stage credentials on each rank
     func_text += (
-        "        with bodo.objmode(\n"
+        "        with bodo.no_warning_objmode(\n"
         "            cursor='snowflake_connector_cursor_type',\n"
         "            tmp_folder='temporary_directory_type',\n"
         "            stage_name='unicode_type',\n"
@@ -4401,23 +4499,44 @@ def to_sql_overload(
         "            ev_estimate_chunksize.finalize()\n"
     )
 
-    # In C++: Upload dataframe chunks on each rank to internal stage.
-    # Compute column names and other required info for parquet_write_table_cpp
+    extra_globals.update(
+        {
+            "__col_name_meta_value_df_to_sql": ColNamesMetaType(df.columns),
+        }
+    )
+    # Call drop_duplicates_local_dictionary on all dict-encoded arrays.
+    # See note in `to_parquet_overload` (Why we are calling drop_duplicates_local_dictionary
+    # on all dict encoded arrays?) for why this is important.
+    if df.is_table_format:
+        if not df.has_runtime_cols:
+            output_arr_typ = types.none
+            extra_globals.update(
+                {
+                    "output_arr_typ": output_arr_typ,
+                }
+            )
+            func_text += "        table = bodo.hiframes.pd_dataframe_ext.get_dataframe_table(df)\n"
+            func_text += "        table = bodo.utils.table_utils.generate_mappable_table_func(table, 'bodo.libs.array_ops.drop_duplicates_local_dictionary_if_dict', output_arr_typ, False)\n"
+            func_text += "        df = bodo.hiframes.pd_dataframe_ext.init_dataframe((table,), df.index, __col_name_meta_value_df_to_sql)\n"
+    else:
+        for i in range(len(df.data)):
+            func_text += f"        arr{i} = get_dataframe_data(df, {i})\n"
+            if df.data[i] == bodo.dict_str_arr_type:
+                func_text += f"        arr{i} = bodo.libs.array.drop_duplicates_local_dictionary(arr{i}, False)\n"
+        data_args = ", ".join([f"arr{i}" for i in range(len(df.data))])
+        func_text += f"        df = bodo.hiframes.pd_dataframe_ext.init_dataframe(({data_args},), df.index, __col_name_meta_value_df_to_sql)\n"
+
     if df.has_runtime_cols:
         func_text += "        columns_index = get_dataframe_column_names(df)\n"
         func_text += "        names_arr = index_to_array(columns_index)\n"
-        func_text += "        col_names = array_to_info(names_arr)\n"
-    else:
-        func_text += "        col_names = array_to_info(col_names_arr)\n"
-    func_text += "        index_col = array_to_info(np.empty(0))\n"
 
-    func_text += "        bucket_region = bodo.io.fs_io.get_s3_bucket_region_njit(parquet_path, parallel=_is_parallel)\n"
+    func_text += "        bucket_region = bodo.io.fs_io.get_s3_bucket_region_wrapper(parquet_path, parallel=_is_parallel)\n"
 
     # On all ranks, write local dataframe chunk to S3/ADLS, or a local file
     # upon fallback to snowflake PUT. In the fallback case, we execute the
     # PUT command later to perform the actual upload
     func_text += "        ev_upload_df = tracing.Event('upload_df', is_parallel=False)           \n"
-    func_text += "        upload_threads_in_progress = []\n"
+    func_text += "        num_files = len(range(0, len(df), chunksize))\n"
     func_text += "        for chunk_idx, i in enumerate(range(0, len(df), chunksize)):           \n"
 
     # Create a unique filename for uploaded chunk with quotes/backslashes escaped
@@ -4450,6 +4569,13 @@ def to_sql_overload(
         func_text += f"            table_chunk = arr_info_list_to_table([{data_args_chunk}])     \n"
     func_text += "            ev_to_df_table.finalize()\n"
 
+    # In C++: Upload dataframe chunks on each rank to internal stage.
+    # Compute column names and other required info for parquet_write_table_cpp
+    if df.has_runtime_cols:
+        func_text += "            col_names = array_to_info(names_arr)\n"
+    else:
+        func_text += "            col_names = array_to_info(col_names_arr)\n"
+
     # Dump chunks to parquet file
     # Below, we always pass `is_parallel=False`. Passing `is_parallel=True` would cause
     # `pq_write` to write a directory of partitioned files, rather than a single file,
@@ -4463,7 +4589,7 @@ def to_sql_overload(
         "            ev_pq_write_cpp.add_attribute('chunk_path', chunk_path)\n"
         "            parquet_write_table_cpp(\n"
         "                unicode_to_utf8(chunk_path),\n"
-        "                table_chunk, col_names, index_col,\n"
+        "                table_chunk, col_names, 0,\n"
         "                False,\n"  # write_index
         "                unicode_to_utf8('null'),\n"  # metadata
         "                unicode_to_utf8(bodo.io.snowflake.SF_WRITE_PARQUET_COMPRESSION),\n"
@@ -4477,40 +4603,44 @@ def to_sql_overload(
         # file is already a reasonable size for one row group.
         "                chunksize,\n"  # row_group_size
         "                unicode_to_utf8('null'),\n"  # prefix
+        "                True,\n"  # Explicitly cast timedelta to int64 in the bodo_array_to_arrow step (convert_timedelta_to_int64)
         "                unicode_to_utf8('UTC'),\n"  # Explicitly set tz='UTC' for snowflake write. see [BE-3530]
+        "                True,\n"  # Explicitly downcast nanoseconds to microseconds (See gen_snowflake_schema comment)
+        "                True,\n"  # Create directory
+        "                True,\n"  # Use HDFS for abfs paths until arrow AzureFileSystem supports SAS tokens
         "            )\n"
         "            ev_pq_write_cpp.finalize()\n"
-        "            delete_table_decref_arrays(table_chunk)\n"
         # If needed, upload local parquet to internal stage using objmode PUT
         "            if upload_using_snowflake_put:\n"
-        "                with bodo.objmode(upload_thread='types.optional(exception_propagating_thread_type)'):\n"
-        "                    upload_thread = bodo.io.snowflake.do_upload_and_cleanup(\n"
+        "                with bodo.no_warning_objmode():\n"
+        "                    bodo.io.snowflake.do_upload_and_cleanup(\n"
         "                        cursor, chunk_idx, chunk_path, stage_name,\n"
         "                    )\n"
-        "                if bodo.io.snowflake.SF_WRITE_OVERLAP_UPLOAD:\n"
-        "                    upload_threads_in_progress.append(upload_thread)\n"
-        "        delete_info_decref_array(index_col)\n"
-        "        delete_info_decref_array(col_names)\n"
-        # Wait for all upload threads to finish
-        "        if bodo.io.snowflake.SF_WRITE_OVERLAP_UPLOAD:\n"
-        "            with bodo.objmode():\n"
-        "                bodo.io.helpers.join_all_threads(upload_threads_in_progress)\n"
         "        ev_upload_df.finalize()\n"
     )
 
     # Barrier ensures that files are copied into internal stage before COPY_INTO
     func_text += "        bodo.barrier()\n"
 
+    # Generate snowflake schema from bodo datatypes.
+    sf_schema = bodo.io.snowflake.gen_snowflake_schema(df.columns, df.data)
+
+    # Compute the total number of files written.
+    func_text += (
+        "        sum_op = np.int32(bodo.libs.distributed_api.Reduce_Type.Sum.value)\n"
+    )
+    func_text += "        num_files_global = bodo.libs.distributed_api.dist_reduce(num_files, np.int32(sum_op))\n"
     # In object mode on rank 0: Create a new table if needed, execute COPY_INTO,
     # and clean up created internal stage.
     func_text += (
-        # We define df_columns outside of objmode to ensure that only the columns
-        # array is boxed rather than the entire dataframe, for performance
-        "        df_columns = df.columns\n"
-        "        with bodo.objmode():\n"
+        # This is because it seems like globals aren't passed into objmode
+        "        df_data_ = df_data\n"
+        "        with bodo.no_warning_objmode():\n"
         "            bodo.io.snowflake.create_table_copy_into(\n"
-        "                cursor, stage_name, location, df_columns,\n"
-        "                if_exists, old_creds, tmp_folder,\n"
+        # Creating the dict here instead of passing it in as a globall is necessary because when boxing
+        # dicts we check if they contain type references in the value and throw an error, we need typerefs here
+        f"                cursor, stage_name, location, {sf_schema}, dict(zip(df.columns, df_data_)),\n"
+        "                if_exists, _bodo_create_table_type, num_files_global, old_creds, tmp_folder,\n"
         "                azure_stage_direct_upload, old_core_site,\n"
         "                old_sas_token,\n"
         "            )\n"
@@ -4527,6 +4657,8 @@ def to_sql_overload(
 
     # -------------------------- Default to_sql Impl --------------------------
     func_text += "    else:\n"
+    func_text += "        if _bodo_allow_downcasting and bodo.get_rank() == 0:\n"
+    func_text += "            warnings.warn('_bodo_allow_downcasting is not supported for SQL tables.')\n"
 
     # Nodes number 0 does the first initial insertion into the database.
     # Following nodes do the insertion of the rest if no error happened.
@@ -4565,7 +4697,6 @@ def to_sql_overload(
     func_text += "        if err_msg != 'all_ok':\n"
     func_text += "            print('err_msg=', err_msg)\n"
     func_text += "            raise ValueError('error in to_sql() operation')\n"
-
     loc_vars = {}
     glbls = globals().copy()
     glbls.update(
@@ -4574,8 +4705,6 @@ def to_sql_overload(
             "array_to_info": array_to_info,
             "bodo": bodo,
             "col_names_arr": col_names_arr,
-            "delete_info_decref_array": delete_info_decref_array,
-            "delete_table_decref_arrays": delete_table_decref_arrays,
             "get_dataframe_column_names": get_dataframe_column_names,
             "get_dataframe_data": get_dataframe_data,
             "get_dataframe_table": get_dataframe_table,
@@ -4584,19 +4713,19 @@ def to_sql_overload(
             "parquet_write_table_cpp": parquet_write_table_cpp,
             "py_table_to_cpp_table": py_table_to_cpp_table,
             "py_table_typ": df.table_type,
-            "pyarrow_table_schema": bodo.io.iceberg.pyarrow_schema(df),
+            "pyarrow_table_schema": bodo.io.helpers.numba_to_pyarrow_schema(
+                df, is_iceberg=True
+            ),
             "time": time,
             "to_sql_exception_guard_encaps": to_sql_exception_guard_encaps,
             "tracing": tracing,
             "unicode_to_utf8": unicode_to_utf8,
             "warnings": warnings,
+            "df_data": df.data,
         }
     )
-    exec(
-        func_text,
-        glbls,
-        loc_vars,
-    )
+    glbls.update(extra_globals)
+    exec(func_text, glbls, loc_vars)
     _impl = loc_vars["df_to_sql"]
     return _impl
 
@@ -4618,7 +4747,7 @@ def to_csv_overload(
     compression=None,  # this is different from pandas, default is 'infer'.
     quoting=None,
     quotechar='"',
-    line_terminator=None,
+    lineterminator=None,
     chunksize=None,
     date_format=None,
     doublequote=True,
@@ -4699,7 +4828,7 @@ def to_csv_overload(
             compression=None,  # this is different from pandas, default is 'infer'.
             quoting=None,
             quotechar='"',
-            line_terminator=None,
+            lineterminator=None,
             chunksize=None,
             date_format=None,
             doublequote=True,
@@ -4709,7 +4838,7 @@ def to_csv_overload(
             storage_options=None,
             _bodo_file_prefix="part-",
         ):  # pragma: no cover
-            with numba.objmode(D="unicode_type"):
+            with bodo.no_warning_objmode(D="unicode_type"):
                 D = df.to_csv(
                     path_or_buf,
                     sep,
@@ -4724,7 +4853,7 @@ def to_csv_overload(
                     compression,
                     quoting,
                     quotechar,
-                    line_terminator,
+                    lineterminator,
                     chunksize,
                     date_format,
                     doublequote,
@@ -4752,7 +4881,7 @@ def to_csv_overload(
         compression=None,  # this is different from pandas, default is 'infer'.
         quoting=None,
         quotechar='"',
-        line_terminator=None,
+        lineterminator=None,
         chunksize=None,
         date_format=None,
         doublequote=True,
@@ -4764,7 +4893,7 @@ def to_csv_overload(
     ):  # pragma: no cover
         # passing None for the first argument returns a string
         # containing contents to write to csv
-        with numba.objmode(D="unicode_type"):
+        with bodo.no_warning_objmode(D="unicode_type"):
             D = df.to_csv(
                 None,
                 sep,
@@ -4779,7 +4908,7 @@ def to_csv_overload(
                 compression,
                 quoting,
                 quotechar,
-                line_terminator,
+                lineterminator,
                 chunksize,
                 date_format,
                 doublequote,
@@ -4810,9 +4939,10 @@ def to_json_overload(
     # Change it to match Bodo default for `read_json`
     lines=True,
     compression="infer",
-    index=True,
+    index=None,
     indent=None,
     storage_options=None,
+    mode="w",
     _bodo_file_prefix="part-",
 ):
     check_runtime_cols_unsupported(df, "DataFrame.to_json()")
@@ -4830,7 +4960,7 @@ def to_json_overload(
 
     # TODO: refactor when objmode() can understand global string constant
     # String output case
-    if path_or_buf is None or path_or_buf == types.none:
+    if is_overload_none(path_or_buf):
 
         def _impl(
             df,
@@ -4843,12 +4973,13 @@ def to_json_overload(
             default_handler=None,
             lines=True,
             compression="infer",
-            index=True,
+            index=None,
             indent=None,
             storage_options=None,
+            mode="w",
             _bodo_file_prefix="part-",
         ):  # pragma: no cover
-            with numba.objmode(D="unicode_type"):
+            with bodo.no_warning_objmode(D="unicode_type"):
                 D = df.to_json(
                     path_or_buf,
                     orient,
@@ -4862,6 +4993,7 @@ def to_json_overload(
                     index,
                     indent,
                     storage_options,
+                    mode,
                 )
             return D
 
@@ -4878,14 +5010,15 @@ def to_json_overload(
         default_handler=None,
         lines=True,
         compression="infer",
-        index=True,
+        index=None,
         indent=None,
         storage_options=None,
+        mode="w",
         _bodo_file_prefix="part-",
     ):  # pragma: no cover
         # passing None for the first argument returns a string
         # containing contents to write to json
-        with numba.objmode(D="unicode_type"):
+        with bodo.no_warning_objmode(D="unicode_type"):
             D = df.to_json(
                 None,
                 orient,
@@ -4899,10 +5032,11 @@ def to_json_overload(
                 index,
                 indent,
                 storage_options,
+                mode,
             )
 
         # Assuming that path_or_buf is a string
-        bucket_region = bodo.io.fs_io.get_s3_bucket_region_njit(
+        bucket_region = bodo.io.fs_io.get_s3_bucket_region_wrapper(
             path_or_buf, parallel=False
         )
 
@@ -4994,14 +5128,14 @@ def get_dummies(
     func_text += "  numba.parfors.parfor.init_prange()\n"
     func_text += "  n = len(data_values)\n"
     for i in range(n_cols):
-        func_text += "  data_arr_{} = np.empty(n, np.uint8)\n".format(i)
+        func_text += f"  data_arr_{i} = np.empty(n, np.uint8)\n"
     func_text += "  for i in numba.parfors.parfor.internal_prange(n):\n"
     func_text += "      if bodo.libs.array_kernels.isna(data_values, i):\n"
     for j in range(n_cols):
-        func_text += "          data_arr_{}[i] = 0\n".format(j)
+        func_text += f"          data_arr_{j}[i] = 0\n"
     func_text += "      else:\n"
     for k in range(n_cols):
-        func_text += "          data_arr_{0}[i] = codes[i] == {0}\n".format(k)
+        func_text += f"          data_arr_{k}[i] = codes[i] == {k}\n"
     data_args = ", ".join(f"data_arr_{i}" for i in range(n_cols))
     index = "bodo.hiframes.pd_index_ext.init_range_index(0, n, 1, None)"
 
@@ -5042,9 +5176,116 @@ def handle_inplace_df_type_change(inplace, _bodo_transformed, func_name):
         and (is_overload_true(inplace) or not is_overload_constant_bool(inplace))
     ):
         bodo.transforms.typing_pass.typing_transform_required = True
-        raise Exception(
-            "DataFrame.{}(): transform necessary for inplace".format(func_name)
+        raise BodoError(f"DataFrame.{func_name}(): transform necessary for inplace")
+
+
+def union_dataframes(df_tup, drop_duplicates, output_colnames):  # pragma: no cover
+    pass
+
+
+@overload(union_dataframes, inline="always")
+def overload_union_dataframes(
+    df_tup, drop_duplicates, output_colnames
+):  # pragma: no cover
+    # Step 1: Verify that all DataFrames have the same number of columns.
+    # We don't care about the index or the names.
+    df_types: tuple[DataFrameType, ...] = df_tup.types
+    if len(df_types) == 0:
+        raise BodoError(
+            "union_distinct_dataframes must be called with at least one DataFrame"
         )
+
+    for in_table_type in df_types:
+        error_on_unsupported_streaming_arrays(in_table_type.table_type)
+
+    num_cols = -1
+    col_types = None
+    for df_type in df_types:
+        if not isinstance(df_type, DataFrameType):
+            raise BodoError("union_distinct_dataframes must be called with DataFrames")
+        if num_cols == -1:
+            num_cols = len(df_type.data)
+            col_types = df_type.data
+        else:
+            if num_cols != len(df_type.data):
+                raise BodoError(
+                    "union_distinct_dataframes must be called with DataFrames with the same number of columns"
+                )
+            new_col_types = []
+            for i, col_typ in enumerate(col_types):
+                other_col_typ = df_type.data[i]
+                if col_typ == other_col_typ:
+                    new_col_types.append(col_typ)
+                elif (
+                    col_typ == bodo.dict_str_arr_type
+                    or other_col_typ == bodo.dict_str_arr_type
+                ):
+                    if col_typ not in (
+                        bodo.string_array_type,
+                        bodo.null_array_type,
+                    ) and other_col_typ not in (
+                        bodo.string_array_type,
+                        bodo.null_array_type,
+                    ):
+                        # If one column is dict encoded the other column must be a string
+                        # or null array.
+                        raise BodoError(
+                            f"Unable to union table with columns of incompatible types. Found types {col_typ} and {other_col_typ} in column {i}."
+                        )
+                    # If either array is dict encoded we want the output to be dict encoded.
+                    new_col_types.append(bodo.dict_str_arr_type)
+                else:
+                    col_dtype = col_typ.dtype
+                    other_col_dtype = other_col_typ.dtype
+                    new_dtype, _ = get_common_scalar_dtype([col_dtype, other_col_dtype])
+                    if new_dtype is None:
+                        raise BodoError(
+                            f"Unable to union table with columns of incompatible types. Found types {col_dtype} and {other_col_dtype} in column {i}."
+                        )
+                    new_col_type = dtype_to_array_type(
+                        new_dtype, is_nullable(col_typ) or is_nullable(other_col_typ)
+                    )
+                    new_col_types.append(new_col_type)
+            col_types = tuple(new_col_types)
+
+    func_text = "def impl(df_tup, drop_duplicates, output_colnames):\n"
+    glbls = {
+        "bodo": bodo,
+        "py_table_typ": bodo.TableType(col_types),
+    }
+    # Step 2 generate code to convert each DataFrame to C++.
+    for i, df_type in enumerate(df_types):
+        # Load the DataFrame
+        func_text += f"  df{i} = df_tup[{i}]\n"
+        # TODO: If necessary create an astype to unify the types.
+        # Convert the DataFrame to a C++ table.
+        if df_type.is_table_format:
+            func_text += f"  table{i} = bodo.hiframes.pd_dataframe_ext.get_dataframe_table(df{i})\n"
+            if df_type.data != col_types:
+                # If the types differ we need to cast.
+                func_text += f"  arg{i} = bodo.utils.table_utils.table_astype(table{i}, py_table_typ, False, _bodo_nan_to_str=False)\n"
+            else:
+                func_text += f"  arg{i} = table{i}\n"
+        else:
+            for j in range(num_cols):
+                func_text += f"  arr{i}_{j} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df{i}, {j})\n"
+                if df_type.data[j] != col_types[j]:
+                    glbls[f"arr_typ_{i}_{j}"] = get_castable_arr_dtype(col_types[j])
+                    # Cast the array if there is a type mismatch.
+                    func_text += f"  arg{i}_{j} = bodo.utils.conversion.fix_arr_dtype(arr{i}_{j}, arr_typ_{i}_{j}, False, nan_to_str=False, from_series=True)\n"
+                else:
+                    func_text += f"  arg{i}_{j} = arr{i}_{j}\n"
+            arrs = [f"arg{i}_{j}" for j in range(num_cols)]
+            tuple_inputs = ", ".join(arrs)
+            func_text += f"  arg{i} = ({tuple_inputs},)\n"
+    df_args = ", ".join([f"arg{i}" for i in range(len(df_types))])
+    # Step 3 call the C++ kernel
+    func_text += f"  out_py_table = bodo.libs.array.union_tables(({df_args}, ), drop_duplicates, py_table_typ)\n"
+    func_text += "  out_df = bodo.hiframes.pd_dataframe_ext.init_dataframe((out_py_table,), bodo.hiframes.pd_index_ext.init_range_index(0, len(out_py_table), 1, None), output_colnames)\n"
+    func_text += "  return out_df\n"
+    loc_vars = {}
+    exec(func_text, glbls, loc_vars)
+    return loc_vars["impl"]
 
 
 # Throw BodoError for top-level unsupported functions in Pandas
@@ -5111,6 +5352,7 @@ dataframe_unsupported = [
     "get",
     # Binary operator functions
     "add",
+    "__add__",
     "sub",
     "mul",
     "div",
@@ -5139,9 +5381,10 @@ dataframe_unsupported = [
     "divide",  # Not in the organized pd docs, putting it here
     "multiply",  # Not in the organized pd docs, putting it here
     # Function application, GroupBy & window
-    "applymap",
     "agg",
     "aggregate",
+    "map",
+    "applymap",
     "transform",
     "expanding",
     "ewm",
@@ -5155,7 +5398,6 @@ dataframe_unsupported = [
     "eval",
     "kurt",
     "kurtosis",
-    "mad",
     "mode",
     "round",
     "sem",
@@ -5208,7 +5450,7 @@ dataframe_unsupported = [
     "tz_convert",
     "tz_localize",
     # Plotting
-    # TODO: handle df.plot.x
+    # TODO [BSE-3957]: handle df.plot.x
     "boxplot",
     "hist",
     # Serialization / IO / conversion:
@@ -5227,6 +5469,8 @@ dataframe_unsupported = [
     "to_clipboard",
     "to_markdown",
     "to_xml",  # Not in the organized pd docs, putting it here
+    "to_orc",
+    "__dataframe__",
 ]
 
 dataframe_unsupported_attrs = [
@@ -5240,7 +5484,7 @@ dataframe_unsupported_attrs = [
     "sparse",
 ]
 
-# TODO: add propper error messaging for df.plot.x
+# TODO [BSE-3957]: add proper error messaging for df.plot.x
 
 
 def _install_pd_unsupported(mod_name, pd_unsupported):
@@ -5255,12 +5499,10 @@ def _install_dataframe_unsupported():
 
     for attr_name in dataframe_unsupported_attrs:
         full_name = "DataFrame." + attr_name
-        overload_attribute(DataFrameType, attr_name)(
-            create_unsupported_overload(full_name)
-        )
+        bodo.overload_unsupported_attribute(DataFrameType, attr_name, full_name)
     for fname in dataframe_unsupported:
-        full_name = "DataFrame." + fname + "()"
-        overload_method(DataFrameType, fname)(create_unsupported_overload(full_name))
+        full_name = "DataFrame." + fname
+        bodo.overload_unsupported_method(DataFrameType, fname, full_name)
 
 
 # Run install unsupported for each module to ensure a correct error message.

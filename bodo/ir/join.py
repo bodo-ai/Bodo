@@ -1,18 +1,29 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """IR node for the join and merge"""
+
 from collections import defaultdict
-from typing import Dict, List, Literal, Optional, Set, Tuple, Union
+from collections.abc import Sequence
+from itertools import chain
+from typing import (
+    TYPE_CHECKING,
+    Literal,
+)
 
 import numba
 import numpy as np
 import pandas as pd
+import pandas.core.computation.expr
+import pandas.core.computation.ops
+import pandas.core.computation.parsing
+import pandas.core.computation.scope
 from llvmlite import ir as lir
 from numba.core import cgutils, ir, ir_utils, types
 from numba.core.ir_utils import (
     compile_to_numba_ir,
+    guard,
     next_label,
     replace_arg_nodes,
     replace_vars_inner,
+    require,
     visit_vars_inner,
 )
 from numba.extending import intrinsic
@@ -26,9 +37,11 @@ from bodo.libs.array import (
     cpp_table_to_py_data,
     delete_table,
     hash_join_table,
+    interval_join_table,
+    nested_loop_join_table,
     py_data_to_cpp_table,
 )
-from bodo.libs.timsort import getitem_arr_tup, setitem_arr_tup
+from bodo.libs.vendored.timsort import getitem_arr_tup, setitem_arr_tup
 from bodo.transforms import distributed_analysis, distributed_pass
 from bodo.transforms.distributed_analysis import Distribution
 from bodo.transforms.table_column_del_pass import (
@@ -50,19 +63,23 @@ from bodo.utils.typing import (
 )
 from bodo.utils.utils import alloc_arr_tup, is_null_pointer
 
+if TYPE_CHECKING:  # pragma: no cover
+    from bodo.hiframes.pd_dataframe_ext import DataFrameType
+
+
 # TODO: it's probably a bad idea for these to be global. Maybe try moving them
 # to a context or dispatcher object somehow
 # Maps symbol name to cfunc object that implements a general condition function.
 # This dict is used only when compiling
 join_gen_cond_cfunc = {}
 # Maps symbol name to cfunc address (used when compiling and loading from cache)
-# When compiling, this is populated in join.py::_gen_general_cond_cfunc
+# When compiling, this is populated in join.py::gen_general_cond_cfunc
 # When loading from cache, this is populated in numba_compat.py::resolve_join_general_cond_funcs
 # when the compiled result is loaded from cache
 join_gen_cond_cfunc_addr = {}
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def add_join_gen_cond_cfunc_sym(typingctx, func, sym):
     """This "registers" a cfunc that implements a general join condition
     so it can be cached. It does two things:
@@ -85,7 +102,7 @@ def add_join_gen_cond_cfunc_sym(typingctx, func, sym):
         #   types.int64,
         #   types.int64,
         # )
-        # See: _gen_general_cond_cfunc
+        # See: gen_general_cond_cfunc
         sig = func.signature
         fnty = lir.FunctionType(
             lir.IntType(1),
@@ -121,30 +138,30 @@ def add_join_gen_cond_cfunc_sym(typingctx, func, sym):
     return types.none(func, sym), codegen
 
 
-@numba.jit
+@numba.njit
 def get_join_cond_addr(name):
     """Resolve address of cfunc given by its symbol name"""
-    with numba.objmode(addr="int64"):
+    with bodo.no_warning_objmode(addr="int64"):
         # This loads the function pointer at runtime, preventing
         # hardcoding the address into the IR.
         addr = join_gen_cond_cfunc_addr[name]
     return addr
 
 
-HOW_OPTIONS = Literal["inner", "left", "right", "outer", "asof"]
+HOW_OPTIONS = Literal["inner", "left", "right", "outer", "asof", "cross"]
 
 
 class Join(ir.Stmt):
     def __init__(
         self,
-        left_keys: Union[List[str], str],
-        right_keys: Union[List[str], str],
-        out_data_vars: List[ir.Var],
-        out_df_type: bodo.DataFrameType,
-        left_vars: List[ir.Var],
-        left_df_type: bodo.DataFrameType,
-        right_vars: List[ir.Var],
-        right_df_type: bodo.DataFrameType,
+        left_keys: list[str] | str,
+        right_keys: list[str] | str,
+        out_data_vars: list[ir.Var],
+        out_df_type: "DataFrameType",
+        left_vars: list[ir.Var],
+        left_df_type: "DataFrameType",
+        right_vars: list[ir.Var],
+        right_df_type: "DataFrameType",
         how: HOW_OPTIONS,
         suffix_left: str,
         suffix_right: str,
@@ -156,7 +173,10 @@ class Join(ir.Stmt):
         right_index: bool,
         indicator_col_num: int,
         is_na_equal: bool,
+        rebalance_output_if_skewed: bool,
         gen_cond_expr: str,
+        left_len_var: ir.Var,
+        right_len_var: ir.Var,
     ):
         """
         IR node used to represent join operations. These are produced
@@ -195,6 +215,7 @@ class Join(ir.Stmt):
         is_na_equal -- Should NA values be treated as equal when comparing keys?
                        In Pandas this is True, but conforming with SQL behavior
                        this is False.
+        rebalance_output_if_skewed -- Should the output be rebalanced if it is skewed?
         gen_cond_expr -- String used to describe the general merge condition. This
                          is used when a more general condition is needed than is
                          provided by equality.
@@ -215,17 +236,20 @@ class Join(ir.Stmt):
         self.right_index = right_index
         self.indicator_col_num = indicator_col_num
         self.is_na_equal = is_na_equal
+        self.rebalance_output_if_skewed = rebalance_output_if_skewed
         self.gen_cond_expr = gen_cond_expr
+        self.left_len_var = left_len_var
+        self.right_len_var = right_len_var
         # Columns within the output table type that are actually used.
-        # These will be updated during optimzations. For more
+        # These will be updated during optimizations. For more
         # information see 'join_remove_dead_column'.
         self.n_out_table_cols = len(self.out_col_names)
         self.out_used_cols = set(range(self.n_out_table_cols))
         if self.out_data_vars[1] is not None:
             self.out_used_cols.add(self.n_out_table_cols)
 
-        left_col_names = left_df_type.columns
-        right_col_names = right_df_type.columns
+        left_col_names: Sequence[str] = left_df_type.columns  # type: ignore
+        right_col_names: Sequence[str] = right_df_type.columns  # type: ignore
         self.left_col_names = left_col_names
         self.right_col_names = right_col_names
         self.is_left_table = left_df_type.is_table_format
@@ -260,8 +284,8 @@ class Join(ir.Stmt):
             self.right_var_map[INDEX_SENTINEL] = right_index_loc
 
         # Create a set of keys future lookups
-        self.left_key_set = set(self.left_var_map[c] for c in left_keys)
-        self.right_key_set = set(self.right_var_map[c] for c in right_keys)
+        self.left_key_set = {self.left_var_map[c] for c in left_keys}
+        self.right_key_set = {self.right_var_map[c] for c in right_keys}
 
         if gen_cond_expr:
             # find columns used in general join condition to avoid removing them in rm dead
@@ -269,16 +293,16 @@ class Join(ir.Stmt):
             # like (left.A)) != (right.B) will look like both A and A) are left key columns
             # based on this check, even though only A) is. Fixing this requires a more detailed
             # refactoring of the parsing.
-            self.left_cond_cols = set(
+            self.left_cond_cols = {
                 self.left_var_map[c]
                 for c in left_col_names
                 if f"(left.{c})" in gen_cond_expr
-            )
-            self.right_cond_cols = set(
+            }
+            self.right_cond_cols = {
                 self.right_var_map[c]
                 for c in right_col_names
                 if f"(right.{c})" in gen_cond_expr
-            )
+            }
         else:
             self.left_cond_cols = set()
             self.right_cond_cols = set()
@@ -298,10 +322,10 @@ class Join(ir.Stmt):
         # Map the output column numbers to the input
         # locations. We use this to avoid repeating
         # the conversion.
-        out_to_input_col_map: Dict[int, (Literal["left", "right"], int)] = {}
+        out_to_input_col_map: dict[int, (Literal["left", "right"], int)] = {}
         # Map each input to the output location.
-        left_to_output_map: Dict[int, int] = {}
-        right_to_output_map: Dict[int, int] = {}
+        left_to_output_map: dict[int, int] = {}
+        right_to_output_map: dict[int, int] = {}
         for i, c in enumerate(left_col_names):
             if c in add_suffix:
                 suffixed_left_name = str(c) + suffix_left
@@ -322,7 +346,7 @@ class Join(ir.Stmt):
                     suffixed_right_name = str(c) + suffix_right
                     out_col_num = out_df_type.column_index[suffixed_right_name]
                     # If a column is both a data column and a key
-                    # from left we have an extra column.
+                    # from right we have an extra column.
                     if left_index and not right_index and i in self.right_key_set:
                         extra_data_col_num = out_df_type.column_index[c]
                         out_to_input_col_map[extra_data_col_num] = ("right", i)
@@ -341,7 +365,7 @@ class Join(ir.Stmt):
         self.right_to_output_map = right_to_output_map
         self.extra_data_col_num = extra_data_col_num
 
-        if len(out_data_vars) > 1:
+        if self.out_data_vars[1] is not None:
             # Compute the source for the index. Note we only
             # need to track the source for a possible output
             # index.
@@ -369,6 +393,9 @@ class Join(ir.Stmt):
             name_right = right_keys[iKey]
             vect_same_key.append(name_left == name_right)
         self.vect_same_key = vect_same_key
+        # Store information if we select the optimized point interval
+        # join implementation.
+        self.point_interval_join_info: tuple[bool, str, str, str] | None = None
 
     @property
     def has_live_left_table_var(self):
@@ -551,8 +578,8 @@ class Join(ir.Stmt):
         df_left_str = f"left={{{in_col_names}}}"
         in_col_names = ", ".join([f"{c}" for c in self.right_col_names])
         df_right_str = f"right={{{in_col_names}}}"
-        return "join [{}={}]: {}, {}".format(
-            self.left_keys, self.right_keys, df_left_str, df_right_str
+        return (
+            f"join [{self.left_keys}={self.right_keys}]: {df_left_str}, {df_right_str}"
         )
 
 
@@ -615,7 +642,7 @@ def join_distributed_analysis(join_node, array_dists):
     contained in the Join IR node
     """
 
-    # left and right inputs can have 1D or 1D_Var seperately (q26 case)
+    # left and right inputs can have 1D or 1D_Var separately (q26 case)
     # input columns have same distribution
     left_dist = Distribution.OneD
     right_dist = Distribution.OneD
@@ -656,7 +683,10 @@ def join_distributed_analysis(join_node, array_dists):
     for col_var in join_node.get_live_right_vars():
         array_dists[col_var.name] = right_dist
 
-    return
+    # save distributions in case all input vars are dead (cross join corner case)
+    # see _get_table_parallel_flags()
+    join_node.left_dist = left_dist
+    join_node.right_dist = right_dist
 
 
 distributed_analysis.distributed_analysis_extensions[Join] = join_distributed_analysis
@@ -687,10 +717,50 @@ def visit_vars_join(join_node, callback, cbdata):
             for var in join_node.get_live_out_vars()
         ]
     )
+    if join_node.how == "cross":
+        join_node.left_len_var = visit_vars_inner(
+            join_node.left_len_var, callback, cbdata
+        )
+        join_node.right_len_var = visit_vars_inner(
+            join_node.right_len_var, callback, cbdata
+        )
 
 
 # add call to visit Join variable
 ir_utils.visit_vars_extensions[Join] = visit_vars_join
+
+
+def check_cross_join_coltypes(
+    left_col_types: list[types.Type], right_col_types: list[types.Type]
+):
+    """
+    Check the Columns of Cross Join or Interval Join tables to
+    make sure that they don't use unsupported column types.
+    Currently, we don not support cases where a timedelta
+    column is used in the condition.
+    """
+    for col_type in chain(left_col_types, right_col_types):
+        if col_type == bodo.datetime_timedelta_array_type or (
+            isinstance(col_type, types.Array) and col_type.dtype == bodo.timedelta64ns
+        ):
+            raise BodoError(
+                "The Timedelta column data type is not supported for Cross Joins or Joins with Inequality Conditions"
+            )
+
+
+def _is_cross_join_len(join_node):
+    """Return True if we have a cross join with all output columns dead but output table
+    alive. This means only the length of the output table is used (corner case).
+    In this case, we need to keep input columns alive to calculate output length.
+    Cross join needs special handling since it has no keys that would stay alive.
+    See test_merge_cross_len_only.
+    """
+    return (
+        join_node.how == "cross"
+        and not join_node.out_used_cols
+        and join_node.has_live_out_table_var
+        and not join_node.has_live_out_index_var
+    )
 
 
 def remove_dead_join(
@@ -805,8 +875,9 @@ def join_remove_dead_column(join_node, column_live_map, equiv_vars, typemap):
     changed = False
     if join_node.has_live_out_table_var:
         table_var_name = join_node.get_out_table_var().name
+        table_key = (table_var_name, None)
         used_columns, use_all, cannot_del_cols = get_live_column_nums_block(
-            column_live_map, equiv_vars, table_var_name
+            column_live_map, equiv_vars, table_key
         )
         if not (use_all or cannot_del_cols):
             used_columns = trim_extra_used_columns(
@@ -828,10 +899,10 @@ remove_dead_column_extensions[Join] = join_remove_dead_column
 
 def join_table_column_use(
     join_node: Join,
-    block_use_map: Dict[str, Tuple[Set[int], bool, bool]],
-    equiv_vars: Dict[str, Set[str]],
-    typemap: Dict[str, types.Type],
-    table_col_use_map: Dict[int, Dict[str, Tuple[Set[int], bool, bool]]],
+    block_use_map: dict[str, tuple[set[int], bool, bool]],
+    equiv_vars: dict[str, set[str]],
+    typemap: dict[str, types.Type],
+    table_col_use_map: dict[int, dict[str, tuple[set[int], bool, bool]]],
 ):
     """Compute column uses in input tables of Join based on output table's
     uses.
@@ -862,9 +933,12 @@ def join_table_column_use(
     # get output's uses
     if join_node.has_live_out_table_var:
         out_table_var = join_node.get_out_table_var()
-        (used_cols, use_all, cannot_del_cols,) = _compute_table_column_uses(
-            out_table_var.name, table_col_use_map, equiv_vars
-        )
+        out_key = (out_table_var.name, None)
+        (
+            used_cols,
+            use_all,
+            cannot_del_cols,
+        ) = _compute_table_column_uses(out_key, table_col_use_map, equiv_vars)
     else:
         (used_cols, use_all, cannot_del_cols) = (
             set(),
@@ -873,33 +947,30 @@ def join_table_column_use(
         )
 
     if join_node.has_live_left_table_var:
-
         left_table = join_node.left_vars[0].name
+        left_key = (left_table, None)
 
         (
             orig_used_cols,
             orig_use_all,
             orig_cannot_del_cols,
-        ) = block_use_map[left_table]
+        ) = block_use_map[left_key]
 
         # skip if input already uses all columns or cannot delete the table
         if not (orig_use_all or orig_cannot_del_cols):
-
             # Map the used columns from output to left
-            left_used_cols = set(
-                [
-                    join_node.out_to_input_col_map[i][1]
-                    for i in used_cols
-                    if join_node.out_to_input_col_map[i][0] == "left"
-                ]
-            )
+            left_used_cols = {
+                join_node.out_to_input_col_map[i][1]
+                for i in used_cols
+                if join_node.out_to_input_col_map[i][0] == "left"
+            }
 
             # key columns are always used in join
-            left_key_cols = set(
+            left_key_cols = {
                 i
                 for i in (join_node.left_key_set | join_node.left_cond_cols)
                 if i < join_node.n_left_table_cols
-            )
+            }
 
             # Update the dead columns for the left
             if not (use_all or cannot_del_cols):
@@ -907,40 +978,37 @@ def join_table_column_use(
                     range(join_node.n_left_table_cols)
                 ) - (left_used_cols | left_key_cols)
 
-            block_use_map[left_table] = (
+            block_use_map[left_key] = (
                 orig_used_cols | left_used_cols | left_key_cols,
                 use_all or cannot_del_cols,
                 False,
             )
 
     if join_node.has_live_right_table_var:
-
         right_table = join_node.right_vars[0].name
+        right_key = (right_table, None)
 
         (
             orig_used_cols,
             orig_use_all,
             orig_cannot_del_cols,
-        ) = block_use_map[right_table]
+        ) = block_use_map[right_key]
 
         # skip if input already uses all columns or cannot delete the table
         if not (orig_use_all or orig_cannot_del_cols):
-
             # Map the used columns from output to right
-            right_used_cols = set(
-                [
-                    join_node.out_to_input_col_map[i][1]
-                    for i in used_cols
-                    if join_node.out_to_input_col_map[i][0] == "right"
-                ]
-            )
+            right_used_cols = {
+                join_node.out_to_input_col_map[i][1]
+                for i in used_cols
+                if join_node.out_to_input_col_map[i][0] == "right"
+            }
 
             # key columns are always used in join
-            right_key_cols = set(
+            right_key_cols = {
                 i
                 for i in (join_node.right_key_set | join_node.right_cond_cols)
                 if i < join_node.n_right_table_cols
-            )
+            }
 
             # Update the dead columns for the right
             if not (use_all or cannot_del_cols):
@@ -948,7 +1016,7 @@ def join_table_column_use(
                     range(join_node.n_right_table_cols)
                 ) - (right_used_cols | right_key_cols)
 
-            block_use_map[right_table] = (
+            block_use_map[right_key] = (
                 orig_used_cols | right_used_cols | right_key_cols,
                 use_all or cannot_del_cols,
                 False,
@@ -976,6 +1044,10 @@ def join_usedefs(join_node, use_set=None, def_set=None):
     # output columns are defined
     def_set.update({v.name for v in join_node.get_live_out_vars()})
 
+    if join_node.how == "cross":
+        use_set.add(join_node.left_len_var.name)
+        use_set.add(join_node.right_len_var.name)
+
     return numba.core.analysis._use_defs_result(usemap=use_set, defmap=def_set)
 
 
@@ -988,7 +1060,7 @@ def get_copies_join(join_node, typemap):
     data flow analysis. Join doesn't generate any
     copies, it just kills the output columns.
     """
-    kill_set = set(v.name for v in join_node.get_live_out_vars())
+    kill_set = {v.name for v in join_node.get_live_out_vars()}
     return set(), kill_set
 
 
@@ -1015,6 +1087,10 @@ def apply_copies_join(
         [replace_vars_inner(var, var_dict) for var in join_node.get_live_out_vars()]
     )
 
+    if join_node.how == "cross":
+        join_node.left_len_var = replace_vars_inner(join_node.left_len_var, var_dict)
+        join_node.right_len_var = replace_vars_inner(join_node.right_len_var, var_dict)
+
 
 ir_utils.apply_copy_propagate_extensions[Join] = apply_copies_join
 
@@ -1034,6 +1110,170 @@ def build_join_definitions(join_node, definitions=None):
 
 
 ir_utils.build_defs_extensions[Join] = build_join_definitions
+
+
+def _gen_cross_join_len(
+    join_node,
+    out_table_type,
+    typemap,
+    calltypes,
+    typingctx,
+    targetctx,
+    left_parallel,
+    right_parallel,
+):
+    """generate join output nodes for cross join corner case where only the length of
+    the output table is used.
+    Creates a dummy table with the output length assigned as product of input lengths.
+    See test_merge_cross_len_only.
+    """
+
+    func_text = "def f(left_len, right_len):\n"
+
+    # Bodo passes global lengths, which needs to be converted to local lengths to get
+    # the correct size of output chunk
+    n_pes = "bodo.libs.distributed_api.get_size()"
+    rank = "bodo.libs.distributed_api.get_rank()"
+
+    if left_parallel:
+        func_text += f"  left_len = bodo.libs.distributed_api.get_node_portion(left_len, {n_pes}, {rank})\n"
+    if right_parallel and not left_parallel:
+        func_text += f"  right_len = bodo.libs.distributed_api.get_node_portion(right_len, {n_pes}, {rank})\n"
+
+    func_text += "  n_rows = left_len * right_len\n"
+    func_text += "  py_table = init_table(py_table_type, False)\n"
+    func_text += "  py_table = set_table_len(py_table, n_rows)\n"
+
+    loc_vars = {}
+    exec(func_text, {}, loc_vars)
+    join_impl = loc_vars["f"]
+
+    glbs = {
+        "py_table_type": out_table_type,
+        "init_table": bodo.hiframes.table.init_table,
+        "set_table_len": bodo.hiframes.table.set_table_len,
+        "sum_op": np.int32(bodo.libs.distributed_api.Reduce_Type.Sum.value),
+        "bodo": bodo,
+    }
+
+    arg_vars = [join_node.left_len_var, join_node.right_len_var]
+    arg_typs = tuple(typemap[v.name] for v in arg_vars)
+
+    f_block = compile_to_numba_ir(
+        join_impl,
+        glbs,
+        typingctx=typingctx,
+        targetctx=targetctx,
+        arg_typs=arg_typs,
+        typemap=typemap,
+        calltypes=calltypes,
+    ).blocks.popitem()[1]
+    replace_arg_nodes(f_block, arg_vars)
+    nodes = f_block.body[:-3]
+    nodes[-1].target = join_node.out_data_vars[0]
+    return nodes
+
+
+def _gen_cross_join_repeat(
+    join_node,
+    out_table_type,
+    typemap,
+    calltypes,
+    typingctx,
+    targetctx,
+    left_parallel,
+    right_parallel,
+    left_is_dead,
+):
+    """generate code for cross join corner cases where all input data from one side
+    is dead.
+    Replicates the other side's data based on length of the dead side.
+    """
+
+    in_vars = join_node.right_vars if left_is_dead else join_node.left_vars
+    data_args = ", ".join(
+        f"t{i}" for i in range(len(in_vars)) if in_vars[i] is not None
+    )
+
+    n_in_data_cols = (
+        len(join_node.right_col_names)
+        if left_is_dead
+        else len(join_node.left_col_names)
+    )
+    is_in_table = join_node.is_right_table if left_is_dead else join_node.is_left_table
+    dead_in_inds = (
+        join_node.right_dead_var_inds if left_is_dead else join_node.left_dead_var_inds
+    )
+    # TODO(ehsan): support repeat on tables directly
+    data_cols = [
+        f"get_table_data(t0, {i})" if is_in_table else f"t{i}"
+        for i in range(n_in_data_cols)
+    ]
+    table_args = ", ".join(
+        f"bodo.libs.array_kernels.repeat_kernel({data_cols[i]}, repeats)"
+        if i not in dead_in_inds
+        else "None"
+        for i in range(n_in_data_cols)
+    )
+
+    n_out_cols = len(out_table_type.arr_types)
+    col_inds = [
+        join_node.out_to_input_col_map.get(i, (-1, -1))[1] for i in range(n_out_cols)
+    ]
+
+    # Bodo passes global length. If the dead side is distributed but the other side is
+    # not, we need to distribute the dead side's global len to get correct output.
+    n_pes = "bodo.libs.distributed_api.get_size()"
+    rank = "bodo.libs.distributed_api.get_rank()"
+    dead_in_len = "left_len" if left_is_dead else "right_len"
+    live_parallel = right_parallel if left_is_dead else left_parallel
+    dead_parallel = left_parallel if left_is_dead else right_parallel
+    dead_is_dist_live_rep = not live_parallel and dead_parallel
+
+    repeats = (
+        f"bodo.libs.distributed_api.get_node_portion({dead_in_len}, {n_pes}, {rank})"
+        if dead_is_dist_live_rep
+        else dead_in_len
+    )
+
+    func_text = f"def f({data_args}, left_len, right_len):\n"
+    func_text += f"  repeats = {repeats}\n"
+    func_text += f"  out_data = ({table_args},)\n"
+    func_text += f"  py_table = logical_table_to_table(out_data, (), col_inds, {n_in_data_cols}, out_table_type, used_cols)\n"
+
+    loc_vars = {}
+    exec(func_text, {}, loc_vars)
+    join_impl = loc_vars["f"]
+
+    glbs = {
+        "out_table_type": out_table_type,
+        "sum_op": np.int32(bodo.libs.distributed_api.Reduce_Type.Sum.value),
+        "bodo": bodo,
+        "used_cols": bodo.utils.typing.MetaType(tuple(join_node.out_used_cols)),
+        "col_inds": bodo.utils.typing.MetaType(tuple(col_inds)),
+        "logical_table_to_table": bodo.hiframes.table.logical_table_to_table,
+        "get_table_data": bodo.hiframes.table.get_table_data,
+    }
+
+    arg_vars = [v for v in in_vars if v is not None] + [
+        join_node.left_len_var,
+        join_node.right_len_var,
+    ]
+    arg_typs = tuple(typemap[v.name] for v in arg_vars)
+
+    f_block = compile_to_numba_ir(
+        join_impl,
+        glbs,
+        typingctx=typingctx,
+        targetctx=targetctx,
+        arg_typs=arg_typs,
+        typemap=typemap,
+        calltypes=calltypes,
+    ).blocks.popitem()[1]
+    replace_arg_nodes(f_block, arg_vars)
+    nodes = f_block.body[:-3]
+    nodes[-1].target = join_node.out_data_vars[0]
+    return nodes
 
 
 def join_distributed_run(
@@ -1111,6 +1351,50 @@ def join_distributed_run(
     else:
         index_col_type = types.none
 
+    # handle cross join corner case where only output length is used
+    if _is_cross_join_len(join_node):
+        return _gen_cross_join_len(
+            join_node,
+            out_table_type,
+            typemap,
+            calltypes,
+            typingctx,
+            targetctx,
+            left_parallel,
+            right_parallel,
+        )
+    # handle cross join corner case when left input is dead
+    elif join_node.how == "cross" and all(
+        i in join_node.left_dead_var_inds for i in range(len(join_node.left_col_names))
+    ):
+        return _gen_cross_join_repeat(
+            join_node,
+            out_table_type,
+            typemap,
+            calltypes,
+            typingctx,
+            targetctx,
+            left_parallel,
+            right_parallel,
+            True,
+        )
+    # handle cross join corner case when right input is dead
+    elif join_node.how == "cross" and all(
+        i in join_node.right_dead_var_inds
+        for i in range(len(join_node.right_col_names))
+    ):
+        return _gen_cross_join_repeat(
+            join_node,
+            out_table_type,
+            typemap,
+            calltypes,
+            typingctx,
+            targetctx,
+            left_parallel,
+            right_parallel,
+            False,
+        )
+
     # Extra column refer: When doing a merge on column and index, the key
     # is put also in output, so we need one additional column in that case.
     if join_node.extra_data_col_num != -1:
@@ -1141,13 +1425,19 @@ def join_distributed_run(
     left_key_in_output = []
     right_key_in_output = []
 
-    # Determine the column numbers that are live.
+    # Determine the key numbers that are live.
+    # Note: This is not the same as the column number of the
+    # key and instead is i for join_node.left_keys[i]
     left_used_key_nums = set()
     right_used_key_nums = set()
+    # Determine the key input column numbers that are live.
+    # These are the actual column numbers for the keys
+    left_used_key_col_nums = set()
+    right_used_key_col_nums = set()
 
-    # Generate a map for the general_merge_cond. Here we a
+    # Generate a map for the general_merge_cond. Here we
     # define a column by two values. The logical index is its
-    # column number in the Pandas DataFrame. In constrast the
+    # column number in the Pandas DataFrame. In contrast the
     # physical index is the actual location in the C++ table.
     # For example if our DataFrame had columns ["A", "B"], but
     # the C++ layout was ["B", "A"], then the columns would be
@@ -1157,7 +1447,6 @@ def join_distributed_run(
     # the generated cfuncs for complex joins are written using the
     # column name and needs to be converted to the column number in
     # C++ for the generated code.
-    #
     left_logical_physical_map = {}
     right_logical_physical_map = {}
     left_physical_to_logical_list = []
@@ -1167,7 +1456,7 @@ def join_distributed_run(
     # Extract the left column variables for the keys and determine
     # the physical index for each live column.
     left_key_vars = []
-    for c in join_node.left_keys:
+    for key_num, c in enumerate(join_node.left_keys):
         in_col_num = join_node.left_var_map[c]
         # If the inputs are array we need to collect the used vars
         if not join_node.is_left_table:
@@ -1187,19 +1476,21 @@ def join_distributed_run(
                 and join_node.index_col_num == in_col_num
             ):
                 out_physical_to_logical_list.append(out_col_num)
-                left_used_key_nums.add(in_col_num)
+                left_used_key_nums.add(key_num)
+                left_used_key_col_nums.add(in_col_num)
             else:
                 is_live = 0
         else:
             if out_col_num not in join_node.out_used_cols:
                 is_live = 0
             else:
-                if in_col_num in left_used_key_nums:
+                if in_col_num in left_used_key_col_nums:
                     # If a key is repeated it is only in the output
                     # once.
                     is_live = 0
                 else:
-                    left_used_key_nums.add(in_col_num)
+                    left_used_key_nums.add(key_num)
+                    left_used_key_col_nums.add(in_col_num)
                     out_physical_to_logical_list.append(out_col_num)
         left_physical_to_logical_list.append(in_col_num)
         left_logical_physical_map[in_col_num] = left_physical_index
@@ -1262,12 +1553,12 @@ def join_distributed_run(
     # Extract the right column variables for the keys and determine
     # the physical index for each live column.
     right_key_vars = []
-    for i, c in enumerate(join_node.right_keys):
+    for key_num, c in enumerate(join_node.right_keys):
         in_col_num = join_node.right_var_map[c]
         # If the inputs are array we need to collect the used vars
         if not join_node.is_right_table:
             right_key_vars.append(join_node.right_vars[in_col_num])
-        if not join_node.vect_same_key[i] and not join_node.is_join:
+        if not join_node.vect_same_key[key_num] and not join_node.is_join:
             is_live = 1
             if in_col_num not in join_node.right_to_output_map:
                 # This path is taken if the key is a common key but
@@ -1288,19 +1579,21 @@ def join_distributed_run(
                         and join_node.index_col_num == in_col_num
                     ):
                         out_physical_to_logical_list.append(out_col_num)
-                        right_used_key_nums.add(in_col_num)
+                        right_used_key_nums.add(key_num)
+                        right_used_key_col_nums.add(in_col_num)
                     else:
                         is_live = 0
                 else:
                     if out_col_num not in join_node.out_used_cols:
                         is_live = 0
                     else:
-                        if in_col_num in right_used_key_nums:
+                        if in_col_num in right_used_key_col_nums:
                             # If a key is repeated it is only in the output
                             # once.
                             is_live = 0
                         else:
-                            right_used_key_nums.add(in_col_num)
+                            right_used_key_nums.add(key_num)
+                            right_used_key_col_nums.add(in_col_num)
                             out_physical_to_logical_list.append(out_col_num)
             right_key_in_output.append(is_live)
         right_physical_to_logical_list.append(in_col_num)
@@ -1504,13 +1797,14 @@ def join_distributed_run(
     else:
         # Cast the keys to a common dtype for comparison
         # if the types differ.
-        func_text += "    t1_keys = ({},)\n".format(
+        func_text += "    t1_keys = ({}{})\n".format(
             ", ".join(
                 f"bodo.utils.utils.astype({left_key_names[i]}, key_type_{i})"
                 if left_key_types[i] != matched_key_types[i]
                 else f"{left_key_names[i]}"
                 for i in range(n_keys)
-            )
+            ),
+            "," if n_keys != 0 else "",
         )
         func_text += "    data_left = ({}{})\n".format(
             ",".join(left_other_names), "," if len(left_other_names) != 0 else ""
@@ -1567,13 +1861,14 @@ def join_distributed_run(
     else:
         # Cast the keys to a common dtype for comparison
         # if the types differ.
-        func_text += "    t2_keys = ({},)\n".format(
+        func_text += "    t2_keys = ({}{})\n".format(
             ", ".join(
                 f"bodo.utils.utils.astype({right_key_names[i]}, key_type_{i})"
                 if right_key_types[i] != matched_key_types[i]
                 else f"{right_key_names[i]}"
                 for i in range(n_keys)
-            )
+            ),
+            "," if n_keys != 0 else "",
         )
         func_text += "    data_right = ({}{})\n".format(
             ",".join(right_other_names), "," if len(right_other_names) != 0 else ""
@@ -1581,12 +1876,44 @@ def join_distributed_run(
 
     # Generate a general join condition function if it exists
     # and determine the data columns it needs.
-    general_cond_cfunc, left_col_nums, right_col_nums = _gen_general_cond_cfunc(
-        join_node,
+    general_cond_cfunc, left_col_nums, right_col_nums = gen_general_cond_cfunc(
         typemap,
         left_logical_physical_map,
         right_logical_physical_map,
+        join_node.gen_cond_expr,
+        join_node.left_var_map,
+        join_node.left_vars,
+        join_node.left_key_set,
+        typemap[join_node.left_vars[0].name]
+        if join_node.has_live_left_table_var
+        else None,
+        join_node.right_var_map,
+        join_node.right_vars,
+        join_node.right_key_set,
+        typemap[join_node.right_vars[0].name]
+        if join_node.has_live_right_table_var
+        else None,
+        # cross join passes batches of input to condition function
+        compute_in_batch=not join_node.left_keys,
     )
+    # Determine if we have a point in interval join
+    join_node.point_interval_join_info: tuple[bool, str, str, str] | None = guard(
+        _get_interval_join_info,
+        join_node,
+        left_col_nums,
+        right_col_nums,
+        left_other_types,
+        right_other_types,
+        left_physical_to_logical_list,
+        right_physical_to_logical_list,
+    )
+    if join_node.point_interval_join_info is not None:
+        # If we have the point in interval join we can discard the
+        # general join condition because the entire implementation
+        # will be in C++. While we have compiled the general join condition
+        # this will avoid storing it in join_gen_cond_cfunc.
+        join_node.gen_cond_expr = ""
+        general_cond_cfunc = None
 
     # TODO: Update asof to use table format.
     if join_node.how == "asof":
@@ -1601,7 +1928,7 @@ def join_distributed_run(
             " = bodo.ir.join.local_merge_asof(t1_keys, t2_keys, data_left, data_right)\n"
         )
     else:
-        func_text += _gen_local_hash_join(
+        func_text += _gen_join_cpp_call(
             join_node,
             left_key_types,
             right_key_types,
@@ -1626,14 +1953,16 @@ def join_distributed_run(
             right_col_nums,
             left_physical_to_logical_list,
             right_physical_to_logical_list,
+            left_logical_physical_map,
+            right_logical_physical_map,
         )
     # TODO: Update asof
     # Set the output variables.
     if join_node.how == "asof":
         for i in range(len(left_other_names)):
-            func_text += "    left_{} = out_data_left[{}]\n".format(i, i)
+            func_text += f"    left_{i} = out_data_left[{i}]\n"
         for i in range(len(right_other_names)):
-            func_text += "    right_{} = out_data_right[{}]\n".format(i, i)
+            func_text += f"    right_{i} = out_data_right[{i}]\n"
         for i in range(n_keys):
             func_text += f"    t1_keys_{i} = out_t1_keys[{i}]\n"
         for i in range(n_keys):
@@ -1651,6 +1980,8 @@ def join_distributed_run(
             "parallel_asof_comm": parallel_asof_comm,
             "array_to_info": array_to_info,
             "arr_info_list_to_table": arr_info_list_to_table,
+            "nested_loop_join_table": nested_loop_join_table,
+            "interval_join_table": interval_join_table,
             "hash_join_table": hash_join_table,
             "delete_table": delete_table,
             "add_join_gen_cond_cfunc_sym": add_join_gen_cond_cfunc_sym,
@@ -1698,8 +2029,20 @@ def join_distributed_run(
 distributed_pass.distributed_run_extensions[Join] = join_distributed_run
 
 
-def _gen_general_cond_cfunc(
-    join_node, typemap, left_logical_physical_map, right_logical_physical_map
+def gen_general_cond_cfunc(
+    typemap,
+    left_logical_physical_map,
+    right_logical_physical_map,
+    expr,
+    left_var_map,
+    left_vars,
+    left_key_set,
+    left_table_type,
+    right_var_map,
+    right_vars,
+    right_key_set,
+    right_table_type,
+    compute_in_batch,
 ):
     """Generate cfunc for general join condition and return its address.
     Return 0 (NULL) if there is no general join condition to evaluate.
@@ -1709,21 +2052,32 @@ def _gen_general_cond_cfunc(
     left_ind=3, right_ind=7
 
     Args:
-        join_node (Join): The join node being used.
-        typemap (Dict[str, types.Type]): The type map for determine the code
-            to generate for each array
+        typemap (Optional[Dict[str, types.Type]]): The type map for determining array
+            types for condition columns (can be None if table types provided)
         left_logical_physical_map (Dict[int, int]): Mapping from the logical
             column number of the left table to the physical number of the C++
             table. This is done because of dead columns.
         right_logical_physical_map (Dict[int, int]): Mapping from the logical
             column number of the right table to the physical number of the C++
             table. This is done because of dead columns.
+        expr (str): general condition expression
+        left_var_map (Dict[str, int]): map column name to logical column number
+        left_vars (Optional[List[ir.Var]]): column variables for left table, needed if
+            left_table_type not provided to determine column array types
+        left_key_set (Set[int]): logical column indices for equality keys if any
+        left_table_type (types.Type): left table type if in table format
+        right_var_map (Dict[str, int]): map column name to logical column number
+        right_vars (Optional[List[ir.Var]]): column variables for left table, needed if
+            right_table_type not provided to determine column array types
+        right_key_set (Set[int]): logical column indices for equality keys if any
+        right_table_type (types.Type): right table type if in table format
+        compute_in_batch (bool): process batches of input instead of a single row.
+            Cross join implementation passes input batches currently.
 
     Returns:
         Tuple[cfunc, List[int], List[int]]: Triple containing the generated
             cfunc and the columns used by each table.
     """
-    expr = join_node.gen_cond_expr
     if not expr:
         return None, [], []
 
@@ -1733,39 +2087,61 @@ def _gen_general_cond_cfunc(
         "bodo": bodo,
         "numba": numba,
         "is_null_pointer": is_null_pointer,
+        "set_bit_to": bodo.utils.cg_helpers.set_bit_to,
     }
     na_check_name = "NOT_NA"
-    func_text = f"def bodo_join_gen_cond{label_suffix}(left_table, right_table, left_data1, right_data1, left_null_bitmap, right_null_bitmap, left_ind, right_ind):\n"
-    func_text += "  if is_null_pointer(left_table):\n"
-    func_text += "    return False\n"
 
+    ext_args = "left_ind, right_ind"
+    if compute_in_batch:
+        ext_args = "match_arr, left_block_start, left_block_end, right_block_start, right_block_end"
+
+    func_text = f"def bodo_join_gen_cond{label_suffix}(left_table, right_table, left_data1, right_data1, left_null_bitmap, right_null_bitmap, {ext_args}):\n"
+    func_text += "  if is_null_pointer(left_table):\n"
+    func_text += f"    return {'' if compute_in_batch else 'False'}\n"
+
+    if compute_in_batch:
+        func_text += "  i = 0\n"
+        func_text += "  for right_ind in range(right_block_start, right_block_end):\n"
+        func_text += "    for left_ind in range(left_block_start, left_block_end):\n"
+
+    indent = "      " if compute_in_batch else "  "
     expr, func_text, left_col_nums = _replace_column_accesses(
         expr,
         left_logical_physical_map,
-        join_node.left_var_map,
+        left_var_map,
         typemap,
-        join_node.left_vars,
+        left_vars,
         table_getitem_funcs,
         func_text,
         "left",
-        join_node.left_key_set,
+        left_key_set,
         na_check_name,
-        join_node.is_left_table,
+        left_table_type,
+        indent,
     )
     expr, func_text, right_col_nums = _replace_column_accesses(
         expr,
         right_logical_physical_map,
-        join_node.right_var_map,
+        right_var_map,
         typemap,
-        join_node.right_vars,
+        right_vars,
         table_getitem_funcs,
         func_text,
         "right",
-        join_node.right_key_set,
+        right_key_set,
         na_check_name,
-        join_node.is_right_table,
+        right_table_type,
+        indent,
     )
-    func_text += f"  return {expr}"
+    # use short-circuit boolean operators to avoid invalid access of NA locations
+    # see https://bodo.atlassian.net/browse/BE-4146
+    expr = expr.replace(" & ", " and ").replace(" | ", " or ")
+
+    if compute_in_batch:
+        func_text += f"      set_bit_to(match_arr, i, {expr})\n"
+        func_text += "      i += 1\n"
+    else:
+        func_text += f"  return {expr}"
 
     loc_vars = {}
     exec(func_text, table_getitem_funcs, loc_vars)
@@ -1781,6 +2157,22 @@ def _gen_general_cond_cfunc(
         types.int64,
         types.int64,
     )
+
+    if compute_in_batch:
+        c_sig = types.void(
+            types.voidptr,
+            types.voidptr,
+            types.voidptr,
+            types.voidptr,
+            types.voidptr,
+            types.voidptr,
+            types.voidptr,
+            types.int64,
+            types.int64,
+            types.int64,
+            types.int64,
+        )
+
     cfunc_cond = numba.cfunc(c_sig, nopython=True)(cond_func)
     # Store the function inside join_gen_cond_cfunc
     join_gen_cond_cfunc[cfunc_cond.native_name] = cfunc_cond
@@ -1799,7 +2191,8 @@ def _replace_column_accesses(
     table_name,
     key_set,
     na_check_name,
-    is_table_var,
+    table_type,
+    indent,
 ):
     """replace column accesses in join condition expression with an intrinsic that loads
     values from table data pointers.
@@ -1814,19 +2207,20 @@ def _replace_column_accesses(
         if cname not in expr:
             continue
         getitem_fname = f"getitem_{table_name}_val_{c_ind}"
-        val_varname = f"_bodo_{table_name}_val_{c_ind}"
-        if is_table_var:
-            array_typ = typemap[col_vars[0].name].arr_types[c_ind]
+        if table_type:
+            array_typ = table_type.arr_types[c_ind]
         else:
             array_typ = typemap[col_vars[c_ind].name]
+
+        # Not creating intermediate variables for val_varname to avoid invalid access of
+        # NA locations (null checks should run before getitems)
+        # see https://bodo.atlassian.net/browse/BE-4146
         if is_str_arr_type(array_typ) or array_typ == bodo.binary_array_type:
             # If we have unicode we pass the table variable which is an array info
-            func_text += f"  {val_varname}, {val_varname}_size = {getitem_fname}({table_name}_table, {table_name}_ind)\n"
-            # Create proper Python string.
-            func_text += f"  {val_varname} = bodo.libs.str_arr_ext.decode_utf8({val_varname}, {val_varname}_size)\n"
+            val_varname = f"{getitem_fname}({table_name}_table, {table_name}_ind)\n"
         else:
             # If we have a numeric type we just pass the data pointers
-            func_text += f"  {val_varname} = {getitem_fname}({table_name}_data1, {table_name}_ind)\n"
+            val_varname = f"{getitem_fname}({table_name}_data1, {table_name}_ind)\n"
 
         physical_ind = logical_to_physical_ind[c_ind]
 
@@ -1841,21 +2235,32 @@ def _replace_column_accesses(
             na_check_fname = f"nacheck_{table_name}_val_{c_ind}"
             na_val_varname = f"_bodo_isna_{table_name}_val_{c_ind}"
             if (
-                isinstance(array_typ, bodo.libs.int_arr_ext.IntegerArrayType)
+                isinstance(
+                    array_typ,
+                    (
+                        bodo.libs.int_arr_ext.IntegerArrayType,
+                        bodo.FloatingArrayType,
+                        bodo.TimeArrayType,
+                    ),
+                )
                 or array_typ
-                in (bodo.libs.bool_arr_ext.boolean_array, bodo.binary_array_type)
+                in (
+                    bodo.libs.bool_arr_ext.boolean_array_type,
+                    bodo.binary_array_type,
+                    bodo.datetime_date_array_type,
+                )
                 or is_str_arr_type(array_typ)
             ):
-                func_text += f"  {na_val_varname} = {na_check_fname}({table_name}_null_bitmap, {table_name}_ind)\n"
+                func_text += f"{indent}{na_val_varname} = {na_check_fname}({table_name}_null_bitmap, {table_name}_ind)\n"
             else:
-                func_text += f"  {na_val_varname} = {na_check_fname}({table_name}_data1, {table_name}_ind)\n"
+                func_text += f"{indent}{na_val_varname} = {na_check_fname}({table_name}_data1, {table_name}_ind)\n"
 
-            table_getitem_funcs[
-                na_check_fname
-            ] = bodo.libs.array._gen_row_na_check_intrinsic(array_typ, physical_ind)
+            table_getitem_funcs[na_check_fname] = (
+                bodo.libs.array._gen_row_na_check_intrinsic(array_typ, physical_ind)
+            )
             expr = expr.replace(na_cname, na_val_varname)
 
-        # only append the column if it is not a key
+        # only append the column if it is not an (equality) key
         if c_ind not in key_set:
             col_nums.append(physical_ind)
     return expr, func_text, col_nums
@@ -1897,9 +2302,19 @@ def _get_table_parallel_flags(join_node, array_dists):
     left_parallel = all(
         array_dists[v.name] in par_dists for v in join_node.get_live_left_vars()
     )
+    # use saved distribution if all input vars are dead (cross join corner case)
+    if not join_node.get_live_left_vars():
+        assert join_node.how == "cross", "cross join expected if left data is dead"
+        left_parallel = join_node.left_dist in par_dists
+
     right_parallel = all(
         array_dists[v.name] in par_dists for v in join_node.get_live_right_vars()
     )
+    # use saved distribution if all input vars are dead (cross join corner case)
+    if not join_node.get_live_right_vars():
+        assert join_node.how == "cross", "cross join expected if right data is dead"
+        right_parallel = join_node.right_dist in par_dists
+
     if not left_parallel:
         assert not any(
             array_dists[v.name] in par_dists for v in join_node.get_live_left_vars()
@@ -1917,8 +2332,8 @@ def _get_table_parallel_flags(join_node, array_dists):
     return left_parallel, right_parallel
 
 
-def _gen_local_hash_join(
-    join_node,
+def _gen_join_cpp_call(
+    join_node: Join,
     left_key_types,
     right_key_types,
     matched_key_types,
@@ -1942,25 +2357,31 @@ def _gen_local_hash_join(
     right_col_nums,
     left_physical_to_logical_list,
     right_physical_to_logical_list,
+    left_logical_physical_map,
+    right_logical_physical_map,
 ):
     """
     Generate the code need to compute a hash join in C++
     """
+
     # In some case the column in output has a type different from the one in input.
     # TODO: Unify those type changes between all cases.
     def needs_typechange(in_type, need_nullable, is_same_key):
         return (
             isinstance(in_type, types.Array)
-            and not is_dtype_nullable(in_type.dtype)
+            and (
+                not is_dtype_nullable(in_type.dtype)
+                or isinstance(in_type.dtype, types.Float)
+            )
             and need_nullable
             and not is_same_key
         )
 
-    # The vect_need_typechange is computed in the python code and is sent to C++.
+    # The use_nullable_arr_type is computed in the python code and is sent to C++.
     # This is a general approach for this kind of combinatorial problem: compute in python
     # preferably to C++. Compute in dataframe_pass.py preferably to the IR node.
     #
-    # The vect_need_typechange is for the need to change the type in some cases.
+    # The use_nullable_arr_type is for the need to change the type in some cases.
     # Following constraints have to be taken into account:
     # ---For NullableArrayType the output column has the same format as the input column
     # ---For numpy array of float the output column has the same format as the input column
@@ -1976,10 +2397,10 @@ def _gen_local_hash_join(
     vect_same_key = join_node.vect_same_key
 
     # List of columns in the output that need to be cast.
-    vect_need_typechange = []
+    use_nullable_arr_type = []
     for i in range(len(left_key_types)):
         if left_key_in_output[i]:
-            vect_need_typechange.append(
+            use_nullable_arr_type.append(
                 needs_typechange(
                     matched_key_types[i], join_node.is_right, vect_same_key[i]
                 )
@@ -2003,14 +2424,14 @@ def _gen_local_hash_join(
             load_arr = left_key_in_output[left_key_in_output_idx]
             left_key_in_output_idx += 1
         if load_arr:
-            vect_need_typechange.append(
+            use_nullable_arr_type.append(
                 needs_typechange(left_other_types[i], join_node.is_right, False)
             )
 
     for i in range(len(right_key_types)):
         if not vect_same_key[i] and not join_node.is_join:
             if right_key_in_output[right_key_in_output_idx]:
-                vect_need_typechange.append(
+                use_nullable_arr_type.append(
                     needs_typechange(matched_key_types[i], join_node.is_left, False)
                 )
             right_key_in_output_idx += 1
@@ -2027,12 +2448,12 @@ def _gen_local_hash_join(
             load_arr = right_key_in_output[right_key_in_output_idx]
             right_key_in_output_idx += 1
         if load_arr:
-            vect_need_typechange.append(
+            use_nullable_arr_type.append(
                 needs_typechange(right_other_types[i], join_node.is_left, False)
             )
 
     n_keys = len(left_key_types)
-    func_text = "    # beginning of _gen_local_hash_join\n"
+    func_text = "    # beginning of _gen_join_cpp_call\n"
     if join_node.is_left_table:
         if join_node.has_live_left_table_var:
             index_left_others = left_other_names[1:]
@@ -2048,11 +2469,11 @@ def _gen_local_hash_join(
     else:
         eList_l = []
         for i in range(n_keys):
-            eList_l.append("t1_keys[{}]".format(i))
+            eList_l.append(f"t1_keys[{i}]")
         for i in range(len(left_other_names)):
-            eList_l.append("data_left[{}]".format(i))
+            eList_l.append(f"data_left[{i}]")
         func_text += "    info_list_total_l = [{}]\n".format(
-            ",".join("array_to_info({})".format(a) for a in eList_l)
+            ",".join(f"array_to_info({a})" for a in eList_l)
         )
         func_text += "    table_left = arr_info_list_to_table(info_list_total_l)\n"
     if join_node.is_right_table:
@@ -2070,16 +2491,16 @@ def _gen_local_hash_join(
     else:
         eList_r = []
         for i in range(n_keys):
-            eList_r.append("t2_keys[{}]".format(i))
+            eList_r.append(f"t2_keys[{i}]")
         for i in range(len(right_other_names)):
-            eList_r.append("data_right[{}]".format(i))
+            eList_r.append(f"data_right[{i}]")
         func_text += "    info_list_total_r = [{}]\n".format(
-            ",".join("array_to_info({})".format(a) for a in eList_r)
+            ",".join(f"array_to_info({a})" for a in eList_r)
         )
         func_text += "    table_right = arr_info_list_to_table(info_list_total_r)\n"
     # Add globals that will be used in the function call.
     glbs["vect_same_key"] = np.array(vect_same_key, dtype=np.int64)
-    glbs["vect_need_typechange"] = np.array(vect_need_typechange, dtype=np.int64)
+    glbs["use_nullable_arr_type"] = np.array(use_nullable_arr_type, dtype=np.int64)
     glbs["left_table_cond_columns"] = np.array(
         left_col_nums if len(left_col_nums) > 0 else [-1], dtype=np.int64
     )
@@ -2095,35 +2516,140 @@ def _gen_local_hash_join(
         func_text += "    cfunc_cond = 0\n"
 
     # single-element numpy array to return number of global rows from C++
-    func_text += f"    total_rows_np = np.array([0], dtype=np.int64)\n"
-    func_text += "    out_table = hash_join_table(table_left, table_right, {}, {}, {}, {}, {}, vect_same_key.ctypes, key_in_output.ctypes, vect_need_typechange.ctypes, {}, {}, {}, {}, {}, {}, cfunc_cond, left_table_cond_columns.ctypes, {}, right_table_cond_columns.ctypes, {}, total_rows_np.ctypes)\n".format(
-        left_parallel,
-        right_parallel,
-        n_keys,
-        len(left_data_logical_list),
-        len(right_data_logical_list),
-        join_node.is_left,
-        join_node.is_right,
-        join_node.is_join,
-        join_node.extra_data_col_num != -1,
-        join_node.indicator_col_num != -1,
-        join_node.is_na_equal,
-        len(left_col_nums),
-        len(right_col_nums),
-    )
-    func_text += "    delete_table(table_left)\n"
-    func_text += "    delete_table(table_right)\n"
+    func_text += "    total_rows_np = np.array([0], dtype=np.int64)\n"
+
+    if join_node.point_interval_join_info is not None:
+        left_col_types = [left_other_types[k] for k in left_col_nums]
+        right_col_types = [right_other_types[k] for k in right_col_nums]
+        check_cross_join_coltypes(left_col_types, right_col_types)
+
+        # Add log msg indicating interval join was detected and used
+        if bodo.user_logging.get_verbose_level() >= 1:
+            join_source = join_node.loc.strformat()
+            msg = "Using optimized interval range join implementation:\n%s"
+            bodo.user_logging.log_message(
+                "Join Optimization",
+                msg,
+                join_source,
+            )
+            # TODO: Add more information about the type of join and relevant columns in logging level 2
+
+        if join_node.point_interval_join_info[
+            0
+        ]:  # i.e. point is on the left side and interval is on the right side
+            # join_node.point_interval_join_info[2,3] are the column names, right_var_map gives us the logical location,
+            # and then we map it to the physical location using right_logical_physical_map
+            start_col_id_interval_side = right_logical_physical_map[
+                join_node.right_var_map[join_node.point_interval_join_info[2]]
+            ]
+            end_col_id_interval_side = right_logical_physical_map[
+                join_node.right_var_map[join_node.point_interval_join_info[3]]
+            ]
+            point_col_id_point_side = left_logical_physical_map[
+                join_node.left_var_map[join_node.point_interval_join_info[1]]
+            ]
+        else:  # i.e. vice-versa
+            start_col_id_interval_side = left_logical_physical_map[
+                join_node.left_var_map[join_node.point_interval_join_info[2]]
+            ]
+            end_col_id_interval_side = left_logical_physical_map[
+                join_node.left_var_map[join_node.point_interval_join_info[3]]
+            ]
+            point_col_id_point_side = right_logical_physical_map[
+                join_node.right_var_map[join_node.point_interval_join_info[1]]
+            ]
+
+        func_text += (
+            f"    out_table = interval_join_table("
+            "table_left, "
+            "table_right, "
+            f"{left_parallel}, "
+            f"{right_parallel}, "
+            f"{join_node.is_left}, "
+            f"{join_node.is_right}, "
+            # Is point on the left side
+            f"{join_node.point_interval_join_info[0]}, "
+            # Does the point need to be strictly greater than the interval start
+            f"{join_node.point_interval_join_info[4]}, "
+            # Does the point need to be strictly less than the interval end
+            f"{join_node.point_interval_join_info[5]}, "
+            # Column ID of point column on point side in point in interval join.
+            f"{point_col_id_point_side}, "
+            # Column ID of start column on interval side in point in interval join.
+            f"{start_col_id_interval_side}, "
+            # Column ID of end column on interval side in point in interval join.
+            f"{end_col_id_interval_side}, "
+            f"key_in_output.ctypes, "
+            f"use_nullable_arr_type.ctypes, "
+            f"{join_node.rebalance_output_if_skewed}, "
+            f"total_rows_np.ctypes)\n"
+        )
+
+    # Joins without equality condition should use nested loop implementation
+    # For now, we are having all interval-overlap joins go through cross join
+    # as well.
+    elif join_node.how == "cross" or not join_node.left_keys:
+        left_col_types = [left_other_types[k] for k in left_col_nums]
+        right_col_types = [right_other_types[k] for k in right_col_nums]
+        check_cross_join_coltypes(left_col_types, right_col_types)
+
+        func_text += (
+            f"    out_table = nested_loop_join_table("
+            "table_left, "
+            "table_right, "
+            f"{left_parallel}, "
+            f"{right_parallel}, "
+            f"{join_node.is_left}, "
+            f"{join_node.is_right}, "
+            f"key_in_output.ctypes, "
+            f"use_nullable_arr_type.ctypes, "
+            f"{join_node.rebalance_output_if_skewed}, "
+            f"cfunc_cond, "
+            f"left_table_cond_columns.ctypes, "
+            f"{len(left_col_nums)}, "
+            f"right_table_cond_columns.ctypes, "
+            f"{len(right_col_nums)}, "
+            f"total_rows_np.ctypes)\n"
+        )
+    else:
+        func_text += (
+            "    out_table = hash_join_table("
+            "table_left, "
+            "table_right, "
+            f"{left_parallel}, "
+            f"{right_parallel}, "
+            f"{n_keys}, "
+            f"{len(left_data_logical_list)}, "
+            f"{len(right_data_logical_list)}, "
+            f"vect_same_key.ctypes, "
+            f"key_in_output.ctypes, "
+            f"use_nullable_arr_type.ctypes, "
+            f"{join_node.is_left}, "
+            f"{join_node.is_right}, "
+            f"{join_node.is_join}, "
+            f"{join_node.extra_data_col_num != -1}, "
+            f"{join_node.indicator_col_num != -1}, "
+            f"{join_node.is_na_equal}, "
+            f"{join_node.rebalance_output_if_skewed}, "
+            f"cfunc_cond, "
+            f"left_table_cond_columns.ctypes, "
+            f"{len(left_col_nums)}, "
+            f"right_table_cond_columns.ctypes, "
+            f"{len(right_col_nums)}, "
+            f"total_rows_np.ctypes)\n"
+        )
+    # Note: Deleting table_left and table_right is done inside C++
     out_types = "(py_table_type, index_col_type)"
     func_text += f"    out_data = cpp_table_to_py_data(out_table, out_col_inds, {out_types}, total_rows_np[0], {join_node.n_out_table_cols})\n"
     if join_node.has_live_out_table_var:
-        func_text += f"    T = out_data[0]\n"
+        func_text += "    T = out_data[0]\n"
     else:
-        func_text += f"    T = None\n"
+        func_text += "    T = None\n"
     if join_node.has_live_out_index_var:
         idx = 1 if join_node.has_live_out_table_var else 0
         func_text += f"    index_var = out_data[{idx}]\n"
     else:
-        func_text += f"    index_var = None\n"
+        func_text += "    index_var = None\n"
 
     glbs["py_table_type"] = out_table_type
     glbs["index_col_type"] = index_col_type
@@ -2133,19 +2659,38 @@ def _gen_local_hash_join(
         # Only delete the C++ table if it is not a nullptr (0 output columns returns nullptr)
         func_text += "    delete_table(out_table)\n"
     if out_table_type != types.none:
+        # Create the left map from input key number to output col number
+        left_key_num_to_out_col_num = {}
+        for i, key in enumerate(join_node.left_keys):
+            # If the key is not used then its dead
+            if i in left_used_key_nums:
+                input_col_num = join_node.left_var_map[key]
+                left_key_num_to_out_col_num[i] = join_node.left_to_output_map[
+                    input_col_num
+                ]
         cast_map = determine_table_cast_map(
             matched_key_types,
             left_key_types,
             left_used_key_nums,
-            join_node.left_to_output_map,
+            left_key_num_to_out_col_num,
             False,
         )
+        # Create the right map from input key number to output col number
+        right_key_num_to_out_col_num = {}
+        for i, key in enumerate(join_node.right_keys):
+            # If the key is not used then its dead
+            if i in right_used_key_nums:
+                input_col_num = join_node.right_var_map[key]
+                right_key_num_to_out_col_num[i] = join_node.right_to_output_map[
+                    input_col_num
+                ]
         cast_map.update(
             determine_table_cast_map(
                 matched_key_types,
                 right_key_types,
                 right_used_key_nums,
-                join_node.right_to_output_map,
+                # Create an actual map from input key number to output
+                right_key_num_to_out_col_num,
                 False,
             )
         )
@@ -2166,7 +2711,7 @@ def _gen_local_hash_join(
                 index_typ = typ
                 index_changed = True
         if table_changed:
-            func_text += f"    T = bodo.utils.table_utils.table_astype(T, cast_table_type, False, _bodo_nan_to_str=False, used_cols=used_cols)\n"
+            func_text += "    T = bodo.utils.table_utils.table_astype(T, cast_table_type, False, _bodo_nan_to_str=False, used_cols=used_cols)\n"
             # Determine the types that must be loaded.
             pre_cast_table_type = bodo.TableType(tuple(table_arrs))
             # Update the table types
@@ -2177,18 +2722,18 @@ def _gen_local_hash_join(
             glbs["index_col_type"] = index_typ
             glbs["index_cast_type"] = index_col_type
             func_text += (
-                f"    index_var = bodo.utils.utils.astype(index_var, index_cast_type)\n"
+                "    index_var = bodo.utils.utils.astype(index_var, index_cast_type)\n"
             )
-    func_text += f"    out_table = T\n"
-    func_text += f"    out_index = index_var\n"
+    func_text += "    out_table = T\n"
+    func_text += "    out_index = index_var\n"
     return func_text
 
 
 def determine_table_cast_map(
-    matched_key_types: List[types.Type],
-    key_types: List[types.Type],
-    used_key_nums: Optional[Set[int]],
-    output_map: Dict[int, int],
+    matched_key_types: list[types.Type],
+    key_types: list[types.Type],
+    used_key_nums: set[int] | None,
+    output_map: dict[int, int],
     convert_dict_col: bool,
 ):
     """Determine any columns in the output table keys that were
@@ -2218,12 +2763,12 @@ def determine_table_cast_map(
         Dict[int, types.Type]: Dictionary mapping the logical column number
         in the output table to the correct output type when loading the table.
     """
-    cast_map: Dict[int, types.Type] = {}
+    cast_map: dict[int, types.Type] = {}
 
     # Check the keys for casts.
     n_keys = len(matched_key_types)
     for i in range(n_keys):
-        # Determine if the column is liveå
+        # Determine if the column is live
         if used_key_nums is None or i in used_key_nums:
             # Astype is needed when the key had to be cast for the join
             # (e.g. left=int64 and right=float64 casts the left to float64)
@@ -2232,11 +2777,257 @@ def determine_table_cast_map(
                 convert_dict_col or key_types[i] != bodo.dict_str_arr_type
             ):
                 # This maps the key number to the actual column number
-                # TODO [BE-3552]: Ensure the cast are compatable.
+                # TODO [BE-3552]: Ensure the cast are compatible.
                 idx = output_map[i]
                 cast_map[idx] = matched_key_types[i]
 
     return cast_map
+
+
+def _get_interval_join_info(
+    join_node: Join,
+    left_col_nums: list[int],
+    right_col_nums: list[int],
+    left_other_types,
+    right_other_types,
+    left_physical_to_logical_list: list[int],
+    right_physical_to_logical_list: list[int],
+) -> tuple[bool, str, str, str]:
+    """Detect and return relevant info for point in interval join
+
+    Args:
+        join_node (Join): Join IR node
+        left_col_nums (list(int))): left column numbers in join condition (physical)
+        right_col_nums (list(int)): right column numbers in join condition (physical)
+        left_other_types (list(types.Type)): data types of left columns in condition
+        right_other_types (list(types.Type)): data types of right columns in condition
+        left_physical_to_logical_list (list(int)): map physical left column numbers
+            (C++ table) to logical (input Python data)
+        right_physical_to_logical_list (list(int)): map physical right column numbers
+            (C++ table) to logical (input Python data)
+
+    Returns:
+        - (bool, string, string, string):
+            - bool: True if point is on the left side
+            - string: Name of the point col on the point side
+            - string: Name of the start col on the interval side
+            - string: Name of the end col on the interval side
+    """
+    from bodo.hiframes.dataframe_impl import _is_col_access, _parse_query_expr
+    from bodo.libs.pd_datetime_arr_ext import PandasDatetimeTZDtype
+
+    # check for no equality condition
+    require(not join_node.left_keys)
+    # Point join has 1 key on one side, 2 keys other. Interval has 2 keys both sides.
+    require(
+        (len(left_col_nums) == 2 and len(right_col_nums) in (1, 2))
+        or (len(right_col_nums) == 2 and len(left_col_nums) in (1, 2))
+    )
+    # inner join, or point join with outer on the point side
+    require(
+        join_node.how == "inner"
+        or (join_node.how == "left" and len(left_col_nums) == 1)
+        or (join_node.how == "right" and len(right_col_nums) == 1)
+    )
+
+    # make sure keys are numerical/date/time and the same type
+    assert (len(left_other_types) >= left_col_nums[0]) and (
+        len(left_other_types) > 0
+    ), "_get_interval_join_info: invalid column types"
+    key_type = left_other_types[left_col_nums[0]]
+    dtype = key_type.dtype
+    require(
+        isinstance(
+            dtype,
+            (
+                types.Integer,
+                types.Float,
+                PandasDatetimeTZDtype,
+                bodo.TimeType,
+                bodo.Decimal128Type,
+            ),
+        )
+        or dtype
+        in (bodo.datetime64ns, bodo.datetime_date_type, bodo.datetime_timedelta_type)
+    )
+    # TODO: We should eventually handle joins between nullable and non-nullable arrays
+    require(all(left_other_types[k] == key_type for k in left_col_nums))
+    require(all(right_other_types[k] == key_type for k in right_col_nums))
+
+    # Parse expr and check for interval join comparison patterns
+    resolver = {"left": 0, "right": 0, "NOT_NA": 0}
+    # create fake environment for Expr to enable parsing
+    env = pandas.core.computation.scope.ensure_scope(2, {}, {}, (resolver,))
+
+    clean_cols = {}
+    # We need to wrap columns like EXPR$0 with ` for pandas to parse
+    # Previous step removed ` from cond_expr
+    formatted_expr = join_node.gen_cond_expr
+    for side, col_names in [
+        ("left", join_node.left_col_names),
+        ("right", join_node.right_col_names),
+    ]:
+        for col_name in col_names:
+            clean_col = pandas.core.computation.parsing.clean_column_name(col_name)
+            clean_cols[(side, clean_col)] = col_name
+
+            col_outer = f"{side}.{col_name}"
+            clean_outer = pandas.core.computation.parsing.clean_column_name(col_outer)
+            clean_cols[("NOT_NA", clean_outer)] = col_outer
+
+            formatted_expr = formatted_expr.replace(
+                f"{side}.{col_name}", f"{side}.`{col_name}`"
+            )
+            formatted_expr = formatted_expr.replace(
+                f"NOT_NA.{side}.`{col_name}`", f"NOT_NA.`{side}.{col_name}`"
+            )
+
+    parsed_expr_tree, _, _ = _parse_query_expr(
+        formatted_expr, env, [], [], None, join_cleaned_cols=clean_cols
+    )
+    terms = parsed_expr_tree.terms
+
+    # pattern match Bodo generated NA checks for some types like float and ignore them
+    if _all_na_check(terms.lhs):
+        terms = terms.rhs
+
+    # condition should be AND of two comparisons
+    require(isinstance(terms, pandas.core.computation.ops.BinOp) and terms.op == "&")
+    cond1 = terms.lhs
+    cond2 = terms.rhs
+    require(
+        isinstance(cond1, pandas.core.computation.ops.BinOp)
+        and isinstance(cond2, pandas.core.computation.ops.BinOp)
+    )
+    require(_is_col_access(cond1.lhs) and _is_col_access(cond1.rhs))
+    require(_is_col_access(cond2.lhs) and _is_col_access(cond2.rhs))
+
+    # normalize to less-than comparisons
+    _normalize_expr_cond(cond1)
+    _normalize_expr_cond(cond2)
+
+    # check for point interval join
+    if len(left_col_nums) == 1:
+        point_colname = join_node.left_col_names[
+            left_physical_to_logical_list[left_col_nums[0]]
+        ]
+        (start_col, strict_start_comp), (end_col, strict_end_comp) = _check_point_cases(
+            point_colname, cond1, cond2, True
+        )
+        return (
+            True,
+            point_colname,
+            start_col,
+            end_col,
+            strict_start_comp,
+            strict_end_comp,
+        )
+    elif len(right_col_nums) == 1:
+        point_colname = join_node.right_col_names[
+            right_physical_to_logical_list[right_col_nums[0]]
+        ]
+        (start_col, strict_start_comp), (end_col, strict_end_comp) = _check_point_cases(
+            point_colname, cond1, cond2, False
+        )
+        return (
+            False,
+            point_colname,
+            start_col,
+            end_col,
+            strict_start_comp,
+            strict_end_comp,
+        )
+
+
+def _all_na_check(expr_node) -> bool:
+    """Return True if expression node is just NA checks for columns
+    (e.g. '((((NOT_NA.left).F)) & (((NOT_NA.left).G))) & (((NOT_NA.right).D))')
+
+    Args:
+        expr_node (pd.core.computation.ops.BinOp): input expr node
+
+    Returns:
+        bool: True if all NA check
+    """
+    if isinstance(expr_node, pandas.core.computation.ops.BinOp):
+        return _all_na_check(expr_node.lhs) and _all_na_check(expr_node.rhs)
+
+    if hasattr(expr_node, "name"):
+        return expr_node.name.startswith("NOT_NA.")
+    return str(expr_node).startswith("((NOT_NA.")
+
+
+def _check_point_cases(
+    point_colname: str,
+    cond1: pandas.core.computation.ops.BinOp,
+    cond2: pandas.core.computation.ops.BinOp,
+    is_left: bool,
+) -> tuple[tuple[str, bool], tuple[str, bool]]:
+    """Check for point interval join in conditions
+
+    Args:
+        point_colname: column name of points
+        cond1: first condition term in join
+        cond2: second condition term in join
+        is_left: is left table the points table
+
+    Returns:
+        - Name of the interval start column and whether `start (<,<=) point` is a strict inequality
+        - Name of the interval end column and whether `point (<,<=) end` is a strict inequality
+    """
+    point_side = "left" if is_left else "right"
+    point_colname = f"{point_side}.{point_colname}"
+    # (A < P and P < B)
+    start_comp_first: bool = (
+        cond1.rhs.name == point_colname and cond2.lhs.name == point_colname
+    )
+    # (P < B and A < P)
+    end_comp_first: bool = (
+        cond1.lhs.name == point_colname and cond2.rhs.name == point_colname
+    )
+    require(start_comp_first or end_comp_first)
+    other_side_prefix = "right." if is_left else "left."
+
+    if start_comp_first:
+        # In the (A < P and P < B) case, cond1 refers to (A < P) and cond2 refers to (P < B).
+        # We want it to be the case that A (cond1.lhs) and B (cond2.rhs) come from the
+        # non-point side and that A != B. If this is not the case, it's not a point
+        # in interval join.
+        require(
+            cond1.lhs.name.startswith(other_side_prefix)
+            and cond2.rhs.name.startswith(other_side_prefix)
+            and cond1.lhs.name != cond2.rhs.name
+        )
+        return (
+            (cond1.lhs.name.removeprefix(other_side_prefix), cond1.op == "<"),
+            (cond2.rhs.name.removeprefix(other_side_prefix), cond2.op == "<"),
+        )
+    else:
+        # Similar logic, but for the (P < B and A < P) case.
+        require(
+            cond1.rhs.name.startswith(other_side_prefix)
+            and cond2.lhs.name.startswith(other_side_prefix)
+            and cond1.rhs.name != cond2.lhs.name
+        )
+        return (
+            (cond2.lhs.name.removeprefix(other_side_prefix), cond2.op == "<"),
+            (cond1.rhs.name.removeprefix(other_side_prefix), cond1.op == "<"),
+        )
+
+
+def _normalize_expr_cond(cond: pandas.core.computation.ops.BinOp) -> None:
+    """Normalize join condition comparison to use less-than instead of greater-than
+
+    Args:
+        cond: input comparison
+    """
+    if cond.op == ">":
+        cond.op = "<"
+        cond.lhs, cond.rhs = cond.operands = cond.rhs, cond.lhs
+
+    if cond.op == ">=":
+        cond.op = "<="
+        cond.lhs, cond.rhs = cond.operands = cond.rhs, cond.lhs
 
 
 @numba.njit

@@ -43,11 +43,11 @@ def install_py_obj_class(
     model_name = f"{class_name}Model" if model_name is None else model_name
 
     class_text = f"class {class_name}(types.Opaque):\n"
-    class_text += f"    def __init__(self):\n"
+    class_text += "    def __init__(self):\n"
     class_text += f"       types.Opaque.__init__(self, name='{class_name}')\n"
     # Implement the reduce method for pickling
     # https://stackoverflow.com/questions/11658511/pickling-dynamically-generated-classes
-    class_text += f"    def __reduce__(self):\n"
+    class_text += "    def __reduce__(self):\n"
     class_text += f"        return (types.Opaque, ('{class_name}',), self.__dict__)\n"
 
     locs = {}
@@ -67,12 +67,12 @@ def install_py_obj_class(
     # https://github.com/numba/numba/blob/496bc20d91485affa842a63173522a6afef453b6/numba/core/runtime/_nrt_python.c#L248
     # https://github.com/numba/numba/blob/496bc20d91485affa842a63173522a6afef453b6/numba/core/runtime/_nrt_python.c#L34
     class_text = f"class {model_name}(models.StructModel):\n"
-    class_text += f"    def __init__(self, dmm, fe_type):\n"
-    class_text += f"        members = [\n"
+    class_text += "    def __init__(self, dmm, fe_type):\n"
+    class_text += "        members = [\n"
     class_text += f"            ('meminfo', types.MemInfoPointer({types_name})),\n"
-    class_text += f"            ('pyobj', types.voidptr),\n"
-    class_text += f"        ]\n"
-    class_text += f"        models.StructModel.__init__(self, dmm, fe_type, members)\n"
+    class_text += "            ('pyobj', types.voidptr),\n"
+    class_text += "        ]\n"
+    class_text += "        models.StructModel.__init__(self, dmm, fe_type, members)\n"
 
     exec(
         class_text, {"types": types, "models": models, types_name: class_instance}, locs
@@ -89,7 +89,7 @@ def install_py_obj_class(
     unbox(class_value)(unbox_py_obj)
     box(class_value)(box_py_obj)
 
-    # We return the class for convenience (better IDE compatbility).
+    # We return the class for convenience (better IDE compatibility).
     # If the function is called from the module specified in 'module',
     # this is essentially a no-op.
     return class_value
@@ -104,10 +104,21 @@ def box_py_obj(typ, val, c):
 
 
 def unbox_py_obj(typ, obj, c):
-    struct_proxy = cgutils.create_struct_proxy(typ)(c.context, c.builder)
+    return NativeValue(
+        create_struct_from_pyobject(typ, obj, c.context, c.builder, c.pyapi)
+    )
+
+
+def create_struct_from_pyobject(typ, obj, context, builder, pyapi):
+    """
+    Helper function to wrap a regular Python Object pointer into a version that
+    borrows and manages a reference to the object. This is useful for passing Python
+    objects allocated in C++ into object mode.
+    """
+    struct_proxy = cgutils.create_struct_proxy(typ)(context, builder)
     # borrows and manages a reference for obj (see data model comments above)
-    struct_proxy.meminfo = c.pyapi.nrt_meminfo_new_from_pyobject(
-        c.context.get_constant_null(types.voidptr), obj
+    struct_proxy.meminfo = pyapi.nrt_meminfo_new_from_pyobject(
+        context.get_constant_null(types.voidptr), obj
     )
     struct_proxy.pyobj = obj
-    return NativeValue(struct_proxy._getvalue())
+    return struct_proxy._getvalue()

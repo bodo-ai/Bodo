@@ -1,14 +1,20 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
-"""Test drop_duplicate opration as called as df.drop_duplicates()
-"""
+"""Test drop_duplicate opration as called as df.drop_duplicates()"""
+
 import random
 from decimal import Decimal
 
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 import pytest
 
-from bodo.tests.utils import check_func, gen_random_list_string_array
+from bodo.tests.utils import (
+    check_func,
+    gen_random_list_string_array,
+    pytest_pandas,
+)
+
+pytestmark = pytest_pandas
 
 
 @pytest.fixture(
@@ -149,6 +155,9 @@ from bodo.tests.utils import check_func, gen_random_list_string_array
                 * 2
             ),
             id="nested_array_7_",
+            marks=pytest.mark.skip(
+                "TODO[BSE-2076]: Support tuple array in Arrow boxing/unboxing"
+            ),
         ),
     ]
 )
@@ -277,6 +286,19 @@ def test_drop_duplicates_2col_int_string(memory_leak_check):
 
 
 @pytest.mark.slow
+def test_drop_duplicates_empty(memory_leak_check):
+    """
+    Test drop_duplicates() on empty dataframe
+    """
+
+    def test_impl(df):
+        return df.drop_duplicates()
+
+    df1 = pd.DataFrame()
+    check_func(test_impl, (df1,), sort_output=True, reset_index=True)
+
+
+@pytest.mark.slow
 @pytest.mark.parametrize("n, len_siz", [(100, 10), (30, 3)])
 def test_drop_duplicates_2col_random_nullable_int(n, len_siz, memory_leak_check):
     """
@@ -284,7 +306,7 @@ def test_drop_duplicates_2col_random_nullable_int(n, len_siz, memory_leak_check)
     """
 
     def test_impl(df1):
-        df2 = df1.drop_duplicates()
+        df2 = df1.drop_duplicates(ignore_index=True)
         return df2
 
     def get_random_column(n, len_siz):
@@ -304,7 +326,7 @@ def test_drop_duplicates_2col_random_nullable_int(n, len_siz, memory_leak_check)
 
     random.seed(5)
     df1 = get_random_dataframe(n, len_siz)
-    check_func(test_impl, (df1,), sort_output=True)
+    check_func(test_impl, (df1,), sort_output=True, reset_index=True)
 
 
 @pytest.mark.slow
@@ -359,7 +381,7 @@ def test_drop_duplicates_2col_int_numpynan_bool(memory_leak_check):
     def get_array(n):
         e_list_a = np.array([0] * n)
         e_list_b = []
-        choice = [True, False, np.nan]
+        choice = [True, False, None]
         for i in range(n):
             e_list_a[i] = i % 40
             e_list_b.append(choice[i % 3])
@@ -545,7 +567,15 @@ def test_dd_map_array_non_drop():
 
     df1 = pd.DataFrame({"A": [3, 3, 3, 1, 4]})
     # We can only run the sequential test because Pandas can't sort a dict column
-    check_func(test_impl, (df1,), reset_index=True, dist_test=False)
+    check_func(
+        test_impl,
+        (df1,),
+        reset_index=True,
+        dist_test=False,
+        py_output=test_impl(df1).astype(
+            {"A": "int64", "B": pd.ArrowDtype(pa.map_(pa.large_string(), pa.int64()))}
+        ),
+    )
 
 
 # TODO: Add memory_leak_check. There appears to be a leak for struct arrays.
@@ -577,7 +607,6 @@ def test_dd_struct_array_non_drop():
     check_func(test_impl, (df1,), reset_index=True, dist_test=False)
 
 
-@pytest.mark.skip("keep argument not supported")
 def test_dd_subset_last(memory_leak_check):
     """
     Test drop_duplicates subset with keep='last'
@@ -591,7 +620,6 @@ def test_dd_subset_last(memory_leak_check):
     check_func(test_impl, (df1,), reset_index=True, sort_output=True)
 
 
-@pytest.mark.skip("keep argument not supported")
 def test_dd_subset_false(memory_leak_check):
     """
     Test drop_duplicates subset with keep=False

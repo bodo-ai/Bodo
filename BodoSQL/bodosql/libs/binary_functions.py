@@ -1,7 +1,7 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
 Library of BodoSQL functions used for binary data.
 """
+
 from numba import generated_jit
 from numba.core import types
 

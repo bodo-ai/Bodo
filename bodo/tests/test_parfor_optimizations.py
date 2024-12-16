@@ -1,4 +1,3 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """Tests that various optimizations inside of parfors work properly
 with Bodo data types. These tests should be used to check that specific
 compiler optimizations (i.e. dce) are working properly.
@@ -115,7 +114,7 @@ def test_parfor_str_eq_dce(memory_leak_check):
     _check_num_parfors(bodo_func, 0)
 
 
-def test_tuple_parfor_fusion():
+def test_tuple_parfor_fusion(memory_leak_check):
     """
     Check to make sure numba can fuse a loop when `ShapeEquivSet._getnames()
     attempts to analyze an unsupported type (float tuple).

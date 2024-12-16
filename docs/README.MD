@@ -1,10 +1,21 @@
+## Clone the bodo platform repository and set required env vars
+
+> [!WARNING]
+> You need to have https://github.com/bodo-ai/bodo-platform cloned and updated. Ensure you are on the `main` branch.
+> You need to set the PLATFORM_SDK_PATH env var to the path of the `sdk2` folder in the bodo-platform repo.
+
+- `export PLATFORM_SDK_PATH=<path_to_sdk2_folder_in_bodo_platform_repo/>`
+
 ## Create virtualenv and install requirements
 - `make pip-install`
 
-**note** Any package you do not find can be pip installed.
+> [!NOTE]
+> Any package you do not find can be pip installed.
+
 
 ## Building docs locally 
 - to render docs, use `make mkdocs-build`. 
+
 
 ## Serving docs locally 
 - to render docs, use `make mkdocs-serve`. 
@@ -13,7 +24,7 @@
 
 ## Creating and api docs 
 
-**WARNING** : Only do this if you are modifying API reference. Contact @ritwika314 first.
+**WARNING** : Only do this if you are modifying API reference.
 
 **note** This process is a bit hacky and manual at the moment, but will improve with time. 
 
@@ -30,3 +41,7 @@ Generate an svg, with a transparent background and embed fonts for any diagrams.
 ## Deploying:
 
 `mike` is used for deployment. 
+- To deploy the docs version you are building locally, use `make mike-deploy version_name=<your_version_name>`.
+- To view the deployed docs locally, use `make mike-serve`.
+- To push the current update docs to the docs site, use `make mike-push version_name=<your_version_name>`.
+- To publish new release docs to the docs site, use `make mike-push-latest version_name=<your_version_name>`.

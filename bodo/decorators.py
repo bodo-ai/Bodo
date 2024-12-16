@@ -1,9 +1,11 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
 Defines decorators of Bodo. Currently just @jit.
 """
+
 import hashlib
 import inspect
+import os
+import types as pytypes
 import warnings
 
 import numba
@@ -12,7 +14,6 @@ from numba.core.options import _mapping
 from numba.core.targetconfig import Option, TargetConfig
 
 import bodo
-from bodo import master_mode
 
 # Add Bodo's options to Numba's allowed options/flags
 numba.core.cpu.CPUTargetOptions.all_args_distributed_block = _mapping(
@@ -36,6 +37,11 @@ numba.core.cpu.CPUTargetOptions.replicated = _mapping("replicated")
 numba.core.cpu.CPUTargetOptions.threaded = _mapping("threaded")
 numba.core.cpu.CPUTargetOptions.pivots = _mapping("pivots")
 numba.core.cpu.CPUTargetOptions.h5_types = _mapping("h5_types")
+numba.core.cpu.CPUTargetOptions.spawn = _mapping("spawn")
+numba.core.cpu.CPUTargetOptions.propagate_env = _mapping("propagate_env")
+numba.core.cpu.CPUTargetOptions.distributed_diagnostics = _mapping(
+    "distributed_diagnostics"
+)
 
 
 class Flags(TargetConfig):
@@ -87,7 +93,7 @@ class Flags(TargetConfig):
     forceinline = Option(
         type=bool,
         default=False,
-        doc="TODO",
+        doc="Force inlining of the function. Overrides _dbg_optnone.",
     )
     no_cpython_wrapper = Option(
         type=bool,
@@ -136,10 +142,29 @@ detail""",
         default=cpu.InlineOptions("never"),
         doc="TODO",
     )
-    # Defines a new target option for tracking the "target backend".
-    # This will be the XYZ in @jit(_target=XYZ).
-    target_backend = Option(
-        type=str, default="cpu", doc="backend"  # if not set, default to CPU
+
+    dbg_extend_lifetimes = Option(
+        type=bool,
+        default=False,
+        doc=(
+            "Extend variable lifetime for debugging. "
+            "This automatically turns on with debug=True."
+        ),
+    )
+
+    dbg_optnone = Option(
+        type=bool,
+        default=False,
+        doc=(
+            "Disable optimization for debug. "
+            "Equivalent to adding optnone attribute in the LLVM Function."
+        ),
+    )
+
+    dbg_directives_only = Option(
+        type=bool,
+        default=False,
+        doc=("Make debug emissions directives-only. " "Used when generating lineinfo."),
     )
 
     # Bodo change: add Bodo-specific options
@@ -198,14 +223,26 @@ detail""",
 
     pivots = Option(
         type=dict,
-        default=dict(),
+        default={},
         doc="pivot values",
     )
 
     h5_types = Option(
         type=dict,
-        default=dict(),
+        default={},
         doc="HDF5 read data types",
+    )
+
+    spawn = Option(
+        type=bool,
+        default=False,
+        doc="Spawn MPI processes",
+    )
+
+    distributed_diagnostics = Option(
+        type=bool,
+        default=False,
+        doc="Print distributed diagnostics information",
     )
 
 
@@ -217,7 +254,7 @@ if bodo.numba_compat._check_numba_change:
     lines = inspect.getsource(numba.core.compiler.Flags)
     if (
         hashlib.sha256(lines.encode()).hexdigest()
-        != "9d5f7a93545fe783c20a9d7579c73e04d91d6b2841fb5972b391a67fff03b9c3"
+        != "c55571413d2aa723a2c5eb18f1dccf3acfd3b900ab25f751302773a8e5bf48d3"
     ):  # pragma: no cover
         warnings.warn("numba.core.compiler.Flags has changed")
 
@@ -259,14 +296,6 @@ def distributed_diagnostics(self, signature=None, level=1):
 numba.core.dispatcher.Dispatcher.distributed_diagnostics = distributed_diagnostics
 
 
-def master_mode_wrapper(numba_jit_wrapper):  # pragma: no cover
-    def _wrapper(pyfunc):
-        dispatcher = numba_jit_wrapper(pyfunc)
-        return master_mode.MasterModeDispatcher(dispatcher)
-
-    return _wrapper
-
-
 # shows whether jit compilation is on inside a function or not. The overloaded version
 # returns True while regular interpreted version returns False.
 # example:
@@ -285,6 +314,43 @@ def is_jit_execution_overload():
 
 
 def jit(signature_or_function=None, pipeline_class=None, **options):
+    # Use spawn mode if specified in decorator or enabled globally (decorator takes
+    # precedence)
+    disable_jit = os.environ.get("NUMBA_DISABLE_JIT", "0") == "1"
+    dist_mode = options.get("distributed", True) is not False
+    if options.get("spawn", bodo.spawn_mode) and not disable_jit and dist_mode:
+        from bodo.submit.spawner import SubmitDispatcher
+        from bodo.submit.worker_state import is_worker
+
+        if is_worker():
+            # If we are already in the worker, just use regular to
+            # compile/execute directly
+            return _jit(
+                signature_or_function=signature_or_function,
+                pipeline_class=pipeline_class,
+                **options,
+            )
+
+        def return_wrapped_fn(py_func):
+            submit_jit_args = {**options}
+            submit_jit_args["pipeline_class"] = pipeline_class
+            return SubmitDispatcher(py_func, submit_jit_args)
+
+        if isinstance(signature_or_function, pytypes.FunctionType):
+            py_func = signature_or_function
+            return return_wrapped_fn(py_func)
+
+        return return_wrapped_fn
+
+    elif "propagate_env" in options:
+        raise bodo.utils.typing.BodoError(
+            "spawn=False while propagate_env is set. No worker to propagate env vars."
+        )
+
+    return _jit(signature_or_function, pipeline_class, **options)
+
+
+def _jit(signature_or_function=None, pipeline_class=None, **options):
     _init_extensions()
 
     # set nopython by default
@@ -319,20 +385,7 @@ def jit(signature_or_function=None, pipeline_class=None, **options):
     numba_jit = numba.jit(
         signature_or_function, pipeline_class=pipeline_class, **options
     )
-    if (
-        master_mode.master_mode_on and bodo.get_rank() == master_mode.MASTER_RANK
-    ):  # pragma: no cover
-        # when options are passed, this function is called with
-        # signature_or_function==None, so numba.jit doesn't return a Dispatcher
-        # object. it returns a decorator ("_jit.<locals>.wrapper") to apply
-        # to the Python function, and we need to wrap that around our own
-        # decorator
-        if isinstance(numba_jit, numba.dispatcher._DispatcherBase):
-            return master_mode.MasterModeDispatcher(numba_jit)
-        else:
-            return master_mode_wrapper(numba_jit)
-    else:
-        return numba_jit
+    return numba_jit
 
 
 def _init_extensions():
@@ -345,9 +398,19 @@ def _init_extensions():
 
     need_refresh = False
 
-    if "sklearn" in sys.modules and "bodo.libs.sklearn_ext" not in sys.modules:
+    if "sklearn" in sys.modules and "bodo.ml_support.sklearn_ext" not in sys.modules:
         # side effect: initialize Numba extensions
-        import bodo.libs.sklearn_ext  # noqa
+        import bodo.ml_support.sklearn_ext  # noqa
+        import bodo.ml_support.sklearn_cluster_ext  # noqa
+        import bodo.ml_support.sklearn_ensemble_ext  # noqa
+        import bodo.ml_support.sklearn_feature_extraction_ext  # noqa
+        import bodo.ml_support.sklearn_linear_model_ext  # noqa
+        import bodo.ml_support.sklearn_metrics_ext  # noqa
+        import bodo.ml_support.sklearn_model_selection_ext  # noqa
+        import bodo.ml_support.sklearn_naive_bayes_ext  # noqa
+        import bodo.ml_support.sklearn_preprocessing_ext  # noqa
+        import bodo.ml_support.sklearn_svm_ext  # noqa
+        import bodo.ml_support.sklearn_utils_ext  # noqa
 
         need_refresh = True
 
@@ -357,9 +420,9 @@ def _init_extensions():
 
         need_refresh = True
 
-    if "xgboost" in sys.modules and "bodo.libs.xgb_ext" not in sys.modules:
+    if "xgboost" in sys.modules and "bodo.ml_support.xgb_ext" not in sys.modules:
         # side effect: initialize Numba extensions
-        import bodo.libs.xgb_ext  # noqa
+        import bodo.ml_support.xgb_ext  # noqa
 
         need_refresh = True
 

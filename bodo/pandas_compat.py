@@ -4,7 +4,7 @@ import warnings
 
 import numpy as np
 import pandas as pd
-from pandas._libs import lib
+import pyarrow as pa
 
 pandas_version = tuple(map(int, pd.__version__.split(".")[:2]))
 
@@ -63,27 +63,23 @@ if pandas_version < (1, 4):
 def ArrowStringArray__init__(self, values):
     import pyarrow as pa
     from pandas.core.arrays.string_ import StringDtype
+    from pandas.core.arrays.string_arrow import ArrowStringArray
 
-    self._dtype = StringDtype(storage="pyarrow")
-    if isinstance(values, pa.Array):
-        self._data = pa.chunked_array([values])
-    elif isinstance(values, pa.ChunkedArray):
-        self._data = values
-    else:
-        raise ValueError(f"Unsupported type '{type(values)}' for ArrowStringArray")
+    super(ArrowStringArray, self).__init__(values)
+    self._dtype = StringDtype(storage=self._storage)
 
     # Bodo change: allow Arrow LargeStringArray (64-bit offsets) type created by Bodo
     # also allow dict-encoded string arrays from Bodo
     if not (
-        pa.types.is_string(self._data.type)
-        or pa.types.is_large_string(self._data.type)
+        pa.types.is_string(self._pa_array.type)
+        or pa.types.is_large_string(self._pa_array.type)
         or (
-            pa.types.is_dictionary(self._data.type)
+            pa.types.is_dictionary(self._pa_array.type)
             and (
-                pa.types.is_string(self._data.type.value_type)
-                or pa.types.is_large_string(self._data.type.value_type)
+                pa.types.is_string(self._pa_array.type.value_type)
+                or pa.types.is_large_string(self._pa_array.type.value_type)
             )
-            and pa.types.is_int32(self._data.type.index_type)
+            and pa.types.is_int32(self._pa_array.type.index_type)
         )
     ):
         raise ValueError(
@@ -95,7 +91,7 @@ if _check_pandas_change:
     lines = inspect.getsource(pd.core.arrays.string_arrow.ArrowStringArray.__init__)
     if (
         hashlib.sha256(lines.encode()).hexdigest()
-        != "cbb9683b2e91867ef12470d4fda28ca6243fbb7b4f78ac2472fca805607c0942"
+        != "5127b219e8856a16ef858b0f120881e32623d75422e50597f8a2fbb5281900c0"
     ):  # pragma: no cover
         warnings.warn(
             "pd.core.arrays.string_arrow.ArrowStringArray.__init__ has changed"
@@ -104,83 +100,147 @@ if _check_pandas_change:
 pd.core.arrays.string_arrow.ArrowStringArray.__init__ = ArrowStringArray__init__
 
 
-# Bodo change to allow dict-encoded arrays
-def factorize(self, na_sentinel: int = -1):
-    import numpy as np
-    import pyarrow as pa
+@classmethod
+def _concat_same_type(cls, to_concat):
+    """
+    Concatenate multiple ArrowExtensionArrays.
 
-    # Bodo change:
-    # Arrow's ChunkedArray.dictionary_encode() doesn't work for arrays that are
-    # dict-encoded already so needs a check to be avoided.
-    encoded = (
-        self._data
-        if pa.types.is_dictionary(self._data.type)
-        else self._data.dictionary_encode()
-    )
-    indices = pa.chunked_array(
-        [c.indices for c in encoded.chunks], type=encoded.type.index_type
-    ).to_pandas()
-    if indices.dtype.kind == "f":
-        indices[np.isnan(indices)] = na_sentinel
-    indices = indices.astype(np.int64, copy=False)
+    Parameters
+    ----------
+    to_concat : sequence of ArrowExtensionArrays
 
-    if encoded.num_chunks:
-        uniques = type(self)(encoded.chunk(0).dictionary)
+    Returns
+    -------
+    ArrowExtensionArray
+    """
+    chunks = [array for ea in to_concat for array in ea._pa_array.iterchunks()]
+    if to_concat[0].dtype == "string":
+        # Bodo change: use Arrow type of underlying data since it could be different
+        # (dict-encoded or large_string)
+        pa_dtype = to_concat[0]._pa_array.type
     else:
-        uniques = type(self)(pa.array([], type=encoded.type.value_type))
-
-    return indices.values, uniques
-
-
-if _check_pandas_change:
-    lines = inspect.getsource(pd.core.arrays.string_arrow.ArrowStringArray.factorize)
-    if (
-        hashlib.sha256(lines.encode()).hexdigest()
-        != "80669a609cfe11b362dacec6bba8e5bf41418b35d0d8b58246a548858320efd9"
-    ):  # pragma: no cover
-        warnings.warn(
-            "pd.core.arrays.string_arrow.ArrowStringArray.factorize has changed"
-        )
-
-
-pd.core.arrays.string_arrow.ArrowStringArray.factorize = factorize
-
-
-def to_numpy(
-    self,
-    dtype=None,
-    copy: bool = False,
-    na_value=lib.no_default,
-) -> np.ndarray:
-    """
-    Convert to a NumPy ndarray.
-    """
-    # TODO: copy argument is ignored
-
-    # Bodo change: work around bugs in Arrow for all null and empty array cases
-    # see test_all_null_pa_bug
-    data = self._data.combine_chunks() if len(self) != 0 else self._data
-
-    result = np.array(data, dtype=dtype)
-    if self._data.null_count > 0:
-        if na_value is lib.no_default:
-            if dtype and np.issubdtype(dtype, np.floating):
-                return result
-            na_value = self._dtype.na_value
-        mask = self.isna()
-        result[mask] = na_value
-    return result
+        pa_dtype = to_concat[0].dtype.pyarrow_dtype
+    arr = pa.chunked_array(chunks, type=pa_dtype)
+    return cls(arr)
 
 
 if _check_pandas_change:
-    lines = inspect.getsource(pd.core.arrays.string_arrow.ArrowStringArray.to_numpy)
+    lines = inspect.getsource(
+        pd.core.arrays.arrow.array.ArrowExtensionArray._concat_same_type
+    )
     if (
         hashlib.sha256(lines.encode()).hexdigest()
-        != "2f49768c0cb51d06eb41882aaf214938f268497fffa07bf81964a5056d572ea3"
+        != "8f29eb56a84ce4000be3ba611f5a23cbf81b981fd8cfe5c7776e79f7800ba94e"
     ):  # pragma: no cover
         warnings.warn(
-            "pd.core.arrays.string_arrow.ArrowStringArray.to_numpy has changed"
+            "pd.core.arrays.arrow.array.ArrowExtensionArray._concat_same_type has changed"
         )
 
 
-pd.core.arrays.string_arrow.ArrowStringArray.to_numpy = to_numpy
+pd.core.arrays.arrow.array.ArrowExtensionArray._concat_same_type = _concat_same_type
+
+
+# Add support for pow() in join conditions
+pd.core.computation.ops.MATHOPS = pd.core.computation.ops.MATHOPS + ("pow",)
+
+
+def FuncNode__init__(self, name: str) -> None:
+    if name not in pd.core.computation.ops.MATHOPS:
+        raise ValueError(f'"{name}" is not a supported function')
+    self.name = name
+    # Bodo change: handle pow() which is not in Numpy
+    self.func = pow if name == "pow" else getattr(np, name)
+
+
+if _check_pandas_change:  # pragma: no cover
+    lines = inspect.getsource(pd.core.computation.ops.FuncNode.__init__)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "dec403a61ed8a58a2b29f3e2e8d49d6398adc7e27a226fe870d2e4b62d5c5475"
+    ):
+        warnings.warn("pd.core.computation.ops.FuncNode.__init__ has changed")
+
+
+pd.core.computation.ops.FuncNode.__init__ = FuncNode__init__
+
+
+# Pandas as of 2.1.4 doesn't have notna() for DatetimeArray for some reason
+# See test_series_value_counts
+if not hasattr(pd.arrays.DatetimeArray, "notna"):
+    pd.arrays.DatetimeArray.notna = lambda self: ~self.isna()
+
+
+# Implementation of precision_from_unit() which has been move to a cdef and
+# is not accessible from Python. This is the python equivalent of the function.
+# When possible we attempt to call into exposed Pandas APIs directly so we can
+# benefit from native code.
+def precision_from_unit_to_nanoseconds(in_reso: str | None):
+    if in_reso is None:
+        in_reso = "ns"
+    if in_reso == "Y":
+        # each 400 years we have 97 leap years, for an average of 97/400=.2425
+        #  extra days each year. We get 31556952 by writing
+        #  3600*24*365.2425=31556952
+        multiplier = pd._libs.tslibs.dtypes.periods_per_second(
+            pd._libs.dtypes.abbrev_to_npy_unit("ns")
+        )
+        m = multiplier * 31556952
+    elif in_reso == "M":
+        # 2629746 comes from dividing the "Y" case by 12.
+        multiplier = pd._libs.tslibs.dtypes.periods_per_second(
+            pd._libs.dtypes.abbrev_to_npy_unit("ns")
+        )
+        m = multiplier * 2629746
+    else:
+        # Careful: if get_conversion_factor raises, the exception does
+        #  not propagate, instead we get a warning about an ignored exception.
+        #  https://github.com/pandas-dev/pandas/pull/51483#discussion_r1115198951
+        m = get_conversion_factor_to_ns(in_reso)
+
+    p = np.floor(np.log10(m))  # number of digits in 'm' minus 1
+    return m, p
+
+
+def get_conversion_factor_to_ns(in_reso: str) -> int:
+    """
+    Get the conversion factor between two resolutions.
+
+    Parameters
+    ----------
+    in_reso : str
+        The input resolution.
+    out_reso : str
+        The output resolution.
+
+    Returns
+    -------
+    int
+        The conversion factor.
+    """
+    if in_reso == "ns":
+        return 1
+
+    if in_reso == "W":
+        value = get_conversion_factor_to_ns("D")
+        factor = 7
+    elif in_reso == "D" or in_reso == "d":
+        value = get_conversion_factor_to_ns("h")
+        factor = 24
+    elif in_reso == "h":
+        value = get_conversion_factor_to_ns("m")
+        factor = 60
+    elif in_reso == "m":
+        value = get_conversion_factor_to_ns("s")
+        factor = 60
+    elif in_reso == "s":
+        value = get_conversion_factor_to_ns("ms")
+        factor = 1000
+    elif in_reso == "ms":
+        value = get_conversion_factor_to_ns("us")
+        factor = 1000
+    elif in_reso == "us":
+        value = get_conversion_factor_to_ns("ns")
+        factor = 1000
+    else:
+        raise ValueError(f"Unsupported resolution {in_reso}")
+    return factor * value

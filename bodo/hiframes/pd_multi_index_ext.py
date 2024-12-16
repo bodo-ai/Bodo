@@ -1,6 +1,5 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
-"""Support for MultiIndex type of Pandas
-"""
+"""Support for MultiIndex type of Pandas"""
+
 import operator
 
 import numba
@@ -19,6 +18,7 @@ from numba.extending import (
     unbox,
 )
 
+import bodo
 from bodo.utils.conversion import ensure_contig_if_np
 from bodo.utils.typing import (
     BodoError,
@@ -45,9 +45,7 @@ class MultiIndexType(types.ArrayCompatible):
         self.array_types = array_types
         self.names_typ = names_typ
         self.name_typ = name_typ
-        super(MultiIndexType, self).__init__(
-            name="MultiIndexType({}, {}, {})".format(array_types, names_typ, name_typ)
-        )
+        super().__init__(name=f"MultiIndexType({array_types}, {names_typ}, {name_typ})")
 
     ndim = 1
 
@@ -85,7 +83,7 @@ class MultiIndexModel(models.StructModel):
             ("names", types.Tuple(fe_type.names_typ)),
             ("name", fe_type.name_typ),
         ]
-        super(MultiIndexModel, self).__init__(dmm, fe_type, members)
+        super().__init__(dmm, fe_type, members)
 
 
 make_attribute_wrapper(MultiIndexType, "data", "_data")
@@ -196,8 +194,8 @@ def unbox_multi_index(typ, val, c):
 
 def from_product_error_checking(iterables, sortorder, names):
     fname = "pandas.MultiIndex.from_product"
-    unsupported_args = dict(sortorder=sortorder)
-    arg_defaults = dict(sortorder=None)
+    unsupported_args = {"sortorder": sortorder}
+    arg_defaults = {"sortorder": None}
     check_unsupported_args(
         fname,
         unsupported_args,
@@ -231,17 +229,17 @@ def from_product_overload(iterables, sortorder=None, names=None):
     setattr(types, t_name, multiindex_type)
     func_text = f"""
 def impl(iterables, sortorder=None, names=None):
-    with numba.objmode(mi='{t_name}'):
+    with bodo.objmode(mi='{t_name}'):
         mi = pd.MultiIndex.from_product(iterables, names=names)
     return mi
 """
     loc_vars = {}
-    exec(func_text, globals(), loc_vars)
+    exec(func_text, {"pd": pd, "bodo": bodo}, loc_vars)
     impl = loc_vars["impl"]
     return impl
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def init_multi_index(typingctx, data, names, name=None):
     """Create a MultiIndex with provided data, names and name values."""
     name = types.none if name is None else name
@@ -284,7 +282,6 @@ def overload_multi_index_getitem(I, ind):
 
     # TODO(ehsan): scalar indexing
     if not isinstance(ind, types.Integer):
-
         n_fields = len(I.array_types)
         func_text = "def impl(I, ind):\n"
         func_text += "  data = I._data\n"

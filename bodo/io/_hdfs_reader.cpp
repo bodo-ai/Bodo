@@ -1,16 +1,18 @@
-// Copyright (C) 2019 Bodo Inc. All rights reserved.
 #include <Python.h>
+#include <algorithm>
 #include <iostream>
+
+#include <arrow/filesystem/filesystem.h>
+#include <arrow/filesystem/hdfs.h>
+#include <arrow/io/hdfs.h>
+#include <arrow/io/interfaces.h>
+#include <arrow/result.h>
+#include <arrow/status.h>
 
 #include "../libs/_bodo_common.h"
 #include "_bodo_file_reader.h"
-#include "arrow/filesystem/filesystem.h"
-#include "arrow/filesystem/hdfs.h"
-#include "arrow/io/hdfs.h"
-#include "arrow/io/interfaces.h"
-#include "arrow/result.h"
-#include "arrow/status.h"
 
+#undef CHECK
 #define CHECK(expr, msg)                                          \
     if (!(expr)) {                                                \
         std::cerr << "Error in arrow hdfs: " << msg << std::endl; \
@@ -22,6 +24,7 @@
                   << std::endl;                                    \
     }
 
+#undef CHECK_ARROW_AND_ASSIGN
 #define CHECK_ARROW_AND_ASSIGN(res, msg, lhs) \
     CHECK_ARROW(res.status(), msg);           \
     lhs = std::move(res).ValueOrDie();
@@ -47,7 +50,7 @@ std::shared_ptr<::arrow::fs::HadoopFileSystem> get_hdfs_fs(
         status = ::arrow::io::HaveLibHdfs();
         if (!status.ok()) {
             Bodo_PyErr_SetString(PyExc_RuntimeError, "libhdfs not found");
-            return NULL;  // TODO: use Bodo_PyErr_SetString instead
+            return nullptr;  // TODO: use Bodo_PyErr_SetString instead
         }
     }
     // parse hdfs options from file uri
@@ -64,20 +67,23 @@ std::shared_ptr<::arrow::fs::HadoopFileSystem> get_hdfs_fs(
         if ((hdfs_config.host != options.connection_config.host) ||
             (hdfs_config.port != options.connection_config.port) ||
             (hdfs_config.user != options.connection_config.user)) {
-            hdfs_fs = nullptr;  // destructor calls Close, which calls Disconnect
+            hdfs_fs =
+                nullptr;  // destructor calls Close, which calls Disconnect
             hdfs_config = options.connection_config;
         } else {
             return hdfs_fs;
         }
     }
-    if (boost::starts_with(uri_string, "abfs://") || boost::starts_with(uri_string, "abfss://"))
+    if (uri_string.starts_with("abfs://") || uri_string.starts_with("abfss://"))
         // need to pass whole URI as host to libhdfs
         options.ConfigureEndPoint(uri_string, 0);
     // connect to hdfs
     options.ConfigureReplication(0);
     options.ConfigureBufferSize(0);
     options.ConfigureBlockSize(0);
-    hdfs_fs = arrow::fs::HadoopFileSystem::Make(options).ValueOrDie();
+    hdfs_fs = arrow::fs::HadoopFileSystem::Make(
+                  options, bodo::default_buffer_io_context())
+                  .ValueOrDie();
 
     is_hdfs_initialized = true;
     return hdfs_fs;
@@ -97,7 +103,7 @@ std::pair<std::string, int64_t> hdfs_extract_file_name_size(
 }
 
 bool hdfs_sort_by_name(const std::pair<std::string, int64_t> &a,
-                  const std::pair<std::string, int64_t> &b) {
+                       const std::pair<std::string, int64_t> &b) {
     return (a.first < b.first);
 }
 
@@ -119,17 +125,19 @@ class HdfsFileReader : public SingleFileReader {
 
         fs = get_hdfs_fs(fname);
         arrow::Result<std::shared_ptr<arrow::fs::FileSystem>> tempfs =
-            ::arrow::fs::FileSystemFromUri(fname, &path);
+            ::arrow::fs::FileSystemFromUri(
+                fname, bodo::default_buffer_io_context(), &path);
         // open file
         result = fs->OpenInputFile(path);
-        CHECK_ARROW_AND_ASSIGN(result, "HdfsFileSystem::OpenInputFile", hdfs_file)
+        CHECK_ARROW_AND_ASSIGN(result, "HdfsFileSystem::OpenInputFile",
+                               hdfs_file)
     }
-    bool seek(int64_t pos) {
+    bool seek(int64_t pos) override {
         status = hdfs_file->Seek(pos + this->csv_header_bytes);
         return status.ok();
     }
-    bool ok() { return status.ok(); }
-    bool read_to_buff(char *s, int64_t size) {
+    bool ok() override { return status.ok(); }
+    bool read_to_buff(char *s, int64_t size) override {
         arrow::Result<int64_t> result = hdfs_file->Read(size, s);
         if (!(result.status().ok())) {
             return false;
@@ -137,7 +145,7 @@ class HdfsFileReader : public SingleFileReader {
         int64_t bytes_read = std::move(result).ValueOrDie();
         return bytes_read == size;
     }
-    uint64_t getSize() {
+    uint64_t getSize() override {
         int64_t size = -1;
         arrow::Result<int64_t> result = hdfs_file->GetSize();
         CHECK_ARROW_AND_ASSIGN(result, "HdfsReadableFile::GetSize", size);
@@ -174,16 +182,15 @@ class HdfsDirectoryFileReader : public DirectoryFileReader {
         // extract file names and file sizes from file_stats
         // then sort by file names
         // assuming the directory contains files only, i.e. no subdirectory
-        std::transform(this->file_stats.begin(), this->file_stats.end(),
-                       std::back_inserter(this->file_names_sizes),
-                       hdfs_extract_file_name_size);
-        std::sort(this->file_names_sizes.begin(), this->file_names_sizes.end(),
-                  hdfs_sort_by_name);
+        std::ranges::transform(this->file_stats,
+                               std::back_inserter(this->file_names_sizes),
+                               hdfs_extract_file_name_size);
+        std::ranges::sort(this->file_names_sizes, hdfs_sort_by_name);
 
         this->findDirSizeFileSizesFileNames(_dirname, file_names_sizes);
     };
 
-    void initFileReader(const char *fname) {
+    void initFileReader(const char *fname) override {
         this->f_reader = new HdfsFileReader(fname, this->f_type_to_string(),
                                             this->csv_header, this->json_lines);
         this->f_reader->csv_header_bytes = this->csv_header_bytes;
@@ -204,21 +211,21 @@ FileReader *init_hdfs_reader(const char *fname, const char *suffix,
     arrow::Result<std::shared_ptr<arrow::fs::FileSystem>> tempfs =
         ::arrow::fs::FileSystemFromUri(fname, &path);
     arrow::fs::FileInfo file_stat;
-    
-    arrow::internal::Uri uri;
+
+    arrow::util::Uri uri;
     (void)uri.Parse(fname);
-    arrow::Result<arrow::fs::FileInfo> result =
-        fs->GetFileInfo(uri.path());
+    arrow::Result<arrow::fs::FileInfo> result = fs->GetFileInfo(uri.path());
     CHECK_ARROW_AND_ASSIGN(result, "fs->GetFileInfo", file_stat)
-    
+
     if (file_stat.IsDirectory()) {
-        return new HdfsDirectoryFileReader(fname, suffix, csv_header, json_lines);
+        return new HdfsDirectoryFileReader(fname, suffix, csv_header,
+                                           json_lines);
     } else if (file_stat.IsFile()) {
         return new HdfsFileReader(fname, suffix, csv_header, json_lines);
     } else {
         Bodo_PyErr_SetString(PyExc_RuntimeError,
                              "Error in arrow hdfs: invalid path");
-        return NULL;
+        return nullptr;
     }
 }
 
@@ -230,7 +237,7 @@ void hdfs_open_file(const char *fname,
     arrow::Result<std::shared_ptr<arrow::fs::FileSystem>> tempfs =
         ::arrow::fs::FileSystemFromUri(f_name, &path);
     arrow::Result<std::shared_ptr<::arrow::io::RandomAccessFile>> result;
-    if (boost::starts_with(f_name, "abfs://") || boost::starts_with(f_name, "abfss://"))
+    if (f_name.starts_with("abfs://") || f_name.starts_with("abfss://"))
         // need to pass whole URI to libhdfs
         result = fs->OpenInputFile(f_name);
     else
@@ -242,19 +249,38 @@ void hdfs_open_file(const char *fname,
 // #undef CHECK_ARROW
 // #undef CHECK_ARROW_AND_ASSIGN
 
+/**
+ * @brief Wrapper around disconnect_hdfs() to be called from Python (avoids
+ Numba JIT overhead and makes compiler debugging easier by eliminating extra
+ compilation)
+ *
+ */
+static PyObject *disconnect_hdfs_py_wrapper(PyObject *self, PyObject *args) {
+    if (PyTuple_Size(args) != 0) {
+        PyErr_SetString(PyExc_TypeError,
+                        "disconnect_hdfs() does not take arguments");
+        return nullptr;
+    }
+    PyObject *ret_obj = PyLong_FromLong(disconnect_hdfs());
+    return ret_obj;
+}
+
+static PyMethodDef ext_methods[] = {
+#define declmethod(func) {#func, (PyCFunction)func, METH_VARARGS, NULL}
+    declmethod(disconnect_hdfs_py_wrapper),
+    {nullptr},
+#undef declmethod
+};
+
 PyMODINIT_FUNC PyInit_hdfs_reader(void) {
     PyObject *m;
-    static struct PyModuleDef moduledef = {
-        PyModuleDef_HEAD_INIT, "hdfs_reader", "No docs", -1, NULL,
-    };
-    m = PyModule_Create(&moduledef);
-    if (m == NULL) return NULL;
+    MOD_DEF(m, "hdfs_reader", "No docs", ext_methods);
+    if (m == nullptr)
+        return nullptr;
 
-    PyObject_SetAttrString(m, "init_hdfs_reader",
-                           PyLong_FromVoidPtr((void *)(&init_hdfs_reader)));
-    PyObject_SetAttrString(m, "hdfs_get_fs",
-                           PyLong_FromVoidPtr((void *)(&hdfs_get_fs)));
-    PyObject_SetAttrString(m, "disconnect_hdfs",
-                           PyLong_FromVoidPtr((void *)(&disconnect_hdfs)));
+    SetAttrStringFromVoidPtr(m, init_hdfs_reader);
+    SetAttrStringFromVoidPtr(m, hdfs_get_fs);
+    SetAttrStringFromVoidPtr(m, disconnect_hdfs);
+
     return m;
 }

@@ -1,0 +1,9 @@
+#ignore the cache
+__pycache__/
+
+#ignore any parquet files generated locally durring testing
+*.parquet
+*.pq/
+
+#ignore any generated log files
+*.log

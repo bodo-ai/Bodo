@@ -1,56 +1,47 @@
-// Copyright (C) 2021 Bodo Inc. All rights reserved.
 
-// Implementation of ParquetReader (subclass of ArrowDataframeReader) with
+// Implementation of ParquetReader (subclass of ArrowReader) with
 // functionality that is specific to reading parquet datasets
 
+#include "../libs/_bodo_to_arrow.h"
+#include "../libs/_distributed.h"
 #include "arrow_reader.h"
-#include "parquet/api/reader.h"
-#include "parquet/arrow/reader.h"
 
-class ParquetReader : public ArrowDataframeReader {
+class ParquetReader : public ArrowReader {
    public:
     /**
      * Initialize ParquetReader.
-     * See pq_read function below for description of arguments.
+     * See pq_read_py_entry function below for description of arguments.
      */
-    ParquetReader(PyObject* _path, bool _parallel, PyObject* _dnf_filters,
-                  PyObject* _expr_filters, PyObject* _storage_options,
-                  int64_t _tot_rows_to_read, int32_t* _selected_fields,
-                  int32_t num_selected_fields, int32_t* is_nullable,
-                  bool _input_file_name_col, bool _use_hive = true)
-        : ArrowDataframeReader(_parallel, _tot_rows_to_read, _selected_fields,
-                               num_selected_fields, is_nullable),
-          dnf_filters(_dnf_filters),
+    ParquetReader(PyObject* _path, bool _parallel, PyObject* _expr_filters,
+                  PyObject* _storage_options, PyObject* _pyarrow_schema,
+                  int64_t _tot_rows_to_read, std::vector<int> _selected_fields,
+                  std::vector<bool> is_nullable, bool _input_file_name_col,
+                  int64_t batch_size, bool _use_hive = true, int64_t op_id = -1)
+        : ArrowReader(_parallel, _pyarrow_schema, _tot_rows_to_read,
+                      _selected_fields, is_nullable, batch_size, op_id),
+          empty_out_table(nullptr),
           expr_filters(_expr_filters),
           path(_path),
           storage_options(_storage_options),
           input_file_name_col(_input_file_name_col),
           use_hive(_use_hive) {
-        if (storage_options == Py_None)
+        if (storage_options == Py_None) {
             throw std::runtime_error("ParquetReader: storage_options is None");
-
-        // copy selected_fields to a Python list to pass to
-        // parquet_pio.get_scanner_batches
-        selected_fields_py = PyList_New(selected_fields.size());
-        size_t i = 0;
-        for (auto field_num : selected_fields) {
-            PyList_SetItem(selected_fields_py, i++, PyLong_FromLong(field_num));
         }
     }
 
     /**
      * Initialize the reader
-     * See pq_read function below for description of arguments.
+     * See pq_read_py_entry function below for description of arguments.
      */
-    void init_pq_reader(int32_t* _str_as_dict_cols,
-                        int32_t num_str_as_dict_cols,
+    void init_pq_reader(std::span<int32_t> str_as_dict_cols,
                         int32_t* _part_cols_cat_dtype,
                         int32_t* _selected_part_cols,
                         int32_t num_partition_cols) {
         // initialize reader
-        ArrowDataframeReader::init_arrow_reader(
-            {_str_as_dict_cols, _str_as_dict_cols + num_str_as_dict_cols},
-            false);
+        ArrowReader::init_arrow_reader(str_as_dict_cols, false);
+        this->dict_builders = std::vector<std::shared_ptr<DictionaryBuilder>>(
+            schema->num_fields());
         if (parallel) {
             // Get the average number of pieces per rank. This is used to
             // increase the number of threads of the Arrow batch reader
@@ -58,90 +49,140 @@ class ParquetReader : public ArrowDataframeReader {
             int num_ranks;
             MPI_Comm_size(MPI_COMM_WORLD, &num_ranks);
             uint64_t num_pieces = static_cast<uint64_t>(get_num_pieces());
-            MPI_Allreduce(MPI_IN_PLACE, &num_pieces, 1, MPI_UINT64_T, MPI_SUM,
-                          MPI_COMM_WORLD);
+            CHECK_MPI(
+                MPI_Allreduce(MPI_IN_PLACE, &num_pieces, 1, MPI_UINT64_T,
+                              MPI_SUM, MPI_COMM_WORLD),
+                "ParquetReader::init_pq_reader: MPI error on MPI_Allreduce:");
             avg_num_pieces = num_pieces / static_cast<double>(num_ranks);
         }
         // allocate output partition columns. These are categorical columns
         // where we only fill out the codes in C++ (see fill_partition_column
         // comments)
         for (auto i = 0; i < num_partition_cols; i++) {
-            part_cols.push_back(alloc_array(
+            part_cols.push_back(alloc_array_top_level(
                 count, -1, -1, bodo_array_type::NUMPY,
-                Bodo_CTypes::CTypeEnum(_part_cols_cat_dtype[i]), 0, -1));
+                Bodo_CTypes::CTypeEnum(_part_cols_cat_dtype[i])));
             selected_part_cols.push_back(_selected_part_cols[i]);
+            this->part_cols_cat_dtype.push_back(_part_cols_cat_dtype[i]);
         }
         part_cols_offset.resize(num_partition_cols, 0);
+
+        this->init_pq_scanner();
+        // Construct ChunkedTableBuilder for output in the streaming case.
+        if (this->batch_size != -1) {
+            this->dict_builders =
+                std::vector<std::shared_ptr<DictionaryBuilder>>(
+                    selected_fields.size() + num_partition_cols);
+            for (size_t i = 0; i < selected_fields.size(); i++) {
+                const std::shared_ptr<arrow::Field>& field =
+                    schema->field(selected_fields[i]);
+                this->dict_builders[i] = create_dict_builder_for_array(
+                    arrow_type_to_bodo_data_type(field->type()), false);
+            }
+            for (int i = 0; i < num_partition_cols; i++) {
+                auto partition_col = part_cols[i];
+                this->dict_builders[selected_fields.size() + i] =
+                    create_dict_builder_for_array(partition_col, false);
+            }
+
+            // Generate a mapping from schema index to selected fields for the
+            // str_as_dict_cols.
+            std::vector<int32_t> str_as_dict_cols_map(schema->num_fields(), -1);
+            for (size_t i = 0; i < selected_fields.size(); i++) {
+                str_as_dict_cols_map[selected_fields[i]] = i;
+            }
+
+            // TODO: Remove. This step is unnecessary if we can guarantee that
+            // the arrow schema always specifies if the fields should be
+            // dictionary.
+            for (int str_as_dict_col : str_as_dict_cols) {
+                int32_t index = str_as_dict_cols_map[str_as_dict_col];
+                this->dict_builders[index] = create_dict_builder_for_array(
+                    std::make_unique<bodo::DataType>(bodo_array_type::DICT,
+                                                     Bodo_CTypes::STRING),
+                    false);
+            }
+            auto empty_table = get_empty_out_table();
+            this->out_batches = std::make_shared<ChunkedTableBuilder>(
+                empty_table->schema(), this->dict_builders, (size_t)batch_size);
+        }
     }
 
-    virtual ~ParquetReader() {}
+    virtual ~ParquetReader() {
+        // Remove after reader is finished or on error
+        Py_XDECREF(this->reader);
+    }
 
     /// a piece is a single parquet file in the context of parquet
     virtual size_t get_num_pieces() const override { return file_paths.size(); }
 
     /// returns output partition columns
-    std::vector<array_info*>& get_partition_cols() { return part_cols; }
+    std::vector<std::shared_ptr<array_info>>& get_partition_cols() {
+        return part_cols;
+    }
 
-    array_info* get_input_file_name_col() { return input_file_name_col_arr; }
+    std::shared_ptr<array_info> get_input_file_name_col() {
+        return input_file_name_col_arr;
+    }
 
    protected:
-    virtual void add_piece(PyObject* piece, int64_t num_rows,
-                           int64_t total_rows) override;
+    virtual void add_piece(PyObject* piece, int64_t num_rows) override;
 
     virtual PyObject* get_dataset() override;
 
-    virtual std::shared_ptr<arrow::Schema> get_schema(
-        PyObject* dataset) override;
+    virtual std::tuple<table_info*, bool, uint64_t> read_inner_row_level()
+        override;
 
-    virtual void read_all(TableBuilder& builder) override;
+    std::tuple<table_info*, bool, uint64_t> read_inner_piece_level() override {
+        throw std::runtime_error(
+            "ParquetReader::read_inner_piece_level: Not supported!");
+    }
 
-    PyObject* dnf_filters = nullptr;
-    PyObject* expr_filters = nullptr;
-    // selected columns in the parquet file (not fields). For example,
-    // field "struct<A: int64, B: int64>" has two int64 columns in the
-    // parquet file
-    std::vector<int> selected_columns;
+    virtual std::shared_ptr<table_info> get_empty_out_table() override;
+
+    std::shared_ptr<table_info> empty_out_table;
+
     // Prefix to add to each of the file paths (only used for input_file_name)
     std::string prefix;
+
+    PyObject* expr_filters = nullptr;
     PyObject* filesystem = nullptr;
     // dataset partitioning info (regardless of whether we select partition
     // columns or not)
     PyObject* ds_partitioning = nullptr;
 
-   private:
+    // Parquet files that this process has to read
+    std::vector<std::string> file_paths;
+
     PyObject* path;  // path passed to pd.read_parquet() call
     PyObject* storage_options;
-    PyObject* selected_fields_py;
     bool input_file_name_col;
     bool use_hive;
 
     std::vector<int64_t> pieces_nrows;
     double avg_num_pieces = 0;
 
-    // Parquet files that this process has to read
-    std::vector<std::string> file_paths;
-
-    // selected partition columns
+    // Selected partition columns
     std::vector<int> selected_part_cols;
     // for each piece that this process reads, store the value of each partition
     // column (value is stored as the categorical code). Note that a given
     // piece/file has the same partition value for all of its rows
     std::vector<std::vector<int64_t>> part_vals;
     // output partition columns
-    std::vector<array_info*> part_cols;
+    std::vector<std::shared_ptr<array_info>> part_cols;
     // current fill offset of each partition column
     std::vector<int64_t> part_cols_offset;
 
     // output input_file_name column
     // indices for the dictionary-encoding
-    array_info* input_file_name_col_indices_arr = nullptr;
+    std::shared_ptr<array_info> input_file_name_col_indices_arr = nullptr;
     int64_t input_file_name_col_indices_offset = 0;
     // dictionary for the dictionary encoding
-    array_info* input_file_name_col_dict_arr = nullptr;
+    std::shared_ptr<array_info> input_file_name_col_dict_arr = nullptr;
     int64_t input_file_name_col_dict_arr_total_chars = 0;
     // output array_info for the dictionary-encoded
     // string array
-    array_info* input_file_name_col_arr = nullptr;
+    std::shared_ptr<array_info> input_file_name_col_arr = nullptr;
 
     /**
      * Get values for all partition columns of a piece of
@@ -149,4 +190,30 @@ class ParquetReader : public ArrowDataframeReader {
      * @param piece : ParquetDataset piece (a single parquet file)
      */
     void get_partition_info(PyObject* piece);
+
+    /**
+     * @brief Set up the Arrow Scanner to read the Parquet files
+     * (pieces) associated for the current rank
+     */
+    virtual void init_pq_scanner();
+
+    // Arrow Batched Reader to get next table iteratively
+    PyObject* reader = nullptr;
+
+    // -------------- Streaming Specific Parameters --------------
+
+    // Number of remaining rows to skip outputting
+    int64_t rows_to_skip = -1;
+
+    // Index of the current piece (Parquet file) being read
+    // Needed for constructing partition columns
+    size_t cur_piece = 0;
+
+    // Number of Rows Left in the Current Piece
+    int64_t rows_left_cur_piece;
+
+    // Index Dtype for Partition Columns
+    // Streaming only needs this because we need to
+    // reconstruct the arrays at read time
+    std::vector<int32_t> part_cols_cat_dtype;
 };

@@ -4,28 +4,24 @@ set -exo pipefail
 
 
 # Package Setup
-eval "$(./bin/micromamba shell hook -s posix)"
-micromamba activate
-micromamba install -q -y boa anaconda-client conda-verify curl -c conda-forge
+eval "$(micromamba shell hook -s posix)"
+micromamba activate sas_build
 
 
 # Build Pakcage
 CHANNEL_NAME=${1:-bodo-binary}
 
 echo "********** Publishing to Artifactory **********"
-USERNAME=`cat $HOME/secret_file | grep artifactory.ci.username | cut -f 2 -d' '`
-TOKEN=`cat $HOME/secret_file | grep artifactory.ci.token | cut -f 2 -d' '`
-ANACONDA_TOKEN=`cat $HOME/secret_file | grep anaconda.org.token | cut -f 2 -d' '`
 
 # We always upload to the main channel since it's a manual pipeline and
 # the package is not expected to change.
 label="main"
 
 cd buildscripts/azurefs-sas-token-provider/conda-recipe/
-conda mambabuild . --no-test -c https://${USERNAME}:${TOKEN}@bodo.jfrog.io/artifactory/api/conda/${BODO_CHANNEL_NAME} -c conda-forge
+conda build . -c https://${USERNAME}:${TOKEN}@bodo.jfrog.io/artifactory/api/conda/${BODO_CHANNEL_NAME} -c conda-forge
 
 # Upload to Anaconda
-package=`ls $CONDA_PREFIX/conda-bld/noarch/bodo-azurefs-sas-token-provider*.tar.bz2`
+package=`ls $CONDA_PREFIX/conda-bld/noarch/bodo-azurefs-sas-token-provider*.conda`
 if [[ -z "$package" ]]; then
   echo "Unable to Find Package. Exiting ..."
   exit 1

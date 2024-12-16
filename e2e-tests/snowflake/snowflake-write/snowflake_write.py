@@ -6,9 +6,8 @@ from uuid import uuid4
 import numba
 import numpy as np
 import pandas as pd
-from mpi4py import MPI
 from utils.utils import (
-    checksum_str_df,
+    checksum_str_df_jit,
     drop_sf_table,
     get_sf_table,
     get_sf_write_conn,
@@ -17,10 +16,8 @@ from utils.utils import (
 import bodo
 import bodo.io.snowflake
 
-comm = MPI.COMM_WORLD
 
-
-@bodo.jit
+@bodo.jit(spawn=True)
 def checksum(df):
     """
     Compute checksum of lineitem dataframe.
@@ -41,13 +38,20 @@ def checksum(df):
     df_str = df[
         ["l_returnflag", "l_linestatus", "l_shipinstruct", "l_shipmode", "l_comment"]
     ]
-    with bodo.objmode(df_str_sum="int64"):
-        df_str_sum = checksum_str_df(df_str)
+
+    df_str_sum = checksum_str_df_jit(df_str)
 
     return df_no_str_sum + df_str_sum
 
 
-@bodo.jit(cache=True)
+@bodo.jit(spawn=True)
+def read_and_compute_checksum_and_len(table_name, conn):
+    df = get_sf_table(table_name, conn)
+    df_checksum = checksum(df)
+    return df_checksum, len(df)
+
+
+@bodo.jit(cache=True, spawn=True)
 def main(read_path, fdate, table_name, sf_conn):
     """
     Snowflake E2E Write test. This reads the lineitem table from S3,
@@ -92,7 +96,7 @@ def main(read_path, fdate, table_name, sf_conn):
     bodo.barrier()
     print("Snowflake Write time: ", time.time() - t0)
 
-    return flineitem
+    return len(flineitem)
 
 
 if __name__ == "__main__":
@@ -104,12 +108,10 @@ if __name__ == "__main__":
 
     # Create a random table name to write to and broadcast to all ranks
     table_name = None
-    if comm.Get_rank() == 0:
-        # We use uppercase due to an issue reading tables
-        # with lowercase letters.
-        # https://bodo.atlassian.net/browse/BE-3534
-        table_name = f"lineitem_out_{str(uuid4())[:8]}".upper()
-    table_name = comm.bcast(table_name)
+    # We use uppercase due to an issue reading tables
+    # with lowercase letters.
+    # https://bodo.atlassian.net/browse/BE-3534
+    table_name = f"lineitem_out_{str(uuid4())[:8]}".upper()
 
     # Get Snowflake connection string based on the user.
     # user=1 is an AWS based account, and user=2 is an Azure based account.
@@ -121,45 +123,30 @@ if __name__ == "__main__":
 
     # Perform the e2e test
     t0 = time.time()
-    out_df = main(
+    len_out_df = main(
         "s3://tpch-data-parquet/SF1/lineitem.pq/",
         datetime.strptime("1998-09-02", "%Y-%m-%d").date(),
         table_name,
         sf_conn,
     )
-    # Add a barrier for synchronization purposes so that
-    # the get length and drop commands are done after all the writes. This is
-    # technically not required since the main function
-    # has barriers, but still good to have.
-    bodo.barrier()
-    if bodo.get_rank() == 0:
-        print("Total time: ", time.time() - t0, " s")
+
+    print("Total time: ", time.time() - t0, " s")
     if args.require_cache and isinstance(main, numba.core.dispatcher.Dispatcher):
         assert (
             main._cache_hits[main.signatures[0]] == 1
         ), "ERROR: Bodo did not load from cache"
 
-    if bodo.get_rank() == 0:
-        print("Getting table from Snowflake for comparison")
+    print("Getting table from Snowflake for comparison")
     # Get the table from Snowflake, so we can verify that
     # all data was written as expected.
-    sf_df = get_sf_table(table_name, sf_conn)
-
-    # Snowflake returns column names as lowercase, so for consistency
-    # we convert all column names to lowercase
-    out_df.columns = list(map(str.lower, out_df.columns))
-    sf_df.columns = list(map(str.lower, sf_df.columns))
 
     # Compute lengths and compare
-    len_out_df = comm.allreduce(len(out_df), op=MPI.SUM)
-    len_sf_df = comm.allreduce(len(sf_df), op=MPI.SUM)
+    # Compute checksum and make sure it's correct
+    sf_df_checksum, len_sf_df = read_and_compute_checksum_and_len(table_name, sf_conn)
 
     assert (
         len_out_df == len_sf_df
     ), f"Expected length ({len_out_df}) != Table length in Snowflake ({len_sf_df})"
-
-    # Compute checksum and make sure it's correct
-    sf_df_checksum = checksum(sf_df)
 
     # Checksum can be off-by-one due to rounding issues (e.g. in disc_price and charge columns)
     assert (
@@ -167,24 +154,14 @@ if __name__ == "__main__":
     ), f"Expected checksum (between 1903874716870990 and 1903874716871000) != Checksum of table in Snowflake ({sf_df_checksum})"
 
     # Drop the table, to avoid dangling tables on our account.
-    # This is done on a single rank, and any errors are then
-    # broadcasted and raised on all ranks to avoid any hangs.
-    drop_err = None
-    if bodo.get_rank() == 0:
-        try:
-            drop_result = drop_sf_table(
-                table_name,
-                sf_conn,
-            )
-            print("drop_result: ", drop_result)
-            assert (
-                isinstance(drop_result, list)
-                and (len(drop_result) == 1)
-                and (len(drop_result[0]) == 1)
-                and "successfully dropped" in drop_result[0][0]
-            ), "Snowflake DROP table failed, see result above. Might require manual cleanup."
-        except Exception as e:
-            drop_err = e
-    drop_err = comm.bcast(drop_err)
-    if isinstance(drop_err, Exception):
-        raise drop_err
+    drop_result = drop_sf_table(
+        table_name,
+        sf_conn,
+    )
+    print("drop_result: ", drop_result)
+    assert (
+        isinstance(drop_result, list)
+        and (len(drop_result) == 1)
+        and (len(drop_result[0]) == 1)
+        and "successfully dropped" in drop_result[0][0]
+    ), "Snowflake DROP table failed, see result above. Might require manual cleanup."

@@ -1,15 +1,19 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """Some kernels for Series related functions. This is a legacy file that needs to be
 refactored.
 """
+
 import datetime
 
 import numba
 import numpy as np
+import pandas as pd
 from numba.core import types
 from numba.extending import overload, register_jitable
 
 import bodo
+from bodo.hiframes.time_ext import TimeArrayType
+from bodo.libs.decimal_arr_ext import _str_to_decimal_scalar
+from bodo.libs.float_arr_ext import FloatDtype, FloatingArrayType
 from bodo.libs.int_arr_ext import IntDtype
 from bodo.utils.typing import decode_if_dict_array
 
@@ -77,8 +81,10 @@ def _get_type_max_value(dtype):  # pragma: no cover
 
 @overload(_get_type_max_value, inline="always", no_unliteral=True)
 def _get_type_max_value_overload(dtype):
-    # pd.Int64Dtype(), pd.IntegerArray, etc.
-    if isinstance(dtype, (bodo.IntegerArrayType, IntDtype)):
+    # nullable float and int data
+    if isinstance(
+        dtype, (bodo.IntegerArrayType, IntDtype, FloatingArrayType, FloatDtype)
+    ):
         _dtype = dtype.dtype
         return lambda dtype: numba.cpython.builtins.get_type_max_value(
             _dtype
@@ -87,6 +93,10 @@ def _get_type_max_value_overload(dtype):
     # datetime.date array
     if dtype == bodo.datetime_date_array_type:
         return lambda dtype: _get_date_max_value()  # pragma: no cover
+
+    # bodo.Time array
+    if dtype == TimeArrayType:
+        return lambda dtype: _get_time_max_value()  # pragma: no cover
 
     # dt64
     if isinstance(dtype.dtype, types.NPDatetime):
@@ -100,11 +110,42 @@ def _get_type_max_value_overload(dtype):
             numba.cpython.builtins.get_type_max_value(numba.core.types.int64)
         )  # pragma: no cover
 
+    # tz-aware timestamp array
+    if isinstance(dtype, bodo.DatetimeArrayType):
+        tz = dtype.tz
+
+        def impl(dtype):  # pragma: no cover
+            int_value = numba.cpython.builtins.get_type_max_value(
+                numba.core.types.int64
+            )
+            result = bodo.hiframes.pd_timestamp_ext.convert_val_to_timestamp(
+                int_value, tz
+            )
+            return result
+
+        return impl
+
+    # timestamptz array
+    if dtype == bodo.timestamptz_array_type:
+        return lambda dtype: _get_timestamptz_max_value()
+
     if dtype.dtype == types.bool_:
         return lambda dtype: True  # pragma: no cover
 
+    if isinstance(dtype, bodo.DecimalArrayType):
+        scale = dtype.dtype.scale
+        precision = dtype.dtype.precision
+
+        def impl(dtype):
+            decimal_string = "9" * (precision - scale) + "." + "9" * scale
+            decimal_val, _ = _str_to_decimal_scalar(decimal_string, precision, scale)
+            return decimal_val
+
+        return impl
+
+    _dtype = dtype.dtype
     return lambda dtype: numba.cpython.builtins.get_type_max_value(
-        dtype
+        _dtype
     )  # pragma: no cover
 
 
@@ -113,15 +154,29 @@ def _get_date_max_value():  # pragma: no cover
     return datetime.date(datetime.MAXYEAR, 12, 31)
 
 
+@register_jitable
+def _get_time_max_value():  # pragma: no cover
+    return bodo.Time(23, 59, 59, 999, 999, 999)
+
+
+@register_jitable
+def _get_timestamptz_max_value():  # pragma: no cover
+    return bodo.TimestampTZ(
+        pd.Timestamp(numba.cpython.builtins.get_type_max_value(numba.core.types.int64)),
+        0,
+    )
+
+
 def _get_type_min_value(dtype):  # pragma: no cover
     return 0
 
 
 @overload(_get_type_min_value, inline="always", no_unliteral=True)
 def _get_type_min_value_overload(dtype):
-
-    # pd.Int64Dtype(), pd.IntegerArray, etc.
-    if isinstance(dtype, (bodo.IntegerArrayType, IntDtype)):
+    # nullable float and int data
+    if isinstance(
+        dtype, (bodo.IntegerArrayType, IntDtype, FloatingArrayType, FloatDtype)
+    ):
         _dtype = dtype.dtype
         return lambda dtype: numba.cpython.builtins.get_type_min_value(
             _dtype
@@ -130,6 +185,27 @@ def _get_type_min_value_overload(dtype):
     # datetime.date array
     if dtype == bodo.datetime_date_array_type:
         return lambda dtype: _get_date_min_value()  # pragma: no cover
+
+    # bodo.Time array
+    if dtype == TimeArrayType:
+        return lambda dtype: _get_time_min_value()  # pragma: no cover
+
+    # Datetime array
+    if isinstance(
+        dtype, bodo.libs.pd_datetime_arr_ext.DatetimeArrayType
+    ):  # pragma: no cover
+        tz = dtype.tz
+
+        def impl(dtype):  # pragma: no cover
+            int_value = numba.cpython.builtins.get_type_min_value(
+                numba.core.types.int64
+            )
+            result = bodo.hiframes.pd_timestamp_ext.convert_val_to_timestamp(
+                int_value, tz
+            )
+            return result
+
+        return impl
 
     # dt64
     if isinstance(dtype.dtype, types.NPDatetime):
@@ -144,17 +220,46 @@ def _get_type_min_value_overload(dtype):
             numba.cpython.builtins.get_type_min_value(numba.core.types.uint64)
         )  # pragma: no cover
 
+    # timestamptz array
+    if dtype == bodo.timestamptz_array_type:
+        return lambda dtype: _get_timestamptz_min_value()
+
     if dtype.dtype == types.bool_:
         return lambda dtype: False  # pragma: no cover
 
+    if isinstance(dtype, bodo.DecimalArrayType):
+        scale = dtype.dtype.scale
+        precision = dtype.dtype.precision
+
+        def impl(dtype):
+            decimal_string = "-" + "9" * (precision - scale) + "." + "9" * scale
+            decimal_val, _ = _str_to_decimal_scalar(decimal_string, precision, scale)
+            return decimal_val
+
+        return impl
+
+    _dtype = dtype.dtype
     return lambda dtype: numba.cpython.builtins.get_type_min_value(
-        dtype
+        _dtype
     )  # pragma: no cover
 
 
 @register_jitable
 def _get_date_min_value():  # pragma: no cover
     return datetime.date(datetime.MINYEAR, 1, 1)
+
+
+@register_jitable
+def _get_time_min_value():  # pragma: no cover
+    return bodo.Time()
+
+
+@register_jitable
+def _get_timestamptz_min_value():  # pragma: no cover
+    return bodo.TimestampTZ(
+        pd.Timestamp(numba.cpython.builtins.get_type_min_value(numba.core.types.int64)),
+        0,
+    )
 
 
 @overload(min)
@@ -259,12 +364,18 @@ def compute_skew(first_moment, second_moment, third_moment, count):  # pragma: n
         return np.nan
     mu = first_moment / count
     numerator = third_moment - 3 * second_moment * mu + 2 * count * mu**3
-    denominator = second_moment - mu * first_moment
-    s = (
-        (count * (count - 1) ** (1.5) / (count - 2))
-        * numerator
-        / (denominator ** (1.5))
-    )
+    denominator = (second_moment - mu * first_moment) ** 1.5
+    # If the denominator is deemed sufficiently close to zero, return zero by default.
+    # These constants were derived from trial and error to correctly flag values
+    # that should be zero without causing any of the other tests to be falsely
+    # flagged just because they are near zero.
+    if (
+        numerator == 0.0
+        or np.abs(denominator) < 1e-14
+        or np.log2(np.abs(denominator)) - np.log2(np.abs(numerator)) < -20
+    ):
+        return 0.0
+    s = (count * (count - 1) ** (1.5) / (count - 2)) * numerator / (denominator)
     s = s / (count - 1)
     return s
 
@@ -283,9 +394,19 @@ def compute_kurt(
         - 3 * count * mu**4
     )
     m2 = second_moment - mu * first_moment
-    adj = 3 * (count - 1) ** 2 / ((count - 2) * (count - 3))
     numer = count * (count + 1) * (count - 1) * m4
     denom = (count - 2) * (count - 3) * m2**2
+    # If the denominator is deemed sufficiently close to zero, return zero by default.
+    # These constants were derived from trial and error to correctly flag values
+    # that should be zero without causing any of the other tests to be falsely
+    # flagged just because they are near zero.
+    if (
+        numer == 0.0
+        or np.abs(denom) < 1e-14
+        or np.log2(np.abs(denom)) - np.log2(np.abs(numer)) < -20
+    ):
+        return 0.0
+    adj = 3 * (count - 1) ** 2 / ((count - 2) * (count - 3))
     s = (count - 1) * (numer / denom - adj)
     s = s / (count - 1)
     return s

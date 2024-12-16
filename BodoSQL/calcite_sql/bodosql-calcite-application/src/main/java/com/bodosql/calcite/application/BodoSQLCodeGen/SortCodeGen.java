@@ -1,9 +1,10 @@
 package com.bodosql.calcite.application.BodoSQLCodeGen;
 
-import static com.bodosql.calcite.application.Utils.Utils.getBodoIndent;
-import static com.bodosql.calcite.application.Utils.Utils.makeQuoted;
-
+import com.bodosql.calcite.ir.Expr;
+import com.bodosql.calcite.ir.Variable;
+import java.util.ArrayList;
 import java.util.List;
+import kotlin.Triple;
 import org.apache.calcite.rel.RelFieldCollation;
 
 /**
@@ -15,7 +16,6 @@ public class SortCodeGen {
    * Function that return the necessary generated code for a Sort expression.
    *
    * @param inVar The input variable.
-   * @param outVar The output variable.
    * @param colNames The names of columns that may be sorted.
    * @param sortOrders The directions of each sort (Ascending/Descending).
    * @param limitStr String corresponding to limit param in limit queries. If there is no limit this
@@ -24,60 +24,49 @@ public class SortCodeGen {
    *     limit/offset this is an empty string.
    * @return The code generated for the Sort expression.
    */
-  public static String generateSortCode(
-      String inVar,
-      String outVar,
+  public static Expr generateSortCode(
+      Variable inVar,
       List<String> colNames,
       List<RelFieldCollation> sortOrders,
       String limitStr,
       String offsetStr) {
     // StringBuilder for the final expr
-    StringBuilder sortString = new StringBuilder();
-    final String indent = getBodoIndent();
-    sortString.append(indent).append(outVar).append(" = ").append(inVar);
+    Triple<Expr.List, Expr.List, Expr.List> params = generateSortParameters(colNames, sortOrders);
+    Expr.List byList = params.getFirst();
+    Expr.List ascendingList = params.getSecond();
+    Expr.List naPositionList = params.getThird();
 
-    // Sort handles both limit and sort_values (possibly both).
-    // If the sortOrders is empty then we are not sorting
+    Expr sortExpr = new Expr.SortValues(inVar, byList, ascendingList, naPositionList);
+
+    if (!offsetStr.isEmpty()) {
+      Expr sliceStart = new Expr.Raw(offsetStr);
+      Expr sliceEnd = new Expr.Raw(offsetStr + " + " + limitStr);
+      Expr limitSlice = new Expr.Slice(sliceStart, sliceEnd);
+
+      sortExpr = new Expr.GetItem(new Expr.Attribute(sortExpr, "iloc"), limitSlice);
+    } else if (!limitStr.isEmpty()) {
+      sortExpr = new Expr.Method(sortExpr, "head", List.of(new Expr.Raw(limitStr)), List.of());
+    }
+    return sortExpr;
+  }
+
+  public static Triple<Expr.List, Expr.List, Expr.List> generateSortParameters(
+      List<String> colNames, List<RelFieldCollation> sortOrders) {
+    List<Expr> byList = new ArrayList<>();
+    List<Expr> ascendingList = new ArrayList<>();
+    List<Expr.StringLiteral> naPositionList = new ArrayList<>();
+
     if (!sortOrders.isEmpty()) {
-      // StringBuilder for the ascending section
-      StringBuilder orderString = new StringBuilder();
-      StringBuilder naPositionString = new StringBuilder();
-      sortString.append(".sort_values(by=[");
-      orderString.append("ascending=[");
-      naPositionString.append("na_position=[");
       for (RelFieldCollation order : sortOrders) {
         int index = order.getFieldIndex();
-        sortString.append(makeQuoted(colNames.get(index))).append(", ");
-        orderString.append(getAscendingBoolString(order.getDirection())).append(", ");
-        naPositionString.append(getNAPositionString(order.nullDirection)).append(", ");
+        naPositionList.add(getNAPositionStringLiteral(order.nullDirection));
+        byList.add(new Expr.StringLiteral(colNames.get(index)));
+        ascendingList.add(getAscendingExpr(order.getDirection()));
       }
-      orderString.append("]");
-      naPositionString.append("]");
-      sortString
-          .append("], ")
-          .append(orderString)
-          .append(", ")
-          .append(naPositionString)
-          .append(")");
     }
-    if (!offsetStr.equals("")) {
-      // If offsetStr is not empty, we are taking a limit with an offset and need df.loc
-      sortString
-          .append(".iloc[")
-          .append(offsetStr)
-          .append(": ")
-          .append(offsetStr)
-          .append(" + ")
-          .append(limitStr)
-          .append(", :]");
-    } else if (!limitStr.equals("")) {
-      // If limitStr is not empty but offset is, we are taking a limit with no offset and can use
-      // head().
-      // TODO: Determine if we should use iloc here.
-      sortString.append(".head(").append(limitStr).append(")");
-    }
-    sortString.append("\n");
-    return sortString.toString();
+
+    return new Triple<>(
+        new Expr.List(byList), new Expr.List(ascendingList), new Expr.List(naPositionList));
   }
 
   /**
@@ -86,12 +75,12 @@ public class SortCodeGen {
    * @param direction whether Order by is ascending or descending
    * @return true if ascending order false otherwise.
    */
-  public static String getAscendingBoolString(RelFieldCollation.Direction direction) {
-    String result = "False";
+  public static Expr.BooleanLiteral getAscendingExpr(RelFieldCollation.Direction direction) {
+    boolean val = false;
     if (direction == RelFieldCollation.Direction.ASCENDING) {
-      result = "True";
+      val = true;
     }
-    return result;
+    return new Expr.BooleanLiteral(val);
   }
 
   /**
@@ -100,11 +89,12 @@ public class SortCodeGen {
    * @param direction whether NA position is first or last
    * @return String "first" if first and "last" if last.
    */
-  public static String getNAPositionString(RelFieldCollation.NullDirection direction) {
-    String result = makeQuoted("last");
+  public static Expr.StringLiteral getNAPositionStringLiteral(
+      RelFieldCollation.NullDirection direction) {
+    String result = "last";
     if (direction == RelFieldCollation.NullDirection.FIRST) {
-      result = makeQuoted("first");
+      result = "first";
     }
-    return result;
+    return new Expr.StringLiteral(result);
   }
 }

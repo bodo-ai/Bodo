@@ -2,105 +2,77 @@
 API used to translate Java BodoParquetInfo objects into
 Python Objects usable inside Bodo.
 """
-from collections import namedtuple
-from typing import List, Tuple
+
+import os
+import typing as pt
+from dataclasses import dataclass
 from urllib.parse import urlparse
 
-from bodo_iceberg_connector.catalog_conn import _remove_prefix, parse_conn_str
-from bodo_iceberg_connector.config import DEFAULT_PORT
+from py4j.protocol import Py4JError
+
+from bodo_iceberg_connector.catalog_conn import parse_conn_str
 from bodo_iceberg_connector.errors import IcebergJavaError
-from bodo_iceberg_connector.filter_to_java import convert_expr_to_java_parsable
-from bodo_iceberg_connector.py4j_support import get_java_table_handler
-from py4j.protocol import Py4JJavaError
+from bodo_iceberg_connector.filter_to_java import FilterExpr
+from bodo_iceberg_connector.py4j_support import get_catalog
+from bodo_iceberg_connector.schema_helper import arrow_schema_j2py
 
-# Named Tuple for Parquet info
-BodoIcebergParquetInfo = namedtuple("BodoIcebergParquetInfo", "filepath start length")
+if pt.TYPE_CHECKING:
+    import pyarrow as pa
 
 
-def bodo_connector_get_parquet_file_list(
-    conn_str: str, db_name: str, table: str, filters
-) -> Tuple[List[str], List[str]]:
+@dataclass
+class IcebergParquetInfo:
+    """Named Tuple for Parquet info"""
+
+    # Original path of the parquet file from Iceberg metadata
+    orig_path: str
+    # Standardized path to the parquet file for Bodo use
+    standard_path: str
+    # Number of rows in the parquet file from Iceberg metadata
+    row_count: int
+    # Iceberg Schema ID the parquet file was written with
+    schema_id: int
+
+
+def get_bodo_parquet_info(
+    conn_str: str, db_name: str, table: str, filters: FilterExpr | None
+) -> tuple[list[IcebergParquetInfo], dict[int, "pa.Schema"], int]:
     """
-    Gets the list of files for use by Bodo. The port value here
-    is set and controlled by a default value for the bodo_iceberg_connector
-    package.
-
-    Here we return two lists:
-        List 1: The Iceberg paths that have been cleaned up. Here we standardize the s3
-        filepath and remove any "file:" header. In addition we convert files not on s3
-        to their absolute path
-
-        List 2: The Iceberg paths exactly as given. These may have various headers and
-        are generally relative paths.
-
-        For example if the absolute path was /Users/bodo/iceberg_db/my_table/part01.pq
-        and the iceberg directory is iceberg_db, then the path in list 1 would be
-        /Users/bodo/iceberg_db/my_table/part01.pq and the path in list 2 would be
-        iceberg_db/my_table/part01.pq.
-    """
-    pq_infos = get_bodo_parquet_info(DEFAULT_PORT, conn_str, db_name, table, filters)
-
-    # filepath is a URI (file:///User/sw/...) or a relative path that needs converted to
-    # a full path
-    # Replace Hadoop S3A URI scheme with regular S3 Scheme
-    file_paths = [x.filepath for x in pq_infos]
-    return (
-        [
-            _remove_prefix(path.replace("s3a://", "s3://"), "file:")
-            if _has_uri_scheme(path)
-            else f"{_remove_prefix(conn_str, 'file:')}/{path}"
-            for path in file_paths
-        ],
-        file_paths,
-    )
-
-
-def bodo_connector_get_parquet_info(warehouse, schema, table, filters):
-    """
-    Gets the BodoIcebergParquetInfo for use by Bodo. The port value here
-    is set and controlled by a default value for the bodo_iceberg_connector
-    package.
-    """
-    return get_bodo_parquet_info(DEFAULT_PORT, warehouse, schema, table, filters)
-
-
-def get_bodo_parquet_info(port, conn_str: str, db_name: str, table: str, filters):
-    """
-    Returns the BodoIcebergParquetInfo for a table.
-
+    Returns the IcebergParquetInfo for a table.
     Port is unused and kept in case we opt to switch back to py4j
     """
 
     try:
-        catalog_type, _ = parse_conn_str(conn_str)
+        catalog_type, warehouse_loc = parse_conn_str(conn_str)
 
-        bodo_iceberg_table_reader = get_java_table_handler(
-            conn_str,
-            catalog_type,
-            db_name,
-            table,
-        )
+        handler = get_catalog(conn_str, catalog_type)
 
-        filter_expr = convert_expr_to_java_parsable(filters)
-        java_parquet_infos = get_java_parquet_info(
-            bodo_iceberg_table_reader, filter_expr
-        )
+        filters = FilterExpr.default() if filters is None else filters
+        filter_expr = filters.to_java()
+        java_out = handler.getParquetInfo(db_name, table, filter_expr)
+        java_parquet_infos = java_out.getFirst()
+        java_all_schemas = java_out.getSecond()
+        get_file_to_schema_us = java_out.getThird() // 1000
 
-    except Py4JJavaError as e:
+    except Py4JError as e:
         raise IcebergJavaError.from_java_error(e)
 
-    return java_to_python(java_parquet_infos)
+    return (
+        java_pq_info_to_python(java_parquet_infos, warehouse_loc),
+        {
+            item.getKey(): arrow_schema_j2py(item.getValue())
+            for item in java_all_schemas.entrySet()
+        },
+        get_file_to_schema_us,
+    )
 
 
-def get_java_parquet_info(bodo_iceberg_table_reader, filter_expr):
-    """Returns the parquet info as a Java object"""
-    return bodo_iceberg_table_reader.getParquetInfo(filter_expr)
-
-
-def java_to_python(java_parquet_infos) -> List[BodoIcebergParquetInfo]:
+def java_pq_info_to_python(
+    java_parquet_infos, warehouse_loc: str | None
+) -> list[IcebergParquetInfo]:
     """
     Converts an Iterable of Java BodoParquetInfo objects
-    to an equivalent list of Named Tuples.
+    to an equivalent list of IcebergParquetInfo.
     """
     pq_infos = []
     for java_pq_info in java_parquet_infos:
@@ -108,19 +80,57 @@ def java_to_python(java_parquet_infos) -> List[BodoIcebergParquetInfo]:
             raise RuntimeError(
                 "Iceberg Dataset contains DeleteFiles, which is not yet supported by Bodo"
             )
+        orig_path = str(java_pq_info.getFilepath())
         pq_infos.append(
-            BodoIcebergParquetInfo(
-                str(java_pq_info.getFilepath()),
-                int(java_pq_info.getStart()),
-                int(java_pq_info.getLength()),
+            IcebergParquetInfo(
+                orig_path,
+                standardize_path(orig_path, warehouse_loc),
+                int(java_pq_info.getRowCount()),
+                int(java_pq_info.getSchemaID()),
             )
         )
     return pq_infos
+
+
+def standardize_path(path: str, warehouse_loc: str | None) -> str:
+    if warehouse_loc is not None:
+        warehouse_loc = warehouse_loc.replace("s3a://", "s3://").removeprefix("file:")
+
+    if _has_uri_scheme(path):
+        return (
+            path.replace("s3a://", "s3://")
+            .replace("wasbs://", "abfss://")
+            .replace("wasb://", "abfs://")
+            .replace("blob.core.windows.net", "dfs.core.windows.net")
+            .removeprefix("file:")
+        )
+    elif warehouse_loc is not None:
+        return os.path.join(warehouse_loc, path)
+    else:
+        return path
 
 
 def _has_uri_scheme(path: str):
     """return True of path has a URI scheme, e.g. file://, s3://, etc."""
     try:
         return urlparse(path).scheme != ""
-    except:
+    except Exception:
         return False
+
+
+def bodo_connector_get_total_num_pq_files_in_table(
+    conn_str: str, db_name: str, table: str
+) -> int:
+    """
+    Returns the number of parquet files in the given Iceberg table.
+    Throws a IcebergJavaError if an error occurs.
+    """
+    try:
+        catalog_type, _ = parse_conn_str(conn_str)
+
+        bodo_iceberg_table_reader = get_catalog(conn_str, catalog_type)
+
+        return bodo_iceberg_table_reader.getNumParquetFiles(db_name, table)
+
+    except Py4JError as e:
+        raise IcebergJavaError.from_java_error(e)

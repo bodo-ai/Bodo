@@ -1,88 +1,77 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
 transforms the IR to remove features that Numba's type inference cannot support
 such as non-uniform dictionary input of `pd.DataFrame({})`.
 """
-import types as pytypes
-import sys
-import warnings
-import itertools
+
 import datetime
-import pandas as pd
-import numpy as np
-import pyarrow as pa
+import itertools
+import sys
+import types as pytypes
+import warnings
+from typing import TYPE_CHECKING
 
 import numba
+import numpy as np
+import pandas as pd
 from numba.core import ir, ir_utils, types
-
 from numba.core.ir_utils import (
-    mk_unique_var,
-    find_topo_order,
-    dprint_func_ir,
-    find_const,
     GuardException,
-    compile_to_numba_ir,
-    replace_arg_nodes,
-    find_callname,
-    guard,
-    get_definition,
     build_definitions,
+    compile_to_numba_ir,
     compute_cfg_from_blocks,
+    dprint_func_ir,
+    find_callname,
+    find_const,
+    find_topo_order,
+    get_definition,
+    guard,
+    mk_unique_var,
+    replace_arg_nodes,
 )
 from numba.core.registry import CPUDispatcher
 
-
 import bodo
+import bodo.hiframes.pd_dataframe_ext
 import bodo.io
-from bodo.io import h5
-from bodo.utils.utils import is_assign, is_call, is_expr
-from bodo.libs.str_arr_ext import string_array_type
-from bodo.libs.int_arr_ext import IntegerArrayType
-from bodo.libs.bool_arr_ext import boolean_array
-from bodo.libs.dict_arr_ext import dict_str_arr_type
-from bodo.hiframes.pd_index_ext import RangeIndexType
 import bodo.ir
 import bodo.ir.aggregate
 import bodo.ir.join
 import bodo.ir.sort
-from bodo.ir import csv_ext
-from bodo.ir import sql_ext
-from bodo.ir import json_ext
-from bodo.io.parquet_pio import ParquetHandler
-from bodo.io.helpers import _get_numba_typ_from_pa_typ
-from bodo.utils.typing import ColNamesMetaType
-
-from bodo.hiframes.pd_categorical_ext import PDCategoricalDtype, CategoricalArrayType
-import bodo.hiframes.pd_dataframe_ext
+from bodo.hiframes.pd_categorical_ext import CategoricalArrayType, PDCategoricalDtype
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
+from bodo.hiframes.pd_index_ext import RangeIndexType
+from bodo.io import h5
+from bodo.ir import csv_ext, json_ext, parquet_ext, sql_ext
+from bodo.libs.bool_arr_ext import boolean_array_type
+from bodo.libs.float_arr_ext import FloatingArrayType
+from bodo.libs.int_arr_ext import IntegerArrayType
+from bodo.libs.str_arr_ext import string_array_type
+from bodo.numba_compat import mini_dce
 from bodo.utils.transform import (
+    compile_func_single_block,
+    fix_struct_return,
+    get_call_expr_arg,
+    get_const_arg,
     get_const_value,
     get_const_value_inner,
-    update_node_list_definitions,
-    compile_func_single_block,
-    get_call_expr_arg,
-    fix_struct_return,
+    get_runtime_join_filter_terms,
     set_call_expr_arg,
+    update_node_list_definitions,
 )
 from bodo.utils.typing import (
     BodoError,
     BodoWarning,
+    ColNamesMetaType,
+    FileInfo,
     raise_bodo_error,
     to_nullable_type,
-    FileInfo,
     to_str_arr_if_dict_array,
 )
-from bodo.utils.utils import check_java_installation
+from bodo.utils.utils import check_java_installation, is_assign, is_call, is_expr
 
-from bodo.numba_compat import mini_dce
-
-
-# dummy sentinel singleton to designate constant value not found for variable
-class ConstNotFound:
-    pass
-
-
-CONST_NOT_FOUND = ConstNotFound()
+# Imports for typechecking
+if TYPE_CHECKING:  # pragma: no cover
+    from snowflake.connector import SnowflakeConnection
 
 
 class UntypedPass:
@@ -92,7 +81,16 @@ class UntypedPass:
     type inference due to complexity such as pd.read_csv().
     """
 
-    def __init__(self, func_ir, typingctx, args, _locals, metadata, flags):
+    def __init__(
+        self,
+        func_ir,
+        typingctx,
+        args,
+        _locals,
+        metadata,
+        flags,
+        is_independent: bool = False,
+    ):
         self.func_ir = func_ir
         self.typingctx = typingctx
         self.args = args
@@ -103,11 +101,14 @@ class UntypedPass:
         ir_utils._the_max_label.update(max(func_ir.blocks.keys()))
 
         self.arrow_tables = {}
-        self.pq_handler = ParquetHandler(func_ir, typingctx, args, _locals)
+        self.pq_handler = parquet_ext.ParquetHandler(func_ir, typingctx, args, _locals)
         self.h5_handler = h5.H5_IO(self.func_ir, _locals, flags, args)
         # save names of arguments and return values to catch invalid dist annotation
         self._arg_names = set()
         self._return_varnames = set()
+        # Is code executing independently on each rank?
+        self._is_independent = is_independent
+        self._snowflake_conn_cache = {}
 
     def run(self):
         """run untyped pass transform"""
@@ -164,9 +165,7 @@ class UntypedPass:
             warnings.warn(
                 BodoWarning(
                     "Only function arguments and return values can be specified as "
-                    "distributed. Ignoring the flag for variables: {}.".format(
-                        extra_vars
-                    )
+                    f"distributed. Ignoring the flag for variables: {extra_vars}."
                 )
             )
         # same for "replicated" flag
@@ -180,7 +179,9 @@ class UntypedPass:
                     f"replicated. Ignoring the flag for variables: {extra_vars}."
                 )
             )
-        return
+
+        # clear connection cache to close connections
+        self._snowflake_conn_cache.clear()
 
     def _run_assign(self, assign, label):
         lhs = assign.target.name
@@ -200,7 +201,7 @@ class UntypedPass:
             self._working_body.insert(0, meta_assign)
             pivot_call.kws = list(pivot_call.kws)
             pivot_call.kws.append(("_pivot_values", meta_var))
-            self.locals[meta_var.name] = bodo.utils.typing.MetaType(pivot_values)
+            self.locals[meta_var.name] = bodo.utils.typing.MetaType(tuple(pivot_values))
 
         # save arg name to catch invalid dist annotations
         if isinstance(rhs, ir.Arg):
@@ -216,7 +217,7 @@ class UntypedPass:
             and rhs.value.__name__ == "h5py"
             and not bodo.utils.utils.has_supported_h5py()
         ):  # pragma: no cover
-            raise BodoError("Bodo requires HDF5 1.10 for h5py support", rhs.loc)
+            raise BodoError("Bodo requires HDF5 >=1.10 for h5py support", rhs.loc)
 
         if isinstance(rhs, ir.Expr):
             if rhs.op == "call":
@@ -522,7 +523,7 @@ class UntypedPass:
         if (
             rhs.attr == "fromhex"
             and isinstance(val_def, ir.Global)
-            and val_def.value == bytes
+            and val_def.value is bytes
         ):
             return compile_func_single_block(
                 eval("lambda: bodo.libs.binary_arr_ext.bytes_fromhex"),
@@ -586,6 +587,15 @@ class UntypedPass:
         else:
             func_name, func_mod = fdef
 
+        if fdef == ("dict", "builtins"):
+            return self._handle_dict(assign, lhs, rhs)
+
+        # Erroring for SnowflakeCatalog.from_conn_str inside of JIT
+        if fdef == ("from_conn_str", "bodosql.SnowflakeCatalog"):
+            raise BodoError(
+                "SnowflakeCatalog.from_conn_str: This constructor can not be called from inside of a Bodo-JIT function. Please construct the SnowflakeCatalog in regular Python."
+            )
+
         # handling pd.DataFrame() here since input can be constant dictionary
         if fdef == ("DataFrame", "pandas"):
             return self._handle_pd_DataFrame(assign, lhs, rhs, label)
@@ -616,6 +626,10 @@ class UntypedPass:
         # replace pd.NamedAgg() with equivalent tuple to be handled in groupby typing
         if fdef == ("NamedAgg", "pandas"):
             return self._handle_pd_named_agg(assign, lhs, rhs)
+
+        # replace bodo.ExtendedNamedAgg() with equivalent tuple to be handled in groupby typing
+        if fdef == ("ExtendedNamedAgg", "bodo.utils.utils"):
+            return self._handle_extended_named_agg(assign, lhs, rhs)
 
         if fdef == ("read_table", "pyarrow.parquet"):
             return self._handle_pq_read_table(assign, lhs, rhs)
@@ -704,7 +718,7 @@ class UntypedPass:
                     block.body[:-1]
                     + compile_func_single_block(
                         eval(
-                            f"lambda A, t: bodo.utils.typing.check_objmode_output_type(A, t)"
+                            "lambda A, t: bodo.utils.typing.check_objmode_output_type(A, t)"
                         ),
                         [last_node.value, type_var_in],
                         new_var,
@@ -763,6 +777,52 @@ class UntypedPass:
             lhs,
         )
 
+    def _handle_dict(
+        self, assign: ir.Assign, lhs: ir.Var, rhs: ir.Expr
+    ) -> list[ir.Assign]:
+        """Optimization step to convert function calls for dict()
+        into Python dictionary literals whenever possible. Literal dictionaries
+        in Python use the BUILD_MAP instruction, which is more efficient and used
+        by Bodo/Numba for analysis of constant dictionaries. This cannot be done in
+        regular Python because any Python programmer can override the dict() function,
+        but this is not possible in Bodo/Numba, making this safe.
+        https://madebyme.today/blog/python-dict-vs-curly-brackets/
+
+        Right now we only support the case where the dict() function is called without
+        any arguments. This is a common pattern if people prefer the readability of dict()
+        over {}. We can easily support more cases in the future if needed. If the call to
+        dict() is not safe to convert to a dictionary literal, we will just return the
+        original assign node.
+
+        Note: The caller is expected to validate that the input is a call to dict().
+
+        Args:
+            assign (ir.Assign): The original assignment. We return this value if we cannot
+                convert the dict() call to a dictionary literal.
+            lhs (ir.Var): The target variable of the assignment. This will be our new target
+                variable if we can convert the dict() call to a dictionary literal.
+            rhs (ir.Expr): The right-hand side of the assignment. This is the dict() call
+                that we will analyze to see if we can convert it to a dictionary literal.
+
+        Returns:
+            list[ir.Assign]: An 1 element list containing either a new `build_map` call or the original
+                `dict()` call as an assignment.
+        """
+        has_args = (
+            len(rhs.args) > 0
+            or len(rhs.kws) > 0
+            or rhs.vararg is not None
+            or rhs.varkwarg is not None
+        )
+        # TODO: Support more complex cases like converting
+        # dict(x=1, y=2, z=3) to {"x": 1, "y": 2, "z": 3}
+        if has_args:
+            return [assign]
+        else:
+            # Create a new dictionary literal
+            new_dict = ir.Expr.build_map([], 0, {}, {}, rhs.loc)
+            return [ir.Assign(new_dict, lhs, lhs.loc)]
+
     def _handle_pd_DataFrame(self, assign, lhs, rhs, label):
         """
         Enable typing for dictionary data arg to pd.DataFrame({'A': A}) call.
@@ -777,7 +837,11 @@ class UntypedPass:
 
         if isinstance(arg_def, ir.Expr) and arg_def.op == "build_map":
             msg = "DataFrame column names should be constant strings or ints"
-            (tup_vars, new_nodes,) = bodo.utils.transform._convert_const_key_dict(
+            # TODO[BSE-4021]: Verify the build_map is not modified in the IR.
+            (
+                tup_vars,
+                new_nodes,
+            ) = bodo.utils.transform._convert_const_key_dict(
                 self.args,
                 self.func_ir,
                 arg_def,
@@ -840,7 +904,11 @@ class UntypedPass:
         if not is_expr(arg_def, "build_map"):
             raise BodoError(msg)
 
-        (tup_vars, new_nodes,) = bodo.utils.transform._convert_const_key_dict(
+        # TODO[BSE-4021]: Verify the build_map is not modified in the IR.
+        (
+            tup_vars,
+            new_nodes,
+        ) = bodo.utils.transform._convert_const_key_dict(
             self.args,
             self.func_ir,
             arg_def,
@@ -854,11 +922,15 @@ class UntypedPass:
         new_nodes.append(assign)
         return new_nodes
 
-    def _handle_pd_read_sql(self, assign, lhs, rhs, label):
+    def _handle_pd_read_sql(self, assign, lhs: ir.Var, rhs: ir.Expr, label):
         """transform pd.read_sql calls"""
         # schema: pd.read_sql(sql, con, index_col=None,
         # coerce_float=True, params=None, parse_dates=None,
-        # columns=None, chunksize=None, _bodo_read_as_dict)
+        # columns=None, chunksize=None, _bodo_read_as_dict,
+        # _bodo_is_table_input, _bodo_downcast_decimal_to_double,
+        # _bodo_read_as_table, _bodo_orig_table_name,
+        # _bodo_orig_table_indices, _bodo_sql_op_id,
+        # _bodo_runtime_join_filters)
         kws = dict(rhs.kws)
         sql_var = get_call_expr_arg("read_sql", rhs.args, kws, 0, "sql")
         # The sql request has to be constant
@@ -875,24 +947,155 @@ class UntypedPass:
         )
         # the connection string has to be constant
         con_const = get_const_value(con_var, self.func_ir, msg, arg_types=self.args)
-        index_col = self._get_const_arg(
-            "read_sql", rhs.args, kws, 2, "index_col", rhs.loc, default=-1
+        index_col = get_const_arg(
+            "read_sql",
+            rhs.args,
+            kws,
+            self.func_ir,
+            self.args,
+            2,
+            "index_col",
+            rhs.loc,
+            default=-1,
         )
+        # If defined, perform batched reads on the table
+        # Only supported for Snowflake tables
+        # Note that we don't want to use Pandas chunksize, since it returns an iterator
+        chunksize: int | None = get_const_arg(
+            "read_sql",
+            rhs.args,
+            kws,
+            self.func_ir,
+            self.args,
+            10e4,
+            "_bodo_chunksize",
+            rhs.loc,
+            use_default=True,
+            default=None,
+            typ="int",
+        )
+        if chunksize is not None and (
+            not isinstance(chunksize, int) or chunksize < 1
+        ):  # pragma: no cover
+            raise BodoError(
+                "pd.read_sql() '_bodo_chunksize' must be a constant integer >= 1."
+            )
+
         # Users can use this to specify what columns should be read in as
         # dictionary-encoded string arrays. This is in addition
         # to whatever columns bodo determines should be read in
         # with dictionary encoding. This is only supported when
         # reading from Snowflake.
-        _bodo_read_as_dict = self._get_const_arg(
+        _bodo_read_as_dict = get_const_arg(
             "read_sql",
             rhs.args,
             kws,
+            self.func_ir,
+            self.args,
             10e4,
             "_bodo_read_as_dict",
             rhs.loc,
             use_default=True,
             default=None,
         )
+        # TODO[BE-4362]: detect table input automatically
+        _bodo_is_table_input: bool = get_const_arg(
+            "read_sql",
+            rhs.args,
+            kws,
+            self.func_ir,
+            self.args,
+            10e5,
+            "_bodo_is_table_input",
+            rhs.loc,
+            default=False,
+        )
+        # Allow Unsafe Downcasting to Double when we dont support decimal computation
+        _bodo_downcast_decimal_to_double: bool = get_const_arg(
+            "read_sql",
+            rhs.args,
+            kws,
+            self.func_ir,
+            self.args,
+            10e5,
+            "_bodo_downcast_decimal_to_double",
+            rhs.loc,
+            default=False,
+        )
+        _bodo_read_as_table: bool = get_const_arg(
+            "read_sql",
+            rhs.args,
+            kws,
+            self.func_ir,
+            self.args,
+            10e5,
+            "_bodo_read_as_table",
+            rhs.loc,
+            default=False,
+        )
+
+        _bodo_orig_table_name_const: str | None = get_const_arg(
+            "read_sql",
+            rhs.args,
+            kws,
+            self.func_ir,
+            self.args,
+            10e5,
+            "_bodo_orig_table_name",
+            rhs.loc,
+            default=None,
+            use_default=True,
+        )
+
+        _bodo_orig_table_indices_const: tuple[int] | None = get_const_arg(
+            "read_sql",
+            rhs.args,
+            kws,
+            self.func_ir,
+            self.args,
+            10e5,
+            "_bodo_orig_table_indices",
+            rhs.loc,
+            default=None,
+            use_default=True,
+        )
+
+        # Operator ID assigned by the planner for query profile purposes.
+        # Only applicable in the streaming case.
+        _bodo_sql_op_id_const: int = get_const_arg(
+            "read_sql",
+            rhs.args,
+            kws,
+            self.func_ir,
+            self.args,
+            10e5,
+            "_bodo_sql_op_id",
+            rhs.loc,
+            default=-1,
+            use_default=True,
+            typ="int",
+        )
+        # Retrieve the tuple of runtime join filters in the form
+        # ((state_1, indices_1), (state_2, indices_2)...) where each
+        # state is a join state object and each indices is a tuple of
+        # column indices.
+        _bodo_runtime_join_filters_arg = get_call_expr_arg(
+            "read_sql",
+            rhs.args,
+            kws,
+            -1,
+            "_bodo_runtime_join_filters",
+            default=None,
+            use_default=True,
+        )
+        rtjf_terms = get_runtime_join_filter_terms(
+            self.func_ir, _bodo_runtime_join_filters_arg
+        )
+        if rtjf_terms is not None and len(rtjf_terms):
+            assert (
+                chunksize is not None
+            ), "Cannot provide rtjf_terms in a non-streaming read"
+
         # coerce_float = self._get_const_arg(
         #     "read_sql", rhs.args, kws, 3, "coerce_float", default=True
         # )
@@ -903,31 +1106,45 @@ class UntypedPass:
         # columns = self._get_const_arg(
         #     "read_sql", rhs.args, kws, 6, "columns", rhs.loc, default=""
         # )
-        # chunksize = get_call_expr_arg("read_sql", rhs.args, kws, 7, "chunksize", -1)
 
         # SUPPORTED:
         # sql is supported since it is fundamental
         # con is supported since it is fundamental but only as a string
         # index_col is supported since setting the index is something useful.
+        # _bodo_chunksize is supported to enable batched reads for Snowflake
+        # _bodo_sql_op_id is supported to enable query profile for batched Snowflake reads.
         # UNSUPPORTED:
-        # chunksize is unsupported because it is a different API and it makes for a different usage of pd.read_sql
+        # chunksize is unsupported but can easily be extended from _bodo_chunksize
         # columns   is unsupported because selecting columns could actually be done in SQL.
         # parse_dates is unsupported because it requires remapping which subset of loaded columns should be updated.
         #        and needs to be implemented with snowflake.
         # coerce_float is currently unsupported but it could be useful to support it.
         # params is currently unsupported because not needed for mysql but surely will be needed later.
-        supported_args = ("sql", "con", "index_col", "_bodo_read_as_dict")
+        supported_args = (
+            "sql",
+            "con",
+            "index_col",
+            "_bodo_chunksize",
+            "_bodo_read_as_dict",
+            "_bodo_is_table_input",
+            "_bodo_downcast_decimal_to_double",
+            "_bodo_read_as_table",
+            "_bodo_orig_table_name",
+            "_bodo_orig_table_indices",
+            "_bodo_sql_op_id",
+            "_bodo_runtime_join_filters",
+        )
 
         unsupported_args = set(kws.keys()) - set(supported_args)
         if unsupported_args:
             raise BodoError(
-                "read_sql() arguments {} not supported yet".format(unsupported_args)
+                f"read_sql() arguments {unsupported_args} not supported yet"
             )
 
         # Generate the type info.
         (
             db_type,
-            columns,
+            col_names,
             data_arrs,
             out_types,
             converted_colnames,
@@ -935,9 +1152,30 @@ class UntypedPass:
             unsupported_arrow_types,
             is_select_query,
             has_side_effects,
+            pyarrow_table_schema,
         ) = _get_sql_types_arr_colnames(
-            sql_const, con_const, _bodo_read_as_dict, lhs, rhs.loc
+            sql_const,
+            con_const,
+            _bodo_read_as_dict,
+            lhs,
+            rhs.loc,
+            _bodo_is_table_input,
+            self._is_independent,
+            _bodo_downcast_decimal_to_double,
+            _bodo_orig_table_name_const,
+            _bodo_orig_table_indices_const,
+            snowflake_conn_cache=self._snowflake_conn_cache,
         )
+
+        if chunksize is not None and db_type != "snowflake":  # pragma: no cover
+            raise BodoError(
+                "pd.read_sql(): The `chunksize` argument is only supported for Snowflake table reads"
+            )
+
+        if (_bodo_sql_op_id_const != -1) and (db_type != "snowflake"):
+            raise BodoError(
+                "pd.read_sql(): The `_bodo_sql_op_id` argument is only supported for Snowflake table reads"
+            )
 
         index_ind = None
         index_col_name = None
@@ -946,40 +1184,15 @@ class UntypedPass:
             # convert column number to column name
             if isinstance(index_col, int):
                 index_ind = index_col
-                index_col = columns[index_col]
+                index_col = col_names[index_col]
             else:
-                index_ind = columns.index(index_col)
+                index_ind = col_names.index(index_col)
             # Set the information for the index type
             index_col_name = index_col
             index_arr_typ = out_types[index_ind]
             # Remove the index column from the table.
-            columns.remove(index_col_name)
+            col_names.remove(index_col_name)
             out_types.remove(index_arr_typ)
-
-        nodes = [
-            sql_ext.SqlReader(
-                sql_const,
-                con_const,
-                lhs.name,
-                columns,
-                data_arrs,
-                out_types,
-                converted_colnames,
-                db_type,
-                lhs.loc,
-                unsupported_columns,
-                unsupported_arrow_types,
-                is_select_query,
-                has_side_effects,
-                index_col_name,
-                index_arr_typ,
-                None,  # database_schema
-                None,  # pyarrow_table_schema
-                False,  # is_merge_into
-                types.none,  # file_list_type
-                types.none,  # snapshot_id_type
-            )
-        ]
 
         data_args = ["table_val", "idx_arr_val"]
 
@@ -998,28 +1211,62 @@ class UntypedPass:
         df_type = DataFrameType(
             tuple(out_types),
             index_type,
-            tuple(columns),
+            tuple(col_names),
             is_table_format=True,
         )
+        col_meta = ColNamesMetaType(df_type.columns)
 
-        func_text = f"def _init_df({data_args[0]}, {data_args[1]}):\n"
-        func_text += f"  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({data_args[0]},), {index_arg}, __col_name_meta_value_pd_read_sql)\n"
-        loc_vars = {}
-        exec(
-            func_text,
-            {},
-            loc_vars,
-        )
-        _init_df = loc_vars["_init_df"]
+        if chunksize is not None:  # pragma: no cover
+            # Create a new temp var so this is always exactly one variable
+            data_arrs = [ir.Var(lhs.scope, mk_unique_var("arrow_iterator"), lhs.loc)]
 
-        nodes += compile_func_single_block(
-            _init_df,
-            data_arrs,
-            lhs,
-            extra_globals={
-                "__col_name_meta_value_pd_read_sql": ColNamesMetaType(df_type.columns)
-            },
-        )
+        nodes = [
+            sql_ext.SqlReader(
+                sql_const,
+                con_const,
+                lhs.name,
+                col_names,
+                out_types,
+                data_arrs,
+                converted_colnames,
+                db_type,
+                lhs.loc,
+                unsupported_columns,
+                unsupported_arrow_types,
+                is_select_query,
+                has_side_effects,
+                index_col_name,
+                index_arr_typ,
+                None,  # database_schema
+                pyarrow_table_schema,
+                _bodo_downcast_decimal_to_double,
+                chunksize,
+                _bodo_sql_op_id_const,
+                rtjf_terms,
+            )
+        ]
+
+        # _bodo_read_as_table = do not wrap the table in a DataFrame
+        if chunksize is not None or _bodo_read_as_table:  # pragma: no cover
+            nodes += [ir.Assign(data_arrs[0], lhs, lhs.loc)]
+        else:
+            # TODO: Pull out to helper function for most IO functions (except Iceberg)
+            func_text = (
+                f"def _init_df({data_args[0]}, {data_args[1]}):\n"
+                f"  return bodo.hiframes.pd_dataframe_ext.init_dataframe(\n"
+                f"    ({data_args[0]},), {index_arg}, __col_name_meta_value_pd_read_sql\n"
+                f"  )\n"
+            )
+            loc_vars = {}
+            exec(func_text, {}, loc_vars)
+            _init_df = loc_vars["_init_df"]
+
+            nodes += compile_func_single_block(
+                _init_df,
+                data_arrs,
+                lhs,
+                extra_globals={"__col_name_meta_value_pd_read_sql": col_meta},
+            )
         return nodes
 
     def _handle_pd_read_excel(self, assign, lhs, rhs, label):
@@ -1034,37 +1281,60 @@ class UntypedPass:
         # convert_float=True, mangle_dupe_cols=True,
         kws = dict(rhs.kws)
         fname_var = get_call_expr_arg("read_excel", rhs.args, kws, 0, "io")
-        sheet_name = self._get_const_arg(
+        sheet_name = get_const_arg(
             "read_excel",
             rhs.args,
             kws,
+            self.func_ir,
+            self.args,
             1,
             "sheet_name",
             rhs.loc,
             default=0,
             typ="str or int",
         )
-        header = self._get_const_arg(
+        header = get_const_arg(
             "read_excel",
             rhs.args,
             kws,
+            self.func_ir,
+            self.args,
             2,
             "header",
             rhs.loc,
             default=0,
             typ="int",
         )
-        col_names = self._get_const_arg(
-            "read_excel", rhs.args, kws, 3, "names", rhs.loc, default=0
+        col_names = get_const_arg(
+            "read_excel",
+            rhs.args,
+            kws,
+            self.func_ir,
+            self.args,
+            3,
+            "names",
+            rhs.loc,
+            default=0,
         )
         # index_col = self._get_const_arg("read_excel", rhs.args, kws, 4, "index_col", -1)
-        comment = self._get_const_arg(
-            "read_excel", rhs.args, kws, 20, "comment", rhs.loc, default=""
+        comment = get_const_arg(
+            "read_excel",
+            rhs.args,
+            kws,
+            self.func_ir,
+            self.args,
+            20,
+            "comment",
+            rhs.loc,
+            default=None,
+            use_default=True,
         )
-        date_cols = self._get_const_arg(
+        date_cols = get_const_arg(
             "pd.read_excel",
             rhs.args,
             kws,
+            self.func_ir,
+            self.args,
             17,
             "parse_dates",
             rhs.loc,
@@ -1072,20 +1342,18 @@ class UntypedPass:
             typ="int or str",
         )
         dtype_var = get_call_expr_arg("read_excel", rhs.args, kws, 7, "dtype", "")
-        skiprows = self._get_const_arg(
+        skiprows = get_const_arg(
             "read_excel",
             rhs.args,
             kws,
+            self.func_ir,
+            self.args,
             12,
             "skiprows",
             rhs.loc,
             default=0,
             typ="int",
         )
-
-        # replace "" placeholder with default None (can't use None in _get_const_arg)
-        if comment == "":
-            comment = None
 
         # TODO: support index_col
         # if index_col == -1:
@@ -1106,7 +1374,7 @@ class UntypedPass:
         unsupported_args = set(kws.keys()) - set(supported_args)
         if unsupported_args:
             raise BodoError(
-                "read_excel() arguments {} not supported yet".format(unsupported_args)
+                f"read_excel() arguments {unsupported_args} not supported yet"
             )
 
         if dtype_var != "" and col_names == 0 or dtype_var == "" and col_names != 0:
@@ -1166,22 +1434,21 @@ class UntypedPass:
 
     def _handle_pd_read_csv(self, assign, lhs, rhs, label):
         """transform pd.read_csv(names=[A], dtype={'A': np.int32}) call"""
-        # schema: pd.read_csv(filepath_or_buffer, sep=',', delimiter=None,
-        # header='infer', names=None, index_col=None, usecols=None,
-        # squeeze=False, prefix=None, mangle_dupe_cols=True, dtype=None,
-        # engine=None, converters=None, true_values=None, false_values=None,
-        # skipinitialspace=False, skiprows=None, skipfooter=0, nrows=None,
-        # na_values=None, keep_default_na=True, na_filter=True, verbose=False,
-        # skip_blank_lines=True, parse_dates=False, infer_datetime_format=False,
-        # keep_date_col=False, date_parser=None, dayfirst=False, cache_dates=True,
-        # iterator=False, chunksize=None, compression='infer', thousands=None,
-        # decimal=b'.', lineterminator=None, quotechar='"', quoting=0,
-        # doublequote=True, escapechar=None, comment=None, encoding=None,
-        # encoding_errors='strict', dialect=None,
-        # error_bad_lines=True, warn_bad_lines=True, on_bad_lines='error',
-        # delim_whitespace=False, low_memory=True, memory_map=False,
-        # NOTE: sample_nrows is Bodo specific argument
-        # float_precision=None, storage_options=None, sample_nrows=100)
+        # schema: pd.read_csv(filepath_or_buffer, *, sep=_NoDefault.no_default,
+        # delimiter=None, header='infer', names=_NoDefault.no_default, index_col=None,
+        # usecols=None, dtype=None, engine=None, converters=None, true_values=None,
+        # false_values=None, skipinitialspace=False, skiprows=None, skipfooter=0,
+        # nrows=None, na_values=None, keep_default_na=True, na_filter=True,
+        # verbose=_NoDefault.no_default, skip_blank_lines=True, parse_dates=None,
+        # infer_datetime_format=_NoDefault.no_default,
+        # keep_date_col=_NoDefault.no_default, date_parser=_NoDefault.no_default,
+        # date_format=None, dayfirst=False, cache_dates=True, iterator=False,
+        # chunksize=None, compression='infer', thousands=None, decimal='.',
+        # lineterminator=None, quotechar='"', quoting=0, doublequote=True,
+        # escapechar=None, comment=None, encoding=None, encoding_errors='strict',
+        # dialect=None, on_bad_lines='error', delim_whitespace=_NoDefault.no_default,
+        # low_memory=True, memory_map=False, float_precision=None, storage_options=None,
+        # dtype_backend=_NoDefault.no_default)
         kws = dict(rhs.kws)
 
         # TODO: Can we use fold the arguments even though this untyped pass?
@@ -1191,20 +1458,24 @@ class UntypedPass:
 
         # Users can only provide either sep or delim. Use a dummy default value to track
         # this behavior.
-        sep_val = self._get_const_arg(
+        sep_val = get_const_arg(
             "pd.read_csv",
             rhs.args,
             kws,
+            self.func_ir,
+            self.args,
             1,
             "sep",
             rhs.loc,
             default=None,
             use_default=True,
         )
-        delim_val = self._get_const_arg(
+        delim_val = get_const_arg(
             "pd.read_csv",
             rhs.args,
             kws,
+            self.func_ir,
+            self.args,
             2,
             "delimiter",
             rhs.loc,
@@ -1241,18 +1512,34 @@ class UntypedPass:
                 loc=rhs.loc,
             )
 
-        header = self._get_const_arg(
-            "pd.read_csv", rhs.args, kws, 3, "header", rhs.loc, default="infer"
+        header = get_const_arg(
+            "pd.read_csv",
+            rhs.args,
+            kws,
+            self.func_ir,
+            self.args,
+            3,
+            "header",
+            rhs.loc,
+            default="infer",
         )
         # Per Pandas documentation (header: int, list of int, default ‘infer’)
         if header not in ("infer", 0, None):
             raise BodoError(
-                f"pd.read_csv() 'header' should be one of 'infer', 0, or None",
+                "pd.read_csv() 'header' should be one of 'infer', 0, or None",
                 loc=rhs.loc,
             )
 
-        col_names = self._get_const_arg(
-            "pd.read_csv", rhs.args, kws, 4, "names", rhs.loc, default=0
+        col_names = get_const_arg(
+            "pd.read_csv",
+            rhs.args,
+            kws,
+            self.func_ir,
+            self.args,
+            4,
+            "names",
+            rhs.loc,
+            default=0,
         )
         # Per Pandas documentation (names: array-like). Since columns don't need string types,
         # we only check that this is a list or tuple (since constant arrays aren't supported).
@@ -1262,10 +1549,12 @@ class UntypedPass:
                 loc=rhs.loc,
             )
 
-        index_col = self._get_const_arg(
+        index_col = get_const_arg(
             "pd.read_csv",
             rhs.args,
             kws,
+            self.func_ir,
+            self.args,
             5,
             "index_col",
             rhs.loc,
@@ -1285,10 +1574,12 @@ class UntypedPass:
                 loc=rhs.loc,
             )
 
-        usecols = self._get_const_arg(
+        usecols = get_const_arg(
             "pd.read_csv()",
             rhs.args,
             kws,
+            self.func_ir,
+            self.args,
             6,
             "usecols",
             rhs.loc,
@@ -1369,10 +1660,12 @@ class UntypedPass:
             "pd.read_csv", rhs.args, kws, 18, "nrows", default=ir.Const(-1, rhs.loc)
         )
 
-        date_cols = self._get_const_arg(
+        date_cols = get_const_arg(
             "pd.read_csv",
             rhs.args,
             kws,
+            self.func_ir,
+            self.args,
             24,
             "parse_dates",
             rhs.loc,
@@ -1389,10 +1682,12 @@ class UntypedPass:
                 loc=rhs.loc,
             )
 
-        chunksize = self._get_const_arg(
+        chunksize = get_const_arg(
             "pandas.read_csv",
             rhs.args,
             kws,
+            self.func_ir,
+            self.args,
             31,
             "chunksize",
             rhs.loc,
@@ -1405,8 +1700,16 @@ class UntypedPass:
                 "pd.read_csv() 'chunksize' must be a constant integer >= 1 if provided."
             )
 
-        compression = self._get_const_arg(
-            "pd.read_csv", rhs.args, kws, 32, "compression", rhs.loc, default="infer"
+        compression = get_const_arg(
+            "pd.read_csv",
+            rhs.args,
+            kws,
+            self.func_ir,
+            self.args,
+            32,
+            "compression",
+            rhs.loc,
+            default="infer",
         )
         # Per Pandas documentation (compression: {'infer', 'gzip', 'bz2', 'zip', 'xz', None}, default ‘infer’)
         supported_compression_options = ["infer", "gzip", "bz2", "zip", "xz", None]
@@ -1417,10 +1720,12 @@ class UntypedPass:
             )
 
         # TODO: [BE-2146] support passing as a variable.
-        escapechar = self._get_const_arg(
+        escapechar = get_const_arg(
             "pd.read_csv",
             rhs.args,
             kws,
+            self.func_ir,
+            self.args,
             39,
             "escapechar",
             rhs.loc,
@@ -1442,14 +1747,16 @@ class UntypedPass:
             )
         if escapechar == "\n":
             raise BodoError(
-                f"pd.read_csv(): newline as 'escapechar' is not supported.", loc=rhs.loc
+                "pd.read_csv(): newline as 'escapechar' is not supported.", loc=rhs.loc
             )
 
         # Pandas default is True but Bodo is False
-        pd_low_memory = self._get_const_arg(
+        pd_low_memory = get_const_arg(
             "pd.read_csv",
             rhs.args,
             kws,
+            self.func_ir,
+            self.args,
             48,
             "low_memory",
             rhs.loc,
@@ -1457,10 +1764,12 @@ class UntypedPass:
             use_default=True,
         )
         # storage_options
-        csv_storage_options = self._get_const_arg(
+        csv_storage_options = get_const_arg(
             "pd.read_csv",
             rhs.args,
             kws,
+            self.func_ir,
+            self.args,
             51,
             "storage_options",
             rhs.loc,
@@ -1468,10 +1777,12 @@ class UntypedPass:
             use_default=True,
         )
         # sample_nrows
-        csv_sample_nrows = self._get_const_arg(
+        csv_sample_nrows = get_const_arg(
             "pd.read_csv",
             rhs.args,
             kws,
+            self.func_ir,
+            self.args,
             52,
             "sample_nrows",
             rhs.loc,
@@ -1491,10 +1802,12 @@ class UntypedPass:
         # _bodo_upcast_to_float64 updates types if inference may not be fully accurate.
         # This upcasts all integer/float values to float64. This runs before
         # dtype dictionary and won't impact those columns.
-        _bodo_upcast_to_float64 = self._get_const_arg(
+        _bodo_upcast_to_float64 = get_const_arg(
             "pd.read_csv",
             rhs.args,
             kws,
+            self.func_ir,
+            self.args,
             -1,
             "_bodo_upcast_to_float64",
             rhs.loc,
@@ -1503,10 +1816,12 @@ class UntypedPass:
         )
         # Allows users specify what columns should be read in as dictionary-encoded
         # string arrays manually.
-        _bodo_read_as_dict = self._get_const_arg(
+        _bodo_read_as_dict = get_const_arg(
             "pd.read_csv",
             rhs.args,
             kws,
+            self.func_ir,
+            self.args,
             -1,
             "_bodo_read_as_dict",
             rhs.loc,
@@ -1530,9 +1845,6 @@ class UntypedPass:
             ("names", None),
             ("index_col", None),
             ("usecols", None),
-            ("squeeze", False),
-            ("prefix", None),
-            ("mangle_dupe_cols", True),
             ("dtype", None),
             ("engine", None),
             ("converters", None),
@@ -1551,6 +1863,7 @@ class UntypedPass:
             ("infer_datetime_format", False),
             ("keep_date_col", False),
             ("date_parser", None),
+            ("date_format", None),
             ("dayfirst", False),
             ("cache_dates", True),
             ("iterator", False),
@@ -1567,43 +1880,40 @@ class UntypedPass:
             ("encoding", None),
             ("encoding_errors", "strict"),
             ("dialect", None),
-            ("error_bad_lines", True),
-            ("warn_bad_lines", True),
             ("on_bad_lines", "error"),
             ("delim_whitespace", False),
             ("low_memory", False),
             ("memory_map", False),
             ("float_precision", None),
             ("storage_options", None),
+            ("dtype_backend", "numpy_nullable"),
             # TODO: Specify this is kwonly in error checks
             ("_bodo_upcast_to_float64", False),
             ("sample_nrows", 100),
             ("_bodo_read_as_dict", None),
         )
         # Arguments that are supported
-        supported_args = set(
-            (
-                "filepath_or_buffer",
-                "sep",
-                "delimiter",
-                "header",
-                "names",
-                "index_col",
-                "usecols",
-                "dtype",
-                "skiprows",
-                "nrows",
-                "parse_dates",
-                "chunksize",
-                "compression",
-                "low_memory",
-                "_bodo_upcast_to_float64",
-                "escapechar",
-                "storage_options",
-                "sample_nrows",
-                "_bodo_read_as_dict",
-            )
-        )
+        supported_args = {
+            "filepath_or_buffer",
+            "sep",
+            "delimiter",
+            "header",
+            "names",
+            "index_col",
+            "usecols",
+            "dtype",
+            "skiprows",
+            "nrows",
+            "parse_dates",
+            "chunksize",
+            "compression",
+            "low_memory",
+            "_bodo_upcast_to_float64",
+            "escapechar",
+            "storage_options",
+            "sample_nrows",
+            "_bodo_read_as_dict",
+        }
         # Iterate through the provided args. If an argument is in the supported_args,
         # skip it. Otherwise we check that the value matches the default value.
         unsupported_args = []
@@ -1613,10 +1923,12 @@ class UntypedPass:
                 try:
                     # Catch the exceptions because don't want the constant value exception
                     # Instead we want to indicate the argument isn't supported.
-                    provided_val = self._get_const_arg(
+                    provided_val = get_const_arg(
                         "pd.read_csv",
                         rhs.args,
                         kws,
+                        self.func_ir,
+                        self.args,
                         i,
                         name,
                         rhs.loc,
@@ -1733,7 +2045,12 @@ class UntypedPass:
             if col_names != 0:
                 cols = _replace_col_names(col_names, usecols)
             col_names = cols
-            dtype_map = {c: dtypes[usecols[i]] for i, c in enumerate(col_names)}
+            # Date types are handled through a separate argument and omitted now.
+            dtype_map = {
+                c: dtypes[usecols[i]]
+                for i, c in enumerate(col_names)
+                if i not in date_cols and c not in date_cols
+            }
         # Update usecols and col_names
         else:
             # Get usecols as indices.
@@ -1746,9 +2063,11 @@ class UntypedPass:
         if _bodo_upcast_to_float64:
             dtype_map_cpy = dtype_map.copy()
             for c, t in dtype_map_cpy.items():
-                if isinstance(t, (types.Array, IntegerArrayType)) and isinstance(
+                if isinstance(
+                    t, (types.Array, IntegerArrayType, FloatingArrayType)
+                ) and isinstance(
                     t.dtype, (types.Integer, types.Float)
-                ):
+                ):  # pragma: no cover
                     dtype_map[c] = types.Array(types.float64, 1, "C")
 
         # handle dtype arg if provided
@@ -1844,9 +2163,7 @@ class UntypedPass:
             index_ind = None
             index_name = None
             index_arr_typ = types.none
-            index_arg = "bodo.hiframes.pd_index_ext.init_range_index(0, len({}), 1, None)".format(
-                data_args[0]
-            )
+            index_arg = f"bodo.hiframes.pd_index_ext.init_range_index(0, len({data_args[0]}), 1, None)"
             index_typ = RangeIndexType(types.none)
 
         # I'm not certain if this is possible, but I'll add a check just in case
@@ -1860,23 +2177,23 @@ class UntypedPass:
         # If we have a chunksize we need to create an iterator, so we determine
         # the yield DataFrame type directly.
         if chunksize is not None:
-            out_types = [
-                bodo.io.csv_iterator_ext.CSVIteratorType(
-                    df_type,
-                    orig_columns,
-                    out_types,
-                    usecols,
-                    sep,
-                    index_ind,
-                    index_arr_typ,
-                    index_name,
-                    escapechar,
-                    csv_storage_options,
-                )
-            ]
+            chunk_iterator = bodo.io.csv_iterator_ext.CSVIteratorType(
+                df_type,
+                orig_columns,
+                out_types,
+                usecols,
+                sep,
+                index_ind,
+                index_arr_typ,
+                index_name,
+                escapechar,
+                csv_storage_options,
+            )
+
             # Create a new temp var so this is always exactly one variable.
             data_arrs = [ir.Var(lhs.scope, mk_unique_var("csv_iterator"), lhs.loc)]
         else:
+            chunk_iterator = None
             data_arrs = [
                 ir.Var(lhs.scope, mk_unique_var("csv_table"), lhs.loc),
                 ir.Var(lhs.scope, mk_unique_var("index_col"), lhs.loc),
@@ -1896,6 +2213,7 @@ class UntypedPass:
                 _nrows,
                 _skiprows,
                 chunksize,
+                chunk_iterator,
                 is_skiprows_list,
                 pd_low_memory,
                 escapechar,
@@ -1952,18 +2270,28 @@ class UntypedPass:
         # convert_dates required for date cols
         kws = dict(rhs.kws)
         fname = get_call_expr_arg("read_json", rhs.args, kws, 0, "path_or_buf")
-        orient = self._get_const_arg(
-            "read_json", rhs.args, kws, 1, "orient", rhs.loc, default="records"
+        orient = get_const_arg(
+            "read_json",
+            rhs.args,
+            kws,
+            self.func_ir,
+            self.args,
+            1,
+            "orient",
+            rhs.loc,
+            default="records",
         )
         frame_or_series = get_call_expr_arg(
             "read_json", rhs.args, kws, 2, "typ", "frame"
         )
         dtype_var = get_call_expr_arg("read_json", rhs.args, kws, 3, "dtype", "")
         # default value is True
-        convert_dates = self._get_const_arg(
+        convert_dates = get_const_arg(
             "read_json",
             rhs.args,
             kws,
+            self.func_ir,
+            self.args,
             5,
             "convert_dates",
             rhs.loc,
@@ -1972,20 +2300,46 @@ class UntypedPass:
         )
         # Q: Why set date_cols = False not empty list as well?
         date_cols = [] if convert_dates is True else convert_dates
-        precise_float = self._get_const_arg(
-            "read_json", rhs.args, kws, 8, "precise_float", rhs.loc, default=False
+        precise_float = get_const_arg(
+            "read_json",
+            rhs.args,
+            kws,
+            self.func_ir,
+            self.args,
+            8,
+            "precise_float",
+            rhs.loc,
+            default=False,
         )
-        lines = self._get_const_arg(
-            "read_json", rhs.args, kws, 12, "lines", rhs.loc, default=True
+        lines = get_const_arg(
+            "read_json",
+            rhs.args,
+            kws,
+            self.func_ir,
+            self.args,
+            12,
+            "lines",
+            rhs.loc,
+            default=True,
         )
-        compression = self._get_const_arg(
-            "read_json", rhs.args, kws, 14, "compression", rhs.loc, default="infer"
+        compression = get_const_arg(
+            "read_json",
+            rhs.args,
+            kws,
+            self.func_ir,
+            self.args,
+            14,
+            "compression",
+            rhs.loc,
+            default="infer",
         )
         # storage_options
-        json_storage_options = self._get_const_arg(
+        json_storage_options = get_const_arg(
             "pd.read_json",
             rhs.args,
             kws,
+            self.func_ir,
+            self.args,
             16,
             "storage_options",
             rhs.loc,
@@ -1995,10 +2349,12 @@ class UntypedPass:
         _check_storage_options(json_storage_options, "read_json", rhs)
 
         # sample_nrows
-        json_sample_nrows = self._get_const_arg(
+        json_sample_nrows = get_const_arg(
             "pd.read_json",
             rhs.args,
             kws,
+            self.func_ir,
+            self.args,
             17,
             "sample_nrows",
             rhs.loc,
@@ -2027,36 +2383,32 @@ class UntypedPass:
         if len(passed_unsupported) > 0:
             if unsupported_args:
                 raise BodoError(
-                    "read_json() arguments {} not supported yet".format(
-                        passed_unsupported
-                    )
+                    f"read_json() arguments {passed_unsupported} not supported yet"
                 )
 
         supported_compression_options = {"infer", "gzip", "bz2", None}
         if compression not in supported_compression_options:
             raise BodoError(
-                "pd.read_json() compression = {} is not supported."
-                " Supported options are {}".format(
-                    compression, supported_compression_options
-                )
+                f"pd.read_json() compression = {compression} is not supported."
+                f" Supported options are {supported_compression_options}"
             )
 
         if frame_or_series != "frame":
             raise BodoError(
-                "pd.read_json() typ = {} is not supported."
-                "Currently only supports orient = 'frame'".format(frame_or_series)
+                f"pd.read_json() typ = {frame_or_series} is not supported."
+                "Currently only supports orient = 'frame'"
             )
 
         if orient != "records":
             raise BodoError(
-                "pd.read_json() orient = {} is not supported."
-                "Currently only supports orient = 'records'".format(orient)
+                f"pd.read_json() orient = {orient} is not supported."
+                "Currently only supports orient = 'records'"
             )
 
-        if type(lines) != bool:
+        if type(lines) is not bool:
             raise BodoError(
-                "pd.read_json() lines = {} is not supported."
-                "lines must be of type bool.".format(lines)
+                f"pd.read_json() lines = {lines} is not supported."
+                "lines must be of type bool."
             )
 
         col_names = []
@@ -2141,6 +2493,10 @@ class UntypedPass:
                 dtype_map = _dtype_val_to_arr_type(
                     dtype_map_const, "pd.read_json", rhs.loc
                 )
+            # NOTE: read_json's behavior is different from read_csv since it doesn't
+            # have the "names" argument for specifying column names. Therefore, we need
+            # to infer column names from dtype to pass to _get_read_file_col_info below.
+            col_names = list(dtype_map.keys())
 
         columns, data_arrs, out_types = _get_read_file_col_info(
             dtype_map, date_cols, col_names, lhs
@@ -2165,16 +2521,12 @@ class UntypedPass:
 
         columns = columns.copy()  # copy since modified below
         n_cols = len(columns)
-        args = ["data{}".format(i) for i in range(n_cols)]
+        args = [f"data{i}" for i in range(n_cols)]
         data_args = args.copy()
 
         # initialize range index
         assert len(data_args) > 0
-        index_arg = (
-            "bodo.hiframes.pd_index_ext.init_range_index(0, len({}), 1, None)".format(
-                data_args[0]
-            )
-        )
+        index_arg = f"bodo.hiframes.pd_index_ext.init_range_index(0, len({data_args[0]}), 1, None)"
 
         # Below we assume that the columns are strings
         func_text = "def _init_df({}):\n".format(", ".join(args))
@@ -2254,6 +2606,24 @@ class UntypedPass:
         assign.value = ir.Expr.build_tuple([column_var, aggfunc_var], rhs.loc)
         return [assign]
 
+    def _handle_extended_named_agg(self, assign, lhs, rhs):
+        """
+        Replace pd.Extended() with equivalent tuple to be handled in groupby typing.
+        In order to handle a generic extension argument, all arguments are passed without keyword arguments.
+        It's up to the individual function to know which arguments are expected.
+        """
+
+        kws = dict(rhs.kws)
+        column_var = get_call_expr_arg("pd.NamedAgg", rhs.args, kws, 0, "column")
+        aggfunc_var = get_call_expr_arg("pd.NamedAgg", rhs.args, kws, 1, "aggfunc")
+        additional_args_var = get_call_expr_arg(
+            "pd.NamedAgg", rhs.args, kws, 2, "additional_args"
+        )
+        assign.value = ir.Expr.build_tuple(
+            [column_var, aggfunc_var, additional_args_var], rhs.loc
+        )
+        return [assign]
+
     def _handle_pq_read_table(self, assign, lhs, rhs):
         if len(rhs.args) != 1:  # pragma: no cover
             raise BodoError("Invalid read_table() arguments")
@@ -2268,24 +2638,24 @@ class UntypedPass:
     def _gen_parquet_read(
         self,
         fname,
-        lhs,
+        lhs: ir.Var,
         columns=None,
         storage_options=None,
         input_file_name_col=None,
         read_as_dict_cols=None,
         use_hive=True,
+        _bodo_read_as_table=False,
+        chunksize: int | None = None,
+        use_index: bool = True,
+        sql_op_id: int = -1,
     ):
-        # make sure pyarrow is available
-        if not bodo.utils.utils.has_pyarrow():
-            raise RuntimeError("pyarrow is required for Parquet support")
-
         (
             columns,
             data_arrs,
             index_col,
             nodes,
-            col_types,
-            index_col_type,
+            _,
+            _,
         ) = self.pq_handler.gen_parquet_read(
             fname,
             lhs,
@@ -2294,15 +2664,24 @@ class UntypedPass:
             input_file_name_col=input_file_name_col,
             read_as_dict_cols=read_as_dict_cols,
             use_hive=use_hive,
+            chunksize=chunksize,
+            use_index=use_index,
+            sql_op_id=sql_op_id,
         )
         n_cols = len(columns)
 
-        if index_col is None:
+        if chunksize is not None and use_index and index_col is not None:
+            raise BodoError(
+                "pd.read_parquet(): Bodo currently does not support batched reads "
+                "of Parquet files with an index column"
+            )
+
+        if not use_index or index_col is None:
             assert n_cols > 0
             index_arg = (
-                f"bodo.hiframes.pd_index_ext.init_range_index(0, len(T), 1, None)"
+                "bodo.hiframes.pd_index_ext.init_range_index(0, len(T), 1, None)"
             )
-            index_typ = RangeIndexType(types.none)
+
         elif isinstance(index_col, dict):
             if index_col["name"] is None:
                 index_col_name = None
@@ -2312,9 +2691,6 @@ class UntypedPass:
                 index_col_name_str = f"'{index_col_name}'"
             # ignore range index information in pandas metadata
             index_arg = f"bodo.hiframes.pd_index_ext.init_range_index(0, len(T), 1, {index_col_name_str})"
-            index_typ = RangeIndexType(
-                types.none if index_col_name is None else types.literal(index_col_name)
-            )
         else:
             # if the index_col is __index_level_0_, it means it has no name.
             # Thus we do not write the name instead of writing '__index_level_0_' as the name
@@ -2322,28 +2698,24 @@ class UntypedPass:
             index_arg = (
                 f"bodo.utils.conversion.convert_to_index(index_arr, {index_name!r})"
             )
-            index_typ = bodo.hiframes.pd_index_ext.array_type_to_index(
-                index_col_type,
-                types.none if index_name is None else types.literal(index_name),
-            )
 
-        func_text = "def _init_df(T, index_arr):\n"
-        func_text += f"  return bodo.hiframes.pd_dataframe_ext.init_dataframe((T,), {index_arg}, __col_name_meta_value_pq_read)\n"
-        loc_vars = {}
-        exec(
-            func_text,
-            {},
-            loc_vars,
-        )
-        _init_df = loc_vars["_init_df"]
-        nodes += compile_func_single_block(
-            _init_df,
-            data_arrs,
-            lhs,
-            extra_globals={
-                "__col_name_meta_value_pq_read": ColNamesMetaType(tuple(columns))
-            },
-        )
+        # _bodo_read_as_table = do not wrap the output table in a DataFrame
+        if _bodo_read_as_table or chunksize is not None:  # pragma: no cover
+            nodes += [ir.Assign(data_arrs[0], lhs, lhs.loc)]
+        else:
+            func_text = "def _init_df(T, index_arr):\n"
+            func_text += f"  return bodo.hiframes.pd_dataframe_ext.init_dataframe((T,), {index_arg}, __col_name_meta_value_pq_read)\n"
+            loc_vars = {}
+            exec(func_text, {}, loc_vars)
+            _init_df = loc_vars["_init_df"]
+            nodes += compile_func_single_block(
+                _init_df,
+                data_arrs,
+                lhs,
+                extra_globals={
+                    "__col_name_meta_value_pq_read": ColNamesMetaType(tuple(columns))
+                },
+            )
         return nodes
 
     def _handle_pd_read_parquet(self, assign, lhs, rhs):
@@ -2351,11 +2723,27 @@ class UntypedPass:
         kws = dict(rhs.kws)
         fname = get_call_expr_arg("read_parquet", rhs.args, kws, 0, "path")
         engine = get_call_expr_arg("read_parquet", rhs.args, kws, 1, "engine", "auto")
-        columns = self._get_const_arg(
-            "read_parquet", rhs.args, kws, 2, "columns", rhs.loc, default=-1
+        columns = get_const_arg(
+            "read_parquet",
+            rhs.args,
+            kws,
+            self.func_ir,
+            self.args,
+            2,
+            "columns",
+            rhs.loc,
+            default=-1,
         )
-        storage_options = self._get_const_arg(
-            "read_parquet", rhs.args, kws, 10e4, "storage_options", rhs.loc, default={}
+        storage_options = get_const_arg(
+            "read_parquet",
+            rhs.args,
+            kws,
+            self.func_ir,
+            self.args,
+            10e4,
+            "storage_options",
+            rhs.loc,
+            default={},
         )
 
         # Bodo specific arguments. To avoid constantly needing to update Pandas we
@@ -2365,10 +2753,12 @@ class UntypedPass:
         # https://spark.apache.org/docs/latest/api/python/reference/api/pyspark.sql.functions.input_file_name.html
         # When specified, create a column in the resulting dataframe with this name
         # that contains the name of the file the row comes from
-        _bodo_input_file_name_col = self._get_const_arg(
+        _bodo_input_file_name_col = get_const_arg(
             "read_parquet",
             rhs.args,
             kws,
+            self.func_ir,
+            self.args,
             10e4,
             "_bodo_input_file_name_col",
             rhs.loc,
@@ -2380,10 +2770,12 @@ class UntypedPass:
         # dictionary-encoded string arrays. This is in addition
         # to whatever columns bodo determines should be read in
         # with dictionary encoding.
-        _bodo_read_as_dict = self._get_const_arg(
+        _bodo_read_as_dict = get_const_arg(
             "read_parquet",
             rhs.args,
             kws,
+            self.func_ir,
+            self.args,
             10e4,
             "_bodo_read_as_dict",
             rhs.loc,
@@ -2391,15 +2783,81 @@ class UntypedPass:
             default=None,
         )
 
-        _bodo_use_hive = self._get_const_arg(
+        _bodo_use_hive = get_const_arg(
             "read_parquet",
             rhs.args,
             kws,
+            self.func_ir,
+            self.args,
             10e4,
             "_bodo_use_hive",
             rhs.loc,
             use_default=True,
             default=True,
+        )
+
+        _bodo_read_as_table: bool = get_const_arg(
+            "read_sql",
+            rhs.args,
+            kws,
+            self.func_ir,
+            self.args,
+            10e5,
+            "_bodo_read_as_table",
+            rhs.loc,
+            default=False,
+        )
+
+        # Mimicing the use_index arg from read_csv
+        use_index = get_const_arg(
+            "read_parquet",
+            rhs.args,
+            kws,
+            self.func_ir,
+            self.args,
+            10e4,
+            "_bodo_use_index",
+            rhs.loc,
+            use_default=True,
+            default=True,
+        )
+
+        # If defined, perform batched reads on the dataset
+        # Note that we don't want to use Pandas chunksize, since it returns an iterator
+        chunksize: int | None = get_const_arg(
+            "read_parquet",
+            rhs.args,
+            kws,
+            self.func_ir,
+            self.args,
+            10e4,
+            "_bodo_chunksize",
+            rhs.loc,
+            use_default=True,
+            default=None,
+            typ="int",
+        )
+        if chunksize is not None and (
+            not isinstance(chunksize, int) or chunksize < 1
+        ):  # pragma: no cover
+            raise BodoError(
+                "pd.read_parquet() '_bodo_chunksize' must be a constant integer >= 1."
+            )
+
+        # Operator ID assigned by the planner for query profile purposes.
+        # Only applicable in the streaming case.
+        _bodo_sql_op_id_const: int = get_const_arg(
+            "read_parquet",
+            rhs.args,
+            kws,
+            self.func_ir,
+            self.args,
+            10e4,
+            "_bodo_sql_op_id",
+            rhs.loc,
+            use_default=True,
+            default=-1,
+            typ="int",
         )
 
         # check unsupported arguments
@@ -2408,16 +2866,20 @@ class UntypedPass:
             "engine",
             "columns",
             "storage_options",
+            "_bodo_chunksize",
             "_bodo_input_file_name_col",
             "_bodo_read_as_dict",
             "_bodo_use_hive",
+            "_bodo_read_as_table",
+            "_bodo_use_index",
+            "_bodo_sql_op_id",
         )
         unsupported_args = set(kws.keys()) - set(supported_args)
         if unsupported_args:
             raise BodoError(
-                "read_parquet() arguments {} not supported yet".format(unsupported_args)
+                f"read_parquet() arguments {unsupported_args} not supported yet"
             )
-        _check_storage_options(storage_options, "read_parquet", rhs)
+        _check_storage_options(storage_options, "read_parquet", rhs, check_fields=False)
 
         if engine not in ("auto", "pyarrow"):
             raise BodoError("read_parquet: only pyarrow engine supported")
@@ -2433,6 +2895,10 @@ class UntypedPass:
             _bodo_input_file_name_col,
             _bodo_read_as_dict,
             use_hive=_bodo_use_hive,
+            _bodo_read_as_table=_bodo_read_as_table,
+            chunksize=chunksize,
+            use_index=use_index,
+            sql_op_id=_bodo_sql_op_id_const,
         )
 
     def _handle_np_fromfile(self, assign, lhs, rhs):
@@ -2457,11 +2923,13 @@ class UntypedPass:
         _count = get_call_expr_arg(
             np_fromfile, rhs.args, kws, 2, "count", default=ir.Const(-1, lhs.loc)
         )
-        sep_err_msg = err_msg = f"{np_fromfile}(): sep argument is not supported"
-        _sep = self._get_const_arg(
+        sep_err_msg = f"{np_fromfile}(): sep argument is not supported"
+        _sep = get_const_arg(
             np_fromfile,
             rhs.args,
             kws,
+            self.func_ir,
+            self.args,
             3,
             "sep",
             rhs.loc,
@@ -2507,46 +2975,6 @@ class UntypedPass:
         nodes = f_block.body[:-3]  # remove none return
         nodes[-1].target = lhs
         return nodes
-
-    def _get_const_arg(
-        self,
-        f_name,
-        args,
-        kws,
-        arg_no,
-        arg_name,
-        loc,
-        *,
-        default=None,
-        err_msg=None,
-        typ=None,
-        use_default=False,
-    ):
-        """Get constant value for a function call argument. Raise error if the value is
-        not constant.
-        """
-        typ = "str" if typ is None else typ
-        arg = CONST_NOT_FOUND
-        if err_msg is None:
-            err_msg = ("{} requires '{}' argument as a constant {}").format(
-                f_name, arg_name, typ
-            )
-
-        arg_var = get_call_expr_arg(f_name, args, kws, arg_no, arg_name, "")
-
-        try:
-            arg = get_const_value_inner(self.func_ir, arg_var, arg_types=self.args)
-        except GuardException:
-            # raise error if argument specified but not constant
-            if arg_var != "":
-                raise BodoError(err_msg, loc=loc)
-
-        if arg is CONST_NOT_FOUND:
-            # Provide use_default to allow letting None be the default value
-            if use_default or default is not None:
-                return default
-            raise BodoError(err_msg, loc=loc)
-        return arg
 
     def _handle_metadata(self):
         """remove distributed input annotation from locals and add to metadata"""
@@ -2608,9 +3036,11 @@ class UntypedPass:
             ):
                 flag = "distributed"
             elif ret_name in self.metadata["replicated"]:
-
                 flag = "replicated"
             else:
+                assert (
+                    ret_name in self.metadata["threaded"]
+                ), f"invalid return flag for {ret_name}"
                 flag = "threaded"
             # save in metadata that the return value is distributed
             # TODO(ehsan): support other flags like distributed_block?
@@ -2641,11 +3071,18 @@ class UntypedPass:
                 self._return_varnames.add(vname)
                 tup_varnames.append(vname)
                 if vname in flagged_vars or all_returns_distributed:
-                    if vname in self.metadata["distributed"] or all_returns_distributed:
+                    if (
+                        vname in self.metadata["distributed"]
+                        or vname in self.metadata["distributed_block"]
+                        or all_returns_distributed
+                    ):
                         flag = "distributed"
                     elif vname in self.metadata["replicated"]:
                         flag = "replicated"
                     else:
+                        assert (
+                            vname in self.metadata["threaded"]
+                        ), f"invalid return flag for {vname}"
                         flag = "threaded"
                     nodes += self._gen_replace_dist_return(v, flag)
                     new_var_list.append(nodes[-1].target)
@@ -2668,7 +3105,6 @@ class UntypedPass:
 
     def _gen_replace_dist_return(self, var, flag):
         if flag == "distributed":
-
             func_text = (
                 ""
                 "def f(_dist_arr):\n"
@@ -2676,7 +3112,6 @@ class UntypedPass:
             )
 
         elif flag == "replicated":
-
             func_text = (
                 ""
                 "def f(_rep_arr):\n"
@@ -2684,7 +3119,6 @@ class UntypedPass:
             )
 
         elif flag == "threaded":
-
             func_text = (
                 ""
                 "def f(_threaded_arr):\n"
@@ -2692,7 +3126,7 @@ class UntypedPass:
             )
 
         else:
-            raise BodoError("Invalid return flag {}".format(flag))
+            raise BodoError(f"Invalid return flag {flag}")
         loc_vars = {}
         exec(func_text, globals(), loc_vars)
         f_block = compile_to_numba_ir(loc_vars["f"], {"bodo": bodo}).blocks.popitem()[1]
@@ -2752,7 +3186,7 @@ def _dtype_val_to_arr_type(t, func_name, loc):
     """get array type from type value 't' specified in calls like read_csv()
     e.g. "str" -> string_array_type
     """
-    if t == object:
+    if t is object:
         # TODO: Add a link to IO dtype documentation when available
         raise BodoError(
             f"{func_name}() 'dtype' does not support object dtype.", loc=loc
@@ -2768,6 +3202,12 @@ def _dtype_val_to_arr_type(t, func_name, loc):
             )
             return IntegerArrayType(dtype.dtype)
 
+        if t.startswith("Float"):  # pragma: no cover
+            dtype = bodo.libs.float_arr_ext.typeof_pd_float_dtype(
+                pd.api.types.pandas_dtype(t), None
+            )
+            return FloatingArrayType(dtype.dtype)
+
         # datetime64 case
         if t == "datetime64[ns]":
             return types.Array(types.NPDatetime("ns"), 1, "C")
@@ -2779,16 +3219,16 @@ def _dtype_val_to_arr_type(t, func_name, loc):
         t = "bool_" if t == "O" else t
 
         if t == "bool_":
-            return boolean_array
+            return boolean_array_type
 
         typ = getattr(types, t)
         typ = types.Array(typ, 1, "C")
         return typ
 
-    if t == int:
+    if t is int:
         return types.Array(types.int64, 1, "C")
 
-    if t == float:
+    if t is float:
         return types.Array(types.float64, 1, "C")
 
     # categorical type
@@ -2799,18 +3239,21 @@ def _dtype_val_to_arr_type(t, func_name, loc):
         return CategoricalArrayType(typ)
 
     # nullable int types
-    if isinstance(t, pd.core.arrays.integer._IntegerDtype):
+    if isinstance(t, pd.core.arrays.integer.IntegerDtype):  # pragma: no cover
         dtype = bodo.libs.int_arr_ext.typeof_pd_int_dtype(t, None)
         return IntegerArrayType(dtype.dtype)
+
+    # nullable float types
+    if isinstance(t, pd.core.arrays.floating.FloatingDtype):
+        dtype = bodo.libs.float_arr_ext.typeof_pd_float_dtype(t, None)
+        return FloatingArrayType(dtype.dtype)
 
     # try numpy dtypes
     try:
         dtype = numba.np.numpy_support.from_dtype(t)
         return types.Array(dtype, 1, "C")
-    except:
-        pass
-
-    raise BodoError(f"{func_name}() 'dtype' does not support {t}", loc=loc)
+    except Exception:
+        raise BodoError(f"{func_name}() 'dtype' does not support {t}", loc=loc)
 
 
 def _get_col_ind_from_name_or_ind(c, col_names_map):
@@ -2937,7 +3380,7 @@ def _get_json_df_type_from_file(
     path is invalid.
     Only rank 0 looks at the file to infer df type, then broadcasts.
     """
-    from mpi4py import MPI
+    from bodo.mpi4py import MPI
 
     comm = MPI.COMM_WORLD
 
@@ -3006,7 +3449,7 @@ def _get_excel_df_type_from_file(
     Only rank 0 looks at the file to infer df type, then broadcasts.
     """
 
-    from mpi4py import MPI
+    from bodo.mpi4py import MPI
 
     comm = MPI.COMM_WORLD
 
@@ -3055,20 +3498,31 @@ def _get_read_file_col_info(dtype_map, date_cols, col_names, lhs):
     columns = []
     data_arrs = []
     out_types = []
-    for i, (col_name, typ) in enumerate(dtype_map.items()):
-        columns.append(col_name)
-        # get array dtype
-        # date_cols = False from read_json(convert_dates=False)
-        if date_cols and (i in date_cols or col_name in date_cols):
-            typ = types.Array(types.NPDatetime("ns"), 1, "C")
-        out_types.append(typ)
-        # output array variable
-        data_arrs.append(ir.Var(lhs.scope, mk_unique_var(col_name), lhs.loc))
-
+    for i, col_name in enumerate(col_names):
+        # Column is alive if its in the dtype_map or date_cols
+        if col_name in dtype_map or i in date_cols or col_name in date_cols:
+            # Pandas prioritizes dtype_map over date_cols
+            col_type = dtype_map.get(col_name, types.Array(bodo.datetime64ns, 1, "C"))
+            columns.append(col_name)
+            out_types.append(col_type)
+            data_arrs.append(ir.Var(lhs.scope, mk_unique_var(col_name), lhs.loc))
     return columns, data_arrs, out_types
 
 
-def _get_sql_types_arr_colnames(sql_const, con_const, _bodo_read_as_dict, lhs, loc):
+def _get_sql_types_arr_colnames(
+    sql_const,
+    con_const,
+    _bodo_read_as_dict,
+    lhs,
+    loc,
+    is_table_input: bool,
+    is_independent: bool,
+    downcast_decimal_to_double: bool = False,
+    orig_table_const: str | None = None,
+    orig_table_indices_const: tuple[int] | None = None,
+    snowflake_conn_cache: dict[str, "SnowflakeConnection"] | None = None,
+    convert_snowflake_column_names: bool = True,
+):
     """
     Wrapper function to determine the db_type, column names,
     array variables, array types, any column names
@@ -3078,9 +3532,33 @@ def _get_sql_types_arr_colnames(sql_const, con_const, _bodo_read_as_dict, lhs, l
     This is written as a standalone
     function because other packages (i.e. BodoSQL) may need
     to type a SQL query.
+
+    Args:
+        sql_const: The sql query to determine the array types for. May be a full query, or a table name.
+        con_const (str): The connection string being used to connect to the database.
+        _bodo_read_as_dict (bool): Read all string columns as dict encoded strings.
+        lhs: The variable being assigned to by the read_sql call. If not converting a read_sql call,
+                this is a dummy variable.
+        loc: The location of the original read_sql call, if calling this function
+                is called while converting a read_sql. Otherwise, it's a dummy location.
+        is_table_input (bool): Is sql_const just the string name of the table to read from?
+        is_independent (bool): (TODO: add docs)
+        downcast_decimal_to_double (bool, default false): (TODO: add docs)
+        orig_table_const (Optional str): The string of the table at the outermost
+                leaf of this query. Should never be passed for queries that read from multiple tables.
+                If provided, this will be used for certain metadata queries.
+        orig_table_indices_const (Optional[Tuple[Int]]): The indices for each column
+            in the original table. This is to handle renaming and replace name based reads with
+            index based reads.
+        convert_snowflake_column_names (bool, default True): Should Snowflake column names be
+            converted to match SqlAlchemy. This is needed to ensure table path is consistent for
+            casing with the SnowflakeCatalog.
+
+    Returns:
+        A very large tuple (TODO: add docs)
     """
     # find db type
-    db_type, con_paswd = bodo.ir.sql_ext.parse_dbtype(con_const)
+    db_type, _ = sql_ext.parse_dbtype(con_const)
     # Whether SQL statement is SELECT query
     is_select_query = False
     # Does the SQL node have side effects (e.g. DELETE). If
@@ -3094,14 +3572,16 @@ def _get_sql_types_arr_colnames(sql_const, con_const, _bodo_read_as_dict, lhs, l
     # Ex. : Create, insert, update, delete, drop, ...
     # SELECT goes to full path of getting type, split across ranks, ...
     # Other will be executed by all ranks as it's.
-    # Snowflake+Bodo only supports SELECT
+    # Snowflake + Bodo only supports SELECT
     # Snowflake: Show and Describe don't work with get_dataset
     # Only supported by MySQL.
     # Oracle: cx_oracle doesn't support them. Bodo displays same error as Pandas.
     # Postgresql: SELECT and SHOW only.
     # Declare what Bodo supports.  Users may run them to explore their database
     supported_sql_queries = ("SELECT", "SHOW", "DESCRIBE", "DESC", "DELETE")
-    sql_word = sql_const.lstrip().split(maxsplit=1)[0].upper()
+    sql_word = (
+        "SELECT" if is_table_input else sql_const.lstrip().split(maxsplit=1)[0].upper()
+    )
     if sql_word not in supported_sql_queries:
         raise BodoError(f"{sql_word} query is not supported.\n")
     elif sql_word == "SELECT":
@@ -3120,6 +3600,7 @@ def _get_sql_types_arr_colnames(sql_const, con_const, _bodo_read_as_dict, lhs, l
         converted_colnames,
         unsupported_columns,
         unsupported_arrow_types,
+        pyarrow_table_schema,
     ) = _get_sql_df_type_from_db(
         sql_const,
         con_const,
@@ -3128,10 +3609,17 @@ def _get_sql_types_arr_colnames(sql_const, con_const, _bodo_read_as_dict, lhs, l
         sql_word,
         _bodo_read_as_dict,
         loc,
+        is_table_input,
+        is_independent,
+        downcast_decimal_to_double,
+        orig_table_const,
+        orig_table_indices_const,
+        snowflake_conn_cache=snowflake_conn_cache,
+        convert_snowflake_column_names=convert_snowflake_column_names,
     )
     dtypes = df_type.data
     dtype_map = {c: dtypes[i] for i, c in enumerate(df_type.columns)}
-    col_names = [c for c in df_type.columns]
+    col_names = list(df_type.columns)
 
     # date columns
     date_cols = []
@@ -3153,24 +3641,72 @@ def _get_sql_types_arr_colnames(sql_const, con_const, _bodo_read_as_dict, lhs, l
         unsupported_arrow_types,
         is_select_query,
         has_side_effects,
+        pyarrow_table_schema,
     )
 
 
 def _get_sql_df_type_from_db(
-    sql_const, con_const, db_type, is_select_query, sql_word, _bodo_read_as_dict, loc
+    sql_const,
+    con_const,
+    db_type,
+    is_select_query,
+    sql_word,
+    _bodo_read_as_dict,
+    loc,
+    is_table_input: bool,
+    is_independent: bool,
+    downcast_decimal_to_double: bool,
+    orig_table_const: str | None = None,
+    orig_table_indices_const: tuple[int] | None = None,
+    snowflake_conn_cache: dict[str, "SnowflakeConnection"] | None = None,
+    convert_snowflake_column_names: bool = True,
 ):
     """access the database to find df type for read_sql() output.
     Only rank zero accesses the database, then broadcasts.
+
+    Args:
+        sql_query (str): read query or Snowflake table name
+        con_const (str): The connection string being used to connect to the database.
+        db_type (str): The string name of the type of database being read from.
+        is_select_query (bool): TODO: document this
+        sql_word: TODO: document this
+        _bodo_read_as_dict (bool): Read all string columns as dict encoded strings.
+        loc: The location of the original read_sql call, can be a dummy,
+            if the original call does not exist
+        is_table_input (bool): read query is a just a table name
+        is_independent (bool): TODO: document this
+        downcast_decimal_to_double (bool): downcast decimal types to double
+        orig_table_const (str, optional): Original table name, to be used if sql_query is not
+            a table name. If provided, must guarantee that the sql_query only performs
+            a selection of a subset of the table's columns, and does not rename
+            any of the columns from the input table. Defaults to None.
+        orig_table_indices_const (Optional[Tuple[Int]]): The indices for each column
+            in the original table. This is to handle renaming and replace name based reads with
+            index based reads.
+        convert_snowflake_column_names (bool, default True): Should Snowflake column names be
+            converted to match SqlAlchemy. This is needed to ensure table path is consistent for
+            casing with the SnowflakeCatalog.
+
+
+    Returns:
+        A large tuple containing: (#TODO: document this)
+
     """
-    from mpi4py import MPI
+    from bodo.mpi4py import MPI
 
     comm = MPI.COMM_WORLD
+
+    if downcast_decimal_to_double and db_type != "snowflake":  # pragma: no cover
+        raise BodoError(
+            "pd.read_sql(): The `_bodo_downcast_decimal_to_double` argument is only supported for "
+            "Snowflake table reads"
+        )
 
     if _bodo_read_as_dict and db_type != "snowflake":
         if bodo.get_rank() == 0:
             warnings.warn(
                 BodoWarning(
-                    f"_bodo_read_as_dict is only supported when reading from Snowflake."
+                    "_bodo_read_as_dict is only supported when reading from Snowflake."
                 )
             )
 
@@ -3187,224 +3723,111 @@ def _get_sql_df_type_from_db(
             )
             raise BodoError(message)
 
-    df_info = None
     message = ""
-    if bodo.get_rank() == 0:
+    df_type = None
+    converted_colnames = None
+    unsupported_columns = None
+    unsupported_arrow_types = None
+    pyarrow_table_schema = None
+    if bodo.get_rank() == 0 or is_independent:
         try:
-            # Any columns that had their name converted. These need to be reverted
-            # in any dead column elimination
-            converted_colnames = set()
-            rows_to_read = 100  # TODO: tune this
-            # SHOW/DESCRIBE don't work with LIMIT.
-            if not is_select_query:
-                sql_call = f"{sql_const}"
-            # oracle does not support LIMIT. Use ROWNUM instead
-            elif db_type == "oracle":
-                sql_call = f"select * from ({sql_const}) WHERE ROWNUM <= {rows_to_read}"
-            else:
-                sql_call = f"select * from ({sql_const}) x LIMIT {rows_to_read}"
-
             if db_type == "snowflake":  # pragma: no cover
-                from bodo.io.snowflake import snowflake_connect
-
-                conn = snowflake_connect(con_const)
-
-                # Import after snowflake_connect since it should be safe now.
-                import snowflake.connector
-
-                cursor = conn.cursor()
-                described_query = cursor.describe(sql_call)
-                col_names = []
-                is_nullable = []
-                for x in described_query:
-                    col_names.append(x.name)
-                    is_nullable.append(x.is_nullable)
-                # TODO: Avoid executing the query once its possible to determine
-                # the exact arrow types.
-                if is_select_query:
-                    # We can only execute a sample query if we are performing a select.
-                    executed_query = cursor.execute(sql_call)
-                    arrow_data = executed_query.fetch_arrow_all()
-                else:
-                    arrow_data = None
-                if arrow_data is None:
-                    # If there is no data to load, construct the types
-                    # based on the metadata.
-                    pa_fields = [
-                        pa.field(
-                            x.name, bodo.io.snowflake.FIELD_TYPE_TO_PA_TYPE[x.type_code]
-                        )
-                        for x in described_query
-                    ]
-                else:
-                    pa_fields = [
-                        arrow_data.schema.field(i) for i in range(len(col_names))
-                    ]
-
-                col_types = []
-                unsupported_columns = []
-                unsupported_arrow_types = []
-                for i, c in enumerate(col_names):
-                    field = pa_fields[i]
-                    dtype, supported = _get_numba_typ_from_pa_typ(
-                        field,
-                        False,  # index_col
-                        is_nullable[i],  # nullable_from_metadata
-                        None,  # category_info
-                    )
-                    col_types.append(dtype)
-                    if not supported:
-                        unsupported_columns.append(i)
-                        # Store the unsupported arrow type for future
-                        # error messages.
-                        unsupported_arrow_types.append(field.type)
-
-                str_as_dict_cols = _bodo_read_as_dict if _bodo_read_as_dict else []
-                str_col_name_to_ind = {}
-                for i, t in enumerate(col_types):
-                    if t == string_array_type:
-                        str_col_name_to_ind[col_names[i]] = i
-
-                # Map the snowflake original column name to the name that
-                # is used from Python. This is used for comparing with
-                # _bodo_read_as_dict which will use Python's convention.
-                snowflake_case_map = {
-                    name.lower() if name.isupper() else name: name
-                    for name in str_col_name_to_ind.keys()
-                }
-
-                # If user-provided list has any columns that are not string
-                # type, show a warning.
-                non_str_columns_in_read_as_dict_cols = (
-                    str_as_dict_cols - snowflake_case_map.keys()
+                from bodo.io.snowflake import (
+                    SF_READ_DICT_ENCODING_IF_TIMEOUT,
+                    get_schema,
+                    snowflake_connect,
                 )
-                if len(non_str_columns_in_read_as_dict_cols) > 0:
-                    if bodo.get_rank() == 0:
-                        warnings.warn(
-                            BodoWarning(
-                                f"The following columns are not of datatype string and hence cannot be read with dictionary encoding: {non_str_columns_in_read_as_dict_cols}"
+
+                # Use Snowflake connection cache if available
+                if snowflake_conn_cache is not None:
+                    if con_const in snowflake_conn_cache:
+                        conn = snowflake_conn_cache[con_const]
+                    else:
+                        conn = snowflake_connect(con_const)
+                        snowflake_conn_cache[con_const] = conn
+                else:
+                    conn = snowflake_connect(con_const)
+
+                (
+                    df_type,
+                    converted_colnames,
+                    unsupported_columns,
+                    unsupported_arrow_types,
+                    pyarrow_table_schema,
+                    schema_timeout_info,
+                    dict_encode_timeout,
+                ) = get_schema(
+                    conn,
+                    sql_const,
+                    is_select_query,
+                    is_table_input,
+                    _bodo_read_as_dict,
+                    downcast_decimal_to_double,
+                    orig_table_const,
+                    orig_table_indices_const,
+                    convert_snowflake_column_names=convert_snowflake_column_names,
+                )
+
+                # Log the chosen dict-encoding timeout behavior
+                if bodo.user_logging.get_verbose_level() >= 2 and (
+                    schema_timeout_info or dict_encode_timeout
+                ):
+                    if schema_timeout_info:
+                        msg = (
+                            "Timeout occurred during schema probing query for Number types:\n%s\n"
+                            "The following columns will be kept as decimal which may impact performance: %s\n"
+                        )
+                        read_src = loc.strformat()
+                        string_col_names = ",".join(schema_timeout_info)
+                        bodo.user_logging.log_message(
+                            "Decimal Schema Probe Query",
+                            msg,
+                            read_src,
+                            string_col_names,
+                        )
+                    if dict_encode_timeout:
+                        probe_limit, query_args = dict_encode_timeout
+
+                        msg = (
+                            "Timeout occurred during probing query at:\n%s\n"
+                            "Maximum number of rows queried: %d\n"
+                        )
+                        if SF_READ_DICT_ENCODING_IF_TIMEOUT:
+                            msg += (
+                                "The following columns will be dictionary encoded: %s\n"
                             )
-                        )
-                convert_dict_col_names = snowflake_case_map.keys() & str_as_dict_cols
-                for name in convert_dict_col_names:
-                    col_types[
-                        str_col_name_to_ind[snowflake_case_map[name]]
-                    ] = dict_str_arr_type
-
-                query_args, string_col_ind = [], []
-                undetermined_str_cols = snowflake_case_map.keys() - str_as_dict_cols
-                for name in undetermined_str_cols:
-                    # Always quote column names for correctness
-                    query_args.append(f'count (distinct "{snowflake_case_map[name]}")')
-                    string_col_ind.append(str_col_name_to_ind[snowflake_case_map[name]])
-
-                # determine if the string columns are dictionary encoded
-                try_dictionary_encode = (
-                    bodo.io.snowflake.SF_READ_AUTO_DICT_ENCODE_ENABLED
-                )
-                if len(query_args) != 0 and try_dictionary_encode:
-                    # the criterion with which we determine whether to convert or not
-                    criterion = bodo.io.snowflake.SF_READ_DICT_ENCODE_CRITERION
-
-                    # the timeout for the probing query
-                    timeout = bodo.io.snowflake.SF_READ_DICT_ENCODING_PROBE_TIMEOUT
-
-                    # what to do if there's a timeout
-                    encode_if_timeout = (
-                        bodo.io.snowflake.SF_READ_DICT_ENCODING_IF_TIMEOUT
-                    )
-
-                    # the limit on the number of rows total to read for the probe
-                    probe_limit = (
-                        bodo.io.snowflake.SF_READ_DICT_ENCODING_PROBE_ROW_LIMIT
-                    )
-                    probe_limit = max(probe_limit // len(query_args), 1)
-
-                    # construct the prediction query script for the string columns
-                    # in which we sample 1 percent of the data
-                    # upper bound limits the total amount of sampling that will occur
-                    # to prevent a hang/timeout
-                    predict_cardinality_call = (
-                        f"select count(*),{', '.join(query_args)}"
-                        f"from ( select * from ({sql_const}) limit {probe_limit} ) SAMPLE (1)"
-                    )
-
-                    prediction_query_timed_out = False
-                    try:
-                        prediction_query = cursor.execute(
-                            predict_cardinality_call, timeout=timeout
-                        )
-                    except snowflake.connector.errors.ProgrammingError as e:
-                        # Catch timeouts
-                        if "SQL execution canceled" in str(e):
-                            prediction_query_timed_out = True
                         else:
-                            raise
-                    if prediction_query_timed_out:  # pragma: no cover
-                        # It is hard to get Snowflake to consistently
-                        # and deterministically time out, so this branch
-                        # isn't tested in the unit tests.
-
-                        # if the query times out, follow the default behavior set by
-                        # the SF_READ_DICT_ENCODING_IF_TIMEOUT flag
-                        if encode_if_timeout:
-                            for i in string_col_ind:
-                                col_types[i] = dict_str_arr_type
-
-                        # log the chosen behavior
-                        if bodo.user_logging.get_verbose_level() >= 2:
-                            msg = (
-                                "Timeout occured during probing query at:\n%s\n"
-                                "Maximum number of rows queried: %d\n"
-                            )
-                            if encode_if_timeout:
-                                msg += "The following columns will be dictionary encoded: %s\n"
-                            else:
-                                msg += "The following columns will not be dictionary encoded: %s\n"
-                            read_src = loc.strformat()
-                            string_col_names = ",".join(query_args)
-                            bodo.user_logging.log_message(
-                                "Dictionary Encoding Probe Query",
-                                msg,
-                                read_src,
-                                probe_limit,
-                                string_col_names,
-                            )
-                    else:
-                        cardinality_data = prediction_query.fetch_arrow_all()
-                        # calculate the level of uniqueness for each string column
-                        total_rows = cardinality_data[0][0].as_py()
-                        uniqueness = [
-                            cardinality_data[i][0].as_py() / max(total_rows, 1)
-                            for i in range(1, len(query_args) + 1)
-                        ]
-                        # filter the string col indices based on the criterion
-                        col_inds_to_convert = filter(
-                            lambda x: x[0] <= criterion, zip(uniqueness, string_col_ind)
+                            msg += "The following columns will not be dictionary encoded: %s\n"
+                        read_src = loc.strformat()
+                        string_col_names = ",".join(query_args)
+                        bodo.user_logging.log_message(
+                            "Dictionary Encoding Probe Query",
+                            msg,
+                            read_src,
+                            probe_limit,
+                            string_col_names,
                         )
-                        for _, ind in col_inds_to_convert:
-                            col_types[ind] = dict_str_arr_type
 
-                # Ensure column name case matches Pandas/sqlalchemy. See:
-                # https://github.com/snowflakedb/snowflake-sqlalchemy#object-name-case-handling
-                # If a name is returned as all uppercase by the Snowflake connector
-                # it means it is case insensitive or it was inserted as all
-                # uppercase with double quotes. In both of these situations
-                # pd.read_sql() returns the name with all lower case
-                new_colnames = []
-                for x in col_names:
-                    if x.isupper():
-                        converted_colnames.add(x.lower())
-                        new_colnames.append(x.lower())
-                    else:
-                        new_colnames.append(x)
-                df_type = DataFrameType(
-                    data=tuple(col_types), columns=tuple(new_colnames)
-                )
             else:
+                # Any columns that had their name converted. These need to be reverted
+                # in any dead column elimination
+                converted_colnames = set()
+                rows_to_read = 100  # TODO: tune this
+                # SHOW/DESCRIBE don't work with LIMIT.
+                if not is_select_query:
+                    sql_call = f"{sql_const}"
+                # oracle does not support LIMIT. Use ROWNUM instead
+                elif db_type == "oracle":
+                    sql_call = (
+                        f"select * from ({sql_const}) WHERE ROWNUM <= {rows_to_read}"
+                    )
+                else:
+                    sql_call = f"select * from ({sql_const}) x LIMIT {rows_to_read}"
+
                 # Unsupported arrow columns is unused by other paths.
                 unsupported_columns = []
                 unsupported_arrow_types = []
+                pyarrow_table_schema = None
                 # MySQL+DESCRIBE: has fixed DataFrameType. Created upfront.
                 # SHOW has many variation depending on object to show
                 # so it will fall in the else-stmt
@@ -3440,45 +3863,58 @@ def _get_sql_df_type_from_db(
             # int for example, but later rows could have NAs
             # Q: Is this needed for snowflake?
             df_type = to_nullable_type(df_type)
-            df_info = (
+
+        except Exception as e:
+            message = f"{type(e).__name__}:'{e}'"
+
+    if not is_independent:
+        message = comm.bcast(message)
+    raise_error = bool(message)
+    if raise_error:
+        common_err_msg = f"pd.read_sql(): Error executing query `{sql_const}`."
+        # raised general exception since except checks for multiple exceptions (sqlalchemy, snowflake)
+        raise RuntimeError(f"{common_err_msg}\n{message}")
+
+    if not is_independent:
+        (
+            df_type,
+            converted_colnames,
+            unsupported_columns,
+            unsupported_arrow_types,
+            pyarrow_table_schema,
+        ) = comm.bcast(
+            (
                 df_type,
                 converted_colnames,
                 unsupported_columns,
                 unsupported_arrow_types,
+                pyarrow_table_schema,
             )
-        except Exception as e:
-            message = f"{type(e).__name__}:'{e}'"
+        )
+    df_type = df_type.copy(data=tuple(t for t in df_type.data))
 
-    raise_error = bool(message)
-    # check if more than 1 rank, then propagate the error to raise on all ranks.
-    if bodo.get_size() > 1:
-        comm = MPI.COMM_WORLD
-        raise_error = comm.allreduce(raise_error, op=MPI.LOR)
-    if raise_error:
-        common_err_msg = f"pd.read_sql(): Error executing query `{sql_const}`."
-        # raised general exception since except checks for multiple exceptions (sqlalchemy, snowflake)
-        if message:
-            raise RuntimeError(f"{common_err_msg}\n{message}")
-        else:
-            raise RuntimeError(
-                f"{common_err_msg}\nPlease refer to errors on other ranks."
-            )
-    (
+    return (
         df_type,
         converted_colnames,
         unsupported_columns,
         unsupported_arrow_types,
-    ) = comm.bcast(df_info)
-    df_type = df_type.copy(data=tuple(t for t in df_type.data))
-    return df_type, converted_colnames, unsupported_columns, unsupported_arrow_types
+        pyarrow_table_schema,
+    )
 
 
-def _check_storage_options(storage_options, func_name, rhs):
+def _check_storage_options(
+    storage_options, func_name: str, rhs, check_fields: bool = True
+):
     """
     Error checking for storage_options usage in read_parquet/json/csv
     """
 
     if isinstance(storage_options, dict):
+        # Early exit when allowing for more storage_options.
+        # Used only in pd.read_parquet for now
+        if not check_fields:
+            return
+
         supported_storage_options = ("anon",)
         unsupported_storage_options = set(storage_options.keys()) - set(
             supported_storage_options
@@ -3561,7 +3997,7 @@ def _get_csv_df_type_from_file(
     Only rank 0 looks at the file to infer df type, then broadcasts.
     """
 
-    from mpi4py import MPI
+    from bodo.mpi4py import MPI
 
     comm = MPI.COMM_WORLD
 
@@ -3621,13 +4057,6 @@ def _get_csv_df_type_from_file(
         )
 
     return df_type_or_e
-
-
-def _check_type(val, typ):
-    """check whether "val" is of type "typ", or any type in "typ" if "typ" is a list"""
-    if isinstance(typ, list):
-        return any(isinstance(val, t) for t in typ)
-    return isinstance(val, typ)
 
 
 def _check_int_list(list_val):

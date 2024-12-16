@@ -1,11 +1,12 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
 Test correctness of bodosql.libs.regex functions
 """
+
 import re
 
-import bodosql
 import pytest
+
+import bodosql
 
 
 @pytest.mark.slow

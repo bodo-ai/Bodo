@@ -1,9 +1,7 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
 Implements array operations for usage by DataFrames and Series
 such as count and max.
 """
-
 
 import numba
 import numpy as np
@@ -15,6 +13,7 @@ from numba.extending import overload
 import bodo
 from bodo.hiframes.datetime_date_ext import datetime_date_array_type
 from bodo.hiframes.pd_categorical_ext import CategoricalArrayType
+from bodo.hiframes.time_ext import TimeArrayType
 from bodo.utils import tracing
 from bodo.utils.typing import (
     element_type,
@@ -144,12 +143,29 @@ def overload_array_op_isna(arr):
     def impl(arr):  # pragma: no cover
         numba.parfors.parfor.init_prange()
         n = len(arr)
-        out_arr = np.empty(n, np.bool_)
+        out_arr = bodo.libs.bool_arr_ext.alloc_bool_array(n)
         for i in numba.parfors.parfor.internal_prange(n):
             out_arr[i] = bodo.libs.array_kernels.isna(arr, i)
         return out_arr
 
     return impl
+
+
+def drop_duplicates_local_dictionary_if_dict(arr):  # pragma: no cover
+    """
+    Used with bodo.utils.table_utils.generate_mappable_table_func to
+    drop duplicates (and NAs) from dictionaries of all dictionary-encoded
+    arrays in a dataframe using table-format.
+    """
+
+
+@overload(drop_duplicates_local_dictionary_if_dict)
+def overload_drop_duplicates_local_dictionary_if_dict(arr):
+    if arr == bodo.dict_str_arr_type:
+        return lambda arr: bodo.libs.array.drop_duplicates_local_dictionary(
+            arr, False
+        )  # lambda: no cover
+    return lambda arr: arr  # lambda: no cover
 
 
 def array_op_count(arr):  # pragma: no cover
@@ -306,9 +322,36 @@ def overload_array_op_min(arr):
 
         return impl_date
 
+    if isinstance(arr, TimeArrayType):
+
+        def impl_time(arr):  # pragma: no cover
+            numba.parfors.parfor.init_prange()
+            s = bodo.hiframes.series_kernels._get_time_max_value()
+            count = 0
+            for i in numba.parfors.parfor.internal_prange(len(arr)):
+                val = s
+                count_val = 0
+                if not bodo.libs.array_kernels.isna(arr, i):
+                    val = arr[i]
+                    count_val = 1
+                s = min(s, val)
+                count += count_val
+            res = bodo.hiframes.series_kernels._sum_handle_nan(s, count)
+            return res
+
+        return impl_time
+
+    if is_str_arr_type(arr):
+        min_or_max = bodo.libs.str_arr_ext.MinOrMax.Min.value
+
+        def impl_str_arr_min(arr):  # pragma: no cover
+            return bodo.libs.str_arr_ext.str_arr_min_max(arr, min_or_max)
+
+        return impl_str_arr_min
+
     def impl(arr):  # pragma: no cover
         numba.parfors.parfor.init_prange()
-        s = bodo.hiframes.series_kernels._get_type_max_value(arr.dtype)
+        s = bodo.hiframes.series_kernels._get_type_max_value(arr)
         count = 0
         for i in numba.parfors.parfor.internal_prange(len(arr)):
             val = s
@@ -404,9 +447,36 @@ def overload_array_op_max(arr):
 
         return impl_date
 
+    if isinstance(arr, TimeArrayType):
+
+        def impl_time(arr):  # pragma: no cover
+            numba.parfors.parfor.init_prange()
+            s = bodo.hiframes.series_kernels._get_time_min_value()
+            count = 0
+            for i in numba.parfors.parfor.internal_prange(len(arr)):
+                val = s
+                count_val = 0
+                if not bodo.libs.array_kernels.isna(arr, i):
+                    val = arr[i]
+                    count_val = 1
+                s = max(s, val)
+                count += count_val
+            res = bodo.hiframes.series_kernels._sum_handle_nan(s, count)
+            return res
+
+        return impl_time
+
+    if is_str_arr_type(arr):
+        min_or_max = bodo.libs.str_arr_ext.MinOrMax.Max.value
+
+        def impl_str_arr_max(arr):  # pragma: no cover
+            return bodo.libs.str_arr_ext.str_arr_min_max(arr, min_or_max)
+
+        return impl_str_arr_max
+
     def impl(arr):  # pragma: no cover
         numba.parfors.parfor.init_prange()
-        s = bodo.hiframes.series_kernels._get_type_min_value(arr.dtype)
+        s = bodo.hiframes.series_kernels._get_type_min_value(arr)
         count = 0
         for i in numba.parfors.parfor.internal_prange(len(arr)):
             val = s
@@ -429,7 +499,6 @@ def array_op_mean(arr):  # pragma: no cover
 
 @overload(array_op_mean)
 def overload_array_op_mean(arr):
-
     # datetime
     if arr.dtype == bodo.datetime64ns:
 
@@ -529,7 +598,6 @@ def array_op_quantile(arr, q):  # pragma: no cover
 @overload(array_op_quantile)
 def overload_array_op_quantile(arr, q):
     if is_iterable_type(q):
-
         if arr.dtype == bodo.datetime64ns:
 
             def _impl_list_dt(arr, q):  # pragma: no cover
@@ -542,6 +610,25 @@ def overload_array_op_quantile(arr, q):
                 return out_arr.view(np.dtype("datetime64[ns]"))
 
             return _impl_list_dt
+
+        if isinstance(arr, bodo.DatetimeArrayType):
+            tz = arr.tz
+
+            def _impl_list_dt_tz(arr, q):  # pragma: no cover
+                out_arr = bodo.libs.pd_datetime_arr_ext.alloc_pd_datetime_array(
+                    len(q), tz
+                )
+                for i in range(len(q)):
+                    q_val = np.float64(q[i])
+                    out_arr[i] = pd.Timestamp(
+                        bodo.libs.array_kernels.quantile(
+                            arr._data.view(np.int64), q_val
+                        ),
+                        tz=tz,
+                    )
+                return out_arr
+
+            return _impl_list_dt_tz
 
         def impl_list(arr, q):  # pragma: no cover
             out_arr = np.empty(len(q), np.float64)
@@ -561,6 +648,19 @@ def overload_array_op_quantile(arr, q):
 
         return _impl_dt
 
+    if isinstance(arr, bodo.DatetimeArrayType):
+        tz = arr.tz
+
+        def _impl_dt_tz(arr, q):  # pragma: no cover
+            return pd.Timestamp(
+                bodo.libs.array_kernels.quantile(
+                    arr._data.view(np.int64), np.float64(q)
+                ),
+                tz=tz,
+            )
+
+        return _impl_dt_tz
+
     def impl(arr, q):  # pragma: no cover
         return bodo.libs.array_kernels.quantile(arr, np.float64(q))
 
@@ -574,6 +674,13 @@ def array_op_sum(arr, skipna, min_count):  # pragma: no cover
 
 @overload(array_op_sum, no_unliteral=True)
 def overload_array_op_sum(arr, skipna, min_count):
+    if isinstance(arr, bodo.DecimalArrayType):
+
+        def impl(arr, skipna, min_count):  # pragma: no cover
+            return bodo.libs.decimal_arr_ext.sum_decimal_array(arr)
+
+        return impl
+
     # TODO: arr that have different underlying data type than dtype
     # like records/tuples
     if isinstance(arr.dtype, types.Integer):
@@ -726,7 +833,6 @@ def array_op_isin(arr, values):  # pragma: no cover
 
 @overload(array_op_isin, inline="always")
 def overload_array_op_isin(arr, values):
-
     # For now we're only using the hash implementation when the dtypes of values
     # and the series are the same, and they are hashable.
     # TODO Optimize this further by casting values to a common dtype if possible
@@ -739,7 +845,7 @@ def overload_array_op_isin(arr, values):
         values = bodo.libs.array_ops._convert_isin_values(values, use_hash_impl)
         numba.parfors.parfor.init_prange()
         n = len(arr)
-        out_arr = np.empty(n, np.bool_)
+        out_arr = bodo.libs.bool_arr_ext.alloc_bool_array(n)
         for i in numba.parfors.parfor.internal_prange(n):
             # TODO: avoid Timestamp conversion for date comparisons if possible
             # TODO: handle None/nan/NA values properly
@@ -832,7 +938,7 @@ def array_unique_vector_map(in_arr_tup):
         # Use a dummy dictionary comprehension to type the
         # dictionary. See the list example in:
         # https://numba.pydata.org/numba-doc/latest/user/troubleshoot.html#my-code-has-an-untyped-list-problem
-        func_text += f"  arr_map = {{in_arr[unused]: 0 for unused in range(0)}}\n"
+        func_text += "  arr_map = {in_arr[unused]: 0 for unused in range(0)}\n"
         func_text += "  map_vector = np.empty(n, np.int64)\n"
         func_text += "  is_na = 0\n"
         func_text += "  in_lst = []\n"
@@ -877,7 +983,7 @@ def array_unique_vector_map(in_arr_tup):
         func_text += "    bodo.libs.array_kernels.setna(out_arr, n_rows - 1)\n"
         func_text += "  ev.add_attribute('n_map_entries', n_rows)\n"
         func_text += "  ev.finalize()\n"
-        func_text += f"  return (out_arr,), map_vector\n"
+        func_text += "  return (out_arr,), map_vector\n"
 
     loc_vars = {}
     exec(func_text, {"bodo": bodo, "np": np, "tracing": tracing}, loc_vars)

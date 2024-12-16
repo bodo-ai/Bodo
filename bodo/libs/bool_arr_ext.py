@@ -1,8 +1,8 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """Nullable boolean array that stores data in Numpy format (1 byte per value)
 but nulls are stored in bit arrays (1 bit per value) similar to Arrow's nulls.
 Pandas converts boolean array to object when NAs are introduced.
 """
+
 import operator
 
 import llvmlite.binding as ll
@@ -24,6 +24,7 @@ from numba.extending import (
     overload,
     overload_attribute,
     overload_method,
+    register_jitable,
     register_model,
     type_callable,
     typeof_impl,
@@ -33,22 +34,12 @@ from numba.parfors.array_analysis import ArrayAnalysis
 
 import bodo
 from bodo.libs import hstr_ext
-from bodo.libs.str_arr_ext import string_array_type
 from bodo.utils.typing import is_list_like_index_type
 
-ll.add_symbol("is_bool_array", hstr_ext.is_bool_array)
-ll.add_symbol("is_pd_boolean_array", hstr_ext.is_pd_boolean_array)
-ll.add_symbol("unbox_bool_array_obj", hstr_ext.unbox_bool_array_obj)
-from bodo.utils.indexing import (
-    array_getitem_bool_index,
-    array_getitem_int_index,
-    array_getitem_slice_index,
-    array_setitem_bool_index,
-    array_setitem_int_index,
-    array_setitem_slice_index,
-)
+ll.add_symbol("bool_arr_to_bitmap", hstr_ext.bool_arr_to_bitmap)
 from bodo.utils.typing import (
     BodoError,
+    check_unsupported_args,
     is_iterable_type,
     is_overload_false,
     is_overload_true,
@@ -59,7 +50,7 @@ from bodo.utils.typing import (
 
 class BooleanArrayType(types.ArrayCompatible):
     def __init__(self):
-        super(BooleanArrayType, self).__init__(name="BooleanArrayType()")
+        super().__init__(name="BooleanArrayType()")
 
     @property
     def as_array(self):
@@ -73,20 +64,29 @@ class BooleanArrayType(types.ArrayCompatible):
     def copy(self):
         return BooleanArrayType()
 
+    def unify(self, typingctx, other):
+        """Allow casting Numpy bool arrays to nullable bool arrays"""
+        if isinstance(other, types.Array) and other.ndim == 1:
+            # If dtype matches or other.dtype is undefined (inferred)
+            # Similar to Numba array unify:
+            # https://github.com/numba/numba/blob/d4460feb8c91213e7b89f97b632d19e34a776cd3/numba/core/types/npytypes.py#L491
+            if other.dtype == types.bool_ or not other.dtype.is_precise():
+                return self
 
-boolean_array = BooleanArrayType()
+
+boolean_array_type = BooleanArrayType()
 
 
 @typeof_impl.register(pd.arrays.BooleanArray)
 def typeof_boolean_array(val, c):
-    return boolean_array
+    return boolean_array_type
 
 
-data_type = types.Array(types.bool_, 1, "C")
+data_type = types.Array(types.uint8, 1, "C")
 nulls_type = types.Array(types.uint8, 1, "C")
 
 
-# store data and nulls as regular numpy arrays without payload machineray
+# store data and nulls as regular numpy arrays without payload machinery
 # since this struct is immutable (data and null_bitmap are not assigned new
 # arrays after initialization)
 @register_model(BooleanArrayType)
@@ -95,12 +95,16 @@ class BooleanArrayModel(models.StructModel):
         members = [
             ("data", data_type),
             ("null_bitmap", nulls_type),
+            # We need to store the actual length because the length
+            # of the data array doesn't match the actual length.
+            ("length", types.int64),
         ]
         models.StructModel.__init__(self, dmm, fe_type, members)
 
 
 make_attribute_wrapper(BooleanArrayType, "data", "_data")
 make_attribute_wrapper(BooleanArrayType, "null_bitmap", "_null_bitmap")
+make_attribute_wrapper(BooleanArrayType, "length", "_length")
 
 
 # dtype object for pd.BooleanDtype()
@@ -111,7 +115,7 @@ class BooleanDtype(types.Number):
 
     def __init__(self):
         self.dtype = types.bool_
-        super(BooleanDtype, self).__init__("BooleanDtype")
+        super().__init__("BooleanDtype")
 
 
 boolean_dtype = BooleanDtype()
@@ -171,214 +175,46 @@ def call_func_in_unbox(func, args, arg_typs, c):
 def unbox_bool_array(typ, obj, c):
     """
     Convert a pd.arrays.BooleanArray or a Numpy array object to a native BooleanArray
-    structure. The array's dtype can be bool or object, depending on the presense of
-    nans.
+    structure. The array's dtype can be bool or object, depending on the presence of
+    NAs.
     """
-    n_obj = c.pyapi.call_method(obj, "__len__", ())
-    n = c.pyapi.long_as_longlong(n_obj)
-    c.pyapi.decref(n_obj)
-
-    fnty = lir.FunctionType(lir.IntType(32), [lir.IntType(8).as_pointer()])
-    fn_bool = cgutils.get_or_insert_function(
-        c.builder.module, fnty, name="is_bool_array"
-    )
-
-    fnty = lir.FunctionType(lir.IntType(32), [lir.IntType(8).as_pointer()])
-    fn = cgutils.get_or_insert_function(
-        c.builder.module, fnty, name="is_pd_boolean_array"
-    )
-
-    bool_arr = cgutils.create_struct_proxy(typ)(c.context, c.builder)
-
-    is_pd_bool = c.builder.call(fn, [obj])
-    cond_pd = c.builder.icmp_unsigned("!=", is_pd_bool, is_pd_bool.type(0))
-    with c.builder.if_else(cond_pd) as (pd_then, pd_otherwise):
-        with pd_then:
-            data_obj = c.pyapi.object_getattr_string(obj, "_data")
-            bool_arr.data = c.pyapi.to_native_value(
-                types.Array(types.bool_, 1, "C"), data_obj
-            ).value
-
-            mask_arr_obj = c.pyapi.object_getattr_string(obj, "_mask")
-            mask_arr = c.pyapi.to_native_value(
-                types.Array(types.bool_, 1, "C"), mask_arr_obj
-            ).value
-            n_bytes = c.builder.udiv(
-                c.builder.add(n, lir.Constant(lir.IntType(64), 7)),
-                lir.Constant(lir.IntType(64), 8),
-            )
-            mask_arr_struct = c.context.make_array(types.Array(types.bool_, 1, "C"))(
-                c.context, c.builder, mask_arr
-            )
-            bitmap_arr_struct = bodo.utils.utils._empty_nd_impl(
-                c.context, c.builder, types.Array(types.uint8, 1, "C"), [n_bytes]
-            )
-
-            fnty = lir.FunctionType(
-                lir.VoidType(),
-                [
-                    lir.IntType(8).as_pointer(),
-                    lir.IntType(8).as_pointer(),
-                    lir.IntType(64),
-                ],
-            )
-            fn = cgutils.get_or_insert_function(
-                c.builder.module, fnty, name="mask_arr_to_bitmap"
-            )
-            c.builder.call(fn, [bitmap_arr_struct.data, mask_arr_struct.data, n])
-            bool_arr.null_bitmap = bitmap_arr_struct._getvalue()
-            # clean up native mask array after creating bitmap from it
-            c.context.nrt.decref(c.builder, types.Array(types.bool_, 1, "C"), mask_arr)
-            c.pyapi.decref(data_obj)
-            c.pyapi.decref(mask_arr_obj)
-
-        with pd_otherwise:
-            is_bool_dtype = c.builder.call(fn_bool, [obj])
-            cond = c.builder.icmp_unsigned("!=", is_bool_dtype, is_bool_dtype.type(0))
-            with c.builder.if_else(cond) as (then, otherwise):
-                with then:
-                    # array is bool
-                    bool_arr.data = c.pyapi.to_native_value(
-                        types.Array(types.bool_, 1, "C"), obj
-                    ).value
-                    bool_arr.null_bitmap = call_func_in_unbox(
-                        gen_full_bitmap, (n,), (types.int64,), c
-                    )
-                with otherwise:
-                    # array is object
-                    # allocate data
-                    bool_arr.data = bodo.utils.utils._empty_nd_impl(
-                        c.context, c.builder, types.Array(types.bool_, 1, "C"), [n]
-                    )._getvalue()
-                    # allocate bitmap
-                    n_bytes = c.builder.udiv(
-                        c.builder.add(n, lir.Constant(lir.IntType(64), 7)),
-                        lir.Constant(lir.IntType(64), 8),
-                    )
-                    bool_arr.null_bitmap = bodo.utils.utils._empty_nd_impl(
-                        c.context,
-                        c.builder,
-                        types.Array(types.uint8, 1, "C"),
-                        [n_bytes],
-                    )._getvalue()
-                    # get array pointers for data and bitmap
-                    data_ptr = c.context.make_array(types.Array(types.bool_, 1, "C"))(
-                        c.context, c.builder, bool_arr.data
-                    ).data
-                    bitmap_ptr = c.context.make_array(types.Array(types.uint8, 1, "C"))(
-                        c.context, c.builder, bool_arr.null_bitmap
-                    ).data
-                    fnty = lir.FunctionType(
-                        lir.VoidType(),
-                        [
-                            lir.IntType(8).as_pointer(),
-                            lir.IntType(8).as_pointer(),
-                            lir.IntType(8).as_pointer(),
-                            lir.IntType(64),
-                        ],
-                    )
-                    fn = cgutils.get_or_insert_function(
-                        c.builder.module, fnty, name="unbox_bool_array_obj"
-                    )
-                    c.builder.call(fn, [obj, data_ptr, bitmap_ptr, n])
-
-    return NativeValue(bool_arr._getvalue())
+    return bodo.libs.array.unbox_array_using_arrow(typ, obj, c)
 
 
 @box(BooleanArrayType)
 def box_bool_arr(typ, val, c):
-    """Box bool array into pd.arrays.BooleanArray object. Null bitmap is converted to
-    mask array.
-    """
-    # TODO: refactor with integer array
-    bool_arr = cgutils.create_struct_proxy(typ)(c.context, c.builder, val)
-    data = c.pyapi.from_native_value(
-        types.Array(typ.dtype, 1, "C"), bool_arr.data, c.env_manager
-    )
-    bitmap_arr_data = c.context.make_array(types.Array(types.uint8, 1, "C"))(
-        c.context, c.builder, bool_arr.null_bitmap
-    ).data
-
-    # allocate mask array
-    n_obj = c.pyapi.call_method(data, "__len__", ())
-    n = c.pyapi.long_as_longlong(n_obj)
-    mod_name = c.context.insert_const_string(c.builder.module, "numpy")
-    np_class_obj = c.pyapi.import_module_noblock(mod_name)
-    bool_dtype = c.pyapi.object_getattr_string(np_class_obj, "bool_")
-    mask_arr = c.pyapi.call_method(np_class_obj, "empty", (n_obj, bool_dtype))
-    mask_arr_ctypes = c.pyapi.object_getattr_string(mask_arr, "ctypes")
-    mask_arr_data = c.pyapi.object_getattr_string(mask_arr_ctypes, "data")
-    mask_arr_ptr = c.builder.inttoptr(
-        c.pyapi.long_as_longlong(mask_arr_data), lir.IntType(8).as_pointer()
-    )
-
-    # fill mask array
-    with cgutils.for_range(c.builder, n) as loop:
-        # (bits[i >> 3] >> (i & 0x07)) & 1
-        i = loop.index
-        byte_ind = c.builder.lshr(i, lir.Constant(lir.IntType(64), 3))
-        byte = c.builder.load(cgutils.gep(c.builder, bitmap_arr_data, byte_ind))
-        mask = c.builder.trunc(
-            c.builder.and_(i, lir.Constant(lir.IntType(64), 7)), lir.IntType(8)
-        )
-        val = c.builder.and_(
-            c.builder.lshr(byte, mask), lir.Constant(lir.IntType(8), 1)
-        )
-        # flip value since bitmap uses opposite convention
-        val = c.builder.xor(val, lir.Constant(lir.IntType(8), 1))
-        ptr = cgutils.gep(c.builder, mask_arr_ptr, i)
-        c.builder.store(val, ptr)
-
-    # clean up bitmap after mask array is created
-    c.context.nrt.decref(
-        c.builder, types.Array(types.uint8, 1, "C"), bool_arr.null_bitmap
-    )
-
-    # create BooleanArray
-    mod_name = c.context.insert_const_string(c.builder.module, "pandas")
-    pd_class_obj = c.pyapi.import_module_noblock(mod_name)
-    arr_mod_obj = c.pyapi.object_getattr_string(pd_class_obj, "arrays")
-    res = c.pyapi.call_method(arr_mod_obj, "BooleanArray", (data, mask_arr))
-
-    # clean up references (TODO: check for potential refcount issues)
-    c.pyapi.decref(pd_class_obj)
-    c.pyapi.decref(n_obj)
-    c.pyapi.decref(np_class_obj)
-    c.pyapi.decref(bool_dtype)
-    c.pyapi.decref(mask_arr_ctypes)
-    c.pyapi.decref(mask_arr_data)
-    c.pyapi.decref(arr_mod_obj)
-    c.pyapi.decref(data)
-    c.pyapi.decref(mask_arr)
-    return res
+    """Box bool array into Pandas ArrowExtensionArray."""
+    return bodo.libs.array.box_array_using_arrow(typ, val, c)
 
 
 @lower_constant(BooleanArrayType)
 def lower_constant_bool_arr(context, builder, typ, pyval):
-
     n = len(pyval)
-    data_arr = np.empty(n, np.bool_)
-    nulls_arr = np.empty((n + 7) >> 3, np.uint8)
+    nbytes = (n + 7) >> 3
+    data_arr = np.empty(nbytes, np.uint8)
+    nulls_arr = np.empty(nbytes, np.uint8)
     for i, s in enumerate(pyval):
         is_na = pd.isna(s)
         bodo.libs.int_arr_ext.set_bit_to_arr(nulls_arr, i, int(not is_na))
         if not is_na:
-            data_arr[i] = s
+            bodo.libs.int_arr_ext.set_bit_to_arr(data_arr, i, int(s))
 
     data_const_arr = context.get_constant_generic(builder, data_type, data_arr)
 
     nulls_const_arr = context.get_constant_generic(builder, nulls_type, nulls_arr)
+    len_const = context.get_constant(types.int64, n)
 
     # create bool arr struct
-    return lir.Constant.literal_struct([data_const_arr, nulls_const_arr])
+    return lir.Constant.literal_struct([data_const_arr, nulls_const_arr, len_const])
 
 
 def lower_init_bool_array(context, builder, signature, args):
-    data_val, bitmap_val = args
+    data_val, bitmap_val, length = args
     # create bool_arr struct and store values
     bool_arr = cgutils.create_struct_proxy(signature.return_type)(context, builder)
     bool_arr.data = data_val
     bool_arr.null_bitmap = bitmap_val
+    bool_arr.length = length
 
     # increase refcount of stored values
     context.nrt.incref(builder, signature.args[0], data_val)
@@ -388,85 +224,58 @@ def lower_init_bool_array(context, builder, signature, args):
 
 
 @intrinsic
-def init_bool_array(typingctx, data, null_bitmap=None):
+def init_bool_array(typingctx, data, null_bitmap, length):
     """Create a BooleanArray with provided data and null bitmap values."""
-    assert data == types.Array(types.bool_, 1, "C")
+    assert data == types.Array(types.uint8, 1, "C")
     assert null_bitmap == types.Array(types.uint8, 1, "C")
-    sig = boolean_array(data, null_bitmap)
+    assert length == types.int64
+    sig = boolean_array_type(data, null_bitmap, length)
     return sig, lower_init_bool_array
 
 
-# using a function for getting data to enable extending various analysis
-@numba.generated_jit(nopython=True, no_cpython_wrapper=True)
-def get_bool_arr_data(A):
-    return lambda A: A._data
-
-
-@numba.generated_jit(nopython=True, no_cpython_wrapper=True)
-def get_bool_arr_bitmap(A):
-    return lambda A: A._null_bitmap
-
-
-# array analysis extension
-def get_bool_arr_data_equiv(self, scope, equiv_set, loc, args, kws):
-    assert len(args) == 1 and not kws
-    var = args[0]
-    if equiv_set.has_shape(var):
-        return ArrayAnalysis.AnalyzeResult(shape=var, pre=[])
-    return None
-
-
-ArrayAnalysis._analyze_op_call_bodo_libs_bool_arr_ext_get_bool_arr_data = (
-    get_bool_arr_data_equiv
-)
-
-
-def init_bool_array_equiv(self, scope, equiv_set, loc, args, kws):
-    assert len(args) == 2 and not kws
-    var = args[0]
-    if equiv_set.has_shape(var):
-        return ArrayAnalysis.AnalyzeResult(shape=var, pre=[])
-    return None
-
-
-ArrayAnalysis._analyze_op_call_bodo_libs_bool_arr_ext_init_bool_array = (
-    init_bool_array_equiv
-)
-
-
-def alias_ext_dummy_func(lhs_name, args, alias_map, arg_aliases):
-    assert len(args) >= 1
-    numba.core.ir_utils._add_alias(lhs_name, args[0].name, alias_map, arg_aliases)
-
-
-def alias_ext_init_bool_array(lhs_name, args, alias_map, arg_aliases):
-    assert len(args) == 2
-    numba.core.ir_utils._add_alias(lhs_name, args[0].name, alias_map, arg_aliases)
-    numba.core.ir_utils._add_alias(lhs_name, args[1].name, alias_map, arg_aliases)
-
-
-numba.core.ir_utils.alias_func_extensions[
-    ("init_bool_array", "bodo.libs.bool_arr_ext")
-] = alias_ext_init_bool_array
-numba.core.ir_utils.alias_func_extensions[
-    ("get_bool_arr_data", "bodo.libs.bool_arr_ext")
-] = alias_ext_dummy_func
-numba.core.ir_utils.alias_func_extensions[
-    ("get_bool_arr_bitmap", "bodo.libs.bool_arr_ext")
-] = alias_ext_dummy_func
+@register_jitable(inline="always")
+def get_boolean_array_bytes_from_length(length):
+    """
+    Determine the number of bytes used for a boolean
+    array of length `length`. Boolean arrays store 1
+    bit per value.
+    """
+    return (length + 7) >> 3
 
 
 # high-level allocation function for boolean arrays
 @numba.njit(no_cpython_wrapper=True)
 def alloc_bool_array(n):  # pragma: no cover
-    data_arr = np.empty(n, dtype=np.bool_)
-    nulls = np.empty((n + 7) >> 3, dtype=np.uint8)
-    return init_bool_array(data_arr, nulls)
+    num_bytes = get_boolean_array_bytes_from_length(n)
+    data_arr = np.empty(num_bytes, dtype=np.uint8)
+    nulls = np.empty(num_bytes, dtype=np.uint8)
+    return init_bool_array(data_arr, nulls, np.int64(n))
+
+
+# allocate a boolean array of all false values
+@numba.njit(no_cpython_wrapper=True)
+def alloc_false_bool_array(n):  # pragma: no cover
+    num_bytes = get_boolean_array_bytes_from_length(n)
+    data_arr = np.zeros(num_bytes, dtype=np.uint8)
+    # Initialize null bitmap to all 1s
+    nulls = np.full(num_bytes, 255, dtype=np.uint8)
+    return init_bool_array(data_arr, nulls, np.int64(n))
+
+
+# allocate a boolean array of all true values
+@numba.njit(no_cpython_wrapper=True)
+def alloc_true_bool_array(n):  # pragma: no cover
+    num_bytes = get_boolean_array_bytes_from_length(n)
+    data_arr = np.full(num_bytes, 255, dtype=np.uint8)
+    # Initialize null bitmap to all 1s
+    nulls = np.full(num_bytes, 255, dtype=np.uint8)
+    return init_bool_array(data_arr, nulls, np.int64(n))
 
 
 def alloc_bool_array_equiv(self, scope, equiv_set, loc, args, kws):
-    """Array analysis function for alloc_bool_array() passed to Numba's array analysis
-    extension. Assigns output array's size as equivalent to the input size variable.
+    """Array analysis function for alloc_bool_array(), alloc_false_bool_array(),
+    and alloc_true_bool_array() passed to Numba's array analysis extension.
+    Assigns output array's size as equivalent to the input size variable.
     """
     assert len(args) == 1 and not kws
     return ArrayAnalysis.AnalyzeResult(shape=args[0], pre=[])
@@ -476,24 +285,63 @@ ArrayAnalysis._analyze_op_call_bodo_libs_bool_arr_ext_alloc_bool_array = (
     alloc_bool_array_equiv
 )
 
+ArrayAnalysis._analyze_op_call_bodo_libs_bool_arr_ext_alloc_false_bool_array = (
+    alloc_bool_array_equiv
+)
+
+ArrayAnalysis._analyze_op_call_bodo_libs_bool_arr_ext_alloc_true_bool_array = (
+    alloc_bool_array_equiv
+)
+
 
 @overload(operator.getitem, no_unliteral=True)
 def bool_arr_getitem(A, ind):
-    if A != boolean_array:
+    if A != boolean_array_type:
         return
-
-    # TODO: refactor with int arr since almost same code
 
     if isinstance(types.unliteral(ind), types.Integer):
         # XXX: cannot handle NA for scalar getitem since not type stable
-        return lambda A, ind: A._data[ind]
+        # Note: We fetch a single bit because we store 1 bit per byte.
+        return lambda A, ind: bool(
+            bodo.libs.int_arr_ext.get_bit_bitmap_arr(A._data, ind)
+        )
 
-    # bool arr indexing
+    # bool arr indexing.
     if is_list_like_index_type(ind) and ind.dtype == types.bool_:
 
         def impl_bool(A, ind):  # pragma: no cover
-            new_data, new_mask = array_getitem_bool_index(A, ind)
-            return init_bool_array(new_data, new_mask)
+            # Calculate the total number of values in the output.
+            # This is effectively what the BooleanArrayIndexer does.
+            # https://github.com/numba/numba/blob/2829f1f108d3350f456984036f9742c95ce41bfc/numba/np/arrayobj.py#L824
+            old_len = len(A)
+            new_len = 0
+            for i in range(old_len):
+                if not bodo.libs.array_kernels.isna(ind, i) and ind[i]:
+                    new_len += 1
+
+            # Now that we know the length, we can allocate the output.
+            output_arr = alloc_bool_array(new_len)
+            # Note: This is very similar to setitem but doesn't match
+            # the supported pattern.
+            dest_ind = 0
+            for i in range(old_len):
+                if not bodo.libs.array_kernels.isna(ind, i) and ind[i]:
+                    # set the data value
+                    data_bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(A._data, i)
+                    bodo.libs.int_arr_ext.set_bit_to_arr(
+                        output_arr._data, dest_ind, data_bit
+                    )
+                    # Set the null bit
+                    null_bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(
+                        A._null_bitmap, i
+                    )
+                    bodo.libs.int_arr_ext.set_bit_to_arr(
+                        output_arr._null_bitmap, dest_ind, null_bit
+                    )
+                    # Update the destination index
+                    dest_ind += 1
+
+            return output_arr
 
         return impl_bool
 
@@ -501,8 +349,23 @@ def bool_arr_getitem(A, ind):
     if is_list_like_index_type(ind) and isinstance(ind.dtype, types.Integer):
 
         def impl(A, ind):  # pragma: no cover
-            new_data, new_mask = array_getitem_int_index(A, ind)
-            return init_bool_array(new_data, new_mask)
+            n = len(ind)
+            output_arr = alloc_bool_array(n)
+            # Note: This is very similar to setitem but doesn't match
+            # the supported pattern.
+            for i in range(n):
+                # set the data value
+                data_bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(A._data, ind[i])
+                bodo.libs.int_arr_ext.set_bit_to_arr(output_arr._data, i, data_bit)
+                # Set the null bit
+                null_bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(
+                    A._null_bitmap, ind[i]
+                )
+                bodo.libs.int_arr_ext.set_bit_to_arr(
+                    output_arr._null_bitmap, i, null_bit
+                )
+
+            return output_arr
 
         return impl
 
@@ -510,8 +373,27 @@ def bool_arr_getitem(A, ind):
     if isinstance(ind, types.SliceType):
 
         def impl_slice(A, ind):  # pragma: no cover
-            new_data, new_mask = array_getitem_slice_index(A, ind)
-            return init_bool_array(new_data, new_mask)
+            slice_ind = numba.cpython.unicode._normalize_slice(ind, len(A))
+            out_length = numba.cpython.unicode._slice_span(slice_ind)
+            output_arr = alloc_bool_array(out_length)
+            # Note: This is very similar to setitem but doesn't match
+            # the supported pattern.
+            dest_idx = 0
+            for i in range(slice_ind.start, slice_ind.stop, slice_ind.step):
+                # set the data value
+                data_bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(A._data, i)
+                bodo.libs.int_arr_ext.set_bit_to_arr(
+                    output_arr._data, dest_idx, data_bit
+                )
+                # Set the null bit
+                null_bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(A._null_bitmap, i)
+                bodo.libs.int_arr_ext.set_bit_to_arr(
+                    output_arr._null_bitmap, dest_idx, null_bit
+                )
+                # Update dest_idx
+                dest_idx += 1
+
+            return output_arr
 
         return impl_slice
 
@@ -524,7 +406,7 @@ def bool_arr_getitem(A, ind):
 
 @overload(operator.setitem, no_unliteral=True)
 def bool_arr_setitem(A, idx, val):
-    if A != boolean_array:
+    if A != boolean_array_type:
         return
 
     # TODO: refactor with int arr since almost same code
@@ -537,11 +419,11 @@ def bool_arr_setitem(A, idx, val):
 
     # scalar case
     if isinstance(idx, types.Integer):
-
         if types.unliteral(val) == types.bool_:
 
             def impl_scalar(A, idx, val):  # pragma: no cover
-                A._data[idx] = val
+                # Set the bit in the data array to val
+                bodo.libs.int_arr_ext.set_bit_to_arr(A._data, idx, val)
                 bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, idx, 1)
 
             return impl_scalar
@@ -556,27 +438,122 @@ def bool_arr_setitem(A, idx, val):
 
     # array of int indices
     if is_list_like_index_type(idx) and isinstance(idx.dtype, types.Integer):
+        if bodo.utils.utils.is_array_typ(val) or bodo.utils.typing.is_iterable_type(
+            val
+        ):
 
-        def impl_arr_ind_mask(A, idx, val):  # pragma: no cover
-            array_setitem_int_index(A, idx, val)
+            def impl_arr_ind_mask(A, idx, val):  # pragma: no cover
+                # Note this is a largely inlined implementation of array_setitem_int_index.
+                # We don't reuse the code because the "set" semantics are different.
+                n = len(idx)
+                for i in range(n):
+                    # Abstract away the data access behind getitem
+                    data_bit = val[i]
+                    # set the data value
+                    bodo.libs.int_arr_ext.set_bit_to_arr(A._data, idx[i], data_bit)
+                    # Abstract away the null access behind isna
+                    null_bit = not bodo.libs.array_kernels.isna(val, i)
+                    # Set the null bit
+                    bodo.libs.int_arr_ext.set_bit_to_arr(
+                        A._null_bitmap, idx[i], null_bit
+                    )
 
-        return impl_arr_ind_mask
+            return impl_arr_ind_mask
+
+        elif val == types.bool_:
+
+            def impl_scalar(A, idx, val):  # pragma: no cover
+                n = len(idx)
+                for i in range(n):
+                    # set the data value
+                    bodo.libs.int_arr_ext.set_bit_to_arr(A._data, idx[i], val)
+                    # Set the null bit
+                    bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, idx[i], 1)
+
+            return impl_scalar
+
+        # Safeguard against gaps in Array setitem to avoid failing in compilation.
+        raise BodoError(
+            f"setitem not supported for BooleanArray with value {val}"
+        )  # pragma: no cover
 
     # bool array
     if is_list_like_index_type(idx) and idx.dtype == types.bool_:
+        # Note this is a largely inlined implementation of array_setitem_bool_index.
+        # We don't reuse the code because the "set" semantics are different.
 
-        def impl_bool_ind_mask(A, idx, val):  # pragma: no cover
-            array_setitem_bool_index(A, idx, val)
+        if bodo.utils.utils.is_array_typ(val) or bodo.utils.typing.is_iterable_type(
+            val
+        ):
 
-        return impl_bool_ind_mask
+            def impl_bool_ind_mask(A, idx, val):  # pragma: no cover
+                n = len(idx)
+                val_ind = 0
+                for i in range(n):
+                    if not bodo.libs.array_kernels.isna(idx, i) and idx[i]:
+                        # Abstract away the data access behind getitem
+                        data_bit = val[val_ind]
+                        # set the data value
+                        bodo.libs.int_arr_ext.set_bit_to_arr(A._data, i, data_bit)
+                        # Abstract away the null access behind isna
+                        null_bit = not bodo.libs.array_kernels.isna(val, val_ind)
+                        # Set the null bit
+                        bodo.libs.int_arr_ext.set_bit_to_arr(
+                            A._null_bitmap, i, null_bit
+                        )
+                        val_ind += 1
+
+            return impl_bool_ind_mask
+
+        elif val == types.bool_:
+
+            def impl_scalar(A, idx, val):  # pragma: no cover
+                n = len(idx)
+                for i in range(n):
+                    if not bodo.libs.array_kernels.isna(idx, i) and idx[i]:
+                        # set the data value
+                        bodo.libs.int_arr_ext.set_bit_to_arr(A._data, i, val)
+                        # Set the null bit
+                        bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, i, 1)
+
+            return impl_scalar
+
+        # Safeguard against gaps in Array setitem to avoid failing in compilation.
+        raise BodoError(
+            f"setitem not supported for BooleanArray with value {val}"
+        )  # pragma: no cover
 
     # slice case
     if isinstance(idx, types.SliceType):
+        # Note we inline array_setitem_slice_index because
+        # the semantics for setitem differ.
+        if val == types.boolean:
 
-        def impl_slice_mask(A, idx, val):  # pragma: no cover
-            array_setitem_slice_index(A, idx, val)
+            def impl_scalar(A, idx, val):  # pragma: no cover
+                slice_idx = numba.cpython.unicode._normalize_slice(idx, len(A))
+                for i in range(slice_idx.start, slice_idx.stop, slice_idx.step):
+                    # set the data value
+                    bodo.libs.int_arr_ext.set_bit_to_arr(A._data, i, val)
+                    bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, i, 1)
 
-        return impl_slice_mask
+            return impl_scalar
+        else:
+
+            def impl_array(A, idx, val):  # pragma: no cover
+                slice_idx = numba.cpython.unicode._normalize_slice(idx, len(A))
+                val_idx = 0
+                for i in range(slice_idx.start, slice_idx.stop, slice_idx.step):
+                    data_bit = val[val_idx]
+                    # set the data value
+                    bodo.libs.int_arr_ext.set_bit_to_arr(A._data, i, data_bit)
+                    # Abstract away the null access behind isna
+                    null_bit = not bodo.libs.array_kernels.isna(val, val_idx)
+                    # Set the null bit
+                    bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, i, null_bit)
+                    # Update val_idx
+                    val_idx += 1
+
+            return impl_array
 
     # This should be the only BooleanArray implementation.
     # We only expect to reach this case if more idx options are added.
@@ -587,18 +564,18 @@ def bool_arr_setitem(A, idx, val):
 
 @overload(len, no_unliteral=True)
 def overload_bool_arr_len(A):
-    if A == boolean_array:
-        return lambda A: len(A._data)  # pragma: no cover
+    if A == boolean_array_type:
+        return lambda A: A._length  # pragma: no cover
 
 
 @overload_attribute(BooleanArrayType, "size")
 def overload_bool_arr_size(A):
-    return lambda A: len(A._data)  # pragma: no cover
+    return lambda A: A._length  # pragma: no cover
 
 
 @overload_attribute(BooleanArrayType, "shape")
 def overload_bool_arr_shape(A):
-    return lambda A: (len(A._data),)  # pragma: no cover
+    return lambda A: (A._length,)  # pragma: no cover
 
 
 @overload_attribute(BooleanArrayType, "dtype")
@@ -619,19 +596,17 @@ def bool_arr_nbytes_overload(A):
 @overload_method(BooleanArrayType, "copy", no_unliteral=True)
 def overload_bool_arr_copy(A):
     return lambda A: bodo.libs.bool_arr_ext.init_bool_array(
-        bodo.libs.bool_arr_ext.get_bool_arr_data(A).copy(),
-        bodo.libs.bool_arr_ext.get_bool_arr_bitmap(A).copy(),
+        A._data.copy(),
+        A._null_bitmap.copy(),
+        len(A),
     )  # pragma: no cover
 
 
 @overload_method(BooleanArrayType, "sum", no_unliteral=True, inline="always")
 def overload_bool_sum(A):
     """
-    Support for .sum() method for BooleanArrays. This is not yet supported
-    in Pandas, but can be used to resolve issues where .sum() may be called on
-    boolean array that would otherwise be a numpy array.
-
-    We don't accept any arguments at this time as the common case is just A.sum()
+    Support for .sum() method for BooleanArrays. We don't accept any arguments
+    at this time as the common case is just A.sum()
     """
 
     def impl(A):  # pragma: no cover
@@ -647,9 +622,26 @@ def overload_bool_sum(A):
     return impl
 
 
+@overload_method(BooleanArrayType, "any", no_unliteral=True, inline="always")
+def overload_bool_any(A):
+    """
+    Support for .any() method for BooleanArrays. We don't accept any arguments
+    at this time as the common case is just A.any().
+    """
+
+    def impl(A):  # pragma: no cover
+        numba.parfors.parfor.init_prange()
+        result = False
+        for i in numba.parfors.parfor.internal_prange(len(A)):
+            if not bodo.libs.array_kernels.isna(A, i) and A[i]:
+                result = True
+        return result
+
+    return impl
+
+
 @overload_method(BooleanArrayType, "astype", no_unliteral=True)
 def overload_bool_arr_astype(A, dtype, copy=True):
-
     # If dtype is a string, force it to be a literal
     if dtype == types.unicode_type:
         raise_bodo_error(
@@ -657,7 +649,7 @@ def overload_bool_arr_astype(A, dtype, copy=True):
         )
 
     # same dtype case
-    if dtype == types.bool_:
+    if dtype in (types.bool_, boolean_dtype):
         # copy=False
         if is_overload_false(copy):
             return lambda A, dtype, copy=True: A
@@ -681,11 +673,10 @@ def overload_bool_arr_astype(A, dtype, copy=True):
     if isinstance(nb_dtype, types.Float):
 
         def impl_float(A, dtype, copy=True):  # pragma: no cover
-            data = bodo.libs.bool_arr_ext.get_bool_arr_data(A)
-            n = len(data)
+            n = len(A)
             B = np.empty(n, nb_dtype)
             for i in numba.parfors.parfor.internal_prange(n):
-                B[i] = data[i]
+                B[i] = A[i]
                 if bodo.libs.array_kernels.isna(A, i):
                     B[i] = np.nan
             return B
@@ -693,36 +684,79 @@ def overload_bool_arr_astype(A, dtype, copy=True):
         return impl_float
 
     # TODO: raise error like Pandas when NAs are assigned to integers
-    return lambda A, dtype, copy=True: bodo.libs.bool_arr_ext.get_bool_arr_data(
-        A
-    ).astype(nb_dtype)
+    return lambda A, dtype, copy=True: A.to_numpy().astype(nb_dtype)
 
 
 @overload_method(BooleanArrayType, "fillna", no_unliteral=True)
 def overload_bool_fillna(A, value=None, method=None, limit=None):
     def impl(A, value=None, method=None, limit=None):  # pragma: no cover
-        data = bodo.libs.bool_arr_ext.get_bool_arr_data(A)
-        n = len(data)
-        B = np.empty(n, dtype=np.bool_)
+        n = len(A)
+        B = bodo.libs.bool_arr_ext.alloc_bool_array(n)
         for i in numba.parfors.parfor.internal_prange(n):
-            B[i] = data[i]
             if bodo.libs.array_kernels.isna(A, i):
                 B[i] = value
+            else:
+                B[i] = A[i]
         return B
 
     return impl
 
 
-@overload(str, no_unliteral=True)
-def overload_str_bool(val):
-    if val == types.bool_:
+@overload_method(BooleanArrayType, "all")
+def overload_bool_arr_all(A, skipna=True):
+    unsupported_args = {"skipna": skipna}
+    default_args = {"skipna": True}
+    check_unsupported_args(
+        "BooleanArray.to_numpy",
+        unsupported_args,
+        default_args,
+        package_name="pandas",
+        # Note: We don't have docs from array yet.
+        module_name="Array",
+    )
 
-        def impl(val):  # pragma: no cover
-            if val:
-                return "True"
-            return "False"
+    def impl(A, skipna=True):  # pragma: no cover
+        result = True
+        n = len(A)
+        for i in numba.parfors.parfor.internal_prange(n):
+            if bodo.libs.array_kernels.isna(A, i):
+                continue
+            elif not A[i]:
+                result = False
+                break
+        # This returns the output for a single rank. Distributed
+        # pass handles the reduction.
+        return result
 
-        return impl
+    return impl
+
+
+@overload_method(BooleanArrayType, "to_numpy", no_unliteral=True)
+def overload_bool_arr_to_numpy(A, dtype=None, copy=False, na_value=None):
+    # TODO: support the proper default value for dtype and na_value
+    unsupported_args = {"dtype": dtype, "copy": copy, "na_value": na_value}
+    default_args = {"dtype": None, "copy": False, "na_value": None}
+    check_unsupported_args(
+        "BooleanArray.to_numpy",
+        unsupported_args,
+        default_args,
+        package_name="pandas",
+        # Note: We don't have docs from array yet.
+        module_name="Array",
+    )
+
+    def impl(A, dtype=None, copy=False, na_value=None):  # pragma: no cover
+        n = len(A)
+        out_array = np.empty(n, np.bool_)
+        for i in numba.parfors.parfor.internal_prange(n):
+            # TODO: handle NA values via na_value
+            # For now we default to False because the common use case
+            # is to use a boolean array as a filter (where NA is falsy), and we want to match
+            # those semantics.
+            out_array[i] = not bodo.libs.array_kernels.isna(A, i) and A[i]
+        return out_array
+
+    return impl
 
 
 # XXX: register all operators just in case they are supported on bool
@@ -755,7 +789,7 @@ def create_op_overload(op, n_inputs):
 
         def overload_bool_arr_op_nin_2(lhs, rhs):
             # if any input is BooleanArray
-            if lhs == boolean_array or rhs == boolean_array:
+            if lhs == boolean_array_type or rhs == boolean_array_type:
                 return bodo.libs.int_arr_ext.get_nullable_array_binary_impl(
                     op, lhs, rhs
                 )
@@ -868,60 +902,88 @@ def overload_unique(A):
             if na_found and true_found and false_found:
                 break
 
-        new_data = np.array(data)
-        n = len(new_data)
-        n_bytes = 1
-        new_mask = np.empty(n_bytes, np.uint8)
+        n = len(data)
+        output_array = bodo.libs.bool_arr_ext.alloc_bool_array(n)
         for j in range(n):
-            bodo.libs.int_arr_ext.set_bit_to_arr(new_mask, j, mask[j])
-        return init_bool_array(new_data, new_mask)
+            if mask[j]:
+                output_array[j] = data[j]
+            else:
+                bodo.libs.array_kernels.setna(output_array, j)
+        return output_array
 
     return impl_bool_arr
 
 
 @overload(operator.getitem, no_unliteral=True)
 def bool_arr_ind_getitem(A, ind):
-    # getitem for array indexed by BooleanArray
-    # TODO: other array types for A?
-    if ind == boolean_array and (
-        isinstance(A, (types.Array, bodo.libs.int_arr_ext.IntegerArrayType))
-        or isinstance(A, bodo.libs.struct_arr_ext.StructArrayType)
-        or isinstance(A, bodo.libs.array_item_arr_ext.ArrayItemArrayType)
-        or isinstance(A, bodo.libs.map_arr_ext.MapArrayType)
-        or A
-        in (
-            string_array_type,
-            bodo.hiframes.split_impl.string_array_split_view_type,
-            boolean_array,
-        )
-    ):
+    # getitem for Numpy arrays indexed by BooleanArray
+    if ind == boolean_array_type and isinstance(A, types.Array):
+        _dtype = A.dtype
 
         def impl(A, ind):  # pragma: no cover
-            new_ind = bodo.utils.conversion.nullable_bool_to_bool_na_false(ind)
-            return A[new_ind]
+            old_len = len(A)
+            new_len = 0
+            for i in range(old_len):
+                if not bodo.libs.array_kernels.isna(ind, i) and ind[i]:
+                    new_len += 1
+
+            # Now that we know the length, we can allocate the output.
+            output_arr = np.empty(new_len, _dtype)
+            # Note: This is very similar to setitem but doesn't match
+            # the supported pattern.
+            dest_ind = 0
+            for i in range(old_len):
+                if not bodo.libs.array_kernels.isna(ind, i) and ind[i]:
+                    # set the data value
+                    output_arr[dest_ind] = A[i]
+                    # Update the destination index
+                    dest_ind += 1
+
+            return output_arr
 
         return impl
 
 
-@lower_cast(types.Array(types.bool_, 1, "C"), boolean_array)
+@lower_cast(types.Array(types.bool_, 1, "C"), boolean_array_type)
 def cast_np_bool_arr_to_bool_arr(context, builder, fromty, toty, val):
-    func = lambda A: bodo.libs.bool_arr_ext.init_bool_array(
-        A, np.full((len(A) + 7) >> 3, 255, np.uint8)
-    )
+    def func(A):  # pragma: no cover
+        n = len(A)
+        out_arr = bodo.libs.bool_arr_ext.alloc_bool_array(n)
+        for i in range(n):
+            out_arr[i] = A[i]
+        return out_arr
+
     res = context.compile_internal(builder, func, toty(fromty), [val])
     return impl_ret_borrowed(context, builder, toty, res)
 
 
 @overload(operator.setitem, no_unliteral=True)
 def overload_np_array_setitem_bool_arr(A, idx, val):
-    """Support setitem of Arrays with boolean_array"""
-    if isinstance(A, types.Array) and idx == boolean_array:
+    """Support setitem of Arrays with boolean_array_type"""
+    if isinstance(A, types.Array) and idx == boolean_array_type:
+        if bodo.utils.utils.is_array_typ(val) or bodo.utils.typing.is_iterable_type(
+            val
+        ):
 
-        def impl(A, idx, val):  # pragma: no cover
-            # TODO(ehsan): consider NAs in idx?
-            A[idx._data] = val
+            def impl(A, idx, val):  # pragma: no cover
+                n = len(idx)
+                val_ind = 0
+                for i in range(n):
+                    if not bodo.libs.array_kernels.isna(idx, i) and idx[i]:
+                        A[i] = val[val_ind]
+                        val_ind += 1
 
-        return impl
+            return impl
+
+        else:
+
+            def impl(A, idx, val):  # pragma: no cover
+                n = len(idx)
+                for i in range(n):
+                    if not bodo.libs.array_kernels.isna(idx, i) and idx[i]:
+                        A[i] = val
+
+            return impl
 
 
 def create_nullable_logical_op_overload(op):
@@ -939,7 +1001,7 @@ def create_nullable_logical_op_overload(op):
         if not is_valid_boolean_array_logical_op(val1, val2):
             return
 
-        # To simplfy the code being generate we allocate these output
+        # To simplify the code being generate we allocate these output
         # variables once at the start based on if the inputs are arrays.
         is_val1_arr = bodo.utils.utils.is_array_typ(val1, False)
         is_val2_arr = bodo.utils.utils.is_array_typ(val2, False)
@@ -947,9 +1009,7 @@ def create_nullable_logical_op_overload(op):
 
         func_text = "def impl(val1, val2):\n"
         func_text += f"  n = len({len_arr})\n"
-        func_text += (
-            "  out_arr = bodo.utils.utils.alloc_type(n, bodo.boolean_array, (-1,))\n"
-        )
+        func_text += "  out_arr = bodo.utils.utils.alloc_type(n, bodo.boolean_array_type, (-1,))\n"
         func_text += "  for i in numba.parfors.parfor.internal_prange(n):\n"
         if is_val1_arr:
             null1 = "bodo.libs.array_kernels.isna(val1, i)\n"
@@ -1082,7 +1142,7 @@ class BooleanArrayLogicalOperatorTemplate(AbstractTemplate):
             return
 
         # Return type is always boolean array
-        ret = boolean_array
+        ret = boolean_array_type
         # Return the signature
         return ret(*args)
 
@@ -1092,7 +1152,7 @@ def is_valid_boolean_array_logical_op(typ1, typ2):
     on a boolean array type"""
 
     is_valid = (
-        (typ1 == bodo.boolean_array or typ2 == bodo.boolean_array)
+        (typ1 == bodo.boolean_array_type or typ2 == bodo.boolean_array_type)
         and (
             (bodo.utils.utils.is_array_typ(typ1, False) and typ1.dtype == types.bool_)
             or typ1 == types.bool_
@@ -1111,9 +1171,9 @@ def _install_nullable_logical_lowering():
         lower_impl = create_boolean_array_logical_lower_impl(op)
         infer_global(op)(BooleanArrayLogicalOperatorTemplate)
         for typ1, typ2 in [
-            (boolean_array, boolean_array),
-            (boolean_array, types.bool_),
-            (boolean_array, types.Array(types.bool_, 1, "C")),
+            (boolean_array_type, boolean_array_type),
+            (boolean_array_type, types.bool_),
+            (boolean_array_type, types.Array(types.bool_, 1, "C")),
         ]:
             lower_builtin(op, typ1, typ2)(lower_impl)
 

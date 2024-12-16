@@ -1,6 +1,5 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
-"""typing for rolling window functions
-"""
+"""typing for rolling window functions"""
+
 from numba.core import cgutils, types
 from numba.core.imputils import impl_ret_borrowed
 from numba.core.typing.templates import (
@@ -38,7 +37,6 @@ from bodo.hiframes.rolling import (
 from bodo.utils.typing import (
     BodoError,
     check_unsupported_args,
-    create_unsupported_overload,
     get_literal_value,
     is_const_func_type,
     is_literal_type,
@@ -62,14 +60,6 @@ class RollingType(types.Type):
         explicit_select=False,
         series_select=False,
     ):
-        if isinstance(obj_type, bodo.SeriesType):
-            name = "Series"
-        else:
-            name = "DataFrame"
-        bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
-            obj_type, f"{name}.rolling()"
-        )
-
         # obj_type can be either Series or DataFrame
         self.obj_type = obj_type
         self.window_type = window_type
@@ -78,7 +68,7 @@ class RollingType(types.Type):
         self.explicit_select = explicit_select
         self.series_select = series_select
 
-        super(RollingType, self).__init__(
+        super().__init__(
             name=f"RollingType({obj_type}, {window_type}, {on}, {selection}, {explicit_select}, {series_select})"
         )
 
@@ -112,7 +102,7 @@ class RollingModel(models.StructModel):
             ("min_periods", types.int64),
             ("center", types.bool_),
         ]
-        super(RollingModel, self).__init__(dmm, fe_type, members)
+        super().__init__(dmm, fe_type, members)
 
 
 make_attribute_wrapper(RollingType, "obj", "obj")
@@ -133,8 +123,8 @@ def df_rolling_overload(
     closed=None,
 ):
     check_runtime_cols_unsupported(df, "DataFrame.rolling()")
-    unsupported_args = dict(win_type=win_type, axis=axis, closed=closed)
-    arg_defaults = dict(win_type=None, axis=0, closed=None)
+    unsupported_args = {"win_type": win_type, "axis": axis, "closed": closed}
+    arg_defaults = {"win_type": None, "axis": 0, "closed": None}
     check_unsupported_args(
         "DataFrame.rolling",
         unsupported_args,
@@ -173,8 +163,8 @@ def overload_series_rolling(
     axis=0,
     closed=None,
 ):
-    unsupported_args = dict(win_type=win_type, axis=axis, closed=closed)
-    arg_defaults = dict(win_type=None, axis=0, closed=None)
+    unsupported_args = {"win_type": win_type, "axis": axis, "closed": closed}
+    arg_defaults = {"win_type": None, "axis": 0, "closed": None}
     check_unsupported_args(
         "Series.rolling",
         unsupported_args,
@@ -202,9 +192,9 @@ def overload_series_rolling(
     return impl
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def init_rolling(
-    typingctx, obj_type, window_type, min_periods_type, center_type, on_type=None
+    typingctx, obj_type, window_type, min_periods_type, center_type, on_type
 ):
     """Initialize a rolling object. The data object inside can be a DataFrame, Series,
     or GroupBy."""
@@ -308,10 +298,13 @@ def _gen_df_rolling_out_data(rolling):
 def overload_rolling_apply(
     rolling, func, raw=False, engine=None, engine_kwargs=None, args=None, kwargs=None
 ):
-    unsupported_args = dict(
-        engine=engine, engine_kwargs=engine_kwargs, args=args, kwargs=kwargs
-    )
-    arg_defaults = dict(engine=None, engine_kwargs=None, args=None, kwargs=None)
+    unsupported_args = {
+        "engine": engine,
+        "engine_kwargs": engine_kwargs,
+        "args": args,
+        "kwargs": kwargs,
+    }
+    arg_defaults = {"engine": None, "engine_kwargs": None, "args": None, "kwargs": None}
     check_unsupported_args(
         "Rolling.apply",
         unsupported_args,
@@ -345,8 +338,13 @@ def groupby_rolling_overload(
     closed=None,
     method="single",
 ):
-    unsupported_args = dict(win_type=win_type, axis=axis, closed=closed, method=method)
-    arg_defaults = dict(win_type=None, axis=0, closed=None, method="single")
+    unsupported_args = {
+        "win_type": win_type,
+        "axis": axis,
+        "closed": closed,
+        "method": method,
+    }
+    arg_defaults = {"win_type": None, "axis": 0, "closed": None, "method": "single"}
     check_unsupported_args(
         "GroupBy.rolling",
         unsupported_args,
@@ -436,7 +434,7 @@ def _gen_rolling_impl(rolling, fname, other=None):
         name = "bodo.hiframes.pd_series_ext.get_series_name(df)"
     elif is_out_series:
         # name of the only output column (excluding 'on' column)
-        c = (set(out_cols) - set([rolling.on])).pop()
+        c = (set(out_cols) - {rolling.on}).pop()
         name = f"'{c}'" if isinstance(c, str) else str(c)
     header += f"  name = {name}\n"
     header += "  window = rolling.window\n"
@@ -444,12 +442,12 @@ def _gen_rolling_impl(rolling, fname, other=None):
     header += "  minp = rolling.min_periods\n"
     header += f"  on_arr = {on_arr}\n"
     if fname == "apply":
-        header += f"  index_arr = bodo.utils.conversion.index_to_array(index)\n"
+        header += "  index_arr = bodo.utils.conversion.index_to_array(index)\n"
     else:
         header += f"  func = '{fname}'\n"
         # no need to pass index array
-        header += f"  index_arr = None\n"
-        header += f"  raw = False\n"
+        header += "  index_arr = None\n"
+        header += "  raw = False\n"
 
     if is_out_series:
         header += f"  return bodo.hiframes.pd_series_ext.init_series({data_args}, index, name)"
@@ -497,9 +495,8 @@ def _install_rolling_methods():
 def _install_rolling_unsupported_methods():
     """install unsupported overloads for rolling functions"""
     for fname in unsupported_rolling_methods:
-        overload_method(RollingType, fname, no_unliteral=True)(
-            create_unsupported_overload(f"pandas.core.window.rolling.Rolling.{fname}()")
-        )
+        full_name = f"pandas.core.window.rolling.Rolling.{fname}"
+        bodo.overload_unsupported_method(RollingType, fname, full_name)
 
 
 _install_rolling_methods()
@@ -558,7 +555,6 @@ def _gen_corr_cov_out_data(out_cols, df_cols, other_cols, window_type, func_name
 
 @overload_method(RollingType, "corr", inline="always", no_unliteral=True)
 def overload_rolling_corr(rolling, other=None, pairwise=None, ddof=1):
-
     args_dict = {
         "pairwise": pairwise,
         "ddof": ddof,
@@ -578,7 +574,6 @@ def overload_rolling_corr(rolling, other=None, pairwise=None, ddof=1):
 
 @overload_method(RollingType, "cov", inline="always", no_unliteral=True)
 def overload_rolling_cov(rolling, other=None, pairwise=None, ddof=1):
-
     args_dict = {
         "ddof": ddof,
         "pairwise": pairwise,
@@ -616,15 +611,13 @@ class GetItemDataFrameRolling2(AbstractTemplate):
             if isinstance(idx, (tuple, list)):
                 if len(set(idx).difference(set(columns))) > 0:  # pragma: no cover
                     raise_bodo_error(
-                        "rolling: selected column {} not found in dataframe".format(
-                            set(idx).difference(set(columns))
-                        )
+                        f"rolling: selected column {set(idx).difference(set(columns))} not found in dataframe"
                     )
                 selection = list(idx)
             else:
                 if idx not in columns:  # pragma: no cover
                     raise_bodo_error(
-                        "rolling: selected column {} not found in dataframe".format(idx)
+                        f"rolling: selected column {idx} not found in dataframe"
                     )
                 selection = [idx]
                 series_select = True

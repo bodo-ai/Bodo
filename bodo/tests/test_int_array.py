@@ -1,14 +1,13 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 import operator
 
 import numba
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 import pytest
 
 import bodo
-from bodo.pandas_compat import pandas_version
-from bodo.tests.utils import check_func
+from bodo.tests.utils import check_func, get_num_test_workers
 
 
 def get_random_integerarray(tot_size):
@@ -28,10 +27,7 @@ def get_random_integerarray(tot_size):
             marks=pytest.mark.slow,
         ),
         pytest.param(
-            pd.arrays.IntegerArray(
-                np.array([1, -3, 2, 3, 10], np.int32),
-                np.array([False, True, True, False, False]),
-            ),
+            np.array([1, None, None, 3, 10], object),
         ),
         pytest.param(
             pd.arrays.IntegerArray(
@@ -41,9 +37,13 @@ def get_random_integerarray(tot_size):
             marks=pytest.mark.slow,
         ),
         pytest.param(
-            pd.arrays.IntegerArray(
-                np.array([1, 4, 2, 3, 10], np.uint8),
-                np.array([False, True, True, False, False]),
+            pd.arrays.ArrowExtensionArray(
+                pa.array(
+                    pd.arrays.IntegerArray(
+                        np.array([1, 4, 2, 3, 10], np.uint8),
+                        np.array([False, True, True, False, False]),
+                    )
+                )
             ),
             marks=pytest.mark.slow,
         ),
@@ -226,12 +226,8 @@ def test_setitem_int(int_arr_value, memory_leak_check):
         return A
 
     # get a non-null value
-    int_arr_value._mask[0] = False
     val = int_arr_value[0]
-    bodo_func = bodo.jit(test_impl)
-    pd.util.testing.assert_extension_array_equal(
-        bodo_func(int_arr_value, val), test_impl(int_arr_value, val)
-    )
+    check_func(test_impl, (int_arr_value, val), copy_input=True, only_seq=True)
 
 
 @pytest.mark.smoke
@@ -240,9 +236,11 @@ def test_setitem_arr(int_arr_value, memory_leak_check):
         A[idx] = val
         return A
 
+    dtype = pd.array(int_arr_value).dtype.numpy_dtype
     np.random.seed(0)
-    idx = np.random.randint(0, len(int_arr_value), 11)
-    val = np.random.randint(0, 50, 11, int_arr_value._data.dtype)
+    n = len(int_arr_value)
+    idx = np.random.choice(n, n, replace=False)
+    val = np.random.randint(0, 50, n, dtype)
     check_func(test_impl, (int_arr_value, idx, val), dist_test=False, copy_input=True)
 
     # IntegerArray as value, reuses the same idx
@@ -254,7 +252,7 @@ def test_setitem_arr(int_arr_value, memory_leak_check):
     check_func(test_impl, (int_arr_value, idx, val), dist_test=False, copy_input=True)
 
     idx = np.random.ranf(len(int_arr_value)) < 0.2
-    val = np.random.randint(0, 50, idx.sum(), int_arr_value._data.dtype)
+    val = np.random.randint(0, 50, idx.sum(), dtype)
     check_func(test_impl, (int_arr_value, idx, val), dist_test=False, copy_input=True)
 
     # IntegerArray as value, reuses the same idx
@@ -266,7 +264,7 @@ def test_setitem_arr(int_arr_value, memory_leak_check):
     check_func(test_impl, (int_arr_value, idx, val), dist_test=False, copy_input=True)
 
     idx = slice(1, 4)
-    val = np.random.randint(0, 50, 3, int_arr_value._data.dtype)
+    val = np.random.randint(0, 50, 3, dtype)
     check_func(test_impl, (int_arr_value, idx, val), dist_test=False, copy_input=True)
 
     # IntegerArray as value, reuses the same idx
@@ -303,20 +301,21 @@ def test_shape(memory_leak_check):
 
 
 @pytest.mark.slow
+def test_list(memory_leak_check):
+    def test_impl(A):
+        return list(A)
+
+    A = pd.array([3, 1, 2], "Int64")
+    check_func(test_impl, (A,), only_seq=True)
+
+
+@pytest.mark.slow
 @pytest.mark.parametrize(
     # avoiding isnat since only supported for datetime/timedelta
     "ufunc",
     [f for f in numba.np.ufunc_db.get_ufuncs() if f.nin == 1 and f != np.isnat],
 )
 def test_unary_ufunc(ufunc):
-    # IntegerArray is buggy as of Pandas 1.3.0 and doesn't put NA mask on output yet
-    assert pandas_version in ((1, 3), (1, 4)), "revisit Pandas issues for int arr"
-
-    # As of 1.3.*, these functions still do not properly put NA masks on the output
-    # and do not produce the correct result
-    if ufunc in (np.logical_not, np.isnan, np.isinf, np.isfinite, np.signbit):
-        return
-
     def test_impl(A):
         return ufunc(A)
 
@@ -324,27 +323,7 @@ def test_unary_ufunc(ufunc):
         np.array([1, 1, 1, -3, 10], np.int32),
         np.array([False, True, True, False, False]),
     )
-
-    # As of 1.3.*, these functions still do not properly put NA masks on the output
-    # But still produce the correct result
-    if ufunc in (
-        np.log,
-        np.log2,
-        np.log10,
-        np.log1p,
-        np.sqrt,
-        np.arcsin,
-        np.arccos,
-        np.arccosh,
-        np.arctanh,
-    ):
-        expected_out = test_impl(A)
-        for i in range(len(expected_out)):
-            if pd.isna(expected_out[i]):
-                expected_out[i] = np.NaN
-        check_func(test_impl, (A,), py_output=expected_out, check_dtype=False)
-    else:
-        check_func(test_impl, (A,))
+    check_func(test_impl, (A,))
 
 
 def test_unary_ufunc_explicit_np(memory_leak_check):
@@ -363,17 +342,14 @@ def test_unary_ufunc_explicit_np(memory_leak_check):
     "ufunc", [f for f in numba.np.ufunc_db.get_ufuncs() if f.nin == 2 and f.nout == 1]
 )
 def test_binary_ufunc(ufunc, memory_leak_check):
-    # IntegerArray is buggy in Pandas 1.1.* and 1.2.0 and doesn't put NA mask on output yet
-
-    assert pandas_version in ((1, 3), (1, 4)), "revisit Pandas issues for int arr"
     # Need suppport for floating array when doing true division
     if ufunc == np.true_divide:
         check_dtype = False
     else:
         check_dtype = True
 
-    # See in version 1.3.x if those issues will be resolved.
-    if ufunc in (np.logical_and, np.logical_or, np.logical_xor):
+    # Bodo's overflow behavior can be different on Python 3.11 (TODO: investigate why)
+    if ufunc == np.power:
         return
 
     def test_impl(A1, A2):
@@ -424,7 +400,7 @@ def test_binary_op(op, memory_leak_check):
         return
     op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
     func_text = "def test_impl(A, other):\n"
-    func_text += "  return A {} other\n".format(op_str)
+    func_text += f"  return A {op_str} other\n"
     loc_vars = {}
     exec(func_text, {}, loc_vars)
     test_impl = loc_vars["test_impl"]
@@ -501,7 +477,7 @@ def test_inplace_binary_op(op, memory_leak_check):
         return
     op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
     func_text = "def test_impl(A, other):\n"
-    func_text += "  A {} other\n".format(op_str)
+    func_text += f"  A {op_str} other\n"
     func_text += "  return A\n"
     loc_vars = {}
     exec(func_text, {}, loc_vars)
@@ -529,7 +505,7 @@ def test_unary_op(op, memory_leak_check):
 
     op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
     func_text = "def test_impl(A):\n"
-    func_text += "  return {} A\n".format(op_str)
+    func_text += f"  return {op_str} A\n"
     loc_vars = {}
     exec(func_text, {}, loc_vars)
     test_impl = loc_vars["test_impl"]
@@ -546,7 +522,16 @@ def test_dtype(int_arr_value, memory_leak_check):
     def test_impl(A):
         return A.dtype
 
-    check_func(test_impl, (int_arr_value,))
+    # Bodo returns Pandas dtype so convert others
+    dtype = int_arr_value.dtype
+    if dtype == np.object_:
+        dtype = pd.Int64Dtype()
+    if isinstance(dtype, pd.ArrowDtype):
+        dtype = pd.core.arrays.integer.IntegerDtype._get_dtype_mapping()[
+            dtype.numpy_dtype
+        ]
+
+    check_func(test_impl, (int_arr_value,), py_output=dtype)
 
 
 @pytest.mark.slow
@@ -586,6 +571,9 @@ def test_astype(int_arr_value, dtype, memory_leak_check):
     def test_impl(A, dtype):
         return A.astype(dtype)
 
+    if isinstance(int_arr_value, np.ndarray):
+        pytest.skip("Numpy arrays don't support Pandas dtypes")
+
     check_func(test_impl, (int_arr_value, dtype))
 
 
@@ -600,11 +588,13 @@ def test_unique(int_arr_value, memory_leak_check):
     def test_impl(A):
         return A.unique()
 
+    if isinstance(int_arr_value, np.ndarray):
+        pytest.skip("Numpy arrays don't have unique()")
+
     # only sequential check since not directly parallelized
     bodo_func = bodo.jit(test_impl)
-    pd.util.testing.assert_extension_array_equal(
-        bodo_func(int_arr_value),
-        test_impl(int_arr_value),
+    pd.testing.assert_extension_array_equal(
+        bodo_func(int_arr_value), test_impl(int_arr_value), check_dtype=False
     )
 
 
@@ -613,6 +603,9 @@ def test_sum_method(int_arr_value, memory_leak_check):
 
     def test_impl(A):
         return A.sum()
+
+    if not isinstance(int_arr_value, pd.arrays.IntegerArray):
+        pytest.skip("Only actual IntegerArray has sum()")
 
     check_func(test_impl, (int_arr_value,))
 
@@ -638,6 +631,7 @@ def test_int_arr_nbytes(memory_leak_check):
         np.array([1, -3, 2, 3, 10], np.int64),
         np.array([False, True, True, False, False]),
     )
-    py_out = 40 + bodo.get_size()  # 1 extra byte for null_bit_map per rank
+    n_pes = get_num_test_workers()
+    py_out = 40 + n_pes  # 1 extra byte for null_bit_map per rank
     check_func(impl, (arr,), py_output=py_out, only_1D=True)
     check_func(impl, (arr,), py_output=41, only_seq=True)

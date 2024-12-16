@@ -1,8 +1,6 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
 Analysis and transformation for HDF5 support.
 """
-import types as pytypes  # avoid confusion with numba.core.types
 
 import numba
 from numba.core import ir, types
@@ -36,11 +34,7 @@ class H5_IO:
             dtype_str = str(tp.dtype)
             func_text = "def _h5_read_impl(dset, index):\n"
             # TODO: index arg?
-            func_text += (
-                "  arr = bodo.io.h5_api.h5_read_dummy(dset, {}, '{}', index)\n".format(
-                    tp.ndim, dtype_str
-                )
-            )
+            func_text += f"  arr = bodo.io.h5_api.h5_read_dummy(dset, {tp.ndim}, '{dtype_str}', index)\n"
             loc_vars = {}
             exec(func_text, {}, loc_vars)
             _h5_read_impl = loc_vars["_h5_read_impl"]

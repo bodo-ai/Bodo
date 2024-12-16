@@ -25,7 +25,9 @@ automatically
 (see below for supported formats and APIs).
 
 !!! warning
-    Performing I/O in regular Python (outside JIT functions) replicates
+    Performing I/O in regular Python (outside JIT functions)
+    causes data distribution overheads when data is passed to JIT functions.
+    In addition, SPMD launch mode replicates
     data on all Python processes,
     which can result in out-of-memory errors if the data is large.
     For example, a 1 GB dataframe replicated on 1000 cores consumes
@@ -126,23 +128,24 @@ not distributed, `to_parquet(name)` writes to a single file called
 ```py
 df = pd.DataFrame({"A": range(10)})
 
-@bodo.jit
+# Only execute on a single core
+@bodo.jit(distributed=False)
 def example1_pq(df):
     df.to_parquet("example1.pq")
 
-@bodo.jit(distributed={"df"})
+# Execute on all cores
+@bodo.jit
 def example2_pq(df):
     df.to_parquet("example2.pq")
 
-if bodo.get_rank() == 0:
-    example1_pq(df)
+example1_pq(df)
 example2_pq(df)
 ```
 
 Run the code above with 4 processors:
 
 ```shell
-mpiexec -n 4 python example_pq.py
+BODO_NUM_WORKERS=4 python example_pq.py
 ```
 
 `example1_pq(df)` writes 1 single file, and `example2_pq(df)` writes a
@@ -298,23 +301,24 @@ def read_test():
     ```py
     df = pd.DataFrame({"A": np.arange(n)})
 
-    @bodo.jit
+    # Only execute on a single core
+    @bodo.jit(distributed=False)
     def example1_csv(df):
         df.to_csv("example1.csv")
 
-    @bodo.jit(distributed={"df"})
+    # Execute on all cores
+    @bodo.jit
     def example2_csv(df):
         df.to_csv("example2.csv")
 
-    if bodo.get_rank() == 0:
-        example1_csv(df)
+    example1_csv(df)
     example2_csv(df)
     ```
 
     Run the code above with 4 processors:
 
     ```shell
-    mpiexec -n 4 python example_csv.py
+    BODO_NUM_WORKERS=4 python example_csv.py
     ```
 
     each ``example1_csv(df)`` and ``example2_csv(df)`` writes to a single file:
@@ -332,23 +336,22 @@ def read_test():
     ```py
     df = pd.DataFrame({"A": np.arange(n)})
 
-    @bodo.jit
+    @bodo.jit(distributed=False)
     def example1_csv(df):
         df.to_csv("s3://bucket-name/example1.csv")
 
-    @bodo.jit(distributed={"df"})
+    @bodo.jit
     def example2_csv(df):
         df.to_csv("s3://bucket-name/example2.csv")
 
-    if bodo.get_rank() == 0:
-        example1_csv(df)
+    example1_csv(df)
     example2_csv(df)
     ```
 
     Run the code above with 4 processors:
 
     ```shell
-    mpiexec -n 4 python example_csv.py
+    BODO_NUM_WORKERS=4 python example_csv.py
     ```
 
     ``example1_csv(df)`` writes 1 single file, and ``example2_csv(df)`` writes a folder containing 4 csv files:
@@ -405,23 +408,24 @@ def example_read_json_multi_lines():
         ```py
         df = pd.DataFrame({"A": np.arange(n)})
 
-        @bodo.jit
+        # Only execute on a single core
+        @bodo.jit(distributed=False)
         def example1_json(df):
             df.to_json("example1.json", orient="records", lines=True)
 
-        @bodo.jit(distributed={"df"})
+        # Execute on all cores
+        @bodo.jit
         def example2_json(df):
             df.to_json("example2.json", orient="records", lines=True)
 
-        if bodo.get_rank() == 0:
-            example1_json(df)
+        example1_json(df)
         example2_jsons(df)
         ```
 
         Run the code above with 4 processors:
 
         ```shell
-        mpiexec -n 4 python example_json.py
+        BODO_NUM_WORKERS=4 python example_json.py
         ```
 
         each ``example1_json(df)`` and ``example2_json(df)`` writes to a single file:
@@ -442,23 +446,24 @@ def example_read_json_multi_lines():
     ```py
     df = pd.DataFrame({"A": np.arange(n)})
 
-    @bodo.jit
+    # Only execute on a single core
+    @bodo.jit(distributed=False)
     def example1_json(df):
         df.to_json("s3://bucket-name/example1.json")
 
-    @bodo.jit(distributed={"df"})
+    # Execute on all cores
+    @bodo.jit
     def example2_json(df):
         df.to_json("s3://bucket-name/example2.json")
 
-    if bodo.get_rank() == 0:
-        example1_json(df)
+    example1_json(df)
     example2_json(df)
     ```
 
     Run the code above with 4 processors:
 
     ```shell
-    mpiexec -n 4 python example_json.py
+    BODO_NUM_WORKERS=4 python example_json.py
     ```
 
     ``example1_json(df)`` writes 1 single file, and ``example2_json(df)`` writes a folder containing 4 json files:
@@ -553,117 +558,6 @@ def example_read_deltalake():
     Writing is currently not supported.
 
 
-### Iceberg {#iceberg-section}
-
-Bodo's support for Iceberg Tables is under active development and currently only supports
-basic read and write functionality.
-
-Bodo supports reading Iceberg tables stored in a directory on HDFS, either locally or from S3,
-through Pandas' `read_sql_table` API.
-
--   Bodo's Iceberg Connector python package needs to be installed using conda: 
-    `conda install bodo-iceberg-connector -c bodo.ai -c conda-forge`.
--   For tables on S3, the credentials should be set either using environment variables,
-    or AWS configuration in `~/.aws` or using an instance profile on the EC2 instance.
-
-Iceberg connection strings vary by catalog, but in general are of the form `iceberg<+conn>://<path><?params>` where 
-- `<conn>://<path>` is the location of the catalog or Iceberg warehouse
-- `params` is a list of properties to pass to the catalog. Each parameter must be of the form `<key>=<value>` and separated with `&`, similar to HTTP URLs.
-
-The following parameters are officially supported:
-- `type`: Type of catalog. The supported values are listed below. When the connection string is ambiguous, this parameter is used to determine the type of catalog implementation.
-- `warehouse`: Location of the warehouse. Required when creating a new table using Glue, Nessie, or Hive catalog.
-
-The following catalogs are supported:
-
-- Hadoop Catalog on Local Filesystem:
-    - Used when `type=hadoop` is specified **or** when `<conn>` is `file` or empty
-    - `<path>` is the absolute path to the warehouse (directory containing the database schema)
-    - Parameter `warehouse` will be ignored if specified
-    - E.g. `iceberg://<ABSOLUTE PATH TO ICEBERG WAREHOUSE>` or `iceberg+file://<ABSOLUTE PATH TO ICEBERG WAREHOUSE>`
-
-- Hadoop Catalog on S3
-    - Used when `type=hadoop-s3` is specified **or** when `<conn>` is `s3`
-    - `<conn>://<path>` is the S3 path to the warehouse (directory or bucket containing the database schema)
-    - Parameter `warehouse` will be ignored if specified
-    - E.g. `iceberg+s3://<S3 PATH TO ICEBERG WAREHOUSE>`
-
-- Dremio Arctic or Nessie Catalog
-    - Must specify `type=nessie` as a parameter to use this warehouse.
-    - `<conn>://<path>` is the URL to the Nessie catalog, which can be found on Dremio's dashboard.
-        - It will look like the following: `https://nessie.dremio.cloud/v1/projects/<PROJECT ID>`
-        - `<PROJECT ID>` is the Nessie project UUID
-    - The following parameters are required:
-        - `authentication.type=BEARER`
-        - `authentication.token=<AUTH TOKEN>` where `<AUTH TOKEN>` is your personal Dremio authentication token and can be found on the dashboard
-    - Parameter `warehouse` is required to create a table
-    - E.g. `iceberg+https://nessie.dremio.cloud/v1/projects/<PROJECT ID>?type=nessie&authentication.type=BEARER&authentication.token=<AUTH TOKEN>`
-
-- AWS Glue Catalog
-    - Connection string must be of the form `iceberg+glue?<params>`
-    - Parameter `type` will be ignored if specified
-    - Parameter `warehouse` is required to create a table
-    - E.g. `iceberg+glue` or `iceberg+glue?warehouse=s3://<ICEBERG-BUCKET>`
-
-- Hive / Thrift Catalog
-    - Used when `type=hive` is specified **or** when `<conn>` is `thrift`
-    - `<conn>://<path>` is the URL to the Thrift catalog, i.e. `thrift://localhost:9083`
-    - Parameter `warehouse` is required to create the table
-    - E.g. `iceberg+thrift://<THRIFT URL>`
-
-
-Example code for reading:
-
-```py
-@bodo.jit
-def example_read_iceberg():
-    df = pd.read_sql_table(
-            table_name="<NAME OF ICEBERG TABLE", 
-            con="<SEE PREVIOUS SECTION ON HOW TO FORMAT THIS FOR DIFFERENT CATALOGS>",
-            schema="<NAME OF ICEBERG DATABASE SCHEMA>"
-         )
-```
-
-!!! note
-    - `schema` argument is required for reading Iceberg tables.
-
-    - The Iceberg table to read should be located at `<warehouse-location>/<schema>/<table_name>`,
-      where `schema` and `table_name` are the arguments to `pd.read_sql_table`, and `warehouse-location`
-      is inferred from the connection string based on the description provided above.
-
-!!! warning
-    - Tables with [delete files](https://iceberg.apache.org/spec/#delete-formats){target="blank"}
-      or those that have gone through 
-      [schema evolution](https://iceberg.apache.org/docs/latest/evolution/){target="blank"}
-      are not supported yet.
-
-
-Bodo has basic support for writing Iceberg tables from Pandas Dataframes using the `to_sql` API, including
-support for appending to tables with an existing [partition spec](https://iceberg.apache.org/spec/#partitioning){target="blank"} 
-and/or [sort order](https://iceberg.apache.org/spec/#sorting){target="blank"}.
-
-Example code for writing:
-
-```py
-@bodo.jit(distributed=["df"])
-def write_iceberg_table(df: pandas.DataFrame):
-    df.to_sql(
-        name="<NAME OF ICEBERG TABLE",
-        con="<SEE PREVIOUS SECTION ON HOW TO FORMAT THIS FOR DIFFERENT CATALOGS>",
-        schema="<NAME OF ICEBERG DATABASE SCHEMA>",
-        if_exists="replace"
-    )
-```
-
-!!! note
-    - `schema` argument is required for reading Iceberg tables.
-    - Writing Pandas Dataframe index to an Iceberg table is not supported. If `index` and `index_label`
-      are provided, they will be ignored.
-    - `chunksize`, `dtype` and `method` arguments are not supported and will be ignored if provided.
-    - While Bodo can *append* to tables with an existing partition spec and/or sort order, it does not 
-      support creating new tables with a Partition Spec or Sort Order.
-
-
 ### Numpy binaries {#numpy-binary-section}
 
 Numpy's `fromfile` and `tofile` are supported as below:
@@ -704,8 +598,7 @@ File Systems {#File Systems}
 Reading and writing [CSV][csv-section], [Parquet][parquet-section], [JSON][json-section], and
 [Numpy binary][numpy-binary-section] files from and to Amazon S3 is supported.
 
-The `fsspec` package must be available, and the file path should start
-with `s3://`:
+The file path should start with `s3://`:
 
 ```py
 @bodo.jit
@@ -728,8 +621,17 @@ environment variables (listed in order of precedence):
 - `HTTP_PROXY`
 - `HTTPS_PROXY`
 
-Bodo uses [Apache Arrow](https://arrow.apache.org/) internally for read
-and write of data on S3.
+By default, Bodo uses [Apache Arrow](https://arrow.apache.org/) internally for read
+and write of data on S3. If additional `storage_options` are provided to `pd.read_parquet`
+that Arrow does not support, then S3FS will be used instead. It can be optionally installed via pip or conda:
+
+``` shell
+pip install "s3fs>=2022.1.0"
+```
+
+``` shell
+conda install -c conda-forge "s3fs>=2022.1.0"
+```
 
 ### Google Cloud Storage {#GCS}
 
@@ -782,6 +684,263 @@ provides default behaviors for the HDFS client used by Bodo.
 Inconsistent configurations (e.g. `dfs.replication`) could potentially
 cause errors in Bodo programs.
 
+
+#### Setting up HDFS/ADLS Credentials
+There are 3 supported methods for authenticating to HDFS/ADLS:
+
+- Environment Variables
+- Azure Identities
+- core-site.xml
+
+##### Environment Variables
+To authenticate with environment variables set `AZURE_STORAGE_ACCOUNT_NAME` to the name of the Azure storage
+account to be accessed and `AZURE_STORAGE_ACCOUNT_KEY` to the key for the storage account.
+
+##### Azure Identities
+To authenticate with Azure Identites assign an identity to your Azure VM and ensure it has the 
+Storage Blob Data Contributor role for the storage account to access. This is only supported on Bodo Platform.
+
+##### core-site.xml
+!!! note
+    core-site.xml authentication is not supported on Bodo Platform, instead use the environment variables or Azure Identities.
+
+To authenticate with a core-site.xml file Hadoop Filesystem sources its credentials from the first available
+`core-site.xml` file on the `CLASSPATH`. When Hadoop is set up (including
+on Bodo Platform), this file is usually created at
+`$HADOOP_HOME/etc/hadoop/core-site.xml` automatically.
+You can edit this file and set credentials appropriately.
+
+You can also write the core-site configuration to `bodo.HDFS_CORE_SITE_LOC`,
+which is a temporary file Bodo adds to the `CLASSPATH` when it is initialized:
+
+```py
+import bodo
+
+# Initialize the temporary directory where the core-site file
+# will be written
+bodo.HDFS_CORE_SITE_LOC_DIR.initialize()
+
+# Define the core-site for your regular ADLS/HDFS read/write
+# operations
+CORE_SITE_SPEC = """
+<configuration>
+...
+</configuration>
+"""
+
+# Write it to the temporary core-site file.
+# Do it on one rank on every node to avoid filesystem conflicts.
+if bodo.get_rank() in bodo.get_nodes_first_ranks():
+    with open(bodo.HDFS_CORE_SITE_LOC, 'w') as f:
+        f.write(CORE_SITE_SPEC)
+
+
+@bodo.jit
+def etl_job():
+    df = pd.read_parquet("abfs://{CONTAINER_NAME}@{STORAGE_ACCOUNT_NAME}.dfs.core.windows.net/file.pq")
+    # ..
+    # .. Some ETL Processing
+    # ..
+    df.to_parquet("abfs://{CONTAINER_NAME}@{STORAGE_ACCOUNT_NAME}.dfs.core.windows.net/out_file.pq")
+    return
+
+
+etl_job()
+```
+
+
+There are several authorization methods for reading from or writing to ADLS Storage Containers using a core-site.xml file, all of which
+require slightly different core-site configurations. Here are some examples:
+
+- Using an ADLS Access Key
+
+    ```py
+    import bodo
+    import pandas as pd
+
+    # Initialize the temporary directory where the core-site file
+    # will be written
+    bodo.HDFS_CORE_SITE_LOC_DIR.initialize()
+
+
+    # Define the core-site for your regular ADLS/HDFS read/write
+    # operations
+    CORE_SITE_SPEC = """<configuration>
+    <property>
+        <name>fs.abfs.impl</name>
+        <value>org.apache.hadoop.fs.azurebfs.AzureBlobFileSystem</value>
+    </property>
+    <property>
+        <name>fs.azure.account.auth.type.{STORAGE_ACCOUNT_NAME}.dfs.core.windows.net</name>
+        <value>SharedKey</value>
+    </property>
+    <property>
+        <name>fs.azure.account.key.{STORAGE_ACCOUNT_NAME}.dfs.core.windows.net</name>
+        <value>{ADLS_SECRET}</value>
+        <description> The ADLS storage account access key itself.</description>
+    </property>
+    </configuration>
+    """
+
+    # Write it to the temporary core-site file.
+    # Do it on one rank on every node to avoid filesystem conflicts.
+    if bodo.get_rank() in bodo.get_nodes_first_ranks():
+        with open(bodo.HDFS_CORE_SITE_LOC, 'w') as f:
+            f.write(CORE_SITE_SPEC)
+
+    # Run your ETL job
+    @bodo.jit
+    def etl_job():
+        df = pd.read_parquet("abfs://{CONTAINER_NAME}@{STORAGE_ACCOUNT_NAME}.dfs.core.windows.net/file.pq")
+        # ..
+        # .. Some ETL Processing
+        # ..
+        df.to_parquet("abfs://{CONTAINER_NAME}@{STORAGE_ACCOUNT_NAME}.dfs.core.windows.net/out_file.pq")
+        return
+
+
+    etl_job()
+    ```
+
+
+
+- Using a SAS Token
+
+    To use SAS Tokens, you need to install the `bodo-azurefs-sas-token-provider`
+    package (it can be installed using `pip install bodo-azurefs-sas-token-provider` or
+    `conda install bodo-azurefs-sas-token-provider -c bodo.ai -c conda-forge`).
+    This is already installed on the Bodo Platform.
+    Then in your program, do the following:
+
+    ```py
+    import bodo
+    # Importing this module adds the required JARs to the CLASSPATH
+    import bodo_azurefs_sas_token_provider
+    import pandas as pd
+    import os
+
+    # Initialize the temporary directory where the core-site file
+    # will be written
+    bodo.HDFS_CORE_SITE_LOC_DIR.initialize()
+
+
+    # Define the core-site for your regular ADLS/HDFS read/write
+    # operations
+    CORE_SITE_SPEC = """<configuration>
+        <property>
+            <name>fs.azure.account.auth.type.{STORAGE_ACCOUNT_NAME}.dfs.core.windows.net</name>
+            <value>SAS</value>
+        </property>
+        <property>
+            <name>fs.azure.sas.token.provider.type.{STORAGE_ACCOUNT_NAME}.dfs.core.windows.net</name>
+            <value>org.bodo.azurefs.sas.BodoSASTokenProvider</value>
+        </property>
+        <property>
+            <name>fs.abfs.impl</name>
+            <value>org.apache.hadoop.fs.azurebfs.AzureBlobFileSystem</value>
+        </property>
+    </configuration>
+    """
+
+    # Write it to the temporary core-site file.
+    # Do it on one rank on every node to avoid filesystem conflicts.
+    if bodo.get_rank() in bodo.get_nodes_first_ranks():
+        with open(bodo.HDFS_CORE_SITE_LOC, 'w') as f:
+            f.write(CORE_SITE_SPEC)
+
+    # Load the SAS token here.
+    SAS_TOKEN = "..."
+
+    # Write SAS Token to a file.
+    # Do it on one rank on every node to avoid filesystem conflicts.
+    if bodo.get_rank() in bodo.get_nodes_first_ranks():
+        with open(os.path.join(bodo.HDFS_CORE_SITE_LOC_DIR.name, "sas_token.txt"), 'w') as f:
+            f.write(SAS_TOKEN)
+
+    # Run your ETL job
+    @bodo.jit
+    def etl_job():
+        df = pd.read_parquet("abfs://{CONTAINER_NAME}@{STORAGE_ACCOUNT_NAME}.dfs.core.windows.net/file.pq")
+        # ..
+        # .. Some ETL Processing
+        # ..
+        df.to_parquet("abfs://{CONTAINER_NAME}@{STORAGE_ACCOUNT_NAME}.dfs.core.windows.net/out_file.pq")
+        return
+
+
+    etl_job()
+    ```
+
+
+#### Interleaving HDFS/ADLS I/O with Snowflake Write {#interleave-adls-snowflake-write}
+***Interleaving HDFS/ADLS I/O with Snowflake Write***
+
+For writing to an Azure based Snowflake account using the direct upload strategy
+(see [Snowflake Write](#snowflake-write)), Bodo writes the required core-site
+configuration to `bodo.HDFS_CORE_SITE_LOC` automatically. In cases where Snowflake
+write (to an Azure based Snowflake account) needs to be
+done in the same process as a regular HDFS/ADLS read/write operation,
+users need to write credentials for the regular HDFS/ADLS read/write operations
+to the same core-site location (`bodo.HDFS_CORE_SITE_LOC`)
+due to limitations of Arrow and HDFS.
+Bodo will modify the file (temporarily) during the Snowflake write operation(s)
+and then restore the original configuration for the regular HDFS/ADLS
+read/write operations.
+
+Here is an example of how to do so:
+
+```py
+import bodo
+import pandas as pd
+
+# Initialize the temporary directory where the core-site file
+# will be written
+bodo.HDFS_CORE_SITE_LOC_DIR.initialize()
+
+
+# Define the core-site for your regular ADLS/HDFS read/write
+# operations
+CORE_SITE_SPEC = """<configuration>
+...
+</configuration>
+"""
+
+# Write it to the temporary core-site file
+# Do it on one rank on every node to avoid filesystem conflicts.
+if bodo.get_rank() in bodo.get_nodes_first_ranks():
+    with open(bodo.HDFS_CORE_SITE_LOC, 'w') as f:
+        f.write(CORE_SITE_SPEC)
+
+
+# Write the SAS token if required.
+# import bodo_azurefs_sas_token_provider
+# SAS_TOKEN = "..."
+# if bodo.get_rank() in bodo.get_nodes_first_ranks():
+#     with open(os.path.join(bodo.HDFS_CORE_SITE_LOC_DIR.name, "sas_token.txt"), 'w') as f:
+#         f.write(SAS_TOKEN)
+
+
+@bodo.jit
+def etl_job():
+    df = pd.read_parquet("abfs://{CONTAINER_NAME}@{STORAGE_ACCOUNT_NAME}.dfs.core.windows.net/file.pq")
+    # ..
+    # .. Some ETL Processing
+    # ..
+    # Here Bodo will replace the core-site configuration to enable Snowflake write
+    df.to_sql("new_table", "snowflake://user:password@url/{db_name}/schema?warehouse=warehouse_name&role=role_name")
+    # Once done, Bodo will restore the contents of the original file so that your
+    # ADLS operations happen as expected.
+    # ..
+    # .. Some more ETL Processing
+    # ..
+    df.to_parquet("abfs://{CONTAINER_NAME}@{STORAGE_ACCOUNT_NAME}.dfs.core.windows.net/out_file.pq")
+    return
+
+
+etl_job()
+```
+
+
 Databases {#db}
 ---------
 
@@ -796,17 +955,18 @@ Snowflake {#snowflake-section}
 In order to be able to query Snowflake or write a dataframe to
 Snowflake from Bodo, installing the Snowflake connector is
 necessary (it is installed by default on Bodo Platform).
-If you are using Bodo in a conda environment:
-
-``` shell
-conda install -c conda-forge snowflake-connector-python
-```
 
 If you have installed Bodo using pip, then you can install the Snowflake
 connector using pip as well:
 
 ``` shell
 pip install snowflake-connector-python
+```
+
+If you are using Bodo in a conda environment:
+
+``` shell
+conda install -c conda-forge snowflake-connector-python
 ```
 
 ## Reading from Snowflake
@@ -835,7 +995,7 @@ def read_snowflake(db_name, table_name):
     return df
 df = read_snowflake(db_name, temp_table_name)
 ```
-- `_bodo_read_as_dict` is a Bodo specific argument which forces 
+- `_bodo_read_as_dict` is a Bodo specific argument which forces
     the specified string columns to be read with dictionary-encoding. Bodo automatically loads string columns using dictionary encoding when it determines it would be beneficial based on a heuristic. Dictionary-encoding stores data in memory in an efficient manner and is most effective when the column has many repeated values. Read more about dictionary-encoded layout [here](https://arrow.apache.org/docs/format/Columnar.html#dictionary-encoded-layout){target=blank}.
     Bodo will raise a warning if the specified columns are not present in the schema or if they are not of type string.
 
@@ -899,7 +1059,6 @@ required at the Schema level:
 - `USAGE`
 - `CREATE TABLE`
 - `CREATE STAGE`
-- `CREATE FILE FORMAT`
 
 #### Replacing an existing table
 ***Replacing an existing table***
@@ -912,7 +1071,7 @@ must be an owner of the table, in addition to having the permissions listed in t
 ***Appending to an existing table***
 
 To append to an existing table (i.e. when using `if_exists='append'`), the role
-must have the `INSERT` permission at the table level, in addition to the 
+must have the `INSERT` permission at the table level, in addition to the
 permissions listed in the [create section](#snowflake-write-perms-create)
 (at the Database and Schema level).
 
@@ -964,20 +1123,21 @@ Direct Upload (preferred) or Put Upload.
     Snowflake accounts, respectively). Note that Bodo will drop the
     temporary stage once the data has been written. Temporary stages
     are also automatically cleaned up by Snowflake after the session ends.
-    
+
     !!! note
         For writing to ADLS based stages, you must have Hadoop setup
         correctly (see more details [here](#HDFS))
         and have the `bodo-azurefs-sas-token-provider` package installed (it
-        can be installed using 
+        can be installed using `pip install bodo-azurefs-sas-token-provider` or
         `conda install bodo-azurefs-sas-token-provider -c bodo.ai -c conda-forge`).
         Bodo will fall back to the Put Upload strategy if both these
-        conditions are not met. 
-    
+        conditions are not met. Also see
+        [Interleaving HDFS/ADLS I/O with Snowflake Write](#interleave-adls-snowflake-write).
+
         Note that this is only applicable to
         on-prem use cases since all of this is pre-configured on
         the Bodo Platform.
-   
+
 2.  Put Upload: In this strategy, Bodo creates a 'named' stage, writes
     parquet files to a temporary directory locally and then uses the
     Snowflake Python Connector to upload these files to this named stage
@@ -987,10 +1147,10 @@ Direct Upload (preferred) or Put Upload.
     This is used for GCS based stages (used by GCP based Snowflake
     accounts), or when the user environment doesn't have all the
     required packages and modules to use the Direct Upload strategy.
-   
+
     Similar to the Direct Upload strategy, Bodo will drop the named stage
     after the data has been written to the table.
-    
+
     !!! note
         In some cases, e.g. during abnormal exits, Bodo may not be able
         to drop these stages, which may require manual cleanup by the
@@ -998,14 +1158,14 @@ Direct Upload (preferred) or Put Upload.
         "bodo_io_snowflake_{random-uuid}". You can list all stages
         created by Bodo in Snowflake by executing the
         [`SHOW STAGES` command](https://docs.snowflake.com/en/sql-reference/sql/show-stages.html){target=blank}:
-        
+
         ```sql
         show stages like 'bodo_io_snowflake_%';
         ```
-        
+
         and then delete them using the
         [`DROP STAGE` command](https://docs.snowflake.com/en/sql-reference/sql/drop-stage.html){target=blank}, e.g.:
-        
+
         ```sql
         drop stage "bodo_io_snowflake_02ca9beb-eaf6-4957-a6ff-ff426441cd7a";
         ```
@@ -1042,12 +1202,6 @@ the write process further (for advanced users only):
   memory usage of the dataframe (in bytes). Note that when provided,
   `df.to_sql`'s `chunksize` parameter (see description in note in
   the [Usage section](#snowflake-write-usage)) overrides this value.
-- `SF_WRITE_OVERLAP_UPLOAD`: For maximum performance, the Put Upload
-  strategy writes intermediate parquet files to local disk and uploads
-  them to the stage in parallel. To alter this behavior, i.e.
-  write the parquet files and upload them sequentially, this configuration
-  variable can be set to `False`. Note that this is only applicable
-  when using the Put Upload strategy.
 
 
 These can be set as follows:
@@ -1067,18 +1221,18 @@ MySQL
 
 ### Prerequisites
 
-In addition to ``sqlalchemy``, installing ``pymysql`` is required.
+In addition to ``sqlalchemy``, installing ``pymysql`` is required. If you have installed Bodo using pip:
+
+```shell
+pip install pymysql
+```
+
 If you are using Bodo in a conda environment:
 
 ```shell
 conda install pymysql -c conda-forge
 ```
 
-If you have installed Bodo using pip:
-
-```shell
-pip install PyMySQL
-```
 
 ### Usage
 
@@ -1126,26 +1280,26 @@ write_mysql(df, table_name, conn)
 ### Prerequisites
 
 In addition to ``sqlalchemy``, install ``cx_oracle`` and Oracle instant client driver.
-If you are using Bodo in a conda environment:
-
-```shell
-conda install cx_oracle -c conda-forge
-```
-
 If you have installed Bodo using pip:
 
 ```shell
 pip install cx-Oracle
 ```
 
+If you are using Bodo in a conda environment:
+
+```shell
+conda install cx_oracle -c conda-forge
+```
+
 - Then, Download "Basic" or "Basic light" package matching your operating system from [here](https://www.oracle.com/database/technologies/instant-client/downloads.html){target=blank}.
-- Unzip package and add it to ``LD_LIBRARY_PATH`` environment variable.
+- Unzip package and add it to ``LD_LIBRARY_PATH`` environment variable on Linux. For MacOS, use `init_oracle_client()` in your application to pass the Oracle Client directory name. See [Using cx_Oracle.init_oracle_client()](https://cx-oracle.readthedocs.io/en/latest/user_guide/initialization.html#usinginitoracleclient) to set the Oracle Client directory.
 
 !!! note
     For linux ``libaio`` package is required as well.
 
-    - conda: ``conda install libaio -c conda-forge``
     - pip: ``pip install libaio``
+    - conda: ``conda install libaio -c conda-forge``
 
 See [cx_oracle](https://cx-oracle.readthedocs.io/en/latest/user_guide/installation.html#cx-oracle-8-installation>){target=blank} for more information.
 Alternatively, Oracle instant driver can be automatically downloaded using ``wget`` or ``curl`` commands.
@@ -1208,16 +1362,16 @@ write_mysql(df, table_name, conn)
 ### Prerequisites
 In addition to `sqlalchemy`, install `psycopg2`.
 
+If you have installed Bodo using pip:
+
+```shell
+pip install psycopg2
+```
+
 If you are using Bodo in a conda environment:
 
 ```shell
 conda install psycopg2 -c conda-forge
-```
-
-If you have installed Bodo using pip:
-
-```shell
-$ pip install psycopg2
 ```
 
 ### Usage

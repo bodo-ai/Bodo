@@ -1,13 +1,11 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
-"""Array of tuple values, implemented by reusing array of structs implementation.
-"""
+"""Array of tuple values, implemented by reusing array of structs implementation."""
+
 import operator
 
 import numba
 import numpy as np
 from numba.core import types
 from numba.extending import (
-    NativeValue,
     box,
     intrinsic,
     make_attribute_wrapper,
@@ -23,9 +21,8 @@ from numba.parfors.array_analysis import ArrayAnalysis
 import bodo
 from bodo.libs.struct_arr_ext import (
     StructArrayType,
-    box_struct_arr,
-    unbox_struct_array,
 )
+from bodo.utils.typing import BodoError, is_list_like_index_type
 
 
 class TupleArrayType(types.ArrayCompatible):
@@ -34,7 +31,7 @@ class TupleArrayType(types.ArrayCompatible):
     def __init__(self, data):
         # data is tuple of Array types
         self.data = data
-        super(TupleArrayType, self).__init__(name="TupleArrayType({})".format(data))
+        super().__init__(name=f"TupleArrayType({data})")
 
     @property
     def as_array(self):
@@ -74,7 +71,7 @@ make_attribute_wrapper(TupleArrayType, "data", "_data")
 
 
 @intrinsic
-def init_tuple_arr(typingctx, data_typ=None):
+def init_tuple_arr(typingctx, data_typ):
     """create a new tuple array from struct array data"""
     assert isinstance(data_typ, StructArrayType)
     out_type = TupleArrayType(data_typ.data)
@@ -92,33 +89,23 @@ def init_tuple_arr(typingctx, data_typ=None):
 @unbox(TupleArrayType)
 def unbox_tuple_array(typ, val, c):
     """
-    Unbox a numpy array with tuple values.
+    Unbox an array with tuple values.
     """
-    # reuse struct array implementation
-    data_typ = StructArrayType(typ.data)
-    struct_native_val = unbox_struct_array(data_typ, val, c, is_tuple_array=True)
-    data_arr = struct_native_val.value
-    tuple_array = c.context.make_helper(c.builder, typ)
-    tuple_array.data = data_arr
-    is_error = struct_native_val.is_error
-    return NativeValue(tuple_array._getvalue(), is_error=is_error)
+    return bodo.libs.array.unbox_array_using_arrow(typ, val, c)
 
 
 @box(TupleArrayType)
 def box_tuple_arr(typ, val, c):
     """box tuple array into python objects"""
-    # reuse struct array implementation
-    data_typ = StructArrayType(typ.data)
-    tuple_array = c.context.make_helper(c.builder, typ, val)
-    arr = box_struct_arr(data_typ, tuple_array.data, c, is_tuple_array=True)
-    # NOTE: no need to decref since box_struct_arr decrefs all data
-    return arr
+    return bodo.libs.array.box_array_using_arrow(typ, val, c)
 
 
 @numba.njit
 def pre_alloc_tuple_array(n, nested_counts, dtypes):  # pragma: no cover
     return init_tuple_arr(
-        bodo.libs.struct_arr_ext.pre_alloc_struct_array(n, nested_counts, dtypes, None)
+        bodo.libs.struct_arr_ext.pre_alloc_struct_array(
+            n, nested_counts, dtypes, None, None
+        )
     )
 
 
@@ -161,11 +148,21 @@ def tuple_arr_getitem(arr, ind):
         impl = loc_vars["impl"]
         return impl
 
-    # other getitem cases return an array, so just call getitem on underlying data array
-    def impl_arr(arr, ind):
-        return init_tuple_arr(arr._data[ind])
+    if (
+        is_list_like_index_type(ind)
+        and (ind.dtype == types.bool_ or isinstance(ind.dtype, types.Integer))
+    ) or isinstance(ind, types.SliceType):
+        # other getitem cases return an array, so just call getitem on underlying data array
+        def impl_arr(arr, ind):  # pragma: no cover
+            return init_tuple_arr(arr._data[ind])
 
-    return impl_arr
+        return impl_arr
+
+    # This should be the only TupleArray implementation.
+    # We only expect to reach this case if more idx options are added.
+    raise BodoError(
+        f"getitem for TupleArray with indexing type {ind} not supported."
+    )  # pragma: no cover
 
 
 @overload(operator.setitem, no_unliteral=True)
@@ -178,7 +175,6 @@ def tuple_arr_setitem(arr, ind, val):
         return
 
     if isinstance(ind, types.Integer):
-
         n_fields = len(arr.data)
         func_text = "def impl(arr, ind, val):\n"
         func_text += "  data = get_data(arr._data)\n"

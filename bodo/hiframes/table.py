@@ -1,18 +1,23 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """Table data type for storing dataframe column arrays. Supports storing many columns
 (e.g. >10k) efficiently.
 """
+
 import operator
 from collections import defaultdict
+from functools import cached_property
 
 import numba
 import numpy as np
 import pandas as pd
 from llvmlite import ir as lir
-from numba.core import cgutils, types
+from numba.core import cgutils, ir, types
 from numba.core.imputils import impl_ret_borrowed, lower_constant
 from numba.core.ir_utils import guard
-from numba.core.typing.templates import signature
+from numba.core.typing.templates import (
+    AbstractTemplate,
+    infer_global,
+    signature,
+)
 from numba.cpython.listobj import ListInstance
 from numba.extending import (
     NativeValue,
@@ -35,9 +40,11 @@ import bodo
 from bodo.hiframes.pd_series_ext import SeriesType
 from bodo.utils.cg_helpers import is_ll_eq
 from bodo.utils.templates import OverloadedKeyAttributeTemplate
+from bodo.utils.transform import get_call_expr_arg
 from bodo.utils.typing import (
     BodoError,
     MetaType,
+    assert_bodo_error,
     decode_if_dict_array,
     get_overload_const_int,
     is_list_like_index_type,
@@ -49,7 +56,14 @@ from bodo.utils.typing import (
     to_str_arr_if_dict_array,
     unwrap_typeref,
 )
-from bodo.utils.utils import is_whole_slice
+from bodo.utils.utils import (
+    alloc_type,
+    is_array_typ,
+    is_whole_slice,
+    numba_to_c_array_types,
+    numba_to_c_types,
+    set_wrapper,
+)
 
 
 class Table:
@@ -57,7 +71,7 @@ class Table:
     Python definition needed since CSV reader passes arrays from objmode
     """
 
-    def __init__(self, arrs, usecols=None, num_arrs=-1):
+    def __init__(self, arrs, usecols=None, num_arrs=-1, dist=None):
         """
         Constructor for a Python Table.
         arrs is a list of arrays to store in the table.
@@ -82,6 +96,8 @@ class Table:
         For a more complete discussion on why these changes are needed, see:
         https://bodo.atlassian.net/wiki/spaces/B/pages/921042953/Table+Structure+with+Dead+Columns
         """
+        from bodo.transforms.distributed_analysis import Distribution
+
         if usecols is not None:
             assert num_arrs != -1, "num_arrs must be provided if usecols is not None"
             # If usecols is provided we need to place everything in the
@@ -104,6 +120,7 @@ class Table:
         # for debugging purposes (enables adding print(t_arg.block_0) in unittests
         # which are called in python too)
         self.block_0 = arrs
+        self.dist = Distribution.REP.value if dist is None else dist
 
     def __eq__(self, other):
         return (
@@ -112,8 +129,26 @@ class Table:
             and all((a == b).all() for a, b in zip(self.arrays, other.arrays))
         )
 
+    def __len__(self):
+        return len(self.arrays[0]) if len(self.arrays) > 0 else 0
+
     def __str__(self) -> str:
-        return str(self.arrays)
+        return f"Table({str(self.arrays)})"
+
+    def __repr__(self) -> str:
+        return f"Table({repr(self.arrays)})"
+
+    def __getitem__(self, val):
+        if not isinstance(val, slice):
+            raise TypeError("Table getitem only supported for slices")
+        # Just slice each array
+        return Table(
+            [arr if arr is None else arr[val] for arr in self.arrays], dist=self.dist
+        )
+
+    @property
+    def shape(self) -> tuple[int, int]:
+        return (len(self.arrays[0] if len(self.arrays) > 0 else 0), len(self.arrays))
 
     def to_pandas(self, index=None):
         """convert table to a DataFrame (with column names just a range of numbers)"""
@@ -124,13 +159,20 @@ class Table:
 
 
 class TableType(types.ArrayCompatible):
-    """Bodo Table type that stores column arrays for dataframes.
+    """Bodo Table type that stores column arrays for DataFrames.
     Arrays of the same type are stored in the same "block" (kind of similar to Pandas).
     This allows for loop generation for columns of same type instead of generating code
-    for each column (important for dataframes with many columns).
+    for each column (important for DataFrames with many columns).
     """
 
-    def __init__(self, arr_types, has_runtime_cols=False):
+    def __init__(
+        self,
+        arr_types: tuple[types.ArrayCompatible, ...],
+        has_runtime_cols: bool = False,
+        dist=None,
+    ):
+        from bodo.transforms.distributed_analysis import Distribution
+
         self.arr_types = arr_types
         self.has_runtime_cols = has_runtime_cols
 
@@ -167,9 +209,10 @@ class TableType(types.ArrayCompatible):
         self.type_to_blk = type_to_blk
         self.blk_to_type = blk_to_type
         self.block_to_arr_ind = block_to_arr_ind
-        super(TableType, self).__init__(
-            name=f"TableType({arr_types}, {has_runtime_cols})"
-        )
+
+        dist = Distribution.OneD_Var if dist is None else dist
+        self.dist = dist
+        super().__init__(name=f"TableType({arr_types}, {has_runtime_cols}, {dist})")
 
     @property
     def as_array(self):
@@ -190,10 +233,27 @@ class TableType(types.ArrayCompatible):
         """
         return self.__class__.__name__, (self._code,)
 
+    def copy(self, dist=None):
+        if dist is None:
+            dist = self.dist
+        return TableType(self.arr_types, self.has_runtime_cols, dist)
+
+    @cached_property
+    def c_array_types(self) -> list[int]:
+        return numba_to_c_array_types(self.arr_types)
+
+    @cached_property
+    def c_dtypes(self) -> list[int]:
+        return numba_to_c_types(self.arr_types)
+
 
 @typeof_impl.register(Table)
 def typeof_table(val, c):
-    return TableType(tuple(numba.typeof(arr) for arr in val.arrays))
+    from bodo.transforms.distributed_analysis import Distribution
+
+    return TableType(
+        tuple(numba.typeof(arr) for arr in val.arrays), dist=Distribution(val.dist)
+    )
 
 
 @register_model(TableType)
@@ -216,7 +276,7 @@ class TableTypeModel(models.StructModel):
         members.append(("parent", types.pyobject))
         # Keep track of the length in the struct directly.
         members.append(("len", types.int64))
-        super(TableTypeModel, self).__init__(dmm, fe_type, members)
+        super().__init__(dmm, fe_type, members)
 
 
 # for debugging purposes (a table may not have a block)
@@ -429,6 +489,11 @@ def box_table(typ, val, c, ensure_unboxed=None):
     cls_obj = c.pyapi.unserialize(c.pyapi.serialize_object(Table))
     out_table_obj = c.pyapi.call_function_objargs(cls_obj, (table_arr_list_obj,))
 
+    dist_val_obj = c.pyapi.long_from_longlong(
+        lir.Constant(lir.IntType(64), typ.dist.value)
+    )
+    c.pyapi.object_setattr_string(out_table_obj, "dist", dist_val_obj)
+
     c.pyapi.decref(cls_obj)
     c.pyapi.decref(table_arr_list_obj)
     c.context.nrt.decref(c.builder, typ, val)
@@ -442,21 +507,31 @@ def table_len_lower(context, builder, sig, args):
     done in a shared template for many different types.
     See LenTemplate.
     """
-    impl = table_len_overload(*sig.args)
-    return context.compile_internal(builder, impl, sig, args)
+    return context.compile_internal(builder, lambda T: T._len, sig, args)
 
 
-def table_len_overload(T):
+def local_len(x):
     """
-    Implementation to compile for len(TableType)
+    Determine the rank-local length of an object.
+    Right now, only implemented for tables, but should be expanded
+    to other datatypes in the future
     """
-    if not isinstance(T, TableType):
-        return
 
-    def impl(T):  # pragma: no cover
-        return T._len
 
-    return impl
+# We can reuse the same overload internally
+# Since distributed pass rewrites __builtin__.len() only
+@infer_global(local_len)
+class LocalLenInfer(AbstractTemplate):
+    def generic(self, args, kws):
+        assert len(args) == 1 and not kws
+        if not isinstance(args[0], TableType):
+            raise BodoError("local_len() only supported for tables")
+        return signature(types.int64, args[0])
+
+
+@lower_builtin(local_len, TableType)
+def local_len_lower(context, builder, sig, args):
+    return context.compile_internal(builder, lambda T: T._len, sig, args)
 
 
 @lower_getattr(TableType, "shape")
@@ -530,11 +605,11 @@ def get_table_data_codegen(context, builder, table_arg, col_ind, table_type):
     return arr
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def get_table_data(typingctx, table_type, ind_typ):
     """get data array of table (using the original array index)"""
     assert isinstance(table_type, TableType)
-    assert is_overload_constant_int(ind_typ)
+    assert_bodo_error(is_overload_constant_int(ind_typ))
     col_ind = get_overload_const_int(ind_typ)
     arr_type = table_type.arr_types[col_ind]
 
@@ -550,6 +625,23 @@ def get_table_data(typingctx, table_type, ind_typ):
 @intrinsic
 def del_column(typingctx, table_type, ind_typ):
     """Decrement the reference count by 1 for the columns in a table."""
+    from bodo.io.arrow_reader import ArrowReaderType
+
+    # Right now in TableColumnDelPass, we treat ArrowReaderType as a TableType
+    # in order to perform column pruning for streaming IO. However, when the
+    # ArrowReaderType is used outside of the streaming loop (to call C++
+    # delete, for example), TableColumnDelPass adds del_column calls for dead
+    # columns after the loop. Current hacky solution is to have del_column be
+    # a no-op in this case
+    # TODO: Properly track and handle operator objects in TableColumnDelPass
+    if isinstance(table_type, ArrowReaderType):  # pragma: no cover
+        sig = types.void(table_type, ind_typ)
+
+        def codegen(context, builder, sig, args):
+            return
+
+        return sig, codegen
+
     assert isinstance(table_type, TableType), "Can only delete columns from a table"
     assert isinstance(ind_typ, types.TypeRef) and isinstance(
         ind_typ.instance_type, MetaType
@@ -809,11 +901,11 @@ def generate_set_table_data_code(table, ind, arr_type, used_cols, is_null=False)
         "out_table_typ": out_table_typ,
     }
     func_text = "def set_table_data(table, ind, arr, used_cols=None):\n"
-    func_text += f"  T2 = init_table(out_table_typ, False)\n"
+    func_text += "  T2 = init_table(out_table_typ, False)\n"
     # Length of the table cannot change.
-    func_text += f"  T2 = set_table_len(T2, len(table))\n"
+    func_text += "  T2 = set_table_len(T2, len(table))\n"
     # Copy the parent for lazy unboxing.
-    func_text += f"  T2 = set_table_parent(T2, table)\n"
+    func_text += "  T2 = set_table_parent(T2, table)\n"
     for typ, blk in out_table_typ.type_to_blk.items():
         if typ in table.type_to_blk:
             orig_table_blk = table.type_to_blk[typ]
@@ -847,8 +939,8 @@ def generate_set_table_data_code(table, ind, arr_type, used_cols, is_null=False)
                     func_text += f"    out_idx = out_idxs_{blk}[i]\n"
                     if removes_arr:
                         # If we remove any array we need to check for -1
-                        func_text += f"    if out_idx == -1:\n"
-                        func_text += f"      continue\n"
+                        func_text += "    if out_idx == -1:\n"
+                        func_text += "      continue\n"
                     func_text += (
                         f"    out_arr_list_{blk}[out_idx] = arr_list_{blk}[i]\n"
                     )
@@ -865,14 +957,14 @@ def generate_set_table_data_code(table, ind, arr_type, used_cols, is_null=False)
                 # Assign the array if it exists
                 func_text += f"  out_arr_list_{blk}[0] = arr\n"
         func_text += f"  T2 = set_table_block(T2, out_arr_list_{blk}, {blk})\n"
-    func_text += f"  return T2\n"
+    func_text += "  return T2\n"
 
     loc_vars = {}
     exec(func_text, glbls, loc_vars)
     return loc_vars["set_table_data"]
 
 
-@numba.generated_jit(nopython=True, no_cpython_wrapper=True)
+@numba.generated_jit(nopython=True, no_cpython_wrapper=True, no_unliteral=True)
 def set_table_data(table, ind, arr, used_cols=None):
     """Returns a new table with the contents as table
     except arr is inserted at ind. There are two main cases,
@@ -900,7 +992,7 @@ def set_table_data(table, ind, arr, used_cols=None):
     return generate_set_table_data_code(table, ind_lit, arr, used_columns)
 
 
-@numba.generated_jit(nopython=True, no_cpython_wrapper=True)
+@numba.generated_jit(nopython=True, no_cpython_wrapper=True, no_unliteral=True)
 def set_table_data_null(table, ind, arr, used_cols=None):
     """Returns a new table with the contents as table
     except a new null array is inserted at ind. There are two main cases,
@@ -938,9 +1030,9 @@ def alias_ext_dummy_func(lhs_name, args, alias_map, arg_aliases):
     numba.core.ir_utils._add_alias(lhs_name, args[0].name, alias_map, arg_aliases)
 
 
-numba.core.ir_utils.alias_func_extensions[
-    ("get_table_data", "bodo.hiframes.table")
-] = alias_ext_dummy_func
+numba.core.ir_utils.alias_func_extensions[("get_table_data", "bodo.hiframes.table")] = (
+    alias_ext_dummy_func
+)
 
 
 def get_table_data_equiv(self, scope, equiv_set, loc, args, kws):
@@ -984,11 +1076,7 @@ def lower_constant_table(context, builder, table_type, pyval):
 
 
 def get_init_table_output_type(table_type, to_str_if_dict_t):
-    out_table_type = (
-        table_type.instance_type
-        if isinstance(table_type, types.TypeRef)
-        else table_type
-    )
+    out_table_type = unwrap_typeref(table_type)
     assert isinstance(out_table_type, TableType), "table type or typeref expected"
     assert is_overload_constant_bool(
         to_str_if_dict_t
@@ -1001,7 +1089,7 @@ def get_init_table_output_type(table_type, to_str_if_dict_t):
     return out_table_type
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def init_table(typingctx, table_type, to_str_if_dict_t):
     """initialize a table object with same structure as input table without setting it's
     array blocks (to be set later)
@@ -1064,11 +1152,11 @@ def init_table_from_lists(typingctx, tuple_of_lists_type, table_type):
     return sig, codegen
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def get_table_block(typingctx, table_type, blk_type):
     """get array list for a type block of table"""
     assert isinstance(table_type, TableType), "table type expected"
-    assert is_overload_constant_int(blk_type)
+    assert_bodo_error(is_overload_constant_int(blk_type))
     blk = get_overload_const_int(blk_type)
     arr_type = None
     for t, b in table_type.type_to_blk.items():
@@ -1096,9 +1184,7 @@ def ensure_table_unboxed(typingctx, table_type, used_cols_typ):
     """
 
     def codegen(context, builder, sig, args):
-
         table_arg, used_col_set = args
-        pyapi = context.get_python_api(builder)
 
         use_all = used_cols_typ == types.none
         if not use_all:
@@ -1215,12 +1301,12 @@ def ensure_column_unboxed_codegen(context, builder, sig, args):
                 )
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def set_table_block(typingctx, table_type, arr_list_type, blk_type):
     """set table block and return a new table object"""
     assert isinstance(table_type, TableType), "table type expected"
     assert isinstance(arr_list_type, types.List), "list type expected"
-    assert is_overload_constant_int(blk_type), "blk should be const int"
+    assert_bodo_error(is_overload_constant_int(blk_type), "blk should be const int")
     blk = get_overload_const_int(blk_type)
 
     def codegen(context, builder, sig, args):
@@ -1272,7 +1358,7 @@ def set_table_parent(typingctx, out_table_type, in_table_type):
     return sig, codegen
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def alloc_list_like(typingctx, list_type, len_type, to_str_if_dict_t):
     """
     allocate a list with same type and size as input list but filled with null values
@@ -1309,7 +1395,7 @@ def alloc_empty_list_type(typingctx, size_typ, data_typ):
     with null values.
     """
     assert isinstance(size_typ, types.Integer), "Size must be an integer"
-    dtype = data_typ.instance_type if isinstance(data_typ, types.TypeRef) else data_typ
+    dtype = unwrap_typeref(data_typ)
     list_type = types.List(dtype)
 
     def codegen(context, builder, sig, args):
@@ -1322,12 +1408,12 @@ def alloc_empty_list_type(typingctx, size_typ, data_typ):
     return sig, codegen
 
 
-def _get_idx_length(idx):  # pragma: no cover
+def _get_idx_num_true(idx):  # pragma: no cover
     pass
 
 
-@overload(_get_idx_length)
-def overload_get_idx_length(idx, n):
+@overload(_get_idx_num_true)
+def overload_get_idx_num_true(idx, n):
     """get length of boolean array or slice index"""
     if is_list_like_index_type(idx) and idx.dtype == types.bool_:
         return lambda idx, n: idx.sum()  # pragma: no cover
@@ -1341,8 +1427,11 @@ def overload_get_idx_length(idx, n):
     return impl
 
 
-@numba.generated_jit(nopython=True, no_cpython_wrapper=True)
 def table_filter(T, idx, used_cols=None):
+    pass
+
+
+def gen_table_filter_impl(T, idx, used_cols=None):
     """Function that filters table using input boolean array or slice.
        If used_cols is passed, only used columns are written in output.
 
@@ -1366,34 +1455,35 @@ def table_filter(T, idx, used_cols=None):
         "set_table_block": set_table_block,
         "set_table_len": set_table_len,
         "alloc_list_like": alloc_list_like,
-        "_get_idx_length": _get_idx_length,
+        "_get_idx_num_true": _get_idx_num_true,
         "ensure_contig_if_np": ensure_contig_if_np,
+        "set_wrapper": set_wrapper,
     }
     if not is_overload_none(used_cols):
         # Get the MetaType from the TypeRef
         used_cols_type = used_cols.instance_type
         used_cols_data = np.array(used_cols_type.meta, dtype=np.int64)
         glbls["used_cols_vals"] = used_cols_data
-        kept_blks = set([T.block_nums[i] for i in used_cols_data])
+        kept_blks = {T.block_nums[i] for i in used_cols_data}
     else:
         used_cols_data = None
 
     func_text = "def table_filter_func(T, idx, used_cols=None):\n"
-    func_text += f"  T2 = init_table(T, False)\n"
-    func_text += f"  l = 0\n"
+    func_text += "  T2 = init_table(T, False)\n"
+    func_text += "  l = 0\n"
 
     # set table length using index value and return if no table column is used
     if used_cols_data is not None and len(used_cols_data) == 0:
-        # avoiding _get_idx_length in the general case below since it has extra overhead
-        func_text += f"  l = _get_idx_length(idx, len(T))\n"
-        func_text += f"  T2 = set_table_len(T2, l)\n"
-        func_text += f"  return T2\n"
+        # avoiding _get_idx_num_true in the general case below since it has extra overhead
+        func_text += "  l = _get_idx_num_true(idx, len(T))\n"
+        func_text += "  T2 = set_table_len(T2, l)\n"
+        func_text += "  return T2\n"
         loc_vars = {}
         exec(func_text, glbls, loc_vars)
         return loc_vars["table_filter_func"]
 
     if used_cols_data is not None:
-        func_text += f"  used_set = set(used_cols_vals)\n"
+        func_text += "  used_set = set_wrapper(used_cols_vals)\n"
     for blk in T.type_to_blk.values():
         func_text += f"  arr_list_{blk} = get_table_block(T, {blk})\n"
         func_text += f"  out_arr_list_{blk} = alloc_list_like(arr_list_{blk}, len(arr_list_{blk}), False)\n"
@@ -1407,23 +1497,76 @@ def table_filter(T, idx, used_cols=None):
                 func_text += f"    if arr_ind_{blk} not in used_set: continue\n"
             func_text += (
                 f"    ensure_column_unboxed(T, arr_list_{blk}, i, arr_ind_{blk})\n"
-            )
-            func_text += (
                 f"    out_arr_{blk} = ensure_contig_if_np(arr_list_{blk}[i][idx])\n"
+                f"    l = len(out_arr_{blk})\n"
+                f"    out_arr_list_{blk}[i] = out_arr_{blk}\n"
             )
-            func_text += f"    l = len(out_arr_{blk})\n"
-            func_text += f"    out_arr_list_{blk}[i] = out_arr_{blk}\n"
         func_text += f"  T2 = set_table_block(T2, out_arr_list_{blk}, {blk})\n"
-    func_text += f"  T2 = set_table_len(T2, l)\n"
-    func_text += f"  return T2\n"
+    func_text += "  T2 = set_table_len(T2, l)\n"
+    func_text += "  return T2\n"
 
     loc_vars = {}
     exec(func_text, glbls, loc_vars)
     return loc_vars["table_filter_func"]
 
 
-@numba.generated_jit(nopython=True, no_cpython_wrapper=True)
+@infer_global(table_filter)
+class TableFilterInfer(AbstractTemplate):
+    """Typer for table_filter"""
+
+    def generic(self, args, kws):
+        pysig = numba.core.utils.pysignature(table_filter)
+        folded_args = bodo.utils.transform.fold_argument_types(pysig, args, kws)
+        # output has same type as input
+        out_type = folded_args[0]
+        return signature(out_type, *folded_args).replace(pysig=pysig)
+
+
+TableFilterInfer._no_unliteral = True
+
+
+@lower_builtin(table_filter, types.VarArg(types.Any))
+def lower_table_filter(context, builder, sig, args):
+    """lower table_filter() using gen_table_filter_impl above"""
+    impl = gen_table_filter_impl(*sig.args)
+    return context.compile_internal(builder, impl, sig, args)
+
+
+def table_local_filter(T, idx, used_cols=None):
+    """
+    Function that filters table using input boolean array or slice
+    only locally. This version is specially treated in Bodo passes.
+    See table_filter for argument and return types.
+    """
+
+
+@infer_global(table_local_filter)
+class TableLocalFilterInfer(AbstractTemplate):
+    """Typer for table_local_filter"""
+
+    def generic(self, args, kws):
+        pysig = numba.core.utils.pysignature(table_local_filter)
+        folded_args = bodo.utils.transform.fold_argument_types(pysig, args, kws)
+        # output has same type as input
+        out_type = folded_args[0]
+        return signature(out_type, *folded_args).replace(pysig=pysig)
+
+
+TableLocalFilterInfer._no_unliteral = True
+
+
+@lower_builtin(table_local_filter, types.VarArg(types.Any))
+def lower_table_local_filter(context, builder, sig, args):
+    """lower table_local_filter() using gen_table_filter_impl above"""
+    impl = gen_table_filter_impl(*sig.args)
+    return context.compile_internal(builder, impl, sig, args)
+
+
 def table_subset(T, idx, copy_arrs, used_cols=None):
+    pass
+
+
+def gen_table_subset_impl(T, idx, copy_arrs, used_cols=None):
     """Selects a subset of arrays/columns
     from a table using a list of integer column numbers.
     To minimize the size of the IR the integers are passed
@@ -1452,6 +1595,7 @@ def table_subset(T, idx, copy_arrs, used_cols=None):
         "set_table_len": set_table_len,
         "alloc_list_like": alloc_list_like,
         "out_table_typ": out_table_typ,
+        "set_wrapper": set_wrapper,
     }
     # Determine which columns to prune if used_cols is included.
     # Note these are the column numbers of the output table, not
@@ -1465,29 +1609,29 @@ def table_subset(T, idx, copy_arrs, used_cols=None):
         skip_cols = False
     # Compute a mapping of columns before removing
     # dropped columns.
-    moved_cols_map = {i: c for i, c in enumerate(cols_subset)}
+    moved_cols_map = dict(enumerate(cols_subset))
 
     func_text = "def table_subset(T, idx, copy_arrs, used_cols=None):\n"
-    func_text += f"  T2 = init_table(out_table_typ, False)\n"
+    func_text += "  T2 = init_table(out_table_typ, False)\n"
     # Length of the table cannot change.
-    func_text += f"  T2 = set_table_len(T2, len(T))\n"
+    func_text += "  T2 = set_table_len(T2, len(T))\n"
 
     # set table length using index value and return if no table column is used
     if skip_cols and len(kept_cols_set) == 0:
         # If all columns are dead just return the table.
-        func_text += f"  return T2\n"
+        func_text += "  return T2\n"
         loc_vars = {}
         exec(func_text, glbls, loc_vars)
         return loc_vars["table_subset"]
 
     if skip_cols:
         # Create a set for filtering
-        func_text += f"  kept_cols_set = set(kept_cols)\n"
+        func_text += "  kept_cols_set = set_wrapper(kept_cols)\n"
 
     # Use the output table to only generate code per output
     # type. Here we iterate over the output type and list of
     # arrays and copy the arrays from the original table. Here
-    # is some pseudocode (omitting many details like unboxing).
+    # is some pseudo-code (omitting many details like unboxing).
 
     #   for typ in out_types:
     #       out_arrs = alloc_list(typ)
@@ -1556,11 +1700,36 @@ def table_subset(T, idx, copy_arrs, used_cols=None):
             suffix = ".copy()" if make_copy else ""
             func_text += f"    out_arr_list_{blk}[i] = arr_list_{blk}[physical_idx_{blk}]{suffix}\n"
         func_text += f"  T2 = set_table_block(T2, out_arr_list_{blk}, {blk})\n"
-    func_text += f"  return T2\n"
+    func_text += "  return T2\n"
 
     loc_vars = {}
     exec(func_text, glbls, loc_vars)
     return loc_vars["table_subset"]
+
+
+@infer_global(table_subset)
+class TableSubsetInfer(AbstractTemplate):
+    """Typer for table_subset"""
+
+    def generic(self, args, kws):
+        pysig = numba.core.utils.pysignature(table_subset)
+        folded_args = bodo.utils.transform.fold_argument_types(pysig, args, kws)
+        T = folded_args[0]
+        idx = folded_args[1]
+        cols_subset = list(unwrap_typeref(idx).meta)
+        out_arr_typs = tuple(np.array(T.arr_types, dtype=object)[cols_subset])
+        out_table_type = TableType(out_arr_typs)
+        return signature(out_table_type, *folded_args).replace(pysig=pysig)
+
+
+TableSubsetInfer._no_unliteral = True
+
+
+@lower_builtin(table_subset, types.VarArg(types.Any))
+def lower_table_subset(context, builder, sig, args):
+    """lower table_subset() using gen_table_subset_impl above"""
+    impl = gen_table_subset_impl(*sig.args)
+    return context.compile_internal(builder, impl, sig, args)
 
 
 def table_filter_equiv(self, scope, equiv_set, loc, args, kws):
@@ -1577,6 +1746,9 @@ def table_filter_equiv(self, scope, equiv_set, loc, args, kws):
 
 
 ArrayAnalysis._analyze_op_call_bodo_hiframes_table_table_filter = table_filter_equiv
+ArrayAnalysis._analyze_op_call_bodo_hiframes_table_table_local_filter = (
+    table_filter_equiv
+)
 
 
 def table_subset_equiv(self, scope, equiv_set, loc, args, kws):
@@ -1625,7 +1797,7 @@ def gen_str_and_dict_enc_cols_to_one_block_fn_txt(
     Args:
         in_table_type (TableType): The input table, from which to source the string columns.
                                    Must contain a string and encoded string block
-        out_table_type (TableType): The out table, whoose columns will be set.
+        out_table_type (TableType): The out table, whose columns will be set.
                                     Must contain a string block
         glbls (dict): The dict of global variable to be used when executing this functext.
                       keys 'arr_inds_(input table string block)', 'arr_inds_(input table dict encoded string block)',
@@ -1650,7 +1822,7 @@ def gen_str_and_dict_enc_cols_to_one_block_fn_txt(
 
     # NOTE: Care must be taken to ensure that arrays are placed into the output block
     # in the correct ordering. The ordering in which the arrays will be placed into the physical table
-    # is dependent on the logical ordering of the columns in the tabletype's arr_types atribute.
+    # is dependent on the logical ordering of the columns in the tabletype's arr_types attribute.
     # For example, if the input table has array_types in the order
     # (String, dict_enc, String, dict_enc)
     # which correspond to the arrays:
@@ -1677,13 +1849,12 @@ def gen_str_and_dict_enc_cols_to_one_block_fn_txt(
     cur_str_ary_idx = 0
     cur_dict_enc_str_ary_idx = 0
 
-    # Iterate over the logical indicies of the string/dictionary columns
+    # Iterate over the logical indices of the string/dictionary columns
     # for each physical index in the output string block, we assign it to whichever
     # column appears first in the logical ordering
     for cur_output_table_offset in range(
         len(logical_string_array_idxs) + len(logical_dic_enc_string_array_idxs)
     ):
-
         if cur_str_ary_idx == len(logical_string_array_idxs):
             # We've already assigned all the string columns
             dict_enc_string_array_physical_offset_in_output_block.append(
@@ -1750,26 +1921,26 @@ def gen_str_and_dict_enc_cols_to_one_block_fn_txt(
     func_text += f"  out_arr_list_{out_table_block} = alloc_list_like(input_str_arr_list, {len(string_array_physical_offset_in_output_block) + len(dict_enc_string_array_physical_offset_in_output_block)}, True)\n"
 
     # handle string arrays
-    func_text += f"  for input_str_ary_idx, output_str_arr_offset in enumerate(output_table_str_arr_offsets_in_combined_block):\n"
+    func_text += "  for input_str_ary_idx, output_str_arr_offset in enumerate(output_table_str_arr_offsets_in_combined_block):\n"
     func_text += (
         f"    arr_ind_str = arr_inds_{input_string_ary_blk}[input_str_ary_idx]\n"
     )
-    func_text += f"    ensure_column_unboxed(T, input_str_arr_list, input_str_ary_idx, arr_ind_str)\n"
-    func_text += f"    out_arr_str = input_str_arr_list[input_str_ary_idx]\n"
+    func_text += "    ensure_column_unboxed(T, input_str_arr_list, input_str_ary_idx, arr_ind_str)\n"
+    func_text += "    out_arr_str = input_str_arr_list[input_str_ary_idx]\n"
     if is_gatherv:
-        func_text += f"    out_arr_str = bodo.gatherv(out_arr_str, allgather, warn_if_rep, root)\n"
+        func_text += "    out_arr_str = bodo.gatherv(out_arr_str, allgather, warn_if_rep, root)\n"
 
     func_text += (
         f"    out_arr_list_{out_table_block}[output_str_arr_offset] = out_arr_str\n"
     )
 
     # handle dict encoded string arrays
-    func_text += f"  for input_dict_enc_str_ary_idx, output_dict_enc_str_arr_offset in enumerate(output_table_dict_enc_str_arr_offsets_in_combined_block):\n"
+    func_text += "  for input_dict_enc_str_ary_idx, output_dict_enc_str_arr_offset in enumerate(output_table_dict_enc_str_arr_offsets_in_combined_block):\n"
     func_text += f"    arr_ind_dict_enc_str = arr_inds_{input_dict_encoded_string_ary_blk}[input_dict_enc_str_ary_idx]\n"
-    func_text += f"    ensure_column_unboxed(T, input_dict_enc_str_arr_list, input_dict_enc_str_ary_idx, arr_ind_dict_enc_str)\n"
-    func_text += f"    out_arr_dict_enc_str = decode_if_dict_array(input_dict_enc_str_arr_list[input_dict_enc_str_ary_idx])\n"
+    func_text += "    ensure_column_unboxed(T, input_dict_enc_str_arr_list, input_dict_enc_str_ary_idx, arr_ind_dict_enc_str)\n"
+    func_text += "    out_arr_dict_enc_str = decode_if_dict_array(input_dict_enc_str_arr_list[input_dict_enc_str_ary_idx])\n"
     if is_gatherv:
-        func_text += f"    out_arr_dict_enc_str = bodo.gatherv(out_arr_dict_enc_str, allgather, warn_if_rep, root)\n"
+        func_text += "    out_arr_dict_enc_str = bodo.gatherv(out_arr_dict_enc_str, allgather, warn_if_rep, root)\n"
 
     func_text += f"    out_arr_list_{out_table_block}[output_dict_enc_str_arr_offset] = out_arr_dict_enc_str\n"
 
@@ -1791,8 +1962,8 @@ def decode_if_dict_table(T):
     all columns are alive (i.e. before write).
     """
     func_text = "def impl(T):\n"
-    func_text += f"  T2 = init_table(T, True)\n"
-    func_text += f"  l = len(T)\n"
+    func_text += "  T2 = init_table(T, True)\n"
+    func_text += "  l = len(T)\n"
     glbls = {
         "init_table": init_table,
         "get_table_block": get_table_block,
@@ -1855,8 +2026,8 @@ def decode_if_dict_table(T):
         func_text += (
             f"  T2 = set_table_block(T2, out_arr_list_{input_blk}, {output_blk})\n"
         )
-    func_text += f"  T2 = set_table_len(T2, l)\n"
-    func_text += f"  return T2\n"
+    func_text += "  T2 = set_table_len(T2, l)\n"
+    func_text += "  return T2\n"
 
     loc_vars = {}
     exec(func_text, glbls, loc_vars)
@@ -1871,7 +2042,7 @@ def overload_table_getitem(T, idx):
 
 
 @intrinsic
-def init_runtime_table_from_lists(typingctx, arr_list_tup_typ, nrows_typ=None):
+def init_runtime_table_from_lists(typingctx, arr_list_tup_typ, nrows_typ):
     """
     Takes a list of arrays and the length of each array and creates a Python
     Table from this list (without making a copy).
@@ -1920,8 +2091,94 @@ def _to_arr_if_series(t):
     return t.data if isinstance(t, SeriesType) else t
 
 
-@numba.generated_jit(nopython=True, no_cpython_wrapper=True)
+def create_empty_table(table_type):
+    pass
+
+
+def gen_create_empty_table_impl(table_type):
+    """Implement of create_empty_table(), which create a table with the
+    required table type and all columns with length 0.
+
+    Note: This doesn't support dictionary encoded arrays. If you call this
+    function make sure you convert any dictionary array types to regular
+    string arrays.
+
+    Args:
+        table_type (TableType): The type of the output table.
+    Returns:
+        TableType: An allocated table with length 0.
+    """
+    out_table_type = unwrap_typeref(table_type)
+    glbls = {
+        "alloc_list_like": alloc_list_like,
+        "alloc_type": alloc_type,
+        "init_table": init_table,
+        "set_table_len": set_table_len,
+        "set_table_block": set_table_block,
+    }
+    func_text = "def impl_create_empty_table(table_type):\n"
+    func_text += "  table = init_table(table_type, False)\n"
+    func_text += "  table = set_table_len(table, 0)\n"
+    for typ, blk in out_table_type.type_to_blk.items():
+        glbls[f"arr_typ_{blk}"] = typ
+        glbls[f"arr_list_typ_{blk}"] = types.List(typ)
+        n_arrs = len(out_table_type.block_to_arr_ind[blk])
+        func_text += f"  out_arr_list_{blk} = alloc_list_like(arr_list_typ_{blk}, {n_arrs}, False)\n"
+        # assign arrays that come from input table.
+        func_text += f"  for i in range(len(out_arr_list_{blk})):\n"
+        func_text += (
+            f"    out_arr_list_{blk}[i] = alloc_type(0, arr_typ_{blk}, (-1,))\n"
+        )
+        func_text += f"  table = set_table_block(table, out_arr_list_{blk}, {blk})\n"
+
+    func_text += "  return table\n"
+    loc_vars = {}
+    exec(func_text, glbls, loc_vars)
+    return loc_vars["impl_create_empty_table"]
+
+
+@infer_global(create_empty_table)
+class CreateEmptyTableInfer(AbstractTemplate):
+    """Typer for create_empty_table"""
+
+    def generic(self, args, kws):
+        pysig = numba.core.utils.pysignature(create_empty_table)
+        folded_args = bodo.utils.transform.fold_argument_types(pysig, args, kws)
+        out_table_type = unwrap_typeref(folded_args[0])
+        return signature(out_table_type, *folded_args).replace(pysig=pysig)
+
+
+@lower_builtin(create_empty_table, types.Any)
+def lower_create_empty_table(context, builder, sig, args):
+    """lower create_empty_table() using gen_create_empty_table_impl() above"""
+    impl = gen_create_empty_table_impl(*sig.args)
+    return context.compile_internal(builder, impl, sig, args)
+
+
+def create_empty_table_equiv(self, scope, equiv_set, loc, args, kws):
+    """array analysis for create_empty_table(). Output table has
+    length 0.
+    """
+    return ArrayAnalysis.AnalyzeResult(shape=(ir.Const(0, loc), None), pre=[])
+
+
+ArrayAnalysis._analyze_op_call_bodo_hiframes_table_create_empty_table = (
+    create_empty_table_equiv
+)
+
+
 def logical_table_to_table(
+    in_table_t,
+    extra_arrs_t,
+    in_col_inds_t,
+    n_table_cols_t,
+    out_table_type_t=None,
+    used_cols=None,
+):
+    pass
+
+
+def gen_logical_table_to_table_impl(
     in_table_t,
     extra_arrs_t,
     in_col_inds_t,
@@ -1962,7 +2219,7 @@ def logical_table_to_table(
         in_table_t, (TableType, types.BaseTuple, types.NoneType)
     ), "logical_table_to_table: input table must be a TableType or tuple of arrays or None (for dead table)"
 
-    glbls = {}
+    glbls = {"set_wrapper": set_wrapper}
     # prune columns if used_cols is provided
     if not is_overload_none(used_cols):
         kept_cols = set(used_cols.instance_type.meta)
@@ -2017,26 +2274,27 @@ def logical_table_to_table(
             "init_table": init_table,
             "set_table_len": set_table_len,
             "out_table_type": out_table_type,
+            "set_wrapper": set_wrapper,
         }
     )
 
-    func_text = "def impl(in_table_t, extra_arrs_t, in_col_inds_t, n_table_cols_t, out_table_type_t=None, used_cols=None):\n"
+    func_text = "def impl_logical_table_to_table(in_table_t, extra_arrs_t, in_col_inds_t, n_table_cols_t, out_table_type_t=None, used_cols=None):\n"
     if any(isinstance(t, SeriesType) for t in extra_arrs_t.types):
         func_text += f"  extra_arrs_t = {extra_arrs_no_series}\n"
-    func_text += f"  T1 = in_table_t\n"
-    func_text += f"  T2 = init_table(out_table_type, False)\n"
-    func_text += f"  T2 = set_table_len(T2, len(T1))\n"
+    func_text += "  T1 = in_table_t\n"
+    func_text += "  T2 = init_table(out_table_type, False)\n"
+    func_text += "  T2 = set_table_len(T2, len(T1))\n"
 
     # If all columns are dead just return the table (only table length is used).
     if skip_cols and len(kept_cols) == 0:
-        func_text += f"  return T2\n"
+        func_text += "  return T2\n"
         loc_vars = {}
         exec(func_text, glbls, loc_vars)
-        return loc_vars["impl"]
+        return loc_vars["impl_logical_table_to_table"]
 
     # Create a set for column filtering
     if skip_cols:
-        func_text += f"  kept_cols_set = set(kept_cols)\n"
+        func_text += "  kept_cols_set = set_wrapper(kept_cols)\n"
 
     for typ, blk in out_table_type.type_to_blk.items():
         glbls[f"arr_list_typ_{blk}"] = types.List(typ)
@@ -2067,7 +2325,7 @@ def logical_table_to_table(
             func_text += f"  for i in range(len(out_arr_list_{blk})):\n"
             func_text += f"    in_offset_{blk} = in_idxs_{blk}[i]\n"
             func_text += f"    if in_offset_{blk} == -1:\n"
-            func_text += f"      continue\n"
+            func_text += "      continue\n"
             func_text += f"    in_arr_ind_{blk} = in_arr_inds_{blk}[i]\n"
             if skip_cols:
                 func_text += (
@@ -2087,7 +2345,7 @@ def logical_table_to_table(
 
         func_text += f"  T2 = set_table_block(T2, out_arr_list_{blk}, {blk})\n"
 
-    func_text += f"  return T2\n"
+    func_text += "  return T2\n"
 
     glbls.update(
         {
@@ -2101,7 +2359,7 @@ def logical_table_to_table(
 
     loc_vars = {}
     exec(func_text, glbls, loc_vars)
-    return loc_vars["impl"]
+    return loc_vars["impl_logical_table_to_table"]
 
 
 def _logical_tuple_table_to_table_codegen(
@@ -2172,8 +2430,8 @@ def _logical_tuple_table_to_table_codegen(
     func_text = "def impl(in_table_t, extra_arrs_t, in_col_inds_t, n_table_cols_t, out_table_type_t=None, used_cols=None):\n"
     if any(isinstance(t, SeriesType) for t in extra_arrs_t.types):
         func_text += f"  extra_arrs_t = {extra_arrs_no_series}\n"
-    func_text += f"  T1 = in_table_t\n"
-    func_text += f"  T2 = init_table(out_table_type, False)\n"
+    func_text += "  T1 = in_table_t\n"
+    func_text += "  T2 = init_table(out_table_type, False)\n"
     func_text += f"  T2 = set_table_len(T2, len({len_arr}))\n"
     glbls = {}
 
@@ -2194,7 +2452,7 @@ def _logical_tuple_table_to_table_codegen(
 
         func_text += f"  T2 = set_table_block(T2, out_arr_list_{blk}, {blk})\n"
 
-    func_text += f"  return T2\n"
+    func_text += "  return T2\n"
 
     glbls.update(
         {
@@ -2212,6 +2470,84 @@ def _logical_tuple_table_to_table_codegen(
     return loc_vars["impl"]
 
 
+@infer_global(logical_table_to_table)
+class LogicalTableToTableInfer(AbstractTemplate):
+    """Typer for logical_table_to_table"""
+
+    def generic(self, args, kws):
+        kws = dict(kws)
+        out_table_type_t = get_call_expr_arg(
+            "logical_table_to_table",
+            args,
+            kws,
+            4,
+            "out_table_type_t",
+            default=types.none,
+        )
+        # out_table_type is provided in table column del pass after optimization
+        if is_overload_none(out_table_type_t):
+            in_table_t = get_call_expr_arg(
+                "logical_table_to_table", args, kws, 0, "in_table_t"
+            )
+            extra_arrs_t = get_call_expr_arg(
+                "logical_table_to_table", args, kws, 1, "extra_arrs_t"
+            )
+            in_col_inds_t = get_call_expr_arg(
+                "logical_table_to_table", args, kws, 2, "in_col_inds_t"
+            )
+            n_table_cols_t = get_call_expr_arg(
+                "logical_table_to_table", args, kws, 3, "n_table_cols_t"
+            )
+            # Make sure inputs are arrays (also catches types.unknown)
+            for t in extra_arrs_t:
+                assert is_array_typ(
+                    t, True
+                ), f"logical_table_to_table: array type expected but got {t}"
+
+            in_col_inds = unwrap_typeref(in_col_inds_t).meta
+            # handle array-only input data
+            if isinstance(in_table_t, (types.BaseTuple, types.NoneType)):
+                n_in_table_arrs = (
+                    get_overload_const_int(n_table_cols_t)
+                    if is_overload_constant_int(n_table_cols_t)
+                    else len(in_table_t.types)
+                )
+                out_table_type = TableType(
+                    tuple(
+                        in_table_t.types[i]
+                        if i < n_in_table_arrs
+                        else _to_arr_if_series(extra_arrs_t.types[i - n_in_table_arrs])
+                        for i in in_col_inds
+                    )
+                )
+            else:
+                n_in_table_arrs = len(in_table_t.arr_types)
+                out_table_type = TableType(
+                    tuple(
+                        in_table_t.arr_types[i]
+                        if i < n_in_table_arrs
+                        else _to_arr_if_series(extra_arrs_t.types[i - n_in_table_arrs])
+                        for i in in_col_inds
+                    )
+                )
+        else:
+            out_table_type = unwrap_typeref(out_table_type_t)
+
+        pysig = numba.core.utils.pysignature(logical_table_to_table)
+        folded_args = bodo.utils.transform.fold_argument_types(pysig, args, kws)
+        return signature(out_table_type, *folded_args).replace(pysig=pysig)
+
+
+LogicalTableToTableInfer._no_unliteral = True
+
+
+@lower_builtin(logical_table_to_table, types.VarArg(types.Any))
+def lower_logical_table_to_table(context, builder, sig, args):
+    """lower logical_table_to_table() using gen_logical_table_to_table_impl above"""
+    impl = gen_logical_table_to_table_impl(*sig.args)
+    return context.compile_internal(builder, impl, sig, args)
+
+
 def logical_table_to_table_equiv(self, scope, equiv_set, loc, args, kws):
     """array analysis for logical_table_to_table().
     Output table has the same length as input table or arrays.
@@ -2220,14 +2556,18 @@ def logical_table_to_table_equiv(self, scope, equiv_set, loc, args, kws):
     extra_arrs_var = args[1]
 
     if equiv_set.has_shape(table_var):
-        return ArrayAnalysis.AnalyzeResult(
-            shape=(equiv_set.get_shape(table_var)[0], None), pre=[]
-        )
+        # Table can be an empty tuple, which sometimes has an empty tuple and is
+        # not correct.
+        equivs = equiv_set.get_shape(table_var)
+        if equivs:
+            return ArrayAnalysis.AnalyzeResult(shape=(equivs[0], None), pre=[])
 
     if equiv_set.has_shape(extra_arrs_var):
-        return ArrayAnalysis.AnalyzeResult(
-            shape=(equiv_set.get_shape(extra_arrs_var)[0], None), pre=[]
-        )
+        # Extra arrays can be an empty tuple, which may have an empty
+        # tuple and is not correct.
+        equivs = equiv_set.get_shape(extra_arrs_var)
+        if equivs:
+            return ArrayAnalysis.AnalyzeResult(shape=(equivs[0], None), pre=[])
 
 
 ArrayAnalysis._analyze_op_call_bodo_hiframes_table_logical_table_to_table = (
@@ -2246,3 +2586,22 @@ def alias_ext_logical_table_to_table(lhs_name, args, alias_map, arg_aliases):
 numba.core.ir_utils.alias_func_extensions[
     ("logical_table_to_table", "bodo.hiframes.table")
 ] = alias_ext_logical_table_to_table
+
+
+def generate_empty_table_with_rows(n_rows):  # pragma: no cover
+    pass
+
+
+@overload(generate_empty_table_with_rows)
+def overload_generate_empty_table_with_rows(n_rows):
+    """
+    Generates a table with no columns and n_rows rows.
+    """
+    table_typ = TableType(())
+
+    def impl(n_rows):  # pragma: no cover
+        T = init_table(table_typ, False)
+        result = set_table_len(T, n_rows)
+        return result
+
+    return impl

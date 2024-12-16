@@ -2,25 +2,12 @@ import llvmlite.binding as ll
 import numba
 from numba.core import types
 
-from bodo.io import arrow_cpp
-from bodo.libs import array_ext, decimal_ext, quantile_alg
+from bodo.libs import array_ext
 
 ll.add_symbol("get_stats_alloc_arr", array_ext.get_stats_alloc)
 ll.add_symbol("get_stats_free_arr", array_ext.get_stats_free)
 ll.add_symbol("get_stats_mi_alloc_arr", array_ext.get_stats_mi_alloc)
 ll.add_symbol("get_stats_mi_free_arr", array_ext.get_stats_mi_free)
-ll.add_symbol("get_stats_alloc_dec", decimal_ext.get_stats_alloc)
-ll.add_symbol("get_stats_free_dec", decimal_ext.get_stats_free)
-ll.add_symbol("get_stats_mi_alloc_dec", decimal_ext.get_stats_mi_alloc)
-ll.add_symbol("get_stats_mi_free_dec", decimal_ext.get_stats_mi_free)
-ll.add_symbol("get_stats_alloc_qa", quantile_alg.get_stats_alloc)
-ll.add_symbol("get_stats_free_qa", quantile_alg.get_stats_free)
-ll.add_symbol("get_stats_alloc_pq", arrow_cpp.get_stats_alloc)
-ll.add_symbol("get_stats_free_pq", arrow_cpp.get_stats_free)
-ll.add_symbol("get_stats_mi_alloc_pq", arrow_cpp.get_stats_mi_alloc)
-ll.add_symbol("get_stats_mi_free_pq", arrow_cpp.get_stats_mi_free)
-ll.add_symbol("get_stats_mi_alloc_qa", quantile_alg.get_stats_mi_alloc)
-ll.add_symbol("get_stats_mi_free_qa", quantile_alg.get_stats_mi_free)
 
 
 get_stats_alloc_arr = types.ExternalFunction(
@@ -43,84 +30,14 @@ get_stats_mi_free_arr = types.ExternalFunction(
     types.uint64(),
 )
 
-get_stats_alloc_dec = types.ExternalFunction(
-    "get_stats_alloc_dec",
-    types.uint64(),
-)
-
-get_stats_free_dec = types.ExternalFunction(
-    "get_stats_free_dec",
-    types.uint64(),
-)
-
-get_stats_mi_alloc_dec = types.ExternalFunction(
-    "get_stats_mi_alloc_dec",
-    types.uint64(),
-)
-
-get_stats_mi_free_dec = types.ExternalFunction(
-    "get_stats_mi_free_dec",
-    types.uint64(),
-)
-
-get_stats_alloc_pq = types.ExternalFunction(
-    "get_stats_alloc_pq",
-    types.uint64(),
-)
-
-get_stats_free_pq = types.ExternalFunction(
-    "get_stats_free_pq",
-    types.uint64(),
-)
-
-get_stats_mi_alloc_pq = types.ExternalFunction(
-    "get_stats_mi_alloc_pq",
-    types.uint64(),
-)
-
-get_stats_mi_free_pq = types.ExternalFunction(
-    "get_stats_mi_free_pq",
-    types.uint64(),
-)
-
-
-get_stats_alloc_qa = types.ExternalFunction(
-    "get_stats_alloc_qa",
-    types.uint64(),
-)
-
-get_stats_free_qa = types.ExternalFunction(
-    "get_stats_free_qa",
-    types.uint64(),
-)
-
-get_stats_mi_alloc_qa = types.ExternalFunction(
-    "get_stats_mi_alloc_qa",
-    types.uint64(),
-)
-
-get_stats_mi_free_qa = types.ExternalFunction(
-    "get_stats_mi_free_qa",
-    types.uint64(),
-)
-
 
 @numba.njit
 def get_allocation_stats():  # pragma: no cover
-    """get allocation stats for arrays allocated in Bodo's C++ runtimes"""
-    stats = (
-        get_allocation_stats_arr(),
-        get_allocation_stats_dec(),
-        get_allocation_stats_pq(),
-        get_allocation_stats_qa(),
-    )
-    allocs, frees, mi_allocs, mi_frees = 0, 0, 0, 0
-    for stat in stats:
-        allocs += stat[0]
-        frees += stat[1]
-        mi_allocs += stat[2]
-        mi_frees += stat[3]
-    return (allocs, frees, mi_allocs, mi_frees)
+    """
+    Get allocation stats for arrays allocated in Bodo's C++ runtime.
+    All C extensions share the same MemSys object, so we only need to check one of the extensions
+    """
+    return get_allocation_stats_arr()
 
 
 @numba.njit
@@ -131,37 +48,4 @@ def get_allocation_stats_arr():  # pragma: no cover
         get_stats_free_arr(),
         get_stats_mi_alloc_arr(),
         get_stats_mi_free_arr(),
-    )
-
-
-@numba.njit
-def get_allocation_stats_dec():  # pragma: no cover
-    """get allocation stats for arrays allocated in Bodo's C++ decimal runtime"""
-    return (
-        get_stats_alloc_dec(),
-        get_stats_free_dec(),
-        get_stats_mi_alloc_dec(),
-        get_stats_mi_free_dec(),
-    )
-
-
-@numba.njit
-def get_allocation_stats_pq():  # pragma: no cover
-    """get allocation stats for arrays allocated in Bodo's C++ parquet runtime"""
-    return (
-        get_stats_alloc_pq(),
-        get_stats_free_pq(),
-        get_stats_mi_alloc_pq(),
-        get_stats_mi_free_pq(),
-    )
-
-
-@numba.njit
-def get_allocation_stats_qa():  # pragma: no cover
-    """get allocation stats for arrays allocated in Bodo's C++ qa runtime"""
-    return (
-        get_stats_alloc_qa(),
-        get_stats_free_qa(),
-        get_stats_mi_alloc_qa(),
-        get_stats_mi_free_qa(),
     )

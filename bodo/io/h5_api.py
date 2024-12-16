@@ -1,4 +1,3 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 import operator
 
 import numba
@@ -51,7 +50,7 @@ if bodo.utils.utils.has_supported_h5py():
 
 class H5FileType(types.Opaque):
     def __init__(self):
-        super(H5FileType, self).__init__(name="H5FileType")
+        super().__init__(name="H5FileType")
 
 
 h5file_type = H5FileType()
@@ -59,7 +58,7 @@ h5file_type = H5FileType()
 
 class H5DatasetType(types.Opaque):
     def __init__(self):
-        super(H5DatasetType, self).__init__(name="H5DatasetType")
+        super().__init__(name="H5DatasetType")
 
 
 h5dataset_type = H5DatasetType()
@@ -67,7 +66,7 @@ h5dataset_type = H5DatasetType()
 
 class H5GroupType(types.Opaque):
     def __init__(self):
-        super(H5GroupType, self).__init__(name="H5GroupType")
+        super().__init__(name="H5GroupType")
 
 
 h5group_type = H5GroupType()
@@ -75,7 +74,7 @@ h5group_type = H5GroupType()
 
 class H5DatasetOrGroupType(types.Opaque):
     def __init__(self):
-        super(H5DatasetOrGroupType, self).__init__(name="H5DatasetOrGroupType")
+        super().__init__(name="H5DatasetOrGroupType")
 
 
 h5dataset_or_group_type = H5DatasetOrGroupType()
@@ -89,7 +88,7 @@ h5file_data_type = types.int64
 @register_model(H5DatasetOrGroupType)
 class H5FileModel(models.IntegerModel):
     def __init__(self, dmm, fe_type):
-        super(H5FileModel, self).__init__(dmm, h5file_data_type)
+        super().__init__(dmm, h5file_data_type)
 
 
 # type for list of names
@@ -100,7 +99,7 @@ string_list_type = types.List(string_type)
 
 
 @intrinsic
-def unify_h5_id(typingctx, tp=None):
+def unify_h5_id(typingctx, tp):
     """converts h5 id objects (which all have the same hid_t representation) to a single
     type to enable reuse of external functions.
     """
@@ -112,7 +111,7 @@ def unify_h5_id(typingctx, tp=None):
 
 
 @intrinsic
-def cast_to_h5_dset(typingctx, tp=None):
+def cast_to_h5_dset(typingctx, tp):
     """converts h5dataset_or_group_type to h5dataset_type"""
     assert tp in (h5dataset_type, h5dataset_or_group_type)
 
@@ -391,15 +390,21 @@ def get_filter_read_indices(bool_arr):  # pragma: no cover
         all_indices = inds
     else:
         all_indices = np.empty(n, indices.dtype)
-    bodo.libs.distributed_api.bcast(all_indices)
+    bodo.libs.distributed_api.bcast_preallocated(all_indices)
 
     start = bodo.libs.distributed_api.get_start(n, n_pes, rank)
     end = bodo.libs.distributed_api.get_end(n, n_pes, rank)
     return all_indices[start:end]
 
 
-@intrinsic
-def tuple_to_ptr(typingctx, tuple_tp=None):
+@intrinsic(prefer_literal=True)
+def tuple_to_ptr(typingctx, tuple_tp):
+    """
+    Converts a tuple representation to a pointer.
+    Note: The tuple may contain Integer literals, which changes
+    its value, so prefer_literal=True is required.
+    """
+
     def codegen(context, builder, sig, args):
         ptr = cgutils.alloca_once(builder, args[0].type)
         builder.store(args[0], ptr)

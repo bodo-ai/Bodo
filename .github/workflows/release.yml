@@ -1,0 +1,73 @@
+name: Release
+on:
+  schedule:
+    # Two events so that we can limit MacOS runs for cost
+    - cron: '0 21 * * 1,3,5'  # 9PM EST Mon, Wed, Fri
+    - cron: '0 21 * * 2,4'    # 9PM EST Tue, Thu
+  release:
+    types: [published]
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'pixi.lock'
+      - '.github/workflows/release.yml'
+      - '.github/workflows/_build_*.yml'
+
+jobs:
+  # For Linux, we need to build conda inside a docker container for best support. 
+  # But for the platform package to have the best potential performance, 
+  # we want to build outside of a container on the native architecture. 
+  # MacOS also builds on the native VM (no docker container). Thus, they are grouped together.
+  bodo-conda-linux:
+    strategy:
+      # Don't cancel other jobs if one fails
+      fail-fast: false
+      matrix:
+        python-version: ['3.12', '3.11', '3.10']
+    uses: ./.github/workflows/_build_bodo_conda_linux_comm.yml
+    with:
+      python-version: ${{ matrix.python-version }}
+      is-release: ${{ github.event_name == 'release' }}
+    secrets: inherit
+  bodo-conda-mac:
+    # Only run every other day to save on MacOS VM costs
+    if: github.event.schedule != '0 21 * * 1,3,5'
+    strategy:
+      # Don't cancel other jobs if one fails
+      fail-fast: false
+      matrix:
+        # On pull requests, only test building for 3.12
+        python-version: ${{ fromJson(github.event_name == 'pull_request' && '["3.12"]' || '["3.12", "3.11", "3.10"]') }}
+        os: ['macos-13', 'macos-14']
+    uses: ./.github/workflows/_build_bodo_conda_native.yml
+    with:
+      python-version: ${{ matrix.python-version }}
+      platform-build: false
+      is-release: ${{ github.event_name == 'release' }}
+      os: ${{ matrix.os }}
+    secrets: inherit
+  bodo-conda-platform:
+    uses: ./.github/workflows/_build_bodo_conda_native.yml
+    with:
+      python-version: '3.12'
+      platform-build: true
+      is-release: ${{ github.event_name == 'release' }}
+      os: self-hosted-medium
+    secrets: inherit
+
+  iceberg-conda:
+    uses: ./.github/workflows/_build_iceberg_conda.yml
+    secrets: inherit
+  azurefs-sas-conda:
+    if: github.event_name == 'release'
+    uses: ./.github/workflows/_build_azurefs_sas_token_provider_conda.yml
+    secrets: inherit
+
+  bodosql-conda:
+    needs: bodo-conda-linux
+    uses: ./.github/workflows/_build_bodosql_conda.yml
+    with:
+      is-release: ${{ github.event_name == 'release' }}
+    secrets: inherit
+
+  # TODO: Include E2E tests, and AMI

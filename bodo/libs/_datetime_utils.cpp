@@ -1,4 +1,3 @@
-// Copyright (C) 2022 Bodo Inc. All rights reserved.
 
 /**
  * Datetime helper functions used in files that are
@@ -6,7 +5,11 @@
  */
 
 #include "_datetime_utils.h"
+#include <Python.h>
+#include <iostream>
+
 #include "../libs/_datetime_ext.h"
+#include "_datetime_ext.h"
 
 /**
  * @brief copied from Arrow since not in exported APIs
@@ -103,4 +106,78 @@ int64_t days_to_yearsdays(int64_t* days_) {
 
     *days_ = days;
     return year + 2000;
+}
+
+void get_month_day(int64_t year, int64_t days, int64_t* month, int64_t* day) {
+    const int* month_lengths;
+    int i;
+
+    month_lengths = days_per_month_table[is_leapyear(year)];
+
+    for (i = 0; i < 12; ++i) {
+        if (days < month_lengths[i]) {
+            *month = i + 1;
+            *day = days + 1;
+            return;
+        } else {
+            days -= month_lengths[i];
+        }
+    }
+}
+
+PyObject* py_date_from_int(size_t ordinal) {
+#undef CHECK
+#define CHECK(expr, msg)               \
+    if (!(expr)) {                     \
+        std::cerr << msg << std::endl; \
+        PyGILState_Release(gilstate);  \
+        return NULL;                   \
+    }
+
+    auto gilstate = PyGILState_Ensure();
+
+    // get datetime.date constructor
+    PyObject* datetime = PyImport_ImportModule("datetime");
+    CHECK(datetime, "importing datetime module failed");
+    PyObject* datetime_date_constructor =
+        PyObject_GetAttrString(datetime, "date");
+    CHECK(datetime_date_constructor, "getting datetime.date failed");
+    int64_t day = ordinal;
+    int64_t month = 0;
+    int64_t year = days_to_yearsdays(&day);
+    get_month_day(year, day, &month, &day);
+
+    auto result = PyObject_CallFunction(datetime_date_constructor, "LLL", year,
+                                        month, day);
+
+    Py_DECREF(datetime_date_constructor);
+    Py_DECREF(datetime);
+    PyGILState_Release(gilstate);
+    return result;
+}
+
+PyObject* py_timestamp_from_int(int64_t val) {
+#undef CHECK
+#define CHECK(expr, msg)               \
+    if (!(expr)) {                     \
+        std::cerr << msg << std::endl; \
+        PyGILState_Release(gilstate);  \
+        return NULL;                   \
+    }
+
+    auto gilstate = PyGILState_Ensure();
+
+    // get pd.Timestamp constructor
+    PyObject* pandas = PyImport_ImportModule("pandas");
+    CHECK(pandas, "importing pandas module failed");
+    PyObject* timestamp_constructor =
+        PyObject_GetAttrString(pandas, "Timestamp");
+    CHECK(timestamp_constructor, "getting pandas.Timestamp failed");
+
+    auto result = PyObject_CallFunction(timestamp_constructor, "L", val);
+
+    Py_DECREF(pandas);
+    Py_DECREF(timestamp_constructor);
+    PyGILState_Release(gilstate);
+    return result;
 }

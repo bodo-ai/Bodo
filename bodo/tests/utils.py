@@ -1,44 +1,62 @@
-"""Utility functions for testing such as check_func() that tests a function.
 """
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
+Utility functions for testing such as check_func() that tests a function.
+"""
+
+import datetime
 import io
 import os
 import random
+import re
 import string
+import subprocess
 import time
 import types as pytypes
+import typing as pt
 import warnings
+from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from decimal import Decimal
 from enum import Enum
-from typing import Dict
+from typing import TypeVar
+from urllib.parse import urlencode
 from uuid import uuid4
 
 import numba
 import numpy as np
 import pandas as pd
 import pyarrow as pa
-from mpi4py import MPI
+import pytest
 from numba.core import ir, types
 from numba.core.compiler_machinery import FunctionPass, register_pass
-from numba.core.ir_utils import find_callname, guard
+from numba.core.ir_utils import build_definitions, find_callname, guard
 from numba.core.typed_passes import NopythonRewrites
 from numba.core.untyped_passes import PreserveIR
 
 import bodo
-from bodo.utils.typing import BodoWarning, dtype_to_array_type
+from bodo.mpi4py import MPI
+from bodo.utils.typing import BodoWarning, dtype_to_array_type, is_bodosql_context_type
 from bodo.utils.utils import (
     is_assign,
     is_distributable_tuple_typ,
     is_distributable_typ,
     is_expr,
+    run_rank0,  # noqa
 )
 
+test_spawn_mode_enabled = os.environ.get("BODO_CHECK_FUNC_SPAWN_MODE", "0") != "0"
+
 # TODO: Include testing DBs for other systems: MSSQL, SQLite, ...
-sql_user_pass_and_hostname = (
-    "user:pass@localhost"
-)
-oracle_user_pass_and_hostname = "user:pass@localhost"
+sql_user_pass_and_hostname = os.environ.get("BODO_TEST_SQL_DB_CREDENTIAL")
+oracle_user_pass_and_hostname = os.environ.get("BODO_TEST_ORACLE_DB_CREDENTIAL")
+
+
+class NoDefault:
+    """Sentinel specifying no default for argument to allow all values including None
+    to be provided for the argument.
+    """
+
+
+no_default = NoDefault()
 
 
 class InputDist(Enum):
@@ -103,6 +121,14 @@ def dist_IR_contains(f_ir, *args):
     return sum([(s in f_ir_text) for s in args])
 
 
+def dist_IR_count(f_ir, func_name):
+    """count how many times the string 'func_name' is in function IR 'f_ir'"""
+    with io.StringIO() as str_io:
+        f_ir.dump(str_io)
+        f_ir_text = str_io.getvalue()
+    return f_ir_text.count(func_name)
+
+
 @bodo.jit
 def get_rank():
     return bodo.libs.distributed_api.get_rank()
@@ -127,13 +153,14 @@ def check_func(
     func,
     args,
     is_out_distributed=None,
+    distributed: list[tuple[str, int]] | bool | None = None,
     sort_output=False,
     check_names=True,
     copy_input=False,
-    check_dtype=True,
+    check_dtype=False,
     reset_index=False,
     convert_columns_to_pandas=False,
-    py_output=None,
+    py_output: pt.Any | NoDefault = no_default,
     dist_test=True,
     check_typing_issues=True,
     additional_compiler_arguments=None,
@@ -142,18 +169,24 @@ def check_func(
     only_seq=False,
     only_1D=False,
     only_1DVar=None,
+    only_spawn=None,
     check_categorical=False,
-    atol=1e-08,
-    rtol=1e-05,
-    use_table_format=None,
+    atol: float = 1e-08,
+    rtol: float = 1e-05,
+    use_table_format=True,
     use_dict_encoded_strings=None,
-):
+    use_map_arrays: bool = False,
+    convert_to_nullable_float=True,
+    check_pandas_types=True,
+) -> dict[str, Callable]:
     """test bodo compilation of function 'func' on arguments using REP, 1D, and 1D_Var
     inputs/outputs
 
     Rationale of the functionalities:
     - is_out_distributed: By default to None and is adjusted according to the REP/1D/1D_Var
     If the is_out_distributed is selected then it is hardcoded here.
+    - distributed: Arguments expected to be distributed input. Default to None where all
+    arguments are allowed to be distributed (for 1D and 1D Var tests)
     - sort_output: The order of the data produced may not match pandas (e.g. groupby/join).
     In that case, set sort_output=True
     - reset_index: The index produced by pandas may not match the one produced by Bodo for good
@@ -175,26 +208,33 @@ def check_func(
     - only_seq: Run just the sequential check.
     - only_1D: Run just the check on a 1D Distributed input.
     - only_1DVar: Run just the check on a 1DVar Distributed input.
+    - only_spawn: Run just the check with spawn mode.
     - check_categorical: Argument to pass to Pandas assert_frame_equals. We use this if we want to disable
     the check_dtype with a categorical input (as otherwise it will still raise an error).
     - atol: Argument to pass to Pandas assert equals functions. This argument will be used if
-    floating point percision can vary due to differences in underlying floating point libraries.
+    floating point precision can vary due to differences in underlying floating point libraries.
     - rtol: Argument to pass to Pandas assert equals functions. This argument will be used if
-    floating point percision can vary due to differences in underlying floating point libraries.
+    floating point precision can vary due to differences in underlying floating point libraries.
     - use_table_format: flag for loading dataframes in table format for testing.
     If None, tests both formats if input arguments have dataframes.
     - use_dict_encoded_strings: flag for loading string arrays in dictionary-encoded
     format for testing.
+    - use_map_arrays: Flag for forcing all input dict-object arrays to be unboxed as map arrays
     If None, tests both formats if input arguments have string arrays.
+    - check_typing_issues: raise an error if there is a typing issue for input args.
+    Runs bodo typing on arguments and converts warnings to errors.
+    - convert_to_nullable_float: convert float inputs to nullable float if the global
+    nullable float flag is on.
+    - check_pandas_types: check if the output types match exactly, e.g. if Bodo returns a BodoDataFrame and python returns a DataFrame throw an error
     """
 
     # We allow the environment flag BODO_TESTING_ONLY_RUN_1D_VAR to change the default
     # testing behavior, to test with only 1D_var. This environment variable is set in our
-    # PR CI environment
+    # AWS PR CI environment
     if only_1DVar is None and not (only_seq or only_1D):
         only_1DVar = os.environ.get("BODO_TESTING_ONLY_RUN_1D_VAR", None) is not None
 
-    run_seq, run_1D, run_1DVar = False, False, False
+    run_seq, run_1D, run_1DVar, run_spawn = False, False, False, False
     if only_seq:
         if only_1D or only_1DVar:
             warnings.warn(
@@ -208,27 +248,49 @@ def check_func(
         run_1D = True
     elif only_1DVar:
         run_1DVar = True
+    elif only_spawn:
+        run_spawn = True
     else:
         run_seq, run_1D, run_1DVar = True, True, True
+
+    # Only run spawn mode if environment variable is set (which is used to test spawn
+    # mode manually, not regular nightly runs)
+    if test_spawn_mode_enabled:
+        run_seq, run_1D, run_1DVar, run_spawn = False, False, False, True
+        check_pandas_types = False
 
     n_pes = bodo.get_size()
 
     # avoid running sequential tests on multi-process configs to save time
     # is_out_distributed=False may lead to avoiding parallel runs and seq run is
     # necessary to capture the parallelism warning (see "w is not None" below)
+    # Ideally we would like to also restrict running parallel tests when we have a single rank,
+    # but this can lead to test coverage issues when running with BODO_TESTING_ONLY_RUN_1D_VAR
+    # on AWS PR CI, where we only run with just a single rank
     if (
         n_pes > 1
         and not numba.core.config.DEVELOPER_MODE
         and is_out_distributed is not False
+        and distributed is not None
     ):
         run_seq = False
+
+    # Avoid testing 1D on CI to run faster. It's not likely to fail independent of
+    # 1D_Var.
+    if not only_1D and not numba.core.config.DEVELOPER_MODE:
+        run_1D = False
+
+    # convert float input to nullable float to test new nullable float functionality
+    if convert_to_nullable_float:
+        args = _convert_float_to_nullable_float(args)
+        py_output = _convert_float_to_nullable_float(py_output)
 
     call_args = tuple(_get_arg(a, copy_input) for a in args)
     w = None
 
     # gives the option of passing desired output to check_func
     # in situations where pandas is buggy/lacks support
-    if py_output is None:
+    if py_output is no_default:
         if convert_columns_to_pandas:
             call_args_mapped = tuple(convert_non_pandas_columns(a) for a in call_args)
             py_output = func(*call_args_mapped)
@@ -242,24 +304,33 @@ def check_func(
     if reorder_columns:
         py_output.sort_index(axis=1, inplace=True)
 
+    # List of Output Bodo Functions
+    bodo_funcs: dict[str, Callable] = {}
+
     saved_TABLE_FORMAT_THRESHOLD = bodo.hiframes.boxing.TABLE_FORMAT_THRESHOLD
     saved_use_dict_str_type = bodo.hiframes.boxing._use_dict_str_type
+    saved_struct_size_limit = bodo.hiframes.boxing.struct_size_limit
     try:
         # test table format for dataframes (non-table format tested below if flag is
         # None)
         if use_table_format is None or use_table_format:
-            bodo.hiframes.boxing.TABLE_FORMAT_THRESHOLD = 0
+            set_config("bodo.hiframes.boxing.TABLE_FORMAT_THRESHOLD", 0)
 
         # test dict-encoded string arrays if flag is set (dict-encoded tested below if
         # flag is None)
         if use_dict_encoded_strings:
-            bodo.hiframes.boxing._use_dict_str_type = True
+            set_config("bodo.hiframes.boxing._use_dict_str_type", True)
+
+        # Test all dict-like arguments as map arrays (no structs) if flag is set
+        if use_map_arrays:
+            set_config("bodo.hiframes.boxing.struct_size_limit", -1)
 
         # sequential
         if run_seq:
-            w = check_func_seq(
+            bodo_func, w = check_func_seq(
                 func,
                 args,
+                n_pes,
                 py_output,
                 copy_input,
                 sort_output,
@@ -270,17 +341,20 @@ def check_func(
                 additional_compiler_arguments,
                 set_columns_name_to_none,
                 reorder_columns,
-                n_pes,
                 check_categorical,
                 atol,
                 rtol,
+                check_pandas_types,
             )
+            bodo_funcs["seq"] = bodo_func
+
             # test string arguments as StringLiteral type also (since StringLiteral is
             # not a subtype of UnicodeType)
             if any(isinstance(a, str) for a in args):
-                check_func_seq(
+                bodo_func, _ = check_func_seq(
                     func,
                     args,
+                    n_pes,
                     py_output,
                     copy_input,
                     sort_output,
@@ -291,18 +365,19 @@ def check_func(
                     additional_compiler_arguments,
                     set_columns_name_to_none,
                     reorder_columns,
-                    n_pes,
                     check_categorical,
                     atol,
                     rtol,
+                    check_pandas_types,
                     True,
                 )
+                bodo_funcs["seq-strlit"] = bodo_func
 
         # distributed test is not needed
         if not dist_test:
-            return
+            return bodo_funcs
 
-        if is_out_distributed is None:
+        if is_out_distributed is None and py_output is not pd.NA:
             # assume all distributable output is distributed if not specified
             py_out_typ = _typeof(py_output)
             is_out_distributed = is_distributable_typ(
@@ -315,20 +390,22 @@ def check_func(
         if (
             w is not None  # if no parallelism is found
             and not is_out_distributed  # if output is not distributable
+            and not distributed  # If some inputs are required to be distributable
             and not any(
                 is_distributable_typ(_typeof(a))
                 or is_distributable_tuple_typ(_typeof(a))
                 for a in args
             )  # if none of the inputs is distributable
         ):
-            return  # no need for distributed checks
+            return bodo_funcs  # no need for distributed checks
 
         if run_1D:
-            check_func_1D(
+            bodo_func = check_func_1D(
                 func,
                 args,
                 py_output,
                 is_out_distributed,
+                distributed,
                 copy_input,
                 sort_output,
                 check_names,
@@ -343,14 +420,17 @@ def check_func(
                 check_categorical,
                 atol,
                 rtol,
+                check_pandas_types,
             )
+            bodo_funcs["1D"] = bodo_func
 
         if run_1DVar:
-            check_func_1D_var(
+            bodo_func = check_func_1D_var(
                 func,
                 args,
                 py_output,
                 is_out_distributed,
+                distributed,
                 copy_input,
                 sort_output,
                 check_names,
@@ -365,19 +445,49 @@ def check_func(
                 check_categorical,
                 atol,
                 rtol,
+                check_pandas_types,
             )
+            bodo_funcs["1D_var"] = bodo_func
+        if run_spawn:
+            bodo_func = check_func_spawn(
+                func,
+                args,
+                py_output,
+                is_out_distributed,
+                distributed,
+                copy_input,
+                sort_output,
+                check_names,
+                check_dtype,
+                reset_index,
+                check_typing_issues,
+                convert_columns_to_pandas,
+                additional_compiler_arguments,
+                set_columns_name_to_none,
+                reorder_columns,
+                n_pes,
+                check_categorical,
+                atol,
+                rtol,
+                check_pandas_types,
+            )
+            bodo_funcs["spawn"] = bodo_func
     finally:
-        bodo.hiframes.boxing.TABLE_FORMAT_THRESHOLD = saved_TABLE_FORMAT_THRESHOLD
-        bodo.hiframes.boxing._use_dict_str_type = saved_use_dict_str_type
+        set_config(
+            "bodo.hiframes.boxing.TABLE_FORMAT_THRESHOLD", saved_TABLE_FORMAT_THRESHOLD
+        )
+        set_config("bodo.hiframes.boxing._use_dict_str_type", saved_use_dict_str_type)
+        set_config("bodo.hiframes.boxing.struct_size_limit", saved_struct_size_limit)
 
     # test non-table format case if there is any dataframe in input
     if use_table_format is None and any(
         isinstance(_typeof(a), bodo.DataFrameType) for a in args
     ):
-        check_func(
+        inner_funcs = check_func(
             func,
             args,
             is_out_distributed,
+            distributed,
             sort_output,
             check_names,
             copy_input,
@@ -393,21 +503,29 @@ def check_func(
             only_seq,
             only_1D,
             only_1DVar,
+            only_spawn,
             check_categorical,
             atol,
             rtol,
+            use_map_arrays=use_map_arrays,
             use_table_format=False,
             use_dict_encoded_strings=use_dict_encoded_strings,
+            convert_to_nullable_float=convert_to_nullable_float,
+            check_pandas_types=check_pandas_types,
+        )
+        bodo_funcs.update(
+            {f"table-format-{name}": func for name, func in inner_funcs.items()}
         )
 
     # test dict-encoded string type if there is any string array in input
     if use_dict_encoded_strings is None and any(
         _type_has_str_array(_typeof(a)) for a in args
     ):
-        check_func(
+        inner_funcs = check_func(
             func,
             args,
             is_out_distributed,
+            distributed,
             sort_output,
             check_names,
             copy_input,
@@ -423,6 +541,7 @@ def check_func(
             only_seq,
             only_1D,
             only_1DVar,
+            only_spawn,
             check_categorical,
             atol,
             rtol,
@@ -430,7 +549,44 @@ def check_func(
             # use_table_format=False above so we just test use_table_format=True for it
             use_table_format=True if use_table_format is None else use_table_format,
             use_dict_encoded_strings=True,
+            convert_to_nullable_float=convert_to_nullable_float,
+            use_map_arrays=use_map_arrays,
+            check_pandas_types=check_pandas_types,
         )
+        bodo_funcs.update(
+            {f"dict-encoding-{name}": func for name, func in inner_funcs.items()}
+        )
+
+    return bodo_funcs
+
+
+def _convert_float_to_nullable_float(arg):
+    """Convert float array/Series/Index/DataFrame to nullable float"""
+    # tuple (avoiding isinstance since PySpark Row is a subclass of tuple)
+    if type(arg) is tuple:
+        return tuple(_convert_float_to_nullable_float(a) for a in arg)
+
+    # Numpy float array
+    if (
+        isinstance(arg, np.ndarray)
+        and arg.dtype in (np.float32, np.float64)
+        and arg.ndim == 1
+    ):
+        return pd.array(arg)
+
+    # Series/Index with float data
+    if isinstance(arg, (pd.Series, pd.Index)) and arg.dtype in (np.float32, np.float64):
+        return arg.astype("Float32" if arg.dtype == np.float32 else "Float64")
+
+    # DataFrame float columns
+    if isinstance(arg, pd.DataFrame) and any(
+        a in (np.float32, np.float64) for a in arg.dtypes
+    ):
+        return pd.DataFrame(
+            {c: _convert_float_to_nullable_float(arg[c]) for c in arg.columns}
+        )
+
+    return arg
 
 
 def _type_has_str_array(t):
@@ -456,25 +612,29 @@ def _type_has_str_array(t):
 def check_func_seq(
     func,
     args,
-    py_output,
-    copy_input,
-    sort_output,
-    check_names,
-    check_dtype,
-    reset_index,
-    convert_columns_to_pandas,
-    additional_compiler_arguments,
-    set_columns_name_to_none,
-    reorder_columns,
-    n_pes,
-    check_categorical,
-    atol,
-    rtol,
+    n_pes=None,
+    py_output: pt.Any | NoDefault = no_default,
+    copy_input=False,
+    sort_output=False,
+    check_names=True,
+    check_dtype=False,
+    reset_index=False,
+    convert_columns_to_pandas=False,
+    additional_compiler_arguments=None,
+    set_columns_name_to_none=False,
+    reorder_columns=False,
+    check_categorical=False,
+    atol: float = 1e-08,
+    rtol: float = 1e-05,
+    check_pandas_types=True,
     test_str_literal=False,
-):
+) -> tuple[Callable, list[warnings.WarningMessage]]:
     """check function output against Python without manually setting inputs/outputs
     distributions (keep the function sequential)
     """
+    if n_pes is None:
+        n_pes = bodo.get_size()
+
     kwargs = {"returns_maybe_distributed": False}
     if additional_compiler_arguments != None:
         kwargs.update(additional_compiler_arguments)
@@ -506,6 +666,9 @@ def check_func_seq(
     if set_columns_name_to_none:
         bodo_out.columns.name = None
     if reorder_columns:
+        # Avoid PyArrow failure in sorting dict-encoded string arrays
+        if bodo_out.columns.dtype == pd.StringDtype("pyarrow"):
+            bodo_out.columns = bodo_out.columns.astype(object)
         bodo_out.sort_index(axis=1, inplace=True)
     passed = _test_equal_guard(
         bodo_out,
@@ -517,12 +680,13 @@ def check_func_seq(
         check_categorical,
         atol,
         rtol,
+        check_pandas_types,
     )
     # count how many pes passed the test, since throwing exceptions directly
     # can lead to inconsistency across pes and hangs
     n_passed = reduce_sum(passed)
     assert n_passed == n_pes, "Sequential test failed"
-    return w
+    return bodo_func, w
 
 
 def check_func_1D(
@@ -530,6 +694,7 @@ def check_func_1D(
     args,
     py_output,
     is_out_distributed,
+    distributed: list[tuple[str, int]] | bool | None,
     copy_input,
     sort_output,
     check_names,
@@ -544,26 +709,44 @@ def check_func_1D(
     check_categorical,
     atol,
     rtol,
-):
+    check_pandas_types,
+) -> Callable:
     """Check function output against Python while setting the inputs/outputs as
     1D distributed
     """
-    # 1D distributed
-    kwargs = {
-        "all_args_distributed_block": True,
-        "all_returns_distributed": is_out_distributed,
-    }
+    kwargs = {}
+    if distributed is None:
+        kwargs["all_returns_distributed"] = is_out_distributed
+        kwargs["all_args_distributed_block"] = True
+        dist_map = [True] * len(args)
+    elif isinstance(distributed, bool):
+        kwargs["distributed"] = distributed
+        dist_map = [distributed] * len(args)
+    else:
+        kwargs["distributed"] = [a for a, _ in distributed]
+        args_to_dist = {i for _, i in distributed}
+        dist_map = [i in args_to_dist for i in range(len(args))]
+
     if additional_compiler_arguments != None:
         kwargs.update(additional_compiler_arguments)
-    bodo_func = bodo.jit(func, **kwargs)
+
     dist_args = tuple(
-        _get_dist_arg(a, copy_input, False, check_typing_issues) for a in args
+        _get_dist_arg(a, copy_input, False, check_typing_issues) if to_dist else a
+        for a, to_dist in zip(args, dist_map)
     )
+
+    bodo_func = bodo.jit(func, **kwargs)
     bodo_output = bodo_func(*dist_args)
-    if convert_columns_to_pandas:
-        bodo_output = convert_non_pandas_columns(bodo_output)
+    # NOTE: We need to gather the output before converting to pandas.
+    # The rationale behind this:
+    # Suppose we have two output arrays from two ranks: [[1]] (single element nested array), [None].
+    # For bodo_output, if we convert to pandas first, [[1]] will become ["[1]" (string type)], and [None] will become [NaN (float type)]. After gathering, the result will be ["[1]" (string), NaN (float)]
+    # For py_output, since it's predefined by the test writer, it will convert [[1], None] to pandas i.e. ["[1]", "nan"] (both are strings), which does not equal ["[1]" (string), NaN (float)].
+    # Thus, asserting bodo_output = py_output will fail, which is not what we want in this case
     if is_out_distributed:
         bodo_output = _gather_output(bodo_output)
+    if convert_columns_to_pandas:
+        bodo_output = convert_non_pandas_columns(bodo_output)
     if set_columns_name_to_none:
         bodo_output.columns.name = None
     if reorder_columns:
@@ -583,10 +766,12 @@ def check_func_1D(
             check_categorical,
             atol,
             rtol,
+            check_pandas_types,
         )
 
     n_passed = reduce_sum(passed)
     assert n_passed == n_pes, "Parallel 1D test failed"
+    return bodo_func
 
 
 def check_func_1D_var(
@@ -594,6 +779,7 @@ def check_func_1D_var(
     args,
     py_output,
     is_out_distributed,
+    distributed: list[str] | bool | None,
     copy_input,
     sort_output,
     check_names,
@@ -608,25 +794,40 @@ def check_func_1D_var(
     check_categorical,
     atol,
     rtol,
-):
+    check_pandas_types,
+) -> Callable:
     """Check function output against Python while setting the inputs/outputs as
     1D distributed variable length
     """
-    kwargs = {
-        "all_args_distributed_varlength": True,
-        "all_returns_distributed": is_out_distributed,
-    }
+    kwargs = {}
+    if distributed is None:
+        kwargs["all_returns_distributed"] = is_out_distributed
+        kwargs["all_args_distributed_varlength"] = True
+        dist_map = [True] * len(args)
+    elif isinstance(distributed, bool):
+        kwargs["distributed"] = distributed
+        dist_map = [distributed] * len(args)
+    else:
+        kwargs["distributed"] = [a for a, _ in distributed]
+        args_to_dist = {i for _, i in distributed}
+        dist_map = [i in args_to_dist for i in range(len(args))]
+
     if additional_compiler_arguments != None:
         kwargs.update(additional_compiler_arguments)
-    bodo_func = bodo.jit(func, **kwargs)
+
     dist_args = tuple(
-        _get_dist_arg(a, copy_input, True, check_typing_issues) for a in args
+        _get_dist_arg(a, copy_input, True, check_typing_issues) if to_dist else a
+        for a, to_dist in zip(args, dist_map)
     )
+
+    bodo_func = bodo.jit(func, **kwargs)
     bodo_output = bodo_func(*dist_args)
-    if convert_columns_to_pandas:
-        bodo_output = convert_non_pandas_columns(bodo_output)
+    # NOTE: We need to gather the output before converting to pandas.
+    # See note in check_func_1D for the rationale behind this.
     if is_out_distributed:
         bodo_output = _gather_output(bodo_output)
+    if convert_columns_to_pandas:
+        bodo_output = convert_non_pandas_columns(bodo_output)
     if set_columns_name_to_none:
         bodo_output.columns.name = None
     if reorder_columns:
@@ -644,9 +845,73 @@ def check_func_1D_var(
             check_categorical,
             atol,
             rtol,
+            check_pandas_types,
         )
     n_passed = reduce_sum(passed)
     assert n_passed == n_pes, "Parallel 1D Var test failed"
+    return bodo_func
+
+
+def check_func_spawn(
+    func,
+    args,
+    py_output,
+    is_out_distributed,
+    distributed: list[tuple[str, int]] | bool | None,
+    copy_input,
+    sort_output,
+    check_names,
+    check_dtype,
+    reset_index,
+    check_typing_issues,
+    convert_columns_to_pandas,
+    additional_compiler_arguments,
+    set_columns_name_to_none,
+    reorder_columns,
+    n_pes,
+    check_categorical,
+    atol,
+    rtol,
+    check_pandas_types,
+):
+    """Check function output against Python while setting the inputs/outputs as
+    1D distributed
+    """
+
+    # Skip spawn testing if the test requires specific data distributions which may
+    # confict with spawn's defaults
+    if distributed is not None:
+        return
+
+    assert n_pes == 1, "Spawn mode tests should only run with 1 rank"
+
+    kwargs = {"spawn": True}
+    if additional_compiler_arguments != None:
+        kwargs.update(additional_compiler_arguments)
+
+    args = tuple(_get_arg(a, copy_input) for a in args)
+
+    bodo_func = bodo.jit(func, **kwargs)
+    bodo_output = bodo_func(*args)
+    if convert_columns_to_pandas:
+        bodo_output = convert_non_pandas_columns(bodo_output)
+    if set_columns_name_to_none:
+        bodo_output.columns.name = None
+    if reorder_columns:
+        bodo_output.sort_index(axis=1, inplace=True)
+
+    _test_equal(
+        bodo_output,
+        py_output,
+        sort_output,
+        check_names,
+        check_dtype,
+        reset_index,
+        check_categorical,
+        atol,
+        rtol,
+        check_pandas_types,
+    )
 
 
 def _get_arg(a, copy=False):
@@ -655,8 +920,13 @@ def _get_arg(a, copy=False):
     return a
 
 
-def _get_dist_arg(a, copy=False, var_length=False, check_typing_issues=True):
-    """get distributed chunk for 'a' on current rank (for input to test functions)"""
+T = TypeVar("T", pytypes.FunctionType, pd.Series, pd.DataFrame)
+
+
+def _get_dist_arg(
+    a: T, copy: bool = False, var_length: bool = False, check_typing_issues: bool = True
+) -> T:
+    """Get distributed chunk for 'a' on current rank (for input to test functions)"""
     if copy and hasattr(a, "copy"):
         a = a.copy()
 
@@ -667,30 +937,26 @@ def _get_dist_arg(a, copy=False, var_length=False, check_typing_issues=True):
     if not (is_distributable_typ(bodo_typ) or is_distributable_tuple_typ(bodo_typ)):
         return a
 
-    try:
+    if is_bodosql_context_type(bodo_typ):
         from bodosql import BodoSQLContext
-        from bodosql.context_ext import BodoSQLContextType
-    except ImportError:  # pragma: no cover
-        BodoSQLContextType = None
 
-    if BodoSQLContextType is not None and isinstance(bodo_typ, BodoSQLContextType):
         # Distribute each of the DataFrames.
         new_dict = {
             name: _get_dist_arg(df, copy, var_length, check_typing_issues)
             for name, df in a.tables.items()
         }
-        return BodoSQLContext(new_dict, a.catalog)
+        return BodoSQLContext(new_dict, a.catalog, bodo_typ.default_tz)
 
     # PyArrow doesn't support shape
     l = len(a) if isinstance(a, pa.Array) else a.shape[0]
 
     start, end = get_start_end(l)
     # for var length case to be different than regular 1D in chunk sizes, add
-    # one extra element to last processor
-    if var_length and bodo.get_size() >= 2:
-        if bodo.get_rank() == bodo.get_size() - 2:
+    # one extra element to the second processor
+    if var_length and bodo.get_size() >= 2 and l > bodo.get_size():
+        if bodo.get_rank() == 0:
             end -= 1
-        if bodo.get_rank() == bodo.get_size() - 1:
+        if bodo.get_rank() == 1:
             start -= 1
 
     if isinstance(a, (pd.Series, pd.DataFrame)):
@@ -708,11 +974,12 @@ def _test_equal_guard(
     py_out,
     sort_output=False,
     check_names=True,
-    check_dtype=True,
+    check_dtype=False,
     reset_index=False,
     check_categorical=False,
     atol=1e-08,
     rtol=1e-05,
+    check_pandas_types=True,
 ):
     # no need to avoid exceptions if running with a single process and hang is not
     # possible. TODO: remove _test_equal_guard in general when [BE-2223] is resolved
@@ -727,6 +994,7 @@ def _test_equal_guard(
             check_categorical,
             atol,
             rtol,
+            check_pandas_types,
         )
         return 1
     passed = 1
@@ -741,6 +1009,7 @@ def _test_equal_guard(
             check_categorical,
             atol,
             rtol,
+            check_pandas_types,
         )
     except Exception as e:
         print(e)
@@ -750,11 +1019,34 @@ def _test_equal_guard(
 
 # We need to sort the index and values for effective comparison
 def sort_series_values_index(S):
+    if S.index.dtype == pd.StringDtype("pyarrow"):
+        S.index = S.index.astype("string")
+
+    # Avoid Arrow array sorting bugs in Pandas as of 2.2
+    if isinstance(S.index.dtype, pd.ArrowDtype):
+        pa_index_arr = S.index.array._pa_array.combine_chunks()
+        # Decode dictionary-encoded strings since to_pandas() converts dictionary array
+        # to categorical.
+        if pa.types.is_dictionary(pa_index_arr.type):
+            pa_index_arr = pa_index_arr.dictionary_decode()
+        S = S.set_axis(pa_index_arr.to_pandas()).rename_axis(S.index.names)
+
     S1 = S.sort_index()
     # pandas fails if all null integer column is sorted
     if S1.isnull().all():
         return S1
+    # Replace PyArrow strings with regular strings since Arrow doesn't support sort for
+    # dict(large_string)
+    if S1.dtype == pd.StringDtype("pyarrow"):
+        S1 = S1.astype("string")
     return S1.sort_values(kind="mergesort")
+
+
+def _is_nested_arrow_dtype(dtype):
+    """return True if Pandas dtype is a nested Arrow dtype (map/struct/list)"""
+    return isinstance(dtype, pd.ArrowDtype) and isinstance(
+        dtype.pyarrow_dtype, (pa.MapType, pa.StructType, pa.ListType, pa.LargeListType)
+    )
 
 
 def sort_dataframe_values_index(df):
@@ -762,12 +1054,68 @@ def sort_dataframe_values_index(df):
     if isinstance(df.index, pd.MultiIndex):
         # rename index in case names are None
         index_names = [f"index_{i}" for i in range(len(df.index.names))]
-        list_col_names = df.columns.to_list() + index_names
+        list_col_names = [
+            c
+            for i, c in enumerate(df.columns)
+            # Avoid sorting nested dtypes since not supported in Pandas yet
+            if not _is_nested_arrow_dtype(df.dtypes.iloc[i])
+        ] + index_names
         return df.rename_axis(index_names).sort_values(list_col_names, kind="mergesort")
 
     eName = "index123"
-    list_col_names = df.columns.to_list() + [eName]
+    list_col_names = [
+        c
+        for i, c in enumerate(df.columns)
+        # Avoid sorting nested dtypes since not supported in Pandas yet
+        if not _is_nested_arrow_dtype(df.dtypes.iloc[i])
+    ] + [eName]
+    if None in list_col_names:
+        raise RuntimeError(
+            "Testing error in sort_dataframe_values_index: None in column names"
+        )
+
+    # Sort only works on hashable datatypes
+    # Thus we convert (non-hashable) list-like types to (hashable) tuples
+    df = df.map(
+        lambda x: (
+            tuple(x)
+            if isinstance(x, (list, np.ndarray, pd.core.arrays.ExtensionArray))
+            else x
+        )
+    )
+
+    # Avoid Arrow array sorting bugs in Pandas as of 2.2
+    if isinstance(df.index.dtype, pd.ArrowDtype):
+        pa_index_arr = df.index.array._pa_array.combine_chunks()
+        # Decode dictionary-encoded strings since to_pandas() converts dictionary array
+        # to categorical.
+        if pa.types.is_dictionary(pa_index_arr.type):
+            pa_index_arr = pa_index_arr.dictionary_decode()
+        df = df.set_index(pa_index_arr.to_pandas()).rename_axis(df.index.names)
+
     return df.rename_axis(eName).sort_values(list_col_names, kind="mergesort")
+
+
+def _to_pa_array(py_out, bodo_arr_type):
+    """Convert object array to Arrow array with specified Bodo type"""
+    if isinstance(py_out, np.ndarray) and isinstance(py_out.dtype, np.dtypes.StrDType):
+        py_out = py_out.astype(object)
+    if (
+        isinstance(bodo_arr_type, bodo.IntegerArrayType)
+        and isinstance(py_out, np.ndarray)
+        and np.issubdtype(py_out.dtype, np.floating)
+    ):
+        # When trying to convert a numpy float array to an integer array we need to convert to a pandas nullable integer array first
+        # to avoid issues with NaN/None values
+        py_out = pd.array(py_out, str(bodo_arr_type.dtype).capitalize())
+    arrow_type = bodo.io.helpers._numba_to_pyarrow_type(
+        bodo_arr_type, use_dict_arr=True
+    )[0]
+    arrow_type_no_dict = bodo.io.helpers._numba_to_pyarrow_type(bodo_arr_type)[0]
+    py_out = pa.array(py_out, arrow_type_no_dict)
+    if arrow_type != arrow_type_no_dict:
+        py_out = bodo.libs.array.convert_arrow_arr_to_dict(py_out, arrow_type)
+    return py_out
 
 
 def _test_equal(
@@ -775,12 +1123,13 @@ def _test_equal(
     py_out,
     sort_output=False,
     check_names=True,
-    check_dtype=True,
+    check_dtype=False,
     reset_index=False,
     check_categorical=False,
-    atol=1e-08,
-    rtol=1e-05,
-):
+    atol: float = 1e-08,
+    rtol: float = 1e-05,
+    check_pandas_types=True,
+) -> None:
     try:
         from scipy.sparse import csr_matrix
     except ImportError:
@@ -790,7 +1139,35 @@ def _test_equal(
     if isinstance(py_out, list) and isinstance(bodo_out, np.ndarray):
         py_out = np.array(py_out)
 
+    # Bodo returns PyArrow decimal scalar
+    if isinstance(py_out, Decimal):
+        py_out = pa.scalar(py_out)
+
     if isinstance(py_out, pd.Series):
+        if isinstance(bodo_out.dtype, pd.ArrowDtype) and not isinstance(
+            py_out.dtype, pd.ArrowDtype
+        ):
+            check_dtype = False
+            pa_type = bodo_out.dtype.pyarrow_dtype
+            # Convert nested types
+            if (
+                pa.types.is_map(pa_type)
+                or pa.types.is_struct(pa_type)
+                or pa.types.is_large_list(pa_type)
+            ):
+                py_out = pd.Series(
+                    _to_pa_array(
+                        py_out.map(
+                            lambda a: None
+                            if isinstance(a, float) and np.isnan(a)
+                            else a
+                        ).values,
+                        bodo.typeof(bodo_out.values),
+                    ),
+                    py_out.index,
+                    bodo_out.dtype,
+                    py_out.name,
+                )
         if sort_output:
             py_out = sort_series_values_index(py_out)
             bodo_out = sort_series_values_index(bodo_out)
@@ -810,6 +1187,7 @@ def _test_equal(
             check_dtype=check_dtype,
             check_index_type=False,
             check_freq=False,
+            check_series_type=check_pandas_types,
             atol=atol,
             rtol=rtol,
         )
@@ -825,9 +1203,11 @@ def _test_equal(
         if isinstance(bodo_out, pd.MultiIndex):
             bodo_out = pd.MultiIndex(
                 levels=[
-                    v.values.to_numpy()
-                    if isinstance(v.values, pd.arrays.ArrowStringArray)
-                    else v
+                    (
+                        v.values.to_numpy()
+                        if isinstance(v.values, pd.arrays.ArrowStringArray)
+                        else v
+                    )
                     for v in bodo_out.levels
                 ],
                 codes=bodo_out.codes,
@@ -854,7 +1234,6 @@ def _test_equal(
 
         if object in py_out_dtypes or np.bool_ in py_out_dtypes:
             check_dtype = False
-
         pd.testing.assert_frame_equal(
             bodo_out,
             py_out,
@@ -864,6 +1243,27 @@ def _test_equal(
             check_column_type=False,
             check_freq=False,
             check_categorical=check_categorical,
+            check_frame_type=check_pandas_types,
+            atol=atol,
+            rtol=rtol,
+        )
+    # Convert object array py_out to Pandas PyArrow array to match Bodo
+    # Avoid changing string arrays to avoid regressions in current infrastructure
+    elif (
+        isinstance(bodo_out, pd.arrays.ArrowExtensionArray)
+        and not isinstance(bodo_out, pd.arrays.ArrowStringArray)
+        and not isinstance(py_out, pd.arrays.ArrowExtensionArray)
+    ):
+        py_out = _to_pa_array(py_out, bodo.typeof(bodo_out))
+        py_out = pd.Series(py_out)
+        bodo_out = pd.Series(bodo_out)
+        if sort_output:
+            py_out = py_out.sort_values().reset_index(drop=True)
+            bodo_out = bodo_out.sort_values().reset_index(drop=True)
+        pd.testing.assert_series_equal(
+            py_out,
+            bodo_out,
+            check_dtype=False,
             atol=atol,
             rtol=rtol,
         )
@@ -903,11 +1303,21 @@ def _test_equal(
                 )
         else:
             # parallel reduction can result in floating point differences
-            if py_out.dtype in (np.float32, np.float64):
+            if py_out.dtype in (np.float32, np.float64, np.complex128, np.complex64):
                 np.testing.assert_allclose(bodo_out, py_out, atol=atol, rtol=rtol)
             elif isinstance(bodo_out, pd.arrays.ArrowStringArray):
                 pd.testing.assert_extension_array_equal(
-                    bodo_out, pd.array(py_out, "string[pyarrow]")
+                    bodo_out,
+                    pd.array(py_out, "string[pyarrow]"),
+                    rtol=rtol,
+                    atol=atol,
+                )
+            elif isinstance(bodo_out, pd.arrays.FloatingArray):
+                pd.testing.assert_extension_array_equal(
+                    bodo_out,
+                    pd.array(py_out, bodo_out.dtype),
+                    rtol=rtol,
+                    atol=atol,
                 )
             else:
                 np.testing.assert_array_equal(bodo_out, py_out)
@@ -923,10 +1333,14 @@ def _test_equal(
             bodo_out = bodo_out[bodo_out.argsort()]
         # We don't care about category order so sort always.
         if isinstance(py_out, pd.Categorical):
-            py_out.categories = py_out.categories.sort_values()
+            py_out = pd.Categorical(py_out, categories=py_out.categories.sort_values())
         if isinstance(bodo_out, pd.Categorical):
-            bodo_out.categories = bodo_out.categories.sort_values()
-        pd.testing.assert_extension_array_equal(bodo_out, py_out, check_dtype=False)
+            bodo_out = pd.Categorical(
+                bodo_out, categories=bodo_out.categories.sort_values()
+            )
+        pd.testing.assert_extension_array_equal(
+            bodo_out, py_out, check_dtype=False, rtol=rtol, atol=atol
+        )
     elif isinstance(py_out, csr_matrix):
         # https://stackoverflow.com/questions/30685024/check-if-two-scipy-sparse-csr-matrix-are-equal
         #
@@ -957,13 +1371,26 @@ def _test_equal(
             atol=atol,
             rtol=rtol,
         )
-    elif isinstance(py_out, float):
+    elif isinstance(py_out, (float, np.floating, np.complex128, np.complex64)):
         # avoid equality check since paralellism can affect floating point operations
-        np.testing.assert_allclose(py_out, bodo_out, 1e-4)
-    elif isinstance(py_out, tuple):
+        np.testing.assert_allclose(py_out, bodo_out, rtol=rtol, atol=atol)
+    elif isinstance(py_out, tuple) or (
+        isinstance(py_out, list)
+        and len(py_out) > 0
+        and is_distributable_typ(bodo.typeof(py_out))
+    ):
         assert len(py_out) == len(bodo_out)
         for p, b in zip(py_out, bodo_out):
-            _test_equal(b, p, sort_output, check_names, check_dtype)
+            _test_equal(
+                b,
+                p,
+                sort_output,
+                check_names,
+                check_dtype,
+                rtol=rtol,
+                atol=atol,
+                check_pandas_types=check_pandas_types,
+            )
     elif isinstance(py_out, dict):
         _test_equal_struct(
             bodo_out,
@@ -975,6 +1402,17 @@ def _test_equal(
         )
     elif py_out is pd.NaT:
         assert py_out is bodo_out
+    # Bodo returns np.nan instead of pd.NA for nullable float data to avoid typing
+    # issues
+    elif py_out is pd.NA and np.isnan(bodo_out):
+        pass
+    elif isinstance(py_out, pd.CategoricalDtype):
+        np.testing.assert_equal(bodo_out.categories.values, py_out.categories.values)
+        assert bodo_out.ordered == py_out.ordered
+    elif isinstance(bodo_out, pa.Decimal128Scalar) and isinstance(
+        py_out, pa.Decimal128Scalar
+    ):
+        assert pa.compute.equal(bodo_out, py_out).as_py()
     else:
         np.testing.assert_equal(bodo_out, py_out)
 
@@ -984,7 +1422,7 @@ def _test_equal_struct(
     py_out,
     sort_output=False,
     check_names=True,
-    check_dtype=True,
+    check_dtype=False,
     reset_index=False,
 ):
     """check struct/dict to be equal. checking individual elements separately since
@@ -1007,7 +1445,7 @@ def _test_equal_struct_array(
     py_out,
     sort_output=False,
     check_names=True,
-    check_dtype=True,
+    check_dtype=False,
     reset_index=False,
 ):
     """check struct arrays to be equal. checking individual elements separately since
@@ -1045,12 +1483,16 @@ def _gather_output(bodo_output):
     try:
         _check_typing_issues(bodo_output)
         bodo_output = bodo.gatherv(bodo_output)
-    except Exception as e:
+    except Exception:
         comm = MPI.COMM_WORLD
         bodo_output_list = comm.gather(bodo_output)
         if bodo.get_rank() == 0:
-            if isinstance(bodo_output_list[0], np.ndarray):
+            if isinstance(
+                bodo_output_list[0], (np.ndarray, pd.arrays.NumpyExtensionArray)
+            ):
                 bodo_output = np.concatenate(bodo_output_list)
+            elif isinstance(bodo_output_list[0], pd.arrays.ArrowExtensionArray):
+                pd.concat([pd.Series(a) for a in bodo_output_list]).values
             else:
                 bodo_output = pd.concat(bodo_output_list)
 
@@ -1059,7 +1501,8 @@ def _gather_output(bodo_output):
 
 def _typeof(val):
     # Pandas returns an object array for .values or to_numpy() call on Series of
-    # nullable int, which can't be handled in typeof. Bodo returns a nullable int array
+    # nullable int/float, which can't be handled in typeof. Bodo returns a
+    # nullable int/float array
     # see test_series_to_numpy[numeric_series_val3] and
     # test_series_get_values[series_val4]
     if (
@@ -1069,27 +1512,21 @@ def _typeof(val):
             (isinstance(a, float) and np.isnan(a)) or isinstance(a, int) for a in val
         )
     ):
-        # TODO: Should this check be fixed? It seems like all floats should
-        # be an IntegerArray
         return bodo.libs.int_arr_ext.IntegerArrayType(bodo.int64)
     elif isinstance(val, pd.arrays.FloatingArray):
-        # TODO: Add proper support for floating array
-        # FloatingArrays are used somewhat extensively in Pandas >= 1.2.0
-        # so we need to add further support. This code is fragile and
-        # should not be considered reliable.
-        return numba.core.types.Array(numba.core.types.float64, 1, "C")
+        return bodo.libs.float_arr_ext.FloatingArrayType(bodo.float64)
     # TODO: add handling of Series with Float64 values here
     elif isinstance(val, pd.DataFrame) and any(
-        [
-            isinstance(val.iloc[:, i].dtype, pd.core.arrays.floating.FloatingDtype)
-            for i in range(len(val.columns))
-        ]
+        isinstance(val.iloc[:, i].dtype, pd.core.arrays.floating.FloatingDtype)
+        for i in range(len(val.columns))
     ):
         col_typs = []
         for i in range(len(val.columns)):
             S = val.iloc[:, i]
             if isinstance(S.dtype, pd.core.arrays.floating.FloatingDtype):
-                col_typs.append(typeof_pd_float_dtype(S.dtype))
+                col_typs.append(
+                    bodo.libs.float_arr_ext.typeof_pd_float_dtype(S.dtype, None)
+                )
             else:
                 col_typs.append(bodo.hiframes.boxing._infer_series_arr_type(S).dtype)
         col_typs = (dtype_to_array_type(typ) for typ in col_typs)
@@ -1100,7 +1537,7 @@ def _typeof(val):
         val.dtype, pd.core.arrays.floating.FloatingDtype
     ):
         return bodo.SeriesType(
-            typeof_pd_float_dtype(val.dtype),
+            bodo.libs.float_arr_ext.typeof_pd_float_dtype(val.dtype, None),
             index=numba.typeof(val.index),
             name_typ=numba.typeof(val.name),
         )
@@ -1108,22 +1545,6 @@ def _typeof(val):
         # function type isn't accurate, but good enough for the purposes of _typeof
         return types.FunctionType(types.none())
     return bodo.typeof(val)
-
-
-def typeof_pd_float_dtype(val):
-    """
-    Pandas 1.2.0 adds interpretting a nullable FloatArray
-    This isn't supported yet in Bodo, so we convert these inputs
-    to floating point values.
-    """
-    # Warning: This code is unstable and doesn't currently change
-    # the actual underlying type. This is just used by _typeof inside
-    # test utils for distirbuted testing. It should not be used in
-    # actual Numba Code
-    bitwidth = 8 * val.itemsize
-    dtype = getattr(numba.types, "float{}".format(bitwidth))
-    # TODO: Add a custom FloatingDType() inside Bodo.
-    return dtype
 
 
 def is_bool_object_series(S):
@@ -1205,7 +1626,7 @@ class ParforTestPipeline(bodo.compiler.BodoCompiler):
             distributed=True, inline_calls_pass=False
         )
         pipeline._finalized = False
-        pipeline.add_pass_after(PreserveIR, bodo.compiler.ParforPass)
+        pipeline.add_pass_after(PreserveIR, bodo.compiler.ParforPreLoweringPass)
         pipeline.finalize()
         return [pipeline]
 
@@ -1240,6 +1661,7 @@ class PreserveIRTypeMap(PreserveIR):
     def run_pass(self, state):
         PreserveIR.run_pass(self, state)
         state.metadata["preserved_typemap"] = state.typemap.copy()
+        state.metadata["preserved_calltypes"] = state.calltypes.copy()
         return False
 
 
@@ -1319,6 +1741,10 @@ class AnalysisTestPipeline(bodo.compiler.BodoCompiler):
     additional ArrayAnalysis pass that preserves analysis object
     """
 
+    # Avoid copy propagation so we don't delete variables used to
+    # check array analysis.
+    avoid_copy_propagation = True
+
     def define_pipelines(self):
         [pipeline] = self._create_bodo_pipeline(
             distributed=True, inline_calls_pass=False
@@ -1333,17 +1759,19 @@ def check_timing_func(func, args):
     """Function for computing runtimes. First run is to get the code compiled and second
     run is to recompute with the compiled code"""
     bodo_func = bodo.jit(func)
-    the_res1 = bodo_func(*args)
+    bodo_func(*args)
     t1 = time.time()
-    the_res2 = bodo_func(*args)
-    t2 = time.time()
+    bodo_func(*args)
+    t2: float = time.time()
     delta_t = round(t2 - t1, 4)
     print("Time:", delta_t, end=" ")
     assert True
 
 
 def string_list_ent(x):
-    if isinstance(x, (int, np.int64, float)):
+    if isinstance(
+        x, (int, np.int64, float, pd.Timestamp, datetime.date, datetime.time)
+    ):
         return str(x)
     if isinstance(x, dict):
         l_str = []
@@ -1352,9 +1780,18 @@ def string_list_ent(x):
             l_str.append(estr)
         return "{" + ", ".join(l_str) + "}"
     if isinstance(
-        x, (list, np.ndarray, pd.arrays.IntegerArray, pd.arrays.ArrowStringArray)
+        x,
+        (
+            list,
+            np.ndarray,
+            pd.arrays.IntegerArray,
+            pd.arrays.FloatingArray,
+            pd.arrays.ArrowStringArray,
+        ),
     ):
         l_str = []
+        if all(isinstance(elem, tuple) for elem in x):
+            return string_list_ent(dict(x))
         for e_val in x:
             l_str.append(string_list_ent(e_val))
         return "[" + ",".join(l_str) + "]"
@@ -1363,6 +1800,8 @@ def string_list_ent(x):
     if isinstance(x, str):
         return x
     if isinstance(x, Decimal):
+        if x == Decimal("0"):
+            return "0"
         e_s = str(x)
         if e_s.find(".") != -1:
             f_s = e_s.strip("0").strip(".")
@@ -1397,7 +1836,10 @@ def convert_non_pandas_columns(df):
     # Manually invalidate the cached typing information.
     df_copy._bodo_meta = None
     list_col = df.columns.to_list()
-    n_rows = df_copy[list_col[0]].size
+    if len(list_col) > 0:
+        n_rows = df_copy[list_col[0]].size
+    else:
+        n_rows = df_copy.shape[0]
     # Determine which columns have list of strings in them
     # Determine which columns have Decimals in them.
     col_names_list_string = []
@@ -1421,6 +1863,7 @@ def convert_non_pandas_columns(df):
                     np.ndarray,
                     pd.arrays.BooleanArray,
                     pd.arrays.IntegerArray,
+                    pd.arrays.FloatingArray,
                     pd.arrays.StringArray,
                     pd.arrays.ArrowStringArray,
                 ),
@@ -1430,14 +1873,26 @@ def convert_non_pandas_columns(df):
                         nb_list_string += 1
                     if isinstance(
                         e_ent[0],
-                        (int, float, np.int32, np.int64, np.float32, np.float64),
+                        (int, float, np.integer, np.floating),
                     ):
                         nb_array_item += 1
                     for e_val in e_ent:
                         if isinstance(
-                            e_val, (list, dict, np.ndarray, pd.arrays.IntegerArray)
+                            e_val,
+                            (
+                                list,
+                                dict,
+                                tuple,
+                                Decimal,
+                                datetime.time,
+                                np.ndarray,
+                                pd.arrays.IntegerArray,
+                                pd.arrays.FloatingArray,
+                            ),
                         ):
                             nb_arrow_array_item += 1
+                else:
+                    nb_array_item += 1
             if isinstance(e_ent, dict):
                 nb_arrow_array_item += 1
             if isinstance(e_ent, Decimal):
@@ -1446,13 +1901,13 @@ def convert_non_pandas_columns(df):
                 nb_bytes += 1
         if nb_list_string > 0:
             col_names_list_string.append(e_col_name)
-        if nb_array_item > 0:
-            col_names_array_item.append(e_col_name)
-        if nb_arrow_array_item > 0:
+        elif nb_arrow_array_item > 0:
             col_names_arrow_array_item.append(e_col_name)
-        if nb_decimal > 0:
+        elif nb_array_item > 0:
+            col_names_array_item.append(e_col_name)
+        elif nb_decimal > 0:
             col_names_decimal.append(e_col_name)
-        if nb_bytes > 0:
+        elif nb_bytes > 0:
             col_names_bytes.append(e_col_name)
     for e_col_name in col_names_list_string:
         e_list_str = []
@@ -1468,7 +1923,7 @@ def convert_non_pandas_columns(df):
                 e_str = ",".join(f_ent) + ","
                 e_list_str.append(e_str)
             else:
-                e_list_str.append(np.nan)
+                e_list_str.append(None)
         df_copy[e_col_name] = e_list_str
     for e_col_name in col_names_array_item:
         e_list_str = []
@@ -1482,6 +1937,7 @@ def convert_non_pandas_columns(df):
                     np.ndarray,
                     pd.arrays.BooleanArray,
                     pd.arrays.IntegerArray,
+                    pd.arrays.FloatingArray,
                     pd.arrays.StringArray,
                     pd.arrays.ArrowStringArray,
                 ),
@@ -1489,7 +1945,7 @@ def convert_non_pandas_columns(df):
                 e_str = ",".join([str(x) for x in e_ent]) + ","
                 e_list_str.append(e_str)
             else:
-                e_list_str.append(np.nan)
+                e_list_str.append(None)
         df_copy[e_col_name] = e_list_str
     for e_col_name in col_names_arrow_array_item:
         e_list_str = []
@@ -1520,7 +1976,7 @@ def convert_non_pandas_columns(df):
 # Mapping Between Numpy Dtype and Equivalent Pandas Extension Dtype
 # Bodo returns the Pandas Dtype while other implementations like Pandas and Spark
 # return the Numpy equivalent. Need to convert during testing.
-np_to_pd_dtype: Dict[np.dtype, pd.api.extensions.ExtensionDtype] = {
+np_to_pd_dtype: dict[np.dtype, pd.api.extensions.ExtensionDtype] = {
     np.dtype(np.int8): pd.Int8Dtype,
     np.dtype(np.int16): pd.Int16Dtype,
     np.dtype(np.int32): pd.Int32Dtype,
@@ -1529,7 +1985,7 @@ np_to_pd_dtype: Dict[np.dtype, pd.api.extensions.ExtensionDtype] = {
     np.dtype(np.uint16): pd.UInt16Dtype,
     np.dtype(np.uint32): pd.UInt32Dtype,
     np.dtype(np.uint64): pd.UInt64Dtype,
-    np.dtype(np.string_): pd.StringDtype,
+    np.dtype(np.str_): pd.StringDtype,
     np.dtype(np.bool_): pd.BooleanDtype,
 }
 
@@ -1541,7 +1997,6 @@ def sync_dtypes(py_out, bodo_out_dtypes):
         isinstance(dtype, pd.api.extensions.ExtensionDtype) for dtype in bodo_out_dtypes
     ):
         for i, (py_dtype, bodo_dtype) in enumerate(zip(py_out_dtypes, bodo_out_dtypes)):
-
             if isinstance(bodo_dtype, np.dtype) and py_dtype == bodo_dtype:
                 continue
             if (
@@ -1632,17 +2087,25 @@ def check_parallel_coherency(
     assert n_passed == n_pes, "Parallel test failed"
 
 
-def gen_random_arrow_array_struct_int(span, n):
+def gen_random_arrow_array_struct_int(span, n, return_map=False):
+    random.seed(0)
     e_list = []
     for _ in range(n):
         valA = random.randint(0, span)
         valB = random.randint(0, span)
         e_ent = {"A": valA, "B": valB}
         e_list.append(e_ent)
-    return e_list
+    dtype = pd.ArrowDtype(
+        pa.struct([pa.field("A", pa.int64()), pa.field("B", pa.int64())])
+    )
+    if return_map:
+        dtype = pd.ArrowDtype(pa.map_(pa.large_string(), pa.int64()))
+    S = pd.Series(e_list, dtype=dtype)
+    return S
 
 
-def gen_random_arrow_array_struct_list_int(span, n):
+def gen_random_arrow_array_struct_list_int(span, n, return_map=False):
+    random.seed(0)
     e_list = []
     for _ in range(n):
         # We cannot allow empty block because if the first one is such type
@@ -1651,10 +2114,24 @@ def gen_random_arrow_array_struct_list_int(span, n):
         valB = [random.randint(0, span) for _ in range(random.randint(1, 5))]
         e_ent = {"A": valA, "B": valB}
         e_list.append(e_ent)
-    return e_list
+
+    dtype = pd.ArrowDtype(
+        pa.struct(
+            [
+                pa.field("A", pa.large_list(pa.int64())),
+                pa.field("B", pa.large_list(pa.int64())),
+            ]
+        )
+    )
+    if return_map:
+        dtype = pd.ArrowDtype(pa.map_(pa.large_string(), pa.large_list(pa.int64())))
+    S = pd.Series(e_list, dtype=dtype)
+    return S
 
 
 def gen_random_arrow_list_list_decimal(rec_lev, prob_none, n):
+    random.seed(0)
+
     def random_list_rec(rec_lev):
         if random.random() < prob_none:
             return None
@@ -1672,6 +2149,8 @@ def gen_random_arrow_list_list_decimal(rec_lev, prob_none, n):
 
 
 def gen_random_arrow_list_list_int(rec_lev, prob_none, n):
+    random.seed(0)
+
     def random_list_rec(rec_lev):
         if random.random() < prob_none:
             return None
@@ -1687,6 +2166,8 @@ def gen_random_arrow_list_list_int(rec_lev, prob_none, n):
 
 
 def gen_random_arrow_list_list_double(rec_lev, prob_none, n):
+    random.seed(0)
+
     def random_list_rec(rec_lev):
         if random.random() < prob_none:
             return None
@@ -1701,7 +2182,8 @@ def gen_random_arrow_list_list_double(rec_lev, prob_none, n):
     return [random_list_rec(rec_lev) for _ in range(n)]
 
 
-def gen_random_arrow_struct_struct(span, n):
+def gen_random_arrow_struct_struct(span, n, return_map=False):
+    random.seed(0)
     e_list = []
     for _ in range(n):
         valA1 = random.randint(0, span)
@@ -1710,7 +2192,46 @@ def gen_random_arrow_struct_struct(span, n):
         valB2 = random.randint(0, span)
         e_ent = {"A": {"A1": valA1, "A2": valA2}, "B": {"B1": valB1, "B2": valB2}}
         e_list.append(e_ent)
-    return e_list
+
+    dtype = pd.ArrowDtype(
+        pa.struct(
+            [
+                pa.field(
+                    "A",
+                    pa.struct([pa.field("A1", pa.int64()), pa.field("A2", pa.int64())]),
+                ),
+                pa.field(
+                    "B",
+                    pa.struct([pa.field("B1", pa.int64()), pa.field("B2", pa.int64())]),
+                ),
+            ]
+        )
+    )
+    if return_map:
+        dtype = pd.ArrowDtype(
+            pa.map_(pa.large_string(), pa.map_(pa.large_string(), pa.int64()))
+        )
+    S = pd.Series(e_list, dtype=dtype)
+    return S
+
+
+def gen_random_arrow_struct_string(string_size, n):
+    random.seed(0)
+    return [
+        {
+            "A": "".join(
+                random.choices(string.ascii_uppercase + string.digits, k=string_size)
+            ),
+            "B": "".join(
+                random.choices(string.ascii_uppercase + string.digits, k=string_size)
+            ),
+        }
+        for _ in range(n)
+    ]
+
+
+def gen_random_arrow_array_struct_string(string_size, num_structs, n):
+    return [gen_random_arrow_struct_string(string_size, num_structs) for _ in range(n)]
 
 
 def gen_nonascii_list(num_strings):
@@ -1807,6 +2328,7 @@ def gen_random_list_string_array(option, n):
     option=1 for series with nullable values
     option=2 for series without nullable entries.
     """
+    random.seed(0)
 
     def rand_col_str(n):
         e_ent = []
@@ -1820,7 +2342,7 @@ def gen_random_list_string_array(option, n):
         e_list = []
         for _ in range(n):
             if random.random() < 0.1:
-                e_ent = np.nan
+                e_ent = None
             else:
                 e_ent = rand_col_str(random.randint(1, 3))
             e_list.append(e_ent)
@@ -1842,11 +2364,16 @@ def gen_random_list_string_array(option, n):
         return e_list_list
 
     if option == 1:
-        e_list = rand_col_l_str(n)
+        e_list = pd.Series(
+            rand_col_l_str(n), dtype=pd.ArrowDtype(pa.large_list(pa.large_string()))
+        ).values
     if option == 2:
         e_list = rand_col_str(n)
     if option == 3:
-        e_list = rand_col_l_str_none_no_first(n)
+        e_list = pd.Series(
+            rand_col_l_str_none_no_first(n),
+            dtype=pd.ArrowDtype(pa.large_list(pa.large_string())),
+        ).values
     return e_list
 
 
@@ -1855,6 +2382,7 @@ def gen_random_decimal_array(option, n):
     option=1 will give random arrays with collision happening (guaranteed for n>100)
     option=2 will give random arrays with collision unlikely to happen
     """
+    random.seed(0)
 
     def random_str1():
         e_str1 = str(1 + random.randint(1, 8))
@@ -1885,7 +2413,7 @@ def gen_random_string_binary_array(n, max_str_len=10, is_binary=False):
     for _ in range(n):
         # store NA with 30% chance
         if random.random() < 0.3:
-            str_vals.append(np.nan)
+            str_vals.append(None)
             continue
 
         k = random.randint(1, max_str_len)
@@ -1895,8 +2423,6 @@ def gen_random_string_binary_array(n, max_str_len=10, is_binary=False):
         str_vals.append(val)
 
     # use consistent string array type with Bodo to avoid output comparison errors
-    if not is_binary and bodo.libs.str_arr_ext.use_pd_string_array:
-        return pd.array(str_vals, "string")
     return np.array(str_vals, dtype="object")  # avoid unichr dtype (TODO: support?)
 
 
@@ -1904,7 +2430,7 @@ def _check_typing_issues(val):
     """Raises an error if there is a typing issue for value 'val'.
     Runs bodo typing on value and converts warnings to errors.
     """
-    from mpi4py import MPI
+    from bodo.mpi4py import MPI
 
     comm = MPI.COMM_WORLD
     try:
@@ -1940,9 +2466,10 @@ def check_caching(
     check_categorical=False,
     set_columns_name_to_none=False,
     reorder_columns=False,
-    py_output=None,
+    py_output=no_default,
     is_out_dist=True,
     args_already_distributed=False,
+    check_pandas_types=True,
 ):
     """Test caching by compiling a BodoSQL function with
     cache=True, then running it again loading from cache.
@@ -1952,10 +2479,10 @@ def check_caching(
     impl: the function to compile
     args: arguments to pass to the function
     is_cached: true if we expect the function to already be cached, false if we do not.
-    input_dist: The InputDist for the dataframe argumennts. This is used
+    input_dist: The InputDist for the dataframe arguments. This is used
         in the flags for compiling the function.
     """
-    if py_output is None:
+    if py_output is no_default:
         py_output = impl(*args)
 
     # compile impl in the correct dist
@@ -2012,6 +2539,7 @@ def check_caching(
             check_categorical,
             atol,
             rtol,
+            check_pandas_types,
         )
     n_passed = reduce_sum(passed)
     assert n_passed == bodo.get_size()
@@ -2023,12 +2551,20 @@ def check_caching(
 
     if is_cached:
         # assert that it was loaded from cache
-        assert bodo_func._cache_hits[sig] == 1
-        assert bodo_func._cache_misses[sig] == 0
+        assert (
+            bodo_func._cache_hits[sig] == 1
+        ), "Expected a cache hit for function signature"
+        assert (
+            bodo_func._cache_misses[sig] == 0
+        ), "Expected no cache miss for function signature"
     else:
         # assert that it wasn't loaded from cache
-        assert bodo_func._cache_hits[sig] == 0
-        assert bodo_func._cache_misses[sig] == 1
+        assert (
+            bodo_func._cache_hits[sig] == 0
+        ), "Expected no cache hits for function signature"
+        assert (
+            bodo_func._cache_misses[sig] == 1
+        ), "Expected a miss for function signature"
 
     return bodo_output
 
@@ -2074,14 +2610,19 @@ def _ensure_func_calls_optimized_out(bodo_func, call_names):
 
 # We only run snowflake tests on Azure Pipelines because the Snowflake account credentials
 # are stored there (to avoid failing on AWS or our local machines)
-def get_snowflake_connection_string(db, schema, user=1):
+def get_snowflake_connection_string(
+    db: str,
+    schema: str,
+    conn_params: dict[str, str] | None = None,
+    user: int = 1,
+) -> str:
     """
     Generates a common snowflake connection string. Some details (how to determine
     username and password) seem unlikely to change, whereas as some tests could require
     other details (db and schema) to change.
     """
     if user == 1:
-        username = os.environ["SF_USER"]
+        username = os.environ["SF_USERNAME"]
         password = os.environ["SF_PASSWORD"]
         account = "bodopartner.us-east-1"
     elif user == 2:
@@ -2095,12 +2636,37 @@ def get_snowflake_connection_string(db, schema, user=1):
     else:
         raise ValueError("Invalid user")
 
-    warehouse = "DEMO_WH"
-    conn = f"snowflake://{username}:{password}@{account}/{db}/{schema}?warehouse={warehouse}"
+    params = {"warehouse": "DEMO_WH"} if conn_params is None else conn_params
+    conn = (
+        f"snowflake://{username}:{password}@{account}/{db}/{schema}?{urlencode(params)}"
+    )
     return conn
 
 
-def snowflake_cred_env_vars_present(user=1) -> bool:
+def get_rest_catalog_connection_string(
+    rest_uri: str,
+    warehouse: str,
+    credential: str | None = None,
+    token: str | None = None,
+) -> str:
+    """
+    Creates a REST Catalog connection string for use in the iceberg connector, either credential or token must be provided
+    args:
+        rest_uri: uri of the catalog
+        warehouse: warehouse to use
+        credential: permanent credential to use for authentication
+        token: temporary token to use for authentication
+    """
+    assert (
+        credential is not None or token is not None
+    ), "credential or token should be provided"
+    auth_param = (
+        f"credential={credential}" if credential is not None else f"token={token}"
+    )
+    return f"iceberg+{rest_uri.replace('https://', 'REST://')}?{auth_param}&warehouse={warehouse}"
+
+
+def snowflake_cred_env_vars_present(user: int = 1) -> bool:
     """
     Simple function to check if environment variables for the
     snowflake credentials are set or not. Goes along with
@@ -2114,7 +2680,7 @@ def snowflake_cred_env_vars_present(user=1) -> bool:
         bool: Whether env vars are set or not
     """
     if user == 1:
-        return ("SF_USER" in os.environ) and ("SF_PASSWORD" in os.environ)
+        return ("SF_USERNAME" in os.environ) and ("SF_PASSWORD" in os.environ)
     elif user == 2:
         return ("SF_USER2" in os.environ) and ("SF_PASSWORD2" in os.environ)
     elif user == 3:
@@ -2126,7 +2692,7 @@ def snowflake_cred_env_vars_present(user=1) -> bool:
 @contextmanager
 def create_snowflake_table(
     df: pd.DataFrame, base_table_name: str, db: str, schema: str
-) -> str:
+) -> Generator[str, None, None]:
     """Creates a new table in Snowflake derived from the base table name
     and using the DataFrame. The name from the base name is modified to help
     reduce the likelihood of conflicts during concurrent tests.
@@ -2142,12 +2708,11 @@ def create_snowflake_table(
     Returns:
         str: The final table name.
     """
+    comm = MPI.COMM_WORLD
+    table_name = None
     try:
-        comm = MPI.COMM_WORLD
-        table_name = None
         if bodo.get_rank() == 0:
-            unique_name = str(uuid4()).replace("-", "_")
-            table_name = f"{base_table_name}_{unique_name}".lower()
+            table_name = gen_unique_table_id(base_table_name)
             conn_str = get_snowflake_connection_string(db, schema)
             df.to_sql(
                 table_name, conn_str, schema=schema, index=False, if_exists="replace"
@@ -2158,23 +2723,711 @@ def create_snowflake_table(
         drop_snowflake_table(table_name, db, schema)
 
 
-def drop_snowflake_table(table_name: str, db: str, schema: str):
+@contextmanager
+def create_snowflake_iceberg_table(
+    df: pd.DataFrame, base_table_name: str, db: str, schema: str, iceberg_volume: str
+) -> Generator[str, None, None]:
+    """Creates a new Iceberg table in Snowflake derived from the base table name
+    and using the DataFrame. This first creates a native table and then creates an
+    Iceberg table from it
+
+    Returns the name of the table added to Snowflake.
+
+    Args:
+        df (pd.DataFrame): DataFrame to insert
+        base_table_name (str): Base string for generating the table name.
+        db (str): Name of the snowflake db.
+        schema (str): Name of the snowflake schema
+        iceberg_volume (str): Name of the external volume to use for the Iceberg table.
+
+
+    Returns:
+        str: The final table name.
+    """
+    comm = MPI.COMM_WORLD
+    iceberg_table_name = None
+    with create_snowflake_table(df, base_table_name, db, schema) as native_table_name:
+        try:
+            if bodo.get_rank() == 0:
+                iceberg_table_name = gen_unique_table_id(base_table_name)
+                query = f"CREATE ICEBERG TABLE {iceberg_table_name} CATALOG='SNOWFLAKE', EXTERNAL_VOLUME='{iceberg_volume}', BASE_LOCATION='{iceberg_table_name}' AS SELECT * FROM {native_table_name}"
+                conn_str = get_snowflake_connection_string(db, schema)
+                pd.read_sql(query, conn_str)
+            iceberg_table_name = comm.bcast(iceberg_table_name)
+            yield iceberg_table_name
+        finally:
+            drop_snowflake_table(
+                iceberg_table_name, db, schema, iceberg_volume=iceberg_volume
+            )
+
+
+@contextmanager
+def create_tabular_iceberg_table(
+    df: pd.DataFrame, base_table_name: str, warehouse: str, schema: str, credential: str
+) -> Generator[str, None, None]:
+    """Creates a new Iceberg table in Tabular derived from the base table name
+    and using the DataFrame.
+
+    Returns the name of the table added to Tabular.
+
+    Args:
+        df (pd.DataFrame): DataFrame to insert
+        base_table_name (str): Base string for generating the table name.
+        warehouse (str): Name of the Tabular warehouse
+        schema (str): Name of the Tabular schema
+        credential (str): Credential to authenticate
+
+
+    Returns:
+        str: The final table name.
+    """
+    import bodo_iceberg_connector as bic
+
+    comm = MPI.COMM_WORLD
+    iceberg_table_name = None
+    table_written = False
+    try:
+        if bodo.get_rank() == 0:
+            iceberg_table_name = gen_unique_table_id(base_table_name)
+
+        iceberg_table_name = comm.bcast(iceberg_table_name)
+
+        @bodo.jit(distributed=["df"])
+        def write_table(df, table_name, schema, con_str):
+            df.to_sql(table_name, con=con_str, schema=schema, if_exists="replace")
+
+        con_str = f"iceberg+REST://api.tabular.io/ws?credential={credential}&warehouse={warehouse}"
+        write_table(_get_dist_arg(df), iceberg_table_name, schema, con_str)
+        table_written = True
+
+        yield iceberg_table_name
+    finally:
+        if table_written:
+            run_rank0(bic.delete_table)(
+                bodo.io.iceberg.format_iceberg_conn(con_str), schema, iceberg_table_name
+            )
+
+
+def gen_unique_table_id(base_table_name):
+    unique_name = str(uuid4()).replace("-", "_")
+    return f"{base_table_name}_{unique_name}".lower()
+
+
+def drop_snowflake_table(
+    table_name: str,
+    db: str,
+    schema: str,
+    iceberg_volume: str | None = None,
+    user: int = 1,
+) -> None:
     """Drops a table from snowflake with the given table_name.
     The db and schema are also provided to connect to Snowflake.
 
     Args:
-        table_name (str): Table Name inside Snowflake.
-        db (str): Snowflake database name
-        schema (str): Snowflake schema name.
+        table_name: Table Name inside Snowflake.
+        db: Snowflake database name
+        schema: Snowflake schema name.
     """
     comm = MPI.COMM_WORLD
     drop_err = None
     if bodo.get_rank() == 0:
         try:
-            conn_str = get_snowflake_connection_string(db, schema)
-            pd.read_sql(f"drop table {table_name}", conn_str)
+            iceberg_prefix = "iceberg" if iceberg_volume else ""
+            conn_str = get_snowflake_connection_string(db, schema, user=user)
+            pd.read_sql(f"drop {iceberg_prefix} table IF EXISTS {table_name}", conn_str)
         except Exception as e:
             drop_err = e
     drop_err = comm.bcast(drop_err)
     if isinstance(drop_err, Exception):
         raise drop_err
+
+
+@contextmanager
+def create_snowflake_table_from_select_query(
+    query: str, base_table_name: str, db: str, schema: str, case_sensitive: bool = False
+) -> Generator[str, None, None]:
+    """Creates a new table in Snowflake derived from the base table name
+    and using the given select query. The name from the base name is modified to help
+    reduce the likelihood of conflicts during concurrent tests.
+
+    Returns the name of the table added to Snowflake.
+
+    Args:
+        query (str): A valid Snowfalke SQL query that will be used to create the table.
+            This will be a SELECT query as we wrap the query in a create or replace table as clause.
+        base_table_name (str): Base string for generating the table name.
+        db (str): Name of the snowflake db.
+        schema (str): Name of the snowflake schema
+        case_sensitive (bool): Whether the table name should be case sensitive or not.
+            If case sensitive, the table name will be wrapped in double quotes.
+
+    Returns:
+        str: The final table name.
+    """
+    comm = MPI.COMM_WORLD
+    table_name = None
+    try:
+        if bodo.get_rank() == 0:
+            table_name = gen_unique_table_id(base_table_name)
+            if case_sensitive:
+                table_name = f'"{table_name}"'
+            conn_str = get_snowflake_connection_string(db, schema)
+            pd.read_sql(f"CREATE or REPLACE TABLE {table_name} as ({query})", conn_str)
+        table_name = comm.bcast(table_name)
+        yield table_name
+    finally:
+        drop_snowflake_table(table_name, db, schema)
+
+
+def generate_comparison_ops_func(op, check_na=False):
+    """
+    Generates a comparison function. If check_na,
+    then we are being called on a scalar value because Pandas
+    can't handle NA values in the array. If so, we return None
+    if either input is NA.
+    """
+    op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
+    func_text = "def test_impl(a, b):\n"
+    if check_na:
+        func_text += "  if pd.isna(a) or pd.isna(b):\n"
+        func_text += "    return None\n"
+    func_text += f"  return a {op_str} b\n"
+    loc_vars = {}
+    exec(func_text, {"pd": pd}, loc_vars)
+    return loc_vars["test_impl"]
+
+
+def find_funcname_in_annotation_ir(annotation, desired_callname):
+    """Finds a function call if it exists in the blocks stored
+    in the annotation. Returns the name of the LHS variable
+    defining the function if it exists and the variables
+    defining the arguments with which the function was called.
+
+    Args:
+        annotation (TypeAnnotation): Dispatcher annotation
+        contain the blocks and typemap.
+
+    Returns:
+        tuple(Name of the LHS variable, list[Name of argument variables])
+
+    Raises Assertion Error if the desired_callname is not found.
+    """
+    # Generate a dummy IR to enable find_callname
+    f_ir = ir.FunctionIR(
+        annotation.blocks,
+        False,
+        annotation.func_id,
+        ir.Loc("", 0),
+        {},
+        0,
+        [],
+    )
+    # Update the definitions
+    f_ir._definitions = build_definitions(f_ir.blocks)
+    # Iterate over the IR
+    for block in f_ir.blocks.values():
+        for stmt in block.body:
+            if isinstance(stmt, ir.Assign):
+                callname = guard(find_callname, f_ir, stmt.value, annotation.typemap)
+                if callname == desired_callname:
+                    return stmt.value.func.name, [var.name for var in stmt.value.args]
+
+    assert False, f"Did not find function {desired_callname} in the IR"
+
+
+def find_nested_dispatcher_and_args(
+    dispatcher, args, func_name, return_dispatcher=True
+):
+    """Finds a dispatcher in the IR and the arguments with which it was
+    called for the given func_name (which matches the output of find_callname).
+
+    Note: This code assumes that if return_dispatcher=True, then the new
+    dispatch must be called with the Overload infrastructure. If any other infrastructure
+    is used, for example the generated_jit infrastructure, then the given
+    code may not work.
+
+    Args:
+        dispatcher (Dispatch): A numba/bodo dispatcher
+        args (tuple(numba.core.types.Type)): Input tuple of Numba types
+        func_name (tuple[str, str]): func_name to find.
+        return_dispatcher (bool): Should we find and return the dispatcher + arguments?
+            This is True when we are doing this as part of a multi-step traversal.
+
+    Returns a tuple with the dispatcher and the arguments with which it was called.
+    """
+    sig = types.void(*args)
+    cr = dispatcher.get_compile_result(sig)
+    annotation = cr.type_annotation
+    var_name, arg_names = find_funcname_in_annotation_ir(annotation, func_name)
+    if return_dispatcher:
+        typemap = annotation.typemap
+        arg_types = tuple([typemap[name] for name in arg_names])
+        # Find the dispatcher in the IR
+        cached_info = typemap[var_name].templates[0]._impl_cache
+        return cached_info[
+            (numba.core.registry.cpu_target.typing_context, arg_types, ())
+        ]
+
+
+def nanoseconds_to_other_time_units(val, unit_str):
+    supported_time_parts = [
+        "hour",
+        "minute",
+        "second",
+        "millisecond",
+        "microsecond",
+        "nanosecond",
+    ]
+
+    assert unit_str in supported_time_parts
+
+    if unit_str == "hour":
+        return val // ((10**9) * 3600)
+    elif unit_str == "minute":
+        return val // ((10**9) * 60)
+    elif unit_str == "second":
+        return val // (10**9)
+    elif unit_str == "millisecond":
+        return val // (10**6)
+    elif unit_str == "microsecond":
+        return val // (10**3)
+    else:
+        return val
+
+
+def compose_decos(decos):
+    def composition(func):
+        for deco in reversed(decos):
+            func = deco(func)
+        return func
+
+    return composition
+
+
+def get_files_changed():
+    """
+    Returns a list of any files changed.
+    """
+    res = subprocess.run(["git", "diff", "--name-only", "main"], capture_output=True)
+    return res.stdout.decode("utf-8").strip().split("\n")
+
+
+files_changed = get_files_changed()
+
+
+def check_for_compiler_file_changes():
+    """
+    Function that returns if any of the files critical to the compiler pipeline were
+    altered. If this is True, then a larger subset of tests will be run on CI.
+    """
+    core_compiler_files = {
+        "bodo/transforms/distributed_pass.py",
+        "bodo/transforms/dataframe_pass.py",
+        "bodo/transforms/series_pass.py",
+        "bodo/transforms/table_column_del_pass.py",
+        "bodo/transforms/typing_pass.py",
+        "bodo/transforms/untyped_pass.py",
+        "bodo/utils/transform.py",
+        "bodo/utils/typing.py",
+    }
+    for filename in files_changed:
+        if filename in core_compiler_files:
+            return True
+    return False
+
+
+compiler_files_were_changed = check_for_compiler_file_changes()
+
+
+# Determine if we are re-running a test due to a flaky failure.
+pytest_snowflake_is_rerunning = False
+
+
+# Determine wether we want to re-run a test due to a flaky failure,
+# and set the pytest_snowflake_is_rerunning flag.
+def _pytest_snowflake_rerun_filter(err, *args):
+    str_err = str(err)
+    should_rerun = (
+        "HTTP 503: Service Unavailable" in str_err
+        or "HTTP 504: Gateway Timeout" in str_err
+        or "Could not connect to Snowflake backend after " in str_err
+        or "snowflake.connector.vendored.requests.exceptions.ReadTimeout" in str_err
+    )
+    if should_rerun:
+        global pytest_snowflake_is_rerunning
+        pytest_snowflake_is_rerunning = True
+    return should_rerun
+
+
+# This is for use as a decorator for a single test function.
+# (@pytest_mark_snowflake)
+pytest_mark_snowflake = compose_decos(
+    (
+        pytest.mark.snowflake,
+        pytest.mark.slow,
+        pytest.mark.flaky(max_runs=3, rerun_filter=_pytest_snowflake_rerun_filter),
+    )
+)
+
+# This is for marking an entire test file
+# (pytestmark = pytest_snowflake)
+pytest_snowflake = [
+    pytest.mark.snowflake,
+    pytest.mark.slow,
+    pytest.mark.flaky(max_runs=3, rerun_filter=_pytest_snowflake_rerun_filter),
+]
+
+# Decorate
+pytest_mark_one_rank = compose_decos(
+    (
+        pytest.mark.one_rank,
+        pytest.mark.skipif(
+            bodo.get_size() != 1,
+            reason="Test should only run on one rank",
+        ),
+    )
+)
+
+# This is for using a "mark" or marking a whole file.
+pytest_one_rank = [
+    pytest.mark.one_rank,
+    pytest.mark.skipif(
+        bodo.get_size() != 1,
+        reason="Test should only run on one rank",
+    ),
+]
+
+
+tabular_markers = (
+    pytest.mark.tabular,
+    pytest.mark.iceberg,
+    pytest.mark.skipif(
+        "TABULAR_CREDENTIAL" not in os.environ, reason="requires tabular credentials"
+    ),
+)
+
+# Decorate
+pytest_mark_tabular = compose_decos(tabular_markers)
+
+
+# This is for using a "mark" or marking a whole file.
+pytest_tabular = list(tabular_markers)
+
+
+glue_markers = (
+    pytest.mark.glue,
+    pytest.mark.iceberg,
+    pytest.mark.skipif(
+        "AWS_ACCESS_KEY_ID" not in os.environ, reason="requires glue credentials"
+    ),
+)
+
+# Decorate
+pytest_mark_glue = compose_decos(glue_markers)
+
+# This is for using a "mark" or marking a whole file.
+pytest_glue = list(glue_markers)
+
+
+spawn_mode_markers = (
+    pytest.mark.spawn_mode,
+    pytest.mark.skipif(
+        os.environ.get("BODO_TEST_SPAWN_MODE", "0") == "0",
+        reason="requires spawn_mode testing enabled",
+    ),
+)
+
+# Decorate
+pytest_mark_spawn_mode = compose_decos(spawn_mode_markers)
+
+
+# This is for using a "mark" or marking a whole file.
+pytest_spawn_mode = list(spawn_mode_markers)
+
+
+# Flag to ignore the mass slowing of tests unless specific files are changed
+ignore_slow_unless_changed = os.environ.get("BODO_IGNORE_SLOW_UNLESS_CHANGED", False)
+
+
+def pytest_slow_unless_changed(features):
+    """
+    Uses the slow marker unless any of the changed files match any of the regex
+    corresponding to the entries in the features input, or compiler pass files
+    have been changed.
+
+    The defined feature keywords:
+        - groupby: any BodoSQL files relating to aggregation
+        - window: any BodoSQL files relating window functions
+        - joins: any BodoSQL files relating to joins
+        - codegen: any in files relating to BodoSQL codegen
+        - library: any files in bodo/libs
+        - io: any files in bodo/io
+        - hiframes: any files in bodo/hiframes
+    """
+    if ignore_slow_unless_changed:
+        return []
+    known_features = {
+        "groupby": "BodoSQL/calcite_sql/bodosql-calcite-application/src/main/.*Agg.*",
+        "window": "BodoSQL/calcite_sql/bodosql-calcite-application/src/main/.*Window.*",
+        "join": "BodoSQL/calcite_sql/bodosql-calcite-application/src/main/.*Join.*",
+        "codegen": "(BodoSQL/calcite_sql/bodosql-calcite-application/src/main/java/com/bodosql/calcite/application/.*)|(BodoSQL/calcite_sql/bodosql-calcite-application/src/main/java/com/bodosql/calcite/ir/.*)",
+        "library": "bodo/libs/.*",
+        "io": "bodo/io/.*",
+        "hiframes": "bodo/hiframes/.*",
+    }
+    if len(features) == 0:
+        raise Exception(f"Invalid features: {features}")
+    patterns = []
+    for feature in features:
+        if feature not in known_features:
+            raise Exception(f"Invalid features: {features}")
+        patterns.append(f"({known_features[feature]})")
+    p = re.compile("|".join(patterns), re.I)
+    if compiler_files_were_changed or any(p.match(f) for f in files_changed):
+        return []
+    return [pytest.mark.slow]
+
+
+pytest_slow_unless_codegen = pytest_slow_unless_changed(["library", "codegen"])
+pytest_slow_unless_groupby = pytest_slow_unless_changed(
+    ["library", "codegen", "groupby"]
+)
+pytest_slow_unless_window = pytest_slow_unless_changed(["library", "codegen", "window"])
+pytest_slow_unless_join = pytest_slow_unless_changed(["library", "codegen", "join"])
+
+
+# This is for use as a decorator for a single test function.
+# (@pytest_mark_pandas)
+pytest_mark_pandas = (
+    compose_decos((pytest.mark.slow, pytest.mark.pandas))
+    if compiler_files_were_changed
+    else pytest.mark.pandas
+)
+
+# This is for marking an entire test file
+# (pytestmark = pytest_pandas)
+pytest_pandas = [pytest.mark.pandas] + (
+    [pytest.mark.slow] if compiler_files_were_changed else []
+)
+
+# This is for marking an entire test file
+# (pytestmark = pytest_perf_regression)
+pytest_perf_regression = [
+    pytest.mark.skipif(
+        "BODO_RUN_REGRESSION_TESTS" not in os.environ,
+        reason="only runs per regression tests manually",
+    ),
+    pytest.mark.perf_regression,
+]
+
+
+@contextmanager
+def temp_env_override(env_vars: dict[str, str | None]):
+    """Update the current environment variables with key-value pairs provided
+    in a dictionary and then restore it after.
+
+    Args
+        env_vars (dict(str, str or None)): A dictionary of environment variables to set.
+            A value of None indicates a variable should be removed.
+    """
+
+    def update_env_vars(env_vars):
+        old_env_vars = {}
+        for k, v in env_vars.items():
+            if k in os.environ:
+                old_env_vars[k] = os.environ[k]
+            else:
+                old_env_vars[k] = None
+
+            if v is None:
+                if k in os.environ:
+                    del os.environ[k]
+            else:
+                os.environ[k] = v
+        return old_env_vars
+
+    old_env = {}
+    try:
+        old_env = update_env_vars(env_vars)
+        yield
+    finally:
+        update_env_vars(old_env)
+
+
+def set_config(name, val):
+    """Set global configuration value (both spawner and workers)
+    E.g. bodo.hiframes.boxing._use_dict_str_type = True
+    """
+    from bodo.submit.utils import set_global_config
+
+    set_global_config(name, val)
+    if test_spawn_mode_enabled:
+        import bodo.submit.spawner
+        from bodo.submit.spawner import CommandType
+
+        spawner = bodo.submit.spawner.get_spawner()
+        bcast_root = MPI.ROOT if bodo.get_rank() == 0 else MPI.PROC_NULL
+        spawner.worker_intercomm.bcast(CommandType.SET_CONFIG.value, bcast_root)
+        spawner.worker_intercomm.bcast((name, val), bcast_root)
+
+
+@contextmanager
+def temp_config_override(name: str, val: pt.Any):
+    """Update a Bodo global config and restore it after (e.g. bodo_use_decimal)"""
+
+    old_val = getattr(bodo, name)
+    try:
+        set_config("bodo." + name, val)
+        yield
+    finally:
+        set_config("bodo." + name, old_val)
+
+
+@contextmanager
+def set_broadcast_join(broadcast: bool):
+    """
+    Context manager for enabling/disabling broadcast join in a test.
+    If broadcasting it set the threshold to 1 TB so it will always
+    broadcast.
+
+    Args:
+        broadcast (bool): Should broadcast be allowed?
+    """
+    old_threshold = os.environ.get("BODO_BCAST_JOIN_THRESHOLD", None)
+    try:
+        if broadcast:
+            # Set to a very high value of 1 GB
+            os.environ["BODO_BCAST_JOIN_THRESHOLD"] = "1000000000"
+        else:
+            os.environ["BODO_BCAST_JOIN_THRESHOLD"] = "0"
+        yield
+    finally:
+        if old_threshold is None:
+            del os.environ["BODO_BCAST_JOIN_THRESHOLD"]
+        else:
+            os.environ["BODO_BCAST_JOIN_THRESHOLD"] = old_threshold
+
+
+def nullable_float_arr_maker(L, to_null, to_nan):
+    """
+    Utility function for helping test cases to generate nullable floating
+    point arrays that contain both NULL and NaN. Takes in a list of numbers,
+    a list of indices that should be set to NULL, a list of indices that should
+    be set to NaN, and outputs the corresponding floating point array.
+
+    For example:
+    nullable_float_arr_maker(list(range(10)), [1, 5, 9], [2, 3, 7])
+
+    Outputs the following Series:
+    0     0.0
+    1    <NA>
+    2     NaN
+    3     NaN
+    4     4.0
+    5    <NA>
+    6     6.0
+    7     NaN
+    8     8.0
+    9    <NA>
+    dtype: Float64
+    """
+    S = _nullable_float_arr_maker(L, to_null, to_nan)
+    # Remove the bodo metadata. It improperly assigns
+    # 1D_Var to the series which interferes with the test
+    # functionality. Deleting the metadata sets it back to
+    # the default of REP distribution.
+    del S._bodo_meta
+    return S
+
+
+@bodo.jit(distributed=False)
+def _nullable_float_arr_maker(L, to_null, to_nan):
+    n = len(L)
+    data_arr = np.empty(n, np.float64)
+    nulls = np.empty((n + 7) >> 3, dtype=np.uint8)
+    A = bodo.libs.float_arr_ext.init_float_array(data_arr, nulls)
+    for i in range(len(L)):
+        if i in to_null:
+            bodo.libs.array_kernels.setna(A, i)
+        elif i in to_nan:
+            A[i] = np.nan
+        else:
+            A[i] = L[i]
+    return pd.Series(A)
+
+
+def cast_dt64_to_ns(df):
+    """Cast datetime64 to datetime64[ns] to match Bodo since Pandas 2 reads some
+    Parquet files as datetime64[us/ms]
+    """
+    from pandas.api.types import is_datetime64_any_dtype
+
+    for c in df.columns:
+        if is_datetime64_any_dtype(df[c]):
+            if isinstance(df[c].dtype, pd.DatetimeTZDtype):
+                df[c] = df[c].astype(pd.DatetimeTZDtype(tz=df[c].dtype.tz))
+            else:
+                df[c] = df[c].astype("datetime64[ns]")
+    if isinstance(df.index, pd.DatetimeIndex):
+        df.index = df.index.astype("datetime64[ns]")
+    return df
+
+
+@contextmanager
+def enable_timestamptz():
+    """
+    Context manager to enable timestamptz in Bodo. This is useful for testing
+    timestamptz functionality.
+    """
+
+    old_value = bodo.enable_timestamp_tz
+    try:
+        set_config("bodo.enable_timestamp_tz", True)
+        yield
+    finally:
+        set_config("bodo.enable_timestamp_tz", old_value)
+
+
+def assert_tables_equal(df1: pd.DataFrame, df2: pd.DataFrame, check_dtype: bool = True):
+    """Asserts df1 and df2 have the same data without regard
+    for ordering or index.
+
+    Args:
+        df1 (pd.DataFrame): First DataFrame.
+        df2 (pd.DataFrame): Second DataFrame.
+    """
+    # Output ordering is not defined so we sort.
+    df1 = df1.sort_values(by=list(df1.columns))
+    df2 = df2.sort_values(by=list(df2.columns))
+    # Drop the index
+    df1 = df1.reset_index(drop=True)
+    df2 = df2.reset_index(drop=True)
+    pd.testing.assert_frame_equal(df1, df2, check_dtype=check_dtype)
+
+
+def get_query_profile_location(output_dir: str, myrank: int) -> str:
+    """
+    Get the path to the query profile file given the output directory.
+    Note that this method will also assert that the expected files are present.
+    """
+    assert os.path.isdir(output_dir)
+    runs = os.listdir(output_dir)
+    assert len(runs) == 1
+    profile_path = os.path.join(output_dir, runs[0], f"query_profile_{myrank}.json")
+    assert os.path.isfile(profile_path)
+    return profile_path
+
+
+def get_num_test_workers():
+    """Return number of workers actually running tests, which is different from
+    bodo.get_size() in spawn mode.
+    """
+    import bodo
+
+    if bodo.spawn_mode or test_spawn_mode_enabled:
+        import bodo.submit.spawner
+
+        spawner = bodo.submit.spawner.get_spawner()
+        return spawner.worker_intercomm.Get_remote_size()
+
+    return bodo.get_size()

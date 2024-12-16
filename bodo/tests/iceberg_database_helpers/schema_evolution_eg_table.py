@@ -7,9 +7,10 @@ from bodo.tests.iceberg_database_helpers.utils import (
     get_spark,
 )
 
+TABLE_NAME = "schema_evolution_eg_table"
 
-def create_table(table_name="schema_evolution_eg_table", spark=None):
 
+def create_table(table_name=TABLE_NAME, spark=None):
     if spark is None:
         spark = get_spark()
 

@@ -25,7 +25,7 @@ on how to proceed with resolving them.
     ```
 
     Please submit a request for us to support your required
-    functionality [here](https://github.com/Bodo-inc/feedback). Also
+    functionality [here](https://github.com/bodo-ai/feedback). Also
     consider joining our [community slack](https://join.slack.com/t/bodocommunity/shared_invite/zt-qwdc8fad-6rZ8a1RmkkJ6eOX1X__knA),
     where you can interact directly with fellow Bodo users to find a
     workaround for your requirements. For longer and more detailed
@@ -133,11 +133,11 @@ on how to proceed with resolving them.
 
     This is likely due to unsupported functionality. If you encounter
     this error, please provide us a minimum reproducer for this error
-    [here](https://github.com/Bodo-inc/feedback).
+    [here](https://github.com/bodo-ai/feedback).
 
 -   `numba.core.errors.TypingError: Unknown attribute <attribute> of type`
 
     This is an uncaught error due to unsupported functionality. If
     you encounter this error, please provide us a minimum reproducer
-    for this error [here](https://github.com/Bodo-inc/feedback).
+    for this error [here](https://github.com/bodo-ai/feedback).
 

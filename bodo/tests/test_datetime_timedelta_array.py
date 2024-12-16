@@ -1,9 +1,9 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
-    Test File for timedelta array types. Covers basic functionality of get_item
-    operations, but it is not comprehensive. It does not cover exception cases
-    or test extensively against None.
+Test File for timedelta array types. Covers basic functionality of get_item
+operations, but it is not comprehensive. It does not cover exception cases
+or test extensively against None.
 """
+
 import datetime
 
 import numpy as np
@@ -11,7 +11,7 @@ import pandas as pd
 import pytest
 
 import bodo
-from bodo.tests.utils import check_func
+from bodo.tests.utils import check_func, get_num_test_workers
 
 
 @pytest.fixture(
@@ -130,10 +130,11 @@ def test_nbytes(timedelta_arr_value, memory_leak_check):
     def impl(arr):
         return arr.nbytes
 
+    n_pes = get_num_test_workers()
     py_out = (
-        264 + bodo.get_size()
+        264 + n_pes
     )  # 88*3 = 264 for data (days, seconds, microseconds), one byte for null_bitmap per rank
     check_func(impl, (timedelta_arr_value,), py_output=266, only_seq=True)
-    if bodo.get_size() == 1:  # np=1 has 2 bytes for null_bitmap
+    if n_pes == 1:  # np=1 has 2 bytes for null_bitmap
         py_out += 1
     check_func(impl, (timedelta_arr_value,), py_output=py_out, only_1DVar=True)

@@ -1,9 +1,12 @@
 package com.bodo.iceberg.catalog;
 
+import com.bodo.iceberg.Triple;
 import java.net.URISyntaxException;
 import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.Path;
 import org.apache.hc.core5.http.NameValuePair;
 import org.apache.hc.core5.net.URIBuilder;
 import org.apache.iceberg.CachingCatalog;
@@ -12,7 +15,8 @@ import org.apache.iceberg.catalog.Catalog;
 
 /** Iceberg Catalog Connector and Communicator */
 public class CatalogCreator {
-  public static Catalog create(String connStr, String catalogType) throws URISyntaxException {
+  public static Triple<Configuration, Map<String, String>, URIBuilder> prepareInput(
+      String connStr, String catalogType, String coreSitePath) throws URISyntaxException {
     // Extract Parameters from URI
     // TODO: Just get from Python
     URIBuilder uriBuilder = new URIBuilder(connStr);
@@ -21,17 +25,39 @@ public class CatalogCreator {
             .collect(Collectors.toMap(NameValuePair::getName, NameValuePair::getValue));
     params.remove("type");
 
+    // Create Configuration
+    // Additional parameters like Iceberg-specific ones should be ignored
+    // Since the conf is reused by multiple objects, like Hive and Hadoop ones
+    // TODO: Spark does something similar, but I believe they do some filtering. What is it?
+    boolean loadDefaults = Objects.equals(coreSitePath, "");
+    Configuration conf = new Configuration(loadDefaults);
+    // Core site path is specified
+    if (!loadDefaults) {
+      conf.addResource(new Path(coreSitePath));
+    }
+    for (Map.Entry<String, String> entry : params.entrySet()) {
+      conf.set(entry.getKey(), entry.getValue());
+    }
+
+    CatalogCreator.configureAzureAuth(conf);
+
     // Catalog URI (without parameters)
     String uriStr = uriBuilder.removeQuery().build().toString();
     params.put(CatalogProperties.URI, uriStr);
 
-    // Create Configuration
-    Configuration conf = new Configuration();
+    return new Triple<>(conf, params, uriBuilder);
+  }
 
+  public static Catalog create(String connStr, String catalogType, String coreSitePath)
+      throws URISyntaxException {
     // Create Catalog
-    Catalog catalog;
+    var out = prepareInput(connStr, catalogType, coreSitePath);
+    Configuration conf = out.getFirst();
+    Map<String, String> params = out.getSecond();
+    URIBuilder uriBuilder = out.getThird();
+    final Catalog catalog;
 
-    switch (catalogType) {
+    switch (catalogType.toLowerCase()) {
       case "nessie":
         catalog = NessieBuilder.create(conf, params);
         break;
@@ -47,7 +73,14 @@ public class CatalogCreator {
                 uriBuilder.removeQuery().setScheme("").build().toString(), conf, params);
         break;
       case "hadoop-s3":
+      case "hadoop-abfs":
         catalog = HadoopBuilder.create(uriBuilder.removeQuery().build().toString(), conf, params);
+        break;
+      case "snowflake":
+        catalog = SnowflakeBuilder.create(conf, params);
+        break;
+      case "rest":
+        catalog = RESTBuilder.create(conf, params);
         break;
       default:
         throw new UnsupportedOperationException("Should never occur. Captured in Python");
@@ -61,5 +94,28 @@ public class CatalogCreator {
     // schema
     // Downsides: Does not refresh if another program modifies the Catalog
     return CachingCatalog.wrap(catalog);
+  }
+
+  /**
+   * Configure Hadoop Azure authentication for the given Configuration object.
+   *
+   * @param conf Configuration object to configure Azure authentication for
+   */
+  private static void configureAzureAuth(Configuration conf) {
+    String accountName = System.getenv("AZURE_STORAGE_ACCOUNT_NAME");
+    String accountKey = System.getenv("AZURE_STORAGE_ACCOUNT_KEY");
+    if (accountName != null && accountKey != null) {
+      conf.set("fs.azure.account.key." + accountName + ".dfs.core.windows.net", accountKey);
+    } else if (System.getenv("BODO_PLATFORM_CLOUD_PROVIDER") != null
+        && System.getenv("BODO_PLATFORM_CLOUD_PROVIDER").equals("AZURE")) {
+      // We're on the platform in an Azure workspace, try to use the identity
+      conf.set("fs.azure.account.auth.type", "OAuth");
+      conf.set(
+          "fs.azure.account.oauth.provider.type",
+          "org.apache.hadoop.fs.azurebfs.oauth2.MsiTokenProvider");
+      conf.set("fs.azure.account.oauth2.msi.tenant", "");
+      conf.set("fs.azure.account.oauth2.client.id", "");
+      conf.set("fs.azure.account.oauth2.msi.endpoint", "");
+    }
   }
 }

@@ -1,9 +1,9 @@
-"""Test Spark parity functions that are in objmode """
+"""Test Spark parity functions that are in objmode"""
+
 import zlib
 
 import pytest
 
-import bodo
 from bodo.tests.utils import check_func
 
 

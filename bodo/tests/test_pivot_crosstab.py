@@ -1,9 +1,9 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 import datetime
 import os
 import random
 import re
 import shutil
+import warnings
 
 import numpy as np
 import pandas as pd
@@ -14,9 +14,12 @@ from bodo.tests.utils import (
     _get_dist_arg,
     _test_equal_guard,
     check_func,
+    pytest_pandas,
     reduce_sum,
 )
 from bodo.utils.typing import BodoError
+
+pytestmark = pytest_pandas
 
 _pivot_df1 = pd.DataFrame(
     {
@@ -58,9 +61,9 @@ def test_pivot_distributed_metadata(memory_leak_check):
     df = test_pivot()
     # df should have distirbuted metadata. If not, gatherv will raise a warning
     # that df is not distributed.
-    with pytest.warns(None) as record:
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
         test_gatherv(df)
-    assert len(record) == 0
 
 
 @pytest.mark.parametrize(
@@ -483,7 +486,7 @@ def test_pivot_invalid_types(memory_leak_check):
         pd.DataFrame(
             {
                 "A": np.arange(1000),
-                "B": [i for i in range(10)] * 100,
+                "B": list(range(10)) * 100,
                 "C": np.arange(1000, 2000),
             }
         ),
@@ -491,23 +494,23 @@ def test_pivot_invalid_types(memory_leak_check):
         pd.DataFrame(
             {
                 "A": np.arange(1000),
-                "B": [i for i in range(10)] * 100,
-                "C": pd.Series(pd.date_range("1/1/2022", freq="H", periods=1000)),
+                "B": list(range(10)) * 100,
+                "C": pd.Series(pd.date_range("1/1/2022", freq="h", periods=1000)),
             }
         ),
         # Nullable Integer Values
         pd.DataFrame(
             {
                 "A": np.arange(1000),
-                "B": [i for i in range(10)] * 100,
-                "C": pd.array(([i for i in range(9)] + [None]) * 100, dtype="Int32"),
+                "B": list(range(10)) * 100,
+                "C": pd.array((list(range(9)) + [None]) * 100, dtype="Int32"),
             }
         ),
         # String Index
         pd.DataFrame(
             {
                 "A": [str(i) for i in range(1000)],
-                "B": [i for i in range(10)] * 100,
+                "B": list(range(10)) * 100,
                 "C": np.arange(1000, 2000),
             }
         ),
@@ -515,7 +518,7 @@ def test_pivot_invalid_types(memory_leak_check):
         pd.DataFrame(
             {
                 "A": np.arange(1000),
-                "B": [i for i in range(10)] * 100,
+                "B": list(range(10)) * 100,
                 "C": [str(i) for i in range(1000, 2000)],
             }
         ),
@@ -525,6 +528,7 @@ def test_pivot_basic(df, memory_leak_check):
     """
     Checks basic support for DataFrame.pivot on various datatypes.
     """
+
     # Test pivot unboxing
     def impl1(df):
         return df.pivot(index="A", columns="B", values="C")
@@ -584,7 +588,7 @@ def test_pivot_basic(df, memory_leak_check):
             {
                 "A": np.arange(1000),
                 "B": np.arange(1000),
-                "C": pd.Series(pd.date_range("1/1/2022", freq="H", periods=1000)),
+                "C": pd.Series(pd.date_range("1/1/2022", freq="h", periods=1000)),
             }
         ),
         # Nullable Integer Values
@@ -592,7 +596,7 @@ def test_pivot_basic(df, memory_leak_check):
             {
                 "A": np.arange(1000),
                 "B": np.arange(1000),
-                "C": pd.array(([i for i in range(9)] + [None]) * 100, dtype="Int32"),
+                "C": pd.array((list(range(9)) + [None]) * 100, dtype="Int32"),
             }
         ),
         # String Index
@@ -648,7 +652,7 @@ def test_pivot_empty(df, memory_leak_check):
         # Basic DataFrame with NAs to insert
         pd.DataFrame(
             {
-                "A": [i for i in range(3)] * 5,
+                "A": list(range(3)) * 5,
                 "B": [str(i) for i in range(5)] * 3,
                 "C": np.arange(1000, 1015),
             }
@@ -656,26 +660,26 @@ def test_pivot_empty(df, memory_leak_check):
         # Integer column names
         pd.DataFrame(
             {
-                "A": [i for i in range(3)] * 5,
-                "B": [i for i in range(5)] * 3,
+                "A": list(range(3)) * 5,
+                "B": list(range(5)) * 3,
                 "C": np.arange(1000, 1015),
             }
         ),
         # Timestamp values
         pd.DataFrame(
             {
-                "A": [i for i in range(3)] * 5,
-                "B": [i for i in range(5)] * 3,
-                "C": pd.Series(pd.date_range("1/1/2022", freq="H", periods=15)),
+                "A": list(range(3)) * 5,
+                "B": list(range(5)) * 3,
+                "C": pd.Series(pd.date_range("1/1/2022", freq="h", periods=15)),
             }
         ),
         # Nullable Integer Values
         pd.DataFrame(
             {
-                "A": [i for i in range(3)] * 5,
-                "B": [i for i in range(5)] * 3,
+                "A": list(range(3)) * 5,
+                "B": list(range(5)) * 3,
                 "C": pd.array(
-                    [i for i in range(11)] + [None, None, None, None], dtype="Int32"
+                    list(range(11)) + [None, None, None, None], dtype="Int32"
                 ),
             }
         ),
@@ -683,15 +687,15 @@ def test_pivot_empty(df, memory_leak_check):
         pd.DataFrame(
             {
                 "A": [str(i) for i in range(3)] * 5,
-                "B": [i for i in range(5)] * 3,
+                "B": list(range(5)) * 3,
                 "C": np.arange(1000, 1015),
             }
         ),
         # String values
         pd.DataFrame(
             {
-                "A": [i for i in range(3)] * 5,
-                "B": [i for i in range(5)] * 3,
+                "A": list(range(3)) * 5,
+                "B": list(range(5)) * 3,
                 "C": [str(i) for i in range(1000, 1015)],
             }
         ),
@@ -732,9 +736,9 @@ def test_pivot_full(df, memory_leak_check):
         pd.DataFrame(
             {
                 "A": pd.array(
-                    [i for i in range(996)] + [None, None, None, None], dtype="Int32"
+                    list(range(996)) + [None, None, None, None], dtype="Int32"
                 ),
-                "B": [i for i in range(10)] * 100,
+                "B": list(range(10)) * 100,
                 "C": np.arange(1000, 2000),
             }
         ),
@@ -742,7 +746,7 @@ def test_pivot_full(df, memory_leak_check):
         pd.DataFrame(
             {
                 "A": pd.array(
-                    [i for i in range(996)] + [None, None, None, None], dtype="Int32"
+                    list(range(996)) + [None, None, None, None], dtype="Int32"
                 ),
                 "B": np.arange(1000),
                 "C": np.arange(1000, 2000),
@@ -752,7 +756,7 @@ def test_pivot_full(df, memory_leak_check):
         pd.DataFrame(
             {
                 "A": pd.array([0, 1, None] * 5, dtype="Int32"),
-                "B": [i for i in range(5)] * 3,
+                "B": list(range(5)) * 3,
                 "C": np.arange(1000, 1015),
             }
         ),
@@ -791,16 +795,16 @@ def test_pivot_na_index(df, memory_leak_check):
         # Normal case
         pd.DataFrame(
             {
-                "A": [i for i in range(5)] * 4,
-                "B": [i for i in range(2)] * 10,
+                "A": list(range(5)) * 4,
+                "B": list(range(2)) * 10,
                 "C": np.arange(20),
             }
         ),
         # String data
         pd.DataFrame(
             {
-                "A": [i for i in range(5)] * 4,
-                "B": [i for i in range(2)] * 10,
+                "A": list(range(5)) * 4,
+                "B": list(range(2)) * 10,
                 "C": [str(i) for i in range(20)],
             }
         ),
@@ -1119,7 +1123,7 @@ def test_pivot_table_multiple_values_string(memory_leak_check):
             {
                 "A": np.arange(1000),
                 "D": [str(i) for i in range(2000, 3000)],
-                "B": [i for i in range(10)] * 100,
+                "B": list(range(10)) * 100,
                 "C": [str(i) for i in range(1000, 2000)],
             }
         ),
@@ -1128,7 +1132,7 @@ def test_pivot_table_multiple_values_string(memory_leak_check):
             {
                 "A": np.arange(1000),
                 "D": np.arange(2000, 3000),
-                "B": [i for i in range(10)] * 100,
+                "B": list(range(10)) * 100,
                 "C": np.arange(1000, 2000),
             }
         ),
@@ -1412,7 +1416,7 @@ def test_pd_pivot_multi_values(memory_leak_check):
             {
                 "C": np.arange(1000),
                 "B": [str(i) for i in range(2000, 3000)],
-                "D": [i for i in range(10)] * 100,
+                "D": list(range(10)) * 100,
                 "A": [str(i) for i in range(1000, 2000)],
             }
         ),
@@ -1421,7 +1425,7 @@ def test_pd_pivot_multi_values(memory_leak_check):
             {
                 "A": np.arange(1000),
                 "D": np.arange(2000, 3000),
-                "B": [i for i in range(10)] * 100,
+                "B": list(range(10)) * 100,
                 "C": np.arange(1000, 2000),
             }
         ),
@@ -1517,10 +1521,15 @@ def test_pivot_table_multiple_index(pivot_dataframes, memory_leak_check):
                 "B": [str(i) for i in range(10)] * 100,
                 "C": np.arange(1000, 2000),
             },
-            index=pd.Index([i for i in range(500)] * 2, name="my_index_name"),
+            index=pd.Index(list(range(500)) * 2, name="my_index_name"),
         ),
     ],
 )
+@pytest.mark.skip("[BSE-1548] Disabling since slow and seg faults sometimes")
+# https://dev.azure.com/bodo-inc/Bodo/_test/analytics?definitionId=5&contextType=build
+# test_pivot_index_none[df0] on average takes 13.27 min, or 796.2 seconds
+@pytest.mark.slow
+@pytest.mark.timeout(1000)
 def test_pivot_index_none(df, memory_leak_check):
     """
     Test running DataFrame.pivot() with index=None and values=None.
@@ -1624,7 +1633,7 @@ def test_pivot_to_parquet(df, memory_leak_check):
         if bodo.get_rank() == 0:
             try:
                 result = pd.read_parquet(output_filename)
-                # Reorder the columns since this can't be done in _test_equals_guard.
+                # Reorder the columns since this can't be done in _test_equal_guard.
                 result.sort_index(axis=1, inplace=True)
                 passed = _test_equal_guard(
                     result,
@@ -1640,8 +1649,8 @@ def test_pivot_to_parquet(df, memory_leak_check):
                 ]
                 cols_metadata = bodo_table.schema.pandas_metadata.get("columns")
                 # Generate expected typenames for Int64 and string
-                pd_type = "Int64" if py_output.b.dtype == np.float64 else "unicode"
-                np_type = "int64" if py_output.b.dtype == np.float64 else "object"
+                pd_type = "int64" if py_output.b.dtype == np.float64 else "unicode"
+                np_type = "Int64" if py_output.b.dtype == np.float64 else "object"
                 total_columns = py_output.columns.to_list() + [py_output.index.name]
                 for col_metadata in cols_metadata:
                     assert col_metadata["name"] in total_columns, "Name doesn't match"
@@ -1725,6 +1734,8 @@ def test_pivot_table_dict_encoded(memory_leak_check):
         bodo.barrier()
 
 
+@pytest.mark.timeout(1000)
+@pytest.mark.slow
 def test_pivot_dict_encoded(memory_leak_check):
     """
     Tests support for df.pivot_table with dictionary

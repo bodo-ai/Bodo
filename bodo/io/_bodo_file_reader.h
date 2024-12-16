@@ -1,13 +1,11 @@
-#ifndef _BODO_FILE_READER_H_INCLUDED
-#define _BODO_FILE_READER_H_INCLUDED
-#include <boost/algorithm/string/predicate.hpp>
+#pragma once
+
 #include <cstdint>
 #include <filesystem>
 #include <vector>
+
 #include "../libs/_bodo_common.h"
 #include "../libs/_distributed.h"
-#include "arrow/filesystem/filesystem.h"
-#include "arrow/python/filesystem.h"
 #include "mpi.h"
 
 typedef std::vector<int64_t> size_vec;
@@ -41,7 +39,7 @@ class FileReader {
         : csv_header(_csv_header), json_lines(_json_lines) {
         this->assign_f_type(std::string(f_type));
     }
-    virtual ~FileReader(){};
+    virtual ~FileReader() {};
     virtual uint64_t getSize() = 0;
     virtual bool seek(int64_t pos) = 0;
     virtual bool ok() = 0;
@@ -64,8 +62,10 @@ class FileReader {
      * f_type to string
      */
     const char *f_type_to_string() {
-        if (this->f_type == File_Type::csv) return "csv";
-        if (this->f_type == File_Type::json) return "json";
+        if (this->f_type == File_Type::csv)
+            return "csv";
+        if (this->f_type == File_Type::json)
+            return "json";
         return "";
     }
 };
@@ -77,14 +77,15 @@ class SingleFileReader : public FileReader {
     const char *fname;
     SingleFileReader(const char *_fname, const char *f_type, bool csv_header,
                      bool json_lines)
-        : FileReader(f_type, csv_header, json_lines), fname(_fname){};
-    virtual ~SingleFileReader(){};
+        : FileReader(f_type, csv_header, json_lines), fname(_fname) {};
+    virtual ~SingleFileReader() {};
     virtual uint64_t getSize() = 0;
     virtual bool seek(int64_t pos) = 0;
     virtual bool ok() = 0;
     virtual bool read_to_buff(char *s, int64_t size) = 0;
     bool read(char *s, int64_t size) {
-        if (!this->read_to_buff(s, size)) return false;
+        if (!this->read_to_buff(s, size))
+            return false;
         if (this->f_type == File_Type::json && (!this->json_lines)) {
             edit_json_multiline_obj(s, size);
         }
@@ -160,11 +161,12 @@ class DirectoryFileReader : public FileReader {
 
     DirectoryFileReader(const char *_dirname, const char *f_type,
                         bool csv_header, bool json_lines)
-        : FileReader(f_type, csv_header, json_lines), dirname(_dirname){};
+        : FileReader(f_type, csv_header, json_lines), dirname(_dirname) {};
     ~DirectoryFileReader() {
-        if (this->f_reader) delete this->f_reader;
+        if (this->f_reader)
+            delete this->f_reader;
     };
-    virtual void initFileReader(const char *fname){};
+    virtual void initFileReader(const char *fname) {};
     bool seek(int64_t pos) {
         // find which file to seek at
         this->file_index = this->findFileIndexFromPos(pos);
@@ -293,8 +295,7 @@ class DirectoryFileReader : public FileReader {
         // find & set all file name
         for (auto it = file_names_sizes.begin(); it != file_names_sizes.end();
              ++it) {
-            if ((boost::ends_with(((*it).first.c_str()), suffix)) &&
-                (*it).second > 0) {
+            if ((*it).first.ends_with(suffix) && (*it).second > 0) {
                 this->file_names.push_back((*it).first);
             }
         }
@@ -305,8 +306,7 @@ class DirectoryFileReader : public FileReader {
         // find and set file_sizes & dir_size
         for (auto it = file_names_sizes.begin(); it != file_names_sizes.end();
              ++it) {
-            if ((boost::ends_with(((*it).first.c_str()), suffix)) &&
-                (*it).second > 0) {
+            if ((*it).first.ends_with(suffix) && (*it).second > 0) {
                 (this->file_sizes).push_back(this->dir_size);
                 this->dir_size += (*it).second - this->csv_header_bytes;
             }
@@ -410,9 +410,9 @@ class DirectoryFileReader : public FileReader {
             this->f_reader = nullptr;
         }
 
-        MPI_Bcast(&header_size, 1, MPI_UINT64_T, 0, MPI_COMM_WORLD);
+        CHECK_MPI(
+            MPI_Bcast(&header_size, 1, MPI_UINT64_T, 0, MPI_COMM_WORLD),
+            "DirectoryFileReader::findHeaderRowSize: MPI error on MPI_Bcast:");
         this->csv_header_bytes = header_size;
     }
 };
-
-#endif  // _BODO_FILE_READER_H_INCLUDED

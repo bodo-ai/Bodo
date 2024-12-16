@@ -1,7 +1,16 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
-
-import pyarrow.fs
 import pyarrow._hdfs
+import pyarrow.fs
+
+from bodo.ext import (  # noqa
+    _hdf5,
+    arrow_cpp,
+    csv_cpp,
+    fsspec_reader,
+    hdfs_reader,
+    json_cpp,
+    s3_reader,
+)
+
 from ._hdfs import HadoopFileSystem
 
 # HadoopFileSystem is a class defined by Arrow in a Cython file (_hdfs.pyx).

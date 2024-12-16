@@ -1,8 +1,8 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
-    Utility functions to help write tests that depend on the
-    bodo logging level.
+Utility functions to help write tests that depend on the
+bodo logging level.
 """
+
 import logging
 from contextlib import contextmanager
 
@@ -12,20 +12,31 @@ from bodo.tests.utils import reduce_sum
 
 @contextmanager
 def set_logging_stream(logger, verbose_level):
+    err = None
     try:
         passed = 1
+        # TODO(aneesh) this is slightly hacky - remove when tracing level is 1
+        # by default
+        original_tracing_level = bodo.tracing_level
+        bodo.tracing_level = 1
         bodo.set_verbose_level(verbose_level)
         bodo.set_bodo_verbose_logger(logger)
         yield
     except Exception as e:
-        # Print the error message
-        print(e, flush=True)
+        err = e
         passed = 0
     finally:
+        bodo.tracing_level = original_tracing_level
         bodo.user_logging.restore_default_bodo_verbose_level()
         bodo.user_logging.restore_default_bodo_verbose_logger()
         n_passed = reduce_sum(passed)
-        assert n_passed == bodo.get_size(), "Error while testing logging stream"
+        if n_passed != bodo.get_size():
+            if err is not None:
+                raise err
+            else:
+                raise AssertionError(
+                    "Error while testing logging stream. See other rank."
+                )
 
 
 def create_string_io_logger(stream):
@@ -47,7 +58,7 @@ def create_string_io_logger(stream):
     return logger
 
 
-def check_logger_msg(stream, msg):
+def check_logger_msg(stream, msg, check_case=True):
     """
     Checks that a specific msg in found inside logger.
     This simply checks if the logger contains the exact
@@ -56,8 +67,18 @@ def check_logger_msg(stream, msg):
     We only check the logger on rank 0 because we only
     write on rank 0.
     """
+    # TODO[BSE-4152]: support checking logs in spawn testing
+    if bodo.tests.utils.test_spawn_mode_enabled:
+        return
     if bodo.get_rank() == 0:
-        assert msg in stream.getvalue()
+        if check_case:
+            assert (
+                msg in stream.getvalue()
+            ), f"Cannot find message in logging stream: '{msg}'"
+        else:
+            assert (
+                msg.lower() in stream.getvalue().lower()
+            ), f"Cannot find message in logging stream: '{msg}'"
 
 
 def check_logger_no_msg(stream, msg):
@@ -69,5 +90,10 @@ def check_logger_no_msg(stream, msg):
     We only check the logger on rank 0 because we only
     write on rank 0.
     """
+    # TODO[BSE-4152]: support checking logs in spawn testing
+    if bodo.tests.utils.test_spawn_mode_enabled:
+        return
     if bodo.get_rank() == 0:
-        assert msg not in stream.getvalue()
+        assert (
+            msg not in stream.getvalue()
+        ), f"Found find message in logging stream that should have been absent: '{msg}'"

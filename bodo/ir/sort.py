@@ -1,7 +1,6 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """IR node for the data sorting"""
+
 from collections import defaultdict
-from typing import List, Set, Tuple, Union
 
 import numba
 import numpy as np
@@ -17,14 +16,13 @@ from numba.core.ir_utils import (
 import bodo
 from bodo.libs.array import (
     arr_info_list_to_table,
+    array_from_cpp_table,
     array_to_info,
     cpp_table_to_py_data,
     delete_table,
-    delete_table_decref_arrays,
-    info_from_table,
-    info_to_array,
     py_data_to_cpp_table,
-    sort_values_table,
+    sort_table_for_interval_join,
+    sort_values_table_py_entry,
 )
 from bodo.transforms import distributed_analysis, distributed_pass
 from bodo.transforms.distributed_analysis import Distribution
@@ -43,14 +41,15 @@ class Sort(ir.Stmt):
         self,
         df_in: str,
         df_out: str,
-        in_vars: List[ir.Var],
-        out_vars: List[ir.Var],
-        key_inds: Tuple[int],
+        in_vars: list[ir.Var],
+        out_vars: list[ir.Var],
+        key_inds: tuple[int],
         inplace: bool,
         loc: ir.Loc,
-        ascending_list: Union[List[bool], bool] = True,
-        na_position: Union[List[str], str] = "last",
-        _bodo_chunk_bounds: Union[ir.Var, None] = None,
+        ascending_list: list[bool] | bool = True,
+        na_position: list[str] | str = "last",
+        _bodo_chunk_bounds: ir.Var | None = None,
+        _bodo_interval_sort: bool = False,
         is_table_format: bool = False,
         num_table_arrays: int = 0,
     ):
@@ -78,7 +77,16 @@ class Sort(ir.Stmt):
                 output array. Can be set per key. Defaults to "last".
             _bodo_chunk_bounds (ir.Var|None): parallel chunk bounds for data
                 redistribution during the parallel algorithm (optional).
-                Currently only used for Iceberg MERGE INTO.
+                Currently only used for Iceberg MERGE INTO, window functions without
+                partitions (e.g. ROW_NUMBER) and with _bodo_interval_sort.
+            _bodo_interval_sort (bool): Use sort_table_for_interval_join instead of regular
+                sort_values. This is only exposed for internal testing purposes.
+                When this is true, _bodo_chunk_bounds must not be None and be of length
+                (#ranks - 1). If number of keys is 1, we treat it as a point column
+                and if it's 2, we treat it as an interval where the first key is the start
+                of the interval and the second key is the end of the interval.
+                `validate_sort_values_spec` ensures that the number of keys is either 1 or 2
+                and _bodo_chunk_bounds is not None.
             is_table_format (bool): flag for table format case (first variable is a
                 table in in_vars/out_vars)
             num_table_arrays: number of columns in the table in case of table format
@@ -91,15 +99,16 @@ class Sort(ir.Stmt):
         self.key_inds = key_inds
         self.inplace = inplace
         self._bodo_chunk_bounds = _bodo_chunk_bounds
+        self._bodo_interval_sort = _bodo_interval_sort
         self.is_table_format = is_table_format
         self.num_table_arrays = num_table_arrays
         # Logical indices of dead columns in input/output (excluding keys), updated in
         # DCE. The column may be in the table (in case of table format) or not.
         # Example: 3 columns table, 1 non-table, dead_var_inds={1, 3} means column 1 in
         # the table is dead and also the non-table column is dead.
-        self.dead_var_inds: Set[int] = set()
+        self.dead_var_inds: set[int] = set()
         # Logical indices of dead key columns in output, updated in DCE.
-        self.dead_key_var_inds: Set[int] = set()
+        self.dead_key_var_inds: set[int] = set()
 
         # normalize na_position to list of bools (per key)
         if isinstance(na_position, str):
@@ -479,6 +488,8 @@ def sort_distributed_run(
     parallel = False
     in_vars = sort_node.get_live_in_vars()
     out_vars = sort_node.get_live_out_vars()
+    assert len(out_vars) > 0, "Invalid empty Sort node in distributed pass"
+
     if array_dists is not None:
         parallel = True
         for v in in_vars + out_vars:
@@ -488,23 +499,14 @@ def sort_distributed_run(
             ):
                 parallel = False
 
-    # copy arrays when not inplace
-    nodes = []
-    if not sort_node.inplace:
-        new_in_vars = []
-        for v in in_vars:
-            v_cp = _copy_array_nodes(
-                v,
-                nodes,
-                typingctx,
-                targetctx,
-                typemap,
-                calltypes,
-                sort_node.dead_var_inds,
-            )
-            new_in_vars.append(v_cp)
-        in_vars = new_in_vars
+    if not parallel:
+        # If we have a replicated call remove sort_node._bodo_chunk_bounds, which
+        # is only valid for distributed calls. When dead code elimination runs at
+        # the end of distributed pass this should optimize out the _bodo_chunk_bounds
+        # variable if it exists.
+        sort_node._bodo_chunk_bounds = None
 
+    nodes = []
     out_types = [
         typemap[v.name] if v is not None else types.none for v in sort_node.out_vars
     ]
@@ -520,10 +522,9 @@ def sort_distributed_run(
             "bodo": bodo,
             "np": np,
             "delete_table": delete_table,
-            "delete_table_decref_arrays": delete_table_decref_arrays,
-            "info_to_array": info_to_array,
-            "info_from_table": info_from_table,
-            "sort_values_table": sort_values_table,
+            "array_from_cpp_table": array_from_cpp_table,
+            "sort_values_table_py_entry": sort_values_table_py_entry,
+            "sort_table_for_interval_join": sort_table_for_interval_join,
             "arr_info_list_to_table": arr_info_list_to_table,
             "array_to_info": array_to_info,
             "py_data_to_cpp_table": py_data_to_cpp_table,
@@ -536,7 +537,7 @@ def sort_distributed_run(
     bounds_var = bounds
     if bounds is None:
         loc = sort_node.loc
-        bounds_var = ir.Var(ir.Scope(None, loc), mk_unique_var("$bounds_none"), loc)
+        bounds_var = ir.Var(out_vars[0].scope, mk_unique_var("$bounds_none"), loc)
         typemap[bounds_var.name] = types.none
         nodes.append(ir.Assign(ir.Const(None, loc), bounds_var, loc))
 
@@ -562,44 +563,6 @@ def sort_distributed_run(
 
 
 distributed_pass.distributed_run_extensions[Sort] = sort_distributed_run
-
-
-def _copy_array_nodes(var, nodes, typingctx, targetctx, typemap, calltypes, dead_cols):
-    """generate IR nodes for copying an array
-
-    Args:
-        var (ir.Var): variable of array to copy
-        nodes (list[ir.Stmt]): list of IR nodes to add output to
-        typingctx (typing.Context): typing context for compiler pipeline
-        targetctx (cpu.CPUContext): target context for compiler pipeline
-        typemap (dict(str, ir.Var)): typemap of variables
-        calltypes (dict[ir.Inst, Signature]): signature of callable nodes
-    """
-    from bodo.hiframes.table import TableType
-
-    impl = lambda arr: arr.copy()  # pragma: no cover
-
-    used_columns = None
-    if isinstance(typemap[var.name], TableType):
-        n_table_cols = len(typemap[var.name].arr_types)
-        used_columns = set(range(n_table_cols)) - dead_cols
-        used_columns = MetaType(tuple(sorted(used_columns)))
-        impl = lambda T: bodo.utils.table_utils.generate_mappable_table_func(
-            T, "copy", types.none, True, used_cols=_used_columns
-        )  # pragma: no cover
-
-    f_block = compile_to_numba_ir(
-        impl,
-        {"bodo": bodo, "types": types, "_used_columns": used_columns},
-        typingctx=typingctx,
-        targetctx=targetctx,
-        arg_typs=(typemap[var.name],),
-        typemap=typemap,
-        calltypes=calltypes,
-    ).blocks.popitem()[1]
-    replace_arg_nodes(f_block, [var])
-    nodes += f_block.body[:-2]
-    return nodes[-1].target
 
 
 def get_sort_cpp_section(sort_node, out_types, typemap, parallel):
@@ -675,14 +638,22 @@ def get_sort_cpp_section(sort_node, out_types, typemap, parallel):
         ",".join("1" if i in dead_keys else "0" for i in range(key_count))
     )
     # single-element numpy array to return number of rows from C++
-    func_text += f"  total_rows_np = np.array([0], dtype=np.int64)\n"
+    func_text += "  total_rows_np = np.array([0], dtype=np.int64)\n"
     bounds_in = sort_node._bodo_chunk_bounds
     bounds_table = (
         "0"
         if bounds_in is None or is_overload_none(typemap[bounds_in.name])
         else "arr_info_list_to_table([array_to_info(bounds_in)])"
     )
-    func_text += f"  out_cpp_table = sort_values_table(in_cpp_table, {key_count}, vect_ascending.ctypes, na_position.ctypes, dead_keys.ctypes, total_rows_np.ctypes, {bounds_table}, {parallel})\n"
+
+    # NOTE: C++ will delete in_cpp_table pointer
+
+    if sort_node._bodo_interval_sort:
+        # bounds_in must exist if _bodo_interval_sort
+        bounds_arr = "array_to_info(bounds_in)"
+        func_text += f"  out_cpp_table = sort_table_for_interval_join(in_cpp_table, {bounds_arr}, {bool(key_count == 1)}, {parallel})\n"
+    else:
+        func_text += f"  out_cpp_table = sort_values_table_py_entry(in_cpp_table, {key_count}, vect_ascending.ctypes, na_position.ctypes, dead_keys.ctypes, total_rows_np.ctypes, {bounds_table}, {parallel})\n"
 
     if sort_node.is_table_format:
         comma = "," if n_out_vars == 1 else ""
@@ -703,7 +674,7 @@ def get_sort_cpp_section(sort_node, out_types, typemap, parallel):
                     if not type_has_unknown_cats(out_types[i])
                     else f"arg{i}"
                 )
-                func_text += f"  out{i} = info_to_array(info_from_table(out_cpp_table, {out_ind}), {out_type})\n"
+                func_text += f"  out{i} = array_from_cpp_table(out_cpp_table, {out_ind}, {out_type})\n"
                 arr_vars.append(f"out{i}")
 
         comma = "," if len(arr_vars) == 1 else ""
@@ -711,8 +682,7 @@ def get_sort_cpp_section(sort_node, out_types, typemap, parallel):
         func_text += f"  out_data = {out_rets_tup}\n"
 
     func_text += "  delete_table(out_cpp_table)\n"
-    func_text += "  delete_table(in_cpp_table)\n"
-    func_text += f"  return out_data\n"
+    func_text += "  return out_data\n"
 
     return func_text, {
         "in_col_inds": MetaType(tuple(in_cpp_col_inds)),
@@ -804,13 +774,15 @@ def sort_table_column_use(
         return
 
     rhs_table = sort_node.in_vars[0].name
+    rhs_key = (rhs_table, None)
     lhs_table = sort_node.out_vars[0].name
+    lhs_key = (lhs_table, None)
 
     (
         orig_used_cols,
         orig_use_all,
         orig_cannot_del_cols,
-    ) = block_use_map[rhs_table]
+    ) = block_use_map[rhs_key]
 
     # skip if input already uses all columns or cannot delete the table
     if orig_use_all or orig_cannot_del_cols:
@@ -821,12 +793,12 @@ def sort_table_column_use(
         used_cols,
         use_all,
         cannot_del_cols,
-    ) = _compute_table_column_uses(lhs_table, table_col_use_map, equiv_vars)
+    ) = _compute_table_column_uses(lhs_key, table_col_use_map, equiv_vars)
 
     # key columns are always used in sorting
-    table_key_set = set(i for i in sort_node.key_inds if i < sort_node.num_table_arrays)
+    table_key_set = {i for i in sort_node.key_inds if i < sort_node.num_table_arrays}
 
-    block_use_map[rhs_table] = (
+    block_use_map[rhs_key] = (
         orig_used_cols | used_cols | table_key_set,
         use_all or cannot_del_cols,
         False,
@@ -855,9 +827,10 @@ def sort_remove_dead_column(sort_node, column_live_map, equiv_vars, typemap):
 
     n_table_cols = sort_node.num_table_arrays
     lhs_table = sort_node.out_vars[0].name
+    lhs_table_key = (lhs_table, None)
 
     used_columns = _find_used_columns(
-        lhs_table, n_table_cols, column_live_map, equiv_vars
+        lhs_table_key, n_table_cols, column_live_map, equiv_vars
     )
 
     # None means all columns are used so we can't prune any columns
@@ -866,7 +839,7 @@ def sort_remove_dead_column(sort_node, column_live_map, equiv_vars, typemap):
 
     dead_columns = set(range(n_table_cols)) - used_columns
 
-    table_key_set = set(i for i in sort_node.key_inds if i < n_table_cols)
+    table_key_set = {i for i in sort_node.key_inds if i < n_table_cols}
     new_dead_keys = sort_node.dead_key_var_inds | (dead_columns & table_key_set)
     new_dead_vars = sort_node.dead_var_inds | (dead_columns - table_key_set)
     removed = (new_dead_keys != sort_node.dead_key_var_inds) | (

@@ -1,8 +1,8 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
 converts Series operations to array operations as much as possible
 to provide implementation and enable optimization.
 """
+
 import operator
 import sys
 import warnings
@@ -24,6 +24,7 @@ from numba.core.ir_utils import (
     guard,
     mk_unique_var,
     replace_arg_nodes,
+    require,
 )
 from numba.core.typing.templates import Signature
 
@@ -77,10 +78,12 @@ from bodo.hiframes.series_str_impl import (
 from bodo.hiframes.split_impl import StringArraySplitViewType
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.libs.bool_arr_ext import (
-    boolean_array,
+    BooleanArrayType,
+    boolean_array_type,
     is_valid_boolean_array_logical_op,
 )
 from bodo.libs.decimal_arr_ext import DecimalArrayType
+from bodo.libs.float_arr_ext import FloatingArrayType
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.map_arr_ext import MapArrayType
 from bodo.libs.str_arr_ext import StringArrayType, string_array_type
@@ -88,6 +91,7 @@ from bodo.libs.str_ext import string_type
 from bodo.libs.struct_arr_ext import StructArrayType
 from bodo.libs.tuple_arr_ext import TupleArrayType
 from bodo.transforms.dataframe_pass import DataFramePass
+from bodo.transforms.typing_pass import _get_state_defining_call
 from bodo.utils.transform import (
     ReplaceFunc,
     avoid_udf_inline,
@@ -95,6 +99,8 @@ from bodo.utils.transform import (
     extract_keyvals_from_struct_map,
     get_call_expr_arg,
     replace_func,
+    set_2nd_to_last_arg_to_true,
+    set_last_arg_to_true,
     update_locs,
 )
 from bodo.utils.typing import (
@@ -106,10 +112,14 @@ from bodo.utils.typing import (
     get_overload_const_int,
     get_overload_const_str,
     get_overload_const_tuple,
+    is_bodosql_context_type,
     is_literal_type,
     is_overload_constant_str,
     is_overload_constant_tuple,
+    is_overload_false,
+    is_overload_none,
     is_str_arr_type,
+    unwrap_typeref,
 )
 from bodo.utils.utils import (
     find_build_tuple,
@@ -123,25 +133,8 @@ from bodo.utils.utils import (
     is_whole_slice,
 )
 
-ufunc_names = set(f.__name__ for f in numba.core.typing.npydecl.supported_ufuncs)
+ufunc_names = {f.__name__ for f in numba.core.typing.npydecl.supported_ufuncs}
 
-
-_dt_index_binops = (
-    "==",
-    "!=",
-    ">=",
-    ">",
-    "<=",
-    "<",
-    "-",
-    operator.eq,
-    operator.ne,
-    operator.ge,
-    operator.gt,
-    operator.le,
-    operator.lt,
-    operator.sub,
-)
 
 _string_array_comp_ops = (
     operator.eq,
@@ -151,35 +144,6 @@ _string_array_comp_ops = (
     operator.le,
     operator.lt,
 )
-
-_binop_to_str = {
-    operator.eq: "==",
-    operator.ne: "!=",
-    operator.ge: ">=",
-    operator.gt: ">",
-    operator.le: "<=",
-    operator.lt: "<",
-    operator.sub: "-",
-    operator.add: "+",
-    operator.mul: "*",
-    operator.truediv: "/",
-    operator.floordiv: "//",
-    operator.mod: "%",
-    operator.pow: "**",
-    "==": "==",
-    "!=": "!=",
-    ">=": ">=",
-    ">": ">",
-    "<=": "<=",
-    "<": "<",
-    "-": "-",
-    "+": "+",
-    "*": "*",
-    "/": "/",
-    "//": "//",
-    "%": "%",
-    "**": "**",
-}
 
 
 class SeriesPass:
@@ -197,6 +161,8 @@ class SeriesPass:
         calltypes,
         _locals,
         optimize_inplace_ops=True,
+        avoid_copy_propagation=False,
+        parfor_metadata=None,
     ):
         self.func_ir = func_ir
         self.typingctx = typingctx
@@ -204,7 +170,7 @@ class SeriesPass:
         self.typemap = typemap
         self.calltypes = calltypes
         self.locals = _locals
-        # dataframe transformation module to try on each statement
+        # DataFrame transformation module to try on each statement
         self.dataframe_pass = DataFramePass(
             func_ir, typingctx, targetctx, typemap, calltypes
         )
@@ -212,6 +178,11 @@ class SeriesPass:
         self.optimize_inplace_ops = optimize_inplace_ops
         # Loc object of current location being translated
         self.curr_loc = self.func_ir.loc
+        # Skip copy propagation. This is used for testing purposes where
+        # copy propagation interferes with simple checks of the IR.
+        self.avoid_copy_propagation = avoid_copy_propagation
+        # Metadata information for parfor used to track user variables
+        self.parfor_metadata = parfor_metadata
 
     def run(self):
         """run series/dataframe transformations"""
@@ -219,16 +190,16 @@ class SeriesPass:
         # topo_order necessary so Series data replacement optimization can be
         # performed in one pass
         topo_order = find_topo_order(blocks)
-        # find the potentially updated dataframes to avoid optimizing out
+        # find the potentially updated DataFrames to avoid optimizing out
         # get_dataframe_data() calls incorrectly
         self.dataframe_pass._updated_dataframes = self._get_updated_dataframes(
             blocks, topo_order
         )
-        # Keep track of the updated dataframes already visited on this pass.
+        # Keep track of the updated DataFrames already visited on this pass.
         self.dataframe_pass._visited_updated_dataframes = set()
 
-        # NOTE: this is iterating in topological order; we're poping from the reversed ordering.
-        work_list = list((l, blocks[l]) for l in reversed(topo_order))
+        # NOTE: this is iterating in topological order; we're popping from the reversed ordering.
+        work_list = [(l, blocks[l]) for l in reversed(topo_order)]
         changed = False
         while work_list:
             label, block = work_list.pop()
@@ -272,7 +243,8 @@ class SeriesPass:
                         # extra pass over the IR (reducing compilation time).
                         bodo.ir.csv_ext.check_node_typing(inst, self.typemap)
                 except BodoError as e:
-                    raise BodoError(self.curr_loc.strformat() + "\n" + str(e))
+                    msg = f"{self.curr_loc.strformat()}\n{str(e)}"
+                    raise BodoError(msg)
 
                 if isinstance(out_nodes, list):
                     new_body.extend(out_nodes)
@@ -293,7 +265,7 @@ class SeriesPass:
                     # replace inst.value to a call with target args
                     # as expected by inline_closure_call
                     inst.value = ir.Expr.call(
-                        ir.Var(block.scope, "dummy", inst.loc),
+                        ir.Var(block.scope, mk_unique_var("dummy"), inst.loc),
                         rp_func.args,
                         (),
                         inst.loc,
@@ -301,7 +273,10 @@ class SeriesPass:
                     # replace "target" of Setitem nodes since inline_closure_call
                     # assumes an assignment and sets "target" to return value
                     if isinstance(inst, (ir.SetItem, ir.StaticSetItem)):
-                        inst.target = ir.Var(block.scope, "dummy", inst.loc)
+                        dummy_varname = mk_unique_var("dummy")
+                        inst.target = ir.Var(block.scope, dummy_varname, inst.loc)
+                        # Append the dummy var to the typemap for correctness.
+                        self.typemap[dummy_varname] = types.none
                     block.body = new_body + block.body[i:]
                     # save work_list length to know how many new items are added
                     n_prev_work_items = len(work_list)
@@ -468,7 +443,7 @@ class SeriesPass:
             )
             return replace_func(self, impl, (target, idx), pre_nodes=nodes)
 
-        # simplify geitem on Series with constant Index values
+        # simplify getitem on Series with constant Index values
         # used for df.apply() UDF optimization
         if (
             isinstance(target_typ, (SeriesType, HeterogeneousSeriesType))
@@ -708,7 +683,7 @@ class SeriesPass:
             val_def = guard(get_definition, self.func_ir, inst.value)
             if (
                 is_expr(val_def, "getitem") or is_expr(val_def, "static_getitem")
-            ) and self.typemap[val_def.value.name] == string_array_type:
+            ) and is_str_arr_type(self.typemap[val_def.value.name]):
                 val_idx = get_getsetitem_index_var(val_def, self.typemap, nodes)
                 return nodes + compile_func_single_block(
                     eval(
@@ -861,15 +836,27 @@ class SeriesPass:
             impl = overload_func(rhs_type)
             return replace_func(self, impl, [rhs.value])
 
+        # Replace T.shape to optimize out T.shape[1] (can be generated in BodoSQL)
+        if (
+            isinstance(rhs_type, bodo.TableType)
+            and rhs.attr == "shape"
+            and not rhs_type.has_runtime_cols
+        ):
+            n_cols = len(rhs_type.arr_types)
+            return compile_func_single_block(
+                eval(f"lambda T: (len(T), {n_cols})"),
+                [rhs.value],
+                assign.target,
+                self,
+            )
+
         # replace series/arr.dtype since PA replacement inserts in the
         # beginning of block, preventing fusion. TODO: fix PA
         if rhs.attr == "dtype" and isinstance(
             if_series_to_array_type(rhs_type), types.Array
         ):
             typ_str = str(rhs_type.dtype)
-            assign.value = ir.Global(
-                "np.dtype({})".format(typ_str), np.dtype(typ_str), rhs.loc
-            )
+            assign.value = ir.Global(f"np.dtype({typ_str})", np.dtype(typ_str), rhs.loc)
             return [assign]
 
         # Start of Index Operations
@@ -970,13 +957,7 @@ class SeriesPass:
                 "init_sql_context",
                 "bodosql.context_ext",
             ):
-                # Try import BodoSQL and check the type
-                try:  # pragma: no cover
-                    from bodosql.context_ext import BodoSQLContextType
-                except:
-                    # workaround: something that makes isinstance(type, BodoSQLContextType) always false
-                    BodoSQLContextType = int
-                if isinstance(rhs_type, BodoSQLContextType):
+                if is_bodosql_context_type(rhs_type):
                     assign.value = sql_ctx_def.args[1]
                     return [assign]
 
@@ -1019,7 +1000,7 @@ class SeriesPass:
         if rhs.fn == operator.sub and (
             is_dt64_series_typ(typ1)
             and (
-                typ2 == bodo.hiframes.pd_timestamp_ext.pd_timestamp_type
+                typ2 == bodo.hiframes.pd_timestamp_ext.pd_timestamp_tz_naive_type
                 or typ2 == datetime_timedelta_type
                 or typ2 == datetime_datetime_type
                 or is_timedelta64_series_typ(typ2)
@@ -1028,7 +1009,7 @@ class SeriesPass:
             or (
                 is_dt64_series_typ(typ2)
                 and (
-                    typ1 == bodo.hiframes.pd_timestamp_ext.pd_timestamp_type
+                    typ1 == bodo.hiframes.pd_timestamp_ext.pd_timestamp_tz_naive_type
                     or typ1 == datetime_datetime_type
                 )
             )
@@ -1048,7 +1029,6 @@ class SeriesPass:
                 and (typ1 == datetime_timedelta_type or is_timedelta64_series_typ(typ1))
             )
         ):
-
             impl = bodo.hiframes.series_dt_impl.create_bin_op_overload(rhs.fn)(
                 typ1, typ2
             )
@@ -1083,14 +1063,14 @@ class SeriesPass:
         if rhs.fn in cmp_ops and (
             is_dt64_series_typ(typ1)
             and (
-                typ2 == bodo.hiframes.pd_timestamp_ext.pd_timestamp_type
+                typ2 == bodo.hiframes.pd_timestamp_ext.pd_timestamp_tz_naive_type
                 or typ2 == string_type
                 or bodo.utils.typing.is_overload_constant_str(typ2)
             )
             or (
                 is_dt64_series_typ(typ2)
                 and (
-                    typ1 == bodo.hiframes.pd_timestamp_ext.pd_timestamp_type
+                    typ1 == bodo.hiframes.pd_timestamp_ext.pd_timestamp_tz_naive_type
                     or typ1 == string_type
                     or bodo.utils.typing.is_overload_constant_str(typ1)
                 )
@@ -1139,11 +1119,11 @@ class SeriesPass:
         if rhs.fn == operator.sub and (
             (
                 isinstance(typ1, DatetimeIndexType)
-                and typ2 == bodo.hiframes.pd_timestamp_ext.pd_timestamp_type
+                and typ2 == bodo.hiframes.pd_timestamp_ext.pd_timestamp_tz_naive_type
             )
             or (
                 isinstance(typ2, DatetimeIndexType)
-                and typ1 == bodo.hiframes.pd_timestamp_ext.pd_timestamp_type
+                and typ1 == bodo.hiframes.pd_timestamp_ext.pd_timestamp_tz_naive_type
             )
         ):
             impl = bodo.hiframes.pd_index_ext.overload_sub_operator_datetime_index(
@@ -1176,6 +1156,16 @@ class SeriesPass:
 
         if rhs.fn == operator.add and (is_str_arr_type(typ1) or is_str_arr_type(typ2)):
             impl = bodo.libs.str_arr_ext.overload_add_operator_string_array(typ1, typ2)
+            return replace_func(self, impl, [arg1, arg2])
+
+        # Add for tz-aware
+        if rhs.fn == operator.add and (
+            isinstance(typ1, bodo.DatetimeArrayType)
+            or isinstance(typ2, bodo.DatetimeArrayType)
+        ):
+            impl = bodo.libs.pd_datetime_arr_ext.overload_add_operator_datetime_arr(
+                typ1, typ2
+            )
             return replace_func(self, impl, [arg1, arg2])
 
         if rhs.fn == operator.sub and typ2 == datetime_timedelta_type:
@@ -1254,6 +1244,35 @@ class SeriesPass:
                 self, bodo.libs.array_kernels.arr_contains(typ1, typ2), [arg1, arg2]
             )
 
+        # Inline tz-aware array operations
+        if rhs.fn in cmp_ops and (
+            isinstance(typ1, bodo.libs.pd_datetime_arr_ext.DatetimeArrayType)
+            or isinstance(typ2, bodo.libs.pd_datetime_arr_ext.DatetimeArrayType)
+        ):
+            impl = bodo.libs.pd_datetime_arr_ext.create_cmp_op_overload_arr(rhs.fn)(
+                typ1, typ2
+            )
+            return replace_func(self, impl, [arg1, arg2])
+
+        # Inline tz-naive array + date operations
+        if (
+            rhs.fn in cmp_ops
+            and (
+                isinstance(typ1, types.Array)
+                and typ1.dtype == bodo.datetime64ns
+                and typ2 in (bodo.datetime_date_array_type, bodo.datetime_date_type)
+            )
+            or (
+                typ1 in (bodo.datetime_date_array_type, bodo.datetime_date_type)
+                and isinstance(typ2, types.Array)
+                and typ2.dtype == bodo.datetime64ns
+            )
+        ):
+            impl = bodo.hiframes.datetime_date_ext.create_datetime_array_date_cmp_op_overload(
+                rhs.fn
+            )(typ1, typ2)
+            return replace_func(self, impl, [arg1, arg2])
+
         # datetime_date_array operations
         if rhs.fn in cmp_ops and (
             typ1 == datetime_date_array_type or typ2 == datetime_date_array_type
@@ -1284,6 +1303,11 @@ class SeriesPass:
         if (
             rhs.fn in numba.core.typing.npydecl.NumpyRulesArrayOperator._op_map.keys()
             and any(isinstance(t, IntegerArrayType) for t in (typ1, typ2))
+            # NOTE: decimal array comparison isn't inlined since it uses Arrow compute
+            and not (
+                any(isinstance(t, DecimalArrayType) for t in (typ1, typ2))
+                and rhs.fn in cmp_ops
+            )
         ):
             overload_func = bodo.libs.int_arr_ext.create_op_overload(rhs.fn, 2)
             impl = overload_func(typ1, typ2)
@@ -1298,9 +1322,32 @@ class SeriesPass:
             impl = overload_func(typ1, typ2)
             return replace_func(self, impl, [arg1, arg2])
 
+        # inline remaining Float array ops
+        if (
+            rhs.fn in numba.core.typing.npydecl.NumpyRulesArrayOperator._op_map.keys()
+            and any(isinstance(t, FloatingArrayType) for t in (typ1, typ2))
+            # NOTE: decimal array comparison isn't inlined since it uses Arrow compute
+            and not (
+                any(isinstance(t, DecimalArrayType) for t in (typ1, typ2))
+                and rhs.fn in cmp_ops
+            )
+        ):
+            overload_func = bodo.libs.float_arr_ext.create_op_overload(rhs.fn, 2)
+            impl = overload_func(typ1, typ2)
+            return replace_func(self, impl, [arg1, arg2])
+
+        if (
+            rhs.fn
+            in numba.core.typing.npydecl.NumpyRulesInplaceArrayOperator._op_map.keys()
+            and any(isinstance(t, FloatingArrayType) for t in (typ1, typ2))
+        ):  # pragma: no cover
+            overload_func = bodo.libs.float_arr_ext.create_op_overload(rhs.fn, 2)
+            impl = overload_func(typ1, typ2)
+            return replace_func(self, impl, [arg1, arg2])
+
         # inline operator.or_ and operator.and_ for boolean arrays
         if (rhs.fn in [operator.or_, operator.and_]) and any(
-            t == boolean_array for t in (typ1, typ2)
+            t == boolean_array_type for t in (typ1, typ2)
         ):
             if is_valid_boolean_array_logical_op(typ1, typ2):
                 impl = bodo.libs.bool_arr_ext.create_nullable_logical_op_overload(
@@ -1312,7 +1359,7 @@ class SeriesPass:
         # inline Boolean array ops
         if (
             rhs.fn in numba.core.typing.npydecl.NumpyRulesArrayOperator._op_map.keys()
-            and any(t == boolean_array for t in (typ1, typ2))
+            and any(t == boolean_array_type for t in (typ1, typ2))
             # Don't inline operators between array + Series. These should be handled
             # by Series
             and not any(isinstance(t, SeriesType) for t in (typ1, typ2))
@@ -1324,7 +1371,7 @@ class SeriesPass:
         if (
             rhs.fn
             in numba.core.typing.npydecl.NumpyRulesInplaceArrayOperator._op_map.keys()
-            and any(t == boolean_array for t in (typ1, typ2))
+            and any(t == boolean_array_type for t in (typ1, typ2))
         ):
             overload_func = bodo.libs.bool_arr_ext.create_op_overload(rhs.fn, 2)
             impl = overload_func(typ1, typ2)
@@ -1371,13 +1418,19 @@ class SeriesPass:
             impl = overload_func(typ)
             return replace_func(self, impl, [arg])
 
-        if isinstance(typ, IntegerArrayType):
+        if isinstance(typ, IntegerArrayType):  # pragma: no cover
             assert rhs.fn in (operator.neg, operator.invert, operator.pos)
             overload_func = bodo.libs.int_arr_ext.create_op_overload(rhs.fn, 1)
             impl = overload_func(typ)
             return replace_func(self, impl, [arg])
 
-        if typ == boolean_array:
+        if isinstance(typ, FloatingArrayType):  # pragma: no cover
+            assert rhs.fn in (operator.neg, operator.pos)
+            overload_func = bodo.libs.float_arr_ext.create_op_overload(rhs.fn, 1)
+            impl = overload_func(typ)
+            return replace_func(self, impl, [arg])
+
+        if typ == boolean_array_type:
             assert rhs.fn in (operator.neg, operator.invert, operator.pos)
             overload_func = bodo.libs.bool_arr_ext.create_op_overload(rhs.fn, 1)
             impl = overload_func(typ)
@@ -1453,12 +1506,53 @@ class SeriesPass:
             and len(rhs.args) == 1
             and isinstance(self.typemap[rhs.args[0].name], SeriesType)
         ):
-
             impl = getattr(bodo.hiframes.series_impl, "overload_series_" + func_name)(
                 self.typemap[rhs.args[0].name]
             )
             return replace_func(
                 self, impl, rhs.args, pysig=numba.core.utils.pysignature(impl), kws=()
+            )
+
+        # inline builtin calls on Bodo nullable arrays (NOTE: our overload
+        # implementation which has inline='always' may not be pick up by Numba since
+        # Bodo arrays are iterables, see test_int_array.py::test_min)
+        if (
+            func_mod == "builtins"
+            and func_name in ("min", "max", "sum")
+            and len(rhs.args) == 1
+            and isinstance(
+                self.typemap[rhs.args[0].name],
+                (IntegerArrayType, FloatingArrayType, BooleanArrayType),
+            )
+        ):
+            impl = getattr(bodo.libs.array_kernels, "overload_array_" + func_name)(
+                self.typemap[rhs.args[0].name]
+            )
+            return replace_func(
+                self, impl, rhs.args, pysig=numba.core.utils.pysignature(impl), kws=()
+            )
+
+        # inline Series methods (necessary since used in min/max/sum array overloads
+        # above)
+        if (
+            isinstance(func_mod, ir.Var)
+            and isinstance(self.typemap[func_mod.name], SeriesType)
+            and func_name in ("min", "max", "sum")
+            and len(rhs.args) == 0
+        ):
+            rhs.args.insert(0, func_mod)
+            arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
+            kw_typs = {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()}
+
+            impl = getattr(bodo.hiframes.series_impl, "overload_series_" + func_name)(
+                *arg_typs, **kw_typs
+            )
+            return replace_func(
+                self,
+                impl,
+                rhs.args,
+                pysig=numba.core.utils.pysignature(impl),
+                kws=dict(rhs.kws),
             )
 
         # inline ufuncs on IntegerArray
@@ -1471,16 +1565,95 @@ class SeriesPass:
         ):
             return self._handle_ufuncs_int_arr(func_name, rhs.args)
 
+        # inline ufuncs on FloatingArray
+        if (
+            func_mod in ("numpy", "ufunc")
+            and func_name in ufunc_names
+            and any(
+                isinstance(self.typemap[a.name], FloatingArrayType) for a in rhs.args
+            )
+        ):  # pragma: no cover
+            return self._handle_ufuncs_float_arr(func_name, rhs.args)
+
         # inline ufuncs on BooleanArray
         if (
             func_mod in ("numpy", "ufunc")
             and func_name in ufunc_names
-            and any(self.typemap[a.name] == boolean_array for a in rhs.args)
+            and any(self.typemap[a.name] == boolean_array_type for a in rhs.args)
         ):
             return self._handle_ufuncs_bool_arr(func_name, rhs.args)
 
+        # Set input_dicts_unified flag if input is already unified in previous streaming
+        # operator
+        if fdef == ("table_builder_append", "bodo.libs.table_builder"):
+            state_def = guard(
+                _get_state_defining_call,
+                self.func_ir,
+                rhs.args[0],
+                ("init_table_builder_state", "bodo.libs.table_builder"),
+            )
+            if (
+                state_def is not None
+                and self.calltypes[state_def].args[-1] == types.Omitted(False)
+                and guard(self._is_unified_streaming_output, rhs.args[1])
+            ):
+                set_last_arg_to_true(self, state_def)
+
+        # Set input_dicts_unified flag if input is already unified in previous streaming
+        # operator
+        if fdef == (
+            "snowflake_writer_append_table",
+            "bodo.io.snowflake_write",
+        ):
+            state_def = guard(
+                _get_state_defining_call,
+                self.func_ir,
+                rhs.args[0],
+                ("snowflake_writer_init", "bodo.io.snowflake_write"),
+            )
+            if (
+                state_def is not None
+                and self.calltypes[state_def].args[-2] == types.Omitted(False)
+                and guard(self._is_unified_streaming_output, rhs.args[1])
+            ):
+                set_2nd_to_last_arg_to_true(self, state_def)
+
+        if fdef == (
+            "iceberg_writer_append_table",
+            "bodo.io.stream_iceberg_write",
+        ):
+            state_def = guard(
+                _get_state_defining_call,
+                self.func_ir,
+                rhs.args[0],
+                ("iceberg_writer_init", "bodo.io.stream_iceberg_write"),
+            )
+            if (
+                state_def is not None
+                and self.calltypes[state_def].args[-2] == types.Omitted(False)
+                and guard(self._is_unified_streaming_output, rhs.args[1])
+            ):
+                set_2nd_to_last_arg_to_true(self, state_def)
+
+        if fdef == (
+            "parquet_writer_append_table",
+            "bodo.io.stream_parquet_write",
+        ):
+            state_def = guard(
+                _get_state_defining_call,
+                self.func_ir,
+                rhs.args[0],
+                ("parquet_writer_init", "bodo.io.stream_parquet_write"),
+            )
+            if (
+                state_def is not None
+                and self.calltypes[state_def].args[-2] == types.Omitted(False)
+                and guard(self._is_unified_streaming_output, rhs.args[1])
+            ):
+                set_2nd_to_last_arg_to_true(self, state_def)
+
         # support matplot lib calls
-        if "matplotlib" in sys.modules:
+        if "bodo.libs.matplotlib_ext" in sys.modules:
             # matplotlib.pyplot functions
             if (
                 func_mod == "matplotlib.pyplot"
@@ -1552,16 +1725,6 @@ class SeriesPass:
                     kws=dict(rhs.kws),
                 )  # pragma: no cover
 
-        if fdef == ("apply_null_mask", "bodo.libs.int_arr_ext"):
-            in_typs = tuple(self.typemap[a.name] for a in rhs.args)
-            impl = bodo.libs.int_arr_ext.apply_null_mask.py_func(*in_typs)
-            return replace_func(self, impl, rhs.args)
-
-        if fdef == ("merge_bitmaps", "bodo.libs.int_arr_ext"):
-            in_typs = tuple(self.typemap[a.name] for a in rhs.args)
-            impl = bodo.libs.int_arr_ext.merge_bitmaps.py_func(*in_typs)
-            return replace_func(self, impl, rhs.args)
-
         if fdef == ("get_int_arr_data", "bodo.libs.int_arr_ext"):
             var_def = guard(get_definition, self.func_ir, rhs.args[0])
             call_def = guard(find_callname, self.func_ir, var_def, self.typemap)
@@ -1576,25 +1739,25 @@ class SeriesPass:
                 assign.value = var_def.args[1]
                 return [assign]
 
-        if fdef == ("get_bool_arr_data", "bodo.libs.bool_arr_ext"):
+        if fdef == ("get_float_arr_data", "bodo.libs.float_arr_ext"):
             var_def = guard(get_definition, self.func_ir, rhs.args[0])
             call_def = guard(find_callname, self.func_ir, var_def, self.typemap)
-            if call_def == ("init_bool_array", "bodo.libs.bool_arr_ext"):
+            if call_def == ("init_float_array", "bodo.libs.float_arr_ext"):
                 assign.value = var_def.args[0]
                 return [assign]
 
-        if fdef == ("get_bool_arr_bitmap", "bodo.libs.bool_arr_ext"):
+        if fdef == ("get_float_arr_bitmap", "bodo.libs.float_arr_ext"):
             var_def = guard(get_definition, self.func_ir, rhs.args[0])
             call_def = guard(find_callname, self.func_ir, var_def, self.typemap)
-            if call_def == ("init_bool_array", "bodo.libs.bool_arr_ext"):
+            if call_def == ("init_float_array", "bodo.libs.float_arr_ext"):
                 assign.value = var_def.args[1]
                 return [assign]
 
-        # inline IntegerArrayType.copy()
+        # inline IntegerArrayType.astype()
         if (
             isinstance(func_mod, ir.Var)
             and isinstance(self.typemap[func_mod.name], IntegerArrayType)
-            and func_name in ("copy", "astype", "sum")
+            and func_name in ("astype", "sum")
         ):
             rhs.args.insert(0, func_mod)
             arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
@@ -1611,11 +1774,32 @@ class SeriesPass:
                 kws=dict(rhs.kws),
             )
 
-        # inline BooleanArray.copy()
+        # inline FloatingArrayType.astype()
         if (
             isinstance(func_mod, ir.Var)
-            and self.typemap[func_mod.name] == boolean_array
-            and func_name in ("copy", "astype")
+            and isinstance(self.typemap[func_mod.name], FloatingArrayType)
+            and func_name in ("astype", "sum")
+        ):  # pragma: no cover
+            rhs.args.insert(0, func_mod)
+            arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
+            kw_typs = {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()}
+
+            impl = getattr(bodo.libs.float_arr_ext, "overload_float_arr_" + func_name)(
+                *arg_typs, **kw_typs
+            )
+            return replace_func(
+                self,
+                impl,
+                rhs.args,
+                pysig=numba.core.utils.pysignature(impl),
+                kws=dict(rhs.kws),
+            )
+
+        # inline BooleanArray.astype()
+        if (
+            isinstance(func_mod, ir.Var)
+            and self.typemap[func_mod.name] == boolean_array_type
+            and func_name in ("astype",)
         ):
             rhs.args.insert(0, func_mod)
             arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
@@ -1796,39 +1980,37 @@ class SeriesPass:
                     func_text += "  start_0 = 0\n"
                     func_text += "  size_0 = len(read_indices)\n"
                 else:
-                    func_text += "  start_{0} = 0\n".format(i)
-                    func_text += "  size_{0} = bodo.io.h5_api.h5size(dset_id, np.int32({0}))\n".format(
-                        i
+                    func_text += f"  start_{i} = 0\n"
+                    func_text += (
+                        f"  size_{i} = bodo.io.h5_api.h5size(dset_id, np.int32({i}))\n"
                     )
                     if i < len(index_types):
                         if isinstance(index_types[i], types.SliceType):
                             func_text += "  slice_idx_{0} = numba.cpython.unicode._normalize_slice(index{1}, size_{0})\n".format(
                                 i,
-                                "[{}]".format(i)
+                                f"[{i}]"
                                 if isinstance(index_tp, types.BaseTuple)
                                 else "",
                             )
-                            func_text += "  start_{0} = slice_idx_{0}.start\n".format(i)
-                            func_text += "  size_{0} = numba.cpython.unicode._slice_span(slice_idx_{0})\n".format(
-                                i
-                            )
+                            func_text += f"  start_{i} = slice_idx_{i}.start\n"
+                            func_text += f"  size_{i} = numba.cpython.unicode._slice_span(slice_idx_{i})\n"
                         else:
                             assert isinstance(
                                 types.unliteral(index_types[i]), types.Integer
                             )
-                            func_text += "  start_{0} = index{1}\n".format(
+                            func_text += "  start_{} = index{}\n".format(
                                 i,
-                                "[{}]".format(i)
+                                f"[{i}]"
                                 if isinstance(index_tp, types.BaseTuple)
                                 else "",
                             )
-                            func_text += "  size_{0} = 1\n".format(i)
+                            func_text += f"  size_{i} = 1\n"
 
             # array dimensions can be less than dataset due to integer selection
             func_text += "  arr_shape = ({},)\n".format(
                 ", ".join(
                     [
-                        "size_{}".format(i)
+                        f"size_{i}"
                         for i in range(ndim)
                         if not (
                             i < len(index_types)
@@ -1839,23 +2021,19 @@ class SeriesPass:
                     ]
                 )
             )
-            func_text += "  A = np.empty(arr_shape, np.{})\n".format(dtype_str)
+            func_text += f"  A = np.empty(arr_shape, np.{dtype_str})\n"
 
             func_text += "  start_tup = ({},)\n".format(
-                ", ".join(["start_{}".format(i) for i in range(ndim)])
+                ", ".join([f"start_{i}" for i in range(ndim)])
             )
             func_text += "  count_tup = ({},)\n".format(
-                ", ".join(["size_{}".format(i) for i in range(ndim)])
+                ", ".join([f"size_{i}" for i in range(ndim)])
             )
 
             if filter_read:
-                func_text += "  err = bodo.io.h5_api.h5read_filter(dset_id, np.int32({}), start_tup, count_tup, 0, A, read_indices)\n".format(
-                    ndim
-                )
+                func_text += f"  err = bodo.io.h5_api.h5read_filter(dset_id, np.int32({ndim}), start_tup, count_tup, 0, A, read_indices)\n"
             else:
-                func_text += "  err = bodo.io.h5_api.h5read(dset_id, np.int32({}), start_tup, count_tup, 0, A)\n".format(
-                    ndim
-                )
+                func_text += f"  err = bodo.io.h5_api.h5read(dset_id, np.int32({ndim}), start_tup, count_tup, 0, A)\n"
             func_text += "  return A\n"
 
             loc_vars = {}
@@ -1876,38 +2054,7 @@ class SeriesPass:
                 self, impl, rhs.args, pysig=self.calltypes[rhs].pysig, kws=dict(rhs.kws)
             )
 
-        if fdef == ("Int64Index", "pandas"):
-            arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
-            kw_typs = {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()}
-            impl = bodo.hiframes.pd_index_ext.create_numeric_constructor(
-                pd.Int64Index, "pandas.Int64Index", np.int64
-            )(*arg_typs, **kw_typs)
-            return replace_func(
-                self, impl, rhs.args, pysig=self.calltypes[rhs].pysig, kws=dict(rhs.kws)
-            )
-
-        if fdef == ("UInt64Index", "pandas"):
-            arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
-            kw_typs = {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()}
-            impl = bodo.hiframes.pd_index_ext.create_numeric_constructor(
-                pd.UInt64Index, "pandas.UInt64Index", np.uint64
-            )(*arg_typs, **kw_typs)
-            return replace_func(
-                self, impl, rhs.args, pysig=self.calltypes[rhs].pysig, kws=dict(rhs.kws)
-            )
-
-        if fdef == ("Float64Index", "pandas"):
-            arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
-            kw_typs = {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()}
-            impl = bodo.hiframes.pd_index_ext.create_numeric_constructor(
-                pd.Float64Index, "pandas.FloatIndex", np.float64
-            )(*arg_typs, **kw_typs)
-            return replace_func(
-                self, impl, rhs.args, pysig=self.calltypes[rhs].pysig, kws=dict(rhs.kws)
-            )
-
         if fdef == ("Series", "pandas"):
-
             arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
             kw_typs = {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()}
 
@@ -1920,6 +2067,23 @@ class SeriesPass:
         # doesn't have inline pass)
         if fdef in (("notna", "pandas"), ("notnull", "pandas")) and not rhs.kws:
             impl = bodo.hiframes.dataframe_impl.overload_notna(
+                self.typemap[rhs.args[0].name]
+            )
+            return compile_func_single_block(
+                impl,
+                rhs.args,
+                assign.target,
+                self,
+            )
+
+        # inline np.var()/np.std() on nullable float arrays to be parallelized
+        if (
+            fdef in (("std", "numpy"), ("var", "numpy"))
+            and not rhs.kws
+            and len(rhs.args) == 1
+            and isinstance(self.typemap[rhs.args[0].name], FloatingArrayType)
+        ):
+            impl = getattr(bodo.libs.float_arr_ext, "overload_" + func_name)(
                 self.typemap[rhs.args[0].name]
             )
             return compile_func_single_block(
@@ -1992,7 +2156,19 @@ class SeriesPass:
                             assign.target,
                             self,
                         )
+            return [assign]
 
+        # Inline pd.Timestamp() calls on constant strings to avoid going to objmode
+        # (generated by BodoSQL for constant datetimes)
+        if (
+            fdef == ("Timestamp", "pandas")
+            and len(rhs.args) == 1
+            and not rhs.kws
+            and is_overload_constant_str(self.typemap[rhs.args[0].name])
+        ):
+            time_val = get_overload_const_str(self.typemap[rhs.args[0].name])
+            gb_name = f"_bodo_timestamp_const_{ir_utils.next_label()}"
+            assign.value = ir.Global(gb_name, pd.Timestamp(time_val), rhs.loc)
             return [assign]
 
         if fdef == ("argsort", "bodo.hiframes.series_impl"):
@@ -2199,6 +2375,9 @@ class SeriesPass:
             impl = bodo.utils.utils.overload_alloc_type(
                 *tuple(self.typemap[v.name] for v in rhs.args)
             )
+            dict_ref_type = (
+                self.typemap[rhs.args[3].name] if len(rhs.args) > 3 else types.none
+            )
             # create new functions for cases that need dtype since 'dtype' becomes a
             # freevar in overload and doesn't work properly currently.
             # TODO: fix freevar support
@@ -2206,23 +2385,45 @@ class SeriesPass:
             if isinstance(typ, types.TypeRef):
                 typ = typ.instance_type
             dtype = None
+            # Add dict_ref_arr=None to args if not provided to avoid errors
+            args = rhs.args
+            nodes = []
+            if len(args) == 3:
+                scope = assign.target.scope
+                none_var = ir.Var(scope, mk_unique_var("none_var"), rhs.loc)
+                self.typemap[none_var.name] = types.none
+                args.append(none_var)
+                nodes.append(ir.Assign(ir.Const(None, rhs.loc), none_var, rhs.loc))
+
             # nullable int array
-            if isinstance(typ, IntegerArrayType):
+            if isinstance(typ, IntegerArrayType):  # pragma: no cover
                 dtype = typ.dtype
                 impl = eval(
-                    "lambda n, t, s=None: bodo.libs.int_arr_ext.alloc_int_array(n, _dtype)"
+                    "lambda n, t, s=None, dict_ref_arr=None: bodo.libs.int_arr_ext.alloc_int_array(n, _dtype)"
+                )
+            elif isinstance(typ, FloatingArrayType):  # pragma: no cover
+                dtype = typ.dtype
+                impl = eval(
+                    "lambda n, t, s=None, dict_ref_arr=None: bodo.libs.float_arr_ext.alloc_float_array(n, _dtype)"
                 )
             elif isinstance(typ, types.Array):
                 dtype = typ.dtype
                 # avoid dt64 errors in np.empty, TODO: fix Numba
                 if dtype == types.NPDatetime("ns"):
                     dtype = np.dtype("datetime64[ns]")
-                impl = eval("lambda n, t, s=None: np.empty(n, _dtype)")
+                impl = eval(
+                    "lambda n, t, s=None, dict_ref_arr=None: np.empty(n, _dtype)"
+                )
             elif isinstance(typ, ArrayItemArrayType):
                 dtype = typ.dtype
-                impl = eval(
-                    "lambda n, t, s=None: bodo.libs.array_item_arr_ext.pre_alloc_array_item_array(n, s, _dtype)"
-                )
+                if is_overload_none(dict_ref_type):
+                    impl = eval(
+                        "lambda n, t, s=None, dict_ref_arr=None: bodo.libs.array_item_arr_ext.pre_alloc_array_item_array(n, s, _dtype)"
+                    )
+                else:
+                    impl = eval(
+                        "lambda n, t, s=None, dict_ref_arr=None: bodo.libs.array_item_arr_ext.pre_alloc_array_item_array(n, s, bodo.libs.array_item_arr_ext.get_data(dict_ref_arr))"
+                    )
             elif isinstance(typ, CategoricalArrayType):
                 if isinstance(self.typemap[rhs.args[1].name], types.TypeRef):
                     # If we have a type ref we must have types that are compile time constants
@@ -2233,20 +2434,20 @@ class SeriesPass:
                     # create the new categorical dtype inside the function instead of passing as
                     # constant. This avoids constant lowered Index inside the dtype, which can
                     # be slow since it cannot have a dictionary.
-                    # see https://github.com/Bodo-inc/Bodo/pull/3563
+                    # see https://github.com/bodo-ai/Bodo/pull/3563
                     is_ordered = typ.dtype.ordered
                     int_type = typ.dtype.int_type
                     new_cats_arr = bodo.utils.utils.create_categorical_type(
                         typ.dtype.categories, typ.dtype.data.data, is_ordered
                     )
-                    new_cats_tup = MetaType(tuple(new_cats_arr))
+                    new_cats_tup = MetaType(typ.dtype.categories)
                     dtype = "bodo.hiframes.pd_categorical_ext.init_cat_dtype(bodo.utils.conversion.index_from_array(new_cats_arr), is_ordered, int_type, new_cats_tup)"
                     impl = eval(
-                        f"lambda n, t, s=None: bodo.hiframes.pd_categorical_ext.alloc_categorical_array(n, {dtype})"
+                        f"lambda n, t, s=None, dict_ref_arr=None: bodo.hiframes.pd_categorical_ext.alloc_categorical_array(n, {dtype})"
                     )
-                    return compile_func_single_block(
+                    return nodes + compile_func_single_block(
                         impl,
-                        rhs.args,
+                        args,
                         assign.target,
                         self,
                         extra_globals={
@@ -2259,16 +2460,16 @@ class SeriesPass:
                 else:
                     # TODO: Fix the infrastructure so types will match when input-type == output-type
                     impl = eval(
-                        "lambda n, t, s=None: bodo.hiframes.pd_categorical_ext.alloc_categorical_array(n, t.dtype)"
+                        "lambda n, t, s=None, dict_ref_arr=None: bodo.hiframes.pd_categorical_ext.alloc_categorical_array(n, t.dtype)"
                     )
             elif isinstance(typ, StructArrayType):
                 dtypes = typ.data
                 names = typ.names
-                return compile_func_single_block(
+                return nodes + compile_func_single_block(
                     eval(
-                        "lambda n, t, s=None: bodo.libs.struct_arr_ext.pre_alloc_struct_array(n, s, _dtypes, _names)"
+                        "lambda n, t, s=None, dict_ref_arr=None: bodo.libs.struct_arr_ext.pre_alloc_struct_array(n, s, _dtypes, _names, dict_ref_arr)"
                     ),
-                    rhs.args,
+                    args,
                     assign.target,
                     self,
                     extra_globals={"_dtypes": dtypes, "_names": names},
@@ -2277,22 +2478,22 @@ class SeriesPass:
                 struct_typ = StructArrayType(
                     (typ.key_arr_type, typ.value_arr_type), ("key", "value")
                 )
-                return compile_func_single_block(
+                return nodes + compile_func_single_block(
                     eval(
-                        "lambda n, t, s=None: bodo.libs.map_arr_ext.pre_alloc_map_array(n, s, _struct_type)"
+                        "lambda n, t, s=None, dict_ref_arr=None: bodo.libs.map_arr_ext.pre_alloc_map_array(n, s, _struct_type, dict_ref_arr)"
                     ),
-                    rhs.args,
+                    args,
                     assign.target,
                     self,
                     extra_globals={"_struct_type": struct_typ},
                 )
             elif isinstance(typ, TupleArrayType):
                 dtypes = typ.data
-                return compile_func_single_block(
+                return nodes + compile_func_single_block(
                     eval(
-                        "lambda n, t, s=None: bodo.libs.tuple_arr_ext.pre_alloc_tuple_array(n, s, _dtypes)"
+                        "lambda n, t, s=None, dict_ref_arr=None: bodo.libs.tuple_arr_ext.pre_alloc_tuple_array(n, s, _dtypes)"
                     ),
-                    rhs.args,
+                    args,
                     assign.target,
                     self,
                     extra_globals={"_dtypes": dtypes},
@@ -2300,18 +2501,49 @@ class SeriesPass:
             elif isinstance(typ, DecimalArrayType):
                 precision = typ.dtype.precision
                 scale = typ.dtype.scale
-                return compile_func_single_block(
+                return nodes + compile_func_single_block(
                     eval(
-                        "lambda n, t, s=None: bodo.libs.decimal_arr_ext.alloc_decimal_array(n, _precision, _scale)"
+                        "lambda n, t, s=None, dict_ref_arr=None: bodo.libs.decimal_arr_ext.alloc_decimal_array(n, _precision, _scale)"
                     ),
-                    rhs.args,
+                    args,
                     assign.target,
                     self,
                     extra_globals={"_precision": precision, "_scale": scale},
                 )
+            elif isinstance(typ, bodo.DatetimeArrayType):
+                tz = typ.tz
+                return nodes + compile_func_single_block(
+                    eval(
+                        "lambda n, t, s=None, dict_ref_arr=None: bodo.libs.pd_datetime_arr_ext.alloc_pd_datetime_array(n, _tz)"
+                    ),
+                    args,
+                    assign.target,
+                    self,
+                    extra_globals={"_tz": tz},
+                )
+            elif isinstance(typ, bodo.TimeArrayType):
+                precision = typ.precision
+                return nodes + compile_func_single_block(
+                    eval(
+                        "lambda n, t, s=None, dict_ref_arr=None: bodo.hiframes.time_ext.alloc_time_array(n, _precision)"
+                    ),
+                    args,
+                    assign.target,
+                    self,
+                    extra_globals={"_precision": precision},
+                )
+            elif typ == bodo.timestamptz_array_type:
+                return nodes + compile_func_single_block(
+                    eval(
+                        "lambda n, t, s=None, dict_ref_arr=None: bodo.hiframes.timestamptz_ext.alloc_timestamptz_array(n)"
+                    ),
+                    args,
+                    assign.target,
+                    self,
+                )
 
-            return compile_func_single_block(
-                impl, rhs.args, assign.target, self, extra_globals={"_dtype": dtype}
+            return nodes + compile_func_single_block(
+                impl, args, assign.target, self, extra_globals={"_dtype": dtype}
             )
 
         if isinstance(func_mod, ir.Var) and is_series_type(self.typemap[func_mod.name]):
@@ -2396,7 +2628,12 @@ class SeriesPass:
                 )
 
         # inline conversion functions to enable optimization
-        if func_mod == "bodo.utils.conversion" and func_name != "flatten_array":
+        if func_mod == "bodo.utils.conversion" and func_name not in (
+            "flatten_array",
+            "make_replicated_array",
+            "list_to_array",
+            "np_to_nullable_array",
+        ):
             # TODO: use overload IR inlining when available
             arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
             kw_typs = {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()}
@@ -2414,7 +2651,6 @@ class SeriesPass:
             return [assign]
 
         if fdef == ("val_isin_dummy", "bodo.hiframes.pd_dataframe_ext"):
-
             func_text = (
                 ""
                 "def impl(S, vals):\n"
@@ -2422,7 +2658,7 @@ class SeriesPass:
                 "    index = bodo.hiframes.pd_series_ext.get_series_index(S)\n"
                 "    numba.parfors.parfor.init_prange()\n"
                 "    n = len(arr)\n"
-                "    out = np.empty(n, np.bool_)\n"
+                "    out = bodo.libs.bool_arr_ext.alloc_bool_array(n)\n"
                 "    for i in numba.parfors.parfor.internal_prange(n):\n"
                 "        out[i] = arr[i] in vals\n"
                 "    return bodo.hiframes.pd_series_ext.init_series(out, index)\n"
@@ -2432,8 +2668,15 @@ class SeriesPass:
             exec(func_text, globals(), loc_vars)
             return replace_func(self, loc_vars["impl"], rhs.args)
 
-        if fdef == ("val_notin_dummy", "bodo.hiframes.pd_dataframe_ext"):
+        # optimize out trivial slicing on tables
+        if (
+            func_mod == "bodo.hiframes.table"
+            and func_name in ("table_filter", "table_local_filter")
+            and guard(is_whole_slice, self.typemap, self.func_ir, rhs.args[1])
+        ):
+            return [ir.Assign(rhs.args[0], assign.target, assign.loc)]
 
+        if fdef == ("val_notin_dummy", "bodo.hiframes.pd_dataframe_ext"):
             func_text = (
                 ""
                 "def impl(S, vals):\n"
@@ -2441,7 +2684,7 @@ class SeriesPass:
                 "    index = bodo.hiframes.pd_series_ext.get_series_index(S)\n"
                 "    numba.parfors.parfor.init_prange()\n"
                 "    n = len(arr)\n"
-                "    out = np.empty(n, np.bool_)\n"
+                "    out = bodo.libs.bool_arr_ext.alloc_bool_array(n)\n"
                 "    for i in numba.parfors.parfor.internal_prange(n):\n"
                 "        # TODO: why don't these work?\n"
                 "        # out[i] = (arr[i] not in vals)\n"
@@ -2454,6 +2697,39 @@ class SeriesPass:
             loc_vars = {}
             exec(func_text, globals(), loc_vars)
             return replace_func(self, loc_vars["impl"], rhs.args)
+
+        # Optimize out trivial table_astype() to avoid corner case in
+        # test_table_astype_copy_false_bug
+        if fdef == ("table_astype", "bodo.utils.table_utils"):
+            kws = dict(rhs.kws)
+            in_table_var = get_call_expr_arg("table_astype", rhs.args, kws, 0, "table")
+            new_table_typ_var = get_call_expr_arg(
+                "table_astype", rhs.args, kws, 1, "new_table_typ"
+            )
+            copy_var = get_call_expr_arg("table_astype", rhs.args, kws, 2, "copy")
+            _bodo_nan_to_str_var = get_call_expr_arg(
+                "table_astype", rhs.args, kws, 3, "_bodo_nan_to_str"
+            )
+            used_cols_var = get_call_expr_arg(
+                "table_astype", rhs.args, kws, 4, "used_cols", default=types.none
+            )
+            used_cols_type = (
+                self.typemap[used_cols_var.name]
+                if isinstance(used_cols_var, ir.Var)
+                else used_cols_var
+            )
+
+            in_table_type = self.typemap[in_table_var.name]
+            new_table_type = unwrap_typeref(self.typemap[new_table_typ_var.name])
+
+            if (
+                in_table_type == new_table_type
+                and is_overload_false(self.typemap[copy_var.name])
+                and is_overload_false(self.typemap[_bodo_nan_to_str_var.name])
+                and is_overload_none(used_cols_type)
+            ):
+                assign.value = in_table_var
+                return [assign]
 
         # inline np.where() for 3 arg case with 1D input
         if (
@@ -2507,9 +2783,42 @@ class SeriesPass:
                 self, impl, rhs.args, pysig=self.calltypes[rhs].pysig, kws=dict(rhs.kws)
             )
 
+        # Replace with Bodo's parallel implementation (numba's version isn't parallel)
+        if fdef == ("nan_to_num", "numpy"):
+            in_data = get_call_expr_arg("nan_to_num", rhs.args, dict(rhs.kws), 0, "x")
+            in_data_type = self.typemap[in_data.name]
+            if (
+                bodo.utils.utils.is_array_typ(in_data_type, False)
+                and in_data_type.ndim <= 2
+            ):
+                arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
+                kw_typs = {
+                    name: self.typemap[v.name] for name, v in dict(rhs.kws).items()
+                }
+                impl = bodo.libs.array_kernels.np_nan_to_num(*arg_typs, **kw_typs)
+                return replace_func(
+                    self,
+                    impl,
+                    rhs.args,
+                    pysig=numba.core.utils.pysignature(impl),
+                    kws=dict(rhs.kws),
+                )
+
+        # Replace np.linspace with Bodo's parallel implementation
+        if fdef == ("linspace", "numpy"):
+            arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
+            kw_typs = {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()}
+            impl = bodo.libs.array_kernels.np_linspace(*arg_typs, **kw_typs)
+            return replace_func(
+                self,
+                impl,
+                rhs.args,
+                pysig=numba.core.utils.pysignature(impl),
+                kws=dict(rhs.kws),
+            )
+
         # dummy count loop to support len of group in agg UDFs
         if fdef == ("dummy_agg_count", "bodo.ir.aggregate"):
-
             func_text = (
                 ""
                 "def impl_agg_c(A):\n"
@@ -2598,6 +2907,71 @@ class SeriesPass:
                     ),
                     args,
                 )
+
+        # Fuse consequtive calls to concat_ws
+        if fdef == ("concat_ws", "bodosql.kernels"):
+            args = rhs.args
+            sep_typ = self.typemap[args[1].name]
+            if is_overload_constant_str(sep_typ):
+                # We can only fuse concat calls if we are certain that the separator
+                # is the same.
+                sep = get_overload_const_str(sep_typ)
+                # Extract the tuple list to check for any repeat calls to
+                tup_list = guard(find_build_tuple, self.func_ir, rhs.args[0].name)
+                new_tup_list = []
+                # We use an indicator variable instead of the size because concat with a single
+                # argument is legal and we still want to optimize out those calls.
+                is_fused = False
+                if tup_list is not None:
+                    for tup_var in tup_list:
+                        # Check each variable for an input to concat_ws. Note that we don't do
+                        # multiple levels of nesting because we assume these will be fused in
+                        # prior steps.
+                        tup_var_def = guard(get_definition, self.func_ir, tup_var)
+                        func_call = guard(
+                            find_callname, self.func_ir, tup_var_def, self.typemap
+                        )
+                        if (
+                            func_call == ("concat_ws", "bodosql.kernels")
+                            and is_overload_constant_str(
+                                self.typemap[tup_var_def.args[1].name]
+                            )
+                            and get_overload_const_str(
+                                self.typemap[tup_var_def.args[1].name]
+                            )
+                            == sep
+                        ):
+                            # The separator is the same so we can fuse this call directly.
+                            nested_tup_list = guard(
+                                find_build_tuple, self.func_ir, tup_var_def.args[0].name
+                            )
+                            if nested_tup_list is None:
+                                # If we can't find the tuple don't fuse the input.
+                                new_tup_list.append(tup_var)
+                            else:
+                                is_fused = True
+                                new_tup_list.extend(nested_tup_list)
+                        else:
+                            new_tup_list.append(tup_var)
+                if is_fused:
+                    import bodosql
+
+                    # If we are fusing generate a new function call.
+                    replace_vars = ", ".join(
+                        f"tup_var{i}" for i in range(len(new_tup_list))
+                    )
+                    total_vars = tuple(new_tup_list + [rhs.args[1]])
+                    glbls = {"bodosql": bodosql}
+                    locals = {}
+                    return replace_func(
+                        self,
+                        eval(
+                            f"lambda {replace_vars}, sep: bodosql.kernels.concat_ws(({replace_vars},), sep)",
+                            glbls,
+                            locals,
+                        ),
+                        total_vars,
+                    )
 
         # inline SparkDataFrame.select() here since inline_closurecall() cannot handle
         # stararg yet. TODO: support
@@ -2726,7 +3100,7 @@ class SeriesPass:
             return [ir.Assign(expr, assign.target, rhs.loc)]
 
         # inline bool arr operators
-        if any(self.typemap[a.name] == boolean_array for a in rhs.args):
+        if any(self.typemap[a.name] == boolean_array_type for a in rhs.args):
             n_args = len(rhs.args)
             overload_func = bodo.libs.bool_arr_ext.create_op_overload(func, n_args)
             impl = overload_func(*tuple(self.typemap[a.name] for a in rhs.args))
@@ -2741,7 +3115,6 @@ class SeriesPass:
         """
         np_ufunc = getattr(np, ufunc_name)
         if np_ufunc.nin == 1:
-
             func_text = (
                 ""
                 "def impl(S):\n"
@@ -2760,7 +3133,6 @@ class SeriesPass:
             )
         elif np_ufunc.nin == 2:
             if isinstance(self.typemap[args[0].name], SeriesType):
-
                 func_text = (
                     ""
                     "def impl(S1, S2):\n"
@@ -2797,11 +3169,20 @@ class SeriesPass:
                     self, loc_vars["impl"], args, extra_globals={"_ufunc": np_ufunc}
                 )
         else:
-            raise BodoError("Unsupported numpy ufunc {}".format(ufunc_name))
+            raise BodoError(f"Unsupported numpy ufunc {ufunc_name}")
 
     def _handle_ufuncs_int_arr(self, ufunc_name, args):
         np_ufunc = getattr(np, ufunc_name)
         overload_func = bodo.libs.int_arr_ext.create_op_overload(np_ufunc, np_ufunc.nin)
+        in_typs = tuple(self.typemap[a.name] for a in args)
+        impl = overload_func(*in_typs)
+        return replace_func(self, impl, args)
+
+    def _handle_ufuncs_float_arr(self, ufunc_name, args):
+        np_ufunc = getattr(np, ufunc_name)
+        overload_func = bodo.libs.float_arr_ext.create_op_overload(
+            np_ufunc, np_ufunc.nin
+        )
         in_typs = tuple(self.typemap[a.name] for a in args)
         impl = overload_func(*in_typs)
         return replace_func(self, impl, args)
@@ -2910,7 +3291,7 @@ class SeriesPass:
             setattr(types, type_name, output_type)
 
         func_text = f"def helper_{func_name}({full_header}):\n"
-        func_text += f"    with numba.objmode(res='{type_name}'):\n"
+        func_text += f"    with bodo.no_warning_objmode(res='{type_name}'):\n"
         if method_var:
             func_text += f"        res = {method_var}.{func_name}({arg_names})\n"
         else:
@@ -2918,13 +3299,13 @@ class SeriesPass:
         # if axes is np.array, we convert to nested tuples
         # TODO: Replace with np.array when we can handle objs
         if func_name == "subplots" and isinstance(output_type[1], types.BaseTuple):
-            func_text += f"        fig, axes = res\n"
+            func_text += "        fig, axes = res\n"
             func_text += "        axes = tuple([tuple(elem) if isinstance(elem, np.ndarray) else elem for elem in axes])\n"
             func_text += "        res = (fig, axes)\n"
 
-        func_text += f"    return res\n"
+        func_text += "    return res\n"
         loc_vars = {}
-        exec(func_text, {"matplotlib": matplotlib, "numba": numba, "np": np}, loc_vars)
+        exec(func_text, {"matplotlib": matplotlib, "bodo": bodo, "np": np}, loc_vars)
         helper_func = numba.njit(loc_vars[f"helper_{func_name}"])
         return helper_func
 
@@ -2934,23 +3315,23 @@ class SeriesPass:
             kws = dict(rhs.kws)
             keys = list(kws.keys())
             header_args = (
-                ", ".join("e{}".format(i) for i in range(len(rhs.args)))
+                ", ".join(f"e{i}" for i in range(len(rhs.args)))
                 + (", " if rhs.args else "")
-                + ", ".join("e{}".format(i + len(rhs.args)) for i in range(len(keys)))
+                + ", ".join(f"e{i + len(rhs.args)}" for i in range(len(keys)))
             )
             arg_names = (
-                ", ".join("e{}".format(i) for i in range(len(rhs.args)))
+                ", ".join(f"e{i}" for i in range(len(rhs.args)))
                 + (", " if rhs.args else "")
-                + ", ".join(
-                    "{}=e{}".format(a, i + len(rhs.args)) for i, a in enumerate(keys)
-                )
+                + ", ".join(f"{a}=e{i + len(rhs.args)}" for i, a in enumerate(keys))
             )
-            func_text = "def f(string, {}):\n".format(header_args)
-            func_text += "    return format_func(string, {})\n".format(header_args)
+            func_text = f"def f(string, {header_args}):\n"
+            func_text += f"    return format_func(string, {header_args})\n"
 
-            format_func_text = "def format_func(string, {}):\n".format(header_args)
-            format_func_text += "    with numba.objmode(res='unicode_type'):\n"
-            format_func_text += "        res = string.format({})\n".format(arg_names)
+            format_func_text = f"def format_func(string, {header_args}):\n"
+            format_func_text += (
+                "    with bodo.no_warning_objmode(res='unicode_type'):\n"
+            )
+            format_func_text += f"        res = string.format({arg_names})\n"
             format_func_text += "    return res\n"
 
             loc_vars = {}
@@ -2991,23 +3372,21 @@ class SeriesPass:
             kws = dict(rhs.kws)
             keys = list(kws.keys())
             header_args = (
-                ", ".join("e{}".format(i) for i in range(len(rhs.args)))
+                ", ".join(f"e{i}" for i in range(len(rhs.args)))
                 + (", " if rhs.args else "")
-                + ", ".join("e{}".format(i + len(rhs.args)) for i in range(len(keys)))
+                + ", ".join(f"e{i + len(rhs.args)}" for i in range(len(keys)))
             )
             arg_names = (
-                ", ".join("e{}".format(i) for i in range(len(rhs.args)))
+                ", ".join(f"e{i}" for i in range(len(rhs.args)))
                 + (", " if rhs.args else "")
-                + ", ".join(
-                    "{}=e{}".format(a, i + len(rhs.args)) for i, a in enumerate(keys)
-                )
+                + ", ".join(f"{a}=e{i + len(rhs.args)}" for i, a in enumerate(keys))
             )
-            func_text = "def f(logger, {}):\n".format(header_args)
-            func_text += "    return format_func(logger, {})\n".format(header_args)
+            func_text = f"def f(logger, {header_args}):\n"
+            func_text += f"    return format_func(logger, {header_args})\n"
 
-            format_func_text = "def format_func(logger, {}):\n".format(header_args)
-            format_func_text += "    with numba.objmode():\n"
-            format_func_text += "        logger.{}({})\n".format(func_name, arg_names)
+            format_func_text = f"def format_func(logger, {header_args}):\n"
+            format_func_text += "    with bodo.no_warning_objmode():\n"
+            format_func_text += f"        logger.{func_name}({arg_names})\n"
 
             loc_vars = {}
             exec(func_text, {}, loc_vars)
@@ -3184,7 +3563,6 @@ class SeriesPass:
 
         # dictionary input case
         if isinstance(func_type, types.DictType):
-
             func_text = (
                 ""
                 "def impl(A, index, name, d):\n"
@@ -3196,7 +3574,7 @@ class SeriesPass:
                 "            bodo.libs.array_kernels.setna(S0, i)\n"
                 "        v = bodo.utils.conversion.box_if_dt64(A[i])\n"
                 "        if v in d:\n"
-                "            S0[i] = bodo.utils.conversion.unbox_if_timestamp(d[v])\n"
+                "            S0[i] = bodo.utils.conversion.unbox_if_tz_naive_timestamp(d[v])\n"
                 "        else:\n"
                 "            bodo.libs.array_kernels.setna(S0, i)\n"
                 "    return bodo.hiframes.pd_series_ext.init_series(S0, index, name)\n"
@@ -3239,7 +3617,7 @@ class SeriesPass:
                     impl,
                     [series_var],
                     pysig=numba.core.utils.pysignature(impl),
-                    kws=dict(),
+                    kws={},
                     # Some Series functions may require methods or
                     # attributes that need to be inlined by the full
                     # pipeline.
@@ -3264,19 +3642,16 @@ class SeriesPass:
         out_arr_types = out_arr_types if is_df_output else [out_arr_types]
         n_out_cols = len(out_arr_types)
         udf_arg_names = (
-            ", ".join("e{}".format(i) for i in range(len(extra_args)))
+            ", ".join(f"e{i}" for i in range(len(extra_args)))
             + (", " if extra_args else "")
-            + ", ".join(
-                "{}=e{}".format(a, i + len(extra_args))
-                for i, a in enumerate(kws.keys())
-            )
+            + ", ".join(f"{a}=e{i + len(extra_args)}" for i, a in enumerate(kws.keys()))
         )
         extra_args += list(kws.values())
         extra_arg_names = (", " if extra_args else "") + ", ".join(
-            "e{}".format(i) for i in range(len(extra_args))
+            f"e{i}" for i in range(len(extra_args))
         )
 
-        func_text = "def f(A, index, name{}):\n".format(extra_arg_names)
+        func_text = f"def f(A, index, name{extra_arg_names}):\n"
         func_text += "  numba.parfors.parfor.init_prange()\n"
         func_text += "  n = len(A)\n"
         for i in range(n_out_cols):
@@ -3285,17 +3660,15 @@ class SeriesPass:
             )
         func_text += "  for i in numba.parfors.parfor.internal_prange(n):\n"
         func_text += "    t2 = bodo.utils.conversion.box_if_dt64(A[i])\n"
-        func_text += "    v = map_func(t2, {})\n".format(udf_arg_names)
+        func_text += f"    v = map_func(t2, {udf_arg_names})\n"
         if is_df_output:
             func_text += "    v_vals = bodo.hiframes.pd_series_ext.get_series_data(v)\n"
             for i in range(n_out_cols):
                 func_text += f"    v{i} = v_vals[{i}]\n"
         else:
-            func_text += f"    v0 = v\n"
+            func_text += "    v0 = v\n"
         for i in range(n_out_cols):
-            func_text += (
-                f"    S{i}[i] = bodo.utils.conversion.unbox_if_timestamp(v{i})\n"
-            )
+            func_text += f"    S{i}[i] = bodo.utils.conversion.unbox_if_tz_naive_timestamp(v{i})\n"
         glbls = {}
         if is_df_output:
             data_arrs = ", ".join(f"S{i}" for i in range(n_out_cols))
@@ -3363,7 +3736,6 @@ class SeriesPass:
         """inline implementation for rolling_corr/cov functions"""
 
         if func_name == "rolling_corr":
-
             func_text = (
                 ""
                 "def rolling_corr_impl(arr, other, win, minp, center):\n"
@@ -3382,7 +3754,6 @@ class SeriesPass:
             return replace_func(self, loc_vars["rolling_corr_impl"], rhs.args)
 
         if func_name == "rolling_cov":
-
             func_text = (
                 ""
                 "def rolling_cov_impl(arr, other, w, minp, center):\n"
@@ -3609,21 +3980,67 @@ class SeriesPass:
         func_text += "  zero_tup = ({},)\n".format(", ".join(["0"] * ndim))
         # TODO: remove after support arr.shape in parallel
         func_text += "  arr_shape = ({},)\n".format(
-            ", ".join(["arr.shape[{}]".format(i) for i in range(ndim)])
+            ", ".join([f"arr.shape[{i}]" for i in range(ndim)])
         )
-        func_text += "  err = bodo.io.h5_api.h5write(dset_id, np.int32({}), zero_tup, arr_shape, 0, arr)\n".format(
-            ndim
-        )
+        func_text += f"  err = bodo.io.h5_api.h5write(dset_id, np.int32({ndim}), zero_tup, arr_shape, 0, arr)\n"
 
         loc_vars = {}
         exec(func_text, {}, loc_vars)
         _h5_write_impl = loc_vars["_h5_write_impl"]
         return compile_func_single_block(_h5_write_impl, (dset, arr), None, self)
 
+    def _is_unified_streaming_output(self, table_var):
+        """Return True if table_var is output a streaming operator that unifies
+        dictionaries. Currently only supports join.
+        TODO[BSE-1197]: support other operators
+        """
+        table_def = get_definition(self.func_ir, table_var)
+
+        # handle projection
+        if is_call(table_def) and find_callname(
+            self.func_ir, table_def, self.typemap
+        ) == ("table_subset", "bodo.hiframes.table"):
+            return self._is_unified_streaming_output(table_def.args[0])
+
+        # join_probe_consume_batch's output is a tuple that is unpacked
+        require(is_expr(table_def, "static_getitem"))
+        table_def = get_definition(self.func_ir, table_def.value)
+        require(is_expr(table_def, "exhaust_iter"))
+        table_def = get_definition(self.func_ir, table_def.value)
+
+        require(is_call(table_def))
+        source_fname = find_callname(self.func_ir, table_def, self.typemap)
+        return source_fname == (
+            "join_probe_consume_batch",
+            "bodo.libs.streaming.join",
+        )
+
     def _simplify_IR(self):
         """Simplify IR after Series pass transforms."""
         changed = False
         self.func_ir.blocks = ir_utils.simplify_CFG(self.func_ir.blocks)
+        if not self.avoid_copy_propagation:
+            # Apply copy propagation. There will be many extra assignments if we
+            # inline code.
+            in_cps, _ = ir_utils.copy_propagate(self.func_ir.blocks, self.typemap)
+            save_copies = ir_utils.apply_copy_propagate(
+                self.func_ir.blocks,
+                in_cps,
+                ir_utils.get_name_var_table(self.func_ir.blocks),
+                self.typemap,
+                self.calltypes,
+            )
+            # Restore any user variable names.
+            # Note: user variables may still be eliminated because of dead code elimination
+            # but we attempt to capture them in metadata.
+            var_rename_map = ir_utils.restore_copy_var_names(
+                self.func_ir.blocks, save_copies, self.typemap
+            )
+            if self.parfor_metadata is not None:
+                if "var_rename_map" not in self.parfor_metadata:
+                    self.parfor_metadata["var_rename_map"] = {}
+                self.parfor_metadata["var_rename_map"].update(var_rename_map)
+
         while ir_utils.remove_dead(
             self.func_ir.blocks, self.func_ir.arg_names, self.func_ir, self.typemap
         ):
@@ -3800,7 +4217,8 @@ class SeriesPass:
             tup_list = guard(find_build_tuple, self.func_ir, varname)
             if tup_list is not None:
                 for v in tup_list:
-                    self._set_add_if_df(updated_dfs, v.name)
+                    if isinstance(v, ir.Var):  # pragma: no cover
+                        self._set_add_if_df(updated_dfs, v.name)
 
     def _convert_series_calltype(self, call):
         sig = self.calltypes[call]
@@ -3862,6 +4280,7 @@ def _fix_typ_undefs(new_typ, old_typ):
                 (
                     types.Array,
                     IntegerArrayType,
+                    FloatingArrayType,
                     SeriesType,
                     StringArrayType,
                     ArrayItemArrayType,

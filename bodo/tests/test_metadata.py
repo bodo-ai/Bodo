@@ -25,7 +25,7 @@ from bodo.tests.utils import reduce_sum
         pd.date_range(start="2018-04-24", end="2018-04-27", periods=3, name="A"),
         pd.timedelta_range(start="1D", end="3D", name="A"),
         pd.CategoricalIndex(["A", "B", "A", "C", "B"]),
-        pd.PeriodIndex(year=[2015, 2016, 2018], month=[1, 2, 3], freq="M"),
+        pd.PeriodIndex.from_fields(year=[2015, 2016, 2018], month=[1, 2, 3], freq="M"),
         pytest.param(pd.Index([b"hkjl", bytes(2), b""] * 3), id="binary_case"),
         pd.Index([True, False, True, False]),
     ]
@@ -81,7 +81,7 @@ def test_metadata_typemaps():
         pd.date_range(start="2018-04-24", end="2018-04-27", periods=3, name="A"),
         pd.timedelta_range(start="1D", end="3D", name="A"),
         pd.CategoricalIndex(["A", "B", "A", "C", "B"]),
-        pd.PeriodIndex(year=[2015, 2016, 2018], month=[1, 2, 3], freq="M"),
+        pd.PeriodIndex.from_fields(year=[2015, 2016, 2018], month=[1, 2, 3], freq="M"),
         pytest.param(pd.Index([b"hkjl", bytes(2), b""] * 3), id="binary_case"),
         pd.Index([True, False, True, False]),
         np.array(
@@ -186,7 +186,7 @@ def test_dtype_converter_literal_values(typ_val):
     # test python value
     converted_enum_list = _dtype_to_type_enum_list(typ_val)
     assert (
-        not (converted_enum_list is None)
+        converted_enum_list is not None
         and converted_enum_list[0] == SeriesDtypeEnum.Literal.value
         and converted_enum_list[1] == typ_val
     )
@@ -198,7 +198,7 @@ def test_dtype_converter_literal_values(typ_val):
         literal_typ = numba.types.literal(typ_val)
         converted_enum_list = _dtype_to_type_enum_list(literal_typ)
         assert (
-            not (converted_enum_list is None)
+            converted_enum_list is not None
             and converted_enum_list[0] == SeriesDtypeEnum.LiteralType.value
             and converted_enum_list[1] == typ_val
         )
@@ -488,14 +488,12 @@ def test_df_return_metadata(gen_func, use_func):
                 passed = 0
                 try:
                     use_func(out)
-                except:
+                except Exception:
                     passed = 1
             elif bodo.get_rank() == 0:
                 pass
 
-            fail_msg = (
-                f"use_func failed to throw an error when metadata was not present"
-            )
+            fail_msg = "use_func failed to throw an error when metadata was not present"
             n_passed = reduce_sum(passed)
             assert n_passed == bodo.get_size(), fail_msg
 
@@ -601,14 +599,12 @@ def test_series_return_metadata(gen_func, use_func):
                 passed = 0
                 try:
                     use_func(out)
-                except:
+                except Exception:
                     passed = 1
             elif bodo.get_rank() == 0:
                 pass
 
-            fail_msg = (
-                f"use_func failed to throw an error when metadata was not present"
-            )
+            fail_msg = "use_func failed to throw an error when metadata was not present"
             n_passed = reduce_sum(passed)
             assert n_passed == bodo.get_size(), fail_msg
 
@@ -679,7 +675,7 @@ def test_index_type_return(metadata_supported_index_types):
         try:
             ret_df = reset_idx(df_out)
             passed = 0
-        except:
+        except Exception:
             pass
 
         n_passed = reduce_sum(passed)
@@ -690,7 +686,7 @@ def test_index_type_return(metadata_supported_index_types):
         try:
             ret_series = reset_idx(series_out)
             passed = 0
-        except:
+        except Exception:
             pass
 
         n_passed = reduce_sum(passed)

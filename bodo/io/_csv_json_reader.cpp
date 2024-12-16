@@ -1,4 +1,3 @@
-// Copyright (C) 2019 Bodo Inc. All rights reserved.
 /*
   SPMD Stream, CSV reader, and JSON reader.
 
@@ -6,7 +5,7 @@
   and can so be used as the input argument to pandas CSV & JSON read.
   When called in a parallel/distributed setup, each process owns a
   chunk of the csv/json file only. The chunks are balanced by number of
-  rows of dataframe (not necessarily number of bytes), determined by number
+  rows of DataFrame (not necessarily number of bytes), determined by number
   of lines(csv & json(orient = 'records', lines=True)) or
   number of objects (json(orient = 'records', lines=False)) . The actual file
   read is done lazily in the objects read method.
@@ -15,31 +14,28 @@
 #include <Python.h>
 #include <mpi.h>
 #include <algorithm>
-#include <boost/algorithm/string/predicate.hpp>
-#include <cinttypes>
 #include <ciso646>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
-#include <sstream>
 #include <string>
 #include <vector>
-#include "../libs/_bodo_common.h"
+
+#include <arrow/io/compressed.h>
+#include <arrow/util/compression.h>
+
 #include "../libs/_distributed.h"
 #include "_bodo_file_reader.h"
 #include "_fs_io.h"
-#include "arrow/filesystem/localfs.h"
-#include "arrow/io/compressed.h"
-#include "arrow/util/compression.h"
-#include "structmember.h"
 
 // lines argument of read_json(lines = json_lines)
 // when json_lines=true, we are reading Json line format where each
-// dataframe row/json record takes up exactly one line, ended with '\n'
+// DataFrame row/json record takes up exactly one line, ended with '\n'
 // when json_lines=false. we are reading a multi line json format where each
-// dataframe row/json record takes up more than one lines, separated by '},'
+// DataFrame row/json record takes up more than one lines, separated by '},'
 
+#undef CHECK
 #define CHECK(expr, msg)                                    \
     if (!(expr)) {                                          \
         std::cerr << "Error in read: " << msg << std::endl; \
@@ -74,15 +70,20 @@
 // needed) with this err msg on all the processes, ensuring there wouldn't be
 // hangs.
 
-#define ARROW_ONE_PROC_ERR_SYNC_USING_MPI(raise_err_bool, err_msg_var)  \
-    MPI_Bcast(&raise_err_bool, 1, MPI_C_BOOL, 0, MPI_COMM_WORLD);       \
-    if (raise_err_bool) {                                               \
-        int err_msg_size = err_msg_var.size();                          \
-        MPI_Bcast(&err_msg_size, 1, MPI_INT, 0, MPI_COMM_WORLD);        \
-        err_msg_var.resize(err_msg_size);                               \
-        MPI_Bcast(const_cast<char *>(err_msg_var.data()), err_msg_size, \
-                  MPI_CHAR, 0, MPI_COMM_WORLD);                         \
-        throw std::runtime_error(err_msg_var);                          \
+#define ARROW_ONE_PROC_ERR_SYNC_USING_MPI(raise_err_bool, err_msg_var)       \
+    CHECK_MPI(MPI_Bcast(&raise_err_bool, 1, MPI_C_BOOL, 0, MPI_COMM_WORLD),  \
+              "ARROW_ONE_PROC_ERR_SYNC_USING_MPI: MPI error on MPI_Bcast:"); \
+    if (raise_err_bool) {                                                    \
+        int err_msg_size = err_msg_var.size();                               \
+        CHECK_MPI(                                                           \
+            MPI_Bcast(&err_msg_size, 1, MPI_INT, 0, MPI_COMM_WORLD),         \
+            "ARROW_ONE_PROC_ERR_SYNC_USING_MPI: MPI error on MPI_Bcast:");   \
+        err_msg_var.resize(err_msg_size);                                    \
+        CHECK_MPI(                                                           \
+            MPI_Bcast(const_cast<char *>(err_msg_var.data()), err_msg_size,  \
+                      MPI_CHAR, 0, MPI_COMM_WORLD),                          \
+            "ARROW_ONE_PROC_ERR_SYNC_USING_MPI: MPI error on MPI_Bcast:");   \
+        throw std::runtime_error(err_msg_var);                               \
     }
 
 /**
@@ -111,7 +112,7 @@ class SkiprowsListInfo {
         read_start_offset.resize(len + 1);
         read_end_offset.resize(len + 1);
     }
-    ~SkiprowsListInfo() {}
+    ~SkiprowsListInfo() = default;
 
     bool is_skiprows_list;
     int64_t num_skiprows;
@@ -149,11 +150,13 @@ class PathInfo {
         // obtain path info on rank 0, broadcast to other ranks.
         // this sets PathInfo attributes on all ranks
         obtain_is_directory();
-        if (!is_valid) return;
+        if (!is_valid) {
+            return;
+        }
         obtain_file_names_and_sizes();
         obtain_compression_scheme(compression_pyarg);
     }
-    ~PathInfo() {}
+    ~PathInfo() = default;
 
     /// get the compression scheme used by this file(s)
     const std::string &get_compression_scheme() const { return compression; }
@@ -199,46 +202,15 @@ class PathInfo {
      * Get arrow::fs::FileSystem object necessary to read data from this path.
      */
     std::shared_ptr<arrow::fs::FileSystem> get_fs() {
-        if (!fs) {
-            bool is_hdfs = boost::starts_with(file_path, "hdfs://") ||
-                           boost::starts_with(file_path, "abfs://") ||
-                           boost::starts_with(file_path, "abfss://");
-            bool is_s3 = boost::starts_with(file_path, "s3://");
-            if (is_s3 || is_hdfs) {
-                this->is_remote_fs = true;
-                arrow::internal::Uri uri;
-                (void)uri.Parse(file_path);
-                PyObject *fs_mod = nullptr;
-                PyObject *func_obj = nullptr;
-                if (is_s3) {
-                    import_fs_module(Bodo_Fs::s3, "", fs_mod);
-                    get_get_fs_pyobject(Bodo_Fs::s3, "", fs_mod, func_obj);
-                    s3_get_fs_t s3_get_fs =
-                        (s3_get_fs_t)PyNumber_AsSsize_t(func_obj, NULL);
-                    std::shared_ptr<arrow::fs::S3FileSystem> s3_fs;
-                    s3_get_fs(&s3_fs, bucket_region, s3fs_anon);
-                    fs = s3_fs;
-
-                    // remove s3:// prefix from file_path
-                    file_path = file_path.substr(strlen("s3://"));
-                } else if (is_hdfs) {
-                    import_fs_module(Bodo_Fs::hdfs, "", fs_mod);
-                    get_get_fs_pyobject(Bodo_Fs::hdfs, "", fs_mod, func_obj);
-                    hdfs_get_fs_t hdfs_get_fs =
-                        (hdfs_get_fs_t)PyNumber_AsSsize_t(func_obj, NULL);
-                    std::shared_ptr<::arrow::fs::HadoopFileSystem> hdfs_fs;
-                    hdfs_get_fs(file_path, &hdfs_fs);
-                    fs = hdfs_fs;
-                    // remove hdfs://host:port prefix from file_path
-                    file_path = uri.path();
-                }
-                Py_DECREF(fs_mod);
-                Py_DECREF(func_obj);
-            } else {
-                fs = std::make_shared<arrow::fs::LocalFileSystem>();
-            }
+        if (!this->fs) {
+            auto info = get_reader_file_system(
+                this->file_path, this->bucket_region, this->s3fs_anon);
+            this->fs = info.first;
+            // Check for LocalFileSystem.type_name()
+            this->is_remote_fs = this->fs->type_name() != "local";
+            this->file_path = info.second;
         }
-        return fs;
+        return this->fs;
     }
 
     /**
@@ -268,11 +240,11 @@ class PathInfo {
                                  runtime_err_msg);
             if (!raise_runtime_err) {
                 arrow::fs::FileInfo file_stat = file_stat_result.ValueOrDie();
-                if (file_stat.IsDirectory())
+                if (file_stat.IsDirectory()) {
                     c_is_dir = 1;
-                else if (file_stat.IsFile())
+                } else if (file_stat.IsFile()) {
                     c_is_dir = 0;
-                else {
+                } else {
                     c_is_dir = -1;
                     raise_runtime_err = true;
                     runtime_err_msg =
@@ -283,7 +255,8 @@ class PathInfo {
             }
         }
         ARROW_ONE_PROC_ERR_SYNC_USING_MPI(raise_runtime_err, runtime_err_msg);
-        MPI_Bcast(&c_is_dir, 1, MPI_INT, 0, MPI_COMM_WORLD);
+        CHECK_MPI(MPI_Bcast(&c_is_dir, 1, MPI_INT, 0, MPI_COMM_WORLD),
+                  "PathInfo::obtain_is_directory: MPI error on MPI_Bcast:");
         is_valid = (c_is_dir != -1);
         is_dir = bool(c_is_dir);
     }
@@ -339,8 +312,8 @@ class PathInfo {
                     std::vector<arrow::fs::FileInfo> file_infos =
                         file_infos_results.ValueOrDie();
                     // sort files by name
-                    std::sort(file_infos.begin(), file_infos.end(),
-                              arrow::fs::FileInfo::ByPath{});
+                    std::ranges::sort(file_infos,
+                                      arrow::fs::FileInfo::ByPath{});
 
                     for (auto &fi : file_infos) {
                         const std::string &path = fi.path();
@@ -353,14 +326,14 @@ class PathInfo {
                             // skip 0 size files
                             (fsize <= 0) ||
                             // Skip checksums
-                            (boost::ends_with(fname, ".crc")) ||
+                            (fname.ends_with(".crc")) ||
                             // Skip HDFS directories in S3
-                            (boost::ends_with(fname, "_$folder$")) ||
+                            (fname.ends_with("_$folder$")) ||
                             // Skip hidden files starting with "_" (e.g.
                             // "_SUCCESS")
-                            (boost::starts_with(fname, "_")) ||
+                            (fname.starts_with("_")) ||
                             // Skip hidden files starting with "."
-                            (boost::starts_with(fname, "."))) {
+                            (fname.starts_with("."))) {
                             continue;
                         }
 
@@ -387,19 +360,29 @@ class PathInfo {
                     str_data_ptr[fname.size()] = 0;  // null terminate string
                     str_data_ptr += fname.size() + 1;
                 }
-                MPI_Bcast(&total_len, 1, MPI_INT64_T, 0, MPI_COMM_WORLD);
-                MPI_Bcast(str_data.data(), str_data.size(), MPI_CHAR, 0,
-                          MPI_COMM_WORLD);
+                CHECK_MPI(
+                    MPI_Bcast(&total_len, 1, MPI_INT64_T, 0, MPI_COMM_WORLD),
+                    "PathInfo::obtain_file_names_and_sizes: MPI error on "
+                    "MPI_Bcast:");
+                CHECK_MPI(MPI_Bcast(str_data.data(), str_data.size(), MPI_CHAR,
+                                    0, MPI_COMM_WORLD),
+                          "PathInfo::obtain_file_names_and_sizes: MPI "
+                          "error on MPI_Bcast:");
             } else {
                 // receive file names from rank 0
                 int64_t recv_size;
-                MPI_Bcast(&recv_size, 1, MPI_INT64_T, 0, MPI_COMM_WORLD);
+                CHECK_MPI(
+                    MPI_Bcast(&recv_size, 1, MPI_INT64_T, 0, MPI_COMM_WORLD),
+                    "PathInfo::obtain_file_names_and_sizes: MPI error on "
+                    "MPI_Bcast:");
                 std::vector<char> str_data(recv_size);
-                MPI_Bcast(str_data.data(), str_data.size(), MPI_CHAR, 0,
-                          MPI_COMM_WORLD);
+                CHECK_MPI(MPI_Bcast(str_data.data(), str_data.size(), MPI_CHAR,
+                                    0, MPI_COMM_WORLD),
+                          "PathInfo::obtain_file_names_and_sizes: MPI "
+                          "error on MPI_Bcast:");
                 char *cur_str = str_data.data();
                 while (cur_str < str_data.data() + recv_size) {
-                    file_names.push_back(cur_str);
+                    file_names.emplace_back(cur_str);
                     cur_str += file_names.back().size() + 1;
                 }
                 file_sizes.resize(file_names.size());
@@ -407,9 +390,13 @@ class PathInfo {
         }
 
         // communicate file sizes to all processes
-        MPI_Bcast(file_sizes.data(), file_sizes.size(), MPI_INT64_T, 0,
-                  MPI_COMM_WORLD);
-        MPI_Bcast(&total_ds_size, 1, MPI_INT64_T, 0, MPI_COMM_WORLD);
+        CHECK_MPI(
+            MPI_Bcast(file_sizes.data(), file_sizes.size(), MPI_INT64_T, 0,
+                      MPI_COMM_WORLD),
+            "PathInfo::obtain_file_names_and_sizes: MPI error on MPI_Bcast:");
+        CHECK_MPI(
+            MPI_Bcast(&total_ds_size, 1, MPI_INT64_T, 0, MPI_COMM_WORLD),
+            "PathInfo::obtain_file_names_and_sizes: MPI error on MPI_Bcast:");
     }
 
     /**
@@ -430,9 +417,9 @@ class PathInfo {
                     // infer compression scheme from the name of the first file
                     fname = get_first_file();
                 }
-                if (boost::ends_with(fname, ".gz"))
+                if (fname.ends_with(".gz"))
                     compression = "gzip";  // using arrow-cpp's representation
-                else if (boost::ends_with(fname, ".bz2"))
+                else if (fname.ends_with(".bz2"))
                     compression = "bz2";  // using arrow-cpp's representation
                 // ... TODO: more compression formats
                 else
@@ -470,18 +457,21 @@ class LocalFileReader : public SingleFileReader {
         CHECK(fstream->good() && !fstream->eof() && fstream->is_open(),
               "could not open file.");
     }
-    uint64_t getSize() { return std::filesystem::file_size(fname); }
-    bool seek(int64_t pos) {
+    uint64_t getSize() override { return std::filesystem::file_size(fname); }
+    bool seek(int64_t pos) override {
         this->fstream->seekg(pos + this->csv_header_bytes, std::ios_base::beg);
         return this->ok();
     }
-    bool ok() { return (this->fstream->good() and !this->fstream->eof()); }
-    bool read_to_buff(char *s, int64_t size) {
+    bool ok() override {
+        return (this->fstream->good() and !this->fstream->eof());
+    }
+    bool read_to_buff(char *s, int64_t size) override {
         this->fstream->read(s, size);
         return this->ok();
     }
-    virtual ~LocalFileReader() {
-        if (fstream) delete fstream;
+    ~LocalFileReader() override {
+        if (fstream)
+            delete fstream;
     }
 };
 
@@ -499,7 +489,7 @@ class LocalDirectoryFileReader : public DirectoryFileReader {
         auto nonEmptyEndsWithSuffix =
             [suffix](const std::filesystem::path &path) -> bool {
             return (std::filesystem::is_regular_file(path) &&
-                    boost::ends_with(path.string(), suffix) &&
+                    path.string().ends_with(suffix) &&
                     std::filesystem::file_size(path) > 0);
         };
 
@@ -514,12 +504,11 @@ class LocalDirectoryFileReader : public DirectoryFileReader {
                 ("No valid file to read from directory: " + dirname).c_str());
         }
         // sort all files in directory
-        std::sort(this->file_paths.begin(), this->file_paths.end());
+        std::ranges::sort(this->file_paths);
 
         // find & set all file name
-        for (auto it = this->file_paths.begin(); it != this->file_paths.end();
-             ++it) {
-            (this->file_names).push_back((*it).string());
+        for (auto &file_path : this->file_paths) {
+            (this->file_names).push_back(file_path.string());
         }
 
         // find and set header row size in bytes
@@ -528,16 +517,15 @@ class LocalDirectoryFileReader : public DirectoryFileReader {
         // find dir_size and construct file_sizes
         // assuming the directory contains files only, i.e. no subdirectory
         this->dir_size = 0;
-        for (auto it = this->file_paths.begin(); it != this->file_paths.end();
-             ++it) {
+        for (auto &file_path : this->file_paths) {
             (this->file_sizes).push_back(this->dir_size);
-            this->dir_size += std::filesystem::file_size(*it);
+            this->dir_size += std::filesystem::file_size(file_path);
             this->dir_size -= this->csv_header_bytes;
         }
         this->file_sizes.push_back(this->dir_size);
     };
 
-    void initFileReader(const char *fname) {
+    void initFileReader(const char *fname) override {
         this->f_reader =
             new LocalFileReader(fname, this->f_type_to_string(),
                                 this->csv_header, this->json_lines);
@@ -549,14 +537,15 @@ class LocalDirectoryFileReader : public DirectoryFileReader {
 // Our file-like object for reading chunks in a std::istream
 // ***********************************************************************************
 
-typedef struct {
+using stream_reader = struct {
     PyObject_HEAD
         /* Your internal buffer, size and pos */
         FileReader *ifs;  // input stream
     size_t chunk_start;   // start of our chunk
     size_t chunk_size;    // size of our chunk
     size_t chunk_pos;     // current position in our chunk
-    std::vector<char>
+
+    std::shared_ptr<bodo::vector<char>>
         buf;  // internal buffer for converting stream input to Unicode object
 
     // The following attributes are needed for chunksize Iterator support
@@ -577,13 +566,16 @@ typedef struct {
     class SkiprowsListInfo *skiprows_list_info;
     bool csv_header;  // whether file(s) has header or not (needed for knowing
                       // whether skiprows are 1-based or 0-based indexing)
-} stream_reader;
+};
 
 static void stream_reader_dealloc(stream_reader *self) {
     // we own the stream!
-    if (self->ifs) delete self->ifs;
-    if (self->path_info) delete self->path_info;
-    if (self->skiprows_list_info) delete self->skiprows_list_info;
+    if (self->ifs)
+        delete self->ifs;
+    if (self->path_info)
+        delete self->path_info;
+    if (self->skiprows_list_info)
+        delete self->skiprows_list_info;
     Py_TYPE(self)->tp_free(self);
 }
 
@@ -603,9 +595,9 @@ static PyObject *stream_reader_new(PyTypeObject *type, PyObject *args,
     stream_reader *self = (stream_reader *)type->tp_alloc(type, 0);
     if (PyErr_Occurred()) {
         PyErr_Print();
-        return NULL;
+        return nullptr;
     }
-    self->ifs = NULL;
+    self->ifs = nullptr;
     self->chunk_start = 0;
     self->chunk_size = 0;
     self->chunk_pos = 0;
@@ -615,8 +607,9 @@ static PyObject *stream_reader_new(PyTypeObject *type, PyObject *args,
     self->chunksize_rows = 0;
     self->is_parallel = false;
     self->header_size_bytes = 0;
-    self->path_info = NULL;
+    self->path_info = nullptr;
     self->first_read = false;
+    self->buf = std::make_shared<bodo::vector<char>>(0);
 
     return (PyObject *)self;
 }
@@ -682,7 +675,8 @@ static void stream_reader_init(stream_reader *self, FileReader *ifs,
     // seek to our chunk beginning
     // only if sz > 0
     bool ok = true;
-    if (sz > 0) ok = self->ifs->seek(start);
+    if (sz > 0)
+        ok = self->ifs->seek(start);
     if (!ok) {
         Bodo_PyErr_SetString(PyExc_RuntimeError,
                              "Could not seek to start position");
@@ -707,21 +701,21 @@ static void stream_reader_init(stream_reader *self, FileReader *ifs,
 // does not read beyond end of our chunk (even if file continues)
 static PyObject *stream_reader_read(stream_reader *self, PyObject *args) {
     // partially copied from from CPython's stringio.c
-    if (self->ifs == NULL) {
+    if (self->ifs == nullptr) {
         PyErr_SetString(PyExc_ValueError,
                         "I/O operation on uninitialized StreamReader object");
-        return NULL;
+        return nullptr;
     }
     Py_ssize_t size, n;
 
     PyObject *arg = Py_None;
     if (!PyArg_ParseTuple(args, "|O:read", &arg)) {
-        return NULL;
+        return nullptr;
     }
     if (PyNumber_Check(arg)) {
         size = PyNumber_AsSsize_t(arg, PyExc_OverflowError);
         if (size == -1 && PyErr_Occurred()) {
-            return NULL;
+            return nullptr;
         }
     } else if (arg == Py_None) {
         /* Read until EOF is reached, by default. */
@@ -729,32 +723,33 @@ static PyObject *stream_reader_read(stream_reader *self, PyObject *args) {
     } else {
         PyErr_Format(PyExc_TypeError, "integer argument expected, got '%s'",
                      Py_TYPE(arg)->tp_name);
-        return NULL;
+        return nullptr;
     }
     /* adjust invalid sizes */
     n = self->chunk_size - self->chunk_pos;
     if (size < 0 || size > n) {
         size = n;
-        if (size < 0) size = 0;
+        if (size < 0)
+            size = 0;
     }
 
-    self->buf.resize(size);
-    bool ok = self->ifs->read(self->buf.data(), size);
+    self->buf->resize(size);
+    bool ok = self->ifs->read(self->buf->data(), size);
     self->chunk_pos += size;
     if (!ok) {
         std::cerr << "Failed reading " << size << " bytes" << std::endl;
-        return NULL;
+        return nullptr;
     }
     // buffer_rd_bytes() function of pandas expects a Bytes object
     // using PyUnicode_FromStringAndSize is wrong since 'size'
     // may end up in the middle a multi-byte UTF-8 character
-    return PyBytes_FromStringAndSize(self->buf.data(), size);
+    return PyBytes_FromStringAndSize(self->buf->data(), size);
 }
 
 // Needed to make Pandas accept it, never used
 static PyObject *stream_reader_iternext(PyObject *self) {
     std::cerr << "iternext not implemented";
-    return NULL;
+    return nullptr;
 };
 
 // Update stream_reader with next chunk data and update its metadata
@@ -786,77 +781,71 @@ static PyMethodDef stream_reader_methods[] = {
         METH_VARARGS,
         "Update reader with next chunk info.",
     },
-    {NULL} /* Sentinel */
+    {nullptr} /* Sentinel */
 };
 
 // the actual Python type class
 static PyTypeObject stream_reader_type = {
-    PyVarObject_HEAD_INIT(NULL, 0) "bodo.libs.hio.StreamReader", /*tp_name*/
-    sizeof(stream_reader),                    /*tp_basicsize*/
-    0,                                        /*tp_itemsize*/
-    (destructor)stream_reader_dealloc,        /*tp_dealloc*/
-    0,                                        /*tp_print*/
-    0,                                        /*tp_getattr*/
-    0,                                        /*tp_setattr*/
-    0,                                        /*tp_compare*/
-    0,                                        /*tp_repr*/
-    0,                                        /*tp_as_number*/
-    0,                                        /*tp_as_sequence*/
-    0,                                        /*tp_as_mapping*/
-    0,                                        /*tp_hash */
-    0,                                        /*tp_call*/
-    0,                                        /*tp_str*/
-    0,                                        /*tp_getattro*/
-    0,                                        /*tp_setattro*/
-    0,                                        /*tp_as_buffer*/
-    Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE, /*tp_flags*/
-    "stream_reader objects",                  /* tp_doc */
-    0,                                        /* tp_traverse */
-    0,                                        /* tp_clear */
-    0,                                        /* tp_richcompare */
-    0,                                        /* tp_weaklistoffset */
-    stream_reader_iternext,                   /* tp_iter */
-    stream_reader_iternext,                   /* tp_iternext */
-    stream_reader_methods,                    /* tp_methods */
-    0,                                        /* tp_members */
-    0,                                        /* tp_getset */
-    0,                                        /* tp_base */
-    0,                                        /* tp_dict */
-    0,                                        /* tp_descr_get */
-    0,                                        /* tp_descr_set */
-    0,                                        /* tp_dictoffset */
-    stream_reader_pyinit,                     /* tp_init */
-    0,                                        /* tp_alloc */
-    stream_reader_new,                        /* tp_new */
+    PyVarObject_HEAD_INIT(NULL, 0) "bodo.libs.StreamReader", /*tp_name*/
+    sizeof(stream_reader),                                   /*tp_basicsize*/
+    0,                                                       /*tp_itemsize*/
+    (destructor)stream_reader_dealloc,                       /*tp_dealloc*/
+    0,                                                       /*tp_print*/
+    nullptr,                                                 /*tp_getattr*/
+    nullptr,                                                 /*tp_setattr*/
+    nullptr,                                                 /*tp_compare*/
+    nullptr,                                                 /*tp_repr*/
+    nullptr,                                                 /*tp_as_number*/
+    nullptr,                                                 /*tp_as_sequence*/
+    nullptr,                                                 /*tp_as_mapping*/
+    nullptr,                                                 /*tp_hash */
+    nullptr,                                                 /*tp_call*/
+    nullptr,                                                 /*tp_str*/
+    nullptr,                                                 /*tp_getattro*/
+    nullptr,                                                 /*tp_setattro*/
+    nullptr,                                                 /*tp_as_buffer*/
+    Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE,                /*tp_flags*/
+    "stream_reader objects",                                 /* tp_doc */
+    nullptr,                                                 /* tp_traverse */
+    nullptr,                                                 /* tp_clear */
+    nullptr,                /* tp_richcompare */
+    0,                      /* tp_weaklistoffset */
+    stream_reader_iternext, /* tp_iter */
+    stream_reader_iternext, /* tp_iternext */
+    stream_reader_methods,  /* tp_methods */
+    nullptr,                /* tp_members */
+    nullptr,                /* tp_getset */
+    nullptr,                /* tp_base */
+    nullptr,                /* tp_dict */
+    nullptr,                /* tp_descr_get */
+    nullptr,                /* tp_descr_set */
+    0,                      /* tp_dictoffset */
+    stream_reader_pyinit,   /* tp_init */
+    nullptr,                /* tp_alloc */
+    stream_reader_new,      /* tp_new */
 };
 
 // at module load time we need to make our type known ot Python
 extern "C" void PyInit_csv(PyObject *m) {
-    if (PyType_Ready(&stream_reader_type) < 0) return;
+    if (PyType_Ready(&stream_reader_type) < 0)
+        return;
     Py_INCREF(&stream_reader_type);
     PyModule_AddObject(m, "StreamReader", (PyObject *)&stream_reader_type);
-    PyObject_SetAttrString(
-        m, "csv_file_chunk_reader",
-        PyLong_FromVoidPtr((void *)(&csv_file_chunk_reader)));
-    PyObject_SetAttrString(m, "update_csv_reader",
-                           PyLong_FromVoidPtr((void *)(&update_csv_reader)));
-    PyObject_SetAttrString(
-        m, "initialize_csv_reader",
-        PyLong_FromVoidPtr((void *)(&initialize_csv_reader)));
+    SetAttrStringFromVoidPtr(m, csv_file_chunk_reader);
+    SetAttrStringFromVoidPtr(m, update_csv_reader);
+    SetAttrStringFromVoidPtr(m, initialize_csv_reader);
     // NOTE: old testing code that is commented out due to
     // introduction of FileReader interface.
     // TODO: update testing code
-    // PyObject_SetAttrString(m, "csv_string_chunk_reader",
-    //                        PyLong_FromVoidPtr((void*)(&csv_string_chunk_reader)));
+    // SetAttrStringFromVoidPtr(m, csv_string_chunk_reader);
 }
 
 extern "C" void PyInit_json(PyObject *m) {
-    if (PyType_Ready(&stream_reader_type) < 0) return;
+    if (PyType_Ready(&stream_reader_type) < 0)
+        return;
     Py_INCREF(&stream_reader_type);
     PyModule_AddObject(m, "StreamReader", (PyObject *)&stream_reader_type);
-    PyObject_SetAttrString(
-        m, "json_file_chunk_reader",
-        PyLong_FromVoidPtr((void *)(&json_file_chunk_reader)));
+    SetAttrStringFromVoidPtr(m, json_file_chunk_reader);
 }
 
 /**
@@ -907,7 +896,8 @@ int64_t get_header_size(const std::string &fname, int64_t file_size,
     ARROW_ONE_PROC_ERR_SYNC_USING_MPI(raise_runtime_err, runtime_err_msg);
 
     header_size += 1;
-    MPI_Bcast(&header_size, 1, MPI_INT64_T, 0, MPI_COMM_WORLD);
+    CHECK_MPI(MPI_Bcast(&header_size, 1, MPI_INT64_T, 0, MPI_COMM_WORLD),
+              "get_header_size: MPI error on MPI_Bcast:");
     return header_size;
 }
 
@@ -924,13 +914,13 @@ class MemReader : public FileReader {
     /// current read position
     int64_t pos = start;
     /// data stored by this MemReader
-    std::vector<char> data;
+    bodo::vector<char> data;
     /// character that constitutes the row separator for this data
     char row_separator;
     /// true if the content refers to JSON where records span multiple lines
     bool json_multi_line = false;
     /// starting offset of each row
-    std::vector<int64_t> row_offsets;
+    bodo::vector<int64_t> row_offsets;
     /// FileReader status
     bool status_ok = true;
 
@@ -961,17 +951,17 @@ class MemReader : public FileReader {
         data.reserve(size);
     }
 
-    virtual ~MemReader() {}
+    ~MemReader() override = default;
 
     /**
      * Return total size of data.
      */
-    uint64_t getSize() { return data.size() - start; }
+    uint64_t getSize() override { return data.size() - start; }
 
     /**
      * Read size bytes into given buffer s (from current position)
      */
-    bool read(char *s, int64_t size) {
+    bool read(char *s, int64_t size) override {
         memcpy(s, data.data() + pos, size);
         pos += size;
         return true;
@@ -980,7 +970,7 @@ class MemReader : public FileReader {
     /**
      * Seek pos_req bytes into data.
      */
-    bool seek(int64_t pos_req) {
+    bool seek(int64_t pos_req) override {
         pos = pos_req + start;
         status_ok = pos >= start && pos < int64_t(data.size());
         return status_ok;
@@ -989,13 +979,13 @@ class MemReader : public FileReader {
     /**
      * Returns reader status.
      */
-    bool ok() { return status_ok; }
+    bool ok() override { return status_ok; }
 
     /// not used by MemReader
     bool read_to_buff(char *s, int64_t size) { return false; }
 
     /// not used by MemReader
-    bool skipHeaderRows() { return this->csv_header; };
+    bool skipHeaderRows() override { return this->csv_header; };
 
     /**
      * Calculate row offsets for current data (fills row_offsets attribute).
@@ -1023,7 +1013,7 @@ class MemReader : public FileReader {
     /**
      * Replace data with new_data (MemReader takes ownership of it).
      */
-    void set_data(std::vector<char> &new_data) {
+    void set_data(bodo::vector<char> &new_data) {
         data = std::move(new_data);
         start = pos = 0;
         row_offsets.clear();
@@ -1089,7 +1079,7 @@ class MemReader : public FileReader {
 
         arrow::Result<std::shared_ptr<arrow::io::CompressedInputStream>>
             istream_result = arrow::io::CompressedInputStream::Make(
-                codec.get(), raw_istream);
+                codec.get(), raw_istream, bodo::BufferPool::DefaultPtr());
         CHECK_ARROW(istream_result, "read_compressed_file",
                     "arrow::io::CompressedInputStream::Make")
         std::shared_ptr<arrow::io::CompressedInputStream> istream =
@@ -1105,7 +1095,8 @@ class MemReader : public FileReader {
             CHECK_ARROW(bytes_read_result, "read_compressed_file",
                         "istream->Read")
             int64_t bytes_read = bytes_read_result.ValueOrDie();
-            if (bytes_read == 0) break;
+            if (bytes_read == 0)
+                break;
             if (!skipped_header) {
                 // check for row_separator in new data read
                 for (int64_t i = actual_size; i < actual_size + bytes_read;
@@ -1150,7 +1141,8 @@ class MemReader : public FileReader {
                 // ranks can have '}' or ']' as last character. JSON multi-line
                 // rows end with }, so ranks will end up with '}' as last
                 // character after data_row_correction()
-                if (data.back() == '}') data.push_back(']');
+                if (data.back() == '}')
+                    data.push_back(']');
             }
         }
     }
@@ -1172,18 +1164,21 @@ void data_row_correction(MemReader *reader, char row_separator) {
     int rank = dist_get_rank();
     int num_ranks = dist_get_size();
 
-    std::vector<char> &data = reader->data;
+    bodo::vector<char> &data = reader->data;
     if (rank < num_ranks - 1) {  // receive chunk from right, append to my data
         size_t cur_data_size = data.size();
         MPI_Status status;
         // probe for incoming message from rank + 1
-        MPI_Probe(rank + 1, 0, MPI_COMM_WORLD, &status);
+        CHECK_MPI(MPI_Probe(rank + 1, 0, MPI_COMM_WORLD, &status),
+                  "data_row_correction: MPI error on MPI_Probe:");
         // when probe returns, the status object has the message size
         int recv_size;
-        MPI_Get_count(&status, MPI_CHAR, &recv_size);
+        CHECK_MPI(MPI_Get_count(&status, MPI_CHAR, &recv_size),
+                  "data_row_correction: MPI error on MPI_Get_count:");
         data.resize(cur_data_size + recv_size);
-        MPI_Recv(data.data() + cur_data_size, recv_size, MPI_CHAR, rank + 1, 0,
-                 MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        CHECK_MPI(MPI_Recv(data.data() + cur_data_size, recv_size, MPI_CHAR,
+                           rank + 1, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE),
+                  "data_row_correction: MPI error on MPI_Recv:");
     }
     if (rank >
         0) {  // send to left (rank - 1): my data up to the first separator
@@ -1195,13 +1190,16 @@ void data_row_correction(MemReader *reader, char row_separator) {
             }
         }
         if (sep_idx != -1) {
-            MPI_Send(data.data(), sep_idx + 1, MPI_CHAR, rank - 1, 0,
-                     MPI_COMM_WORLD);
+            CHECK_MPI(MPI_Send(data.data(), sep_idx + 1, MPI_CHAR, rank - 1, 0,
+                               MPI_COMM_WORLD),
+                      "data_row_correction: MPI error on MPI_Send:");
             reader->start = sep_idx + 1;
         } else {
             // I have no separator. Send all my data
-            MPI_Send(data.data() + reader->start, data.size() - reader->start,
-                     MPI_CHAR, rank - 1, 0, MPI_COMM_WORLD);
+            CHECK_MPI(MPI_Send(data.data() + reader->start,
+                               data.size() - reader->start, MPI_CHAR, rank - 1,
+                               0, MPI_COMM_WORLD),
+                      "data_row_correction: MPI error on MPI_Send:");
             data.clear();
             reader->start = 0;
         }
@@ -1237,8 +1235,10 @@ void set_skiprows_list(MemReader *mem_reader, int64_t *skiprows,
         int64_t num_rows = mem_reader->get_num_rows();
         std::vector<int64_t> num_rows_ranks(
             num_ranks);  // number of rows in each rank
-        MPI_Allgather(&num_rows, 1, MPI_INT64_T, num_rows_ranks.data(), 1,
-                      MPI_INT64_T, MPI_COMM_WORLD);
+        CHECK_MPI(
+            MPI_Allgather(&num_rows, 1, MPI_INT64_T, num_rows_ranks.data(), 1,
+                          MPI_INT64_T, MPI_COMM_WORLD),
+            "set_skiprows_list: MPI error on MPI_Allgather:");
 
         // determine the start/end row number of each rank
         int64_t rank_global_start, rank_global_end;
@@ -1256,9 +1256,11 @@ void set_skiprows_list(MemReader *mem_reader, int64_t *skiprows,
                     // skiprows is 1-index based if file contains a header
                     skip_row = skiprows[i] - csv_header;
                     // needed to handle case skiprows=[0] and file has header
-                    if (skip_row == -1) skip_row = 0;
+                    if (skip_row == -1)
+                        skip_row = 0;
                     // Finished rows that are in this rank's range
-                    if (skip_row < rank_global_start) break;
+                    if (skip_row < rank_global_start)
+                        break;
                     if (skip_row >= rank_global_start &&
                         skip_row <= rank_global_end) {
                         // Copy from next row to end on this position
@@ -1291,8 +1293,10 @@ void set_skiprows_list(MemReader *mem_reader, int64_t *skiprows,
         int64_t num_rows = mem_reader->get_num_rows();
         for (int i = skiprows_list_len - 1; i >= 0; i--) {
             skip_row = skiprows[i] - csv_header;
-            if (skip_row >= num_rows) continue;
-            if (skip_row == -1) skip_row = 0;
+            if (skip_row >= num_rows)
+                continue;
+            if (skip_row == -1)
+                skip_row = 0;
             if (skip_row < num_rows) {
                 int64_t bytes_to_move = mem_reader->data.size() -
                                         mem_reader->row_offsets[skip_row + 1];
@@ -1325,7 +1329,8 @@ void set_skiprows_list(MemReader *mem_reader, int64_t *skiprows,
  */
 void skip_rows(MemReader *reader, int64_t skiprows, bool is_parallel) {
     tracing::Event ev("skip_rows", is_parallel);
-    if (skiprows <= 0) return;
+    if (skiprows <= 0)
+        return;
     // we need to know the row offsets to skip rows
     reader->calc_row_offsets();
     if (is_parallel) {
@@ -1335,8 +1340,10 @@ void skip_rows(MemReader *reader, int64_t skiprows, bool is_parallel) {
         int64_t num_rows = reader->get_num_rows();
         std::vector<int64_t> num_rows_ranks(
             num_ranks);  // number of rows in each rank
-        MPI_Allgather(&num_rows, 1, MPI_INT64_T, num_rows_ranks.data(), 1,
-                      MPI_INT64_T, MPI_COMM_WORLD);
+        CHECK_MPI(
+            MPI_Allgather(&num_rows, 1, MPI_INT64_T, num_rows_ranks.data(), 1,
+                          MPI_INT64_T, MPI_COMM_WORLD),
+            "skip_rows: MPI error on MPI_Allgather:");
 
         // determine the number of rows we need to skip on each rank,
         // and modify starting offset of data accordingly
@@ -1347,7 +1354,8 @@ void skip_rows(MemReader *reader, int64_t skiprows, bool is_parallel) {
                 return;
             }
             skiprows -= rank_skip;
-            if (skiprows == 0) break;
+            if (skiprows == 0)
+                break;
         }
     } else {
         // data is replicated, so skip same number of rows on every rank
@@ -1369,7 +1377,8 @@ void skip_rows(MemReader *reader, int64_t skiprows, bool is_parallel) {
  */
 void set_nrows(MemReader *reader, int64_t nrows, bool is_parallel) {
     tracing::Event ev("set_nrows", is_parallel);
-    if (nrows <= 0) return;
+    if (nrows <= 0)
+        return;
     // we need to know the row offsets to set specific number of rows to read
     reader->calc_row_offsets();
     if (is_parallel) {
@@ -1379,8 +1388,10 @@ void set_nrows(MemReader *reader, int64_t nrows, bool is_parallel) {
         int64_t num_rows = reader->get_num_rows();
         std::vector<int64_t> num_rows_ranks(
             num_ranks);  // number of rows in each rank
-        MPI_Allgather(&num_rows, 1, MPI_INT64_T, num_rows_ranks.data(), 1,
-                      MPI_INT64_T, MPI_COMM_WORLD);
+        CHECK_MPI(
+            MPI_Allgather(&num_rows, 1, MPI_INT64_T, num_rows_ranks.data(), 1,
+                          MPI_INT64_T, MPI_COMM_WORLD),
+            "set_nrows: MPI error on MPI_Allgather:");
 
         // determine the number of rows we need to read on each rank,
         // and modify data accordingly
@@ -1435,9 +1446,10 @@ void calc_row_transfer(const std::vector<int64_t> &num_rows, int64_t total_rows,
 
     // rows_left tracks how many rows I have left to send
     int64_t rows_left = num_rows[myrank];
-    if (rows_left == 0) return;
+    if (rows_left == 0)
+        return;
 
-    typedef std::pair<int64_t, int64_t> range;
+    using range = std::pair<int64_t, int64_t>;
     // my current row range (in global dataset)
     range my_cur_range(start_row_global, start_row_global + num_rows[myrank]);
 
@@ -1454,9 +1466,11 @@ void calc_row_transfer(const std::vector<int64_t> &num_rows, int64_t total_rows,
         int64_t rows_to_send = 0;
         if (std::get<0>(overlap) <= std::get<1>(overlap))
             rows_to_send = std::get<1>(overlap) - std::get<0>(overlap);
-        if (rows_to_send > 0) to_send.emplace_back(rank, rows_to_send);
+        if (rows_to_send > 0)
+            to_send.emplace_back(rank, rows_to_send);
         rows_left -= rows_to_send;
-        if (rows_left == 0) break;
+        if (rows_left == 0)
+            break;
     }
 }
 
@@ -1478,16 +1492,17 @@ void balance_rows(MemReader *reader) {
     int64_t num_rows = reader->get_num_rows();
     std::vector<int64_t> num_rows_ranks(
         num_ranks);  // number of rows in each rank
-    MPI_Allgather(&num_rows, 1, MPI_INT64_T, num_rows_ranks.data(), 1,
-                  MPI_INT64_T, MPI_COMM_WORLD);
+    CHECK_MPI(MPI_Allgather(&num_rows, 1, MPI_INT64_T, num_rows_ranks.data(), 1,
+                            MPI_INT64_T, MPI_COMM_WORLD),
+              "balance_rows: MPI error on MPI_Allgather:");
 
     // check that all ranks have same number of rows. in that case there is no
     // need to do anything
-    auto result =
-        std::minmax_element(num_rows_ranks.begin(), num_rows_ranks.end());
-    int64_t min = *result.first;
-    int64_t max = *result.second;
-    if (min == max) return;  // already balanced
+    auto result = std::ranges::minmax_element(num_rows_ranks);
+    int64_t min = *result.min;
+    int64_t max = *result.max;
+    if (min == max)
+        return;  // already balanced
 
     // get total number of rows in global dataset
     int64_t total_rows = std::accumulate(num_rows_ranks.begin(),
@@ -1519,8 +1534,9 @@ void balance_rows(MemReader *reader) {
     }
 
     // get recv count
-    MPI_Alltoall(sendcounts.data(), 1, MPI_INT64_T, recvcounts.data(), 1,
-                 MPI_INT64_T, MPI_COMM_WORLD);
+    CHECK_MPI(MPI_Alltoall(sendcounts.data(), 1, MPI_INT64_T, recvcounts.data(),
+                           1, MPI_INT64_T, MPI_COMM_WORLD),
+              "balance_rows: MPI error on MPI_Alltoall:");
 
     // have to receive rows from other processes
     int64_t total_recv_size = 0;
@@ -1530,7 +1546,7 @@ void balance_rows(MemReader *reader) {
         cur_offset += recvcounts[rank];
         total_recv_size += recvcounts[rank];
     }
-    std::vector<char> recvbuf(total_recv_size);
+    bodo::vector<char> recvbuf(total_recv_size);
     char *sendbuf = reader->data.data() + reader->start;
 
     bodo_alltoallv(sendbuf, sendcounts, sdispls, MPI_CHAR, recvbuf.data(),
@@ -1584,7 +1600,7 @@ void balance_rows(MemReader *reader) {
  * of local_data. Needed to identify i_start for nrows/chunksize-iterator case.
  */
 static int64_t compute_offsets(int64_t i_start, int64_t bytes_read,
-                               const std::vector<char> &local_data,
+                               const bodo::vector<char> &local_data,
                                char row_separator, int64_t &rows_count,
                                int64_t &global_offset, int64_t global_start,
                                int64_t &total_bytes, bool is_skiplist,
@@ -1595,10 +1611,12 @@ static int64_t compute_offsets(int64_t i_start, int64_t bytes_read,
     for (int64_t i = i_start; i < bytes_read; i++) {
         if (local_data[i] == row_separator) {
             // skip empty lines
-            if (i > i_start && local_data[i - 1] == row_separator) continue;
+            if (i > i_start && local_data[i - 1] == row_separator)
+                continue;
             cur_row++;
             // avoid counting the skipped row.
-            if (is_skiplist && cur_row == skiprows[skiprow_num]) {
+            if (is_skiplist && skiprow_num < skiprows_list_len &&
+                cur_row == skiprows[skiprow_num]) {
                 skiprow_num++;
                 continue;
             }
@@ -1616,7 +1634,8 @@ static int64_t compute_offsets(int64_t i_start, int64_t bytes_read,
     }
     // If local_data is read and we still have rows remaining, add the
     // bytes_read to add this whole section to the total_bytes scanned so far.
-    if (rows_count) total_bytes += (bytes_read - i_start);
+    if (rows_count)
+        total_bytes += (bytes_read - i_start);
     // Otherwise, add the part of local_data that was scanned to the total_bytes
     else
         total_bytes += current_pos;
@@ -1645,7 +1664,7 @@ static int64_t compute_offsets(int64_t i_start, int64_t bytes_read,
  *
  */
 static void compute_skiprows_list_offsets(
-    int64_t i_start, int64_t bytes_read, const std::vector<char> &local_data,
+    int64_t i_start, int64_t bytes_read, const bodo::vector<char> &local_data,
     char row_separator, SkiprowsListInfo *skiprows_list_info,
     int64_t &skiplist_idx, int64_t &rows_count, int64_t &total_bytes,
     bool csv_header) {
@@ -1656,7 +1675,8 @@ static void compute_skiprows_list_offsets(
     for (int64_t i = i_start; i < bytes_read; i++) {
         if (local_data[i] == row_separator) {
             // skip empty lines
-            if (i > i_start && local_data[i - 1] == row_separator) continue;
+            if (i > i_start && local_data[i - 1] == row_separator)
+                continue;
             // this is last row to read, next will be skipped
             // compute and store end of row to read
             if (rows_count == skiprows_list_info->skiprows[skiplist_idx] - 1) {
@@ -1673,7 +1693,8 @@ static void compute_skiprows_list_offsets(
             }
             rows_count++;
         }
-        if (skiplist_idx > skiprows_list_info->num_skiprows) break;
+        if (skiplist_idx >= skiprows_list_info->num_skiprows)
+            break;
     }
     // If local_data is read and we still have rows to skip, add the
     // bytes_read to the total_bytes scanned so far.
@@ -1718,7 +1739,7 @@ void read_file_info(const std::vector<std::string> &file_names,
 
     // TODO Tune (https://bodo.atlassian.net/browse/BE-2600)
     constexpr int64_t CHUNK_SIZE = 1024 * 1024;
-    std::vector<char> local_data(CHUNK_SIZE);
+    bodo::vector<char> local_data(CHUNK_SIZE);
     // Bytes skipped from the beginning based on how many rows to skip when
     // using skiprows
     int64_t total_skipped = 0;
@@ -1772,7 +1793,8 @@ void read_file_info(const std::vector<std::string> &file_names,
                 file->Read(read_size, local_data.data());
             CHECK_ARROW(bytes_read_result, "read_file_info", "file->Read")
             int64_t bytes_read = bytes_read_result.ValueOrDie();
-            if (bytes_read == 0) break;
+            if (bytes_read == 0)
+                break;
             bytes_left_to_read -= read_size;
             // 1. skiprows
             // Compute if skiprows is list or just a number > 0
@@ -1825,12 +1847,12 @@ void read_file_info(const std::vector<std::string> &file_names,
                 // nrows total count
                 tracing::Event ev_nrows("compute_offsets_nrows", false);
                 ev_nrows.add_attribute("nrows", nrows);
-                compute_offsets(skipped_start_pos, bytes_read, local_data,
-                                row_separator, nrows, global_end, global_start,
-                                nrows_bytes,
-                                skiprows_list_info->is_skiprows_list,
-                                skiprows_list_info->skiprows.data(),
-                                nrows_cur_row, nrows_skiprow_idx, 0);
+                compute_offsets(
+                    skipped_start_pos, bytes_read, local_data, row_separator,
+                    nrows, global_end, global_start, nrows_bytes,
+                    skiprows_list_info->is_skiprows_list,
+                    skiprows_list_info->skiprows.data(), nrows_cur_row,
+                    nrows_skiprow_idx, skiprows_list_info->skiprows.size());
                 ev_nrows.finalize();
             }
             // 3. chunksize
@@ -1870,7 +1892,7 @@ void read_file_info(const std::vector<std::string> &file_names,
             // no need to read more chunks in this file.
             // NOTE: if chunksize is not used it'll be -1. If used, we decrease
             // until it reaches 0. See
-            // https://github.com/Bodo-inc/Bodo/blob/1476d4812a2131603ef633ef97f0e4e36f05dc02/bodo/ir/csv_ext.py#L986
+            // https://github.com/bodo-ai/Bodo/blob/1476d4812a2131603ef633ef97f0e4e36f05dc02/bodo/ir/csv_ext.py#L986
             // Hence the check:
             if (!(skiprows_list_info->is_skiprows_list &&
                   skiprows_list_info->skiprows[0]) &&
@@ -1880,7 +1902,7 @@ void read_file_info(const std::vector<std::string> &file_names,
         // If scan reached start and end position, no need to read more files.
         // NOTE: if chunksize is not used it'll be -1. If used, we decrease
         // until it reaches 0. See
-        // https://github.com/Bodo-inc/Bodo/blob/1476d4812a2131603ef633ef97f0e4e36f05dc02/bodo/ir/csv_ext.py#L986
+        // https://github.com/bodo-ai/Bodo/blob/1476d4812a2131603ef633ef97f0e4e36f05dc02/bodo/ir/csv_ext.py#L986
         // Hence the check:
         if (!(skiprows_list_info->is_skiprows_list &&
               skiprows_list_info->skiprows[0]) &&
@@ -1983,7 +2005,8 @@ void read_chunk_data_skiplist(MemReader *mem_reader, PathInfo *path_info,
     // chunk)
     for (int skiplist_i = 0; skiplist_i < skiprows_list_len + 1; skiplist_i++) {
         // next read is not in my chunk.
-        if (start_global >= main_end_global) break;
+        if (start_global >= main_end_global)
+            break;
         int64_t local_to_read = 0;
         // Check if the rank has data to read in this section.
         // 1. Compute start and end offsets to read
@@ -2014,11 +2037,13 @@ void read_chunk_data_skiplist(MemReader *mem_reader, PathInfo *path_info,
         // Set start_global to start of next section
         // start_global==0 (to handle case where first row is skipped so
         // local_read=0)
-        if ((local_to_read && skiplist_i < skiprows_list_len) ||
-            (start_global == 0))
+        if ((local_to_read || start_global == 0) &&
+            (size_t)(skiplist_i + 1) < read_start_offset.size()) {
             start_global = read_start_offset[skiplist_i + 1];
+        }
     }
-    if (is_parallel) data_row_correction(mem_reader, row_separator);
+    if (is_parallel)
+        data_row_correction(mem_reader, row_separator);
 }
 // If skiprows and/or nrows are used
 // This is the threshold used to determine whether there's enough memory for
@@ -2094,7 +2119,7 @@ extern "C" PyObject *file_chunk_reader(
     bool is_skiprows_list = false, int64_t skiprows_list_len = 0,
     bool pd_low_memory = false) {
     try {
-        CHECK(fname != NULL, "NULL filename provided.");
+        CHECK(fname != nullptr, "NULL filename provided.");
         tracing::Event ev("file_chunk_reader", is_parallel);
         if (storage_options == Py_None)
             throw std::runtime_error("ParquetReader: storage_options is None");
@@ -2108,7 +2133,7 @@ extern "C" PyObject *file_chunk_reader(
             // returns borrowed ref
             PyObject *s3fs_anon_py =
                 PyDict_GetItemString(storage_options, "anon");
-            if (s3fs_anon_py != NULL && s3fs_anon_py == Py_True) {
+            if (s3fs_anon_py != nullptr && s3fs_anon_py == Py_True) {
                 is_anon = true;
             }
         } else {
@@ -2125,7 +2150,8 @@ extern "C" PyObject *file_chunk_reader(
         // seem like something that should worry us right now
 
         char row_separator = '\n';
-        if (strcmp(suffix, "json") == 0) row_separator = '}';
+        if (strcmp(suffix, "json") == 0)
+            row_separator = '}';
 
         int rank = dist_get_rank();
         int num_ranks = dist_get_size();
@@ -2135,7 +2161,7 @@ extern "C" PyObject *file_chunk_reader(
             new PathInfo(fname, compression_pyarg, bucket_region, is_anon);
         if (!path_info->is_path_valid()) {
             delete path_info;
-            return NULL;
+            return nullptr;
         }
         const std::string compression = path_info->get_compression_scheme();
         SkiprowsListInfo *skiprows_list_info =
@@ -2183,7 +2209,7 @@ extern "C" PyObject *file_chunk_reader(
             // TODO: Non-uniform cluster
             // Allreduce(first rank/node, SUM(node_sys_memory))
             size_t cluster_sys_memory =
-                getTotalSystemMemory() * dist_get_node_count();
+                get_total_node_memory() * dist_get_node_count();
             // Checks if memory size is low or user explicitly requested
             // low_memory.
             is_low_memory = (((double)bytes_meta_data[0] / cluster_sys_memory) >
@@ -2200,8 +2226,9 @@ extern "C" PyObject *file_chunk_reader(
                               REMOTE_FS_READ_ENTIRE_FILE_THRESHOLD));
             // If one of the ranks has is_low_memory true,
             // all ranks should switch to scanning first.
-            MPI_Allreduce(MPI_IN_PLACE, &is_low_memory, 1, MPI_C_BOOL, MPI_LOR,
-                          MPI_COMM_WORLD);
+            CHECK_MPI(MPI_Allreduce(MPI_IN_PLACE, &is_low_memory, 1, MPI_C_BOOL,
+                                    MPI_LOR, MPI_COMM_WORLD),
+                      "file_chunk_reader: MPI error on MPI_Allreduce:");
 
             // If skiprows and/or nrows are used and we decided to scan first,
             // start_global and/or end_global will be shifted.
@@ -2233,7 +2260,8 @@ extern "C" PyObject *file_chunk_reader(
                  is_low_memory) ||
                 (chunksize > 0)) {
                 // rank 0 finds update start, end offsets, and total size.
-                if (nrows > 0 && chunksize > nrows) chunksize = nrows;
+                if (nrows > 0 && chunksize > nrows)
+                    chunksize = nrows;
                 // rank 0 computes bytes information and broadcasts it.
                 if (rank == 0) {
                     read_file_info(file_names, file_sizes, header_size_bytes,
@@ -2247,23 +2275,32 @@ extern "C" PyObject *file_chunk_reader(
                 }
                 if (is_skiprows_list) {
                     // Brodacast skiprows_list_info object
-                    MPI_Bcast(skiprows_list_info->read_start_offset.data(),
-                              skiprows_list_info->read_start_offset.size(),
-                              MPI_INT64_T, 0, MPI_COMM_WORLD);
-                    MPI_Bcast(skiprows_list_info->read_end_offset.data(),
-                              skiprows_list_info->read_end_offset.size(),
-                              MPI_INT64_T, 0, MPI_COMM_WORLD);
-                    MPI_Bcast(&skiprows_list_info->rows_read, 1, MPI_INT64_T, 0,
-                              MPI_COMM_WORLD);
-                    MPI_Bcast(&skiprows_list_info->skiprows_list_idx, 1,
-                              MPI_INT64_T, 0, MPI_COMM_WORLD);
+                    CHECK_MPI(
+                        MPI_Bcast(skiprows_list_info->read_start_offset.data(),
+                                  skiprows_list_info->read_start_offset.size(),
+                                  MPI_INT64_T, 0, MPI_COMM_WORLD),
+                        "file_chunk_reader: MPI error on MPI_Bcast:");
+                    CHECK_MPI(
+                        MPI_Bcast(skiprows_list_info->read_end_offset.data(),
+                                  skiprows_list_info->read_end_offset.size(),
+                                  MPI_INT64_T, 0, MPI_COMM_WORLD),
+                        "file_chunk_reader: MPI error on MPI_Bcast:");
+                    CHECK_MPI(MPI_Bcast(&skiprows_list_info->rows_read, 1,
+                                        MPI_INT64_T, 0, MPI_COMM_WORLD),
+                              "file_chunk_reader: MPI error on MPI_Bcast:");
+                    CHECK_MPI(MPI_Bcast(&skiprows_list_info->skiprows_list_idx,
+                                        1, MPI_INT64_T, 0, MPI_COMM_WORLD),
+                              "file_chunk_reader: MPI error on MPI_Bcast:");
                 }
-                MPI_Bcast(bytes_meta_data.data(), 3, MPI_INT64_T, 0,
-                          MPI_COMM_WORLD);
-                MPI_Bcast(&chunksize_global_end, 1, MPI_INT64_T, 0,
-                          MPI_COMM_WORLD);
-                MPI_Bcast(&g_chunksize_bytes, 1, MPI_INT64_T, 0,
-                          MPI_COMM_WORLD);
+                CHECK_MPI(MPI_Bcast(bytes_meta_data.data(), 3, MPI_INT64_T, 0,
+                                    MPI_COMM_WORLD),
+                          "file_chunk_reader: MPI error on MPI_Bcast:");
+                CHECK_MPI(MPI_Bcast(&chunksize_global_end, 1, MPI_INT64_T, 0,
+                                    MPI_COMM_WORLD),
+                          "file_chunk_reader: MPI error on MPI_Bcast:");
+                CHECK_MPI(MPI_Bcast(&g_chunksize_bytes, 1, MPI_INT64_T, 0,
+                                    MPI_COMM_WORLD),
+                          "file_chunk_reader: MPI error on MPI_Bcast:");
                 // chunksize iterator case
                 // only read size upto number of bytes in the chunk
                 if (chunksize > 0) {
@@ -2358,7 +2395,8 @@ extern "C" PyObject *file_chunk_reader(
         }
 
         // shuffle data so that each rank has required number of rows
-        if (is_parallel) balance_rows(mem_reader);
+        if (is_parallel)
+            balance_rows(mem_reader);
 
         // prepare data for pandas
         mem_reader->finalize();
@@ -2372,11 +2410,12 @@ extern "C" PyObject *file_chunk_reader(
         PyObject *reader =
             PyObject_CallFunctionObjArgs((PyObject *)&stream_reader_type, NULL);
         PyGILState_Release(gilstate);
-        if (reader == NULL || PyErr_Occurred()) {
+        if (reader == nullptr || PyErr_Occurred()) {
             PyErr_Print();
             std::cerr << "Could not create chunk reader object" << std::endl;
-            if (reader) delete reader;
-            reader = NULL;
+            if (reader)
+                delete reader;
+            reader = nullptr;
         } else {
             stream_reader_init(
                 reinterpret_cast<stream_reader *>(reader), mem_reader, 0,
@@ -2387,7 +2426,7 @@ extern "C" PyObject *file_chunk_reader(
         return reader;
     } catch (const std::exception &e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
-        return NULL;
+        return nullptr;
     }
 }
 #undef MEMORY_LOAD_FACTOR
@@ -2492,12 +2531,16 @@ static bool stream_reader_update_reader(stream_reader *self) {
                        l_start_global, l_end_global, '\n', self->chunksize_rows,
                        self->global_end, g_chunksize_bytes, false,
                        self->skiprows_list_info, self->csv_header);
-    MPI_Bcast(&self->global_end, 1, MPI_INT64_T, 0, MPI_COMM_WORLD);
-    MPI_Bcast(&g_chunksize_bytes, 1, MPI_INT64_T, 0, MPI_COMM_WORLD);
-    MPI_Bcast(&self->skiprows_list_info->rows_read, 1, MPI_INT64_T, 0,
-              MPI_COMM_WORLD);
-    MPI_Bcast(&self->skiprows_list_info->skiprows_list_idx, 1, MPI_INT64_T, 0,
-              MPI_COMM_WORLD);
+    CHECK_MPI(MPI_Bcast(&self->global_end, 1, MPI_INT64_T, 0, MPI_COMM_WORLD),
+              "stream_reader_update_reader: MPI error on MPI_Bcast:");
+    CHECK_MPI(MPI_Bcast(&g_chunksize_bytes, 1, MPI_INT64_T, 0, MPI_COMM_WORLD),
+              "stream_reader_update_reader: MPI error on MPI_Bcast:");
+    CHECK_MPI(MPI_Bcast(&self->skiprows_list_info->rows_read, 1, MPI_INT64_T, 0,
+                        MPI_COMM_WORLD),
+              "stream_reader_update_reader: MPI error on MPI_Bcast:");
+    CHECK_MPI(MPI_Bcast(&self->skiprows_list_info->skiprows_list_idx, 1,
+                        MPI_INT64_T, 0, MPI_COMM_WORLD),
+              "stream_reader_update_reader: MPI error on MPI_Bcast:");
     // Each rank computes its start and end position to read
     if (self->is_parallel) {
         l_start_global =
@@ -2529,7 +2572,8 @@ static bool stream_reader_update_reader(stream_reader *self) {
                                  self->skiprows_list_info->num_skiprows);
     }
     // shuffle data so that each rank has required number of rows
-    if (self->is_parallel) balance_rows(mem_reader);
+    if (self->is_parallel)
+        balance_rows(mem_reader);
     // prepare data for pandas
     mem_reader->pos = mem_reader->start;
     mem_reader->finalize();

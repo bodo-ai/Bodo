@@ -1,236 +1,140 @@
-trigger:
-- refs/tags/*
-
+# Azure Pipeline that is triggered weekdays at midnight or when a release is tagged.
+trigger: none
 pr: none
 
+# Currently nightly can take up to ~12 hours to run. 1 AM is a good time to start.
+# (Note that this is in UTC time, so 1AM UTC is 8PM EST)
 schedules:
-- cron: "0 5 * * MON-FRI"
+- cron: "0 1 * * MON-FRI"
   displayName: 'Weekdays Daily midnight build'
   branches:
     include:
+    - main
+    exclude:
     - develop
 
+parameters:
+  - name: PYTEST_MARKER
+    displayName: PyTest Marker
+    type: string
+    default: 'not weekly'
+
+# NOTE: these variables determine artifactory channel to publish Bodo/BodoSQL/Iceberg packages.
+# See get_channel.sh
+# Originally added through Azure Pipeline UI.
+# Azure pipeline UI includes AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY
+variables:
+  # Azure Pipelines currently doesn't have a "range" function to count from 1 to total
+  # We have to manually add the element and split into an array
+  # TODO: Replace with range when available
+  bodo_1p_each: "1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22"
+  bodo_1p_total: 22
+  bodo_2p_each: "1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30"
+  bodo_2p_total: 30
+  bodosql_1p_each: "1,2,3,4,5,6,7,8,9,10,11,12"
+  bodosql_1p_total: 12
+  bodosql_2p_each: "1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22"
+  bodosql_2p_total: 22
+
 stages:
-- stage: Build_Bodo_BodoSQL_Binary
-  displayName: 'Build Bodo and BodoSQL Binary'
+  # Bodo tests
+- stage: Test_Bodo
+  displayName: 'Test Bodo'
+  dependsOn: []
   jobs:
-  - job: find_suffix
-    pool:
-      vmImage: macOS-latest
-    steps:
-    - script: |
-        set -eo pipefail
-        export BUILD_DATE=`date  +"%Y-%m-%d"`
-        export FILE_SUFFIX=built-${BUILD_DATE}
-        echo "##vso[task.setvariable variable=fileSuffix;isOutput=true]$FILE_SUFFIX"
-      displayName: 'write FILE_SUFFIX'
-      name: suffix_step
-
-  # Bodo build:
-  # Note: for all the bodo build steps,
-  # the name string is used later in the buildscripts to determine which version of conda to install
-  - template: buildscripts/azure/azure-build-binary-linux-macos.yml
-    parameters:
-      name: Linux
-      vmImage: ubuntu-latest
-      useNumbaDev: false
-      platformBuild: false
-      weeklyTest: false
-  - template: buildscripts/azure/azure-build-binary-linux-macos.yml
-    parameters:
-      name: macOS
-      vmImage: macOS-latest
-      useNumbaDev: false
-      platformBuild: false
-      weeklyTest: false
-#  - template: buildscripts/azure/azure-build-binary-windows.yml
-#    parameters:
-#      name: Windows
-#      vmImage: windows-2019
-#      useNumbaDev: false
-  - template: buildscripts/azure/azure-build-binary-linux-macos.yml
-    parameters:
-      name: macOS_ARM
-      vmImage: macOS-latest
-      useNumbaDev: false
-      platformBuild: false
-      weeklyTest: false
-  - template: buildscripts/azure/azure-build-binary-linux-pip.yml
-    parameters:
-      name: Linux_pip
-      vmImage: ubuntu-latest
-      useNumbaDev: false
-      platformBuild: false
-#  - template: buildscripts/azure/azure-build-binary-windows-pip.yml
-#    parameters:
-#      name: Windows_pip
-#      vmImage: windows-2019
-#      useNumbaDev: false
-#      platformBuild: false
-  - template: buildscripts/azure/azure-build-binary-macos-x86-pip.yml
-    parameters:
-      name: macOS_x86_pip
-      vmImage: macOS-latest
-      useNumbaDev: false
-      platformBuild: false
-
-# Note: It is difficult to enforce the exact version of bodo to use for the build, outside of
-# modifying the build recipe. Therefore, if we update BodoSQL's build process to require a specific version
-# of Bodo, I'm requiring that we update the recipe in buildscripts/bodosql/conda-recipe/meta.yaml,
-# and do a mini-release.
-
-  # BodoSQL build:
-  - template: buildscripts/bodosql/azure/azure-build-binary.yml
-    parameters:
-      name: BodoSQL_Conda_Build
-      vmImage: ubuntu-latest
-      CONDA_ENV: build_bodo_sql
-      PYTHON_VERSION: 3.10
-  - template: buildscripts/bodosql/azure/azure-build-binary-pip.yml
-    parameters:
-      name: BodoSQL_Pip_Build
-      vmImage: ubuntu-latest
-      CONDA_ENV: build_bodo_sql
-      PYTHON_VERSION: 3.10
-
-- stage: Test_Bodo_Binary
-  displayName: Test Bodo Binary
-  dependsOn: Build_Bodo_BodoSQL_Binary
-  jobs:
-  - template: buildscripts/azure/azure-test-binary-linux-macos.yml
+  - template: buildscripts/bodo/azure/azure-test-conda-linux-macos.yml
     parameters:
       # Note: name is used later in the buildscripts to determine which version of conda to install
-      name: Linux
-      vmImage: ubuntu-latest
-      useNumbaDev: false
+      name: Bodo_Tests
       caching_test: false
-      PYTHON_VERSION: 3.10
+      spawn_mode_test: false
       matrix:
-        BODO_1P_1_OF_6:
-          NP: 1
-          CONDA_ENV: 'bodo'
-          PYTEST_MARKER: bodo_1of6
-        BODO_1P_2_OF_6:
-          NP: 1
-          CONDA_ENV: 'bodo'
-          PYTEST_MARKER: bodo_2of6
-        BODO_1P_3_OF_6:
-          NP: 1
-          CONDA_ENV: 'bodo'
-          PYTEST_MARKER: bodo_3of6
-        BODO_1P_4_OF_6:
-          NP: 1
-          CONDA_ENV: 'bodo'
-          PYTEST_MARKER: bodo_4of6
-        BODO_1P_5_OF_6:
-          NP: 1
-          CONDA_ENV: 'bodo'
-          PYTEST_MARKER: bodo_5of6
-        BODO_1P_6_OF_6:
-          NP: 1
-          CONDA_ENV: 'bodo'
-          PYTEST_MARKER: bodo_6of6
-        BODO_2P_1_OF_8:
-          NP: 2
-          CONDA_ENV: 'bodo'
-          PYTEST_MARKER: bodo_1of8
-        BODO_2P_2_OF_8:
-          NP: 2
-          CONDA_ENV: 'bodo'
-          PYTEST_MARKER: bodo_2of8
-        BODO_2P_3_OF_8:
-          NP: 2
-          CONDA_ENV: 'bodo'
-          PYTEST_MARKER: bodo_3of8
-        BODO_2P_4_OF_8:
-          NP: 2
-          CONDA_ENV: 'bodo'
-          PYTEST_MARKER: bodo_4of8
-        BODO_2P_5_OF_8:
-          NP: 2
-          CONDA_ENV: 'bodo'
-          PYTEST_MARKER: bodo_5of8
-        BODO_2P_6_OF_8:
-          NP: 2
-          CONDA_ENV: 'bodo'
-          PYTEST_MARKER: bodo_6of8
-        BODO_2P_7_OF_8:
-          NP: 2
-          CONDA_ENV: 'bodo'
-          PYTEST_MARKER: bodo_7of8
-        BODO_2P_8_OF_8:
-          NP: 2
-          CONDA_ENV: 'bodo'
-          PYTEST_MARKER: bodo_8of8
+        ${{ each slice in split(variables.bodo_1p_each, ',') }}:
+          ${{ format('BODO_1P_{0}_OF_{1}', slice, variables.bodo_1p_total) }}:
+            NP: 1
+            PYTEST_MARKER: ${{ format('bodo_{0}of{1} and ({2})', slice, variables.bodo_1p_total, parameters.PYTEST_MARKER) }}
+            BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
 
-  - template: buildscripts/azure/azure-test-binary-linux-macos.yml
+        ${{ each slice in split(variables.bodo_2p_each, ',') }}:
+          ${{ format('BODO_2P_{0}_OF_{1}', slice, variables.bodo_2p_total) }}:
+            NP: 2
+            PYTEST_MARKER: ${{ format('bodo_{0}of{1} and ({2})', slice, variables.bodo_2p_total, parameters.PYTEST_MARKER) }}
+            BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
+
+  - template: buildscripts/bodo/azure/azure-test-conda-linux-macos.yml
     parameters:
-      # Note: name is used later in the buildscripts to determine which version of conda to install
       name: Linux_cache
-      vmImage: ubuntu-latest
-      useNumbaDev: false
       caching_test: true
-      PYTHON_VERSION: 3.10
+      spawn_mode_test: false
       matrix:
         TEST_2P:
           NP: 2
-          CONDA_ENV: 'bodo'
           PYTEST_MARKER: ""
+    
+  - template: buildscripts/bodo/azure/azure-test-conda-linux-macos.yml
+    parameters:
+      name: Bodo_Spawn_mode_tests
+      caching_test: false
+      spawn_mode_test: true
+      matrix:
+        TEST_1P:
+          NP: 1
+          PYTEST_MARKER: "spawn_mode"
+        TEST_2P:
+          NP: 2
+          PYTEST_MARKER: "spawn_mode"
 
 
-- stage: Test_BodoSQL_Binary
-  displayName: Test BodoSQL Binary
-  dependsOn: Build_Bodo_BodoSQL_Binary
+  # BodoSQL tests
+- stage: Test_BodoSQL_Streaming
+  displayName: 'Test BodoSQL Streaming'
+  dependsOn: []
   jobs:
-  - template: buildscripts/bodosql/azure/azure-test-binary-linux-macos.yml
+
+  - template: buildscripts/bodosql/azure/azure-test-conda-linux-macos.yml
     parameters:
       # Note: this name is not important, as we explicitly check uname to determine the os
       # for the bodoSQL tests
-      name: BODOSQL_Linux
-      vmImage: ubuntu-latest
-      BODO_CHANNEL_NAME: $(BODO_CHANNEL_NAME)
-      CONDA_ENV: run_bodo_sql
-      PYTHON_VERSION: 3.10
+      name: BodoSQL_Streaming_Tests
+      SPAWN_MODE_TEST: false
+      BODO_STREAMING_ENABLED: 1
       matrix:
-        BODOSQL_1P_1_OF_4:
-          NP: 1
-          PYTEST_MARKER: bodosql_1of4
-        BODOSQL_1P_2_OF_4:
-          NP: 1
-          PYTEST_MARKER: bodosql_2of4
-        BODOSQL_1P_3_OF_4:
-          NP: 1
-          PYTEST_MARKER: bodosql_3of4
-        BODOSQL_1P_4_OF_4:
-          NP: 1
-          PYTEST_MARKER: bodosql_4of4
-        BODOSQL_2P_1_OF_5:
-          NP: 2
-          PYTEST_MARKER: bodosql_1of5
-        BODOSQL_2P_2_OF_5:
-          NP: 2
-          PYTEST_MARKER: bodosql_2of5
-        BODOSQL_2P_3_OF_5:
-          NP: 2
-          PYTEST_MARKER: bodosql_3of5
-        BODOSQL_2P_4_OF_5:
-          NP: 2
-          PYTEST_MARKER: bodosql_4of5
-        BODOSQL_2P_5_OF_5:
-          NP: 2
-          PYTEST_MARKER: bodosql_5of5
+        ${{ each slice in split(variables.bodosql_1p_each, ',') }}:
+          ${{ format('BODOSQL_1P_{0}_OF_{1}', slice, variables.bodosql_1p_total) }}:
+            NP: 1
+            PYTEST_MARKER: ${{ format('bodosql_{0}of{1} and ({2})', slice, variables.bodosql_1p_total, parameters.PYTEST_MARKER) }}
+            BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
+        ${{ each slice in split(variables.bodosql_2p_each, ',') }}:
+          ${{ format('BODOSQL_2P_{0}_OF_{1}', slice, variables.bodosql_2p_total) }}:
+            NP: 2
+            PYTEST_MARKER: ${{ format('bodosql_{0}of{1} and ({2})', slice, variables.bodosql_2p_total, parameters.PYTEST_MARKER) }}
+            BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
 
-  - template: buildscripts/bodosql/azure/azure-test-binary-linux-macos.yml
+  - template: buildscripts/bodosql/azure/azure-test-conda-linux-macos.yml
     parameters:
       # Note: this name is not important, as we explicitly pass CACHE_TEST and
       # check uname to determine the os for the bodoSQL tests
-      name: BODOSQL_Linux_cache
-      vmImage: ubuntu-latest
-      BODO_CHANNEL_NAME: $(BODO_CHANNEL_NAME)
-      CONDA_ENV: build_bodo_sql
-      PYTHON_VERSION: 3.10
+      name: BodoSQL_Streaming_Caching_Tests
       CACHE_TEST: true
-      PYTEST_MARKER: ""
+      SPAWN_MODE_TEST: false
+      BODO_STREAMING_ENABLED: 1
       matrix:
         TEST_2P:
           NP: 2
+          PYTEST_MARKER: ""
+  
+  - template: buildscripts/bodosql/azure/azure-test-conda-linux-macos.yml
+    parameters:
+      # Note: this name is not important, as we explicitly pass CACHE_TEST and
+      # check uname to determine the os for the bodoSQL tests
+      name: BodoSQL_Streaming_Spawn_mode_tests
+      CACHE_TEST: false
+      SPAWN_MODE_TEST: true
+      BODO_STREAMING_ENABLED: 1
+      matrix:
+        TEST_1P:
+          NP: 1
+          PYTEST_MARKER: "spawn_mode"
+        TEST_2P:
+          NP: 2
+          PYTEST_MARKER: "spawn_mode"

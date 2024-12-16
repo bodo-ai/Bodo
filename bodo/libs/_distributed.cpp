@@ -1,674 +1,730 @@
-// Copyright (C) 2019 Bodo Inc. All rights reserved.
 #include "_distributed.h"
+#include <fstream>
+
+#include <fmt/format.h>
+#include <mpi.h>
 #include <openssl/err.h>
 #include <openssl/evp.h>
 #include <openssl/pem.h>
 #include <ctime>
-#include <fstream>
 #include <vector>
 
-#if defined(CHECK_LICENSE_EXPIRED) || defined(CHECK_LICENSE_CORE_COUNT) || \
-    defined(CHECK_LICENSE_PLATFORM)
+#include "_array_utils.h"
+#include "_dict_builder.h"
+#include "_shuffle.h"
+#include "_table_builder_utils.h"
 
-#define FREE_MAX_CORES 8
-#define EXPIRATION_COUNTDOWN_DAYS 6
+void print_and_raise_detailed_mpi_test_all_err(
+    int err, const std::vector<MPI_Status> &req_status_arr,
+    const std::string_view user_err_prefix) {
+    char testall_mpi_err_msg_[MPI_MAX_ERROR_STRING + 1];
+    int testall_mpi_err_msg_len = 0;
+    MPI_Error_string(err, testall_mpi_err_msg_, &testall_mpi_err_msg_len);
 
-/*
- * A license consists of a header, content and signature.
- * The header is one 32-bit integer. The first 16 bits currently specify
- * the license type (note that we don't need 16 bits for the type and can use
- * some of these in the future for other purposes). The second 16 bits specify
- * the total length (in bytes) of the license.
- * The license content varies by license type.
- * - Type 0 (regular):
- *   The content is four 32-bit ints: max core count, expiration year,
- *   expiration month, expiration day
- * - Type 1 (Bodo Platform on AWS):
- *   The content is the EC2 Instance ID (19 ASCII characters) licensed to run
- * Bodo
- * - Type 2 (Bodo Platform on Azure):
- *   The content is the Azure VM Unique ID (36 ASCII characters) licensed to run
- * Bodo The signature is obtained by getting a SHA-256 digest of the license
- * content and signing with a private key using RSA. The license that is
- * provided to customers is encoded in Base64
- */
+    std::string overall_err_msg = fmt::format(
+        "{}MPI_Error Code: {}. "
+        "MPI_Error_string:\n\t{}\nIndividual Status Details:\n",
+        user_err_prefix, err,
+        std::string(testall_mpi_err_msg_, testall_mpi_err_msg_len));
 
-#define REGULAR_LIC_TYPE 0
-#define PLATFORM_LIC_TYPE_AWS 1
-#define PLATFORM_LIC_TYPE_AZURE 2
-
-#define PLATFORM_LIC_CHECK_MAX_RETRIES 10
-#define PLATFORM_LIC_CHECK_RETRY_MAX_DELAY 5.0
-
-#define HEADER_LEN_MASK \
-    0xffff  // mask to get the total license length from license header
-
-// public key to verify signature of license file
-const char *pubkey =
-    "-----BEGIN PUBLIC KEY-----\n"
-    "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAom4enwn8WEk3saSpAhOd\n"
-    "n3JCkEf00p+EJuVV9WYK1DbAAog0Szm8TSAtNLNp2cQavctkEmq2qDhPHZL8MhFm\n"
-    "x83FVDo/4Jv4U99Jk1T+Xuy25REsbzQ4dPm0tl0yFRcTOOkMrTH2lZ/NOZ6EXIUQ\n"
-    "btvjAtgyq3mzFuKZognaterprzlEvNWsMh0ZaO6fF4bT65L9Zv6BCSuwJC0jgssJ\n"
-    "wnKmdK2q/zCBnBTlsU3VMYp0WcyWY4hQKzGfKi1zW04kGLKBLIBF/xAR4U/mIj23\n"
-    "zk2rTVKWc5IJaYCNG9XiFt71CLosb+sSA6PVVPLz4AKjoUkslhYSzjSkn6uP9ebj\n"
-    "lQIDAQAB\n"
-    "-----END PUBLIC KEY-----";
-
-/**
- * Read license from environment variable BODO_LICENSE or from license file.
- * @param[out] data: all the license data including signature
- * @param[in] b64_encoded: true if license is Base64 encoded
- */
-static int read_license_common(std::vector<char> &data, bool b64_encoded) {
-    // first check if license is in environment variable
-    char *license_text = std::getenv("BODO_LICENSE");
-    if (license_text != NULL && strlen(license_text) > 0) {
-        data.assign(license_text, license_text + strlen(license_text));
-    } else {
-        // read from "bodo.lic" file in: 1) cwd or 2) /etc
-        // TODO: check HOME directory or some other directory?
-        std::ifstream f("bodo.lic", std::ios::binary);
-        if (f.fail()) {
-            f = std::ifstream("/etc/bodo.lic", std::ios::binary);
-            if (f.fail()) {
-                fprintf(stderr, "Bodo license not found\n");
-                return 0;
-            }
+    for (size_t i = 0; i < req_status_arr.size(); i++) {
+        const MPI_Status &status = req_status_arr[i];
+        std::string mpi_err_msg;
+        if (status.MPI_ERROR == MPI_SUCCESS) {
+            mpi_err_msg = "MPI_SUCCESS";
+        } else if (status.MPI_ERROR == MPI_ERR_PENDING) {
+            mpi_err_msg = "MPI_ERR_PENDING";
+        } else {
+            char mpi_err_msg_[MPI_MAX_ERROR_STRING + 1];
+            int mpi_err_msg_len = 0;
+            MPI_Error_string(status.MPI_ERROR, mpi_err_msg_, &mpi_err_msg_len);
+            mpi_err_msg = std::string(mpi_err_msg_, mpi_err_msg_len);
         }
-        data.assign(std::istreambuf_iterator<char>{f}, {});
+        overall_err_msg += fmt::format(
+            "\tStatus #{}: MPI_SOURCE: {}, MPI_TAG: {}, MPI_ERROR Code: "
+            "{}, MPI_Error_string:\n\t\t{}\n",
+            i, status.MPI_SOURCE, status.MPI_TAG, status.MPI_ERROR,
+            mpi_err_msg);
     }
 
-    if (b64_encoded) {
-        // decode from Base64 to binary
-        // decoded data is smaller than encoded
-        std::vector<char> decoded_data(data.size());
-        int dlen = EVP_DecodeBlock((unsigned char *)decoded_data.data(),
-                                   (unsigned char *)data.data(), data.size());
-        if (dlen == -1) {
-            // ERR_print_errors_fp(stderr);  // print ssl errors
-            fprintf(stderr, "Invalid license\n");
-            return 0;
-        }
-        int header = ((int *)decoded_data.data())[0];
-        int actual_size = header & HEADER_LEN_MASK;
-        decoded_data.resize(actual_size);
-        data = std::move(decoded_data);
+    // Sometimes long messages aren't propagated properly all the way to Python,
+    // so we also print the error message to be safe. A failure in MPI_Testall
+    // implies a bug in Bodo (and potentially a hard to reproduce one), so it
+    // should be rare.
+    std::cerr << overall_err_msg << std::endl;
+    throw std::runtime_error(overall_err_msg);
+}
+
+void _dist_transpose_comm(char *output, char *input, int typ_enum,
+                          int64_t n_loc_rows, int64_t n_cols) {
+    int myrank, n_pes;
+    MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+    MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
+
+    // Calculate send counts for each target rank, which is number of local rows
+    // multiplied by number of columns that will become the target rank's rows
+    // after transpose
+    std::vector<int64_t> send_counts(n_pes);
+    for (int i = 0; i < n_pes; i++) {
+        int64_t n_target_cols = dist_get_node_portion(n_cols, n_pes, i);
+        send_counts[i] = n_loc_rows * n_target_cols;
     }
-    return 1;
+
+    std::vector<int64_t> recv_counts(n_pes);
+    CHECK_MPI(MPI_Alltoall(send_counts.data(), 1, MPI_INT64_T,
+                           recv_counts.data(), 1, MPI_INT64_T, MPI_COMM_WORLD),
+              "_dist_transpose_comm: MPI error on MPI_Alltoall:");
+
+    std::vector<int64_t> send_disp(n_pes);
+    std::vector<int64_t> recv_disp(n_pes);
+    calc_disp(send_disp, send_counts);
+    calc_disp(recv_disp, recv_counts);
+
+    MPI_Datatype mpi_typ = get_MPI_typ(typ_enum);
+    bodo_alltoallv(input, send_counts, send_disp, mpi_typ, output, recv_counts,
+                   recv_disp, mpi_typ, MPI_COMM_WORLD);
 }
 
 /**
- * Return public key in `const char *pubkey` global as openssl data structure.
+ * @brief State for non-blocking is_last synchronization using IBarrier.
+ Used in streaming Iceberg and Parquet writes currently.
+ *
  */
-static EVP_PKEY *get_public_key() {
-    BIO *mem = BIO_new_mem_buf((void *)pubkey, strlen(pubkey));
-    EVP_PKEY *key = PEM_read_bio_PUBKEY(mem, NULL, NULL, NULL);
-    BIO_free(mem);
-    return key;
-}
+class IsLastState {
+   public:
+    // The IBarrier request used for is_last synchronization
+    MPI_Request is_last_request = MPI_REQUEST_NULL;
+    bool is_last_barrier_started = false;
+    bool global_is_last = false;
+    MPI_Comm is_last_comm;
+
+    IsLastState() {
+        CHECK_MPI(MPI_Comm_dup(MPI_COMM_WORLD, &this->is_last_comm),
+                  "IsLastState: MPI error on MPI_Comm_dup:");
+    }
+    ~IsLastState() { MPI_Comm_free(&this->is_last_comm); }
+};
 
 /**
- * Verifies that the license file is valid (originates from Bodo).
- * @param msg: byte array with license content
- * @param mlen: length of msg in bytes
- * @param sig: signature (obtained when signing license content with Bodo
- * private key)
- * @param slen: length of signature in bytes
- * @return : 1 if verified correctly, 0 otherwise.
+ * @brief Create a new IsLastState and return to Python
+ *
  */
-static int verify_license(EVP_PKEY *key, const void *msg, const size_t mlen,
-                          const unsigned char *sig, size_t slen) {
-    EVP_MD_CTX *mdctx = NULL;
-
-    // create the Message Digest Context
-    if (!(mdctx = EVP_MD_CTX_create())) return 0;
-
-    // initialize the DigestSign operation - use SHA-256 as the message
-    // digest function
-    if (1 != EVP_DigestVerifyInit(mdctx, NULL, EVP_sha256(), NULL, key))
-        return 0;
-
-    // call update with the message
-    if (1 != EVP_DigestVerifyUpdate(mdctx, msg, mlen)) return 0;
-
-    // verify the signature
-    if (1 != EVP_DigestVerifyFinal(mdctx, sig, slen)) return 0;
-
-    // clean up
-    if (mdctx) EVP_MD_CTX_destroy(mdctx);
-
-    return 1;  // verified correctly
-}
-
-#endif  // CHECK_LICENSE_EXPIRED || CHECK_LICENSE_CORE_COUNT ||
-        // CHECK_LICENSE_PLATFORM
-
-#if defined(CHECK_LICENSE_PLATFORM)
-
-#include <curl/curl.h>
-#include "gason.h"  // lightweight JSON parser: https://github.com/vivkin/gason
-
-#define EC2_INSTANCE_ID_LEN 19  // number of characters in a EC2 instance ID
-#define AZURE_INSTANCE_ID_LEN \
-    36  // number of characters in an Azure instance ID
-
-// license checking error codes
-#define LICENSE_ERR_DOWNLOAD \
-    100  // could not download Instance Identity Document
-#define LICENSE_ERR_JSON_PARSE 101  // Error parsing Identity Document
-#define LICENSE_ERR_INSTANCE_ID_NOT_FOUND \
-    102  // Instance ID not found in Identity Document
-#define LICENSE_ERR_INVALID_INSTANCE 103  // License is not for this instance
-#define LICENSE_ERR_INVALID_LICENSE \
-    104  // Invalid license (for example tampered license, invalid/no signature,
-         // etc.)
-#define LICENSE_ERR_INVALID_LICENSE_TYPE 105  // Invalid license type
+IsLastState *init_is_last_state() { return new IsLastState(); }
 
 /**
- * Reads the license file, verifies the signature and returns the instance ID
- * contained in the license.
- * @param[out] license_type: the license type (see PLATFORM_LIC_TYPE_X above)
- * @param[out] lic_instance_id: the Instance ID contained in the license
+ * @brief Delete IsLastState object (called from Python)
+ *
  */
-static int get_license_platform(int &license_type,
-                                std::string &lic_instance_id) {
-    std::vector<char> data;   // store license
-    bool b64_encoded = true;  // license encoded in Base64
-    int read_license = read_license_common(data, b64_encoded);
-    if (!read_license) return 0;
+void delete_is_last_state(IsLastState *state) { delete state; }
 
-    license_type = ((int *)data.data())[0] >> 16;
-    if (license_type != PLATFORM_LIC_TYPE_AWS &&
-        license_type != PLATFORM_LIC_TYPE_AZURE) {
-        fprintf(stderr, "Could not verify license. Code %d\n",
-                LICENSE_ERR_INVALID_LICENSE_TYPE);
-        return 0;
+/**
+ * @brief Performs non-blocking synchronization of is_last flag
+ *
+ * @param state non-blocking synchronization state
+ * @param local_is_last local is_last flag that needs synchronized
+ * @return 1 if is_last is true on all ranks else 0
+ */
+int32_t sync_is_last_non_blocking(IsLastState *state, int32_t local_is_last) {
+    if (state->global_is_last) {
+        return 1;
     }
 
-    int instance_id_len;
-    if (license_type == PLATFORM_LIC_TYPE_AWS)
-        instance_id_len = EC2_INSTANCE_ID_LEN;
-    else  // AZURE (guaranteed due to the earlier check)
-        instance_id_len = AZURE_INSTANCE_ID_LEN;
-
-    lic_instance_id.assign(data.begin() + sizeof(int),
-                           data.begin() + sizeof(int) + instance_id_len);
-    std::vector<char> signature;  // to store signature contained in license
-    signature.assign(data.begin() + sizeof(int) + instance_id_len, data.end());
-
-    EVP_PKEY *key = get_public_key();
-    if (!key) {
-        // ERR_print_errors_fp(stderr);  // print ssl errors
-        fprintf(stderr, "Error obtaining public key\n");
-        return 0;
-    }
-
-    if (!verify_license(key, lic_instance_id.c_str(), instance_id_len,
-                        (unsigned char *)signature.data(), signature.size())) {
-        // ERR_print_errors_fp(stderr);  // print ssl errors
-        fprintf(stderr, "Could not verify license. Code %d\n",
-                LICENSE_ERR_INVALID_LICENSE);
-        return 0;
-    }
-    EVP_PKEY_free(key);
-
-    return 1;
-}
-
-namespace {
-/**
- * Callback used by CURL to store the result of a HTTP GET operation.
- * @param[in] in: data obtained by CURL
- * @param[in] size: size of elements
- * @param[in] num: number of elements
- * @param[in,out]: container where we are adding the data read by CURL.
- */
-std::size_t callback(const char *in, std::size_t size, std::size_t num,
-                     std::string *out) {
-    const std::size_t totalBytes(size * num);
-    out->append(in, totalBytes);
-    return totalBytes;
-}
-}  // namespace
-
-/**
- * Verify license for this EC2 instance. Obtains the instance ID of the
- * instance that this is running on and compares it with the instance ID from
- * the license.
- */
-static int verify_license_aws(std::string &lic_instance_id) {
-    const std::string url(
-        "http://169.254.169.254/latest/dynamic/instance-identity/document");
-
-    // Even though the check only takes place on one rank,
-    // we do the check PLATFORM_LIC_CHECK_MAX_RETRIES+1 times for
-    // better resilience.
-    for (int i = 0; i <= PLATFORM_LIC_CHECK_MAX_RETRIES; i++) {
-        CURL *curl = curl_easy_init();
-
-        // Set remote URL
-        curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-
-        // Don't use IPv6, which would increase DNS resolution time
-        curl_easy_setopt(curl, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V4);
-
-        // Time out after 10 seconds
-        curl_easy_setopt(curl, CURLOPT_TIMEOUT, 10);
-
-        // Response information
-        int http_code = 0;
-        std::string http_data;
-
-        // Set data handling function
-        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, callback);
-
-        // Set data container (will be passed as the last parameter to the
-        // callback handling function)
-        curl_easy_setopt(curl, CURLOPT_WRITEDATA, &http_data);
-
-        // Run HTTP GET command, capture HTTP response code, and clean up
-        curl_easy_perform(curl);
-        curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
-        curl_easy_cleanup(curl);
-
-        if (http_code == 200) {
-            char *endptr;
-            JsonValue value;
-            JsonAllocator allocator;
-            int status = jsonParse((char *)http_data.c_str(), &endptr, &value,
-                                   allocator);
-            if (status != JSON_OK) {
-                fprintf(stderr, "Could not verify license. Code %d\n",
-                        LICENSE_ERR_JSON_PARSE);
-                return 0;
-            }
-            for (auto i : value) {
-                if (strcmp(i->key, "instanceId") == 0) {
-                    std::string cur_instance_id = i->value.toString();
-                    if (cur_instance_id != lic_instance_id) {
-                        fprintf(stderr, "Could not verify license. Code %d\n",
-                                LICENSE_ERR_INVALID_INSTANCE);
-                        return 0;
-                    }
-                    return 1;
-                }
-            }
-            fprintf(stderr, "Could not verify license. Code %d\n",
-                    LICENSE_ERR_INSTANCE_ID_NOT_FOUND);
+    if (local_is_last) {
+        if (!state->is_last_barrier_started) {
+            CHECK_MPI(
+                MPI_Ibarrier(state->is_last_comm, &state->is_last_request),
+                "sync_is_last_non_blocking: MPI error on MPI_Ibarrier:");
+            state->is_last_barrier_started = true;
             return 0;
         } else {
-            // Sleep and retry
-            // Simple exponential backoff.
-            const double sleep_secs =
-                std::min((std::exp2(i) * 0.25) + ((std::rand() % 10) / 100.0),
-                         PLATFORM_LIC_CHECK_RETRY_MAX_DELAY);
-            sleep(sleep_secs);
-        }
-    }
-    fprintf(stderr, "Could not verify license. Code %d\n",
-            LICENSE_ERR_DOWNLOAD);
-    return 0;
-}
-
-/**
- * Verify license for this Azure instance. Obtains the instance ID of the
- * instance that this is running on and compares it with the instance ID from
- * the license.
- */
-static int verify_license_azure(std::string &lic_instance_id) {
-    // Can get the Azure VM Unique ID with curl:
-    // https://docs.microsoft.com/en-us/azure/virtual-machines/windows/instance-metadata-service?tabs=linux#sample-1-tracking-vm-running-on-azure
-    // curl -H Metadata:true --noproxy "*"
-    // "http://169.254.169.254/metadata/instance/compute/vmId?api-version=2017-08-01&format=text"
-    const std::string url(
-        "http://169.254.169.254/metadata/instance/compute/"
-        "vmId?api-version=2017-08-01&format=text");
-
-    // Even though the check only takes place on one rank,
-    // we do the check PLATFORM_LIC_CHECK_MAX_RETRIES+1 times for
-    // better resilience.
-    for (int i = 0; i <= PLATFORM_LIC_CHECK_MAX_RETRIES; i++) {
-        CURL *curl = curl_easy_init();
-
-        // Set remote URL
-        curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-
-        // Don't use IPv6, which would increase DNS resolution time
-        curl_easy_setopt(curl, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V4);
-
-        // Time out after 10 seconds
-        curl_easy_setopt(curl, CURLOPT_TIMEOUT, 10);
-
-        // set custom header "Metadata:true"
-        struct curl_slist *list = NULL;
-        list = curl_slist_append(list, "Metadata:true");
-        curl_easy_setopt(curl, CURLOPT_HTTPHEADER, list);
-
-        // --noproxy "*"
-        curl_easy_setopt(curl, CURLOPT_NOPROXY, "*");
-
-        // Response information
-        int http_code = 0;
-        std::string http_data;
-
-        // Set data handling function
-        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, callback);
-
-        // Set data container (will be passed as the last parameter to the
-        // callback handling function)
-        curl_easy_setopt(curl, CURLOPT_WRITEDATA, &http_data);
-
-        // Run HTTP GET command, capture HTTP response code, and clean up
-        curl_easy_perform(curl);
-        curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
-        curl_easy_cleanup(curl);
-        curl_slist_free_all(list);
-
-        if (http_code == 200) {
-            if (http_data != lic_instance_id) {
-                fprintf(stderr, "Could not verify license. Code %d\n",
-                        LICENSE_ERR_INVALID_INSTANCE);
-                return 0;
+            int flag = 0;
+            CHECK_MPI(
+                MPI_Test(&state->is_last_request, &flag, MPI_STATUS_IGNORE),
+                "sync_is_last_non_blocking: MPI error on MPI_Test:");
+            if (flag) {
+                state->global_is_last = true;
             }
-            return 1;
-        } else {
-            // Sleep and retry
-            // Simple exponential backoff.
-            const double sleep_secs =
-                std::min((std::exp2(i) * 0.25) + ((std::rand() % 10) / 100.0),
-                         PLATFORM_LIC_CHECK_RETRY_MAX_DELAY);
-            sleep(sleep_secs);
+            return flag;
         }
+    } else {
+        return 0;
     }
-    fprintf(stderr, "Could not verify license. Code %d\n",
-            LICENSE_ERR_DOWNLOAD);
-    return 0;
 }
 
-static int verify_license_platform() {
-    /**
-     * We only perform the license check on rank 0.
-     * Instance Metadata Services have API limits per
-     * node per second. In case of Azure this is very low (5)
-     * and hence it's essential to only do the check as few times as possible.
-     * Technically, we could be doing the check on one rank
-     * for each node, but that would only be useful in very
-     * malicious use cases (e.g. someone uses one node
-     * that was provisioned by the platform and has the license,
-     * but the rest don't.)
-     */
-    int success = 0;
-    if (dist_get_rank() == 0) {
-        int license_type;
-        std::string instance_id;
-        int rc = get_license_platform(license_type, instance_id);
-        if (rc == 0) {
-            success = 0;
-        } else {
-            if (license_type == PLATFORM_LIC_TYPE_AWS)
-                success = verify_license_aws(instance_id);
-            if (license_type == PLATFORM_LIC_TYPE_AZURE)
-                success = verify_license_azure(instance_id);
-        }
+int MPI_Gengather(void *sendbuf, int sendcount, MPI_Datatype sendtype,
+                  void *recvbuf, int recvcount, MPI_Datatype recvtype,
+                  int root_pe, MPI_Comm comm, bool all_gather) {
+    if (all_gather) {
+        return MPI_Allgather(sendbuf, sendcount, sendtype, recvbuf, recvcount,
+                             recvtype, comm);
+    } else {
+        return MPI_Gather(sendbuf, sendcount, sendtype, recvbuf, recvcount,
+                          recvtype, root_pe, comm);
     }
-    MPI_Bcast(&success, 1, MPI_INT, 0, MPI_COMM_WORLD);
-    return success;
 }
 
-#endif  // CHECK_LICENSE_PLATFORM
+int MPI_Gengatherv(const void *sendbuf, int sendcount, MPI_Datatype sendtype,
+                   void *recvbuf, const int *recvcounts, const int *displs,
+                   MPI_Datatype recvtype, int root_pe, MPI_Comm comm,
+                   bool all_gather) {
+    if (all_gather) {
+        return MPI_Allgatherv(sendbuf, sendcount, sendtype, recvbuf, recvcounts,
+                              displs, recvtype, comm);
+    } else {
+        return MPI_Gatherv(sendbuf, sendcount, sendtype, recvbuf, recvcounts,
+                           displs, recvtype, root_pe, comm);
+    }
+}
 
-MPI_Datatype decimal_mpi_type = MPI_DATATYPE_NULL;
+std::shared_ptr<array_info> gather_array(std::shared_ptr<array_info> in_arr,
+                                         bool all_gather, bool is_parallel,
+                                         int mpi_root, int n_pes, int myrank,
+                                         MPI_Comm *comm_ptr) {
+    int64_t n_rows = in_arr->length;
+    int64_t n_sub_elems = in_arr->n_sub_elems();
 
-#if defined(CHECK_LICENSE_EXPIRED) || defined(CHECK_LICENSE_CORE_COUNT)
+    MPI_Comm comm = MPI_COMM_WORLD;
+    bool is_receiver = (myrank == mpi_root);
+    bool is_intercomm = false;
+    if (comm_ptr != nullptr) {
+        comm = *comm_ptr;
+        is_intercomm = true;
+        is_receiver = (mpi_root == MPI_ROOT);
+        if (is_receiver) {
+            CHECK_MPI(MPI_Comm_remote_size(*comm_ptr, &n_pes),
+                      "gather_array: MPI error on MPI_Comm_remote_size:");
+            n_rows = 0;
+            n_sub_elems = 0;
+        }
+    }
+
+    int64_t arr_gath_s[2] = {n_rows, n_sub_elems};
+    bodo::vector<int64_t> arr_gath_r(2 * n_pes);
+    CHECK_MPI(MPI_Gengather(arr_gath_s, 2, MPI_LONG_LONG_INT, arr_gath_r.data(),
+                            2, MPI_LONG_LONG_INT, mpi_root, comm, all_gather),
+              "_distributed.cpp::gather_array: MPI error on MPI_Gengather:");
+
+    Bodo_CTypes::CTypeEnum dtype = in_arr->dtype;
+    bodo_array_type::arr_type_enum arr_type = in_arr->arr_type;
+    int64_t num_categories = in_arr->num_categories;
+
+    std::vector<int> rows_disps(n_pes), rows_counts(n_pes);
+    int rows_pos = 0;
+    for (int i_p = 0; i_p < n_pes; i_p++) {
+        int siz = arr_gath_r[2 * i_p];
+        rows_counts[i_p] = siz;
+        rows_disps[i_p] = rows_pos;
+        rows_pos += siz;
+    }
+
+    std::shared_ptr<array_info> out_arr;
+    if (arr_type == bodo_array_type::NUMPY ||
+        arr_type == bodo_array_type::CATEGORICAL ||
+        arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
+        // Computing the total number of rows.
+        // On mpi_root, all rows, on others just 1 row for consistency.
+        int64_t n_rows_tot = 0;
+        for (int i_p = 0; i_p < n_pes; i_p++) {
+            n_rows_tot += rows_counts[i_p];
+        }
+        if (arr_type == bodo_array_type::NULLABLE_INT_BOOL &&
+            dtype == Bodo_CTypes::_BOOL) {
+            // Nullable boolean arrays store 1 bit per boolean. As
+            // a result we need a separate code path to handle
+            // fusing the bits
+            char *data_arr_i = in_arr->data1();
+            std::vector<int> recv_count_bytes(n_pes), recv_disp_bytes(n_pes);
+            for (int i_p = 0; i_p < n_pes; i_p++) {
+                recv_count_bytes[i_p] = (rows_counts[i_p] + 7) >> 3;
+            }
+            calc_disp(recv_disp_bytes, recv_count_bytes);
+            size_t n_data_bytes = std::accumulate(
+                recv_count_bytes.begin(), recv_count_bytes.end(), size_t(0));
+            bodo::vector<uint8_t> tmp_data_bytes(n_data_bytes, 0);
+            // Boolean arrays always store data as UINT8
+            MPI_Datatype mpi_typ = get_MPI_typ(Bodo_CTypes::UINT8);
+            int n_bytes = (n_rows + 7) >> 3;
+            CHECK_MPI(
+                MPI_Gengatherv(data_arr_i, n_bytes, mpi_typ,
+                               tmp_data_bytes.data(), recv_count_bytes.data(),
+                               recv_disp_bytes.data(), mpi_typ, mpi_root, comm,
+                               all_gather),
+                "_distributed.cpp::gather_array: MPI error on MPI_Gengatherv:");
+            if (is_receiver || all_gather) {
+                out_arr = alloc_array_top_level(n_rows_tot, -1, -1, arr_type,
+                                                dtype, -1, 0, num_categories);
+                uint8_t *data_arr_o = (uint8_t *)out_arr->data1();
+                copy_gathered_null_bytes(data_arr_o, tmp_data_bytes,
+                                         recv_count_bytes, rows_counts);
+            }
+        } else {
+            MPI_Datatype mpi_typ = get_MPI_typ(dtype);
+            char *data1_ptr = nullptr;
+            if (is_receiver || all_gather) {
+                out_arr = alloc_array_top_level(n_rows_tot, -1, -1, arr_type,
+                                                dtype, -1, 0, num_categories);
+                data1_ptr = out_arr->data1();
+            }
+            CHECK_MPI(
+                MPI_Gengatherv(in_arr->data1(), n_rows, mpi_typ, data1_ptr,
+                               rows_counts.data(), rows_disps.data(), mpi_typ,
+                               mpi_root, comm, all_gather),
+                "_distributed.cpp::gather_array: MPI error on MPI_Gengatherv:");
+        }
+    } else if (arr_type == bodo_array_type::INTERVAL) {
+        MPI_Datatype mpi_typ = get_MPI_typ(dtype);
+        // Computing the total number of rows.
+        // On mpi_root, all rows, on others just 1 row for consistency.
+        int64_t n_rows_tot = 0;
+        for (int i_p = 0; i_p < n_pes; i_p++)
+            n_rows_tot += arr_gath_r[2 * i_p];
+        char *data1_ptr = nullptr;
+        char *data2_ptr = nullptr;
+        if (is_receiver || all_gather) {
+            out_arr = alloc_array_top_level(n_rows_tot, -1, -1, arr_type, dtype,
+                                            -1, 0, num_categories);
+            data1_ptr = out_arr->data1();
+            data2_ptr = out_arr->data2();
+        }
+        CHECK_MPI(
+            MPI_Gengatherv(in_arr->data1(), n_rows, mpi_typ, data1_ptr,
+                           rows_counts.data(), rows_disps.data(), mpi_typ,
+                           mpi_root, comm, all_gather),
+            "_distributed.cpp::gather_array: MPI error on MPI_Gengatherv:");
+        CHECK_MPI(
+            MPI_Gengatherv(in_arr->data2(), n_rows, mpi_typ, data2_ptr,
+                           rows_counts.data(), rows_disps.data(), mpi_typ,
+                           mpi_root, comm, all_gather),
+            "_distributed.cpp::gather_array: MPI error on MPI_Gengatherv:");
+    } else if (arr_type == bodo_array_type::STRING) {
+        MPI_Datatype mpi_typ32 = get_MPI_typ(Bodo_CTypes::UINT32);
+        MPI_Datatype mpi_typ8 = get_MPI_typ(Bodo_CTypes::UINT8);
+        // Computing indexing data in characters and rows.
+        int64_t n_rows_tot = 0;
+        int64_t n_chars_tot = 0;
+        for (int i_p = 0; i_p < n_pes; i_p++) {
+            n_rows_tot += arr_gath_r[2 * i_p];
+            n_chars_tot += arr_gath_r[2 * i_p + 1];
+        }
+        // Doing the characters
+        char *data1_ptr = nullptr;
+        if (is_receiver || all_gather) {
+            out_arr =
+                alloc_array_top_level(n_rows_tot, n_chars_tot, -1, arr_type,
+                                      dtype, -1, 0, num_categories);
+            data1_ptr = out_arr->data1();
+        }
+        std::vector<int> char_disps(n_pes), char_counts(n_pes);
+        int pos = 0;
+        for (int i_p = 0; i_p < n_pes; i_p++) {
+            int siz = arr_gath_r[2 * i_p + 1];
+            char_disps[i_p] = pos;
+            char_counts[i_p] = siz;
+            pos += siz;
+        }
+        CHECK_MPI(
+            MPI_Gengatherv(in_arr->data1(), n_sub_elems, mpi_typ8, data1_ptr,
+                           char_counts.data(), char_disps.data(), mpi_typ8,
+                           mpi_root, comm, all_gather),
+            "_distributed.cpp::gather_array: MPI error on MPI_Gengatherv:");
+        // Collecting the offsets data
+        bodo::vector<uint32_t> list_count_loc(n_rows);
+        offset_t *offsets_i = (offset_t *)in_arr->data2();
+        offset_t curr_offset = 0;
+        for (int64_t pos = 0; pos < n_rows; pos++) {
+            offset_t new_offset = offsets_i[pos + 1];
+            list_count_loc[pos] = new_offset - curr_offset;
+            curr_offset = new_offset;
+        }
+        bodo::vector<uint32_t> list_count_tot(n_rows_tot);
+        CHECK_MPI(
+            MPI_Gengatherv(list_count_loc.data(), n_rows, mpi_typ32,
+                           list_count_tot.data(), rows_counts.data(),
+                           rows_disps.data(), mpi_typ32, mpi_root, comm,
+                           all_gather),
+            "_distributed.cpp::gather_array: MPI error on MPI_Gengatherv:");
+        if (is_receiver || all_gather) {
+            offset_t *offsets_o = (offset_t *)out_arr->data2();
+            offsets_o[0] = 0;
+            for (int64_t pos = 0; pos < n_rows_tot; pos++) {
+                offsets_o[pos + 1] = offsets_o[pos] + list_count_tot[pos];
+            }
+        }
+    } else if (arr_type == bodo_array_type::DICT) {
+        // Note: We need to revisit if gather_table should be a no-op if
+        // is_parallel=False
+        if (!(is_receiver && is_intercomm)) {
+            make_dictionary_global_and_unique(in_arr, true);
+        }
+        std::shared_ptr<array_info> dict_arr = in_arr->child_arrays[0];
+
+        // Workers need to send dictionary to receiver in the intercomm case
+        if (is_intercomm) {
+            std::shared_ptr<array_info> dict_to_send = dict_arr;
+
+            // Use gather to send dictionary slices to receiver
+            // TODO(ehsan): use point-to-point array communication when
+            // available
+            if (!is_receiver) {
+                int64_t start = dist_get_start(dict_arr->length, n_pes, myrank);
+                int64_t end = dist_get_end(dict_arr->length, n_pes, myrank);
+                int64_t size = end - start;
+                std::vector<int64_t> slice_inds(size);
+                std::iota(slice_inds.begin(), slice_inds.end(), start);
+                dict_to_send =
+                    RetrieveArray_SingleColumn(dict_arr, slice_inds, false);
+            }
+            dict_arr = gather_array(dict_to_send, false, is_parallel, mpi_root,
+                                    n_pes, myrank, comm_ptr);
+        }
+        out_arr = gather_array(in_arr->child_arrays[1], all_gather, is_parallel,
+                               mpi_root, n_pes, myrank, comm_ptr);
+        if (all_gather || is_receiver) {
+            out_arr = create_dict_string_array(dict_arr, out_arr);
+        }
+    } else if (arr_type == bodo_array_type::TIMESTAMPTZ) {
+        // Computing the total number of rows.
+        // On mpi_root, all rows, on others just 1 row for consistency.
+        // The null bitmask is handled at the bottom of the function.
+        int64_t n_rows_tot = 0;
+        for (int i_p = 0; i_p < n_pes; i_p++) {
+            n_rows_tot += rows_counts[i_p];
+        }
+        MPI_Datatype utc_mpi_typ = get_MPI_typ(dtype);
+        MPI_Datatype offset_mpi_typ = get_MPI_typ(Bodo_CTypes::INT16);
+        // Copy the UTC timestamp and offset minutes buffers
+        char *data1_ptr = nullptr;
+        char *data2_ptr = nullptr;
+        if (is_receiver || all_gather) {
+            out_arr = alloc_array_top_level(n_rows_tot, -1, -1, arr_type, dtype,
+                                            -1, 0, num_categories);
+            data1_ptr = out_arr->data1();
+            data2_ptr = out_arr->data2();
+        }
+        CHECK_MPI(
+            MPI_Gengatherv(in_arr->data1(), n_rows, utc_mpi_typ, data1_ptr,
+                           rows_counts.data(), rows_disps.data(), utc_mpi_typ,
+                           mpi_root, comm, all_gather),
+            "_distributed.cpp::gather_array: MPI error on MPI_Gengatherv:");
+        CHECK_MPI(
+            MPI_Gengatherv(in_arr->data2(), n_rows, offset_mpi_typ, data2_ptr,
+                           rows_counts.data(), rows_disps.data(),
+                           offset_mpi_typ, mpi_root, comm, all_gather),
+            "_distributed.cpp::gather_array: MPI error on MPI_Gengatherv:");
+    } else if (arr_type == bodo_array_type::ARRAY_ITEM) {
+        int64_t n_rows_tot = 0;
+        for (int i_p = 0; i_p < n_pes; i_p++) {
+            n_rows_tot += arr_gath_r[2 * i_p];
+        }
+        // Collecting the offsets data
+        std::vector<offset_t> list_count_loc;
+        list_count_loc.reserve(n_rows);
+        offset_t *offsets_i = (offset_t *)in_arr->data1();
+        for (int64_t pos = 0; pos < n_rows; pos++) {
+            list_count_loc.push_back(offsets_i[pos + 1] - offsets_i[pos]);
+        }
+        std::vector<offset_t> list_count_tot(n_rows_tot);
+        MPI_Datatype mpi_typ64 = get_MPI_typ(Bodo_CTypes::UINT64);
+        CHECK_MPI(
+            MPI_Gengatherv(list_count_loc.data(), n_rows, mpi_typ64,
+                           list_count_tot.data(), rows_counts.data(),
+                           rows_disps.data(), mpi_typ64, mpi_root, comm,
+                           all_gather),
+            "_distributed.cpp::gather_array: MPI error on MPI_Gengatherv:");
+        // Gathering inner array
+        out_arr = gather_array(in_arr->child_arrays.front(), all_gather,
+                               is_parallel, mpi_root, n_pes, myrank, comm_ptr);
+        if (is_receiver || all_gather) {
+            out_arr = alloc_array_item(n_rows_tot, out_arr);
+            offset_t *offsets_o = (offset_t *)out_arr->data1();
+            offsets_o[0] = 0;
+            for (int64_t pos = 0; pos < n_rows_tot; pos++) {
+                offsets_o[pos + 1] = offsets_o[pos] + list_count_tot[pos];
+            }
+        }
+    } else if (arr_type == bodo_array_type::STRUCT) {
+        if (is_receiver || all_gather) {
+            int64_t n_rows_tot = 0;
+            for (int i_p = 0; i_p < n_pes; i_p++) {
+                n_rows_tot += arr_gath_r[2 * i_p];
+            }
+            std::vector<std::shared_ptr<array_info>> child_arrays;
+            child_arrays.reserve(in_arr->child_arrays.size());
+            for (const auto &child_array : in_arr->child_arrays) {
+                child_arrays.push_back(gather_array(child_array, all_gather,
+                                                    is_parallel, mpi_root,
+                                                    n_pes, myrank, comm_ptr));
+            }
+            out_arr = alloc_struct(n_rows_tot, std::move(child_arrays));
+        } else {
+            for (const auto &child_array : in_arr->child_arrays) {
+                gather_array(child_array, all_gather, is_parallel, mpi_root,
+                             n_pes, myrank, comm_ptr);
+            }
+        }
+    } else if (arr_type == bodo_array_type::MAP) {
+        std::shared_ptr<array_info> out_arr_item =
+            gather_array(in_arr->child_arrays[0], all_gather, is_parallel,
+                         mpi_root, n_pes, myrank, comm_ptr);
+        if (is_receiver || all_gather) {
+            out_arr = alloc_map(out_arr_item->length, out_arr_item);
+        }
+    } else {
+        throw std::runtime_error("Unexpected array type in gather_array: " +
+                                 GetArrType_as_string(arr_type));
+    }
+    if (arr_type == bodo_array_type::STRING ||
+        arr_type == bodo_array_type::NULLABLE_INT_BOOL ||
+        arr_type == bodo_array_type::TIMESTAMPTZ ||
+        arr_type == bodo_array_type::ARRAY_ITEM ||
+        arr_type == bodo_array_type::STRUCT) {
+        char *null_bitmask_i = in_arr->null_bitmask();
+        std::vector<int> recv_count_null(n_pes), recv_disp_null(n_pes);
+        for (int i_p = 0; i_p < n_pes; i_p++) {
+            recv_count_null[i_p] = (rows_counts[i_p] + 7) >> 3;
+        }
+        calc_disp(recv_disp_null, recv_count_null);
+        size_t n_null_bytes = std::accumulate(recv_count_null.begin(),
+                                              recv_count_null.end(), size_t(0));
+        bodo::vector<uint8_t> tmp_null_bytes(n_null_bytes, 0);
+        MPI_Datatype mpi_typ = get_MPI_typ(Bodo_CTypes::UINT8);
+        int n_bytes = (n_rows + 7) >> 3;
+        CHECK_MPI(
+            MPI_Gengatherv(null_bitmask_i, n_bytes, mpi_typ,
+                           tmp_null_bytes.data(), recv_count_null.data(),
+                           recv_disp_null.data(), mpi_typ, mpi_root, comm,
+                           all_gather),
+            "_distributed.cpp::gather_array: MPI error on MPI_Gengatherv:");
+        if (is_receiver || all_gather) {
+            char *null_bitmask_o = out_arr->null_bitmask();
+            copy_gathered_null_bytes((uint8_t *)null_bitmask_o, tmp_null_bytes,
+                                     recv_count_null, rows_counts);
+        }
+    }
+
+    return out_arr;
+}
+
+std::shared_ptr<table_info> gather_table(std::shared_ptr<table_info> in_table,
+                                         int64_t n_cols, bool all_gather,
+                                         bool is_parallel, int mpi_root,
+                                         MPI_Comm *comm_ptr) {
+    tracing::Event ev("gather_table", is_parallel);
+    int n_pes, myrank;
+    MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
+    MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+    std::vector<std::shared_ptr<array_info>> out_arrs;
+    if (n_cols == -1) {
+        n_cols = in_table->ncols();
+    }
+    out_arrs.reserve(n_cols);
+    for (int64_t i_col = 0; i_col < n_cols; i_col++) {
+        out_arrs.push_back(gather_array(in_table->columns[i_col], all_gather,
+                                        is_parallel, mpi_root, n_pes, myrank,
+                                        comm_ptr));
+    }
+    return std::make_shared<table_info>(out_arrs);
+}
+
+table_info *gather_table_py_entry(table_info *in_table, bool all_gather,
+                                  int mpi_root, int64_t comm_ptr) {
+    try {
+        int myrank;
+        MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+        bool is_receiver =
+            comm_ptr != 0 ? (mpi_root == MPI_ROOT) : (myrank == mpi_root);
+
+        std::shared_ptr<table_info> table(in_table);
+        std::shared_ptr<table_info> output =
+            gather_table(table, in_table->ncols(), all_gather, true, mpi_root,
+                         reinterpret_cast<MPI_Comm *>(comm_ptr));
+        if (!is_receiver && !all_gather) {
+            output = alloc_table_like(table);
+        }
+
+        return new table_info(*output);
+    } catch (const std::exception &e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return nullptr;
+    }
+}
+
+array_info *gather_array_py_entry(array_info *in_array, bool all_gather,
+                                  int mpi_root, int64_t comm_ptr) {
+    try {
+        int myrank, n_pes;
+        MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+        MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
+
+        MPI_Comm *mpi_comm_ptr = reinterpret_cast<MPI_Comm *>(comm_ptr);
+        bool is_receiver = (myrank == mpi_root);
+        if (mpi_comm_ptr != nullptr) {
+            is_receiver = (mpi_root == MPI_ROOT);
+            if (is_receiver) {
+                CHECK_MPI(MPI_Comm_remote_size(*mpi_comm_ptr, &n_pes),
+                          "gather_array_py_entry: MPI error on "
+                          "MPI_Comm_remote_size:");
+            }
+        }
+
+        std::shared_ptr<array_info> array(in_array);
+        std::shared_ptr<array_info> output = gather_array(
+            array, all_gather, true, mpi_root, n_pes, myrank, mpi_comm_ptr);
+
+        if (!is_receiver && !all_gather) {
+            output = alloc_array_like(array);
+        }
+        return new array_info(*output);
+    } catch (const std::exception &e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return nullptr;
+    }
+}
+
+// Only works on x86 Apple machines
+#if defined(__APPLE__) && defined(__x86_64__)
+#include <cpuid.h>
+
+#define CPUID(INFO, LEAF, SUBLEAF) \
+    __cpuid_count(LEAF, SUBLEAF, INFO[0], INFO[1], INFO[2], INFO[3])
+
+#define GETCPU(CPU)                                     \
+    {                                                   \
+        uint32_t CPUInfo[4];                            \
+        CPUID(CPUInfo, 1, 0);                           \
+        /* CPUInfo[1] is EBX, bits 24-31 are APIC ID */ \
+        if ((CPUInfo[3] & (1 << 9)) == 0) {             \
+            CPU = -1; /* no APIC on chip */             \
+        } else {                                        \
+            CPU = (unsigned)CPUInfo[1] >> 24;           \
+        }                                               \
+        if (CPU < 0)                                    \
+            CPU = 0;                                    \
+    }
+#endif
 
 /**
- * Determine if current date is greater than expiration date.
- * @param exp_year: expiration year
- * @param exp_month: expiration month
- * @param exp_day: expiration day
- * @return : true if expired, false otherwise
+ * @brief Get the ID of the CPU that this thread is running on. Returns -1 if we
+ * cannot get the ID, e.g. if on Windows.
+ *
+ * @return int
  */
-static bool is_expired(int exp_year, int exp_month, int exp_day) {
-    std::time_t t = std::time(0);  // get time now
-    std::tm *now = std::localtime(&t);
-    int year_now = now->tm_year + 1900;
-    int month_now = now->tm_mon + 1;
-    int day_now = now->tm_mday;
-
-    if (year_now > exp_year) return true;
-    if (year_now == exp_year) {
-        if (month_now > exp_month) return true;
-        if (month_now == exp_month) return day_now > exp_day;
-    }
-    return false;
+[[maybe_unused]] static int get_cpu_id() {
+    int cpu_id = -1;
+#ifdef __linux__
+    cpu_id = sched_getcpu();
+#elif defined(__APPLE__) && defined(__x86_64__)
+    GETCPU(cpu_id);
+#endif
+    return cpu_id;
 }
 
-static int num_days_till_license_expiration(int exp_year, int exp_month,
-                                            int exp_day) {
-    /**
-     * Return the number of days between expiry and current day. Return -1 in
-     * case of error.
-     * @param exp_year: expiration year
-     * @param exp_month: expiration month
-     * @param exp_day: expiration day
-     * @return : number of days till expiration
-     */
-
-    // Copied from
-    // https://stackoverflow.com/questions/14218894/number-of-days-between-two-dates-c
-
-    struct std::tm exp = {0, 0, 0, exp_day, exp_month - 1, exp_year - 1900};
-    std::time_t expiration_ts = std::mktime(&exp);
-    std::time_t now_ts = std::time(nullptr);  // get time now
-
-    int num_days_left = 0;
-
-    if (expiration_ts != (std::time_t)(-1) && now_ts != (std::time_t)(-1)) {
-        num_days_left =
-            (int)(std::difftime(expiration_ts, now_ts) / (60 * 60 * 24));
-    } else {
-        num_days_left = -1;
+/**
+ * @brief Wrapper around get_rank() to be called from Python (avoids Numba JIT
+ overhead and makes compiler debugging easier by eliminating extra compilation)
+ *
+ */
+static PyObject *get_rank_py_wrapper(PyObject *self, PyObject *args) {
+    if (PyTuple_Size(args) != 0) {
+        PyErr_SetString(PyExc_TypeError, "get_rank() does not take arguments");
+        return nullptr;
     }
-    return num_days_left;
+    PyObject *rank_obj = PyLong_FromLong(dist_get_rank());
+    return rank_obj;
 }
 
-#endif  // CHECK_LICENSE_EXPIRED) || CHECK_LICENSE_CORE_COUNT
+/**
+ * @brief Wrapper around finalize() to be called from Python (avoids Numba JIT
+ overhead and makes compiler debugging easier by eliminating extra compilation)
+ *
+ */
+static PyObject *finalize_py_wrapper(PyObject *self, PyObject *args) {
+    if (PyTuple_Size(args) != 0) {
+        PyErr_SetString(PyExc_TypeError, "finalize() does not take arguments");
+        return nullptr;
+    }
+    PyObject *ret_obj = PyLong_FromLong(finalize());
+    return ret_obj;
+}
+
+static PyMethodDef ext_methods[] = {
+#define declmethod(func) {#func, (PyCFunction)func, METH_VARARGS, NULL}
+    declmethod(get_rank_py_wrapper),
+    declmethod(finalize_py_wrapper),
+    {nullptr},
+#undef declmethod
+};
 
 PyMODINIT_FUNC PyInit_hdist(void) {
     PyObject *m;
-    static struct PyModuleDef moduledef = {
-        PyModuleDef_HEAD_INIT, "hdist", "No docs", -1, NULL,
-    };
-    m = PyModule_Create(&moduledef);
-    if (m == NULL) return NULL;
-
-#if defined(CHECK_LICENSE_PLATFORM)
-    int num_pes_plat;
-    MPI_Comm_size(MPI_COMM_WORLD, &num_pes_plat);
-
-    if ((num_pes_plat > FREE_MAX_CORES) && !verify_license_platform()) {
-        PyErr_SetString(PyExc_RuntimeError, "Invalid license\n");
-        return NULL;
-    }
-#endif
-
-#if defined(CHECK_LICENSE_EXPIRED) || defined(CHECK_LICENSE_CORE_COUNT)
-    int num_pes;
-    int max_cores = FREE_MAX_CORES;
-    int year;
-    int month;
-    int day;
-    MPI_Comm_size(MPI_COMM_WORLD, &num_pes);
-    if (num_pes > FREE_MAX_CORES) {
-        // get max cores and expiration date from license, and verify license
-        // using digital signature with asymmetric cryptography
-
-        bool b64_encoded = true;  // license encoded in Base64
-        std::vector<char> data;   // store license
-        int read_license = read_license_common(data, b64_encoded);
-        if (!read_license) {
-            PyErr_SetString(PyExc_RuntimeError, "Error reading license");
-            return NULL;
-        }
-        const int *_data = (int *)data.data();
-        int license_type = _data[0] >> 16;
-        if (license_type != 0) {
-            fprintf(stderr, "Invalid license type\n");
-            return NULL;
-        }
-        max_cores = _data[1];
-        year = _data[2];
-        month = _data[3];
-        day = _data[4];
-        std::vector<char> signature;  // to store signature contained in license
-        signature.assign(data.begin() + sizeof(int) * 5, data.end());
-        std::vector<int> msg = {max_cores, year, month, day};
-
-        EVP_PKEY *key = get_public_key();
-        if (!key) {
-            // ERR_print_errors_fp(stderr);  // print ssl errors
-            PyErr_SetString(PyExc_RuntimeError, "Error obtaining public key");
-            return NULL;
-        }
-
-        if (!verify_license(key, msg.data(), msg.size() * sizeof(int),
-                            (unsigned char *)signature.data(),
-                            signature.size())) {
-            // ERR_print_errors_fp(stderr);  // print ssl errors
-            PyErr_SetString(PyExc_RuntimeError, "Invalid license\n");
-            return NULL;
-        }
-        EVP_PKEY_free(key);
-    }
-#endif
-
-#ifdef CHECK_LICENSE_EXPIRED
-    // check expiration date
-    int rank;
-    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-    MPI_Comm_size(MPI_COMM_WORLD, &num_pes);
-    if ((num_pes > FREE_MAX_CORES) && is_expired(year, month, day)) {
-        PyErr_SetString(PyExc_RuntimeError, "Bodo license has expired");
-        return NULL;
-    }
-
-    // license countdown message if within EXPIRATION_COUNTDOWN_DAYS
-    // days of license expiry and using more than FREE_MAX_CORES cores
-    if ((num_pes > FREE_MAX_CORES)) {
-        int countdown_days = num_days_till_license_expiration(year, month, day);
-        if (countdown_days < 0) {
-            PyErr_SetString(PyExc_RuntimeError,
-                            "Error in license countdown check.");
-            return NULL;
-        }
-        // only print reminder on rank 0
-        if (countdown_days < EXPIRATION_COUNTDOWN_DAYS && rank == 0) {
-            fprintf(stdout, "Reminder: Bodo License will expire in %d days.\n",
-                    countdown_days);
-        }
-    }
-#endif
+    MOD_DEF(m, "hdist", "No docs", ext_methods);
+    if (m == nullptr)
+        return nullptr;
 
     // make sure MPI is initialized, assuming this will be called
     // on all processes
     int is_initialized;
     MPI_Initialized(&is_initialized);
-    if (!is_initialized) MPI_Init(NULL, NULL);
-
-#ifdef CHECK_LICENSE_CORE_COUNT
-    MPI_Comm_size(MPI_COMM_WORLD, &num_pes);
-    if (num_pes > max_cores) {
-        char error_msg[100];
-        sprintf(error_msg, "License is for %d cores. Max core count exceeded.",
-                max_cores);
-        PyErr_SetString(PyExc_RuntimeError, error_msg);
-        return NULL;
-    }
-#endif
-
-    // initialize decimal_mpi_type
-    // TODO: free when program exits
-    if (decimal_mpi_type == MPI_DATATYPE_NULL) {
-        MPI_Type_contiguous(2, MPI_LONG_LONG_INT, &decimal_mpi_type);
-        MPI_Type_commit(&decimal_mpi_type);
-    }
+    if (!is_initialized)
+        CHECK_MPI(MPI_Init(nullptr, nullptr),
+                  "PyInit_hdist: MPI error on MPI_Init:");
 
     int decimal_bytes;
-    MPI_Type_size(decimal_mpi_type, &decimal_bytes);
+    CHECK_MPI(MPI_Type_size(get_MPI_typ(Bodo_CTypes::DECIMAL), &decimal_bytes),
+              "PyInit_hdist: MPI error on MPI_Type_size:");
     // decimal_value should be exactly 128 bits to match Python
     if (decimal_bytes != 16)
         std::cerr << "invalid decimal mpi type size" << std::endl;
 
-    PyObject_SetAttrString(m, "dist_get_rank",
-                           PyLong_FromVoidPtr((void *)(&dist_get_rank)));
-    PyObject_SetAttrString(m, "dist_get_size",
-                           PyLong_FromVoidPtr((void *)(&dist_get_size)));
-    PyObject_SetAttrString(m, "dist_get_start",
-                           PyLong_FromVoidPtr((void *)(&dist_get_start)));
-    PyObject_SetAttrString(m, "dist_get_end",
-                           PyLong_FromVoidPtr((void *)(&dist_get_end)));
-    PyObject_SetAttrString(
-        m, "dist_get_node_portion",
-        PyLong_FromVoidPtr((void *)(&dist_get_node_portion)));
-    PyObject_SetAttrString(m, "dist_get_time",
-                           PyLong_FromVoidPtr((void *)(&dist_get_time)));
-    PyObject_SetAttrString(m, "get_time",
-                           PyLong_FromVoidPtr((void *)(&get_time)));
-    PyObject_SetAttrString(m, "barrier",
-                           PyLong_FromVoidPtr((void *)(&barrier)));
+    SetAttrStringFromVoidPtr(m, dist_get_rank);
+    SetAttrStringFromVoidPtr(m, dist_get_size);
+    SetAttrStringFromVoidPtr(m, dist_get_remote_size);
+    SetAttrStringFromVoidPtr(m, dist_get_start);
+    SetAttrStringFromVoidPtr(m, dist_get_end);
+    SetAttrStringFromVoidPtr(m, dist_get_node_portion);
+    SetAttrStringFromVoidPtr(m, dist_get_time);
+    SetAttrStringFromVoidPtr(m, get_time);
+    SetAttrStringFromVoidPtr(m, barrier);
 
-    PyObject_SetAttrString(m, "dist_reduce",
-                           PyLong_FromVoidPtr((void *)(&dist_reduce)));
-    PyObject_SetAttrString(m, "dist_exscan",
-                           PyLong_FromVoidPtr((void *)(&dist_exscan)));
-    PyObject_SetAttrString(m, "dist_arr_reduce",
-                           PyLong_FromVoidPtr((void *)(&dist_arr_reduce)));
-    PyObject_SetAttrString(m, "dist_irecv",
-                           PyLong_FromVoidPtr((void *)(&dist_irecv)));
-    PyObject_SetAttrString(m, "dist_isend",
-                           PyLong_FromVoidPtr((void *)(&dist_isend)));
-    PyObject_SetAttrString(m, "dist_recv",
-                           PyLong_FromVoidPtr((void *)(&dist_recv)));
-    PyObject_SetAttrString(m, "dist_send",
-                           PyLong_FromVoidPtr((void *)(&dist_send)));
-    PyObject_SetAttrString(m, "dist_wait",
-                           PyLong_FromVoidPtr((void *)(&dist_wait)));
-    PyObject_SetAttrString(
-        m, "dist_get_item_pointer",
-        PyLong_FromVoidPtr((void *)(&dist_get_item_pointer)));
-    PyObject_SetAttrString(m, "get_dummy_ptr",
-                           PyLong_FromVoidPtr((void *)(&get_dummy_ptr)));
-    PyObject_SetAttrString(m, "c_gather_scalar",
-                           PyLong_FromVoidPtr((void *)(&c_gather_scalar)));
-    PyObject_SetAttrString(m, "c_gatherv",
-                           PyLong_FromVoidPtr((void *)(&c_gatherv)));
-    PyObject_SetAttrString(m, "c_allgatherv",
-                           PyLong_FromVoidPtr((void *)(&c_allgatherv)));
-    PyObject_SetAttrString(m, "c_scatterv",
-                           PyLong_FromVoidPtr((void *)(&c_scatterv)));
-    PyObject_SetAttrString(m, "c_bcast",
-                           PyLong_FromVoidPtr((void *)(&c_bcast)));
-    PyObject_SetAttrString(m, "c_alltoallv",
-                           PyLong_FromVoidPtr((void *)(&c_alltoallv)));
-    PyObject_SetAttrString(m, "c_alltoall",
-                           PyLong_FromVoidPtr((void *)(&c_alltoall)));
-    PyObject_SetAttrString(m, "allgather",
-                           PyLong_FromVoidPtr((void *)(&allgather)));
-    PyObject_SetAttrString(m, "finalize",
-                           PyLong_FromVoidPtr((void *)(&finalize)));
-    PyObject_SetAttrString(m, "oneD_reshape_shuffle",
-                           PyLong_FromVoidPtr((void *)(&oneD_reshape_shuffle)));
-    PyObject_SetAttrString(m, "permutation_int",
-                           PyLong_FromVoidPtr((void *)(&permutation_int)));
-    PyObject_SetAttrString(
-        m, "permutation_array_index",
-        PyLong_FromVoidPtr((void *)(&permutation_array_index)));
+    SetAttrStringFromVoidPtr(m, dist_reduce);
+    SetAttrStringFromVoidPtr(m, dist_exscan);
+    SetAttrStringFromVoidPtr(m, dist_arr_reduce);
+    SetAttrStringFromVoidPtr(m, dist_irecv);
+    SetAttrStringFromVoidPtr(m, dist_isend);
+    SetAttrStringFromVoidPtr(m, dist_recv);
+    SetAttrStringFromVoidPtr(m, dist_send);
+    SetAttrStringFromVoidPtr(m, dist_wait);
+    SetAttrStringFromVoidPtr(m, dist_get_item_pointer);
+    SetAttrStringFromVoidPtr(m, get_dummy_ptr);
+    SetAttrStringFromVoidPtr(m, c_gather_scalar);
+    SetAttrStringFromVoidPtr(m, c_gatherv);
+    SetAttrStringFromVoidPtr(m, c_allgatherv);
+    SetAttrStringFromVoidPtr(m, c_scatterv);
+    SetAttrStringFromVoidPtr(m, c_bcast);
+    SetAttrStringFromVoidPtr(m, broadcast_array_py_entry);
+    SetAttrStringFromVoidPtr(m, broadcast_table_py_entry);
+    SetAttrStringFromVoidPtr(m, c_alltoallv);
+    SetAttrStringFromVoidPtr(m, c_alltoall);
+    SetAttrStringFromVoidPtr(m, allgather);
+    SetAttrStringFromVoidPtr(m, oneD_reshape_shuffle);
+    SetAttrStringFromVoidPtr(m, permutation_int);
+    SetAttrStringFromVoidPtr(m, permutation_array_index);
+    SetAttrStringFromVoidPtr(m, timestamptz_reduce);
+    SetAttrStringFromVoidPtr(m, decimal_reduce);
+    SetAttrStringFromVoidPtr(m, _dist_transpose_comm);
+    SetAttrStringFromVoidPtr(m, init_is_last_state);
+    SetAttrStringFromVoidPtr(m, delete_is_last_state);
+    SetAttrStringFromVoidPtr(m, sync_is_last_non_blocking);
+    SetAttrStringFromVoidPtr(m, get_cpu_id);
+
+    SetAttrStringFromVoidPtr(m, gather_table_py_entry);
+    SetAttrStringFromVoidPtr(m, gather_array_py_entry);
 
     // add actual int value to module
     PyObject_SetAttrString(m, "mpi_req_num_bytes",
                            PyLong_FromSize_t(get_mpi_req_num_bytes()));
     PyObject_SetAttrString(m, "ANY_SOURCE",
                            PyLong_FromLong((long)MPI_ANY_SOURCE));
+
     return m;
 }

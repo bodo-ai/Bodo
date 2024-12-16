@@ -1,1 +1,1 @@
-bodo/_version.py export-subst
+pixi.lock merge=ours linguist-language=YAML linguist-generated=true

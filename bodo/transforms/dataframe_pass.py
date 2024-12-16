@@ -1,13 +1,12 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
 converts data frame operations to Series and Array operations
 as much as possible to provide implementation and enable optimization.
 Creates specialized IR nodes for complex operations like Join.
 """
+
+import datetime
 import operator
 import warnings
-from collections import defaultdict
-from typing import List
 
 import numba
 import numpy as np
@@ -55,11 +54,14 @@ from bodo.utils.typing import (
     INDEX_SENTINEL,
     BodoError,
     ColNamesMetaType,
+    gen_bodosql_case_func,
+    get_index_data_arr_types,
     get_literal_value,
     get_overload_const_func,
     get_overload_const_list,
     get_overload_const_str,
     get_overload_const_tuple,
+    handle_bodosql_case_init_code,
     is_literal_type,
     is_overload_constant_list,
     is_overload_constant_str,
@@ -125,7 +127,6 @@ class DataFramePass:
         return None
 
     def _run_getitem(self, assign, rhs):
-        lhs = assign.target
         nodes = []
         index_var = get_getsetitem_index_var(rhs, self.typemap, nodes)
         index_typ = self.typemap[index_var.name]
@@ -333,6 +334,27 @@ class DataFramePass:
                 self.typemap[rhs.func.name], types.Dispatcher
             ):
                 return [assign]
+            # Cases like dtype(value) in np.linspace implementation
+            elif isinstance(
+                func_def, (ir.Const, ir.FreeVar, ir.Global)
+            ) and func_def.value in (
+                int,
+                np.int8,
+                np.int16,
+                np.int32,
+                np.int64,
+                np.uint8,
+                np.uint16,
+                np.uint32,
+                np.uint64,
+                float,
+                np.float32,
+                np.float64,
+                complex,
+                np.complex64,
+                np.complex128,
+            ):
+                return [assign]
 
             warnings.warn("function call couldn't be found for dataframe analysis")
             return None
@@ -374,11 +396,9 @@ class DataFramePass:
                 "init_dataframe",
                 "bodo.hiframes.pd_dataframe_ext",
             ):
-                assert self.typemap[
-                    df_var.name
-                ].is_table_format, (
-                    "set_table_data called on a DataFrame without a table format"
-                )
+                assert (
+                    self.typemap[df_var.name].is_table_format
+                ), "set_table_data called on a DataFrame without a table format"
                 # Extra the original table to enable eliminating the original DataFrame
                 tuple_var = df_def.args[0]
                 tuple_def = guard(get_definition, self.func_ir, tuple_var)
@@ -455,7 +475,6 @@ class DataFramePass:
 
                 # column is in extra arrays
                 if in_ind >= n_in_table_cols:
-
                     return compile_func_single_block(
                         eval(
                             f"lambda extra_arrs: extra_arrs[{in_ind - n_in_table_cols}]"
@@ -664,7 +683,7 @@ class DataFramePass:
         # Handle builtin functions passed by strings.
         if is_overload_constant_str(func_type):
             func_name = get_overload_const_str(func_type)
-            var_kws = dict()
+            var_kws = {}
             try:
                 axis_var = get_call_expr_arg("apply", rhs.args, kws, 1, "axis")
                 axis_type = self.typemap[axis_var.name]
@@ -712,15 +731,12 @@ class DataFramePass:
         kws.pop("result_type", None)
         kws.pop("args", None)
         udf_arg_names = (
-            ", ".join("e{}".format(i) for i in range(len(extra_args)))
+            ", ".join(f"e{i}" for i in range(len(extra_args)))
             + (", " if extra_args else "")
-            + ", ".join(
-                "{}=e{}".format(a, i + len(extra_args))
-                for i, a in enumerate(kws.keys())
-            )
+            + ", ".join(f"{a}=e{i + len(extra_args)}" for i, a in enumerate(kws.keys()))
         )
         extra_args += list(kws.values())
-        extra_arg_names = ", ".join("e{}".format(i) for i in range(len(extra_args)))
+        extra_arg_names = ", ".join(f"e{i}" for i in range(len(extra_args)))
 
         # find which columns are actually used if possible
         used_cols = _get_df_apply_used_cols(func, df_typ.columns)
@@ -737,7 +753,7 @@ class DataFramePass:
             ]
         )
 
-        func_text = "def f({}, df_index, {}):\n".format(col_name_args, extra_arg_names)
+        func_text = f"def f({col_name_args}, df_index, {extra_arg_names}):\n"
         func_text += "  numba.parfors.parfor.init_prange()\n"
         func_text += "  n = len(c0)\n"
         func_text += "  index_arr = bodo.utils.conversion.coerce_to_array(df_index)\n"
@@ -748,9 +764,7 @@ class DataFramePass:
             )
         func_text += "  for i in numba.parfors.parfor.internal_prange(n):\n"
         # TODO: unbox to array value if necessary (e.g. Timestamp to dt64)
-        func_text += "    row_idx = bodo.hiframes.pd_index_ext.init_heter_index({}, bodo.utils.conversion.box_if_dt64(index_arr[i]))\n".format(
-            gen_const_tup(used_cols)
-        )
+        func_text += f"    row_idx = bodo.hiframes.pd_index_ext.init_heter_index({gen_const_tup(used_cols)}, bodo.utils.conversion.box_if_dt64(index_arr[i]))\n"
         # Determine if we have a heterogenous or homogeneous series
         null_values_list = [
             f"bodo.libs.array_kernels.isna(c{i}, i)" for i in range(len(used_cols))
@@ -758,13 +772,13 @@ class DataFramePass:
         null_args = ", ".join(null_values_list)
         func_text += f"    row_data = bodo.libs.nullable_tuple_ext.build_nullable_tuple(({row_args},), ({null_args},))\n"
         func_text += "    row = bodo.hiframes.pd_series_ext.init_series(row_data, row_idx, bodo.utils.conversion.box_if_dt64(index_arr[i]))\n"
-        func_text += "    v = map_func(row, {})\n".format(udf_arg_names)
+        func_text += f"    v = map_func(row, {udf_arg_names})\n"
         if is_df_output:
             func_text += "    v_vals = bodo.hiframes.pd_series_ext.get_series_data(v)\n"
             for i in range(n_out_cols):
                 func_text += f"    v{i} = v_vals[{i}]\n"
         else:
-            func_text += f"    v0 = v\n"
+            func_text += "    v0 = v\n"
         for i in range(n_out_cols):
             if is_df_output:
                 func_text += f"    if bodo.libs.array_kernels.isna(v_vals, {i}):\n"
@@ -772,9 +786,7 @@ class DataFramePass:
                 func_text += "    else:\n"
                 # Add extra indent
                 func_text += "  "
-            func_text += (
-                f"    S{i}[i] = bodo.utils.conversion.unbox_if_timestamp(v{i})\n"
-            )
+            func_text += f"    S{i}[i] = bodo.utils.conversion.unbox_if_tz_naive_timestamp(v{i})\n"
         if is_df_output:
             data_arrs = ", ".join(f"S{i}" for i in range(n_out_cols))
             func_text += f"  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({data_arrs},), df_index, __col_name_meta_value_dataframe_apply)\n"
@@ -837,40 +849,69 @@ class DataFramePass:
         import bodosql
 
         init_code = self.typemap[rhs.args[2].name].instance_type.meta
-        body_code = get_overload_const_str(self.typemap[rhs.args[3].name])
-        out_arr_type = unwrap_typeref(self.typemap[rhs.args[4].name])
+        body_code = self.typemap[rhs.args[3].name].instance_type.meta
+        arr_variable_name = get_overload_const_str(self.typemap[rhs.args[4].name])
+        indexing_variable_name = get_overload_const_str(self.typemap[rhs.args[5].name])
+        out_arr_type = unwrap_typeref(self.typemap[rhs.args[6].name])
 
         named_params = dict(rhs.kws)
         named_param_args = ", ".join(named_params.keys())
 
-        func_text = f"def f(arrs, n, {named_param_args}):\n"
-        func_text += "\n".join(init_code) + "\n"
-        func_text += "  numba.parfors.parfor.init_prange()\n"
-        func_text += "  out_arr = bodo.utils.utils.alloc_type(n, out_arr_type, (-1,))\n"
-        func_text += "  for i in numba.parfors.parfor.internal_prange(n):\n"
-        func_text += (
-            f"    out_arr[i] = bodo.utils.conversion.unbox_if_timestamp({body_code})\n"
-        )
-        func_text += "  return out_arr\n"
+        # As a simple heuristic we determined complex case statements by looking at the
+        # number of lines in the body of the case
+        is_complex = len(body_code.split("\n")) > bodo.COMPLEX_CASE_THRESHOLD
 
-        loc_vars = {}
-        glbls = {
-            "numba": numba,
-            "pd": pd,
-            "np": np,
-            "re": re,
-            "bodo": bodo,
-            "bodosql": bodosql,
-            "out_arr_type": out_arr_type,
-        }
-        exec(func_text, glbls, loc_vars)
-        f = loc_vars["f"]
+        var_names, must_inline = handle_bodosql_case_init_code(init_code)
+
+        if (
+            not must_inline
+            and is_complex
+            and len(var_names) > 0
+            and not named_param_args
+        ):
+            f, glbls = gen_bodosql_case_func(
+                init_code,
+                body_code,
+                named_param_args,
+                var_names,
+                arr_variable_name,
+                indexing_variable_name,
+                out_arr_type,
+                self.func_ir.func_id.func.__globals__,
+            )
+        else:
+            func_text = f"def f(arrs, n, {named_param_args}):\n"
+            func_text += init_code
+            func_text += "  numba.parfors.parfor.init_prange()\n"
+            func_text += f"  {arr_variable_name} = bodo.utils.utils.alloc_type(n, out_arr_type, (-1,))\n"
+            func_text += f"  for {indexing_variable_name} in numba.parfors.parfor.internal_prange(n):\n"
+            func_text += body_code
+            func_text += f"  return {arr_variable_name}\n"
+
+            loc_vars = {}
+            glbls = {
+                "numba": numba,
+                "pd": pd,
+                "np": np,
+                "re": re,
+                "bodo": bodo,
+                "bodosql": bodosql,
+                "out_arr_type": out_arr_type,
+                "datetime": datetime,
+            }
+            # Globals generated by BodoSQL (accessible from main function) may be
+            # necessary too.
+            # See https://bodo.atlassian.net/browse/BSE-1941
+            glbls.update(self.func_ir.func_id.func.__globals__)
+            exec(func_text, glbls, loc_vars)
+            f = loc_vars["f"]
 
         return replace_func(
             self,
             f,
             rhs.args[:2] + list(named_params.values()),
             extra_globals=glbls,
+            run_full_pipeline=True,
         )
 
     def _run_call_df_sort_values(self, assign, lhs, rhs):
@@ -884,6 +925,7 @@ class DataFramePass:
             inplace_var,
             na_position_var,
             _bodo_chunk_bounds,
+            _bodo_interval_sort_var,
         ) = rhs.args
         df_typ = self.typemap[df_var.name]
         is_table_format = self.typemap[lhs.name].is_table_format
@@ -896,6 +938,11 @@ class DataFramePass:
             self.func_ir,
             error_msg,
             typemap=self.typemap,
+        )
+        _bodo_interval_sort = get_const_value(
+            _bodo_interval_sort_var,
+            self.func_ir,
+            "df.sort_values(): '_bodo_interval_sort' must be a literal constant of type boolean.",
         )
 
         # find key array for sort ('by' arg)
@@ -980,6 +1027,7 @@ class DataFramePass:
                 ascending_list,
                 na_position,
                 _bodo_chunk_bounds,
+                _bodo_interval_sort,
                 is_table_format=is_table_format,
                 num_table_arrays=len(df_typ.columns) if is_table_format else 0,
             )
@@ -1065,14 +1113,10 @@ class DataFramePass:
         df_typ = self.typemap[df_var.name]
 
         col_name_args = ", ".join(["c" + str(i) for i in range(len(df_typ.columns))])
-        name_consts = ", ".join(["'{}'".format(c) for c in df_typ.columns])
+        name_consts = ", ".join([f"'{c}'" for c in df_typ.columns])
 
-        func_text = "def f({}):\n".format(col_name_args)
-        func_text += (
-            "  return bodo.hiframes.dataframe_impl.get_itertuples({}, {})\n".format(
-                name_consts, col_name_args
-            )
-        )
+        func_text = f"def f({col_name_args}):\n"
+        func_text += f"  return bodo.hiframes.dataframe_impl.get_itertuples({name_consts}, {col_name_args})\n"
 
         loc_vars = {}
         exec(func_text, {}, loc_vars)
@@ -1092,13 +1136,11 @@ class DataFramePass:
         # impl: for each column, convert data to series, call S.mean(), get
         # output data and create a new indexed Series
         n_cols = len(df_typ.columns)
-        data_args = tuple("data{}".format(i) for i in range(n_cols))
+        data_args = tuple(f"data{i}" for i in range(n_cols))
 
         func_text = "def _mean_impl({}):\n".format(", ".join(data_args))
         for d in data_args:
-            ind = "bodo.hiframes.pd_index_ext.init_range_index(0, len({}), 1, None)".format(
-                d
-            )
+            ind = f"bodo.hiframes.pd_index_ext.init_range_index(0, len({d}), 1, None)"
             func_text += (
                 "  {} = bodo.hiframes.pd_series_ext.init_series({}, {})\n".format(
                     d + "_S", d, ind
@@ -1110,7 +1152,7 @@ class DataFramePass:
         )
         func_text += (
             "  index = bodo.libs.str_arr_ext.str_arr_from_sequence(({},))\n".format(
-                ", ".join("'{}'".format(c) for c in df_typ.columns)
+                ", ".join(f"'{c}'" for c in df_typ.columns)
             )
         )
         func_text += "  return bodo.hiframes.pd_series_ext.init_series(data, index)\n"
@@ -1162,16 +1204,14 @@ class DataFramePass:
         func_text = "def _query_impl({}):\n".format(", ".join(in_args))
         # convert array to Series to support cases such as C.str.contains
         for c_var in used_cols.values():
-            ind = "bodo.hiframes.pd_index_ext.init_range_index(0, len({}), 1, None)".format(
-                c_var
+            ind = (
+                f"bodo.hiframes.pd_index_ext.init_range_index(0, len({c_var}), 1, None)"
             )
             func_text += (
-                "  {0} = bodo.hiframes.pd_series_ext.init_series({0}, {1})\n".format(
-                    c_var, ind
-                )
+                f"  {c_var} = bodo.hiframes.pd_series_ext.init_series({c_var}, {ind})\n"
             )
         # use dummy function to catch data type error
-        func_text += "  return _check_query_series_bool({})".format(parsed_expr_str)
+        func_text += f"  return _check_query_series_bool({parsed_expr_str})"
         loc_vars = {}
         global _check_query_series_bool
         exec(
@@ -1309,7 +1349,7 @@ class DataFramePass:
             in_arrs = [
                 self._get_dataframe_data(df_var, c, nodes) for c in df_typ.columns
             ]
-            data_args = ["data{}".format(i) for i in range(n_cols)]
+            data_args = [f"data{i}" for i in range(n_cols)]
 
             # if column is being added
             if cname not in df_typ.columns:
@@ -1333,7 +1373,7 @@ class DataFramePass:
         if df_typ.is_table_format:
             func_text += f"  T2 = bodo.hiframes.table.set_table_data(T1, {col_ind}, {new_arr_arg})\n"
             func_text += f"  df = bodo.hiframes.pd_dataframe_ext.init_dataframe((T2,), {df_index}, __col_name_meta_value_set_df_column)\n"
-            func_text += f"  return df\n"
+            func_text += "  return df\n"
         else:
             func_text += f"  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({data_args},), {df_index}, __col_name_meta_value_set_df_column)\n"
         loc_vars = {}
@@ -1427,7 +1467,7 @@ class DataFramePass:
             in_arrs = [
                 self._get_dataframe_data(df_var, c, nodes) for c in in_df_typ.columns
             ]
-            data_args = ["data{}".format(i) for i in range(n_cols)]
+            data_args = [f"data{i}" for i in range(n_cols)]
             init_table_args = data_args.copy()
             for i in range(len(col_names_to_replace)):
                 new_arr = new_arrs[i]
@@ -1436,9 +1476,9 @@ class DataFramePass:
                 col_ind = in_df_typ.column_index[col_name]
                 data_args[col_ind] = f"new_arr_{col_ind}"
                 in_arrs[col_ind] = new_arrs[i]
-                init_table_args[
-                    col_ind
-                ] = f"bodo.utils.conversion.coerce_to_array(new_arr_{col_ind})"
+                init_table_args[col_ind] = (
+                    f"bodo.utils.conversion.coerce_to_array(new_arr_{col_ind})"
+                )
                 in_arrs[col_ind] = new_arr
 
         data_args_full_string = ", ".join(data_args)
@@ -1457,7 +1497,7 @@ class DataFramePass:
                 col_ind = col_inds[i]
                 func_text += f"  T{i+1} = bodo.hiframes.table.set_table_data(T{i}, {col_ind}, bodo.utils.conversion.coerce_to_array({data_args[i+1]}))\n"
             func_text += f"  df = bodo.hiframes.pd_dataframe_ext.init_dataframe((T{len(col_names_to_replace)},), df_index, out_col_names)\n"
-            func_text += f"  return df\n"
+            func_text += "  return df\n"
         else:
             init_table_args_full_string = ", ".join(init_table_args)
             func_text += f"  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({init_table_args_full_string},), df_index, out_col_names)\n"
@@ -1509,6 +1549,7 @@ class DataFramePass:
             is_join_var,
             is_indicator_var,
             _bodo_na_equal_var,
+            _bodo_rebalance_output_if_skewed_var,
             gen_cond_var,
         ) = rhs.args
 
@@ -1529,6 +1570,12 @@ class DataFramePass:
         assert is_indicator is not None, "Internal error with Join IR node"
         is_na_equal = guard(find_const, self.func_ir, _bodo_na_equal_var)
         assert is_na_equal is not None, "Internal error with Join IR node"
+        rebalance_output_if_skewed = guard(
+            find_const, self.func_ir, _bodo_rebalance_output_if_skewed_var
+        )
+        assert (
+            rebalance_output_if_skewed is not None
+        ), "Internal error with Join IR node"
         gen_cond_expr = guard(find_const, self.func_ir, gen_cond_var)
         assert gen_cond_expr is not None, "Internal error with Join IR node"
         out_typ = self.typemap[lhs.name]
@@ -1595,17 +1642,17 @@ class DataFramePass:
 
         if right_index_as_output:
             has_index_var = True
-            out_index_typ = self.typemap[right_index_var.name]
             in_df_index_name = right_df_index_name
         elif left_index_as_output:
             has_index_var = True
-            out_index_typ = self.typemap[left_index_var.name]
             in_df_index_name = left_df_index_name
         # Update the type info
         if has_index_var:
             index_var = ir.Var(lhs.scope, mk_unique_var("out_index"), lhs.loc)
             out_data_vars.append(index_var)
-            self.typemap[index_var.name] = out_index_typ
+            self.typemap[index_var.name] = get_index_data_arr_types(
+                self.typemap[lhs.name].index
+            )[0]
             left_vars.append(left_index_var)
             right_vars.append(right_index_var)
         else:
@@ -1617,6 +1664,10 @@ class DataFramePass:
             indicator_col_num = len(out_typ.data) - 1
         else:
             indicator_col_num = -1
+
+        # cross join needs input lengths to handle dead input cases
+        left_len_var = self._gen_len_call(left_df, nodes) if how == "cross" else None
+        right_len_var = self._gen_len_call(right_df, nodes) if how == "cross" else None
 
         nodes.append(
             bodo.ir.join.Join(
@@ -1639,7 +1690,10 @@ class DataFramePass:
                 right_index,
                 indicator_col_num,
                 is_na_equal,
+                rebalance_output_if_skewed,
                 gen_cond_expr,
+                left_len_var,
+                right_len_var,
             )
         )
 
@@ -1661,6 +1715,82 @@ class DataFramePass:
 
         return nodes + compile_func_single_block(_init_df, out_vars, lhs, self)
 
+    def _gen_len_call(self, var, nodes):
+        """generate a len() call on 'var' and append the IR nodes to 'nodes'
+
+        Args:
+            var (ir.Var): input variable to call len() on (array/series/dataframe type)
+            nodes (list(ir.Stmt)): IR node list to append nodes of len() call
+
+        Returns:
+            ir.Var: output variable of len() call
+        """
+        nodes += compile_func_single_block(
+            eval("lambda A: len(A)"),
+            (var,),
+            None,
+            self,
+        )
+        return nodes[-1].target
+
+    def _gen_gb_info_out(self, rhs, grp_typ, df_type, out_typ, func_name):
+        args = tuple([self.typemap[v.name] for v in rhs.args])
+        kws = {k: self.typemap[v.name] for k, v in rhs.kws}
+
+        # gb_info maps (in_cols, additional_args, func_name) -> [out_col_1, out_col_2, ...]
+        _, gb_info = bodo.hiframes.pd_groupby_ext.resolve_gb(
+            grp_typ,
+            args,
+            kws,
+            func_name,
+            numba.core.registry.cpu_target.typing_context,
+            numba.core.registry.cpu_target.target_context,
+        )
+
+        # Populate gb_info_out (to store in Aggregate node)
+        # gb_info_out: maps out_col -> (in_cols, func)
+        gb_info_out = {}
+        agg_func = get_agg_func(self.func_ir, func_name, rhs, typemap=self.typemap)
+        if not isinstance(agg_func, list):
+            # agg_func is SimpleNamespace or a Python function for UDFs
+            agg_funcs = [agg_func for _ in range(len(gb_info))]
+        else:
+            # TODO Might be possible to simplify get_agg_func by returning a flat list
+            agg_funcs = list(flatten(agg_func))
+
+        used_colnames = set(grp_typ.keys)
+        i = 0
+        for (in_cols, additional_args, fname), out_col_list in gb_info.items():
+            in_col_inds = tuple(df_type.column_index[in_col] for in_col in in_cols)
+
+            # TODO(keaton): handle the case that we have duplicate aggregation functions
+            # https://bodo.atlassian.net/browse/BSE-609
+            # previously, this was segfaulting. This doesn't resolve the issue, but it at least
+            # prevents segfaults.
+            if len(out_col_list) != 1:
+                raise BodoError(
+                    "Internal error in _gen_gb_info_out: encountered duplicate aggregation functions"
+                )
+
+            out_col = out_col_list[0]
+            out_col_ind = (
+                out_typ.column_index[out_col]
+                if not isinstance(out_typ, SeriesType)
+                else 0
+            )
+            f = agg_funcs[i]
+            assert (
+                out_col_ind not in gb_info_out
+            ), "Internal error in _gen_gb_info_out: duplicate output column assignment"
+            assert (
+                fname == f.fname
+            ), "Internal error in _gen_gb_info_out: fname mismatch"
+            gb_info_out[out_col_ind] = (in_col_inds, f)
+            used_colnames.update(in_cols)
+            i += 1
+
+        return gb_info_out, used_colnames
+
     def _run_call_groupby(self, assign, lhs, rhs, grp_var, func_name):
         """Transform groupby calls into an Aggregate IR node"""
         if func_name == "apply":
@@ -1681,46 +1811,9 @@ class DataFramePass:
         if len(out_colnames) != len(set(out_colnames)):
             raise BodoError("aggregate with duplication in output is not allowed")
 
-        args = tuple([self.typemap[v.name] for v in rhs.args])
-        kws = {k: self.typemap[v.name] for k, v in rhs.kws}
-        # gb_info maps (in_col, func_name) -> out_col
-        _, gb_info = bodo.hiframes.pd_groupby_ext.resolve_gb(
-            grp_typ,
-            args,
-            kws,
-            func_name,
-            numba.core.registry.cpu_target.typing_context,
-            numba.core.registry.cpu_target.target_context,
+        gb_info_out, used_colnames = self._gen_gb_info_out(
+            rhs, grp_typ, df_type, out_typ, func_name
         )
-
-        # Populate gb_info_in and gb_info_out (to store in Aggregate node)
-        # gb_info_in: maps in_col -> list of (func, out_col)
-        # gb_info_out: maps out_col -> (in_col, func)
-        gb_info_in = defaultdict(list)
-        gb_info_out = {}
-        agg_func = get_agg_func(self.func_ir, func_name, rhs, typemap=self.typemap)
-        if not isinstance(agg_func, list):
-            # agg_func is SimpleNamespace or a Python function for UDFs
-            agg_funcs = [agg_func for _ in range(len(gb_info))]
-        else:
-            # TODO Might be possible to simplify get_agg_func by returning a flat list
-            agg_funcs = list(flatten(agg_func))
-
-        used_colnames = set(grp_typ.keys)
-        i = 0
-        for (in_col, fname), out_col in gb_info.items():
-            in_col_ind = df_type.column_index[in_col] if in_col is not None else None
-            out_col_ind = (
-                out_typ.column_index[out_col]
-                if not isinstance(out_typ, SeriesType)
-                else 0
-            )
-            f = agg_funcs[i]
-            assert fname == f.fname
-            gb_info_in[in_col_ind].append((f, out_col_ind))
-            gb_info_out[out_col_ind] = (in_col_ind, f)
-            used_colnames.add(in_col)
-            i += 1
 
         # input_has_index=True means we have to pass Index of input dataframe to groupby
         # since it's needed in creating output, e.g. in shift() but not sum()
@@ -1731,19 +1824,24 @@ class DataFramePass:
         # return_key=True if groupby returns group keys since needed for output.
         # e.g. for sum() but not shift()
         return_key = True
+        # Is the output df defined to maintain the same size as the input.
+        maintain_input_size = False
 
-        for funcs in gb_info_in.values():
-            for func, _ in funcs:
-                if func.ftype in (list_cumulative | {"shift", "transform", "ngroup"}):
-                    input_has_index = True
-                    same_index = True
-                    return_key = False
-                elif func.ftype in {"idxmin", "idxmax"}:
-                    input_has_index = True
-                elif func.ftype == "head":
-                    input_has_index = True
-                    same_index = True
-                    return_key = False
+        for _, func in gb_info_out.values():
+            if func.ftype in (list_cumulative | {"shift", "transform", "ngroup"}):
+                input_has_index = True
+                same_index = True
+                return_key = False
+                maintain_input_size = True
+            elif func.ftype in {"idxmin", "idxmax"}:
+                input_has_index = True
+            elif func.ftype == "head":
+                input_has_index = True
+                same_index = True
+                return_key = False
+            elif func.ftype == "window":
+                return_key = False
+                maintain_input_size = True
 
         # TODO: comment on when this case is possible and necessary
         if (
@@ -1811,7 +1909,6 @@ class DataFramePass:
             lhs.name,
             df_var.name,  # input dataframe var name
             grp_typ.keys,  # name of key columns, for printing only
-            gb_info_in,
             gb_info_out,
             out_vars,
             in_vars,
@@ -1823,13 +1920,17 @@ class DataFramePass:
             return_key,
             lhs.loc,
             func_name,
+            maintain_input_size,
             grp_typ.dropna,
             # Subset of keys to use as the key when shuffling across
             # ranks, keys[:grp_typ._num_shuffle_keys].
             # If grp_typ._num_shuffle_keys == -1 then we use
             # all of the keys, which is the common case.
             grp_typ._num_shuffle_keys,
+            # Should we use SQL or Pandas rules instead groupby
+            grp_typ._use_sql_rules,
         )
+
         nodes.append(agg_node)
 
         if same_index:
@@ -1937,12 +2038,9 @@ class DataFramePass:
         # find kw arguments to UDF (pop apply() args first)
         kws.pop("func", None)
         udf_arg_names = (
-            ", ".join("e{}".format(i) for i in range(len(extra_args)))
+            ", ".join(f"e{i}" for i in range(len(extra_args)))
             + (", " if extra_args else "")
-            + ", ".join(
-                "{}=e{}".format(a, i + len(extra_args))
-                for i, a in enumerate(kws.keys())
-            )
+            + ", ".join(f"{a}=e{i + len(extra_args)}" for i, a in enumerate(kws.keys()))
         )
         udf_arg_types = [self.typemap[v.name] for v in extra_args]
         udf_kw_types = {k: self.typemap[v.name] for k, v in kws.items()}
@@ -1956,7 +2054,7 @@ class DataFramePass:
         )
 
         extra_args += list(kws.values())
-        extra_arg_names = ", ".join("e{}".format(i) for i in range(len(extra_args)))
+        extra_arg_names = ", ".join(f"e{i}" for i in range(len(extra_args)))
 
         in_col_names = df_type.columns
         if grp_typ.explicit_select:
@@ -1985,7 +2083,7 @@ class DataFramePass:
         # Otherwise, _bodo_groupby_apply_impl would have to be recompiled in distributed
         # pass to avoid errors (extra compilation time overhead).
         if isinstance(df_type.index, RangeIndexType):
-            func_text += f"  df_index = range_index_to_numeric(df_index)\n"
+            func_text += "  df_index = range_index_to_numeric(df_index)\n"
 
         func_text += f"  in_df = bodo.hiframes.pd_dataframe_ext.init_dataframe(({col_name_args},), df_index, __col_name_meta_value_inner)\n"
 
@@ -2103,7 +2201,7 @@ class DataFramePass:
         func_text += "  in_data = in_df.iloc[sort_idx{}]\n".format(
             ",0" if is_series_in else ""
         )
-        func_text += f"  ev_gp_indices_data.add_attribute('in_data', len(in_data))\n"
+        func_text += "  ev_gp_indices_data.add_attribute('in_data', len(in_data))\n"
         func_text += "  ev_gp_indices_data.finalize()\n"
 
         # whether UDF returns a single row (as Series) or scalar
@@ -2157,7 +2255,7 @@ class DataFramePass:
             func_text += f"    n_prev_groups = bodo.libs.distributed_api.dist_exscan(ngroups, np.int32({sum_no}))\n"
 
         # loop over groups and call UDF
-        func_text += f"  for i in range(ngroups):\n"
+        func_text += "  for i in range(ngroups):\n"
         func_text += "    piece = in_data[starts[i]:ends[i]]\n"
 
         func_text += f"    out = map_func(piece, {udf_arg_names})\n"
@@ -2166,21 +2264,22 @@ class DataFramePass:
                 "    out_vals = bodo.hiframes.pd_series_ext.get_series_data(out)\n"
             )
             for i in range(n_out_cols - n_out_keys):
-                func_text += f"    arrs{i}[i] = bodo.utils.conversion.unbox_if_timestamp(out_vals[{i}])\n"
+                func_text += f"    arrs{i}[i] = bodo.utils.conversion.unbox_if_tz_naive_timestamp(out_vals[{i}])\n"
         else:
-            func_text += (
-                f"    arrs0[i] = bodo.utils.conversion.unbox_if_timestamp(out)\n"
-            )
+            func_text += "    arrs0[i] = bodo.utils.conversion.unbox_if_tz_naive_timestamp(out)\n"
         for i in range(n_keys):
             key_typ = df.data[df.column_index[grp_typ.keys[i]]]
             if key_typ == bodo.dict_str_arr_type:
                 func_text += (
-                    f"    dict_key_indices_arrs{i}[i] = s_key{i}._indices[starts[i]]\n"
+                    f"    if bodo.libs.array_kernels.isna(s_key{i}, starts[i]):\n"
                 )
+                func_text += f"      bodo.libs.array_kernels.setna(dict_key_indices_arrs{i}, i)\n"
+                func_text += "    else:\n"
+                func_text += f"      dict_key_indices_arrs{i}[i] = s_key{i}._indices[starts[i]]\n"
             else:
-                func_text += f"    in_key_arrs{i}[i] = s_key{i}[starts[i]]\n"
+                func_text += f"    bodo.libs.array_kernels.copy_array_element(in_key_arrs{i}, i, s_key{i}, starts[i])\n"
         if not grp_typ.as_index:
-            func_text += f"    out_index_arr[i] = n_prev_groups + i\n"
+            func_text += "    out_index_arr[i] = n_prev_groups + i\n"
 
         # create output dataframe
         if grp_typ.as_index:
@@ -2192,7 +2291,7 @@ class DataFramePass:
         for i in range(n_keys):
             key_typ = df.data[df.column_index[grp_typ.keys[i]]]
             if key_typ == bodo.dict_str_arr_type:
-                func_text += f"  in_key_arrs{i} = bodo.libs.dict_arr_ext.init_dict_arr(s_key{i}._data, dict_key_indices_arrs{i})\n"
+                func_text += f"  in_key_arrs{i} = bodo.libs.dict_arr_ext.init_dict_arr(s_key{i}._data, dict_key_indices_arrs{i}, False, False, s_key{i}._dict_id)\n"
 
         if isinstance(out_typ.index, MultiIndexType):
             out_key_arr_names = ", ".join(f"in_key_arrs{i}" for i in range(n_keys))
@@ -2207,8 +2306,8 @@ class DataFramePass:
                 ", ".join(f"in_key_arrs{i}" for i in range(n_keys)) + ", " + out_data
             )
         # parallel shuffle clean up
-        func_text += f"  if _is_parallel:\n"
-        func_text += f"    delete_shuffle_info(shuffle_info)\n"
+        func_text += "  if _is_parallel:\n"
+        func_text += "    delete_shuffle_info(shuffle_info)\n"
         func_text += "  ev.finalize()\n"
         func_text += "  ev_apply.finalize()\n"
 
@@ -2216,7 +2315,7 @@ class DataFramePass:
             # This column name metadata value is generated at the point of execution of the functext in _run_call_groupby_apply when the out type is a dataframe
             func_text += f"  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({out_data},), out_index, __col_name_meta_value_groupby_apply)\n"
         else:
-            func_text += f"  return bodo.hiframes.pd_series_ext.init_series(arrs0, out_index, None)\n"
+            func_text += "  return bodo.hiframes.pd_series_ext.init_series(arrs0, out_index, None)\n"
         return func_text
 
     def _gen_groupby_apply_acc_loop(
@@ -2251,10 +2350,10 @@ class DataFramePass:
         # NOTE: Pandas tracks whether output Index is same as input, and reorders output
         # to match input if Index hasn't changed
         # https://github.com/pandas-dev/pandas/blob/9ee8674a9fb593f138e66d7b108a097beaaab7f2/pandas/_libs/reduction.pyx#L369
-        func_text += f"  mutated = False\n"
+        func_text += "  mutated = False\n"
 
         # loop over groups and call UDF
-        func_text += f"  for i in range(ngroups):\n"
+        func_text += "  for i in range(ngroups):\n"
         func_text += "    piece = in_data[starts[i]:ends[i]]\n"
 
         func_text += f"    out_df = map_func(piece, {udf_arg_names})\n"
@@ -2281,10 +2380,10 @@ class DataFramePass:
                     func_text += f"    in_key_arrs{i}.append(bodo.utils.utils.full_type(len(out_df), s_key{i}[starts[i]], s_key{i}))\n"
         else:
             func_text += (
-                f"    in_key_arr.append(np.full(len(out_df), n_prev_groups + i))\n"
+                "    in_key_arr.append(np.full(len(out_df), n_prev_groups + i))\n"
             )
         if isinstance(udf_return_type, SeriesType):
-            func_text += f"    arrs0.append(bodo.hiframes.pd_series_ext.get_series_data(out_df))\n"
+            func_text += "    arrs0.append(bodo.hiframes.pd_series_ext.get_series_data(out_df))\n"
         else:
             for i in range(n_out_cols):
                 func_text += f"    arrs{i}.append(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(out_df, {i}))\n"
@@ -2295,13 +2394,13 @@ class DataFramePass:
                 key_typ = df.data[df.column_index[grp_typ.keys[i]]]
                 if key_typ == bodo.dict_str_arr_type:
                     func_text += f"  out_key_arr_dict_index{i} = bodo.libs.array_kernels.concat(in_key_arrs{i})\n"
-                    func_text += f"  out_key_arr{i} = bodo.libs.dict_arr_ext.init_dict_arr(s_key{i}._data, out_key_arr_dict_index{i}, s_key{i}._has_global_dictionary)\n"
+                    func_text += f"  out_key_arr{i} = bodo.libs.dict_arr_ext.init_dict_arr(s_key{i}._data, out_key_arr_dict_index{i}, s_key{i}._has_global_dictionary, s_key{i}._has_unique_local_dictionary, s_key{i}._dict_id)\n"
                 else:
                     func_text += f"  out_key_arr{i} = bodo.libs.array_kernels.concat(in_key_arrs{i})\n"
 
             out_key_arr_names = ", ".join(f"out_key_arr{i}" for i in range(n_keys))
         else:
-            func_text += f"  out_key_arr = bodo.libs.array_kernels.concat(in_key_arr)\n"
+            func_text += "  out_key_arr = bodo.libs.array_kernels.concat(in_key_arr)\n"
             out_key_arr_names = "out_key_arr"
 
         # create output dataframe
@@ -2313,8 +2412,18 @@ class DataFramePass:
         else:
             index_names = "None"
         index_names += ", in_df.index.name"
-        func_text += f"  out_idx_arr_all = bodo.libs.array_kernels.concat(arrs_index)\n"
+        func_text += "  out_idx_arr_all = bodo.libs.array_kernels.concat(arrs_index)\n"
         func_text += f"  out_index = bodo.hiframes.pd_multi_index_ext.init_multi_index(({out_key_arr_names}, out_idx_arr_all), ({index_names},), None)\n"
+
+        # Unset global flag of output dictionary-encoded arrays in case map_func
+        # kernel reuses input dictionaries which are global after shuffle.
+        # The ranks with empty data won't have the global flag on which causes a hang
+        # in reverse shuffle below.
+        # See https://bodo.atlassian.net/browse/BSE-2566
+        for i in range(n_out_cols):
+            func_text += (
+                f"  out_arr{i} = bodo.libs.dict_arr_ext.unset_dict_global(out_arr{i})\n"
+            )
 
         # reorder output to match input if UDF Index is same as input
         func_text += "  if _is_parallel:\n"
@@ -2323,29 +2432,33 @@ class DataFramePass:
             f"    mutated = bool(dist_reduce(int(mutated), np.int32({sum_no})))\n"
         )
         func_text += "  if not mutated:\n"
-        func_text += f"    rev_idx = sort_idx.argsort()\n"
-        func_text += f"    out_index = out_index[rev_idx]\n"
+
+        # Use Bodo's implementation of argsort instead of numba (sort_idx.argsort())
+        # Numba's implementation is slow.
+        # https://bodo.atlassian.net/browse/BE-4053
+        func_text += "    rev_idx = bodo.hiframes.series_impl.argsort(sort_idx)\n"
+        func_text += "    out_index = out_index[rev_idx]\n"
         for i in range(n_out_cols):
             func_text += f"    out_arr{i} = out_arr{i}[rev_idx]\n"
-        func_text += f"    if _is_parallel:\n"
-        func_text += f"      out_index = reverse_shuffle(out_index, shuffle_info)\n"
+        func_text += "    if _is_parallel:\n"
+        func_text += "      out_index = reverse_shuffle(out_index, shuffle_info)\n"
         for i in range(n_out_cols):
             func_text += (
                 f"      out_arr{i} = reverse_shuffle(out_arr{i}, shuffle_info)\n"
             )
 
         # parallel shuffle clean up
-        func_text += f"  if _is_parallel:\n"
-        func_text += f"    delete_shuffle_info(shuffle_info)\n"
+        func_text += "  if _is_parallel:\n"
+        func_text += "    delete_shuffle_info(shuffle_info)\n"
 
-        out_data = ", ".join("out_arr{}".format(i) for i in range(n_out_cols))
+        out_data = ", ".join(f"out_arr{i}" for i in range(n_out_cols))
         if isinstance(out_typ, SeriesType):
             # some ranks may have empty data after shuffle (ngroups == 0), so call the
             # UDF with empty data to get the name of the output Series
             func_text += f"  out_name = out_df.name if ngroups else map_func(in_data[0:0], {udf_arg_names}).name\n"
             func_text += "  ev.finalize()\n"
             func_text += "  ev_apply.finalize()\n"
-            func_text += f"  return bodo.hiframes.pd_series_ext.init_series(out_arr0, out_index, out_name)\n"
+            func_text += "  return bodo.hiframes.pd_series_ext.init_series(out_arr0, out_index, out_name)\n"
         else:
             func_text += "  ev.finalize()\n"
             func_text += "  ev_apply.finalize()\n"
@@ -2476,7 +2589,7 @@ class DataFramePass:
         )
         return nodes[-1].target
 
-    def _get_dataframe_table(self, df_var: ir.Var, nodes: List[ir.Stmt]):
+    def _get_dataframe_table(self, df_var: ir.Var, nodes: list[ir.Stmt]):
         """Returns the table used by a DataFrame with
         table format. If the DataFrame's init_dataframe call is in the
         IR, it extracts an existing ir.Var for the table. Otherwise
@@ -2641,7 +2754,7 @@ def _gen_init_df_dataframe_pass(columns, index=None, is_table_format=False):
         # Table always uses only a single variable
         data_args = "data0"
     else:
-        data_args = ", ".join("data{}".format(i) for i in range(n_cols))
+        data_args = ", ".join(f"data{i}" for i in range(n_cols))
     args = data_args
 
     if index is None:
@@ -2650,16 +2763,14 @@ def _gen_init_df_dataframe_pass(columns, index=None, is_table_format=False):
     else:
         args += ", " + index
 
-    func_text = "def _init_df({}):\n".format(args)
-    func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), {}, __col_name_meta_value_gen_init_df_2)\n".format(
-        data_args, index
-    )
+    func_text = f"def _init_df({args}):\n"
+    func_text += f"  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({data_args},), {index}, __col_name_meta_value_gen_init_df_2)\n"
     loc_vars = {}
     exec(
         func_text,
         {
             "bodo": bodo,
-            "__col_name_meta_value_gen_init_df_2": ColNamesMetaType(columns),
+            "__col_name_meta_value_gen_init_df_2": ColNamesMetaType(tuple(columns)),
         },
         loc_vars,
     )
@@ -2684,7 +2795,6 @@ def _get_df_apply_used_cols(func, columns):
     use_all_cols = False
     for bl in lambda_ir.blocks.values():
         for stmt in bl.body:
-
             # ignore ir.Arg
             if is_assign(stmt) and isinstance(stmt.value, ir.Arg):
                 continue
@@ -2736,7 +2846,7 @@ def _get_df_apply_used_cols(func, columns):
                             used_cols.update(cols_set)
                             continue
 
-            vnames = set(v.name for v in stmt.list_vars())
+            vnames = {v.name for v in stmt.list_vars()}
             if arg_var.name in vnames:
                 # argument is used in some other form
                 # be conservative and use all cols

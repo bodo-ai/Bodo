@@ -1,0 +1,110 @@
+name: Bodo Conda Build (Linux)
+on:
+  workflow_call:
+    inputs:
+      python-version:
+        description: 'Python Version to Build For'
+        type: string
+        required: true
+      os:
+        description: 'Operating System to Build On/For'
+        type: string
+        required: true
+      platform-build:
+        description: 'Build Platform Version of Bodo'
+        required: false
+        type: boolean
+        default: false
+      is-release:
+        description: 'Is this a release build'
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  build-bodo:
+    defaults:
+      run:
+        shell: bash -l {0}
+
+    runs-on: ${{ inputs.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      # Mac-Specific Setup
+      - name: Install MacOS SDK
+        if: ${{ contains(inputs.os, 'macos') }}
+        run: ./buildscripts/setup_osx_sdk.sh
+        env:
+          MACOSX_DEPLOYMENT_TARGET: ${{ inputs.os == 'macos-13' && '10.15' || '11.0' }}
+
+      # Regular Setup
+      - name: Create Micromamba Environment
+        uses: mamba-org/setup-micromamba@v1
+        with:
+          environment-name: bodo_build
+          create-args: python=3.11 conda-build anaconda-client python-libarchive-c setuptools_scm -c conda-forge
+          cache-environment: true
+          generate-run-shell: true
+          init-shell: bash
+          condarc: |
+            conda_build:
+              pkg_format: 2
+      - name: Get Version
+        run: |
+          set -exo pipefail
+          echo "BODO_VERSION=`python -m setuptools_scm`" >> $GITHUB_ENV
+          echo "IS_RELEASE=`git tag --points-at HEAD`" >> $GITHUB_ENV
+
+      - name: Build Bodo Conda Package
+        run: |
+          set -exo pipefail
+          cd buildscripts/bodo/conda-recipe
+
+          # --no-verify because it doesn't work for Conda v2 packages
+          # --no-anaconda-upload because we'll upload ourselves
+          # Sccache works when the files are located in the same path.
+          # Conda-Build normally uses a random path. Setting these args disables that.
+          # --croot for consistent base directory path for sccache
+          # --build-id-pat for consistent build directory path for sccache
+          conda build . $PLATFORM_CHANNEL -c conda-forge \
+            --no-verify --no-anaconda-upload \
+            --croot $HOME/conda-bld --build-id-pat 'bb' \
+            --python '${{ inputs.python-version }}'
+
+          # Export Location for Artifacting
+          echo "CONDA_BLD_PATH=$HOME/conda-bld" >> $GITHUB_ENV
+        env:
+          CONDA_SOLVER: libmamba
+          # Sccache Creds
+          AWS_ACCESS_KEY_ID: ${{ vars.SCCACHE_AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.SCCACHE_AWS_SECRET_ACCESS_KEY }}
+          # Platform specific
+          IS_BODO_PLATFORM: ${{ (inputs.platform-build == true) && '1' || '0' }}
+          BUILD_WITH_V8: ${{ (inputs.platform-build == true) && '1' || '0' }}
+          PLATFORM_CHANNEL: ${{ (inputs.platform-build == true) && '-c bodo.ai' || '' }}
+
+      - name: Upload Conda Package
+        uses: actions/upload-artifact@v4
+        with:
+          name: bodo-conda-${{ inputs.python-version }}-${{ inputs.platform-build == true && 'platform' || inputs.os }}
+          path: ${{ env.CONDA_BLD_PATH }}
+
+      - name: Publish to Artifactory / Anaconda
+        if: ${{ inputs.is-release }}
+        run: |
+          set -exo pipefail
+
+          echo "BODO_VERSION: $BODO_VERSION"
+          echo "ARTIFACTORY_CHANNEL: $ARTIFACTORY_CHANNEL"
+          ./buildscripts/bodo/publish_binary.sh $ARTIFACTORY_CHANNEL $OS_DIR $BODO_VERSION
+        env:
+          IS_RELEASE: ${{ inputs.is-release }}
+          ARTIFACTORY_CHANNEL: ${{ format('bodo.ai{0}{1}', (inputs.platform-build == true) && '-platform' || '', (inputs.is-release == false) && '-dev' || '') }}
+          OS_DIR: ${{ format('{0}', (inputs.os == 'macos-13') && 'osx-64' || (inputs.os == 'macos-14') && 'osx-arm64' || 'linux-64') }}
+          USERNAME: ${{ secrets.ARTIFACTORY_USERNAME }}
+          TOKEN: ${{ secrets.ARTIFACTORY_TOKEN }}
+          ANACONDA_TOKEN: ${{ secrets.ANACONDA_TOKEN }}

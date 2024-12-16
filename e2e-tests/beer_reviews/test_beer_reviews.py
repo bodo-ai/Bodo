@@ -81,7 +81,7 @@ def test_beer_reviews():
         # remove __pycache__ (numba stores cache in there)
         shutil.rmtree("__pycache__", ignore_errors=True)
 
-        beers_fn = "s3://{}/beer_reviews/reviews_sample.csv".format(BUCKET_NAME)
+        beers_fn = f"s3://{BUCKET_NAME}/beer_reviews/reviews_sample.csv"
 
         # --------- run with pandas first ---------
         os.environ["NUMBA_DISABLE_JIT"] = "1"
@@ -95,21 +95,23 @@ def test_beer_reviews():
         # --------- now run with Bodo ---------
 
         # run with 1 process first and generate cache
-        top_words_out, low_words_out = process_output(run_cmd(cmd))
+        top_words_out, low_words_out = process_output(
+            run_cmd(cmd, additional_envs={"BODO_NUM_WORKERS": "1"})
+        )
         check_result(top_words_out, low_words_out)
 
         for num_processes in (4,):
             cmd = [
-                "mpiexec",
-                "-n",
-                str(num_processes),
                 "python",
                 "-u",
                 "beer_reviews.py",
                 beers_fn,
                 "True",  # tell script to make sure we load from cache, or fail
             ]
-            top_words_out, low_words_out = process_output(run_cmd(cmd))
+
+            top_words_out, low_words_out = process_output(
+                run_cmd(cmd, additional_envs={"BODO_NUM_WORKERS": str(num_processes)})
+            )
             check_result(top_words_out, low_words_out)
 
     finally:

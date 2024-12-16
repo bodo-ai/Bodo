@@ -1,7 +1,9 @@
-#ifndef _JOIN_H_INCLUDED
-#define _JOIN_H_INCLUDED
+#pragma once
 
 #include "_bodo_common.h"
+
+// Default block size to 500K to make sure block data fits in L3 cache
+const int64_t DEFAULT_BLOCK_SIZE_BYTES = 500 * 1024;
 
 /**
  * @brief Function type for general join condition functions generated in
@@ -20,14 +22,35 @@
  * @param l_ind index in left table
  * @param r_ind index in right table
  */
-typedef bool (*cond_expr_fn_t)(array_info** left_table,
-                               array_info** right_table, void** left_data1,
-                               void** right_data1, void** left_null_bitmap,
-                               void** right_null_bitmap, int64_t l_ind,
-                               int64_t r_ind);
+using cond_expr_fn_t = bool (*)(array_info**, array_info**, void**, void**,
+                                void**, void**, int64_t, int64_t);
+
+/**
+ * @brief Same as previous function type, but processes data in batches and sets
+ * bits in a bitmap.
+ *
+ * @param left_table array of array_info pointers for all columns of left table
+ * @param right_table array of array_info pointers for all columns of right
+ * table
+ * @param left_data1 array of data1 pointers for the left table. This is used as
+ *      a fast path for numeric columns.
+ * @param right_data1  array of data1 pointers for the right table. This is used
+ * as a fast path for numeric columns.
+ * @param left_null_bitmap array of null bitmaps for the left table.
+ * @param right_null_bitmap array of null bitmaps for the right table.
+ * @param match_arr array of null bitmaps to set output
+ * @param left_block_start start index for left table loop
+ * @param left_block_end end index for left table loop
+ * @param right_block_start start index for right table loop
+ * @param right_block_end end index for right table loop
+ */
+using cond_expr_fn_batch_t = void (*)(array_info**, array_info**, void**,
+                                      void**, void**, void**, uint8_t*, int64_t,
+                                      int64_t, int64_t, int64_t);
 
 /** This function does the joining of the table and returns the joined
  * table
+ * Using raw pointers since called from Python.
  *
  * This implementation follows the Shared partition procedure.
  * The data is partitioned and shuffled with the _gen_par_shuffle.
@@ -54,7 +77,7 @@ typedef bool (*cond_expr_fn_t)(array_info** left_table,
  * @param right_table : the right table
  * @param left_parallel : whether the left table is parallel or not
  * @param right_parallel : whether the right table is parallel or not
- * @param n_key_t : the number of columns of keys on input
+ * @param n_keys : the number of columns of keys on input
  * @param n_data_left_t : the number of columns of data on the left
  * @param n_data_right_t : the number of columns of data on the right
  * @param vect_same_key : a vector of integers specifying if a key has the same
@@ -63,19 +86,21 @@ typedef bool (*cond_expr_fn_t)(array_info** left_table,
  * func columns are included in the output table. The booleans first contain
  * all of the left table (keys then cond columns in order of the table) and
  * then the right table. Shared output keys are only stored for the left table.
- * @param vect_need_typechange : a vector specifying whether a column needs to
+ * @param use_nullable_arr_type : a vector specifying whether a column needs to
  * be changed or not. This usage is due to the need to support categorical
  * array.
- * @param is_left : whether we do an inner or outer merge on the left.
- * @param is_right : whether we do an inner or outer merge on the right.
+ * @param is_left_outer : whether we do an inner or outer merge on the left.
+ * @param is_right_outer : whether we do an inner or outer merge on the right.
  * @param is_join : whether the call is a join in Pandas or not (as opposed to
  * merge).
- * @param optional_col : When doing a merge on column and index, the key
+ * @param extra_data_col : When doing a merge on column and index, the key
  *    is put also in output, so we need one additional column in that case.
  * @param indicator: When doing a merge, if indicator=True outputs an additional
  *    Categorical column with name _merge that says if the data source is from
  * left_only, right_only, or both.
  * @param is_na_equal: When doing a merge, are NA values considered equal?
+ * @param rebalance_if_skewed: After the merge should we check the data for
+ *   skew and rebalance if needed?
  * @param cond_func function generated in Python to evaluate general join
  * conditions. It takes data pointers for left/right tables and row indices.
  * @param cond_func_left_columns: Array of column numbers in the left table
@@ -94,11 +119,107 @@ typedef bool (*cond_expr_fn_t)(array_info** left_table,
  */
 table_info* hash_join_table(
     table_info* left_table, table_info* right_table, bool left_parallel,
-    bool right_parallel, int64_t n_key_t, int64_t n_data_left_t,
+    bool right_parallel, int64_t n_keys, int64_t n_data_left_t,
     int64_t n_data_right_t, int64_t* vect_same_key, bool* key_in_output,
-    int64_t* vect_need_typechange, bool is_left, bool is_right, bool is_join,
-    bool extra_data_col, bool indicator, bool is_na_equal,
-    cond_expr_fn_t cond_func, uint64_t* cond_func_left_columns,
+    int64_t* use_nullable_arr_type, bool is_left_outer, bool is_right_outer,
+    bool is_join, bool extra_data_col, bool indicator, bool is_na_equal,
+    bool rebalance_if_skewed, cond_expr_fn_t cond_func,
+    uint64_t* cond_func_left_columns, uint64_t cond_func_left_column_len,
+    uint64_t* cond_func_right_columns, uint64_t cond_func_right_column_len,
+    uint64_t* num_rows_ptr);
+
+/**
+ * @brief nested loop join two tables (parallel if any input is parallel)
+ * Using raw pointers since called from Python.
+ *
+ * @param left_table left input table
+ * @param right_table right input table
+ * @param left_parallel whether the left table is parallel or not
+ * @param right_parallel whether the right table is parallel or not
+ * @param is_left : whether we do an inner or outer merge on the left.
+ * @param is_right : whether we do an inner or outer merge on the right.
+ * @param key_in_output : a vector of booleans specifying if cond
+ * func columns are included in the output table. The booleans first contain
+ * all cond columns of the left table and then the right table.
+ * @param vect_need_typechange : a vector specifying whether a column's type
+ * needs to be changed to nullable or not. Only application to Numpy
+ * integer/float columns currently.
+ * @param rebalance_if_skewed: After the merge should we check the data for
+ *   skew and rebalance if needed?
+ * @param cond_func function generated in Python to evaluate general join
+ * conditions. It takes data pointers for left/right tables and row indices.
+ * @param cond_func_left_columns: Array of column numbers in the left table
+ * used by cond_func.
+ * @param cond_func_left_column_len: Length of cond_func_left_columns.
+ * @param cond_func_right_columns: Array of column numbers in the right table
+ * used by cond_func.
+ * @param cond_func_right_column_len: Length of cond_func_right_columns.
+ * @param num_rows_ptr Pointer used to store the number of rows in the
+        output to return to Python. This enables marking all columns as
+        dead.
+ * @return table_info* nested loop join output table
+ */
+table_info* nested_loop_join_table(
+    table_info* left_table, table_info* right_table, bool left_parallel,
+    bool right_parallel, bool is_left, bool is_right, bool* key_in_output,
+    int64_t* vect_need_typechange, bool rebalance_if_skewed,
+    cond_expr_fn_batch_t cond_func, uint64_t* cond_func_left_columns,
     uint64_t cond_func_left_column_len, uint64_t* cond_func_right_columns,
     uint64_t cond_func_right_column_len, uint64_t* num_rows_ptr);
-#endif  // _JOIN_H_INCLUDED
+
+/**
+ * @brief Point-in-interval or interval-overlap join of two tables (parallel if
+ * any input is parallel).
+ * Design doc: https://bodo.atlassian.net/l/cp/1JCnntP1
+ *
+ * Using raw pointers since called from Python.
+ *
+ * @param left_table left input table
+ * @param right_table right input table
+ * @param left_parallel whether the left table is parallel or not
+ * @param right_parallel whether the right table is parallel or not
+ * @param is_left whether we do an inner or outer merge on the left. Can only be
+ * outer in case of point-in-interval join where the point side is on the left.
+ * @param is_right whether we do an inner or outer merge on the right. Can only
+ * be outer in case of point-in-interval join where the point side is on the
+ * right.
+ * @param is_left_point Is the point side on the left side. Only applicable if
+ * point-in-interval join.
+ * @param strict_start Does the point need to be strictly right of the interval
+ * start
+ * @param strict_end Does the point need to strictly left of the interval end
+ * @param point_col_id Column id of the point column. Only applicable if
+ * point-in-interval join.
+ * @param interval_start_col_id Column id of the interval start column. Only
+ * applicable if point-in-interval join.
+ * @param interval_end_col_id Column id of the interval end column. Only
+ * applicable if point-in-interval join.
+ * @param key_in_output a vector of booleans specifying if cond
+ * func columns are included in the output table. The booleans first contain
+ * all cond columns of the left table and then the right table.
+ * @param use_nullable_arr_type a vector specifying whether a column's type
+ * needs to be changed to nullable or not. Only application to Numpy integer
+ * columns currently.
+ * @param rebalance_if_skewed: After the merge should we check the data for
+ *   skew and rebalance if needed?
+ * @param num_rows_ptr Pointer used to store the number of rows in the
+ * output to return to Python. This enables marking all columns as dead.
+ * @return table_info* interval join output table
+ */
+table_info* interval_join_table(
+    table_info* left_table, table_info* right_table, bool left_parallel,
+    bool right_parallel, bool is_left, bool is_right, bool is_left_point,
+    bool strict_start, bool strict_end, uint64_t point_col_id,
+    uint64_t interval_start_col_id, uint64_t interval_end_col_id,
+    bool* key_in_output, int64_t* use_nullable_arr_type,
+    bool rebalance_if_skewed, uint64_t* num_rows_ptr);
+
+// Helper function declarations
+void nested_loop_join_handle_dict_encoded(
+    std::shared_ptr<table_info> left_table,
+    std::shared_ptr<table_info> right_table, bool left_parallel,
+    bool right_parallel);
+int get_bcast_join_threshold();
+
+std::shared_ptr<table_info> rebalance_join_output(
+    std::shared_ptr<table_info> original_output);

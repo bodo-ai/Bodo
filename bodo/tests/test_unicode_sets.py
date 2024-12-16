@@ -1,8 +1,6 @@
-# Copyright (C) 2022 Bodo Inc.
 import pytest
 
 from bodo.tests.utils import check_func
-
 
 _non_repeating_data = [f"A{i}" for i in range(0, 100)]
 
@@ -11,6 +9,7 @@ _non_repeating_data_subset = _non_repeating_data[::2]
 _repeating_data = [f"A{i}" for i in range(0, 100)] * 3
 
 _repeating_data_subset = _repeating_data[::2]
+
 
 @pytest.mark.parametrize("arg", [_non_repeating_data, _repeating_data])
 def test_unicode_set_constructor(arg, memory_leak_check):
@@ -74,10 +73,14 @@ def _set_remove_impl(to_add, to_remove):
         s.remove(v)
     return len(s)
 
-@pytest.mark.parametrize("to_add,to_remove", [
-    (_non_repeating_data, _non_repeating_data),
-    (_non_repeating_data, _non_repeating_data_subset),
-])
+
+@pytest.mark.parametrize(
+    "to_add,to_remove",
+    [
+        (_non_repeating_data, _non_repeating_data),
+        (_non_repeating_data, _non_repeating_data_subset),
+    ],
+)
 def test_unicode_set_remove(to_add, to_remove, memory_leak_check):
     """
     Test removing values from a unicode set.
@@ -86,10 +89,13 @@ def test_unicode_set_remove(to_add, to_remove, memory_leak_check):
     check_func(_set_remove_impl, (to_add, to_remove))
 
 
-@pytest.mark.parametrize("to_add,to_remove", [
-    (_non_repeating_data_subset, _non_repeating_data),
-    (_repeating_data_subset, _repeating_data),
-])
+@pytest.mark.parametrize(
+    "to_add,to_remove",
+    [
+        (_non_repeating_data_subset, _non_repeating_data),
+        (_repeating_data_subset, _repeating_data),
+    ],
+)
 def test_unicode_set_remove_error(to_add, to_remove, memory_leak_check):
     """
     Test removing a value from a unicode set that doesn't exist.
@@ -99,16 +105,19 @@ def test_unicode_set_remove_error(to_add, to_remove, memory_leak_check):
         _set_remove_impl(to_add, to_remove)
 
 
-@pytest.mark.parametrize("to_add,to_discard", [
-    (_non_repeating_data, _non_repeating_data),
-    (_non_repeating_data, _non_repeating_data_subset),
-    (_non_repeating_data_subset, _non_repeating_data),
-    (_non_repeating_data_subset, _non_repeating_data_subset),
-    (_repeating_data, _repeating_data),
-    (_repeating_data, _repeating_data_subset),
-    (_repeating_data_subset, _repeating_data),
-    (_repeating_data_subset, _repeating_data_subset),
-])
+@pytest.mark.parametrize(
+    "to_add,to_discard",
+    [
+        (_non_repeating_data, _non_repeating_data),
+        (_non_repeating_data, _non_repeating_data_subset),
+        (_non_repeating_data_subset, _non_repeating_data),
+        (_non_repeating_data_subset, _non_repeating_data_subset),
+        (_repeating_data, _repeating_data),
+        (_repeating_data, _repeating_data_subset),
+        (_repeating_data_subset, _repeating_data),
+        (_repeating_data_subset, _repeating_data_subset),
+    ],
+)
 def test_unicode_set_discard(to_add, to_discard, memory_leak_check):
     """
     Test discarding values from a unicode set.
@@ -139,16 +148,19 @@ def test_unicode_set_pop(arg, memory_leak_check):
     check_func(impl, (arg,))
 
 
-@pytest.mark.parametrize("to_add,to_check", [
-    (_non_repeating_data, _non_repeating_data),
-    (_non_repeating_data, _non_repeating_data_subset),
-    (_non_repeating_data_subset, _non_repeating_data),
-    (_non_repeating_data_subset, _non_repeating_data_subset),
-    (_repeating_data, _repeating_data),
-    (_repeating_data, _repeating_data_subset),
-    (_repeating_data_subset, _repeating_data),
-    (_repeating_data_subset, _repeating_data_subset),
-])
+@pytest.mark.parametrize(
+    "to_add,to_check",
+    [
+        (_non_repeating_data, _non_repeating_data),
+        (_non_repeating_data, _non_repeating_data_subset),
+        (_non_repeating_data_subset, _non_repeating_data),
+        (_non_repeating_data_subset, _non_repeating_data_subset),
+        (_repeating_data, _repeating_data),
+        (_repeating_data, _repeating_data_subset),
+        (_repeating_data_subset, _repeating_data),
+        (_repeating_data_subset, _repeating_data_subset),
+    ],
+)
 def test_unicode_set_contains(to_add, to_check, memory_leak_check):
     """
     Test checking if a value is in a unicode set.

@@ -2,12 +2,9 @@
 catalog contains all information needed to connect to a Snowflake account
 in Java and load relevant schema information.
 """
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
-from copy import deepcopy
-from typing import Dict, Optional
 
-from bodosql import DatabaseCatalog, DatabaseCatalogType
-from bodosql.context import PropertiesClass, SnowflakeCatalogImplClass
+from copy import deepcopy
+
 from numba.core import types
 from numba.core.imputils import lower_constant
 from numba.core.typing import signature
@@ -22,11 +19,18 @@ from numba.extending import (
     unbox,
 )
 
+from bodo.io.snowflake import parse_conn_str
 from bodo.utils.typing import (
     BodoError,
     get_literal_value,
     is_literal_type,
+    is_overload_none,
     raise_bodo_error,
+)
+from bodosql import DatabaseCatalog, DatabaseCatalogType
+from bodosql.imported_java_classes import (
+    PropertiesClass,
+    SnowflakeCatalogClass,
 )
 
 
@@ -36,7 +40,8 @@ def _validate_constructor_args(
     account: str,
     warehouse: str,
     database: str,
-    connection_params: Optional[Dict[str, str]],
+    connection_params: dict[str, str] | None,
+    iceberg_volume: str | None,
 ):
     """Validate
 
@@ -47,6 +52,7 @@ def _validate_constructor_args(
         warehouse (str): Snowflake warehouse type
         database (str): Snowflake database name to use.
         connection_params (Optional[Dict[str, str]]): Any additional connection parameters to provide.
+        iceberg_volume (Optional[str]): Snowflake external volume (e.g. S3/ADLS) for writing Iceberg data if available
     """
     if not isinstance(username, str):
         raise BodoError(
@@ -69,14 +75,15 @@ def _validate_constructor_args(
             f"SnowflakeCatalog(): 'database' argument must be a constant string. Found {type(database)}."
         )
     is_str_dict = isinstance(connection_params, dict) and all(
-        [
-            isinstance(k, str) and isinstance(v, str)
-            for k, v in connection_params.items()
-        ]
+        isinstance(k, str) and isinstance(v, str) for k, v in connection_params.items()
     )
     if not (connection_params is None or is_str_dict):
         raise BodoError(
             "SnowflakeCatalog(): 'connection_params' argument must be a Dict[str, str] if provided."
+        )
+    if iceberg_volume is not None and not isinstance(iceberg_volume, str):
+        raise BodoError(
+            f"SnowflakeCatalog(): 'iceberg_volume' argument must be a constant string. Found {type(iceberg_volume)}."
         )
 
 
@@ -86,7 +93,8 @@ def _create_java_snowflake_catalog(
     account: str,
     warehouse: str,
     database: str,
-    connection_params: Dict[str, str],
+    connection_params: dict[str, str],
+    iceberg_volume: str | None,
 ):
     """Create a SnowflakeCatalog Java object
     from the given parameters.
@@ -99,6 +107,7 @@ def _create_java_snowflake_catalog(
         database (str): Snowflake database to use.
         connection_params (Dict[str, str]): Any optional connection parameters
         to pass.
+        iceberg_volume (Optional[str]): Snowflake external volume (e.g. S3/ADLS) for writing Iceberg data if available
     """
     # Create a properties object to pass parameters. Account
     # and database are not included because they are needed
@@ -107,11 +116,13 @@ def _create_java_snowflake_catalog(
     for key, value in connection_params.items():
         properties.put(key, value)
     # Create the Snowflake catalog
-    return SnowflakeCatalogImplClass(username, password, account, database, warehouse, properties)
+    return SnowflakeCatalogClass(
+        username, password, account, database, warehouse, properties, iceberg_volume
+    )
 
 
 class SnowflakeCatalog(DatabaseCatalog):
-    """Python class for storing the account infomation
+    """Python class for storing the account information
     needed to connect to a remote Snowflake account from
     Java.
     """
@@ -123,7 +134,8 @@ class SnowflakeCatalog(DatabaseCatalog):
         account: str,
         warehouse: str,
         database: str,
-        connection_params: Optional[Dict[str, str]] = None,
+        connection_params: dict[str, str] | None = None,
+        iceberg_volume: str | None = None,
     ):
         """Constructor for the Snowflake catalog. The required arguments
         are based on the information that should be made available when
@@ -132,7 +144,13 @@ class SnowflakeCatalog(DatabaseCatalog):
         https://bodo.atlassian.net/wiki/spaces/BodoSQL/pages/1097859073/Bodo+Design+Changes
         """
         _validate_constructor_args(
-            username, password, account, warehouse, database, connection_params
+            username,
+            password,
+            account,
+            warehouse,
+            database,
+            connection_params,
+            iceberg_volume,
         )
         self.username = username
         self.password = password
@@ -146,6 +164,51 @@ class SnowflakeCatalog(DatabaseCatalog):
             # after validation.
             connection_params = deepcopy(connection_params)
         self.connection_params = connection_params
+        self.iceberg_volume = iceberg_volume
+
+    @classmethod
+    def from_conn_str(cls, conn_str: str) -> "SnowflakeCatalog":
+        conn_contents = parse_conn_str(conn_str, strict_parsing=True)
+        ref_str = "See https://docs.snowflake.com/developer-guide/python-connector/sqlalchemy#connection-parameters for constructing a connection URL."
+
+        # Parse Required Parameters Out of conn_contents
+        # TODO: Output of parse_conn_str is better as NamedTuple
+        # But what argument are required for Snowflake SQLAlchemy
+        # Snowflake Docs have more details
+        if (username := conn_contents.pop("user", None)) is None:
+            raise BodoError(
+                f"SnowflakeCatalog.from_conn_str: `conn_str` must contain a user login name. {ref_str}"
+            )
+
+        if (password := conn_contents.pop("password", None)) is None:
+            password = ""
+        if (account := conn_contents.pop("account", None)) is None:
+            raise BodoError(
+                f"SnowflakeCatalog.from_conn_str: `conn_str` must contain an an account identifier or URL. {ref_str}"
+            )
+        if (warehouse := conn_contents.pop("warehouse", None)) is None:
+            raise BodoError(
+                f"SnowflakeCatalog.from_conn_str: `conn_str` must contain a warehouse name as an additional connection parameter. {ref_str}"
+            )
+        if (database := conn_contents.pop("database", None)) is None:
+            raise BodoError(
+                f"SnowflakeCatalog.from_conn_str: `conn_str` must contain a database name in the URI path. {ref_str}"
+            )
+
+        iceberg_volume = conn_contents.pop("iceberg_volume", None)
+
+        # Remaining parameters in conn_contents are still passed in
+        # Example: schema, role_name, etc
+        # TODO: Does BodoSQL support session_parameters (its a dict, but can it be flattened?)
+        return cls(
+            username,
+            password,
+            account,
+            warehouse,
+            database,
+            connection_params=conn_contents,
+            iceberg_volume=iceberg_volume,
+        )
 
     def get_java_object(self):
         return _create_java_snowflake_catalog(
@@ -155,9 +218,10 @@ class SnowflakeCatalog(DatabaseCatalog):
             self.warehouse,
             self.database,
             self.connection_params,
+            self.iceberg_volume,
         )
 
-    # Define == fot testing
+    # Define == for testing
     def __eq__(self, other: object) -> bool:
         if isinstance(other, SnowflakeCatalog):
             return (
@@ -167,12 +231,13 @@ class SnowflakeCatalog(DatabaseCatalog):
                 and self.warehouse == other.warehouse
                 and self.database == other.database
                 and self.connection_params == other.connection_params
+                and self.iceberg_volume == other.iceberg_volume
             )
         return False
 
 
 class SnowflakeCatalogType(DatabaseCatalogType):
-    """JIT class for storing the account infomation
+    """JIT class for storing the account information
     needed to connect to a remote Snowflake account from
     Java.
     """
@@ -185,9 +250,16 @@ class SnowflakeCatalogType(DatabaseCatalogType):
         warehouse,
         database,
         connection_params,
+        iceberg_volume,
     ):
         _validate_constructor_args(
-            username, password, account, warehouse, database, connection_params
+            username,
+            password,
+            account,
+            warehouse,
+            database,
+            connection_params,
+            iceberg_volume,
         )
         if connection_params is None:
             connection_params = {}
@@ -198,9 +270,10 @@ class SnowflakeCatalogType(DatabaseCatalogType):
         self.warehouse = warehouse
         self.database = database
         self.connection_params = connection_params
-        super(SnowflakeCatalogType, self).__init__(
+        self.iceberg_volume = iceberg_volume
+        super().__init__(
             # We omit the password in case the type is printed.
-            name=f"SnowflakeCatalogType(username={username}, password=*******, account={account}, warehouse={warehouse}, database={database}, connection_params={connection_params})"
+            name=f"SnowflakeCatalogType(username={username}, password=*******, account={account}, warehouse={warehouse}, database={database}, connection_params={connection_params}, iceberg_volume={iceberg_volume})"
         )
 
     @property
@@ -215,6 +288,7 @@ class SnowflakeCatalogType(DatabaseCatalogType):
             self.warehouse,
             self.database,
             tuple(self.connection_params.items()),
+            self.iceberg_volume,
         )
 
     def get_java_object(self):
@@ -225,6 +299,7 @@ class SnowflakeCatalogType(DatabaseCatalogType):
             self.warehouse,
             self.database,
             self.connection_params,
+            self.iceberg_volume,
         )
 
 
@@ -237,6 +312,7 @@ def typeof_snowflake_catalog(val, c):
         val.warehouse,
         val.database,
         val.connection_params,
+        val.iceberg_volume,
     )
 
 
@@ -276,6 +352,16 @@ def box_snowflake_catalog(typ, val, c):
         c.context.get_constant_generic(c.builder, types.unicode_type, typ.database),
         c.env_manager,
     )
+    if typ.iceberg_volume is not None:
+        iceberg_volume_obj = c.pyapi.from_native_value(
+            types.unicode_type,
+            c.context.get_constant_generic(
+                c.builder, types.unicode_type, typ.iceberg_volume
+            ),
+            c.env_manager,
+        )
+    else:
+        iceberg_volume_obj = c.pyapi.make_none()
 
     # Lowering a constant dictionary doesn't appear to work, so we construct
     # the dictionary in Python from the key + value pairs.
@@ -312,6 +398,7 @@ def box_snowflake_catalog(typ, val, c):
             warehouse_obj,
             database_obj,
             connection_params_obj,
+            iceberg_volume_obj,
         ),
     )
     c.pyapi.decref(snowflake_catalog_obj)
@@ -320,6 +407,7 @@ def box_snowflake_catalog(typ, val, c):
     c.pyapi.decref(account_obj)
     c.pyapi.decref(warehouse_obj)
     c.pyapi.decref(database_obj)
+    c.pyapi.decref(iceberg_volume_obj)
     c.pyapi.decref(connection_params_obj)
     c.pyapi.decref(dict_obj)
     c.pyapi.decref(zipped_obj)
@@ -350,7 +438,13 @@ def lower_constant_table_path(context, builder, ty, pyval):
 # Create the JIT constructor
 @overload(SnowflakeCatalog, no_unliteral=True)
 def overload_snowflake_catalog_constructor(
-    username, password, account, warehouse, database, connection_params=None
+    username,
+    password,
+    account,
+    warehouse,
+    database,
+    connection_params=None,
+    iceberg_volume=None,
 ):
     """
     SnowflakeCatalog Constructor to enable creating the catalog directly
@@ -359,21 +453,40 @@ def overload_snowflake_catalog_constructor(
     """
 
     def impl(
-        username, password, account, warehouse, database, connection_params=None
+        username,
+        password,
+        account,
+        warehouse,
+        database,
+        connection_params=None,
+        iceberg_volume=None,
     ):  # pragma: no cover
         return init_snowflake_connector(
-            username, password, account, warehouse, database, connection_params
+            username,
+            password,
+            account,
+            warehouse,
+            database,
+            connection_params,
+            iceberg_volume,
         )
 
     return impl
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def init_snowflake_connector(
-    typingctx, username, password, account, warehouse, database, connection_params
+    typingctx,
+    username,
+    password,
+    account,
+    warehouse,
+    database,
+    connection_params,
+    iceberg_volume,
 ):
     """
-    Instrinsic used to actually construct the SnowflakeCatalog from the constructor.
+    Intrinsic used to actually construct the SnowflakeCatalog from the constructor.
     """
     # Check for literals
     if not is_literal_type(username):
@@ -400,6 +513,10 @@ def init_snowflake_connector(
         raise_bodo_error(
             "bodosql.SnowflakeCatalog(): 'connection_params' must be a constant Dict[str, str] if provided"
         )
+    if not (is_overload_none(iceberg_volume) or is_literal_type(iceberg_volume)):
+        raise_bodo_error(
+            "bodosql.SnowflakeCatalog(): 'iceberg_volume' must be None or a constant string"
+        )
 
     # Extract the literal values
     username_lit = get_literal_value(username)
@@ -408,6 +525,7 @@ def init_snowflake_connector(
     warehouse_lit = get_literal_value(warehouse)
     database_lit = get_literal_value(database)
     connection_params_lit = get_literal_value(connection_params)
+    iceberg_volume_lit = get_literal_value(iceberg_volume)
 
     # Construct the output type
     ret_type = SnowflakeCatalogType(
@@ -417,6 +535,7 @@ def init_snowflake_connector(
         warehouse_lit,
         database_lit,
         connection_params_lit,
+        iceberg_volume_lit,
     )
 
     def codegen(context, builder, signature, args):  # pragma: no cover
@@ -432,6 +551,7 @@ def init_snowflake_connector(
             warehouse,
             database,
             connection_params,
+            iceberg_volume,
         ),
         codegen,
     )

@@ -1,0 +1,32 @@
+parameters:
+- name: name
+  type: string
+  default: ''
+
+jobs:
+- job: ${{ parameters.name }}
+  variables:
+    - group: SnowflakeCredentials
+  timeoutInMinutes: 360
+  pool: ScalingVMSet
+
+  steps:
+  - script: |
+      curl -fsSL https://get.docker.com -o get-docker.sh
+      sudo sh get-docker.sh
+    displayName: 'Install Docker Engine'
+
+  - script: |
+      set -eo pipefail
+      sudo apt-get update
+      sudo apt-get install maven -y
+    displayName: 'Install Maven'
+    # [BSE-837] This step known to fail. Temp solution
+    # See https://learn.microsoft.com/en-us/azure/devops/pipelines/yaml-schema/steps-task?view=azure-pipelines
+    retryCountOnTaskFailure: 5
+
+  - script: |
+      set -eo pipefail
+      cd $(System.DefaultWorkingDirectory)/BodoSQL/calcite_sql/
+      sudo mvn -B -U test
+    displayName: 'Run Maven Tests for BodoSQL'

@@ -1,12 +1,11 @@
-// Copyright (C) 2019 Bodo Inc. All rights reserved.
 #include <Python.h>
-#include <iostream>
 
 #include <arrow/io/api.h>
+#include <mpi.h>
+
 #include "_csv_json_reader.h"
 #include "_fs_io.h"
 #include "_io.h"
-#include "mpi.h"
 
 extern "C" {
 
@@ -42,8 +41,9 @@ extern "C" {
  * df.to_csv() false for all other "orient" and "lines" combinations
  */
 void write_buff(char *_path_name, char *buff, int64_t start, int64_t count,
-                bool is_parallel, const std::string &prefix, const std::string &suffix,
-                bool is_records_lines, char *bucket_region) {
+                bool is_parallel, const std::string &prefix,
+                const std::string &suffix, bool is_records_lines,
+                char *bucket_region) {
     try {
         int myrank, num_ranks;
         MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
@@ -58,8 +58,8 @@ void write_buff(char *_path_name, char *buff, int64_t start, int64_t count,
         std::shared_ptr<::arrow::io::OutputStream> out_stream;
         Bodo_Fs::FsEnum fs_option;
         arrow::Status status;
-        extract_fs_dir_path(_path_name, is_parallel, prefix, suffix, myrank, num_ranks,
-                            &fs_option, &dirname, &fname, &orig_path,
+        extract_fs_dir_path(_path_name, is_parallel, prefix, suffix, myrank,
+                            num_ranks, &fs_option, &dirname, &fname, &orig_path,
                             &path_name);
         // handling posix with mpi/fwrite
         // csv is always written into a single file
@@ -119,9 +119,8 @@ void write_buff(char *_path_name, char *buff, int64_t start, int64_t count,
  */
 void csv_write(char *_path_name, char *buff, int64_t start, int64_t count,
                bool is_parallel, char *bucket_region, char *prefix) {
-
-    write_buff(_path_name, buff, start, count, is_parallel, prefix, ".csv", true,
-               bucket_region);
+    write_buff(_path_name, buff, start, count, is_parallel, prefix, ".csv",
+               true, bucket_region);
 }
 
 /*
@@ -135,7 +134,8 @@ void csv_write(char *_path_name, char *buff, int64_t start, int64_t count,
  * @param prefix: prefix of files written in distributed case
  */
 void json_write(char *_path_name, char *buff, int64_t start, int64_t count,
-                bool is_parallel, bool is_records_lines, char *bucket_region, char *prefix) {
+                bool is_parallel, bool is_records_lines, char *bucket_region,
+                char *prefix) {
     write_buff(_path_name, buff, start, count, is_parallel, prefix, ".json",
                is_records_lines, bucket_region);
 }
@@ -160,17 +160,12 @@ int8_t csv_output_is_dir(char *_path_name) {
 
 PyMODINIT_FUNC PyInit_csv_cpp(void) {
     PyObject *m;
-    static struct PyModuleDef moduledef = {
-        PyModuleDef_HEAD_INIT, "csv_cpp", "No docs", -1, NULL,
-    };
-    m = PyModule_Create(&moduledef);
-    if (m == NULL) return NULL;
+    MOD_DEF(m, "csv_cpp", "No docs", nullptr);
+    if (m == nullptr)
+        return nullptr;
 
-    PyObject_SetAttrString(m, "csv_write",
-                           PyLong_FromVoidPtr((void *)(&csv_write)));
-
-    PyObject_SetAttrString(m, "csv_output_is_dir",
-                           PyLong_FromVoidPtr((void *)(&csv_output_is_dir)));
+    SetAttrStringFromVoidPtr(m, csv_write);
+    SetAttrStringFromVoidPtr(m, csv_output_is_dir);
 
     PyInit_csv(m);
     return m;
@@ -178,14 +173,11 @@ PyMODINIT_FUNC PyInit_csv_cpp(void) {
 
 PyMODINIT_FUNC PyInit_json_cpp(void) {
     PyObject *m;
-    static struct PyModuleDef moduledef = {
-        PyModuleDef_HEAD_INIT, "json_cpp", "No docs", -1, NULL,
-    };
-    m = PyModule_Create(&moduledef);
-    if (m == NULL) return NULL;
+    MOD_DEF(m, "json_cpp", "No docs", nullptr);
+    if (m == nullptr)
+        return nullptr;
 
-    PyObject_SetAttrString(m, "json_write",
-                           PyLong_FromVoidPtr((void *)(&json_write)));
+    SetAttrStringFromVoidPtr(m, json_write);
 
     PyInit_json(m);
     return m;

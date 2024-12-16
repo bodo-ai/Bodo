@@ -1,4 +1,4 @@
-# Copied from https://github.com/apache/arrow/blob/master/python/pyarrow/_hdfs.pyx
+# Copied from https://github.com/apache/arrow/blob/apache-arrow-17.0.0/python/pyarrow/_hdfs.pyx
 # See comment in bodo/io/__init__.py for why this is needed.
 # See our modification to this file below where it says "bodo change".
 
@@ -21,7 +21,8 @@
 
 # cython: language_level = 3
 
-from pyarrow.lib cimport check_status
+from cython cimport binding
+
 from pyarrow.includes.common cimport *
 from pyarrow.includes.libarrow cimport *
 from pyarrow.includes.libarrow_fs cimport *
@@ -57,6 +58,13 @@ cdef class HadoopFileSystem(FileSystem):
     extra_conf : dict, default None
         Extra key/value pairs for configuration; will override any
         hdfs-site.xml properties.
+
+    Examples
+    --------
+    >>> from pyarrow import fs
+    >>> hdfs = fs.HadoopFileSystem(host, port, user=user, kerb_ticket=ticket_cache_path) # doctest: +SKIP
+
+    For usage of the methods see examples for :func:`~pyarrow.fs.LocalFileSystem`.
     """
 
     cdef:
@@ -71,9 +79,9 @@ cdef class HadoopFileSystem(FileSystem):
             shared_ptr[CHadoopFileSystem] wrapped
 
         # bodo change: add abfs and abfss
-        if not host.startswith(('hdfs://', 'viewfs://', 'abfs://', 'abfss://')) and host != "default":
+        if not host.startswith(("hdfs://", "viewfs://", "abfs://", "abfss://")) and host != "default":
             # TODO(kszucs): do more sanitization
-            host = 'hdfs://{}'.format(host)
+            host = "hdfs://{}".format(host)
 
         options.ConfigureEndPoint(tobytes(host), int(port))
         options.ConfigureReplication(replication)
@@ -133,9 +141,12 @@ replication=1)``
         self.init(<shared_ptr[CFileSystem]> wrapped)
         return self
 
-    @classmethod
-    def _reconstruct(cls, kwargs):
-        return cls(**kwargs)
+    @staticmethod
+    @binding(True)  # Required for cython < 3
+    def _reconstruct(kwargs):
+        # __reduce__ doesn't allow passing named arguments directly to the
+        # reconstructor, hence this wrapper.
+        return HadoopFileSystem(**kwargs)
 
     def __reduce__(self):
         cdef CHdfsOptions opts = self.hdfs.options()

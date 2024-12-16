@@ -13,9 +13,14 @@ as well as how to debug the workload. Additionally, using Python's `logging` mod
 ## Example Usage
 
 To detect important optimizations, all you need to do is set a verbose level in the global scope of a Python file using `bodo.set_verbose_level(level)`. The verbose level
-is a positive integer, with greater values outputing more detailed information. The optimzations that are expected to be the most impactful are tracked at level 1, so in most situations you can just do `bodo.set_verbose_level(1)`. More information on the optimizations are displayed is found in the [`set_verbose_level` API reference](#set_verbose_level). Now when Bodo compiles a function, `rank 0` will log important optimizations to `stderr` using Python's `logging` package.
+is a positive integer, with greater values outputting more detailed information. The optimizations that are
+expected to be the most impactful are tracked at level 1, so in most situations you can just do `bodo.
+set_verbose_level(1)`. More information on the optimizations that are displayed is found in the
+[`set_verbose_level` API reference](#set_verbose_level). Now when Bodo compiles a function, `rank 0` will log
+important optimizations to `stderr` using Python's `logging` package.
 
 Below is an example using the `verbose mode` to verify that Bodo is only loading the 1 column from a parquet file that is actually needed as opposed to any additional columns.
+
 
 ```py
 bodo.set_verbose_level(1)
@@ -29,24 +34,32 @@ load_data("my_file.pq")
 ```
 
 ```console
-2022-03-24 11:50:21,656 - Bodo Default Logger - INFO -
+2024-03-24 10:44:21,023 - Bodo Default Logger - INFO - 
+================================================================================
+--------------------------------Filter Pushdown---------------------------------
+Arrow filters pushed down:
+None
+None
+
+
+================================================================================
+2024-03-24 10:44:21,023 - Bodo Default Logger - INFO - 
 ================================================================================
 ---------------------------------Column Pruning---------------------------------
 Finish column pruning on read_parquet node:
 
-File "verbose_ex.py", line 8:
+File "objmode.py", line 10:
 def load_data(filename):
     df = pd.read_parquet(filename)
     ^
 Columns loaded ['id']
-
 
 ================================================================================
 ```
 
 You can also log this information to a valid `logging.Logger` instance with Bodo.
 
-!!! important
+!!! info "Important"
     The logger should be a variable set in a global scope.
 
 ```py
@@ -64,6 +77,9 @@ def load_data(filename):
 load_data("my_file.pq")
 ```
 
+The output will be written to `example.log` in the current working directory.
+
+```console
 
 ## Leveraging Optimizations for Debugging
 
@@ -82,12 +98,21 @@ load_data("my_file.pq")
 ```
 
 ```console
-2022-03-25 11:22:24,619 - Bodo Default Logger - INFO -
+2024-03-24 10:48:19,046 - Bodo Default Logger - INFO - 
+================================================================================
+--------------------------------Filter Pushdown---------------------------------
+Arrow filters pushed down:
+None
+None
+
+
+================================================================================
+2024-03-24 10:48:19,047 - Bodo Default Logger - INFO - 
 ================================================================================
 ---------------------------------Column Pruning---------------------------------
 Finish column pruning on read_parquet node:
 
-File "verbose_ex.py", line 10:
+File "objmode.py", line 11:
 def load_data(filename):
     df = pd.read_parquet(filename)
     ^
@@ -115,7 +140,7 @@ the success/failure of optimizations can be an extremely useful first step to de
 
     | Verbose Level | Optimizations |
     |----------------------------------|--------------------------------------|
-    | 1 | <ul><li>Column Pruning</li><li>Filter Pushdown</li><li>Dictionary Encoding</li><li>Limit Pushdown</li></ul> |
+    | 1 | <ul><li>Column Pruning</li><li>Filter Pushdown</li><li>Dictionary Encoding</li><li>Limit Pushdown</li><li>BodoSQL generated IO time</li></ul> |
     | 2 | <ul><li>Join column pruning</li></ul> |
 
     ***Arguments***

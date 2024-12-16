@@ -1,7 +1,7 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """Old tests for DataFrame values which can be useful since they are different and may
 expose corner cases.
 """
+
 import unittest
 
 import numpy as np
@@ -14,7 +14,10 @@ from bodo.tests.utils import (
     count_array_REPs,
     count_parfor_OneDs,
     count_parfor_REPs,
+    pytest_pandas,
 )
+
+pytestmark = pytest_pandas
 
 
 @bodo.jit
@@ -49,6 +52,7 @@ class TestDataFrame(unittest.TestCase):
         n = 11
         pd.testing.assert_series_equal(bodo_func(n), test_impl(n))
 
+    @unittest.skip("TODO: raise error on int to float cast to match Pandas 2")
     def test_create_dtype1(self):
         def test_impl(n):
             df = pd.DataFrame(
@@ -122,7 +126,6 @@ class TestDataFrame(unittest.TestCase):
             return df
 
         bodo_func = bodo.jit(test_impl)
-        n = 11
         data = np.arange(9).reshape(3, 3)
         pd.testing.assert_frame_equal(
             bodo_func(data.copy()), test_impl(data.copy()), check_column_type=False
@@ -550,7 +553,7 @@ class TestDataFrame(unittest.TestCase):
     def test_df_apply(self):
         def test_impl(n):
             df = pd.DataFrame({"A": np.arange(n), "B": np.arange(n)})
-            B = df.apply(lambda r: r.A + r.B, axis=1)
+            df.apply(lambda r: r.A + r.B, axis=1)
             return df.B.sum()
 
         n = 121
@@ -560,7 +563,7 @@ class TestDataFrame(unittest.TestCase):
     def test_df_apply_branch(self):
         def test_impl(n):
             df = pd.DataFrame({"A": np.arange(n), "B": np.arange(n)})
-            B = df.apply(lambda r: r.A < 10 and r.B > 20, axis=1)
+            df.apply(lambda r: r.A < 10 and r.B > 20, axis=1)
             return df.B.sum()
 
         n = 121
@@ -834,7 +837,7 @@ class TestDataFrame(unittest.TestCase):
             {
                 "A": [1.0, 2.0, 4.0, 1.0],
                 "B": ["aa", "b", None, "ccc"],
-                "C": [np.nan, ["AA", "A"], ["B"], ["CC", "D"]],
+                "C": [None, ["AA", "A"], ["B"], ["CC", "D"]],
             }
         )
         bodo_func = bodo.jit(test_impl)
@@ -890,7 +893,10 @@ class TestDataFrame(unittest.TestCase):
         df2 = pd.DataFrame({"A": np.arange(n), "C": np.arange(n) ** 2})
         df2.A[n // 2 :] = n
         pd.testing.assert_frame_equal(
-            bodo_func(df, df2), test_impl(df, df2), check_column_type=False
+            bodo_func(df, df2),
+            test_impl(df, df2),
+            check_column_type=False,
+            check_dtype=False,
         )
 
     @unittest.skip("needs dict typing in Numba")
@@ -915,34 +921,7 @@ class TestDataFrame(unittest.TestCase):
         n = 11
         df = pd.DataFrame({"A": np.arange(n), "B": np.arange(n) ** 2})
         pd.testing.assert_frame_equal(
-            bodo_func(df), test_impl(df), check_column_type=False
-        )
-
-    def test_append1(self):
-        def test_impl(df, df2):
-            return df.append(df2, ignore_index=True)
-
-        bodo_func = bodo.jit(test_impl)
-        n = 11
-        df = pd.DataFrame({"A": np.arange(n), "B": np.arange(n) ** 2})
-        df2 = pd.DataFrame({"A": np.arange(n), "C": np.arange(n) ** 2})
-        df2.A[n // 2 :] = n
-        pd.testing.assert_frame_equal(
-            bodo_func(df, df2), test_impl(df, df2), check_column_type=False
-        )
-
-    def test_append2(self):
-        def test_impl(df, df2, df3):
-            return df.append([df2, df3], ignore_index=True)
-
-        bodo_func = bodo.jit(test_impl)
-        n = 11
-        df = pd.DataFrame({"A": np.arange(n), "B": np.arange(n) ** 2})
-        df2 = pd.DataFrame({"A": np.arange(n), "B": np.arange(n) ** 2})
-        df2.A[n // 2 :] = n
-        df3 = pd.DataFrame({"A": np.arange(n), "B": np.arange(n) ** 2})
-        pd.testing.assert_frame_equal(
-            bodo_func(df, df2, df3), test_impl(df, df2, df3), check_column_type=False
+            bodo_func(df), test_impl(df), check_column_type=False, check_dtype=False
         )
 
     def test_concat_columns1(self):

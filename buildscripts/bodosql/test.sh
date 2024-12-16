@@ -1,14 +1,10 @@
 #!/bin/bash
-set -exo pipefail
+set -eo pipefail
+set +x
 
-# Deactivate env in case this was called by another file that
-# activated the env. This only happens on AWS and causes errors
-# on Azure with MacOS
-if [[ "$CI_SOURCE" == "AWS" ]]; then
-    source deactivate || true
-fi
-export PATH=$HOME/miniconda3/bin:$PATH
+export PATH=$HOME/miniforge3/bin:$PATH
 source activate $CONDA_ENV
+set -x
 
 # Move to BodoSQL directory
 cd BodoSQL
@@ -20,7 +16,7 @@ export BODOSQL_PY4J_GATEWAY_PORT="auto"
 # only collect coverage for Bodo.
 
 # unittests
-python bodosql/runtests.py 1 -s -v -p no:faulthandler -m "$PYTEST_MARKER" bodosql/tests/
+python bodosql/runtests.py "BodoSQL_Tests" 1 -s -v -p no:faulthandler -m "$PYTEST_MARKER" bodosql/tests/
 
 # restore cwd to original directory
 cd ..

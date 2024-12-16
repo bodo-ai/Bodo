@@ -1,7 +1,7 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """Old tests for Series values which can be useful since they are different and may
 expose corner cases.
 """
+
 import os
 import unittest
 
@@ -15,8 +15,11 @@ from bodo.tests.utils import (
     count_array_REPs,
     count_parfor_REPs,
     get_start_end,
+    pytest_pandas,
 )
 from bodo.utils.typing import BodoError
+
+pytestmark = pytest_pandas
 
 _cov_corr_series = [
     (pd.Series(x), pd.Series(y))
@@ -24,7 +27,7 @@ _cov_corr_series = [
         ([np.nan, -2.0, 3.0, 9.1], [np.nan, -2.0, 3.0, 5.0]),
         # TODO(quasilyte): more intricate data for complex-typed series.
         # Some arguments make assert_almost_equal fail.
-        # Functions that yield mismaching results: _column_corr_impl and _column_cov_impl.
+        # Functions that yield mismatching results: _column_corr_impl and _column_cov_impl.
         (
             [complex(-2.0, 1.0), complex(3.0, 1.0)],
             [complex(-3.0, 1.0), complex(2.0, 1.0)],
@@ -681,7 +684,7 @@ class TestSeries(unittest.TestCase):
         self.assertEqual(bodo_func(S), test_impl(S))
         S = pd.Series([np.nan, np.nan])
         self.assertEqual(bodo_func(S), test_impl(S))
-        S = pd.Series(["aa", "bb", np.nan])
+        S = pd.Series(["aa", "bb", None])
         self.assertEqual(bodo_func(S), test_impl(S))
 
     def test_series_mean1(self):
@@ -769,8 +772,8 @@ class TestSeries(unittest.TestCase):
             return pd.concat([S1, S2])
 
         bodo_func = bodo.jit(test_impl)
-        S1 = pd.Series(["aa", "bb", np.nan, "", "GGG"])
-        S2 = pd.Series(["1", "12", "", np.nan, "A"])
+        S1 = pd.Series(["aa", "bb", None, "", "GGG"])
+        S2 = pd.Series(["1", "12", "", None, "A"])
         # TODO: handle index in concat
         pd.testing.assert_series_equal(
             bodo_func(S1, S2),
@@ -788,7 +791,7 @@ class TestSeries(unittest.TestCase):
             np.testing.assert_almost_equal(
                 bodo_func(S1, S2),
                 test_impl(S1, S2),
-                err_msg="S1={}\nS2={}".format(S1, S2),
+                err_msg=f"S1={S1}\nS2={S2}",
             )
 
     def test_series_corr1(self):
@@ -801,7 +804,7 @@ class TestSeries(unittest.TestCase):
             np.testing.assert_almost_equal(
                 bodo_func(S1, S2),
                 test_impl(S1, S2),
-                err_msg="S1={}\nS2={}".format(S1, S2),
+                err_msg=f"S1={S1}\nS2={S2}",
             )
 
     def test_series_str_len1(self):
@@ -825,13 +828,13 @@ class TestSeries(unittest.TestCase):
         )
         for method in str2str_methods:
             func_text = "def test_impl(S):\n"
-            func_text += "  return S.str.{}()\n".format(method)
+            func_text += f"  return S.str.{method}()\n"
             loc_vars = {}
             exec(func_text, {"bodo": bodo}, loc_vars)
             test_impl = loc_vars["test_impl"]
             # XXX: \t support pending Numba #4188
             # S = pd.Series([' \tbbCD\t ', 'ABC', ' mCDm\t', 'abc'])
-            S = pd.Series([" bbCD ", "ABC", " mCDm ", np.nan, "abc"])
+            S = pd.Series([" bbCD ", "ABC", " mCDm ", None, "abc"])
             check_func(test_impl, (S,))
 
     def test_series_strip_with_args(self):
@@ -842,7 +845,7 @@ class TestSeries(unittest.TestCase):
         )
         for method in strip_methods:
             func_text = "def test_impl(S, to_strip):\n"
-            func_text += "  return S.str.{}(to_strip)\n".format(method)
+            func_text += f"  return S.str.{method}(to_strip)\n"
             loc_vars = {}
             exec(func_text, {"bodo": bodo}, loc_vars)
             test_impl = loc_vars["test_impl"]
@@ -855,7 +858,7 @@ class TestSeries(unittest.TestCase):
                     " bbCD ",
                     "ABC",
                     " mCDm ",
-                    np.nan,
+                    None,
                     "abc",
                 ]
             )
@@ -877,35 +880,14 @@ class TestSeries(unittest.TestCase):
         )
         for method in str2bool_methods:
             func_text = "def test_impl(S):\n"
-            func_text += "  return S.str.{}()\n".format(method)
+            func_text += f"  return S.str.{method}()\n"
             loc_vars = {}
             exec(func_text, {"bodo": bodo}, loc_vars)
             test_impl = loc_vars["test_impl"]
             S = pd.Series(
-                [" 1aB ", "982", "ABC", "  ", np.nan, "abc", "Hi There", "100.20"]
+                [" 1aB ", "982", "ABC", "  ", None, "abc", "Hi There", "100.20"]
             )
             check_func(test_impl, (S,))
-
-    def test_series_append1(self):
-        def test_impl(S, other):
-            return S.append(other).values
-
-        bodo_func = bodo.jit(test_impl)
-        S1 = pd.Series([-2.0, 3.0, 9.1])
-        S2 = pd.Series([-2.0, 5.0])
-        # Test single series
-        np.testing.assert_array_equal(bodo_func(S1, S2), test_impl(S1, S2))
-
-    def test_series_append2(self):
-        def test_impl(S1, S2, S3):
-            return S1.append([S2, S3]).values
-
-        bodo_func = bodo.jit(test_impl)
-        S1 = pd.Series([-2.0, 3.0, 9.1])
-        S2 = pd.Series([-2.0, 5.0])
-        S3 = pd.Series([1.0])
-        # Test series tuple
-        np.testing.assert_array_equal(bodo_func(S1, S2, S3), test_impl(S1, S2, S3))
 
     def test_series_isna1(self):
         def test_impl(S):
@@ -922,7 +904,7 @@ class TestSeries(unittest.TestCase):
         bodo_func = bodo.jit(test_impl)
         # column with NA
         S = pd.Series([np.nan, 2.0, 3.0])
-        pd.testing.assert_series_equal(bodo_func(S), test_impl(S))
+        pd.testing.assert_series_equal(bodo_func(S), test_impl(S), check_dtype=False)
 
     def test_series_notna1(self):
         def test_impl(S):
@@ -931,7 +913,7 @@ class TestSeries(unittest.TestCase):
         bodo_func = bodo.jit(test_impl)
         # column with NA
         S = pd.Series([np.nan, 2.0, 3.0])
-        pd.testing.assert_series_equal(bodo_func(S), test_impl(S))
+        pd.testing.assert_series_equal(bodo_func(S), test_impl(S), check_dtype=False)
 
     def test_series_str_isna1(self):
         def test_impl(S):

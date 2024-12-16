@@ -1,15 +1,18 @@
-// Copyright (C) 2019 Bodo Inc. All rights reserved.
-#ifndef _FS_IO_H_INCLUDED
-#define _FS_IO_H_INCLUDED
+#pragma once
+
 #include <Python.h>
-#include <arrow/io/api.h>
 #include <string>
+
+#include <arrow/filesystem/hdfs.h>
+#include <arrow/filesystem/s3fs.h>
+#include <arrow/io/interfaces.h>
+#include <arrow/python/filesystem.h>
+#include <aws/core/auth/AWSCredentialsProvider.h>
+
 #include "_bodo_file_reader.h"
-#include "arrow/filesystem/hdfs.h"
-#include "arrow/filesystem/s3fs.h"
 
 struct Bodo_Fs {
-    enum FsEnum { posix = 0, s3 = 1, hdfs = 2, gcs = 3 };
+    enum FsEnum { posix = 0, s3 = 1, hdfs = 2, gcs = 3, abfs = 4 };
 };
 
 // TODO gcs reader
@@ -52,15 +55,32 @@ std::string gen_pieces_file_name(int myrank, int num_ranks,
  * @param fname: name of file to write (exclude prefix, excludes path)
  * @param orig_path: name of file to write (include prefix & path)
  * @param path_name: name of file to write (exclude prefix, include path)
+* @param force_hdfs: Force HDFS filesystem type for abfs paths, needed for
+Snowflake Write until
+* arrow AzureFileSystem suports SAS tokens
  */
 void extract_fs_dir_path(const char *_path_name, bool is_parallel,
                          const std::string &prefix, const std::string &suffix,
                          int myrank, int num_ranks, Bodo_Fs::FsEnum *fs,
                          std::string *dirname, std::string *fname,
-                         std::string *orig_path, std::string *path_name);
+                         std::string *orig_path, std::string *path_name,
+                         bool force_hdfs = false);
+
+/**
+ * @brief Determine the arrow file system to use based on the file path.
+ * @param file_path: The path/connection string to the file.
+ * @param s3_bucket_region: The region of the S3 bucket if the file is on S3.
+ * @param s3fs_anon: Whether to use anonymous access for S3.
+ * @return A pair containing the file system and the updated path to use
+ *         with it.
+ *
+ */
+std::pair<std::shared_ptr<arrow::fs::FileSystem>, std::string>
+get_reader_file_system(std::string file_path, std::string s3_bucket_region,
+                       bool s3fs_anon);
 
 /*
- * Import file system python module: bodo.io.s3_reader, bodo.io.hdfs_reader or
+ * Import file system python module: bodo.io.s3_reader, bodo.io.hdfs_reader,
  * bodo.io.gcs_reader
  * @param fs_option: file system to write to
  * @param file_type: type of file, 'csv', 'json', 'parquet', or '' all others
@@ -186,5 +206,3 @@ void parallel_in_order_write(
     const std::string &fname, char *buff, int64_t count, int64_t elem_size,
     std::shared_ptr<arrow::fs::S3FileSystem> s3_fs,
     std::shared_ptr<::arrow::fs::HadoopFileSystem> hdfs_fs);
-
-#endif  // _FS_IO_H_INCLUDED

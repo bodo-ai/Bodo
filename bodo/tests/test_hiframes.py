@@ -1,6 +1,5 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
-"""Old dataframe/series tests
-"""
+"""Old dataframe/series tests"""
+
 import os
 import unittest
 
@@ -20,7 +19,10 @@ from bodo.tests.utils import (
     dist_IR_contains,
     gen_random_string_binary_array,
     get_start_end,
+    pytest_pandas,
 )
+
+pytestmark = pytest_pandas
 
 
 @pytest.mark.slow
@@ -154,7 +156,7 @@ class TestHiFrames(unittest.TestCase):
         self.assertEqual(count_parfor_REPs(), 0)
         self.assertEqual(count_parfor_OneDs(), 2)
         f_ir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
-        self.assertTrue(dist_IR_contains(f_ir, "dist_cumsum"))
+        self.assertTrue(dist_IR_contains(f_ir, "accum_func"))
 
     def test_column_distribution(self):
         # make sure all column calls are distributed
@@ -176,7 +178,7 @@ class TestHiFrames(unittest.TestCase):
         self.assertEqual(count_array_REPs(), 0)
         self.assertEqual(count_parfor_REPs(), 0)
         f_ir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
-        self.assertTrue(dist_IR_contains(f_ir, "dist_cumsum"))
+        self.assertTrue(dist_IR_contains(f_ir, "accum_func"))
 
     def test_quantile_parallel(self):
         def test_impl(n):
@@ -359,7 +361,7 @@ class TestHiFrames(unittest.TestCase):
         def test_impl(df):
             return df.A.str.replace("AB*", "EE", regex=True)
 
-        df = pd.DataFrame({"A": ["ABCC", "CABBD", np.nan, "CCD"]})
+        df = pd.DataFrame({"A": ["ABCC", "CABBD", None, "CCD"]})
         bodo_func = bodo.jit(test_impl)
         pd.testing.assert_series_equal(bodo_func(df), test_impl(df), check_dtype=False)
 
@@ -367,7 +369,7 @@ class TestHiFrames(unittest.TestCase):
         def test_impl(df):
             return df.A.str.replace("AB", "EE", regex=False)
 
-        df = pd.DataFrame({"A": ["ABCC", "CABBD", np.nan, "AA"]})
+        df = pd.DataFrame({"A": ["ABCC", "CABBD", None, "AA"]})
         bodo_func = bodo.jit(test_impl)
         pd.testing.assert_series_equal(bodo_func(df), test_impl(df), check_dtype=False)
 
@@ -376,7 +378,7 @@ class TestHiFrames(unittest.TestCase):
             B = df.A.str.replace("AB*", "EE", regex=True)
             return B
 
-        A = ["ABCC", "CABBD", "CCD", "CCDAABB", np.nan, "ED"]
+        A = ["ABCC", "CABBD", "CCD", "CCDAABB", None, "ED"]
         start, end = get_start_end(len(A))
         # TODO: support Index
         df = pd.DataFrame({"A": A}).iloc[start:end].reset_index(drop=True)
@@ -397,16 +399,18 @@ class TestHiFrames(unittest.TestCase):
         def test_impl(df):
             return df.A.str.split()
 
-        df = pd.DataFrame({"A": ["AB CC", "C ABB D", "G ", np.nan, "g\t f"]})
+        df = pd.DataFrame({"A": ["AB CC", "C ABB D", "G ", None, "g\t f"]})
         bodo_func = bodo.jit(test_impl)
-        pd.testing.assert_series_equal(bodo_func(df), test_impl(df), check_names=False)
+        pd.testing.assert_series_equal(
+            bodo_func(df), test_impl(df), check_names=False, check_dtype=False
+        )
 
     def test_str_split2(self):
         def test_impl(df):
             B = df.A.str.split(",")
             return B
 
-        df = pd.DataFrame({"A": ["AB,CC", "C,ABB,D", "G", "", np.nan, "g,f"]})
+        df = pd.DataFrame({"A": ["AB,CC", "C,ABB,D", "G", "", None, "g,f"]})
         bodo_func = bodo.jit(test_impl)
         pd.testing.assert_series_equal(bodo_func(df), test_impl(df))
 
@@ -417,7 +421,7 @@ class TestHiFrames(unittest.TestCase):
             df2 = pd.DataFrame({"B": B})
             return df2[df2.B.str.len() > 1]
 
-        df = pd.DataFrame({"A": ["AB,CC", "C,ABB,D", "G", "", np.nan, "g,f"]})
+        df = pd.DataFrame({"A": ["AB,CC", "C,ABB,D", "G", "", None, "g,f"]})
         bodo_func = bodo.jit(test_impl)
         pd.testing.assert_frame_equal(
             bodo_func(df), test_impl(df), check_column_type=False
@@ -470,7 +474,7 @@ class TestHiFrames(unittest.TestCase):
             B = df.A.str.split(",")
             return B.str.get(1)
 
-        df = pd.DataFrame({"A": ["AAA", "AB,CC", np.nan, "C,ABB,D"]})
+        df = pd.DataFrame({"A": ["AAA", "AB,CC", None, "C,ABB,D"]})
         bodo_func = bodo.jit(test_impl)
         pd.testing.assert_series_equal(bodo_func(df), test_impl(df), check_dtype=False)
 
@@ -524,6 +528,7 @@ class TestHiFrames(unittest.TestCase):
         self.assertEqual(bodo_func(n), test_impl(n))
         self.assertEqual(count_array_REPs(), 0)
         self.assertEqual(count_parfor_REPs(), 0)
+
         # size 7 with unroll
         def test_impl_2(n):
             df = pd.DataFrame({"A": np.arange(n) + 1.0, "B": np.random.ranf(n)})
@@ -787,7 +792,7 @@ class TestHiFrames(unittest.TestCase):
         B = np.array([3, 4, 5, 6])
         bodo_func = bodo.jit(distributed=["A", "B", "df2"])(test_impl)
         start, end = get_start_end(len(A))
-        df2 = bodo_func(A[start:end], B[start:end])
+        bodo_func(A[start:end], B[start:end])
         # TODO:
         # pd.testing.assert_frame_equal(
         #     bodo_func(A[start:end], B[start:end]), test_impl(A, B))

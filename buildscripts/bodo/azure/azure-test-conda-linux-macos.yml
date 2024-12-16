@@ -1,0 +1,157 @@
+parameters:
+- name: name
+  type: string
+  default: ''
+- name: matrix
+  type: object
+  default: []
+- name: caching_test
+  type: boolean
+  default: false
+- name: spawn_mode_test
+  type: boolean
+  default: false
+- name: BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST
+  type: boolean
+  default: false
+
+jobs:
+- job: ${{ parameters.name }}
+  timeoutInMinutes: 360
+  variables:
+    - group: AWS-427-S3-Access-Keys
+    - group: SnowflakeCredentials
+    - group: TabularCredentials
+    - group: SQLDBCredentials
+  pool: ScalingVMSet
+  strategy:
+    matrix:
+      ${{ insert }}: ${{ parameters.matrix }}
+
+  steps:
+  - script: |
+      set -exo pipefail
+      curl -fsSL https://pixi.sh/install.sh | bash
+      source ~/.bashrc
+      echo "##vso[task.prependpath]$HOME/.pixi/bin"
+    displayName: Install Pixi
+  - script: pixi install -v --locked -e azure
+    displayName: Install Test Environment
+
+  - script: |
+      set -exo pipefail
+      pixi global install unzip
+      which unzip
+
+      if [[ "$(uname)" == 'Linux' ]]; then
+        wget https://download.oracle.com/otn_software/linux/instantclient/215000/instantclient-basic-linux.x64-21.5.0.0.0dbru.zip
+        sudo $(which unzip) instantclient-basic-linux.x64-21.5.0.0.0dbru.zip -d /usr/local/lib
+      else
+        wget https://download.oracle.com/otn_software/mac/instantclient/198000/instantclient-basic-macos.x64-19.8.0.0.0dbru.zip
+        sudo $(which unzip) instantclient-basic-macos.x64-19.8.0.0.0dbru.zip -d /usr/local/lib
+      fi
+    displayName: 'Setup Oracle Database Testing'
+    retryCountOnTaskFailure: 5
+
+  - script: |
+      set -exo pipefail
+      pixi run -e azure build-bodo -Cbuild.verbose=true
+      pixi run -e azure build-iceberg
+      pixi run -e azure -- sccache --show-stats
+    env:
+      AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
+      AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
+      DISABLE_CCACHE: 1  # Just use sccache directly on CI
+      USE_BODO_ARROW_FORK: 1  # Build from Source with Arrow Fork
+    displayName: 'Build Bodo & Iceberg Connector'
+
+  - bash: |
+      set -exo pipefail
+      eval "$(pixi shell-hook --shell bash -e azure)"
+
+      wget -q -O - "https://adlsresources.blob.core.windows.net/adlsresources/hadoop-3.3.2.tar.gz" | sudo tar -xzf - -C /opt
+      cd azurefs-sas-token-provider
+      pip install --no-deps --no-build-isolation -ve .
+    displayName: "Setup Snowflake ADLS Testing (only Linux)"
+    retryCountOnTaskFailure: 5
+
+  - bash: |
+      pixi list
+      pixi run pip list
+    continueOnError: true
+    displayName: Export Environment Spec
+
+  - bash: |
+      set -exo pipefail
+      eval "$(pixi shell-hook --shell bash -e azure)"
+
+      unamestr=`uname`
+      if [[ "$unamestr" == 'Linux' ]]; then
+        export LD_LIBRARY_PATH=/usr/local/lib/instantclient_21_5:$LD_LIBRARY_PATH
+      else
+        export LD_LIBRARY_PATH=/usr/local/lib/instantclient_19_8:$LD_LIBRARY_PATH
+      fi
+
+      if [[ "$unamestr" == 'Linux' ]]; then
+        echo "Setting up Hadoop (and Arrow) environment variables"
+        export HADOOP_HOME=/opt/hadoop-3.3.2
+        export HADOOP_INSTALL=$HADOOP_HOME
+        export HADOOP_MAPRED_HOME=$HADOOP_HOME
+        export HADOOP_COMMON_HOME=$HADOOP_HOME
+        export HADOOP_HDFS_HOME=$HADOOP_HOME
+        export YARN_HOME=$HADOOP_HOME
+        export HADOOP_COMMON_LIB_NATIVE_DIR=$HADOOP_HOME/lib/native
+        export HADOOP_OPTS='-Djava.library.path=$HADOOP_HOME/lib'
+        export HADOOP_OPTIONAL_TOOLS=hadoop-azure
+        export ARROW_LIBHDFS_DIR=$HADOOP_HOME/lib/native
+        export CLASSPATH=`$HADOOP_HOME/bin/hdfs classpath --glob`
+      else
+        echo "Skipping hadoop/arrow env var setup"
+      fi
+
+      # For debugging purposes
+      export BODO_SF_WRITE_DEBUG=1
+
+      cd $(System.DefaultWorkingDirectory)
+      # For caching tests we need to update the location of the decryption file.
+      # We set the absolute path as an environment variable.
+      export BODO_TRACING_DECRYPTION_FILE_PATH=`echo "$(System.DefaultWorkingDirectory)/buildscripts/decompress_traces.py"`
+      if [[ "${{ parameters.caching_test }}" == "True" ]]; then
+        python -m bodo.runtests_caching "${{ parameters.name }}" "$NP" bodo/tests/caching_tests
+      elif [[ "${{ parameters.spawn_mode_test }}" == "True" ]]; then
+        export BODO_TEST_SPAWN_MODE=1
+        export BODO_NUM_WORKERS="$NP"
+        pytest -s -v -Wignore -m "$(PYTEST_MARKER)" bodo/tests --junitxml=pytest-report-spawn-mode.xml --test-run-title="${{ parameters.name }}"
+      else
+        python -m bodo.runtests "${{ parameters.name }}" "$NP" --pyargs bodo -s -v -m "$(PYTEST_MARKER)"
+      fi
+    env:
+      SF_USERNAME: $(SNOWFLAKE_USER)
+      SF_PASSWORD: $(SNOWFLAKE_PASSWORD)
+      SF_USER2: $(SNOWFLAKE_USER2)
+      SF_PASSWORD2: $(SNOWFLAKE_PASSWORD2)
+      SF_AZURE_USER: $(SF_AZURE_USER)
+      SF_AZURE_PASSWORD: $(SF_AZURE_PASSWORD)
+      AZURE_STORAGE_ACCOUNT_NAME: $(AZURE_ICEBERG_STORAGE_ACCOUNT)
+      AZURE_STORAGE_ACCOUNT_KEY: $(AZURE_ICEBERG_ACCESS_KEY)
+      AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
+      AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
+      BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: ${{ parameters.BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST }}
+      TABULAR_CREDENTIAL: $(TABULAR_CREDENTIAL)
+      BODO_TEST_SQL_DB_CREDENTIAL: $(SQL_DB_CREDENTIAL)
+      BODO_TEST_ORACLE_DB_CREDENTIAL: $(ORACLE_DB_CREDENTIAL)
+      BODO_SPAWN_MODE: "0"
+    displayName: 'Test Bodo'
+
+  - script: |
+      set -eo pipefail
+      eval "$(pixi shell-hook --shell bash -e azure)"
+
+      export IS_RELEASE=`git tag --points-at HEAD`
+      if [[ -n "$IS_RELEASE" ]]; then
+        git clone https://github.com/bodo-ai/Bodo-examples.git
+        cd Bodo-examples/06-Compare-Bodo-with-Spark/tpch/
+        # Invalid env variables for AWS credentials in the pipeline, s3 access is denied unless we run it by resetting them
+        AWS_ACCESS_KEY_ID="" AWS_SECRET_ACCESS_KEY="" mpiexec -n 4 python bodo_queries.py --folder s3://bodo-example-data/tpch/SF1
+      fi
+    displayName: 'Run Bodo Examples for Major Release'

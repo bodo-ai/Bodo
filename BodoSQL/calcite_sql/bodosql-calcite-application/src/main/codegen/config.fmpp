@@ -1,0 +1,616 @@
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to you under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+data: {
+  # Data declarations for this parser.
+  #
+  # Default declarations are in default_config.fmpp; if you do not include a
+  # declaration ('imports' or 'nonReservedKeywords', for example) in this file,
+  # FMPP will use the declaration from default_config.fmpp.
+  parser: {
+    # Generated parser implementation class package and name
+    package: "com.bodosql.calcite.sql.parser",
+    class: "SqlBodoParserImpl",
+
+    # List of additional classes and packages to import.
+    # Example: "org.apache.calcite.sql.*", "java.util.List".
+    imports: [
+      "java.util.HashMap"
+      "com.bodosql.calcite.application.operatorTables.ArrayOperatorTable"
+      "com.bodosql.calcite.application.operatorTables.ContextOperatorTable"
+      "com.bodosql.calcite.application.operatorTables.DatetimeOperatorTable"
+      "com.bodosql.calcite.application.operatorTables.DatetimeFnUtils"
+      "com.bodosql.calcite.application.operatorTables.CondOperatorTable"
+      "com.bodosql.calcite.application.operatorTables.NumericOperatorTable"
+      "com.bodosql.calcite.application.operatorTables.ObjectOperatorTable"
+      "com.bodosql.calcite.application.operatorTables.SelectOperatorTable",
+      "com.bodosql.calcite.application.operatorTables.StringOperatorTable"
+      "com.bodosql.calcite.application.RelationalAlgebraGenerator"
+      "com.bodosql.calcite.sql.ddl.SqlCopyIntoTable"
+      "com.bodosql.calcite.sql.ddl.SqlCopyIntoLocation"
+      "com.bodosql.calcite.sql.ddl.SqlSnowflakeFileFormat"
+      "com.bodosql.calcite.sql.ddl.SqlSnowflakeColumnDeclaration"
+      "com.bodosql.calcite.sql.ddl.BodoSqlCreateTable"
+      "com.bodosql.calcite.sql.ddl.BodoSqlCreateTableAs"
+      "com.bodosql.calcite.sql.ddl.BodoSqlCreateTableLike"
+      "com.bodosql.calcite.sql.ddl.BodoSqlCreateTableClone"
+      "com.bodosql.calcite.sql.ddl.SqlShow"
+      "com.bodosql.calcite.sql.ddl.SqlSnowflakeShowObjects"
+      "com.bodosql.calcite.sql.ddl.SqlSnowflakeShowSchemas"
+      "com.bodosql.calcite.sql.ddl.SqlShowViews"
+      "com.bodosql.calcite.sql.ddl.SqlShowTables"
+      "com.bodosql.calcite.sql.ddl.SqlShowTblproperties"
+      "com.bodosql.calcite.sql.ddl.SqlSnowflakeUpdate"
+      "com.bodosql.calcite.sql.ddl.SqlDropTable"
+      "com.bodosql.calcite.sql.ddl.SqlDescribeView"
+      "com.bodosql.calcite.sql.ddl.SqlAlterTable"
+      "com.bodosql.calcite.sql.ddl.SqlAlterTableRenameTable"
+      "com.bodosql.calcite.sql.ddl.SqlAlterTableSwapTable"
+      "com.bodosql.calcite.sql.ddl.SqlAlterTableAddCol"
+      "com.bodosql.calcite.sql.ddl.SqlAlterTableRenameCol"
+      "com.bodosql.calcite.sql.ddl.SqlAlterTableDropCol"
+      "com.bodosql.calcite.sql.ddl.SqlAlterTableSetProperty"
+      "com.bodosql.calcite.sql.ddl.SqlAlterTableUnsetProperty"
+      "com.bodosql.calcite.sql.ddl.SqlAlterTableAlterColumn"
+      "com.bodosql.calcite.sql.ddl.SqlAlterTableAlterColumnComment"
+      "com.bodosql.calcite.sql.ddl.SqlAlterTableAlterColumnDropNotNull"
+      "com.bodosql.calcite.sql.ddl.SqlAlterView"
+      "com.bodosql.calcite.sql.ddl.SqlAlterViewRenameView"
+      "com.bodosql.calcite.sql.ddl.SqlTruncateTable"
+      "com.bodosql.calcite.sql.func.SqlBodoOperatorTable"
+      "com.bodosql.calcite.sql.parser.SqlBodoParserUtil"
+      "org.apache.calcite.sql.SqlCreate"
+      "org.apache.calcite.sql.SqlDrop"
+      "org.apache.calcite.sql.SqlDdl"
+      "org.apache.calcite.sql.SqlTruncate"
+      "org.apache.calcite.sql.ddl.SqlDdlNodes"
+      "org.apache.calcite.sql.fun.SqlAggOperatorTable"
+      "org.apache.calcite.sql.parser.SqlAbstractParserImpl"
+    ]
+
+    # List of new keywords. Example: "DATABASES", "TABLES". If the keyword is
+    # not a reserved keyword, add it to the 'nonReservedKeywords' section.
+    keywords: [
+      "IF"
+      "TEMP"
+      "TRANSIENT"
+      "VOLATILE"
+      "COMPRESSION"
+      "RECORD_DELIMITER"
+      "FIELD_DELIMITER"
+      "PARSE_HEADER"
+      "SKIP_HEADER"
+      "SKIP_BLANK_LINES"
+      "DATE_FORMAT"
+      "TIME_FORMAT"
+      "TIMESTAMP_FORMAT"
+      "BINARY_FORMAT"
+      "BINARY_AS_TEXT"
+      "ESCAPE_UNENCLOSED_FIELD"
+      "TRIM_SPACE"
+      "FIELD_OPTIONALLY_ENCLOSED_BY"
+      "NULL_IF"
+      "NULLIF"
+      "ERROR_ON_COLUMN_COUNT_MISMATCH"
+      "REPLACE_INVALID_CHARACTERS"
+      "EMPTY_FIELD_AS_NULL"
+      "SKIP_BYTE_ORDER_MARK"
+      "ENABLE_OCTAL"
+      "ALLOW_DUPLICATE"
+      "STRIP_OUTER_ARRAY"
+      "STRIP_NULL_VALUES"
+      "IGNORE_UTF8_ERRORS"
+      "PRESERVE_SPACE"
+      "STRIP_OUTER_ELEMENT"
+      "DISABLE_SNOWFLAKE_DATA"
+      "DISABLE_AUTO_CONVERT"
+      "AUTO"
+      "GZIP"
+      "BZ2"
+      "BROTLI"
+      "ZSTD"
+      "DEFLATE"
+      "RAW_DEFLATE"
+      "SNAPPY"
+      "FORMAT_NAME"
+      "FILE_FORMAT"
+      "HEX"
+      "BASE64"
+      "AUTOINCREMENT"
+      "CLONE"
+      "CLUSTER"
+      "COPY"
+      "GRANTS"
+      "TIMESTAMP_LTZ"
+      "TIMESTAMPLTZ"
+      "TIMESTAMP_TZ"
+      "TIMESTAMPTZ"
+      "LAST_DAY"
+      # Tokens for Date/Time Intervals
+      "Y"
+      "YY"
+      "YYY"
+      "YYYY"
+      "YR"
+      "YRS"
+      "MM"
+      "MON"
+      "MONS"
+      "D"
+      "DD"
+      "DAYOFMONTH"
+      "WEEKDAY"
+      "DW"
+      "DAYOFWEEKISO"
+      "WEEKDAY_ISO"
+      "DOW_ISO"
+      "DW_ISO"
+      "YEARDAY"
+      "DY"
+      "W"
+      "WK"
+      "WEEKOFYEAR"
+      "WOY"
+      "WY"
+      "WEEKISO"
+      "WEEK_ISO"
+      "WEEKOFYEARISO"
+      "WEEKOFYEAR_ISO"
+      "Q"
+      "QTR"
+      "QTRS"
+      "YEAROFWEEK"
+      "YEAROFWEEKISO"
+      "H"
+      "HH"
+      "HR"
+      "HRS"
+      "MI"
+      "MINS"
+      "S"
+      "SEC"
+      "SECS"
+      "MS"
+      "MSEC"
+      "MILLISECONDS"
+      "US"
+      "USEC"
+      "MICROSECONDS"
+      "NS"
+      "NSEC"
+      "NANOSEC"
+      "NSECOND"
+      "NANOSECONDS"
+      "NANOSECS"
+      "NSECONDS"
+      "EPOCH_SECOND"
+      "EPOCH_SECONDS"
+      "EPOCH_MILLISECOND"
+      "EPOCH_MILLISECONDS"
+      "EPOCH_MICROSECOND"
+      "EPOCH_MICROSECONDS"
+      "EPOCH_NANOSECOND"
+      "EPOCH_NANOSECONDS"
+      "TZH"
+      "TZM"
+      "COMMENT"
+      "SECURE"
+      "TAG"
+      "MASKING"
+      "ACCESS"
+      "POLICY"
+      "OBJECTS"
+      "SCHEMAS"
+      "VIEWS"
+      "TERSE"
+      "TABLES"
+      "TAGS"
+      "PROPERTY"
+      "PROPERTIES"
+      "TBLPROPERTY"
+      "TBLPROPERTIES"
+      "UNSET"
+    ]
+
+    # List of non-reserved keywords to add;
+    # items in this list become non-reserved
+    nonReservedKeywordsToAdd: [
+        # Unreserved functions (functions listed in ReservedFunctionName in parser.jj)
+        "ABS"
+        "AVG"
+        "CARDINALITY"
+        "CEILING"
+        "CHAR_LENGTH"
+        "CHARACTER_LENGTH"
+        "COALESCE"
+        "COLLECT"
+        "COVAR_POP"
+        "COVAR_SAMP"
+        "CUME_DIST"
+        "COUNT"
+        "DENSE_RANK"
+        "ELEMENT"
+        "EVERY"
+        "EXP"
+        "FIRST_VALUE"
+        "FLATTEN"
+        "FLOOR"
+        "FUSION"
+        "INTERSECTION"
+        "GROUPING"
+        "LAG"
+        "LEAD"
+        "LAST_VALUE"
+        "LN"
+        "LOWER"
+        "MAX"
+        "MIN"
+        "MOD"
+        "NTH_VALUE"
+        "NTILE"
+        "OCTET_LENGTH"
+        "PERCENTILE_CONT"
+        "PERCENTILE_DISC"
+        "PERCENT_RANK"
+        "POWER"
+        "RANK"
+        "REGR_COUNT"
+        "REGR_SXX"
+        "REGR_SYY"
+        "ROW_NUMBER"
+        "SQRT"
+        "STDDEV_POP"
+        "STDDEV_SAMP"
+        "SUM"
+        "UPPER"
+        "TRUNCATE"
+        "USER"
+        "VAR_POP"
+        "VAR_SAMP"
+        # Other tokens
+        "ACCESS"
+        "ALLOW_DUPLICATE"
+        "AT"
+        "AUTO"
+        "AUTOINCREMENT"
+        "BASE64"
+        "BINARY_AS_TEXT"
+        "BINARY_FORMAT"
+        "BROTLI"
+        "BZ2"
+        "CLONE"
+        "CLUSTER"
+        "COMMENT"
+        "COMPRESSION"
+        "CONDITION"
+        "CONTAINS"
+        "COPY"
+        "CORR"
+        "DATE_FORMAT"
+        "DEFLATE"
+        "DISABLE_AUTO_CONVERT"
+        "DISABLE_SNOWFLAKE_DATA"
+        "EMPTY_FIELD_AS_NULL"
+        "ENABLE_OCTAL"
+        "ERROR_ON_COLUMN_COUNT_MISMATCH"
+        "ESCAPE_UNENCLOSED_FIELD"
+        "FIELD_DELIMITER"
+        "FIELD_OPTIONALLY_ENCLOSED_BY"
+        "FILE_FORMAT"
+        "FILTER"
+        "FORMAT_NAME"
+        "FUNCTION"
+        "GET"
+        "GZIP"
+        "HEX"
+        "IF"
+        "IGNORE_UTF8_ERRORS"
+        "INSERT"
+        "INTERVAL"
+        "LANGUAGE"
+        "LAST_DAY"
+        "MATCHES"
+        "MATCH_NUMBER"
+        "METHOD"
+        "NULLIF"
+        "NULL_IF"
+        "OUT"
+        "OBJECTS"
+        "PARSE_HEADER"
+        "PERCENT"
+        "PERIOD"
+        "POLICY"
+        "POSITION"
+        "PRESERVE_SPACE"
+        "PURGE"
+        "RAW_DEFLATE"
+        "RECORD_DELIMITER"
+        "RECURSIVE"
+        "REF"
+        "REFERENCES"
+        "REGR_AVGX"
+        "REGR_AVGY"
+        "REGR_INTERCEPT"
+        "REGR_R2"
+        "REGR_SLOPE"
+        "REGR_SXY"
+        "RENAME"
+        "REPLACE_INVALID_CHARACTERS"
+        "ROLLUP"
+        "SCHEMAS"
+        "SECURE"
+        "SKIP_BLANK_LINES"
+        "SKIP_BYTE_ORDER_MARK"
+        "SKIP_HEADER"
+        "SNAPPY"
+        "SPLIT_TO_TABLE"
+        "STRIP_NULL_VALUES"
+        "STRIP_OUTER_ARRAY"
+        "STRIP_OUTER_ELEMENT"
+        "SUBSET"
+        "SWAP"
+        "TEMP"
+        "TIMESTAMP_FORMAT"
+        "TIME_FORMAT"
+        "TRANSIENT"
+        "TRANSLATE"
+        "TRANSLATION"
+        "TRIM_SPACE"
+        "VALUE"
+        "VALUES"
+        "WIDTH_BUCKET"
+        "ZSTD"
+        # https://docs.snowflake.com/en/sql-reference/reserved-keywords
+        # Snowflake doesn't reserve type keywords
+        "ARRAY"
+        "BIGINT"
+        "BINARY"
+        "BOOLEAN"
+        "BYTEINT"
+        "CHAR"
+        "CHARACTER"
+        "DATE"
+        "DECIMAL"
+        "DOUBLE"
+        "FLOAT"
+        "FLOAT4"
+        "FLOAT8"
+        "INT"
+        "INTEGER"
+        "NCHAR"
+        "NUMBER"
+        "NUMERIC"
+        "NVARCHAR"
+        "NVARCHAR2"
+        "OBJECT"
+        "SMALLINT"
+        "STRING"
+        "TEXT"
+        "TIME"
+        "TIMESTAMP"
+        "TIMESTAMP_LTZ"
+        # Note TIMESTAMPLTZ is a valid alias for TIMESTAMP_LTZ
+        "TIMESTAMPLTZ"
+        "TIMESTAMP_NTZ"
+        # Note TIMESTAMPNTZ is a valid alias for TIMESTAMP_NTZ
+        "TIMESTAMPNTZ"
+        "TIMESTAMP_TZ"
+        # Note TIMESTAMPTZ is a valid alias for TIMESTAMP_TZ
+        "TIMESTAMPTZ"
+        "TINYINT"
+        "VARBINARY"
+        "VARCHAR"
+        "VARIANT"
+        # Tokens for Date/Time Intervals
+        "YEAR"
+        "YEARS"
+        "QUARTER"
+        "QUARTERS"
+        "MONTH"
+        "MONTHS"
+        "WEEK"
+        "WEEKS"
+        "DAY"
+        "DAYS"
+        "HOUR"
+        "HOURS"
+        "MINUTE"
+        "MINUTES"
+        "SECOND"
+        "SECONDS"
+        "MS"
+        "MSEC"
+        "MILLISECONDS"
+        "US"
+        "USEC"
+        "MICROSECONDS"
+        "Y"
+        "YY"
+        "YYY"
+        "YYYY"
+        "YR"
+        "YRS"
+        "MM"
+        "MON"
+        "MONS"
+        "D"
+        "DD"
+        "DAYOFMONTH"
+        "DAYOFWEEK"
+        "WEEKDAY"
+        "DW"
+        "DAYOFWEEKISO"
+        "WEEKDAY_ISO"
+        "DOW_ISO"
+        "DW_ISO"
+        "DAYOFYEAR"
+        "YEARDAY"
+        "DY"
+        "W"
+        "WK"
+        "WEEKOFYEAR"
+        "WOY"
+        "WY"
+        "WEEKISO"
+        "WEEK_ISO"
+        "WEEKOFYEARISO"
+        "WEEKOFYEAR_ISO"
+        "Q"
+        "QTR"
+        "QTRS"
+        "YEAROFWEEK"
+        "YEAROFWEEKISO"
+        "H"
+        "HH"
+        "HR"
+        "HRS"
+        "MI"
+        "MINS"
+        "S"
+        "SEC"
+        "SECS"
+        "NS"
+        "NSEC"
+        "NANOSEC"
+        "NSECOND"
+        "NANOSECONDS"
+        "NANOSECS"
+        "NSECONDS"
+        "EPOCH_SECOND"
+        "EPOCH_SECONDS"
+        "EPOCH_MILLISECOND"
+        "EPOCH_MILLISECONDS"
+        "EPOCH_MICROSECOND"
+        "EPOCH_MICROSECONDS"
+        "EPOCH_NANOSECOND"
+        "EPOCH_NANOSECONDS"
+        "TZH"
+        "TZM"
+        "TERSE"
+        "VIEWS"
+        "TABLES"
+        "PROPERTY"
+        "PROPERTIES"
+        "TBLPROPERTY"
+        "TBLPROPERTIES"
+        "TAG"
+        "TAGS"
+        "UNSET"
+    ]
+
+    # List of additional join types. Each is a method with no arguments.
+    # Example: "LeftSemiJoin".
+    joinTypes: [
+    ]
+
+    # List of methods for parsing builtin function calls.
+    # Return type of method implementation should be "SqlNode".
+    # Example: "DateTimeConstructorCall()".
+    builtinFunctionCallMethods: [
+        "DatePartFunctionCall()",
+        "LastDayFunctionCall()",
+        "TimestampAddFunctionCall()",
+        "BodoArrayLiteral()",
+        "BodoObjectLiteral()",
+    ]
+
+    # List of methods for parsing extensions to "CREATE [OR REPLACE]" calls.
+    # Each must accept arguments "(SqlParserPos pos, boolean replace)".
+    # Example: "SqlCreateForeignSchema".
+    createStatementParserMethods: [
+        "SqlCreateTable",
+        "SqlCreateView",
+        "SqlCreateSchema",
+    ]
+
+    # List of methods for parsing extensions to "DROP" calls.
+    # Each must accept arguments "(SqlParserPos pos)".
+    # Example: "SqlDropSchema".
+    dropStatementParserMethods: [
+        "SqlDropTable",
+        "SqlDropView",
+        "SqlDropSchema",
+    ]
+
+    # List of methods for parsing extensions to "ALTER TABLE / VIEW" calls.
+    alterStatementParserMethods: [
+        "SqlAlterTable",
+        "SqlAlterView",
+    ]
+
+    # List of methods for parsing extensions to "SHOW" calls.
+    showStatementParserMethods : [
+        "SqlShowObjects"
+        "SqlShowSchemas"
+        "SqlShowViews"
+        "SqlShowTables"
+        "SqlShowTblproperties"
+    ]
+
+    # List of methods which are not extensions (don't have a corresponding preexisting parser method).
+    statementParserMethods: [
+        # Misc commands
+        "SqlCopyInto()"
+    ]
+
+    # Binary operators tokens.
+    # Example: "< INFIX_CAST: \"::\" >".
+    binaryOperatorsTokens: [
+# Temporary reversions for the Bodo version
+# TODO: move these from changes to the core parser back into this module
+#      "< INFIX_CAST: \"::\" >",
+#      "< NULL_SAFE_EQUAL: \"<=>\" >"
+    ]
+
+    # Binary operators initialization.
+    # Example: "InfixCast".
+    extraBinaryExpressions: [
+# Temporary reversions for the Bodo version
+# TODO: move these from changes to the core parser into this module
+#      "InfixCast",
+#      "NullSafeEqual"
+    ]
+
+    # Bodo Change: List of keywords that can be used for argument names
+    # but aren't fully unreserved.
+    argumentNameUnreserveList: [
+        "OUTER",
+    ]
+
+    # List of methods for parsing extensions to "TRUNCATE" calls.
+    # Each must accept arguments "(SqlParserPos pos)".
+    # Example: "SqlTruncateTable".
+    truncateStatementParserMethods: [
+      "SqlTruncateTable"
+    ]
+
+
+    # List of files in @includes directory that have parser method
+    # implementations for parsing custom SQL statements, literals or types
+    # given as part of "statementParserMethods", "literalParserMethods" or
+    # "dataTypeParserMethods".
+    # Example: "parserImpls.ftl".
+    implementationFiles: [
+      "parserImpls.ftl"
+    ]
+
+  },
+
+  default: tdd(../default_config.fmpp)
+}
+
+freemarkerLinks: {
+  includes: includes/
+}

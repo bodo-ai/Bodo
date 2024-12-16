@@ -1,22 +1,57 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
+import datetime
 import gc
 import glob
 import hashlib
-import json
+import operator
 import os
+import shutil
 import subprocess
+import time
+import traceback
+from collections.abc import Callable, Generator
+from pathlib import Path
+from typing import (
+    TYPE_CHECKING,
+    Optional,
+    Protocol,
+)
 
+import pandas as pd
+import psutil
 import pytest
-from mpi4py import MPI
 from numba.core.runtime import rtsys
 
 import bodo
 import bodo.utils.allocation_tracking
+from bodo.mpi4py import MPI
+from bodo.tests.iceberg_database_helpers.utils import DATABASE_NAME
+from bodo.tests.utils import temp_env_override
+
+if TYPE_CHECKING:
+    from pyspark.sql import SparkSession
 
 
-# similar to Pandas
+# Disable broadcast join as the default
+os.environ["BODO_BCAST_JOIN_THRESHOLD"] = "0"
+
+
+# Similar to Pandas
+class DataPath(Protocol):
+    def __call__(self, *args: str, check_exists: bool = True) -> str: ...
+
+
+def datapath_util(*args, base_path=None, check_exists=True) -> str:
+    if base_path is None:
+        base_path = os.path.join(os.path.dirname(__file__), "data")
+    path = os.path.join(base_path, *args)
+    if check_exists and not os.path.exists(path):
+        msg = "Could not find file {}."
+        raise ValueError(msg.format(path))
+    return path
+
+
 @pytest.fixture(scope="session")
-def datapath():
+def datapath() -> DataPath:
     """Get the path to a test data file.
 
     Parameters
@@ -36,13 +71,17 @@ def datapath():
     BASE_PATH = os.path.join(os.path.dirname(__file__), "data")
 
     def deco(*args, check_exists=True):
-        path = os.path.join(BASE_PATH, *args)
-        if check_exists and not os.path.exists(path):
-            msg = "Could not find file {}."
-            raise ValueError(msg.format(path))
-        return path
+        return datapath_util(*args, base_path=BASE_PATH, check_exists=check_exists)
 
     return deco
+
+
+@pytest.fixture(scope="session", autouse=True)
+def enable_numba_alloc_stats():
+    """Enable Numba's allocation stat collection for memory_leak_check below"""
+    from numba.core.runtime import _nrt_python
+
+    _nrt_python.memsys_enable_stats()
 
 
 @pytest.fixture(scope="function")
@@ -52,6 +91,8 @@ def memory_leak_check():
     Equivalent to Numba's MemoryLeakMixin:
     https://github.com/numba/numba/blob/13ece9b97e6f01f750e870347f231282325f60c3/numba/tests/support.py#L688
     """
+    import bodo.tests.utils
+
     gc.collect()
     old = rtsys.get_allocation_stats()
     old_bodo = bodo.utils.allocation_tracking.get_allocation_stats()
@@ -65,8 +106,44 @@ def memory_leak_check():
     total_free = sum([m[1] for m in new_stats]) - sum([m[1] for m in old_stats])
     total_mi_alloc = sum([m[2] for m in new_stats]) - sum([m[2] for m in old_stats])
     total_mi_free = sum([m[3] for m in new_stats]) - sum([m[3] for m in old_stats])
-    assert total_alloc == total_free
-    assert total_mi_alloc == total_mi_free
+
+    # Don't check for memory leaks if the test is being re-run by flaky
+    if bodo.tests.utils.pytest_snowflake_is_rerunning:
+        bodo.tests.utils.pytest_snowflake_is_rerunning = False
+    else:
+        assert total_alloc == total_free
+        assert total_mi_alloc == total_mi_free
+
+
+def item_file_name(item):
+    """Get the name of a pytest item. Uses the default pytest implementation, except for C++ tests, where we return the cached name"""
+    if isinstance(item, (CppTestFile, CppTestItem)):
+        return item.filename
+    else:
+        return item.module.__name__.split(".")[-1] + ".py"
+
+
+def item_module_name(item):
+    """Get the pytest module name. Uses default pytest implementation, except for c++, whiche uses the filename"""
+    if isinstance(item, (CppTestFile, CppTestItem)):
+        return item.filename
+    else:
+        return item.module.__name__
+
+
+def unique_test_name(test):
+    """Return a unique string for every pytest function"""
+    return item_module_name(test) + str(test)
+
+
+def get_last_byte_of_test_hash(test):
+    """
+    Gets the last byte of hashing the test name. The hash function doesn't
+    matter as long as it distributes tests reasonably well across all the
+    buckets.
+    """
+    name = unique_test_name(test).encode("utf-8")
+    return hashlib.sha1(name).digest()[-1]
 
 
 def pytest_collection_modifyitems(items):
@@ -74,23 +151,62 @@ def pytest_collection_modifyitems(items):
     called after collection has been performed.
     """
     azure_1p_markers = [
-        pytest.mark.bodo_1of6,
-        pytest.mark.bodo_2of6,
-        pytest.mark.bodo_3of6,
-        pytest.mark.bodo_4of6,
-        pytest.mark.bodo_5of6,
-        pytest.mark.bodo_6of6,
+        pytest.mark.bodo_1of22,
+        pytest.mark.bodo_2of22,
+        pytest.mark.bodo_3of22,
+        pytest.mark.bodo_4of22,
+        pytest.mark.bodo_5of22,
+        pytest.mark.bodo_6of22,
+        pytest.mark.bodo_7of22,
+        pytest.mark.bodo_8of22,
+        pytest.mark.bodo_9of22,
+        pytest.mark.bodo_10of22,
+        pytest.mark.bodo_11of22,
+        pytest.mark.bodo_12of22,
+        pytest.mark.bodo_13of22,
+        pytest.mark.bodo_14of22,
+        pytest.mark.bodo_15of22,
+        pytest.mark.bodo_16of22,
+        pytest.mark.bodo_17of22,
+        pytest.mark.bodo_18of22,
+        pytest.mark.bodo_19of22,
+        pytest.mark.bodo_20of22,
+        pytest.mark.bodo_21of22,
+        pytest.mark.bodo_22of22,
     ]
     azure_2p_markers = [
-        pytest.mark.bodo_1of8,
-        pytest.mark.bodo_2of8,
-        pytest.mark.bodo_3of8,
-        pytest.mark.bodo_4of8,
-        pytest.mark.bodo_5of8,
-        pytest.mark.bodo_6of8,
-        pytest.mark.bodo_7of8,
-        pytest.mark.bodo_8of8,
+        pytest.mark.bodo_1of30,
+        pytest.mark.bodo_2of30,
+        pytest.mark.bodo_3of30,
+        pytest.mark.bodo_4of30,
+        pytest.mark.bodo_5of30,
+        pytest.mark.bodo_6of30,
+        pytest.mark.bodo_7of30,
+        pytest.mark.bodo_8of30,
+        pytest.mark.bodo_9of30,
+        pytest.mark.bodo_10of30,
+        pytest.mark.bodo_11of30,
+        pytest.mark.bodo_12of30,
+        pytest.mark.bodo_13of30,
+        pytest.mark.bodo_14of30,
+        pytest.mark.bodo_15of30,
+        pytest.mark.bodo_16of30,
+        pytest.mark.bodo_17of30,
+        pytest.mark.bodo_18of30,
+        pytest.mark.bodo_19of30,
+        pytest.mark.bodo_20of30,
+        pytest.mark.bodo_21of30,
+        pytest.mark.bodo_22of30,
+        pytest.mark.bodo_23of30,
+        pytest.mark.bodo_24of30,
+        pytest.mark.bodo_25of30,
+        pytest.mark.bodo_26of30,
+        pytest.mark.bodo_27of30,
+        pytest.mark.bodo_28of30,
+        pytest.mark.bodo_29of30,
+        pytest.mark.bodo_30of30,
     ]
+
     # BODO_TEST_PYTEST_MOD environment variable indicates that we only want
     # to run the tests from the given test file. In this case, we add the
     # "single_mod" mark to the tests belonging to that module. This envvar is
@@ -99,37 +215,26 @@ def pytest_collection_modifyitems(items):
     module_to_run = os.environ.get("BODO_TEST_PYTEST_MOD", None)
     if module_to_run is not None:
         for item in items:
-            if module_to_run == item.module.__name__.split(".")[-1] + ".py":
+            if module_to_run == item_file_name(item):
                 item.add_marker(pytest.mark.single_mod)
-    n = len(items)
 
-    for i, item in enumerate(items):
+    # If this assert fails, we need to get more than just the last byte from the
+    # hash below, and then the limit can be updated to 2**(8 * num_bytes).
+    assert len(azure_1p_markers) < 128, "Need more bytes from hash to distribute tests"
+    assert len(azure_2p_markers) < 128, "Need more bytes from hash to distribute tests"
+    for item in items:
+        hash_ = get_last_byte_of_test_hash(item)
         # Divide the tests evenly so long tests don't end up in 1 group
-        azure_1p_marker = azure_1p_markers[i % len(azure_1p_markers)]
-        azure_2p_marker = azure_2p_markers[i % len(azure_2p_markers)]
+        azure_1p_marker = azure_1p_markers[hash_ % len(azure_1p_markers)]
+        azure_2p_marker = azure_2p_markers[hash_ % len(azure_2p_markers)]
         # All of the test_s3.py tests must be on the same rank because they
         # haven't been refactored to remove cross-test dependencies.
-        testfile = item.module.__name__.split(".")[-1] + ".py"
+        testfile = item_file_name(item)
         if "test_s3.py" in testfile:
             azure_1p_marker = azure_1p_markers[0]
             azure_2p_marker = azure_2p_markers[0]
         item.add_marker(azure_1p_marker)
         item.add_marker(azure_2p_marker)
-
-    # Check if we should try and mark groups for AWS Codebuild
-    if "NUMBER_GROUPS_SPLIT" in os.environ:
-        num_groups = int(os.environ["NUMBER_GROUPS_SPLIT"])
-        with open("testtiming.json", "r") as f:
-            marker_groups = json.load(f)
-
-        for item in items:
-            # Gives filename + function name
-            testname = item.module.__name__.split(".")[-1] + ".py" + "::" + item.name
-            if testname in marker_groups:
-                group_marker = marker_groups[testname]
-            else:
-                group_marker = group_from_hash(testname, num_groups)
-            item.add_marker(getattr(pytest.mark, group_marker))
 
 
 def group_from_hash(testname, num_groups):
@@ -143,31 +248,39 @@ def group_from_hash(testname, num_groups):
     # Python's builtin hash fails on mpiexec -n 2 because
     # it has randomness. Instead we use a cryptographic hash,
     # but we don't need that level of support.
-    hash_val = hashlib.sha1(testname.encode("utf-8")).hexdigest()
-    # Hash val is a hex-string
-    int_hash = int(hash_val, base=16) % num_groups
+    hash_val = hashlib.sha1(testname.encode("utf-8")).digest()
+    int_hash = int.from_bytes(hash_val) % num_groups
     return str(int_hash)
 
 
 @pytest.fixture(scope="session")
 def minio_server():
     """
-    spins up minio server
+    Spins up minio server
     """
+    cwd = os.getcwd()
+
+    # Kill an existing Minio server (orphan process from segfault)
+    for proc in psutil.process_iter():
+        if proc.name() == "minio":
+            proc.kill()
+            shutil.rmtree(cwd + "/Data", ignore_errors=True)
+            time.sleep(1)
+
     # Session level environment variables used for S3 Testing.
-    os.environ["AWS_ACCESS_KEY_ID"] = "bodotest1"
-    os.environ["AWS_SECRET_ACCESS_KEY"] = "bodosecret1"
 
     host, port = "127.0.0.1", "9000"
-    access_key = os.environ["AWS_ACCESS_KEY_ID"]
-    secret_key = os.environ["AWS_SECRET_ACCESS_KEY"]
-    address = "{}:{}".format(host, port)
+    access_key = "bodotest1"
+    secret_key = "bodosecret1"
+    address = f"{host}:{port}"
 
+    os.environ["MINIO_ROOT_USER"] = access_key
+    os.environ["MINIO_ROOT_PASSWORD"] = secret_key
+    # For compatibility with older MinIO versions.
     os.environ["MINIO_ACCESS_KEY"] = access_key
     os.environ["MINIO_SECRET_KEY"] = secret_key
-    os.environ["AWS_S3_ENDPOINT"] = "http://{}/".format(address)
+    os.environ["AWS_S3_ENDPOINT"] = f"http://{address}/"
 
-    cwd = os.getcwd()
     args = [
         "minio",
         "--compat",
@@ -182,7 +295,7 @@ def minio_server():
     try:
         if bodo.get_rank() == 0:
             proc = subprocess.Popen(args, env=os.environ)
-    except (OSError, IOError):
+    except OSError:
         pytest.skip("`minio` command cannot be located")
     else:
         yield access_key, secret_key, address
@@ -190,9 +303,19 @@ def minio_server():
         if bodo.get_rank() == 0:
             if proc is not None:
                 proc.kill()
-            import shutil
+            shutil.rmtree(cwd + "/Data", ignore_errors=True)
 
-            shutil.rmtree(cwd + "/Data")
+
+@pytest.fixture(scope="function")
+def minio_server_with_s3_envs(minio_server: tuple[str, str, str]):
+    with temp_env_override(
+        {
+            "AWS_ACCESS_KEY_ID": minio_server[0],
+            "AWS_SECRET_ACCESS_KEY": minio_server[1],
+            "AWS_SESSION_TOKEN": None,
+        }
+    ):
+        yield minio_server
 
 
 def s3_bucket_helper(minio_server, datapath, bucket_name, region="us-east-1"):
@@ -207,7 +330,7 @@ def s3_bucket_helper(minio_server, datapath, bucket_name, region="us-east-1"):
     if bodo.get_rank() == 0:
         s3 = boto3.resource(
             "s3",
-            endpoint_url="http://{}/".format(address),
+            endpoint_url=f"http://{address}/",
             aws_access_key_id=access_key,
             aws_secret_access_key=secret_key,
             config=botocore.client.Config(signature_version="s3v4"),
@@ -289,7 +412,6 @@ def s3_bucket_us_west_2(minio_server, datapath):
     return s3_bucket_helper(minio_server, datapath, "bodo-test-2", "us-west-2")
 
 
-@pytest.mark.hdfs
 @pytest.fixture(scope="session")
 def hadoop_server():
     """
@@ -302,21 +424,21 @@ def hadoop_server():
     return host, port
 
 
-@pytest.mark.hdfs
 @pytest.fixture(scope="session")
 def hdfs_dir(hadoop_server, datapath):
     """
     create a directory in hdfs and add files to it
     """
-    hdfs3 = pytest.importorskip("hdfs3")
-    from hdfs3 import HDFileSystem
+    from pyarrow.fs import HadoopFileSystem as HDFileSystem
+    from pyarrow.fs import LocalFileSystem, copy_files
 
     host, port = hadoop_server
     dir_name = "bodo-test"
 
     if bodo.get_rank() == 0:
         hdfs = HDFileSystem(host=host, port=port)
-        hdfs.mkdir("/" + dir_name)
+        local_fs = LocalFileSystem()
+        hdfs.create_dir("/" + dir_name)
         test_hdfs_files = [
             ("csv_data1.csv", datapath("csv_data1.csv")),
             ("csv_data_date1.csv", datapath("csv_data_date1.csv")),
@@ -325,41 +447,40 @@ def hdfs_dir(hadoop_server, datapath):
             ("example.json", datapath("example.json")),
         ]
         for fname, path in test_hdfs_files:
-            formatted_fname = "/{}/{}".format(dir_name, fname)
-            hdfs.put(path, formatted_fname)
+            formatted_fname = f"/{dir_name}/{fname}"
+            copy_files(path, formatted_fname, local_fs, hdfs)
 
-        hdfs.mkdir("/bodo-test/int_nulls_multi.pq")
+        hdfs.create_dir("/bodo-test/int_nulls_multi.pq")
         prefix = datapath("int_nulls_multi.pq")
         pat = prefix + "/*.snappy.parquet"
-        int_nulls_multi_parts = [f for f in glob.glob(pat)]
+        int_nulls_multi_parts = list(glob.glob(pat))
         for path in int_nulls_multi_parts:
             fname = path[len(prefix) + 1 :]
-            fname = "/{}/int_nulls_multi.pq/{}".format(dir_name, fname)
-            hdfs.put(path, fname)
+            fname = f"/{dir_name}/int_nulls_multi.pq/{fname}"
+            copy_files(path, fname, local_fs, hdfs)
 
-        hdfs.mkdir("/bodo-test/example_single.json")
+        hdfs.create_dir("/bodo-test/example_single.json")
         prefix = datapath("example_single.json")
         pat = prefix + "/*.json"
-        example_single_parts = [f for f in glob.glob(pat)]
+        example_single_parts = list(glob.glob(pat))
         for path in example_single_parts:
             fname = path[len(prefix) + 1 :]
-            fname = "/{}/example_single.json/{}".format(dir_name, fname)
-            hdfs.put(path, fname)
+            fname = f"/{dir_name}/example_single.json/{fname}"
+            copy_files(path, fname, local_fs, hdfs)
 
-        hdfs.mkdir("/bodo-test/example_multi.json")
+        hdfs.create_dir("/bodo-test/example_multi.json")
         prefix = datapath("example_multi.json")
         pat = prefix + "/*.json"
-        example_multi_parts = [f for f in glob.glob(pat)]
+        example_multi_parts = list(glob.glob(pat))
         for path in example_multi_parts:
             fname = path[len(prefix) + 1 :]
-            fname = "/{}/example_multi.json/{}".format(dir_name, fname)
-            hdfs.put(path, fname)
+            fname = f"/{dir_name}/example_multi.json/{fname}"
+            copy_files(path, fname, local_fs, hdfs)
 
     bodo.barrier()
     return dir_name
 
 
-@pytest.mark.hdfs
 @pytest.fixture(scope="session")
 def hdfs_datapath(hadoop_server, hdfs_dir):
     """
@@ -367,7 +488,7 @@ def hdfs_datapath(hadoop_server, hdfs_dir):
     """
 
     host, port = hadoop_server
-    BASE_PATH = "hdfs://{}:{}/{}".format(host, port, hdfs_dir)
+    BASE_PATH = f"hdfs://{host}:{port}/{hdfs_dir}"
 
     def deco(*args):
         path = os.path.join(BASE_PATH, *args)
@@ -391,7 +512,7 @@ def pytest_addoption(parser):
     # Minor check
     try:
         parser.addoption("--is_cached", action="store_true", default=False)
-    except:
+    except Exception:
         pass
 
 
@@ -403,41 +524,56 @@ def is_cached(pytestconfig):
 
 
 @pytest.fixture(scope="session")
-@pytest.mark.iceberg
-def iceberg_database():
+def iceberg_database() -> (
+    Generator[Callable[[list[str] | str], tuple[str, str]], None, None]
+):
     """
     Create and populate Iceberg test tables.
     """
-    from bodo.tests.iceberg_database_helpers.create_all_tables import (
-        create_all_tables,
+    from bodo.tests.iceberg_database_helpers.create_tables import (
+        create_tables,
     )
 
     comm = MPI.COMM_WORLD
 
     warehouse_loc = os.path.abspath(os.getcwd())
 
-    database_schema_or_e = None
-    if bodo.get_rank() == 0:
-        try:
-            database_schema_or_e = create_all_tables()
-        except Exception as e:
-            database_schema_or_e = e
-    database_schema_or_e = comm.bcast(database_schema_or_e)
-    if isinstance(database_schema_or_e, Exception):
-        raise database_schema_or_e
-    database_schema = database_schema_or_e
+    # Use a list to store the database schema, so that it can be accessed by the fixture
+    database_schema = []
 
-    yield database_schema, warehouse_loc
+    # TODO(aneesh) this should probably take in a spark instance explicitly to
+    # make this safer to use - calling this function will invalidate all old
+    # spark referneces.
+    def create_tables_on_rank_one(
+        tables: list[str] | str = [], spark: Optional["SparkSession"] = None
+    ) -> tuple[str, str]:
+        if not isinstance(tables, list):
+            tables = [tables]
+        database_schema_or_e = None
+        if bodo.get_rank() == 0:
+            try:
+                database_schema_or_e = create_tables(tables, spark=spark)
+            except Exception as e:
+                database_schema_or_e = e
+                print("".join(traceback.format_exception(None, e, e.__traceback__)))
+        database_schema_or_e = comm.bcast(database_schema_or_e)
+        if isinstance(database_schema_or_e, Exception):
+            raise database_schema_or_e
+        if database_schema_or_e not in database_schema:
+            database_schema.append(database_schema_or_e)
+        return database_schema_or_e, warehouse_loc
 
+    yield create_tables_on_rank_one
+
+    bodo.barrier()
     if bodo.get_rank() == 0:
         import shutil
 
-        dir_to_rm = os.path.join(warehouse_loc, database_schema)
+        dir_to_rm = os.path.join(warehouse_loc, DATABASE_NAME)
         shutil.rmtree(dir_to_rm, ignore_errors=True)
 
 
 @pytest.fixture(scope="session")
-@pytest.mark.iceberg
 def iceberg_table_conn():
     """Get the connection string and database-schema for Iceberg table.
 
@@ -468,3 +604,298 @@ def iceberg_table_conn():
         return f"iceberg://{warehouse_loc}"
 
     return deco
+
+
+@pytest.fixture(
+    params=(
+        operator.eq,
+        operator.ne,
+        operator.ge,
+        operator.gt,
+        operator.le,
+        operator.lt,
+    ),
+    scope="session",
+)
+def cmp_op(request):
+    return request.param
+
+
+@pytest.fixture
+def time_df():
+    """
+    Fixture containing a representative set of bodo.Time object
+    for use in testing, including None object.
+    """
+    return {
+        "TABLE1": pd.DataFrame(
+            {
+                "A": pd.Series(
+                    [
+                        bodo.Time(17, 33, 26, 91, 8, 79),
+                        bodo.Time(0, 24, 43, 365, 18, 74),
+                        bodo.Time(3, 59, 6, 25, 757, 3),
+                        bodo.Time(),
+                        bodo.Time(4),
+                        bodo.Time(6, 41),
+                        bodo.Time(22, 13, 57),
+                        bodo.Time(17, 34, 29, 90),
+                        bodo.Time(7, 3, 45, 876, 234),
+                        None,
+                    ]
+                ),
+                "B": pd.Series(
+                    [
+                        bodo.Time(20, 6, 26, 324, 4, 79),
+                        bodo.Time(3, 59, 6, 25, 57, 3),
+                        bodo.Time(7, 3, 45, 876, 234),
+                        bodo.Time(17, 34, 29, 90),
+                        bodo.Time(22, 13, 57),
+                        bodo.Time(6, 41),
+                        bodo.Time(4),
+                        bodo.Time(),
+                        None,
+                        bodo.Time(0, 24, 4, 512, 18, 74),
+                    ]
+                ),
+            }
+        )
+    }
+
+
+@pytest.fixture
+def date_df():
+    """
+    Fixture containing a representative set of datetime.date object
+    for use in testing, including None object.
+    """
+    return {
+        "TABLE1": pd.DataFrame(
+            {
+                "A": pd.Series(
+                    [
+                        datetime.date(2017, 3, 26),
+                        datetime.date(2000, 12, 31),
+                        datetime.date(2003, 9, 6),
+                        datetime.date(2023, 3, 6),
+                        datetime.date(2024, 1, 1),
+                        datetime.date(1996, 4, 25),
+                        datetime.date(2022, 11, 17),
+                        datetime.date(1917, 7, 29),
+                        datetime.date(2007, 10, 14),
+                        None,
+                    ]
+                ),
+                "B": pd.Series(
+                    [
+                        datetime.date(2020, 6, 26),
+                        datetime.date(2025, 5, 3),
+                        datetime.date(1987, 3, 15),
+                        datetime.date(2117, 8, 29),
+                        datetime.date(1822, 12, 7),
+                        datetime.date(1906, 4, 14),
+                        datetime.date(2004, 9, 13),
+                        datetime.date(1917, 7, 29),
+                        None,
+                        datetime.date(1700, 2, 4),
+                    ]
+                ),
+                "C": pd.Series(
+                    [
+                        datetime.date(2012, 4, 22),
+                        datetime.date(2043, 11, 3),
+                        datetime.date(1998, 9, 11),
+                        datetime.date(2100, 4, 19),
+                        datetime.date(1832, 1, 7),
+                    ]
+                    * 2
+                ),
+            }
+        )
+    }
+
+
+class CppTestFile(pytest.File):
+    """Represents a c++ unit testing file that integrates with pytest.
+
+    When bodo is built with `setup.py develop --test`, the bodo.ext module contains the
+    compiled versions of the C++ tests. When pytest is run with a .cpp file, this class makes it
+    look up the c++ file in the compiled module. The module is able to enumerate all tests in the file.
+    """
+
+    @classmethod
+    def from_parent(cls, parent, **kwargs):
+        return super().from_parent(parent, **kwargs)
+
+    def __init__(self, parent, **kwargs):
+        super().__init__(path=kwargs["path"], parent=parent)
+        self.tests = kwargs["tests"]
+        self.filename = kwargs["filename"]
+
+    def collect(self):
+        for test in self.tests:
+            yield CppTestItem.from_parent(self, test=test)
+
+
+class CppTestItem(pytest.Item):
+    """Every individual c++ test in a file can be enumerated. The 'CppTestFile' class builds
+    a 'CppTestItem' for each test in the given c++ file.
+    """
+
+    def __init__(self, parent, *, test):
+        super().__init__(test.name, parent=parent)
+        self.test = test
+        for marker in self.test.markers:
+            self.add_marker(marker)
+
+    @property
+    def filename(self):
+        return self.parent.filename
+
+    def runtest(self):
+        self.test()
+
+    def reportinfo(self):
+        return self.test.filename, self.test.lineno, self.test.name
+
+
+def pytest_collect_file(parent, file_path: Path):
+    """
+    A hook into py.test to collect test_*.cpp test files.
+
+    This adds functionality to collect test_*.cpp files (except for test_framework.cpp).
+
+    Each c++ file gets a corresponding 'CppTestFile' pytest item, which lets pytest run c++ tests.
+
+    The C++ tests are built as part of the bodo.ext module when `--test` is given to the `setup.py develop` command.
+
+    When built, the tests are available as the `bodo.ext.test_cpp` module. Otherwise, the import fails
+    and this file won't collect any C++ tests (but it will print out a warning)
+    """
+    try:
+        from bodo.ext import test_cpp
+    except ImportError:
+        test_cpp = None
+
+    if (
+        file_path.suffix == ".cpp"
+        and file_path.name.startswith("test_")
+        and file_path.name != "test_framework.cpp"
+    ):
+        if test_cpp is None:
+            import warnings
+
+            warnings.warn(
+                "c++ tests are disabled in this build. Run 'setup.py develop' with the '--test' flag to enable."
+            )
+            return
+
+        tests = [
+            test
+            for test in test_cpp.tests
+            if file_path.name == os.path.basename(test.filename)
+        ]
+        return CppTestFile.from_parent(
+            parent, path=file_path, filename=file_path.name, tests=tests
+        )
+
+
+def get_tabular_connection(tabular_credential: str):
+    return (
+        "https://api.tabular.io/ws",
+        os.getenv("TABULAR_WAREHOUSE", "Bodo-Test-Iceberg-Warehouse"),
+        os.getenv("TABULAR_CREDENTIAL"),
+    )
+
+
+@pytest.fixture
+def tabular_connection(request):
+    """
+    Fixture to create a connection to the tabular warehouse.
+    Returns the catalog url, warehouse name, and credential.
+    """
+    assert "TABULAR_CREDENTIAL" in os.environ, "TABULAR_CREDENTIAL is not set"
+    assert (
+        request.node.get_closest_marker("tabular") is not None
+    ), "tabular marker not set"
+    # Unset the AWS credentials to avoid using them
+    # to confirm that the tests are getting aws credentials from Tabular
+    with temp_env_override(
+        {
+            "AWS_ACCESS_KEY_ID": None,
+            "AWS_SECRET_ACCESS_KEY": None,
+            "AWS_SESSION_TOKEN": None,
+        }
+    ):
+        yield get_tabular_connection(os.getenv("TABULAR_CREDENTIAL"))
+
+
+def pytest_runtest_setup(item):
+    tabular = len(list(item.iter_markers(name="tabular")))
+    if tabular:
+        if "TABULAR_CREDENTIAL" not in os.environ or "AGENT_NAME" not in os.environ:
+            pytest.skip("Tabular tests must be run on Azure CI")
+
+
+@pytest.fixture(
+    params=[
+        "quarter",
+        "yyy",
+        pytest.param("MONTH", marks=pytest.mark.slow),
+        "mon",
+        "WEEK",
+        pytest.param("wk", marks=pytest.mark.slow),
+        pytest.param("DAY", marks=pytest.mark.slow),
+        "dd",
+    ]
+)
+def day_part_strings(request):
+    """
+    Fixture containing a representative set of large time unit part strings
+    (larger or equal to day) for use in testing, including aliases.
+    """
+    return request.param
+
+
+@pytest.fixture(
+    params=[
+        "HOUR",
+        pytest.param("hr", marks=pytest.mark.slow),
+        pytest.param("MINUTE", marks=pytest.mark.slow),
+        "min",
+        "SECOND",
+        "ms",
+        pytest.param("microsecond", marks=pytest.mark.slow),
+        pytest.param("usec", marks=pytest.mark.slow),
+        "nanosecs",
+    ]
+)
+def time_part_strings(request):
+    """
+    Fixture containing a representative set of small time unit part strings
+    (smaller or equal to hour) for use in testing, including aliases.
+    """
+    return request.param
+
+
+@pytest.fixture(
+    params=[
+        "quarter",
+        pytest.param("yyyy", marks=pytest.mark.slow),
+        "week",
+        pytest.param("mm", marks=pytest.mark.slow),
+        "days",
+        pytest.param("hour", marks=pytest.mark.slow),
+        "minute",
+        pytest.param("S", marks=pytest.mark.slow),
+        "ms",
+        pytest.param("us", marks=pytest.mark.slow),
+        "nsecond",
+    ]
+)
+def datetime_part_strings(request):
+    """
+    Fixture containing a representative set of datetime part strings
+    for use in testing, including aliases.
+    """
+    return request.param

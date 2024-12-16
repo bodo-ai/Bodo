@@ -1,7 +1,7 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
 Test I/O for JSON files using pd.read_json()
 """
+
 import os
 import shutil
 import subprocess
@@ -14,6 +14,8 @@ import bodo
 from bodo.tests.utils import _get_dist_arg, check_func
 from bodo.utils.testing import ensure_clean, ensure_clean_dir
 from bodo.utils.typing import BodoError
+
+pytestmark = pytest.mark.weekly
 
 
 def compress_file(fname):
@@ -212,7 +214,7 @@ def json_write_test(test_impl, read_impl, df, sort_col, reset_index=False):
     """
     A helper function used to test json write correctness
     """
-    from mpi4py import MPI
+    from bodo.mpi4py import MPI
 
     comm = MPI.COMM_WORLD
 
@@ -231,7 +233,7 @@ def json_write_test(test_impl, read_impl, df, sort_col, reset_index=False):
     arg_1D_var = (bodo_1D_var, _get_dist_arg(df, False, True), "df_1d_var.json")
     args = [arg_seq, arg_1D, arg_1D_var]
     # test writing sequentially, 1D distributed, and 1D Var-length
-    for (func, df_arg, fname_arg) in args:
+    for func, df_arg, fname_arg in args:
         with ensure_clean(fname_arg), ensure_clean_dir(fname_arg):
             func(df_arg, fname_arg)
             bodo.barrier()
@@ -245,10 +247,6 @@ def json_write_test(test_impl, read_impl, df, sort_col, reset_index=False):
                         # pandas read single each json file in directory then concat
                         json_files = os.listdir(fname_arg)
                         assert len(json_files) > 0
-                        results = [
-                            read_impl(os.path.join(fname_arg, fname))
-                            for fname in json_files
-                        ]
                         bodo_res = pd.concat(
                             [
                                 read_impl(os.path.join(fname_arg, fname))
@@ -290,10 +288,17 @@ def json_write_test(test_impl, read_impl, df, sort_col, reset_index=False):
         pd.DataFrame(
             {
                 "A": pd.date_range(start="2018-04-24", periods=12),
-                "B": ["¡Y tú quién te crees?", "🐍⚡", "大处着眼，小处着手。", "hi", "a123", ""]
+                "B": [
+                    "¡Y tú quién te crees?",
+                    "🐍⚡",
+                    "大处着眼，小处着手。",
+                    "hi",
+                    "a123",
+                    "",
+                ]
                 * 2,
                 "C": np.arange(12).astype(np.float64),
-                "D": [True, False, np.nan, False, False, True] * 2,
+                "D": [True, False, None, False, False, True] * 2,
             }
         )
     ]
@@ -409,7 +414,7 @@ def test_json_write_read_simple_df(memory_leak_check):
     n = 10
     fname_file = "json_data.json"
     bodo.jit(write_impl)(n, fname_file)
-    py_output = df = pd.DataFrame(
+    py_output = pd.DataFrame(
         {
             "A": np.arange(n),
             "B": np.arange(n) % 2,

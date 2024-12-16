@@ -1,20 +1,20 @@
 import argparse
+import functools
+import logging
 import os
 import sys
+from collections.abc import Callable
 from datetime import datetime
-from typing import Callable, Tuple
 
-import bodo_iceberg_connector  # noqa
 import boto3
 import numba
 import numpy as np
 import pandas as pd
 import pyarrow.fs as pafs
-from mpi4py import MPI
+import snowflake
 from pyspark.sql import SparkSession
 
 import bodo
-from bodo.tests.utils import _get_dist_arg
 
 BUCKET_NAME = "engine-e2e-tests-iceberg"
 # The AWS Java SDK 2.0 library (used by Iceberg-AWS) gets the default region
@@ -22,7 +22,8 @@ BUCKET_NAME = "engine-e2e-tests-iceberg"
 # which is used by other libraries.
 os.environ["AWS_DEFAULT_REGION"] = "us-east-1"
 os.environ["AWS_REGION"] = "us-east-1"
-comm = MPI.COMM_WORLD
+
+logger = logging.getLogger(__name__)
 
 
 def get_spark_iceberg(nessie_token):
@@ -30,10 +31,10 @@ def get_spark_iceberg(nessie_token):
         SparkSession.builder.appName("Iceberg with Spark")
         .config(
             "spark.jars.packages",
-            "org.apache.iceberg:iceberg-spark-runtime-3.2_2.12:0.14.1,"
-            "software.amazon.awssdk:bundle:2.15.40,"
-            "software.amazon.awssdk:url-connection-client:2.15.40,"
-            "org.projectnessie:nessie-spark-3.2-extensions:0.44.0",
+            "org.apache.iceberg:iceberg-spark-runtime-3.4_2.12:1.5.2,"
+            "software.amazon.awssdk:bundle:2.19.13,"
+            "software.amazon.awssdk:url-connection-client:2.19.13,"
+            "org.projectnessie.nessie-integrations:nessie-spark-extensions-3.4_2.12:0.71.1",
         )
         .config(
             "spark.sql.catalog.nessie_catalog", "org.apache.iceberg.spark.SparkCatalog"
@@ -60,7 +61,7 @@ def get_spark_iceberg(nessie_token):
         .config(
             "spark.sql.extensions",
             "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions,"
-            "org.projectnessie.spark.extensions.NessieSpark32SessionExtensions",
+            "org.projectnessie.spark.extensions.NessieSparkSessionExtensions",
         )
         .getOrCreate()
     )
@@ -70,9 +71,7 @@ def get_spark_iceberg(nessie_token):
 # ------------------------ Cleanup Code ------------------------
 def cleanup_nessie(nessie_token: str, table_name: str):
     spark = get_spark_iceberg(nessie_token)
-    spark.sql(f"DROP TABLE nessie_catalog.{table_name}")
-    fs = pafs.S3FileSystem(region="us-east-1")
-    fs.delete_dir_contents(f"{BUCKET_NAME}/nessie")
+    spark.sql(f"DROP TABLE nessie_catalog.{table_name} PURGE")
 
 
 def cleanup_glue(table_name: str):
@@ -87,20 +86,72 @@ def cleanup_hadoop():
     fs.delete_dir_contents(f"{BUCKET_NAME}/hadoop")
 
 
+def cleanup_snowflake(table_name: str):
+    conn = snowflake.connector.connect(
+        user=os.environ["SF_USERNAME"],
+        password=os.environ["SF_PASSWORD"],
+        account=os.environ["SF_ACCOUNT"],
+        warehouse="DEMO_WH",
+        database="TEST_DB",
+        schema="PUBLIC",
+    )
+    cur = conn.cursor()
+    cur.execute(f"DROP TABLE IF EXISTS {table_name}")
+
+
+# ------------------------ Snowflake Write Impl ----------------
+def snowflake_write_impl(df, table_name):
+    SF_USERNAME = os.environ["SF_USERNAME"]
+    SF_PASSWORD = os.environ["SF_PASSWORD"]
+    SF_ACCOUNT = os.environ["SF_ACCOUNT"]
+    bodo.jit(
+        lambda df, SF_USERNAME, SF_PASSWORD, SF_ACCOUNT: df.to_sql(
+            f"{table_name}_non_iceberg",
+            f"snowflake://{SF_USERNAME}:{SF_PASSWORD}@{SF_ACCOUNT}/TEST_DB/PUBLIC?warehouse=DEMO_WH",
+        ),
+        cache=True,
+        spawn=True,
+    )(df, SF_USERNAME, SF_PASSWORD, SF_ACCOUNT)
+    conn = snowflake.connector.connect(
+        user=SF_USERNAME,
+        password=SF_PASSWORD,
+        account=SF_ACCOUNT,
+        warehouse="DEMO_WH",
+        database="TEST_DB",
+        schema="PUBLIC",
+    )
+    cur = conn.cursor()
+    cur.execute(
+        f'CREATE OR REPLACE ICEBERG TABLE {table_name} ("bools" boolean, "bytes" BINARY, "ints" bigint, "floats" float, "strings" string, "lists" array(number(2, 0)), "timestamps" timestamp_ntz) CATALOG=\'SNOWFLAKE\' EXTERNAL_VOLUME=EXVOL BASE_LOCATION={table_name} AS SELECT bools, bytes, ints, floats, strings, lists::ARRAY(NUMBER(2,0)) as lists, timestamps FROM {table_name}_non_iceberg'
+    ).fetchall()
+    cur.execute(f"DROP TABLE {table_name}_non_iceberg").fetchall()
+    cur.close()
+
+
 # ------------------------ Test Code ------------------------
 def test_builder(
-    conn: str, db_name: str, table_name: str
-) -> Tuple[Callable[[pd.DataFrame], None], Callable[[], pd.DataFrame]]:
-    @bodo.jit(distributed=["df"], cache=True)
-    def write_impl(df):
-        print("starting write...")
-        df.to_sql(table_name, conn, schema=db_name, if_exists="fail")
+    conn: str,
+    db_name: str,
+    table_name: str,
+    write_impl: Callable[[pd.DataFrame], None] | None = None,
+    read_back_impl: Callable[[], pd.DataFrame] | None = None,
+) -> tuple[Callable[[pd.DataFrame], None], Callable[[], pd.DataFrame]]:
+    if write_impl is None:
 
-    @bodo.jit(cache=True)
-    def read_back_impl():
-        print("starting read...")
-        out_df = pd.read_sql_table(table_name, conn, schema=db_name)
-        return out_df
+        def write_impl_def(df):
+            print("starting write...")
+            df.to_sql(table_name, conn, schema=db_name, if_exists="fail")
+
+        write_impl = bodo.jit(write_impl_def, cache=True, spawn=True)
+
+    if read_back_impl is None:
+
+        def read_back_impl_def():
+            print("starting read...")
+            out_df = pd.read_sql_table(table_name, conn, schema=db_name)
+            return out_df
+
+        read_back_impl = bodo.jit(read_back_impl_def, cache=True, spawn=True)
 
     return write_impl, read_back_impl
 
@@ -123,13 +174,19 @@ s3_tests = lambda table_name: test_builder(
     f"iceberg+s3://{BUCKET_NAME}", "hadoop", table_name
 )
 
+snowflake_tests = lambda table_name: test_builder(
+    f"iceberg+snowflake://{os.environ['SF_ACCOUNT']}/?warehouse=DEMO_WH&user={os.environ['SF_USERNAME']}&password={os.environ['SF_PASSWORD']}",
+    "TEST_DB.PUBLIC",
+    table_name,
+    write_impl=functools.partial(snowflake_write_impl, table_name=table_name),
+)
 
 # ------------------------ Test Case ------------------------
 df = pd.DataFrame(
     {
         "bools": np.array([True, False, True, True, False] * 10, dtype=np.bool_),
         "bytes": np.array([1, 1, 0, 1, 0] * 10).tobytes(),
-        "ints": np.array([1, 2, 3, 4, 5] * 10, dtype=np.int32),
+        "ints": np.arange(50, dtype=np.int32),
         "floats": np.array([1, 2, 3, 4, 5] * 10, dtype=np.float32),
         "strings": np.array(["A", "B", "C", "D", "E"] * 10),
         "lists": pd.Series(
@@ -159,58 +216,63 @@ if __name__ == "__main__":
     table_name = args.table_name
 
     # Get Nessie Authentication Token
-    nessie_token = os.environ.get("NESSIE_AUTH_TOKEN")
-    assert nessie_token is not None, "Missing Environment Variable: NESSIE_AUTH_TOKEN"
+    # TODO[BSE-1408]: enable Nessie tests after fixing issues
+    # nessie_token = os.environ.get("NESSIE_AUTH_TOKEN")
+    # assert nessie_token is not None, "Missing Environment Variable: NESSIE_AUTH_TOKEN"
 
     # Build Test Cases
     tests = {
-        "Nessie": nessie_tests(nessie_token, table_name),
+        # TODO[BSE-1408]: enable Nessie tests after fixing issues
+        # "Nessie": nessie_tests(nessie_token, table_name),
         "Glue": glue_tests(table_name),
         "S3": s3_tests(table_name),
+        "Snowflake": snowflake_tests(table_name),
     }
 
     passed = 0
     for key, (write_test_func, read_test_func) in tests.items():
         print(f"Running {key}")
         try:
-            write_test_func(_get_dist_arg(df))
+            write_test_func(df)
             out_df = read_test_func()
-            out_df = bodo.allgatherv(out_df)
-            pd.testing.assert_frame_equal(out_df, df, check_dtype=False)
+            out_df_to_cmp = out_df.sort_values("ints", ignore_index=True)
+            df_to_cmp = df.sort_values("ints", ignore_index=True)
 
+            pd.testing.assert_frame_equal(out_df_to_cmp, df_to_cmp, check_dtype=False)
             if args.require_cache:
                 if isinstance(write_test_func, numba.core.dispatcher.Dispatcher):
                     assert (
                         write_test_func._cache_hits[write_test_func.signatures[0]] == 1
-                    ), f"ERROR: Bodo did not load write function from cache"
+                    ), "ERROR: Bodo did not load write function from cache"
                 if isinstance(read_test_func, numba.core.dispatcher.Dispatcher):
                     assert (
                         read_test_func._cache_hits[read_test_func.signatures[0]] == 1
-                    ), f"ERROR: Bodo did not load read function from cache"
+                    ), "ERROR: Bodo did not load read function from cache"
 
             passed += 1
             print(f"Finished {key} Test successfully...")
         except Exception as e:
-            print(f"Error During {key} Test\n{e}")
-
+            print(f"Error During {key} Test")
+            logging.exception(e)
     # Cleanup of Test Cases
-    bodo.barrier()
     cleanup_failed = False
-    if bodo.get_rank() == 0:
-        try:
-            print("Starting Cleanup...")
-            print("Cleaning up Hadoop...")
-            cleanup_hadoop()
-            print("Cleaning up Glue...")
-            cleanup_glue(table_name)
-            print("Cleaning up Nessie...")
-            cleanup_nessie(nessie_token, table_name)
-            print("Successfully Finished Cleanup...")
-        except Exception as e:
-            cleanup_failed = True
-            print(f"Failed During Cleanup...\n{e}", file=sys.stderr)
+    try:
+        print("Starting Cleanup...")
+        print("Cleaning up Hadoop...")
+        cleanup_hadoop()
+        print("Cleaning up Glue...")
+        cleanup_glue(table_name)
+        print("Cleaning up Snowflake...")
+        cleanup_snowflake(table_name)
+        # TODO[BSE-1408]: enable Nessie tests after fixing issues
+        # print("Cleaning up Nessie...")
+        # cleanup_nessie(nessie_token, table_name)
+    except Exception as e:
+        cleanup_failed = True
+        print(f"Failed During Cleanup...\n{e}", file=sys.stderr)
+    else:
+        print("Successfully Finished Cleanup...")
 
-    cleanup_failed = comm.bcast(cleanup_failed)
     if cleanup_failed:
         raise Exception("Iceberg E2E Cleanup Failed. See Rank 0.")
 

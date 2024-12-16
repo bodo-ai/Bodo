@@ -1,8 +1,6 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
 Tests for pd.Timestamp error checking
 """
-
 
 import re
 
@@ -78,6 +76,25 @@ def test_timestamp_day_name_unsupported(memory_leak_check):
         )
 
     err_msg = "locale parameter only supports default value None"
+    with pytest.raises(
+        BodoError,
+        match=err_msg,
+    ):
+        bodo.jit(impl)()
+
+
+def test_timestamp_compare_timezones_unsupported(memory_leak_check):
+    """
+    Test timezone-aware timestamps don't work on common operations (like min)
+    """
+
+    def impl():
+        return min(
+            pd.Timestamp("2020-03-14T15:32:52.192548651", tz="America/Los_Angeles"),
+            pd.Timestamp("2020-03-14T15:32:52.192548651", tz="America/New_York"),
+        )
+
+    err_msg = "on timestamps with different timezones"
     with pytest.raises(
         BodoError,
         match=err_msg,

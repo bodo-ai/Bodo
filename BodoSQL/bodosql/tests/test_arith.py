@@ -1,14 +1,18 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
 Test correctness of SQL arithmetic operations on BodoSQL
 """
 
-
+import pandas as pd
 import pytest
+
+from bodo.tests.utils import pytest_slow_unless_codegen
 from bodosql.tests.utils import (
     check_query,
     create_pyspark_schema_from_dataframe,
 )
+
+# Skip unless any codegen files were changed
+pytestmark = pytest_slow_unless_codegen
 
 
 @pytest.mark.slow
@@ -264,7 +268,7 @@ def test_arith_ops_between_tables(basic_df, spark_info, memory_leak_check):
     Tests that arith operations between tables work as intended
     """
     query = "Select table1.A + table2.C / table1.B - table2.A from table1, table2"
-    newCtx = {"table1": basic_df["table1"], "table2": basic_df["table1"]}
+    newCtx = {"TABLE1": basic_df["TABLE1"], "TABLE2": basic_df["TABLE1"]}
     check_query(query, newCtx, spark_info, check_dtype=False, check_names=False)
 
 
@@ -361,4 +365,100 @@ def test_negation(query, bodosql_numeric_types, spark_info, memory_leak_check):
         check_dtype=False,
         check_names=False,
         pyspark_schemas=pyspark_schemas,
+    )
+
+
+def test_date_arithmetic(bodosql_date_types, memory_leak_check):
+    """Tests +/- on date columns with integers. This is supported in Snowflake for
+    date but not similar types like Timestamp.
+    https://docs.snowflake.com/en/sql-reference/data-types-datetime.html#simple-arithmetic-for-dates
+    """
+    query = "select A + 7 as col1, B - 2 as col2, 1 + C as col3 from table1"
+    # Spark doesn't support date arithmetic with integers
+    table1 = bodosql_date_types["TABLE1"]
+    expected_output = pd.DataFrame(
+        {
+            "COL1": table1.A + pd.Timedelta(days=7),
+            "COL2": table1.B - pd.Timedelta(days=2),
+            "COL3": pd.Timedelta(days=1) + table1.C,
+        }
+    )
+    check_query(
+        query,
+        bodosql_date_types,
+        None,
+        check_dtype=False,
+        expected_output=expected_output,
+    )
+
+
+@pytest.mark.slow
+def test_date_arithmetic_case(bodosql_date_types, memory_leak_check):
+    """Tests +/- on date columns with integers inside a case statement (to check
+    the return type). This is supported in Snowflake for
+    date but not similar types like Timestamp.
+    https://docs.snowflake.com/en/sql-reference/data-types-datetime.html#simple-arithmetic-for-dates
+    """
+
+    query = "select CASE WHEN A > B THEN A + 7 WHEN B > C THEN B - 2 END as col1 from table1"
+    # Spark doesn't support date arithmetic with integers
+    table1 = bodosql_date_types["TABLE1"]
+    S1 = table1.A + pd.Timedelta(days=7)
+    S2 = table1.B - pd.Timedelta(days=2)
+    expected_output = pd.DataFrame({"COL1": S1})
+    # Replace S1 with S2 when not A > B
+    filter1 = ~(table1.A > table1.B)
+    expected_output["COL1"][filter1] = S2
+    # Insert null for the else condition
+    filter2 = filter1 & ~(table1.B > table1.C)
+    expected_output["COL1"][filter2] = None
+    check_query(
+        query,
+        bodosql_date_types,
+        None,
+        check_dtype=False,
+        expected_output=expected_output,
+    )
+
+
+@pytest.mark.slow
+def test_subtraction_between_dates(bodosql_date_types, memory_leak_check):
+    """Tests - on two date columns. The output in SQL is an integer."""
+    query = "select A - B as col1 from table1"
+    # Spark doesn't support date arithmetic with integers
+    table1 = bodosql_date_types["TABLE1"]
+    expected_output = pd.DataFrame(
+        {
+            "COL1": (table1.A - table1.B).map(
+                lambda a: pd.NA if pd.isna(a) else a.days
+            ),
+        }
+    )
+    check_query(
+        query,
+        bodosql_date_types,
+        None,
+        check_dtype=False,
+        expected_output=expected_output,
+    )
+
+
+def test_subtraction_between_dates_case(bodosql_date_types, memory_leak_check):
+    """Tests - on two date columns with case. The output in SQL is an integer."""
+
+    query = "select CASE WHEN A > B THEN A - B ELSE B - A END as col1 from table1"
+    # Spark doesn't support date arithmetic with integers
+    table1 = bodosql_date_types["TABLE1"]
+    S1 = (table1.A - table1.B).map(lambda a: pd.NA if pd.isna(a) else a.days)
+    S2 = (table1.B - table1.A).map(lambda a: pd.NA if pd.isna(a) else a.days)
+    expected_output = pd.DataFrame({"COL1": S1})
+    # Replace S1 with S2 when not A > B
+    filter1 = ~(table1.A > table1.B)
+    expected_output["COL1"][filter1] = S2
+    check_query(
+        query,
+        bodosql_date_types,
+        None,
+        check_dtype=False,
+        expected_output=expected_output,
     )

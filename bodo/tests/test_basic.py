@@ -1,7 +1,8 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 import fractions
 import random
+import warnings
 
+import cloudpickle
 import numba
 import numpy as np
 import pandas as pd
@@ -17,7 +18,7 @@ from bodo.tests.utils import (
     count_parfor_OneDs,
     dist_IR_contains,
 )
-from bodo.utils.typing import BodoError
+from bodo.utils.typing import BodoError, BodoWarning
 from bodo.utils.utils import is_assign, is_expr
 
 
@@ -83,6 +84,20 @@ def test_dict_constant_lowering():
 
     check_func(impl1, (), only_seq=True)
     check_func(impl2, (), only_seq=True)
+
+
+def test_dict_pickle(memory_leak_check):
+    """Make sure pickling works for Numba typed dict"""
+    d = numba.typed.Dict.empty(
+        key_type=numba.core.types.unicode_type, value_type=numba.core.types.int64
+    )
+    d["A"] = 1
+    d["B"] = 3
+
+    pickled = cloudpickle.dumps(d)
+    unpickled = cloudpickle.loads(pickled)
+    assert d == unpickled
+    assert d._numba_type_ == unpickled._numba_type_
 
 
 l1 = ["A", "ABC", "D2", "E4", "F53"]
@@ -284,13 +299,10 @@ def test_reduce(test_dtypes_input, test_funcs_input, memory_leak_check):
         and dtype == "int64"
         and func in ["argmin", "argmax"]
     ):
-
-        func_text = """def f(n):
-            A = np.arange(0, n, 1, np.{})
-            return A.{}()
-        """.format(
-            dtype, func
-        )
+        func_text = f"""def f(n):
+            A = np.arange(0, n, 1, np.{dtype})
+            return A.{func}()
+        """
         loc_vars = {}
         exec(func_text, {"np": np, "bodo": bodo}, loc_vars)
         test_impl = loc_vars["f"]
@@ -311,12 +323,9 @@ def test_reduce2(test_dtypes_input, test_funcs_input, memory_leak_check):
         and dtype == "int64"
         and func in ["argmin", "argmax"]
     ):
-
-        func_text = """def f(A):
-            return A.{}()
-        """.format(
-            func
-        )
+        func_text = f"""def f(A):
+            return A.{func}()
+        """
         loc_vars = {}
         exec(func_text, {"np": np}, loc_vars)
         test_impl = loc_vars["f"]
@@ -324,7 +333,7 @@ def test_reduce2(test_dtypes_input, test_funcs_input, memory_leak_check):
         n = 21
         np.random.seed(0)
         A = np.random.randint(0, 10, n).astype(dtype)
-        check_func(test_impl, (A,))
+        check_func(test_impl, (A,), convert_to_nullable_float=False)
 
 
 @pytest.mark.slow
@@ -354,20 +363,17 @@ def test_reduce_filter1(test_dtypes_input, test_funcs_input, memory_leak_check):
         and dtype == "int64"
         and func in ["argmin", "argmax"]
     ):
-
-        func_text = """def f(A):
+        func_text = f"""def f(A):
             A = A[A>5]
-            return A.{}()
-        """.format(
-            func
-        )
+            return A.{func}()
+        """
         loc_vars = {}
         exec(func_text, {"np": np}, loc_vars)
         test_impl = loc_vars["f"]
         n = 21
         np.random.seed(0)
         A = np.random.randint(0, 10, n).astype(dtype)
-        check_func(test_impl, (A,))
+        check_func(test_impl, (A,), convert_to_nullable_float=False)
 
 
 def test_array_reduce(memory_leak_check):
@@ -380,16 +386,14 @@ def test_array_reduce(memory_leak_check):
         "np.int32",
         "np.int64",
     ]
-    for (op, typ) in zip(binops, dtypes):
-        func_text = """def f(n):
-                A = np.arange(0, 10, 1, {})
-                B = np.arange(0 +  3, 10 + 3, 1, {})
+    for op, typ in zip(binops, dtypes):
+        func_text = f"""def f(n):
+                A = np.arange(0, 10, 1, {typ})
+                B = np.arange(0 +  3, 10 + 3, 1, {typ})
                 for i in numba.prange(n):
-                    A {} B
+                    A {op} B
                 return A
-        """.format(
-            typ, typ, op
-        )
+        """
         loc_vars = {}
         exec(func_text, {"np": np, "numba": numba, "bodo": bodo}, loc_vars)
         test_impl = loc_vars["f"]
@@ -548,7 +552,7 @@ def test_np_array(memory_leak_check):
     # TODO: enable when supported by Numba
     # check_func(test_impl1, (np.ones(11),))
     check_func(test_impl1, ([1, 2, 5, 1, 2, 3],), is_out_distributed=False)
-    check_func(test_impl2, (np.ones(11),))
+    check_func(test_impl2, (np.ones(11),), convert_to_nullable_float=False)
     check_func(test_impl2, ([1, 2, 5, 1, 2, 3],), is_out_distributed=False)
 
 
@@ -676,7 +680,7 @@ def test_permuted_array_indexing(memory_leak_check):
     for arr_len in [11, 111, 128, 120]:
         hpat_A, hpat_B = hpat_func1(arr_len)
         python_A, python_B = python_one_dim(arr_len, r)
-        rank_bounds = self._rank_bounds(arr_len)
+        rank_bounds = _rank_bounds(arr_len)
         np.testing.assert_allclose(hpat_A, python_A[slice(*rank_bounds)])
         np.testing.assert_allclose(hpat_B, python_B[slice(*rank_bounds)])
 
@@ -936,6 +940,9 @@ def test_pure_func(datapath):
 
     import h5py
 
+    # import Bodo's h5py extension since not using Bodo jit decorator that inits it in
+    # this test
+    import bodo.io.h5_api  # noqa
     from bodo.utils.transform import _func_is_pure
 
     fname_pq = datapath("example.parquet")
@@ -949,7 +956,7 @@ def test_pure_func(datapath):
 
     # yield
     def impl2():
-        for a in [1, 2, 3]:
+        for a in [1, 2, 3]:  # noqa
             yield a
 
     # objmode
@@ -1241,7 +1248,7 @@ def test_missing_arg_msg():
     numba.core.config.DEVELOPER_MODE = 0
 
     with pytest.raises(
-        numba.core.errors.TypingError,
+        TypeError,
         match=r"missing a required argument",
     ):
         bodo.jit(test)()
@@ -1315,7 +1322,7 @@ def test_parfor_empty_entry_block(memory_leak_check):
     """make sure CFG simplification can handle empty entry block corner case properly.
     See BodoSQL/bodosql/tests/test_named_param_df_apply.py::test_case
     """
-    out_arr_type = bodo.boolean_array
+    out_arr_type = bodo.boolean_array_type
 
     @bodo.jit
     def impl(arrs, n, b, c, d, e, f, g):
@@ -1328,25 +1335,23 @@ def test_parfor_empty_entry_block(memory_leak_check):
                 if b
                 else (
                     False
-                    if ((c > 12))
+                    if (c > 12)
                     else (
                         False
-                        if ((d == "hello"))
+                        if (d == "hello")
                         else (
                             False
-                            if ((e == "hello"))
+                            if (e == "hello")
                             else (
                                 False
-                                if ((f > pd.Timestamp("2021-10-14 00:00:00")))
+                                if (f > pd.Timestamp("2021-10-14 00:00:00"))
                                 else (
                                     False
-                                    if ((g > pd.Timestamp("2021-10-14 00:00:00")))
+                                    if (g > pd.Timestamp("2021-10-14 00:00:00"))
                                     else (
-                                        (
-                                            None
-                                            if (pd.isna(table1_A[i]))
-                                            else ((table1_A[i] > 1))
-                                        )
+                                        None
+                                        if (pd.isna(table1_A[i]))
+                                        else (table1_A[i] > 1)
                                     )
                                 )
                             )
@@ -1366,3 +1371,38 @@ def test_parfor_empty_entry_block(memory_leak_check):
     np.testing.assert_array_equal(
         impl((A,), len(A), b, c, d, e, f, g), np.array([False, False, False])
     )
+
+
+def test_objmode_warning(memory_leak_check):
+    """Test that bodo.objmode raises a warning when used
+    and that bodo.no_warning_objmode does not."""
+
+    def g():
+        return 1
+
+    @bodo.jit
+    def impl1():
+        with bodo.objmode(a="int64"):
+            a = g()
+        return a
+
+    @bodo.jit
+    def impl2():
+        with bodo.no_warning_objmode(a="int64"):
+            a = g()
+        return a
+
+    old_developer_mode = numba.core.config.DEVELOPER_MODE
+    try:
+        numba.core.config.DEVELOPER_MODE = True
+        with pytest.warns(
+            BodoWarning,
+            match="Entered bodo\\.objmode\\. This will likely negatively impact performance\\.",
+        ):
+            assert impl1() == 1, "Incorrect output with numba.objmode"
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", BodoWarning)
+            assert impl2() == 1, "Incorrect output with bodo.no_warning_objmode"
+    finally:
+        numba.core.config.DEVELOPER_MODE = old_developer_mode

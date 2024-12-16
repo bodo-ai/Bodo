@@ -1,4 +1,3 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 import operator
 import re
 
@@ -22,6 +21,7 @@ from numba.extending import (
     models,
     overload,
     overload_attribute,
+    overload_method,
     register_jitable,
     register_model,
 )
@@ -48,6 +48,8 @@ ll.add_symbol("del_str", hstr_ext.del_str)
 ll.add_symbol("unicode_to_utf8", hstr_ext.unicode_to_utf8)
 ll.add_symbol("memcmp", hstr_ext.memcmp)
 ll.add_symbol("int_to_hex", hstr_ext.int_to_hex)
+ll.add_symbol("re_escape_length", hstr_ext.re_escape_length)
+ll.add_symbol("re_escape_with_output", hstr_ext.re_escape_with_output)
 
 
 string_type = types.unicode_type
@@ -55,7 +57,7 @@ string_type = types.unicode_type
 
 @numba.njit
 def contains_regex(e, in_str):  # pragma: no cover
-    with numba.objmode(res="bool_"):
+    with bodo.objmode(res="bool_"):
         res = bool(e.search(in_str))
     return res
 
@@ -63,7 +65,7 @@ def contains_regex(e, in_str):  # pragma: no cover
 @numba.generated_jit
 def str_findall_count(regex, in_str):
     def _str_findall_count_impl(regex, in_str):
-        with numba.objmode(res="int64"):
+        with bodo.objmode(res="int64"):
             res = len(regex.findall(in_str))
         return res
 
@@ -109,7 +111,6 @@ def unicode_to_utf8_and_len(typingctx, str_typ):
                 out_tup.f1 = uni_str.length
             # non-ascii case
             with orelse:
-
                 # call utf8 encoder once to get the allocation size, then call again
                 # to write to output buffer (TODO: avoid two calls?)
                 fnty = lir.FunctionType(
@@ -155,6 +156,93 @@ def unicode_to_utf8_and_len(typingctx, str_typ):
     return ret_typ(string_type), codegen
 
 
+@intrinsic
+def re_escape_len(typingctx, str_typ):
+    """Intrinsic to call into a C++ function that determines the length
+    of the output string when calling re.escape.
+
+    Args:
+        typingctx (TypingContext): TypingContext required by the calling convention.
+        in_str_typ (unicode_type): Input string that will be escaped
+
+    Returns:
+        types.int64: The number of elements in the output string.
+    """
+    assert types.unliteral(str_typ) == string_type, "str_typ must be a string"
+
+    def codegen(context, builder, sig, args):
+        (str_in,) = args
+        str_struct = cgutils.create_struct_proxy(string_type)(
+            context, builder, value=str_in
+        )
+
+        fnty = lir.FunctionType(
+            lir.IntType(64),
+            [
+                lir.IntType(8).as_pointer(),
+                lir.IntType(64),
+                lir.IntType(32),
+            ],
+        )
+        fn_escape_length = cgutils.get_or_insert_function(
+            builder.module, fnty, name="re_escape_length"
+        )
+        new_length = builder.call(
+            fn_escape_length, [str_struct.data, str_struct.length, str_struct.kind]
+        )
+        return new_length
+
+    return types.int64(string_type), codegen
+
+
+@intrinsic
+def re_escape_with_output(typingctx, in_str_typ, out_str_typ):
+    """Intrinsic to call into a C++ function that implements
+    re.escape. The output data is written to the buffer allocated
+    in out_str
+
+    Args:
+        typingctx (TypingContext): TypingContext required by the calling convention.
+        in_str_typ (unicode_type): Input string to escape
+        out_str_typ (unicode_type): Output string used to store the result.
+    """
+    assert types.unliteral(in_str_typ) == string_type, "str_typ must be a string"
+    assert types.unliteral(out_str_typ) == string_type, "str_typ must be a string"
+
+    def codegen(context, builder, sig, args):
+        (in_str, out_str) = args
+        in_str_struct = cgutils.create_struct_proxy(string_type)(
+            context, builder, value=in_str
+        )
+        out_str_struct = cgutils.create_struct_proxy(string_type)(
+            context, builder, value=out_str
+        )
+
+        fnty = lir.FunctionType(
+            lir.VoidType(),
+            [
+                lir.IntType(8).as_pointer(),
+                lir.IntType(64),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(32),
+            ],
+        )
+        fn_re_escape_with_output = cgutils.get_or_insert_function(
+            builder.module, fnty, name="re_escape_with_output"
+        )
+        builder.call(
+            fn_re_escape_with_output,
+            [
+                in_str_struct.data,
+                in_str_struct.length,
+                out_str_struct.data,
+                in_str_struct.kind,
+            ],
+        )
+
+    return types.void(string_type, string_type), codegen
+
+
 def unicode_to_utf8(s):  # pragma: no cover
     return s
 
@@ -162,6 +250,24 @@ def unicode_to_utf8(s):  # pragma: no cover
 @overload(unicode_to_utf8)
 def overload_unicode_to_utf8(s):
     return lambda s: unicode_to_utf8_and_len(s)[0]  # pragma: no cover
+
+
+def unicode_to_utf8_len(s):  # pragma: no cover
+    return s
+
+
+@overload(unicode_to_utf8_len)
+def overload_unicode_to_utf8_len(s):
+    """Obtain the length of a unicode string when encoded in
+    utf8. Currently this requires converting to utf8.
+
+    Args:
+        s (types.unicode_type): String in unicode
+
+    Returns:
+        types.int64: length of the string as a utf8 string.
+    """
+    return lambda s: unicode_to_utf8_and_len(s)[1]  # pragma: no cover
 
 
 @overload(max)
@@ -185,7 +291,7 @@ def overload_builtin_min(lhs, rhs):
 
 
 @intrinsic
-def memcmp(typingctx, dest_t, src_t, count_t=None):
+def memcmp(typingctx, dest_t, src_t, count_t):
     """call memcmp() in C"""
 
     def codegen(context, builder, sig, args):
@@ -240,7 +346,7 @@ def overload_int_to_str_len(n):
 
 class StdStringType(types.Opaque):
     def __init__(self):
-        super(StdStringType, self).__init__(name="StdStringType")
+        super().__init__(name="StdStringType")
 
 
 std_str_type = StdStringType()
@@ -258,7 +364,6 @@ dummy_use = numba.njit(lambda a: None)
 @overload(int)
 def int_str_overload(in_str, base=10):
     if in_str == string_type:
-
         if is_overload_constant_int(base) and get_overload_const_int(base) == 10:
 
             def _str_to_int_impl(in_str, base=10):  # pragma: no cover
@@ -372,7 +477,7 @@ def gen_get_unicode_chars(context, builder, unicode_val):
 
 
 @intrinsic
-def unicode_to_std_str(typingctx, unicode_t=None):
+def unicode_to_std_str(typingctx, unicode_t):
     def codegen(context, builder, sig, args):
         return gen_unicode_to_std_str(context, builder, args[0])
 
@@ -380,7 +485,7 @@ def unicode_to_std_str(typingctx, unicode_t=None):
 
 
 @intrinsic
-def std_str_to_unicode(typingctx, unicode_t=None):
+def std_str_to_unicode(typingctx, unicode_t):
     def codegen(context, builder, sig, args):
         return gen_std_str_to_unicode(context, builder, args[0], True)
 
@@ -390,9 +495,7 @@ def std_str_to_unicode(typingctx, unicode_t=None):
 # string array type that is optimized for random access read/write
 class RandomAccessStringArrayType(types.ArrayCompatible):
     def __init__(self):
-        super(RandomAccessStringArrayType, self).__init__(
-            name="RandomAccessStringArrayType()"
-        )
+        super().__init__(name="RandomAccessStringArrayType()")
 
     @property
     def as_array(self):
@@ -507,39 +610,38 @@ def float_to_str_overload(s, v):
     return lambda s, v: str_from_float64(s._data, v)  # pragma: no cover
 
 
-@overload(str)
+@overload_method(types.Float, "__str__")
 def float_str_overload(v):
-    """support str(float) by preallocating the output string and calling sprintf() in C"""
+    """support str(float) by preallocating the output string and calling snprintf() in C"""
     # TODO(ehsan): handle in Numba similar to str(int)
-    if isinstance(v, types.Float):
-        kind = numba.cpython.unicode.PY_UNICODE_1BYTE_KIND
+    kind = numba.cpython.unicode.PY_UNICODE_1BYTE_KIND
 
-        def impl(v):  # pragma: no cover
-            # Shortcut for 0
-            if v == 0:
-                return "0.0"
-            # same formula as str(int) in Numba, plus 1 char for decimal and 6 precision
-            # chars (default precision in C)
-            # https://github.com/numba/numba/blob/0db8a2bcd0f53c0d0ad8a798432fb3f37f14af27/numba/cpython/unicode.py#L2391
-            flag = 0
-            inner_v = v
-            if inner_v < 0:
-                flag = 1
-                inner_v = -inner_v
-            if inner_v < 1:
-                # Less than 1 produces a negative np.log value, so skip computation
-                digits_len = 1
-            else:
-                digits_len = 1 + int(np.floor(np.log10(inner_v)))
-            # possible values: - sign, digits before decimal place, decimal point,
-            # 6 digits after decimal
-            # NOTE: null character is added automatically by _malloc_string()
-            length = flag + digits_len + 1 + 6
-            s = numba.cpython.unicode._malloc_string(kind, 1, length, True)
-            float_to_str(s, v)
-            return s
+    def impl(v):  # pragma: no cover
+        # Shortcut for 0
+        if v == 0:
+            return "0.0"
+        # same formula as str(int) in Numba, plus 1 char for decimal and 6 precision
+        # chars (default precision in C)
+        # https://github.com/numba/numba/blob/0db8a2bcd0f53c0d0ad8a798432fb3f37f14af27/numba/cpython/unicode.py#L2391
+        flag = 0
+        inner_v = v
+        if inner_v < 0:
+            flag = 1
+            inner_v = -inner_v
+        if inner_v < 1:
+            # Less than 1 produces a negative np.log value, so skip computation
+            digits_len = 1
+        else:
+            digits_len = 1 + int(np.floor(np.log10(inner_v)))
+        # possible values: - sign, digits before decimal place, decimal point,
+        # 6 digits after decimal
+        # NOTE: null character is added automatically by _malloc_string()
+        length = flag + digits_len + 1 + 6
+        s = numba.cpython.unicode._malloc_string(kind, 1, length, True)
+        float_to_str(s, v)
+        return s
 
-        return impl
+    return impl
 
 
 @overload(format, no_unliteral=True)
@@ -561,7 +663,7 @@ def overload_format(value, format_spec=""):
 
     # use Python's format() in objmode
     def impl(value, format_spec=""):  # pragma: no cover
-        with numba.objmode(res="string"):
+        with bodo.objmode(res="string"):
             res = format(value, format_spec)
         return res
 
@@ -644,10 +746,10 @@ class StringAttribute(AttributeTemplate):
     def resolve_format(self, string_typ, args, kws):
         kws = dict(kws)
         # add dummy default value for kws to avoid errors
-        arg_names = ", ".join("e{}".format(i) for i in range(len(args)))
+        arg_names = ", ".join(f"e{i}" for i in range(len(args)))
         if arg_names:
             arg_names += ", "
-        kw_names = ", ".join("{} = ''".format(a) for a in kws.keys())
+        kw_names = ", ".join(f"{a} = ''" for a in kws.keys())
         func_text = f"def format_stub(string, {arg_names} {kw_names}):\n"
         func_text += "    pass\n"
         loc_vars = {}
@@ -715,6 +817,62 @@ def str_split(arr, pat, n):  # pragma: no cover
             s = vals[k]
             data[curr_ind] = s
             curr_ind += 1
+
+    index_offsets[l] = curr_ind
+    return out_arr
+
+
+@numba.njit(cache=True)
+def str_split_empty_n(arr, n):  # pragma: no cover
+    """Used for pd.Series.str.split when pat is not provided, but n is and it is positive."""
+    compiled_pat = re.compile("\\s+")
+
+    # Do a pre-pass to calculate the exact number of strings and number of characters from
+    # the inner string array of the final answer.
+    l = len(arr)
+    num_strs = 0
+    num_chars = 0
+    numba.parfors.parfor.init_prange()
+    for i in numba.parfors.parfor.internal_prange(l):
+        if bodo.libs.array_kernels.isna(arr, i):
+            continue
+        strs = 0
+        chars = 0
+        pruned_str = arr[i].strip()
+        if not (bodo.libs.array_kernels.isna(arr, i) or pruned_str == 0):
+            vals = compiled_pat.split(pruned_str, maxsplit=n)
+            strs = len(vals)
+            for s in vals:
+                chars += bodo.libs.str_arr_ext.get_utf8_size(s)
+        num_strs += strs
+        num_chars += chars
+
+    # Allocate the array item array where the inner array is the string
+    # array with the specified size.
+    out_arr = bodo.libs.array_item_arr_ext.pre_alloc_array_item_array(
+        l, (num_strs, num_chars), bodo.libs.str_arr_ext.string_array_type
+    )
+    index_offsets = bodo.libs.array_item_arr_ext.get_offsets(out_arr)
+    null_bitmap = bodo.libs.array_item_arr_ext.get_null_bitmap(out_arr)
+    data = bodo.libs.array_item_arr_ext.get_data(out_arr)
+
+    # Repeat the same logic as the first pass, writing the split up
+    # string lists into the result array.
+    curr_ind = 0
+    for j in numba.parfors.parfor.internal_prange(l):
+        index_offsets[j] = curr_ind
+        if bodo.libs.array_kernels.isna(arr, j):
+            bodo.libs.int_arr_ext.set_bit_to_arr(null_bitmap, j, 0)
+            continue
+        bodo.libs.int_arr_ext.set_bit_to_arr(null_bitmap, j, 1)
+        pruned_str = arr[j].strip()
+        if len(pruned_str) > 0:
+            vals = compiled_pat.split(pruned_str, maxsplit=n)
+            n_str = len(vals)
+            for k in range(n_str):
+                s = vals[k]
+                data[curr_ind] = s
+                curr_ind += 1
 
     index_offsets[l] = curr_ind
     return out_arr

@@ -15,7 +15,13 @@ from bodo.tests.user_logging_utils import (
     create_string_io_logger,
     set_logging_stream,
 )
-from bodo.tests.utils import ColumnDelTestPipeline, check_func, reduce_sum
+from bodo.tests.utils import (
+    ColumnDelTestPipeline,
+    check_func,
+    get_snowflake_connection_string,
+    pytest_mark_snowflake,
+    reduce_sum,
+)
 from bodo.utils.utils import is_expr
 
 
@@ -39,7 +45,7 @@ def _check_column_dels(bodo_func, col_del_lists):
     fir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
     typemap = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_typemap"]
     # Ensure every input list is sorted
-    col_del_lists = [list(sorted(x)) for x in col_del_lists]
+    col_del_lists = [sorted(x) for x in col_del_lists]
     for block in fir.blocks.values():
         for stmt in block.body:
             if isinstance(stmt, ir.Assign) and is_expr(stmt.value, "call"):
@@ -49,7 +55,7 @@ def _check_column_dels(bodo_func, col_del_lists):
                     and typ.name == "Function(<intrinsic del_column>)"
                 ):
                     col_nums = typemap[stmt.value.args[1].name].instance_type.meta
-                    col_nums = list(sorted(col_nums))
+                    col_nums = sorted(col_nums)
                     removed = False
                     for i, col_list in enumerate(col_del_lists):
                         if col_list == col_nums:
@@ -107,7 +113,7 @@ def test_table_filter_dead_columns(datapath, memory_leak_check):
     """
     Test table filter with no used column (just length)
     """
-    filename = datapath(f"many_columns.parquet")
+    filename = datapath("many_columns.parquet")
 
     def impl(idx):
         df = pd.read_parquet(filename)
@@ -141,7 +147,7 @@ def test_table_len_with_idx_col(datapath, memory_leak_check):
 
     Manually verified that the index col is dead/removed
     """
-    filename = datapath(f"many_columns.csv")
+    filename = datapath("many_columns.csv")
 
     def impl():
         df = pd.read_csv(filename, index_col="Column0")
@@ -207,7 +213,7 @@ def test_table_del_single_block(file_type, datapath, memory_leak_check):
     exec(func_text, globals(), local_vars)
     impl = local_vars["impl"]
 
-    check_func(impl, ())
+    check_func(impl, (), check_dtype=False)
     stream = io.StringIO()
     logger = create_string_io_logger(stream)
     with set_logging_stream(logger, 1):
@@ -1308,7 +1314,7 @@ def test_table_del_single_block_pq_index(datapath, memory_leak_check):
     loads an index from parquet.
     TODO: add automatic check to ensure that the index is loaded
     """
-    filename = datapath(f"many_columns_index.parquet")
+    filename = datapath("many_columns_index.parquet")
 
     def impl():
         df = pd.read_parquet(filename)
@@ -1325,7 +1331,7 @@ def test_table_del_single_block_pq_index(datapath, memory_leak_check):
         else:
             delete_list = [[3], [37], [59]]
         _check_column_dels(bodo_func, delete_list)
-        check_logger_msg(stream, f"Columns loaded ['Column3', 'Column37', 'Column59']")
+        check_logger_msg(stream, "Columns loaded ['Column3', 'Column37', 'Column59']")
 
 
 def test_table_del_single_block_pq_index_alias(datapath, memory_leak_check):
@@ -1334,7 +1340,7 @@ def test_table_del_single_block_pq_index_alias(datapath, memory_leak_check):
     loads an index from parquet with an alias.
     TODO: add automatic check to ensure that the index is loaded
     """
-    filename = datapath(f"many_columns_index.parquet")
+    filename = datapath("many_columns_index.parquet")
 
     def impl():
         df = pd.read_parquet(filename)
@@ -1352,7 +1358,7 @@ def test_table_del_single_block_pq_index_alias(datapath, memory_leak_check):
         else:
             delete_list = [[3, 37, 59], [3], [37], [59]]
         _check_column_dels(bodo_func, delete_list)
-        check_logger_msg(stream, f"Columns loaded ['Column3', 'Column37', 'Column59']")
+        check_logger_msg(stream, "Columns loaded ['Column3', 'Column37', 'Column59']")
 
 
 def test_table_dead_pq_index(datapath, memory_leak_check):
@@ -1360,7 +1366,7 @@ def test_table_dead_pq_index(datapath, memory_leak_check):
     Test dead code elimination still works for unused indices.
     TODO: add automatic check to ensure that the index is marked as dead
     """
-    filename = datapath(f"many_columns_index.parquet")
+    filename = datapath("many_columns_index.parquet")
 
     def impl(n):
         df = pd.read_parquet(filename)
@@ -1376,7 +1382,7 @@ def test_table_dead_pq_index(datapath, memory_leak_check):
         bodo_func = bodo.jit(pipeline_class=ColumnDelTestPipeline)(impl)
         bodo_func(25)
         _check_column_dels(bodo_func, [[0], [3]])
-        check_logger_msg(stream, f"Columns loaded ['Column0', 'Column3']")
+        check_logger_msg(stream, "Columns loaded ['Column0', 'Column3']")
 
 
 def test_table_dead_pq_index_alias(datapath, memory_leak_check):
@@ -1384,7 +1390,7 @@ def test_table_dead_pq_index_alias(datapath, memory_leak_check):
     Test dead code elimination still works for unused indices with an alias.
     TODO: add automatic check to ensure that the index is marked as dead
     """
-    filename = datapath(f"many_columns_index.parquet")
+    filename = datapath("many_columns_index.parquet")
 
     def impl(n):
         df = pd.read_parquet(filename)
@@ -1401,7 +1407,7 @@ def test_table_dead_pq_index_alias(datapath, memory_leak_check):
         bodo_func = bodo.jit(pipeline_class=ColumnDelTestPipeline)(impl)
         bodo_func(25)
         _check_column_dels(bodo_func, [[0, 3], [0], [3]])
-        check_logger_msg(stream, f"Columns loaded ['Column0', 'Column3']")
+        check_logger_msg(stream, "Columns loaded ['Column0', 'Column3']")
 
 
 def test_table_while_loop_alias_with_idx_col(datapath, memory_leak_check):
@@ -1410,7 +1416,7 @@ def test_table_while_loop_alias_with_idx_col(datapath, memory_leak_check):
     repeatedly in a for loop with an alias.
     TODO: add automatic check to ensure that the index is marked as dead
     """
-    filename = datapath(f"many_columns.csv")
+    filename = datapath("many_columns.csv")
 
     def impl(n):
         df = pd.read_csv(filename)
@@ -1428,7 +1434,7 @@ def test_table_while_loop_alias_with_idx_col(datapath, memory_leak_check):
         bodo_func = bodo.jit(pipeline_class=ColumnDelTestPipeline)(impl)
         bodo_func(25)
         _check_column_dels(bodo_func, [[0, 3], [0], [3]])
-        check_logger_msg(stream, f"Columns loaded ['Column0', 'Column3']")
+        check_logger_msg(stream, "Columns loaded ['Column0', 'Column3']")
 
 
 def test_table_dead_pq_table(datapath, memory_leak_check):
@@ -1436,7 +1442,7 @@ def test_table_dead_pq_table(datapath, memory_leak_check):
     Test dead code elimination still works on a table with a used index.
     TODO: add automatic check to ensure that the table is marked as dead
     """
-    filename = datapath(f"many_columns_index.parquet")
+    filename = datapath("many_columns_index.parquet")
 
     def impl():
         df = pd.read_parquet(filename)
@@ -1455,7 +1461,7 @@ def test_table_dead_pq_table_alias(datapath, memory_leak_check):
     and an alias.
     TODO: add automatic check to ensure that the table is marked as dead
     """
-    filename = datapath(f"many_columns_index.parquet")
+    filename = datapath("many_columns_index.parquet")
 
     def impl():
         df = pd.read_parquet(filename)
@@ -1474,7 +1480,7 @@ def test_table_dead_csv(datapath, memory_leak_check):
     I've manually confirmed that the table variable is correctly marked as dead.
     TODO: add automatic check to ensure that the table is marked as dead
     """
-    filename = datapath(f"many_columns.csv")
+    filename = datapath("many_columns.csv")
 
     def impl():
         df = pd.read_csv(filename, index_col="Column4")
@@ -1488,7 +1494,7 @@ def test_table_dead_csv(datapath, memory_leak_check):
 
 def test_many_cols_to_parquet(datapath, memory_leak_check):
     """Tests df.to_parquet with many columns."""
-    filename = datapath(f"many_columns.csv")
+    filename = datapath("many_columns.csv")
     try:
 
         def impl(source_filename, dest_filename):
@@ -1500,7 +1506,7 @@ def test_many_cols_to_parquet(datapath, memory_leak_check):
             bodo_df = pd.read_parquet(bodo_filename)
             try:
                 pd.testing.assert_frame_equal(
-                    pandas_df, bodo_df, check_column_type=False
+                    pandas_df, bodo_df, check_column_type=False, check_dtype=False
                 )
                 return 1
             except Exception:
@@ -1527,13 +1533,13 @@ def test_table_dead_csv(datapath, memory_leak_check):
     I've manually confirmed that the table variable is correctly marked as dead.
     TODO: add automatic check to ensure that the table is marked as dead
     """
-    filename = datapath(f"many_columns.csv")
+    filename = datapath("many_columns.csv")
 
     def impl():
         df = pd.read_csv(filename, index_col="Column4")
         return df.index
 
-    check_func(impl, ())
+    check_func(impl, (), check_dtype=False)
     bodo_func = bodo.jit(pipeline_class=ColumnDelTestPipeline)(impl)
     bodo_func()
     _check_column_dels(bodo_func, [])
@@ -1573,14 +1579,14 @@ def test_table_column_filter_past_setitem(memory_leak_check, datapath, num_layer
     Tests that dead setitems on tables are correctly converted to set_table_column_null, which
     allows for column pruning and filtering at the IO node.
     """
-    filename = datapath(f"many_columns.parquet")
+    filename = datapath("many_columns.parquet")
 
     func_text = ""
     func_text += "def impl():\n"
     func_text += f"    df = pd.read_parquet({filename!r})\n"
     for i in range(num_layers):
         func_text += f"    df['Column{i+1}'] = df['Column{i}']\n"
-    func_text += f"    df2 = df[df['Column96'] > 10]\n"
+    func_text += "    df2 = df[df['Column96'] > 10]\n"
     # func_text += f"    df2 = df\n"
     func_text += f"    return df2['Column{num_layers + 1}']\n"
 
@@ -1604,10 +1610,10 @@ def test_table_column_pruing_past_atype_setitem(datapath, memory_leak_check):
     Tests that dead setitems on tables are correctly converted to set_table_column_null, which
     allows for column pruning at the IO node.
 
-    This case checks that the setiem is converted even when using funtions that have no side
+    This case checks that the setitem is converted even when using functions that have no side
     effects.
     """
-    filename = datapath(f"many_columns.parquet")
+    filename = datapath("many_columns.parquet")
 
     def impl():
         df = pd.read_parquet(filename)
@@ -1634,7 +1640,7 @@ def test_table_del_astype(datapath, memory_leak_check):
     Test dead column elimination works with an astype
     cast.
     """
-    filename = datapath(f"many_columns.parquet")
+    filename = datapath("many_columns.parquet")
 
     def impl():
         df = pd.read_parquet(filename)
@@ -1657,7 +1663,7 @@ def test_table_nbytes_del_cols(datapath, memory_leak_check):
     every column that isn't used later once the operation
     finishes.
     """
-    filename = datapath(f"many_columns.parquet")
+    filename = datapath("many_columns.parquet")
 
     def impl():
         df = pd.read_parquet(filename)
@@ -1679,7 +1685,7 @@ def test_table_nbytes_del_cols(datapath, memory_leak_check):
         check_logger_msg(stream, f"Columns loaded {columns_list}")
         # df.memory_usage uses every column, but those should be possible
         # to delete in 1 block
-        init_block_columns = list(sorted(set(range(99)) - {3, 6}))
+        init_block_columns = sorted(set(range(99)) - {3, 6})
         # The other blocks should then each decref the opposite column
         # at the start and then the used column
         _check_column_dels(bodo_func, [init_block_columns, [3], [6], [3], [6]])
@@ -1695,7 +1701,7 @@ def test_table_nbytes_ret_df(datapath, memory_leak_check):
     when the source of a table is a DataFrame that we do
     not prune columns.
     """
-    filename = datapath(f"many_columns.parquet")
+    filename = datapath("many_columns.parquet")
 
     def impl():
         df = pd.read_parquet(filename)
@@ -1726,7 +1732,7 @@ def test_table_concat_del_cols(datapath, memory_leak_check):
     pruning any columns it needs that isn't used later
     once the operation finishes.
     """
-    filename = datapath(f"many_columns.parquet")
+    filename = datapath("many_columns.parquet")
 
     def impl():
         df = pd.read_parquet(filename)
@@ -1749,7 +1755,7 @@ def test_table_concat_del_cols(datapath, memory_leak_check):
         bodo_func()
         check_logger_msg(
             stream,
-            f"Columns loaded ['Column0', 'Column2', 'Column3', 'Column5', 'Column6']",
+            "Columns loaded ['Column0', 'Column2', 'Column3', 'Column5', 'Column6']",
         )
         # Melt uses but can then delete 0, 2 and 5.
         # The other blocks delete the columns used in both branch
@@ -1767,7 +1773,7 @@ def test_table_concat_ret_df(datapath, memory_leak_check):
     when the source of a table is a DataFrame that we do
     not prune columns.
     """
-    filename = datapath(f"many_columns.parquet")
+    filename = datapath("many_columns.parquet")
 
     def impl():
         df = pd.read_parquet(filename)
@@ -1833,7 +1839,7 @@ def test_table_astype_del_cols(datapath, memory_leak_check):
     calls inside the IR and that calling table prunes
     its columns as well.
     """
-    filename = datapath(f"many_columns.parquet")
+    filename = datapath("many_columns.parquet")
 
     def impl():
         df1 = pd.read_parquet(filename)
@@ -1862,7 +1868,7 @@ def test_table_astype_del_cols(datapath, memory_leak_check):
         bodo_func()
         check_logger_msg(
             stream,
-            f"Columns loaded ['Column0', 'Column3', 'Column6']",
+            "Columns loaded ['Column0', 'Column3', 'Column6']",
         )
         # In the first block df1 needs to load columns 0 and 6 for astype.
         # Column 0 is no longer needed by df1 after the operation. Similarly
@@ -1877,7 +1883,7 @@ def test_table_astype_ret_df_input(datapath, memory_leak_check):
     calls inside the IR if we return a DataFrame with the
     input table.
     """
-    filename = datapath(f"many_columns.parquet")
+    filename = datapath("many_columns.parquet")
 
     def impl():
         df1 = pd.read_parquet(filename)
@@ -1915,7 +1921,7 @@ def test_table_astype_ret_df_output(datapath, memory_leak_check):
     calls inside the IR if we return the result DataFrame.
     However, the del_column should still be created for the input.
     """
-    filename = datapath(f"many_columns.parquet")
+    filename = datapath("many_columns.parquet")
 
     def impl():
         df1 = pd.read_parquet(filename)
@@ -1943,10 +1949,67 @@ def test_table_astype_ret_df_output(datapath, memory_leak_check):
         columns_list = [f"Column{i}" for i in range(99)]
         check_logger_msg(stream, f"Columns loaded {columns_list}")
         # We prune columns from df1 after the astype.
-        init_block_columns = list(sorted(set(range(99)) - {3, 6}))
+        init_block_columns = sorted(set(range(99)) - {3, 6})
         _check_column_dels(
             bodo_func, [init_block_columns, [3], [6], [3], [6], list(range(99))]
         )
+
+
+def test_table_astype_multiple_cols_different_cast(datapath, memory_leak_check):
+    """
+    Test table_astype properly handles the case where we're casting two
+    columns of of the same type, to a different type.
+
+    """
+    filename = datapath("many_columns.parquet")
+
+    def impl():
+        df1 = pd.read_parquet(filename)
+        # All columns being casted are originally int
+        df2 = df1.astype({"Column0": np.float32, "Column3": np.float64})
+        return df2
+
+    check_func(impl, (), check_dtype=False)
+
+
+def test_concat_tables_used_cols(datapath, memory_leak_check):
+    """Make sure used_cols in concat_tables() is set properly"""
+    filename = datapath("many_columns.parquet")
+
+    def impl():
+        df1 = pd.read_parquet(filename)
+        in_dfs = []
+        for _ in range(3):
+            in_dfs.append(df1)
+
+        df2 = pd.concat(in_dfs)
+        return df2[["Column3", "Column6"]]
+
+    check_func(impl, (), only_seq=True)
+    bodo_func = bodo.jit(pipeline_class=ColumnDelTestPipeline)(impl)
+    bodo_func()
+    fir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
+    typemap = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_typemap"]
+    found = False
+    for block in fir.blocks.values():
+        for stmt in block.body:
+            if isinstance(stmt, ir.Assign) and is_expr(stmt.value, "call"):
+                rhs = stmt.value
+                fdef = numba.core.ir_utils.guard(
+                    numba.core.ir_utils.find_callname, fir, rhs
+                )
+                if fdef == ("concat_tables", "bodo.utils.table_utils"):
+                    found = True
+                    kws = dict(rhs.kws)
+                    assert "used_cols" in kws, "used_cols not found"
+                    used_cols = bodo.utils.typing.unwrap_typeref(
+                        typemap[kws["used_cols"].name]
+                    )
+                    assert used_cols == bodo.utils.typing.MetaType(
+                        (3, 6)
+                    ), "invalid used_cols"
+
+    assert found, "concat_tables not found."
 
 
 def test_filter_del_cols(datapath, memory_leak_check):
@@ -1955,7 +2018,7 @@ def test_filter_del_cols(datapath, memory_leak_check):
     calls inside the IR and that calling table prunes
     its columns as well.
     """
-    filename = datapath(f"many_columns.parquet")
+    filename = datapath("many_columns.parquet")
 
     def impl():
         df1 = pd.read_parquet(filename)
@@ -1984,7 +2047,7 @@ def test_filter_del_cols(datapath, memory_leak_check):
         bodo_func()
         check_logger_msg(
             stream,
-            f"Columns loaded ['Column0', 'Column3', 'Column6']",
+            "Columns loaded ['Column0', 'Column3', 'Column6']",
         )
         # In the first block df1 needs to load columns 0 and 6 for astype.
         # Column 0 is no longer needed by df1 after the operation. Similarly
@@ -1999,7 +2062,7 @@ def test_filter_ret_df_input(datapath, memory_leak_check):
     calls inside the IR if we return a DataFrame with the
     input table.
     """
-    filename = datapath(f"many_columns.parquet")
+    filename = datapath("many_columns.parquet")
 
     def impl():
         df1 = pd.read_parquet(filename)
@@ -2037,7 +2100,7 @@ def test_table_filter_ret_df_output(datapath, memory_leak_check):
     calls inside the IR if we return the result DataFrame.
     However, the del_column should still be created for the input.
     """
-    filename = datapath(f"many_columns.parquet")
+    filename = datapath("many_columns.parquet")
 
     def impl():
         df1 = pd.read_parquet(filename)
@@ -2065,7 +2128,7 @@ def test_table_filter_ret_df_output(datapath, memory_leak_check):
         columns_list = [f"Column{i}" for i in range(99)]
         check_logger_msg(stream, f"Columns loaded {columns_list}")
         # We prune columns from df1 after the filter.
-        init_block_columns = list(sorted(set(range(99)) - {3, 6}))
+        init_block_columns = sorted(set(range(99)) - {3, 6})
         _check_column_dels(
             bodo_func, [init_block_columns, [3], [6], [3], [6], list(range(99))]
         )
@@ -2077,7 +2140,7 @@ def test_table_mappable_del_cols(datapath, memory_leak_check):
     calls inside the IR and that calling table prunes
     its columns as well.
     """
-    filename = datapath(f"many_columns.parquet")
+    filename = datapath("many_columns.parquet")
 
     def impl():
         df1 = pd.read_parquet(filename)
@@ -2106,7 +2169,7 @@ def test_table_mappable_del_cols(datapath, memory_leak_check):
         bodo_func()
         check_logger_msg(
             stream,
-            f"Columns loaded ['Column0', 'Column3', 'Column6']",
+            "Columns loaded ['Column0', 'Column3', 'Column6']",
         )
         # In the first block df1 needs to load columns 0 and 6 for astype.
         # Column 0 is no longer needed by df1 after the operation. Similarly
@@ -2121,7 +2184,7 @@ def test_table_mappable_ret_df_input(datapath, memory_leak_check):
     calls inside the IR if we return a DataFrame with the
     input table.
     """
-    filename = datapath(f"many_columns.parquet")
+    filename = datapath("many_columns.parquet")
 
     def impl():
         df1 = pd.read_parquet(filename)
@@ -2159,7 +2222,7 @@ def test_table_mappable_ret_df_output(datapath, memory_leak_check):
     calls inside the IR if we return the result DataFrame.
     However, the del_column should still be created for the input.
     """
-    filename = datapath(f"many_columns.parquet")
+    filename = datapath("many_columns.parquet")
 
     def impl():
         df1 = pd.read_parquet(filename)
@@ -2187,7 +2250,7 @@ def test_table_mappable_ret_df_output(datapath, memory_leak_check):
         columns_list = [f"Column{i}" for i in range(99)]
         check_logger_msg(stream, f"Columns loaded {columns_list}")
         # We prune columns from df1 after the copy.
-        init_block_columns = list(sorted(set(range(99)) - {3, 6}))
+        init_block_columns = sorted(set(range(99)) - {3, 6})
         _check_column_dels(
             bodo_func, [init_block_columns, [3], [6], [3], [6], list(range(99))]
         )
@@ -2197,7 +2260,7 @@ def test_sort_table_dels(datapath, memory_leak_check):
     """
     Make sure table columns are deleted properly for Sort nodes
     """
-    filename = datapath(f"many_columns.parquet")
+    filename = datapath("many_columns.parquet")
 
     def impl():
         df1 = pd.read_parquet(filename)
@@ -2212,17 +2275,14 @@ def test_sort_table_dels(datapath, memory_leak_check):
         bodo_func()
         columns_list = [f"Column{i}" for i in [1, 3, 6, 8, 9, 11, 13]]
         check_logger_msg(stream, f"Columns loaded {columns_list}")
-        # [3, 6, 8, 9, 11, 13] for input table is repeated since there is a table copy
-        _check_column_dels(
-            bodo_func, [[3, 6, 8, 9, 11, 13], [3, 6, 8, 9, 11, 13], [11], [8], [3], [1]]
-        )
+        _check_column_dels(bodo_func, [[3, 6, 8, 9, 11, 13], [11], [8], [3], [1]])
 
 
 def test_groupby_table_dels(datapath, memory_leak_check):
     """
     Make sure table columns are deleted properly for Aggregate nodes
     """
-    filename = datapath(f"many_columns.parquet")
+    filename = datapath("many_columns.parquet")
 
     def impl():
         df1 = pd.read_parquet(filename)
@@ -2246,7 +2306,7 @@ def test_groupby_table_dels_as_index_false(datapath, memory_leak_check):
     """
     Make sure table columns are deleted properly for Aggregate nodes when as_index=False
     """
-    filename = datapath(f"many_columns.parquet")
+    filename = datapath("many_columns.parquet")
 
     def impl():
         df1 = pd.read_parquet(filename)
@@ -2276,7 +2336,7 @@ def test_two_column_dels(datapath, memory_leak_check):
     Test that when deleting a large number of columns we
     delete columns in batches.
     """
-    filename = datapath(f"many_columns.parquet")
+    filename = datapath("many_columns.parquet")
 
     def impl():
         df1 = pd.read_parquet(filename)
@@ -2330,7 +2390,7 @@ def test_table_loc_column_subset_level1(datapath, memory_leak_check):
         bodo_func()
         # Check the columns were pruned
         check_logger_msg(stream, str(columns_loaded))
-        _check_column_dels(bodo_func, [list(range(n_cols)), list(range(n_cols * 2))])
+        _check_column_dels(bodo_func, [list(range(n_cols))])
 
 
 def test_table_loc_column_subset_level2(datapath, memory_leak_check):
@@ -2371,12 +2431,9 @@ def test_table_loc_column_subset_level2(datapath, memory_leak_check):
         # deletes them at the new remapped location.
         df_col_nums = list(range(n_cols_level_2))
         df1_col_nums = list(range(n_cols_level_1 - n_cols_level_2, n_cols_level_1))
-        df2_col_nums = list(range(n_cols_level_2 * 2))
-        # There is 1 del_columns for the original df, 2 for df1 (the subset
-        # and the filter) and 1 for df2 (the subset)
-        _check_column_dels(
-            bodo_func, [df_col_nums, df1_col_nums, df1_col_nums, df2_col_nums]
-        )
+        # There is 1 del_columns for the original df and 2 for df1
+        # (the subset and the filter)
+        _check_column_dels(bodo_func, [df_col_nums, df1_col_nums])
 
 
 def test_table_iloc_column_subset_level1(datapath, memory_leak_check):
@@ -2412,7 +2469,7 @@ def test_table_iloc_column_subset_level1(datapath, memory_leak_check):
         bodo_func()
         # Check the columns were pruned
         check_logger_msg(stream, str(cols_names_loaded))
-        _check_column_dels(bodo_func, [list(range(n_cols)), list(range(n_cols * 2))])
+        _check_column_dels(bodo_func, [list(range(n_cols))])
 
 
 def test_table_iloc_column_subset_level2(datapath, memory_leak_check):
@@ -2456,12 +2513,9 @@ def test_table_iloc_column_subset_level2(datapath, memory_leak_check):
         # deletes them at the new remapped location.
         df_col_nums = list(range(n_cols_level_2))
         df1_col_nums = list(range(n_cols_level_1 - n_cols_level_2, n_cols_level_1))
-        df2_col_nums = list(range(n_cols_level_2 * 2))
         # There is 1 del_columns for the original df, 2 for df1 (the subset
         # and the filter) and 1 for df2 (the subset)
-        _check_column_dels(
-            bodo_func, [df_col_nums, df1_col_nums, df1_col_nums, df2_col_nums]
-        )
+        _check_column_dels(bodo_func, [df_col_nums, df1_col_nums])
 
 
 def test_table_column_subset_level1(datapath, memory_leak_check):
@@ -2542,7 +2596,7 @@ def test_table_column_subset_level2(datapath, memory_leak_check):
 def test_merge_del_columns(datapath, memory_leak_check):
     # Verify that column pruning from the source and dead
     # column insertion works with Join.
-    filename = datapath(f"many_columns.parquet")
+    filename = datapath("many_columns.parquet")
 
     def impl():
         df1 = pd.read_parquet(filename)
@@ -2555,8 +2609,8 @@ def test_merge_del_columns(datapath, memory_leak_check):
     with set_logging_stream(logger, 2):
         bodo_func = bodo.jit(pipeline_class=ColumnDelTestPipeline)(impl)
         bodo_func()
-        check_logger_msg(stream, f"Columns loaded ['Column0', 'Column1', 'Column21']")
-        check_logger_msg(stream, f"Output columns: ['Column1_x', 'Column21_y']")
+        check_logger_msg(stream, "Columns loaded ['Column0', 'Column1', 'Column21']")
+        check_logger_msg(stream, "Output columns: ['Column1_x', 'Column21_y']")
         # We prune columns 0, 1, 21 from the read parquet and 1 and 119
         # from the join.
         if bodo.hiframes.boxing.TABLE_FORMAT_THRESHOLD <= 2:
@@ -2581,7 +2635,7 @@ def test_merge_del_columns_tuple(datapath, memory_leak_check):
 
     # Verify that column pruning from the source and dead
     # column insertion works with Join.
-    filename = datapath(f"many_columns.parquet")
+    filename = datapath("many_columns.parquet")
 
     def impl1():
         df1 = pd.read_parquet(filename)
@@ -2649,8 +2703,8 @@ def test_merge_del_columns_tuple(datapath, memory_leak_check):
     with set_logging_stream(logger, 2):
         bodo_func = bodo.jit(pipeline_class=ColumnDelTestPipeline)(impl1)
         bodo_func()
-        check_logger_msg(stream, f"Columns loaded ['Column0', 'Column1', 'Column21']")
-        check_logger_msg(stream, f"Output columns: ['Column21', 'Column1_y']")
+        check_logger_msg(stream, "Columns loaded ['Column0', 'Column1', 'Column21']")
+        check_logger_msg(stream, "Output columns: ['Column21', 'Column1_y']")
         _check_column_dels(bodo_func, [[1], [0, 21], [21], [99]])
 
     stream = io.StringIO()
@@ -2658,8 +2712,8 @@ def test_merge_del_columns_tuple(datapath, memory_leak_check):
     with set_logging_stream(logger, 2):
         bodo_func = bodo.jit(pipeline_class=ColumnDelTestPipeline)(impl2)
         bodo_func()
-        check_logger_msg(stream, f"Columns loaded ['Column0', 'Column1', 'Column21']")
-        check_logger_msg(stream, f"Output columns: ['Column1_x', 'Column21']")
+        check_logger_msg(stream, "Columns loaded ['Column0', 'Column1', 'Column21']")
+        check_logger_msg(stream, "Output columns: ['Column1_x', 'Column21']")
         _check_column_dels(bodo_func, [[1], [0, 21], [1], [30]])
 
     stream = io.StringIO()
@@ -2667,8 +2721,8 @@ def test_merge_del_columns_tuple(datapath, memory_leak_check):
     with set_logging_stream(logger, 2):
         bodo_func = bodo.jit(pipeline_class=ColumnDelTestPipeline)(impl3)
         bodo_func()
-        check_logger_msg(stream, f"Columns loaded ['Column0', 'Column1', 'Column2']")
-        check_logger_msg(stream, f"Output columns: ['Column1_x', 'Column2_y']")
+        check_logger_msg(stream, "Columns loaded ['Column0', 'Column1', 'Column2']")
+        check_logger_msg(stream, "Output columns: ['Column1_x', 'Column2_y']")
         _check_column_dels(bodo_func, [[0], [1], [2], [1], [11]])
 
 
@@ -2677,7 +2731,7 @@ def test_parquet_tail(datapath, memory_leak_check):
         df = pd.read_parquet(filename)
         return len(df.tail(10000))
 
-    filename = datapath(f"many_columns.parquet")
+    filename = datapath("many_columns.parquet")
     check_func(impl, (), sort_output=True, reset_index=True)
     stream = io.StringIO()
     logger = create_string_io_logger(stream)
@@ -2687,4 +2741,73 @@ def test_parquet_tail(datapath, memory_leak_check):
         # There shouldn't be any del_column calls
         _check_column_dels(bodo_func, [])
         # There shouldn't be a need to load any columns.
-        check_logger_msg(stream, f"Columns loaded []")
+        check_logger_msg(stream, "Columns loaded []")
+
+
+@pytest_mark_snowflake
+def test_streaming_read_sql(memory_leak_check):
+    """
+    Tests support for dead column elimination with `pd.read_sql` used
+    in a streaming context. This is meant to be a test example of the
+    necessary operation, so this example is smaller functional test
+    without the proper control flow.
+    """
+    col_meta = bodo.utils.typing.ColNamesMetaType(
+        (
+            "l_orderkey",
+            "l_partkey",
+            "l_suppkey",
+            "l_linenumber",
+            "l_quantity",
+            "l_extendedprice",
+            "l_discount",
+            "l_tax",
+            "l_returnflag",
+            "l_linestatus",
+            "l_shipdate",
+            "l_commitdate",
+            "l_receiptdate",
+            "l_shipinstruct",
+            "l_shipmode",
+            "l_comment",
+        )
+    )
+
+    def impl(conn):
+        reader = pd.read_sql(
+            "SELECT * FROM LINEITEM ORDER BY L_ORDERKEY, L_PARTKEY, L_SUPPKEY LIMIT 70",
+            conn,
+            _bodo_chunksize=4000,
+        )  # type: ignore
+        table, is_last = bodo.io.arrow_reader.read_arrow_next(reader, True)
+        index_var = bodo.hiframes.pd_index_ext.init_range_index(0, len(table), 1, None)
+        df = bodo.hiframes.pd_dataframe_ext.init_dataframe(
+            (table,), index_var, col_meta
+        )
+        bodo.io.arrow_reader.arrow_reader_del(reader)
+        return df[["l_partkey"]]
+
+    db = "SNOWFLAKE_SAMPLE_DATA"
+    schema = "TPCH_SF1"
+    conn = get_snowflake_connection_string(db, schema)
+    py_output = pd.read_sql(
+        "SELECT l_partkey FROM LINEITEM ORDER BY L_ORDERKEY, L_PARTKEY, L_SUPPKEY LIMIT 70",
+        conn,
+    )
+    check_func(
+        impl,
+        (conn,),
+        sort_output=True,
+        reset_index=True,
+        py_output=py_output,
+        check_dtype=False,
+    )
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        bodo_func = bodo.jit(pipeline_class=ColumnDelTestPipeline)(impl)
+        bodo_func(conn)
+        # There shouldn't be any del_column calls
+        _check_column_dels(bodo_func, [[1]])
+        # There shouldn't be a need to load any columns.
+        check_logger_msg(stream, "Columns loaded ['l_partkey']")

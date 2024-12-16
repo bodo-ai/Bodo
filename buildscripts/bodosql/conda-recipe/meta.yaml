@@ -1,6 +1,6 @@
 package:
     name: bodosql
-    version: {{ BODOSQL_VERSION }}
+    version: {{ environ.get('BODOSQL_VERSION') }} 
 
 source:
     path: ../../../BodoSQL
@@ -10,30 +10,29 @@ build:
 
 requirements:
     host:
-        - python >=3.8,<3.11
-        # setuptools>=65 removes the msvc compilers that
-        # distutils/extension uses.
-        # TODO[BE-3467]: remove distutils
-        - setuptools <60
-        - openjdk >=9.0, <12
+        - python >=3.10,<3.13
+        - setuptools >=64
+        - setuptools_scm >=8
+        - openjdk >=11.0, <18
         - maven
-        - ninja
-        - bodo =2022.9.*
+        - bodo  {{ BODOSQL_VERSION }}
 
     run:
-        - openjdk >=9.0
-        - bodo =2022.9.*
-        - py4j
-        - python >=3.8,<3.11
+        - openjdk >=11.0, <18
+        - bodo  {{ BODOSQL_VERSION }}
+        - py4j ==0.10.9.7
+        - python >=3.10,<3.13
 
 
 test:
     imports:
         - bodosql
+    files:
+        - test.py
 
 
 about:
 home: https://bodo.ai/
-license: Proprietary
-license_file: LICENSE.md
+license: Apache-2.0
+license_file: LICENSE
 summary: Bodo SQL Engine

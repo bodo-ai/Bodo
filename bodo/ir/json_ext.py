@@ -1,4 +1,4 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
+import llvmlite.binding as ll
 import numba
 import numpy as np
 import pandas as pd
@@ -9,29 +9,34 @@ from numba.extending import intrinsic
 
 import bodo
 import bodo.ir.connector
-from bodo import objmode
+import bodo.user_logging
+from bodo.io import json_cpp
 from bodo.io.fs_io import (
     get_storage_options_pyobject,
     storage_options_dict_type,
 )
+from bodo.ir.connector import Connector
 from bodo.libs.str_ext import string_type
 from bodo.transforms import distributed_analysis, distributed_pass
 from bodo.utils.utils import (
-    check_and_propagate_cpp_exception,
     check_java_installation,
     sanitize_varname,
 )
 
+ll.add_symbol("json_file_chunk_reader", json_cpp.json_file_chunk_reader)
 
-class JsonReader(ir.Stmt):
+
+class JsonReader(Connector):
+    connector_typ = "json"
+
     def __init__(
         self,
-        df_out,
-        loc,
-        out_vars,
-        out_types,
+        df_out_varname: str,
+        loc: ir.Loc,
+        out_vars: list[ir.Var],
+        out_table_col_types,
         file_name,
-        df_colnames,
+        out_table_col_names: list[str],
         orient,
         convert_dates,
         precise_float,
@@ -39,13 +44,14 @@ class JsonReader(ir.Stmt):
         compression,
         storage_options,
     ):
-        self.connector_typ = "json"
-        self.df_out = df_out  # used only for printing
+        self.df_out_varname = df_out_varname  # used only for printing
         self.loc = loc
+        # Each column is returned to a separate variable
+        # unlike the C++ readers that return a single TableType
         self.out_vars = out_vars
-        self.out_types = out_types
+        self.out_table_col_types = out_table_col_types
         self.file_name = file_name
-        self.df_colnames = df_colnames
+        self.out_table_col_names = out_table_col_names
         self.orient = orient
         self.convert_dates = convert_dates
         self.precise_float = precise_float
@@ -54,16 +60,10 @@ class JsonReader(ir.Stmt):
         self.storage_options = storage_options
 
     def __repr__(self):  # pragma: no cover
-        return "{} = ReadJson(file={}, col_names={}, types={}, vars={})".format(
-            self.df_out, self.file_name, self.df_colnames, self.out_types, self.out_vars
-        )
+        return f"{self.df_out_varname} = ReadJson(file={self.file_name}, col_names={self.out_table_col_names}, types={self.out_table_col_types}, vars={self.out_vars})"
 
-
-import llvmlite.binding as ll
-
-from bodo.io import json_cpp
-
-ll.add_symbol("json_file_chunk_reader", json_cpp.json_file_chunk_reader)
+    def out_vars_and_types(self) -> list[tuple[str, types.Type]]:
+        return list(zip((x.name for x in self.out_vars), self.out_table_col_types))
 
 
 @intrinsic
@@ -104,9 +104,7 @@ def json_file_chunk_reader(
             builder.module, fnty, name="json_file_chunk_reader"
         )
         obj = builder.call(fn_tp, args)
-        context.compile_internal(
-            builder, lambda: check_and_propagate_cpp_exception(), types.none(), []
-        )  # pragma: no cover
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
         # json_file_chunk_reader returns a pyobject. We need to wrap the result in the
         # proper return type and create a meminfo.
         ret = cgutils.create_struct_proxy(types.stream_reader_type)(context, builder)
@@ -136,22 +134,28 @@ def json_file_chunk_reader(
 
 
 def remove_dead_json(
-    json_node, lives_no_aliases, lives, arg_aliases, alias_map, func_ir, typemap
+    json_node: JsonReader,
+    lives_no_aliases,
+    lives,
+    arg_aliases,
+    alias_map,
+    func_ir,
+    typemap,
 ):
     # TODO
-    new_df_colnames = []
+    new_col_names = []
     new_out_vars = []
     new_out_types = []
 
     for i, col_var in enumerate(json_node.out_vars):
         if col_var.name in lives:
-            new_df_colnames.append(json_node.df_colnames[i])
+            new_col_names.append(json_node.out_table_col_names[i])
             new_out_vars.append(json_node.out_vars[i])
-            new_out_types.append(json_node.out_types[i])
+            new_out_types.append(json_node.out_table_col_types[i])
 
-    json_node.df_colnames = new_df_colnames
+    json_node.out_table_col_names = new_col_names
     json_node.out_vars = new_out_vars
-    json_node.out_types = new_out_types
+    json_node.out_table_col_types = new_out_types
 
     if len(json_node.out_vars) == 0:
         return None
@@ -160,13 +164,13 @@ def remove_dead_json(
 
 
 def json_distributed_run(
-    json_node, array_dists, typemap, calltypes, typingctx, targetctx
+    json_node: JsonReader, array_dists, typemap, calltypes, typingctx, targetctx
 ):
     # Add debug info about column pruning
     if bodo.user_logging.get_verbose_level() >= 1:
         msg = "Finish column pruning on read_json node:\n%s\nColumns loaded %s\n"
         json_source = json_node.loc.strformat()
-        json_cols = json_node.df_colnames
+        json_cols = json_node.out_table_col_names
         bodo.user_logging.log_message(
             "Column Pruning",
             msg,
@@ -176,9 +180,10 @@ def json_distributed_run(
         # Log if any columns use dictionary encoded arrays.
         dict_encoded_cols = [
             c
-            for i, c in enumerate(json_node.df_colnames)
+            for i, c in enumerate(json_node.out_table_col_names)
             if isinstance(
-                json_node.out_types[i], bodo.libs.dict_arr_ext.DictionaryArrayType
+                json_node.out_table_col_types[i],
+                bodo.libs.dict_arr_ext.DictionaryArrayType,
             )
         ]
         # TODO: Test. Dictionary encoding isn't supported yet.
@@ -206,14 +211,14 @@ def json_distributed_run(
     # get column variables
     arg_names = ", ".join("arr" + str(i) for i in range(n_cols))
     func_text = "def json_impl(fname):\n"
-    func_text += "    ({},) = _json_reader_py(fname)\n".format(arg_names)
+    func_text += f"    ({arg_names},) = _json_reader_py(fname)\n"
 
     loc_vars = {}
     exec(func_text, {}, loc_vars)
     json_impl = loc_vars["json_impl"]
     json_reader_py = _gen_json_reader_py(
-        json_node.df_colnames,
-        json_node.out_types,
+        json_node.out_table_col_names,
+        json_node.out_table_col_types,
         typingctx,
         targetctx,
         parallel,
@@ -240,26 +245,26 @@ def json_distributed_run(
     return nodes
 
 
-numba.parfors.array_analysis.array_analysis_extensions[
-    JsonReader
-] = bodo.ir.connector.connector_array_analysis
-distributed_analysis.distributed_analysis_extensions[
-    JsonReader
-] = bodo.ir.connector.connector_distributed_analysis
+numba.parfors.array_analysis.array_analysis_extensions[JsonReader] = (
+    bodo.ir.connector.connector_array_analysis
+)
+distributed_analysis.distributed_analysis_extensions[JsonReader] = (
+    bodo.ir.connector.connector_distributed_analysis
+)
 typeinfer.typeinfer_extensions[JsonReader] = bodo.ir.connector.connector_typeinfer
 # add call to visit json variable
 ir_utils.visit_vars_extensions[JsonReader] = bodo.ir.connector.visit_vars_connector
 ir_utils.remove_dead_extensions[JsonReader] = remove_dead_json
-numba.core.analysis.ir_extension_usedefs[
-    JsonReader
-] = bodo.ir.connector.connector_usedefs
+numba.core.analysis.ir_extension_usedefs[JsonReader] = (
+    bodo.ir.connector.connector_usedefs
+)
 ir_utils.copy_propagate_extensions[JsonReader] = bodo.ir.connector.get_copies_connector
-ir_utils.apply_copy_propagate_extensions[
-    JsonReader
-] = bodo.ir.connector.apply_copies_connector
-ir_utils.build_defs_extensions[
-    JsonReader
-] = bodo.ir.connector.build_connector_definitions
+ir_utils.apply_copy_propagate_extensions[JsonReader] = (
+    bodo.ir.connector.apply_copies_connector
+)
+ir_utils.build_defs_extensions[JsonReader] = (
+    bodo.ir.connector.build_connector_definitions
+)
 distributed_pass.distributed_run_extensions[JsonReader] = json_distributed_run
 
 # XXX: temporary fix pending Numba's #3378
@@ -284,18 +289,15 @@ def _gen_json_reader_py(
 ):
     # TODO: support non-numpy types like strings
     sanitized_cnames = [sanitize_varname(c) for c in col_names]
-    date_inds = ", ".join(
-        str(i) for i, t in enumerate(col_typs) if t.dtype == types.NPDatetime("ns")
-    )
     typ_strs = ", ".join(
         [
-            "{}='{}'".format(s_cname, bodo.ir.csv_ext._get_dtype_str(t))
+            f"{s_cname}='{bodo.ir.csv_ext._get_dtype_str(t)}'"
             for s_cname, t in zip(sanitized_cnames, col_typs)
         ]
     )
     pd_dtype_strs = ", ".join(
         [
-            "'{}':{}".format(cname, bodo.ir.csv_ext._get_pd_dtype_str(t))
+            f"'{cname}':{bodo.ir.csv_ext._get_pd_dtype_str(t)}"
             for cname, t in zip(col_names, col_typs)
         ]
     )
@@ -312,7 +314,7 @@ def _gen_json_reader_py(
     # check_java_installation is a check for hdfs that java is installed
     func_text += "  check_java_installation(fname)\n"
     # if it's an s3 url, get the region and pass it into the c++ code
-    func_text += f"  bucket_region = bodo.io.fs_io.get_s3_bucket_region_njit(fname, parallel={parallel})\n"
+    func_text += f"  bucket_region = bodo.io.fs_io.get_s3_bucket_region_wrapper(fname, parallel={parallel})\n"
     # Add a dummy variable to the dict (empty dicts are not yet supported in numba).
     if storage_options is None:
         storage_options = {}
@@ -321,24 +323,22 @@ def _gen_json_reader_py(
         f"  storage_options_py = get_storage_options_pyobject({str(storage_options)})\n"
     )
     func_text += "  f_reader = bodo.ir.json_ext.json_file_chunk_reader(bodo.libs.str_ext.unicode_to_utf8(fname), "
-    func_text += "    {}, {}, -1, bodo.libs.str_ext.unicode_to_utf8('{}'), bodo.libs.str_ext.unicode_to_utf8(bucket_region), storage_options_py )\n".format(
-        lines, parallel, compression
-    )
+    func_text += f"    {lines}, {parallel}, -1, bodo.libs.str_ext.unicode_to_utf8('{compression}'), bodo.libs.str_ext.unicode_to_utf8(bucket_region), storage_options_py )\n"
     func_text += "  if bodo.utils.utils.is_null_pointer(f_reader._pyobj):\n"
     func_text += "      raise FileNotFoundError('File does not exist')\n"
-    func_text += f"  with objmode({typ_strs}):\n"
+    func_text += f"  with bodo.no_warning_objmode({typ_strs}):\n"
     func_text += f"    df = pd.read_json(f_reader, orient='{orient}',\n"
     func_text += f"       convert_dates = {convert_dates}, \n"
     func_text += f"       precise_float={precise_float}, \n"
     func_text += f"       lines={lines}, \n"
-    func_text += "       dtype={{{}}},\n".format(pd_dtype_strs)
+    func_text += f"       dtype={{{pd_dtype_strs}}},\n"
     func_text += "       )\n"
     func_text += "    bodo.ir.connector.cast_float_to_nullable(df, df_typeref_2)\n"
     for s_cname, cname in zip(sanitized_cnames, col_names):
         func_text += "    if len(df) > 0:\n"
-        func_text += "        {} = df['{}'].values\n".format(s_cname, cname)
+        func_text += f"        {s_cname} = df['{cname}'].values\n"
         func_text += "    else:\n"
-        func_text += "        {} = np.array([])\n".format(s_cname)
+        func_text += f"        {s_cname} = np.array([])\n"
     func_text += "  return ({},)\n".format(", ".join(sc for sc in sanitized_cnames))
     glbls = globals()  # TODO: fix globals after Numba's #3355 is resolved
     glbls.update(
@@ -346,7 +346,6 @@ def _gen_json_reader_py(
             "bodo": bodo,
             "pd": pd,
             "np": np,
-            "objmode": objmode,
             "check_java_installation": check_java_installation,
             "df_typeref": bodo.DataFrameType(
                 tuple(col_typs), bodo.RangeIndexType(None), tuple(col_names)

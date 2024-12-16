@@ -22,39 +22,14 @@
 		<sourceEncoding>UTF-8</sourceEncoding>
 		<project.build.sourceEncoding>${sourceEncoding}</project.build.sourceEncoding>
 		<project.reporting.outputEncoding>${sourceEncoding}</project.reporting.outputEncoding>
-		<java.version>1.11</java.version>
-		<org.slf4j-version>1.7.29</org.slf4j-version>
-		<junit.version>4.12</junit.version>
-		<org.testng.version>6.14.3</org.testng.version>
+		<java.version>11</java.version>
+		<org.slf4j-version>1.7.36</org.slf4j-version>
 	</properties>
 
 	<modules>
-		<module>bodosql-calcite-core</module>
 		<module>bodosql-calcite-application</module>
 	</modules>
 
-	<dependencies>
-		<!-- Test Dependencies -->
-		<dependency>
-			<groupId>junit</groupId>
-			<artifactId>junit</artifactId>
-			<version>${junit.version}</version>
-			<scope>test</scope>
-		</dependency>
-        <dependency>
-            <groupId>org.projectlombok</groupId>
-            <artifactId>lombok</artifactId>
-            <version>1.18.20</version>
-            <scope>test</scope>
-        </dependency>
-		<dependency>
-			<groupId>org.testng</groupId>
-			<artifactId>testng</artifactId>
-			<version>${org.testng.version}</version>
-			<scope>test</scope>
-		</dependency>
-		<!-- https://mvnrepository.com/artifact/org.javatuples/javatuples -->
-	</dependencies>
 	<build>
 		<finalName>${project.artifactId}</finalName>
 		<plugins>

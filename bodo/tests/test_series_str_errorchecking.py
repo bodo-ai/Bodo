@@ -3,7 +3,10 @@ import pandas as pd
 import pytest
 
 import bodo
+from bodo.tests.utils import pytest_pandas
 from bodo.utils.typing import BodoError
+
+pytestmark = pytest_pandas
 
 
 @pytest.fixture(params=[pd.Series(["New_York", "Lisbon", "Tokyo", "Paris", "Munich"])])
@@ -131,9 +134,11 @@ def test_pad_fillchar_nonchar(test_sr, memory_leak_check):
     def impl2(test_sr):
         return test_sr.str.pad(width=13, fillchar="**")
 
-    with pytest.raises(BodoError, match="fillchar must be a character, not"):
+    expected_err_msg = "'fillchar' must be a Character. Got"
+
+    with pytest.raises(BodoError, match=expected_err_msg):
         bodo.jit(impl)(test_sr)
-    with pytest.raises(BodoError, match="fillchar must be a character, not"):
+    with pytest.raises(BodoError, match=expected_err_msg):
         bodo.jit(impl2)(test_sr)
 
 
@@ -145,7 +150,7 @@ def test_pad_width_noint(test_sr, memory_leak_check):
     def impl(test_sr):
         return test_sr.str.pad(width="1", fillchar="*")
 
-    with pytest.raises(BodoError, match="expected an int object"):
+    with pytest.raises(BodoError, match="'width' must be a Integer. Got:"):
         bodo.jit(impl)(test_sr)
 
 
@@ -160,9 +165,11 @@ def test_pad_side_invalid(test_sr, memory_leak_check):
     def impl2(test_sr):
         return test_sr.str.pad(width=13, side=123, fillchar="*")
 
-    with pytest.raises(BodoError, match="Invalid Side"):
+    expected_err_msg = '\'side\' must be a compile time constant and must be "left", "right" or "both". Got:'
+
+    with pytest.raises(BodoError, match=expected_err_msg):
         bodo.jit(impl)(test_sr)
-    with pytest.raises(BodoError, match="Invalid Side"):
+    with pytest.raises(BodoError, match=expected_err_msg):
         bodo.jit(impl2)(test_sr)
 
 
@@ -362,7 +369,7 @@ def test_getitem_ind(ind, memory_leak_check):
             [
                 "this is a regular sentence",
                 "https://docs.python.org/3/tutorial/index.html",
-                np.nan,
+                None,
             ]
         )
     ]
@@ -442,9 +449,11 @@ def test_contains_args(test_sr, memory_leak_check):
     """
 
     def impl(test_sr):
-        return test_sr.str.contains("New", na=np.nan)
+        return test_sr.str.contains("New", na=-1)
 
-    with pytest.raises(BodoError, match="is not supported"):
+    with pytest.raises(
+        BodoError, match="na parameter only supports default value None"
+    ):
         bodo.jit(impl)(test_sr)
 
 
@@ -456,7 +465,7 @@ def test_contains_flags(test_sr, memory_leak_check):
     def impl(test_sr):
         return test_sr.str.contains("New", flags="x")
 
-    with pytest.raises(BodoError, match="expected an int object"):
+    with pytest.raises(BodoError, match="'flags' must be a Integer"):
         bodo.jit(impl)(test_sr)
 
 
@@ -468,9 +477,7 @@ def test_contains_regex(test_sr, memory_leak_check):
     def impl(test_sr):
         return test_sr.str.contains("New", regex="x")
 
-    with pytest.raises(
-        BodoError, match="'regex' argument should be a constant boolean"
-    ):
+    with pytest.raises(BodoError, match="'regex' must be a constant Boolean"):
         bodo.jit(impl)(test_sr)
 
 
@@ -482,7 +489,7 @@ def test_contains_case(test_sr, memory_leak_check):
     def impl(test_sr):
         return test_sr.str.contains("New", case="x")
 
-    with pytest.raises(BodoError, match="'case' argument should be a constant boolean"):
+    with pytest.raises(BodoError, match="'case' must be a constant Boolean"):
         bodo.jit(impl)(test_sr)
 
 

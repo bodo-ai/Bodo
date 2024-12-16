@@ -1,6 +1,5 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
-"""implementations of rolling window functions (sequential and parallel)
-"""
+"""implementations of rolling window functions (sequential and parallel)"""
+
 import numba
 import numpy as np
 import pandas as pd
@@ -14,6 +13,7 @@ import bodo
 from bodo.libs.distributed_api import Reduce_Type
 from bodo.utils.typing import (
     BodoError,
+    assert_bodo_error,
     decode_if_dict_array,
     get_overload_const_func,
     get_overload_const_str,
@@ -85,26 +85,37 @@ def lower_rolling_corr_dummy(context, builder, sig, args):
 def overload_rolling_fixed(
     arr, index_arr, win, minp, center, fname, raw=True, parallel=False
 ):
-    assert is_overload_constant_bool(raw), "raw argument should be constant bool"
+    assert_bodo_error(
+        is_overload_constant_bool(raw), "raw argument should be constant bool"
+    )
     # UDF case
     if is_const_func_type(fname):
         func = _get_apply_func(fname)
-        return lambda arr, index_arr, win, minp, center, fname, raw=True, parallel=False: roll_fixed_apply(
-            arr, index_arr, win, minp, center, parallel, func, raw
+        return (
+            lambda arr,
+            index_arr,
+            win,
+            minp,
+            center,
+            fname,
+            raw=True,
+            parallel=False: roll_fixed_apply(
+                arr, index_arr, win, minp, center, parallel, func, raw
+            )
         )  # pragma: no cover
 
-    assert is_overload_constant_str(fname)
+    assert_bodo_error(is_overload_constant_str(fname))
     func_name = get_overload_const_str(fname)
 
     if func_name not in ("sum", "mean", "var", "std", "count", "median", "min", "max"):
-        raise BodoError("invalid rolling (fixed window) function {}".format(func_name))
+        raise BodoError(f"invalid rolling (fixed window) function {func_name}")
 
     if func_name in ("median", "min", "max"):
         # just using 'apply' since we don't have streaming/linear support
         # TODO: implement linear support similar to others
         func_text = "def kernel_func(A):\n"
         func_text += "  if np.isnan(A).sum() != 0: return np.nan\n"
-        func_text += "  return np.{}(A)\n".format(func_name)
+        func_text += f"  return np.{func_name}(A)\n"
         loc_vars = {}
         exec(func_text, {"np": np}, loc_vars)
         # We can't use numba.njit because it generates a CPUDispatcher which
@@ -114,21 +125,39 @@ def overload_rolling_fixed(
         # knows which function call to insert in the library
         kernel_func = register_jitable(loc_vars["kernel_func"])
 
-        return lambda arr, index_arr, win, minp, center, fname, raw=True, parallel=False: roll_fixed_apply(
-            arr, index_arr, win, minp, center, parallel, kernel_func
+        return (
+            lambda arr,
+            index_arr,
+            win,
+            minp,
+            center,
+            fname,
+            raw=True,
+            parallel=False: roll_fixed_apply(
+                arr, index_arr, win, minp, center, parallel, kernel_func
+            )
         )  # pragma: no cover
 
     init_kernel, add_kernel, remove_kernel, calc_kernel = linear_kernels[func_name]
-    return lambda arr, index_arr, win, minp, center, fname, raw=True, parallel=False: roll_fixed_linear_generic(
-        arr,
+    return (
+        lambda arr,
+        index_arr,
         win,
         minp,
         center,
-        parallel,
-        init_kernel,
-        add_kernel,
-        remove_kernel,
-        calc_kernel,
+        fname,
+        raw=True,
+        parallel=False: roll_fixed_linear_generic(
+            arr,
+            win,
+            minp,
+            center,
+            parallel,
+            init_kernel,
+            add_kernel,
+            remove_kernel,
+            calc_kernel,
+        )
     )  # pragma: no cover
 
 
@@ -136,21 +165,29 @@ def overload_rolling_fixed(
 def overload_rolling_variable(
     arr, on_arr, index_arr, win, minp, center, fname, raw=True, parallel=False
 ):
-    assert is_overload_constant_bool(raw)
+    assert_bodo_error(is_overload_constant_bool(raw))
     # UDF case
     if is_const_func_type(fname):
         func = _get_apply_func(fname)
-        return lambda arr, on_arr, index_arr, win, minp, center, fname, raw=True, parallel=False: roll_variable_apply(
-            arr, on_arr, index_arr, win, minp, center, parallel, func, raw
+        return (
+            lambda arr,
+            on_arr,
+            index_arr,
+            win,
+            minp,
+            center,
+            fname,
+            raw=True,
+            parallel=False: roll_variable_apply(
+                arr, on_arr, index_arr, win, minp, center, parallel, func, raw
+            )
         )  # pragma: no cover
 
-    assert is_overload_constant_str(fname)
+    assert_bodo_error(is_overload_constant_str(fname))
     func_name = get_overload_const_str(fname)
 
     if func_name not in ("sum", "mean", "var", "std", "count", "median", "min", "max"):
-        raise BodoError(
-            "invalid rolling (variable window) function {}".format(func_name)
-        )
+        raise BodoError(f"invalid rolling (variable window) function {func_name}")
 
     if func_name in ("median", "min", "max"):
         # just using 'apply' since we don't have streaming/linear support
@@ -158,7 +195,7 @@ def overload_rolling_variable(
         func_text = "def kernel_func(A):\n"
         func_text += "  arr  = dropna(A)\n"
         func_text += "  if len(arr) == 0: return np.nan\n"
-        func_text += "  return np.{}(arr)\n".format(func_name)
+        func_text += f"  return np.{func_name}(arr)\n"
         loc_vars = {}
         exec(func_text, {"np": np, "dropna": _dropna}, loc_vars)
         # We can't use numba.njit because it generates a CPUDispatcher which
@@ -168,22 +205,42 @@ def overload_rolling_variable(
         # knows which function call to insert in the library
         kernel_func = register_jitable(loc_vars["kernel_func"])
 
-        return lambda arr, on_arr, index_arr, win, minp, center, fname, raw=True, parallel=False: roll_variable_apply(
-            arr, on_arr, index_arr, win, minp, center, parallel, kernel_func
+        return (
+            lambda arr,
+            on_arr,
+            index_arr,
+            win,
+            minp,
+            center,
+            fname,
+            raw=True,
+            parallel=False: roll_variable_apply(
+                arr, on_arr, index_arr, win, minp, center, parallel, kernel_func
+            )
         )  # pragma: no cover
 
     init_kernel, add_kernel, remove_kernel, calc_kernel = linear_kernels[func_name]
-    return lambda arr, on_arr, index_arr, win, minp, center, fname, raw=True, parallel=False: roll_var_linear_generic(
-        arr,
+    return (
+        lambda arr,
         on_arr,
+        index_arr,
         win,
         minp,
         center,
-        parallel,
-        init_kernel,
-        add_kernel,
-        remove_kernel,
-        calc_kernel,
+        fname,
+        raw=True,
+        parallel=False: roll_var_linear_generic(
+            arr,
+            on_arr,
+            win,
+            minp,
+            center,
+            parallel,
+            init_kernel,
+            add_kernel,
+            remove_kernel,
+            calc_kernel,
+        )
     )  # pragma: no cover
 
 
@@ -327,7 +384,7 @@ def roll_fixed_apply(
 def overload_roll_fixed_apply(
     in_arr, index_arr, win, minp, center, parallel, kernel_func, raw=True
 ):
-    assert is_overload_constant_bool(raw)
+    assert_bodo_error(is_overload_constant_bool(raw))
     return roll_fixed_apply_impl
 
 
@@ -457,7 +514,7 @@ def overload_recv_right_compute(
     kernel_func,
     raw,
 ):
-    assert is_overload_constant_bool(raw)
+    assert_bodo_error(is_overload_constant_bool(raw))
     if is_overload_true(raw):
 
         def impl(
@@ -542,7 +599,7 @@ def overload_recv_left_compute(
     kernel_func,
     raw,
 ):
-    assert is_overload_constant_bool(raw)
+    assert_bodo_error(is_overload_constant_bool(raw))
     if is_overload_true(raw):
 
         def impl(
@@ -601,7 +658,7 @@ def roll_fixed_apply_seq(
 def overload_roll_fixed_apply_seq(
     in_arr, index_arr, win, minp, center, kernel_func, raw=True
 ):
-    assert is_overload_constant_bool(raw), "'raw' should be constant bool"
+    assert_bodo_error(is_overload_constant_bool(raw), "'raw' should be constant bool")
 
     def roll_fixed_apply_seq_impl(
         in_arr, index_arr, win, minp, center, kernel_func, raw=True
@@ -632,7 +689,7 @@ def apply_func(kernel_func, data, index_arr, start, end, raw):  # pragma: no cov
 
 @overload(apply_func, no_unliteral=True)
 def overload_apply_func(kernel_func, data, index_arr, start, end, raw):
-    assert is_overload_constant_bool(raw), "'raw' should be constant bool"
+    assert_bodo_error(is_overload_constant_bool(raw), "'raw' should be constant bool")
     if is_overload_true(raw):
         return lambda kernel_func, data, index_arr, start, end, raw: kernel_func(
             data
@@ -664,7 +721,7 @@ def get_offset_nanos(w):  # pragma: no cover
     out = status = 0
     try:
         out = pd.tseries.frequencies.to_offset(w).nanos
-    except:
+    except Exception:
         status = 1
     return out, status
 
@@ -680,7 +737,7 @@ def overload_offset_to_nanos(w):
         return lambda w: w  # pragma: no cover
 
     def impl(w):  # pragma: no cover
-        with numba.objmode(out="int64", status="int64"):
+        with bodo.objmode(out="int64", status="int64"):
             out, status = get_offset_nanos(w)
         if status != 0:
             raise ValueError("Invalid offset value")
@@ -869,8 +926,11 @@ def roll_variable_apply(
 def overload_roll_variable_apply(
     in_arr, on_arr_dt, index_arr, win, minp, center, parallel, kernel_func, raw=True
 ):
-    assert is_overload_constant_bool(raw)
+    assert_bodo_error(is_overload_constant_bool(raw))
     return roll_variable_apply_impl
+
+
+dummy_use = numba.njit(lambda a: None)
 
 
 def roll_variable_apply_impl(
@@ -939,6 +999,9 @@ def roll_variable_apply_impl(
                 bodo.libs.distributed_api.wait(l_recv_req_idx, True)
                 bodo.libs.distributed_api.wait(l_recv_t_req_idx, True)
 
+            # make sure unused buffer is not released before communication is done
+            dummy_use(l_recv_t_buff_idx)
+
             # values with start == 0 could potentially have left halo starts
             num_zero_starts = 0
             for i in range(0, N):
@@ -996,7 +1059,7 @@ def overload_recv_left_var_compute(
     kernel_func,
     raw,
 ):
-    assert is_overload_constant_bool(raw)
+    assert_bodo_error(is_overload_constant_bool(raw))
     if is_overload_true(raw):
 
         def impl(
@@ -1057,7 +1120,7 @@ def roll_variable_apply_seq(
 def overload_roll_variable_apply_seq(
     in_arr, on_arr, index_arr, win, minp, start, end, kernel_func, raw
 ):
-    assert is_overload_constant_bool(raw)
+    assert_bodo_error(is_overload_constant_bool(raw))
     if is_overload_true(raw):
         return roll_variable_apply_seq_impl
 
@@ -1332,8 +1395,9 @@ linear_kernels = {
 
 # shift -------------
 
+
 # dummy
-def shift():  # pragma: no cover
+def shift(in_arr, shift, parallel, default_fill_value=None):  # pragma: no cover
     return
 
 
@@ -1439,7 +1503,9 @@ def shift_seq(
             bodo.libs.array_kernels.setna_slice(output, slice(None, shift))
         else:
             for i in range(shift):
-                output[i] = bodo.utils.conversion.unbox_if_timestamp(default_fill_value)
+                output[i] = bodo.utils.conversion.unbox_if_tz_naive_timestamp(
+                    default_fill_value
+                )
 
     # range is shift..N for positive shift, 0..N+shift for negative shift
     start = max(shift, 0)
@@ -1457,7 +1523,9 @@ def shift_seq(
             bodo.libs.array_kernels.setna_slice(output, slice(shift, None))
         else:
             for i in range(end, N):
-                output[i] = bodo.utils.conversion.unbox_if_timestamp(default_fill_value)
+                output[i] = bodo.utils.conversion.unbox_if_tz_naive_timestamp(
+                    default_fill_value
+                )
 
     return output
 
@@ -1503,10 +1571,19 @@ def is_supported_shift_array_type(arr_type):
                 or arr_type.dtype in [bodo.datetime64ns, bodo.timedelta64ns]
             )
         )
-        or isinstance(arr_type, (bodo.IntegerArrayType, bodo.DecimalArrayType))
+        or isinstance(
+            arr_type,
+            (
+                bodo.IntegerArrayType,
+                bodo.FloatingArrayType,
+                bodo.DecimalArrayType,
+                bodo.DatetimeArrayType,
+                bodo.TimeArrayType,
+            ),
+        )
         or arr_type
         in (
-            bodo.boolean_array,
+            bodo.boolean_array_type,
             bodo.datetime_date_array_type,
             bodo.string_array_type,
             bodo.binary_array_type,
@@ -1516,6 +1593,7 @@ def is_supported_shift_array_type(arr_type):
 
 
 # pct_change -------------
+
 
 # dummy
 def pct_change():  # pragma: no cover
@@ -1813,7 +1891,7 @@ def _handle_small_data(
         )
     else:
         all_out = np.empty(all_N, np.float64)
-    bodo.libs.distributed_api.bcast(all_out)
+    bodo.libs.distributed_api.bcast_preallocated(all_out)
     # 1D_Var chunk sizes can be variable, TODO: use 1D flag to avoid exscan
     start = bodo.libs.distributed_api.dist_exscan(N, np.int32(Reduce_Type.Sum.value))
     end = start + N
@@ -1843,7 +1921,7 @@ def _handle_small_data_apply(
         )
     else:
         all_out = np.empty(all_N, np.float64)
-    bodo.libs.distributed_api.bcast(all_out)
+    bodo.libs.distributed_api.bcast_preallocated(all_out)
     # 1D_Var chunk sizes can be variable, TODO: use 1D flag to avoid exscan
     start = bodo.libs.distributed_api.dist_exscan(N, np.int32(Reduce_Type.Sum.value))
     end = start + N
@@ -1895,7 +1973,7 @@ def _handle_small_data_shift(
         n_chars = bcast_n_chars_if_str_binary_arr(in_arr)
         all_out = alloc_shift(all_N, in_arr, (n_chars,), fill_value=default_fill_value)
 
-    bodo.libs.distributed_api.bcast(all_out)
+    bodo.libs.distributed_api.bcast_preallocated(all_out)
     # 1D_Var chunk sizes can be variable, TODO: use 1D flag to avoid exscan
     start = bodo.libs.distributed_api.dist_exscan(N, np.int32(Reduce_Type.Sum.value))
     end = start + N
@@ -1918,7 +1996,7 @@ def _handle_small_data_pct_change(in_arr, shift, rank, n_pes):  # pragma: no cov
         all_out = pct_change_seq(all_in_arr, shift)
     else:
         all_out = alloc_pct_change(all_N, in_arr)
-    bodo.libs.distributed_api.bcast(all_out)
+    bodo.libs.distributed_api.bcast_preallocated(all_out)
     # 1D_Var chunk sizes can be variable, TODO: use 1D flag to avoid exscan
     start = bodo.libs.distributed_api.dist_exscan(N, np.int32(Reduce_Type.Sum.value))
     end = start + N
@@ -1997,7 +2075,7 @@ def _handle_small_data_variable(
         )
     else:
         all_out = np.empty(all_N, np.float64)
-    bodo.libs.distributed_api.bcast(all_out)
+    bodo.libs.distributed_api.bcast_preallocated(all_out)
     # 1D_Var chunk sizes can be variable, TODO: use 1D flag to avoid exscan
     start = bodo.libs.distributed_api.dist_exscan(N, np.int32(Reduce_Type.Sum.value))
     end = start + N
@@ -2035,7 +2113,7 @@ def _handle_small_data_variable_apply(
         )
     else:
         all_out = np.empty(all_N, np.float64)
-    bodo.libs.distributed_api.bcast(all_out)
+    bodo.libs.distributed_api.bcast_preallocated(all_out)
     # 1D_Var chunk sizes can be variable, TODO: use 1D flag to avoid exscan
     start = bodo.libs.distributed_api.dist_exscan(N, np.int32(Reduce_Type.Sum.value))
     end = start + N
@@ -2095,11 +2173,11 @@ def alloc_pct_change(n, A):  # pragma: no cover
 def alloc_pct_change_overload(n, A):
     """allocate output array for pct_change(). The output is float for int input."""
 
-    # output of int is float
+    # output of Numpy int is float to set NAs
     if isinstance(A.dtype, types.Integer):
         return lambda n, A: np.empty(n, np.float64)  # pragma: no cover
 
-    return lambda n, A: np.empty(n, A.dtype)  # pragma: no cover
+    return lambda n, A: bodo.utils.utils.alloc_type(n, A, (-1,))  # pragma: no cover
 
 
 def prep_values(A):  # pragma: no cover

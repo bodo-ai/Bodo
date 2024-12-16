@@ -6,7 +6,10 @@ import pandas as pd
 import pytest
 
 import bodo
+from bodo.tests.utils import pytest_pandas
 from bodo.utils.typing import BodoError
+
+pytestmark = pytest_pandas
 
 
 def test_isin(memory_leak_check):
@@ -257,7 +260,7 @@ def test_series_groupby_by_arg_unsupported_types(memory_leak_check):
                 Decimal("1.6"),
                 Decimal("-0.2"),
                 Decimal("44.2"),
-                np.nan,
+                None,
                 Decimal("0"),
             ]
         )
@@ -457,19 +460,65 @@ def test_np_select_series_cond(memory_leak_check):
 
 def test_series_init_dict_non_const_keys():
     """
-    Tests the error message when initializing series with non constant keyed dicts.
+    Tests the error message when initializing series with non constant keyed dicts
+    that cannot be unrolled.
     """
 
     @bodo.jit
     def test_impl():
-        init_dict = dict()
+        init_dict = dict()  # noqa: C408
+        n = 100 if np.random.rand() > 0.5 else 10
+        for i in range(n):
+            init_dict[f"idx_{i}"] = 1
+        return pd.Series(init_dict)
+
+    with pytest.raises(
+        BodoError,
+        match="pd.Series\\(\\): When initializing series with a dictionary, it is required that the dict has constant keys",
+    ):
+        test_impl()
+
+
+def test_series_init_dict_constant_unrolling():
+    """
+    Tests that we can build a DataFrame from a constant dictionary when the keys
+    can be constant by unrolling the loop. This requires further optimizations.
+    See BSE-4021.
+    """
+
+    @bodo.jit
+    def test_impl():
+        # TODO: Bodo should be able to unroll this loop.
+        init_dict = dict()  # noqa: C408
         for i in range(10):
             init_dict[f"idx_{i}"] = 1
         return pd.Series(init_dict)
 
     with pytest.raises(
         BodoError,
-        match="pd.Series\\(\\): When intializing series with a dictionary, it is required that the dict has constant keys",
+        match="pd.Series\\(\\): When initializing series with a dictionary, it is required that the dict has constant keys",
+    ):
+        test_impl()
+
+
+def test_series_init_build_map_constant_unrolling():
+    """
+    Tests that we can build a DataFrame from a dictionary literal when the keys
+    can be constant by unrolling the loop. This requires further optimizations.
+    See BSE-4021.
+    """
+
+    @bodo.jit
+    def test_impl():
+        # TODO: Bodo should be able to unroll this loop.
+        init_dict = {}
+        for i in range(10):
+            init_dict[f"idx_{i}"] = 1
+        return pd.Series(init_dict)
+
+    with pytest.raises(
+        BodoError,
+        match="pd.Series\\(\\): When initializing series with a dictionary, it is required that the dict has constant keys",
     ):
         test_impl()
 
@@ -542,22 +591,6 @@ def test_heterogenous_series_unsupported_method(memory_leak_check):
         return df.apply(lambda row: row.any(), axis=1)
 
     df = pd.DataFrame({"A": [1, 2, 3, 4] * 5, "B": ["a", "c", "Er2w", ""] * 5})
-    err_msg = re.escape("HeterogeneousSeries.any not supported yet")
+    err_msg = re.escape("HeterogeneousSeries.any() not supported yet")
     with pytest.raises(BodoError, match=err_msg):
         test_impl(df)
-
-
-@pytest.mark.slow()
-def test_pd_float_array_err():
-    """Test using a series with an underlying FloatingArray throws a reasonable error"""
-    S = pd.Series(pd.array([1.0, 2.0, 3.0, 4.0, 8.0] * 2))
-
-    @bodo.jit
-    def impl(S):
-        return S
-
-    err_msg = re.escape(
-        "Bodo does not currently support Series constructed with Pandas FloatingArray.\nPlease use Series.astype() to convert any input Series input to Bodo JIT functions."
-    )
-    with pytest.raises(BodoError, match=err_msg):
-        impl(S)

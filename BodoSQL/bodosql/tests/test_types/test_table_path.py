@@ -1,21 +1,31 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
 Tests various components of the TablePath type both inside and outside a
 direct BodoSQLContext.
 """
+
+import io
+import json
 import os
 
-import bodosql
 import pandas as pd
 import pytest
-from bodosql.tests.utils import _check_query_equal, check_num_parquet_readers
 
 import bodo
+import bodosql
+from bodo.mpi4py import MPI
+from bodo.sql_plan_cache import BodoSqlPlanCache
+from bodo.tests.user_logging_utils import (
+    check_logger_msg,
+    create_string_io_logger,
+    set_logging_stream,
+)
 from bodo.tests.utils import (
     TypeInferenceTestPipeline,
     check_func,
     get_snowflake_connection_string,
+    pytest_mark_snowflake,
 )
+from bodosql.tests.utils import _check_query_equal, check_num_parquet_readers
 
 
 @pytest.fixture(
@@ -29,7 +39,7 @@ from bodo.tests.utils import (
 )
 def dummy_table_paths(request):
     """
-    List of table paths that should be suppported.
+    List of table paths that should be supported.
     None of these actually point to valid data
     """
     return request.param
@@ -37,18 +47,19 @@ def dummy_table_paths(request):
 
 @pytest.fixture(
     params=[
-        "bodosql/tests/data/sample-parquet-data/no_index.pq",
-        "bodosql/tests/data/sample-parquet-data/numeric_index.pq",
-        "bodosql/tests/data/sample-parquet-data/string_index.pq",
+        "sample-parquet-data/no_index.pq",
+        "sample-parquet-data/numeric_index.pq",
+        "sample-parquet-data/string_index.pq",
     ]
 )
-def parquet_filepaths(request):
+def parquet_filepaths(request, datapath):
     """
     List of files used to load data.
     """
-    return request.param
+    return datapath(request.param)
 
 
+@pytest.mark.parquet
 @pytest.mark.slow
 def test_table_path_lower_constant(dummy_table_paths, memory_leak_check):
     """
@@ -61,6 +72,7 @@ def test_table_path_lower_constant(dummy_table_paths, memory_leak_check):
     check_func(impl, ())
 
 
+@pytest.mark.parquet
 @pytest.mark.slow
 def test_table_path_boxing(dummy_table_paths, memory_leak_check):
     """
@@ -74,6 +86,7 @@ def test_table_path_boxing(dummy_table_paths, memory_leak_check):
 
 
 @pytest.mark.parametrize("reorder_io", [True, False, None])
+@pytest.mark.parquet
 @pytest.mark.slow
 def test_table_path_pq_constructor(reorder_io, memory_leak_check):
     """
@@ -88,8 +101,9 @@ def test_table_path_pq_constructor(reorder_io, memory_leak_check):
 
 @pytest.mark.parametrize("reorder_io", [True, False, None])
 @pytest.mark.slow
+@pytest.mark.parquet
 def test_table_path_pq_bodosqlContext_python(
-    reorder_io, parquet_filepaths, datapath, memory_leak_check
+    reorder_io, parquet_filepaths, memory_leak_check
 ):
     """
     Test using the table path constructor inside a BodoSQLContext that is in Python.
@@ -98,7 +112,7 @@ def test_table_path_pq_bodosqlContext_python(
     def impl(filename):
         bc = bodosql.BodoSQLContext(
             {
-                "parquet_table": bodosql.TablePath(
+                "PARQUET_TABLE": bodosql.TablePath(
                     filename, "parquet", reorder_io=reorder_io
                 )
             }
@@ -108,6 +122,9 @@ def test_table_path_pq_bodosqlContext_python(
     filename = parquet_filepaths
     py_output = pd.read_parquet(filename)
     bodosql_output = impl(filename)
+    if bodo.get_size() != 1:
+        bodosql_output = bodo.allgatherv(bodosql_output)
+
     _check_query_equal(
         bodosql_output,
         py_output,
@@ -121,10 +138,11 @@ def test_table_path_pq_bodosqlContext_python(
     )
 
 
+@pytest.mark.parquet
 @pytest.mark.slow
 @pytest.mark.parametrize("reorder_io", [True, False, None])
 def test_table_path_pq_bodosqlContext_jit(
-    reorder_io, parquet_filepaths, datapath, memory_leak_check
+    reorder_io, parquet_filepaths, memory_leak_check
 ):
     """
     Test using the table path constructor inside a BodoSQLContext in JIT.
@@ -133,7 +151,7 @@ def test_table_path_pq_bodosqlContext_jit(
     def impl(filename):
         bc = bodosql.BodoSQLContext(
             {
-                "parquet_table": bodosql.TablePath(
+                "PARQUET_TABLE": bodosql.TablePath(
                     filename, "parquet", reorder_io=reorder_io
                 )
             }
@@ -142,24 +160,23 @@ def test_table_path_pq_bodosqlContext_jit(
 
     filename = parquet_filepaths
 
-    py_output = pd.read_parquet(filename)
+    # Should SQL still produce index columns?
+    # Should it include an index column within the data?
+    py_output = pd.read_parquet(filename).reset_index(drop=True)
     check_func(impl, (filename,), py_output=py_output)
 
 
-@pytest.mark.skipif(
-    "AGENT_NAME" not in os.environ,
-    reason="requires Azure Pipelines",
-)
+@pytest_mark_snowflake
 def test_table_path_sql_bodosqlContext_python(memory_leak_check):
     def impl(table_name, conn_str):
         bc = bodosql.BodoSQLContext(
-            {"sql_table": bodosql.TablePath(table_name, "sql", conn_str=conn_str)}
+            {"SQL_TABLE": bodosql.TablePath(table_name, "sql", conn_str=conn_str)}
         )
         return bc.sql(
-            "select L_SUPPKEY from sql_table ORDER BY L_ORDERKEY, L_PARTKEY, L_SUPPKEY LIMIT 70"
+            "select L_SUPPKEY from SQL_TABLE ORDER BY L_ORDERKEY, L_PARTKEY, L_SUPPKEY LIMIT 70"
         )
 
-    table_name = "lineitem"
+    table_name = "LINEITEM"
     db = "SNOWFLAKE_SAMPLE_DATA"
     schema = "TPCH_SF1"
     conn_str = get_snowflake_connection_string(db, schema)
@@ -168,6 +185,8 @@ def test_table_path_sql_bodosqlContext_python(memory_leak_check):
         conn_str,
     )
     bodosql_output = impl(table_name, conn_str)
+    if bodo.get_size() != 1:
+        bodosql_output = bodo.allgatherv(bodosql_output)
     _check_query_equal(
         bodosql_output,
         py_output,
@@ -182,26 +201,22 @@ def test_table_path_sql_bodosqlContext_python(memory_leak_check):
     )
 
 
-@pytest.mark.skipif(
-    "AGENT_NAME" not in os.environ,
-    reason="requires Azure Pipelines",
-)
+@pytest_mark_snowflake
 def test_table_path_sql_bodosqlContext_jit(memory_leak_check):
     def impl(table_name):
         bc = bodosql.BodoSQLContext(
-            {"sql_table": bodosql.TablePath(table_name, "sql", conn_str=conn_str)}
+            {"SQL_TABLE": bodosql.TablePath(table_name, "sql", conn_str=conn_str)}
         )
         return bc.sql("select L_SUPPKEY from sql_table ORDER BY L_SUPPKEY LIMIT 70")
 
-    table_name = "lineitem"
+    table_name = "LINEITEM"
     db = "SNOWFLAKE_SAMPLE_DATA"
     schema = "TPCH_SF1"
     conn_str = get_snowflake_connection_string(db, schema)
     py_output = pd.read_sql(
         f"select L_SUPPKEY from {table_name} ORDER BY L_SUPPKEY LIMIT 70", conn_str
     )
-    # Names won't match because BodoSQL keep names uppercase.
-    py_output.columns = ["L_SUPPKEY"]
+    py_output.columns = py_output.columns.str.upper()
     # Set check_dtype=False because BodoSQL loads columns with the actual Snowflake type
     check_func(
         impl,
@@ -212,6 +227,7 @@ def test_table_path_sql_bodosqlContext_jit(memory_leak_check):
     )
 
 
+@pytest.mark.parquet
 @pytest.mark.slow
 def test_table_path_avoid_unused_table_jit(
     parquet_filepaths, datapath, memory_leak_check
@@ -224,8 +240,8 @@ def test_table_path_avoid_unused_table_jit(
     def impl(f1, f2):
         bc = bodosql.BodoSQLContext(
             {
-                "parquet_table": bodosql.TablePath(f1, "parquet"),
-                "unused_table": bodosql.TablePath(f2, "parquet"),
+                "PARQUET_TABLE": bodosql.TablePath(f1, "parquet"),
+                "UNUSED_TABLE": bodosql.TablePath(f2, "parquet"),
             }
         )
         return bc.sql("select * from parquet_table")
@@ -233,14 +249,16 @@ def test_table_path_avoid_unused_table_jit(
     f1 = parquet_filepaths
     f2 = datapath("tpcxbb-test-data") + "/web_sales"
 
-    py_output = pd.read_parquet(f1)
+    py_output = pd.read_parquet(f1).reset_index(drop=True)
     check_func(impl, (f1, f2), py_output=py_output)
     bodo_func = bodo.jit(impl, pipeline_class=TypeInferenceTestPipeline)
     bodo_func(f1, f2)
     check_num_parquet_readers(bodo_func, 1)
 
 
+@pytest.mark.parquet
 @pytest.mark.slow
+@pytest.mark.skip(reason="[BSE-787] TODO: support categorical read cast on tables")
 def test_table_path_avoid_unused_table_python(
     parquet_filepaths, datapath, memory_leak_check
 ):
@@ -251,8 +269,8 @@ def test_table_path_avoid_unused_table_python(
     def impl(f1, f2):
         bc = bodosql.BodoSQLContext(
             {
-                "parquet_table": bodosql.TablePath(f1, "parquet"),
-                "unused_table": bodosql.TablePath(f2, "parquet"),
+                "PARQUET_TABLE": bodosql.TablePath(f1, "parquet"),
+                "UNUSED_TABLE": bodosql.TablePath(f2, "parquet"),
             }
         )
         return bc.sql("select * from parquet_table")
@@ -276,18 +294,19 @@ def test_table_path_avoid_unused_table_python(
     # TODO: Check the IR from Python.
 
 
+@pytest.mark.parquet
 @pytest.mark.slow
-def test_table_path_categorical_unused_table_jit(datapath):
-    # TODO: Add memory leak check
+@pytest.mark.skip(reason="[BSE-787] TODO: support categorical read cast on tables")
+def test_table_path_categorical_unused_table_jit(datapath, memory_leak_check):
     """
-    Tests loading a paritioned parquet table in JIT.
+    Tests loading a partitioned parquet table in JIT.
     """
 
     def impl(f1, f2):
         bc = bodosql.BodoSQLContext(
             {
-                "parquet_table": bodosql.TablePath(f1, "parquet"),
-                "unused_table": bodosql.TablePath(f2, "parquet"),
+                "PARQUET_TABLE": bodosql.TablePath(f1, "parquet"),
+                "UNUSED_TABLE": bodosql.TablePath(f2, "parquet"),
             }
         )
         return bc.sql("select * from parquet_table")
@@ -303,18 +322,19 @@ def test_table_path_categorical_unused_table_jit(datapath):
     check_num_parquet_readers(bodo_func, 1)
 
 
+@pytest.mark.parquet
 @pytest.mark.slow
-def test_table_path_categorical_unused_table_python(datapath):
-    # TODO: Add memory leak check
+@pytest.mark.skip(reason="[BSE-787] TODO: support categorical read cast on tables")
+def test_table_path_categorical_unused_table_python(datapath, memory_leak_check):
     """
-    Tests loading a paritioned parquet table in Python.
+    Tests loading a partitioned parquet table in Python.
     """
 
     def impl(f1, f2):
         bc = bodosql.BodoSQLContext(
             {
-                "parquet_table": bodosql.TablePath(f1, "parquet"),
-                "unused_table": bodosql.TablePath(f2, "parquet"),
+                "PARQUET_TABLE": bodosql.TablePath(f1, "parquet"),
+                "UNUSED_TABLE": bodosql.TablePath(f2, "parquet"),
             }
         )
         return bc.sql("select * from parquet_table")
@@ -339,4 +359,136 @@ def test_table_path_categorical_unused_table_python(datapath):
     # TODO: Check the IR from Python.
 
 
-# TODO: Add a test with muliple tables to check reorder_io works as expected.
+@pytest.mark.parquet
+@pytest.mark.slow
+@pytest.mark.skip(reason="[BSE-787] TODO: support categorical read cast on tables")
+def test_table_path_timing_debug_message(datapath, memory_leak_check):
+    """
+    Tests that loading a table using TablePath with bodo.set_verbose_level(1)
+    automatically adds a debug message about IO.
+    """
+
+    @bodo.jit
+    def impl(f1):
+        bc = bodosql.BodoSQLContext(
+            {
+                "PARQUET_TABLE": bodosql.TablePath(f1, "parquet"),
+            }
+        )
+        return bc.sql("select * from parquet_table")
+
+    f1 = datapath("sample-parquet-data/partitioned")
+
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        impl(f1)
+        check_logger_msg(stream, "Execution time for reading table parquet_table")
+
+
+@pytest.mark.parquet
+@pytest.mark.slow
+def test_parquet_row_count_estimation(datapath, memory_leak_check):
+    """
+    Tests that loading a parquet table using TablePath produces a row count estimation.
+    """
+
+    f1 = datapath("sample-parquet-data/partitioned")
+    bc = bodosql.BodoSQLContext(
+        {
+            "PARQUET_TABLE": bodosql.TablePath(f1, "parquet"),
+        }
+    )
+
+    assert bc.estimated_row_counts == [10]
+
+
+@pytest.mark.parquet
+@pytest.mark.slow
+def test_parquet_statistics_file(datapath, memory_leak_check):
+    """
+    Test that providing a statistics file through the TablePath API
+    works as expected.
+    """
+
+    f1 = datapath("tpch-test-data/parquet/orders.parquet")
+    stats_file = datapath("tpch-test-data/stats_orders.json")
+    table = bodosql.TablePath(f1, "parquet", statistics_file=stats_file)
+    bc = bodosql.BodoSQLContext({"ORDERS": table})
+
+    with open(stats_file) as f:
+        expected_stats = json.load(f)
+
+    assert "row_count" in expected_stats
+    expected_row_count = expected_stats["row_count"]
+    assert "ndv" in expected_stats
+    expected_ndvs = expected_stats["ndv"]
+    assert table.estimated_row_count == expected_row_count
+    assert table._statistics["row_count"] == expected_row_count
+    assert table._statistics["ndv"] == expected_ndvs
+    assert table._statistics["ndv"] == expected_ndvs
+    assert bc.estimated_ndvs == [expected_ndvs]
+
+    # Verify that the information was properly propagated to the planner by
+    # running a simple query and checking the distinctness estimates.
+    plan = bc.generate_plan("select * from orders", show_cost=True)
+    assert (
+        "distinct estimates: $0 = 3E4 values, $1 = 2E3 values, $2 = 3E0 values, $3 = 2.9987E4 values, $4 = 2.406E3 values, $5 = 5E0 values, $6 = 1E3 values, $7 = 1E0 values, $8 = 2.9984E4 values"
+        in plan
+    )
+    assert "3e4 rows" in plan
+
+
+@pytest.mark.parquet
+@pytest.mark.slow
+def test_parquet_statistics_file_jit(datapath, memory_leak_check, tmp_path):
+    """
+    Test that statistics provided to a TablePath instance through a statistics
+    file are correctly propagated to the planner when a query is executed
+    from inside a jit function.
+    """
+
+    comm = MPI.COMM_WORLD
+    tmp_path_rank0 = comm.bcast(str(tmp_path))
+
+    orig_sql_plan_cache_loc = bodo.sql_plan_cache_loc
+    bodo.sql_plan_cache_loc = str(tmp_path_rank0)
+
+    f1 = datapath("tpch-test-data/parquet/orders.parquet")
+    stats_file = datapath("tpch-test-data/stats_orders.json")
+    table = bodosql.TablePath(f1, "parquet", statistics_file=stats_file)
+    bc = bodosql.BodoSQLContext({"ORDERS": table})
+    query = "select * from orders"
+
+    @bodo.jit
+    def test1(bc, query):
+        return bc.sql(query)
+
+    try:
+        test1(bc, query)
+        bodo.barrier()
+
+        # Get the cache location from BodoSqlPlanCache
+        expected_cache_loc = BodoSqlPlanCache.get_cache_loc(query)
+
+        # Verify that the file exists. Read the file and do some keyword checks.
+        assert os.path.isfile(
+            expected_cache_loc
+        ), f"Plan not found at expected cache location ({expected_cache_loc})"
+
+        with open(expected_cache_loc) as f:
+            plan_str = f.read()
+        bodo.barrier()
+
+        assert (
+            "distinct estimates: $0 = 3E4 values, $1 = 2E3 values, $2 = 3E0 values, $3 = 2.9987E4 values, $4 = 2.406E3 values, $5 = 5E0 values, $6 = 1E3 values, $7 = 1E0 values, $8 = 2.9984E4 values"
+            in plan_str
+        )
+        assert "3e4 rows" in plan_str
+
+    finally:
+        # Restore original value in case of failure
+        bodo.sql_plan_cache_loc = orig_sql_plan_cache_loc
+
+
+# TODO: Add a test with multiple tables to check reorder_io works as expected.

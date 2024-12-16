@@ -1,121 +1,146 @@
 """
 Contains information used to access the Java package via py4j.
 """
+
 import os
 import sys
-from enum import Enum, auto
-from typing import Any, List, NamedTuple
+import typing as pt
+import warnings
 
-import py4j
-import py4j.protocol
-
-# ------------------------------- Monkey Patch -------------------------------
-# Required because by default, Py4J converts Python integers into one of the
-# Java Integer types by looking at the runtime value and if it fits between
-# INT_MIN and INT_MAX. This can cause issues in lists or collections where
-# we need all the numbers to either be ints or longs. This monkey patch
-# essentially implements the recommended fix from this GitHub issue:
-# https://github.com/py4j/py4j/issues/374
-# This code block must run before any use of Py4J, even by another library
-# like PySpark
-# TODO: Look into UnitTest patch to eliminate the order req
-
-
-class JavaType(Enum):
-    PRIMITIVE_INT = auto()
-    PRIMITIVE_LONG = auto()
-
-
-class TypeInt(NamedTuple):
-    value: int
-    java_type: JavaType
-
-
-py4j.protocol.JavaType = JavaType  # type: ignore
-py4j.protocol.TypeInt = TypeInt  # type: ignore
-
-
-get_command_part_old = py4j.protocol.get_command_part
-
-
-def get_command_part(parameter, python_proxy_pool=None):
-    if isinstance(parameter, TypeInt):
-        if parameter.java_type is JavaType.PRIMITIVE_INT:
-            type_key = py4j.protocol.INTEGER_TYPE
-        elif parameter.java_type is JavaType.PRIMITIVE_LONG:
-            type_key = py4j.protocol.LONG_TYPE
-        else:
-            raise ValueError("Invalid Type Hint for Java Integer Type")
-
-        return type_key + py4j.protocol.smart_decode(parameter.value) + "\n"
-    else:
-        return get_command_part_old(parameter, python_proxy_pool)
-
-
-py4j.protocol.get_command_part = get_command_part
-
-
-# ------------------------------- Helper Code -------------------------------
-from mpi4py import MPI
-from py4j.java_collections import ListConverter
+from py4j.java_collections import ListConverter, MapConverter
 from py4j.java_gateway import GatewayParameters, JavaGateway, launch_gateway
 
+if pt.TYPE_CHECKING:
+    from py4j.java_gateway import JavaClass
+
+
 # The gateway object used to communicate with the JVM.
-gateway = None
+gateway: JavaGateway | None = None
+# Output path for redirecting Java output
+global_redirect_path: str | None = None
 
 # Java Classes used by the Python Portion
-CLASSES = {}
+CLASSES: dict[str, "JavaClass"] = {}
 
 # Dictionary mapping table info -> Reader obj
-table_dict = {}
+catalog_dict = {}
 
 
-def launch_jvm():
+# Core site location.
+_CORE_SITE_PATH = ""
+
+
+def set_core_site_path(path: str):
+    global _CORE_SITE_PATH
+    _CORE_SITE_PATH = path
+
+
+def get_core_site_path() -> str:
+    return _CORE_SITE_PATH
+
+
+def get_java_path() -> str:
     """
-    Launches the gateway server, if it is not already running, and returns
-    a gateway object.
+    Ensure that the Java executable Py4J uses is the OpenJDK package
+    installed in the current conda environment
     """
-    global CLASSES, gateway
 
-    rank = MPI.COMM_WORLD.Get_rank()
-    assert (
-        rank == 0
-    ), f"Rank {rank} is trying to launch the JVM. Only rank 0 should launch it."
+    # Currently inside a conda subenvironment
+    # except for platform
+    if (
+        "CONDA_PREFIX" in os.environ
+        and "BODO_PLATFORM_WORKSPACE_UUID" not in os.environ
+    ):
+        conda_prefix = os.environ["CONDA_PREFIX"]
+        if "JAVA_HOME" in os.environ:
+            java_home = os.environ["JAVA_HOME"]
+            if java_home != os.path.join(conda_prefix, "lib", "jvm"):
+                warnings.warn(
+                    "$JAVA_HOME is currently set to a location that isn't installed by Conda. "
+                    "It is recommended that you use OpenJDK v11 from Conda with the Bodo Iceberg Connector. To do so, first run\n"
+                    "    conda install openjdk=11 -c conda-forge\n"
+                    "and then reactivate your environment via\n"
+                    f"    conda deactivate && conda activate {conda_prefix}"
+                )
+            return os.path.join(java_home, "bin", "java")
 
-    if gateway is None:
+        else:
+            warnings.warn(
+                "$JAVA_HOME is currently unset. This occurs when OpenJDK is not installed in your conda environment or when your environment has recently changed but not reactivated. The Bodo Iceberg Connector will default to using you system's Java."
+                "It is recommended that you use OpenJDK v11 from Conda with the Bodo Iceberg Connector. To do so, first run\n"
+                "    conda install openjdk=11 -c conda-forge\n"
+                "and then reactivate your environment via\n"
+                f"    conda deactivate && conda activate {conda_prefix}"
+            )
+            # TODO: In this case, should we default to conda java?
+            return "java"
+
+    # Don't do anything in a pip environment
+    # TODO: Some debug logging would be good here
+    return "java"
+
+
+def launch_jvm() -> JavaGateway:
+    """
+    Launches Py4J's Java Gateway server if it is not already running.
+    The gateway server manages a backend Java process that has access to
+    various Iceberg, Hive, and Hadoop Java libraries.
+
+    Returns:
+        The active Py4J java gateway instance
+    """
+    global CLASSES, gateway, global_redirect_path
+
+    # If provided, redirect stdout and stderr to the specified file.
+    # Useful for testing because capsys will error when capturing Java output
+    # If the environment variable changes, we will relaunch the JVM
+    # TODO: Shared logging between Python and Java
+    redirect_path = os.environ.get("BODO_ICEBERG_OUTPUT_PATH", None)
+
+    if gateway is None or global_redirect_path != redirect_path:
+        # Set redirect_path value to current
+        global_redirect_path = redirect_path
+
         cur_file_path = os.path.dirname(os.path.abspath(__file__))
         full_path = os.path.join(cur_file_path, "jars", "bodo-iceberg-reader.jar")
-
-        # TODO: we do not currently specify a port here. In this case, launch_gateway launches
-        # using an arbitrary free ephemeral port. Launching with specified port can lead to
-        # hangs if the port is already in use, and has caused errors on CI, so we are ommiting it
-        # for now
 
         # Die on exit will close the gateway server when this python process exits or is killed.
         # We don't need to specify a classpath here, as the executable JAR has a baked in default
         # classpath, which will point to the folder that contains all the needed dependencies.
-        gateway_port = launch_gateway(
-            jarpath=full_path,
-            redirect_stderr=sys.stderr,
-            redirect_stdout=sys.stdout,
-            die_on_exit=True,
+        java_path = get_java_path()
+        print(f"Launching JVM with Java executable: {java_path}", file=sys.stderr)
+
+        redirectf = None if redirect_path is None else open(redirect_path, "w")
+
+        gateway_port = pt.cast(
+            int,
+            launch_gateway(
+                jarpath=full_path,
+                java_path=java_path,
+                redirect_stderr=sys.stderr if redirectf is None else redirectf,
+                redirect_stdout=sys.stdout if redirectf is None else redirectf,
+                die_on_exit=True,
+            ),
         )
 
         # TODO: Test out auto_convert=True for converting collections (esp lists)
         # https://www.py4j.org/advanced_topics.html#collections-conversion
         gateway = JavaGateway(gateway_parameters=GatewayParameters(port=gateway_port))
-        CLASSES = {}
+        CLASSES.clear()
+        catalog_dict.clear()
 
     # NOTE: currently, gateway.entry_point returns a non existent java object. Additionally, the
     # "main" function of the IcebergReadEntryPoint never seems to run. This is very strange.
-    # I suspect it may have somthing to do with the fact that we don't store any state in the
+    # I suspect it may have something to do with the fact that we don't store any state in the
     # gateway object class, and/or the fact that I'm generating a classpath aware executable JAR, as
-    # opposed to BodoSQl where I'm packaging it as a sigular executable JAR with all dependencies
+    # opposed to BodoSQl where I'm packaging it as a singular executable JAR with all dependencies
     # included. In any case, it doesn't actually impact us, so we can safely ignore it.
     return gateway
 
 
-def get_class_wrapper(class_name: str, class_inst):
+def get_class_wrapper(
+    class_name: str, class_inst: pt.Callable[[JavaGateway], "JavaClass"]
+):
     """
     Wrapper around getting the constructor for a specified Java class
     on first request, and caching the rest.
@@ -131,7 +156,15 @@ def get_class_wrapper(class_name: str, class_inst):
     return impl
 
 
-def convert_list_to_java(vals: List[Any]):
+def convert_dict_to_java(python_dict: dict):
+    """
+    Converts a Python dictionary to a Java Map
+    """
+    gateway = launch_jvm()
+    return MapConverter().convert(python_dict, gateway._gateway_client)
+
+
+def convert_list_to_java(vals: list[pt.Any]):
     """
     Converts a Python list to a Java ArrayList
     """
@@ -147,45 +180,72 @@ def get_literal_converter_class():
     """
     return get_class_wrapper(
         "LiteralConverterClass",
-        lambda gateway: gateway.jvm.com.bodo.iceberg.LiteralConverters,
+        lambda gateway: gateway.jvm.com.bodo.iceberg.LiteralConverters,  # type: ignore
     )()
 
 
 # TODO: Better way than this?
 # Built-in Classes
-get_linkedlist_class = get_class_wrapper(
-    "LinkedListClass",
-    lambda gateway: gateway.jvm.java.util.LinkedList,
+get_system_class = get_class_wrapper(
+    "SystemClass",
+    lambda gateway: gateway.jvm.System,  # type: ignore
 )
 
 # Iceberg Classes
 get_iceberg_schema_class = get_class_wrapper(
     "IcebergSchemaClass",
-    lambda gateway: gateway.jvm.org.apache.iceberg.Schema,
+    lambda gateway: gateway.jvm.org.apache.iceberg.Schema,  # type: ignore
 )
 get_iceberg_type_class = get_class_wrapper(
     "IcebergTypeClass",
-    lambda gateway: gateway.jvm.org.apache.iceberg.types.Types,
+    lambda gateway: gateway.jvm.org.apache.iceberg.types.Types,  # type: ignore
+)
+get_hadoop_conf_class = get_class_wrapper(
+    "ConfigurationClass",
+    lambda gateway: gateway.jvm.org.apache.hadoop.conf.Configuration,  # type: ignore
 )
 
 # Bodo Classes
 get_bodo_iceberg_handler_class = get_class_wrapper(
     "BodoIcebergHandlerClass",
-    lambda gateway: gateway.jvm.com.bodo.iceberg.BodoIcebergHandler,
-)
-get_op_enum_class = get_class_wrapper(
-    "OpEnumClass",
-    lambda gateway: gateway.jvm.com.bodo.iceberg.OpEnum,
+    lambda gateway: gateway.jvm.com.bodo.iceberg.BodoIcebergHandler,  # type: ignore
 )
 get_data_file_class = get_class_wrapper(
     "DataFileClass",
-    lambda gateway: gateway.jvm.com.bodo.iceberg.DataFileInfo,
+    lambda gateway: gateway.jvm.com.bodo.iceberg.DataFileInfo,  # type: ignore
+)
+get_bodo_arrow_schema_utils_class = get_class_wrapper(
+    "BodoArrowSchemaUtil",
+    lambda gateway: gateway.jvm.com.bodo.iceberg.BodoArrowSchemaUtil,  # type: ignore
+)
+get_snowflake_prefetch_class = get_class_wrapper(
+    "SnowflakePrefetchClass",
+    lambda gateway: gateway.jvm.com.bodo.iceberg.SnowflakePrefetch,  # type: ignore
+)
+
+# Bodo Filter Pushdown Classes
+get_column_ref_class = get_class_wrapper(
+    "ColumnRefClass",
+    lambda gateway: gateway.jvm.com.bodo.iceberg.filters.ColumnRef,  # type: ignore
+)
+get_array_const_class = get_class_wrapper(
+    "ArrayConstClass",
+    lambda gateway: gateway.jvm.com.bodo.iceberg.filters.ArrayConst,  # type: ignore
+)
+get_filter_expr_class = get_class_wrapper(
+    "FilterExprClass",
+    lambda gateway: gateway.jvm.com.bodo.iceberg.filters.FilterExpr,  # type: ignore
 )
 
 
-def get_java_table_handler(conn_str: str, catalog_type: str, db_name: str, table: str):
+def get_catalog(conn_str: str, catalog_type: str):
+    """
+    Get the catalog object from the global cache
+    """
     reader_class = get_bodo_iceberg_handler_class()
-    key = (conn_str, db_name, table)
-    if key not in table_dict:
-        table_dict[key] = reader_class(conn_str, catalog_type, db_name, table)
-    return table_dict[key]
+    if conn_str not in catalog_dict:
+        created_core_site = get_core_site_path()
+        # Use the defaults if the user didn't override the core site.
+        core_site = created_core_site if os.path.exists(created_core_site) else ""
+        catalog_dict[conn_str] = reader_class(conn_str, catalog_type, core_site)
+    return catalog_dict[conn_str]

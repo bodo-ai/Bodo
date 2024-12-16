@@ -1,19 +1,25 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
 Collection of utility functions. Needs to be refactored in separate files.
 """
+
+import functools
 import hashlib
 import inspect
 import keyword
 import re
+import sys
+import traceback
+import typing as pt
 import warnings
+from collections.abc import Callable, Iterable
+from dataclasses import dataclass
 from enum import Enum
+from typing import TypeGuard
 
 import numba
 import numpy as np
 import pandas as pd
 from llvmlite import ir as lir
-from mpi4py import MPI
 from numba.core import cgutils, ir, ir_utils, types
 from numba.core.imputils import lower_builtin, lower_constant
 from numba.core.ir_utils import (
@@ -31,23 +37,33 @@ from numba.np.arrayobj import get_itemsize, make_array, populate_array
 from numba.np.numpy_support import as_dtype
 
 import bodo
-from bodo.hiframes.time_ext import TimeArrayType
+from bodo.hiframes.pd_timestamp_ext import PandasTimestampType
+from bodo.hiframes.timestamptz_ext import timestamptz_array_type, timestamptz_type
 from bodo.libs.binary_arr_ext import bytes_type
-from bodo.libs.bool_arr_ext import boolean_array
+from bodo.libs.bool_arr_ext import boolean_array_type
 from bodo.libs.decimal_arr_ext import DecimalArrayType
+from bodo.libs.float_arr_ext import FloatingArrayType
 from bodo.libs.int_arr_ext import IntegerArrayType
+from bodo.libs.null_arr_ext import null_dtype
+from bodo.libs.pd_datetime_arr_ext import (
+    DatetimeArrayType,
+    PandasDatetimeTZDtype,
+)
 from bodo.libs.str_arr_ext import (
     num_total_chars,
     pre_alloc_string_array,
     string_array_type,
 )
 from bodo.libs.str_ext import string_type
+from bodo.mpi4py import MPI
 from bodo.utils.cg_helpers import is_ll_eq
 from bodo.utils.typing import (
     NOT_CONSTANT,
     BodoError,
     BodoWarning,
     MetaType,
+    is_bodosql_context_type,
+    is_overload_none,
     is_str_arr_type,
 )
 
@@ -77,10 +93,13 @@ class CTypeEnum(Enum):
     # NOTE: currently, only used for handling decimal array's data array for scatterv
     # since it handles the data array inside decimal array separately
     Int128 = 17
-    # NOTE: 17 is used by LIST_STRING in bodo_common.h
-    LIST = 19
-    STRUCT = 20
-    BINARY = 21
+    LIST = 18
+    STRUCT = 19
+    BINARY = 20
+    COMPLEX64 = 21
+    COMPLEX128 = 22
+    Map = 23
+    TIMESTAMPTZ = 24  # Used to catch gaps based on dtype in C++
 
 
 _numba_to_c_type_map = {
@@ -98,7 +117,34 @@ _numba_to_c_type_map = {
     types.int16: CTypeEnum.Int16.value,
     types.uint16: CTypeEnum.UInt16.value,
     int128_type: CTypeEnum.Int128.value,
+    bodo.hiframes.datetime_date_ext.datetime_date_type: CTypeEnum.Date.value,
+    # TODO: Timedelta arrays need to be supported
+    # bodo.hiframes.datetime_timedelta_ext.datetime_timedelta_type: CTypeEnum.Timedelta.value,
+    types.unicode_type: CTypeEnum.STRING.value,
+    bodo.libs.binary_arr_ext.bytes_type: CTypeEnum.BINARY.value,
+    # Null arrays are passed as nullable bool arrays to C++ currently.
+    # TODO[BSE-433]: support null dtype in C++ directly
+    # https://github.com/bodo-ai/Bodo/blob/b9b38a8643d61a5038bcf4a3a5dff4f14040b76c/bodo/libs/_array.cpp#L165
+    null_dtype: CTypeEnum.Bool.value,
+    types.complex64: CTypeEnum.COMPLEX64.value,
+    types.complex128: CTypeEnum.COMPLEX128.value,
+    timestamptz_type: CTypeEnum.TIMESTAMPTZ.value,
 }
+
+
+# int values for array types to pass to C code
+# XXX: These are defined in _bodo_common.h and must match here
+class CArrayTypeEnum(Enum):
+    NUMPY = 0
+    STRING = 1
+    NULLABLE_INT_BOOL = 2
+    STRUCT = 3
+    CATEGORICAL = 4
+    ARRAY_ITEM = 5
+    INTERVAL = 6
+    DICT = 7  # dictionary-encoded string array
+    MAP = 8
+    TIMESTAMPTZ = 9
 
 
 # silence Numba error messages for now
@@ -139,21 +185,138 @@ def get_constant(func_ir, var, default=NOT_CONSTANT):
     return default
 
 
-def numba_to_c_type(t):
+def numba_to_c_type(t) -> int:  # pragma: no cover
+    """
+    Derive the enum value for the dtype of the array being passed to C++. Semi-structured array types (ArrayItemArrayType, StructArrayType, MapArrayType, TupleArrayType) are not supported. Please use numba_to_c_types instead.
+
+    Args:
+        t: Dtype that needs to be passed to C++.
+
+    Returns:
+        int: The value for the CTypeEnum value
+    """
     if isinstance(t, bodo.libs.decimal_arr_ext.Decimal128Type):
         return CTypeEnum.Decimal.value
-
-    if t == bodo.hiframes.datetime_date_ext.datetime_date_type:
-        return CTypeEnum.Date.value
-
-    if isinstance(t, bodo.hiframes.time_ext.TimeType):
+    elif isinstance(t, PandasDatetimeTZDtype):
+        return CTypeEnum.Datetime.value
+    elif isinstance(t, PandasTimestampType):
+        return CTypeEnum.Int64.value
+    elif isinstance(t, bodo.hiframes.time_ext.TimeType):
         return CTypeEnum.Time.value
+    else:
+        return _numba_to_c_type_map[t]
 
-    # TODO: Timedelta arrays need to be supported
-    #    if t == bodo.hiframes.datetime_timedelta_ext.datetime_timedelta_type:
-    #        return CTypeEnum.Timedelta.value
 
-    return _numba_to_c_type_map[t]
+def numba_to_c_types(
+    arr_types: Iterable[types.ArrayCompatible],
+) -> np.ndarray:  # pragma: no cover
+    """
+    Derive the enum value for a list of array dtypes passed to C++.
+
+    Args:
+        arr_types: The list of array dtypes that needs to be passed to C++.
+
+    Returns:
+        List: The values for their CTypeEnum values
+    """
+    c_types = []
+    for arr_type in arr_types:
+        if isinstance(arr_type, (bodo.StructArrayType, bodo.TupleArrayType)):
+            c_types.append(CTypeEnum.STRUCT.value)
+            c_types.append(len(arr_type.data))
+            c_types.extend(numba_to_c_types(arr_type.data))
+        elif isinstance(arr_type, bodo.MapArrayType):
+            c_types.append(CTypeEnum.Map.value)
+            c_types.extend(
+                numba_to_c_types((arr_type.key_arr_type, arr_type.value_arr_type))
+            )
+        elif isinstance(arr_type, bodo.ArrayItemArrayType):
+            c_types.append(CTypeEnum.LIST.value)
+            c_types.extend(numba_to_c_types((arr_type.dtype,)))
+        elif isinstance(arr_type, bodo.DecimalArrayType):
+            c_types.append(numba_to_c_type(arr_type.dtype))
+            c_types.append(arr_type.dtype.precision)
+            c_types.append(arr_type.dtype.scale)
+        else:
+            c_types.append(numba_to_c_type(arr_type.dtype))
+    return np.array(c_types, dtype=np.int8)
+
+
+def numba_to_c_array_type(arr_type: types.ArrayCompatible) -> int:  # pragma: no cover
+    """
+    Derive the enum value for the array being passed to C++. Semi-structured array types (ArrayItemArrayType, StructArrayType, MapArrayType, TupleArrayType) are not supported. Please use numba_to_c_array_types instead.
+
+    Args:
+        arr_type (types.ArrayCompatible): An array type that needs
+        to be passed to C++.
+
+    Returns:
+        int: The value for the CArrayTypeEnum value
+    """
+    if isinstance(arr_type, types.Array):
+        return CArrayTypeEnum.NUMPY.value
+    elif arr_type == bodo.string_array_type or arr_type == bodo.binary_array_type:
+        return CArrayTypeEnum.STRING.value
+    elif arr_type in (
+        bodo.null_array_type,
+        bodo.datetime_date_array_type,
+        bodo.boolean_array_type,
+    ) or isinstance(
+        arr_type,
+        (
+            bodo.IntegerArrayType,
+            bodo.FloatingArrayType,
+            bodo.TimeArrayType,
+            bodo.DecimalArrayType,
+            bodo.DatetimeArrayType,
+        ),
+    ):
+        return CArrayTypeEnum.NULLABLE_INT_BOOL.value
+    elif isinstance(arr_type, bodo.CategoricalArrayType):
+        return CArrayTypeEnum.CATEGORICAL.value
+    elif isinstance(arr_type, bodo.IntervalArrayType):
+        return CArrayTypeEnum.INTERVAL.value
+    elif arr_type == timestamptz_array_type:
+        return CArrayTypeEnum.TIMESTAMPTZ.value
+    elif arr_type == bodo.dict_str_arr_type:
+        return CArrayTypeEnum.DICT.value
+    else:
+        raise BodoError(f"Unsupported Array Type '{arr_type}' in numba_to_c_array_type")
+
+
+def numba_to_c_array_types(
+    arr_types: Iterable[types.ArrayCompatible],
+) -> np.ndarray:  # pragma: no cover
+    """
+    Derive the enum value for a list of array dtypes passed to C++.
+
+    Args:
+        arr_types (List[types.ArrayCompatible]): The list of array types that needs to be passed to C++.
+
+    Returns:
+        List: The values for their CArrayTypeEnum values
+    """
+    c_arr_types = []
+    for arr_type in arr_types:
+        if isinstance(arr_type, (bodo.StructArrayType, bodo.TupleArrayType)):
+            c_arr_types.append(CArrayTypeEnum.STRUCT.value)
+            c_arr_types.append(len(arr_type.data))
+            c_arr_types.extend(numba_to_c_array_types(arr_type.data))
+        elif isinstance(arr_type, bodo.MapArrayType):
+            c_arr_types.append(CArrayTypeEnum.MAP.value)
+            c_arr_types.extend(
+                numba_to_c_array_types((arr_type.key_arr_type, arr_type.value_arr_type))
+            )
+        elif isinstance(arr_type, bodo.ArrayItemArrayType):
+            c_arr_types.append(CArrayTypeEnum.ARRAY_ITEM.value)
+            c_arr_types.extend(numba_to_c_array_types((arr_type.dtype,)))
+        elif isinstance(arr_type, bodo.DecimalArrayType):
+            c_arr_types.append(numba_to_c_array_type(arr_type))
+            c_arr_types.append(arr_type.dtype.precision)
+            c_arr_types.append(arr_type.dtype.scale)
+        else:
+            c_arr_types.append(numba_to_c_array_type(arr_type))
+    return np.array(c_arr_types, dtype=np.int8)
 
 
 def is_alloc_callname(func_name, mod_name):
@@ -192,7 +355,16 @@ def is_alloc_callname(func_name, mod_name):
             and mod_name == "bodo.libs.tuple_arr_ext"
         )
         or (func_name == "alloc_bool_array" and mod_name == "bodo.libs.bool_arr_ext")
+        or (
+            func_name == "alloc_false_bool_array"
+            and mod_name == "bodo.libs.bool_arr_ext"
+        )
+        or (
+            func_name == "alloc_true_bool_array"
+            and mod_name == "bodo.libs.bool_arr_ext"
+        )
         or (func_name == "alloc_int_array" and mod_name == "bodo.libs.int_arr_ext")
+        or (func_name == "alloc_float_array" and mod_name == "bodo.libs.float_arr_ext")
         or (
             func_name == "alloc_datetime_date_array"
             and mod_name == "bodo.hiframes.datetime_date_ext"
@@ -210,19 +382,41 @@ def is_alloc_callname(func_name, mod_name):
             and mod_name == "bodo.hiframes.pd_categorical_ext"
         )
         or (func_name == "gen_na_array" and mod_name == "bodo.libs.array_kernels")
+        or (
+            func_name == "alloc_pd_datetime_array"
+            and mod_name == "bodo.libs.pd_datetime_arr_ext"
+        )
+        or (func_name == "alloc_time_array" and mod_name == "bodo.hiframes.time_ext")
+        or (
+            func_name == "alloc_timestamptz_array"
+            and mod_name == "bodo.hiframes.timestamptz_ext"
+        )
+        or (func_name == "init_null_array" and mod_name == "bodo.libs.null_arr_ext")
+        or (func_name == "full_type" and mod_name == "bodo.utils.utils")
     )
 
 
-def find_build_tuple(func_ir, var):
+def find_build_tuple(func_ir, var, handle_const_tuple=False):
     """Check if a variable is constructed via build_tuple
     and return the sequence or raise GuardException otherwise.
+    The output sequence can be a list/tuple of ir.Vars or a tuple of constant values.
+    'handle_const_tuple=True' allows constant tuples to be returned. Otherwise,
+    only a sequence of ir.Vars can be returned (which may be a requirement in the
+    caller).
     """
     # variable or variable name
     require(isinstance(var, (ir.Var, str)))
     var_def = get_definition(func_ir, var)
-    require(isinstance(var_def, ir.Expr))
-    require(var_def.op == "build_tuple")
-    return var_def.items
+    if isinstance(var_def, ir.Expr):
+        require(var_def.op == "build_tuple")
+        return var_def.items
+
+    # Array analysis may convert tuples to an ir.Const expression:
+    # https://github.com/numba/numba/blob/d4460feb8c91213e7b89f97b632d19e34a776cd3/numba/parfors/array_analysis.py#L2186
+    require(handle_const_tuple)
+    require(isinstance(var_def, ir.Const))
+    require(isinstance(var_def.value, tuple))
+    return var_def.value
 
 
 # print function used for debugging that uses printf in C, instead of Numba's print that
@@ -251,14 +445,13 @@ typ_to_format = {
 
 @lower_builtin(cprint, types.VarArg(types.Any))
 def cprint_lower(context, builder, sig, args):  # pragma: no cover
-
     for i, val in enumerate(args):
         typ = sig.args[i]
         if isinstance(typ, types.ArrayCTypes):
             cgutils.printf(builder, "%p ", val)
             continue
         format_str = typ_to_format[typ]
-        cgutils.printf(builder, "%{} ".format(format_str), val)
+        cgutils.printf(builder, f"%{format_str} ", val)
     cgutils.printf(builder, "\n")
     return context.get_dummy_value()
 
@@ -329,54 +522,25 @@ def get_slice_step(typemap, func_ir, var):
     return call_expr.args[2]
 
 
-def is_array_typ(var_typ, include_index_series=True):
+def is_array_typ(
+    var_typ, include_index_series=True
+) -> TypeGuard[types.ArrayCompatible]:
     """return True if var_typ is an array type.
     include_index_series=True also includes Index and Series types (as "array-like").
     """
 
     # NOTE: make sure all Bodo arrays are here
-    return (
-        is_np_array_typ(var_typ)
-        or var_typ
-        in (
-            string_array_type,
-            bodo.binary_array_type,
-            bodo.dict_str_arr_type,
-            bodo.hiframes.split_impl.string_array_split_view_type,
-            bodo.hiframes.datetime_date_ext.datetime_date_array_type,
-            bodo.hiframes.datetime_timedelta_ext.datetime_timedelta_array_type,
-            boolean_array,
-            bodo.libs.str_ext.random_access_string_array,
-            bodo.libs.interval_arr_ext.IntervalArrayType,
-        )
-        or isinstance(
-            var_typ,
-            (
-                IntegerArrayType,
-                bodo.libs.decimal_arr_ext.DecimalArrayType,
-                bodo.hiframes.pd_categorical_ext.CategoricalArrayType,
-                bodo.libs.array_item_arr_ext.ArrayItemArrayType,
-                bodo.libs.struct_arr_ext.StructArrayType,
-                bodo.libs.interval_arr_ext.IntervalArrayType,
-                bodo.libs.tuple_arr_ext.TupleArrayType,
-                bodo.libs.map_arr_ext.MapArrayType,
-                bodo.libs.csr_matrix_ext.CSRMatrixType,
-                bodo.DatetimeArrayType,
-                TimeArrayType,
-            ),
-        )
-        or (
-            include_index_series
-            and (
-                isinstance(
-                    var_typ,
-                    (
-                        bodo.hiframes.pd_series_ext.SeriesType,
-                        bodo.hiframes.pd_multi_index_ext.MultiIndexType,
-                    ),
-                )
-                or bodo.hiframes.pd_index_ext.is_pd_index_type(var_typ)
+    return isinstance(var_typ, bodo.libs.array_kernels.BODO_ARRAY_TYPE_CLASSES) or (
+        include_index_series
+        and (
+            isinstance(
+                var_typ,
+                (
+                    bodo.hiframes.pd_series_ext.SeriesType,
+                    bodo.hiframes.pd_multi_index_ext.MultiIndexType,
+                ),
             )
+            or bodo.hiframes.pd_index_ext.is_pd_index_type(var_typ)
         )
     )
 
@@ -385,7 +549,6 @@ def is_np_array_typ(var_typ):
     return isinstance(var_typ, types.Array)
 
 
-# TODO: fix tuple, dataframe distribution
 def is_distributable_typ(var_typ):
     return (
         is_array_typ(var_typ)
@@ -400,12 +563,14 @@ def is_distributable_typ(var_typ):
     )
 
 
+def is_bodosql_kernel_mod(module: pt.Any) -> bool:
+    """
+    Checks that `func_mod` is a submodule of bodosql.kernels
+    """
+    return isinstance(module, str) and module.startswith("bodosql.kernels")
+
+
 def is_distributable_tuple_typ(var_typ):
-    try:
-        from bodosql.context_ext import BodoSQLContextType
-    except ImportError:  # pragma: no cover
-        # ignore if None.
-        BodoSQLContextType = None
     return (
         (
             isinstance(var_typ, types.BaseTuple)
@@ -430,9 +595,8 @@ def is_distributable_tuple_typ(var_typ):
             )
         )
         or (
-            BodoSQLContextType is not None
-            and isinstance(var_typ, BodoSQLContextType)
-            and any([is_distributable_typ(df) for df in var_typ.dataframes])
+            is_bodosql_context_type(var_typ)
+            and any(is_distributable_typ(df) for df in var_typ.dataframes)
         )
     )
 
@@ -455,7 +619,7 @@ def build_set_seen_na(A):
     # membership check
     # XXX using dict for now due to Numba's #4577
     def impl(A):  # pragma: no cover
-        s = dict()
+        s = {}
         seen_na = False
         for i in range(len(A)):
             if bodo.libs.array_kernels.isna(A, i):
@@ -505,7 +669,16 @@ def empty_like_type_overload(n, arr):
 
         return empty_like_type_int_arr
 
-    if arr == boolean_array:
+    # nullable float arr
+    if isinstance(arr, FloatingArrayType):  # pragma: no cover
+        _dtype = arr.dtype
+
+        def empty_like_type_float_arr(n, arr):  # pragma: no cover
+            return bodo.libs.float_arr_ext.alloc_float_array(n, _dtype)
+
+        return empty_like_type_float_arr
+
+    if arr == boolean_array_type:
 
         def empty_like_type_bool_arr(n, arr):  # pragma: no cover
             return bodo.libs.bool_arr_ext.alloc_bool_array(n)
@@ -519,8 +692,15 @@ def empty_like_type_overload(n, arr):
 
         return empty_like_type_datetime_date_arr
 
-    if isinstance(arr, bodo.hiframes.time_ext.TimeArrayType):
+    if isinstance(arr, DatetimeArrayType):
+        tz = arr.tz
 
+        def empty_like_pandas_datetime_arr(n, arr):  # pragma: no cover
+            return bodo.libs.pd_datetime_arr_ext.alloc_pd_datetime_array(n, tz)
+
+        return empty_like_pandas_datetime_arr
+
+    if isinstance(arr, bodo.hiframes.time_ext.TimeArrayType):
         precision = arr.precision
 
         def empty_like_type_time_arr(n, arr):
@@ -544,6 +724,13 @@ def empty_like_type_overload(n, arr):
             return bodo.libs.decimal_arr_ext.alloc_decimal_array(n, precision, scale)
 
         return empty_like_type_decimal_arr
+
+    if arr == timestamptz_array_type:
+
+        def empty_like_timestamp_tz_arr(n, arr):  # pragma: no cover
+            return bodo.hiframes.timestamptz_ext.alloc_timestamptz_array(n)
+
+        return empty_like_timestamp_tz_arr
 
     # string array buffer for join
     assert arr == string_array_type
@@ -595,7 +782,7 @@ def _empty_nd_impl(context, builder, arrtype, shapes):  # pragma: no cover
         strides = tuple(strides)
     else:
         raise NotImplementedError(
-            "Don't know how to allocate array with layout '{0}'.".format(arrtype.layout)
+            f"Don't know how to allocate array with layout '{arrtype.layout}'."
         )
 
     # Check overflow, numpy also does this after checking order
@@ -638,7 +825,7 @@ if bodo.numba_compat._check_numba_change:
     lines = inspect.getsource(numba.np.arrayobj._empty_nd_impl)
     if (
         hashlib.sha256(lines.encode()).hexdigest()
-        != "b6a998927680caa35917a553c79704e9d813d8f1873d83a5f8513837c159fa29"
+        != "009ebfa261e39c4d8b9fdcc956205d9ee03ad87feea6560ef5fc2ddc8551c70d"
     ):  # pragma: no cover
         warnings.warn("numba.np.arrayobj._empty_nd_impl has changed")
 
@@ -654,15 +841,12 @@ def alloc_arr_tup(n, arr_tup, init_vals=()):  # pragma: no cover
 def alloc_arr_tup_overload(n, data, init_vals=()):
     count = data.count
 
-    allocs = ",".join(["empty_like_type(n, data[{}])".format(i) for i in range(count)])
+    allocs = ",".join([f"empty_like_type(n, data[{i}])" for i in range(count)])
 
     if init_vals != ():
         # TODO check for numeric value
         allocs = ",".join(
-            [
-                "np.full(n, init_vals[{}], data[{}].dtype)".format(i, i)
-                for i in range(count)
-            ]
+            [f"np.full(n, init_vals[{i}], data[{i}].dtype)" for i in range(count)]
         )
 
     func_text = "def f(n, data, init_vals=()):\n"
@@ -724,56 +908,115 @@ def create_categorical_type(categories, data, is_ordered):
     return new_cats_arr
 
 
-def alloc_type(n, t, s=None):  # pragma: no cover
-    return np.empty(n, t.dtype)
+def alloc_type(n, t, s=None, dict_ref_arr=None):  # pragma: no cover
+    pass
 
 
 @overload(alloc_type)
-def overload_alloc_type(n, t, s=None):
+def overload_alloc_type(n, t, s=None, dict_ref_arr=None):
     """Allocate an array with type 't'. 'n' is length of the array. 's' is a tuple for
     arrays with variable size elements (e.g. strings), providing the number of elements
     needed for allocation.
     """
     typ = t.instance_type if isinstance(t, types.TypeRef) else t
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(typ, "bodo.alloc_type()")
+
+    # Dictionary-encoded arrays can be allocated if a reference array is provided to
+    # reuse its dictionary
+    if typ == bodo.dict_str_arr_type and not is_overload_none(dict_ref_arr):
+        return (
+            lambda n,
+            t,
+            s=None,
+            dict_ref_arr=None: bodo.libs.dict_arr_ext.init_dict_arr(
+                dict_ref_arr._data,
+                bodo.libs.int_arr_ext.alloc_int_array(n, np.int32),
+                dict_ref_arr._has_global_dictionary,
+                dict_ref_arr._has_unique_local_dictionary,
+                dict_ref_arr._dict_id,
+            )
+        )
 
     # NOTE: creating regular string array for dictionary-encoded strings to get existing
     # code that doesn't support dict arr to work
     if is_str_arr_type(typ):
-        return lambda n, t, s=None: bodo.libs.str_arr_ext.pre_alloc_string_array(
-            n, s[0]
+        return (
+            lambda n,
+            t,
+            s=None,
+            dict_ref_arr=None: bodo.libs.str_arr_ext.pre_alloc_string_array(n, s[0])
+        )  # pragma: no cover
+
+    if typ == bodo.null_array_type:
+        return (
+            lambda n,
+            t,
+            s=None,
+            dict_ref_arr=None: bodo.libs.null_arr_ext.init_null_array(n)
         )  # pragma: no cover
 
     if typ == bodo.binary_array_type:
-        return lambda n, t, s=None: bodo.libs.binary_arr_ext.pre_alloc_binary_array(
-            n, s[0]
+        return (
+            lambda n,
+            t,
+            s=None,
+            dict_ref_arr=None: bodo.libs.binary_arr_ext.pre_alloc_binary_array(n, s[0])
         )  # pragma: no cover
 
     if isinstance(typ, bodo.libs.array_item_arr_ext.ArrayItemArrayType):
+        if not is_overload_none(dict_ref_arr):
+            return (
+                lambda n,
+                t,
+                s=None,
+                dict_ref_arr=None: bodo.libs.array_item_arr_ext.pre_alloc_array_item_array(
+                    n, s, bodo.libs.array_item_arr_ext.get_data(dict_ref_arr)
+                )
+            )  # pragma: no cover
+
         dtype = typ.dtype
-        return lambda n, t, s=None: bodo.libs.array_item_arr_ext.pre_alloc_array_item_array(
-            n, s, dtype
+        return (
+            lambda n,
+            t,
+            s=None,
+            dict_ref_arr=None: bodo.libs.array_item_arr_ext.pre_alloc_array_item_array(
+                n, s, dtype
+            )
         )  # pragma: no cover
 
     if isinstance(typ, bodo.libs.struct_arr_ext.StructArrayType):
         dtypes = typ.data
         names = typ.names
-        return lambda n, t, s=None: bodo.libs.struct_arr_ext.pre_alloc_struct_array(
-            n, s, dtypes, names
+        return (
+            lambda n,
+            t,
+            s=None,
+            dict_ref_arr=None: bodo.libs.struct_arr_ext.pre_alloc_struct_array(
+                n, s, dtypes, names, dict_ref_arr
+            )
         )  # pragma: no cover
 
     if isinstance(typ, bodo.libs.map_arr_ext.MapArrayType):
         struct_typ = bodo.libs.struct_arr_ext.StructArrayType(
             (typ.key_arr_type, typ.value_arr_type), ("key", "value")
         )
-        return lambda n, t, s=None: bodo.libs.map_arr_ext.pre_alloc_map_array(
-            n, s, struct_typ
+        return (
+            lambda n,
+            t,
+            s=None,
+            dict_ref_arr=None: bodo.libs.map_arr_ext.pre_alloc_map_array(
+                n, s, struct_typ, dict_ref_arr
+            )
         )  # pragma: no cover
 
     if isinstance(typ, bodo.libs.tuple_arr_ext.TupleArrayType):
         dtypes = typ.data
-        return lambda n, t, s=None: bodo.libs.tuple_arr_ext.pre_alloc_tuple_array(
-            n, s, dtypes
+        return (
+            lambda n,
+            t,
+            s=None,
+            dict_ref_arr=None: bodo.libs.tuple_arr_ext.pre_alloc_tuple_array(
+                n, s, dtypes
+            )
         )  # pragma: no cover
 
     if isinstance(typ, bodo.hiframes.pd_categorical_ext.CategoricalArrayType):
@@ -786,66 +1029,147 @@ def overload_alloc_type(n, t, s=None):
             # create the new categorical dtype inside the function instead of passing as
             # constant. This avoids constant lowered Index inside the dtype, which can
             # be slow since it cannot have a dictionary.
-            # see https://github.com/Bodo-inc/Bodo/pull/3563
+            # see https://github.com/bodo-ai/Bodo/pull/3563
             is_ordered = typ.dtype.ordered
             int_type = typ.dtype.int_type
             new_cats_arr = create_categorical_type(
                 typ.dtype.categories, typ.dtype.data.data, is_ordered
             )
-            new_cats_tup = MetaType(tuple(new_cats_arr))
-            return lambda n, t, s=None: bodo.hiframes.pd_categorical_ext.alloc_categorical_array(
-                n,
-                bodo.hiframes.pd_categorical_ext.init_cat_dtype(
-                    bodo.utils.conversion.index_from_array(new_cats_arr),
-                    is_ordered,
-                    int_type,
-                    new_cats_tup,
-                ),
+            new_cats_tup = MetaType(typ.dtype.categories)
+            return (
+                lambda n,
+                t,
+                s=None,
+                dict_ref_arr=None: bodo.hiframes.pd_categorical_ext.alloc_categorical_array(
+                    n,
+                    bodo.hiframes.pd_categorical_ext.init_cat_dtype(
+                        bodo.utils.conversion.index_from_array(new_cats_arr),
+                        is_ordered,
+                        int_type,
+                        new_cats_tup,
+                    ),
+                )
             )  # pragma: no cover
         else:
-            return lambda n, t, s=None: bodo.hiframes.pd_categorical_ext.alloc_categorical_array(
-                n, t.dtype
+            return (
+                lambda n,
+                t,
+                s=None,
+                dict_ref_arr=None: bodo.hiframes.pd_categorical_ext.alloc_categorical_array(
+                    n, t.dtype
+                )
             )  # pragma: no cover
 
     if typ.dtype == bodo.hiframes.datetime_date_ext.datetime_date_type:
-        return lambda n, t, s=None: bodo.hiframes.datetime_date_ext.alloc_datetime_date_array(
-            n
+        return (
+            lambda n,
+            t,
+            s=None,
+            dict_ref_arr=None: bodo.hiframes.datetime_date_ext.alloc_datetime_date_array(
+                n
+            )
         )  # pragma: no cover
 
     if isinstance(typ.dtype, bodo.hiframes.time_ext.TimeType):
         precision = typ.dtype.precision
 
-        return lambda n, t, s=None: bodo.hiframes.time_ext.alloc_time_array(
-            n, precision
+        return (
+            lambda n,
+            t,
+            s=None,
+            dict_ref_arr=None: bodo.hiframes.time_ext.alloc_time_array(n, precision)
         )  # pragma: no cover
 
     if typ.dtype == bodo.hiframes.datetime_timedelta_ext.datetime_timedelta_type:
-        return lambda n, t, s=None: bodo.hiframes.datetime_timedelta_ext.alloc_datetime_timedelta_array(
-            n
+        return (
+            lambda n,
+            t,
+            s=None,
+            dict_ref_arr=None: bodo.hiframes.datetime_timedelta_ext.alloc_datetime_timedelta_array(
+                n
+            )
         )  # pragma: no cover
 
     if isinstance(typ, DecimalArrayType):
         precision = typ.dtype.precision
         scale = typ.dtype.scale
-        return lambda n, t, s=None: bodo.libs.decimal_arr_ext.alloc_decimal_array(
-            n, precision, scale
+        return (
+            lambda n,
+            t,
+            s=None,
+            dict_ref_arr=None: bodo.libs.decimal_arr_ext.alloc_decimal_array(
+                n, precision, scale
+            )
+        )  # pragma: no cover
+
+    if isinstance(typ, bodo.DatetimeArrayType) or isinstance(
+        type,
+        (
+            PandasTimestampType,
+            PandasDatetimeTZDtype,
+        ),
+    ):
+        tz_literal = typ.tz
+        return (
+            lambda n,
+            t,
+            s=None,
+            dict_ref_arr=None: bodo.libs.pd_datetime_arr_ext.alloc_pd_datetime_array(
+                n, tz_literal
+            )
+        )  # pragma: no cover
+
+    if isinstance(typ, bodo.hiframes.timestamptz_ext.TimestampTZArrayType):
+        return (
+            lambda n,
+            t,
+            s=None,
+            dict_ref_arr=None: bodo.hiframes.timestamptz_ext.alloc_timestamptz_array(n)
         )  # pragma: no cover
 
     dtype = numba.np.numpy_support.as_dtype(typ.dtype)
 
     # nullable int array
     if isinstance(typ, IntegerArrayType):
-        return lambda n, t, s=None: bodo.libs.int_arr_ext.alloc_int_array(
-            n, dtype
+        return (
+            lambda n,
+            t,
+            s=None,
+            dict_ref_arr=None: bodo.libs.int_arr_ext.alloc_int_array(n, dtype)
+        )  # pragma: no cover
+
+    # primitive array
+    if isinstance(typ, bodo.libs.primitive_arr_ext.PrimitiveArrayType):
+        return (
+            lambda n,
+            t,
+            s=None,
+            dict_ref_arr=None: bodo.libs.primitive_arr_ext.alloc_primitive_array(
+                n, dtype
+            )
+        )  # pragma: no cover
+
+    # nullable float array
+    if isinstance(typ, FloatingArrayType):
+        return (
+            lambda n,
+            t,
+            s=None,
+            dict_ref_arr=None: bodo.libs.float_arr_ext.alloc_float_array(n, dtype)
         )  # pragma: no cover
 
     # nullable bool array
-    if typ == boolean_array:
-        return lambda n, t, s=None: bodo.libs.bool_arr_ext.alloc_bool_array(
-            n
+    if typ == boolean_array_type:
+        return (
+            lambda n,
+            t,
+            s=None,
+            dict_ref_arr=None: bodo.libs.bool_arr_ext.alloc_bool_array(n)
         )  # pragma: no cover
 
-    return lambda n, t, s=None: np.empty(n, dtype)  # pragma: no cover
+    return lambda n, t, s=None, dict_ref_arr=None: np.empty(
+        n, dtype
+    )  # pragma: no cover
 
 
 def astype(A, t):  # pragma: no cover
@@ -861,13 +1185,22 @@ def overload_astype(A, t):
     if A == typ:
         return lambda A, t: A  # pragma: no cover
 
-    # numpy or nullable int array can convert to numpy directly
-    if isinstance(A, (types.Array, IntegerArrayType)) and isinstance(typ, types.Array):
+    # numpy or nullable int/float array can convert to numpy directly
+    if isinstance(A, (types.Array, IntegerArrayType, FloatingArrayType)) and isinstance(
+        typ, types.Array
+    ):
         return lambda A, t: A.astype(dtype)  # pragma: no cover
 
     # convert to nullable int
     if isinstance(typ, IntegerArrayType):
         return lambda A, t: bodo.libs.int_arr_ext.init_integer_array(
+            A.astype(dtype),
+            np.full((len(A) + 7) >> 3, 255, np.uint8),
+        )  # pragma: no cover
+
+    # convert to nullable float
+    if isinstance(typ, FloatingArrayType):  # pragma: no cover
+        return lambda A, t: bodo.libs.float_arr_ext.init_float_array(
             A.astype(dtype),
             np.full((len(A) + 7) >> 3, 255, np.uint8),
         )  # pragma: no cover
@@ -904,12 +1237,25 @@ def overload_full_type(n, val, t):
             np.full((tuple_to_scalar(n) + 7) >> 3, 255, np.uint8),
         )  # pragma: no cover
 
-    # nullable bool array
-    if typ == boolean_array:
-        return lambda n, val, t: bodo.libs.bool_arr_ext.init_bool_array(
-            np.full(n, val, np.bool_),
+    # nullable float array
+    if isinstance(typ, FloatingArrayType):
+        dtype = numba.np.numpy_support.as_dtype(typ.dtype)
+        return lambda n, val, t: bodo.libs.float_arr_ext.init_float_array(
+            np.full(n, val, dtype),
             np.full((tuple_to_scalar(n) + 7) >> 3, 255, np.uint8),
         )  # pragma: no cover
+
+    # nullable bool array
+    if typ == boolean_array_type:
+
+        def impl(n, val, t):  # pragma: no cover
+            length = tuple_to_scalar(n)
+            if val:
+                return bodo.libs.bool_arr_ext.alloc_true_bool_array(length)
+            else:
+                return bodo.libs.bool_arr_ext.alloc_false_bool_array(length)
+
+        return impl
 
     # string array
     if typ == string_array_type:
@@ -977,8 +1323,8 @@ def tuple_list_to_array(A, data, elem_type):
     )
     func_text = "def impl(A, data, elem_type):\n"
     func_text += "  for i, d in enumerate(data):\n"
-    if elem_type == bodo.hiframes.pd_timestamp_ext.pd_timestamp_type:
-        func_text += "    A[i] = bodo.utils.conversion.unbox_if_timestamp(d)\n"
+    if elem_type == bodo.hiframes.pd_timestamp_ext.pd_timestamp_tz_naive_type:
+        func_text += "    A[i] = bodo.utils.conversion.unbox_if_tz_naive_timestamp(d)\n"
     else:
         func_text += "    A[i] = d\n"
     loc_vars = {}
@@ -1031,7 +1377,7 @@ def get_getsetitem_index_var(node, typemap, nodes):
         # literal type is preferred for uniform/easier getitem index match
         try:
             index_typ = types.literal(node.index)
-        except:
+        except Exception:
             index_typ = numba.typeof(node.index)
         index_var = ir.Var(
             node.value.scope, ir_utils.mk_unique_var("dummy_index"), node.loc
@@ -1049,7 +1395,7 @@ import copy
 ir.Const.__deepcopy__ = lambda self, memo: ir.Const(self.value, copy.deepcopy(self.loc))
 
 
-def is_call_assign(stmt):
+def is_call_assign(stmt) -> TypeGuard[ir.Assign]:
     return (
         isinstance(stmt, ir.Assign)
         and isinstance(stmt.value, ir.Expr)
@@ -1057,19 +1403,19 @@ def is_call_assign(stmt):
     )
 
 
-def is_call(expr):
+def is_call(expr) -> TypeGuard[ir.Expr]:
     return isinstance(expr, ir.Expr) and expr.op == "call"
 
 
-def is_var_assign(inst):
+def is_var_assign(inst) -> TypeGuard[ir.Assign]:
     return isinstance(inst, ir.Assign) and isinstance(inst.value, ir.Var)
 
 
-def is_assign(inst):
+def is_assign(inst) -> TypeGuard[ir.Assign]:
     return isinstance(inst, ir.Assign)
 
 
-def is_expr(val, op):
+def is_expr(val, op) -> TypeGuard[ir.Expr]:
     return isinstance(val, ir.Expr) and val.op == op
 
 
@@ -1138,7 +1484,7 @@ def nanstd_ddof1(a):  # pragma: no cover
     return np.sqrt(nanvar_ddof1(a))
 
 
-def has_supported_h5py():
+def has_supported_h5py() -> bool:
     """returns True if supported versions of h5py and hdf5 are installed"""
     try:
         import h5py  # noqa
@@ -1152,26 +1498,22 @@ def has_supported_h5py():
         # NOTE: _hdf5 import fails if proper hdf5 version is not installed, but we
         # should check h5py as well since there may be an extra pip installation
         # see [BE-1382].
-        # We support both 1.10 and 1.12
-        _has_h5py = h5py.version.hdf5_version_tuple[1] in (10, 12)
+        # We only support 1.14
+        _has_h5py = h5py.version.hdf5_version_tuple[1] == 14
     return _has_h5py
+
+
+# Dummy function, that should be handled in untyped pass
+# Used to handle aggregations that require more arguments than just the column
+# and aggregation name.
+def ExtendedNamedAgg():
+    pass
 
 
 def check_h5py():
     """raise error if h5py/hdf5 is not installed"""
     if not has_supported_h5py():
         raise BodoError("install 'h5py' package to enable hdf5 support")
-
-
-def has_pyarrow():
-    """returns True if pyarrow is installed"""
-    try:
-        import pyarrow  # noqa
-    except ImportError:
-        _has_pyarrow = False
-    else:
-        _has_pyarrow = True
-    return _has_pyarrow
 
 
 def has_scipy():
@@ -1194,7 +1536,6 @@ def check_and_propagate_cpp_exception(typingctx):
     """
 
     def codegen(context, builder, sig, args):
-
         pyapi = context.get_python_api(builder)
         err_flag = pyapi.err_occurred()
         error_occured = cgutils.is_not_null(builder, err_flag)
@@ -1220,7 +1561,7 @@ def inlined_check_and_propagate_cpp_exception(context, builder):
 
 @numba.njit
 def check_java_installation(fname):
-    with numba.objmode():
+    with bodo.no_warning_objmode():
         check_java_installation_(fname)
 
 
@@ -1369,7 +1710,7 @@ def lower_constant_dict(context, builder, typ, pyval):
     # fast path for cases that fit in arrays
     try:
         return lower_const_dict_fast_path(context, builder, typ, pyval)
-    except:
+    except Exception:
         pass
 
     # throw warning for large dicts in slow path since compilation can take long
@@ -1442,5 +1783,102 @@ def synchronize_error_njit(exception_str, error_message):
         exception_str (string): string representation of exception, e.x. 'RuntimeError', 'ValueError'
         error_message (string): error message, empty string means no error
     """
-    with numba.objmode():
+    with bodo.no_warning_objmode():
         synchronize_error(exception_str, error_message)
+
+
+# Helper function that extracts the constant value from a tuple of constants or a constant
+def get_const_or_build_tuple_of_consts(var):
+    if is_expr(var, "build_tuple"):
+        return tuple([item.value for item in var.items])
+    elif isinstance(var, (ir.Global, ir.FreeVar, ir.Const)):
+        return var.value
+    else:
+        raise BodoError(
+            "Value of orderby should be a constant tuple or tuple of constants"
+        )
+
+
+# Helper function that adds a value to a dictionary of lists,
+# creating the list if it doesn't exist, and appending if it does
+def dict_add_multimap(d, k, v):
+    if k in d:
+        d[k].append(v)
+    else:
+        d[k] = [v]
+
+
+@numba.njit(no_cpython_wrapper=True)
+def set_wrapper(a):
+    """wrapper around set() constructor to reduce compilation time.
+    This makes sure set (e.g. of int array) is compiled once versus lower_builtin in
+    Numba compiling it every time.
+    """
+    return set(a)
+
+
+def run_rank0(func: Callable, bcast_result: bool = True, result_default=None):
+    """
+    Utility function decorator to run a function on just rank 0
+    but re-raise any Exceptions safely on all ranks.
+    NOTE: 'func' must be a simple python function that doesn't require
+    any synchronization.
+    e.g. Using a bodo.jit function might be unsafe in this situation.
+    Similarly, a function that uses any MPI collective
+    operation would be unsafe and could result in a hang.
+
+    Args:
+        func: Function to run.
+        bcast_result (bool, optional): Whether the function should be
+            broadcasted to all ranks. Defaults to True.
+        result_default (optional): Default for result. This is only
+            useful in the bcase_result=False case. Defaults to None.
+    """
+
+    @functools.wraps(func)
+    def inner(*args, **kwargs):
+        comm = MPI.COMM_WORLD
+        result = result_default
+        err = None
+        # Run on rank 0 and catch any exceptions.
+        if comm.Get_rank() == 0:
+            try:
+                result = func(*args, **kwargs)
+            except Exception as e:
+                print("".join(traceback.format_exception(None, e, e.__traceback__)))
+                err = e
+        # Synchronize and re-raise any exception on all ranks.
+        err = comm.bcast(err)
+        if isinstance(err, Exception):
+            raise err
+        # Broadcast the result to all ranks.
+        if bcast_result:
+            result = comm.bcast(result)
+        return result
+
+    return inner
+
+
+def is_ml_support_loaded():
+    ml_support_modules = (
+        "bodo.ml_support.sklearn_cluster_ext",
+        "bodo.ml_support.sklearn_ensemble_ext",
+        "bodo.ml_support.sklearn_ext",
+        "bodo.ml_support.sklearn_feature_extraction_ext",
+        "bodo.ml_support.sklearn_linear_model_ext",
+        "bodo.ml_support.sklearn_metrics_ext",
+        "bodo.ml_support.sklearn_model_selection_ext",
+        "bodo.ml_support.sklearn_naive_bayes_ext",
+        "bodo.ml_support.sklearn_preprocessing_ext",
+        "bodo.ml_support.sklearn_svm_ext",
+        "bodo.ml_support.sklearn_utils_ext",
+    )
+    return any(module in sys.modules for module in ml_support_modules)
+
+
+@dataclass
+class AWSCredentials:
+    access_key: str
+    secret_key: str
+    session_token: str | None = None
+    region: str | None = None

@@ -1,4 +1,3 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
 Unittests for objmode blocks
 """
@@ -8,8 +7,10 @@ import pandas as pd
 import pytest
 
 import bodo
-from bodo.tests.utils import check_func
+from bodo.tests.utils import check_func, pytest_pandas
 from bodo.utils.typing import BodoError
+
+pytestmark = pytest_pandas
 
 
 def test_type_register():
@@ -23,7 +24,12 @@ def test_type_register():
             df = pd.DataFrame({"A": [1, 2, 5]})
         return df
 
-    check_func(impl, (), is_out_distributed=False)
+    check_func(
+        impl,
+        (),
+        is_out_distributed=False,
+        additional_compiler_arguments={"replicated": ["df"]},
+    )
 
     # error checking
     with pytest.raises(BodoError, match="type name 'my_type1' already exists"):

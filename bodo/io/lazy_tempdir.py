@@ -1,12 +1,11 @@
 import os
 import shutil
-import types
 import warnings
 import weakref
 from tempfile import gettempdir
 from uuid import uuid4
 
-from mpi4py import MPI
+from bodo.mpi4py import MPI
 
 
 class LazyTemporaryDirectory:
@@ -109,7 +108,7 @@ class LazyTemporaryDirectory:
                     self,
                     self._cleanup,
                     self.name,
-                    warn_message="Implicitly cleaning up {!r}".format(self),
+                    warn_message=f"Implicitly cleaning up {self!r}",
                     ignore_errors=self._ignore_cleanup_errors,
                 )
             else:
@@ -161,7 +160,7 @@ class LazyTemporaryDirectory:
     # Same as tempfile.TemporaryDirectory
     # (https://github.com/python/cpython/blob/9c7b4bd1646f2170247f88cf59936740d9c4c004/Lib/tempfile.py#L862)
     def __repr__(self):
-        return "<{} {!r}>".format(self.__class__.__name__, self.name)
+        return f"<{self.__class__.__name__} {self.name!r}>"
 
     # Same as tempfile.TemporaryDirectory
     # (https://github.com/python/cpython/blob/9c7b4bd1646f2170247f88cf59936740d9c4c004/Lib/tempfile.py#L865)
@@ -190,4 +189,6 @@ class LazyTemporaryDirectory:
         ):
             self._rmtree(self.name, ignore_errors=self._ignore_cleanup_errors)
 
-    __class_getitem__ = classmethod(types.GenericAlias)
+    # TODO: uncomment after deprecating Python 3.8
+    # New in version 3.9. https://docs.python.org/3/library/types.html#types.GenericAlias
+    # __class_getitem__ = classmethod(types.GenericAlias)

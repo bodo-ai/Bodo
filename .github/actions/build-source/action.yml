@@ -1,0 +1,51 @@
+name: Build Bodo from Source
+description: Build Bodo and related packages from Source Code
+inputs:
+  build-all:
+    description: 'Build all packages or only Bodo'
+    required: false
+    default: false
+    type: 'boolean'
+
+runs:
+  using: "composite"
+  steps:
+    # -------------------------- Environment Setup -------------------------- #
+      - uses: prefix-dev/setup-pixi@v0.8.1
+        with:
+          pixi-version: v0.34.0
+          cache: true
+          cache-write: ${{ github.event_name == 'push' && github.ref_name == 'main' }}
+          environments: 'default'
+          activate-environment: true
+
+      # -------------------------- Build Packages --------------------------- #
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: us-east-2
+          role-to-assume: arn:aws:iam::427443013497:role/BodoEngineNightlyRole
+          role-session-name: BodoEnginePrCiSession
+          role-skip-session-tagging: true
+
+      - name: Build Bodo
+        run: pixi run build-bodo -Cbuild.verbose=true
+        shell: bash
+        env:
+          # We should just use sccache directly on CI
+          DISABLE_CCACHE: 1
+          # Build Bodo with our fork of Arrow
+          USE_BODO_ARROW_FORK: 1
+
+      - name: Build Remaining
+        if: inputs.build-all == 'true'
+        shell: bash
+        run: |
+          pixi run build-bodosql
+          pixi run build-iceberg
+
+      - name: Disable AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          unset-current-credentials: true
+          aws-region: us-east-2

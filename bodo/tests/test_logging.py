@@ -205,6 +205,6 @@ def test_logging_logger_unsupported():
     ):
         test_unsupp_attr(l)
     with pytest.raises(
-        BodoError, match=re.escape("logging.Logger.hasHandlers not supported yet")
+        BodoError, match=re.escape("logging.Logger.hasHandlers() not supported yet")
     ):
         test_unsupp_method(l)

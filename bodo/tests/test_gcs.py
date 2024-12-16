@@ -1,10 +1,12 @@
 """Test connector for Google Cloud Storage."""
 
 import pandas as pd
+import pytest
 
 from bodo.tests.utils import check_func
 
 
+@pytest.mark.parquet
 def test_read_parquet_gcs():
     def impl(pq_file):
         df = pd.read_parquet(pq_file)
@@ -21,6 +23,7 @@ def test_read_parquet_gcs():
         check_func(impl, (pq_file,), py_output=expected_length)
 
 
+@pytest.mark.parquet
 def test_read_parquet_gcs_filters():
     """
     Verify that filters work correctly with gcs.

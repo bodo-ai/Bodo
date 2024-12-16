@@ -10,6 +10,7 @@ from bodo.utils.typing import BodoError
 df1 = pd.DataFrame({"A": [1, 2, 3], "C": ["aa", "b", "c"], "E": ["aa", "bb", "cc"]})
 df2 = pd.DataFrame({"A": [1, 2, 5], "B": ["aa", "b", "c"], "C": ["aa", "bb", "cc"]})
 
+
 # tests left is of type dataframe
 @pytest.mark.skip("[BE-3083] asof needs to be supported with table format")
 def test_merge_asof_left_dataframe(memory_leak_check):

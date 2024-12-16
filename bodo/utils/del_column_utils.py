@@ -1,13 +1,12 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """Helper information to keep table column deletion
 pass organized. This contains information about all
 table operations for optimizations.
 """
-from typing import Dict, Tuple
 
 from numba.core import ir, types
 
 from bodo.hiframes.table import TableType
+from bodo.utils.typing import is_overload_none
 
 # This must contain all table functions that can
 # "use" a column. This is used by helper functions
@@ -19,6 +18,7 @@ from bodo.hiframes.table import TableType
 table_usecol_funcs = {
     ("get_table_data", "bodo.hiframes.table"),
     ("table_filter", "bodo.hiframes.table"),
+    ("table_local_filter", "bodo.hiframes.table"),
     ("table_subset", "bodo.hiframes.table"),
     ("set_table_data", "bodo.hiframes.table"),
     ("set_table_data_null", "bodo.hiframes.table"),
@@ -31,7 +31,7 @@ table_usecol_funcs = {
 }
 
 
-def is_table_use_column_ops(fdef: Tuple[str, str], args, typemap):
+def is_table_use_column_ops(fdef: tuple[str, str], args, typemap):
     """Is the given callname a table operation
     that uses columns. Note: This must include
     all valid table operations that do not result
@@ -54,7 +54,7 @@ def is_table_use_column_ops(fdef: Tuple[str, str], args, typemap):
 
 
 def get_table_used_columns(
-    fdef: Tuple[str, str], call_expr: ir.Expr, typemap: Dict[str, types.Type]
+    fdef: tuple[str, str], call_expr: ir.Expr, typemap: dict[str, types.Type]
 ):
     """Get the columns used by a particular table operation
 
@@ -73,6 +73,7 @@ def get_table_used_columns(
         return {col_num}
     elif fdef in {
         ("table_filter", "bodo.hiframes.table"),
+        ("table_local_filter", "bodo.hiframes.table"),
         ("table_astype", "bodo.utils.table_utils"),
         ("generate_mappable_table_func", "bodo.utils.table_utils"),
         ("set_table_data", "bodo.hiframes.table"),
@@ -82,8 +83,11 @@ def get_table_used_columns(
         if "used_cols" in kws:
             used_cols_var = kws["used_cols"]
             used_cols_typ = typemap[used_cols_var.name]
-            used_cols_typ = used_cols_typ.instance_type
-            return set(used_cols_typ.meta)
+            # Double check that someone didn't manually specify
+            # "none" for used_cols.
+            if not is_overload_none(used_cols_typ):
+                used_cols_typ = used_cols_typ.instance_type
+                return set(used_cols_typ.meta)
     elif fdef == ("table_concat", "bodo.utils.table_utils"):
         # Table concat passes the column numbers meta type
         # as argument 1.
@@ -127,7 +131,7 @@ def get_table_used_columns(
         # extra arrays (arg 1). Non-table indices need to be removed.
         used_cols = typemap[call_expr.args[2].name].instance_type.meta
         n_table_cols = len(typemap[call_expr.args[0].name].arr_types)
-        return set(i for i in used_cols if i < n_table_cols)
+        return {i for i in used_cols if i < n_table_cols}
 
     # NOTE: get_table_used_columns() is called only when first input of
     # logical_table_to_table() is a table
@@ -145,7 +149,7 @@ def get_table_used_columns(
                     in_used_cols.add(in_ind)
             return in_used_cols
         else:
-            return set(i for i in in_col_inds if i < n_in_table_arrs)
+            return {i for i in in_col_inds if i < n_in_table_arrs}
 
     # If we don't have information about which columns this operation
     # kills, we return to None to indicate we must decref any remaining

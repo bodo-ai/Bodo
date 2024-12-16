@@ -1,7 +1,7 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
 Defines Bodo's compiler pipeline.
 """
+
 import os
 import warnings
 from collections import namedtuple
@@ -31,7 +31,7 @@ from numba.core.typed_passes import (
     InlineOverloads,
     IRLegalization,
     NopythonTypeInference,
-    ParforPass,
+    ParforPreLoweringPass,
     PreParforPass,
 )
 from numba.core.untyped_passes import (
@@ -52,6 +52,8 @@ import bodo.libs.re_ext  # noqa # side effect: initialize Numba extensions
 import bodo.libs.spark_extra
 import bodo.transforms
 import bodo.transforms.series_pass
+import bodo.transforms.type_inference
+import bodo.transforms.type_inference.typeinfer  # noqa # side effect: initialize Numba extensions
 import bodo.transforms.untyped_pass
 import bodo.utils
 import bodo.utils.table_utils  # noqa # side effect
@@ -80,6 +82,8 @@ class BodoCompiler(numba.core.compiler.CompilerBase):
     LowerParforSeq, BodoDumpDistDiagnosticsPass.
     See class docstrings for more info.
     """
+
+    avoid_copy_propagation = False
 
     def define_pipelines(self):
         return self._create_bodo_pipeline(
@@ -116,9 +120,9 @@ class BodoCompiler(numba.core.compiler.CompilerBase):
         # Series (e.g. S.var is not the same as np.var(S))
         add_pass_before(pm, BodoSeriesPass, PreParforPass)
         if distributed:
-            pm.add_pass_after(BodoDistributedPass, ParforPass)
+            pm.add_pass_after(BodoDistributedPass, ParforPreLoweringPass)
         else:
-            pm.add_pass_after(LowerParforSeq, ParforPass)
+            pm.add_pass_after(LowerParforSeq, ParforPreLoweringPass)
             pm.add_pass_after(LowerBodoIRExtSeq, LowerParforSeq)
 
         # Decref right before dels are inserted so the IR won't change anymore.
@@ -142,7 +146,7 @@ def add_pass_before(pm, pass_cls, location):
         if x == location:
             break
     else:  # pragma: no cover
-        raise bodo.utils.typing.BodoError("Could not find pass %s" % location)
+        raise bodo.utils.typing.BodoError(f"Could not find pass {location}")
     pm.passes.insert(idx, (pass_cls, str(pass_cls)))
     # if a pass has been added, it's not finalized
     pm._finalized = False
@@ -160,7 +164,7 @@ def replace_pass(pm, pass_cls, location):
         if x == location:
             break
     else:  # pragma: no cover
-        raise bodo.utils.typing.BodoError("Could not find pass %s" % location)
+        raise bodo.utils.typing.BodoError(f"Could not find pass {location}")
     pm.passes[idx] = (pass_cls, str(pass_cls))
     # if a pass has been added, it's not finalized
     pm._finalized = False
@@ -176,7 +180,7 @@ def remove_pass(pm, location):
         if x == location:
             break
     else:  # pragma: no cover
-        raise bodo.utils.typing.BodoError("Could not find pass %s" % location)
+        raise bodo.utils.typing.BodoError(f"Could not find pass {location}")
     pm.passes.pop(idx)
     # if a pass has been added, it's not finalized
     pm._finalized = False
@@ -226,7 +230,7 @@ def _convert_bodo_dispatcher_to_udf(rhs, func_ir):
 
             mod = importlib.import_module(func_mod)
             func_val = getattr(mod, func_name)
-        except:
+        except Exception:
             return
 
     # replace regular bodo compiler pipeline with bodo udf pipeline
@@ -293,6 +297,7 @@ class BodoUntypedPass(FunctionPass):
             state.locals,
             state.metadata,
             state.flags,
+            isinstance(state.pipeline, BodoCompilerSeq),
         )
         untyped_pass.run()
         return True
@@ -332,7 +337,6 @@ _series_method_alias = {
     "isnull": "isna",
     "product": "prod",
     "kurtosis": "kurt",
-    "is_monotonic": "is_monotonic_increasing",
     "notnull": "notna",
 }
 # DataFrame methods that are not inlined currently, but some may be possible to inline
@@ -490,7 +494,7 @@ def bodo_overload_inline_pass(func_ir, typingctx, targetctx, typemap, calltypes)
     pass_info = PassInfo(func_ir, typemap)
 
     blocks = func_ir.blocks
-    work_list = list((l, blocks[l]) for l in reversed(blocks.keys()))
+    work_list = [(l, blocks[l]) for l in reversed(blocks.keys())]
     while work_list:
         label, block = work_list.pop()
         new_body = []
@@ -609,6 +613,8 @@ class BodoSeriesPass(FunctionPass):
             state.typemap,
             state.calltypes,
             state.locals,
+            avoid_copy_propagation=state.pipeline.avoid_copy_propagation,
+            parfor_metadata=state.metadata["parfors"],
         )
         # run multiple times to make sure transformations are fully applied
         # TODO(ehsan): run as long as IR changes
@@ -639,10 +645,12 @@ class BodoDumpDistDiagnosticsPass(AnalysisPass):
         env_name = "BODO_DISTRIBUTED_DIAGNOSTICS"
         try:
             diag_level = int(os.environ[env_name])
-        except:
+        except Exception:
             pass
 
-        if diag_level > 0 and "distributed_diagnostics" in state.metadata:
+        if (
+            diag_level > 0 or state.flags.distributed_diagnostics
+        ) and "distributed_diagnostics" in state.metadata:
             state.metadata["distributed_diagnostics"].dump(diag_level, state.metadata)
         return True
 
@@ -721,14 +729,38 @@ class LowerBodoIRExtSeq(FunctionPass):
             for inst in block.body:
                 if type(inst) in distributed_run_extensions:
                     f = distributed_run_extensions[type(inst)]
-                    out_nodes = f(
+                    if isinstance(
                         inst,
-                        None,
-                        state.typemap,
-                        state.calltypes,
-                        state.typingctx,
-                        state.targetctx,
-                    )
+                        (
+                            bodo.ir.parquet_ext.ParquetReader,
+                            bodo.ir.iceberg_ext.IcebergReader,
+                        ),
+                    ) or (
+                        isinstance(inst, bodo.ir.sql_ext.SqlReader)
+                        and inst.db_type == "snowflake"
+                    ):
+                        out_nodes = f(
+                            inst,
+                            None,
+                            state.typemap,
+                            state.calltypes,
+                            state.typingctx,
+                            state.targetctx,
+                            # is_independent -> Ranks will execute independently of
+                            # other ranks due to bodo.jit(distributed=False),
+                            # i.e., no collective operations should be used.
+                            is_independent=True,
+                            meta_head_only_info=None,
+                        )
+                    else:
+                        out_nodes = f(
+                            inst,
+                            None,
+                            state.typemap,
+                            state.calltypes,
+                            state.typingctx,
+                            state.targetctx,
+                        )
                     new_body += out_nodes
                 elif is_call_assign(inst):
                     rhs = inst.value
@@ -788,7 +820,6 @@ class BodoTableColumnDelPass(AnalysisPass):
         FunctionPass.__init__(self)
 
     def run_pass(self, state):
-
         table_decref_pass = TableColumnDelPass(
             state.func_ir,
             state.typingctx,
@@ -950,7 +981,7 @@ def remove_passes_after(pm, location):
         if x == location:
             break
     else:  # pragma: no cover
-        raise bodo.utils.typing.BodoError("Could not find pass %s" % location)
+        raise bodo.utils.typing.BodoError(f"Could not find pass {location}")
     pm.passes = pm.passes[: idx + 1]
     # if a pass has been added, it's not finalized
     pm._finalized = False

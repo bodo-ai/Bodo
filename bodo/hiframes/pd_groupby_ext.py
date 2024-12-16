@@ -1,6 +1,5 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
-"""Support for Pandas Groupby operations
-"""
+"""Support for Pandas Groupby operations"""
+
 import operator
 from enum import Enum
 
@@ -11,6 +10,7 @@ from numba.core.imputils import impl_ret_borrowed
 from numba.core.registry import CPUDispatcher
 from numba.core.typing.templates import (
     AbstractTemplate,
+    Signature,
     bound_function,
     infer_global,
     signature,
@@ -23,7 +23,6 @@ from numba.extending import (
     make_attribute_wrapper,
     models,
     overload,
-    overload_attribute,
     overload_method,
     register_model,
 )
@@ -35,19 +34,18 @@ from bodo.hiframes.pd_multi_index_ext import MultiIndexType
 from bodo.hiframes.pd_series_ext import HeterogeneousSeriesType, SeriesType
 from bodo.libs.array import (
     arr_info_list_to_table,
+    array_from_cpp_table,
     array_to_info,
     delete_table,
-    delete_table_decref_arrays,
     get_groupby_labels,
     get_null_shuffle_info,
     get_shuffle_info,
-    info_from_table,
-    info_to_array,
     reverse_shuffle_table,
     shuffle_table,
 )
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
-from bodo.libs.decimal_arr_ext import Decimal128Type
+from bodo.libs.decimal_arr_ext import DECIMAL128_MAX_PRECISION, Decimal128Type
+from bodo.libs.float_arr_ext import FloatDtype, FloatingArrayType
 from bodo.libs.int_arr_ext import IntDtype, IntegerArrayType
 from bodo.libs.str_arr_ext import string_array_type
 from bodo.libs.str_ext import string_type
@@ -57,8 +55,8 @@ from bodo.utils.transform import get_call_expr_arg, get_const_func_output_type
 from bodo.utils.typing import (
     BodoError,
     ColNamesMetaType,
+    assert_bodo_error,
     check_unsupported_args,
-    create_unsupported_overload,
     dtype_to_array_type,
     get_index_data_arr_types,
     get_index_name_types,
@@ -68,6 +66,7 @@ from bodo.utils.typing import (
     get_overload_const_int,
     get_overload_const_list,
     get_overload_const_str,
+    get_overload_const_tuple,
     get_overload_constant_dict,
     get_udf_error_msg,
     get_udf_out_arr_type,
@@ -87,7 +86,7 @@ from bodo.utils.typing import (
     to_numeric_index_if_range_index,
     to_str_arr_if_dict_array,
 )
-from bodo.utils.utils import dt_err, is_expr
+from bodo.utils.utils import dict_add_multimap, dt_err, is_expr
 
 
 class DataFrameGroupByType(types.Type):  # TODO: IterableType over groups
@@ -105,11 +104,9 @@ class DataFrameGroupByType(types.Type):  # TODO: IterableType over groups
         explicit_select=False,
         series_select=False,
         _num_shuffle_keys=-1,
+        _use_sql_rules=False,
     ):
-        bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
-            df_type, "pandas.groupby()"
-        )
-
+        # TODO [BE-3982]: Ensure full groupby support with tz-aware keys and data.
         self.df_type = df_type
         self.keys = keys
         self.selection = selection
@@ -120,8 +117,10 @@ class DataFrameGroupByType(types.Type):  # TODO: IterableType over groups
         # How many of the keys to use as the keys to the shuffle. If -1
         # we shuffle on all keys.
         self._num_shuffle_keys = _num_shuffle_keys
+        # Should we use SQL or Pandas rules
+        self._use_sql_rules = _use_sql_rules
 
-        super(DataFrameGroupByType, self).__init__(
+        super().__init__(
             name=f"DataFrameGroupBy({df_type}, {keys}, {selection}, {as_index}, {dropna}, {explicit_select}, {series_select}, {_num_shuffle_keys})"
         )
 
@@ -136,6 +135,7 @@ class DataFrameGroupByType(types.Type):  # TODO: IterableType over groups
             self.explicit_select,
             self.series_select,
             self._num_shuffle_keys,
+            self._use_sql_rules,
         )
 
     @property
@@ -155,7 +155,7 @@ class GroupbyModel(models.StructModel):
         members = [
             ("obj", fe_type.df_type),
         ]
-        super(GroupbyModel, self).__init__(dmm, fe_type, members)
+        super().__init__(dmm, fe_type, members)
 
 
 make_attribute_wrapper(DataFrameGroupByType, "obj", "obj")
@@ -174,9 +174,15 @@ def validate_udf(func_name, func):
         raise_bodo_error(f"Groupby.{func_name}: 'func' must be user defined function")
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def init_groupby(
-    typingctx, obj_type, by_type, as_index_type, dropna_type, _num_shuffle_keys
+    typingctx,
+    obj_type,
+    by_type,
+    as_index_type,
+    dropna_type,
+    _num_shuffle_keys,
+    _is_bodosql,
 ):
     """Initialize a groupby object. The data object inside can be a DataFrame"""
 
@@ -218,6 +224,10 @@ def init_groupby(
         shuffle_keys = get_overload_const_int(_num_shuffle_keys)
     else:  # pragma: no cover
         shuffle_keys = -1
+    if is_overload_constant_bool(_is_bodosql):
+        _use_sql_rules = get_overload_const_bool(_is_bodosql)
+    else:
+        _use_sql_rules = False
     groupby_type = DataFrameGroupByType(
         obj_type,
         keys,
@@ -226,9 +236,17 @@ def init_groupby(
         dropna,
         False,
         _num_shuffle_keys=shuffle_keys,
+        _use_sql_rules=_use_sql_rules,
     )
     return (
-        groupby_type(obj_type, by_type, as_index_type, dropna_type, _num_shuffle_keys),
+        groupby_type(
+            obj_type,
+            by_type,
+            as_index_type,
+            dropna_type,
+            _num_shuffle_keys,
+            _is_bodosql,
+        ),
         codegen,
     )
 
@@ -256,15 +274,13 @@ class StaticGetItemDataFrameGroupBy(AbstractTemplate):
             if isinstance(idx, (tuple, list)):
                 if len(set(idx).difference(set(grpby.df_type.columns))) > 0:
                     raise_bodo_error(
-                        "groupby: selected column {} not found in dataframe".format(
-                            set(idx).difference(set(grpby.df_type.columns))
-                        )
+                        f"groupby: selected column {set(idx).difference(set(grpby.df_type.columns))} not found in dataframe"
                     )
                 selection = idx
             else:
                 if idx not in grpby.df_type.columns:
                     raise_bodo_error(
-                        "groupby: selected column {} not found in dataframe".format(idx)
+                        f"groupby: selected column {idx} not found in dataframe"
                     )
                 selection = (idx,)
                 series_select = True
@@ -277,6 +293,7 @@ class StaticGetItemDataFrameGroupBy(AbstractTemplate):
                 True,
                 series_select,
                 _num_shuffle_keys=grpby._num_shuffle_keys,
+                _use_sql_rules=grpby._use_sql_rules,
             )
             return signature(ret_grp, *args)
 
@@ -308,7 +325,7 @@ def static_getitem_df_groupby(context, builder, sig, args):
     return impl_ret_borrowed(context, builder, sig.return_type, args[0])
 
 
-def get_groupby_output_dtype(arr_type, func_name, index_type=None):
+def get_groupby_output_dtype(arr_type, func_name, index_type=None, other_args=None):
     """
     Return output array dtype for groupby aggregation function based on the
     function and the input array type and dtype.
@@ -331,21 +348,141 @@ def get_groupby_output_dtype(arr_type, func_name, index_type=None):
         )
     # [BE-416] Support with list
     # [BE-433] Support with tuples
-    if (
-        func_name
-        in ("first", "last", "sum", "prod", "min", "max", "count", "nunique", "head")
-    ) and (isinstance(arr_type, (TupleArrayType, ArrayItemArrayType))):
+    elif (
+        func_name in {"last", "sum", "prod", "min", "max", "nunique", "head"}
+    ) and isinstance(
+        arr_type, (ArrayItemArrayType, TupleArrayType)
+    ):  # pragma: no cover
         return (
             None,
-            f"column type of list/tuple of {in_dtype} is not supported in groupby built-in function {func_name}",
+            f"column type of {arr_type} of {in_dtype} is not supported in groupby built-in function {func_name}",
+        )
+    elif func_name in {"count"} and isinstance(
+        arr_type, TupleArrayType
+    ):  # pragma: no cover
+        return (
+            None,
+            f"column type of {arr_type} of {in_dtype} is not supported in groupby built-in function {func_name}",
         )
 
-    if (func_name in {"median", "mean", "var", "std"}) and isinstance(
-        in_dtype, (Decimal128Type, types.Integer, types.Float)
+    elif func_name == "size" or func_name == "grouping":
+        return dtype_to_array_type(types.int64), "ok"
+    elif func_name == "sum" and isinstance(in_dtype, Decimal128Type):
+        # Use maximum precision since sum can produce large output values
+        # TODO[BSE-3224] Support changing decimal representation in runtime to handle
+        # overflows.
+        out_dtype = Decimal128Type(DECIMAL128_MAX_PRECISION, in_dtype.scale)
+        return dtype_to_array_type(out_dtype), "ok"
+    elif (
+        (func_name == "sum")
+        and isinstance(in_dtype, types.Integer)
+        and (in_dtype.bitwidth <= 64)
     ):
-        return dtype_to_array_type(types.float64), "ok"
+        # Upcast output integer to the 64-bit variant to prevent overflow.
+        out_dtype = types.int64 if in_dtype.signed else types.uint64
+        if isinstance(arr_type, types.Array):
+            # If regular numpy (i.e. non-nullable)
+            return dtype_to_array_type(out_dtype), "ok"
+        else:
+            # Nullable:
+            return dtype_to_array_type(out_dtype, convert_nullable=True), "ok"
+
+    # These functions have a dedicated decimal implementation.
+    elif func_name in {"median", "percentile_cont"} and isinstance(
+        in_dtype, Decimal128Type
+    ):
+        # MEDIAN / PERCENTILE_CONT
+        # For median, the input precision and scale are increased by 3,
+        # while precision remains capped at 38.
+        # This means that an input scale of 36 or more is invalid.
+        # (Based off of Snowflake's MEDIAN)
+        new_scale = in_dtype.scale + 3
+        new_precision = min(38, in_dtype.precision + 3)
+        if new_scale > 38:
+            raise BodoError(
+                f"Input scale of {in_dtype.precision} too large for MEDIAN operation"
+            )
+        return bodo.DecimalArrayType(new_precision, new_scale), "ok"
+    elif func_name == "percentile_disc" and isinstance(in_dtype, Decimal128Type):
+        # PERCENTILE_DISC
+        # Maintain the same precision and scale as the input.
+        return bodo.DecimalArrayType(in_dtype.precision, in_dtype.scale), "ok"
+
+    elif (
+        func_name
+        in {
+            "median",
+            "mean",
+            "var_pop",
+            "std_pop",
+            "var",
+            "std",
+            "kurtosis",
+            "skew",
+            "percentile_cont",
+            "percentile_disc",
+        }
+    ) and isinstance(in_dtype, (Decimal128Type, types.Integer, types.Float)):
+        # TODO: Only make the output nullable if the input is nullable?
+        return to_nullable_type(dtype_to_array_type(types.float64)), "ok"
+    elif func_name in {"boolor_agg", "booland_agg", "boolxor_agg"}:
+        if isinstance(
+            in_dtype, (Decimal128Type, types.Integer, types.Float, types.Boolean)
+        ):
+            return bodo.boolean_array_type, "ok"
+        return (
+            None,
+            f"For {func_name}, only columns of type integer, float, Decimal, or boolean type are allowed",
+        )
+    elif func_name == "mode":
+        return arr_type, "ok"
+    elif func_name in {"bitor_agg", "bitand_agg", "bitxor_agg"}:
+        if isinstance(in_dtype, types.Integer):
+            return to_nullable_type(dtype_to_array_type(in_dtype)), "ok"
+        elif isinstance(in_dtype, (types.Float)) or in_dtype == types.unicode_type:
+            return to_nullable_type(dtype_to_array_type(types.int64)), "ok"
+        else:
+            return (
+                None,
+                f"For {func_name}, only columns of type integer, float, or strings (that evaluate to numbers) are allowed",
+            )
+    elif func_name == "count_if":
+        if in_dtype == types.boolean:
+            return types.Array(types.int64, 1, "C"), "ok"
+        return (
+            None,
+            "For count_if, only boolean columns are allowed",
+        )
+    elif func_name == "listagg":
+        # For listagg, output is always string, even if the input is dict encoded.
+        if in_dtype == string_type:
+            return string_array_type, "ok"
+        return (
+            None,
+            "For listagg, only string columns are allowed",
+        )
+    elif func_name in {"array_agg", "array_agg_distinct"}:
+        # For array_agg, output is a nested array where the internal arrays' dtypes
+        # are the same as the original input.
+        return ArrayItemArrayType(arr_type), "ok"
+    elif func_name == "object_agg":
+        # For object_agg, output is a map array where the keys are the
+        # first argument (which must be a string dtype) and the values
+        # are the second argument
+        key_arr_type = other_args[0]
+        if key_arr_type.dtype != string_type:  # pragma: no cover
+            return (
+                None,
+                f"Unsupported array type for {func_name}: {arr_type}",
+            )
+        return bodo.MapArrayType(key_arr_type, arr_type), "ok"
+
     if not isinstance(in_dtype, (types.Integer, types.Float, types.Boolean)):
-        if is_list_string or in_dtype == types.unicode_type:
+        if (
+            is_list_string
+            or in_dtype == types.unicode_type
+            or arr_type == bodo.binary_array_type
+        ):
             if func_name not in {
                 "count",
                 "nunique",
@@ -394,38 +531,13 @@ def get_groupby_output_dtype(arr_type, func_name, index_type=None):
             None,
             f"groupby built-in functions {func_name} does not support boolean column",
         )
-    if func_name in {"idxmin", "idxmax"}:
+    elif func_name in {"idxmin", "idxmax"}:
         return dtype_to_array_type(get_index_data_arr_types(index_type)[0].dtype), "ok"
     elif func_name in {"count", "nunique"}:
         return dtype_to_array_type(types.int64), "ok"
     else:
         # default: return same dtype as input
         return arr_type, "ok"
-
-
-def get_pivot_output_dtype(arr_type, func_name, index_type=None):
-    """
-    Return output dtype for groupby aggregation function based on the
-    function and the input array type and dtype.
-    If the operation is not feasible (e.g. summing dates) then an error message
-    is passed upward to be decided according to the context.
-    """
-    in_dtype = arr_type.dtype
-    if func_name in {"count"}:
-        return IntDtype(types.int64)
-    if func_name in {"sum", "prod", "min", "max"}:
-        if func_name in {"sum", "prod"} and not isinstance(
-            in_dtype, (types.Integer, types.Float)
-        ):
-            raise BodoError(
-                "pivot_table(): sum and prod operations require integer or float input"
-            )
-        if isinstance(in_dtype, types.Integer):
-            return IntDtype(in_dtype)
-        return in_dtype
-    if func_name in {"mean", "var", "std"}:
-        return types.float64
-    raise BodoError("invalid pivot operation")
 
 
 def check_args_kwargs(func_name, len_args, args, kws):
@@ -464,7 +576,14 @@ def get_keys_not_as_index(
 
 
 def get_agg_typ(
-    grp, args, func_name, typing_context, target_context, func=None, kws=None
+    grp,
+    args,
+    func_name,
+    typing_context,
+    target_context,
+    func=None,
+    kws=None,
+    raise_on_any_error=False,
 ):
     """Get output signature for a groupby function"""
     # grp: DataFrameGroupByType instance
@@ -513,7 +632,8 @@ def get_agg_typ(
                 ind_arr_t, types.StringLiteral(grp.keys[0])
             )
 
-    # gb_info maps (in_col, func_name) -> out_col
+    # gb_info maps (in_cols, additional_args, func_name) -> out_col
+    # where in_cols is a tuple of input column names
     gb_info = {}
     list_err_msg = []
     if func_name in ("size", "count"):
@@ -523,17 +643,17 @@ def get_agg_typ(
         # size always produces one integer output and doesn't depend on any input
         out_data.append(types.Array(types.int64, 1, "C"))
         out_columns.append("size")
-        gb_info[(None, "size")] = "size"
+        dict_add_multimap(gb_info, ((), (), "size"), "size")
     elif func_name == "ngroup":
         # ngroup always produces one integer output and doesn't depend on any input
         out_data.append(types.Array(types.int64, 1, "C"))
         out_columns.append("ngroup")
-        gb_info[(None, "ngroup")] = "ngroup"
+        dict_add_multimap(gb_info, ((), (), "ngroup"), "ngroup")
         # arguments passed to ngroup(ascending=True)
         kws = dict(kws) if kws else {}
         ascending = args[0] if len(args) > 0 else kws.pop("ascending", True)
-        unsupported_args = dict(ascending=ascending)
-        arg_defaults = dict(ascending=True)
+        unsupported_args = {"ascending": ascending}
+        arg_defaults = {"ascending": True}
         check_unsupported_args(
             f"Groupby.{func_name}",
             unsupported_args,
@@ -559,9 +679,9 @@ def get_agg_typ(
             if func_name in ("sum", "cumsum"):
                 data = to_str_arr_if_dict_array(data)
             e_column_type = ColumnType.NonNumericalColumn.value
-            if isinstance(data, (types.Array, IntegerArrayType)) and isinstance(
-                data.dtype, (types.Integer, types.Float)
-            ):
+            if isinstance(
+                data, (types.Array, IntegerArrayType, FloatingArrayType)
+            ) and isinstance(data.dtype, (types.Integer, types.Float)):
                 e_column_type = ColumnType.NumericalColumn.value
 
             if func_name == "agg":
@@ -576,14 +696,13 @@ def get_agg_typ(
                     if out_dtype != ArrayItemArrayType(string_array_type):
                         out_dtype = dtype_to_array_type(out_dtype)
                     err_msg = "ok"
-                except:
+                except Exception:
                     raise_bodo_error(
-                        "Groupy.agg()/Groupy.aggregate(): column {col} of type {type} "
-                        "is unsupported/not a valid input type for user defined function".format(
-                            col=c, type=data.dtype
-                        )
+                        f"Groupy.agg()/Groupy.aggregate(): column {c} of type {data.dtype} "
+                        "is unsupported/not a valid input type for user defined function"
                     )
             else:
+                other_args = None
                 if func_name in ("first", "last", "min", "max"):
                     kws = dict(kws) if kws else {}
                     # pop arguments from kws
@@ -593,10 +712,11 @@ def get_agg_typ(
                         args[0] if len(args) > 0 else kws.pop("numeric_only", False)
                     )
                     min_count = args[1] if len(args) > 1 else kws.pop("min_count", -1)
-                    unsupported_args = dict(
-                        numeric_only=numeric_only, min_count=min_count
-                    )
-                    arg_defaults = dict(numeric_only=False, min_count=-1)
+                    unsupported_args = {
+                        "numeric_only": numeric_only,
+                        "min_count": min_count,
+                    }
+                    arg_defaults = {"numeric_only": False, "min_count": -1}
                     check_unsupported_args(
                         f"Groupby.{func_name}",
                         unsupported_args,
@@ -613,10 +733,11 @@ def get_agg_typ(
                         args[0] if len(args) > 0 else kws.pop("numeric_only", True)
                     )
                     min_count = args[1] if len(args) > 1 else kws.pop("min_count", 0)
-                    unsupported_args = dict(
-                        numeric_only=numeric_only, min_count=min_count
-                    )
-                    arg_defaults = dict(numeric_only=True, min_count=0)
+                    unsupported_args = {
+                        "numeric_only": numeric_only,
+                        "min_count": min_count,
+                    }
+                    arg_defaults = {"numeric_only": True, "min_count": 0}
                     check_unsupported_args(
                         f"Groupby.{func_name}",
                         unsupported_args,
@@ -631,8 +752,8 @@ def get_agg_typ(
                     numeric_only = (
                         args[0] if len(args) > 0 else kws.pop("numeric_only", True)
                     )
-                    unsupported_args = dict(numeric_only=numeric_only)
-                    arg_defaults = dict(numeric_only=True)
+                    unsupported_args = {"numeric_only": numeric_only}
+                    arg_defaults = {"numeric_only": True}
                     check_unsupported_args(
                         f"Groupby.{func_name}",
                         unsupported_args,
@@ -646,8 +767,8 @@ def get_agg_typ(
                     # TODO: [BE-475] Throw an error if both args and kws are passed for same argument
                     axis = args[0] if len(args) > 0 else kws.pop("axis", 0)
                     skipna = args[1] if len(args) > 1 else kws.pop("skipna", True)
-                    unsupported_args = dict(axis=axis, skipna=skipna)
-                    arg_defaults = dict(axis=0, skipna=True)
+                    unsupported_args = {"axis": axis, "skipna": skipna}
+                    arg_defaults = {"axis": 0, "skipna": True}
                     check_unsupported_args(
                         f"Groupby.{func_name}",
                         unsupported_args,
@@ -655,13 +776,13 @@ def get_agg_typ(
                         package_name="pandas",
                         module_name="GroupBy",
                     )
-                elif func_name in ("var", "std"):
+                elif func_name in ("var_pop", "std_pop", "var", "std"):
                     kws = dict(kws) if kws else {}
                     # pop arguments from kws or args
                     # TODO: [BE-475] Throw an error if both args and kws are passed for same argument
                     ddof = args[0] if len(args) > 0 else kws.pop("ddof", 1)
-                    unsupported_args = dict(ddof=ddof)
-                    arg_defaults = dict(ddof=1)
+                    unsupported_args = {"ddof": ddof}
+                    arg_defaults = {"ddof": 1}
                     check_unsupported_args(
                         f"Groupby.{func_name}",
                         unsupported_args,
@@ -673,15 +794,20 @@ def get_agg_typ(
                     kws = dict(kws) if kws else {}
                     # pop arguments from kws or args
                     # TODO: [BE-475] Throw an error if both args and kws are passed for same argument
-                    dropna = args[0] if len(args) > 0 else kws.pop("dropna", 1)
+                    if len(args) == 0:
+                        kws.pop("dropna", None)
                     check_args_kwargs(func_name, 1, args, kws)
                 elif func_name == "head":
                     # pop arguments from kws or args
                     if len(args) == 0:
                         kws.pop("n", None)
-
+                elif func_name == "object_agg":
+                    key_col = args[0]
+                    key_col_idx = grp.df_type.column_index[key_col]
+                    key_col_type = grp.df_type.data[key_col_idx]
+                    other_args = (key_col_type,)
                 out_dtype, err_msg = get_groupby_output_dtype(
-                    data, func_name, grp.df_type.index
+                    data, func_name, grp.df_type.index, other_args
                 )
             if err_msg == "ok":
                 out_dtype = (
@@ -696,33 +822,18 @@ def get_agg_typ(
                     udf_name = bodo.ir.aggregate._get_udf_name(
                         bodo.ir.aggregate._get_const_agg_func(func, None)
                     )
-                    gb_info[(c, udf_name)] = c
+                    dict_add_multimap(gb_info, ((c,), (), udf_name), c)
                 else:
-                    gb_info[(c, func_name)] = c
+                    dict_add_multimap(gb_info, ((c,), (), func_name), c)
                 out_column_type.append(e_column_type)
             else:
-                list_err_msg.append(err_msg)
+                if raise_on_any_error:
+                    raise BodoError(
+                        f"Groupby with function {func_name} not supported. Error message: {err_msg}"
+                    )
+                else:
+                    list_err_msg.append(err_msg)
 
-    if func_name == "sum":
-        has_numeric = any(
-            [x == ColumnType.NumericalColumn.value for x in out_column_type]
-        )
-        if has_numeric:
-            out_data = [
-                x
-                for x, y in zip(out_data, out_column_type)
-                if y != ColumnType.NonNumericalColumn.value
-            ]
-            out_columns = [
-                x
-                for x, y in zip(out_columns, out_column_type)
-                if y != ColumnType.NonNumericalColumn.value
-            ]
-            gb_info = {}
-            for c in out_columns:
-                if grp.as_index is False and c in grp.keys:
-                    continue
-                gb_info[(c, func_name)] = c
     nb_drop = len(list_err_msg)
     if len(out_data) == 0:
         if nb_drop == 0:
@@ -749,6 +860,8 @@ def get_agg_typ(
     ):
         if isinstance(out_data[0], IntegerArrayType):
             dtype = IntDtype(out_data[0].dtype)
+        elif isinstance(out_data[0], FloatingArrayType):
+            dtype = FloatDtype(out_data[0].dtype)
         else:
             dtype = out_data[0].dtype
         name_type = (
@@ -760,10 +873,35 @@ def get_agg_typ(
     return signature(out_res, *args), gb_info
 
 
-def get_agg_funcname_and_outtyp(grp, col, f_val, typing_context, target_context):
-    """Get function name and output type for a function used in
+def get_agg_name_for_numpy_method(method_name):
+    """Takes in the name of a numpy method that is supported for groupby
+    aggregation (e.g. var, std) and returns the corresponding name used
+    to describe it in the groupby aggregation internals (e.g. "var_pop",
+    "std_pop")"""
+    method_to_agg_names = {
+        "var": "var_pop",
+        "std": "std_pop",
+    }
+    if method_name not in method_to_agg_names:
+        raise BodoError(
+            f"unsupported numpy method for use as an aggregate function np.{method_name}"
+        )
+    return method_to_agg_names[method_name]
+
+
+def get_agg_funcname_and_outtyp(
+    grp, col, f_val, additional_args, typing_context, target_context, raise_on_any_error
+):
+    """
+    Get function name and output type for a function used in
     groupby.agg(), given by f_val (can be a string constant or
-    user-defined function) applied to column col"""
+    user-defined function) applied to column col
+
+    Additional_args is a tuple of additional arguments to the aggregation call.
+    Empty tuple for aggregation functions which do not require
+    additional arguments.
+    """
+
     is_udf = True  # is user-defined function
     if isinstance(f_val, str):
         is_udf = False
@@ -775,10 +913,23 @@ def get_agg_funcname_and_outtyp(grp, col, f_val, typing_context, target_context)
         # Builtin functions like
         is_udf = False
         f_name = bodo.utils.typing.get_builtin_function_name(f_val)
+    elif bodo.utils.typing.is_numpy_function(f_val):
+        is_udf = False
+        method_name = bodo.utils.typing.get_builtin_function_name(f_val)
+        f_name = get_agg_name_for_numpy_method(method_name)
 
     if not is_udf:
         if f_name not in bodo.ir.aggregate.supported_agg_funcs[:-1]:
             raise BodoError(f"unsupported aggregate function {f_name}")
+
+        if (
+            f_name not in bodo.ir.aggregate.supported_extended_agg_funcs
+            and len(additional_args) != 0
+        ):
+            raise BodoError(
+                f"Internal error: aggregate function {f_name} does not support additional arguments and should not be used with bodo.utils.utils.ExtendedNamedAgg"
+            )
+
         # run typer on a groupby with just column col
         ret_grp = DataFrameGroupByType(
             grp.df_type,
@@ -789,10 +940,16 @@ def get_agg_funcname_and_outtyp(grp, col, f_val, typing_context, target_context)
             True,
             True,
             _num_shuffle_keys=grp._num_shuffle_keys,
+            _use_sql_rules=grp._use_sql_rules,
         )
-        out_tp = get_agg_typ(ret_grp, (), f_name, typing_context, target_context)[
-            0
-        ].return_type
+        out_tp = get_agg_typ(
+            ret_grp,
+            additional_args,
+            f_name,
+            typing_context,
+            target_context,
+            raise_on_any_error=raise_on_any_error,
+        )[0].return_type
     else:
         # assume udf
         if is_expr(f_val, "make_function"):
@@ -813,16 +970,182 @@ def get_agg_funcname_and_outtyp(grp, col, f_val, typing_context, target_context)
             True,
             True,
             _num_shuffle_keys=grp._num_shuffle_keys,
+            _use_sql_rules=grp._use_sql_rules,
         )
         # out_tp is series because we are passing only one input column
-        out_tp = get_agg_typ(ret_grp, (), "agg", typing_context, target_context, f)[
-            0
-        ].return_type
+        out_tp = get_agg_typ(
+            ret_grp,
+            additional_args,
+            "agg",
+            typing_context,
+            target_context,
+            f,
+            raise_on_any_error=raise_on_any_error,
+        )[0].return_type
     return f_name, out_tp
 
 
+def handle_extended_named_agg_input_cols(
+    data_col_name, f_name, args
+):  # pragma: no cover
+    assert (
+        len(args) == 3
+    ), "Internal error in handle_extended_named_agg_input_cols: args length does not equal 3"
+    assert_bodo_error(
+        is_literal_type(args[0]),
+        "Internal error in handle_extended_named_agg_input_cols: data column name is not a literal value",
+    )
+    assert (
+        get_literal_value(args[0]) == data_col_name
+    ), f"Internal error in handle_extended_named_agg_input_cols: data column name mismatch: {data_col_name} and {get_literal_value(args[0])}"
+
+    additional_args = args[2]
+    additional_args_made_literal = get_overload_const_tuple(additional_args)
+
+    if f_name not in bodo.ir.aggregate.supported_extended_agg_funcs:
+        raise RuntimeError(
+            f"Internal error: aggregate function {f_name} does not support additional arguments and should not be used with bodo.utils.utils.ExtendedNamedAgg"
+        )
+
+    if f_name == "listagg":
+        assert (
+            get_literal_value(args[1]) == "listagg"
+        ), "Internal error in resolve_listagg_func_inputs: Called on not listagg function."
+        return resolve_listagg_func_inputs(data_col_name, additional_args_made_literal)
+    if f_name in {"array_agg", "array_agg_distinct"}:
+        assert (
+            get_literal_value(args[1]) == f_name
+        ), "Internal error in resolve_array_agg_func_inputs: Called on not array_agg function."
+        return resolve_array_agg_func_inputs(
+            data_col_name, additional_args_made_literal
+        )
+    if f_name in {"percentile_cont", "percentile_disc"}:
+        assert (
+            get_literal_value(args[1]) == f_name
+        ), f"Internal error in resolve_listagg_func_inputs: Called on not {f_name} function."
+        percentile = additional_args_made_literal[0]
+        if not (isinstance(percentile, str)):
+            raise_bodo_error(
+                f"Groupby.{f_name}: 'percentile' should be a string of a single column name."
+            )
+        return (data_col_name, additional_args_made_literal[0]), ()
+    if f_name == "object_agg":
+        assert (
+            get_literal_value(args[1]) == f_name
+        ), "Internal error in resolve_array_agg_func_inputs: Called on not object_agg function."
+        key_col_name = additional_args_made_literal[0]
+        if not (isinstance(key_col_name, str)):
+            raise_bodo_error(
+                f"Groupby.{f_name}: 'key_col_name' should be a string of a single column name."
+            )
+        return (key_col_name, data_col_name), ()
+
+    raise RuntimeError(
+        f"Internal error in handle_extended_named_agg_input_cols: Unsupported function name: {f_name}"
+    )
+
+
+def resolve_listagg_func_inputs(data_col_name, additional_args) -> tuple:
+    sep = additional_args[0]
+    order_by = additional_args[1]
+    ascending = additional_args[2]
+    na_position = additional_args[3]
+
+    if not (isinstance(sep, str)):
+        raise_bodo_error(
+            "Groupby.listagg: 'sep' string  of a single column name if provided."
+        )
+    if not (
+        isinstance(order_by, tuple)
+        and all(isinstance(col_name, str) for col_name in order_by)
+    ):
+        raise_bodo_error(
+            "Groupby.listagg: 'order_by' argument must be a tuple of column names if provided."
+        )
+    if not (
+        isinstance(ascending, tuple) and all(isinstance(val, bool) for val in ascending)
+    ):
+        raise_bodo_error(
+            "Groupby.listagg: 'ascending' argument must be a tuple of booleans if provided."
+        )
+
+    if not (
+        isinstance(na_position, tuple)
+        and all(isinstance(val, str) for val in na_position)
+    ):
+        raise_bodo_error(
+            "Groupby.listagg: 'na_position' argument must be a tuple of 'first' or 'last' if provided."
+        )
+
+    if len(order_by) != len(ascending) or len(ascending) != len(na_position):
+        raise_bodo_error(
+            "Groupby.listagg: 'order_by', 'ascending', and 'na_position' arguments must have the same length."
+        )
+
+    # orderby is the only columnar input that should be included in the input columns
+    input_cols = (data_col_name,) + (sep,) + order_by
+    additional_args = (ascending, na_position)
+    return input_cols, additional_args
+
+
+def resolve_array_agg_func_inputs(data_col_name, additional_args) -> tuple:
+    order_by = additional_args[0]
+    ascending = additional_args[1]
+    na_position = additional_args[2]
+
+    if not (
+        isinstance(order_by, tuple)
+        and all(isinstance(col_name, str) for col_name in order_by)
+    ):  # pragma: no cover
+        raise_bodo_error(
+            "Groupby.array_agg: 'order_by' argument must be a tuple of column names if provided."
+        )
+    if not (
+        isinstance(ascending, tuple) and all(isinstance(val, bool) for val in ascending)
+    ):  # pragma: no cover
+        raise_bodo_error(
+            "Groupby.array_agg: 'ascending' argument must be a tuple of booleans if provided."
+        )
+
+    if not (
+        isinstance(na_position, tuple)
+        and all(isinstance(val, str) for val in na_position)
+    ):  # pragma: no cover
+        raise_bodo_error(
+            "Groupby.array_agg: 'na_position' argument must be a tuple of 'first' or 'last' if provided."
+        )
+
+    if len(order_by) != len(ascending) or len(ascending) != len(
+        na_position
+    ):  # pragma: no cover
+        raise_bodo_error(
+            "Groupby.array_agg: 'order_by', 'ascending', and 'na_position' arguments must have the same length."
+        )
+
+    # orderby is the only columnar input that should be included in the input columns
+    input_cols = (data_col_name,) + order_by
+    additional_args = (ascending, na_position)
+    return input_cols, additional_args
+
+
+def resolve_named_agg_literals(kws):
+    in_col_names = []
+    f_vals = []
+    additional_args = []
+
+    for out_tuple in kws.values():
+        in_col_names.append(get_literal_value(out_tuple[0]))
+        f_vals.append(get_literal_value(out_tuple[1]))
+        if len(out_tuple) == 2:
+            additional_args.append(())
+        else:
+            additional_args.append(get_literal_value(out_tuple[2]))
+
+    return in_col_names, f_vals, additional_args
+
+
 def resolve_agg(grp, args, kws, typing_context, target_context):
-    """infer groupby output type for agg/aggregate"""
+    """infer groupby output type for agg/aggregate/extended agg"""
     # NamedAgg case has func=None
     # e.g. df.groupby("A").agg(C=pd.NamedAgg(column="B", aggfunc="sum"))
     func = get_call_expr_arg("agg", args, dict(kws), 0, "func", default=types.none)
@@ -831,8 +1154,11 @@ def resolve_agg(grp, args, kws, typing_context, target_context):
     # This check is same as Pandas:
     # https://github.com/pandas-dev/pandas/blob/64027e60eead00d5ccccc5c7cddc9493a186aa95/pandas/core/aggregation.py#L129
     relabeling = kws and all(
-        isinstance(v, types.Tuple) and len(v) == 2 for v in kws.values()
+        isinstance(v, types.Tuple) and len(v) in (2, 3) for v in kws.values()
     )
+    # Should we raise an immediate exception when a particular column cannot be
+    # used in an aggregation. If a column is explicitly selected then yes.
+    raise_on_any_error = relabeling
 
     if is_overload_none(func) and not relabeling:
         raise_bodo_error("Groupby.agg()/aggregate(): Must provide 'func'")
@@ -859,12 +1185,12 @@ def resolve_agg(grp, args, kws, typing_context, target_context):
         # functions are applied to a column)
         if relabeling:
             # not using a col_map dictionary since input columns could be repeated
-            in_col_names = [get_literal_value(in_col) for (in_col, _) in kws.values()]
-            f_vals = [get_literal_value(col_func) for (_, col_func) in kws.values()]
+            in_col_names, f_vals, additional_args_list = resolve_named_agg_literals(kws)
         else:
             col_map = get_overload_constant_dict(func)
             in_col_names = tuple(col_map.keys())
             f_vals = tuple(col_map.values())
+            additional_args_list = [()] * len(col_map)
         for fn in ("head", "ngroup"):
             if fn in f_vals:
                 raise BodoError(
@@ -888,6 +1214,8 @@ def resolve_agg(grp, args, kws, typing_context, target_context):
             )
 
         # get output names and output types
+        # gb_info maps (in_cols, additional_args, func_name) -> out_col
+        # where in_cols is a tuple of input column names
         gb_info = {}
         out_columns = []
         out_data = []
@@ -901,12 +1229,20 @@ def resolve_agg(grp, args, kws, typing_context, target_context):
                 out_column_type,
                 multi_level_names=multi_level_names,
             )
-        for col_name, f_val in zip(in_col_names, f_vals):
+        for col_name, f_val, additional_args in zip(
+            in_col_names, f_vals, additional_args_list
+        ):
             if isinstance(f_val, (tuple, list)):
                 lambda_count = 0
                 for f in f_val:
                     f_name, out_tp = get_agg_funcname_and_outtyp(
-                        grp, col_name, f, typing_context, target_context
+                        grp,
+                        col_name,
+                        f,
+                        additional_args,
+                        typing_context,
+                        target_context,
+                        raise_on_any_error,
                     )
                     has_cumulative_ops = f_name in list_cumulative
                     if f_name == "<lambda>" and len(f_val) > 1:
@@ -916,19 +1252,29 @@ def resolve_agg(grp, args, kws, typing_context, target_context):
                     # This happens, for example, with
                     # df.groupby(...).agg({"A": [f1, f2]})
                     out_columns.append((col_name, f_name))
-                    gb_info[(col_name, f_name)] = (col_name, f_name)
+                    dict_add_multimap(
+                        gb_info, ((col_name,), (), f_name), (col_name, f_name)
+                    )
                     _append_out_type(grp, out_data, out_tp)
             else:
                 f_name, out_tp = get_agg_funcname_and_outtyp(
-                    grp, col_name, f_val, typing_context, target_context
+                    grp,
+                    col_name,
+                    f_val,
+                    additional_args,
+                    typing_context,
+                    target_context,
+                    raise_on_any_error,
                 )
                 has_cumulative_ops = f_name in list_cumulative
                 if multi_level_names:
                     out_columns.append((col_name, f_name))
-                    gb_info[(col_name, f_name)] = (col_name, f_name)
+                    dict_add_multimap(
+                        gb_info, ((col_name,), (), f_name), (col_name, f_name)
+                    )
                 elif not relabeling:
                     out_columns.append(col_name)
-                    gb_info[(col_name, f_name)] = col_name
+                    dict_add_multimap(gb_info, ((col_name,), (), f_name), col_name)
                 elif relabeling:
                     f_names.append(f_name)
                 _append_out_type(grp, out_data, out_tp)
@@ -937,7 +1283,16 @@ def resolve_agg(grp, args, kws, typing_context, target_context):
         if relabeling:
             for i, out_col in enumerate(kws.keys()):
                 out_columns.append(out_col)
-                gb_info[in_col_names[i], f_names[i]] = out_col
+
+                if len(kws[out_col]) == 3:
+                    input_cols, additional_args = handle_extended_named_agg_input_cols(
+                        in_col_names[i], f_names[i], kws[out_col]
+                    )
+                else:
+                    input_cols, additional_args = (in_col_names[i],), ()
+                dict_add_multimap(
+                    gb_info, (input_cols, additional_args, f_names[i]), out_col
+                )
 
         if has_cumulative_ops:
             # result of groupby.cumsum, etc. doesn't have a group index
@@ -976,11 +1331,19 @@ def resolve_agg(grp, args, kws, typing_context, target_context):
         lambda_count = 0
         if not grp.as_index:
             get_keys_not_as_index(grp, out_columns, out_data, out_column_type)
+        # gb_info maps (in_cols, additional_args, func_name) -> out_col
+        # where in_cols is a tuple of input column names
         gb_info = {}
         in_col_name = grp.selection[0]
         for f_val in func_vals:
             f_name, out_tp = get_agg_funcname_and_outtyp(
-                grp, in_col_name, f_val, typing_context, target_context
+                grp,
+                in_col_name,
+                f_val,
+                (),
+                typing_context,
+                target_context,
+                raise_on_any_error,
             )
             has_cumulative_ops = f_name in list_cumulative
             # if tuple has lambdas they will be named <lambda_0>,
@@ -989,7 +1352,7 @@ def resolve_agg(grp, args, kws, typing_context, target_context):
                 f_name = "<lambda_" + str(lambda_count) + ">"
                 lambda_count += 1
             out_columns.append(f_name)
-            gb_info[(in_col_name, f_name)] = f_name
+            dict_add_multimap(gb_info, ((in_col_name,), (), f_name), f_name)
             _append_out_type(grp, out_data, out_tp)
         if has_cumulative_ops:
             # result of groupby.cumsum, etc. doesn't have a group index
@@ -1040,9 +1403,10 @@ def resolve_transformative(grp, args, kws, msg, name_operation):
         # TODO: [BE-475] Throw an error if both args and kws are passed for same argument
         axis = args[0] if len(args) > 0 else kws.pop("axis", 0)
         numeric_only = args[1] if len(args) > 1 else kws.pop("numeric_only", False)
-        skipna = args[2] if len(args) > 2 else kws.pop("skipna", 1)
-        unsupported_args = dict(axis=axis, numeric_only=numeric_only)
-        arg_defaults = dict(axis=0, numeric_only=False)
+        if len(args) <= 2:
+            kws.pop("skipna", None)
+        unsupported_args = {"axis": axis, "numeric_only": numeric_only}
+        arg_defaults = {"axis": 0, "numeric_only": False}
         check_unsupported_args(
             f"Groupby.{name_operation}",
             unsupported_args,
@@ -1054,12 +1418,13 @@ def resolve_transformative(grp, args, kws, msg, name_operation):
     elif name_operation == "shift":
         # pop arguments from kws or args
         # TODO: [BE-475] Throw an error if both args and kws are passed for same argument
-        periods = args[0] if len(args) > 0 else kws.pop("periods", 1)
+        if len(args) == 0:
+            kws.pop("periods", None)
         freq = args[1] if len(args) > 1 else kws.pop("freq", None)
         axis = args[2] if len(args) > 2 else kws.pop("axis", 0)
         fill_value = args[3] if len(args) > 3 else kws.pop("fill_value", None)
-        unsupported_args = dict(freq=freq, axis=axis, fill_value=fill_value)
-        arg_defaults = dict(freq=None, axis=0, fill_value=None)
+        unsupported_args = {"freq": freq, "axis": axis, "fill_value": fill_value}
+        arg_defaults = {"freq": None, "axis": 0, "fill_value": None}
         check_unsupported_args(
             f"Groupby.{name_operation}",
             unsupported_args,
@@ -1074,20 +1439,22 @@ def resolve_transformative(grp, args, kws, msg, name_operation):
         transform_func = args[0] if len(args) > 0 else kws.pop("func", None)
         engine = kws.pop("engine", None)
         engine_kwargs = kws.pop("engine_kwargs", None)
-        unsupported_args = dict(engine=engine, engine_kwargs=engine_kwargs)
-        arg_defaults = dict(engine=None, engine_kwargs=None)
+        unsupported_args = {"engine": engine, "engine_kwargs": engine_kwargs}
+        arg_defaults = {"engine": None, "engine_kwargs": None}
         check_unsupported_args(
-            f"Groupby.transform",
+            "Groupby.transform",
             unsupported_args,
             arg_defaults,
             package_name="pandas",
             module_name="GroupBy",
         )
 
+    # gb_info maps (in_cols, additional_args, func_name) -> out_col
+    # where in_cols is a tuple of input column names
     gb_info = {}
     for c in grp.selection:
         out_columns.append(c)
-        gb_info[(c, name_operation)] = c
+        dict_add_multimap(gb_info, ((c,), (), name_operation), c)
         ind = grp.df_type.column_index[c]
         data = grp.df_type.data[ind]
         operation = (
@@ -1152,11 +1519,229 @@ def resolve_transformative(grp, args, kws, msg, name_operation):
     return signature(out_res, *args), gb_info
 
 
+def extract_window_args(
+    func_name: str, func_args: tuple[str]
+) -> tuple[list[str], list[str]]:
+    """
+    Processes a function name and tuple of argument strings corresponding to a window function
+    inside of a groupby.window term. Verifies that the number of arguments is correct for
+    the input function, and returns the scalar and vector arguments in separate lists
+
+    Args:
+
+        func_name: the string name of which window aggregation is being used.
+        func_args: the tuple of string representations of any arguments to the function.
+
+    Returns:
+
+        A list of all scalar arguments as string literals and list of all vector argument names.
+    """
+    # Map each function to the pattern of expected arguments (default is no arguments)
+    func_arg_typs = {
+        "ntile": ["scalar"],
+        "ratio_to_report": ["vector"],
+        "conditional_true_event": ["vector"],
+        "conditional_change_event": ["vector"],
+        "size": ["scalar", "scalar"],
+        "count": ["vector", "scalar", "scalar"],
+        "count_if": ["vector", "scalar", "scalar"],
+        "var": ["vector", "scalar", "scalar"],
+        "var_pop": ["vector", "scalar", "scalar"],
+        "std": ["vector", "scalar", "scalar"],
+        "std_pop": ["vector", "scalar", "scalar"],
+        "mean": ["vector", "scalar", "scalar"],
+        "any_value": ["vector"],
+        "first": ["vector", "scalar", "scalar"],
+        "last": ["vector", "scalar", "scalar"],
+    }
+    func_arg_typ = func_arg_typs.get(func_name, [])
+    # Verify that the input tuple has the correct length
+    if len(func_args) != len(func_arg_typ):
+        raise_bodo_error(
+            f"groupby.window: {func_name} expects {len(func_arg_typ)} arguments, received {len(func_args)}"
+        )
+    # Append each argument to the correct list
+    scalar_args = []
+    vector_args = []
+    for i in range(len(func_arg_typ)):
+        if func_arg_typ[i] == "vector":
+            vector_args.append(func_args[i])
+        else:
+            scalar_args.append(func_args[i])
+    return scalar_args, vector_args
+
+
+def get_window_func_types():
+    """
+    Return a mapping from function name to an expected output row type.
+    This may return None if the output type depends on the input type.
+    TODO: Add the input type as an argument.
+    """
+    window_func_types = {
+        "row_number": dtype_to_array_type(types.uint64),
+        "rank": dtype_to_array_type(types.uint64),
+        "dense_rank": dtype_to_array_type(types.uint64),
+        "ntile": dtype_to_array_type(types.uint64),
+        "ratio_to_report": to_nullable_type(dtype_to_array_type(types.float64)),
+        "conditional_true_event": dtype_to_array_type(types.uint64),
+        "conditional_change_event": dtype_to_array_type(types.uint64),
+        "size": dtype_to_array_type(types.uint64),
+        "count": dtype_to_array_type(types.uint64),
+        "count_if": dtype_to_array_type(types.uint64),
+        "percent_rank": dtype_to_array_type(types.float64),
+        "cume_dist": dtype_to_array_type(types.float64),
+        "var": to_nullable_type(dtype_to_array_type(types.float64)),
+        "var_pop": to_nullable_type(dtype_to_array_type(types.float64)),
+        "std": to_nullable_type(dtype_to_array_type(types.float64)),
+        "std_pop": to_nullable_type(dtype_to_array_type(types.float64)),
+        "mean": to_nullable_type(dtype_to_array_type(types.float64)),
+        "min_row_number_filter": bodo.boolean_array_type,
+        "booland_agg": bodo.boolean_array_type,
+        "boolor_agg": bodo.boolean_array_type,
+        # None = output dtype matches input dtype
+        "any_value": None,
+        "first": None,
+        "last": None,
+        "max": None,
+        "min": None,
+        "sum": None,
+        "bitand_agg": None,
+        "bitor_agg": None,
+        "bitxor_agg": None,
+        "lead": None,
+        "lag": None,
+    }
+    return window_func_types
+
+
+def resolve_window_funcs(
+    grp: DataFrameGroupByType,
+    args: tuple,
+    kws: tuple[tuple[str, types.Type]] | dict[str, types.Type],
+) -> tuple[Signature, dict]:
+    """
+    Output the Numba function signature and groupby information for window functions.
+    The groupby information maps the used columns and functions to the output columns.
+
+    Args:
+        grp (DataFrameGroupByType): _description_
+        args (Tuple): N-Tuple of argument types passed to Numba.
+        kws (Union[Tuple[Tuple[str, types.Type]], Dict[str, types.Type]]):
+            Either a N-tuple of pairs or Dict mapping kwargs passed to
+            Numba to their types.
+        msg (str): Error message to output on failure.
+
+    Returns:
+        Tuple[Signature, Dict]: The output signature for this function
+        and a dictionary mapping the used columns in the input to the output
+        and the used function.
+    """
+    # This operation isn't shared with Pandas so we can reduce
+    # memory by just generating a range index.
+    index = RangeIndexType(types.none)
+    out_columns = []
+    out_data = []
+    kws = dict(kws)
+    default_tuple = types.Tuple([])
+    # Extract the relevant arguments from kws or args
+    window_funcs = get_literal_value(
+        args[0] if len(args) > 0 else kws.pop("funcs", default_tuple)
+    )
+    order_by = get_literal_value(
+        args[1] if len(args) > 1 else kws.pop("order_by", default_tuple)
+    )
+    ascending = get_literal_value(
+        args[2] if len(args) > 2 else kws.pop("ascending", default_tuple)
+    )
+    na_position = get_literal_value(
+        args[3] if len(args) > 3 else kws.pop("na_position", default_tuple)
+    )
+    # We currently require only a single order by column as that satisfies the initial
+
+    if not (
+        isinstance(order_by, tuple)
+        and all(isinstance(col_name, str) for col_name in order_by)
+    ):
+        raise_bodo_error(
+            "Groupby.window: 'order_by' argument must be a tuple of column names if provided."
+        )
+    if not (
+        isinstance(ascending, tuple) and all(isinstance(val, bool) for val in ascending)
+    ):
+        raise_bodo_error(
+            "Groupby.window: 'ascending' argument must be a tuple of booleans if provided."
+        )
+    if not (
+        isinstance(na_position, tuple)
+        and all(isinstance(val, str) for val in na_position)
+    ):
+        raise_bodo_error(
+            "Groupby.window: 'na_position' argument must be a tuple of 'first' or 'last' if provided."
+        )
+
+    # Verify that every order_by column exists in the
+    if any(col_name not in grp.df_type.column_index for col_name in order_by):
+        raise_bodo_error(
+            f"Groupby.window: Column '{order_by}' does not exist in the input dataframe."
+        )
+    # Reuse the name currently generated by BodoSQL
+    out_columns = [f"AGG_OUTPUT_{i}" for i in range(len(window_funcs))]
+    out_data = []
+    in_cols = list(order_by)
+
+    for window_func in window_funcs:
+        if len(window_func) == 0:
+            raise_bodo_error(
+                "Invalid groupby.window term: argument tuples cannot have length zero"
+            )
+        func_name = window_func[0]
+        func_args = window_func[1:]
+        window_func_types = get_window_func_types()
+        if func_name not in window_func_types:
+            raise_bodo_error(f"Unrecognized window function {func_name}")
+        _, vector_args = extract_window_args(func_name, func_args)
+        in_cols.extend(vector_args)
+        out_dtype = window_func_types[func_name]
+        # None = output dtype matches input dtype
+        if out_dtype is None:
+            ind = grp.df_type.column_index[vector_args[0]]
+            in_arr_type = grp.df_type.data[ind]
+            out_dtype = in_arr_type
+            # If the function allows frames, the output can be nullable
+            # even if the input is not
+            if func_name in {"first", "last"}:
+                out_dtype = to_nullable_type(out_dtype)
+        out_data.append(out_dtype)
+
+    # Generate the gb_info
+    # gb_info maps (in_cols, additional_args, func_name) -> out_col
+    # where in_cols is a tuple of input column names
+    gb_info = {(tuple(in_cols), (), "window"): [out_columns[0]]}
+
+    out_res = DataFrameType(
+        tuple(out_data), index, tuple(out_columns), is_table_format=True
+    )
+    # XXX output becomes series if single output and explicitly selected
+    # TODO: Drop the keys for this groupby and just work as a series output
+    if len(grp.selection) == 1 and grp.series_select and grp.as_index:
+        out_res = SeriesType(
+            out_data[0].dtype,
+            data=out_data[0],
+            index=index,
+            name_typ=types.StringLiteral(grp.selection[0]),
+        )
+    return signature(out_res, *args), gb_info
+
+
 def resolve_gb(grp, args, kws, func_name, typing_context, target_context, err_msg=""):
     """Given a groupby function returns 2-tuple with output signature
-    and dict with mapping of (in_col, func_name) -> out_col"""
+    and dict with mapping of (in_col, func_name) -> [out_col_1, out_col_2, ...]
+    """
+
     if func_name in set(list_cumulative) | {"shift", "transform"}:
         return resolve_transformative(grp, args, kws, err_msg, func_name)
+    elif func_name == "window":
+        return resolve_window_funcs(grp, args, kws)
     elif func_name in {"agg", "aggregate"}:
         return resolve_agg(grp, args, kws, typing_context, target_context)
     else:
@@ -1273,6 +1858,17 @@ class DataframeGroupByAttribute(OverloadedKeyAttributeTemplate):
             numba.core.registry.cpu_target.target_context,
         )[0]
 
+    @bound_function("groupby.std", no_unliteral=True)
+    def resolve_std(self, grp, args, kws):
+        return resolve_gb(
+            grp,
+            args,
+            kws,
+            "std",
+            self.context,
+            numba.core.registry.cpu_target.target_context,
+        )[0]
+
     @bound_function("groupby.prod", no_unliteral=True)
     def resolve_prod(self, grp, args, kws):
         return resolve_gb(
@@ -1295,13 +1891,35 @@ class DataframeGroupByAttribute(OverloadedKeyAttributeTemplate):
             numba.core.registry.cpu_target.target_context,
         )[0]
 
-    @bound_function("groupby.std", no_unliteral=True)
-    def resolve_std(self, grp, args, kws):
+    @bound_function("groupby.kurtosis", no_unliteral=True)
+    def resolve_kurtosis(self, grp, args, kws):
         return resolve_gb(
             grp,
             args,
             kws,
-            "std",
+            "kurtosis",
+            self.context,
+            numba.core.registry.cpu_target.target_context,
+        )[0]
+
+    @bound_function("groupby.skew", no_unliteral=True)
+    def resolve_skew(self, grp, args, kws):
+        return resolve_gb(
+            grp,
+            args,
+            kws,
+            "skew",
+            self.context,
+            numba.core.registry.cpu_target.target_context,
+        )[0]
+
+    @bound_function("groupby.kurtosis", no_unliteral=True)
+    def resolve_kurtosis(self, grp, args, kws):
+        return resolve_gb(
+            grp,
+            args,
+            kws,
+            "kurtosis",
             self.context,
             numba.core.registry.cpu_target.target_context,
         )[0]
@@ -1443,9 +2061,20 @@ class DataframeGroupByAttribute(OverloadedKeyAttributeTemplate):
             err_msg=msg,
         )[0]
 
+    @bound_function("groupby.window", no_unliteral=True)
+    def resolve_window(self, grp, args, kws):
+        return resolve_gb(
+            grp,
+            args,
+            kws,
+            "window",
+            self.context,
+            numba.core.registry.cpu_target.target_context,
+        )[0]
+
     @bound_function("groupby.head", no_unliteral=True)
     def resolve_head(self, grp, args, kws):
-        msg = "Unsupported Gropupby head operation.\n"
+        msg = "Unsupported Groupby head operation.\n"
         return resolve_gb(
             grp,
             args,
@@ -1541,6 +2170,7 @@ class DataframeGroupByAttribute(OverloadedKeyAttributeTemplate):
         # output
         if single_row_output:
             if isinstance(f_return_type, HeterogeneousSeriesType):
+                assert_bodo_error(f_return_type.const_info is not None)
                 _, index_vals = f_return_type.const_info
                 # Heterogenous Series should always return a Nullable Tuple in the output type,
                 if isinstance(
@@ -1622,6 +2252,7 @@ class DataframeGroupByAttribute(OverloadedKeyAttributeTemplate):
             True,
             True,
             _num_shuffle_keys=grpby._num_shuffle_keys,
+            _use_sql_rules=grpby._use_sql_rules,
         )
 
 
@@ -1764,7 +2395,6 @@ def get_group_indices_overload(keys, dropna, _is_parallel):
     func_text += "    group_labels = np.empty(len(keys[0]), np.int64)\n"
     func_text += "    sort_idx = np.empty(len(keys[0]), np.int64)\n"
     func_text += "    ngroups = get_groupby_labels(table, group_labels.ctypes, sort_idx.ctypes, dropna, _is_parallel)\n"
-    func_text += "    delete_table_decref_arrays(table)\n"
     func_text += "    ev.finalize()\n"
     func_text += "    return sort_idx, group_labels, ngroups\n"
     loc_vars = {}
@@ -1776,7 +2406,6 @@ def get_group_indices_overload(keys, dropna, _is_parallel):
             "get_groupby_labels": get_groupby_labels,
             "array_to_info": array_to_info,
             "arr_info_list_to_table": arr_info_list_to_table,
-            "delete_table_decref_arrays": delete_table_decref_arrays,
         },
         loc_vars,
     )
@@ -1852,7 +2481,7 @@ def gen_shuffle_dataframe(df, keys, _is_parallel):
     for i in range(n_cols):
         func_text += f"  in_arr{i} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i})\n"
 
-    func_text += f"  in_index_arr = bodo.utils.conversion.index_to_array(bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df))\n"
+    func_text += "  in_index_arr = bodo.utils.conversion.index_to_array(bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df))\n"
 
     func_text += "  info_list = [{}, {}, {}]\n".format(
         ", ".join(f"array_to_info(keys[{i}])" for i in range(n_keys)),
@@ -1860,20 +2489,22 @@ def gen_shuffle_dataframe(df, keys, _is_parallel):
         "array_to_info(in_index_arr)",
     )
     func_text += "  table = arr_info_list_to_table(info_list)\n"
+    # NOTE: C++ will delete table pointer
     func_text += f"  out_table = shuffle_table(table, {n_keys}, _is_parallel, 1)\n"
 
     # extract arrays from C++ table
     for i in range(n_keys):
-        func_text += f"  out_key{i} = info_to_array(info_from_table(out_table, {i}), keys{i}_typ)\n"
+        func_text += (
+            f"  out_key{i} = array_from_cpp_table(out_table, {i}, keys{i}_typ)\n"
+        )
 
     for i in range(n_cols):
-        func_text += f"  out_arr{i} = info_to_array(info_from_table(out_table, {i+n_keys}), in_arr{i}_typ)\n"
+        func_text += f"  out_arr{i} = array_from_cpp_table(out_table, {i+n_keys}, in_arr{i}_typ)\n"
 
-    func_text += f"  out_arr_index = info_to_array(info_from_table(out_table, {n_keys + n_cols}), ind_arr_typ)\n"
+    func_text += f"  out_arr_index = array_from_cpp_table(out_table, {n_keys + n_cols}, ind_arr_typ)\n"
 
     func_text += "  shuffle_info = get_shuffle_info(out_table)\n"
     func_text += "  delete_table(out_table)\n"
-    func_text += "  delete_table(table)\n"
 
     out_data = ", ".join(f"out_arr{i}" for i in range(n_cols))
     func_text += "  out_index = bodo.utils.conversion.index_from_array(out_arr_index)\n"
@@ -1888,14 +2519,15 @@ def gen_shuffle_dataframe(df, keys, _is_parallel):
         "array_to_info": array_to_info,
         "arr_info_list_to_table": arr_info_list_to_table,
         "shuffle_table": shuffle_table,
-        "info_from_table": info_from_table,
-        "info_to_array": info_to_array,
+        "array_from_cpp_table": array_from_cpp_table,
         "delete_table": delete_table,
         "get_shuffle_info": get_shuffle_info,
         "__col_name_meta_value_df_shuffle": ColNamesMetaType(df.columns),
-        "ind_arr_typ": types.Array(types.int64, 1, "C")
-        if isinstance(df.index, RangeIndexType)
-        else df.index.data,
+        "ind_arr_typ": (
+            types.Array(types.int64, 1, "C")
+            if isinstance(df.index, RangeIndexType)
+            else df.index.data
+        ),
     }
     glbls.update({f"keys{i}_typ": keys.types[i] for i in range(n_keys)})
     glbls.update({f"in_arr{i}_typ": df.data[i] for i in range(n_cols)})
@@ -1926,11 +2558,11 @@ def overload_reverse_shuffle(data, shuffle_info):
             ", ".join(f"array_to_info(data._data[{i}])" for i in range(n_fields)),
         )
         func_text += "  table = arr_info_list_to_table(info_list)\n"
+        # NOTE: C++ will delete table pointer
         func_text += "  out_table = reverse_shuffle_table(table, shuffle_info)\n"
         for i in range(n_fields):
-            func_text += f"  out_arr{i} = info_to_array(info_from_table(out_table, {i}), data._data[{i}])\n"
+            func_text += f"  out_arr{i} = array_from_cpp_table(out_table, {i}, data._data[{i}])\n"
         func_text += "  delete_table(out_table)\n"
-        func_text += "  delete_table(table)\n"
         func_text += (
             "  return init_multi_index(({},), data._names, data._name)\n".format(
                 ", ".join(f"out_arr{i}" for i in range(n_fields))
@@ -1944,8 +2576,7 @@ def overload_reverse_shuffle(data, shuffle_info):
                 "array_to_info": array_to_info,
                 "arr_info_list_to_table": arr_info_list_to_table,
                 "reverse_shuffle_table": reverse_shuffle_table,
-                "info_from_table": info_from_table,
-                "info_to_array": info_to_array,
+                "array_from_cpp_table": array_from_cpp_table,
                 "delete_table": delete_table,
                 "init_multi_index": bodo.hiframes.pd_multi_index_ext.init_multi_index,
             },
@@ -1968,10 +2599,10 @@ def overload_reverse_shuffle(data, shuffle_info):
     def impl_arr(data, shuffle_info):  # pragma: no cover
         info_list = [array_to_info(data)]
         table = arr_info_list_to_table(info_list)
+        # NOTE: C++ will delete table pointer
         out_table = reverse_shuffle_table(table, shuffle_info)
-        out_arr = info_to_array(info_from_table(out_table, 0), data)
+        out_arr = array_from_cpp_table(out_table, 0, data)
         delete_table(out_table)
-        delete_table(table)
         return out_arr
 
     return impl_arr
@@ -1983,9 +2614,13 @@ def overload_reverse_shuffle(data, shuffle_info):
 def groupby_value_counts(
     grp, normalize=False, sort=True, ascending=False, bins=None, dropna=True
 ):
-
-    unsupported_args = dict(normalize=normalize, sort=sort, bins=bins, dropna=dropna)
-    arg_defaults = dict(normalize=False, sort=True, bins=None, dropna=True)
+    unsupported_args = {
+        "normalize": normalize,
+        "sort": sort,
+        "bins": bins,
+        "dropna": dropna,
+    }
+    arg_defaults = {"normalize": False, "sort": True, "bins": None, "dropna": True}
     check_unsupported_args(
         "Groupby.value_counts",
         unsupported_args,
@@ -2003,14 +2638,10 @@ def groupby_value_counts(
 
     ascending_val = get_overload_const_bool(ascending)
 
-    # Series.value_counts set its index name to `None`
-    # Here, last index name in MultiIndex will have series name.
-    name = grp.selection[0]
-
     # df.groupby("X")["Y"].value_counts() => df.groupby("X")["Y"].apply(lambda S : S.value_counts())
-    func_text = f"def impl(grp, normalize=False, sort=True, ascending=False, bins=None, dropna=True):\n"
+    func_text = "def impl(grp, normalize=False, sort=True, ascending=False, bins=None, dropna=True):\n"
     # TODO: [BE-635] Use S.rename_axis
-    udf = f"lambda S: S.value_counts(ascending={ascending_val}, _index_name='{name}')"
+    udf = f"lambda S: S.value_counts(ascending={ascending_val})"
     func_text += f"    return grp.apply({udf})\n"
     loc_vars = {}
     exec(func_text, {"bodo": bodo}, loc_vars)
@@ -2055,12 +2686,10 @@ groupby_unsupported = {
     "fillna",
     "filter",
     "hist",
-    "mad",
     "plot",
     "quantile",
     "resample",
     "sample",
-    "skew",
     "take",
     "tshift",
 }
@@ -2085,31 +2714,31 @@ def _install_groupby_unsupported():
     DataFrameGroupBy, and SeriesGroupBy types
     """
 
-    for fname in groupby_unsupported_attr:
-        overload_attribute(DataFrameGroupByType, fname, no_unliteral=True)(
-            create_unsupported_overload(f"DataFrameGroupBy.{fname}")
+    for attr_name in groupby_unsupported_attr:
+        bodo.overload_unsupported_attribute(
+            DataFrameGroupByType, attr_name, f"DataFrameGroupBy.{attr_name}"
         )
 
     for fname in groupby_unsupported:
-        overload_method(DataFrameGroupByType, fname, no_unliteral=True)(
-            create_unsupported_overload(f"DataFrameGroupBy.{fname}")
+        bodo.overload_unsupported_method(
+            DataFrameGroupByType, fname, f"DataFrameGroupBy.{fname}"
         )
 
     # TODO: Replace DataFrameGroupByType with SeriesGroupByType once we
     # have separate types.
-    for fname in series_only_unsupported_attrs:
-        overload_attribute(DataFrameGroupByType, fname, no_unliteral=True)(
-            create_unsupported_overload(f"SeriesGroupBy.{fname}")
+    for attr_name in series_only_unsupported_attrs:
+        bodo.overload_unsupported_attribute(
+            DataFrameGroupByType, attr_name, f"SeriesGroupBy.{attr_name}"
         )
 
     for fname in series_only_unsupported:
-        overload_method(DataFrameGroupByType, fname, no_unliteral=True)(
-            create_unsupported_overload(f"SeriesGroupBy.{fname}")
+        bodo.overload_unsupported_method(
+            DataFrameGroupByType, fname, f"SeriesGroupBy.{fname}"
         )
 
     for fname in dataframe_only_unsupported:
-        overload_method(DataFrameGroupByType, fname, no_unliteral=True)(
-            create_unsupported_overload(f"DataFrameGroupBy.{fname}")
+        bodo.overload_unsupported_method(
+            DataFrameGroupByType, fname, f"DataFrameGroupBy.{fname}"
         )
 
 

@@ -1,7 +1,7 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
 Indexing support for Series objects, including loc/iloc/at/iat types.
 """
+
 import operator
 
 import numpy as np
@@ -31,7 +31,7 @@ from bodo.hiframes.pd_timestamp_ext import (
     convert_datetime64_to_timestamp,
     convert_numpy_timedelta64_to_pd_timedelta,
     integer_to_dt64,
-    pd_timestamp_type,
+    pd_timestamp_tz_naive_type,
 )
 from bodo.utils.typing import (
     BodoError,
@@ -52,8 +52,8 @@ from bodo.utils.typing import (
 class SeriesIatType(types.Type):
     def __init__(self, stype):
         self.stype = stype
-        name = "SeriesIatType({})".format(stype)
-        super(SeriesIatType, self).__init__(name)
+        name = f"SeriesIatType({stype})"
+        super().__init__(name)
 
     @property
     def mangling_args(self):
@@ -72,14 +72,14 @@ class SeriesIatType(types.Type):
 class SeriesIatModel(models.StructModel):
     def __init__(self, dmm, fe_type):
         members = [("obj", fe_type.stype)]
-        super(SeriesIatModel, self).__init__(dmm, fe_type, members)
+        super().__init__(dmm, fe_type, members)
 
 
 make_attribute_wrapper(SeriesIatType, "obj", "_obj")
 
 
 @intrinsic
-def init_series_iat(typingctx, obj=None):
+def init_series_iat(typingctx, obj):
     def codegen(context, builder, signature, args):
         (obj_val,) = args
         iat_type = signature.return_type
@@ -126,9 +126,12 @@ def overload_series_iat_setitem(I, idx, val):
     if isinstance(I, SeriesIatType):
         if not isinstance(idx, types.Integer):
             raise BodoError("iAt based indexing can only have integer indexers")
-        # check string setitem
+        # check string/binary setitem
         if I.stype.dtype == bodo.string_type and val is not types.none:
             raise BodoError("Series string setitem not supported yet")
+        if I.stype.dtype == bodo.bytes_type and val is not types.none:
+            raise BodoError("Series binary setitem not supported yet")
+
         # Bodo Restriction, cannot set item with immutable array.
         if is_immutable_array(I.stype.data):
             raise BodoError(
@@ -137,7 +140,10 @@ def overload_series_iat_setitem(I, idx, val):
         # unbox dt64 from Timestamp
         # see unboxing pandas/core/arrays/datetimes.py:
         # DatetimeArray._unbox_scalar
-        if I.stype.dtype == types.NPDatetime("ns") and val == pd_timestamp_type:
+        if (
+            I.stype.dtype == types.NPDatetime("ns")
+            and val == pd_timestamp_tz_naive_type
+        ):
 
             def impl_dt(I, idx, val):  # pragma: no cover
                 s = integer_to_dt64(val.value)
@@ -189,8 +195,8 @@ def overload_series_iat_setitem(I, idx, val):
 class SeriesIlocType(types.Type):
     def __init__(self, stype):
         self.stype = stype
-        name = "SeriesIlocType({})".format(stype)
-        super(SeriesIlocType, self).__init__(name)
+        name = f"SeriesIlocType({stype})"
+        super().__init__(name)
 
     @property
     def mangling_args(self):
@@ -209,14 +215,14 @@ class SeriesIlocType(types.Type):
 class SeriesIlocModel(models.StructModel):
     def __init__(self, dmm, fe_type):
         members = [("obj", fe_type.stype)]
-        super(SeriesIlocModel, self).__init__(dmm, fe_type, members)
+        super().__init__(dmm, fe_type, members)
 
 
 make_attribute_wrapper(SeriesIlocType, "obj", "_obj")
 
 
 @intrinsic
-def init_series_iloc(typingctx, obj=None):
+def init_series_iloc(typingctx, obj):
     def codegen(context, builder, signature, args):
         (obj_val,) = args
         iloc_type = signature.return_type
@@ -240,7 +246,6 @@ def overload_series_iloc(s):
 @overload(operator.getitem, no_unliteral=True)
 def overload_series_iloc_getitem(I, idx):
     if isinstance(I, SeriesIlocType):
-
         # convert dt64 to pd.timedelta
         if I.stype.dtype == types.NPTimedelta("ns") and isinstance(idx, types.Integer):
             return lambda I, idx: convert_numpy_timedelta64_to_pd_timedelta(
@@ -271,7 +276,7 @@ def overload_series_iloc_getitem(I, idx):
                 # This has a separate implementation because numpy arrays
                 # cannot support list of int getitem and we must first
                 # convert to an array
-                idx_t = bodo.utils.conversion.coerce_to_ndarray(idx)
+                idx_t = bodo.utils.conversion.coerce_to_array(idx)
                 arr = bodo.hiframes.pd_series_ext.get_series_data(S)[idx_t]
                 index = bodo.hiframes.pd_series_ext.get_series_index(S)[idx_t]
                 name = bodo.hiframes.pd_series_ext.get_series_name(S)
@@ -293,19 +298,23 @@ def overload_series_iloc_getitem(I, idx):
 
         # TODO: error-checking test
         raise BodoError(
-            "Series.iloc[] getitem using {} not supported".format(idx)
+            f"Series.iloc[] getitem using {idx} not supported"
         )  # pragma: no cover
 
 
 @overload(operator.setitem, no_unliteral=True)
 def overload_series_iloc_setitem(I, idx, val):
     if isinstance(I, SeriesIlocType):
-        # check string setitem
+        # check string/binary setitem
         if I.stype.dtype == bodo.string_type and val is not types.none:
-            # TODO: error-checking test
             raise BodoError(
                 "Series string setitem not supported yet"
             )  # pragma: no cover
+        if I.stype.dtype == bodo.bytes_type and val is not types.none:
+            raise BodoError(
+                "Series binary setitem not supported yet"
+            )  # pragma: no cover
+
         # Bodo Restriction, cannot set item with immutable array.
         if is_immutable_array(I.stype.data):
             raise BodoError(
@@ -318,7 +327,10 @@ def overload_series_iloc_setitem(I, idx, val):
             isinstance(idx, types.SliceType) and is_scalar_type(val)
         ):
             # unbox dt64 from Timestamp (TODO: timedelta and other datetimelike)
-            if I.stype.dtype == types.NPDatetime("ns") and val == pd_timestamp_type:
+            if (
+                I.stype.dtype == types.NPDatetime("ns")
+                and val == pd_timestamp_tz_naive_type
+            ):
 
                 def impl_dt(I, idx, val):  # pragma: no cover
                     s = integer_to_dt64(val.value)
@@ -368,9 +380,9 @@ def overload_series_iloc_setitem(I, idx, val):
         if isinstance(idx, types.SliceType):
 
             def impl_slice(I, idx, val):  # pragma: no cover
-                bodo.hiframes.pd_series_ext.get_series_data(I._obj)[
-                    idx
-                ] = bodo.utils.conversion.coerce_to_array(val, False)
+                bodo.hiframes.pd_series_ext.get_series_data(I._obj)[idx] = (
+                    bodo.utils.conversion.coerce_to_array(val, False)
+                )
 
             return impl_slice
 
@@ -380,16 +392,17 @@ def overload_series_iloc_setitem(I, idx, val):
         if is_list_like_index_type(idx) and isinstance(
             idx.dtype, (types.Integer, types.Boolean)
         ):
-
             # Scalar case the same as int/slice. Needs a separate
-            # implementation for bodo.utils.conversion.coerce_to_ndarray
+            # implementation for bodo.utils.conversion.coerce_to_array
             if is_scalar_type(val):
-
-                if I.stype.dtype == types.NPDatetime("ns") and val == pd_timestamp_type:
+                if (
+                    I.stype.dtype == types.NPDatetime("ns")
+                    and val == pd_timestamp_tz_naive_type
+                ):
 
                     def impl_dt(I, idx, val):  # pragma: no cover
                         s = integer_to_dt64(val.value)
-                        idx_t = bodo.utils.conversion.coerce_to_ndarray(idx)
+                        idx_t = bodo.utils.conversion.coerce_to_array(idx)
                         bodo.hiframes.pd_series_ext.get_series_data(I._obj)[idx_t] = s
 
                     return impl_dt
@@ -403,7 +416,7 @@ def overload_series_iloc_setitem(I, idx, val):
                         s = bodo.hiframes.pd_timestamp_ext.datetime_datetime_to_dt64(
                             val
                         )
-                        idx_t = bodo.utils.conversion.coerce_to_ndarray(idx)
+                        idx_t = bodo.utils.conversion.coerce_to_array(idx)
                         bodo.hiframes.pd_series_ext.get_series_data(I._obj)[idx_t] = s
 
                     return impl_dt
@@ -418,7 +431,7 @@ def overload_series_iloc_setitem(I, idx, val):
                             val
                         )
                         s = bodo.hiframes.pd_timestamp_ext.integer_to_timedelta64(val_b)
-                        idx_t = bodo.utils.conversion.coerce_to_ndarray(idx)
+                        idx_t = bodo.utils.conversion.coerce_to_array(idx)
                         bodo.hiframes.pd_series_ext.get_series_data(I._obj)[idx_t] = s
 
                     return impl_dt
@@ -431,28 +444,28 @@ def overload_series_iloc_setitem(I, idx, val):
                     def impl_dt(I, idx, val):  # pragma: no cover
                         val_b = val.value
                         s = bodo.hiframes.pd_timestamp_ext.integer_to_timedelta64(val_b)
-                        idx_t = bodo.utils.conversion.coerce_to_ndarray(idx)
+                        idx_t = bodo.utils.conversion.coerce_to_array(idx)
                         bodo.hiframes.pd_series_ext.get_series_data(I._obj)[idx_t] = s
 
                     return impl_dt
 
                 def impl(I, idx, val):  # pragma: no cover
-                    idx_t = bodo.utils.conversion.coerce_to_ndarray(idx)
+                    idx_t = bodo.utils.conversion.coerce_to_array(idx)
                     bodo.hiframes.pd_series_ext.get_series_data(I._obj)[idx_t] = val
 
                 return impl
 
             def impl_arr(I, idx, val):  # pragma: no cover
-                idx_t = bodo.utils.conversion.coerce_to_ndarray(idx)
-                bodo.hiframes.pd_series_ext.get_series_data(I._obj)[
-                    idx_t
-                ] = bodo.utils.conversion.coerce_to_array(val, False)
+                idx_t = bodo.utils.conversion.coerce_to_array(idx)
+                bodo.hiframes.pd_series_ext.get_series_data(I._obj)[idx_t] = (
+                    bodo.utils.conversion.coerce_to_array(val, False)
+                )
 
             return impl_arr
 
         # TODO: error-checking test
         raise BodoError(
-            "Series.iloc[] setitem using {} not supported".format(idx)
+            f"Series.iloc[] setitem using {idx} not supported"
         )  # pragma: no cover
 
 
@@ -462,8 +475,8 @@ def overload_series_iloc_setitem(I, idx, val):
 class SeriesLocType(types.Type):
     def __init__(self, stype):
         self.stype = stype
-        name = "SeriesLocType({})".format(stype)
-        super(SeriesLocType, self).__init__(name)
+        name = f"SeriesLocType({stype})"
+        super().__init__(name)
 
     @property
     def mangling_args(self):
@@ -482,14 +495,14 @@ class SeriesLocType(types.Type):
 class SeriesLocModel(models.StructModel):
     def __init__(self, dmm, fe_type):
         members = [("obj", fe_type.stype)]
-        super(SeriesLocModel, self).__init__(dmm, fe_type, members)
+        super().__init__(dmm, fe_type, members)
 
 
 make_attribute_wrapper(SeriesLocType, "obj", "_obj")
 
 
 @intrinsic
-def init_series_loc(typingctx, obj=None):
+def init_series_loc(typingctx, obj):
     def codegen(context, builder, signature, args):
         (obj_val,) = args
         loc_type = signature.return_type
@@ -520,7 +533,7 @@ def overload_series_loc_getitem(I, idx):
 
         def impl(I, idx):  # pragma: no cover
             S = I._obj
-            idx_t = bodo.utils.conversion.coerce_to_ndarray(idx)
+            idx_t = bodo.utils.conversion.coerce_to_array(idx)
             arr = bodo.hiframes.pd_series_ext.get_series_data(S)[idx_t]
             index = bodo.hiframes.pd_series_ext.get_series_index(S)[idx_t]
             name = bodo.hiframes.pd_series_ext.get_series_name(S)
@@ -562,7 +575,6 @@ def overload_series_loc_setitem(I, idx, val):
 
     # S.loc[cond]
     if is_list_like_index_type(idx) and idx.dtype == types.bool_:
-
         # Series.loc[] setitem with boolean array is same as Series[] setitem
         def impl(I, idx, val):  # pragma: no cover
             S = I._obj
@@ -628,7 +640,7 @@ def overload_series_getitem(S, idx):
                 )
 
             def impl_arr(S, idx):  # pragma: no cover
-                idx_t = bodo.utils.conversion.coerce_to_ndarray(idx)
+                idx_t = bodo.utils.conversion.coerce_to_array(idx)
                 arr = bodo.hiframes.pd_series_ext.get_series_data(S)[idx_t]
                 index = bodo.hiframes.pd_series_ext.get_series_index(S)[idx_t]
                 name = bodo.hiframes.pd_series_ext.get_series_name(S)
@@ -672,7 +684,7 @@ def overload_series_getitem(S, idx):
                 return impl_str_getitem
             else:
                 raise BodoError(
-                    f"Cannot get Series value using a string, unless the index type is also string"
+                    "Cannot get Series value using a string, unless the index type is also string"
                 )
 
         # TODO: handle idx as SeriesType on array
@@ -693,6 +705,11 @@ def overload_series_setitem(S, idx, val):
             and not (is_list_like_index_type(idx) and idx.dtype == types.bool_)
         ):
             raise BodoError("Series string setitem not supported yet")
+        elif S.dtype == bodo.bytes_type:
+            # NOTE: we can loosen the above restriction to be the same as the string
+            # array restriction, if we implement boolean list index setitem
+            # on the underlying binary array type.
+            raise BodoError("Series binary setitem not supported yet")
 
         # integer case same as iat
         if isinstance(idx, types.Integer):
@@ -704,7 +721,7 @@ def overload_series_setitem(S, idx, val):
                     " (which is label-based) not supported yet"
                 )
             # unbox dt64 from Timestamp (TODO: timedelta and other datetimelike)
-            if S.dtype == types.NPDatetime("ns") and val == pd_timestamp_type:
+            if S.dtype == types.NPDatetime("ns") and val == pd_timestamp_tz_naive_type:
 
                 def impl_dt(S, idx, val):  # pragma: no cover
                     s = integer_to_dt64(val.value)
@@ -740,9 +757,9 @@ def overload_series_setitem(S, idx, val):
         if isinstance(idx, types.SliceType):
 
             def impl_slice(S, idx, val):  # pragma: no cover
-                bodo.hiframes.pd_series_ext.get_series_data(S)[
-                    idx
-                ] = bodo.utils.conversion.coerce_to_array(val, False)
+                bodo.hiframes.pd_series_ext.get_series_data(S)[idx] = (
+                    bodo.utils.conversion.coerce_to_array(val, False)
+                )
 
             return impl_slice
 
@@ -763,10 +780,10 @@ def overload_series_setitem(S, idx, val):
                 )
 
             def impl_arr(S, idx, val):  # pragma: no cover
-                idx_t = bodo.utils.conversion.coerce_to_ndarray(idx)
-                bodo.hiframes.pd_series_ext.get_series_data(S)[
-                    idx_t
-                ] = bodo.utils.conversion.coerce_to_array(val, False)
+                idx_t = bodo.utils.conversion.coerce_to_array(idx)
+                bodo.hiframes.pd_series_ext.get_series_data(S)[idx_t] = (
+                    bodo.utils.conversion.coerce_to_array(val, False)
+                )
 
             return impl_arr
 

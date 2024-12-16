@@ -1,6 +1,5 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
-"""Measure performance of various operations that uses the unordered_map/unordered_set
-"""
+"""Measure performance of various operations that uses the unordered_map/unordered_set"""
+
 import random
 
 import numpy as np
@@ -9,7 +8,7 @@ import pandas as pd
 from bodo.tests.utils import check_timing_func
 
 
-def test_median_large_random_numpy():
+def test_cumsum_large_random_numpy():
     def get_random_array(n, sizlen):
         elist = []
         for i in range(n):

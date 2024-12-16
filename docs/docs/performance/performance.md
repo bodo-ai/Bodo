@@ -8,17 +8,17 @@ time:
     necessary for useful measurements.
 2.  Performance can vary from one run to another. Several measurements
     are always needed.
-3.  It is important to use a sequence of tests with increasing input
+3.  Longer computations typically provide more reliable run time
+    information.
+4.  It is important to use a sequence of tests with increasing input
     size, which helps understand the impact of problem size on program
     performance.
-4.  Testing with different data (in terms statistical distribution and
+5.  Testing with different data (in terms statistical distribution and
     skew) can be useful to see the impact of data skew on performance
     and scaling.
-5.  Simple programs are useful to study performance factors. Complex
+6.  Simple programs are useful to study performance factors. Complex
     programs are impacted by multiple factors and their performance is
     harder to understand.
-6.  Longer computations typically provide more reliable run time
-    information.
 
 ## Measuring execution time of Bodo functions
 
@@ -59,7 +59,7 @@ print("\nbodo:")
 bodo_calc_pi(n)
 ```
 
-The output of this code is as follows:
+The output of this code on a single core is as follows:
 
 ```console
 python:
@@ -97,7 +97,7 @@ calc_pi(2 * 10**8)
 Launched on eight parallel cores:
 
 ```console
-$ mpiexec -n 8 python calc_pi.py
+$ BODO_NUM_WORKERS=8 python calc_pi.py
 Execution time: 0.5736249439651147
 result: 3.14161474
 ```
@@ -105,6 +105,10 @@ result: 3.14161474
 And the time it takes can be compared with Python performance. Here, we
 have a `5.06/0.57 ~= 9x` speedup (from parallelism and sequential
 optimizations).
+
+In addition, [SPMD launch mode](../bodo_parallelism/bodo_parallelism_basics.md#spmd) is recommended
+for performance measurements since it has lower overheads.
+
 
 ## Measuring sections inside Bodo functions
 

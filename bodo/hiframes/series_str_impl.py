@@ -1,7 +1,7 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
 Support for Series.str methods
 """
+
 import operator
 import re
 
@@ -20,6 +20,10 @@ from numba.extending import (
 )
 
 import bodo
+from bodo.hiframes.generic_pandas_coverage import (
+    generate_series_to_df_impl,
+    generate_simple_series_impl,
+)
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.hiframes.pd_index_ext import StringIndexType
 from bodo.hiframes.pd_series_ext import SeriesType
@@ -28,6 +32,16 @@ from bodo.hiframes.split_impl import (
     get_split_view_index,
     string_array_split_view_type,
 )
+from bodo.ir.argument_checkers import (
+    CharScalarArgumentChecker,
+    ConstantArgumentChecker,
+    IntegerScalarArgumentChecker,
+    NDistinctValueArgumentChecker,
+    OverloadArgumentsChecker,
+    StringScalarArgumentChecker,
+    StringSeriesArgumentChecker,
+)
+from bodo.ir.declarative_templates import overload_method_declarative
 from bodo.libs.array import get_search_regex
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.libs.str_arr_ext import (
@@ -38,7 +52,7 @@ from bodo.libs.str_arr_ext import (
 from bodo.libs.str_ext import str_findall_count
 from bodo.utils.typing import (
     BodoError,
-    create_unsupported_overload,
+    check_unsupported_args,
     get_overload_const_int,
     get_overload_const_list,
     get_overload_const_str,
@@ -62,22 +76,22 @@ class SeriesStrMethodType(types.Type):
     def __init__(self, stype):
         # keeping Series type since string data representation can be varied
         self.stype = stype
-        name = "SeriesStrMethodType({})".format(stype)
-        super(SeriesStrMethodType, self).__init__(name)
+        name = f"SeriesStrMethodType({stype})"
+        super().__init__(name)
 
 
 @register_model(SeriesStrMethodType)
 class SeriesStrModel(models.StructModel):
     def __init__(self, dmm, fe_type):
         members = [("obj", fe_type.stype)]
-        super(SeriesStrModel, self).__init__(dmm, fe_type, members)
+        super().__init__(dmm, fe_type, members)
 
 
 make_attribute_wrapper(SeriesStrMethodType, "obj", "_obj")
 
 
 @intrinsic
-def init_series_str_method(typingctx, obj=None):
+def init_series_str_method(typingctx, obj):
     def codegen(context, builder, signature, args):
         (obj_val,) = args
         str_method_type = signature.return_type
@@ -100,9 +114,7 @@ def str_arg_check(func_name, arg_name, arg):
     """
     if not isinstance(arg, types.UnicodeType) and not is_overload_constant_str(arg):
         raise_bodo_error(
-            "Series.str.{}(): parameter '{}' expected a string object, not {}".format(
-                func_name, arg_name, arg
-            )
+            f"Series.str.{func_name}(): parameter '{arg_name}' expected a string object, not {arg}"
         )
 
 
@@ -113,9 +125,7 @@ def int_arg_check(func_name, arg_name, arg):
     """
     if not isinstance(arg, types.Integer) and not is_overload_constant_int(arg):
         raise BodoError(
-            "Series.str.{}(): parameter '{}' expected an int object, not {}".format(
-                func_name, arg_name, arg
-            )
+            f"Series.str.{func_name}(): parameter '{arg_name}' expected an int object, not {arg}"
         )
 
 
@@ -129,16 +139,12 @@ def not_supported_arg_check(func_name, arg_name, arg, defval):
             not isinstance(arg, float) or not np.isnan(arg)
         ):
             raise BodoError(
-                "Series.str.{}(): parameter '{}' is not supported, default: np.nan".format(
-                    func_name, arg_name
-                )
+                f"Series.str.{func_name}(): parameter '{arg_name}' is not supported, default: np.nan"
             )
     else:
         if not isinstance(arg, types.Omitted) and arg != defval:
             raise BodoError(
-                "Series.str.{}(): parameter '{}' is not supported, default: {}".format(
-                    func_name, arg_name, defval
-                )
+                f"Series.str.{func_name}(): parameter '{arg_name}' is not supported, default: {defval}"
             )
 
 
@@ -150,15 +156,11 @@ def common_validate_padding(func_name, width, fillchar):
     if is_overload_constant_str(fillchar):
         if get_overload_const_str_len(fillchar) != 1:
             raise BodoError(
-                "Series.str.{}(): fillchar must be a character, not str".format(
-                    func_name
-                )
+                f"Series.str.{func_name}(): fillchar must be a character, not str"
             )
     elif not isinstance(fillchar, types.UnicodeType):
         raise BodoError(
-            "Series.str.{}(): fillchar must be a character, not {}".format(
-                func_name, fillchar
-            )
+            f"Series.str.{func_name}(): fillchar must be a character, not {fillchar}"
         )
 
     int_arg_check(func_name, "width", width)
@@ -240,14 +242,23 @@ def overload_str_method_split(S_str, pat=None, n=-1, expand=False):
 
         return _str_split_view_impl
 
-    # TODO: optimize!
+    use_default_pat = is_overload_none(pat) and not (
+        is_overload_constant_int(n) and get_overload_const_int(n) < 1
+    )
+
     def _str_split_impl(S_str, pat=None, n=-1, expand=False):  # pragma: no cover
         S = S_str._obj
         arr = bodo.hiframes.pd_series_ext.get_series_data(S)
         index = bodo.hiframes.pd_series_ext.get_series_index(S)
         name = bodo.hiframes.pd_series_ext.get_series_name(S)
-        # not inlining loops since fusion optimization doesn't seem likely
-        out_arr = bodo.libs.str_ext.str_split(arr, pat, n)
+        # Not inlining loops since fusion optimization doesn't seem likely
+        if use_default_pat and n >= 1:
+            # Avoiding passing in None since the implementation of split does not
+            # do the correct pandas behavior when pat=None and n>=1, but does when
+            # passed in the corresponding regex pattern.
+            out_arr = bodo.libs.str_ext.str_split_empty_n(arr, n)
+        else:
+            out_arr = bodo.libs.str_ext.str_split(arr, pat, n)
         return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
     return _str_split_impl
@@ -450,17 +461,112 @@ def overload_str_method_replace(S_str, pat, repl, n=-1, case=None, flags=0, rege
     return _str_replace_noregex_impl
 
 
+@overload_method(
+    SeriesStrMethodType, "removeprefix", inline="always", no_unliteral=True
+)
+def overload_str_method_removeprefix(S, prefix):
+    str_arg_check("removeprefix", "prefix", prefix)
+    scalar_text = "if bodo.libs.array_kernels.isna(data, i):\n"
+    scalar_text += "  bodo.libs.array_kernels.setna(result, i)\n"
+    scalar_text += "else:\n"
+    scalar_text += " data_str = data[i]\n"
+    scalar_text += " if data_str.startswith(prefix):\n"
+    scalar_text += "   result[i] = data_str[len(prefix):]\n"
+    scalar_text += " else:\n"
+    scalar_text += "   result[i] = data_str\n"
+    return generate_simple_series_impl(
+        ("S", "prefix"), (S, prefix), S.stype, scalar_text
+    )
+
+
+@overload_method(SeriesStrMethodType, "casefold", inline="always")
+def overload_str_method_casefold(S):
+    scalar_text = "if bodo.libs.array_kernels.isna(data, i):\n"
+    scalar_text += " bodo.libs.array_kernels.setna(result, i)\n"
+    scalar_text += " continue\n"
+    scalar_text += "result[i] = data[i].casefold()\n"
+    return generate_simple_series_impl(("S",), (S,), S.stype, scalar_text)
+
+
+@overload_method(
+    SeriesStrMethodType, "removesuffix", inline="always", no_unliteral=True
+)
+def overload_str_method_removesuffix(S, suffix):
+    str_arg_check("removesuffix", "suffix", suffix)
+    scalar_text = "if bodo.libs.array_kernels.isna(data, i):\n"
+    scalar_text += "  bodo.libs.array_kernels.setna(result, i)\n"
+    scalar_text += "else:\n"
+    scalar_text += " data_str = data[i]\n"
+    scalar_text += " if data_str.endswith(suffix):\n"
+    scalar_text += "   result[i] = data_str[:-len(suffix)]\n"
+    scalar_text += " else:\n"
+    scalar_text += "   result[i] = data_str\n"
+    return generate_simple_series_impl(
+        ("S", "suffix"), (S, suffix), S.stype, scalar_text
+    )
+
+
+@overload_method(SeriesStrMethodType, "partition", inline="always", no_unliteral=True)
+def overload_str_method_partition(S, sep=" ", expand=True):
+    str_arg_check("partition", "sep", sep)
+    if not is_overload_constant_bool(expand):
+        raise_bodo_error(
+            "pd.Series.str.partition: requires expand to be a constant boolean"
+        )
+    unsupported_args = {"expand": expand}
+    arg_defaults = {"expand": True}
+    check_unsupported_args(
+        "Series.str.partition",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="Series",
+    )
+
+    # Returns a 3-column Dataframe
+    scalar_text = "if bodo.libs.array_kernels.isna(data, i):\n"
+    scalar_text += "  bodo.libs.array_kernels.setna(res0, i)\n"
+    scalar_text += "  bodo.libs.array_kernels.setna(res1, i)\n"
+    scalar_text += "  bodo.libs.array_kernels.setna(res2, i)\n"
+    scalar_text += "else:\n"
+    scalar_text += " data_str = data[i]\n"
+    scalar_text += " if sep in data_str:\n"
+    scalar_text += "  sep_idx = data_str.index(sep)\n"
+    scalar_text += "  res0[i] = data_str[:sep_idx]\n"
+    scalar_text += "  res1[i] = sep\n"
+    scalar_text += "  res2[i] = data_str[sep_idx+len(sep):]\n"
+    scalar_text += " else:\n"
+    scalar_text += "  res0[i] = data_str\n"
+    scalar_text += "  res1[i] = ''\n"
+    scalar_text += "  res2[i] = ''\n"
+    return generate_series_to_df_impl(
+        ("S", "sep", "expand"),
+        (None, "' '", "True"),
+        (S, sep, expand),
+        (0, 1, 2),
+        (S.stype.data, S.stype.data, S.stype.data),
+        scalar_text,
+    )
+
+
 @numba.njit
 def series_contains_regex(S, pat, case, flags, na, regex):  # pragma: no cover
-    with numba.objmode(out_arr=bodo.boolean_array):
+    with bodo.objmode(out_arr=bodo.boolean_array_type):
         out_arr = pd.array(S.array, "string")._str_contains(pat, case, flags, na, regex)
     return out_arr
 
 
 @numba.njit
 def series_match_regex(S, pat, case, flags, na):  # pragma: no cover
-    with numba.objmode(out_arr=bodo.boolean_array):
+    with bodo.objmode(out_arr=bodo.boolean_array_type):
         out_arr = S.array._str_match(pat, case, flags, na)
+    return out_arr
+
+
+@numba.njit
+def series_fullmatch_regex(S, pat, case, flags, na):  # pragma: no cover
+    with bodo.objmode(out_arr=bodo.boolean_array_type):
+        out_arr = S.array._str_fullmatch(pat, case, flags, na)
     return out_arr
 
 
@@ -478,37 +584,38 @@ def is_regex_unsupported(pat):
     if is_overload_constant_str(pat):
         if isinstance(pat, types.StringLiteral):
             pat = pat.literal_value
-        return any([x in pat for x in unsupported_regex])
+        return any(x in pat for x in unsupported_regex)
     else:
         return True
 
 
-@overload_method(SeriesStrMethodType, "contains", no_unliteral=True)
-def overload_str_method_contains(S_str, pat, case=True, flags=0, na=np.nan, regex=True):
-    not_supported_arg_check("contains", "na", na, np.nan)
-    str_arg_check("contains", "pat", pat)
-    int_arg_check("contains", "flags", flags)
+@overload_method_declarative(
+    SeriesStrMethodType,
+    "contains",
+    path="pd.Series.str.contains",
+    unsupported_args={"na"},
+    method_args_checker=OverloadArgumentsChecker(
+        [
+            StringSeriesArgumentChecker("S_str", is_self=True),
+            StringScalarArgumentChecker("pat"),
+            ConstantArgumentChecker("case", (bool,)),
+            IntegerScalarArgumentChecker("flags"),
+            ConstantArgumentChecker("regex", (bool,)),
+        ]
+    ),
+    description=None,
+    no_unliteral=True,
+)
+def overload_str_method_contains(S_str, pat, case=True, flags=0, na=None, regex=True):
     # TODO: support other arguments
     # TODO: support dynamic values for regex
-
-    # Error checking for regex argument
-    if not is_overload_constant_bool(regex):
-        raise BodoError(
-            "Series.str.contains(): 'regex' argument should be a constant boolean"
-        )
-    # Error checking for case argument
-    if not is_overload_constant_bool(case):
-        raise BodoError(
-            "Series.str.contains(): 'case' argument should be a constant boolean"
-        )
-
     # Get value of re.IGNORECASE. It cannot be computed inside the impl
     # since this is a custom enum class (not regular Enum) and numba doesn't
     # support it. https://numba.readthedocs.io/en/stable/reference/pysupported.html#enum
     re_ignorecase_value = re.IGNORECASE.value
 
     func_text = "def impl(\n"
-    func_text += "    S_str, pat, case=True, flags=0, na=np.nan, regex=True\n"
+    func_text += "    S_str, pat, case=True, flags=0, na=None, regex=True\n"
     func_text += "):\n"
     func_text += "  S = S_str._obj\n"
     func_text += "  arr = bodo.hiframes.pd_series_ext.get_series_data(S)\n"
@@ -568,17 +675,8 @@ def overload_str_method_contains(S_str, pat, case=True, flags=0, na=np.nan, rege
     return impl
 
 
-@overload_method(SeriesStrMethodType, "match", inline="always", no_unliteral=True)
-def overload_str_method_match(S_str, pat, case=True, flags=0, na=np.nan):
-    not_supported_arg_check("match", "na", na, np.nan)
-    str_arg_check("match", "pat", pat)
-    int_arg_check("match", "flags", flags)
-
-    # Error checking for case argument
-    if not is_overload_constant_bool(case):
-        raise BodoError(
-            "Series.str.match(): 'case' argument should be a constant boolean"
-        )
+def gen_str_match_impl(S_str, pat, do_full_match, flags):
+    """Generates an implementation of str.match or str.full_match depending on the do_full_match flag."""
     # Get value of re.IGNORECASE. It cannot be computed inside the impl
     # since this is a custom enum class (not regular Enum) and numba doesn't
     # support it. https://numba.readthedocs.io/en/stable/reference/pysupported.html#enum
@@ -592,12 +690,12 @@ def overload_str_method_match(S_str, pat, case=True, flags=0, na=np.nan):
     func_text += "        name = bodo.hiframes.pd_series_ext.get_series_name(S)\n"
     if not is_regex_unsupported(pat) and flags == 0:
         func_text += "        out_arr = bodo.libs.bool_arr_ext.alloc_bool_array(l)\n"
-        func_text += "        get_search_regex(arr, case, True, bodo.libs.str_ext.unicode_to_utf8(pat), out_arr)\n"
+        func_text += f"        get_search_regex(arr, case, True, bodo.libs.str_ext.unicode_to_utf8(pat), out_arr, do_full_match={do_full_match})\n"
     # optimized version for dictionary encoded array
     elif S_str.stype.data == bodo.dict_str_arr_type:
-        func_text += "        out_arr = bodo.libs.dict_arr_ext.str_match(arr, pat, case, flags, na)\n"
+        func_text += f"        out_arr = bodo.libs.dict_arr_ext.str_match(arr, pat, case, flags, na, do_full_match={do_full_match})\n"
     else:
-        func_text += "        out_arr = series_match_regex(S, pat, case, flags, na)\n"
+        func_text += "        out_arr = series_match_impl(S, pat, case, flags, na)\n"
     func_text += (
         "        return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)\n"
     )
@@ -612,6 +710,9 @@ def overload_str_method_match(S_str, pat, case=True, flags=0, na=np.nan):
             "np": np,
             "re_ignorecase_value": re_ignorecase_value,
             "get_search_regex": get_search_regex,
+            "series_match_impl": series_fullmatch_regex
+            if do_full_match
+            else series_match_regex,
         },
         loc_vars,
     )
@@ -619,9 +720,38 @@ def overload_str_method_match(S_str, pat, case=True, flags=0, na=np.nan):
     return impl
 
 
+@overload_method(SeriesStrMethodType, "fullmatch", inline="always", no_unliteral=True)
+def overload_str_method_fullmatch(S_str, pat, case=True, flags=0, na=np.nan):
+    not_supported_arg_check("fullmatch", "na", na, np.nan)
+    str_arg_check("fullmatch", "pat", pat)
+    int_arg_check("fullmatch", "flags", flags)
+
+    # Error checking for case argument
+    if not is_overload_constant_bool(case):
+        raise BodoError(
+            "Series.str.fullmatch(): 'case' argument should be a constant boolean"
+        )
+
+    return gen_str_match_impl(S_str, pat, True, flags)
+
+
+@overload_method(SeriesStrMethodType, "match", inline="always", no_unliteral=True)
+def overload_str_method_match(S_str, pat, case=True, flags=0, na=np.nan):
+    not_supported_arg_check("match", "na", na, np.nan)
+    str_arg_check("match", "pat", pat)
+    int_arg_check("match", "flags", flags)
+
+    # Error checking for case argument
+    if not is_overload_constant_bool(case):
+        raise BodoError(
+            "Series.str.match(): 'case' argument should be a constant boolean"
+        )
+
+    return gen_str_match_impl(S_str, pat, False, flags)
+
+
 @overload_method(SeriesStrMethodType, "cat", no_unliteral=True)
 def overload_str_method_cat(S_str, others=None, sep=None, na_rep=None, join="left"):
-
     # only DataFrame input is currently supported (TODO: support Series/Index/array)
     if not isinstance(others, DataFrameType):
         raise_bodo_error("Series.str.cat(): 'others' must be a DataFrame currently")
@@ -984,7 +1114,7 @@ def overload_str_method_repeat(S_str, repeats):
         return impl
     elif is_overload_constant_list(repeats):
         list_vals = get_overload_const_list(repeats)
-        legal_array_input = all([isinstance(val, int) for val in list_vals])
+        legal_array_input = all(isinstance(val, int) for val in list_vals)
     elif is_list_like_index_type(repeats) and isinstance(repeats.dtype, types.Integer):
         legal_array_input = True
     else:  # pragma: no cover
@@ -1073,19 +1203,23 @@ def _install_ljust_rjust_center():
 _install_ljust_rjust_center()
 
 
-@overload_method(SeriesStrMethodType, "pad", no_unliteral=True)
+@overload_method_declarative(
+    SeriesStrMethodType,
+    "pad",
+    path="pd.Series.str.pad",
+    unsupported_args={},
+    method_args_checker=OverloadArgumentsChecker(
+        [
+            StringSeriesArgumentChecker("S_str", is_self=True),
+            IntegerScalarArgumentChecker("width"),
+            NDistinctValueArgumentChecker("side", ["left", "right", "both"]),
+            CharScalarArgumentChecker("fillchar"),
+        ]
+    ),
+    description=None,
+    no_unliteral=True,
+)
 def overload_str_method_pad(S_str, width, side="left", fillchar=" "):
-    common_validate_padding("pad", width, fillchar)
-    if is_overload_constant_str(side):
-        if get_overload_const_str(side) not in [
-            "left",
-            "right",
-            "both",
-        ]:  # numba does not catch this case. Causes SegFault
-            raise BodoError("Series.str.pad(): Invalid Side")
-    else:
-        raise BodoError("Series.str.pad(): Invalid Side")
-
     # optimized version for dictionary encoded arrays
     if S_str.stype.data == bodo.dict_str_arr_type:
 
@@ -1281,6 +1415,22 @@ def overload_str_method_endswith(S_str, pat, na=np.nan):
     return impl
 
 
+@overload_method(SeriesStrMethodType, "encode", inline="always", no_unliteral=True)
+def overload_str_method_find(S_str, encoding, errors: str = "strict"):
+    str_arg_check("encode", "encoding", encoding)
+    str_arg_check("encode", "errors", errors)
+
+    def _str_encode_impl(S_str, encoding, errors: str = "strict"):  # pragma: no cover
+        S = S_str._obj
+        arr = bodo.hiframes.pd_series_ext.get_series_data(S)
+        index = bodo.hiframes.pd_series_ext.get_series_index(S)
+        name = bodo.hiframes.pd_series_ext.get_series_name(S)
+        out_arr = bodo.libs.str_arr_ext.str_arr_encode(arr, encoding, errors)
+        return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
+
+    return _str_encode_impl
+
+
 @overload(operator.getitem, no_unliteral=True)
 def overload_str_method_getitem(S_str, ind):
     if not isinstance(S_str, SeriesStrMethodType):
@@ -1298,7 +1448,6 @@ def overload_str_method_getitem(S_str, ind):
 
 @overload_method(SeriesStrMethodType, "extract", inline="always", no_unliteral=True)
 def overload_str_method_extract(S_str, pat, flags=0, expand=True):
-
     if not is_overload_constant_bool(expand):
         raise BodoError(
             "Series.str.extract(): 'expand' argument should be a constant bool"
@@ -1330,39 +1479,33 @@ def overload_str_method_extract(S_str, pat, flags=0, expand=True):
         func_text += "  numba.parfors.parfor.init_prange()\n"
         func_text += "  n = len(str_arr)\n"
         for i in range(n_cols):
-            func_text += "  out_arr_{0} = bodo.libs.str_arr_ext.pre_alloc_string_array(n, -1)\n".format(
-                i
+            func_text += (
+                f"  out_arr_{i} = bodo.libs.str_arr_ext.pre_alloc_string_array(n, -1)\n"
             )
         func_text += "  for j in numba.parfors.parfor.internal_prange(n):\n"
         func_text += "      if bodo.libs.array_kernels.isna(str_arr, j):\n"
         for i in range(n_cols):
-            func_text += "          out_arr_{}[j] = ''\n".format(i)
-            func_text += (
-                "          bodo.libs.array_kernels.setna(out_arr_{}, j)\n".format(i)
-            )
+            func_text += f"          out_arr_{i}[j] = ''\n"
+            func_text += f"          bodo.libs.array_kernels.setna(out_arr_{i}, j)\n"
         func_text += "      else:\n"
         func_text += "          m = regex.search(str_arr[j])\n"
         func_text += "          if m:\n"
         func_text += "            g = m.groups()\n"
         for i in range(n_cols):
-            func_text += "            out_arr_{0}[j] = g[{0}]\n".format(i)
+            func_text += f"            out_arr_{i}[j] = g[{i}]\n"
         func_text += "          else:\n"
         for i in range(n_cols):
-            func_text += "            out_arr_{}[j] = ''\n".format(i)
-            func_text += (
-                "            bodo.libs.array_kernels.setna(out_arr_{}, j)\n".format(i)
-            )
+            func_text += f"            out_arr_{i}[j] = ''\n"
+            func_text += f"            bodo.libs.array_kernels.setna(out_arr_{i}, j)\n"
 
     # no expand case
     if is_overload_false(expand) and regex.groups == 1:
         name = (
-            "'{}'".format(list(regex.groupindex.keys()).pop())
+            f"'{list(regex.groupindex.keys()).pop()}'"
             if len(regex.groupindex.keys()) > 0
             else "name"
         )
-        func_text += "  return bodo.hiframes.pd_series_ext.init_series(out_arr_0, index, {})\n".format(
-            name
-        )
+        func_text += f"  return bodo.hiframes.pd_series_ext.init_series(out_arr_0, index, {name})\n"
         loc_vars = {}
         exec(
             func_text,
@@ -1372,7 +1515,7 @@ def overload_str_method_extract(S_str, pat, flags=0, expand=True):
         impl = loc_vars["impl"]
         return impl
 
-    data_args = ", ".join("out_arr_{}".format(i) for i in range(n_cols))
+    data_args = ", ".join(f"out_arr_{i}" for i in range(n_cols))
     impl = bodo.hiframes.dataframe_impl._gen_init_df(
         func_text,
         columns,
@@ -1385,7 +1528,6 @@ def overload_str_method_extract(S_str, pat, flags=0, expand=True):
 
 @overload_method(SeriesStrMethodType, "extractall", inline="always", no_unliteral=True)
 def overload_str_method_extractall(S_str, pat, flags=0):
-
     columns, _ = _get_column_names_from_regex(pat, flags, "extractall")
     n_cols = len(columns)
     is_index_string = isinstance(S_str.stype.index, StringIndexType)
@@ -1430,7 +1572,7 @@ def overload_str_method_extractall(S_str, pat, flags=0):
         # using a list wrapper for integer to avoid reduction machinery (we need local size)
         func_text += "  out_n_l = [0]\n"
         for i in range(n_cols):
-            func_text += "  num_chars_{} = 0\n".format(i)
+            func_text += f"  num_chars_{i} = 0\n"
         if is_index_string:
             func_text += "  index_num_chars = 0\n"
         func_text += "  for i in numba.parfors.parfor.internal_prange(n):\n"
@@ -1441,22 +1583,20 @@ def overload_str_method_extractall(S_str, pat, flags=0):
         func_text += "      m = regex.findall(str_arr[i])\n"
         func_text += "      out_n_l[0] += len(m)\n"
         for i in range(n_cols):
-            func_text += "      l_{} = 0\n".format(i)
+            func_text += f"      l_{i} = 0\n"
         func_text += "      for s in m:\n"
         for i in range(n_cols):
             func_text += "        l_{} += get_utf8_size(s{})\n".format(
-                i, "[{}]".format(i) if n_cols > 1 else ""
+                i, f"[{i}]" if n_cols > 1 else ""
             )
         for i in range(n_cols):
-            func_text += "      num_chars_{0} += l_{0}\n".format(i)
+            func_text += f"      num_chars_{i} += l_{i}\n"
         # TODO: refactor with arr_builder
         # using a sentinel function to specify that the arrays are local and no need for
         # distributed transformation
         func_text += "  out_n = bodo.libs.distributed_api.local_alloc_size(out_n_l[0], str_arr)\n"
         for i in range(n_cols):
-            func_text += "  out_arr_{0} = bodo.libs.str_arr_ext.pre_alloc_string_array(out_n, num_chars_{0})\n".format(
-                i
-            )
+            func_text += f"  out_arr_{i} = bodo.libs.str_arr_ext.pre_alloc_string_array(out_n, num_chars_{i})\n"
         if is_index_string:
             func_text += "  out_ind_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(out_n, index_num_chars)\n"
         else:
@@ -1471,7 +1611,7 @@ def overload_str_method_extractall(S_str, pat, flags=0):
         for i in range(n_cols):
             # using set_arr_local() to avoid distributed transformation of setitem
             func_text += "        bodo.libs.distributed_api.set_arr_local(out_arr_{}, out_ind, s{})\n".format(
-                i, "[{}]".format(i) if n_cols > 1 else ""
+                i, f"[{i}]" if n_cols > 1 else ""
             )
         func_text += "        bodo.libs.distributed_api.set_arr_local(out_ind_arr, out_ind, index_arr[j])\n"
         func_text += "        bodo.libs.distributed_api.set_arr_local(out_match_arr, out_ind, k)\n"
@@ -1482,7 +1622,7 @@ def overload_str_method_extractall(S_str, pat, flags=0):
         func_text += "    (out_ind_arr, out_match_arr), (index_name, 'match'))\n"
 
     # TODO: support dead code elimination with local distribution sentinels
-    data_args = ", ".join("out_arr_{}".format(i) for i in range(n_cols))
+    data_args = ", ".join(f"out_arr_{i}" for i in range(n_cols))
     impl = bodo.hiframes.dataframe_impl._gen_init_df(
         func_text,
         columns,
@@ -1502,16 +1642,12 @@ def _get_column_names_from_regex(pat, flags, func_name):
     # compilation time is required for determining output type.
     if not is_overload_constant_str(pat):
         raise BodoError(
-            "Series.str.{}(): 'pat' argument should be a constant string".format(
-                func_name
-            )
+            f"Series.str.{func_name}(): 'pat' argument should be a constant string"
         )
 
     if not is_overload_constant_int(flags):
         raise BodoError(
-            "Series.str.{}(): 'flags' argument should be a constant int".format(
-                func_name
-            )
+            f"Series.str.{func_name}(): 'flags' argument should be a constant int"
         )
 
     # get column names similar to pd.core.strings._str_extract_frame()
@@ -1520,9 +1656,7 @@ def _get_column_names_from_regex(pat, flags, func_name):
     regex = re.compile(pat, flags=flags)
     if regex.groups == 0:
         raise BodoError(
-            "Series.str.{}(): pattern {} contains no capture groups".format(
-                func_name, pat
-            )
+            f"Series.str.{func_name}(): pattern {pat} contains no capture groups"
         )
     names = dict(zip(regex.groupindex.values(), regex.groupindex.keys()))
     columns = [names.get(1 + i, i) for i in range(regex.groups)]
@@ -1530,7 +1664,6 @@ def _get_column_names_from_regex(pat, flags, func_name):
 
 
 def create_str2str_methods_overload(func_name):
-
     # All of the functions except for strip take no arguments.
     # Strip takes one optional argument, which is the character(s) to strip.
     # In order to resolve this with minmal code duplication, we create/exec the func text
@@ -1626,9 +1759,7 @@ def create_str2bool_methods_overload(func_name):
     func_text += "        if bodo.libs.array_kernels.isna(str_arr, i):\n"
     func_text += "            bodo.libs.array_kernels.setna(out_arr, i)\n"
     func_text += "        else:\n"
-    func_text += "            out_arr[i] = np.bool_(str_arr[i].{}())\n".format(
-        func_name
-    )
+    func_text += f"            out_arr[i] = np.bool_(str_arr[i].{func_name}())\n"
     func_text += "    return bodo.hiframes.pd_series_ext.init_series(\n"
     func_text += "      out_arr,index, name)\n"
     loc_vars = {}
@@ -1684,8 +1815,8 @@ def overload_series_cat(s):
 class SeriesCatMethodType(types.Type):
     def __init__(self, stype):
         self.stype = stype
-        name = "SeriesCatMethodType({})".format(stype)
-        super(SeriesCatMethodType, self).__init__(name)
+        name = f"SeriesCatMethodType({stype})"
+        super().__init__(name)
 
     @property
     def mangling_args(self):
@@ -1702,14 +1833,14 @@ class SeriesCatMethodType(types.Type):
 class SeriesCatModel(models.StructModel):
     def __init__(self, dmm, fe_type):
         members = [("obj", fe_type.stype)]
-        super(SeriesCatModel, self).__init__(dmm, fe_type, members)
+        super().__init__(dmm, fe_type, members)
 
 
 make_attribute_wrapper(SeriesCatMethodType, "obj", "_obj")
 
 
 @intrinsic
-def init_series_cat_method(typingctx, obj=None):
+def init_series_cat_method(typingctx, obj):
     def codegen(context, builder, signature, args):
         (obj_val,) = args
         cat_method_type = signature.return_type
@@ -1763,33 +1894,21 @@ def _install_catseries_unsupported():
 
     for attr_name in unsupported_cat_attrs:
         full_name = "Series.cat." + attr_name
-        overload_attribute(SeriesCatMethodType, attr_name)(
-            create_unsupported_overload(full_name)
-        )
+        bodo.overload_unsupported_attribute(SeriesCatMethodType, attr_name, full_name)
 
     for fname in unsupported_cat_methods:
         full_name = "Series.cat." + fname
-        overload_method(SeriesCatMethodType, fname)(
-            create_unsupported_overload(full_name)
-        )
+        bodo.overload_unsupported_method(SeriesCatMethodType, fname, full_name)
 
 
 _install_catseries_unsupported()
 
 
 unsupported_str_methods = {
-    "casefold",
     "decode",
-    "encode",
     "findall",
-    "fullmatch",
-    "index",
-    "match",
     "normalize",
-    "partition",
-    "rindex",
     "rpartition",
-    "slice_replace",
     "rsplit",
     "translate",
     "wrap",
@@ -1802,9 +1921,7 @@ def _install_strseries_unsupported():
 
     for fname in unsupported_str_methods:
         full_name = "Series.str." + fname
-        overload_method(SeriesStrMethodType, fname)(
-            create_unsupported_overload(full_name)
-        )
+        bodo.overload_unsupported_method(SeriesStrMethodType, fname, full_name)
 
 
 _install_strseries_unsupported()

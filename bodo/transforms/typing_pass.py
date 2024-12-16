@@ -2,22 +2,25 @@
 Bodo type inference pass that performs transformations that enable typing of the IR
 according to Bodo requirements (using partial typing).
 """
+
 import copy
 import itertools
 import operator
-import types as pytypes
+import typing as pt
 import warnings
 from collections import defaultdict
-from typing import Dict, Set, Tuple
+from typing import Any
 
 import numba
 import numpy as np
 import pandas as pd
-from numba.core import ir, ir_utils, types
+from numba.core import event, ir, ir_utils, types
 from numba.core.compiler_machinery import register_pass
 from numba.core.extending import register_jitable
+from numba.core.inline_closurecall import inline_closure_call
 from numba.core.ir_utils import (
     GuardException,
+    build_definitions,
     compute_cfg_from_blocks,
     dprint_func_ir,
     find_callname,
@@ -32,6 +35,8 @@ from numba.core.ir_utils import (
 from numba.core.typed_passes import NopythonTypeInference, PartialTypeInference
 
 import bodo
+import bodo.ir.filter as bif
+import bodo.ir.iceberg_ext
 from bodo.hiframes.dataframe_indexing import DataFrameILocType, DataFrameLocType
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.hiframes.pd_groupby_ext import DataFrameGroupByType
@@ -41,14 +46,29 @@ from bodo.hiframes.pd_series_ext import SeriesType
 from bodo.hiframes.pd_timestamp_ext import PandasTimestampType
 from bodo.hiframes.series_dt_impl import SeriesDatetimePropertiesType
 from bodo.hiframes.series_str_impl import SeriesStrMethodType
+from bodo.io.arrow_reader import ArrowReaderType
+from bodo.io.helpers import get_table_iterator
+from bodo.ir.filter import (
+    build_filter_from_ir,
+    supported_arrow_funcs_map,
+    supported_funcs_map,
+)
 from bodo.libs.pd_datetime_arr_ext import DatetimeArrayType
 from bodo.numba_compat import mini_dce
+from bodo.sql_plan_cache import BodoSqlPlanCache
 from bodo.utils.transform import (
+    ReplaceFunc,
     compile_func_single_block,
     container_update_method_names,
+    create_nested_run_pass_event,
     get_call_expr_arg,
+    get_const_arg,
+    get_const_func_output_type,
     get_const_value_inner,
+    get_runtime_join_filter_terms,
+    replace_func,
     set_call_expr_arg,
+    update_locs,
     update_node_list_definitions,
 )
 from bodo.utils.typing import (
@@ -58,16 +78,25 @@ from bodo.utils.typing import (
     BodoWarning,
     ColNamesMetaType,
     check_unsupported_args,
+    dtype_to_array_type,
+    gen_bodosql_case_func,
     get_literal_value,
     get_overload_const_bool,
     get_overload_const_int,
+    get_overload_const_str,
+    handle_bodosql_case_init_code,
+    is_bodosql_context_type,
     is_const_func_type,
+    is_immutable,
     is_list_like_index_type,
     is_literal_type,
     is_overload_constant_bool,
     is_overload_constant_int,
+    is_overload_constant_str,
     is_overload_none,
+    is_scalar_type,
     raise_bodo_error,
+    unwrap_typeref,
 )
 from bodo.utils.utils import (
     find_build_tuple,
@@ -78,6 +107,12 @@ from bodo.utils.utils import (
     is_call_assign,
     is_expr,
 )
+
+if pt.TYPE_CHECKING:
+    from numba.core.utils import UniqueDict
+
+    from bodo.ir.connector import Connector
+
 
 # global flag indicating that we are in partial type inference, so that error checking
 # code can raise regular Exceptions that can potentially be handled here
@@ -115,15 +150,34 @@ class BodoTypeInference(PartialTypeInference):
         curr_typing_pass_required = False
         # flag indicating that transformation has run at least once
         ran_transform = False
+        # flag indicating that loop unrolling has been tried at least once
+        tried_unrolling = False
         # flag for when another transformation pass is needed (to avoid break before
         # next transform)
         needs_transform = False
+        # Flag to indicate if some optimizations should be rerun once dead code
+        # elimination has completed for possible further optimization.
+        rerun_after_dce = True
+
+        # Counter to keep track of the number of iterations that have passed without
+        # a change to the IR.
+        num_iterations_without_change = 0
+        # Constant. Since updating the typemap doesn't count as a change,
+        # there are situations where we may need several iterations
+        # before everything is fully typed and we actually see a change
+        # Therefore, whenever a transformation is required,
+        # we attempt to run typing transforms this many times
+        # before aborting.
+        num_iterations_without_change_before_abort = 2
         while True:
             try:
                 # set global partial typing flag, see comment above
                 in_partial_typing = True
                 typing_transform_required = False
-                super(BodoTypeInference, self).run_pass(state)
+                # Call into Numba's PartialTypeInference but with chrome tracing enabled properly.
+                create_nested_run_pass_event(
+                    PartialTypeInference.name(), state, super()
+                )
                 curr_typing_pass_required = typing_transform_required
             finally:
                 in_partial_typing = saved_in_partial_typing
@@ -148,13 +202,26 @@ class BodoTypeInference(PartialTypeInference):
                 state.flags,
                 True,
                 ran_transform,
+                tried_unrolling,
             )
             ran_transform = True
-            prev_needs_transform = needs_transform
-            changed, needs_transform = typing_transforms_pass.run()
+
+            changed, needs_transform, tried_unrolling = typing_transforms_pass.run()
+            num_iterations_without_change = (
+                0 if changed else num_iterations_without_change + 1
+            )
+
+            rerun_after_dce = typing_transforms_pass.rerun_after_dce
             # transform pass has failed if transform was needed but IR is not changed.
             # This avoids infinite loop, see [BE-140]
-            if prev_needs_transform and needs_transform and not changed:
+            # We're adding one additional iteration, in order to handle a possible
+            # edge case where a run of typing transforms does not change the IR, but
+            # updates types
+            if (
+                num_iterations_without_change
+                > num_iterations_without_change_before_abort
+                and not changed
+            ):
                 break
             # can't be typed if IR not changed
             if not changed and not needs_transform:
@@ -164,7 +231,12 @@ class BodoTypeInference(PartialTypeInference):
         # make sure transformation has run at least once to handle cases that may not
         # throw typing errors like "df.B = v". See test_set_column_setattr
         rerun_typing = False
-        if not ran_transform:
+        # Was there a change after the typing step.
+        changed_after_typing = False
+        # Track if we may need an extra transform to produce
+        # an error message.
+        skipped_transform_in_typing = not ran_transform
+        while rerun_after_dce or not ran_transform:
             typing_transforms_pass = TypingTransforms(
                 state.func_ir,
                 state.typingctx,
@@ -176,29 +248,45 @@ class BodoTypeInference(PartialTypeInference):
                 state.flags,
                 False,
                 ran_transform,
+                tried_unrolling,
             )
-            changed, needs_transform = typing_transforms_pass.run()
-            # some cases need a second transform pass to raise the proper error
-            # see test_df_rename::impl4
-            if needs_transform:
-                typing_transforms_pass = TypingTransforms(
-                    state.func_ir,
-                    state.typingctx,
-                    state.targetctx,
-                    state.typemap,
-                    state.calltypes,
-                    state.args,
-                    state.locals,
-                    state.flags,
-                    False,
-                    True,
-                )
-                changed, needs_transform = typing_transforms_pass.run()
+            ran_transform = True
+            (
+                local_changed,
+                needs_transform,
+                tried_unrolling,
+            ) = typing_transforms_pass.run()
+            changed_after_typing = changed_after_typing or local_changed
+            rerun_after_dce = typing_transforms_pass.rerun_after_dce
+        # some cases need a second transform pass to raise the proper error
+        # see test_df_rename::impl4
+        if skipped_transform_in_typing and needs_transform:
+            typing_transforms_pass = TypingTransforms(
+                state.func_ir,
+                state.typingctx,
+                state.targetctx,
+                state.typemap,
+                state.calltypes,
+                state.args,
+                state.locals,
+                state.flags,
+                False,
+                True,
+                tried_unrolling,
+            )
+            (
+                local_changed,
+                needs_transform,
+                tried_unrolling,
+            ) = typing_transforms_pass.run()
+            changed_after_typing = changed_after_typing or local_changed
+        if skipped_transform_in_typing or changed_after_typing:
             # need to rerun type inference if the IR changed
             # see test_set_column_setattr
-            rerun_typing = changed or needs_transform
+            rerun_typing = changed_after_typing or needs_transform
 
         dprint_func_ir(state.func_ir, "after typing pass")
+
         self._check_for_errors(state, curr_typing_pass_required or rerun_typing)
         return True
 
@@ -217,7 +305,7 @@ class BodoTypeInference(PartialTypeInference):
         if None not in ret_types:
             try:
                 return_type = state.typingctx.unify_types(*ret_types)
-            except:
+            except Exception:
                 pass
             if return_type is None:
                 raise_bodo_error(
@@ -251,7 +339,9 @@ class BodoTypeInference(PartialTypeInference):
                     typ.dispatcher._compiler._failed_cache.clear()
 
             # run regular type inference again with _raise_errors=True to raise errors
-            NopythonTypeInference().run_pass(state)
+            create_nested_run_pass_event(
+                NopythonTypeInference.name(), state, NopythonTypeInference()
+            )
         else:
             # last return type check in Numba:
             # https://github.com/numba/numba/blob/0bac18af44d08e913cd512babb9f9b7f6386d30a/numba/core/typed_passes.py#L141
@@ -275,6 +365,9 @@ class BodoTypeInference(PartialTypeInference):
         return types.unknown not in typemap.values()
 
 
+unresolved_types = (None, types.unknown, types.undefined)
+
+
 class TypingTransforms:
     """
     Transformations that enable typing of the IR according to Bodo requirements.
@@ -285,16 +378,17 @@ class TypingTransforms:
 
     def __init__(
         self,
-        func_ir,
+        func_ir: ir.FunctionIR,
         typingctx,
         targetctx,
-        typemap,
+        typemap: "UniqueDict",
         calltypes,
         arg_types,
         _locals,
         flags,
         change_required,
         ran_transform,
+        tried_unrolling,
     ):
         self.func_ir = func_ir
         self.typingctx = typingctx
@@ -307,7 +401,7 @@ class TypingTransforms:
         # currently use to keep lhs of Arg nodes intact
         self.replace_var_dict = {}
         # labels of rhs of assignments to enable finding nodes that create
-        # dataframes such as Arg(df_type), pd.DataFrame(), df[['A','B']]...
+        # DataFrames such as Arg(df_type), pd.DataFrame(), df[['A','B']]...
         # the use is conservative and doesn't assume complete info
         self.rhs_labels = {}
         # Loc object of current location being translated
@@ -323,15 +417,21 @@ class TypingTransforms:
         self.flags = flags
         # a change in the IR in current pass is required to enable typing
         self.change_required = change_required
-        # whether transform has run before (e.g. loop unrolling is attempted)
+        # whether transform has run before
         self.ran_transform = ran_transform
+        # whether loop unrolling has been tried at least once
+        self.tried_unrolling = tried_unrolling
         self.changed = False
         # whether another transformation pass is needed (see _run_setattr)
         self.needs_transform = False
+        # Flag indicating if we should try rerunning typing pass again after running DCE
+        # to enable further optimizations
+        self.rerun_after_dce = False
+        # get Scope object for easier access
+        assert len(self.func_ir.blocks) > 0, "Invalid empty function IR"
+        self.scope = next(iter(self.func_ir.blocks.values())).scope
 
     def run(self):
-        # XXX: the block structure shouldn't change in this pass since labels
-        # are used in analysis (e.g. df creation points in rhs_labels)
         blocks = self.func_ir.blocks
         topo_order = find_topo_order(blocks)
         self._updated_containers, self._equiv_vars = _find_updated_containers(
@@ -340,12 +440,13 @@ class TypingTransforms:
         for label in topo_order:
             block = blocks[label]
             self._working_body = []
-            for inst in block.body:
+            for i, inst in enumerate(block.body):
                 self._replace_vars(inst)
+
                 out_nodes = [inst]
                 self.curr_loc = inst.loc
 
-                # handle potential dataframe set column here
+                # handle potential DataFrame set column here
                 # df['col'] = arr
                 if isinstance(inst, (ir.SetItem, ir.StaticSetItem)):
                     out_nodes = self._run_setitem(inst, label)
@@ -356,7 +457,19 @@ class TypingTransforms:
                     self.rhs_labels[inst.value] = label
                     out_nodes = self._run_assign(inst, label)
 
+                if isinstance(out_nodes, ReplaceFunc):
+                    if out_nodes.pre_nodes is not None:
+                        self._working_body.extend(out_nodes.pre_nodes)
+                        self._update_definitions(out_nodes.pre_nodes)
+                    self._handle_inline_func(out_nodes, inst, i, block)
+                    # We use block labels in this pass (rhs_labels for finding df definition dominators)
+                    # so need to start over when block structure changes.
+                    # Returning tried_unrolling=False since control flow changes and need
+                    # to try again.
+                    return True, self.needs_transform, False
+
                 self._working_body.extend(out_nodes)
+
                 update_node_list_definitions(out_nodes, self.func_ir)
                 for inst in out_nodes:
                     if is_assign(inst):
@@ -367,16 +480,70 @@ class TypingTransforms:
         # try loop unrolling if some const values couldn't be resolved
         if self._require_const:
             self._try_loop_unroll_for_const()
+            self.tried_unrolling = True
 
         # try unrolling a loop with constant range if everything else failed
         if self.change_required and not self.changed and not self.needs_transform:
             self._try_unroll_const_loop()
+            self.tried_unrolling = True
 
         # Remove any transformed variables that are not used anymore
         # since cases like agg dicts may not be type stable
         mini_dce(self.func_ir)
 
-        return self.changed, self.needs_transform
+        return self.changed, self.needs_transform, self.tried_unrolling
+
+    def _update_definitions(self, node_list):
+        loc = ir.Loc("", 0)
+        dumm_block = ir.Block(ir.Scope(None, loc), loc)
+        dumm_block.body = node_list
+        build_definitions({0: dumm_block}, self.func_ir._definitions)
+        return
+
+    def _handle_inline_func(
+        self, replacement_func, orig_inst, orig_inst_idx, cur_block
+    ):
+        """
+        Helper function used to handle ReplaceFunc nodes in run().
+        This is largely copied from the code that handles this in series pass.
+
+        Handles inlining the call, appending the remaining instructions in the
+        current block to the working body, and then updating the current block body
+        """
+
+        # Replace inst.value with a call with target args
+        # as expected by inline_closure_call (the only supported format is ir.Call).
+        # orig_inst is replaced anyways so it is ok to change it.
+        orig_inst.value = ir.Expr.call(
+            ir.Var(cur_block.scope, mk_unique_var("dummy"), orig_inst.loc),
+            replacement_func.args,
+            (),
+            orig_inst.loc,
+        )
+
+        # Update block body with nodes that are processed already (_working_body)
+        cur_block.body = self._working_body + cur_block.body[orig_inst_idx:]
+
+        # use callee_validator mechanism to run untyped pass as a workaround
+        def run_untyped_pass(new_ir):
+            untyped_pass = bodo.transforms.untyped_pass.UntypedPass(
+                new_ir, self.typingctx, replacement_func.arg_types, {}, {}, self.flags
+            )
+            untyped_pass.run()
+
+        callee_blocks, _ = inline_closure_call(
+            self.func_ir,
+            replacement_func.glbls,
+            cur_block,
+            len(self._working_body),
+            replacement_func.func,
+            callee_validator=run_untyped_pass,
+        )
+        for c_block in callee_blocks.values():
+            c_block.loc = self.curr_loc
+            update_locs(c_block.body, self.curr_loc)
+
+        self.func_ir.blocks = ir_utils.simplify_CFG(self.func_ir.blocks)
 
     def _run_assign(self, assign, label):
         rhs = assign.value
@@ -574,42 +741,70 @@ class TypingTransforms:
             # NOTE: not passing "self" since target type may change
             return nodes + compile_func_single_block(impl, [target, idx], assign.target)
 
+        # If we have a constant filter it cannot be a boolean filter.
+        if not isinstance(rhs.index, ir.Var):
+            return nodes + [assign]
+
         # detect if filter pushdown is possible and transform
         # e.g. df = pd.read_parquet(...); df = df[df.A > 3]
-        index_def = guard(get_definition, self.func_ir, rhs.index)
+        self._try_apply_filter_pushdown(assign, label)
+
+        nodes.append(assign)
+        return nodes
+
+    def _try_apply_filter_pushdown(self, assign, label):
+        """Apply filter pushdown to filter statement if possible
+
+        Args:
+            assign (ir.Assign): input filter statement (getitem or table_filter)
+            label (int): block label
+        """
+
+        rhs = assign.value
+
+        if is_expr(rhs, "getitem"):
+            in_table_var = rhs.value
+            index_var = rhs.index
+        else:
+            assert is_call(rhs), "_try_apply_filter_pushdown call expected"
+            in_table_var = rhs.args[0]
+            index_var = rhs.args[1]
+
+        index_typ = self.typemap.get(index_var.name, None)
+        # If we cannot determine the type we will try again later.
+        if index_typ in (None, types.unknown, types.undefined):
+            self.needs_transform = True
+            return
+
+        index_def = guard(get_definition, self.func_ir, index_var)
         # BodoSQL generates wrappers around exprs like Series.values that need removed
         index_def = self._remove_series_wrappers_from_def(index_def)
-        value_def = guard(get_definition, self.func_ir, rhs.value)
-        index_call_name = None
-        # Check call expresions for isna, isnull, notna, notnull, and isin.
-        if is_call(index_def):
-            index_call_name = guard(
-                find_callname, self.func_ir, index_def, self.typemap
-            )
+        value_def = guard(get_definition, self.func_ir, in_table_var)
 
+        # If our filter is a boolean array or series then we can perform filter pushdown.
         if (
-            is_expr(index_def, "binop")
-            or self._is_and_filter_pushdown(index_def)
-            or self._is_na_filter_pushdown_func(index_def, index_call_name)
-            or self._is_isin_filter_pushdown_func(index_def, index_call_name)
-            or self._starts_ends_with_filter_pushdown_func(index_def, index_call_name)
+            bodo.utils.utils.is_array_typ(index_typ, True)
+            and index_typ.dtype == types.boolean
         ):
             pushdown_results = guard(
-                self._follow_patterns_to_init_dataframe, assign, self.func_ir
+                self._follow_patterns_to_table_def, in_table_var, self.func_ir
             )
             if pushdown_results is not None:
                 value_def, used_dfs, skipped_vars = pushdown_results
-                call_name = guard(find_callname, self.func_ir, value_def)
-                if call_name == ("init_dataframe", "bodo.hiframes.pd_dataframe_ext"):
+                node_res = guard(self._get_filter_read_and_def_nodes, value_def)
+                if node_res is not None:
+                    table_def_node, read_node = node_res
                     working_body = guard(
                         self._try_filter_pushdown,
                         assign,
                         self._working_body,
                         self.func_ir,
-                        value_def,
+                        table_def_node,
+                        read_node,
                         used_dfs,
                         skipped_vars,
                         index_def,
+                        label,
                     )
                     # If this function returns a list we have updated the working body.
                     # This is done to enable updating a single block that is not yet being processed
@@ -617,16 +812,16 @@ class TypingTransforms:
                     if working_body is not None:
                         self._working_body = working_body
 
-        nodes.append(assign)
-        return nodes
-
-    def _follow_patterns_to_init_dataframe(
-        self, assign: ir.Assign, func_ir: ir.FunctionIR
-    ) -> Tuple[ir.Inst, Dict[str, ir.Inst], Set[str]]:
+    def _follow_patterns_to_table_def(
+        self, in_table_var: ir.Var, func_ir: ir.FunctionIR
+    ) -> tuple[ir.Inst, dict[str, ir.Inst], set[str]]:
         """
-        Takes an ir.Assign that creates a DataFrame used in filter pushdown and converts it to the
-        "Expression" that defined the DataFrame. A DataFrame that can be used in filter pushdown is required
-        to be an ir.Expr that is a call to "init_dataframe".
+        Takes an ir.Assign that creates a DataFrame/Table used in filter pushdown and
+        converts it to the "Expression" that defined the DataFrame/Table.
+        A DataFrame that can be used in filter pushdown is required
+        to be an ir.Expr that is a call to "init_dataframe". A Table is not
+        subject to these constraints so long as the table can be traced back to
+        a SqlReader, IcebergReader, or ParquetReader node.
 
         However, in some code patterns BodoSQL may generate additional code beyond the init_dataframe that
         is otherwise unused. For example, BodoSQL handles unsupported types that can be cast to supported
@@ -643,8 +838,8 @@ class TypingTransforms:
         called skipped_vars. These are variables that can be explicitly skipped because we know some strong invariant.
 
         Args:
-            assign (ir.Assign): _description_
-            func_ir (ir.FunctionIR): _description_
+            in_table_var (ir.Assign): Input table/dataframe variable
+            func_ir (ir.FunctionIR): Function IR
 
         Returns:
             Tuple[ir.Inst, Dict[str, ir.Inst], Set[str]]: Tuple of values collected. These are:
@@ -653,11 +848,10 @@ class TypingTransforms:
                 - ir Variables to skip. These require a VERY specific pattern.
         """
         # TODO(Nick): Refactor the code in this function with clearer variable names and explicit IR examples.
-        rhs = assign.value
-        value_def = get_definition(func_ir, rhs.value)
+        value_def = get_definition(func_ir, in_table_var)
         # Intermediate DataFrames that need to be checked.
         # Maps dataframe names to their definitions
-        used_dfs = {rhs.value.name: value_def}
+        used_dfs = {in_table_var.name: value_def}
         skipped_vars = set()
 
         # If we have any df.loc calls that load all rows, they will appear
@@ -694,8 +888,11 @@ class TypingTransforms:
             # Add this to the intermediate DataFrames
             used_dfs[used_name] = value_def
 
-        # Passing _bodo_merge_into=True with Iceberg generates a tuple. As a result
-        # we will need to traverse this tuple to the original SQLNode if it exists.
+        # Iceberg read with _bodo_merge_into=True generates a tuple. As a result
+        # we will need to traverse this tuple to the original init_dataframe if it
+        # exists and track intermediate values generated (which need to be handled).
+        # SQL streaming Snowflake read also creates static_getitem but we just need to
+        # match the specific codegen pattern generated.
         if is_expr(value_def, "static_getitem"):
             # at this stage the IR looks like:
             # $actual_val = call init_dataframe ...
@@ -715,14 +912,19 @@ class TypingTransforms:
             skipped_vars.add(used_name)
             # Find the build tuple
             tuple_def = get_definition(func_ir, exhaust_iter_def.value)
-            require(is_expr(tuple_def, "build_tuple"))
-            # Add the build tuple to tracking
-            used_name = exhaust_iter_def.value.name
-            used_dfs[used_name] = tuple_def
-            value_def = get_definition(func_ir, tuple_def.items[tuple_index])
-            # Add the original DF to tracking
-            used_name = tuple_def.items[tuple_index].name
-            used_dfs[used_name] = value_def
+            if is_expr(tuple_def, "build_tuple"):
+                # Add the build tuple to tracking
+                used_name = exhaust_iter_def.value.name
+                used_dfs[used_name] = tuple_def
+                value_def = get_definition(func_ir, tuple_def.items[tuple_index])
+                # Add the original DF to tracking
+                used_name = tuple_def.items[tuple_index].name
+                used_dfs[used_name] = value_def
+            else:
+                require(
+                    find_callname(self.func_ir, tuple_def)
+                    == ("read_arrow_next", "bodo.io.arrow_reader")
+                )
 
         if is_call(value_def) and guard(find_callname, func_ir, value_def) == (
             "__bodosql_replace_columns_dummy",
@@ -742,15 +944,85 @@ class TypingTransforms:
 
         return value_def, used_dfs, skipped_vars
 
+    def _get_filter_read_and_def_nodes(self, value_def) -> tuple[ir.Expr, "Connector"]:
+        """Find table definition node and read node for filter pushdown. value_def is
+        the definition of the DataFrame/Table being filtered and could be
+        init_dataframe, reader, or static_getitem node.
+        Performs several checks to make sure a valid filter pushdown is happening.
+
+        Args:
+            value_def (ir.Expr): definition of the DataFrame/Table that is filtered
+
+        Returns:
+            tuple(ir.Expr, ir.Expr): table definition node and reader node
+        """
+        call_name = guard(find_callname, self.func_ir, value_def)
+        if call_name == ("init_dataframe", "bodo.hiframes.pd_dataframe_ext"):
+            # avoid empty dataframe
+            require(len(value_def.args) > 0)
+            data_def = get_definition(self.func_ir, value_def.args[0])
+            assert is_expr(
+                data_def, "build_tuple"
+            ), "invalid data tuple in init_dataframe"
+
+            # table_def_node is the IR node that creates the input table, which is
+            # read_arrow_next() in the streaming read case but otherwise same as read node.
+            table_def_node = read_node = get_definition(self.func_ir, data_def.items[0])
+            # TODO: Change to Walrus Operator once Cython 3 is supported
+            arrow_iter_name = guard(get_table_iterator, read_node, self.func_ir)
+            if arrow_iter_name:
+                read_node = get_definition(self.func_ir, arrow_iter_name)
+            require(
+                all(
+                    get_definition(self.func_ir, v) == table_def_node
+                    for v in data_def.items
+                )
+            )
+        else:
+            table_def_node = read_node = value_def
+            arrow_iter_name = guard(get_table_iterator, read_node, self.func_ir)
+            if arrow_iter_name:
+                read_node = get_definition(self.func_ir, arrow_iter_name)
+
+        require(
+            isinstance(
+                read_node,
+                (
+                    bodo.ir.parquet_ext.ParquetReader,
+                    bodo.ir.iceberg_ext.IcebergReader,
+                    bodo.ir.sql_ext.SqlReader,
+                ),
+            )
+        )
+        if isinstance(read_node, bodo.ir.sql_ext.SqlReader):
+            # Filter pushdown is only supported for snowflake and iceberg
+            # right now.
+            require(read_node.db_type == "snowflake")
+        # If the reader is streaming, and thus implied from BodoSQL
+        # and the filters are already present in the reader, then we
+        # can assume BodoSQL has already done the filter pushdown.
+        # The same is true for a limit from BodoSQL.
+        # Bodo doesn't need to attempt further
+        if read_node.is_streaming:
+            is_sql_node = isinstance(read_node, bodo.ir.sql_ext.SqlReader)
+            require(
+                read_node.filters is None
+                and (not is_sql_node or read_node.limit is None)
+            )
+
+        return table_def_node, read_node
+
     def _try_filter_pushdown(
         self,
         assign,
         working_body,
         func_ir,
-        value_def,
-        used_dfs: Dict[str, ir.Inst],
-        skipped_vars: Set[str],
+        table_def_node,
+        read_node: "Connector",
+        used_dfs: dict[str, ir.Inst],
+        skipped_vars: set[str],
         index_def,
+        label: int,
     ):
         """detect filter pushdown and add filters to ParquetReader or SQLReader IR nodes if possible.
 
@@ -766,28 +1038,11 @@ class TypingTransforms:
         Throws GuardException if not possible.
         """
 
-        # avoid empty dataframe
-        require(len(value_def.args) > 0)
-        data_def = get_definition(func_ir, value_def.args[0])
-        assert is_expr(data_def, "build_tuple"), "invalid data tuple in init_dataframe"
-        read_node = get_definition(func_ir, data_def.items[0])
-        require(
-            isinstance(
-                read_node,
-                (bodo.ir.parquet_ext.ParquetReader, bodo.ir.sql_ext.SqlReader),
-            )
-        )
-        require(all(get_definition(func_ir, v) == read_node for v in data_def.items))
-        if isinstance(read_node, bodo.ir.sql_ext.SqlReader):
-            # Filter pushdown is only supported for snowflake and iceberg
-            # right now.
-            require(read_node.db_type in ("snowflake", "iceberg"))
-
         # make sure all filters have the right form
         # If we don't have a binary operation, then we just pass
         # the single def as the index_def and set the lhs_def
         # and rhs_def to none.
-        if is_expr(index_def, "binop") or self._is_and_filter_pushdown(index_def):
+        if self._is_logical_op_filter_pushdown(index_def, func_ir):
             lhs_def = get_definition(func_ir, get_binop_arg(index_def, 0))
             lhs_def = self._remove_series_wrappers_from_def(lhs_def)
             rhs_def = get_definition(func_ir, get_binop_arg(index_def, 1))
@@ -796,7 +1051,9 @@ class TypingTransforms:
             lhs_def = None
             rhs_def = None
 
-        df_var = assign.value.value
+        # assign could be getitem or table_filter()
+        df_var = assign.value.args[0] if is_call_assign(assign) else assign.value.value
+        new_ir_assigns = []
         filters = self._get_partition_filters(
             index_def,
             df_var,
@@ -805,22 +1062,38 @@ class TypingTransforms:
             func_ir,
             # SQL generates different operators than pyarrow
             read_node,
+            # Some filters may require generating additional IR variables.
+            # This will be updated in place.
+            new_ir_assigns,
         )
-        self._check_non_filter_df_use(set(used_dfs.keys()), assign, func_ir)
-        new_working_body = self._reorder_filter_nodes(
-            read_node, index_def, used_dfs, skipped_vars, filters, working_body, func_ir
+        # Append any new assigns to the working body
+        working_body = working_body + new_ir_assigns
+        self._check_non_filter_df_use_after_filter(
+            set(used_dfs.keys()), assign, func_ir
         )
+        new_working_body, is_ir_reordered = self._reorder_filter_nodes(
+            table_def_node,
+            read_node,
+            index_def,
+            used_dfs,
+            skipped_vars,
+            filters,
+            working_body,
+            func_ir,
+            label,
+        )
+
         old_filters = read_node.filters
-        # If there are existing filters then we need to merge them together because this is
-        # an implicit AND. We merge by distributed the AND over ORs
-        # (A or B) AND (C or D) -> AC or AD or BC or BD
-        # See test_read_partitions_implicit_and_detailed for an example usage.
-        if old_filters is not None:
-            new_filters = []
-            for old_or_cond in old_filters:
-                for new_or_cond in filters:
-                    new_filters.append(old_or_cond + new_or_cond)
-            filters = new_filters
+
+        # Combine old and new filters to avoid duplicates somehow
+        # Also checks if filter is contained in the old filters
+        # likely indicating we reached a static state
+        if old_filters is None:
+            filters_changed = True
+        else:
+            combined_filters = bif.Op("AND", old_filters, filters)
+            filters = bif.SimplifyFilterVisitor().visit(combined_filters)
+            filters_changed = filters != old_filters
 
         # Update the logs with the successful filter pushdown.
         # (no exception was raise until this end point so filters are valid)
@@ -834,97 +1107,155 @@ class TypingTransforms:
                 filter_source,
                 read_source,
             )
-        # set ParquetReader/SQLReader node filters (no exception was raise until this end point
+        # Set node filters (no exception was raise until this end point
         # so filters are valid)
         read_node.filters = filters
         # Merge into only filters by file not within rows, so we cannot remove the filter.
         keep_filter = (
-            isinstance(read_node, bodo.ir.sql_ext.SqlReader) and read_node.is_merge_into
+            isinstance(read_node, bodo.ir.iceberg_ext.IcebergReader)
+            and read_node.is_merge_into
         )
         if not keep_filter:
             # remove filtering code since not necessary anymore
-            assign.value = assign.value.value
+            # assign could be getitem or table_filter()
+            assign.value = (
+                assign.value.args[0] if is_call_assign(assign) else assign.value.value
+            )
+            self.rerun_after_dce = True
 
-        # Mark the IR as changed
-        self.changed = True
+        # Mark the IR as changed if modified the IR or filters at all.
+        # This is important because if we don't delete the filter and an error
+        # in the code requires a transformation we will wrongfully believe the IR
+        # has changed. See test_merge_into_filter_compilation_errors.py::test_requires_transform.
+        self.changed = self.changed or (
+            is_ir_reordered or filters_changed or (not keep_filter)
+        )
         # Return the updates to the working body so we can modify blocks that may not
         # be in the working body yet.
         return new_working_body
 
-    def _check_non_filter_df_use(self, df_names, assign, func_ir):
-        """make sure the chain of used dataframe variables are not used after filtering in the
+    def _check_non_filter_df_use_after_filter(self, df_names, assign, func_ir):
+        """make sure the chain of used dataframe variables are not used AFTER filtering in the
         program. e.g. df2 = df[...]; A = df.A
         Assumes that Numba renames variables if the same df name is used later. e.g.:
             df2 = df[...]
             df = ....  # numba renames df to df.1
+
+        This DOES NOT detect any extra uses of the DataFrame before the filter. Those will be
+        captured by _reorder_filter_nodes.
+
         TODO(ehsan): use proper liveness analysis to handle cases with control flow:
             df2 = df[...]
             if flag:
                 df = ....
         """
-
         for block in func_ir.blocks.values():
             for stmt in reversed(block.body):
                 # ignore code before the filtering node in the same basic block
                 if stmt is assign:
                     break
-                require(all(v.name not in df_names for v in stmt.list_vars()))
+                require(self._is_not_filter_df_use(df_names, stmt))
 
-    def _reorder_filter_nodes(
-        self,
-        read_node,
-        index_def,
-        used_dfs,
-        skipped_vars,
-        filters,
-        working_body,
-        func_ir,
-    ):
-        """reorder nodes that are used for Parquet/SQL partition filtering to be before the
-        Reader node (to be accessible when the Reader is run).
+    def _is_not_filter_df_use(self, df_names, stmt):
+        """Helper function for _check_non_filter_df_use_after_filter, that checks a particular
+        statement doesn't use any of the DataFrames in df_names, for purposes of
+        performing filter pushdown.
 
-        df_names is a set of variables that need to be tracked to perform the filter pushdown.
+        Args:
+            df_names (set(String)): Set of DataFrames that can't be used
+            stmt (IR.Stmt): statement to check for usage
 
-        Categorizes all statements after the read node as either filter variable nodes
-        or not. For example, given df["B"] == a, any node that is used for
-        computing 'a' is filter variable node. The node df["B"] == a itself is not in
-        this set.
-        Moves the filter variable nodes before
-        the read node to enable filter pushdown.
-
-        Throws GuardException if not possible.
+        Returns:
+            True/False
         """
-        # e.g. [[("a", "0", ir.Var("val"))]] -> {"val"}
-        filter_vars = set()
-        for predicate_list in filters:
-            for v in predicate_list:
-                # If v[2] is a variable add it to the filter_vars. If its
-                # a compile time constant (i.e. NULL) then don't add it.
-                if isinstance(v[2], ir.Var):
-                    filter_vars.add(v[2].name)
 
-        # data array/table variables should not be used in filter expressions directly
-        non_filter_vars = {v.name for v in read_node.list_vars()}
+        """In BodoSQL, when doing a MERGE INTO operation with iceberg,
+        we generate code that looks something like:
 
-        # find all variables that are potentially used in filter expressions after the
-        # reader node
-        # make sure they don't overlap with other nodes (to be conservative)
+            dest_df = pd.read_sql(*args*, _bodo_with_orig_file_metadata=True)
+            _____
+            (Some code that does a bunch of joins with the dest_df,
+            and creates the delta table)
+            _____
+            writeback_df = do_delta_merge_with_target(dest_df, delta_df)
+
+        The issue is that, we don't want do_delta_merge_with_target to count
+        as a use of dest_df, since we want it to be fully filtered at the
+        input to do_delta_merge_with_target.
+
+        Since we don't use this function for any other purpose,
+        we can completely ignore the use of the dest_df in the function,
+        for determining what filters can be applied.
+        (no columns should be pruned, as we'll need to write back every column)"""
+        if isinstance(stmt, ir.Assign):
+            call_name = guard(find_callname, self.func_ir, stmt.value, self.typemap)
+            if call_name in (
+                (
+                    "do_delta_merge_with_target",
+                    "bodosql.libs.iceberg_merge_into",
+                ),
+                ("pushdown_safe_init_df", "bodo.hiframes.pd_dataframe_ext"),
+            ):
+                # Only need to check if the delta table is in df names.
+                # To be totally correct, we could check for uses of the delta table argument,
+                # but we don't need to since it will never be used after
+                # do_delta_merge_with_target
+                return True
+        return all(v.name not in df_names for v in stmt.list_vars())
+
+    def _find_target_node_location_for_filtering(
+        self,
+        block_body: list[ir.Stmt],
+        target_node: ir.Stmt,
+        filter_nodes: set[ir.Expr],
+        filter_vars: set[ir.Var],
+        non_filter_vars: set[ir.Var],
+        related_vars: set[ir.Var],
+        skipped_vars: set[ir.Var],
+        df_names: set[str],
+        used_dfs: dict[str, ir.Expr],
+    ) -> int:
+        """For a given block_body, find the location within
+        the IR at which the target_node is located for the
+        purposes of reordering filters. Throughout this iteration
+        several restrictions on variable usage are enforced, effectively
+        requiring there can't be any overlap between filter_vars and non_filter_vars.
+        The enforce these, the sets filter_vars, non_filter_vars, related_vars, and
+        skipped_vars, as well as the dictionary used_dfs will be updated throughout
+        the execution of this function.
+
+        Args:
+            block_body (List[ir.Stmt]): The body of an IR block to search.
+            target_node (ir.Stmt): The IR statements we are trying to find
+            filter_nodes (Set[ir.Expr]): The nodes that are part of the filter and should
+                be skipped.
+            filter_vars[in, out] (Set[ir.Var]): Variables that are used in computing
+                the filter.
+            non_filter_vars[in, out] (Set[ir.Var]): Variables that are used in computation
+                unrelated to the filter. To be conservative these cannot overlap with filter variables.
+            related_vars[in, out] (Set[ir.Var]): Set of variables that are related to the use of the filter.
+                These are variables that are intermediate steps for computing the filter that need to be
+                checked for illicit use.
+            skipped_vars[in, out] (Set[ir.Var]): Set of variables that are explicitly skipped because
+                of a prior pattern matching step. Any directly assignments to these variables are also
+                updated.
+            df_names (Set[str]): The variable names for known DataFrames that
+                can be skipped.
+            used_dfs[in, out] (Dict[str, ir.Expr]): A mapping between each DataFrame
+                variable involved with pushdown and the actual IR expression.
+
+
+        Raises:
+            GuardException: Is there any overlap between filter and
+                non-filter variables (which means we cannot safely do pushdown)
+                or have types not finalized yet in a way that interferes with
+                pushdown.
+
+        Returns:
+            int: The line in block body at which the target_node can be found.
+        """
         i = 0  # will be set to ParquetReader node's reversed index
-        # nodes used for filtering output dataframe use filter vars as well but should
-        # be excluded since they have dependency to data arrays (e.g. df["A"] == 3)
-        filter_nodes = self._get_filter_nodes(index_def, func_ir)
-        # get all variables related to filtering nodes in some way, to make sure df is
-        # not used in other ways before filtering
-        # e.g.
-        # df = pd.read_parquet("../tmp/pq_data3")
-        # n = len(df)
-        # df = df[df["A"] == 2]
-        related_vars = set()
-        # Get the set of intermediate df names
-        df_names = set(used_dfs.keys())
-        for node in filter_nodes:
-            related_vars.update({v.name for v in node.list_vars()})
-        for stmt in reversed(working_body):
+        for stmt in reversed(block_body):
             i += 1
             # ignore dataframe filter expression nodes
             if is_assign(stmt) and stmt.value in filter_nodes:
@@ -956,9 +1287,9 @@ class TypingTransforms:
                     continue
 
             # avoid nodes before the reader
-            if stmt is read_node:
+            if stmt is target_node:
                 break
-            stmt_vars = {v.name for v in stmt.list_vars()}
+            stmt_vars: set[str] = {v.name for v in stmt.list_vars()}
 
             # make sure df is not used before filtering
             if not (stmt_vars & related_vars):
@@ -966,42 +1297,268 @@ class TypingTransforms:
                 # is non empty then a df_name is in stmt_vars
                 require(not (df_names & stmt_vars))
             else:
-                related_vars |= stmt_vars - df_names
+                related_vars.update(stmt_vars - df_names)
 
-            if stmt_vars & filter_vars:
-                filter_vars |= stmt_vars
+            # If the target of an assignment is a filter_var, then
+            # the inputs are involved with computing filters so they must
+            # be filter_var's too
+            if is_assign(stmt) and stmt.target.name in filter_vars:
+                filter_vars.update(stmt_vars)
+                continue
+
+            # For BoundFunction's, we need to check if the original bounded value
+            # is a filter var, so add it to stmt_vars
+            if is_call_assign(stmt):
+                # This is tested in test_snowflake_filter_pushdown_edgecase,
+                # which doesn't run on PR CI, so the pragma is needed
+                if stmt.value.func.name not in self.typemap:  # pragma: no cover
+                    self.needs_transform = True
+                    raise GuardException
+                elif isinstance(
+                    self.typemap[stmt.value.func.name], types.BoundFunction
+                ):
+                    def_loc = get_definition(self.func_ir, stmt.value.func)
+                    stmt_vars.update(v.name for v in def_loc.list_vars())
+
+            # Otherwise, if the stmt uses a filter var and the filter_var is
+            # not immutable, assume that all vars are involved and must be filter_var's
+            # If filter_var is immutable, then don't need to assume that
+            used_filter_vars: set[str] = stmt_vars & filter_vars
+
+            # This is a defensive check, and isn't expected to be hit
+            # so we need the pragma to let coverage pass
+            for fvar in used_filter_vars:
+                if fvar not in self.typemap:  # pragma: no cover
+                    self.needs_transform = True
+                    raise GuardException
+
+            if used_filter_vars and any(
+                not is_immutable(self.typemap[fvar]) for fvar in used_filter_vars
+            ):
+                filter_vars.update(stmt_vars)
             else:
-                non_filter_vars |= stmt_vars
-        require(not (filter_vars & non_filter_vars))
+                non_filter_vars.update(stmt_vars - filter_vars)
 
+        require(not (filter_vars & non_filter_vars))
+        return len(block_body) - i
+
+    @staticmethod
+    def _move_filter_nodes(
+        block_body: list[ir.Stmt],
+        reader_ind: int,
+        filter_nodes: set[ir.Expr],
+        filter_vars: set[ir.Var],
+    ) -> tuple[list[ir.Stmt], list[ir.Stmt]]:
+        """
+        Given a block that should be reordered based on filter nodes, splits the block into
+        two lists, one containing all the nodes before the reader and any reordered filters,
+        and one containing the reader and any nodes that remain after it.
+
+        Args:
+            block_body (List[ir.Stmt]): The body of an IR block to search.
+            reader_ind (int): The location in block_body of the reader node.
+                All filter variables must be moved before this.
+            filter_nodes (Set[ir.Expr]): The nodes that are part of the filter and should
+                not be reordered.
+            filter_vars (Set[ir.Var]): Variables that are used in computing
+                the filter and should be reordered.
+
+        Returns:
+            Tuple[List[ir.Stmt], List[ir.Stmt]]: Returns two lists:
+                - A list containing all statements before the reader
+                  and the reordered filter nodes.
+                - A list containing the reader statement and all statements
+                  that remain after it.
+        """
         # move IR nodes for filter expressions before the reader node
-        pq_ind = len(working_body) - i
-        new_body = working_body[:pq_ind]
+        new_body = block_body[:reader_ind]
         non_filter_nodes = []
-        for i in range(pq_ind, len(working_body)):
-            stmt = working_body[i]
+        for i in range(reader_ind, len(block_body)):
+            stmt = block_body[i]
             # ignore dataframe filter expression node
             if is_assign(stmt) and stmt.value in filter_nodes:
                 non_filter_nodes.append(stmt)
                 continue
 
-            stmt_vars = {v.name for v in stmt.list_vars()}
-            if stmt_vars & filter_vars:
+            # Should only be true if:
+            # - Target of stmt is a filter_var
+            # - A mutable filter var was used in stmt
+            # In both cases, we all all used vars as filter_vars
+            # In the case that an immutable filter var is used in the stmt
+            # we don't need to move the stmt. The definition will be moved up
+            # but that should be safe
+            if all(v.name in filter_vars for v in stmt.list_vars()):
                 new_body.append(stmt)
             else:
                 non_filter_nodes.append(stmt)
 
+        return new_body, non_filter_nodes
+
+    def _reorder_filter_nodes(
+        self,
+        table_def_node,
+        read_node,
+        index_def,
+        used_dfs,
+        skipped_vars,
+        filters,
+        working_body: list[ir.Stmt],
+        func_ir: ir.FunctionIR,
+        label: int,
+    ):
+        """reorder nodes that are used for Parquet/SQL partition filtering to be before the
+        Reader node (to be accessible when the Reader is run).
+
+        df_names is a set of variables that need to be tracked to perform the filter pushdown.
+        table_def_node is read_arrow_next() in streaming case, otherwise it's read_node.
+
+        label is the current basic block number being processed.
+
+        Categorizes all statements after the read node as either filter variable nodes
+        or not. For example, given df["B"] == a, any node that is used for
+        computing 'a' is filter variable node. The node df["B"] == a itself is not in
+        this set.
+        Moves the filter variable nodes before
+        the read node to enable filter pushdown.
+
+        Throws GuardException if not possible.
+        """
+        # e.g. [[("a", "0", ir.Var("val"))]] -> {"val"}
+        filter_vars: set[str] = {
+            v.name for v in bodo.ir.connector.get_filter_vars(filters)
+        }
+
+        # data array/table variables should not be used in filter expressions directly
+        non_filter_vars = {v.name for v in table_def_node.list_vars()}
+
+        # find all variables that are potentially used in filter expressions after the
+        # reader node
+        # make sure they don't overlap with other nodes (to be conservative)
+        # nodes used for filtering output dataframe use filter vars as well but should
+        # be excluded since they have dependency to data arrays (e.g. df["A"] == 3)
+        filter_nodes = self._get_filter_nodes(index_def, func_ir)
+        # get all variables related to filtering nodes in some way, to make sure df is
+        # not used in other ways before filtering
+        # e.g.
+        # df = pd.read_parquet("../tmp/pq_data3")
+        # n = len(df)
+        # df = df[df["A"] == 2]
+        related_vars = set()
+        # Get the set of intermediate df names
+        df_names = set(used_dfs.keys())
+        for node in filter_nodes:
+            related_vars.update({v.name for v in node.list_vars()})
+
+        pq_ind = self._find_target_node_location_for_filtering(
+            working_body,
+            table_def_node,
+            filter_nodes,
+            filter_vars,
+            non_filter_vars,
+            related_vars,
+            skipped_vars,
+            df_names,
+            used_dfs,
+        )
+        new_body, non_filter_nodes = self._move_filter_nodes(
+            working_body, pq_ind, filter_nodes, filter_vars
+        )
+
+        # Check if the code has changed. There is only 1 change that
+        # can occur, a node is moved from later into the IR earlier
+        # via new body. This changes will be found in location
+        #  new_body[pq_ind: len(new_body)]. As a result we can just
+        # check this code for changes
+        start_idx, end_idx = pq_ind, len(new_body)
+        changed = working_body[start_idx:end_idx] != new_body[start_idx:end_idx]
+
         # update current basic block with new stmt order
-        return new_body + non_filter_nodes
+        if read_node == table_def_node:
+            new_working_body = new_body + non_filter_nodes
+        else:  # pragma: no cover
+            # The filter pushdown structure requires the read is located at the front
+            # of the block to avoid accidentally moving any unrelated nodes via
+            # new_body. This is enforced in the current codegen where read_arrow_next
+            # should always be the first statement of the block.
+            require(pq_ind == 0)
+            # Overview of this path:
+            # https://bodo.atlassian.net/wiki/spaces/B/pages/1412366337/Dictionary-Encoding+Related+BodoSQL+Streaming+Filter+Pushdown+Changes
+            # move filter nodes before the actual read IR node, not read_arrow_next()
+            new_working_body = non_filter_nodes
+            # new_body must consist of only the filter nodes (there are no nodes before
+            # the read and the only moved nodes must be part of the filter). Assuming
+            # the codegen pattern is supported we will move these nodes to the IR block
+            # with the actual Reader call.
+            filter_nodes = new_body
+            read_found = False
+            # read node is before the while loop so it's in a predecessor block
+            cfg = compute_cfg_from_blocks(self.func_ir.blocks)
+            new_target_block = []
+            new_target_label = -1
+            for pred, _ in cfg.predecessors(label):
+                body = func_ir.blocks[pred].body
+                # NOTE: Numba as of 0.59 may generate an indirect self-loop with an
+                # extra empty block
+                if (pred == label) or (
+                    len(body) == 1
+                    and isinstance(body[0], ir.Jump)
+                    and body[0].target == label
+                ):
+                    # Ignore self-loops.
+                    continue
+                # Simplify the filter pushdown requirements. There can
+                # only be one path we select.
+                require(new_target_label == -1)
+                pq_ind = self._find_target_node_location_for_filtering(
+                    body,
+                    read_node,
+                    filter_nodes,
+                    filter_vars,
+                    non_filter_vars,
+                    related_vars,
+                    skipped_vars,
+                    df_names,
+                    used_dfs,
+                )
+                # We only support a single predecessor, so we
+                # must find the node.
+                require(body[pq_ind] == read_node)
+                new_body, non_filter_nodes = self._move_filter_nodes(
+                    body, pq_ind, filter_nodes, filter_vars
+                )
+                start_idx, end_idx = pq_ind, len(new_body)
+                # Update changed
+                changed = (
+                    changed or body[start_idx:end_idx] != new_body[start_idx:end_idx]
+                )
+                # Note: new_body already contains all nodes before the reader.
+                new_target_block = new_body + filter_nodes + non_filter_nodes
+                new_target_label = pred
+                read_found = True
+            assert (
+                read_found
+            ), "_reorder_filter_nodes: read node not found in streaming I/O"
+            require(new_target_label != -1)
+            func_ir.blocks[new_target_label].body = new_target_block
+
+        return new_working_body, changed
 
     def _get_filter_nodes(self, index_def, func_ir):
         """find ir.Expr nodes used in filtering output dataframe directly so they can
         be excluded from filter dependency reordering
         """
         # e.g. (df["A"] == 3) | (df["A"] == 4)
-        if (
-            is_expr(index_def, "binop") and index_def.fn == operator.or_
-        ) or self._is_and_filter_pushdown(index_def):
+        if self._is_logical_not_filter_pushdown(index_def, func_ir):
+            nodes = self._get_filter_nodes(
+                self._remove_series_wrappers_from_def(
+                    get_definition(func_ir, get_unary_arg(index_def))
+                ),
+                func_ir,
+            )
+            return {index_def} | nodes
+        if self._is_or_filter_pushdown(
+            index_def, func_ir
+        ) or self._is_and_filter_pushdown(index_def, func_ir):
             left_nodes = self._get_filter_nodes(
                 self._remove_series_wrappers_from_def(
                     get_definition(func_ir, get_binop_arg(index_def, 0))
@@ -1017,10 +1574,124 @@ class TypingTransforms:
             return {index_def} | left_nodes | right_nodes
         return {index_def}
 
-    def _get_call_filter(self, call_def, func_ir, df_var, df_col_names, is_snowflake):
+    def _negate_column_filter(self, old_filter: bif.Op) -> bif.Filter:
+        """Negate an individual filter by wrapping it in the NOT operator.
+        If we
+
+        Args:
+            old_filter (Tuple[str, str, ir.Var]): The filter to be negated
+
+        Returns:
+            bif.Filter: The new filter with the operator negated.
+        """
+        require(isinstance(old_filter, bif.Op))
+        if old_filter.op.lower() == "not":
+            # NOT(NOT X) = X, so we just remove the previous NOT.
+            return old_filter.args[0]
+
+        return bif.Op("NOT", old_filter)
+
+    def _check_comparison_typing(
+        self,
+        col_arr_type: types.ArrayCompatible,
+        scalar_var,
+        read_node: "Connector",
+    ) -> None:
+        # If this is parquet we need to verify this is a filter we can process.
+        if isinstance(read_node, bodo.ir.parquet_ext.ParquetReader):
+            lhs_scalar_typ = bodo.utils.typing.element_type(col_arr_type)
+            require(scalar_var.name in self.typemap)
+            rhs_scalar_typ = self.typemap[scalar_var.name]
+            # Only apply filter pushdown if its safe to use inside arrow
+            require(
+                bodo.utils.typing.is_common_scalar_dtype(
+                    [lhs_scalar_typ, rhs_scalar_typ]
+                )
+                or bodo.utils.typing.is_safe_arrow_cast(lhs_scalar_typ, rhs_scalar_typ)
+            )
+
+    def _get_column_filter(
+        self,
+        col_def: ir.Expr,
+        func_ir: ir.FunctionIR,
+        df_var: ir.Var,
+        df_col_names,
+        df_col_types,
+        is_sql_op: bool,
+        read_node: "Connector",
+        new_ir_assigns: list[ir.Stmt],
+    ) -> bif.Filter:
         """
         Function used by _get_partition_filters to extract filters
-        related to series method calls.
+        related to columns with boolean data. Returns a single filter
+        comparing the boolean column to True.
+
+        Raises Guard exception if this is not possible.
+
+        Args:
+            col_def (ir.Expr): The IR expression for the column. There may be a transformation
+                function on the column.
+            func_ir (ir.FunctionIR): The function IR used for traversing definitions and calls.
+            df_var (ir.Var): The DataFrame variable to check for columns
+            df_col_names (N Tuple[str, ...]): A tuple of column names for the DataFrame.
+            is_sql_op (bool): Should the equality operator have SQL or arrow syntax.
+            new_ir_assigns (List[ir.Stmt]): List of statements to add the IR when new IR variables
+                must be created. This is update with the True variable.
+
+        Returns:
+             bif.Filter: The filter for a column with a boolean output type.
+        """
+
+        colname, col_typ = self._get_col_name(
+            col_def,
+            df_var,
+            df_col_names,
+            df_col_types,
+            func_ir,
+            read_node,
+        )
+
+        # This is a defensive check, and isn't expected to be hit
+        # so we need the pragma to let coverage pass
+        if df_var.name not in self.typemap:  # pragma: no cover
+            self.needs_transform = True
+            raise GuardException
+        # Verify that the column has a boolean type.
+        require(
+            bodo.utils.utils.is_array_typ(col_typ, False)
+            and col_typ.dtype == types.boolean
+        )
+
+        # Generate a == TRUE for the column. This allows using the partition filters in
+        # Arrow.
+        # Generate the True variable.
+        # Create a new IR Expr for the constant pattern.
+        expr_value = ir.Const(True, col_def.loc)
+        # Generate a variable from the Expr
+        new_name = mk_unique_var("true_var")
+        new_var = ir.Var(self.scope, new_name, col_def.loc)
+        new_assign = ir.Assign(target=new_var, value=expr_value, loc=col_def.loc)
+        # Append the assign so we update the IR.
+        new_ir_assigns.append(new_assign)
+        # Update the definitions. This is safe since the name is unique.
+        func_ir._definitions[new_name] = [expr_value]
+        # TODO: Just have a IS_TRUE function instead to avoid scalar creation?
+        return bif.Op("=" if is_sql_op else "==", colname, bif.Scalar(new_var))
+
+    def _get_call_filter(
+        self,
+        call_def: ir.Expr,
+        func_ir: ir.FunctionIR,
+        df_var,
+        df_col_names,
+        df_col_types,
+        is_sql_op: bool,
+        read_node,
+        new_ir_assigns,
+    ) -> bif.Filter:
+        """
+        Function used by _get_partition_filters to extract filters
+        related to series or array method calls.
 
         Currently this supports null related filters and isin.
         """
@@ -1030,44 +1701,121 @@ class TypingTransforms:
         # by BodoSQL
         require(
             len(call_list) == 2
-            and (isinstance(call_list[1], ir.Var) or call_list[1] == "pandas")
+            and (
+                isinstance(call_list[1], ir.Var)
+                or call_list[1] == "pandas"
+                or call_list[1] == "bodosql.kernels"
+            )
         )
         if call_list[0] in ("notna", "isna", "notnull", "isnull"):
             return self._get_null_filter(
-                call_def, call_list, func_ir, df_var, df_col_names
+                call_def,
+                call_list,
+                func_ir,
+                df_var,
+                df_col_names,
+                df_col_types,
+                read_node,
             )
         elif call_list[0] == "isin":
             return self._get_isin_filter(
-                call_list, call_def, func_ir, df_var, df_col_names
+                call_list,
+                call_def,
+                func_ir,
+                df_var,
+                df_col_names,
+                df_col_types,
+                read_node,
             )
-        elif (
-            call_list[0] in ("startswith", "endswith") and is_snowflake
+        elif call_list == (
+            "is_in",
+            "bodosql.kernels",
         ):  # pragma: no cover
-            # This path is only taken on Azure because snowflake
-            # is not tested on AWS.
-            return self._get_starts_ends_with_filter(
-                call_list, call_def, func_ir, df_var, df_col_names
+            return self._get_bodosql_array_kernel_is_in_filter(
+                call_def,
+                func_ir,
+                df_var,
+                df_col_names,
+                df_col_types,
+                read_node,
             )
+        elif call_list[0] in ("startswith", "endswith"):  # pragma: no cover
+            return self._get_starts_ends_with_filter(
+                call_list,
+                call_def,
+                func_ir,
+                df_var,
+                df_col_names,
+                df_col_types,
+                read_node,
+            )
+        elif call_list == (
+            "like_kernel",
+            "bodosql.kernels",
+        ):  # pragma: no cover
+            return self._get_like_filter(
+                call_def,
+                func_ir,
+                df_var,
+                df_col_names,
+                df_col_types,
+                is_sql_op,
+                read_node,
+                new_ir_assigns,
+            )
+        elif call_list == (
+            "regexp_like",
+            "bodosql.kernels",
+        ):  # pragma: no cover
+            return self._get_regexp_like_filter(
+                call_def,
+                func_ir,
+                df_var,
+                df_col_names,
+                df_col_types,
+                read_node,
+            )
+
         else:
             # Trigger a GuardException because we have hit an unknown function.
             # This should be caught by a surrounding function.
             raise GuardException
 
-    def _get_null_filter(self, call_def, call_list, func_ir, df_var, df_col_names):
+    def _get_null_filter(
+        self,
+        call_def,
+        call_list,
+        func_ir: ir.FunctionIR,
+        df_var,
+        df_col_names,
+        df_col_types,
+        read_node: "Connector",
+    ):
         """
         Function used by _get_partition_filters to extract null related
         filters from series method calls.
         """
         # support both Series.isna() and pd.isna() forms
         arr_var = call_list[1] if isinstance(call_list[1], ir.Var) else call_def.args[0]
-        colname = self._get_col_name(arr_var, df_var, df_col_names, func_ir)
+        col_name, _ = self._get_col_name(
+            arr_var, df_var, df_col_names, df_col_types, func_ir, read_node
+        )
         if call_list[0] in ("notna", "notnull"):
-            op = "is not"
+            op = "IS_NOT_NULL"
         else:
-            op = "is"
-        return (colname, op, "NULL")
+            op = "IS_NULL"
+        return bif.Op(op, col_name)
 
-    def _get_isin_filter(self, call_list, call_def, func_ir, df_var, df_col_names):
+    def _get_isin_filter(
+        self,
+        call_list,
+        call_def,
+        func_ir: ir.FunctionIR,
+        df_var,
+        df_col_names,
+        df_col_types,
+        read_node: "Connector",
+    ) -> bif.Filter:
         """
         Function used by _get_partition_filters to extract isin related
         filters from series method calls.
@@ -1083,258 +1831,503 @@ class TypingTransforms:
                 list_set_typ.dtype, bodo.hiframes.pd_timestamp_ext.PandasTimestampType
             )
         )
-        colname = self._get_col_name(call_list[1], df_var, df_col_names, func_ir)
-        op = "in"
-        return (colname, op, list_set_arg)
+        colname, _ = self._get_col_name(
+            call_list[1], df_var, df_col_names, df_col_types, func_ir, read_node
+        )
+        # TODO: Add do _check_comparison_typing check. Requires list / set handling
+        return bif.Op("IN", colname, bif.Scalar(list_set_arg))
+
+    def _get_bodosql_array_kernel_is_in_filter(
+        self,
+        call_def,
+        func_ir: ir.FunctionIR,
+        df_var,
+        df_col_names,
+        df_col_types,
+        read_node: "Connector",
+    ):  # pragma: no cover
+        """
+        Function used by _get_partition_filters to extract isin related
+        filters from the bodosql is_in kernel.
+        """
+
+        # This is normally already be checked in _is_isin_filter_pushdown_func,
+        # However, we need to have this check here in case this expression is
+        # the a sub expression in a binop (i.e. filter = (df.A < 3) & is_in(df.B, pd.array([1, 2])))
+        arg1_arr_type = self.typemap.get(call_def.args[1].name, None)
+
+        # We require that arg1 is a replicated array to perform filter pushdown.
+        # In the bodoSQL codegen, this value should be lowered
+        # as a global, and all globals are required to be replicated.
+        is_arg1_global = isinstance(
+            guard(get_definition, self.func_ir, call_def.args[1].name),
+            numba.core.ir.Global,
+        )
+
+        # TODO: check if this requirement needs to be enforced
+        require(
+            is_arg1_global
+            and arg1_arr_type.dtype != bodo.datetime64ns
+            and not isinstance(
+                arg1_arr_type.dtype, bodo.hiframes.pd_timestamp_ext.PandasTimestampType
+            )
+        )
+
+        colname, _ = self._get_col_name(
+            call_def.args[0], df_var, df_col_names, df_col_types, func_ir, read_node
+        )
+        # TODO: Add do _check_comparison_typing check. Requires list / set handling
+        return bif.Op("IN", colname, bif.Scalar(call_def.args[1]))
 
     def _get_starts_ends_with_filter(
-        self, call_list, call_def, func_ir, df_var, df_col_names
+        self,
+        call_list,
+        call_def,
+        func_ir: ir.FunctionIR,
+        df_var,
+        df_col_names,
+        df_col_types,
+        read_node: "Connector",
     ):  # pragma: no cover
-        # This path is only taken on Azure because snowflake
-        # is not tested on AWS.
-        colname = self._get_col_name(call_list[1], df_var, df_col_names, func_ir)
-        op = call_list[0]
-        return (colname, op, call_def.args[0])
+        colname, coltype = self._get_col_name(
+            call_list[1], df_var, df_col_names, df_col_types, func_ir, read_node
+        )
+        self._check_comparison_typing(coltype, call_def.args[0], read_node)
+        return bif.Op(call_list[0], colname, bif.Scalar(call_def.args[0]))
+
+    def _get_regexp_like_filter(
+        self,
+        call_def: ir.Expr,
+        func_ir: ir.FunctionIR,
+        df_var: ir.Var,
+        df_col_names,
+        df_col_types,
+        read_node: "Connector",
+    ) -> bif.Filter:  # pragma: no cover
+        args = call_def.args
+        # Get the column names
+        col_name, col_type = self._get_col_name(
+            args[0], df_var, df_col_names, df_col_types, func_ir, read_node
+        )
+
+        # Get the other args. We can only do filter pushdown if all of them are literals
+        pattern_arg = args[1]
+        regex_param_arg = args[2]
+
+        pattern_type = self.typemap.get(pattern_arg.name, None)
+        regex_param_type = self.typemap.get(regex_param_arg.name, None)
+
+        invalid_types = (None, types.undefined, types.unknown)
+        if (pattern_type in invalid_types) or (regex_param_type in invalid_types):
+            self.needs_transform = True
+            raise GuardException
+
+        require(
+            is_overload_constant_str(pattern_type)
+            and is_overload_constant_str(regex_param_type)
+        )
+
+        pattern_type = types.unliteral(pattern_type)
+        regex_param_type = types.unliteral(regex_param_type)
+
+        require(
+            pattern_type in (types.unicode_type, types.none)
+            and regex_param_type in (types.unicode_type, types.none)
+        )
+
+        self._check_comparison_typing(col_type, pattern_arg, read_node)
+        return bif.Op("REGEXP_LIKE", col_name, *(bif.Scalar(x) for x in args[1:]))
+
+    def _get_like_filter(
+        self,
+        call_def: ir.Expr,
+        func_ir: ir.FunctionIR,
+        df_var: ir.Var,
+        df_col_names,
+        df_col_types,
+        is_sql_op: bool,
+        read_node,
+        new_ir_assigns: list[ir.Var],
+    ) -> bif.Filter:  # pragma: no cover
+        """Generate a filter for like. If the values in like are proper constants
+        then this generates the correct operations
+
+        Args:
+            call_def (ir.Expr): An IR expression representing the call in the IR. This contains
+                access to the call details, such as the arguments.
+            func_ir (ir.FunctionIR): The current IR for the function. This is needed to update
+                definitions and extract information like column names.
+            df_var (ir.Var): The IR variable for the DataFrame being accessed by the kernel. This is
+                used to determine the original column name for filter pushdown.
+            df_col_names (Tuple[str, ...]): n-tuple of DataFrame column names
+            is_sql_op (bool): Is the operation targeting sql or parquet/iceberg. This
+                influences the generated op string.
+            new_ir_assigns (List[ir.Stmt]): A list of ir.Stmt values that are created when generating
+                the filters. If this filter succeeds we will append to this list.
+
+        Returns:
+            Tuple[str, str, ir.Var]: A tuple for this particular filter. It has the form
+                (column_name, op (e.g. <), Variable). Since like/ilike require a transformation
+                to get the pattern into this standard form we generate a new Variable add append
+                it to the IR.
+
+        Raises GuardException: If the inputs cannot be converted to a valid filter.
+        """
+        args = call_def.args
+        # Get the column names
+        colname, _ = self._get_col_name(
+            args[0], df_var, df_col_names, df_col_types, func_ir, read_node
+        )
+        # Get the other args. We can only do filter pushdown if all of them are literals
+        pattern_arg = args[1]
+        pattern_type = self.typemap.get(pattern_arg.name, None)
+        if pattern_type in (None, types.undefined, types.unknown):
+            self.needs_transform = True
+            raise GuardException
+        escape_arg = args[2]
+        escape_type = self.typemap.get(escape_arg.name, None)
+        if escape_type in (None, types.undefined, types.unknown):
+            self.needs_transform = True
+            raise GuardException
+        case_insensitive_arg = args[3]
+        case_insensitive_type = self.typemap.get(case_insensitive_arg.name, None)
+        if case_insensitive_type in (None, types.undefined, types.unknown):
+            self.needs_transform = True
+            raise GuardException
+        require(is_overload_constant_bool(case_insensitive_type))
+        # Fetch case sensitive information. If is_case_insensitive == True
+        # then we will create new operations that can be replaced by
+        # arrow and snowflake.
+        is_case_insensitive = get_overload_const_bool(case_insensitive_type)
+        # If either pattern or escape is not literal it must be the regex case
+        # or always False.
+        match_nothing = False
+        requires_regex = False
+        if not (
+            is_overload_constant_str(pattern_type)
+            and is_overload_constant_str(escape_type)
+        ):
+            # We don't support filter pushdown with optional types
+            # or array types.
+            pattern_type = types.unliteral(pattern_type)
+            escape_type = types.unliteral(escape_type)
+            require(
+                pattern_type in (types.unicode_type, types.none)
+                and escape_type in (types.unicode_type, types.none)
+            )
+            if pattern_type == types.none or escape_type == types.none:
+                match_nothing = True
+                # Generate a dummy pattern to get an ir.Var.
+                final_pattern = ""
+            else:
+                requires_regex = True
+        else:
+            pattern_const = get_overload_const_str(pattern_type)
+            escape_const = get_overload_const_str(escape_type)
+            # Convert the pattern from SQL to Python for pushdown.
+            (
+                final_pattern,
+                requires_regex,
+                must_match_start,
+                must_match_end,
+                match_anything,
+            ) = bodo.ir.filter.convert_sql_pattern_to_python_compile_time(
+                pattern_const, escape_const, is_case_insensitive
+            )
+
+        filter_args = []
+
+        # We cannot do filter pushdown if the expression requires us to keep like/use a regex.
+        if requires_regex:
+            # Regex can only be handled with a SQL interface
+            require(is_sql_op)
+            if is_case_insensitive:
+                op = "ilike"
+            else:
+                op = "like"
+
+            filter_args = [pattern_arg, escape_arg]
+        else:
+            if match_nothing:
+                return bif.Op("ALWAYS_NULL")
+            elif match_anything:
+                return bif.Op("ALWAYS_TRUE")
+
+            elif must_match_start and must_match_end:
+                # This is equality
+                if is_case_insensitive:
+                    op = "case_insensitive_equality"
+                else:
+                    op = "=" if is_sql_op else "=="
+            elif must_match_start:
+                if is_case_insensitive:
+                    op = "case_insensitive_startswith"
+                else:
+                    op = "startswith"
+            elif must_match_end:
+                if is_case_insensitive:
+                    op = "case_insensitive_endswith"
+                else:
+                    op = "endswith"
+            else:
+                if is_case_insensitive:
+                    op = "case_insensitive_contains"
+                else:
+                    op = "contains"
+
+            # Create a new IR Expr for the constant pattern.
+            expr_value = ir.Const(final_pattern, call_def.loc)
+
+            # Generate a variable from the Expr
+            new_name = mk_unique_var("like_python_var")
+            new_var = ir.Var(self.scope, new_name, call_def.loc)
+            new_assign = ir.Assign(target=new_var, value=expr_value, loc=call_def.loc)
+            # Append the assign so we update the IR.
+            new_ir_assigns.append(new_assign)
+            # Update the definitions. This is safe since the name is unique.
+            func_ir._definitions[new_name] = [expr_value]
+
+            # Add new argument to filter args
+            filter_args = [new_var]
+
+        return bif.Op(op.upper(), colname, *(bif.Scalar(arg) for arg in filter_args))
 
     def _get_partition_filters(
-        self, index_def, df_var, lhs_def, rhs_def, func_ir, read_node
-    ):
-        """get filters for predicate pushdown if possible.
-        Returns filters in pyarrow DNF format (e.g. [[("a", "==", 1)][("a", "==", 2)]]):
-        https://arrow.apache.org/docs/python/generated/pyarrow.parquet.ParquetDataset.html#pyarrow.parquet.ParquetDataset
+        self,
+        index_def,
+        df_var,
+        lhs_def,
+        rhs_def,
+        func_ir: ir.FunctionIR,
+        read_node: "Connector",
+        new_ir_assigns,
+    ) -> bif.Filter:
+        """
+        Get filters for predicate pushdown if possible.
+        Returns filters as Bodo IR Filter objects:
         Throws GuardException if not possible.
         """
-        require(is_expr(index_def, "binop") or is_call(index_def))
         is_sql = isinstance(read_node, bodo.ir.sql_ext.SqlReader)
-        is_snowflake = is_sql and read_node.db_type == "snowflake"
-        # NOTE: I/O nodes update df_colnames in DCE but typing pass is before
+        # NOTE: I/O nodes update out_table_col_names in DCE but typing pass is before
         # optimizations
-        # SqlReader doesn't have original_df_colnames so needs special casing
+        # Only ParquetReader has original_df_colnames so needs special casing
         df_col_names = (
-            read_node.df_colnames if is_sql else read_node.original_df_colnames
+            read_node.original_df_colnames
+            if isinstance(read_node, bodo.ir.parquet_ext.ParquetReader)
+            else read_node.out_table_col_names
         )
-        # similar to DNF normalization in Sympy:
-        # https://github.com/sympy/sympy/blob/da5cd290017814e6100859e5a3f289b3eda4ca6c/sympy/logic/boolalg.py#L1565
-        # Or case: call recursively on arguments and concatenate
-        # e.g. A or B
 
-        def get_child_filter(child_def):
+        df_col_types = (
+            read_node.original_table_col_types
+            if isinstance(read_node, bodo.ir.parquet_ext.ParquetReader)
+            else read_node.out_table_col_types
+        )
+
+        # Call recursively on arguments and concatenate
+        def get_child_filter(child_def) -> bif.Filter:
             """
             Function that abstracts away the recursive steps of getting the filters
             from the child exprs of index_def.
             """
-            if is_expr(child_def, "binop") or self._is_and_filter_pushdown(child_def):
+            if self._is_logical_not_filter_pushdown(child_def, func_ir):
+                arg_var = get_unary_arg(child_def)
+                arg_def = get_definition(func_ir, arg_var)
+                child_or = self._negate_column_filter(get_child_filter(arg_def))
+
+            elif self._is_logical_op_filter_pushdown(child_def, func_ir):
                 l_def = get_definition(func_ir, get_binop_arg(child_def, 0))
                 l_def = self._remove_series_wrappers_from_def(l_def)
                 r_def = get_definition(func_ir, get_binop_arg(child_def, 1))
                 r_def = self._remove_series_wrappers_from_def(r_def)
                 child_or = self._get_partition_filters(
-                    child_def, df_var, l_def, r_def, func_ir, read_node
+                    child_def, df_var, l_def, r_def, func_ir, read_node, new_ir_assigns
+                )
+            elif self._is_call_op_filter_pushdown(child_def, func_ir):
+                child_or = self._get_call_filter(
+                    child_def,
+                    func_ir,
+                    df_var,
+                    df_col_names,
+                    df_col_types,
+                    is_sql,
+                    read_node,
+                    new_ir_assigns,
                 )
             else:
-                child_or = [
-                    [
-                        self._get_call_filter(
-                            child_def, func_ir, df_var, df_col_names, is_snowflake
-                        )
-                    ]
-                ]
+                child_or = self._get_column_filter(
+                    child_def,
+                    func_ir,
+                    df_var,
+                    df_col_names,
+                    df_col_types,
+                    is_sql,
+                    read_node,
+                    new_ir_assigns,
+                )
             return child_or
 
-        if is_expr(index_def, "binop") or self._is_and_filter_pushdown(index_def):
-            if is_expr(index_def, "binop") and index_def.fn == operator.or_:
+        if self._is_logical_not_filter_pushdown(index_def, func_ir):
+            arg_var = get_unary_arg(index_def)
+            arg_def = get_definition(func_ir, arg_var)
+            filters = get_child_filter(arg_def)
+            return self._negate_column_filter(filters)
+
+        if self._is_logical_op_filter_pushdown(index_def, func_ir):
+            if self._is_or_filter_pushdown(index_def, func_ir):
                 left_or = get_child_filter(lhs_def)
                 right_or = get_child_filter(rhs_def)
-                return left_or + right_or
+                return bif.Op("OR", left_or, right_or)
 
-            # And case: distribute Or over And to normalize if needed
-            if self._is_and_filter_pushdown(index_def):
-
-                # rhs is Or
-                # e.g. "A And (B Or C)" -> "(A And B) Or (A And C)"
-                if is_expr(rhs_def, "binop") and rhs_def.fn == operator.or_:
-                    # lhs And rhs.lhs (A And B)
-                    new_lhs = ir.Expr.binop(
-                        operator.and_,
-                        get_binop_arg(index_def, 0),
-                        get_binop_arg(rhs_def, 0),
-                        index_def.loc,
-                    )
-                    new_lhs_rdef = get_definition(func_ir, get_binop_arg(rhs_def, 0))
-                    new_lhs_rdef = self._remove_series_wrappers_from_def(new_lhs_rdef)
-                    left_or = self._get_partition_filters(
-                        new_lhs,
-                        df_var,
-                        lhs_def,
-                        new_lhs_rdef,
-                        func_ir,
-                        read_node,
-                    )
-                    # lhs And rhs.rhs (A And C)
-                    new_rhs = ir.Expr.binop(
-                        operator.and_,
-                        get_binop_arg(index_def, 0),
-                        get_binop_arg(rhs_def, 1),
-                        index_def.loc,
-                    )
-                    new_rhs_rdef = get_definition(func_ir, get_binop_arg(rhs_def, 1))
-                    new_rhs_rdef = self._remove_series_wrappers_from_def(new_rhs_rdef)
-                    right_or = self._get_partition_filters(
-                        new_rhs,
-                        df_var,
-                        lhs_def,
-                        new_rhs_rdef,
-                        func_ir,
-                        read_node,
-                    )
-                    return left_or + right_or
-
-                # lhs is Or
-                # e.g. "(B Or C) And A" -> "(B And A) Or (C And A)"
-                if is_expr(lhs_def, "binop") and lhs_def.fn == operator.or_:
-                    # lhs.lhs And rhs (B And A)
-                    new_lhs = ir.Expr.binop(
-                        operator.and_,
-                        get_binop_arg(lhs_def, 0),
-                        get_binop_arg(index_def, 1),
-                        index_def.loc,
-                    )
-                    new_lhs_ldef = get_definition(func_ir, get_binop_arg(lhs_def, 0))
-                    new_lhs_ldef = self._remove_series_wrappers_from_def(new_lhs_ldef)
-                    left_or = self._get_partition_filters(
-                        new_lhs,
-                        df_var,
-                        new_lhs_ldef,
-                        rhs_def,
-                        func_ir,
-                        read_node,
-                    )
-                    # lhs.rhs And rhs (C And A)
-                    new_rhs = ir.Expr.binop(
-                        operator.and_,
-                        get_binop_arg(lhs_def, 1),
-                        get_binop_arg(index_def, 1),
-                        index_def.loc,
-                    )
-                    new_rhs_ldef = get_definition(func_ir, get_binop_arg(lhs_def, 1))
-                    new_rhs_ldef = self._remove_series_wrappers_from_def(new_rhs_ldef)
-                    right_or = self._get_partition_filters(
-                        new_rhs,
-                        df_var,
-                        new_rhs_ldef,
-                        rhs_def,
-                        func_ir,
-                        read_node,
-                    )
-                    return left_or + right_or
-
+            if self._is_and_filter_pushdown(index_def, func_ir):
                 # both lhs and rhs are And/literal expressions.
-                left_or = get_child_filter(lhs_def)
-                right_or = get_child_filter(rhs_def)
+                left_and = get_child_filter(lhs_def)
+                right_and = get_child_filter(rhs_def)
+                return bif.Op("AND", left_and, right_and)
 
-                # If either expression is an AND, we may still have ORs inside
-                # the AND. As a result, distributed ANDs across all ORs.
-                # For example
-                # ((A | B) & C) & D -> (AC | BC) & D (via the recursion)
-                # Now we need to produce (AC | BC) & D -> (ACD | BCD)
-                filters = []
-                for left_or_cond in left_or:
-                    for right_or_cond in right_or:
-                        filters.append(left_or_cond + right_or_cond)
-                return filters
-
-        # literal case
-        # TODO(ehsan): support 'in' and 'not in'
-        # Iceberg uses arrow operators instead of SQL operators.
-        use_sql_ops = is_sql and read_node.db_type != "iceberg"
-        op_map = {
-            operator.eq: "=" if use_sql_ops else "==",
-            operator.ne: "<>" if use_sql_ops else "!=",
-            operator.lt: "<",
-            operator.le: "<=",
-            operator.gt: ">",
-            operator.ge: ">=",
-        }
-
-        # Operator mapping used to support situations
-        # where the column is on the RHS. Since Pyarrow
-        # format is ("col", op, scalar), we must invert certain
-        # operators.
-        right_colname_op_map = {
-            operator.eq: "=" if is_sql else "==",
-            operator.ne: "<>" if is_sql else "!=",
-            operator.lt: ">",
-            operator.le: ">=",
-            operator.gt: "<",
-            operator.ge: "<=",
-        }
-
-        if is_expr(index_def, "binop"):
-            require(index_def.fn in op_map)
+        if self._is_cmp_op_filter_pushdown(index_def, func_ir):
+            lhs = get_binop_arg(index_def, 0)
+            rhs = get_binop_arg(index_def, 1)
             left_colname = guard(
-                self._get_col_name, index_def.lhs, df_var, df_col_names, func_ir
+                self._get_col_name,
+                lhs,
+                df_var,
+                df_col_names,
+                df_col_types,
+                func_ir,
+                read_node,
             )
             right_colname = guard(
-                self._get_col_name, index_def.rhs, df_var, df_col_names, func_ir
+                self._get_col_name,
+                rhs,
+                df_var,
+                df_col_names,
+                df_col_types,
+                func_ir,
+                read_node,
             )
 
             require(
                 (left_colname and not right_colname)
                 or (right_colname and not left_colname)
             )
-            if right_colname:
-                cond = (
-                    right_colname,
-                    right_colname_op_map[index_def.fn],
-                    index_def.lhs,
-                )
-            else:
-                cond = (left_colname, op_map[index_def.fn], index_def.rhs)
-        else:
+            col: tuple[bif.Filter, types.ArrayCompatible] = (
+                left_colname if left_colname else right_colname
+            )  # type: ignore
+            colname, coltype = col
+            scalar = rhs if left_colname else lhs
+            # This is a defensive check, and isn't expected to be hit
+            # so we need the pragma to let coverage pass
+            if scalar.name not in self.typemap:  # pragma: no cover
+                self.needs_transform = True
+                raise GuardException
+            op = get_cmp_operator(
+                index_def,
+                self.typemap[scalar.name],
+                is_sql,
+                right_colname is not None,
+                self.func_ir,
+            )
+            self._check_comparison_typing(coltype, scalar, read_node)
+            return bif.Op(op.upper(), colname, bif.Scalar(scalar))
+
+        elif self._is_call_op_filter_pushdown(index_def, func_ir):
             cond = self._get_call_filter(
-                index_def, func_ir, df_var, df_col_names, is_snowflake
+                index_def,
+                func_ir,
+                df_var,
+                df_col_names,
+                df_col_types,
+                is_sql,
+                read_node,
+                new_ir_assigns,
+            )
+        else:
+            # Filter pushdown is just on a boolean column.
+            cond = self._get_column_filter(
+                index_def,
+                func_ir,
+                df_var,
+                df_col_names,
+                df_col_types,
+                is_sql,
+                read_node,
+                new_ir_assigns,
             )
 
-        # If this is parquet we need to verify this is a filter we can process.
-        # We don't do this check if there is a call expression because isnull
-        # is always supported.
-        if not is_sql and not is_call(index_def):
-            lhs_arr_typ = read_node.original_out_types[
-                read_node.original_df_colnames.index(cond[0])
-            ]
-            lhs_scalar_typ = bodo.utils.typing.element_type(lhs_arr_typ)
-            require(cond[2].name in self.typemap)
-            rhs_scalar_typ = self.typemap[cond[2].name]
-            # Only apply filter pushdown if its safe to use inside arrow
-            require(
-                bodo.utils.typing.is_common_scalar_dtype(
-                    [lhs_scalar_typ, rhs_scalar_typ]
-                )
-                or bodo.utils.typing.is_safe_arrow_cast(lhs_scalar_typ, rhs_scalar_typ)
-            )
+        return cond
 
-        # Pyarrow format, e.g.: [[("a", "==", 2)]]
-        return [[cond]]
-
-    def _get_col_name(self, var, df_var, df_col_names, func_ir):
-        """get column name for dataframe column access like df["A"] if possible.
+    def _get_col_name(
+        self,
+        var,
+        df_var,
+        df_col_names,
+        df_col_types,
+        func_ir: ir.FunctionIR,
+        read_node: "Connector",
+    ) -> tuple[bif.Filter, types.ArrayCompatible]:
+        """
+        Get column name for dataframe column access like df["A"] if possible.
         Throws GuardException if not possible.
         """
+
+        def are_supported_kws(kws: list[tuple[str, ir.Var]]) -> bool:
+            """Verify that keyword args passed into a function are supported,
+            which are only the special arguments for filter pushdown.
+
+            Args:
+                kws (List[Tuple[str, ir.Var]]): The kws passed into the IR.Call
+
+            Returns:
+                bool: Are the kws either empty or just dict_encoding_state and func_id.
+            """
+            if len(kws) == 0:
+                return True
+            else:
+                kws_dict = dict(kws)
+                return (
+                    len(kws_dict) == 2
+                    and "dict_encoding_state" in kws_dict
+                    and "func_id" in kws_dict
+                )
+
+        def get_col_type(col_val: str) -> types.ArrayCompatible:
+            """Return column type for column representation in filter predicate
+
+            Args:
+                col_val (str): column name
+
+            Returns:
+                types.Type: array type of predicate column
+            """
+            return df_col_types[df_col_names.index(col_val)]
+
         var_def = get_definition(func_ir, var)
         var_def = self._remove_series_wrappers_from_def(var_def)
 
+        # In form of df.A
         if is_expr(var_def, "getattr") and var_def.value.name == df_var.name:
-            return var_def.attr
+            return bif.Ref(var_def.attr), get_col_type(var_def.attr)
 
+        # In form of df["A"]
         if is_expr(var_def, "static_getitem") and var_def.value.name == df_var.name:
-            return var_def.index
+            return bif.Ref(var_def.index), get_col_type(var_def.index)
+
+        if (
+            is_expr(var_def, "call")
+            and find_callname(self.func_ir, var_def)
+            == ("get_table_data", "bodo.hiframes.table")
+            and var_def.args[0].name == df_var.name
+        ):
+            col_val = df_col_names[find_const(func_ir, var_def.args[1])]
+            return bif.Ref(col_val), get_col_type(col_val)
 
         # handle case with calls like df["A"].astype(int) > 2
         if is_call(var_def):
             fdef = find_callname(func_ir, var_def)
+            require(fdef is not None)
             # calling pd.to_datetime() on a string column is possible since pyarrow
             # matches the data types before filter comparison (in this case, calls
-            # pd.Timestamp on partiton's string value)
+            # pd.Timestamp on partition's string value)
             # BodoSQL generates pd.Series(arr) calls for expressions
             if fdef in (("to_datetime", "pandas"), ("Series", "pandas")):
                 # We don't want to perform filter pushdown if there is a format argument
@@ -1342,7 +2335,12 @@ class TypingTransforms:
                 # https://pandas.pydata.org/docs/reference/api/pandas.to_datetime.html
                 require((len(var_def.args) == 1) and not var_def.kws)
                 return self._get_col_name(
-                    var_def.args[0], df_var, df_col_names, func_ir
+                    var_def.args[0],
+                    df_var,
+                    df_col_names,
+                    df_col_types,
+                    func_ir,
+                    read_node,
                 )
             # BodoSQL generates get_dataframe_data() calls for projections
             if (
@@ -1352,21 +2350,157 @@ class TypingTransforms:
                 col_ind = get_const_value_inner(
                     func_ir, var_def.args[1], arg_types=self.arg_types
                 )
-                return df_col_names[col_ind]
+                col_val = df_col_names[col_ind]
+                return bif.Ref(col_val), get_col_type(col_val)
+
+            is_bodosql_array_kernel = fdef[1] == "bodosql.kernels"
+
+            # coalesce can be called on the filter column, which will be pushed down
+            # e.g. where coalesce(L_COMMITDATE, current_date()) >= '1998-10-30'
+            if is_bodosql_array_kernel and fdef[0] in (
+                "coalesce",
+                "concat_ws",
+                "least",
+                "greatest",
+            ):  # pragma: no cover
+                # coalesce takes a tuple input
+                # We only push down 2-arg scalar case, i.e. coalesce((column, scalar))
+                if fdef[0] == "concat_ws":  # pragma: no cover
+                    require(
+                        (
+                            isinstance(read_node, bodo.ir.sql_ext.SqlReader)
+                            and read_node.db_type == "snowflake"
+                        )
+                        or isinstance(read_node, bodo.ir.iceberg_ext.IcebergReader)
+                    )
+                else:
+                    require((len(var_def.args) == 1) and are_supported_kws(var_def.kws))
+
+                args = find_build_tuple(self.func_ir, var_def.args[0])
+                require(len(args) == 2)
+
+                # make sure arg[1] is scalar
+                arg_type = self.typemap.get(args[1].name, None)
+                if arg_type in (None, types.undefined, types.unknown):
+                    self.needs_transform = True
+                    raise GuardException
+
+                require(
+                    is_scalar_type(arg_type)
+                    and arg_type != types.none
+                    and not isinstance(arg_type, types.Optional)
+                )
+
+                col_name, col_type = self._get_col_name(
+                    args[0], df_var, df_col_names, df_col_types, func_ir, read_node
+                )
+                return bif.Op(fdef[0].upper(), col_name, bif.Scalar(args[1])), col_type
+
+            if is_bodosql_array_kernel and fdef[0] in (
+                "dayofweek",
+                "weekofyear",
+                "week",
+                "yearofweek",
+            ):  # pragma: no cover
+                bodosql_kernel_name = fdef[0]
+                require(bodosql_kernel_name in supported_funcs_map)
+
+                if bodosql_kernel_name not in supported_arrow_funcs_map:
+                    require(
+                        (
+                            isinstance(read_node, bodo.ir.sql_ext.SqlReader)
+                            and read_node.db_type == "snowflake"
+                        )
+                        or isinstance(read_node, bodo.ir.iceberg_ext.IcebergReader)
+                    )
+
+                args = var_def.args
+
+                col_name, col_type = self._get_col_name(
+                    args[0], df_var, df_col_names, df_col_types, func_ir, read_node
+                )
+
+                return bif.Op(bodosql_kernel_name.upper(), col_name), col_type
+
+            # All other BodoSQL functions
+            if is_bodosql_array_kernel and are_supported_kws(
+                var_def.kws
+            ):  # pragma: no cover
+                bodosql_kernel_name = fdef[0]
+                require(bodosql_kernel_name in supported_funcs_map)
+
+                if bodosql_kernel_name not in supported_arrow_funcs_map:
+                    require(
+                        (
+                            isinstance(read_node, bodo.ir.sql_ext.SqlReader)
+                            and read_node.db_type == "snowflake"
+                        )
+                        or isinstance(read_node, bodo.ir.iceberg_ext.IcebergReader)
+                    )
+
+                args = var_def.args
+
+                arg_type = self.typemap.get(args[0].name, None)
+                require(is_array_typ(arg_type))
+
+                for i, arg in enumerate(args):
+                    arg_type = self.typemap.get(arg.name, None)
+
+                    if arg_type in (None, types.undefined, types.unknown):
+                        self.needs_transform = True
+                        raise GuardException
+
+                    if i == 0:
+                        # We make the assumption that for every array kernel we
+                        # have the array as the 0th argument.
+                        require(is_array_typ(arg_type))
+                    else:
+                        require(is_scalar_type(arg_type))
+
+                col_name, col_type = self._get_col_name(
+                    args[0], df_var, df_col_names, df_col_types, func_ir, read_node
+                )
+                return (
+                    bif.Op(
+                        fdef[0].upper(), col_name, *(bif.Scalar(x) for x in args[1:])
+                    ),
+                    col_type,
+                )
+
+            if fdef[0] in ("str.lower", "str.upper"):
+                # make sure fdef[1] is a Series
+                arg_type = self.typemap.get(fdef[1].name, None)
+                if arg_type in (None, types.undefined, types.unknown):
+                    self.needs_transform = True
+                    raise GuardException
+                require(isinstance(arg_type, SeriesType))
+                col_name, col_type = self._get_col_name(
+                    fdef[1], df_var, df_col_names, df_col_types, func_ir, read_node
+                )
+
+                return bif.Op(fdef[0].split(".")[1].upper(), col_name), col_type
+
+            # We only support astype at this point
             require(
                 isinstance(fdef, tuple)
                 and len(fdef) == 2
                 and isinstance(fdef[1], ir.Var)
+                and fdef[0] == "astype"
             )
-            return self._get_col_name(fdef[1], df_var, df_col_names, func_ir)
+            return self._get_col_name(
+                fdef[1], df_var, df_col_names, df_col_types, func_ir, read_node
+            )
 
         require(is_expr(var_def, "getitem"))
         require(var_def.value.name == df_var.name)
-        return get_const_value_inner(func_ir, var_def.index, arg_types=self.arg_types)
+        col_val = get_const_value_inner(
+            func_ir, var_def.index, arg_types=self.arg_types
+        )
+        return bif.Ref(col_val), get_col_type(col_val)
 
-    def _remove_series_wrappers_from_def(self, var_def):
+    def _remove_series_wrappers_from_def(self, var_def: ir.Expr) -> ir.Expr:
         """Returns the definition node of the Series variable in
-        pd.Series()/Series.values/Series.str nodes.
+        pd.Series()/Series.values/Series.str/bodo.pd_hiframes.series_ext.get_series_data nodes.
         This effectively removes the Series wrappers that BodoSQL currently generates to
         convert to/from arrays.
 
@@ -1386,6 +2520,17 @@ class TypingTransforms:
         if (
             is_call(var_def)
             and guard(find_callname, self.func_ir, var_def) == ("Series", "pandas")
+            and (len(var_def.args) == 1)
+            and not var_def.kws
+        ):
+            var_def = guard(get_definition, self.func_ir, var_def.args[0])
+            return self._remove_series_wrappers_from_def(var_def)
+
+        # remove bodo.hiframes.pd_series_ext.get_series_data calls
+        if (
+            is_call(var_def)
+            and guard(find_callname, self.func_ir, var_def)
+            == ("get_series_data", "bodo.hiframes.pd_series_ext")
             and (len(var_def.args) == 1)
             and not var_def.kws
         ):
@@ -1712,7 +2857,6 @@ class TypingTransforms:
             # creates a new dataframe and replaces the old variable, only possible if
             # df.index dominates the df creation due to type stability
             if inst.attr == "index":
-
                 # check control flow error
                 df_var = inst.target
                 err_msg = "DataFrame.index: setting dataframe index"
@@ -1836,20 +2980,11 @@ class TypingTransforms:
         # to avoid paying the import overhead for Bodo calls with no BodoSQL.
         if isinstance(func_mod, ir.Var) and func_name in (
             "sql",
-            "_test_sql_unoptimized",
             "convert_to_pandas",
         ):  # pragma: no cover
-
             # Try import BodoSQL and check the type
-            try:  # pragma: no cover
-                from bodosql.context_ext import BodoSQLContextType
-            except:
-                # workaround: something that makes isinstance(type, BodoSQLContextType) always false
-                BodoSQLContextType = int
 
-            if isinstance(
-                self._get_method_obj_type(func_mod, rhs.func), BodoSQLContextType
-            ):
+            if is_bodosql_context_type(self._get_method_obj_type(func_mod, rhs.func)):
                 return self._run_call_bodosql_sql(
                     assign, rhs, func_mod, func_name, label
                 )
@@ -1884,14 +3019,111 @@ class TypingTransforms:
             func_name = "unknown"
             try:
                 func_name = self.typemap[rhs.func.name].literal_value.__name__
-            except:  # pragma: no cover
+            except Exception:  # pragma: no cover
                 pass
             raise BodoError(
                 f"Cannot call non-JIT function '{func_name}' from JIT function (convert to JIT or use objmode).",
                 rhs.loc,
             )
 
+        if func_mod == "bodo.libs.streaming.join":
+            return self._run_call_stream_join(assign, rhs, func_name, label)
+
+        if func_mod == "bodo.libs.streaming.groupby":
+            return self._run_call_stream_groupby(assign, rhs, func_name)
+
+        if func_mod == "bodo.libs.streaming.window":
+            return self._run_call_stream_window(assign, rhs, func_name)
+
+        if func_mod == "bodo.libs.streaming.union":
+            return self._run_call_stream_union(assign, rhs, func_name, label)
+
+        if func_mod == "bodo.libs.streaming.sort":
+            return self._run_call_stream_sort(assign, rhs, func_name, label)
+
+        if func_mod == "bodo.libs.table_builder":
+            return self._run_call_table_builder(assign, rhs, func_name, label)
+
+        if func_mod in (
+            "bodo.io.snowflake_write",
+            "bodo.io.stream_iceberg_write",
+            "bodo.io.stream_parquet_write",
+        ):
+            return self._run_call_stream_write(assign, rhs, func_name, label)
+
+        if fdef == ("table_filter", "bodo.hiframes.table"):
+            self._try_apply_filter_pushdown(assign, label)
+
+        # Infer CASE output type if not provided by BodoSQL
+        if (
+            fdef == ("bodosql_case_placeholder", "bodo.utils.typing")
+            and unwrap_typeref(self.typemap[rhs.args[-1].name]) == types.unknown
+        ):
+            return self._run_call_bodosql_case_placeholder(assign, rhs)
+
         return [assign]
+
+    def _run_call_bodosql_case_placeholder(self, assign, rhs):
+        """Infers output type of CASE kernel when not provided by BodoSQL and updates
+        the IR.
+        """
+        import bodosql  # noqa: F401
+
+        if any(self.typemap[v.name] in unresolved_types for v in rhs.args[:-1]):
+            self.needs_transform = True
+            return [assign]
+
+        init_code = self.typemap[rhs.args[2].name].instance_type.meta
+        body_code = self.typemap[rhs.args[3].name].instance_type.meta
+        arr_variable_name = get_overload_const_str(self.typemap[rhs.args[4].name])
+        indexing_variable_name = get_overload_const_str(self.typemap[rhs.args[5].name])
+
+        # Replace output array setitem with scalar to infer scalar type from output
+        out_setitem = f"{arr_variable_name}[{indexing_variable_name}]"
+        body_code = body_code.replace(out_setitem, arr_variable_name)
+
+        named_params = dict(rhs.kws)
+        named_param_args = ", ".join(named_params.keys())
+
+        var_names, _ = handle_bodosql_case_init_code(init_code)
+
+        # skip_allocation=True since we want output to be scalar to infer its type
+        f, _ = gen_bodosql_case_func(
+            init_code,
+            body_code,
+            named_param_args,
+            var_names,
+            arr_variable_name,
+            indexing_variable_name,
+            None,
+            self.func_ir.func_id.func.__globals__,
+            skip_allocation=True,
+        )
+
+        in_arg_types = [self.typemap[v.name] for v in rhs.args[:2]]
+        out_dtype = get_const_func_output_type(
+            bodo.jit(distributed=False)(f),
+            in_arg_types,
+            {k: self.typemap[v.name] for k, v in named_params.items()},
+            self.typingctx,
+            numba.core.registry.cpu_target.target_context,
+        )
+        output_array_type = dtype_to_array_type(out_dtype, True)
+
+        # Replace last argument with inferred array type
+        new_type_var = ir.Var(
+            assign.target.scope, mk_unique_var("output_array_type"), rhs.loc
+        )
+        new_type_var_assign = ir.Assign(
+            ir.Global("output_array_type", output_array_type, rhs.loc),
+            new_type_var,
+            rhs.loc,
+        )
+        rhs.args[-1] = new_type_var
+        self.typemap.pop(assign.target.name)
+        self.typemap[assign.target.name] = output_array_type
+        self.changed = True
+        return [new_type_var_assign, assign]
 
     def _run_call_pd_datetime_array(self, assign, rhs, func_name, label):
         """Handle calls to pandas.DatetimeArray methods that need transformation"""
@@ -1931,10 +3163,6 @@ class TypingTransforms:
         return nodes + [assign]
 
     def _run_binop(self, assign, rhs):
-        arg1_typ = self.typemap.get(rhs.lhs.name, None)
-        arg2_typ = self.typemap.get(rhs.rhs.name, None)
-        target_typ = self.typemap.get(assign.target.name, None)
-
         return [assign]
 
     def _run_call_dataframe(self, assign, rhs, df_var, func_name, label):
@@ -2052,10 +3280,6 @@ class TypingTransforms:
                 assign, lhs, rhs, df_var, inplace_var, label, func_name
             )
 
-        # convert const list to tuple for better optimization
-        if func_name == "append":
-            self._call_arg_list_to_tuple(rhs, "append", 0, "other", nodes)
-
         return nodes + [assign]
 
     def _df_assign_non_lambda_helper(self, lhs, kws_key_val_list, df_var, assign):
@@ -2084,26 +3308,22 @@ class TypingTransforms:
         for c in df_type.columns:
             if c in preserved_columns:
                 name_col_total.append(c)
-                data_col_total.append("df['{}'].values".format(c))
+                data_col_total.append(f"df['{c}'].values")
             elif c in additional_columns:
                 name_col_total.append(c)
-                e_col = "bodo.utils.conversion.coerce_to_array(new_arg{}, scalar_to_arr_len=len(df))".format(
-                    kws_key_list.index(c)
-                )
+                e_col = f"bodo.utils.conversion.coerce_to_array(new_arg{kws_key_list.index(c)}, scalar_to_arr_len=len(df))"
                 data_col_total.append(e_col)
 
         # The new columns should be added in the order that they apear in kws_key_val_list
         for i, c in enumerate(kws_key_list):
             if c not in df_type.columns:
                 name_col_total.append(c)
-                e_col = "bodo.utils.conversion.coerce_to_array(new_arg{}, scalar_to_arr_len=len(df))".format(
-                    i
-                )
+                e_col = f"bodo.utils.conversion.coerce_to_array(new_arg{i}, scalar_to_arr_len=len(df))"
                 data_col_total.append(e_col)
 
         data_args = ", ".join(data_col_total)
         header = "def impl(df, {}):\n".format(
-            ", ".join("new_arg{}".format(i) for i in range(len(kws_key_val_list)))
+            ", ".join(f"new_arg{i}" for i in range(len(kws_key_val_list)))
         )
         impl = bodo.hiframes.dataframe_impl._gen_init_df(
             header,
@@ -2175,7 +3395,7 @@ class TypingTransforms:
                         add_if_missing=True,
                     )
                     # Convert kws back to list of tuples for consistency
-                    new_rhs.kws = [(x, y) for x, y in new_rhs.kws.items()]
+                    new_rhs.kws = list(new_rhs.kws.items())
                     # Create a new assign to avoid mutating the IR
                     assign = ir.Assign(new_rhs, assign.target, assign.loc)
                     self.changed = True
@@ -2205,7 +3425,7 @@ class TypingTransforms:
         if df_type is None:
             return [assign]
         # cannot transform yet if argument type is not available yet
-        for (_, kw_val) in rhs.kws:
+        for _, kw_val in rhs.kws:
             if self.typemap.get(kw_val.name, None) is None:
                 return [assign]
 
@@ -2256,13 +3476,12 @@ class TypingTransforms:
         # For each of the arguments not already handled in the optimized codepath,
         # Perform the sequence of setitems on the copied dataframe,
         # updating cur_df_var each iteration.
-        for (kw_name, kw_val) in kws_list[first_lambda_idx:]:
-
+        for kw_name, kw_val in kws_list[first_lambda_idx:]:
             if isinstance(self.typemap.get(kw_val.name), types.Dispatcher):
                 # handles lambda fns, and passed JIT functions
                 # put the setitem value is as the output of an apply on the current dataframe
 
-                # assign the apply functon to a variable
+                # assign the apply function to a variable
                 apply_fn_var = ir.Var(
                     assign.target.scope, mk_unique_var("df_apply_fn"), rhs.loc
                 )
@@ -2362,7 +3581,7 @@ class TypingTransforms:
         func_text += "  return df"
 
         loc_vars = {}
-        exec(func_text, dict(), loc_vars)
+        exec(func_text, {}, loc_vars)
         impl = loc_vars["impl"]
 
         # Don't pass the typing ctx, as many of the newly created variables won't be typed yet.
@@ -2503,10 +3722,6 @@ class TypingTransforms:
         """Handle Series calls that need transformation to meet Bodo requirements"""
         nodes = []
 
-        # convert const list to tuple for better optimization
-        if func_name == "append":
-            self._call_arg_list_to_tuple(rhs, "append", 0, "to_append", nodes)
-
         # mapping of Series functions to their arguments that require constant values
         series_call_const_args = {
             "map": [(0, "arg")],
@@ -2555,7 +3770,9 @@ class TypingTransforms:
 
         return nodes + [assign]
 
-    def _run_call_read_sql_table(self, assign, rhs, func_name, label):
+    def _run_call_read_sql_table(
+        self, assign: ir.Assign, rhs: ir.Expr, func_name, label
+    ):
         """transform pd.read_sql_table into a SQL node"""
         func_str = "pandas.read_sql_table"
         lhs = assign.target
@@ -2564,22 +3781,52 @@ class TypingTransforms:
         # will use the variable name database_schema.
         supported_args = ["table_name", "con", "schema"]
         arg_values = []
+
+        def handle_con(con_arg):
+            """
+            Extracts the con_str from the con arg
+            """
+            err_msg = "pandas.read_sql_table(): 'con', if provided, must be a constant string or an IcebergConnectionType"
+            con_type = self.typemap[con_arg.name]
+
+            if isinstance(con_type, bodo.io.iceberg.IcebergConnectionType):
+                con_str = con_type.get_conn_str()
+            else:
+                con_str = self._get_const_value(
+                    con_arg, label, rhs.loc, err_msg=err_msg
+                )
+
+            # Parse `con` String and Ensure its an Iceberg Connection
+            try:
+                con_str = bodo.io.iceberg.format_iceberg_conn(con_str)
+            except BodoError as e:
+                raise BodoError(
+                    "pandas.read_sql_table(): Only Iceberg is currently supported. "
+                    + e.msg
+                )
+            # TODO: BSE-3331: This shouldn't have to change the con_arg, con_arg should be able to stay as an ir.Var but
+            # right now it does because we need to call format_iceberg_conn on the value before passing to the IcebergReader
+            if not isinstance(con_type, bodo.io.iceberg.IcebergConnectionType):
+                con_arg = ir.Const(con_str, con_arg.loc)
+
+            if not isinstance(con_str, str):
+                raise BodoError(err_msg)
+
+            return con_arg, con_str
+
         for i, arg in enumerate(supported_args):
             err_msg = f"pandas.read_sql_table(): '{arg}', if provided, must be a constant string."
             temp = get_call_expr_arg(func_str, rhs.args, kws, i, arg)
-            temp = self._get_const_value(temp, label, rhs.loc, err_msg=err_msg)
-            if not isinstance(temp, str):
-                raise BodoError(err_msg)
+
+            if arg == "con":
+                temp, con_str = handle_con(temp)
+            else:
+                temp = self._get_const_value(temp, label, rhs.loc, err_msg=err_msg)
+                if not isinstance(temp, str):
+                    raise BodoError(err_msg)
+
             arg_values.append(temp)
         table_name, con, database_schema = arg_values
-
-        # Parse `con` String and Ensure its an Iceberg Connection
-        try:
-            con = bodo.io.iceberg.format_iceberg_conn(con)
-        except BodoError as e:
-            raise BodoError(
-                "pandas.read_sql_table(): Only Iceberg is currently supported. " + e.msg
-            )
 
         # Generate Output DataFrame Type
         arg_defaults = {
@@ -2630,6 +3877,18 @@ class TypingTransforms:
             else False
         )
 
+        # _bodo_read_as_table allows specifying that the output should be a Table rather than
+        # be wrapped in a DataFrame
+        _bodo_read_as_table = get_call_expr_arg(
+            func_str,
+            rhs.args,
+            kws,
+            -1,  # Support this argument by keyword only
+            "_bodo_read_as_table",
+            default=None,
+            use_default=True,
+        )
+
         # _bodo_read_as_dict allows users to specify columns as dictionary-encoded
         # string arrays manually. This is in addition to whatever columns bodo
         # determines should be read in with dictionary encoding.
@@ -2650,14 +3909,177 @@ class TypingTransforms:
             if _bodo_read_as_dict_var
             else []
         )
+        if _bodo_read_as_dict == None:
+            _bodo_read_as_dict = []
         if not isinstance(_bodo_read_as_dict, list):
             raise BodoError(err_msg)
 
+        # _bodo_detect_dict_cols allows users to disable dict-encoding detection
+        # This is useful when getting a list of files from the table takes too long.
+        # This is possible when:
+        # - The table is too large and has a lot of files
+        # - The table is located on a high-latency filesystem
+        # - There are some other entities (firewalls) slowing filesystem ops
+        # Note that columns passed in via _bodo_read_as_dict will still be dictionary-encoded
+        _bodo_detect_dict_cols_var = get_call_expr_arg(
+            func_str,
+            rhs.args,
+            kws,
+            -1,  # Support this argument by keyword only
+            "_bodo_detect_dict_cols",
+            default=None,
+            use_default=True,
+        )
+        err_msg = "pandas.read_sql_table(): '_bodo_detect_dict_cols', if provided, must be a constant boolean."
+        detect_dict_cols = (
+            self._get_const_value(
+                _bodo_detect_dict_cols_var, label, rhs.loc, err_msg=err_msg
+            )
+            if _bodo_detect_dict_cols_var
+            else True
+        )
+        if not isinstance(detect_dict_cols, bool):
+            raise BodoError(err_msg)
+
+        # Whether Bodo should do the dictionary encoding (for the columns selected for dict-encoding)
+        # after reading the columns as string from Arrow. This is useful for testing purposes. In
+        # practice, we don't expect users to specify this.
+        _bodo_dict_encode_in_bodo_var = get_call_expr_arg(
+            func_str,
+            rhs.args,
+            kws,
+            -1,  # Support this argument by keyword only
+            "_bodo_dict_encode_in_bodo",
+            default=None,
+            use_default=True,
+        )
+        err_msg = "pandas.read_sql_table(): '_bodo_dict_encode_in_bodo', if provided, must be a constant boolean."
+        dict_encode_in_bodo = None
+        if _bodo_dict_encode_in_bodo_var:
+            dict_encode_in_bodo = self._get_const_value(
+                _bodo_dict_encode_in_bodo_var, label, rhs.loc, err_msg=err_msg
+            )
+            if not isinstance(dict_encode_in_bodo, bool):
+                raise BodoError(err_msg)
+        else:
+            # If the user did not specify where the dict-encoding should happen,
+            # we will make the decision ourselves. At this point, we will only
+            # do the dict-encoding ourselves if the table is a Snowflake managed
+            # Iceberg table. If it isn't, we will let Arrow do it.
+            dict_encode_in_bodo = bodo.io.iceberg.is_snowflake_managed_iceberg_wh(
+                con_str
+            )
+
+        # _bodo_chunksize enables streaming Iceberg reads with specified batch-size
+        _bodo_chunksize_var = get_call_expr_arg(
+            func_str,
+            rhs.args,
+            kws,
+            -1,  # Support this argument by keyword only
+            "_bodo_chunksize",
+            default=None,
+            use_default=True,
+        )
+        err_msg = "pandas.read_sql_table(): '_bodo_chunksize', if provided, must be a constant integer."
+        chunksize = (
+            self._get_const_value(_bodo_chunksize_var, label, rhs.loc, err_msg=err_msg)
+            if _bodo_chunksize_var
+            else None
+        )
+        if chunksize and not isinstance(chunksize, int):
+            raise BodoError(err_msg)
+
+        _bodo_columns_var = get_call_expr_arg(
+            func_str,
+            rhs.args,
+            kws,
+            -1,  # Support this argument by keyword only
+            "_bodo_columns",
+            default=None,
+            use_default=True,
+        )
+        err_msg = "pandas.read_sql_table(): '_bodo_columns_var', if provided, must be a constant."
+        columns_obj = (
+            self._get_const_value(_bodo_columns_var, label, rhs.loc, err_msg=err_msg)
+            if _bodo_columns_var
+            else None
+        )
+        if chunksize is None and columns_obj is not None:  # pragma: no cover
+            raise BodoError(
+                "pandas.read_sql_table(): '_bodo_columns' can only be used with '_bodo_chunksize'"
+            )
+
+        _bodo_filter_var = get_call_expr_arg(
+            func_str,
+            rhs.args,
+            kws,
+            -1,  # Support this argument by keyword only
+            "_bodo_filter",
+            default=None,
+            use_default=True,
+        )
+        if _bodo_filter_var is None:
+            filter_obj = None
+        else:
+            top_def = get_definition(self.func_ir, _bodo_filter_var)
+            if isinstance(top_def, ir.Const) and is_overload_none(top_def):
+                filter_obj = None
+            else:
+                filter_obj = build_filter_from_ir(
+                    _bodo_filter_var, self.func_ir, self.typemap
+                )
+
+        _bodo_limit_var = get_call_expr_arg(
+            func_str,
+            rhs.args,
+            kws,
+            -1,  # Support this argument by keyword only
+            "_bodo_limit",
+            default=None,
+            use_default=True,
+        )
+        limit_obj = (
+            self._get_const_value(_bodo_limit_var, label, rhs.loc)
+            if _bodo_limit_var
+            else None
+        )
+
+        # Operator ID assigned by the planner for query profile purposes.
+        # Only applicable in the streaming case.
+        _bodo_sql_op_id_var = get_call_expr_arg(
+            func_str,
+            rhs.args,
+            kws,
+            -1,
+            "_bodo_sql_op_id",
+            default=None,
+            use_default=True,
+        )
+        err_msg = "pandas.read_sql_table(): '_bodo_sql_op_id', if provided, must be a constant integer."
+        _bodo_sql_op_id_const = (
+            self._get_const_value(_bodo_sql_op_id_var, label, rhs.loc, err_msg=err_msg)
+            if _bodo_sql_op_id_var
+            else -1
+        )
+
         (
-            col_names,
-            arr_types,
+            orig_col_names,
+            orig_arr_types,
             pyarrow_table_schema,
-        ) = bodo.io.iceberg.get_iceberg_type_info(table_name, con, database_schema)
+        ) = bodo.io.iceberg.get_iceberg_type_info(
+            table_name,
+            con_str,
+            database_schema,
+            is_merge_into_cow=_bodo_merge_into,
+        )
+
+        if columns_obj is not None:
+            name_to_type = dict(zip(orig_col_names, orig_arr_types))
+            col_names = columns_obj
+            arr_types = [name_to_type[col] for col in col_names]
+        else:
+            col_names = orig_col_names
+            arr_types = orig_arr_types
 
         # check user-provided dict-encoded columns for errors
         col_name_map = {c: i for i, c in enumerate(col_names)}
@@ -2672,27 +4094,28 @@ class TypingTransforms:
                     f"pandas.read_sql_table(): column name '{c}' in _bodo_read_as_dict is not a string column"
                 )
 
-        # estimate which string columns should be dict-encoded using existing Parquet
-        # infrastructure.
-        # setting get_row_counts=False since row counts of all files are only needed
-        # during runtime.
-        iceberg_pq_dset = bodo.io.iceberg.get_iceberg_pq_dataset(
-            con, database_schema, table_name, pyarrow_table_schema, get_row_counts=False
-        )
-        str_columns = bodo.io.parquet_pio.get_str_columns_from_pa_schema(
-            pyarrow_table_schema
-        )
-        # remove user provided dict-encoded columns
-        str_columns = list(set(str_columns) - set(_bodo_read_as_dict))
-        # Sort the columns to ensure same order on all ranks
-        str_columns = sorted(str_columns)
-        dict_str_cols = bodo.io.parquet_pio.determine_str_as_dict_columns(
-            iceberg_pq_dset.pq_dataset,
-            pyarrow_table_schema,
-            str_columns,
-            is_iceberg=True,
-        )
-        all_dict_str_cols = set(dict_str_cols) | set(_bodo_read_as_dict)
+        all_dict_str_cols = set(_bodo_read_as_dict)
+        if detect_dict_cols:
+            # Estimate which string columns should be dict-encoded using existing Parquet
+            # infrastructure.
+            str_columns: list[str] = bodo.io.parquet_pio.get_str_columns_from_pa_schema(
+                pyarrow_table_schema
+            )
+            # remove user provided dict-encoded columns
+            str_columns = list(
+                set(str_columns).intersection(col_names) - set(_bodo_read_as_dict)
+            )
+            # Sort the columns to ensure same order on all ranks
+            str_columns = sorted(str_columns)
+
+            dict_str_cols = bodo.io.iceberg.determine_str_as_dict_columns(
+                con_str,
+                database_schema,
+                table_name,
+                str_columns,
+                pyarrow_table_schema,
+            )
+            all_dict_str_cols.update(dict_str_cols)
 
         # change string array types to dict-encoded
         for c in all_dict_str_cols:
@@ -2706,42 +4129,75 @@ class TypingTransforms:
             tuple(col_names),
             is_table_format=True,
         )
-        data_arrs = [
-            ir.Var(lhs.scope, mk_unique_var("sql_table"), lhs.loc),
-            # Note index_col will always be dead since we don't support
-            # index_col yet.
-            ir.Var(lhs.scope, mk_unique_var("index_col"), lhs.loc),
-            ir.Var(lhs.scope, mk_unique_var("file_list"), lhs.loc),
-            ir.Var(lhs.scope, mk_unique_var("snapshot_id"), lhs.loc),
-        ]
 
-        self.typemap[data_arrs[0].name] = df_type.table_type
-        self.typemap[data_arrs[1].name] = types.none
+        if _bodo_merge_into and chunksize is not None:
+            raise BodoError(
+                "pandas.read_sql_table(): Batched reads does not support MERGE INTO"
+            )
+
+        # Merge INTO default output types
         file_list_type = types.pyobject_of_list_type
         snapshot_id_type = types.int64
-        # If we have a merge into we will return a list of original iceberg files
-        # + the snapshot id.
-        if _bodo_merge_into:
-            self.typemap[data_arrs[2].name] = file_list_type
-            self.typemap[data_arrs[3].name] = snapshot_id_type
+
+        if chunksize is None:
+            # Normal, non-streaming case
+            data_arrs = [
+                ir.Var(lhs.scope, mk_unique_var("sql_table"), lhs.loc),
+                # Note index_col will always be dead since we don't support
+                # index_col yet.
+                ir.Var(lhs.scope, mk_unique_var("index_col"), lhs.loc),
+                ir.Var(lhs.scope, mk_unique_var("file_list"), lhs.loc),
+                ir.Var(lhs.scope, mk_unique_var("snapshot_id"), lhs.loc),
+            ]
+
+            self.typemap[data_arrs[0].name] = df_type.table_type  # type: ignore
+            self.typemap[data_arrs[1].name] = types.none
+            # If we have a merge into we will return a list of original iceberg files
+            # + the snapshot id.
+            if _bodo_merge_into:
+                self.typemap[data_arrs[2].name] = file_list_type
+                self.typemap[data_arrs[3].name] = snapshot_id_type
+            else:
+                self.typemap[data_arrs[2].name] = types.none
+                self.typemap[data_arrs[3].name] = types.none
         else:
-            self.typemap[data_arrs[2].name] = types.none
-            self.typemap[data_arrs[3].name] = types.none
+            # Streaming case
+            data_arrs = [
+                ir.Var(lhs.scope, mk_unique_var("arrow_iterator"), lhs.loc),
+            ]
+            self.typemap[data_arrs[0].name] = ArrowReaderType(col_names, df_type.data)
+        # Retrieve the tuple of runtime join filters in the form
+        # ((state_1, indices_1), (state_2, indices_2)...) where each
+        # state is a join state object and each indices is a tuple of
+        # column indices.
+        _bodo_runtime_join_filters_arg = get_call_expr_arg(
+            "read_sql",
+            rhs.args,
+            kws,
+            -1,
+            "_bodo_runtime_join_filters",
+            default=None,
+            use_default=True,
+        )
+        rtjf_terms = get_runtime_join_filter_terms(
+            self.func_ir, _bodo_runtime_join_filters_arg
+        )
+        if rtjf_terms is not None and len(rtjf_terms):
+            assert (
+                chunksize is not None
+            ), "Cannot provide rtjf_terms in a non-streaming read"
+
         nodes = [
-            bodo.ir.sql_ext.SqlReader(
+            bodo.ir.iceberg_ext.IcebergReader(
                 table_name,
                 con,
                 lhs.name,
                 list(df_type.columns),
-                data_arrs,
                 list(df_type.data),
-                set(),
-                "iceberg",
+                data_arrs,
                 lhs.loc,
                 [],  # unsupported_columns
                 [],  # unsupported_arrow_types
-                True,  # is_select_query
-                False,  # has_side_effects
                 None,  # index_column_name
                 types.none,  # index_column_type
                 database_schema,  # database_schema
@@ -2749,38 +4205,61 @@ class TypingTransforms:
                 _bodo_merge_into,  # is_merge_into
                 file_list_type,  # file_list_type
                 snapshot_id_type,  # snapshot_id_type
+                chunksize=chunksize,
+                used_cols=columns_obj,
+                initial_filter=filter_obj,
+                initial_limit=limit_obj,
+                orig_col_names=orig_col_names,
+                orig_col_types=orig_arr_types,
+                sql_op_id=_bodo_sql_op_id_const,
+                dict_encode_in_bodo=dict_encode_in_bodo,
+                rtjf_terms=rtjf_terms,
             )
         ]
-        data_args = ["table_val", "idx_arr_val", "file_list_val", "snapshot_id_val"]
-        # Create the index + dataframe
-        index_arg = f"bodo.hiframes.pd_index_ext.init_range_index(0, len({data_args[0]}), 1, None)"
-        func_text = f"def _init_df({data_args[0]}, {data_args[1]}, {data_args[2]}, {data_args[3]}):\n"
-        df_value = f"bodo.hiframes.pd_dataframe_ext.init_dataframe(({data_args[0]},), {index_arg}, __col_name_meta_value_read_sql_table)"
-        if _bodo_merge_into:
-            # If merge_into we return a tuple of values
-            func_text += f"  return ({df_value}, {data_args[2]}, {data_args[3]})\n"
-        else:
-            # Otherwise just return the DataFrame
-            func_text += f"  return {df_value}\n"
-        loc_vars = {}
-        exec(
-            func_text,
-            {"__col_name_meta_value_read_sql_table": ColNamesMetaType(df_type.columns)},
-            loc_vars,
-        )
-        _init_df = loc_vars["_init_df"]
 
-        nodes += compile_func_single_block(
-            _init_df,
-            data_arrs,
-            lhs,
-            self,
-            extra_globals={
-                "__col_name_meta_value_read_sql_table": ColNamesMetaType(
-                    df_type.columns
-                )
-            },
-        )
+        if chunksize is not None:
+            nodes += [ir.Assign(data_arrs[0], lhs, lhs.loc)]
+        else:
+            data_args = ["table_val", "idx_arr_val", "file_list_val", "snapshot_id_val"]
+            # Create the index + dataframe
+            index_arg = f"bodo.hiframes.pd_index_ext.init_range_index(0, len({data_args[0]}), 1, None)"
+
+            if _bodo_read_as_table:
+                df_value = data_args[0]
+            else:
+                df_value = f"bodo.hiframes.pd_dataframe_ext.init_dataframe(({data_args[0]},), {index_arg}, __col_name_meta_value_read_sql_table)"
+
+            func_text = f"def _init_df({data_args[0]}, {data_args[1]}, {data_args[2]}, {data_args[3]}):\n"
+            if _bodo_merge_into:
+                # If merge_into we return a tuple of values
+                func_text += f"  return ({df_value}, {data_args[2]}, {data_args[3]})\n"
+            else:
+                # Otherwise just return the DataFrame
+                func_text += f"  return {df_value}\n"
+            loc_vars = {}
+            exec(
+                func_text,
+                {
+                    "__col_name_meta_value_read_sql_table": ColNamesMetaType(
+                        df_type.columns
+                    )
+                },
+                loc_vars,
+            )
+            _init_df = loc_vars["_init_df"]
+
+            nodes += compile_func_single_block(
+                _init_df,
+                data_arrs,
+                lhs,
+                self,
+                extra_globals={
+                    "__col_name_meta_value_read_sql_table": ColNamesMetaType(
+                        df_type.columns
+                    )
+                },
+            )
+
         # Mark the IR as changed
         self.changed = True
         return nodes
@@ -2854,14 +4333,25 @@ class TypingTransforms:
         data_arg_def = guard(get_definition, self.func_ir, data_arg)
 
         if isinstance(data_arg_def, ir.Expr) and data_arg_def.op == "build_map":
-            if idx_arg != "" and self.typemap[idx_arg.name] != types.none:
-                raise_bodo_error(
-                    "pd.Series(): Cannot specify index argument when initializing with a dictionary"
-                )
-
+            if data_arg.name in self._updated_containers:
+                # TODO[BSE-4021]: Move to _convert_const_key_dict
+                non_const_msg = "pd.Series(): When initializing series with a dictionary, it is required that the dict has constant keys"
+                raise_bodo_error(non_const_msg)
+            if idx_arg != "":
+                # This is a defensive check, and isn't expected to be hit
+                # so we need the pragma to let coverage pass
+                if idx_arg.name not in self.typemap:  # pragma: no cover
+                    self.needs_transform = True
+                    return nodes
+                elif self.typemap[idx_arg.name] != types.none:
+                    raise_bodo_error(
+                        "pd.Series(): Cannot specify index argument when initializing with a dictionary"
+                    )
             msg = "When initializng a series with a dictionary, the keys should be constant strings or constant ints"
-
-            (tuples, new_nodes,) = bodo.utils.transform._convert_const_key_dict(
+            (
+                tuples,
+                new_nodes,
+            ) = bodo.utils.transform._convert_const_key_dict(
                 rhs.args, self.func_ir, data_arg_def, msg, lhs.scope, lhs.loc
             )
             val_tup_var = tuples[0]
@@ -2896,19 +4386,15 @@ class TypingTransforms:
             ok = True
         elif isinstance(kw_default, tuple):
             ok = all(
-                [
-                    isinstance(guard(get_definition, self.func_ir, x), ir.Const)
-                    for x in kw_default
-                ]
+                isinstance(guard(get_definition, self.func_ir, x), ir.Const)
+                for x in kw_default
             )
         elif isinstance(kw_default, ir.Expr):
             if kw_default.op != "build_tuple":
                 return [assign]
             ok = all(
-                [
-                    isinstance(guard(get_definition, self.func_ir, x), ir.Const)
-                    for x in kw_default.items
-                ]
+                isinstance(guard(get_definition, self.func_ir, x), ir.Const)
+                for x in kw_default.items
             )
         if not ok:
             return [assign]
@@ -2967,7 +4453,7 @@ class TypingTransforms:
             f_ind: code.co_argcount + i for i, f_ind in enumerate(freevar_inds)
         }
         new_code = _replace_load_deref_code(
-            code.co_code, freevar_arg_map, code.co_argcount
+            code.co_code, freevar_arg_map, code.co_argcount, code.co_nlocals
         )
 
         # we can now change the IR/code since all checks are done (including
@@ -2976,7 +4462,7 @@ class TypingTransforms:
         # Pop the freevar indices in reverse order to ensure everything
         # stays in the same position
         # i.e. convert [0, 1, 2] to [2, 1, 0]
-        for i in reversed(sorted(freevar_inds)):
+        for i in sorted(freevar_inds, reverse=True):
             items.pop(i)
 
         new_co_varnames = (
@@ -2985,23 +4471,12 @@ class TypingTransforms:
             + code.co_varnames[code.co_argcount :]
         )
         new_co_freevars = tuple(set(code.co_freevars) - set(freevar_names))
-        rhs.code = pytypes.CodeType(
-            code.co_argcount + len(freevar_names),
-            code.co_posonlyargcount,
-            code.co_kwonlyargcount,
-            code.co_nlocals + len(freevar_names),
-            code.co_stacksize,
-            code.co_flags,
-            new_code,
-            code.co_consts,
-            code.co_names,
-            new_co_varnames,
-            code.co_filename,
-            code.co_name,
-            code.co_firstlineno,
-            code.co_lnotab,
-            new_co_freevars,
-            code.co_cellvars,
+        rhs.code = code.replace(
+            co_argcount=code.co_argcount + len(freevar_names),
+            co_nlocals=code.co_nlocals + len(freevar_names),
+            co_code=new_code,
+            co_varnames=new_co_varnames,
+            co_freevars=new_co_freevars,
         )
 
         # pass free variables as arguments
@@ -3064,23 +4539,1501 @@ class TypingTransforms:
             find_build_tuple(self.func_ir, args_var)
         return apply_assign, args_var
 
+    def _replace_state_definition(
+        self,
+        func_text: str,
+        func_name: str,
+        extra_globals: dict[str, Any],
+        args: tuple[pt.Any, ...],
+        retvar,
+        def_to_replace,
+        label_of_replacer: int,
+    ):
+        """Replace the definition of some state variable (e.g. join/table
+        builder)
+        Note that this transformation requires that the definition we are
+        replacing is in a different basic block. Otherwise we will be modifying
+        the current block while iterating over it.
+
+        e.g.:
+          # this is ok:
+          table_builder = bodo.libs.table_builder.init_table_builder_state()
+          ...
+          while foo:
+            ...
+            bodo.libs.table_builder.table_builder_append(table_builder, T0)
+            ...
+
+          # this is NOT ok
+          table_builder = bodo.libs.table_builder.init_table_builder_state()
+          ...
+          bodo.libs.table_builder.table_builder_append(table_builder, T0)
+          ...
+
+        Args:
+            func_text (str): Source defining a new function where the body will
+              replace the old definition
+            func_name (str): Name of the new function defined in func_text
+            extra_globals (Dict[str, Any]): Additional globals to use while
+              evaluating func_text
+            args (Tuple[Any]): Arguments to pass to the function
+            retvar: ir Node corresponding to the variable being assigned to
+            def_to_replace: ir Node corresponding to original definition of retvar
+            label_of_replacer: label of block currently being iterated during
+              the transformation
+        """
+        loc_vars = {}
+        exec(
+            func_text,
+            {"bodo": bodo, **extra_globals},
+            loc_vars,
+        )
+        func = loc_vars[func_name]
+        new_nodes = compile_func_single_block(
+            func,
+            args,
+            retvar,
+            self,
+            extra_globals=extra_globals,
+        )
+        label_of_replacee = self.rhs_labels[def_to_replace]
+        # This should only be true for tests. Generated code will usually have
+        # the replacer expression in a loop while the replacee is in the outer
+        # scope.
+        same_label = label_of_replacee == label_of_replacer
+        if same_label:
+            body = self._working_body
+        else:
+            body = self.func_ir.blocks[label_of_replacee].body
+        remove_line = -1
+        for i, stmt in enumerate(body):
+            # Find the instruction
+            if is_assign(stmt) and stmt.target.name == retvar.name:
+                # Just want to set i here
+                remove_line = i
+                break
+        assert (
+            remove_line != -1
+        ), "Could not find original table builder state to replace"
+        body = body[:remove_line] + new_nodes + body[remove_line + 1 :]
+
+        if same_label:
+            self._working_body = body
+        else:
+            self.func_ir.blocks[label_of_replacee].body = body
+        # Replicate the changes that would occur to defintions and labels if this was
+        # done in the active block.
+
+        # Delete the old definition. Note the function may cause an intermediate assignment,
+        # so we need to delete all definitions.
+        assert (
+            len(self.func_ir._definitions[retvar.name])
+        ) == 1, "There must be exactly 1 definition for table builder state."
+        del self.func_ir._definitions[retvar.name]
+        update_node_list_definitions(new_nodes, self.func_ir)
+        # Update the labels as well
+        for inst in new_nodes:
+            if is_assign(inst):
+                self.rhs_labels[inst.value] = label_of_replacee
+        self.needs_transform = True
+        self.changed = True
+        return new_nodes
+
+    def _run_call_table_builder(
+        self, assign, rhs, func_name, label
+    ):  # pragma: no cover
+        """
+        Handle the typing pass information needed for updating the type of the
+        input table for TableBuilderStateType
+        """
+        if func_name == "init_table_builder_state":
+            expected_arg = get_call_expr_arg(
+                "init_table_builder_state",
+                rhs.args,
+                dict(rhs.kws),
+                1,
+                "expected_state_type",
+                default=None,
+                use_default=True,
+            )
+            if expected_arg is None:
+                self.needs_transform = True
+            else:
+                expected_type = self.typemap.get(expected_arg.name, None)
+                # If the expected type is unknown we need to transform
+                if expected_type in unresolved_types:
+                    self.needs_transform = True
+        elif func_name == "table_builder_append":
+            builder_state = rhs.args[0]
+            table = rhs.args[1]
+            # Load the types
+            state_type = self.typemap.get(builder_state.name, None)
+            input_table_type = self.typemap.get(table.name, None)
+            if state_type in unresolved_types or input_table_type in unresolved_types:
+                self.needs_transform = True
+                return [assign]
+
+            builder_def = guard(
+                _get_state_defining_call,
+                self.func_ir,
+                builder_state,
+                ("init_table_builder_state", "bodo.libs.table_builder"),
+            )
+            if builder_def is None:
+                self.needs_transform = True
+                return [assign]
+            # Fetch the expected type.
+            expected_arg = get_call_expr_arg(
+                "init_table_builder_state",
+                builder_def.args,
+                dict(builder_def.kws),
+                1,
+                "expected_state_type",
+                default=None,
+                use_default=True,
+            )
+            if expected_arg is None:
+                expected_type = state_type
+            else:
+                expected_type = self.typemap.get(expected_arg.name, None)
+            output_type = unwrap_typeref(expected_type)
+            # Check that the build/probe type match.
+            if output_type in unresolved_types:
+                self.needs_transform = True
+                return [assign]
+
+            if input_table_type != output_type.build_table_type:
+                should_use_chunked_builder_arg = get_call_expr_arg(
+                    "init_table_builder_state",
+                    builder_def.args,
+                    dict(builder_def.kws),
+                    2,
+                    "use_chunked_builder",
+                    default=None,
+                    use_default=True,
+                )
+                if should_use_chunked_builder_arg is None:
+                    should_use_chunked_builder_arg = False
+                else:
+                    should_use_chunked_builder_type = self.typemap.get(
+                        should_use_chunked_builder_arg.name, None
+                    )
+                    if not is_overload_constant_bool(should_use_chunked_builder_type):
+                        raise BodoError(
+                            "init_table_builder_state(): use_chunked_builder must be a constant boolean value"
+                        )
+                    should_use_chunked_builder_arg = get_overload_const_bool(
+                        should_use_chunked_builder_type
+                    )
+
+                operator_id_var = get_call_expr_arg(
+                    "init_table_builder_state",
+                    builder_def.args,
+                    dict(builder_def.kws),
+                    0,
+                    "operator_id",
+                    default=-1,
+                    use_default=True,
+                )
+                operator_id = self.typemap.get(operator_id_var.name, None)
+                assert isinstance(operator_id, numba.core.types.scalars.IntegerLiteral)
+                operator_id = operator_id.literal_value
+
+                inputs_unified_arg = get_call_expr_arg(
+                    "init_table_builder_state",
+                    builder_def.args,
+                    dict(builder_def.kws),
+                    3,
+                    "input_dicts_unified",
+                    default=None,
+                    use_default=True,
+                )
+                inputs_unified_txt = ""
+                if inputs_unified_arg is not None:
+                    inputs_unified_type = self.typemap.get(
+                        inputs_unified_arg.name, None
+                    )
+                    if not is_overload_constant_bool(inputs_unified_type):
+                        raise BodoError(
+                            "init_table_builder_state(): inputs_unified must be a constant boolean value"
+                        )
+                    inputs_unified_arg = get_overload_const_bool(inputs_unified_type)
+                    inputs_unified_txt = f"input_dicts_unified={inputs_unified_arg}"
+
+                args = ()
+                new_type = bodo.libs.table_builder.TableBuilderStateType(
+                    input_table_type, should_use_chunked_builder_arg
+                )
+
+                func_text = (
+                    "def impl():\n"
+                    "  return bodo.libs.table_builder.init_table_builder_state(\n"
+                    "    operator_id,\n"
+                    "    expected_state_type=_expected_state_type,\n"
+                    "    use_chunked_builder=_should_use_chunked_builder_arg,\n"
+                    f"    {inputs_unified_txt}\n"
+                    "  )\n"
+                )
+
+                self._replace_state_definition(
+                    func_text,
+                    "impl",
+                    {
+                        "operator_id": operator_id,
+                        "_expected_state_type": new_type,
+                        "_should_use_chunked_builder_arg": should_use_chunked_builder_arg,
+                        "_inputs_unified_arg": inputs_unified_arg,
+                    },
+                    args,
+                    builder_state,
+                    builder_def,
+                    label,
+                )
+
+        return [assign]
+
+    def _run_call_stream_write(self, assign, rhs, func_name, label):  # pragma: no cover
+        """
+        Handle the typing pass information needed for updating the type of the
+        input table for SnowflakeWriterType
+        """
+        if func_name == "snowflake_writer_init":
+            expected_arg = get_call_expr_arg(
+                "snowflake_writer_init",
+                rhs.args,
+                dict(rhs.kws),
+                6,
+                "expected_state_type",
+                default=None,
+                use_default=True,
+            )
+            if expected_arg is None:
+                self.needs_transform = True
+            else:
+                expected_type = self.typemap.get(expected_arg.name, None)
+                # If the expected type is unknown we need to transform
+                if expected_type in unresolved_types:
+                    self.needs_transform = True
+                else:
+                    output_type = unwrap_typeref(expected_type)
+                    if output_type.input_table_type == types.unknown:
+                        self.needs_transform = True
+        elif func_name == "snowflake_writer_append_table":
+            write_state = rhs.args[0]
+            table = rhs.args[1]
+            # Load the types
+            state_type = self.typemap.get(write_state.name, None)
+            input_table_type = self.typemap.get(table.name, None)
+            if state_type in unresolved_types or input_table_type in unresolved_types:
+                self.needs_transform = True
+                return [assign]
+
+            writer_init_def = guard(
+                _get_state_defining_call,
+                self.func_ir,
+                write_state,
+                ("snowflake_writer_init", "bodo.io.snowflake_write"),
+            )
+            if writer_init_def is None:
+                self.needs_transform = True
+                return [assign]
+            # Fetch the expected type.
+            expected_arg = get_call_expr_arg(
+                "snowflake_writer_init",
+                writer_init_def.args,
+                dict(writer_init_def.kws),
+                6,
+                "expected_state_type",
+                default=None,
+                use_default=True,
+            )
+            if expected_arg is None:
+                expected_type = state_type
+            else:
+                expected_type = self.typemap.get(expected_arg.name, None)
+            output_type = unwrap_typeref(expected_type)
+            # Check that the build/probe type match.
+            if output_type in unresolved_types:
+                self.needs_transform = True
+                return [assign]
+
+            if input_table_type != output_type.input_table_type:
+                args = writer_init_def.args[:6]
+                new_type = bodo.io.snowflake_write.SnowflakeWriterType(input_table_type)
+                func_text = (
+                    "def impl(operator_id, conn, table_name, schema, if_exists, table_type):\n"
+                    "  return bodo.io.snowflake_write.snowflake_writer_init(\n"
+                    "    operator_id, conn, table_name, schema, if_exists, table_type, \n"
+                    "    expected_state_type=_expected_state_type\n"
+                    "  )\n"
+                )
+
+                self._replace_state_definition(
+                    func_text,
+                    "impl",
+                    {"_expected_state_type": new_type},
+                    args,
+                    write_state,
+                    writer_init_def,
+                    label,
+                )
+        elif func_name == "iceberg_writer_init":
+            expected_arg = get_call_expr_arg(
+                "iceberg_writer_init",
+                rhs.args,
+                dict(rhs.kws),
+                7,
+                "expected_state_type",
+                default=None,
+                use_default=True,
+            )
+            if expected_arg is None:
+                self.needs_transform = True
+            else:
+                expected_type = self.typemap.get(expected_arg.name, None)
+                # If the expected type is unknown we need to transform
+                if expected_type in unresolved_types:
+                    self.needs_transform = True
+                else:
+                    output_type = unwrap_typeref(expected_type)
+                    if output_type.input_table_type == types.unknown:
+                        self.needs_transform = True
+        elif func_name == "iceberg_writer_append_table":
+            write_state = rhs.args[0]
+            table = rhs.args[1]
+            # Load the types
+            state_type = self.typemap.get(write_state.name, None)
+            input_table_type = self.typemap.get(table.name, None)
+            if state_type in unresolved_types or input_table_type in unresolved_types:
+                self.needs_transform = True
+                return [assign]
+
+            writer_init_def = guard(
+                _get_state_defining_call,
+                self.func_ir,
+                write_state,
+                ("iceberg_writer_init", "bodo.io.stream_iceberg_write"),
+            )
+            if writer_init_def is None:
+                self.needs_transform = True
+                return [assign]
+            # Fetch the expected type.
+            expected_arg = get_call_expr_arg(
+                "iceberg_writer_init",
+                writer_init_def.args,
+                dict(writer_init_def.kws),
+                7,
+                "expected_state_type",
+                default=None,
+                use_default=True,
+            )
+            if expected_arg is None:
+                expected_type = state_type
+            else:
+                expected_type = self.typemap.get(expected_arg.name, None)
+            output_type = unwrap_typeref(expected_type)
+            # Check that the build/probe type match.
+            if output_type in unresolved_types:
+                self.needs_transform = True
+                return [assign]
+
+            allow_theta_sketch_val = get_const_arg(
+                "iceberg_writer_init",
+                writer_init_def.args,
+                dict(writer_init_def.kws),
+                self.func_ir,
+                self.arg_types,
+                8,
+                "allow_theta_sketches",
+                rhs.loc,
+                default=False,
+            )
+
+            create_table_meta_val = get_const_arg(
+                "iceberg_writer_init",
+                writer_init_def.args,
+                dict(writer_init_def.kws),
+                self.func_ir,
+                self.arg_types,
+                6,
+                "create_table_meta",
+                rhs.loc,
+                default=None,
+                use_default=True,
+            )
+
+            if input_table_type != output_type.input_table_type:
+                args = writer_init_def.args[:6]
+                new_type = bodo.io.stream_iceberg_write.IcebergWriterType(
+                    input_table_type
+                )
+                func_text = (
+                    "def impl(operator_id, conn, table_name, schema, col_names_meta, if_exists):\n"
+                    "  return bodo.io.stream_iceberg_write.iceberg_writer_init(\n"
+                    "    operator_id, conn, table_name, schema, col_names_meta, if_exists, \n"
+                    "    create_table_meta=_create_table_meta,\n"
+                    "    expected_state_type=_expected_state_type,\n"
+                    "    allow_theta_sketches=_allow_theta_sketches\n"
+                    "  )\n"
+                )
+                self._replace_state_definition(
+                    func_text,
+                    "impl",
+                    {
+                        "_create_table_meta": create_table_meta_val,
+                        "_expected_state_type": new_type,
+                        "_allow_theta_sketches": allow_theta_sketch_val,
+                    },
+                    args,
+                    write_state,
+                    writer_init_def,
+                    label,
+                )
+        elif func_name == "parquet_writer_init":
+            expected_arg = get_call_expr_arg(
+                "parquet_writer_init",
+                rhs.args,
+                dict(rhs.kws),
+                6,
+                "expected_state_type",
+                default=None,
+                use_default=True,
+            )
+            if expected_arg is None:
+                self.needs_transform = True
+            else:
+                expected_type = self.typemap.get(expected_arg.name, None)
+                # If the expected type is unknown we need to transform
+                if expected_type in unresolved_types:
+                    self.needs_transform = True
+                else:
+                    output_type = unwrap_typeref(expected_type)
+                    if output_type.input_table_type == types.unknown:
+                        self.needs_transform = True
+        elif func_name == "parquet_writer_append_table":
+            write_state = rhs.args[0]
+            table = rhs.args[1]
+            # Load the types
+            state_type = self.typemap.get(write_state.name, None)
+            input_table_type = self.typemap.get(table.name, None)
+            if state_type in unresolved_types or input_table_type in unresolved_types:
+                self.needs_transform = True
+                return [assign]
+
+            writer_init_def = guard(
+                _get_state_defining_call,
+                self.func_ir,
+                write_state,
+                ("parquet_writer_init", "bodo.io.stream_parquet_write"),
+            )
+            if writer_init_def is None:
+                self.needs_transform = True
+                return [assign]
+            # Fetch the expected type.
+            expected_arg = get_call_expr_arg(
+                "parquet_writer_init",
+                writer_init_def.args,
+                dict(writer_init_def.kws),
+                6,
+                "expected_state_type",
+                default=None,
+                use_default=True,
+            )
+            if expected_arg is None:
+                expected_type = state_type
+            else:
+                expected_type = self.typemap.get(expected_arg.name, None)
+            output_type = unwrap_typeref(expected_type)
+            # Check that the build/probe type match.
+            if output_type in unresolved_types:
+                self.needs_transform = True
+                return [assign]
+
+            if input_table_type != output_type.input_table_type:
+                args = writer_init_def.args[:6]
+                new_type = bodo.io.stream_parquet_write.ParquetWriterType(
+                    input_table_type
+                )
+                func_text = (
+                    "def impl(operator_id, path, compression, row_group_size, bodo_file_prefix, bodo_timestamp_tz):\n"
+                    "  return bodo.io.stream_parquet_write.parquet_writer_init(\n"
+                    "    operator_id, path, compression, row_group_size, bodo_file_prefix, bodo_timestamp_tz, \n"
+                    "    expected_state_type=_expected_state_type\n"
+                    "  )\n"
+                )
+
+                self._replace_state_definition(
+                    func_text,
+                    "impl",
+                    {"_expected_state_type": new_type},
+                    args,
+                    write_state,
+                    writer_init_def,
+                    label,
+                )
+        return [assign]
+
+    def _run_call_stream_join(self, assign, rhs, func_name, label):  # pragma: no cover
+        """
+        Handle the typing pass information needed for updating the join state with
+        streaming join.
+        """
+        if func_name == "init_join_state":
+            expected_arg = get_call_expr_arg(
+                "init_join_state",
+                rhs.args,
+                dict(rhs.kws),
+                10,
+                "expected_state_type",
+                default=None,
+                use_default=True,
+            )
+            if expected_arg is None:
+                self.needs_transform = True
+            else:
+                expected_type = self.typemap.get(expected_arg.name, None)
+                # If the expected type is unknown we need to transform
+                if expected_type in unresolved_types:
+                    self.needs_transform = True
+                else:
+                    output_type = unwrap_typeref(expected_type)
+                    if (
+                        output_type.build_table_type == types.unknown
+                        or output_type.probe_table_type == types.unknown
+                    ):
+                        self.needs_transform = True
+        elif func_name in ("join_build_consume_batch", "join_probe_consume_batch"):
+            is_build = func_name == "join_build_consume_batch"
+            join_state = rhs.args[0]
+            table = rhs.args[1]
+            # Load the types
+            state_type = self.typemap.get(join_state.name, None)
+            input_table_type = self.typemap.get(table.name, None)
+            if state_type in unresolved_types or input_table_type in unresolved_types:
+                self.needs_transform = True
+                return [assign]
+
+            # Fetch the join information from the definition
+            join_def = _get_state_defining_call(
+                self.func_ir,
+                join_state,
+                ("init_join_state", "bodo.libs.streaming.join"),
+            )
+            if join_def is None:
+                self.needs_transform = True
+                return [assign]
+            # Fetch the expected type.
+            expected_arg = get_call_expr_arg(
+                "init_join_state",
+                join_def.args,
+                dict(join_def.kws),
+                10,
+                "expected_state_type",
+                default=None,
+                use_default=True,
+            )
+            if expected_arg is None:
+                expected_type = state_type
+            else:
+                expected_type = self.typemap.get(expected_arg.name, None)
+            output_type = unwrap_typeref(expected_type)
+            # Check that the build/probe type match.
+            if output_type in unresolved_types:
+                self.needs_transform = True
+                return [assign]
+            if is_build:
+                table_type = output_type.build_table_type
+            else:
+                table_type = output_type.probe_table_type
+            if input_table_type != table_type:
+                # We need to update the expected type
+                if is_build:
+                    new_type = bodo.libs.streaming.join.JoinStateType(
+                        output_type.build_key_inds,
+                        output_type.probe_key_inds,
+                        output_type.build_outer,
+                        output_type.probe_outer,
+                        input_table_type,
+                        output_type.probe_table_type,
+                    )
+                else:
+                    new_type = bodo.libs.streaming.join.JoinStateType(
+                        output_type.build_key_inds,
+                        output_type.probe_key_inds,
+                        output_type.build_outer,
+                        output_type.probe_outer,
+                        output_type.build_table_type,
+                        input_table_type,
+                    )
+                params = [
+                    "operator_id",
+                    "build_key_inds",
+                    "probe_key_inds",
+                    "build_column_names",
+                    "probe_column_names",
+                    "build_outer",
+                    "probe_outer",
+                    "interval_build_columns",
+                    "force_broadcast",
+                ]
+                args = join_def.args[:9]
+
+                # Fetch the op_pool_size_bytes argument
+                op_pool_size_bytes_var = get_call_expr_arg(
+                    "init_join_state",
+                    join_def.args,
+                    dict(join_def.kws),
+                    9,
+                    "op_pool_size_bytes",
+                    default=None,
+                    use_default=True,
+                )
+                # If there is a op_pool_size_bytes we need to include it in
+                # the function.
+                if op_pool_size_bytes_var is not None:
+                    params.append("op_pool_size_bytes")
+                    args.append(op_pool_size_bytes_var)
+                    op_pool_size_bytes_val = "op_pool_size_bytes"
+                else:
+                    op_pool_size_bytes_val = "-1"
+
+                # Fetch the non-equality condition argument
+                non_equi_cond_var = get_call_expr_arg(
+                    "init_join_state",
+                    join_def.args,
+                    dict(join_def.kws),
+                    11,
+                    "non_equi_condition",
+                    default=None,
+                    use_default=True,
+                )
+                # If there is a non equality condition we need to include it in
+                # the function.
+                if non_equi_cond_var is not None:
+                    params.append("non_equi_condition")
+                    args.append(non_equi_cond_var)
+                    non_equi_val = "non_equi_condition"
+                else:
+                    non_equi_val = "None"
+
+                # Compile a new function.
+                func_text = f"""def impl({", ".join(params)}):
+                    return bodo.libs.streaming.join.init_join_state(
+                        operator_id,
+                        build_key_inds,
+                        probe_key_inds,
+                        build_column_names,
+                        probe_column_names,
+                        build_outer,
+                        probe_outer,
+                        interval_build_columns,
+                        force_broadcast,
+                        op_pool_size_bytes={op_pool_size_bytes_val},
+                        expected_state_type=_expected_state_type,
+                        non_equi_condition={non_equi_val},
+                    )
+                """
+                self._replace_state_definition(
+                    func_text,
+                    "impl",
+                    {"_expected_state_type": new_type},
+                    args,
+                    join_state,
+                    join_def,
+                    label,
+                )
+
+        return [assign]
+
+    def _run_call_stream_groupby(self, assign, rhs, func_name):  # pragma: no cover
+        """
+        Handle the typing pass information needed for updating the groupby state with
+        streaming groupby.
+        """
+        if func_name in ("init_groupby_state", "init_grouping_sets_state"):
+            arg_no = 10 if func_name == "init_groupby_state" else 7
+            expected_arg = get_call_expr_arg(
+                func_name,
+                rhs.args,
+                dict(rhs.kws),
+                arg_no,
+                "expected_state_type",
+                default=None,
+                use_default=True,
+            )
+            if expected_arg is None:
+                self.needs_transform = True
+            else:
+                expected_type = self.typemap.get(expected_arg.name, None)
+                # If the expected type is unknown we need to transform
+                if expected_type in unresolved_types:
+                    self.needs_transform = True
+                else:
+                    output_type = unwrap_typeref(expected_type)
+                    if output_type.build_table_type == types.unknown:
+                        self.needs_transform = True
+        elif func_name == "groupby_build_consume_batch":
+            groupby_state = rhs.args[0]
+            table = rhs.args[1]
+            # Load the types
+            state_type = self.typemap.get(groupby_state.name, None)
+            input_table_type = self.typemap.get(table.name, None)
+            if state_type in unresolved_types or input_table_type in unresolved_types:
+                self.needs_transform = True
+                return [assign]
+
+            # Fetch the groupby information from the definition
+            groupby_def = guard(get_definition, self.func_ir, groupby_state)
+            if groupby_def is None:
+                # If we can't find the definition we need to transform
+                self.needs_transform = True
+                return [assign]
+            state_init = guard(find_callname, self.func_ir, groupby_def)
+            # Verify we are at init_groupby_state and we can fetch the call name.
+            if state_init != (
+                "init_groupby_state",
+                "bodo.libs.streaming.groupby",
+            ):
+                self.needs_transform = True
+                return [assign]
+                # Fetch the expected type.
+            expected_arg = get_call_expr_arg(
+                "init_groupby_state",
+                groupby_def.args,
+                dict(groupby_def.kws),
+                10,
+                "expected_state_type",
+                default=None,
+                use_default=True,
+            )
+            if expected_arg is None:
+                expected_type = state_type
+            else:
+                expected_type = self.typemap.get(expected_arg.name, None)
+            output_type = unwrap_typeref(expected_type)
+            # Check that the build/probe type match.
+            if output_type in unresolved_types:
+                self.needs_transform = True
+                return [assign]
+            if input_table_type != output_type.build_table_type:
+                # We need to update the expected type
+                new_type = bodo.libs.streaming.groupby.GroupbyStateType(
+                    output_type.key_inds,
+                    output_type.grouping_sets,
+                    output_type.fnames,
+                    output_type.f_in_offsets,
+                    output_type.f_in_cols,
+                    output_type.mrnf_sort_col_inds,
+                    output_type.mrnf_sort_col_asc,
+                    output_type.mrnf_sort_col_na,
+                    output_type.mrnf_col_inds_keep,
+                    build_table_type=input_table_type,
+                )
+
+                params = [
+                    "operator_id",
+                    "key_inds",
+                    "fnames",
+                    "f_in_offsets",
+                    "f_in_cols",
+                ]
+
+                args = groupby_def.args[:5]
+
+                # Handle the optional MRNF arguments.
+                mrnf_vals = {}
+                for argname, idx in [
+                    ("mrnf_sort_col_inds", 5),
+                    ("mrnf_sort_col_asc", 6),
+                    ("mrnf_sort_col_na", 7),
+                    ("mrnf_col_inds_keep", 8),
+                ]:
+                    arg_var = get_call_expr_arg(
+                        "init_groupby_state",
+                        groupby_def.args,
+                        dict(groupby_def.kws),
+                        idx,
+                        argname,
+                        default=None,
+                        use_default=True,
+                    )
+                    if arg_var is not None:
+                        params.append(argname)
+                        args.append(arg_var)
+                        mrnf_vals[argname] = argname
+                    else:
+                        mrnf_vals[argname] = "None"
+
+                # Fetch the op_pool_size_bytes argument
+                op_pool_size_bytes_var = get_call_expr_arg(
+                    "init_groupby_state",
+                    groupby_def.args,
+                    dict(groupby_def.kws),
+                    9,
+                    "op_pool_size_bytes",
+                    default=None,
+                    use_default=True,
+                )
+                # If there is a op_pool_size_bytes we need to include it in
+                # the function.
+                if op_pool_size_bytes_var is not None:
+                    params.append("op_pool_size_bytes")
+                    args.append(op_pool_size_bytes_var)
+                    op_pool_size_bytes_val = "op_pool_size_bytes"
+                else:
+                    op_pool_size_bytes_val = "-1"
+
+                # Compile a new function.
+                func_text = f"""def impl({", ".join(params)}):
+                    return bodo.libs.streaming.groupby.init_groupby_state(
+                        operator_id,
+                        key_inds,
+                        fnames,
+                        f_in_offsets,
+                        f_in_cols,
+                        mrnf_sort_col_inds={mrnf_vals['mrnf_sort_col_inds']},
+                        mrnf_sort_col_asc={mrnf_vals['mrnf_sort_col_asc']},
+                        mrnf_sort_col_na={mrnf_vals['mrnf_sort_col_na']},
+                        mrnf_col_inds_keep={mrnf_vals['mrnf_col_inds_keep']},
+                        op_pool_size_bytes={op_pool_size_bytes_val},
+                        expected_state_type=_expected_state_type,
+                    )
+                """
+                loc_vars = {}
+                exec(
+                    func_text,
+                    {"bodo": bodo, "_expected_state_type": new_type},
+                    loc_vars,
+                )
+                func = loc_vars["impl"]
+
+                new_nodes = compile_func_single_block(
+                    func,
+                    args,
+                    groupby_state,
+                    self,
+                    extra_globals={"_expected_state_type": new_type},
+                )
+                # Find the label.
+                label = self.rhs_labels[groupby_def]
+                block = self.func_ir.blocks[label]
+                remove_line = -1
+                for i, stmt in enumerate(block.body):
+                    # Find the instruction
+                    if is_assign(stmt) and stmt.target.name == groupby_state.name:
+                        # Just want to set i here
+                        remove_line = i
+                        break
+                assert (
+                    remove_line != -1
+                ), "Could not find original groupby state to replace"
+                block.body = (
+                    block.body[:remove_line] + new_nodes + block.body[remove_line + 1 :]
+                )
+                # Replicate the changes that would occur to defintions and labels if this was
+                # done in the active block.
+
+                # Delete the old definition. Note the function may cause an intermediate assignment,
+                # so we need to delete all definitions.
+                assert (
+                    len(self.func_ir._definitions[groupby_state.name])
+                ) == 1, "There must be exactly 1 definition for groupby state."
+                del self.func_ir._definitions[groupby_state.name]
+                update_node_list_definitions(new_nodes, self.func_ir)
+                # Update the labels as well
+                for inst in new_nodes:
+                    if is_assign(inst):
+                        self.rhs_labels[inst.value] = label
+                self.needs_transform = True
+                self.changed = True
+        elif func_name == "groupby_grouping_sets_build_consume_batch":
+            grouping_sets_state = rhs.args[0]
+            table = rhs.args[1]
+            # Load the types
+            state_type = self.typemap.get(grouping_sets_state.name, None)
+            input_table_type = self.typemap.get(table.name, None)
+            if state_type in unresolved_types or input_table_type in unresolved_types:
+                self.needs_transform = True
+                return [assign]
+
+            # Fetch the groupby information from the definition
+            grouping_sets_def = guard(get_definition, self.func_ir, grouping_sets_state)
+            if grouping_sets_def is None:
+                # If we can't find the definition we need to transform
+                self.needs_transform = True
+                return [assign]
+            state_init = guard(find_callname, self.func_ir, grouping_sets_def)
+            # Verify we are at init_grouping_sets_state and we can fetch the call name.
+            if state_init != (
+                "init_grouping_sets_state",
+                "bodo.libs.streaming.groupby",
+            ):
+                self.needs_transform = True
+                return [assign]
+                # Fetch the expected type.
+            expected_arg = get_call_expr_arg(
+                "init_grouping_sets_state",
+                grouping_sets_def.args,
+                dict(grouping_sets_def.kws),
+                7,
+                "expected_state_type",
+                default=None,
+                use_default=True,
+            )
+            if expected_arg is None:
+                expected_type = state_type
+            else:
+                expected_type = self.typemap.get(expected_arg.name, None)
+            output_type = unwrap_typeref(expected_type)
+            # Check that the build/probe type match.
+            if output_type in unresolved_types:
+                self.needs_transform = True
+                return [assign]
+            if input_table_type != output_type.build_table_type:
+                # We need to update the expected type
+                new_type = bodo.libs.streaming.groupby.GroupbyStateType(
+                    output_type.key_inds,
+                    output_type.grouping_sets,
+                    output_type.fnames,
+                    output_type.f_in_offsets,
+                    output_type.f_in_cols,
+                    output_type.mrnf_sort_col_inds,
+                    output_type.mrnf_sort_col_asc,
+                    output_type.mrnf_sort_col_na,
+                    output_type.mrnf_col_inds_keep,
+                    build_table_type=input_table_type,
+                )
+
+                params = [
+                    "operator_id",
+                    "sub_operator_ids",
+                    "key_inds",
+                    "grouping_sets",
+                    "fnames",
+                    "f_in_offsets",
+                    "f_in_cols",
+                ]
+
+                args = grouping_sets_def.args[:7]
+
+                # Compile a new function.
+                func_text = f"""def impl({", ".join(params)}):
+                    return bodo.libs.streaming.groupby.init_grouping_sets_state(
+                        operator_id,
+                        sub_operator_ids,
+                        key_inds,
+                        grouping_sets,
+                        fnames,
+                        f_in_offsets,
+                        f_in_cols,
+                        expected_state_type=_expected_state_type,
+                    )
+                """
+                loc_vars = {}
+                exec(
+                    func_text,
+                    {"bodo": bodo, "_expected_state_type": new_type},
+                    loc_vars,
+                )
+                func = loc_vars["impl"]
+
+                new_nodes = compile_func_single_block(
+                    func,
+                    args,
+                    grouping_sets_state,
+                    self,
+                    extra_globals={"_expected_state_type": new_type},
+                )
+                # Find the label.
+                label = self.rhs_labels[grouping_sets_def]
+                block = self.func_ir.blocks[label]
+                remove_line = -1
+                for i, stmt in enumerate(block.body):
+                    # Find the instruction
+                    if is_assign(stmt) and stmt.target.name == grouping_sets_state.name:
+                        # Just want to set i here
+                        remove_line = i
+                        break
+                assert (
+                    remove_line != -1
+                ), "Could not find original groupby state to replace"
+                block.body = (
+                    block.body[:remove_line] + new_nodes + block.body[remove_line + 1 :]
+                )
+                # Replicate the changes that would occur to defintions and labels if this was
+                # done in the active block.
+
+                # Delete the old definition. Note the function may cause an intermediate assignment,
+                # so we need to delete all definitions.
+                assert (
+                    len(self.func_ir._definitions[grouping_sets_state.name])
+                ) == 1, "There must be exactly 1 definition for grouping sets state."
+                del self.func_ir._definitions[grouping_sets_state.name]
+                update_node_list_definitions(new_nodes, self.func_ir)
+                # Update the labels as well
+                for inst in new_nodes:
+                    if is_assign(inst):
+                        self.rhs_labels[inst.value] = label
+                self.needs_transform = True
+                self.changed = True
+
+        return [assign]
+
+    def _run_call_stream_window(self, assign, rhs, func_name):  # pragma: no cover
+        """
+        Handle the typing pass information needed for updating the window state with
+        streaming window.
+        """
+        if func_name == "init_window_state":
+            expected_arg = get_call_expr_arg(
+                "init_window_state",
+                rhs.args,
+                dict(rhs.kws),
+                12,
+                "expected_state_type",
+                default=None,
+                use_default=True,
+            )
+            if expected_arg is None:
+                self.needs_transform = True
+            else:
+                expected_type = self.typemap.get(expected_arg.name, None)
+                # If the expected type is unknown we need to transform
+                if expected_type in unresolved_types:
+                    self.needs_transform = True
+                else:
+                    output_type = unwrap_typeref(expected_type)
+                    if output_type.build_table_type == types.unknown:
+                        self.needs_transform = True
+        elif func_name == "window_build_consume_batch":
+            window_state = rhs.args[0]
+            table = rhs.args[1]
+            # Load the types
+            state_type = self.typemap.get(window_state.name, None)
+            input_table_type = self.typemap.get(table.name, None)
+            if state_type in unresolved_types or input_table_type in unresolved_types:
+                self.needs_transform = True
+                return [assign]
+
+            # Fetch the window information from the definition
+            window_def = guard(get_definition, self.func_ir, window_state)
+            if window_def is None:
+                # If we can't find the definition we need to transform
+                self.needs_transform = True
+                return [assign]
+            state_init = guard(find_callname, self.func_ir, window_def)
+            # Verify we are at init_window_state and we can fetch the call name.
+            if state_init != ("init_window_state", "bodo.libs.streaming.window"):
+                self.needs_transform = True
+                return [assign]
+                # Fetch the expected type.
+            expected_arg = get_call_expr_arg(
+                "init_window_state",
+                window_def.args,
+                dict(window_def.kws),
+                12,
+                "expected_state_type",
+                default=None,
+                use_default=True,
+            )
+            if expected_arg is None:
+                expected_type = state_type
+            else:
+                expected_type = self.typemap.get(expected_arg.name, None)
+            output_type = unwrap_typeref(expected_type)
+            # Check that the build/probe type match.
+            if output_type in unresolved_types:
+                self.needs_transform = True
+                return [assign]
+            if input_table_type != output_type.build_table_type:
+                # We need to update the expected type
+                new_type = bodo.libs.streaming.window.WindowStateType(
+                    output_type.partition_indices,
+                    output_type.order_by_indices,
+                    output_type.is_ascending,
+                    output_type.nulls_last,
+                    output_type.func_names,
+                    output_type.func_input_indices,
+                    output_type.kept_input_indices,
+                    output_type.n_inputs,
+                    output_type.window_args,
+                    build_table_type=input_table_type,
+                )
+
+                # Fetch the op_pool_size_bytes argument
+                op_pool_size_bytes_var = get_call_expr_arg(
+                    "init_window_state",
+                    window_def.args,
+                    dict(window_def.kws),
+                    11,
+                    "op_pool_size_bytes",
+                    default=None,
+                    use_default=True,
+                )
+                params = [
+                    "operator_id",
+                    "partition_indices",
+                    "order_by_indices",
+                    "is_ascending",
+                    "nulls_last",
+                    "func_names",
+                    "func_input_indices",
+                    "kept_input_indices",
+                    "allow_work_stealing",
+                    "n_inputs",
+                    "window_args",
+                ]
+                args = list(window_def.args)
+                # If there is a op_pool_size_bytes we need to include it in
+                # the function.
+                if op_pool_size_bytes_var is not None:
+                    params.append("op_pool_size_bytes")
+                    args.append(op_pool_size_bytes_var)
+                    op_pool_size_bytes_val = "op_pool_size_bytes"
+                else:
+                    op_pool_size_bytes_val = "-1"
+
+                # Compile a new function.
+                func_text = f"""def impl({", ".join(params)}):
+                    return bodo.libs.streaming.window.init_window_state(
+                        operator_id,
+                        partition_indices,
+                        order_by_indices,
+                        is_ascending,
+                        nulls_last,
+                        func_names,
+                        func_input_indices,
+                        kept_input_indices,
+                        allow_work_stealing,
+                        n_inputs,
+                        window_args,
+                        op_pool_size_bytes={op_pool_size_bytes_val},
+                        expected_state_type=_expected_state_type,
+                    )
+                """
+                loc_vars = {}
+                exec(
+                    func_text,
+                    {"bodo": bodo, "_expected_state_type": new_type},
+                    loc_vars,
+                )
+                func = loc_vars["impl"]
+
+                new_nodes = compile_func_single_block(
+                    func,
+                    args,
+                    window_state,
+                    self,
+                    extra_globals={"_expected_state_type": new_type},
+                )
+                # Find the label.
+                label = self.rhs_labels[window_def]
+                block = self.func_ir.blocks[label]
+                remove_line = -1
+                for i, stmt in enumerate(block.body):
+                    # Find the instruction
+                    if is_assign(stmt) and stmt.target.name == window_state.name:
+                        # Just want to set i here
+                        remove_line = i
+                        break
+                assert (
+                    remove_line != -1
+                ), "Could not find original window state to replace"
+                block.body = (
+                    block.body[:remove_line] + new_nodes + block.body[remove_line + 1 :]
+                )
+                # Replicate the changes that would occur to definitions and labels if this was
+                # done in the active block.
+
+                # Delete the old definition. Note the function may cause an intermediate assignment,
+                # so we need to delete all definitions.
+                assert (
+                    len(self.func_ir._definitions[window_state.name])
+                ) == 1, "There must be exactly 1 definition for window state."
+                del self.func_ir._definitions[window_state.name]
+                update_node_list_definitions(new_nodes, self.func_ir)
+                # Update the labels as well
+                for inst in new_nodes:
+                    if is_assign(inst):
+                        self.rhs_labels[inst.value] = label
+                self.needs_transform = True
+                self.changed = True
+
+        return [assign]
+
+    def _run_call_stream_union(self, assign, rhs, func_name, label):
+        if func_name == "init_union_state":
+            expected_arg = get_call_expr_arg(
+                "init_union_state",
+                rhs.args,
+                dict(rhs.kws),
+                1,
+                "expected_state_typeref",
+                default=None,
+                use_default=True,
+            )
+            if expected_arg is None:
+                self.needs_transform = True
+            else:
+                expected_type = self.typemap.get(expected_arg.name, None)
+                # If the expected type is unknown we need to transform
+                if expected_type in unresolved_types:
+                    self.needs_transform = True
+                else:
+                    output_type = unwrap_typeref(expected_type)
+                    if output_type.in_table_types == ():
+                        self.needs_transform = True
+
+        elif func_name == "union_consume_batch":
+            union_state = rhs.args[0]
+            # Load the types
+            state_type = self.typemap.get(union_state.name, None)
+            input_table_type = self.typemap.get(rhs.args[1].name, None)
+            if state_type in unresolved_types or input_table_type in unresolved_types:
+                self.needs_transform = True
+                return [assign]
+
+            # Fetch the union information from the definition
+            union_def = _get_state_defining_call(
+                self.func_ir,
+                union_state,
+                ("init_union_state", "bodo.libs.streaming.union"),
+            )
+            if union_def is None:
+                self.needs_transform = True
+                return [assign]
+
+            # Fetch the expected type.
+            expected_arg = get_call_expr_arg(
+                "init_union_state",
+                union_def.args,
+                dict(union_def.kws),
+                1,
+                "expected_state_typeref",
+                default=None,
+                use_default=True,
+            )
+            if expected_arg is None:
+                expected_type = state_type
+            else:
+                expected_type = self.typemap.get(expected_arg.name, None)
+            output_state_type = unwrap_typeref(expected_type)
+            if output_state_type in unresolved_types:
+                self.needs_transform = True
+                return [assign]
+
+            # Check if input table type is in state type
+            # and add if not
+            if input_table_type not in output_state_type.in_table_types:
+                new_state_type = bodo.libs.streaming.union.UnionStateType(
+                    output_state_type.all,
+                    (*output_state_type.in_table_types, input_table_type),
+                )
+
+                # Compile a new function with new state
+                func_text = """def impl(operator_id):
+                    return bodo.libs.streaming.union.init_union_state(
+                        operator_id,
+                        all=_all,
+                        expected_state_typeref=_expected_state_typeref,
+                    )
+                """
+                args = union_def.args[:1]
+                self._replace_state_definition(
+                    func_text,
+                    "impl",
+                    {
+                        "_all": output_state_type.all,
+                        "_expected_state_typeref": new_state_type,
+                    },
+                    args,
+                    union_state,
+                    union_def,
+                    label,
+                )
+
+        return [assign]
+
+    def _run_call_stream_sort(self, assign, rhs, func_name, label):
+        if func_name == "init_stream_sort_state":
+            expected_arg = get_call_expr_arg(
+                "init_stream_sort_state",
+                rhs.args,
+                dict(rhs.kws),
+                7,
+                "expected_state_type",
+                default=None,
+                use_default=True,
+            )
+            # If we can't determine the expected type we need to transform -
+            # this transformation is done by looking at calls to
+            # sort_build_consume_batch and using that to determine the type that
+            # expected_arg should be.
+            # TODO(aneesh): this could use some serious refactoring - we do this
+            # in many places in this file, and it's hard to tell exactly what's
+            # happening here for new readers.
+            if expected_arg is None:
+                self.needs_transform = True
+            else:
+                expected_type = self.typemap.get(expected_arg.name, None)
+                # If the expected type is unknown we need to transform
+                if expected_type in unresolved_types:
+                    self.needs_transform = True
+                else:
+                    expected_type = self.typemap.get(expected_arg.name, None)
+                    # If the expected type is unknown we need to transform
+                    if expected_type in unresolved_types:
+                        self.needs_transform = True
+        elif func_name == "finalize":
+            # Use the type of the arguments to sort_build_consume_batch to
+            # set the type of the table on the state object.
+            builder_state = rhs.args[0]
+            table = rhs.args[1]
+            # Load the types
+            state_type = self.typemap.get(builder_state.name, None)
+            input_table_type = self.typemap.get(table.name, None)
+            if state_type in unresolved_types or input_table_type in unresolved_types:
+                self.needs_transform = True
+                return [assign]
+
+            builder_def = guard(
+                _get_state_defining_call,
+                self.func_ir,
+                builder_state,
+                ("init_stream_sort_state", "bodo.libs.streaming.sort"),
+            )
+            if builder_def is None:
+                self.needs_transform = True
+                return [assign]
+            # Fetch the expected type.
+            expected_arg = get_call_expr_arg(
+                "init_stream_sort_state",
+                builder_def.args,
+                dict(builder_def.kws),
+                7,
+                "expected_state_type",
+                default=None,
+                use_default=True,
+            )
+            if expected_arg is None:
+                expected_type = state_type
+            else:
+                expected_type = self.typemap.get(expected_arg.name, None)
+            output_type = unwrap_typeref(expected_type)
+            if output_type in unresolved_types:
+                self.needs_transform = True
+                return [assign]
+
+        elif func_name == "sort_build_consume_batch":
+            # Use the type of the arguments to sort_build_consume_batch to
+            # set the type of the table on the state object.
+            builder_state = rhs.args[0]
+            table = rhs.args[1]
+            # Load the types
+            state_type = self.typemap.get(builder_state.name, None)
+            input_table_type = self.typemap.get(table.name, None)
+            if state_type in unresolved_types or input_table_type in unresolved_types:
+                self.needs_transform = True
+                return [assign]
+
+            builder_def = guard(
+                _get_state_defining_call,
+                self.func_ir,
+                builder_state,
+                ("init_stream_sort_state", "bodo.libs.streaming.sort"),
+            )
+            if builder_def is None:
+                self.needs_transform = True
+                return [assign]
+            # Fetch the expected type.
+            expected_arg = get_call_expr_arg(
+                "init_stream_sort_state",
+                builder_def.args,
+                dict(builder_def.kws),
+                7,
+                "expected_state_type",
+                default=None,
+                use_default=True,
+            )
+            if expected_arg is None:
+                expected_type = state_type
+            else:
+                expected_type = self.typemap.get(expected_arg.name, None)
+            output_type = unwrap_typeref(expected_type)
+            if output_type in unresolved_types:
+                self.needs_transform = True
+                return [assign]
+
+            if input_table_type != output_type.build_table_type:
+                num_pos_args = 7
+                arg_variables = []
+                arg_values = []
+                for i in range(num_pos_args):
+                    var = get_call_expr_arg(
+                        "init_stream_sort_state",
+                        builder_def.args,
+                        dict(builder_def.kws),
+                        i,
+                        "",
+                    )
+                    arg_variables.append(var)
+
+                if any(
+                    self.typemap.get(var.name, None) is None for var in arg_variables
+                ):
+                    self.needs_transform = True
+                    return [assign]
+                arg_values = [
+                    self._get_const_value(v, label, "arguments to sort must be const")
+                    for v in arg_variables
+                ]
+                # Stringify args so that we can use them in the function call
+                # below
+                const_args = " ,".join([f"{val}" for val in arg_values])
+
+                # `by` is the 1st argument to init_stream_sort_state, and
+                # stores the columns that we are sorting by as a list of
+                # strings. We want to convert that to a list of indices into the
+                # list of columns to store in the state type. The list of
+                # columns is available as the 4th argument.
+                by = arg_values[3]
+                col_names = arg_values[6]
+                key_inds = tuple(col_names.index(col) for col in by)
+                new_type = bodo.libs.streaming.sort.SortStateType(
+                    input_table_type, key_inds
+                )
+
+                func_text = (
+                    "def impl():\n"
+                    "  return bodo.libs.streaming.sort.init_stream_sort_state(\n"
+                    f"    {const_args},\n"
+                    "    expected_state_type=_expected_state_type\n"
+                    "  )\n"
+                )
+
+                args = ()
+                self._replace_state_definition(
+                    func_text,
+                    "impl",
+                    {"_expected_state_type": new_type},
+                    args,
+                    builder_state,
+                    builder_def,
+                    label,
+                )
+
+        return [assign]
+
     def _run_call_bodosql_sql(
         self, assign, rhs, sql_context_var, func_name, label
     ):  # pragma: no cover
         """inline BodoSQLContextType.sql() calls since the generated code cannot
         be handled in regular overloads (requires Bodo's untyped pass, typing pass)
-
-        This code is also used for _test_sql_unoptimized, which is an internal testing
-        API that generates Pandas code on the original non-optimized plan. We use the
-        testing function to check coverage of operators that would otherwise be
-        optimized out. We use this so our test suite can have simple cases but we can
-        have confidence in the complex cases when optimizations may not be possible
-        (i.e. testing scalar support using literals).
         """
         import bodosql
         from bodosql.context_ext import BodoSQLContextType
 
-        # In order to inline the sql() call, we must insure that the type of the input dataframe(s)
+        # In order to inline the sql() call, we must ensure that the type of the input dataframe(s)
         # are finalized. dataframe type may have changed in typing pass (e.g. due to df setitem)
         # so we shouldn't use the actual type of the dataframes used to initialize the sql_context_var
         def determine_bodosql_context_type(sql_context_var):
@@ -3091,6 +6044,7 @@ class TypingTransforms:
             """
             sql_ctx_def = guard(get_definition, self.func_ir, sql_context_var)
             if isinstance(sql_ctx_def, ir.Arg):
+                # Variable type always available in typemap since it is an argument.
                 return self.typemap[sql_context_var.name]
             fdef = guard(find_callname, self.func_ir, sql_ctx_def)
             if fdef is None or len(fdef) < 2:
@@ -3103,8 +6057,8 @@ class TypingTransforms:
                     fdef[0],
                     sql_ctx_def.args,
                     sql_ctx_def.kws,
-                    ("dataframes", "catalog"),
-                    {"catalog": None},
+                    ("dataframes", "catalog", "default_tz"),
+                    {"catalog": None, "default_tz": None},
                 )
                 names, df_typs = self._get_bodosql_ctx_name_df_typs(folded_args)
                 for df_typ in df_typs:
@@ -3112,12 +6066,29 @@ class TypingTransforms:
                         # Return None if a transformation failed
                         # because a dataframe type is unknown.
                         return None
+                # Cannot estimate length from compiled code at this time.
+                estimate_row_counts = tuple([None] * len(df_typs))
                 catalog_var = folded_args[1]
                 if isinstance(catalog_var, ir.Var):
+                    if catalog_var.name not in self.typemap:
+                        return None
                     catalog_typ = self.typemap[catalog_var.name]
                 else:
                     catalog_typ = types.none
-                return BodoSQLContextType(names, df_typs, catalog_typ)
+                default_tz_var = folded_args[2]
+                if isinstance(default_tz_var, ir.Var):
+                    if default_tz_var.name not in self.typemap:
+                        return None
+                    default_tz_typ = self.typemap[default_tz_var.name]
+                else:
+                    default_tz_typ = types.none
+                return BodoSQLContextType(
+                    names,
+                    df_typs,
+                    estimate_row_counts,
+                    catalog_typ,
+                    default_tz_typ,
+                )
             elif fdef[0] == "add_or_replace_view":
                 context_type = determine_bodosql_context_type(fdef[1])
                 name_typ = self.typemap.get(sql_ctx_def.args[0].name, None)
@@ -3130,16 +6101,26 @@ class TypingTransforms:
                 # Map to a new BodoSQLContextType
                 new_names = []
                 new_df_typs = []
-                for old_name_typ, old_df_typ in zip(
-                    context_type.names, context_type.dataframes
+                new_estimated_row_counts = []
+                for old_name_typ, old_df_typ, old_row_count in zip(
+                    context_type.names,
+                    context_type.dataframes,
+                    context_type.estimated_row_counts,
                 ):
                     if old_name_typ != name_typ:
                         new_names.append(old_name_typ)
                         new_df_typs.append(old_df_typ)
+                        new_estimated_row_counts.append(old_row_count)
                 new_names.append(name_typ)
                 new_df_typs.append(df_typ)
+                # Cannot estimate length from compiled code at this time.
+                new_estimated_row_counts.append(None)
                 return BodoSQLContextType(
-                    tuple(new_names), tuple(new_df_typs), context_type.catalog_type
+                    tuple(new_names),
+                    tuple(new_df_typs),
+                    tuple(new_estimated_row_counts),
+                    context_type.catalog_type,
+                    context_type.default_tz,
                 )
             elif fdef[0] == "remove_view":
                 context_type = determine_bodosql_context_type(fdef[1])
@@ -3152,14 +6133,22 @@ class TypingTransforms:
                 # Map to a new BodoSQLContextType
                 new_names = []
                 new_df_typs = []
-                for old_name_typ, old_df_typ in zip(
-                    context_type.names, context_type.dataframes
+                new_estimated_row_counts = []
+                for old_name_typ, old_df_typ, old_row_count in zip(
+                    context_type.names,
+                    context_type.dataframes,
+                    context_type.estimated_row_counts,
                 ):
                     if old_name_typ != name_typ:
                         new_names.append(old_name_typ)
                         new_df_typs.append(old_df_typ)
+                        new_estimated_row_counts.append(old_row_count)
                 return BodoSQLContextType(
-                    tuple(new_names), tuple(new_df_typs), context_type.catalog_type
+                    tuple(new_names),
+                    tuple(new_df_typs),
+                    tuple(new_estimated_row_counts),
+                    context_type.catalog_type,
+                    context_type.default_tz,
                 )
             elif fdef[0] in ("add_or_replace_catalog", "remove_catalog"):
                 context_type = determine_bodosql_context_type(fdef[1])
@@ -3172,11 +6161,16 @@ class TypingTransforms:
                 else:
                     catalog_typ = types.none
                 return BodoSQLContextType(
-                    context_type.names, context_type.dataframes, catalog_typ
+                    context_type.names,
+                    context_type.dataframes,
+                    context_type.estimated_row_counts,
+                    catalog_typ,
+                    context_type.default_tz,
                 )
             return None
 
         sql_context_type = determine_bodosql_context_type(sql_context_var)
+
         if sql_context_type is None:
             # cannot transform yet if type is not available yet
             return [assign]
@@ -3187,14 +6181,28 @@ class TypingTransforms:
         sql_var = get_call_expr_arg(
             f"BodoSQLContextType.{func_name}", rhs.args, kws, 0, "sql"
         )
-        params_var = get_call_expr_arg(
+        params_dict_var = get_call_expr_arg(
             f"BodoSQLContextType.{func_name}",
             rhs.args,
             kws,
             1,
-            "param_dict",
+            "params_dict",
             default=types.none,
         )
+        dynamic_params_var = get_call_expr_arg(
+            f"BodoSQLContextType.{func_name}",
+            rhs.args,
+            kws,
+            2,
+            "dynamic_params_list",
+            default=types.none,
+        )
+        # Make sure JIT options are not used inside JIT functions
+        for k in kws.keys():
+            if k not in ("sql", "params_dict", "dynamic_params_list"):
+                raise BodoError(
+                    f"Argument '{k}' is not supported for BodoSQLContextType.{func_name}() inside JIT functions."
+                )
 
         needs_transform = False
         try:
@@ -3203,22 +6211,86 @@ class TypingTransforms:
         except (GuardException, BodoConstUpdatedError):
             needs_transform = True
 
-        # TODO: Handle the none case
-        if is_overload_none(params_var):
-            keys, values = [], []
+        if is_overload_none(params_dict_var):
+            named_param_keys, named_param_values = [], []
         else:
-            try:
-                keys, values = bodo.utils.transform.dict_to_const_keys_var_values_lists(
-                    params_var,
-                    self.func_ir,
-                    self.arg_types,
-                    self.typemap,
-                    self._updated_containers,
-                    self._require_const,
-                    label,
-                )
-            except GuardException:
-                needs_transform = True
+            arg_name = params_dict_var.name
+            if (arg_name in self.typemap) and is_overload_none(self.typemap[arg_name]):
+                named_param_keys, named_param_values = [], []
+            else:
+                try:
+                    (
+                        named_param_keys,
+                        named_param_values,
+                    ) = bodo.utils.transform.dict_to_const_keys_var_values_lists(
+                        params_dict_var,
+                        self.func_ir,
+                        self.arg_types,
+                        self.typemap,
+                        self._updated_containers,
+                        self._require_const,
+                        label,
+                    )
+                except GuardException:
+                    needs_transform = True
+
+        pre_nodes = []
+        if is_overload_none(dynamic_params_var):
+            dynamic_param_values = []
+        else:
+            arg_name = dynamic_params_var.name
+            if (arg_name in self.typemap) and is_overload_none(self.typemap[arg_name]):
+                dynamic_param_values = []
+            elif arg_name in self.typemap and isinstance(
+                self.typemap[arg_name], types.BaseTuple
+            ):
+                try:
+                    # Try to fetch the original variables if we have a constant tuple to avoid generating
+                    # extra IR.
+                    dynamic_param_values = (
+                        bodo.utils.transform.tuples_to_vars_value_list(
+                            dynamic_params_var, self.func_ir
+                        )
+                    )
+                except GuardException:
+                    # If we failed to fetch a constant tuple we can generate valid code by introducing a new variable
+                    # for each tuple getitem.
+                    dynamic_param_values = []
+                    tuple_type = self.typemap[arg_name]
+                    for i in range(len(tuple_type.types)):
+                        # Create the index variable.
+                        index_var = ir.Var(
+                            dynamic_params_var.scope,
+                            mk_unique_var("$index_var"),
+                            dynamic_params_var.loc,
+                        )
+                        self.typemap[index_var.name] = types.intp
+                        assign = ir.Assign(
+                            ir.Const(i, dynamic_params_var.loc),
+                            index_var,
+                            dynamic_params_var.loc,
+                        )
+                        pre_nodes.append(assign)
+                        # Get the variable for the tuple element.
+                        var = ir.Var(
+                            dynamic_params_var.scope,
+                            mk_unique_var("$tuple_var"),
+                            dynamic_params_var.loc,
+                        )
+                        self.typemap[var.name] = tuple_type.types[i]
+                        getitem = ir.Expr.getitem(
+                            dynamic_params_var, index_var, var.loc
+                        )
+                        assign = ir.Assign(getitem, var, var.loc)
+                        pre_nodes.append(assign)
+                        dynamic_param_values.append(var)
+            else:
+                try:
+                    dynamic_param_values = bodo.utils.transform.list_to_vars_value_list(
+                        dynamic_params_var, self.func_ir
+                    )
+                except GuardException:
+                    needs_transform = True
 
         # If any variable needs to be a constant, try and
         # transform the code
@@ -3226,46 +6298,80 @@ class TypingTransforms:
             self.needs_transform = True
             return [assign]
 
-        keys = tuple(keys)
-        value_typs = tuple([self.typemap[value.name] for value in values])
-        if func_name == "sql":
-            (
-                impl,
-                additional_globals_to_lower,
-            ) = bodosql.context_ext._gen_pd_func_and_glbls_for_query(
-                sql_context_type, sql_str, keys, value_typs
-            )
-        elif func_name == "_test_sql_unoptimized":
-            (
-                impl,
-                additional_globals_to_lower,
-            ) = bodosql.context_ext._gen_pd_func_and_globals_for_unoptimized_query(
-                sql_context_type, sql_str, keys, value_typs
-            )
-        elif func_name == "convert_to_pandas":
-            (
-                impl,
-                additional_globals_to_lower,
-            ) = bodosql.context_ext._gen_pd_func_str_for_query(
-                sql_context_type, sql_str, keys, value_typs
-            )
+        named_param_keys = tuple(named_param_keys)
+
+        for value in named_param_values:
+            if value.name not in self.typemap:
+                self.needs_transform = True
+                return [assign]
+
+        named_param_value_types = tuple(
+            [self.typemap[value.name] for value in named_param_values]
+        )
+
+        for value in dynamic_param_values:
+            if value.name not in self.typemap:
+                self.needs_transform = True
+                return [assign]
+
+        dynamic_param_value_types = tuple(
+            [self.typemap[value.name] for value in dynamic_param_values]
+        )
+
+        # Generate a chrome tracing event inside the Numba infrastructure for accurately
+        # measuring the time spent in BodoSQL in compilation.
+        ev_details = {"name": "BodoSQL Planning: [...]"}
+        with event.trigger_event("numba:run_pass", data=ev_details):
+            if func_name == "sql":
+                (
+                    impl,
+                    additional_globals_to_lower,
+                    sql_plan,
+                ) = bodosql.context_ext._gen_sql_plan_pd_func_and_glbls_for_query(
+                    sql_context_type,
+                    sql_str,
+                    dynamic_param_value_types,
+                    named_param_keys,
+                    named_param_value_types,
+                )
+                # Save the plan if a cache location is set up.
+                BodoSqlPlanCache.cache_bodosql_plan(sql_plan, sql_str)
+            elif func_name == "convert_to_pandas":
+                (
+                    impl,
+                    additional_globals_to_lower,
+                ) = bodosql.context_ext._gen_pd_func_str_for_query(
+                    sql_context_type,
+                    sql_str,
+                    dynamic_param_value_types,
+                    named_param_keys,
+                    named_param_value_types,
+                )
 
         self.changed = True
         # BodoSQL generates df.columns setattr, which needs another transform to work
         # (See BodoSQL #189)
         self.needs_transform = True
-        block_body = compile_func_single_block(
-            impl,
-            [sql_context_var] + values,
-            assign.target,
+
+        # Update the function globals with SQL globals since needed for case handling.
+        # See https://github.com/bodo-ai/Bodo/blob/53369bb1817c30e751975b1694ec3f65a648294b/bodo/transforms/dataframe_pass.py#L939
+        if (
+            self.func_ir.func_id.func.__globals__.keys()
+            & additional_globals_to_lower.keys()
+        ):  # pragma: no cover
+            warnings.warn(
+                "SQL globals overlap with JIT globals which may cause errors. This could be because of multiple sql() calls in the same JIT function."
+            )
+
+        self.func_ir.func_id.func.__globals__.update(additional_globals_to_lower)
+
+        return replace_func(
             self,
-            infer_types=False,
-            run_untyped_pass=True,
-            flags=self.flags,
-            replace_globals=False,
+            impl,
+            [sql_context_var] + dynamic_param_values + named_param_values,
             extra_globals=additional_globals_to_lower,
+            pre_nodes=pre_nodes,
         )
-        return block_body
 
     def _call_arg_list_to_tuple(self, rhs, func_name, arg_no, arg_name, nodes):
         """Convert call argument to tuple if it is a constant list"""
@@ -3323,11 +6429,9 @@ class TypingTransforms:
             return [true_assign, assign, ir.Assign(lhs, new_df_var, lhs.loc)]
         else:
             raise BodoError(
-                (
-                    "DataFrame.{}(): non-deterministic inplace change of dataframe schema "
-                    "not supported.\nSee "
-                    "https://docs.bodo.ai/latest/bodo_parallelism/not_supported/"
-                ).format(func_name)
+                f"DataFrame.{func_name}(): non-deterministic inplace change of dataframe schema "
+                "not supported.\nSee "
+                "https://docs.bodo.ai/latest/bodo_parallelism/not_supported/"
             )
 
         return [assign]
@@ -3427,6 +6531,9 @@ class TypingTransforms:
                 func, args, out_var, self, extra_globals={"_inplace": inplace}
             )
             self.typemap.pop(out_var.name, None)
+            assert (
+                nodes[-1].value.name in self.typemap
+            ), f"Internal error in _run_df_set_column: {nodes[-1].value.name} not present in type map"
             self.typemap[out_var.name] = self.typemap[nodes[-1].value.name]
         else:
             nodes += compile_func_single_block(
@@ -3475,6 +6582,13 @@ class TypingTransforms:
             return self.typemap[obj_var.name]
         if func_var.name in self.typemap:
             return self.typemap[func_var.name].this
+        else:
+            # impl6 in test_set_df_column_names in bodo/tests/test_dataframe_part2.py
+            # Fails if this case throws an error. I'm not certain if this is function
+            # is intended to return None, if the type cannot be found,
+            # or if this is a bug. For now I'm just going to
+            # keep it as is and return "None"
+            return None
 
     def _replace_arg_with_literal(
         self, func_name, rhs, func_args, label, pyobject_to_literal=False
@@ -3483,10 +6597,10 @@ class TypingTransforms:
         enable constant access in overload. This may force JIT arguments to be literals
         if needed to satify constant requirements.
         """
+
         kws = dict(rhs.kws)
         nodes = []
-        for (arg_no, arg_name) in func_args:
-
+        for arg_no, arg_name in func_args:
             var = get_call_expr_arg(func_name, rhs.args, kws, arg_no, arg_name, "")
             # skip if argument not specified or literal already
             if var == "":
@@ -3496,13 +6610,7 @@ class TypingTransforms:
                     # loop unrolling can potentially make updated lists constants
                     if self.ran_transform:
                         raise BodoError(
-                            "{}(): argument '{}' requires a constant value but variable '{}' is updated inplace using '{}'\n{}\n".format(
-                                func_name,
-                                arg_name,
-                                var.name,
-                                self._updated_containers[var.name],
-                                rhs.loc.strformat(),
-                            )
+                            f"{func_name}(): argument '{arg_name}' requires a constant value but variable '{var.name}' is updated inplace using '{self._updated_containers[var.name]}'\n{rhs.loc.strformat()}\n"
                         )
                     else:
                         # save for potential loop unrolling
@@ -3562,7 +6670,7 @@ class TypingTransforms:
             )
         except BodoConstUpdatedError as e:
             # loop unrolling can potentially make updated lists constants
-            if self.ran_transform and err_msg:
+            if self.ran_transform and err_msg and self.tried_unrolling:
                 raise BodoError(f"{err_msg} but {e}\n{loc.strformat()}\n")
             else:
                 # save for potential loop unrolling
@@ -3585,6 +6693,8 @@ class TypingTransforms:
             and var_def.op in ("build_list", "build_set", "build_map")
             and not var_def.items
         ):
+            # TODO[BSE-4021]: Do we need to check self._updated_containers?
+            # We need to be clear about the "constant" guarantee here.
             return True
         return is_literal_type(self.typemap.get(varname, None))
 
@@ -4004,9 +7114,11 @@ class TypingTransforms:
         # phis need to be transformed into regular assignments since unrolling changes
         # control flow
         # typemap=None to avoid PreLowerStripPhis's generator manipulation
-        numba.core.typed_passes.PreLowerStripPhis().run_pass(
-            numba.core.compiler.StateDict({"func_ir": self.func_ir, "typemap": None})
+        state = numba.core.compiler.StateDict(
+            {"func_ir": self.func_ir, "typemap": None}
         )
+        strip_phis_pass = numba.core.typed_passes.PreLowerStripPhis()
+        create_nested_run_pass_event(strip_phis_pass.name(), state, strip_phis_pass)
 
         # get loop label info
         loop_body = {l: self.func_ir.blocks[l] for l in loop.body if l != loop.header}
@@ -4051,11 +7163,11 @@ class TypingTransforms:
         self.func_ir.blocks = ir_utils.simplify_CFG(self.func_ir.blocks)
 
         # call SSA reconstruction to rename variables and prepare for type inference
-        numba.core.untyped_passes.ReconstructSSA().run_pass(
-            numba.core.compiler.StateDict(
-                {"func_ir": self.func_ir, "locals": self.locals}
-            )
+        state = numba.core.compiler.StateDict(
+            {"func_ir": self.func_ir, "locals": self.locals}
         )
+        ssa_pass = numba.core.untyped_passes.ReconstructSSA()
+        create_nested_run_pass_event(ssa_pass.name(), state, ssa_pass)
         self.changed = True
 
     def _get_enclosing_loop(self, var, label, cfg):
@@ -4189,17 +7301,168 @@ class TypingTransforms:
             )
         )
 
-    def _is_and_filter_pushdown(self, index_def):
+    def _is_call_op_filter_pushdown(
+        self, index_def: ir.Expr, func_ir: ir.FunctionIR
+    ) -> bool:
+        """Performs an equality check on the index_def expr with the possible
+        call expressions that represent filters.
+
+        Args:
+            index_def (ir.Expr): The expression that may be a valid call filter.
+            func_ir (ir.FunctionIR): Function IR used for finding the call expression.
+
+        Returns:
+            bool: Is this expression a valid logical operator?
+        """
+        if is_expr(index_def, "call"):
+            call_list = find_callname(func_ir, index_def, self.typemap)
+            if len(call_list) == 2 and (
+                isinstance(call_list[1], ir.Var)
+                # checking call_list[1] == "pandas" to handle pd.isna/pd.notna cases generated
+                # by BodoSQL
+                or call_list[1] == "pandas"
+                or call_list[1] == "bodosql.kernels"
+            ):
+                return call_list[0] in (
+                    "notna",
+                    "isna",
+                    "notnull",
+                    "isnull",
+                    "isin",
+                    "startswith",
+                    "endswith",
+                ) or call_list in (
+                    ("is_in", "bodosql.kernels"),
+                    ("like_kernel", "bodosql.kernels"),
+                    ("regexp_like", "bodosql.kernels"),
+                )
+        return False
+
+    def _is_logical_not_filter_pushdown(
+        self, index_def: ir.Expr, func_ir: ir.FunctionIR
+    ) -> bool:
+        """Performs an equality check on the index_def expr with the
+        NOT operators, operator.invert (Pandas uses ~) and the
+        boolnot bodosql_array_kernel.
+
+        Args:
+            index_def (ir.Expr): The expression that may be a valid not expression.
+            func_ir (ir.FunctionIR): Function IR used for finding the call expression.
+
+        Returns:
+            bool: Is this expression a valid not operator?
+        """
+        if is_expr(index_def, "unary"):
+            return index_def.fn == operator.invert
+        elif is_call(index_def):
+            call_name = guard(find_callname, func_ir, index_def, self.typemap)
+            return call_name == ("boolnot", "bodosql.kernels")
+        return False
+
+    def _is_logical_op_filter_pushdown(
+        self, index_def: ir.Expr, func_ir: ir.FunctionIR
+    ) -> bool:
+        """Performs an equality check on the index_def expr with the possible
+        logical operators (AND, OR, or a comparison operator). This also supports
+        the equivalent BodoSQL array kernels to ensure that
+        we can support filter pushdown for both the Pythonic version of these
+        comparison operators and their SQL array kernels.
+
+        Args:
+            index_def (ir.Expr): The expression that may be a valid logical operation
+            func_ir (ir.FunctionIR): Function IR used for finding the call expression.
+
+        Returns:
+            bool: Is this expression a valid logical operator?
+        """
+        return (
+            self._is_cmp_op_filter_pushdown(index_def, func_ir)
+            or self._is_and_filter_pushdown(index_def, func_ir)
+            or self._is_or_filter_pushdown(index_def, func_ir)
+        )
+
+    def _is_cmp_op_filter_pushdown(
+        self, index_def: ir.Expr, func_ir: ir.FunctionIR
+    ) -> bool:
+        """
+        Performs an equality check on the index_def expr with the valid
+        comparison operators (e.g. !=) or their equivalent BodoSQL array kernels
+        (e.g. bodosql.kernels.not_equal). This is to ensure that
+        we can support filter pushdown for both the Pythonic version of these
+        comparison operators and their SQL array kernels.
+
+        Args:
+            index_def (ir.Expr): The expression that may be a valid comparison operation.
+            func_ir (ir.FunctionIR): Function IR used for finding the call expression.
+
+        Returns:
+            bool: Is this expression a valid comparison operation?
+        """
+        if is_expr(index_def, "binop"):
+            return index_def.fn in (
+                operator.eq,
+                operator.ne,
+                operator.lt,
+                operator.gt,
+                operator.le,
+                operator.ge,
+            )
+        elif is_call(index_def):
+            call_name = guard(find_callname, func_ir, index_def, self.typemap)
+            if len(call_name) == 2 and call_name[1] == "bodosql.kernels":
+                return call_name[0] in (
+                    "equal",
+                    "not_equal",
+                    "less_than",
+                    "greater_than",
+                    "less_than_or_equal",
+                    "greater_than_or_equal",
+                )
+        return False
+
+    def _is_and_filter_pushdown(
+        self, index_def: ir.Expr, func_ir: ir.FunctionIR
+    ) -> bool:
         """
         Performs an equality check on the index_def expr with & / AND,
         depending on whether the operator is a binop or a function call respectively.
         This is to ensure that we can support filter pushdown for AND as well instead of just &.
+
+        Args:
+            index_def (ir.Expr): The expression that may be a valid AND operation.
+            func_ir (ir.FunctionIR): Function IR used for finding the call expression.
+
+        Returns:
+            bool: Is this expression a valid AND operation?
         """
         if is_expr(index_def, "binop"):
             return index_def.fn == operator.and_
         elif is_call(index_def):
-            call_name = guard(find_callname, self.func_ir, index_def, self.typemap)
-            return call_name == ("booland", "bodo.libs.bodosql_array_kernels")
+            call_name = guard(find_callname, func_ir, index_def, self.typemap)
+            return call_name == ("booland", "bodosql.kernels")
+        else:
+            return False
+
+    def _is_or_filter_pushdown(
+        self, index_def: ir.Expr, func_ir: ir.FunctionIR
+    ) -> bool:
+        """
+        Performs an equality check on the index_def expr with | / OR,
+        depending on whether the operator is a binop or a function call respectively.
+        This is to ensure that we can support filter pushdown for OR as well instead of just |.
+
+        Args:
+            index_def (ir.Expr): The expression that may be a valid OR operation.
+            func_ir (ir.FunctionIR): Function IR used for finding the call expression.
+
+        Returns:
+            bool: Is this expression a valid OR operation?
+        """
+        if is_expr(index_def, "binop"):
+            return index_def.fn == operator.or_
+        elif is_call(index_def):
+            call_name = guard(find_callname, func_ir, index_def, self.typemap)
+            return call_name == ("boolor", "bodosql.kernels")
         else:
             return False
 
@@ -4237,41 +7500,73 @@ class TypingTransforms:
         Does an expression match a supported isin call that can be
         used in filter pushdown.
 
-        Note: we only allow isin with lists/sets. We don't support Series/Array
+        Note: we only allow series isin with lists/sets. We don't support Series/Array
         because we don't want to worry about distributed data and tuples aren't
         supported in the isin API.
         """
-        if not (is_call(index_def) and index_call_name[0] == "isin"):
+
+        if not is_call(index_def):
+            # Immediately return false if we don't have a call
             return False
+        elif index_call_name[0] == "isin":
+            method_obj_type = self.typemap.get(index_call_name[1].name, None)
 
-        method_obj_type = self.typemap.get(index_call_name[1].name, None)
+            # rerun type inference if we don't have the method's object type yet
+            # read_sql_table (and other I/O calls in the future) is handled in typing pass
+            # so the Series type may not be available yet
+            if method_obj_type in (None, types.unknown, types.undefined):
+                self.needs_transform = True
+                return False
 
-        # rerun type inference if we don't have the method's object type yet
-        # read_sql_table (and other I/O calls in the future) is handled in typing pass
-        # so the Series type may not be available yet
-        if method_obj_type in (None, types.unknown, types.undefined):
-            self.needs_transform = True
-            return False
+            if not isinstance(method_obj_type, SeriesType):
+                return False
 
-        if not isinstance(method_obj_type, SeriesType):
-            return False
-
-        list_set_typ = self.typemap.get(index_def.args[0].name, None)
-        # We don't support casting pd_timestamp_type/datetime64 values in arrow, so we avoid
-        # filter pushdown in that situation.
-        return (
-            isinstance(list_set_typ, (types.List, types.Set))
-            and list_set_typ.dtype != bodo.datetime64ns
-            and not isinstance(
-                list_set_typ.dtype, bodo.hiframes.pd_timestamp_ext.PandasTimestampType
+            list_set_typ = self.typemap.get(index_def.args[0].name, None)
+            # We don't support casting pd_timestamp_type/datetime64 values in arrow, so we avoid
+            # filter pushdown in that situation.
+            return (
+                isinstance(list_set_typ, (types.List, types.Set))
+                and list_set_typ.dtype != bodo.datetime64ns
+                and not isinstance(
+                    list_set_typ.dtype,
+                    bodo.hiframes.pd_timestamp_ext.PandasTimestampType,
+                )
             )
-        )
+        elif index_call_name == ("is_in", "bodosql.kernels"):
+            # In the case that we're hadling the bodsql is_in array kernel, we expect arg1 to be
+            # an array. We need to rerun type inference if we don't have the type yet
+            arg1_arr_type = self.typemap.get(index_def.args[1].name, None)
+            if arg1_arr_type in (None, types.unknown, types.undefined):
+                self.needs_transform = True
+                return False
+
+            # We require that arg1 is a replicated array to perform filter pushdown.
+            # In the bodoSQL codegen, this value should be lowered
+            # as a global, and all globals are required to be replicated.
+            is_arg1_global = isinstance(
+                guard(get_definition, self.func_ir, index_def.args[1].name),
+                numba.core.ir.Global,
+            )
+
+            # TODO: verify if we have the same issue with datetime64ns/timestamps that the
+            # series isin implementation does.
+            return (
+                is_arg1_global
+                and arg1_arr_type.dtype != bodo.datetime64ns
+                and not isinstance(
+                    arg1_arr_type.dtype,
+                    bodo.hiframes.pd_timestamp_ext.PandasTimestampType,
+                )
+            )
+
+        else:
+            # In all other cases, return False
+            return False
 
     def _starts_ends_with_filter_pushdown_func(self, index_def, index_call_name):
         """
         Does an expression match a supported startswith/endswith call that can be
-        used in filter pushdown. Currently these optimizations are only supported
-        when loaded from Snowflake.
+        used in filter pushdown.
         """
         if not (
             is_call(index_def) and index_call_name[0] in ("startswith", "endswith")
@@ -4292,11 +7587,55 @@ class TypingTransforms:
 
         return True
 
+    def _is_like_filter_pushdown_func(self, index_def: ir.Stmt, index_call_name):
+        """Does an expression match a like call that may be possible to support
+        in filter pushdown?
+
+        Args:
+            index_def (ir.Stmt): The index expression to check.
+            index_call_name (Tuple[str, str | ir.Var]): A 2-tuple identifying the function call.
+        """
+        if not (
+            is_call(index_def) and index_call_name == ("like_kernel", "bodosql.kernels")
+        ):
+            return False
+
+        # Filter pushdown is currently only possible if both the pattern and escape are constants
+        # and we are doing case sensitive matching.
+        args = index_def.args
+        # Pattern and escape are args 1 and 2
+        for arg_no in (1, 2):
+            const_arg = args[arg_no].name
+            arg_type = self.typemap.get(const_arg, None)
+            if arg_type in (None, types.unknown, types.undefined):
+                self.needs_transform = True
+                return False
+
+            if types.unliteral(arg_type) not in (types.unicode_type, types.none):
+                # We don't support filter pushdown with optional types
+                # or arrays.
+                return False
+
+        # case insensitive is argument 3
+        case_insensitive = args[3].name
+        case_insensitive_type = self.typemap.get(case_insensitive, None)
+        if case_insensitive_type in (None, types.unknown, types.undefined):
+            self.needs_transform = True
+            return False
+
+        # We may need to recompile to get the constant version to avoid errors.
+        if not is_overload_constant_bool(case_insensitive_type):
+            return False
+
+        # We can do filter pushdown for both values of case_insensitive.
+        return True
+
 
 def _create_const_var(val, name, scope, loc, nodes):
     """create a new variable that holds constant value 'val'. Generates constant
     creation IR nodes and adds them to 'nodes'.
     """
+
     # convert pd.Index values (usually coming from "df.columns") to list to enable
     # passing values as constant (list and pd.Index are equivalent for Pandas API calls
     # that take column names).
@@ -4440,6 +7779,26 @@ def _find_updated_containers(blocks, topo_order):
     return updated_containers, equiv_vars
 
 
+def get_unary_arg(child_def: ir.Expr) -> ir.Var:
+    """The child accessors of an expr differ depending on whether
+    the expr is a unary or a function call.
+
+    Therefore this is a wrapper method to support both types of expr
+    with a single interface.
+
+    Args:
+        child_def (ir.Expr): The expression that maps to a unary function.
+            It is either op = "call" or op = "unary"
+
+    Returns:
+        ir.Var: The IR variable for the argument.
+    """
+    if is_expr(child_def, "unary"):
+        return child_def.value
+    require(is_expr(child_def, "call") and len(child_def.args) == 1)
+    return child_def.args[0]
+
+
 def get_binop_arg(child_def, arg_no):
     """
     The child accessors of an expr differ depending on whether
@@ -4457,7 +7816,86 @@ def get_binop_arg(child_def, arg_no):
         else:
             return child_def.rhs
 
+    require(is_expr(child_def, "call") and len(child_def.args) == 2)
     return child_def.args[arg_no]
+
+
+def get_cmp_operator(
+    index_def: ir.Expr,
+    scalar_type: types.Type,
+    is_sql_op: bool,
+    reverse_op: bool,
+    func_ir: ir.FunctionIR,
+) -> str:
+    """Derive the operator string used for filter pushdown with binary
+    comparison operators. These operators can either be a binop or a call to
+    a BodoSQL array kernel.
+
+    Args:
+        index_def (ir.Expr): The expression in the IR responsible for the comparison.
+            This is either a binop or a call expression.
+        scalar_type (types.Type): The type of the scalar type. This is used for validation
+            and a special None case with call expressions.
+        is_sql_op (bool): Should the operator be output using standard SQL syntax or pyarrow
+            sytnax.
+        reverse_op (bool): Is the column arg1 and not arg0. This is important for "reversing" certain
+            operators as opposed to the function. For example (scalar < column) should output
+            ">" despite the binop being operator.lt.
+        func_ir (ir.FunctionIR): The function IR object. This is used to get the callname.
+
+    Returns:
+        str: The filter pushdown operator string.
+
+    Raise GuardException: The function is not formatted in way that can handle filter pushdown.
+    """
+    # Map the BodoSQL array kernels to equivalent operators.
+    fn_name_map = {
+        "equal": operator.eq,
+        "not_equal": operator.ne,
+        "less_than": operator.lt,
+        "greater_than": operator.gt,
+        "less_than_or_equal": operator.le,
+        "greater_than_or_equal": operator.ge,
+    }
+    # Map the operator to its filter pushdown operator string.
+    if reverse_op:
+        # Operator mapping used to support situations
+        # where the column is on the RHS. Since Pyarrow
+        # format is ("col", op, scalar), we must invert certain
+        # operators.
+        op_map = {
+            operator.eq: "=" if is_sql_op else "==",
+            operator.ne: "<>" if is_sql_op else "!=",
+            operator.lt: ">",
+            operator.le: ">=",
+            operator.gt: "<",
+            operator.ge: "<=",
+        }
+    else:
+        op_map = {
+            operator.eq: "=" if is_sql_op else "==",
+            operator.ne: "<>" if is_sql_op else "!=",
+            operator.lt: "<",
+            operator.le: "<=",
+            operator.gt: ">",
+            operator.ge: ">=",
+        }
+    # The other argument must be a scalar, not an array
+    require(not bodo.utils.utils.is_array_typ(scalar_type, True))
+    if is_call(index_def):
+        # We can't do filter pushdown with optional types yet.
+        require(scalar_type != types.optional)
+        if scalar_type == types.none:
+            # SQL comparison functions always return NULL if an input is NULL.
+            return "ALWAYS_NULL"
+        callname = guard(find_callname, func_ir, index_def)
+        require(callname is not None)
+        op = fn_name_map[callname[0]]
+    else:
+        # Python operators shouldn't compare with None or optional values.
+        require(scalar_type not in (types.optional, types.none))
+        op = index_def.fn
+    return op_map[op]
 
 
 def guard_const(func, *args, **kwargs):
@@ -4485,7 +7923,7 @@ def _set_updated_container(varname, update_func, updated_containers, equiv_vars)
         updated_containers[w] = update_func
 
 
-def _replace_load_deref_code(code, freevar_arg_map, prev_argcount):
+def _replace_load_deref_code(code, freevar_arg_map, prev_argcount, prev_n_locals):
     """replace load of free variables in byte code with load of new arguments and
     adjust local variable indices due to new arguments in co_varnames.
     # https://docs.python.org/3/library/dis.html#opcode-LOAD_FAST
@@ -4502,12 +7940,12 @@ def _replace_load_deref_code(code, freevar_arg_map, prev_argcount):
         CODE_LEN == 1 and ARG_LEN == 1 and NO_ARG_LEN == 1
     ), "invalid bytecode version"
     # cannot handle cases that write to free variables
-    banned_ops = (dis.opname.index("STORE_DEREF"), dis.opname.index("LOAD_CLOSURE"))
+    banned_ops = (dis.opmap["STORE_DEREF"], dis.opmap["LOAD_CLOSURE"])
     # local variable access to be adjusted
     local_varname_ops = (
-        dis.opname.index("LOAD_FAST"),
-        dis.opname.index("STORE_FAST"),
-        dis.opname.index("DELETE_FAST"),
+        dis.opmap["LOAD_FAST"],
+        dis.opmap["STORE_FAST"],
+        dis.opmap["DELETE_FAST"],
     )
     n_new_args = len(freevar_arg_map)
 
@@ -4523,9 +7961,16 @@ def _replace_load_deref_code(code, freevar_arg_map, prev_argcount):
         if op in local_varname_ops and arg >= prev_argcount:
             arg += n_new_args
 
+        # Python 3.11 copies free vars into local variables in the beginning of the
+        # function. We need to update LOAD_DEREF indices accordingly. See:
+        # https://docs.python.org/3.11/library/dis.html#opcode-COPY_FREE_VARS
+        # https://github.com/python/cpython/blob/cce6ba91b3a0111110d7e1db828bd6311d58a0a7/Python/ceval.c#L3206
+        if "COPY_FREE_VARS" in dis.opmap and op == dis.opmap["COPY_FREE_VARS"]:
+            freevar_arg_map = {k + prev_n_locals: v for k, v in freevar_arg_map.items()}
+
         # replace free variable load
-        if op == dis.opname.index("LOAD_DEREF") and arg in freevar_arg_map:
-            op = dis.opname.index("LOAD_FAST")
+        if op == dis.opmap["LOAD_DEREF"] and arg in freevar_arg_map:
+            op = dis.opmap["LOAD_FAST"]
             arg = freevar_arg_map[arg]
 
         new_code[i] = op
@@ -4533,3 +7978,13 @@ def _replace_load_deref_code(code, freevar_arg_map, prev_argcount):
         i += 2
 
     return bytes(new_code)
+
+
+def _get_state_defining_call(func_ir, state, fn):
+    """Find the expression defining `state` (e.g. join/table builder state)
+    and return it only if it is a call to `fn`."""
+    defn = get_definition(func_ir, state)
+    init = find_callname(func_ir, defn)
+    if init != fn:
+        raise GuardException("initialization is not the expected call")
+    return defn

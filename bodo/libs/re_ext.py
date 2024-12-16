@@ -1,5 +1,5 @@
-"""Support re module using object mode of Numba
-"""
+"""Support re module using object mode of Numba"""
+
 import operator
 import re
 
@@ -26,7 +26,8 @@ from numba.extending import (
     unbox,
 )
 
-from bodo.libs.str_ext import string_type
+import bodo
+from bodo.libs.str_ext import re_escape_len, re_escape_with_output, string_type
 from bodo.utils.typing import (
     BodoError,
     gen_objmode_func_overload,
@@ -41,7 +42,7 @@ class RePatternType(types.Opaque):
         # keep pattern string if it is a constant value
         # useful for findall() to handle multi-group case
         self.pat_const = pat_const
-        super(RePatternType, self).__init__(name=f"RePatternType({pat_const})")
+        super().__init__(name=f"RePatternType({pat_const})")
 
     @property
     def mangling_args(self):
@@ -83,12 +84,21 @@ def unbox_re_pattern(typ, obj, c):
     return NativeValue(obj)
 
 
+@lower_constant(RePatternType)
+def pattern_constant(context, builder, ty, pyval):
+    """
+    get LLVM constant by serializing the Python value.
+    """
+    pyapi = context.get_python_api(builder)
+    return pyapi.unserialize(pyapi.serialize_object(pyval))
+
+
 # data type for storing re.Match objects or None
 # handling None is required since functions like re.seach() return either Match object
 # or None (when there is no match)
 class ReMatchType(types.Type):
     def __init__(self):
-        super(ReMatchType, self).__init__(name="ReMatchType")
+        super().__init__(name="ReMatchType")
 
 
 re_match_type = ReMatchType()
@@ -204,7 +214,7 @@ def cast_match_obj_bool(context, builder, fromty, toty, val):
 
 
 @intrinsic
-def match_obj_is_none(typingctx, match_typ=None):
+def match_obj_is_none(typingctx, match_typ):
     assert match_typ == re_match_type
 
     def codegen(context, builder, sig, args):
@@ -238,7 +248,30 @@ gen_objmode_func_overload(re.match, "re_match_type")
 gen_objmode_func_overload(re.fullmatch, "re_match_type")
 gen_objmode_func_overload(re.split, "list_str_type")
 gen_objmode_func_overload(re.sub, "unicode_type")
-gen_objmode_func_overload(re.escape, "unicode_type")
+
+
+@overload(re.escape)
+def overload_re_escape(pattern):
+    """Implementation of re.escape that works by calling C++
+    kernels equivalent to the Cpython re.escape implementation.
+    All allocations are done via JIT/Numpy.
+
+    Args:
+        pattern (types.unicode_type): String that needs to be escaped.
+
+    Returns: The escaped pattern.
+    """
+
+    def impl(pattern):  # pragma: no cover
+        new_length = re_escape_len(pattern)
+        # Allocate the output string.
+        out_str = numba.cpython.unicode._empty_string(
+            pattern._kind, new_length, pattern._is_ascii
+        )
+        re_escape_with_output(pattern, out_str)
+        return out_str
+
+    return impl
 
 
 @overload(re.findall, no_unliteral=True)
@@ -255,7 +288,7 @@ def overload_re_findall(pattern, string, flags=0):
 @overload(re.subn, no_unliteral=True)
 def overload_re_subn(pattern, repl, string, count=0, flags=0):
     def _re_subn_impl(pattern, repl, string, count=0, flags=0):  # pragma: no cover
-        with numba.objmode(m="unicode_type", s="int64"):
+        with bodo.objmode(m="unicode_type", s="int64"):
             m, s = re.subn(pattern, repl, string, count, flags)
         return m, s
 
@@ -265,15 +298,15 @@ def overload_re_subn(pattern, repl, string, count=0, flags=0):
 @overload(re.purge, no_unliteral=True)
 def overload_re_purge():
     def _re_purge_impl():  # pragma: no cover
-        with numba.objmode():
+        with bodo.objmode():
             re.purge()
         return
 
     return _re_purge_impl
 
 
-@intrinsic
-def init_const_pattern(typingctx, pat, pat_const=None):
+@intrinsic(prefer_literal=True)
+def init_const_pattern(typingctx, pat, pat_const):
     """dummy intrinsic to add constant pattern string to Pattern data type"""
     pat_const_str = get_overload_const_str(pat_const)
 
@@ -290,14 +323,14 @@ def re_compile_overload(pattern, flags=0):
         pat_const = get_overload_const_str(pattern)
 
         def _re_compile_const_impl(pattern, flags=0):  # pragma: no cover
-            with numba.objmode(pat="re_pattern_type"):
+            with bodo.objmode(pat="re_pattern_type"):
                 pat = re.compile(pattern, flags)
             return init_const_pattern(pat, pat_const)
 
         return _re_compile_const_impl
 
     def _re_compile_impl(pattern, flags=0):  # pragma: no cover
-        with numba.objmode(pat="re_pattern_type"):
+        with bodo.objmode(pat="re_pattern_type"):
             pat = re.compile(pattern, flags)
         return pat
 
@@ -326,7 +359,7 @@ def overload_pat_findall(p, string, pos=0, endpos=9223372036854775807):
         def _pat_findall_const_impl(
             p, string, pos=0, endpos=9223372036854775807
         ):  # pragma: no cover
-            with numba.objmode(m=typ):
+            with bodo.objmode(m=typ):
                 m = p.findall(string, pos, endpos)
             return m
 
@@ -339,17 +372,33 @@ def overload_pat_findall(p, string, pos=0, endpos=9223372036854775807):
             raise BodoError(
                 "pattern string should be constant for 'findall' with multiple groups"
             )
-        with numba.objmode(m="list_str_type"):
+        with bodo.objmode(m="list_str_type"):
             m = p.findall(string, pos, endpos)
         return m
 
     return _pat_findall_impl
 
 
+def re_count(p, string):  # pragma: no cover
+    pass
+
+
+@overload(re_count)
+def overload_regexp_count(p, string):
+    """Count the number of regex matches, used in BodoSQL regexp_count() kernel"""
+
+    def impl(p, string):  # pragma: no cover
+        with bodo.objmode(m="int64"):
+            m = len(p.findall(string))
+        return m
+
+    return impl
+
+
 @overload_method(RePatternType, "subn", no_unliteral=True)
 def re_subn_overload(p, repl, string, count=0):
     def _re_subn_impl(p, repl, string, count=0):  # pragma: no cover
-        with numba.objmode(out="unicode_type", s="int64"):
+        with bodo.objmode(out="unicode_type", s="int64"):
             out, s = p.subn(repl, string, count)
         return out, s
 
@@ -359,7 +408,7 @@ def re_subn_overload(p, repl, string, count=0):
 @overload_attribute(RePatternType, "flags")
 def overload_pattern_flags(p):
     def _pat_flags_impl(p):  # pragma: no cover
-        with numba.objmode(flags="int64"):
+        with bodo.objmode(flags="int64"):
             flags = p.flags
         return flags
 
@@ -369,7 +418,7 @@ def overload_pattern_flags(p):
 @overload_attribute(RePatternType, "groups")
 def overload_pattern_groups(p):
     def _pat_groups_impl(p):  # pragma: no cover
-        with numba.objmode(groups="int64"):
+        with bodo.objmode(groups="int64"):
             groups = p.groups
         return groups
 
@@ -384,7 +433,7 @@ def overload_pattern_groupindex(p):
     types.dict_string_int = types.DictType(string_type, types.int64)
 
     def _pat_groupindex_impl(p):  # pragma: no cover
-        with numba.objmode(d="dict_string_int"):
+        with bodo.objmode(d="dict_string_int"):
             groupindex = dict(p.groupindex)
             d = numba.typed.Dict.empty(
                 key_type=numba.core.types.unicode_type, value_type=numba.int64
@@ -398,7 +447,7 @@ def overload_pattern_groupindex(p):
 @overload_attribute(RePatternType, "pattern")
 def overload_pattern_pattern(p):
     def _pat_pattern_impl(p):  # pragma: no cover
-        with numba.objmode(pattern="unicode_type"):
+        with bodo.objmode(pattern="unicode_type"):
             pattern = p.pattern
         return pattern
 
@@ -413,7 +462,7 @@ def overload_match_group(m, *args):
     # NOTE: using *args in implementation throws an error in Numba lowering
     # TODO: use simpler implementation when Numba is fixed
     # def _match_group_impl(m, *args):
-    #     with numba.objmode(out="unicode_type"):
+    #     with bodo.objmode(out="unicode_type"):
     #         out = m.group(*args)
     #     return out
 
@@ -428,7 +477,7 @@ def overload_match_group(m, *args):
     if len(args) == 0:
 
         def _match_group_impl_zero(m, *args):  # pragma: no cover
-            with numba.objmode(out="unicode_type"):
+            with bodo.objmode(out="unicode_type"):
                 out = m.group()
             return out
 
@@ -444,7 +493,7 @@ def overload_match_group(m, *args):
 
         def _match_group_impl_one(m, *args):  # pragma: no cover
             group1 = args[0]
-            with numba.objmode(out=optional_str):
+            with bodo.objmode(out=optional_str):
                 out = m.group(group1)
             return out
 
@@ -452,13 +501,13 @@ def overload_match_group(m, *args):
 
     # multi-argument case returns a tuple of strings
     # TODO: avoid setting attributes to "types" when object mode can handle actual types
-    type_name = "tuple_str_{}".format(len(args))
+    type_name = f"tuple_str_{len(args)}"
     setattr(types, type_name, types.Tuple([optional_str] * len(args)))
-    arg_names = ", ".join("group{}".format(i + 1) for i in range(len(args)))
+    arg_names = ", ".join(f"group{i + 1}" for i in range(len(args)))
     func_text = "def _match_group_impl(m, *args):\n"
-    func_text += "  ({}) = args\n".format(arg_names)
-    func_text += "  with numba.objmode(out='{}'):\n".format(type_name)
-    func_text += "    out = m.group({})\n".format(arg_names)
+    func_text += f"  ({arg_names}) = args\n"
+    func_text += f"  with bodo.objmode(out='{type_name}'):\n"
+    func_text += f"    out = m.group({arg_names})\n"
     func_text += "  return out\n"
 
     loc_vars = {}
@@ -483,7 +532,7 @@ def overload_match_groups(m, default=None):
     # NOTE: Python returns tuple of strings, but we don't know the length in advance
     # which makes it not compilable. We return a list which is similar to tuple
     def _match_groups_impl(m, default=None):  # pragma: no cover
-        with numba.objmode(out=out_type):
+        with bodo.objmode(out=out_type):
             out = list(m.groups(default))
         return out
 
@@ -507,7 +556,7 @@ def overload_match_groupdict(m, default=None):
             )
 
     def _match_groupdict_impl(m, default=None):  # pragma: no cover
-        with numba.objmode(d="dict_string_string"):
+        with bodo.objmode(d="dict_string_string"):
             out = m.groupdict(default)
             _check_dict_none(out)
             d = numba.typed.Dict.empty(
@@ -526,12 +575,11 @@ gen_objmode_method_overload(ReMatchType, "end", re.Match.end, "int64")
 
 @overload_method(ReMatchType, "span", no_unliteral=True)
 def overload_match_span(m, group=0):
-
     # span() returns a tuple of int
     types.tuple_int64_2 = types.Tuple([types.int64, types.int64])
 
     def _match_span_impl(m, group=0):  # pragma: no cover
-        with numba.objmode(out="tuple_int64_2"):
+        with bodo.objmode(out="tuple_int64_2"):
             out = m.span(group)
         return out
 
@@ -541,7 +589,7 @@ def overload_match_span(m, group=0):
 @overload_attribute(ReMatchType, "pos")
 def overload_match_pos(p):
     def _match_pos_impl(p):  # pragma: no cover
-        with numba.objmode(pos="int64"):
+        with bodo.objmode(pos="int64"):
             pos = p.pos
         return pos
 
@@ -551,7 +599,7 @@ def overload_match_pos(p):
 @overload_attribute(ReMatchType, "endpos")
 def overload_match_endpos(p):
     def _match_endpos_impl(p):  # pragma: no cover
-        with numba.objmode(endpos="int64"):
+        with bodo.objmode(endpos="int64"):
             endpos = p.endpos
         return endpos
 
@@ -564,7 +612,7 @@ def overload_match_lastindex(p):
     typ = types.Optional(types.int64)
 
     def _match_lastindex_impl(p):  # pragma: no cover
-        with numba.objmode(lastindex=typ):
+        with bodo.objmode(lastindex=typ):
             lastindex = p.lastindex
         return lastindex
 
@@ -578,7 +626,7 @@ def overload_match_lastgroup(p):
     optional_str = types.optional(string_type)
 
     def _match_lastgroup_impl(p):  # pragma: no cover
-        with numba.objmode(lastgroup=optional_str):
+        with bodo.objmode(lastgroup=optional_str):
             lastgroup = p.lastgroup
         return lastgroup
 
@@ -588,7 +636,7 @@ def overload_match_lastgroup(p):
 @overload_attribute(ReMatchType, "re")
 def overload_match_re(m):
     def _match_re_impl(m):  # pragma: no cover
-        with numba.objmode(m_re="re_pattern_type"):
+        with bodo.objmode(m_re="re_pattern_type"):
             m_re = m.re
         return m_re
 
@@ -598,7 +646,7 @@ def overload_match_re(m):
 @overload_attribute(ReMatchType, "string")
 def overload_match_string(m):
     def _match_string_impl(m):  # pragma: no cover
-        with numba.objmode(out="unicode_type"):
+        with bodo.objmode(out="unicode_type"):
             out = m.string
         return out
 

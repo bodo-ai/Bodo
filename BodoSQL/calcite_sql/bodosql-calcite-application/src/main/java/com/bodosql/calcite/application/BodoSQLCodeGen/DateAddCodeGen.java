@@ -1,55 +1,51 @@
 package com.bodosql.calcite.application.BodoSQLCodeGen;
 
-import static com.bodosql.calcite.application.BodoSQLCodeGen.CastCodeGen.generateCastCode;
-
-import org.apache.calcite.sql.type.SqlTypeName;
+import com.bodosql.calcite.ir.Expr;
+import com.bodosql.calcite.ir.ExprKt;
+import java.util.List;
 
 /**
  * Class that returns the generated code for a DateAdd expression after all inputs have been
  * visited.
  */
 public class DateAddCodeGen {
-  /**
-   * Function that return the necessary generated code for a DateAdd Function Call.
-   *
-   * @param arg0 The first arg expr.
-   * @param arg1 The second arg expr.
-   * @param generateScalarCode Should scalar code be generated
-   * @param strNeedsCast Is arg0 a string that needs casting.
-   * @return The code generated that matches the DateAdd expression.
-   */
-  public static String generateDateAddCode(
-      String arg0, String arg1, boolean generateScalarCode, boolean strNeedsCast) {
-    // Note: Null handling is supported by Bodo/Pandas behavior
-    // TODO: Only in the case that timestamp NULLS == NaN
-    StringBuilder addBuilder = new StringBuilder();
-    if (strNeedsCast) {
-      arg0 = generateCastCode(arg0, SqlTypeName.TIMESTAMP, generateScalarCode);
-    }
-    if (generateScalarCode) {
-      addBuilder
-          .append("bodosql.libs.generated_lib.sql_null_checking_addition(")
-          .append(arg0)
-          .append(", ")
-          .append(arg1)
-          .append(")");
-    } else {
-      addBuilder.append("(pd.Series(").append(arg0).append(") + ").append(arg1).append(").values");
-    }
 
-    return addBuilder.toString();
+  /**
+   * Function that return the necessary generated code for a Snowflake DATEADD function call, which
+   * adds an integer amount to a datetime of a certain unit.
+   *
+   * @param operands the list of arguments (UNIT, AMOUNT, START_DATETIME)
+   * @return The code generated that matches the DATEADD expression.
+   */
+  public static Expr generateSnowflakeDateAddCode(List<Expr> operands, String unit) {
+    // input check for time unit is moved to standardizeTimeUnit() function,
+    // which is called in BodoCodeGenVisitor.java
+    return ExprKt.bodoSQLKernel("add_interval_" + unit + "s", operands, List.of());
   }
 
   /**
-   * Function that returns the generated name for a DateAdd Function Call.
+   * Function that return the necessary generated code for a MySQL DATEADD function call, which
+   * differs from Snowflake DATEADD as follows:
    *
-   * @param arg0Name The first arg's name.
-   * @param arg1Name The second arg's name.
-   * @return The name generated that matches the DateAdd expression.
+   * <p>Both of the following add 42 days to column A: MySQL: DATEADD(A, 42) Snowflake:
+   * DATEADD('day', 42, A)
+   *
+   * @param arg0 The first starting datetime (or string).
+   * @param arg1 The amount of days to add to the starting datetime.
+   * @param adding_delta Is the second argument a timedelta?
+   * @param fnName The name of the function
+   * @return The code generated that matches the DateAdd expression.
    */
-  public static String generateDateAddName(String arg0Name, String arg1Name) {
-    StringBuilder nameBuilder = new StringBuilder();
-    nameBuilder.append("DATE_ADD(").append(arg0Name).append(", ").append(arg1Name).append(")");
-    return nameBuilder.toString();
+  public static Expr generateMySQLDateAddCode(
+      Expr arg0, Expr arg1, boolean adding_delta, String fnName) {
+    if (fnName.equals("SUBDATE") || fnName.equals("DATE_SUB")) {
+      arg1 = ExprKt.bodoSQLKernel("negate", List.of(arg1), List.of());
+    }
+
+    if (adding_delta) {
+      return ExprKt.bodoSQLKernel("add_interval", List.of(arg0, arg1), List.of());
+    } else {
+      return ExprKt.bodoSQLKernel("add_interval_days", List.of(arg1, arg0), List.of());
+    }
   }
 }

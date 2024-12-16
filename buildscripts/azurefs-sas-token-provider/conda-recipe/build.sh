@@ -2,4 +2,8 @@
 set -exo pipefail
 # Copied from BodoSQL
 
-python setup.py build install --single-version-externally-managed --record=record.txt
+python -m pip wheel \
+    --wheel-dir=/tmp/wheelhouse \
+    --no-deps --no-build-isolation -vv .
+
+python -m pip install --no-index --find-links=/tmp/wheelhouse bodo-azurefs-sas-token-provider

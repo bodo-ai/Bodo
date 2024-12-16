@@ -1,7 +1,5 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
-"""
-Implement pd.Series typing and data model handling.
-"""
+"""Implement pd.Series typing and data model handling."""
+
 import operator
 
 import llvmlite.binding as ll
@@ -19,7 +17,6 @@ from numba.extending import (
     lower_cast,
     models,
     overload,
-    overload_attribute,
     overload_method,
     register_model,
 )
@@ -28,8 +25,9 @@ from numba.parfors.array_analysis import ArrayAnalysis
 import bodo
 from bodo.hiframes.datetime_date_ext import datetime_date_type
 from bodo.hiframes.datetime_timedelta_ext import pd_timedelta_type
-from bodo.hiframes.pd_timestamp_ext import pd_timestamp_type
+from bodo.hiframes.pd_timestamp_ext import pd_timestamp_tz_naive_type
 from bodo.io import csv_cpp
+from bodo.libs.float_arr_ext import FloatDtype
 from bodo.libs.int_arr_ext import IntDtype
 from bodo.libs.pd_datetime_arr_ext import PandasDatetimeTZDtype
 from bodo.libs.str_ext import string_type, unicode_to_utf8
@@ -38,7 +36,6 @@ from bodo.utils.transform import get_const_func_output_type
 from bodo.utils.typing import (
     BodoError,
     check_unsupported_args,
-    create_unsupported_overload,
     dtype_to_array_type,
     get_overload_const_str,
     get_overload_const_tuple,
@@ -76,6 +73,8 @@ class SeriesType(types.IterableType, types.ArrayCompatible):
         data = dtype_to_array_type(dtype) if data is None else data
         # store regular dtype instead of IntDtype to avoid errors
         dtype = dtype.dtype if isinstance(dtype, IntDtype) else dtype
+        # store regular dtype instead of FloatDtype to avoid errors
+        dtype = dtype.dtype if isinstance(dtype, FloatDtype) else dtype
         self.dtype = dtype
         self.data = data
         name_typ = types.none if name_typ is None else name_typ
@@ -85,9 +84,7 @@ class SeriesType(types.IterableType, types.ArrayCompatible):
         # see comment on 'dist' in DataFrameType
         dist = Distribution.OneD_Var if dist is None else dist
         self.dist = dist
-        super(SeriesType, self).__init__(
-            name=f"series({dtype}, {data}, {index}, {name_typ}, {dist})"
-        )
+        super().__init__(name=f"series({dtype}, {data}, {index}, {name_typ}, {dist})")
 
     @property
     def as_array(self):
@@ -130,13 +127,15 @@ class SeriesType(types.IterableType, types.ArrayCompatible):
             if other.dtype == self.dtype or not other.dtype.is_precise():
                 return SeriesType(
                     self.dtype,
-                    self.data.unify(typingctx, other.data),
+                    self.data
+                    if self.data == other.data
+                    else self.data.unify(typingctx, other.data),
                     new_index,
                     dist=dist,
                 )
 
         # XXX: unify Series/Array as Array
-        return super(SeriesType, self).unify(typingctx, other)
+        return super().unify(typingctx, other)
 
     def can_convert_to(self, typingctx, other):
         from numba.core.typeconv import Conversion
@@ -200,9 +199,7 @@ class HeterogeneousSeriesType(types.Type):
         self.index = index  # index should be an Index type (not Array)
         self.name_typ = name_typ
         self.dist = Distribution.REP  # cannot be distributed
-        super(HeterogeneousSeriesType, self).__init__(
-            name=f"heter_series({data}, {index}, {name_typ})"
-        )
+        super().__init__(name=f"heter_series({data}, {index}, {name_typ})")
 
     def copy(self, index=None, dist=None):
         # 'dist' argument is necessary since distributed analysis calls copy() for
@@ -258,7 +255,6 @@ class HeterSeriesAttribute(OverloadedKeyAttributeTemplate):
         if isinstance(S.index, HeterogeneousIndexType) and is_overload_constant_tuple(
             S.index.data
         ):
-
             indices = get_overload_const_tuple(S.index.data)
             if attr in indices:
                 arr_ind = indices.index(attr)
@@ -287,9 +283,7 @@ def is_datetime_date_series_typ(t):
 class SeriesPayloadType(types.Type):
     def __init__(self, series_type):
         self.series_type = series_type
-        super(SeriesPayloadType, self).__init__(
-            name=f"SeriesPayloadType({series_type})"
-        )
+        super().__init__(name=f"SeriesPayloadType({series_type})")
 
     @property
     def mangling_args(self):
@@ -310,7 +304,7 @@ class SeriesPayloadModel(models.StructModel):
             ("index", fe_type.series_type.index),
             ("name", fe_type.series_type.name_typ),
         ]
-        super(SeriesPayloadModel, self).__init__(dmm, fe_type, members)
+        super().__init__(dmm, fe_type, members)
 
 
 @register_model(HeterogeneousSeriesType)
@@ -325,7 +319,7 @@ class SeriesModel(models.StructModel):
             # for boxed Series, enables updating original Series object
             ("parent", types.pyobject),
         ]
-        super(SeriesModel, self).__init__(dmm, fe_type, members)
+        super().__init__(dmm, fe_type, members)
 
 
 def define_series_dtor(context, builder, series_type, payload_type):
@@ -336,9 +330,7 @@ def define_series_dtor(context, builder, series_type, payload_type):
     # Declare dtor
     fnty = lir.FunctionType(lir.VoidType(), [cgutils.voidptr_t])
     # TODO(ehsan): do we need to sanitize the name in any case?
-    fn = cgutils.get_or_insert_function(
-        mod, fnty, name=".dtor.series.{}".format(series_type)
-    )
+    fn = cgutils.get_or_insert_function(mod, fnty, name=f".dtor.series.{series_type}")
 
     # End early if the dtor is already defined
     if not fn.is_declaration:
@@ -389,7 +381,7 @@ def construct_series(context, builder, series_type, data_val, index_val, name_va
     return series._getvalue()
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def init_series(typingctx, data, index, name=None):
     """Create a Series with provided data, index and name values.
     Used as a single constructor for Series and assigning its data, so that
@@ -473,7 +465,7 @@ def get_series_payload(context, builder, series_type, value):
 
 
 @intrinsic
-def get_series_data(typingctx, series_typ=None):
+def get_series_data(typingctx, series_typ):
     def codegen(context, builder, signature, args):
         series_payload = get_series_payload(
             context, builder, signature.args[0], args[0]
@@ -486,7 +478,7 @@ def get_series_data(typingctx, series_typ=None):
 
 
 @intrinsic
-def get_series_index(typingctx, series_typ=None):
+def get_series_index(typingctx, series_typ):
     def codegen(context, builder, signature, args):
         series_payload = get_series_payload(
             context, builder, signature.args[0], args[0]
@@ -501,7 +493,7 @@ def get_series_index(typingctx, series_typ=None):
 
 
 @intrinsic
-def get_series_name(typingctx, series_typ=None):
+def get_series_name(typingctx, series_typ):
     def codegen(context, builder, signature, args):
         series_payload = get_series_payload(
             context, builder, signature.args[0], args[0]
@@ -597,7 +589,6 @@ def cast_series(context, builder, fromty, toty, val):
         and isinstance(fromty.index, bodo.hiframes.pd_index_ext.RangeIndexType)
         and isinstance(toty.index, bodo.hiframes.pd_index_ext.NumericIndexType)
     ):
-
         series_payload = get_series_payload(context, builder, fromty, val)
         new_index = context.cast(
             builder, series_payload.index, fromty.index, toty.index
@@ -668,9 +659,8 @@ class SeriesAttribute(OverloadedKeyAttributeTemplate):
         dtype = ary.dtype
         # TODO(ehsan): use getitem resolve similar to df.apply?
         # getitem returns Timestamp for dt_index and series(dt64)
-        bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(ary, "Series.map()")
         if dtype == types.NPDatetime("ns"):
-            dtype = pd_timestamp_type
+            dtype = pd_timestamp_tz_naive_type
         # getitem returns Timedelta for td_index and series(td64)
         # TODO(ehsan): simpler to use timedelta64ns instead of types.NPTimedelta("ns")
         if dtype == types.NPTimedelta("ns"):
@@ -696,7 +686,7 @@ class SeriesAttribute(OverloadedKeyAttributeTemplate):
                 if types.unliteral(func) == types.unicode_type:
                     if not is_overload_constant_str(func):
                         raise BodoError(
-                            f"Series.apply(): string argument (for builtins) must be a compile time constant"
+                            "Series.apply(): string argument (for builtins) must be a compile time constant"
                         )
                     f_return_type = bodo.utils.transform.get_udf_str_return_type(
                         ary,
@@ -780,12 +770,8 @@ class SeriesAttribute(OverloadedKeyAttributeTemplate):
         kws.pop("arg", None)
         na_action = args[1] if len(args) > 1 else kws.pop("na_action", types.none)
 
-        unsupported_args = dict(
-            na_action=na_action,
-        )
-        map_defaults = dict(
-            na_action=None,
-        )
+        unsupported_args = {"na_action": na_action}
+        map_defaults = {"na_action": None}
         check_unsupported_args(
             "Series.map",
             unsupported_args,
@@ -810,12 +796,8 @@ class SeriesAttribute(OverloadedKeyAttributeTemplate):
         )
         f_args = args[2] if len(args) > 2 else kws.pop("args", None)
 
-        unsupported_args = dict(
-            convert_dtype=convert_dtype,
-        )
-        apply_defaults = dict(
-            convert_dtype=True,
-        )
+        unsupported_args = {"convert_dtype": convert_dtype}
+        apply_defaults = {"convert_dtype": True}
         check_unsupported_args(
             "Series.apply",
             unsupported_args,
@@ -825,7 +807,7 @@ class SeriesAttribute(OverloadedKeyAttributeTemplate):
         )
 
         # add dummy default value for UDF kws to avoid errors
-        kw_names = ", ".join("{} = ''".format(a) for a in kws.keys())
+        kw_names = ", ".join(f"{a} = ''" for a in kws.keys())
         func_text = f"def apply_stub(func, convert_dtype=True, args=(), {kw_names}):\n"
         func_text += "    pass\n"
         loc_vars = {}
@@ -863,10 +845,10 @@ class SeriesAttribute(OverloadedKeyAttributeTemplate):
             other, "Series.combine()"
         )
         if dtype1 == types.NPDatetime("ns"):
-            dtype1 = pd_timestamp_type
+            dtype1 = pd_timestamp_tz_naive_type
         dtype2 = other.dtype
         if dtype2 == types.NPDatetime("ns"):
-            dtype2 = pd_timestamp_type
+            dtype2 = pd_timestamp_tz_naive_type
 
         f_return_type = get_const_func_output_type(
             func,
@@ -889,7 +871,6 @@ class SeriesAttribute(OverloadedKeyAttributeTemplate):
 
     @bound_function("series.pipe", no_unliteral=True)
     def resolve_pipe(self, ary, args, kws):
-        bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(ary, "Series.pipe()")
         return bodo.hiframes.pd_groupby_ext.resolve_obj_pipe(
             self, ary, args, kws, "Series"
         )
@@ -997,7 +978,7 @@ def pd_series_overload(
     # to convert it to a tuple type, so we can access the keys as constants
     if isinstance(data, types.DictType):
         raise_bodo_error(
-            "pd.Series(): When intializing series with a dictionary, it is required that the dict has constant keys"
+            "pd.Series(): When initializing series with a dictionary, it is required that the dict has constant keys"
         )
 
     # heterogeneous tuple input case
@@ -1049,12 +1030,17 @@ def pd_series_overload(
             nb_dtype = bodo.utils.typing.parse_dtype(dtype, "pandas.Series")
             if isinstance(nb_dtype, bodo.libs.int_arr_ext.IntDtype):
                 _arr_dtype = bodo.IntegerArrayType(nb_dtype.dtype)
+            elif isinstance(nb_dtype, bodo.libs.float_arr_ext.FloatDtype):
+                _arr_dtype = bodo.FloatingArrayType(nb_dtype.dtype)
             elif nb_dtype == bodo.libs.bool_arr_ext.boolean_dtype:
-                _arr_dtype = bodo.boolean_array
-            elif isinstance(nb_dtype, types.Number) or nb_dtype in [
-                bodo.datetime64ns,
-                bodo.timedelta64ns,
-            ]:
+                _arr_dtype = bodo.boolean_array_type
+            elif nb_dtype == bodo.datetime64ns:  # pragma: no cover
+                _arr_dtype = bodo.libs.pd_datetime_arr_ext.DatetimeArrayType(None)
+            elif isinstance(nb_dtype, PandasDatetimeTZDtype):
+                _arr_dtype = bodo.libs.pd_datetime_arr_ext.DatetimeArrayType(
+                    nb_dtype.tz
+                )
+            elif isinstance(nb_dtype, types.Number) or nb_dtype == bodo.timedelta64ns:
                 _arr_dtype = types.Array(nb_dtype, 1, "C")
             else:
                 raise BodoError("pd.Series with dtype: {dtype} not currently supported")
@@ -1144,7 +1130,7 @@ def to_csv_overload(
     compression="infer",
     quoting=None,
     quotechar='"',
-    line_terminator=None,
+    lineterminator=None,
     chunksize=None,
     date_format=None,
     doublequote=True,
@@ -1181,7 +1167,7 @@ def to_csv_overload(
             compression="infer",
             quoting=None,
             quotechar='"',
-            line_terminator=None,
+            lineterminator=None,
             chunksize=None,
             date_format=None,
             doublequote=True,
@@ -1191,7 +1177,7 @@ def to_csv_overload(
             _bodo_file_prefix="part-",
             _is_parallel=False,
         ):  # pragma: no cover
-            with numba.objmode(D="unicode_type"):
+            with bodo.no_warning_objmode(D="unicode_type"):
                 D = series.to_csv(
                     None,
                     sep,
@@ -1206,7 +1192,7 @@ def to_csv_overload(
                     compression,
                     quoting,
                     quotechar,
-                    line_terminator,
+                    lineterminator,
                     chunksize,
                     date_format,
                     doublequote,
@@ -1233,7 +1219,7 @@ def to_csv_overload(
         compression="infer",
         quoting=None,
         quotechar='"',
-        line_terminator=None,
+        lineterminator=None,
         chunksize=None,
         date_format=None,
         doublequote=True,
@@ -1249,7 +1235,7 @@ def to_csv_overload(
             header &= (bodo.libs.distributed_api.get_rank() == 0) | _csv_output_is_dir(
                 unicode_to_utf8(path_or_buf)
             )
-        with numba.objmode(D="unicode_type"):
+        with bodo.no_warning_objmode(D="unicode_type"):
             D = series.to_csv(
                 None,
                 sep,
@@ -1264,7 +1250,7 @@ def to_csv_overload(
                 compression,
                 quoting,
                 quotechar,
-                line_terminator,
+                lineterminator,
                 chunksize,
                 date_format,
                 doublequote,
@@ -1318,6 +1304,8 @@ series_unsupported_attrs = {
     "axes",
     "array",  # TODO: support
     "flags",
+    "list",
+    "struct",
     # Indexing, Iteration
     "at",
     # Computations / descriptive stats
@@ -1355,8 +1343,8 @@ series_unsupported_methods = (
     "transform",
     "expanding",
     "ewm",
+    "case_when",
     # Computations / descriptive stats
-    "clip",
     "factorize",
     "mode",
     # Reindexing / selection / label manipulation
@@ -1374,8 +1362,6 @@ series_unsupported_methods = (
     # Missing data handling
     "interpolate",
     # Reshaping, sorting
-    "argmin",
-    "argmax",
     "reorder_levels",
     "swaplevel",
     "unstack",
@@ -1420,15 +1406,11 @@ def _install_series_unsupported():
 
     for attr_name in series_unsupported_attrs:
         full_name = "Series." + attr_name
-        overload_attribute(SeriesType, attr_name)(
-            create_unsupported_overload(full_name)
-        )
+        bodo.overload_unsupported_attribute(SeriesType, attr_name, full_name)
 
     for fname in series_unsupported_methods:
         full_name = "Series." + fname
-        overload_method(SeriesType, fname, no_unliteral=True)(
-            create_unsupported_overload(full_name)
-        )
+        bodo.overload_unsupported_method(SeriesType, fname, full_name)
 
 
 _install_series_unsupported()
@@ -1449,7 +1431,6 @@ heter_series_unsupported_attrs = {
     "at",
     # Computations / descriptive stats
     "is_unique",
-    "is_monotonic",
     "is_monotonic_increasing",
     "is_monotonic_decreasing",
     # Accessors
@@ -1546,7 +1527,6 @@ heter_series_unsupported_methods = {
     "diff",
     "factorize",
     "kurt",
-    "mad",
     "max",
     "mean",
     "median",
@@ -1624,7 +1604,6 @@ heter_series_unsupported_methods = {
     "squeeze",
     "view",
     # Combining / joining / merging
-    "append",
     "compare",
     "update",
     # Time series-related
@@ -1667,15 +1646,13 @@ def _install_heter_series_unsupported():
 
     for attr_name in heter_series_unsupported_attrs:
         full_name = "HeterogeneousSeries." + attr_name
-        overload_attribute(HeterogeneousSeriesType, attr_name)(
-            create_unsupported_overload(full_name)
+        bodo.overload_unsupported_attribute(
+            HeterogeneousSeriesType, attr_name, full_name
         )
 
     for fname in heter_series_unsupported_methods:
         full_name = "HeterogeneousSeries." + fname
-        overload_method(HeterogeneousSeriesType, fname, no_unliteral=True)(
-            create_unsupported_overload(full_name)
-        )
+        bodo.overload_unsupported_method(HeterogeneousSeriesType, fname, full_name)
 
 
 _install_heter_series_unsupported()

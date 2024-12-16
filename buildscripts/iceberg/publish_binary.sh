@@ -4,22 +4,16 @@ set -exo pipefail
 
 
 # Package Setup
-eval "$(./bin/micromamba shell hook -s posix)"
-micromamba activate
-micromamba install -q -y boa anaconda-client conda-verify curl -c conda-forge
+eval "$(micromamba shell hook -s posix)"
+micromamba activate iceberg_build
 
 
 # Build Pakcage
 CHANNEL_NAME=${1:-bodo-binary}
 
 echo "********** Publishing to Artifactory **********"
-USERNAME=`cat $HOME/secret_file | grep artifactory.ci.username | cut -f 2 -d' '`
-TOKEN=`cat $HOME/secret_file | grep artifactory.ci.token | cut -f 2 -d' '`
-ANACONDA_TOKEN=`cat $HOME/secret_file | grep anaconda.org.token | cut -f 2 -d' '`
-
 # Get the Connector Version
-export CONNECTOR_VERSION=`python -c "import versioneer; print(versioneer.get_version())"`
-CONNECTOR_VERSION+="alpha"
+export CONNECTOR_VERSION=`python -m setuptools_scm`
 export IS_RELEASE=`git tag --points-at HEAD`
 
 # We follow the following convention for release:
@@ -31,24 +25,17 @@ export IS_RELEASE=`git tag --points-at HEAD`
 # we will create a minor release ending in .0 and append rc#
 # i.e. 2021.9.0betarc1 or 2021.11.0rc2
 # For more information, please see our confluence doc: https://bodo.atlassian.net/wiki/spaces/B/pages/1020592198/Release+Checklist
-IS_MAJOR_RELEASE=0
-if [[ -n "$IS_RELEASE" ]]; then
-    IS_MAJOR_RELEASE=`python -c "import os; print(int(len(os.environ[\"CONNECTOR_VERSION\"].split(\".\")) < 3))"`
-fi
 label=""
-if [[ "$IS_MAJOR_RELEASE" == 1 ]] && [[ "$CHANNEL_NAME" == "bodo.ai" ]]; then
+if [[ -n "$IS_RELEASE" ]] && [[ "$CHANNEL_NAME" == "bodo.ai" ]]; then
     # If we have a major release upload with our main anaconda label
     label="main"
-elif [[ "$CHANNEL_NAME" == "bodo.ai" ]] && [[ -n "$IS_RELEASE" ]]; then
-    # If we have a minor release upload with our dev anaconda label
-    label="dev"
 fi
 
 cd buildscripts/iceberg/conda-recipe/
-conda mambabuild . --no-test -c https://${USERNAME}:${TOKEN}@bodo.jfrog.io/artifactory/api/conda/${BODO_CHANNEL_NAME} -c conda-forge
+conda build . -c conda-forge
 
 # Upload to Anaconda
-package=`ls $CONDA_PREFIX/conda-bld/noarch/bodo-iceberg-connector*.tar.bz2`
+package=`ls $CONDA_PREFIX/conda-bld/noarch/bodo-iceberg-connector*.conda`
 if [[ -z "$package" ]]; then
   echo "Unable to Find Package. Exiting ..."
   exit 1

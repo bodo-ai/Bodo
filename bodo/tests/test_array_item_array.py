@@ -1,72 +1,84 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
-"""Tests for array of list of fixed size items.
-"""
+"""Tests for array of list of fixed size items."""
+
 import datetime
+from decimal import Decimal
 
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 import pytest
 
 import bodo
-from bodo.tests.utils import check_func
+from bodo.tests.utils import check_func, pytest_mark_one_rank
 
 
 @pytest.fixture(
     params=[
-        np.array(
-            [[1, 3, None], [2], None, [4, None, 5, 6], [], [1, 1], None] * 2,
-            dtype=object,
+        pd.arrays.ArrowExtensionArray(
+            pa.array(
+                [[1, 3, None], [2], None, [4, None, 5, 6], [], [1, 1], None] * 2,
+                pa.large_list(pa.int64()),
+            )
         ),
         pytest.param(
-            np.array(
-                [[2.0, -3.2], [2.2, 1.3], None, [4.1, np.nan, 6.3], [], [1.1, 1.2]] * 2,
-                dtype=object,
+            pd.arrays.ArrowExtensionArray(
+                pa.array(
+                    [[2.0, -3.2], [2.2, 1.3], None, [4.1, np.nan, 6.3], [], [1.1, 1.2]]
+                    * 2,
+                    pa.large_list(pa.float64()),
+                )
             ),
             marks=pytest.mark.slow,
         ),
         pytest.param(
-            np.array(
-                [
-                    [True, False, None],
-                    [False, False],
-                    None,
-                    [True, False, None] * 4,
-                    [],
-                    [True, True],
-                ]
-                * 2,
-                dtype=object,
+            pd.arrays.ArrowExtensionArray(
+                pa.array(
+                    [
+                        [True, False, None],
+                        [False, False],
+                        None,
+                        [True, False, None] * 4,
+                        [],
+                        [True, True],
+                    ]
+                    * 2,
+                    pa.large_list(pa.bool_()),
+                )
             ),
             marks=pytest.mark.slow,
         ),
         pytest.param(
-            np.array(
-                [
-                    [datetime.date(2018, 1, 24), datetime.date(1983, 1, 3)],
-                    [datetime.date(1966, 4, 27), datetime.date(1999, 12, 7)],
-                    None,
-                    [datetime.date(1966, 4, 27), datetime.date(2004, 7, 8)],
-                    [],
-                    [datetime.date(2020, 11, 17)],
-                ]
-                * 2,
-                dtype=object,
+            pd.arrays.ArrowExtensionArray(
+                pa.array(
+                    [
+                        [datetime.date(2018, 1, 24), datetime.date(1983, 1, 3)],
+                        [datetime.date(1966, 4, 27), datetime.date(1999, 12, 7)],
+                        None,
+                        [datetime.date(1966, 4, 27), datetime.date(2004, 7, 8)],
+                        [],
+                        [datetime.date(2020, 11, 17)],
+                    ]
+                    * 2,
+                    pa.large_list(pa.date32()),
+                )
             ),
             marks=pytest.mark.slow,
         ),
         # data from Spark-generated Parquet files can have array elements
         pytest.param(
-            np.array(
-                [
-                    np.array([1, 3], np.int32),
-                    np.array([2], np.int32),
-                    None,
-                    np.array([4, 5, 6], np.int32),
-                    np.array([], np.int32),
-                    np.array([1, 1], np.int32),
-                ]
-                * 2,
-                dtype=object,
+            pd.arrays.ArrowExtensionArray(
+                pa.array(
+                    [
+                        np.array([1, 3], np.int32),
+                        np.array([2], np.int32),
+                        None,
+                        np.array([4, 5, 6], np.int32),
+                        np.array([], np.int32),
+                        np.array([1, 1], np.int32),
+                    ]
+                    * 2,
+                    pa.large_list(pa.int32()),
+                )
             ),
             marks=pytest.mark.slow,
         ),
@@ -83,38 +95,47 @@ from bodo.tests.utils import check_func
         # ),
         # nested list case with NA elems
         pytest.param(
-            np.array(
-                [
-                    [[1, 3], [2]],
-                    [[3, 1]],
-                    None,
-                    [[4, 5, 6], [1], [1, 2]],
-                    [],
-                    [[1], None, [1, 4], []],
-                ]
-                * 2,
-                dtype=object,
+            pd.arrays.ArrowExtensionArray(
+                pa.array(
+                    [
+                        [[1, 3], [2]],
+                        [[3, 1]],
+                        None,
+                        [[4, 5, 6], [1], [1, 2]],
+                        [],
+                        [[1], None, [1, 4], []],
+                    ]
+                    * 2,
+                    pa.large_list(pa.large_list(pa.int64())),
+                )
             ),
             marks=pytest.mark.slow,
         ),
         # string data with NA
         pytest.param(
-            np.array([[["1", "2", "8"], ["3"]], [["2", None]]] * 4, dtype=object),
+            pd.arrays.ArrowExtensionArray(
+                pa.array(
+                    [[["1", "2", "8"], ["3"]], [["2", None]]] * 4,
+                    pa.large_list(pa.large_list(pa.string())),
+                )
+            ),
             marks=pytest.mark.slow,
         ),
         # two level nesting
         pytest.param(
-            np.array(
-                [
-                    [[[1, 2], [3]], [[2, None]]],
-                    [[[3], [], [1, None, 4]]],
-                    None,
-                    [[[4, 5, 6], []], [[1]], [[1, 2]]],
-                    [],
-                    [[[], [1]], None, [[1, 4]], []],
-                ]
-                * 2,
-                dtype=object,
+            pd.arrays.ArrowExtensionArray(
+                pa.array(
+                    [
+                        [[[1, 2], [3]], [[2, None]]],
+                        [[[3], [], [1, None, 4]]],
+                        None,
+                        [[[4, 5, 6], []], [[1]], [[1, 2]]],
+                        [],
+                        [[[], [1]], None, [[1, 4]], []],
+                    ]
+                    * 2,
+                    pa.large_list(pa.large_list(pa.large_list(pa.int64()))),
+                )
             ),
             marks=pytest.mark.slow,
         ),
@@ -176,6 +197,18 @@ def test_unbox(array_item_arr_value, memory_leak_check):
     check_func(impl2, (array_item_arr_value,))
 
 
+def test_unbox_dict_str(memory_leak_check):
+    """Test boxing/unboxing array(array) with dict-encoded data (see [BSE-1155])"""
+
+    def impl(arr_arg):
+        return arr_arg
+
+    A1 = np.array([["a1", None, "a2"], None, ["a3"]], object)
+    A2 = np.array([[["1", "2", "8"], ["3"]], [["2", None]]] * 4, dtype=object)
+    check_func(impl, (A1,), use_dict_encoded_strings=True, only_seq=True)
+    check_func(impl, (A2,), use_dict_encoded_strings=True, only_seq=True)
+
+
 @pytest.mark.smoke
 def test_getitem_int(array_item_arr_value, memory_leak_check):
     def test_impl(A, i):
@@ -224,7 +257,7 @@ def test_ndim(memory_leak_check):
     def test_impl(A):
         return A.ndim
 
-    A = np.array([[1, 2, 3], [2]])
+    A = np.array([[1, 2, 3], [2]], object)
     assert bodo.jit(test_impl)(A) == test_impl(A)
 
 
@@ -233,7 +266,7 @@ def test_shape(memory_leak_check):
     def test_impl(A):
         return A.shape
 
-    A = np.array([[1, 2, 3], [2], None, []])
+    A = np.array([[1, 2, 3], [2], None, []], object)
     assert bodo.jit(test_impl)(A) == test_impl(A)
 
 
@@ -242,7 +275,7 @@ def test_dtype(memory_leak_check):
     def test_impl(A):
         return A.dtype
 
-    A = np.array([[1, 2, 3], [2], None, []])
+    A = np.array([[1, 2, 3], [2], None, []], object)
     assert bodo.jit(test_impl)(A) == test_impl(A)
 
 
@@ -252,3 +285,67 @@ def test_copy(array_item_arr_value, memory_leak_check):
         return A.copy()
 
     check_func(test_impl, (array_item_arr_value,))
+
+
+@pytest.mark.skipif(
+    bodo.tests.utils.test_spawn_mode_enabled,
+    reason="Spawn workers don't set _use_dict_str_type",
+)
+def test_nested_arr_dict_getitem(memory_leak_check):
+    """Make sure dictionary-encoded arrays inside nested arrays support allocation and
+    setitem that are necessary for operations like array(item) bool getitem
+    """
+
+    def test_impl(A, ind):
+        return A[ind]
+
+    # Struct array
+    A1 = pd.arrays.ArrowExtensionArray(
+        pa.array(
+            [[{"A": "a1", "B": 2}], [{"A": "a1", "B": 2}, {"A": "a2", "B": 2}]],
+            pa.large_list(
+                pa.struct([pa.field("A", pa.large_string()), pa.field("B", pa.int64())])
+            ),
+        )
+    )
+    # Map array
+    A2 = pd.arrays.ArrowExtensionArray(
+        pa.array(
+            [
+                [{1: "abc", 4: "h"}],
+                [
+                    {1: "aa", 3: "m"},
+                    {1: "abc", 4: "abc"},
+                ],
+            ],
+            pa.large_list(pa.map_(pa.int64(), pa.large_string())),
+        )
+    )
+    B = np.array([False, True], np.bool_)
+
+    orig_use_dict_str_type = bodo.hiframes.boxing._use_dict_str_type
+    bodo.hiframes.boxing._use_dict_str_type = True
+    try:
+        check_func(test_impl, (A1, B), only_seq=True)
+        check_func(test_impl, (A2, B), only_seq=True)
+    finally:
+        bodo.hiframes.boxing._use_dict_str_type = orig_use_dict_str_type
+
+
+@pytest_mark_one_rank
+def test_nested_arr_pyarrow_typeof():
+    """
+    Test that we are properly typing nested arrays containing pyarrow types
+    """
+
+    precision, scale = 38, 2
+
+    A = pd.array([Decimal("0.3")], dtype=pd.ArrowDtype(pa.decimal128(precision, scale)))
+    S = pd.Series([A])
+    typ = bodo.typeof(S)
+
+    assert (
+        isinstance(typ.dtype, bodo.DecimalArrayType)
+        and typ.dtype.precision == precision
+        and typ.dtype.scale == scale
+    )

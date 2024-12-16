@@ -1,7 +1,7 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
 Implements array kernels such as median and quantile.
 """
+
 import hashlib
 import inspect
 import math
@@ -20,7 +20,7 @@ from numba.core.imputils import lower_builtin
 from numba.core.ir_utils import find_const, guard
 from numba.core.typing import signature
 from numba.core.typing.templates import AbstractTemplate, infer_global
-from numba.extending import overload, overload_attribute, register_jitable
+from numba.extending import lower_cast, overload, overload_attribute, register_jitable
 from numba.np.arrayobj import make_array
 from numba.np.numpy_support import as_dtype
 from numba.parfors.array_analysis import ArrayAnalysis
@@ -32,51 +32,58 @@ from bodo.hiframes.pd_categorical_ext import (
     CategoricalArrayType,
     init_categorical_array,
 )
+from bodo.hiframes.pd_series_ext import SeriesType
 from bodo.hiframes.split_impl import string_array_split_view_type
 from bodo.hiframes.time_ext import TimeArrayType
+from bodo.hiframes.timestamptz_ext import TimestampTZArrayType, timestamptz_array_type
 from bodo.libs import quantile_alg
 from bodo.libs.array import (
     arr_info_list_to_table,
+    array_from_cpp_table,
     array_to_info,
-    convert_local_dictionary_to_global,
-    delete_info_decref_array,
     delete_table,
-    delete_table_decref_arrays,
-    drop_duplicates_table,
-    info_from_table,
-    info_to_array,
+    drop_duplicates_cpp_table,
+    drop_duplicates_local_dictionary,
     sample_table,
 )
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType, offset_type
-from bodo.libs.bool_arr_ext import BooleanArrayType, boolean_array
+from bodo.libs.bool_arr_ext import BooleanArrayType, boolean_array_type
 from bodo.libs.decimal_arr_ext import DecimalArrayType
 from bodo.libs.dict_arr_ext import DictionaryArrayType, init_dict_arr
 from bodo.libs.distributed_api import Reduce_Type
+from bodo.libs.float_arr_ext import FloatingArrayType
 from bodo.libs.int_arr_ext import IntegerArrayType, alloc_int_array
+from bodo.libs.interval_arr_ext import IntervalArrayType
 from bodo.libs.pd_datetime_arr_ext import DatetimeArrayType
 from bodo.libs.str_arr_ext import (
     pre_alloc_string_array,
     str_arr_set_na,
     string_array_type,
 )
+from bodo.libs.str_ext import string_type
 from bodo.libs.struct_arr_ext import StructArrayType
 from bodo.libs.tuple_arr_ext import TupleArrayType
 from bodo.utils.indexing import add_nested_counts, init_nested_counts
 from bodo.utils.typing import (
     BodoError,
+    assert_bodo_error,
     check_unsupported_args,
     decode_if_dict_array,
     element_type,
     find_common_np_dtype,
     get_overload_const_bool,
+    get_overload_const_int,
     get_overload_const_list,
     get_overload_const_str,
     is_bin_arr_type,
     is_overload_constant_bool,
+    is_overload_constant_int,
     is_overload_constant_str,
     is_overload_none,
     is_overload_true,
     is_str_arr_type,
+    is_valid_float_arg,
+    is_valid_int_arg,
     raise_bodo_error,
     to_str_arr_if_dict_array,
 )
@@ -90,10 +97,44 @@ from bodo.utils.utils import (
 ll.add_symbol("quantile_sequential", quantile_alg.quantile_sequential)
 ll.add_symbol("quantile_parallel", quantile_alg.quantile_parallel)
 
-MPI_ROOT = 0
+DEFAULT_ROOT = 0
 sum_op = np.int32(bodo.libs.distributed_api.Reduce_Type.Sum.value)
 max_op = np.int32(bodo.libs.distributed_api.Reduce_Type.Max.value)
 min_op = np.int32(bodo.libs.distributed_api.Reduce_Type.Min.value)
+or_op = np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_Or.value)
+and_op = np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value)
+bitor_op = np.int32(bodo.libs.distributed_api.Reduce_Type.Bit_Or.value)
+bitand_op = np.int32(bodo.libs.distributed_api.Reduce_Type.Bit_And.value)
+bitxor_op = np.int32(bodo.libs.distributed_api.Reduce_Type.Bit_Xor.value)
+
+
+BODO_ARRAY_TYPE_CLASSES = (
+    types.Array,
+    bodo.libs.str_arr_ext.StringArrayType,
+    bodo.libs.binary_arr_ext.BinaryArrayType,
+    bodo.libs.dict_arr_ext.DictionaryArrayType,
+    bodo.hiframes.split_impl.StringArraySplitViewType,
+    bodo.hiframes.datetime_date_ext.DatetimeDateArrayType,
+    bodo.hiframes.datetime_timedelta_ext.DatetimeTimeDeltaArrayType,
+    BooleanArrayType,
+    bodo.libs.str_ext.RandomAccessStringArrayType,
+    bodo.libs.null_arr_ext.NullArrayType,
+    IntegerArrayType,
+    FloatingArrayType,
+    bodo.libs.primitive_arr_ext.PrimitiveArrayType,
+    bodo.libs.decimal_arr_ext.DecimalArrayType,
+    bodo.hiframes.pd_categorical_ext.CategoricalArrayType,
+    bodo.libs.array_item_arr_ext.ArrayItemArrayType,
+    bodo.libs.struct_arr_ext.StructArrayType,
+    bodo.libs.interval_arr_ext.IntervalArrayType,
+    bodo.libs.tuple_arr_ext.TupleArrayType,
+    bodo.libs.map_arr_ext.MapArrayType,
+    bodo.libs.matrix_ext.MatrixType,
+    bodo.libs.csr_matrix_ext.CSRMatrixType,
+    bodo.DatetimeArrayType,
+    TimeArrayType,
+    TimestampTZArrayType,
+)
 
 
 def isna(arr, i):  # pragma: no cover
@@ -110,11 +151,21 @@ def overload_isna(arr, i):
         )  # pragma: no cover
 
     # masked Integer array, boolean array
-    if isinstance(arr, (IntegerArrayType, DecimalArrayType, TimeArrayType)) or arr in (
-        boolean_array,
+    if isinstance(
+        arr,
+        (
+            IntegerArrayType,
+            FloatingArrayType,
+            DecimalArrayType,
+            TimeArrayType,
+            DatetimeArrayType,
+        ),
+    ) or arr in (
+        boolean_array_type,
         datetime_date_array_type,
         datetime_timedelta_array_type,
         string_array_split_view_type,
+        timestamptz_array_type,
     ):
         return lambda arr, i: not bodo.libs.int_arr_ext.get_bit_bitmap_arr(
             arr._null_bitmap, i
@@ -142,6 +193,12 @@ def overload_isna(arr, i):
     if isinstance(arr, TupleArrayType):
         return lambda arr, i: bodo.libs.array_kernels.isna(
             arr._data, i
+        )  # pragma: no cover
+
+    # interval array
+    if isinstance(arr, IntervalArrayType):
+        return lambda arr, i: bodo.libs.array_kernels.isna(
+            arr._left, i
         )  # pragma: no cover
 
     # Categorical Array
@@ -181,6 +238,10 @@ def overload_isna(arr, i):
     if isinstance(arr, DatetimeArrayType):
         return lambda arr, i: np.isnat(arr._data[i])  # pragma: no cover
 
+    # NullArrayType
+    if arr == bodo.null_array_type:
+        return lambda arr, i: True  # pragma: no cover
+
     # TODO: extend to other types (which ones are missing?)
     assert isinstance(arr, types.Array), f"Invalid array type in isna(): {arr}"
 
@@ -202,8 +263,7 @@ def setna(arr, ind, int_nan_const=0):  # pragma: no cover
 
 @overload(setna, no_unliteral=True)
 def setna_overload(arr, ind, int_nan_const=0):
-
-    if isinstance(arr.dtype, types.Float):
+    if isinstance(arr, types.Array) and isinstance(arr.dtype, types.Float):
         return setna
 
     if isinstance(arr.dtype, (types.NPDatetime, types.NPTimedelta)):
@@ -215,11 +275,11 @@ def setna_overload(arr, ind, int_nan_const=0):
         return _setnan_impl
 
     if isinstance(arr, DatetimeArrayType):
-
         nat = bodo.datetime64ns("NaT")
 
         def _setnan_impl(arr, ind, int_nan_const=0):  # pragma: no cover
             arr._data[ind] = nat
+            bodo.libs.int_arr_ext.set_bit_to_arr(arr._null_bitmap, ind, 0)
 
         return _setnan_impl
 
@@ -242,7 +302,7 @@ def setna_overload(arr, ind, int_nan_const=0):
     # to a numpy array. For indexing purposes, we need to try NA as False, so
     # we set the data here.
     # TODO: Update coerce_to_ndarray or indexing to handle NA properly.
-    if arr == boolean_array:
+    if arr == boolean_array_type:
 
         def impl(arr, ind, int_nan_const=0):
             arr[ind] = False
@@ -250,7 +310,16 @@ def setna_overload(arr, ind, int_nan_const=0):
 
         return impl
 
-    if isinstance(arr, (IntegerArrayType, DecimalArrayType)):
+    if isinstance(
+        arr,
+        (
+            IntegerArrayType,
+            FloatingArrayType,
+            DecimalArrayType,
+            TimeArrayType,
+            TimestampTZArrayType,
+        ),
+    ):
         return lambda arr, ind, int_nan_const=0: bodo.libs.int_arr_ext.set_bit_to_arr(
             arr._null_bitmap, ind, 0
         )  # pragma: no cover
@@ -269,29 +338,32 @@ def setna_overload(arr, ind, int_nan_const=0):
 
         return impl_binary_arr
 
+    # ArrayItemArrayType
     if isinstance(arr, bodo.libs.array_item_arr_ext.ArrayItemArrayType):
 
         def impl_arr_item(arr, ind, int_nan_const=0):  # pragma: no cover
             # set offset
             offsets = bodo.libs.array_item_arr_ext.get_offsets(arr)
+            if ind == 0:
+                offsets[ind] = 0
             offsets[ind + 1] = offsets[ind]
             # set NA bitmask
             bodo.libs.int_arr_ext.set_bit_to_arr(
                 bodo.libs.array_item_arr_ext.get_null_bitmap(arr), ind, 0
             )
+            # Length of the data array has to be set properly after filling the data to
+            # avoid violating assumptions in other parts of the code.
+            # For example, length of string array is used when passed to C++.
+            # See https://bodo.atlassian.net/browse/BSE-1915
+            if ind == (bodo.libs.array_item_arr_ext.get_n_arrays(arr) - 1):
+                bodo.libs.array_item_arr_ext.trim_excess_data(arr)
 
         return impl_arr_item
 
     if isinstance(arr, bodo.libs.map_arr_ext.MapArrayType):
 
         def impl_arr_item(arr, ind, int_nan_const=0):  # pragma: no cover
-            # set offset
-            offsets = bodo.libs.array_item_arr_ext.get_offsets(arr._data)
-            offsets[ind + 1] = offsets[ind]
-            # set NA bitmask
-            bodo.libs.int_arr_ext.set_bit_to_arr(
-                bodo.libs.array_item_arr_ext.get_null_bitmap(arr._data), ind, 0
-            )
+            bodo.libs.array_kernels.setna(arr._data, ind)
 
         return impl_arr_item
 
@@ -341,6 +413,14 @@ def setna_overload(arr, ind, int_nan_const=0):
 
         return setna_int
 
+    if isinstance(arr, IntervalArrayType):
+
+        def setna_interval(arr, ind, int_nan_const=0):  # pragma: no cover
+            setna(arr.left, ind, int_nan_const)
+            setna(arr.right, ind, int_nan_const)
+
+        return setna_interval
+
     # Add support for datetime.date array. This checks that the value in the
     # array won't cause a runtime error in getitem.
     if arr == datetime_date_array_type:
@@ -351,14 +431,6 @@ def setna_overload(arr, ind, int_nan_const=0):
             bodo.libs.int_arr_ext.set_bit_to_arr(arr._null_bitmap, ind, 0)
 
         return setna_datetime_date
-
-    # Add support for bodo.Time array.
-    if isinstance(arr, bodo.TimeArrayType):
-
-        def setna_time(arr, ind, int_nan_const=0):
-            bodo.libs.int_arr_ext.set_bit_to_arr(arr._null_bitmap, ind, 0)
-
-        return setna_time
 
     # Add support for datetime.timedelta array
     if arr == datetime_timedelta_array_type:
@@ -374,9 +446,57 @@ def setna_overload(arr, ind, int_nan_const=0):
     return lambda arr, ind, int_nan_const=0: None  # pragma: no cover
 
 
+def copy_array_element(out_arr, out_ind, in_arr, in_ind):  # pragma: no cover
+    pass
+
+
+@overload(copy_array_element)
+def overload_copy_array_element(out_arr, out_ind, in_arr, in_ind):
+    """Copy array element from input array to output array with specified indices.
+    Handles NAs and uses optimized implementation based on array types. For example,
+    the string array case avoids allocating an intermediate string value.
+    """
+
+    # string array case (input can be dict-encoded too in get_str_arr_item_copy)
+    if out_arr == bodo.string_array_type and is_str_arr_type(in_arr):
+
+        def impl_str(out_arr, out_ind, in_arr, in_ind):  # pragma: no cover
+            if bodo.libs.array_kernels.isna(in_arr, in_ind):
+                bodo.libs.array_kernels.setna(out_arr, out_ind)
+            else:
+                bodo.libs.str_arr_ext.get_str_arr_item_copy(
+                    out_arr, out_ind, in_arr, in_ind
+                )
+
+        return impl_str
+
+    # tz-aware datetime array case (avoid Timestamp value creation overheads)
+    if (
+        isinstance(out_arr, DatetimeArrayType)
+        and isinstance(in_arr, DatetimeArrayType)
+        and out_arr.tz == in_arr.tz
+    ):
+        # data values can be copied directly if timezones match (no Timestamp values)
+        def impl_dt(out_arr, out_ind, in_arr, in_ind):  # pragma: no cover
+            if bodo.libs.array_kernels.isna(in_arr, in_ind):
+                bodo.libs.array_kernels.setna(out_arr, out_ind)
+            else:
+                out_arr._data[out_ind] = in_arr._data[in_ind]
+
+        return impl_dt
+
+    # general case
+    def impl(out_arr, out_ind, in_arr, in_ind):  # pragma: no cover
+        if bodo.libs.array_kernels.isna(in_arr, in_ind):
+            bodo.libs.array_kernels.setna(out_arr, out_ind)
+        else:
+            out_arr[out_ind] = in_arr[in_ind]
+
+    return impl
+
+
 def setna_tup(arr_tup, ind, int_nan_const=0):  # pragma: no cover
-    for arr in arr_tup:
-        arr[ind] = np.nan
+    pass
 
 
 @overload(setna_tup, no_unliteral=True)
@@ -385,7 +505,7 @@ def overload_setna_tup(arr_tup, ind, int_nan_const=0):
 
     func_text = "def f(arr_tup, ind, int_nan_const=0):\n"
     for i in range(count):
-        func_text += "  setna(arr_tup[{}], ind, int_nan_const)\n".format(i)
+        func_text += f"  setna(arr_tup[{i}], ind, int_nan_const)\n"
     func_text += "  return\n"
 
     loc_vars = {}
@@ -410,7 +530,7 @@ def overload_setna_slice(arr, s):
     return impl
 
 
-@numba.generated_jit
+@numba.generated_jit(no_unliteral=True)
 def first_last_valid_index(arr, index_arr, is_first=True, parallel=False):
     """
     Taking a data array (arr) and index array (index_arr) as input, this function determines the index
@@ -486,11 +606,14 @@ def first_last_valid_index(arr, index_arr, is_first=True, parallel=False):
 ################################ median ####################################
 
 
-ll.add_symbol("median_series_computation", quantile_alg.median_series_computation)
+ll.add_symbol(
+    "median_series_computation_py_entry",
+    quantile_alg.median_series_computation_py_entry,
+)
 
 
 _median_series_computation = types.ExternalFunction(
-    "median_series_computation",
+    "median_series_computation_py_entry",
     types.void(
         types.voidptr, bodo.libs.array.array_info_type, types.bool_, types.bool_
     ),
@@ -502,16 +625,18 @@ def median_series_computation(res, arr, is_parallel, skipna):  # pragma: no cove
     arr_info = array_to_info(arr)
     _median_series_computation(res, arr_info, is_parallel, skipna)
     check_and_propagate_cpp_exception()
-    delete_info_decref_array(arr_info)
 
 
 ################################ autocorr ####################################
 
-ll.add_symbol("autocorr_series_computation", quantile_alg.autocorr_series_computation)
+ll.add_symbol(
+    "autocorr_series_computation_py_entry",
+    quantile_alg.autocorr_series_computation_py_entry,
+)
 
 
 _autocorr_series_computation = types.ExternalFunction(
-    "autocorr_series_computation",
+    "autocorr_series_computation_py_entry",
     types.void(
         types.voidptr, bodo.libs.array.array_info_type, types.int64, types.bool_
     ),
@@ -523,7 +648,6 @@ def autocorr_series_computation(res, arr, lag, is_parallel):  # pragma: no cover
     arr_info = array_to_info(arr)
     _autocorr_series_computation(res, arr_info, lag, is_parallel)
     check_and_propagate_cpp_exception()
-    delete_info_decref_array(arr_info)
 
 
 @numba.njit
@@ -536,11 +660,14 @@ def autocorr(arr, lag=1, parallel=False):  # pragma: no cover
 
 ####################### series monotonicity ####################################
 
-ll.add_symbol("compute_series_monotonicity", quantile_alg.compute_series_monotonicity)
+ll.add_symbol(
+    "compute_series_monotonicity_py_entry",
+    quantile_alg.compute_series_monotonicity_py_entry,
+)
 
 
 _compute_series_monotonicity = types.ExternalFunction(
-    "compute_series_monotonicity",
+    "compute_series_monotonicity_py_entry",
     types.void(
         types.voidptr, bodo.libs.array.array_info_type, types.int64, types.bool_
     ),
@@ -552,7 +679,6 @@ def series_monotonicity_call(res, arr, inc_dec, is_parallel):  # pragma: no cove
     arr_info = array_to_info(arr)
     _compute_series_monotonicity(res, arr_info, inc_dec, is_parallel)
     check_and_propagate_cpp_exception()
-    delete_info_decref_array(arr_info)
 
 
 @numba.njit
@@ -567,7 +693,7 @@ def series_monotonicity(arr, inc_dec, parallel=False):  # pragma: no cover
 ################################ DateTime ####################################
 
 
-@numba.generated_jit(nopython=True)
+@numba.generated_jit(nopython=True, no_unliteral=True)
 def get_valid_entries_from_date_offset(
     index_arr, offset, initial_date, is_last, is_parallel=False
 ):
@@ -592,7 +718,9 @@ def get_valid_entries_from_date_offset(
         "def impl(index_arr, offset, initial_date, is_last, is_parallel=False):\n"
     )
     if types.unliteral(offset) == types.unicode_type:
-        func_text += "  with numba.objmode(threshhold_date=bodo.pd_timestamp_type):\n"
+        func_text += (
+            "  with bodo.objmode(threshhold_date=bodo.pd_timestamp_tz_naive_type):\n"
+        )
         func_text += "    date_offset = pd.tseries.frequencies.to_offset(offset)\n"
         if not get_overload_const_bool(is_last):
             func_text += "    if not isinstance(date_offset, pd._libs.tslibs.Tick) and date_offset.is_on_offset(index_arr[0]):\n"
@@ -606,8 +734,8 @@ def get_valid_entries_from_date_offset(
     else:
         func_text += f"  threshhold_date = initial_date {threshhold_str} offset\n"
     func_text += "  local_valid = 0\n"
-    func_text += f"  n = len(index_arr)\n"
-    func_text += f"  if n:\n"
+    func_text += "  n = len(index_arr)\n"
+    func_text += "  if n:\n"
     func_text += f"    if {last_val_check_str}:\n"
     func_text += "      loc_valid = n\n"
     func_text += "    else:\n"
@@ -627,6 +755,65 @@ def get_valid_entries_from_date_offset(
         func_text, {"bodo": bodo, "pd": pd, "numba": numba, "sum_op": sum_op}, loc_vars
     )
     return loc_vars["impl"]
+
+
+############################ approx_percentile ################################
+
+
+def approx_percentile(A, q, parallel=False):  # pragma: no cover
+    pass
+
+
+ll.add_symbol(
+    "approx_percentile_py_entrypt",
+    quantile_alg.approx_percentile_py_entrypt,
+)
+
+_approx_percentile_ = types.ExternalFunction(
+    "approx_percentile_py_entrypt",
+    types.float64(bodo.libs.array.array_info_type, types.float64, types.bool_),
+)
+
+
+@numba.njit
+def approx_percentile(arr, percentile, parallel=False):  # pragma: no cover
+    arr_info = array_to_info(arr)
+    result = _approx_percentile_(arr_info, percentile, parallel)
+    check_and_propagate_cpp_exception()
+    return result
+
+
+ll.add_symbol(
+    "percentile_py_entrypt",
+    quantile_alg.percentile_py_entrypt,
+)
+
+_percentile = types.ExternalFunction(
+    "percentile_py_entrypt",
+    types.float64(
+        bodo.libs.array.array_info_type, types.float64, types.bool_, types.bool_
+    ),
+)
+
+
+@numba.njit
+def percentile_cont(arr, percentile, parallel=False):  # pragma: no cover
+    arr_info = array_to_info(arr)
+    result = _percentile(arr_info, percentile, True, parallel)
+    check_and_propagate_cpp_exception()
+    if np.isnan(result):
+        return None
+    return result
+
+
+@numba.njit
+def percentile_disc(arr, percentile, parallel=False):  # pragma: no cover
+    arr_info = array_to_info(arr)
+    result = _percentile(arr_info, percentile, False, parallel)
+    check_and_propagate_cpp_exception()
+    if np.isnan(result):
+        return None
+    return result
 
 
 ################################ quantile ####################################
@@ -651,9 +838,9 @@ class QuantileType(AbstractTemplate):
 
 @lower_builtin(quantile, types.Array, types.float64)
 @lower_builtin(quantile, IntegerArrayType, types.float64)
+@lower_builtin(quantile, FloatingArrayType, types.float64)
 @lower_builtin(quantile, BooleanArrayType, types.float64)
 def lower_dist_quantile_seq(context, builder, sig, args):
-
     # store an int to specify data type
     typ_enum = numba_to_c_type(sig.args[0].dtype)
     typ_arg = cgutils.alloca_once_value(
@@ -662,7 +849,9 @@ def lower_dist_quantile_seq(context, builder, sig, args):
 
     arr_val = args[0]
     arr_typ = sig.args[0]
-    if isinstance(arr_typ, (IntegerArrayType, BooleanArrayType)):
+    if isinstance(
+        arr_typ, (IntegerArrayType, FloatingArrayType, BooleanArrayType)
+    ):  # pragma: no cover
         arr_val = cgutils.create_struct_proxy(arr_typ)(context, builder, arr_val).data
         arr_typ = types.Array(arr_typ.dtype, 1, "C")
 
@@ -696,9 +885,9 @@ def lower_dist_quantile_seq(context, builder, sig, args):
 
 @lower_builtin(quantile_parallel, types.Array, types.float64, types.intp)
 @lower_builtin(quantile_parallel, IntegerArrayType, types.float64, types.intp)
+@lower_builtin(quantile_parallel, FloatingArrayType, types.float64, types.intp)
 @lower_builtin(quantile_parallel, BooleanArrayType, types.float64, types.intp)
 def lower_dist_quantile_parallel(context, builder, sig, args):
-
     # store an int to specify data type
     typ_enum = numba_to_c_type(sig.args[0].dtype)
     typ_arg = cgutils.alloca_once_value(
@@ -707,7 +896,9 @@ def lower_dist_quantile_parallel(context, builder, sig, args):
 
     arr_val = args[0]
     arr_typ = sig.args[0]
-    if isinstance(arr_typ, (IntegerArrayType, BooleanArrayType)):
+    if isinstance(
+        arr_typ, (IntegerArrayType, FloatingArrayType, BooleanArrayType)
+    ):  # pragma: no cover
         arr_val = cgutils.create_struct_proxy(arr_typ)(context, builder, arr_val).data
         arr_typ = types.Array(arr_typ.dtype, 1, "C")
 
@@ -749,34 +940,29 @@ def lower_dist_quantile_parallel(context, builder, sig, args):
 def _rank_detect_ties(arr):
     """
     Helper for forming 'obs', or tie-detecting array, for the rank function.
-    Assumes that arr is sorted.
-    TODO: can be optimized using the fact that all NAs appear consecutively
+    It may not necessarily be sorted, and nulls might not be grouped together,
+    if the rank is based on sorting by multiple columns.
     """
 
     def impl(arr):  # pragma: no cover
-        sorted_nas = np.nonzero(pd.isna(arr))[0]
-        eq_arr_na = arr[1:] != arr[:-1]
-        # eq_arr will be a nullable boolean array rather than a non-nullable boolean and thus must be converted
-        eq_arr_na[pd.isna(eq_arr_na)] = False
-        # astype turns NAs to False but it is done explicitly here in case this changes
-        eq_arr = eq_arr_na.astype(np.bool_)
-        # the first NA entry should be marked True
-        obs = np.concatenate((np.array([True]), eq_arr))
-        if sorted_nas.size:
-            # here we set the first NA entry to True, the repeated NAs (rep_NAs) to False, and
-            # the entry succeeding the NAs (if na_option='first') to True
-            first_na, rep_nas = sorted_nas[0], sorted_nas[1:]
-            # TODO: optimize since all nas will be consecutive, could use make an optimization for non-rank_sql
-            # using first_valid_index() (and?) last_valid_index()
-            obs[first_na] = True
-            if rep_nas.size:
-                obs[rep_nas] = False
-                if (rep_nas[-1] + 1) < obs.size:
-                    # entry suceeding NAs, if there are repeated NAs, when na_option='first'
-                    obs[rep_nas[-1] + 1] = True
-            elif (first_na + 1) < obs.size:
-                # entry suceeding NAs, if there are no repeated NAs, when na_option='first'
-                obs[first_na + 1] = True
+        n = len(arr)
+        obs = bodo.utils.utils.alloc_type(n, np.bool_, (-1,))
+        # The first row is a distinct entry
+        obs[0] = True
+        is_null = pd.isna(arr)
+        for i in range(1, len(arr)):
+            # If the current row and previous row are both null, then the
+            # current row is not a distinct entry
+            if is_null[i] and is_null[i - 1]:
+                obs[i] = False
+            # Otherwise, if the current row or the previous row are null, then
+            # they are distinct entries
+            elif is_null[i] or is_null[i - 1]:
+                obs[i] = True
+            # Otherwise, we check if the current row is distinct via the
+            # != operator
+            else:
+                obs[i] = arr[i] != arr[i - 1]
         return obs
 
     return impl
@@ -953,6 +1139,10 @@ def select_k_nonan_overload(A, index_arr, m, k):
 def nlargest(A, index_arr, k, is_largest, cmp_f):  # pragma: no cover
     # algorithm: keep a min heap of k largest values, if a value is greater
     # than the minimum (root) in heap, replace the minimum and rebuild the heap
+    # avoid nullable arrays (TODO: support directly)
+    A = bodo.utils.conversion.ndarray_if_nullable_arr(A)
+    # avoid nullable arrays (TODO: support directly)
+    index_arr = bodo.utils.conversion.ndarray_if_nullable_arr(index_arr)
     m = len(A)
 
     # return empty arrays for k=0 corner case (min_heap_vals[0] below would be invalid)
@@ -963,6 +1153,10 @@ def nlargest(A, index_arr, k, is_largest, cmp_f):  # pragma: no cover
     if k >= m:
         B = np.sort(A)
         out_index = index_arr[np.argsort(A)]
+        # Note that we must use np.argsort here rather
+        # than bodo.hiframes.series_impl.argsort since Bodo's sort behavior
+        # is slightly different from np.sort. The sorting scheme
+        # of the values and the sorting scheme of the keys must match.
         mask = pd.Series(B).notna().values
         B = B[mask]
         out_index = out_index[mask]
@@ -1002,18 +1196,20 @@ def nlargest_parallel(A, I, k, is_largest, cmp_f):  # pragma: no cover
     # of A, gather the result and return the largest k
     # TODO: support cases where k is not too small
     my_rank = bodo.libs.distributed_api.get_rank()
+    # avoid nullable arrays (TODO: support directly)
+    A = bodo.utils.conversion.coerce_to_ndarray(A)
     local_res, local_res_ind = nlargest(A, I, k, is_largest, cmp_f)
     all_largest = bodo.libs.distributed_api.gatherv(local_res)
     all_largest_ind = bodo.libs.distributed_api.gatherv(local_res_ind)
 
     # TODO: handle len(res) < k case
-    if my_rank == MPI_ROOT:
+    if my_rank == DEFAULT_ROOT:
         res, res_ind = nlargest(all_largest, all_largest_ind, k, is_largest, cmp_f)
     else:
         res = np.empty(k, A.dtype)
         res_ind = np.empty(k, I.dtype)  # TODO: string array
-    bodo.libs.distributed_api.bcast(res)
-    bodo.libs.distributed_api.bcast(res_ind)
+    bodo.libs.distributed_api.bcast_preallocated(res)
+    bodo.libs.distributed_api.bcast_preallocated(res_ind)
     return res, res_ind
 
 
@@ -1078,8 +1274,8 @@ def duplicated(data, parallel=False):
     n = len(data)
     # empty input tuple corner case
     if n == 0:
-        return lambda data, parallel=False: np.empty(
-            0, dtype=np.bool_
+        return lambda data, parallel=False: bodo.libs.bool_arr_ext.alloc_bool_array(
+            0
         )  # pragma: no cover
 
     # if is_tuple, we are processing a dataframe and will form nullable tuples from the rows
@@ -1089,17 +1285,16 @@ def duplicated(data, parallel=False):
     func_text += "  if parallel:\n"
     array_info_str = ", ".join(f"array_to_info(data[{i}])" for i in range(n))
     func_text += f"    cpp_table = arr_info_list_to_table([{array_info_str}])\n"
+    # NOTE: C++ will delete cpp_table pointer
     func_text += f"    out_cpp_table = bodo.libs.array.shuffle_table(cpp_table, {n}, parallel, 1)\n"
     info_to_arr_str = ", ".join(
-        f"info_to_array(info_from_table(out_cpp_table, {i}), data[{i}])"
-        for i in range(n)
+        f"array_from_cpp_table(out_cpp_table, {i}, data[{i}])" for i in range(n)
     )
     func_text += f"    data = ({info_to_arr_str},)\n"
     func_text += "    shuffle_info = bodo.libs.array.get_shuffle_info(out_cpp_table)\n"
     func_text += "    bodo.libs.array.delete_table(out_cpp_table)\n"
-    func_text += "    bodo.libs.array.delete_table(cpp_table)\n"
     func_text += "  n = len(data[0])\n"
-    func_text += "  out = np.empty(n, np.bool_)\n"
+    func_text += "  out = bodo.libs.bool_arr_ext.alloc_bool_array(n)\n"
     func_text += "  uniqs = dict()\n"
     if is_tuple:
         func_text += "  for i in range(n):\n"
@@ -1131,6 +1326,7 @@ def duplicated(data, parallel=False):
     func_text += (
         "    out = bodo.hiframes.pd_groupby_ext.reverse_shuffle(out, shuffle_info)\n"
     )
+    func_text += "  delete_shuffle_info(shuffle_info)\n"
     func_text += "  return out\n"
     loc_vars = {}
     exec(
@@ -1140,8 +1336,8 @@ def duplicated(data, parallel=False):
             "np": np,
             "array_to_info": array_to_info,
             "arr_info_list_to_table": arr_info_list_to_table,
-            "info_to_array": info_to_array,
-            "info_from_table": info_from_table,
+            "array_from_cpp_table": array_from_cpp_table,
+            "delete_shuffle_info": bodo.libs.array.delete_shuffle_info,
         },
         loc_vars,
     )
@@ -1149,40 +1345,41 @@ def duplicated(data, parallel=False):
     return impl
 
 
-def sample_table_operation(data, ind_arr, n, frac, replace, parallel=False):
+def sample_table_operation(
+    data, ind_arr, n, frac, replace, random_state, parallel=False
+):
     pass
 
 
 @overload(sample_table_operation, no_unliteral=True)
-def overload_sample_table_operation(data, ind_arr, n, frac, replace, parallel=False):
+def overload_sample_table_operation(
+    data, ind_arr, n, frac, replace, random_state, parallel=False
+):
     """This is the code calling the C++ function for the sampling procedure.
     Parameters passed in argument are:
     ---the number of rows.
     ---The fraction used (-1 if the number of rows is used.
-    ---Whether to allow collision of values."""
+    ---Whether to allow collision of values.
+    ---Random number generator seed"""
     count = len(data)
 
-    func_text = "def impl(data, ind_arr, n, frac, replace, parallel=False):\n"
+    func_text = (
+        "def impl(data, ind_arr, n, frac, replace, random_state, parallel=False):\n"
+    )
     func_text += "  info_list_total = [{}, array_to_info(ind_arr)]\n".format(
-        ", ".join("array_to_info(data[{}])".format(x) for x in range(count))
+        ", ".join(f"array_to_info(data[{x}])" for x in range(count))
     )
     func_text += "  table_total = arr_info_list_to_table(info_list_total)\n"
-    func_text += (
-        "  out_table = sample_table(table_total, n, frac, replace, parallel)\n".format(
-            count
-        )
-    )
+    # NOTE: C++ will delete table_total pointer
+    func_text += "  out_table = sample_table(table_total, n, frac, replace, random_state, parallel)\n"
     for i_col in range(count):
-        func_text += "  out_arr_{} = info_to_array(info_from_table(out_table, {}), data[{}])\n".format(
-            i_col, i_col, i_col
-        )
-    func_text += "  out_arr_index = info_to_array(info_from_table(out_table, {}), ind_arr)\n".format(
-        count
+        func_text += f"  out_arr_{i_col} = array_from_cpp_table(out_table, {i_col}, data[{i_col}])\n"
+    func_text += (
+        f"  out_arr_index = array_from_cpp_table(out_table, {count}, ind_arr)\n"
     )
     func_text += "  delete_table(out_table)\n"
-    func_text += "  delete_table(table_total)\n"
     func_text += "  return ({},), out_arr_index\n".format(
-        ", ".join("out_arr_{}".format(i) for i in range(count))
+        ", ".join(f"out_arr_{i}" for i in range(count))
     )
     loc_vars = {}
     exec(
@@ -1193,10 +1390,8 @@ def overload_sample_table_operation(data, ind_arr, n, frac, replace, parallel=Fa
             "array_to_info": array_to_info,
             "sample_table": sample_table,
             "arr_info_list_to_table": arr_info_list_to_table,
-            "info_from_table": info_from_table,
-            "info_to_array": info_to_array,
+            "array_from_cpp_table": array_from_cpp_table,
             "delete_table": delete_table,
-            "delete_table_decref_arrays": delete_table_decref_arrays,
         },
         loc_vars,
     )
@@ -1204,15 +1399,16 @@ def overload_sample_table_operation(data, ind_arr, n, frac, replace, parallel=Fa
     return impl
 
 
-def drop_duplicates(data, ind_arr, ncols, parallel=False):  # pragma: no cover
+def drop_duplicates(data, ind_arr, ncols, keep_i, parallel=False):  # pragma: no cover
     pass
 
 
 @overload(drop_duplicates, no_unliteral=True)
-def overload_drop_duplicates(data, ind_arr, ncols, parallel=False):
+def overload_drop_duplicates(data, ind_arr, ncols, keep_i, parallel=False):
     """
     Kernel implementation for drop_duplicates. ncols is the number of
     columns to check for possible duplicates, which are always at the front.
+    keep_i is either 0, 1, or 2 corresponding to keep="first", "last", or False
     """
 
     # TODO: inline for optimization?
@@ -1222,25 +1418,27 @@ def overload_drop_duplicates(data, ind_arr, ncols, parallel=False):
     # ncols <= count. The duplicate checked columns are always at the front.
     count = len(data)
 
-    func_text = "def impl(data, ind_arr, ncols, parallel=False):\n"
-    func_text += "  info_list_total = [{}, array_to_info(ind_arr)]\n".format(
-        ", ".join("array_to_info(data[{}])".format(x) for x in range(count))
+    ignore_index = is_overload_none(ind_arr)
+    ind_info = "" if ignore_index else "array_to_info(ind_arr)"
+
+    func_text = "def impl(data, ind_arr, ncols, keep_i, parallel=False):\n"
+    func_text += "  info_list_total = [{}, {}]\n".format(
+        ", ".join(f"array_to_info(data[{x}])" for x in range(count)), ind_info
     )
     func_text += "  table_total = arr_info_list_to_table(info_list_total)\n"
-    # We keep the first entry in the drop_duplicates
-    func_text += "  keep_i = 0\n"
-    func_text += "  out_table = drop_duplicates_table(table_total, parallel, ncols, keep_i, False, True)\n"
+    # NOTE: C++ will delete table pointer
+    func_text += "  out_table = drop_duplicates_cpp_table(table_total, parallel, ncols, keep_i, False, True)\n"
     for i_col in range(count):
-        func_text += "  out_arr_{} = info_to_array(info_from_table(out_table, {}), data[{}])\n".format(
-            i_col, i_col, i_col
+        func_text += f"  out_arr_{i_col} = array_from_cpp_table(out_table, {i_col}, data[{i_col}])\n"
+    if ignore_index:
+        func_text += "  out_arr_index = None\n"
+    else:
+        func_text += (
+            f"  out_arr_index = array_from_cpp_table(out_table, {count}, ind_arr)\n"
         )
-    func_text += "  out_arr_index = info_to_array(info_from_table(out_table, {}), ind_arr)\n".format(
-        count
-    )
     func_text += "  delete_table(out_table)\n"
-    func_text += "  delete_table(table_total)\n"
     func_text += "  return ({},), out_arr_index\n".format(
-        ", ".join("out_arr_{}".format(i) for i in range(count))
+        ", ".join(f"out_arr_{i}" for i in range(count))
     )
     loc_vars = {}
     exec(
@@ -1249,12 +1447,10 @@ def overload_drop_duplicates(data, ind_arr, ncols, parallel=False):
             "np": np,
             "bodo": bodo,
             "array_to_info": array_to_info,
-            "drop_duplicates_table": drop_duplicates_table,
+            "drop_duplicates_cpp_table": drop_duplicates_cpp_table,
             "arr_info_list_to_table": arr_info_list_to_table,
-            "info_from_table": info_from_table,
-            "info_to_array": info_to_array,
+            "array_from_cpp_table": array_from_cpp_table,
             "delete_table": delete_table,
-            "delete_table_decref_arrays": delete_table_decref_arrays,
         },
         loc_vars,
     )
@@ -1276,10 +1472,12 @@ def overload_drop_duplicates_array(data_arr, parallel=False):
         info_list_total = [array_to_info(data_arr)]
         table_total = arr_info_list_to_table(info_list_total)
         keep_i = 0
-        out_table = drop_duplicates_table(table_total, parallel, 1, keep_i, False, True)
-        out_arr = info_to_array(info_from_table(out_table, 0), data_arr)
+        # NOTE: C++ will delete table pointer
+        out_table = drop_duplicates_cpp_table(
+            table_total, parallel, 1, keep_i, False, True
+        )
+        out_arr = array_from_cpp_table(out_table, 0, data_arr)
         delete_table(out_table)
-        delete_table(table_total)
         return out_arr
 
     return impl
@@ -1294,7 +1492,6 @@ def overload_dropna(data, how, thresh, subset):
     """drop NA rows in tuple of arrays 'data'. 'subset' is the index numbers of arrays
     to consider for NA check. 'how' and 'thresh' are the same as df.dropna().
     """
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(data, "bodo.dropna()")
 
     n_data_arrs = len(data.types)
     out_names = ["out" + str(i) for i in range(n_data_arrs)]
@@ -1302,7 +1499,7 @@ def overload_dropna(data, how, thresh, subset):
     how = get_overload_const_str(how)
 
     # gen NA check code
-    isna_calls = ["isna(data[{}], i)".format(i) for i in subset_inds]
+    isna_calls = [f"isna(data[{i}], i)" for i in subset_inds]
     isna_check = "not ({})".format(" or ".join(isna_calls))
     if not is_overload_none(thresh):
         isna_check = "(({}) <= ({}) - thresh)".format(
@@ -1316,34 +1513,32 @@ def overload_dropna(data, how, thresh, subset):
     func_text += "  old_len = len(data[0])\n"
     func_text += "  new_len = 0\n"
     func_text += "  for i in range(old_len):\n"
-    func_text += "    if {}:\n".format(isna_check)
+    func_text += f"    if {isna_check}:\n"
     func_text += "      new_len += 1\n"
     # allocate new arrays
     for i, out in enumerate(out_names):
         # Add a check for categorical, if so use data[{i}].dtype
         if isinstance(data[i], bodo.CategoricalArrayType):
-            func_text += "  {0} = bodo.utils.utils.alloc_type(new_len, data[{1}], (-1,))\n".format(
-                out, i
+            func_text += (
+                f"  {out} = bodo.utils.utils.alloc_type(new_len, data[{i}], (-1,))\n"
             )
         else:
             func_text += (
-                "  {0} = bodo.utils.utils.alloc_type(new_len, t{1}, (-1,))\n".format(
-                    out, i
-                )
+                f"  {out} = bodo.utils.utils.alloc_type(new_len, t{i}, (-1,))\n"
             )
     func_text += "  curr_ind = 0\n"
     func_text += "  for i in range(old_len):\n"
-    func_text += "    if {}:\n".format(isna_check)
+    func_text += f"    if {isna_check}:\n"
     for i in range(n_data_arrs):
-        func_text += "      if isna(data[{}], i):\n".format(i)
-        func_text += "        setna({}, curr_ind)\n".format(out_names[i])
+        func_text += f"      if isna(data[{i}], i):\n"
+        func_text += f"        setna({out_names[i]}, curr_ind)\n"
         func_text += "      else:\n"
-        func_text += "        {}[curr_ind] = data[{}][i]\n".format(out_names[i], i)
+        func_text += f"        {out_names[i]}[curr_ind] = data[{i}][i]\n"
     func_text += "      curr_ind += 1\n"
     func_text += "  return {}\n".format(", ".join(out_names))
     loc_vars = {}
     # pass data types to generated code
-    _globals = {"t{}".format(i): t for i, t in enumerate(data.types)}
+    _globals = {f"t{i}": t for i, t in enumerate(data.types)}
     _globals.update(
         {
             "isna": isna,
@@ -1364,7 +1559,6 @@ def get(arr, ind):  # pragma: no cover
 
 @overload(get, no_unliteral=True)
 def overload_get(arr, ind):
-
     if isinstance(arr, ArrayItemArrayType):
         arr_typ = arr.dtype
         out_dtype = arr_typ.dtype
@@ -1422,20 +1616,30 @@ def concat(arr_list):  # pragma: no cover
 
 @overload(concat, no_unliteral=True)
 def concat_overload(arr_list):
-
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
-        arr_list.dtype, "bodo.concat()"
-    )
-
     # TODO: Support actually handling the possibles null values
     if isinstance(arr_list, bodo.NullableTupleType):
-        return lambda arr_list: bodo.libs.array_kernels.concat(arr_list._data)
+        return lambda arr_list: bodo.libs.array_kernels.concat(
+            arr_list._data
+        )  # pragma: no cover
+
+    if (
+        isinstance(arr_list, (types.UniTuple, types.List))
+        and arr_list.dtype == bodo.null_array_type
+    ):
+
+        def null_array_concat_impl(arr_list):  # pragma: no cover
+            tot_len = 0
+            for A in arr_list:
+                tot_len += len(A)
+            ret = bodo.libs.null_arr_ext.init_null_array(tot_len)
+            return ret
+
+        return null_array_concat_impl
 
     # array(item) arrays
     if isinstance(arr_list, (types.UniTuple, types.List)) and isinstance(
         arr_list.dtype, ArrayItemArrayType
     ):
-        data_arr_type = arr_list.dtype.dtype
 
         def array_item_concat_impl(arr_list):  # pragma: no cover
             # preallocate the output
@@ -1482,7 +1686,7 @@ def concat_overload(arr_list):
     ):
         struct_keys = arr_list.dtype.names
         func_text = "def struct_array_concat_impl(arr_list):\n"
-        func_text += f"    n_all = 0\n"
+        func_text += "    n_all = 0\n"
         for i in range(len(struct_keys)):
             func_text += f"    concat_list{i} = []\n"
         func_text += "    for A in arr_list:\n"
@@ -1501,7 +1705,7 @@ def concat_overload(arr_list):
         )
         func_text += "            bodo.libs.int_arr_ext.set_bit_to_arr(new_mask, curr_bit, bit)\n"
         func_text += "            curr_bit += 1\n"
-        func_text += "    return bodo.libs.struct_arr_ext.init_struct_arr(\n"
+        func_text += "    return bodo.libs.struct_arr_ext.init_struct_arr(n_all, \n"
         data_val = ", ".join(
             [
                 f"bodo.libs.array_kernels.concat(concat_list{i})"
@@ -1522,6 +1726,29 @@ def concat_overload(arr_list):
             loc_vars,
         )
         return loc_vars["struct_array_concat_impl"]
+
+    # TZ-Aware arrays
+    if isinstance(arr_list, (types.UniTuple, types.List)) and isinstance(
+        arr_list.dtype, bodo.DatetimeArrayType
+    ):
+        tz_literal = arr_list.dtype.tz
+
+        def tz_aware_concat_impl(arr_list):  # pragma: no cover
+            tot_len = 0
+            for A in arr_list:
+                tot_len += len(A)
+            Aret = bodo.libs.pd_datetime_arr_ext.alloc_pd_datetime_array(
+                tot_len, tz_literal
+            )
+            curr_pos = 0
+            for A in arr_list:
+                for i in range(len(A)):
+                    Aret[i + curr_pos] = A[i]
+                curr_pos += len(A)
+
+            return Aret
+
+        return tz_aware_concat_impl
 
     # datetime.date array
     if (
@@ -1547,6 +1774,55 @@ def concat_overload(arr_list):
             return Aret
 
         return datetime_date_array_concat_impl
+
+    # Time array
+    if isinstance(arr_list, (types.UniTuple, types.List)) and isinstance(
+        arr_list.dtype, TimeArrayType
+    ):
+        prec = arr_list.dtype.precision
+
+        def time_array_concat_impl(arr_list):  # pragma: no cover
+            tot_len = 0
+            for A in arr_list:
+                tot_len += len(A)
+            Aret = bodo.hiframes.time_ext.alloc_time_array(tot_len, prec)
+            curr_pos = 0
+            for A in arr_list:
+                for i in range(len(A)):
+                    Aret._data[i + curr_pos] = A._data[i]
+                    bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(A._null_bitmap, i)
+                    bodo.libs.int_arr_ext.set_bit_to_arr(
+                        Aret._null_bitmap, i + curr_pos, bit
+                    )
+                curr_pos += len(A)
+            return Aret
+
+        return time_array_concat_impl
+
+    # TimestampTZ array
+    if (
+        isinstance(arr_list, (types.UniTuple, types.List))
+        and arr_list.dtype == timestamptz_array_type
+    ):
+
+        def timestamp_tz_array_concat_impl(arr_list):  # pragma: no cover
+            tot_len = 0
+            for A in arr_list:
+                tot_len += len(A)
+            out_arr = bodo.hiframes.timestamptz_ext.alloc_timestamptz_array(tot_len)
+            curr_pos = 0
+            for A in arr_list:
+                for i in range(len(A)):
+                    out_arr.data_ts[i + curr_pos] = A.data_ts[i]
+                    out_arr.data_offset[i + curr_pos] = A.data_offset[i]
+                    bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(A._null_bitmap, i)
+                    bodo.libs.int_arr_ext.set_bit_to_arr(
+                        out_arr._null_bitmap, i + curr_pos, bit
+                    )
+                curr_pos += len(A)
+            return out_arr
+
+        return timestamp_tz_array_concat_impl
 
     # datetime.timedelta array
     if (
@@ -1616,7 +1892,6 @@ def concat_overload(arr_list):
         isinstance(arr_list, types.BaseTuple)
         and all(is_str_arr_type(t) for t in arr_list.types)
     ):
-
         if isinstance(arr_list, types.BaseTuple):
             _arr_type = arr_list.types[0]
             for i in range(len(arr_list)):
@@ -1631,60 +1906,142 @@ def concat_overload(arr_list):
             def impl_dict_arr(arr_list):  # pragma: no cover
                 """
                 Combine the dictionaries by stacking the inner dict-array
-                and remap the indices. convert_local_dictionary_to_global is
-                called at the end to remove duplicates and make the dictionary global.
+                and remap the indices. drop_duplicates_local_dictionary is
+                called at the end to remove duplicates.
+
+                If all dictionaries share the same id then we can skip the transpose step.
                 """
-                # allocate the inner dict array
+                if len(arr_list) == 0:
+                    # 0 array edge case that probably never happens.
+                    out_dict_arr = pre_alloc_string_array(0, 0)
+                    out_ind_arr = bodo.libs.int_arr_ext.alloc_int_array(0, np.int32)
+                    # Note: we shouldn't assume this value is global.
+                    return init_dict_arr(out_dict_arr, out_ind_arr, False, True, None)
+
+                # Check if all dictionaries have the same id.
+                all_same_id = True
+                first_arr = arr_list[0]
+                initial_id = first_arr._dict_id
+                has_global_dictionary = first_arr._has_global_dictionary
+                # Track unique for the id case. We want to avoid false negatives.
+                has_unique_local_dictionary_if_same = (
+                    first_arr._has_unique_local_dictionary
+                )
+                largest_dict_data = arr_list[0]._data
                 num_strs = 0
                 num_chars = 0
                 num_elems = 0
-                for A in arr_list:
-                    data_arr = A._data
-                    indices_arr = A._indices
+                for arr in arr_list:
+                    data_arr = arr._data
+                    indices_arr = arr._indices
+                    # Compute the sizes
                     num_elems += len(indices_arr)
                     num_strs += len(data_arr)
                     num_chars += bodo.libs.str_arr_ext.num_total_chars(data_arr)
-
-                out_dict_arr = pre_alloc_string_array(num_strs, num_chars)
-                out_ind_arr = bodo.libs.int_arr_ext.alloc_int_array(num_elems, np.int32)
-                bodo.libs.str_arr_ext.set_null_bits_to_value(out_dict_arr, -1)
-
-                # copy data to output
-                curr_str_ind = 0
-                curr_chars_ind = 0
-                curr_elem_ind = 0
-                for A in arr_list:
-                    data_arr = A._data
-                    indices_arr = A._indices
-                    num_elems = len(indices_arr)
-                    bodo.libs.str_arr_ext.set_string_array_range(
-                        out_dict_arr, data_arr, curr_str_ind, curr_chars_ind
+                    # Compute the dicitonary metadata.
+                    has_global_dictionary = (
+                        has_global_dictionary and arr._has_global_dictionary
                     )
-                    for i in range(num_elems):
-                        if bodo.libs.array_kernels.isna(
-                            indices_arr, i
-                        ) or bodo.libs.array_kernels.isna(data_arr, indices_arr[i]):
-                            bodo.libs.array_kernels.setna(
-                                out_ind_arr, curr_elem_ind + i
-                            )
-                        else:
-                            out_ind_arr[curr_elem_ind + i] = (
-                                curr_str_ind + indices_arr[i]
-                            )
-                    curr_str_ind += len(data_arr)
-                    curr_chars_ind += bodo.libs.str_arr_ext.num_total_chars(data_arr)
-                    curr_elem_ind += num_elems
+                    all_same_id = all_same_id and arr._dict_id == initial_id
 
-                out_arr = init_dict_arr(out_dict_arr, out_ind_arr, False)
-                # convert_local_dictionary_to_global will convert the dictionary
-                # to global and deduplicate the inner dictionary array, potentially
-                # remaping the indices.
-                unique_out_arr = convert_local_dictionary_to_global(out_arr, False)
-                return unique_out_arr
+                    # we want to determine if the dictionary is locally unique
+                    # only if some largest dictionary is marked as locally
+                    # unique. This is because if there are two dictionaries
+                    # with the same data, one might be marked non-unique because
+                    # we don't know that is unique, while the other one has been
+                    # more recently checked and is verified to be unique.
+                    if len(data_arr) > len(largest_dict_data):
+                        largest_dict_data = data_arr
+                        has_unique_local_dictionary_if_same = (
+                            arr._has_unique_local_dictionary
+                        )
+                    elif len(data_arr) == len(largest_dict_data):
+                        has_unique_local_dictionary_if_same = (
+                            has_unique_local_dictionary_if_same
+                            or arr._has_unique_local_dictionary
+                        )
+
+                if all_same_id:
+                    # If all the dictionaries shared the same ID we can use the
+                    # largest dictionary data (shared ID implies shared prefix)
+                    out_dict_arr = largest_dict_data
+                    # Check the indices
+                    out_ind_arr = bodo.libs.int_arr_ext.alloc_int_array(
+                        num_elems, np.int32
+                    )
+                    # copy the indices to the output
+                    curr_elem_ind = 0
+                    for A in arr_list:
+                        indices_arr = A._indices
+                        num_elems = len(indices_arr)
+                        for i in range(num_elems):
+                            if bodo.libs.array_kernels.isna(
+                                indices_arr, i
+                            ) or bodo.libs.array_kernels.isna(
+                                out_dict_arr, indices_arr[i]
+                            ):
+                                bodo.libs.array_kernels.setna(
+                                    out_ind_arr, curr_elem_ind + i
+                                )
+                            else:
+                                # No need to remap data
+                                out_ind_arr[curr_elem_ind + i] = indices_arr[i]
+                        curr_elem_ind += num_elems
+                    return init_dict_arr(
+                        out_dict_arr,
+                        out_ind_arr,
+                        has_global_dictionary,
+                        has_unique_local_dictionary_if_same,
+                        initial_id,
+                    )
+
+                else:
+                    # allocate the inner dict array
+                    out_dict_arr = pre_alloc_string_array(num_strs, num_chars)
+                    out_ind_arr = bodo.libs.int_arr_ext.alloc_int_array(
+                        num_elems, np.int32
+                    )
+                    bodo.libs.str_arr_ext.set_null_bits_to_value(out_dict_arr, -1)
+
+                    # copy data to output
+                    curr_str_ind = 0
+                    curr_chars_ind = 0
+                    curr_elem_ind = 0
+                    for A in arr_list:
+                        data_arr = A._data
+                        indices_arr = A._indices
+                        num_elems = len(indices_arr)
+                        bodo.libs.str_arr_ext.set_string_array_range(
+                            out_dict_arr, data_arr, curr_str_ind, curr_chars_ind
+                        )
+                        for i in range(num_elems):
+                            if bodo.libs.array_kernels.isna(
+                                indices_arr, i
+                            ) or bodo.libs.array_kernels.isna(data_arr, indices_arr[i]):
+                                bodo.libs.array_kernels.setna(
+                                    out_ind_arr, curr_elem_ind + i
+                                )
+                            else:
+                                out_ind_arr[curr_elem_ind + i] = (
+                                    curr_str_ind + indices_arr[i]
+                                )
+                        curr_str_ind += len(data_arr)
+                        curr_chars_ind += bodo.libs.str_arr_ext.num_total_chars(
+                            data_arr
+                        )
+                        curr_elem_ind += num_elems
+
+                    out_arr = init_dict_arr(
+                        out_dict_arr, out_ind_arr, has_global_dictionary, False, None
+                    )
+                    # drop_duplicates_local_dictionary will drop any local duplicates,
+                    # potentially remapping the indices.
+                    unique_out_arr = drop_duplicates_local_dictionary(out_arr, False)
+                    return unique_out_arr
 
             return impl_dict_arr
 
-        def impl_str(arr_list):  # pragma: no cover\n
+        def impl_str(arr_list):  # pragma: no cover
             # decode_if_dict_array will convert a list or tuple of
             # heterogenous(dict and non-dict) string arrays to a list of regular string arrays
             arr_list = decode_if_dict_array(arr_list)
@@ -1725,7 +2082,7 @@ def concat_overload(arr_list):
         )
     ):
 
-        def impl_int_arr_list(arr_list):
+        def impl_int_arr_list(arr_list):  # pragma: no cover
             arr_list_converted = convert_to_nullable_tup(arr_list)
             all_data = []
             n_all = 0
@@ -1752,15 +2109,46 @@ def concat_overload(arr_list):
     # Boolean array input, or mix of Numpy and nullable boolean
     if (
         isinstance(arr_list, (types.UniTuple, types.List))
-        and arr_list.dtype == boolean_array
+        and arr_list.dtype == boolean_array_type
         or (
             isinstance(arr_list, types.BaseTuple)
             and all(t.dtype == types.bool_ for t in arr_list.types)
-            and any(t == boolean_array for t in arr_list.types)
+            and any(t == boolean_array_type for t in arr_list.types)
         )
     ):
         # TODO: refactor to avoid duplication with integer array
-        def impl_bool_arr_list(arr_list):
+        def impl_bool_arr_list(arr_list):  # pragma: no cover
+            arr_list_converted = convert_to_nullable_tup(arr_list)
+            all_data = []
+            n_all = 0
+            for A in arr_list_converted:
+                all_data.append(A._data)
+                n_all += len(A)
+            out_array = bodo.libs.bool_arr_ext.alloc_bool_array(n_all)
+            offset = 0
+            for A in arr_list_converted:
+                for j in range(len(A)):
+                    if bodo.libs.array_kernels.isna(A, j):
+                        bodo.libs.array_kernels.setna(out_array, offset + j)
+                    else:
+                        out_array[offset + j] = A[j]
+                offset += len(A)
+            return out_array
+
+        return impl_bool_arr_list
+
+    # Floating array input, or mix of Floating array and Numpy float array
+    if (
+        isinstance(arr_list, (types.UniTuple, types.List))
+        and isinstance(arr_list.dtype, FloatingArrayType)
+        or (
+            isinstance(arr_list, types.BaseTuple)
+            and all(isinstance(t.dtype, types.Float) for t in arr_list.types)
+            and any(isinstance(t, FloatingArrayType) for t in arr_list.types)
+        )
+    ):
+
+        def impl_float_arr_list(arr_list):  # pragma: no cover
             arr_list_converted = convert_to_nullable_tup(arr_list)
             all_data = []
             n_all = 0
@@ -1777,9 +2165,12 @@ def concat_overload(arr_list):
                     bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(old_mask, j)
                     bodo.libs.int_arr_ext.set_bit_to_arr(new_mask, curr_bit, bit)
                     curr_bit += 1
-            return bodo.libs.bool_arr_ext.init_bool_array(out_data, new_mask)
+            return bodo.libs.float_arr_ext.init_float_array(
+                out_data,
+                new_mask,
+            )
 
-        return impl_bool_arr_list
+        return impl_float_arr_list
 
     # categorical arrays
     if isinstance(arr_list, (types.UniTuple, types.List)) and isinstance(
@@ -1791,7 +2182,8 @@ def concat_overload(arr_list):
             for A in arr_list:
                 new_code_arrs.append(A.codes)
             return init_categorical_array(
-                bodo.libs.array_kernels.concat(new_code_arrs), arr_list[0].dtype
+                bodo.libs.array_kernels.concat(new_code_arrs),
+                arr_list[0].dtype,
             )
 
         return cat_array_concat_impl
@@ -1801,7 +2193,7 @@ def concat_overload(arr_list):
     if _is_same_categorical_array_type(arr_list):
         code_arrs = ", ".join(f"arr_list[{i}].codes" for i in range(len(arr_list)))
         func_text = "def impl(arr_list):\n"
-        func_text += f"    return init_categorical_array(bodo.libs.array_kernels.concat(({code_arrs},)), arr_list[0].dtype)\n"
+        func_text += f"    return init_categorical_array(bodo.libs.array_kernels.concat(({code_arrs}, )), arr_list[0].dtype)\n"
 
         locs = {}
         exec(
@@ -1819,7 +2211,7 @@ def concat_overload(arr_list):
     ):
         dtype = arr_list.dtype.dtype
 
-        def impl_np_arr_list(arr_list):
+        def impl_np_arr_list(arr_list):  # pragma: no cover
             n_all = 0
             for A in arr_list:
                 n_all += len(A)
@@ -1842,7 +2234,8 @@ def concat_overload(arr_list):
             for t in arr_list.types
         )
         and any(
-            isinstance(t, types.Array) and isinstance(t.dtype, types.Float)
+            isinstance(t, (types.Array, FloatingArrayType))
+            and isinstance(t.dtype, types.Float)
             for t in arr_list.types
         )
     ):
@@ -1863,6 +2256,31 @@ def concat_overload(arr_list):
             return result
 
         return impl_map_arr_list
+    if isinstance(arr_list, (types.UniTuple, types.List)) and isinstance(
+        arr_list.dtype, bodo.TupleArrayType
+    ):
+
+        def impl_tuple_arr_list(arr_list):  # pragma: no cover
+            array_item_list = []
+            for A in arr_list:
+                array_item_list.append(A._data)
+            output_arr_item_arr = bodo.libs.array_kernels.concat(array_item_list)
+            result = bodo.libs.tuple_arr_ext.init_tuple_arr(output_arr_item_arr)
+            return result
+
+        return impl_tuple_arr_list
+
+    if isinstance(arr_list, types.Tuple):
+        # Generate a simpler error message for multiple timezones.
+        all_timestamp_data = all(
+            isinstance(typ, bodo.DatetimeArrayType)
+            or (isinstance(typ, types.Array) and typ.dtype == bodo.datetime64ns)
+            for typ in arr_list.types
+        )
+        if all_timestamp_data:
+            raise BodoError(
+                f"Cannot concatenate the rows of Timestamp data with different timezones. Found types: {arr_list}. Please use pd.Series.tz_convert(None) to remove Timezone information."
+            )
 
     for typ in arr_list:
         if not isinstance(typ, types.Array):  # pragma: no cover
@@ -1884,7 +2302,7 @@ def overload_astype_float_tup(arr_tup):
 
     func_text = "def f(arr_tup):\n"
     func_text += "  return ({}{})\n".format(
-        ",".join("arr_tup[{}].astype(np.float64)".format(i) for i in range(count)),
+        ",".join(f"arr_tup[{i}].astype(np.float64)" for i in range(count)),
         "," if count == 1 else "",
     )  # single value needs comma to become tuple
 
@@ -1900,16 +2318,18 @@ def convert_to_nullable_tup(arr_tup):
 
 @overload(convert_to_nullable_tup, no_unliteral=True)
 def overload_convert_to_nullable_tup(arr_tup):
-    """converts a tuple of integer/bool arrays to nullable integer/bool arrays with
-    common dtype
+    """converts a tuple of integer/float/bool arrays to nullable integer/float/bool
+    arrays with common dtype
     """
     # no need for conversion if already nullable int
     if isinstance(arr_tup, (types.UniTuple, types.List)) and isinstance(
-        arr_tup.dtype, (IntegerArrayType, BooleanArrayType)
+        arr_tup.dtype, (IntegerArrayType, FloatingArrayType, BooleanArrayType)
     ):
         return lambda arr_tup: arr_tup  # pragma: no cover
 
-    assert isinstance(arr_tup, types.BaseTuple)
+    assert isinstance(
+        arr_tup, types.BaseTuple
+    ), "convert_to_nullable_tup: tuple expected"
     count = len(arr_tup.types)
     comm_dtype = find_common_np_dtype(arr_tup.types)
     out_dtype = None
@@ -1917,13 +2337,14 @@ def overload_convert_to_nullable_tup(arr_tup):
     if isinstance(comm_dtype, types.Integer):
         out_dtype = bodo.libs.int_arr_ext.IntDtype(comm_dtype)
         astype_str = ".astype(out_dtype, False)"
+    if isinstance(comm_dtype, types.Float):
+        out_dtype = bodo.libs.float_arr_ext.FloatDtype(comm_dtype)
+        astype_str = ".astype(out_dtype, False)"
 
     func_text = "def f(arr_tup):\n"
     func_text += "  return ({}{})\n".format(
         ",".join(
-            "bodo.utils.conversion.coerce_to_array(arr_tup[{}], use_nullable_array=True){}".format(
-                i, astype_str
-            )
+            f"bodo.utils.conversion.coerce_to_array(arr_tup[{i}], use_nullable_array=True){astype_str}"
             for i in range(count)
         ),
         "," if count == 1 else "",
@@ -1969,50 +2390,75 @@ def unique(A, dropna=False, parallel=False):  # pragma: no cover
     pass
 
 
-def cummin(A):  # pragma: no cover
+def accum_func(A, func_name, parallel=False):  # pragma: no cover
     pass
 
 
-@overload(cummin, no_unliteral=True)
-def cummin_overload(A):
-    if isinstance(A.dtype, types.Float):
-        neutral_val = np.finfo(A.dtype(1).dtype).max
-    else:  # TODO: Add support for dates
-        neutral_val = np.iinfo(A.dtype(1).dtype).max
-    # No parallel code here. This cannot be done via parfor usual stuff but instead
-    # by the more complicated mpi_exscan
+@overload(accum_func, no_unliteral=True)
+def accum_func_overload(A, func_name, parallel=False):
+    """General kernel for cumulative functions: cumsum/cumprod/cummin/cummax
 
-    def impl(A):
+    Args:
+        A (array): input data array
+        func_name (string literal): cumulative function name
+        parallel (bool, optional): flag for running in parallel. Defaults to False.
+
+    Returns:
+        array: output array of cumulative operation
+    """
+
+    assert_bodo_error(
+        is_overload_constant_str(func_name), "accum_func: func_name should be const"
+    )
+    fname = get_overload_const_str(func_name)
+    assert fname in (
+        "cumsum",
+        "cumprod",
+        "cummin",
+        "cummax",
+    ), "accum_func: invalid func_name"
+
+    if fname == "cumsum":
+        neutral_val = A.dtype(0)
+        op = np.int32(Reduce_Type.Sum.value)
+        func = np.add
+    if fname == "cumprod":
+        neutral_val = A.dtype(1)
+        op = np.int32(Reduce_Type.Prod.value)
+        func = np.multiply
+    if fname == "cummin":
+        if isinstance(A.dtype, types.Float):
+            neutral_val = np.finfo(A.dtype(1).dtype).max
+        else:  # TODO: Add support for dates
+            neutral_val = np.iinfo(A.dtype(1).dtype).max
+        op = np.int32(Reduce_Type.Min.value)
+        func = min
+    if fname == "cummax":
+        if isinstance(A.dtype, types.Float):
+            neutral_val = np.finfo(A.dtype(1).dtype).min
+        else:
+            neutral_val = np.iinfo(A.dtype(1).dtype).min
+        op = np.int32(Reduce_Type.Max.value)
+        func = max
+
+    out_arr_type = A
+
+    def impl(A, func_name, parallel=False):
         n = len(A)
-        out_arr = np.empty(n, A.dtype)
         curr_cumulative = neutral_val
+        if parallel:
+            for i in range(n):
+                if not bodo.libs.array_kernels.isna(A, i):
+                    curr_cumulative = func(curr_cumulative, A[i])
+            curr_cumulative = bodo.libs.distributed_api.dist_exscan(curr_cumulative, op)
+            if bodo.get_rank() == 0:
+                curr_cumulative = neutral_val
+        out_arr = bodo.utils.utils.alloc_type(n, out_arr_type, (-1,))
         for i in range(n):
-            curr_cumulative = min(curr_cumulative, A[i])
-            out_arr[i] = curr_cumulative
-        return out_arr
-
-    return impl
-
-
-def cummax(A):  # pragma: no cover
-    pass
-
-
-@overload(cummax, no_unliteral=True)
-def cummax_overload(A):
-    if isinstance(A.dtype, types.Float):
-        neutral_val = np.finfo(A.dtype(1).dtype).min
-    else:  # TODO: Add support for dates
-        neutral_val = np.iinfo(A.dtype(1).dtype).min
-    # No parallel code here. This cannot be done via parfor usual stuff but instead
-    # by the more complicated mpi_exscan
-
-    def impl(A):
-        n = len(A)
-        out_arr = np.empty(n, A.dtype)
-        curr_cumulative = neutral_val
-        for i in range(n):
-            curr_cumulative = max(curr_cumulative, A[i])
+            if bodo.libs.array_kernels.isna(A, i):
+                bodo.libs.array_kernels.setna(out_arr, i)
+                continue
+            curr_cumulative = func(curr_cumulative, A[i])
             out_arr[i] = curr_cumulative
         return out_arr
 
@@ -2026,11 +2472,11 @@ def unique_overload(A, dropna=False, parallel=False):
         input_table = arr_info_list_to_table([array_to_info(A)])
         n_key = 1
         keep_i = 0
-        out_table = drop_duplicates_table(
+        # NOTE: C++ will delete table pointer
+        out_table = drop_duplicates_cpp_table(
             input_table, parallel, n_key, keep_i, dropna, True
         )
-        out_arr = info_to_array(info_from_table(out_table, 0), A)
-        delete_table(input_table)
+        out_arr = array_from_cpp_table(out_table, 0, A)
         delete_table(out_table)
         return out_arr
 
@@ -2297,7 +2743,7 @@ def overload_gen_na_array(n, arr, use_dict_arr=False):
 
     # array of np.nan values if 'arr' is float or int Numpy array
     # TODO: use nullable int array
-    if not isinstance(arr, IntegerArrayType) and isinstance(
+    if not isinstance(arr, (FloatingArrayType, IntegerArrayType)) and isinstance(
         dtype, (types.Integer, types.Float)
     ):
         dtype = dtype if isinstance(dtype, types.Float) else types.float64
@@ -2319,7 +2765,9 @@ def overload_gen_na_array(n, arr, use_dict_arr=False):
             numba.parfors.parfor.init_prange()
             for i in numba.parfors.parfor.internal_prange(n):
                 setna(indices, i)
-            return bodo.libs.dict_arr_ext.init_dict_arr(dict_arr, indices, True)
+            return bodo.libs.dict_arr_ext.init_dict_arr(
+                dict_arr, indices, True, True, None
+            )
 
         return impl_dict
 
@@ -2347,6 +2795,33 @@ def gen_na_array_equiv(self, scope, equiv_set, loc, args, kws):  # pragma: no co
 ArrayAnalysis._analyze_op_call_bodo_libs_array_kernels_gen_na_array = gen_na_array_equiv
 
 
+def cast_null_arr(context, builder, fromty, toty, val):
+    """Cast null array to any other nullable array"""
+    assert fromty == bodo.null_array_type, "cast_null_arr: null_array_type expected"
+
+    if toty != bodo.utils.typing.to_nullable_type(toty):  # pragma: no cover
+        raise BodoError(
+            f"Casting null array to non-nullable array type {toty} not allowed."
+        )
+
+    # NOTE: this cast isn't free since it needs to create a new array (allocate and fill with nulls)
+    return context.compile_internal(
+        builder,
+        lambda A: bodo.libs.array_kernels.gen_na_array(len(A), toty),
+        toty(fromty),
+        [val],
+    )  # pragma: no cover
+
+
+def _install_null_array_casts():
+    """Install casting all Bodo arrays to null array"""
+    for t in BODO_ARRAY_TYPE_CLASSES:
+        lower_cast(bodo.null_array_type, t)(cast_null_arr)
+
+
+_install_null_array_casts()
+
+
 def resize_and_copy(A, new_len):  # pragma: no cover
     pass
 
@@ -2354,9 +2829,6 @@ def resize_and_copy(A, new_len):  # pragma: no cover
 @overload(resize_and_copy, no_unliteral=True)
 def overload_resize_and_copy(A, old_size, new_len):
     """allocate a new array (same type as 'A') and copy data of array 'A'"""
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
-        A, "bodo.resize_and_copy()"
-    )
 
     _dtype = A
 
@@ -2374,7 +2846,7 @@ def overload_resize_and_copy(A, old_size, new_len):
 
     # generic copy for const sized arrays
     def impl(A, old_size, new_len):  # pragma: no cover
-        out_arr = bodo.utils.utils.alloc_type(new_len, _dtype, (-1,))
+        out_arr = bodo.utils.utils.alloc_type(new_len, _dtype, (-1,), A)
         out_arr[:old_size] = A[:old_size]
         return out_arr
 
@@ -2408,16 +2880,25 @@ def calc_nitems_equiv(self, scope, equiv_set, loc, args, kws):
 ArrayAnalysis._analyze_op_call_bodo_libs_array_kernels_calc_nitems = calc_nitems_equiv
 
 
-def arange_parallel_impl(return_type, *args):
-    dtype = as_dtype(return_type.dtype)
+def arange_parallel_impl(return_type, *args, dtype=None):
+    inferred_dtype = as_dtype(return_type.dtype)
 
     def arange_1(stop):  # pragma: no cover
+        return np.arange(0, stop, 1, inferred_dtype)
+
+    def arange_1_dtype(stop, dtype):  # pragma: no cover
         return np.arange(0, stop, 1, dtype)
 
     def arange_2(start, stop):  # pragma: no cover
+        return np.arange(start, stop, 1, inferred_dtype)
+
+    def arange_2_dtype(start, stop, dtype):  # pragma: no cover
         return np.arange(start, stop, 1, dtype)
 
     def arange_3(start, stop, step):  # pragma: no cover
+        return np.arange(start, stop, step, inferred_dtype)
+
+    def arange_3_dtype(start, stop, step, dtype):  # pragma: no cover
         return np.arange(start, stop, step, dtype)
 
     if any(isinstance(a, types.Complex) for a in args):
@@ -2444,15 +2925,15 @@ def arange_parallel_impl(return_type, *args):
             return arr
 
     if len(args) == 1:
-        return arange_1
+        return arange_1 if dtype is None else arange_1_dtype
     elif len(args) == 2:
-        return arange_2
+        return arange_2 if dtype is None else arange_2_dtype
     elif len(args) == 3:
-        return arange_3
+        return arange_3 if dtype is None else arange_3_dtype
     elif len(args) == 4:
         return arange_4
     else:
-        raise BodoError("parallel arange with types {}".format(args))
+        raise BodoError(f"parallel arange with types {args}")
 
 
 # Check if numba.parfors.parfor.arange_parallel_impl source code has changed
@@ -2460,7 +2941,7 @@ if bodo.numba_compat._check_numba_change:
     lines = inspect.getsource(numba.parfors.parfor.arange_parallel_impl)
     if (
         hashlib.sha256(lines.encode()).hexdigest()
-        != "c72b0390b4f3e52dcc5426bd42c6b55ff96bae5a425381900985d36e7527a4bd"
+        != "5b03ca42e1fd827f472cf01fc039ffbf9f09742babf39a1be0eac86112aa59d2"
     ):  # pragma: no cover
         warnings.warn("numba.parfors.parfor.arange_parallel_impl has changed")
 numba.parfors.parfor.swap_functions_map[("arange", "numpy")] = arange_parallel_impl
@@ -2484,9 +2965,9 @@ def overload_sort(arr, ascending, inplace):
 
         l_key_arrs = bodo.libs.str_arr_ext.to_list_if_immutable_arr(key_arrs)
         l_data = bodo.libs.str_arr_ext.to_list_if_immutable_arr(data, True)
-        bodo.libs.timsort.sort(l_key_arrs, 0, n, l_data)
+        bodo.libs.vendored.timsort.sort(l_key_arrs, 0, n, l_data)
         if not ascending:
-            bodo.libs.timsort.reverseRange(l_key_arrs, 0, n, l_data)
+            bodo.libs.vendored.timsort.reverseRange(l_key_arrs, 0, n, l_data)
         bodo.libs.str_arr_ext.cp_str_list_to_array(key_arrs, l_key_arrs)
         return key_arrs[0]
 
@@ -2497,7 +2978,10 @@ def overload_sort(arr, ascending, inplace):
 
 
 def overload_array_max(A):
-    if isinstance(A, IntegerArrayType) or A == boolean_array:
+    if (
+        isinstance(A, (IntegerArrayType, FloatingArrayType, SeriesType))
+        or A == boolean_array_type
+    ):
 
         def impl(A):  # pragma: no cover
             return pd.Series(A).max()
@@ -2511,7 +2995,10 @@ overload(max, inline="always", no_unliteral=True)(overload_array_max)
 
 
 def overload_array_min(A):
-    if isinstance(A, IntegerArrayType) or A == boolean_array:
+    if (
+        isinstance(A, (IntegerArrayType, FloatingArrayType, SeriesType))
+        or A == boolean_array_type
+    ):
 
         def impl(A):  # pragma: no cover
             return pd.Series(A).min()
@@ -2525,12 +3012,15 @@ overload(min, inline="always", no_unliteral=True)(overload_array_min)
 
 
 def overload_array_sum(A):
-    if isinstance(A, IntegerArrayType) or A == boolean_array:
+    if (
+        isinstance(A, (IntegerArrayType, FloatingArrayType, SeriesType))
+        or A == boolean_array_type
+    ):
 
         def impl(A):  # pragma: no cover
             return pd.Series(A).sum()
 
-    return impl
+        return impl
 
 
 # Use function decorator to enable stacked inlining
@@ -2540,12 +3030,15 @@ overload(sum, inline="always", no_unliteral=True)(overload_array_sum)
 
 @overload(np.prod, inline="always", no_unliteral=True)
 def overload_array_prod(A):
-    if isinstance(A, IntegerArrayType) or A == boolean_array:
+    if (
+        isinstance(A, (IntegerArrayType, FloatingArrayType, SeriesType))
+        or A == boolean_array_type
+    ):
 
         def impl(A):  # pragma: no cover
             return pd.Series(A).prod()
 
-    return impl
+        return impl
 
 
 def nonzero(arr):  # pragma: no cover
@@ -2589,21 +3082,35 @@ def ffill_bfill_overload(A, method, parallel=False):
     If method is 'ffill' or 'pad',  forward fills NA arguments, i.e. propagates last valid value.
     Otherwise, it backward fills NA arguments, i.e. uses the next valid observation to fill gap.
     """
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
-        A, "bodo.ffill_bfill_arr()"
-    )
 
     _dtype = element_type(A)
+
+    global_vars = {
+        "bodo": bodo,
+        "numba": numba,
+        "pd": pd,
+        "null_border_icomm": null_border_icomm,
+        "decode_if_dict_array": decode_if_dict_array,
+    }
 
     # This function assumes _dtype error checking is done by calling function.
     if _dtype == types.unicode_type:
         null_value = '""'
     elif _dtype == types.bool_:
         null_value = "False"
+    elif isinstance(_dtype, bodo.libs.pd_datetime_arr_ext.PandasDatetimeTZDtype):
+        null_value = f"pd.Timestamp(0, tz='{_dtype.tz}')"
     elif _dtype == bodo.datetime64ns:
-        null_value = "bodo.utils.conversion.unbox_if_timestamp(pd.to_datetime(0))"
+        null_value = (
+            "bodo.utils.conversion.unbox_if_tz_naive_timestamp(pd.to_datetime(0))"
+        )
     elif _dtype == bodo.timedelta64ns:
-        null_value = "bodo.utils.conversion.unbox_if_timestamp(pd.to_timedelta(0))"
+        null_value = (
+            "bodo.utils.conversion.unbox_if_tz_naive_timestamp(pd.to_timedelta(0))"
+        )
+    elif _dtype == bodo.pd_datetime_tz_naive_type:  # pragma: no cover
+        null_value = "NOT_A_TIME"
+        global_vars["NOT_A_TIME"] = pd.Timestamp("NaT")
     else:
         null_value = "0"
 
@@ -2647,13 +3154,7 @@ def ffill_bfill_overload(A, method, parallel=False):
     local_vars = {}
     exec(
         func_text,
-        {
-            "bodo": bodo,
-            "numba": numba,
-            "pd": pd,
-            "null_border_icomm": null_border_icomm,
-            "decode_if_dict_array": decode_if_dict_array,
-        },
+        global_vars,
         local_vars,
     )
     impl = local_vars["impl"]
@@ -2731,12 +3232,10 @@ def null_border_icomm(
         send_buff_value[0] = prev_value
 
     if rank != last_rank:
-        r_send_req1 = bodo.libs.distributed_api.isend(
+        bodo.libs.distributed_api.isend(
             send_buff_is_valid, 1, send_rank, comm_tag, True
         )
-        r_send_req2 = bodo.libs.distributed_api.isend(
-            send_buff_value, 1, send_rank, comm_tag, True
-        )
+        bodo.libs.distributed_api.isend(send_buff_value, 1, send_rank, comm_tag, True)
     return prev_is_valid, prev_value
 
 
@@ -2759,7 +3258,6 @@ def np_sort(A, axis=-1, kind=None, order=None):
     check_unsupported_args("np.sort", args_dict, args_default_dict, "numpy")
 
     def impl(A, axis=-1, kind=None, order=None):  # pragma: no cover
-
         return pd.Series(A).sort_values().values
 
     return impl
@@ -2772,8 +3270,6 @@ def repeat_kernel(A, repeats):  # pragma: no cover
 @overload(repeat_kernel, no_unliteral=True)
 def repeat_kernel_overload(A, repeats):
     """kernel for repeating array values (for Series.repeat)"""
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(A, "Series.repeat()")
-
     _dtype = to_str_arr_if_dict_array(A)
 
     # int case
@@ -2792,7 +3288,13 @@ def repeat_kernel_overload(A, repeats):
                             bodo.libs.array_kernels.setna(out_ind_arr, idx + j)
                     else:
                         out_ind_arr[idx : idx + repeats] = indices_arr[i]
-                return init_dict_arr(data_arr, out_ind_arr, A._has_global_dictionary)
+                return init_dict_arr(
+                    data_arr,
+                    out_ind_arr,
+                    A._has_global_dictionary,
+                    A._has_unique_local_dictionary,
+                    A._dict_id,
+                )
 
             return impl_dict_int
 
@@ -2829,7 +3331,13 @@ def repeat_kernel_overload(A, repeats):
                 else:
                     out_ind_arr[idx : idx + r] = indices_arr[i]
                 idx += r
-            return init_dict_arr(data_arr, out_ind_arr, A._has_global_dictionary)
+            return init_dict_arr(
+                data_arr,
+                out_ind_arr,
+                A._has_global_dictionary,
+                A._has_unique_local_dictionary,
+                A._dict_id,
+            )
 
         return impl_dict_arr
 
@@ -2883,6 +3391,318 @@ def repeat_like(A, dist_like_arr):
     return impl
 
 
+@numba.generated_jit(nopython=True)
+def round_half_always_up(x, places):
+    """Variant of builtin round() that avoids Python's tie-breaking behavior:
+
+                             x: 0.5, 1.5, 2.5, 3.5
+                   round(x, 0): 0.0, 2.0, 2.0, 4.0
+    round_half_always_up(x, 0): 0.0, 1.0, 2.0, 3.0
+
+    Args:
+        x (integer/float): the number to be rounded
+        places (integer): how many places to round to (can be positive or negative)
+
+    Returns:
+        integer/float: x rounded to the specified number of places (same type as x)
+    """
+    func_text = "def impl(x, places):\n"
+    func_text += "  sign = -1 if x < 0 else 1\n"
+    func_text += "  x = abs(x)\n"
+    func_text += "  shift = 10 ** abs(places)\n"
+    func_text += "  if places < 0:\n"
+    func_text += "    x /= shift\n"
+    func_text += "    r = x % 1\n"
+    func_text += "    if r < 0.5: x = floor(x)\n"
+    func_text += "    else: x = ceil(x)\n"
+    func_text += "    x *= shift\n"
+    func_text += "  else:\n"
+    func_text += "    x *= shift\n"
+    func_text += "    r = x % 1\n"
+    func_text += "    if r < 0.5: x = floor(x)\n"
+    func_text += "    else: x = ceil(x)\n"
+    func_text += "    x /= shift\n"
+    if is_valid_int_arg(x):
+        func_text += "  x = np.int64(x)\n"
+    func_text += "  return x * sign\n"
+    loc_vars = {}
+    exec(
+        func_text,
+        # We must use np.floor/ceil and not math.floor/ceil to handle
+        # potential intermediate overflows in the float case.
+        # The multiplication/division by 'shifts' may create a value
+        # not representable as an integer. However, math.floor/ceil
+        # will force it to an integer, leading to be an incorrect result.
+        # See 'test_round_half_always_up_intermediate_overflows' for
+        # an example.
+        {
+            "bodo": bodo,
+            "floor": np.floor,
+            "ceil": np.ceil,
+            "np": np,
+        },
+        loc_vars,
+    )
+    impl = loc_vars["impl"]
+    return impl
+
+
+@numba.generated_jit
+def boolor_agg(A, parallel=False):
+    """Performs the BOOLOR_AGG operation on an array
+
+    Args:
+        A (np.ndarray): the array of integers/floats/booleans/decimals
+
+    Returns:
+        boolean: None if the array is all-null, otherwise True if there is
+                 at least one non-null entry.
+    """
+
+    def impl(A, parallel=False):  # pragma: no cover
+        result = False
+        non_null = False
+        for i in range(len(A)):
+            if not bodo.libs.array_kernels.isna(A, i):
+                non_null = True
+                if bool(A[i]):
+                    result = True
+                    break
+        if parallel:
+            non_null = bodo.libs.distributed_api.dist_reduce(non_null, or_op)
+            result = bodo.libs.distributed_api.dist_reduce(result, or_op)
+        if non_null:
+            return result
+        return None
+
+    return impl
+
+
+@numba.generated_jit
+def booland_agg(A, parallel=False):
+    """Performs the BOOLAND_AGG operation on an array
+
+    Args:
+        A (np.ndarray): the array of integers/floats/booleans/decimals
+
+    Returns:
+        boolean: None if the array is all-null, otherwise True if every non-null
+                 entry is also non-zero
+    """
+
+    def impl(A, parallel=False):  # pragma: no cover
+        result = True
+        non_null = False
+        for i in range(len(A)):
+            if not bodo.libs.array_kernels.isna(A, i):
+                non_null = True
+                if not bool(A[i]):
+                    result = False
+                    break
+        if parallel:
+            non_null = bodo.libs.distributed_api.dist_reduce(non_null, or_op)
+            result = bodo.libs.distributed_api.dist_reduce(result, and_op)
+        if non_null:
+            return result
+        return None
+
+    return impl
+
+
+@numba.generated_jit
+def boolxor_agg(A, parallel=False):  # pragma: no cover
+    """Performs the BOOLXOR_AGG operation on an array
+
+    Args:
+        A (np.ndarray): the array of integers/floats/booleans/decimals
+
+    Returns:
+        boolean: None if the array is all-null, otherwise True if there is
+                 at exactly one non-null entry.
+    """
+
+    def impl(A, parallel=False):  # pragma: no cover
+        count = 0
+        non_null = False
+        for i in range(len(A)):
+            if not bodo.libs.array_kernels.isna(A, i):
+                non_null = True
+                count += np.int64(bool(A[i]))
+                if count > 1:
+                    break
+        if parallel:
+            non_null = bodo.libs.distributed_api.dist_reduce(non_null, or_op)
+            count = bodo.libs.distributed_api.dist_reduce(count, sum_op)
+        if non_null:
+            return count == 1
+        return None
+
+    return impl
+
+
+def make_bitX_agg_fn(func_type):
+    """Overloaded function, generates implementation for bitor_agg, bitand_agg, and bitxor_agg.
+
+    Args:
+        func_type (string): which bitX_agg function code to generate. Should be "or" | "and" | "xor"
+
+    Returns:
+        fn: Function that generates the implementation of bitX_agg.
+    """
+
+    if func_type == "or":
+        op_sym = "|"
+        start_val = 0
+    elif func_type == "and":
+        op_sym = "&"
+        # Numpy will cast this -1 to the appropriate dtype.
+        # For signed values (two's complement), -1 is all 1 bits.
+        # If it's unsigned, it underflows to INT_MAX, which is also all 1 bits.
+        start_val = -1
+    elif func_type == "xor":
+        op_sym = "^"
+        start_val = 0
+    else:
+        raise_bodo_error(f'Failed to make a bit agg func of type "{func_type}"')
+
+    def overload_fn(A, parallel=False):
+        func_text = "def impl(A, parallel=False):\n"
+
+        if bodo.utils.utils.is_array_typ(A):  # pragma: no cover
+            if isinstance(A, SeriesType):  # pragma: no cover
+                arr_data = A.data
+                func_text += "    A = bodo.utils.conversion.coerce_to_array(A)\n"
+            else:
+                arr_data = A
+        else:
+            raise_bodo_error("Input must be an array type")
+
+        if isinstance(arr_data.dtype, types.Float) or arr_data.dtype == string_type:
+            func_text += f"    result = np.int64({start_val})\n"
+        else:
+            func_text += f"    result = np.{arr_data.dtype}({start_val})\n"
+        func_text += "    non_null = False\n"
+        func_text += "    for i in range(len(A)):\n"
+        func_text += "        if not bodo.libs.array_kernels.isna(A, i):\n"
+        func_text += "            non_null = True\n"
+        if isinstance(arr_data.dtype, types.Integer):
+            func_text += f"            result {op_sym}= A[i]\n"
+        elif isinstance(arr_data.dtype, types.Float):
+            func_text += f"            result {op_sym}= np.int64(round_half_always_up(A[i], 0))\n"
+        elif arr_data.dtype == string_type:
+            func_text += f"            result {op_sym}= np.int64(round_half_always_up(float(A[i]), 0))\n"
+        else:
+            raise_bodo_error(
+                "Invalid type for bitor_agg--expected integer, float, or string that evaluates to a number."
+            )
+
+        func_text += "    if parallel:\n"
+        func_text += "        non_null = bodo.libs.distributed_api.dist_reduce(non_null, or_op)\n"
+        func_text += f"        result = bodo.libs.distributed_api.dist_reduce(result, bit{func_type}_op)\n"
+        func_text += "    if non_null:\n"
+        func_text += "        return result\n"
+        func_text += "    return None\n"
+
+        loc_vars = {}
+        exec(
+            func_text,
+            {
+                "np": np,
+                "pd": pd,
+                "bodo": bodo,
+                "or_op": or_op,
+                "bitor_op": bitor_op,
+                "bitand_op": bitand_op,
+                "bitxor_op": bitxor_op,
+                "round_half_always_up": round_half_always_up,
+            },
+            loc_vars,
+        )
+        return loc_vars["impl"]
+
+    return overload_fn
+
+
+def bitor_agg(A, parallel=False):  # pragma: no cover
+    """Performs the BITOR_AGG operation on an array. This function
+    performs a bitwise or on every element of the array, reducing it to one value.
+
+    Args:
+        A (np.ndarray): the array of integers/floats/booleans/decimals
+        parallel (bool, optional): flag that indicates if the code is being
+                executed in parallel.
+    Returns:
+        boolean: None if the array is all-null, otherwise True if there is
+                at least one non-null entry.
+    """
+    # Dummy function used for overload
+
+
+def bitand_agg(A, parallel=False):  # pragma: no cover
+    """Performs the BITAND_AGG operation on an array. This function
+    performs a bitwise and on every element of the array, reducing it to one value.
+
+    Args:
+        A (np.ndarray): the array of integers/floats/booleans/decimals
+        parallel (bool, optional): flag that indicates if the code is being
+                executed in parallel.
+    Returns:
+        boolean: None if the array is all-null, otherwise True if there is
+                at least one non-null entry.
+    """
+    # Dummy function used for overload
+
+
+def bitxor_agg(A, parallel=False):  # pragma: no cover
+    """Performs the BITXOR_AGG operation on an array. This function
+    performs a bitwise xor on every element of the array, reducing it to one value.
+
+    Args:
+        A (np.ndarray): the array of integers/floats/booleans/decimals
+        parallel (bool, optional): flag that indicates if the code is being
+                executed in parallel.
+    Returns:
+        boolean: None if the array is all-null, otherwise True if there is
+                at least one non-null entry.
+    """
+    # Dummy function used for overload
+
+
+def _install_bitX_agg_fns():
+    overload(bitor_agg)(make_bitX_agg_fn("or"))
+    overload(bitand_agg)(make_bitX_agg_fn("and"))
+    overload(bitxor_agg)(make_bitX_agg_fn("xor"))
+
+
+_install_bitX_agg_fns()
+
+
+@numba.generated_jit
+def anyvalue_agg(A, parallel=False):
+    """Performs the ANYVALUE_AGG operation on an array by returning the first
+    value from the array. Note that NULL can be returned."""
+
+    def impl(A, parallel=False):  # pragma: no cover
+        if len(A) == 0:
+            return None
+
+        result = A[0]
+        is_none = bodo.libs.array_kernels.isna(A, 0)
+        # if is_none is True, result is some garbage, but we need it for the
+        # broadcast call below
+
+        if parallel:
+            # Let rank 0 decide the global result
+            is_none = bodo.libs.distributed_api.bcast_scalar(is_none)
+            result = bodo.libs.distributed_api.bcast_scalar(result)
+
+        if is_none:
+            return None
+        return result
+
+    return impl
+
+
 @overload(np.unique, inline="always", no_unliteral=True)
 def np_unique(A):
     if not bodo.utils.utils.is_array_typ(A, False) or isinstance(
@@ -2901,9 +3721,7 @@ def np_unique(A):
 def overload_union1d(A1, A2):
     if not bodo.utils.utils.is_array_typ(
         A1, False
-    ) or not bodo.utils.utils.is_array_typ(
-        A2, False
-    ):  # pragma: no cover
+    ) or not bodo.utils.utils.is_array_typ(A2, False):  # pragma: no cover
         return
 
     # TODO(Nick): Fix this to be proper typechecking.
@@ -2924,9 +3742,7 @@ def overload_union1d(A1, A2):
 def overload_intersect1d(A1, A2, assume_unique=False, return_indices=False):
     if not bodo.utils.utils.is_array_typ(
         A1, False
-    ) or not bodo.utils.utils.is_array_typ(
-        A2, False
-    ):  # pragma: no cover
+    ) or not bodo.utils.utils.is_array_typ(A2, False):  # pragma: no cover
         return
 
     args_dict = {
@@ -3027,9 +3843,7 @@ def intersection_mask(arr, parallel=False):  # pragma: no cover
 def overload_setdiff1d(A1, A2, assume_unique=False):
     if not bodo.utils.utils.is_array_typ(
         A1, False
-    ) or not bodo.utils.utils.is_array_typ(
-        A2, False
-    ):  # pragma: no cover
+    ) or not bodo.utils.utils.is_array_typ(A2, False):  # pragma: no cover
         return
 
     args_dict = {
@@ -3145,8 +3959,6 @@ def overload_np_linspace_get_stepsize(start, stop, num, endpoint):
 
 @overload(operator.contains, no_unliteral=True)
 def arr_contains(A, val):
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(A, "np.contains()")
-
     # TODO: Add support for types with different width. i.e. int64 and int16
     if not (
         bodo.utils.utils.is_array_typ(A, False) and A.dtype == types.unliteral(val)
@@ -3167,8 +3979,6 @@ def arr_contains(A, val):
 
 @overload(np.any, inline="always", no_unliteral=True)
 def np_any(A, axis=None, out=None, keepdims=None):
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(A, "np.any()")
-
     if not (
         bodo.utils.utils.is_array_typ(A, False) and A.ndim == 1
     ):  # pragma: no cover
@@ -3192,8 +4002,6 @@ def np_any(A, axis=None, out=None, keepdims=None):
 
 @overload(np.all, inline="always", no_unliteral=True)
 def np_all(A, axis=None, out=None, keepdims=None):
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(A, "np.all()")
-
     if not (
         bodo.utils.utils.is_array_typ(A, False) and A.ndim == 1
     ):  # pragma: no cover
@@ -3430,7 +4238,7 @@ def np_random_multivariate_normal(mean, cov, size=None, check_valid="warn", tol=
 
 
 def _validate_multivar_norm(cov):  # pragma: no cover
-    # Dummy function for overload
+    # Dummy function used for overload
     return
 
 
@@ -3443,6 +4251,140 @@ def _overload_validate_multivar_norm(cov):
             )
 
     return impl
+
+
+@overload(np.tile, inline="always", no_unliteral=True)
+def np_tile(A, reps):
+    """Performs the operation np.tile(A, reps) under limited cases:
+
+    1. A is a 2D array and reps is in the form (1, n). This form
+       corresponds to duplicating the columns of a 2D array n times.
+
+    2. A is a 1D array and reps is in the form (n, 1). This form
+       corresponds to turning a 1D array into a 2D array where the
+       columns of the 2D array are the rows of the 1D array, and the
+       rows are n identical copies.
+
+    [BSE-1029] TODO: add support for more np.tile cases
+
+    Args:
+        A (np.ndarray) Array of data that is to be tiled in the specified manner.
+        reps (integer tuple): tuple of integers describing how the data should be tiled.
+
+    Returns:
+        (np.ndarray) A copy of input A with the data transformed in the manner specified
+        by the combination of A.ndim and the reps tuple.
+    """
+    if not isinstance(reps, (types.Tuple, types.UniTuple)):  # pragma: no cover
+        raise_bodo_error("np.tile: reps argument must be a tuple")
+    if not bodo.utils.utils.is_array_typ(A, False) or isinstance(
+        A, bodo.FloatingArrayType
+    ):  # pragma: no cover
+        raise_bodo_error("np.tile: A argument must be a numpy array")
+    ndims = A.ndim
+    n_reps = 0
+    for typ in reps.types:
+        if not isinstance(typ, types.Integer):  # pragma: no cover
+            raise_bodo_error("np.tile: all elements in reps tuple must be integers")
+        n_reps += 1
+    if (
+        ndims == 2
+        and n_reps == 2
+        and is_overload_constant_int(reps[0])
+        and get_overload_const_int(reps[0]) == 1
+    ):
+        # Case 1 [2D array with reps = (1, n)]: replicating the columns of a 2D array
+        dtype = A.dtype
+
+        def impl(A, reps):  # pragma: no cover
+            n, m = A.shape
+            replicated_cols = reps[1]
+            numba.parfors.parfor.init_prange()
+            res = np.empty((n, m * replicated_cols), dtype=dtype)
+            # Loop over each row in the original 2D array
+            for r in numba.parfors.parfor.internal_prange(n):
+                # Loop over the number of times we want to replicate the columns
+                for i in range(replicated_cols):
+                    # For each row, replicate the columns in the row that many times
+                    for c in range(m):
+                        res[r][c + i * m] = A[r][c]
+            return res
+
+        return impl
+    elif (
+        ndims == 1
+        and n_reps
+        and is_overload_constant_int(reps[1])
+        and get_overload_const_int(reps[1]) == 1
+    ):
+        # Case 2 [1D array with reps = (n, 1)]: Upcasting 1D array into 2D array where the elements of the
+        # original array become columns in the output array.
+        dtype = A.dtype
+
+        def impl(A, reps):  # pragma: no cover
+            n_rows = reps[0]
+            n_cols = len(A)
+            numba.parfors.parfor.init_prange()
+            res = np.empty((n_rows, n_cols), dtype=dtype)
+            for r in numba.parfors.parfor.internal_prange(n_rows):
+                res[r, :] = A
+            return res
+
+        return impl
+    else:  # pragma: no cover
+        raise_bodo_error(
+            f"np.tile: array with dimension {ndims} and reps tuple {reps} is not currently supported"
+        )
+
+
+@overload(np.interp, no_unliteral=True)
+def np_interp(x, xp, fp, left=None, right=None, period=None):
+    if not (
+        bodo.utils.utils.is_array_typ(x, False)
+        and bodo.utils.utils.is_array_typ(xp, False)
+        and bodo.utils.utils.is_array_typ(fp, False)
+    ):  # pragma: no cover
+        raise BodoError("np.interp(): x, xp, fp inputs should be arrays")
+
+    # Output is the same dtype as fp but same shape as x
+    # https://numpy.org/doc/stable/reference/generated/numpy.interp.html
+    dtype = fp.dtype
+    ndim = x.ndim
+    out_type = types.Array(dtype, ndim, "C")
+
+    # Using objmode since Numpy's implementation is optimized:
+    # https://github.com/numpy/numpy/blob/1f82da745496092d85b402b1703877462a7c2de2/numpy/core/src/multiarray/compiled_base.c#L492
+
+    def impl(x, xp, fp, left=None, right=None, period=None):  # pragma: no cover
+        with bodo.objmode(A=out_type):
+            A = np.interp(x, xp, fp, left, right, period)
+        return A
+
+    return impl
+
+
+def is_index_decimal_value(indval):
+    return isinstance(indval, typing.builtins.IndexValueType) and isinstance(
+        indval.val_typ, bodo.Decimal128Type
+    )
+
+
+@overload(min)
+def overload_min_decimal_ival(indval1, indval2):
+    """
+    Max function for decimals that skips the isna check (assumes it is done caller)
+    """
+    if is_index_decimal_value(indval1) and is_index_decimal_value(indval2):
+
+        def min_impl(indval1, indval2):  # pragma no cover
+            if indval1.value > indval2.value:
+                return indval2
+            elif indval1.value == indval2.value:
+                if indval2.index < indval1.index:
+                    return indval2
+            return indval1
+
+        return min_impl
 
 
 def _nan_argmin(arr):  # pragma: no cover
@@ -3460,17 +4402,22 @@ def _overload_nan_argmin(arr):
     """
     # We check just the dtype because the previous function ensures
     # we are operating on 1D arrays
-
     if (
-        isinstance(arr, IntegerArrayType)
-        or arr in [boolean_array, datetime_date_array_type]
-        or arr.dtype == bodo.timedelta64ns
+        isinstance(
+            arr,
+            (IntegerArrayType, FloatingArrayType, DatetimeArrayType, DecimalArrayType),
+        )
+        or arr in [boolean_array_type, datetime_date_array_type]
+        or arr.dtype in [bodo.timedelta64ns, bodo.datetime64ns]
+        # Recent Numpy versions treat NA as min while pandas
+        # skips NA values
+        or isinstance(arr.dtype, types.Float)
     ):
 
         def impl_bodo_arr(arr):  # pragma: no cover
             numba.parfors.parfor.init_prange()
             init_val = bodo.hiframes.series_kernels._get_type_max_value(arr)
-            ival = typing.builtins.IndexValue(-1, init_val)
+            ival = typing.builtins.IndexValue(len(arr), init_val)
             for i in numba.parfors.parfor.internal_prange(len(arr)):
                 if bodo.libs.array_kernels.isna(arr, i):
                     continue
@@ -3503,6 +4450,24 @@ def _overload_nan_argmin(arr):
     return lambda arr: arr.argmin()  # pragma: no cover
 
 
+@overload(max)
+def overload_max_decimal_ival(indval1, indval2):
+    """
+    Max function for decimals that skips the isna check (assumes it is done caller)
+    """
+    if is_index_decimal_value(indval1) and is_index_decimal_value(indval2):
+
+        def max_impl(indval1, indval2):  # pragma no cover
+            if indval1.value < indval2.value:
+                return indval2
+            elif indval1.value == indval2.value:
+                if indval2.index < indval1.index:
+                    return indval2
+            return indval1
+
+        return max_impl
+
+
 def _nan_argmax(arr):  # pragma: no cover
     # Dummy function used for overload
     return
@@ -3520,16 +4485,22 @@ def _overload_nan_argmax(arr):
     # we are operating on 1D arrays
 
     if (
-        isinstance(arr, IntegerArrayType)
-        or arr in [boolean_array, datetime_date_array_type]
+        isinstance(
+            arr,
+            (IntegerArrayType, FloatingArrayType, DatetimeArrayType, DecimalArrayType),
+        )
+        or arr in [boolean_array_type, datetime_date_array_type]
         or arr.dtype == bodo.timedelta64ns
+        # Recent Numpy versions treat NA as max while pandas
+        # skips NA values
+        or isinstance(arr.dtype, types.Float)
     ):
 
         def impl_bodo_arr(arr):  # pragma: no cover
             n = len(arr)
             numba.parfors.parfor.init_prange()
             init_val = bodo.hiframes.series_kernels._get_type_min_value(arr)
-            ival = typing.builtins.IndexValue(-1, init_val)
+            ival = typing.builtins.IndexValue(len(arr), init_val)
             for i in numba.parfors.parfor.internal_prange(n):
                 if bodo.libs.array_kernels.isna(arr, i):
                     continue
@@ -3569,3 +4540,159 @@ def overload_dataframe_index(A):
     """get number of bytes in Numpy array"""
     # TODO(ehsan): contribute to Numba
     return lambda A: A.size * bodo.io.np_io.get_dtype_size(A.dtype)  # pragma: no cover
+
+
+@overload(np.dot, inline="always")
+def np_dot_heterogeneous(A, B):
+    """
+    Implementations of np.dot when the arguments are different types but
+    both still numeric dtypes.
+
+    [BSE-1024] TODO: add support for complex numbers (requires dist_reduce support).
+    """
+    if bodo.utils.utils.is_array_typ(A, False) and bodo.utils.utils.is_array_typ(
+        B, False
+    ):  # pragma: no cover
+        if isinstance(A.dtype, types.Integer) and isinstance(B.dtype, types.Float):
+            return lambda A, B: np.dot(A.astype(np.float64), B)  # pragma: no cover
+        if isinstance(A.dtype, types.Float) and isinstance(B.dtype, types.Integer):
+            return lambda A, B: np.dot(A, B.astype(np.float64))  # pragma: no cover
+    # If not in one of those two cases, this overload will return None indicating
+    # to numba that it should try a different candidate implementation (e.g.
+    # the original one for when the types are homogeneous).
+
+
+@overload(np.linalg.norm, no_unliteral=True)
+def np_linalg_norm_axis(x, ord=None, axis=None, keepdims=False):
+    """
+    Implementations of np.linalg.norm for when the axis keyword argument is provided.
+    If not provided, fall back to the numba implementation.
+    """
+    args_dict = {
+        "ord": ord,
+        "keepdims": keepdims,
+    }
+    args_default_dict = {
+        "ord": None,
+        "keepdims": False,
+    }
+    check_unsupported_args("np.linalg.norm", args_dict, args_default_dict, "numpy")
+    if axis != None:
+        if is_overload_constant_int(axis) and get_overload_const_int(axis) == 1:
+            if x.ndim != 2:  # pragma: no cover
+                raise_bodo_error(
+                    f"np.linalg.norm: axis=1 only currently supported with 2d arrays, not {x.ndim}d arrays"
+                )
+
+            def impl(x, ord=None, axis=None, keepdims=False):  # pragma: no cover
+                n = len(x)
+                res = np.empty((n,), dtype=np.float64)
+                numba.parfors.parfor.init_prange()
+                for i in numba.parfors.parfor.internal_prange(n):
+                    res[i] = np.linalg.norm(x[i])
+                return res
+
+            return impl
+        raise_bodo_error(
+            f"np.linalg.norm: unsupported argument for axis argument '{axis}'"
+        )
+
+
+@overload(np.nan_to_num, inline="always", no_unliteral=True)
+def np_nan_to_num(x, copy=True, nan=0.0, posinf=None, neginf=None):
+    """
+    Replace NaN with zero and infinity with large finite numbers
+    (default behaviour) or with the numbers defined by the user
+    using the nan, posinf and/or neginf keywords.
+
+    Args:
+        x (scalar or array): the array/scalar to be converted.
+        copy (bool, optional): create a new array or replace the element in place.
+            copy=False is not supported yet due to some boxing issue.
+        nan (int, float, optional): Value to be used to fill NaN values.
+            If no value is passed then NaN values will be replaced with 0.0.
+        posinf (int, float, optional): Value to be used to fill positive infinity values.
+            If no value is passed then positive infinity values will be replaced with
+            the largest float number of that type.
+        neginf (int, float, optional): Value to be used to fill negative infinity values.
+            If no value is passed then negative infinity values will be replaced with
+            the smallest float number of that type.
+
+    Returns:
+        scalar/array: x, with the non-finite values replaced.
+    """
+    if not is_valid_float_arg(x):  # pragma: no cover
+        # for non-float scalar/array just return the input
+        return lambda x, copy=True, nan=0.0, posinf=None, neginf=None: x
+
+    args_dict = {"copy": copy}
+    args_default_dict = {"copy": True}
+    check_unsupported_args("np.nan_to_num", args_dict, args_default_dict, "numpy")
+
+    if bodo.utils.utils.is_array_typ(x, False):
+        scalar = x.dtype
+    else:
+        scalar = x
+    if scalar == types.float16:
+        dtype = np.float16
+    elif scalar == types.float32:
+        dtype = np.float32
+    else:
+        dtype = np.float64
+
+    # When posinf/neginf is not specified, the default value is the largest/smallest
+    # float number of that type.
+    # e.g. 6.55e+04 for float16, 3.4028235e+38 for float32 and 1.79769313e+308 for float64.
+    finfo = np.core.getlimits.finfo(dtype)
+    largest_float = finfo.max
+    smallest_float = finfo.min
+    pos_val = largest_float if posinf == bodo.none or posinf is None else "posinf"
+    neg_val = smallest_float if neginf == bodo.none or neginf is None else "neginf"
+    calculation_text = f"scalar_nan_to_num({{}}, nan, {pos_val}, {neg_val})"
+
+    func_text = "def impl(x, copy=True, nan=0.0, posinf=None, neginf=None):\n"
+    if bodo.utils.utils.is_array_typ(x, False):
+        func_text += "  res = x.copy()\n"
+        func_text += "  numba.parfors.parfor.init_prange()\n"
+        if x.ndim == 1:
+            func_text += "  for i in numba.parfors.parfor.internal_prange(len(x)):\n"
+            func_text += f"    res[i] = {calculation_text.format('x[i]')}\n"
+        elif x.ndim == 2:
+            func_text += "  rows, cols = x.shape\n"
+            func_text += "  for i in numba.parfors.parfor.internal_prange(rows):\n"
+            func_text += "    for j in range(cols):\n"
+            func_text += f"      res[i, j] = {calculation_text.format('x[i, j]')}\n"
+        else:
+            raise_bodo_error(f"nan_to_num not supported on {x.ndim}d array")
+        func_text += "  return res"
+    else:
+        func_text += f"  return {calculation_text.format('x')}"
+    loc_vars = {}
+    exec(
+        func_text,
+        {"np": np, "numba": numba, "scalar_nan_to_num": scalar_nan_to_num},
+        loc_vars,
+    )
+    impl = loc_vars["impl"]
+    return impl
+
+
+@register_jitable
+def scalar_nan_to_num(scalar, nan, posinf, neginf):  # pragma: no cover
+    """
+    Helper function for nan_to_num to transform a scalar float
+    from NaN/±∞ to a regular float.
+
+    Args:
+        scalar: the scalar float that is to be converted.
+        nan: the value to return if scalar is NaN
+        posinf: the value to return if scalar is +∞
+        neginf: the value to return if scalar is -∞
+    """
+    if np.isnan(scalar):
+        return nan
+    if scalar == np.inf:
+        return posinf
+    if scalar == -np.inf:
+        return neginf
+    return scalar

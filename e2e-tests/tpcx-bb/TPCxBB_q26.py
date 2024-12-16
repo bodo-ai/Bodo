@@ -8,7 +8,7 @@ import pandas as pd
 import bodo
 
 
-@bodo.jit(cache=True)
+@bodo.jit(cache=True, spawn=True)
 def q26(ss_file, i_file, category, item_count):
     t1 = time.time()
     ss_dtype = {"ss_item_sk": np.int64, "ss_customer_sk": np.int64}
@@ -103,7 +103,6 @@ def q26(ss_file, i_file, category, item_count):
 
 
 if __name__ == "__main__":
-
     ss_file = "s3://bodotest-customer-data/tpcx-bb/q26/store_sales_10.dat"
     i_file = "s3://bodotest-customer-data/tpcx-bb/q26/item_10.dat"
     require_cache = False

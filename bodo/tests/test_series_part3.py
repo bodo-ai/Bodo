@@ -8,8 +8,10 @@ import pytest
 import bodo
 from bodo.tests.series_common import numeric_series_val  # noqa
 from bodo.tests.test_parfor_optimizations import _check_num_parfors
-from bodo.tests.utils import ParforTestPipeline, check_func
+from bodo.tests.utils import ParforTestPipeline, check_func, no_default, pytest_pandas
 from bodo.utils.typing import BodoError
+
+pytestmark = pytest_pandas
 
 
 @pytest.mark.slow
@@ -86,6 +88,7 @@ def test_str_nullable_astype(type_name, memory_leak_check):
     Checks that casting from a String Series to a
     Nullable Integer works as expected.
     """
+
     # Generate the test code becuase the typename
     # must be a string constant
     def test_impl(S):
@@ -147,7 +150,7 @@ def test_scalar_series(val, memory_leak_check):
     def test_impl():
         return pd.Series(val, pd.RangeIndex(0, 100, 1))
 
-    check_func(test_impl, (), reset_index=True)
+    check_func(test_impl, (), reset_index=True, check_dtype=False)
 
 
 def test_or_null(memory_leak_check):
@@ -420,7 +423,7 @@ def test_series_apply_pandas_unsupported_method(memory_leak_check):
     """
 
     def impl1(S):
-        return S.apply("argmin")
+        return S.apply("mode")
 
     S = pd.Series(list(np.arange(100) + list(np.arange(100))))
     with pytest.raises(BodoError, match="user-defined function not supported"):
@@ -772,7 +775,7 @@ def test_series_first_last(offset):
         else:
             py_output = ts.loc[:end]
     else:
-        py_output = None
+        py_output = no_default
 
     check_func(impl_first, (ts,), py_output=py_output)
     check_func(impl_last, (ts,))
@@ -895,14 +898,14 @@ def test_heterogeneous_series_df_apply_astype(to_type):
             def _str_helper(x):
                 if pd.isna(x):
                     return pd.NA
-                elif type(x) == float:
-                    return "{:.6f}".format(x)
+                elif isinstance(x, float):
+                    return f"{x:.6f}"
                 else:
                     return str(x)
 
-            exp_output = df_str.applymap(_str_helper)
+            exp_output = df_str.map(_str_helper)
         elif to_type in ("bool", "boolean"):
-            exp_output = df_str.applymap(lambda x: bool(x) if not pd.isna(x) else pd.NA)
+            exp_output = df_str.map(lambda x: bool(x) if not pd.isna(x) else pd.NA)
         check_func(test_impl, (df_str,), check_dtype=False, py_output=exp_output)
     elif "int" in to_type or "Int" in to_type:
         int_func = {
@@ -916,7 +919,7 @@ def test_heterogeneous_series_df_apply_astype(to_type):
             "uint32": np.uint32,
             "uint64": np.uint64,
         }
-        exp_output = df_int.applymap(
+        exp_output = df_int.map(
             lambda x: int_func[to_type.lower()](x) if not pd.isna(x) else pd.NA
         )
         check_func(test_impl, (df_int,), py_output=exp_output)
@@ -926,12 +929,12 @@ def test_heterogeneous_series_df_apply_astype(to_type):
             "float32": np.float32,
             "float64": np.float64,
         }
-        exp_output = df_float.applymap(
+        exp_output = df_float.map(
             lambda x: float_func[to_type](x)
             if not pd.isna(x)
             else float_func[to_type](np.nan)
         )
-        check_func(test_impl, (df_float,), py_output=exp_output)
+        check_func(test_impl, (df_float,), py_output=exp_output, check_dtype=False)
     elif to_type == "datetime64[ns]":
         # astype behavior fails when iterating through rows in pandas
         py_output = df_dt.astype(to_type)
@@ -955,7 +958,7 @@ def test_heterogeneous_series_df_apply_astype_classes():
     def test_impl_int(df):
         return df.apply(lambda row: row.astype(int), axis=1)
 
-    def test_impl_float(df):
+    def test_impl_float(df):  # noqa: F841
         return df.apply(lambda row: row.astype("float"), axis=1)
 
     df_str = pd.DataFrame(
@@ -973,7 +976,7 @@ def test_heterogeneous_series_df_apply_astype_classes():
             "C": ["1", None, "4"] * 2,
         }
     )
-    df_float = pd.DataFrame(
+    df_float = pd.DataFrame(  # noqa: F841
         {
             "A": pd.array([1, 2, 3] * 2, dtype="Int32"),
             "B": pd.array([4.3, np.nan, 1.2] * 2, dtype="float"),
@@ -985,21 +988,21 @@ def test_heterogeneous_series_df_apply_astype_classes():
     def _str_helper(x):
         if pd.isna(x):
             return pd.NA
-        elif type(x) == float:
-            return "{:.6f}".format(x)
+        elif isinstance(x, float):
+            return f"{x:.6f}"
         else:
             return str(x)
 
-    str_output = df_str.applymap(_str_helper)
+    str_output = df_str.map(_str_helper)
     # TODO: nullable bool
-    bool_output = df_str.applymap(lambda x: bool(x) if not pd.isna(x) else pd.NA)
-    int_output = df_int.applymap(lambda x: int(x) if not pd.isna(x) else pd.NA)
-    float_output = df_float.applymap(lambda x: float(x) if not pd.isna(x) else pd.NA)
+    bool_output = df_str.map(lambda x: bool(x) if not pd.isna(x) else pd.NA)
+    int_output = df_int.map(lambda x: int(x) if not pd.isna(x) else pd.NA)
 
     check_func(test_impl_str, (df_str,), py_output=str_output)
     check_func(test_impl_bool, (df_str,), py_output=bool_output)
     check_func(test_impl_int, (df_int,), py_output=int_output)
     # TODO: error with float32
+    # float_output = df_float.map(lambda x: float(x) if not pd.isna(x) else pd.NA)
     # check_func(test_impl_float, (df_float,), py_output=float_output)
 
 
@@ -1118,7 +1121,7 @@ def test_unique(memory_leak_check):
     "S",
     [
         pd.Series(np.arange(100)),
-        pd.Series(pd.date_range("02-20-2022", freq="3D1H", periods=30)),
+        pd.Series(pd.date_range("02-20-2022", freq="3D1h", periods=30)),
     ],
 )
 def test_dist_iat(S, memory_leak_check):
@@ -1206,6 +1209,7 @@ def test_np_mod(numeric_series_val):
     check_func(impl, (10, numeric_series_val), check_dtype=False)
 
 
+@pytest.mark.tz_aware
 def test_tz_aware_series_getitem(memory_leak_check):
     def impl_iat(S):
         return S.iat[2]
@@ -1224,3 +1228,152 @@ def test_tz_aware_series_getitem(memory_leak_check):
     check_func(impl_iloc, (S,))
     check_func(impl_loc, (S,))
     check_func(impl_regular, (S,))
+
+
+def test_bool_aggfuncs(memory_leak_check):
+    def impl(S):
+        return (
+            bodo.libs.array_kernels.boolor_agg(S.values),
+            bodo.libs.array_kernels.booland_agg(S.values),
+            bodo.libs.array_kernels.boolxor_agg(S.values),
+        )
+
+    test_cases = [
+        (pd.Series([None] * 20, dtype=pd.Int32Dtype()), (None, None, None)),
+        (pd.Series([0] * 50, dtype=pd.Int32Dtype()), (False, False, False)),
+        (
+            pd.Series([i + 1 for i in range(20)], dtype=pd.Int32Dtype()),
+            (True, True, False),
+        ),
+        (
+            pd.Series([2 if i == 20 else 0 for i in range(40)], dtype=pd.Int32Dtype()),
+            (True, False, True),
+        ),
+        (
+            pd.Series(
+                [1 if i == 17 else None for i in range(32)], dtype=pd.Int32Dtype()
+            ),
+            (True, True, True),
+        ),
+    ]
+    for data, res in test_cases:
+        check_func(impl, (data,), py_output=res, is_out_distributed=False)
+
+
+@pytest.mark.parametrize(
+    "S, expected",
+    [
+        pytest.param(
+            pd.Series([None] * 20, dtype=pd.Int32Dtype()),
+            (None, None, None),
+            id="all_null",
+        ),
+        pytest.param(
+            pd.Series([1, 2, 3, 4, 16] * 5, dtype=pd.Int8Dtype()),
+            (np.int8(23), np.int8(0), np.int8(20)),
+            id="1234-16_int8",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.Series([1, 2, 3, 4, 16] * 5, dtype=pd.Int16Dtype()),
+            (np.int16(23), np.int16(0), np.int16(20)),
+            id="1234-16_int16",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.Series([1, 2, 3, 4, 16] * 5, dtype=pd.Int32Dtype()),
+            (np.int32(23), np.int32(0), np.int32(20)),
+            id="1234-16_int32",
+        ),
+        pytest.param(
+            pd.Series([1, 2, 3, 4, 16] * 5, dtype=pd.Int64Dtype()),
+            (np.int64(23), np.int64(0), np.int64(20)),
+            id="1234-16_int64",
+        ),
+        pytest.param(
+            pd.Series([1, 2, 3, 4, 16] * 5, dtype=pd.UInt8Dtype()),
+            (np.uint8(23), np.uint8(0), np.uint8(20)),
+            id="1234-16_uint8",
+        ),
+        pytest.param(
+            pd.Series([1, 2, 3, 4, 16] * 5, dtype=pd.UInt16Dtype()),
+            (np.uint16(23), np.uint16(0), np.uint16(20)),
+            id="1234-16_uint16",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.Series([1, 2, 3, 4, 16] * 5, dtype=pd.UInt32Dtype()),
+            (np.uint32(23), np.uint32(0), np.uint32(20)),
+            id="1234-16_uint32",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.Series([1, 2, 3, 4, 16] * 5, dtype=pd.UInt64Dtype()),
+            (np.uint64(23), np.uint64(0), np.uint64(20)),
+            id="1234-16_uint64",
+        ),
+        pytest.param(
+            pd.Series([1, 2, 3, 4, None] * 5, dtype=pd.Int32Dtype()),
+            (np.int32(7), np.int32(0), np.int32(4)),
+            id="1234_null",
+        ),
+        pytest.param(
+            pd.Series(
+                [
+                    4201237097,
+                    962326793,
+                    856422497,
+                    -244593951,
+                    -779400448,
+                    9981822901237097,
+                ],
+                dtype=pd.Int64Dtype(),
+            ),
+            (np.int64(-67108887), np.int64(589824), np.int64(9981824254375817)),
+            id="bignums",
+        ),
+        pytest.param(
+            pd.Series([0.5, 0.5, 0.5, 0.5, 0.5], dtype=pd.Float64Dtype()),
+            (np.int64(1), np.int64(1), np.int64(1)),
+            id="rounding",
+        ),
+        pytest.param(
+            pd.Series(
+                [
+                    1567.8653501685835,
+                    9746.196149569489,
+                    7345.689816151691,
+                    3811.3918987611833,
+                    3900.786502418112,
+                ],
+                dtype=pd.Float64Dtype(),
+            ),
+            (np.int64(16383), np.int64(1024), np.int64(15710)),
+            id="float",
+        ),
+        pytest.param(
+            pd.Series(["1", "2", "3", "4", "5"], dtype=pd.StringDtype()),
+            (np.int64(7), np.int64(0), np.int64(1)),
+            id="strings",
+        ),
+    ],
+)
+def test_bit_aggfuncs(S, expected, memory_leak_check):
+    """Tests the BITOR_AGG window function array kernel implementation.
+    This will in the future also test BITAND_AGG and BITXOR_AGG.
+
+    Args:
+        S (pd.Series): The series that the test wil run on.
+        expected ([int]): Expected output from running BITOR_AGG on S.
+        memory_leak_check (): Fixture, see `conftest.py`.
+
+    """
+
+    def impl(S):
+        return (
+            bodo.libs.array_kernels.bitor_agg(S),
+            bodo.libs.array_kernels.bitand_agg(S),
+            bodo.libs.array_kernels.bitxor_agg(S),
+        )
+
+    check_func(impl, (S,), py_output=expected, is_out_distributed=False)

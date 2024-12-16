@@ -1,12 +1,12 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
-"""Tests for array of struct values.
-"""
+"""Tests for array of struct values."""
 
 import numpy as np
+import pandas as pd
+import pyarrow as pa
 import pytest
 
 import bodo
-from bodo.tests.utils import check_func
+from bodo.tests.utils import check_func, get_num_test_workers
 
 
 @pytest.fixture(
@@ -35,6 +35,8 @@ from bodo.tests.utils import check_func
                 {"X": 5, "Y": 9},
             ]
         ),
+        # Struct array with no fields
+        pd.array([{}, {}, {}], pd.ArrowDtype(pa.struct([]))),
         pytest.param(
             np.array(
                 [
@@ -141,6 +143,10 @@ def test_getitem_slice(struct_arr_value, memory_leak_check):
 
 @pytest.mark.smoke
 def test_rec_getitem(struct_arr_value, memory_leak_check):
+    # Ignore the no field test input
+    if len(bodo.typeof(struct_arr_value).data) == 0:
+        return
+
     def test_impl(A, i):
         return A[i]["Y"]
 
@@ -314,5 +320,5 @@ def test_nbytes(memory_leak_check):
         ]
     )
     check_func(impl, (struct_value,), py_output=115, only_seq=True)
-    py_out = 112 + 3 * bodo.get_size()
+    py_out = 112 + 3 * get_num_test_workers()
     check_func(impl, (struct_value,), py_output=py_out, only_1DVar=True)

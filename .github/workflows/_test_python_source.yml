@@ -1,0 +1,111 @@
+name: Run Python Tests (Linux)
+on:
+  workflow_call:
+    inputs:
+      batch:
+        description: 'Test Batch to Run'
+        required: true
+        type: number
+      total-batches:
+        description: 'Total Number of Batches Running'
+        required: true
+        type: number
+      pytest-marker:
+        description: 'Pytest Marker to Run Subset of Tests'
+        required: true
+        type: string
+      collect-coverage:
+        description: 'Collect Coverage'
+        required: true
+        type: boolean
+
+jobs:
+  run:
+    name: Build and Run Tests Helper
+    runs-on: self-hosted-medium
+    steps:
+        # Setup
+        - uses: actions/checkout@v4
+        - name: Build from Source
+          uses: ./.github/actions/build-source
+          with:
+            build-all: true
+        - name: Load Hadoop from Cache
+          uses: actions/cache/restore@v4
+          with:
+            path: hadoop.tar.gz
+            key: hadoop-3.3.2-${{ runner.os }}
+        - name: Install SAS and Clean Cache
+          run: |
+            # Build SAS Token Provider
+            ./buildscripts/install_azurefs_sas_token_provider.sh
+            # Clean Maven and Spark Ivy Cache
+            rm -rf "$HOME"/.ivy2/cache "$HOME"/.ivy2/jars "$HOME"/.m2/repository
+        - name: Configure AWS Credentials
+          uses: aws-actions/configure-aws-credentials@v4
+          with:
+            aws-region: us-east-2
+            role-to-assume: arn:aws:iam::427443013497:role/BodoEngineNightlyRole
+            role-session-name: BodoEnginePrCiSession
+            role-skip-session-tagging: true
+  
+        # Run Tests
+        - name: Run Tests
+          run: |
+            # Bodo Tests: Coverage is collected
+            pytest -s -v -Wignore \
+              --cov-report= --cov=bodo \
+              --splits=${{ inputs.total-batches }} --group=${{ inputs.batch }} \
+              --store-durations --clean-durations \
+              --durations-path=buildscripts/github/test_dur_bodo.json \
+              -m "$PYTEST_MARKER" bodo/tests/
+            
+            # Save Exit Code for Later
+            test_exit_code=$?
+
+            # BodoSQL Tests
+            cd BodoSQL
+            pytest -s -v -Wignore \
+              --splits=${{ inputs.total-batches }} --group=${{ inputs.batch }} \
+              --store-durations --clean-durations \
+              --durations-path=../buildscripts/github/test_dur_bodosql.json \
+              -m "$PYTEST_MARKER" bodosql/tests/
+
+            # Merge Exit Codes.
+            # If neither Bodo nor BodoSQL fails, the exit code will be 0
+            # If one fails, the exit code will be 1
+            # If both fail, the exit code will be 2
+            exit $((test_exit_code + $?))
+          env:
+            BODO_TESTING_ONLY_RUN_1D_VAR: true
+            PYTEST_MARKER: ${{ inputs.pytest-marker }}
+            BODO_TEST_SPAWN_MODE: ${{ inputs.pytest-marker == 'spawn_mode' && '1' || '0' }}
+            BODOSQL_PY4J_GATEWAY_PORT: "auto"
+            BODO_SPAWN_MODE: "0"
+            # Testing Credentials
+            SF_USERNAME: ${{ secrets.SF_USERNAME }}
+            SF_PASSWORD: ${{ secrets.SF_PASSWORD }}
+            SF_ACCOUNT: ${{ secrets.SF_ACCOUNT }}
+            SF_AZURE_USER: ${{ secrets.SF_AZURE_USER }}
+            SF_AZURE_PASSWORD: ${{ secrets.SF_AZURE_PASSWORD }}
+            SF_AZURE_ACCOUNT: ${{ secrets.SF_AZURE_ACCOUNT }}
+            AZURE_STORAGE_ACCOUNT_NAME: ${{ secrets.AZURE_STORAGE_ACCOUNT_NAME }}
+            AZURE_STORAGE_ACCOUNT_KEY: ${{ secrets.AZURE_STORAGE_ACCOUNT_KEY }}
+            BODO_TEST_SQL_DB_CREDENTIAL: ${{ secrets.BODO_TEST_SQL_DB_CREDENTIAL }}
+            BODO_TEST_ORACLE_DB_CREDENTIAL: ${{ secrets.BODO_TEST_ORACLE_DB_CREDENTIAL }}
+
+        # Upload
+        - name: Prepare Outputs
+          if: inputs.collect-coverage && (success() || failure())
+          run: |
+            mkdir -p outputs
+            mv buildscripts/github/test_dur_bodo.json outputs/test_dur_bodo_${{ inputs.batch }}.json
+            mv .coverage outputs/.coverage_${{ inputs.batch }}
+            mv buildscripts/github/test_dur_bodosql.json outputs/test_dur_bodosql_${{ inputs.batch }}.json
+        - name: Upload Timings and Coverage
+          uses: actions/upload-artifact@v4
+          if: inputs.collect-coverage && (success() || failure())
+          with:
+            name: output-${{ inputs.batch }}
+            path: outputs/
+            include-hidden-files: true

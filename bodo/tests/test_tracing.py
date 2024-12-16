@@ -1,4 +1,3 @@
-# Copyright (C) 2019 Bodo Inc.
 # Turn on tracing for all tests in this file.
 import os
 from tempfile import TemporaryDirectory
@@ -6,7 +5,10 @@ from tempfile import TemporaryDirectory
 import pytest
 
 import bodo
+from bodo.mpi4py import MPI
 from bodo.utils import tracing
+from bodo.utils.tracing import TRACING_MEM_WARN
+from bodo.utils.typing import BodoWarning
 
 # Enable tracing for all test in this file. This should be fine because
 # runtest.py ensure our tests run 1 file at a time so we will avoid any
@@ -61,3 +63,45 @@ def test_tracing():
 
     tracing.reset()
     tracing.stop()
+
+
+# Recwarn is a built-in PyTest fixture that captures all warnings and lets us
+# check them within the test. We can't use pytest.warns because it will raise
+# an Exception when no warning is raised on ranks != 0
+def test_tracing_warning(recwarn):
+    """Test if Memory Warning is Raised on Rank 0"""
+
+    def impl1():
+        with TemporaryDirectory() as tempdir:
+            tracing.start()
+            ev = tracing.Event("event", sync=False)
+            ev.finalize()
+            tracing.dump(f"{tempdir}/bodo_trace.json")
+
+    impl1()
+
+    tracing.reset()
+    tracing.stop()
+
+    comm = MPI.COMM_WORLD
+
+    if comm.Get_rank() == 0:
+        rank_no_warns = True
+        rank_0_warn = any(
+            isinstance(warning.message, BodoWarning)
+            and warning.message.args[0] == TRACING_MEM_WARN
+            for warning in recwarn
+        )
+    else:
+        rank_0_warn = False
+        rank_no_warns = all(
+            not isinstance(warning.message, BodoWarning)
+            or warning.message.args[0] != TRACING_MEM_WARN
+            for warning in recwarn
+        )
+
+    rank_0_warn = comm.bcast(rank_0_warn)
+    assert rank_0_warn, "Memory warning was not raised on rank 0"
+
+    rank_no_warns = comm.allreduce(rank_no_warns, MPI.BAND)
+    assert rank_no_warns, "Memory warning was raised on ranks != 0"
