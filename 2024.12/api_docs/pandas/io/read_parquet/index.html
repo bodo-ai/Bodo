@@ -24800,7 +24800,7 @@
     row was read from. This is similar to SparkSQL's 
     <a href="https://spark.apache.org/docs/latest/api/python/reference/api/pyspark.sql.functions.input_file_name.html" target="blank"><code>input_file_name</code></a> function.</p>
 <p>For example:
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="nd">@bodo</span><span class="o">.</span><span class="n">jit</span><span class="p">()</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="nd">@bodo</span><span class="o">.</span><span class="n">jit</span>
 <a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="k">def</span> <span class="nf">impl</span><span class="p">(</span><span class="n">f</span><span class="p">):</span>
 <a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>  <span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_parquet</span><span class="p">(</span><span class="n">f</span><span class="p">,</span> <span class="n">_bodo_input_file_name_col</span><span class="o">=</span><span class="s2">&quot;fname&quot;</span><span class="p">)</span>
 <a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>  <span class="k">return</span> <span class="n">df</span>
@@ -24817,7 +24817,7 @@
     Read more about dictionary-encoded layout
     <a href="https://arrow.apache.org/docs/format/Columnar.html#dictionary-encoded-layout" target="blank">here</a>.</p>
 <p>For example:
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nd">@bodo</span><span class="o">.</span><span class="n">jit</span><span class="p">()</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nd">@bodo</span><span class="o">.</span><span class="n">jit</span>
 <a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="k">def</span> <span class="nf">impl</span><span class="p">(</span><span class="n">f</span><span class="p">):</span>
 <a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>  <span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_parquet</span><span class="p">(</span><span class="n">f</span><span class="p">,</span> <span class="n">_bodo_read_as_dict</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;A&quot;</span><span class="p">,</span> <span class="s2">&quot;B&quot;</span><span class="p">,</span> <span class="s2">&quot;C&quot;</span><span class="p">])</span>
 <a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>  <span class="k">return</span> <span class="n">df</span>

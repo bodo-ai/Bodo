@@ -26512,7 +26512,7 @@ follows:</p>
     Bodo will raise a warning if the specified columns are not present in the schema or if they are not of type string.</p>
 <div class="highlight"><pre><span></span><code>For example:
 ```py
-@bodo.jit()
+@bodo.jit
 def impl(query, conn):
     df = pd.read_sql(query, conn, _bodo_read_as_dict=[&quot;A&quot;, &quot;B&quot;, &quot;C&quot;])
     return df
