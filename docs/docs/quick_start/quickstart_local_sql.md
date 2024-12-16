@@ -12,7 +12,7 @@ pip install bodosql
 ```
 
 ```shell
-conda install -c bodo.ai -c conda-forge bodosql
+conda install bodosql -c bodo.ai -c conda-forge
 ```
 
 ## Generate Sample Data
@@ -24,7 +24,6 @@ import pandas as pd
 import numpy as np
 import bodo
 import bodosql
-import time
 
 NUM_GROUPS = 30
 NUM_ROWS = 20_000_000
@@ -49,18 +48,11 @@ bc = bodosql.BodoSQLContext(
 
 ## Write a SQL Query
 
-Now we can write a SQL query to compute the sum of column `A` for all rows where `B` is greater than 4. We encapsulate the statement within a `@bodo.jit` decorated function to indicate that we want to compile the code using Bodo. Let's also add a timer to measure the execution time.
+Now we can write a SQL query to compute the sum of column `A` for all rows where `B` is greater than 4.
 
 ```python
-@bodo.jit(cache=True)
-def query(bc):
-    t1 = time.time()
-    df1 = bc.sql("SELECT SUM(A) as SUM_OF_COLUMN_A FROM TABLE1 WHERE B > 4")
-    print("Execution time:", time.time() - t1)
-    return df1
-
-result = query(bc)
-print(result)
+df1 = bc.sql("SELECT SUM(A) as SUM_OF_COLUMN_A FROM TABLE1 WHERE B > 4")
+print(df1)
 ```
 
 
@@ -71,9 +63,7 @@ Bringing it all together, the complete code looks like this:
 ```python
 import pandas as pd
 import numpy as np
-import bodo
 import bodosql
-import time
 
 NUM_GROUPS = 30
 NUM_ROWS = 20_000_000
@@ -91,15 +81,8 @@ bc = bodosql.BodoSQLContext(
     }
 )
 
-@bodo.jit(cache=True)
-def query(bc):
-    t1 = time.time()
-    df1 = bc.sql("SELECT SUM(A) as SUM_OF_COLUMN_A FROM TABLE1 WHERE B > 4")
-    print("Execution time:", time.time() - t1)
-    return df1
-
-result = query(bc)
-print(result)
+df1 = bc.sql("SELECT SUM(A) as SUM_OF_COLUMN_A FROM TABLE1 WHERE B > 4")
+print(df1)
 ```
 
 
@@ -111,5 +94,4 @@ python test_bodo_sql.py
 
 
 By default Bodo will use all available cores. To set a limit on the number of processes spawned, set the environment variable `BODO_NUM_WORKERS`.
-Note that the first time you run this code, it may take a few seconds to compile the code.
-Next time you run the code, it will execute much faster. Check the [SQL API Reference][bodosql] for the full list of supported SQL operations.
+Check the [SQL API Reference][bodosql] for the full list of supported SQL operations.
