@@ -462,7 +462,7 @@ With Bodo:
 
 ```py
 
-@bodo.jit()
+@bodo.jit
 def create():
     df = pd.DataFrame({'id': [1, 2], 'label': ["one", "two"]})
     return df
@@ -485,7 +485,7 @@ With Bodo:
 
 ```py
 
-@bodo.jit()
+@bodo.jit
 def export_data():
     df = pd.DataFrame({'id': [1, 2], 'label': ["one", "two"]})
     df_pandas = df.to_csv('pandas_data.csv')
