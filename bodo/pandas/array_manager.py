@@ -188,8 +188,8 @@ class LazyArrayManager(ArrayManager, LazyMetadataMixin[ArrayManager]):
         """
         axis = self._normalize_axis(axis)
 
-        start = slobj.start if slobj.start else 0
-        stop = slobj.stop if slobj.stop else 0
+        # Normalize negative and None start/stop/step values
+        start, stop, step = slobj.indices(len(self))
 
         # TODO Check if this condition is correct.
         if (
@@ -198,6 +198,7 @@ class LazyArrayManager(ArrayManager, LazyMetadataMixin[ArrayManager]):
             and stop <= self._md_head.shape[1]
             and axis == 0
         ):
+            slobj = slice(start, stop, step)
             tmp_arrs = self._md_head.arrays
             arrays = [arr[slobj] for arr in tmp_arrs]
             new_axes = list(self._axes)
@@ -437,14 +438,16 @@ class LazySingleArrayManager(SingleArrayManager, LazyMetadataMixin[SingleArrayMa
         if axis >= self.ndim:
             raise IndexError("Requested axis not found in manager")
 
-        start = slobj.start if slobj.start else 0
-        stop = slobj.stop if slobj.stop else 0
+        # Normalize negative and None start/stop/step values
+        start, stop, step = slobj.indices(len(self))
+
         if (
             (self._md_head is not None)
             and start <= len(self._md_head)
             and stop <= len(self._md_head)
             and axis == 0
         ):
+            slobj = slice(start, stop, step)
             tmp_arrs = self._md_head.arrays
             arrays = [arr[slobj] for arr in tmp_arrs]
             new_axes = list(self._axes)
@@ -491,9 +494,6 @@ class LazySingleArrayManager(SingleArrayManager, LazyMetadataMixin[SingleArrayMa
         if name == "arrays":
             self._collect()
         return SingleArrayManager.__getattribute__(self, name)
-
-    # BSE-4097
-    # TODO Override __len__
 
     def __del__(self):
         """
