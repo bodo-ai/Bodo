@@ -183,8 +183,8 @@ ipython = "==8.16.1"
 
 # Compilers and Related
 [feature.dev.target.linux-64.dependencies]
-gcc_linux-64 = ">=9"
-gxx_linux-64 = ">=9"
+gcc_linux-64 = "=9"
+gxx_linux-64 = "=9"
 [feature.dev.target.osx-64.dependencies]
 clang_osx-64 = "=19"
 clangxx_osx-64 = "=19"
