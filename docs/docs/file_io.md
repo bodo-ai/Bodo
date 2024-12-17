@@ -1002,7 +1002,7 @@ df = read_snowflake(db_name, temp_table_name)
 
     For example:
     ```py
-    @bodo.jit()
+    @bodo.jit
     def impl(query, conn):
         df = pd.read_sql(query, conn, _bodo_read_as_dict=["A", "B", "C"])
         return df
