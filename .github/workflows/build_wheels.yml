@@ -27,7 +27,7 @@ jobs:
         run: |
           set -exo pipefail
           pip install setuptools_scm
-          echo "bodo_version=`python -m setuptools_scm`" >> $GITHUB_OUTPUT
+          echo "bodo_version=$(python -m setuptools_scm)" >> "$GITHUB_OUTPUT"
     outputs:
       bodo_version: ${{ steps.get_version.outputs.bodo_version }}
 
@@ -40,6 +40,7 @@ jobs:
     secrets: inherit
 
   build_bodo_macos_wheels:
+    if: false
     uses: ./.github/workflows/_build_bodo_pip.yml
     needs: [get_version]
     strategy:
@@ -138,7 +139,7 @@ jobs:
       - name: Build BodoSQL Wheels
         run: |
           set -exo pipefail
-          pip install bodo --find-links $(find . -name "cibw-wheels-*" -print) --no-index --no-deps
+          pip install bodo --find-links "$(find . -name "cibw-wheels-*" -print)" --no-index --no-deps
           cd BodoSQL
           pip wheel --no-deps --no-build-isolation -v .
       - uses: actions/upload-artifact@v4

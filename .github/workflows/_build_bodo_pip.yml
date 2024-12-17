@@ -41,7 +41,9 @@ jobs:
         if: inputs.os == 'macos-14'
         run: |
           sed -i '' '/; export PATH;/d' ~/.bashrc
+          # shellcheck disable=SC2016
           echo 'export PATH="/opt/homebrew/bin:/opt/homebrew/sbin:$PATH"' >> ~/.bashrc
+          # shellcheck disable=SC1090
           source ~/.bashrc
       # We need Pixi to properly configure the C++ compilers for Mac
       # For Linux, we only need C++ dependencies, so installing it and updating
@@ -123,7 +125,7 @@ jobs:
             --exclude libmpi.so.12 --exclude libmpi.so.40 
             --exclude libarrow.so.1801 --exclude libarrow_acero.so.1801 --exclude libarrow_dataset.so.1801 
             --exclude libarrow_python.so --exclude libparquet.so.1801 
-            --plat manylinux_2_35_x86_64 {wheel} -w {dest_dir} && 
+            --plat manylinux_2_34_x86_64 {wheel} -w {dest_dir} && 
             python buildscripts/bodo/pip/manylinux/patch_libs_for_pip.py -p {dest_dir}
 
       - uses: actions/upload-artifact@v4
