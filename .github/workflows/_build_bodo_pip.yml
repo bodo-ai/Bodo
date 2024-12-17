@@ -73,7 +73,7 @@ jobs:
             pixi list -e pip-cpp
             # Global Tools
             pixi global install sccache
-            yum install -y libcurl-devel
+            yum install -y libcurl-devel zlib-devel
           CIBW_BEFORE_BUILD: |
             # Delete mpi4py folder if it exists so correct version gets copied in
             rm -r {package}/bodo/mpi4py || true
