@@ -2,7 +2,7 @@ import pyarrow._hdfs
 import pyarrow.fs
 
 from bodo.ext import (  # noqa
-    _hdf5,
+    # _hdf5,
     arrow_cpp,
     csv_cpp,
     fsspec_reader,
