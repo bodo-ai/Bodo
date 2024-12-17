@@ -620,7 +620,7 @@ target_link_directories(ext PRIVATE ${PYARROW_LIB_DIR} "${Python_NumPy_INCLUDE_D
 target_link_libraries(ext PRIVATE
   npymath
   mpi
-  hdf5
+  #hdf5
   arrow
   arrow_python
   arrow_dataset
