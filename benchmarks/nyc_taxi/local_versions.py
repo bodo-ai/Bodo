@@ -1,8 +1,9 @@
-"""Run local version of Bodo, Dask, Modin, and Pyspark benchmarks
-Accepts a list of files to use as the High Volume For Hire Vehicle dataset
-(defaults to first 5 million rows of the dataset). For exhaustive list of
+"""Run local version of Bodo, Dask, Modin, or PySpark benchmarks.
+Accepts a parquet file to use as the High Volume For Hire Vehicle dataset
+(defaults to first 5 million rows of the dataset). For an exhaustive list of
 files, see s3://bodo-example-data/nyc-taxi/fhvhv. You can also optionally
-specify the system to run e.g. just run bodo or "all" to run on all systems.
+specify which system to run the benchmark on. The default is Bodo. To run
+all systems at once, use run_local.sh.
 
 usage:
     python run_local.py --dataset FILE --system SYSTEM
@@ -32,7 +33,7 @@ WEATHER_DATASET_PATH_S3 = "nyc-taxi/central_park_weather.csv"
 BUCKET_NAME = "bodo-example-data"
 
 
-def download_data_s3(path_to_s3: str, local_data_dir="data") -> str:
+def download_data_s3(path_to_s3: str, local_data_dir: str = "data") -> str:
     """Download the dataset from S3 if already exists, skip download."""
     file_name = path_to_s3.split("/", -1)[1]
     local_path = os.path.join(local_data_dir, file_name)
@@ -51,9 +52,9 @@ def download_data_s3(path_to_s3: str, local_data_dir="data") -> str:
     return local_path
 
 
-def main(fhvhv_path_s3: str, system: str):
+def main(hvfhv_path_s3: str, system: str):
     weather_path = download_data_s3(WEATHER_DATASET_PATH_S3)
-    fhvhv_path = download_data_s3(fhvhv_path_s3)
+    hvfhv_path = download_data_s3(hvfhv_path_s3)
 
     get_monthly_travels_weather_impls = {
         "bodo": bodo_get_monthly_travels_weather,
@@ -65,7 +66,7 @@ def main(fhvhv_path_s3: str, system: str):
     get_monthly_travels_weather = get_monthly_travels_weather_impls[system]
 
     print(f"Running {system.capitalize()}...")
-    get_monthly_travels_weather(weather_path, fhvhv_path)
+    get_monthly_travels_weather(weather_path, hvfhv_path)
 
 
 if __name__ == "__main__":
@@ -75,17 +76,17 @@ if __name__ == "__main__":
         "-d",
         required=False,
         default=SMALL_DATASET_PATH_S3,
-        help="Path to parquet file(s) to use for local benchmark.",
+        help="Path to parquet file to use for local benchmark. Include everything after s3://bodo-example-data.",
     )
     parser.add_argument(
         "--system",
         "-s",
         required=False,
         default="bodo",
-        help="System to run benchmark on.",
+        help="System to run benchmark on. Options are bodo, dask, modin or spark.",
     )
     args = parser.parse_args()
-    fhvhv_path_s3 = args.dataset
+    hvfhv_path_s3 = args.dataset
     system = args.system
 
-    main(fhvhv_path_s3, system)
+    main(hvfhv_path_s3, system)

@@ -66,8 +66,8 @@ To see an even bigger difference, try increasing the number of rows read by spec
 ``` shell
 # (Run from benchmarks/ directory)
 # run Dask on first parquet file (~20 million rows)
-python -m nyc_taxi.local_versions -b dask -d nyc-taxi/fhvhv_tripdata/fhvhv_tripdata_2019-02.parquet
+python -m nyc_taxi.local_versions -s dask -d nyc-taxi/fhvhv_tripdata/fhvhv_tripdata_2019-02.parquet
 
 # run Bodo on first parquet file (~20 million rows)
-python -m nyc_taxi.local_versions -b bodo -d nyc-taxi/fhvhv_tripdata/fhvhv_tripdata_2019-02.parquet
+python -m nyc_taxi.local_versions -s bodo -d nyc-taxi/fhvhv_tripdata/fhvhv_tripdata_2019-02.parquet
 ```
