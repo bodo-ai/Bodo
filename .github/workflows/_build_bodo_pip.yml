@@ -91,7 +91,7 @@ jobs:
             SETUPTOOLS_SCM_PRETEND_VERSION=${{ inputs.bodo_version }}
           CIBW_ENVIRONMENT_LINUX: >
             PATH=/project/.pixi/envs/pip-cpp/bin:$HOME/.pixi/bin:$PATH
-            LD_LIBRARY_PATH=/project/.pixi/envs/pip-cpp/lib
+            LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/project/.pixi/envs/pip-cpp/lib
             CFLAGS="-isystem /project/.pixi/envs/pip-cpp/include"
             CPPFLAGS="-isystem /project/.pixi/envs/pip-cpp/include"
             DISABLE_CCACHE=1
