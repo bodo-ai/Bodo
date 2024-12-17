@@ -424,7 +424,7 @@ set(sources_list
   "bodo/io/_csv_json_writer.cpp"
   "bodo/io/_fs_io.cpp"
   "bodo/io/_fsspec_reader.cpp"
-  "bodo/io/_hdf5.cpp"
+  #"bodo/io/_hdf5.cpp"
   "bodo/io/_hdfs_reader.cpp"
   "bodo/io/_io.cpp"
   "bodo/io/_s3_reader.cpp"
