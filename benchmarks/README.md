@@ -48,7 +48,7 @@ pip install boto3 # for S3 download
 To run the entire benchmarks as a script
 
 ``` shell
-# (from the benchmarks/ directory)
+# From the benchmarks/ directory
 ./nyc_taxi/run_local.sh
 ```
 
@@ -59,15 +59,15 @@ We use a smaller subset of the [For Hire Vehicle High Volume dataset](https://ww
 | Bodo   | 1.007   |
 | Dask   | 3.091  |
 | Modin/Ray | 13.65 |
-| Spark   | 27.27   |
+| PySpark   | 27.27   |
 
 To see an even bigger difference, try increasing the number of rows read by specifying a different parquet file such as `s3://bodo-example-data/nyc-taxi/fhvhv_tripdata/fhvhv_tripdata_2019-02.parquet`. On this size (~20 million rows), Dask runs out of memory whereas Bodo continue to run:
 
 ``` shell
-# (Run from benchmarks/ directory)
-# run Dask on first parquet file (~20 million rows)
+# From the benchmarks/ directory.
+# Run Dask on first parquet file (~20 million rows)
 python -m nyc_taxi.local_versions -s dask -d nyc-taxi/fhvhv_tripdata/fhvhv_tripdata_2019-02.parquet
 
-# run Bodo on first parquet file (~20 million rows)
+# Run Bodo on first parquet file (~20 million rows)
 python -m nyc_taxi.local_versions -s bodo -d nyc-taxi/fhvhv_tripdata/fhvhv_tripdata_2019-02.parquet
 ```

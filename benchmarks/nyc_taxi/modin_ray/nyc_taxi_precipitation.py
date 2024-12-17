@@ -107,6 +107,6 @@ if __name__ == "__main__":
     cpu_count = ray.cluster_resources()["CPU"]
     print("RAY CPU COUNT: ", cpu_count)
 
-    hvfhv_dataset = "s3://bodo-example-data/nyc-taxi/fhvhv/"
     weather_dataset = "s3://bodo-example-data/nyc-taxi/central_park_weather.csv"
+    hvfhv_dataset = "s3://bodo-example-data/nyc-taxi/fhvhv/"
     get_monthly_travels_weather(weather_dataset, hvfhv_dataset)

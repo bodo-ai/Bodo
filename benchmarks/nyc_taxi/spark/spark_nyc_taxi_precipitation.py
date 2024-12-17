@@ -112,6 +112,6 @@ def get_monthly_travels_weather(weather_dataset, hvfhv_dataset):
 
 
 if __name__ == "__main__":
-    hvfhv_dataset = "s3a://bodo-example-data/nyc-taxi/fhvhv_tripdata_rewrite/"
     weather_dataset = "s3a://bodo-example-data/nyc-taxi/central_park_weather.csv"
+    hvfhv_dataset = "s3a://bodo-example-data/nyc-taxi/fhvhv_tripdata_rewrite/"
     get_monthly_travels_weather(weather_dataset, hvfhv_dataset)
