@@ -52,7 +52,7 @@ jobs:
       python-version: '3.12'
       platform-build: true
       is-release: ${{ github.event_name == 'release' }}
-      os: self-hosted-medium
+      os: ubuntu-latest
     secrets: inherit
 
   iceberg-conda:

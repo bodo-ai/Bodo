@@ -6,7 +6,7 @@ on:
 
 jobs:
   build:
-    runs-on: [self-hosted, small]
+    runs-on: ubuntu-latest
     timeout-minutes: 240      
 
     steps:

@@ -22,7 +22,7 @@ on:
 jobs:
   run:
     name: Build and Run Tests Helper
-    runs-on: self-hosted-medium
+    runs-on: ubuntu-latest
     steps:
         # Setup
         - uses: actions/checkout@v4
