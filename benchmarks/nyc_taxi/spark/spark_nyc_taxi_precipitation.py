@@ -11,7 +11,7 @@ from pyspark.sql.functions import (
 )
 
 
-def get_monthly_travels_weather(hvfhv_dataset):
+def get_monthly_travels_weather(weather_dataset, hvfhv_dataset):
     spark = (
         SparkSession.builder.appName("MonthlyTravelsWeather")
         .config("spark.jars.packages", "org.apache.hadoop:hadoop-aws:3.3.2")
@@ -27,7 +27,7 @@ def get_monthly_travels_weather(hvfhv_dataset):
 
     # Read in weather data using pandas-on-Spark
     central_park_weather_observations = ps.read_csv(
-        "s3a://bodo-example-data/nyc-taxi/central_park_weather.csv",
+        weather_dataset,
     ).rename(columns={"DATE": "date", "PRCP": "precipitation"})
 
     central_park_weather_observations["date"] = ps.to_datetime(
@@ -113,4 +113,5 @@ def get_monthly_travels_weather(hvfhv_dataset):
 
 if __name__ == "__main__":
     hvfhv_dataset = "s3a://bodo-example-data/nyc-taxi/fhvhv_tripdata_rewrite/"
-    get_monthly_travels_weather(hvfhv_dataset)
+    weather_dataset = "s3a://bodo-example-data/nyc-taxi/central_park_weather.csv"
+    get_monthly_travels_weather(weather_dataset, hvfhv_dataset)

@@ -15,21 +15,16 @@ import dask.dataframe as dd
 from dask.distributed import Client
 
 
-def get_monthly_travels_weather(hvfhv_dataset):
+def get_monthly_travels_weather(weather_dataset, hvfhv_dataset, storage_options=None):
     start = time.time()
     central_park_weather_observations = dd.read_csv(
-        "s3://bodo-example-data/nyc-taxi/central_park_weather.csv",
-        parse_dates=["DATE"],
-        storage_options={"anon": True},
+        weather_dataset, parse_dates=["DATE"], storage_options=storage_options
     )
     central_park_weather_observations = central_park_weather_observations.rename(
         columns={"DATE": "date", "PRCP": "precipitation"}
     )
 
-    fhvhv_tripdata = dd.read_parquet(
-        hvfhv_dataset,
-        storage_options={"anon": True},
-    )
+    fhvhv_tripdata = dd.read_parquet(hvfhv_dataset, storage_options=storage_options)
 
     central_park_weather_observations["date"] = central_park_weather_observations[
         "date"
@@ -102,31 +97,42 @@ def get_monthly_travels_weather(hvfhv_dataset):
     return end - start
 
 
-def local_get_monthly_travels_weather(hvfhv_dataset):
+def local_get_monthly_travels_weather(weather_dataset, hvfhv_dataset):
     """Run Dask on local cluster."""
     with Client():
-        total_time = get_monthly_travels_weather(hvfhv_dataset)
+        total_time = get_monthly_travels_weather(weather_dataset, hvfhv_dataset)
         print("Total time for IO and compute:", total_time)
 
 
-def ec2_get_monthly_travels_weather(hvfhv_dataset):
+def ec2_get_monthly_travels_weather(weather_dataset, hvfhv_dataset):
     """Run Dask on EC2 cluster."""
     from dask_cloudprovider.aws import EC2Cluster
 
+    # for reading from S3
     env_vars = {"EXTRA_CONDA_PACKAGES": "s3fs==2024.10.0"}
+
+    # use an anoymous session to avoid passing credentials to cluster
+    s3_options = {"anon": True}
+
     with EC2Cluster(
         # NOTE: Setting security = False to avoid large config size
         # https://github.com/dask/dask-cloudprovider/issues/249
         security=False,
         n_workers=4,
-        instance_type="r6i.16xlarge",
+        scheduler_instance_type="c6i.xlarge",
+        worker_instance_type="r6i.16xlarge",
         # Region for accessing bodo-example-data
         region="us-east-2",
         env_vars=env_vars,
     ) as cluster:
         with Client(cluster) as client:
             for _ in range(3):
-                future = client.submit(get_monthly_travels_weather, hvfhv_dataset)
+                future = client.submit(
+                    get_monthly_travels_weather,
+                    weather_dataset,
+                    hvfhv_dataset,
+                    storage_options=s3_options,
+                )
                 total_time = future.result()
                 client.restart()
                 print("Total time for IO and compute:", total_time)
@@ -134,4 +140,5 @@ def ec2_get_monthly_travels_weather(hvfhv_dataset):
 
 if __name__ == "__main__":
     hvfhv_dataset = "s3://bodo-example-data/nyc-taxi/fhvhv_tripdata/"
-    ec2_get_monthly_travels_weather(hvfhv_dataset)
+    weather_dataset = "s3://bodo-example-data/nyc-taxi/central_park_weather.csv"
+    ec2_get_monthly_travels_weather(weather_dataset, hvfhv_dataset)
