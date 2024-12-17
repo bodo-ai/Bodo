@@ -31,7 +31,7 @@ Each benchmark is collected on a cluster containing 4 worker instances and 128 p
 
 The graph below summarizes the total execution time of each system (averaged over 3 runs). Results were last collected on December 12th, 2024.
 
-<img src="./img/nyc_taxi.png" alt="Monthly High Volume for Hire Vehicle Trips with Precipitation Benchmark Execution Time" title="Monthly High Volume for Hire Vehicle Trips with Precipitation Average Execution Time" width="30%">
+<img src="./img/nyc-taxi-benchmark.png" alt="Monthly High Volume for Hire Vehicle Trips with Precipitation Benchmark Execution Time" title="Monthly High Volume for Hire Vehicle Trips with Precipitation Average Execution Time" width="30%">
 
 ## Local Benchmark
 
@@ -42,6 +42,7 @@ pip install bodo==2024.12.1
 pip install "dask[dataframe]"==2024.12.0
 pip install "modin[all]"==0.32.0
 pip install pyspark==3.5.3  
+pip install boto3 # for S3 download
 ```
 
 To run the entire benchmarks as a script
