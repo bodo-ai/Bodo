@@ -95,6 +95,7 @@ jobs:
             CONDA_PREFIX=$(pwd)/.pixi/envs/pip-cpp
             SETUPTOOLS_SCM_PRETEND_VERSION=${{ inputs.bodo_version }}
           CIBW_ENVIRONMENT_LINUX: >
+            BOOST_ROOT=/usr/local/boost_1_87_0
             DISABLE_CCACHE=1
             SCCACHE_BUCKET=engine-codebuild-cache
             SCCACHE_REGION=us-east-2
