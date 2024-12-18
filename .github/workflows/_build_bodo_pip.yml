@@ -84,7 +84,8 @@ jobs:
             curl --output boost_1_87_0.tar.xz 'https://github.com/boostorg/boost/releases/download/boost-1.87.0/boost-1.87.0-cmake.tar.xz' -L
             mkdir boost_1_87_0
             tar -xJf boost_1_87_0.tar.xz -C boost_1_87_0
-            (cd boost_1_87_0 && ./bootstrap.sh && ./b2 install)
+            ls boost_1_87_0
+            (cd boost_1_87_0; ./bootstrap.sh; ./b2 install)
           CIBW_ENVIRONMENT: >-
             DISABLE_CCACHE=1
             SCCACHE_BUCKET=engine-codebuild-cache
