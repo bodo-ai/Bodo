@@ -80,9 +80,11 @@ jobs:
             # Install mpich for mpi.h needed by mpi4py
             MPICH_VERSION=$(/opt/python/cp312-cp312/bin/python -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["tool"]["scikit-build"]["cmake"]["define"]["MPICH_VERSION"])')
             pip install mpich=="$MPICH_VERSION" -i https://pypi.anaconda.org/mpi4py/simple --default-timeout=100
+            # Install boost
             curl --output boost_1_87_0.tar.xz 'https://github.com/boostorg/boost/releases/download/boost-1.87.0/boost-1.87.0-cmake.tar.xz' -L
-            mkdir /usr/local/boost_1_87_0
-            tar -xJf boost_1_87_0.tar.xz -C /usr/local/boost_1_87_0
+            mkdir boost_1_87_0
+            tar -xJf boost_1_87_0.tar.xz -C boost_1_87_0
+            (cd boost_1_87_0 && ./bootstrap.sh && ./b2 install)
           CIBW_ENVIRONMENT: >-
             DISABLE_CCACHE=1
             SCCACHE_BUCKET=engine-codebuild-cache
