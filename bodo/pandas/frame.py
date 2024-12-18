@@ -323,42 +323,24 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         storage_options=None,
         mode="w",
     ):
-        # argument defaults should match that of to_json_overload in pd_dataframe_ext.py
+        # Argument defaults should match that of to_json_overload in pd_dataframe_ext.py
+        # Passing orient and lines as free vars to become literals in the compiler
 
         @bodo.jit(spawn=True)
         def to_json_wrapper(
             df: pd.DataFrame,
             path_or_buf,
-            orient,
             date_format,
             double_precision,
             force_ascii,
             date_unit,
             default_handler,
-            lines,
             compression,
             index,
             indent,
             storage_options,
             mode,
         ):
-            if orient == "records":
-                # leave out orient in forwarded arguments for it to default back to
-                # Literal["records"] instead of being unicode
-                return df.to_json(
-                    path_or_buf=path_or_buf,
-                    date_format=date_format,
-                    double_precision=double_precision,
-                    force_ascii=force_ascii,
-                    date_unit=date_unit,
-                    default_handler=default_handler,
-                    lines=lines,
-                    compression=compression,
-                    index=index,
-                    indent=indent,
-                    storage_options=storage_options,
-                    mode=mode,
-                )
             return df.to_json(
                 path_or_buf,
                 orient,
@@ -378,13 +360,11 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         to_json_wrapper(
             self,
             path_or_buf,
-            orient,
             date_format,
             double_precision,
             force_ascii,
             date_unit,
             default_handler,
-            lines,
             compression,
             index,
             indent,
