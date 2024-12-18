@@ -73,7 +73,7 @@ jobs:
             pixi list -e pip-cpp
             # Global Tools
             pixi global install sccache
-            yum install -y libcurl-devel zlib-devel
+            yum install -y libcurl-devel zlib-devel boost-devel
           CIBW_BEFORE_BUILD: |
             # Delete mpi4py folder if it exists so correct version gets copied in
             rm -r {package}/bodo/mpi4py || true
@@ -93,10 +93,6 @@ jobs:
           CIBW_ENVIRONMENT_LINUX: >
             PATH=/project/.pixi/envs/pip-cpp/bin:$HOME/.pixi/bin:$PATH
             LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/project/.pixi/envs/pip-cpp/lib
-            CFLAGS="-I /project/.pixi/envs/pip-cpp/include"
-            CPPFLAGS="-I /project/.pixi/envs/pip-cpp/include"
-            CC=/project/.pixi/envs/pip-cpp/bin/x86_64-conda-linux-gnu-gcc
-            CXX=/project/.pixi/envs/pip-cpp/bin/x86_64-conda-linux-gnu-g++
             DISABLE_CCACHE=1
             SCCACHE_BUCKET=engine-codebuild-cache
             SCCACHE_REGION=us-east-2

@@ -12,7 +12,7 @@ azure =        { features = ["rcpp", "dev", "local-mpi", "azure"], solve-group =
 platform =     { features = ["rcpp", "platform", "platform-mpi"],  solve-group = "312-platform" }
 platform-dev = { features = ["rcpp", "dev", "platform-mpi"],       solve-group = "312-platform" }
 # Pip C++ Deps
-pip-cpp =      { features = ["rcpp", "pip", "local-mpi"], no-default-feature = true,   solve-group = "pip" }
+pip-cpp =      { features = ["local-mpi"], no-default-feature = true,   solve-group = "pip" }
 
 # Build Commands
 [tasks.build-bodo]
@@ -115,7 +115,7 @@ cx_oracle = "*"
 [feature.rcpp.dependencies]
 libcurl = "~=8.0"
 zstd = "<=1.5.6"
-#hdf5 = { version = ">=1.14.3,<1.14.4.0a0", build = "*mpi_mpich_*" }
+hdf5 = { version = ">=1.14.3,<1.14.4.0a0", build = "*mpi_mpich_*" }
 boost-cpp = "1.85"
 
 [feature.dev.dependencies]
@@ -226,14 +226,14 @@ pytest-azurepipelines = "*"
 pytest-nunit = "*"
 
 # Pip to Limit libstdcxx.so
-[feature.pip.target.linux-64.dependencies]
-gcc_linux-64 = "*"
-gxx_linux-64 = "*"
-libstdcxx = "<13.1"
-libstdcxx-ng = "<13.1"
-[feature.pip.target.osx-64.dependencies]
-clang_osx-64 = "=19"
-clangxx_osx-64 = "=19"
-[feature.pip.target.osx-arm64.dependencies]
-clang_osx-arm64 = "=19"
-clangxx_osx-arm64 = "=19"
+#[feature.pip.target.linux-64.dependencies]
+#gcc_linux-64 = "*"
+#gxx_linux-64 = "*"
+#libstdcxx = "<13.1"
+#libstdcxx-ng = "<13.1"
+#[feature.pip.target.osx-64.dependencies]
+#clang_osx-64 = "=19"
+#clangxx_osx-64 = "=19"
+#[feature.pip.target.osx-arm64.dependencies]
+#clang_osx-arm64 = "=19"
+#clangxx_osx-arm64 = "=19"
