@@ -80,8 +80,8 @@ jobs:
             rm -rf {package}/build
             rm -f {package}/mpich.whl
             # Install mpich for mpi.h needed by mpi4py
-            MPICH_VERSION=$(/opt/python/cp312-cp312/bin/python -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["tool"]["scikit-build"]["cmake"]["define"]["MPICH_VERSION"])')
-            pip install mpich=="$MPICH_VERSION" -i https://pypi.anaconda.org/mpi4py/simple
+            #MPICH_VERSION=$(/opt/python/cp312-cp312/bin/python -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["tool"]["scikit-build"]["cmake"]["define"]["MPICH_VERSION"])')
+            #pip install mpich=="$MPICH_VERSION" -i https://pypi.anaconda.org/mpi4py/simple
           CIBW_ENVIRONMENT: >-
             DISABLE_CCACHE=1
             SCCACHE_BUCKET=engine-codebuild-cache
@@ -94,6 +94,8 @@ jobs:
             CONDA_PREFIX=$(pwd)/.pixi/envs/pip-cpp
             SETUPTOOLS_SCM_PRETEND_VERSION=${{ inputs.bodo_version }}
           CIBW_ENVIRONMENT_LINUX: >
+            CFLAGS="-isystem /project/.pixi/envs/pip-cpp/include"
+            CPPFLAGS="-isystem /project/.pixi/envs/pip-cpp/include"
             DISABLE_CCACHE=1
             SCCACHE_BUCKET=engine-codebuild-cache
             SCCACHE_REGION=us-east-2
