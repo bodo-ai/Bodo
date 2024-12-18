@@ -80,7 +80,7 @@ jobs:
             # Install mpich for mpi.h needed by mpi4py
             MPICH_VERSION=$(/opt/python/cp312-cp312/bin/python -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["tool"]["scikit-build"]["cmake"]["define"]["MPICH_VERSION"])')
             pip install mpich=="$MPICH_VERSION" -i https://pypi.anaconda.org/mpi4py/simple --default-timeout=100
-            wget boost_1_87_0.tar.bz2 https://boostorg.jfrog.io/artifactory/main/release/1.87.0/source/boost_1_87_0.tar.bz2
+            curl --output boost_1_87_0.tar.bz2 'boostorg.jfrog.io/artifactory/main/release/1.87.0/source/boost_1_87_0.tar.bz2' -L
             tar --bzip2 -xf boost_1_87_0.tar.bz2 -C /usr/local/boost_1_87_0
           CIBW_ENVIRONMENT: >-
             DISABLE_CCACHE=1
