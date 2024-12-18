@@ -117,6 +117,10 @@ ExternalProject_Get_property(aws-sdk-cpp INSTALL_DIR)
 set(aws-sdk-cpp_INSTALL_DIR ${INSTALL_DIR})
 message("Source dir of datasketches = ${aws-sdk-cpp_INSTALL_DIR}")
 
+# Add boost as a dependency
+find_package(Boost REQUIRED 1.81)
+include_directories(${Boost_INCLUDE_DIRS})
+
 
 # ---------------------------- Set CMake Options -----------------------------
 # Use RelWithDebInfo Mode by Default
