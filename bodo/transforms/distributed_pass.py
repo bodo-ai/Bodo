@@ -72,6 +72,7 @@ from bodo.utils.transform import (
 from bodo.utils.typing import (
     BodoError,
     decode_if_dict_array,
+    get_overload_const_bool,
     is_str_arr_type,
     list_cumulative,
     to_str_arr_if_dict_array,
@@ -2848,7 +2849,7 @@ class DistributedPass:
                 lines_var = get_call_expr_arg(
                     "to_json", rhs.args, kws, 7, "lines", None
                 )
-                is_lines = self.typemap[lines_var.name]
+                is_lines = get_overload_const_bool(self.typemap[lines_var.name])
 
             is_records_lines = ir.Var(
                 assign.target.scope, mk_unique_var("is_records_lines"), rhs.loc
