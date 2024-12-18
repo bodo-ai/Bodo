@@ -73,6 +73,8 @@ from bodo.utils.typing import (
     BodoError,
     decode_if_dict_array,
     get_overload_const_bool,
+    get_overload_const_str,
+    is_overload_constant_str,
     is_str_arr_type,
     list_cumulative,
     to_str_arr_if_dict_array,
@@ -2842,14 +2844,25 @@ class DistributedPass:
                     "to_json", rhs.args, kws, 1, "orient", None
                 )
                 orient_val = self.typemap[orient_var.name]
-                is_records = True if orient_val.literal_value == "records" else False
+                if not is_overload_constant_str(orient_val):
+                    raise BodoError(
+                        "orient argument in to_json() must be a constant string"
+                    )
+                is_records = (
+                    True if get_overload_const_str(orient_val) == "records" else False
+                )
 
             is_lines = False
             if "lines" in kws:
                 lines_var = get_call_expr_arg(
                     "to_json", rhs.args, kws, 7, "lines", None
                 )
-                is_lines = get_overload_const_bool(self.typemap[lines_var.name])
+                lines_val = self.typemap[lines_var.name]
+                if not is_overload_constant_str(lines_val):
+                    raise BodoError(
+                        "lines argument in to_json() must be a constant boolean"
+                    )
+                is_lines = get_overload_const_bool(lines_val)
 
             is_records_lines = ir.Var(
                 assign.target.scope, mk_unique_var("is_records_lines"), rhs.loc
