@@ -118,7 +118,7 @@ set(aws-sdk-cpp_INSTALL_DIR ${INSTALL_DIR})
 message("Source dir of datasketches = ${aws-sdk-cpp_INSTALL_DIR}")
 
 # Add boost as a dependency
-find_package(Boost REQUIRED 1.66)
+find_package(Boost REQUIRED)
 include_directories(${Boost_INCLUDE_DIRS})
 
 
