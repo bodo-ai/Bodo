@@ -21,9 +21,6 @@ on:
 
 jobs:
   run:
-    permissions:
-      id-token: write
-      contents: read
     name: Build and Run Tests Helper
     runs-on: self-hosted-medium
     steps:
