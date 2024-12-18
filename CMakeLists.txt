@@ -118,7 +118,7 @@ set(aws-sdk-cpp_INSTALL_DIR ${INSTALL_DIR})
 message("Source dir of datasketches = ${aws-sdk-cpp_INSTALL_DIR}")
 
 # Add boost as a dependency
-find_package(Boost REQUIRED COMPONENTS container)
+find_package(Boost REQUIRED COMPONENTS container json)
 include_directories(${Boost_INCLUDE_DIRS})
 
 
@@ -239,7 +239,7 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -isystem ${CONDA_INCLUDE_DIR}")
 # Vendor MPICH
 if(DEFINED ENV{BODO_VENDOR_MPICH})
   message(STATUS "Downloading MPICH")
-  execute_process(COMMAND ${Python_EXECUTABLE} -m pip download mpich==${MPICH_VERSION} -i https://pypi.anaconda.org/mpi4py/simple)
+  execute_process(COMMAND ${Python_EXECUTABLE} -m pip download mpich==${MPICH_VERSION} -i https://pypi.anaconda.org/mpi4py/simple --default-timeout=100)
   execute_process(COMMAND unzip "mpich-*.whl" "mpich*.data/*" -d mpich-tmp-extract-dir)
   file(GLOB MPICH_DATA_DIR "mpich-tmp-extract-dir/mpich-*.data/data/*")
   file(COPY ${MPICH_DATA_DIR} DESTINATION "${SKBUILD_DATA_DIR}" FOLLOW_SYMLINK_CHAIN 
