@@ -74,6 +74,7 @@ from bodo.utils.typing import (
     decode_if_dict_array,
     get_overload_const_bool,
     get_overload_const_str,
+    is_overload_constant_bool,
     is_overload_constant_str,
     is_str_arr_type,
     list_cumulative,
@@ -2858,7 +2859,7 @@ class DistributedPass:
                     "to_json", rhs.args, kws, 7, "lines", None
                 )
                 lines_val = self.typemap[lines_var.name]
-                if not is_overload_constant_str(lines_val):
+                if not is_overload_constant_bool(lines_val):
                     raise BodoError(
                         "lines argument in to_json() must be a constant boolean"
                     )
