@@ -93,8 +93,8 @@ jobs:
           CIBW_ENVIRONMENT_LINUX: >
             PATH=/project/.pixi/envs/pip-cpp/bin:$HOME/.pixi/bin:$PATH
             LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/project/.pixi/envs/pip-cpp/lib
-            CFLAGS="-isystem /project/.pixi/envs/pip-cpp/include -lz"
-            CPPFLAGS="-isystem /project/.pixi/envs/pip-cpp/include"
+            CFLAGS="-I /project/.pixi/envs/pip-cpp/include"
+            CPPFLAGS="-I /project/.pixi/envs/pip-cpp/include"
             CC=/project/.pixi/envs/pip-cpp/bin/x86_64-conda-linux-gnu-gcc
             CXX=/project/.pixi/envs/pip-cpp/bin/x86_64-conda-linux-gnu-g++
             DISABLE_CCACHE=1
