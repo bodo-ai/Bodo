@@ -648,8 +648,8 @@ target_link_libraries(ext PRIVATE
   arrow_dataset
   parquet
   fmt::fmt
-  AWSSDK::aws-cpp-sdk-core
-  AWSSDK::aws-cpp-sdk-s3
+  aws-cpp-sdk-core
+  aws-cpp-sdk-s3
   ${Boost_LIBRARIES}
 )
 
