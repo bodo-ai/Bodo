@@ -106,7 +106,7 @@ ExternalProject_Add(aws-sdk-cpp
   # generation, as CMake otherwise picks up the Datasketch files when building
   # an RPM for a dependent package. (RPM scans the directory for files in addition to installing
   # those files referenced in an "install" rule in the cmake file)
-  INSTALL_COMMAND env DESTDIR= ${CMAKE_COMMAND} --build . --target install
+  #INSTALL_COMMAND env DESTDIR= ${CMAKE_COMMAND} --build . --target install
   TEST_COMMAND      ""
   LOG_CONFIGURE ON
   LOG_BUILD ON
