@@ -11,7 +11,6 @@ pytestmark = pytest_spawn_mode + [pytest.mark.test_docs]
 
 def test_quickstart_local_sql():
     """Test example equivalent to docs/quick_start/quickstart_local_sql.md"""
-    print("running test")
     NUM_GROUPS = 30
     NUM_ROWS = 2_000
 
