@@ -25,7 +25,7 @@ https://hub.docker.com/r/bodoai/bodoai_image
 
 1. Download the Bodo image:
 ```shell
-docker pull bodoai/bodoai_image
+docker pull bodoai/bodoai_image:latest
 ```
 
 2. Start the Docker container with JupyterLab:
