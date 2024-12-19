@@ -426,7 +426,7 @@ Save this code as `df_unsupported.py` and run from command line:
 
 ``` 
 $ python df_unsupported.py
-# bodo.utils.typing.BodoError: Dataframe.transpose not supported yet
+# bodo.utils.typing.BodoError: Dataframe.transpose() not supported yet.
 ```
 
 As the error indicates, Bodo doesn't currently support the `transpose`
