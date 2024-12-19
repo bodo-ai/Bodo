@@ -100,6 +100,7 @@ ExternalProject_Add(aws-sdk-cpp
   GIT_TAG           1.11.468
   GIT_SHALLOW true
   LIST_SEPARATOR "|"
+  INSTALL_DIR /tmp/aws-sdk-cpp-prefix
   CMAKE_ARGS -DBUILD_TESTS=OFF -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} -DBUILD_ONLY=s3|core -DAUTORUN_UNIT_TESTS=OFF -DCMAKE_INSTALL_PREFIX=/tmp/aws-sdk-cpp-prefix
   # Override the install command to add DESTDIR
   # This is necessary to work around an oddity in the RPM (but not other) package
@@ -685,8 +686,7 @@ endif()
 target_include_directories(ext PRIVATE ${datasketches_INSTALL_DIR}/include/DataSketches)
 add_dependencies(ext datasketches)
 
-target_include_directories(ext SYSTEM PRIVATE ${aws-sdk-cpp_INSTALL_DIR}/src/aws-sdk-cpp/src/aws-cpp-sdk-core/include)
-target_include_directories(ext SYSTEM PRIVATE ${aws-sdk-cpp_INSTALL_DIR}/src/aws-sdk-cpp/crt/aws-crt-cpp/include)
+target_include_directories(ext SYSTEM PRIVATE ${aws-sdk-cpp_INSTALL_DIR}/include)
 add_dependencies(ext aws-sdk-cpp)
 
 set_target_properties(ext PROPERTIES CXX_CLANG_TIDY "${CLANG_TIDY_COMMAND}")
