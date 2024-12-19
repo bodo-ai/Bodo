@@ -71,6 +71,9 @@ jobs:
     name: Pre-Build Bodo for Cache
     runs-on: ubuntu-latest
     if: needs.validate.outputs.run_tests == 'true'
+    permissions:
+      id-token: write
+      contents: read
     steps:
       - uses: actions/checkout@v4
       - name: Build from Source
