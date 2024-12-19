@@ -69,7 +69,7 @@ jobs:
   compile-bodo:
     needs: [validate]
     name: Pre-Build Bodo for Cache
-    runs-on: [self-hosted, large]
+    runs-on: ubuntu-latest
     if: needs.validate.outputs.run_tests == 'true'
     steps:
       - uses: actions/checkout@v4
