@@ -7,6 +7,10 @@ tags:
 
 ---
 
+<!-- 
+NOTE: the examples in this file are covered by tests in bodo/tests/test_quickstart_docs.py. Any changes to examples in this file should also update the corresponding unit test(s).
+ -->
+
 # Python Development Guide {#devguide}
 
 
