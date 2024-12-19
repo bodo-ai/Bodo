@@ -2104,7 +2104,7 @@ PyMODINIT_FUNC PyInit_array_ext(void);
 PyMODINIT_FUNC PyInit_s3_reader(void);
 PyMODINIT_FUNC PyInit_fsspec_reader(void);
 PyMODINIT_FUNC PyInit_hdfs_reader(void);
-PyMODINIT_FUNC PyInit__hdf5(void);
+// PyMODINIT_FUNC PyInit__hdf5(void);
 PyMODINIT_FUNC PyInit_arrow_cpp(void);
 PyMODINIT_FUNC PyInit_csv_cpp(void);
 PyMODINIT_FUNC PyInit_json_cpp(void);

@@ -95,6 +95,33 @@ ExternalProject_Get_property(datasketches INSTALL_DIR)
 set(datasketches_INSTALL_DIR ${INSTALL_DIR})
 message("Source dir of datasketches = ${datasketches_INSTALL_DIR}")
 
+ExternalProject_Add(aws-sdk-cpp
+  GIT_REPOSITORY    https://github.com/aws/aws-sdk-cpp.git
+  GIT_TAG           1.11.468
+  GIT_SHALLOW true
+  LIST_SEPARATOR |
+  CMAKE_ARGS -DBUILD_TESTS=OFF -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} -DBUILD_ONLY=s3|core -DAUTORUN_UNIT_TESTS=OFF -DCMAKE_INSTALL_PREFIX=/tmp/aws-sdk-cpp-prefix
+  # Override the install command to add DESTDIR
+  # This is necessary to work around an oddity in the RPM (but not other) package
+  # generation, as CMake otherwise picks up the Datasketch files when building
+  # an RPM for a dependent package. (RPM scans the directory for files in addition to installing
+  # those files referenced in an "install" rule in the cmake file)
+  INSTALL_COMMAND env DESTDIR= ${CMAKE_COMMAND} --build . --target install
+  TEST_COMMAND      ""
+  LOG_CONFIGURE ON
+  LOG_BUILD ON
+  LOG_INSTALL ON
+  LOG_OUTPUT_ON_FAILURE ON
+)
+
+ExternalProject_Get_property(aws-sdk-cpp INSTALL_DIR)
+set(aws-sdk-cpp_INSTALL_DIR ${INSTALL_DIR})
+message("Source dir of datasketches = ${aws-sdk-cpp_INSTALL_DIR}")
+
+# Add boost as a dependency
+find_package(Boost 1.85 REQUIRED json)
+include_directories(${Boost_INCLUDE_DIRS})
+
 
 # ---------------------------- Set CMake Options -----------------------------
 # Use RelWithDebInfo Mode by Default
@@ -213,7 +240,7 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -isystem ${CONDA_INCLUDE_DIR}")
 # Vendor MPICH
 if(DEFINED ENV{BODO_VENDOR_MPICH})
   message(STATUS "Downloading MPICH")
-  execute_process(COMMAND ${Python_EXECUTABLE} -m pip download mpich==${MPICH_VERSION} -i https://pypi.anaconda.org/mpi4py/simple)
+  execute_process(COMMAND ${Python_EXECUTABLE} -m pip download mpich==${MPICH_VERSION} -i https://pypi.anaconda.org/mpi4py/simple --default-timeout=100)
   execute_process(COMMAND unzip "mpich-*.whl" "mpich*.data/*" -d mpich-tmp-extract-dir)
   file(GLOB MPICH_DATA_DIR "mpich-tmp-extract-dir/mpich-*.data/data/*")
   file(COPY ${MPICH_DATA_DIR} DESTINATION "${SKBUILD_DATA_DIR}" FOLLOW_SYMLINK_CHAIN 
@@ -424,7 +451,7 @@ set(sources_list
   "bodo/io/_csv_json_writer.cpp"
   "bodo/io/_fs_io.cpp"
   "bodo/io/_fsspec_reader.cpp"
-  "bodo/io/_hdf5.cpp"
+  #"bodo/io/_hdf5.cpp"
   "bodo/io/_hdfs_reader.cpp"
   "bodo/io/_io.cpp"
   "bodo/io/_s3_reader.cpp"
@@ -620,13 +647,14 @@ target_link_directories(ext PRIVATE ${PYARROW_LIB_DIR} "${Python_NumPy_INCLUDE_D
 target_link_libraries(ext PRIVATE
   npymath
   mpi
-  hdf5
+  #hdf5
   arrow
   arrow_python
   arrow_dataset
   parquet
   fmt::fmt
   aws-cpp-sdk-core
+  ${Boost_LIBRARIES}
 )
 
 set(IS_PLATFORM "$ENV{IS_BODO_PLATFORM}")
@@ -656,6 +684,9 @@ endif()
 
 target_include_directories(ext PRIVATE ${datasketches_INSTALL_DIR}/include/DataSketches)
 add_dependencies(ext datasketches)
+
+target_include_directories(ext PRIVATE ${aws-sdk-cpp_INSTALL_DIR}/include/aws-sdk-cpp)
+add_dependencies(ext aws-sdk-cpp)
 
 set_target_properties(ext PROPERTIES CXX_CLANG_TIDY "${CLANG_TIDY_COMMAND}")
 add_dependencies(ext pyfs _hdfs tracing pyarrow_wrappers datasketches)
