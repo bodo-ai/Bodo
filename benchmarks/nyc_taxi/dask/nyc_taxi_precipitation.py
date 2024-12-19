@@ -15,7 +15,9 @@ import dask.dataframe as dd
 from dask.distributed import Client
 
 
-def get_monthly_travels_weather(weather_dataset, hvfhv_dataset, storage_options=None):
+def get_monthly_travels_weather(
+    weather_dataset, hvfhv_dataset, storage_options=None, is_local=False
+):
     start = time.time()
     central_park_weather_observations = dd.read_csv(
         weather_dataset, parse_dates=["DATE"], storage_options=storage_options
@@ -89,8 +91,13 @@ def get_monthly_travels_weather(weather_dataset, hvfhv_dataset, storage_options=
         },
     )
 
-    # TODO: Write output to S3 once permissions issue is resolved.
-    monthly_trips_weather = monthly_trips_weather.compute()
+    if is_local:
+        monthly_trips_weather = monthly_trips_weather.to_parquet(
+            "dask_monthly_trips_weather.pq", compute=True
+        )
+    else:
+        # TODO: Write output to S3 once permissions issue is resolved.
+        monthly_trips_weather = monthly_trips_weather.compute()
 
     end = time.time()
 
@@ -100,7 +107,9 @@ def get_monthly_travels_weather(weather_dataset, hvfhv_dataset, storage_options=
 def local_get_monthly_travels_weather(weather_dataset, hvfhv_dataset):
     """Run Dask on local cluster."""
     with Client():
-        total_time = get_monthly_travels_weather(weather_dataset, hvfhv_dataset)
+        total_time = get_monthly_travels_weather(
+            weather_dataset, hvfhv_dataset, is_local=True
+        )
         print("Total time for IO and compute:", total_time)
 
 
