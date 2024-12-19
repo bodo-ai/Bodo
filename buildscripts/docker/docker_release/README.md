@@ -35,6 +35,14 @@ Replace `8` in `--cpus=8` with the desired number of CPUs:
 docker run -p 8888:8888 --cpus=8 bodoai/bodoai_image
 ```
 
+Or start the container using the shell:
+```
+docker run -dt bodo-img
+docker ps  
+docker exec -it <container_id> bash
+```
+The first command starts the container in detached mode, the second shows the container ID, and the third opens a shell session inside the container.
+
 3. Access the JupyterLab environment:
 At the end of the terminal output, you’ll see a link similar to this:
 
@@ -52,12 +60,12 @@ To stop the running container:
 
 ## Build the Image Locally
 If you prefer to build the image locally instead of downloading it:
-1. Checkout this folder from Github repo
-2. Navigate to the directory containing the Dockerfile on your machine.
-3. Build the Docker image:
+1. Download [docker_release folder](https://github.com/bodo-ai/Bodo/tree/main/buildscripts/docker) containing the Dockerfile from the repository (e.g., by using tools like GitHub’s “Download ZIP” for a single folder).
+2. Update those file paths (`env.yml`, `pi.ipynb`, and `quickstart.ipynb`) in the `COPY` step in the  Dockerfile to ensure they match your local directory structure.
+3. Navigate to the folder and build the Docker image:
 
 ```shell
-docker build -t bodo-img . 
+docker build -t bodo-img .
 ```
 
 4. Start the container:
