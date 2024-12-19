@@ -99,7 +99,8 @@ ExternalProject_Add(aws-sdk-cpp
   GIT_REPOSITORY    https://github.com/aws/aws-sdk-cpp.git
   GIT_TAG           1.11.468
   GIT_SHALLOW true
-  CMAKE_ARGS -DBUILD_TESTS=OFF -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} -DBUILD_ONLY=s3 -DAUTORUN_UNIT_TESTS=OFF -DCMAKE_INSTALL_PREFIX=/tmp/aws-sdk-cpp-prefix
+  LIST_SEPARATOR |
+  CMAKE_ARGS -DBUILD_TESTS=OFF -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} -DBUILD_ONLY=s3|core -DAUTORUN_UNIT_TESTS=OFF -DCMAKE_INSTALL_PREFIX=/tmp/aws-sdk-cpp-prefix
   # Override the install command to add DESTDIR
   # This is necessary to work around an oddity in the RPM (but not other) package
   # generation, as CMake otherwise picks up the Datasketch files when building
