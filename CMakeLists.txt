@@ -75,12 +75,11 @@ FetchContent_Declare(aws-sdk-cpp
   GIT_TAG           1.11.468
   GIT_SHALLOW true
 )
-FetchContent_MakeAvailable(aws-sdk-cpp)
+FetchContent_MakeAvailable(fmt aws-sdk-cpp)
 unset(BUILD_TESTS)
 unset(BUILD_ONLY)
 unset(AUTORUN_UNIT_TESTS)
 unset(TEST_COMMAND)
-FetchContent_MakeAvailable(fmt aws-sdk-cpp)
 set_target_properties(fmt PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 
