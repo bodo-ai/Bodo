@@ -1,3 +1,7 @@
+<!-- 
+NOTE: the examples in this file are covered by tests in bodo/tests/test_quickstart_docs.py. Any changes to examples in this file should also update the corresponding unit test(s).
+ -->
+
 # Bodo Iceberg Quick Start {#quickstart-local-iceberg}
 
 This quickstart guide will walk you through the process of creating and reading from an Iceberg table using Bodo on your local machine.
