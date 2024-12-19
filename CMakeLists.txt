@@ -66,7 +66,21 @@ FetchContent_Declare(
   GIT_TAG         10.2.1
   EXCLUDE_FROM_ALL
 )
-FetchContent_MakeAvailable(fmt)
+set(BUILD_TESTS OFF)
+set(BUILD_ONLY s3;core)
+set(AUTORUN_UNIT_TESTS OFF)
+set(TEST_COMMAND "")
+FetchContent_Declare(aws-sdk-cpp
+  GIT_REPOSITORY    https://github.com/aws/aws-sdk-cpp.git
+  GIT_TAG           1.11.468
+  GIT_SHALLOW true
+)
+FetchContent_MakeAvailable(aws-sdk-cpp)
+unset(BUILD_TESTS)
+unset(BUILD_ONLY)
+unset(AUTORUN_UNIT_TESTS)
+unset(TEST_COMMAND)
+FetchContent_MakeAvailable(fmt aws-sdk-cpp)
 set_target_properties(fmt PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 
@@ -95,20 +109,6 @@ ExternalProject_Get_property(datasketches INSTALL_DIR)
 set(datasketches_INSTALL_DIR ${INSTALL_DIR})
 message("Source dir of datasketches = ${datasketches_INSTALL_DIR}")
 
-set(BUILD_TESTS OFF)
-set(BUILD_ONLY s3;core)
-set(AUTORUN_UNIT_TESTS OFF)
-set(TEST_COMMAND "")
-FetchContent_Declare(aws-sdk-cpp
-  GIT_REPOSITORY    https://github.com/aws/aws-sdk-cpp.git
-  GIT_TAG           1.11.468
-  GIT_SHALLOW true
-)
-FetchContent_MakeAvailable(aws-sdk-cpp)
-unset(BUILD_TESTS)
-unset(BUILD_ONLY)
-unset(AUTORUN_UNIT_TESTS)
-unset(TEST_COMMAND)
 
 # Add boost as a dependency
 find_package(Boost 1.85 REQUIRED json)
