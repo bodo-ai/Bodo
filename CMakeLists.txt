@@ -118,7 +118,7 @@ set(aws-sdk-cpp_INSTALL_DIR ${INSTALL_DIR})
 message("Source dir of datasketches = ${aws-sdk-cpp_INSTALL_DIR}")
 
 # Add boost as a dependency
-find_package(Boost 1.85 REQUIRED)
+find_package(Boost 1.85 REQUIRED json)
 include_directories(${Boost_INCLUDE_DIRS})
 
 
@@ -653,6 +653,7 @@ target_link_libraries(ext PRIVATE
   parquet
   fmt::fmt
   aws-cpp-sdk-core
+  ${Boost_LIBRARIES}
 )
 
 set(IS_PLATFORM "$ENV{IS_BODO_PLATFORM}")
