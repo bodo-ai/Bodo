@@ -686,6 +686,7 @@ target_include_directories(ext PRIVATE ${datasketches_INSTALL_DIR}/include/DataS
 add_dependencies(ext datasketches)
 
 target_include_directories(ext SYSTEM PRIVATE ${aws-sdk-cpp_INSTALL_DIR}/src/aws-sdk-cpp/src/aws-cpp-sdk-core/include)
+target_include_directories(ext SYSTEM PRIVATE ${aws-sdk-cpp_INSTALL_DIR}/src/aws-sdk-cpp/crt/aws-crt-cpp/include)
 add_dependencies(ext aws-sdk-cpp)
 
 set_target_properties(ext PROPERTIES CXX_CLANG_TIDY "${CLANG_TIDY_COMMAND}")
