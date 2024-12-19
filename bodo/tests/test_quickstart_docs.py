@@ -10,11 +10,11 @@ import pytest
 from numba.core.errors import TypingError
 
 import bodo
-from bodo.tests.utils import check_func, temp_env_override
+from bodo.tests.utils import check_func, pytest_spawn_mode, temp_env_override
 from bodo.utils.testing import ensure_clean2
 from bodo.utils.typing import BodoError
 
-# pytestmark = pytest_spawn_mode + [pytest.mark.test_docs]
+pytestmark = pytest_spawn_mode + [pytest.mark.test_docs]
 
 
 def test_quickstart_local_python():

@@ -1,11 +1,12 @@
 import numpy as np
 import pandas as pd
+import pytest
 
 import bodosql
-from bodo.tests.utils import temp_env_override
+from bodo.tests.utils import pytest_spawn_mode, temp_env_override
 from bodo.utils.testing import ensure_clean2
 
-# pytestmark = pytest_spawn_mode + [pytest.mark.test_docs]
+pytestmark = pytest_spawn_mode + [pytest.mark.test_docs]
 
 
 def test_quickstart_local_sql():
