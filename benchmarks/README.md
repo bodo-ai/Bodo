@@ -35,7 +35,7 @@ The graph below summarizes the total execution time of each system (averaged ove
 
 ## Local Benchmark
 
-You can start to see the benefits of using Bodo from your laptop by running a smaller version of our benchmark locally. To set up, install the required packages using pip:
+You can start to see the benefits of using Bodo from your laptop by running any of the notebooks in [`./nyc_taxi/notebooks`](./nyc_taxi/notebooks) which include a smaller version of the NYC Taxi Monthly Trips with Precipitation benchmark. To set up, install the required packages using pip:
 
 ``` shell
 pip install bodo==2024.12.1
@@ -46,17 +46,7 @@ pip install pandas==2.2.3
 pip install boto3 # for S3 download
 ```
 
-To run the benchmark as a script:
-
-``` shell
-cd benchmarks
-
-./nyc_taxi/run_local.sh
-```
-
-Alternatively, you can also run the benchmark as a series of notebooks.
-
-We use a smaller subset of the [For Hire Vehicle High Volume dataset](https://www.nyc.gov/site/tlc/about/tlc-trip-record-data.page) to allow the workload to run locally on an Apple M2 Macbook Pro with 10 cores and 16 GB memory. We have also included an implementation using Pandas to demonstrate that it is often on par with or better than other distributed frameworks like Dask when the data is smaller due to the overheads introduced when coordinating parallel workers. Even at this smaller scale, Bodo shows a roughly 3x improvement over the next best system (Dask/Pandas). 
+We use a smaller subset of the [For Hire Vehicle High Volume dataset](https://www.nyc.gov/site/tlc/about/tlc-trip-record-data.page) to allow the workload to run locally on an Apple M2 Macbook Pro with 10 cores and 16 GB memory. We have also included an implementation using Pandas, which is often on par with or better than other distributed frameworks when data size is smaller due to the overhead from coordinating parallel workers. Even at this smaller scale, Bodo shows a roughly 3x improvement over the next best system (Dask/Pandas). 
 
 The results below were collected December 18th, 2024. Note that these numbers might differ based on your specific hardware and operating system.
 
@@ -69,17 +59,7 @@ The results below were collected December 18th, 2024. Note that these numbers mi
 | Modin/Ray | 13.65 |
 | PySpark   | 27.27   |
 
-To see an even bigger difference, try increasing the number of rows read by specifying a different parquet file such as `s3://bodo-example-data/nyc-taxi/fhvhv_tripdata/fhvhv_tripdata_2019-02.parquet`. On this size (~20 million rows), Spark runs out of memory:
-
-``` shell
-cd benchmarks
-
-# Run Spark on first parquet file (~20 million rows)
-python -m nyc_taxi.local_versions -s spark -d nyc-taxi/fhvhv_tripdata/fhvhv_tripdata_2019-02.parquet
-
-# Run Bodo on first parquet file (~20 million rows)
-python -m nyc_taxi.local_versions -s bodo -d nyc-taxi/fhvhv_tripdata/fhvhv_tripdata_2019-02.parquet
-```
+To see an even bigger difference, try increasing the number of rows read by specifying a different parquet file such as `s3://bodo-example-data/nyc-taxi/fhvhv_tripdata/fhvhv_tripdata_2019-02.parquet`. On this size (~20 million rows), Spark runs out of memory while Pandas and Dask become 4-5x slower than Bodo.
 
 The code to run the larger dataset is also included in the notebooks section. Results are summarized in the table below. 
 
@@ -87,6 +67,6 @@ The code to run the larger dataset is also included in the notebooks section. Re
 |----------------|----------------|
 | Bodo   | 4.228   |
 | Pandas | 17.990 |
-| Dask   | 27.50  |
+| Dask   | 21.41  |
 | Modin/Ray | 118.52 |
 | PySpark   | OOM  |
