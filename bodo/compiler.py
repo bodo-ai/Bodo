@@ -830,6 +830,22 @@ class BodoTableColumnDelPass(AnalysisPass):
         return table_decref_pass.run()
 
 
+class InlineValidationError(Exception):
+    pass
+
+
+def callee_ir_validator(func_ir):
+    """Validates callee IR for unsupported features in inlining (currently only avoids
+    functions with "with objmode" blocks)
+    """
+    for blk in func_ir.blocks.values():
+        for stmt in blk.body:
+            if isinstance(stmt, ir.EnterWith):
+                raise InlineValidationError(
+                    "callee_ir_validator: EnterWith not supported"
+                )
+
+
 def inline_calls(
     func_ir,
     _locals,
@@ -871,19 +887,24 @@ def inline_calls(
                             _, arg_types = func_def.value.fold_argument_types(
                                 a_types, k_types
                             )
-                        _, var_dict = inline_closure_call(
-                            func_ir,
-                            py_func.__globals__,
-                            block,
-                            i,
-                            py_func,
-                            typingctx=typingctx,
-                            targetctx=targetctx,
-                            arg_typs=arg_types,
-                            typemap=typemap,
-                            calltypes=calltypes,
-                            work_list=work_list,
-                        )
+                        try:
+                            _, var_dict = inline_closure_call(
+                                func_ir,
+                                py_func.__globals__,
+                                block,
+                                i,
+                                py_func,
+                                typingctx=typingctx,
+                                targetctx=targetctx,
+                                arg_typs=arg_types,
+                                typemap=typemap,
+                                calltypes=calltypes,
+                                work_list=work_list,
+                                callee_validator=callee_ir_validator,
+                            )
+                        except InlineValidationError:
+                            # Avoid inlining unsupported functions (e.g. has objmode)
+                            continue
 
                         _locals.update(
                             (var_dict[k].name, v)
