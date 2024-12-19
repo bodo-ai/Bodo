@@ -66,10 +66,10 @@ FetchContent_Declare(
   GIT_TAG         10.2.1
   EXCLUDE_FROM_ALL
 )
-set(BUILD_TESTS OFF)
-set(BUILD_ONLY s3;core)
-set(AUTORUN_UNIT_TESTS OFF)
-set(TEST_COMMAND "")
+set(BUILD_TESTS OFF CACHE INTERNAL "")
+set(BUILD_ONLY s3;core CACHE INTERNAL "")
+set(AUTORUN_UNIT_TESTS OFF CACHE INTERNAL "")
+set(TEST_COMMAND "" CACHE INTERNAL "")
 FetchContent_Declare(aws-sdk-cpp
   GIT_REPOSITORY    https://github.com/aws/aws-sdk-cpp.git
   GIT_TAG           1.11.468
