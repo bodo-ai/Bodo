@@ -99,8 +99,8 @@ ExternalProject_Add(aws-sdk-cpp
   GIT_REPOSITORY    https://github.com/aws/aws-sdk-cpp.git
   GIT_TAG           1.11.468
   GIT_SHALLOW true
-  LIST_SEPARATOR |
-  CMAKE_ARGS -DBUILD_TESTS=OFF -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} -DBUILD_ONLY=s3|core -DAUTORUN_UNIT_TESTS=OFF -DCMAKE_INSTALL_PREFIX=/tmp/aws-sdk-cpp-prefix
+  LIST_SEPARATOR "|"
+  CMAKE_ARGS -DBUILD_TESTS=OFF -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} -DBUILD_ONLY=s3|core -DAUTORUN_UNIT_TESTS=OFF
   # Override the install command to add DESTDIR
   # This is necessary to work around an oddity in the RPM (but not other) package
   # generation, as CMake otherwise picks up the Datasketch files when building
@@ -115,8 +115,9 @@ ExternalProject_Add(aws-sdk-cpp
 )
 
 ExternalProject_Get_property(aws-sdk-cpp INSTALL_DIR)
+ExternalProject_Get_Property(aws-sdk-cpp )
 set(aws-sdk-cpp_INSTALL_DIR ${INSTALL_DIR})
-message("Source dir of datasketches = ${aws-sdk-cpp_INSTALL_DIR}")
+message("Source dir of aws-sdk-cpp = ${aws-sdk-cpp_INSTALL_DIR}")
 
 # Add boost as a dependency
 find_package(Boost 1.85 REQUIRED json)
@@ -685,7 +686,7 @@ endif()
 target_include_directories(ext PRIVATE ${datasketches_INSTALL_DIR}/include/DataSketches)
 add_dependencies(ext datasketches)
 
-target_include_directories(ext PRIVATE ${aws-sdk-cpp_INSTALL_DIR}/include/aws-sdk-cpp)
+target_include_directories(ext PRIVATE ${aws-sdk-cpp_INSTALL_DIR}/src/aws-cpp-sdk-core/include)
 add_dependencies(ext aws-sdk-cpp)
 
 set_target_properties(ext PROPERTIES CXX_CLANG_TIDY "${CLANG_TIDY_COMMAND}")
