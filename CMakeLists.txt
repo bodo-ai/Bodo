@@ -33,11 +33,14 @@ endif()
 # ---------------------------- Enable C++ Linting ----------------------------
 # Clang-Tidy is only available on MacOS as we use GCC on Linux
 find_program(CLANG_TIDY_EXE NAMES "clang-tidy")
-if (CLANG_TIDY_EXE)
+if (LINUX)
+  message(STATUS "Clang-Tidy is not used on Linux")
+  set(CLANG_TIDY_COMMAND "")
+elseif (CLANG_TIDY_EXE)
   message(STATUS "Found Clang-Tidy: ${CLANG_TIDY_EXE}")
   set(CLANG_TIDY_COMMAND "${CLANG_TIDY_EXE}" "--checks=.clang-tidy" "--fix-errors")
 else()
-  message(STATUS "Clang-Tidy not found")
+  message(STATUS "Clang-Tidy was not found")
   set(CLANG_TIDY_COMMAND "")
 endif()
 

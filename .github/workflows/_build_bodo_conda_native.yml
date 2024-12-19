@@ -23,6 +23,9 @@ on:
 
 jobs:
   build-bodo:
+    permissions:
+      id-token: write
+      contents: read
     defaults:
       run:
         shell: bash -l {0}
