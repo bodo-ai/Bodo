@@ -49,6 +49,7 @@ dependencies = [
 [project.urls]
 Homepage = "https://bodo.ai"
 Documentation = "https://docs.bodo.ai"
+Repository = "https://github.com/bodo-ai/Bodo"
 
 [project.optional-dependencies]
 hdf5 = ["h5py"]

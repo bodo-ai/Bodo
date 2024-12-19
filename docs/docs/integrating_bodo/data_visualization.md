@@ -169,7 +169,7 @@ import bodo
 import numpy as np
 import matplotlib.pyplot as plt
 
-@bodo.jit()
+@bodo.jit
 def dist_gather_test(n):
     X = np.arange(n)
     Y = 3 - np.cos(X)

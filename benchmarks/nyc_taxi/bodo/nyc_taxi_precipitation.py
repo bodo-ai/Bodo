@@ -13,19 +13,20 @@ import bodo
 
 
 @bodo.jit(cache=True)
-def get_monthly_travels_weather():
-    start = time.time()
+def get_monthly_travels_weather(weather_dataset, hvfhv_dataset):
+    start_read = time.time()
     central_park_weather_observations = pd.read_csv(
-        "s3://bodo-example-data/nyc-taxi/central_park_weather.csv", parse_dates=["DATE"]
+        weather_dataset,
+        parse_dates=["DATE"],
     )
     central_park_weather_observations = central_park_weather_observations.rename(
         columns={"DATE": "date", "PRCP": "precipitation"}, copy=False
     )
-    fhvhv_tripdata = pd.read_parquet("s3://bodo-example-data/nyc-taxi/fhvhv_tripdata/")
+    fhvhv_tripdata = pd.read_parquet(hvfhv_dataset)
     end = time.time()
-    print("Reading Time: ", (end - start))
+    print("Reading Time: ", (end - start_read))
 
-    start = time.time()
+    start_compute = time.time()
 
     central_park_weather_observations["date"] = central_park_weather_observations[
         "date"
@@ -88,14 +89,17 @@ def get_monthly_travels_weather():
         copy=False,
     )
     end = time.time()
-    print("Monthly Taxi Travel Times Computation Time: ", end - start)
+    print("Monthly Taxi Travel Times Computation Time: ", end - start_compute)
 
-    start = time.time()
+    start_write = time.time()
     monthly_trips_weather.to_parquet("monthly_trips_weather.pq")
     end = time.time()
-    print("Writing time:", (end - start))
+    print("Writing time:", (end - start_write))
+    print("Total E2E time:", (end - start_read))
     return monthly_trips_weather
 
 
 if __name__ == "__main__":
-    get_monthly_travels_weather()
+    weather_dataset = "s3://bodo-example-data/nyc-taxi/central_park_weather.csv"
+    hvfhv_dataset = "s3://bodo-example-data/nyc-taxi/fhvhv/"
+    get_monthly_travels_weather(weather_dataset, hvfhv_dataset)

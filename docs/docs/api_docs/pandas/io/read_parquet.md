@@ -31,7 +31,7 @@
 
     For example:
     ```py
-    @bodo.jit()
+    @bodo.jit
     def impl(f):
       df = pd.read_parquet(f, _bodo_input_file_name_col="fname")
       return df
@@ -49,7 +49,7 @@
 
     For example:
     ```py
-    @bodo.jit()
+    @bodo.jit
     def impl(f):
       df = pd.read_parquet(f, _bodo_read_as_dict=["A", "B", "C"])
       return df

@@ -35,7 +35,7 @@ NUM_GROUPS = 30
 NUM_ROWS = 20_000_000
 
 
-@bodo.jit()
+@bodo.jit
 def example_write_iceberg_table():
     df = pd.DataFrame({
         "A": np.arange(NUM_ROWS) % NUM_GROUPS,
@@ -86,7 +86,7 @@ NUM_GROUPS = 30
 NUM_ROWS = 20_000_000
 
 
-@bodo.jit()
+@bodo.jit
 def example_write_iceberg_table():
     df = pd.DataFrame({
         "A": np.arange(NUM_ROWS) % NUM_GROUPS,

@@ -27,7 +27,7 @@ df.to_parquet("my_data.pq")
 
 ## A Simple Pandas Computation
 
-Now let's write a simple Python function that computes the sum of column `A` for all rows where `B` is greater than 4 using pandas. We decorate the function with `@bodo.jit` to indicate that we want to compile the code using Bodo. Let's also add a timer to measure the execution time.
+Now let's write a simple Python function that computes the division of column `B` over column `A` (when `A` is not zero) using pandas. We decorate the function with `@bodo.jit` to indicate that we want to compile the code using Bodo. Let's also add a timer to measure the execution time.
 
 
 ```python
@@ -35,12 +35,11 @@ Now let's write a simple Python function that computes the sum of column `A` for
 def computation():
     t1 = time.time()
     df = pd.read_parquet("my_data.pq")
-    df1 = df[df.B > 4].A.sum()
+    df2 = pd.DataFrame({"A": df.apply(lambda r: 0 if r.A == 0 else (r.B // r.A), axis=1)})
+    df2.to_parquet("out.pq")
     print("Execution time:", time.time() - t1)
-    return df1
 
-result = computation()
-print(result)
+computation()
 ```
 
 ## Running the Code
@@ -66,12 +65,11 @@ df.to_parquet("my_data.pq")
 def computation():
     t1 = time.time()
     df = pd.read_parquet("my_data.pq")
-    df1 = df[df.B > 4].A.sum()
+    df2 = pd.DataFrame({"A": df.apply(lambda r: 0 if r.A == 0 else (r.B // r.A), axis=1)})
+    df2.to_parquet("out.pq")
     print("Execution time:", time.time() - t1)
-    return df1
 
-result = computation()
-print(result)
+computation()
 ```
 
 To run the code, save it to a file, e.g. `test_bodo.py`, and run the following command in your terminal:

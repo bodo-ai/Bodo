@@ -1,33 +1,27 @@
 import time
 
-import ray
-
-ray.init(address="auto")
-cpu_count = ray.cluster_resources()["CPU"]
-print("RAY CPU COUNT: ", cpu_count)
 import modin.pandas as pd
+import ray
 from modin.pandas.io import to_ray
 
 
-def run_modin():
-    start = time.time()
+def get_monthly_travels_weather(weather_dataset, hvfhv_dataset):
+    start_read = time.time()
     central_park_weather_observations = pd.read_csv(
-        "s3://bodo-example-data/nyc-taxi/central_park_weather.csv",
+        weather_dataset,
         parse_dates=["DATE"],
-        storage_options={"anon": True},
     )
     central_park_weather_observations = central_park_weather_observations.rename(
         columns={"DATE": "date", "PRCP": "precipitation"},
         copy=False,
     )
     fhvhv_tripdata = pd.read_parquet(
-        "s3://bodo-example-data/nyc-taxi/fhvhv_tripdata/",
-        storage_options={"anon": True},
+        hvfhv_dataset,
     )
     end = time.time()
-    print("Reading Time: ", (end - start))
+    print("Reading Time: ", (end - start_read))
 
-    start = time.time()
+    start_compute = time.time()
 
     central_park_weather_observations["date"] = central_park_weather_observations[
         "date"
@@ -90,16 +84,29 @@ def run_modin():
         copy=False,
     )
     end = time.time()
-    print("Monthly Taxi Travel Times Computation Time: ", end - start)
-    print(monthly_trips_weather.head())
+    print("Monthly Taxi Travel Times Computation Time: ", end - start_compute)
 
-    start = time.time()
+    start_write = time.time()
     monthly_trips_weather_ray = to_ray(monthly_trips_weather)
     monthly_trips_weather_ray.write_parquet("local:///tmp/data/modin_result.pq")
     end = time.time()
-    print("Writing time:", (end - start))
+    print("Writing time:", (end - start_write))
+    print("Total E2E time:", (end - start_read))
     return monthly_trips_weather
 
 
+def local_get_monthly_travels_weather(weather_dataset, hvfhv_dataset):
+    """Run Modin on local Ray cluster"""
+    ray.init()
+    get_monthly_travels_weather(weather_dataset, hvfhv_dataset)
+    ray.shutdown()
+
+
 if __name__ == "__main__":
-    result = run_modin()
+    ray.init(address="auto")
+    cpu_count = ray.cluster_resources()["CPU"]
+    print("RAY CPU COUNT: ", cpu_count)
+
+    weather_dataset = "s3://bodo-example-data/nyc-taxi/central_park_weather.csv"
+    hvfhv_dataset = "s3://bodo-example-data/nyc-taxi/fhvhv/"
+    get_monthly_travels_weather(weather_dataset, hvfhv_dataset)

@@ -130,7 +130,7 @@ my_cluster.update(instance_type='c5.2xlarge', workers_quantity=2)
 ### Create a Job
 
 Lets now create a job on our `RUNNING` cluster.
-First, access `https://platform.bodo.ai` and navigate to the jupyter notebook in your workspace. Then
+First, access `https://platform.bodo.ai` and navigate to the Jupyter notebook in your workspace. Then
 create the following `test.py` file in your main directory:
 
 ```python
@@ -154,13 +154,11 @@ time.sleep(1)  # wait till file will be available on all nodes
 def computation():
     t1 = time.time()
     df = pd.read_parquet("my_data.pq")
-    df1 = df[df.B > 4].A.sum()
+    df2 = pd.DataFrame({"A": df.apply(lambda r: 0 if r.A == 0 else (r.B // r.A), axis=1)})
+    df2.to_parquet("out.pq")
     print("Execution time:", time.time() - t1)
-    return df1
 
-
-result = computation()
-print(result)
+computation()
 ```
 
 Now you can define a job on cluster through SDK, wait till it has `SUCCEEDED` and check its logs as follows:
