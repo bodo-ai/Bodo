@@ -16,6 +16,9 @@ jobs:
   build-bodo:
     runs-on: ubuntu-latest
     container: condaforge/linux-anvil-alma-x86_64:8
+    permissions:
+      id-token: write
+      contents: read
 
     steps:
       - name: Install Git
