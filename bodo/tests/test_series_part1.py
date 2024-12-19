@@ -3040,7 +3040,7 @@ def test_series_getitem_string_index(memory_leak_check):
     def test_impl(S):
         return S["A"]
 
-    # needed so sonar doesn't complain
+    # needed so code coverage doesn't complain
     def test_impl2(S, idx):
         return S[idx]
 

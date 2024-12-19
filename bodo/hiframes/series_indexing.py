@@ -661,7 +661,7 @@ def overload_series_getitem(S, idx):
 
             return impl_slice
 
-        # pragma is needed, as otherwise, sonar yells at me, because we don't check the immediately
+        # pragma is needed, because we don't check the immediately
         # following error in a non-slow test.
         if idx == bodo.string_type or is_overload_constant_str(idx):  # pragma: no cover
             # TODO: throw an error if not distributed, BE-1535/BE-1536
