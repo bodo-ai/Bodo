@@ -55,7 +55,7 @@ jobs:
           pixi-version: v0.36.0
           cache: true
           cache-write: ${{ github.event_name == 'schedule'}}
-          environments: 'pip-cpp'
+          environments: 'pip-cpp-macos'
           activate-environment: true
       - name: Install Pixi Global Tools
         if: contains(inputs.os, 'macos')
@@ -94,7 +94,7 @@ jobs:
             MACOSX_DEPLOYMENT_TARGET=${{ inputs.os == 'macos-14' && '12.0' || '10.15' }}
             BODO_VENDOR_MPICH=1
             PATH=$HOME/.pixi/bin:$PATH
-            CONDA_PREFIX=$(pwd)/.pixi/envs/pip-cpp
+            CONDA_PREFIX=$(pwd)/.pixi/envs/pip-cpp-macos
             SETUPTOOLS_SCM_PRETEND_VERSION=${{ inputs.bodo_version }}
           CIBW_ENVIRONMENT_LINUX: >
             CMAKE_MODULE_PATH=/usr/local/boost_1_87_0
@@ -123,7 +123,7 @@ jobs:
             mv {wheel} {dest_dir}
           CIBW_REPAIR_WHEEL_COMMAND_LINUX: >
             sccache --show-stats && 
-            LD_LIBRARY_PATH=/project/.pixi/envs/pip-cpp/lib:$LD_LIBRARY_PATH auditwheel -v repair 
+            LD_LIBRARY_PATH=/project/.pixi/envs/pip-cpp-linux/lib:$LD_LIBRARY_PATH auditwheel -v repair 
             --exclude libmpi.so.12 --exclude libmpi.so.40 
             --exclude libarrow.so.1801 --exclude libarrow_acero.so.1801 --exclude libarrow_dataset.so.1801 
             --exclude libarrow_python.so --exclude libparquet.so.1801 

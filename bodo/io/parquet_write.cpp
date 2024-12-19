@@ -2,7 +2,7 @@
 // Functions to write Bodo arrays to parquet
 
 #include <arrow/filesystem/filesystem.h>
-#include <aws/core/auth/AWSCredentialsProvider.h>
+#include "aws/core/auth/AWSCredentialsProvider.h"
 #if _MSC_VER >= 1900
 #undef timezone
 #endif
