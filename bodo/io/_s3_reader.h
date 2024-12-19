@@ -3,8 +3,8 @@
 
 #include <arrow/io/interfaces.h>
 #include <curl/curl.h>
-#include "aws/core/auth/AWSCredentials.h"
-#include "aws/core/auth/AWSCredentialsProvider.h"
+#include <aws/core/auth/AWSCredentials.h
+#include <aws/core/auth/AWSCredentialsProvider.h
 
 void s3_open_file(const char *fname,
                   std::shared_ptr<::arrow::io::RandomAccessFile> *file,
