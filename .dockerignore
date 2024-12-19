@@ -1,0 +1,17 @@
+# Ignore Git and version control files
+.gitignore
+.pixi
+
+# Ignore Docker artifacts
+Dockerfile
+*.tar
+*.img
+
+# Ignore temporary files
+*.pyc
+__pycache__
+
+# Ignore build directories or files
+build/
+dist/
+

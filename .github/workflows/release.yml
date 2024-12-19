@@ -70,4 +70,11 @@ jobs:
       is-release: ${{ github.event_name == 'release' }}
     secrets: inherit
 
+  docker-img:
+    needs: bodo-conda-linux
+    uses: ./.github/workflows/docker_build_and_publish.yml
+    with:
+      is-release: ${{ github.event_name == 'release' }}
+    secrets: inherit
+
   # TODO: Include E2E tests, and AMI
