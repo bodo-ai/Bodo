@@ -81,6 +81,8 @@ unset(BUILD_ONLY)
 unset(AUTORUN_UNIT_TESTS)
 unset(TEST_COMMAND)
 set_target_properties(fmt PROPERTIES POSITION_INDEPENDENT_CODE ON)
+find_package(fmt REQUIRED)
+find_package(AWSSDK REQUIRED COMPONENTS s3)
 
 
 # ----------------------------- Download Apache Datasketches -------------------------
@@ -638,7 +640,7 @@ target_link_directories(ext PRIVATE ${PYARROW_LIB_DIR} "${Python_NumPy_INCLUDE_D
 
 target_include_directories(ext PRIVATE ${datasketches_INSTALL_DIR}/include/DataSketches)
 add_dependencies(ext datasketches)
-
+cmake_print_variables(AWSSDK_LINK_LIBRARIES)
 target_link_libraries(ext PRIVATE
   npymath
   mpi
@@ -648,8 +650,7 @@ target_link_libraries(ext PRIVATE
   arrow_dataset
   parquet
   fmt::fmt
-  aws-cpp-sdk-core
-  aws-cpp-sdk-s3
+  ${AWSSDK_LINK_LIBRARIES}
   ${Boost_LIBRARIES}
 )
 
