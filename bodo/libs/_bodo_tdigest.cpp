@@ -250,8 +250,9 @@ class TDigest::TDigestImpl {
 
         // Since the merger only has to occur on the root rank, all other ranks
         // can remain unchanged after sending their data to the root.
-        if (myrank != 0)
+        if (myrank != 0) {
             return;
+        }
 
         Reset();
 

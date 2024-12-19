@@ -801,10 +801,11 @@ inline void copy_item_to_buffer(char* data, Py_ssize_t ind, PyObject* item,
     } else if (dtype == Bodo_CTypes::_BOOL) {
         bool* ptr = (bool*)data;
         ptr[ind] = (item == Py_True);
-    } else
+    } else {
         std::cerr << "data type " << dtype
                   << " not supported for unboxing array(item) array."
                   << std::endl;
+    }
 }
 
 /**
@@ -827,10 +828,11 @@ inline PyObject* value_to_pyobject(const char* data, int64_t ind,
     } else if (dtype == Bodo_CTypes::_BOOL) {
         bool* ptr = (bool*)data;
         return PyBool_FromLong((long)(ptr[ind]));
-    } else
+    } else {
         std::cerr << "data type " << dtype
                   << " not supported for boxing array(item) array."
                   << std::endl;
+    }
     return nullptr;
 }
 
@@ -983,8 +985,9 @@ table_info* retrieve_table_py_entry(table_info* in_table,
 PyMODINIT_FUNC PyInit_array_ext(void) {
     PyObject* m;
     MOD_DEF(m, "array_ext", "No docs", nullptr);
-    if (m == nullptr)
+    if (m == nullptr) {
         return nullptr;
+    }
 
     // init datetime APIs
     PyDateTime_IMPORT;
