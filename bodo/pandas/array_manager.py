@@ -261,10 +261,6 @@ class LazyArrayManager(ArrayManager, LazyMetadataMixin[ArrayManager]):
         otherwise we do nothing because the data is already collected/deleted.
         """
         if (r_id := self._md_result_id) is not None:
-            debug_msg(
-                self.logger,
-                f"[LazyArrayManager] Asking workers to delete result '{r_id}'",
-            )
             assert self._del_func is not None
             self._del_func(r_id)
             self._del_func = None
@@ -501,10 +497,6 @@ class LazySingleArrayManager(SingleArrayManager, LazyMetadataMixin[SingleArrayMa
         otherwise we do nothing because the data is already collected/deleted.
         """
         if (r_id := self._md_result_id) is not None:
-            debug_msg(
-                self.logger,
-                f"[LazySingleArrayManager] Asking workers to delete result '{r_id}'",
-            )
             assert self._del_func is not None
             self._del_func(r_id)
             self._del_func = None
