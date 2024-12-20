@@ -117,7 +117,6 @@ ExternalProject_Add(aws-sdk-cpp
 
 ExternalProject_Get_property(aws-sdk-cpp INSTALL_DIR)
 set(aws-sdk-cpp_INSTALL_DIR ${INSTALL_DIR})
-message("Source dir of aws-sdk-cpp = ${aws-sdk-cpp_INSTALL_DIR}")
 
 # Add boost as a dependency
 find_package(Boost 1.85 REQUIRED json)
@@ -649,6 +648,7 @@ target_link_directories(ext PRIVATE ${PYARROW_LIB_DIR} "${Python_NumPy_INCLUDE_D
 target_include_directories(ext PRIVATE ${datasketches_INSTALL_DIR}/include/DataSketches)
 add_dependencies(ext datasketches)
 
+cmake_print_variables(aws-sdk-cpp_INSTALL_DIR)
 target_include_directories(ext SYSTEM PRIVATE ${aws-sdk-cpp_INSTALL_DIR}/include)
 target_link_directories(ext PRIVATE ${aws-sdk-cpp_INSTALL_DIR}/lib)
 
