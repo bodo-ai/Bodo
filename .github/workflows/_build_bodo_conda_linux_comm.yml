@@ -14,8 +14,11 @@ on:
 
 jobs:
   build-bodo:
-    runs-on: [self-hosted, medium]
+    runs-on: ubuntu-latest
     container: condaforge/linux-anvil-alma-x86_64:8
+    permissions:
+      id-token: write
+      contents: read
 
     steps:
       - name: Install Git

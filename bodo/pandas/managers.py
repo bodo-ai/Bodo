@@ -244,10 +244,6 @@ class LazyBlockManager(BlockManager, LazyMetadataMixin[BlockManager]):
         Delete the result from the workers if it hasn't been collected yet.
         """
         if (r_id := self._md_result_id) is not None:
-            debug_msg(
-                self.logger,
-                f"[LazyBlockManager] Asking workers to delete result '{r_id}'",
-            )
             assert self._del_func is not None
             self._del_func(r_id)
             self._del_func = None
@@ -437,10 +433,6 @@ class LazySingleBlockManager(SingleBlockManager, LazyMetadataMixin[SingleBlockMa
         Delete the result from the workers if it hasn't been collected yet.
         """
         if (r_id := self._md_result_id) is not None:
-            debug_msg(
-                self.logger,
-                f"[LazySingleBlockManager] Asking workers to delete result '{r_id}'",
-            )
             assert self._del_func is not None
             self._del_func(r_id)
             self._del_func = None
@@ -463,14 +455,16 @@ class LazySingleBlockManager(SingleBlockManager, LazyMetadataMixin[SingleBlockMa
         if axis >= self.ndim:
             raise IndexError("Requested axis not found in manager")
 
-        start = slobj.start if slobj.start else 0
-        stop = slobj.stop if slobj.stop else 0
+        # Normalize negative and None start/stop/step values
+        start, stop, step = slobj.indices(len(self))
+
         if (
             (self._md_head is not None)
             and start <= len(self._md_head)
             and stop <= len(self._md_head)
             and axis == 0
         ):
+            slobj = slice(start, stop, step)
             tmp_block = self._md_head._block
             array = tmp_block.values[slobj]
             bp = BlockPlacement(slice(0, len(array)))

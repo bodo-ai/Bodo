@@ -188,8 +188,8 @@ class LazyArrayManager(ArrayManager, LazyMetadataMixin[ArrayManager]):
         """
         axis = self._normalize_axis(axis)
 
-        start = slobj.start if slobj.start else 0
-        stop = slobj.stop if slobj.stop else 0
+        # Normalize negative and None start/stop/step values
+        start, stop, step = slobj.indices(len(self))
 
         # TODO Check if this condition is correct.
         if (
@@ -198,6 +198,7 @@ class LazyArrayManager(ArrayManager, LazyMetadataMixin[ArrayManager]):
             and stop <= self._md_head.shape[1]
             and axis == 0
         ):
+            slobj = slice(start, stop, step)
             tmp_arrs = self._md_head.arrays
             arrays = [arr[slobj] for arr in tmp_arrs]
             new_axes = list(self._axes)
@@ -260,10 +261,6 @@ class LazyArrayManager(ArrayManager, LazyMetadataMixin[ArrayManager]):
         otherwise we do nothing because the data is already collected/deleted.
         """
         if (r_id := self._md_result_id) is not None:
-            debug_msg(
-                self.logger,
-                f"[LazyArrayManager] Asking workers to delete result '{r_id}'",
-            )
             assert self._del_func is not None
             self._del_func(r_id)
             self._del_func = None
@@ -437,14 +434,16 @@ class LazySingleArrayManager(SingleArrayManager, LazyMetadataMixin[SingleArrayMa
         if axis >= self.ndim:
             raise IndexError("Requested axis not found in manager")
 
-        start = slobj.start if slobj.start else 0
-        stop = slobj.stop if slobj.stop else 0
+        # Normalize negative and None start/stop/step values
+        start, stop, step = slobj.indices(len(self))
+
         if (
             (self._md_head is not None)
             and start <= len(self._md_head)
             and stop <= len(self._md_head)
             and axis == 0
         ):
+            slobj = slice(start, stop, step)
             tmp_arrs = self._md_head.arrays
             arrays = [arr[slobj] for arr in tmp_arrs]
             new_axes = list(self._axes)
@@ -492,19 +491,12 @@ class LazySingleArrayManager(SingleArrayManager, LazyMetadataMixin[SingleArrayMa
             self._collect()
         return SingleArrayManager.__getattribute__(self, name)
 
-    # BSE-4097
-    # TODO Override __len__
-
     def __del__(self):
         """
         Handles cleanup of the result on deletion. If we have a result ID, we ask the workers to delete the result,
         otherwise we do nothing because the data is already collected/deleted.
         """
         if (r_id := self._md_result_id) is not None:
-            debug_msg(
-                self.logger,
-                f"[LazySingleArrayManager] Asking workers to delete result '{r_id}'",
-            )
             assert self._del_func is not None
             self._del_func(r_id)
             self._del_func = None

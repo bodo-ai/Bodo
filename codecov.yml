@@ -1,0 +1,21 @@
+codecov:
+  notify:
+    wait_for_ci: yes
+
+coverage:
+  status:
+    project:
+      default:
+        enabled: true
+        # Overall coverage must remain at 80% or higher, 
+        # with a tolerance of up to 0.2% below the target before failing.
+        target: 80%
+        threshold: 0.2
+    patch:
+      default:
+        enabled: true
+        # Lines changed in PR can drop by up to 5% without failing. 
+        threshold: 5.0
+
+comment:
+    layout: "header, diff, changes, uncovered"

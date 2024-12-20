@@ -285,3 +285,23 @@ def test_slice(single_pandas_managers, head_s, collect_func, del_func):
     lam_sliced_s = lam_s[10:30]
     assert not lam_s._lazy
     assert lam_sliced_s.tolist() == (collect_func(0)[10:30]).tolist()
+
+    # Slicing with negative indices (does not trigger a data fetch)
+    lsam = lazy_manager(
+        [],
+        [],
+        result_id="abc",
+        nrows=40,
+        head=head_s._mgr,
+        collect_func=collect_func,
+        del_func=del_func,
+    )
+    lam_s: BodoSeries = BodoSeries._from_mgr(lsam, [])
+    lam_sliced_head_s = lam_s[-38:-37]
+    assert lam_s._lazy
+    pd.testing.assert_series_equal(lam_sliced_head_s, head_s[2:3])
+
+    # Triggers a fetch
+    lam_sliced_head_s = lam_s[-3:]
+    assert not lam_s._lazy
+    pd.testing.assert_series_equal(lam_sliced_head_s, collect_func(0)[-3:])
