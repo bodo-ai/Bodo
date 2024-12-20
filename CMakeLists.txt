@@ -95,20 +95,29 @@ ExternalProject_Get_property(datasketches INSTALL_DIR)
 set(datasketches_INSTALL_DIR ${INSTALL_DIR})
 message("Source dir of datasketches = ${datasketches_INSTALL_DIR}")
 
-set(BUILD_TESTS OFF)
-set(BUILD_ONLY s3;core)
-set(AUTORUN_UNIT_TESTS OFF)
-set(TEST_COMMAND "")
-FetchContent_Declare(aws-sdk-cpp
+ExternalProject_Add(aws-sdk-cpp
   GIT_REPOSITORY    https://github.com/aws/aws-sdk-cpp.git
   GIT_TAG           1.11.468
   GIT_SHALLOW true
+  LIST_SEPARATOR "|"
+  INSTALL_DIR /tmp/aws-sdk-cpp-prefix
+  CMAKE_ARGS -DBUILD_TESTS=OFF -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} -DBUILD_ONLY=s3|core -DAUTORUN_UNIT_TESTS=OFF -DCMAKE_INSTALL_PREFIX=/tmp/aws-sdk-cpp-prefix
+  # Override the install command to add DESTDIR
+  # This is necessary to work around an oddity in the RPM (but not other) package
+  # generation, as CMake otherwise picks up the Datasketch files when building
+  # an RPM for a dependent package. (RPM scans the directory for files in addition to installing
+  # those files referenced in an "install" rule in the cmake file)
+  #INSTALL_COMMAND env DESTDIR= ${CMAKE_COMMAND} --build . --target install
+  TEST_COMMAND      ""
+  LOG_CONFIGURE ON
+  LOG_BUILD ON
+  LOG_INSTALL ON
+  LOG_OUTPUT_ON_FAILURE ON
 )
-FetchContent_MakeAvailable(aws-sdk-cpp)
-unset(BUILD_TESTS)
-unset(BUILD_ONLY)
-unset(AUTORUN_UNIT_TESTS)
-unset(TEST_COMMAND)
+
+ExternalProject_Get_property(aws-sdk-cpp INSTALL_DIR)
+set(aws-sdk-cpp_INSTALL_DIR ${INSTALL_DIR})
+message("Source dir of aws-sdk-cpp = ${aws-sdk-cpp_INSTALL_DIR}")
 
 # Add boost as a dependency
 find_package(Boost 1.85 REQUIRED json)
@@ -640,6 +649,10 @@ target_link_directories(ext PRIVATE ${PYARROW_LIB_DIR} "${Python_NumPy_INCLUDE_D
 target_include_directories(ext PRIVATE ${datasketches_INSTALL_DIR}/include/DataSketches)
 add_dependencies(ext datasketches)
 
+target_include_directories(ext SYSTEM PRIVATE ${aws-sdk-cpp_INSTALL_DIR}/include)
+target_link_directories(ext PRIVATE ${aws-sdk-cpp_INSTALL_DIR}/lib)
+
+add_dependencies(ext aws-sdk-cpp)
 target_link_libraries(ext PRIVATE
   npymath
   mpi
