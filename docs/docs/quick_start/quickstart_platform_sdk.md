@@ -1,7 +1,6 @@
 # Bodo Platform SDK Quick Start {#quickstart-platform-sdk}
 
-This quickstart guide will walk you through the process of running a Job on Bodo platform using Bodo Platform SDK,
-installed on your local machine.
+This quickstart guide will walk you through running a job on the Bodo Platform using the Bodo Platform SDK installed on your local machine.
 
 ## Getting Started
 
@@ -13,12 +12,13 @@ pip install bodosdk
 
 ### Create a workspace client
 
-First you need to access your workspace in `https://platform.bodo.ai/` and create an _API Token_ in the Bodo Platform.
-This token is used to authenticate your client with the Bodo Platform API.
+To authenticate with the Bodo Platform API, you need to create an API Token:
 
-Navigate to _API Tokens_ in the Admin Console to generate a token.
-Copy and save the token's _Client ID_ and _Secret Key_ and use them to define a client (`BodoClient`) that can interact
-with the Bodo Platform.
+1) Log in to your workspace at https://platform.bodo.ai/.
+2) Navigate to API Tokens in the Admin Console.
+3) Generate a token and copy the Client ID and Secret Key.
+
+Use these credentials to define a `BodoWorkspaceClient` for interacting with the platform:
 
 ```python
 from bodosdk import BodoWorkspaceClient
@@ -30,7 +30,7 @@ my_workspace = BodoWorkspaceClient(
 ```
 
 ### Create a cluster
-Creates one node cluster in your workspace with the latest available bodo version.
+Create a single-node cluster in your workspace with the latest available Bodo version:
 
 ```python
 from bodosdk import BodoWorkspaceClient
@@ -47,11 +47,11 @@ my_cluster = my_workspace.ClusterClient.create(
 )
 ```
 
-### Create a Job
+### Run Python Job
 
-Lets now create a job on our `RUNNING` cluster.
-First, access `https://platform.bodo.ai` and navigate to the Jupyter notebook in your workspace. Then
-create the following `test.py` file in your main directory:
+**Step 1: Write the Job Script**
+
+Access https://platform.bodo.ai and open the Jupyter notebook in your workspace. Create the following test.py file in your main directory:
 
 ```python
 import pandas as pd
@@ -81,7 +81,10 @@ def computation():
 computation()
 ```
 
-Now you can define a job on cluster through SDK, wait till it has `SUCCEEDED` and check its logs as follows:
+**Step 2: Run the Job**
+
+Use the SDK to run the job on your cluster, wait for it to SUCCEED, and check its logs:
+
 
 ```python
 from bodosdk import BodoWorkspaceClient
@@ -102,9 +105,9 @@ my_job = my_cluster.run_job(
 print(my_job.wait_for_status(['SUCCEEDED']).get_stdout())
 ```
 
-You can use almost the same configuration to run a SQL file. All you need is to define your `test.sql` file and a
-Catalog on `https://platform.bodo.ai`:
 
+### Run a SQL Job
+To run a SQL job, create a test.sql file and a catalog in https://platform.bodo.ai. Then, run the job as follows:
 ```python
 from bodosdk import BodoWorkspaceClient
 

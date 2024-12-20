@@ -36,5 +36,4 @@ as well as Bodo platform set up process for your AWS account.
 ---
 
 ## [Bodo Platform SDK Quick Start][quickstart-platform-sdk]
-This guide provides a walkthrough of the process of running a Job on Bodo platform using Bodo Platform SDK,
-installed on your local machine.
+This quickstart guide will walk you through running a job on the Bodo Platform using the Bodo Platform SDK installed on your local machine.
