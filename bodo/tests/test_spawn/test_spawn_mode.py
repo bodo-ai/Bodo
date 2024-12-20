@@ -406,8 +406,8 @@ def test_spawn_globals_objmode():
 
     @bodo.jit(spawn=True)
     def f():
-        with bodo.objmode(val="int64"):
+        with bodo.no_warning_objmode(val="int64"):
             val = VALUE
         return val
 
-    assert f() == 1
+    assert f() == VALUE
