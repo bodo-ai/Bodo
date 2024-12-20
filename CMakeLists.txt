@@ -65,7 +65,6 @@ FetchContent_Declare(
   GIT_REPOSITORY  https://github.com/fmtlib/fmt.git
   GIT_TAG         10.2.1
   EXCLUDE_FROM_ALL
-  OVERRIDE_FIND_PACKAGE
 )
 set(BUILD_TESTS OFF CACHE INTERNAL "")
 set(BUILD_ONLY s3;core CACHE INTERNAL "")
@@ -75,7 +74,6 @@ FetchContent_Declare(aws-sdk-cpp
   GIT_REPOSITORY    https://github.com/aws/aws-sdk-cpp.git
   GIT_TAG           1.11.468
   GIT_SHALLOW true
-  OVERRIDE_FIND_PACKAGE
 )
 FetchContent_MakeAvailable(fmt aws-sdk-cpp)
 unset(BUILD_TESTS)
@@ -83,8 +81,7 @@ unset(BUILD_ONLY)
 unset(AUTORUN_UNIT_TESTS)
 unset(TEST_COMMAND)
 set_target_properties(fmt PROPERTIES POSITION_INDEPENDENT_CODE ON)
-find_package(fmt REQUIRED)
-find_package(aws-sdk-cpp REQUIRED COMPONENTS s3)
+find_package(AWSSDK REQUIRED COMPONENTS s3)
 
 
 # ----------------------------- Download Apache Datasketches -------------------------
