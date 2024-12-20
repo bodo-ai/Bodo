@@ -65,6 +65,8 @@ jobs:
         docker run -d --name test-container ${{env.TEST_TAG}}
 
         # Step 2: Execute the notebook inside the container using jupyter nbconvert
+        # NOTE: this doesn't check correctness of the output.
+        # Only test setup and notebook works as expected.
         docker exec test-container jupyter nbconvert --to notebook --execute /app/pi.ipynb --output /app/pi_output.ipynb
         docker exec test-container jupyter nbconvert --to notebook --execute /app/quickstart.ipynb --output /app/quickstart_output.ipynb
 
@@ -76,6 +78,7 @@ jobs:
         docker rm -f test-container
 
 
+      # Upload notebook result to check in case previous step failed
     - name: Upload Notebook Outputs
       uses: actions/upload-artifact@v4
       with:
@@ -84,6 +87,7 @@ jobs:
 
     - name: Build and push
       uses: docker/build-push-action@v6
+      # TODO: undo before merging
       # if: ${{ inputs.is-release }}
       with:
         push: true

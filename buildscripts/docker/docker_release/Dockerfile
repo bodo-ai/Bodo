@@ -18,7 +18,7 @@ COPY --chown=root --from=builder /opt/conda /opt/conda
 
 # Install necessary packages
 RUN apt-get update && \
-    apt-get install -y bzip2 git make python3 python3-pip vim wget && \
+    apt-get install -y vim && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
@@ -27,8 +27,12 @@ ENV PATH=/opt/conda/bin:$PATH
 # Create a working directory for the Jupyter Notebook
 WORKDIR /app
 
-# Copy the two Python files to the container
-COPY ./buildscripts/docker/docker_release/pi.ipynb ./buildscripts/docker/docker_release/quickstart.ipynb /app/
+# Create symlink for Getting-Started notebook files
+RUN ln -s ./examples/Getting-Started/pi.ipynb ./pi.ipynb && \
+    ln -s ./examples/Getting-Started/quickstart.ipynb ./quickstart.ipynb
+
+# Copy them to the container
+# COPY ./pi.ipynb ./quickstart.ipynb /app/
 
 # Expose port 8888 for the Jupyter Notebook
 EXPOSE 8888
