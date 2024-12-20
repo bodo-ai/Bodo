@@ -80,6 +80,7 @@ unset(BUILD_ONLY)
 unset(AUTORUN_UNIT_TESTS)
 unset(TEST_COMMAND)
 set_target_properties(fmt PROPERTIES POSITION_INDEPENDENT_CODE ON)
+find_package(fmt REQUIRED)
 find_package(AWSSDK REQUIRED COMPONENTS s3)
 
 
