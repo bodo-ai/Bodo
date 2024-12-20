@@ -201,21 +201,23 @@ Now let's try to run same job on different clusters:
 
 ```python
 from bodosdk import BodoWorkspaceClient
+import random
 
 my_workspace = BodoWorkspaceClient()
 
+random_val = random.random()  # just to avoid conflicts on name
 clusters_conf = [('c5.large', 8), ('c5.xlarge', 4), ('c5.2xlarge', 2)]
 for i, conf in enumerate(clusters_conf):
     my_workspace.ClusterClient.create(
         name=f'Test {i}',
         instance_type=conf[0],
         workers_quantity=conf[1],
-        custom_tags={'test_tag': f'bodo_example_test'}
+        custom_tags={'test_tag': f'perf_test{random_val}'}  # let's add tag to easy filter our clusters
     )
 
 # get list by tag
 clusters = my_workspace.ClusterClient.list(filters={
-    'tags': {'test_tag': f'bodo_example_test'}
+    'tags': {'test_tag': f'perf_test{random_val}'}
 })
 
 # run same job 3 times, once per each cluster
