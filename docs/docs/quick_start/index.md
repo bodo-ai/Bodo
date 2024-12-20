@@ -35,5 +35,5 @@ as well as Bodo platform set up process for your AWS account.
 
 ---
 
-## [Bodo Platform SDK][bodo-platform-sdk-guide]
+## [Bodo Platform SDK Quick Start][quickstart-platform-sdk]
 This guide provides a walkthrough of the Bodo Platform SDK that provides a simple way to interact with the Bodo Platform API.
