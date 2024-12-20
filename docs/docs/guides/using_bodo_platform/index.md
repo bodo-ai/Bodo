@@ -46,6 +46,11 @@ This guide explains how to interact with Bodo clusters outside of Jobs and Noteb
 
 ---
 
+## [Using Bodo Platform SDK][bodo-platform-sdk-guide]
+This guide provides a walkthrough of the Bodo Platform SDK that provides a simple way to interact with the Bodo Platform API.
+
+---
+
 ## [Creating Network Configuration][network_configuration]
 This guide explains how to create a network configuration for the Bodo Cloud Platform.
 
@@ -62,5 +67,4 @@ This guide explains how to configure an AWS PrivateLink in Customer Managed VPC 
 ---
 
 ## [Troubleshooting][troubleshooting]
-
 This guide offers some troubleshooting tips for potential issues encountered while using the Bodo Cloud Platform.

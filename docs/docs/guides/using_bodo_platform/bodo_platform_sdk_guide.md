@@ -1,4 +1,4 @@
-# Bodo Platform SDK Guide
+# Bodo Platform SDK Guide {#bodo-platform-sdk-guide}
 
 Bodo Platform SDK is a Python library that provides a simple way to interact with the Bodo Platform API. It allows you
 to create, manage, and monitor resources such as clusters, jobs, and workspaces.
@@ -106,6 +106,7 @@ my_cluster = my_workspace.ClusterClient.create(
     instance_type='c5.large',
     workers_quantity=1
 )
+
 my_cluster.wait_for_status(['RUNNING'])
 my_cluster.update(
     description='My description',
@@ -200,33 +201,35 @@ Now let's try to run same job on different clusters:
 
 ```python
 from bodosdk import BodoWorkspaceClient
-import random
 
 my_workspace = BodoWorkspaceClient()
 
-random_val = random.random()  # just to avoid conflicts on name
 clusters_conf = [('c5.large', 8), ('c5.xlarge', 4), ('c5.2xlarge', 2)]
 for i, conf in enumerate(clusters_conf):
     my_workspace.ClusterClient.create(
         name=f'Test {i}',
         instance_type=conf[0],
         workers_quantity=conf[1],
-        custom_tags={'test_tag': f'perf_test{random_val}'}  # let's add tag to easy filter our clusters
+        custom_tags={'test_tag': f'bodo_example_test'}
     )
+
 # get list by tag
 clusters = my_workspace.ClusterClient.list(filters={
-    'tags': {'test_tag': f'perf_test{random_val}'}
+    'tags': {'test_tag': f'bodo_example_test'}
 })
+
 # run same job 3 times, once per each cluster
 jobs = clusters.run_job(
     code_type='PYTHON',
     source={'type': 'WORKSPACE', 'path': '/'},
     exec_file='test.py'
 )
+
 # wait for jobs to finish and print results
 for job in jobs.wait_for_status(['SUCCEEDED']):
     print(job.name, job.cluster.name)
     print(job.get_stdout())
+
 # remove our clusters
 jobs.clusters.delete()  # or clusters.delete()
 ```
@@ -239,11 +242,15 @@ You can also execute SQL queries by passing just query text like following:
 from bodosdk import BodoWorkspaceClient
 
 my_workspace = BodoWorkspaceClient()
-my_sql_job = my_workspace.JobClient.run_sql_query(sql_query="SELECT 1", catalog="MyCatalog", cluster={
-    "name": 'Temporary cluster',
-    "instance_type": 'c5.large',
-    "workers_quantity": 1
-})
+my_sql_job = my_workspace.JobClient.run_sql_query(
+    sql_query="SELECT 1", 
+    catalog="MyCatalog", 
+    cluster={
+        "name": 'Temporary cluster',
+        "instance_type": 'c5.large',
+        "workers_quantity": 1
+    }
+)
 print(my_sql_job.wait_for_status(['SUCCEEDED']).get_stdout())
 ```
 
