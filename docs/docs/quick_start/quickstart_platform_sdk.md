@@ -169,5 +169,5 @@ print(result)
 
 
 !!! seealso "See Also"
- * [BodoSDK Guide](../../guides/bodo_platform_sdk_guide.md)
- * [BodoSDK Reference](../../api_docs/platform_sdk.md)
+ * [BodoSDK Guide](../guides/bodo_platform_sdk_guide.md)
+ * [BodoSDK Reference](../api_docs/platform_sdk.md)
