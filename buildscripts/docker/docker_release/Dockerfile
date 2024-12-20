@@ -27,12 +27,8 @@ ENV PATH=/opt/conda/bin:$PATH
 # Create a working directory for the Jupyter Notebook
 WORKDIR /app
 
-# Create symlink for Getting-Started notebook files
-RUN ln -s ./examples/Getting-Started/pi.ipynb ./pi.ipynb && \
-    ln -s ./examples/Getting-Started/quickstart.ipynb ./quickstart.ipynb
-
-# Copy them to the container
-# COPY ./pi.ipynb ./quickstart.ipynb /app/
+# Copy Getting-Started notebook files to the container
+COPY ./buildscripts/docker/docker_release/pi.ipynb ./buildscripts/docker/docker_release/quickstart.ipynb /app/
 
 # Expose port 8888 for the Jupyter Notebook
 EXPOSE 8888
