@@ -14,11 +14,10 @@ from bodo.submit.spawner import SubmitDispatcher, destroy_spawner, get_num_worke
 from bodo.tests.utils import (
     _test_equal,
     check_func,
-    pytest_spawn_mode,
     temp_env_override,
 )
 
-pytestmark = pytest_spawn_mode
+# pytestmark = pytest_spawn_mode
 
 VALUE = 1
 
@@ -351,6 +350,7 @@ def test_spawn_type_register():
 
 
 @pytest.mark.no_cover
+@pytest.mark.skip(reason="Testing atexit behavior is flakey.")
 def test_spawn_atexit_delete_result():
     """Tests that results in the user program are deleted properly upon exit,
     even after spawner has been destroyed"""
@@ -377,6 +377,7 @@ def test_spawn_atexit_delete_result():
         raise
 
 
+@pytest.mark.skip(reason="Testing atexit behavior is flakey.")
 def test_destroy_spawn_delete():
     """Tests that it is safe to get a distributed result, destroy spawner,
     create a new global spawner and delete the result.

@@ -6778,9 +6778,9 @@ def Dict__reduce__(self):
 numba.typed.Dict.__reduce__ = Dict__reduce__
 
 
-# Bodo change: use globals dict from function for using object mode with cloudpickle.
+# Bodo change: use correct globals dict from the function when running object mode.
 @classmethod
-def _get_function_info(cls, func_ir):
+def _get_function_info(cls, func_ir, native):
     """
     Returns
     -------
@@ -6795,11 +6795,8 @@ def _get_function_info(cls, func_ir):
     doc = func.__doc__ or ''
     args = tuple(func_ir.arg_names)
     kws = ()        # TODO
-    global_dict = func_ir.func_id.func.__globals__
+    global_dict = None if native else func_ir.func_id.func.__globals__
 
-    # issue #9786: In cases where the module globals mismatch the
-    # function's global dictionary (e.g. when using cloudpicke),
-    # we want to use the function's globals.
     if modname is None or (
         func_ir.func_id.module is not None
         and func_ir.func_id.module.__dict__ != global_dict
@@ -6808,8 +6805,7 @@ def _get_function_info(cls, func_ir):
         modname = _dynamic_modname
         # Retain a reference to the dictionary of the function.
         # This disables caching, serialization and pickling.
-    else:
-        global_dict = None
+        global_dict = func_ir.func_id.func.__globals__
 
     unique_name = func_ir.func_id.unique_name
 
@@ -6826,3 +6822,31 @@ if _check_numba_change:  # pragma: no cover
 
 
 numba.core.funcdesc.FunctionDescriptor._get_function_info = _get_function_info
+
+
+@classmethod
+# Bodo change: Pass native to _get_function_info to detect when we are in the object mode path.
+def _from_python_function(cls, func_ir, typemap, restype,
+                            calltypes, native, mangler=None,
+                            inline=False, noalias=False, abi_tags=()):
+    (qualname, unique_name, modname, doc, args, kws, global_dict,
+        ) = cls._get_function_info(func_ir, native)
+
+    self = cls(native, modname, qualname, unique_name, doc,
+                typemap, restype, calltypes,
+                args, kws, mangler=mangler, inline=inline, noalias=noalias,
+                global_dict=global_dict, abi_tags=abi_tags,
+                uid=func_ir.func_id.unique_id)
+    return self
+
+
+if _check_numba_change:  # pragma: no cover
+    lines = inspect.getsource(numba.core.funcdesc.FunctionDescriptor._from_python_function)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "ee079a16f93f9d9818c84b11da7bc14bf3127c12c08f726b5d888b134c49dca8"
+    ):
+        warnings.warn("numba.core.funcdesc.FunctionDescriptor._from_python_function has changed")
+
+
+numba.core.funcdesc.FunctionDescriptor._from_python_function = _from_python_function
