@@ -5,15 +5,15 @@ parameters:
 - name: matrix
   type: object
   default: []
+- name: pool_name
+  type: string
+  default: 'ScalingVMSet'
 - name: CACHE_TEST
   type: boolean
   default: false
 - name: SPAWN_MODE_TEST
   type: boolean
   default: false
-- name: BODO_STREAMING_ENABLED
-  type: number
-  default: 0
 
 jobs:
 - job: ${{ parameters.name }}
@@ -22,7 +22,7 @@ jobs:
     - group: SnowflakeCredentials
     - group: TabularCredentials
   timeoutInMinutes: 360
-  pool: ScalingVMSet
+  pool: ${{ parameters.pool_name }}
   strategy:
     matrix:
       ${{ insert }}: ${{ parameters.matrix }}
@@ -115,6 +115,7 @@ jobs:
       AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
       AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
       AWS_REGION: us-east-1
-      BODO_STREAMING_ENABLED: ${{ parameters.BODO_STREAMING_ENABLED }}
+      BODO_STREAMING_ENABLED: 1
       BODO_SPAWN_MODE: "0"
+      BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
     displayName: 'Test BodoSQL'

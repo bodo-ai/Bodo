@@ -230,7 +230,7 @@ def check_func(
 
     # We allow the environment flag BODO_TESTING_ONLY_RUN_1D_VAR to change the default
     # testing behavior, to test with only 1D_var. This environment variable is set in our
-    # AWS PR CI environment
+    # PR CI environment
     if only_1DVar is None and not (only_seq or only_1D):
         only_1DVar = os.environ.get("BODO_TESTING_ONLY_RUN_1D_VAR", None) is not None
 

@@ -72,8 +72,6 @@ jobs:
         if: ${{ inputs.is-release }}
         run: |
           set -eo pipefail
-          echo "${{ secrets.PUBLISH_BINARY_SECRETS }}" > $HOME/secret_file
-          sudo chmod a+r $HOME/secret_file
 
           echo "BODOSQL_VERSION: $BODOSQL_VERSION"
           artifactory_channel=`./buildscripts/bodosql/get_channel.sh`
