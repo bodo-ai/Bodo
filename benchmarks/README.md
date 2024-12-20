@@ -35,7 +35,7 @@ The graph below summarizes the total execution time of each system (averaged ove
 
 ## Local Benchmark
 
-You can start to see the benefits of using Bodo from your laptop by running any of the notebooks in [`./nyc_taxi/notebooks`](./nyc_taxi/notebooks) which include a smaller version of the NYC Taxi Monthly Trips with Precipitation benchmark. To set up, install the required packages using pip in a clean environment that includes Python 3.12:
+You can start to see the benefits of using Bodo from your laptop by running the notebooks found in [`./nyc_taxi/notebooks`](./nyc_taxi/notebooks) which include a smaller version of the NYC Taxi Monthly Trips with Precipitation benchmark. To set up, install the required packages using pip in a clean environment that includes Python 3.12:
 
 ``` shell
 pip install bodo==2024.12.1 "dask[dataframe]"==2024.12.0 "modin[all]"==0.32.0 pyspark==3.5.3 pandas==2.2.3 boto3
