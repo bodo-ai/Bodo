@@ -138,16 +138,27 @@ endif()
 
 
 # ----------------------- Set Compiler Args for Targets -----------------------
+
+if (WIN32)
+    add_compile_options(
+      "/wd4996"        # Disable deprecation warnings (similar to -Wno-deprecated)
+      "/D_FORTIFY_SOURCE=2" # Equivalent for _FORTIFY_SOURCE
+      "/GS"            # Enable buffer security check (similar to -fstack-protector-strong)
+      "/W3"            # Set warning level
+    )
 # Default Compiler Args
-add_compile_options(
-  "-Wno-c99-designator"         # Check if still necessary?
-  "-Wno-return-type-c-linkage"  # Check if still necessary?
-  "-Wno-macro-redefined"        # Check if still necessary?
-  "-Wno-implicit-const-int-float-conversion" # Necessary for DataSketches
-  "-fwrapv"                     # Conda used to force-add. Remove in follow up PR
-  "-fstack-protector-strong"    # Conda used to force-add. Remove in follow up PR
-  "-D_FORTIFY_SOURCE=2"         # Conda used to force-add. Remove in follow up PR
-)
+else()
+    add_compile_options(
+      "-Wno-c99-designator"         # Check if still necessary?
+      "-Wno-return-type-c-linkage"  # Check if still necessary?
+      "-Wno-macro-redefined"        # Check if still necessary?
+      "-Wno-implicit-const-int-float-conversion" # Necessary for DataSketches
+      "-fwrapv"                     # Conda used to force-add. Remove in follow up PR
+      "-fstack-protector-strong"    # Conda used to force-add. Remove in follow up PR
+      "-D_FORTIFY_SOURCE=2"         # Conda used to force-add. Remove in follow up PR
+    )
+endif()
+
 if (LINUX)
   add_compile_options(
     # -march=haswell is used to enable AVX2 support (required by SIMD bloom filter implementation)
