@@ -64,7 +64,6 @@ FetchContent_Declare(
   fmt
   GIT_REPOSITORY  https://github.com/fmtlib/fmt.git
   GIT_TAG         10.2.1
-  EXCLUDE_FROM_ALL
 )
 set(BUILD_TESTS OFF CACHE INTERNAL "")
 set(BUILD_ONLY s3;core CACHE INTERNAL "")
