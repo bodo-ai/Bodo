@@ -83,6 +83,7 @@ unset(BUILD_ONLY)
 unset(AUTORUN_UNIT_TESTS)
 unset(TEST_COMMAND)
 set_target_properties(fmt PROPERTIES POSITION_INDEPENDENT_CODE ON)
+find_package(AWSSDK REQUIRED COMPONENTS s3)
 
 
 # ----------------------------- Download Apache Datasketches -------------------------
@@ -641,7 +642,7 @@ target_link_directories(ext PRIVATE ${PYARROW_LIB_DIR} "${Python_NumPy_INCLUDE_D
 target_include_directories(ext PRIVATE ${datasketches_INSTALL_DIR}/include/DataSketches)
 target_include_directories(ext SYSTEM PRIVATE ${AWSSDK_INCLUDE_DIR})
 add_dependencies(ext datasketches)
-cmake_print_variables(AWSSDK_LIBRARIES)
+cmake_print_variables(AWSSDK_LINK_LIBRARIES)
 cmake_print_variables(AWSSDK_INCLUDE_DIR)
 target_link_libraries(ext PRIVATE
   npymath
@@ -652,9 +653,7 @@ target_link_libraries(ext PRIVATE
   arrow_dataset
   parquet
   fmt::fmt
-  aws-cpp-sdk-core
-  AWSSDK::s3
-  AWSSDK_LIBRARIES
+  ${AWSSDK_LINK_LIBRARIES}
   ${Boost_LIBRARIES}
 )
 
@@ -685,5 +684,5 @@ endif()
 
 
 set_target_properties(ext PROPERTIES CXX_CLANG_TIDY "${CLANG_TIDY_COMMAND}")
-add_dependencies(ext pyfs _hdfs tracing pyarrow_wrappers datasketches fmt AWSSDK)
+add_dependencies(ext pyfs _hdfs tracing pyarrow_wrappers datasketches)
 install(TARGETS ext DESTINATION "bodo/")
