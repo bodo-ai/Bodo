@@ -8,11 +8,9 @@ conda-pypi-map = { "bodo.ai" = "buildscripts/bodo_mapping.json" }
 # Development
 default =      { features = ["rcpp", "dev", "local-mpi"],          solve-group = "312" }
 azure =        { features = ["rcpp", "dev", "local-mpi", "azure"], solve-group = "312" }
-
 # Platform
 platform =     { features = ["rcpp", "platform", "platform-mpi"],  solve-group = "312-platform" }
 platform-dev = { features = ["rcpp", "dev", "platform-mpi"],       solve-group = "312-platform" }
-
 # Pip C++ Deps
 pip-cpp =      { features = ["rcpp", "pip", "local-mpi"], no-default-feature = true,   solve-group = "pip" }
 
@@ -20,7 +18,6 @@ pip-cpp =      { features = ["rcpp", "pip", "local-mpi"], no-default-feature = t
 [tasks.build-bodo]
 cmd = "pip install --no-deps --no-build-isolation -ve ."
 inputs = ["bodo/**/*.cpp", "bodo/**/*.h", "bodo/**/*.pyx", "bodo/**/*.pxd"]
-
 [tasks.build-bodo.env]  # SCcache Envs
 SCCACHE_BUCKET = "engine-codebuild-cache"
 SCCACHE_REGION = "us-east-2"
@@ -30,7 +27,6 @@ SCCACHE_S3_SERVER_SIDE_ENCRYPTION = "true"
 [tasks.build-bodo-debug]
 cmd = "pip install --no-deps --no-build-isolation -Ccmake.build-type='Debug' -Cinstall.strip=false -ve ."
 inputs = ["bodo/**/*.cpp", "bodo/**/*.h", "bodo/**/*.pyx", "bodo/**/*.pxd"]
-
 [tasks.build-bodo-san]
 cmd = "pip install --no-deps --no-build-isolation -Ccmake.build-type='DebugSanitize' -Cinstall.strip=false -ve ."
 inputs = ["bodo/**/*.cpp", "bodo/**/*.h", "bodo/**/*.pyx", "bodo/**/*.pxd"]
@@ -46,7 +42,6 @@ inputs = [
     "BodoSQL/calcite_sql/bodosql-calcite-application/src/**/*.sql",
 ]
 outputs = ["BodoSQL/bodosql.egg-info/"]
-
 [tasks.build-iceberg]
 cmd = "pip install --no-deps --no-build-isolation -ve ."
 cwd = "iceberg"
@@ -217,7 +212,8 @@ clang-tools = "=19"
 # Copied into bodo/mpi4py
 mpi4py = "~=3.1"
 
-[feature.dev.target.win.dependencies]
+[feature.dev.target.win-64.dependencies]
+# Copied into bodo/mpi4py
 mpi4py = "~=4.0"
 
 [feature.platform]
@@ -247,7 +243,7 @@ mpich = { version = "4.1.*", build = "h*" }
 mpich = { version = "4.1.*", build = "h*" }
 
 [feature.local-mpi.target.win.dependencies]
-impi_rt = { version = "=2021.13.1" }
+impi-devel = { version = "=2021.13.1" }
 
 [feature.platform-mpi]
 channels = ["conda-forge", "conda-forge/label/broken"]

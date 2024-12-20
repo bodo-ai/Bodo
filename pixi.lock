@@ -1207,6 +1207,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/win-64/icu-75.1-he0c23c2_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/identify-2.6.3-pyhd8ed1ab_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/idna-3.10-pyhd8ed1ab_1.conda
+      - conda: https://conda.anaconda.org/conda-forge/win-64/impi-devel-2021.13.1-h57928b3_767.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/impi_rt-2021.13.1-h57928b3_767.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/importlib-metadata-8.5.0-pyha770c72_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/importlib-resources-6.4.5-pyhd8ed1ab_1.conda
@@ -2617,6 +2618,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/win-64/icu-75.1-he0c23c2_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/identify-2.6.3-pyhd8ed1ab_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/idna-3.10-pyhd8ed1ab_1.conda
+      - conda: https://conda.anaconda.org/conda-forge/win-64/impi-devel-2021.13.1-h57928b3_767.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/impi_rt-2021.13.1-h57928b3_767.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/importlib-metadata-8.5.0-pyha770c72_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/importlib-resources-6.4.5-pyhd8ed1ab_1.conda
@@ -3037,6 +3039,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/win-64/boost-cpp-1.85.0-ha5ead02_4.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/bzip2-1.0.8-h2466b09_7.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/ca-certificates-2024.12.14-h56e8100_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/win-64/impi-devel-2021.13.1-h57928b3_767.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/impi_rt-2021.13.1-h57928b3_767.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/krb5-1.21.3-hdf4eb48_0.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/libboost-1.85.0-h444863b_4.conda
@@ -10190,6 +10193,21 @@ packages:
   license_family: BSD
   size: 49765
   timestamp: 1733211921194
+- kind: conda
+  name: impi-devel
+  version: 2021.13.1
+  build: h57928b3_767
+  build_number: 767
+  subdir: win-64
+  url: https://conda.anaconda.org/conda-forge/win-64/impi-devel-2021.13.1-h57928b3_767.conda
+  sha256: c0c1e48ded0da26dcc8b8b712af8fec852239fea577fb4c07721abe79be4fe7f
+  md5: 95606a619ac73e265eaed10a552388d6
+  depends:
+  - impi_rt 2021.13.1 h57928b3_767
+  license: LicenseRef-IntelSimplifiedSoftwareOct2022
+  license_family: Proprietary
+  size: 3305084
+  timestamp: 1730232790350
 - kind: conda
   name: impi_rt
   version: 2021.13.1
