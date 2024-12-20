@@ -6797,10 +6797,7 @@ def _get_function_info(cls, func_ir, native):
     kws = ()        # TODO
     global_dict = None if native else func_ir.func_id.func.__globals__
 
-    if modname is None or (
-        func_ir.func_id.module is not None
-        and func_ir.func_id.module.__dict__ != global_dict
-    ):
+    if modname is None:
         # Dynamically generated function.
         modname = _dynamic_modname
         # Retain a reference to the dictionary of the function.
