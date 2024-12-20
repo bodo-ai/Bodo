@@ -14,10 +14,11 @@ from bodo.submit.spawner import SubmitDispatcher, destroy_spawner, get_num_worke
 from bodo.tests.utils import (
     _test_equal,
     check_func,
+    pytest_spawn_mode,
     temp_env_override,
 )
 
-# pytestmark = pytest_spawn_mode
+pytestmark = pytest_spawn_mode
 
 VALUE = 1
 
