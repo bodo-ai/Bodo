@@ -140,10 +140,10 @@ endif()
 # ----------------------- Set Compiler Args for Targets -----------------------
 # Default Compiler Args
 add_compile_options(
-#  "-Wno-c99-designator"         # Check if still necessary?
-#  "-Wno-return-type-c-linkage"  # Check if still necessary?
-#  "-Wno-macro-redefined"        # Check if still necessary?
-#  "-Wno-implicit-const-int-float-conversion" # Necessary for DataSketches
+  "-Wno-c99-designator"         # Check if still necessary?
+  "-Wno-return-type-c-linkage"  # Check if still necessary?
+  "-Wno-macro-redefined"        # Check if still necessary?
+  "-Wno-implicit-const-int-float-conversion" # Necessary for DataSketches
   "-fwrapv"                     # Conda used to force-add. Remove in follow up PR
   "-fstack-protector-strong"    # Conda used to force-add. Remove in follow up PR
   "-D_FORTIFY_SOURCE=2"         # Conda used to force-add. Remove in follow up PR
