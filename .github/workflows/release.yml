@@ -71,7 +71,7 @@ jobs:
     secrets: inherit
 
   docker-img:
-    needs: bodo-conda-linux
+    needs: [bodo-conda-linux, iceberg-conda, bodosql-conda, azurefs-sas-conda]
     uses: ./.github/workflows/docker_build_and_publish.yml
     with:
       is-release: ${{ github.event_name == 'release' }}
