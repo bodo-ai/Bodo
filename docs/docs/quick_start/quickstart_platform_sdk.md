@@ -14,9 +14,9 @@ pip install bodosdk
 
 To authenticate with the Bodo Platform API, you need to create an API Token:
 
-1) Log in to your workspace at https://platform.bodo.ai/.
-2) Navigate to API Tokens in the Admin Console.
-3) Generate a token and copy the Client ID and Secret Key.
+1. Log in to your workspace at https://platform.bodo.ai/.
+2. Navigate to API Tokens in the Admin Console. 
+3. Generate a token and copy the Client ID and Secret Key.
 
 Use these credentials to define a `BodoWorkspaceClient` for interacting with the platform:
 
@@ -169,5 +169,5 @@ print(result)
 
 
 !!! seealso "See Also"
- * [BodoSDK Guide](../../guides/using_bodo_platform/bodo_platform_sdk_guide.md)
- * [BodoSDK Reference](../../api_docs/using_bodo_platform/platform_sdk.md)
+ * [BodoSDK Guide](../../guides/using_bodo_platform/bodo_platform_sdk_guide)
+ * [BodoSDK Reference](../../api_docs/platform_sdk)
