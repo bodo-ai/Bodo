@@ -646,13 +646,10 @@ target_compile_options(
 target_link_directories(ext PRIVATE ${PYARROW_LIB_DIR} "${Python_NumPy_INCLUDE_DIR}/../lib")
 
 target_include_directories(ext PRIVATE ${datasketches_INSTALL_DIR}/include/DataSketches)
-add_dependencies(ext datasketches)
 
-cmake_print_variables(aws-sdk-cpp_INSTALL_DIR)
 target_include_directories(ext SYSTEM PRIVATE ${aws-sdk-cpp_INSTALL_DIR}/include)
 target_link_directories(ext PRIVATE ${aws-sdk-cpp_INSTALL_DIR}/lib)
 
-add_dependencies(ext aws-sdk-cpp)
 target_link_libraries(ext PRIVATE
   npymath
   mpi
@@ -692,5 +689,5 @@ endif()
 
 
 set_target_properties(ext PROPERTIES CXX_CLANG_TIDY "${CLANG_TIDY_COMMAND}")
-add_dependencies(ext pyfs _hdfs tracing pyarrow_wrappers datasketches)
+add_dependencies(ext pyfs _hdfs tracing pyarrow_wrappers datasketches aws-sdk-cpp)
 install(TARGETS ext DESTINATION "bodo/")
