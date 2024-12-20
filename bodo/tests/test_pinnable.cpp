@@ -43,10 +43,11 @@ void equality_check(const Iterator1 &begin1, const Iterator1 &end1,
         }
     }
 
-    if (elided)
+    if (elided) {
         std::cerr << "in total, " << diffs
                   << " positions were different, but some were elided"
                   << std::endl;
+    }
 
     if (differs) {
         std::cerr << "  Expected: ";
@@ -162,8 +163,9 @@ struct push_back_test {
         : begin_(begin), end_(end) {}
 
     void operator()(Vector &v) const {
-        for (auto i(begin_); i != end_; ++i)
+        for (auto i(begin_); i != end_; ++i) {
             v.push_back(i);
+        }
     }
 };
 
@@ -205,9 +207,10 @@ struct insert_map_test {
                 auto seti(keys.begin());
                 std::advance(seti, key % keys.size());
                 auto i(map.find(*seti));
-                if (i == map.end())
+                if (i == map.end()) {
                     throw std::runtime_error(
                         "Map could not find key we inserted");
+                }
                 keys.erase(seti);
                 map.erase(i);
             } else {
@@ -284,7 +287,7 @@ static bodo::tests::suite tests([] {
     bodo::tests::test("simple_insert", [] {
         typename bodo::pinnable<bodo::vector<uint32_t>>::element_type
             nonspilling;
-        // std::vector<uint32_t> nonspilling;
+        // std::vector<uint32_t> non-spilling;
         for (int i = 0; i < 33; ++i) {
             nonspilling.push_back(0);
         }

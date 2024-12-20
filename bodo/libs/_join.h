@@ -219,6 +219,7 @@ void nested_loop_join_handle_dict_encoded(
     std::shared_ptr<table_info> left_table,
     std::shared_ptr<table_info> right_table, bool left_parallel,
     bool right_parallel);
+
 int get_bcast_join_threshold();
 
 std::shared_ptr<table_info> rebalance_join_output(

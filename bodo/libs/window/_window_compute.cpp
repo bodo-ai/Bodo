@@ -613,8 +613,9 @@ void ntile_batch_update(std::shared_ptr<array_info> out_arr,
     // of elements that will go into small vs large groups, and
     // the number of bins that will require a larger group
     int n = group_end_idx - group_start_idx;
-    if (n == 0)
+    if (n == 0) {
         return;
+    }
     int remainder = n % num_bins;
     int n_smaller = n / num_bins;
     int n_larger = n_smaller + (remainder ? 1 : 0);
@@ -1369,8 +1370,9 @@ void single_global_window_computation(
 
     int64_t total_rows = getv<int64_t, bodo_array_type::NUMPY>(count_arr, 0);
 
-    if (total_rows == 0)
+    if (total_rows == 0) {
         return;
+    }
 
     // Do the division
     if (out_arr->dtype == Bodo_CTypes::FLOAT64) {

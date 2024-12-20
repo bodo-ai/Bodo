@@ -74,9 +74,11 @@ std::shared_ptr<::arrow::fs::HadoopFileSystem> get_hdfs_fs(
             return hdfs_fs;
         }
     }
-    if (uri_string.starts_with("abfs://") || uri_string.starts_with("abfss://"))
+    if (uri_string.starts_with("abfs://") ||
+        uri_string.starts_with("abfss://")) {
         // need to pass whole URI as host to libhdfs
         options.ConfigureEndPoint(uri_string, 0);
+    }
     // connect to hdfs
     options.ConfigureReplication(0);
     options.ConfigureBufferSize(0);
@@ -237,11 +239,12 @@ void hdfs_open_file(const char *fname,
     arrow::Result<std::shared_ptr<arrow::fs::FileSystem>> tempfs =
         ::arrow::fs::FileSystemFromUri(f_name, &path);
     arrow::Result<std::shared_ptr<::arrow::io::RandomAccessFile>> result;
-    if (f_name.starts_with("abfs://") || f_name.starts_with("abfss://"))
+    if (f_name.starts_with("abfs://") || f_name.starts_with("abfss://")) {
         // need to pass whole URI to libhdfs
         result = fs->OpenInputFile(f_name);
-    else
+    } else {
         result = fs->OpenInputFile(path);
+    }
     CHECK_ARROW_AND_ASSIGN(result, "fs->OpenInputFile", *file)
 }
 
@@ -275,8 +278,9 @@ static PyMethodDef ext_methods[] = {
 PyMODINIT_FUNC PyInit_hdfs_reader(void) {
     PyObject *m;
     MOD_DEF(m, "hdfs_reader", "No docs", ext_methods);
-    if (m == nullptr)
+    if (m == nullptr) {
         return nullptr;
+    }
 
     SetAttrStringFromVoidPtr(m, init_hdfs_reader);
     SetAttrStringFromVoidPtr(m, hdfs_get_fs);
