@@ -662,7 +662,6 @@ target_link_libraries(ext PRIVATE
   arrow_dataset
   parquet
   fmt::fmt
-  aws-cpp-sdk-core
   ${Boost_LIBRARIES}
 )
 
