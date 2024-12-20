@@ -84,6 +84,11 @@ requirements:
     - adlfs >=2022.1.0
     - gcsfs >=2022.1.0
 
+test:
+  imports:
+    - bodo
+  source_files:
+    - examples/pi.py
 
 about:
   home: https://bodo.ai
