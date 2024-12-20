@@ -1003,6 +1003,27 @@ def test_df_apply_udf_inline(memory_leak_check):
 
 
 @pytest.mark.slow
+def test_df_apply_udf_inline_objmode(memory_leak_check):
+    """make sure UDFs with nested objmode don't cause compiler failures"""
+
+    @bodo.jit
+    def g(a):
+        with bodo.objmode(out="int64"):
+            out = a + 1
+        return out
+
+    @bodo.jit
+    def f(a):
+        return g(a)
+
+    @bodo.jit
+    def test(S):
+        return S.map(f)
+
+    test(pd.Series([1, 2, 3]))
+
+
+@pytest.mark.slow
 def test_df_apply_supported_types(df_value, memory_leak_check):
     """Test DataFrame.apply with all Bodo supported Types"""
 

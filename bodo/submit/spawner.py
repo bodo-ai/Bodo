@@ -556,7 +556,6 @@ class Spawner:
             # We might not be able to log during process teardown
             pass
         self.worker_intercomm.bcast(CommandType.EXIT.value, root=self.bcast_root)
-        self.worker_intercomm.Disconnect()
         self.destroyed = True
 
 
