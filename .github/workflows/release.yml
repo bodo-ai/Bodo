@@ -1,9 +1,7 @@
 name: Release
 on:
   schedule:
-    # Two events so that we can limit MacOS runs for cost
-    - cron: '0 21 * * 1,3,5'  # 9PM EST Mon, Wed, Fri
-    - cron: '0 21 * * 2,4'    # 9PM EST Tue, Thu
+    - cron: '0 21 * * 1,2,3,4,5'  # 9PM EST Mon, Wed, Fri
   release:
     types: [published]
   workflow_dispatch:
@@ -30,8 +28,6 @@ jobs:
       is-release: ${{ github.event_name == 'release' }}
     secrets: inherit
   bodo-conda-mac:
-    # Only run every other day to save on MacOS VM costs
-    if: github.event.schedule != '0 21 * * 1,3,5'
     strategy:
       # Don't cancel other jobs if one fails
       fail-fast: false
@@ -70,4 +66,4 @@ jobs:
       is-release: ${{ github.event_name == 'release' }}
     secrets: inherit
 
-  # TODO: Include E2E tests, and AMI
+  # TODO: Include E2E tests
