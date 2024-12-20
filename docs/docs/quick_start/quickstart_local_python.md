@@ -1,3 +1,7 @@
+<!-- 
+NOTE: the examples in this file are covered by tests in bodo/tests/test_quickstart_docs.py. Any changes to examples in this file should also update the corresponding unit test(s).
+ -->
+
 # Bodo Python Quick Start {#quickstart-local-python}
 
 This quickstart guide will walk you through the process of running a simple Python computation using Bodo on your local machine.

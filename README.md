@@ -1,3 +1,7 @@
+<!--
+NOTE: the example in this file is covered by tests in bodo/tests/test_quickstart_docs.py. Any changes to the examples in this file should also update the corresponding unit test.
+ -->
+
 ![Logo](Assets/bodo.png)
 
 <h3 align="center">
@@ -65,7 +69,7 @@ Bodo can be installed using Pip or Conda:
 pip install -U bodo
 ```
 
-or 
+or
 
 ```bash
 conda create -n Bodo python=3.12 -c conda-forge
