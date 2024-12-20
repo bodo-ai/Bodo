@@ -98,7 +98,6 @@ unless support is explicitly mentioned.
 - [`pd.Series.describe`][pdseriesdescribe]                               
 - [`pd.Series.diff`][pdseriesdiff]                                       
 - [`pd.Series.kurt`][pdserieskurt]                                       
-- [`pd.Series.mad`][pdseriesmad]                                         
 - [`pd.Series.max`][pdseriesmax]                                         
 - [`pd.Series.mean`][pdseriesmean]                                       
 - [`pd.Series.median`][pdseriesmedian]                                   
@@ -118,7 +117,6 @@ unless support is explicitly mentioned.
 - [`pd.Series.kurtosis`][pdserieskurtosis]                               
 - [`pd.Series.unique`][pdseriesunique]                                   
 - [`pd.Series.nunique`][pdseriesnunique]                                 
-- [`pd.Series.is_monotonic`][pdseriesis_monotonic]                       
 - [`pd.Series.is_monotonic_increasing`][pdseriesis_monotonic_increasing] 
 - [`pd.Series.is_monotonic_decreasing`][pdseriesis_monotonic_decreasing] 
 - [`pd.Series.value_counts`][pdseriesvalue_counts]                       
@@ -163,11 +161,7 @@ unless support is explicitly mentioned.
 - [`pd.Series.sort_index`][pdseriessort_index]                           
 - [`pd.Series.explode`][pdseriesexplode]                                 
 - [`pd.Series.repeat`][pdseriesrepeat]                                   
-
-### Combining / comparing / joining / merging
-
-
-- [`pd.Series.append`][pdseriesappend]                                   
+                               
 
 ### Time series-related
 
@@ -187,8 +181,6 @@ unless support is explicitly mentioned.
 - [`pd.Series.dt.second`][pdseriesdtsecond]                              
 - [`pd.Series.dt.microsecond`][pdseriesdtmicrosecond]                    
 - [`pd.Series.dt.nanosecond`][pdseriesdtnanosecond]                      
-- [`pd.Series.dt.week`][pdseriesdtweek]                                  
-- [`pd.Series.dt.weekofyear`][pdseriesdtweekofyear]                      
 - [`pd.Series.dt.day_of_week`][pdseriesdtday_of_week]                    
 - [`pd.Series.dt.weekday`][pdseriesdtweekday]                            
 - [`pd.Series.dt.dayofyear`][pdseriesdtdayofyear]                        
