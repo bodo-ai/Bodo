@@ -93,11 +93,10 @@ jobs:
             if find /usr /lib /usr/local -name "libaws*" | grep -q .; then
               echo "Skipping aws-sdk-cpp, already installed"
             else
-              curl --output aws-sdk-cpp.1.11.472.tar.gz 'https://github.com/aws/aws-sdk-cpp/archive/refs/tags/1.11.472.tar.gz' -L
-              tar -zxvf aws-sdk-cpp.1.11.472.tar.gz -C .
+              curl --output aws-sdk-cpp-1.11.472.tar.gz 'https://github.com/aws/aws-sdk-cpp/archive/refs/tags/1.11.472.tar.gz' -L
+              tar -zxvf aws-sdk-cpp-1.11.472.tar.gz -C .
               mkdir aws-sdk-cpp-build
-              ls
-              (cd aws-sdk-cpp-build; cmake ../aws-sdk-cpp.1.11.472 \
+              (cd aws-sdk-cpp-build; cmake ../aws-sdk-cpp-1.11.472 \
                 -DCMAKE_BUILD_TYPE=Release \
                 -DBUILD_ONLY="core;s3";
                 cmake --build . --config=Release; \
