@@ -100,8 +100,6 @@ jobs:
                 -DBUILD_ONLY="core;s3" \
                 -DENABLE_TESTING=OFF \ 
                 -DAUTORUN_UNIT_TESTS=OFF \
-                -DCMAKE_PREFIX_PATH=/usr/local/ \ 
-                -DCMAKE_INSTALL_PREFIX=/usr/local/;
                 cmake --build . --config=Release; \
                 cmake --install . --config=Release)
             fi
