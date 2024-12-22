@@ -97,7 +97,9 @@ jobs:
               mkdir aws-sdk-cpp/build 
               (cd aws-sdk-cpp/build; cmake .. \
                 -DCMAKE_BUILD_TYPE=Release \
-                -DBUILD_ONLY="core;s3";
+                -DBUILD_ONLY="core;s3" \
+                -DENABLE_TESTING=OFF \ 
+                -DAUTORUN_UNIT_TESTS=OFF;
                 cmake --build . --config=Release; \
                 cmake --install . --config=Release)
             fi
