@@ -99,7 +99,7 @@ message("Source dir of datasketches = ${datasketches_INSTALL_DIR}")
 find_package(Boost 1.85 REQUIRED json)
 include_directories(${Boost_INCLUDE_DIRS})
 # Add AWS SDK as a dependency
-find_package(aws-sdk-cpp REQUIRED COMPONENTS core s3)
+find_package(AWSSDK REQUIRED COMPONENTS core s3)
 
 
 # ---------------------------- Set CMake Options -----------------------------
