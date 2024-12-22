@@ -622,10 +622,9 @@ target_compile_options(
     "-Wall"
 )
 
-target_link_directories(ext PRIVATE ${PYARROW_LIB_DIR} "${Python_NumPy_INCLUDE_DIR}/../lib")
+target_link_directories(ext PRIVATE ${PYARROW_LIB_DIR} "${Python_NumPy_INCLUDE_DIR}/../lib" ${AWSSDK_LIB_DIR})
 
 target_include_directories(ext PRIVATE ${datasketches_INSTALL_DIR}/include/DataSketches)
-
 
 target_link_libraries(ext PRIVATE
   npymath
