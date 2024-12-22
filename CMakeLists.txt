@@ -622,8 +622,7 @@ target_compile_options(
     "-Wall"
 )
 
-target_link_directories(ext PRIVATE ${PYARROW_LIB_DIR} "${Python_NumPy_INCLUDE_DIR}/../lib" ${AWSSDK_LIB_DIR})
-cmake_print_variables(AWSSDK_LIB_DIR)
+target_link_directories(ext PRIVATE ${PYARROW_LIB_DIR} "${Python_NumPy_INCLUDE_DIR}/../lib")
 
 target_include_directories(ext PRIVATE ${datasketches_INSTALL_DIR}/include/DataSketches)
 
@@ -667,5 +666,5 @@ endif()
 
 
 set_target_properties(ext PROPERTIES CXX_CLANG_TIDY "${CLANG_TIDY_COMMAND}")
-add_dependencies(ext pyfs _hdfs tracing pyarrow_wrappers datasketches)
+add_dependencies(ext pyfs _hdfs tracing pyarrow_wrappers datasketches AWSSDK)
 install(TARGETS ext DESTINATION "bodo/")
