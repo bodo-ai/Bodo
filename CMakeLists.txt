@@ -636,7 +636,7 @@ target_link_libraries(ext PRIVATE
   arrow_dataset
   parquet
   fmt::fmt
-  ${AWS_SDK_LINK_LIBRARIES}
+  ${AWSSDK_LINK_LIBRARIES}
   ${Boost_LIBRARIES}
 )
 
