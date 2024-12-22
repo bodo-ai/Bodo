@@ -71,7 +71,7 @@ jobs:
             source ~/.bashrc
             # Global Tools
             pixi global install sccache
-            yum install -y libcurl-devel zlib-devel openssl-devel libzstd-devel cmake
+            yum install -y libcurl-devel zlib-devel openssl-devel libzstd-devel
           CIBW_BEFORE_BUILD: |
             # Delete mpi4py folder if it exists so correct version gets copied in
             rm -r {package}/bodo/mpi4py || true
@@ -93,7 +93,7 @@ jobs:
             if find /usr /lib /usr/local -name "libaws*" | grep -q .; then
               echo "Skipping aws-sdk-cpp, already installed"
             else
-              curl --output aws-sdk-cpp.1.11.472.tar.gz https://github.com/aws/aws-sdk-cpp/archive/refs/tags/1.11.472.tar.gz
+              curl --output aws-sdk-cpp.1.11.472.tar.gz 'https://github.com/aws/aws-sdk-cpp/archive/refs/tags/1.11.472.tar.gz' -L
               tar -zxvf aws-sdk-cpp.1.11.472.tar.gz -C .
               mkdir aws-sdk-cpp-build
               (cd aws-sdk-cpp-build; cmake ../aws-sdk-cpp.1.11.472 \
