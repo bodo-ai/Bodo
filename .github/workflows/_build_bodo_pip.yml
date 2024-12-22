@@ -94,7 +94,8 @@ jobs:
               echo "Skipping aws-sdk-cpp, already installed"
             else
               git clone --branch 1.11.472 --depth 1 --recurse-submodules --shallow-submodules https://github.com/aws/aws-sdk-cpp
-              (cd aws-sdk-cpp-build; cmake ../aws-sdk-cpp \
+              mkdir aws-sdk-cpp/build 
+              (cd aws-sdk-cpp/build; cmake .. \
                 -DCMAKE_BUILD_TYPE=Release \
                 -DBUILD_ONLY="core;s3";
                 cmake --build . --config=Release; \
