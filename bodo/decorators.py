@@ -12,6 +12,8 @@ import numba
 from numba.core import cpu
 from numba.core.options import _mapping
 from numba.core.targetconfig import Option, TargetConfig
+from numba.core.typing.templates import signature
+from numba.extending import models, register_model
 
 import bodo
 
@@ -454,3 +456,47 @@ def _init_extensions():
 
     if need_refresh:
         numba.core.registry.cpu_target.target_context.refresh()
+
+
+class JITWrapperDispatcher:
+    def __init__(self, py_func, return_type):
+        self.py_func = py_func
+        self.return_type = return_type
+
+    def __call__(self, *args, **kwargs):
+        return self.py_func(*args, **kwargs)
+
+    @property
+    def _numba_type_(self):
+        return JITWrapperDispatcherType(self)
+
+
+def jit_wrapper(return_type):
+    def wrapper(func):
+        return JITWrapperDispatcher(func, return_type)
+
+    return wrapper
+
+
+class JITWrapperDispatcherType(numba.types.Callable, numba.types.Opaque):
+    def __init__(self, dispatcher):
+        self.dispatcher = dispatcher
+        super().__init__(name=f"JITWrapperDispatcherType({dispatcher})")
+
+    def get_call_type(self, context, args, kws):
+        pysig = numba.core.utils.pysignature(self.dispatcher.py_func)
+        folded_args = bodo.utils.transform.fold_argument_types(pysig, args, kws)
+        return signature(self.dispatcher.return_type, *folded_args).replace(pysig=pysig)
+
+    def get_call_signatures(self):
+        pass
+
+    def get_impl_key(self, sig):
+        pass
+
+    @property
+    def key(self):
+        return self.dispatcher.py_func, self.dispatcher.return_type
+
+
+register_model(JITWrapperDispatcherType)(models.OpaqueModel)
