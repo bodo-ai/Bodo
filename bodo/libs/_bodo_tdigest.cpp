@@ -20,6 +20,7 @@
 
 #include "_bodo_common.h"
 #include "_distributed.h"
+#include "_mpi.h"
 
 namespace {
 
@@ -213,15 +214,15 @@ class TDigest::TDigestImpl {
         std::vector<double> each_weight(n_pes);
         std::vector<double> each_min(n_pes);
         std::vector<double> each_max(n_pes);
-        std::vector<int32_t> lengths(n_pes);
+        std::vector<int64_t> lengths(n_pes);
 
-        int length = tdigests_[current_].size();
+        int64_t length = tdigests_[current_].size();
 
         c_gather_scalar(&total_weight_, each_weight.data(),
                         Bodo_CTypes::FLOAT64, false, 0);
         c_gather_scalar(&min_, each_min.data(), Bodo_CTypes::FLOAT64, false, 0);
         c_gather_scalar(&max_, each_max.data(), Bodo_CTypes::FLOAT64, false, 0);
-        c_gather_scalar(&length, lengths.data(), Bodo_CTypes::INT32, false, 0);
+        c_gather_scalar(&length, lengths.data(), Bodo_CTypes::INT64, false, 0);
 
         // Create a vector of the means of each centroid on the current rank
         // and the weights of each centroid on the current rank
@@ -233,20 +234,21 @@ class TDigest::TDigestImpl {
         }
 
         // Calculate the displacements based on the lengths of each rank.
-        int total_length = 0;
-        for (int l : lengths) {
+        int64_t total_length = 0;
+        for (int64_t l : lengths) {
             total_length += l;
         }
-        std::vector<int32_t> displs(n_pes);
+        std::vector<int64_t> displs(n_pes);
         calc_disp(displs, lengths);
+        MPI_Aint* displs_ptr = reinterpret_cast<MPI_Aint*>(displs.data());
 
         // Gather the means/weights from each rank into vectors on the root rank
         std::vector<double> means(total_length);
         std::vector<double> weights(total_length);
         c_gatherv(local_means.data(), length, means.data(), lengths.data(),
-                  displs.data(), Bodo_CTypes::FLOAT64, false, 0);
+                  displs_ptr, Bodo_CTypes::FLOAT64, false, 0);
         c_gatherv(local_weights.data(), length, weights.data(), lengths.data(),
-                  displs.data(), Bodo_CTypes::FLOAT64, false, 0);
+                  displs_ptr, Bodo_CTypes::FLOAT64, false, 0);
 
         // Since the merger only has to occur on the root rank, all other ranks
         // can remain unchanged after sending their data to the root.
