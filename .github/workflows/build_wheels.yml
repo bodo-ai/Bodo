@@ -89,7 +89,7 @@ jobs:
           assert f() == 6' && \
 
           # Check that only expected dylibs are included in the wheel
-          LIB_WHITELIST="^(libcom_err|libcrypto|libcurl|libfftw3_mpi|libfftw3f_mpi|libfftw3|libfftw3f|libgssapi_krb5|libhdf5|libk5crypto|libkeyutils|libkrb5support|libkrb5|libnghttp2|libs2n|libssh2|libssl|libsz|libzstd|libaws-.*|libboost_container|libboost_json|libbrotli|libbrotli.*)-.*\.so(\.[0-9]+)*"
+          LIB_WHITELIST="^(libcom_err|libcrypto|libcurl|libfftw3_mpi|libfftw3f_mpi|libfftw3|libfftw3f|libgssapi_krb5|libhdf5|libk5crypto|libkeyutils|libkrb5support|libkrb5|libnghttp2|libs2n|libssh2|libssl|libsz|libzstd|libaws-.*|libboost_container|libboost_json|libbrotli|libbrotli.*|libcrypt|libidn2|liblber-2|libpcre2|libpsl|libsasl2|libselinux|libssh|libunistring)-.*\.so(\.[0-9]+)*"
           LIBS_DIR="$(pip show  bodo | grep Location | awk -F 'Location: ' '{print $2}')/bodo.libs" && \
           for file in "$LIBS_DIR"/*; do
               if [[ ! $(basename "$file") =~ $LIB_WHITELIST ]]; then
