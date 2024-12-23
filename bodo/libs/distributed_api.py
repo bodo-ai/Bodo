@@ -2310,7 +2310,7 @@ def scatterv_impl_jit(
             displs = bodo.ir.join.calc_disp(send_counts)
 
             # compute send counts for items
-            send_counts_item = np.empty(n_pes, np.int32)
+            send_counts_item = np.empty(n_pes, np.int64)
             if is_sender:
                 curr_item = 0
                 for i in range(n_pes):
