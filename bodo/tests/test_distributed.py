@@ -2364,6 +2364,7 @@ def get_random_int64index(n):
             .astype(dtype=pd.ArrowDtype(pa.large_list(pa.large_string())))
             .values,
             marks=pytest.mark.slow,
+            id="array_item_array_string",
         ),
         pytest.param(
             pd.Series(

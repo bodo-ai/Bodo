@@ -123,9 +123,9 @@ static void c_gatherv(void* send_data, int sendcount, void* recv_data,
                       int* recv_counts, int* displs, int typ_enum,
                       bool allgather, int root,
                       int64_t comm_ptr = 0) __UNUSED__;
-static void c_scatterv(void* send_data, int* sendcounts, int* displs,
-                       void* recv_data, int recv_count, int typ_enum, int root,
-                       int64_t comm_ptr) __UNUSED__;
+static void c_scatterv(void* send_data, MPI_Count* sendcounts, MPI_Aint* displs,
+                       void* recv_data, MPI_Count recv_count, int typ_enum,
+                       int root, int64_t comm_ptr) __UNUSED__;
 static void c_allgatherv(void* send_data, int sendcount, void* recv_data,
                          int* recv_counts, int* displs,
                          int typ_enum) __UNUSED__;
@@ -1022,17 +1022,18 @@ static void c_allgatherv(void* send_data, int sendcount, void* recv_data,
     return;
 }
 
-static void c_scatterv(void* send_data, int* sendcounts, int* displs,
-                       void* recv_data, int recv_count, int typ_enum, int root,
-                       int64_t comm_ptr) {
+static void c_scatterv(void* send_data, MPI_Count* sendcounts, MPI_Aint* displs,
+                       void* recv_data, MPI_Count recv_count, int typ_enum,
+                       int root, int64_t comm_ptr) {
+    static_assert(sizeof(MPI_Count) == sizeof(uint64_t));
     MPI_Datatype mpi_typ = get_MPI_typ(typ_enum);
     MPI_Comm comm = MPI_COMM_WORLD;
     // Use provided comm pointer if available (0 means not provided)
     if (comm_ptr != 0) {
         comm = (*reinterpret_cast<MPI_Comm*>(comm_ptr));
     }
-    CHECK_MPI(MPI_Scatterv(send_data, sendcounts, displs, mpi_typ, recv_data,
-                           recv_count, mpi_typ, root, comm),
+    CHECK_MPI(MPI_Scatterv_c(send_data, sendcounts, displs, mpi_typ, recv_data,
+                             recv_count, mpi_typ, root, comm),
               "_distributed.h::c_scatterv: MPI error on MPI_Scatterv:");
 }
 
