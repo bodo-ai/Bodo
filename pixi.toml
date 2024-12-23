@@ -234,6 +234,11 @@ gcc_linux-64 = "*"
 gxx_linux-64 = "*"
 libstdcxx = "<13.1"
 libstdcxx-ng = "<13.1"
+[feature.pip.target.linux-aarch64.dependencies]
+gcc_linux-aarch64 = "*"
+gxx_linux-aarch64 = "*"
+libstdcxx = "<13.1"
+libstdcxx-ng = "<13.1"
 [feature.pip.target.osx-64.dependencies]
 clang_osx-64 = "=19"
 clangxx_osx-64 = "=19"
