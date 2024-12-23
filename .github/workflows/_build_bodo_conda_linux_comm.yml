@@ -18,8 +18,8 @@ on:
 
 jobs:
   build-bodo:
-    runs-on: ${{ inputs.arm == 'true' && 'self-arm-medium' || 'ubuntu-latest' }}
-    container: ${{ inputs.arm == 'true' && 'condaforge/linux-anvil-aarch64:alma8' || 'condaforge/linux-anvil-x86_64:alma8' }}
+    runs-on: ${{ inputs.arm && 'self-arm-medium' || 'ubuntu-latest' }}
+    container: ${{ inputs.arm && 'condaforge/linux-anvil-aarch64:alma8' || 'condaforge/linux-anvil-x86_64:alma8' }}
     permissions:
       id-token: write
       contents: read
