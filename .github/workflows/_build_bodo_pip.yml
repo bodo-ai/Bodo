@@ -7,23 +7,21 @@ on:
         description: 'Operating System to Build On/For'
         type: string
         required: true
+      name:
+        description: 'Name of the OS to Build For'
+        type: string
+        required: true
       bodo_version:
         description: 'Bodo Version to Build'
         type: string
         required: true
-
-# Recommended with setup-micromamba
-# https://github.com/mamba-org/setup-micromamba#about-login-shells
-defaults:
-  run:
-    shell: bash -leo pipefail {0}
 
 jobs:
   build_bodo_wheels:
     permissions:
       id-token: write
       contents: read
-    name: Build Bodo Wheels for ${{ inputs.os }}
+    name: Build Bodo Wheels for ${{ inputs.name }}
     runs-on: ${{ inputs.os }}
 
     steps:
@@ -38,7 +36,7 @@ jobs:
 
       # https://github.com/actions/runner-images/issues/10624
       - name: Fix PATH in .bashrc
-        if: inputs.os == 'macos-14'
+        if: inputs.name == 'macos-arm'
         run: |
           sed -i '' '/; export PATH;/d' ~/.bashrc
           echo 'export PATH="/opt/homebrew/bin:/opt/homebrew/sbin:$PATH"' >> ~/.bashrc
@@ -82,7 +80,7 @@ jobs:
             SCCACHE_REGION=us-east-2
             SCCACHE_S3_USE_SSL=true
             SCCACHE_S3_SERVER_SIDE_ENCRYPTION=true
-            MACOSX_DEPLOYMENT_TARGET=${{ inputs.os == 'macos-14' && '12.0' || '10.15' }}
+            MACOSX_DEPLOYMENT_TARGET=${{ inputs.name == 'macos-arm' && '12.0' || '10.15' }}
             BODO_VENDOR_MPICH=1
             PATH=$HOME/.pixi/bin:$PATH
             CONDA_PREFIX=$(pwd)/.pixi/envs/pip-cpp
@@ -128,5 +126,5 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: cibw-wheels-${{ inputs.os }}
+          name: cibw-wheels-${{ inputs.name }}
           path: ./wheelhouse/*.whl

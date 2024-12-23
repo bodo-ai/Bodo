@@ -11,11 +11,15 @@ on:
         required: false
         type: boolean
         default: false
+      arm:
+        description: 'Is this an ARM build'
+        required: true
+        type: boolean
 
 jobs:
   build-bodo:
-    runs-on: ubuntu-latest
-    container: condaforge/linux-anvil-alma-x86_64:8
+    runs-on: ${{ inputs.arm && 'self-arm-medium' || 'ubuntu-latest' }}
+    container: ${{ inputs.arm && 'condaforge/linux-anvil-aarch64:alma8' || 'condaforge/linux-anvil-x86_64:alma8' }}
     permissions:
       id-token: write
       contents: read

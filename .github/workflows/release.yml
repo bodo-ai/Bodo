@@ -22,10 +22,12 @@ jobs:
       fail-fast: false
       matrix:
         python-version: ['3.12', '3.11', '3.10']
+        arm: [false, true]
     uses: ./.github/workflows/_build_bodo_conda_linux_comm.yml
     with:
       python-version: ${{ matrix.python-version }}
       is-release: ${{ github.event_name == 'release' }}
+      arm: ${{ matrix.arm }}
     secrets: inherit
   bodo-conda-mac:
     strategy:
@@ -66,4 +68,4 @@ jobs:
       is-release: ${{ github.event_name == 'release' }}
     secrets: inherit
 
-  # TODO: Include E2E tests
+  # TODO: Include E2E tests, and AMI
