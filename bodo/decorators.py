@@ -506,17 +506,31 @@ class JITWrapperDispatcherType(numba.types.Callable, numba.types.Opaque):
                 arg_obj = pyapi.from_native_value(arg_type, arg, env_manager)
                 arg_objs.append(arg_obj)
 
+            # Output handling similar to:
+            # https://github.com/numba/numba/blob/53e976f1b0c6683933fa0a93738362914bffc1cd/numba/core/lowering.py#L963
+
             out_obj = c.pyapi.call_function_objargs(func_obj, arg_objs)
-            for arg_obj in arg_objs:
-                pyapi.decref(arg_obj)
 
             # Check for user function exceptions
             with builder.if_then(c.pyapi.c_api_error()):
                 context.call_conv.return_exc(builder)
 
-            out = pyapi.to_native_value(sig.return_type, out_obj).value
+            out = pyapi.to_native_value(sig.return_type, out_obj)
+
+            # Release objs
             pyapi.decref(out_obj)
-            return out
+            for arg_obj in arg_objs:
+                pyapi.decref(arg_obj)
+
+            # cleanup output
+            if callable(out.cleanup):
+                out.cleanup()
+
+            # Error during unboxing
+            with builder.if_then(out.is_error):
+                context.call_conv.return_exc(builder)
+
+            return out.value
 
         self._overload_cache[folded_args] = impl
         lower_builtin(impl, *folded_args)(impl)
