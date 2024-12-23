@@ -47,7 +47,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: self-arm-medium
+          - os: ubuntu-latest  # Through emulation
             name: linux-aarch64
           - os: macos-13
             name: macos-x86

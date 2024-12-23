@@ -34,6 +34,13 @@ jobs:
           role-skip-session-tagging: true
       - uses: actions/checkout@v4
 
+      # https://github.com/actions/setup-python/blob/main/docs/advanced-usage.md#using-setup-python-with-a-self-hosted-runner
+      - name: Setup Emulation for Arm Builds
+        if: inputs.name == 'linux-arm'
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
       # https://github.com/actions/runner-images/issues/10624
       - name: Fix PATH in .bashrc
         if: inputs.name == 'macos-arm'
