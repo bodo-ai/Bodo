@@ -41,6 +41,7 @@ from numba.core.untyped_passes import (
 )
 
 import bodo
+import bodo.decorators
 import bodo.hiframes.dataframe_indexing  # noqa # side effect: initialize Numba extensions
 import bodo.hiframes.datetime_datetime_ext  # noqa # side effect: initialize Numba extensions
 import bodo.hiframes.datetime_timedelta_ext  # noqa # side effect: initialize Numba extensions
@@ -925,6 +926,11 @@ def udf_jit(signature_or_function=None, **options):
     the UDF to make sure nested calls are inlined and not distributed. Otherwise,
     generated barriers cause hangs. see: test_df_apply_func_case2
     """
+
+    # jit_wrapper functions don't need to be compiled for UDFs
+    if isinstance(signature_or_function, bodo.decorators.JITWrapperDispatcher):
+        return signature_or_function
+
     parallel = {
         "comprehension": True,
         "setitem": False,
