@@ -36,7 +36,7 @@ jobs:
 
       # https://github.com/actions/setup-python/blob/main/docs/advanced-usage.md#using-setup-python-with-a-self-hosted-runner
       - name: Setup Emulation for Arm Builds
-        if: inputs.name == 'linux-arm'
+        if: inputs.name == 'linux'
         uses: docker/setup-qemu-action@v3
         with:
           platforms: arm64
