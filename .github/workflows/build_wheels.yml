@@ -6,11 +6,11 @@ on:
     types: [published]
   schedule:
     - cron: '45 21 * * 2,4'    # 9:45PM EST Tue, Thu
-  pull_request:
-    paths:
-      - 'pixi.lock'
-      - '.github/workflows/_build_*_pip.yml'
-      - '.github/workflows/build_wheels.yml'
+  # pull_request:
+  #   paths:
+  #     - 'pixi.lock'
+  #     - '.github/workflows/_build_*_pip.yml'
+  #     - '.github/workflows/build_wheels.yml'
 
 jobs:
   get_version:
@@ -71,7 +71,7 @@ jobs:
       - uses: actions/download-artifact@v4
         id: download-artifact
         with:
-          pattern: cibw-wheels-ubuntu-*
+          pattern: cibw-wheels-linux-x86
           path: .
       - uses: actions/setup-python@v5
         with:
@@ -169,7 +169,7 @@ jobs:
       - uses: actions/download-artifact@v4
         id: download-bodo-artifact
         with:
-          pattern: cibw-wheels-ubuntu-*
+          pattern: cibw-wheels-linux-x86
           path: .
       - uses: actions/download-artifact@v4
         id: download-bodosql-artifact
