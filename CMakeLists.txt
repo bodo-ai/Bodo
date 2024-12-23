@@ -635,6 +635,7 @@ target_link_libraries(ext PRIVATE
   arrow_dataset
   parquet
   fmt::fmt
+  zstd
   ${AWSSDK_LINK_LIBRARIES}
 )
 
