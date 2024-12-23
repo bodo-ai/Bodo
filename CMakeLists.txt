@@ -430,7 +430,6 @@ set(sources_list
   "bodo/io/_csv_json_writer.cpp"
   "bodo/io/_fs_io.cpp"
   "bodo/io/_fsspec_reader.cpp"
-  "bodo/io/_hdf5.cpp"
   "bodo/io/_hdfs_reader.cpp"
   "bodo/io/_io.cpp"
   "bodo/io/_s3_reader.cpp"
@@ -622,6 +621,14 @@ target_compile_options(
     "-Wall"
 )
 
+set(NO_HDF5 "$ENV{NO_HDF5}")
+if(NO_HDF5)
+  target_compile_definitions(ext PRIVATE "NO_HDF5=1")
+else()
+  target_link_libraries(ext PRIVATE hdf5)
+  set(sources_list "${sources_list}" "bodo/io/_hdf5_reader.cpp")
+endif()
+
 target_link_directories(ext PRIVATE ${PYARROW_LIB_DIR} "${Python_NumPy_INCLUDE_DIR}/../lib")
 
 target_include_directories(ext PRIVATE ${datasketches_INSTALL_DIR}/include/DataSketches)
@@ -639,12 +646,6 @@ target_link_libraries(ext PRIVATE
   ${Boost_LIBRARIES}
 )
 
-set(NO_HDF5 "$ENV{NO_HDF5}")
-if(NO_HDF5)
-  target_compile_definitions(ext PRIVATE "NO_HDF5=1")
-else()
-  target_link_libraries(ext PRIVATE hdf5)
-endif()
 
 set(IS_PLATFORM "$ENV{IS_BODO_PLATFORM}")
 cmake_print_variables(IS_PLATFORM)
