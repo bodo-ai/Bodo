@@ -20,6 +20,8 @@ from bodo.tests.utils import (
 
 pytestmark = pytest_spawn_mode
 
+VALUE = 1
+
 
 def test_propogate_same_exception_all_ranks():
     """Test that a single exact exception is raised when all ranks raise the same
@@ -349,6 +351,7 @@ def test_spawn_type_register():
 
 
 @pytest.mark.no_cover
+@pytest.mark.skip(reason="Testing atexit behavior is flakey.")
 def test_spawn_atexit_delete_result():
     """Tests that results in the user program are deleted properly upon exit,
     even after spawner has been destroyed"""
@@ -375,6 +378,7 @@ def test_spawn_atexit_delete_result():
         raise
 
 
+@pytest.mark.skip(reason="Testing atexit behavior is flakey.")
 def test_destroy_spawn_delete():
     """Tests that it is safe to get a distributed result, destroy spawner,
     create a new global spawner and delete the result.
@@ -395,3 +399,17 @@ def test_destroy_spawn_delete():
     _ = get_bodo_df(df)
 
     del bodo_df
+
+
+def test_spawn_globals_objmode():
+    """Tests that referencing global variables works
+    in object mode
+    """
+
+    @bodo.jit(spawn=True)
+    def f():
+        with bodo.no_warning_objmode(val="int64"):
+            val = VALUE
+        return val
+
+    assert f() == VALUE

@@ -128,10 +128,6 @@ class LazyArrowExtensionArray(
         Delete the result from workers if it exists.
         """
         if (r_id := self._md_result_id) is not None:
-            debug_msg(
-                self.logger,
-                f"[LazyArrowExtensionArray] Asking workers to delete result '{r_id}'",
-            )
             assert self._del_func is not None
             self._del_func(r_id)
             self._del_func = None

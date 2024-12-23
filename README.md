@@ -1,3 +1,7 @@
+<!--
+NOTE: the example in this file is covered by tests in bodo/tests/test_quickstart_docs.py. Any changes to the examples in this file should also update the corresponding unit test.
+ -->
+
 ![Logo](Assets/bodo.png)
 
 <h3 align="center">
@@ -65,7 +69,7 @@ Bodo can be installed using Pip or Conda:
 pip install -U bodo
 ```
 
-or 
+or
 
 ```bash
 conda create -n Bodo python=3.12 -c conda-forge
@@ -114,3 +118,5 @@ Please read our latest [project contribution guide](CONTRIBUTING.md).
 ## Getting involved
 
 You can join our community and collaborate with other contributors by joining our [Slack channel](https://bodocommunity.slack.com/join/shared_invite/zt-qwdc8fad-6rZ8a1RmkkJ6eOX1X__knA#/shared-invite/email) – we’re excited to hear your ideas and help you get started!
+
+[![codecov](https://codecov.io/github/bodo-ai/Bodo/graph/badge.svg?token=zYHQy0R9ck)](https://codecov.io/github/bodo-ai/Bodo)

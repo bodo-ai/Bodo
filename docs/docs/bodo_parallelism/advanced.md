@@ -175,7 +175,7 @@ to as *concatenation reduction*. For example:
 def impl(n):
    df = pd.DataFrame()
    for i in bodo.prange(n):
-      df = df.append(pd.DataFrame({"A": np.arange(i)}))
+      df = pd.concat([df, pd.DataFrame({"A": np.arange(i)})], ignore_index=True)
 
    return df
 ```
@@ -190,7 +190,7 @@ def impl():
    params = bodo.scatterv(params)
    df = pd.DataFrame()
    for i in bodo.prange(len(params)):
-      df = df.append(get_result(params[i]))
+      df = pd.concat([df, get_result(params[i])], ignore_index=True)
 
    return df
 ```

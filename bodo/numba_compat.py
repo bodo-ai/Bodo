@@ -23,6 +23,7 @@ from contextlib import ExitStack
 import numba
 import numba.core.boxing
 import numba.core.dispatcher
+import numba.core.funcdesc
 import numba.core.inline_closurecall
 import numba.core.lowering
 import numba.core.runtime.context
@@ -68,6 +69,7 @@ from numba.core.typing.typeof import Purpose, typeof
 from numba.experimental.jitclass import base as jitclass_base
 from numba.experimental.jitclass import decorators as jitclass_decorators
 from numba.extending import NativeValue, lower_builtin, typeof_impl
+from numba.core.utils import _dynamic_modname
 from numba.parfors.parfor import get_expr_args
 
 from bodo.utils.python_310_bytecode_pass import (
@@ -5542,7 +5544,7 @@ def _reduce_states(self):
         sigs = []
     else:
         sigs = [cr.signature for cr in self.overloads.values()]
-        
+
     return dict(
         uuid=str(self._uuid),
         py_func=self.py_func,
@@ -5561,7 +5563,7 @@ def _rebuild_dispatcher(cls, uuid, py_func, locals, targetoptions,
     Rebuild an Dispatcher instance after it was __reduce__'d.
 
     NOTE: part of ReduceMixin protocol
-    
+
     Bodo change: add pipeline_class argument.
     """
     try:
@@ -6764,7 +6766,7 @@ def _dict_rebuild(vals: dict, key_type: types.Type, value_type: types.Type):
     )
     d.update(vals)
     return d
-    
+
 
 def Dict__reduce__(self):
     """pickle Dict by converting data to regular dict"""
@@ -6774,3 +6776,74 @@ def Dict__reduce__(self):
 
 # Add pickling support to typed Dict
 numba.typed.Dict.__reduce__ = Dict__reduce__
+
+
+# Bodo change: use correct globals dict from the function when running object mode.
+@classmethod
+def _get_function_info(cls, func_ir, native):
+    """
+    Returns
+    -------
+    qualname, unique_name, modname, doc, args, kws, globals
+
+    ``unique_name`` must be a unique name.
+    """
+    func = func_ir.func_id.func
+    qualname = func_ir.func_id.func_qualname
+    # XXX to func_id
+    modname = func.__module__
+    doc = func.__doc__ or ''
+    args = tuple(func_ir.arg_names)
+    kws = ()        # TODO
+    global_dict = None if native else func_ir.func_id.func.__globals__
+
+    if modname is None:
+        # Dynamically generated function.
+        modname = _dynamic_modname
+        # Retain a reference to the dictionary of the function.
+        # This disables caching, serialization and pickling.
+        global_dict = func_ir.func_id.func.__globals__
+
+    unique_name = func_ir.func_id.unique_name
+
+    return qualname, unique_name, modname, doc, args, kws, global_dict
+
+
+if _check_numba_change:  # pragma: no cover
+    lines = inspect.getsource(numba.core.funcdesc.FunctionDescriptor._get_function_info)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "d566a13ed33839d4b6b478d3bd334c9894a580e4aaf3497bc5a59ecc82e3938a"
+    ):
+        warnings.warn("numba.core.funcdesc.FunctionDescriptor._get_function_info has changed")
+
+
+numba.core.funcdesc.FunctionDescriptor._get_function_info = _get_function_info
+
+
+@classmethod
+# Bodo change: Pass native to _get_function_info to detect when we are in the object mode path.
+def _from_python_function(cls, func_ir, typemap, restype,
+                            calltypes, native, mangler=None,
+                            inline=False, noalias=False, abi_tags=()):
+    (qualname, unique_name, modname, doc, args, kws, global_dict,
+        ) = cls._get_function_info(func_ir, native)
+
+    self = cls(native, modname, qualname, unique_name, doc,
+                typemap, restype, calltypes,
+                args, kws, mangler=mangler, inline=inline, noalias=noalias,
+                global_dict=global_dict, abi_tags=abi_tags,
+                uid=func_ir.func_id.unique_id)
+    return self
+
+
+if _check_numba_change:  # pragma: no cover
+    lines = inspect.getsource(numba.core.funcdesc.FunctionDescriptor._from_python_function)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "ee079a16f93f9d9818c84b11da7bc14bf3127c12c08f726b5d888b134c49dca8"
+    ):
+        warnings.warn("numba.core.funcdesc.FunctionDescriptor._from_python_function has changed")
+
+
+numba.core.funcdesc.FunctionDescriptor._from_python_function = _from_python_function

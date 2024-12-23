@@ -421,6 +421,26 @@ def test_slice(pandas_managers, head_df, collect_func):
     lam_sliced_twice_df = lam_sliced_df[10:30]
     assert lam_sliced_twice_df.equals(collect_func(0)["A0"][10:30])
 
+    # Slicing with negative indices (does not trigger a data fetch)
+    lam = lazy_manager(
+        [],
+        [],
+        result_id="abc",
+        nrows=40,
+        head=head_df._mgr,
+        collect_func=collect_func,
+        del_func=del_func,
+    )
+    lam_df: BodoDataFrame = BodoDataFrame.from_lazy_mgr(lam, head_df)
+    lam_sliced_head_df = lam_df.iloc[-38:-37]
+    assert lam_df._lazy
+    assert lam_sliced_head_df.equals(head_df[2:3])
+
+    # Trigger a fetch
+    lam_sliced_head_df = lam_df.iloc[-3:]
+    assert not lam_df._lazy
+    pd.testing.assert_frame_equal(lam_sliced_head_df, collect_func(0)[-3:])
+
 
 @pytest_mark_spawn_mode
 def test_parquet(collect_func):

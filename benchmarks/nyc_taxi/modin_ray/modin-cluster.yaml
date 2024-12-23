@@ -173,6 +173,7 @@ setup_commands:
     - conda activate modin && pip install -U fsspec>=2022.11.0 s3fs boto3 pyopenssl
     - echo "conda activate modin" >> ~/.bashrc
     - echo 'export MODIN_RAY_CLUSTER=True' >> ~/.bashrc
+    - echo 'conda list'
     
 # Custom commands that will be run on the head node after common setup.
 head_setup_commands: 
