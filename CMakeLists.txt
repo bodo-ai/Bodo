@@ -629,7 +629,6 @@ target_include_directories(ext PRIVATE ${datasketches_INSTALL_DIR}/include/DataS
 target_link_libraries(ext PRIVATE
   npymath
   mpi
-  hdf5
   arrow
   arrow_python
   arrow_dataset
@@ -639,6 +638,13 @@ target_link_libraries(ext PRIVATE
   ${AWSSDK_LINK_LIBRARIES}
   ${Boost_LIBRARIES}
 )
+
+set(NO_HDF5 "$ENV{NO_HDF5}")
+if(NO_HDF5)
+  target_compile_definitions(ext PRIVATE "NO_HDF5=1")
+else()
+  target_link_libraries(ext PRIVATE hdf5)
+endif()
 
 set(IS_PLATFORM "$ENV{IS_BODO_PLATFORM}")
 cmake_print_variables(IS_PLATFORM)

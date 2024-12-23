@@ -71,9 +71,7 @@ jobs:
             source ~/.bashrc
             # Global Tools
             pixi global install sccache
-            yum install –y epel-release
-            yum-config-manager --enable epel
-            yum install -y libcurl-devel zlib-devel openssl-devel libzstd-devel hdf5-devel
+            yum install -y libcurl-devel zlib-devel openssl-devel libzstd-devel
           CIBW_BEFORE_BUILD: |
             # Delete mpi4py folder if it exists so correct version gets copied in
             rm -r {package}/bodo/mpi4py || true
