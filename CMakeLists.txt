@@ -96,10 +96,10 @@ set(datasketches_INSTALL_DIR ${INSTALL_DIR})
 message("Source dir of datasketches = ${datasketches_INSTALL_DIR}")
 
 # Add boost as a dependency
-find_package(Boost 1.85 REQUIRED json)
+find_package(Boost 1.85 REQUIRED)
 include_directories(${Boost_INCLUDE_DIRS})
 # Add AWS SDK as a dependency
-find_package(AWSSDK REQUIRED COMPONENTS core s3)
+find_package(AWSSDK REQUIRED COMPONENTS core)
 
 
 # ---------------------------- Set CMake Options -----------------------------
@@ -636,7 +636,6 @@ target_link_libraries(ext PRIVATE
   parquet
   fmt::fmt
   ${AWSSDK_LINK_LIBRARIES}
-  ${Boost_LIBRARIES}
 )
 
 set(IS_PLATFORM "$ENV{IS_BODO_PLATFORM}")
