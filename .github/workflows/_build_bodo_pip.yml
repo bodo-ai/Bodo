@@ -98,10 +98,10 @@ jobs:
               (cd aws-sdk-cpp/build; cmake .. \
                 -DCMAKE_BUILD_TYPE=Release \
                 -DBUILD_ONLY="core;s3" \
-                -DCMAKE_PREFIX_PATH=/usr/local/ \ 
-                -DCMAKE_INSTALL_PREFIX=/usr/local/ \
                 -DENABLE_TESTING=OFF \ 
-                -DAUTORUN_UNIT_TESTS=OFF; \
+                -DAUTORUN_UNIT_TESTS=OFF \
+                -DCMAKE_PREFIX_PATH=/usr/local/ \ 
+                -DCMAKE_INSTALL_PREFIX=/usr/local/;
                 cmake --build . --config=Release; \
                 cmake --install . --config=Release)
             fi
