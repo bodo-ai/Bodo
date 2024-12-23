@@ -13,7 +13,7 @@ from numba.core import cpu
 from numba.core.options import _mapping
 from numba.core.targetconfig import Option, TargetConfig
 from numba.core.typing.templates import signature
-from numba.extending import models, register_model
+from numba.extending import lower_builtin, models, register_model
 
 import bodo
 
@@ -481,18 +481,46 @@ def jit_wrapper(return_type):
 class JITWrapperDispatcherType(numba.types.Callable, numba.types.Opaque):
     def __init__(self, dispatcher):
         self.dispatcher = dispatcher
+        self._overload_cache = {}
         super().__init__(name=f"JITWrapperDispatcherType({dispatcher})")
 
     def get_call_type(self, context, args, kws):
         pysig = numba.core.utils.pysignature(self.dispatcher.py_func)
         folded_args = bodo.utils.transform.fold_argument_types(pysig, args, kws)
+
+        def impl(context, builder, sig, args):
+            pyapi = context.get_python_api(builder)
+            env_manager = context.get_env_manager(builder)
+            c = numba.core.pythonapi._BoxContext(context, builder, pyapi, env_manager)
+
+            func_obj = pyapi.unserialize(
+                pyapi.serialize_object(self.dispatcher.py_func)
+            )
+
+            arg_objs = []
+            for arg_type, arg in zip(sig.args, args):
+                c.context.nrt.incref(c.builder, arg_type, arg)
+                arg_obj = pyapi.from_native_value(arg_type, arg, env_manager)
+                arg_objs.append(arg_obj)
+
+            out_obj = c.pyapi.call_function_objargs(func_obj, arg_objs)
+            for arg_obj in arg_objs:
+                pyapi.decref(arg_obj)
+
+            out = pyapi.to_native_value(sig.return_type, out_obj).value
+            pyapi.decref(out_obj)
+            return out
+
+        self._overload_cache[folded_args] = impl
+        lower_builtin(impl, *folded_args)(impl)
+
         return signature(self.dispatcher.return_type, *folded_args).replace(pysig=pysig)
 
     def get_call_signatures(self):
         pass
 
     def get_impl_key(self, sig):
-        pass
+        return self._overload_cache[sig.args]
 
     @property
     def key(self):
