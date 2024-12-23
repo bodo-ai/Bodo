@@ -71,7 +71,11 @@ jobs:
             source ~/.bashrc
             # Global Tools
             pixi global install sccache
+            # Install dependencies available on package manager
             yum install -y libcurl-devel zlib-devel openssl-devel libzstd-devel
+            # Install mpich for mpi.h needed by mpi4py
+            MPICH_VERSION=$(/opt/python/cp312-cp312/bin/python -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["tool"]["scikit-build"]["cmake"]["define"]["MPICH_VERSION"])')
+            pip install mpich=="$MPICH_VERSION" -i https://pypi.anaconda.org/mpi4py/simple --default-timeout=100
             # Install boost
             if find /usr /lib /usr/local -name "libboost*" | grep -q .; then
               echo "Skipping boost, already installed"
@@ -102,9 +106,6 @@ jobs:
             rm -r {package}/bodo/mpi4py || true
             rm -rf {package}/build
             rm -f {package}/mpich.whl
-            # Install mpich for mpi.h needed by mpi4py
-            MPICH_VERSION=$(/opt/python/cp312-cp312/bin/python -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["tool"]["scikit-build"]["cmake"]["define"]["MPICH_VERSION"])')
-            pip install mpich=="$MPICH_VERSION" -i https://pypi.anaconda.org/mpi4py/simple --default-timeout=100
           CIBW_ENVIRONMENT: >-
             DISABLE_CCACHE=1
             SCCACHE_BUCKET=engine-codebuild-cache
