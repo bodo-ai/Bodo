@@ -72,14 +72,6 @@ jobs:
             # Global Tools
             pixi global install sccache
             yum install -y libcurl-devel zlib-devel openssl-devel libzstd-devel
-          CIBW_BEFORE_BUILD: |
-            # Delete mpi4py folder if it exists so correct version gets copied in
-            rm -r {package}/bodo/mpi4py || true
-            rm -rf {package}/build
-            rm -f {package}/mpich.whl
-            # Install mpich for mpi.h needed by mpi4py
-            MPICH_VERSION=$(/opt/python/cp312-cp312/bin/python -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["tool"]["scikit-build"]["cmake"]["define"]["MPICH_VERSION"])')
-            pip install mpich=="$MPICH_VERSION" -i https://pypi.anaconda.org/mpi4py/simple --default-timeout=100
             # Install boost
             if find /usr /lib /usr/local -name "libboost*" | grep -q .; then
               echo "Skipping boost, already installed"
@@ -105,6 +97,14 @@ jobs:
                 cmake --build . --config=Release; \
                 cmake --install . --config=Release)
             fi
+          CIBW_BEFORE_BUILD: |
+            # Delete mpi4py folder if it exists so correct version gets copied in
+            rm -r {package}/bodo/mpi4py || true
+            rm -rf {package}/build
+            rm -f {package}/mpich.whl
+            # Install mpich for mpi.h needed by mpi4py
+            MPICH_VERSION=$(/opt/python/cp312-cp312/bin/python -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["tool"]["scikit-build"]["cmake"]["define"]["MPICH_VERSION"])')
+            pip install mpich=="$MPICH_VERSION" -i https://pypi.anaconda.org/mpi4py/simple --default-timeout=100
           CIBW_ENVIRONMENT: >-
             DISABLE_CCACHE=1
             SCCACHE_BUCKET=engine-codebuild-cache
@@ -126,6 +126,7 @@ jobs:
             BODO_VENDOR_MPICH=1
             CONDA_PREFIX=""
             SETUPTOOLS_SCM_PRETEND_VERSION=${{ inputs.bodo_version }}
+            NO_HDF5=1
           CIBW_ENVIRONMENT_PASS_LINUX: >
             AWS_ACCESS_KEY_ID
             AWS_SECRET_ACCESS_KEY
