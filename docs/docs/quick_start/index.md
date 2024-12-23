@@ -28,7 +28,7 @@ This guide will walk you through the process of running a simple Python code usi
 
 ---
 
-## [Cloud Platform Quick Start][bodoplatformquickstart]
+## [Bodo Platform Quick Start][bodoplatformquickstart]
 
 This guide provides a walkthrough of the Bodo subscription process through [AWS Marketplace](https://aws.amazon.com/marketplace/pp/B08NY29SMQ){target="blank"}
 as well as Bodo platform set up process for your AWS account.
