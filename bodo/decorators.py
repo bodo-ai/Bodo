@@ -510,6 +510,10 @@ class JITWrapperDispatcherType(numba.types.Callable, numba.types.Opaque):
             for arg_obj in arg_objs:
                 pyapi.decref(arg_obj)
 
+            # Check for user function exceptions
+            with builder.if_then(c.pyapi.c_api_error()):
+                context.call_conv.return_exc(builder)
+
             out = pyapi.to_native_value(sig.return_type, out_obj).value
             pyapi.decref(out_obj)
             return out
