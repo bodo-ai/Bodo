@@ -462,6 +462,8 @@ class JITWrapperDispatcher:
     def __init__(self, py_func, return_type):
         self.py_func = py_func
         self.return_type = return_type
+        self.__name__ = py_func.__name__
+        self.__qualname__ = py_func.__qualname__
 
     def __call__(self, *args, **kwargs):
         return self.py_func(*args, **kwargs)
