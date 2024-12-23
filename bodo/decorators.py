@@ -482,6 +482,7 @@ class JITWrapperDispatcherType(numba.types.Callable, numba.types.Opaque):
     def __init__(self, dispatcher):
         self.dispatcher = dispatcher
         self._overload_cache = {}
+        self._sigs = []
         super().__init__(name=f"JITWrapperDispatcherType({dispatcher})")
 
     def get_call_type(self, context, args, kws):
@@ -514,10 +515,14 @@ class JITWrapperDispatcherType(numba.types.Callable, numba.types.Opaque):
         self._overload_cache[folded_args] = impl
         lower_builtin(impl, *folded_args)(impl)
 
-        return signature(self.dispatcher.return_type, *folded_args).replace(pysig=pysig)
+        out_sig = signature(self.dispatcher.return_type, *folded_args).replace(
+            pysig=pysig
+        )
+        self._sigs.append(out_sig)
+        return out_sig
 
     def get_call_signatures(self):
-        pass
+        return self._sigs, True
 
     def get_impl_key(self, sig):
         return self._overload_cache[sig.args]
