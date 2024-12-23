@@ -40,7 +40,6 @@ jobs:
     secrets: inherit
 
   build_bodo_macos_wheels:
-    if: false
     uses: ./.github/workflows/_build_bodo_pip.yml
     needs: [get_version]
     strategy:
