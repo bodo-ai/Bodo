@@ -22,7 +22,7 @@ on:
         default: false
 env:
   TEST_TAG: bodoai/test_release_image:test
-  LATEST_TAG: bodoai/bodoai_image:latest
+  LATEST_TAG: bodoai/bodo_example:latest
 
 jobs:
 
