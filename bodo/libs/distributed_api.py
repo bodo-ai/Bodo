@@ -577,7 +577,7 @@ c_gatherv = types.ExternalFunction(
     "c_gatherv",
     types.void(
         types.voidptr,
-        types.int32,
+        types.int64,
         types.voidptr,
         types.voidptr,
         types.voidptr,
