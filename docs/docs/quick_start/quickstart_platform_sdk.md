@@ -159,6 +159,6 @@ print(result)
 
 
 !!! seealso "See Also"
- * [BodoSDK Guide](../../guides/using_bodo_platform/bodo_platform_sdk_guide)
- * [BodoSDK Reference](../../api_docs/platform_sdk)
- * [BodoSDK PyPi](https://pypi.org/project/bodosdk/)
+ * [Bodo SDK Guide](../guides/using_bodo_platform/bodo_platform_sdk_guide.md)
+ * [Bodo SDK Reference](../api_docs/platform_sdk.md)
+ * [Bodo SDK PyPi](https://pypi.org/project/bodosdk/)

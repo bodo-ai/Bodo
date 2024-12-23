@@ -1,4 +1,4 @@
-# Bodo Cloud Platform
+# Bodo Cloud Platform {#bodo-cloud-platform-guides}
 This set of guides explains the basics of using the Bodo cloud platform and associated concepts.
 
 ## [Organization Basics][organization-basics]
