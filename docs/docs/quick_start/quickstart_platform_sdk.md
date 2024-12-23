@@ -42,9 +42,11 @@ my_workspace = BodoWorkspaceClient(
 
 my_cluster = my_workspace.ClusterClient.create(
     name='My first cluster',
-    instance_type='c5.large',
+    instance_type='c6i.large',
     workers_quantity=1
 )
+my_cluster.wait_for_status(['RUNNING'])
+print(my_cluster.id)
 ```
 
 ### Run Python Job
@@ -54,31 +56,19 @@ my_cluster = my_workspace.ClusterClient.create(
 Access https://platform.bodo.ai and open the Jupyter notebook in your workspace. Create the following test.py file in your main directory:
 
 ```python
-import pandas as pd
-import numpy as np
 import bodo
 import time
+import numpy as np
 
-NUM_GROUPS = 30
-NUM_ROWS = 20_000_000
-
-df = pd.DataFrame({
-    "A": np.arange(NUM_ROWS) % NUM_GROUPS,
-    "B": np.arange(NUM_ROWS)
-})
-df.to_parquet("my_data.pq")
-time.sleep(1)  # wait till file will be available on all nodes
-
-
-@bodo.jit(cache=True)
-def computation():
+@bodo.jit
+def calc_pi(n):
     t1 = time.time()
-    df = pd.read_parquet("my_data.pq")
-    df2 = pd.DataFrame({"A": df.apply(lambda r: 0 if r.A == 0 else (r.B // r.A), axis=1)})
-    df2.to_parquet("out.pq")
-    print("Execution time:", time.time() - t1)
+    x = 2 * np.random.ranf(n) - 1
+    y = 2 * np.random.ranf(n) - 1
+    pi = 4 * np.sum(x**2 + y**2 < 1) / n
+    print("Execution time:", time.time()-t1, "\nresult:", pi)
 
-computation()
+calc_pi(2 * 10**6)
 ```
 
 **Step 2: Run the Job**
@@ -107,7 +97,7 @@ print(my_job.wait_for_status(['SUCCEEDED']).get_stdout())
 
 
 ### Run a SQL Job
-To run a SQL job, create a test.sql file and a catalog in https://platform.bodo.ai. Then, run the job as follows:
+To run a SQL job, create a test.sql file and a [catalog][sql_catalog] in https://platform.bodo.ai. Then, run the job as follows:
 ```python
 from bodosdk import BodoWorkspaceClient
 
@@ -171,3 +161,4 @@ print(result)
 !!! seealso "See Also"
  * [BodoSDK Guide](../../guides/using_bodo_platform/bodo_platform_sdk_guide)
  * [BodoSDK Reference](../../api_docs/platform_sdk)
+ * [BodoSDK PyPi](https://pypi.org/project/bodosdk/)
