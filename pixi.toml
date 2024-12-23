@@ -13,7 +13,7 @@ platform =     { features = ["rcpp", "platform", "platform-mpi"],  solve-group =
 platform-dev = { features = ["rcpp", "dev", "platform-mpi"],       solve-group = "312-platform" }
 # Pip C++ Deps
 pip-cpp-linux =      { features = ["local-mpi"], no-default-feature = true,   solve-group = "pip" }
-pip-cpp-macos =      { features = ["rcpp", "local-mpi"], no-default-feature = true,   solve-group = "pip" }
+pip-cpp-macos =      { features = ["rcpp", "local-mpi", "pip"], no-default-feature = true,   solve-group = "pip" }
 
 # Build Commands
 [tasks.build-bodo]
