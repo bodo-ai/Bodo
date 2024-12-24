@@ -459,9 +459,13 @@ def _init_extensions():
 
 
 class JITWrapperDispatcher:
+    """Dispatcher for JIT wrapped Python functions."""
+
     def __init__(self, py_func, return_type):
         self.py_func = py_func
         self.return_type = return_type
+        # Copy function name attributes similar to regular Dispatchers to allow
+        # handling in find_callname()
         self.__name__ = py_func.__name__
         self.__qualname__ = py_func.__qualname__
 
@@ -474,6 +478,14 @@ class JITWrapperDispatcher:
 
 
 def jit_wrapper(return_type):
+    """Creates a JIT wrapper around a regular Python function to allow its use inside
+    JIT functions (including UDFs).
+    The data type of the function output must be specified.
+
+    Args:
+        return_type (types.Type|str): data type of function output
+    """
+
     def wrapper(func):
         return JITWrapperDispatcher(func, return_type)
 
@@ -481,6 +493,8 @@ def jit_wrapper(return_type):
 
 
 class JITWrapperDispatcherType(numba.types.Callable, numba.types.Opaque):
+    """Data type for JIT wrapper dispatcher."""
+
     def __init__(self, dispatcher):
         self.dispatcher = dispatcher
         self._overload_cache = {}
@@ -488,6 +502,9 @@ class JITWrapperDispatcherType(numba.types.Callable, numba.types.Opaque):
         super().__init__(name=f"JITWrapperDispatcherType({dispatcher})")
 
     def get_call_type(self, context, args, kws):
+        """Get call signature for JIT wrapper dispatcher call and install its lowering
+        implementation.
+        """
         pysig = numba.core.utils.pysignature(self.dispatcher.py_func)
         folded_args = bodo.utils.transform.fold_argument_types(pysig, args, kws)
 
