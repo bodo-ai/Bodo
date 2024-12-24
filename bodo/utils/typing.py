@@ -996,6 +996,8 @@ def is_const_func_type(t) -> bool:
 
 def get_overload_const_func(val, func_ir):
     """get constant function object or ir.Expr.make_function from function type"""
+    from bodo.decorators import JITWrapperDispatcherType
+
     if isinstance(val, (types.MakeFunctionLiteral, bodo.utils.typing.FunctionLiteral)):
         func = val.literal_value
         # Handle functions that are currently make_function expressions from BodoSQL
@@ -1010,6 +1012,10 @@ def get_overload_const_func(val, func_ir):
         return val.dispatcher.py_func
     if isinstance(val, CPUDispatcher):
         return val.py_func
+
+    if isinstance(val, JITWrapperDispatcherType):
+        return val.dispatcher
+
     raise BodoError(f"'{val}' not a constant function type")
 
 
