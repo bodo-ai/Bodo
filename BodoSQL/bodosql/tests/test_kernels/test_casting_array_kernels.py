@@ -609,7 +609,7 @@ def test_cast_interval(args, memory_leak_check):
         ),
         pytest.param(
             pd.Series(
-                [None] * 3 + list(pd.date_range("2022-1-1", periods=21, freq="40D5H4S"))
+                [None] * 3 + list(pd.date_range("2022-1-1", periods=21, freq="40D5h4s"))
             ).values,
             id="timestamp-vector",
         ),
@@ -753,7 +753,7 @@ def test_cast_date_to_tz_aware_non_literal_tz_error_handling(memory_leak_check):
                 [None] * 3
                 + list(
                     pd.date_range(
-                        "2022-1-1", periods=21, freq="40D5H4S", tz="US/Pacific"
+                        "2022-1-1", periods=21, freq="40D5h4s", tz="US/Pacific"
                     )
                 )
             ).array,
@@ -800,7 +800,7 @@ def test_cast_tz_aware_to_tz_naive(ts_val, memory_leak_check):
             pd.Series(
                 [None] * 3
                 + list(
-                    pd.date_range("2022-1-1", periods=21, freq="40D5H4S")
+                    pd.date_range("2022-1-1", periods=21, freq="40D5h4s")
                     .to_series()
                     .astype("str")
                 )

@@ -183,6 +183,8 @@ build-frontend = { name = "pip" }
 
 [tool.cibuildwheel.linux]
 manylinux-x86_64-image = "quay.io/pypa/manylinux_2_28_x86_64:latest"
+manylinux-aarch64-image = "quay.io/pypa/manylinux_2_28_aarch64:latest"
+archs = ["auto", "aarch64"]
 
 [tool.cibuildwheel.macos]
 # Can't use pytest because we don't include tests in the wheel

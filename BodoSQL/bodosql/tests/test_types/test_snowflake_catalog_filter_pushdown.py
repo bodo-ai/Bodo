@@ -2482,11 +2482,16 @@ def test_nonregex_string_match_functions(
     "test_cases",
     [
         pytest.param(
-            ("REGEXP_LIKE(A, '.*\w+-\w+.*')", ".*\w+-\w+.*", True, "REGEXP_LIKE"),
+            (r"REGEXP_LIKE(A, '.*\w+-\w+.*')", r".*\w+-\w+.*", True, "REGEXP_LIKE"),
             id="regexp_like",
         ),
         pytest.param(
-            ("REGEXP_LIKE(A, '.*\w+-\w+.*', 'c')", ".*\w+-\w+.*", True, "REGEXP_LIKE"),
+            (
+                r"REGEXP_LIKE(A, '.*\w+-\w+.*', 'c')",
+                r".*\w+-\w+.*",
+                True,
+                "REGEXP_LIKE",
+            ),
             id="regexp_like_opt_arg",
         ),
         pytest.param(
