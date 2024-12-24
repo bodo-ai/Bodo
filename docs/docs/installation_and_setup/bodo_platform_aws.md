@@ -196,7 +196,7 @@ Bodo Platform creates in your account to enable clusters and notebooks.
 
 ## Using Bodo Platform
 
-Please refer to the [platform usage guides][using-the-bodo-cloud-platform] to explain the basics of using the Bodo Cloud Platform and associated concepts.
+Please refer to the [platform usage guides][bodo-cloud-platform-guides] to explain the basics of using the Bodo Cloud Platform and associated concepts.
 
 
 ## Billing {#aws_billing}

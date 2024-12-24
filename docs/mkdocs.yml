@@ -128,10 +128,12 @@ nav:
     - Python Quick Start: quick_start/quickstart_local_python.md
     - SQL Quick Start: quick_start/quickstart_local_sql.md
     - Iceberg Quick Start: quick_start/quickstart_local_iceberg.md
-    - Cloud Platform Quick Start: quick_start/quick_start_platform.md
+    - Platform Quick Start: quick_start/quickstart_platform.md
+    - Platform SDK Quick Start: quick_start/quickstart_platform_sdk.md
+
   - Guides:
       - integrating_bodo/index.md
-      - Installation and Setup Guides:
+      - Installation and Setup:
           - installation_and_setup/index.md
           - Local and On-Prem Cluster Installation:
             - Installing Bodo Engine: installation_and_setup/install.md
@@ -140,8 +142,23 @@ nav:
           - Bodo Cloud Platform:
             - Bodo Platform on AWS: installation_and_setup/bodo_platform_aws.md
             - Bodo Platform on Azure: installation_and_setup/bodo_platform_azure.md
-            - Bodo Platform SDK: installation_and_setup/platform_sdk.md
-      - Python Development Guide: quick_start/dev_guide.md
+      - Python Development: quick_start/dev_guide.md
+      - Bodo Cloud Platform:
+          - guides/using_bodo_platform/index.md
+          - Organization Basics: guides/using_bodo_platform/organization.md
+          - Creating a Cluster: guides/using_bodo_platform/clusters.md
+          - Using Notebooks: guides/using_bodo_platform/notebooks.md
+          - Running Jobs: guides/using_bodo_platform/bodo_jobs.md
+          - Native SQL with Catalogs: integrating_bodo/database_catalog.md
+          - Platform SDK Guide : guides/using_bodo_platform/bodo_platform_sdk_guide.md
+          - Instance Role for a Cluster: guides/using_bodo_platform/instance_role.md
+          - Managing Packages Manually: guides/using_bodo_platform/packages.md
+          - Running Shell Commands on a Cluster: guides/using_bodo_platform/shell.md
+          - Connecting to a Cluster: guides/using_bodo_platform/connect.md
+          - Customer Managed VPC: guides/using_bodo_platform/customer_managed_vpc.md
+          - AWS PrivateLink: guides/using_bodo_platform/aws_private_link.md
+          - Troubleshooting: guides/using_bodo_platform/troubleshooting.md
+      - Using Regular Python inside Bodo (Object Mode): objmode.md
       - Understanding Parallelism with Bodo:
           - Basics of Bodo Parallelism: bodo_parallelism/bodo_parallelism_basics.md
           - Advanced Parallelism Topics: bodo_parallelism/advanced.md
@@ -153,22 +170,6 @@ nav:
           - Reading and Writing: iceberg/read_write.md
           - Supported Data Types: iceberg/data_types.md
           - Puffin Files: iceberg/puffin_files.md
-      - Using the Bodo Cloud Platform:
-          - guides/using_bodo_platform/index.md
-          - Organization Basics: guides/using_bodo_platform/organization.md
-          - Creating a Cluster: guides/using_bodo_platform/clusters.md
-          - Using Notebooks: guides/using_bodo_platform/notebooks.md
-          - Using Native SQL with Catalogs: integrating_bodo/database_catalog.md
-          - Running a Batch Job: guides/using_bodo_platform/bodo_jobs.md
-          - Using your own Instance Role for a Cluster: guides/using_bodo_platform/instance_role.md
-          - Managing Packages Manually: guides/using_bodo_platform/packages.md
-          - Running Shell Commands on a Cluster: guides/using_bodo_platform/shell.md
-          - Connecting to a Cluster: guides/using_bodo_platform/connect.md
-          - Configuring Customer Managed VPC: guides/using_bodo_platform/customer_managed_vpc.md
-          - AWS PrivateLink: guides/using_bodo_platform/aws_private_link.md
-          - Troubleshooting: guides/using_bodo_platform/troubleshooting.md
-          - Bodo Platform SDK guide : guides/using_bodo_platform/bodo_platform_sdk_guide.md
-      - Using Regular Python inside Bodo (Object Mode): objmode.md
       - Measuring Performance: performance/performance.md
       - Caching: performance/caching.md
       - Inlining: performance/inlining.md
