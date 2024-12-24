@@ -1256,77 +1256,99 @@ void coherent_hash_array(uint32_t* const out_hashes,
     // If both are unsigned int, we convert to uint64_t
     if (is_unsigned_integer(array->dtype) &&
         is_unsigned_integer(ref_array->dtype)) {
-        if (array->dtype == Bodo_CTypes::UINT8)
+        if (array->dtype == Bodo_CTypes::UINT8) {
             return coherent_hash_array_inner_uint64<uint8_t>(out_hashes, array,
                                                              n_rows, seed);
-        if (array->dtype == Bodo_CTypes::UINT16)
+        }
+        if (array->dtype == Bodo_CTypes::UINT16) {
             return coherent_hash_array_inner_uint64<uint16_t>(out_hashes, array,
                                                               n_rows, seed);
-        if (array->dtype == Bodo_CTypes::UINT32)
+        }
+        if (array->dtype == Bodo_CTypes::UINT32) {
             return coherent_hash_array_inner_uint64<uint32_t>(out_hashes, array,
                                                               n_rows, seed);
-        if (array->dtype == Bodo_CTypes::UINT64)
+        }
+        if (array->dtype == Bodo_CTypes::UINT64) {
             return coherent_hash_array_inner_uint64<uint64_t>(out_hashes, array,
                                                               n_rows, seed);
+        }
     }
     // If both are integer (signed or unsigned), we convert to int64_t
     if (is_integer(array->dtype) && is_integer(ref_array->dtype)) {
-        if (array->dtype == Bodo_CTypes::UINT8)
+        if (array->dtype == Bodo_CTypes::UINT8) {
             return coherent_hash_array_inner_int64<uint8_t>(out_hashes, array,
                                                             n_rows, seed);
-        if (array->dtype == Bodo_CTypes::UINT16)
+        }
+        if (array->dtype == Bodo_CTypes::UINT16) {
             return coherent_hash_array_inner_int64<uint16_t>(out_hashes, array,
                                                              n_rows, seed);
-        if (array->dtype == Bodo_CTypes::UINT32)
+        }
+        if (array->dtype == Bodo_CTypes::UINT32) {
             return coherent_hash_array_inner_int64<uint32_t>(out_hashes, array,
                                                              n_rows, seed);
-        if (array->dtype == Bodo_CTypes::UINT64)
+        }
+        if (array->dtype == Bodo_CTypes::UINT64) {
             return coherent_hash_array_inner_int64<uint64_t>(out_hashes, array,
                                                              n_rows, seed);
-        if (array->dtype == Bodo_CTypes::INT8)
+        }
+        if (array->dtype == Bodo_CTypes::INT8) {
             return coherent_hash_array_inner_int64<int8_t>(out_hashes, array,
                                                            n_rows, seed);
-        if (array->dtype == Bodo_CTypes::INT16)
+        }
+        if (array->dtype == Bodo_CTypes::INT16) {
             return coherent_hash_array_inner_int64<int16_t>(out_hashes, array,
                                                             n_rows, seed);
-        if (array->dtype == Bodo_CTypes::INT32)
+        }
+        if (array->dtype == Bodo_CTypes::INT32) {
             return coherent_hash_array_inner_int64<int32_t>(out_hashes, array,
                                                             n_rows, seed);
-        if (array->dtype == Bodo_CTypes::INT64)
+        }
+        if (array->dtype == Bodo_CTypes::INT64) {
             return coherent_hash_array_inner_int64<int64_t>(out_hashes, array,
                                                             n_rows, seed);
+        }
     }
     // In all other cases, we convert to double
-    if (array->dtype == Bodo_CTypes::UINT8)
+    if (array->dtype == Bodo_CTypes::UINT8) {
         return coherent_hash_array_inner_double<uint8_t>(out_hashes, array,
                                                          n_rows, seed);
-    if (array->dtype == Bodo_CTypes::UINT16)
+    }
+    if (array->dtype == Bodo_CTypes::UINT16) {
         return coherent_hash_array_inner_double<uint16_t>(out_hashes, array,
                                                           n_rows, seed);
-    if (array->dtype == Bodo_CTypes::UINT32)
+    }
+    if (array->dtype == Bodo_CTypes::UINT32) {
         return coherent_hash_array_inner_double<uint32_t>(out_hashes, array,
                                                           n_rows, seed);
-    if (array->dtype == Bodo_CTypes::UINT64)
+    }
+    if (array->dtype == Bodo_CTypes::UINT64) {
         return coherent_hash_array_inner_double<uint64_t>(out_hashes, array,
                                                           n_rows, seed);
-    if (array->dtype == Bodo_CTypes::INT8)
+    }
+    if (array->dtype == Bodo_CTypes::INT8) {
         return coherent_hash_array_inner_double<int8_t>(out_hashes, array,
                                                         n_rows, seed);
-    if (array->dtype == Bodo_CTypes::INT16)
+    }
+    if (array->dtype == Bodo_CTypes::INT16) {
         return coherent_hash_array_inner_double<int16_t>(out_hashes, array,
                                                          n_rows, seed);
-    if (array->dtype == Bodo_CTypes::INT32)
+    }
+    if (array->dtype == Bodo_CTypes::INT32) {
         return coherent_hash_array_inner_double<int32_t>(out_hashes, array,
                                                          n_rows, seed);
-    if (array->dtype == Bodo_CTypes::INT64)
+    }
+    if (array->dtype == Bodo_CTypes::INT64) {
         return coherent_hash_array_inner_double<int64_t>(out_hashes, array,
                                                          n_rows, seed);
-    if (array->dtype == Bodo_CTypes::FLOAT32)
+    }
+    if (array->dtype == Bodo_CTypes::FLOAT32) {
         return coherent_hash_array_inner_double<float>(out_hashes, array,
                                                        n_rows, seed);
-    if (array->dtype == Bodo_CTypes::FLOAT64)
+    }
+    if (array->dtype == Bodo_CTypes::FLOAT64) {
         return coherent_hash_array_inner_double<double>(out_hashes, array,
                                                         n_rows, seed);
+    }
 }
 
 template <typename T>
@@ -1446,77 +1468,99 @@ void coherent_hash_array_combine(uint32_t* const out_hashes,
     // If both are unsigned int, we convert to uint64_t
     if (is_unsigned_integer(array->dtype) &&
         is_unsigned_integer(ref_array->dtype)) {
-        if (array->dtype == Bodo_CTypes::UINT8)
+        if (array->dtype == Bodo_CTypes::UINT8) {
             return coherent_hash_array_combine_inner_uint64<uint8_t>(
                 out_hashes, array, n_rows, seed);
-        if (array->dtype == Bodo_CTypes::UINT16)
+        }
+        if (array->dtype == Bodo_CTypes::UINT16) {
             return coherent_hash_array_combine_inner_uint64<uint16_t>(
                 out_hashes, array, n_rows, seed);
-        if (array->dtype == Bodo_CTypes::UINT32)
+        }
+        if (array->dtype == Bodo_CTypes::UINT32) {
             return coherent_hash_array_combine_inner_uint64<uint32_t>(
                 out_hashes, array, n_rows, seed);
-        if (array->dtype == Bodo_CTypes::UINT64)
+        }
+        if (array->dtype == Bodo_CTypes::UINT64) {
             return coherent_hash_array_combine_inner_uint64<uint64_t>(
                 out_hashes, array, n_rows, seed);
+        }
     }
     // If both are integer (signed or unsigned), we convert to int64_t
     if (is_integer(array->dtype) && is_integer(ref_array->dtype)) {
-        if (array->dtype == Bodo_CTypes::UINT8)
+        if (array->dtype == Bodo_CTypes::UINT8) {
             return coherent_hash_array_combine_inner_int64<uint8_t>(
                 out_hashes, array, n_rows, seed);
-        if (array->dtype == Bodo_CTypes::UINT16)
+        }
+        if (array->dtype == Bodo_CTypes::UINT16) {
             return coherent_hash_array_combine_inner_int64<uint16_t>(
                 out_hashes, array, n_rows, seed);
-        if (array->dtype == Bodo_CTypes::UINT32)
+        }
+        if (array->dtype == Bodo_CTypes::UINT32) {
             return coherent_hash_array_combine_inner_int64<uint32_t>(
                 out_hashes, array, n_rows, seed);
-        if (array->dtype == Bodo_CTypes::UINT64)
+        }
+        if (array->dtype == Bodo_CTypes::UINT64) {
             return coherent_hash_array_combine_inner_int64<uint64_t>(
                 out_hashes, array, n_rows, seed);
-        if (array->dtype == Bodo_CTypes::INT8)
+        }
+        if (array->dtype == Bodo_CTypes::INT8) {
             return coherent_hash_array_combine_inner_int64<int8_t>(
                 out_hashes, array, n_rows, seed);
-        if (array->dtype == Bodo_CTypes::INT16)
+        }
+        if (array->dtype == Bodo_CTypes::INT16) {
             return coherent_hash_array_combine_inner_int64<int16_t>(
                 out_hashes, array, n_rows, seed);
-        if (array->dtype == Bodo_CTypes::INT32)
+        }
+        if (array->dtype == Bodo_CTypes::INT32) {
             return coherent_hash_array_combine_inner_int64<int32_t>(
                 out_hashes, array, n_rows, seed);
-        if (array->dtype == Bodo_CTypes::INT64)
+        }
+        if (array->dtype == Bodo_CTypes::INT64) {
             return coherent_hash_array_combine_inner_int64<int64_t>(
                 out_hashes, array, n_rows, seed);
+        }
     }
     // In all other cases, we convert to double
-    if (array->dtype == Bodo_CTypes::UINT8)
+    if (array->dtype == Bodo_CTypes::UINT8) {
         return coherent_hash_array_combine_inner_double<uint8_t>(
             out_hashes, array, n_rows, seed);
-    if (array->dtype == Bodo_CTypes::UINT16)
+    }
+    if (array->dtype == Bodo_CTypes::UINT16) {
         return coherent_hash_array_combine_inner_double<uint16_t>(
             out_hashes, array, n_rows, seed);
-    if (array->dtype == Bodo_CTypes::UINT32)
+    }
+    if (array->dtype == Bodo_CTypes::UINT32) {
         return coherent_hash_array_combine_inner_double<uint32_t>(
             out_hashes, array, n_rows, seed);
-    if (array->dtype == Bodo_CTypes::UINT64)
+    }
+    if (array->dtype == Bodo_CTypes::UINT64) {
         return coherent_hash_array_combine_inner_double<uint64_t>(
             out_hashes, array, n_rows, seed);
-    if (array->dtype == Bodo_CTypes::INT8)
+    }
+    if (array->dtype == Bodo_CTypes::INT8) {
         return coherent_hash_array_combine_inner_double<int8_t>(
             out_hashes, array, n_rows, seed);
-    if (array->dtype == Bodo_CTypes::INT16)
+    }
+    if (array->dtype == Bodo_CTypes::INT16) {
         return coherent_hash_array_combine_inner_double<int16_t>(
             out_hashes, array, n_rows, seed);
-    if (array->dtype == Bodo_CTypes::INT32)
+    }
+    if (array->dtype == Bodo_CTypes::INT32) {
         return coherent_hash_array_combine_inner_double<int32_t>(
             out_hashes, array, n_rows, seed);
-    if (array->dtype == Bodo_CTypes::INT64)
+    }
+    if (array->dtype == Bodo_CTypes::INT64) {
         return coherent_hash_array_combine_inner_double<int64_t>(
             out_hashes, array, n_rows, seed);
-    if (array->dtype == Bodo_CTypes::FLOAT32)
+    }
+    if (array->dtype == Bodo_CTypes::FLOAT32) {
         return coherent_hash_array_combine_inner_double<float>(
             out_hashes, array, n_rows, seed);
-    if (array->dtype == Bodo_CTypes::FLOAT64)
+    }
+    if (array->dtype == Bodo_CTypes::FLOAT64) {
         return coherent_hash_array_combine_inner_double<double>(
             out_hashes, array, n_rows, seed);
+    }
 }
 
 /* The coherent_hash_keys is for computing hashes for join computation.

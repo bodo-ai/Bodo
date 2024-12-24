@@ -146,10 +146,11 @@ get_data_type_from_bodo_fixed_width_array(
                     type = arrow::time64(arrow::TimeUnit::MICRO);
                     break;
                 case 9:
-                    if (downcast_time_ns_to_us)
+                    if (downcast_time_ns_to_us) {
                         type = arrow::time64(arrow::TimeUnit::MICRO);
-                    else
+                    } else {
                         type = arrow::time64(arrow::TimeUnit::NANO);
+                    }
                     break;
                 default:
                     throw std::runtime_error(
