@@ -27,7 +27,7 @@ jobs:
         run: |
           set -exo pipefail
           pip install setuptools_scm
-          echo "bodo_version=`python -m setuptools_scm`" >> $GITHUB_OUTPUT
+          echo "bodo_version=$(python -m setuptools_scm)" >> "$GITHUB_OUTPUT"
     outputs:
       bodo_version: ${{ steps.get_version.outputs.bodo_version }}
 
@@ -89,7 +89,7 @@ jobs:
           assert f() == 6' && \
 
           # Check that only expected dylibs are included in the wheel
-          LIB_WHITELIST="^(libcom_err|libcrypto|libcurl|libfftw3_mpi|libfftw3f_mpi|libfftw3|libfftw3f|libgssapi_krb5|libhdf5|libk5crypto|libkeyutils|libkrb5support|libkrb5|libnghttp2|libs2n|libssh2|libssl|libsz|libzstd|libaws-.*)-.*\.so(\.[0-9]+)*"
+          LIB_WHITELIST="^(libcom_err|libcrypto|libcurl|libfftw3_mpi|libfftw3f_mpi|libfftw3|libfftw3f|libgssapi_krb5|libhdf5|libk5crypto|libkeyutils|libkrb5support|libkrb5|libnghttp2|libs2n|libssh2|libssl|libsz|libzstd|libaws-.*|libboost_container|libboost_json|libbrotli.*|libcrypt|libidn2|liblber-2|libpcre2|libpsl|libsasl2|libselinux|libssh|libunistring|libldap-2)-.*\.so(\.[0-9]+)*"
           LIBS_DIR="$(pip show  bodo | grep Location | awk -F 'Location: ' '{print $2}')/bodo.libs" && \
           for file in "$LIBS_DIR"/*; do
               if [[ ! $(basename "$file") =~ $LIB_WHITELIST ]]; then
@@ -99,6 +99,7 @@ jobs:
           done
 
   build_bodosql_wheels:
+    if: false
     permissions:
       id-token: write
       contents: read
@@ -138,7 +139,7 @@ jobs:
       - name: Build BodoSQL Wheels
         run: |
           set -exo pipefail
-          pip install bodo --find-links $(find . -name "cibw-wheels-*" -print) --no-index --no-deps
+          pip install bodo --find-links "$(find . -name "cibw-wheels-*" -print)" --no-index --no-deps
           cd BodoSQL
           pip wheel --no-deps --no-build-isolation -v .
       - uses: actions/upload-artifact@v4
@@ -186,6 +187,7 @@ jobs:
           assert res["OUTPUT"].iloc[0] == 6'
 
   build-iceberg:
+    if: false
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code

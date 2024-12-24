@@ -98,6 +98,12 @@ ExternalProject_Get_property(datasketches INSTALL_DIR)
 set(datasketches_INSTALL_DIR ${INSTALL_DIR})
 message("Source dir of datasketches = ${datasketches_INSTALL_DIR}")
 
+# Add boost as a dependency
+find_package(Boost 1.85 REQUIRED COMPONENTS json)
+include_directories(${Boost_INCLUDE_DIRS})
+# Add AWS SDK as a dependency
+find_package(AWSSDK REQUIRED COMPONENTS core)
+
 
 # ---------------------------- Set CMake Options -----------------------------
 # Use RelWithDebInfo Mode by Default
@@ -216,7 +222,7 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -isystem ${CONDA_INCLUDE_DIR}")
 # Vendor MPICH
 if(DEFINED ENV{BODO_VENDOR_MPICH})
   message(STATUS "Downloading MPICH")
-  execute_process(COMMAND ${Python_EXECUTABLE} -m pip download mpich==${MPICH_VERSION} -i https://pypi.anaconda.org/mpi4py/simple)
+  execute_process(COMMAND ${Python_EXECUTABLE} -m pip download mpich==${MPICH_VERSION} -i https://pypi.anaconda.org/mpi4py/simple --default-timeout=100)
   execute_process(COMMAND unzip "mpich-*.whl" "mpich*.data/*" -d mpich-tmp-extract-dir)
   file(GLOB MPICH_DATA_DIR "mpich-tmp-extract-dir/mpich-*.data/data/*")
   file(COPY ${MPICH_DATA_DIR} DESTINATION "${SKBUILD_DATA_DIR}" FOLLOW_SYMLINK_CHAIN 
@@ -427,7 +433,6 @@ set(sources_list
   "bodo/io/_csv_json_writer.cpp"
   "bodo/io/_fs_io.cpp"
   "bodo/io/_fsspec_reader.cpp"
-  "bodo/io/_hdf5.cpp"
   "bodo/io/_hdfs_reader.cpp"
   "bodo/io/_io.cpp"
   "bodo/io/_s3_reader.cpp"
@@ -564,6 +569,11 @@ if (NOT (CMAKE_BUILD_TYPE STREQUAL "Release") AND NOT DEFINED ENV{BODO_SKIP_CPP_
     "bodo/tests/test_theta_sketches.cpp")
 endif()
 
+set(NO_HDF5 "$ENV{NO_HDF5}")
+if(NOT NO_HDF5)
+    list(APPEND sources_list "bodo/io/_hdf5.cpp")
+endif()
+
 python_add_library(ext MODULE WITH_SOABI "${sources_list}")
 
 # Dependency Includes Are `-isystem` to Suppress Warnings
@@ -619,18 +629,24 @@ target_compile_options(
     "-Wall"
 )
 
+
 target_link_directories(ext PRIVATE ${PYARROW_LIB_DIR} "${Python_NumPy_INCLUDE_DIR}/../lib")
+
+target_include_directories(ext PRIVATE ${datasketches_INSTALL_DIR}/include/DataSketches)
+
 target_link_libraries(ext PRIVATE
   npymath
   mpi
-  hdf5
   arrow
   arrow_python
   arrow_dataset
   parquet
   fmt::fmt
-  aws-cpp-sdk-core
+  zstd
+  ${AWSSDK_LINK_LIBRARIES}
+  ${Boost_LIBRARIES}
 )
+
 
 set(IS_PLATFORM "$ENV{IS_BODO_PLATFORM}")
 cmake_print_variables(IS_PLATFORM)
@@ -657,8 +673,11 @@ if (BUILD_WITH_V8)
   target_compile_definitions(ext PRIVATE "BUILD_WITH_V8=1")
 endif()
 
-target_include_directories(ext PRIVATE ${datasketches_INSTALL_DIR}/include/DataSketches)
-add_dependencies(ext datasketches)
+if(NO_HDF5)
+  target_compile_definitions(ext PRIVATE "NO_HDF5=1")
+else()
+  target_link_libraries(ext PRIVATE hdf5)
+endif()
 
 set_target_properties(ext PROPERTIES CXX_CLANG_TIDY "${CLANG_TIDY_COMMAND}")
 add_dependencies(ext pyfs _hdfs tracing pyarrow_wrappers datasketches)
