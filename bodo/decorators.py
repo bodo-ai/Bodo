@@ -477,6 +477,35 @@ class JITWrapperDispatcher:
         return JITWrapperDispatcherType(self)
 
 
+def _check_return_type(return_type):
+    """Check and convert jit_wrapper return type to Numba type."""
+
+    from numba.core import sigutils, types
+
+    from bodo.utils.typing import BodoError
+
+    if isinstance(return_type, str):
+        return_type = sigutils._parse_signature_string(return_type)
+
+    if isinstance(return_type, types.abstract._TypeMetaclass):
+        raise BodoError(
+            f"jit_wrapper requires full data types, not just data type "
+            f"classes. For example, 'bodo.DataFrameType((bodo.float64[::1],), "
+            f"bodo.RangeIndexType(), ('A',))' is a valid data type but 'bodo.DataFrameType' is not.\n"
+            f"Return type is type class {return_type}."
+        )
+    if not isinstance(return_type, types.Type):
+        raise BodoError(
+            f"A data type is required for jit_wrapper return type annotation, not {return_type}."
+        )
+
+    # list/set reflection is irrelevant in jit_wrapper
+    if isinstance(return_type, (types.List, types.Set)):
+        return_type = return_type.copy(reflected=False)
+
+    return return_type
+
+
 def jit_wrapper(return_type):
     """Creates a JIT wrapper around a regular Python function to allow its use inside
     JIT functions (including UDFs).
@@ -485,6 +514,7 @@ def jit_wrapper(return_type):
     Args:
         return_type (types.Type|str): data type of function output
     """
+    return_type = _check_return_type(return_type)
 
     def wrapper(func):
         return JITWrapperDispatcher(func, return_type)
