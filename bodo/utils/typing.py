@@ -686,6 +686,8 @@ def get_overload_const(val):
         return val.literal_value
     if isinstance(val, types.Dispatcher):
         return val
+    if isinstance(val, bodo.decorators.JITWrapperDispatcherType):
+        return val.dispatcher
     if isinstance(val, types.BaseTuple):
         out_list = []
         for v in val.types:
@@ -990,6 +992,7 @@ def is_const_func_type(t) -> bool:
             types.MakeFunctionLiteral,
             bodo.utils.typing.FunctionLiteral,
             types.Dispatcher,
+            bodo.decorators.JITWrapperDispatcherType,
         ),
     )
 
@@ -1582,6 +1585,8 @@ def get_literal_value(t):
         return tuple(get_literal_value(v) for v in t.types)
     if isinstance(t, types.Dispatcher):
         return t
+    if isinstance(t, bodo.decorators.JITWrapperDispatcherType):
+        return t.dispatcher
     if is_initial_value_type(t):
         return t.initial_value
     if isinstance(t, (types.DTypeSpec, types.Function)):

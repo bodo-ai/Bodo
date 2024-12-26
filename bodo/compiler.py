@@ -964,9 +964,13 @@ def is_user_dispatcher(func_type):
     a user rather than an internally written function."""
     # Func_type is a user function component if it is either from objmode or a
     # dispatcher with the BodoCompiler
-    return isinstance(func_type, numba.core.types.functions.ObjModeDispatcher) or (
-        isinstance(func_type, numba.core.types.Dispatcher)
-        and issubclass(func_type.dispatcher._compiler.pipeline_class, BodoCompiler)
+    return (
+        isinstance(func_type, numba.core.types.functions.ObjModeDispatcher)
+        or isinstance(func_type, bodo.decorators.JITWrapperDispatcherType)
+        or (
+            isinstance(func_type, numba.core.types.Dispatcher)
+            and issubclass(func_type.dispatcher._compiler.pipeline_class, BodoCompiler)
+        )
     )
 
 
