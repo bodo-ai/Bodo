@@ -119,8 +119,8 @@ static void dist_wait(MPI_Request req, bool cond) __UNUSED__;
 static void c_gather_scalar(void* send_data, void* recv_data, int typ_enum,
                             bool allgather, int root,
                             int64_t comm_ptr = 0) __UNUSED__;
-static void c_gatherv(void* send_data, MPI_Count sendcount, void* recv_data,
-                      MPI_Count* recv_counts, int64_t* displs, int typ_enum,
+static void c_gatherv(void* send_data, int64_t sendcount, void* recv_data,
+                      int64_t* recv_counts, int64_t* displs, int typ_enum,
                       bool allgather, int root,
                       int64_t comm_ptr = 0) __UNUSED__;
 static void c_scatterv(void* send_data, MPI_Count* sendcounts, MPI_Aint* displs,
@@ -997,10 +997,11 @@ static void c_gather_scalar(void* send_data, void* recv_data, int typ_enum,
 static_assert(sizeof(MPI_Count) == sizeof(int64_t));
 static_assert(sizeof(MPI_Aint) == sizeof(int64_t));
 
-static void c_gatherv(void* send_data, MPI_Count sendcount, void* recv_data,
-                      MPI_Count* recv_counts, int64_t* displs, int typ_enum,
+static void c_gatherv(void* send_data, int64_t sendcount, void* recv_data,
+                      int64_t* recv_counts, int64_t* displs, int typ_enum,
                       bool allgather, int root, int64_t comm_ptr) {
     MPI_Datatype mpi_typ = get_MPI_typ(typ_enum);
+    MPI_Count* mpi_recv_counts = reinterpret_cast<MPI_Count*>(recv_counts);
     MPI_Aint* mpi_displs = reinterpret_cast<MPI_Aint*>(displs);
     MPI_Comm comm = MPI_COMM_WORLD;
     if (comm_ptr != 0) {
@@ -1008,12 +1009,13 @@ static void c_gatherv(void* send_data, MPI_Count sendcount, void* recv_data,
     }
     if (allgather) {
         CHECK_MPI(MPI_Allgatherv_c(send_data, sendcount, mpi_typ, recv_data,
-                                   recv_counts, mpi_displs, mpi_typ, comm),
+                                   mpi_recv_counts, mpi_displs, mpi_typ, comm),
                   "_distributed.h::c_gatherv: MPI error on MPI_Allgatherv:");
     } else {
-        CHECK_MPI(MPI_Gatherv_c(send_data, sendcount, mpi_typ, recv_data,
-                                recv_counts, mpi_displs, mpi_typ, root, comm),
-                  "_distributed.h::c_gatherv: MPI error on MPI_Gatherv:");
+        CHECK_MPI(
+            MPI_Gatherv_c(send_data, sendcount, mpi_typ, recv_data,
+                          mpi_recv_counts, mpi_displs, mpi_typ, root, comm),
+            "_distributed.h::c_gatherv: MPI error on MPI_Gatherv:");
     }
     return;
 }
@@ -1563,9 +1565,9 @@ int MPI_Gengather(void* sendbuf, int sendcount, MPI_Datatype sendtype,
                   void* recvbuf, int recvcount, MPI_Datatype recvtype,
                   int root_pe, MPI_Comm comm, bool all_gather);
 
-int MPI_Gengatherv(const void* sendbuf, MPI_Count sendcount,
+int MPI_Gengatherv(const void* sendbuf, int64_t sendcount,
                    MPI_Datatype sendtype, void* recvbuf,
-                   const MPI_Count* recvcounts, const MPI_Aint* displs,
+                   const int64_t* recvcounts, const int64_t* displs,
                    MPI_Datatype recvtype, int root_pe, MPI_Comm comm,
                    bool all_gather);
 

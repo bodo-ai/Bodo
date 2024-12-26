@@ -163,18 +163,21 @@ int MPI_Gengather(void *sendbuf, int sendcount, MPI_Datatype sendtype,
     }
 }
 
-int MPI_Gengatherv(const void *sendbuf, MPI_Count sendcount,
+int MPI_Gengatherv(const void *sendbuf, int64_t sendcount,
                    MPI_Datatype sendtype, void *recvbuf,
-                   const MPI_Count *recvcounts, const int64_t *displs,
+                   const int64_t *recvcounts, const int64_t *displs,
                    MPI_Datatype recvtype, int root_pe, MPI_Comm comm,
                    bool all_gather) {
     const MPI_Aint *mpi_displs = reinterpret_cast<const MPI_Aint *>(displs);
+    const MPI_Count *mpi_recvcounts =
+        reinterpret_cast<const MPI_Count *>(recvcounts);
     if (all_gather) {
         return MPI_Allgatherv_c(sendbuf, sendcount, sendtype, recvbuf,
-                                recvcounts, mpi_displs, recvtype, comm);
+                                mpi_recvcounts, mpi_displs, recvtype, comm);
     } else {
-        return MPI_Gatherv_c(sendbuf, sendcount, sendtype, recvbuf, recvcounts,
-                             mpi_displs, recvtype, root_pe, comm);
+        return MPI_Gatherv_c(sendbuf, sendcount, sendtype, recvbuf,
+                             mpi_recvcounts, mpi_displs, recvtype, root_pe,
+                             comm);
     }
 }
 
