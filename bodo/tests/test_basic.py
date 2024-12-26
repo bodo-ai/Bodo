@@ -1409,11 +1409,11 @@ def test_objmode_warning(memory_leak_check):
 
 
 def test_jit_wrapper(memory_leak_check):
-    """Make sure basic usage of  jit_wrapper works"""
+    """Make sure basic usage of jit_wrapper works"""
 
     A = 3
 
-    @bodo.jit_wrapper(bodo.int64)
+    @bodo.jit_wrapper("int64")
     def g(df):
         return A
 
@@ -1422,3 +1422,19 @@ def test_jit_wrapper(memory_leak_check):
 
     df = pd.DataFrame({"A": [1, 2, 3], "B": [4, 5, 6]})
     check_func(impl, (df,))
+
+
+def test_jit_wrapper_error_handling(memory_leak_check):
+    """Test error handling in jit_wrapper"""
+
+    with pytest.raises(BodoError, match="jit_wrapper requires full data types"):
+
+        @bodo.jit_wrapper(bodo.DataFrameType)
+        def g(df):
+            return df
+
+    with pytest.raises(BodoError, match="A data type is required for jit_wrapper"):
+
+        @bodo.jit_wrapper(3)
+        def g(a):
+            return a
