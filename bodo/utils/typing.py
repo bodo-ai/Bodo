@@ -1496,6 +1496,7 @@ def is_literal_type(t):
         )
         or t == types.none  # None type is always literal since single value
         or isinstance(t, types.Dispatcher)
+        or isinstance(t, bodo.decorators.JITWrapperDispatcherType)
         # LiteralStrKeyDict is a BaseTuple in Numba 0.51 also
         or (isinstance(t, types.BaseTuple) and all(is_literal_type(v) for v in t.types))
         # List/Dict types preserve const initial values in Numba 0.51
