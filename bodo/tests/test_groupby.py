@@ -3485,6 +3485,31 @@ def test_groupby_apply(is_slow_run, memory_leak_check):
     check_func(impl12, (df,), sort_output=True, reset_index=True)
 
 
+df_type = bodo.typeof(pd.DataFrame({"AA": [1.1], "BB": [4.1]}))
+
+
+@bodo.jit_wrapper(df_type)
+def g_wrapped(df):
+    return pd.DataFrame({"AA": [df.C.mean(), df.C.sum()], "BB": [3.1, df["C"].iloc[0]]})
+
+
+def test_groupby_apply_jit_wrapper(memory_leak_check):
+    """Test groupby apply with a jit_wrapper UDF"""
+
+    def impl1(df):
+        df2 = df.groupby("A").apply(g_wrapped)
+        return df2
+
+    df = pd.DataFrame(
+        {
+            "A": [1, 4, 4, 11, 4, 1],
+            "B": ["AB", "DD", "E", "A", "DD", "AB"],
+            "C": [1.1, 2.2, 3.3, 4.4, 5.5, -1.1],
+        }
+    )
+    check_func(impl1, (df,), sort_output=True, reset_index=True, check_dtype=False)
+
+
 @pytest.mark.skipif(
     bodo.get_size() == 1,
     reason="Test should only run on more than one rank",

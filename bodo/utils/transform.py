@@ -30,7 +30,7 @@ from numba.core.registry import CPUDispatcher
 from numba.core.typing.templates import fold_arguments
 
 import bodo
-from bodo.decorators import JITWrapperDispatcherType
+from bodo.decorators import JITWrapperDispatcher, JITWrapperDispatcherType
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.libs.map_arr_ext import MapArrayType
 from bodo.libs.str_arr_ext import string_array_type
@@ -1251,6 +1251,11 @@ def get_const_func_output_type(
     # jit_wrapper functions have output type available already
     if isinstance(func, JITWrapperDispatcherType):
         return func.dispatcher.return_type
+
+    if isinstance(func, bodo.utils.typing.FunctionLiteral) and isinstance(
+        func.literal_value, JITWrapperDispatcher
+    ):
+        return func.literal_value.return_type
 
     py_func = None
     # MakeFunctionLiteral is not possible currently due to Numba's
