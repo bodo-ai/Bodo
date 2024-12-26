@@ -120,7 +120,7 @@ static void c_gather_scalar(void* send_data, void* recv_data, int typ_enum,
                             bool allgather, int root,
                             int64_t comm_ptr = 0) __UNUSED__;
 static void c_gatherv(void* send_data, MPI_Count sendcount, void* recv_data,
-                      MPI_Count* recv_counts, MPI_Aint* displs, int typ_enum,
+                      MPI_Count* recv_counts, int64_t* displs, int typ_enum,
                       bool allgather, int root,
                       int64_t comm_ptr = 0) __UNUSED__;
 static void c_scatterv(void* send_data, MPI_Count* sendcounts, MPI_Aint* displs,
@@ -993,24 +993,26 @@ static void c_gather_scalar(void* send_data, void* recv_data, int typ_enum,
     return;
 }
 
+// Count and displacement types for MPI_gatherv_c/scatterv_c
 static_assert(sizeof(MPI_Count) == sizeof(int64_t));
 static_assert(sizeof(MPI_Aint) == sizeof(int64_t));
 
 static void c_gatherv(void* send_data, MPI_Count sendcount, void* recv_data,
-                      MPI_Count* recv_counts, MPI_Aint* displs, int typ_enum,
+                      MPI_Count* recv_counts, int64_t* displs, int typ_enum,
                       bool allgather, int root, int64_t comm_ptr) {
     MPI_Datatype mpi_typ = get_MPI_typ(typ_enum);
+    MPI_Aint* mpi_displs = reinterpret_cast<MPI_Aint*>(displs);
     MPI_Comm comm = MPI_COMM_WORLD;
     if (comm_ptr != 0) {
         comm = *(reinterpret_cast<MPI_Comm*>(comm_ptr));
     }
     if (allgather) {
         CHECK_MPI(MPI_Allgatherv_c(send_data, sendcount, mpi_typ, recv_data,
-                                   recv_counts, displs, mpi_typ, comm),
+                                   recv_counts, mpi_displs, mpi_typ, comm),
                   "_distributed.h::c_gatherv: MPI error on MPI_Allgatherv:");
     } else {
         CHECK_MPI(MPI_Gatherv_c(send_data, sendcount, mpi_typ, recv_data,
-                                recv_counts, displs, mpi_typ, root, comm),
+                                recv_counts, mpi_displs, mpi_typ, root, comm),
                   "_distributed.h::c_gatherv: MPI error on MPI_Gatherv:");
     }
     return;

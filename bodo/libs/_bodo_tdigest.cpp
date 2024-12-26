@@ -20,7 +20,6 @@
 
 #include "_bodo_common.h"
 #include "_distributed.h"
-#include "_mpi.h"
 
 namespace {
 
@@ -240,15 +239,14 @@ class TDigest::TDigestImpl {
         }
         std::vector<int64_t> displs(n_pes);
         calc_disp(displs, lengths);
-        MPI_Aint* displs_ptr = reinterpret_cast<MPI_Aint*>(displs.data());
 
         // Gather the means/weights from each rank into vectors on the root rank
         std::vector<double> means(total_length);
         std::vector<double> weights(total_length);
         c_gatherv(local_means.data(), length, means.data(), lengths.data(),
-                  displs_ptr, Bodo_CTypes::FLOAT64, false, 0);
+                  displs.data(), Bodo_CTypes::FLOAT64, false, 0);
         c_gatherv(local_weights.data(), length, weights.data(), lengths.data(),
-                  displs_ptr, Bodo_CTypes::FLOAT64, false, 0);
+                  displs.data(), Bodo_CTypes::FLOAT64, false, 0);
 
         // Since the merger only has to occur on the root rank, all other ranks
         // can remain unchanged after sending their data to the root.

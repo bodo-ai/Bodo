@@ -1226,17 +1226,17 @@ def gatherv_impl_jit(
             # size to handle multi-dim arrays
             n_loc = data.size
             recv_counts = gather_scalar(
-                np.int32(n_loc), allgather, root=root, comm=comm
+                np.int64(n_loc), allgather, root=root, comm=comm
             )
             n_total = recv_counts.sum()
             all_data = empty_like_type(n_total, data)
             # displacements
-            displs = np.empty(1, np.int32)
+            displs = np.empty(1, np.int64)
             if is_receiver or allgather:
                 displs = bodo.ir.join.calc_disp(recv_counts)
             c_gatherv(
                 data.ctypes,
-                np.int32(n_loc),
+                np.int64(n_loc),
                 all_data.ctypes,
                 recv_counts.ctypes,
                 displs.ctypes,
@@ -1309,11 +1309,11 @@ def gatherv_impl_jit(
                 np.int32(n_loc), allgather, warn_if_rep, root, comm
             )
 
-            recv_counts_nulls = np.empty(1, np.int32)
-            displs_nulls = np.empty(1, np.int32)
+            recv_counts_nulls = np.empty(1, np.int64)
+            displs_nulls = np.empty(1, np.int64)
             tmp_null_bytes = np.empty(1, np.uint8)
             if is_receiver or allgather:
-                recv_counts_nulls = np.empty(len(recv_counts), np.int32)
+                recv_counts_nulls = np.empty(len(recv_counts), np.int64)
                 for i in range(len(recv_counts)):
                     recv_counts_nulls[i] = (recv_counts[i] + 7) >> 3
                 displs_nulls = bodo.ir.join.calc_disp(recv_counts_nulls)
@@ -1321,7 +1321,7 @@ def gatherv_impl_jit(
 
             c_gatherv(
                 data._null_bitmap.ctypes,
-                np.int32(n_bytes),
+                np.int64(n_bytes),
                 tmp_null_bytes.ctypes,
                 recv_counts_nulls.ctypes,
                 displs_nulls.ctypes,
