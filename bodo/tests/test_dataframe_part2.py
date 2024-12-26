@@ -841,6 +841,25 @@ def test_df_apply_func_case2(memory_leak_check):
     pd.testing.assert_series_equal(res, py_res)
 
 
+g_var = [3, 1, 5]
+
+
+@bodo.jit_wrapper(bodo.int64)
+def g3(r):
+    return r.A + g_var[0]
+
+
+def test_df_apply_jit_wrapper(memory_leak_check):
+    """Test jit_wrapper function in df.apply()"""
+
+    def test_impl(df):
+        return df.apply(g3, axis=1)
+
+    n = 121
+    df = pd.DataFrame({"A": np.arange(n), "B": np.arange(n) + 2})
+    check_func(test_impl, (df,))
+
+
 def test_df_apply_freevar(memory_leak_check):
     """Test transforming freevars into apply() arguments"""
 

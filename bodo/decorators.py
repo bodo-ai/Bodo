@@ -468,6 +468,12 @@ class JITWrapperDispatcher:
         # handling in find_callname()
         self.__name__ = py_func.__name__
         self.__qualname__ = py_func.__qualname__
+        # Default argument values match py_func
+        self.__defaults__ = py_func.__defaults__
+        self.__code__ = py_func.__code__
+        # Required for compiler frontend used in _get_df_apply_used_cols(), see:
+        # https://github.com/numba/numba/blob/53e976f1b0c6683933fa0a93738362914bffc1cd/numba/core/bytecode.py#L32
+        self.__numba__ = "py_func"
 
     def __call__(self, *args, **kwargs):
         return self.py_func(*args, **kwargs)
