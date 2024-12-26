@@ -1406,3 +1406,19 @@ def test_objmode_warning(memory_leak_check):
             assert impl2() == 1, "Incorrect output with bodo.no_warning_objmode"
     finally:
         numba.core.config.DEVELOPER_MODE = old_developer_mode
+
+
+def test_jit_wrapper(memory_leak_check):
+    """Make sure basic usage of  jit_wrapper works"""
+
+    A = 3
+
+    @bodo.jit_wrapper(bodo.int64)
+    def g(df):
+        return A
+
+    def impl(df):
+        return g(df)
+
+    df = pd.DataFrame({"A": [1, 2, 3], "B": [4, 5, 6]})
+    check_func(impl, (df,))
