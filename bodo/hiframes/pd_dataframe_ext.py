@@ -5326,10 +5326,11 @@ pd_unsupported = [
     pd.Grouper,
 ]
 
-# Newer versions of pandas do not have pd.read_gbq
+
 try:
     pd_unsupported.append(pd.read_gbq)
 except AttributeError:
+    # pd.read_gbq is not supported in Pandas > 2.2
     pass
 
 

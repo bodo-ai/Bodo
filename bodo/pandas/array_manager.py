@@ -11,7 +11,7 @@ from pandas.core.arrays.arrow.array import ArrowExtensionArray
 try:
     from pandas.core.internals.array_manager import ArrayManager, SingleArrayManager
 except ModuleNotFoundError:
-    # newer versions of pandas do not support ArrayManager/SingleArrayManager (only use BlockManager)
+    # Pandas > 2.2 does not have an array_manager module (uses BlockManager/SinglBlockManager).
     class ArrayManager:
         pass
 

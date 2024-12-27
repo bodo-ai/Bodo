@@ -13,7 +13,7 @@ def get_data_manager_pandas() -> str:
 
         return _get_option("mode.data_manager", silent=True)
     except ModuleNotFoundError:
-        # _get_option and mode.data_manager are not supported in newer Pandas versions.
+        # _get_option and mode.data_manager are not supported in Pandas > 2.2.
         return "block"
 
 
