@@ -5289,7 +5289,7 @@ def overload_union_dataframes(
 
 
 # Throw BodoError for top-level unsupported functions in Pandas
-pd_unsupported = (
+pd_unsupported = [
     # Input/output
     pd.read_pickle,
     pd.read_table,
@@ -5324,7 +5324,13 @@ pd_unsupported = (
     pd.test,
     # GroupBy
     pd.Grouper,
-)
+]
+
+# Newer versions of pandas do not have pd.read_gbq
+try:
+    pd_unsupported.append(pd.read_gbq)
+except ModuleNotFoundError:
+    pass
 
 
 pd_util_unsupported = (
