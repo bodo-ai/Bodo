@@ -1032,7 +1032,7 @@ class BodoSQLContext:
 
     def sql(self, sql, params_dict=None, dynamic_params_list=None, **jit_options):
         import bodosql
-        from bodo.submit.spawner import SubmitDispatcher
+        from bodo.spawn.spawner import SubmitDispatcher
 
         if params_dict is None:
             params_dict = {}

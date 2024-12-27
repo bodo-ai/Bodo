@@ -319,8 +319,8 @@ def jit(signature_or_function=None, pipeline_class=None, **options):
     disable_jit = os.environ.get("NUMBA_DISABLE_JIT", "0") == "1"
     dist_mode = options.get("distributed", True) is not False
     if options.get("spawn", bodo.spawn_mode) and not disable_jit and dist_mode:
-        from bodo.submit.spawner import SubmitDispatcher
-        from bodo.submit.worker_state import is_worker
+        from bodo.spawn.spawner import SubmitDispatcher
+        from bodo.spawn.worker_state import is_worker
 
         if is_worker():
             # If we are already in the worker, just use regular to

@@ -11,7 +11,7 @@ from pandas.core.internals.array_manager import ArrayManager, SingleArrayManager
 
 import bodo.user_logging
 from bodo.pandas.lazy_metadata import LazyMetadataMixin
-from bodo.submit.utils import debug_msg
+from bodo.spawn.utils import debug_msg
 
 
 class LazyArrayManager(ArrayManager, LazyMetadataMixin[ArrayManager]):

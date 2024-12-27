@@ -29,7 +29,7 @@ from bodo.pandas import (
     LazyMetadata,
 )
 from bodo.pandas.lazy_wrapper import BodoLazyWrapper
-from bodo.submit.utils import (
+from bodo.spawn.utils import (
     ArgMetadata,
     CommandType,
     debug_msg,
@@ -148,7 +148,7 @@ class Spawner:
             self.worker_intercomm = self.comm_world.Spawn(
                 # get the same python executable that is currently running
                 "env",
-                environ_args + [sys.executable, "-u", "-m", "bodo.submit.worker"],
+                environ_args + [sys.executable, "-u", "-m", "bodo.spawn.worker"],
                 n_pes,
                 MPI.INFO_NULL,
                 0,
