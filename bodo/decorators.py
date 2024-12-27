@@ -9,9 +9,11 @@ import types as pytypes
 import warnings
 
 import numba
-from numba.core import cpu
+from numba.core import cgutils, cpu, serialize
 from numba.core.options import _mapping
 from numba.core.targetconfig import Option, TargetConfig
+from numba.core.typing.templates import signature
+from numba.extending import lower_builtin, models, register_model
 
 import bodo
 
@@ -454,3 +456,209 @@ def _init_extensions():
 
     if need_refresh:
         numba.core.registry.cpu_target.target_context.refresh()
+
+
+class WrapPythonDispatcher:
+    """Dispatcher for JIT wrapped Python functions."""
+
+    def __init__(self, py_func, return_type):
+        self.py_func = py_func
+        self.return_type = return_type
+        # Copy function name attributes similar to regular Dispatchers to allow
+        # handling in find_callname()
+        self.__name__ = py_func.__name__
+        self.__qualname__ = py_func.__qualname__
+        # Default argument values match py_func
+        self.__defaults__ = py_func.__defaults__
+        self.__code__ = py_func.__code__
+        # Required for compiler frontend used in _get_df_apply_used_cols(), see:
+        # https://github.com/numba/numba/blob/53e976f1b0c6683933fa0a93738362914bffc1cd/numba/core/bytecode.py#L32
+        self.__numba__ = "py_func"
+
+    def __call__(self, *args, **kwargs):
+        return self.py_func(*args, **kwargs)
+
+    @property
+    def _numba_type_(self):
+        return WrapPythonDispatcherType(self)
+
+
+def _check_return_type(return_type):
+    """Check and convert wrap_python return type to Numba type."""
+
+    from numba.core import sigutils, types
+
+    from bodo.utils.typing import BodoError
+
+    if isinstance(return_type, str):
+        return_type = sigutils._parse_signature_string(return_type)
+
+    if isinstance(return_type, types.abstract._TypeMetaclass):
+        raise BodoError(
+            f"wrap_python requires full data types, not just data type "
+            f"classes. For example, 'bodo.DataFrameType((bodo.float64[::1],), "
+            f"bodo.RangeIndexType(), ('A',))' is a valid data type but 'bodo.DataFrameType' is not.\n"
+            f"Return type is type class {return_type}."
+        )
+    if not isinstance(return_type, types.Type):
+        raise BodoError(
+            f"A data type is required for wrap_python return type annotation, not {return_type}."
+        )
+
+    # list/set reflection is irrelevant in wrap_python
+    if isinstance(return_type, (types.List, types.Set)):
+        return_type = return_type.copy(reflected=False)
+
+    return return_type
+
+
+def wrap_python(return_type):
+    """Creates a JIT wrapper around a regular Python function to allow its use inside
+    JIT functions (including UDFs).
+    The data type of the function output must be specified.
+
+    Args:
+        return_type (types.Type|str): data type of function output
+    """
+    return_type = _check_return_type(return_type)
+
+    def wrapper(func):
+        return WrapPythonDispatcher(func, return_type)
+
+    return wrapper
+
+
+class WrapPythonDispatcherType(numba.types.Callable, numba.types.Opaque):
+    """Data type for JIT wrapper dispatcher."""
+
+    def __init__(self, dispatcher):
+        self.dispatcher = dispatcher
+        self._overload_cache = {}
+        self._sigs = []
+        super().__init__(name=f"WrapPythonDispatcherType({dispatcher})")
+
+    def get_call_type(self, context, args, kws):
+        """Get call signature for JIT wrapper dispatcher call and install its lowering
+        implementation.
+        """
+        pysig = numba.core.utils.pysignature(self.dispatcher.py_func)
+        folded_args = bodo.utils.transform.fold_argument_types(pysig, args, kws)
+
+        def impl(context, builder, sig, args):
+            pyapi = context.get_python_api(builder)
+            env_manager = context.get_env_manager(builder)
+            c = numba.core.pythonapi._BoxContext(context, builder, pyapi, env_manager)
+
+            func_obj = _load_wrap_python_function(pyapi, self.dispatcher.py_func)
+
+            arg_objs = []
+            for arg_type, arg in zip(sig.args, args):
+                c.context.nrt.incref(c.builder, arg_type, arg)
+                arg_obj = pyapi.from_native_value(arg_type, arg, env_manager)
+                arg_objs.append(arg_obj)
+
+            # Output handling similar to:
+            # https://github.com/numba/numba/blob/53e976f1b0c6683933fa0a93738362914bffc1cd/numba/core/lowering.py#L963
+
+            out_obj = c.pyapi.call_function_objargs(func_obj, arg_objs)
+
+            # Check for user function exceptions
+            with builder.if_then(c.pyapi.c_api_error()):
+                context.call_conv.return_exc(builder)
+
+            # Check output type to match the expected return type
+            type_checker_func_obj = c.pyapi.unserialize(
+                c.pyapi.serialize_object(bodo.utils.typing._check_objmode_type)
+            )
+            type_obj = c.pyapi.unserialize(c.pyapi.serialize_object(sig.return_type))
+            fixed_out_obj = c.pyapi.call_function_objargs(
+                type_checker_func_obj, [out_obj, type_obj]
+            )
+
+            # Error during type check
+            with builder.if_then(c.pyapi.c_api_error()):
+                context.call_conv.return_exc(builder)
+
+            pyapi.decref(out_obj)
+            pyapi.decref(type_checker_func_obj)
+            pyapi.decref(type_obj)
+
+            out = pyapi.to_native_value(sig.return_type, fixed_out_obj)
+
+            # Release objs
+            pyapi.decref(fixed_out_obj)
+            for arg_obj in arg_objs:
+                pyapi.decref(arg_obj)
+
+            # cleanup output
+            if callable(out.cleanup):
+                out.cleanup()
+
+            # Error during unboxing
+            with builder.if_then(out.is_error):
+                context.call_conv.return_exc(builder)
+
+            return out.value
+
+        self._overload_cache[folded_args] = impl
+        lower_builtin(impl, *folded_args)(impl)
+
+        out_sig = signature(self.dispatcher.return_type, *folded_args).replace(
+            pysig=pysig
+        )
+        self._sigs.append(out_sig)
+        return out_sig
+
+    def get_call_signatures(self):
+        return self._sigs, True
+
+    def get_impl_key(self, sig):
+        return self._overload_cache[sig.args]
+
+    @property
+    def key(self):
+        return self.dispatcher.py_func, self.dispatcher.return_type
+
+
+register_model(WrapPythonDispatcherType)(models.OpaqueModel)
+
+
+def _load_wrap_python_function(pyapi, py_func):
+    """Load the JIT wrapper function object to call. Handles serialization and
+    unserialization (if serializable) to support caching.
+    Also, caches the unseralized
+    function in a global variable to avoid repeated serialization/unserialization.
+    """
+    from llvmlite import ir as lir
+
+    # Adapted from:
+    # https://github.com/numba/numba/blob/53e976f1b0c6683933fa0a93738362914bffc1cd/numba/core/pythonapi.py#L1663
+    builder = pyapi.builder
+    tyctx = pyapi.context
+    m = builder.module
+
+    # Add a global variable to cache the unserialized function
+    gv = lir.GlobalVariable(
+        m,
+        pyapi.pyobj,
+        name=m.get_unique_name("cached_wrap_python_py_func"),
+    )
+    gv.initializer = gv.type.pointee(None)
+    gv.linkage = "internal"
+
+    cached = builder.load(gv)
+    with builder.if_then(cgutils.is_null(builder, cached)):
+        if serialize.is_serialiable(py_func):
+            callee = pyapi.unserialize(pyapi.serialize_object(py_func))
+        else:
+            callee = tyctx.add_dynamic_addr(
+                builder,
+                id(py_func),
+                info="wrap_python_function",
+            )
+        # Incref the function and cache it
+        pyapi.incref(callee)
+        builder.store(callee, gv)
+
+    callee = builder.load(gv)
+    return callee

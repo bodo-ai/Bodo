@@ -2772,7 +2772,7 @@ class TypingTransforms:
             # get dataframe data arrays to set
             for i in range(len(col_inds)):
                 func = eval(
-                    "lambda df: bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, _i)"
+                    "lambda _b_df: bodo.hiframes.pd_dataframe_ext.get_dataframe_data(_b_df, _i)"
                 )
                 nodes += compile_func_single_block(
                     func, [val], None, extra_globals={"_i": i}
@@ -6418,7 +6418,9 @@ class TypingTransforms:
         # is not used in other code paths
         if self._label_dominates_var_defs(label, df_var):
             # replace old variable with new one
-            new_df_var = ir.Var(df_var.scope, mk_unique_var(df_var.name), df_var.loc)
+            new_df_var = ir.Var(
+                df_var.scope, mk_unique_var(df_var.name) + "_2", df_var.loc
+            )
             self.replace_var_dict[df_var.name] = new_df_var
             self.changed = True
             true_var = ir.Var(
@@ -6507,7 +6509,11 @@ class TypingTransforms:
 
         if dominates:
             # rename the dataframe variable to keep schema static
-            new_df_var = ir.Var(df_var.scope, mk_unique_var(df_var.name), df_var.loc)
+            # Adding extra suffix to avoid name conflicts with Numba's renaming
+            # e.g. df.1, see test_df_set_col_rename_bug
+            new_df_var = ir.Var(
+                df_var.scope, mk_unique_var(df_var.name) + "_1", df_var.loc
+            )
             out_var = new_df_var
             self.replace_var_dict[df_var.name] = new_df_var
         else:
@@ -6517,8 +6523,11 @@ class TypingTransforms:
             # set_dataframe_data()
             out_var = df_var
 
+        # NOTE: avoiding "df" as input argument name to avoid conflicts with user code.
+        # see test_df_set_col_rename_bug
+        # TODO: rename variables in generated functions
         func = eval(
-            "lambda df, cname, arr: bodo.hiframes.dataframe_impl.set_df_col(df, cname, arr, _inplace)"
+            "lambda _b_df, cname, arr: bodo.hiframes.dataframe_impl.set_df_col(_b_df, cname, arr, _inplace)"
         )
         args = [df_var, cname_var, inst.value]
 
