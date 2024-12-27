@@ -34,7 +34,7 @@ from numba.parfors.parfor import (
 import bodo
 import bodo.io
 import bodo.io.np_io
-from bodo.decorators import JITWrapperDispatcherType
+from bodo.decorators import WrapPythonDispatcherType
 from bodo.hiframes.pd_categorical_ext import CategoricalArrayType
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.hiframes.pd_multi_index_ext import MultiIndexType
@@ -916,7 +916,7 @@ class DistributedAnalysis:
             func_name, func_mod = fdef
 
         # Similar to ObjModeLiftedWith, we assume out data is distributed (1D_Var)
-        if isinstance(self.typemap[rhs.func.name], JITWrapperDispatcherType):
+        if isinstance(self.typemap[rhs.func.name], WrapPythonDispatcherType):
             if lhs not in array_dists:
                 self._set_var_dist(lhs, array_dists, Distribution.OneD_Var)
             return

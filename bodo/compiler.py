@@ -927,8 +927,8 @@ def udf_jit(signature_or_function=None, **options):
     generated barriers cause hangs. see: test_df_apply_func_case2
     """
 
-    # jit_wrapper functions don't need to be compiled for UDFs
-    if isinstance(signature_or_function, bodo.decorators.JITWrapperDispatcher):
+    # wrap_python functions don't need to be compiled for UDFs
+    if isinstance(signature_or_function, bodo.decorators.WrapPythonDispatcher):
         return signature_or_function
 
     parallel = {
@@ -966,7 +966,7 @@ def is_user_dispatcher(func_type):
     # dispatcher with the BodoCompiler
     return (
         isinstance(func_type, numba.core.types.functions.ObjModeDispatcher)
-        or isinstance(func_type, bodo.decorators.JITWrapperDispatcherType)
+        or isinstance(func_type, bodo.decorators.WrapPythonDispatcherType)
         or (
             isinstance(func_type, numba.core.types.Dispatcher)
             and issubclass(func_type.dispatcher._compiler.pipeline_class, BodoCompiler)

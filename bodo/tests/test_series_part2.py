@@ -147,7 +147,7 @@ def g3(a):
 out_type = bodo.typeof([1.0, 2.0])
 
 
-@bodo.jit_wrapper(out_type)
+@bodo.wrap_python(out_type)
 def g4(a):
     return [a, 2 * a]
 
@@ -208,8 +208,8 @@ def test_series_map_global_jit(memory_leak_check):
     check_func(test_impl, (S,))
 
 
-def test_series_map_jit_wrapper(memory_leak_check):
-    """Test UDF defined as a jit_wrapper function"""
+def test_series_map_wrap_python(memory_leak_check):
+    """Test UDF defined as a wrap_python function"""
 
     def test_impl(S):
         return S.map(g4)

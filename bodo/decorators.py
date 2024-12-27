@@ -458,7 +458,7 @@ def _init_extensions():
         numba.core.registry.cpu_target.target_context.refresh()
 
 
-class JITWrapperDispatcher:
+class WrapPythonDispatcher:
     """Dispatcher for JIT wrapped Python functions."""
 
     def __init__(self, py_func, return_type):
@@ -480,11 +480,11 @@ class JITWrapperDispatcher:
 
     @property
     def _numba_type_(self):
-        return JITWrapperDispatcherType(self)
+        return WrapPythonDispatcherType(self)
 
 
 def _check_return_type(return_type):
-    """Check and convert jit_wrapper return type to Numba type."""
+    """Check and convert wrap_python return type to Numba type."""
 
     from numba.core import sigutils, types
 
@@ -495,24 +495,24 @@ def _check_return_type(return_type):
 
     if isinstance(return_type, types.abstract._TypeMetaclass):
         raise BodoError(
-            f"jit_wrapper requires full data types, not just data type "
+            f"wrap_python requires full data types, not just data type "
             f"classes. For example, 'bodo.DataFrameType((bodo.float64[::1],), "
             f"bodo.RangeIndexType(), ('A',))' is a valid data type but 'bodo.DataFrameType' is not.\n"
             f"Return type is type class {return_type}."
         )
     if not isinstance(return_type, types.Type):
         raise BodoError(
-            f"A data type is required for jit_wrapper return type annotation, not {return_type}."
+            f"A data type is required for wrap_python return type annotation, not {return_type}."
         )
 
-    # list/set reflection is irrelevant in jit_wrapper
+    # list/set reflection is irrelevant in wrap_python
     if isinstance(return_type, (types.List, types.Set)):
         return_type = return_type.copy(reflected=False)
 
     return return_type
 
 
-def jit_wrapper(return_type):
+def wrap_python(return_type):
     """Creates a JIT wrapper around a regular Python function to allow its use inside
     JIT functions (including UDFs).
     The data type of the function output must be specified.
@@ -523,19 +523,19 @@ def jit_wrapper(return_type):
     return_type = _check_return_type(return_type)
 
     def wrapper(func):
-        return JITWrapperDispatcher(func, return_type)
+        return WrapPythonDispatcher(func, return_type)
 
     return wrapper
 
 
-class JITWrapperDispatcherType(numba.types.Callable, numba.types.Opaque):
+class WrapPythonDispatcherType(numba.types.Callable, numba.types.Opaque):
     """Data type for JIT wrapper dispatcher."""
 
     def __init__(self, dispatcher):
         self.dispatcher = dispatcher
         self._overload_cache = {}
         self._sigs = []
-        super().__init__(name=f"JITWrapperDispatcherType({dispatcher})")
+        super().__init__(name=f"WrapPythonDispatcherType({dispatcher})")
 
     def get_call_type(self, context, args, kws):
         """Get call signature for JIT wrapper dispatcher call and install its lowering
@@ -549,7 +549,7 @@ class JITWrapperDispatcherType(numba.types.Callable, numba.types.Opaque):
             env_manager = context.get_env_manager(builder)
             c = numba.core.pythonapi._BoxContext(context, builder, pyapi, env_manager)
 
-            func_obj = _load_jit_wrapper_function(pyapi, self.dispatcher.py_func)
+            func_obj = _load_wrap_python_function(pyapi, self.dispatcher.py_func)
 
             arg_objs = []
             for arg_type, arg in zip(sig.args, args):
@@ -620,10 +620,10 @@ class JITWrapperDispatcherType(numba.types.Callable, numba.types.Opaque):
         return self.dispatcher.py_func, self.dispatcher.return_type
 
 
-register_model(JITWrapperDispatcherType)(models.OpaqueModel)
+register_model(WrapPythonDispatcherType)(models.OpaqueModel)
 
 
-def _load_jit_wrapper_function(pyapi, py_func):
+def _load_wrap_python_function(pyapi, py_func):
     """Load the JIT wrapper function object to call. Handles serialization and
     unserialization (if serializable) to support caching.
     Also, caches the unseralized
@@ -641,7 +641,7 @@ def _load_jit_wrapper_function(pyapi, py_func):
     gv = lir.GlobalVariable(
         m,
         pyapi.pyobj,
-        name=m.get_unique_name("cached_jit_wrapper_py_func"),
+        name=m.get_unique_name("cached_wrap_python_py_func"),
     )
     gv.initializer = gv.type.pointee(None)
     gv.linkage = "internal"
@@ -654,7 +654,7 @@ def _load_jit_wrapper_function(pyapi, py_func):
             callee = tyctx.add_dynamic_addr(
                 builder,
                 id(py_func),
-                info="jit_wrapper_function",
+                info="wrap_python_function",
             )
         # Incref the function and cache it
         pyapi.incref(callee)

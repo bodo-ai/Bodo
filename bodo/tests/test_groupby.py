@@ -3488,13 +3488,13 @@ def test_groupby_apply(is_slow_run, memory_leak_check):
 df_type = bodo.typeof(pd.DataFrame({"AA": [1.1], "BB": [4.1]}))
 
 
-@bodo.jit_wrapper(df_type)
+@bodo.wrap_python(df_type)
 def g_wrapped(df):
     return pd.DataFrame({"AA": [df.C.mean(), df.C.sum()], "BB": [3.1, df["C"].iloc[0]]})
 
 
-def test_groupby_apply_jit_wrapper(memory_leak_check):
-    """Test groupby apply with a jit_wrapper UDF"""
+def test_groupby_apply_wrap_python(memory_leak_check):
+    """Test groupby apply with a wrap_python UDF"""
 
     def impl1(df):
         df2 = df.groupby("A").apply(g_wrapped)

@@ -1422,12 +1422,12 @@ def test_objmode_warning(memory_leak_check):
         numba.core.config.DEVELOPER_MODE = old_developer_mode
 
 
-def test_jit_wrapper(memory_leak_check):
-    """Make sure basic usage of jit_wrapper works"""
+def test_wrap_python(memory_leak_check):
+    """Make sure basic usage of wrap_python works"""
 
     A = 3
 
-    @bodo.jit_wrapper("int64")
+    @bodo.wrap_python("int64")
     def g(df):
         return A
 
@@ -1438,30 +1438,30 @@ def test_jit_wrapper(memory_leak_check):
     check_func(impl, (df,))
 
 
-def test_jit_wrapper_error_handling(memory_leak_check):
-    """Test error handling in jit_wrapper"""
+def test_wrap_python_error_handling(memory_leak_check):
+    """Test error handling in wrap_python"""
 
-    with pytest.raises(BodoError, match="jit_wrapper requires full data types"):
+    with pytest.raises(BodoError, match="wrap_python requires full data types"):
 
-        @bodo.jit_wrapper(bodo.DataFrameType)
+        @bodo.wrap_python(bodo.DataFrameType)
         def g(df):
             return df
 
-    with pytest.raises(BodoError, match="A data type is required for jit_wrapper"):
+    with pytest.raises(BodoError, match="A data type is required for wrap_python"):
 
-        @bodo.jit_wrapper(3)
+        @bodo.wrap_python(3)
         def g(a):
             return a
 
 
-def test_jit_wrapper_type_check():
+def test_wrap_python_type_check():
     """test type checking for JIT wrapper output values"""
 
     # A is specified as int but return value has strings
     df1 = pd.DataFrame({"A": [1, 2, 3]})
     df_type1 = bodo.typeof(df1)
 
-    @bodo.jit_wrapper(df_type1)
+    @bodo.wrap_python(df_type1)
     def g():
         return pd.DataFrame({"A": ["abc", "bc"]})
 

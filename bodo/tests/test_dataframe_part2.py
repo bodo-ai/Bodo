@@ -844,13 +844,13 @@ def test_df_apply_func_case2(memory_leak_check):
 g_var = [3, 1, 5]
 
 
-@bodo.jit_wrapper(bodo.int64)
+@bodo.wrap_python(bodo.int64)
 def g3(r):
     return r.A + g_var[0]
 
 
-def test_df_apply_jit_wrapper(memory_leak_check):
-    """Test jit_wrapper function in df.apply()"""
+def test_df_apply_wrap_python(memory_leak_check):
+    """Test wrap_python function in df.apply()"""
 
     def test_impl(df):
         return df.apply(g3, axis=1)

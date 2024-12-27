@@ -686,7 +686,7 @@ def get_overload_const(val):
         return val.literal_value
     if isinstance(val, types.Dispatcher):
         return val
-    if isinstance(val, bodo.decorators.JITWrapperDispatcherType):
+    if isinstance(val, bodo.decorators.WrapPythonDispatcherType):
         return val.dispatcher
     if isinstance(val, types.BaseTuple):
         out_list = []
@@ -992,14 +992,14 @@ def is_const_func_type(t) -> bool:
             types.MakeFunctionLiteral,
             bodo.utils.typing.FunctionLiteral,
             types.Dispatcher,
-            bodo.decorators.JITWrapperDispatcherType,
+            bodo.decorators.WrapPythonDispatcherType,
         ),
     )
 
 
 def get_overload_const_func(val, func_ir):
     """get constant function object or ir.Expr.make_function from function type"""
-    from bodo.decorators import JITWrapperDispatcherType
+    from bodo.decorators import WrapPythonDispatcherType
 
     if isinstance(val, (types.MakeFunctionLiteral, bodo.utils.typing.FunctionLiteral)):
         func = val.literal_value
@@ -1016,7 +1016,7 @@ def get_overload_const_func(val, func_ir):
     if isinstance(val, CPUDispatcher):
         return val.py_func
 
-    if isinstance(val, JITWrapperDispatcherType):
+    if isinstance(val, WrapPythonDispatcherType):
         return val.dispatcher
 
     raise BodoError(f"'{val}' not a constant function type")
@@ -1499,7 +1499,7 @@ def is_literal_type(t):
         )
         or t == types.none  # None type is always literal since single value
         or isinstance(t, types.Dispatcher)
-        or isinstance(t, bodo.decorators.JITWrapperDispatcherType)
+        or isinstance(t, bodo.decorators.WrapPythonDispatcherType)
         # LiteralStrKeyDict is a BaseTuple in Numba 0.51 also
         or (isinstance(t, types.BaseTuple) and all(is_literal_type(v) for v in t.types))
         # List/Dict types preserve const initial values in Numba 0.51
@@ -1585,7 +1585,7 @@ def get_literal_value(t):
         return tuple(get_literal_value(v) for v in t.types)
     if isinstance(t, types.Dispatcher):
         return t
-    if isinstance(t, bodo.decorators.JITWrapperDispatcherType):
+    if isinstance(t, bodo.decorators.WrapPythonDispatcherType):
         return t.dispatcher
     if is_initial_value_type(t):
         return t.initial_value
