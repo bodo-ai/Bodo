@@ -936,6 +936,9 @@ def _infer_series_arr_type(S: pd.Series, array_metadata=None):
             arr_type = types.Array(arr_type.dtype, 1, "C")
 
         return arr_type
+    except pa.lib.ArrowMemoryError:  # pragma: no cover
+        # OOM
+        raise
     except Exception:  # pragma: no cover
         raise BodoError(f"data type {S.dtype} for column {S.name} not supported yet")
 
