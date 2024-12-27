@@ -1373,6 +1373,20 @@ def test_parfor_empty_entry_block(memory_leak_check):
     )
 
 
+def test_df_set_col_rename_bug(memory_leak_check):
+    """Test for variable rename clashes with Numba in typing"""
+
+    def impl(df):
+        df["A"] = df["A"] + 1
+        df["B"] = df["A"] + 3
+        df = df.drop_duplicates(subset=["A"])
+        df = df.drop("A", axis=1)
+        return df
+
+    df = pd.DataFrame({"A": [1, 2, 3]})
+    check_func(impl, (df,), only_seq=True, copy_input=True)
+
+
 def test_objmode_warning(memory_leak_check):
     """Test that bodo.objmode raises a warning when used
     and that bodo.no_warning_objmode does not."""
