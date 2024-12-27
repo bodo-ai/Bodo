@@ -70,6 +70,6 @@ def preprocess_pile(df, out_file):
 
 if __name__ == "__main__":
     print("Loading dataset...")
-    dataset = load_dataset(Config.dataset_name, split="train", cache_dir=Config.cache_dir, revision="convert/parquet")
+    dataset = load_dataset(Config.dataset_name, split="train", cache_dir=Config.cache_dir)
     df = dataset.to_pandas()
     preprocess_pile(df, Config.output_file)
