@@ -2833,6 +2833,10 @@ def _check_objmode_type(val, typ):
 
     val_typ = bodo.typeof(val)
 
+    # Shortcut for the common case
+    if val_typ == typ:
+        return val
+
     # handle dataframe type differences if possible
     if isinstance(typ, DataFrameType) and isinstance(val_typ, DataFrameType):
         val, val_typ = _fix_objmode_df_type(val, val_typ, typ)
