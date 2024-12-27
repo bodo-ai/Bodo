@@ -9,7 +9,7 @@ import types as pytypes
 import warnings
 
 import numba
-from numba.core import cpu
+from numba.core import cgutils, cpu, serialize
 from numba.core.options import _mapping
 from numba.core.targetconfig import Option, TargetConfig
 from numba.core.typing.templates import signature
@@ -549,9 +549,7 @@ class JITWrapperDispatcherType(numba.types.Callable, numba.types.Opaque):
             env_manager = context.get_env_manager(builder)
             c = numba.core.pythonapi._BoxContext(context, builder, pyapi, env_manager)
 
-            func_obj = pyapi.unserialize(
-                pyapi.serialize_object(self.dispatcher.py_func)
-            )
+            func_obj = _load_jit_wrapper_function(pyapi, self.dispatcher.py_func)
 
             arg_objs = []
             for arg_type, arg in zip(sig.args, args):
@@ -606,3 +604,44 @@ class JITWrapperDispatcherType(numba.types.Callable, numba.types.Opaque):
 
 
 register_model(JITWrapperDispatcherType)(models.OpaqueModel)
+
+
+def _load_jit_wrapper_function(pyapi, py_func):
+    """Load the JIT wrapper function object to call. Handles serialization and
+    unserialization (if serializable) to support caching.
+    Also, caches the unseralized
+    function in a global variable to avoid repeated serialization/unserialization.
+    """
+    from llvmlite import ir as lir
+
+    # Adapted from:
+    # https://github.com/numba/numba/blob/53e976f1b0c6683933fa0a93738362914bffc1cd/numba/core/pythonapi.py#L1663
+    builder = pyapi.builder
+    tyctx = pyapi.context
+    m = builder.module
+
+    # Add a global variable to cache the unserialized function
+    gv = lir.GlobalVariable(
+        m,
+        pyapi.pyobj,
+        name=m.get_unique_name("cached_jit_wrapper_py_func"),
+    )
+    gv.initializer = gv.type.pointee(None)
+    gv.linkage = "internal"
+
+    cached = builder.load(gv)
+    with builder.if_then(cgutils.is_null(builder, cached)):
+        if serialize.is_serialiable(py_func):
+            callee = pyapi.unserialize(pyapi.serialize_object(py_func))
+        else:
+            callee = tyctx.add_dynamic_addr(
+                builder,
+                id(py_func),
+                info="jit_wrapper_function",
+            )
+        # Incref the function and cache it
+        pyapi.incref(callee)
+        builder.store(callee, gv)
+
+    callee = builder.load(gv)
+    return callee
