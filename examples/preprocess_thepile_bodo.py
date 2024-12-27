@@ -26,14 +26,13 @@ class Config:
     max_seq_length: int = 512
 
 
-@bodo.jit(spawn=False)
+@bodo.wrap_python(bodo.string_type)
 def hash_text(text):
     """Hash function for deduplication"""
-    with bodo.objmode(out="string"):
-        out = hashlib.md5(text.encode('utf-8')).hexdigest()
-    return out
+    return hashlib.md5(text.encode('utf-8')).hexdigest()
 
-@bodo.jit(spawn=False)
+
+@bodo.wrap_python(bodo.string_type)
 def clean_text(text):
     text = text.replace('\n', ' ').replace('\t', ' ')
     # Remove extra spaces
@@ -46,22 +45,20 @@ tokenizer.pad_token = tokenizer.eos_token
 tuple_list_type = bodo.typeof(([1, 2], [3, 4]))
 
 
-@bodo.jit(spawn=False)
+@bodo.wrap_python(tuple_list_type)
 def run_tokenizer(text):
-    with bodo.objmode(out=tuple_list_type):
-        tokenized = tokenizer(text, truncation=True, max_length=Config.max_seq_length, padding="max_length")
-        out = (tokenized["input_ids"], tokenized["attention_mask"])
-    return out
+    tokenized = tokenizer(text, truncation=True, max_length=Config.max_seq_length, padding="max_length")
+    return (tokenized["input_ids"], tokenized["attention_mask"])
 
 
-@bodo.jit(spawn=False)
+@bodo.jit
 def tokenize_data(row):
     text = row.text
     t = run_tokenizer(text)
     return pd.Series([text, t[0], t[1]], index=["text", "input_ids", "attention_mask"])
 
 
-@bodo.jit(spawn=False)
+@bodo.jit
 def preprocess_pile(df, out_file):
     df["text"] = df["text"].map(clean_text)
     df["text_hash"] = df["text"].map(hash_text)
