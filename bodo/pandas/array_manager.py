@@ -7,7 +7,17 @@ import numpy as np
 import pandas as pd
 from pandas.core.arrays import ExtensionArray
 from pandas.core.arrays.arrow.array import ArrowExtensionArray
-from pandas.core.internals.array_manager import ArrayManager, SingleArrayManager
+
+try:
+    from pandas.core.internals.array_manager import ArrayManager, SingleArrayManager
+except ModuleNotFoundError:
+    # newer versions of pandas do not support ArrayManager/SingleArrayManager (only use BlockManager)
+    class ArrayManager:
+        pass
+
+    class SingleArrayManager:
+        pass
+
 
 import bodo.user_logging
 from bodo.pandas.lazy_metadata import LazyMetadataMixin

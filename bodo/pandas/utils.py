@@ -1,4 +1,11 @@
-from pandas._config.config import _get_option
+try:
+    from pandas._config.config import _get_option
+except ModuleNotFoundError:
+    # newer versions of pandas remove _get_option API and `mode.data_manager` option
+    def _get_option(path, silent=True):
+        assert path == "mode.data_manager"
+        return "block"
+
 
 from bodo.pandas.array_manager import LazyArrayManager, LazySingleArrayManager
 from bodo.pandas.managers import LazyBlockManager, LazySingleBlockManager

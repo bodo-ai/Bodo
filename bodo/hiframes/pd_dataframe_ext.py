@@ -5304,7 +5304,6 @@ pd_unsupported = (
     pd.read_sas,
     pd.read_spss,
     pd.read_sql_query,
-    pd.read_gbq,
     pd.read_stata,
     pd.ExcelWriter,
     pd.json_normalize,
