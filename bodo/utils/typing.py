@@ -2853,7 +2853,7 @@ def _check_objmode_type(val, typ):
 
     if val_typ != typ:
         raise BodoError(
-            f"Invalid objmode data type specified.\nUser specified:\t{typ}\nValue type:\t{val_typ}"
+            f"Invalid Python output data type specified.\nUser specified:\t{typ}\nValue type:\t{val_typ}"
         )
 
     return val

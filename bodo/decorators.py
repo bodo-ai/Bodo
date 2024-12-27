@@ -566,10 +566,27 @@ class JITWrapperDispatcherType(numba.types.Callable, numba.types.Opaque):
             with builder.if_then(c.pyapi.c_api_error()):
                 context.call_conv.return_exc(builder)
 
-            out = pyapi.to_native_value(sig.return_type, out_obj)
+            # Check output type to match the expected return type
+            type_checker_func_obj = c.pyapi.unserialize(
+                c.pyapi.serialize_object(bodo.utils.typing._check_objmode_type)
+            )
+            type_obj = c.pyapi.unserialize(c.pyapi.serialize_object(sig.return_type))
+            fixed_out_obj = c.pyapi.call_function_objargs(
+                type_checker_func_obj, [out_obj, type_obj]
+            )
+
+            # Error during type check
+            with builder.if_then(c.pyapi.c_api_error()):
+                context.call_conv.return_exc(builder)
+
+            pyapi.decref(out_obj)
+            pyapi.decref(type_checker_func_obj)
+            pyapi.decref(type_obj)
+
+            out = pyapi.to_native_value(sig.return_type, fixed_out_obj)
 
             # Release objs
-            pyapi.decref(out_obj)
+            pyapi.decref(fixed_out_obj)
             for arg_obj in arg_objs:
                 pyapi.decref(arg_obj)
 

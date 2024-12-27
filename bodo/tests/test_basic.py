@@ -1452,3 +1452,21 @@ def test_jit_wrapper_error_handling(memory_leak_check):
         @bodo.jit_wrapper(3)
         def g(a):
             return a
+
+
+def test_jit_wrapper_type_check():
+    """test type checking for JIT wrapper output values"""
+
+    # A is specified as int but return value has strings
+    df1 = pd.DataFrame({"A": [1, 2, 3]})
+    df_type1 = bodo.typeof(df1)
+
+    @bodo.jit_wrapper(df_type1)
+    def g():
+        return pd.DataFrame({"A": ["abc", "bc"]})
+
+    def impl():
+        return g()
+
+    with pytest.raises(BodoError, match="Invalid Python output data type specified"):
+        bodo.jit(impl)()
