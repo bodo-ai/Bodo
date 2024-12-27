@@ -5329,7 +5329,7 @@ pd_unsupported = [
 # Newer versions of pandas do not have pd.read_gbq
 try:
     pd_unsupported.append(pd.read_gbq)
-except ModuleNotFoundError:
+except AttributeError:
     pass
 
 
