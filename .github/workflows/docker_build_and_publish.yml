@@ -22,7 +22,7 @@ on:
         default: false
 env:
   TEST_TAG: bodoai/test_release_image:test
-  LATEST_TAG: bodoai/bodo_example:latest
+  LATEST_TAG: bodoai/bodo-jupyterlab:latest
 
 jobs:
 
