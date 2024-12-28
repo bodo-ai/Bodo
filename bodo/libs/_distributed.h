@@ -1078,6 +1078,8 @@ static void c_bcast(void* send_data, int sendcount, int typ_enum, int root,
     if (comm_ptr != 0) {
         comm = (*reinterpret_cast<MPI_Comm*>(comm_ptr));
     }
+    std::cout << "bcasting val || " << "send count |" << sendcount << "| "
+              << "send data addr |" << send_data << "|" << std::endl;
     CHECK_MPI(MPI_Bcast(send_data, sendcount, mpi_typ, root, comm),
               "_distributed.h::c_bcast: MPI error on MPI_Bcast:");
 }
