@@ -2898,7 +2898,7 @@ def test_barrier_error():
 @pytest.mark.parametrize(
     "val1, val2",
     [
-        ("hello from rank0", "other"),
+        pytest.param("hello from rank0", "other", id="hello"),
         (1, 0),
         (
             np.datetime64("2005-02-25").astype("datetime64[ns]"),
