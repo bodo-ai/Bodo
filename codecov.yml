@@ -1,7 +1,6 @@
 codecov:
   notify:
     wait_for_ci: yes
-  branch: Hadia/codecov
 
 coverage:
   status:
