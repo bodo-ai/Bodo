@@ -46,7 +46,7 @@ jobs:
 
       # Regular Setup
       - name: Create Micromamba Environment
-        uses: mamba-org/setup-micromamba@v1
+        uses: mamba-org/setup-micromamba@v2
         with:
           environment-name: bodo_build
           create-args: python=3.11 conda-build anaconda-client python-libarchive-c setuptools_scm -c conda-forge

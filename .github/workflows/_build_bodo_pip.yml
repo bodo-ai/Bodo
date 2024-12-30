@@ -61,7 +61,7 @@ jobs:
           pixi global install sccache
 
       - name: Build Wheels
-        uses: pypa/cibuildwheel@v2.21.3
+        uses: pypa/cibuildwheel@v2.22.0
         env:
           CIBW_BEFORE_ALL_LINUX: |
             # Install Pixi and Environment
