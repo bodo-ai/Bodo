@@ -17,7 +17,7 @@ def query_model(prompt):
 
 @bodo.jit
 def query_model_all(df):
-    """
+    """Clean up prompts and query the model for all prompts in the dataframe.
     """
     t0 = time.time()
     cleaned_prompts = df["prompt"].str.strip().str.lower()
