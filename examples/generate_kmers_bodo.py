@@ -12,25 +12,24 @@ df_type = bodo.typeof(df_sample)
 
 @bodo.wrap_python(df_type)
 def fasta4epitope(fasta_file):
+
+    # Save sequence names and sequences in a list
+    seq_names = []
+    sequences = []
+
     # Read fasta file containing epitope sequences
-    epitope_seq = list(SeqIO.parse(fasta_file, "fasta"))
-    
-    # Save sequence names in a list
-    seq_name = [record.id for record in epitope_seq]
-    
-    # Save sequences in a list
-    sequences = [str(record.seq) for record in epitope_seq]
+    for record in SeqIO.parse(fasta_file, "fasta"):
+        seq_names.append(record.id)
+        sequences.append(str(record.seq))
     
     # Save these in a data frame
-    seq_df = pd.DataFrame({'annotation': seq_name, 'PROBE_SEQUENCE': sequences})
+    seq_df = pd.DataFrame({'annotation': seq_names, 'PROBE_SEQUENCE': sequences})
     
     # Add a column with epitope name
     seq_df['source'] = os.path.basename(fasta_file).split('.')[0]
     
     # Change all columns to string
     seq_df = seq_df.astype(str)
-    
-    # Return data frame
     return seq_df
 
 
