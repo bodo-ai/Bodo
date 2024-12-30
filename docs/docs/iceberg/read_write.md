@@ -103,6 +103,11 @@ The following catalogs are supported:
     - Parameter `token` or `credential` is required for authentication and should be retrieved from the REST catalog provider.
     - E.g. `iceberg+rest` or `iceberg+rest://<rest-uri>?warehouse=<warehouse>&token=<token>`
 
+- S3 Tables
+    - Connection string must be of the form `iceberg+arn:aws:s3tables:<region>:<account_number>:<bucket>`
+    - `params` is unused
+    - E.g. `iceberg+arn:aws:s3tables:us-west-2:123456789012:mybucket`
+
 #### Pandas APIs {#iceberg-pandas}
 
 Example code for reading:
