@@ -27,15 +27,15 @@ import bodo.hiframes
 import bodo.hiframes.table
 from bodo.mpi4py import MPI
 from bodo.pandas import LazyMetadata
-from bodo.submit.spawner import BodoSQLContextMetadata, env_var_prefix
-from bodo.submit.utils import (
+from bodo.spawn.spawner import BodoSQLContextMetadata, env_var_prefix
+from bodo.spawn.utils import (
     ArgMetadata,
     CommandType,
     debug_msg,
     poll_for_barrier,
     set_global_config,
 )
-from bodo.submit.worker_state import set_is_worker
+from bodo.spawn.worker_state import set_is_worker
 from bodo.utils.typing import BodoWarning
 
 DISTRIBUTED_RETURN_HEAD_SIZE: int = 5

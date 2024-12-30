@@ -11,9 +11,9 @@ import pytest
 from numba.core.ir_utils import find_callname, guard
 
 import bodo
-import bodo.submit.spawner
+import bodo.spawn.spawner
 from bodo.mpi4py import MPI
-from bodo.submit.spawner import CommandType
+from bodo.spawn.spawner import CommandType
 from bodo.tests.dataframe_common import df_value  # noqa
 from bodo.tests.test_numpy_array import arr_tuple_val  # noqa
 from bodo.tests.utils import (
@@ -3223,7 +3223,7 @@ def test_get_cpu_id(memory_leak_check):
 
 def bcast_intercomm(data):
     """broadcast data using spawner's intercomm"""
-    spawner = bodo.submit.spawner.get_spawner()
+    spawner = bodo.spawn.spawner.get_spawner()
     bcast_root = MPI.ROOT if bodo.get_rank() == 0 else MPI.PROC_NULL
     spawner.worker_intercomm.bcast(CommandType.BROADCAST.value, bcast_root)
     bodo.libs.distributed_api.bcast(
@@ -3243,7 +3243,7 @@ def test_bcast_intercomm():
 def test_scatterv_intercomm(scatter_gather_data, memory_leak_check):
     """Test scatterv's intercomm support in spawn mode"""
 
-    spawner = bodo.submit.spawner.get_spawner()
+    spawner = bodo.spawn.spawner.get_spawner()
     bcast_root = MPI.ROOT if bodo.get_rank() == 0 else MPI.PROC_NULL
     spawner.worker_intercomm.bcast(CommandType.SCATTER.value, bcast_root)
     bodo.libs.distributed_api.scatterv(
@@ -3257,7 +3257,7 @@ def test_gatherv_intercomm(scatter_gather_data, memory_leak_check):
     """Test gatherv's intercomm support in spawn mode"""
 
     # Scatter the data to workers then gather
-    spawner = bodo.submit.spawner.get_spawner()
+    spawner = bodo.spawn.spawner.get_spawner()
     bcast_root = MPI.ROOT if bodo.get_rank() == 0 else MPI.PROC_NULL
     spawner.worker_intercomm.bcast(CommandType.SCATTER.value, bcast_root)
     bodo.libs.distributed_api.scatterv(

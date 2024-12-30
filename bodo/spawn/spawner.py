@@ -29,7 +29,7 @@ from bodo.pandas import (
     LazyMetadata,
 )
 from bodo.pandas.lazy_wrapper import BodoLazyWrapper
-from bodo.submit.utils import (
+from bodo.spawn.utils import (
     ArgMetadata,
     CommandType,
     debug_msg,
@@ -148,7 +148,7 @@ class Spawner:
             self.worker_intercomm = self.comm_world.Spawn(
                 # get the same python executable that is currently running
                 "env",
-                environ_args + [sys.executable, "-u", "-m", "bodo.submit.worker"],
+                environ_args + [sys.executable, "-u", "-m", "bodo.spawn.worker"],
                 n_pes,
                 MPI.INFO_NULL,
                 0,
@@ -238,7 +238,7 @@ class Spawner:
         self.worker_intercomm.bcast(propagate_env, bcast_root)
 
     def submit_func_to_workers(
-        self, dispatcher: "SubmitDispatcher", propagate_env, *args, **kwargs
+        self, dispatcher: "SpawnDispatcher", propagate_env, *args, **kwargs
     ):
         """Send func to be compiled and executed on spawned process"""
 
@@ -486,7 +486,7 @@ class Spawner:
                 self._send_arg_meta(val, out_val)
 
     def _send_args_update_dist_flags(
-        self, dispatcher: "SubmitDispatcher", args, kwargs
+        self, dispatcher: "SpawnDispatcher", args, kwargs
     ) -> tuple[tuple[ArgMetadata | None, ...], dict[str, ArgMetadata | None]]:
         """Send function arguments from spawner to workers. DataFrame/Series/Index/array
         arguments are sent separately using broadcast or scatter (depending on flags).
@@ -495,7 +495,7 @@ class Spawner:
         compilation on the worker.
 
         Args:
-            dispatcher (SubmitDispatcher): dispatcher to run on workers
+            dispatcher (SpawnDispatcher): dispatcher to run on workers
             args (tuple[Any]): positional arguments
             kwargs (dict[str, Any]): keyword arguments
         """
@@ -584,14 +584,14 @@ atexit.register(destroy_spawner)
 
 
 def submit_func_to_workers(
-    dispatcher: "SubmitDispatcher", propagate_env, *args, **kwargs
+    dispatcher: "SpawnDispatcher", propagate_env, *args, **kwargs
 ):
     """Get the global spawner and submit `func` for execution"""
     spawner = get_spawner()
     return spawner.submit_func_to_workers(dispatcher, propagate_env, *args, **kwargs)
 
 
-class SubmitDispatcher:
+class SpawnDispatcher:
     """Pickleable wrapper that lazily sends a function and the arguments needed
     to compile to the workers"""
 
@@ -609,7 +609,7 @@ class SubmitDispatcher:
 
     @classmethod
     def get_dispatcher(cls, py_func, decorator_args, extra_globals, linecache_entry):
-        # Instead of unpickling into a new SubmitDispatcher, we call bodo.jit to
+        # Instead of unpickling into a new SpawnDispatcher, we call bodo.jit to
         # return the real dispatcher
         py_func.__globals__.update(extra_globals)
         decorator = bodo.jit(**decorator_args)
@@ -634,7 +634,7 @@ class SubmitDispatcher:
         # Pickle this object by pickling the underlying function (which is
         # guaranteed to have the extra properties necessary to build the actual
         # dispatcher via bodo.jit on the worker side)
-        return SubmitDispatcher.get_dispatcher, (
+        return SpawnDispatcher.get_dispatcher, (
             self.py_func,
             self.decorator_args,
             self.extra_globals,

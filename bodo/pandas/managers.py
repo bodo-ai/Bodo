@@ -17,7 +17,7 @@ from pandas.core.internals.managers import (
 
 import bodo.user_logging
 from bodo.pandas.lazy_metadata import LazyMetadataMixin
-from bodo.submit.utils import debug_msg
+from bodo.spawn.utils import debug_msg
 
 
 class LazyBlockManager(BlockManager, LazyMetadataMixin[BlockManager]):
