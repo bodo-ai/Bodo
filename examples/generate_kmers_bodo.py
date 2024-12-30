@@ -49,7 +49,7 @@ def process_all_fastas(fasta_files, out_path):
 
 if __name__ == '__main__':
     # Directory containing the fasta files
-    directory = '../tmp/kmers/'
+    directory = 'data/'
     # Find all fasta files in the specified directory
     fasta_files = glob.glob(os.path.join(directory, '*.fasta'))
     out_path = os.path.join(directory, 'combined_fasta_sequences.csv')
