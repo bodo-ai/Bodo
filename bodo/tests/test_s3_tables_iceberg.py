@@ -1,0 +1,78 @@
+from io import StringIO
+
+import pandas as pd
+import pytest
+
+from bodo.tests.user_logging_utils import (
+    check_logger_msg,
+    create_string_io_logger,
+    set_logging_stream,
+)
+from bodo.tests.utils import (
+    check_func,
+    temp_env_override,
+)
+
+pytest_mark = pytest.mark.iceberg
+
+bucket_arn = "arn:aws:s3tables:us-east-2:427443013497:bucket/unittest-bucket"
+
+
+@temp_env_override({"AWS_REGION": "us-east-2"})
+def test_basic_read(memory_leak_check):
+    """
+    Test reading a complete Iceberg table S3 Tables
+    """
+
+    def impl(table_name, conn, db_schema):
+        return pd.read_sql_table(table_name, conn, db_schema)
+
+    py_out = pd.DataFrame(
+        {
+            "A": ["ally", "bob", "cassie", "david", pd.NA],
+            "B": [10.5, -124.0, 11.11, 456.2, -8e2],
+            "C": [True, None, False, pd.NA, pd.NA],
+        }
+    )
+
+    conn = "iceberg+" + bucket_arn
+    check_func(
+        impl,
+        ("bodo_iceberg_read_test", conn, "read_namespace"),
+        py_output=py_out,
+        sort_output=True,
+        reset_index=True,
+    )
+
+
+@temp_env_override({"AWS_REGION": "us-east-2"})
+def test_read_implicit_pruning(memory_leak_check):
+    """
+    Test reading an Iceberg table from Snowflake with Bodo
+    compiler column pruning
+    """
+
+    def impl(table_name, conn, db_schema):
+        df = pd.read_sql_table(table_name, conn, db_schema)
+        df["B"] = df["B"].abs()
+        return df[["B", "A"]]
+
+    py_out = pd.DataFrame(
+        {
+            "B": [10.5, 124.0, 11.11, 456.2, 8e2],
+            "A": ["ally", "bob", "cassie", "david", pd.NA],
+        }
+    )
+
+    conn = "iceberg+" + bucket_arn
+    stream = StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        check_func(
+            impl,
+            ("bodo_iceberg_read_test", conn, "read_namespace"),
+            py_output=py_out,
+            sort_output=True,
+            reset_index=True,
+        )
+        check_logger_msg(stream, "Columns loaded ['A', 'B']")
