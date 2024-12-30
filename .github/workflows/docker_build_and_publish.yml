@@ -1,0 +1,92 @@
+name: Build and push Docker image to dockerhub
+
+on:
+  workflow_dispatch:
+    inputs:
+      push:
+        description: 'Push to dockerhub after build'
+        required: false
+        default: false
+        type: boolean
+
+  workflow_call:
+    inputs:
+      is-release:
+        description: 'Is this a release build'
+        required: false
+        type: boolean
+        default: false
+env:
+  TEST_TAG: bodoai/test_release_image:test
+  LATEST_TAG: bodoai/bodo-jupyterlab:latest
+
+jobs:
+
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Check out the repo
+      uses: actions/checkout@v4
+
+    - name: Login to dockerhub
+      uses: docker/login-action@v3
+      with:
+       username: ${{ secrets.DOCKERHUB_USERNAME }}
+       password: ${{ secrets.DOCKERHUB_ACCESS_TOKEN }}
+
+      # Add support for more platforms with QEMU (optional)
+      # https://github.com/docker/setup-qemu-action
+    - name: Set up QEMU
+      uses: docker/setup-qemu-action@v3
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Build and export Docker image
+      uses: docker/build-push-action@v6
+      with:
+        load: true
+        file: ./buildscripts/docker/docker_release/Dockerfile
+        tags: ${{ env.TEST_TAG }}
+ 
+    - name: Test Jupyter notebooks inside the Docker image
+      run: |
+
+        # Create folder to save output
+        mkdir -p ./notebooks
+
+        # Step 1: Run the container in detached mode
+        docker run -d --name test-container ${{env.TEST_TAG}}
+
+        # Step 2: Execute the notebook inside the container using jupyter nbconvert
+        # NOTE: this doesn't check correctness of the output.
+        # Only test setup and notebook works as expected.
+        docker exec test-container jupyter nbconvert --to notebook --execute /app/pi.ipynb --output /app/pi_output.ipynb
+        docker exec test-container jupyter nbconvert --to notebook --execute /app/quickstart.ipynb --output /app/quickstart_output.ipynb
+
+        # Step 3: Copy the output notebooks from the container to the local directory
+        docker cp test-container:/app/pi_output.ipynb ./notebooks/pi_output.ipynb
+        docker cp test-container:/app/quickstart_output.ipynb ./notebooks/quickstart_output.ipynb
+
+        # Step 4: Stop and remove the container after the test
+        docker rm -f test-container
+
+
+      # Upload notebook result to check in case previous step failed
+    - name: Upload Notebook Outputs
+      uses: actions/upload-artifact@v4
+      with:
+        name: notebook-outputs
+        path: ./notebooks/
+
+    - name: Build and push
+      uses: docker/build-push-action@v6
+      if: ${{ inputs.is-release }}
+      with:
+        push: true
+        file: ./buildscripts/docker/docker_release/Dockerfile
+        # TODO: linux/arm64
+        platforms: linux/amd64
+        tags: ${{ env.LATEST_TAG}}  
