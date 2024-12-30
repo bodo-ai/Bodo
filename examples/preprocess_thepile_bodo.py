@@ -20,7 +20,7 @@ import bodo
 @dataclass
 class Config:
     dataset_name: str = "monology/pile-uncopyrighted"
-    cache_dir: str = "./data"
+    cache_dir: str = "/bodofs/Users/scott/pile_data"
     tokenizer_name: str = "EleutherAI/gpt-neo-2.7B"
     output_file: str = "./processed_dataset.jsonl"
     max_seq_length: int = 512
