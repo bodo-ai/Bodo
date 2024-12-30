@@ -51,11 +51,18 @@ public class CatalogCreator {
   public static Catalog create(String connStr, String catalogType, String coreSitePath)
       throws URISyntaxException {
     // Create Catalog
+    final Catalog catalog;
+
+    // S3Tables doesn't use a URI
+    if (connStr.startsWith("arn:aws:s3tables") && catalogType.equals("s3tables")) {
+      catalog = S3TablesBuilder.create(connStr);
+      return CachingCatalog.wrap(catalog);
+    }
+
     var out = prepareInput(connStr, catalogType, coreSitePath);
     Configuration conf = out.getFirst();
     Map<String, String> params = out.getSecond();
     URIBuilder uriBuilder = out.getThird();
-    final Catalog catalog;
 
     switch (catalogType.toLowerCase()) {
       case "nessie":
