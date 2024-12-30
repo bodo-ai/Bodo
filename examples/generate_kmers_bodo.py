@@ -33,7 +33,7 @@ def fasta4epitope(fasta_file):
     return seq_df
 
 
-@bodo.jit(cache=True, spawn=False)
+@bodo.jit(cache=True)
 def process_all_fastas(fasta_files, out_path):
     t0 = time.time()
 
