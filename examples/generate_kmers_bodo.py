@@ -1,3 +1,11 @@
+"""
+This is a pipeline for ingesting multiple FASTA files (using BioPython's SeqIO),
+extracting sequence IDs and their corresponding peptide strings, and consolidating them
+into a unified CSV file. It uses Bodo to parallelize the process, which can
+significantly expedite data processing, especially on larger datasets.
+The end result is a single CSV containing all the annotation, probe, and source
+information derived from each FASTA input.
+"""
 import glob
 import os
 import time
