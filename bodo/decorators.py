@@ -321,7 +321,7 @@ def jit(signature_or_function=None, pipeline_class=None, **options):
     disable_jit = os.environ.get("NUMBA_DISABLE_JIT", "0") == "1"
     dist_mode = options.get("distributed", True) is not False
     if options.get("spawn", bodo.spawn_mode) and not disable_jit and dist_mode:
-        from bodo.spawn.spawner import SubmitDispatcher
+        from bodo.spawn.spawner import SpawnDispatcher
         from bodo.spawn.worker_state import is_worker
 
         if is_worker():
@@ -336,7 +336,7 @@ def jit(signature_or_function=None, pipeline_class=None, **options):
         def return_wrapped_fn(py_func):
             submit_jit_args = {**options}
             submit_jit_args["pipeline_class"] = pipeline_class
-            return SubmitDispatcher(py_func, submit_jit_args)
+            return SpawnDispatcher(py_func, submit_jit_args)
 
         if isinstance(signature_or_function, pytypes.FunctionType):
             py_func = signature_or_function

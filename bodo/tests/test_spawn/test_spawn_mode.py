@@ -10,7 +10,7 @@ import bodo
 from bodo.pandas.array_manager import LazyArrayManager
 from bodo.pandas.frame import BodoDataFrame
 from bodo.pandas.managers import LazyBlockManager
-from bodo.spawn.spawner import SubmitDispatcher, destroy_spawner, get_num_workers
+from bodo.spawn.spawner import SpawnDispatcher, destroy_spawner, get_num_workers
 from bodo.tests.utils import (
     _test_equal,
     check_func,
@@ -307,7 +307,7 @@ def test_dist_false():
     def f(A):
         return A
 
-    assert not isinstance(f, SubmitDispatcher)
+    assert not isinstance(f, SpawnDispatcher)
 
 
 def test_results_deleted_after_collection(datapath):
