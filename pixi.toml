@@ -9,8 +9,8 @@ conda-pypi-map = { "bodo.ai" = "buildscripts/bodo_mapping.json" }
 default =      { features = ["rcpp", "dev", "local-mpi"],          solve-group = "312" }
 azure =        { features = ["rcpp", "dev", "local-mpi", "azure"], solve-group = "312" }
 # Platform
-platform =     { features = ["rcpp", "platform", "platform-mpi"],  solve-group = "312-platform" }
-platform-dev = { features = ["rcpp", "dev", "platform-mpi"],       solve-group = "312-platform" }
+platform =     { features = ["rcpp", "platform"],  solve-group = "312-platform" }
+platform-dev = { features = ["rcpp", "dev"],       solve-group = "312-platform" }
 # Pip C++ Deps
 pip-cpp =      { features = ["rcpp", "pip", "local-mpi"], no-default-feature = true,   solve-group = "pip" }
 
@@ -68,8 +68,7 @@ macos = "12.0"
 python = "3.12.*"
 pip = "*"
 # Core Python Deps
-numba = "0.60.0"
-numpy = ">=1.24,<1.27"
+numpy = ">=1.24,<2.2"
 pandas = ">=2.2,<2.3"
 pyarrow = { version = "18.1.0", channel = "conda-forge" }
 fsspec = ">=2021.09"
@@ -214,12 +213,12 @@ httpie = "*"
 [feature.local-mpi.dependencies]
 # Using h* to avoid the "external_*" kind
 mpich = { version = "4.1.*", build = "h*" }
-[feature.platform-mpi]
-channels = ["conda-forge", "conda-forge/label/broken"]
-platforms = ["linux-64"]
+# [feature.platform-mpi]
+# channels = ["conda-forge", "conda-forge/label/broken"]
+# platforms = ["linux-64"]
 # Want to use Intel MPI on platform, so use "external_*"
 # https://conda-forge.org/docs/user/tipsandtricks/#using-external-message-passing-interface-mpi-libraries
-dependencies = { mpich = { version = "4.1.2", build = "external_4", channel = "conda-forge/label/broken" } }
+# dependencies = { mpich = { version = "4.1.2", build = "external_4", channel = "conda-forge/label/broken" } }
 
 # Azure CI
 [feature.azure.dependencies]
@@ -238,3 +237,6 @@ clangxx_osx-64 = "=19"
 [feature.pip.target.osx-arm64.dependencies]
 clang_osx-arm64 = "=19"
 clangxx_osx-arm64 = "=19"
+
+[pypi-dependencies]
+llvmlite = "==0.44.0rc2"
