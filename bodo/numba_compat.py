@@ -1342,7 +1342,7 @@ def _compile_for_args(self, *args, **kws):  # pragma: no cover
         raise e
     # Bodo change: avoid arg leak
     finally:
-        self._types_active_call = []
+        self._types_active_call.clear()
         # avoid issue of reference leak of arguments to jitted function:
         # https://github.com/numba/numba/issues/5419
         del args
@@ -1359,7 +1359,7 @@ if _check_numba_change:  # pragma: no cover
     lines = inspect.getsource(numba.core.dispatcher._DispatcherBase._compile_for_args)
     if (
         hashlib.sha256(lines.encode()).hexdigest()
-        != "5cdfbf0b13a528abf9f0408e70f67207a03e81d610c26b1acab5b2dc1f79bf06"
+        != "574ef31a488694f419a02dff4e313c1714e3dd2368d990a78fbe5e72c3bfb23f"
     ):  # pragma: no cover
         warnings.warn(
             "numba.core.dispatcher._DispatcherBase._compile_for_args has changed"
