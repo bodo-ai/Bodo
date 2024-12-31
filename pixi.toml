@@ -240,3 +240,4 @@ clangxx_osx-arm64 = "=19"
 
 [pypi-dependencies]
 llvmlite = "==0.44.0rc2"
+numba = "==0.61.0rc2"
