@@ -994,7 +994,7 @@ if _check_numba_change:  # pragma: no cover
     lines = inspect.getsource(numba.core.types.functions.BaseFunction.get_call_type)
     if (
         hashlib.sha256(lines.encode()).hexdigest()
-        != "25f038a7216f8e6f40068ea81e11fd9af8ad25d19888f7304a549941b01b7015"
+        != "6559c167bfc0ad36ab4af049ed2f2b9ddc28ce1eedbc2e3462b69b62079e850e"
     ):  # pragma: no cover
         warnings.warn(
             "numba.core.types.functions.BaseFunction.get_call_type has changed"
