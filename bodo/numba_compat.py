@@ -5618,23 +5618,13 @@ def define_untyped_pipeline(state, name="untyped"):
     from numba.core.utils import PYVERSION
 
     pm = PassManager(name)
-
-    if numba.core.config.USE_RVSDG_FRONTEND:
-        if state.func_ir is None:
-            pm.add_pass(RVSDGFrontend, "rvsdg frontend")
-            # Bodo Change: Insert Python 3.10 Bytecode peepholes
-            if PYVERSION >= (3, 10):
-                pm.add_pass(Bodo310ByteCodePass, "Apply Python 3.10 bytecode changes")
-            pm.add_pass(FixupArgs, "fix up args")
-        pm.add_pass(IRProcessing, "processing IR")
-    else:
-        if state.func_ir is None:
-            pm.add_pass(TranslateByteCode, "analyzing bytecode")
-            # Bodo Change: Insert Python 3.10 Bytecode peepholes
-            if PYVERSION >= (3, 10):
-                pm.add_pass(Bodo310ByteCodePass, "Apply Python 3.10 bytecode changes")
-            pm.add_pass(FixupArgs, "fix up args")
-        pm.add_pass(IRProcessing, "processing IR")
+    if state.func_ir is None:
+        pm.add_pass(TranslateByteCode, "analyzing bytecode")
+        # Bodo Change: Insert Python 3.10 Bytecode peepholes
+        if PYVERSION >= (3, 10):
+            pm.add_pass(Bodo310ByteCodePass, "Apply Python 3.10 bytecode changes")
+        pm.add_pass(FixupArgs, "fix up args")
+    pm.add_pass(IRProcessing, "processing IR")
 
     pm.add_pass(WithLifting, "Handle with contexts")
 
@@ -5666,6 +5656,9 @@ def define_untyped_pipeline(state, name="untyped"):
     if state.flags.enable_ssa:
         pm.add_pass(ReconstructSSA, "ssa")
 
+    if not state.flags.no_rewrites:
+        pm.add_pass(DeadBranchPrune, "dead branch pruning")
+
     pm.add_pass(LiteralPropagationSubPipelinePass, "Literal propagation")
 
     pm.finalize()
@@ -5678,7 +5671,7 @@ if _check_numba_change:  # pragma: no cover
     )
     if (
         hashlib.sha256(lines.encode()).hexdigest()
-        != "ee2d8498b402655ac08d02018fab21932d416c2e8caed3f98cfe0126af0f044d"
+        != "0cb11451d06eef493a9959a4fced3d1d693e6f1a48b686c51649e9a9849de64b"
     ):
         warnings.warn(
             "numba.core.compiler.DefaultPassBuilder.define_untyped_pipeline has changed"
