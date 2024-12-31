@@ -86,7 +86,7 @@ from bodo.utils.typing import (
 
 # flag for checking whether the functions we are replacing have changed in a later Numba
 # release. Needs to be checked for every new Numba release so we update our changes.
-_check_numba_change = True
+_check_numba_change = False
 
 
 # Make sure literals are tried first for typing Bodo's intrinsics, since output type
