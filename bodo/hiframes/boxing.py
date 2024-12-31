@@ -1022,7 +1022,7 @@ def _create_initial_df_object(
             # set parent dataframe column names to numbers for robust setting of columns
             # df.columns = np.arange(len(df.columns))
             mod_name = context.insert_const_string(c.builder.module, "numpy")
-            class_obj = pyapi.import_module_noblock(mod_name)
+            class_obj = pyapi.import_module(mod_name)
             if df_typ.has_runtime_cols:
                 # If we have columns determined at runtime, use_parent is always False
                 num_cols = 0
@@ -1044,7 +1044,7 @@ def _create_initial_df_object(
             )
 
             mod_name = context.insert_const_string(c.builder.module, "pandas")
-            class_obj = pyapi.import_module_noblock(mod_name)
+            class_obj = pyapi.import_module(mod_name)
             df_obj = pyapi.call_method(
                 class_obj, "DataFrame", (pyapi.borrow_none(), index_obj)
             )
@@ -1319,7 +1319,7 @@ def _unbox_series_data(dtype, data_typ, arr_obj, c):
 def box_series(typ, val, c):
     """"""
     mod_name = c.context.insert_const_string(c.builder.module, "pandas")
-    pd_class_obj = c.pyapi.import_module_noblock(mod_name)
+    pd_class_obj = c.pyapi.import_module(mod_name)
 
     # TODO: handle parent
     series_payload = bodo.hiframes.pd_series_ext.get_series_payload(

@@ -167,7 +167,7 @@ register_model(StringDtype)(models.OpaqueModel)
 @box(StringDtype)
 def box_string_dtype(typ, val, c):
     mod_name = c.context.insert_const_string(c.builder.module, "pandas")
-    pd_class_obj = c.pyapi.import_module_noblock(mod_name)
+    pd_class_obj = c.pyapi.import_module(mod_name)
     res = c.pyapi.call_method(pd_class_obj, "StringDtype", ())
     c.pyapi.decref(pd_class_obj)
     return res
