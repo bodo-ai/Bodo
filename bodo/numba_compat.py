@@ -6499,7 +6499,7 @@ def _sequence_of_arrays(
         or not all(isinstance(a, types.Array) for a in arrays)
     ):
         # Bodo change: raise NumbaError to allow typing to continue
-        raise numba.NumbaTypeError(
+        raise numba.TypingError(
             "%s(): expecting a non-empty tuple of arrays, "
             "got %s" % (func_name, arrays)
         )
@@ -6509,7 +6509,7 @@ def _sequence_of_arrays(
     dtype = context.unify_types(*(a.dtype for a in arrays))
     if dtype is None:
         # Bodo change: raise NumbaError to allow typing to continue
-        raise numba.NumbaTypeError(
+        raise numba.TypingError(
             "%s(): input arrays must have " "compatible dtypes" % func_name
         )
 
@@ -6520,7 +6520,7 @@ if _check_numba_change:  # pragma: no cover
     lines = inspect.getsource(numba.core.typing.npydecl._sequence_of_arrays)
     if (
         hashlib.sha256(lines.encode()).hexdigest()
-        != "5e56ef05b3d09d20f9bd73e1f9fd198c453ab61c126e40754c285f631433c519"
+        != "8dbf671f71d6afeb2571516acd935c2b385a25c54219b591210ead43dd4a191e"
     ):
         warnings.warn("numba.core.typing.npydecl._sequence_of_arrays")
 
