@@ -5549,12 +5549,12 @@ if _check_numba_change:  # pragma: no cover
         (
             "numba.core.dispatcher.Dispatcher._reduce_states",
             numba.core.dispatcher.Dispatcher._reduce_states,
-            "b5eff22f9db75873bb7623137912d42c63204166d84ccae13346a0598ada7afa",
+            "15aeae6bded38f319ff1c4269ae3683d2973e44787ca47ad974f36e89d4ef7a5",
         ),
         (
             "numba.core.dispatcher.Dispatcher._rebuild",
             numba.core.dispatcher.Dispatcher._rebuild,
-            "b6634a51819746bc86907ac7baeee4b1607c1b5eeb7b9ebf22d7cf7104f5788a",
+            "61f176cd04774fe23cc99e94f47ae562d50f7bcce7c2b78447cda963c3448a99",
         ),
     ):
         lines = inspect.getsource(orig)
