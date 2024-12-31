@@ -1600,29 +1600,7 @@ def propagate(self, typeinfer):
                     errors.append(
                         bodo.utils.typing.BodoError(e.msg, locs_in_msg=e.locs_in_msg)
                     )
-            except Exception as e:
-                from numba.core import utils
 
-                if utils.use_old_style_errors():
-                    numba.core.typeinfer._logger.debug("captured error", exc_info=e)
-                    msg = (
-                        "Internal error at {con}.\n{err}\n"
-                        "Enable logging at debug level for details."
-                    )
-                    new_exc = numba.core.errors.TypingError(
-                        msg.format(con=constraint, err=str(e)),
-                        loc=constraint.loc,
-                        highlighting=False,
-                    )
-                    errors.append(utils.chain_exception(new_exc, e))
-                elif utils.use_new_style_errors():
-                    raise e
-                else:
-                    msg = (
-                        "Unknown CAPTURED_ERRORS style: "
-                        f"'{numba.core.config.CAPTURED_ERRORS}'."
-                    )
-                    assert 0, msg
     return errors
 
 
@@ -1630,7 +1608,7 @@ if _check_numba_change:  # pragma: no cover
     lines = inspect.getsource(numba.core.typeinfer.ConstraintNetwork.propagate)
     if (
         hashlib.sha256(lines.encode()).hexdigest()
-        != "1e73635eeba9ba43cb3372f395b747ae214ce73b729fb0adba0a55237a1cb063"
+        != "01b516bfb28ce9fc4b090366eca51fbc6c714ad847f3a5481ab43c073f40b50f"
     ):
         warnings.warn("numba.core.typeinfer.ConstraintNetwork.propagate has changed")
 
