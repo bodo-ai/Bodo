@@ -2099,11 +2099,7 @@ def passmanager_run(self, state):
         except Exception as e:
             # TODO: [BE-486] environment variable developer_mode?
             if numba.core.config.DEVELOPER_MODE:
-                from numba.core import utils
-
-                if utils.use_new_style_errors() and not isinstance(
-                    e, errors.NumbaError
-                ):
+                if not isinstance(e, errors.NumbaError):
                     raise e
                 msg = "Failed in %s mode pipeline (step: %s)" % (
                     self.pipeline_name,
@@ -2120,7 +2116,7 @@ if _check_numba_change:  # pragma: no cover
     lines = inspect.getsource(numba.core.compiler_machinery.PassManager.run)
     if (
         hashlib.sha256(lines.encode()).hexdigest()
-        != "43505782e15e690fd2d7e53ea716543bec37aa0633502956864edf649e790cdb"
+        != "0a50275e02bb0f11ffc403fb7a560aff8840d5d45149aeae7e06188de07deb7d"
     ):  # pragma: no cover
         warnings.warn("numba.core.compiler_machinery.PassManager.run has changed")
 
