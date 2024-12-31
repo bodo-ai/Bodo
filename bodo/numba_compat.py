@@ -1044,11 +1044,7 @@ def get_call_type2(self, context, args, kws):
                 try:
                     out = template.apply(unliteral_args, unliteral_kws)
                 except Exception as exc:
-                    from numba.core import utils
-
-                    if utils.use_new_style_errors() and not isinstance(
-                        exc, errors.NumbaError
-                    ):
+                    if not isinstance(exc, errors.NumbaError):
                         raise exc
                     if isinstance(exc, errors.ForceLiteralArg):
                         if template.prefer_literal:
@@ -1127,7 +1123,7 @@ if _check_numba_change:  # pragma: no cover
     lines = inspect.getsource(numba.core.types.functions.BoundFunction.get_call_type)
     if (
         hashlib.sha256(lines.encode()).hexdigest()
-        != "502cd77c0084452e903a45a0f1f8107550bfbde7179363b57dabd617ce135f4a"
+        != "b8bf7bc438d0362698a9057a998d49a19ed46f03e0d3ccff3987f0037387a685"
     ):  # pragma: no cover
         warnings.warn(
             "numba.core.types.functions.BoundFunction.get_call_type has changed"
