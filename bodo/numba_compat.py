@@ -86,7 +86,7 @@ from bodo.utils.typing import (
 
 # flag for checking whether the functions we are replacing have changed in a later Numba
 # release. Needs to be checked for every new Numba release so we update our changes.
-_check_numba_change = False
+_check_numba_change = True
 
 
 # Make sure literals are tried first for typing Bodo's intrinsics, since output type
@@ -966,15 +966,10 @@ def get_call_type(self, context, args, kws):
                     nolitkws = {k: _unlit_non_poison(v) for k, v in kws.items()}
                     sig = temp.apply(nolitargs, nolitkws)
             except Exception as e:
-                from numba.core import utils
-
-                if utils.use_new_style_errors() and not isinstance(
-                    e, errors.NumbaError
-                ):
+                if not isinstance(e, errors.NumbaError):
                     raise e
-                else:
-                    sig = None
-                    failures.add_error(temp, False, e, uselit)
+                sig = None
+                failures.add_error(temp, False, e, uselit)
             else:
                 if sig is not None:
                     self._impl_keys[sig.args] = temp.get_impl_key(sig)
