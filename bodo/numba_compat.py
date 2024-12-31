@@ -5611,7 +5611,6 @@ def define_untyped_pipeline(state, name="untyped"):
         ReconstructSSA,
         RewriteDynamicRaises,
         RewriteSemanticConstants,
-        RVSDGFrontend,
         TranslateByteCode,
         WithLifting,
     )
