@@ -77,7 +77,7 @@ jobs:
             # Global Tools
             pixi global install sccache
             # Install dependencies available on package manager
-            yum install -y libcurl-devel zlib-devel openssl-devel libzstd-devel
+            dnf install -y libcurl-devel zlib-devel openssl-devel libzstd-devel
             # Install boost
             if find /usr /lib /usr/local -name "libboost*" | grep -q .; then
               echo "Skipping boost, already installed"
@@ -128,6 +128,7 @@ jobs:
             CONDA_PREFIX=$(pwd)/.pixi/envs/pip-cpp-macos
             SETUPTOOLS_SCM_PRETEND_VERSION=${{ inputs.bodo_version }}
           CIBW_ENVIRONMENT_LINUX: >
+            PATH=$HOME/.pixi/bin/:$PATH
             CMAKE_MODULE_PATH=/usr/local/boost_1_85_0
             DISABLE_CCACHE=1
             SCCACHE_BUCKET=engine-codebuild-cache
@@ -144,6 +145,7 @@ jobs:
             AWS_SESSION_TOKEN
             AWS_DEFAULT_REGION
           CIBW_REPAIR_WHEEL_COMMAND_MACOS: >
+            sccache --show-stats &&
             delocate-wheel --ignore-missing-dependencies --sanitize-rpaths
             -e libmpi -e libpmpi
             -e libarrow -e libarrow_acero -e libarrow_dataset -e libarrow_flight
@@ -153,6 +155,7 @@ jobs:
             python buildscripts/bodo/pip/macos/patch_libs_for_pip.py -p {wheel} &&
             mv {wheel} {dest_dir}
           CIBW_REPAIR_WHEEL_COMMAND_LINUX: >
+            sccache --show-stats && 
             LD_LIBRARY_PATH=/usr/local/lib64/:/project/.pixi/envs/pip-cpp-linux/lib:$LD_LIBRARY_PATH auditwheel -v repair 
             --exclude libmpi.so.12 --exclude libmpi.so.40 
             --exclude libarrow.so.1801 --exclude libarrow_acero.so.1801 --exclude libarrow_dataset.so.1801 
