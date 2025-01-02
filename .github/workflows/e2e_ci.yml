@@ -81,7 +81,7 @@ jobs:
 
           # --------- Run Tests -----------
           cd e2e-tests
-          pytest -s -v --durations=0 beer_reviews/test_beer_reviews.py
+          pytest -s -v --durations=0 beer_reviews groupby iceberg join
           # cd ..
           # pytest -s -v --durations=0 bodo/tests/test_javascript*
 
