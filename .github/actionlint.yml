@@ -7,3 +7,4 @@ self-hosted-runner:
     - self-hosted-small
     - self-hosted-medium
     - self-hosted-large
+    - self-hosted-xlarge

@@ -152,7 +152,7 @@ struct AtForkState {
 };
 
 // Copied from
-// https://github.com/apache/arrow/blob/apache-arrow-17.0.0/cpp/src/arrow/util/atfork_internal.cc#L131
+// https://github.com/apache/arrow/blob/apache-arrow-18.1.0/cpp/src/arrow/util/atfork_internal.cc#L131
 AtForkState* GetAtForkState() {
     static std::unique_ptr<AtForkState> state = []() {
         auto state = std::make_unique<AtForkState>();
@@ -177,7 +177,7 @@ AtForkState* GetAtForkState() {
 // Register the given at-fork handlers. Their intended lifetime should be
 // tracked by calling code using an owning shared_ptr.
 // Copied from
-// https://github.com/apache/arrow/blob/apache-arrow-17.0.0/cpp/src/arrow/util/atfork_internal.cc#L149
+// https://github.com/apache/arrow/blob/apache-arrow-18.1.0/cpp/src/arrow/util/atfork_internal.cc#L149
 void RegisterAtFork(std::weak_ptr<AtForkHandler> weak_handler) {
     GetAtForkState()->RegisterAtFork(std::move(weak_handler));
 }

@@ -2689,9 +2689,9 @@ def is_safe_arrow_cast(lhs_scalar_typ, rhs_scalar_typ):
 
 def register_type(type_name, type_value):
     """register a data type to be used in objmode blocks"""
-    import bodo.submit.spawner
+    import bodo.spawn.spawner
     from bodo.mpi4py import MPI
-    from bodo.submit.spawner import CommandType
+    from bodo.spawn.spawner import CommandType
 
     # check input
     if not isinstance(type_name, str):
@@ -2713,7 +2713,7 @@ def register_type(type_name, type_value):
 
     # TODO[BSE-4170]: simplify test flags
     if bodo.spawn_mode or bodo.tests.utils.test_spawn_mode_enabled:
-        spawner = bodo.submit.spawner.get_spawner()
+        spawner = bodo.spawn.spawner.get_spawner()
         bcast_root = MPI.ROOT if bodo.get_rank() == 0 else MPI.PROC_NULL
         spawner.worker_intercomm.bcast(CommandType.REGISTER_TYPE.value, bcast_root)
         spawner.worker_intercomm.bcast((type_name, type_value), bcast_root)

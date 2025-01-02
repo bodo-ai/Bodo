@@ -57,7 +57,7 @@ def _global_except_hook(exctype, value, traceback):
     finally:
         if is_hang:
             try:
-                from bodo.submit.worker_state import is_worker
+                from bodo.spawn.worker_state import is_worker
 
                 if is_worker():
                     MPI.COMM_WORLD.Get_parent().Abort(1)

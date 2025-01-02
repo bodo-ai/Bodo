@@ -139,7 +139,7 @@ def test_lead_lag_shift(func, shift_amt, spark_info, capfd):
             id="date",
         ),
         pytest.param(
-            pd.array(list(range(1000)), dtype=pd.Int32Dtype), -1, -1, id="int"
+            pd.array(list(range(1000)), dtype=pd.Int32Dtype()), -1, -1, id="int"
         ),
         pytest.param(
             pd.array(
