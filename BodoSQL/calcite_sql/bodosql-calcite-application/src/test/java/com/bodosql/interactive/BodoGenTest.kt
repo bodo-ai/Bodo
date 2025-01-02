@@ -3,6 +3,7 @@ package com.bodosql.interactive
 import com.bodosql.calcite.adapter.bodo.bodoPhysicalProject
 import com.bodosql.calcite.application.RelationalAlgebraGenerator
 import com.bodosql.calcite.schema.LocalSchema
+import com.bodosql.calcite.table.BodoSQLColumn
 import com.bodosql.calcite.table.BodoSQLColumn.BodoSQLColumnDataType
 import com.bodosql.calcite.table.BodoSQLColumnImpl
 import com.bodosql.calcite.table.BodoSqlTable
@@ -19,20 +20,20 @@ object BodoGenTest {
         val sql = "select * from table1"
         val plannerChoice = RelationalAlgebraGenerator.STREAMING_PLANNER
         val schema = LocalSchema("__BODOLOCAL__")
-        var arr: ArrayList<*> = ArrayList<Any?>()
+        var cols: ArrayList<BodoSQLColumn> = ArrayList()
         val dataType: BodoSQLColumnDataType = BodoSQLColumnDataType.INT64
         val dataTypeInfo = ColumnDataTypeInfo(dataType, true)
         val column = BodoSQLColumnImpl("A", dataTypeInfo)
-        arr.add(column)
+        cols.add(column)
         val column2 = BodoSQLColumnImpl("D", dataTypeInfo)
-        arr.add(column2)
+        cols.add(column2)
         val column3 = BodoSQLColumnImpl("C", dataTypeInfo)
-        arr.add(column3)
+        cols.add(column3)
         val table: BodoSqlTable =
             LocalTable(
                 "TABLE1",
-                schema.getFullPath(),
-                arr,
+                schema.fullPath,
+                cols,
                 true,
                 "table1",
                 "TABLE_1 WRITE HERE (%s, %s)",
@@ -42,17 +43,17 @@ object BodoGenTest {
                 null,
             )
         schema.addTable(table)
-        arr = ArrayList<Any?>()
-        arr.add(column)
+        var cols2: ArrayList<BodoSQLColumn> = ArrayList()
+        cols2.add(column)
         val column4 = BodoSQLColumnImpl("B", dataTypeInfo)
-        arr.add(column4)
+        cols2.add(column4)
         val column5 = BodoSQLColumnImpl("C", dataTypeInfo)
-        arr.add(column5)
+        cols2.add(column5)
         val table2: BodoSqlTable =
             LocalTable(
                 "TABLE2",
-                schema.getFullPath(),
-                arr,
+                schema.fullPath,
+                cols2,
                 true,
                 "table2",
                 "TABLE_2 WRITE HERE (%s, %s)",
@@ -65,8 +66,8 @@ object BodoGenTest {
         val table3: BodoSqlTable =
             LocalTable(
                 "TABLE3",
-                schema.getFullPath(),
-                arr,
+                schema.fullPath,
+                cols2,
                 true,
                 "table3",
                 "TABLE_3 WRITE HERE (%s, %s)",
@@ -93,44 +94,24 @@ object BodoGenTest {
                 false, // Only cache identical nodes
                 true, // Generate a prefetch call at the beginning of SQL queries
             )
-        val paramTypes = java.util.List.of<ColumnDataTypeInfo>(ColumnDataTypeInfo(BodoSQLColumnDataType.INT64, false))
+        val paramTypes = listOf(ColumnDataTypeInfo(BodoSQLColumnDataType.INT64, false))
         val namedParamTypes =
-            java.util.Map.of<String, ColumnDataTypeInfo>(
+            java.util.Map.of(
                 "a",
                 ColumnDataTypeInfo(BodoSQLColumnDataType.INT64, false),
                 "c",
                 ColumnDataTypeInfo(BodoSQLColumnDataType.INT64, false),
             )
         println("SQL query:")
-        println(
-            """
-            $sql
-            
-            """.trimIndent(),
-        )
+        println(sql)
         val optimizedPlanStr = getRelationalAlgebraString(generator, sql, paramTypes, namedParamTypes)
         println("Optimized plan:")
-        println(
-            """
-            $optimizedPlanStr
-            
-            """.trimIndent(),
-        )
+        println(optimizedPlanStr)
         val pandasStr = generator.getPandasString(sql, paramTypes, namedParamTypes)
         println("Generated code:")
-        println(
-            """
-            $pandasStr
-            
-            """.trimIndent(),
-        )
+        println(pandasStr)
         println("Lowered globals:")
-        println(
-            """
-            ${generator.loweredGlobalVariables}
-            
-            """.trimIndent(),
-        )
+        println(generator.loweredGlobalVariables)
     }
 
     private fun getRelationalAlgebraString(
