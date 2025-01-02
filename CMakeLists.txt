@@ -576,6 +576,11 @@ if (NOT (CMAKE_BUILD_TYPE STREQUAL "Release") AND NOT DEFINED ENV{BODO_SKIP_CPP_
     "bodo/tests/test_theta_sketches.cpp")
 endif()
 
+set(NO_HDF5 "$ENV{NO_HDF5}")
+if(NOT NO_HDF5)
+    list(APPEND sources_list "bodo/io/_hdf5.cpp")
+endif()
+
 python_add_library(ext MODULE WITH_SOABI "${sources_list}")
 
 # Dependency Includes Are `-isystem` to Suppress Warnings
@@ -632,10 +637,11 @@ target_compile_options(
 )
 
 target_link_directories(ext PRIVATE ${PYARROW_LIB_DIR} "${Python_NumPy_INCLUDE_DIR}/../lib")
+target_include_directories(ext PRIVATE ${datasketches_INSTALL_DIR}/include/DataSketches)
+
 target_link_libraries(ext PRIVATE
   npymath
   mpi
-  hdf5
   arrow
   arrow_python
   arrow_dataset
@@ -669,8 +675,11 @@ if (BUILD_WITH_V8)
   target_compile_definitions(ext PRIVATE "BUILD_WITH_V8=1")
 endif()
 
-target_include_directories(ext PRIVATE ${datasketches_INSTALL_DIR}/include/DataSketches)
-add_dependencies(ext datasketches)
+if(NO_HDF5)
+  target_compile_definitions(ext PRIVATE "NO_HDF5=1")
+else()
+  target_link_libraries(ext PRIVATE hdf5)
+endif()
 
 set_target_properties(ext PROPERTIES CXX_CLANG_TIDY "${CLANG_TIDY_COMMAND}")
 add_dependencies(ext pyfs _hdfs tracing pyarrow_wrappers datasketches)
