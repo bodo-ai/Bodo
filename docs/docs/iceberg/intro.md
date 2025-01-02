@@ -39,6 +39,7 @@ These are the Iceberg catalogs supported in Bodo Python and SQL:
 | Tabular's RESTCatalog | Yes | Yes, via the TabularCatalog | Only tested on S3 |
 | GlueCatalog | Yes | Yes, via TablePath |  |
 | HiveCatalog | Yes | Yes, via TablePath |  |
+| S3 Tables | Yes | No | |
 
 
 ## Limitations and Considerations

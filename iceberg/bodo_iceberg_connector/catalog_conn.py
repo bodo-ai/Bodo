@@ -5,7 +5,9 @@ from urllib.parse import parse_qs, urlparse
 
 from bodo_iceberg_connector.errors import IcebergError, IcebergWarning
 
-CatalogType = Literal["hadoop", "hive", "nessie", "glue", "snowflake", "rest"]
+CatalogType = Literal[
+    "hadoop", "hive", "nessie", "glue", "snowflake", "rest", "s3tables"
+]
 
 
 def _get_first(elems: dict[str, list[str]], param: str) -> str | None:
@@ -64,6 +66,8 @@ def parse_conn_str(
             catalog_type = "snowflake"
         elif parsed_conn.scheme == "rest":
             catalog_type = "rest"
+        elif parsed_conn.scheme == "arn" and "aws:s3tables" in parsed_conn.path:
+            catalog_type = "s3tables"
 
         else:
             types = ", ".join(
@@ -75,6 +79,7 @@ def parse_conn_str(
                     "glue",
                     "snowflake",
                     "rest",
+                    "s3tables",
                 ]
             )
             raise IcebergError(
@@ -90,10 +95,11 @@ def parse_conn_str(
         "glue",
         "snowflake",
         "rest",
+        "s3tables",
     ]
 
     # Get Warehouse Location
-    if catalog_type != "snowflake" and warehouse is None:
+    if catalog_type not in ("snowflake", "s3tables") and warehouse is None:
         warnings.warn(
             "It is recommended that the `warehouse` property is included in the connection string for this type of catalog. Bodo can automatically infer what kind of FileIO to use from the warehouse location. It is also highly recommended to include with Glue and Nessie catalogs.",
             IcebergWarning,
