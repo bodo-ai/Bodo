@@ -131,11 +131,12 @@ def format_iceberg_conn(conn_str: str) -> str:
         "iceberg+abfs",
         "iceberg+abfss",
         "iceberg+rest",
+        "iceberg+arn",
     ):
         raise BodoError(
             "'con' must start with one of the following: 'iceberg://', 'iceberg+file://', "
             "'iceberg+s3://', 'iceberg+thrift://', 'iceberg+http://', 'iceberg+https://', 'iceberg+glue', 'iceberg+snowflake://', "
-            "'iceberg+abfs://', 'iceberg+abfss://', 'iceberg+rest://'"
+            "'iceberg+abfs://', 'iceberg+abfss://', 'iceberg+rest://', 'iceberg+arn'"
         )
 
     # Remove Iceberg Prefix when using Internally
