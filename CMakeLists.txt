@@ -73,7 +73,6 @@ FetchContent_Declare(
   fmt
   GIT_REPOSITORY  https://github.com/fmtlib/fmt.git
   GIT_TAG         10.2.1
-  EXCLUDE_FROM_ALL
 )
 set(BUILD_ONLY "core;s3" CACHE INTERNAL "only build core and s3")
 set(ENABLE_TESTING OFF CACHE INTERNAL "disabling fmt tests")
