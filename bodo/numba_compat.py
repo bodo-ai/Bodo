@@ -5655,8 +5655,10 @@ def define_untyped_pipeline(state, name="untyped"):
     if state.flags.enable_ssa:
         pm.add_pass(ReconstructSSA, "ssa")
 
-    if not state.flags.no_rewrites:
-        pm.add_pass(DeadBranchPrune, "dead branch pruning")
+    # Bodo change: disable extra branch pruning since it can result in IR issues
+    # See test_batched_read_agg for example (TODO(Ehsan): investigate and re-enable)
+    # if not state.flags.no_rewrites:
+    #     pm.add_pass(DeadBranchPrune, "dead branch pruning")
 
     pm.add_pass(LiteralPropagationSubPipelinePass, "Literal propagation")
 
