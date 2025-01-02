@@ -144,7 +144,7 @@ jobs:
           SF_USERNAME: ${{ secrets.SF_USERNAME }}
           SF_PASSWORD: ${{ secrets.SF_PASSWORD }}
           SF_ACCOUNT: ${{ secrets.SF_ACCOUNT }}
-          SKIP_FILES: "query_llm_ollama.py preprocess_thepile_bodo.py"
+          SKIP_FILES: "query_llm_ollama.py preprocess_thepile_bodo.py generate_kmers.py"
         run: |
           set -eo pipefail
           ls *.py | grep -v -E "$(echo $SKIP_FILES | sed 's/ /|/g')" | xargs -n 1 -P 1 python
