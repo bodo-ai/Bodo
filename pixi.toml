@@ -87,7 +87,7 @@ scipy = "*"
 scikit-learn = "1.4.*"
 matplotlib = "<=3.8.2"
 # IO
-boto3 = "*"
+boto3 = ">=1.35.74"
 botocore = "*"
 # Min bound is necessary. Otherwise s3fs will occasionally install v0.4.2
 # Due to s3fs pinning aiobotocore and not regularly updating

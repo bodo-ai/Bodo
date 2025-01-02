@@ -18,7 +18,7 @@
     <iceberg.version>1.5.2</iceberg.version>
     <hadoop.version>3.3.3</hadoop.version>
     <aws.old.version>1.12.382</aws.old.version>
-    <aws.version>2.19.13</aws.version>
+    <aws.version>2.29.26</aws.version>
   </properties>
 
   <dependencies>
@@ -225,6 +225,18 @@
       <groupId>software.amazon.awssdk</groupId>
       <artifactId>url-connection-client</artifactId>
       <version>${aws.version}</version>
+    </dependency>
+
+    <!-- S3Tables Dependencies -->
+    <dependency>
+      <groupId>software.amazon.awssdk</groupId>
+      <artifactId>s3tables</artifactId>
+      <version>${aws.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>software.amazon.s3tables</groupId>
+      <artifactId>s3-tables-catalog-for-iceberg</artifactId>
+      <version>0.1.3</version>
     </dependency>
 
     <!-- Logging Dependencies (to avoid duplicate versions) -->

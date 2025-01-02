@@ -279,7 +279,6 @@ def minio_server():
     # For compatibility with older MinIO versions.
     os.environ["MINIO_ACCESS_KEY"] = access_key
     os.environ["MINIO_SECRET_KEY"] = secret_key
-    os.environ["AWS_S3_ENDPOINT"] = f"http://{address}/"
 
     args = [
         "minio",
@@ -313,6 +312,7 @@ def minio_server_with_s3_envs(minio_server: tuple[str, str, str]):
             "AWS_ACCESS_KEY_ID": minio_server[0],
             "AWS_SECRET_ACCESS_KEY": minio_server[1],
             "AWS_SESSION_TOKEN": None,
+            "AWS_S3_ENDPOINT": f"http://{minio_server[2]}/",
         }
     ):
         yield minio_server
