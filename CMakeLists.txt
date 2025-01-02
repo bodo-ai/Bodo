@@ -9,6 +9,12 @@ include(CMakePrintHelpers)
 include(CheckIPOSupported)
 check_ipo_supported(LANGUAGES CXX)
 
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "(x86)|(X86)|(amd64)|(AMD64)")
+  set (X86 TRUE)
+else()
+  set (X86 FALSE)
+endif()
+
 
 # ------------------------- Enable Compilation Caches -------------------------
 # Enable CCache or SCCache if Found
@@ -154,7 +160,7 @@ add_compile_options(
   "-fstack-protector-strong"    # Conda used to force-add. Remove in follow up PR
   "-D_FORTIFY_SOURCE=2"         # Conda used to force-add. Remove in follow up PR
 )
-if (LINUX)
+if (LINUX AND X86)
   add_compile_options(
     # -march=haswell is used to enable AVX2 support (required by SIMD bloom filter implementation)
     "-march=haswell"
@@ -537,7 +543,8 @@ if (NOT (CMAKE_BUILD_TYPE STREQUAL "Release") AND NOT DEFINED ENV{BODO_SKIP_CPP_
     "bodo/tests/test_external_sort.cpp"
     "bodo/tests/test_dict_builder.cpp"
     "bodo/tests/test_groupby_common.cpp"
-    "bodo/tests/test_groupby_and_window.cpp"
+    "bodo/tests/test_groupby.cpp"
+    "bodo/tests/test_window.cpp"
     "bodo/tests/test_json_col_reader.cpp"
     "bodo/tests/test_memory_budget.cpp"
     "bodo/tests/test_pinnable.cpp"
@@ -635,6 +642,7 @@ target_link_directories(ext PRIVATE ${PYARROW_LIB_DIR} "${Python_NumPy_INCLUDE_D
 target_include_directories(ext PRIVATE ${datasketches_INSTALL_DIR}/include/DataSketches)
 
 target_link_libraries(ext PRIVATE
+  pthread
   npymath
   mpi
   arrow

@@ -7,23 +7,21 @@ on:
         description: 'Operating System to Build On/For'
         type: string
         required: true
+      name:
+        description: 'Name of the OS to Build For'
+        type: string
+        required: true
       bodo_version:
         description: 'Bodo Version to Build'
         type: string
         required: true
-
-# Recommended with setup-micromamba
-# https://github.com/mamba-org/setup-micromamba#about-login-shells
-defaults:
-  run:
-    shell: bash -leo pipefail {0}
 
 jobs:
   build_bodo_wheels:
     permissions:
       id-token: write
       contents: read
-    name: Build Bodo Wheels for ${{ inputs.os }}
+    name: Build Bodo Wheels for ${{ inputs.name }}
     runs-on: ${{ inputs.os }}
 
     steps:
@@ -38,7 +36,7 @@ jobs:
 
       # https://github.com/actions/runner-images/issues/10624
       - name: Fix PATH in .bashrc
-        if: inputs.os == 'macos-14'
+        if: inputs.name == 'macos-arm'
         run: |
           sed -i '' '/; export PATH;/d' ~/.bashrc
           # shellcheck disable=SC2016
@@ -61,9 +59,16 @@ jobs:
         if: contains(inputs.os, 'macos')
         run: |
           pixi global install sccache
+      # TODO: Remove once the self-hosted runners use Ubuntu
+      - name: Install Pipx on Self-Hosted Runner
+        if: inputs.name == 'linux-arm'
+        run: |
+          sudo dnf install -y python3-pip
+          python3 -m pip install --user pipx
+          python3 -m pipx ensurepath 
 
       - name: Build Wheels
-        uses: pypa/cibuildwheel@v2.21.3
+        run: ${{ contains(inputs.os, 'macos') && 'pipx' || 'python3 -m pipx' }} run cibuildwheel==2.22.0
         env:
           CIBW_BEFORE_ALL_LINUX: |
             # Install Pixi and Environment
@@ -77,10 +82,10 @@ jobs:
             if find /usr /lib /usr/local -name "libboost*" | grep -q .; then
               echo "Skipping boost, already installed"
             else
-              curl --output boost_1_87_0.tar.xz 'https://github.com/boostorg/boost/releases/download/boost-1.87.0/boost-1.87.0-cmake.tar.xz' -L
-              mkdir boost_1_87_0
-              tar -xJf boost_1_87_0.tar.xz -C .
-              (cd boost-1.87.0; ./bootstrap.sh --with-libraries=container,container_hash,json,stacktrace,uuid,lexical_cast; ./b2 install)
+              curl --output boost_1_85_0.tar.xz 'https://github.com/boostorg/boost/releases/download/boost-1.85.0/boost-1.85.0-cmake.tar.xz' -L
+              mkdir boost_1_85_0
+              tar -xJf boost_1_85_0.tar.xz -C .
+              (cd boost-1.85.0; ./bootstrap.sh --with-libraries=container,container_hash,json,stacktrace,uuid,lexical_cast; ./b2 install)
             fi
             # Install aws-sdk-cpp
             if find /usr /lib /usr/local -name "libaws*" | grep -q .; then
@@ -117,13 +122,13 @@ jobs:
             SCCACHE_REGION=us-east-2
             SCCACHE_S3_USE_SSL=true
             SCCACHE_S3_SERVER_SIDE_ENCRYPTION=true
-            MACOSX_DEPLOYMENT_TARGET=${{ inputs.os == 'macos-14' && '12.0' || '10.15' }}
+            MACOSX_DEPLOYMENT_TARGET=${{ inputs.name == 'macos-arm' && '12.0' || '10.15' }}
             BODO_VENDOR_MPICH=1
             PATH=$HOME/.pixi/bin:$PATH
             CONDA_PREFIX=$(pwd)/.pixi/envs/pip-cpp-macos
             SETUPTOOLS_SCM_PRETEND_VERSION=${{ inputs.bodo_version }}
           CIBW_ENVIRONMENT_LINUX: >
-            CMAKE_MODULE_PATH=/usr/local/boost_1_87_0
+            CMAKE_MODULE_PATH=/usr/local/boost_1_85_0
             DISABLE_CCACHE=1
             SCCACHE_BUCKET=engine-codebuild-cache
             SCCACHE_REGION=us-east-2
@@ -152,10 +157,10 @@ jobs:
             --exclude libmpi.so.12 --exclude libmpi.so.40 
             --exclude libarrow.so.1801 --exclude libarrow_acero.so.1801 --exclude libarrow_dataset.so.1801 
             --exclude libarrow_python.so --exclude libparquet.so.1801 
-            --plat manylinux_2_28_x86_64 {wheel} -w {dest_dir} && 
+            --plat manylinux_2_28_$(uname -m) {wheel} -w {dest_dir} && 
             python buildscripts/bodo/pip/manylinux/patch_libs_for_pip.py -p {dest_dir}
 
       - uses: actions/upload-artifact@v4
         with:
-          name: cibw-wheels-${{ inputs.os }}
+          name: cibw-wheels-${{ inputs.name }}
           path: ./wheelhouse/*.whl

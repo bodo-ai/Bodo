@@ -5289,7 +5289,7 @@ def overload_union_dataframes(
 
 
 # Throw BodoError for top-level unsupported functions in Pandas
-pd_unsupported = (
+pd_unsupported = [
     # Input/output
     pd.read_pickle,
     pd.read_table,
@@ -5304,7 +5304,6 @@ pd_unsupported = (
     pd.read_sas,
     pd.read_spss,
     pd.read_sql_query,
-    pd.read_gbq,
     pd.read_stata,
     pd.ExcelWriter,
     pd.json_normalize,
@@ -5325,7 +5324,14 @@ pd_unsupported = (
     pd.test,
     # GroupBy
     pd.Grouper,
-)
+]
+
+
+try:
+    pd_unsupported.append(pd.read_gbq)
+except AttributeError:
+    # pd.read_gbq is not supported in Pandas > 2.2
+    pass
 
 
 pd_util_unsupported = (

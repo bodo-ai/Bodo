@@ -1373,6 +1373,20 @@ def test_parfor_empty_entry_block(memory_leak_check):
     )
 
 
+def test_df_set_col_rename_bug(memory_leak_check):
+    """Test for variable rename clashes with Numba in typing"""
+
+    def impl(df):
+        df["A"] = df["A"] + 1
+        df["B"] = df["A"] + 3
+        df = df.drop_duplicates(subset=["A"])
+        df = df.drop("A", axis=1)
+        return df
+
+    df = pd.DataFrame({"A": [1, 2, 3]})
+    check_func(impl, (df,), only_seq=True, copy_input=True)
+
+
 def test_objmode_warning(memory_leak_check):
     """Test that bodo.objmode raises a warning when used
     and that bodo.no_warning_objmode does not."""
@@ -1406,3 +1420,53 @@ def test_objmode_warning(memory_leak_check):
             assert impl2() == 1, "Incorrect output with bodo.no_warning_objmode"
     finally:
         numba.core.config.DEVELOPER_MODE = old_developer_mode
+
+
+def test_wrap_python(memory_leak_check):
+    """Make sure basic usage of wrap_python works"""
+
+    A = 3
+
+    @bodo.wrap_python("int64")
+    def g(df):
+        return A
+
+    def impl(df):
+        return g(df)
+
+    df = pd.DataFrame({"A": [1, 2, 3], "B": [4, 5, 6]})
+    check_func(impl, (df,))
+
+
+def test_wrap_python_error_handling(memory_leak_check):
+    """Test error handling in wrap_python"""
+
+    with pytest.raises(BodoError, match="wrap_python requires full data types"):
+
+        @bodo.wrap_python(bodo.DataFrameType)
+        def g(df):
+            return df
+
+    with pytest.raises(BodoError, match="A data type is required for wrap_python"):
+
+        @bodo.wrap_python(3)
+        def g(a):
+            return a
+
+
+def test_wrap_python_type_check():
+    """test type checking for JIT wrapper output values"""
+
+    # A is specified as int but return value has strings
+    df1 = pd.DataFrame({"A": [1, 2, 3]})
+    df_type1 = bodo.typeof(df1)
+
+    @bodo.wrap_python(df_type1)
+    def g():
+        return pd.DataFrame({"A": ["abc", "bc"]})
+
+    def impl():
+        return g()
+
+    with pytest.raises(BodoError, match="Invalid Python output data type specified"):
+        bodo.jit(impl)()

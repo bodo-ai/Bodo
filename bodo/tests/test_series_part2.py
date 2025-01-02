@@ -144,6 +144,14 @@ def g3(a):
     return g2(a=a)
 
 
+out_type = bodo.typeof([1.0, 2.0])
+
+
+@bodo.wrap_python(out_type)
+def g4(a):
+    return [a, 2 * a]
+
+
 @pytest.mark.slow
 def test_series_map_func_cases1(memory_leak_check):
     """test map() called with a function defined as global/freevar outside or passed as
@@ -195,6 +203,16 @@ def test_series_map_global_jit(memory_leak_check):
 
     def test_impl(S):
         return S.map(g2)
+
+    S = pd.Series([1.0, 2.0, 3.0, 4.0, 5.0])
+    check_func(test_impl, (S,))
+
+
+def test_series_map_wrap_python(memory_leak_check):
+    """Test UDF defined as a wrap_python function"""
+
+    def test_impl(S):
+        return S.map(g4)
 
     S = pd.Series([1.0, 2.0, 3.0, 4.0, 5.0])
     check_func(test_impl, (S,))

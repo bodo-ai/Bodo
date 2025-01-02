@@ -686,6 +686,8 @@ def get_overload_const(val):
         return val.literal_value
     if isinstance(val, types.Dispatcher):
         return val
+    if isinstance(val, bodo.decorators.WrapPythonDispatcherType):
+        return val.dispatcher
     if isinstance(val, types.BaseTuple):
         out_list = []
         for v in val.types:
@@ -990,12 +992,15 @@ def is_const_func_type(t) -> bool:
             types.MakeFunctionLiteral,
             bodo.utils.typing.FunctionLiteral,
             types.Dispatcher,
+            bodo.decorators.WrapPythonDispatcherType,
         ),
     )
 
 
 def get_overload_const_func(val, func_ir):
     """get constant function object or ir.Expr.make_function from function type"""
+    from bodo.decorators import WrapPythonDispatcherType
+
     if isinstance(val, (types.MakeFunctionLiteral, bodo.utils.typing.FunctionLiteral)):
         func = val.literal_value
         # Handle functions that are currently make_function expressions from BodoSQL
@@ -1010,6 +1015,10 @@ def get_overload_const_func(val, func_ir):
         return val.dispatcher.py_func
     if isinstance(val, CPUDispatcher):
         return val.py_func
+
+    if isinstance(val, WrapPythonDispatcherType):
+        return val.dispatcher
+
     raise BodoError(f"'{val}' not a constant function type")
 
 
@@ -1490,6 +1499,7 @@ def is_literal_type(t):
         )
         or t == types.none  # None type is always literal since single value
         or isinstance(t, types.Dispatcher)
+        or isinstance(t, bodo.decorators.WrapPythonDispatcherType)
         # LiteralStrKeyDict is a BaseTuple in Numba 0.51 also
         or (isinstance(t, types.BaseTuple) and all(is_literal_type(v) for v in t.types))
         # List/Dict types preserve const initial values in Numba 0.51
@@ -1575,6 +1585,8 @@ def get_literal_value(t):
         return tuple(get_literal_value(v) for v in t.types)
     if isinstance(t, types.Dispatcher):
         return t
+    if isinstance(t, bodo.decorators.WrapPythonDispatcherType):
+        return t.dispatcher
     if is_initial_value_type(t):
         return t.initial_value
     if isinstance(t, (types.DTypeSpec, types.Function)):
@@ -2677,9 +2689,9 @@ def is_safe_arrow_cast(lhs_scalar_typ, rhs_scalar_typ):
 
 def register_type(type_name, type_value):
     """register a data type to be used in objmode blocks"""
-    import bodo.submit.spawner
+    import bodo.spawn.spawner
     from bodo.mpi4py import MPI
-    from bodo.submit.spawner import CommandType
+    from bodo.spawn.spawner import CommandType
 
     # check input
     if not isinstance(type_name, str):
@@ -2701,7 +2713,7 @@ def register_type(type_name, type_value):
 
     # TODO[BSE-4170]: simplify test flags
     if bodo.spawn_mode or bodo.tests.utils.test_spawn_mode_enabled:
-        spawner = bodo.submit.spawner.get_spawner()
+        spawner = bodo.spawn.spawner.get_spawner()
         bcast_root = MPI.ROOT if bodo.get_rank() == 0 else MPI.PROC_NULL
         spawner.worker_intercomm.bcast(CommandType.REGISTER_TYPE.value, bcast_root)
         spawner.worker_intercomm.bcast((type_name, type_value), bcast_root)
@@ -2821,6 +2833,10 @@ def _check_objmode_type(val, typ):
 
     val_typ = bodo.typeof(val)
 
+    # Shortcut for the common case
+    if val_typ == typ:
+        return val
+
     # handle dataframe type differences if possible
     if isinstance(typ, DataFrameType) and isinstance(val_typ, DataFrameType):
         val, val_typ = _fix_objmode_df_type(val, val_typ, typ)
@@ -2841,7 +2857,7 @@ def _check_objmode_type(val, typ):
 
     if val_typ != typ:
         raise BodoError(
-            f"Invalid objmode data type specified.\nUser specified:\t{typ}\nValue type:\t{val_typ}"
+            f"Invalid Python output data type specified.\nUser specified:\t{typ}\nValue type:\t{val_typ}"
         )
 
     return val

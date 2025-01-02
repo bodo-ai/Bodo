@@ -577,7 +577,7 @@ c_gatherv = types.ExternalFunction(
     "c_gatherv",
     types.void(
         types.voidptr,
-        types.int32,
+        types.int64,
         types.voidptr,
         types.voidptr,
         types.voidptr,
@@ -596,7 +596,7 @@ c_scatterv = types.ExternalFunction(
         types.voidptr,
         types.voidptr,
         types.voidptr,
-        types.int32,
+        types.int64,
         types.int32,
         types.int32,
         types.int64,
@@ -1226,17 +1226,17 @@ def gatherv_impl_jit(
             # size to handle multi-dim arrays
             n_loc = data.size
             recv_counts = gather_scalar(
-                np.int32(n_loc), allgather, root=root, comm=comm
+                np.int64(n_loc), allgather, root=root, comm=comm
             )
             n_total = recv_counts.sum()
             all_data = empty_like_type(n_total, data)
             # displacements
-            displs = np.empty(1, np.int32)
+            displs = np.empty(1, np.int64)
             if is_receiver or allgather:
                 displs = bodo.ir.join.calc_disp(recv_counts)
             c_gatherv(
                 data.ctypes,
-                np.int32(n_loc),
+                np.int64(n_loc),
                 all_data.ctypes,
                 recv_counts.ctypes,
                 displs.ctypes,
@@ -1309,11 +1309,11 @@ def gatherv_impl_jit(
                 np.int32(n_loc), allgather, warn_if_rep, root, comm
             )
 
-            recv_counts_nulls = np.empty(1, np.int32)
-            displs_nulls = np.empty(1, np.int32)
+            recv_counts_nulls = np.empty(1, np.int64)
+            displs_nulls = np.empty(1, np.int64)
             tmp_null_bytes = np.empty(1, np.uint8)
             if is_receiver or allgather:
-                recv_counts_nulls = np.empty(len(recv_counts), np.int32)
+                recv_counts_nulls = np.empty(len(recv_counts), np.int64)
                 for i in range(len(recv_counts)):
                     recv_counts_nulls[i] = (recv_counts[i] + 7) >> 3
                 displs_nulls = bodo.ir.join.calc_disp(recv_counts_nulls)
@@ -1321,7 +1321,7 @@ def gatherv_impl_jit(
 
             c_gatherv(
                 data._null_bitmap.ctypes,
-                np.int32(n_bytes),
+                np.int64(n_bytes),
                 tmp_null_bytes.ctypes,
                 recv_counts_nulls.ctypes,
                 displs_nulls.ctypes,
@@ -1759,7 +1759,7 @@ def _get_scatterv_send_counts(send_counts, n_pes, n):
 
     def impl(send_counts, n_pes, n):  # pragma: no cover
         # compute send counts if not available
-        send_counts = np.empty(n_pes, np.int32)
+        send_counts = np.empty(n_pes, np.int64)
         for i in range(n_pes):
             send_counts[i] = get_node_portion(n, n_pes, i)
         return send_counts
@@ -1813,7 +1813,7 @@ def _scatterv_np(data, send_counts=None, warn_if_dist=True, root=DEFAULT_ROOT, c
             send_counts.ctypes,
             displs.ctypes,
             recv_data.ctypes,
-            np.int32(n_loc),
+            np.int64(n_loc),
             np.int32(typ_val),
             root,
             comm,
@@ -2188,7 +2188,7 @@ def scatterv_impl_jit(
             displs = bodo.ir.join.calc_disp(send_counts)
 
             # compute send counts for characters
-            send_counts_char = np.empty(n_pes, np.int32)
+            send_counts_char = np.empty(n_pes, np.int64)
             if is_sender:
                 curr_str = 0
                 for i in range(n_pes):
@@ -2206,7 +2206,7 @@ def scatterv_impl_jit(
             displs_char = bodo.ir.join.calc_disp(send_counts_char)
 
             # compute send counts for nulls
-            send_counts_nulls = np.empty(n_pes, np.int32)
+            send_counts_nulls = np.empty(n_pes, np.int64)
             for i in range(n_pes):
                 send_counts_nulls[i] = (send_counts[i] + 7) >> 3
 
@@ -2226,7 +2226,7 @@ def scatterv_impl_jit(
                 send_counts.ctypes,
                 displs.ctypes,
                 recv_lens.ctypes,
-                np.int32(n_loc),
+                np.int64(n_loc),
                 int32_typ_enum,
                 root,
                 comm,
@@ -2245,7 +2245,7 @@ def scatterv_impl_jit(
                 send_counts_char.ctypes,
                 displs_char.ctypes,
                 bodo.libs.str_arr_ext.get_data_ptr(recv_arr),
-                np.int32(n_loc_char),
+                np.int64(n_loc_char),
                 char_typ_enum,
                 root,
                 comm,
@@ -2267,7 +2267,7 @@ def scatterv_impl_jit(
                 send_counts_nulls.ctypes,
                 displs_nulls.ctypes,
                 bodo.libs.str_arr_ext.get_null_bitmap_ptr(recv_arr),
-                np.int32(n_recv_bytes),
+                np.int64(n_recv_bytes),
                 char_typ_enum,
                 root,
                 comm,
@@ -2310,7 +2310,7 @@ def scatterv_impl_jit(
             displs = bodo.ir.join.calc_disp(send_counts)
 
             # compute send counts for items
-            send_counts_item = np.empty(n_pes, np.int32)
+            send_counts_item = np.empty(n_pes, np.int64)
             if is_sender:
                 curr_item = 0
                 for i in range(n_pes):
@@ -2325,7 +2325,7 @@ def scatterv_impl_jit(
             )
 
             # compute send counts for nulls
-            send_counts_nulls = np.empty(n_pes, np.int32)
+            send_counts_nulls = np.empty(n_pes, np.int64)
             for i in range(n_pes):
                 send_counts_nulls[i] = (send_counts[i] + 7) >> 3
 
@@ -2350,7 +2350,7 @@ def scatterv_impl_jit(
                 send_counts.ctypes,
                 displs.ctypes,
                 recv_lens.ctypes,
-                np.int32(n_loc),
+                np.int64(n_loc),
                 int32_typ_enum,
                 root,
                 comm,
@@ -2371,7 +2371,7 @@ def scatterv_impl_jit(
                 send_counts_nulls.ctypes,
                 displs_nulls.ctypes,
                 recv_null_bitmap_arr.ctypes,
-                np.int32(n_recv_null_bytes),
+                np.int64(n_recv_null_bytes),
                 char_typ_enum,
                 root,
                 comm,
@@ -2406,7 +2406,7 @@ def scatterv_impl_jit(
             # Calculate number of local output elements
             n_loc = np.int64(0 if (is_intercomm and is_sender) else send_counts[rank])
             # compute send counts bytes
-            send_counts_bytes = np.empty(n_pes, np.int32)
+            send_counts_bytes = np.empty(n_pes, np.int64)
             for i in range(n_pes):
                 send_counts_bytes[i] = (send_counts[i] + 7) >> 3
 
@@ -2430,7 +2430,7 @@ def scatterv_impl_jit(
                 send_counts_bytes.ctypes,
                 displs_bytes.ctypes,
                 data_recv.ctypes,
-                np.int32(n_recv_bytes),
+                np.int64(n_recv_bytes),
                 char_typ_enum,
                 root,
                 comm,
@@ -2440,7 +2440,7 @@ def scatterv_impl_jit(
                 send_counts_bytes.ctypes,
                 displs_bytes.ctypes,
                 bitmap_recv.ctypes,
-                np.int32(n_recv_bytes),
+                np.int64(n_recv_bytes),
                 char_typ_enum,
                 root,
                 comm,
@@ -2595,7 +2595,7 @@ def scatterv_impl_jit(
             send_counts = _get_scatterv_send_counts(send_counts, n_pes, n_all)
 
             # compute send counts for nulls
-            send_counts_nulls = np.empty(n_pes, np.int32)
+            send_counts_nulls = np.empty(n_pes, np.int64)
             for i in range(n_pes):
                 send_counts_nulls[i] = (send_counts[i] + 7) >> 3
 
@@ -2611,7 +2611,7 @@ def scatterv_impl_jit(
                 send_counts_nulls.ctypes,
                 displs_nulls.ctypes,
                 bitmap_recv.ctypes,
-                np.int32(n_recv_bytes),
+                np.int64(n_recv_bytes),
                 char_typ_enum,
                 root,
                 comm,
@@ -3011,7 +3011,7 @@ def _scatterv_null_bitmap(null_bitmap, send_counts, n_in, root, comm):
     bitmap_recv = np.empty(n_recv_bytes, np.uint8)
 
     # compute send counts for nulls
-    send_counts_nulls = np.empty(n_pes, np.int32)
+    send_counts_nulls = np.empty(n_pes, np.int64)
     for i in range(n_pes):
         send_counts_nulls[i] = (send_counts[i] + 7) >> 3
 
@@ -3027,7 +3027,7 @@ def _scatterv_null_bitmap(null_bitmap, send_counts, n_in, root, comm):
         send_counts_nulls.ctypes,
         displs_nulls.ctypes,
         bitmap_recv.ctypes,
-        np.int32(n_recv_bytes),
+        np.int64(n_recv_bytes),
         char_typ_enum,
         root,
         comm,

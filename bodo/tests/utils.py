@@ -230,7 +230,7 @@ def check_func(
 
     # We allow the environment flag BODO_TESTING_ONLY_RUN_1D_VAR to change the default
     # testing behavior, to test with only 1D_var. This environment variable is set in our
-    # AWS PR CI environment
+    # PR CI environment
     if only_1DVar is None and not (only_seq or only_1D):
         only_1DVar = os.environ.get("BODO_TESTING_ONLY_RUN_1D_VAR", None) is not None
 
@@ -3258,14 +3258,14 @@ def set_config(name, val):
     """Set global configuration value (both spawner and workers)
     E.g. bodo.hiframes.boxing._use_dict_str_type = True
     """
-    from bodo.submit.utils import set_global_config
+    from bodo.spawn.utils import set_global_config
 
     set_global_config(name, val)
     if test_spawn_mode_enabled:
-        import bodo.submit.spawner
-        from bodo.submit.spawner import CommandType
+        import bodo.spawn.spawner
+        from bodo.spawn.spawner import CommandType
 
-        spawner = bodo.submit.spawner.get_spawner()
+        spawner = bodo.spawn.spawner.get_spawner()
         bcast_root = MPI.ROOT if bodo.get_rank() == 0 else MPI.PROC_NULL
         spawner.worker_intercomm.bcast(CommandType.SET_CONFIG.value, bcast_root)
         spawner.worker_intercomm.bcast((name, val), bcast_root)
@@ -3425,9 +3425,9 @@ def get_num_test_workers():
     import bodo
 
     if bodo.spawn_mode or test_spawn_mode_enabled:
-        import bodo.submit.spawner
+        import bodo.spawn.spawner
 
-        spawner = bodo.submit.spawner.get_spawner()
+        spawner = bodo.spawn.spawner.get_spawner()
         return spawner.worker_intercomm.Get_remote_size()
 
     return bodo.get_size()
