@@ -422,7 +422,7 @@ public class RelationalAlgebraGenerator {
    * @param sql Query to parse Sets parseNode to the generated SQLNode
    * @throws SqlSyntaxException if the SQL syntax is incorrect.
    */
-  public void parseQuery(String sql) throws SqlSyntaxException {
+  void parseQuery(String sql) throws SqlSyntaxException {
     try {
       this.parseNode = planner.parse(sql);
     } catch (SqlParseException e) {

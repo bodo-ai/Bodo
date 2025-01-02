@@ -17,7 +17,27 @@ package com.bodosql.calcite.application
  * support.
  */
 class PythonEntryPoint {
-    fun resetPlanner(planner: RelationalAlgebraGenerator) {
-        planner.reset()
+    companion object {
+        /**
+         * Parse a query and update the generator's state.
+         * @param generator The generator to update.
+         * @param query The query to parse.
+         */
+        @JvmStatic
+        fun parseQuery(
+            generator: RelationalAlgebraGenerator,
+            query: String,
+        ) {
+            generator.parseQuery(query)
+        }
+
+        /**
+         * Reset the planner inside the RelationalAlgebraGenerator.
+         * @param generator The generator to reset.
+         */
+        @JvmStatic
+        fun resetPlanner(generator: RelationalAlgebraGenerator) {
+            generator.reset()
+        }
     }
 }

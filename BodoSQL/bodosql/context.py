@@ -27,6 +27,7 @@ from bodosql.imported_java_classes import (
     ColumnDataEnum,
     ColumnDataTypeClass,
     HashMapClass,
+    JavaEntryPoint,
     LocalSchemaClass,
     LocalTableClass,
     RelationalAlgebraGeneratorClass,
@@ -911,7 +912,7 @@ class BodoSQLContext:
                     bodo.utils.typing.raise_bodo_error(
                         "BodoSQLContext passed empty query string"
                     )
-                plan_generator.parseQuery(sql)
+                JavaEntryPoint.parseQuery(plan_generator, sql)
                 # Write type is used for the current Merge Into code path decisions.
                 # This should be removed when we revisit Merge Into
                 write_type = plan_generator.getWriteType(sql)
