@@ -108,6 +108,8 @@ message("Source dir of datasketches = ${datasketches_INSTALL_DIR}")
 find_package(Boost 1.85 REQUIRED COMPONENTS json)
 include_directories(${Boost_INCLUDE_DIRS})
 # Add AWS SDK as a dependency
+# don't mark as required because in the conda mac build this lookup fails for some reason
+# but it will be able to be found because it's in the conda environment
 find_package(AWSSDK COMPONENTS core)
 
 
