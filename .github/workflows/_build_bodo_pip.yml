@@ -87,22 +87,6 @@ jobs:
               tar -xJf boost_1_85_0.tar.xz -C .
               (cd boost-1.85.0; ./bootstrap.sh --with-libraries=container,json,stacktrace,uuid,lexical_cast; ./b2 install)
             fi
-            # Install aws-sdk-cpp
-            if find /usr /lib /usr/local -name "libaws*" | grep -q .; then
-              echo "Skipping aws-sdk-cpp, already installed"
-            else
-              git clone --branch 1.11.472 --depth 1 --recurse-submodules --shallow-submodules https://github.com/aws/aws-sdk-cpp
-              mkdir aws-sdk-cpp/build 
-              (cd aws-sdk-cpp/build; cmake .. \
-                -DCMAKE_BUILD_TYPE=Release \
-                -DBUILD_ONLY="core;s3" \
-                -DENABLE_TESTING=OFF \
-                -DAUTORUN_UNIT_TESTS=OFF \
-                -DCMAKE_PREFIX_PATH=/usr/local/ \
-                -DCMAKE_INSTALL_PREFIX=/usr/local/;
-                cmake --build . --config=Release; \
-                cmake --install . --config=Release)
-            fi
           CIBW_BEFORE_BUILD: |
             # Delete mpi4py folder if it exists so correct version gets copied in
             rm -r {package}/bodo/mpi4py || true
@@ -156,7 +140,7 @@ jobs:
             mv {wheel} {dest_dir}
           CIBW_REPAIR_WHEEL_COMMAND_LINUX: >
             sccache --show-stats && 
-            LD_LIBRARY_PATH=/usr/local/lib64/:/project/.pixi/envs/pip-cpp-linux/lib:$LD_LIBRARY_PATH auditwheel -v repair 
+            LD_LIBRARY_PATH=/project/build/type_Release/lib:/project/.pixi/envs/pip-cpp-linux/lib:$LD_LIBRARY_PATH auditwheel -v repair 
             --exclude libmpi.so.12 --exclude libmpi.so.40 
             --exclude libarrow.so.1801 --exclude libarrow_acero.so.1801 --exclude libarrow_dataset.so.1801 
             --exclude libarrow_python.so --exclude libparquet.so.1801 

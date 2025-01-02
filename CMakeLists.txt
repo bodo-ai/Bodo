@@ -75,7 +75,17 @@ FetchContent_Declare(
   GIT_TAG         10.2.1
   EXCLUDE_FROM_ALL
 )
-FetchContent_MakeAvailable(fmt)
+set(BUILD_ONLY "core;s3" CACHE INTERNAL "only build core and s3")
+set(ENABLE_TESTING OFF CACHE INTERNAL "disabling fmt tests")
+FetchContent_Declare(
+  AWSSDK
+  GIT_REPOSITORY   https://github.com/aws/aws-sdk-cpp
+  GIT_TAG         1.11.472
+  OVERRIDE_FIND_PACKAGE
+)
+FetchContent_MakeAvailable(AWSSDK fmt)
+unset(BUILD_ONLY)
+unset(ENABLE_TESTING)
 set_target_properties(fmt PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 
@@ -108,9 +118,7 @@ message("Source dir of datasketches = ${datasketches_INSTALL_DIR}")
 find_package(Boost 1.85 REQUIRED COMPONENTS json)
 include_directories(${Boost_INCLUDE_DIRS})
 # Add AWS SDK as a dependency
-# don't mark as required because in the conda mac build this lookup fails for some reason
-# but it will be able to be found because it's in the conda environment
-find_package(AWSSDK COMPONENTS core)
+find_package(AWSSDK REQUIRED COMPONENTS core)
 
 
 # ---------------------------- Set CMake Options -----------------------------
