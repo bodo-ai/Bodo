@@ -6702,3 +6702,91 @@ if _check_numba_change:  # pragma: no cover
 
 
 numba.core.funcdesc.FunctionDescriptor._from_python_function = _from_python_function
+
+
+def fold_arguments(pysig, args, kws, normal_handler, default_handler,
+                   stararg_handler):
+    """
+    Given the signature *pysig*, explicit *args* and *kws*, resolve
+    omitted arguments and keyword arguments. A tuple of positional
+    arguments is returned.
+    Various handlers allow to process arguments:
+    - normal_handler(index, param, value) is called for normal arguments
+    - default_handler(index, param, default) is called for omitted arguments
+    - stararg_handler(index, param, values) is called for a "*args" argument
+    """
+    if isinstance(kws, Sequence):
+        # Normalize dict kws
+        kws = dict(kws)
+
+    # deal with kwonly args
+    params = pysig.parameters
+    kwonly = []
+    for name, p in params.items():
+        if p.kind == p.KEYWORD_ONLY:
+            kwonly.append(name)
+
+    if kwonly:
+        bind_args = args[:-len(kwonly)]
+    else:
+        bind_args = args
+    bind_kws = kws.copy()
+    if kwonly:
+        for idx, n in enumerate(kwonly):
+            bind_kws[n] = args[len(kwonly) + idx]
+
+    # now bind
+    try:
+        ba = pysig.bind(*bind_args, **bind_kws)
+    except TypeError as e:
+        # The binding attempt can raise if the args don't match up, this needs
+        # to be converted to a TypingError so that e.g. partial type inference
+        # doesn't just halt.
+        # msg = (f"Cannot bind 'args={bind_args} kws={bind_kws}' to "
+        #        f"signature '{pysig}' due to \"{type(e).__name__}: {e}\".")
+        # Bodo change: keep the original error message for simpler user error reporting
+        raise TypingError(str(e))
+    for i, param in enumerate(pysig.parameters.values()):
+        name = param.name
+        default = param.default
+        if param.kind == param.VAR_POSITIONAL:
+            # stararg may be omitted, in which case its "default" value
+            # is simply the empty tuple
+            if name in ba.arguments:
+                argval = ba.arguments[name]
+                # NOTE: avoid wrapping the tuple type for stararg in another
+                #       tuple.
+                if (len(argval) == 1 and
+                        isinstance(argval[0], (types.StarArgTuple,
+                                               types.StarArgUniTuple))):
+                    argval = tuple(argval[0])
+            else:
+                argval = ()
+            out = stararg_handler(i, param, argval)
+
+            ba.arguments[name] = out
+        elif name in ba.arguments:
+            # Non-stararg, present
+            ba.arguments[name] = normal_handler(i, param, ba.arguments[name])
+        else:
+            # Non-stararg, omitted
+            assert default is not param.empty
+            ba.arguments[name] = default_handler(i, param, default)
+    # Collect args in the right order
+    args = tuple(ba.arguments[param.name]
+                 for param in pysig.parameters.values())
+    return args
+
+
+if _check_numba_change:  # pragma: no cover
+    lines = inspect.getsource(numba.core.typing.templates.fold_arguments)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "1ace2d13ce2c1637efa0c280fedd1204cf5e2cc0ec7d14e17cad4098ca364e5c"
+    ):
+        warnings.warn("numba.core.typing.templates.fold_arguments has changed")
+
+
+numba.core.typing.templates.fold_arguments = fold_arguments
+numba.core.typing.fold_arguments = fold_arguments
+numba.core.dispatcher.fold_arguments = fold_arguments
