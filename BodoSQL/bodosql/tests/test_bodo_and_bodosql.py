@@ -6,6 +6,7 @@ JIT functions.
 import pandas as pd
 
 import bodosql
+from bodosql.imported_java_classes import PythonEntryPoint
 from bodo.tests.utils import check_func, pytest_mark_one_rank
 
 
@@ -40,7 +41,7 @@ def test_planner_reset(memory_leak_check):
     final_query = "DESCRIBE TABLE MYTABLE"
     for query in queries:
         generator.parseQuery(query)
-        generator.resetPlanner()
+        PythonEntryPoint.resetPlanner(generator)
     generator.parseQuery(final_query)
     # Verify that the internal state is based on the final query
     # (e.g. its been reset). All other queries are not DDL.

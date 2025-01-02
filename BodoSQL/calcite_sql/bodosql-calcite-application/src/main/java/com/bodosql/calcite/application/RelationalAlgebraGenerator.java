@@ -410,10 +410,8 @@ public class RelationalAlgebraGenerator {
   /**
    * Calls "RESET" on the current planner and clears any cached state need to compile a single query
    * (but not configuration).
-   *
-   * <p>Note: This is exposed to Python.
    */
-  public void resetPlanner() {
+  public void reset() {
     this.planner.close();
     this.parseNode = null;
   }

@@ -49,6 +49,7 @@ if bodo.get_rank() == 0:
         # Initialize logging. Must be done after importing all classes to ensure
         # PythonLoggersClass is available.
         configure_java_logging(bodo.user_logging.get_verbose_level())
+        PythonEntryPoint = gateway.jvm.com.bodosql.calcite.application.PythonEntryPoint
     except Exception as e:
         saw_error = True
         msg = str(e)
@@ -71,6 +72,7 @@ else:
     WriteTargetEnum = None
     TabularCatalogClass = None
     BodoGlueCatalogClass = None
+    PythonEntryPoint = None
 
 saw_error = bcast_scalar(saw_error)
 msg = bcast_scalar(msg)
