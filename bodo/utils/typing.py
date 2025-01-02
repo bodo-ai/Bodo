@@ -286,7 +286,7 @@ def get_udf_error_msg(context_str, error):
     msg = ""
     if hasattr(error, "msg"):
         msg = str(error.msg)
-    if hasattr(error, "args") and error.args:
+    elif hasattr(error, "args") and error.args:
         # TODO(ehsan): can Exception have more than one arg?
         msg = str(error.args[0])
 
