@@ -54,7 +54,7 @@ def test_basic_read(memory_leak_check):
 @temp_env_override({"AWS_REGION": "us-east-2"})
 def test_read_implicit_pruning(memory_leak_check):
     """
-    Test reading an Iceberg table from Snowflake with Bodo
+    Test reading an Iceberg table from S3 Tables with Bodo
     compiler column pruning
     """
 
