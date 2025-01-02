@@ -2,7 +2,7 @@
 trigger: none
 pr: none
 
-# Currently nightly can take up to ~12 hours to run. 1 AM is a good time to start.
+# Currently nightly can take up to ~8 hours to run. 1 AM is a good time to start.
 # (Note that this is in UTC time, so 1AM UTC is 8PM EST)
 schedules:
 - cron: "0 1 * * MON-FRI"

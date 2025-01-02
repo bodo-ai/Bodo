@@ -7,7 +7,7 @@ from pandas.core.arrays.arrow.array import ArrowExtensionArray
 import bodo.user_logging
 from bodo.pandas.lazy_metadata import LazyMetadata, LazyMetadataMixin
 from bodo.pandas.lazy_wrapper import BodoLazyWrapper
-from bodo.submit.utils import debug_msg
+from bodo.spawn.utils import debug_msg
 
 
 class LazyArrowExtensionArray(

@@ -163,16 +163,21 @@ int MPI_Gengather(void *sendbuf, int sendcount, MPI_Datatype sendtype,
     }
 }
 
-int MPI_Gengatherv(const void *sendbuf, int sendcount, MPI_Datatype sendtype,
-                   void *recvbuf, const int *recvcounts, const int *displs,
+int MPI_Gengatherv(const void *sendbuf, int64_t sendcount,
+                   MPI_Datatype sendtype, void *recvbuf,
+                   const int64_t *recvcounts, const int64_t *displs,
                    MPI_Datatype recvtype, int root_pe, MPI_Comm comm,
                    bool all_gather) {
+    const MPI_Aint *mpi_displs = reinterpret_cast<const MPI_Aint *>(displs);
+    const MPI_Count *mpi_recvcounts =
+        reinterpret_cast<const MPI_Count *>(recvcounts);
     if (all_gather) {
-        return MPI_Allgatherv(sendbuf, sendcount, sendtype, recvbuf, recvcounts,
-                              displs, recvtype, comm);
+        return MPI_Allgatherv_c(sendbuf, sendcount, sendtype, recvbuf,
+                                mpi_recvcounts, mpi_displs, recvtype, comm);
     } else {
-        return MPI_Gatherv(sendbuf, sendcount, sendtype, recvbuf, recvcounts,
-                           displs, recvtype, root_pe, comm);
+        return MPI_Gatherv_c(sendbuf, sendcount, sendtype, recvbuf,
+                             mpi_recvcounts, mpi_displs, recvtype, root_pe,
+                             comm);
     }
 }
 
@@ -208,10 +213,10 @@ std::shared_ptr<array_info> gather_array(std::shared_ptr<array_info> in_arr,
     bodo_array_type::arr_type_enum arr_type = in_arr->arr_type;
     int64_t num_categories = in_arr->num_categories;
 
-    std::vector<int> rows_disps(n_pes), rows_counts(n_pes);
-    int rows_pos = 0;
+    std::vector<int64_t> rows_disps(n_pes), rows_counts(n_pes);
+    int64_t rows_pos = 0;
     for (int i_p = 0; i_p < n_pes; i_p++) {
-        int siz = arr_gath_r[2 * i_p];
+        int64_t siz = arr_gath_r[2 * i_p];
         rows_counts[i_p] = siz;
         rows_disps[i_p] = rows_pos;
         rows_pos += siz;
@@ -233,7 +238,8 @@ std::shared_ptr<array_info> gather_array(std::shared_ptr<array_info> in_arr,
             // a result we need a separate code path to handle
             // fusing the bits
             char *data_arr_i = in_arr->data1();
-            std::vector<int> recv_count_bytes(n_pes), recv_disp_bytes(n_pes);
+            std::vector<int64_t> recv_count_bytes(n_pes),
+                recv_disp_bytes(n_pes);
             for (int i_p = 0; i_p < n_pes; i_p++) {
                 recv_count_bytes[i_p] = (rows_counts[i_p] + 7) >> 3;
             }
@@ -243,7 +249,7 @@ std::shared_ptr<array_info> gather_array(std::shared_ptr<array_info> in_arr,
             bodo::vector<uint8_t> tmp_data_bytes(n_data_bytes, 0);
             // Boolean arrays always store data as UINT8
             MPI_Datatype mpi_typ = get_MPI_typ(Bodo_CTypes::UINT8);
-            int n_bytes = (n_rows + 7) >> 3;
+            int64_t n_bytes = (n_rows + 7) >> 3;
             CHECK_MPI(
                 MPI_Gengatherv(data_arr_i, n_bytes, mpi_typ,
                                tmp_data_bytes.data(), recv_count_bytes.data(),
@@ -314,10 +320,10 @@ std::shared_ptr<array_info> gather_array(std::shared_ptr<array_info> in_arr,
                                       dtype, -1, 0, num_categories);
             data1_ptr = out_arr->data1();
         }
-        std::vector<int> char_disps(n_pes), char_counts(n_pes);
-        int pos = 0;
+        std::vector<int64_t> char_disps(n_pes), char_counts(n_pes);
+        int64_t pos = 0;
         for (int i_p = 0; i_p < n_pes; i_p++) {
-            int siz = arr_gath_r[2 * i_p + 1];
+            int64_t siz = arr_gath_r[2 * i_p + 1];
             char_disps[i_p] = pos;
             char_counts[i_p] = siz;
             pos += siz;
@@ -479,7 +485,7 @@ std::shared_ptr<array_info> gather_array(std::shared_ptr<array_info> in_arr,
         arr_type == bodo_array_type::ARRAY_ITEM ||
         arr_type == bodo_array_type::STRUCT) {
         char *null_bitmask_i = in_arr->null_bitmask();
-        std::vector<int> recv_count_null(n_pes), recv_disp_null(n_pes);
+        std::vector<int64_t> recv_count_null(n_pes), recv_disp_null(n_pes);
         for (int i_p = 0; i_p < n_pes; i_p++) {
             recv_count_null[i_p] = (rows_counts[i_p] + 7) >> 3;
         }
@@ -488,7 +494,7 @@ std::shared_ptr<array_info> gather_array(std::shared_ptr<array_info> in_arr,
                                               recv_count_null.end(), size_t(0));
         bodo::vector<uint8_t> tmp_null_bytes(n_null_bytes, 0);
         MPI_Datatype mpi_typ = get_MPI_typ(Bodo_CTypes::UINT8);
-        int n_bytes = (n_rows + 7) >> 3;
+        int64_t n_bytes = (n_rows + 7) >> 3;
         CHECK_MPI(
             MPI_Gengatherv(null_bitmask_i, n_bytes, mpi_typ,
                            tmp_null_bytes.data(), recv_count_null.data(),
