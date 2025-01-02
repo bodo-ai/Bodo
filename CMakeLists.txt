@@ -73,7 +73,11 @@ FetchContent_Declare(
   fmt
   GIT_REPOSITORY  https://github.com/fmtlib/fmt.git
   GIT_TAG         10.2.1
+  EXCLUDE_FROM_ALL
 )
+FetchContent_MakeAvailable(fmt)
+set_target_properties(fmt PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
 set(BUILD_ONLY "core;s3" CACHE INTERNAL "only build core and s3")
 set(ENABLE_TESTING OFF CACHE INTERNAL "disabling fmt tests")
 FetchContent_Declare(
@@ -81,10 +85,9 @@ FetchContent_Declare(
   GIT_REPOSITORY   https://github.com/aws/aws-sdk-cpp
   GIT_TAG         1.11.472
 )
-FetchContent_MakeAvailable(AWSSDK fmt)
+FetchContent_MakeAvailable(AWSSDK)
 unset(BUILD_ONLY)
 unset(ENABLE_TESTING)
-set_target_properties(fmt PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 
 # ----------------------------- Download Apache Datasketches -------------------------
@@ -406,7 +409,7 @@ python_add_library(
 
 target_include_directories(memory_tester PRIVATE ${BASE_INCLUDE_DIRS} "${CMAKE_CURRENT_SOURCE_DIR}/bodo/tests/")
 target_link_directories(memory_tester PRIVATE ${PYARROW_LIB_DIR} ${CONDA_LIB_DIR} ${MPICH_LIB_DIR})
-target_link_libraries(memory_tester PRIVATE mpi arrow arrow_python fmt::fmt)
+target_link_libraries(memory_tester PRIVATE mpi arrow arrow_python fmt::fmt-header-only)
 if(NOT(CMAKE_BUILD_TYPE STREQUAL "Release"))
   target_compile_definitions(
     memory_tester
@@ -437,7 +440,7 @@ python_add_library(
 )
 target_include_directories(native_typer PRIVATE ${BASE_INCLUDE_DIRS} "${CMAKE_CURRENT_SOURCE_DIR}/bodo/transforms/type_inference/" "${CMAKE_CURRENT_BINARY_DIR}/bodo/transforms/type_inference/")
 target_link_directories(native_typer PRIVATE ${CONDA_LIB_DIR})
-target_link_libraries(native_typer PRIVATE fmt::fmt)
+target_link_libraries(native_typer PRIVATE fmt::fmt-header-only)
 install(TARGETS native_typer DESTINATION "bodo/transforms/type_inference/")
 
 
@@ -657,7 +660,7 @@ target_link_libraries(ext PRIVATE
   arrow_python
   arrow_dataset
   parquet
-  fmt::fmt
+  fmt::fmt-header-only
   zstd
   ${AWSSDK_LINK_LIBRARIES}
   ${Boost_LIBRARIES}

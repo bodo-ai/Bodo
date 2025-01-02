@@ -140,7 +140,7 @@ jobs:
             mv {wheel} {dest_dir}
           CIBW_REPAIR_WHEEL_COMMAND_LINUX: >
             sccache --show-stats && 
-            LD_LIBRARY_PATH=/project/build/type_Release/lib:/project/.pixi/envs/pip-cpp-linux/lib:$LD_LIBRARY_PATH auditwheel -v repair 
+            LD_LIBRARY_PATH=/project/.pixi/envs/pip-cpp-linux/lib:$LD_LIBRARY_PATH auditwheel -v repair 
             --exclude libmpi.so.12 --exclude libmpi.so.40 
             --exclude libarrow.so.1801 --exclude libarrow_acero.so.1801 --exclude libarrow_dataset.so.1801 
             --exclude libarrow_python.so --exclude libparquet.so.1801 
