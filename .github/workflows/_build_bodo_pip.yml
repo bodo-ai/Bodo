@@ -85,7 +85,7 @@ jobs:
               curl --output boost_1_85_0.tar.xz 'https://github.com/boostorg/boost/releases/download/boost-1.85.0/boost-1.85.0-cmake.tar.xz' -L
               mkdir boost_1_85_0
               tar -xJf boost_1_85_0.tar.xz -C .
-              (cd boost-1.85.0; ./bootstrap.sh --with-libraries=container,json,stacktrace,lexical_cast; ./b2 install)
+              (cd boost-1.85.0; ./bootstrap.sh --with-libraries=container,json,stacktrace; ./b2 install)
             fi
           CIBW_BEFORE_BUILD: |
             # Delete mpi4py folder if it exists so correct version gets copied in
