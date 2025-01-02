@@ -53,11 +53,11 @@ jobs:
           # Azure SAS Provider Install
           ./buildscripts/install_azurefs_sas_token_provider.sh
 
-      - name: Disable AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          unset-current-credentials: true
-          aws-region: us-east-2
+      # - name: Disable AWS Credentials
+      #   uses: aws-actions/configure-aws-credentials@v4
+      #   with:
+      #     unset-current-credentials: true
+      #     aws-region: us-east-2
 
       - name: Run Tests
         run: |
