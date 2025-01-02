@@ -37,7 +37,7 @@ $$
 create or replace function test_regex_udf(A varchar) RETURNS DOUBLE LANGUAGE JAVASCRIPT AS
 $$
 try {
-return parseInt(A.match(/(\d+).*?(\d+).*?(\d+)/)[2]);
+return parseInt(A.match(/(\\d+).*?(\\d+).*?(\\d+)/)[2]);
 } catch (e) {
     return null;
 }
