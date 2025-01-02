@@ -66,7 +66,7 @@ jobs:
           python3 -m pipx ensurepath 
 
       - name: Build Wheels
-        run: pipx run cibuildwheel==2.22.0
+        run: python3 -m pipx run cibuildwheel==2.22.0
         env:
           CIBW_BEFORE_ALL_LINUX: |
             # Install Pixi and Environment
