@@ -1,4 +1,5 @@
 import datetime
+import platform
 import random
 import sys
 from decimal import Decimal
@@ -3210,8 +3211,9 @@ def test_complex_arr_attr(memory_leak_check):
 
 
 @pytest.mark.skipif(
-    (not sys.platform.startswith("linux")) and (not sys.platform.startswith("darwin")),
-    reason="get_cpu_id only works on Mac/Linux",
+    (not sys.platform.startswith("linux"))
+    and (not sys.platform.startswith("darwin") or platform.machine() == "arm64"),
+    reason="get_cpu_id only works on Mac (x86)/Linux",
 )
 def test_get_cpu_id(memory_leak_check):
     """
