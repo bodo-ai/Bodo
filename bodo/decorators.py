@@ -47,6 +47,8 @@ numba.core.cpu.CPUTargetOptions.distributed_diagnostics = _mapping(
 
 
 class Flags(TargetConfig):
+    __slots__ = ()
+
     enable_looplift = Option(
         type=bool,
         default=False,
@@ -256,7 +258,7 @@ if bodo.numba_compat._check_numba_change:
     lines = inspect.getsource(numba.core.compiler.Flags)
     if (
         hashlib.sha256(lines.encode()).hexdigest()
-        != "c55571413d2aa723a2c5eb18f1dccf3acfd3b900ab25f751302773a8e5bf48d3"
+        != "834e3920054f7758de2170c87ea884e59c35fd57f5777d559168a95e4ba2ec56"
     ):  # pragma: no cover
         warnings.warn("numba.core.compiler.Flags has changed")
 

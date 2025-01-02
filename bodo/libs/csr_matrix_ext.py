@@ -143,7 +143,7 @@ def unbox_csr_matrix(typ, val, c):
 def box_csr_matrix(typ, val, c):
     """box scipy.sparse.csv_matrix into python objects"""
     mod_name = c.context.insert_const_string(c.builder.module, "scipy.sparse")
-    sc_sp_class_obj = c.pyapi.import_module_noblock(mod_name)
+    sc_sp_class_obj = c.pyapi.import_module(mod_name)
 
     csr_matrix = cgutils.create_struct_proxy(typ)(c.context, c.builder, val)
 

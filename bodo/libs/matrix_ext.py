@@ -76,7 +76,7 @@ def unbox_matrix(typ, val, c):
 def box_matrix(typ, val, c):
     """Box np.matrix into a Python object."""
     mod_name = c.context.insert_const_string(c.builder.module, "numpy")
-    np_class_obj = c.pyapi.import_module_noblock(mod_name)
+    np_class_obj = c.pyapi.import_module(mod_name)
     matrix = cgutils.create_struct_proxy(typ)(c.context, c.builder, val)
     # box data
     c.context.nrt.incref(c.builder, types.Array(typ.dtype, 2, "C"), matrix.data)

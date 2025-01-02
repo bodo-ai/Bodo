@@ -83,7 +83,7 @@ def lower_constant_pd_datetime_tz_dtype(context, builder, typ, pyval):
 @box(PandasDatetimeTZDtype)
 def box_pd_datetime_tzdtype(typ, val, c):
     mod_name = c.context.insert_const_string(c.builder.module, "pandas")
-    pd_class_obj = c.pyapi.import_module_noblock(mod_name)
+    pd_class_obj = c.pyapi.import_module(mod_name)
     # Create the timezone type.
     unit_str = c.context.get_constant_generic(c.builder, types.unicode_type, "ns")
     # No need to incref because unit_str is a constant
@@ -263,7 +263,7 @@ def unbox_pd_datetime_array(typ, val, c):
     )
 
     pd_str_const = c.context.insert_const_string(c.builder.module, "pandas")
-    pd_mod = c.pyapi.import_module_noblock(pd_str_const)
+    pd_mod = c.pyapi.import_module(pd_str_const)
     isvalid_arr_obj = c.pyapi.call_method(pd_mod, "notna", (val,))
     bool_arr_typ = types.Array(types.bool_, 1, "C")
     isvalid_arr = c.pyapi.to_native_value(bool_arr_typ, isvalid_arr_obj).value
@@ -334,7 +334,7 @@ def box_pd_datetime_array(typ, val, c):
         tz_arg_obj = None
 
     mod_name = c.context.insert_const_string(c.builder.module, "pandas")
-    pd_class_obj = c.pyapi.import_module_noblock(mod_name)
+    pd_class_obj = c.pyapi.import_module(mod_name)
 
     if tz_arg_obj is not None:
         dtype_obj = c.pyapi.call_method(

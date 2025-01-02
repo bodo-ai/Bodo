@@ -109,7 +109,7 @@ def box_multi_index(typ, val, c):
     arrays currently. TODO: support `levels` and `codes`
     """
     mod_name = c.context.insert_const_string(c.builder.module, "pandas")
-    class_obj = c.pyapi.import_module_noblock(mod_name)
+    class_obj = c.pyapi.import_module(mod_name)
     multi_index_class_obj = c.pyapi.object_getattr_string(class_obj, "MultiIndex")
 
     index_val = cgutils.create_struct_proxy(typ)(c.context, c.builder, val)

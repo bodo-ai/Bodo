@@ -133,7 +133,7 @@ def box_spark_session(typ, val, c):
     # TODO(ehsan): store the Spark configs in native SparkSession object and set them
     # in boxed object
     mod_name = c.context.insert_const_string(c.builder.module, "pyspark")
-    pyspark_obj = c.pyapi.import_module_noblock(mod_name)
+    pyspark_obj = c.pyapi.import_module(mod_name)
     sql_obj = c.pyapi.object_getattr_string(pyspark_obj, "sql")
     session_class_obj = c.pyapi.object_getattr_string(sql_obj, "SparkSession")
     builder_obj = c.pyapi.object_getattr_string(session_class_obj, "builder")

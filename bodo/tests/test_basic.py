@@ -1248,7 +1248,7 @@ def test_missing_arg_msg():
     numba.core.config.DEVELOPER_MODE = 0
 
     with pytest.raises(
-        TypeError,
+        numba.TypingError,
         match=r"missing a required argument",
     ):
         bodo.jit(test)()
