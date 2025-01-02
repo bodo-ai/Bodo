@@ -35,9 +35,9 @@ jobs:
     uses: ./.github/workflows/_build_bodo_pip.yml
     needs: [get_version]
     with:
-      # All Linux archs (x86, ARM) in the same job
+      # Only Linux x86 in this job
       os: ubuntu-latest
-      name: linux
+      name: linux-x86
       bodo_version: ${{ needs.get_version.outputs.bodo_version }}
     secrets: inherit
 
@@ -52,6 +52,8 @@ jobs:
             name: macos-x86
           - os: macos-latest
             name: macos-arm
+          - os: self-arm-medium
+            name: linux-arm
     with:
       os: ${{ matrix.os }}
       name: ${{ matrix.name }}

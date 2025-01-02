@@ -34,13 +34,6 @@ jobs:
           role-skip-session-tagging: true
       - uses: actions/checkout@v4
 
-      # https://github.com/actions/setup-python/blob/main/docs/advanced-usage.md#using-setup-python-with-a-self-hosted-runner
-      - name: Setup Emulation for Arm Builds
-        if: inputs.name == 'linux'
-        uses: docker/setup-qemu-action@v3
-        with:
-          platforms: arm64
-
       # https://github.com/actions/runner-images/issues/10624
       - name: Fix PATH in .bashrc
         if: inputs.name == 'macos-arm'
@@ -64,9 +57,16 @@ jobs:
         if: contains(inputs.os, 'macos')
         run: |
           pixi global install sccache
+      # TODO: Remove once the self-hosted runners use Ubuntu
+      - name: Install Pipx on Self-Hosted Runner
+        if: inputs.name == 'linux-arm'
+        run: |
+          sudo dnf install python3-pip
+          python3 -m pip install --user pipx
+          python3 -m pipx ensurepath 
 
       - name: Build Wheels
-        uses: pypa/cibuildwheel@v2.21.3
+        run: pipx run cibuildwheel==2.23.0
         env:
           CIBW_BEFORE_ALL_LINUX: |
             # Install Pixi and Environment

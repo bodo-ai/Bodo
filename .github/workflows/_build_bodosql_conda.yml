@@ -41,7 +41,7 @@ jobs:
       - name: 'Download the Bodo conda'
         uses: actions/download-artifact@v4
         with:
-          name: bodo-conda-3.12-community-linux-x86
+          name: bodo-conda-3.12-linux-x86
           run-id: ${{ github.event.workflow_run.id }}
           path: ./Bodo-CondaPkg-Linux
 
