@@ -125,7 +125,7 @@ jobs:
       - name: Convert Notebooks scripts to Python
         run: |
           pip install nbconvert
-          jupyter nbconvert --to script $(find examples -type f -name "*.ipynb")
+          jupyter nbconvert --to script examples/*.ipynb
 
       - name: Install Bodo Packages
         env:
@@ -147,4 +147,4 @@ jobs:
           SKIP_FILES: "query_llm_ollama.py preprocess_thepile_bodo.py"
         run: |
           set -eo pipefail
-          find . -type f -name "*.py" | grep -v -E "$(echo $SKIP_FILES | sed 's/ /|/g')" | xargs -n 1 -P 1 python
+          ls *.py | grep -v -E "$(echo $SKIP_FILES | sed 's/ /|/g')" | xargs -n 1 -P 1 python
