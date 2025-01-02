@@ -147,4 +147,4 @@ jobs:
           SKIP_FILES: "query_llm_ollama.py preprocess_thepile_bodo.py"
         run: |
           set -eo pipefail
-          find . -type f -name "*.py" | grep -v -E "$(echo $SKIP_FILES | sed 's/ /|/g') | xargs -n 1 -P 1 python
+          find . -type f -name "*.py" | grep -v -E "$(echo $SKIP_FILES | sed 's/ /|/g')" | xargs -n 1 -P 1 python
