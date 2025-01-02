@@ -43,11 +43,13 @@ def tpcx_bb_helper(test_file_name, good_result):
         os.chdir(pytest_working_dir)
 
 
+# @pytest.mark.skip
 def test_tpcx_bb_csv():
     good_result = 3380326.0
     tpcx_bb_helper("TPCxBB_q26.py", good_result)
 
 
+# @pytest.mark.skip
 def test_tpcx_bb_parquet():
     good_result = 3380326.0
     tpcx_bb_helper("TPCxBB_q26_pq.py", good_result)
