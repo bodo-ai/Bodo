@@ -104,9 +104,9 @@ The following catalogs are supported:
     - E.g. `iceberg+rest` or `iceberg+rest://<rest-uri>?warehouse=<warehouse>&token=<token>`
 
 - S3 Tables
-    - Connection string must be of the form `iceberg+arn:aws:s3tables:<region>:<account_number>:<bucket>`
+    - Connection string must be of the form `iceberg+arn:aws:s3tables:<region>:<account_number>:bucket/<bucket>`
     - `params` is unused
-    - E.g. `iceberg+arn:aws:s3tables:us-west-2:123456789012:mybucket`
+    - E.g. `iceberg+arn:aws:s3tables:us-west-2:123456789012:bucket/mybucket`
 
 #### Pandas APIs {#iceberg-pandas}
 
