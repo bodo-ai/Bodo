@@ -51,6 +51,7 @@ jobs:
             role-to-assume: arn:aws:iam::427443013497:role/BodoEngineNightlyRole
             role-session-name: BodoEnginePrCiSession
             role-skip-session-tagging: true
+            role-duration-seconds: 10800
   
         # Run Tests
         - name: Run Tests
