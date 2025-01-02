@@ -3,6 +3,7 @@ import random
 import sys
 from decimal import Decimal
 
+import numba
 import numpy as np
 import pandas as pd
 import psutil
@@ -2887,11 +2888,20 @@ def test_barrier_error():
     def f():
         bodo.barrier("foo")
 
+    # Save default developer mode value
+    default_mode = numba.core.config.DEVELOPER_MODE
+
+    # Test as a user
+    numba.core.config.DEVELOPER_MODE = 0
+
     with pytest.raises(
-        TypeError,
+        numba.TypingError,
         match=r"too many positional arguments",
     ):
         bodo.jit(f)()
+
+    # Reset back to original setting
+    numba.core.config.DEVELOPER_MODE = default_mode
 
 
 @pytest.mark.slow
