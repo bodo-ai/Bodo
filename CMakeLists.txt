@@ -81,7 +81,6 @@ FetchContent_Declare(
   AWSSDK
   GIT_REPOSITORY   https://github.com/aws/aws-sdk-cpp
   GIT_TAG         1.11.472
-  OVERRIDE_FIND_PACKAGE
 )
 FetchContent_MakeAvailable(AWSSDK fmt)
 unset(BUILD_ONLY)
