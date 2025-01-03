@@ -766,11 +766,11 @@ class BodoSQLContext:
             False,  # We need to execute the code so don't hide credentials.
         )
         if bodo.get_rank() == 0:
-            is_dll = generator.isDDLProcessedQuery()
+            is_ddl = JavaEntryPoint.isDDLProcessedQuery(generator)
         else:
-            is_dll = False
-        is_dll = bcast_scalar(is_dll)
-        if is_dll:
+            is_ddl = False
+        is_ddl = bcast_scalar(is_ddl)
+        if is_ddl:
             warning_msg = "Encountered a DDL query. These queries are executed directly by bc.sql() so this wont't properly test compilation."
             warnings.warn(BodoSQLWarning(warning_msg))
         func_text, lowered_globals = self._convert_to_pandas(
@@ -778,7 +778,7 @@ class BodoSQLContext:
             dynamic_params_list,
             params_dict,
             generator,
-            is_dll,
+            is_ddl,
         )
 
         glbls = {
@@ -854,11 +854,11 @@ class BodoSQLContext:
             hide_credentials,
         )
         if bodo.get_rank() == 0:
-            is_dll = generator.isDDLProcessedQuery()
+            is_ddl = JavaEntryPoint.isDDLProcessedQuery(generator)
         else:
-            is_dll = False
-        is_dll = bcast_scalar(is_dll)
-        if is_dll:
+            is_ddl = False
+        is_ddl = bcast_scalar(is_ddl)
+        if is_ddl:
             warning_msg = "Encountered a DDL query. These queries are executed directly by bc.sql() so this wont't properly represent generated code."
             warnings.warn(BodoSQLWarning(warning_msg))
         pd_code, lowered_globals = self._convert_to_pandas(
@@ -866,7 +866,7 @@ class BodoSQLContext:
             dynamic_params_list,
             params_dict,
             generator,
-            is_dll,
+            is_ddl,
         )
         # add the imports so someone can directly run the code.
         imports = [
@@ -1045,11 +1045,11 @@ class BodoSQLContext:
             False,  # We need to execute the code so don't hide credentials.
         )
         if bodo.get_rank() == 0:
-            is_dll = generator.isDDLProcessedQuery()
+            is_ddl = JavaEntryPoint.isDDLProcessedQuery(generator)
         else:
-            is_dll = False
-        is_dll = bcast_scalar(is_dll)
-        if is_dll:
+            is_ddl = False
+        is_ddl = bcast_scalar(is_ddl)
+        if is_ddl:
             # Just execute DDL operations directly and return the DataFrame.
             return self.execute_ddl(sql, generator)
         else:

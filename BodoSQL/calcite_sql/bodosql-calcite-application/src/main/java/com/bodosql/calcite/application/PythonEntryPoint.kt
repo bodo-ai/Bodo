@@ -128,5 +128,12 @@ class PythonEntryPoint {
             generator: RelationalAlgebraGenerator,
             sql: String,
         ): DDLExecutionResult = generator.executeDDL(sql)
+
+        /**
+         * Determine if the active query is a DDL query that is not treated like compute (not CTAS).
+         * @param generator The generator to use.
+         * @return Is the query DDL?
+         */
+        fun isDDLProcessedQuery(generator: RelationalAlgebraGenerator): Boolean = generator.isDDLProcessedQuery
     }
 }
