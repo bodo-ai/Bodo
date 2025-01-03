@@ -141,6 +141,7 @@ class PythonEntryPoint {
          * @param generator The generator to use.
          * @return Is the query DDL?
          */
+        @JvmStatic
         fun isDDLProcessedQuery(generator: RelationalAlgebraGenerator): Boolean = generator.isDDLProcessedQuery
 
         /**
