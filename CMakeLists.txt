@@ -84,7 +84,7 @@ FetchContent_Declare(
   AWSSDK
   GIT_REPOSITORY   https://github.com/aws/aws-sdk-cpp
   GIT_TAG         1.11.472
-  OVERRIDE_FIND_PACKAGE
+  FIND_PACKAGE_ARGS
 )
 FetchContent_MakeAvailable(AWSSDK)
 unset(BUILD_ONLY)
@@ -119,8 +119,6 @@ message("Source dir of datasketches = ${datasketches_INSTALL_DIR}")
 # Add boost as a dependency
 find_package(Boost 1.85 REQUIRED COMPONENTS json)
 include_directories(${Boost_INCLUDE_DIRS})
-# Add AWS SDK as a dependency
-find_package(AWSSDK REQUIRED COMPONENTS core)
 
 
 # ---------------------------- Set CMake Options -----------------------------
