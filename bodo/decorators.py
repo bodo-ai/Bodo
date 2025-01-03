@@ -243,6 +243,12 @@ detail""",
         doc="Spawn MPI processes",
     )
 
+    propagate_env = Option(
+        type=list,
+        default=[],
+        doc="Environment variables to propagate to spawned MPI processes",
+    )
+
     distributed_diagnostics = Option(
         type=bool,
         default=False,
