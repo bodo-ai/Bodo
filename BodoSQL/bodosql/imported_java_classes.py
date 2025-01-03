@@ -17,9 +17,6 @@ msg = ""
 gateway = get_gateway()
 if bodo.get_rank() == 0:
     try:
-        CommonsExceptionUtilsClass = (
-            gateway.jvm.org.apache.commons.lang3.exception.ExceptionUtils
-        )
         ColumnClass = gateway.jvm.com.bodosql.calcite.table.BodoSQLColumnImpl
         ColumnDataTypeClass = gateway.jvm.com.bodosql.calcite.table.ColumnDataTypeInfo
         LocalTableClass = gateway.jvm.com.bodosql.calcite.table.LocalTable
@@ -47,7 +44,6 @@ if bodo.get_rank() == 0:
         saw_error = True
         msg = str(e)
 else:
-    CommonsExceptionUtilsClass = None
     ColumnClass = None
     ColumnDataTypeClass = None
     LocalTableClass = None

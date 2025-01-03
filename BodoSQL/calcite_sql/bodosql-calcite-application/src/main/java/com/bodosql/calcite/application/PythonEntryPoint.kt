@@ -5,6 +5,7 @@ import com.bodosql.calcite.application.write.WriteTarget
 import com.bodosql.calcite.ddl.DDLExecutionResult
 import com.bodosql.calcite.table.BodoSQLColumn
 import com.bodosql.calcite.table.ColumnDataTypeInfo
+import org.apache.commons.lang3.exception.ExceptionUtils
 
 /**
  * This class is the entry point for all Python code that relates to planner driven operations.
@@ -215,5 +216,8 @@ class PythonEntryPoint {
         ) {
             map[key] = value
         }
+
+        @JvmStatic
+        fun getStackTrace(throwable: Throwable): String = ExceptionUtils.getStackTrace(throwable)
     }
 }
