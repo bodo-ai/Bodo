@@ -7,6 +7,7 @@ import com.bodosql.calcite.catalog.FileSystemCatalog
 import com.bodosql.calcite.catalog.SnowflakeCatalog
 import com.bodosql.calcite.catalog.TabularCatalog
 import com.bodosql.calcite.ddl.DDLExecutionResult
+import com.bodosql.calcite.schema.LocalSchema
 import com.bodosql.calcite.table.BodoSQLColumn
 import com.bodosql.calcite.table.BodoSQLColumnImpl
 import com.bodosql.calcite.table.ColumnDataTypeInfo
@@ -363,5 +364,13 @@ class PythonEntryPoint {
                 estimatedRowCount,
                 estimatedNdvs,
             )
+
+        /**
+         * Build a LocalSchema object.
+         * @param name The name to use.
+         * @return The LocalSchema object.
+         */
+        @JvmStatic
+        fun buildLocalSchema(name: String): LocalSchema = LocalSchema(name)
     }
 }

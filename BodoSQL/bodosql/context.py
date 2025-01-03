@@ -24,7 +24,6 @@ from bodosql.bodosql_types.table_path import TablePath, TablePathType
 from bodosql.imported_java_classes import (
     ColumnDataTypeClass,
     JavaEntryPoint,
-    LocalSchemaClass,
     RelationalAlgebraGeneratorClass,
 )
 from bodosql.py4j_gateway import build_java_array_list, build_java_hash_map
@@ -501,7 +500,7 @@ def compute_df_types(df_list, is_bodo_type):
 
 def add_table_type(
     table_name: str,
-    schema: LocalSchemaClass,
+    schema,
     df_type: bodo.DataFrameType,
     estimated_row_count: int | None,
     estimated_ndvs: dict[str, int] | None,
@@ -515,7 +514,7 @@ def add_table_type(
 
     Args:
         table_name (str): The name of the table.
-        schema (LocalSchemaClass): The schema to update.
+        schema (Java LocalSchema): The schema to update.
         df_type (bodo.DataFrameType): The Bodo DataFrame type.
         estimated_row_count (Optional[int]): The expected number of rows in the table for the
             Volcano Planner. None if no estimate is provided.
@@ -1485,18 +1484,18 @@ def initialize_schema():
     """Create the BodoSQL Schema used to store all local DataFrames.
 
     Returns:
-        LocalSchemaClass: Java type for the BodoSQL schema.
+        Java LocalSchema: Java type for the BodoSQL schema.
     """
     # TODO(ehsan): create and store generator during bodo_sql_context initialization
     if bodo.get_rank() == 0:
-        schema = LocalSchemaClass("__BODOLOCAL__")
+        schema = JavaEntryPoint.buildLocalSchema("__BODOLOCAL__")
     else:
         schema = None
     return schema
 
 
 def update_schema(
-    schema: LocalSchemaClass,
+    schema,
     table_names: list[str],
     df_types: list[bodo.DataFrameType],
     estimated_row_counts: list[int | None],
@@ -1508,7 +1507,7 @@ def update_schema(
     """Update a local schema with local tables.
 
     Args:
-        schema (LocalSchemaClass): The schema to update.
+        schema (Java LocalSchema): The schema to update.
         table_names (List[str]): List of tables to add to the schema.
         df_types (List[bodo.DataFrameType]): List of Bodo DataFrame types for each table.
         estimated_row_counts (List[Optional[int]]): The expected number of rows in each input
