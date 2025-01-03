@@ -116,8 +116,8 @@ int Base64decode_len(const char *bufcoded) {
     int nprbytes;
 
     bufin = (const unsigned char *)bufcoded;
-    while (pr2six[*(bufin++)] <= 63)
-        ;
+    while (pr2six[*(bufin++)] <= 63) {
+    }
 
     nprbytes = (bufin - (const unsigned char *)bufcoded) - 1;
     nbytesdecoded = ((nprbytes + 3) / 4) * 3;
@@ -132,8 +132,8 @@ int Base64decode(char *bufplain, const char *bufcoded) {
     int nprbytes;
 
     bufin = (const unsigned char *)bufcoded;
-    while (pr2six[*(bufin++)] <= 63)
-        ;
+    while (pr2six[*(bufin++)] <= 63) {
+    }
     nprbytes = (bufin - (const unsigned char *)bufcoded) - 1;
     nbytesdecoded = ((nprbytes + 3) / 4) * 3;
 

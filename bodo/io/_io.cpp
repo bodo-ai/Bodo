@@ -45,8 +45,9 @@ void file_write_parallel_py_entrypt(const char* file_name, char* buff,
 PyMODINIT_FUNC PyInit_hio(void) {
     PyObject* m;
     MOD_DEF(m, "hio", "No docs", nullptr);
-    if (m == nullptr)
+    if (m == nullptr) {
         return nullptr;
+    }
 
     // numpy read
     SetAttrStringFromVoidPtr(m, get_file_size);
@@ -137,11 +138,13 @@ void file_read(const char* file_name, void* buff, int64_t size,
         } else {
             // posix
             FILE* fp = fopen(file_name, "rb");
-            if (fp == nullptr)
+            if (fp == nullptr) {
                 return;
+            }
             int64_t seek_res = fseek(fp, offset, SEEK_SET);
-            if (seek_res != 0)
+            if (seek_res != 0) {
                 return;
+            }
             size_t ret_code = fread(buff, 1, (size_t)size, fp);
             fclose(fp);
             if (ret_code != (size_t)size) {

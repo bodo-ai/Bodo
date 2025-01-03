@@ -504,14 +504,16 @@ bodo::tests::suite external_sort_tests([] {
             };
 
             for (int64_t i = 0; i < (n_pes - 1); i++) {
-                if (i == 0)
+                if (i == 0) {
                     bodo::tests::check(in_bound(int_arr->Value(i)));
-                else
+                } else {
                     bodo::tests::check(
                         in_bound(int_arr->Value(i) - int_arr->Value(i - 1)));
-                if (i == n_pes - 2)
+                }
+                if (i == n_pes - 2) {
                     bodo::tests::check(
                         in_bound(per_host_size * n_pes - int_arr->Value(i)));
+                }
             }
         }
     });
@@ -532,8 +534,9 @@ bodo::tests::suite external_sort_tests([] {
         std::iota(all_data.begin(), all_data.end(), 0);
         unsort_vector(all_data);
         std::vector<int64_t> data{};
-        for (int i = 0; i < per_host_size; i++)
+        for (int i = 0; i < per_host_size; i++) {
             data.push_back(all_data[i + myrank * per_host_size]);
+        }
 
         std::shared_ptr<table_info> table =
             bodo::tests::cppToBodo({"A"}, {false}, {}, std::move(data));
@@ -566,8 +569,9 @@ bodo::tests::suite external_sort_tests([] {
         int n_pes, myrank;
         MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
         MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
-        if (n_pes > 1)
+        if (n_pes > 1) {
             return;
+        }
 
         std::vector<std::pair<int64_t, int64_t>> limitoffset{
             std::make_pair(-1, -1), std::make_pair(5, 0), std::make_pair(47, 0),
@@ -615,14 +619,15 @@ bodo::tests::suite external_sort_tests([] {
                                 all_data[index++] == int_arr->Value(i));
                         }
                     } else {
-                        if (trial.first == -1)
+                        if (trial.first == -1) {
                             bodo::tests::check(index == static_cast<int64_t>(
                                                             n_elems_per_host));
-                        else
+                        } else {
                             bodo::tests::check(
                                 index == std::min(trial.first + trial.second,
                                                   static_cast<int64_t>(
                                                       n_elems_per_host)));
+                        }
                         bodo::tests::check(int_arr->length() == 0);
                     }
                 }
@@ -682,15 +687,17 @@ bodo::tests::suite external_sort_tests([] {
         // every other rank
         const size_t n_elems_per_host = n_pes * (myrank + 1) * chunk_size;
         std::vector<int64_t> data(n_elems_per_host), all_data;
-        for (int64_t i = 0; i < (int64_t)n_elems_per_host; i++)
+        for (int64_t i = 0; i < (int64_t)n_elems_per_host; i++) {
             data[i] = myrank + i * n_pes;
+        }
         unsort_vector(data);
         std::shared_ptr<table_info> table =
             bodo::tests::cppToBodo({"A"}, {false}, {}, std::move(data));
         for (int i = 0; i < n_pes; i++) {
             const size_t n_elems_per_host = n_pes * (i + 1) * chunk_size;
-            for (int j = 0; j < (int)n_elems_per_host; j++)
+            for (int j = 0; j < (int)n_elems_per_host; j++) {
                 all_data.push_back(i + j * n_pes);
+            }
         }
         std::ranges::sort(all_data);
 
@@ -722,8 +729,9 @@ bodo::tests::suite external_sort_tests([] {
                 if (index == -1) {
                     index = 0;
                     while (index < (int)all_data.size() &&
-                           all_data[index] < int_arr->Value(0))
+                           all_data[index] < int_arr->Value(0)) {
                         index++;
+                    }
                     bodo::tests::check(index < (int)all_data.size() &&
                                        all_data[index] == int_arr->Value(0));
                     range.first = index;
@@ -742,14 +750,16 @@ bodo::tests::suite external_sort_tests([] {
                           "on MPI_Gather:");
                 if (myrank == 0) {
                     for (int i = 0; i < n_pes; i++) {
-                        if (i == 0)
+                        if (i == 0) {
                             bodo::tests::check(gather[i].first == all_data[0]);
-                        else
+                        } else {
                             bodo::tests::check(gather[i].first ==
                                                gather[i - 1].second + 1);
-                        if (i == n_pes - 1)
+                        }
+                        if (i == n_pes - 1) {
                             bodo::tests::check(gather[i].second ==
                                                (int)all_data.size() - 1);
+                        }
                     }
                 }
             }
@@ -804,8 +814,9 @@ bodo::tests::suite external_sort_tests([] {
                 if (index == -1) {
                     index = 0;
                     while (index < (int)total_elems &&
-                           index < int_arr->Value(0))
+                           index < int_arr->Value(0)) {
                         index++;
+                    }
                     bodo::tests::check(index < (int)total_elems &&
                                        index == int_arr->Value(0));
                     range.first = index;
@@ -824,14 +835,16 @@ bodo::tests::suite external_sort_tests([] {
                           "error on MPI_Gather:");
                 if (myrank == 0) {
                     for (int i = 0; i < n_pes; i++) {
-                        if (i == 0)
+                        if (i == 0) {
                             bodo::tests::check(gather[i].first == 0);
-                        else
+                        } else {
                             bodo::tests::check(gather[i].first ==
                                                gather[i - 1].second + 1);
-                        if (i == n_pes - 1)
+                        }
+                        if (i == n_pes - 1) {
                             bodo::tests::check(gather[i].second ==
                                                (int)total_elems - 1);
+                        }
                     }
                 }
             }
@@ -950,9 +963,11 @@ bodo::tests::suite external_sort_tests([] {
             for (int i = 0; i < n_pes; i++) {
                 int batch_elem = dis(gen);
                 batch_elem = std::min(batch_elem, (int)n_elem - index);
-                if (i == myrank)
-                    for (int j = index; j < index + batch_elem; j++)
+                if (i == myrank) {
+                    for (int j = index; j < index + batch_elem; j++) {
                         local_data.push_back(global_data[j]);
+                    }
+                }
                 index += batch_elem;
             }
 
@@ -1046,9 +1061,11 @@ bodo::tests::suite external_sort_tests([] {
                 for (int i = 0; i < n_pes; i++) {
                     int batch_elem = dis(gen);
                     batch_elem = std::min(batch_elem, (int)n_elem - index);
-                    if (i == myrank)
-                        for (int j = index; j < index + batch_elem; j++)
+                    if (i == myrank) {
+                        for (int j = index; j < index + batch_elem; j++) {
                             local_data.push_back(global_data[j]);
+                        }
+                    }
                     index += batch_elem;
                 }
 
@@ -1089,20 +1106,23 @@ bodo::tests::suite external_sort_tests([] {
                       "test_external_sort::test_parallel_stress: MPI error on "
                       "MPI_Allgather:");
             int64_t start = offset >= 0 ? offset : 0;
-            for (int64_t i = 0; i < myrank; i++)
+            for (int64_t i = 0; i < myrank; i++) {
                 start = std::max(start, maximums[i] + 1);
+            }
             int64_t end = (max == -1 ? start : max + 1);
             bodo::tests::check(int_arr->length() == end - start);
             for (int64_t i = 0; i < end - start; i++) {
                 bodo::tests::check(int_arr->Value(i) == start + i);
             }
             int last_non_empty = n_pes - 1;
-            while (maximums[last_non_empty] == -1)
+            while (maximums[last_non_empty] == -1) {
                 last_non_empty--;
-            if (myrank == last_non_empty)
+            }
+            if (myrank == last_non_empty) {
                 bodo::tests::check(
                     end ==
                     std::min(static_cast<int64_t>(limit + offset), n_elem));
+            }
         }
     });
 

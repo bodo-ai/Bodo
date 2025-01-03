@@ -660,8 +660,9 @@ class GroupbyPipeline {
             if (n_gen_udf > 0) {
                 std::shared_ptr<table_info> general_in_table =
                     std::make_shared<table_info>();
-                for (auto udf_col_set : gen_udf_col_sets)
+                for (auto udf_col_set : gen_udf_col_sets) {
                     udf_col_set->fill_in_columns(general_in_table, grp_info);
+                }
                 udf_info.general_udf(grp_info.num_groups,
                                      general_in_table.get(),
                                      update_table.get());
@@ -739,8 +740,9 @@ class GroupbyPipeline {
      */
     void eval() {
         tracing::Event ev("eval", is_parallel);
-        for (auto col_set : col_sets)
+        for (auto col_set : col_sets) {
             col_set->eval(grp_infos[0]);
+        }
         // only regular UDFs need eval step
         if (n_udf - gen_udf_col_sets.size() > 0) {
             udf_info.eval(cur_table.get());
@@ -914,10 +916,11 @@ class GroupbyPipeline {
                 static_cast<float>(nunique_keyval_hashes) /
                 static_cast<float>(n_rows);
             float global_fraction_unique_hashes;
-            if (ev.is_tracing())
+            if (ev.is_tracing()) {
                 ev.add_attribute("nunique_" + std::to_string(i) +
                                      "_local_fraction_unique_hashes",
                                  local_fraction_unique_hashes);
+            }
             CHECK_MPI(MPI_Allreduce(&local_fraction_unique_hashes,
                                     &global_fraction_unique_hashes, 1,
                                     MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD),
