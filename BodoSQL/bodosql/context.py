@@ -1425,14 +1425,19 @@ class BodoSQLContext:
             try:
                 ddl_result = JavaEntryPoint.executeDDL(generator, sql)
                 # Convert the output to a DataFrame.
-                column_names = list(ddl_result.getColumnNames())
+                column_names = list(
+                    JavaEntryPoint.getDDLExecutionColumnNames(ddl_result)
+                )
                 column_types = [
-                    _generate_ddl_column_type(t) for t in ddl_result.getColumnTypes()
+                    _generate_ddl_column_type(t)
+                    for t in JavaEntryPoint.getDDLExecutionColumnTypes(ddl_result)
                 ]
                 data = [
                     # Use astype to avoid issues with Java conversion.
                     pd.array(column, dtype=object).astype(column_types[i])
-                    for i, column in enumerate(ddl_result.getColumnValues())
+                    for i, column in enumerate(
+                        JavaEntryPoint.getDDLColumnValues(ddl_result)
+                    )
                 ]
                 df_dict = {column_names[i]: data[i] for i in range(len(column_names))}
                 result = pd.DataFrame(

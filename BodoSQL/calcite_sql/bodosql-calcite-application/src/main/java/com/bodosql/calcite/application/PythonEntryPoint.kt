@@ -149,6 +149,15 @@ class PythonEntryPoint {
             sql: String,
         ): DDLExecutionResult = generator.executeDDL(sql)
 
+        @JvmStatic
+        fun getDDLExecutionColumnNames(result: DDLExecutionResult): List<String> = result.columnNames
+
+        @JvmStatic
+        fun getDDLExecutionColumnTypes(result: DDLExecutionResult): List<String> = result.columnTypes
+
+        @JvmStatic
+        fun getDDLColumnValues(result: DDLExecutionResult): List<List<Any?>> = result.columnValues
+
         /**
          * Determine if the active query is a DDL query that is not treated like compute (not CTAS).
          * @param generator The generator to use.
