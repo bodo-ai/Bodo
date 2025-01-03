@@ -46,13 +46,13 @@ if bodo.get_rank() == 0:
         WriteTargetEnum = gateway.jvm.com.bodosql.calcite.application.write.WriteTarget.WriteTargetEnum
         TabularCatalogClass = gateway.jvm.com.bodosql.calcite.catalog.TabularCatalog
         BodoGlueCatalogClass = gateway.jvm.com.bodosql.calcite.catalog.BodoGlueCatalog
-        # Initialize logging. Must be done after importing all classes to ensure
-        # PythonLoggersClass is available.
-        configure_java_logging(bodo.user_logging.get_verbose_level())
         # Note: We call this JavaEntryPoint so its clear the Python code enters java
         # and the class is named PythonEntryPoint to make it clear the Java code
         # is being entered from Python.
         JavaEntryPoint = gateway.jvm.com.bodosql.calcite.application.PythonEntryPoint
+        # Initialize logging. Must be done after importing all classes to ensure
+        # PythonLoggersClass is available.
+        configure_java_logging(bodo.user_logging.get_verbose_level())
     except Exception as e:
         saw_error = True
         msg = str(e)
