@@ -149,6 +149,7 @@ class PythonEntryPoint {
          * @param typeID The type ID to convert.
          * @return The BodoSQLColumnDataType.
          */
+        @JvmStatic
         fun buildBodoSQLColumnDataTypeFromTypeId(typeID: Int): BodoSQLColumn.BodoSQLColumnDataType =
             BodoSQLColumn.BodoSQLColumnDataType.fromTypeId(typeID)
 
@@ -157,8 +158,14 @@ class PythonEntryPoint {
          * @param value The string to convert.
          * @return The WriteTargetEnum.
          */
+        @JvmStatic
         fun buildWriteTargetEnumFromString(value: String): WriteTarget.WriteTargetEnum = WriteTarget.WriteTargetEnum.fromString(value)
 
+        /**
+         * Configure the Java logging level.
+         * @param level The logging level to set.
+         */
+        @JvmStatic
         fun configureJavaLogging(level: Int) {
             toggleLoggers(level)
         }
