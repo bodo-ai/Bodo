@@ -455,5 +455,41 @@ class PythonEntryPoint {
          */
         @JvmStatic
         fun getPlanFromPair(pair: CodePlanPair): String = pair.plan
+
+        @JvmStatic
+        fun buildColumnDataTypeInfo(
+            dataType: BodoSQLColumn.BodoSQLColumnDataType,
+            isNullable: Boolean,
+        ): ColumnDataTypeInfo = ColumnDataTypeInfo(dataType, isNullable)
+
+        @JvmStatic
+        fun buildColumnDataTypeInfo(
+            dataType: BodoSQLColumn.BodoSQLColumnDataType,
+            isNullable: Boolean,
+            precision: Int,
+        ): ColumnDataTypeInfo = ColumnDataTypeInfo(dataType, isNullable, precision = precision)
+
+        @JvmStatic
+        fun buildColumnDataTypeInfo(
+            dataType: BodoSQLColumn.BodoSQLColumnDataType,
+            isNullable: Boolean,
+            precision: Int,
+            scale: Int,
+        ): ColumnDataTypeInfo = ColumnDataTypeInfo(dataType, isNullable, precision = precision, scale = scale)
+
+        @JvmStatic
+        fun buildColumnDataTypeInfo(
+            dataType: BodoSQLColumn.BodoSQLColumnDataType,
+            isNullable: Boolean,
+            child: ColumnDataTypeInfo,
+        ): ColumnDataTypeInfo = ColumnDataTypeInfo(dataType, isNullable, child = child)
+
+        @JvmStatic
+        fun buildColumnDataTypeInfo(
+            dataType: BodoSQLColumn.BodoSQLColumnDataType,
+            isNullable: Boolean,
+            keyType: ColumnDataTypeInfo,
+            valueType: ColumnDataTypeInfo,
+        ): ColumnDataTypeInfo = ColumnDataTypeInfo(dataType, isNullable, keyType = keyType, valueType = valueType)
     }
 }

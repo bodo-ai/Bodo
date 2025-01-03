@@ -140,12 +140,12 @@ def construct_tz_aware_array_type(typ, nullable):
         type_enum = JavaEntryPoint.buildBodoSQLColumnDataTypeFromTypeId(
             SqlTypeEnum.Timestamp_Ntz.value
         )
-        return ColumnDataTypeClass(type_enum, nullable, precision)
+        return JavaEntryPoint.buildColumnDataTypeInfo(type_enum, nullable, precision)
     else:
         type_enum = JavaEntryPoint.buildBodoSQLColumnDataTypeFromTypeId(
             SqlTypeEnum.Timestamp_Ltz.value
         )
-        return ColumnDataTypeClass(type_enum, nullable, precision)
+        return JavaEntryPoint.buildColumnDataTypeInfo(type_enum, nullable, precision)
 
 
 def construct_time_array_type(typ: bodo.TimeArrayType | bodo.TimeType, nullable: bool):
@@ -161,7 +161,7 @@ def construct_time_array_type(typ: bodo.TimeArrayType | bodo.TimeType, nullable:
     type_enum = JavaEntryPoint.buildBodoSQLColumnDataTypeFromTypeId(
         SqlTypeEnum.Time.value
     )
-    return ColumnDataTypeClass(type_enum, nullable, typ.precision)
+    return JavaEntryPoint.buildColumnDataTypeInfo(type_enum, nullable, typ.precision)
 
 
 def construct_array_item_array_type(arr_type):
@@ -179,7 +179,7 @@ def construct_array_item_array_type(arr_type):
     type_enum = JavaEntryPoint.buildBodoSQLColumnDataTypeFromTypeId(
         SqlTypeEnum.Array.value
     )
-    return ColumnDataTypeClass(type_enum, True, child)
+    return JavaEntryPoint.buildColumnDataTypeInfo(type_enum, True, child)
 
 
 def construct_json_array_type(arr_type):
@@ -199,15 +199,15 @@ def construct_json_array_type(arr_type):
         key_enum = JavaEntryPoint.buildBodoSQLColumnDataTypeFromTypeId(
             SqlTypeEnum.String.value
         )
-        key = ColumnDataTypeClass(key_enum, True)
+        key = JavaEntryPoint.buildColumnDataTypeInfo(key_enum, True)
         value_enum = JavaEntryPoint.buildBodoSQLColumnDataTypeFromTypeId(
             SqlTypeEnum.Variant.value
         )
-        value = ColumnDataTypeClass(value_enum, True)
+        value = JavaEntryPoint.buildColumnDataTypeInfo(value_enum, True)
         type_enum = JavaEntryPoint.buildBodoSQLColumnDataTypeFromTypeId(
             SqlTypeEnum.Json_Object.value
         )
-        return ColumnDataTypeClass(type_enum, True, key, value)
+        return JavaEntryPoint.buildColumnDataTypeInfo(type_enum, True, key, value)
     else:
         # TODO: Add map scalar support
         key = get_sql_data_type(arr_type.key_arr_type)
@@ -215,7 +215,7 @@ def construct_json_array_type(arr_type):
         type_enum = JavaEntryPoint.buildBodoSQLColumnDataTypeFromTypeId(
             SqlTypeEnum.Json_Object.value
         )
-        return ColumnDataTypeClass(type_enum, True, key, value)
+        return JavaEntryPoint.buildColumnDataTypeInfo(type_enum, True, key, value)
 
 
 def get_sql_column_type(arr_type, col_name):
@@ -240,7 +240,7 @@ def get_sql_data_type(arr_type):
         type_enum = JavaEntryPoint.buildBodoSQLColumnDataTypeFromTypeId(
             SqlTypeEnum.Timestamp_Tz.value
         )
-        return ColumnDataTypeClass(type_enum, nullable)
+        return JavaEntryPoint.buildColumnDataTypeInfo(type_enum, nullable)
     elif isinstance(arr_type, bodo.TimeArrayType):
         # Time array types have their own special handling for precision
         return construct_time_array_type(arr_type, nullable)
@@ -248,7 +248,7 @@ def get_sql_data_type(arr_type):
         type_enum = JavaEntryPoint.buildBodoSQLColumnDataTypeFromTypeId(
             SqlTypeEnum.Decimal.value
         )
-        return ColumnDataTypeClass(
+        return JavaEntryPoint.buildColumnDataTypeInfo(
             type_enum, nullable, arr_type.precision, arr_type.scale
         )
     elif isinstance(arr_type, bodo.ArrayItemArrayType):
