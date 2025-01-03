@@ -633,6 +633,16 @@ public class RelationalAlgebraGenerator {
 
   // ~~~~~~~~~~~~~Called by the Python Entry Points~~~~~~~~~~~~~~
 
+  /**
+   * Get the optimized plan string for the given SQL query.
+   *
+   * @param sql The SQL query to process.
+   * @param includeCosts Should the costs be included in the plan string.
+   * @param dynamicParamTypes The dynamic parameter types.
+   * @param namedParamTypeMap The named parameter types.
+   * @return The optimized plan string for the given SQL query.
+   * @throws Exception If an error occurs while processing the SQL query.
+   */
   String getOptimizedPlanString(
       String sql,
       Boolean includeCosts,
@@ -656,6 +666,16 @@ public class RelationalAlgebraGenerator {
     }
   }
 
+  /**
+   * Get the Pandas code and the optimized plan string for the given SQL query.
+   *
+   * @param sql The SQL query to process.
+   * @param includeCosts Should the costs be included in the plan string.
+   * @param dynamicParamTypes The dynamic parameter types.
+   * @param namedParamTypeMap The named parameter types.
+   * @return The Pandas code and the optimized plan string for the given SQL query.
+   * @throws Exception If an error occurs while processing the SQL query.
+   */
   PandasCodeSqlPlanPair getPandasAndPlanString(
       String sql,
       boolean includeCosts,
