@@ -1,6 +1,7 @@
 package com.bodosql.calcite.application
 
 import com.bodosql.calcite.ddl.DDLExecutionResult
+import com.bodosql.calcite.table.BodoSQLColumn
 import com.bodosql.calcite.table.ColumnDataTypeInfo
 
 /**
@@ -135,5 +136,13 @@ class PythonEntryPoint {
          * @return Is the query DDL?
          */
         fun isDDLProcessedQuery(generator: RelationalAlgebraGenerator): Boolean = generator.isDDLProcessedQuery
+
+        /**
+         * Build a BodoSQLColumnDataType from a type ID.
+         * @param typeID The type ID to convert.
+         * @return The BodoSQLColumnDataType.
+         */
+        fun buildBodoSQLColumnDataTypeFromTypeId(typeID: Int): BodoSQLColumn.BodoSQLColumnDataType =
+            BodoSQLColumn.BodoSQLColumnDataType.fromTypeId(typeID)
     }
 }

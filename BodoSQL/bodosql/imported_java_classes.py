@@ -19,9 +19,6 @@ if bodo.get_rank() == 0:
     try:
         ArrayListClass = gateway.jvm.java.util.ArrayList
         HashMapClass = gateway.jvm.java.util.HashMap
-        ColumnDataEnum = (
-            gateway.jvm.com.bodosql.calcite.table.BodoSQLColumn.BodoSQLColumnDataType
-        )
         ColumnClass = gateway.jvm.com.bodosql.calcite.table.BodoSQLColumnImpl
         ColumnDataTypeClass = gateway.jvm.com.bodosql.calcite.table.ColumnDataTypeInfo
         LocalTableClass = gateway.jvm.com.bodosql.calcite.table.LocalTable
@@ -59,7 +56,6 @@ if bodo.get_rank() == 0:
 else:
     ArrayListClass = None
     HashMapClass = None
-    ColumnDataEnum = None
     ColumnClass = None
     ColumnDataTypeClass = None
     LocalTableClass = None
