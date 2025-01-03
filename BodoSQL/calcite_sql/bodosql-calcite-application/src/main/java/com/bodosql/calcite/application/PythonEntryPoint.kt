@@ -1,5 +1,6 @@
 package com.bodosql.calcite.application
 
+import com.bodosql.calcite.ddl.DDLExecutionResult
 import com.bodosql.calcite.table.ColumnDataTypeInfo
 
 /**
@@ -113,5 +114,19 @@ class PythonEntryPoint {
             generator: RelationalAlgebraGenerator,
             sql: String,
         ): String = generator.getWriteType(sql)
+
+        /**
+         * Execute the given DDL statement in an interpreted manner. This
+         * assumes/requires that sql is a DDL statement, which should have
+         * already been checked.
+         * @param generator The generator to use.
+         * @param sql The DDL statement to execute
+         * @return The result of the DDL execution.
+         */
+        @JvmStatic
+        fun executeDDL(
+            generator: RelationalAlgebraGenerator,
+            sql: String,
+        ): DDLExecutionResult = generator.executeDDL(sql)
     }
 }

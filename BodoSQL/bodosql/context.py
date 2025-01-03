@@ -1416,7 +1416,7 @@ class BodoSQLContext:
 
         if bodo.get_rank() == 0:
             try:
-                ddl_result = generator.executeDDL(sql)
+                ddl_result = JavaEntryPoint.executeDDL(generator, sql)
                 # Convert the output to a DataFrame.
                 column_names = list(ddl_result.getColumnNames())
                 column_types = [

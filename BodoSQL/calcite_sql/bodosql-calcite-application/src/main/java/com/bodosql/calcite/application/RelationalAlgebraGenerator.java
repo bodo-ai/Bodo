@@ -685,6 +685,15 @@ public class RelationalAlgebraGenerator {
     }
   }
 
+  /**
+   * Return the Python code generated for the given SQL query.
+   *
+   * @param sql The SQL query to process.
+   * @param dynamicParamTypes The dynamic parameter types.
+   * @param namedParamTypeMap The named parameter types.
+   * @return The Python code generated for the given SQL query.
+   * @throws Exception If an error occurs while processing the SQL query.
+   */
   String getPandasString(
       @NonNull String sql,
       @NonNull List<ColumnDataTypeInfo> dynamicParamTypes,
@@ -732,9 +741,14 @@ public class RelationalAlgebraGenerator {
     }
   }
 
-  // ~~~~~~~~~~~~~PYTHON EXPOSED APIS~~~~~~~~~~~~~~
-
-  public DDLExecutionResult executeDDL(String sql) throws Exception {
+  /**
+   * Execute the given DDL statement in an interpreted manner. This assumes/requires that sql is a
+   * DDL statement, which should have already been checked.
+   *
+   * @param sql The DDL statement to execute
+   * @return The result of the DDL execution.
+   */
+  DDLExecutionResult executeDDL(String sql) throws Exception {
     try {
       // DDL doesn't support dynamic or named parameters at this time.
       SqlNode validatedSqlNode = validateQuery(sql, List.of(), Map.of());
@@ -750,6 +764,8 @@ public class RelationalAlgebraGenerator {
       }
     }
   }
+
+  // ~~~~~~~~~~~~~PYTHON EXPOSED APIS~~~~~~~~~~~~~~
 
   /**
    * Determine if the active query is a DDL query that is not treated like compute (not CTAS).
