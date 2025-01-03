@@ -188,7 +188,7 @@ public class RelationalAlgebraGenerator {
    */
   public RelationalAlgebraGenerator(
       BodoSqlSchema localSchema,
-      int plannerType,
+      boolean isStreaming,
       int verboseLevel,
       int tracingLevel,
       int streamingBatchSize,
@@ -202,7 +202,7 @@ public class RelationalAlgebraGenerator {
       boolean coveringExpressionCaching,
       boolean prefetchSFIceberg) {
     this.catalog = null;
-    this.plannerType = choosePlannerType(plannerType);
+    this.plannerType = choosePlannerType(isStreaming);
     this.verboseLevel = verboseLevel;
     this.tracingLevel = tracingLevel;
     this.streamingBatchSize = streamingBatchSize;
@@ -228,7 +228,7 @@ public class RelationalAlgebraGenerator {
   /** Constructor for the relational algebra generator class that takes in the default timezone. */
   public RelationalAlgebraGenerator(
       BodoSqlSchema localSchema,
-      int plannerType,
+      boolean isStreaming,
       int verboseLevel,
       int tracingLevel,
       int streamingBatchSize,
@@ -243,7 +243,7 @@ public class RelationalAlgebraGenerator {
       boolean prefetchSFIceberg,
       String defaultTz) {
     this.catalog = null;
-    this.plannerType = choosePlannerType(plannerType);
+    this.plannerType = choosePlannerType(isStreaming);
     this.verboseLevel = verboseLevel;
     this.tracingLevel = tracingLevel;
     this.streamingBatchSize = streamingBatchSize;
@@ -276,11 +276,7 @@ public class RelationalAlgebraGenerator {
   public RelationalAlgebraGenerator(
       BodoSQLCatalog catalog,
       BodoSqlSchema localSchema,
-      // int is a bad choice for this variable, but we're limited by either
-      // forcing py4j to initialize another Java object or use some plain old data
-      // that it can use so we're choosing the latter.
-      // Something like this can be replaced with a more formal API like GRPC and protobuf.
-      int plannerType,
+      boolean isStreaming,
       int verboseLevel,
       int tracingLevel,
       int streamingBatchSize,
@@ -294,7 +290,7 @@ public class RelationalAlgebraGenerator {
       boolean coveringExpressionCaching,
       boolean prefetchSFIceberg) {
     this.catalog = catalog;
-    this.plannerType = choosePlannerType(plannerType);
+    this.plannerType = choosePlannerType(isStreaming);
     this.verboseLevel = verboseLevel;
     this.tracingLevel = tracingLevel;
     this.streamingBatchSize = streamingBatchSize;
@@ -603,14 +599,11 @@ public class RelationalAlgebraGenerator {
     return this.loweredGlobalVariables;
   }
 
-  private static PlannerType choosePlannerType(int plannerType) {
-    switch (plannerType) {
-      case VOLCANO_PLANNER:
-        return PlannerType.VOLCANO;
-      case STREAMING_PLANNER:
-        return PlannerType.STREAMING;
-      default:
-        throw new RuntimeException("Unexpected Planner option");
+  private static PlannerType choosePlannerType(boolean isStreaming) {
+    if (isStreaming) {
+      return PlannerType.STREAMING;
+    } else {
+      return PlannerType.VOLCANO;
     }
   }
 

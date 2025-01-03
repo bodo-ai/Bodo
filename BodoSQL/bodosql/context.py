@@ -6,7 +6,7 @@ import re
 import time
 import traceback
 import warnings
-from enum import Enum, IntEnum
+from enum import Enum
 from typing import Any
 
 import numba
@@ -121,17 +121,6 @@ _numba_to_sql_param_type_map = {
     bodo.timestamptz_type: SqlTypeEnum.Timestamp_Tz.value,
     # TODO: Support Date and Binary parameters [https://bodo.atlassian.net/browse/BE-3542]
 }
-
-
-# Hacky way to get the planner type option to Java.
-# I don't want to access the Java enum class or the constants
-# defined in Java that are used for this decision from Python
-# so we're going to redefine the enum here.
-#
-# Not intended as a public API.
-class _PlannerType(IntEnum):
-    Volcano = 0
-    Streaming = 1
 
 
 def construct_tz_aware_array_type(typ, nullable):
@@ -579,7 +568,7 @@ def add_table_type(
 
     table = JavaEntryPoint.buildLocalTable(
         table_name,
-        schema.getFullPath(),
+        schema,
         col_arr,
         is_writeable,
         read_code,
@@ -1239,15 +1228,11 @@ class BodoSQLContext:
         """
         verbose_level = bodo.user_logging.get_verbose_level()
         tracing_level = bodo.tracing_level
-        if bodo.bodosql_use_streaming_plan:
-            planner_type = _PlannerType.Streaming.value
-        else:
-            planner_type = _PlannerType.Volcano.value
         if self.catalog is not None:
             return RelationalAlgebraGeneratorClass(
                 self.catalog.get_java_object(),
                 self.schema,
-                planner_type,
+                bodo.bodosql_use_streaming_plan,
                 verbose_level,
                 tracing_level,
                 bodo.bodosql_streaming_batch_size,
@@ -1264,7 +1249,7 @@ class BodoSQLContext:
         extra_args = () if self.default_tz is None else (self.default_tz,)
         generator = RelationalAlgebraGeneratorClass(
             self.schema,
-            planner_type,
+            bodo.bodosql_use_streaming_plan,
             verbose_level,
             tracing_level,
             bodo.bodosql_streaming_batch_size,

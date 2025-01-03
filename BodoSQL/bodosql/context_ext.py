@@ -45,7 +45,6 @@ from bodosql.context import (
     DYNAMIC_PARAM_ARG_PREFIX,
     NAMED_PARAM_ARG_PREFIX,
     BodoSQLContext,
-    _PlannerType,
     compute_df_types,
     create_java_dynamic_parameter_type_list,
     create_java_named_parameter_type_map,
@@ -437,15 +436,11 @@ def _gen_sql_plan_pd_func_text_and_lowered_globals(
             schema = initialize_schema()
             verbose_level = bodo.user_logging.get_verbose_level()
             tracing_level = bodo.tracing_level
-            if bodo.bodosql_use_streaming_plan:
-                planner_type = _PlannerType.Streaming.value
-            else:
-                planner_type = _PlannerType.Volcano.value
             if bodo_sql_context_type.catalog_type != types.none:
                 generator = RelationalAlgebraGeneratorClass(
                     bodo_sql_context_type.catalog_type.get_java_object(),
                     schema,
-                    planner_type,
+                    bodo.bodosql_use_streaming_plan,
                     verbose_level,
                     tracing_level,
                     bodo.bodosql_streaming_batch_size,
@@ -468,7 +463,7 @@ def _gen_sql_plan_pd_func_text_and_lowered_globals(
                 )
                 generator = RelationalAlgebraGeneratorClass(
                     schema,
-                    planner_type,
+                    bodo.bodosql_use_streaming_plan,
                     verbose_level,
                     tracing_level,
                     bodo.bodosql_streaming_batch_size,

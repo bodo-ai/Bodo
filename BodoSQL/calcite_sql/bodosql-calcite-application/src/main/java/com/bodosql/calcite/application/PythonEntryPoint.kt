@@ -12,7 +12,6 @@ import com.bodosql.calcite.table.BodoSQLColumn
 import com.bodosql.calcite.table.BodoSQLColumnImpl
 import com.bodosql.calcite.table.ColumnDataTypeInfo
 import com.bodosql.calcite.table.LocalTable
-import com.google.common.collect.ImmutableList
 import org.apache.commons.lang3.exception.ExceptionUtils
 import java.util.Properties
 
@@ -346,7 +345,7 @@ class PythonEntryPoint {
         @JvmStatic
         fun buildLocalTable(
             tableName: String,
-            path: ImmutableList<String>,
+            schema: LocalSchema,
             columns: List<BodoSQLColumn>,
             isWriteable: Boolean,
             readCode: String,
@@ -358,7 +357,7 @@ class PythonEntryPoint {
         ): LocalTable =
             LocalTable(
                 tableName,
-                path,
+                schema.fullPath,
                 columns,
                 isWriteable,
                 readCode,

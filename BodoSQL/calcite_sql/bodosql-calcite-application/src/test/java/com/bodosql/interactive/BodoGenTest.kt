@@ -19,7 +19,7 @@ object BodoGenTest {
     @JvmStatic
     fun main(args: Array<String>) {
         val sql = "select * from table1"
-        val plannerChoice = RelationalAlgebraGenerator.STREAMING_PLANNER
+        val isStreaming = true
         val schema = LocalSchema("__BODOLOCAL__")
         var cols: ArrayList<BodoSQLColumn> = ArrayList()
         val dataType: BodoSQLColumnDataType = BodoSQLColumnDataType.INT64
@@ -81,7 +81,7 @@ object BodoGenTest {
         val generator =
             RelationalAlgebraGenerator(
                 schema,
-                plannerChoice,
+                isStreaming,
                 0,
                 1,
                 BatchingProperty.defaultBatchSize,
