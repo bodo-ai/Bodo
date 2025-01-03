@@ -498,7 +498,7 @@ def _gen_sql_plan_pd_func_text_and_lowered_globals(
         if not failed:
             try:
                 # Determine the write type
-                write_type = generator.getWriteType(sql_str)
+                write_type = JavaEntryPoint.getWriteType(generator, sql_str)
 
                 # Get the row counts and NDV estimates for the tables:
                 estimated_row_counts = []

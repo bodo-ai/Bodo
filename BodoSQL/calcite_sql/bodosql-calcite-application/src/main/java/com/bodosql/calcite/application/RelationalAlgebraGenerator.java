@@ -707,8 +707,6 @@ public class RelationalAlgebraGenerator {
     }
   }
 
-  // ~~~~~~~~~~~~~PYTHON EXPOSED APIS~~~~~~~~~~~~~~
-
   /**
    * Determine the "type" of write produced by this node. The write operation is always assumed to
    * be the top level of the parsed query. It returns the name of operation in question to enable
@@ -719,7 +717,7 @@ public class RelationalAlgebraGenerator {
    * @param sql The SQL query to parse.
    * @return A string representing the type of write.
    */
-  public String getWriteType(String sql) throws Exception {
+  String getWriteType(String sql) throws Exception {
     // Parse the query if we haven't already
     if (this.parseNode == null) {
       parseQuery(sql);
@@ -733,6 +731,8 @@ public class RelationalAlgebraGenerator {
       return "INSERT";
     }
   }
+
+  // ~~~~~~~~~~~~~PYTHON EXPOSED APIS~~~~~~~~~~~~~~
 
   public DDLExecutionResult executeDDL(String sql) throws Exception {
     try {

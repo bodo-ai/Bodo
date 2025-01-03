@@ -915,7 +915,7 @@ class BodoSQLContext:
                 JavaEntryPoint.parseQuery(plan_generator, sql)
                 # Write type is used for the current Merge Into code path decisions.
                 # This should be removed when we revisit Merge Into
-                write_type = plan_generator.getWriteType(sql)
+                write_type = JavaEntryPoint.getWriteType(plan_generator, sql)
                 update_schema(
                     self.schema,
                     self.names,

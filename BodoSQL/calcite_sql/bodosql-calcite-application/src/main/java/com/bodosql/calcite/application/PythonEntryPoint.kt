@@ -93,5 +93,25 @@ class PythonEntryPoint {
             dynamicParamTypes: MutableList<ColumnDataTypeInfo>,
             namedParamTypeMap: MutableMap<String, ColumnDataTypeInfo>,
         ): String = generator.getPandasString(sql, dynamicParamTypes, namedParamTypeMap)
+
+        /**
+         * Determine the "type" of write produced by this SQL code.
+         * The write operation is always assumed to be the top level
+         * of the parsed query. It returns the name of operation in
+         * question to enable passing the correct write API to the table.
+         *
+         * Currently supported write types: "MERGE": Merge into "INSERT": Insert Into
+         *
+         * TODO: Remove once we refactor the MERGE INTO code for Iceberg.
+         *
+         * @param generator The generator to use.
+         * @param sql The SQL query to parse.
+         * @return A string representing the type of write.
+         */
+        @JvmStatic
+        fun getWriteType(
+            generator: RelationalAlgebraGenerator,
+            sql: String,
+        ): String = generator.getWriteType(sql)
     }
 }
