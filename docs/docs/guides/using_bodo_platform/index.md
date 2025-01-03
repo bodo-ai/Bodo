@@ -1,4 +1,4 @@
-# Using the Bodo Cloud Platform
+# Bodo Cloud Platform {#bodo-cloud-platform-guides}
 This set of guides explains the basics of using the Bodo cloud platform and associated concepts.
 
 ## [Organization Basics][organization-basics]
@@ -16,17 +16,22 @@ This guide describes how to attach a notebook to a cluster to perform computatio
 
 ---
 
-## [Using native SQL with Catalogs][sql_catalog]
+## [Running Jobs][running-batch-jobs]
+This guide shows how to run jobs using the Bodo Cloud Platform.
+
+---
+
+## [Native SQL with Catalogs][sql_catalog]
 This guide provides an overview of using native SQL with Notebooks and how to use Catalogs to access data.
 
 ---
 
-## [Running a Batch Job][running-batch-jobs]
-This guide shows how to run batch jobs using the Bodo Cloud Platform.
+## [Platform SDK Guide][bodo-platform-sdk-guide]
+This guide provides a walkthrough of the Bodo Platform SDK that provides a simple way to interact with the Bodo Platform API.
 
 ---
 
-## [Using your own Instance Role for a Cluster][instance_role_cluster]
+## [Instance Role for a Cluster][instance_role_cluster]
 This guide explains how to use your own instance role for a cluster on the Bodo Cloud Platform.
 
 ---
@@ -62,5 +67,4 @@ This guide explains how to configure an AWS PrivateLink in Customer Managed VPC 
 ---
 
 ## [Troubleshooting][troubleshooting]
-
 This guide offers some troubleshooting tips for potential issues encountered while using the Bodo Cloud Platform.

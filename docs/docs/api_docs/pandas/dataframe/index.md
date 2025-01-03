@@ -130,7 +130,6 @@ Bodo provides extensive DataFrame support. This section covers the DataFrame API
 
 | Function                                   | Description                                                          |
 |--------------------------------------------|----------------------------------------------------------------------|
-| [`pd.DataFrame.append`][pddataframeappend] | Append rows of other to the end of caller, returning a new object    |
 | [`pd.DataFrame.assign`][pddataframeassign] | Assign new columns to a DataFrame                                    |
 | [`pd.DataFrame.join`][pddataframejoin]     | Join columns with other DataFrame either on index or on a key column |
 | [`pd.DataFrame.merge`][pddataframemerge]   | Merge DataFrame or named Series objects with a database-style join   |
