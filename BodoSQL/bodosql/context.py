@@ -1189,7 +1189,9 @@ class BodoSQLContext:
                 named_params_dict
             )
             pd_code = str(
-                generator.getPandasString(sql, java_params_array, java_named_params_map)
+                JavaEntryPoint.getPandasString(
+                    generator, sql, java_params_array, java_named_params_map
+                )
             )
             failed = False
         except Exception as e:

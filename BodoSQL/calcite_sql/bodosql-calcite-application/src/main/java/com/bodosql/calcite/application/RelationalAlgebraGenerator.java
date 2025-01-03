@@ -40,6 +40,7 @@ import org.apache.calcite.sql.type.BodoTZInfo;
 import org.apache.calcite.tools.RelConversionException;
 import org.apache.calcite.tools.ValidationException;
 import org.apache.commons.lang3.tuple.Pair;
+import org.checkerframework.checker.nullness.qual.NonNull;
 import org.checkerframework.checker.nullness.qual.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -684,16 +685,10 @@ public class RelationalAlgebraGenerator {
     }
   }
 
-  // ~~~~~~~~~~~~~PYTHON EXPOSED APIS~~~~~~~~~~~~~~
-
-  public String getPandasString(String sql) throws Exception {
-    return getPandasString(sql, List.of(), Map.of());
-  }
-
-  public String getPandasString(
-      String sql,
-      List<ColumnDataTypeInfo> dynamicParamTypes,
-      Map<String, ColumnDataTypeInfo> namedParamTypeMap)
+  String getPandasString(
+      @NonNull String sql,
+      @NonNull List<ColumnDataTypeInfo> dynamicParamTypes,
+      @NonNull Map<String, ColumnDataTypeInfo> namedParamTypeMap)
       throws Exception {
     try {
       SqlNode validatedSqlNode = validateQuery(sql, dynamicParamTypes, namedParamTypeMap);
@@ -711,6 +706,8 @@ public class RelationalAlgebraGenerator {
       }
     }
   }
+
+  // ~~~~~~~~~~~~~PYTHON EXPOSED APIS~~~~~~~~~~~~~~
 
   /**
    * Determine the "type" of write produced by this node. The write operation is always assumed to
