@@ -64,7 +64,7 @@ This set of guides explains the basics of using the Bodo cloud platform and asso
 ---
 
 
-### [Using Regular Python inside Bodo (Object Mode)][objmode]
+### [Using Regular Python inside JIT with @bodo.wrap_python][objmode]
 
 This guide teaches you how to can interleave regular Python code with Bodo functions using Bodo's object mode.
 
