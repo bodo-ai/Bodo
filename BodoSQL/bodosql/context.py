@@ -1213,7 +1213,7 @@ class BodoSQLContext:
             raise bodo.utils.typing.BodoError(
                 f"Unable to compile SQL Query. Error message:\n{message}"
             )
-        return pd_code, generator.getLoweredGlobalVariables()
+        return pd_code, JavaEntryPoint.getLoweredGlobals(generator)
 
     def _create_generator(self, hide_credentials: bool):
         """Creates a RelationalAlgebraGenerator from the schema.

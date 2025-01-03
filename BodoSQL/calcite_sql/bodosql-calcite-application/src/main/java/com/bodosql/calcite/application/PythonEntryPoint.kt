@@ -116,6 +116,14 @@ class PythonEntryPoint {
         ): String = generator.getPandasString(sql, dynamicParamTypes, namedParamTypeMap)
 
         /**
+         * Get the lowered global variables from the generator.
+         * @param generator The generator to use.
+         * @return The lowered global variables.
+         */
+        @JvmStatic
+        fun getLoweredGlobals(generator: RelationalAlgebraGenerator): Map<String, String> = generator.loweredGlobalVariables
+
+        /**
          * Determine the "type" of write produced by this SQL code.
          * The write operation is always assumed to be the top level
          * of the parsed query. It returns the name of operation in
@@ -149,12 +157,30 @@ class PythonEntryPoint {
             sql: String,
         ): DDLExecutionResult = generator.executeDDL(sql)
 
+        /**
+         * Get the column names from the DDL execution result for use in
+         * Python.
+         * @param result The DDL execution result.
+         * @return The column names.
+         */
         @JvmStatic
         fun getDDLExecutionColumnNames(result: DDLExecutionResult): List<String> = result.columnNames
 
+        /**
+         * Get the column types from the DDL execution result for use in
+         * Python.
+         * @param result The DDL execution result.
+         * @return The column types.
+         */
         @JvmStatic
         fun getDDLExecutionColumnTypes(result: DDLExecutionResult): List<String> = result.columnTypes
 
+        /**
+         * Get the column values from the DDL execution result for use in
+         * Python.
+         * @param result The DDL execution result.
+         * @return The column values.
+         */
         @JvmStatic
         fun getDDLColumnValues(result: DDLExecutionResult): List<List<Any?>> = result.columnValues
 

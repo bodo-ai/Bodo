@@ -541,7 +541,7 @@ def _gen_sql_plan_pd_func_text_and_lowered_globals(
                 globalsToLower = tuple(
                     [
                         (str(k), str(v))
-                        for k, v in generator.getLoweredGlobalVariables().items()
+                        for k, v in JavaEntryPoint.getLoweredGlobals(generator).items()
                     ]
                 )
             except Exception as e:

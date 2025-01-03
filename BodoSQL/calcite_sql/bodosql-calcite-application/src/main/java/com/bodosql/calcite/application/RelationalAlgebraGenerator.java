@@ -595,7 +595,7 @@ public class RelationalAlgebraGenerator {
     return codegen.getGeneratedCode();
   }
 
-  public HashMap<String, String> getLoweredGlobalVariables() {
+  Map<String, String> getLoweredGlobalVariables() {
     return this.loweredGlobalVariables;
   }
 
