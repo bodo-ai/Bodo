@@ -41,7 +41,7 @@ object BodoGenTest {
                 false,
                 "MEMORY",
                 null,
-                null,
+                mapOf(),
             )
         schema.addTable(table)
         var cols2: ArrayList<BodoSQLColumn> = ArrayList()
@@ -61,7 +61,7 @@ object BodoGenTest {
                 false,
                 "MEMORY",
                 null,
-                null,
+                mapOf(),
             )
         schema.addTable(table2)
         val table3: BodoSqlTable =
@@ -75,7 +75,7 @@ object BodoGenTest {
                 false,
                 "MEMORY",
                 null,
-                null,
+                mapOf(),
             )
         schema.addTable(table3)
         val generator =

@@ -5,7 +5,7 @@ BodoSQL utils used to help construct Python code.
 import py4j
 
 from bodo.utils.typing import BodoError
-from bodosql.imported_java_classes import CommonsExceptionUtilsClass
+from bodosql.imported_java_classes import JavaEntryPoint
 
 
 class BodoSQLWarning(Warning):
@@ -33,13 +33,13 @@ def error_to_string(e: Exception) -> str:
     elif isinstance(e, py4j.protocol.Py4JJavaError):
         java_exception = e.java_exception
         message = java_exception.getMessage()
-        if message is None and CommonsExceptionUtilsClass is not None:
+        if message is None:
             # If the message is None, rather than return None we should provide a stack
             # trace.
             msg_header = (
                 "No message found for java exception. Displaying stack trace:\n"
             )
-            msg_body = CommonsExceptionUtilsClass.getStackTrace(java_exception)
+            msg_body = JavaEntryPoint.getStackTrace(java_exception)
             message = msg_header + msg_body
         # Append the cause if it exists
         cause = java_exception.getCause()
