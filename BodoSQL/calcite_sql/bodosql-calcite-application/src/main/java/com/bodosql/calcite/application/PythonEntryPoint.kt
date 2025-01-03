@@ -1,5 +1,6 @@
 package com.bodosql.calcite.application
 
+import com.bodosql.calcite.application.PythonLoggers.toggleLoggers
 import com.bodosql.calcite.application.write.WriteTarget
 import com.bodosql.calcite.ddl.DDLExecutionResult
 import com.bodosql.calcite.table.BodoSQLColumn
@@ -152,5 +153,9 @@ class PythonEntryPoint {
          * @return The WriteTargetEnum.
          */
         fun buildWriteTargetEnumFromString(value: String): WriteTarget.WriteTargetEnum = WriteTarget.WriteTargetEnum.fromString(value)
+
+        fun configureJavaLogging(level: Int) {
+            toggleLoggers(level)
+        }
     }
 }

@@ -33,7 +33,6 @@ if bodo.get_rank() == 0:
         SnowflakeCatalogClass = gateway.jvm.com.bodosql.calcite.catalog.SnowflakeCatalog
         # Note: Although this isn't used it must be imported.
         SnowflakeDriver = gateway.jvm.net.snowflake.client.jdbc.SnowflakeDriver
-        PythonLoggersClass = gateway.jvm.com.bodosql.calcite.application.PythonLoggers
         FileSystemCatalogClass = (
             gateway.jvm.com.bodosql.calcite.catalog.FileSystemCatalog
         )
@@ -44,7 +43,7 @@ if bodo.get_rank() == 0:
         # is being entered from Python.
         JavaEntryPoint = gateway.jvm.com.bodosql.calcite.application.PythonEntryPoint
         # Initialize logging. Must be done after importing all classes to ensure
-        # PythonLoggersClass is available.
+        # JavaEntryPoint is available.
         configure_java_logging(bodo.user_logging.get_verbose_level())
     except Exception as e:
         saw_error = True
@@ -61,7 +60,6 @@ else:
     PropertiesClass = None
     SnowflakeCatalogClass = None
     SnowflakeDriver = None
-    PythonLoggersClass = None
     FileSystemCatalogClass = None
     TabularCatalogClass = None
     BodoGlueCatalogClass = None
