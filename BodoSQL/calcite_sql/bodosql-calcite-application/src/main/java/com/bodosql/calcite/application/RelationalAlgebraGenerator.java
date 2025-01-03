@@ -475,23 +475,6 @@ public class RelationalAlgebraGenerator {
     return Pair.of(optimizedPlan, idMapping);
   }
 
-  /**
-   * Takes a sql statement and converts it into an optimized relational algebra node. The result of
-   * this function is a logical plan that has been optimized using a rule based optimizer. This is
-   * used when we just want to get the optimized plan and not the pandas code.
-   *
-   * @param sql a string sql query that is to be parsed, converted into relational algebra, then
-   *     optimized
-   * @return a RelNode which contains the relational algebra tree generated from the sql statement
-   *     provided after an optimization step has been completed.
-   * @throws SqlSyntaxException, SqlValidationException, RelConversionException
-   */
-  @VisibleForTesting
-  public Pair<RelRoot, Map<Integer, Integer>> getRelationalAlgebra(String sql)
-      throws SqlSyntaxException, SqlValidationException, RelConversionException {
-    return getRelationalAlgebra(sql, List.of(), Map.of());
-  }
-
   @VisibleForTesting
   public Pair<RelRoot, Map<Integer, Integer>> getRelationalAlgebra(
       String sql,

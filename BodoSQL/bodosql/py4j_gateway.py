@@ -114,20 +114,6 @@ def configure_java_logging(level: int):
     """
     # Java logging is only on rank 0
     if bodo.get_rank() == 0:
-        from bodosql.imported_java_classes import PythonLoggersClass
+        from bodosql.imported_java_classes import JavaEntryPoint
 
-        java_level_one_logger = PythonLoggersClass.VERBOSE_LEVEL_ONE_LOGGER
-        java_level_two_logger = PythonLoggersClass.VERBOSE_LEVEL_TWO_LOGGER
-        java_level_three_logger = PythonLoggersClass.VERBOSE_LEVEL_THREE_LOGGER
-        if level >= 1:
-            PythonLoggersClass.turnLoggerOn(java_level_one_logger)
-        else:
-            PythonLoggersClass.turnLoggerOff(java_level_one_logger)
-        if level >= 2:
-            PythonLoggersClass.turnLoggerOn(java_level_two_logger)
-        else:
-            PythonLoggersClass.turnLoggerOff(java_level_two_logger)
-        if level >= 3:
-            PythonLoggersClass.turnLoggerOn(java_level_three_logger)
-        else:
-            PythonLoggersClass.turnLoggerOff(java_level_three_logger)
+        JavaEntryPoint.configureJavaLogging(level)

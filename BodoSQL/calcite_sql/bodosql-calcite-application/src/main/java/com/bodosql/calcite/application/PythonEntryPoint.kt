@@ -1,6 +1,9 @@
 package com.bodosql.calcite.application
 
+import com.bodosql.calcite.application.PythonLoggers.toggleLoggers
+import com.bodosql.calcite.application.write.WriteTarget
 import com.bodosql.calcite.ddl.DDLExecutionResult
+import com.bodosql.calcite.table.BodoSQLColumn
 import com.bodosql.calcite.table.ColumnDataTypeInfo
 
 /**
@@ -144,5 +147,31 @@ class PythonEntryPoint {
          */
         @JvmStatic
         fun isDDLProcessedQuery(generator: RelationalAlgebraGenerator): Boolean = generator.isDDLProcessedQuery
+
+        /**
+         * Build a BodoSQLColumnDataType from a type ID.
+         * @param typeID The type ID to convert.
+         * @return The BodoSQLColumnDataType.
+         */
+        @JvmStatic
+        fun buildBodoSQLColumnDataTypeFromTypeId(typeID: Int): BodoSQLColumn.BodoSQLColumnDataType =
+            BodoSQLColumn.BodoSQLColumnDataType.fromTypeId(typeID)
+
+        /**
+         * Build a WriteTargetEnum from a string.
+         * @param value The string to convert.
+         * @return The WriteTargetEnum.
+         */
+        @JvmStatic
+        fun buildWriteTargetEnumFromString(value: String): WriteTarget.WriteTargetEnum = WriteTarget.WriteTargetEnum.fromString(value)
+
+        /**
+         * Configure the Java logging level.
+         * @param level The logging level to set.
+         */
+        @JvmStatic
+        fun configureJavaLogging(level: Int) {
+            toggleLoggers(level)
+        }
     }
 }

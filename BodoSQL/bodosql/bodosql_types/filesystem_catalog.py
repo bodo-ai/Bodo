@@ -14,7 +14,7 @@ from numba.extending import (
 )
 
 from bodosql import DatabaseCatalog, DatabaseCatalogType
-from bodosql.imported_java_classes import FileSystemCatalogClass, WriteTargetEnum
+from bodosql.imported_java_classes import FileSystemCatalogClass, JavaEntryPoint
 
 
 def _create_java_filesystem_catalog(
@@ -33,7 +33,7 @@ def _create_java_filesystem_catalog(
     """
     return FileSystemCatalogClass(
         connection_string,
-        WriteTargetEnum.fromString(default_write_format),
+        JavaEntryPoint.buildWriteTargetEnumFromString(default_write_format),
         default_schema,
     )
 

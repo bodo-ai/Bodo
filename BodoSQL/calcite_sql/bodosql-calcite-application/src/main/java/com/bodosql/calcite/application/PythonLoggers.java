@@ -23,10 +23,32 @@ public class PythonLoggers {
     logger.setLevel(Level.OFF);
   }
 
+  /**
+   * Get the loggers that are enabled for the given level.
+   *
+   * @param level The Bodo verbose level.
+   * @return The list of loggers that are enabled for the given level.
+   */
+  public static void toggleLoggers(int level) {
+    if (level >= 1) {
+      turnLoggerOn(VERBOSE_LEVEL_ONE_LOGGER);
+    } else {
+      turnLoggerOff(VERBOSE_LEVEL_ONE_LOGGER);
+    }
+    if (level >= 2) {
+      turnLoggerOn(VERBOSE_LEVEL_TWO_LOGGER);
+    } else {
+      turnLoggerOff(VERBOSE_LEVEL_TWO_LOGGER);
+    }
+    if (level >= 3) {
+      turnLoggerOn(VERBOSE_LEVEL_THREE_LOGGER);
+    } else {
+      turnLoggerOff(VERBOSE_LEVEL_THREE_LOGGER);
+    }
+  }
+
   static {
     // Disable loggers until turned on by Python.
-    turnLoggerOff(VERBOSE_LEVEL_ONE_LOGGER);
-    turnLoggerOff(VERBOSE_LEVEL_TWO_LOGGER);
-    turnLoggerOff(VERBOSE_LEVEL_THREE_LOGGER);
+    toggleLoggers(0);
   }
 }
