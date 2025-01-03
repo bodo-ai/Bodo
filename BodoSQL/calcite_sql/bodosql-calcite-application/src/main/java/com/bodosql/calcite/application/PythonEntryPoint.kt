@@ -6,6 +6,7 @@ import com.bodosql.calcite.ddl.DDLExecutionResult
 import com.bodosql.calcite.table.BodoSQLColumn
 import com.bodosql.calcite.table.ColumnDataTypeInfo
 import org.apache.commons.lang3.exception.ExceptionUtils
+import java.util.Properties
 
 /**
  * This class is the entry point for all Python code that relates to planner driven operations.
@@ -217,6 +218,33 @@ class PythonEntryPoint {
             map[key] = value
         }
 
+        /**
+         * Build a properties value that can be transferred to Python.
+         * @return The properties value.
+         */
+        @JvmStatic
+        fun buildProperties(): Properties = Properties()
+
+        /**
+         * Set a property in the properties object.
+         * @param properties The properties object to set the property in.
+         * @param key The key of the property.
+         * @param value The value of the property.
+         */
+        @JvmStatic
+        fun setProperty(
+            properties: Properties,
+            key: String,
+            value: String,
+        ) {
+            properties.setProperty(key, value)
+        }
+
+        /**
+         * Get the stack trace of a throwable as a string.
+         * @param throwable The throwable to get the stack trace of.
+         * @return The stack trace as a string.
+         */
         @JvmStatic
         fun getStackTrace(throwable: Throwable): String = ExceptionUtils.getStackTrace(throwable)
     }

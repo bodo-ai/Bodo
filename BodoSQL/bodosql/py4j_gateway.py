@@ -5,7 +5,7 @@ APIs used to launch and connect to the Java py4j calcite gateway server.
 import os
 import sys
 import warnings
-from typing import cast
+from typing import Any, cast
 
 from py4j.java_gateway import GatewayParameters, JavaGateway, launch_gateway
 
@@ -119,7 +119,7 @@ def configure_java_logging(level: int):
         JavaEntryPoint.configureJavaLogging(level)
 
 
-def build_java_array_list(elems):
+def build_java_array_list(elems: list[Any]):
     if bodo.get_rank() == 0:
         from bodosql.imported_java_classes import JavaEntryPoint
 
@@ -129,11 +129,21 @@ def build_java_array_list(elems):
         return output_list
 
 
-def build_java_hash_map(d):
+def build_java_hash_map(d: dict[Any, Any]):
     if bodo.get_rank() == 0:
         from bodosql.imported_java_classes import JavaEntryPoint
 
         output_map = JavaEntryPoint.buildHashMap()
         for key, value in d.items():
             JavaEntryPoint.putToHashMap(output_map, key, value)
+        return output_map
+
+
+def build_java_properties(d: dict[str, str]):
+    if bodo.get_rank() == 0:
+        from bodosql.imported_java_classes import JavaEntryPoint
+
+        output_map = JavaEntryPoint.buildProperties()
+        for key, value in d.items():
+            JavaEntryPoint.setProperty(output_map, key, value)
         return output_map
