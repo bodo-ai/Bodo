@@ -45,4 +45,4 @@ def test_planner_reset(memory_leak_check):
     JavaEntryPoint.parseQuery(generator, final_query)
     # Verify that the internal state is based on the final query
     # (e.g. its been reset). All other queries are not DDL.
-    assert JavaEntryPoint.isDDLProcessedQuery(generator, final_query)
+    assert JavaEntryPoint.isDDLProcessedQuery(generator)

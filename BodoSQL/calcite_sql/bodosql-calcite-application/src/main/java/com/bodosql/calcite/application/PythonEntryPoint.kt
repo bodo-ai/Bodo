@@ -48,6 +48,8 @@ class PythonEntryPoint {
          * @param generator The generator to use.
          * @param sql The SQL query to optimize.
          * @param includeCosts Whether to include costs in the output plan.
+         * @param dynamicParamTypes The dynamic parameter types.
+         * @param namedParamTypeMap The named parameter types.
          * @return The string representation of the optimized plan.
          */
         @JvmStatic
@@ -55,12 +57,14 @@ class PythonEntryPoint {
             generator: RelationalAlgebraGenerator,
             sql: String,
             includeCosts: Boolean,
+            dynamicParamTypes: MutableList<ColumnDataTypeInfo>,
+            namedParamTypeMap: MutableMap<String, ColumnDataTypeInfo>,
         ): String =
             generator.getOptimizedPlanString(
                 sql,
                 includeCosts,
-                listOf(),
-                mapOf(),
+                dynamicParamTypes,
+                namedParamTypeMap,
             )
 
         /**
