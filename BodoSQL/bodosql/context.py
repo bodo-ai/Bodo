@@ -27,6 +27,7 @@ from bodosql.imported_java_classes import (
     ColumnDataEnum,
     ColumnDataTypeClass,
     HashMapClass,
+    JavaEntryPoint,
     LocalSchemaClass,
     LocalTableClass,
     RelationalAlgebraGeneratorClass,
@@ -765,11 +766,11 @@ class BodoSQLContext:
             False,  # We need to execute the code so don't hide credentials.
         )
         if bodo.get_rank() == 0:
-            is_dll = generator.isDDLProcessedQuery()
+            is_ddl = JavaEntryPoint.isDDLProcessedQuery(generator)
         else:
-            is_dll = False
-        is_dll = bcast_scalar(is_dll)
-        if is_dll:
+            is_ddl = False
+        is_ddl = bcast_scalar(is_ddl)
+        if is_ddl:
             warning_msg = "Encountered a DDL query. These queries are executed directly by bc.sql() so this wont't properly test compilation."
             warnings.warn(BodoSQLWarning(warning_msg))
         func_text, lowered_globals = self._convert_to_pandas(
@@ -777,7 +778,7 @@ class BodoSQLContext:
             dynamic_params_list,
             params_dict,
             generator,
-            is_dll,
+            is_ddl,
         )
 
         glbls = {
@@ -853,11 +854,11 @@ class BodoSQLContext:
             hide_credentials,
         )
         if bodo.get_rank() == 0:
-            is_dll = generator.isDDLProcessedQuery()
+            is_ddl = JavaEntryPoint.isDDLProcessedQuery(generator)
         else:
-            is_dll = False
-        is_dll = bcast_scalar(is_dll)
-        if is_dll:
+            is_ddl = False
+        is_ddl = bcast_scalar(is_ddl)
+        if is_ddl:
             warning_msg = "Encountered a DDL query. These queries are executed directly by bc.sql() so this wont't properly represent generated code."
             warnings.warn(BodoSQLWarning(warning_msg))
         pd_code, lowered_globals = self._convert_to_pandas(
@@ -865,7 +866,7 @@ class BodoSQLContext:
             dynamic_params_list,
             params_dict,
             generator,
-            is_dll,
+            is_ddl,
         )
         # add the imports so someone can directly run the code.
         imports = [
@@ -911,10 +912,10 @@ class BodoSQLContext:
                     bodo.utils.typing.raise_bodo_error(
                         "BodoSQLContext passed empty query string"
                     )
-                plan_generator.parseQuery(sql)
+                JavaEntryPoint.parseQuery(plan_generator, sql)
                 # Write type is used for the current Merge Into code path decisions.
                 # This should be removed when we revisit Merge Into
-                write_type = plan_generator.getWriteType(sql)
+                write_type = JavaEntryPoint.getWriteType(plan_generator, sql)
                 update_schema(
                     self.schema,
                     self.names,
@@ -1044,11 +1045,11 @@ class BodoSQLContext:
             False,  # We need to execute the code so don't hide credentials.
         )
         if bodo.get_rank() == 0:
-            is_dll = generator.isDDLProcessedQuery()
+            is_ddl = JavaEntryPoint.isDDLProcessedQuery(generator)
         else:
-            is_dll = False
-        is_dll = bcast_scalar(is_dll)
-        if is_dll:
+            is_ddl = False
+        is_ddl = bcast_scalar(is_ddl)
+        if is_ddl:
             # Just execute DDL operations directly and return the DataFrame.
             return self.execute_ddl(sql, generator)
         else:
@@ -1141,8 +1142,12 @@ class BodoSQLContext:
                     params_dict
                 )
                 plan_or_err_msg = str(
-                    generator.getOptimizedPlanString(
-                        sql, show_cost, java_params_array, java_named_params_map
+                    JavaEntryPoint.getOptimizedPlanString(
+                        generator,
+                        sql,
+                        show_cost,
+                        java_params_array,
+                        java_named_params_map,
                     )
                 )
             except Exception as e:
@@ -1184,7 +1189,9 @@ class BodoSQLContext:
                 named_params_dict
             )
             pd_code = str(
-                generator.getPandasString(sql, java_params_array, java_named_params_map)
+                JavaEntryPoint.getPandasString(
+                    generator, sql, java_params_array, java_named_params_map
+                )
             )
             failed = False
         except Exception as e:
@@ -1409,7 +1416,7 @@ class BodoSQLContext:
 
         if bodo.get_rank() == 0:
             try:
-                ddl_result = generator.executeDDL(sql)
+                ddl_result = JavaEntryPoint.executeDDL(generator, sql)
                 # Convert the output to a DataFrame.
                 column_names = list(ddl_result.getColumnNames())
                 column_types = [
