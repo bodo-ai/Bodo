@@ -279,6 +279,22 @@ class PythonEntryPoint {
         }
 
         /**
+         * Get the message from a throwable.
+         * @param throwable The throwable to get the message from.
+         * @return The message.
+         */
+        @JvmStatic
+        fun getThrowableMessage(throwable: Throwable): String? = throwable.message
+
+        /**
+         * Get the cause of a throwable.
+         * @param throwable The throwable to get the cause of.
+         * @return The cause.
+         */
+        @JvmStatic
+        fun getThrowableCause(throwable: Throwable): Throwable? = throwable.cause
+
+        /**
          * Get the stack trace of a throwable as a string.
          * @param throwable The throwable to get the stack trace of.
          * @return The stack trace as a string.
