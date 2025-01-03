@@ -1359,7 +1359,7 @@
         
   
   <span class="md-ellipsis">
-    Using Regular Python inside Bodo (Object Mode)
+    Using Regular Python inside JIT with @bodo.wrap_python
   </span>
   
 
@@ -25322,7 +25322,7 @@ cannot be used inside JIT functions. For example:</p>
 </code></pre></div>
 <p>As the error indicates, Bodo doesn't currently support the <code>transpose</code>
 call in JIT functions. In these cases, an alternative API should be used
-or this portion of the code should be either be in regular Python or in Bodo's <a class="autorefs autorefs-internal" href="../../objmode/#objmode">Object Mode</a>.
+or this portion of the code should be either be in regular Python or in Bodo's <a class="autorefs autorefs-internal" href="../../objmode/#objmode">@bodo.wrap_python</a>.
 See <a class="autorefs autorefs-internal" href="../../api_docs/pandas/#pandas">supported Pandas API</a> for the
 complete list of supported Pandas operations.</p>
 <h3 id="type-stability">Type Stability<a class="headerlink" href="#type-stability" title="Permanent link">&para;</a></h3>

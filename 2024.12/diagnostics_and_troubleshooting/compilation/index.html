@@ -1198,7 +1198,7 @@
         
   
   <span class="md-ellipsis">
-    Using Regular Python inside Bodo (Object Mode)
+    Using Regular Python inside JIT with @bodo.wrap_python
   </span>
   
 
@@ -25145,9 +25145,9 @@ issues try the following:</p>
 <p>Refactor your code and use regular Python for unsupported
     features.</p>
 <p>a.  Move the code causing issues to regular Python and pass
-    necessary data to JIT functions.
-b.  Use Object Mode to perform some computation within JIT
-    functions in regular Python if necessary (see <a class="autorefs autorefs-internal" href="../../objmode/#objmode">Object Mode</a>).</p>
+    necessary data to JIT functions.</p>
+<p>b.  Use <code>@bodo.wrap_python</code> to perform some computation within JIT
+    functions in regular Python if necessary (see <a class="autorefs autorefs-internal" href="../../objmode/#objmode">@bodo.wrap_python</a>).</p>
 </li>
 <li>
 <p>Refactor your code to make it type stable (see
