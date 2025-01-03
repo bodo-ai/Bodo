@@ -16,7 +16,7 @@ on:
 jobs:
   run-e2e:
     name: Run E2E
-    runs-on: [self-hosted, xlarge]
+    runs-on: self-hosted-xlarge
     steps:
       - uses: actions/checkout@v4
       - uses: prefix-dev/setup-pixi@v0.8.1
@@ -97,18 +97,18 @@ jobs:
           SF_AZURE_ACCOUNT: ${{ secrets.SF_AZURE_ACCOUNT }}
           NESSIE_AUTH_TOKEN: ${{ secrets.NESSIE_AUTH_TOKEN }}
 
-  # run-examples:
-  #   name: Run Examples
-  #   runs-on: [self-hosted, large]
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #     - uses: prefix-dev/setup-pixi@v0.8.1
-  #       with:
-  #         pixi-version: v0.34.0
-  #         cache: true
-  #         cache-write: ${{ github.event_name == 'schedule' }}
-  #         environments: 'default'
-  #         activate-environment: true
+  run-examples:
+    name: Run Examples
+    runs-on: self-hosted-large
+    steps:
+      - uses: actions/checkout@v4
+      - uses: prefix-dev/setup-pixi@v0.8.1
+        with:
+          pixi-version: v0.34.0
+          cache: true
+          cache-write: ${{ github.event_name == 'schedule' }}
+          environments: 'default'
+          activate-environment: true
 
   #     - name: Configure AWS Credentials
   #       uses: aws-actions/configure-aws-credentials@v4
@@ -140,12 +140,13 @@ jobs:
   #         # Azure SAS Provider Install
   #         ./buildscripts/install_azurefs_sas_token_provider.sh
 
-  #     - name: Run Python Examples
-  #       working-directory: ./examples
-  #       env:
-  #         SF_USERNAME: ${{ secrets.SF_USERNAME }}
-  #         SF_PASSWORD: ${{ secrets.SF_PASSWORD }}
-  #         SF_ACCOUNT: ${{ secrets.SF_ACCOUNT }}
-  #       run: |
-  #         set -eo pipefail
-  #         ls *.py | xargs -n 1 -P 1 python
+      # - name: Run Python Examples
+      #   working-directory: ./examples
+      #   env:
+      #     SF_USERNAME: ${{ secrets.SF_USERNAME }}
+      #     SF_PASSWORD: ${{ secrets.SF_PASSWORD }}
+      #     SF_ACCOUNT: ${{ secrets.SF_ACCOUNT }}
+      #     SKIP_FILES: "query_llm_ollama.py preprocess_thepile_bodo.py generate_kmers.py"
+      #   run: |
+      #     set -eo pipefail
+      #     ls *.py | grep -v -E "$(echo $SKIP_FILES | sed 's/ /|/g')" | xargs -n 1 -P 1 python

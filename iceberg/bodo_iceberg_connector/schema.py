@@ -9,11 +9,10 @@ from collections import namedtuple
 from py4j.protocol import Py4JError
 
 from bodo_iceberg_connector.catalog_conn import (
-    gen_table_loc,
     normalize_data_loc,
     parse_conn_str,
 )
-from bodo_iceberg_connector.errors import IcebergError, IcebergJavaError
+from bodo_iceberg_connector.errors import IcebergJavaError
 from bodo_iceberg_connector.py4j_support import (
     get_catalog,
     launch_jvm,
@@ -113,12 +112,7 @@ def get_iceberg_info(conn_str: str, schema: str, table: str, error: bool = True)
             iceberg_schema = None
             partition_spec = []
             sort_order = []
-
-            if warehouse is None:
-                raise IcebergError(
-                    "`warehouse` parameter required in connection string"
-                )
-            table_loc = gen_table_loc(catalog_type, warehouse, schema, table)  # type: ignore
+            table_loc = ""
 
         else:
             schema_id: int | None = java_table_info.getSchemaID()

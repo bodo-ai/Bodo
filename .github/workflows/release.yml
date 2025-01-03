@@ -1,9 +1,7 @@
 name: Release
 on:
   schedule:
-    # Two events so that we can limit MacOS runs for cost
-    - cron: '0 21 * * 1,3,5'  # 9PM EST Mon, Wed, Fri
-    - cron: '0 21 * * 2,4'    # 9PM EST Tue, Thu
+    - cron: '0 21 * * 1,2,3,4,5'  # 9PM EST Mon, Wed, Fri
   release:
     types: [published]
   workflow_dispatch:
@@ -18,7 +16,7 @@ jobs:
   # But for the platform package to have the best potential performance, 
   # we want to build outside of a container on the native architecture. 
   # MacOS also builds on the native VM (no docker container). Thus, they are grouped together.
-  bodo-conda-linux:
+  bodo-conda-linux-x86:
     strategy:
       # Don't cancel other jobs if one fails
       fail-fast: false
@@ -28,10 +26,22 @@ jobs:
     with:
       python-version: ${{ matrix.python-version }}
       is-release: ${{ github.event_name == 'release' }}
+      arm: false
+    secrets: inherit
+  bodo-conda-linux-arm:
+    strategy:
+      # Don't cancel other jobs if one fails
+      fail-fast: false
+      matrix:
+        # On pull requests, only test building for 3.12
+        python-version: ${{ fromJson(github.event_name == 'pull_request' && '["3.12"]' || '["3.12", "3.11", "3.10"]') }}
+    uses: ./.github/workflows/_build_bodo_conda_linux_comm.yml
+    with:
+      python-version: ${{ matrix.python-version }}
+      is-release: ${{ github.event_name == 'release' }}
+      arm: true
     secrets: inherit
   bodo-conda-mac:
-    # Only run every other day to save on MacOS VM costs
-    if: github.event.schedule != '0 21 * * 1,3,5'
     strategy:
       # Don't cancel other jobs if one fails
       fail-fast: false
@@ -64,14 +74,14 @@ jobs:
     secrets: inherit
 
   bodosql-conda:
-    needs: bodo-conda-linux
+    needs: bodo-conda-linux-x86
     uses: ./.github/workflows/_build_bodosql_conda.yml
     with:
       is-release: ${{ github.event_name == 'release' }}
     secrets: inherit
 
   docker-img:
-    needs: [bodo-conda-linux, iceberg-conda, bodosql-conda, azurefs-sas-conda]
+    needs: [bodo-conda-linux-x86, iceberg-conda, bodosql-conda, azurefs-sas-conda]
     uses: ./.github/workflows/docker_build_and_publish.yml
     with:
       is-release: ${{ github.event_name == 'release' }}

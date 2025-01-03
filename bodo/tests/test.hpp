@@ -17,8 +17,10 @@
 #include <string>
 #include <vector>
 
-namespace bodo {
-namespace tests {
+#include "../libs/_array_utils.h"
+#include "../libs/_bodo_common.h"
+
+namespace bodo::tests {
 
 /// @brief A single test case. Use the 'test()' function instead of constructing
 /// this directly.
@@ -203,5 +205,159 @@ void check_parallel(bool x, const std::source_location location =
 /// @param expected_msg_start The expected start of the exception message
 void check_exception(std::function<void()> f, const char *expected_msg_start);
 
-}  // namespace tests
-}  // namespace bodo
+}  // namespace bodo::tests
+
+// Create an array of the desired type without directly setting the null bit
+template <bodo_array_type::arr_type_enum ArrType, Bodo_CTypes::CTypeEnum DType>
+    requires(nullable_array<ArrType>)
+std::shared_ptr<array_info> make_arr(size_t n) {
+    return alloc_nullable_array(n, DType);
+}
+
+template <bodo_array_type::arr_type_enum ArrType, Bodo_CTypes::CTypeEnum DType>
+    requires(numpy_array<ArrType>)
+std::shared_ptr<array_info> make_arr(size_t n) {
+    return alloc_numpy(n, DType);
+}
+
+template <bodo_array_type::arr_type_enum ArrType, Bodo_CTypes::CTypeEnum DType>
+    requires(string_array<ArrType>)
+std::shared_ptr<array_info> make_arr(size_t n) {
+    return alloc_string_array(DType, n, 0);
+}
+
+template <bodo_array_type::arr_type_enum ArrType, Bodo_CTypes::CTypeEnum DType>
+    requires(dict_array<ArrType>)
+std::shared_ptr<array_info> make_arr(size_t n) {
+    return alloc_dict_string_array(n, 0, 0);
+}
+
+template <bodo_array_type::arr_type_enum ArrType, Bodo_CTypes::CTypeEnum DType>
+    requires(ArrType == bodo_array_type::ARRAY_ITEM)
+std::shared_ptr<array_info> make_arr(size_t n) {
+    return alloc_array_item(n, alloc_numpy(0, DType));
+}
+
+// Create an array of the desired type with all null elements
+template <bodo_array_type::arr_type_enum ArrType, Bodo_CTypes::CTypeEnum DType>
+    requires(nullable_array<ArrType>)
+std::shared_ptr<array_info> make_all_null_arr(size_t n) {
+    return alloc_nullable_array_all_nulls(n, DType);
+}
+
+template <bodo_array_type::arr_type_enum ArrType, Bodo_CTypes::CTypeEnum DType>
+    requires(numpy_array<ArrType>)
+std::shared_ptr<array_info> make_all_null_arr(size_t n) {
+    return alloc_numpy(n, DType);
+}
+
+template <bodo_array_type::arr_type_enum ArrType, Bodo_CTypes::CTypeEnum DType>
+    requires(string_array<ArrType>)
+std::shared_ptr<array_info> make_all_null_arr(size_t n) {
+    return alloc_string_array_all_nulls(DType, n);
+}
+
+template <bodo_array_type::arr_type_enum ArrType, Bodo_CTypes::CTypeEnum DType>
+    requires(dict_array<ArrType>)
+std::shared_ptr<array_info> make_all_null_arr(size_t n) {
+    return alloc_dict_string_array_all_nulls(n);
+}
+
+template <bodo_array_type::arr_type_enum ArrType, Bodo_CTypes::CTypeEnum DType>
+    requires(array_item_array<ArrType>)
+std::shared_ptr<array_info> make_all_null_arr(size_t n) {
+    return alloc_array_item_all_nulls(n, alloc_numpy(0, DType));
+}
+
+using empty_return_enum = enum {
+    ZERO,
+    ONE,
+    NULL_OUTPUT,
+    EMPTY_STRING,
+    EMPTY_ARRAY,
+    EMPTY_MAP,
+};
+
+// Create an array of the desired type with all 0 elements. Only works
+// on nullable/numpy arrays with a numeric dtype.
+template <bodo_array_type::arr_type_enum ArrType, Bodo_CTypes::CTypeEnum DType,
+          empty_return_enum RetType>
+    requires(RetType == empty_return_enum::ZERO)
+std::shared_ptr<array_info> make_result_output(size_t n) {
+    using T = typename dtype_to_type<DType>::type;
+    std::shared_ptr<array_info> res = make_arr<ArrType, DType>(n);
+    for (size_t i = 0; i < n; i++) {
+        set_non_null<ArrType, T, DType>(*res, i);
+        set_arr_item<ArrType, T, DType>(*res, i, static_cast<T>(0));
+    }
+    return res;
+}
+
+// Create an array of the desired type with all 1 elements. Only works
+// on nullable/numpy arrays with a numeric dtype.
+template <bodo_array_type::arr_type_enum ArrType, Bodo_CTypes::CTypeEnum DType,
+          empty_return_enum RetType>
+    requires(RetType == empty_return_enum::ONE)
+std::shared_ptr<array_info> make_result_output(size_t n) {
+    using T = typename dtype_to_type<DType>::type;
+    std::shared_ptr<array_info> res = make_arr<ArrType, DType>(n);
+    for (size_t i = 0; i < n; i++) {
+        set_non_null<ArrType, T, DType>(*res, i);
+        set_arr_item<ArrType, T, DType>(*res, i, static_cast<T>(1));
+    }
+    return res;
+}
+
+// Create an array of the desired type with all null elements. Should work
+// on all array types.
+template <bodo_array_type::arr_type_enum ArrType, Bodo_CTypes::CTypeEnum DType,
+          empty_return_enum RetType>
+    requires(RetType == empty_return_enum::NULL_OUTPUT)
+std::shared_ptr<array_info> make_result_output(size_t n) {
+    return make_all_null_arr<ArrType, DType>(n);
+}
+
+// Create an array of the desired type with all empty string elements. Only
+// works when return type is a string array.
+template <bodo_array_type::arr_type_enum ArrType, Bodo_CTypes::CTypeEnum DType,
+          empty_return_enum RetType>
+    requires(RetType == empty_return_enum::EMPTY_STRING)
+std::shared_ptr<array_info> make_result_output(size_t n) {
+    bodo::vector<uint8_t> nulls((n + 7) >> 3, 0xff);
+    bodo::vector<std::string> strings(n, "");
+    return create_string_array(DType, nulls, strings);
+}
+
+// Create an array of the desired type with all empty array elements. Only
+// works when return type is an array item array.
+template <bodo_array_type::arr_type_enum ArrType, Bodo_CTypes::CTypeEnum DType,
+          empty_return_enum RetType>
+    requires(RetType == empty_return_enum::EMPTY_ARRAY)
+std::shared_ptr<array_info> make_result_output(size_t n) {
+    std::shared_ptr<array_info> inner_arr;
+    if (DType == Bodo_CTypes::STRUCT) {
+        std::shared_ptr<array_info> dummy_inner =
+            make_result_output<bodo_array_type::STRING, Bodo_CTypes::STRING,
+                               empty_return_enum::EMPTY_STRING>(0);
+        inner_arr = alloc_struct(0, {dummy_inner, dummy_inner});
+    } else {
+        inner_arr = alloc_numpy(0, DType);
+    }
+    std::shared_ptr<array_info> array_arr = alloc_array_item(n, inner_arr);
+    offset_t *offsets =
+        (offset_t *)(array_arr->buffers[0]->mutable_data() + array_arr->offset);
+    for (size_t i = 0; i < n + 1; i++) {
+        offsets[i] = 0;
+    }
+    return array_arr;
+}
+
+template <bodo_array_type::arr_type_enum ArrType, Bodo_CTypes::CTypeEnum DType,
+          empty_return_enum RetType>
+    requires(RetType == empty_return_enum::EMPTY_MAP)
+std::shared_ptr<array_info> make_result_output(size_t n) {
+    std::shared_ptr<array_info> inner_arr =
+        make_result_output<bodo_array_type::ARRAY_ITEM, Bodo_CTypes::STRUCT,
+                           empty_return_enum::EMPTY_ARRAY>(n);
+    return alloc_map(n, inner_arr);
+}
