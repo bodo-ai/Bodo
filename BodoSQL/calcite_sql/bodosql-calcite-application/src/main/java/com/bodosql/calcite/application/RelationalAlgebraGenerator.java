@@ -177,208 +177,139 @@ public class RelationalAlgebraGenerator {
     }
   }
 
-  public static final int VOLCANO_PLANNER = 0;
-  public static final int STREAMING_PLANNER = 1;
-
   /**
    * Constructor for the relational algebra generator class. It will take the schema store it in the
    * config and then set up the program for optimizing and the {@link #planner} for parsing.
-   *
-   * @param localSchema This is the schema which contains any of our local tables.
    */
   public RelationalAlgebraGenerator(
-      BodoSqlSchema localSchema,
-      boolean isStreaming,
-      int verboseLevel,
-      int tracingLevel,
-      int streamingBatchSize,
-      boolean hideCredentials,
-      boolean enableSnowflakeIcebergTables,
-      boolean enableTimestampTz,
-      boolean enableRuntimeJoinFilters,
-      boolean enableStreamingSort,
-      boolean enableStreamingSortLimitOffset,
-      String sqlStyle,
-      boolean coveringExpressionCaching,
-      boolean prefetchSFIceberg) {
-    this.catalog = null;
-    this.plannerType = choosePlannerType(isStreaming);
-    this.verboseLevel = verboseLevel;
-    this.tracingLevel = tracingLevel;
-    this.streamingBatchSize = streamingBatchSize;
-    System.setProperty("calcite.default.charset", "UTF-8");
-    List<SchemaPlus> defaultSchemas =
-        setupSchema(
-            (root, defaults) -> {
-              defaults.add(root.add(localSchema.getName(), localSchema));
-            });
-    RelDataTypeSystem typeSystem =
-        new BodoSQLRelDataTypeSystem(enableStreamingSort, enableStreamingSortLimitOffset);
-    this.typeSystem = typeSystem;
-    this.sqlStyle = sqlStyle;
-    setupPlanner(defaultSchemas, typeSystem);
-    this.hideCredentials = hideCredentials;
-    this.enableSnowflakeIcebergTables = enableSnowflakeIcebergTables;
-    this.enableTimestampTz = enableTimestampTz;
-    this.enableRuntimeJoinFilters = enableRuntimeJoinFilters;
-    this.coveringExpressionCaching = coveringExpressionCaching;
-    this.prefetchSFIceberg = prefetchSFIceberg;
-  }
-
-  /** Constructor for the relational algebra generator class that takes in the default timezone. */
-  public RelationalAlgebraGenerator(
-      BodoSqlSchema localSchema,
-      boolean isStreaming,
-      int verboseLevel,
-      int tracingLevel,
-      int streamingBatchSize,
-      boolean hideCredentials,
-      boolean enableSnowflakeIcebergTables,
-      boolean enableTimestampTz,
-      boolean enableRuntimeJoinFilters,
-      boolean enableStreamingSort,
-      boolean enableStreamingSortLimitOffset,
-      String sqlStyle,
-      boolean coveringExpressionCaching,
-      boolean prefetchSFIceberg,
-      String defaultTz) {
-    this.catalog = null;
-    this.plannerType = choosePlannerType(isStreaming);
-    this.verboseLevel = verboseLevel;
-    this.tracingLevel = tracingLevel;
-    this.streamingBatchSize = streamingBatchSize;
-    System.setProperty("calcite.default.charset", "UTF-8");
-    List<SchemaPlus> defaultSchemas =
-        setupSchema(
-            (root, defaults) -> {
-              defaults.add(root.add(localSchema.getName(), localSchema));
-            });
-    BodoTZInfo tzInfo = new BodoTZInfo(defaultTz, "str");
-    RelDataTypeSystem typeSystem =
-        new BodoSQLRelDataTypeSystem(
-            tzInfo, 0, 0, null, enableStreamingSort, enableStreamingSortLimitOffset);
-    this.typeSystem = typeSystem;
-    this.sqlStyle = sqlStyle;
-    setupPlanner(defaultSchemas, typeSystem);
-    this.hideCredentials = hideCredentials;
-    this.enableSnowflakeIcebergTables = enableSnowflakeIcebergTables;
-    this.enableTimestampTz = enableTimestampTz;
-    this.enableRuntimeJoinFilters = enableRuntimeJoinFilters;
-    this.coveringExpressionCaching = coveringExpressionCaching;
-    this.prefetchSFIceberg = prefetchSFIceberg;
-  }
-
-  /**
-   * Constructor for the relational algebra generator class that accepts a Catalog and Schema
-   * objects. It will take the schema objects in the Catalog as well as the Schema object store it
-   * in the schemas and then set up the program for optimizing and the {@link #planner} for parsing.
-   */
-  public RelationalAlgebraGenerator(
-      BodoSQLCatalog catalog,
-      BodoSqlSchema localSchema,
-      boolean isStreaming,
-      int verboseLevel,
-      int tracingLevel,
-      int streamingBatchSize,
-      boolean hideCredentials,
-      boolean enableSnowflakeIcebergTables,
-      boolean enableTimestampTz,
-      boolean enableRuntimeJoinFilters,
-      boolean enableStreamingSort,
-      boolean enableStreamingSortLimitOffset,
-      String sqlStyle,
-      boolean coveringExpressionCaching,
-      boolean prefetchSFIceberg) {
+      @Nullable BodoSQLCatalog catalog,
+      @NonNull BodoSqlSchema localSchema,
+      @NonNull boolean isStreaming,
+      @NonNull int verboseLevel,
+      @NonNull int tracingLevel,
+      @NonNull int streamingBatchSize,
+      @NonNull boolean hideCredentials,
+      @NonNull boolean enableSnowflakeIcebergTables,
+      @NonNull boolean enableTimestampTz,
+      @NonNull boolean enableRuntimeJoinFilters,
+      @NonNull boolean enableStreamingSort,
+      @NonNull boolean enableStreamingSortLimitOffset,
+      @NonNull String sqlStyle,
+      @NonNull boolean coveringExpressionCaching,
+      @NonNull boolean prefetchSFIceberg,
+      @Nullable String defaultTz) {
     this.catalog = catalog;
     this.plannerType = choosePlannerType(isStreaming);
     this.verboseLevel = verboseLevel;
     this.tracingLevel = tracingLevel;
     this.streamingBatchSize = streamingBatchSize;
+    System.setProperty("calcite.default.charset", "UTF-8");
+    List<SchemaPlus> defaultSchemas;
+    final RelDataTypeSystem typeSystem;
+    if (catalog != null) {
+      // Set the default schemas for the catalog.
+      List<String> catalogDefaultSchema = catalog.getDefaultSchema(0);
+      final @Nullable String currentDatabase;
+      if (catalogDefaultSchema.isEmpty()) {
+        currentDatabase = null;
+      } else {
+        currentDatabase = catalogDefaultSchema.get(0);
+      }
+      defaultSchemas =
+          setupSchema(
+              (root, defaults) -> {
+                // Create a schema object with the name of the catalog,
+                // and register all the schemas with this catalog as sub-schemas
+                // Note that the order of adding to default matters. Earlier
+                // elements are given higher priority during resolution.
+                // The correct attempted order of resolution should be:
+                //     catalog_default_path1.(table_identifier)
+                //     catalog_default_path2.(table_identifier)
+                //     ...
+                //     __BODOLOCAL__.(table_identifier)
+                //     (table_identifier) (Note: this case will never yield a match,
+                //     as the root schema is currently always empty. This may change
+                //     in the future)
+
+                List<SchemaPlus> schemas = new ArrayList();
+                int numLevels = catalog.numDefaultSchemaLevels();
+                SchemaPlus parent = root;
+                for (int i = 0; i < catalog.numDefaultSchemaLevels(); i++) {
+                  List<String> schemaNames = catalog.getDefaultSchema(i);
+                  // The current default schema API is awkward and needs to be
+                  // rewritten. Snowflake allows there to be multiple current
+                  // schemas, but this doesn't generalize to other catalogs as
+                  // this can lead to diverging paths. We add this check as a
+                  // temporary fix and will revisit the API later.
+                  // TODO: Fix the API.
+                  if ((i + 1) != numLevels && schemaNames.size() > 1) {
+                    throw new RuntimeException(
+                        String.format(
+                            Locale.ROOT,
+                            "BodoSQL only supports multiple default schema paths that differ in the"
+                                + " last level"));
+                  }
+                  SchemaPlus newParent = parent;
+                  for (int j = schemaNames.size() - 1; j >= 0; j--) {
+                    String schemaName = schemaNames.get(j);
+                    SchemaPlus newSchema = parent.getSubSchema(schemaName);
+                    if (newSchema == null) {
+                      throw new RuntimeException(
+                          String.format(
+                              Locale.ROOT, "Unable to find default schema: %s", schemaName));
+                    }
+                    schemas.add(newSchema);
+                    newParent = newSchema;
+                  }
+                  parent = newParent;
+                }
+                // Add the list in reverse order.
+                for (int i = schemas.size() - 1; i >= 0; i--) {
+                  defaults.add(schemas.get(i));
+                }
+                // Add the local schema to the list of schemas.
+                defaults.add(root.add(localSchema.getName(), localSchema));
+              });
+      // Create a type system with the correct default Timezone.
+      BodoTZInfo tzInfo = catalog.getDefaultTimezone();
+      Integer weekStart = catalog.getWeekStart();
+      Integer weekOfYearPolicy = catalog.getWeekOfYearPolicy();
+      typeSystem =
+          new BodoSQLRelDataTypeSystem(
+              tzInfo,
+              weekStart,
+              weekOfYearPolicy,
+              new BodoSQLRelDataTypeSystem.CatalogContext(
+                  currentDatabase, catalog.getAccountName()),
+              enableStreamingSort,
+              enableStreamingSortLimitOffset);
+
+    } else {
+      // Set the default schema as just based on local schema.
+      defaultSchemas =
+          setupSchema(
+              (root, defaults) -> {
+                defaults.add(root.add(localSchema.getName(), localSchema));
+              });
+      if (defaultTz != null) {
+        BodoTZInfo tzInfo = new BodoTZInfo(defaultTz, "str");
+        typeSystem =
+            new BodoSQLRelDataTypeSystem(
+                tzInfo, 0, 0, null, enableStreamingSort, enableStreamingSortLimitOffset);
+      } else {
+        typeSystem =
+            new BodoSQLRelDataTypeSystem(enableStreamingSort, enableStreamingSortLimitOffset);
+      }
+    }
+    this.typeSystem = typeSystem;
+    this.sqlStyle = sqlStyle;
+    setupPlanner(defaultSchemas, typeSystem);
     this.hideCredentials = hideCredentials;
     this.enableSnowflakeIcebergTables = enableSnowflakeIcebergTables;
     this.enableTimestampTz = enableTimestampTz;
     this.enableRuntimeJoinFilters = enableRuntimeJoinFilters;
-    this.sqlStyle = sqlStyle;
     this.coveringExpressionCaching = coveringExpressionCaching;
     this.prefetchSFIceberg = prefetchSFIceberg;
-    System.setProperty("calcite.default.charset", "UTF-8");
-    List<String> catalogDefaultSchema = catalog.getDefaultSchema(0);
-    final @Nullable String currentDatabase;
-    if (catalogDefaultSchema.isEmpty()) {
-      currentDatabase = null;
-    } else {
-      currentDatabase = catalogDefaultSchema.get(0);
-    }
-    List<SchemaPlus> defaultSchemas =
-        setupSchema(
-            (root, defaults) -> {
-              // Create a schema object with the name of the catalog,
-              // and register all the schemas with this catalog as sub-schemas
-              // Note that the order of adding to default matters. Earlier
-              // elements are given higher priority during resolution.
-              // The correct attempted order of resolution should be:
-              //     catalog_default_path1.(table_identifier)
-              //     catalog_default_path2.(table_identifier)
-              //     ...
-              //     __BODOLOCAL__.(table_identifier)
-              //     (table_identifier) (Note: this case will never yield a match,
-              //     as the root schema is currently always empty. This may change
-              //     in the future)
-
-              List<SchemaPlus> schemas = new ArrayList();
-              int numLevels = catalog.numDefaultSchemaLevels();
-              SchemaPlus parent = root;
-              for (int i = 0; i < catalog.numDefaultSchemaLevels(); i++) {
-                List<String> schemaNames = catalog.getDefaultSchema(i);
-                // The current default schema API is awkward and needs to be
-                // rewritten. Snowflake allows there to be multiple current
-                // schemas, but this doesn't generalize to other catalogs as
-                // this can lead to diverging paths. We add this check as a
-                // temporary fix and will revisit the API later.
-                // TODO: Fix the API.
-                if ((i + 1) != numLevels && schemaNames.size() > 1) {
-                  throw new RuntimeException(
-                      String.format(
-                          Locale.ROOT,
-                          "BodoSQL only supports multiple default schema paths that differ in the"
-                              + " last level"));
-                }
-                SchemaPlus newParent = parent;
-                for (int j = schemaNames.size() - 1; j >= 0; j--) {
-                  String schemaName = schemaNames.get(j);
-                  SchemaPlus newSchema = parent.getSubSchema(schemaName);
-                  if (newSchema == null) {
-                    throw new RuntimeException(
-                        String.format(
-                            Locale.ROOT, "Unable to find default schema: %s", schemaName));
-                  }
-                  schemas.add(newSchema);
-                  newParent = newSchema;
-                }
-                parent = newParent;
-              }
-              // Add the list in reverse order.
-              for (int i = schemas.size() - 1; i >= 0; i--) {
-                defaults.add(schemas.get(i));
-              }
-              // Add the local schema to the list of schemas.
-              defaults.add(root.add(localSchema.getName(), localSchema));
-            });
-
-    // Create a type system with the correct default Timezone.
-    BodoTZInfo tzInfo = catalog.getDefaultTimezone();
-    Integer weekStart = catalog.getWeekStart();
-    Integer weekOfYearPolicy = catalog.getWeekOfYearPolicy();
-    RelDataTypeSystem typeSystem =
-        new BodoSQLRelDataTypeSystem(
-            tzInfo,
-            weekStart,
-            weekOfYearPolicy,
-            new BodoSQLRelDataTypeSystem.CatalogContext(currentDatabase, catalog.getAccountName()),
-            enableStreamingSort,
-            enableStreamingSortLimitOffset);
-    this.typeSystem = typeSystem;
-    setupPlanner(defaultSchemas, typeSystem);
   }
 
   // TODO: Determine a better location for this.

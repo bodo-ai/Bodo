@@ -81,6 +81,7 @@ object BodoGenTest {
         schema.addTable(table3)
         val generator =
             RelationalAlgebraGenerator(
+                null,
                 schema,
                 isStreaming,
                 0,
@@ -95,6 +96,7 @@ object BodoGenTest {
                 "SNOWFLAKE", // Maintain case sensitivity in the Snowflake style by default
                 false, // Only cache identical nodes
                 true, // Generate a prefetch call at the beginning of SQL queries
+                null,
             )
         val paramTypes = MutableList(1) { ColumnDataTypeInfo(BodoSQLColumnDataType.INT64, false) }
         val namedParamTypes =
