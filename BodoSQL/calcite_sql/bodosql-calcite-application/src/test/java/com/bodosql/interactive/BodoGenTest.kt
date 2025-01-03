@@ -1,6 +1,7 @@
 package com.bodosql.interactive
 
 import com.bodosql.calcite.adapter.bodo.bodoPhysicalProject
+import com.bodosql.calcite.application.PythonEntryPoint.Companion.getLoweredGlobals
 import com.bodosql.calcite.application.PythonEntryPoint.Companion.getPandasString
 import com.bodosql.calcite.application.RelationalAlgebraGenerator
 import com.bodosql.calcite.schema.LocalSchema
@@ -112,7 +113,7 @@ object BodoGenTest {
         println("Generated code:")
         println(pandasStr)
         println("Lowered globals:")
-        println(generator.loweredGlobalVariables)
+        println(getLoweredGlobals(generator))
     }
 
     private fun getRelationalAlgebraString(

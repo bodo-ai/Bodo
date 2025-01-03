@@ -580,7 +580,7 @@ def add_table_type(
         estimated_row_count,
         estimated_ndvs_java_map,
     )
-    schema.addTable(table)
+    JavaEntryPoint.addTableToSchema(schema, table)
 
 
 def _get_estimated_row_count(table: pd.DataFrame | TablePath) -> int | None:

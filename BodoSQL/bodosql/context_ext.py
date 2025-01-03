@@ -427,7 +427,7 @@ def _gen_sql_plan_pd_func_text_and_lowered_globals(
             f"Unable to determine one or more DataFrames in BodoSQL query: {e}"
         )
     failed = False
-    sql_plan = None
+    plan = None
     if bodo.get_rank() == 0:
         # This outermost try except should normally never be invoked, but it's here for safety
         # So the other ranks don't hang forever if we encounter an unexpected runtime error
@@ -528,15 +528,15 @@ def _gen_sql_plan_pd_func_text_and_lowered_globals(
                 java_named_params_map = create_java_named_parameter_type_map(
                     named_params_dict
                 )
-                pd_code_sql_plan_pair = JavaEntryPoint.getPandasAndPlanString(
+                code_plan_pair = JavaEntryPoint.getPandasAndPlanString(
                     generator,
                     sql_str,
                     True,
                     java_params_array,
                     java_named_params_map,
                 )
-                pd_code = str(pd_code_sql_plan_pair.getPdCode())
-                sql_plan = str(pd_code_sql_plan_pair.getSqlPlan())
+                code = JavaEntryPoint.getCodeFromPair(code_plan_pair)
+                plan = JavaEntryPoint.getPlanFromPair(code_plan_pair)
                 # Convert to tuple of string tuples, to allow bcast to work
                 globalsToLower = tuple(
                     [
@@ -560,13 +560,13 @@ def _gen_sql_plan_pd_func_text_and_lowered_globals(
                     ["bodo_sql_context"] + dynamic_param_names + named_param_names
                 )
                 func_text_or_error_msg = f"def impl({args}):\n"
-                func_text_or_error_msg += f"{pd_code}\n"
+                func_text_or_error_msg += f"{code}\n"
 
     failed = bcast_scalar(failed)
     func_text_or_error_msg = bcast_scalar(func_text_or_error_msg)
     if failed:
         raise bodo.utils.typing.BodoError(func_text_or_error_msg)
-    sql_plan = comm.bcast(sql_plan)
+    plan = comm.bcast(plan)
     globalsToLower = comm.bcast(globalsToLower)
 
     # Convert the globalsToLower from a list of tuples of strings to a dict of string varname -> value
@@ -590,7 +590,7 @@ def _gen_sql_plan_pd_func_text_and_lowered_globals(
             locs,
         )
         outGlobalsDict[varname] = locs["value"]
-    return func_text_or_error_msg, outGlobalsDict, sql_plan
+    return func_text_or_error_msg, outGlobalsDict, plan
 
 
 def _gen_sql_plan_pd_func_and_glbls_for_query(

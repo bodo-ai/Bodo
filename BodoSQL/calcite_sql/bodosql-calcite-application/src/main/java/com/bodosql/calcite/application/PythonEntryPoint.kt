@@ -97,7 +97,7 @@ class PythonEntryPoint {
             includeCosts: Boolean,
             dynamicParamTypes: MutableList<ColumnDataTypeInfo>,
             namedParamTypeMap: MutableMap<String, ColumnDataTypeInfo>,
-        ): PandasCodeSqlPlanPair = generator.getPandasAndPlanString(sql, includeCosts, dynamicParamTypes, namedParamTypeMap)
+        ): CodePlanPair = generator.getPandasAndPlanString(sql, includeCosts, dynamicParamTypes, namedParamTypeMap)
 
         /**
          * Generate the Python code to execute the given SQL query.
@@ -410,5 +410,34 @@ class PythonEntryPoint {
          */
         @JvmStatic
         fun buildLocalSchema(name: String): LocalSchema = LocalSchema(name)
+
+        /**
+         * Add a table to a schema.
+         * @param schema The schema to add the table to.
+         * @param table The table to add.
+         */
+        @JvmStatic
+        fun addTableToSchema(
+            schema: LocalSchema,
+            table: LocalTable,
+        ) {
+            schema.addTable(table)
+        }
+
+        /**
+         * Get the code from a CodePlanPair.
+         * @param pair The CodePlanPair to get the code from.
+         * @return The code.
+         */
+        @JvmStatic
+        fun getCodeFromPair(pair: CodePlanPair): String = pair.code
+
+        /**
+         * Get the plan from a CodePlanPair.
+         * @param pair The CodePlanPair to get the plan from.
+         * @return The plan.
+         */
+        @JvmStatic
+        fun getPlanFromPair(pair: CodePlanPair): String = pair.plan
     }
 }

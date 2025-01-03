@@ -652,7 +652,7 @@ public class RelationalAlgebraGenerator {
    * @return The Pandas code and the optimized plan string for the given SQL query.
    * @throws Exception If an error occurs while processing the SQL query.
    */
-  PandasCodeSqlPlanPair getPandasAndPlanString(
+  CodePlanPair getPandasAndPlanString(
       String sql,
       boolean includeCosts,
       List<ColumnDataTypeInfo> dynamicParamTypes,
@@ -665,12 +665,12 @@ public class RelationalAlgebraGenerator {
         String pandasString =
             getPandasStringFromPlan(optimizedPlan, sql, dynamicParamTypes, namedParamTypeMap);
         String planString = getOptimizedPlanStringFromRoot(optimizedPlan, includeCosts);
-        return new PandasCodeSqlPlanPair(pandasString, planString);
+        return new CodePlanPair(pandasString, planString);
       } else {
         String pandasString =
             getDDLPandasString(validatedSqlNode, sql, dynamicParamTypes, namedParamTypeMap);
         String planString = getDDLPlanString(validatedSqlNode);
-        return new PandasCodeSqlPlanPair(pandasString, planString);
+        return new CodePlanPair(pandasString, planString);
       }
     } finally {
       planner.close();
