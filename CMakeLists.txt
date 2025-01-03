@@ -80,7 +80,7 @@ set_target_properties(fmt PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 
 # If we're building dependencies (not getting them from conda), we need to build AWS SDK
-if (CONDA_PREFIX STREQUAL "")
+if (ENV{CONDA_PREFIX} STREQUAL "")
     set(BUILD_ONLY "core" CACHE INTERNAL "only build core")
     set(ENABLE_TESTING OFF CACHE INTERNAL "disabling fmt tests")
     FetchContent_Declare(
