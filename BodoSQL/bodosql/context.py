@@ -1142,8 +1142,12 @@ class BodoSQLContext:
                     params_dict
                 )
                 plan_or_err_msg = str(
-                    generator.getOptimizedPlanString(
-                        sql, show_cost, java_params_array, java_named_params_map
+                    JavaEntryPoint.getOptimizedPlanString(
+                        generator,
+                        sql,
+                        show_cost,
+                        java_params_array,
+                        java_named_params_map,
                     )
                 )
             except Exception as e:

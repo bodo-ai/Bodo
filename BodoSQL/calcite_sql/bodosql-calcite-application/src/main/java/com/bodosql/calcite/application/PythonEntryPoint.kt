@@ -1,5 +1,7 @@
 package com.bodosql.calcite.application
 
+import com.bodosql.calcite.table.ColumnDataTypeInfo
+
 /**
  * This class is the entry point for all Python code that relates to planner driven operations.
  * Each method in this class should be a static method so that it can be cleanly called from Python
@@ -39,5 +41,18 @@ class PythonEntryPoint {
         fun resetPlanner(generator: RelationalAlgebraGenerator) {
             generator.reset()
         }
+
+        @JvmStatic
+        fun getOptimizedPlanString(
+            generator: RelationalAlgebraGenerator,
+            sql: String,
+            includeCosts: Boolean,
+        ): String =
+            generator.getOptimizedPlanString(
+                sql,
+                includeCosts,
+                listOf<ColumnDataTypeInfo>(),
+                mapOf(),
+            )
     }
 }
