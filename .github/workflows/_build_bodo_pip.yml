@@ -140,7 +140,7 @@ jobs:
             mv {wheel} {dest_dir}
           CIBW_REPAIR_WHEEL_COMMAND_LINUX: >
             sccache --show-stats && 
-            SITE_DIR=$(python -c 'import site; print(site.getsitepackages()[0])'); ls $SITE_DIR/lib; ls $SITE_DIR/lib64;
+            SITE_DIR=$(python -c 'import site; print(site.getsitepackages()[0])'); ls $SITE_DIR; ls /opt/python/cp310-cp310/lib/;
             LD_LIBRARY_PATH=$SITE_DIR/lib:$SITE_DIR/lib64:$LD_LIBRARY_PATH; echo $LD_LIBRARY_PATH; auditwheel -v repair
             --exclude libmpi.so.12 --exclude libmpi.so.40 
             --exclude libarrow.so.1801 --exclude libarrow_acero.so.1801 --exclude libarrow_dataset.so.1801
