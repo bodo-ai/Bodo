@@ -244,10 +244,6 @@ public class LocalTable extends BodoSqlTable {
 
   @Override
   public Double getColumnDistinctCount(int column) {
-    if (this.estimatedNdvs == null) {
-      return null;
-    }
-
     String columnName = this.getColumnNames().get(column);
     if (this.estimatedNdvs.containsKey(columnName)) {
       return Double.valueOf(this.estimatedNdvs.get(columnName));
