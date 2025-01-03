@@ -78,12 +78,13 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(fmt)
 set_target_properties(fmt PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
-set(BUILD_ONLY "core;s3" CACHE INTERNAL "only build core and s3")
+set(BUILD_ONLY "core" CACHE INTERNAL "only build core")
 set(ENABLE_TESTING OFF CACHE INTERNAL "disabling fmt tests")
 FetchContent_Declare(
   AWSSDK
   GIT_REPOSITORY   https://github.com/aws/aws-sdk-cpp
   GIT_TAG         1.11.472
+  OVERRIDE_FIND_PACKAGE
 )
 FetchContent_MakeAvailable(AWSSDK)
 unset(BUILD_ONLY)
@@ -662,7 +663,7 @@ target_link_libraries(ext PRIVATE
   parquet
   fmt::fmt-header-only
   zstd
-  ${AWSSDK_LINK_LIBRARIES}
+  aws-cpp-sdk-core
   ${Boost_LIBRARIES}
 )
 
