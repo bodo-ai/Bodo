@@ -69,6 +69,8 @@ class PythonEntryPoint {
          * @param generator The generator to use.
          * @param sql The SQL query to optimize.
          * @param includeCosts Whether to include costs in the output plan.
+         * @param dynamicParamTypes The dynamic parameter types.
+         * @param namedParamTypeMap The named parameter types.
          * @return The generated code and the string representation of
          * the optimized plan.
          */
@@ -77,7 +79,9 @@ class PythonEntryPoint {
             generator: RelationalAlgebraGenerator,
             sql: String,
             includeCosts: Boolean,
-        ): PandasCodeSqlPlanPair = generator.getPandasAndPlanString(sql, includeCosts, listOf(), mapOf())
+            dynamicParamTypes: MutableList<ColumnDataTypeInfo>,
+            namedParamTypeMap: MutableMap<String, ColumnDataTypeInfo>,
+        ): PandasCodeSqlPlanPair = generator.getPandasAndPlanString(sql, includeCosts, dynamicParamTypes, namedParamTypeMap)
 
         /**
          * Generate the Python code to execute the given SQL query.
