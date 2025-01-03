@@ -533,8 +533,12 @@ def _gen_sql_plan_pd_func_text_and_lowered_globals(
                 java_named_params_map = create_java_named_parameter_type_map(
                     named_params_dict
                 )
-                pd_code_sql_plan_pair = generator.getPandasAndPlanString(
-                    sql_str, True, java_params_array, java_named_params_map
+                pd_code_sql_plan_pair = JavaEntryPoint.getPandasAndPlanString(
+                    generator,
+                    sql_str,
+                    True,
+                    java_params_array,
+                    java_named_params_map,
                 )
                 pd_code = str(pd_code_sql_plan_pair.getPdCode())
                 sql_plan = str(pd_code_sql_plan_pair.getSqlPlan())

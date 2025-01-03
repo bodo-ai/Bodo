@@ -630,6 +630,8 @@ public class RelationalAlgebraGenerator {
     }
   }
 
+  // ~~~~~~~~~~~~~Called by the Python Entry Points~~~~~~~~~~~~~~
+
   String getOptimizedPlanString(
       String sql,
       Boolean includeCosts,
@@ -653,14 +655,7 @@ public class RelationalAlgebraGenerator {
     }
   }
 
-  // ~~~~~~~~~~~~~PYTHON EXPOSED APIS~~~~~~~~~~~~~~
-
-  public PandasCodeSqlPlanPair getPandasAndPlanString(String sql, boolean includeCosts)
-      throws Exception {
-    return getPandasAndPlanString(sql, includeCosts, List.of(), Map.of());
-  }
-
-  public PandasCodeSqlPlanPair getPandasAndPlanString(
+  PandasCodeSqlPlanPair getPandasAndPlanString(
       String sql,
       boolean includeCosts,
       List<ColumnDataTypeInfo> dynamicParamTypes,
@@ -688,6 +683,8 @@ public class RelationalAlgebraGenerator {
       }
     }
   }
+
+  // ~~~~~~~~~~~~~PYTHON EXPOSED APIS~~~~~~~~~~~~~~
 
   public String getPandasString(String sql) throws Exception {
     return getPandasString(sql, List.of(), Map.of());

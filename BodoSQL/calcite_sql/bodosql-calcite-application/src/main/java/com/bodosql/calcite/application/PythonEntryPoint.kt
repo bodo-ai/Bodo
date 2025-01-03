@@ -1,7 +1,5 @@
 package com.bodosql.calcite.application
 
-import com.bodosql.calcite.table.ColumnDataTypeInfo
-
 /**
  * This class is the entry point for all Python code that relates to planner driven operations.
  * Each method in this class should be a static method so that it can be cleanly called from Python
@@ -42,6 +40,13 @@ class PythonEntryPoint {
             generator.reset()
         }
 
+        /**
+         * Generate a string representation of the optimized plan.
+         * @param generator The generator to use.
+         * @param sql The SQL query to optimize.
+         * @param includeCosts Whether to include costs in the output plan.
+         * @return The string representation of the optimized plan.
+         */
         @JvmStatic
         fun getOptimizedPlanString(
             generator: RelationalAlgebraGenerator,
@@ -51,8 +56,24 @@ class PythonEntryPoint {
             generator.getOptimizedPlanString(
                 sql,
                 includeCosts,
-                listOf<ColumnDataTypeInfo>(),
+                listOf(),
                 mapOf(),
             )
+
+        /**
+         * Generate a string representation of the generated code and the corresponding
+         * optimized plan.
+         * @param generator The generator to use.
+         * @param sql The SQL query to optimize.
+         * @param includeCosts Whether to include costs in the output plan.
+         * @return The generated code and the string representation of
+         * the optimized plan.
+         */
+        @JvmStatic
+        fun getPandasAndPlanString(
+            generator: RelationalAlgebraGenerator,
+            sql: String,
+            includeCosts: Boolean,
+        ): PandasCodeSqlPlanPair = generator.getPandasAndPlanString(sql, includeCosts, listOf(), mapOf())
     }
 }
