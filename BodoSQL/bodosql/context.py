@@ -22,11 +22,9 @@ from bodo.utils.typing import BodoError, dtype_to_array_type
 from bodosql.bodosql_types.database_catalog import DatabaseCatalog
 from bodosql.bodosql_types.table_path import TablePath, TablePathType
 from bodosql.imported_java_classes import (
-    ColumnClass,
     ColumnDataTypeClass,
     JavaEntryPoint,
     LocalSchemaClass,
-    LocalTableClass,
     RelationalAlgebraGeneratorClass,
 )
 from bodosql.py4j_gateway import build_java_array_list, build_java_hash_map
@@ -234,7 +232,7 @@ def construct_json_array_type(arr_type):
 
 def get_sql_column_type(arr_type, col_name):
     data_type = get_sql_data_type(arr_type)
-    return ColumnClass(col_name, data_type)
+    return JavaEntryPoint.buildBodoSQLColumnImpl(col_name, data_type)
 
 
 def get_sql_data_type(arr_type):
@@ -580,7 +578,7 @@ def add_table_type(
     estimated_ndvs = {} if estimated_ndvs is None else estimated_ndvs
     estimated_ndvs_java_map = build_java_hash_map(estimated_ndvs)
 
-    table = LocalTableClass(
+    table = JavaEntryPoint.buildLocalTable(
         table_name,
         schema.getFullPath(),
         col_arr,

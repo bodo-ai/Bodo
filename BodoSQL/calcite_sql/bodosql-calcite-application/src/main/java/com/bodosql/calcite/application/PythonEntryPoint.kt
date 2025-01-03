@@ -8,7 +8,10 @@ import com.bodosql.calcite.catalog.SnowflakeCatalog
 import com.bodosql.calcite.catalog.TabularCatalog
 import com.bodosql.calcite.ddl.DDLExecutionResult
 import com.bodosql.calcite.table.BodoSQLColumn
+import com.bodosql.calcite.table.BodoSQLColumnImpl
 import com.bodosql.calcite.table.ColumnDataTypeInfo
+import com.bodosql.calcite.table.LocalTable
+import com.google.common.collect.ImmutableList
 import org.apache.commons.lang3.exception.ExceptionUtils
 import java.util.Properties
 
@@ -308,5 +311,57 @@ class PythonEntryPoint {
             icebergVolume: String?,
         ): SnowflakeCatalog =
             SnowflakeCatalog(username, password, accountName, defaultDatabaseName, warehouseName, accountInfo, icebergVolume)
+
+        /**
+         * Build a BodoSQLColumnImpl object.
+         * @param columnName The column name to use.
+         * @param dataTypeInfo The data type info to use.
+         * @return The BodoSQLColumnImpl object.
+         */
+        @JvmStatic
+        fun buildBodoSQLColumnImpl(
+            columnName: String,
+            dataTypeInfo: ColumnDataTypeInfo,
+        ): BodoSQLColumnImpl = BodoSQLColumnImpl(columnName, dataTypeInfo)
+
+        /**
+         * Build a LocalTable object.
+         * @param tableName The table name to use.
+         * @param path The path to use.
+         * @param columns The columns to use.
+         * @param isWriteable Whether the table is writeable.
+         * @param readCode The read code to use.
+         * @param writeCodeFormatString The write code format string to use.
+         * @param useIORead Whether to use IO read.
+         * @param dbType The database type to use.
+         * @param estimatedRowCount The estimated row count to use. If this is not known, this should be null.
+         * @param estimatedNdvs The estimated NDVs to use. If this is not known, this should be null.
+         * @return The LocalTable object.
+         */
+        @JvmStatic
+        fun buildLocalTable(
+            tableName: String,
+            path: ImmutableList<String>,
+            columns: List<BodoSQLColumn>,
+            isWriteable: Boolean,
+            readCode: String,
+            writeCodeFormatString: String,
+            useIORead: Boolean,
+            dbType: String,
+            estimatedRowCount: Long?,
+            estimatedNdvs: Map<String, Int>,
+        ): LocalTable =
+            LocalTable(
+                tableName,
+                path,
+                columns,
+                isWriteable,
+                readCode,
+                writeCodeFormatString,
+                useIORead,
+                dbType,
+                estimatedRowCount,
+                estimatedNdvs,
+            )
     }
 }

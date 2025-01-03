@@ -9,13 +9,13 @@ import com.bodosql.calcite.ir.Expr;
 import com.bodosql.calcite.ir.Variable;
 import com.google.common.collect.ImmutableList;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.schema.Statistic;
 import org.apache.calcite.schema.Table;
+import org.checkerframework.checker.nullness.qual.NonNull;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
 /**
@@ -77,16 +77,16 @@ public class LocalTable extends BodoSqlTable {
    * @param estimatedRowCount Estimated row count passed from Python.
    */
   public LocalTable(
-      String name,
-      ImmutableList<String> schemaPath,
-      List<BodoSQLColumn> columns,
-      boolean isWriteable,
-      String readCode,
-      String writeCodeFormatString,
-      boolean useIORead,
-      String dbType,
+      @NonNull String name,
+      @NonNull ImmutableList<String> schemaPath,
+      @NonNull List<BodoSQLColumn> columns,
+      @NonNull boolean isWriteable,
+      @NonNull String readCode,
+      @NonNull String writeCodeFormatString,
+      @NonNull boolean useIORead,
+      @NonNull String dbType,
       @Nullable Long estimatedRowCount,
-      @Nullable HashMap<String, Integer> estimatedNdvs) {
+      @NonNull Map<String, Integer> estimatedNdvs) {
 
     super(name, schemaPath, columns);
     this.isWriteable = isWriteable;
@@ -214,7 +214,7 @@ public class LocalTable extends BodoSqlTable {
         useIORead,
         dbType,
         null,
-        null);
+        estimatedNdvs);
   }
 
   /**
