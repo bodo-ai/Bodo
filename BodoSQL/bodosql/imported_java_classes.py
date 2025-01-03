@@ -18,7 +18,6 @@ gateway = get_gateway()
 if bodo.get_rank() == 0:
     try:
         ColumnDataTypeClass = gateway.jvm.com.bodosql.calcite.table.ColumnDataTypeInfo
-        LocalSchemaClass = gateway.jvm.com.bodosql.calcite.schema.LocalSchema
         RelationalAlgebraGeneratorClass = (
             gateway.jvm.com.bodosql.calcite.application.RelationalAlgebraGenerator
         )
@@ -36,7 +35,6 @@ if bodo.get_rank() == 0:
         msg = str(e)
 else:
     ColumnDataTypeClass = None
-    LocalSchemaClass = None
     RelationalAlgebraGeneratorClass = None
     SnowflakeDriver = None
     JavaEntryPoint = None
