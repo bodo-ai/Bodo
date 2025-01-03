@@ -19,13 +19,13 @@ if bodo.get_rank() == 0:
     try:
         ArrayListClass = gateway.jvm.java.util.ArrayList
         HashMapClass = gateway.jvm.java.util.HashMap
+        CommonsExceptionUtilsClass = (
+            gateway.jvm.org.apache.commons.lang3.exception.ExceptionUtils
+        )
         ColumnClass = gateway.jvm.com.bodosql.calcite.table.BodoSQLColumnImpl
         ColumnDataTypeClass = gateway.jvm.com.bodosql.calcite.table.ColumnDataTypeInfo
         LocalTableClass = gateway.jvm.com.bodosql.calcite.table.LocalTable
         LocalSchemaClass = gateway.jvm.com.bodosql.calcite.schema.LocalSchema
-        PandasCodeSqlPlanPairClass = (
-            gateway.jvm.com.bodosql.calcite.schema.PandasCodeSqlPlanPair
-        )
         RelationalAlgebraGeneratorClass = (
             gateway.jvm.com.bodosql.calcite.application.RelationalAlgebraGenerator
         )
@@ -33,14 +33,10 @@ if bodo.get_rank() == 0:
         SnowflakeCatalogClass = gateway.jvm.com.bodosql.calcite.catalog.SnowflakeCatalog
         # Note: Although this isn't used it must be imported.
         SnowflakeDriver = gateway.jvm.net.snowflake.client.jdbc.SnowflakeDriver
-        CommonsExceptionUtilsClass = (
-            gateway.jvm.org.apache.commons.lang3.exception.ExceptionUtils
-        )
         PythonLoggersClass = gateway.jvm.com.bodosql.calcite.application.PythonLoggers
         FileSystemCatalogClass = (
             gateway.jvm.com.bodosql.calcite.catalog.FileSystemCatalog
         )
-        WriteTargetEnum = gateway.jvm.com.bodosql.calcite.application.write.WriteTarget.WriteTargetEnum
         TabularCatalogClass = gateway.jvm.com.bodosql.calcite.catalog.TabularCatalog
         BodoGlueCatalogClass = gateway.jvm.com.bodosql.calcite.catalog.BodoGlueCatalog
         # Note: We call this JavaEntryPoint so its clear the Python code enters java
@@ -56,19 +52,17 @@ if bodo.get_rank() == 0:
 else:
     ArrayListClass = None
     HashMapClass = None
+    CommonsExceptionUtilsClass = None
     ColumnClass = None
     ColumnDataTypeClass = None
     LocalTableClass = None
     LocalSchemaClass = None
-    PandasCodeSqlPlanPairClass = None
     RelationalAlgebraGeneratorClass = None
     PropertiesClass = None
     SnowflakeCatalogClass = None
     SnowflakeDriver = None
-    CommonsExceptionUtilsClass = None
     PythonLoggersClass = None
     FileSystemCatalogClass = None
-    WriteTargetEnum = None
     TabularCatalogClass = None
     BodoGlueCatalogClass = None
     JavaEntryPoint = None

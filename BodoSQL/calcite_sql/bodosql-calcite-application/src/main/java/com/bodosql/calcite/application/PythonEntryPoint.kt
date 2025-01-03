@@ -1,5 +1,6 @@
 package com.bodosql.calcite.application
 
+import com.bodosql.calcite.application.write.WriteTarget
 import com.bodosql.calcite.ddl.DDLExecutionResult
 import com.bodosql.calcite.table.BodoSQLColumn
 import com.bodosql.calcite.table.ColumnDataTypeInfo
@@ -144,5 +145,12 @@ class PythonEntryPoint {
          */
         fun buildBodoSQLColumnDataTypeFromTypeId(typeID: Int): BodoSQLColumn.BodoSQLColumnDataType =
             BodoSQLColumn.BodoSQLColumnDataType.fromTypeId(typeID)
+
+        /**
+         * Build a WriteTargetEnum from a string.
+         * @param value The string to convert.
+         * @return The WriteTargetEnum.
+         */
+        fun buildWriteTargetEnumFromString(value: String): WriteTarget.WriteTargetEnum = WriteTarget.WriteTargetEnum.fromString(value)
     }
 }
