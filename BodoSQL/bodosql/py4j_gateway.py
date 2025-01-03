@@ -117,3 +117,13 @@ def configure_java_logging(level: int):
         from bodosql.imported_java_classes import JavaEntryPoint
 
         JavaEntryPoint.configureJavaLogging(level)
+
+
+def build_java_array_list(elems):
+    if bodo.get_rank() == 0:
+        from bodosql.imported_java_classes import JavaEntryPoint
+
+        output_list = JavaEntryPoint.buildArrayList()
+        for elem in elems:
+            JavaEntryPoint.appendToArrayList(output_list, elem)
+        return output_list

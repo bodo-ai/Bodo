@@ -22,7 +22,6 @@ from bodo.utils.typing import BodoError, dtype_to_array_type
 from bodosql.bodosql_types.database_catalog import DatabaseCatalog
 from bodosql.bodosql_types.table_path import TablePath, TablePathType
 from bodosql.imported_java_classes import (
-    ArrayListClass,
     ColumnClass,
     ColumnDataTypeClass,
     HashMapClass,
@@ -31,6 +30,7 @@ from bodosql.imported_java_classes import (
     LocalTableClass,
     RelationalAlgebraGeneratorClass,
 )
+from bodosql.py4j_gateway import build_java_array_list
 from bodosql.utils import BodoSQLWarning, error_to_string
 
 # Prefix to add to table argument names when passed to JIT to avoid variable name conflicts
@@ -303,11 +303,11 @@ def create_java_dynamic_parameter_type_list(dynamic_params_list: list[Any]):
     Returns:
         JavaObject: A java array to pass to code generation.
     """
-    output_list = ArrayListClass()
-    for val in dynamic_params_list:
-        typ = val if isinstance(val, types.Type) else bodo.typeof(val)
-        output_list.add(get_sql_param_column_type_info(typ))
-    return output_list
+    types = [
+        val if isinstance(val, types.Type) else bodo.typeof(val)
+        for val in dynamic_params_list
+    ]
+    return build_java_array_list(types)
 
 
 def create_java_named_parameter_type_map(named_params: dict[str, Any]):
@@ -532,10 +532,11 @@ def add_table_type(
             queries.
     """
     assert bodo.get_rank() == 0, "add_table_type should only be called on rank 0."
-    col_arr = ArrayListClass()
-    for i, cname in enumerate(df_type.columns):
-        column = get_sql_column_type(df_type.data[i], cname)
-        col_arr.add(column)
+    sql_types = [
+        get_sql_column_type(df_type.data[i], cname)
+        for i, cname in enumerate(df_type.columns)
+    ]
+    col_arr = build_java_array_list(sql_types)
 
     # To support writing to SQL Databases we register is_writeable
     # for SQL databases.

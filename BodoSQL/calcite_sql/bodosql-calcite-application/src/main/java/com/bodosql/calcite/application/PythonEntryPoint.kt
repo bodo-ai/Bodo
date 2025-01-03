@@ -169,5 +169,27 @@ class PythonEntryPoint {
         fun configureJavaLogging(level: Int) {
             toggleLoggers(level)
         }
+
+        /**
+         * Build an ArrayList that can be transferred to Python.
+         * This is done because lists are not automatically supported in Py4j.
+         * @return The ArrayList.
+         */
+        @JvmStatic
+        fun buildArrayList(): ArrayList<Any> = ArrayList()
+
+        /**
+         * Append an element to the array list. This is done to make clear
+         * that the list is modified by calling into Java.
+         * @param lst The list to append to.
+         * @param elem The element to append.
+         */
+        @JvmStatic
+        fun appendToArrayList(
+            lst: ArrayList<Any>,
+            elem: Any,
+        ) {
+            lst.add(elem)
+        }
     }
 }
