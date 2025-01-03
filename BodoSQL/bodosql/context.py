@@ -22,7 +22,6 @@ from bodo.utils.typing import BodoError, dtype_to_array_type
 from bodosql.bodosql_types.database_catalog import DatabaseCatalog
 from bodosql.bodosql_types.table_path import TablePath, TablePathType
 from bodosql.imported_java_classes import (
-    ColumnDataTypeClass,
     JavaEntryPoint,
     RelationalAlgebraGeneratorClass,
 )
@@ -259,13 +258,13 @@ def get_sql_data_type(arr_type):
         type_enum = JavaEntryPoint.buildBodoSQLColumnDataTypeFromTypeId(
             _numba_to_sql_column_type_map[arr_type.dtype]
         )
-        return ColumnDataTypeClass(type_enum, nullable)
+        return JavaEntryPoint.buildColumnDataTypeInfo(type_enum, nullable)
     elif isinstance(arr_type.dtype, bodo.PDCategoricalDtype):
         type_enum = JavaEntryPoint.buildBodoSQLColumnDataTypeFromTypeId(
             SqlTypeEnum.Categorical.value
         )
         child = get_sql_data_type(dtype_to_array_type(arr_type.dtype.elem_type, True))
-        return ColumnDataTypeClass(type_enum, nullable, child)
+        return JavaEntryPoint.buildColumnDataTypeInfo(type_enum, nullable, child)
     else:
         # The type is unsupported we raise a warning indicating this is a possible
         # error but we generate a dummy type because we may be able to support it
@@ -274,7 +273,7 @@ def get_sql_data_type(arr_type):
         type_enum = JavaEntryPoint.buildBodoSQLColumnDataTypeFromTypeId(
             SqlTypeEnum.Unsupported.value
         )
-        return ColumnDataTypeClass(type_enum, nullable)
+        return JavaEntryPoint.buildColumnDataTypeInfo(type_enum, nullable)
 
 
 def create_java_dynamic_parameter_type_list(dynamic_params_list: list[Any]):
@@ -322,7 +321,7 @@ def get_sql_param_column_type_info(param_type: types.Type):
     Args:
         param_type (types.Type): The bodo type to lower as a parameter.
     Return:
-        JavaObject: The ColumnDataTypeClass for the parameter type.
+        JavaObject: The ColumnDataTypeInfo for the parameter type.
     """
     unliteral_type = types.unliteral(param_type)
     # The named parameters are always scalars. We don't support
@@ -342,14 +341,14 @@ def get_sql_param_column_type_info(param_type: types.Type):
         type_enum = JavaEntryPoint.buildBodoSQLColumnDataTypeFromTypeId(
             SqlTypeEnum.Decimal.value
         )
-        return ColumnDataTypeClass(
+        return JavaEntryPoint.buildColumnDataTypeInfo(
             type_enum, nullable, unliteral_type.precision, unliteral_type.scale
         )
     elif unliteral_type in _numba_to_sql_param_type_map:
         type_enum = JavaEntryPoint.buildBodoSQLColumnDataTypeFromTypeId(
             _numba_to_sql_param_type_map[unliteral_type]
         )
-        return ColumnDataTypeClass(type_enum, nullable)
+        return JavaEntryPoint.buildColumnDataTypeInfo(type_enum, nullable)
     raise TypeError(
         f"Dynamic Parameter with type {param_type} not supported in BodoSQL. Please cast your data to a supported type. https://docs.bodo.ai/latest/source/BodoSQL.html#supported-data-types"
     )
