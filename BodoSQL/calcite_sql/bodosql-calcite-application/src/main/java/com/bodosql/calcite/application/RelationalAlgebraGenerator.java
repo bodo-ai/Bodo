@@ -412,7 +412,7 @@ public class RelationalAlgebraGenerator {
    * Calls "RESET" on the current planner and clears any cached state need to compile a single query
    * (but not configuration).
    */
-  public void reset() {
+  void reset() {
     this.planner.close();
     this.parseNode = null;
   }
