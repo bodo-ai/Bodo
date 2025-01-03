@@ -72,6 +72,7 @@ def check_result(top_words_out, low_words_out):
         assert low_words_out[word] == count
 
 
+# @pytest.mark.skip
 def test_beer_reviews():
     pytest_working_dir = os.getcwd()
     try:
