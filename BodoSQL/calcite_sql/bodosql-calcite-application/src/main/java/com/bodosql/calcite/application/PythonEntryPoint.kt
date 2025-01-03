@@ -191,5 +191,29 @@ class PythonEntryPoint {
         ) {
             lst.add(elem)
         }
+
+        /**
+         * Build a map that can be transferred to Python.
+         * This is done because maps are not automatically supported in Py4j.
+         * @return The map.
+         */
+        @JvmStatic
+        fun buildMap(): HashMap<Any, Any> = HashMap()
+
+        /**
+         * Put an element into the map. This is done to make clear
+         * that the map is modified by calling into Java.
+         * @param map The map to put into.
+         * @param key The key to put.
+         * @param value The value to put.
+         */
+        @JvmStatic
+        fun putIntoMap(
+            map: HashMap<Any, Any>,
+            key: Any,
+            value: Any,
+        ) {
+            map[key] = value
+        }
     }
 }

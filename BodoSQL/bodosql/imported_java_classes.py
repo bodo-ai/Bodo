@@ -17,7 +17,6 @@ msg = ""
 gateway = get_gateway()
 if bodo.get_rank() == 0:
     try:
-        HashMapClass = gateway.jvm.java.util.HashMap
         CommonsExceptionUtilsClass = (
             gateway.jvm.org.apache.commons.lang3.exception.ExceptionUtils
         )
@@ -48,7 +47,6 @@ if bodo.get_rank() == 0:
         saw_error = True
         msg = str(e)
 else:
-    HashMapClass = None
     CommonsExceptionUtilsClass = None
     ColumnClass = None
     ColumnDataTypeClass = None

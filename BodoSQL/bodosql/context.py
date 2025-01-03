@@ -24,13 +24,12 @@ from bodosql.bodosql_types.table_path import TablePath, TablePathType
 from bodosql.imported_java_classes import (
     ColumnClass,
     ColumnDataTypeClass,
-    HashMapClass,
     JavaEntryPoint,
     LocalSchemaClass,
     LocalTableClass,
     RelationalAlgebraGeneratorClass,
 )
-from bodosql.py4j_gateway import build_java_array_list
+from bodosql.py4j_gateway import build_java_array_list, build_java_hash_map
 from bodosql.utils import BodoSQLWarning, error_to_string
 
 # Prefix to add to table argument names when passed to JIT to avoid variable name conflicts
@@ -321,11 +320,13 @@ def create_java_named_parameter_type_map(named_params: dict[str, Any]):
     Returns:
         JavaObject: A java map to pass to code generation.
     """
-    output_map = HashMapClass()
-    for key, val in named_params.items():
-        typ = val if isinstance(val, types.Type) else bodo.typeof(val)
-        output_map.put(key, get_sql_param_column_type_info(typ))
-    return output_map
+    d = {
+        key: get_sql_param_column_type_info(
+            val if isinstance(val, types.Type) else bodo.typeof(val)
+        )
+        for key, val in named_params.items()
+    }
+    return build_java_hash_map(d)
 
 
 def get_sql_param_column_type_info(param_type: types.Type):
@@ -576,10 +577,8 @@ def add_table_type(
     read_code = _generate_table_read(table_name, bodo_type, table_num, from_jit)
 
     # Convert the Python dict to a Java HashMap:
-    estimated_ndvs_java_map = HashMapClass()
-    if estimated_ndvs:
-        for k, v in estimated_ndvs.items():
-            estimated_ndvs_java_map.put(k, v)
+    estimated_ndvs = {} if estimated_ndvs is None else estimated_ndvs
+    estimated_ndvs_java_map = build_java_hash_map(estimated_ndvs)
 
     table = LocalTableClass(
         table_name,
