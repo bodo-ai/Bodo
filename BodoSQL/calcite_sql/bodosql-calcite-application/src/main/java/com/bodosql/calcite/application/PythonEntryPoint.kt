@@ -3,6 +3,7 @@ package com.bodosql.calcite.application
 import com.bodosql.calcite.application.PythonLoggers.toggleLoggers
 import com.bodosql.calcite.application.write.WriteTarget
 import com.bodosql.calcite.catalog.BodoGlueCatalog
+import com.bodosql.calcite.catalog.BodoSQLCatalog
 import com.bodosql.calcite.catalog.FileSystemCatalog
 import com.bodosql.calcite.catalog.SnowflakeCatalog
 import com.bodosql.calcite.catalog.TabularCatalog
@@ -365,7 +366,15 @@ class PythonEntryPoint {
             accountInfo: Properties,
             icebergVolume: String?,
         ): SnowflakeCatalog =
-            SnowflakeCatalog(username, password, accountName, defaultDatabaseName, warehouseName, accountInfo, icebergVolume)
+            SnowflakeCatalog(
+                username,
+                password,
+                accountName,
+                defaultDatabaseName,
+                warehouseName,
+                accountInfo,
+                icebergVolume,
+            )
 
         /**
          * Build a BodoSQLColumnImpl object.
@@ -491,5 +500,43 @@ class PythonEntryPoint {
             keyType: ColumnDataTypeInfo,
             valueType: ColumnDataTypeInfo,
         ): ColumnDataTypeInfo = ColumnDataTypeInfo(dataType, isNullable, keyType = keyType, valueType = valueType)
+
+        @JvmStatic
+        fun buildRelationalAlgebraGenerator(
+            catalog: BodoSQLCatalog?,
+            localSchema: LocalSchema,
+            isStreaming: Boolean,
+            verboseLevel: Int,
+            tracingLevel: Int,
+            streamingBatchSize: Int,
+            hideCredentials: Boolean,
+            enableSnowflakeIcebergTables: Boolean,
+            enableTimestampTz: Boolean,
+            enableRuntimeJoinFilters: Boolean,
+            enableStreamingSort: Boolean,
+            enableStreamingSortLimitOffset: Boolean,
+            sqlStyle: String,
+            coveringExpressionCaching: Boolean,
+            prefetchSFIceberg: Boolean,
+            defaultTz: String?,
+        ): RelationalAlgebraGenerator =
+            RelationalAlgebraGenerator(
+                catalog,
+                localSchema,
+                isStreaming,
+                verboseLevel,
+                tracingLevel,
+                streamingBatchSize,
+                hideCredentials,
+                enableSnowflakeIcebergTables,
+                enableTimestampTz,
+                enableRuntimeJoinFilters,
+                enableStreamingSort,
+                enableStreamingSortLimitOffset,
+                sqlStyle,
+                coveringExpressionCaching,
+                prefetchSFIceberg,
+                defaultTz,
+            )
     }
 }

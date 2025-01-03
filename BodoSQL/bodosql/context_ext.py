@@ -53,7 +53,6 @@ from bodosql.context import (
 )
 from bodosql.imported_java_classes import (
     JavaEntryPoint,
-    RelationalAlgebraGeneratorClass,
 )
 from bodosql.utils import error_to_string
 
@@ -437,47 +436,33 @@ def _gen_sql_plan_pd_func_text_and_lowered_globals(
             verbose_level = bodo.user_logging.get_verbose_level()
             tracing_level = bodo.tracing_level
             if bodo_sql_context_type.catalog_type != types.none:
-                generator = RelationalAlgebraGeneratorClass(
-                    bodo_sql_context_type.catalog_type.get_java_object(),
-                    schema,
-                    bodo.bodosql_use_streaming_plan,
-                    verbose_level,
-                    tracing_level,
-                    bodo.bodosql_streaming_batch_size,
-                    hide_credentials,
-                    bodo.enable_snowflake_iceberg,
-                    bodo.enable_timestamp_tz,
-                    bodo.enable_runtime_join_filters,
-                    bodo.enable_streaming_sort,
-                    bodo.enable_streaming_sort_limit_offset,
-                    bodo.bodo_sql_style,
-                    bodo.bodosql_full_caching,
-                    bodo.prefetch_sf_iceberg,
-                )
+                catalog_obj = bodo_sql_context_type.catalog_type.get_java_object()
             else:
-                extra_args = (
-                    ()
-                    if bodo_sql_context_type.default_tz is None
-                    or isinstance(bodo_sql_context_type.default_tz, types.NoneType)
-                    else (bodo_sql_context_type.default_tz.literal_value,)
-                )
-                generator = RelationalAlgebraGeneratorClass(
-                    schema,
-                    bodo.bodosql_use_streaming_plan,
-                    verbose_level,
-                    tracing_level,
-                    bodo.bodosql_streaming_batch_size,
-                    hide_credentials,
-                    bodo.enable_snowflake_iceberg,
-                    bodo.enable_timestamp_tz,
-                    bodo.enable_runtime_join_filters,
-                    bodo.enable_streaming_sort,
-                    bodo.enable_streaming_sort_limit_offset,
-                    bodo.bodo_sql_style,
-                    bodo.bodosql_full_caching,
-                    bodo.prefetch_sf_iceberg,
-                    *extra_args,
-                )
+                catalog_obj = None
+            if bodo_sql_context_type.default_tz is None or isinstance(
+                bodo_sql_context_type.default_tz, types.NoneType
+            ):
+                default_tz_str = None
+            else:
+                default_tz_str = bodo_sql_context_type.default_tz.literal_value
+            generator = JavaEntryPoint.buildRelationalAlgebraGenerator(
+                catalog_obj,
+                schema,
+                bodo.bodosql_use_streaming_plan,
+                verbose_level,
+                tracing_level,
+                bodo.bodosql_streaming_batch_size,
+                hide_credentials,
+                bodo.enable_snowflake_iceberg,
+                bodo.enable_timestamp_tz,
+                bodo.enable_runtime_join_filters,
+                bodo.enable_streaming_sort,
+                bodo.enable_streaming_sort_limit_offset,
+                bodo.bodo_sql_style,
+                bodo.bodosql_full_caching,
+                bodo.prefetch_sf_iceberg,
+                default_tz_str,
+            )
         except Exception as e:
             # Raise BodoError outside except to avoid stack trace
             func_text_or_error_msg = f"Unable to initialize BodoSQL Tables when parsing SQL Query. Error message: {error_to_string(e)}"

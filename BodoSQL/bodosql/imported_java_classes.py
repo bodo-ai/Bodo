@@ -17,9 +17,6 @@ msg = ""
 gateway = get_gateway()
 if bodo.get_rank() == 0:
     try:
-        RelationalAlgebraGeneratorClass = (
-            gateway.jvm.com.bodosql.calcite.application.RelationalAlgebraGenerator
-        )
         # Note: Although this isn't used it must be imported.
         SnowflakeDriver = gateway.jvm.net.snowflake.client.jdbc.SnowflakeDriver
         # Note: We call this JavaEntryPoint so its clear the Python code enters java
@@ -33,8 +30,6 @@ if bodo.get_rank() == 0:
         saw_error = True
         msg = str(e)
 else:
-    RelationalAlgebraGeneratorClass = None
-    SnowflakeDriver = None
     JavaEntryPoint = None
 
 saw_error = bcast_scalar(saw_error)

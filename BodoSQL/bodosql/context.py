@@ -23,7 +23,6 @@ from bodosql.bodosql_types.database_catalog import DatabaseCatalog
 from bodosql.bodosql_types.table_path import TablePath, TablePathType
 from bodosql.imported_java_classes import (
     JavaEntryPoint,
-    RelationalAlgebraGeneratorClass,
 )
 from bodosql.py4j_gateway import build_java_array_list, build_java_hash_map
 from bodosql.utils import BodoSQLWarning, error_to_string
@@ -1227,25 +1226,11 @@ class BodoSQLContext:
         verbose_level = bodo.user_logging.get_verbose_level()
         tracing_level = bodo.tracing_level
         if self.catalog is not None:
-            return RelationalAlgebraGeneratorClass(
-                self.catalog.get_java_object(),
-                self.schema,
-                bodo.bodosql_use_streaming_plan,
-                verbose_level,
-                tracing_level,
-                bodo.bodosql_streaming_batch_size,
-                hide_credentials,
-                bodo.enable_snowflake_iceberg,
-                bodo.enable_timestamp_tz,
-                bodo.enable_runtime_join_filters,
-                bodo.enable_streaming_sort,
-                bodo.enable_streaming_sort_limit_offset,
-                bodo.bodo_sql_style,
-                bodo.bodosql_full_caching,
-                bodo.prefetch_sf_iceberg,
-            )
-        extra_args = () if self.default_tz is None else (self.default_tz,)
-        generator = RelationalAlgebraGeneratorClass(
+            catalog_obj = self.catalog.get_java_object()
+        else:
+            catalog_obj = None
+        return JavaEntryPoint.buildRelationalAlgebraGenerator(
+            catalog_obj,
             self.schema,
             bodo.bodosql_use_streaming_plan,
             verbose_level,
@@ -1260,9 +1245,8 @@ class BodoSQLContext:
             bodo.bodo_sql_style,
             bodo.bodosql_full_caching,
             bodo.prefetch_sf_iceberg,
-            *extra_args,
+            self.default_tz,
         )
-        return generator
 
     def add_or_replace_view(self, name: str, table: pd.DataFrame | TablePath):
         """Create a new BodoSQLContext that contains all of the old DataFrames and the
