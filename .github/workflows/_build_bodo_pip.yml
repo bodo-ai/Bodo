@@ -146,7 +146,7 @@ jobs:
             AWS_DEFAULT_REGION
           CIBW_REPAIR_WHEEL_COMMAND_MACOS: >
             sccache --show-stats &&
-            delocate-wheel --ignore-missing-dependencies --sanitize-rpaths
+            LD_LIBRARY_PATH=/usr/local/lib64/:/project/.pixi/envs/pip-cpp-linux/lib:$LD_LIBRARY_PATH delocate-wheel --ignore-missing-dependencies --sanitize-rpaths
             -e libmpi -e libpmpi
             -e libarrow -e libarrow_acero -e libarrow_dataset -e libarrow_flight
             -e libarrow_python -e libarrow_python_flight -e libarrow_python_parquet_encryption
