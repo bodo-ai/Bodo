@@ -9,10 +9,7 @@ import time
 
 import pandas as pd
 
-import bodo
 
-
-@bodo.jit(cache=True)
 def get_monthly_travels_weather(weather_dataset, hvfhv_dataset):
     start_read = time.time()
     central_park_weather_observations = pd.read_csv(
