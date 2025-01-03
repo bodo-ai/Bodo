@@ -951,7 +951,7 @@ class BodoSQLContext:
         sql: str,
         dynamic_params_list: list[Any],
         named_params_dict: dict[str, Any],
-        generator: RelationalAlgebraGeneratorClass,
+        generator,
         is_ddl: bool,
     ) -> tuple[str, dict[str, Any]]:
         """Generate the func_text for the Python code generated for the given SQL query.
@@ -959,12 +959,11 @@ class BodoSQLContext:
 
         Args:
             sql (str): The SQL query to process.
-            optimize_plan (bool): Should the generated plan be optimized?
-            params_dict (Dict[str, Any]): A python dictionary mapping Python variables
-                to usable SQL names that can be referenced in the query.
-            hide_credentials (bool): Should credentials be hidden in the generated code. This
-                is set to true when we want to inspect the code but not run the code.
-
+            dynamic_params_list (List[Any]): The list of dynamic parameters to lower.
+            named_params_dict (Dict[str, Any]): The named parameters to lower.
+            generator (RelationalAlgebraGenerator Java Object): The relational algebra generator
+                used to generate the code.
+            is_ddl (bool): Is this a DDL query?
         Raises:
             BodoError: If the SQL query cannot be processed.
 
@@ -1173,7 +1172,7 @@ class BodoSQLContext:
     def _get_pandas_code(
         self,
         sql: str,
-        generator: RelationalAlgebraGeneratorClass,
+        generator,
         dynamic_params_list: list[Any],
         named_params_dict: dict[str, Any],
     ) -> tuple[str, dict[str, Any]]:
@@ -1181,7 +1180,7 @@ class BodoSQLContext:
 
         Args:
             sql (str): The SQL query text.
-            generator (RelationalAlgebraGeneratorClass): The relational algebra generator
+            generator (RelationalAlgebraGenerator Java Object): The relational algebra generator
                 used to generate the code.
 
         Raises:
@@ -1222,7 +1221,7 @@ class BodoSQLContext:
                 any generated code.
 
         Returns:
-            RelationalAlgebraGeneratorClass: The java object holding
+            RelationalAlgebraGenerator Java Object: The java object holding
                 the relational algebra generator.
         """
         verbose_level = bodo.user_logging.get_verbose_level()
@@ -1385,9 +1384,7 @@ class BodoSQLContext:
                 return self.catalog == bc.catalog
         return False  # pragma: no cover
 
-    def execute_ddl(
-        self, sql: str, generator: RelationalAlgebraGeneratorClass | None = None
-    ) -> pd.DataFrame:
+    def execute_ddl(self, sql: str, generator=None) -> pd.DataFrame:
         """API to directly execute DDL queries. This is used by the JIT
         path to execute DDL queries and can be used as a fast path when you
         statically know the query you want to execute is a DDL query to avoid the
@@ -1398,7 +1395,7 @@ class BodoSQLContext:
 
         Args:
             sql (str): The DDL query to execute.
-            generator (Optional[RelationalAlgebraGeneratorClass]): The prepared planner
+            generator (Optional[RelationalAlgebraGenerator Java object]): The prepared planner
                 information used for executing the query. If None we need to create
                 the planner.
 
