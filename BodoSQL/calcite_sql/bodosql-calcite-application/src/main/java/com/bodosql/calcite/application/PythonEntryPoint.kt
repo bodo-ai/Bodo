@@ -2,6 +2,10 @@ package com.bodosql.calcite.application
 
 import com.bodosql.calcite.application.PythonLoggers.toggleLoggers
 import com.bodosql.calcite.application.write.WriteTarget
+import com.bodosql.calcite.catalog.BodoGlueCatalog
+import com.bodosql.calcite.catalog.FileSystemCatalog
+import com.bodosql.calcite.catalog.SnowflakeCatalog
+import com.bodosql.calcite.catalog.TabularCatalog
 import com.bodosql.calcite.ddl.DDLExecutionResult
 import com.bodosql.calcite.table.BodoSQLColumn
 import com.bodosql.calcite.table.ColumnDataTypeInfo
@@ -156,14 +160,6 @@ class PythonEntryPoint {
             BodoSQLColumn.BodoSQLColumnDataType.fromTypeId(typeID)
 
         /**
-         * Build a WriteTargetEnum from a string.
-         * @param value The string to convert.
-         * @return The WriteTargetEnum.
-         */
-        @JvmStatic
-        fun buildWriteTargetEnumFromString(value: String): WriteTarget.WriteTargetEnum = WriteTarget.WriteTargetEnum.fromString(value)
-
-        /**
          * Configure the Java logging level.
          * @param level The logging level to set.
          */
@@ -247,5 +243,70 @@ class PythonEntryPoint {
          */
         @JvmStatic
         fun getStackTrace(throwable: Throwable): String = ExceptionUtils.getStackTrace(throwable)
+
+        /**
+         * Build a BodoGlueCatalog object.
+         * @param warehouse The warehouse to use.
+         * @return The BodoGlueCatalog object.
+         */
+        @JvmStatic
+        fun buildBodoGlueCatalog(warehouse: String): BodoGlueCatalog = BodoGlueCatalog(warehouse)
+
+        /**
+         * Build a TabularCatalog object.
+         * @param warehouse The warehouse to use.
+         * @param restUri The REST URI to use.
+         * @param token The token to use. This may not always be required.
+         * @param credential The credential to use. This may not always be required.
+         * @return The TabularCatalog object.
+         */
+        @JvmStatic
+        fun buildTabularCatalog(
+            warehouse: String,
+            restUri: String,
+            token: String?,
+            credential: String?,
+        ): TabularCatalog = TabularCatalog(warehouse, restUri, token, credential)
+
+        /**
+         * Build a FileSystemCatalog object.
+         * @param connectionString The connection string to use.
+         * @param writeTarget The write target to use.
+         * @param defaultSchema The default schema to use.
+         * @return The FileSystemCatalog object.
+         */
+        @JvmStatic
+        fun buildFileSystemCatalog(
+            connectionString: String,
+            writeTarget: String,
+            defaultSchema: String,
+        ): FileSystemCatalog =
+            FileSystemCatalog(
+                connectionString,
+                WriteTarget.WriteTargetEnum.fromString(writeTarget),
+                defaultSchema,
+            )
+
+        /**
+         * Build a SnowflakeCatalog object.
+         * @param username The username to use.
+         * @param password The password to use.
+         * @param accountName The account name to use.
+         * @param defaultDatabaseName The default database name to use. If there is no default database, this should be null.
+         * @param warehouseName The warehouse name to use.
+         * @param accountInfo The account info to use.
+         * @param icebergVolume The iceberg volume to use. If this is not a connection through iceberg, this should be null.
+         */
+        @JvmStatic
+        fun buildSnowflakeCatalog(
+            username: String,
+            password: String,
+            accountName: String,
+            defaultDatabaseName: String?,
+            warehouseName: String,
+            accountInfo: Properties,
+            icebergVolume: String?,
+        ): SnowflakeCatalog =
+            SnowflakeCatalog(username, password, accountName, defaultDatabaseName, warehouseName, accountInfo, icebergVolume)
     }
 }
