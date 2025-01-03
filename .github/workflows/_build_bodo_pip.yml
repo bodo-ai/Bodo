@@ -87,22 +87,6 @@ jobs:
               tar -xJf boost_1_85_0.tar.xz -C .
               (cd boost-1.85.0; ./bootstrap.sh --with-libraries=container,json,stacktrace; ./b2 install)
             fi
-            # Install aws-sdk-cpp
-            if find /usr /lib /usr/local -name "libaws*" | grep -q .; then
-              echo "Skipping aws-sdk-cpp, already installed"
-            else
-              git clone --branch 1.11.472 --depth 1 --recurse-submodules --shallow-submodules https://github.com/aws/aws-sdk-cpp
-              mkdir aws-sdk-cpp/build 
-              (cd aws-sdk-cpp/build; cmake .. \
-                -DCMAKE_BUILD_TYPE=Release \
-                -DBUILD_ONLY="core;s3" \
-                -DENABLE_TESTING=OFF \
-                -DAUTORUN_UNIT_TESTS=OFF \
-                -DCMAKE_PREFIX_PATH=/usr/local/ \
-                -DCMAKE_INSTALL_PREFIX=/usr/local/;
-                cmake --build . --config=Release; \
-                cmake --install . --config=Release)
-            fi
           CIBW_BEFORE_BUILD: |
             # Delete mpi4py folder if it exists so correct version gets copied in
             rm -r {package}/bodo/mpi4py || true
@@ -146,7 +130,7 @@ jobs:
             AWS_DEFAULT_REGION
           CIBW_REPAIR_WHEEL_COMMAND_MACOS: >
             sccache --show-stats &&
-            LD_LIBRARY_PATH=/usr/local/lib64/:/project/.pixi/envs/pip-cpp-linux/lib:$LD_LIBRARY_PATH delocate-wheel --ignore-missing-dependencies --sanitize-rpaths
+            delocate-wheel --ignore-missing-dependencies --sanitize-rpaths
             -e libmpi -e libpmpi
             -e libarrow -e libarrow_acero -e libarrow_dataset -e libarrow_flight
             -e libarrow_python -e libarrow_python_flight -e libarrow_python_parquet_encryption
@@ -160,6 +144,11 @@ jobs:
             --exclude libmpi.so.12 --exclude libmpi.so.40 
             --exclude libarrow.so.1801 --exclude libarrow_acero.so.1801 --exclude libarrow_dataset.so.1801
             --exclude libarrow_python.so --exclude libparquet.so.1801
+            --exclude libaws-cpp-sdk-core.so --exclude libaws-crt-cpp.so --exclude libaws-c-mqtt.so.1.0.0
+            --exclude libaws-c-event-stream.so.1.0.0 --exclude libaws-c-s3.so.0unstable --exclude libaws-c-auth.so.1.0.0
+            --exclude libaws-c-http.so.1.0.0 --exclude libaws-c-io.so.1.0.0 --exclude libaws-c-cal.so.1.0.0
+            --exclude libaws-checksums.so.1.0.0 --exclude libaws-c-compression.so.1.0.0
+            --exclude libaws-c-sdkutils.so.1.0.0 --exclude libaws-c-common.so.1
             --plat manylinux_2_28_$(uname -m) {wheel} -w {dest_dir} &&
             python buildscripts/bodo/pip/manylinux/patch_libs_for_pip.py -p {dest_dir}
 
