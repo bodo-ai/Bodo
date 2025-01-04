@@ -334,8 +334,8 @@ Reduction variable s has multiple conflicting reduction operators.
 There are multiple methods for integration with APIs that Bodo does not
 support natively:
 
-1. Switch to [python Object Mode][objmode] inside jit functions
-2. Pass data in and out of jit functions
+1. Switch to [regular Python inside JIT functions with @bodo.wrap_python][objmode]
+2. Pass data in and out of JIT functions
 
 ### Passing Distributed Data
 
@@ -411,14 +411,18 @@ By default, all non-JIT code will only be run on a single rank. Within a JIT
 function, if there's some code you want to only run from a single rank, you can
 do so as follows:
 ```py
+@bodo.wrap_python(bodo.none)
+def rm_dir():
+    # Remove directory
+    import os, shutil
+    if os.path.exists("data/data.pq"):
+        shutil.rmtree("data/data.pq")
+
+
 @bodo.jit
 def f():
     if bodo.get_rank() == 0:
-        with bodo.objmode():
-            # Remove directory
-            import os, shutil
-            if os.path.exists("data/data.pq"):
-                shutil.rmtree("data/data.pq")
+        rm_dir()
 
     # To synchronize all ranks before proceeding
     bodo.barrier()
