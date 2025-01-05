@@ -158,7 +158,7 @@ nav:
           - Customer Managed VPC: guides/using_bodo_platform/customer_managed_vpc.md
           - AWS PrivateLink: guides/using_bodo_platform/aws_private_link.md
           - Troubleshooting: guides/using_bodo_platform/troubleshooting.md
-      - Using Regular Python inside Bodo (Object Mode): objmode.md
+      - Using Regular Python inside JIT with @bodo.wrap_python: objmode.md
       - Understanding Parallelism with Bodo:
           - Basics of Bodo Parallelism: bodo_parallelism/bodo_parallelism_basics.md
           - Advanced Parallelism Topics: bodo_parallelism/advanced.md

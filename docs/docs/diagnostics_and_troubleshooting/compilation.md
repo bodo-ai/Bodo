@@ -276,8 +276,9 @@ issues try the following:
 
     a.  Move the code causing issues to regular Python and pass
         necessary data to JIT functions.
-    b.  Use Object Mode to perform some computation within JIT
-        functions in regular Python if necessary (see [Object Mode][objmode]).
+
+    b.  Use `@bodo.wrap_python` to perform some computation within JIT
+        functions in regular Python if necessary (see [@bodo.wrap_python][objmode]).
 
 4.  Refactor your code to make it type stable (see
     [type stability][typestability]). For example:
