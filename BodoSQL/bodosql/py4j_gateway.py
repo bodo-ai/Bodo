@@ -133,9 +133,9 @@ def build_java_hash_map(d: dict[Any, Any]):
     if bodo.get_rank() == 0:
         from bodosql.imported_java_classes import JavaEntryPoint
 
-        output_map = JavaEntryPoint.buildHashMap()
+        output_map = JavaEntryPoint.buildMap()
         for key, value in d.items():
-            JavaEntryPoint.putToHashMap(output_map, key, value)
+            JavaEntryPoint.putIntoMap(output_map, key, value)
         return output_map
 
 
