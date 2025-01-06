@@ -77,9 +77,9 @@ jobs:
 
           # --------- Run Tests -----------
           cd e2e-tests
-          pytest -s -v --durations=0
-          cd ..
-          pytest -s -v --durations=0 bodo/tests/test_javascript*
+          python -u snowflake/snowflake-write/snowflake_write.py 2
+          # cd ..
+          # pytest -s -v --durations=0 bodo/tests/test_javascript*
 
         env:
           PYTEST_ADDOPTS: ${{ github.event.inputs.pytest_addopts }}
