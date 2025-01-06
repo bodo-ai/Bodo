@@ -299,11 +299,11 @@ def create_java_dynamic_parameter_type_list(dynamic_params_list: list[Any]):
     Returns:
         JavaObject: A java array to pass to code generation.
     """
-    types = [
-        val if isinstance(val, types.Type) else bodo.typeof(val)
-        for val in dynamic_params_list
-    ]
-    return build_java_array_list(types)
+    types_list = []
+    for val in dynamic_params_list:
+        typ = val if isinstance(val, types.Type) else bodo.typeof(val)
+        types_list.append(get_sql_param_column_type_info(typ))
+    return build_java_array_list(types_list)
 
 
 def create_java_named_parameter_type_map(named_params: dict[str, Any]):
