@@ -23,8 +23,9 @@ from bodosql.bodosql_types.database_catalog import DatabaseCatalog
 from bodosql.bodosql_types.table_path import TablePath, TablePathType
 from bodosql.imported_java_classes import (
     JavaEntryPoint,
+    build_java_array_list,
+    build_java_hash_map,
 )
-from bodosql.py4j_gateway import build_java_array_list, build_java_hash_map
 from bodosql.utils import BodoSQLWarning, error_to_string
 
 # Prefix to add to table argument names when passed to JIT to avoid variable name conflicts

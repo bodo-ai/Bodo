@@ -3,6 +3,8 @@ Common location for importing all java classes from Py4j. This is used so they
 can be imported in multiple locations.
 """
 
+from typing import Any
+
 import bodo
 from bodo.libs.distributed_api import bcast_scalar
 from bodo.utils.typing import BodoError
@@ -36,3 +38,27 @@ saw_error = bcast_scalar(saw_error)
 msg = bcast_scalar(msg)
 if saw_error:
     raise BodoError(msg)
+
+
+def build_java_array_list(elems: list[Any]):
+    if bodo.get_rank() == 0:
+        output_list = JavaEntryPoint.buildArrayList()
+        for elem in elems:
+            JavaEntryPoint.appendToArrayList(output_list, elem)
+        return output_list
+
+
+def build_java_hash_map(d: dict[Any, Any]):
+    if bodo.get_rank() == 0:
+        output_map = JavaEntryPoint.buildMap()
+        for key, value in d.items():
+            JavaEntryPoint.mapPut(output_map, key, value)
+        return output_map
+
+
+def build_java_properties(d: dict[str, str]):
+    if bodo.get_rank() == 0:
+        output_map = JavaEntryPoint.buildProperties()
+        for key, value in d.items():
+            JavaEntryPoint.setProperty(output_map, key, value)
+        return output_map
