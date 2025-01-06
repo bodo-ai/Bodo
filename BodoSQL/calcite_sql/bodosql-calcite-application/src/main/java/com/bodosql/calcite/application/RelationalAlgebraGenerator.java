@@ -40,6 +40,7 @@ import org.apache.calcite.sql.type.BodoTZInfo;
 import org.apache.calcite.tools.RelConversionException;
 import org.apache.calcite.tools.ValidationException;
 import org.apache.commons.lang3.tuple.Pair;
+import org.checkerframework.checker.nullness.qual.NonNull;
 import org.checkerframework.checker.nullness.qual.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -410,10 +411,8 @@ public class RelationalAlgebraGenerator {
   /**
    * Calls "RESET" on the current planner and clears any cached state need to compile a single query
    * (but not configuration).
-   *
-   * <p>Note: This is exposed to Python.
    */
-  public void resetPlanner() {
+  void reset() {
     this.planner.close();
     this.parseNode = null;
   }
@@ -424,7 +423,7 @@ public class RelationalAlgebraGenerator {
    * @param sql Query to parse Sets parseNode to the generated SQLNode
    * @throws SqlSyntaxException if the SQL syntax is incorrect.
    */
-  public void parseQuery(String sql) throws SqlSyntaxException {
+  void parseQuery(String sql) throws SqlSyntaxException {
     try {
       this.parseNode = planner.parse(sql);
     } catch (SqlParseException e) {
@@ -632,12 +631,19 @@ public class RelationalAlgebraGenerator {
     }
   }
 
-  // ~~~~~~~~~~~~~PYTHON EXPOSED APIS~~~~~~~~~~~~~~
-  public String getOptimizedPlanString(String sql, Boolean includeCosts) throws Exception {
-    return getOptimizedPlanString(sql, includeCosts, List.of(), Map.of());
-  }
+  // ~~~~~~~~~~~~~Called by the Python Entry Points~~~~~~~~~~~~~~
 
-  public String getOptimizedPlanString(
+  /**
+   * Get the optimized plan string for the given SQL query.
+   *
+   * @param sql The SQL query to process.
+   * @param includeCosts Should the costs be included in the plan string.
+   * @param dynamicParamTypes The dynamic parameter types.
+   * @param namedParamTypeMap The named parameter types.
+   * @return The optimized plan string for the given SQL query.
+   * @throws Exception If an error occurs while processing the SQL query.
+   */
+  String getOptimizedPlanString(
       String sql,
       Boolean includeCosts,
       List<ColumnDataTypeInfo> dynamicParamTypes,
@@ -660,12 +666,17 @@ public class RelationalAlgebraGenerator {
     }
   }
 
-  public PandasCodeSqlPlanPair getPandasAndPlanString(String sql, boolean includeCosts)
-      throws Exception {
-    return getPandasAndPlanString(sql, includeCosts, List.of(), Map.of());
-  }
-
-  public PandasCodeSqlPlanPair getPandasAndPlanString(
+  /**
+   * Get the Pandas code and the optimized plan string for the given SQL query.
+   *
+   * @param sql The SQL query to process.
+   * @param includeCosts Should the costs be included in the plan string.
+   * @param dynamicParamTypes The dynamic parameter types.
+   * @param namedParamTypeMap The named parameter types.
+   * @return The Pandas code and the optimized plan string for the given SQL query.
+   * @throws Exception If an error occurs while processing the SQL query.
+   */
+  PandasCodeSqlPlanPair getPandasAndPlanString(
       String sql,
       boolean includeCosts,
       List<ColumnDataTypeInfo> dynamicParamTypes,
@@ -694,14 +705,19 @@ public class RelationalAlgebraGenerator {
     }
   }
 
-  public String getPandasString(String sql) throws Exception {
-    return getPandasString(sql, List.of(), Map.of());
-  }
-
-  public String getPandasString(
-      String sql,
-      List<ColumnDataTypeInfo> dynamicParamTypes,
-      Map<String, ColumnDataTypeInfo> namedParamTypeMap)
+  /**
+   * Return the Python code generated for the given SQL query.
+   *
+   * @param sql The SQL query to process.
+   * @param dynamicParamTypes The dynamic parameter types.
+   * @param namedParamTypeMap The named parameter types.
+   * @return The Python code generated for the given SQL query.
+   * @throws Exception If an error occurs while processing the SQL query.
+   */
+  String getPandasString(
+      @NonNull String sql,
+      @NonNull List<ColumnDataTypeInfo> dynamicParamTypes,
+      @NonNull Map<String, ColumnDataTypeInfo> namedParamTypeMap)
       throws Exception {
     try {
       SqlNode validatedSqlNode = validateQuery(sql, dynamicParamTypes, namedParamTypeMap);
@@ -730,7 +746,7 @@ public class RelationalAlgebraGenerator {
    * @param sql The SQL query to parse.
    * @return A string representing the type of write.
    */
-  public String getWriteType(String sql) throws Exception {
+  String getWriteType(String sql) throws Exception {
     // Parse the query if we haven't already
     if (this.parseNode == null) {
       parseQuery(sql);
@@ -745,7 +761,14 @@ public class RelationalAlgebraGenerator {
     }
   }
 
-  public DDLExecutionResult executeDDL(String sql) throws Exception {
+  /**
+   * Execute the given DDL statement in an interpreted manner. This assumes/requires that sql is a
+   * DDL statement, which should have already been checked.
+   *
+   * @param sql The DDL statement to execute
+   * @return The result of the DDL execution.
+   */
+  DDLExecutionResult executeDDL(String sql) throws Exception {
     try {
       // DDL doesn't support dynamic or named parameters at this time.
       SqlNode validatedSqlNode = validateQuery(sql, List.of(), Map.of());
@@ -767,7 +790,7 @@ public class RelationalAlgebraGenerator {
    *
    * @return Is the query DDL?
    */
-  public boolean isDDLProcessedQuery() {
+  boolean isDDLProcessedQuery() {
     if (this.parseNode == null) {
       throw new RuntimeException("No SQL query has been parsed yet. Cannot determine query type");
     }
