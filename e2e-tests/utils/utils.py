@@ -70,6 +70,9 @@ def drop_sf_table(table_name, sf_conn):
     connection = engine.connect()
     result = connection.execute(text(f"drop table {table_name}"))
     result = result.fetchall()
+    connection.close()
+    engine.dispose()
+
     return result
 
 
