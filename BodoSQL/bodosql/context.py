@@ -24,7 +24,6 @@ from bodosql.bodosql_types.table_path import TablePath, TablePathType
 from bodosql.imported_java_classes import (
     ArrayListClass,
     ColumnClass,
-    ColumnDataEnum,
     ColumnDataTypeClass,
     HashMapClass,
     JavaEntryPoint,
@@ -153,10 +152,14 @@ def construct_tz_aware_array_type(typ, nullable):
     precision = 9
     if typ.tz is None:
         # TZ = None is a timezone naive timestamp
-        type_enum = ColumnDataEnum.fromTypeId(SqlTypeEnum.Timestamp_Ntz.value)
+        type_enum = JavaEntryPoint.buildBodoSQLColumnDataTypeFromTypeId(
+            SqlTypeEnum.Timestamp_Ntz.value
+        )
         return ColumnDataTypeClass(type_enum, nullable, precision)
     else:
-        type_enum = ColumnDataEnum.fromTypeId(SqlTypeEnum.Timestamp_Ltz.value)
+        type_enum = JavaEntryPoint.buildBodoSQLColumnDataTypeFromTypeId(
+            SqlTypeEnum.Timestamp_Ltz.value
+        )
         return ColumnDataTypeClass(type_enum, nullable, precision)
 
 
@@ -170,7 +173,9 @@ def construct_time_array_type(typ: bodo.TimeArrayType | bodo.TimeType, nullable:
     Returns:
         JavaObject: The Java Object for the BodoSQL column type data info.
     """
-    type_enum = ColumnDataEnum.fromTypeId(SqlTypeEnum.Time.value)
+    type_enum = JavaEntryPoint.buildBodoSQLColumnDataTypeFromTypeId(
+        SqlTypeEnum.Time.value
+    )
     return ColumnDataTypeClass(type_enum, nullable, typ.precision)
 
 
@@ -186,7 +191,9 @@ def construct_array_item_array_type(arr_type):
         JavaObject: The Java Object for the BodoSQL column type data info.
     """
     child = get_sql_data_type(arr_type.dtype)
-    type_enum = ColumnDataEnum.fromTypeId(SqlTypeEnum.Array.value)
+    type_enum = JavaEntryPoint.buildBodoSQLColumnDataTypeFromTypeId(
+        SqlTypeEnum.Array.value
+    )
     return ColumnDataTypeClass(type_enum, True, child)
 
 
@@ -204,17 +211,25 @@ def construct_json_array_type(arr_type):
     if isinstance(arr_type, bodo.StructArrayType):
         # TODO: FIXME. We don't support full structs of types yet.
         # As a placeholder we will just match Snowflake.
-        key_enum = ColumnDataEnum.fromTypeId(SqlTypeEnum.String.value)
+        key_enum = JavaEntryPoint.buildBodoSQLColumnDataTypeFromTypeId(
+            SqlTypeEnum.String.value
+        )
         key = ColumnDataTypeClass(key_enum, True)
-        value_enum = ColumnDataEnum.fromTypeId(SqlTypeEnum.Variant.value)
+        value_enum = JavaEntryPoint.buildBodoSQLColumnDataTypeFromTypeId(
+            SqlTypeEnum.Variant.value
+        )
         value = ColumnDataTypeClass(value_enum, True)
-        type_enum = ColumnDataEnum.fromTypeId(SqlTypeEnum.Json_Object.value)
+        type_enum = JavaEntryPoint.buildBodoSQLColumnDataTypeFromTypeId(
+            SqlTypeEnum.Json_Object.value
+        )
         return ColumnDataTypeClass(type_enum, True, key, value)
     else:
         # TODO: Add map scalar support
         key = get_sql_data_type(arr_type.key_arr_type)
         value = get_sql_data_type(arr_type.value_arr_type)
-        type_enum = ColumnDataEnum.fromTypeId(SqlTypeEnum.Json_Object.value)
+        type_enum = JavaEntryPoint.buildBodoSQLColumnDataTypeFromTypeId(
+            SqlTypeEnum.Json_Object.value
+        )
         return ColumnDataTypeClass(type_enum, True, key, value)
 
 
@@ -237,13 +252,17 @@ def get_sql_data_type(arr_type):
         # Timezone-aware Timestamp columns have their own special handling.
         return construct_tz_aware_array_type(arr_type, nullable)
     elif arr_type == bodo.timestamptz_array_type:
-        type_enum = ColumnDataEnum.fromTypeId(SqlTypeEnum.Timestamp_Tz.value)
+        type_enum = JavaEntryPoint.buildBodoSQLColumnDataTypeFromTypeId(
+            SqlTypeEnum.Timestamp_Tz.value
+        )
         return ColumnDataTypeClass(type_enum, nullable)
     elif isinstance(arr_type, bodo.TimeArrayType):
         # Time array types have their own special handling for precision
         return construct_time_array_type(arr_type, nullable)
     elif isinstance(arr_type, bodo.DecimalArrayType):
-        type_enum = ColumnDataEnum.fromTypeId(SqlTypeEnum.Decimal.value)
+        type_enum = JavaEntryPoint.buildBodoSQLColumnDataTypeFromTypeId(
+            SqlTypeEnum.Decimal.value
+        )
         return ColumnDataTypeClass(
             type_enum, nullable, arr_type.precision, arr_type.scale
         )
@@ -252,12 +271,14 @@ def get_sql_data_type(arr_type):
     elif isinstance(arr_type, (bodo.StructArrayType, bodo.MapArrayType)):
         return construct_json_array_type(arr_type)
     elif arr_type.dtype in _numba_to_sql_column_type_map:
-        type_enum = ColumnDataEnum.fromTypeId(
+        type_enum = JavaEntryPoint.buildBodoSQLColumnDataTypeFromTypeId(
             _numba_to_sql_column_type_map[arr_type.dtype]
         )
         return ColumnDataTypeClass(type_enum, nullable)
     elif isinstance(arr_type.dtype, bodo.PDCategoricalDtype):
-        type_enum = ColumnDataEnum.fromTypeId(SqlTypeEnum.Categorical.value)
+        type_enum = JavaEntryPoint.buildBodoSQLColumnDataTypeFromTypeId(
+            SqlTypeEnum.Categorical.value
+        )
         child = get_sql_data_type(dtype_to_array_type(arr_type.dtype.elem_type, True))
         return ColumnDataTypeClass(type_enum, nullable, child)
     else:
@@ -265,7 +286,9 @@ def get_sql_data_type(arr_type):
         # error but we generate a dummy type because we may be able to support it
         # if its optimized out.
         warnings.warn(BodoSQLWarning(warning_msg))
-        type_enum = ColumnDataEnum.fromTypeId(SqlTypeEnum.Unsupported.value)
+        type_enum = JavaEntryPoint.buildBodoSQLColumnDataTypeFromTypeId(
+            SqlTypeEnum.Unsupported.value
+        )
         return ColumnDataTypeClass(type_enum, nullable)
 
 
@@ -329,12 +352,14 @@ def get_sql_param_column_type_info(param_type: types.Type):
         return construct_time_array_type(param_type, nullable)
     elif isinstance(unliteral_type, bodo.Decimal128Type):
         # Decimal types need handling for precision and scale.
-        type_enum = ColumnDataEnum.fromTypeId(SqlTypeEnum.Decimal.value)
+        type_enum = JavaEntryPoint.buildBodoSQLColumnDataTypeFromTypeId(
+            SqlTypeEnum.Decimal.value
+        )
         return ColumnDataTypeClass(
             type_enum, nullable, unliteral_type.precision, unliteral_type.scale
         )
     elif unliteral_type in _numba_to_sql_param_type_map:
-        type_enum = ColumnDataEnum.fromTypeId(
+        type_enum = JavaEntryPoint.buildBodoSQLColumnDataTypeFromTypeId(
             _numba_to_sql_param_type_map[unliteral_type]
         )
         return ColumnDataTypeClass(type_enum, nullable)
