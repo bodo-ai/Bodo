@@ -50,6 +50,39 @@ class PlannerImpl(
 
     companion object {
         /**
+         * Define the parser configuration to use within BodoSQL. The "target"
+         * dialect (Spark or Snowflake) has different case sensitivity rules
+         * by default, so we modify the parser based on the "sqlStyle" to
+         * allow translating code more easily.
+         * @param sqlStyle The base dialect for the majority of the SQL code.
+         *     This should be one of "SNOWFLAKE" or "SPARK".
+         * @return The parser configuration to use for the given SQL style.
+         */
+        private fun getParserConfig(sqlStyle: String): SqlParser.Config {
+            val baseConfig =
+                SqlParser.Config.DEFAULT
+                    .withConformance(SqlConformanceEnum.LENIENT)
+                    .withParserFactory(SqlBodoParserImpl.FACTORY)
+            return when (sqlStyle) {
+                "SNOWFLAKE" -> {
+                    baseConfig
+                        .withCaseSensitive(true)
+                        .withQuotedCasing(Casing.UNCHANGED)
+                        .withUnquotedCasing(Casing.TO_UPPER)
+                }
+                "SPARK" -> {
+                    baseConfig
+                        .withCaseSensitive(false)
+                        .withQuotedCasing(Casing.UNCHANGED)
+                        .withUnquotedCasing(Casing.UNCHANGED)
+                }
+                else -> {
+                    throw Exception("Unrecognized bodo sql style: $sqlStyle")
+                }
+            }
+        }
+
+        /**
          * @return The table with the hints that BodoSQL supports.
          */
         private fun getHintStrategyTable(): HintStrategyTable {
@@ -62,25 +95,7 @@ class PlannerImpl(
         private fun frameworkConfig(config: Config): FrameworkConfig {
             // Set up the parser config based on which case sensitivity
             // protocol was selected
-            var parserConfig =
-                SqlParser.Config.DEFAULT
-                    .withConformance(SqlConformanceEnum.LENIENT)
-                    .withParserFactory(SqlBodoParserImpl.FACTORY)
-            parserConfig =
-                when (config.sqlStyle) {
-                    "SNOWFLAKE" ->
-                        parserConfig
-                            .withCaseSensitive(true)
-                            .withQuotedCasing(Casing.UNCHANGED)
-                            .withUnquotedCasing(Casing.TO_UPPER)
-                    "SPARK" ->
-                        parserConfig
-                            .withCaseSensitive(false)
-                            .withQuotedCasing(Casing.UNCHANGED)
-                            .withUnquotedCasing(Casing.UNCHANGED)
-                    else ->
-                        throw Exception("Unrecognized bodo sql style: " + config.sqlStyle)
-                }
+            val parserConfig = getParserConfig(config.sqlStyle)
             var validator =
                 SqlValidator.Config.DEFAULT
                     .withCallRewrite(false)
