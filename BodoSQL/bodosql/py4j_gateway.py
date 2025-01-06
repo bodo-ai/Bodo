@@ -135,7 +135,7 @@ def build_java_hash_map(d: dict[Any, Any]):
 
         output_map = JavaEntryPoint.buildMap()
         for key, value in d.items():
-            JavaEntryPoint.putIntoMap(output_map, key, value)
+            JavaEntryPoint.mapPut(output_map, key, value)
         return output_map
 
 
