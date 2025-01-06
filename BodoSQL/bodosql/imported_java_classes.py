@@ -19,16 +19,13 @@ if bodo.get_rank() == 0:
     try:
         ArrayListClass = gateway.jvm.java.util.ArrayList
         HashMapClass = gateway.jvm.java.util.HashMap
-        ColumnDataEnum = (
-            gateway.jvm.com.bodosql.calcite.table.BodoSQLColumn.BodoSQLColumnDataType
+        CommonsExceptionUtilsClass = (
+            gateway.jvm.org.apache.commons.lang3.exception.ExceptionUtils
         )
         ColumnClass = gateway.jvm.com.bodosql.calcite.table.BodoSQLColumnImpl
         ColumnDataTypeClass = gateway.jvm.com.bodosql.calcite.table.ColumnDataTypeInfo
         LocalTableClass = gateway.jvm.com.bodosql.calcite.table.LocalTable
         LocalSchemaClass = gateway.jvm.com.bodosql.calcite.schema.LocalSchema
-        PandasCodeSqlPlanPairClass = (
-            gateway.jvm.com.bodosql.calcite.schema.PandasCodeSqlPlanPair
-        )
         RelationalAlgebraGeneratorClass = (
             gateway.jvm.com.bodosql.calcite.application.RelationalAlgebraGenerator
         )
@@ -36,18 +33,17 @@ if bodo.get_rank() == 0:
         SnowflakeCatalogClass = gateway.jvm.com.bodosql.calcite.catalog.SnowflakeCatalog
         # Note: Although this isn't used it must be imported.
         SnowflakeDriver = gateway.jvm.net.snowflake.client.jdbc.SnowflakeDriver
-        CommonsExceptionUtilsClass = (
-            gateway.jvm.org.apache.commons.lang3.exception.ExceptionUtils
-        )
-        PythonLoggersClass = gateway.jvm.com.bodosql.calcite.application.PythonLoggers
         FileSystemCatalogClass = (
             gateway.jvm.com.bodosql.calcite.catalog.FileSystemCatalog
         )
-        WriteTargetEnum = gateway.jvm.com.bodosql.calcite.application.write.WriteTarget.WriteTargetEnum
         TabularCatalogClass = gateway.jvm.com.bodosql.calcite.catalog.TabularCatalog
         BodoGlueCatalogClass = gateway.jvm.com.bodosql.calcite.catalog.BodoGlueCatalog
+        # Note: We call this JavaEntryPoint so its clear the Python code enters java
+        # and the class is named PythonEntryPoint to make it clear the Java code
+        # is being entered from Python.
+        JavaEntryPoint = gateway.jvm.com.bodosql.calcite.application.PythonEntryPoint
         # Initialize logging. Must be done after importing all classes to ensure
-        # PythonLoggersClass is available.
+        # JavaEntryPoint is available.
         configure_java_logging(bodo.user_logging.get_verbose_level())
     except Exception as e:
         saw_error = True
@@ -55,22 +51,19 @@ if bodo.get_rank() == 0:
 else:
     ArrayListClass = None
     HashMapClass = None
-    ColumnDataEnum = None
+    CommonsExceptionUtilsClass = None
     ColumnClass = None
     ColumnDataTypeClass = None
     LocalTableClass = None
     LocalSchemaClass = None
-    PandasCodeSqlPlanPairClass = None
     RelationalAlgebraGeneratorClass = None
     PropertiesClass = None
     SnowflakeCatalogClass = None
     SnowflakeDriver = None
-    CommonsExceptionUtilsClass = None
-    PythonLoggersClass = None
     FileSystemCatalogClass = None
-    WriteTargetEnum = None
     TabularCatalogClass = None
     BodoGlueCatalogClass = None
+    JavaEntryPoint = None
 
 saw_error = bcast_scalar(saw_error)
 msg = bcast_scalar(msg)
