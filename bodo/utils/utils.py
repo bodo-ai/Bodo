@@ -1489,7 +1489,7 @@ def has_supported_h5py() -> bool:
     try:
         import h5py  # noqa
 
-        from bodo.io import _hdf5  # noqa
+        from bodo.ext import _hdf5  # noqa
 
         # TODO: make sure h5py/hdf5 supports parallel
     except ImportError:

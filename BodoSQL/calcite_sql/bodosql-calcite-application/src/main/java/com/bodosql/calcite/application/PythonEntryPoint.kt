@@ -249,7 +249,7 @@ class PythonEntryPoint {
          * @param value The value to put.
          */
         @JvmStatic
-        fun putIntoMap(
+        fun mapPut(
             map: HashMap<Any, Any>,
             key: Any,
             value: Any,
