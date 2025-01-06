@@ -34,6 +34,8 @@ jobs:
           role-to-assume: arn:aws:iam::427443013497:role/BodoEngineNightlyRole
           role-session-name: BodoEngineNightlySession
           role-skip-session-tagging: true
+          # ~ 2 hours to run all tests
+          role-duration-seconds: 7200
 
       - name: Load and Save Hadoop to Cache
         uses: actions/cache@v4
@@ -52,12 +54,6 @@ jobs:
           pixi run build
           # Azure SAS Provider Install
           ./buildscripts/install_azurefs_sas_token_provider.sh
-
-      # - name: Disable AWS Credentials
-      #   uses: aws-actions/configure-aws-credentials@v4
-      #   with:
-      #     unset-current-credentials: true
-      #     aws-region: us-east-2
 
       - name: Run Tests
         run: |
