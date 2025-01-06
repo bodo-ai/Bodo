@@ -34,8 +34,8 @@ jobs:
           role-to-assume: arn:aws:iam::427443013497:role/BodoEngineNightlyRole
           role-session-name: BodoEngineNightlySession
           role-skip-session-tagging: true
-          # ~ 3 hours to run all tests
-          role-duration-seconds: 10800
+          # It takes around 80 minutes to run everything.
+          role-duration-seconds: 7200
 
       - name: Load and Save Hadoop to Cache
         uses: actions/cache@v4
