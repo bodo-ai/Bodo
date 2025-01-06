@@ -58,6 +58,7 @@ class PlannerImpl(
          *     This should be one of "SNOWFLAKE" or "SPARK".
          * @return The parser configuration to use for the given SQL style.
          */
+        @JvmStatic
         private fun getParserConfig(sqlStyle: String): SqlParser.Config {
             val baseConfig =
                 SqlParser.Config.DEFAULT
@@ -82,6 +83,23 @@ class PlannerImpl(
             }
         }
 
+        @JvmStatic
+        private fun getValidatorConfig(sqlStyle: String): SqlValidator.Config {
+            val baseConfig =
+                SqlValidator.Config.DEFAULT
+                    .withCallRewrite(false)
+                    .withTypeCoercionFactory(BodoTypeCoercionImpl.FACTORY)
+                    .withTypeCoercionRules(BodoSqlTypeCoercionRule.instance())
+            return when (sqlStyle) {
+                // Ensure order by defaults match. The only differences
+                // are in the default behavior for nulls first/last.
+                "SNOWFLAKE" -> baseConfig.withDefaultNullCollation(NullCollation.HIGH)
+                "SPARK" -> baseConfig.withDefaultNullCollation(NullCollation.LOW)
+                else ->
+                    throw Exception("Unrecognized bodo sql style: $sqlStyle")
+            }
+        }
+
         /**
          * @return The table with the hints that BodoSQL supports.
          */
@@ -96,24 +114,7 @@ class PlannerImpl(
             // Set up the parser config based on which case sensitivity
             // protocol was selected
             val parserConfig = getParserConfig(config.sqlStyle)
-            var validator =
-                SqlValidator.Config.DEFAULT
-                    .withCallRewrite(false)
-                    .withTypeCoercionFactory(BodoTypeCoercionImpl.FACTORY)
-                    .withTypeCoercionRules(BodoSqlTypeCoercionRule.instance())
-            validator =
-                when (config.sqlStyle) {
-                    // Ensure order by defaults match. The only differences
-                    // are in the default behavior for nulls first/last.
-                    "SNOWFLAKE" ->
-                        validator
-                            .withDefaultNullCollation(NullCollation.HIGH)
-                    "SPARK" ->
-                        validator
-                            .withDefaultNullCollation(NullCollation.LOW)
-                    else ->
-                        throw Exception("Unrecognized bodo sql style: " + config.sqlStyle)
-                }
+            val validatorConfig = getValidatorConfig()
             return Frameworks
                 .newConfigBuilder()
                 .operatorTable(BodoOperatorTable)
@@ -128,7 +129,7 @@ class PlannerImpl(
                     BodoConvertletTable(
                         StandardConvertletTableConfig(false, false),
                     ),
-                ).sqlValidatorConfig(validator)
+                ).sqlValidatorConfig(validatorConfig)
                 .costFactory(CostFactory())
                 .traitDefs(config.plannerType.traitDefs())
                 .programs(config.plannerType.programs().toList())
