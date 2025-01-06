@@ -22,15 +22,11 @@ from bodo.utils.typing import BodoError, dtype_to_array_type
 from bodosql.bodosql_types.database_catalog import DatabaseCatalog
 from bodosql.bodosql_types.table_path import TablePath, TablePathType
 from bodosql.imported_java_classes import (
-    ArrayListClass,
-    ColumnClass,
     ColumnDataTypeClass,
-    HashMapClass,
     JavaEntryPoint,
-    LocalSchemaClass,
-    LocalTableClass,
     RelationalAlgebraGeneratorClass,
 )
+from bodosql.py4j_gateway import build_java_array_list, build_java_hash_map
 from bodosql.utils import BodoSQLWarning, error_to_string
 
 # Prefix to add to table argument names when passed to JIT to avoid variable name conflicts
@@ -235,7 +231,7 @@ def construct_json_array_type(arr_type):
 
 def get_sql_column_type(arr_type, col_name):
     data_type = get_sql_data_type(arr_type)
-    return ColumnClass(col_name, data_type)
+    return JavaEntryPoint.buildBodoSQLColumnImpl(col_name, data_type)
 
 
 def get_sql_data_type(arr_type):
@@ -303,11 +299,11 @@ def create_java_dynamic_parameter_type_list(dynamic_params_list: list[Any]):
     Returns:
         JavaObject: A java array to pass to code generation.
     """
-    output_list = ArrayListClass()
+    types_list = []
     for val in dynamic_params_list:
         typ = val if isinstance(val, types.Type) else bodo.typeof(val)
-        output_list.add(get_sql_param_column_type_info(typ))
-    return output_list
+        types_list.append(get_sql_param_column_type_info(typ))
+    return build_java_array_list(types_list)
 
 
 def create_java_named_parameter_type_map(named_params: dict[str, Any]):
@@ -321,11 +317,13 @@ def create_java_named_parameter_type_map(named_params: dict[str, Any]):
     Returns:
         JavaObject: A java map to pass to code generation.
     """
-    output_map = HashMapClass()
-    for key, val in named_params.items():
-        typ = val if isinstance(val, types.Type) else bodo.typeof(val)
-        output_map.put(key, get_sql_param_column_type_info(typ))
-    return output_map
+    d = {
+        key: get_sql_param_column_type_info(
+            val if isinstance(val, types.Type) else bodo.typeof(val)
+        )
+        for key, val in named_params.items()
+    }
+    return build_java_hash_map(d)
 
 
 def get_sql_param_column_type_info(param_type: types.Type):
@@ -502,7 +500,7 @@ def compute_df_types(df_list, is_bodo_type):
 
 def add_table_type(
     table_name: str,
-    schema: LocalSchemaClass,
+    schema,
     df_type: bodo.DataFrameType,
     estimated_row_count: int | None,
     estimated_ndvs: dict[str, int] | None,
@@ -516,7 +514,7 @@ def add_table_type(
 
     Args:
         table_name (str): The name of the table.
-        schema (LocalSchemaClass): The schema to update.
+        schema (Java LocalSchema): The schema to update.
         df_type (bodo.DataFrameType): The Bodo DataFrame type.
         estimated_row_count (Optional[int]): The expected number of rows in the table for the
             Volcano Planner. None if no estimate is provided.
@@ -532,10 +530,11 @@ def add_table_type(
             queries.
     """
     assert bodo.get_rank() == 0, "add_table_type should only be called on rank 0."
-    col_arr = ArrayListClass()
-    for i, cname in enumerate(df_type.columns):
-        column = get_sql_column_type(df_type.data[i], cname)
-        col_arr.add(column)
+    sql_types = [
+        get_sql_column_type(df_type.data[i], cname)
+        for i, cname in enumerate(df_type.columns)
+    ]
+    col_arr = build_java_array_list(sql_types)
 
     # To support writing to SQL Databases we register is_writeable
     # for SQL databases.
@@ -575,12 +574,10 @@ def add_table_type(
     read_code = _generate_table_read(table_name, bodo_type, table_num, from_jit)
 
     # Convert the Python dict to a Java HashMap:
-    estimated_ndvs_java_map = HashMapClass()
-    if estimated_ndvs:
-        for k, v in estimated_ndvs.items():
-            estimated_ndvs_java_map.put(k, v)
+    estimated_ndvs = {} if estimated_ndvs is None else estimated_ndvs
+    estimated_ndvs_java_map = build_java_hash_map(estimated_ndvs)
 
-    table = LocalTableClass(
+    table = JavaEntryPoint.buildLocalTable(
         table_name,
         schema.getFullPath(),
         col_arr,
@@ -1487,18 +1484,18 @@ def initialize_schema():
     """Create the BodoSQL Schema used to store all local DataFrames.
 
     Returns:
-        LocalSchemaClass: Java type for the BodoSQL schema.
+        Java LocalSchema: Java type for the BodoSQL schema.
     """
     # TODO(ehsan): create and store generator during bodo_sql_context initialization
     if bodo.get_rank() == 0:
-        schema = LocalSchemaClass("__BODOLOCAL__")
+        schema = JavaEntryPoint.buildLocalSchema("__BODOLOCAL__")
     else:
         schema = None
     return schema
 
 
 def update_schema(
-    schema: LocalSchemaClass,
+    schema,
     table_names: list[str],
     df_types: list[bodo.DataFrameType],
     estimated_row_counts: list[int | None],
@@ -1510,7 +1507,7 @@ def update_schema(
     """Update a local schema with local tables.
 
     Args:
-        schema (LocalSchemaClass): The schema to update.
+        schema (Java LocalSchema): The schema to update.
         table_names (List[str]): List of tables to add to the schema.
         df_types (List[bodo.DataFrameType]): List of Bodo DataFrame types for each table.
         estimated_row_counts (List[Optional[int]]): The expected number of rows in each input
