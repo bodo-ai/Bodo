@@ -17,6 +17,7 @@
 package org.apache.calcite.sql;
 
 import com.bodosql.calcite.application.BodoSQLTypeSystems.BodoSQLRelDataTypeSystem;
+import com.bodosql.calcite.sql.parser.SqlBodoParserUtil;
 import org.apache.calcite.avatica.util.TimeUnit;
 import org.apache.calcite.avatica.util.TimeUnitRange;
 import org.apache.calcite.rel.metadata.NullSentinel;
@@ -408,7 +409,7 @@ public class SqlLiteral extends SqlNode {
         return clazz.cast(getValueAs(BigDecimal.class, typeSystem).longValue());
       } else if (clazz == BigDecimal.class) {
         // Bodo Change: Include typeSystem and compute with nanoseconds
-        long timeInNanos = valTime.getSign() * SqlParserUtil.intervalToNanos(valTime, typeSystem);
+        long timeInNanos = valTime.getSign() * SqlBodoParserUtil.intervalToNanos(valTime, typeSystem);
         BigDecimal factor = BigDecimal.ONE.scaleByPowerOfTen(6);
         BigDecimal timeInMillis = null;
         if (typeName != SqlTypeName.INTERVAL_SECOND) {
@@ -506,7 +507,7 @@ public class SqlLiteral extends SqlNode {
         final SqlIntervalLiteral.IntervalValue valTime =
             literal.getValueAs(SqlIntervalLiteral.IntervalValue.class);
         // Bodo Change: Include typeSystem
-        return valTime.getSign() * SqlParserUtil.intervalToNanos(valTime, typeSystem);
+        return valTime.getSign() * SqlBodoParserUtil.intervalToNanos(valTime, typeSystem);
       default:
         break;
       }

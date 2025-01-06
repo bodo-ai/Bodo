@@ -479,51 +479,6 @@ public final class SqlParserUtil {
   }
 
   /**
-   * Converts the interval value into a millisecond representation.
-   *
-   * @param interval Interval
-   * @return a long value that represents millisecond equivalent of the
-   * interval value.
-   *
-   * Bodo Change: intervalToMillis has been replaced by intervalToNanos.
-   */
-  public static long intervalToNanos(
-      SqlIntervalLiteral.IntervalValue interval, RelDataTypeSystem typeSystem) {
-    return intervalToNanos(
-        interval.getIntervalLiteral(),
-        interval.getIntervalQualifier(),
-        typeSystem);
-  }
-
-  public static long intervalToNanos(
-      String literal,
-      SqlIntervalQualifier intervalQualifier, RelDataTypeSystem typeSystem) {
-    checkArgument(!intervalQualifier.isYearMonth(),
-        "interval must be day time");
-    int[] ret;
-    try {
-      ret =
-          intervalQualifier.evaluateIntervalLiteral(literal,
-              intervalQualifier.getParserPosition(), typeSystem);
-    } catch (CalciteContextException e) {
-      throw new RuntimeException("while parsing day-to-second interval "
-          + literal, e);
-    }
-    long l = 0;
-    long[] conv = new long[6];
-    conv[5] = 1; // nanosecond
-    conv[4] = 1000000; // millisecond
-    conv[3] = conv[4] * 1000; // second
-    conv[2] = conv[3] * 60; // minute
-    conv[1] = conv[2] * 60; // hour
-    conv[0] = conv[1] * 24; // day
-    for (int i = 1; i < ret.length; i++) {
-      l += conv[i - 1] * ret[i];
-    }
-    return ret[0] * l;
-  }
-
-  /**
    * Converts the interval value into a months representation.
    *
    * @param interval Interval
