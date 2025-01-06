@@ -4,7 +4,6 @@ import shutil
 from utils.utils import run_cmd
 
 
-# @pytest.mark.skip
 def test_join_rebalance():
     # remove __pycache__ (numba stores cache in there)
     pytest_working_dir = os.getcwd()

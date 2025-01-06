@@ -5,7 +5,6 @@ from uuid import uuid4
 from utils.utils import run_cmd
 
 
-# @pytest.mark.skip
 def test_iceberg_basic_df():
     num_processes = 4
     timeout = 300

@@ -5,7 +5,6 @@ import pytest
 from utils.utils import run_cmd
 
 
-# @pytest.mark.skip
 @pytest.mark.parametrize(
     "sf_username",
     [1, pytest.param(2, marks=pytest.mark.skip, id="azure")],

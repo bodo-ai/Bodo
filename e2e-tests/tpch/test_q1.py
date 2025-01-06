@@ -4,7 +4,6 @@ import shutil
 from utils.utils import run_cmd
 
 
-# @pytest.mark.skip
 def test_q1():
     """
     Test TPCH Q1 using Spawn mode.
