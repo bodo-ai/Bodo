@@ -83,6 +83,17 @@ class PlannerImpl(
             }
         }
 
+        /**
+         * Define the validator configuration to use within BodoSQL. The "target"
+         * dialect (Spark or Snowflake) has different default null collation rules
+         * (e.g. the default nulls first/last) so we modify the validator based on
+         * the "sqlStyle" to allow translating code more easily. This is especially
+         * import for window functions as it can lead to subtle runtime differences
+         * that are hard to debug.
+         *
+         * @param sqlStyle The base dialect for the majority of the SQL code.
+         * @return The validator configuration to use for the given SQL style.
+         */
         @JvmStatic
         private fun getValidatorConfig(sqlStyle: String): SqlValidator.Config {
             val baseConfig =
@@ -90,9 +101,9 @@ class PlannerImpl(
                     .withCallRewrite(false)
                     .withTypeCoercionFactory(BodoTypeCoercionImpl.FACTORY)
                     .withTypeCoercionRules(BodoSqlTypeCoercionRule.instance())
+            // Ensure order by defaults match. The only differences
+            // are in the default behavior for nulls first/last.
             return when (sqlStyle) {
-                // Ensure order by defaults match. The only differences
-                // are in the default behavior for nulls first/last.
                 "SNOWFLAKE" -> baseConfig.withDefaultNullCollation(NullCollation.HIGH)
                 "SPARK" -> baseConfig.withDefaultNullCollation(NullCollation.LOW)
                 else ->
@@ -111,10 +122,8 @@ class PlannerImpl(
         }
 
         private fun frameworkConfig(config: Config): FrameworkConfig {
-            // Set up the parser config based on which case sensitivity
-            // protocol was selected
             val parserConfig = getParserConfig(config.sqlStyle)
-            val validatorConfig = getValidatorConfig()
+            val validatorConfig = getValidatorConfig(config.sqlStyle)
             return Frameworks
                 .newConfigBuilder()
                 .operatorTable(BodoOperatorTable)
