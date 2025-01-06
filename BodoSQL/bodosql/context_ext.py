@@ -52,7 +52,10 @@ from bodosql.context import (
     initialize_schema,
     update_schema,
 )
-from bodosql.imported_java_classes import RelationalAlgebraGeneratorClass
+from bodosql.imported_java_classes import (
+    JavaEntryPoint,
+    RelationalAlgebraGeneratorClass,
+)
 from bodosql.utils import error_to_string
 
 
@@ -487,7 +490,7 @@ def _gen_sql_plan_pd_func_text_and_lowered_globals(
         if not failed:
             try:
                 # Handle the parsing step.
-                generator.parseQuery(sql_str)
+                JavaEntryPoint.parseQuery(generator, sql_str)
             except Exception as e:
                 # Raise BodoError outside except to avoid stack trace
                 func_text_or_error_msg = f"Failure encountered while parsing SQL Query. Error message: {error_to_string(e)}"
@@ -495,7 +498,7 @@ def _gen_sql_plan_pd_func_text_and_lowered_globals(
         if not failed:
             try:
                 # Determine the write type
-                write_type = generator.getWriteType(sql_str)
+                write_type = JavaEntryPoint.getWriteType(generator, sql_str)
 
                 # Get the row counts and NDV estimates for the tables:
                 estimated_row_counts = []
@@ -530,8 +533,12 @@ def _gen_sql_plan_pd_func_text_and_lowered_globals(
                 java_named_params_map = create_java_named_parameter_type_map(
                     named_params_dict
                 )
-                pd_code_sql_plan_pair = generator.getPandasAndPlanString(
-                    sql_str, True, java_params_array, java_named_params_map
+                pd_code_sql_plan_pair = JavaEntryPoint.getPandasAndPlanString(
+                    generator,
+                    sql_str,
+                    True,
+                    java_params_array,
+                    java_named_params_map,
                 )
                 pd_code = str(pd_code_sql_plan_pair.getPdCode())
                 sql_plan = str(pd_code_sql_plan_pair.getSqlPlan())
