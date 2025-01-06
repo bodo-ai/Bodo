@@ -29,7 +29,7 @@ if bodo.utils.utils.has_supported_h5py():
     import h5py
     import llvmlite.binding as ll
 
-    from bodo.io import _hdf5
+    from bodo.ext import _hdf5
 
     ll.add_symbol("h5_open", _hdf5.h5_open)
     ll.add_symbol("h5_open_dset_or_group_obj", _hdf5.h5_open_dset_or_group_obj)
