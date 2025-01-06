@@ -8,7 +8,7 @@ from utils.utils import run_cmd
 @pytest.mark.parametrize(
     "sf_username",
     [
-        1,
+        pytest.param(1, id="aws"),
         pytest.param(
             2,
             marks=pytest.mark.skip(reason="[BSE-XXX] Fix hang on Nightly CI."),
