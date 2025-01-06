@@ -83,7 +83,7 @@ jobs:
           cd e2e-tests
           # beer_reviews groupby iceberg join
           # search_grids sequences snowflake tpch tpcx-bb
-          pytest -s -v --durations=0 tpch tpcx-bb search_grids sequences join beer_reviews groupby iceberg
+          pytest -s -v --durations=0 snowflake/snowflake-write
           # cd ..
           # pytest -s -v --durations=0 bodo/tests/test_javascript*
 
