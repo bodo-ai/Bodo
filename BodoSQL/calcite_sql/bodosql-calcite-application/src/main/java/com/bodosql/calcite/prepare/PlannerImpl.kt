@@ -84,6 +84,19 @@ class PlannerImpl(
         }
 
         /**
+         * Get the Convertlet Table that we use for BodoSQL. A convertlet table is
+         * responsible for unifying implementations between similar or identical
+         * functions by converting 1 implementation to another. This is useful for
+         * reducing code rewrite and increasing the effectiveness of the optimizer.
+         * @return The convertlet table to use for BodoSQL.
+         */
+        @JvmStatic
+        private fun getConvertletTable(): BodoConvertletTable =
+            BodoConvertletTable(
+                StandardConvertletTableConfig(false, false),
+            )
+
+        /**
          * Define the validator configuration to use within BodoSQL. The "target"
          * dialect (Spark or Snowflake) has different default null collation rules
          * (e.g. the default nulls first/last) so we modify the validator based on
@@ -124,6 +137,7 @@ class PlannerImpl(
         private fun frameworkConfig(config: Config): FrameworkConfig {
             val parserConfig = getParserConfig(config.sqlStyle)
             val validatorConfig = getValidatorConfig(config.sqlStyle)
+            val convertletTable = getConvertletTable()
             return Frameworks
                 .newConfigBuilder()
                 .operatorTable(BodoOperatorTable)
@@ -134,11 +148,8 @@ class PlannerImpl(
                         .withInSubQueryThreshold(Integer.MAX_VALUE)
                         .withHintStrategyTable(getHintStrategyTable()),
                 ).parserConfig(parserConfig)
-                .convertletTable(
-                    BodoConvertletTable(
-                        StandardConvertletTableConfig(false, false),
-                    ),
-                ).sqlValidatorConfig(validatorConfig)
+                .convertletTable(convertletTable)
+                .sqlValidatorConfig(validatorConfig)
                 .costFactory(CostFactory())
                 .traitDefs(config.plannerType.traitDefs())
                 .programs(config.plannerType.programs().toList())
