@@ -31,8 +31,11 @@ function(set_default_compiler_options)
     add_compile_options(
       "/wd4819" # Suppress warnings about file character encoding
       "/wd4996" # Suppress warnings about deprecated functions
+      "/wd4312" # Suppress warnings about conversion
+      "/wd4551" # Suppress warnings about function call missing argument list
       "/GS"     # Enable buffer security checks
       "/guard:cf" # Enable control flow guard (security feature)
+      "/EHsc"
     )
   else()
     add_compile_options(
@@ -99,7 +102,7 @@ function(include_general_directories)
     set(CONDA_LIB_DIR "$ENV{CONDA_PREFIX}\\Library\\lib")
   else()
     set(CONDA_INCLUDE_DIR "$ENV{CONDA_PREFIX}/include")
-    set(CONDA_INCLUDE_DIR "$ENV{CONDA_PREFIX}/lib")
+    set(CONDA_LIB_DIR "$ENV{CONDA_PREFIX}/lib")
   endif()
 
   cmake_print_variables(CONDA_INCLUDE_DIR)
