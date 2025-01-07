@@ -3,6 +3,7 @@ package com.bodosql.calcite.application
 import com.bodosql.calcite.application.PythonLoggers.toggleLoggers
 import com.bodosql.calcite.application.write.WriteTarget
 import com.bodosql.calcite.catalog.BodoGlueCatalog
+import com.bodosql.calcite.catalog.BodoSQLCatalog
 import com.bodosql.calcite.catalog.FileSystemCatalog
 import com.bodosql.calcite.catalog.SnowflakeCatalog
 import com.bodosql.calcite.catalog.TabularCatalog
@@ -12,7 +13,6 @@ import com.bodosql.calcite.table.BodoSQLColumn
 import com.bodosql.calcite.table.BodoSQLColumnImpl
 import com.bodosql.calcite.table.ColumnDataTypeInfo
 import com.bodosql.calcite.table.LocalTable
-import com.google.common.collect.ImmutableList
 import org.apache.commons.lang3.exception.ExceptionUtils
 import java.util.Properties
 
@@ -98,7 +98,7 @@ class PythonEntryPoint {
             includeCosts: Boolean,
             dynamicParamTypes: MutableList<ColumnDataTypeInfo>,
             namedParamTypeMap: MutableMap<String, ColumnDataTypeInfo>,
-        ): PandasCodeSqlPlanPair = generator.getPandasAndPlanString(sql, includeCosts, dynamicParamTypes, namedParamTypeMap)
+        ): CodePlanPair = generator.getPandasAndPlanString(sql, includeCosts, dynamicParamTypes, namedParamTypeMap)
 
         /**
          * Generate the Python code to execute the given SQL query.
@@ -115,6 +115,14 @@ class PythonEntryPoint {
             dynamicParamTypes: MutableList<ColumnDataTypeInfo>,
             namedParamTypeMap: MutableMap<String, ColumnDataTypeInfo>,
         ): String = generator.getPandasString(sql, dynamicParamTypes, namedParamTypeMap)
+
+        /**
+         * Get the lowered global variables from the generator.
+         * @param generator The generator to use.
+         * @return The lowered global variables.
+         */
+        @JvmStatic
+        fun getLoweredGlobals(generator: RelationalAlgebraGenerator): Map<String, String> = generator.loweredGlobalVariables
 
         /**
          * Determine the "type" of write produced by this SQL code.
@@ -149,6 +157,33 @@ class PythonEntryPoint {
             generator: RelationalAlgebraGenerator,
             sql: String,
         ): DDLExecutionResult = generator.executeDDL(sql)
+
+        /**
+         * Get the column names from the DDL execution result for use in
+         * Python.
+         * @param result The DDL execution result.
+         * @return The column names.
+         */
+        @JvmStatic
+        fun getDDLExecutionColumnNames(result: DDLExecutionResult): List<String> = result.columnNames
+
+        /**
+         * Get the column types from the DDL execution result for use in
+         * Python.
+         * @param result The DDL execution result.
+         * @return The column types.
+         */
+        @JvmStatic
+        fun getDDLExecutionColumnTypes(result: DDLExecutionResult): List<String> = result.columnTypes
+
+        /**
+         * Get the column values from the DDL execution result for use in
+         * Python.
+         * @param result The DDL execution result.
+         * @return The column values.
+         */
+        @JvmStatic
+        fun getDDLColumnValues(result: DDLExecutionResult): List<List<Any?>> = result.columnValues
 
         /**
          * Determine if the active query is a DDL query that is not treated like compute (not CTAS).
@@ -245,6 +280,22 @@ class PythonEntryPoint {
         }
 
         /**
+         * Get the message from a throwable.
+         * @param throwable The throwable to get the message from.
+         * @return The message.
+         */
+        @JvmStatic
+        fun getThrowableMessage(throwable: Throwable): String? = throwable.message
+
+        /**
+         * Get the cause of a throwable.
+         * @param throwable The throwable to get the cause of.
+         * @return The cause.
+         */
+        @JvmStatic
+        fun getThrowableCause(throwable: Throwable): Throwable? = throwable.cause
+
+        /**
          * Get the stack trace of a throwable as a string.
          * @param throwable The throwable to get the stack trace of.
          * @return The stack trace as a string.
@@ -315,7 +366,15 @@ class PythonEntryPoint {
             accountInfo: Properties,
             icebergVolume: String?,
         ): SnowflakeCatalog =
-            SnowflakeCatalog(username, password, accountName, defaultDatabaseName, warehouseName, accountInfo, icebergVolume)
+            SnowflakeCatalog(
+                username,
+                password,
+                accountName,
+                defaultDatabaseName,
+                warehouseName,
+                accountInfo,
+                icebergVolume,
+            )
 
         /**
          * Build a BodoSQLColumnImpl object.
@@ -346,7 +405,7 @@ class PythonEntryPoint {
         @JvmStatic
         fun buildLocalTable(
             tableName: String,
-            path: ImmutableList<String>,
+            schema: LocalSchema,
             columns: List<BodoSQLColumn>,
             isWriteable: Boolean,
             readCode: String,
@@ -358,7 +417,7 @@ class PythonEntryPoint {
         ): LocalTable =
             LocalTable(
                 tableName,
-                path,
+                schema.fullPath,
                 columns,
                 isWriteable,
                 readCode,
@@ -376,5 +435,108 @@ class PythonEntryPoint {
          */
         @JvmStatic
         fun buildLocalSchema(name: String): LocalSchema = LocalSchema(name)
+
+        /**
+         * Add a table to a schema.
+         * @param schema The schema to add the table to.
+         * @param table The table to add.
+         */
+        @JvmStatic
+        fun addTableToSchema(
+            schema: LocalSchema,
+            table: LocalTable,
+        ) {
+            schema.addTable(table)
+        }
+
+        /**
+         * Get the code from a CodePlanPair.
+         * @param pair The CodePlanPair to get the code from.
+         * @return The code.
+         */
+        @JvmStatic
+        fun getCodeFromPair(pair: CodePlanPair): String = pair.code
+
+        /**
+         * Get the plan from a CodePlanPair.
+         * @param pair The CodePlanPair to get the plan from.
+         * @return The plan.
+         */
+        @JvmStatic
+        fun getPlanFromPair(pair: CodePlanPair): String = pair.plan
+
+        @JvmStatic
+        fun buildColumnDataTypeInfo(
+            dataType: BodoSQLColumn.BodoSQLColumnDataType,
+            isNullable: Boolean,
+        ): ColumnDataTypeInfo = ColumnDataTypeInfo(dataType, isNullable)
+
+        @JvmStatic
+        fun buildColumnDataTypeInfo(
+            dataType: BodoSQLColumn.BodoSQLColumnDataType,
+            isNullable: Boolean,
+            precision: Int,
+        ): ColumnDataTypeInfo = ColumnDataTypeInfo(dataType, isNullable, precision = precision)
+
+        @JvmStatic
+        fun buildColumnDataTypeInfo(
+            dataType: BodoSQLColumn.BodoSQLColumnDataType,
+            isNullable: Boolean,
+            precision: Int,
+            scale: Int,
+        ): ColumnDataTypeInfo = ColumnDataTypeInfo(dataType, isNullable, precision = precision, scale = scale)
+
+        @JvmStatic
+        fun buildColumnDataTypeInfo(
+            dataType: BodoSQLColumn.BodoSQLColumnDataType,
+            isNullable: Boolean,
+            child: ColumnDataTypeInfo,
+        ): ColumnDataTypeInfo = ColumnDataTypeInfo(dataType, isNullable, child = child)
+
+        @JvmStatic
+        fun buildColumnDataTypeInfo(
+            dataType: BodoSQLColumn.BodoSQLColumnDataType,
+            isNullable: Boolean,
+            keyType: ColumnDataTypeInfo,
+            valueType: ColumnDataTypeInfo,
+        ): ColumnDataTypeInfo = ColumnDataTypeInfo(dataType, isNullable, keyType = keyType, valueType = valueType)
+
+        @JvmStatic
+        fun buildRelationalAlgebraGenerator(
+            catalog: BodoSQLCatalog?,
+            localSchema: LocalSchema,
+            isStreaming: Boolean,
+            verboseLevel: Int,
+            tracingLevel: Int,
+            streamingBatchSize: Int,
+            hideCredentials: Boolean,
+            enableSnowflakeIcebergTables: Boolean,
+            enableTimestampTz: Boolean,
+            enableRuntimeJoinFilters: Boolean,
+            enableStreamingSort: Boolean,
+            enableStreamingSortLimitOffset: Boolean,
+            sqlStyle: String,
+            coveringExpressionCaching: Boolean,
+            prefetchSFIceberg: Boolean,
+            defaultTz: String?,
+        ): RelationalAlgebraGenerator =
+            RelationalAlgebraGenerator(
+                catalog,
+                localSchema,
+                isStreaming,
+                verboseLevel,
+                tracingLevel,
+                streamingBatchSize,
+                hideCredentials,
+                enableSnowflakeIcebergTables,
+                enableTimestampTz,
+                enableRuntimeJoinFilters,
+                enableStreamingSort,
+                enableStreamingSortLimitOffset,
+                sqlStyle,
+                coveringExpressionCaching,
+                prefetchSFIceberg,
+                defaultTz,
+            )
     }
 }
