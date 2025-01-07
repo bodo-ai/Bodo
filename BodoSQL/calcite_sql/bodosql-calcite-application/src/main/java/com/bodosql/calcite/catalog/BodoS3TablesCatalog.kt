@@ -62,19 +62,14 @@ class BodoS3TablesCatalog(
      * @param depth The depth at which to find the default.
      * @return List of default Schema for this catalog.
      */
-    override fun getDefaultSchema(depth: Int): List<String> {
-        if (depth == 0) {
-            return listOf("default")
-        }
-        return listOf()
-    }
+    override fun getDefaultSchema(depth: Int): List<String> = listOf()
 
     /**
      * Return the number of levels at which a default schema may be found.
      * S3 Table catalogs don't have subSchemas, so this method always returns 1.
      * @return The number of levels a default schema can be found.
      */
-    override fun numDefaultSchemaLevels(): Int = 1
+    override fun numDefaultSchemaLevels(): Int = 0
 
     /**
      * Generates the code necessary to produce an append write expression from the given catalog.
