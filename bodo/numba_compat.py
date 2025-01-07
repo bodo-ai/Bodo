@@ -2961,7 +2961,12 @@ numba.core.lowering.Lower._lower_call_ExternalFunction = _lower_call_ExternalFun
 def CallConstraint_resolve(self, typeinfer, typevars, fnty):
     from bodo.transforms.type_inference.native_typer import bodo_resolve_call
     from bodo.transforms.type_inference.typeinfer import BodoFunction
-    from bodo.libs.streaming.groupby import groupby_build_consume_batch, GroupbyStateType, groupby_grouping_sets_build_consume_batch
+    from bodo.libs.streaming.base import StreamingStateType
+    from bodo.libs.streaming.groupby import groupby_build_consume_batch, groupby_grouping_sets_build_consume_batch
+    from bodo.libs.streaming.join import join_build_consume_batch, join_probe_consume_batch
+    
+    streaming_build_funcs = (groupby_build_consume_batch, groupby_grouping_sets_build_consume_batch, join_build_consume_batch, join_probe_consume_batch)
+    
 
     assert fnty
     context = typeinfer.context
@@ -2976,7 +2981,7 @@ def CallConstraint_resolve(self, typeinfer, typevars, fnty):
     for a in itertools.chain(pos_args, kw_args.values()):
         # Forbids imprecise type except array of undefined dtype
         if not a.is_precise() and not isinstance(a, types.Array):
-            if getattr(fnty, "typing_key", None) in (groupby_build_consume_batch, groupby_grouping_sets_build_consume_batch) and isinstance(a, GroupbyStateType):
+            if getattr(fnty, "typing_key", None) in streaming_build_funcs and isinstance(a, StreamingStateType):
                 continue
             return
 
@@ -3036,7 +3041,7 @@ def CallConstraint_resolve(self, typeinfer, typevars, fnty):
 
     typeinfer.add_type(self.target, sig.return_type, loc=self.loc)
 
-    if getattr(fnty, "typing_key", None) in (groupby_build_consume_batch, groupby_grouping_sets_build_consume_batch) and pos_args[0] != sig.args[0]:
+    if getattr(fnty, "typing_key", None) in streaming_build_funcs and pos_args[0] != sig.args[0]:
         typeinfer.add_type(self.args[0].name, sig.args[0], loc=self.loc)
 
     # If the function is a bound function and its receiver type

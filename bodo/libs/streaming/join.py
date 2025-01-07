@@ -27,7 +27,6 @@ from bodo.libs.array import (
     py_data_to_cpp_table,
 )
 from bodo.libs.streaming.base import StreamingStateType
-from bodo.utils.transform import get_call_expr_arg
 from bodo.utils.typing import (
     BodoError,
     MetaType,
@@ -140,6 +139,38 @@ class JoinStateType(StreamingStateType):
     @property
     def n_keys(self):
         return len(self.build_key_inds)
+
+    def is_precise(self):
+        return (
+            self.build_table_type != types.unknown
+            and self.probe_table_type != types.unknown
+        )
+
+    def unify(self, typingctx, other):
+        """Unify two JoinStateType instances when build_table_type/probe_table_type
+        are not resolved.
+        """
+        if isinstance(other, JoinStateType):
+            if JoinStateType._num_known_tables(self) > JoinStateType._num_known_tables(
+                other
+            ):
+                return self
+            # Prefer the new type in case join build/probe changed its table type
+            return other
+
+    @staticmethod
+    def _num_known_tables(state):
+        """Determine the number of known tables in the join state.
+
+        Args:
+            state (JoinStateType): The state to check.
+
+        Returns:
+            int: The number of known tables.
+        """
+        return int(state.build_table_type != types.unknown) + int(
+            state.probe_table_type != types.unknown
+        )
 
     # Methods used to compute the information needed for _init_join_state
 
@@ -1038,11 +1069,12 @@ InitJoinStateInfer._no_unliteral = True
 @lower_builtin(init_join_state, types.VarArg(types.Any))
 def lower_init_join_state(context, builder, sig, args):
     """lower init_join_state() using gen_init_join_state_impl"""
-    impl = gen_init_join_state_impl(*sig.args)
+    impl = gen_init_join_state_impl(sig.return_type, *sig.args)
     return context.compile_internal(builder, impl, sig, args)
 
 
 def gen_init_join_state_impl(
+    output_type,
     operator_id,
     build_key_inds,
     probe_key_inds,
@@ -1063,8 +1095,6 @@ def gen_init_join_state_impl(
     build_parallel=False,
     probe_parallel=False,
 ):
-    output_type = unwrap_typeref(expected_state_type)
-
     build_arr_dtypes = output_type.build_arr_ctypes
     build_arr_array_types = output_type.build_arr_array_types
     n_build_arrs = len(build_arr_array_types)
@@ -1276,6 +1306,18 @@ class JoinBuildConsumeBatchInfer(AbstractTemplate):
     def generic(self, args, kws):
         pysig = numba.core.utils.pysignature(join_build_consume_batch)
         folded_args = bodo.utils.transform.fold_argument_types(pysig, args, kws)
+        # Update state type in signature to include build table type from input
+        state_type = folded_args[0]
+        build_table_type = folded_args[1]
+        new_state_type = bodo.libs.streaming.join.JoinStateType(
+            state_type.build_key_inds,
+            state_type.probe_key_inds,
+            state_type.build_outer,
+            state_type.probe_outer,
+            build_table_type,
+            state_type.probe_table_type,
+        )
+        folded_args = (new_state_type, *folded_args[1:])
         output_type = types.BaseTuple.from_types((types.bool_, types.bool_))
         return signature(output_type, *folded_args).replace(pysig=pysig)
 
@@ -1842,22 +1884,30 @@ class JoinProbeConsumeBatchInfer(AbstractTemplate):
     """
 
     def generic(self, args, kws):
-        kws = dict(kws)
-        join_state = get_call_expr_arg(
-            "join_probe_consume_batch", args, kws, 0, "join_state"
+        pysig = numba.core.utils.pysignature(join_probe_consume_batch)
+        folded_args = bodo.utils.transform.fold_argument_types(pysig, args, kws)
+        # Update state type in signature to include probe table type from input
+        state_type = folded_args[0]
+        probe_table_type = folded_args[1]
+        new_state_type = bodo.libs.streaming.join.JoinStateType(
+            state_type.build_key_inds,
+            state_type.probe_key_inds,
+            state_type.build_outer,
+            state_type.probe_outer,
+            state_type.build_table_type,
+            probe_table_type,
         )
+        folded_args = (new_state_type, *folded_args[1:])
+
         StreamingStateType.ensure_known_inputs(
             "join_probe_consume_batch",
-            (join_state.build_table_type, join_state.probe_table_type),
+            (new_state_type.build_table_type, new_state_type.probe_table_type),
         )
-        out_table_type = join_state.output_type
+        out_table_type = new_state_type.output_type
         # Output is (out_table, out_is_last, request_input)
         output_type = types.BaseTuple.from_types(
             (out_table_type, types.bool_, types.bool_)
         )
-
-        pysig = numba.core.utils.pysignature(join_probe_consume_batch)
-        folded_args = bodo.utils.transform.fold_argument_types(pysig, args, kws)
         return signature(output_type, *folded_args).replace(pysig=pysig)
 
 
