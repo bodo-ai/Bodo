@@ -35,7 +35,7 @@ jobs:
           role-session-name: BodoEngineNightlySession
           role-skip-session-tagging: true
           # It takes around 80 minutes to run everything.
-          role-duration-seconds: 7200
+          role-duration-seconds: 3600
 
       - name: Load and Save Hadoop to Cache
         uses: actions/cache@v4
