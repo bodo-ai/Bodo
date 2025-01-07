@@ -82,11 +82,13 @@ endfunction()
 
 # Function to set release options
 function(set_release_options)
-  add_compile_options(
-    "-O3"
-    "-ftree-vectorize"
-    $<$<COMPILE_LANGUAGE:CXX>:-fvisibility=hidden>
-  )
+  if (NOT WIN32)
+    add_compile_options(
+      "-O3"
+      "-ftree-vectorize"
+      $<$<COMPILE_LANGUAGE:CXX>:-fvisibility=hidden>
+    )
+  endif()
 endfunction()
 
 
