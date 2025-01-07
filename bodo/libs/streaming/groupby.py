@@ -164,6 +164,16 @@ class GroupbyStateType(StreamingStateType):
             func_types.append(supported_agg_funcs.index(fname))
         return func_types
 
+    def is_precise(self):
+        return self.build_table_type != types.unknown
+
+    def unify(self, typingctx, other):
+        """Unify two GroupbyStateType instances when one doesn't have a resolved
+        build_table_type.
+        """
+        if isinstance(other, GroupbyStateType) and not other.is_precise():
+            return self
+
     @cached_property
     def _col_reorder_map(self) -> dict[int, int]:
         """
@@ -902,11 +912,12 @@ InitGroupbyStateInfer._no_unliteral = True
 @lower_builtin(init_groupby_state, types.VarArg(types.Any))
 def lower_init_groupby_state(context, builder, sig, args):
     """lower init_groupby_state() using gen_init_groupby_state_impl above"""
-    impl = gen_init_groupby_state_impl(*sig.args)
+    impl = gen_init_groupby_state_impl(sig.return_type, *sig.args)
     return context.compile_internal(builder, impl, sig, args)
 
 
 def gen_init_groupby_state_impl(
+    output_type,
     operator_id,
     key_inds,
     fnames,  # fnames matches function names in supported_agg_funcs
@@ -923,7 +934,7 @@ def gen_init_groupby_state_impl(
     expected_state_type = unwrap_typeref(expected_state_type)
 
     output_type = _get_init_groupby_state_type(
-        expected_state_type,
+        output_type,
         key_inds,
         fnames,
         f_in_offsets,
@@ -1345,6 +1356,22 @@ class GroupbyBuildConsumeBatchInfer(AbstractTemplate):
     def generic(self, args, kws):
         pysig = numba.core.utils.pysignature(groupby_build_consume_batch)
         folded_args = bodo.utils.transform.fold_argument_types(pysig, args, kws)
+        # Update state type in signature to include build table type from input
+        state_type = folded_args[0]
+        build_table_type = folded_args[1]
+        new_state_type = GroupbyStateType(
+            state_type.key_inds,
+            state_type.grouping_sets,
+            state_type.fnames,
+            state_type.f_in_offsets,
+            state_type.f_in_cols,
+            state_type.mrnf_sort_col_inds,
+            state_type.mrnf_sort_col_asc,
+            state_type.mrnf_sort_col_na,
+            state_type.mrnf_col_inds_keep,
+            build_table_type=build_table_type,
+        )
+        folded_args = (new_state_type, *folded_args[1:])
         output_type = types.BaseTuple.from_types((types.bool_, types.bool_))
         return signature(output_type, *folded_args).replace(pysig=pysig)
 

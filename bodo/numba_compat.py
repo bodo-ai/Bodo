@@ -2961,6 +2961,7 @@ numba.core.lowering.Lower._lower_call_ExternalFunction = _lower_call_ExternalFun
 def CallConstraint_resolve(self, typeinfer, typevars, fnty):
     from bodo.transforms.type_inference.native_typer import bodo_resolve_call
     from bodo.transforms.type_inference.typeinfer import BodoFunction
+    from bodo.libs.streaming.groupby import groupby_build_consume_batch, GroupbyStateType
 
     assert fnty
     context = typeinfer.context
@@ -2975,6 +2976,8 @@ def CallConstraint_resolve(self, typeinfer, typevars, fnty):
     for a in itertools.chain(pos_args, kw_args.values()):
         # Forbids imprecise type except array of undefined dtype
         if not a.is_precise() and not isinstance(a, types.Array):
+            if getattr(fnty, "typing_key", None) == groupby_build_consume_batch and isinstance(a, GroupbyStateType):
+                continue
             return
 
     # Resolve call type
@@ -3032,6 +3035,9 @@ def CallConstraint_resolve(self, typeinfer, typevars, fnty):
         raise TypingError(msg)
 
     typeinfer.add_type(self.target, sig.return_type, loc=self.loc)
+
+    if getattr(fnty, "typing_key", None) == groupby_build_consume_batch and pos_args[0] != sig.args[0]:
+        typeinfer.add_type(self.args[0].name, sig.args[0], loc=self.loc)
 
     # If the function is a bound function and its receiver type
     # was refined, propagate it.
