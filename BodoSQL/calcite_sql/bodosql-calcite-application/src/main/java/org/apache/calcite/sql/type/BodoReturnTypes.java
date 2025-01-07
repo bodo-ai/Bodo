@@ -942,14 +942,14 @@ public class BodoReturnTypes {
                 }
             }
 
-            //precicion defaults to 38 if not specified
-            int precicion = 38;
+            // precision defaults to 38 if not specified
+            int precision = 38;
             if (opBinding.getOperandCount() >= 2) {
                 assert opBinding.isOperandLiteral(2, true) :
                         "Internal error in ToNumberRetTypeHelper: scale argument is not a literal";
-                precicion = opBinding.getIntLiteralOperand(1);
+                precision = opBinding.getIntLiteralOperand(1);
             }
-            return factory.createSqlType(getMinIntegerSize(precicion));
+            return factory.createSqlType(getMinIntegerSize(precision));
         };
 
         //Now handle nullability
