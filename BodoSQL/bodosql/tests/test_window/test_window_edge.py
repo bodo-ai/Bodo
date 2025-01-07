@@ -311,7 +311,7 @@ def test_window_pruning_multiple_layers(spark_info, memory_leak_check):
     FROM (
         SELECT *, ROW_NUMBER() OVER (PARTITION BY O4 ORDER BY O5) AS RN
         FROM (
-            SELECT
+            SELECT 
                 A, B, E,
                 P1, P3, O4, P5, O5,
                 W1,
@@ -322,7 +322,7 @@ def test_window_pruning_multiple_layers(spark_info, memory_leak_check):
                 LEAD(W2 + W4, -1, -1) OVER (PARTITION BY P2 ORDER BY O2) as W8,
                 W5
             FROM (
-                SELECT
+                SELECT 
                     P1, P2, P3, P4, P5,
                     O1, O2, O3, O4, O5,
                     LEAD(A) OVER (PARTITION BY P1 ORDER BY O1+O2) as W1,
@@ -348,7 +348,7 @@ def test_window_pruning_multiple_layers(spark_info, memory_leak_check):
     FROM (
         SELECT *, ROW_NUMBER() OVER (PARTITION BY O4 ORDER BY O5) AS RN
         FROM (
-            SELECT
+            SELECT 
                 A, B, E,
                 P1, P3, O4, P5, O5,
                 W1,
@@ -359,7 +359,7 @@ def test_window_pruning_multiple_layers(spark_info, memory_leak_check):
                 LEAD(W2 + W4, -1, -1) OVER (PARTITION BY P2 ORDER BY O2) as W8,
                 W5
             FROM (
-                SELECT
+                SELECT 
                     P1, P2, P3, P4, P5,
                     O1, O2, O3, O4, O5,
                     LEAD(A) OVER (PARTITION BY P1 ORDER BY O1+O2) as W1,
@@ -419,14 +419,14 @@ def test_window_pruning_single_layer(spark_info, memory_leak_check):
     with only 1 layer of window calls.
     """
     query = """
-    SELECT
+    SELECT 
         A,
         B,
         W2,
         P1,
         O2
     FROM (
-        SELECT
+        SELECT 
             A,
             B,
             LEAD(A, 1) OVER (PARTITION BY P1 ORDER BY O1) as W1,
