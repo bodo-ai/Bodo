@@ -122,6 +122,13 @@ jobs:
         run: |
           pip install nbconvert
           jupyter nbconvert --to script examples/*.ipynb
+          export PYTHON_FILES=$(find . -name *.py | grep -v -E "$(echo $SKIP_FILES | sed 's/ /|/g')")
+
+          # replace notebook builtin display with a print
+          export DISPLAY_DEF="display = print\n"
+          $PYTHON_FILES | xargs -I {} sh -c 'echo $DISPLAY_DEF | cat - {} > temp && mv temp {}'
+        env:
+          SKIP_FILES: "query_llm_ollama.py preprocess_thepile_bodo.py generate_kmers.py llm_inference_speedtest.py"
 
       - name: Install Bodo Packages
         env:
@@ -140,7 +147,7 @@ jobs:
           SF_USERNAME: ${{ secrets.SF_USERNAME }}
           SF_PASSWORD: ${{ secrets.SF_PASSWORD }}
           SF_ACCOUNT: ${{ secrets.SF_ACCOUNT }}
-          SKIP_FILES: "query_llm_ollama.py preprocess_thepile_bodo.py generate_kmers.py llm_inference_speedtest.py"
         run: |
           set -eo pipefail
+
           ls *.py | grep -v -E "$(echo $SKIP_FILES | sed 's/ /|/g')" | xargs -n 1 -P 1 python
