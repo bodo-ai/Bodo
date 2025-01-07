@@ -392,3 +392,41 @@ The `GlueCatalog` currently supports the following types of SQL queries:
   * `#!sql CREATE TABLE AS`
 
 
+## S3TablesCatalog {#s3-tables-catalog-api}
+
+The `S3TablesCatalog` allows users to read and write tables to and from S3 Tables.
+To use this catalog, you will need to provide the S3 table bucket arn.
+The bucket must exist.
+
+```py
+catalog = bodosql.GlueCatalog(
+    warehouse="warehouse_name",
+)
+bc = bodosql.BodoSQLContext(catalog=catalog)
+df = bc.sql("SELECT * FROM MY_SCHEMA.MY_TABLE")
+```
+
+When constructing a query you must follow the BodoSQL rules for [identifier case sensitivity][identifier-case-sensitivity].
+
+### Authentication / Authorization
+
+Refer to [AWS' documentation](https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-tables-security-overview.html)
+### API Reference
+
+- `bodosql.S3TablesCatalog(warehouse: str)`
+<br><br>
+
+    Constructor for `S3TablesCatalog`. This allows users to use an AWS S3 Tables Iceberg Warehouse as a database for querying
+    or writing tables with a `BodoSQLContext`.
+
+    ***Arguments***
+
+    - `warehouse`: Arn of the S3 table bucket
+
+#### Supported Query Types
+
+The `S3TablesCatalog` currently supports the following types of SQL queries:
+
+  * `#!sql SELECT`
+  * `#!sql CREATE TABLE AS`
+
