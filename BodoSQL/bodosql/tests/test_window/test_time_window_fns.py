@@ -4,7 +4,7 @@ import pytest
 from bodo import Time
 
 # Skip unless any window-related files were changed
-from bodo.tests.utils import pytest_slow_unless_window
+from bodo.tests.utils import pytest_mark_multi_rank_nightly, pytest_slow_unless_window
 from bodosql.tests.test_window.window_common import count_window_applies
 from bodosql.tests.utils import check_query
 
@@ -94,6 +94,7 @@ def test_time_order(time_df, memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest_mark_multi_rank_nightly
 def test_time_min_max_count_lead_lag(time_df, memory_leak_check):
     """Tests the window functions MIN, MAX, COUNT, LEAD and LAG with time inputs"""
     query = "SELECT C, D, \
