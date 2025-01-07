@@ -77,7 +77,8 @@ jobs:
 
           # --------- Run Tests -----------
           cd e2e-tests
-          python -u snowflake/snowflake-write/snowflake_write.py 2 --use_put_method
+          export BODO_SPAWN_MODE=0
+          mpiexec -n 36 python -u snowflake/snowflake-write/snowflake_write.py 2 --use_put_method
           # cd ..
           # pytest -s -v --durations=0 bodo/tests/test_javascript*
 

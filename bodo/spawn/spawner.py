@@ -41,20 +41,7 @@ from bodo.utils.utils import is_distributable_typ
 # is detected
 BodoSQLContextCls = None
 
-env_var_prefix = (
-    "BODO_",
-    "AWS_",
-    "AZURE_",
-    "LD_",
-    "PYTHONPATH",
-    "__BODOSQL",
-    "MINIO_",
-    "CLASSPATH",
-    "OMP",
-    "MKL",
-    "OPENBLAS",
-    "NUMBA",
-)
+env_var_prefix = ("BODO_", "AWS_", "AZURE_", "LD_")
 
 
 @contextlib.contextmanager
