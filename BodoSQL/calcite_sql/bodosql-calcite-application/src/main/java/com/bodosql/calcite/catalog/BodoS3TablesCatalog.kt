@@ -66,7 +66,7 @@ class BodoS3TablesCatalog(
 
     /**
      * Return the number of levels at which a default schema may be found.
-     * S3 Table catalogs don't have subSchemas, so this method always returns 1.
+     * Glue catalogs don't have a default schema so always returns 0.
      * @return The number of levels a default schema can be found.
      */
     override fun numDefaultSchemaLevels(): Int = 0
