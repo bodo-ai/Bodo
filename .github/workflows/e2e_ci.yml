@@ -60,7 +60,7 @@ jobs:
           set -eo pipefail
 
           # ------ Clean Maven and Spark Ivy Cache ------
-          # rm -rf $HOME/.ivy2/cache $HOME/.ivy2/jars $HOME/.m2/repository
+          rm -rf $HOME/.ivy2/cache $HOME/.ivy2/jars $HOME/.m2/repository
 
           # --------- Run Tests -----------
           cd e2e-tests
