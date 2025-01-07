@@ -6,8 +6,6 @@ import pandas as pd
 
 import bodo
 
-bodo.set_verbose_level(2)
-
 DATA_LOC = "s3://tpch-data-parquet/SF10/lineitem.pq/"
 
 
