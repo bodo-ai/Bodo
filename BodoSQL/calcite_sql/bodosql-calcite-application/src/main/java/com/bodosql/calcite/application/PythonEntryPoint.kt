@@ -3,6 +3,7 @@ package com.bodosql.calcite.application
 import com.bodosql.calcite.application.PythonLoggers.toggleLoggers
 import com.bodosql.calcite.application.write.WriteTarget
 import com.bodosql.calcite.catalog.BodoGlueCatalog
+import com.bodosql.calcite.catalog.BodoS3TablesCatalog
 import com.bodosql.calcite.catalog.BodoSQLCatalog
 import com.bodosql.calcite.catalog.FileSystemCatalog
 import com.bodosql.calcite.catalog.SnowflakeCatalog
@@ -310,6 +311,14 @@ class PythonEntryPoint {
          */
         @JvmStatic
         fun buildBodoGlueCatalog(warehouse: String): BodoGlueCatalog = BodoGlueCatalog(warehouse)
+
+        /**
+         * Build a BodoGlueCatalog object.
+         * @param warehouse The warehouse to use.
+         * @return The BodoGlueCatalog object.
+         */
+        @JvmStatic
+        fun buildBodoS3TablesCatalog(warehouse: String): BodoS3TablesCatalog = BodoS3TablesCatalog(warehouse)
 
         /**
          * Build a TabularCatalog object.
