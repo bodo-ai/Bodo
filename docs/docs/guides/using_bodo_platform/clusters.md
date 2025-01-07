@@ -95,7 +95,7 @@ You can define these in Settings. By default, a new role will be created and att
 
 #### Bodo Version
 
-This option specifies the Bodo version to be installed on your cluster 
+This option specifies the Bodo version to be installed on your cluster.
 
 #### Cluster description 
 
