@@ -1,3 +1,4 @@
+message(STATUS "\n*** Build Bodo Project")
 cmake_minimum_required(VERSION 3.23 FATAL_ERROR)
 project(${SKBUILD_PROJECT_NAME} LANGUAGES C CXX)
 
@@ -17,6 +18,7 @@ check_ipo_supported(LANGUAGES CXX)
 # SCCache is similar, but supports remote S3 caches
 # We use CCache for local development and SCCache for CI
 # Note that SCCache doesn't handle linking, so we skip for both
+message(STATUS "\n*** Enable Compilation Caches")
 
 find_program(CCACHE_EXECUTABLE "ccache")
 find_program(SCCACHE_EXECUTABLE "sccache")
@@ -32,6 +34,8 @@ endif()
 
 # ---------------------------- Enable C++ Linting ----------------------------
 # Clang-Tidy is only available on MacOS as we use GCC on Linux
+
+message(STATUS "\n*** Enable C++ Linting")
 find_program(CLANG_TIDY_EXE NAMES "clang-tidy")
 if (LINUX)
   message(STATUS "Clang-Tidy is not used on Linux")
@@ -46,8 +50,11 @@ endif()
 
 # ----------------------------- Declare Dependencies -------------------------
 # We need to do this before setting CMake Options so they aren't propagated
+
+message(STATUS "\n*** Declare Dependencie")
 set(BUILD_WITH_V8 "$ENV{BUILD_WITH_V8}")
 cmake_print_variables(BUILD_WITH_V8)
+
 if (BUILD_WITH_V8)
     # Needed for Prix64 to be defined in g++/Centos
     add_compile_definitions("__STDC_FORMAT_MACROS")
@@ -74,6 +81,8 @@ set_target_properties(fmt PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 
 # ----------------------------- Download Apache Datasketches -------------------------
+message(STATUS "\n*** Download Apache Datasketches")
+
 include(ExternalProject)
 ExternalProject_Add(datasketches
   GIT_REPOSITORY https://github.com/apache/datasketches-cpp.git
@@ -101,6 +110,7 @@ message("Source dir of datasketches = ${datasketches_INSTALL_DIR}")
 
 # ---------------------------- Set CMake Options -----------------------------
 # Use RelWithDebInfo Mode by Default
+message(STATUS "\n*** Set CMake Options")
 cmake_print_variables(CMAKE_BUILD_TYPE)
 if (NOT CMAKE_BUILD_TYPE)
     message(STATUS "No build type selected, default to RelWithDebInfo")
@@ -108,6 +118,7 @@ if (NOT CMAKE_BUILD_TYPE)
 endif()
 
 # Ensure We are Inside a Conda Environment
+cmake_print_variables(CONDA_PREFIX "$ENV{CONDA_PREFIX}")
 if (NOT DEFINED ENV{CONDA_PREFIX})
   message(FATAL_ERROR "Please activate a Conda Environment before building Bodo")
 endif()
@@ -138,13 +149,7 @@ endif()
 
 
 # ----------------------- Set Compiler Args for Targets -----------------------
-
-add_compile_options(
-  "-fwrapv"                     # Conda used to force-add. Remove in follow up PR
-  "-fstack-protector-strong"    # Conda used to force-add. Remove in follow up PR
-  "-D_FORTIFY_SOURCE=2"         # Conda used to force-add. Remove in follow up PR
-)
-
+message(STATUS "\n*** Set Compiler Args for Targets")
 # WIN Compiler Args
 if (WIN32)
     add_compile_options(
@@ -153,6 +158,9 @@ if (WIN32)
 # POSIX Compiler Args
 else()
     add_compile_options(
+      "-fwrapv"                     # Conda used to force-add. Remove in follow up PR
+      "-fstack-protector-strong"    # Conda used to force-add. Remove in follow up PR
+      "-D_FORTIFY_SOURCE=2"         # Conda used to force-add. Remove in follow up PR
       "-Wno-c99-designator"         # Check if still necessary?
       "-Wno-return-type-c-linkage"  # Check if still necessary?
       "-Wno-macro-redefined"        # Check if still necessary?
@@ -204,14 +212,18 @@ endif()
 
 # ------------------------ Find Libraries + Compilers ------------------------
 # Build Package + Program Dependencies
+message(STATUS "\n*** Find Libraries + Compilers")
+
 find_package(Python COMPONENTS Interpreter Development.Module REQUIRED)
 find_program(CYTHON_EXECUTABLE "cython" REQUIRED)
 
 # Include for All Targets in General
-set(CONDA_INCLUDE_DIR "$ENV{CONDA_PREFIX}/include")
+set(CONDA_INCLUDE_DIR "$ENV{CONDA_PREFIX}\\Library\\include")
 cmake_print_variables(CONDA_INCLUDE_DIR)
-set(CONDA_LIB_DIR "$ENV{CONDA_PREFIX}/lib")
+set(CONDA_LIB_DIR "$ENV{CONDA_PREFIX}\\Library\\lib")
 cmake_print_variables(CONDA_LIB_DIR)
+
+
 
 # This is supposed to work, but isn't. I don't know why
 # include_directories(SYSTEM "${CONDA_INCLUDE_DIR}")
@@ -222,10 +234,10 @@ cmake_print_variables(CONDA_LIB_DIR)
 # TODO: Figure out what's going on here
 # As an alternative, we can manually construct the generated arguments
 # and append to the CMAKE_*_FLAGS variables directly
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -isystem ${CONDA_INCLUDE_DIR}")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -isystem ${CONDA_INCLUDE_DIR}")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /I ${CONDA_INCLUDE_DIR}")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /I ${CONDA_INCLUDE_DIR}")
 
-# Vendor MPICH
+message(STATUS "\n*** Vendor MPICH")
 if(DEFINED ENV{BODO_VENDOR_MPICH})
   message(STATUS "Downloading MPICH")
   execute_process(COMMAND ${Python_EXECUTABLE} -m pip download mpich==${MPICH_VERSION} -i https://pypi.anaconda.org/mpi4py/simple)
@@ -245,7 +257,8 @@ else()
 endif()
 cmake_print_variables(MPICH_INCLUDE_DIR)
 
-# Vendor MPI4Py
+
+message(STATUS "\n*** Vendor MPI4Py")
 if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/bodo/mpi4py")
   message(STATUS "Copying MPI4Py to Source Directory")
   # Extract the location of the site-packages directory containing mpi4py
