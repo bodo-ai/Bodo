@@ -111,6 +111,19 @@ class WindowStateType(StreamingStateType):
             name=f"WindowStateType({partition_indices=}, {order_by_indices=}, {is_ascending=}, {nulls_last=}, {func_names=}, {func_input_indices=}, {kept_input_indices=}, {n_inputs=}, {window_args=}, {build_table_type=})"
         )
 
+    def is_precise(self):
+        return self.build_table_type != types.unknown
+
+    def unify(self, typingctx, other):
+        """Unify two WindowStateType instances when one doesn't have a resolved
+        build_table_type.
+        """
+        if isinstance(other, WindowStateType):
+            if not other.is_precise() and self.is_precise():
+                return self
+            # Prefer the new type in case window build changed its table type
+            return other
+
     @staticmethod
     def derive_common_arr_types(arr_type1, arr_type2):
         common_arr_type = arr_type1
@@ -830,11 +843,12 @@ InitWindowStateInfer._no_unliteral = True
 @lower_builtin(init_window_state, types.VarArg(types.Any))
 def lower_init_window_state(context, builder, sig, args):
     """lower init_window_state() using overload_init_window_state"""
-    impl = overload_init_window_state(*sig.args)
+    impl = overload_init_window_state(sig.return_type, *sig.args)
     return context.compile_internal(builder, impl, sig, args)
 
 
 def overload_init_window_state(
+    output_type,
     operator_id,
     partition_indices,
     order_by_indices,
@@ -850,8 +864,6 @@ def overload_init_window_state(
     expected_state_type=None,
     parallel=False,
 ):
-    output_type: WindowStateType = unwrap_typeref(expected_state_type)  # type: ignore
-
     build_arr_dtypes = output_type.build_arr_ctypes
     build_arr_array_types = output_type.build_arr_array_types
     n_build_arrs = len(build_arr_dtypes)
@@ -1109,6 +1121,22 @@ class WindowBuildConsumeBatchInfer(AbstractTemplate):
     def generic(self, args, kws):
         pysig = numba.core.utils.pysignature(window_build_consume_batch)
         folded_args = bodo.utils.transform.fold_argument_types(pysig, args, kws)
+        # Update state type in signature to include build table type from input
+        state_type = folded_args[0]
+        build_table_type = folded_args[1]
+        new_state_type = bodo.libs.streaming.window.WindowStateType(
+            state_type.partition_indices,
+            state_type.order_by_indices,
+            state_type.is_ascending,
+            state_type.nulls_last,
+            state_type.func_names,
+            state_type.func_input_indices,
+            state_type.kept_input_indices,
+            state_type.n_inputs,
+            state_type.window_args,
+            build_table_type=build_table_type,
+        )
+        folded_args = (new_state_type, *folded_args[1:])
         output_type = types.BaseTuple.from_types((types.bool_, types.bool_))
         return signature(output_type, *folded_args).replace(pysig=pysig)
 

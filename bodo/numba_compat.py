@@ -2964,8 +2964,9 @@ def CallConstraint_resolve(self, typeinfer, typevars, fnty):
     from bodo.libs.streaming.base import StreamingStateType
     from bodo.libs.streaming.groupby import groupby_build_consume_batch, groupby_grouping_sets_build_consume_batch
     from bodo.libs.streaming.join import join_build_consume_batch, join_probe_consume_batch
+    from bodo.libs.streaming.window import window_build_consume_batch
     
-    streaming_build_funcs = (groupby_build_consume_batch, groupby_grouping_sets_build_consume_batch, join_build_consume_batch, join_probe_consume_batch)
+    streaming_build_funcs = (groupby_build_consume_batch, groupby_grouping_sets_build_consume_batch, join_build_consume_batch, join_probe_consume_batch, window_build_consume_batch)
     
 
     assert fnty
