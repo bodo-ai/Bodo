@@ -1,4 +1,4 @@
-message(STATUS "\n*** Build Bodo Project")
+message(STATUS "\n*** Start Building Bodo")
 cmake_minimum_required(VERSION 3.23 FATAL_ERROR)
 project(${SKBUILD_PROJECT_NAME} LANGUAGES C CXX)
 
@@ -10,6 +10,124 @@ include(CMakePrintHelpers)
 include(CheckIPOSupported)
 check_ipo_supported(LANGUAGES CXX)
 
+
+# ----------------------- Helper functions -----------------------
+# Function to set default compiler options
+function(set_default_compiler_options)
+  if (LINUX)
+    add_compile_options(
+      "-march=haswell"
+      "-Wno-alloc-size-larger-than"
+      "-Wno-error=unknown-pragmas"
+    )
+  endif()
+
+  if (WIN32)
+    add_compile_options(
+      "/wd4819" # Suppress warnings about file character encoding
+      "/wd4996" # Suppress warnings about deprecated functions
+      "/GS"     # Enable buffer security checks
+      "/RTC1"   # Enable runtime checks for debugging
+      "/guard:cf" # Enable control flow guard (security feature)
+    )
+  else()
+    add_compile_options(
+      "-Wno-c99-designator"
+      "-Wno-return-type-c-linkage"
+      "-Wno-macro-redefined"
+      "-Wno-implicit-const-int-float-conversion"
+      "-fwrapv"
+      "-fstack-protector-strong"
+      "-D_FORTIFY_SOURCE=2"
+    )
+  endif()
+endfunction()
+
+
+# Function to set debug options
+function(set_debug_options)
+  if (WIN32)
+    add_compile_options(
+      "/Zi"  # Generate debug information
+      "/Od"  # Disable optimizations
+      "/RTC1" # Enable runtime error checks
+    )
+    add_link_options("/DEBUG") # Generate debug symbols
+  else()
+    add_compile_options(
+      "-g"
+      "-O1"
+      "-fno-omit-frame-pointer"
+    )
+  endif()
+endfunction()
+
+
+# Function to set sanitizer options
+function(set_sanitizer_options)
+  if (NOT WIN32)
+    add_compile_options(
+      "-fsanitize=address"
+      "-fsanitize=undefined"
+    )
+    add_link_options(
+      "-fsanitize=address"
+      "-fsanitize=undefined"
+    )
+  endif()
+endfunction()
+
+
+# Function to set release options
+function(set_release_options)
+  if (WIN32)
+    add_compile_options(
+      "/O2"         # Optimize for speed
+      "/GL"         # Enable whole program optimization
+      "/Gy"         # Enable function-level linking
+    )
+    add_link_options("/LTCG") # Link-time code generation
+  else()
+    add_compile_options(
+      "-O3"
+      "-ftree-vectorize"
+      $<$<COMPILE_LANGUAGE:CXX>:-fvisibility=hidden>
+    )
+  endif()
+endfunction()
+
+
+# -------------------- Include for All Targets in General ---------------------
+function(set_release_options)
+  if (WIN32)
+    set(CONDA_INCLUDE_DIR "$ENV{CONDA_PREFIX}\\Library\\include")
+    set(CONDA_LIB_DIR "$ENV{CONDA_PREFIX}\\Library\\lib")
+  else()
+    set(CONDA_INCLUDE_DIR "$ENV{CONDA_PREFIX}/include")
+    set(CONDA_INCLUDE_DIR "$ENV{CONDA_PREFIX}/lib")
+  endif()
+
+  cmake_print_variables(CONDA_INCLUDE_DIR)
+  cmake_print_variables(CONDA_LIB_DIR)
+
+  # This is supposed to work, but isn't. I don't know why
+  # include_directories(SYSTEM "${CONDA_INCLUDE_DIR}")
+  # Similarly, the following line doesn't work
+  # target_include_directories(ext SYSTEM PRIVATE ${CONDA_INCLUDE_DIR})
+  # In both cases, I'm certain that CMake believes that the directory is included
+  # But the Ninja file and GCC / Clang command doesn't include the directory
+  # TODO: Figure out what's going on here
+  # As an alternative, we can manually construct the generated arguments
+  # and append to the CMAKE_*_FLAGS variables directly
+
+  if (WIN32)
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /external:I ${CONDA_INCLUDE_DIR}")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /external:I ${CONDA_INCLUDE_DIR}")
+  else()
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -isystem ${CONDA_INCLUDE_DIR}")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -isystem ${CONDA_INCLUDE_DIR}")
+  endif()
+endfunction()
 
 # ------------------------- Enable Compilation Caches -------------------------
 # Enable CCache or SCCache if Found
@@ -51,7 +169,7 @@ endif()
 # ----------------------------- Declare Dependencies -------------------------
 # We need to do this before setting CMake Options so they aren't propagated
 
-message(STATUS "\n*** Declare Dependencie")
+message(STATUS "\n*** Declare Dependencies")
 set(BUILD_WITH_V8 "$ENV{BUILD_WITH_V8}")
 cmake_print_variables(BUILD_WITH_V8)
 
@@ -148,65 +266,25 @@ if (CMAKE_BUILD_TYPE STREQUAL "Release")
 endif()
 
 
-# ----------------------- Set Compiler Args for Targets -----------------------
-message(STATUS "\n*** Set Compiler Args for Targets")
-# WIN Compiler Args
-if (WIN32)
-    add_compile_options(
-      "/wd4996"        # Disable deprecation warnings (similar to -Wno-deprecated)
-    )
-# POSIX Compiler Args
-else()
-    add_compile_options(
-      "-fwrapv"                     # Conda used to force-add. Remove in follow up PR
-      "-fstack-protector-strong"    # Conda used to force-add. Remove in follow up PR
-      "-D_FORTIFY_SOURCE=2"         # Conda used to force-add. Remove in follow up PR
-      "-Wno-c99-designator"         # Check if still necessary?
-      "-Wno-return-type-c-linkage"  # Check if still necessary?
-      "-Wno-macro-redefined"        # Check if still necessary?
-      "-Wno-implicit-const-int-float-conversion" # Necessary for DataSketches
-    )
-endif()
+# ----------------------- Apply Compiler Flags -----------------------
+message(STATUS "\n*** Apply Compiler Flags for Targets")
 
-if (LINUX)
-  add_compile_options(
-    # -march=haswell is used to enable AVX2 support (required by SIMD bloom filter implementation)
-    "-march=haswell"
-    # Avoid GCC errors for using int64 in allocations
-    "-Wno-alloc-size-larger-than"
-    # Avoid GCC errors for unknown pragmas like "region"
-    "-Wno-error=unknown-pragmas")
-endif()
+# Default Compiler Args
+set_default_compiler_options()
 
 # Debug Compiler Args
 if (CMAKE_BUILD_TYPE STREQUAL "Debug" OR CMAKE_BUILD_TYPE STREQUAL "DebugSanitize")
-  add_compile_options(
-    "-g"
-    "-O1"
-    "-fno-omit-frame-pointer"
-  )
+  set_debug_options()
 endif()
 
 # Debug with Sanitizer Flags
 if (CMAKE_BUILD_TYPE STREQUAL "DebugSanitize")
-  add_compile_options(
-    "-fsanitize=address"
-    "-fsanitize=undefined"
-  )
-  add_link_options(
-    "-fsanitize=address"
-    "-fsanitize=undefined"
-  )
+  set_sanitizer_options()
 endif()
 
 # Release Compiler Args
 if (CMAKE_BUILD_TYPE STREQUAL "Release" OR CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
-  add_compile_options(
-    "-O3"
-    "-ftree-vectorize"
-    # Encourages LTO & increase obfuscations
-    $<$<COMPILE_LANGUAGE:CXX>:-fvisibility=hidden>
-  )
+  set_release_options()
 endif()
 
 
@@ -218,12 +296,13 @@ find_package(Python COMPONENTS Interpreter Development.Module REQUIRED)
 find_program(CYTHON_EXECUTABLE "cython" REQUIRED)
 
 # Include for All Targets in General
+set(CONDA_INCLUDE_DIR "$ENV{CONDA_PREFIX}/include")
 set(CONDA_INCLUDE_DIR "$ENV{CONDA_PREFIX}\\Library\\include")
 cmake_print_variables(CONDA_INCLUDE_DIR)
+
+set(CONDA_INCLUDE_DIR "$ENV{CONDA_PREFIX}/lib")
 set(CONDA_LIB_DIR "$ENV{CONDA_PREFIX}\\Library\\lib")
 cmake_print_variables(CONDA_LIB_DIR)
-
-
 
 # This is supposed to work, but isn't. I don't know why
 # include_directories(SYSTEM "${CONDA_INCLUDE_DIR}")
