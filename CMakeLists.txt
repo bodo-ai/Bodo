@@ -32,7 +32,6 @@ function(set_default_compiler_options)
       "/wd4819" # Suppress warnings about file character encoding
       "/wd4996" # Suppress warnings about deprecated functions
       "/GS"     # Enable buffer security checks
-      "/RTC1"   # Enable runtime checks for debugging
       "/guard:cf" # Enable control flow guard (security feature)
     )
   else()
@@ -54,7 +53,6 @@ function(set_debug_options)
   if (WIN32)
     add_compile_options(
       "/Zi"  # Generate debug information
-      "/Od"  # Disable optimizations
     )
     add_link_options("/DEBUG") # Generate debug symbols
   else()
@@ -84,19 +82,11 @@ endfunction()
 
 # Function to set release options
 function(set_release_options)
-  if (WIN32)
-    add_compile_options(
-      "/GL"         # Enable whole program optimization
-      "/Gy"         # Enable function-level linking
-    )
-    add_link_options("/LTCG") # Link-time code generation
-  else()
-    add_compile_options(
-      "-O3"
-      "-ftree-vectorize"
-      $<$<COMPILE_LANGUAGE:CXX>:-fvisibility=hidden>
-    )
-  endif()
+  add_compile_options(
+    "-O3"
+    "-ftree-vectorize"
+    $<$<COMPILE_LANGUAGE:CXX>:-fvisibility=hidden>
+  )
 endfunction()
 
 
