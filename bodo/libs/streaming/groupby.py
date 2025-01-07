@@ -91,6 +91,9 @@ ll.add_symbol(
     stream_groupby_cpp.get_partition_top_bitmask_by_idx,
 )
 
+# We only support first, count and size for semi-structured arrays
+supported_nested_agg_funcs = ["first", "count", "size"]
+
 
 class GroupbyStateType(StreamingStateType):
     """Type for C++ GroupbyState pointer"""
@@ -468,6 +471,20 @@ class GroupbyStateType(StreamingStateType):
                     in_type = self.build_table_type.arr_types[
                         self.f_in_cols[self.f_in_offsets[i]]
                     ]
+                    if (
+                        isinstance(
+                            in_type,
+                            (
+                                bodo.MapArrayType,
+                                bodo.ArrayItemArrayType,
+                                bodo.StructArrayType,
+                            ),
+                        )
+                        and f_name not in supported_nested_agg_funcs
+                    ):
+                        raise BodoError(
+                            f"Groupby does not support semi-structured arrays for aggregations other than {', '.join(supported_nested_agg_funcs[:-1])} and {supported_nested_agg_funcs[-1]}."
+                        )
                     (
                         out_type,
                         err_msg,
@@ -848,8 +865,6 @@ def _get_init_groupby_state_type(
                     )
 
         else:
-            # If there are any semi-structured arrays, we only support first, count and size:
-            supported_nested_agg_funcs = ["first", "count", "size"]
             for idx in output_type.f_in_offsets[i : i + 1]:
                 # 'size' doesn't require an input column, so we don't need to check the array type.
                 if output_type.fnames[i] == "size":
