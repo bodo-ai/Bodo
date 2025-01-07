@@ -1200,11 +1200,12 @@ InitGroupingSetsStateInfer._no_unliteral = True
 @lower_builtin(init_grouping_sets_state, types.VarArg(types.Any))
 def lower_init_grouping_sets_state(context, builder, sig, args):
     """lower init_grouping_sets_state() using gen_init_grouping_sets_state_impl"""
-    impl = gen_init_grouping_sets_state_impl(*sig.args)
+    impl = gen_init_grouping_sets_state_impl(sig.return_type, *sig.args)
     return context.compile_internal(builder, impl, sig, args)
 
 
 def gen_init_grouping_sets_state_impl(
+    output_type,
     operator_id,
     sub_operator_ids,
     key_inds,
@@ -1215,9 +1216,8 @@ def gen_init_grouping_sets_state_impl(
     expected_state_type=None,
     parallel=False,
 ):
-    expected_state_type = unwrap_typeref(expected_state_type)
     output_type = _get_init_grouping_sets_output_type(
-        expected_state_type, key_inds, grouping_sets, fnames, f_in_offsets, f_in_cols
+        output_type, key_inds, grouping_sets, fnames, f_in_offsets, f_in_cols
     )
 
     build_arr_dtypes = output_type.build_arr_ctypes
@@ -1463,6 +1463,22 @@ class GroupbyBuildConsumeGroupingSetsBatchInfer(AbstractTemplate):
     def generic(self, args, kws):
         pysig = numba.core.utils.pysignature(groupby_grouping_sets_build_consume_batch)
         folded_args = bodo.utils.transform.fold_argument_types(pysig, args, kws)
+        # Update state type in signature to include build table type from input
+        state_type = folded_args[0]
+        build_table_type = folded_args[1]
+        new_state_type = bodo.libs.streaming.groupby.GroupbyStateType(
+            state_type.key_inds,
+            state_type.grouping_sets,
+            state_type.fnames,
+            state_type.f_in_offsets,
+            state_type.f_in_cols,
+            state_type.mrnf_sort_col_inds,
+            state_type.mrnf_sort_col_asc,
+            state_type.mrnf_sort_col_na,
+            state_type.mrnf_col_inds_keep,
+            build_table_type=build_table_type,
+        )
+        folded_args = (new_state_type, *folded_args[1:])
         output_type = types.BaseTuple.from_types((types.bool_, types.bool_))
         return signature(output_type, *folded_args).replace(pysig=pysig)
 
