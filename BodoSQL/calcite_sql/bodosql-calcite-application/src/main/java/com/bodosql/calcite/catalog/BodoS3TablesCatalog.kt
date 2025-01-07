@@ -176,7 +176,7 @@ class BodoS3TablesCatalog(
      * @return The connection string
      */
     override fun generatePythonConnStr(schemaPath: ImmutableList<String>?): Expr =
-        Expr.Call("bodosql.get_s3Tables_connection", Expr.StringLiteral(warehouse))
+        Expr.Call("bodosql.get_s3_tables_connection", Expr.StringLiteral(warehouse))
 
     /**
      * Return the desired WriteTarget for a create table operation.

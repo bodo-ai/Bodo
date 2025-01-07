@@ -105,13 +105,13 @@ def box_s3_tables_catalog_type(typ, val, c):
 @unbox(S3TablesCatalogType)
 def unbox_s3_tables_catalog_type(typ, val, c):
     """
-    Unbox a Glue Catalog Python object into its native representation.
+    Unbox a S3 Tables Catalog Python object into its native representation.
     Since the actual model is opaque we can just generate a dummy.
     """
     return NativeValue(c.context.get_dummy_value())
 
 
-@numba.jit
+@numba.jit(types.unicode_type(types.unicode_type))
 def get_conn_str(warehouse):
     """Get the connection string for a S3 Tables Iceberg catalog."""
     return warehouse
@@ -134,7 +134,7 @@ class S3TablesConnectionType(IcebergConnectionType):
         return "iceberg+" + self.conn_str
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def _get_s3_tables_connection(typingctx, warehouse, conn_str):
     """Create a struct model for a  S3TablesonnectionType from a warehouse and connection string."""
     literal_warehouse = get_literal_value(warehouse)
@@ -176,7 +176,7 @@ class S3TablesConnectionModel(models.StructModel):
         members = [
             ("conn_str", types.unicode_type),
         ]
-        models.StructModel.__init__(self, dmm, fe_type, members)
+        super().__init__(dmm, fe_type, members)
 
 
 make_attribute_wrapper(S3TablesConnectionType, "conn_str", "conn_str")

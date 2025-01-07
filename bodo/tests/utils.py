@@ -3128,6 +3128,17 @@ pytest_mark_glue = compose_decos(glue_markers)
 # This is for using a "mark" or marking a whole file.
 pytest_glue = list(glue_markers)
 
+s3_tables_markers = (
+    pytest.mark.s3_tables,
+    pytest.mark.iceberg,
+)
+
+# Decorate
+pytest_mark_s3_tables = compose_decos(s3_tables_markers)
+
+# This is for using a "mark" or marking a whole file.
+pytest_s3_tables = list(s3_tables_markers)
+
 
 spawn_mode_markers = (
     pytest.mark.spawn_mode,
