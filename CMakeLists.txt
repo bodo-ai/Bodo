@@ -98,7 +98,7 @@ endfunction()
 
 
 # -------------------- Include for All Targets in General ---------------------
-function(set_release_options)
+function(include_general_directories)
   if (WIN32)
     set(CONDA_INCLUDE_DIR "$ENV{CONDA_PREFIX}\\Library\\include")
     set(CONDA_LIB_DIR "$ENV{CONDA_PREFIX}\\Library\\lib")
@@ -296,25 +296,7 @@ find_package(Python COMPONENTS Interpreter Development.Module REQUIRED)
 find_program(CYTHON_EXECUTABLE "cython" REQUIRED)
 
 # Include for All Targets in General
-set(CONDA_INCLUDE_DIR "$ENV{CONDA_PREFIX}/include")
-set(CONDA_INCLUDE_DIR "$ENV{CONDA_PREFIX}\\Library\\include")
-cmake_print_variables(CONDA_INCLUDE_DIR)
-
-set(CONDA_INCLUDE_DIR "$ENV{CONDA_PREFIX}/lib")
-set(CONDA_LIB_DIR "$ENV{CONDA_PREFIX}\\Library\\lib")
-cmake_print_variables(CONDA_LIB_DIR)
-
-# This is supposed to work, but isn't. I don't know why
-# include_directories(SYSTEM "${CONDA_INCLUDE_DIR}")
-# Similarly, the following line doesn't work
-# target_include_directories(ext SYSTEM PRIVATE ${CONDA_INCLUDE_DIR})
-# In both cases, I'm certain that CMake believes that the directory is included
-# But the Ninja file and GCC / Clang command doesn't include the directory
-# TODO: Figure out what's going on here
-# As an alternative, we can manually construct the generated arguments
-# and append to the CMAKE_*_FLAGS variables directly
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /I ${CONDA_INCLUDE_DIR}")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /I ${CONDA_INCLUDE_DIR}")
+include_general_directories()
 
 message(STATUS "\n*** Vendor MPICH")
 if(DEFINED ENV{BODO_VENDOR_MPICH})
