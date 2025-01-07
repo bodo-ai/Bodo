@@ -50,7 +50,6 @@ function(set_debug_options)
     add_compile_options(
       "/Zi"  # Generate debug information
       "/Od"  # Disable optimizations
-      "/RTC1" # Enable runtime error checks
     )
     add_link_options("/DEBUG") # Generate debug symbols
   else()
@@ -82,7 +81,6 @@ endfunction()
 function(set_release_options)
   if (WIN32)
     add_compile_options(
-      "/O2"         # Optimize for speed
       "/GL"         # Enable whole program optimization
       "/Gy"         # Enable function-level linking
     )
