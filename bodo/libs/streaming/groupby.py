@@ -171,8 +171,11 @@ class GroupbyStateType(StreamingStateType):
         """Unify two GroupbyStateType instances when one doesn't have a resolved
         build_table_type.
         """
-        if isinstance(other, GroupbyStateType) and not other.is_precise():
-            return self
+        if isinstance(other, GroupbyStateType):
+            if not other.is_precise() and self.is_precise():
+                return self
+            # Prefer the new type in case groupby build changed its table type
+            return other
 
     @cached_property
     def _col_reorder_map(self) -> dict[int, int]:
