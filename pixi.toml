@@ -192,30 +192,19 @@ ipython = "==8.16.1"
 #   - horovod
 
 # Compilers and Related
-[feature.dev.target.linux-64.dependencies]
+[feature.dev.target.linux.dependencies]
 gcc_linux-64 = ">=9"
 gxx_linux-64 = ">=9"
 # Copied into bodo/mpi4py
 mpi4py = "~=3.1"
 
-[feature.dev.target.linux-aarch64.dependencies]
-gcc_linux-aarch64 = ">=9"
-gxx_linux-aarch64 = ">=9"
-mpi4py = "~=3.1"
-
-[feature.dev.target.osx-64.dependencies]
+[feature.dev.target.osx.dependencies]
 clang_osx-64 = "=19"
 clangxx_osx-64 = "=19"
 clang-tools = "=19"
 mpi4py = "~=3.1"
 
-[feature.dev.target.osx-arm64.dependencies]
-clang_osx-arm64 = "=19"
-clangxx_osx-arm64 = "=19"
-clang-tools = "=19"
-mpi4py = "~=3.1"
-
-[feature.dev.target.win-64.dependencies]
+[feature.dev.target.win.dependencies]
 mpi4py = "~=4.0"
 
 [feature.platform]
@@ -258,10 +247,6 @@ dependencies = { mpich = { version = "4.1.2", build = "external_4", channel = "c
 pytest-azurepipelines = "*"
 pytest-nunit = "*"
 
-[feature.pip.target.osx-64.dependencies]
+[feature.pip.target.osx.dependencies]
 clang_osx-64 = "=19"
 clangxx_osx-64 = "=19"
-
-[feature.pip.target.osx-arm64.dependencies]
-clang_osx-arm64 = "=19"
-clangxx_osx-arm64 = "=19"
