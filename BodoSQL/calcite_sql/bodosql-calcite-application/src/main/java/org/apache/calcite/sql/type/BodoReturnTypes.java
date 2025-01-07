@@ -119,12 +119,9 @@ public class BodoReturnTypes {
                 RelDataTypeFactory factory = opBinding.getTypeFactory();
                 RelDataType stringType = factory.createSqlType(SqlTypeName.VARCHAR);
                 RelDataType mapType = factory.createMapType(stringType, stringType);
-                return mapType;
-                // TODO: Replace the above implementation with the below implementation when
-                // we have proper struct support in Calcite.
-//                return factory.createStructType(
-//                        List.of(stringType, stringType, mapType, stringType, stringType, stringType, stringType),
-//                        List.of("fragment", "host", "parameters",                                       "path", "port", "query", "scheme"));
+                return factory.createStructType(
+                        List.of(stringType, stringType, mapType, stringType, stringType, stringType, stringType),
+                        List.of("fragment", "host", "parameters",                                       "path", "port", "query", "scheme"));
             };
 
     /**
