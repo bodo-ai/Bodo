@@ -27,15 +27,23 @@ jobs:
           environments: 'default'
           activate-environment: true
 
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v4
+      - name: Setup upterm session
+        uses: lhotari/action-upterm@v1
         with:
-          aws-region: us-east-2
-          role-to-assume: arn:aws:iam::427443013497:role/BodoEngineNightlyRole
-          role-session-name: BodoEngineNightlySession
-          role-skip-session-tagging: true
-          # It takes around 80 minutes to run everything.
-          role-duration-seconds: 3600
+          ## limits ssh access and adds the ssh public key for the user which triggered the workflow
+          limit-access-to-actor: true
+          ## limits ssh access and adds the ssh public keys of the listed GitHub users
+          limit-access-to-users: scott-routledge2
+
+      # - name: Configure AWS Credentials
+      #   uses: aws-actions/configure-aws-credentials@v4
+      #   with:
+      #     aws-region: us-east-2
+      #     role-to-assume: arn:aws:iam::427443013497:role/BodoEngineNightlyRole
+      #     role-session-name: BodoEngineNightlySession
+      #     role-skip-session-tagging: true
+      #     # It takes around 80 minutes to run everything.
+      #     role-duration-seconds: 3600
 
       - name: Load and Save Hadoop to Cache
         uses: actions/cache@v4
@@ -55,42 +63,42 @@ jobs:
           # Azure SAS Provider Install
           ./buildscripts/install_azurefs_sas_token_provider.sh
 
-      - name: Run Tests
-        run: |
-          set -eo pipefail
+      # - name: Run Tests
+      #   run: |
+      #     set -eo pipefail
 
-          # ------ Setup Hadoop (and Arrow) environment variables ------
-          export HADOOP_HOME=/tmp/hadoop-3.3.2
-          export HADOOP_INSTALL=$HADOOP_HOME
-          export HADOOP_MAPRED_HOME=$HADOOP_HOME
-          export HADOOP_COMMON_HOME=$HADOOP_HOME
-          export HADOOP_HDFS_HOME=$HADOOP_HOME
-          export YARN_HOME=$HADOOP_HOME
-          export HADOOP_COMMON_LIB_NATIVE_DIR=$HADOOP_HOME/lib/native
-          export HADOOP_OPTS='-Djava.library.path=$HADOOP_HOME/lib'
-          export HADOOP_OPTIONAL_TOOLS=hadoop-azure
-          export ARROW_LIBHDFS_DIR=$HADOOP_HOME/lib/native
-          export CLASSPATH=`$HADOOP_HOME/bin/hdfs classpath --glob`
+      #     # ------ Setup Hadoop (and Arrow) environment variables ------
+      #     export HADOOP_HOME=/tmp/hadoop-3.3.2
+      #     export HADOOP_INSTALL=$HADOOP_HOME
+      #     export HADOOP_MAPRED_HOME=$HADOOP_HOME
+      #     export HADOOP_COMMON_HOME=$HADOOP_HOME
+      #     export HADOOP_HDFS_HOME=$HADOOP_HOME
+      #     export YARN_HOME=$HADOOP_HOME
+      #     export HADOOP_COMMON_LIB_NATIVE_DIR=$HADOOP_HOME/lib/native
+      #     export HADOOP_OPTS='-Djava.library.path=$HADOOP_HOME/lib'
+      #     export HADOOP_OPTIONAL_TOOLS=hadoop-azure
+      #     export ARROW_LIBHDFS_DIR=$HADOOP_HOME/lib/native
+      #     export CLASSPATH=`$HADOOP_HOME/bin/hdfs classpath --glob`
 
-          # ------ Clean Maven and Spark Ivy Cache ------
-          rm -rf $HOME/.ivy2/cache $HOME/.ivy2/jars $HOME/.m2/repository
+      #     # ------ Clean Maven and Spark Ivy Cache ------
+      #     rm -rf $HOME/.ivy2/cache $HOME/.ivy2/jars $HOME/.m2/repository
 
-          # --------- Run Tests -----------
-          cd e2e-tests
-          export BODO_SPAWN_MODE=0
-          mpiexec -n 36 python -u snowflake/snowflake-write/snowflake_write.py 2 --use_put_method
-          # cd ..
-          # pytest -s -v --durations=0 bodo/tests/test_javascript*
+      #     # --------- Run Tests -----------
+      #     cd e2e-tests
+      #     export BODO_SPAWN_MODE=0
+      #     mpiexec -n 36 python -u snowflake/snowflake-write/snowflake_write.py 2 --use_put_method
+      #     # cd ..
+      #     # pytest -s -v --durations=0 bodo/tests/test_javascript*
 
-        env:
-          PYTEST_ADDOPTS: ${{ github.event.inputs.pytest_addopts }}
-          SF_USERNAME: ${{ secrets.SF_USERNAME }}
-          SF_PASSWORD: ${{ secrets.SF_PASSWORD }}
-          SF_ACCOUNT: ${{ secrets.SF_ACCOUNT }}
-          SF_AZURE_USER: ${{ secrets.SF_AZURE_USER }}
-          SF_AZURE_PASSWORD: ${{ secrets.SF_AZURE_PASSWORD }}
-          SF_AZURE_ACCOUNT: ${{ secrets.SF_AZURE_ACCOUNT }}
-          NESSIE_AUTH_TOKEN: ${{ secrets.NESSIE_AUTH_TOKEN }}
+        # env:
+        #   PYTEST_ADDOPTS: ${{ github.event.inputs.pytest_addopts }}
+          # SF_USERNAME: ${{ secrets.SF_USERNAME }}
+          # SF_PASSWORD: ${{ secrets.SF_PASSWORD }}
+          # SF_ACCOUNT: ${{ secrets.SF_ACCOUNT }}
+          # SF_AZURE_USER: ${{ secrets.SF_AZURE_USER }}
+          # SF_AZURE_PASSWORD: ${{ secrets.SF_AZURE_PASSWORD }}
+          # SF_AZURE_ACCOUNT: ${{ secrets.SF_AZURE_ACCOUNT }}
+          # NESSIE_AUTH_TOKEN: ${{ secrets.NESSIE_AUTH_TOKEN }}
 
   # run-examples:
   #   name: Run Examples
