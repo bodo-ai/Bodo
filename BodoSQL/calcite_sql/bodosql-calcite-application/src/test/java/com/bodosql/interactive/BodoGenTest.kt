@@ -1,6 +1,7 @@
 package com.bodosql.interactive
 
 import com.bodosql.calcite.adapter.bodo.bodoPhysicalProject
+import com.bodosql.calcite.application.PythonEntryPoint.Companion.getPandasString
 import com.bodosql.calcite.application.RelationalAlgebraGenerator
 import com.bodosql.calcite.schema.LocalSchema
 import com.bodosql.calcite.table.BodoSQLColumn
@@ -40,7 +41,7 @@ object BodoGenTest {
                 false,
                 "MEMORY",
                 null,
-                null,
+                mapOf(),
             )
         schema.addTable(table)
         var cols2: ArrayList<BodoSQLColumn> = ArrayList()
@@ -60,7 +61,7 @@ object BodoGenTest {
                 false,
                 "MEMORY",
                 null,
-                null,
+                mapOf(),
             )
         schema.addTable(table2)
         val table3: BodoSqlTable =
@@ -74,7 +75,7 @@ object BodoGenTest {
                 false,
                 "MEMORY",
                 null,
-                null,
+                mapOf(),
             )
         schema.addTable(table3)
         val generator =
@@ -94,7 +95,7 @@ object BodoGenTest {
                 false, // Only cache identical nodes
                 true, // Generate a prefetch call at the beginning of SQL queries
             )
-        val paramTypes = listOf(ColumnDataTypeInfo(BodoSQLColumnDataType.INT64, false))
+        val paramTypes = MutableList(1) { ColumnDataTypeInfo(BodoSQLColumnDataType.INT64, false) }
         val namedParamTypes =
             java.util.Map.of(
                 "a",
@@ -107,7 +108,7 @@ object BodoGenTest {
         val optimizedPlanStr = getRelationalAlgebraString(generator, sql, paramTypes, namedParamTypes)
         println("Optimized plan:")
         println(optimizedPlanStr)
-        val pandasStr = generator.getPandasString(sql, paramTypes, namedParamTypes)
+        val pandasStr = getPandasString(generator, sql, paramTypes, namedParamTypes)
         println("Generated code:")
         println(pandasStr)
         println("Lowered globals:")

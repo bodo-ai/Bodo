@@ -8,6 +8,7 @@ import com.bodosql.calcite.ir.Variable
 import com.bodosql.calcite.sql.ddl.CreateTableMetadata
 import com.google.common.collect.ImmutableList
 import org.apache.calcite.sql.ddl.SqlCreateTable.CreateTableType
+import java.util.Locale
 
 /**
  * Base abstract class for any write destination. This provides a standard
@@ -117,8 +118,8 @@ abstract class WriteTarget(
 
         companion object {
             @JvmStatic
-            fun fromString(strVal: String): WriteTargetEnum =
-                when (strVal) {
+            fun fromString(value: String): WriteTargetEnum =
+                when (value.lowercase(Locale.getDefault())) {
                     "parquet" -> {
                         PARQUET
                     }

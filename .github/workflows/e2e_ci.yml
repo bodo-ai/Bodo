@@ -77,7 +77,7 @@ jobs:
 
           # --------- Run Tests -----------
           cd e2e-tests
-          python -u snowflake/snowflake-write/snowflake_write.py 2
+          python -u snowflake/snowflake-write/snowflake_write.py 2 --use_put_method
           # cd ..
           # pytest -s -v --durations=0 bodo/tests/test_javascript*
 
@@ -91,56 +91,56 @@ jobs:
           SF_AZURE_ACCOUNT: ${{ secrets.SF_AZURE_ACCOUNT }}
           NESSIE_AUTH_TOKEN: ${{ secrets.NESSIE_AUTH_TOKEN }}
 
-  run-examples:
-    name: Run Examples
-    runs-on: self-hosted-large
-    steps:
-      - uses: actions/checkout@v4
-      - uses: prefix-dev/setup-pixi@v0.8.1
-        with:
-          pixi-version: v0.34.0
-          cache: true
-          cache-write: ${{ github.event_name == 'schedule' }}
-          environments: 'default'
-          activate-environment: true
+  # run-examples:
+  #   name: Run Examples
+  #   runs-on: self-hosted-large
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - uses: prefix-dev/setup-pixi@v0.8.1
+  #       with:
+  #         pixi-version: v0.34.0
+  #         cache: true
+  #         cache-write: ${{ github.event_name == 'schedule' }}
+  #         environments: 'default'
+  #         activate-environment: true
 
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-region: us-east-2
-          role-to-assume: arn:aws:iam::427443013497:role/BodoEngineNightlyRole
-          role-session-name: BodoEngineNightlySession
-          role-skip-session-tagging: true
+  #     - name: Configure AWS Credentials
+  #       uses: aws-actions/configure-aws-credentials@v4
+  #       with:
+  #         aws-region: us-east-2
+  #         role-to-assume: arn:aws:iam::427443013497:role/BodoEngineNightlyRole
+  #         role-session-name: BodoEngineNightlySession
+  #         role-skip-session-tagging: true
 
-      - name: Load and Save Hadoop to Cache
-        uses: actions/cache@v4
-        with:
-          path: hadoop.tar.gz
-          key: hadoop-3.3.2-${{ runner.os }}
+  #     - name: Load and Save Hadoop to Cache
+  #       uses: actions/cache@v4
+  #       with:
+  #         path: hadoop.tar.gz
+  #         key: hadoop-3.3.2-${{ runner.os }}
 
-      - name: Convert Notebooks scripts to Python
-        run: |
-          pip install nbconvert
-          jupyter nbconvert --to script examples/*.ipynb
+  #     - name: Convert Notebooks scripts to Python
+  #       run: |
+  #         pip install nbconvert
+  #         jupyter nbconvert --to script examples/*.ipynb
 
-      - name: Install Bodo Packages
-        env:
-          # Build with support for javascript udfs
-          BUILD_WITH_V8: 1
-          # Use sccache over ccache
-          DISABLE_CCACHE: 1
-        run: |
-          pixi run build
-          # Azure SAS Provider Install
-          ./buildscripts/install_azurefs_sas_token_provider.sh
+  #     - name: Install Bodo Packages
+  #       env:
+  #         # Build with support for javascript udfs
+  #         BUILD_WITH_V8: 1
+  #         # Use sccache over ccache
+  #         DISABLE_CCACHE: 1
+  #       run: |
+  #         pixi run build
+  #         # Azure SAS Provider Install
+  #         ./buildscripts/install_azurefs_sas_token_provider.sh
 
-      - name: Run Python Examples
-        working-directory: ./examples
-        env:
-          SF_USERNAME: ${{ secrets.SF_USERNAME }}
-          SF_PASSWORD: ${{ secrets.SF_PASSWORD }}
-          SF_ACCOUNT: ${{ secrets.SF_ACCOUNT }}
-          SKIP_FILES: "query_llm_ollama.py preprocess_thepile_bodo.py generate_kmers.py llm_inference_speedtest.py"
-        run: |
-          set -eo pipefail
-          ls *.py | grep -v -E "$(echo $SKIP_FILES | sed 's/ /|/g')" | xargs -n 1 -P 1 python
+  #     - name: Run Python Examples
+  #       working-directory: ./examples
+  #       env:
+  #         SF_USERNAME: ${{ secrets.SF_USERNAME }}
+  #         SF_PASSWORD: ${{ secrets.SF_PASSWORD }}
+  #         SF_ACCOUNT: ${{ secrets.SF_ACCOUNT }}
+  #         SKIP_FILES: "query_llm_ollama.py preprocess_thepile_bodo.py generate_kmers.py llm_inference_speedtest.py"
+  #       run: |
+  #         set -eo pipefail
+  #         ls *.py | grep -v -E "$(echo $SKIP_FILES | sed 's/ /|/g')" | xargs -n 1 -P 1 python

@@ -28,10 +28,8 @@ from bodo.utils.typing import (
     raise_bodo_error,
 )
 from bodosql import DatabaseCatalog, DatabaseCatalogType
-from bodosql.imported_java_classes import (
-    PropertiesClass,
-    SnowflakeCatalogClass,
-)
+from bodosql.imported_java_classes import JavaEntryPoint
+from bodosql.py4j_gateway import build_java_properties
 
 
 def _validate_constructor_args(
@@ -112,11 +110,9 @@ def _create_java_snowflake_catalog(
     # Create a properties object to pass parameters. Account
     # and database are not included because they are needed
     # directly in the Java Snowflake Catalog constructor.
-    properties = PropertiesClass()
-    for key, value in connection_params.items():
-        properties.put(key, value)
+    properties = build_java_properties(connection_params)
     # Create the Snowflake catalog
-    return SnowflakeCatalogClass(
+    return JavaEntryPoint.buildSnowflakeCatalog(
         username, password, account, database, warehouse, properties, iceberg_volume
     )
 

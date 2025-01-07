@@ -11,7 +11,7 @@ from utils.utils import run_cmd
         pytest.param(1, id="aws"),
         pytest.param(
             2,
-            marks=pytest.mark.skip(reason="[BSE-XXX] Fix hang on Nightly CI."),
+            marks=pytest.mark.skip(reason="[BSE-4457] Fix hang on Nightly CI."),
             id="azure",
         ),
     ],
