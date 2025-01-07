@@ -426,7 +426,7 @@ def test_window_pruning_single_layer(spark_info, memory_leak_check):
         P1,
         O2
     FROM (
-        SELECT 
+        SELECT
             A,
             B,
             LEAD(A, 1) OVER (PARTITION BY P1 ORDER BY O1) as W1,
