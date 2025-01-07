@@ -5,7 +5,7 @@ APIs used to launch and connect to the Java py4j calcite gateway server.
 import os
 import sys
 import warnings
-from typing import cast
+from typing import Any, cast
 
 from py4j.java_gateway import GatewayParameters, JavaGateway, launch_gateway
 
@@ -114,20 +114,36 @@ def configure_java_logging(level: int):
     """
     # Java logging is only on rank 0
     if bodo.get_rank() == 0:
-        from bodosql.imported_java_classes import PythonLoggersClass
+        from bodosql.imported_java_classes import JavaEntryPoint
 
-        java_level_one_logger = PythonLoggersClass.VERBOSE_LEVEL_ONE_LOGGER
-        java_level_two_logger = PythonLoggersClass.VERBOSE_LEVEL_TWO_LOGGER
-        java_level_three_logger = PythonLoggersClass.VERBOSE_LEVEL_THREE_LOGGER
-        if level >= 1:
-            PythonLoggersClass.turnLoggerOn(java_level_one_logger)
-        else:
-            PythonLoggersClass.turnLoggerOff(java_level_one_logger)
-        if level >= 2:
-            PythonLoggersClass.turnLoggerOn(java_level_two_logger)
-        else:
-            PythonLoggersClass.turnLoggerOff(java_level_two_logger)
-        if level >= 3:
-            PythonLoggersClass.turnLoggerOn(java_level_three_logger)
-        else:
-            PythonLoggersClass.turnLoggerOff(java_level_three_logger)
+        JavaEntryPoint.configureJavaLogging(level)
+
+
+def build_java_array_list(elems: list[Any]):
+    if bodo.get_rank() == 0:
+        from bodosql.imported_java_classes import JavaEntryPoint
+
+        output_list = JavaEntryPoint.buildArrayList()
+        for elem in elems:
+            JavaEntryPoint.appendToArrayList(output_list, elem)
+        return output_list
+
+
+def build_java_hash_map(d: dict[Any, Any]):
+    if bodo.get_rank() == 0:
+        from bodosql.imported_java_classes import JavaEntryPoint
+
+        output_map = JavaEntryPoint.buildMap()
+        for key, value in d.items():
+            JavaEntryPoint.mapPut(output_map, key, value)
+        return output_map
+
+
+def build_java_properties(d: dict[str, str]):
+    if bodo.get_rank() == 0:
+        from bodosql.imported_java_classes import JavaEntryPoint
+
+        output_map = JavaEntryPoint.buildProperties()
+        for key, value in d.items():
+            JavaEntryPoint.setProperty(output_map, key, value)
+        return output_map

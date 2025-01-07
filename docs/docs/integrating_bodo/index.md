@@ -46,16 +46,16 @@ This guide demonstrates how to use Bodo for reading and writing Iceberg tables.
 
 ---
 
-### Using the Bodo Cloud Platform
+### Bodo Cloud Platform
 
 This set of guides explains the basics of using the Bodo cloud platform and associated concepts.
 
 - [Organization Basics][organization-basics]
 - [Creating a Cluster][creating_clusters]
 - [Using Notebooks][notebooks]
-- [Using native SQL with Catalogs][sql_catalog]
-- [Running a Batch Job][running-batch-jobs]
-- [Using your own Instance Role for a Cluster][instance_role_cluster]
+- [Running Jobs][running-batch-jobs]
+- [Native SQL with Catalogs][sql_catalog]
+- [Instance Role for a Cluster][instance_role_cluster]
 - [Managing Packages on the cluster using Jupyter magics - Conda and Pip][managing-packages]
 - [Running shell commands on the cluster using Jupyter magics][shell-commands]
 - [Connecting to a Cluster][connecting_to_a_cluster]
@@ -64,7 +64,7 @@ This set of guides explains the basics of using the Bodo cloud platform and asso
 ---
 
 
-### [Using Regular Python inside Bodo (Object Mode)][objmode]
+### [Using Regular Python inside JIT with @bodo.wrap_python][objmode]
 
 This guide teaches you how to can interleave regular Python code with Bodo functions using Bodo's object mode.
 

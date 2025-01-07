@@ -52,7 +52,7 @@ def test_type_check():
             df = pd.DataFrame({"A": ["abc", "bc"]})
         return df
 
-    with pytest.raises(BodoError, match="Invalid objmode data type specified"):
+    with pytest.raises(BodoError, match="Invalid Python output data type specified"):
         bodo.jit(impl)()
 
 

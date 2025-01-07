@@ -7,7 +7,14 @@ from utils.utils import run_cmd
 
 @pytest.mark.parametrize(
     "sf_username",
-    [1, 2],
+    [
+        pytest.param(1, id="aws"),
+        pytest.param(
+            2,
+            marks=pytest.mark.skip(reason="[BSE-4457] Fix hang on Nightly CI."),
+            id="azure",
+        ),
+    ],
 )
 @pytest.mark.parametrize("use_put_method", [False, True])
 def test_snowflake_write(sf_username, use_put_method):

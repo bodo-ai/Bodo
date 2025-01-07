@@ -57,7 +57,7 @@ def _global_except_hook(exctype, value, traceback):
     finally:
         if is_hang:
             try:
-                from bodo.submit.worker_state import is_worker
+                from bodo.spawn.worker_state import is_worker
 
                 if is_worker():
                     MPI.COMM_WORLD.Get_parent().Abort(1)
@@ -405,7 +405,7 @@ import bodo.compiler  # isort:skip
 
 use_pandas_join = False
 use_cpp_drop_duplicates = True
-from bodo.decorators import is_jit_execution, jit
+from bodo.decorators import is_jit_execution, jit, wrap_python
 
 multithread_mode = False
 parquet_validate_schema = True

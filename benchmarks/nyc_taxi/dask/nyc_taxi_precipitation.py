@@ -97,13 +97,6 @@ def get_monthly_travels_weather(weather_dataset, hvfhv_dataset, storage_options=
     return end - start
 
 
-def local_get_monthly_travels_weather(weather_dataset, hvfhv_dataset):
-    """Run Dask on local cluster."""
-    with Client():
-        total_time = get_monthly_travels_weather(weather_dataset, hvfhv_dataset)
-        print("Total time for IO and compute:", total_time)
-
-
 def ec2_get_monthly_travels_weather(weather_dataset, hvfhv_dataset):
     """Run Dask on EC2 cluster."""
     from dask_cloudprovider.aws import EC2Cluster

@@ -201,7 +201,7 @@ def add_agg_cfunc_sym(typingctx, func, sym):
 def get_agg_udf_addr(name):
     """Resolve address of cfunc given by its symbol name"""
     with bodo.no_warning_objmode(addr="int64"):
-        addr = gb_agg_cfunc_addr[name]
+        addr = bodo.ir.aggregate.gb_agg_cfunc_addr[name]
     return addr
 
 

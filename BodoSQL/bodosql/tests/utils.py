@@ -323,6 +323,7 @@ def check_query(
 
     if not (run_jit_seq or run_jit_1D or run_jit_1DVar or run_python):
         warnings.warn("check_query: No tests are being run.")
+        return
 
     # If a user sets BODOSQL_TESTING_DEBUG, we print the
     # unoptimized plan, optimized plan, and the Pandas code

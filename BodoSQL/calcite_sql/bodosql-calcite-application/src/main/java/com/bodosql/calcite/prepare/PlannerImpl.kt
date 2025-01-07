@@ -50,6 +50,81 @@ class PlannerImpl(
 
     companion object {
         /**
+         * Define the parser configuration to use within BodoSQL. The "target"
+         * dialect (Spark or Snowflake) has different case sensitivity rules
+         * by default, so we modify the parser based on the "sqlStyle" to
+         * allow translating code more easily.
+         * @param sqlStyle The base dialect for the majority of the SQL code.
+         *     This should be one of "SNOWFLAKE" or "SPARK".
+         * @return The parser configuration to use for the given SQL style.
+         */
+        @JvmStatic
+        private fun getParserConfig(sqlStyle: String): SqlParser.Config {
+            val baseConfig =
+                SqlParser.Config.DEFAULT
+                    .withConformance(SqlConformanceEnum.LENIENT)
+                    .withParserFactory(SqlBodoParserImpl.FACTORY)
+            return when (sqlStyle) {
+                "SNOWFLAKE" -> {
+                    baseConfig
+                        .withCaseSensitive(true)
+                        .withQuotedCasing(Casing.UNCHANGED)
+                        .withUnquotedCasing(Casing.TO_UPPER)
+                }
+                "SPARK" -> {
+                    baseConfig
+                        .withCaseSensitive(false)
+                        .withQuotedCasing(Casing.UNCHANGED)
+                        .withUnquotedCasing(Casing.UNCHANGED)
+                }
+                else -> {
+                    throw Exception("Unrecognized bodo sql style: $sqlStyle")
+                }
+            }
+        }
+
+        /**
+         * Get the Convertlet Table that we use for BodoSQL. A convertlet table is
+         * responsible for unifying implementations between similar or identical
+         * functions by converting 1 implementation to another. This is useful for
+         * reducing code rewrite and increasing the effectiveness of the optimizer.
+         * @return The convertlet table to use for BodoSQL.
+         */
+        @JvmStatic
+        private fun getConvertletTable(): BodoConvertletTable =
+            BodoConvertletTable(
+                StandardConvertletTableConfig(false, false),
+            )
+
+        /**
+         * Define the validator configuration to use within BodoSQL. The "target"
+         * dialect (Spark or Snowflake) has different default null collation rules
+         * (e.g. the default nulls first/last) so we modify the validator based on
+         * the "sqlStyle" to allow translating code more easily. This is especially
+         * import for window functions as it can lead to subtle runtime differences
+         * that are hard to debug.
+         *
+         * @param sqlStyle The base dialect for the majority of the SQL code.
+         * @return The validator configuration to use for the given SQL style.
+         */
+        @JvmStatic
+        private fun getValidatorConfig(sqlStyle: String): SqlValidator.Config {
+            val baseConfig =
+                SqlValidator.Config.DEFAULT
+                    .withCallRewrite(false)
+                    .withTypeCoercionFactory(BodoTypeCoercionImpl.FACTORY)
+                    .withTypeCoercionRules(BodoSqlTypeCoercionRule.instance())
+            // Ensure order by defaults match. The only differences
+            // are in the default behavior for nulls first/last.
+            return when (sqlStyle) {
+                "SNOWFLAKE" -> baseConfig.withDefaultNullCollation(NullCollation.HIGH)
+                "SPARK" -> baseConfig.withDefaultNullCollation(NullCollation.LOW)
+                else ->
+                    throw Exception("Unrecognized bodo sql style: $sqlStyle")
+            }
+        }
+
+        /**
          * @return The table with the hints that BodoSQL supports.
          */
         private fun getHintStrategyTable(): HintStrategyTable {
@@ -60,45 +135,9 @@ class PlannerImpl(
         }
 
         private fun frameworkConfig(config: Config): FrameworkConfig {
-            // Set up the parser config based on which case sensitivity
-            // protocol was selected
-            var parserConfig =
-                SqlParser.Config.DEFAULT
-                    .withConformance(SqlConformanceEnum.LENIENT)
-                    .withParserFactory(SqlBodoParserImpl.FACTORY)
-            parserConfig =
-                when (config.sqlStyle) {
-                    "SNOWFLAKE" ->
-                        parserConfig
-                            .withCaseSensitive(true)
-                            .withQuotedCasing(Casing.UNCHANGED)
-                            .withUnquotedCasing(Casing.TO_UPPER)
-                    "SPARK" ->
-                        parserConfig
-                            .withCaseSensitive(false)
-                            .withQuotedCasing(Casing.UNCHANGED)
-                            .withUnquotedCasing(Casing.UNCHANGED)
-                    else ->
-                        throw Exception("Unrecognized bodo sql style: " + config.sqlStyle)
-                }
-            var validator =
-                SqlValidator.Config.DEFAULT
-                    .withCallRewrite(false)
-                    .withTypeCoercionFactory(BodoTypeCoercionImpl.FACTORY)
-                    .withTypeCoercionRules(BodoSqlTypeCoercionRule.instance())
-            validator =
-                when (config.sqlStyle) {
-                    // Ensure order by defaults match. The only differences
-                    // are in the default behavior for nulls first/last.
-                    "SNOWFLAKE" ->
-                        validator
-                            .withDefaultNullCollation(NullCollation.HIGH)
-                    "SPARK" ->
-                        validator
-                            .withDefaultNullCollation(NullCollation.LOW)
-                    else ->
-                        throw Exception("Unrecognized bodo sql style: " + config.sqlStyle)
-                }
+            val parserConfig = getParserConfig(config.sqlStyle)
+            val validatorConfig = getValidatorConfig(config.sqlStyle)
+            val convertletTable = getConvertletTable()
             return Frameworks
                 .newConfigBuilder()
                 .operatorTable(BodoOperatorTable)
@@ -109,11 +148,8 @@ class PlannerImpl(
                         .withInSubQueryThreshold(Integer.MAX_VALUE)
                         .withHintStrategyTable(getHintStrategyTable()),
                 ).parserConfig(parserConfig)
-                .convertletTable(
-                    BodoConvertletTable(
-                        StandardConvertletTableConfig(false, false),
-                    ),
-                ).sqlValidatorConfig(validator)
+                .convertletTable(convertletTable)
+                .sqlValidatorConfig(validatorConfig)
                 .costFactory(CostFactory())
                 .traitDefs(config.plannerType.traitDefs())
                 .programs(config.plannerType.programs().toList())

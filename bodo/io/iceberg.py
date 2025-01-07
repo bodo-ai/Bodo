@@ -131,11 +131,12 @@ def format_iceberg_conn(conn_str: str) -> str:
         "iceberg+abfs",
         "iceberg+abfss",
         "iceberg+rest",
+        "iceberg+arn",
     ):
         raise BodoError(
             "'con' must start with one of the following: 'iceberg://', 'iceberg+file://', "
             "'iceberg+s3://', 'iceberg+thrift://', 'iceberg+http://', 'iceberg+https://', 'iceberg+glue', 'iceberg+snowflake://', "
-            "'iceberg+abfs://', 'iceberg+abfss://', 'iceberg+rest://'"
+            "'iceberg+abfs://', 'iceberg+abfss://', 'iceberg+rest://', 'iceberg+arn'"
         )
 
     # Remove Iceberg Prefix when using Internally
@@ -220,7 +221,7 @@ def get_iceberg_type_info(
     col_types = None
     pyarrow_schema = None
 
-    # Sonar cube only runs on rank 0, so we add no cover to avoid the warning
+    # Only runs on rank 0, so we add no cover to avoid coverage warning
     if bodo.get_rank() == 0:  # pragma: no cover
         try:
             (
@@ -1242,7 +1243,7 @@ def get_iceberg_file_list_parallel(
 
     # Always get the list on rank 0 to avoid the need
     # to initialize a full JVM + gateway server on every rank.
-    # Sonar cube only runs on rank 0, so we add no cover to avoid the warning
+    # Only runs on rank 0, so we add no cover to avoid coverage warning
     if bodo.get_rank() == 0:  # pragma: no cover
         ev_iceberg_fl = tracing.Event("get_iceberg_file_list", is_parallel=False)
         if tracing.is_tracing():  # pragma: no cover

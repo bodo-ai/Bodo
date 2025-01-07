@@ -841,6 +841,25 @@ def test_df_apply_func_case2(memory_leak_check):
     pd.testing.assert_series_equal(res, py_res)
 
 
+g_var = [3, 1, 5]
+
+
+@bodo.wrap_python(bodo.int64)
+def g3(r):
+    return r.A + g_var[0]
+
+
+def test_df_apply_wrap_python(memory_leak_check):
+    """Test wrap_python function in df.apply()"""
+
+    def test_impl(df):
+        return df.apply(g3, axis=1)
+
+    n = 121
+    df = pd.DataFrame({"A": np.arange(n), "B": np.arange(n) + 2})
+    check_func(test_impl, (df,))
+
+
 def test_df_apply_freevar(memory_leak_check):
     """Test transforming freevars into apply() arguments"""
 
@@ -1000,6 +1019,27 @@ def test_df_apply_udf_inline(memory_leak_check):
     pd.testing.assert_series_equal(j_func(df, df2), impl2(df, df2))
     fir = j_func.overloads[j_func.signatures[0]].metadata["preserved_ir"]
     assert not has_udf_call(fir)
+
+
+@pytest.mark.slow
+def test_df_apply_udf_inline_objmode(memory_leak_check):
+    """make sure UDFs with nested objmode don't cause compiler failures"""
+
+    @bodo.jit
+    def g(a):
+        with bodo.objmode(out="int64"):
+            out = a + 1
+        return out
+
+    @bodo.jit
+    def f(a):
+        return g(a)
+
+    @bodo.jit
+    def test(S):
+        return S.map(f)
+
+    test(pd.Series([1, 2, 3]))
 
 
 @pytest.mark.slow

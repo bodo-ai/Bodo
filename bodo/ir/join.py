@@ -144,7 +144,7 @@ def get_join_cond_addr(name):
     with bodo.no_warning_objmode(addr="int64"):
         # This loads the function pointer at runtime, preventing
         # hardcoding the address into the IR.
-        addr = join_gen_cond_cfunc_addr[name]
+        addr = bodo.ir.join.join_gen_cond_cfunc_addr[name]
     return addr
 
 

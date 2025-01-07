@@ -95,13 +95,6 @@ def get_monthly_travels_weather(weather_dataset, hvfhv_dataset):
     return monthly_trips_weather
 
 
-def local_get_monthly_travels_weather(weather_dataset, hvfhv_dataset):
-    """Run Modin on local Ray cluster"""
-    ray.init()
-    get_monthly_travels_weather(weather_dataset, hvfhv_dataset)
-    ray.shutdown()
-
-
 if __name__ == "__main__":
     ray.init(address="auto")
     cpu_count = ray.cluster_resources()["CPU"]

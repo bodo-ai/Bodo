@@ -1791,7 +1791,6 @@ PyMODINIT_FUNC PyInit_ext(void) {
     SetAttrStringFromPyInit(m, s3_reader);
     SetAttrStringFromPyInit(m, fsspec_reader);
     SetAttrStringFromPyInit(m, hdfs_reader);
-
 #ifndef NO_HDF5
     SetAttrStringFromPyInit(m, _hdf5);
 #endif

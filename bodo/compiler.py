@@ -41,6 +41,7 @@ from numba.core.untyped_passes import (
 )
 
 import bodo
+import bodo.decorators
 import bodo.hiframes.dataframe_indexing  # noqa # side effect: initialize Numba extensions
 import bodo.hiframes.datetime_datetime_ext  # noqa # side effect: initialize Numba extensions
 import bodo.hiframes.datetime_timedelta_ext  # noqa # side effect: initialize Numba extensions
@@ -830,6 +831,22 @@ class BodoTableColumnDelPass(AnalysisPass):
         return table_decref_pass.run()
 
 
+class InlineValidationError(Exception):
+    pass
+
+
+def callee_ir_validator(func_ir):
+    """Validates callee IR for unsupported features in inlining (currently only avoids
+    functions with "with objmode" blocks)
+    """
+    for blk in func_ir.blocks.values():
+        for stmt in blk.body:
+            if isinstance(stmt, ir.EnterWith):
+                raise InlineValidationError(
+                    "callee_ir_validator: EnterWith not supported"
+                )
+
+
 def inline_calls(
     func_ir,
     _locals,
@@ -871,19 +888,24 @@ def inline_calls(
                             _, arg_types = func_def.value.fold_argument_types(
                                 a_types, k_types
                             )
-                        _, var_dict = inline_closure_call(
-                            func_ir,
-                            py_func.__globals__,
-                            block,
-                            i,
-                            py_func,
-                            typingctx=typingctx,
-                            targetctx=targetctx,
-                            arg_typs=arg_types,
-                            typemap=typemap,
-                            calltypes=calltypes,
-                            work_list=work_list,
-                        )
+                        try:
+                            _, var_dict = inline_closure_call(
+                                func_ir,
+                                py_func.__globals__,
+                                block,
+                                i,
+                                py_func,
+                                typingctx=typingctx,
+                                targetctx=targetctx,
+                                arg_typs=arg_types,
+                                typemap=typemap,
+                                calltypes=calltypes,
+                                work_list=work_list,
+                                callee_validator=callee_ir_validator,
+                            )
+                        except InlineValidationError:
+                            # Avoid inlining unsupported functions (e.g. has objmode)
+                            continue
 
                         _locals.update(
                             (var_dict[k].name, v)
@@ -904,6 +926,11 @@ def udf_jit(signature_or_function=None, **options):
     the UDF to make sure nested calls are inlined and not distributed. Otherwise,
     generated barriers cause hangs. see: test_df_apply_func_case2
     """
+
+    # wrap_python functions don't need to be compiled for UDFs
+    if isinstance(signature_or_function, bodo.decorators.WrapPythonDispatcher):
+        return signature_or_function
+
     parallel = {
         "comprehension": True,
         "setitem": False,
@@ -937,9 +964,13 @@ def is_user_dispatcher(func_type):
     a user rather than an internally written function."""
     # Func_type is a user function component if it is either from objmode or a
     # dispatcher with the BodoCompiler
-    return isinstance(func_type, numba.core.types.functions.ObjModeDispatcher) or (
-        isinstance(func_type, numba.core.types.Dispatcher)
-        and issubclass(func_type.dispatcher._compiler.pipeline_class, BodoCompiler)
+    return (
+        isinstance(func_type, numba.core.types.functions.ObjModeDispatcher)
+        or isinstance(func_type, bodo.decorators.WrapPythonDispatcherType)
+        or (
+            isinstance(func_type, numba.core.types.Dispatcher)
+            and issubclass(func_type.dispatcher._compiler.pipeline_class, BodoCompiler)
+        )
     )
 
 

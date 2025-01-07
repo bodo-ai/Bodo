@@ -1,9 +1,7 @@
 package com.bodosql.calcite.table;
 
-import com.bodosql.calcite.application.PythonLoggers;
 import com.bodosql.calcite.ir.Variable;
 import com.bodosql.calcite.rel.type.BodoRelDataTypeFactory;
-import java.sql.JDBCType;
 import java.util.List;
 import java.util.Locale;
 import org.apache.calcite.avatica.util.TimeUnit;
@@ -98,58 +96,11 @@ public interface BodoSQLColumn {
       return this.type_id_name;
     }
 
-    // Note: This is a Python facing API.
     public static BodoSQLColumnDataType fromTypeId(int typeId) {
       for (BodoSQLColumnDataType verbosity : BodoSQLColumnDataType.values()) {
         if (verbosity.getTypeId() == typeId) return verbosity;
       }
       throw new RuntimeException(String.format(Locale.ROOT, "Unknown type id: %d", typeId));
-    }
-
-    // Note: This isn't currently used but would be used if we get type information via
-    // a generic JDBC connection, so its here for completeness.
-    public static BodoSQLColumnDataType fromJavaSqlType(final JDBCType typeId) {
-      switch (typeId) {
-        case NULL:
-          return NULL;
-        case BIGINT:
-          return INT64;
-        case BINARY:
-        case LONGVARBINARY:
-        case VARBINARY:
-          return BINARY;
-        case BOOLEAN:
-          return BOOL8;
-        case CHAR:
-        case LONGVARCHAR:
-        case LONGNVARCHAR:
-        case NCHAR:
-        case VARCHAR:
-          return STRING;
-        case DATE:
-          return DATE;
-        case DECIMAL:
-        case DOUBLE:
-        case NUMERIC:
-          return FLOAT64;
-        case FLOAT:
-          return FLOAT32;
-        case INTEGER:
-          return INT32;
-        case SMALLINT:
-          return INT16;
-        case TIMESTAMP:
-          return TIMESTAMP_NTZ;
-        case TIMESTAMP_WITH_TIMEZONE:
-          return TIMESTAMP_LTZ;
-        case TINYINT:
-          return INT8;
-        default:
-          // We may be able to prune the column so we just output a warning.
-          PythonLoggers.VERBOSE_LEVEL_TWO_LOGGER.warning(
-              String.format(Locale.ROOT, "Unsupported Java SQL Type: %s", typeId.getName()));
-          return UNSUPPORTED;
-      }
     }
 
     public RelDataType convertToSqlType(

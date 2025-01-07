@@ -7,11 +7,21 @@ import numpy as np
 import pandas as pd
 from pandas.core.arrays import ExtensionArray
 from pandas.core.arrays.arrow.array import ArrowExtensionArray
-from pandas.core.internals.array_manager import ArrayManager, SingleArrayManager
+
+try:
+    from pandas.core.internals.array_manager import ArrayManager, SingleArrayManager
+except ModuleNotFoundError:
+    # Pandas > 2.2 does not have an array_manager module (uses BlockManager/SinglBlockManager).
+    class ArrayManager:
+        pass
+
+    class SingleArrayManager:
+        pass
+
 
 import bodo.user_logging
 from bodo.pandas.lazy_metadata import LazyMetadataMixin
-from bodo.submit.utils import debug_msg
+from bodo.spawn.utils import debug_msg
 
 
 class LazyArrayManager(ArrayManager, LazyMetadataMixin[ArrayManager]):
