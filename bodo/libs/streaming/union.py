@@ -59,8 +59,9 @@ class UnionStateType(StreamingStateType):
         return (self.all, self.in_table_types)
 
     def is_precise(self):
-        return (len(self.in_table_types) == 0) or any(
-            t == types.unknown for t in self.in_table_types
+        return not (
+            (len(self.in_table_types) == 0)
+            or any(t == types.unknown for t in self.in_table_types)
         )
 
     def unify(self, typingctx, other):
