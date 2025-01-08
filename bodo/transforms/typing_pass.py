@@ -3027,7 +3027,6 @@ class TypingTransforms:
             )
 
         if func_mod in (
-            "bodo.io.snowflake_write",
             "bodo.io.stream_iceberg_write",
             "bodo.io.stream_parquet_write",
         ):
@@ -4626,87 +4625,7 @@ class TypingTransforms:
         Handle the typing pass information needed for updating the type of the
         input table for SnowflakeWriterType
         """
-        if func_name == "snowflake_writer_init":
-            expected_arg = get_call_expr_arg(
-                "snowflake_writer_init",
-                rhs.args,
-                dict(rhs.kws),
-                6,
-                "expected_state_type",
-                default=None,
-                use_default=True,
-            )
-            if expected_arg is None:
-                self.needs_transform = True
-            else:
-                expected_type = self.typemap.get(expected_arg.name, None)
-                # If the expected type is unknown we need to transform
-                if expected_type in unresolved_types:
-                    self.needs_transform = True
-                else:
-                    output_type = unwrap_typeref(expected_type)
-                    if output_type.input_table_type == types.unknown:
-                        self.needs_transform = True
-        elif func_name == "snowflake_writer_append_table":
-            write_state = rhs.args[0]
-            table = rhs.args[1]
-            # Load the types
-            state_type = self.typemap.get(write_state.name, None)
-            input_table_type = self.typemap.get(table.name, None)
-            if state_type in unresolved_types or input_table_type in unresolved_types:
-                self.needs_transform = True
-                return [assign]
-
-            writer_init_def = guard(
-                _get_state_defining_call,
-                self.func_ir,
-                write_state,
-                ("snowflake_writer_init", "bodo.io.snowflake_write"),
-            )
-            if writer_init_def is None:
-                self.needs_transform = True
-                return [assign]
-            # Fetch the expected type.
-            expected_arg = get_call_expr_arg(
-                "snowflake_writer_init",
-                writer_init_def.args,
-                dict(writer_init_def.kws),
-                6,
-                "expected_state_type",
-                default=None,
-                use_default=True,
-            )
-            if expected_arg is None:
-                expected_type = state_type
-            else:
-                expected_type = self.typemap.get(expected_arg.name, None)
-            output_type = unwrap_typeref(expected_type)
-            # Check that the build/probe type match.
-            if output_type in unresolved_types:
-                self.needs_transform = True
-                return [assign]
-
-            if input_table_type != output_type.input_table_type:
-                args = writer_init_def.args[:6]
-                new_type = bodo.io.snowflake_write.SnowflakeWriterType(input_table_type)
-                func_text = (
-                    "def impl(operator_id, conn, table_name, schema, if_exists, table_type):\n"
-                    "  return bodo.io.snowflake_write.snowflake_writer_init(\n"
-                    "    operator_id, conn, table_name, schema, if_exists, table_type, \n"
-                    "    expected_state_type=_expected_state_type\n"
-                    "  )\n"
-                )
-
-                self._replace_state_definition(
-                    func_text,
-                    "impl",
-                    {"_expected_state_type": new_type},
-                    args,
-                    write_state,
-                    writer_init_def,
-                    label,
-                )
-        elif func_name == "iceberg_writer_init":
+        if func_name == "iceberg_writer_init":
             expected_arg = get_call_expr_arg(
                 "iceberg_writer_init",
                 rhs.args,
