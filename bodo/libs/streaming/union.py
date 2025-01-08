@@ -23,7 +23,6 @@ from bodo.libs.array import (
     py_data_to_cpp_table,
 )
 from bodo.libs.streaming.base import StreamingStateType
-from bodo.utils.transform import get_call_expr_arg
 from bodo.utils.typing import (
     BodoError,
     MetaType,
@@ -69,6 +68,7 @@ class UnionStateType(StreamingStateType):
         build_table_type.
         """
         if isinstance(other, UnionStateType):
+            # Return self if more input table types are added to the state
             self_len = len(self.in_table_types)
             other_len = len(other.in_table_types)
             if (self_len > other_len) or (
@@ -523,22 +523,16 @@ class UnionProduceOutputInfer(AbstractTemplate):
     """
 
     def generic(self, args, kws):
-        kws = dict(kws)
-        union_state = get_call_expr_arg(
-            "union_produce_batch", args, kws, 0, "union_state"
-        )
-        if (len(union_state.in_table_types) == 0) or any(
-            t == types.unknown for t in union_state.in_table_types
-        ):
+        pysig = numba.core.utils.pysignature(union_produce_batch)
+        folded_args = bodo.utils.transform.fold_argument_types(pysig, args, kws)
+        union_state = folded_args[0]
+        if not union_state.is_precise():
             raise numba.NumbaError(
                 "union_produce_batch: unknown table type in streaming union state type"
             )
         out_table_type = union_state.out_table_type
         # Output is (out_table, out_is_last)
         output_type = types.BaseTuple.from_types((out_table_type, types.bool_))
-
-        pysig = numba.core.utils.pysignature(union_produce_batch)
-        folded_args = bodo.utils.transform.fold_argument_types(pysig, args, kws)
         return signature(output_type, *folded_args).replace(pysig=pysig)
 
 
