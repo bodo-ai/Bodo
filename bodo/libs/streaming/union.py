@@ -32,8 +32,6 @@ from bodo.utils.typing import (
     get_overload_const_bool,
     is_nullable_ignore_sentinels,
     is_overload_bool,
-    is_overload_none,
-    unwrap_typeref,
 )
 
 
@@ -185,7 +183,6 @@ register_model(UnionStateType)(models.OpaqueModel)
 def init_union_state(
     operator_id,
     all=False,
-    expected_state_typeref=None,
     parallel=False,
 ):
     pass
@@ -198,13 +195,8 @@ class InitUnionStateInfer(AbstractTemplate):
     def generic(self, args, kws):
         pysig = numba.core.utils.pysignature(init_union_state)
         folded_args = bodo.utils.transform.fold_argument_types(pysig, args, kws)
-        expected_state_type = unwrap_typeref(folded_args[2])
         all_const = get_overload_const_bool(folded_args[1])
-        if is_overload_none(expected_state_type):
-            output_type = UnionStateType(all=all_const)
-        else:
-            output_type: UnionStateType = expected_state_type  # type: ignore
-            assert output_type.all == all_const
+        output_type = UnionStateType(all=all_const)
         return signature(output_type, *folded_args).replace(pysig=pysig)
 
 
@@ -222,7 +214,6 @@ def gen_init_union_state_impl(
     output_type,
     operator_id,
     all=False,
-    expected_state_typeref=None,
     parallel=False,
 ):
     all_const = get_overload_const_bool(all)
@@ -253,7 +244,6 @@ def gen_init_union_state_impl(
         def impl(
             operator_id,
             all=False,
-            expected_state_typeref=None,
             parallel=False,
         ):  # pragma: no cover
             return bodo.libs.table_builder._init_chunked_table_builder_state(
@@ -279,7 +269,6 @@ def gen_init_union_state_impl(
         def impl(
             operator_id,
             all=False,
-            expected_state_typeref=None,
             parallel=False,
         ):
             return bodo.libs.streaming.groupby._init_groupby_state(
