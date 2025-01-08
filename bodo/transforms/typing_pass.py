@@ -62,7 +62,6 @@ from bodo.utils.transform import (
     container_update_method_names,
     create_nested_run_pass_event,
     get_call_expr_arg,
-    get_const_arg,
     get_const_func_output_type,
     get_const_value_inner,
     get_runtime_join_filter_terms,
@@ -4625,119 +4624,7 @@ class TypingTransforms:
         Handle the typing pass information needed for updating the type of the
         input table for SnowflakeWriterType
         """
-        if func_name == "iceberg_writer_init":
-            expected_arg = get_call_expr_arg(
-                "iceberg_writer_init",
-                rhs.args,
-                dict(rhs.kws),
-                7,
-                "expected_state_type",
-                default=None,
-                use_default=True,
-            )
-            if expected_arg is None:
-                self.needs_transform = True
-            else:
-                expected_type = self.typemap.get(expected_arg.name, None)
-                # If the expected type is unknown we need to transform
-                if expected_type in unresolved_types:
-                    self.needs_transform = True
-                else:
-                    output_type = unwrap_typeref(expected_type)
-                    if output_type.input_table_type == types.unknown:
-                        self.needs_transform = True
-        elif func_name == "iceberg_writer_append_table":
-            write_state = rhs.args[0]
-            table = rhs.args[1]
-            # Load the types
-            state_type = self.typemap.get(write_state.name, None)
-            input_table_type = self.typemap.get(table.name, None)
-            if state_type in unresolved_types or input_table_type in unresolved_types:
-                self.needs_transform = True
-                return [assign]
-
-            writer_init_def = guard(
-                _get_state_defining_call,
-                self.func_ir,
-                write_state,
-                ("iceberg_writer_init", "bodo.io.stream_iceberg_write"),
-            )
-            if writer_init_def is None:
-                self.needs_transform = True
-                return [assign]
-            # Fetch the expected type.
-            expected_arg = get_call_expr_arg(
-                "iceberg_writer_init",
-                writer_init_def.args,
-                dict(writer_init_def.kws),
-                7,
-                "expected_state_type",
-                default=None,
-                use_default=True,
-            )
-            if expected_arg is None:
-                expected_type = state_type
-            else:
-                expected_type = self.typemap.get(expected_arg.name, None)
-            output_type = unwrap_typeref(expected_type)
-            # Check that the build/probe type match.
-            if output_type in unresolved_types:
-                self.needs_transform = True
-                return [assign]
-
-            allow_theta_sketch_val = get_const_arg(
-                "iceberg_writer_init",
-                writer_init_def.args,
-                dict(writer_init_def.kws),
-                self.func_ir,
-                self.arg_types,
-                8,
-                "allow_theta_sketches",
-                rhs.loc,
-                default=False,
-            )
-
-            create_table_meta_val = get_const_arg(
-                "iceberg_writer_init",
-                writer_init_def.args,
-                dict(writer_init_def.kws),
-                self.func_ir,
-                self.arg_types,
-                6,
-                "create_table_meta",
-                rhs.loc,
-                default=None,
-                use_default=True,
-            )
-
-            if input_table_type != output_type.input_table_type:
-                args = writer_init_def.args[:6]
-                new_type = bodo.io.stream_iceberg_write.IcebergWriterType(
-                    input_table_type
-                )
-                func_text = (
-                    "def impl(operator_id, conn, table_name, schema, col_names_meta, if_exists):\n"
-                    "  return bodo.io.stream_iceberg_write.iceberg_writer_init(\n"
-                    "    operator_id, conn, table_name, schema, col_names_meta, if_exists, \n"
-                    "    create_table_meta=_create_table_meta,\n"
-                    "    expected_state_type=_expected_state_type,\n"
-                    "    allow_theta_sketches=_allow_theta_sketches\n"
-                    "  )\n"
-                )
-                self._replace_state_definition(
-                    func_text,
-                    "impl",
-                    {
-                        "_create_table_meta": create_table_meta_val,
-                        "_expected_state_type": new_type,
-                        "_allow_theta_sketches": allow_theta_sketch_val,
-                    },
-                    args,
-                    write_state,
-                    writer_init_def,
-                    label,
-                )
-        elif func_name == "parquet_writer_init":
+        if func_name == "parquet_writer_init":
             expected_arg = get_call_expr_arg(
                 "parquet_writer_init",
                 rhs.args,

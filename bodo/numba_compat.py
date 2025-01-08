@@ -2975,6 +2975,7 @@ def CallConstraint_resolve(self, typeinfer, typevars, fnty):
     from bodo.libs.streaming.sort import sort_build_consume_batch
     from bodo.libs.table_builder import table_builder_append
     from bodo.io.snowflake_write import snowflake_writer_append_table
+    from bodo.io.stream_iceberg_write import iceberg_writer_append_table
 
     streaming_build_funcs = (
         groupby_build_consume_batch,
@@ -2986,6 +2987,7 @@ def CallConstraint_resolve(self, typeinfer, typevars, fnty):
         table_builder_append,
         sort_build_consume_batch,
         snowflake_writer_append_table,
+        iceberg_writer_append_table,
     )
 
     assert fnty
