@@ -40,7 +40,6 @@ from bodo.utils.typing import (
     get_overload_const_int,
     is_bodosql_integer_arr_type,
     is_nullable,
-    is_overload_none,
     to_nullable_type,
     unwrap_typeref,
 )
@@ -786,7 +785,6 @@ def init_window_state(
     n_inputs,
     window_args,
     op_pool_size_bytes=-1,
-    expected_state_type=None,
     parallel=False,
 ):
     pass
@@ -799,7 +797,6 @@ class InitWindowStateInfer(AbstractTemplate):
     def generic(self, args, kws):
         pysig = numba.core.utils.pysignature(init_window_state)
         folded_args = bodo.utils.transform.fold_argument_types(pysig, args, kws)
-        expected_state_type = unwrap_typeref(folded_args[12])
         (
             partition_indices,
             order_by_indices,
@@ -812,28 +809,25 @@ class InitWindowStateInfer(AbstractTemplate):
             n_inputs,
             window_args,
         ) = folded_args[1:11]
-        if is_overload_none(expected_state_type):
-            partition_indices_tuple = unwrap_typeref(partition_indices).meta
-            order_by_indices_tuple = unwrap_typeref(order_by_indices).meta
-            is_ascending_tuple = unwrap_typeref(is_ascending).meta
-            nulls_last_tuple = unwrap_typeref(nulls_last).meta
-            func_names_tuple = unwrap_typeref(func_names).meta
-            func_input_tuple = unwrap_typeref(func_input_indices).meta
-            kept_input_indices_tuple = unwrap_typeref(kept_input_indices).meta
-            window_args = unwrap_typeref(window_args).meta
-            output_type = WindowStateType(
-                partition_indices_tuple,
-                order_by_indices_tuple,
-                is_ascending_tuple,
-                nulls_last_tuple,
-                func_names_tuple,
-                func_input_tuple,
-                kept_input_indices_tuple,
-                get_overload_const_int(n_inputs),
-                window_args,
-            )
-        else:
-            output_type = expected_state_type
+        partition_indices_tuple = unwrap_typeref(partition_indices).meta
+        order_by_indices_tuple = unwrap_typeref(order_by_indices).meta
+        is_ascending_tuple = unwrap_typeref(is_ascending).meta
+        nulls_last_tuple = unwrap_typeref(nulls_last).meta
+        func_names_tuple = unwrap_typeref(func_names).meta
+        func_input_tuple = unwrap_typeref(func_input_indices).meta
+        kept_input_indices_tuple = unwrap_typeref(kept_input_indices).meta
+        window_args = unwrap_typeref(window_args).meta
+        output_type = WindowStateType(
+            partition_indices_tuple,
+            order_by_indices_tuple,
+            is_ascending_tuple,
+            nulls_last_tuple,
+            func_names_tuple,
+            func_input_tuple,
+            kept_input_indices_tuple,
+            get_overload_const_int(n_inputs),
+            window_args,
+        )
         return signature(output_type, *folded_args).replace(pysig=pysig)
 
 
@@ -861,7 +855,6 @@ def overload_init_window_state(
     n_inputs,
     window_args,
     op_pool_size_bytes=-1,
-    expected_state_type=None,
     parallel=False,
 ):
     build_arr_dtypes = output_type.build_arr_ctypes
@@ -923,7 +916,6 @@ def overload_init_window_state(
             n_inputs,
             window_args,
             op_pool_size_bytes=-1,
-            expected_state_type=None,
             parallel=False,
         ):  # pragma: no cover
             output_val = bodo.libs.streaming.window._init_window_state(
@@ -967,7 +959,6 @@ def impl(
         n_inputs,
         window_args,  # list of tuples containing scalar window args
         op_pool_size_bytes=-1,
-        expected_state_type=None,
         parallel=False,
 ):\n
 """
