@@ -2962,14 +2962,29 @@ def CallConstraint_resolve(self, typeinfer, typevars, fnty):
     from bodo.transforms.type_inference.native_typer import bodo_resolve_call
     from bodo.transforms.type_inference.typeinfer import BodoFunction
     from bodo.libs.streaming.base import StreamingStateType
-    from bodo.libs.streaming.groupby import groupby_build_consume_batch, groupby_grouping_sets_build_consume_batch
-    from bodo.libs.streaming.join import join_build_consume_batch, join_probe_consume_batch
+    from bodo.libs.streaming.groupby import (
+        groupby_build_consume_batch,
+        groupby_grouping_sets_build_consume_batch,
+    )
+    from bodo.libs.streaming.join import (
+        join_build_consume_batch,
+        join_probe_consume_batch,
+    )
     from bodo.libs.streaming.window import window_build_consume_batch
     from bodo.libs.streaming.union import union_consume_batch
+    from bodo.libs.streaming.sort import sort_build_consume_batch
     from bodo.libs.table_builder import table_builder_append
-    
-    streaming_build_funcs = (groupby_build_consume_batch, groupby_grouping_sets_build_consume_batch, join_build_consume_batch, join_probe_consume_batch, window_build_consume_batch, union_consume_batch, table_builder_append)
-    
+
+    streaming_build_funcs = (
+        groupby_build_consume_batch,
+        groupby_grouping_sets_build_consume_batch,
+        join_build_consume_batch,
+        join_probe_consume_batch,
+        window_build_consume_batch,
+        union_consume_batch,
+        table_builder_append,
+        sort_build_consume_batch,
+    )
 
     assert fnty
     context = typeinfer.context

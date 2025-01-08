@@ -61,6 +61,20 @@ class SortStateType(StreamingStateType):
             f"SortStateType(build_table={build_table_type}, key_indices={key_indices})"
         )
 
+    def is_precise(self):
+        return self._build_table_type != types.unknown
+
+    def unify(self, typingctx, other):
+        """Unify two GroupbyStateType instances when one doesn't have a resolved
+        build_table_type.
+        """
+        if isinstance(other, SortStateType):
+            if not other.is_precise() and self.is_precise():
+                return self
+
+            # Prefer the new type in case groupby build changed its table type
+            return other
+
     @cached_property
     def arr_dtypes(self) -> list[types.ArrayCompatible]:
         """Returns the list of types for each array in the build table."""
@@ -240,11 +254,12 @@ InitSortStateInfer._no_unliteral = True
 @lower_builtin(init_stream_sort_state, types.VarArg(types.Any))
 def lower_init_stream_sort_state(context, builder, sig, args):
     """lower init_stream_sort_state() using gen_init_stream_sort_state_impl"""
-    impl = gen_init_stream_sort_state_impl(*sig.args)
+    impl = gen_init_stream_sort_state_impl(sig.return_type, *sig.args)
     return context.compile_internal(builder, impl, sig, args)
 
 
 def gen_init_stream_sort_state_impl(
+    output_type,
     operator_id,
     limit,
     offset,
@@ -256,7 +271,6 @@ def gen_init_stream_sort_state_impl(
     parallel=False,
 ):
     """Initialize the C++ TableBuilderState pointer"""
-    output_type = unwrap_typeref(expected_state_type)
 
     asc_cols_ = get_overload_const_list(asc_cols)
     asc_cols_ = [int(asc) for asc in asc_cols_]
@@ -384,6 +398,11 @@ class SortBuildConsumeBatchInfer(AbstractTemplate):
     def generic(self, args, kws):
         pysig = numba.core.utils.pysignature(sort_build_consume_batch)
         folded_args = bodo.utils.transform.fold_argument_types(pysig, args, kws)
+        # Update state type in signature to include build table type from input
+        state_type = folded_args[0]
+        build_table_type = folded_args[1]
+        new_state_type = SortStateType(build_table_type, state_type.key_indices)
+        folded_args = (new_state_type, *folded_args[1:])
         return signature(types.bool_, *folded_args).replace(pysig=pysig)
 
 
