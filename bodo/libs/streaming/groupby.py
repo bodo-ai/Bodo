@@ -710,7 +710,6 @@ def init_groupby_state(
     mrnf_sort_col_na=None,
     mrnf_col_inds_keep=None,
     op_pool_size_bytes=-1,
-    expected_state_type=None,
     parallel=False,
 ):
     pass
@@ -816,7 +815,6 @@ def _validate_groupby_state_type(output_type):
 
 
 def _get_init_groupby_state_type(
-    expected_state_type,
     key_inds,
     fnames,
     f_in_offsets,
@@ -827,59 +825,55 @@ def _get_init_groupby_state_type(
     mrnf_col_inds_keep,
 ):
     """Helper for init_groupby_state output typing that returns state type with unknown
-    table types when expected state type is not provided.
+    table types.
     Also performs validation checks for MRNF and some other cases.
     """
-    if is_overload_none(expected_state_type):
-        key_inds = unwrap_typeref(key_inds).meta
-        fnames = unwrap_typeref(fnames).meta
-        f_in_offsets = unwrap_typeref(f_in_offsets).meta
-        f_in_cols = unwrap_typeref(f_in_cols).meta
-        # Check if the MRNF fields are provided:
-        if not is_overload_none(mrnf_sort_col_inds):
-            mrnf_sort_col_inds = unwrap_typeref(mrnf_sort_col_inds).meta
-        else:
-            mrnf_sort_col_inds = ()
-        if not is_overload_none(mrnf_sort_col_asc):
-            mrnf_sort_col_asc = unwrap_typeref(mrnf_sort_col_asc).meta
-        else:
-            mrnf_sort_col_asc = ()
-        if not is_overload_none(mrnf_sort_col_na):
-            mrnf_sort_col_na = unwrap_typeref(mrnf_sort_col_na).meta
-        else:
-            mrnf_sort_col_na = ()
-        if not is_overload_none(mrnf_col_inds_keep):
-            mrnf_col_inds_keep = unwrap_typeref(mrnf_col_inds_keep).meta
-        else:
-            mrnf_col_inds_keep = ()
-
-        if len(mrnf_sort_col_inds) > 0:
-            # In the MRNF case, if there are indices in both the
-            # partition and sort columns, then raise an error.
-            mrnf_sort_col_inds_set = set(mrnf_sort_col_inds)
-            key_inds_set = set(key_inds)
-            common_inds = mrnf_sort_col_inds_set.intersection(key_inds_set)
-            if len(common_inds) > 0:
-                raise BodoError(
-                    "Groupby (Min Row-Number Filter): A column cannot be both a partition column and a sort column. "
-                    f"The following column indices were in both sets: {common_inds}."
-                )
-
-        output_type = GroupbyStateType(
-            key_inds,
-            # A regular groupby has a single grouping set that matches the keys.
-            (key_inds,),
-            fnames,
-            f_in_offsets,
-            f_in_cols,
-            mrnf_sort_col_inds,
-            mrnf_sort_col_asc,
-            mrnf_sort_col_na,
-            mrnf_col_inds_keep,
-        )
+    key_inds = unwrap_typeref(key_inds).meta
+    fnames = unwrap_typeref(fnames).meta
+    f_in_offsets = unwrap_typeref(f_in_offsets).meta
+    f_in_cols = unwrap_typeref(f_in_cols).meta
+    # Check if the MRNF fields are provided:
+    if not is_overload_none(mrnf_sort_col_inds):
+        mrnf_sort_col_inds = unwrap_typeref(mrnf_sort_col_inds).meta
     else:
-        output_type = expected_state_type
+        mrnf_sort_col_inds = ()
+    if not is_overload_none(mrnf_sort_col_asc):
+        mrnf_sort_col_asc = unwrap_typeref(mrnf_sort_col_asc).meta
+    else:
+        mrnf_sort_col_asc = ()
+    if not is_overload_none(mrnf_sort_col_na):
+        mrnf_sort_col_na = unwrap_typeref(mrnf_sort_col_na).meta
+    else:
+        mrnf_sort_col_na = ()
+    if not is_overload_none(mrnf_col_inds_keep):
+        mrnf_col_inds_keep = unwrap_typeref(mrnf_col_inds_keep).meta
+    else:
+        mrnf_col_inds_keep = ()
 
+    if len(mrnf_sort_col_inds) > 0:
+        # In the MRNF case, if there are indices in both the
+        # partition and sort columns, then raise an error.
+        mrnf_sort_col_inds_set = set(mrnf_sort_col_inds)
+        key_inds_set = set(key_inds)
+        common_inds = mrnf_sort_col_inds_set.intersection(key_inds_set)
+        if len(common_inds) > 0:
+            raise BodoError(
+                "Groupby (Min Row-Number Filter): A column cannot be both a partition column and a sort column. "
+                f"The following column indices were in both sets: {common_inds}."
+            )
+
+    output_type = GroupbyStateType(
+        key_inds,
+        # A regular groupby has a single grouping set that matches the keys.
+        (key_inds,),
+        fnames,
+        f_in_offsets,
+        f_in_cols,
+        mrnf_sort_col_inds,
+        mrnf_sort_col_asc,
+        mrnf_sort_col_na,
+        mrnf_col_inds_keep,
+    )
     _validate_groupby_state_type(output_type)
     return output_type
 
@@ -891,7 +885,6 @@ class InitGroupbyStateInfer(AbstractTemplate):
     def generic(self, args, kws):
         pysig = numba.core.utils.pysignature(init_groupby_state)
         folded_args = bodo.utils.transform.fold_argument_types(pysig, args, kws)
-        expected_state_type = unwrap_typeref(folded_args[10])
         (
             key_inds,
             fnames,
@@ -903,7 +896,6 @@ class InitGroupbyStateInfer(AbstractTemplate):
             mrnf_col_inds_keep,
         ) = folded_args[1:9]
         output_type = _get_init_groupby_state_type(
-            expected_state_type,
             key_inds,
             fnames,
             f_in_offsets,
@@ -938,22 +930,9 @@ def gen_init_groupby_state_impl(
     mrnf_sort_col_na=None,
     mrnf_col_inds_keep=None,
     op_pool_size_bytes=-1,
-    expected_state_type=None,
     parallel=False,
 ):
-    expected_state_type = unwrap_typeref(expected_state_type)
-
-    output_type = _get_init_groupby_state_type(
-        output_type,
-        key_inds,
-        fnames,
-        f_in_offsets,
-        f_in_cols,
-        mrnf_sort_col_inds,
-        mrnf_sort_col_asc,
-        mrnf_sort_col_na,
-        mrnf_col_inds_keep,
-    )
+    _validate_groupby_state_type(output_type)
 
     build_arr_dtypes = output_type.build_arr_ctypes
     build_arr_array_types = output_type.build_arr_array_types
@@ -984,7 +963,6 @@ def gen_init_groupby_state_impl(
         mrnf_sort_col_na=None,
         mrnf_col_inds_keep=None,
         op_pool_size_bytes=-1,
-        expected_state_type=None,
         parallel=False,
     ):  # pragma: no cover
         return _init_groupby_state(
