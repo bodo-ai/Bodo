@@ -121,6 +121,10 @@ jobs:
 
   java-ci:
     name: Test Java
+    needs: [validate]
+    if: |
+      needs.validate.outputs.run_tests == 'true' &&
+      needs.validate.outputs.run_bodosql_customer_tests == 'true'
     uses: ./.github/workflows/_test_java_source.yml
 
 
