@@ -165,9 +165,10 @@ jobs:
           echo "$PYTHON_FILES"
 
           # Run each python file (also cd's into the directory of the file)
-          echo "$PYTHON_FILES" | while read -r file; do
-            (
-              cd "$(dirname "$file")" || exit 1
+          current_wd=$(pwd)
+          for file in $PYTHON_FILES; do
+              echo "running $file... "
+              cd "$(dirname "$file")"
               python "$(basename "$file")"
-            )
+              cd "$current_wd"
           done
