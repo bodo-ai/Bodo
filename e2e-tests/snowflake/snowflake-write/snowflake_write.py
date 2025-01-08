@@ -1,4 +1,5 @@
 import argparse
+import os
 import time
 from datetime import datetime
 from uuid import uuid4
@@ -6,15 +7,118 @@ from uuid import uuid4
 import numba
 import numpy as np
 import pandas as pd
-from utils.utils import (
-    checksum_str_df_jit,
-    drop_sf_table,
-    get_sf_table,
-    get_sf_write_conn,
-)
 
 import bodo
 import bodo.io.snowflake
+from bodo.mpi4py import MPI
+
+bodo.set_verbose_level(2)
+
+
+def checksum_str_df(df):
+    """
+    Compute checksum of the a DataFrame with all string columns.
+    We sum up the ascii encoding and compute modulo 256 for
+    each element and then add it up across all processes.
+
+    Args:
+        df (pd.DataFrame): DataFrame with all string columns
+
+    Returns:
+        int64: Checksum
+    """
+    comm = MPI.COMM_WORLD
+    df_hash = df.map(lambda x: sum(x.encode("ascii")) % 256)
+    str_sum = np.int64(df_hash.sum().sum())
+    str_sum = comm.allreduce(str_sum, op=MPI.SUM)
+    return np.int64(str_sum)
+
+
+@bodo.jit
+def checksum_str_df_jit(df):
+    """JIT version of above"""
+    str_sum = 0
+    for c in df.columns:
+        str_sum += df[c].str.encode("ascii").map(lambda x: sum(x) % 256).sum()
+    return str_sum
+
+
+@bodo.jit
+def get_sf_table(table_name, sf_conn):
+    """
+    Get length of Snowflake table.
+
+    Args:
+        table_name (str): name of table
+        sf_conn (str): snowflake connection string
+
+    Returns:
+        pd.DataFrame: Snowflake Table
+    """
+    df = pd.read_sql(f"select * from {table_name}", sf_conn)
+    return df
+
+
+def drop_sf_table(table_name, sf_conn):
+    """
+    Drop a Snowflake Table.
+
+    Args:
+        table_name (str): name of table
+        sf_conn (str): snowflake connection string
+
+    Returns:
+        list: list of results from the drop command
+    """
+    from sqlalchemy import create_engine, text
+
+    engine = create_engine(sf_conn)
+    connection = engine.connect()
+    result = connection.execute(text(f"drop table {table_name}"))
+    result = result.fetchall()
+    connection.close()
+    engine.dispose()
+
+    return result
+
+
+def get_sf_write_conn(user=1):
+    """
+    Get Snowflake connection string of the form:
+    "snowflake://{username}:{password}@{account}/{database}/{schema}?warehouse={warehouse}"
+
+    When user=1, we use an AWS based account
+        username is derived from the SF_USERNAME environment variable
+        password is derived from the SF_PASSWORD environment variable
+        account is derived from the SF_ACCOUNT environment variable
+    When user=2, we use an Azure based account
+        username is derived from the SF_AZURE_USER environment variable
+        password is derived from the SF_AZURE_PASSWORD environment variable
+        account is derived from the SF_AZURE_ACCOUNT environment variable
+
+    database is E2E_TESTS_DB
+    schema is 'public'
+    warehouse is DEMO_WH
+
+    Returns:
+        str: snowflake connection string
+    """
+    if user == 1:
+        username = os.environ["SF_USERNAME"]
+        password = os.environ["SF_PASSWORD"]
+        account = os.environ["SF_ACCOUNT"]
+    elif user == 2:
+        username = os.environ["SF_AZURE_USER"]
+        password = os.environ["SF_AZURE_PASSWORD"]
+        account = os.environ["SF_AZURE_ACCOUNT"]
+    else:
+        raise ValueError(
+            f"Unsupported user value {user} for get_sf_write_conn. Supported values: [1, 2]"
+        )
+    database = "E2E_TESTS_DB"
+    schema = "public"
+    warehouse = "DEMO_WH"
+    return f"snowflake://{username}:{password}@{account}/{database}/{schema}?warehouse={warehouse}"
 
 
 @bodo.jit(spawn=True)
