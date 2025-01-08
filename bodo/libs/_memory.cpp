@@ -703,10 +703,27 @@ BufferPoolOptions BufferPoolOptions::Defaults() {
         options._allocate_extra_frames = true;
     } else {
         // Fraction of total memory we should actually assign to the buffer
-        // pool. We will read this from an environment variable if it's set, but
-        // will default to 95% if spilling is available and enabled, and to 500%
-        // otherwise.
-        double mem_fraction = options.storage_options.empty() ? 5. : .95;
+        // pool.
+        // - 0.8 is the default value.
+        // - If we're running on a remote system, we use 0.95 with spilling
+        //   enabled, 5.0 without spilling enabled.
+        // - If users set an environment variable, we use that fraction.
+        double mem_fraction = 0.8;
+
+        // When Bodo is running on remote systems, like the platform or an
+        // external VM we don't need to be as careful with causing extreme
+        // amounts of memory pressure or heavy swapping, since it's not shared.
+        // However, on local systems, like a laptop, we should be more careful.
+        // TODO(srilman): Remove when we configure default spill support.
+        if (const char* bodo_mode_ =
+                std::getenv("BODO_BUFFER_POOL_REMOTE_MODE")) {
+            if (!std::strcmp(bodo_mode_, "1")) {
+                // Its useful to have more large size classes available for
+                // skewed data We let the OS handle memory pressure and trigger
+                // OOMs. But if spilling is enabled, skew can be spilled instead
+                mem_fraction = options.storage_options.empty() ? 5. : .95;
+            }
+        }
 
         // We expect this to be in percentages and not fraction,
         // i.e. it should be set to 45 if we want to use 45% (or 0.45)

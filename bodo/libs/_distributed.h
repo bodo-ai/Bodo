@@ -654,16 +654,16 @@ static void dist_reduce(char* in_ptr, char* out_ptr, int op_enum, int type_enum,
                 switch (type_enum) {
                     case Bodo_CTypes::_BOOL:
                     case Bodo_CTypes::INT8:
-                        value = (int32_t) * ((int8_t*)in_val_ptr);
+                        value = (int32_t)*((int8_t*)in_val_ptr);
                         break;
                     case Bodo_CTypes::UINT8:
-                        value = (int32_t) * ((uint8_t*)in_val_ptr);
+                        value = (int32_t)*((uint8_t*)in_val_ptr);
                         break;
                     case Bodo_CTypes::INT16:
-                        value = (int32_t) * ((int16_t*)in_val_ptr);
+                        value = (int32_t)*((int16_t*)in_val_ptr);
                         break;
                     case Bodo_CTypes::UINT16:
-                        value = (int32_t) * ((uint16_t*)in_val_ptr);
+                        value = (int32_t)*((uint16_t*)in_val_ptr);
                         break;
                 }
                 memcpy(in_val_rank, &value, struct_val_size);
