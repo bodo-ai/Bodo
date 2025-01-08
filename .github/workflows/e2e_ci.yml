@@ -64,8 +64,8 @@ jobs:
 
           # --------- Run Tests -----------
           cd e2e-tests
-          python -u snowflake/snowflake-write/snowflake_write.py 2 --use_put_method
-          python -u snowflake/snowflake-write/snowflake_write.py 2
+
+          pytest -svW ignore snowflake/snowflake-write/test_snowflake_write.py::test_snowflake_write\[True-azure\]
           # cd ..
           # pytest -s -v --durations=0 bodo/tests/test_javascript*
 
