@@ -130,7 +130,7 @@ jobs:
           export PYTHON_FILES=$(find examples -name "*.py" | grep -v -E "$(echo $SKIP_FILES | sed 's/ /|/g')")
 
           # replace notebook builtin display with a print
-          export DISPLAY_DEF="display = print\n"
+          export DISPLAY_DEF="display = print;"
           echo "$PYTHON_FILES" | xargs -I {} sh -c 'echo $DISPLAY_DEF | cat - {} > temp && mv temp {}'
 
       - name: Install Bodo Packages
