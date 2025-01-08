@@ -32,7 +32,6 @@ from bodo.libs.str_ext import unicode_to_utf8
 from bodo.libs.streaming.base import StreamingStateType
 from bodo.libs.table_builder import TableBuilderStateType
 from bodo.utils import tracing
-from bodo.utils.transform import get_call_expr_arg
 from bodo.utils.typing import (
     BodoError,
     ColNamesMetaType,
@@ -244,7 +243,6 @@ def parquet_writer_init(
     row_group_size,
     bodo_file_prefix,
     bodo_timestamp_tz,
-    expected_state_type=None,
     input_dicts_unified=False,
     _is_parallel=False,
 ):  # pragma: no cover
@@ -259,7 +257,6 @@ def gen_parquet_writer_init_impl(
     row_group_size,
     bodo_file_prefix,
     bodo_timestamp_tz,
-    expected_state_type=None,
     input_dicts_unified=False,
     _is_parallel=False,
 ):  # pragma: no cover
@@ -276,7 +273,6 @@ def gen_parquet_writer_init_impl(
         row_group_size,
         bodo_file_prefix,
         bodo_timestamp_tz,
-        expected_state_type=None,
         input_dicts_unified=False,
         _is_parallel=False,
     ):
@@ -317,21 +313,7 @@ class ParquetWriterInitInfer(AbstractTemplate):
     """Typer for parquet_writer_init that returns writer type"""
 
     def generic(self, args, kws):
-        kws = dict(kws)
-        expected_state_type = get_call_expr_arg(
-            "parquet_writer_init",
-            args,
-            kws,
-            6,
-            "expected_state_type",
-            default=types.none,
-        )
-        expected_state_type = unwrap_typeref(expected_state_type)
-        if is_overload_none(expected_state_type):
-            parquet_writer_type = ParquetWriterType()
-        else:
-            parquet_writer_type = expected_state_type
-
+        parquet_writer_type = ParquetWriterType()
         pysig = numba.core.utils.pysignature(parquet_writer_init)
         folded_args = bodo.utils.transform.fold_argument_types(pysig, args, kws)
         return signature(parquet_writer_type, *folded_args).replace(pysig=pysig)
