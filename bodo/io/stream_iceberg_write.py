@@ -63,7 +63,6 @@ from bodo.libs.streaming.base import StreamingStateType
 from bodo.libs.table_builder import TableBuilderStateType
 from bodo.mpi4py import MPI
 from bodo.utils import tracing
-from bodo.utils.transform import get_call_expr_arg
 from bodo.utils.typing import (
     BodoError,
     ColNamesMetaType,
@@ -905,7 +904,6 @@ def iceberg_writer_init(
     col_names_meta,
     if_exists,
     create_table_meta=None,
-    expected_state_type=None,
     allow_theta_sketches=False,
     input_dicts_unified=False,
     _is_parallel=False,
@@ -922,7 +920,6 @@ def gen_iceberg_writer_init_impl(
     col_names_meta,
     if_exists,
     create_table_meta=None,
-    expected_state_type=None,
     allow_theta_sketches=False,
     input_dicts_unified=False,
     _is_parallel=False,
@@ -964,7 +961,6 @@ def gen_iceberg_writer_init_impl(
         col_names_meta,
         if_exists,
         create_table_meta=None,
-        expected_state_type=None,
         allow_theta_sketches=False,
         input_dicts_unified=False,
         _is_parallel=False,
@@ -1166,21 +1162,7 @@ class IcebergWriterInitInfer(AbstractTemplate):
     """Typer for iceberg_writer_init that returns writer type"""
 
     def generic(self, args, kws):
-        kws = dict(kws)
-        expected_state_type = get_call_expr_arg(
-            "iceberg_writer_init",
-            args,
-            kws,
-            7,
-            "expected_state_type",
-            default=types.none,
-        )
-        expected_state_type = unwrap_typeref(expected_state_type)
-        if is_overload_none(expected_state_type):
-            iceberg_writer_type = IcebergWriterType()
-        else:
-            iceberg_writer_type = expected_state_type
-
+        iceberg_writer_type = IcebergWriterType()
         pysig = numba.core.utils.pysignature(iceberg_writer_init)
         folded_args = bodo.utils.transform.fold_argument_types(pysig, args, kws)
         return signature(iceberg_writer_type, *folded_args).replace(pysig=pysig)
