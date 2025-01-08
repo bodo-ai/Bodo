@@ -29,6 +29,7 @@ from bodo.io.helpers import (
 from bodo.io.parquet_pio import parquet_write_table_cpp, pq_write_create_dir
 from bodo.libs.array import array_to_info, py_table_to_cpp_table
 from bodo.libs.str_ext import unicode_to_utf8
+from bodo.libs.streaming.base import StreamingStateType
 from bodo.libs.table_builder import TableBuilderStateType
 from bodo.utils import tracing
 from bodo.utils.transform import get_call_expr_arg
@@ -46,12 +47,26 @@ from bodo.utils.typing import (
 PARQUET_WRITE_CHUNK_SIZE = int(256e6)
 
 
-class ParquetWriterType(types.Type):
+class ParquetWriterType(StreamingStateType):
     """Data type for streaming Parquet writer's internal state"""
 
     def __init__(self, input_table_type=types.unknown):
         self.input_table_type = input_table_type
         super().__init__(name=f"ParquetWriterType({input_table_type})")
+
+    def is_precise(self):
+        return self.input_table_type != types.unknown
+
+    def unify(self, typingctx, other):
+        """Unify two ParquetWriterType instances when one doesn't have a resolved
+        input_table_type.
+        """
+        if isinstance(other, ParquetWriterType):
+            if not other.is_precise() and self.is_precise():
+                return self
+
+            # Prefer the new type in case append table changed its table type
+            return other
 
 
 class ParquetWriterPayloadType(types.Type):
@@ -237,6 +252,7 @@ def parquet_writer_init(
 
 
 def gen_parquet_writer_init_impl(
+    parquet_writer_type,
     operator_id,
     path,
     compression,
@@ -248,12 +264,6 @@ def gen_parquet_writer_init_impl(
     _is_parallel=False,
 ):  # pragma: no cover
     """Initialize Parquet stream writer"""
-
-    expected_state_type = unwrap_typeref(expected_state_type)
-    if is_overload_none(expected_state_type):
-        parquet_writer_type = ParquetWriterType()
-    else:
-        parquet_writer_type = expected_state_type
 
     table_builder_state_type = TableBuilderStateType(
         parquet_writer_type.input_table_type
@@ -278,7 +288,7 @@ def gen_parquet_writer_init_impl(
         pq_write_create_dir(unicode_to_utf8(path))
 
         # Initialize writer
-        writer = parquet_writer_alloc(expected_state_type)
+        writer = parquet_writer_alloc(parquet_writer_type)
 
         writer["path"] = path
         writer["compression"] = compression
@@ -333,7 +343,7 @@ ParquetWriterInitInfer._no_unliteral = True
 @lower_builtin(parquet_writer_init, types.VarArg(types.Any))
 def lower_parquet_writer_init(context, builder, sig, args):
     """lower parquet_writer_init() using gen_parquet_writer_init_impl above"""
-    impl = gen_parquet_writer_init_impl(*sig.args)
+    impl = gen_parquet_writer_init_impl(sig.return_type, *sig.args)
     return context.compile_internal(builder, impl, sig, args)
 
 
@@ -539,6 +549,10 @@ class ParquetWriterAppendInfer(AbstractTemplate):
     def generic(self, args, kws):
         pysig = numba.core.utils.pysignature(parquet_writer_append_table)
         folded_args = bodo.utils.transform.fold_argument_types(pysig, args, kws)
+        # Update state type in signature to include build table type from input
+        input_table_type = folded_args[1]
+        new_state_type = ParquetWriterType(input_table_type)
+        folded_args = (new_state_type, *folded_args[1:])
         return signature(types.bool_, *folded_args).replace(pysig=pysig)
 
 
