@@ -95,8 +95,13 @@ jobs:
     name: Run Examples
     runs-on: self-hosted-large
     env:
-      # skip AI examples files that aren't testing core functionality.
-      SKIP_FILES: "query_llm_ollama.py preprocess_thepile_bodo.py generate_kmers.py llm_inference_speedtest.py"
+      # Skip files that aren't testing core functionality or are covered in existing tests.
+      SKIP_FILES: >
+        query_llm_ollama.py
+        preprocess_thepile_bodo.py
+        generate_kmers.py
+        llm_inference_speedtest.py
+        Getting_Started/bodo_getting_started.py
     steps:
       - uses: actions/checkout@v4
       - uses: prefix-dev/setup-pixi@v0.8.1
@@ -158,4 +163,11 @@ jobs:
 
           export PYTHON_FILES=$(find . -name "*.py" | grep -v -E "$(echo $SKIP_FILES | sed 's/ /|/g')")
           echo "$PYTHON_FILES"
-          echo "$PYTHON_FILES" | xargs -n 1 -P 1 python
+
+          # Run each python file (cd into subdirectories for relative imports)
+          echo "$PYTHON_FILES" | while read -r file; do
+            (
+              cd "$(dirname "$file")" || exit 1
+              python "$(basename "$file")"
+            )
+          done
