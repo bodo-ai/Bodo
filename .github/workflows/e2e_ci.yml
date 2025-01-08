@@ -124,7 +124,7 @@ jobs:
           export NOTEBOOK_FILES=$(find examples -name "*.ipynb")
           echo "$NOTEBOOK_FILES"
           echo "$NOTEBOOK_FILES" | xargs -n 10 jupyter nbconvert --to script
-          export PYTHON_FILES=$(find . -name *.py | grep -v -E "$(echo $SKIP_FILES | sed 's/ /|/g')")
+          export PYTHON_FILES=$(find examples -name "*.py" | grep -v -E "$(echo $SKIP_FILES | sed 's/ /|/g')")
 
           # replace notebook builtin display with a print
           export DISPLAY_DEF="display = print\n"
