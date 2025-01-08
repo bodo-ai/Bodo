@@ -58,6 +58,26 @@ class UnionStateType(StreamingStateType):
     def key(self):
         return (self.all, self.in_table_types)
 
+    def is_precise(self):
+        return (len(self.in_table_types) == 0) or any(
+            t == types.unknown for t in self.in_table_types
+        )
+
+    def unify(self, typingctx, other):
+        """Unify two UnionStateType instances when one doesn't have a resolved
+        build_table_type.
+        """
+        if isinstance(other, UnionStateType):
+            self_len = len(self.in_table_types)
+            other_len = len(other.in_table_types)
+            if (self_len > other_len) or (
+                self_len == other_len and not other.is_precise() and self.is_precise()
+            ):
+                return self
+
+            # Prefer the new type in case groupby build changed its table type
+            return other
+
     @staticmethod
     def _derive_cpp_indices(key_indices, num_cols):
         """Generate the indices used for the C++ table from the
@@ -193,17 +213,17 @@ InitUnionStateInfer._no_unliteral = True
 @lower_builtin(init_union_state, types.VarArg(types.Any))
 def lower_init_union_state(context, builder, sig, args):
     """lower init_union_state() using gen_init_union_state_impl"""
-    impl = gen_init_union_state_impl(*sig.args)
+    impl = gen_init_union_state_impl(sig.return_type, *sig.args)
     return context.compile_internal(builder, impl, sig, args)
 
 
 def gen_init_union_state_impl(
+    output_type,
     operator_id,
     all=False,
     expected_state_typeref=None,
     parallel=False,
 ):
-    output_type: UnionStateType = unwrap_typeref(expected_state_typeref)  # type: ignore
     all_const = get_overload_const_bool(all)
     assert output_type.all == all_const
 
@@ -372,6 +392,16 @@ class UnionConsumeBatchInfer(AbstractTemplate):
     def generic(self, args, kws):
         pysig = numba.core.utils.pysignature(union_consume_batch)
         folded_args = bodo.utils.transform.fold_argument_types(pysig, args, kws)
+        # Update state type in signature to include build table type from input
+        state_type = folded_args[0]
+        build_table_type = folded_args[1]
+        new_state_type = state_type
+        if build_table_type not in state_type.in_table_types:
+            new_state_type = UnionStateType(
+                state_type.all,
+                (*state_type.in_table_types, build_table_type),
+            )
+        folded_args = (new_state_type, *folded_args[1:])
         output_type = types.BaseTuple.from_types((types.bool_, types.bool_))
         return signature(output_type, *folded_args).replace(pysig=pysig)
 
