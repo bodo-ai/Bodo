@@ -121,7 +121,8 @@ jobs:
       - name: Convert Notebooks scripts to Python
         run: |
           pip install nbconvert
-          jupyter nbconvert --to script examples/*.ipynb
+          export NOTEBOOK_FILES=$(find examples -name "*.ipynb")
+          echo "$NOTEBOOK_FILES" | xargs -n 1 jupyter nbconvert --to script
           export PYTHON_FILES=$(find . -name *.py | grep -v -E "$(echo $SKIP_FILES | sed 's/ /|/g')")
 
           # replace notebook builtin display with a print
