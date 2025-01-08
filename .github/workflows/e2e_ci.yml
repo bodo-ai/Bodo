@@ -119,6 +119,7 @@ jobs:
           role-to-assume: arn:aws:iam::427443013497:role/BodoEngineNightlyRole
           role-session-name: BodoEngineNightlySession
           role-skip-session-tagging: true
+          role-duration-seconds: 7200
 
       - name: Load and Save Hadoop to Cache
         uses: actions/cache@v4
