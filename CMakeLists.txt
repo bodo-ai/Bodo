@@ -15,8 +15,7 @@ else()
   set (X86 FALSE)
 endif()
 
-
-# ----------------------- Helper functions -----------------------
+#----------------------- Helper functions -----------------------
 # Function to set default compiler options
 function(set_default_compiler_options)
   if (LINUX AND X86)
@@ -248,7 +247,6 @@ if (NOT CMAKE_BUILD_TYPE)
 endif()
 
 # Ensure We are Inside a Conda Environment
-cmake_print_variables(CONDA_PREFIX "$ENV{CONDA_PREFIX}")
 if (NOT DEFINED ENV{CONDA_PREFIX})
   message(FATAL_ERROR "Please activate a Conda Environment before building Bodo")
 endif()
@@ -306,14 +304,42 @@ find_package(Python COMPONENTS Interpreter Development.Module REQUIRED)
 find_program(CYTHON_EXECUTABLE "cython" REQUIRED)
 
 # Include for All Targets in General
-include_general_directories()
+if (WIN32)
+  set(CONDA_INCLUDE_DIR "$ENV{CONDA_PREFIX}\\Library\\include")
+  set(CONDA_LIB_DIR "$ENV{CONDA_PREFIX}\\Library\\lib")
+else()
+  set(CONDA_INCLUDE_DIR "$ENV{CONDA_PREFIX}/include")
+  set(CONDA_LIB_DIR "$ENV{CONDA_PREFIX}/lib")
+endif()
 
+cmake_print_variables(CONDA_INCLUDE_DIR)
+cmake_print_variables(CONDA_LIB_DIR)
+
+# This is supposed to work, but isn't. I don't know why
+# include_directories(SYSTEM "${CONDA_INCLUDE_DIR}")
+# Similarly, the following line doesn't work
+# target_include_directories(ext SYSTEM PRIVATE ${CONDA_INCLUDE_DIR})
+# In both cases, I'm certain that CMake believes that the directory is included
+# But the Ninja file and GCC / Clang command doesn't include the directory
+# TODO: Figure out what's going on here
+# As an alternative, we can manually construct the generated arguments
+# and append to the CMAKE_*_FLAGS variables directly
+
+if (WIN32)
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /external:I ${CONDA_INCLUDE_DIR}")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /external:I ${CONDA_INCLUDE_DIR}")
+else()
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -isystem ${CONDA_INCLUDE_DIR}")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -isystem ${CONDA_INCLUDE_DIR}")
+endif()
+
+# Vendor MPICH
 if(DEFINED ENV{BODO_VENDOR_MPICH})
   message(STATUS "Downloading MPICH")
   execute_process(COMMAND ${Python_EXECUTABLE} -m pip download mpich==${MPICH_VERSION} -i https://pypi.anaconda.org/mpi4py/simple --default-timeout=100)
   execute_process(COMMAND unzip "mpich-*.whl" "mpich*.data/*" -d mpich-tmp-extract-dir)
   file(GLOB MPICH_DATA_DIR "mpich-tmp-extract-dir/mpich-*.data/data/*")
-  file(COPY ${MPICH_DATA_DIR} DESTINATION "${SKBUILD_DATA_DIR}" FOLLOW_SYMLINK_CHAIN 
+  file(COPY ${MPICH_DATA_DIR} DESTINATION "${SKBUILD_DATA_DIR}" FOLLOW_SYMLINK_CHAIN
     FILE_PERMISSIONS OWNER_EXECUTE GROUP_EXECUTE WORLD_EXECUTE OWNER_READ GROUP_READ WORLD_READ OWNER_WRITE GROUP_WRITE)
   file(GLOB MPICH_WHEEL "mpich-*.whl")
   file(REMOVE_RECURSE ${MPICH_WHEEL} mpich-tmp-extract-dir)
@@ -653,7 +679,7 @@ if (NOT (CMAKE_BUILD_TYPE STREQUAL "Release") AND NOT DEFINED ENV{BODO_SKIP_CPP_
       )
   endif()
   list(APPEND sources_list "${test_list}")
-  list(APPEND allow_implicit_fallthrough_list 
+  list(APPEND allow_implicit_fallthrough_list
     "bodo/tests/test_puffin.cpp"
     "bodo/tests/test_theta_sketches.cpp")
 endif()
@@ -705,7 +731,7 @@ if (NOT WIN32)
     PROPERTIES
     COMPILE_FLAGS "-Werror=implicit-fallthrough"
   )
-else() 
+else()
   SET_SOURCE_FILES_PROPERTIES(
     ${error_on_fallthrough}
     PROPERTIES
@@ -720,7 +746,7 @@ if (NOT WIN32)
     PROPERTIES
     COMPILE_FLAGS "-Wno-unused-function"
   )
-else() 
+else()
   SET_SOURCE_FILES_PROPERTIES(
     "bodo/io/arrow_compat.cpp"
     PROPERTIES
