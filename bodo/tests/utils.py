@@ -3095,7 +3095,7 @@ pytest_mark_multi_rank_nightly = compose_decos(
         pytest.mark.skipif(
             bodo.get_size() == 1
             and os.environ.get("BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST", False),
-            reason="Skipping test on one rank, will run the test on multi ranks.",
+            reason="Skipping test on one rank, will run the test on multiple ranks.",
         ),
     )
 )
