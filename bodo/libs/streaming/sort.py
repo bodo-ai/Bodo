@@ -29,7 +29,6 @@ from bodo.utils.transform import get_call_expr_arg
 from bodo.utils.typing import (
     MetaType,
     get_overload_const_list,
-    is_overload_none,
     unwrap_typeref,
 )
 
@@ -227,7 +226,6 @@ def init_stream_sort_state(
     asc_cols,
     na_position,
     col_names,
-    expected_state_type=None,
     parallel=False,
 ):
     pass
@@ -240,11 +238,7 @@ class InitSortStateInfer(AbstractTemplate):
     def generic(self, args, kws):
         pysig = numba.core.utils.pysignature(init_stream_sort_state)
         folded_args = bodo.utils.transform.fold_argument_types(pysig, args, kws)
-        expected_state_type = unwrap_typeref(folded_args[7])
-        if is_overload_none(expected_state_type):
-            output_type = SortStateType()
-        else:
-            output_type = expected_state_type
+        output_type = SortStateType()
         return signature(output_type, *folded_args).replace(pysig=pysig)
 
 
@@ -267,7 +261,6 @@ def gen_init_stream_sort_state_impl(
     asc_cols,
     na_position,
     col_names,
-    expected_state_type=None,
     parallel=False,
 ):
     """Initialize the C++ TableBuilderState pointer"""
@@ -291,7 +284,6 @@ def gen_init_stream_sort_state_impl(
         asc_cols,
         na_position,
         col_names,
-        expected_state_type=None,
         parallel=False,
     ):  # pragma: no cover
         return _init_stream_sort_state(
