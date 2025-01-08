@@ -1127,35 +1127,30 @@ def init_grouping_sets_state(
     fnames,  # fnames matches function names in supported_agg_funcs
     f_in_offsets,
     f_in_cols,
-    expected_state_type=None,
     parallel=False,
 ):
     pass
 
 
 def _get_init_grouping_sets_output_type(
-    expected_state_type, key_inds, grouping_sets, fnames, f_in_offsets, f_in_cols
+    key_inds, grouping_sets, fnames, f_in_offsets, f_in_cols
 ):
     """Helper for init_grouping_sets_state output typing that returns state type with
-    unknown table types when expected state type is not provided.
+    unknown table types.
     """
-    if is_overload_none(expected_state_type):
-        key_inds = unwrap_typeref(key_inds).meta
-        grouping_sets = unwrap_typeref(grouping_sets).meta
-        fnames = unwrap_typeref(fnames).meta
-        f_in_offsets = unwrap_typeref(f_in_offsets).meta
-        f_in_cols = unwrap_typeref(f_in_cols).meta
+    key_inds = unwrap_typeref(key_inds).meta
+    grouping_sets = unwrap_typeref(grouping_sets).meta
+    fnames = unwrap_typeref(fnames).meta
+    f_in_offsets = unwrap_typeref(f_in_offsets).meta
+    f_in_cols = unwrap_typeref(f_in_cols).meta
 
-        output_type = GroupbyStateType(
-            key_inds,
-            grouping_sets,
-            fnames,
-            f_in_offsets,
-            f_in_cols,
-        )
-    else:
-        output_type = expected_state_type
-
+    output_type = GroupbyStateType(
+        key_inds,
+        grouping_sets,
+        fnames,
+        f_in_offsets,
+        f_in_cols,
+    )
     return output_type
 
 
@@ -1166,10 +1161,8 @@ class InitGroupingSetsStateInfer(AbstractTemplate):
     def generic(self, args, kws):
         pysig = numba.core.utils.pysignature(init_grouping_sets_state)
         folded_args = bodo.utils.transform.fold_argument_types(pysig, args, kws)
-        expected_state_type = unwrap_typeref(folded_args[7])
         (key_inds, grouping_sets, fnames, f_in_offsets, f_in_cols) = folded_args[2:7]
         output_type = _get_init_grouping_sets_output_type(
-            expected_state_type,
             key_inds,
             grouping_sets,
             fnames,
@@ -1198,13 +1191,8 @@ def gen_init_grouping_sets_state_impl(
     fnames,  # fnames matches function names in supported_agg_funcs
     f_in_offsets,
     f_in_cols,
-    expected_state_type=None,
     parallel=False,
 ):
-    output_type = _get_init_grouping_sets_output_type(
-        output_type, key_inds, grouping_sets, fnames, f_in_offsets, f_in_cols
-    )
-
     build_arr_dtypes = output_type.build_arr_ctypes
     build_arr_array_types = output_type.build_arr_array_types
     n_build_arrs = len(build_arr_array_types)
@@ -1244,7 +1232,6 @@ def gen_init_grouping_sets_state_impl(
         fnames,  # fnames matches function names in supported_agg_funcs
         f_in_offsets,
         f_in_cols,
-        expected_state_type=None,
         parallel=False,
     ):  # pragma: no cover
         return _init_grouping_sets_state(
