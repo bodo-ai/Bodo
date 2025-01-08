@@ -104,7 +104,10 @@ class TableBuilderStateType(StreamingStateType):
         """Unify two TableBuilderStateType instances when one doesn't have a resolved
         build_table_type.
         """
-        if isinstance(other, TableBuilderStateType):
+        if (
+            isinstance(other, TableBuilderStateType)
+            and self.is_chunked_builder == other.is_chunked_builder
+        ):
             if not other.is_precise() and self.is_precise():
                 return self
             # Prefer the new type in case groupby build changed its table type
@@ -255,8 +258,9 @@ class InitTableBuilderStateInfer(AbstractTemplate):
         pysig = numba.core.utils.pysignature(init_table_builder_state)
         folded_args = bodo.utils.transform.fold_argument_types(pysig, args, kws)
         expected_state_type = unwrap_typeref(folded_args[1])
+        is_chunked_builder = get_overload_const_bool(folded_args[2])
         if is_overload_none(expected_state_type):
-            output_type = TableBuilderStateType()
+            output_type = TableBuilderStateType(is_chunked_builder=is_chunked_builder)
         else:
             output_type = expected_state_type
 
@@ -289,7 +293,7 @@ def gen_init_table_builder_state_impl(
     n_arrs = len(arr_array_types)
 
     if get_overload_const_bool(use_chunked_builder):
-        assert expected_state_type.is_chunked_builder, "Error in init_table_builder_state: expected_state_type.is_chunked_builder must be True if use_chunked_builder is True"
+        assert output_type.is_chunked_builder, "Error in init_table_builder_state: expected_state_type.is_chunked_builder must be True if use_chunked_builder is True"
 
         def impl(
             operator_id,
