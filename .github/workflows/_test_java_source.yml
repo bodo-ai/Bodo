@@ -14,7 +14,7 @@ jobs:
             distribution: 'temurin'
             java-version: '11'
             cache: 'maven'
-            cache-dependency-path: 'Bodo/BodoSQL/calcite_sql/bodosql-calcite-application/pom.xml'
+            cache-dependency-path: 'BodoSQL/calcite_sql/bodosql-calcite-application/pom.xml'
         - name: Set up Maven
           uses: stCarolas/setup-maven@v5
           with:
