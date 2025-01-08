@@ -990,7 +990,6 @@ def init_join_state(
     interval_build_columns,
     force_broadcast,
     op_pool_size_bytes=-1,
-    expected_state_type=None,
     # The non-equality portion of the join condition. If None then
     # the join is a pure hash join. Otherwise this is a string similar
     # to the query string accepted by merge.
@@ -1004,36 +1003,31 @@ def init_join_state(
 
 
 def _get_init_join_state_type(
-    expected_state_type,
     build_key_inds,
     probe_key_inds,
     build_outer,
     probe_outer,
 ):
     """Helper for init_join_state output typing that returns state type with unknown
-    table types when expected state type is not provided.
+    table types.
     """
-    if is_overload_none(expected_state_type):
-        build_keys = unwrap_typeref(build_key_inds).meta
-        probe_keys = unwrap_typeref(probe_key_inds).meta
-        if len(build_keys) != len(probe_keys):
-            raise BodoError(
-                "init_join_state(): Number of keys on build and probe sides must match"
-            )
-        if not (is_overload_bool(build_outer) and is_overload_bool(probe_outer)):
-            raise_bodo_error(
-                "init_join_state(): build_outer and probe_outer must be constant booleans"
-            )
-
-        output_type = JoinStateType(
-            build_keys,
-            probe_keys,
-            get_overload_const_bool(build_outer),
-            get_overload_const_bool(probe_outer),
+    build_keys = unwrap_typeref(build_key_inds).meta
+    probe_keys = unwrap_typeref(probe_key_inds).meta
+    if len(build_keys) != len(probe_keys):
+        raise BodoError(
+            "init_join_state(): Number of keys on build and probe sides must match"
         )
-    else:
-        output_type = expected_state_type
+    if not (is_overload_bool(build_outer) and is_overload_bool(probe_outer)):
+        raise_bodo_error(
+            "init_join_state(): build_outer and probe_outer must be constant booleans"
+        )
 
+    output_type = JoinStateType(
+        build_keys,
+        probe_keys,
+        get_overload_const_bool(build_outer),
+        get_overload_const_bool(probe_outer),
+    )
     return output_type
 
 
@@ -1044,7 +1038,6 @@ class InitJoinStateInfer(AbstractTemplate):
     def generic(self, args, kws):
         pysig = numba.core.utils.pysignature(init_join_state)
         folded_args = bodo.utils.transform.fold_argument_types(pysig, args, kws)
-        expected_state_type = unwrap_typeref(folded_args[10])
         (
             build_key_inds,
             probe_key_inds,
@@ -1054,7 +1047,6 @@ class InitJoinStateInfer(AbstractTemplate):
             probe_outer,
         ) = folded_args[1:7]
         output_type = _get_init_join_state_type(
-            expected_state_type,
             build_key_inds,
             probe_key_inds,
             build_outer,
@@ -1085,7 +1077,6 @@ def gen_init_join_state_impl(
     interval_build_columns,
     force_broadcast,
     op_pool_size_bytes=-1,
-    expected_state_type=None,
     # The non-equality portion of the join condition. If None then
     # the join is a pure hash join. Otherwise this is a string similar
     # to the query string accepted by merge.
@@ -1171,7 +1162,6 @@ def gen_init_join_state_impl(
             interval_build_columns,
             force_broadcast,
             op_pool_size_bytes=-1,
-            expected_state_type=None,
             non_equi_condition=None,
             build_parallel=False,
             probe_parallel=False,
@@ -1211,7 +1201,6 @@ def gen_init_join_state_impl(
         interval_build_columns,
         force_broadcast,
         op_pool_size_bytes=-1,
-        expected_state_type=None,
         non_equi_condition=None,
         build_parallel=False,
         probe_parallel=False,
