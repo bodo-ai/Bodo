@@ -426,7 +426,7 @@ def gen_snowflake_writer_init_impl(
         location = _get_schema_str(schema)
         location += table_name
         # Initialize writer
-        writer = sf_writer_alloc(expected_state_type)
+        writer = sf_writer_alloc(snowflake_writer_type)
         writer["conn"] = conn
         writer["location"] = location
         writer["if_exists"] = if_exists
