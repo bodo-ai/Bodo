@@ -18,14 +18,14 @@ repos:
         args: [--allow-missing-credentials]
   # Python
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.8.0
+    rev: v0.8.6
     hooks:
       - id: ruff
         args: [ --fix, --exit-non-zero-on-fix ]
       - id: ruff-format
   # Cython
   - repo: https://github.com/MarcoGorelli/cython-lint
-    rev: v0.16.2
+    rev: v0.16.6
     hooks:
       - id: cython-lint
         args: [--no-pycodestyle]  # Because it doesn't autofix, it would be too annoying
@@ -40,7 +40,7 @@ repos:
         args: ["--autofix"]
   # C++
   - repo: https://github.com/pre-commit/mirrors-clang-format
-    rev: v18.1.8
+    rev: v19.1.6
     hooks:
       - id: clang-format
         types_or: [c++]
@@ -48,7 +48,7 @@ repos:
           (?x)^(bodo/libs/vendored/.*)$
   # GitHub Actions
   - repo: https://github.com/rhysd/actionlint
-    rev: v1.7.4
+    rev: v1.7.6
     hooks:
       - id: actionlint
 
