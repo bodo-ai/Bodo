@@ -33,6 +33,7 @@ from bodo.utils.typing import (
     MetaType,
     error_on_unsupported_streaming_arrays,
     get_overload_const_bool,
+    is_overload_none,
     unwrap_typeref,
 )
 
@@ -239,6 +240,7 @@ def _init_chunked_table_builder_state(
 
 def init_table_builder_state(
     operator_id,
+    expected_state_type=None,
     use_chunked_builder=False,
     input_dicts_unified=False,
 ):
@@ -252,7 +254,12 @@ class InitTableBuilderStateInfer(AbstractTemplate):
     def generic(self, args, kws):
         pysig = numba.core.utils.pysignature(init_table_builder_state)
         folded_args = bodo.utils.transform.fold_argument_types(pysig, args, kws)
-        output_type = TableBuilderStateType()
+        expected_state_type = unwrap_typeref(folded_args[1])
+        if is_overload_none(expected_state_type):
+            output_type = TableBuilderStateType()
+        else:
+            output_type = expected_state_type
+
         return signature(output_type, *folded_args).replace(pysig=pysig)
 
 
@@ -269,6 +276,7 @@ def lower_init_table_builder_state(context, builder, sig, args):
 def gen_init_table_builder_state_impl(
     output_type,
     operator_id,
+    expected_state_type=None,
     use_chunked_builder=False,
     input_dicts_unified=False,
 ):
@@ -281,9 +289,11 @@ def gen_init_table_builder_state_impl(
     n_arrs = len(arr_array_types)
 
     if get_overload_const_bool(use_chunked_builder):
+        assert expected_state_type.is_chunked_builder, "Error in init_table_builder_state: expected_state_type.is_chunked_builder must be True if use_chunked_builder is True"
 
         def impl(
             operator_id,
+            expected_state_type=None,
             use_chunked_builder=False,
             input_dicts_unified=False,
         ):  # pragma: no cover
@@ -299,6 +309,7 @@ def gen_init_table_builder_state_impl(
 
         def impl(
             operator_id,
+            expected_state_type=None,
             use_chunked_builder=False,
             input_dicts_unified=False,
         ):  # pragma: no cover
