@@ -164,7 +164,7 @@ jobs:
           export PYTHON_FILES=$(find . -name "*.py" | grep -v -E "$(echo $SKIP_FILES | sed 's/ /|/g')")
           echo "$PYTHON_FILES"
 
-          # Run each python file (cd into subdirectories for relative imports)
+          # Run each python file (also cd's into the directory of the file)
           echo "$PYTHON_FILES" | while read -r file; do
             (
               cd "$(dirname "$file")" || exit 1
