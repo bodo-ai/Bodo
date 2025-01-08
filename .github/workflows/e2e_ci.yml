@@ -151,6 +151,6 @@ jobs:
           set -eo pipefail
 
           # for ML examples
-          pip install seaborn
+          pip install seaborn imblearn
 
           echo "$PYTHON_FILES" | xargs -n 1 -P 1 python
