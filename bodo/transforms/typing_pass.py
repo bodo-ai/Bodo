@@ -9,7 +9,6 @@ import operator
 import typing as pt
 import warnings
 from collections import defaultdict
-from typing import Any
 
 import numba
 import numpy as np
@@ -4512,106 +4511,6 @@ class TypingTransforms:
         if args_var != "":
             find_build_tuple(self.func_ir, args_var)
         return apply_assign, args_var
-
-    def _replace_state_definition(
-        self,
-        func_text: str,
-        func_name: str,
-        extra_globals: dict[str, Any],
-        args: tuple[pt.Any, ...],
-        retvar,
-        def_to_replace,
-        label_of_replacer: int,
-    ):
-        """Replace the definition of some state variable (e.g. join/table
-        builder)
-        Note that this transformation requires that the definition we are
-        replacing is in a different basic block. Otherwise we will be modifying
-        the current block while iterating over it.
-
-        e.g.:
-          # this is ok:
-          table_builder = bodo.libs.table_builder.init_table_builder_state()
-          ...
-          while foo:
-            ...
-            bodo.libs.table_builder.table_builder_append(table_builder, T0)
-            ...
-
-          # this is NOT ok
-          table_builder = bodo.libs.table_builder.init_table_builder_state()
-          ...
-          bodo.libs.table_builder.table_builder_append(table_builder, T0)
-          ...
-
-        Args:
-            func_text (str): Source defining a new function where the body will
-              replace the old definition
-            func_name (str): Name of the new function defined in func_text
-            extra_globals (Dict[str, Any]): Additional globals to use while
-              evaluating func_text
-            args (Tuple[Any]): Arguments to pass to the function
-            retvar: ir Node corresponding to the variable being assigned to
-            def_to_replace: ir Node corresponding to original definition of retvar
-            label_of_replacer: label of block currently being iterated during
-              the transformation
-        """
-        loc_vars = {}
-        exec(
-            func_text,
-            {"bodo": bodo, **extra_globals},
-            loc_vars,
-        )
-        func = loc_vars[func_name]
-        new_nodes = compile_func_single_block(
-            func,
-            args,
-            retvar,
-            self,
-            extra_globals=extra_globals,
-        )
-        label_of_replacee = self.rhs_labels[def_to_replace]
-        # This should only be true for tests. Generated code will usually have
-        # the replacer expression in a loop while the replacee is in the outer
-        # scope.
-        same_label = label_of_replacee == label_of_replacer
-        if same_label:
-            body = self._working_body
-        else:
-            body = self.func_ir.blocks[label_of_replacee].body
-        remove_line = -1
-        for i, stmt in enumerate(body):
-            # Find the instruction
-            if is_assign(stmt) and stmt.target.name == retvar.name:
-                # Just want to set i here
-                remove_line = i
-                break
-        assert (
-            remove_line != -1
-        ), "Could not find original table builder state to replace"
-        body = body[:remove_line] + new_nodes + body[remove_line + 1 :]
-
-        if same_label:
-            self._working_body = body
-        else:
-            self.func_ir.blocks[label_of_replacee].body = body
-        # Replicate the changes that would occur to defintions and labels if this was
-        # done in the active block.
-
-        # Delete the old definition. Note the function may cause an intermediate assignment,
-        # so we need to delete all definitions.
-        assert (
-            len(self.func_ir._definitions[retvar.name])
-        ) == 1, "There must be exactly 1 definition for table builder state."
-        del self.func_ir._definitions[retvar.name]
-        update_node_list_definitions(new_nodes, self.func_ir)
-        # Update the labels as well
-        for inst in new_nodes:
-            if is_assign(inst):
-                self.rhs_labels[inst.value] = label_of_replacee
-        self.needs_transform = True
-        self.changed = True
-        return new_nodes
 
     def _run_call_bodosql_sql(
         self, assign, rhs, sql_context_var, func_name, label
