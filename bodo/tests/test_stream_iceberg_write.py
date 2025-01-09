@@ -6,7 +6,7 @@ import pandas as pd
 import pytest
 
 import bodo
-from bodo.io.stream_iceberg_write import (
+from bodo.io.iceberg.stream_iceberg_write import (
     iceberg_writer_append_table,
     iceberg_writer_init,
 )

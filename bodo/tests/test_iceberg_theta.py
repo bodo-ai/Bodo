@@ -7,7 +7,7 @@ import pytest
 
 import bodo
 from bodo.io.iceberg import table_columns_have_theta_sketches
-from bodo.io.stream_iceberg_write import (
+from bodo.io.iceberg.stream_iceberg_write import (
     iceberg_writer_append_table,
     iceberg_writer_init,
     read_puffin_file_ndvs,
