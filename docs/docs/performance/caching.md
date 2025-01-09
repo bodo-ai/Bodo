@@ -194,4 +194,4 @@ from cache.
 
 If the compiler reports that it is not able to cache a function, or load
 a function from cache, please report the issue
-[on our feedback respository](https://github.com/bodo-ai/Feedback).
+[on our respository](https://github.com/bodo-ai/Bodo).
