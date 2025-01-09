@@ -6,12 +6,12 @@ import pyarrow as pa
 import pytest
 
 import bodo
-from bodo.io.iceberg import table_columns_have_theta_sketches
 from bodo.io.iceberg.stream_iceberg_write import (
     iceberg_writer_append_table,
     iceberg_writer_init,
     read_puffin_file_ndvs,
 )
+from bodo.io.iceberg.write import table_columns_have_theta_sketches
 from bodo.ir.sql_ext import remove_iceberg_prefix
 from bodo.tests.iceberg_database_helpers.metadata_utils import (
     get_metadata_field,
@@ -98,10 +98,12 @@ def test_iceberg_write_theta_estimates(
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=False)
 
     orig_use_dict_str_type = bodo.hiframes.boxing._use_dict_str_type
-    orig_chunk_size = bodo.io.stream_iceberg_write.ICEBERG_WRITE_PARQUET_CHUNK_SIZE
+    orig_chunk_size = (
+        bodo.io.iceberg.stream_iceberg_write.ICEBERG_WRITE_PARQUET_CHUNK_SIZE
+    )
     orig_enable_theta = bodo.enable_theta_sketches
     bodo.hiframes.boxing._use_dict_str_type = True
-    bodo.io.stream_iceberg_write.ICEBERG_WRITE_PARQUET_CHUNK_SIZE = 300
+    bodo.io.iceberg.stream_iceberg_write.ICEBERG_WRITE_PARQUET_CHUNK_SIZE = 300
     bodo.enable_theta_sketches = True
     try:
         f = write_iceberg_table_with_puffin_files(
@@ -117,7 +119,9 @@ def test_iceberg_write_theta_estimates(
         pd.testing.assert_extension_array_equal(ndvs, ndvs_array, check_dtype=False)
     finally:
         bodo.hiframes.boxing._use_dict_str_type = orig_use_dict_str_type
-        bodo.io.stream_iceberg_write.ICEBERG_WRITE_PARQUET_CHUNK_SIZE = orig_chunk_size
+        bodo.io.iceberg.stream_iceberg_write.ICEBERG_WRITE_PARQUET_CHUNK_SIZE = (
+            orig_chunk_size
+        )
         bodo.enable_theta_sketches = orig_enable_theta
 
 
@@ -144,10 +148,12 @@ def test_iceberg_write_disabled_theta(
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=False)
 
     orig_use_dict_str_type = bodo.hiframes.boxing._use_dict_str_type
-    orig_chunk_size = bodo.io.stream_iceberg_write.ICEBERG_WRITE_PARQUET_CHUNK_SIZE
+    orig_chunk_size = (
+        bodo.io.iceberg.stream_iceberg_write.ICEBERG_WRITE_PARQUET_CHUNK_SIZE
+    )
     orig_enable_theta = bodo.enable_theta_sketches
     bodo.hiframes.boxing._use_dict_str_type = True
-    bodo.io.stream_iceberg_write.ICEBERG_WRITE_PARQUET_CHUNK_SIZE = 300
+    bodo.io.iceberg.stream_iceberg_write.ICEBERG_WRITE_PARQUET_CHUNK_SIZE = 300
     bodo.enable_theta_sketches = False
     try:
         f = write_iceberg_table_with_puffin_files(
@@ -161,7 +167,9 @@ def test_iceberg_write_disabled_theta(
         assert puffin_file_name is None, "Found a puffin file when none should exist"
     finally:
         bodo.hiframes.boxing._use_dict_str_type = orig_use_dict_str_type
-        bodo.io.stream_iceberg_write.ICEBERG_WRITE_PARQUET_CHUNK_SIZE = orig_chunk_size
+        bodo.io.iceberg.stream_iceberg_write.ICEBERG_WRITE_PARQUET_CHUNK_SIZE = (
+            orig_chunk_size
+        )
         bodo.enable_theta_sketches = orig_enable_theta
 
 

@@ -1179,8 +1179,10 @@ def iceberg_write(
             )
         )
 
-    dummy_theta_sketch = bodo.io.stream_iceberg_write.init_theta_sketches_wrapper(
-        alloc_false_bool_array(n_cols)
+    dummy_theta_sketch = (
+        bodo.io.iceberg.stream_iceberg_write.init_theta_sketches_wrapper(
+            alloc_false_bool_array(n_cols)
+        )
     )
     bucket_region = bodo.io.fs_io.get_s3_bucket_region_wrapper(table_loc, is_parallel)
     iceberg_files_info = iceberg_pq_write(
@@ -1221,6 +1223,6 @@ def iceberg_write(
         # we might not have DeleteObject permissions, for instance.
         raise BodoError("Iceberg write failed.")
 
-    bodo.io.stream_iceberg_write.delete_theta_sketches(dummy_theta_sketch)
+    bodo.io.iceberg.stream_iceberg_write.delete_theta_sketches(dummy_theta_sketch)
 
     ev.finalize()

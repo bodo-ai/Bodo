@@ -1688,7 +1688,10 @@ class DistributedAnalysis:
             self._set_var_dist(rhs.args[0].name, array_dists, new_state_dist, False)
             return
 
-        if fdef == ("iceberg_writer_fetch_theta", "bodo.io.stream_iceberg_write"):
+        if fdef == (
+            "iceberg_writer_fetch_theta",
+            "bodo.io.iceberg.stream_iceberg_write",
+        ):
             # Used to obtain the current value of a theta sketch collection from
             # an Iceberg writer as an array, where each row is the current estimate
             # for that column of the table. Answer is replicated since there is
@@ -1696,7 +1699,7 @@ class DistributedAnalysis:
             self._set_REP(lhs, array_dists)
             return
 
-        if fdef == ("read_puffin_file_ndvs", "bodo.io.stream_iceberg_write"):
+        if fdef == ("read_puffin_file_ndvs", "bodo.io.iceberg.stream_iceberg_write"):
             # Used to the ndvs from a puffin file for testing.
             self._set_REP(lhs, array_dists)
             return
@@ -1708,7 +1711,7 @@ class DistributedAnalysis:
             ),
             (
                 "iceberg_writer_append_table",
-                "bodo.io.stream_iceberg_write",
+                "bodo.io.iceberg.stream_iceberg_write",
             ),
             (
                 "parquet_writer_append_table",

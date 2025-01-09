@@ -10,12 +10,27 @@ import bodo
 import bodo.utils.tracing as tracing
 from bodo.io import arrow_cpp
 from bodo.io.helpers import sync_and_reraise_error
-from bodo.io.iceberg.common import flatten_concatenation, flatten_tuple, get_iceberg_fs
-from bodo.io.iceberg.read_metadata import (
+from bodo.io.parquet_pio import get_fpath_without_protocol_prefix, parse_fpath
+from bodo.mpi4py import MPI
+
+from . import merge_into
+from .common import ICEBERG_FIELD_ID_MD_KEY as ICEBERG_FIELD_ID_MD_KEY
+from .common import IcebergConnectionType as IcebergConnectionType
+from .common import flatten_concatenation, flatten_tuple, get_iceberg_fs
+from .common import format_iceberg_conn as format_iceberg_conn
+from .common import format_iceberg_conn_njit as format_iceberg_conn_njit
+from .read_compilation import (
+    determine_str_as_dict_columns as determine_str_as_dict_columns,
+)
+from .read_compilation import get_iceberg_type_info as get_iceberg_type_info
+from .read_compilation import (
+    is_snowflake_managed_iceberg_wh as is_snowflake_managed_iceberg_wh,
+)
+from .read_metadata import (
     get_iceberg_file_list_parallel,
     group_file_frags_by_schema_group_identifier,
 )
-from bodo.io.iceberg.read_parquet import (
+from .read_parquet import (
     IcebergParquetDataset,
     IcebergPiece,
     IcebergPqDatasetMetrics,
@@ -24,8 +39,6 @@ from bodo.io.iceberg.read_parquet import (
     get_row_counts_for_schema_group,
     warn_if_non_ideal_io_parallelism,
 )
-from bodo.io.parquet_pio import get_fpath_without_protocol_prefix, parse_fpath
-from bodo.mpi4py import MPI
 
 
 def get_iceberg_pq_dataset(
@@ -319,3 +332,13 @@ def get_iceberg_pq_dataset(
     ev.finalize()
 
     return iceberg_pq_dataset
+
+
+__all__ = [
+    "merge_into",
+    "ICEBERG_FIELD_ID_MD_KEY",
+    "IcebergConnectionType",
+    "format_iceberg_conn",
+    "format_iceberg_conn_njit",
+    "get_iceberg_pq_dataset",
+]
