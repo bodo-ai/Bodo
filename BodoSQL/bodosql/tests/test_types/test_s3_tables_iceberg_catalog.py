@@ -14,6 +14,8 @@ from bodosql.bodosql_types.s3_tables_catalog import S3TablesConnectionType
 pytestmark = pytest_s3_tables
 
 
+# Refer to bodo/tests/test_s3_tables_iceberg.py for infrastructure
+# required to run these tests
 def test_basic_read(memory_leak_check, s3_tables_catalog):
     """
     Test reading an entire Iceberg table from S3 Tables in SQL
