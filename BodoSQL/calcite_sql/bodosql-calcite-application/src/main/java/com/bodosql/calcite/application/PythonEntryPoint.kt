@@ -313,7 +313,7 @@ class PythonEntryPoint {
         fun buildBodoGlueCatalog(warehouse: String): BodoGlueCatalog = BodoGlueCatalog(warehouse)
 
         /**
-         * Build a BodoGlueCatalog object.
+         * Build a BodoS3TablesCatalog object.
          * @param warehouse The warehouse to use.
          * @return The BodoGlueCatalog object.
          */
