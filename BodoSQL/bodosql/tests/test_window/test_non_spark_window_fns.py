@@ -7,6 +7,7 @@ import pytest
 
 from bodo.tests.utils import (
     nullable_float_arr_maker,
+    pytest_mark_multi_rank_nightly,
     pytest_slow_unless_window,
     temp_config_override,
 )
@@ -18,6 +19,7 @@ pytestmark = pytest_slow_unless_window
 
 
 @pytest.mark.tz_aware
+@pytest_mark_multi_rank_nightly
 def test_conditional_event_pure(memory_leak_check):
     """
     Tests CONDITIONAL_TRUE_EVENT and CONDITIONAL_CHANGE_EVENT in isolation
@@ -113,6 +115,7 @@ def test_conditional_event_pure(memory_leak_check):
     count_window_applies(pandas_code, 0, ["CONDITIONAL_CHANGE_EVENT"])
 
 
+@pytest_mark_multi_rank_nightly
 def test_conditional_event_mixed(memory_leak_check):
     ctx = {
         "TABLE1": pd.DataFrame(

@@ -17,6 +17,7 @@
 package org.apache.calcite.rex;
 
 import com.bodosql.calcite.application.BodoSQLTypeSystems.BodoSQLRelDataTypeSystem;
+import com.bodosql.calcite.sql.parser.SqlBodoParserUtil;
 import org.apache.calcite.avatica.util.ByteString;
 import org.apache.calcite.avatica.util.DateTimeUtils;
 import org.apache.calcite.avatica.util.TimeUnit;
@@ -857,7 +858,7 @@ public class RexLiteral extends RexNode {
       // Bodo Change: Compute nanoseconds instead of milliseconds
       // Bodo Change: Include the type system
       long nanos =
-          SqlParserUtil.intervalToNanos(
+          SqlBodoParserUtil.intervalToNanos(
               literal,
               castNonNull(type.getIntervalQualifier()),
               typeSystem);

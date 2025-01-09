@@ -389,7 +389,7 @@ def test_regexp_count_non_scalar_pattern(regexp_strings_df, args, memory_leak_ch
         ),
         pytest.param(
             (
-                r"SELECT REGEXP_REPLACE(A, 'the (\w+)', 'the (\\\\1)', 1, 1, 'i') FROM table1",
+                r"SELECT REGEXP_REPLACE(A, 'the (\w+)', 'the (\\1)', 1, 1, 'i') FROM table1",
                 pd.DataFrame(
                     {
                         0: pd.Series(
@@ -409,7 +409,7 @@ def test_regexp_count_non_scalar_pattern(regexp_strings_df, args, memory_leak_ch
         ),
         pytest.param(
             (
-                r"SELECT CASE WHEN INSTR(A, '-') > 0 THEN REGEXP_REPLACE(A, '\W+([[:alpha:]]+)-([[:alpha:]]+)', ' \\\\2-\\\\1') ELSE REGEXP_REPLACE(A, '(\W+)(\w+) (\w+) (\w+)', '\\\\1[\\\\4,\\\\3,\\\\2]', 6) END FROM table1",
+                r"SELECT CASE WHEN INSTR(A, '-') > 0 THEN REGEXP_REPLACE(A, '\W+([[:alpha:]]+)-([[:alpha:]]+)', ' \\2-\\1') ELSE REGEXP_REPLACE(A, '(\W+)(\w+) (\w+) (\w+)', '\\1[\\4,\\3,\\2]', 6) END FROM table1",
                 pd.DataFrame(
                     {
                         0: pd.Series(
