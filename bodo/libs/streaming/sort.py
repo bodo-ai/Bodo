@@ -238,7 +238,10 @@ class InitSortStateInfer(AbstractTemplate):
     def generic(self, args, kws):
         pysig = numba.core.utils.pysignature(init_stream_sort_state)
         folded_args = bodo.utils.transform.fold_argument_types(pysig, args, kws)
-        output_type = SortStateType()
+        by = get_overload_const_list(folded_args[3])
+        col_names = get_overload_const_list(folded_args[6])
+        key_inds = tuple(col_names.index(col) for col in by)
+        output_type = SortStateType(key_indices=key_inds)
         return signature(output_type, *folded_args).replace(pysig=pysig)
 
 
