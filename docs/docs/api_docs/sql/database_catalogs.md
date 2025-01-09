@@ -399,7 +399,7 @@ To use this catalog, you will need to provide the S3 table bucket arn.
 The bucket must exist.
 
 ```py
-catalog = bodosql.GlueCatalog(
+catalog = bodosql.S3TablesCatalog(
     warehouse="warehouse_name",
 )
 bc = bodosql.BodoSQLContext(catalog=catalog)
