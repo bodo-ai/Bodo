@@ -248,7 +248,7 @@ class TableType(types.ArrayCompatible):
         if (
             isinstance(other, TableType)
             and (len(self.arr_types) == len(other.arr_types))
-            and (self.has_runtime_cols == other.has_runtime_cols)
+            and (not self.has_runtime_cols and not other.has_runtime_cols)
             and (self.dist == other.dist)
         ):
             try:
