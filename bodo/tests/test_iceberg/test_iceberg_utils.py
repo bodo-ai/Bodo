@@ -3,6 +3,8 @@ import pytest
 
 from bodo.io.iceberg import (
     ICEBERG_FIELD_ID_MD_KEY,
+)
+from bodo.io.iceberg.write import (
     add_iceberg_field_id_md_to_pa_schema,
     with_iceberg_field_id_md,
 )

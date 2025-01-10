@@ -3046,7 +3046,7 @@ class TypingTransforms:
 
         if func_mod in (
             "bodo.io.snowflake_write",
-            "bodo.io.stream_iceberg_write",
+            "bodo.io.iceberg.stream_iceberg_write",
             "bodo.io.stream_parquet_write",
         ):
             return self._run_call_stream_write(assign, rhs, func_name, label)
@@ -4912,7 +4912,7 @@ class TypingTransforms:
                 _get_state_defining_call,
                 self.func_ir,
                 write_state,
-                ("iceberg_writer_init", "bodo.io.stream_iceberg_write"),
+                ("iceberg_writer_init", "bodo.io.iceberg.stream_iceberg_write"),
             )
             if writer_init_def is None:
                 self.needs_transform = True
@@ -4964,12 +4964,12 @@ class TypingTransforms:
 
             if input_table_type != output_type.input_table_type:
                 args = writer_init_def.args[:6]
-                new_type = bodo.io.stream_iceberg_write.IcebergWriterType(
+                new_type = bodo.io.iceberg.stream_iceberg_write.IcebergWriterType(
                     input_table_type
                 )
                 func_text = (
                     "def impl(operator_id, conn, table_name, schema, col_names_meta, if_exists):\n"
-                    "  return bodo.io.stream_iceberg_write.iceberg_writer_init(\n"
+                    "  return bodo.io.iceberg.stream_iceberg_write.iceberg_writer_init(\n"
                     "    operator_id, conn, table_name, schema, col_names_meta, if_exists, \n"
                     "    create_table_meta=_create_table_meta,\n"
                     "    expected_state_type=_expected_state_type,\n"

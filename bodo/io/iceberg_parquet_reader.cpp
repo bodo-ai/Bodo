@@ -856,12 +856,14 @@ class IcebergParquetReader : public ArrowReader {
         assert(this->tot_rows_to_read == -1);
 
         // import bodo.io.iceberg
-        PyObject* iceberg_mod = PyImport_ImportModule("bodo.io.iceberg");
+        PyObject* iceberg_mod =
+            PyImport_ImportModule("bodo.io.iceberg.read_parquet");
         if (PyErr_Occurred()) {
             throw std::runtime_error("python");
         }
 
-        // pieces_myrank_py = bodo.io.iceberg.distribute_pieces(pieces_py)
+        // pieces_myrank_py =
+        // bodo.io.iceberg.read_parquet.distribute_pieces(pieces_py)
         PyObject* pieces_myrank_py = PyObject_CallMethod(
             iceberg_mod, "distribute_pieces", "O", pieces_py);
         if (pieces_myrank_py == nullptr && PyErr_Occurred()) {
@@ -1238,7 +1240,8 @@ class IcebergParquetReader : public ArrowReader {
             }
         }
 
-        PyObject* iceberg_mod = PyImport_ImportModule("bodo.io.iceberg");
+        PyObject* iceberg_mod =
+            PyImport_ImportModule("bodo.io.iceberg.read_parquet");
 
         // XXX TODO Use something like this to set the IO thread pool size and
         // then reset at the end.

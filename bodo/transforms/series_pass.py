@@ -1620,13 +1620,13 @@ class SeriesPass:
 
         if fdef == (
             "iceberg_writer_append_table",
-            "bodo.io.stream_iceberg_write",
+            "bodo.io.iceberg.stream_iceberg_write",
         ):
             state_def = guard(
                 _get_state_defining_call,
                 self.func_ir,
                 rhs.args[0],
-                ("iceberg_writer_init", "bodo.io.stream_iceberg_write"),
+                ("iceberg_writer_init", "bodo.io.iceberg.stream_iceberg_write"),
             )
             if (
                 state_def is not None

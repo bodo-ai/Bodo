@@ -576,7 +576,7 @@ if (NOT (CMAKE_BUILD_TYPE STREQUAL "Release") AND NOT DEFINED ENV{BODO_SKIP_CPP_
     "bodo/tests/test_query_profile_collector.cpp"
     "bodo/tests/test_theta_sketches.cpp"
     "bodo/tests/test_puffin.cpp"
-    "bodo/tests/test_iceberg_rest_aws_credentials_provider.cpp"
+    "bodo/tests/test_iceberg/test_iceberg_rest_aws_credentials_provider.cpp"
     "bodo/tests/test_sorted_window_computation.cpp"
     "bodo/tests/test_thread_pool.cpp"
     "bodo/tests/test_datatypes.cpp"

@@ -39,7 +39,7 @@ class SnowflakeIcebergWriteTarget(
     override fun streamingCreateTableFinalize(): Op.Stmt {
         val expr =
             Expr.Call(
-                "bodo.io.stream_iceberg_write.convert_to_snowflake_iceberg_table",
+                "bodo.io.iceberg.stream_iceberg_write.convert_to_snowflake_iceberg_table",
                 snowflakeConnectionString,
                 icebergConnectionString,
                 Expr.StringLiteral(schema.joinToString(separator = "/")),

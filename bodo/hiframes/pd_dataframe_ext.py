@@ -4410,7 +4410,7 @@ def to_sql_overload(
     # Partition columns not supported through this API.
     func_text += (
         "        col_names = array_to_info(col_names_arr)\n"
-        "        bodo.io.iceberg.iceberg_write(\n"
+        "        bodo.io.iceberg.write.iceberg_write(\n"
         "            con_str, schema, name, table, col_names,\n"
         "            None, if_exists, _is_parallel, pyarrow_table_schema,\n"
         f"            {n_cols}, _bodo_allow_downcasting,\n"

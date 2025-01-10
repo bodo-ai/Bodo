@@ -6,7 +6,7 @@ import pandas as pd
 import pytest
 
 import bodo
-from bodo.io.iceberg import get_rest_catalog_config, get_rest_catalog_fs
+from bodo.io.iceberg.common import get_rest_catalog_config, get_rest_catalog_fs
 from bodo.tests.utils import (
     _get_dist_arg,
     check_func,
