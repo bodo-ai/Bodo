@@ -164,6 +164,19 @@ class GroupbyStateType(StreamingStateType):
             func_types.append(supported_agg_funcs.index(fname))
         return func_types
 
+    def is_precise(self):
+        return self.build_table_type != types.unknown
+
+    def unify(self, typingctx, other):
+        """Unify two GroupbyStateType instances when one doesn't have a resolved
+        build_table_type.
+        """
+        if isinstance(other, GroupbyStateType):
+            if not other.is_precise() and self.is_precise():
+                return self
+            # Prefer the new type in case groupby build changed its table type
+            return other
+
     @cached_property
     def _col_reorder_map(self) -> dict[int, int]:
         """
@@ -432,6 +445,8 @@ class GroupbyStateType(StreamingStateType):
         if self.build_table_type == types.unknown:
             return types.unknown
 
+        _validate_groupby_state_type(self)
+
         # TODO[BSE-578]: get proper output type for all functions
         out_arr_types = []
         if self.fnames != ("min_row_number_filter",):
@@ -695,76 +710,13 @@ def init_groupby_state(
     mrnf_sort_col_na=None,
     mrnf_col_inds_keep=None,
     op_pool_size_bytes=-1,
-    expected_state_type=None,
     parallel=False,
 ):
     pass
 
 
-def _get_init_groupby_state_type(
-    expected_state_type,
-    key_inds,
-    fnames,
-    f_in_offsets,
-    f_in_cols,
-    mrnf_sort_col_inds,
-    mrnf_sort_col_asc,
-    mrnf_sort_col_na,
-    mrnf_col_inds_keep,
-):
-    """Helper for init_groupby_state output typing that returns state type with unknown
-    table types when expected state type is not provided.
-    Also performs validation checks for MRNF and some other cases.
-    """
-    if is_overload_none(expected_state_type):
-        key_inds = unwrap_typeref(key_inds).meta
-        fnames = unwrap_typeref(fnames).meta
-        f_in_offsets = unwrap_typeref(f_in_offsets).meta
-        f_in_cols = unwrap_typeref(f_in_cols).meta
-        # Check if the MRNF fields are provided:
-        if not is_overload_none(mrnf_sort_col_inds):
-            mrnf_sort_col_inds = unwrap_typeref(mrnf_sort_col_inds).meta
-        else:
-            mrnf_sort_col_inds = ()
-        if not is_overload_none(mrnf_sort_col_asc):
-            mrnf_sort_col_asc = unwrap_typeref(mrnf_sort_col_asc).meta
-        else:
-            mrnf_sort_col_asc = ()
-        if not is_overload_none(mrnf_sort_col_na):
-            mrnf_sort_col_na = unwrap_typeref(mrnf_sort_col_na).meta
-        else:
-            mrnf_sort_col_na = ()
-        if not is_overload_none(mrnf_col_inds_keep):
-            mrnf_col_inds_keep = unwrap_typeref(mrnf_col_inds_keep).meta
-        else:
-            mrnf_col_inds_keep = ()
-
-        if len(mrnf_sort_col_inds) > 0:
-            # In the MRNF case, if there are indices in both the
-            # partition and sort columns, then raise an error.
-            mrnf_sort_col_inds_set = set(mrnf_sort_col_inds)
-            key_inds_set = set(key_inds)
-            common_inds = mrnf_sort_col_inds_set.intersection(key_inds_set)
-            if len(common_inds) > 0:
-                raise BodoError(
-                    "Groupby (Min Row-Number Filter): A column cannot be both a partition column and a sort column. "
-                    f"The following column indices were in both sets: {common_inds}."
-                )
-
-        output_type = GroupbyStateType(
-            key_inds,
-            # A regular groupby has a single grouping set that matches the keys.
-            (key_inds,),
-            fnames,
-            f_in_offsets,
-            f_in_cols,
-            mrnf_sort_col_inds,
-            mrnf_sort_col_asc,
-            mrnf_sort_col_na,
-            mrnf_col_inds_keep,
-        )
-    else:
-        output_type = expected_state_type
+def _validate_groupby_state_type(output_type):
+    """Perform various validation checks on the GroupbyStateType instance."""
 
     ## Validation checks for the MRNF case (assuming typing transformations are done):
     if (
@@ -861,6 +813,68 @@ def _get_init_groupby_state_type(
                         f"Groupby does not support semi-structured arrays for aggregations other than {', '.join(supported_nested_agg_funcs[:-1])} and {supported_nested_agg_funcs[-1]}."
                     )
 
+
+def _get_init_groupby_state_type(
+    key_inds,
+    fnames,
+    f_in_offsets,
+    f_in_cols,
+    mrnf_sort_col_inds,
+    mrnf_sort_col_asc,
+    mrnf_sort_col_na,
+    mrnf_col_inds_keep,
+):
+    """Helper for init_groupby_state output typing that returns state type with unknown
+    table types.
+    Also performs validation checks for MRNF and some other cases.
+    """
+    key_inds = unwrap_typeref(key_inds).meta
+    fnames = unwrap_typeref(fnames).meta
+    f_in_offsets = unwrap_typeref(f_in_offsets).meta
+    f_in_cols = unwrap_typeref(f_in_cols).meta
+    # Check if the MRNF fields are provided:
+    if not is_overload_none(mrnf_sort_col_inds):
+        mrnf_sort_col_inds = unwrap_typeref(mrnf_sort_col_inds).meta
+    else:
+        mrnf_sort_col_inds = ()
+    if not is_overload_none(mrnf_sort_col_asc):
+        mrnf_sort_col_asc = unwrap_typeref(mrnf_sort_col_asc).meta
+    else:
+        mrnf_sort_col_asc = ()
+    if not is_overload_none(mrnf_sort_col_na):
+        mrnf_sort_col_na = unwrap_typeref(mrnf_sort_col_na).meta
+    else:
+        mrnf_sort_col_na = ()
+    if not is_overload_none(mrnf_col_inds_keep):
+        mrnf_col_inds_keep = unwrap_typeref(mrnf_col_inds_keep).meta
+    else:
+        mrnf_col_inds_keep = ()
+
+    if len(mrnf_sort_col_inds) > 0:
+        # In the MRNF case, if there are indices in both the
+        # partition and sort columns, then raise an error.
+        mrnf_sort_col_inds_set = set(mrnf_sort_col_inds)
+        key_inds_set = set(key_inds)
+        common_inds = mrnf_sort_col_inds_set.intersection(key_inds_set)
+        if len(common_inds) > 0:
+            raise BodoError(
+                "Groupby (Min Row-Number Filter): A column cannot be both a partition column and a sort column. "
+                f"The following column indices were in both sets: {common_inds}."
+            )
+
+    output_type = GroupbyStateType(
+        key_inds,
+        # A regular groupby has a single grouping set that matches the keys.
+        (key_inds,),
+        fnames,
+        f_in_offsets,
+        f_in_cols,
+        mrnf_sort_col_inds,
+        mrnf_sort_col_asc,
+        mrnf_sort_col_na,
+        mrnf_col_inds_keep,
+    )
+    _validate_groupby_state_type(output_type)
     return output_type
 
 
@@ -871,7 +885,6 @@ class InitGroupbyStateInfer(AbstractTemplate):
     def generic(self, args, kws):
         pysig = numba.core.utils.pysignature(init_groupby_state)
         folded_args = bodo.utils.transform.fold_argument_types(pysig, args, kws)
-        expected_state_type = unwrap_typeref(folded_args[10])
         (
             key_inds,
             fnames,
@@ -883,7 +896,6 @@ class InitGroupbyStateInfer(AbstractTemplate):
             mrnf_col_inds_keep,
         ) = folded_args[1:9]
         output_type = _get_init_groupby_state_type(
-            expected_state_type,
             key_inds,
             fnames,
             f_in_offsets,
@@ -902,11 +914,12 @@ InitGroupbyStateInfer._no_unliteral = True
 @lower_builtin(init_groupby_state, types.VarArg(types.Any))
 def lower_init_groupby_state(context, builder, sig, args):
     """lower init_groupby_state() using gen_init_groupby_state_impl above"""
-    impl = gen_init_groupby_state_impl(*sig.args)
+    impl = gen_init_groupby_state_impl(sig.return_type, *sig.args)
     return context.compile_internal(builder, impl, sig, args)
 
 
 def gen_init_groupby_state_impl(
+    output_type,
     operator_id,
     key_inds,
     fnames,  # fnames matches function names in supported_agg_funcs
@@ -917,22 +930,9 @@ def gen_init_groupby_state_impl(
     mrnf_sort_col_na=None,
     mrnf_col_inds_keep=None,
     op_pool_size_bytes=-1,
-    expected_state_type=None,
     parallel=False,
 ):
-    expected_state_type = unwrap_typeref(expected_state_type)
-
-    output_type = _get_init_groupby_state_type(
-        expected_state_type,
-        key_inds,
-        fnames,
-        f_in_offsets,
-        f_in_cols,
-        mrnf_sort_col_inds,
-        mrnf_sort_col_asc,
-        mrnf_sort_col_na,
-        mrnf_col_inds_keep,
-    )
+    _validate_groupby_state_type(output_type)
 
     build_arr_dtypes = output_type.build_arr_ctypes
     build_arr_array_types = output_type.build_arr_array_types
@@ -963,7 +963,6 @@ def gen_init_groupby_state_impl(
         mrnf_sort_col_na=None,
         mrnf_col_inds_keep=None,
         op_pool_size_bytes=-1,
-        expected_state_type=None,
         parallel=False,
     ):  # pragma: no cover
         return _init_groupby_state(
@@ -1128,35 +1127,30 @@ def init_grouping_sets_state(
     fnames,  # fnames matches function names in supported_agg_funcs
     f_in_offsets,
     f_in_cols,
-    expected_state_type=None,
     parallel=False,
 ):
     pass
 
 
 def _get_init_grouping_sets_output_type(
-    expected_state_type, key_inds, grouping_sets, fnames, f_in_offsets, f_in_cols
+    key_inds, grouping_sets, fnames, f_in_offsets, f_in_cols
 ):
     """Helper for init_grouping_sets_state output typing that returns state type with
-    unknown table types when expected state type is not provided.
+    unknown table types.
     """
-    if is_overload_none(expected_state_type):
-        key_inds = unwrap_typeref(key_inds).meta
-        grouping_sets = unwrap_typeref(grouping_sets).meta
-        fnames = unwrap_typeref(fnames).meta
-        f_in_offsets = unwrap_typeref(f_in_offsets).meta
-        f_in_cols = unwrap_typeref(f_in_cols).meta
+    key_inds = unwrap_typeref(key_inds).meta
+    grouping_sets = unwrap_typeref(grouping_sets).meta
+    fnames = unwrap_typeref(fnames).meta
+    f_in_offsets = unwrap_typeref(f_in_offsets).meta
+    f_in_cols = unwrap_typeref(f_in_cols).meta
 
-        output_type = GroupbyStateType(
-            key_inds,
-            grouping_sets,
-            fnames,
-            f_in_offsets,
-            f_in_cols,
-        )
-    else:
-        output_type = expected_state_type
-
+    output_type = GroupbyStateType(
+        key_inds,
+        grouping_sets,
+        fnames,
+        f_in_offsets,
+        f_in_cols,
+    )
     return output_type
 
 
@@ -1167,10 +1161,8 @@ class InitGroupingSetsStateInfer(AbstractTemplate):
     def generic(self, args, kws):
         pysig = numba.core.utils.pysignature(init_grouping_sets_state)
         folded_args = bodo.utils.transform.fold_argument_types(pysig, args, kws)
-        expected_state_type = unwrap_typeref(folded_args[7])
         (key_inds, grouping_sets, fnames, f_in_offsets, f_in_cols) = folded_args[2:7]
         output_type = _get_init_grouping_sets_output_type(
-            expected_state_type,
             key_inds,
             grouping_sets,
             fnames,
@@ -1186,11 +1178,12 @@ InitGroupingSetsStateInfer._no_unliteral = True
 @lower_builtin(init_grouping_sets_state, types.VarArg(types.Any))
 def lower_init_grouping_sets_state(context, builder, sig, args):
     """lower init_grouping_sets_state() using gen_init_grouping_sets_state_impl"""
-    impl = gen_init_grouping_sets_state_impl(*sig.args)
+    impl = gen_init_grouping_sets_state_impl(sig.return_type, *sig.args)
     return context.compile_internal(builder, impl, sig, args)
 
 
 def gen_init_grouping_sets_state_impl(
+    output_type,
     operator_id,
     sub_operator_ids,
     key_inds,
@@ -1198,14 +1191,8 @@ def gen_init_grouping_sets_state_impl(
     fnames,  # fnames matches function names in supported_agg_funcs
     f_in_offsets,
     f_in_cols,
-    expected_state_type=None,
     parallel=False,
 ):
-    expected_state_type = unwrap_typeref(expected_state_type)
-    output_type = _get_init_grouping_sets_output_type(
-        expected_state_type, key_inds, grouping_sets, fnames, f_in_offsets, f_in_cols
-    )
-
     build_arr_dtypes = output_type.build_arr_ctypes
     build_arr_array_types = output_type.build_arr_array_types
     n_build_arrs = len(build_arr_array_types)
@@ -1245,7 +1232,6 @@ def gen_init_grouping_sets_state_impl(
         fnames,  # fnames matches function names in supported_agg_funcs
         f_in_offsets,
         f_in_cols,
-        expected_state_type=None,
         parallel=False,
     ):  # pragma: no cover
         return _init_grouping_sets_state(
@@ -1345,6 +1331,22 @@ class GroupbyBuildConsumeBatchInfer(AbstractTemplate):
     def generic(self, args, kws):
         pysig = numba.core.utils.pysignature(groupby_build_consume_batch)
         folded_args = bodo.utils.transform.fold_argument_types(pysig, args, kws)
+        # Update state type in signature to include build table type from input
+        state_type = folded_args[0]
+        build_table_type = folded_args[1]
+        new_state_type = GroupbyStateType(
+            state_type.key_inds,
+            state_type.grouping_sets,
+            state_type.fnames,
+            state_type.f_in_offsets,
+            state_type.f_in_cols,
+            state_type.mrnf_sort_col_inds,
+            state_type.mrnf_sort_col_asc,
+            state_type.mrnf_sort_col_na,
+            state_type.mrnf_col_inds_keep,
+            build_table_type=build_table_type,
+        )
+        folded_args = (new_state_type, *folded_args[1:])
         output_type = types.BaseTuple.from_types((types.bool_, types.bool_))
         return signature(output_type, *folded_args).replace(pysig=pysig)
 
@@ -1433,6 +1435,22 @@ class GroupbyBuildConsumeGroupingSetsBatchInfer(AbstractTemplate):
     def generic(self, args, kws):
         pysig = numba.core.utils.pysignature(groupby_grouping_sets_build_consume_batch)
         folded_args = bodo.utils.transform.fold_argument_types(pysig, args, kws)
+        # Update state type in signature to include build table type from input
+        state_type = folded_args[0]
+        build_table_type = folded_args[1]
+        new_state_type = bodo.libs.streaming.groupby.GroupbyStateType(
+            state_type.key_inds,
+            state_type.grouping_sets,
+            state_type.fnames,
+            state_type.f_in_offsets,
+            state_type.f_in_cols,
+            state_type.mrnf_sort_col_inds,
+            state_type.mrnf_sort_col_asc,
+            state_type.mrnf_sort_col_na,
+            state_type.mrnf_col_inds_keep,
+            build_table_type=build_table_type,
+        )
+        folded_args = (new_state_type, *folded_args[1:])
         output_type = types.BaseTuple.from_types((types.bool_, types.bool_))
         return signature(output_type, *folded_args).replace(pysig=pysig)
 

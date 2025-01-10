@@ -29,7 +29,6 @@ from bodo.utils.transform import get_call_expr_arg
 from bodo.utils.typing import (
     MetaType,
     get_overload_const_list,
-    is_overload_none,
     unwrap_typeref,
 )
 
@@ -60,6 +59,20 @@ class SortStateType(StreamingStateType):
         super().__init__(
             f"SortStateType(build_table={build_table_type}, key_indices={key_indices})"
         )
+
+    def is_precise(self):
+        return self._build_table_type != types.unknown
+
+    def unify(self, typingctx, other):
+        """Unify two GroupbyStateType instances when one doesn't have a resolved
+        build_table_type.
+        """
+        if isinstance(other, SortStateType):
+            if not other.is_precise() and self.is_precise():
+                return self
+
+            # Prefer the new type in case sort build changed its table type
+            return other
 
     @cached_property
     def arr_dtypes(self) -> list[types.ArrayCompatible]:
@@ -213,7 +226,6 @@ def init_stream_sort_state(
     asc_cols,
     na_position,
     col_names,
-    expected_state_type=None,
     parallel=False,
 ):
     pass
@@ -226,11 +238,10 @@ class InitSortStateInfer(AbstractTemplate):
     def generic(self, args, kws):
         pysig = numba.core.utils.pysignature(init_stream_sort_state)
         folded_args = bodo.utils.transform.fold_argument_types(pysig, args, kws)
-        expected_state_type = unwrap_typeref(folded_args[7])
-        if is_overload_none(expected_state_type):
-            output_type = SortStateType()
-        else:
-            output_type = expected_state_type
+        by = get_overload_const_list(folded_args[3])
+        col_names = get_overload_const_list(folded_args[6])
+        key_inds = tuple(col_names.index(col) for col in by)
+        output_type = SortStateType(key_indices=key_inds)
         return signature(output_type, *folded_args).replace(pysig=pysig)
 
 
@@ -240,11 +251,12 @@ InitSortStateInfer._no_unliteral = True
 @lower_builtin(init_stream_sort_state, types.VarArg(types.Any))
 def lower_init_stream_sort_state(context, builder, sig, args):
     """lower init_stream_sort_state() using gen_init_stream_sort_state_impl"""
-    impl = gen_init_stream_sort_state_impl(*sig.args)
+    impl = gen_init_stream_sort_state_impl(sig.return_type, *sig.args)
     return context.compile_internal(builder, impl, sig, args)
 
 
 def gen_init_stream_sort_state_impl(
+    output_type,
     operator_id,
     limit,
     offset,
@@ -252,11 +264,9 @@ def gen_init_stream_sort_state_impl(
     asc_cols,
     na_position,
     col_names,
-    expected_state_type=None,
     parallel=False,
 ):
     """Initialize the C++ TableBuilderState pointer"""
-    output_type = unwrap_typeref(expected_state_type)
 
     asc_cols_ = get_overload_const_list(asc_cols)
     asc_cols_ = [int(asc) for asc in asc_cols_]
@@ -277,7 +287,6 @@ def gen_init_stream_sort_state_impl(
         asc_cols,
         na_position,
         col_names,
-        expected_state_type=None,
         parallel=False,
     ):  # pragma: no cover
         return _init_stream_sort_state(
@@ -384,6 +393,11 @@ class SortBuildConsumeBatchInfer(AbstractTemplate):
     def generic(self, args, kws):
         pysig = numba.core.utils.pysignature(sort_build_consume_batch)
         folded_args = bodo.utils.transform.fold_argument_types(pysig, args, kws)
+        # Update state type in signature to include build table type from input
+        state_type = folded_args[0]
+        build_table_type = folded_args[1]
+        new_state_type = SortStateType(build_table_type, state_type.key_indices)
+        folded_args = (new_state_type, *folded_args[1:])
         return signature(types.bool_, *folded_args).replace(pysig=pysig)
 
 
