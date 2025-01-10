@@ -43,23 +43,42 @@ This option enables spot instances in the cluster. Use this option to reduce the
 
 This option specifies the number of nodes in your cluster.
 
-#### Bodo Version 
+#### Automatic Version Upgrade
 
-This option specifies the Bodo version to be installed on your cluster. 
+This option enables automatic Bodo version upgrades. 
+The cluster will automatically select the latest Bodo version during each cluster creation or restart. 
+If you want to use a specific Bodo version, please deselect this option and specify the version in the `advanced` tab.
 Typically, the three latest Bodo Releases are available.
 
-![Cluster-Form-Bodo](../../platform2-screenshots/cluster_bodo_version.png#center)
+![Cluster-Form-Bodo](../../platform2-gifs/cluster_bodo_version.gif#center)
 
-#### Cluster Auto Pause
+#### Cluster Auto Pause / Auto Stop
 
-This is the amount of time of inactivity after which the platform will pause the cluster automatically.
+**Cluster Auto Pause** is the period of inactivity after which the platform will automatically pause the cluster. 
+Activity is based on attached notebooks and jobs.
 
-![Cluster-Form-Auto-Pause](../../platform2-screenshots/cluster_auto_pause.png#center)
+**Cluster Auto Stop** is the period of inactivity after which the platform will automatically stop the cluster. 
+This will remove VMs with storage but leave a reference in the Bodo Platform, allowing the cluster to be restarted.
+
+!!! note
+    In both cases, activity is determined by [attached notebooks][attaching_notebook_to_cluster] and [jobs][running-a-batch-job]. 
+    If you don’t plan to attach a notebook or job (and will use SSH instead), it’s recommended to set this to ‘Never.’ 
+    Otherwise, the cluster will be stopped or paused after the specified time
+
+![Cluster-Form-Auto](../../platform2-screenshots/cluster_auto.png#center)
+
+
+#### Cluster Tags
+
+This option allows the user to specify additional tags that can be used to find resources in your cloud.
+
+![Cluster-Tags](../../platform2-gifs/cluster_tags.gif#center)
+
 
 ### Cluster Advanced Configuration
 Additionally, you can specify the following advanced configuration options for cluster.
 
-![Cluster-Form-Advanced](../../platform2-screenshots/cluster_advanced.png#center)
+![Cluster-Form-Advanced](../../platform2-gifs/cluster_advanced.gif#center)
 
 #### Availability Zone
 
@@ -67,22 +86,16 @@ Additionally, you can specify the following advanced configuration options for c
 
 Select the availability zone where you want to deploy your cluster. By default, this is set to `Auto Select`.
 
-#### Auto Stop 
-
-Activity is determined through attached notebooks (see
-[how to attach a notebook to a cluster][attaching_notebook_to_cluster]) and jobs
-(see [how to run a job][running-a-batch-job]). Therefore, if you
-don't plan to attach a notebook or a job to this cluster (and use it
-via `ssh` instead), we recommend that you to set this to
-`Never,` since otherwise, the cluster will be stopped after
-the set time.
-
 #### Instance Role 
 
 :fontawesome-brands-aws: On AWS only 
 
 Is the instance role that should be attached to the cluster instances. 
 You can define these in Settings. By default, a new role will be created and attached.
+
+#### Bodo Version
+
+This option specifies the Bodo version to be installed on your cluster.
 
 #### Cluster description 
 
@@ -115,12 +128,7 @@ cluster creation is in progress.
 
 ![Cluster-Status-InProgress](../../platform2-screenshots/cluster_inprogress.png#center)
 
-You can click on the `Details` drop-down to monitor the progress of the
-cluster creation.
-
-![Cluster-Info](../../platform2-screenshots/cluster_inprogress_deatails.png#center)
-
-Once the cluster is successfully created and ready to use, the status is
-updated to <fin>RUNNING</fin>.
+Once the cluster is successfully created and ready to use, its status will be updated to <fin>RUNNING</fin>. 
+You can click on the Details drop-down to view more information.
 
 ![Cluster-Status-Finished](../../platform2-gifs/create_cluster_details.gif#center)
