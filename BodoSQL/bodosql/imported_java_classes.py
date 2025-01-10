@@ -3,6 +3,8 @@ Common location for importing all java classes from Py4j. This is used so they
 can be imported in multiple locations.
 """
 
+from typing import Any
+
 import bodo
 from bodo.libs.distributed_api import bcast_scalar
 from bodo.utils.typing import BodoError
@@ -17,10 +19,6 @@ msg = ""
 gateway = get_gateway()
 if bodo.get_rank() == 0:
     try:
-        ColumnDataTypeClass = gateway.jvm.com.bodosql.calcite.table.ColumnDataTypeInfo
-        RelationalAlgebraGeneratorClass = (
-            gateway.jvm.com.bodosql.calcite.application.RelationalAlgebraGenerator
-        )
         # Note: Although this isn't used it must be imported.
         SnowflakeDriver = gateway.jvm.net.snowflake.client.jdbc.SnowflakeDriver
         # Note: We call this JavaEntryPoint so its clear the Python code enters java
@@ -34,12 +32,33 @@ if bodo.get_rank() == 0:
         saw_error = True
         msg = str(e)
 else:
-    ColumnDataTypeClass = None
-    RelationalAlgebraGeneratorClass = None
-    SnowflakeDriver = None
     JavaEntryPoint = None
 
 saw_error = bcast_scalar(saw_error)
 msg = bcast_scalar(msg)
 if saw_error:
     raise BodoError(msg)
+
+
+def build_java_array_list(elems: list[Any]):
+    if bodo.get_rank() == 0:
+        output_list = JavaEntryPoint.buildArrayList()
+        for elem in elems:
+            JavaEntryPoint.appendToArrayList(output_list, elem)
+        return output_list
+
+
+def build_java_hash_map(d: dict[Any, Any]):
+    if bodo.get_rank() == 0:
+        output_map = JavaEntryPoint.buildMap()
+        for key, value in d.items():
+            JavaEntryPoint.mapPut(output_map, key, value)
+        return output_map
+
+
+def build_java_properties(d: dict[str, str]):
+    if bodo.get_rank() == 0:
+        output_map = JavaEntryPoint.buildProperties()
+        for key, value in d.items():
+            JavaEntryPoint.setProperty(output_map, key, value)
+        return output_map

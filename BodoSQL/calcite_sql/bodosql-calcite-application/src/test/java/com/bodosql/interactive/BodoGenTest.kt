@@ -1,6 +1,7 @@
 package com.bodosql.interactive
 
 import com.bodosql.calcite.adapter.bodo.bodoPhysicalProject
+import com.bodosql.calcite.application.PythonEntryPoint.Companion.getLoweredGlobals
 import com.bodosql.calcite.application.PythonEntryPoint.Companion.getPandasString
 import com.bodosql.calcite.application.RelationalAlgebraGenerator
 import com.bodosql.calcite.schema.LocalSchema
@@ -19,7 +20,7 @@ object BodoGenTest {
     @JvmStatic
     fun main(args: Array<String>) {
         val sql = "select * from table1"
-        val plannerChoice = RelationalAlgebraGenerator.STREAMING_PLANNER
+        val isStreaming = true
         val schema = LocalSchema("__BODOLOCAL__")
         var cols: ArrayList<BodoSQLColumn> = ArrayList()
         val dataType: BodoSQLColumnDataType = BodoSQLColumnDataType.INT64
@@ -80,8 +81,9 @@ object BodoGenTest {
         schema.addTable(table3)
         val generator =
             RelationalAlgebraGenerator(
+                null,
                 schema,
-                plannerChoice,
+                isStreaming,
                 0,
                 1,
                 BatchingProperty.defaultBatchSize,
@@ -94,6 +96,7 @@ object BodoGenTest {
                 "SNOWFLAKE", // Maintain case sensitivity in the Snowflake style by default
                 false, // Only cache identical nodes
                 true, // Generate a prefetch call at the beginning of SQL queries
+                null,
             )
         val paramTypes = MutableList(1) { ColumnDataTypeInfo(BodoSQLColumnDataType.INT64, false) }
         val namedParamTypes =
@@ -112,7 +115,7 @@ object BodoGenTest {
         println("Generated code:")
         println(pandasStr)
         println("Lowered globals:")
-        println(generator.loweredGlobalVariables)
+        println(getLoweredGlobals(generator))
     }
 
     private fun getRelationalAlgebraString(

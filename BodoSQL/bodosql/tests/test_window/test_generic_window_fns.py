@@ -8,7 +8,11 @@ import pytest
 
 import bodo
 from bodo.mpi4py import MPI
-from bodo.tests.utils import pytest_slow_unless_window, temp_env_override
+from bodo.tests.utils import (
+    pytest_mark_multi_rank_nightly,
+    pytest_slow_unless_window,
+    temp_env_override,
+)
 from bodosql.tests.test_window.window_common import (  # noqa
     all_numeric_window_col_names,
     all_numeric_window_df,
@@ -30,6 +34,7 @@ pytestmark = pytest_slow_unless_window
         pytest.param(["SUM", "AVG"], id="sum_avg"),
     ],
 )
+@pytest_mark_multi_rank_nightly
 @pytest.mark.timeout(1300)
 # passes in 18 minutes on 1 rank
 def test_numeric_window_functions(
@@ -136,6 +141,7 @@ def test_two_arg_numeric_window_functions(memory_leak_check):
         pytest.param(["MIN", "MAX"], id="min-max"),
     ],
 )
+@pytest_mark_multi_rank_nightly
 @pytest.mark.timeout(1200)
 # NOTE (allai5): passes in 592.81 seconds on 1 rank on M1 as of 05/03/2023
 def test_non_numeric_window_functions(
@@ -237,6 +243,7 @@ def test_first_last_nth(window_calls, all_window_df, spark_info):
 
 
 @pytest.mark.slow
+@pytest_mark_multi_rank_nightly
 def test_blended_fusion(memory_leak_check):
     """Tests fusion between RANK, AVG, MEDIAN, MODE and CONDITIONAL_CHANGE_EVENT.
     This allows window functions that are not tested together to have one

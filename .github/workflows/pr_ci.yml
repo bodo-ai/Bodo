@@ -43,7 +43,7 @@ jobs:
         id: check_msg
         run: |
           set -xe pipefail
-          echo "commit_message=$(git log -1 --pretty=format:'%s')" >> $GITHUB_OUTPUT
+          echo "commit_message=$(git log -1 --pretty=format:'%s')" >> "$GITHUB_OUTPUT"
 
   # 2) Trigger BodoSQL Customer tests
   bodosql-customer-tests:
@@ -118,6 +118,16 @@ jobs:
       pytest-marker: "spawn_mode"
       collect-coverage: false
     secrets: inherit
+
+  java-ci:
+    name: Test Java
+    needs: [validate]
+    if: |
+      needs.validate.outputs.run_tests == 'true' &&
+      needs.validate.outputs.run_bodosql_customer_tests == 'true'
+    uses: ./.github/workflows/_test_java_source.yml
+
+
 
   # 5) Collect and combine any results from runs
   collect-results:
