@@ -208,7 +208,7 @@ public class BodoReturnTypes {
     public static final SqlTypeTransform WRAP_TYPE_TO_ARRAY =
             (opBinding, typeToTransform) ->
                     toArrayTypeIfNotAlready(opBinding, typeToTransform, false)
-                    ;
+            ;
 
 
 
