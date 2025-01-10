@@ -248,6 +248,7 @@ class TableType(types.ArrayCompatible):
         if (
             isinstance(other, TableType)
             and (len(self.arr_types) == len(other.arr_types))
+            # TODO: revisit unify for runtime columns case
             and (not self.has_runtime_cols and not other.has_runtime_cols)
             and (self.dist == other.dist)
         ):
