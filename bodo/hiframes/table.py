@@ -172,6 +172,8 @@ def _unify_array_types(typingctx, t1, t2):
     if unified is not None:
         return unified
 
+    # TODO[BSE-4462]: revisit table unification functions
+
     # NOTE: may raise BodoError if cannot unify
     return bodo.libs.streaming.join.JoinStateType._derive_common_key_type([t1, t2])
 
