@@ -110,7 +110,7 @@ class TableBuilderStateType(StreamingStateType):
         ):
             if not other.is_precise() and self.is_precise():
                 return self
-            # Prefer the new type in case groupby build changed its table type
+            # Prefer the new type in case append changed its table type
             return other
 
     @cached_property

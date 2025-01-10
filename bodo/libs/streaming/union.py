@@ -74,7 +74,7 @@ class UnionStateType(StreamingStateType):
             ):
                 return self
 
-            # Prefer the new type in case groupby build changed its table type
+            # Prefer the new type in case union build changed its table type
             return other
 
     @staticmethod
