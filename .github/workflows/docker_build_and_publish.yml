@@ -1,6 +1,10 @@
 name: Build and push Docker image to dockerhub
 
 on:
+  #TODO: undo before merge
+  pull_request:
+    branches: [develop]
+
   workflow_dispatch:
     inputs:
       push:
@@ -83,10 +87,10 @@ jobs:
 
     - name: Build and push
       uses: docker/build-push-action@v6
-      if: ${{ inputs.is-release }}
+      # TODO: undo before merging
+      # if: ${{ inputs.is-release }}
       with:
         push: true
         file: ./buildscripts/docker/docker_release/Dockerfile
-        # TODO: linux/arm64
-        platforms: linux/amd64
+        platforms: linux/amd64, linux/arm64
         tags: ${{ env.LATEST_TAG}}  
