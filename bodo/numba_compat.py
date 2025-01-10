@@ -3005,6 +3005,7 @@ def CallConstraint_resolve(self, typeinfer, typevars, fnty):
     for a in itertools.chain(pos_args, kw_args.values()):
         # Forbids imprecise type except array of undefined dtype
         if not a.is_precise() and not isinstance(a, types.Array):
+            # Bodo change: allow streaming state type to be imprecise
             if getattr(fnty, "typing_key", None) in streaming_build_funcs and isinstance(a, StreamingStateType):
                 continue
             return
@@ -3065,6 +3066,7 @@ def CallConstraint_resolve(self, typeinfer, typevars, fnty):
 
     typeinfer.add_type(self.target, sig.return_type, loc=self.loc)
 
+    # Bodo change: update streaming state type
     if getattr(fnty, "typing_key", None) in streaming_build_funcs and pos_args[0] != sig.args[0]:
         typeinfer.add_type(self.args[0].name, sig.args[0], loc=self.loc)
 
