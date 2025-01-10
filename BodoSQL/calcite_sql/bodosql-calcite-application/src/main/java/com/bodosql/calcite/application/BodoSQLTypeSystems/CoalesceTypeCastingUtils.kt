@@ -355,7 +355,7 @@ class CoalesceTypeCastingUtils {
         fun genQueriesForUnconfirmedTypePairs() {
             for (typ1 in SF_TYPE.values()) {
                 for (typ2 in SF_TYPE.values()) {
-                    if (typ1.equals(typ2)) continue
+                    if (typ1 == typ2) continue
                     if (!pairTypeMap.containsKey(Pair(typ1, typ2))) {
                         println("EXPLAIN SELECT Coalesce(${SFTypeToColumNameDict.get(typ1)}, ${SFTypeToColumNameDict.get(typ2)}) FROM TEST_DB.PUBLIC.KEATON_LOCAL_TEST;")
                     }
@@ -409,12 +409,12 @@ class CoalesceTypeCastingUtils {
                 // [typ1, typ2, typ3] --> COALESCE(typ3, typ2, typ1)
                 val argsList: MutableList<SF_TYPE> = mutableListOf(baseKey.second, baseKey.first)
 
-                var expectedOutType: SF_TYPE = validPairTypeMap.get(baseKey)!!.first
+                var expectedOutType: SF_TYPE = validPairTypeMap[baseKey]!!.first
                 var nextKeyOptional = findValidCastIfExists(remainingKeys, expectedOutType)
 
                 while (nextKeyOptional.isPresent) {
                     val nextKeyInChain = nextKeyOptional.get()
-                    expectedOutType = validPairTypeMap.get(nextKeyInChain)!!.first
+                    expectedOutType = validPairTypeMap[nextKeyInChain]!!.first
                     argsList.add(nextKeyInChain.first)
                     remainingKeys.remove(nextKeyInChain)
                     nextKeyOptional = findValidCastIfExists(remainingKeys, expectedOutType)
@@ -467,8 +467,7 @@ class CoalesceTypeCastingUtils {
             // map of type-> expression
             val valuesListAsString = argsListAsString.reduce { u, v -> "$u, $v" }
             val outColName = "EXPECT_${expectedOutType}_$suffix"
-            val coalesceStmt = "COALESCE($valuesListAsString) as $outColName"
-            return coalesceStmt
+            return "COALESCE($valuesListAsString) as $outColName"
         }
 
         /**
