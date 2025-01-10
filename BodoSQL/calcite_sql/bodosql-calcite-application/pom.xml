@@ -33,7 +33,7 @@
         <!-- Start Iceberg Dependencies. We may remove these as we cleanup the relationship with the Iceberg Connector. -->
         <iceberg.version>1.5.2</iceberg.version>
         <hadoop.version>3.3.3</hadoop.version>
-        <aws.version>2.20.26</aws.version>
+        <aws.version>2.29.26</aws.version>
         <janino.version>3.1.10</janino.version>
         <!-- End Iceberg Dependencies -->
     </properties>
@@ -220,6 +220,18 @@
             <artifactId>s3</artifactId>
             <version>${aws.version}</version>
         </dependency>
+        <!-- S3Tables Dependencies -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>s3tables</artifactId>
+            <version>${aws.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>software.amazon.s3tables</groupId>
+            <artifactId>s3-tables-catalog-for-iceberg</artifactId>
+            <version>0.1.3</version>
+        </dependency>
+
         <dependency>
             <groupId>org.testcontainers</groupId>
             <artifactId>testcontainers</artifactId>

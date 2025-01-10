@@ -27,7 +27,7 @@ from bodo.tests.conftest import (  # noqa
     tabular_connection,
 )
 from bodo.tests.iceberg_database_helpers.utils import get_spark
-from bodo.tests.utils import gen_nonascii_list
+from bodo.tests.utils import gen_nonascii_list, temp_env_override
 
 # Patch to avoid PySpark's Py4j exception handler in testing.
 # See:
@@ -1971,6 +1971,17 @@ def glue_catalog():
 
     warehouse = "s3://icebergglue-ci"
     return bodosql.GlueCatalog(warehouse=warehouse)
+
+
+@pytest.fixture
+def s3_tables_catalog():
+    """
+    Returns a s3 tables catalog object
+    """
+
+    warehouse = "arn:aws:s3tables:us-east-2:427443013497:bucket/unittest-bucket"
+    with temp_env_override({"AWS_REGION": "us-east-2"}):
+        yield bodosql.S3TablesCatalog(warehouse=warehouse)
 
 
 @pytest.fixture(

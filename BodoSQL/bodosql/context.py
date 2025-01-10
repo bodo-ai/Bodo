@@ -1249,7 +1249,9 @@ class BodoSQLContext:
             self.default_tz,
         )
 
-    def add_or_replace_view(self, name: str, table: pd.DataFrame | TablePath):
+    def add_or_replace_view(
+        self, name: str, table: pd.DataFrame | TablePath
+    ) -> BodoSQLContext:
         """Create a new BodoSQLContext that contains all of the old DataFrames and the
         new table being provided. If there is a DataFrame in the old BodoSQLContext with
         the same name, it is replaced by the new table in the new BodoSQLContext. Otherwise

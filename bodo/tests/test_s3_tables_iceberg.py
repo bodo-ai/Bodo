@@ -4,7 +4,6 @@ from io import StringIO
 
 import boto3
 import pandas as pd
-import pytest
 
 import bodo
 from bodo.tests.user_logging_utils import (
@@ -15,12 +14,16 @@ from bodo.tests.user_logging_utils import (
 from bodo.tests.utils import (
     _get_dist_arg,
     check_func,
+    pytest_s3_tables,
     run_rank0,
     temp_env_override,
 )
 
-pytest_mark = pytest.mark.iceberg
+pytest_mark = pytest_s3_tables
 
+# This bucket must exist and have the read_namespace and write_namespace namespaces
+# created. Additionally, the bodo_iceberg_read_test table should have contents
+# matching the test_basic_read test's py_out.
 bucket_arn = "arn:aws:s3tables:us-east-2:427443013497:bucket/unittest-bucket"
 
 
@@ -132,4 +135,4 @@ def test_basic_write(memory_leak_check):
             )
             client.close()
 
-        run_rank0(cleanup)
+        run_rank0(cleanup)()

@@ -11,79 +11,11 @@ import com.bodosql.calcite.table.CatalogTable
 import com.bodosql.calcite.table.IcebergCatalogTable
 import com.google.common.collect.ImmutableList
 import org.apache.calcite.sql.ddl.SqlCreateTable
-import org.apache.iceberg.aws.glue.GlueCatalog
+import software.amazon.s3tables.iceberg.S3TablesCatalog
 
-class BodoGlueCatalog(
+class BodoS3TablesCatalog(
     private val warehouse: String,
-) : IcebergCatalog<GlueCatalog>(createGlueCatalog(warehouse)) {
-    /**
-     * Generates the code necessary to submit the remote query to the catalog DB.
-     *
-     * @param query Query to submit.
-     * @return The generated code.
-     */
-    override fun generateRemoteQuery(query: String): Expr {
-        TODO("Not yet implemented")
-    }
-
-    /**
-     * Returns if a schema with the given depth is allowed to contain tables. Glue only allows Tables to be present in "databases", which maps to schemas when using iceberg. Schemas cannot be nested.
-     *
-     * @param depth The number of parent schemas that would need to be visited to reach the root.
-     * @return true if the depth is 1 and false otherwise.
-     */
-    override fun schemaDepthMayContainTables(depth: Int): Boolean = depth == 1
-
-    /**
-     * Returns if a schema with the given depth is allowed to contain subSchemas.
-     * Glue catalogs do not support subSchemas, so this method always returns false for non-zero values.
-     *
-     * @param depth The number of parent schemas that would need to be visited to reach the root.
-     * @return true if the depth is 0 and false otherwise.
-     */
-    override fun schemaDepthMayContainSubSchemas(depth: Int): Boolean = depth == 0
-
-    /**
-     * Generate a Python connection string used to read from or write to a Catalog in Bodo's SQL
-     * Python code.
-     *
-     *
-     * TODO(jsternberg): This method is needed for the XXXToPandasConverter nodes, but exposing
-     * this is a bad idea and this class likely needs to be refactored in a way that the connection
-     * information can be passed around more easily.
-     *
-     * @param schemaPath The schema component to define the connection not including the table name.
-     * @return The connection string
-     */
-    override fun generatePythonConnStr(schemaPath: ImmutableList<String>): Expr =
-        Expr.Call("bodosql.get_glue_connection", Expr.StringLiteral(warehouse))
-
-    /**
-     * Return the desired WriteTarget for a create table operation.
-     * This catalog only supports Iceberg tables, so the WriteTarget will be an IcebergWriteTarget.
-     *
-     * @param schema The schemaPath to the table.
-     * @param tableName The name of the type that will be created.
-     * @param createTableType The createTable type. This is unused by the file system catalog.
-     * @param ifExistsBehavior The createTable behavior for if there is already a table defined.
-     * @param columnNamesGlobal Global Variable holding the output column names.
-     * @return The selected WriteTarget.
-     */
-    override fun getCreateTableWriteTarget(
-        schema: ImmutableList<String>,
-        tableName: String,
-        createTableType: SqlCreateTable.CreateTableType,
-        ifExistsBehavior: WriteTarget.IfExistsBehavior,
-        columnNamesGlobal: Variable,
-    ): WriteTarget =
-        IcebergWriteTarget(
-            tableName,
-            schema,
-            ifExistsBehavior,
-            columnNamesGlobal,
-            generatePythonConnStr(schema),
-        )
-
+) : IcebergCatalog<S3TablesCatalog>(createS3TablesCatalog(warehouse)) {
     /**
      * Returns a set of all table names with the given schema name.
      *
@@ -134,7 +66,7 @@ class BodoGlueCatalog(
 
     /**
      * Return the number of levels at which a default schema may be found.
-     * Glue catalogs don't have a default schema so always returns 0.
+     * S3 Tables catalogs don't have a default schema so always returns 0.
      * @return The number of levels a default schema can be found.
      */
     override fun numDefaultSchemaLevels(): Int = 0
@@ -149,9 +81,9 @@ class BodoGlueCatalog(
      * @return The generated code to produce the append write.
      */
     override fun generateAppendWriteCode(
-        visitor: BodoCodeGenVisitor,
-        varName: Variable,
-        tableName: ImmutableList<String>,
+        visitor: BodoCodeGenVisitor?,
+        varName: Variable?,
+        tableName: ImmutableList<String>?,
     ): Expr {
         TODO("Not yet implemented")
     }
@@ -169,12 +101,12 @@ class BodoGlueCatalog(
      * @return The generated code to produce a write.
      */
     override fun generateWriteCode(
-        visitor: BodoCodeGenVisitor,
-        varName: Variable,
-        tableName: ImmutableList<String>,
-        ifExists: WriteTarget.IfExistsBehavior,
-        createTableType: SqlCreateTable.CreateTableType,
-        meta: CreateTableMetadata,
+        visitor: BodoCodeGenVisitor?,
+        varName: Variable?,
+        tableName: ImmutableList<String>?,
+        ifExists: WriteTarget.IfExistsBehavior?,
+        createTableType: SqlCreateTable.CreateTableType?,
+        meta: CreateTableMetadata?,
     ): Expr {
         TODO("Not yet implemented")
     }
@@ -192,12 +124,80 @@ class BodoGlueCatalog(
      * @return The generated code to produce a read.
      */
     override fun generateReadCode(
-        tableName: ImmutableList<String>,
+        tableName: ImmutableList<String>?,
         useStreaming: Boolean,
-        streamingOptions: StreamingOptions,
+        streamingOptions: StreamingOptions?,
     ): Expr {
         TODO("Not yet implemented")
     }
+
+    /**
+     * Generates the code necessary to submit the remote query to the catalog DB.
+     *
+     * @param query Query to submit.
+     * @return The generated code.
+     */
+    override fun generateRemoteQuery(query: String?): Expr {
+        TODO("Not yet implemented")
+    }
+
+    /**
+     * Returns if a schema with the given depth is allowed to contain tables. S3 Tables only allows Tables to be present in "databases", which maps to schemas when using iceberg. Schemas cannot be nested.
+     *
+     * @param depth The number of parent schemas that would need to be visited to reach the root.
+     * @return true if the depth is 1 and false otherwise.
+     */
+    override fun schemaDepthMayContainTables(depth: Int): Boolean = depth == 1
+
+    /**
+     * Returns if a schema with the given depth is allowed to contain subSchemas.
+     * S3 Tables catalogs do not support subSchemas, so this method always returns false for non-zero values.
+     *
+     * @param depth The number of parent schemas that would need to be visited to reach the root.
+     * @return true if the depth is 0 and false otherwise.
+     */
+    override fun schemaDepthMayContainSubSchemas(depth: Int): Boolean = depth == 0
+
+    /**
+     * Generate a Python connection string used to read from or write to a Catalog in Bodo's SQL
+     * Python code.
+     *
+     *
+     * TODO: This method is needed for the XXXToPandasConverter nodes, but exposing
+     * this is a bad idea and this class likely needs to be refactored in a way that the connection
+     * information can be passed around more easily.
+     *
+     * @param schemaPath The schema component to define the connection not including the table name.
+     * @return The connection string
+     */
+    override fun generatePythonConnStr(schemaPath: ImmutableList<String>?): Expr =
+        Expr.Call("bodosql.get_s3_tables_connection", Expr.StringLiteral(warehouse))
+
+    /**
+     * Return the desired WriteTarget for a create table operation.
+     * This catalog only supports Iceberg tables, so the WriteTarget will be an IcebergWriteTarget.
+     *
+     * @param schema The schemaPath to the table.
+     * @param tableName The name of the type that will be created.
+     * @param createTableType The createTable type. This is unused by the file system catalog.
+     * @param ifExistsBehavior The createTable behavior for if there is already a table defined.
+     * @param columnNamesGlobal Global Variable holding the output column names.
+     * @return The selected WriteTarget.
+     */
+    override fun getCreateTableWriteTarget(
+        schema: ImmutableList<String>,
+        tableName: String,
+        createTableType: SqlCreateTable.CreateTableType,
+        ifExistsBehavior: WriteTarget.IfExistsBehavior,
+        columnNamesGlobal: Variable,
+    ): WriteTarget =
+        IcebergWriteTarget(
+            tableName,
+            schema,
+            ifExistsBehavior,
+            columnNamesGlobal,
+            generatePythonConnStr(schema),
+        )
 
     companion object {
         /**
@@ -206,9 +206,9 @@ class BodoGlueCatalog(
          * @return The RESTCatalog object.
          */
         @JvmStatic
-        private fun createGlueCatalog(warehouse: String): GlueCatalog {
-            val catalog = GlueCatalog()
-            catalog.initialize("glueCatalog", mapOf(Pair("warehouse", warehouse)))
+        private fun createS3TablesCatalog(warehouse: String): S3TablesCatalog {
+            val catalog = S3TablesCatalog()
+            catalog.initialize("S3TablesCatalog", mapOf(Pair("warehouse", warehouse)))
             return catalog
         }
     }
