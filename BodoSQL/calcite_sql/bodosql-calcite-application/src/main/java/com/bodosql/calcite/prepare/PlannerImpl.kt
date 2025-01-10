@@ -125,6 +125,19 @@ class PlannerImpl(
         }
 
         /**
+         * Get the SqlToRelConverter configuration to use within BodoSQL. This
+         * is used to define characteristics like our hint handling and
+         * sub query handling.
+         * @return The SqlToRelConverter configuration to use for BodoSQL.
+         */
+        @JvmStatic
+        private fun getSqlToRelConverterConfig(): SqlToRelConverter.Config =
+            SqlToRelConverter
+                .config()
+                .withInSubQueryThreshold(Integer.MAX_VALUE)
+                .withHintStrategyTable(getHintStrategyTable())
+
+        /**
          * @return The table with the hints that BodoSQL supports.
          */
         private fun getHintStrategyTable(): HintStrategyTable {
@@ -138,16 +151,13 @@ class PlannerImpl(
             val parserConfig = getParserConfig(config.sqlStyle)
             val validatorConfig = getValidatorConfig(config.sqlStyle)
             val convertletTable = getConvertletTable()
+            val sqlToRelConverterConfig = getSqlToRelConverterConfig()
             return Frameworks
                 .newConfigBuilder()
                 .operatorTable(BodoOperatorTable)
                 .typeSystem(config.typeSystem)
-                .sqlToRelConverterConfig(
-                    SqlToRelConverter
-                        .config()
-                        .withInSubQueryThreshold(Integer.MAX_VALUE)
-                        .withHintStrategyTable(getHintStrategyTable()),
-                ).parserConfig(parserConfig)
+                .sqlToRelConverterConfig(sqlToRelConverterConfig)
+                .parserConfig(parserConfig)
                 .convertletTable(convertletTable)
                 .sqlValidatorConfig(validatorConfig)
                 .costFactory(CostFactory())
