@@ -592,7 +592,7 @@ if (NOT (CMAKE_BUILD_TYPE STREQUAL "Release") AND NOT DEFINED ENV{BODO_SKIP_CPP_
     "bodo/tests/test_theta_sketches.cpp")
 endif()
 
-if($"ENV{NO_HDF5}" STREQUAL "1")
+if("$ENV{NO_HDF5}" STREQUAL "1")
     set(NO_HDF5 TRUE)
 else()
     list(APPEND sources_list "bodo/io/_hdf5.cpp")
