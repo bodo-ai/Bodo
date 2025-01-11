@@ -514,24 +514,27 @@ std::shared_ptr<array_info> interleave_struct_columns(
             case bodo_array_type::DICT:
             case bodo_array_type::STRING: {
                 string_mode = true;
-                if (array_mode || numeric_mode)
+                if (array_mode || numeric_mode) {
                     throw std::runtime_error(
                         "lateral_flatten_struct: invalid struct child arrays");
+                }
                 break;
             }
             case bodo_array_type::NUMPY:
             case bodo_array_type::NULLABLE_INT_BOOL: {
                 numeric_mode = true;
-                if (string_mode || array_mode)
+                if (string_mode || array_mode) {
                     throw std::runtime_error(
                         "lateral_flatten_struct: invalid struct child arrays");
+                }
                 break;
             }
             case bodo_array_type::ARRAY_ITEM: {
                 array_mode = true;
-                if (string_mode || numeric_mode)
+                if (string_mode || numeric_mode) {
                     throw std::runtime_error(
                         "lateral_flatten_struct: invalid struct child arrays");
+                }
                 break;
             }
             default: {

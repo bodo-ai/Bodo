@@ -173,8 +173,9 @@ static bodo::tests::suite tests([] {
 
         for (int i = 0; i < 1000; ++i) {
             bodo::tests::check(pool->Spawn([&] {
-                                       if (pool->OwnsThisThread())
+                                       if (pool->OwnsThisThread()) {
                                            return;
+                                       }
 
                                        one_failed = true;
                                    })
