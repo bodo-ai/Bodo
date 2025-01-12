@@ -1,4 +1,3 @@
-# Copyright (C) 2024 Bodo Inc. All rights reserved.
 """
 Provides a registry of function call handlers for distributed analysis.
 """
