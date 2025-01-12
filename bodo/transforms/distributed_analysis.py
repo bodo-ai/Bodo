@@ -2090,7 +2090,7 @@ class DistributedAnalysis:
             "str_arr_encode",
             "bodo.libs.str_arr_ext",
         ):
-            _meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
             return
 
         if fdef == (
