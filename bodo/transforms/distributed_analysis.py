@@ -75,7 +75,6 @@ from bodo.utils.utils import (
     is_distributable_tuple_typ,
     is_distributable_typ,
     is_expr,
-    is_ml_support_loaded,
     is_np_array_typ,
     is_slice_equiv_arr,
     is_whole_slice,
@@ -395,7 +394,10 @@ class DistributedAnalysis:
                     inst.target, inst.attr, inst.value, array_dists, inst.loc
                 )
             else:
-                self._set_REP(
+                _set_REP(
+                    self.typemap,
+                    self.metadata,
+                    self.diag_info,
                     inst.list_vars(),
                     array_dists,
                     "unsupported statement in distribution analysis",
@@ -414,7 +416,7 @@ class DistributedAnalysis:
         if isinstance(rhs, ir.Var) and (
             is_distributable_typ(lhs_typ) or is_distributable_tuple_typ(lhs_typ)
         ):
-            self._meet_array_dists(lhs, rhs.name, array_dists)
+            _meet_array_dists(self.typemap, lhs, rhs.name, array_dists)
             return
         # NOTE: decimal array comparison isn't inlined since it uses Arrow compute
         elif is_array_typ(lhs_typ) and (
@@ -435,13 +437,13 @@ class DistributedAnalysis:
             arg2_typ = self.typemap[arg2]
             dist = Distribution.OneD
             if is_distributable_typ(arg1_typ):
-                dist = self._meet_array_dists(lhs, arg1, array_dists)
+                dist = _meet_array_dists(self.typemap, lhs, arg1, array_dists)
             if is_distributable_typ(arg2_typ):
-                dist = self._meet_array_dists(lhs, arg2, array_dists, dist)
+                dist = _meet_array_dists(self.typemap, lhs, arg2, array_dists, dist)
             if is_distributable_typ(arg1_typ):
-                dist = self._meet_array_dists(lhs, arg1, array_dists, dist)
+                dist = _meet_array_dists(self.typemap, lhs, arg1, array_dists, dist)
             if is_distributable_typ(arg2_typ):
-                self._meet_array_dists(lhs, arg2, array_dists, dist)
+                _meet_array_dists(self.typemap, lhs, arg2, array_dists, dist)
             return
         elif isinstance(rhs, ir.Expr) and rhs.op in ("getitem", "static_getitem"):
             self._analyze_getitem(inst, lhs, rhs, equiv_set, array_dists)
@@ -449,15 +451,15 @@ class DistributedAnalysis:
         elif is_expr(rhs, "build_tuple") and is_distributable_tuple_typ(lhs_typ):
             # parallel arrays can be packed and unpacked from tuples
             # e.g. boolean array index in test_getitem_multidim
-            l_dist = self._get_var_dist(lhs, array_dists)
+            l_dist = _get_var_dist(lhs, array_dists, self.typemap)
             new_dist = []
             for d, v in zip(l_dist, rhs.items):
                 # some elements might not be distributable
                 if d is None:
                     new_dist.append(None)
                     continue
-                new_d = self._min_dist(d, self._get_var_dist(v.name, array_dists))
-                self._set_var_dist(v.name, array_dists, new_d)
+                new_d = _min_dist(d, _get_var_dist(v.name, array_dists, self.typemap))
+                _set_var_dist(self.typemap, v.name, array_dists, new_d)
                 new_dist.append(new_d)
 
             array_dists[lhs] = new_dist
@@ -468,10 +470,10 @@ class DistributedAnalysis:
             # dist vars can be in lists
             # meet all distributions
             for v in rhs.items:
-                self._meet_array_dists(lhs, v.name, array_dists)
+                _meet_array_dists(self.typemap, lhs, v.name, array_dists)
             # second round to propagate info fully
             for v in rhs.items:
-                self._meet_array_dists(lhs, v.name, array_dists)
+                _meet_array_dists(self.typemap, lhs, v.name, array_dists)
             return
         elif is_expr(rhs, "build_map") and (
             is_distributable_tuple_typ(lhs_typ) or is_distributable_typ(lhs_typ)
@@ -479,13 +481,13 @@ class DistributedAnalysis:
             # dist vars can be in dictionary as values
             # meet all distributions
             for _, v in rhs.items:
-                self._meet_array_dists(lhs, v.name, array_dists)
+                _meet_array_dists(self.typemap, lhs, v.name, array_dists)
             # second round to propagate info fully
             for _, v in rhs.items:
-                self._meet_array_dists(lhs, v.name, array_dists)
+                _meet_array_dists(self.typemap, lhs, v.name, array_dists)
             return
         elif is_expr(rhs, "exhaust_iter") and is_distributable_tuple_typ(lhs_typ):
-            self._meet_array_dists(lhs, rhs.value.name, array_dists)
+            _meet_array_dists(self.typemap, lhs, rhs.value.name, array_dists)
         elif is_expr(rhs, "getattr"):
             self._analyze_getattr(lhs, rhs, array_dists)
         elif is_expr(rhs, "call"):
@@ -516,13 +518,19 @@ class DistributedAnalysis:
         ):
             arr_container = guard(_get_pair_first_container, self.func_ir, rhs)
             if arr_container is not None:
-                self._meet_array_dists(lhs, arr_container.name, array_dists)
+                _meet_array_dists(self.typemap, lhs, arr_container.name, array_dists)
                 return
             # this path is not possible since pair_first is only used in the pattern
             # above, unless if variable definitions have some issue
             else:  # pragma: no cover
-                self._set_REP(
-                    inst.list_vars(), array_dists, "invalid pair_first", rhs.loc
+                _set_REP(
+                    self.typemap,
+                    self.metadata,
+                    self.diag_info,
+                    inst.list_vars(),
+                    array_dists,
+                    "invalid pair_first",
+                    rhs.loc,
                 )
         elif isinstance(rhs, ir.Expr) and rhs.op in ("getiter", "iternext"):
             # analyze array container access in pair_first
@@ -564,7 +572,7 @@ class DistributedAnalysis:
                 ):
                     # If expanding a list set the distributions equal.
                     if rhs.lhs.name in array_dists:
-                        self._meet_array_dists(lhs, rhs.lhs.name, array_dists)
+                        _meet_array_dists(self.typemap, lhs, rhs.lhs.name, array_dists)
                         return
                 elif (
                     isinstance(rhs.rhs, ir.Var)
@@ -573,7 +581,7 @@ class DistributedAnalysis:
                 ):
                     # If expanding a list set the distributions equal.
                     if rhs.rhs.name in array_dists:
-                        self._meet_array_dists(lhs, rhs.rhs.name, array_dists)
+                        _meet_array_dists(self.typemap, lhs, rhs.rhs.name, array_dists)
                         return
                 # Matrix multiply
                 elif (
@@ -592,13 +600,16 @@ class DistributedAnalysis:
                     # C = A * B
                     # B is replicated since accessed across rows but A and C can be
                     # distributed
-                    self._set_REP(
+                    _set_REP(
+                        self.typemap,
+                        self.metadata,
+                        self.diag_info,
                         rhs.rhs.name,
                         array_dists,
                         "matrix multiply right hand side input",
                         rhs.loc,
                     )
-                    self._meet_array_dists(lhs, rhs.lhs.name, array_dists)
+                    _meet_array_dists(self.typemap, lhs, rhs.lhs.name, array_dists)
                     return
             # Handle Tuple append
             elif is_expr(rhs, "binop") and rhs.fn == operator.add:
@@ -640,7 +651,15 @@ class DistributedAnalysis:
                 return
 
             msg = "unsupported expression in distributed analysis"
-            self._set_REP(inst.list_vars(), array_dists, msg, rhs.loc)
+            _set_REP(
+                self.typemap,
+                self.metadata,
+                self.diag_info,
+                inst.list_vars(),
+                array_dists,
+                msg,
+                rhs.loc,
+            )
 
     def _analyze_getattr(self, lhs, rhs, array_dists):
         """analyze getattr nodes (ir.Expr.getattr)"""
@@ -658,12 +677,12 @@ class DistributedAnalysis:
         ):
             # array and its transpose have same distributions
             arr = rhs.value.name
-            self._meet_array_dists(lhs, arr, array_dists)
+            _meet_array_dists(self.typemap, lhs, arr, array_dists)
             return
         elif attr in ("real", "imag") and is_array_typ(lhs_typ, False):
             # complex array and its real/imag parts have same distributions
             arr = rhs.value.name
-            self._meet_array_dists(lhs, arr, array_dists)
+            _meet_array_dists(self.typemap, lhs, arr, array_dists)
             return
         elif (
             isinstance(rhs_typ, MultiIndexType)
@@ -673,18 +692,18 @@ class DistributedAnalysis:
             # output of MultiIndex._data is a tuple, with all arrays having the same
             # distribution as input MultiIndex
             # find min of all array distributions
-            l_dist = self._get_var_dist(lhs, array_dists)
-            m_dist = self._get_var_dist(rhs.value.name, array_dists)
-            new_dist = self._min_dist(l_dist[0], m_dist)
+            l_dist = _get_var_dist(lhs, array_dists, self.typemap)
+            m_dist = _get_var_dist(rhs.value.name, array_dists, self.typemap)
+            new_dist = _min_dist(l_dist[0], m_dist)
             for d in l_dist:
-                new_dist = self._min_dist(new_dist, d)
-            self._set_var_dist(lhs, array_dists, new_dist)
-            self._set_var_dist(rhs.value.name, array_dists, new_dist)
+                new_dist = _min_dist(new_dist, d)
+            _set_var_dist(self.typemap, lhs, array_dists, new_dist)
+            _set_var_dist(self.typemap, rhs.value.name, array_dists, new_dist)
             return
         elif isinstance(rhs_typ, CategoricalArrayType) and attr == "codes":
             # categorical array and its underlying codes array have same distributions
             arr = rhs.value.name
-            self._meet_array_dists(lhs, arr, array_dists)
+            _meet_array_dists(self.typemap, lhs, arr, array_dists)
         # jitclass getattr (e.g. df1 = self.df)
         elif (
             isinstance(rhs_typ, types.ClassInstanceType)
@@ -715,12 +734,18 @@ class DistributedAnalysis:
             and attr == "_df"
         ):
             # Spark dataframe may be replicated, e.g. sdf.select(F.sum(F.col("A")))
-            self._meet_array_dists(lhs, rhs.value.name, array_dists)
+            _meet_array_dists(self.typemap, lhs, rhs.value.name, array_dists)
         elif is_bodosql_context_type(rhs_typ) and attr == "dataframes":
-            self._meet_array_dists(lhs, rhs.value.name, array_dists)
+            _meet_array_dists(self.typemap, lhs, rhs.value.name, array_dists)
         elif isinstance(rhs_typ, DataFrameType) and attr == "dtypes":
-            self._set_REP(
-                lhs, array_dists, "Output of DataFrame.dtypes is replicated", rhs.loc
+            _set_REP(
+                self.typemap,
+                self.metadata,
+                self.diag_info,
+                lhs,
+                array_dists,
+                "Output of DataFrame.dtypes is replicated",
+                rhs.loc,
             )
 
     def _analyze_parfor(self, parfor, array_dists, parfor_dists):
@@ -752,7 +777,8 @@ class DistributedAnalysis:
         out_dist = Distribution.OneD
         # nested parfors are replicated
         if self.in_parallel_parfor != -1:
-            self._add_diag_info(
+            _add_diag_info(
+                self.diag_info,
                 f"Parfor {parfor.id} set to REP since it is inside another distributed Parfor",
                 self.parfor_locs[parfor.id],
             )
@@ -784,7 +810,8 @@ class DistributedAnalysis:
                     parfor_arrs.add(arr)
                     self._parallel_accesses.add((arr, index))
                 if par_index_var in index_tuple[1:]:
-                    self._add_diag_info(
+                    _add_diag_info(
+                        self.diag_info,
                         f"Parfor {parfor.id} set to REP since index is used in lower dimensions of array access",
                         self.parfor_locs[parfor.id],
                     )
@@ -815,7 +842,10 @@ class DistributedAnalysis:
             # reduction arrays of distributed parfors are replicated
             # see test_basic.py::test_array_reduce
             # concat reduce variables should stay distributed
-            self._set_REP(
+            _set_REP(
+                self.typemap,
+                self.metadata,
+                self.diag_info,
                 non_concat_redvars,
                 array_dists,
                 "reduction arrays of distributed parfor",
@@ -845,7 +875,8 @@ class DistributedAnalysis:
             if reduce_op == Reduce_Type.Concat:
                 # if output array is replicated, parfor should be replicated too
                 if is_REP(array_dists[reduce_varname]):
-                    self._add_diag_info(
+                    _add_diag_info(
+                        self.diag_info,
                         f"Parfor {parfor.id} set to REP since its concat reduction variable is REP",
                         self.parfor_locs[parfor.id],
                     )
@@ -856,8 +887,9 @@ class DistributedAnalysis:
                     array_dists[reduce_varname] = Distribution.OneD_Var
                 # if pafor is replicated, output array is replicated
                 if is_REP(out_dist):
-                    self._add_diag_info(
-                        f"Variable '{self._get_user_varname(reduce_varname)}' set to REP since it is a concat reduction variable for Parfor {parfor.id} which is REP",
+                    _add_diag_info(
+                        self.diag_info,
+                        f"Variable '{_get_user_varname(self.metadata, reduce_varname)}' set to REP since it is a concat reduction variable for Parfor {parfor.id} which is REP",
                         self.parfor_locs[parfor.id],
                     )
                     array_dists[reduce_varname] = Distribution.REP
@@ -881,6 +913,11 @@ class DistributedAnalysis:
         self, inst, lhs, rhs, func_var, args, kws, equiv_set, array_dists
     ):
         """analyze array distributions in function calls"""
+        from bodo.transforms.distributed_analysis_call_registry import (
+            DistributedAnalysisContext,
+            call_registry,
+        )
+
         func_name = ""
         func_mod = ""
         fdef = guard(find_callname, self.func_ir, rhs, self.typemap)
@@ -891,7 +928,7 @@ class DistributedAnalysis:
                 func_def.value, numba.core.dispatcher.ObjModeLiftedWith
             ):
                 if lhs not in array_dists:
-                    self._set_var_dist(lhs, array_dists, Distribution.OneD_Var)
+                    _set_var_dist(self.typemap, lhs, array_dists, Distribution.OneD_Var)
                 return
             # some functions like overload_bool_arr_op_nin_1 may generate const ufuncs
             if isinstance(func_def, ir.Const) and isinstance(func_def.value, np.ufunc):
@@ -918,45 +955,25 @@ class DistributedAnalysis:
         # Similar to ObjModeLiftedWith, we assume out data is distributed (1D_Var)
         if isinstance(self.typemap[rhs.func.name], WrapPythonDispatcherType):
             if lhs not in array_dists:
-                self._set_var_dist(lhs, array_dists, Distribution.OneD_Var)
+                _set_var_dist(self.typemap, lhs, array_dists, Distribution.OneD_Var)
             return
 
-        if (
-            func_name in {"fit", "predict"}
-            and "bodo.ml_support.xgb_ext" in sys.modules
-            and isinstance(func_mod, numba.core.ir.Var)
-            and isinstance(
-                self.typemap[func_mod.name],
-                (
-                    bodo.ml_support.xgb_ext.BodoXGBClassifierType,
-                    bodo.ml_support.xgb_ext.BodoXGBRegressorType,
-                ),
-            )
-        ):  # pragma: no cover
-            if func_name == "fit":
-                arg0 = rhs.args[0].name
-                arg1 = rhs.args[1].name
-                self._meet_array_dists(arg0, arg1, array_dists)
-                if array_dists[arg0] == Distribution.REP:
-                    raise BodoError(
-                        "Arguments of xgboost.fit are not distributed", rhs.loc
-                    )
-            elif func_name == "predict":
-                # match input and output distributions
-                self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
-            return
-
-        if fdef == (
-            "generate_mappable_table_func",
-            "bodo.utils.table_utils",
-        ) and self._analyze_mappable_table_funcs(lhs, rhs, kws, array_dists):
-            return
-
-        if fdef == (
-            "table_astype",
-            "bodo.utils.table_utils",
-        ):
-            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+        # Check distributed analysis call registry for handler first
+        ctx = DistributedAnalysisContext(
+            self.typemap,
+            array_dists,
+            equiv_set,
+            func_name,
+            self.metadata,
+            self.diag_info,
+        )
+        # Replace ir.Var with type's class name for easy matching
+        fdef_str_var = fdef[:-1] + (
+            type(self.typemap[fdef[-1].name]).__name__
+            if isinstance(fdef[-1], ir.Var)
+            else fdef[-1],
+        )
+        if call_registry.analyze_call(ctx, inst, fdef_str_var):
             return
 
         if func_mod == "bodo.hiframes.table" and func_name in (
@@ -971,262 +988,16 @@ class DistributedAnalysis:
             )
             return
 
-        if fdef == ("table_subset", "bodo.hiframes.table"):
-            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
-            return
-
-        if fdef == ("create_empty_table", "bodo.hiframes.table"):
-            if lhs not in array_dists:
-                self._set_var_dist(lhs, array_dists, Distribution.OneD, True)
-            return
-
-        if fdef == ("table_concat", "bodo.utils.table_utils"):
-            table = args[0].name
-            out_dist = Distribution.OneD_Var
-            if lhs in array_dists:
-                out_dist = Distribution(min(out_dist.value, array_dists[lhs].value))
-            out_dist = Distribution(min(out_dist.value, array_dists[table].value))
-            array_dists[lhs] = out_dist
-            if out_dist != Distribution.OneD_Var:
-                array_dists[table] = out_dist
-            return
-
-        if fdef == ("scalar_optional_getitem", "bodo.utils.indexing"):
-            # scalar_optional_getitem isused by BodoSQL to load scalars.
-            # This doesn't impact the distribution of any array.
-            return
-
-        if fdef == ("add_nested_counts", "bodo.utils.indexing"):
-            # add_nested_counts is used by ArrayItemArray to add nested counts.
-            # This doesn't impact the distribution of any array.
-            return
-
-        if fdef == ("scalar_to_array_item_array", "bodo.libs.array_item_arr_ext"):
-            # scalar_to_array_item_array is used to convert a scalar to ArrayItemArray.
-            # This doesn't impact the distribution of any array.
-            return
-
-        if fdef == (
-            "array_to_repeated_array_item_array",
-            "bodo.libs.array_item_arr_ext",
-        ):
-            if lhs not in array_dists:
-                array_dists[lhs] = Distribution.OneD
-            # array_to_repeated_array_item_array is used to create an ArrayItemArray with an array.
-            # This requires the input array to be replicated.
-            self._set_REP(
-                rhs.args[0],
-                array_dists,
-                "The scalar array must be duplicated for array_to_repeated_array_item_array.",
-                rhs.loc,
-            )
-            return
-
-        # Scalar to array functions are similar to allocations and can return
-        # distributed data
-        if fdef in (
-            (
-                "scalar_to_struct_array",
-                "bodo.libs.struct_arr_ext",
-            ),
-            ("scalar_to_map_array", "bodo.libs.map_arr_ext"),
-        ):
-            if lhs not in array_dists:
-                array_dists[lhs] = Distribution.OneD
-            return
-
-        if (
-            func_name == "predict_proba"
-            and "bodo.ml_support.xgb_ext" in sys.modules
-            and isinstance(func_mod, numba.core.ir.Var)
-            and isinstance(
-                self.typemap[func_mod.name],
-                (bodo.ml_support.xgb_ext.BodoXGBClassifierType,),
-            )
-        ):  # pragma: no cover
-            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
-            return
-
-        if (
-            func_name in {"fit", "predict", "score"}
-            and is_ml_support_loaded()
-            and isinstance(func_mod, numba.core.ir.Var)
-            and isinstance(
-                self.typemap[func_mod.name],
-                (
-                    bodo.ml_support.sklearn_ensemble_ext.BodoRandomForestClassifierType,
-                    bodo.ml_support.sklearn_ensemble_ext.BodoRandomForestRegressorType,
-                    bodo.ml_support.sklearn_linear_model_ext.BodoSGDClassifierType,
-                    bodo.ml_support.sklearn_linear_model_ext.BodoSGDRegressorType,
-                    bodo.ml_support.sklearn_linear_model_ext.BodoLogisticRegressionType,
-                    bodo.ml_support.sklearn_linear_model_ext.BodoLassoType,
-                    bodo.ml_support.sklearn_linear_model_ext.BodoLinearRegressionType,
-                    bodo.ml_support.sklearn_linear_model_ext.BodoRidgeType,
-                    bodo.ml_support.sklearn_svm_ext.BodoLinearSVCType,
-                    bodo.ml_support.sklearn_naive_bayes_ext.BodoMultinomialNBType,
-                ),
-            )
-        ):
-            if func_name == "fit":
-                self._meet_array_dists(rhs.args[0].name, rhs.args[1].name, array_dists)
-            elif func_name == "predict":
-                # match input and output distributions
-                self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
-            elif func_name == "score":
-                self._meet_array_dists(rhs.args[0].name, rhs.args[1].name, array_dists)
-            return
-
-        if (
-            func_name in {"predict_proba", "predict_log_proba"}
-            and is_ml_support_loaded()
-            and isinstance(func_mod, numba.core.ir.Var)
-            and isinstance(
-                self.typemap[func_mod.name],
-                (
-                    bodo.ml_support.sklearn_ensemble_ext.BodoRandomForestClassifierType,
-                    bodo.ml_support.sklearn_linear_model_ext.BodoSGDClassifierType,
-                    bodo.ml_support.sklearn_linear_model_ext.BodoLogisticRegressionType,
-                ),
-            )
-        ):
-            # match input and output distributions
-            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
-            return
-
-        if (
-            func_name in {"fit", "predict", "score", "transform"}
-            and is_ml_support_loaded()
-            and isinstance(func_mod, numba.core.ir.Var)
-            and isinstance(
-                self.typemap[func_mod.name],
-                bodo.ml_support.sklearn_cluster_ext.BodoKMeansClusteringType,
-            )
-        ):
-            self._analyze_call_sklearn_cluster_kmeans(
-                lhs, func_name, rhs, kws, array_dists
-            )
-            return
-
-        if (
-            func_name
-            in {"fit", "partial_fit", "transform", "inverse_transform", "fit_transform"}
-            and "bodo.ml_support.sklearn_preprocessing_ext" in sys.modules
-            and isinstance(func_mod, numba.core.ir.Var)
-            and isinstance(
-                self.typemap[func_mod.name],
-                (
-                    bodo.ml_support.sklearn_preprocessing_ext.BodoPreprocessingOneHotEncoderType,
-                    bodo.ml_support.sklearn_preprocessing_ext.BodoPreprocessingStandardScalerType,
-                    bodo.ml_support.sklearn_preprocessing_ext.BodoPreprocessingMaxAbsScalerType,
-                    bodo.ml_support.sklearn_preprocessing_ext.BodoPreprocessingMinMaxScalerType,
-                    bodo.ml_support.sklearn_preprocessing_ext.BodoPreprocessingRobustScalerType,
-                    bodo.ml_support.sklearn_preprocessing_ext.BodoPreprocessingLabelEncoderType,
-                ),
-            )
-        ):
-            self._analyze_call_sklearn_preprocessing_scalers(
-                lhs, func_name, rhs, kws, array_dists
-            )
-            return
-
-        if (
-            func_name in {"fit_transform"}
-            and "bodo.ml_support.sklearn_feature_extraction_ext" in sys.modules
-            and isinstance(func_mod, numba.core.ir.Var)
-            and isinstance(
-                self.typemap[func_mod.name],
-                (
-                    bodo.ml_support.sklearn_feature_extraction_ext.BodoFExtractHashingVectorizerType,
-                    bodo.ml_support.sklearn_feature_extraction_ext.BodoFExtractCountVectorizerType,
-                ),
-            )
-        ):
-            if func_name == "fit_transform":
-                # match input and output distributions (y is ignored)
-                self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
-
-            return
-
-        if func_mod == "sklearn.utils" and func_name == "shuffle":
-            # match input and output distributions
-            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
-
-            return
-
-        if func_mod in ("sklearn.metrics._classification", "sklearn.metrics"):
-            if func_name in {"precision_score", "recall_score", "f1_score"}:
-                # output is always replicated, and the output can be an array
-                # if average=None so we have to set it
-                # TODO this shouldn't be done if output is float?
-                self._set_REP(
-                    lhs, array_dists, f"output of {func_name} is REP", rhs.loc
-                )
-                dist_arg0 = is_distributable_typ(self.typemap[rhs.args[0].name])
-                dist_arg1 = is_distributable_typ(self.typemap[rhs.args[1].name])
-                if dist_arg0 and dist_arg1:
-                    self._meet_array_dists(
-                        rhs.args[0].name, rhs.args[1].name, array_dists
-                    )
-                elif not dist_arg0 and dist_arg1:
-                    self._set_REP(
-                        rhs.args[1].name,
-                        array_dists,
-                        f"first input of {func_name} is non-distributable",
-                        rhs.loc,
-                    )
-                elif not dist_arg1 and dist_arg0:
-                    self._set_REP(
-                        rhs.args[0].name,
-                        array_dists,
-                        f"second input of {func_name} is non-distributable",
-                        rhs.loc,
-                    )
-
-            if func_name == "log_loss":
-                self._analyze_sklearn_score_err_ytrue_ypred_optional_sample_weight(
-                    lhs, func_name, rhs, kws, array_dists
-                )
-                # labels is an optional kw arg, so check if it is provided.
-                # if it is provided, then set it to REP
-                if "labels" in kws:
-                    labels_arg_name = kws["labels"].name
-                    self._set_REP(
-                        labels_arg_name,
-                        array_dists,
-                        "labels when provided are assumed to be REP",
-                        rhs.loc,
-                    )
-
-            if func_name == "accuracy_score":
-                self._analyze_sklearn_score_err_ytrue_ypred_optional_sample_weight(
-                    lhs, func_name, rhs, kws, array_dists
-                )
-
-            if func_name == "confusion_matrix":
-                # output is always replicated, and the output is an array
-                self._set_REP(
-                    lhs, array_dists, f"output of {func_name} is REP", rhs.loc
-                )
-                self._analyze_sklearn_score_err_ytrue_ypred_optional_sample_weight(
-                    lhs, func_name, rhs, kws, array_dists
-                )
-                # labels is an optional kw arg, so check if it is provided.
-                # if it is provided, then set it to REP
-                if "labels" in kws:
-                    labels_arg_name = kws["labels"].name
-                    self._set_REP(
-                        labels_arg_name,
-                        array_dists,
-                        "labels when provided are assumed to be REP",
-                        rhs.loc,
-                    )
-
-            return
-
         if func_mod in ("sklearn.metrics._regression", "sklearn.metrics"):
             if func_name in {"mean_squared_error", "mean_absolute_error", "r2_score"}:
-                self._set_REP(
-                    lhs, array_dists, f"output of {func_name} is REP", rhs.loc
+                _set_REP(
+                    self.typemap,
+                    self.metadata,
+                    self.diag_info,
+                    lhs,
+                    array_dists,
+                    f"output of {func_name} is REP",
+                    rhs.loc,
                 )
                 self._analyze_sklearn_score_err_ytrue_ypred_optional_sample_weight(
                     lhs, func_name, rhs, kws, array_dists
@@ -1237,7 +1008,7 @@ class DistributedAnalysis:
         if func_mod == "sklearn.metrics.pairwise" and func_name == "cosine_similarity":
             # Match distribution of X to the output.
             # The output distribution is intended to match X and should ignore Y.
-            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
             return
 
         if (
@@ -1273,29 +1044,31 @@ class DistributedAnalysis:
             if func_name == "train_test_split":
                 arg0 = rhs.args[0].name
                 if lhs not in array_dists:
-                    self._set_var_dist(lhs, array_dists, Distribution.OneD, True)
+                    _set_var_dist(
+                        self.typemap, lhs, array_dists, Distribution.OneD, True
+                    )
 
-                min_dist = self._min_dist(array_dists[lhs][0], array_dists[lhs][1])
-                min_dist = self._min_dist(min_dist, array_dists[arg0])
+                min_dist = _min_dist(array_dists[lhs][0], array_dists[lhs][1])
+                min_dist = _min_dist(min_dist, array_dists[arg0])
                 if self.typemap[rhs.args[1].name] != types.none:
                     arg1 = rhs.args[1].name
-                    min_dist = self._min_dist(min_dist, array_dists[arg1])
-                    min_dist = self._min_dist(min_dist, array_dists[lhs][2])
-                    min_dist = self._min_dist(min_dist, array_dists[lhs][3])
+                    min_dist = _min_dist(min_dist, array_dists[arg1])
+                    min_dist = _min_dist(min_dist, array_dists[lhs][2])
+                    min_dist = _min_dist(min_dist, array_dists[lhs][3])
                     array_dists[arg1] = min_dist
 
-                self._set_var_dist(lhs, array_dists, min_dist)
+                _set_var_dist(self.typemap, lhs, array_dists, min_dist)
                 array_dists[arg0] = min_dist
             return
 
         if fdef == ("datetime_date_arr_to_dt64_arr", "bodo.hiframes.pd_timestamp_ext"):
             # LHS should match RHS
-            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
             return
 
         if fdef == ("unwrap_tz_array", "bodo.libs.pd_datetime_arr_ext"):
             # LHS should match RHS
-            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
             return
 
         if is_alloc_callname(func_name, func_mod):
@@ -1332,11 +1105,11 @@ class DistributedAnalysis:
                 if axis == 1:
                     # With axis=1 (the only version supported at the moment), the
                     # input and the output have the same distribution.
-                    self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+                    _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
             return
 
         if fdef == ("accum_func", "bodo.libs.array_kernels"):
-            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
             return
 
         # handle array.func calls
@@ -1353,7 +1126,7 @@ class DistributedAnalysis:
         ):
             # Updating a catalog doesn't change the underlying dataframes,
             # so we can do a simple meet on each entry.
-            self._meet_array_dists(lhs, func_mod.name, array_dists)
+            _meet_array_dists(self.typemap, lhs, func_mod.name, array_dists)
             return
 
         # handle bodosql context calls
@@ -1364,9 +1137,11 @@ class DistributedAnalysis:
             # The BodoSQLContext behaves like a tuple. We need to verify that
             # each entry matches.
             if func_mod.name not in array_dists:
-                self._set_var_dist(func_mod.name, array_dists, Distribution.OneD)
+                _set_var_dist(
+                    self.typemap, func_mod.name, array_dists, Distribution.OneD
+                )
             if lhs not in array_dists:
-                self._set_var_dist(lhs, array_dists, Distribution.OneD)
+                _set_var_dist(self.typemap, lhs, array_dists, Distribution.OneD)
             old_lhs_dists = array_dists[lhs]
             old_rhs_var_dists = array_dists.get(func_mod.name, ())
             lhs_dists = []
@@ -1445,8 +1220,14 @@ class DistributedAnalysis:
             if warn_flag and is_REP(array_dists[rhs.args[0].name]):
                 # TODO: test
                 warnings.warn(BodoWarning("Input to gatherv is not distributed array"))
-            self._set_REP(
-                lhs, array_dists, "output of gatherv() is replicated", rhs.loc
+            _set_REP(
+                self.typemap,
+                self.metadata,
+                self.diag_info,
+                lhs,
+                array_dists,
+                "output of gatherv() is replicated",
+                rhs.loc,
             )
             return
 
@@ -1454,7 +1235,7 @@ class DistributedAnalysis:
         if fdef == ("scatterv", "bodo"):
             # output of scatterv is 1D
             if lhs not in array_dists:
-                self._set_var_dist(lhs, array_dists, Distribution.OneD)
+                _set_var_dist(self.typemap, lhs, array_dists, Distribution.OneD)
             elif is_REP(array_dists[lhs]):
                 raise BodoError(
                     "Output of scatterv should be a distributed array", rhs.loc
@@ -1471,7 +1252,7 @@ class DistributedAnalysis:
                 warnings.warn(BodoWarning("Input to scatterv() is distributed"))
             # scatterv() is no-op if input is dist, so output can be 1D_Var
             if _is_1D_or_1D_Var_arr(rhs.args[0].name, array_dists):
-                self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+                _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
             return
 
         if func_mod == "bodo.libs.dict_arr_ext" and func_name in (
@@ -1517,7 +1298,7 @@ class DistributedAnalysis:
             "str_isdecimal",
             "str_match",
         ):
-            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
             return
 
         # dict-arr extractall
@@ -1528,7 +1309,7 @@ class DistributedAnalysis:
             # default is set to 1D_var because there could be no matches
             # for some strings
             if lhs not in array_dists:
-                self._set_var_dist(lhs, array_dists, Distribution.OneD_Var)
+                _set_var_dist(self.typemap, lhs, array_dists, Distribution.OneD_Var)
 
             in_dist = Distribution(
                 min(
@@ -1548,19 +1329,19 @@ class DistributedAnalysis:
                     in_dist.value,
                 )
             )
-            self._set_var_dist(lhs, array_dists, out_dist)
+            _set_var_dist(self.typemap, lhs, array_dists, out_dist)
 
             if out_dist != Distribution.OneD_Var:
                 in_dist = out_dist
-            self._set_var_dist(rhs.args[0].name, array_dists, in_dist)
-            self._set_var_dist(rhs.args[3].name, array_dists, in_dist)
+            _set_var_dist(self.typemap, rhs.args[0].name, array_dists, in_dist)
+            _set_var_dist(self.typemap, rhs.args[3].name, array_dists, in_dist)
             return
 
         # dict-arr concat
         if fdef == ("cat_dict_str", "bodo.libs.dict_arr_ext"):
             # all input arrays and output array have the same distribution
             if lhs not in array_dists:
-                self._set_var_dist(lhs, array_dists, Distribution.OneD)
+                _set_var_dist(self.typemap, lhs, array_dists, Distribution.OneD)
 
             out_dist = Distribution(
                 min(
@@ -1568,20 +1349,20 @@ class DistributedAnalysis:
                     array_dists[lhs].value,
                 )
             )
-            self._set_var_dist(lhs, array_dists, out_dist)
-            self._set_var_dist(rhs.args[0].name, array_dists, out_dist)
+            _set_var_dist(self.typemap, lhs, array_dists, out_dist)
+            _set_var_dist(self.typemap, rhs.args[0].name, array_dists, out_dist)
             return
 
         if fdef == ("series_contains_regex", "bodo.hiframes.series_str_impl"):
-            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
             return
 
         if fdef == ("series_match_regex", "bodo.hiframes.series_str_impl"):
-            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
             return
 
         if fdef == ("series_fullmatch_regex", "bodo.hiframes.series_str_impl"):
-            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
             return
 
         if fdef == ("setna", "bodo.libs.array_kernels"):
@@ -1589,7 +1370,7 @@ class DistributedAnalysis:
 
         if fdef == ("read_arrow_next", "bodo.io.arrow_reader"):  # pragma: no cover
             if lhs not in array_dists:
-                self._set_var_dist(lhs, array_dists, Distribution.OneD_Var)
+                _set_var_dist(self.typemap, lhs, array_dists, Distribution.OneD_Var)
 
             in_dist = array_dists[rhs.args[0].name]
 
@@ -1600,11 +1381,11 @@ class DistributedAnalysis:
                     in_dist.value,
                 )
             )
-            self._set_var_dist(lhs, array_dists, out_dist)
+            _set_var_dist(self.typemap, lhs, array_dists, out_dist)
 
             if out_dist == Distribution.REP:
                 in_dist = out_dist
-            self._set_var_dist(rhs.args[0].name, array_dists, in_dist, False)
+            _set_var_dist(self.typemap, rhs.args[0].name, array_dists, in_dist, False)
             return
 
         if fdef == (
@@ -1614,7 +1395,7 @@ class DistributedAnalysis:
             # Initialize join state to 1D
             if lhs not in array_dists:
                 default_dist = (Distribution.OneD, Distribution.OneD)
-                self._set_var_dist(lhs, array_dists, default_dist, False)
+                _set_var_dist(self.typemap, lhs, array_dists, default_dist, False)
             return
 
         if fdef == (
@@ -1631,15 +1412,17 @@ class DistributedAnalysis:
                 )
             )
             # Update the build table
-            self._set_var_dist(rhs.args[1].name, array_dists, build_dist)
+            _set_var_dist(self.typemap, rhs.args[1].name, array_dists, build_dist)
             # Update the state
             new_state_dist = (build_dist, state_dist[1])
-            self._set_var_dist(rhs.args[0].name, array_dists, new_state_dist, False)
+            _set_var_dist(
+                self.typemap, rhs.args[0].name, array_dists, new_state_dist, False
+            )
             return
 
         if fdef == ("runtime_join_filter", "bodo.libs.streaming.join"):
             # Simply match input and output array distributions.
-            self._meet_array_dists(lhs, rhs.args[1].name, array_dists)
+            _meet_array_dists(self.typemap, lhs, rhs.args[1].name, array_dists)
             return
 
         if fdef == (
@@ -1647,7 +1430,7 @@ class DistributedAnalysis:
             "bodo.libs.streaming.join",
         ):  # pragma: no cover
             if lhs not in array_dists:
-                self._set_var_dist(lhs, array_dists, Distribution.OneD_Var)
+                _set_var_dist(self.typemap, lhs, array_dists, Distribution.OneD_Var)
             state_dist = array_dists[rhs.args[0].name]
             # Get the build dist
             build_dist = state_dist[0]
@@ -1675,17 +1458,19 @@ class DistributedAnalysis:
                 )
             )
             # Update the output
-            self._set_var_dist(lhs, array_dists, out_dist)
+            _set_var_dist(self.typemap, lhs, array_dists, out_dist)
             if out_dist == Distribution.REP:
                 # Output can convert inputs to REP.
                 build_dist = Distribution.REP
                 probe_dist = Distribution.REP
 
             # Update the probe table
-            self._set_var_dist(rhs.args[1].name, array_dists, probe_dist)
+            _set_var_dist(self.typemap, rhs.args[1].name, array_dists, probe_dist)
             # Update the state
             new_state_dist = (build_dist, probe_dist)
-            self._set_var_dist(rhs.args[0].name, array_dists, new_state_dist, False)
+            _set_var_dist(
+                self.typemap, rhs.args[0].name, array_dists, new_state_dist, False
+            )
             return
 
         if fdef == ("iceberg_writer_fetch_theta", "bodo.io.stream_iceberg_write"):
@@ -1693,12 +1478,12 @@ class DistributedAnalysis:
             # an Iceberg writer as an array, where each row is the current estimate
             # for that column of the table. Answer is replicated since there is
             # only 1 correct answer globally.
-            self._set_REP(lhs, array_dists)
+            _set_REP(self.typemap, self.metadata, self.diag_info, lhs, array_dists)
             return
 
         if fdef == ("read_puffin_file_ndvs", "bodo.io.stream_iceberg_write"):
             # Used to the ndvs from a puffin file for testing.
-            self._set_REP(lhs, array_dists)
+            _set_REP(self.typemap, self.metadata, self.diag_info, lhs, array_dists)
             return
 
         if fdef in (
@@ -1715,7 +1500,9 @@ class DistributedAnalysis:
                 "bodo.io.stream_parquet_write",
             ),
         ):
-            self._meet_array_dists(rhs.args[0].name, rhs.args[1].name, array_dists)
+            _meet_array_dists(
+                self.typemap, rhs.args[0].name, rhs.args[1].name, array_dists
+            )
             return
 
         if fdef in (
@@ -1728,7 +1515,7 @@ class DistributedAnalysis:
         ):  # pragma: no cover
             # Initialize groupby state to 1D
             if lhs not in array_dists:
-                self._set_var_dist(lhs, array_dists, Distribution.OneD, False)
+                _set_var_dist(self.typemap, lhs, array_dists, Distribution.OneD, False)
             return
 
         if fdef in (
@@ -1740,7 +1527,9 @@ class DistributedAnalysis:
             ("window_build_consume_batch", "bodo.libs.streaming.window"),
             ("sort_build_consume_batch", "bodo.libs.streaming.sort"),
         ):  # pragma: no cover
-            self._meet_array_dists(rhs.args[0].name, rhs.args[1].name, array_dists)
+            _meet_array_dists(
+                self.typemap, rhs.args[0].name, rhs.args[1].name, array_dists
+            )
             return
 
         if fdef in (
@@ -1753,7 +1542,7 @@ class DistributedAnalysis:
             ("produce_output_batch", "bodo.libs.streaming.sort"),
         ):  # pragma: no cover
             if lhs not in array_dists:
-                self._set_var_dist(lhs, array_dists, Distribution.OneD_Var)
+                _set_var_dist(self.typemap, lhs, array_dists, Distribution.OneD_Var)
 
             state_dist = array_dists[rhs.args[0].name]
 
@@ -1764,21 +1553,23 @@ class DistributedAnalysis:
                 )
             )
             # Update the output
-            self._set_var_dist(lhs, array_dists, out_dist)
+            _set_var_dist(self.typemap, lhs, array_dists, out_dist)
 
             if out_dist == Distribution.REP:
                 # Output can convert inputs to REP.
                 state_dist = Distribution.REP
 
             # Update the state
-            self._set_var_dist(rhs.args[0].name, array_dists, state_dist, False)
+            _set_var_dist(
+                self.typemap, rhs.args[0].name, array_dists, state_dist, False
+            )
             return
 
         if fdef == (
             "table_builder_finalize",
             "bodo.libs.table_builder",
         ):  # pragma: no cover
-            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
             return
 
         if fdef == (
@@ -1788,7 +1579,7 @@ class DistributedAnalysis:
             if lhs not in array_dists:
                 # We can pop unequal chunks on each rank. As a result we must
                 # initialize everything to 1DVar.
-                self._set_var_dist(lhs, array_dists, Distribution.OneD_Var)
+                _set_var_dist(self.typemap, lhs, array_dists, Distribution.OneD_Var)
             lhs_dist = array_dists[lhs][0]
             out_dist = Distribution(
                 min(
@@ -1796,7 +1587,7 @@ class DistributedAnalysis:
                     array_dists[rhs.args[0].name].value,
                 )
             )
-            self._set_var_dist(lhs, array_dists, out_dist)
+            _set_var_dist(self.typemap, lhs, array_dists, out_dist)
             array_dists[rhs.args[0].name] = out_dist
             return
 
@@ -1811,9 +1602,7 @@ class DistributedAnalysis:
             # If the input is OneD, it the output should be OneD_Var since
             # appending multiple OneD tables together may break the invariant
             # that we have only at most 1 extra row on a given rank.
-            out_dist = self._min_dist(
-                Distribution.OneD_Var, array_dists[rhs.args[1].name]
-            )
+            out_dist = _min_dist(Distribution.OneD_Var, array_dists[rhs.args[1].name])
             array_dists[rhs.args[0].name] = out_dist
             return
 
@@ -1827,12 +1616,14 @@ class DistributedAnalysis:
                 # If the input is OneD, it the output should be OneD_Var since
                 # appending multiple OneD tables together may break the invariant
                 # that we have only at most 1 extra row on a given rank.
-                out_dist = self._min_dist(
+                out_dist = _min_dist(
                     Distribution.OneD_Var, array_dists[rhs.args[1].name]
                 )
                 array_dists[rhs.args[0].name] = out_dist
             else:
-                self._meet_array_dists(rhs.args[0].name, rhs.args[1].name, array_dists)
+                _meet_array_dists(
+                    self.typemap, rhs.args[0].name, rhs.args[1].name, array_dists
+                )
             return
 
         if fdef == ("union_produce_batch", "bodo.libs.streaming.union"):
@@ -1841,7 +1632,7 @@ class DistributedAnalysis:
                 if lhs not in array_dists:
                     # We can pop unequal chunks on each rank. As a result we must
                     # initialize everything to 1DVar.
-                    self._set_var_dist(lhs, array_dists, Distribution.OneD_Var)
+                    _set_var_dist(self.typemap, lhs, array_dists, Distribution.OneD_Var)
                 lhs_dist = array_dists[lhs][0]
                 out_dist = Distribution(
                     min(
@@ -1849,12 +1640,12 @@ class DistributedAnalysis:
                         array_dists[rhs.args[0].name].value,
                     )
                 )
-                self._set_var_dist(lhs, array_dists, out_dist)
+                _set_var_dist(self.typemap, lhs, array_dists, out_dist)
                 array_dists[rhs.args[0].name] = out_dist
 
             else:
                 if lhs not in array_dists:
-                    self._set_var_dist(lhs, array_dists, Distribution.OneD_Var)
+                    _set_var_dist(self.typemap, lhs, array_dists, Distribution.OneD_Var)
 
                 state_dist = array_dists[rhs.args[0].name]
 
@@ -1865,26 +1656,28 @@ class DistributedAnalysis:
                     )
                 )
                 # Update the output
-                self._set_var_dist(lhs, array_dists, out_dist)
+                _set_var_dist(self.typemap, lhs, array_dists, out_dist)
 
                 if out_dist == Distribution.REP:
                     # Output can convert inputs to REP.
                     state_dist = Distribution.REP
 
                 # Update the state
-                self._set_var_dist(rhs.args[0].name, array_dists, state_dist, False)
+                _set_var_dist(
+                    self.typemap, rhs.args[0].name, array_dists, state_dist, False
+                )
             return
 
         if (
             isinstance(func_mod, str) and func_mod == "bodo"
         ) and func_name == "rebalance":
-            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
             return
 
         if (
             isinstance(func_mod, str) and func_mod == "bodo"
         ) and func_name == "random_shuffle":
-            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
             return
 
         # bodo.libs.distributed_api functions
@@ -1907,13 +1700,17 @@ class DistributedAnalysis:
             dtype = self.typemap[func_mod.name].dtype
             if is_distributable_typ(dtype) or is_distributable_tuple_typ(dtype):
                 if func_name in ("append", "count", "extend", "index", "remove"):
-                    self._meet_array_dists(func_mod.name, rhs.args[0].name, array_dists)
+                    _meet_array_dists(
+                        self.typemap, func_mod.name, rhs.args[0].name, array_dists
+                    )
                     return
                 if func_name == "insert":
-                    self._meet_array_dists(func_mod.name, rhs.args[1].name, array_dists)
+                    _meet_array_dists(
+                        self.typemap, func_mod.name, rhs.args[1].name, array_dists
+                    )
                     return
                 if func_name in ("copy", "pop"):
-                    self._meet_array_dists(lhs, func_mod.name, array_dists)
+                    _meet_array_dists(self.typemap, lhs, func_mod.name, array_dists)
                     return
 
         if func_mod == "bodo.io.h5_api" and func_name in (
@@ -1987,28 +1784,30 @@ class DistributedAnalysis:
                     rhs.args[0].name in array_dists
                     and array_dists[rhs.args[0].name] == Distribution.REP
                 ):
-                    self._set_var_dist(lhs, array_dists, Distribution.REP)
+                    _set_var_dist(self.typemap, lhs, array_dists, Distribution.REP)
                 else:
-                    self._set_var_dist(lhs, array_dists, Distribution.OneD_Var)
+                    _set_var_dist(self.typemap, lhs, array_dists, Distribution.OneD_Var)
             return
 
         if fdef == ("series_str_dt64_astype", "bodo.hiframes.pd_timestamp_ext"):
             # LHS should match RHS
-            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
             return
 
         if fdef == ("series_str_td64_astype", "bodo.hiframes.pd_timestamp_ext"):
             # LHS should match RHS
-            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
             return
 
         if fdef == ("cat_replace", "bodo.hiframes.pd_categorical_ext"):
             # LHS should match RHS
-            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
             return
 
         if fdef == ("interp_bin_search", "bodo.libs.array_kernels"):
-            self._meet_array_dists(rhs.args[1].name, rhs.args[2].name, array_dists)
+            _meet_array_dists(
+                self.typemap, rhs.args[1].name, rhs.args[2].name, array_dists
+            )
             return
 
         if fdef == ("unique", "bodo.libs.array_kernels"):
@@ -2023,12 +1822,12 @@ class DistributedAnalysis:
             return
 
         if fdef == ("intersection_mask", "bodo.libs.array_kernels"):
-            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
             return
 
         if fdef == ("random_seedless", "bodosql.kernels"):
             if self.typemap[rhs.args[0].name] != bodo.none:
-                self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+                _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
             return
 
         if fdef == (
@@ -2054,7 +1853,7 @@ class DistributedAnalysis:
                 if is_array_typ(self.typemap[arg.name]):
                     arrays.append(arg.name)
             if len(arrays) > 1:
-                self._meet_several_array_dists(arrays, array_dists)
+                _meet_several_array_dists(self.typemap, arrays, array_dists)
             return
 
         if (
@@ -2071,7 +1870,7 @@ class DistributedAnalysis:
                 if is_array_typ(self.typemap[arg.name]):
                     arrays.append(arg.name)
             if len(arrays) > 1:
-                self._meet_several_array_dists(arrays, array_dists)
+                _meet_several_array_dists(self.typemap, arrays, array_dists)
             return
 
         if fdef == ("bodosql_case_kernel", ""):
@@ -2088,7 +1887,7 @@ class DistributedAnalysis:
 
             arrays = [lhs] + [elem.name for elem in elems]
             if len(arrays) > 1:
-                self._meet_several_array_dists(arrays, array_dists)
+                _meet_several_array_dists(self.typemap, arrays, array_dists)
             return
 
         if fdef == ("concat_ws", "bodosql.kernels"):
@@ -2109,7 +1908,7 @@ class DistributedAnalysis:
                 if is_array_typ(self.typemap[sep_name]):
                     arrays.append(sep_name)
                 if len(arrays) > 1:
-                    self._meet_several_array_dists(arrays, array_dists)
+                    _meet_several_array_dists(self.typemap, arrays, array_dists)
                 return
 
         if fdef == ("is_in", "bodosql.kernels"):
@@ -2121,13 +1920,21 @@ class DistributedAnalysis:
                 # If the input array is distributed, then the output
                 # must be an array with matching distribution
                 assert is_array_typ(self.typemap[lhs])
-                new_dist = self._meet_array_dists(rhs.args[0].name, lhs, array_dists)
+                new_dist = _meet_array_dists(
+                    self.typemap, rhs.args[0].name, lhs, array_dists
+                )
 
             assert is_array_typ(self.typemap[rhs.args[1].name])
 
             # if arg0 is replicated, then we must force arg1 to be replicated as well
             if is_REP(array_dists.get(rhs.args[0].name, None)):
-                self._set_REP(rhs.args[1].name, array_dists)
+                _set_REP(
+                    self.typemap,
+                    self.metadata,
+                    self.diag_info,
+                    rhs.args[1].name,
+                    array_dists,
+                )
 
             return
 
@@ -2143,7 +1950,13 @@ class DistributedAnalysis:
             if is_REP(array_dists.get(rhs.args[0].name, None)) or is_REP(
                 array_dists.get(rhs.args[1].name, None)
             ):
-                self._set_REP([lhs, rhs.args[0].name, rhs.args[1].name], array_dists)
+                _set_REP(
+                    self.typemap,
+                    self.metadata,
+                    self.diag_info,
+                    [lhs, rhs.args[0].name, rhs.args[1].name],
+                    array_dists,
+                )
                 return
             # If rhs.args[1].name and rhs.args[0].name are both distributed,
             # they do not affect the others distribution
@@ -2152,7 +1965,7 @@ class DistributedAnalysis:
             # due to the possibility of deleting
             # varying numbers of rows on each rank at runtime
 
-            self._set_var_dist(lhs, array_dists, Distribution.OneD_Var)
+            _set_var_dist(self.typemap, lhs, array_dists, Distribution.OneD_Var)
             return
 
         if fdef == ("first_last_valid_index", "bodo.libs.array_kernels"):
@@ -2170,64 +1983,82 @@ class DistributedAnalysis:
             # Case 4: REP  DIST:   Banned by construction
 
             # out_arr and in_arr should have the same distribution
-            new_dist = self._meet_array_dists(
-                rhs.args[0].name, rhs.args[1].name, array_dists
+            new_dist = _meet_array_dists(
+                self.typemap, rhs.args[0].name, rhs.args[1].name, array_dists
             )
 
             # if the input is replicated, then we must force the values  to be replicated as well
             if is_REP(new_dist) and _is_1D_or_1D_Var_arr(rhs.args[2].name, array_dists):
-                self._set_REP(rhs.args[2].name, array_dists)
+                _set_REP(
+                    self.typemap,
+                    self.metadata,
+                    self.diag_info,
+                    rhs.args[2].name,
+                    array_dists,
+                )
 
             return
         if fdef == ("get_search_regex", "bodo.libs.array"):
             # out_arr and in_arr should have the same distribution
-            new_dist = self._meet_array_dists(
-                rhs.args[0].name, rhs.args[3].name, array_dists
+            new_dist = _meet_array_dists(
+                self.typemap, rhs.args[0].name, rhs.args[3].name, array_dists
             )
             array_dists[rhs.args[0].name] = new_dist
             array_dists[rhs.args[3].name] = new_dist
             return
         if fdef == ("get_replace_regex", "bodo.libs.array"):
             # out_arr and in_arr should have the same distribution
-            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
             return
 
         if fdef == ("rolling_fixed", "bodo.hiframes.rolling"):
-            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
             # index array is passed for apply(raw=False) case
             if self.typemap[rhs.args[1].name] != types.none:
-                self._meet_array_dists(lhs, rhs.args[1].name, array_dists)
-                self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+                _meet_array_dists(self.typemap, lhs, rhs.args[1].name, array_dists)
+                _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
             return
 
         if fdef == ("rolling_variable", "bodo.hiframes.rolling"):
             # lhs, in_arr, on_arr should have the same distribution
-            new_dist = self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
-            new_dist = self._meet_array_dists(
-                lhs, rhs.args[1].name, array_dists, new_dist
+            new_dist = _meet_array_dists(
+                self.typemap, lhs, rhs.args[0].name, array_dists
+            )
+            new_dist = _meet_array_dists(
+                self.typemap, lhs, rhs.args[1].name, array_dists, new_dist
             )
             # index array is passed for apply(raw=False) case
             if self.typemap[rhs.args[2].name] != types.none:
-                new_dist = self._meet_array_dists(
-                    lhs, rhs.args[2].name, array_dists, new_dist
+                new_dist = _meet_array_dists(
+                    self.typemap, lhs, rhs.args[2].name, array_dists, new_dist
                 )
             array_dists[rhs.args[0].name] = new_dist
             array_dists[rhs.args[1].name] = new_dist
             return
 
         if fdef == ("shift", "bodo.hiframes.rolling"):
-            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
             return
 
         if fdef == ("pct_change", "bodo.hiframes.rolling"):
-            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
             return
 
         if fdef == ("nlargest", "bodo.libs.array_kernels"):
             # data and index arrays have the same distributions
-            self._meet_array_dists(rhs.args[0].name, rhs.args[1].name, array_dists)
+            _meet_array_dists(
+                self.typemap, rhs.args[0].name, rhs.args[1].name, array_dists
+            )
             # output of nlargest is REP
-            self._set_REP(lhs, array_dists, "output of nlargest is REP", rhs.loc)
+            _set_REP(
+                self.typemap,
+                self.metadata,
+                self.diag_info,
+                lhs,
+                array_dists,
+                "output of nlargest is REP",
+                rhs.loc,
+            )
             return
 
         if fdef in (
@@ -2235,13 +2066,13 @@ class DistributedAnalysis:
             ("set_dataframe_data", "bodo.hiframes.pd_dataframe_ext"),
             ("set_table_data", "bodo.hiframes.table"),
         ):
-            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
-            self._meet_array_dists(lhs, rhs.args[2].name, array_dists)
-            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
+            _meet_array_dists(self.typemap, lhs, rhs.args[2].name, array_dists)
+            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
             return
 
         if fdef == ("set_table_data_null", "bodo.hiframes.table"):
-            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
             return
 
         if fdef == ("sample_table_operation", "bodo.libs.array_kernels"):
@@ -2251,30 +2082,30 @@ class DistributedAnalysis:
                     array_dists[rhs.args[1].name].value,
                 )
             )
-            self._set_var_dist(rhs.args[0].name, array_dists, in_dist)
-            self._set_var_dist(rhs.args[1].name, array_dists, in_dist)
-            self._set_var_dist(lhs, array_dists, in_dist)
+            _set_var_dist(self.typemap, rhs.args[0].name, array_dists, in_dist)
+            _set_var_dist(self.typemap, rhs.args[1].name, array_dists, in_dist)
+            _set_var_dist(self.typemap, lhs, array_dists, in_dist)
             return
 
         if fdef == (
             "str_arr_encode",
             "bodo.libs.str_arr_ext",
         ):
-            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
             return
 
         if fdef == (
             "pandas_string_array_to_datetime",
             "bodo.hiframes.pd_timestamp_ext",
         ):
-            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
             return
 
         if fdef == (
             "pandas_dict_string_array_to_datetime",
             "bodo.hiframes.pd_timestamp_ext",
         ):
-            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
             return
 
         if fdef in (
@@ -2287,20 +2118,20 @@ class DistributedAnalysis:
                 "bodo.hiframes.pd_dataframe_ext",
             ),
         ):
-            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
             return
 
         if fdef == (
             "pandas_string_array_to_timedelta",
             "bodo.hiframes.pd_timestamp_ext",
         ):
-            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
             return
 
         if fdef == ("nonzero", "bodo.libs.array_kernels"):
             # output of nonzero is variable-length even if input is 1D
             if lhs not in array_dists:
-                self._set_var_dist(lhs, array_dists, Distribution.OneD_Var)
+                _set_var_dist(self.typemap, lhs, array_dists, Distribution.OneD_Var)
 
             # arg0 is an array
             in_dist = Distribution(array_dists[rhs.args[0].name].value)
@@ -2311,13 +2142,13 @@ class DistributedAnalysis:
                     in_dist.value,
                 )
             )
-            self._set_var_dist(lhs, array_dists, out_dist)
+            _set_var_dist(self.typemap, lhs, array_dists, out_dist)
 
             # output can cause input REP
             if out_dist != Distribution.OneD_Var:
                 in_dist = out_dist
 
-            self._set_var_dist(rhs.args[0].name, array_dists, in_dist)
+            _set_var_dist(self.typemap, rhs.args[0].name, array_dists, in_dist)
             return
 
         if fdef == ("repeat_kernel", "bodo.libs.array_kernels"):
@@ -2325,14 +2156,14 @@ class DistributedAnalysis:
             # because of the boundary case
             # ex repeat(A, 2) where len(A) = 9 -> (10, 8)
             if lhs not in array_dists:
-                self._set_var_dist(lhs, array_dists, Distribution.OneD_Var)
+                _set_var_dist(self.typemap, lhs, array_dists, Distribution.OneD_Var)
 
             # arg0 is an array
             in_dist = Distribution(array_dists[rhs.args[0].name].value)
             # arg1 could be an array
             if is_array_typ(self.typemap[rhs.args[1].name]):
-                in_dist = self._meet_array_dists(
-                    rhs.args[0].name, rhs.args[1].name, array_dists
+                in_dist = _meet_array_dists(
+                    self.typemap, rhs.args[0].name, rhs.args[1].name, array_dists
                 )
             # return is an array
             out_dist = Distribution(
@@ -2341,20 +2172,23 @@ class DistributedAnalysis:
                     in_dist.value,
                 )
             )
-            self._set_var_dist(lhs, array_dists, out_dist)
+            _set_var_dist(self.typemap, lhs, array_dists, out_dist)
 
             # output can cause input REP
             if out_dist != Distribution.OneD_Var:
                 in_dist = out_dist
 
-            self._set_var_dist(rhs.args[0].name, array_dists, in_dist)
+            _set_var_dist(self.typemap, rhs.args[0].name, array_dists, in_dist)
             if is_array_typ(self.typemap[rhs.args[1].name]):
-                self._set_var_dist(rhs.args[1].name, array_dists, in_dist)
+                _set_var_dist(self.typemap, rhs.args[1].name, array_dists, in_dist)
             return
 
         if fdef == ("repeat_like", "bodo.libs.array_kernels"):
             # arr has to be replicated for this function
-            self._set_REP(
+            _set_REP(
+                self.typemap,
+                self.metadata,
+                self.diag_info,
                 rhs.args[0],
                 array_dists,
                 "repeat_like argument 0 must be replicated",
@@ -2365,7 +2199,7 @@ class DistributedAnalysis:
             # output of repeat_like should have distribution matching dist_like_arr
             # arr should also be distributed
             if lhs not in array_dists:
-                self._set_var_dist(lhs, array_dists, Distribution.OneD_Var)
+                _set_var_dist(self.typemap, lhs, array_dists, Distribution.OneD_Var)
 
             # return is an array
             out_dist = Distribution(
@@ -2374,22 +2208,22 @@ class DistributedAnalysis:
                     like_dist.value,
                 )
             )
-            self._set_var_dist(lhs, array_dists, out_dist)
+            _set_var_dist(self.typemap, lhs, array_dists, out_dist)
 
             # output can cause input REP
             if out_dist != Distribution.OneD_Var:
-                self._set_var_dist(rhs.args[1].name, array_dists, out_dist)
+                _set_var_dist(self.typemap, rhs.args[1].name, array_dists, out_dist)
             return
 
         if fdef == ("make_replicated_array", "bodo.utils.conversion"):
             # output must be replicated
-            self._set_var_dist(lhs, array_dists, Distribution.REP)
+            _set_var_dist(self.typemap, lhs, array_dists, Distribution.REP)
             return
 
         if fdef == ("list_to_array", "bodo.utils.conversion"):
             # Initialize output to distirbuted.
             if lhs not in array_dists:
-                self._set_var_dist(lhs, array_dists, Distribution.OneD)
+                _set_var_dist(self.typemap, lhs, array_dists, Distribution.OneD)
             if array_dists[lhs] == Distribution.OneD_Var:
                 raise BodoError(
                     "Output of list_to_array must have a OneD distribution", rhs.loc
@@ -2399,7 +2233,7 @@ class DistributedAnalysis:
         if fdef == ("drop_duplicates", "bodo.libs.array_kernels"):
             # output of drop_duplicates is variable-length even if input is 1D
             if lhs not in array_dists:
-                self._set_var_dist(lhs, array_dists, Distribution.OneD_Var)
+                _set_var_dist(self.typemap, lhs, array_dists, Distribution.OneD_Var)
 
             # df.drop_duplicates(ignore_index=True) passes None as Index to
             # drop_duplicates kernel, which causes it to return None as output Index.
@@ -2428,20 +2262,20 @@ class DistributedAnalysis:
                     in_dist.value,
                 )
             )
-            self._set_var_dist(lhs, array_dists, out_dist)
+            _set_var_dist(self.typemap, lhs, array_dists, out_dist)
 
             # output can cause input REP
             if out_dist != Distribution.OneD_Var:
                 in_dist = out_dist
 
-            self._set_var_dist(rhs.args[0].name, array_dists, in_dist)
-            self._set_var_dist(rhs.args[1].name, array_dists, in_dist)
+            _set_var_dist(self.typemap, rhs.args[0].name, array_dists, in_dist)
+            _set_var_dist(self.typemap, rhs.args[1].name, array_dists, in_dist)
             return
 
         if fdef == ("drop_duplicates_table", "bodo.utils.table_utils"):
             # output of drop_duplicates is variable-length even if input is 1D
             if lhs not in array_dists:
-                self._set_var_dist(lhs, array_dists, Distribution.OneD_Var)
+                _set_var_dist(self.typemap, lhs, array_dists, Distribution.OneD_Var)
 
             # df.drop_duplicates(ignore_index=True) passes None as Index to
             # drop_duplicates_table kernel, which causes it to return None as output
@@ -2471,20 +2305,20 @@ class DistributedAnalysis:
                     in_dist.value,
                 )
             )
-            self._set_var_dist(lhs, array_dists, out_dist)
+            _set_var_dist(self.typemap, lhs, array_dists, out_dist)
 
             # output can cause input REP
             if out_dist != Distribution.OneD_Var:
                 in_dist = out_dist
 
-            self._set_var_dist(rhs.args[0].name, array_dists, in_dist)
-            self._set_var_dist(rhs.args[1].name, array_dists, in_dist)
+            _set_var_dist(self.typemap, rhs.args[0].name, array_dists, in_dist)
+            _set_var_dist(self.typemap, rhs.args[1].name, array_dists, in_dist)
             return
 
         if fdef == ("drop_duplicates_table", "bodo.utils.table_utils"):
             # output of drop_duplicates is variable-length even if input is 1D
             if lhs not in array_dists:
-                self._set_var_dist(lhs, array_dists, Distribution.OneD_Var)
+                _set_var_dist(self.typemap, lhs, array_dists, Distribution.OneD_Var)
 
             # arg0 is a table, arg1 is an array
             in_dist = Distribution(
@@ -2501,20 +2335,20 @@ class DistributedAnalysis:
                     in_dist.value,
                 )
             )
-            self._set_var_dist(lhs, array_dists, out_dist)
+            _set_var_dist(self.typemap, lhs, array_dists, out_dist)
 
             # output can cause input REP
             if out_dist != Distribution.OneD_Var:
                 in_dist = out_dist
 
-            self._set_var_dist(rhs.args[0].name, array_dists, in_dist)
-            self._set_var_dist(rhs.args[1].name, array_dists, in_dist)
+            _set_var_dist(self.typemap, rhs.args[0].name, array_dists, in_dist)
+            _set_var_dist(self.typemap, rhs.args[1].name, array_dists, in_dist)
             return
 
         if fdef == ("union_tables", "bodo.libs.array"):
             # output of union_tables is variable-length even if input is 1D
             if lhs not in array_dists:
-                self._set_var_dist(lhs, array_dists, Distribution.OneD_Var)
+                _set_var_dist(self.typemap, lhs, array_dists, Distribution.OneD_Var)
 
             # arg0 is a tuple of "tables". Here each table is either a
             # tuple of arrays or the actual table type. We currently require
@@ -2532,35 +2366,35 @@ class DistributedAnalysis:
                 table_dists.append(table_dist)
             rhs_total_dist = Distribution(min(a.value for a in table_dists))
             out_dist = Distribution(min(rhs_total_dist.value, array_dists[lhs].value))
-            self._set_var_dist(lhs, array_dists, out_dist)
+            _set_var_dist(self.typemap, lhs, array_dists, out_dist)
             # output can cause input REP
             if out_dist != Distribution.OneD_Var:
-                self._set_var_dist(rhs.args[0].name, array_dists, out_dist)
+                _set_var_dist(self.typemap, rhs.args[0].name, array_dists, out_dist)
             return
 
         if fdef == ("drop_duplicates_array", "bodo.libs.array_kernels"):
             # output of drop_duplicates_array is variable-length even if input is 1D
             if lhs not in array_dists:
-                self._set_var_dist(lhs, array_dists, Distribution.OneD_Var)
+                _set_var_dist(self.typemap, lhs, array_dists, Distribution.OneD_Var)
 
             # arg0 an array
             in_dist = Distribution(array_dists[rhs.args[0].name].value)
 
             # return is an array
             out_dist = Distribution(min(array_dists[lhs].value, in_dist.value))
-            self._set_var_dist(lhs, array_dists, out_dist)
+            _set_var_dist(self.typemap, lhs, array_dists, out_dist)
 
             # output can cause input REP
             if out_dist != Distribution.OneD_Var:
                 in_dist = out_dist
 
-            self._set_var_dist(rhs.args[0].name, array_dists, in_dist)
+            _set_var_dist(self.typemap, rhs.args[0].name, array_dists, in_dist)
             return
 
         if fdef == ("duplicated", "bodo.libs.array_kernels"):
             # output of duplicated is variable-length even if input is 1D
             if lhs not in array_dists:
-                self._set_var_dist(lhs, array_dists, Distribution.OneD)
+                _set_var_dist(self.typemap, lhs, array_dists, Distribution.OneD)
 
             # input tuple may be empty, see test_df_duplicated
             if len(self.typemap[rhs.args[0].name]) == 0:
@@ -2569,30 +2403,30 @@ class DistributedAnalysis:
             # arg0 is a tuple of arrays, arg1 is an array
             in_dist = Distribution(min(a.value for a in array_dists[rhs.args[0].name]))
             out_dist = Distribution(min(array_dists[lhs].value, in_dist.value))
-            self._set_var_dist(lhs, array_dists, out_dist)
+            _set_var_dist(self.typemap, lhs, array_dists, out_dist)
 
-            self._set_var_dist(rhs.args[0].name, array_dists, out_dist)
+            _set_var_dist(self.typemap, rhs.args[0].name, array_dists, out_dist)
             return
 
         if fdef == ("dropna", "bodo.libs.array_kernels"):
             # output of dropna is variable-length even if input is 1D
             if lhs not in array_dists:
-                self._set_var_dist(lhs, array_dists, Distribution.OneD_Var)
+                _set_var_dist(self.typemap, lhs, array_dists, Distribution.OneD_Var)
 
             in_dist = Distribution(min(a.value for a in array_dists[rhs.args[0].name]))
             out_dist = Distribution(min(a.value for a in array_dists[lhs]))
             out_dist = Distribution(min(out_dist.value, in_dist.value))
-            self._set_var_dist(lhs, array_dists, out_dist)
+            _set_var_dist(self.typemap, lhs, array_dists, out_dist)
             # output can cause input REP
             if out_dist != Distribution.OneD_Var:
                 in_dist = out_dist
-            self._set_var_dist(rhs.args[0].name, array_dists, in_dist)
+            _set_var_dist(self.typemap, rhs.args[0].name, array_dists, in_dist)
             return
 
         if fdef == ("pivot_impl", "bodo.hiframes.pd_dataframe_ext"):
             # output of pivot_impl is variable-length even if input is 1D
             if lhs not in array_dists:
-                self._set_var_dist(lhs, array_dists, Distribution.OneD_Var)
+                _set_var_dist(self.typemap, lhs, array_dists, Distribution.OneD_Var)
 
             # arg0 is a tuple of arrays that must share a distribution.
             index_dist = array_dists[rhs.args[0].name]
@@ -2610,19 +2444,22 @@ class DistributedAnalysis:
             )
             out_dist = array_dists[lhs]
             final_dist = Distribution(min(in_dist.value, out_dist.value))
-            self._set_var_dist(lhs, array_dists, final_dist)
+            _set_var_dist(self.typemap, lhs, array_dists, final_dist)
             # output can cause input REP
             if final_dist != Distribution.OneD_Var:
                 in_dist = final_dist
             # Update args 0, 1, 2 so all arrays have the same dist
             index_dist = len(index_dist) * [in_dist]
-            self._set_var_dist(rhs.args[0].name, array_dists, index_dist)
+            _set_var_dist(self.typemap, rhs.args[0].name, array_dists, index_dist)
             columns_dist = len(columns_dist) * [in_dist]
-            self._set_var_dist(rhs.args[1].name, array_dists, columns_dist)
+            _set_var_dist(self.typemap, rhs.args[1].name, array_dists, columns_dist)
             values_dist = len(values_dist) * [in_dist]
-            self._set_var_dist(rhs.args[2].name, array_dists, values_dist)
+            _set_var_dist(self.typemap, rhs.args[2].name, array_dists, values_dist)
             # arg 3 must be replicated
-            self._set_REP(
+            _set_REP(
+                self.typemap,
+                self.metadata,
+                self.diag_info,
                 rhs.args[3].name,
                 array_dists,
                 "list of unique values for pivot is replicated",
@@ -2630,7 +2467,10 @@ class DistributedAnalysis:
             )
             # arg 6 must be replicated if it is an array
             if self.typemap[rhs.args[6].name] != types.none:
-                self._set_REP(
+                _set_REP(
+                    self.typemap,
+                    self.metadata,
+                    self.diag_info,
                     rhs.args[6].name,
                     array_dists,
                     "column names for pivot is replicated",
@@ -2639,11 +2479,19 @@ class DistributedAnalysis:
             return
 
         if fdef == ("get", "bodo.libs.array_kernels"):
-            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
             return
 
         if fdef == ("nancorr", "bodo.libs.array_kernels"):
-            self._set_REP(lhs, array_dists, "output of nancorr is REP", rhs.loc)
+            _set_REP(
+                self.typemap,
+                self.metadata,
+                self.diag_info,
+                lhs,
+                array_dists,
+                "output of nancorr is REP",
+                rhs.loc,
+            )
             return
 
         if fdef == ("series_monotonicity", "bodo.libs.array_kernels"):
@@ -2673,7 +2521,9 @@ class DistributedAnalysis:
             return
 
         if fdef == ("move_str_binary_arr_payload", "bodo.libs.str_arr_ext"):
-            self._meet_array_dists(rhs.args[0].name, rhs.args[1].name, array_dists)
+            _meet_array_dists(
+                self.typemap, rhs.args[0].name, rhs.args[1].name, array_dists
+            )
             return
 
         if fdef == ("enumerate", "builtins"):
@@ -2682,7 +2532,7 @@ class DistributedAnalysis:
                 # For enumerate the iterator should be the same dist as the value
                 # portion of the enumerate tuple.
                 if lhs not in array_dists:
-                    self._set_var_dist(lhs, array_dists, Distribution.OneD)
+                    _set_var_dist(self.typemap, lhs, array_dists, Distribution.OneD)
                 if rhs.args[0].name not in array_dists:
                     array_dists[rhs.args[0].name] = Distribution.OneD
                 rhs_dist = array_dists[rhs.args[0].name]
@@ -2693,7 +2543,7 @@ class DistributedAnalysis:
                 if rhs_dist != out_dist:
                     array_dists[rhs.args[0].name] = out_dist
                 if lhs_dist != out_dist:
-                    self._set_var_dist(lhs, array_dists, out_dist)
+                    _set_var_dist(self.typemap, lhs, array_dists, out_dist)
             return
 
         if fdef == ("get_series_name", "bodo.hiframes.pd_series_ext"):
@@ -2703,11 +2553,11 @@ class DistributedAnalysis:
             return
 
         if fdef == ("order_range", "bodo.hiframes.pd_index_ext"):
-            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
             return
 
         if fdef == ("range_index_to_numeric", "bodo.hiframes.pd_index_ext"):
-            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
             return
 
         # dummy hiframes functions
@@ -2720,31 +2570,31 @@ class DistributedAnalysis:
                 self._analyze_call_set_REP(lhs, args, array_dists, fdef, rhs.loc)
                 return
 
-            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
             return
 
         if func_mod == "bodo.libs.int_arr_ext" and func_name in (
             "get_int_arr_data",
             "get_int_arr_bitmap",
         ):
-            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
             return
 
         if func_mod == "bodo.libs.float_arr_ext" and func_name in (
             "get_float_arr_data",
             "get_float_arr_bitmap",
         ):
-            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
             return
 
         if func_mod == "bodo.hiframes.pd_categorical_ext" and func_name in (
             "get_categorical_arr_codes",
         ):
-            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
             return
 
         if fdef == ("ffill_bfill_arr", "bodo.libs.array_kernels"):
-            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
             return
 
         if fdef == ("get_bit_bitmap_arr", "bodo.libs.int_arr_ext"):
@@ -2761,7 +2611,10 @@ class DistributedAnalysis:
         # add proper diagnostic info for tuple/list to array since usually happens
         # when the code creates Series/Dataframe from list, e.g. pd.Series([1, 2, 3])
         if fdef == ("tuple_list_to_array", "bodo.utils.utils"):
-            self._set_REP(
+            _set_REP(
+                self.typemap,
+                self.metadata,
+                self.diag_info,
                 rhs.args[0],
                 array_dists,
                 "Tuples and lists are not distributed by default. Convert to array/Series/DataFrame and use bodo.scatterv() to distribute if necessary.",
@@ -2770,11 +2623,11 @@ class DistributedAnalysis:
             return
 
         if fdef == ("decode_if_dict_array", "bodo.utils.typing"):
-            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
             return
 
         if fdef == ("np_to_nullable_array", "bodo.utils.conversion"):
-            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
             return
 
         # from flat map pattern: pd.Series(list(itertools.chain(*A)))
@@ -2795,15 +2648,15 @@ class DistributedAnalysis:
         if fdef == ("explode", "bodo.libs.array_kernels"):
             # output of explode is variable-length even if input is 1D
             if lhs not in array_dists:
-                self._set_var_dist(lhs, array_dists, Distribution.OneD_Var)
+                _set_var_dist(self.typemap, lhs, array_dists, Distribution.OneD_Var)
 
-            in_dist = self._meet_array_dists(
-                rhs.args[1].name, rhs.args[0].name, array_dists
+            in_dist = _meet_array_dists(
+                self.typemap, rhs.args[1].name, rhs.args[0].name, array_dists
             )
             out_dist = Distribution(
                 min(array_dists[lhs][0].value, array_dists[lhs][1].value, in_dist.value)
             )
-            self._set_var_dist(lhs, array_dists, out_dist)
+            _set_var_dist(self.typemap, lhs, array_dists, out_dist)
             # output can cause input REP
             if out_dist != Distribution.OneD_Var:
                 in_dist = out_dist
@@ -2816,13 +2669,13 @@ class DistributedAnalysis:
         if fdef == ("explode_no_index", "bodo.libs.array_kernels"):
             # output of explode is variable-length even if input is 1D
             if lhs not in array_dists:
-                self._set_var_dist(lhs, array_dists, Distribution.OneD_Var)
+                _set_var_dist(self.typemap, lhs, array_dists, Distribution.OneD_Var)
 
-            in_dist = self._meet_array_dists(
-                rhs.args[1].name, rhs.args[0].name, array_dists
+            in_dist = _meet_array_dists(
+                self.typemap, rhs.args[1].name, rhs.args[0].name, array_dists
             )
             out_dist = Distribution(min(array_dists[lhs].value, in_dist.value))
-            self._set_var_dist(lhs, array_dists, out_dist)
+            _set_var_dist(self.typemap, lhs, array_dists, out_dist)
             # output can cause input REP
             if out_dist != Distribution.OneD_Var:
                 in_dist = out_dist
@@ -2832,30 +2685,30 @@ class DistributedAnalysis:
             return
 
         if fdef == ("get_arr_lens", "bodo.libs.array_kernels"):
-            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
             return
 
         if fdef == ("str_split", "bodo.libs.str_ext") or fdef == (
             "str_split_empty_n",
             "bodo.libs.str_ext",
         ):
-            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
             return
 
         if fdef == ("explode_str_split", "bodo.libs.array_kernels"):
             # output of explode is variable-length even if input is 1D
             if lhs not in array_dists:
-                self._set_var_dist(lhs, array_dists, Distribution.OneD_Var)
+                _set_var_dist(self.typemap, lhs, array_dists, Distribution.OneD_Var)
 
             # Input array and index array (args 0 and 3) need to be checked
-            in_dist = self._meet_array_dists(
-                rhs.args[3].name, rhs.args[0].name, array_dists
+            in_dist = _meet_array_dists(
+                self.typemap, rhs.args[3].name, rhs.args[0].name, array_dists
             )
 
             out_dist = Distribution(
                 min(array_dists[lhs][0].value, array_dists[lhs][1].value, in_dist.value)
             )
-            self._set_var_dist(lhs, array_dists, out_dist)
+            _set_var_dist(self.typemap, lhs, array_dists, out_dist)
             # output can cause input REP
             if out_dist != Distribution.OneD_Var:
                 in_dist = out_dist
@@ -2873,7 +2726,7 @@ class DistributedAnalysis:
             "init_period_index",
             "init_interval_index",
         ):
-            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
             return
 
         if fdef == ("get_index_data", "bodo.hiframes.pd_index_ext"):
@@ -2890,9 +2743,9 @@ class DistributedAnalysis:
                     min(out_dist.value, array_dists[rhs.args[0].name].value)
                 )
                 array_dists[lhs] = [out_dist] * len(tuple_typ)
-                self._set_var_dist(rhs.args[0].name, array_dists, out_dist)
+                _set_var_dist(self.typemap, rhs.args[0].name, array_dists, out_dist)
             else:
-                self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+                _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
             return
 
         # RangeIndexType is technically a distributable type even though the
@@ -2931,7 +2784,7 @@ class DistributedAnalysis:
                         and not isinstance(array_dists[v.split("#")[0]], list)
                     ):
                         arr_name = v.split("#")[0]
-                        self._meet_array_dists(lhs, arr_name, array_dists)
+                        _meet_array_dists(self.typemap, lhs, arr_name, array_dists)
 
             return
 
@@ -2947,9 +2800,9 @@ class DistributedAnalysis:
             tup_list = guard(find_build_tuple, self.func_ir, rhs.args[0])
             assert tup_list is not None
             for v in tup_list:
-                self._meet_array_dists(lhs, v.name, array_dists)
+                _meet_array_dists(self.typemap, lhs, v.name, array_dists)
             for v in tup_list:
-                self._meet_array_dists(lhs, v.name, array_dists)
+                _meet_array_dists(self.typemap, lhs, v.name, array_dists)
             return
 
         if fdef == ("init_series", "bodo.hiframes.pd_series_ext"):
@@ -2959,9 +2812,11 @@ class DistributedAnalysis:
                 return
 
             # lhs, in_arr, and index should have the same distribution
-            new_dist = self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
-            new_dist = self._meet_array_dists(
-                lhs, rhs.args[1].name, array_dists, new_dist
+            new_dist = _meet_array_dists(
+                self.typemap, lhs, rhs.args[0].name, array_dists
+            )
+            new_dist = _meet_array_dists(
+                self.typemap, lhs, rhs.args[1].name, array_dists, new_dist
             )
             array_dists[rhs.args[0].name] = new_dist
             return
@@ -2979,7 +2834,7 @@ class DistributedAnalysis:
 
             # empty dataframe case, Index and df have same distribution
             if len(self.typemap[data_varname].types) == 0:
-                self._meet_array_dists(lhs, ind_varname, array_dists)
+                _meet_array_dists(self.typemap, lhs, ind_varname, array_dists)
                 return
 
             new_dist_val = min(a.value for a in array_dists[data_varname])
@@ -2988,9 +2843,9 @@ class DistributedAnalysis:
             # handle index
             new_dist_val = min(new_dist_val, array_dists[ind_varname].value)
             new_dist = Distribution(new_dist_val)
-            self._set_var_dist(data_varname, array_dists, new_dist)
-            self._set_var_dist(ind_varname, array_dists, new_dist)
-            self._set_var_dist(lhs, array_dists, new_dist)
+            _set_var_dist(self.typemap, data_varname, array_dists, new_dist)
+            _set_var_dist(self.typemap, ind_varname, array_dists, new_dist)
+            _set_var_dist(self.typemap, lhs, array_dists, new_dist)
             return
 
         if fdef == ("pushdown_safe_init_df", "bodo.hiframes.pd_dataframe_ext"):
@@ -2998,7 +2853,7 @@ class DistributedAnalysis:
             if lhs in array_dists:
                 new_dist_val = min(new_dist_val, array_dists[lhs].value)
             new_dist = Distribution(new_dist_val)
-            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
             return
 
         if fdef == ("init_dict_arr", "bodo.libs.dict_arr_ext"):
@@ -3006,8 +2861,11 @@ class DistributedAnalysis:
             # be replicated. Here we assume other the data risks
             # having incorrect indices. The indices should match
             # the distribution of the output.
-            self._meet_array_dists(lhs, rhs.args[1].name, array_dists)
-            self._set_REP(
+            _meet_array_dists(self.typemap, lhs, rhs.args[1].name, array_dists)
+            _set_REP(
+                self.typemap,
+                self.metadata,
+                self.diag_info,
                 rhs.args[0].name,
                 array_dists,
                 "init_dict_arr dictionary array is REP",
@@ -3017,31 +2875,35 @@ class DistributedAnalysis:
 
         if fdef == ("init_datetime_array", "bodo.libs.pd_datetime_arr_ext"):
             # lhs and data should have the same distribution
-            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
-            self._meet_array_dists(lhs, rhs.args[1].name, array_dists)
+            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
+            _meet_array_dists(self.typemap, lhs, rhs.args[1].name, array_dists)
             return
 
         if fdef == ("init_integer_array", "bodo.libs.int_arr_ext"):
             # lhs, data, and bitmap should have the same distribution
-            new_dist = self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
-            new_dist = self._meet_array_dists(
-                lhs, rhs.args[1].name, array_dists, new_dist
+            new_dist = _meet_array_dists(
+                self.typemap, lhs, rhs.args[0].name, array_dists
+            )
+            new_dist = _meet_array_dists(
+                self.typemap, lhs, rhs.args[1].name, array_dists, new_dist
             )
             array_dists[rhs.args[0].name] = new_dist
             return
 
         if fdef == ("init_float_array", "bodo.libs.float_arr_ext"):
             # lhs, data, and bitmap should have the same distribution
-            new_dist = self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
-            new_dist = self._meet_array_dists(
-                lhs, rhs.args[1].name, array_dists, new_dist
+            new_dist = _meet_array_dists(
+                self.typemap, lhs, rhs.args[0].name, array_dists
+            )
+            new_dist = _meet_array_dists(
+                self.typemap, lhs, rhs.args[1].name, array_dists, new_dist
             )
             array_dists[rhs.args[0].name] = new_dist
             return
 
         if fdef == ("init_categorical_array", "bodo.hiframes.pd_categorical_ext"):
             # lhs and codes should have the same distribution
-            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
             return
 
         if func_mod == "bodo.hiframes.pd_dataframe_ext" and func_name in (
@@ -3053,13 +2915,13 @@ class DistributedAnalysis:
             if any(is_tuple_like_type(t) for t in self.typemap[rhs.args[0].name].data):
                 self._analyze_call_set_REP(lhs, args, array_dists, fdef, rhs.loc)
                 return
-            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
             return
 
         if fdef == ("get_dataframe_all_data", "bodo.hiframes.pd_dataframe_ext"):
             in_df = rhs.args[0].name
             if lhs not in array_dists:
-                self._set_var_dist(lhs, array_dists, Distribution.OneD, False)
+                _set_var_dist(self.typemap, lhs, array_dists, Distribution.OneD, False)
 
             min_dist = Distribution(
                 min(
@@ -3071,17 +2933,17 @@ class DistributedAnalysis:
                     array_dists[in_df].value,
                 )
             )
-            self._set_var_dist(lhs, array_dists, min_dist)
-            self._set_var_dist(in_df, array_dists, min_dist)
+            _set_var_dist(self.typemap, lhs, array_dists, min_dist)
+            _set_var_dist(self.typemap, in_df, array_dists, min_dist)
             return
 
         if fdef == ("get_table_data", "bodo.hiframes.table"):
-            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
             return
 
         if fdef == ("logical_table_to_table", "bodo.hiframes.table"):
             if lhs not in array_dists:
-                self._set_var_dist(lhs, array_dists, Distribution.OneD, False)
+                _set_var_dist(self.typemap, lhs, array_dists, Distribution.OneD, False)
 
             # NOTE: replacing dead input arguments with None is done in table column
             # del pass so there is no None input here
@@ -3110,17 +2972,25 @@ class DistributedAnalysis:
                     array_dists[lhs].value,
                 )
             )
-            self._set_var_dist(lhs, array_dists, min_dist)
-            self._set_var_dist(in_table, array_dists, min_dist)
-            self._set_var_dist(in_extra_arrs, array_dists, min_dist)
+            _set_var_dist(self.typemap, lhs, array_dists, min_dist)
+            _set_var_dist(self.typemap, in_table, array_dists, min_dist)
+            _set_var_dist(self.typemap, in_extra_arrs, array_dists, min_dist)
             return
 
         if fdef == ("get_dataframe_column_names", "bodo.hiframes.table"):
-            self._set_REP(lhs, array_dists, "DataFrame column names is REP", rhs.loc)
+            _set_REP(
+                self.typemap,
+                self.metadata,
+                self.diag_info,
+                lhs,
+                array_dists,
+                "DataFrame column names is REP",
+                rhs.loc,
+            )
             return
 
         if fdef == ("compute_split_view", "bodo.hiframes.split_impl"):
-            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
             return
 
         if fdef == ("get_split_view_index", "bodo.hiframes.split_impl"):
@@ -3161,7 +3031,7 @@ class DistributedAnalysis:
 
         if fdef == ("str_arr_to_dict_str_arr", "bodo.libs.str_arr_ext"):
             # LHS should match RHS
-            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
             return
 
         if fdef == ("array_op_describe", "bodo.libs.array_ops"):
@@ -3172,7 +3042,10 @@ class DistributedAnalysis:
 
         if fdef == ("generate_table_nbytes", "bodo.utils.table_utils"):
             # Arg1 is the output array and is always replicated.
-            self._set_REP(
+            _set_REP(
+                self.typemap,
+                self.metadata,
+                self.diag_info,
                 rhs.args[1],
                 array_dists,
                 "nbytes array in generate_table_nbytes is REP",
@@ -3201,19 +3074,19 @@ class DistributedAnalysis:
         ):
             out_arrname = rhs.args[0].name
             in_arrname = rhs.args[1].name
-            self._meet_array_dists(out_arrname, in_arrname, array_dists)
+            _meet_array_dists(self.typemap, out_arrname, in_arrname, array_dists)
             return
 
         if fdef == ("str_arr_item_to_numeric", "bodo.libs.str_arr_ext"):
             out_arrname = rhs.args[0].name
             in_arrname = rhs.args[2].name
-            self._meet_array_dists(out_arrname, in_arrname, array_dists)
+            _meet_array_dists(self.typemap, out_arrname, in_arrname, array_dists)
             return
 
         if fdef == ("init_spark_df", "bodo.libs.pyspark_ext"):
             in_df_name = args[0].name
             # Spark dataframe may be replicated, e.g. sdf.select(F.sum(F.col("A")))
-            self._meet_array_dists(lhs, in_df_name, array_dists)
+            _meet_array_dists(self.typemap, lhs, in_df_name, array_dists)
             return
 
         # np.fromfile()
@@ -3221,14 +3094,20 @@ class DistributedAnalysis:
             return
 
         if fdef == ("array_to_string", "bodosql.kernels"):
-            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
             return
 
         # str_arr_from_sequence() applies to lists/tuples so output is REP
         # e.g. column names in df.mean()
         if fdef == ("str_arr_from_sequence", "bodo.libs.str_arr_ext"):
-            self._set_REP(
-                lhs, array_dists, "output of str_arr_from_sequence is REP", rhs.loc
+            _set_REP(
+                self.typemap,
+                self.metadata,
+                self.diag_info,
+                lhs,
+                array_dists,
+                "output of str_arr_from_sequence is REP",
+                rhs.loc,
             )
             return
 
@@ -3240,7 +3119,7 @@ class DistributedAnalysis:
         if fdef == ("_bodo_groupby_apply_impl", ""):
             # output is variable-length even if input is 1D
             if lhs not in array_dists:
-                self._set_var_dist(lhs, array_dists, Distribution.OneD_Var)
+                _set_var_dist(self.typemap, lhs, array_dists, Distribution.OneD_Var)
 
             # arg0 is a tuple of arrays, arg1 is a dataframe
             in_dist = Distribution(
@@ -3255,16 +3134,22 @@ class DistributedAnalysis:
                     in_dist.value,
                 )
             )
-            self._set_var_dist(lhs, array_dists, out_dist)
+            _set_var_dist(self.typemap, lhs, array_dists, out_dist)
 
             # output can cause input REP
             if out_dist != Distribution.OneD_Var:
                 in_dist = out_dist
 
-            self._set_var_dist(rhs.args[0].name, array_dists, in_dist)
-            self._set_var_dist(rhs.args[1].name, array_dists, in_dist)
-            self._set_REP(
-                args[2:], array_dists, "extra argument in groupby.apply()", rhs.loc
+            _set_var_dist(self.typemap, rhs.args[0].name, array_dists, in_dist)
+            _set_var_dist(self.typemap, rhs.args[1].name, array_dists, in_dist)
+            _set_REP(
+                self.typemap,
+                self.metadata,
+                self.diag_info,
+                args[2:],
+                array_dists,
+                "extra argument in groupby.apply()",
+                rhs.loc,
             )
             return
         if fdef == ("fft2", "scipy.fftpack._basic") or fdef == (
@@ -3277,15 +3162,21 @@ class DistributedAnalysis:
             if lhs not in array_dists:
                 # Default to 1D_Var, fftw's distribution does not match our 1D distribution
                 # so 1D always becomes 1D_Var
-                self._set_var_dist(lhs, array_dists, Distribution.OneD_Var)
+                _set_var_dist(self.typemap, lhs, array_dists, Distribution.OneD_Var)
             new_dist = Distribution(
                 min(array_dists[lhs].value, array_dists[rhs.args[0].name].value)
             )
             array_dists[lhs] = new_dist
             # If output is REP set input to REP
             if new_dist == Distribution.REP:
-                self._set_REP(
-                    rhs.args[0], array_dists, "Output of FFT is replicated.", rhs.loc
+                _set_REP(
+                    self.typemap,
+                    self.metadata,
+                    self.diag_info,
+                    rhs.args[0],
+                    array_dists,
+                    "Output of FFT is replicated.",
+                    rhs.loc,
                 )
             return
         if fdef == ("fftshift", "numpy.fft") or fdef == (
@@ -3298,7 +3189,7 @@ class DistributedAnalysis:
             if lhs not in array_dists:
                 # Default to 1D, this always does an alltoallv
                 # so 1D_Var always becomes 1D
-                self._set_var_dist(lhs, array_dists, Distribution.OneD)
+                _set_var_dist(self.typemap, lhs, array_dists, Distribution.OneD)
             new_dist = Distribution(
                 min(array_dists[lhs].value, array_dists[rhs.args[0].name].value)
             )
@@ -3306,7 +3197,10 @@ class DistributedAnalysis:
                 new_dist = Distribution.OneD
             # If output is REP set input to REP
             if new_dist == Distribution.REP:
-                self._set_REP(
+                _set_REP(
+                    self.typemap,
+                    self.metadata,
+                    self.diag_info,
                     rhs.args[0],
                     array_dists,
                     "Output of fftshift is replicated.",
@@ -3321,13 +3215,13 @@ class DistributedAnalysis:
         ):  # pragma: no cover
             # All of the arguments could be scalars or arrays, but all of the
             # arrays need to meet one another
-            self._set_var_dist(lhs, array_dists, Distribution.OneD)
+            _set_var_dist(self.typemap, lhs, array_dists, Distribution.OneD)
             arrays = [lhs]
             for arg in rhs.args:
                 if is_array_typ(self.typemap[arg.name]):
                     arrays.append(arg.name)
             if len(arrays) > 1:
-                self._meet_several_array_dists(arrays, array_dists)
+                _meet_several_array_dists(self.typemap, arrays, array_dists)
             return
 
         # handle calling other Bodo functions that have distributed flags
@@ -3340,26 +3234,6 @@ class DistributedAnalysis:
 
         # set REP if not found
         self._analyze_call_set_REP(lhs, args, array_dists, fdef, rhs.loc)
-
-    def _analyze_call_sklearn_preprocessing_scalers(
-        self,
-        lhs,
-        func_name,
-        rhs,
-        kws,
-        array_dists,
-    ):
-        """
-        Analyze distribution of sklearn.preprocessing.OneHotEncoder, StandardScaler,
-        MaxAbsScaler, MinMaxScaler, RobustScaler, and LabelEncoder functions.
-        Only need to handle fit_transform, transform and inverse_transform. fit is handled automatically.
-        """
-
-        if func_name in {"transform", "inverse_transform", "fit_transform"}:
-            # match input (X) and output (X_new) distributions
-            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
-
-        return
 
     def _analyze_call_sklearn_cross_validators(
         self, lhs, func_name, rhs, kws, array_dists
@@ -3379,157 +3253,15 @@ class DistributedAnalysis:
                 groups_arg_name = None
 
             if groups_arg_name:
-                self._meet_array_dists(X_arg_name, groups_arg_name, array_dists)
-
-    def _analyze_call_sklearn_cluster_kmeans(
-        self, lhs, func_name, rhs, kws, array_dists
-    ):
-        """
-        Analyze distribution of sklearn cluster kmeans
-        functions (sklearn.cluster.kmeans.func_name)
-        """
-        if func_name == "fit":
-            # match dist of X and sample_weight (if provided)
-            X_arg_name = rhs.args[0].name
-            if len(rhs.args) >= 3:
-                sample_weight_arg_name = rhs.args[2].name
-            elif "sample_weight" in kws:
-                sample_weight_arg_name = kws["sample_weight"].name
-            else:
-                sample_weight_arg_name = None
-
-            if sample_weight_arg_name:
-                self._meet_array_dists(X_arg_name, sample_weight_arg_name, array_dists)
-
-        elif func_name == "predict":
-            # match dist of X and sample_weight (if provided)
-            X_arg_name = rhs.args[0].name
-            if len(rhs.args) >= 2:
-                sample_weight_arg_name = rhs.args[1].name
-            elif "sample_weight" in kws:
-                sample_weight_arg_name = kws["sample_weight"].name
-            else:
-                sample_weight_arg_name = None
-            if sample_weight_arg_name:
-                self._meet_array_dists(X_arg_name, sample_weight_arg_name, array_dists)
-
-            # match input and output distributions
-            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
-
-        elif func_name == "score":
-            # match dist of X and sample_weight (if provided)
-            X_arg_name = rhs.args[0].name
-            if len(rhs.args) >= 3:
-                sample_weight_arg_name = rhs.args[2].name
-            elif "sample_weight" in kws:
-                sample_weight_arg_name = kws["sample_weight"].name
-            else:
-                sample_weight_arg_name = None
-            if sample_weight_arg_name:
-                self._meet_array_dists(X_arg_name, sample_weight_arg_name, array_dists)
-
-        elif func_name == "transform":
-            # match input (X) and output (X_new) distributions
-            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
-
-        return
-
-    def _analyze_mappable_table_funcs(self, lhs, rhs, kws, array_dists):
-        """
-        Analyze for functions using generate_mappable_table_func.
-        Arg0 is a table used for distribution and arg1 is the function
-        name. Distributions differ based on arg1.
-
-        Returns True if there was a known implementation.
-        """
-        func_name_typ = self.typemap[rhs.args[1].name]
-        has_func = not is_overload_none(func_name_typ)
-        if has_func:
-            # XXX: Make this more scalable by recalling the distributed
-            # analysis already in this pass for each of the provided
-            # func names.
-            func_name = guard(get_overload_const_str, func_name_typ)
-            # We support mappable prefixes that don't need to be separate functions.
-            if func_name[0] == "~":
-                func_name = func_name[1:]
-            # Note: This isn't an elif because the ~ may modify the name
-            if func_name in (
-                "bodo.libs.array_ops.array_op_isna",
-                "copy",
-                "bodo.libs.array_ops.drop_duplicates_local_dictionary_if_dict",
-            ):
-                # Not currently in the code because it is otherwise inlined.
-                # This should be included somewhere.
-                self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
-                return True
-        else:
-            # If we don't have a func, this is a shallow copy.
-            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
-            return True
-
-        return False
-
-    def _analyze_sklearn_score_err_ytrue_ypred_optional_sample_weight(
-        self, lhs, func_name, rhs, kws, array_dists
-    ):
-        """
-        Analyze for sklearn functions like accuracy_score and mean_squared_error.
-        In these we have a y_true, y_pred and optionally a sample_weight.
-        Distribution of all 3 should match.
-        """
-
-        # sample_weight is an optional kw arg, so check if it is provided.
-        # if it is provided and it is not none (because if it is none it's
-        # as good as not being provided), then get the "name"
-        sample_weight_arg_name = None
-        if "sample_weight" in kws and (
-            self.typemap[kws["sample_weight"].name] != types.none
-        ):
-            sample_weight_arg_name = kws["sample_weight"].name
-
-        # check if all 3 (y_true, y_pred, sample_weight) are distributable types
-        dist_y_true = is_distributable_typ(self.typemap[rhs.args[0].name])
-        dist_y_pred = is_distributable_typ(self.typemap[rhs.args[1].name])
-        # if sample_weight is not provided, we can act as if it is distributable
-        dist_sample_weight = (
-            is_distributable_typ(self.typemap[sample_weight_arg_name])
-            if sample_weight_arg_name
-            else True
-        )
-
-        # if any of the 3 are not distributable, set top_dist to REP
-        top_dist = Distribution.OneD
-        if not (dist_y_true and dist_y_pred and dist_sample_weight):
-            top_dist = Distribution.REP
-
-        # Match distribution of y_true and y_pred, with top dist as
-        # computed above, i.e. set to REP if any of the types
-        # are not distributable
-        self._meet_array_dists(
-            rhs.args[0].name, rhs.args[1].name, array_dists, top_dist=top_dist
-        )
-        if sample_weight_arg_name:
-            # Match distribution of y_true and sample_weight
-            self._meet_array_dists(
-                rhs.args[0].name,
-                sample_weight_arg_name,
-                array_dists,
-                top_dist=top_dist,
-            )
-            # Match distribution of y_pred and sample_weight
-            self._meet_array_dists(
-                rhs.args[1].name,
-                sample_weight_arg_name,
-                array_dists,
-                top_dist=top_dist,
-            )
-        return
+                _meet_array_dists(
+                    self.typemap, X_arg_name, groups_arg_name, array_dists
+                )
 
     def _analyze_call_np(self, lhs, func_name, args, kws, array_dists, loc):
         """analyze distributions of numpy functions (np.func_name)"""
         # TODO: handle kw args properly
         if func_name == "ascontiguousarray":
-            self._meet_array_dists(lhs, args[0].name, array_dists)
+            _meet_array_dists(self.typemap, lhs, args[0].name, array_dists)
             return
 
         if func_name == "select":
@@ -3574,7 +3306,7 @@ class DistributedAnalysis:
             min_dist = lhs_dist
 
             for dist_val in cond_list_dist + choice_list_dist:
-                min_dist = self._min_dist(min_dist, dist_val)
+                min_dist = _min_dist(min_dist, dist_val)
 
             array_dists[lhs] = min_dist
             if cond_list_basetuple:
@@ -3609,9 +3341,15 @@ class DistributedAnalysis:
         if func_name == "digitize":
             in_arr = get_call_expr_arg("digitize", args, kws, 0, "x")
             bins = get_call_expr_arg("digitize", args, kws, 1, "bins")
-            self._meet_array_dists(lhs, in_arr.name, array_dists)
-            self._set_REP(
-                bins.name, array_dists, "'bins' argument of 'digitize' is REP", loc
+            _meet_array_dists(self.typemap, lhs, in_arr.name, array_dists)
+            _set_REP(
+                self.typemap,
+                self.metadata,
+                self.diag_info,
+                bins.name,
+                array_dists,
+                "'bins' argument of 'digitize' is REP",
+                loc,
             )
             return
 
@@ -3630,9 +3368,12 @@ class DistributedAnalysis:
             # np.array of another array can be distributed, but not list/tuple
             # NOTE: not supported by Numba yet
             if is_array_typ(self.typemap[arg.name]):  # pragma: no cover
-                self._meet_array_dists(lhs, arg.name, array_dists)
+                _meet_array_dists(self.typemap, lhs, arg.name, array_dists)
             else:
-                self._set_REP(
+                _set_REP(
+                    self.typemap,
+                    self.metadata,
+                    self.diag_info,
                     lhs,
                     array_dists,
                     "output of np.array() call on non-array is REP",
@@ -3644,9 +3385,12 @@ class DistributedAnalysis:
             arg = get_call_expr_arg("asarray", args, kws, 0, "a")
             # np.asarray of another array can be distributed, but not list/tuple
             if is_array_typ(self.typemap[args[0].name]):
-                self._meet_array_dists(lhs, args[0].name, array_dists)
+                _meet_array_dists(self.typemap, lhs, args[0].name, array_dists)
             else:
-                self._set_REP(
+                _set_REP(
+                    self.typemap,
+                    self.metadata,
+                    self.diag_info,
                     lhs,
                     array_dists,
                     "output of np.asarray() call on non-array is REP",
@@ -3662,10 +3406,13 @@ class DistributedAnalysis:
             if (
                 isinstance(input_type, types.Array) and input_type.ndim == 2
             ) or isinstance(input_type, bodo.libs.matrix_ext.MatrixType):
-                self._meet_array_dists(lhs, args[0].name, array_dists)
+                _meet_array_dists(self.typemap, lhs, args[0].name, array_dists)
                 return
             else:
-                self._set_REP(
+                _set_REP(
+                    self.typemap,
+                    self.metadata,
+                    self.diag_info,
                     lhs,
                     array_dists,
                     "output of np.asmatrix() call is REP if input is not 2D array or matrix",
@@ -3674,8 +3421,8 @@ class DistributedAnalysis:
 
         if func_name == "interp":
             # Output matches 1st input, and 2nd/3rd must match each other
-            self._meet_array_dists(lhs, args[0].name, array_dists)
-            self._meet_array_dists(args[1].name, args[2].name, array_dists)
+            _meet_array_dists(self.typemap, lhs, args[0].name, array_dists)
+            _meet_array_dists(self.typemap, args[1].name, args[2].name, array_dists)
             return
 
         # handle array.sum() with axis
@@ -3684,13 +3431,19 @@ class DistributedAnalysis:
             axis = guard(find_const, self.func_ir, axis_var)
             # sum over the first axis produces REP output
             if axis == 0:
-                self._set_REP(
-                    lhs, array_dists, "sum over the first axis produces REP output", loc
+                _set_REP(
+                    self.typemap,
+                    self.metadata,
+                    self.diag_info,
+                    lhs,
+                    array_dists,
+                    "sum over the first axis produces REP output",
+                    loc,
                 )
                 return
             # sum over other axis doesn't change distribution
             if axis_var != "" and axis != 0:
-                self._meet_array_dists(lhs, args[0].name, array_dists)
+                _meet_array_dists(self.typemap, lhs, args[0].name, array_dists)
                 return
 
         if func_name == "dot":
@@ -3717,7 +3470,7 @@ class DistributedAnalysis:
             # parallel if args are 1D and output is 2D and axis == 1
             if axis is not None and axis == 1 and self.typemap[lhs].ndim == 2:
                 for v in in_arrs:
-                    self._meet_array_dists(lhs, v.name, array_dists)
+                    _meet_array_dists(self.typemap, lhs, v.name, array_dists)
                 return
 
         if func_name == "reshape":
@@ -3748,7 +3501,7 @@ class DistributedAnalysis:
             "copy",
         ]:
             in_arr = args[0].name
-            self._meet_array_dists(lhs, in_arr, array_dists)
+            _meet_array_dists(self.typemap, lhs, in_arr, array_dists)
             return
 
         # pragma is needed as the only test is marked as slow
@@ -3759,7 +3512,7 @@ class DistributedAnalysis:
             if is_distributable_typ(self.typemap[args[1].name]):
                 arys_to_meet += [args[1].name]
             if len(arys_to_meet) > 1:
-                self._meet_several_array_dists(arys_to_meet, array_dists)
+                _meet_several_array_dists(self.typemap, arys_to_meet, array_dists)
             return
 
         # set REP if not found
@@ -3786,7 +3539,7 @@ class DistributedAnalysis:
         # see index test_1D_Var_alloc4 for example
         r = guard(self._get_calc_n_items_range_index, size_def)
         if r is not None:
-            self._meet_array_dists(lhs, r.name, array_dists)
+            _meet_array_dists(self.typemap, lhs, r.name, array_dists)
 
         # all arrays with equivalent size should have same distribution
         var_set = equiv_set.get_equiv_set(size_var)
@@ -3813,7 +3566,7 @@ class DistributedAnalysis:
             if isinstance(v, str) and "#0" in v:
                 arr_name = v.split("#")[0]
                 if is_distributable_typ(self.typemap[arr_name]):
-                    self._meet_array_dists(lhs, arr_name, array_dists)
+                    _meet_array_dists(self.typemap, lhs, arr_name, array_dists)
 
     def _analyze_call_array(self, lhs, arr, func_name, args, array_dists, loc):
         """analyze distributions of array functions (arr.func_name)"""
@@ -3828,7 +3581,7 @@ class DistributedAnalysis:
                 raise BodoError(
                     "Transpose with non-zero first argument" " is not supported", loc
                 )
-            self._meet_array_dists(lhs, in_arr_name, array_dists)
+            _meet_array_dists(self.typemap, lhs, in_arr_name, array_dists)
             return
 
         if func_name == "reshape":
@@ -3846,7 +3599,7 @@ class DistributedAnalysis:
 
         if func_name in ("astype", "copy", "view", "tz_convert", "to_numpy"):
             in_arr_name = arr.name
-            self._meet_array_dists(lhs, in_arr_name, array_dists)
+            _meet_array_dists(self.typemap, lhs, in_arr_name, array_dists)
             return
 
         # Array.tofile() is supported for all distributions
@@ -3862,8 +3615,14 @@ class DistributedAnalysis:
         if is_REP(array_dists[arr.name]) or (
             lhs in array_dists and is_REP(array_dists[lhs])
         ):
-            self._set_REP(
-                [lhs, arr.name], array_dists, "np.reshape() input/output are REP", loc
+            _set_REP(
+                self.typemap,
+                self.metadata,
+                self.diag_info,
+                [lhs, arr.name],
+                array_dists,
+                "np.reshape() input/output are REP",
+                loc,
             )
             return
 
@@ -3885,17 +3644,17 @@ class DistributedAnalysis:
                 )
             )
         ):
-            self._meet_array_dists(lhs, arr.name, array_dists)
+            _meet_array_dists(self.typemap, lhs, arr.name, array_dists)
             return
 
         # reshape to 1 dimension
         # special case: output is 1D_Var since we just reshape locally without data
         # exchange
         if len(shape_vars) == 1:
-            self._set_var_dist(lhs, array_dists, Distribution.OneD_Var)
+            _set_var_dist(self.typemap, lhs, array_dists, Distribution.OneD_Var)
         # all other cases will have data exchange resulting in 1D distribution
         else:
-            self._set_var_dist(lhs, array_dists, Distribution.OneD)
+            _set_var_dist(self.typemap, lhs, array_dists, Distribution.OneD)
 
     def _analyze_call_df(self, lhs, arr, func_name, args, array_dists, loc):
         # to_csv() and to_parquet() can be parallelized
@@ -3926,8 +3685,8 @@ class DistributedAnalysis:
             return
 
         if func_name == "rep_return":
-            self._set_var_dist(lhs, array_dists, Distribution.REP)
-            self._set_var_dist(args[0].name, array_dists, Distribution.REP)
+            _set_var_dist(self.typemap, lhs, array_dists, Distribution.REP)
+            _set_var_dist(self.typemap, args[0].name, array_dists, Distribution.REP)
             return
 
         if func_name == "dist_return":
@@ -3958,16 +3717,16 @@ class DistributedAnalysis:
             return
 
         if func_name == "rebalance":
-            self._meet_array_dists(lhs, args[0].name, array_dists)
+            _meet_array_dists(self.typemap, lhs, args[0].name, array_dists)
             return
 
         if func_name == "random_shuffle":
-            self._meet_array_dists(lhs, args[0].name, array_dists)
+            _meet_array_dists(self.typemap, lhs, args[0].name, array_dists)
             return
 
         # output is replicated but input can stay distributed
         if func_name == "get_chunk_bounds":
-            self._set_var_dist(lhs, array_dists, Distribution.REP)
+            _set_var_dist(self.typemap, lhs, array_dists, Distribution.REP)
             return
 
         # set REP if not found
@@ -4007,8 +3766,11 @@ class DistributedAnalysis:
                         ),
                         rhs.loc,
                     )
-            self._set_var_dist(
-                lhs, array_dists, _get_ret_new_dist(lhs_typ, is_return_distributed)
+            _set_var_dist(
+                self.typemap,
+                lhs,
+                array_dists,
+                _get_ret_new_dist(lhs_typ, is_return_distributed),
             )
         else:
             if (
@@ -4025,8 +3787,11 @@ class DistributedAnalysis:
                     ),
                     rhs.loc,
                 )
-            self._set_var_dist(
-                lhs, array_dists, _get_ret_new_dist(lhs_typ, is_return_distributed)
+            _set_var_dist(
+                self.typemap,
+                lhs,
+                array_dists,
+                _get_ret_new_dist(lhs_typ, is_return_distributed),
             )
 
     def _handle_dispatcher_args(self, dispatcher, lhs, rhs, array_dists, err_msg):
@@ -4110,7 +3875,10 @@ class DistributedAnalysis:
                     continue
                 typ = arg_types[ind]
                 if vname in rep_vars:
-                    self._set_REP(
+                    _set_REP(
+                        self.typemap,
+                        self.metadata,
+                        self.diag_info,
                         vname,
                         array_dists,
                         f"replicated flag set for {vname}",
@@ -4118,7 +3886,10 @@ class DistributedAnalysis:
                     )
                     continue
                 if not hasattr(typ, "dist"):
-                    self._set_REP(
+                    _set_REP(
+                        self.typemap,
+                        self.metadata,
+                        self.diag_info,
                         vname,
                         array_dists,
                         f"input of another Bodo call without distributed flag (automatic distribution detection not supported for data type {typ})",
@@ -4134,7 +3905,10 @@ class DistributedAnalysis:
                     self.typemap[vname] = new_typ
                     recompile = True
             else:
-                self._set_REP(
+                _set_REP(
+                    self.typemap,
+                    self.metadata,
+                    self.diag_info,
                     vname,
                     array_dists,
                     "input of another Bodo call without distributed flag",
@@ -4243,42 +4017,66 @@ class DistributedAnalysis:
             # special case were arg1 vector is treated as column vector
             # samples dot weights: np.dot(X,w)
             # w is always REP
-            self._set_REP(
-                arg1, array_dists, "vector multiplied by matrix rows in np.dot()", loc
+            _set_REP(
+                self.typemap,
+                self.metadata,
+                self.diag_info,
+                arg1,
+                array_dists,
+                "vector multiplied by matrix rows in np.dot()",
+                loc,
             )
             if lhs not in array_dists:
                 array_dists[lhs] = Distribution.OneD
             # lhs and X have same distribution
-            self._meet_array_dists(lhs, arg0, array_dists)
+            _meet_array_dists(self.typemap, lhs, arg0, array_dists)
             dprint("dot case 1 Xw:", arg0, arg1)
             return
         if ndim0 == 1 and ndim1 == 2 and not t1:
             # reduction across samples np.dot(Y,X)
             # lhs is always REP
-            self._set_REP(
-                lhs, array_dists, "output of vector-matrix multiply in np.dot()", loc
+            _set_REP(
+                self.typemap,
+                self.metadata,
+                self.diag_info,
+                lhs,
+                array_dists,
+                "output of vector-matrix multiply in np.dot()",
+                loc,
             )
             # Y and X have same distribution
-            self._meet_array_dists(arg0, arg1, array_dists)
+            _meet_array_dists(self.typemap, arg0, arg1, array_dists)
             dprint("dot case 2 YX:", arg0, arg1)
             return
         if ndim0 == 2 and ndim1 == 2 and t0 and not t1:
             # reduction across samples np.dot(X.T,Y)
             # lhs is always REP
-            self._set_REP(
-                lhs, array_dists, "output of matrix-matrix multiply in np.dot()", loc
+            _set_REP(
+                self.typemap,
+                self.metadata,
+                self.diag_info,
+                lhs,
+                array_dists,
+                "output of matrix-matrix multiply in np.dot()",
+                loc,
             )
             # Y and X have same distribution
-            self._meet_array_dists(arg0, arg1, array_dists)
+            _meet_array_dists(self.typemap, arg0, arg1, array_dists)
             dprint("dot case 3 XtY:", arg0, arg1)
             return
         if ndim0 == 2 and ndim1 == 2 and not t0 and not t1:
             # samples dot weights: np.dot(X,w)
             # w is always REP
-            self._set_REP(
-                arg1, array_dists, "matrix multiplied by rows in np.dot()", loc
+            _set_REP(
+                self.typemap,
+                self.metadata,
+                self.diag_info,
+                arg1,
+                array_dists,
+                "matrix multiplied by rows in np.dot()",
+                loc,
             )
-            self._meet_array_dists(lhs, arg0, array_dists)
+            _meet_array_dists(self.typemap, lhs, arg0, array_dists)
             dprint("dot case 4 Xw:", arg0, arg1)
             return
 
@@ -4291,12 +4089,14 @@ class DistributedAnalysis:
             typ = self.typemap[v.name]
             if is_distributable_typ(typ) or is_distributable_tuple_typ(typ):
                 dprint(f"dist setting call arg REP {v.name} in {fdef}")
-                self._set_REP(v.name, array_dists)
+                _set_REP(
+                    self.typemap, self.metadata, self.diag_info, v.name, array_dists
+                )
                 arrs.append(v.name)
         typ = self.typemap[lhs]
         if is_distributable_typ(typ) or is_distributable_tuple_typ(typ):
             dprint(f"dist setting call out REP {lhs} in {fdef}")
-            self._set_REP(lhs, array_dists)
+            _set_REP(self.typemap, self.metadata, self.diag_info, lhs, array_dists)
             arrs.append(lhs)
         # save diagnostic info for faild analysis
         fname = fdef
@@ -4309,8 +4109,11 @@ class DistributedAnalysis:
             info = (
                 "Distributed analysis set '{}' as replicated due "
                 "to call to function '{}' (unsupported function or usage)"
-            ).format(", ".join(f"'{self._get_user_varname(a)}'" for a in arrs), fname)
-            self._add_diag_info(info, loc)
+            ).format(
+                ", ".join(f"'{_get_user_varname(self.metadata, a)}'" for a in arrs),
+                fname,
+            )
+            _add_diag_info(self.diag_info, info, loc)
 
     def _analyze_getitem_array_table_inputs(
         self,
@@ -4327,7 +4130,10 @@ class DistributedAnalysis:
 
         if (in_var.name, index_var.name) in self._parallel_accesses:
             # XXX: is this always valid? should be done second pass?
-            self._set_REP(
+            _set_REP(
+                self.typemap,
+                self.metadata,
+                self.diag_info,
                 [inst.target],
                 array_dists,
                 "output of distributed getitem is REP",
@@ -4342,8 +4148,14 @@ class DistributedAnalysis:
             index_var = tup_list[0]
             # rest of indices should be replicated if array
             other_ind_vars = tup_list[1:]
-            self._set_REP(
-                other_ind_vars, array_dists, "getitem index variables are REP", rhs_loc
+            _set_REP(
+                self.typemap,
+                self.metadata,
+                self.diag_info,
+                other_ind_vars,
+                array_dists,
+                "getitem index variables are REP",
+                rhs_loc,
             )
 
         assert isinstance(index_var, ir.Var)
@@ -4356,7 +4168,9 @@ class DistributedAnalysis:
             or index_typ == boolean_array_type
         ):
             # input array and bool index have the same distribution
-            new_dist = self._meet_array_dists(index_var.name, in_var.name, array_dists)
+            new_dist = _meet_array_dists(
+                self.typemap, index_var.name, in_var.name, array_dists
+            )
             out_dist = Distribution.OneD_Var
             if lhs in array_dists:
                 out_dist = Distribution(min(out_dist.value, array_dists[lhs].value))
@@ -4364,8 +4178,8 @@ class DistributedAnalysis:
             array_dists[lhs] = out_dist
             # output can cause input REP
             if out_dist != Distribution.OneD_Var:
-                self._meet_array_dists(
-                    index_var.name, in_var.name, array_dists, out_dist
+                _meet_array_dists(
+                    self.typemap, index_var.name, in_var.name, array_dists, out_dist
                 )
             return
 
@@ -4381,7 +4195,7 @@ class DistributedAnalysis:
             self.func_ir,
             equiv_set,
         ):
-            self._meet_array_dists(lhs, in_var.name, array_dists)
+            _meet_array_dists(self.typemap, lhs, in_var.name, array_dists)
             return
         # chunked slice or strided slice can be 1D_Var
         # examples: A = X[:n//3], A = X[::2,5]
@@ -4389,8 +4203,8 @@ class DistributedAnalysis:
             # output array is 1D_Var if input array is distributed
             out_dist = Distribution.OneD_Var
             if lhs in array_dists:
-                out_dist = self._min_dist(out_dist, array_dists[lhs])
-            out_dist = self._min_dist(out_dist, array_dists[in_var.name])
+                out_dist = _min_dist(out_dist, array_dists[lhs])
+            out_dist = _min_dist(out_dist, array_dists[in_var.name])
             array_dists[lhs] = out_dist
             # input can become REP
             if out_dist != Distribution.OneD_Var:
@@ -4400,7 +4214,10 @@ class DistributedAnalysis:
         # avoid parallel scalar getitem when inside a parfor
         # examples: test_np_dot, logistic_regression_rand
         if self.in_parallel_parfor != -1:
-            self._set_REP(
+            _set_REP(
+                self.typemap,
+                self.metadata,
+                self.diag_info,
                 inst.list_vars(),
                 array_dists,
                 "getitem inside parallel loop is REP",
@@ -4411,7 +4228,10 @@ class DistributedAnalysis:
         # int index of dist array
         if isinstance(index_typ, types.Integer):
             if is_distributable_typ(self.typemap[lhs]):
-                self._set_REP(
+                _set_REP(
+                    self.typemap,
+                    self.metadata,
+                    self.diag_info,
                     lhs,
                     array_dists,
                     "output of distributed getitem with int index is REP",
@@ -4419,8 +4239,14 @@ class DistributedAnalysis:
                 )
             return
 
-        self._set_REP(
-            inst.list_vars(), array_dists, "unsupported getitem distribution", rhs_loc
+        _set_REP(
+            self.typemap,
+            self.metadata,
+            self.diag_info,
+            inst.list_vars(),
+            array_dists,
+            "unsupported getitem distribution",
+            rhs_loc,
         )
 
     def _analyze_getitem(self, inst, lhs, rhs, equiv_set, array_dists):
@@ -4445,10 +4271,10 @@ class DistributedAnalysis:
                 ind_val = index_typ.literal_value
                 tup = rhs.value.name
                 if tup not in array_dists:
-                    self._set_var_dist(tup, array_dists, Distribution.OneD)
+                    _set_var_dist(self.typemap, tup, array_dists, Distribution.OneD)
                 if lhs not in array_dists:
-                    self._set_var_dist(lhs, array_dists, Distribution.OneD)
-                new_dist = self._min_dist(array_dists[tup][ind_val], array_dists[lhs])
+                    _set_var_dist(self.typemap, lhs, array_dists, Distribution.OneD)
+                new_dist = _min_dist(array_dists[tup][ind_val], array_dists[lhs])
                 array_dists[tup][ind_val] = new_dist
                 array_dists[lhs] = new_dist
             return
@@ -4458,13 +4284,19 @@ class DistributedAnalysis:
             is_distributable_typ(lhs_typ) or is_distributable_tuple_typ(lhs_typ)
         ):
             # output and dictionary have the same distribution
-            self._meet_array_dists(lhs, rhs.value.name, array_dists)
+            _meet_array_dists(self.typemap, lhs, rhs.value.name, array_dists)
             return
 
         # indexing into arrays from this point only, check for array type
         if not (is_array_typ(in_typ) or isinstance(in_typ, TableType)):
-            self._set_REP(
-                inst.list_vars(), array_dists, "getitem input not array", rhs.loc
+            _set_REP(
+                self.typemap,
+                self.metadata,
+                self.diag_info,
+                inst.list_vars(),
+                array_dists,
+                "getitem input not array",
+                rhs.loc,
             )
             return
 
@@ -4486,12 +4318,15 @@ class DistributedAnalysis:
             is_distributable_typ(value_typ) or is_distributable_tuple_typ(value_typ)
         ):
             # output and dictionary have the same distribution
-            self._meet_array_dists(arr.name, inst.value.name, array_dists)
+            _meet_array_dists(self.typemap, arr.name, inst.value.name, array_dists)
             return
 
         if (arr.name, index_var.name) in self._parallel_accesses:
             # no parallel to parallel array set (TODO)
-            self._set_REP(
+            _set_REP(
+                self.typemap,
+                self.metadata,
+                self.diag_info,
                 [inst.value],
                 array_dists,
                 "value set in distributed setitem is REP",
@@ -4503,8 +4338,14 @@ class DistributedAnalysis:
         if tup_list is not None:
             index_var = tup_list[0]
             # rest of indices should be replicated if array
-            self._set_REP(
-                tup_list[1:], array_dists, "index variables are REP", inst.loc
+            _set_REP(
+                self.typemap,
+                self.metadata,
+                self.diag_info,
+                tup_list[1:],
+                array_dists,
+                "index variables are REP",
+                inst.loc,
             )
 
         # array selection with boolean index
@@ -4516,8 +4357,11 @@ class DistributedAnalysis:
             # setting scalar or lower dimension value, e.g. A[B] = 1
             if not is_array_typ(value_typ) or value_typ.ndim < target_typ.ndim:
                 # input array and bool index have the same distribution
-                self._meet_array_dists(arr.name, index_var.name, array_dists)
-                self._set_REP(
+                _meet_array_dists(self.typemap, arr.name, index_var.name, array_dists)
+                _set_REP(
+                    self.typemap,
+                    self.metadata,
+                    self.diag_info,
                     [inst.value],
                     array_dists,
                     "scalar/lower-dimension value set in distributed setitem with bool array index is REP",
@@ -4532,14 +4376,17 @@ class DistributedAnalysis:
         if guard(is_whole_slice, self.typemap, self.func_ir, index_var) or guard(
             is_slice_equiv_arr, arr, index_var, self.func_ir, equiv_set
         ):
-            self._meet_array_dists(arr.name, inst.value.name, array_dists)
+            _meet_array_dists(self.typemap, arr.name, inst.value.name, array_dists)
             return
         # chunked slice or strided slice
         # examples: X[:n//3] = v, X[::2,5] = v
         elif isinstance(index_typ, types.SliceType):
             # if the value is scalar/lower dimension
             if not is_array_typ(value_typ) or value_typ.ndim < target_typ.ndim:
-                self._set_REP(
+                _set_REP(
+                    self.typemap,
+                    self.metadata,
+                    self.diag_info,
                     [inst.value],
                     array_dists,
                     "scalar/lower-dimension value set in distributed setitem with slice index is REP",
@@ -4551,7 +4398,10 @@ class DistributedAnalysis:
 
         # avoid parallel scalar setitem when inside a parfor
         if self.in_parallel_parfor != -1:
-            self._set_REP(
+            _set_REP(
+                self.typemap,
+                self.metadata,
+                self.diag_info,
                 inst.list_vars(),
                 array_dists,
                 "setitem inside parallel loop is REP",
@@ -4561,7 +4411,10 @@ class DistributedAnalysis:
 
         # int index setitem of dist array
         if isinstance(index_typ, types.Integer):
-            self._set_REP(
+            _set_REP(
+                self.typemap,
+                self.metadata,
+                self.diag_info,
                 [inst.value],
                 array_dists,
                 "value set in distributed array setitem is REP",
@@ -4576,10 +4429,13 @@ class DistributedAnalysis:
             and index_typ.dtype == types.bool_
             and not is_array_typ(value_typ)
         ):
-            self._meet_array_dists(arr.name, index_var.name, array_dists)
+            _meet_array_dists(self.typemap, arr.name, index_var.name, array_dists)
             return
 
-        self._set_REP(
+        _set_REP(
+            self.typemap,
+            self.metadata,
+            self.diag_info,
             [inst.value, arr, index_var],
             array_dists,
             "unsupported setitem distribution",
@@ -4596,12 +4452,12 @@ class DistributedAnalysis:
         # take precedence)
         if rhs.name in self.metadata["replicated"]:
             if lhs not in array_dists:
-                self._set_var_dist(lhs, array_dists, Distribution.REP)
+                _set_var_dist(self.typemap, lhs, array_dists, Distribution.REP)
         elif rhs.name in self.metadata["distributed_block"] or (
             is_arg and self.flags.all_args_distributed_block
         ):
             if lhs not in array_dists:
-                self._set_var_dist(lhs, array_dists, Distribution.OneD)
+                _set_var_dist(self.typemap, lhs, array_dists, Distribution.OneD)
             # Check if a user specified argument is indicated distributed
             # but transitions to REP. Fixed point iteration dictates that we will
             # eventually fail this check if an argument is ever changed to REP.
@@ -4610,7 +4466,7 @@ class DistributedAnalysis:
             is_arg and self.flags.all_args_distributed_varlength
         ):
             if lhs not in array_dists:
-                self._set_var_dist(lhs, array_dists, Distribution.OneD_Var)
+                _set_var_dist(self.typemap, lhs, array_dists, Distribution.OneD_Var)
             # Check if a user specified argument is indicated distributed
             # but transitions to REP. Fixed point iteration dictates that we will
             # eventually fail this check if an argument is ever changed to REP.
@@ -4638,7 +4494,15 @@ class DistributedAnalysis:
                     "'{1}'). Set distributed flag for '{0}' if distributed partitions "
                     "are passed (e.g. @bodo.jit(distributed=['{0}']))."
                 ).format(rhs.name, lhs, "argument" if is_arg else "global value")
-                self._set_REP(lhs, array_dists, info, rhs.loc)
+                _set_REP(
+                    self.typemap,
+                    self.metadata,
+                    self.diag_info,
+                    lhs,
+                    array_dists,
+                    info,
+                    rhs.loc,
+                )
 
     def _analyze_setattr(self, target, attr, value, array_dists, loc):
         """Analyze ir.SetAttr nodes for distribution (e.g. A.b = B)"""
@@ -4668,7 +4532,15 @@ class DistributedAnalysis:
                 )
             return
 
-        self._set_REP([target, value], array_dists, "unsupported SetAttr", loc)
+        _set_REP(
+            self.typemap,
+            self.metadata,
+            self.diag_info,
+            [target, value],
+            array_dists,
+            "unsupported SetAttr",
+            loc,
+        )
 
     def _analyze_return(self, var, array_dists, loc):
         """analyze ir.Return nodes for distribution. Checks for user flags; sets to REP
@@ -4712,7 +4584,9 @@ class DistributedAnalysis:
             f"'{var.name}'. Set distributed flag for the original variable if distributed "
             "partitions should be returned."
         )
-        self._set_REP([var], array_dists, info, loc)
+        _set_REP(
+            self.typemap, self.metadata, self.diag_info, [var], array_dists, info, loc
+        )
 
     def _is_dist_return_var(self, var):
         try:
@@ -4730,126 +4604,6 @@ class DistributedAnalysis:
             return True
         except GuardException:
             return False
-
-    def _meet_array_dists(self, arr1, arr2, array_dists, top_dist=None):
-        """meet distributions of arrays for consistent distribution"""
-
-        if top_dist is None:
-            top_dist = Distribution.OneD
-        if arr1 not in array_dists:
-            self._set_var_dist(arr1, array_dists, top_dist, False)
-        if arr2 not in array_dists:
-            self._set_var_dist(arr2, array_dists, top_dist, False)
-
-        new_dist = self._min_dist(array_dists[arr1], array_dists[arr2])
-        new_dist = self._min_dist_top(new_dist, top_dist)
-        array_dists[arr1] = new_dist
-        array_dists[arr2] = new_dist
-        return new_dist
-
-    def _meet_several_array_dists(self, iterable_of_arrs, array_dists, top_dist=None):
-        """meet distributions of arrays for consistent distribution"""
-
-        if top_dist is None:
-            top_dist = Distribution.OneD
-
-        new_dist = top_dist
-        for arr in iterable_of_arrs:
-            if arr not in array_dists:
-                self._set_var_dist(arr, array_dists, top_dist, False)
-
-            new_dist = self._min_dist(new_dist, array_dists[arr])
-
-        for arr in iterable_of_arrs:
-            array_dists[arr] = new_dist
-
-        return new_dist
-
-    def _set_REP(self, var_list, array_dists, info=None, loc=None):
-        """set distribution of all variables in 'var_list' to REP if distributable."""
-        if isinstance(var_list, (str, ir.Var)):
-            var_list = [var_list]
-        for var in var_list:
-            varname = var.name if isinstance(var, ir.Var) else var
-            # Handle SeriesType since it comes from Arg node and it could
-            # have user-defined distribution
-            typ = self.typemap[varname]
-            if is_distributable_typ(typ) or is_distributable_tuple_typ(typ):
-                dprint(f"dist setting REP {varname}")
-                # keep diagnostics info if the distribution is changing to REP and extra
-                # info is available
-                if (
-                    varname not in array_dists or not is_REP(array_dists[varname])
-                ) and info is not None:
-                    info = (
-                        f"Setting distribution of variable '{self._get_user_varname(varname)}' to REP: "
-                        + info
-                    )
-                    self._add_diag_info(info, loc)
-                self._set_var_dist(varname, array_dists, Distribution.REP)
-
-    def _get_var_dist(self, varname, array_dists):
-        if varname not in array_dists:
-            self._set_var_dist(varname, array_dists, Distribution.OneD, False)
-        return array_dists[varname]
-
-    def _set_var_dist(self, varname, array_dists, dist, check_type=True):
-        # some non-distributable types could need to be assigned distribution
-        # sometimes, e.g. SeriesILocType. check_type=False handles these cases.
-        typ = self.typemap[varname]
-        dist = self._get_dist(typ, dist)
-        # TODO: use proper "FullRangeIndex" type
-        if not check_type or (
-            is_distributable_typ(typ) or is_distributable_tuple_typ(typ)
-        ):
-            array_dists[varname] = dist
-
-    def _get_dist(self, typ, dist):
-        """get proper distribution value for type. Returns list of distributions for
-        tuples (but just the input 'dist' otherwise).
-        """
-
-        if is_distributable_tuple_typ(typ):
-            if isinstance(typ, types.iterators.EnumerateType):
-                typ = typ.yield_type[1]
-                # Enumerate is always Tuple(integer, value_type)
-                return [None, self._get_dist(typ, dist)]
-            if isinstance(typ, types.List):
-                typ = typ.dtype
-            if is_bodosql_context_type(typ):
-                typs = typ.dataframes
-            else:
-                typs = typ.types
-            if not isinstance(dist, list):
-                dist = [dist] * len(typs)
-            return [
-                (
-                    self._get_dist(t, dist[i])
-                    if (is_distributable_typ(t) or is_distributable_tuple_typ(t))
-                    else None
-                )
-                for i, t in enumerate(typs)
-            ]
-        return dist
-
-    def _min_dist(self, dist1, dist2):
-        if isinstance(dist1, list):
-            assert len(dist1) == len(dist2)
-            n = len(dist1)
-            return [
-                self._min_dist(dist1[i], dist2[i]) if dist1[i] is not None else None
-                for i in range(n)
-            ]
-        return Distribution(min(dist1.value, dist2.value))
-
-    def _min_dist_top(self, dist, top_dist):
-        if isinstance(dist, list):
-            n = len(dist)
-            return [
-                self._min_dist_top(dist[i], top_dist) if dist[i] is not None else None
-                for i in range(n)
-            ]
-        return Distribution(min(dist.value, top_dist.value))
 
     def _get_calc_n_items_range_index(self, size_def):
         """match RangeIndex calc_nitems(r._start, r._stop, r._step) call and return r"""
@@ -4912,7 +4666,8 @@ class DistributedAnalysis:
 
     def _recompile_func(self, lhs, rhs, fname):
         """Recompile function call due to distribution change in input data types"""
-        self._add_diag_info(
+        _add_diag_info(
+            self.diag_info,
             f"Recompiling {fname} since argument data distribution changed after analysis",
             rhs.loc,
         )
@@ -4928,20 +4683,148 @@ class DistributedAnalysis:
         self.typemap.pop(lhs)
         self.typemap[lhs] = self.calltypes[rhs].return_type
 
-    def _add_diag_info(self, info, loc):
-        """append diagnostics info to be displayed in distributed diagnostics output"""
-        if (info, loc) not in self.diag_info:
-            self.diag_info.append((info, loc))
-
     def _get_diag_info_str(self):
         """returns all diagnostics info and their locations as a string"""
         return "\n".join(f"{info}\n{loc.strformat()}" for (info, loc) in self.diag_info)
 
-    def _get_user_varname(self, v):
-        """get original variable name by user for diagnostics info if possible"""
-        if v in self.metadata["parfors"]["var_rename_map"]:
-            return self.metadata["parfors"]["var_rename_map"][v]
-        return v
+
+def _set_REP(typemap, metadata, diag_info, var_list, array_dists, info=None, loc=None):
+    """set distribution of all variables in 'var_list' to REP if distributable."""
+    if isinstance(var_list, (str, ir.Var)):
+        var_list = [var_list]
+    for var in var_list:
+        varname = var.name if isinstance(var, ir.Var) else var
+        # Handle SeriesType since it comes from Arg node and it could
+        # have user-defined distribution
+        typ = typemap[varname]
+        if is_distributable_typ(typ) or is_distributable_tuple_typ(typ):
+            dprint(f"dist setting REP {varname}")
+            # keep diagnostics info if the distribution is changing to REP and extra
+            # info is available
+            if (
+                varname not in array_dists or not is_REP(array_dists[varname])
+            ) and info is not None:
+                info = (
+                    f"Setting distribution of variable '{_get_user_varname(metadata, varname)}' to REP: "
+                    + info
+                )
+                _add_diag_info(diag_info, info, loc)
+            _set_var_dist(typemap, varname, array_dists, Distribution.REP)
+
+
+def _add_diag_info(diag_info, info, loc):
+    """append diagnostics info to be displayed in distributed diagnostics output"""
+    if (info, loc) not in diag_info:
+        diag_info.append((info, loc))
+
+
+def _get_user_varname(metadata, v):
+    """get original variable name by user for diagnostics info if possible"""
+    if v in metadata["parfors"]["var_rename_map"]:
+        return metadata["parfors"]["var_rename_map"][v]
+    return v
+
+
+def _meet_array_dists(typemap, arr1, arr2, array_dists, top_dist=None):
+    """meet distributions of arrays for consistent distribution"""
+
+    if top_dist is None:
+        top_dist = Distribution.OneD
+    if arr1 not in array_dists:
+        _set_var_dist(typemap, arr1, array_dists, top_dist, False)
+    if arr2 not in array_dists:
+        _set_var_dist(typemap, arr2, array_dists, top_dist, False)
+
+    new_dist = _min_dist(array_dists[arr1], array_dists[arr2])
+    new_dist = _min_dist_top(new_dist, top_dist)
+    array_dists[arr1] = new_dist
+    array_dists[arr2] = new_dist
+    return new_dist
+
+
+def _meet_several_array_dists(typemap, iterable_of_arrs, array_dists, top_dist=None):
+    """meet distributions of arrays for consistent distribution"""
+
+    if top_dist is None:
+        top_dist = Distribution.OneD
+
+    new_dist = top_dist
+    for arr in iterable_of_arrs:
+        if arr not in array_dists:
+            _set_var_dist(typemap, arr, array_dists, top_dist, False)
+
+        new_dist = _min_dist(new_dist, array_dists[arr])
+
+    for arr in iterable_of_arrs:
+        array_dists[arr] = new_dist
+
+    return new_dist
+
+
+def _get_var_dist(varname, array_dists, typemap):
+    if varname not in array_dists:
+        _set_var_dist(typemap, varname, array_dists, Distribution.OneD, False)
+    return array_dists[varname]
+
+
+def _set_var_dist(typemap, varname, array_dists, dist, check_type=True):
+    # some non-distributable types could need to be assigned distribution
+    # sometimes, e.g. SeriesILocType. check_type=False handles these cases.
+    typ = typemap[varname]
+    dist = _get_dist(typ, dist)
+    # TODO: use proper "FullRangeIndex" type
+    if not check_type or (is_distributable_typ(typ) or is_distributable_tuple_typ(typ)):
+        array_dists[varname] = dist
+
+
+def _get_dist(typ, dist):
+    """get proper distribution value for type. Returns list of distributions for
+    tuples (but just the input 'dist' otherwise).
+    """
+
+    if is_distributable_tuple_typ(typ):
+        if isinstance(typ, types.iterators.EnumerateType):
+            typ = typ.yield_type[1]
+            # Enumerate is always Tuple(integer, value_type)
+            return [None, _get_dist(typ, dist)]
+        if isinstance(typ, types.List):
+            typ = typ.dtype
+        if is_bodosql_context_type(typ):
+            typs = typ.dataframes
+        else:
+            typs = typ.types
+        if not isinstance(dist, list):
+            dist = [dist] * len(typs)
+        return [
+            (
+                _get_dist(t, dist[i])
+                if (is_distributable_typ(t) or is_distributable_tuple_typ(t))
+                else None
+            )
+            for i, t in enumerate(typs)
+        ]
+    return dist
+
+
+def _min_dist(dist1, dist2):
+    if isinstance(dist1, list):
+        assert len(dist1) == len(dist2)
+        n = len(dist1)
+        return [
+            _min_dist(dist1[i], dist2[i]) if dist1[i] is not None else None
+            for i in range(n)
+        ]
+    return Distribution(min(dist1.value, dist2.value))
+
+
+def _min_dist_top(dist, top_dist):
+    if isinstance(dist, list):
+        n = len(dist)
+        return [
+            _min_dist_top(dist[i], top_dist) if dist[i] is not None else None
+            for i in range(n)
+        ]
+    return Distribution(min(dist.value, top_dist.value))
 
 
 def _update_type_dist(typ, dist):
