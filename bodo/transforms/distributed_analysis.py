@@ -956,6 +956,7 @@ class DistributedAnalysis:
         if isinstance(self.typemap[rhs.func.name], WrapPythonDispatcherType):
             if lhs not in array_dists:
                 _set_var_dist(self.typemap, lhs, array_dists, Distribution.OneD_Var)
+            return
 
         # Check distributed analysis call registry for handler first
         ctx = DistributedAnalysisContext(
