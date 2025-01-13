@@ -566,12 +566,14 @@ class DistributedPass:
                 assert call_type.args[-2] == types.Omitted(False) and call_type.args[
                     -1
                 ] == types.Omitted(False)
-                self.calltypes[rhs] = self.typemap[rhs.func.name].get_call_type(
+                new_sig = self.typemap[rhs.func.name].get_call_type(
                     self.typingctx,
                     call_type.args[:-2]
                     + (types.Omitted(build_parallel), types.Omitted(probe_parallel)),
                     {},
                 )
+                new_sig = new_sig.replace(return_type=call_type.return_type)
+                self.calltypes[rhs] = new_sig
                 return [assign]
 
         if fdef in (

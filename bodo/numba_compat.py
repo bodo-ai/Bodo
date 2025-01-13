@@ -2961,6 +2961,36 @@ numba.core.lowering.Lower._lower_call_ExternalFunction = _lower_call_ExternalFun
 def CallConstraint_resolve(self, typeinfer, typevars, fnty):
     from bodo.transforms.type_inference.native_typer import bodo_resolve_call
     from bodo.transforms.type_inference.typeinfer import BodoFunction
+    from bodo.libs.streaming.base import StreamingStateType
+    from bodo.libs.streaming.groupby import (
+        groupby_build_consume_batch,
+        groupby_grouping_sets_build_consume_batch,
+    )
+    from bodo.libs.streaming.join import (
+        join_build_consume_batch,
+        join_probe_consume_batch,
+    )
+    from bodo.libs.streaming.window import window_build_consume_batch
+    from bodo.libs.streaming.union import union_consume_batch
+    from bodo.libs.streaming.sort import sort_build_consume_batch
+    from bodo.libs.table_builder import table_builder_append
+    from bodo.io.snowflake_write import snowflake_writer_append_table
+    from bodo.io.stream_iceberg_write import iceberg_writer_append_table
+    from bodo.io.stream_parquet_write import parquet_writer_append_table
+
+    streaming_build_funcs = (
+        groupby_build_consume_batch,
+        groupby_grouping_sets_build_consume_batch,
+        join_build_consume_batch,
+        join_probe_consume_batch,
+        window_build_consume_batch,
+        union_consume_batch,
+        table_builder_append,
+        sort_build_consume_batch,
+        snowflake_writer_append_table,
+        iceberg_writer_append_table,
+        parquet_writer_append_table,
+    )
 
     assert fnty
     context = typeinfer.context
@@ -2975,6 +3005,9 @@ def CallConstraint_resolve(self, typeinfer, typevars, fnty):
     for a in itertools.chain(pos_args, kw_args.values()):
         # Forbids imprecise type except array of undefined dtype
         if not a.is_precise() and not isinstance(a, types.Array):
+            # Bodo change: allow streaming state type to be imprecise
+            if getattr(fnty, "typing_key", None) in streaming_build_funcs and isinstance(a, StreamingStateType):
+                continue
             return
 
     # Resolve call type
@@ -3032,6 +3065,10 @@ def CallConstraint_resolve(self, typeinfer, typevars, fnty):
         raise TypingError(msg)
 
     typeinfer.add_type(self.target, sig.return_type, loc=self.loc)
+
+    # Bodo change: update streaming state type
+    if getattr(fnty, "typing_key", None) in streaming_build_funcs and pos_args[0] != sig.args[0]:
+        typeinfer.add_type(self.args[0].name, sig.args[0], loc=self.loc)
 
     # If the function is a bound function and its receiver type
     # was refined, propagate it.

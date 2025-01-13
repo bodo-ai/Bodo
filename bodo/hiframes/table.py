@@ -158,6 +158,26 @@ class Table:
         return df
 
 
+def _unify_array_types(typingctx, t1, t2):
+    """Unify two array types for table unification.
+    Uses _derive_common_key_type() if necessary to expand integer types since regular
+    unify functions don't handle that case (necessary for runtime join filter typing,
+    and doesn't hurt other use cases).
+    """
+    if t1 == t2:
+        return t1
+
+    unified = typingctx.unify_types(t1, t2)
+
+    if unified is not None:
+        return unified
+
+    # TODO[BSE-4462]: revisit table unification functions
+
+    # NOTE: may raise BodoError if cannot unify
+    return bodo.libs.streaming.join.JoinStateType._derive_common_key_type([t1, t2])
+
+
 class TableType(types.ArrayCompatible):
     """Bodo Table type that stores column arrays for DataFrames.
     Arrays of the same type are stored in the same "block" (kind of similar to Pandas).
@@ -222,6 +242,24 @@ class TableType(types.ArrayCompatible):
     @property
     def key(self):
         return self.arr_types, self.has_runtime_cols
+
+    def unify(self, typingctx, other):
+        """Unify two TableType instances (required for runtime join filter typing)."""
+        if (
+            isinstance(other, TableType)
+            and (len(self.arr_types) == len(other.arr_types))
+            # TODO: revisit unify for runtime columns case
+            and (not self.has_runtime_cols and not other.has_runtime_cols)
+            and (self.dist == other.dist)
+        ):
+            try:
+                new_arr_types = tuple(
+                    _unify_array_types(typingctx, t1, t2)
+                    for t1, t2 in zip(self.arr_types, other.arr_types)
+                )
+            except BodoError:
+                return None
+            return TableType(new_arr_types, self.has_runtime_cols, self.dist)
 
     @property
     def mangling_args(self):

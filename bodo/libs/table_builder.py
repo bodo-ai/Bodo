@@ -97,6 +97,22 @@ class TableBuilderStateType(StreamingStateType):
             f"TableBuilderStateType(build_table={build_table_type}, is_chunked_builder={is_chunked_builder})"
         )
 
+    def is_precise(self):
+        return self._build_table_type != types.unknown
+
+    def unify(self, typingctx, other):
+        """Unify two TableBuilderStateType instances when one doesn't have a resolved
+        build_table_type.
+        """
+        if (
+            isinstance(other, TableBuilderStateType)
+            and self.is_chunked_builder == other.is_chunked_builder
+        ):
+            if not other.is_precise() and self.is_precise():
+                return self
+            # Prefer the new type in case append changed its table type
+            return other
+
     @cached_property
     def arr_dtypes(self) -> list[types.ArrayCompatible]:
         """Returns the list of types for each array in the build table."""
@@ -242,8 +258,9 @@ class InitTableBuilderStateInfer(AbstractTemplate):
         pysig = numba.core.utils.pysignature(init_table_builder_state)
         folded_args = bodo.utils.transform.fold_argument_types(pysig, args, kws)
         expected_state_type = unwrap_typeref(folded_args[1])
+        is_chunked_builder = get_overload_const_bool(folded_args[2])
         if is_overload_none(expected_state_type):
-            output_type = TableBuilderStateType()
+            output_type = TableBuilderStateType(is_chunked_builder=is_chunked_builder)
         else:
             output_type = expected_state_type
 
@@ -256,19 +273,18 @@ InitTableBuilderStateInfer._no_unliteral = True
 @lower_builtin(init_table_builder_state, types.VarArg(types.Any))
 def lower_init_table_builder_state(context, builder, sig, args):
     """lower init_table_builder_state() using gen_init_table_builder_state_impl"""
-    impl = gen_init_table_builder_state_impl(*sig.args)
+    impl = gen_init_table_builder_state_impl(sig.return_type, *sig.args)
     return context.compile_internal(builder, impl, sig, args)
 
 
 def gen_init_table_builder_state_impl(
+    output_type,
     operator_id,
     expected_state_type=None,
     use_chunked_builder=False,
     input_dicts_unified=False,
 ):
     """Initialize the C++ TableBuilderState pointer"""
-    expected_state_type = unwrap_typeref(expected_state_type)
-    output_type = expected_state_type
 
     arr_dtypes = output_type.arr_ctypes
     arr_array_types = output_type.arr_array_types
@@ -277,7 +293,7 @@ def gen_init_table_builder_state_impl(
     n_arrs = len(arr_array_types)
 
     if get_overload_const_bool(use_chunked_builder):
-        assert expected_state_type.is_chunked_builder, "Error in init_table_builder_state: expected_state_type.is_chunked_builder must be True if use_chunked_builder is True"
+        assert output_type.is_chunked_builder, "Error in init_table_builder_state: expected_state_type.is_chunked_builder must be True if use_chunked_builder is True"
 
         def impl(
             operator_id,
@@ -414,6 +430,13 @@ class TableBuilderAppendInfer(AbstractTemplate):
     def generic(self, args, kws):
         pysig = numba.core.utils.pysignature(table_builder_append)
         folded_args = bodo.utils.transform.fold_argument_types(pysig, args, kws)
+        # Update state type in signature to include build table type from input
+        state_type = folded_args[0]
+        build_table_type = folded_args[1]
+        new_state_type = TableBuilderStateType(
+            build_table_type, state_type.is_chunked_builder
+        )
+        folded_args = (new_state_type, *folded_args[1:])
         return signature(types.none, *folded_args).replace(pysig=pysig)
 
 
