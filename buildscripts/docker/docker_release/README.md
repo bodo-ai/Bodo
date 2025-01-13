@@ -49,10 +49,9 @@ You can also run container using the shell instead of JupyterLab by doing the fo
 
 ```
 docker run -dt bodoai/bodo-jupyterlab
-docker ps  
 docker exec -it <container_id> bash
 ```
-The first command starts the container in detached mode, the second shows the container ID, and the third opens a shell session inside the container.
+The first command starts the container in detached mode and will print the `container_id`. The second one, opens a shell session inside the container.
 
 
 ## Stop the container
