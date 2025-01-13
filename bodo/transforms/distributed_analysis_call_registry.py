@@ -31,6 +31,10 @@ class DistributedAnalysisCallRegistry:
     """Registry of function call handlers for distributed analysis"""
 
     def __init__(self):
+        # Dictionary format: (function_name, module_name): handler_func
+        # module_name is a class name for methods instead.
+        # handler_func takes distributed analysis context data and the instruction to
+        # handle as arguments.
         self.call_map = {
             # scalar_optional_getitem is used by BodoSQL to load scalars.
             # This doesn't impact the distribution of any array.
