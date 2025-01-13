@@ -25,23 +25,15 @@ https://hub.docker.com/r/bodoai/bodoai_image
 
 1. Download the Bodo image:
 ```shell
-docker pull bodoai/bodoai_image:latest
+docker pull bodoai/bodo-jupyterlab:latest
 ```
 
 2. Start the Docker container with JupyterLab:
 Replace `8` in `--cpus=8` with the desired number of CPUs:
 
 ```shell
-docker run -p 8888:8888 --cpus=8 bodoai/bodoai_image
+docker run -p 8888:8888 --cpus=8 bodoai/bodo-jupyterlab
 ```
-
-Or start the container using the shell:
-```
-docker run -dt bodo-img
-docker ps  
-docker exec -it <container_id> bash
-```
-The first command starts the container in detached mode, the second shows the container ID, and the third opens a shell session inside the container.
 
 3. Access the JupyterLab environment:
 At the end of the terminal output, you’ll see a link similar to this:
@@ -52,6 +44,16 @@ At the end of the terminal output, you’ll see a link similar to this:
 Open the link in your browser to access the two included notebooks.
 
 Enjoy!
+
+You can also run container using the shell instead of JupyterLab by doing the following steps:
+
+```
+docker run -dt bodoai/bodo-jupyterlab
+docker ps  
+docker exec -it <container_id> bash
+```
+The first command starts the container in detached mode, the second shows the container ID, and the third opens a shell session inside the container.
+
 
 ## Stop the container
 To stop the running container:
