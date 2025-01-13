@@ -1,13 +1,16 @@
 cmake_minimum_required(VERSION 3.23 FATAL_ERROR)
 project(${SKBUILD_PROJECT_NAME} LANGUAGES C CXX)
+message(STATUS "CMake generator: ${CMAKE_GENERATOR}")
+message(STATUS "PLATFORM: ${CMAKE_GENERATOR_PLATFORM}")
+message(STATUS "PROCESSOR: ${CMAKE_SYSTEM_PROCESSOR}")
 
 # External Packages
 include(FetchContent)
 # Debug Helpers
 include(CMakePrintHelpers)
 # LTO Support
-include(CheckIPOSupported)
-check_ipo_supported(LANGUAGES CXX)
+# include(CheckIPOSupported)
+# check_ipo_supported(LANGUAGES CXX)
 
 if(CMAKE_SYSTEM_PROCESSOR MATCHES "(x86)|(X86)|(amd64)|(AMD64)")
   set (X86 TRUE)
@@ -36,6 +39,7 @@ function(set_default_compiler_options)
       "/GS"     # Enable buffer security checks
       "/guard:cf" # Enable control flow guard (security feature)
       "/EHsc"
+      # "/arch:SSE2"
     )
   else()
     add_compile_options(
@@ -222,7 +226,7 @@ ExternalProject_Add(datasketches
   # generation, as CMake otherwise picks up the Datasketch files when building
   # an RPM for a dependent package. (RPM scans the directory for files in addition to installing
   # those files referenced in an "install" rule in the cmake file)
-  INSTALL_COMMAND env DESTDIR= ${CMAKE_COMMAND} --build . --target install
+  INSTALL_COMMAND ${CMAKE_COMMAND} --build . --target install
   LOG_CONFIGURE ON
   LOG_BUILD ON
   LOG_INSTALL ON
@@ -234,7 +238,11 @@ set(datasketches_INSTALL_DIR ${INSTALL_DIR})
 message("Source dir of datasketches = ${datasketches_INSTALL_DIR}")
 
 # Add boost as a dependency
+# set(Boost_USE_STATIC_LIBS OFF)
 find_package(Boost 1.85 REQUIRED COMPONENTS json)
+# find_package(Boost 1.85 REQUIRED COMPONENTS)
+message(STATUS "BOOST INCLUDE DIRS: ${Boost_INCLUDE_DIRS}")
+# set(Boost_INCLUDE_DIRS, "C:\\Users\\owner\\dev\\Bodo\\.pixi\\envs\\default\\Library\\include")
 include_directories(${Boost_INCLUDE_DIRS})
 
 
@@ -401,7 +409,7 @@ add_custom_command(
   VERBATIM
   WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
   COMMAND "${CYTHON_EXECUTABLE}" --cplus -3 --output-file "bodo/io/pyfs.cpp" "bodo/io/pyfs.pyx"
-  COMMAND cp "bodo/io/pyfs.cpp" "${CMAKE_CURRENT_BINARY_DIR}/bodo/io/pyfs.cpp"
+  COMMAND "${CMAKE_COMMAND}" -E copy "bodo/io/pyfs.cpp" "${CMAKE_CURRENT_BINARY_DIR}/bodo/io/pyfs.cpp"
   COMMENT "Cythonizing Source bodo/io/pyfs.pyx into bodo/io/pyfs.cpp"
 )
 
@@ -418,7 +426,7 @@ add_custom_command(
  VERBATIM
  WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
  COMMAND "${CYTHON_EXECUTABLE}" --cplus -3 --output-file "bodo/io/pyarrow_wrappers.cpp" "bodo/io/pyarrow_wrappers.pyx"
- COMMAND cp "bodo/io/pyarrow_wrappers.cpp" "${CMAKE_CURRENT_BINARY_DIR}/bodo/io/pyarrow_wrappers.cpp"
+ COMMAND "${CMAKE_COMMAND}" -E copy "bodo/io/pyarrow_wrappers.cpp" "${CMAKE_CURRENT_BINARY_DIR}/bodo/io/pyarrow_wrappers.cpp"
  COMMENT "Cythonizing Source bodo/io/pyarrow_wrappers.pyx into bodo/io/pyarrow_wrappers.cpp"
 )
 set(pyarrow_wrappers_sources "bodo/io/pyarrow_wrappers.cpp" "bodo/io/arrow_compat.cpp")
@@ -435,7 +443,7 @@ add_custom_command(
   VERBATIM
   WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
   COMMAND "${CYTHON_EXECUTABLE}" --cplus -3 --output-file "bodo/io/_hdfs.cpp" "bodo/io/_hdfs.pyx"
-  COMMAND cp "bodo/io/_hdfs.cpp" "${CMAKE_CURRENT_BINARY_DIR}/bodo/io/_hdfs.cpp"
+  COMMAND "${CMAKE_COMMAND}" -E copy "bodo/io/_hdfs.cpp" "${CMAKE_CURRENT_BINARY_DIR}/bodo/io/_hdfs.cpp"
   COMMENT "Cythonizing Source bodo/io/_hdfs.pyx into bodo/io/_hdfs.cpp"
 )
 
