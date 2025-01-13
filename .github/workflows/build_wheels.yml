@@ -105,7 +105,7 @@ jobs:
           pip wheel --no-deps --no-build-isolation -v .
       - uses: actions/upload-artifact@v4
         with:
-          name: cibw-bodosql
+          name: bodosql-wheel-no-arch
           path: ./BodoSQL/*.whl
 
   test-bodosql:
@@ -128,12 +128,12 @@ jobs:
       - uses: actions/download-artifact@v4
         id: download-bodosql-artifact
         with:
-          pattern: cibw-bodosql
+          pattern: bodosql-wheel-no-arch
           path: .
       - name: Install
         run: |
           # Install bodo and bodosql from the local wheel
-          pip install bodo  --find-links "$(find . -name "cibw-wheels-*" -print)" bodosql --find-links cibw-bodosql --no-index --no-deps
+          pip install bodo  --find-links "$(find . -name "cibw-wheels-*" -print)" bodosql --find-links bodosql-wheel-no-arch --no-index --no-deps
           # Install dependencies from pypi
           pip install bodo bodosql
       - name: Test
@@ -201,7 +201,9 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          pattern: cibw-*
+          pattern: |
+            bodosql-wheel-no-arch
+            cibw-*
           path: dist
           merge-multiple: true
 
