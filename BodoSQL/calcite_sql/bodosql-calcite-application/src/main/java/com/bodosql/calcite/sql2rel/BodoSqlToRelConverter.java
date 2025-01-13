@@ -302,7 +302,7 @@ public class BodoSqlToRelConverter extends SqlToRelConverter {
         SqlCall call = ((SqlCall) expr);
         /**
          * This is the section that handles UDF processing, either to build our custom UDF RexNode
-         * definitions or to grow through the actual inlining step.
+         * definitions or to go through the actual inlining step.
          */
         if (call.getOperator() instanceof SqlUserDefinedFunction) {
           SqlUserDefinedFunction udf = (SqlUserDefinedFunction) call.getOperator();
