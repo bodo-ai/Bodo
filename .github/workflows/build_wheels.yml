@@ -201,9 +201,6 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          pattern: |
-            bodosql-wheel-no-arch
-            cibw-*
           path: dist
           merge-multiple: true
 
