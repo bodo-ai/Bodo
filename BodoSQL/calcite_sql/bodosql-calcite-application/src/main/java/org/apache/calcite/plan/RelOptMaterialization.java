@@ -47,6 +47,8 @@ import java.util.Objects;
 
 import static org.apache.calcite.linq4j.Nullness.castNonNull;
 
+import static java.util.Objects.requireNonNull;
+
 /**
  * Records that a particular query is materialized by a particular table.
  */
@@ -62,11 +64,10 @@ public class RelOptMaterialization {
    */
   public RelOptMaterialization(RelNode tableRel, RelNode queryRel,
       @Nullable RelOptTable starRelOptTable, List<String> qualifiedTableName) {
+    this.queryRel = requireNonNull(queryRel, "queryRel");
     this.tableRel =
-        RelOptUtil.createCastRel(
-            Objects.requireNonNull(tableRel, "tableRel"),
-            Objects.requireNonNull(queryRel, "queryRel").getRowType(),
-            false);
+            RelOptUtil.createCastRel(Objects.requireNonNull(tableRel, "tableRel"),
+                queryRel.getRowType(), false);
     this.starRelOptTable = starRelOptTable;
     if (starRelOptTable == null) {
       this.starTable = null;
@@ -74,7 +75,6 @@ public class RelOptMaterialization {
       this.starTable = starRelOptTable.unwrapOrThrow(StarTable.class);
     }
     this.qualifiedTableName = qualifiedTableName;
-    this.queryRel = queryRel;
   }
 
   /**
@@ -135,7 +135,8 @@ public class RelOptMaterialization {
                   try {
                     match(left, right, join.getCluster());
                   } catch (Util.FoundOne e) {
-                    return (RelNode) Objects.requireNonNull(e.getNode(), "FoundOne.getNode");
+                    return (RelNode) requireNonNull(e.getNode(),
+                            "FoundOne.getNode");
                   }
                 }
               }
@@ -235,7 +236,7 @@ public class RelOptMaterialization {
         Mappings.@Nullable TargetMapping mapping, TableScan scan) {
       this.condition = condition;
       this.mapping = mapping;
-      this.scan = Objects.requireNonNull(scan, "scan");
+      this.scan = requireNonNull(scan, "scan");
     }
 
     static @Nullable ProjectFilterTable of(RelNode node) {

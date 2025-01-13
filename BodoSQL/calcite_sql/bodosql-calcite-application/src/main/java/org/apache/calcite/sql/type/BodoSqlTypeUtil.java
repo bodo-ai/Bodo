@@ -151,23 +151,6 @@ public class BodoSqlTypeUtil {
   }
 
   /**
-   * Expansion of SqlTypeUtil.isValidDecimalValue to also consider scale differences.
-   */
-  public static boolean isValidDecimalValue(@Nullable BigDecimal value, RelDataType toType) {
-    if (value == null) {
-      return true;
-    }
-    switch (toType.getSqlTypeName()) {
-      case DECIMAL:
-        final int intDigits = value.precision() - value.scale();
-        final int maxIntDigits = toType.getPrecision() - toType.getScale();
-        return intDigits <= maxIntDigits && value.scale() <= toType.getScale();
-      default:
-        return true;
-    }
-  }
-
-  /**
    * Wrapper around SqlTypeUtil.canCastFrom
    * with specialized behavior for SnowflakeUDFs.
    */
