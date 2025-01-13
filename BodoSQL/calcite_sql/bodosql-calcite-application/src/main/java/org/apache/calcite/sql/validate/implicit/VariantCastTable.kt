@@ -123,12 +123,12 @@ internal class VariantCastTable {
          * @param precision The precision of the decimal type.
          * @return An integer type that can represent it.
          */
-        private fun chooseIntegerType(precision: Int): SqlTypeName =
-            if (precision < 3) { SqlTypeName.TINYINT } else {
-                if (precision < 5) { SqlTypeName.SMALLINT } else {
-                    if (precision < 10) { SqlTypeName.INTEGER } else { SqlTypeName.BIGINT }
-                }
-            }
+        private fun chooseIntegerType(precision: Int): SqlTypeName = when {
+            precision < 3 -> SqlTypeName.TINYINT
+            precision < 5 -> SqlTypeName.SMALLINT
+            precision < 10 -> SqlTypeName.INTEGER
+            else -> SqlTypeName.BIGINT
+        }
 
         /**
          * @param precisions: the precision that each argument should be casted to.
