@@ -2,8 +2,11 @@
 Provides a registry of function call handlers for distributed analysis.
 """
 
-from numba.core import types
+import typing as pt
+
+from numba.core import ir, types
 from numba.core.ir_utils import guard
+from numba.parfors.array_analysis import ShapeEquivSet
 
 from bodo.transforms.distributed_analysis import (
     Distribution,
@@ -18,7 +21,15 @@ from bodo.utils.utils import is_distributable_typ
 class DistributedAnalysisContext:
     """Distributed analysis context data needed for handling calls"""
 
-    def __init__(self, typemap, array_dists, equiv_set, func_name, metadata, diag_info):
+    def __init__(
+        self,
+        typemap: dict[str, types.Type],
+        array_dists: dict[str, Distribution],
+        equiv_set: ShapeEquivSet,
+        func_name: str,
+        metadata: dict[str, pt.Any],
+        diag_info: list[tuple[str, ir.Loc]],
+    ):
         self.typemap = typemap
         self.array_dists = array_dists
         self.equiv_set = equiv_set
