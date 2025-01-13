@@ -1,0 +1,33 @@
+name: Run Java Tests (Linux)
+on:
+  workflow_call:
+jobs:
+  run:
+    name: Build and Run Tests
+    runs-on: ubuntu-latest
+    steps:
+        # Setup
+        - uses: actions/checkout@v4
+        - name: Install Java
+          uses: actions/setup-java@v4
+          with:
+            distribution: 'temurin'
+            java-version: '11'
+            cache: 'maven'
+            cache-dependency-path: 'BodoSQL/calcite_sql/bodosql-calcite-application/pom.xml'
+        - name: Set up Maven
+          uses: stCarolas/setup-maven@v5
+          with:
+            maven-version: 3.9.9
+        - name: Run Tests
+          working-directory: BodoSQL/calcite_sql
+          run: |
+            mvn -B -U test
+        # Publishing Test Results
+        # Always run both even if tests fail
+        - name: Publish Test Result Failures
+          uses: mikepenz/action-junit-report@v4
+
+          if: success() || failure()
+          with:
+            report_paths: 'BodoSQL/calcite_sql/bodosql-calcite-application/target/surefire-reports/TEST-*.xml'

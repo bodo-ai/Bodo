@@ -59,10 +59,10 @@ from bodo.libs.array import (
 )
 from bodo.libs.bool_arr_ext import alloc_false_bool_array
 from bodo.libs.str_ext import unicode_to_utf8
+from bodo.libs.streaming.base import StreamingStateType
 from bodo.libs.table_builder import TableBuilderStateType
 from bodo.mpi4py import MPI
 from bodo.utils import tracing
-from bodo.utils.transform import get_call_expr_arg
 from bodo.utils.typing import (
     BodoError,
     ColNamesMetaType,
@@ -464,12 +464,26 @@ def create_iceberg_rest_s3_fs(
     return get_rest_catalog_fs(catalog_uri, bearer_token, warehouse, schema, table_name)
 
 
-class IcebergWriterType(types.Type):
+class IcebergWriterType(StreamingStateType):
     """Data type for streaming Iceberg writer's internal state"""
 
     def __init__(self, input_table_type=types.unknown):
         self.input_table_type = input_table_type
         super().__init__(name=f"IcebergWriterType({input_table_type})")
+
+    def is_precise(self):
+        return self.input_table_type != types.unknown
+
+    def unify(self, typingctx, other):
+        """Unify two IcebergWriterType instances when one doesn't have a resolved
+        input_table_type.
+        """
+        if isinstance(other, IcebergWriterType):
+            if not other.is_precise() and self.is_precise():
+                return self
+
+            # Prefer the new type in case write append changed its table type
+            return other
 
 
 class IcebergWriterPayloadType(types.Type):
@@ -890,7 +904,6 @@ def iceberg_writer_init(
     col_names_meta,
     if_exists,
     create_table_meta=None,
-    expected_state_type=None,
     allow_theta_sketches=False,
     input_dicts_unified=False,
     _is_parallel=False,
@@ -899,6 +912,7 @@ def iceberg_writer_init(
 
 
 def gen_iceberg_writer_init_impl(
+    iceberg_writer_type,
     operator_id,
     conn,
     table_name,
@@ -906,7 +920,6 @@ def gen_iceberg_writer_init_impl(
     col_names_meta,
     if_exists,
     create_table_meta=None,
-    expected_state_type=None,
     allow_theta_sketches=False,
     input_dicts_unified=False,
     _is_parallel=False,
@@ -928,12 +941,6 @@ def gen_iceberg_writer_init_impl(
                 f"for `create_table_meta`, found {create_table_info}"
             )
 
-    expected_state_type = unwrap_typeref(expected_state_type)
-    if is_overload_none(expected_state_type):
-        iceberg_writer_type = IcebergWriterType()
-    else:
-        iceberg_writer_type = expected_state_type
-
     table_builder_state_type = TableBuilderStateType(
         iceberg_writer_type.input_table_type
     )
@@ -954,7 +961,6 @@ def gen_iceberg_writer_init_impl(
         col_names_meta,
         if_exists,
         create_table_meta=None,
-        expected_state_type=None,
         allow_theta_sketches=False,
         input_dicts_unified=False,
         _is_parallel=False,
@@ -999,7 +1005,7 @@ def gen_iceberg_writer_init_impl(
         catalog_uri, bearer_token, warehouse = get_rest_catalog_config_wrapper(con_str)
 
         # Initialize writer
-        writer = iceberg_writer_alloc(expected_state_type)
+        writer = iceberg_writer_alloc(iceberg_writer_type)
         writer["conn"] = con_str
         writer["table_name"] = table_name
         writer["db_schema"] = schema
@@ -1156,21 +1162,7 @@ class IcebergWriterInitInfer(AbstractTemplate):
     """Typer for iceberg_writer_init that returns writer type"""
 
     def generic(self, args, kws):
-        kws = dict(kws)
-        expected_state_type = get_call_expr_arg(
-            "iceberg_writer_init",
-            args,
-            kws,
-            7,
-            "expected_state_type",
-            default=types.none,
-        )
-        expected_state_type = unwrap_typeref(expected_state_type)
-        if is_overload_none(expected_state_type):
-            iceberg_writer_type = IcebergWriterType()
-        else:
-            iceberg_writer_type = expected_state_type
-
+        iceberg_writer_type = IcebergWriterType()
         pysig = numba.core.utils.pysignature(iceberg_writer_init)
         folded_args = bodo.utils.transform.fold_argument_types(pysig, args, kws)
         return signature(iceberg_writer_type, *folded_args).replace(pysig=pysig)
@@ -1182,7 +1174,7 @@ IcebergWriterInitInfer._no_unliteral = True
 @lower_builtin(iceberg_writer_init, types.VarArg(types.Any))
 def lower_iceberg_writer_init(context, builder, sig, args):
     """lower iceberg_writer_init() using gen_iceberg_writer_init_impl above"""
-    impl = gen_iceberg_writer_init_impl(*sig.args)
+    impl = gen_iceberg_writer_init_impl(sig.return_type, *sig.args)
     return context.compile_internal(builder, impl, sig, args)
 
 
@@ -1411,6 +1403,10 @@ class IcebergWriterAppendInfer(AbstractTemplate):
     def generic(self, args, kws):
         pysig = numba.core.utils.pysignature(iceberg_writer_append_table)
         folded_args = bodo.utils.transform.fold_argument_types(pysig, args, kws)
+        # Update state type in signature to include build table type from input
+        input_table_type = folded_args[1]
+        new_state_type = IcebergWriterType(input_table_type)
+        folded_args = (new_state_type, *folded_args[1:])
         return signature(types.bool_, *folded_args).replace(pysig=pysig)
 
 

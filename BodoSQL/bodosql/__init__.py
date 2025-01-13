@@ -19,6 +19,11 @@ from bodosql.bodosql_types.glue_catalog import (
     GlueCatalogType,
     get_glue_connection,
 )
+from bodosql.bodosql_types.s3_tables_catalog import (
+    S3TablesCatalog,
+    S3TablesCatalogType,
+    get_s3_tables_connection,
+)
 
 import bodosql.context_ext
 import bodosql.ddl_ext

@@ -51,17 +51,17 @@ public class BodoSQLRelDataTypeSystem extends RelDataTypeSystemImpl {
   public boolean enableStreamingSortLimitOffset;
 
   public static class CatalogContext {
-    public String currentDatabase;
+    public @Nullable String currentDatabase;
     public String currentAccount;
 
-    public CatalogContext(String database, String account) {
+    public CatalogContext(@Nullable String database, String account) {
       this.currentDatabase = database;
       this.currentAccount = account;
     }
   }
 
   /*
-  CURRENT_DATABSE: Name of the database in use for the current session.
+  CURRENT_DATABASE: Name of the database in use for the current session.
 
   */
   private CatalogContext currentDatabase;
