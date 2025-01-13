@@ -1451,7 +1451,7 @@ class BodoRexSimplify(
                             } else {
                                 val matchSection = patternString.substring(startIndex, endIndex)
                                 if (matchSection.contains(safeSpecialCharacter)) {
-                                    // If we have a % in the middle, we can simplify if there is exactly "1" location.
+                                    // If we have a % in the middle, we can simplify if there is exactly 1 "location".
                                     // We search through the string to find the first and last %.
                                     val canSimplify = if (startIndex == 0 && endIndex == patternString.length) {
                                         while (startIndex < patternString.length && patternString[startIndex] != safeSpecialCharacter) {
