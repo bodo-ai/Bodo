@@ -35,10 +35,10 @@ from bodo.io.snowflake import (
 )
 from bodo.libs.array import array_to_info, cpp_table_map_to_list, py_table_to_cpp_table
 from bodo.libs.str_ext import unicode_to_utf8
+from bodo.libs.streaming.base import StreamingStateType
 from bodo.libs.table_builder import TableBuilderStateType
 from bodo.mpi4py import MPI
 from bodo.utils import tracing
-from bodo.utils.transform import get_call_expr_arg
 from bodo.utils.typing import (
     BodoError,
     ColNamesMetaType,
@@ -50,12 +50,26 @@ from bodo.utils.typing import (
 )
 
 
-class SnowflakeWriterType(types.Type):
+class SnowflakeWriterType(StreamingStateType):
     """Data type for streaming Snowflake writer's internal state"""
 
     def __init__(self, input_table_type=types.unknown):
         self.input_table_type = input_table_type
         super().__init__(name=f"SnowflakeWriterType({input_table_type})")
+
+    def is_precise(self):
+        return self.input_table_type != types.unknown
+
+    def unify(self, typingctx, other):
+        """Unify two SnowflakeWriterType instances when one doesn't have a resolved
+        input_table_type.
+        """
+        if isinstance(other, SnowflakeWriterType):
+            if not other.is_precise() and self.is_precise():
+                return self
+
+            # Prefer the new type in case write append changed its table type
+            return other
 
 
 class SnowflakeWriterPayloadType(types.Type):
@@ -312,7 +326,6 @@ def snowflake_writer_init(
     schema,
     if_exists,
     table_type,
-    expected_state_type=None,
     input_dicts_unified=False,
     _is_parallel=False,
 ):  # pragma: no cover
@@ -381,22 +394,16 @@ def overload_connect_and_get_upload_info_jit(conn):
 
 
 def gen_snowflake_writer_init_impl(
+    snowflake_writer_type,
     operator_id,
     conn,
     table_name,
     schema,
     if_exists,
     table_type,
-    expected_state_type=None,
     input_dicts_unified=False,
     _is_parallel=False,
 ):  # pragma: no cover
-    expected_state_type = unwrap_typeref(expected_state_type)
-    if is_overload_none(expected_state_type):
-        snowflake_writer_type = SnowflakeWriterType()
-    else:
-        snowflake_writer_type = expected_state_type
-
     table_builder_state_type = TableBuilderStateType(
         snowflake_writer_type.input_table_type
     )
@@ -408,7 +415,6 @@ def gen_snowflake_writer_init_impl(
         schema,
         if_exists,
         table_type,
-        expected_state_type=None,
         input_dicts_unified=False,
         _is_parallel=False,
     ):
@@ -416,7 +422,7 @@ def gen_snowflake_writer_init_impl(
         location = _get_schema_str(schema)
         location += table_name
         # Initialize writer
-        writer = sf_writer_alloc(expected_state_type)
+        writer = sf_writer_alloc(snowflake_writer_type)
         writer["conn"] = conn
         writer["location"] = location
         writer["if_exists"] = if_exists
@@ -483,21 +489,7 @@ class SnowflakeWriterInitInfer(AbstractTemplate):
     """Typer for snowflake_writer_init that returns writer type"""
 
     def generic(self, args, kws):
-        kws = dict(kws)
-        expected_state_type = get_call_expr_arg(
-            "snowflake_writer_init",
-            args,
-            kws,
-            6,
-            "expected_state_type",
-            default=types.none,
-        )
-        expected_state_type = unwrap_typeref(expected_state_type)
-        if is_overload_none(expected_state_type):
-            snowflake_writer_type = SnowflakeWriterType()
-        else:
-            snowflake_writer_type = expected_state_type
-
+        snowflake_writer_type = SnowflakeWriterType()
         pysig = numba.core.utils.pysignature(snowflake_writer_init)
         folded_args = bodo.utils.transform.fold_argument_types(pysig, args, kws)
         return signature(snowflake_writer_type, *folded_args).replace(pysig=pysig)
@@ -509,7 +501,7 @@ SnowflakeWriterInitInfer._no_unliteral = True
 @lower_builtin(snowflake_writer_init, types.VarArg(types.Any))
 def lower_snowflake_writer_init(context, builder, sig, args):
     """lower snowflake_writer_init() using gen_snowflake_writer_init_impl above"""
-    impl = gen_snowflake_writer_init_impl(*sig.args)
+    impl = gen_snowflake_writer_init_impl(sig.return_type, *sig.args)
     return context.compile_internal(builder, impl, sig, args)
 
 
@@ -900,6 +892,10 @@ class SnowflakeWriterAppendInfer(AbstractTemplate):
     def generic(self, args, kws):
         pysig = numba.core.utils.pysignature(snowflake_writer_append_table)
         folded_args = bodo.utils.transform.fold_argument_types(pysig, args, kws)
+        # Update state type in signature to include build table type from input
+        input_table_type = folded_args[1]
+        new_state_type = SnowflakeWriterType(input_table_type)
+        folded_args = (new_state_type, *folded_args[1:])
         return signature(types.bool_, *folded_args).replace(pysig=pysig)
 
 
