@@ -1873,7 +1873,7 @@ std::string GetStringExpression(Bodo_CTypes::CTypeEnum const& dtype,
         return std::to_string(*ptr);
     }
     if (dtype == Bodo_CTypes::DECIMAL) {
-        __int128* val = (__int128*)ptrdata;
+        __int128_t* val = (__int128_t*)ptrdata;
         return int128_decimal_to_std_string(*val, scale);
     }
     if (dtype == Bodo_CTypes::FLOAT64) {
@@ -1965,14 +1965,14 @@ void DEBUG_append_to_primitive_boolean(
 }
 
 void DEBUG_append_to_primitive_decimal(
-    const __int128* values, int64_t offset, int64_t length,
+    const __int128_t* values, int64_t offset, int64_t length,
     std::string& string_builder, const std::vector<uint8_t>& valid_elems) {
     string_builder += "[";
     for (int64_t i = 0; i < length; i++) {
         if (i > 0)
             string_builder += ",";
         if (valid_elems[i]) {
-            __int128 val = values[offset + i];
+            __int128_t val = values[offset + i];
             int scale = 18;
             string_builder += int128_decimal_to_std_string(val, scale);
         } else {
@@ -2020,7 +2020,7 @@ void DEBUG_append_to_primitive(arrow::Type::type const& type,
         DEBUG_append_to_primitive_T((double*)values, offset, length,
                                     string_builder, valid_elems);
     } else if (type == arrow::Type::DECIMAL) {
-        DEBUG_append_to_primitive_decimal((__int128*)values, offset, length,
+        DEBUG_append_to_primitive_decimal((__int128_t*)values, offset, length,
                                           string_builder, valid_elems);
     } else {
         Bodo_PyErr_SetString(PyExc_RuntimeError,

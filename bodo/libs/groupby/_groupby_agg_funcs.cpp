@@ -320,8 +320,8 @@ bool idx_compare_column(const std::shared_ptr<array_info>& out_arr,
             case Bodo_CTypes::DECIMAL: {
                 // Decimal can just compare the underlying integers
                 // as the types must be the same.
-                __int128 old_value = getv<__int128>(in_arr, curr_idx);
-                __int128 new_value = getv<__int128>(in_arr, in_idx);
+                __int128_t old_value = getv<__int128_t>(in_arr, curr_idx);
+                __int128_t new_value = getv<__int128_t>(in_arr, in_idx);
                 STANDARD_EQUALITY_CHECK
             }
             default:

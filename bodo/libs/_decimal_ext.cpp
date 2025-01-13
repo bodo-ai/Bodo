@@ -116,14 +116,14 @@ std::string decimal_to_std_string(arrow::Decimal128 const& arrow_decimal,
     return str;
 }
 
-std::string int128_decimal_to_std_string(__int128 const& val,
+std::string int128_decimal_to_std_string(__int128_t const& val,
                                          int const& scale) {
     arrow::Decimal128 arrow_decimal((int64_t)(val >> 64), (int64_t)(val));
     return decimal_to_std_string(arrow_decimal, scale);
 }
 
-double decimal_to_double(__int128 const& val, uint8_t scale) {
-    // TODO: Zero-copy (cast __int128 to int64[2] for Decimal128 constructor)
+double decimal_to_double(__int128_t const& val, uint8_t scale) {
+    // TODO: Zero-copy (cast __int128_t to int64[2] for Decimal128 constructor)
     // Can't figure out how to do this in C++
     arrow::Decimal128 dec((int64_t)(val >> 64), (int64_t)(val));
     return dec.ToDouble(scale);
@@ -317,7 +317,8 @@ array_info* cast_decimal_to_decimal_array_safe_py_entry(
 double decimal_to_double_py_entry(decimal_value val, uint8_t scale) {
     auto high = static_cast<uint64_t>(val.high);
     auto low = static_cast<uint64_t>(val.low);
-    return decimal_to_double((static_cast<__int128>(high) << 64) | low, scale);
+    return decimal_to_double((static_cast<__int128_t>(high) << 64) | low,
+                             scale);
 }
 
 /**

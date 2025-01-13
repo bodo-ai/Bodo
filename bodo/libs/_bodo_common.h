@@ -427,8 +427,8 @@ inline std::vector<char> RetrieveNaNentry(Bodo_CTypes::CTypeEnum const& dtype) {
     if (dtype == Bodo_CTypes::DECIMAL) {
         // Normally the null value of decimal_value should never show up
         // anywhere. A value is assigned for simplicity of the code
-        __int128 e_val = 0;
-        return GetCharVector<__int128>(e_val);
+        __int128_t e_val = 0;
+        return GetCharVector<__int128_t>(e_val);
     }
     return {};
 }
