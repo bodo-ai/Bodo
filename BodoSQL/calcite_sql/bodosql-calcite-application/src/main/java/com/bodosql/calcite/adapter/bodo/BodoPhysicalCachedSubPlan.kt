@@ -150,9 +150,7 @@ class BodoPhysicalCachedSubPlan private constructor(
     override fun deleteStateVariable(
         ctx: BodoPhysicalRel.BuildContext,
         stateVar: StateVariable,
-    ) {
-        // Do Nothing
-    }
+    ) = Unit
 
     override fun expectedOutputBatchingProperty(inputBatchingProperty: BatchingProperty): BatchingProperty =
         ExpectedBatchingProperty.streamingIfPossibleProperty(getRowType())
