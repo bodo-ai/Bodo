@@ -8,8 +8,8 @@
 #endif
 
 #include <Python.h>
-#include <vector>
 #include <boost/multiprecision/cpp_int.hpp>
+#include <vector>
 
 #include "_meminfo.h"
 #include "vendored/simd-block-fixed-fpp.h"
@@ -26,34 +26,32 @@
 //   }
 // See https://gcc.gnu.org/onlinedocs/gcc/Diagnostic-Pragmas.html
 #if defined(__GNUC__) || defined(__clang__)
-    #define DO_PRAGMA(x) _Pragma(#x)
-    #define PUSH_IGNORED_COMPILER_ERROR(err)                                      \
-        DO_PRAGMA(GCC diagnostic push);                                           \
-        /* some compilers don't support -Wunknown-warning-option as used below */ \
-        DO_PRAGMA(GCC diagnostic ignored "-Wpragmas");                            \
-        /* some compilers might not implement the error class specified */        \
-        DO_PRAGMA(GCC diagnostic ignored "-Wunknown-warning-option");             \
-        /* Ignore the requested error class */                                    \
-        DO_PRAGMA(GCC diagnostic ignored err);                                    \
-        /* emit a compiler message so we don't lose track of ignored errors */    \
-        DO_PRAGMA(message "Ignoring error " err " in " __FILE__)
-    // Every call to PUSH_IGNORED_COMPILER_ERROR  MUST  have a corresponding call to
-    // POP_IGNORED_COMPILER_ERROR. Otherwise the error will be disabled for the rest
-    // of compilation
-    #define POP_IGNORED_COMPILER_ERROR() DO_PRAGMA(GCC diagnostic pop)
+#define DO_PRAGMA(x) _Pragma(#x)
+#define PUSH_IGNORED_COMPILER_ERROR(err)                                      \
+    DO_PRAGMA(GCC diagnostic push);                                           \
+    /* some compilers don't support -Wunknown-warning-option as used below */ \
+    DO_PRAGMA(GCC diagnostic ignored "-Wpragmas");                            \
+    /* some compilers might not implement the error class specified */        \
+    DO_PRAGMA(GCC diagnostic ignored "-Wunknown-warning-option");             \
+    /* Ignore the requested error class */                                    \
+    DO_PRAGMA(GCC diagnostic ignored err);                                    \
+    /* emit a compiler message so we don't lose track of ignored errors */    \
+    DO_PRAGMA(message "Ignoring error " err " in " __FILE__)
+// Every call to PUSH_IGNORED_COMPILER_ERROR  MUST  have a corresponding call to
+// POP_IGNORED_COMPILER_ERROR. Otherwise the error will be disabled for the rest
+// of compilation
+#define POP_IGNORED_COMPILER_ERROR() DO_PRAGMA(GCC diagnostic pop)
 #elif defined(_MSC_VER)
-    #define PUSH_IGNORED_COMPILER_ERROR(err)  \
-        __pragma(warning(push));  \
-        __pragma(warning(disable: err))
-    #define POP_IGNORED_COMPILER_ERROR() \
-        __pragma(warning(pop))                                 
+#define PUSH_IGNORED_COMPILER_ERROR(err) \
+    __pragma(warning(push));             \
+    __pragma(warning(disable : err))
+#define POP_IGNORED_COMPILER_ERROR() __pragma(warning(pop))
 #else
-    #define PUSH_IGNORED_COMPILER_ERROR(err)                                      \
-        static_assert(false, "Unsupported compiler: Cannot disable warnings")
-    #define POP_IGNORED_COMPILER_ERROR() \
-        static_assert(false, "Unsupported compiler: Cannot pop ignored warnings")
+#define PUSH_IGNORED_COMPILER_ERROR(err) \
+    static_assert(false, "Unsupported compiler: Cannot disable warnings")
+#define POP_IGNORED_COMPILER_ERROR() \
+    static_assert(false, "Unsupported compiler: Cannot pop ignored warnings")
 #endif
-
 
 // Convenience macros from
 // https://github.com/numba/numba/blob/main/numba/_pymodule.h

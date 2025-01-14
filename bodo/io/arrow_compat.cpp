@@ -4,13 +4,13 @@
 
 // Silence warnings from including generated code
 #if defined(__GNUC__) || defined(__clang__)
-    PUSH_IGNORED_COMPILER_ERROR("-Wreturn-type-c-linkage")
-    PUSH_IGNORED_COMPILER_ERROR("-Wunused-variable")
-    PUSH_IGNORED_COMPILER_ERROR("-Wunused-function")
+PUSH_IGNORED_COMPILER_ERROR("-Wreturn-type-c-linkage")
+PUSH_IGNORED_COMPILER_ERROR("-Wunused-variable")
+PUSH_IGNORED_COMPILER_ERROR("-Wunused-function")
 #elif defined(_MSC_VER)
-    PUSH_IGNORED_COMPILER_ERROR(4273)
-    // PUSH_IGNORED_COMPILER_ERROR("-Wunused-variable")
-    // PUSH_IGNORED_COMPILER_ERROR("-Wunused-function")
+PUSH_IGNORED_COMPILER_ERROR(4273)
+// PUSH_IGNORED_COMPILER_ERROR("-Wunused-variable")
+// PUSH_IGNORED_COMPILER_ERROR("-Wunused-function")
 #endif
 #include "pyarrow_wrappers_api.h"
 POP_IGNORED_COMPILER_ERROR()
