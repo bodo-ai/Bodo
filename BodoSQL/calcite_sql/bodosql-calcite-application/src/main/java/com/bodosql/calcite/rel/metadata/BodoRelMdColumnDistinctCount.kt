@@ -189,7 +189,7 @@ class BodoRelMdColumnDistinctCount : MetadataHandler<ColumnDistinctCount> {
         subset: RelSubset,
         mq: RelMetadataQuery,
         column: Int,
-    ): Double? = (mq as BodoRelMetadataQuery).getColumnDistinctCount(subset.getBestOrOriginal(), column)
+    ): Double? = (mq as BodoRelMetadataQuery).getColumnDistinctCount(subset.bestOrOriginal, column)
 
     fun getColumnDistinctCount(
         rel: Union,
@@ -513,7 +513,7 @@ class BodoRelMdColumnDistinctCount : MetadataHandler<ColumnDistinctCount> {
         return if (distinctCount != null) {
             distinctCount
         } else {
-            val leftCount = rel.left.getRowType().fieldCount
+            val leftCount = rel.left.rowType.fieldCount
             val isLeftInput = column < leftCount
             // For join assume an unchanged ratio and fetch the inputs.
             val input =
