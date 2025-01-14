@@ -2975,7 +2975,7 @@ def CallConstraint_resolve(self, typeinfer, typevars, fnty):
     from bodo.libs.streaming.sort import sort_build_consume_batch
     from bodo.libs.table_builder import table_builder_append
     from bodo.io.snowflake_write import snowflake_writer_append_table
-    from bodo.io.stream_iceberg_write import iceberg_writer_append_table
+    from bodo.io.iceberg.stream_iceberg_write import iceberg_writer_append_table
     from bodo.io.stream_parquet_write import parquet_writer_append_table
 
     streaming_build_funcs = (
