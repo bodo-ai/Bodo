@@ -440,8 +440,6 @@
                                         <exclude>org/apache/calcite/rel/rules/CalcRelSplitter$MaxInputFinder.class</exclude>
                                         <exclude>org/apache/calcite/rel/rules/CalcRelSplitter$HighestUsageFinder.class</exclude>
                                         <exclude>org/apache/calcite/rel/logical/LogicalTargetTableScan.class</exclude>
-                                        <exclude>org/apache/calcite/rel/metadata/RelMdColumnUniqueness$1.class</exclude>
-                                        <exclude>org/apache/calcite/rel/metadata/RelMdColumnUniqueness.class</exclude>
                                         <exclude>org/apache/calcite/rel2sql/SqlImplementor.class</exclude>
                                         <exclude>org/apache/calcite/rex/LogicVisitor$1.class</exclude>
                                         <exclude>org/apache/calcite/rex/LogicVisitor.class</exclude>
