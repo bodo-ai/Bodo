@@ -25,7 +25,6 @@ import org.apache.calcite.rel.core.Project
 import org.apache.calcite.rel.core.Union
 import org.apache.calcite.rel.metadata.MetadataDef
 import org.apache.calcite.rel.metadata.MetadataHandler
-import org.apache.calcite.rel.metadata.ReflectiveRelMetadataProvider
 import org.apache.calcite.rel.metadata.RelMetadataQuery
 import org.apache.calcite.rex.RexCall
 import org.apache.calcite.rex.RexInputRef
@@ -189,7 +188,7 @@ class BodoRelMdColumnDistinctCount : MetadataHandler<ColumnDistinctCount> {
         subset: RelSubset,
         mq: RelMetadataQuery,
         column: Int,
-    ): Double? = (mq as BodoRelMetadataQuery).getColumnDistinctCount(subset.getBestOrOriginal(), column)
+    ): Double? = (mq as BodoRelMetadataQuery).getColumnDistinctCount(subset.bestOrOriginal, column)
 
     fun getColumnDistinctCount(
         rel: Union,
@@ -513,7 +512,7 @@ class BodoRelMdColumnDistinctCount : MetadataHandler<ColumnDistinctCount> {
         return if (distinctCount != null) {
             distinctCount
         } else {
-            val leftCount = rel.left.getRowType().fieldCount
+            val leftCount = rel.left.rowType.fieldCount
             val isLeftInput = column < leftCount
             // For join assume an unchanged ratio and fetch the inputs.
             val input =
@@ -644,12 +643,4 @@ class BodoRelMdColumnDistinctCount : MetadataHandler<ColumnDistinctCount> {
         mq: RelMetadataQuery,
         column: Int,
     ): Double? = (mq as BodoRelMetadataQuery).getColumnDistinctCount(rel.cachedPlan.plan, column)
-
-    companion object {
-        val SOURCE =
-            ReflectiveRelMetadataProvider.reflectiveSource(
-                BodoRelMdColumnDistinctCount(),
-                ColumnDistinctCount.Handler::class.java,
-            )
-    }
 }

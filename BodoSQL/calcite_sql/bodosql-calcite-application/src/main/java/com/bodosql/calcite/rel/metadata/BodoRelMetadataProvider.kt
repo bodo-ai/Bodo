@@ -1,6 +1,7 @@
 package com.bodosql.calcite.rel.metadata
 
 import org.apache.calcite.rel.metadata.BuiltInMetadata
+import org.apache.calcite.rel.metadata.BuiltInMetadata.ColumnUniqueness
 import org.apache.calcite.rel.metadata.ChainedRelMetadataProvider
 import org.apache.calcite.rel.metadata.DefaultRelMetadataProvider
 import org.apache.calcite.rel.metadata.ReflectiveRelMetadataProvider
@@ -49,6 +50,10 @@ class BodoRelMetadataProvider(
             ReflectiveRelMetadataProvider.reflectiveSource(
                 BodoRelMdColumnDistinctCount(),
                 ColumnDistinctCount.Handler::class.java,
+            ),
+            ReflectiveRelMetadataProvider.reflectiveSource(
+                BodoRelMdColumnUniqueness(),
+                ColumnUniqueness.Handler::class.java,
             ),
             DefaultRelMetadataProvider.INSTANCE,
         ),

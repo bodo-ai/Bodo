@@ -38,7 +38,7 @@ class BodoRelMdDistinctRowCount : RelMdDistinctRowCount() {
      *  (((40*100)*0.5)*75)*0.5 = 75,000 combinations.
      *
      * @param rel The RelNode being analyzed
-     * @param mq Metadta query interface
+     * @param mq Metadata query interface
      * @param groupKey the columns that are being used to group by
      * @return An approximation of the number of distinct combinations of the
      * columns specified by groupKey.
