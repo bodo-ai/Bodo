@@ -13,8 +13,10 @@ import hashlib
 from datasets import load_dataset
 from transformers import AutoTokenizer
 import pandas as pd
+import numpy as np
 from dataclasses import dataclass
 import bodo
+import time
 
 
 @dataclass
@@ -42,13 +44,13 @@ def clean_text(text):
 
 tokenizer = AutoTokenizer.from_pretrained(Config.tokenizer_name)
 tokenizer.pad_token = tokenizer.eos_token
-tuple_list_type = bodo.typeof(([1, 2], [3, 4]))
+tuple_arr_type = bodo.typeof((np.array([1, 2]), np.array([3, 4])))
 
 
-@bodo.wrap_python(tuple_list_type)
+@bodo.wrap_python(tuple_arr_type)
 def run_tokenizer(text):
     tokenized = tokenizer(text, truncation=True, max_length=Config.max_seq_length, padding="max_length")
-    return (tokenized["input_ids"], tokenized["attention_mask"])
+    return (np.array(tokenized["input_ids"]), np.array(tokenized["attention_mask"]))
 
 
 @bodo.jit
@@ -60,12 +62,14 @@ def tokenize_data(row):
 
 @bodo.jit
 def preprocess_pile(df, out_file):
+    t0 = time.time()
     df["text"] = df["text"].map(clean_text)
     df["text_hash"] = df["text"].map(hash_text)
     df = df.drop_duplicates(subset=["text_hash"])
     df = df.drop("text_hash", axis=1)
     processed_data = df.apply(tokenize_data, axis=1)
     processed_data.to_json(out_file, orient="records", lines=True)
+    print("Execution Time:", time.time() - t0)
 
 
 if __name__ == "__main__":

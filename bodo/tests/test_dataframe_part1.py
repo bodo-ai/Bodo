@@ -1276,7 +1276,7 @@ def test_df_rename_all_types(df_value, memory_leak_check):
     """
 
     def test_impl(df):
-        df.rename(columns={"A": "first", "B": "second"})
+        return df.rename(columns={"A": "first", "B": "second"})
 
     check_func(test_impl, (df_value,))
 
@@ -1289,7 +1289,7 @@ def test_df_rename_mapper_all_types(df_value, memory_leak_check):
     """
 
     def test_impl(df):
-        df.rename({"A": "first", "B": "second"}, axis=1)
+        return df.rename({"A": "first", "B": "second"}, axis=1)
 
     check_func(test_impl, (df_value,))
 

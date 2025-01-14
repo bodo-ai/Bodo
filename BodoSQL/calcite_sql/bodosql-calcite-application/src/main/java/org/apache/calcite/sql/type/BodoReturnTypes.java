@@ -121,10 +121,11 @@ public class BodoReturnTypes {
                 RelDataType mapType = factory.createMapType(stringType, stringType);
                 return mapType;
                 // TODO: Replace the above implementation with the below implementation when
-                // we have proper struct support in Calcite.
-//                return factory.createStructType(
-//                        List.of(stringType, stringType, mapType, stringType, stringType, stringType, stringType),
-//                        List.of("fragment", "host", "parameters",                                       "path", "port", "query", "scheme"));
+                // we have proper struct support in BodoSQL. Currently we are missing proper
+                // support for RexFieldAccess in code generation.
+                //  return factory.createStructType(
+                //        List.of(stringType, stringType, mapType, stringType, stringType, stringType, stringType),
+                //        List.of("fragment", "host", "parameters",                                       "path", "port", "query", "scheme"));
             };
 
     /**
@@ -207,7 +208,7 @@ public class BodoReturnTypes {
     public static final SqlTypeTransform WRAP_TYPE_TO_ARRAY =
             (opBinding, typeToTransform) ->
                     toArrayTypeIfNotAlready(opBinding, typeToTransform, false)
-                    ;
+            ;
 
 
 
@@ -929,14 +930,14 @@ public class BodoReturnTypes {
     public static final SqlReturnTypeInference TRY_TO_NUMBER_RET_TYPE = ToNumberRetTypeHelper(false);
 
     public static SqlReturnTypeInference ToNumberRetTypeHelper(boolean errorOnFailedConversion) {
-        //First, generate the return type without considering output nullability
+        // First, generate the return type without considering output nullability
         SqlReturnTypeInference retType = opBinding -> {
             RelDataTypeFactory factory = opBinding.getTypeFactory();
 
-            //TODO: the binding.getOperandCount() checks will need to be changed if/when we allow the 'format'
+            // TODO: the binding.getOperandCount() checks will need to be changed if/when we allow the 'format'
             // optional argument
             if (opBinding.getOperandCount() == 3) {
-                //We have a fractional value, return Double
+                // We have a fractional value, return Double
                 assert opBinding.isOperandLiteral(2, true) : "Internal error in ToNumberRetTypeHelper: scale argument is not a literal";
                 int scale = opBinding.getIntLiteralOperand(2);
 
@@ -945,17 +946,17 @@ public class BodoReturnTypes {
                 }
             }
 
-            //precicion defaults to 38 if not specified
-            int precicion = 38;
+            // precision defaults to 38 if not specified
+            int precision = 38;
             if (opBinding.getOperandCount() >= 2) {
                 assert opBinding.isOperandLiteral(2, true) :
                         "Internal error in ToNumberRetTypeHelper: scale argument is not a literal";
-                precicion = opBinding.getIntLiteralOperand(1);
+                precision = opBinding.getIntLiteralOperand(1);
             }
-            return factory.createSqlType(getMinIntegerSize(precicion));
+            return factory.createSqlType(getMinIntegerSize(precision));
         };
 
-        //Now handle nullability
+        // Now handle nullability
         if (errorOnFailedConversion) {
             return retType.andThen(SqlTypeTransforms.TO_NULLABLE);
         } else {
