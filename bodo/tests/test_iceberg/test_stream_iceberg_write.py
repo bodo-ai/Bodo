@@ -27,7 +27,7 @@ from bodo.tests.iceberg_database_helpers.utils import (
     create_iceberg_table,
     get_spark,
 )
-from bodo.tests.test_iceberg import (
+from bodo.tests.test_iceberg.test_iceberg import (
     ICEBERG_FIELD_IDS_IN_PQ_SCHEMA_TEST_PARAMS,
     _setup_test_iceberg_field_ids_in_pq_schema,
     _test_file_part,
