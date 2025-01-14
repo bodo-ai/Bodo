@@ -10,6 +10,12 @@ import org.apache.calcite.rex.RexBuilder;
 import org.apache.calcite.sql2rel.RelStructuredTypeFlattener;
 import org.apache.calcite.tools.RelBuilder;
 
+/**
+ * The RelStructuredTypeFlattener needs to exist as a generic step where Calcite converts weirdly
+ * nested structured types into a flat form for optimization usage. We do not really need to do
+ * anything special here, but since we have added extra RelNode definitions we need to ensure that
+ * those can be successfully processed.
+ */
 public class BodoRelStructuredTypeFlattener extends RelStructuredTypeFlattener {
   public BodoRelStructuredTypeFlattener(
       final RelBuilder relBuilder,
