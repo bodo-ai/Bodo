@@ -353,13 +353,21 @@ if(DEFINED ENV{BODO_VENDOR_MPICH})
   file(REMOVE_RECURSE ${MPICH_WHEEL} mpich-tmp-extract-dir)
   message(STATUS "Moved MPICH to ${SKBUILD_DATA_DIR}")
 
-  set(MPICH_INCLUDE_DIR "${SKBUILD_DATA_DIR}/include")
-  set(MPICH_LIB_DIR "${SKBUILD_DATA_DIR}/lib")
+  set(MPI_INCLUDE_DIR "${SKBUILD_DATA_DIR}/include")
+  set(MPI_LIB_DIR "${SKBUILD_DATA_DIR}/lib")
 else()
-  set(MPICH_INCLUDE_DIR "${CONDA_INCLUDE_DIR}")
-  set(MPICH_LIB_DIR "${CONDA_LIB_DIR}")
+  set(MPI_INCLUDE_DIR "${CONDA_INCLUDE_DIR}")
+  set(MPI_LIB_DIR "${CONDA_LIB_DIR}")
 endif()
-cmake_print_variables(MPICH_INCLUDE_DIR)
+cmake_print_variables(MPI_INCLUDE_DIR)
+cmake_print_variables(MPI_LIB_DIR)
+
+# MPI implementation (Intel or MPICH)
+if (WIN32)
+  set(MPI_LIBRARIES, "impi")
+else()
+  set(MPI_LIBRARIES, "mpi")
+endif()
 
 # Vendor MPI4Py
 if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/bodo/mpi4py")
@@ -399,7 +407,7 @@ cmake_print_variables(PYARROW_LIB_DIR)
 cmake_print_variables(Python_NumPy_INCLUDE_DIR)
 
 # Combine All 2 Includes
-set(BASE_INCLUDE_DIRS ${PYARROW_INCLUDE_DIR} ${Python_NumPy_INCLUDE_DIR} ${MPICH_INCLUDE_DIR})
+set(BASE_INCLUDE_DIRS ${PYARROW_INCLUDE_DIR} ${Python_NumPy_INCLUDE_DIR} ${MPI_INCLUDE_DIR})
 
 
 # ------------------------ Cython Target - bodo.io.pyfs -----------------------
@@ -432,8 +440,9 @@ add_custom_command(
 set(pyarrow_wrappers_sources "bodo/io/pyarrow_wrappers.cpp" "bodo/io/arrow_compat.cpp")
 python_add_library(pyarrow_wrappers MODULE WITH_SOABI "${pyarrow_wrappers_sources}")
 target_include_directories(pyarrow_wrappers PRIVATE ${BASE_INCLUDE_DIRS})
-target_link_directories(pyarrow_wrappers PRIVATE ${PYARROW_LIB_DIR} ${CONDA_LIB_DIR} ${MPICH_LIB_DIR})
-target_link_libraries(pyarrow_wrappers PRIVATE arrow arrow_python arrow_dataset mpi)
+target_link_directories(pyarrow_wrappers PRIVATE ${PYARROW_LIB_DIR} ${CONDA_LIB_DIR} ${MPI_LIB_DIR})
+target_link_libraries(pyarrow_wrappers PRIVATE arrow arrow_python arrow_dataset "${MPI_LIBRARIES}")
+target_compile_definitions(pyarrow_wrappers PRIVATE ARROW_PYTHON_EXPORTING)
 install(TARGETS pyarrow_wrappers DESTINATION "bodo/io/")
 
 # ----------------------- Cython Target - bodo.io._hdfs -----------------------
@@ -470,9 +479,9 @@ add_custom_command(
 )
 
 python_add_library(tracing MODULE WITH_SOABI "bodo/utils/tracing.c")
-target_include_directories(tracing PRIVATE ${MPICH_INCLUDE_DIR})
-target_link_directories(tracing PRIVATE ${CONDA_LIB_DIR} ${MPICH_LIB_DIR})
-target_link_libraries(tracing PRIVATE mpi)
+target_include_directories(tracing PRIVATE ${MPI_INCLUDE_DIR})
+target_link_directories(tracing PRIVATE ${CONDA_LIB_DIR} ${MPI_LIB_DIR})
+target_link_libraries(tracing PRIVATE "${MPI_LIBRARIES}")
 install(TARGETS tracing DESTINATION "bodo/utils/")
 
 # ---------------------- Cython Target - bodo.memory -----------------------
@@ -513,8 +522,8 @@ python_add_library(
 )
 
 target_include_directories(memory_tester PRIVATE ${BASE_INCLUDE_DIRS} "${CMAKE_CURRENT_SOURCE_DIR}/bodo/tests/")
-target_link_directories(memory_tester PRIVATE ${PYARROW_LIB_DIR} ${CONDA_LIB_DIR} ${MPICH_LIB_DIR})
-target_link_libraries(memory_tester PRIVATE mpi arrow arrow_python fmt::fmt)
+target_link_directories(memory_tester PRIVATE ${PYARROW_LIB_DIR} ${CONDA_LIB_DIR} ${MPI_LIB_DIR})
+target_link_libraries(memory_tester PRIVATE "${MPI_LIBRARIES}" arrow arrow_python fmt::fmt)
 if(NOT(CMAKE_BUILD_TYPE STREQUAL "Release"))
   target_compile_definitions(
     memory_tester
@@ -704,7 +713,7 @@ python_add_library(ext MODULE WITH_SOABI "${sources_list}")
 
 # Dependency Includes Are `-isystem` to Suppress Warnings
 target_include_directories(ext SYSTEM PRIVATE ${BASE_INCLUDE_DIRS})
-target_link_directories(ext PRIVATE ${CONDA_LIB_DIR} ${MPICH_LIB_DIR})
+target_link_directories(ext PRIVATE ${CONDA_LIB_DIR} ${MPI_LIB_DIR})
 
 if (CMAKE_BUILD_TYPE STREQUAL "Release")
   target_compile_options(ext PRIVATE "-Wno-unknown-pragmas")
@@ -779,7 +788,7 @@ target_include_directories(ext PRIVATE ${datasketches_INSTALL_DIR}/include/DataS
 target_link_libraries(ext PRIVATE
   pthread
   npymath
-  mpi
+  ${MPI_LIBRARIES}
   arrow
   arrow_python
   arrow_dataset
