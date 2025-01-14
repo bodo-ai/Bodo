@@ -1458,6 +1458,20 @@ public class RexBuilder {
     }
 
     /**
+     * Creates an approximate numeric literal (double or float)
+     * from a Double value.
+     *
+     * @param val  literal value
+     * @param type approximate numeric type
+     * @return new literal
+     */
+    public RexLiteral makeApproxLiteral(Double val, RelDataType type) {
+      assert SqlTypeFamily.APPROXIMATE_NUMERIC.getTypeNames().contains(
+          type.getSqlTypeName());
+      return makeLiteral(val, type, SqlTypeName.DOUBLE);
+    }
+
+    /**
      * Creates a search argument literal.
      */
     public RexLiteral makeSearchArgumentLiteral(Sarg s, RelDataType type) {
@@ -2032,8 +2046,7 @@ public class RexBuilder {
               if (value instanceof Double) {
                 return makeApproxLiteral((Double) value, type);
               }
-          case BOOLEAN:
-                return makeApproxLiteral((BigDecimal) value, type);
+              return makeApproxLiteral(((BigDecimal) value).doubleValue(), type);
             case BOOLEAN:
                 return (Boolean) value ? booleanTrue : booleanFalse;
             case TIME:
