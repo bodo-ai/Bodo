@@ -49,7 +49,7 @@ It includes the following fields:
 
 
 - ##### Type :fontawesome-solid-asterisk:{.requirement}
-The type of the batch job. Currently, we support two types of jobs: Python(`PYTHON`) and SQL(`SQL`). 
+The type of the job. Currently, we support two types of jobs: Python(`PYTHON`) and SQL(`SQL`). 
 
 - ##### Source Location :fontawesome-solid-asterisk:{.requirement}
 The relative path from the location in the job source to the `.py` or `.sql` file that contains the job script.
