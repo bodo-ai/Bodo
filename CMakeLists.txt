@@ -359,15 +359,17 @@ else()
   set(MPI_INCLUDE_DIR "${CONDA_INCLUDE_DIR}")
   set(MPI_LIB_DIR "${CONDA_LIB_DIR}")
 endif()
-cmake_print_variables(MPI_INCLUDE_DIR)
-cmake_print_variables(MPI_LIB_DIR)
 
 # MPI implementation (Intel or MPICH)
 if (WIN32)
-  set(MPI_LIBRARIES, "impi")
+  set(MPI_LIBRARIES "impi")
 else()
-  set(MPI_LIBRARIES, "mpi")
+ set(MPI_LIBRARIES "mpi")
 endif()
+
+cmake_print_variables(MPI_LIBRARIES)
+cmake_print_variables(MPI_INCLUDE_DIR)
+cmake_print_variables(MPI_LIB_DIR)
 
 # Vendor MPI4Py
 if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/bodo/mpi4py")
