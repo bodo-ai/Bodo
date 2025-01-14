@@ -2,7 +2,7 @@ package com.bodosql.calcite.prepare
 
 import org.apache.calcite.tools.Program
 
-typealias ProgramFactory = (optimize: Boolean) -> Program
+typealias ProgramFactory = () -> Program
 
 /**
  * Collection of programs each planner must define.
@@ -13,12 +13,11 @@ data class ProgramCollection(
     /**
      * Structures the above into a list for the planner.
      *
-     * The list order is preprocessor, optimized, and then unoptimized.
+     * The list order is preprocessor and optimized.
      */
     fun toList(): List<Program> =
         listOf(
             BodoPrograms.preprocessor(),
-            programFactory.invoke(true),
-            programFactory.invoke(false),
+            programFactory.invoke(),
         )
 }
