@@ -32,9 +32,10 @@ import org.checkerframework.dataflow.qual.Pure;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
-import java.util.Objects;
 
 import static org.apache.calcite.linq4j.Nullness.castNonNull;
+
+import static java.util.Objects.requireNonNull;
 
 /**
  * A <code>SqlCall</code> is a call to an {@link SqlOperator operator}.
@@ -146,7 +147,8 @@ public abstract class SqlCall extends SqlNode {
     final SqlDialect dialect = writer.getDialect();
     if (leftPrec > operator.getLeftPrec()
         || (operator.getRightPrec() <= rightPrec && (rightPrec != 0))
-        || writer.isAlwaysUseParentheses() && isA(SqlKind.EXPRESSION)) {
+        || writer.isAlwaysUseParentheses() && isA(SqlKind.EXPRESSION)
+        || (operator.getRightPrec() <= rightPrec + 1 && isA(SqlKind.COMPARISON))) {
       final SqlWriter.Frame frame = writer.startList("(", ")");
       dialect.unparseCall(writer, this, 0, 0);
       writer.endList(frame);
@@ -224,8 +226,7 @@ public abstract class SqlCall extends SqlNode {
     List<String> signatureList = new ArrayList<>();
     for (final SqlNode operand : getOperandList()) {
       final RelDataType argType =
-          validator.deriveType(Objects.requireNonNull(scope, "scope"),
-              operand);
+          validator.deriveType(requireNonNull(scope, "scope"), operand);
       if (null == argType) {
         continue;
       }
