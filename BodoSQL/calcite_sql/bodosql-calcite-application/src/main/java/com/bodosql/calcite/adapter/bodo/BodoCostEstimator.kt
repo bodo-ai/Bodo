@@ -109,7 +109,7 @@ interface BodoCostEstimator {
          * Magic number used to guess how many inner elements
          * each row in a column with ARRAY type contains on average.
          */
-        private val AVG_ARRAY_ENTRIES_PER_ROW: Double = 16.0
+        val AVG_ARRAY_ENTRIES_PER_ROW: Double = 16.0
 
         /**
          * Magic number used to guess how many key-value pairs
