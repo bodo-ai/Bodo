@@ -466,46 +466,46 @@ public class SqlIntervalQualifier extends SqlNode {
     final String timeUnitString = stringValue.toUpperCase(Locale.ROOT);
 
     switch (timeUnitString) {
-      case "MICROSECOND":
-        return TimeUnit.MICROSECOND;
-      case "MILLISECOND":
-        return TimeUnit.MILLISECOND;
-      case "SECOND":
-        return TimeUnit.SECOND;
-      case "MINUTE":
-        return TimeUnit.MINUTE;
-      case "HOUR":
-        return TimeUnit.HOUR;
-      case "DAY":
-        return TimeUnit.DAY;
-      case "DAYOFWEEK":
-      case "DOW":
-        return TimeUnit.DOW;
-      case "DAYOFYEAR":
-      case "DOY":
-        return TimeUnit.DOY;
-      case "ISODOW":
-        return TimeUnit.ISODOW;
-      case "ISODOY":
-        return TimeUnit.ISOYEAR;
-      case "WEEK":
-        return TimeUnit.WEEK;
-      case "MONTH":
-        return TimeUnit.MONTH;
-      case "QUARTER":
-        return TimeUnit.QUARTER;
-      case "YEAR":
-        return TimeUnit.YEAR;
-      case "EPOCH":
-        return TimeUnit.EPOCH;
-      case "DECADE":
-        return TimeUnit.DECADE;
-      case "CENTURY":
-        return TimeUnit.CENTURY;
-      case "MILLENNIUM":
-        return TimeUnit.MILLENNIUM;
-      default:
-        throw new IllegalArgumentException("Date/Time units \"" + stringValue + "\" not recognized");
+    case "MICROSECOND":
+      return TimeUnit.MICROSECOND;
+    case "MILLISECOND":
+      return TimeUnit.MILLISECOND;
+    case "SECOND":
+      return TimeUnit.SECOND;
+    case "MINUTE":
+      return TimeUnit.MINUTE;
+    case "HOUR":
+      return TimeUnit.HOUR;
+    case "DAY":
+      return TimeUnit.DAY;
+    case "DAYOFWEEK":
+    case "DOW":
+      return TimeUnit.DOW;
+    case "DAYOFYEAR":
+    case "DOY":
+      return TimeUnit.DOY;
+    case "ISODOW":
+      return TimeUnit.ISODOW;
+    case "ISODOY":
+      return TimeUnit.ISOYEAR;
+    case "WEEK":
+      return TimeUnit.WEEK;
+    case "MONTH":
+      return TimeUnit.MONTH;
+    case "QUARTER":
+      return TimeUnit.QUARTER;
+    case "YEAR":
+      return TimeUnit.YEAR;
+    case "EPOCH":
+      return TimeUnit.EPOCH;
+    case "DECADE":
+      return TimeUnit.DECADE;
+    case "CENTURY":
+      return TimeUnit.CENTURY;
+    case "MILLENNIUM":
+      return TimeUnit.MILLENNIUM;
+    default:
+      throw new IllegalArgumentException("Date/Time units \"" + stringValue + "\" not recognized");
     }
   }
 
@@ -1468,10 +1468,10 @@ public class SqlIntervalQualifier extends SqlNode {
     case SECOND:
       return evaluateIntervalLiteralAsSecond(typeSystem, sign, value, value0,
           pos);
-      case MILLISECOND:
-      case MICROSECOND:
-      case NANOSECOND:
-        return evaluateIntervalLiteralAsSubsecond(timeUnitRange.startUnit, typeSystem, sign, value, value0, pos);
+    case MILLISECOND:
+    case MICROSECOND:
+    case NANOSECOND:
+      return evaluateIntervalLiteralAsSubsecond(timeUnitRange.startUnit, typeSystem, sign, value, value0, pos);
     default:
       throw invalidValueException(pos, value0);
     }

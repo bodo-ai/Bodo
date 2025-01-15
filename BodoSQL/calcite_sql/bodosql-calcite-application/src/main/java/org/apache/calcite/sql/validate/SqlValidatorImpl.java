@@ -4428,7 +4428,7 @@ public class SqlValidatorImpl implements SqlValidatorWithHints {
       SqlNode matchCondition = getMatchCondition(asof);
       matchCondition = expand(matchCondition, joinScope);
       join.setOperand(6, matchCondition);
-      validateWhereOrOn(joinScope, matchCondition, "MATCH_CONDITION");
+      validateWhereOrOnOrNonAggregateHaving(joinScope, matchCondition, "MATCH_CONDITION");
       SqlNode condition = join.getCondition();
       if (condition == null) {
         throw newValidationError(join, RESOURCE.joinRequiresCondition());
