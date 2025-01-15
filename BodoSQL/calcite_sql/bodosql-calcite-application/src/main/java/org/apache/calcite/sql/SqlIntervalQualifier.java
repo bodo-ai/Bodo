@@ -466,6 +466,8 @@ public class SqlIntervalQualifier extends SqlNode {
     final String timeUnitString = stringValue.toUpperCase(Locale.ROOT);
 
     switch (timeUnitString) {
+    case "NANOSECOND":
+      return TimeUnit.NANOSECOND;
     case "MICROSECOND":
       return TimeUnit.MICROSECOND;
     case "MILLISECOND":
