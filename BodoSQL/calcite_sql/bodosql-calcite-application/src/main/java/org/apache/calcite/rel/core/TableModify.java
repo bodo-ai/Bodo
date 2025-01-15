@@ -65,8 +65,8 @@ public abstract class TableModify extends SingleRel {
    * Enumeration of supported modification operations.
    */
   public enum Operation {
-
-    //We assign each enum an integer value. This is used when converting "MERGE INTO" into a
+    // Bodo Change:
+    // We assign each enum an integer value. This is used when converting "MERGE INTO" into a
     // LogicalTableModify node, to enumerate which action should be taken for each row.
     DELETE(0),
     INSERT(1),
@@ -106,7 +106,7 @@ public abstract class TableModify extends SingleRel {
   /**
    * The connection to the optimizing session.
    */
-  final protected Prepare.CatalogReader catalogReader;
+  protected final Prepare.CatalogReader catalogReader;
 
   /**
    * The table definition.
