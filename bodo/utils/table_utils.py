@@ -114,7 +114,6 @@ def generate_mappable_table_func(
         used_cols_data = None
 
     # Select each block from the table
-    func_text += "  bodo.hiframes.table.ensure_table_unboxed(table, used_cols_set)\n"
     for blk in table.type_to_blk.values():
         func_text += (
             f"  blk_{blk} = bodo.hiframes.table.get_table_block(table, {blk})\n"
@@ -210,10 +209,6 @@ def generate_table_nbytes(table, out_arr, start_offset, parallel=False):
     }
 
     func_text = "def impl(table, out_arr, start_offset, parallel=False):\n"
-    # Ensure the whole table is unboxed as we will use every column. Bodo loads
-    # Tables/DataFrames from Python with "lazy" unboxing and some columns
-    # may not be loaded yet.
-    func_text += "  bodo.hiframes.table.ensure_table_unboxed(table, None)\n"
     # General code for each type stored inside the table.
     for blk in table.type_to_blk.values():
         func_text += f"  blk = bodo.hiframes.table.get_table_block(table, {blk})\n"
@@ -265,7 +260,6 @@ def table_concat(table, col_nums_meta, arr_type):
     if is_string:
         func_text += "  total_chars = 0\n"
         func_text += "  for c in col_nums:\n"
-        func_text += "    bodo.hiframes.table.ensure_column_unboxed(table, blk, col_num_to_ind_in_blk[c], c)\n"
         func_text += "    arr = blk[col_num_to_ind_in_blk[c]]\n"
         func_text += "    total_chars += bodo.libs.str_arr_ext.num_total_chars(arr)\n"
         func_text += "  out_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(n * len(col_nums), total_chars)\n"
@@ -273,9 +267,6 @@ def table_concat(table, col_nums_meta, arr_type):
         func_text += "  out_arr = bodo.utils.utils.alloc_type(n * len(col_nums), arr_type, (-1,))\n"
     func_text += "  for i in range(len(col_nums)):\n"
     func_text += "    c = col_nums[i]\n"
-    if not is_string:
-        # unboxing must be done on first iteration over columns
-        func_text += "    bodo.hiframes.table.ensure_column_unboxed(table, blk, col_num_to_ind_in_blk[c], c)\n"
     func_text += "    arr = blk[col_num_to_ind_in_blk[c]]\n"
     func_text += "    off = i * n\n"
     func_text += "    for j in range(len(arr)):\n"
@@ -315,7 +306,6 @@ def concat_tables(in_tables, used_cols=None):
         "bodo": bodo,
         "init_table": bodo.hiframes.table.init_table,
         "get_table_block": bodo.hiframes.table.get_table_block,
-        "ensure_column_unboxed": bodo.hiframes.table.ensure_column_unboxed,
         "set_table_block": bodo.hiframes.table.set_table_block,
         "set_table_len": bodo.hiframes.table.set_table_len,
         "alloc_list_like": bodo.hiframes.table.alloc_list_like,
@@ -366,7 +356,6 @@ def concat_tables(in_tables, used_cols=None):
             func_text += f"    in_arrs_{blk} = []\n"
             func_text += f"    for T_{blk} in in_tables:\n"
             func_text += f"      arr_list_{blk} = get_table_block(T_{blk}, {blk})\n"
-            func_text += f"      ensure_column_unboxed(T_{blk}, arr_list_{blk}, i, arr_ind_{blk})\n"
             func_text += f"      in_arrs_{blk}.append(arr_list_{blk}[i])\n"
 
             func_text += (
@@ -531,7 +520,6 @@ def table_astype(table, new_table_typ, copy, _bodo_nan_to_str, used_cols=None):
                     f"    if arr_ind_{orig_table_blk} not in copied_cols_set:\n"
                 )
                 func_text += "      continue\n"
-                func_text += f"    bodo.hiframes.table.ensure_column_unboxed(table, arr_list_{orig_table_blk}, i, arr_ind_{orig_table_blk})\n"
                 # Map to the new physical location.
                 func_text += f"    out_idx_{new_table_blk}_{orig_table_blk} = new_idx_{orig_table_blk}[i]\n"
                 func_text += (
@@ -573,7 +561,6 @@ def table_astype(table, new_table_typ, copy, _bodo_nan_to_str, used_cols=None):
                     # For each column, in the orig_table_blk, check if it is being cast to this output type
                     func_text += f"    if arr_ind_{orig_table_blk} not in cast_cols_{orig_table_blk}_{new_table_blk}_set:\n"
                     func_text += "      continue\n"
-                    func_text += f"    bodo.hiframes.table.ensure_column_unboxed(table, arr_list_{orig_table_blk}, i, arr_ind_{orig_table_blk})\n"
                     # Map to the new physical location.
                     func_text += f"    out_idx_{new_table_blk}_{orig_table_blk} = new_idx_{orig_table_blk}[i]\n"
                     func_text += f"    arr_val_{new_table_blk} =  bodo.utils.conversion.fix_arr_dtype(arr_list_{orig_table_blk}[i], typ_{new_table_blk}, copy, nan_to_str=_bodo_nan_to_str, from_series=True)\n"

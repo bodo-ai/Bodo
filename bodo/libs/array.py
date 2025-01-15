@@ -2332,21 +2332,6 @@ def py_table_to_cpp_table(typingctx, py_table_t, py_table_type_t):
                         arr_inds_struct,
                         i,
                     )
-                    # Ensure we don't need to unbox
-                    ensure_column_unboxed_sig = signature(
-                        types.none,
-                        py_table_type,
-                        types.List(t),
-                        types.int64,
-                        types.int64,
-                    )
-                    ensure_column_unboxed_args = (py_table, arr_list, i, arr_ind)
-                    bodo.hiframes.table.ensure_column_unboxed_codegen(
-                        context,
-                        builder,
-                        ensure_column_unboxed_sig,
-                        ensure_column_unboxed_args,
-                    )
                     # Get the array
                     arr = arr_list_inst.getitem(i)
                     # Call array to info
@@ -2464,7 +2449,6 @@ def gen_py_data_to_cpp_table_impl(
             func_text += f"    if out_arr_ind_{blk} == -1:\n"
             func_text += "      continue\n"
             func_text += f"    arr_ind_{blk} = arr_inds_{blk}[i]\n"
-            func_text += f"    ensure_column_unboxed(py_table, arr_list_{blk}, i, arr_ind_{blk})\n"
             func_text += f"    cpp_arr_list[out_arr_ind_{blk}] = array_to_info(arr_list_{blk}[i])\n"
 
         # Handle any table duplicates as individual arrays.
@@ -2492,7 +2476,6 @@ def gen_py_data_to_cpp_table_impl(
             "array_info_type": array_info_type,
             "alloc_empty_list_type": bodo.hiframes.table.alloc_empty_list_type,
             "get_table_block": bodo.hiframes.table.get_table_block,
-            "ensure_column_unboxed": bodo.hiframes.table.ensure_column_unboxed,
             "array_to_info": array_to_info,
             "arr_info_list_to_table": arr_info_list_to_table,
         }

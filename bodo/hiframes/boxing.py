@@ -1124,8 +1124,7 @@ def box_dataframe(typ, val, c):
         table_type = typ.table_type
         table = builder.extract_value(dataframe_payload.data, 0)
         context.nrt.incref(builder, table_type, table)
-        # setting ensure_unboxed of box_table() to True if not using parent obj
-        table_obj = box_table(table_type, table, c, builder.not_(use_parent_obj))
+        table_obj = box_table(table_type, table, c)
 
         with builder.if_else(use_parent_obj) as (then, orelse):
             with then:
