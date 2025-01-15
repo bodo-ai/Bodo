@@ -2778,6 +2778,9 @@ def scatterv_impl_jit(
             func_text += f"  out_arr_list_{blk} = alloc_list_like(arr_list_{blk}, len(arr_list_{blk}), False)\n"
             func_text += f"  for i in range(len(arr_list_{blk})):\n"
             func_text += f"    arr_ind_{blk} = arr_inds_{blk}[i]\n"
+            func_text += (
+                f"    ensure_column_unboxed(T, arr_list_{blk}, i, arr_ind_{blk})\n"
+            )
             func_text += f"    out_arr_{blk} = bodo.libs.distributed_api.scatterv_impl(arr_list_{blk}[i], send_counts, warn_if_dist, root, comm)\n"
             func_text += f"    out_arr_list_{blk}[i] = out_arr_{blk}\n"
             func_text += f"    l = len(out_arr_{blk})\n"
@@ -2790,6 +2793,7 @@ def scatterv_impl_jit(
                 "bodo": bodo,
                 "init_table": bodo.hiframes.table.init_table,
                 "get_table_block": bodo.hiframes.table.get_table_block,
+                "ensure_column_unboxed": bodo.hiframes.table.ensure_column_unboxed,
                 "set_table_block": bodo.hiframes.table.set_table_block,
                 "set_table_len": bodo.hiframes.table.set_table_len,
                 "alloc_list_like": bodo.hiframes.table.alloc_list_like,

@@ -448,6 +448,13 @@ def remove_hiframes(rhs, lives, call_list):
         return True
 
     if (
+        call_list == ["ensure_column_unboxed", "table", "hiframes", bodo]
+        and rhs.args[0].name not in lives
+        and rhs.args[1].name not in lives
+    ):
+        return True
+
+    if (
         call_list == ["generate_table_nbytes", "table_utils", "utils", bodo]
         and rhs.args[1].name not in lives
     ):

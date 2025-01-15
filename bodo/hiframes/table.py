@@ -307,6 +307,11 @@ class TableTypeModel(models.StructModel):
                 (f"block_{blk}", types.List(t))
                 for t, blk in fe_type.type_to_blk.items()
             ]
+        # parent df object if result of df unbox, used for unboxing arrays lazily
+        # NOTE: Table could be result of set_table_data() and therefore different than
+        # the parent (have more columns and/or different types). However, NULL arrays
+        # still have the same column index in the parent df for correct unboxing.
+        members.append(("parent", types.pyobject))
         # Keep track of the length in the struct directly.
         members.append(("len", types.int64))
         super().__init__(dmm, fe_type, members)
@@ -336,6 +341,7 @@ def unbox_table(typ, val, c):
     """unbox Table into native blocks of arrays"""
     arrs_obj = c.pyapi.object_getattr_string(val, "arrays")
     table = cgutils.create_struct_proxy(typ)(c.context, c.builder)
+    table.parent = cgutils.get_null_value(table.parent.type)
 
     none_obj = c.pyapi.make_none()
 
@@ -407,8 +413,9 @@ def unbox_table(typ, val, c):
 
 
 @box(TableType)
-def box_table(typ, val, c):
+def box_table(typ, val, c, ensure_unboxed=None):
     """Boxes array blocks from native Table into a Python Table"""
+    from bodo.hiframes.boxing import get_df_obj_column_codegen
 
     table = cgutils.create_struct_proxy(typ)(c.context, c.builder, val)
 
@@ -450,6 +457,9 @@ def box_table(typ, val, c):
     table_arr_list_obj = c.pyapi.list_new(
         c.context.get_constant(types.int64, len(typ.arr_types))
     )
+    has_parent = cgutils.is_not_null(c.builder, table.parent)
+    if ensure_unboxed is None:
+        ensure_unboxed = c.context.get_constant(types.bool_, False)
 
     # generate code for each block
     # box arrays and set into output list object
@@ -484,7 +494,9 @@ def box_table(typ, val, c):
                 c.builder, c.context.get_constant_null(t)
             )
             is_null = is_ll_eq(c.builder, arr_struct_ptr, null_struct_ptr)
-            with c.builder.if_else(is_null) as (then, orelse):
+            with c.builder.if_else(
+                c.builder.and_(is_null, c.builder.not_(ensure_unboxed))
+            ) as (then, orelse):
                 with then:
                     none_obj = c.pyapi.make_none()
                     c.pyapi.list_setitem(table_arr_list_obj, arr_ind, none_obj)
@@ -492,11 +504,21 @@ def box_table(typ, val, c):
                     arr_obj = cgutils.alloca_once(
                         c.builder, c.context.get_value_type(types.pyobject)
                     )
-                    c.context.nrt.incref(c.builder, t, arr)
-                    c.builder.store(
-                        c.pyapi.from_native_value(t, arr, c.env_manager),
-                        arr_obj,
-                    )
+                    with c.builder.if_else(c.builder.and_(is_null, has_parent)) as (
+                        arr_then,
+                        arr_orelse,
+                    ):
+                        with arr_then:
+                            arr_obj_orig = get_df_obj_column_codegen(
+                                c.context, c.builder, c.pyapi, table.parent, arr_ind, t
+                            )
+                            c.builder.store(arr_obj_orig, arr_obj)
+                        with arr_orelse:
+                            c.context.nrt.incref(c.builder, t, arr)
+                            c.builder.store(
+                                c.pyapi.from_native_value(t, arr, c.env_manager),
+                                arr_obj,
+                            )
                     # NOTE: PyList_SetItem() steals a reference so no need to decref
                     # arr_obj
                     c.pyapi.list_setitem(
@@ -608,6 +630,13 @@ def get_table_data_codegen(context, builder, table_arg, col_ind, table_type):
     blk = table_type.block_nums[col_ind]
     blk_offset = table_type.block_offsets[col_ind]
     arr_list = getattr(table, f"block_{blk}")
+
+    # unbox the column if necessary
+    unbox_sig = types.none(table_type, types.List(arr_type), types.int64, types.int64)
+    col_ind_arg = context.get_constant(types.int64, col_ind)
+    blk_offset_arg = context.get_constant(types.int64, blk_offset)
+    unbox_args = (table_arg, arr_list, blk_offset_arg, col_ind_arg)
+    ensure_column_unboxed_codegen(context, builder, unbox_sig, unbox_args)
 
     arr_list_inst = ListInstance(context, builder, types.List(arr_type), arr_list)
     arr = arr_list_inst.getitem(blk_offset)
@@ -743,6 +772,7 @@ def set_table_data_codegen(
     out_table = cgutils.create_struct_proxy(out_table_type)(context, builder)
     # Copy the length ptr
     out_table.len = in_table.len
+    out_table.parent = in_table.parent
 
     zero = context.get_constant(types.int64, 0)
     one = context.get_constant(types.int64, 1)
@@ -869,7 +899,8 @@ def _rm_old_array(col_ind, out_table_type, out_table, in_table_type, context, bu
 def generate_set_table_data_code(table, ind, arr_type, used_cols, is_null=False):
     """Generates the code used for both set_table_data and
     set_table_data_null, which are distinguished by the null
-    parameter.
+    parameter. Note: Since we copy the parent, we do not need to
+    ensure any columns are unboxed as no data is actually manipulated.
 
     Args:
         table (TableType): Input table type that will have a column set
@@ -903,6 +934,7 @@ def generate_set_table_data_code(table, ind, arr_type, used_cols, is_null=False)
         "get_table_block": get_table_block,
         "set_table_block": set_table_block,
         "set_table_len": set_table_len,
+        "set_table_parent": set_table_parent,
         "alloc_list_like": alloc_list_like,
         "out_table_typ": out_table_typ,
     }
@@ -910,6 +942,8 @@ def generate_set_table_data_code(table, ind, arr_type, used_cols, is_null=False)
     func_text += "  T2 = init_table(out_table_typ, False)\n"
     # Length of the table cannot change.
     func_text += "  T2 = set_table_len(T2, len(table))\n"
+    # Copy the parent for lazy unboxing.
+    func_text += "  T2 = set_table_parent(T2, table)\n"
     for typ, blk in out_table_typ.type_to_blk.items():
         if typ in table.type_to_blk:
             orig_table_blk = table.type_to_blk[typ]
@@ -1072,10 +1106,11 @@ def lower_constant_table(context, builder, table_type, pyval):
             context.get_constant_generic(builder, types.List(t), t_arr_list)
         )
 
+    parent = context.get_constant_null(types.pyobject)
     t_len = context.get_constant(
         types.int64, 0 if len(pyval.arrays) == 0 else len(pyval.arrays[0])
     )
-    return lir.Constant.literal_struct(arr_lists + [t_len])
+    return lir.Constant.literal_struct(arr_lists + [parent, t_len])
 
 
 def get_init_table_output_type(table_type, to_str_if_dict_t):
@@ -1178,6 +1213,132 @@ def get_table_block(typingctx, table_type, blk_type):
     return sig, codegen
 
 
+@intrinsic
+def ensure_table_unboxed(typingctx, table_type, used_cols_typ):
+    """make all used in columns of table are unboxed.
+    Throw an error if column array is null and there is no parent to unbox from
+
+    used_cols is a set of columns that are used or None.
+    """
+
+    def codegen(context, builder, sig, args):
+        table_arg, used_col_set = args
+
+        use_all = used_cols_typ == types.none
+        if not use_all:
+            set_inst = numba.cpython.setobj.SetInstance(
+                context, builder, types.Set(types.int64), used_col_set
+            )
+
+        table = cgutils.create_struct_proxy(sig.args[0])(context, builder, table_arg)
+        for t, blk in table_type.type_to_blk.items():
+            n_arrs = context.get_constant(
+                types.int64, len(table_type.block_to_arr_ind[blk])
+            )
+            # lower array of array indices for block to use within the loop
+            # using array since list doesn't have constant lowering
+            arr_inds = context.make_constant_array(
+                builder,
+                types.Array(types.int64, 1, "C"),
+                # On windows np.array defaults to the np.int32 for integers.
+                # As a result, we manually specify int64 during the array
+                # creation to keep the lowered constant consistent with the
+                # expected type.
+                np.array(table_type.block_to_arr_ind[blk], dtype=np.int64),
+            )
+            arr_inds_struct = context.make_array(types.Array(types.int64, 1, "C"))(
+                context, builder, arr_inds
+            )
+            arr_list = getattr(table, f"block_{blk}")
+            with cgutils.for_range(builder, n_arrs) as loop:
+                i = loop.index
+                # get array index in "arrays"
+                arr_ind = _getitem_array_single_int(
+                    context,
+                    builder,
+                    types.int64,
+                    types.Array(types.int64, 1, "C"),
+                    arr_inds_struct,
+                    i,
+                )
+                unbox_sig = types.none(
+                    table_type, types.List(t), types.int64, types.int64
+                )
+                unbox_args = (table_arg, arr_list, i, arr_ind)
+                if use_all:
+                    # If we use all columns avoid generating control flow.
+                    ensure_column_unboxed_codegen(
+                        context, builder, unbox_sig, unbox_args
+                    )
+                else:
+                    # If we need to check the column we generate an if.
+                    use_col = set_inst.contains(arr_ind)
+                    with builder.if_then(use_col):
+                        ensure_column_unboxed_codegen(
+                            context, builder, unbox_sig, unbox_args
+                        )
+
+    assert isinstance(table_type, TableType), "table type expected"
+    sig = types.none(table_type, used_cols_typ)
+    return sig, codegen
+
+
+@intrinsic
+def ensure_column_unboxed(typingctx, table_type, arr_list_t, ind_t, arr_ind_t):
+    """make sure column of table is unboxed
+    Throw an error if column array is null and there is no parent to unbox from
+    table_type: table containing the parent structure to unbox
+    arr_list_t: list of arrays that might be updated by the unboxing, list containing relevant column
+    ind_t: index into arr_list_t where relevant column can be found (physical index of the column inside the list)
+    arr_ind_t: index into the table where the relevant column is found (logical index of the column,
+               i.e. column number in the original DataFrame)
+    """
+    assert isinstance(table_type, TableType), "table type expected"
+    sig = types.none(table_type, arr_list_t, ind_t, arr_ind_t)
+    return sig, ensure_column_unboxed_codegen
+
+
+def ensure_column_unboxed_codegen(context, builder, sig, args):
+    """
+    Codegen for ensure_column_unboxed. This isn't a closure so it can be
+    used by intrinsics.
+    """
+    from bodo.hiframes.boxing import get_df_obj_column_codegen
+
+    table_arg, list_arg, i_arg, arr_ind_arg = args
+    pyapi = context.get_python_api(builder)
+
+    table = cgutils.create_struct_proxy(sig.args[0])(context, builder, table_arg)
+    has_parent = cgutils.is_not_null(builder, table.parent)
+
+    arr_list_inst = ListInstance(context, builder, sig.args[1], list_arg)
+    in_arr = arr_list_inst.getitem(i_arg)
+
+    arr_struct_ptr = cgutils.alloca_once_value(builder, in_arr)
+    null_struct_ptr = cgutils.alloca_once_value(
+        builder, context.get_constant_null(sig.args[1].dtype)
+    )
+    is_null = is_ll_eq(builder, arr_struct_ptr, null_struct_ptr)
+    with builder.if_then(is_null):
+        with builder.if_else(has_parent) as (then, orelse):
+            with then:
+                arr_obj = get_df_obj_column_codegen(
+                    context,
+                    builder,
+                    pyapi,
+                    table.parent,
+                    arr_ind_arg,
+                    sig.args[1].dtype,
+                )
+                arr = pyapi.to_native_value(sig.args[1].dtype, arr_obj).value
+                arr_list_inst.inititem(i_arg, arr, incref=False)
+                pyapi.decref(arr_obj)
+            with orelse:
+                context.call_conv.return_user_exc(
+                    builder, BodoError, ("unexpected null table column",)
+                )
+
+
 @intrinsic(prefer_literal=True)
 def set_table_block(typingctx, table_type, arr_list_type, blk_type):
     """set table block and return a new table object"""
@@ -1208,6 +1369,30 @@ def set_table_len(typingctx, table_type, l_type):
         return impl_ret_borrowed(context, builder, table_type, in_table._getvalue())
 
     sig = table_type(table_type, l_type)
+    return sig, codegen
+
+
+@intrinsic
+def set_table_parent(typingctx, out_table_type, in_table_type):
+    """set out_table parent to the in_table's parent and return a new table object"""
+    assert isinstance(in_table_type, TableType), "table type expected"
+    assert isinstance(out_table_type, TableType), "table type expected"
+
+    def codegen(context, builder, sig, args):
+        out_table_arg, in_table_arg = args
+        in_table = cgutils.create_struct_proxy(in_table_type)(
+            context, builder, in_table_arg
+        )
+        out_table = cgutils.create_struct_proxy(out_table_type)(
+            context, builder, out_table_arg
+        )
+        out_table.parent = in_table.parent
+        context.nrt.incref(builder, types.pyobject, out_table.parent)
+        return impl_ret_borrowed(
+            context, builder, out_table_type, out_table._getvalue()
+        )
+
+    sig = out_table_type(out_table_type, in_table_type)
     return sig, codegen
 
 
@@ -1304,6 +1489,7 @@ def gen_table_filter_impl(T, idx, used_cols=None):
     glbls = {
         "init_table": init_table,
         "get_table_block": get_table_block,
+        "ensure_column_unboxed": ensure_column_unboxed,
         "set_table_block": set_table_block,
         "set_table_len": set_table_len,
         "alloc_list_like": alloc_list_like,
@@ -1348,6 +1534,7 @@ def gen_table_filter_impl(T, idx, used_cols=None):
             if used_cols_data is not None:
                 func_text += f"    if arr_ind_{blk} not in used_set: continue\n"
             func_text += (
+                f"    ensure_column_unboxed(T, arr_list_{blk}, i, arr_ind_{blk})\n"
                 f"    out_arr_{blk} = ensure_contig_if_np(arr_list_{blk}[i][idx])\n"
                 f"    l = len(out_arr_{blk})\n"
                 f"    out_arr_list_{blk}[i] = out_arr_{blk}\n"
@@ -1441,6 +1628,7 @@ def gen_table_subset_impl(T, idx, copy_arrs, used_cols=None):
     glbls = {
         "init_table": init_table,
         "get_table_block": get_table_block,
+        "ensure_column_unboxed": ensure_column_unboxed,
         "set_table_block": set_table_block,
         "set_table_len": set_table_len,
         "alloc_list_like": alloc_list_like,
@@ -1544,6 +1732,9 @@ def gen_table_subset_impl(T, idx, copy_arrs, used_cols=None):
             glbls[f"in_physical_idx_{blk}"] = np.array(in_physical_idx, dtype=np.int64)
             func_text += f"    logical_idx_{blk} = in_logical_idx_{blk}[i]\n"
             func_text += f"    physical_idx_{blk} = in_physical_idx_{blk}[i]\n"
+            # We must check if we need to unbox the original column because DataFrames
+            # do lazy unboxing.
+            func_text += f"    ensure_column_unboxed(T, arr_list_{blk}, physical_idx_{blk}, logical_idx_{blk})\n"
             suffix = ".copy()" if make_copy else ""
             func_text += f"    out_arr_list_{blk}[i] = arr_list_{blk}[physical_idx_{blk}]{suffix}\n"
         func_text += f"  T2 = set_table_block(T2, out_arr_list_{blk}, {blk})\n"
@@ -1629,11 +1820,13 @@ def gen_str_and_dict_enc_cols_to_one_block_fn_txt(
     out_arr_list_0 = alloc_list_like(input_str_arr_list, 4, True)
     for input_str_ary_idx, output_str_arr_offset in enumerate(output_table_str_arr_offsets_in_combined_block):
         arr_ind_str = arr_inds_0[input_str_ary_idx]
+        ensure_column_unboxed(T, input_str_arr_list, input_str_ary_idx, arr_ind_str)
         out_arr_str = input_str_arr_list[input_str_ary_idx]
         out_arr_str = bodo.gatherv(out_arr_str, allgather, warn_if_rep, root)
         out_arr_list_0[output_str_arr_offset] = out_arr_str
     for input_dict_enc_str_ary_idx, output_dict_enc_str_arr_offset in enumerate(output_table_dict_enc_str_arr_offsets_in_combined_block):
         arr_ind_dict_enc_str = arr_inds_1[input_dict_enc_str_ary_idx]
+        ensure_column_unboxed(T, input_dict_enc_str_arr_list, input_dict_enc_str_ary_idx, arr_ind_dict_enc_str)
         out_arr_dict_enc_str = decode_if_dict_array(input_dict_enc_str_arr_list[input_dict_enc_str_ary_idx])
         out_arr_dict_enc_str = bodo.gatherv(out_arr_dict_enc_str, allgather, warn_if_rep, root)
         out_arr_list_0[output_dict_enc_str_arr_offset] = out_arr_dict_enc_str
@@ -1770,6 +1963,7 @@ def gen_str_and_dict_enc_cols_to_one_block_fn_txt(
     func_text += (
         f"    arr_ind_str = arr_inds_{input_string_ary_blk}[input_str_ary_idx]\n"
     )
+    func_text += "    ensure_column_unboxed(T, input_str_arr_list, input_str_ary_idx, arr_ind_str)\n"
     func_text += "    out_arr_str = input_str_arr_list[input_str_ary_idx]\n"
     if is_gatherv:
         func_text += "    out_arr_str = bodo.gatherv(out_arr_str, allgather, warn_if_rep, root)\n"
@@ -1781,6 +1975,7 @@ def gen_str_and_dict_enc_cols_to_one_block_fn_txt(
     # handle dict encoded string arrays
     func_text += "  for input_dict_enc_str_ary_idx, output_dict_enc_str_arr_offset in enumerate(output_table_dict_enc_str_arr_offsets_in_combined_block):\n"
     func_text += f"    arr_ind_dict_enc_str = arr_inds_{input_dict_encoded_string_ary_blk}[input_dict_enc_str_ary_idx]\n"
+    func_text += "    ensure_column_unboxed(T, input_dict_enc_str_arr_list, input_dict_enc_str_ary_idx, arr_ind_dict_enc_str)\n"
     func_text += "    out_arr_dict_enc_str = decode_if_dict_array(input_dict_enc_str_arr_list[input_dict_enc_str_ary_idx])\n"
     if is_gatherv:
         func_text += "    out_arr_dict_enc_str = bodo.gatherv(out_arr_dict_enc_str, allgather, warn_if_rep, root)\n"
@@ -1810,6 +2005,7 @@ def decode_if_dict_table(T):
     glbls = {
         "init_table": init_table,
         "get_table_block": get_table_block,
+        "ensure_column_unboxed": ensure_column_unboxed,
         "set_table_block": set_table_block,
         "set_table_len": set_table_len,
         "alloc_list_like": alloc_list_like,
@@ -1860,6 +2056,7 @@ def decode_if_dict_table(T):
         func_text += f"  out_arr_list_{input_blk} = alloc_list_like(arr_list_{input_blk}, len(arr_list_{input_blk}), True)\n"
         func_text += f"  for i in range(len(arr_list_{input_blk})):\n"
         func_text += f"    arr_ind_{input_blk} = arr_inds_{input_blk}[i]\n"
+        func_text += f"    ensure_column_unboxed(T, arr_list_{input_blk}, i, arr_ind_{input_blk})\n"
         func_text += (
             f"    out_arr_{input_blk} = decode_if_dict_array(arr_list_{input_blk}[i])\n"
         )
@@ -2172,6 +2369,7 @@ def gen_logical_table_to_table_impl(
                 func_text += (
                     f"    if out_arr_inds_{blk}[i] not in kept_cols_set: continue\n"
                 )
+            func_text += f"    ensure_column_unboxed(T1, in_arr_list_{blk}, in_offset_{blk}, in_arr_ind_{blk})\n"
             func_text += (
                 f"    out_arr_list_{blk}[i] = in_arr_list_{blk}[in_offset_{blk}]\n"
             )
@@ -2192,6 +2390,7 @@ def gen_logical_table_to_table_impl(
             "alloc_list_like": alloc_list_like,
             "set_table_block": set_table_block,
             "get_table_block": get_table_block,
+            "ensure_column_unboxed": ensure_column_unboxed,
             "get_series_data": bodo.hiframes.pd_series_ext.get_series_data,
         }
     )
