@@ -282,7 +282,7 @@ def unbox_dataframe(typ, val, c):
         typ,
         data_tup,
         index_val,
-        None if typ.is_table_format else val,
+        val,
         None,
     )
 
