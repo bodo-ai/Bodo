@@ -34,13 +34,20 @@ function(set_default_compiler_options)
       "/wd4819" # Suppress warnings about file character encoding
       "/wd4996" # Suppress warnings about deprecated functions
       "/wd4312" # Suppress warnings about conversion
+      "/wd4365" # Supress warnings about conversions (signed/unsigned) TODO fix
+      "/wd4244" # Supress warning about conversions (loss of data) TODO fix
+      "/wd4061" # Supress warning about switch not being explicitly handled TODO fix
+      "/wd4100" # Supress warning about unreferenced formal parameter.
       "/wd4551" # Suppress warnings about function call missing argument list
+      "/w" # disable all warnings: TODO fix
       "/FS"
       "/GS"     # Enable buffer security checks
       "/guard:cf" # Enable control flow guard (security feature)
       "/EHsc"
+      # "/permissive-"
       # "/arch:SSE2"
     )
+    add_definitions(-DMS_WINDOWS)  # Globally define MS_WINDOWS
   else()
     add_compile_options(
       "-Wno-c99-designator"
@@ -702,10 +709,12 @@ if (NOT (CMAKE_BUILD_TYPE STREQUAL "Release") AND NOT DEFINED ENV{BODO_SKIP_CPP_
     "bodo/tests/test_puffin.cpp"
     "bodo/tests/test_theta_sketches.cpp")
 endif()
-
-if($"ENV{NO_HDF5}" STREQUAL "1")
+message(STATUS "#################################CHECKING FOR HDFS: $ENV{NO_HDF5}")
+if(DEFINED ENV{NO_HDF5} AND "$ENV{NO_HDF5}" STREQUAL "1")
+    message(STATUS "IT WAS SET")
     set(NO_HDF5 TRUE)
 else()
+    message(STATUS "IT WAS NOT SET")
     list(APPEND sources_list "bodo/io/_hdf5.cpp")
     set(NO_HDF5 FALSE)
 endif()
@@ -773,14 +782,23 @@ else()
 endif()
 
 
-target_compile_options(
-	ext
-	PRIVATE
-		# -fno-strict-aliasing required by bloom filter implementation (see comment
-		# in simd-block-fixed-fpp.h about violating strict aliasing rules)
-		"-fno-strict-aliasing"
-    "-Wall"
-)
+if (WIN32)
+  target_compile_options(
+    ext
+    PRIVATE
+    # "/permissive-" # ignore override not overriding method in the base class error.
+    # "/Wall"
+  )
+else()
+  target_compile_options(
+    ext
+    PRIVATE
+      # -fno-strict-aliasing required by bloom filter implementation (see comment
+      # in simd-block-fixed-fpp.h about violating strict aliasing rules)
+      "-fno-strict-aliasing"
+      "-Wall"
+  )
+endif()
 
 
 target_link_directories(ext PRIVATE ${PYARROW_LIB_DIR} "${Python_NumPy_INCLUDE_DIR}/../lib")

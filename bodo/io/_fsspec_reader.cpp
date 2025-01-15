@@ -11,11 +11,18 @@
 #include "../libs/_bodo_common.h"
 
 // Silence warnings from including generated code
+#ifndef _MSC_VER
 PUSH_IGNORED_COMPILER_ERROR("-Wreturn-type-c-linkage")
 PUSH_IGNORED_COMPILER_ERROR("-Wunused-variable")
 PUSH_IGNORED_COMPILER_ERROR("-Wunused-function")
-#include "pyfs.cpp"
+#else
+#endif
+// #include "pyfs.cpp"
+
+#ifndef _MSC_VER
 POP_IGNORED_COMPILER_ERROR()
+#else
+#endif
 
 using std::string;
 

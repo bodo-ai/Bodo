@@ -823,7 +823,7 @@ static MPI_Datatype get_MPI_typ() {
         case Bodo_CTypes::UINT16:
             return MPI_UNSIGNED_SHORT;
         case Bodo_CTypes::INT128:
-        case Bodo_CTypes::DECIMAL:
+        case Bodo_CTypes::DECIMAL: {
             // data type for Decimal128 values (2 64-bit ints)
             static MPI_Datatype decimal_mpi_type = MPI_DATATYPE_NULL;
             // initialize decimal_mpi_type
@@ -838,6 +838,7 @@ static MPI_Datatype get_MPI_typ() {
                           "MPI_Type_commit:");
             }
             return decimal_mpi_type;
+        }
         case Bodo_CTypes::COMPLEX128:
             return MPI_C_DOUBLE_COMPLEX;
         case Bodo_CTypes::COMPLEX64:
