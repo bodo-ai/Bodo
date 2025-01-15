@@ -35,6 +35,7 @@ import org.apache.calcite.sql.type.SqlTypeUtil;
 import org.apache.calcite.sql.validate.SqlValidator;
 import org.apache.calcite.sql.validate.SqlValidatorImpl;
 import org.apache.calcite.sql.validate.SqlValidatorScope;
+import org.apache.calcite.sql.validate.implicit.BodoTypeCoercionImpl;
 import org.apache.calcite.sql.validate.implicit.TypeCoercion;
 import org.apache.calcite.util.Util;
 
@@ -91,7 +92,9 @@ public class SqlCoalesceFunction extends SqlFunction {
   private static RelDataType inferTypeFromValidator(
       SqlCallBinding callBinding) {
 
-    TypeCoercion typeCoercion = callBinding.getValidator().getTypeCoercion();
+    TypeCoercion coercion = callBinding.getValidator().getTypeCoercion();
+    assert coercion instanceof BodoTypeCoercionImpl;
+    BodoTypeCoercionImpl typeCoercion = (BodoTypeCoercionImpl) coercion;
     typeCoercion.coalesceCoercion(callBinding);
 
     SqlCall coalesceCall = callBinding.getCall();
