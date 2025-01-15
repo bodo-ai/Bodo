@@ -1357,7 +1357,7 @@ public class RexBuilder {
       }
       if (typeName == SqlTypeName.DECIMAL
               // Bodo Change: Check scale
-              && !SqlTypeUtil.canBeRepresentedExactly((BigDecimal) o, type)) {
+              && !BodoSqlTypeUtil.isValidDecimalValue((BigDecimal) o, type)) {
           throw new IllegalArgumentException(
                   "Cannot convert " + o + " to " + type  + " due to overflow");
       } else if (o != null && o instanceof BigDecimal && type.getSqlTypeName() == SqlTypeName.DECIMAL) {

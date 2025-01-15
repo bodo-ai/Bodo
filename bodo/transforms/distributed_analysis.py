@@ -988,23 +988,6 @@ class DistributedAnalysis:
             )
             return
 
-        if func_mod in ("sklearn.metrics._regression", "sklearn.metrics"):
-            if func_name in {"mean_squared_error", "mean_absolute_error", "r2_score"}:
-                _set_REP(
-                    self.typemap,
-                    self.metadata,
-                    self.diag_info,
-                    lhs,
-                    array_dists,
-                    f"output of {func_name} is REP",
-                    rhs.loc,
-                )
-                self._analyze_sklearn_score_err_ytrue_ypred_optional_sample_weight(
-                    lhs, func_name, rhs, kws, array_dists
-                )
-
-            return
-
         if func_mod == "sklearn.metrics.pairwise" and func_name == "cosine_similarity":
             # Match distribution of X to the output.
             # The output distribution is intended to match X and should ignore Y.
