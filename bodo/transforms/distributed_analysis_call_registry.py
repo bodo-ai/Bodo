@@ -292,6 +292,30 @@ class DistributedAnalysisCallRegistry:
                 "confusion_matrix",
                 "sklearn.metrics",
             ): analyze_call_sklearn_metrics,
+            (
+                "mean_squared_error",
+                "sklearn.metrics",
+            ): analyze_call_sklearn_metrics,
+            (
+                "mean_squared_error",
+                "sklearn.metrics._regression",
+            ): analyze_call_sklearn_metrics,
+            (
+                "mean_absolute_error",
+                "sklearn.metrics",
+            ): analyze_call_sklearn_metrics,
+            (
+                "mean_absolute_error",
+                "sklearn.metrics._regression",
+            ): analyze_call_sklearn_metrics,
+            (
+                "r2_score",
+                "sklearn.metrics",
+            ): analyze_call_sklearn_metrics,
+            (
+                "r2_score",
+                "sklearn.metrics._regression",
+            ): analyze_call_sklearn_metrics,
         }
 
     def analyze_call(self, ctx, inst, fdef):
@@ -496,6 +520,21 @@ def analyze_call_sklearn_metrics(ctx, inst):
     typemap = ctx.typemap
     metadata = ctx.metadata
     diag_info = ctx.diag_info
+
+    if func_name in {"mean_squared_error", "mean_absolute_error", "r2_score"}:
+        _set_REP(
+            typemap,
+            metadata,
+            diag_info,
+            lhs,
+            array_dists,
+            f"output of {func_name} is REP",
+            rhs.loc,
+        )
+        _analyze_sklearn_score_err_ytrue_ypred_optional_sample_weight(
+            typemap, lhs, func_name, rhs, kws, array_dists
+        )
+
     if func_name in {"precision_score", "recall_score", "f1_score"}:
         # output is always replicated, and the output can be an array
         # if average=None so we have to set it
