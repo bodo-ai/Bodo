@@ -50,6 +50,7 @@ public class SqlShuttle extends SqlBasicVisitor<@Nullable SqlNode> {
     return id;
   }
 
+  // Bodo Change: Fix for merge into
   @Override public @Nullable SqlNode visit(SqlTableIdentifierWithID id) {
     return id;
   }
