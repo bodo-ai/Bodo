@@ -498,15 +498,12 @@
                                         <exclude>org/apache/calcite/rex/RexUtil$SubQueryFinder.class</exclude>
                                         <exclude>org/apache/calcite/rex/RexUtil.class</exclude>
                                         <exclude>org/apache/calcite/sql/SqlBasicTypeNameSpec.class</exclude>
-                                        <exclude>org/apache/calcite/sql/SqlCall.class</exclude>
                                         <exclude>org/apache/calcite/sql/SqlCallBinding$1.class</exclude>
                                         <exclude>org/apache/calcite/sql/SqlCallBinding$DefaultCallHolder.class</exclude>
                                         <exclude>org/apache/calcite/sql/SqlCallBinding.class</exclude>
-                                        <exclude>org/apache/calcite/sql/SqlDataTypeSpec.class</exclude>
                                         <exclude>org/apache/calcite/sql/SqlDelete.class</exclude>
                                         <exclude>org/apache/calcite/sql/SqlDeleteUsingItem$SqlDeleteUsingItemOperator.class</exclude>
                                         <exclude>org/apache/calcite/sql/SqlDeleteUsingItem.class</exclude>
-                                        <exclude>org/apache/calcite/sql/SqlDynamicParam.class</exclude>
                                         <exclude>org/apache/calcite/sql/SqlIdentifier.class</exclude>
                                         <exclude>org/apache/calcite/sql/SqlInsert$1.class</exclude>
                                         <exclude>org/apache/calcite/sql/SqlInsert.class</exclude>
@@ -519,8 +516,6 @@
                                         <exclude>org/apache/calcite/sql/SqlLiteral$SqlSymbol.class</exclude>
                                         <exclude>org/apache/calcite/sql/SqlLiteral.class</exclude>
                                         <exclude>org/apache/calcite/sql/SqlMerge.class</exclude>
-                                        <exclude>org/apache/calcite/sql/SqlNode.class</exclude>
-                                        <exclude>org/apache/calcite/sql/SqlNodeList.class</exclude>
                                         <exclude>org/apache/calcite/sql/SqlTableIdentifierWithID.class</exclude>
                                         <exclude>org/apache/calcite/sql/SqlTableRefWithID$1.class</exclude>
                                         <exclude>org/apache/calcite/sql/SqlTableRefWithID.class</exclude>

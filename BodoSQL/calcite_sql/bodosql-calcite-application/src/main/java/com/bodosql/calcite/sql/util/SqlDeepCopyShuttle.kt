@@ -9,26 +9,18 @@ import org.apache.calcite.sql.SqlLiteral
 import org.apache.calcite.sql.SqlNode
 import org.apache.calcite.sql.SqlNodeList
 import org.apache.calcite.sql.SqlTableIdentifierWithID
-import org.apache.calcite.sql.parser.SqlParserPos
 import org.apache.calcite.sql.util.SqlShuttle
 
 /**
- * Implementation of a SqlShuttle that creates a deep copy of
- * the visited nodes.
+ * Implementation of a SqlShuttle that creates a deep copy by
+ * recursively calling clone on all nodes.
  */
-class SqlDeepCopyShuttle(
-    private val pos: SqlParserPos?,
-) : SqlShuttle() {
+class SqlDeepCopyShuttle : SqlShuttle() {
     /**
      * Basic implementation that just updates the position and
      * calls clone.
      */
-    private fun defaultImpl(node: SqlNode): SqlNode =
-        if (pos == null) {
-            node.clone(node.parserPosition)
-        } else {
-            node.clone(pos)
-        }
+    private fun defaultImpl(node: SqlNode): SqlNode = node.clone(node.parserPosition)
 
     // ~ Methods ----------------------------------------------------------------
     override fun visit(literal: SqlLiteral): SqlNode = defaultImpl(literal)
@@ -43,6 +35,10 @@ class SqlDeepCopyShuttle(
 
     override fun visit(intervalQualifier: SqlIntervalQualifier): SqlNode = defaultImpl(intervalQualifier)
 
+    /**
+     * Note: This can't use the builtin SqlShuttle implementation
+     * because that may not always return a copy.
+     */
     override fun visit(call: SqlCall): SqlNode {
         val newOperandList: MutableList<SqlNode?> = java.util.ArrayList()
         // See above comment, operand list is nullable, but it isn't typed as such
@@ -55,14 +51,16 @@ class SqlDeepCopyShuttle(
                 newOperandList.add(curNode.accept(this))
             }
         }
-        val usedPos = pos ?: call.parserPosition
-        return call.operator.createCall(call.functionQuantifier, usedPos, newOperandList)
+        return call.operator.createCall(call.functionQuantifier, call.parserPosition, newOperandList)
     }
 
+    /**
+     * Note: This can't use the builtin SqlShuttle implementation
+     * because that may not always return a copy.
+     */
     override fun visit(nodeList: SqlNodeList): SqlNode {
         val origNodeList: List<SqlNode?> = nodeList.list
-        val usedPos = pos ?: nodeList.parserPosition
-        val newNodeList = SqlNodeList(usedPos)
+        val newNodeList = SqlNodeList(nodeList.parserPosition)
         for (i in origNodeList.indices) {
             val origNode = origNodeList[i]
             if (origNode == null) {

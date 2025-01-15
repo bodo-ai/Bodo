@@ -1928,7 +1928,7 @@ public class SqlValidatorImpl implements SqlValidatorWithHints {
     // In this case, it's ok to keep the original pos, but we need to do a deep copy so that
     // all of the sub nodes are different java objects, otherwise we get issues later during
     // validation (scopes, clauseScopes, and namespaces fields for the validator can conflict)
-    final SqlDeepCopyShuttle shuttle = new SqlDeepCopyShuttle(null);
+    final SqlDeepCopyShuttle shuttle = new SqlDeepCopyShuttle();
     final SqlNode leftJoinTerm = shuttle.visitNode(sourceTableRef);
     SqlNode outerJoin =
         new SqlJoin(SqlParserPos.ZERO,
@@ -2006,7 +2006,6 @@ public class SqlValidatorImpl implements SqlValidatorWithHints {
     // note that the values clause has already been converted to a
     // select on the values row constructor; so we need to extract
     // that via the from clause on the select
-    final SqlDeepCopyShuttle deepCopyShuttle = new SqlDeepCopyShuttle(null);
     for  (int i = 0; i < insertCallList.size(); i++) {
       SqlInsert insertCall = (SqlInsert) insertCallList.get(i);
       SqlCall valuesCall = (SqlCall) insertCall.getSource();
@@ -2015,7 +2014,7 @@ public class SqlValidatorImpl implements SqlValidatorWithHints {
           new SqlNodeList(
               rowCall.getOperandList(),
               SqlParserPos.ZERO);
-      final SqlNode insertSource = deepCopyShuttle.visitNode(sourceTableRef);
+      final SqlNode insertSource = shuttle.visitNode(sourceTableRef);
       select =
           new SqlSelect(SqlParserPos.ZERO, null, selectList, insertSource,
               insertCall.getCondition(), null, null, null, null, null,
