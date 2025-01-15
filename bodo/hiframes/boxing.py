@@ -205,11 +205,6 @@ def unbox_dataframe(typ, val, c):
     if typ.is_table_format:
         table = cgutils.create_struct_proxy(typ.table_type)(c.context, c.builder)
 
-        # TODO(ehsan): do we need to incref/decref the parent object? JIT args will be
-        # available while JIT function is running.
-        # Numba's list object doesn't incref/decref its parent for example
-        table.parent = val
-
         # create array list for each block (but don't unbox yet)
         for t, blk in typ.table_type.type_to_blk.items():
             n_arrs = c.context.get_constant(
@@ -277,7 +272,13 @@ def unbox_dataframe(typ, val, c):
         data_tup = c.context.make_tuple(c.builder, types.Tuple(typ.data), data_nulls)
 
     dataframe_val = construct_dataframe(
-        c.context, c.builder, typ, data_tup, index_val, val, None
+        c.context,
+        c.builder,
+        typ,
+        data_tup,
+        index_val,
+        None if typ.is_table_format else val,
+        None,
     )
 
     return NativeValue(dataframe_val)
