@@ -141,7 +141,7 @@ def isna(arr, i):  # pragma: no cover
     return False
 
 
-@overload(isna)
+@overload(isna, jit_options={"cache": True})
 def overload_isna(arr, i):
     i = types.unliteral(i)
     # String array
@@ -261,7 +261,7 @@ def setna(arr, ind, int_nan_const=0):  # pragma: no cover
     arr[ind] = np.nan
 
 
-@overload(setna, no_unliteral=True)
+@overload(setna, no_unliteral=True, jit_options={"cache": True})
 def setna_overload(arr, ind, int_nan_const=0):
     if isinstance(arr, types.Array) and isinstance(arr.dtype, types.Float):
         return setna
@@ -450,7 +450,7 @@ def copy_array_element(out_arr, out_ind, in_arr, in_ind):  # pragma: no cover
     pass
 
 
-@overload(copy_array_element)
+@overload(copy_array_element, jit_options={"cache": True})
 def overload_copy_array_element(out_arr, out_ind, in_arr, in_ind):
     """Copy array element from input array to output array with specified indices.
     Handles NAs and uses optimized implementation based on array types. For example,
@@ -499,7 +499,7 @@ def setna_tup(arr_tup, ind, int_nan_const=0):  # pragma: no cover
     pass
 
 
-@overload(setna_tup, no_unliteral=True)
+@overload(setna_tup, no_unliteral=True, jit_options={"cache": True})
 def overload_setna_tup(arr_tup, ind, int_nan_const=0):
     count = arr_tup.count
 
@@ -518,7 +518,7 @@ def setna_slice(arr, s):  # pragma: no cover
     arr[s] = np.nan
 
 
-@overload(setna_slice, no_unliteral=True)
+@overload(setna_slice, no_unliteral=True, jit_options={"cache": True})
 def overload_setna_slice(arr, s):
     """set all elements of array slice to NA"""
 
@@ -1103,7 +1103,7 @@ def select_k_nonan(A, index_arr, m, k):  # pragma: no cover
     return A[:k]
 
 
-@overload(select_k_nonan, no_unliteral=True)
+@overload(select_k_nonan, no_unliteral=True, jit_options={"cache": True})
 def select_k_nonan_overload(A, index_arr, m, k):
     dtype = A.dtype
     # TODO: other types like strings and categoricals
@@ -1462,7 +1462,7 @@ def drop_duplicates_array(data_arr, parallel=False):
     pass
 
 
-@overload(drop_duplicates_array, no_unliteral=True)
+@overload(drop_duplicates_array, no_unliteral=True, jit_options={"cache": True})
 def overload_drop_duplicates_array(data_arr, parallel=False):
     """
     Kernel implementation for drop_duplicates on a single array
@@ -1487,7 +1487,7 @@ def dropna(data, how, thresh, subset, parallel=False):  # pragma: no cover
     pass
 
 
-@overload(dropna, no_unliteral=True)
+@overload(dropna, no_unliteral=True, jit_options={"cache": True})
 def overload_dropna(data, how, thresh, subset):
     """drop NA rows in tuple of arrays 'data'. 'subset' is the index numbers of arrays
     to consider for NA check. 'how' and 'thresh' are the same as df.dropna().
@@ -1557,7 +1557,7 @@ def get(arr, ind):  # pragma: no cover
     pass
 
 
-@overload(get, no_unliteral=True)
+@overload(get, no_unliteral=True, jit_options={"cache": True})
 def overload_get(arr, ind):
     if isinstance(arr, ArrayItemArrayType):
         arr_typ = arr.dtype
@@ -2294,7 +2294,7 @@ def astype_float_tup(arr_tup):
     return tuple(t.astype(np.float64) for t in arr_tup)
 
 
-@overload(astype_float_tup, no_unliteral=True)
+@overload(astype_float_tup, no_unliteral=True, jit_options={"cache": True})
 def overload_astype_float_tup(arr_tup):
     """converts a tuple of arrays to float arrays using array.astype(np.float64)"""
     assert isinstance(arr_tup, types.BaseTuple)
@@ -2316,7 +2316,7 @@ def convert_to_nullable_tup(arr_tup):
     pass
 
 
-@overload(convert_to_nullable_tup, no_unliteral=True)
+@overload(convert_to_nullable_tup, no_unliteral=True, jit_options={"cache": True})
 def overload_convert_to_nullable_tup(arr_tup):
     """converts a tuple of integer/float/bool arrays to nullable integer/float/bool
     arrays with common dtype
@@ -2364,7 +2364,7 @@ def nunique_parallel(A, dropna):  # pragma: no cover
     pass
 
 
-@overload(nunique, no_unliteral=True)
+@overload(nunique, no_unliteral=True, jit_options={"cache": True})
 def nunique_overload(A, dropna):
     # TODO: extend to other types like datetime?
     def nunique_seq(A, dropna):
@@ -2374,7 +2374,7 @@ def nunique_overload(A, dropna):
     return nunique_seq
 
 
-@overload(nunique_parallel, no_unliteral=True)
+@overload(nunique_parallel, no_unliteral=True, jit_options={"cache": True})
 def nunique_overload_parallel(A, dropna):
     sum_op = bodo.libs.distributed_api.Reduce_Type.Sum.value
 
@@ -2394,7 +2394,7 @@ def accum_func(A, func_name, parallel=False):  # pragma: no cover
     pass
 
 
-@overload(accum_func, no_unliteral=True)
+@overload(accum_func, no_unliteral=True, jit_options={"cache": True})
 def accum_func_overload(A, func_name, parallel=False):
     """General kernel for cumulative functions: cumsum/cumprod/cummin/cummax
 
@@ -2465,7 +2465,7 @@ def accum_func_overload(A, func_name, parallel=False):
     return impl
 
 
-@overload(unique, no_unliteral=True)
+@overload(unique, no_unliteral=True, jit_options={"cache": True})
 def unique_overload(A, dropna=False, parallel=False):
     # Dropna is used by nunique which support dropna=True
     def unique_impl(A, dropna=False, parallel=False):  # pragma: no cover
@@ -2487,7 +2487,7 @@ def explode(arr, index_arr):  # pragma: no cover
     return pd.Series(arr, index_arr).explode()
 
 
-@overload(explode, no_unliteral=True)
+@overload(explode, no_unliteral=True, jit_options={"cache": True})
 def overload_explode(arr, index_arr):
     """
     Internal kernel for Series.explode(). Transforms each item in array(item) array into
@@ -2551,7 +2551,7 @@ def explode_no_index(arr):  # pragma: no cover
     pass
 
 
-@overload(explode_no_index, no_unliteral=True)
+@overload(explode_no_index, no_unliteral=True, jit_options={"cache": True})
 def overload_explode_no_index(arr, counts):
     """
     Internal kernel for Series.explode(). Transforms each item in array(item) array into
@@ -2656,7 +2656,7 @@ def explode_str_split(arr, pat, n, index_arr):  # pragma: no cover
     pass
 
 
-@overload(explode_str_split, no_unliteral=True)
+@overload(explode_str_split, no_unliteral=True, jit_options={"cache": True})
 def overload_explode_str_split(arr, pat, n, index_arr):
     """
     Internal kernel for optimizing Series.str.split().explode(). Splits
@@ -2726,7 +2726,7 @@ def gen_na_array(n, arr):  # pragma: no cover
     pass
 
 
-@overload(gen_na_array, no_unliteral=True)
+@overload(gen_na_array, no_unliteral=True, jit_options={"cache": True})
 def overload_gen_na_array(n, arr, use_dict_arr=False):
     """
     generate an array full of NA values with the same type as 'arr'
@@ -2826,7 +2826,7 @@ def resize_and_copy(A, new_len):  # pragma: no cover
     pass
 
 
-@overload(resize_and_copy, no_unliteral=True)
+@overload(resize_and_copy, no_unliteral=True, jit_options={"cache": True})
 def overload_resize_and_copy(A, old_size, new_len):
     """allocate a new array (same type as 'A') and copy data of array 'A'"""
 
@@ -2954,7 +2954,7 @@ def sort(arr, ascending, inplace):  # pragma: no cover
 # Our sort implementation for series and dataframe relies on the inclusion
 # of a sort IR node. This sort kernel is for use when that is not appropriate.
 # For example: Inside of sklearn functions.
-@overload(sort, no_unliteral=True)
+@overload(sort, no_unliteral=True, jit_options={"cache": True})
 def overload_sort(arr, ascending, inplace):
     def impl(arr, ascending, inplace):  # pragma: no cover
         n = len(arr)
@@ -3028,7 +3028,7 @@ overload(np.sum, inline="always", no_unliteral=True)(overload_array_sum)
 overload(sum, inline="always", no_unliteral=True)(overload_array_sum)
 
 
-@overload(np.prod, inline="always", no_unliteral=True)
+@overload(np.prod, inline="always", no_unliteral=True, jit_options={"cache": True})
 def overload_array_prod(A):
     if (
         isinstance(A, (IntegerArrayType, FloatingArrayType, SeriesType))
@@ -3045,7 +3045,7 @@ def nonzero(arr):  # pragma: no cover
     pass
 
 
-@overload(nonzero, no_unliteral=True)
+@overload(nonzero, no_unliteral=True, jit_options={"cache": True})
 def nonzero_overload(A, parallel=False):
     bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(A, "bodo.nonzero()")
 
@@ -3239,7 +3239,7 @@ def null_border_icomm(
     return prev_is_valid, prev_value
 
 
-@overload(np.sort, inline="always", no_unliteral=True)
+@overload(np.sort, inline="always", no_unliteral=True, jit_options={"cache": True})
 def np_sort(A, axis=-1, kind=None, order=None):
     if not bodo.utils.utils.is_array_typ(A, False) or isinstance(
         A, types.Array
@@ -3267,7 +3267,7 @@ def repeat_kernel(A, repeats):  # pragma: no cover
     pass
 
 
-@overload(repeat_kernel, no_unliteral=True)
+@overload(repeat_kernel, no_unliteral=True, jit_options={"cache": True})
 def repeat_kernel_overload(A, repeats):
     """kernel for repeating array values (for Series.repeat)"""
     _dtype = to_str_arr_if_dict_array(A)
@@ -3362,7 +3362,7 @@ def repeat_kernel_overload(A, repeats):
     return impl_arr
 
 
-@overload(np.repeat, inline="always", no_unliteral=True)
+@overload(np.repeat, inline="always", no_unliteral=True, jit_options={"cache": True})
 def np_repeat(A, repeats):
     if not bodo.utils.utils.is_array_typ(A, False) or isinstance(
         A, types.Array
@@ -3703,7 +3703,7 @@ def anyvalue_agg(A, parallel=False):
     return impl
 
 
-@overload(np.unique, inline="always", no_unliteral=True)
+@overload(np.unique, inline="always", no_unliteral=True, jit_options={"cache": True})
 def np_unique(A):
     if not bodo.utils.utils.is_array_typ(A, False) or isinstance(
         A, types.Array
@@ -3717,7 +3717,7 @@ def np_unique(A):
     return impl
 
 
-@overload(np.union1d, inline="always", no_unliteral=True)
+@overload(np.union1d, inline="always", no_unliteral=True, jit_options={"cache": True})
 def overload_union1d(A1, A2):
     if not bodo.utils.utils.is_array_typ(
         A1, False
@@ -3738,7 +3738,9 @@ def overload_union1d(A1, A2):
 
 
 # TODO(Nick): Add support for a parallel implementation
-@overload(np.intersect1d, inline="always", no_unliteral=True)
+@overload(
+    np.intersect1d, inline="always", no_unliteral=True, jit_options={"cache": True}
+)
 def overload_intersect1d(A1, A2, assume_unique=False, return_indices=False):
     if not bodo.utils.utils.is_array_typ(
         A1, False
@@ -3839,7 +3841,7 @@ def intersection_mask(arr, parallel=False):  # pragma: no cover
     return mask
 
 
-@overload(np.setdiff1d, inline="always", no_unliteral=True)
+@overload(np.setdiff1d, inline="always", no_unliteral=True, jit_options={"cache": True})
 def overload_setdiff1d(A1, A2, assume_unique=False):
     if not bodo.utils.utils.is_array_typ(
         A1, False
@@ -3880,7 +3882,7 @@ def calculate_mask_setdiff1d(A1, A2):  # pragma: no cover
     return mask
 
 
-@overload(np.linspace, inline="always", no_unliteral=True)
+@overload(np.linspace, inline="always", no_unliteral=True, jit_options={"cache": True})
 def np_linspace(start, stop, num=50, endpoint=True, retstep=False, dtype=None, axis=0):
     # This kernel is also supported in Numba but without kwargs. Based on our tests,
     # whenever any kwargs are passed in this kernel is selected. This kernel also seems to
@@ -3943,7 +3945,7 @@ def np_linspace_get_stepsize(start, stop, num, endpoint):  # pragma: no cover
     return 0
 
 
-@overload(np_linspace_get_stepsize, no_unliteral=True)
+@overload(np_linspace_get_stepsize, no_unliteral=True, jit_options={"cache": True})
 def overload_np_linspace_get_stepsize(start, stop, num, endpoint):
     def impl(start, stop, num, endpoint):  # pragma: no cover
         if num < 0:
@@ -3957,7 +3959,7 @@ def overload_np_linspace_get_stepsize(start, stop, num, endpoint):
     return impl
 
 
-@overload(operator.contains, no_unliteral=True)
+@overload(operator.contains, no_unliteral=True, jit_options={"cache": True})
 def arr_contains(A, val):
     # TODO: Add support for types with different width. i.e. int64 and int16
     if not (
@@ -3977,7 +3979,7 @@ def arr_contains(A, val):
     return impl
 
 
-@overload(np.any, inline="always", no_unliteral=True)
+@overload(np.any, inline="always", no_unliteral=True, jit_options={"cache": True})
 def np_any(A, axis=None, out=None, keepdims=None):
     if not (
         bodo.utils.utils.is_array_typ(A, False) and A.ndim == 1
@@ -4000,7 +4002,7 @@ def np_any(A, axis=None, out=None, keepdims=None):
     return impl
 
 
-@overload(np.all, inline="always", no_unliteral=True)
+@overload(np.all, inline="always", no_unliteral=True, jit_options={"cache": True})
 def np_all(A, axis=None, out=None, keepdims=None):
     if not (
         bodo.utils.utils.is_array_typ(A, False) and A.ndim == 1
@@ -4023,7 +4025,7 @@ def np_all(A, axis=None, out=None, keepdims=None):
     return impl
 
 
-@overload(np.cbrt, inline="always", no_unliteral=True)
+@overload(np.cbrt, inline="always", no_unliteral=True, jit_options={"cache": True})
 def np_cbrt(
     A, out=None, where=True, casting="same_kind", order="K", dtype=None, subok=True
 ):
@@ -4125,7 +4127,7 @@ def np_cbrt_scalar(x, float_dtype):  # pragma: no cover
 # inlining manually instead of inline="always" since Numba's
 # np.hstack overload for tuples fails.
 # TODO(Ehsan): Fix in Numba
-@overload(np.hstack, no_unliteral=True)
+@overload(np.hstack, no_unliteral=True, jit_options={"cache": True})
 def np_hstack(tup):
     # Verify that arr_iter is a tuple, list of arrays, or Series of Arrays
     is_sequence = isinstance(tup, (types.BaseTuple, types.List))
@@ -4176,7 +4178,12 @@ def np_hstack(tup):
 
 
 # Source code: https://github.com/numpy/numpy/blob/04b58d3ffbd2c8d30c36ae6ed6366f1069136c43/numpy/random/mtrand.pyx#L4060
-@overload(np.random.multivariate_normal, inline="always", no_unliteral=True)
+@overload(
+    np.random.multivariate_normal,
+    inline="always",
+    no_unliteral=True,
+    jit_options={"cache": True},
+)
 def np_random_multivariate_normal(mean, cov, size=None, check_valid="warn", tol=1e-8):
     args_dict = {"check_valid": check_valid, "tol": tol}
     args_default_dict = {"check_valid": "warn", "tol": 1e-8}
@@ -4242,7 +4249,7 @@ def _validate_multivar_norm(cov):  # pragma: no cover
     return
 
 
-@overload(_validate_multivar_norm, no_unliteral=True)
+@overload(_validate_multivar_norm, no_unliteral=True, jit_options={"cache": True})
 def _overload_validate_multivar_norm(cov):
     def impl(cov):  # pragma: no cover
         if cov.shape[0] != cov.shape[1]:
@@ -4253,7 +4260,7 @@ def _overload_validate_multivar_norm(cov):
     return impl
 
 
-@overload(np.tile, inline="always", no_unliteral=True)
+@overload(np.tile, inline="always", no_unliteral=True, jit_options={"cache": True})
 def np_tile(A, reps):
     """Performs the operation np.tile(A, reps) under limited cases:
 
@@ -4337,7 +4344,7 @@ def np_tile(A, reps):
         )
 
 
-@overload(np.interp, no_unliteral=True)
+@overload(np.interp, no_unliteral=True, jit_options={"cache": True})
 def np_interp(x, xp, fp, left=None, right=None, period=None):
     if not (
         bodo.utils.utils.is_array_typ(x, False)
@@ -4369,7 +4376,7 @@ def is_index_decimal_value(indval):
     )
 
 
-@overload(min)
+@overload(min, jit_options={"cache": True})
 def overload_min_decimal_ival(indval1, indval2):
     """
     Max function for decimals that skips the isna check (assumes it is done caller)
@@ -4395,7 +4402,7 @@ def _nan_argmin(arr):  # pragma: no cover
 # inlining in series pass to avoid non-unique variable name issue in Numba 0.54 for
 # bodo/tests/test_dataframe.py::test_df_idxmin_all_types_axis0"[df_value2]"
 # see https://github.com/numba/numba/issues/7225
-@overload(_nan_argmin, no_unliteral=True)
+@overload(_nan_argmin, no_unliteral=True, jit_options={"cache": True})
 def _overload_nan_argmin(arr):
     """
     Argmin function used on Bodo Array types for idxmin
@@ -4450,7 +4457,7 @@ def _overload_nan_argmin(arr):
     return lambda arr: arr.argmin()  # pragma: no cover
 
 
-@overload(max)
+@overload(max, jit_options={"cache": True})
 def overload_max_decimal_ival(indval1, indval2):
     """
     Max function for decimals that skips the isna check (assumes it is done caller)
@@ -4476,7 +4483,7 @@ def _nan_argmax(arr):  # pragma: no cover
 # inlining in series pass to avoid non-unique variable name issue in Numba 0.54 for
 # bodo/tests/test_dataframe.py::test_df_idxmax_all_types_axis0"[df_value2]"
 # see https://github.com/numba/numba/issues/7225
-@overload(_nan_argmax, no_unliteral=True)
+@overload(_nan_argmax, no_unliteral=True, jit_options={"cache": True})
 def _overload_nan_argmax(arr):
     """
     Argmax function used on Bodo Array types for idxmax
@@ -4535,14 +4542,14 @@ def _overload_nan_argmax(arr):
     return lambda arr: arr.argmax()  # pragma: no cover
 
 
-@overload_attribute(types.Array, "nbytes", inline="always")
+@overload_attribute(types.Array, "nbytes", inline="always", jit_options={"cache": True})
 def overload_dataframe_index(A):
     """get number of bytes in Numpy array"""
     # TODO(ehsan): contribute to Numba
     return lambda A: A.size * bodo.io.np_io.get_dtype_size(A.dtype)  # pragma: no cover
 
 
-@overload(np.dot, inline="always")
+@overload(np.dot, inline="always", jit_options={"cache": True})
 def np_dot_heterogeneous(A, B):
     """
     Implementations of np.dot when the arguments are different types but
@@ -4562,7 +4569,7 @@ def np_dot_heterogeneous(A, B):
     # the original one for when the types are homogeneous).
 
 
-@overload(np.linalg.norm, no_unliteral=True)
+@overload(np.linalg.norm, no_unliteral=True, jit_options={"cache": True})
 def np_linalg_norm_axis(x, ord=None, axis=None, keepdims=False):
     """
     Implementations of np.linalg.norm for when the axis keyword argument is provided.
@@ -4598,7 +4605,9 @@ def np_linalg_norm_axis(x, ord=None, axis=None, keepdims=False):
         )
 
 
-@overload(np.nan_to_num, inline="always", no_unliteral=True)
+@overload(
+    np.nan_to_num, inline="always", no_unliteral=True, jit_options={"cache": True}
+)
 def np_nan_to_num(x, copy=True, nan=0.0, posinf=None, neginf=None):
     """
     Replace NaN with zero and infinity with large finite numbers

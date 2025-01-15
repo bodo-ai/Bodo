@@ -143,7 +143,7 @@ type_callable(pd.BooleanDtype)(lambda c: lambda: boolean_dtype)
 lower_builtin(pd.BooleanDtype)(lambda c, b, s, a: c.get_dummy_value())
 
 
-@numba.njit
+@numba.njit(cache=True)
 def gen_full_bitmap(n):  # pragma: no cover
     n_bytes = (n + 7) >> 3
     return np.full(n_bytes, 255, np.uint8)
@@ -244,7 +244,7 @@ def get_boolean_array_bytes_from_length(length):
 
 
 # high-level allocation function for boolean arrays
-@numba.njit(no_cpython_wrapper=True)
+@numba.njit(cache=True, no_cpython_wrapper=True)
 def alloc_bool_array(n):  # pragma: no cover
     num_bytes = get_boolean_array_bytes_from_length(n)
     data_arr = np.empty(num_bytes, dtype=np.uint8)
@@ -253,7 +253,7 @@ def alloc_bool_array(n):  # pragma: no cover
 
 
 # allocate a boolean array of all false values
-@numba.njit(no_cpython_wrapper=True)
+@numba.njit(cache=True, no_cpython_wrapper=True)
 def alloc_false_bool_array(n):  # pragma: no cover
     num_bytes = get_boolean_array_bytes_from_length(n)
     data_arr = np.zeros(num_bytes, dtype=np.uint8)
@@ -263,7 +263,7 @@ def alloc_false_bool_array(n):  # pragma: no cover
 
 
 # allocate a boolean array of all true values
-@numba.njit(no_cpython_wrapper=True)
+@numba.njit(cache=True, no_cpython_wrapper=True)
 def alloc_true_bool_array(n):  # pragma: no cover
     num_bytes = get_boolean_array_bytes_from_length(n)
     data_arr = np.full(num_bytes, 255, dtype=np.uint8)
@@ -294,7 +294,7 @@ ArrayAnalysis._analyze_op_call_bodo_libs_bool_arr_ext_alloc_true_bool_array = (
 )
 
 
-@overload(operator.getitem, no_unliteral=True)
+@overload(operator.getitem, no_unliteral=True, jit_options={"cache": True})
 def bool_arr_getitem(A, ind):
     if A != boolean_array_type:
         return
@@ -404,7 +404,7 @@ def bool_arr_getitem(A, ind):
     )  # pragma: no cover
 
 
-@overload(operator.setitem, no_unliteral=True)
+@overload(operator.setitem, no_unliteral=True, jit_options={"cache": True})
 def bool_arr_setitem(A, idx, val):
     if A != boolean_array_type:
         return
@@ -562,38 +562,40 @@ def bool_arr_setitem(A, idx, val):
     )  # pragma: no cover
 
 
-@overload(len, no_unliteral=True)
+@overload(len, no_unliteral=True, jit_options={"cache": True})
 def overload_bool_arr_len(A):
     if A == boolean_array_type:
         return lambda A: A._length  # pragma: no cover
 
 
-@overload_attribute(BooleanArrayType, "size")
+@overload_attribute(BooleanArrayType, "size", jit_options={"cache": True})
 def overload_bool_arr_size(A):
     return lambda A: A._length  # pragma: no cover
 
 
-@overload_attribute(BooleanArrayType, "shape")
+@overload_attribute(BooleanArrayType, "shape", jit_options={"cache": True})
 def overload_bool_arr_shape(A):
     return lambda A: (A._length,)  # pragma: no cover
 
 
-@overload_attribute(BooleanArrayType, "dtype")
+@overload_attribute(BooleanArrayType, "dtype", jit_options={"cache": True})
 def overload_bool_arr_dtype(A):
     return lambda A: pd.BooleanDtype()  # pragma: no cover
 
 
-@overload_attribute(BooleanArrayType, "ndim")
+@overload_attribute(BooleanArrayType, "ndim", jit_options={"cache": True})
 def overload_bool_arr_ndim(A):
     return lambda A: 1  # pragma: no cover
 
 
-@overload_attribute(BooleanArrayType, "nbytes")
+@overload_attribute(BooleanArrayType, "nbytes", jit_options={"cache": True})
 def bool_arr_nbytes_overload(A):
     return lambda A: A._data.nbytes + A._null_bitmap.nbytes  # pragma: no cover
 
 
-@overload_method(BooleanArrayType, "copy", no_unliteral=True)
+@overload_method(
+    BooleanArrayType, "copy", no_unliteral=True, jit_options={"cache": True}
+)
 def overload_bool_arr_copy(A):
     return lambda A: bodo.libs.bool_arr_ext.init_bool_array(
         A._data.copy(),
@@ -602,7 +604,13 @@ def overload_bool_arr_copy(A):
     )  # pragma: no cover
 
 
-@overload_method(BooleanArrayType, "sum", no_unliteral=True, inline="always")
+@overload_method(
+    BooleanArrayType,
+    "sum",
+    no_unliteral=True,
+    inline="always",
+    jit_options={"cache": True},
+)
 def overload_bool_sum(A):
     """
     Support for .sum() method for BooleanArrays. We don't accept any arguments
@@ -622,7 +630,13 @@ def overload_bool_sum(A):
     return impl
 
 
-@overload_method(BooleanArrayType, "any", no_unliteral=True, inline="always")
+@overload_method(
+    BooleanArrayType,
+    "any",
+    no_unliteral=True,
+    inline="always",
+    jit_options={"cache": True},
+)
 def overload_bool_any(A):
     """
     Support for .any() method for BooleanArrays. We don't accept any arguments
@@ -640,7 +654,9 @@ def overload_bool_any(A):
     return impl
 
 
-@overload_method(BooleanArrayType, "astype", no_unliteral=True)
+@overload_method(
+    BooleanArrayType, "astype", no_unliteral=True, jit_options={"cache": True}
+)
 def overload_bool_arr_astype(A, dtype, copy=True):
     # If dtype is a string, force it to be a literal
     if dtype == types.unicode_type:
@@ -687,7 +703,9 @@ def overload_bool_arr_astype(A, dtype, copy=True):
     return lambda A, dtype, copy=True: A.to_numpy().astype(nb_dtype)
 
 
-@overload_method(BooleanArrayType, "fillna", no_unliteral=True)
+@overload_method(
+    BooleanArrayType, "fillna", no_unliteral=True, jit_options={"cache": True}
+)
 def overload_bool_fillna(A, value=None, method=None, limit=None):
     def impl(A, value=None, method=None, limit=None):  # pragma: no cover
         n = len(A)
@@ -702,7 +720,7 @@ def overload_bool_fillna(A, value=None, method=None, limit=None):
     return impl
 
 
-@overload_method(BooleanArrayType, "all")
+@overload_method(BooleanArrayType, "all", jit_options={"cache": True})
 def overload_bool_arr_all(A, skipna=True):
     unsupported_args = {"skipna": skipna}
     default_args = {"skipna": True}
@@ -731,7 +749,9 @@ def overload_bool_arr_all(A, skipna=True):
     return impl
 
 
-@overload_method(BooleanArrayType, "to_numpy", no_unliteral=True)
+@overload_method(
+    BooleanArrayType, "to_numpy", no_unliteral=True, jit_options={"cache": True}
+)
 def overload_bool_arr_to_numpy(A, dtype=None, copy=False, na_value=None):
     # TODO: support the proper default value for dtype and na_value
     unsupported_args = {"dtype": dtype, "copy": copy, "na_value": na_value}
@@ -874,7 +894,9 @@ def _install_unary_ops():
 _install_unary_ops()
 
 
-@overload_method(BooleanArrayType, "unique", no_unliteral=True)
+@overload_method(
+    BooleanArrayType, "unique", no_unliteral=True, jit_options={"cache": True}
+)
 def overload_unique(A):
     def impl_bool_arr(A):  # pragma: no cover
         # preserve order
@@ -914,7 +936,7 @@ def overload_unique(A):
     return impl_bool_arr
 
 
-@overload(operator.getitem, no_unliteral=True)
+@overload(operator.getitem, no_unliteral=True, jit_options={"cache": True})
 def bool_arr_ind_getitem(A, ind):
     # getitem for Numpy arrays indexed by BooleanArray
     if ind == boolean_array_type and isinstance(A, types.Array):
@@ -957,7 +979,7 @@ def cast_np_bool_arr_to_bool_arr(context, builder, fromty, toty, val):
     return impl_ret_borrowed(context, builder, toty, res)
 
 
-@overload(operator.setitem, no_unliteral=True)
+@overload(operator.setitem, no_unliteral=True, jit_options={"cache": True})
 def overload_np_array_setitem_bool_arr(A, idx, val):
     """Support setitem of Arrays with boolean_array_type"""
     if isinstance(A, types.Array) and idx == boolean_array_type:
@@ -1056,7 +1078,7 @@ def compute_or_body(null1, null2, val1, val2):  # pragma: no cover
     pass
 
 
-@overload(compute_or_body)
+@overload(compute_or_body, jit_options={"cache": True})
 def overload_compute_or_body(null1, null2, val1, val2):
     """
     Separate function to compute the body of an OR.
@@ -1087,7 +1109,7 @@ def compute_and_body(null1, null2, val1, val2):  # pragma: no cover
     pass
 
 
-@overload(compute_and_body)
+@overload(compute_and_body, jit_options={"cache": True})
 def overload_compute_and_body(null1, null2, val1, val2):
     """
     Separate function to compute the body of an AND.

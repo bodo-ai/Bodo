@@ -274,7 +274,9 @@ make_attribute_wrapper(DatetimeIndexType, "name", "_name")
 make_attribute_wrapper(DatetimeIndexType, "dict", "_dict")
 
 
-@overload_method(DatetimeIndexType, "copy", no_unliteral=True)
+@overload_method(
+    DatetimeIndexType, "copy", no_unliteral=True, jit_options={"cache": True}
+)
 def overload_datetime_index_copy(A, name=None, deep=False, dtype=None, names=None):
     idx_cpy_unsupported_args = {"deep": deep, "dtype": dtype, "names": names}
     err_str = idx_typ_to_format_str_map[DatetimeIndexType].format("copy()")
@@ -459,7 +461,7 @@ def _install_dti_date_fields():
 _install_dti_date_fields()
 
 
-@overload_attribute(DatetimeIndexType, "is_leap_year")
+@overload_attribute(DatetimeIndexType, "is_leap_year", jit_options={"cache": True})
 def overload_datetime_index_is_leap_year(dti):
     def impl(dti):  # pragma: no cover
         numba.parfors.parfor.init_prange()
@@ -478,7 +480,7 @@ def overload_datetime_index_is_leap_year(dti):
     return impl
 
 
-@overload_attribute(DatetimeIndexType, "date")
+@overload_attribute(DatetimeIndexType, "date", jit_options={"cache": True})
 def overload_datetime_index_date(dti):
     # TODO: NaN
 
@@ -508,7 +510,9 @@ def _tdi_val_finalize(s, count):  # pragma: no cover
     return pd.Timedelta("nan") if not count else pd.Timedelta(s)
 
 
-@overload_method(DatetimeIndexType, "min", no_unliteral=True)
+@overload_method(
+    DatetimeIndexType, "min", no_unliteral=True, jit_options={"cache": True}
+)
 def overload_datetime_index_min(dti, axis=None, skipna=True):
     dti_is_tz_aware = isinstance(
         dti.dtype, bodo.libs.pd_datetime_arr_ext.PandasDatetimeTZDtype
@@ -552,7 +556,9 @@ def overload_datetime_index_min(dti, axis=None, skipna=True):
 
 
 # TODO: refactor min/max
-@overload_method(DatetimeIndexType, "max", no_unliteral=True)
+@overload_method(
+    DatetimeIndexType, "max", no_unliteral=True, jit_options={"cache": True}
+)
 def overload_datetime_index_max(dti, axis=None, skipna=True):
     dti_is_tz_aware = isinstance(
         dti.dtype, bodo.libs.pd_datetime_arr_ext.PandasDatetimeTZDtype
@@ -595,7 +601,9 @@ def overload_datetime_index_max(dti, axis=None, skipna=True):
     return impl
 
 
-@overload_method(DatetimeIndexType, "tz_convert", no_unliteral=True)
+@overload_method(
+    DatetimeIndexType, "tz_convert", no_unliteral=True, jit_options={"cache": True}
+)
 def overload_pd_datetime_tz_convert(A, tz):
     def impl(A, tz):
         return init_datetime_index(A._data.tz_convert(tz), A._name)
@@ -611,7 +619,7 @@ class DatetimeIndexAttribute(AttributeTemplate):
         return _dt_index_data_typ
 
 
-@overload(pd.DatetimeIndex, no_unliteral=True)
+@overload(pd.DatetimeIndex, no_unliteral=True, jit_options={"cache": True})
 def pd_datetimeindex_overload(
     data=None,
     freq=None,
@@ -763,7 +771,7 @@ def overload_binop_dti_str(op):
     return overload_impl
 
 
-@overload(pd.Index, inline="always", no_unliteral=True)
+@overload(pd.Index, inline="always", no_unliteral=True, jit_options={"cache": True})
 def pd_index_overload(data=None, dtype=None, copy=False, name=None, tupleize_cols=True):
     bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(data, "pandas.Index()")
 
@@ -908,7 +916,7 @@ def pd_index_overload(data=None, dtype=None, copy=False, name=None, tupleize_col
     return impl
 
 
-@overload(operator.getitem, no_unliteral=True)
+@overload(operator.getitem, no_unliteral=True, jit_options={"cache": True})
 def overload_datetime_index_getitem(dti, ind):
     # TODO: other getitem cases
     if isinstance(dti, DatetimeIndexType):
@@ -932,7 +940,7 @@ def overload_datetime_index_getitem(dti, ind):
             return impl
 
 
-@overload(operator.getitem, no_unliteral=True)
+@overload(operator.getitem, no_unliteral=True, jit_options={"cache": True})
 def overload_timedelta_index_getitem(I, ind):
     """getitem overload for TimedeltaIndex"""
     if not isinstance(I, TimedeltaIndexType):
@@ -957,7 +965,7 @@ def overload_timedelta_index_getitem(I, ind):
     return impl
 
 
-@overload(operator.getitem, no_unliteral=True)
+@overload(operator.getitem, no_unliteral=True, jit_options={"cache": True})
 def overload_categorical_index_getitem(I, ind):
     """getitem overload for CategoricalIndex"""
     if not isinstance(I, CategoricalIndexType):
@@ -1057,7 +1065,7 @@ def _dummy_convert_none_to_int(val):
     return lambda val: val  # pragma: no cover
 
 
-@overload(pd.date_range, inline="always")
+@overload(pd.date_range, inline="always", jit_options={"cache": True})
 def pd_date_range_overload(
     start=None,
     end=None,
@@ -1179,7 +1187,7 @@ def pd_date_range_overload(
     return f
 
 
-@overload(pd.timedelta_range, no_unliteral=True)
+@overload(pd.timedelta_range, no_unliteral=True, jit_options={"cache": True})
 def pd_timedelta_range_overload(
     start=None,
     end=None,
@@ -1273,7 +1281,13 @@ def pd_timedelta_range_overload(
     return f
 
 
-@overload_method(DatetimeIndexType, "isocalendar", inline="always", no_unliteral=True)
+@overload_method(
+    DatetimeIndexType,
+    "isocalendar",
+    inline="always",
+    no_unliteral=True,
+    jit_options={"cache": True},
+)
 def overload_pd_timestamp_isocalendar(idx):
     __col_name_meta_value_pd_timestamp_isocalendar = ColNamesMetaType(
         ("year", "week", "day")
@@ -1499,7 +1513,9 @@ make_attribute_wrapper(TimedeltaIndexType, "name", "_name")
 make_attribute_wrapper(TimedeltaIndexType, "dict", "_dict")
 
 
-@overload_method(TimedeltaIndexType, "copy", no_unliteral=True)
+@overload_method(
+    TimedeltaIndexType, "copy", no_unliteral=True, jit_options={"cache": True}
+)
 def overload_timedelta_index_copy(A, name=None, deep=False, dtype=None, names=None):
     idx_cpy_unsupported_args = {"deep": deep, "dtype": dtype, "names": names}
     err_str = idx_typ_to_format_str_map[TimedeltaIndexType].format("copy()")
@@ -1527,7 +1543,13 @@ def overload_timedelta_index_copy(A, name=None, deep=False, dtype=None, names=No
     return impl
 
 
-@overload_method(TimedeltaIndexType, "min", inline="always", no_unliteral=True)
+@overload_method(
+    TimedeltaIndexType,
+    "min",
+    inline="always",
+    no_unliteral=True,
+    jit_options={"cache": True},
+)
 def overload_timedelta_index_min(tdi, axis=None, skipna=True):
     unsupported_args = {"axis": axis, "skipna": skipna}
     arg_defaults = {"axis": None, "skipna": True}
@@ -1560,7 +1582,13 @@ def overload_timedelta_index_min(tdi, axis=None, skipna=True):
     return impl
 
 
-@overload_method(TimedeltaIndexType, "max", inline="always", no_unliteral=True)
+@overload_method(
+    TimedeltaIndexType,
+    "max",
+    inline="always",
+    no_unliteral=True,
+    jit_options={"cache": True},
+)
 def overload_timedelta_index_max(tdi, axis=None, skipna=True):
     unsupported_args = {"axis": axis, "skipna": skipna}
     arg_defaults = {"axis": None, "skipna": True}
@@ -1650,7 +1678,7 @@ def _install_tdi_time_fields():
 _install_tdi_time_fields()
 
 
-@overload(pd.TimedeltaIndex, no_unliteral=True)
+@overload(pd.TimedeltaIndex, no_unliteral=True, jit_options={"cache": True})
 def pd_timedelta_index_overload(
     data=None,
     unit=None,
@@ -1773,7 +1801,7 @@ make_attribute_wrapper(RangeIndexType, "step", "_step")
 make_attribute_wrapper(RangeIndexType, "name", "_name")
 
 
-@overload_method(RangeIndexType, "copy", no_unliteral=True)
+@overload_method(RangeIndexType, "copy", no_unliteral=True, jit_options={"cache": True})
 def overload_range_index_copy(A, name=None, deep=False, dtype=None, names=None):
     idx_cpy_unsupported_args = {"deep": deep, "dtype": dtype, "names": names}
     err_str = idx_typ_to_format_str_map[RangeIndexType].format("copy()")
@@ -1924,7 +1952,9 @@ def lower_constant_range_index(context, builder, ty, pyval):
     return lir.Constant.literal_struct([start, stop, step, name])
 
 
-@overload(pd.RangeIndex, no_unliteral=True, inline="always")
+@overload(
+    pd.RangeIndex, no_unliteral=True, inline="always", jit_options={"cache": True}
+)
 def range_index_overload(
     start=None,
     stop=None,
@@ -1976,14 +2006,16 @@ def range_index_overload(
     return _pd_range_index_imp
 
 
-@overload(pd.CategoricalIndex, no_unliteral=True, inline="always")
+@overload(
+    pd.CategoricalIndex, no_unliteral=True, inline="always", jit_options={"cache": True}
+)
 def categorical_index_overload(
     data=None, categories=None, ordered=None, dtype=None, copy=False, name=None
 ):
     raise BodoError("pd.CategoricalIndex() initializer not yet supported.")
 
 
-@overload_attribute(RangeIndexType, "start")
+@overload_attribute(RangeIndexType, "start", jit_options={"cache": True})
 def rangeIndex_get_start(ri):
     def impl(ri):  # pragma: no cover
         return ri._start
@@ -1991,7 +2023,7 @@ def rangeIndex_get_start(ri):
     return impl
 
 
-@overload_attribute(RangeIndexType, "stop")
+@overload_attribute(RangeIndexType, "stop", jit_options={"cache": True})
 def rangeIndex_get_stop(ri):
     def impl(ri):  # pragma: no cover
         return ri._stop
@@ -1999,7 +2031,7 @@ def rangeIndex_get_stop(ri):
     return impl
 
 
-@overload_attribute(RangeIndexType, "step")
+@overload_attribute(RangeIndexType, "step", jit_options={"cache": True})
 def rangeIndex_get_step(ri):
     def impl(ri):  # pragma: no cover
         return ri._step
@@ -2007,7 +2039,7 @@ def rangeIndex_get_step(ri):
     return impl
 
 
-@overload(operator.getitem, no_unliteral=True)
+@overload(operator.getitem, no_unliteral=True, jit_options={"cache": True})
 def overload_range_index_getitem(I, idx):
     if isinstance(I, RangeIndexType):
         if isinstance(types.unliteral(idx), types.Integer):
@@ -2036,7 +2068,7 @@ def overload_range_index_getitem(I, idx):
         )  # pragma: no cover
 
 
-@overload(len, no_unliteral=True)
+@overload(len, no_unliteral=True, jit_options={"cache": True})
 def overload_range_len(r):
     if isinstance(r, RangeIndexType):
         # TODO: test
@@ -2104,7 +2136,9 @@ make_attribute_wrapper(PeriodIndexType, "name", "_name")
 make_attribute_wrapper(PeriodIndexType, "dict", "_dict")
 
 
-@overload_method(PeriodIndexType, "copy", no_unliteral=True)
+@overload_method(
+    PeriodIndexType, "copy", no_unliteral=True, jit_options={"cache": True}
+)
 def overload_period_index_copy(A, name=None, deep=False, dtype=None, names=None):
     freq = A.freq
     idx_cpy_unsupported_args = {"deep": deep, "dtype": dtype, "names": names}
@@ -2431,7 +2465,9 @@ make_attribute_wrapper(CategoricalIndexType, "name", "_name")
 make_attribute_wrapper(CategoricalIndexType, "dict", "_dict")
 
 
-@overload_method(CategoricalIndexType, "copy", no_unliteral=True)
+@overload_method(
+    CategoricalIndexType, "copy", no_unliteral=True, jit_options={"cache": True}
+)
 def overload_categorical_index_copy(A, name=None, deep=False, dtype=None, names=None):
     err_str = idx_typ_to_format_str_map[CategoricalIndexType].format("copy()")
     idx_cpy_unsupported_args = {"deep": deep, "dtype": dtype, "names": names}
@@ -2696,7 +2732,9 @@ make_attribute_wrapper(NumericIndexType, "name", "_name")
 make_attribute_wrapper(NumericIndexType, "dict", "_dict")
 
 
-@overload_method(NumericIndexType, "copy", no_unliteral=True)
+@overload_method(
+    NumericIndexType, "copy", no_unliteral=True, jit_options={"cache": True}
+)
 def overload_numeric_index_copy(A, name=None, deep=False, dtype=None, names=None):
     err_str = idx_typ_to_format_str_map[NumericIndexType].format("copy()")
     idx_cpy_unsupported_args = {"deep": deep, "dtype": dtype, "names": names}
@@ -3074,8 +3112,12 @@ def get_binary_str_codegen(is_binary=False):
     return impl
 
 
-@overload_method(BinaryIndexType, "copy", no_unliteral=True)
-@overload_method(StringIndexType, "copy", no_unliteral=True)
+@overload_method(
+    BinaryIndexType, "copy", no_unliteral=True, jit_options={"cache": True}
+)
+@overload_method(
+    StringIndexType, "copy", no_unliteral=True, jit_options={"cache": True}
+)
 def overload_binary_string_index_copy(A, name=None, deep=False, dtype=None, names=None):
     typ = type(A)
 
@@ -3110,16 +3152,16 @@ def overload_binary_string_index_copy(A, name=None, deep=False, dtype=None, name
 # ---------------- Common Index fns -------------------
 
 
-@overload_attribute(BinaryIndexType, "name")
-@overload_attribute(StringIndexType, "name")
-@overload_attribute(DatetimeIndexType, "name")
-@overload_attribute(TimedeltaIndexType, "name")
-@overload_attribute(RangeIndexType, "name")
-@overload_attribute(PeriodIndexType, "name")
-@overload_attribute(NumericIndexType, "name")
-@overload_attribute(IntervalIndexType, "name")
-@overload_attribute(CategoricalIndexType, "name")
-@overload_attribute(MultiIndexType, "name")
+@overload_attribute(BinaryIndexType, "name", jit_options={"cache": True})
+@overload_attribute(StringIndexType, "name", jit_options={"cache": True})
+@overload_attribute(DatetimeIndexType, "name", jit_options={"cache": True})
+@overload_attribute(TimedeltaIndexType, "name", jit_options={"cache": True})
+@overload_attribute(RangeIndexType, "name", jit_options={"cache": True})
+@overload_attribute(PeriodIndexType, "name", jit_options={"cache": True})
+@overload_attribute(NumericIndexType, "name", jit_options={"cache": True})
+@overload_attribute(IntervalIndexType, "name", jit_options={"cache": True})
+@overload_attribute(CategoricalIndexType, "name", jit_options={"cache": True})
+@overload_attribute(MultiIndexType, "name", jit_options={"cache": True})
 def Index_get_name(i):
     def impl(i):  # pragma: no cover
         return i._name
@@ -3127,7 +3169,7 @@ def Index_get_name(i):
     return impl
 
 
-@overload(operator.getitem, no_unliteral=True)
+@overload(operator.getitem, no_unliteral=True, jit_options={"cache": True})
 def overload_index_getitem(I, ind):
     # output of integer indexing is scalar value
     if isinstance(
@@ -3246,12 +3288,18 @@ def _verify_setop_compatible(func_name, I, other):
         raise BodoError(f"Index.{func_name}(): incompatible types {t1} and {t2}")
 
 
-@overload_method(NumericIndexType, "union", inline="always")
-@overload_method(StringIndexType, "union", inline="always")
-@overload_method(BinaryIndexType, "union", inline="always")
-@overload_method(DatetimeIndexType, "union", inline="always")
-@overload_method(TimedeltaIndexType, "union", inline="always")
-@overload_method(RangeIndexType, "union", inline="always")
+@overload_method(
+    NumericIndexType, "union", inline="always", jit_options={"cache": True}
+)
+@overload_method(StringIndexType, "union", inline="always", jit_options={"cache": True})
+@overload_method(BinaryIndexType, "union", inline="always", jit_options={"cache": True})
+@overload_method(
+    DatetimeIndexType, "union", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    TimedeltaIndexType, "union", inline="always", jit_options={"cache": True}
+)
+@overload_method(RangeIndexType, "union", inline="always", jit_options={"cache": True})
 def overload_index_union(I, other, sort=None):
     """Adds support for a modified version of pd.Index.union() on tagged Index types.
 
@@ -3299,12 +3347,24 @@ def overload_index_union(I, other, sort=None):
     return impl
 
 
-@overload_method(NumericIndexType, "intersection", inline="always")
-@overload_method(StringIndexType, "intersection", inline="always")
-@overload_method(BinaryIndexType, "intersection", inline="always")
-@overload_method(DatetimeIndexType, "intersection", inline="always")
-@overload_method(TimedeltaIndexType, "intersection", inline="always")
-@overload_method(RangeIndexType, "intersection", inline="always")
+@overload_method(
+    NumericIndexType, "intersection", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    StringIndexType, "intersection", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    BinaryIndexType, "intersection", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    DatetimeIndexType, "intersection", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    TimedeltaIndexType, "intersection", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    RangeIndexType, "intersection", inline="always", jit_options={"cache": True}
+)
 def overload_index_intersection(I, other, sort=None):
     """Adds support for a modified version of pd.Index.intersection() on tagged Index types.
 
@@ -3356,12 +3416,24 @@ def overload_index_intersection(I, other, sort=None):
     return impl
 
 
-@overload_method(NumericIndexType, "difference", inline="always")
-@overload_method(StringIndexType, "difference", inline="always")
-@overload_method(BinaryIndexType, "difference", inline="always")
-@overload_method(DatetimeIndexType, "difference", inline="always")
-@overload_method(TimedeltaIndexType, "difference", inline="always")
-@overload_method(RangeIndexType, "difference", inline="always")
+@overload_method(
+    NumericIndexType, "difference", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    StringIndexType, "difference", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    BinaryIndexType, "difference", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    DatetimeIndexType, "difference", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    TimedeltaIndexType, "difference", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    RangeIndexType, "difference", inline="always", jit_options={"cache": True}
+)
 def overload_index_difference(I, other, sort=None):
     """Adds support for a modified version of pd.Index.difference() on tagged Index types.
 
@@ -3415,12 +3487,39 @@ def overload_index_difference(I, other, sort=None):
     return impl
 
 
-@overload_method(NumericIndexType, "symmetric_difference", inline="always")
-@overload_method(StringIndexType, "symmetric_difference", inline="always")
-@overload_method(BinaryIndexType, "symmetric_difference", inline="always")
-@overload_method(DatetimeIndexType, "symmetric_difference", inline="always")
-@overload_method(TimedeltaIndexType, "symmetric_difference", inline="always")
-@overload_method(RangeIndexType, "symmetric_difference", inline="always")
+@overload_method(
+    NumericIndexType,
+    "symmetric_difference",
+    inline="always",
+    jit_options={"cache": True},
+)
+@overload_method(
+    StringIndexType,
+    "symmetric_difference",
+    inline="always",
+    jit_options={"cache": True},
+)
+@overload_method(
+    BinaryIndexType,
+    "symmetric_difference",
+    inline="always",
+    jit_options={"cache": True},
+)
+@overload_method(
+    DatetimeIndexType,
+    "symmetric_difference",
+    inline="always",
+    jit_options={"cache": True},
+)
+@overload_method(
+    TimedeltaIndexType,
+    "symmetric_difference",
+    inline="always",
+    jit_options={"cache": True},
+)
+@overload_method(
+    RangeIndexType, "symmetric_difference", inline="always", jit_options={"cache": True}
+)
 def overload_index_symmetric_difference(I, other, result_name=None, sort=None):
     """Adds support for a modified version of pd.Index.difference() on tagged Index types.
 
@@ -3479,14 +3578,28 @@ def overload_index_symmetric_difference(I, other, result_name=None, sort=None):
 
 
 # TODO: test
-@overload_method(RangeIndexType, "take", no_unliteral=True)
-@overload_method(NumericIndexType, "take", no_unliteral=True)
-@overload_method(StringIndexType, "take", no_unliteral=True)
-@overload_method(BinaryIndexType, "take", no_unliteral=True)
-@overload_method(CategoricalIndexType, "take", no_unliteral=True)
-@overload_method(PeriodIndexType, "take", no_unliteral=True)
-@overload_method(DatetimeIndexType, "take", no_unliteral=True)
-@overload_method(TimedeltaIndexType, "take", no_unliteral=True)
+@overload_method(RangeIndexType, "take", no_unliteral=True, jit_options={"cache": True})
+@overload_method(
+    NumericIndexType, "take", no_unliteral=True, jit_options={"cache": True}
+)
+@overload_method(
+    StringIndexType, "take", no_unliteral=True, jit_options={"cache": True}
+)
+@overload_method(
+    BinaryIndexType, "take", no_unliteral=True, jit_options={"cache": True}
+)
+@overload_method(
+    CategoricalIndexType, "take", no_unliteral=True, jit_options={"cache": True}
+)
+@overload_method(
+    PeriodIndexType, "take", no_unliteral=True, jit_options={"cache": True}
+)
+@overload_method(
+    DatetimeIndexType, "take", no_unliteral=True, jit_options={"cache": True}
+)
+@overload_method(
+    TimedeltaIndexType, "take", no_unliteral=True, jit_options={"cache": True}
+)
 def overload_index_take(I, indices, axis=0, allow_fill=True, fill_value=None):
     unsupported_args = {
         "axis": axis,
@@ -3508,7 +3621,7 @@ def _init_engine(I, ban_unique=True):
     pass
 
 
-@overload(_init_engine)
+@overload(_init_engine, jit_options={"cache": True})
 def overload_init_engine(I, ban_unique=True):
     """initialize the Index hashmap engine (just a simple dict for now)"""
     if isinstance(I, CategoricalIndexType):
@@ -3545,7 +3658,7 @@ def overload_init_engine(I, ban_unique=True):
         return impl
 
 
-@overload(operator.contains, no_unliteral=True)
+@overload(operator.contains, no_unliteral=True, jit_options={"cache": True})
 def index_contains(I, val):
     """support for "val in I" operator. Uses the Index hashmap for faster results."""
     if not is_index_type(I):  # pragma: no cover
@@ -3617,13 +3730,27 @@ def range_contains(start, stop, step, val):  # pragma: no cover
     return ((val - start) % step) == 0
 
 
-@overload_method(RangeIndexType, "get_loc", no_unliteral=True)
-@overload_method(NumericIndexType, "get_loc", no_unliteral=True)
-@overload_method(StringIndexType, "get_loc", no_unliteral=True)
-@overload_method(BinaryIndexType, "get_loc", no_unliteral=True)
-@overload_method(PeriodIndexType, "get_loc", no_unliteral=True)
-@overload_method(DatetimeIndexType, "get_loc", no_unliteral=True)
-@overload_method(TimedeltaIndexType, "get_loc", no_unliteral=True)
+@overload_method(
+    RangeIndexType, "get_loc", no_unliteral=True, jit_options={"cache": True}
+)
+@overload_method(
+    NumericIndexType, "get_loc", no_unliteral=True, jit_options={"cache": True}
+)
+@overload_method(
+    StringIndexType, "get_loc", no_unliteral=True, jit_options={"cache": True}
+)
+@overload_method(
+    BinaryIndexType, "get_loc", no_unliteral=True, jit_options={"cache": True}
+)
+@overload_method(
+    PeriodIndexType, "get_loc", no_unliteral=True, jit_options={"cache": True}
+)
+@overload_method(
+    DatetimeIndexType, "get_loc", no_unliteral=True, jit_options={"cache": True}
+)
+@overload_method(
+    TimedeltaIndexType, "get_loc", no_unliteral=True, jit_options={"cache": True}
+)
 def overload_index_get_loc(I, key, method=None, tolerance=None):
     """simple get_loc implementation intended for cases with small Index like
     df.columns.get_loc(c). Only supports Index with unique values (scalar return).
@@ -3769,20 +3896,20 @@ def _install_isna_specific_methods():
 _install_isna_specific_methods()
 
 
-@overload_attribute(RangeIndexType, "values")
-@overload_attribute(NumericIndexType, "values")
-@overload_attribute(StringIndexType, "values")
-@overload_attribute(BinaryIndexType, "values")
-@overload_attribute(CategoricalIndexType, "values")
-@overload_attribute(PeriodIndexType, "values")
-@overload_attribute(DatetimeIndexType, "values")
-@overload_attribute(TimedeltaIndexType, "values")
+@overload_attribute(RangeIndexType, "values", jit_options={"cache": True})
+@overload_attribute(NumericIndexType, "values", jit_options={"cache": True})
+@overload_attribute(StringIndexType, "values", jit_options={"cache": True})
+@overload_attribute(BinaryIndexType, "values", jit_options={"cache": True})
+@overload_attribute(CategoricalIndexType, "values", jit_options={"cache": True})
+@overload_attribute(PeriodIndexType, "values", jit_options={"cache": True})
+@overload_attribute(DatetimeIndexType, "values", jit_options={"cache": True})
+@overload_attribute(TimedeltaIndexType, "values", jit_options={"cache": True})
 def overload_values(I):
     bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(I, "Index.values")
     return lambda I: bodo.utils.conversion.coerce_to_array(I)  # pragma: no cover
 
 
-@overload(len, no_unliteral=True)
+@overload(len, no_unliteral=True, jit_options={"cache": True})
 def overload_index_len(I):
     if isinstance(
         I,
@@ -3804,7 +3931,7 @@ def overload_index_len(I):
         )  # pragma: no cover
 
 
-@overload(len, no_unliteral=True)
+@overload(len, no_unliteral=True, jit_options={"cache": True})
 def overload_multi_index_len(I):
     if isinstance(I, MultiIndexType):
         return lambda I: len(
@@ -3812,36 +3939,56 @@ def overload_multi_index_len(I):
         )  # pragma: no cover
 
 
-@overload_attribute(DatetimeIndexType, "shape")
-@overload_attribute(NumericIndexType, "shape")
-@overload_attribute(StringIndexType, "shape")
-@overload_attribute(BinaryIndexType, "shape")
-@overload_attribute(PeriodIndexType, "shape")
-@overload_attribute(TimedeltaIndexType, "shape")
-@overload_attribute(IntervalIndexType, "shape")
-@overload_attribute(CategoricalIndexType, "shape")
+@overload_attribute(DatetimeIndexType, "shape", jit_options={"cache": True})
+@overload_attribute(NumericIndexType, "shape", jit_options={"cache": True})
+@overload_attribute(StringIndexType, "shape", jit_options={"cache": True})
+@overload_attribute(BinaryIndexType, "shape", jit_options={"cache": True})
+@overload_attribute(PeriodIndexType, "shape", jit_options={"cache": True})
+@overload_attribute(TimedeltaIndexType, "shape", jit_options={"cache": True})
+@overload_attribute(IntervalIndexType, "shape", jit_options={"cache": True})
+@overload_attribute(CategoricalIndexType, "shape", jit_options={"cache": True})
 def overload_index_shape(s):
     return lambda s: (
         len(bodo.hiframes.pd_index_ext.get_index_data(s)),
     )  # pragma: no cover
 
 
-@overload_attribute(RangeIndexType, "shape")
+@overload_attribute(RangeIndexType, "shape", jit_options={"cache": True})
 def overload_range_index_shape(s):
     return lambda s: (len(s),)  # pragma: no cover
 
 
-@overload_attribute(MultiIndexType, "shape")
+@overload_attribute(MultiIndexType, "shape", jit_options={"cache": True})
 def overload_index_shape(s):
     return lambda s: (
         len(bodo.hiframes.pd_index_ext.get_index_data(s)[0]),
     )  # pragma: no cover
 
 
-@overload_attribute(NumericIndexType, "is_monotonic_increasing", inline="always")
-@overload_attribute(RangeIndexType, "is_monotonic_increasing", inline="always")
-@overload_attribute(DatetimeIndexType, "is_monotonic_increasing", inline="always")
-@overload_attribute(TimedeltaIndexType, "is_monotonic_increasing", inline="always")
+@overload_attribute(
+    NumericIndexType,
+    "is_monotonic_increasing",
+    inline="always",
+    jit_options={"cache": True},
+)
+@overload_attribute(
+    RangeIndexType,
+    "is_monotonic_increasing",
+    inline="always",
+    jit_options={"cache": True},
+)
+@overload_attribute(
+    DatetimeIndexType,
+    "is_monotonic_increasing",
+    inline="always",
+    jit_options={"cache": True},
+)
+@overload_attribute(
+    TimedeltaIndexType,
+    "is_monotonic_increasing",
+    inline="always",
+    jit_options={"cache": True},
+)
 def overload_index_is_montonic(I):
     """
     Implementation of is_monotonic_increasing attributes for Int64Index,
@@ -3868,10 +4015,30 @@ def overload_index_is_montonic(I):
         return impl
 
 
-@overload_attribute(NumericIndexType, "is_monotonic_decreasing", inline="always")
-@overload_attribute(RangeIndexType, "is_monotonic_decreasing", inline="always")
-@overload_attribute(DatetimeIndexType, "is_monotonic_decreasing", inline="always")
-@overload_attribute(TimedeltaIndexType, "is_monotonic_decreasing", inline="always")
+@overload_attribute(
+    NumericIndexType,
+    "is_monotonic_decreasing",
+    inline="always",
+    jit_options={"cache": True},
+)
+@overload_attribute(
+    RangeIndexType,
+    "is_monotonic_decreasing",
+    inline="always",
+    jit_options={"cache": True},
+)
+@overload_attribute(
+    DatetimeIndexType,
+    "is_monotonic_decreasing",
+    inline="always",
+    jit_options={"cache": True},
+)
+@overload_attribute(
+    TimedeltaIndexType,
+    "is_monotonic_decreasing",
+    inline="always",
+    jit_options={"cache": True},
+)
 def overload_index_is_montonic_decreasing(I):
     """
     Implementation of is_monotonic_decreasing attribute for Int64Index,
@@ -3897,14 +4064,62 @@ def overload_index_is_montonic_decreasing(I):
         return impl
 
 
-@overload_method(NumericIndexType, "duplicated", inline="always", no_unliteral=True)
-@overload_method(DatetimeIndexType, "duplicated", inline="always", no_unliteral=True)
-@overload_method(TimedeltaIndexType, "duplicated", inline="always", no_unliteral=True)
-@overload_method(StringIndexType, "duplicated", inline="always", no_unliteral=True)
-@overload_method(PeriodIndexType, "duplicated", inline="always", no_unliteral=True)
-@overload_method(CategoricalIndexType, "duplicated", inline="always", no_unliteral=True)
-@overload_method(BinaryIndexType, "duplicated", inline="always", no_unliteral=True)
-@overload_method(RangeIndexType, "duplicated", inline="always", no_unliteral=True)
+@overload_method(
+    NumericIndexType,
+    "duplicated",
+    inline="always",
+    no_unliteral=True,
+    jit_options={"cache": True},
+)
+@overload_method(
+    DatetimeIndexType,
+    "duplicated",
+    inline="always",
+    no_unliteral=True,
+    jit_options={"cache": True},
+)
+@overload_method(
+    TimedeltaIndexType,
+    "duplicated",
+    inline="always",
+    no_unliteral=True,
+    jit_options={"cache": True},
+)
+@overload_method(
+    StringIndexType,
+    "duplicated",
+    inline="always",
+    no_unliteral=True,
+    jit_options={"cache": True},
+)
+@overload_method(
+    PeriodIndexType,
+    "duplicated",
+    inline="always",
+    no_unliteral=True,
+    jit_options={"cache": True},
+)
+@overload_method(
+    CategoricalIndexType,
+    "duplicated",
+    inline="always",
+    no_unliteral=True,
+    jit_options={"cache": True},
+)
+@overload_method(
+    BinaryIndexType,
+    "duplicated",
+    inline="always",
+    no_unliteral=True,
+    jit_options={"cache": True},
+)
+@overload_method(
+    RangeIndexType,
+    "duplicated",
+    inline="always",
+    no_unliteral=True,
+    jit_options={"cache": True},
+)
 def overload_index_duplicated(I, keep="first"):
     """
     Implementation of Index.duplicated() for all supported index types.
@@ -3925,10 +4140,34 @@ def overload_index_duplicated(I, keep="first"):
     return impl
 
 
-@overload_method(NumericIndexType, "any", no_unliteral=True, inline="always")
-@overload_method(StringIndexType, "any", no_unliteral=True, inline="always")
-@overload_method(BinaryIndexType, "any", no_unliteral=True, inline="always")
-@overload_method(RangeIndexType, "any", no_unliteral=True, inline="always")
+@overload_method(
+    NumericIndexType,
+    "any",
+    no_unliteral=True,
+    inline="always",
+    jit_options={"cache": True},
+)
+@overload_method(
+    StringIndexType,
+    "any",
+    no_unliteral=True,
+    inline="always",
+    jit_options={"cache": True},
+)
+@overload_method(
+    BinaryIndexType,
+    "any",
+    no_unliteral=True,
+    inline="always",
+    jit_options={"cache": True},
+)
+@overload_method(
+    RangeIndexType,
+    "any",
+    no_unliteral=True,
+    inline="always",
+    jit_options={"cache": True},
+)
 def overload_index_any(I):
     if isinstance(I, RangeIndexType):
 
@@ -3945,10 +4184,34 @@ def overload_index_any(I):
     return impl
 
 
-@overload_method(NumericIndexType, "all", no_unliteral=True, inline="always")
-@overload_method(StringIndexType, "all", no_unliteral=True, inline="always")
-@overload_method(RangeIndexType, "all", no_unliteral=True, inline="always")
-@overload_method(BinaryIndexType, "all", no_unliteral=True, inline="always")
+@overload_method(
+    NumericIndexType,
+    "all",
+    no_unliteral=True,
+    inline="always",
+    jit_options={"cache": True},
+)
+@overload_method(
+    StringIndexType,
+    "all",
+    no_unliteral=True,
+    inline="always",
+    jit_options={"cache": True},
+)
+@overload_method(
+    RangeIndexType,
+    "all",
+    no_unliteral=True,
+    inline="always",
+    jit_options={"cache": True},
+)
+@overload_method(
+    BinaryIndexType,
+    "all",
+    no_unliteral=True,
+    inline="always",
+    jit_options={"cache": True},
+)
 def overload_index_all(I):
     if isinstance(I, RangeIndexType):
 
@@ -3979,21 +4242,61 @@ def overload_index_all(I):
     return impl
 
 
-@overload_method(RangeIndexType, "drop_duplicates", no_unliteral=True, inline="always")
 @overload_method(
-    NumericIndexType, "drop_duplicates", no_unliteral=True, inline="always"
-)
-@overload_method(StringIndexType, "drop_duplicates", no_unliteral=True, inline="always")
-@overload_method(BinaryIndexType, "drop_duplicates", no_unliteral=True, inline="always")
-@overload_method(
-    CategoricalIndexType, "drop_duplicates", no_unliteral=True, inline="always"
-)
-@overload_method(PeriodIndexType, "drop_duplicates", no_unliteral=True, inline="always")
-@overload_method(
-    DatetimeIndexType, "drop_duplicates", no_unliteral=True, inline="always"
+    RangeIndexType,
+    "drop_duplicates",
+    no_unliteral=True,
+    inline="always",
+    jit_options={"cache": True},
 )
 @overload_method(
-    TimedeltaIndexType, "drop_duplicates", no_unliteral=True, inline="always"
+    NumericIndexType,
+    "drop_duplicates",
+    no_unliteral=True,
+    inline="always",
+    jit_options={"cache": True},
+)
+@overload_method(
+    StringIndexType,
+    "drop_duplicates",
+    no_unliteral=True,
+    inline="always",
+    jit_options={"cache": True},
+)
+@overload_method(
+    BinaryIndexType,
+    "drop_duplicates",
+    no_unliteral=True,
+    inline="always",
+    jit_options={"cache": True},
+)
+@overload_method(
+    CategoricalIndexType,
+    "drop_duplicates",
+    no_unliteral=True,
+    inline="always",
+    jit_options={"cache": True},
+)
+@overload_method(
+    PeriodIndexType,
+    "drop_duplicates",
+    no_unliteral=True,
+    inline="always",
+    jit_options={"cache": True},
+)
+@overload_method(
+    DatetimeIndexType,
+    "drop_duplicates",
+    no_unliteral=True,
+    inline="always",
+    jit_options={"cache": True},
+)
+@overload_method(
+    TimedeltaIndexType,
+    "drop_duplicates",
+    no_unliteral=True,
+    inline="always",
+    jit_options={"cache": True},
 )
 def overload_index_drop_duplicates(I, keep="first"):
     """Overload `Index.drop_duplicates` method for all index types."""
@@ -4027,12 +4330,12 @@ def overload_index_drop_duplicates(I, keep="first"):
     return impl
 
 
-@numba.generated_jit(nopython=True)
+@numba.generated_jit(cache=True, nopython=True)
 def get_index_data(S):
     return lambda S: S._data  # pragma: no cover
 
 
-@numba.generated_jit(nopython=True)
+@numba.generated_jit(cache=True, nopython=True)
 def get_index_name(S):
     return lambda S: S._name  # pragma: no cover
 
@@ -4079,14 +4382,62 @@ ArrayAnalysis._analyze_op_call_bodo_hiframes_pd_index_ext_get_index_data = (
 )
 
 
-@overload_method(RangeIndexType, "map", inline="always", no_unliteral=True)
-@overload_method(NumericIndexType, "map", inline="always", no_unliteral=True)
-@overload_method(StringIndexType, "map", inline="always", no_unliteral=True)
-@overload_method(BinaryIndexType, "map", inline="always", no_unliteral=True)
-@overload_method(CategoricalIndexType, "map", inline="always", no_unliteral=True)
-@overload_method(PeriodIndexType, "map", inline="always", no_unliteral=True)
-@overload_method(DatetimeIndexType, "map", inline="always", no_unliteral=True)
-@overload_method(TimedeltaIndexType, "map", inline="always", no_unliteral=True)
+@overload_method(
+    RangeIndexType,
+    "map",
+    inline="always",
+    no_unliteral=True,
+    jit_options={"cache": True},
+)
+@overload_method(
+    NumericIndexType,
+    "map",
+    inline="always",
+    no_unliteral=True,
+    jit_options={"cache": True},
+)
+@overload_method(
+    StringIndexType,
+    "map",
+    inline="always",
+    no_unliteral=True,
+    jit_options={"cache": True},
+)
+@overload_method(
+    BinaryIndexType,
+    "map",
+    inline="always",
+    no_unliteral=True,
+    jit_options={"cache": True},
+)
+@overload_method(
+    CategoricalIndexType,
+    "map",
+    inline="always",
+    no_unliteral=True,
+    jit_options={"cache": True},
+)
+@overload_method(
+    PeriodIndexType,
+    "map",
+    inline="always",
+    no_unliteral=True,
+    jit_options={"cache": True},
+)
+@overload_method(
+    DatetimeIndexType,
+    "map",
+    inline="always",
+    no_unliteral=True,
+    jit_options={"cache": True},
+)
+@overload_method(
+    TimedeltaIndexType,
+    "map",
+    inline="always",
+    no_unliteral=True,
+    jit_options={"cache": True},
+)
 def overload_index_map(I, mapper, na_action=None):
     if not is_const_func_type(mapper):
         raise BodoError("Index.map(): 'mapper' should be a function")
@@ -4459,7 +4810,9 @@ make_attribute_wrapper(HeterogeneousIndexType, "data", "_data")
 make_attribute_wrapper(HeterogeneousIndexType, "name", "_name")
 
 
-@overload_method(HeterogeneousIndexType, "copy", no_unliteral=True)
+@overload_method(
+    HeterogeneousIndexType, "copy", no_unliteral=True, jit_options={"cache": True}
+)
 def overload_heter_index_copy(A, name=None, deep=False, dtype=None, names=None):
     err_str = idx_typ_to_format_str_map[HeterogeneousIndexType].format("copy()")
     idx_cpy_unsupported_args = {"deep": deep, "dtype": dtype, "names": names}
@@ -4536,7 +4889,7 @@ def init_heter_index(typingctx, data, name=None):
     return HeterogeneousIndexType(data, name)(data, name), codegen
 
 
-@overload_attribute(HeterogeneousIndexType, "name")
+@overload_attribute(HeterogeneousIndexType, "name", jit_options={"cache": True})
 def heter_index_get_name(i):
     def impl(i):  # pragma: no cover
         return i._name
@@ -4544,15 +4897,15 @@ def heter_index_get_name(i):
     return impl
 
 
-@overload_attribute(NumericIndexType, "nbytes")
-@overload_attribute(DatetimeIndexType, "nbytes")
-@overload_attribute(TimedeltaIndexType, "nbytes")
-@overload_attribute(RangeIndexType, "nbytes")
-@overload_attribute(StringIndexType, "nbytes")
-@overload_attribute(BinaryIndexType, "nbytes")
-@overload_attribute(CategoricalIndexType, "nbytes")
-@overload_attribute(PeriodIndexType, "nbytes")
-@overload_attribute(MultiIndexType, "nbytes")
+@overload_attribute(NumericIndexType, "nbytes", jit_options={"cache": True})
+@overload_attribute(DatetimeIndexType, "nbytes", jit_options={"cache": True})
+@overload_attribute(TimedeltaIndexType, "nbytes", jit_options={"cache": True})
+@overload_attribute(RangeIndexType, "nbytes", jit_options={"cache": True})
+@overload_attribute(StringIndexType, "nbytes", jit_options={"cache": True})
+@overload_attribute(BinaryIndexType, "nbytes", jit_options={"cache": True})
+@overload_attribute(CategoricalIndexType, "nbytes", jit_options={"cache": True})
+@overload_attribute(PeriodIndexType, "nbytes", jit_options={"cache": True})
+@overload_attribute(MultiIndexType, "nbytes", jit_options={"cache": True})
 def overload_nbytes(I):
     """Add support for Index.nbytes by computing underlying arrays nbytes"""
     # Note: Pandas have a different underlying data structure
@@ -4586,13 +4939,27 @@ def overload_nbytes(I):
         return _impl_nbytes
 
 
-@overload_method(NumericIndexType, "to_series", inline="always")
-@overload_method(DatetimeIndexType, "to_series", inline="always")
-@overload_method(TimedeltaIndexType, "to_series", inline="always")
-@overload_method(RangeIndexType, "to_series", inline="always")
-@overload_method(StringIndexType, "to_series", inline="always")
-@overload_method(BinaryIndexType, "to_series", inline="always")
-@overload_method(CategoricalIndexType, "to_series", inline="always")
+@overload_method(
+    NumericIndexType, "to_series", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    DatetimeIndexType, "to_series", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    TimedeltaIndexType, "to_series", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    RangeIndexType, "to_series", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    StringIndexType, "to_series", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    BinaryIndexType, "to_series", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    CategoricalIndexType, "to_series", inline="always", jit_options={"cache": True}
+)
 def overload_index_to_series(I, index=None, name=None):
     """Supports pd.Index.to_series() on tagged Index types.
 
@@ -4657,13 +5024,49 @@ def overload_index_to_series(I, index=None, name=None):
     return impl
 
 
-@overload_method(NumericIndexType, "to_frame", inline="always", no_unliteral=True)
+@overload_method(
+    NumericIndexType,
+    "to_frame",
+    inline="always",
+    no_unliteral=True,
+    jit_options={"cache": True},
+)
 @overload_method(DatetimeIndexType, "to_frame", inline="always", no_unliteral=True)
-@overload_method(TimedeltaIndexType, "to_frame", inline="always", no_unliteral=True)
-@overload_method(RangeIndexType, "to_frame", inline="always", no_unliteral=True)
-@overload_method(StringIndexType, "to_frame", inline="always", no_unliteral=True)
-@overload_method(BinaryIndexType, "to_frame", inline="always", no_unliteral=True)
-@overload_method(CategoricalIndexType, "to_frame", inline="always", no_unliteral=True)
+@overload_method(
+    TimedeltaIndexType,
+    "to_frame",
+    inline="always",
+    no_unliteral=True,
+    jit_options={"cache": True},
+)
+@overload_method(
+    RangeIndexType,
+    "to_frame",
+    inline="always",
+    no_unliteral=True,
+    jit_options={"cache": True},
+)
+@overload_method(
+    StringIndexType,
+    "to_frame",
+    inline="always",
+    no_unliteral=True,
+    jit_options={"cache": True},
+)
+@overload_method(
+    BinaryIndexType,
+    "to_frame",
+    inline="always",
+    no_unliteral=True,
+    jit_options={"cache": True},
+)
+@overload_method(
+    CategoricalIndexType,
+    "to_frame",
+    inline="always",
+    no_unliteral=True,
+    jit_options={"cache": True},
+)
 def overload_index_to_frame(I, index=True, name=None):
     """Supports pd.Index.to_frame() on tagged Index types.
 
@@ -4728,7 +5131,13 @@ def overload_index_to_frame(I, index=True, name=None):
     return impl
 
 
-@overload_method(MultiIndexType, "to_frame", inline="always", no_unliteral=True)
+@overload_method(
+    MultiIndexType,
+    "to_frame",
+    inline="always",
+    no_unliteral=True,
+    jit_options={"cache": True},
+)
 def overload_multi_index_to_frame(I, index=True, name=None):
     """Supports pd.Index.to_frame() for MultiIndex
 
@@ -4805,14 +5214,30 @@ def overload_multi_index_to_frame(I, index=True, name=None):
     return impl
 
 
-@overload_method(NumericIndexType, "to_numpy", inline="always")
-@overload_method(DatetimeIndexType, "to_numpy", inline="always")
-@overload_method(TimedeltaIndexType, "to_numpy", inline="always")
-@overload_method(RangeIndexType, "to_numpy", inline="always")
-@overload_method(StringIndexType, "to_numpy", inline="always")
-@overload_method(BinaryIndexType, "to_numpy", inline="always")
-@overload_method(CategoricalIndexType, "to_numpy", inline="always")
-@overload_method(IntervalIndexType, "to_numpy", inline="always")
+@overload_method(
+    NumericIndexType, "to_numpy", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    DatetimeIndexType, "to_numpy", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    TimedeltaIndexType, "to_numpy", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    RangeIndexType, "to_numpy", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    StringIndexType, "to_numpy", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    BinaryIndexType, "to_numpy", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    CategoricalIndexType, "to_numpy", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    IntervalIndexType, "to_numpy", inline="always", jit_options={"cache": True}
+)
 def overload_index_to_numpy(I, dtype=None, copy=False, na_value=None):
     """Supports pd.Index.to_numpy() on tagged Index types.
 
@@ -4871,20 +5296,46 @@ def overload_index_to_numpy(I, dtype=None, copy=False, na_value=None):
     return impl
 
 
-@overload_method(NumericIndexType, "to_list", inline="always")
-@overload_method(RangeIndexType, "to_list", inline="always")
-@overload_method(StringIndexType, "to_list", inline="always")
-@overload_method(BinaryIndexType, "to_list", inline="always")
-@overload_method(CategoricalIndexType, "to_list", inline="always")
-@overload_method(DatetimeIndexType, "to_list", inline="always")
-@overload_method(TimedeltaIndexType, "to_list", inline="always")
-@overload_method(NumericIndexType, "tolist", inline="always")
-@overload_method(RangeIndexType, "tolist", inline="always")
-@overload_method(StringIndexType, "tolist", inline="always")
-@overload_method(BinaryIndexType, "tolist", inline="always")
-@overload_method(CategoricalIndexType, "tolist", inline="always")
-@overload_method(DatetimeIndexType, "tolist", inline="always")
-@overload_method(TimedeltaIndexType, "tolist", inline="always")
+@overload_method(
+    NumericIndexType, "to_list", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    RangeIndexType, "to_list", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    StringIndexType, "to_list", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    BinaryIndexType, "to_list", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    CategoricalIndexType, "to_list", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    DatetimeIndexType, "to_list", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    TimedeltaIndexType, "to_list", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    NumericIndexType, "tolist", inline="always", jit_options={"cache": True}
+)
+@overload_method(RangeIndexType, "tolist", inline="always", jit_options={"cache": True})
+@overload_method(
+    StringIndexType, "tolist", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    BinaryIndexType, "tolist", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    CategoricalIndexType, "tolist", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    DatetimeIndexType, "tolist", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    TimedeltaIndexType, "tolist", inline="always", jit_options={"cache": True}
+)
 def overload_index_to_list(I):
     """Supported pd.Index.to_list() on tagged Index types
 
@@ -4915,16 +5366,16 @@ def overload_index_to_list(I):
     return impl
 
 
-@overload_attribute(NumericIndexType, "T")
-@overload_attribute(DatetimeIndexType, "T")
-@overload_attribute(TimedeltaIndexType, "T")
-@overload_attribute(RangeIndexType, "T")
-@overload_attribute(StringIndexType, "T")
-@overload_attribute(BinaryIndexType, "T")
-@overload_attribute(CategoricalIndexType, "T")
-@overload_attribute(PeriodIndexType, "T")
-@overload_attribute(MultiIndexType, "T")
-@overload_attribute(IntervalIndexType, "T")
+@overload_attribute(NumericIndexType, "T", jit_options={"cache": True})
+@overload_attribute(DatetimeIndexType, "T", jit_options={"cache": True})
+@overload_attribute(TimedeltaIndexType, "T", jit_options={"cache": True})
+@overload_attribute(RangeIndexType, "T", jit_options={"cache": True})
+@overload_attribute(StringIndexType, "T", jit_options={"cache": True})
+@overload_attribute(BinaryIndexType, "T", jit_options={"cache": True})
+@overload_attribute(CategoricalIndexType, "T", jit_options={"cache": True})
+@overload_attribute(PeriodIndexType, "T", jit_options={"cache": True})
+@overload_attribute(MultiIndexType, "T", jit_options={"cache": True})
+@overload_attribute(IntervalIndexType, "T", jit_options={"cache": True})
 def overload_T(I):
     """Adds support for Index.T
 
@@ -4938,16 +5389,16 @@ def overload_T(I):
     return lambda I: I  # pragma: no cover
 
 
-@overload_attribute(NumericIndexType, "size")
-@overload_attribute(DatetimeIndexType, "size")
-@overload_attribute(TimedeltaIndexType, "size")
-@overload_attribute(RangeIndexType, "size")
-@overload_attribute(StringIndexType, "size")
-@overload_attribute(BinaryIndexType, "size")
-@overload_attribute(CategoricalIndexType, "size")
-@overload_attribute(PeriodIndexType, "size")
-@overload_attribute(MultiIndexType, "size")
-@overload_attribute(IntervalIndexType, "size")
+@overload_attribute(NumericIndexType, "size", jit_options={"cache": True})
+@overload_attribute(DatetimeIndexType, "size", jit_options={"cache": True})
+@overload_attribute(TimedeltaIndexType, "size", jit_options={"cache": True})
+@overload_attribute(RangeIndexType, "size", jit_options={"cache": True})
+@overload_attribute(StringIndexType, "size", jit_options={"cache": True})
+@overload_attribute(BinaryIndexType, "size", jit_options={"cache": True})
+@overload_attribute(CategoricalIndexType, "size", jit_options={"cache": True})
+@overload_attribute(PeriodIndexType, "size", jit_options={"cache": True})
+@overload_attribute(MultiIndexType, "size", jit_options={"cache": True})
+@overload_attribute(IntervalIndexType, "size", jit_options={"cache": True})
 def overload_size(I):
     """Adds support for Index.size
 
@@ -4960,16 +5411,16 @@ def overload_size(I):
     return lambda I: len(I)  # pragma: no cover
 
 
-@overload_attribute(NumericIndexType, "ndim")
-@overload_attribute(DatetimeIndexType, "ndim")
-@overload_attribute(TimedeltaIndexType, "ndim")
-@overload_attribute(RangeIndexType, "ndim")
-@overload_attribute(StringIndexType, "ndim")
-@overload_attribute(BinaryIndexType, "ndim")
-@overload_attribute(CategoricalIndexType, "ndim")
-@overload_attribute(PeriodIndexType, "ndim")
-@overload_attribute(MultiIndexType, "ndim")
-@overload_attribute(IntervalIndexType, "ndim")
+@overload_attribute(NumericIndexType, "ndim", jit_options={"cache": True})
+@overload_attribute(DatetimeIndexType, "ndim", jit_options={"cache": True})
+@overload_attribute(TimedeltaIndexType, "ndim", jit_options={"cache": True})
+@overload_attribute(RangeIndexType, "ndim", jit_options={"cache": True})
+@overload_attribute(StringIndexType, "ndim", jit_options={"cache": True})
+@overload_attribute(BinaryIndexType, "ndim", jit_options={"cache": True})
+@overload_attribute(CategoricalIndexType, "ndim", jit_options={"cache": True})
+@overload_attribute(PeriodIndexType, "ndim", jit_options={"cache": True})
+@overload_attribute(MultiIndexType, "ndim", jit_options={"cache": True})
+@overload_attribute(IntervalIndexType, "ndim", jit_options={"cache": True})
 def overload_ndim(I):
     """Adds support for Index.ndim
 
@@ -4983,16 +5434,16 @@ def overload_ndim(I):
     return lambda I: 1  # pragma: no cover
 
 
-@overload_attribute(NumericIndexType, "nlevels")
-@overload_attribute(DatetimeIndexType, "nlevels")
-@overload_attribute(TimedeltaIndexType, "nlevels")
-@overload_attribute(RangeIndexType, "nlevels")
-@overload_attribute(StringIndexType, "nlevels")
-@overload_attribute(BinaryIndexType, "nlevels")
-@overload_attribute(CategoricalIndexType, "nlevels")
-@overload_attribute(PeriodIndexType, "nlevels")
-@overload_attribute(MultiIndexType, "nlevels")
-@overload_attribute(IntervalIndexType, "nlevels")
+@overload_attribute(NumericIndexType, "nlevels", jit_options={"cache": True})
+@overload_attribute(DatetimeIndexType, "nlevels", jit_options={"cache": True})
+@overload_attribute(TimedeltaIndexType, "nlevels", jit_options={"cache": True})
+@overload_attribute(RangeIndexType, "nlevels", jit_options={"cache": True})
+@overload_attribute(StringIndexType, "nlevels", jit_options={"cache": True})
+@overload_attribute(BinaryIndexType, "nlevels", jit_options={"cache": True})
+@overload_attribute(CategoricalIndexType, "nlevels", jit_options={"cache": True})
+@overload_attribute(PeriodIndexType, "nlevels", jit_options={"cache": True})
+@overload_attribute(MultiIndexType, "nlevels", jit_options={"cache": True})
+@overload_attribute(IntervalIndexType, "nlevels", jit_options={"cache": True})
 def overload_nlevels(I):
     """Adds support for Index.nlevels
 
@@ -5008,16 +5459,16 @@ def overload_nlevels(I):
     return lambda I: 1  # pragma: no cover
 
 
-@overload_attribute(NumericIndexType, "empty")
-@overload_attribute(DatetimeIndexType, "empty")
-@overload_attribute(TimedeltaIndexType, "empty")
-@overload_attribute(RangeIndexType, "empty")
-@overload_attribute(StringIndexType, "empty")
-@overload_attribute(BinaryIndexType, "empty")
-@overload_attribute(CategoricalIndexType, "empty")
-@overload_attribute(PeriodIndexType, "empty")
-@overload_attribute(MultiIndexType, "empty")
-@overload_attribute(IntervalIndexType, "empty")
+@overload_attribute(NumericIndexType, "empty", jit_options={"cache": True})
+@overload_attribute(DatetimeIndexType, "empty", jit_options={"cache": True})
+@overload_attribute(TimedeltaIndexType, "empty", jit_options={"cache": True})
+@overload_attribute(RangeIndexType, "empty", jit_options={"cache": True})
+@overload_attribute(StringIndexType, "empty", jit_options={"cache": True})
+@overload_attribute(BinaryIndexType, "empty", jit_options={"cache": True})
+@overload_attribute(CategoricalIndexType, "empty", jit_options={"cache": True})
+@overload_attribute(PeriodIndexType, "empty", jit_options={"cache": True})
+@overload_attribute(MultiIndexType, "empty", jit_options={"cache": True})
+@overload_attribute(IntervalIndexType, "empty", jit_options={"cache": True})
 def overload_empty(I):
     """Adds support for Index.empty
 
@@ -5030,16 +5481,16 @@ def overload_empty(I):
     return lambda I: len(I) == 0  # pragma: no cover
 
 
-@overload_attribute(NumericIndexType, "inferred_type")
-@overload_attribute(DatetimeIndexType, "inferred_type")
-@overload_attribute(TimedeltaIndexType, "inferred_type")
-@overload_attribute(RangeIndexType, "inferred_type")
-@overload_attribute(StringIndexType, "inferred_type")
-@overload_attribute(BinaryIndexType, "inferred_type")
-@overload_attribute(CategoricalIndexType, "inferred_type")
-@overload_attribute(PeriodIndexType, "inferred_type")
-@overload_attribute(MultiIndexType, "inferred_type")
-@overload_attribute(IntervalIndexType, "inferred_type")
+@overload_attribute(NumericIndexType, "inferred_type", jit_options={"cache": True})
+@overload_attribute(DatetimeIndexType, "inferred_type", jit_options={"cache": True})
+@overload_attribute(TimedeltaIndexType, "inferred_type", jit_options={"cache": True})
+@overload_attribute(RangeIndexType, "inferred_type", jit_options={"cache": True})
+@overload_attribute(StringIndexType, "inferred_type", jit_options={"cache": True})
+@overload_attribute(BinaryIndexType, "inferred_type", jit_options={"cache": True})
+@overload_attribute(CategoricalIndexType, "inferred_type", jit_options={"cache": True})
+@overload_attribute(PeriodIndexType, "inferred_type", jit_options={"cache": True})
+@overload_attribute(MultiIndexType, "inferred_type", jit_options={"cache": True})
+@overload_attribute(IntervalIndexType, "inferred_type", jit_options={"cache": True})
 def overload_inferred_type(I):
     """Adds support for Index.inferred_type
 
@@ -5081,14 +5532,14 @@ def overload_inferred_type(I):
     return lambda I: inferred_type  # pragma: no cover
 
 
-@overload_attribute(NumericIndexType, "dtype")
-@overload_attribute(DatetimeIndexType, "dtype")
-@overload_attribute(TimedeltaIndexType, "dtype")
-@overload_attribute(RangeIndexType, "dtype")
-@overload_attribute(StringIndexType, "dtype")
-@overload_attribute(BinaryIndexType, "dtype")
-@overload_attribute(CategoricalIndexType, "dtype")
-@overload_attribute(MultiIndexType, "dtype")
+@overload_attribute(NumericIndexType, "dtype", jit_options={"cache": True})
+@overload_attribute(DatetimeIndexType, "dtype", jit_options={"cache": True})
+@overload_attribute(TimedeltaIndexType, "dtype", jit_options={"cache": True})
+@overload_attribute(RangeIndexType, "dtype", jit_options={"cache": True})
+@overload_attribute(StringIndexType, "dtype", jit_options={"cache": True})
+@overload_attribute(BinaryIndexType, "dtype", jit_options={"cache": True})
+@overload_attribute(CategoricalIndexType, "dtype", jit_options={"cache": True})
+@overload_attribute(MultiIndexType, "dtype", jit_options={"cache": True})
 def overload_inferred_type(I):
     """Adds support for Index.dtype
 
@@ -5122,16 +5573,16 @@ def overload_inferred_type(I):
     return lambda I: dtype  # pragma: no cover
 
 
-@overload_attribute(NumericIndexType, "names")
-@overload_attribute(DatetimeIndexType, "names")
-@overload_attribute(TimedeltaIndexType, "names")
-@overload_attribute(RangeIndexType, "names")
-@overload_attribute(StringIndexType, "names")
-@overload_attribute(BinaryIndexType, "names")
-@overload_attribute(CategoricalIndexType, "names")
-@overload_attribute(IntervalIndexType, "names")
-@overload_attribute(PeriodIndexType, "names")
-@overload_attribute(MultiIndexType, "names")
+@overload_attribute(NumericIndexType, "names", jit_options={"cache": True})
+@overload_attribute(DatetimeIndexType, "names", jit_options={"cache": True})
+@overload_attribute(TimedeltaIndexType, "names", jit_options={"cache": True})
+@overload_attribute(RangeIndexType, "names", jit_options={"cache": True})
+@overload_attribute(StringIndexType, "names", jit_options={"cache": True})
+@overload_attribute(BinaryIndexType, "names", jit_options={"cache": True})
+@overload_attribute(CategoricalIndexType, "names", jit_options={"cache": True})
+@overload_attribute(IntervalIndexType, "names", jit_options={"cache": True})
+@overload_attribute(PeriodIndexType, "names", jit_options={"cache": True})
+@overload_attribute(MultiIndexType, "names", jit_options={"cache": True})
 def overload_names(I):
     """Adds support for Index.names. Diverges from the pandas API by returning
        a tuple instead of a FrozenList.
@@ -5149,16 +5600,34 @@ def overload_names(I):
     return lambda I: (I._name,)  # pragma: no cover
 
 
-@overload_method(NumericIndexType, "rename", inline="always")
-@overload_method(DatetimeIndexType, "rename", inline="always")
-@overload_method(TimedeltaIndexType, "rename", inline="always")
-@overload_method(RangeIndexType, "rename", inline="always")
-@overload_method(StringIndexType, "rename", inline="always")
-@overload_method(BinaryIndexType, "rename", inline="always")
-@overload_method(CategoricalIndexType, "rename", inline="always")
-@overload_method(PeriodIndexType, "rename", inline="always")
-@overload_method(IntervalIndexType, "rename", inline="always")
-@overload_method(HeterogeneousIndexType, "rename", inline="always")
+@overload_method(
+    NumericIndexType, "rename", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    DatetimeIndexType, "rename", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    TimedeltaIndexType, "rename", inline="always", jit_options={"cache": True}
+)
+@overload_method(RangeIndexType, "rename", inline="always", jit_options={"cache": True})
+@overload_method(
+    StringIndexType, "rename", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    BinaryIndexType, "rename", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    CategoricalIndexType, "rename", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    PeriodIndexType, "rename", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    IntervalIndexType, "rename", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    HeterogeneousIndexType, "rename", inline="always", jit_options={"cache": True}
+)
 def overload_rename(I, name, inplace=False):
     """Add support for Index.rename"""
     if is_overload_true(inplace):
@@ -5234,9 +5703,27 @@ def get_index_constructor(I):
     )  # pragma: no cover
 
 
-@overload_method(NumericIndexType, "min", no_unliteral=True, inline="always")
-@overload_method(RangeIndexType, "min", no_unliteral=True, inline="always")
-@overload_method(CategoricalIndexType, "min", no_unliteral=True, inline="always")
+@overload_method(
+    NumericIndexType,
+    "min",
+    no_unliteral=True,
+    inline="always",
+    jit_options={"cache": True},
+)
+@overload_method(
+    RangeIndexType,
+    "min",
+    no_unliteral=True,
+    inline="always",
+    jit_options={"cache": True},
+)
+@overload_method(
+    CategoricalIndexType,
+    "min",
+    no_unliteral=True,
+    inline="always",
+    jit_options={"cache": True},
+)
 def overload_index_min(I, axis=None, skipna=True):
     """Supports pd.Index.min() on tagged Index types
 
@@ -5282,9 +5769,27 @@ def overload_index_min(I, axis=None, skipna=True):
     return impl
 
 
-@overload_method(NumericIndexType, "max", no_unliteral=True, inline="always")
-@overload_method(RangeIndexType, "max", no_unliteral=True, inline="always")
-@overload_method(CategoricalIndexType, "max", no_unliteral=True, inline="always")
+@overload_method(
+    NumericIndexType,
+    "max",
+    no_unliteral=True,
+    inline="always",
+    jit_options={"cache": True},
+)
+@overload_method(
+    RangeIndexType,
+    "max",
+    no_unliteral=True,
+    inline="always",
+    jit_options={"cache": True},
+)
+@overload_method(
+    CategoricalIndexType,
+    "max",
+    no_unliteral=True,
+    inline="always",
+    jit_options={"cache": True},
+)
 def overload_index_max(I, axis=None, skipna=True):
     """Supports pd.Index.max() on tagged Index types
 
@@ -5330,14 +5835,62 @@ def overload_index_max(I, axis=None, skipna=True):
     return impl
 
 
-@overload_method(NumericIndexType, "argmin", no_unliteral=True, inline="always")
-@overload_method(StringIndexType, "argmin", no_unliteral=True, inline="always")
-@overload_method(BinaryIndexType, "argmin", no_unliteral=True, inline="always")
-@overload_method(DatetimeIndexType, "argmin", no_unliteral=True, inline="always")
-@overload_method(TimedeltaIndexType, "argmin", no_unliteral=True, inline="always")
-@overload_method(CategoricalIndexType, "argmin", no_unliteral=True, inline="always")
-@overload_method(RangeIndexType, "argmin", no_unliteral=True, inline="always")
-@overload_method(PeriodIndexType, "argmin", no_unliteral=True, inline="always")
+@overload_method(
+    NumericIndexType,
+    "argmin",
+    no_unliteral=True,
+    inline="always",
+    jit_options={"cache": True},
+)
+@overload_method(
+    StringIndexType,
+    "argmin",
+    no_unliteral=True,
+    inline="always",
+    jit_options={"cache": True},
+)
+@overload_method(
+    BinaryIndexType,
+    "argmin",
+    no_unliteral=True,
+    inline="always",
+    jit_options={"cache": True},
+)
+@overload_method(
+    DatetimeIndexType,
+    "argmin",
+    no_unliteral=True,
+    inline="always",
+    jit_options={"cache": True},
+)
+@overload_method(
+    TimedeltaIndexType,
+    "argmin",
+    no_unliteral=True,
+    inline="always",
+    jit_options={"cache": True},
+)
+@overload_method(
+    CategoricalIndexType,
+    "argmin",
+    no_unliteral=True,
+    inline="always",
+    jit_options={"cache": True},
+)
+@overload_method(
+    RangeIndexType,
+    "argmin",
+    no_unliteral=True,
+    inline="always",
+    jit_options={"cache": True},
+)
+@overload_method(
+    PeriodIndexType,
+    "argmin",
+    no_unliteral=True,
+    inline="always",
+    jit_options={"cache": True},
+)
 def overload_index_argmin(I, axis=0, skipna=True):
     """Support for Index.argmin() on tagged Index types
 
@@ -5381,14 +5934,62 @@ def overload_index_argmin(I, axis=0, skipna=True):
     return impl
 
 
-@overload_method(NumericIndexType, "argmax", no_unliteral=True, inline="always")
-@overload_method(StringIndexType, "argmax", no_unliteral=True, inline="always")
-@overload_method(BinaryIndexType, "argmax", no_unliteral=True, inline="always")
-@overload_method(DatetimeIndexType, "argmax", no_unliteral=True, inline="always")
-@overload_method(TimedeltaIndexType, "argmax", no_unliteral=True, inline="always")
-@overload_method(RangeIndexType, "argmax", no_unliteral=True, inline="always")
-@overload_method(CategoricalIndexType, "argmax", no_unliteral=True, inline="always")
-@overload_method(PeriodIndexType, "argmax", no_unliteral=True, inline="always")
+@overload_method(
+    NumericIndexType,
+    "argmax",
+    no_unliteral=True,
+    inline="always",
+    jit_options={"cache": True},
+)
+@overload_method(
+    StringIndexType,
+    "argmax",
+    no_unliteral=True,
+    inline="always",
+    jit_options={"cache": True},
+)
+@overload_method(
+    BinaryIndexType,
+    "argmax",
+    no_unliteral=True,
+    inline="always",
+    jit_options={"cache": True},
+)
+@overload_method(
+    DatetimeIndexType,
+    "argmax",
+    no_unliteral=True,
+    inline="always",
+    jit_options={"cache": True},
+)
+@overload_method(
+    TimedeltaIndexType,
+    "argmax",
+    no_unliteral=True,
+    inline="always",
+    jit_options={"cache": True},
+)
+@overload_method(
+    RangeIndexType,
+    "argmax",
+    no_unliteral=True,
+    inline="always",
+    jit_options={"cache": True},
+)
+@overload_method(
+    CategoricalIndexType,
+    "argmax",
+    no_unliteral=True,
+    inline="always",
+    jit_options={"cache": True},
+)
+@overload_method(
+    PeriodIndexType,
+    "argmax",
+    no_unliteral=True,
+    inline="always",
+    jit_options={"cache": True},
+)
 def overload_index_argmax(I, axis=0, skipna=True):
     """Support for Index.argmax() on tagged Index types
 
@@ -5433,17 +6034,59 @@ def overload_index_argmax(I, axis=0, skipna=True):
     return impl
 
 
-@overload_method(NumericIndexType, "unique", no_unliteral=True, inline="always")
-@overload_method(BinaryIndexType, "unique", no_unliteral=True, inline="always")
-@overload_method(StringIndexType, "unique", no_unliteral=True, inline="always")
-@overload_method(CategoricalIndexType, "unique", no_unliteral=True, inline="always")
+@overload_method(
+    NumericIndexType,
+    "unique",
+    no_unliteral=True,
+    inline="always",
+    jit_options={"cache": True},
+)
+@overload_method(
+    BinaryIndexType,
+    "unique",
+    no_unliteral=True,
+    inline="always",
+    jit_options={"cache": True},
+)
+@overload_method(
+    StringIndexType,
+    "unique",
+    no_unliteral=True,
+    inline="always",
+    jit_options={"cache": True},
+)
+@overload_method(
+    CategoricalIndexType,
+    "unique",
+    no_unliteral=True,
+    inline="always",
+    jit_options={"cache": True},
+)
 # Does not work if the intervals are distinct but share a start-value
 # (i.e. [(1, 2), (2, 3), (1, 3)]).
 # Does not work for time-based intervals.
 # See [BE-2813]
-@overload_method(IntervalIndexType, "unique", no_unliteral=True, inline="always")
-@overload_method(DatetimeIndexType, "unique", no_unliteral=True, inline="always")
-@overload_method(TimedeltaIndexType, "unique", no_unliteral=True, inline="always")
+@overload_method(
+    IntervalIndexType,
+    "unique",
+    no_unliteral=True,
+    inline="always",
+    jit_options={"cache": True},
+)
+@overload_method(
+    DatetimeIndexType,
+    "unique",
+    no_unliteral=True,
+    inline="always",
+    jit_options={"cache": True},
+)
+@overload_method(
+    TimedeltaIndexType,
+    "unique",
+    no_unliteral=True,
+    inline="always",
+    jit_options={"cache": True},
+)
 def overload_index_unique(I):
     """Add support for Index.unique() on most Index types"""
     constructor = get_index_constructor(I)
@@ -5457,7 +6100,13 @@ def overload_index_unique(I):
     return impl
 
 
-@overload_method(RangeIndexType, "unique", no_unliteral=True, inline="always")
+@overload_method(
+    RangeIndexType,
+    "unique",
+    no_unliteral=True,
+    inline="always",
+    jit_options={"cache": True},
+)
 def overload_range_index_unique(I):
     """Add support for Index.unique() on RangeIndex"""
 
@@ -5467,13 +6116,27 @@ def overload_range_index_unique(I):
     return impl
 
 
-@overload_method(NumericIndexType, "nunique", inline="always")
-@overload_method(BinaryIndexType, "nunique", inline="always")
-@overload_method(StringIndexType, "nunique", inline="always")
-@overload_method(CategoricalIndexType, "nunique", inline="always")
-@overload_method(DatetimeIndexType, "nunique", inline="always")
-@overload_method(TimedeltaIndexType, "nunique", inline="always")
-@overload_method(PeriodIndexType, "nunique", inline="always")
+@overload_method(
+    NumericIndexType, "nunique", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    BinaryIndexType, "nunique", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    StringIndexType, "nunique", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    CategoricalIndexType, "nunique", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    DatetimeIndexType, "nunique", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    TimedeltaIndexType, "nunique", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    PeriodIndexType, "nunique", inline="always", jit_options={"cache": True}
+)
 def overload_index_nunique(I, dropna=True):
     """Add support for Index.nunique() on tagged Index types"""
 
@@ -5485,7 +6148,9 @@ def overload_index_nunique(I, dropna=True):
     return impl
 
 
-@overload_method(RangeIndexType, "nunique", inline="always")
+@overload_method(
+    RangeIndexType, "nunique", inline="always", jit_options={"cache": True}
+)
 def overload_range_index_nunique(I, dropna=True):
     """Add support for Index.nunique() on RangeIndex by calculating the
     number of elements in the range."""
@@ -5499,11 +6164,41 @@ def overload_range_index_nunique(I, dropna=True):
     return impl
 
 
-@overload_method(NumericIndexType, "isin", no_unliteral=True, inline="always")
-@overload_method(BinaryIndexType, "isin", no_unliteral=True, inline="always")
-@overload_method(StringIndexType, "isin", no_unliteral=True, inline="always")
-@overload_method(DatetimeIndexType, "isin", no_unliteral=True, inline="always")
-@overload_method(TimedeltaIndexType, "isin", no_unliteral=True, inline="always")
+@overload_method(
+    NumericIndexType,
+    "isin",
+    no_unliteral=True,
+    inline="always",
+    jit_options={"cache": True},
+)
+@overload_method(
+    BinaryIndexType,
+    "isin",
+    no_unliteral=True,
+    inline="always",
+    jit_options={"cache": True},
+)
+@overload_method(
+    StringIndexType,
+    "isin",
+    no_unliteral=True,
+    inline="always",
+    jit_options={"cache": True},
+)
+@overload_method(
+    DatetimeIndexType,
+    "isin",
+    no_unliteral=True,
+    inline="always",
+    jit_options={"cache": True},
+)
+@overload_method(
+    TimedeltaIndexType,
+    "isin",
+    no_unliteral=True,
+    inline="always",
+    jit_options={"cache": True},
+)
 def overload_index_isin(I, values):
     # if input is Series or array, special implementation is necessary since it may
     # require hash-based shuffling of both inputs for parallelization
@@ -5531,7 +6226,13 @@ def overload_index_isin(I, values):
     return impl
 
 
-@overload_method(RangeIndexType, "isin", no_unliteral=True, inline="always")
+@overload_method(
+    RangeIndexType,
+    "isin",
+    no_unliteral=True,
+    inline="always",
+    jit_options={"cache": True},
+)
 def overload_range_index_isin(I, values):
     # if input is Series or array, special implementation is necessary since it may
     # require hash-based shuffling of both inputs for parallelization
@@ -5582,15 +6283,55 @@ def order_range(I, ascending):  # pragma: no cover
         return init_range_index(last_value, new_stop, -step, name)
 
 
-@overload_method(NumericIndexType, "sort_values", no_unliteral=True, inline="always")
-@overload_method(BinaryIndexType, "sort_values", no_unliteral=True, inline="always")
-@overload_method(StringIndexType, "sort_values", no_unliteral=True, inline="always")
 @overload_method(
-    CategoricalIndexType, "sort_values", no_unliteral=True, inline="always"
+    NumericIndexType,
+    "sort_values",
+    no_unliteral=True,
+    inline="always",
+    jit_options={"cache": True},
 )
-@overload_method(DatetimeIndexType, "sort_values", no_unliteral=True, inline="always")
-@overload_method(TimedeltaIndexType, "sort_values", no_unliteral=True, inline="always")
-@overload_method(RangeIndexType, "sort_values", no_unliteral=True, inline="always")
+@overload_method(
+    BinaryIndexType,
+    "sort_values",
+    no_unliteral=True,
+    inline="always",
+    jit_options={"cache": True},
+)
+@overload_method(
+    StringIndexType,
+    "sort_values",
+    no_unliteral=True,
+    inline="always",
+    jit_options={"cache": True},
+)
+@overload_method(
+    CategoricalIndexType,
+    "sort_values",
+    no_unliteral=True,
+    inline="always",
+    jit_options={"cache": True},
+)
+@overload_method(
+    DatetimeIndexType,
+    "sort_values",
+    no_unliteral=True,
+    inline="always",
+    jit_options={"cache": True},
+)
+@overload_method(
+    TimedeltaIndexType,
+    "sort_values",
+    no_unliteral=True,
+    inline="always",
+    jit_options={"cache": True},
+)
+@overload_method(
+    RangeIndexType,
+    "sort_values",
+    no_unliteral=True,
+    inline="always",
+    jit_options={"cache": True},
+)
 def overload_index_sort_values(
     I, return_indexer=False, ascending=True, na_position="last", key=None
 ):
@@ -5672,14 +6413,62 @@ def overload_index_sort_values(
     return impl
 
 
-@overload_method(NumericIndexType, "argsort", no_unliteral=True, inline="always")
-@overload_method(BinaryIndexType, "argsort", no_unliteral=True, inline="always")
-@overload_method(StringIndexType, "argsort", no_unliteral=True, inline="always")
-@overload_method(CategoricalIndexType, "argsort", no_unliteral=True, inline="always")
-@overload_method(DatetimeIndexType, "argsort", no_unliteral=True, inline="always")
-@overload_method(TimedeltaIndexType, "argsort", no_unliteral=True, inline="always")
-@overload_method(PeriodIndexType, "argsort", no_unliteral=True, inline="always")
-@overload_method(RangeIndexType, "argsort", no_unliteral=True, inline="always")
+@overload_method(
+    NumericIndexType,
+    "argsort",
+    no_unliteral=True,
+    inline="always",
+    jit_options={"cache": True},
+)
+@overload_method(
+    BinaryIndexType,
+    "argsort",
+    no_unliteral=True,
+    inline="always",
+    jit_options={"cache": True},
+)
+@overload_method(
+    StringIndexType,
+    "argsort",
+    no_unliteral=True,
+    inline="always",
+    jit_options={"cache": True},
+)
+@overload_method(
+    CategoricalIndexType,
+    "argsort",
+    no_unliteral=True,
+    inline="always",
+    jit_options={"cache": True},
+)
+@overload_method(
+    DatetimeIndexType,
+    "argsort",
+    no_unliteral=True,
+    inline="always",
+    jit_options={"cache": True},
+)
+@overload_method(
+    TimedeltaIndexType,
+    "argsort",
+    no_unliteral=True,
+    inline="always",
+    jit_options={"cache": True},
+)
+@overload_method(
+    PeriodIndexType,
+    "argsort",
+    no_unliteral=True,
+    inline="always",
+    jit_options={"cache": True},
+)
+@overload_method(
+    RangeIndexType,
+    "argsort",
+    no_unliteral=True,
+    inline="always",
+    jit_options={"cache": True},
+)
 def overload_index_argsort(I, axis=0, kind="quicksort", order=None):
     """Supports pd.argsort() on tagged Index types.
 
@@ -5723,14 +6512,56 @@ def overload_index_argsort(I, axis=0, kind="quicksort", order=None):
     return impl
 
 
-@overload_method(NumericIndexType, "where", no_unliteral=True, inline="always")
-@overload_method(StringIndexType, "where", no_unliteral=True, inline="always")
-@overload_method(BinaryIndexType, "where", no_unliteral=True, inline="always")
-@overload_method(DatetimeIndexType, "where", no_unliteral=True, inline="always")
-@overload_method(TimedeltaIndexType, "where", no_unliteral=True, inline="always")
+@overload_method(
+    NumericIndexType,
+    "where",
+    no_unliteral=True,
+    inline="always",
+    jit_options={"cache": True},
+)
+@overload_method(
+    StringIndexType,
+    "where",
+    no_unliteral=True,
+    inline="always",
+    jit_options={"cache": True},
+)
+@overload_method(
+    BinaryIndexType,
+    "where",
+    no_unliteral=True,
+    inline="always",
+    jit_options={"cache": True},
+)
+@overload_method(
+    DatetimeIndexType,
+    "where",
+    no_unliteral=True,
+    inline="always",
+    jit_options={"cache": True},
+)
+@overload_method(
+    TimedeltaIndexType,
+    "where",
+    no_unliteral=True,
+    inline="always",
+    jit_options={"cache": True},
+)
 # [BE-2910]: Only works if the elements from other are the same as (or a subset of) the categories
-@overload_method(CategoricalIndexType, "where", no_unliteral=True, inline="always")
-@overload_method(RangeIndexType, "where", no_unliteral=True, inline="always")
+@overload_method(
+    CategoricalIndexType,
+    "where",
+    no_unliteral=True,
+    inline="always",
+    jit_options={"cache": True},
+)
+@overload_method(
+    RangeIndexType,
+    "where",
+    no_unliteral=True,
+    inline="always",
+    jit_options={"cache": True},
+)
 def overload_index_where(I, cond, other=np.nan):
     """Supports pd.Index.where() on tagged Index types.
 
@@ -5791,14 +6622,56 @@ def overload_index_where(I, cond, other=np.nan):
     return impl
 
 
-@overload_method(NumericIndexType, "putmask", no_unliteral=True, inline="always")
-@overload_method(StringIndexType, "putmask", no_unliteral=True, inline="always")
-@overload_method(BinaryIndexType, "putmask", no_unliteral=True, inline="always")
-@overload_method(DatetimeIndexType, "putmask", no_unliteral=True, inline="always")
-@overload_method(TimedeltaIndexType, "putmask", no_unliteral=True, inline="always")
+@overload_method(
+    NumericIndexType,
+    "putmask",
+    no_unliteral=True,
+    inline="always",
+    jit_options={"cache": True},
+)
+@overload_method(
+    StringIndexType,
+    "putmask",
+    no_unliteral=True,
+    inline="always",
+    jit_options={"cache": True},
+)
+@overload_method(
+    BinaryIndexType,
+    "putmask",
+    no_unliteral=True,
+    inline="always",
+    jit_options={"cache": True},
+)
+@overload_method(
+    DatetimeIndexType,
+    "putmask",
+    no_unliteral=True,
+    inline="always",
+    jit_options={"cache": True},
+)
+@overload_method(
+    TimedeltaIndexType,
+    "putmask",
+    no_unliteral=True,
+    inline="always",
+    jit_options={"cache": True},
+)
 # [BE-2910]: Only works if the elements from other are the same as (or a subset of) the categories
-@overload_method(CategoricalIndexType, "putmask", no_unliteral=True, inline="always")
-@overload_method(RangeIndexType, "putmask", no_unliteral=True, inline="always")
+@overload_method(
+    CategoricalIndexType,
+    "putmask",
+    no_unliteral=True,
+    inline="always",
+    jit_options={"cache": True},
+)
+@overload_method(
+    RangeIndexType,
+    "putmask",
+    no_unliteral=True,
+    inline="always",
+    jit_options={"cache": True},
+)
 def overload_index_putmask(I, cond, other):
     """Supports pd.Index.putmask() on tagged Index types.
 
@@ -5859,12 +6732,48 @@ def overload_index_putmask(I, cond, other):
     return impl
 
 
-@overload_method(NumericIndexType, "repeat", no_unliteral=True, inline="always")
-@overload_method(StringIndexType, "repeat", no_unliteral=True, inline="always")
-@overload_method(CategoricalIndexType, "repeat", no_unliteral=True, inline="always")
-@overload_method(DatetimeIndexType, "repeat", no_unliteral=True, inline="always")
-@overload_method(TimedeltaIndexType, "repeat", no_unliteral=True, inline="always")
-@overload_method(RangeIndexType, "repeat", no_unliteral=True, inline="always")
+@overload_method(
+    NumericIndexType,
+    "repeat",
+    no_unliteral=True,
+    inline="always",
+    jit_options={"cache": True},
+)
+@overload_method(
+    StringIndexType,
+    "repeat",
+    no_unliteral=True,
+    inline="always",
+    jit_options={"cache": True},
+)
+@overload_method(
+    CategoricalIndexType,
+    "repeat",
+    no_unliteral=True,
+    inline="always",
+    jit_options={"cache": True},
+)
+@overload_method(
+    DatetimeIndexType,
+    "repeat",
+    no_unliteral=True,
+    inline="always",
+    jit_options={"cache": True},
+)
+@overload_method(
+    TimedeltaIndexType,
+    "repeat",
+    no_unliteral=True,
+    inline="always",
+    jit_options={"cache": True},
+)
+@overload_method(
+    RangeIndexType,
+    "repeat",
+    no_unliteral=True,
+    inline="always",
+    jit_options={"cache": True},
+)
 def overload_index_repeat(I, repeats, axis=None):
     """Supports pd.Index.repeats() on tagged index type
 
@@ -5922,25 +6831,33 @@ def overload_index_repeat(I, repeats, axis=None):
     return impl
 
 
-@overload_method(NumericIndexType, "is_integer", inline="always")
+@overload_method(
+    NumericIndexType, "is_integer", inline="always", jit_options={"cache": True}
+)
 def overload_is_integer_numeric(I):
     truth = isinstance(I.dtype, types.Integer)
     return lambda I: truth  # pragma: no cover
 
 
-@overload_method(NumericIndexType, "is_floating", inline="always")
+@overload_method(
+    NumericIndexType, "is_floating", inline="always", jit_options={"cache": True}
+)
 def overload_is_floating_numeric(I):
     truth = isinstance(I.dtype, types.Float)
     return lambda I: truth  # pragma: no cover
 
 
-@overload_method(NumericIndexType, "is_boolean", inline="always")
+@overload_method(
+    NumericIndexType, "is_boolean", inline="always", jit_options={"cache": True}
+)
 def overload_is_boolean_numeric(I):
     truth = isinstance(I.dtype, types.Boolean)
     return lambda I: truth  # pragma: no cover
 
 
-@overload_method(NumericIndexType, "is_numeric", inline="always")
+@overload_method(
+    NumericIndexType, "is_numeric", inline="always", jit_options={"cache": True}
+)
 def overload_is_numeric_numeric(I):
     truth = not isinstance(I.dtype, types.Boolean)
     return lambda I: truth  # pragma: no cover
@@ -5949,86 +6866,218 @@ def overload_is_numeric_numeric(I):
 # TODO: fix for cases where I came from a pd.array of booleans
 
 
-@overload_method(NumericIndexType, "is_object", inline="always")
+@overload_method(
+    NumericIndexType, "is_object", inline="always", jit_options={"cache": True}
+)
 def overload_is_object_numeric(I):
     return lambda I: False  # pragma: no cover
 
 
-@overload_method(StringIndexType, "is_object", inline="always")
-@overload_method(BinaryIndexType, "is_object", inline="always")
-@overload_method(RangeIndexType, "is_numeric", inline="always")
-@overload_method(RangeIndexType, "is_integer", inline="always")
-@overload_method(CategoricalIndexType, "is_categorical", inline="always")
-@overload_method(IntervalIndexType, "is_interval", inline="always")
-@overload_method(MultiIndexType, "is_object", inline="always")
+@overload_method(
+    StringIndexType, "is_object", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    BinaryIndexType, "is_object", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    RangeIndexType, "is_numeric", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    RangeIndexType, "is_integer", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    CategoricalIndexType, "is_categorical", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    IntervalIndexType, "is_interval", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    MultiIndexType, "is_object", inline="always", jit_options={"cache": True}
+)
 def overload_is_methods_true(I):
     return lambda I: True  # pragma: no cover
 
 
-@overload_method(NumericIndexType, "is_categorical", inline="always")
-@overload_method(NumericIndexType, "is_interval", inline="always")
-@overload_method(StringIndexType, "is_boolean", inline="always")
-@overload_method(StringIndexType, "is_floating", inline="always")
-@overload_method(StringIndexType, "is_categorical", inline="always")
-@overload_method(StringIndexType, "is_integer", inline="always")
-@overload_method(StringIndexType, "is_interval", inline="always")
-@overload_method(StringIndexType, "is_numeric", inline="always")
-@overload_method(BinaryIndexType, "is_boolean", inline="always")
-@overload_method(BinaryIndexType, "is_floating", inline="always")
-@overload_method(BinaryIndexType, "is_categorical", inline="always")
-@overload_method(BinaryIndexType, "is_integer", inline="always")
-@overload_method(BinaryIndexType, "is_interval", inline="always")
-@overload_method(BinaryIndexType, "is_numeric", inline="always")
-@overload_method(DatetimeIndexType, "is_boolean", inline="always")
-@overload_method(DatetimeIndexType, "is_floating", inline="always")
-@overload_method(DatetimeIndexType, "is_categorical", inline="always")
-@overload_method(DatetimeIndexType, "is_integer", inline="always")
-@overload_method(DatetimeIndexType, "is_interval", inline="always")
-@overload_method(DatetimeIndexType, "is_numeric", inline="always")
-@overload_method(DatetimeIndexType, "is_object", inline="always")
-@overload_method(TimedeltaIndexType, "is_boolean", inline="always")
-@overload_method(TimedeltaIndexType, "is_floating", inline="always")
-@overload_method(TimedeltaIndexType, "is_categorical", inline="always")
-@overload_method(TimedeltaIndexType, "is_integer", inline="always")
-@overload_method(TimedeltaIndexType, "is_interval", inline="always")
-@overload_method(TimedeltaIndexType, "is_numeric", inline="always")
-@overload_method(TimedeltaIndexType, "is_object", inline="always")
-@overload_method(RangeIndexType, "is_boolean", inline="always")
-@overload_method(RangeIndexType, "is_floating", inline="always")
-@overload_method(RangeIndexType, "is_categorical", inline="always")
-@overload_method(RangeIndexType, "is_interval", inline="always")
-@overload_method(RangeIndexType, "is_object", inline="always")
-@overload_method(IntervalIndexType, "is_boolean", inline="always")
-@overload_method(IntervalIndexType, "is_floating", inline="always")
-@overload_method(IntervalIndexType, "is_categorical", inline="always")
-@overload_method(IntervalIndexType, "is_integer", inline="always")
-@overload_method(IntervalIndexType, "is_numeric", inline="always")
-@overload_method(IntervalIndexType, "is_object", inline="always")
-@overload_method(CategoricalIndexType, "is_boolean", inline="always")
-@overload_method(CategoricalIndexType, "is_floating", inline="always")
-@overload_method(CategoricalIndexType, "is_integer", inline="always")
-@overload_method(CategoricalIndexType, "is_interval", inline="always")
-@overload_method(CategoricalIndexType, "is_numeric", inline="always")
-@overload_method(CategoricalIndexType, "is_object", inline="always")
-@overload_method(PeriodIndexType, "is_boolean", inline="always")
-@overload_method(PeriodIndexType, "is_floating", inline="always")
-@overload_method(PeriodIndexType, "is_categorical", inline="always")
-@overload_method(PeriodIndexType, "is_integer", inline="always")
-@overload_method(PeriodIndexType, "is_interval", inline="always")
-@overload_method(PeriodIndexType, "is_numeric", inline="always")
-@overload_method(PeriodIndexType, "is_object", inline="always")
-@overload_method(MultiIndexType, "is_boolean", inline="always")
-@overload_method(MultiIndexType, "is_floating", inline="always")
-@overload_method(MultiIndexType, "is_categorical", inline="always")
-@overload_method(MultiIndexType, "is_integer", inline="always")
-@overload_method(MultiIndexType, "is_interval", inline="always")
-@overload_method(MultiIndexType, "is_numeric", inline="always")
+@overload_method(
+    NumericIndexType, "is_categorical", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    NumericIndexType, "is_interval", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    StringIndexType, "is_boolean", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    StringIndexType, "is_floating", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    StringIndexType, "is_categorical", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    StringIndexType, "is_integer", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    StringIndexType, "is_interval", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    StringIndexType, "is_numeric", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    BinaryIndexType, "is_boolean", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    BinaryIndexType, "is_floating", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    BinaryIndexType, "is_categorical", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    BinaryIndexType, "is_integer", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    BinaryIndexType, "is_interval", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    BinaryIndexType, "is_numeric", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    DatetimeIndexType, "is_boolean", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    DatetimeIndexType, "is_floating", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    DatetimeIndexType, "is_categorical", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    DatetimeIndexType, "is_integer", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    DatetimeIndexType, "is_interval", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    DatetimeIndexType, "is_numeric", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    DatetimeIndexType, "is_object", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    TimedeltaIndexType, "is_boolean", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    TimedeltaIndexType, "is_floating", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    TimedeltaIndexType, "is_categorical", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    TimedeltaIndexType, "is_integer", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    TimedeltaIndexType, "is_interval", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    TimedeltaIndexType, "is_numeric", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    TimedeltaIndexType, "is_object", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    RangeIndexType, "is_boolean", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    RangeIndexType, "is_floating", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    RangeIndexType, "is_categorical", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    RangeIndexType, "is_interval", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    RangeIndexType, "is_object", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    IntervalIndexType, "is_boolean", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    IntervalIndexType, "is_floating", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    IntervalIndexType, "is_categorical", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    IntervalIndexType, "is_integer", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    IntervalIndexType, "is_numeric", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    IntervalIndexType, "is_object", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    CategoricalIndexType, "is_boolean", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    CategoricalIndexType, "is_floating", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    CategoricalIndexType, "is_integer", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    CategoricalIndexType, "is_interval", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    CategoricalIndexType, "is_numeric", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    CategoricalIndexType, "is_object", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    PeriodIndexType, "is_boolean", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    PeriodIndexType, "is_floating", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    PeriodIndexType, "is_categorical", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    PeriodIndexType, "is_integer", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    PeriodIndexType, "is_interval", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    PeriodIndexType, "is_numeric", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    PeriodIndexType, "is_object", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    MultiIndexType, "is_boolean", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    MultiIndexType, "is_floating", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    MultiIndexType, "is_categorical", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    MultiIndexType, "is_integer", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    MultiIndexType, "is_interval", inline="always", jit_options={"cache": True}
+)
+@overload_method(
+    MultiIndexType, "is_numeric", inline="always", jit_options={"cache": True}
+)
 def overload_is_methods_false(I):
     return lambda I: False  # pragma: no cover
 
 
 # TODO(ehsan): test
-@overload(operator.getitem, no_unliteral=True)
+@overload(operator.getitem, no_unliteral=True, jit_options={"cache": True})
 def overload_heter_index_getitem(I, ind):  # pragma: no cover
     if not isinstance(I, HeterogeneousIndexType):
         return

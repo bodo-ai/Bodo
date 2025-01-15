@@ -635,7 +635,7 @@ def empty_like_type(n, arr):  # pragma: no cover
     return np.empty(n, arr.dtype)
 
 
-@overload(empty_like_type, no_unliteral=True)
+@overload(empty_like_type, no_unliteral=True, jit_options={"cache": True})
 def empty_like_type_overload(n, arr):
     # categorical
     if isinstance(arr, bodo.hiframes.pd_categorical_ext.CategoricalArrayType):
@@ -837,7 +837,7 @@ def alloc_arr_tup(n, arr_tup, init_vals=()):  # pragma: no cover
     return tuple(arrs)
 
 
-@overload(alloc_arr_tup, no_unliteral=True)
+@overload(alloc_arr_tup, no_unliteral=True, jit_options={"cache": True})
 def alloc_arr_tup_overload(n, data, init_vals=()):
     count = data.count
 
@@ -912,7 +912,7 @@ def alloc_type(n, t, s=None, dict_ref_arr=None):  # pragma: no cover
     pass
 
 
-@overload(alloc_type)
+@overload(alloc_type, jit_options={"cache": True})
 def overload_alloc_type(n, t, s=None, dict_ref_arr=None):
     """Allocate an array with type 't'. 'n' is length of the array. 's' is a tuple for
     arrays with variable size elements (e.g. strings), providing the number of elements
@@ -1176,7 +1176,7 @@ def astype(A, t):  # pragma: no cover
     return A.astype(t.dtype)
 
 
-@overload(astype, no_unliteral=True)
+@overload(astype, no_unliteral=True, jit_options={"cache": True})
 def overload_astype(A, t):
     """Convert array 'A' to type 't'"""
     typ = t.instance_type if isinstance(t, types.TypeRef) else t
@@ -1220,7 +1220,7 @@ def full_type(n, val, t):  # pragma: no cover
     return np.full(n, val, t.dtype)
 
 
-@overload(full_type, no_unliteral=True)
+@overload(full_type, no_unliteral=True, jit_options={"cache": True})
 def overload_full_type(n, val, t):
     typ = t.instance_type if isinstance(t, types.TypeRef) else t
 
@@ -1442,7 +1442,7 @@ def debug_prints():
 
 
 # TODO: Move to Numba
-@overload(reversed)
+@overload(reversed, jit_options={"cache": True})
 def list_reverse(A):
     """
     reversed(list)
@@ -1457,7 +1457,7 @@ def list_reverse(A):
         return impl_reversed
 
 
-@numba.njit
+@numba.njit(cache=True)
 def count_nonnan(a):  # pragma: no cover
     """
     Count number of non-NaN elements in an array
@@ -1465,7 +1465,7 @@ def count_nonnan(a):  # pragma: no cover
     return np.count_nonzero(~np.isnan(a))
 
 
-@numba.njit
+@numba.njit(cache=True)
 def nanvar_ddof1(a):  # pragma: no cover
     """
     Simple implementation for np.nanvar(arr, ddof=1)
@@ -1476,7 +1476,7 @@ def nanvar_ddof1(a):  # pragma: no cover
     return np.nanvar(a) * (num_el / (num_el - 1))
 
 
-@numba.njit
+@numba.njit(cache=True)
 def nanstd_ddof1(a):  # pragma: no cover
     """
     Simple implementation for np.nanstd(arr, ddof=1)
@@ -1559,7 +1559,7 @@ def inlined_check_and_propagate_cpp_exception(context, builder):
         builder.ret(numba.core.callconv.RETCODE_EXC)
 
 
-@numba.njit
+@numba.njit(cache=True)
 def check_java_installation(fname):
     with bodo.no_warning_objmode():
         check_java_installation_(fname)
@@ -1775,7 +1775,7 @@ def synchronize_error(exception_str, error_message):
                 raise exception(error_message)
 
 
-@numba.njit
+@numba.njit(cache=True)
 def synchronize_error_njit(exception_str, error_message):
     """An njit wrapper around syncrhonize_error
 
@@ -1808,7 +1808,7 @@ def dict_add_multimap(d, k, v):
         d[k] = [v]
 
 
-@numba.njit(no_cpython_wrapper=True)
+@numba.njit(cache=True, no_cpython_wrapper=True)
 def set_wrapper(a):
     """wrapper around set() constructor to reduce compilation time.
     This makes sure set (e.g. of int array) is compiled once versus lower_builtin in
@@ -1882,3 +1882,43 @@ class AWSCredentials:
     secret_key: str
     session_token: str | None = None
     region: str | None = None
+
+
+def create_arg_hash(*args, **kwargs):
+    """
+    Create a hash encompassing the string representations of all the args and kwargs.
+    This is typically used to generate a unique and repeatable function name.
+    Args:
+        args and kwargs: the variables that have some effect on the contents of the function.
+    """
+    concat_str_args = "".join(map(str, args)) + "".join(
+        f"{k}={v}" for k, v in kwargs.items()
+    )
+    arg_hash = hashlib.sha256(concat_str_args.encode("utf-8"))
+    return arg_hash.hexdigest()
+
+
+def bodo_exec(func_name, func_text, glbls, loc_vars, real_globals, mod_name):
+    """
+    Take a string containing a dynamically generated function with a given name and exec
+    it into existence and make the resulting function Numba cacheable.
+    Args:
+        func_name: the name of the new function created within func_text
+        func_text: the text of the new function to be created
+        glbls: the globals to be passed to exec
+        loc_vars: the local var dict to be passed to exec
+        real_globals: should be passed globals() from the calling scope
+        mod_name: should be __name__ from the calling scope
+    """
+    # Exec the function into existence.
+    exec(func_text, glbls, loc_vars)
+    # Register the code associated with this function so that it is cacheable.
+    bodo.numba_compat.BodoCacheLocator.register(func_name, func_text)
+    # Get the new function from the local environment.
+    new_func = loc_vars[func_name]
+    # Make the new function a member of the module that it was exec'ed in.
+    real_globals[func_name] = new_func
+    # Make the function know what module it resides in.
+    # Also necessary for caching/pickling.
+    new_func.__module__ = mod_name
+    return new_func

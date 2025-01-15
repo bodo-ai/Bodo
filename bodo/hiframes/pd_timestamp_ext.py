@@ -425,7 +425,7 @@ def tz_has_transition_times(tz: str | int | None):
     return False
 
 
-@overload(pd.Timestamp, no_unliteral=True)
+@overload(pd.Timestamp, no_unliteral=True, jit_options={"cache": True})
 def overload_pd_timestamp(
     ts_input=_no_input,
     freq=None,
@@ -744,8 +744,8 @@ def overload_pd_timestamp(
         return impl_date
 
 
-@overload_attribute(PandasTimestampType, "dayofyear")
-@overload_attribute(PandasTimestampType, "day_of_year")
+@overload_attribute(PandasTimestampType, "dayofyear", jit_options={"cache": True})
+@overload_attribute(PandasTimestampType, "day_of_year", jit_options={"cache": True})
 def overload_pd_dayofyear(ptt):
     def pd_dayofyear(ptt):  # pragma: no cover
         return get_day_of_year(ptt.year, ptt.month, ptt.day)
@@ -753,9 +753,9 @@ def overload_pd_dayofyear(ptt):
     return pd_dayofyear
 
 
-@overload_method(PandasTimestampType, "weekday")
-@overload_attribute(PandasTimestampType, "dayofweek")
-@overload_attribute(PandasTimestampType, "day_of_week")
+@overload_method(PandasTimestampType, "weekday", jit_options={"cache": True})
+@overload_attribute(PandasTimestampType, "dayofweek", jit_options={"cache": True})
+@overload_attribute(PandasTimestampType, "day_of_week", jit_options={"cache": True})
 def overload_pd_dayofweek(ptt):
     def pd_dayofweek(ptt):  # pragma: no cover
         return get_day_of_week(ptt.year, ptt.month, ptt.day)
@@ -765,8 +765,8 @@ def overload_pd_dayofweek(ptt):
 
 # Pandas Implementation:
 # https://github.com/pandas-dev/pandas/blob/e088ea31a897929848caa4b5ce3db9d308c604db/pandas/_libs/tslibs/ccalendar.pyx#L138
-@overload_attribute(PandasTimestampType, "week")
-@overload_attribute(PandasTimestampType, "weekofyear")
+@overload_attribute(PandasTimestampType, "week", jit_options={"cache": True})
+@overload_attribute(PandasTimestampType, "weekofyear", jit_options={"cache": True})
 def overload_week_number(ptt):
     def pd_week_number(ptt):
         # In the Gregorian calendar, week 1 is considered the week of the first Thursday
@@ -783,7 +783,7 @@ def overload_week_number(ptt):
     return pd_week_number
 
 
-@overload_method(PandasTimestampType, "utcoffset")
+@overload_method(PandasTimestampType, "utcoffset", jit_options={"cache": True})
 def overload_utcoffset(ptt):
     """
     Overload for PandasTimestampType.utcoffset() method.
@@ -800,15 +800,17 @@ def overload_utcoffset(ptt):
     return pd_utcoffset
 
 
-@overload_method(PandasTimestampType, "__hash__", no_unliteral=True)
+@overload_method(
+    PandasTimestampType, "__hash__", no_unliteral=True, jit_options={"cache": True}
+)
 def dt64_hash(val):
     return lambda val: hash(val.value)
 
 
 # Pandas Implementation:
 # https://github.com/pandas-dev/pandas/blob/e088ea31a897929848caa4b5ce3db9d308c604db/pandas/_libs/tslibs/ccalendar.pyx#L59
-@overload_attribute(PandasTimestampType, "days_in_month")
-@overload_attribute(PandasTimestampType, "daysinmonth")
+@overload_attribute(PandasTimestampType, "days_in_month", jit_options={"cache": True})
+@overload_attribute(PandasTimestampType, "daysinmonth", jit_options={"cache": True})
 def overload_pd_daysinmonth(ptt):
     def pd_daysinmonth(ptt):  # pragma: no cover
         return get_days_in_month(ptt.year, ptt.month)
@@ -818,7 +820,7 @@ def overload_pd_daysinmonth(ptt):
 
 # Pandas Implementation:
 # https://github.com/pandas-dev/pandas/blob/e088ea31a897929848caa4b5ce3db9d308c604db/pandas/_libs/tslibs/ccalendar.pyx#L132
-@overload_attribute(PandasTimestampType, "is_leap_year")
+@overload_attribute(PandasTimestampType, "is_leap_year", jit_options={"cache": True})
 def overload_pd_is_leap_year(ptt):
     def pd_is_leap_year(ptt):  # pragma: no cover
         return is_leap_year(ptt.year)
@@ -829,7 +831,7 @@ def overload_pd_is_leap_year(ptt):
 # Pandas Implementation:
 # https://github.com/pandas-dev/pandas/blob/e088ea31a897929848caa4b5ce3db9d308c604db/pandas/_libs/tslibs/timestamps.pyx#L425
 # Note we don't support business frequencies
-@overload_attribute(PandasTimestampType, "is_month_start")
+@overload_attribute(PandasTimestampType, "is_month_start", jit_options={"cache": True})
 def overload_pd_is_month_start(ptt):
     def pd_is_month_start(ptt):  # pragma: no cover
         return ptt.day == 1
@@ -840,7 +842,7 @@ def overload_pd_is_month_start(ptt):
 # Pandas Implementation:
 # https://github.com/pandas-dev/pandas/blob/e088ea31a897929848caa4b5ce3db9d308c604db/pandas/_libs/tslibs/timestamps.pyx#L436
 # Note we don't support business frequencies
-@overload_attribute(PandasTimestampType, "is_month_end")
+@overload_attribute(PandasTimestampType, "is_month_end", jit_options={"cache": True})
 def overload_pd_is_month_end(ptt):
     def pd_is_month_end(ptt):  # pragma: no cover
         return ptt.day == get_days_in_month(ptt.year, ptt.month)
@@ -851,7 +853,9 @@ def overload_pd_is_month_end(ptt):
 # Pandas Implementation:
 # https://github.com/pandas-dev/pandas/blob/e088ea31a897929848caa4b5ce3db9d308c604db/pandas/_libs/tslibs/timestamps.pyx#L445
 # Note we don't support business frequencies
-@overload_attribute(PandasTimestampType, "is_quarter_start")
+@overload_attribute(
+    PandasTimestampType, "is_quarter_start", jit_options={"cache": True}
+)
 def overload_pd_is_quarter_start(ptt):
     def pd_is_quarter_start(ptt):  # pragma: no cover
         return ptt.day == 1 and (ptt.month % 3) == 1
@@ -862,7 +866,7 @@ def overload_pd_is_quarter_start(ptt):
 # Pandas Implementation:
 # https://github.com/pandas-dev/pandas/blob/e088ea31a897929848caa4b5ce3db9d308c604db/pandas/_libs/tslibs/timestamps.pyx#L456
 # Note we don't support business frequencies
-@overload_attribute(PandasTimestampType, "is_quarter_end")
+@overload_attribute(PandasTimestampType, "is_quarter_end", jit_options={"cache": True})
 def overload_pd_is_quarter_end(ptt):
     def pd_is_quarter_end(ptt):  # pragma: no cover
         return (ptt.month % 3) == 0 and ptt.day == get_days_in_month(
@@ -875,7 +879,7 @@ def overload_pd_is_quarter_end(ptt):
 # Pandas Implementation:
 # https://github.com/pandas-dev/pandas/blob/e088ea31a897929848caa4b5ce3db9d308c604db/pandas/_libs/tslibs/timestamps.pyx#L466
 # Note we don't support business frequencies
-@overload_attribute(PandasTimestampType, "is_year_start")
+@overload_attribute(PandasTimestampType, "is_year_start", jit_options={"cache": True})
 def overload_pd_is_year_start(ptt):
     def pd_is_year_start(ptt):  # pragma: no cover
         return ptt.day == 1 and ptt.month == 1
@@ -886,7 +890,7 @@ def overload_pd_is_year_start(ptt):
 # Pandas Implementation:
 # https://github.com/pandas-dev/pandas/blob/e088ea31a897929848caa4b5ce3db9d308c604db/pandas/_libs/tslibs/timestamps.pyx#L476
 # Note we don't support business frequencies
-@overload_attribute(PandasTimestampType, "is_year_end")
+@overload_attribute(PandasTimestampType, "is_year_end", jit_options={"cache": True})
 def overload_pd_is_year_end(ptt):
     def pd_is_year_end(ptt):  # pragma: no cover
         return ptt.day == 31 and ptt.month == 12
@@ -894,7 +898,7 @@ def overload_pd_is_year_end(ptt):
     return pd_is_year_end
 
 
-@overload_attribute(PandasTimestampType, "quarter")
+@overload_attribute(PandasTimestampType, "quarter", jit_options={"cache": True})
 def overload_quarter(ptt):
     # copied implementation from https://github.com/pandas-dev/pandas/blob/4859be9cd145e3da0a7f596c3e27636a58920c1c/pandas/_libs/tslibs/timestamps.pyx#L547
     def quarter(ptt):  # pragma: no cover
@@ -903,7 +907,9 @@ def overload_quarter(ptt):
     return quarter
 
 
-@overload_method(PandasTimestampType, "date", no_unliteral=True)
+@overload_method(
+    PandasTimestampType, "date", no_unliteral=True, jit_options={"cache": True}
+)
 def overload_pd_timestamp_date(ptt):
     def pd_timestamp_date_impl(ptt):  # pragma: no cover
         return datetime.date(ptt.year, ptt.month, ptt.day)
@@ -911,7 +917,9 @@ def overload_pd_timestamp_date(ptt):
     return pd_timestamp_date_impl
 
 
-@overload_method(PandasTimestampType, "isocalendar", no_unliteral=True)
+@overload_method(
+    PandasTimestampType, "isocalendar", no_unliteral=True, jit_options={"cache": True}
+)
 def overload_pd_timestamp_isocalendar(ptt):
     def impl(ptt):  # pragma: no cover
         year, week, day_of_week = get_isocalendar(ptt.year, ptt.month, ptt.day)
@@ -920,7 +928,9 @@ def overload_pd_timestamp_isocalendar(ptt):
     return impl
 
 
-@overload_method(PandasTimestampType, "isoformat", no_unliteral=True)
+@overload_method(
+    PandasTimestampType, "isoformat", no_unliteral=True, jit_options={"cache": True}
+)
 def overload_pd_timestamp_isoformat(ts, sep=None):
     has_tz = ts.tz is not None
     if is_overload_none(sep):
@@ -981,7 +991,9 @@ def overload_pd_timestamp_isoformat(ts, sep=None):
     return timestamp_isoformat_impl
 
 
-@overload_method(PandasTimestampType, "normalize", no_unliteral=True)
+@overload_method(
+    PandasTimestampType, "normalize", no_unliteral=True, jit_options={"cache": True}
+)
 def overload_pd_timestamp_normalize(ptt):
     tz_literal = ptt.tz
 
@@ -991,7 +1003,9 @@ def overload_pd_timestamp_normalize(ptt):
     return impl
 
 
-@overload_method(PandasTimestampType, "day_name", no_unliteral=True)
+@overload_method(
+    PandasTimestampType, "day_name", no_unliteral=True, jit_options={"cache": True}
+)
 def overload_pd_timestamp_day_name(ptt, locale=None):
     """
     Support for Timestamp.day_name(). This returns the full name
@@ -1024,7 +1038,9 @@ def overload_pd_timestamp_day_name(ptt, locale=None):
     return impl
 
 
-@overload_method(PandasTimestampType, "month_name", no_unliteral=True)
+@overload_method(
+    PandasTimestampType, "month_name", no_unliteral=True, jit_options={"cache": True}
+)
 def overload_pd_timestamp_month_name(ptt, locale=None):
     """
     Support for Timestamp.month_name(). This returns the full name
@@ -1060,7 +1076,9 @@ def overload_pd_timestamp_month_name(ptt, locale=None):
     return impl
 
 
-@overload_method(PandasTimestampType, "tz_convert", no_unliteral=True)
+@overload_method(
+    PandasTimestampType, "tz_convert", no_unliteral=True, jit_options={"cache": True}
+)
 def overload_pd_timestamp_tz_convert(ptt, tz):
     if ptt.tz is None:
         # TODO: tz_localize
@@ -1074,7 +1092,9 @@ def overload_pd_timestamp_tz_convert(ptt, tz):
         return lambda ptt, tz: convert_val_to_timestamp(ptt.value, tz=tz)
 
 
-@overload_method(PandasTimestampType, "tz_localize", no_unliteral=True)
+@overload_method(
+    PandasTimestampType, "tz_localize", no_unliteral=True, jit_options={"cache": True}
+)
 def overload_pd_timestamp_tz_localize(ptt, tz, ambiguous="raise", nonexistent="raise"):
     if ptt.tz is not None and not is_overload_none(tz):
         raise BodoError(
@@ -1169,7 +1189,7 @@ def overload_pd_timestamp_tz_localize(ptt, tz, ambiguous="raise", nonexistent="r
     return impl
 
 
-@overload_method(PandasTimestampType, "__str__")
+@overload_method(PandasTimestampType, "__str__", jit_options={"cache": True})
 def timestamp_str_overload(a):
     return lambda a: a.isoformat(" ")  # pragma: no cover
 
@@ -1502,7 +1522,7 @@ def convert_val_to_timestamp(ts_input, tz=None, is_convert=True):
     return impl
 
 
-@numba.njit(no_cpython_wrapper=True)
+@numba.njit(cache=True, no_cpython_wrapper=True)
 def convert_datetime64_to_timestamp(dt64):  # pragma: no cover
     """Converts dt64 value to pd.Timestamp"""
     dt, year, days = extract_year_days(dt64)
@@ -1522,7 +1542,7 @@ def convert_datetime64_to_timestamp(dt64):  # pragma: no cover
     )
 
 
-@numba.njit(no_cpython_wrapper=True)
+@numba.njit(cache=True, no_cpython_wrapper=True)
 def convert_numpy_timedelta64_to_datetime_timedelta(dt64):  # pragma: no cover
     """Convertes numpy.timedelta64 to datetime.timedelta"""
     n_int64 = bodo.hiframes.datetime_timedelta_ext.cast_numpy_timedelta_to_int(dt64)
@@ -1534,7 +1554,7 @@ def convert_numpy_timedelta64_to_datetime_timedelta(dt64):  # pragma: no cover
     return datetime.timedelta(n_day, n_sec, n_microsec)
 
 
-@numba.njit(no_cpython_wrapper=True)
+@numba.njit(cache=True, no_cpython_wrapper=True)
 def convert_numpy_timedelta64_to_pd_timedelta(dt64):  # pragma: no cover
     """Convertes numpy.timedelta64 to pd.Timedelta"""
     n_int64 = bodo.hiframes.datetime_timedelta_ext.cast_numpy_timedelta_to_int(dt64)
@@ -1578,13 +1598,17 @@ def cast_dt64_to_integer(context, builder, fromty, toty, val):
 
 
 # TODO: fix in Numba
-@overload_method(types.NPDatetime, "__hash__", no_unliteral=True)
+@overload_method(
+    types.NPDatetime, "__hash__", no_unliteral=True, jit_options={"cache": True}
+)
 def dt64_hash(val):
     return lambda val: hash(dt64_to_integer(val))
 
 
 # TODO: fix in Numba
-@overload_method(types.NPTimedelta, "__hash__", no_unliteral=True)
+@overload_method(
+    types.NPTimedelta, "__hash__", no_unliteral=True, jit_options={"cache": True}
+)
 def td64_hash(val):
     return lambda val: hash(dt64_to_integer(val))
 
@@ -1605,7 +1629,7 @@ def cast_td64_to_integer(context, builder, fromty, toty, val):
     return val
 
 
-@numba.njit
+@numba.njit(cache=True)
 def parse_datetime_str(val):  # pragma: no cover
     """Parse datetime string value to dt64
     Just calling Pandas since the Pandas code is complex
@@ -1615,7 +1639,7 @@ def parse_datetime_str(val):  # pragma: no cover
     return integer_to_dt64(res)
 
 
-@numba.njit
+@numba.njit(cache=True)
 def datetime_timedelta_to_timedelta64(val):  # pragma: no cover
     """convert datetime.timedelta to np.timedelta64"""
     with bodo.objmode(res='NPTimedelta("ns")'):
@@ -1625,7 +1649,7 @@ def datetime_timedelta_to_timedelta64(val):  # pragma: no cover
     return res
 
 
-@numba.njit
+@numba.njit(cache=True)
 def series_str_dt64_astype(data):  # pragma: no cover
     """convert string array to datetime64 array using
     objmode and Series implementation."""
@@ -1638,7 +1662,7 @@ def series_str_dt64_astype(data):  # pragma: no cover
     return res
 
 
-@numba.njit
+@numba.njit(cache=True)
 def series_str_td64_astype(data):  # pragma: no cover
     """convert string array to timedelta64 array using
     objmode."""
@@ -1650,7 +1674,7 @@ def series_str_td64_astype(data):  # pragma: no cover
     return res
 
 
-@numba.njit
+@numba.njit(cache=True)
 def datetime_datetime_to_dt64(val):  # pragma: no cover
     """convert datetime.datetime to np.datetime64"""
     return integer_to_dt64(pd.Timestamp(val).value)
@@ -1707,7 +1731,7 @@ def to_datetime_scalar(
     return t
 
 
-@numba.njit
+@numba.njit(cache=True)
 def pandas_string_array_to_datetime(
     arr,
     errors,
@@ -1737,7 +1761,7 @@ def pandas_string_array_to_datetime(
     return result
 
 
-@numba.njit
+@numba.njit(cache=True)
 def pandas_dict_string_array_to_datetime(
     arr,
     errors,
@@ -1782,7 +1806,9 @@ def pandas_dict_string_array_to_datetime(
     return B
 
 
-@overload(pd.to_datetime, inline="always", no_unliteral=True)
+@overload(
+    pd.to_datetime, inline="always", no_unliteral=True, jit_options={"cache": True}
+)
 def overload_to_datetime(
     arg_a,
     errors="raise",
@@ -2164,7 +2190,9 @@ def overload_to_datetime(
     )  # pragma: no cover
 
 
-@overload(pd.to_timedelta, inline="always", no_unliteral=True)
+@overload(
+    pd.to_timedelta, inline="always", no_unliteral=True, jit_options={"cache": True}
+)
 def overload_to_timedelta(arg_a, unit="ns", errors="raise"):
     # changed 'arg' to 'arg_a' since inliner uses vname.startswith("arg.") to find
     # argument variables which causes conflict
@@ -2321,7 +2349,7 @@ def float_to_timedelta_val(data, precision, multiplier):  # pragma: no cover
     return base * multiplier + np.int64(frac * multiplier)
 
 
-@numba.njit
+@numba.njit(cache=True)
 def pandas_string_array_to_timedelta(
     arg_a, unit="ns", errors="raise"
 ):  # pragma: no cover
@@ -2429,7 +2457,9 @@ def create_timestamp_cmp_op_overload(op):
     return overload_date_timestamp_cmp
 
 
-@overload_method(PandasTimestampType, "toordinal", no_unliteral=True)
+@overload_method(
+    PandasTimestampType, "toordinal", no_unliteral=True, jit_options={"cache": True}
+)
 def toordinal(date):
     """Return proleptic Gregorian ordinal for the year, month and day.
     January 1 of year 1 is day 1.  Only the year, month and day values
@@ -2686,7 +2716,7 @@ def to_nanoseconds(td):
     pass
 
 
-@overload(to_nanoseconds)
+@overload(to_nanoseconds, jit_options={"cache": True})
 def to_nanoseconds_impl(td):
     if td == datetime_timedelta_type:
 
@@ -2735,7 +2765,7 @@ def overload_add_operator_timestamp(lhs, rhs):
         return impl
 
 
-@overload(min, no_unliteral=True)
+@overload(min, no_unliteral=True, jit_options={"cache": True})
 def timestamp_min(lhs, rhs):
     if isinstance(lhs, PandasTimestampType) and isinstance(rhs, PandasTimestampType):
         if lhs.tz == rhs.tz:
@@ -2786,7 +2816,7 @@ def timestamp_min(lhs, rhs):
         return impl
 
 
-@overload(max, no_unliteral=True)
+@overload(max, no_unliteral=True, jit_options={"cache": True})
 def timestamp_max(lhs, rhs):
     if isinstance(lhs, PandasTimestampType) and isinstance(rhs, PandasTimestampType):
         if lhs.tz == rhs.tz:
@@ -2838,8 +2868,8 @@ def timestamp_max(lhs, rhs):
         return impl
 
 
-@overload_method(DatetimeDateType, "strftime")
-@overload_method(PandasTimestampType, "strftime")
+@overload_method(DatetimeDateType, "strftime", jit_options={"cache": True})
+@overload_method(PandasTimestampType, "strftime", jit_options={"cache": True})
 def strftime(ts, format):
     if isinstance(ts, DatetimeDateType):
         cls_name = "datetime.date"
@@ -2856,7 +2886,7 @@ def strftime(ts, format):
     return impl
 
 
-@overload_method(PandasTimestampType, "to_datetime64")
+@overload_method(PandasTimestampType, "to_datetime64", jit_options={"cache": True})
 def to_datetime64(ts):
     def impl(ts):
         return integer_to_dt64(ts.value)
@@ -2868,7 +2898,7 @@ def now_impl(tz=None):  # pragma: no cover
     pass
 
 
-@overload(now_impl, no_unilteral=True)
+@overload(now_impl, no_unilteral=True, jit_options={"cache": True})
 def now_impl_overload(tz=None):
     """Internal call to support pd.Timestamp.now().
     Untyped pass replaces pd.Timestamp.now() with this call since class methods are
@@ -2950,7 +2980,7 @@ def typeof_python_calendar(val, c):
     return types.Tuple([types.StringLiteral(v) for v in val])
 
 
-@overload_method(types.NPDatetime, "__str__")
+@overload_method(types.NPDatetime, "__str__", jit_options={"cache": True})
 def overload_datetime64_str(val):
     if val == bodo.datetime64ns:
         # for right now, just going to use isoformat. This will omit fractional values,
