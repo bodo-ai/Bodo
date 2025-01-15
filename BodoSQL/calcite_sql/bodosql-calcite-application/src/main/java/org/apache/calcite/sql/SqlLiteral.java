@@ -257,14 +257,6 @@ public class SqlLiteral extends SqlNode {
     return new SqlLiteral(value, typeName, pos);
   }
 
-  // Bodo Change: Override deepCopy
-  @Override public SqlNode deepCopy(@Nullable SqlParserPos pos) {
-    if (pos == null) {
-      pos = this.pos;
-    }
-    return this.clone(pos);
-  }
-
   @Override public SqlKind getKind() {
     return SqlKind.LITERAL;
   }
