@@ -94,6 +94,14 @@ jobs:
   run-examples:
     name: Run Examples
     runs-on: self-hosted-large
+    env:
+      # Skip files that aren't testing core functionality or are covered in existing tests.
+      SKIP_FILES: >
+        query_llm_ollama.py
+        preprocess_thepile_bodo.py
+        generate_kmers.py
+        llm_inference_speedtest.py
+        Tutorials/*.py
     steps:
       - uses: actions/checkout@v4
       - uses: prefix-dev/setup-pixi@v0.8.1
@@ -111,6 +119,7 @@ jobs:
           role-to-assume: arn:aws:iam::427443013497:role/BodoEngineNightlyRole
           role-session-name: BodoEngineNightlySession
           role-skip-session-tagging: true
+          role-duration-seconds: 7200
 
       - name: Load and Save Hadoop to Cache
         uses: actions/cache@v4
@@ -121,7 +130,14 @@ jobs:
       - name: Convert Notebooks scripts to Python
         run: |
           pip install nbconvert
-          jupyter nbconvert --to script examples/*.ipynb
+
+          export NOTEBOOK_FILES=$(find examples -name "*.ipynb")
+          echo "$NOTEBOOK_FILES" | xargs -n 10 jupyter nbconvert --to script
+          export PYTHON_FILES=$(find examples -name "*.py" | grep -v -E "$(echo $SKIP_FILES | sed 's/ /|/g')")
+
+          # replace notebook builtin display with a print
+          export DISPLAY_DEF="display = print;"
+          echo "$PYTHON_FILES" | xargs -I {} sh -c 'echo $DISPLAY_DEF | cat - {} > temp && mv temp {}'
 
       - name: Install Bodo Packages
         env:
@@ -140,7 +156,20 @@ jobs:
           SF_USERNAME: ${{ secrets.SF_USERNAME }}
           SF_PASSWORD: ${{ secrets.SF_PASSWORD }}
           SF_ACCOUNT: ${{ secrets.SF_ACCOUNT }}
-          SKIP_FILES: "query_llm_ollama.py preprocess_thepile_bodo.py generate_kmers.py llm_inference_speedtest.py"
         run: |
           set -eo pipefail
-          ls *.py | grep -v -E "$(echo $SKIP_FILES | sed 's/ /|/g')" | xargs -n 1 -P 1 python
+
+          # for ML examples
+          pip install seaborn imblearn
+
+          export PYTHON_FILES=$(find . -name "*.py" | grep -v -E "$(echo $SKIP_FILES | sed 's/ /|/g')")
+          echo "$PYTHON_FILES"
+
+          # Run each python file (also cd's into the directory of the file)
+          current_wd=$(pwd)
+          for file in $PYTHON_FILES; do
+              echo "running $file... "
+              cd "$(dirname "$file")"
+              python "$(basename "$file")"
+              cd "$current_wd"
+          done

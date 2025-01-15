@@ -1,13 +1,13 @@
-# Running Batch Jobs
+# Running Jobs
 :fontawesome-brands-aws: Supported on AWS ·
 :material-microsoft-azure:{.azure} Supported on Azure ·
 
-Bodo supports Python and SQL batch jobs. Batch jobs are useful for running data processing tasks, such as ETL, ELT, data preparation, and data analysis. 
-Bodo Cloud Platform allows users to create _Batch Job Definitions_ and then submit _Batch Job Runs_ for execution.
+Bodo supports Python and SQL jobs. Jobs are useful for running data processing tasks, such as ETL, ELT, data preparation, and data analysis. 
+Bodo Cloud Platform allows users to create _Job Template_ and then submit _Job Runs_ for execution.
 
 ![Sidebar-Jobs](../../platform2-screenshots/side-jobs.png#center)
 
-## Batch Job Definitions 
+## Job Template 
 
 Batch job definitions are stored objects which can be used to run your data processing and analysis applications in a Bodo Platform workspace.
 You need to have an available workspace before creating a batch job definitions. 
@@ -49,7 +49,7 @@ It includes the following fields:
 
 
 - ##### Type :fontawesome-solid-asterisk:{.requirement}
-The type of the batch job. Currently, we support two types of batch jobs: Python(`PYTHON`) and SQL(`SQL`). 
+The type of the job. Currently, we support two types of jobs: Python(`PYTHON`) and SQL(`SQL`). 
 
 - ##### Source Location :fontawesome-solid-asterisk:{.requirement}
 The relative path from the location in the job source to the `.py` or `.sql` file that contains the job script.
@@ -119,9 +119,9 @@ The ID of the batch job to run.
         - If neither a cluster UUID nor a cluster configuration is provided, an error will be thrown.
 
 
-### Batch Job Run Logs and Status
+### Job Run Logs and Status
 
-Batch jobs can have one of the following statuses. 
+Jobs can have one of the following statuses. 
 
 - `PENDING` - The batch job is pending.
 - `RUNNING` - The batch job is running.
@@ -144,7 +144,7 @@ You can access the logs of a batch job run from the UI as well.
 
 ### Running a SQL Query as a Batch Job {#sql-batch-job}
 
-Bodo supports running SQL queries as batch jobs without explicitly writing a batch job definition. 
+Bodo supports running SQL queries as jobs without explicitly writing a job template. 
 See [Bodo Platform SDK][execute-sql-query] for usage details.
 
 ### Queuing Batch Job Runs

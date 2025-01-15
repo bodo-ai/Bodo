@@ -16,7 +16,6 @@ import com.bodosql.calcite.sql.SqlTableSampleRowLimitSpec;
 import com.bodosql.calcite.sql.ddl.BodoSqlCreateTableBase;
 import com.bodosql.calcite.sql.func.SqlNamedParam;
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableMap;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -81,16 +80,22 @@ import org.checkerframework.checker.nullness.qual.Nullable;
 
 public class BodoSqlToRelConverter extends SqlToRelConverter {
   // Duplicated because SqlToRelConverter doesn't give access to the one
-  // it created.
+  // it created. No state should be preserved by this.
   private final RelBuilder relBuilder;
 
   // Function expander used for inlining Snowflake UDFs.
+  // The FunctionExpander class is basically "function inlining"
   private final FunctionExpander functionExpander;
 
-  // Map used to pass to all blackboards so parameters when
-  // inlining UDFs can be globally referenced.
+  // Map used to pass to all blackboards parameters. This
+  // is necessary because a function call like UDF(x) in its
+  // signature needs an actual "type" for x (the definitions when
+  // inlining don't have explicit type specifications).
   private final Map<String, RexNode> paramNameToNodeMap;
 
+  // Map that contains information about named parameters. This is used so
+  // that if a sql statement says f(@a) or f($1) we can provide parameter information
+  // how to build a named parameter with a proper type.
   private final Map<String, SqlNamedParam> namedParamSqlNodes = new HashMap<>();
 
   public BodoSqlToRelConverter(
@@ -173,17 +178,14 @@ public class BodoSqlToRelConverter extends SqlToRelConverter {
           bb.setRoot(new RowSample(cluster, bb.root(), params), false);
           return;
         }
-
-        // Let calcite core handle this conversion.
-        break;
     }
-
     // Defer all other conversions to calcite core.
     super.convertFrom(bb, from, fieldNames, propagatingHints);
   }
 
   /**
-   * Recursively converts a query to a relational expression.
+   * Recursively converts a query to a relational expression. We have extended the Calcite builtin
+   * to support CREATE TABLE statements.
    *
    * @param query Query
    * @param top Whether this query is the top-level query of the statement
@@ -194,7 +196,7 @@ public class BodoSqlToRelConverter extends SqlToRelConverter {
   protected RelRoot convertQueryRecursive(
       SqlNode query, boolean top, @Nullable RelDataType targetRowType) {
     if (query instanceof BodoSqlCreateTableBase) {
-      // Create table has to be the topmost relnode
+      // Create table has to be the topmost RelNode
       assert top;
       // Bodo change: intercept logic for CREATE TABLE and call our own method
       return RelRoot.of(
@@ -255,9 +257,17 @@ public class BodoSqlToRelConverter extends SqlToRelConverter {
             .makeLiteral(0, typeFactory.createSqlType(SqlTypeName.BIGINT), false));
   }
 
+  /**
+   * Handles the processing for CREATE TABLE. There are two basic create table options, one that
+   * builds a table from a query and one that just builds a table. This method handles the
+   * switch/if-else logic for this.
+   *
+   * @param createTableDef The create table definition.
+   * @param createTableScope The scope for the create table definition.
+   * @return The relational expression for the create table definition.
+   */
   protected RelNode convertCreateTableDefinition(
       SqlNode createTableDef, SqlValidatorScope createTableScope) {
-
     if (createTableDef instanceof SqlIdentifier) {
       return convertCreateTableIdentifier(createTableDef, createTableScope);
     } else {
@@ -268,7 +278,9 @@ public class BodoSqlToRelConverter extends SqlToRelConverter {
   protected class BodoBlackboard extends Blackboard {
 
     /**
-     * Creates a Blackboard.
+     * Creates a Blackboard. A blackboard is basically a "scratch space" that maintains additional
+     * information for the conversion process. As an example, the blackboard contains the
+     * typeFactory information, so it is able to build proper RelNodes via types.
      *
      * @param scope Name-resolution scope for expressions validated within this query. Can be null
      *     if this Blackboard is for a leaf node, say
@@ -288,9 +300,16 @@ public class BodoSqlToRelConverter extends SqlToRelConverter {
     public RexNode convertExpression(SqlNode expr) {
       if (expr instanceof SqlCall) {
         SqlCall call = ((SqlCall) expr);
+        /**
+         * This is the section that handles UDF processing, either to build our custom UDF RexNode
+         * definitions or to go through the actual inlining step.
+         */
         if (call.getOperator() instanceof SqlUserDefinedFunction) {
           SqlUserDefinedFunction udf = (SqlUserDefinedFunction) call.getOperator();
           Function function = udf.getFunction();
+          // We only process Snowflake UDFs, so we check these first.
+          // This is because our UDF context has additional information
+          // beyond Calcite's base.
           if (function instanceof SnowflakeUserDefinedFunction) {
             SnowflakeUserDefinedFunction snowflakeScalarUdf =
                 (SnowflakeUserDefinedFunction) function;
@@ -312,6 +331,13 @@ public class BodoSqlToRelConverter extends SqlToRelConverter {
             }
             // Get the expected return type
             RelDataType returnType = snowflakeScalarUdf.getReturnType(typeFactory);
+            // This holds the logic for UDF inlining. If we can inline a UDF
+            // we always do (this is the use case for the SQL function body
+            // UDFs). If we can't for any reason (e.g. JavaScript UDFs), then
+            // we build a proper expression. In the future if/when we add a
+            // RexCall for SQL UDFs we can make this logic more complex and
+            // let the planner actually make "decisions" about inlining (which
+            // would require planner optimization and moving inlining code).
             if (snowflakeScalarUdf.canInlineFunction()) {
               // Inline the function body.
               // Generate correlated variables in case we have a query that references
@@ -349,7 +375,14 @@ public class BodoSqlToRelConverter extends SqlToRelConverter {
       return super.convertExpression(expr);
     }
 
-    /** SqlBasicVisitor for preparing and updating the correlated variable arguments to a */
+    /**
+     * SqlBasicVisitor for preparing and updating the arguments for a UDF function call that we are
+     * seeking to inline. This replaces any of the inputRefs that are used with correlation
+     * variables for inlining functions.
+     *
+     * <p>This is necessary because within the process of inlining a function any inputRefs need to
+     * refer to the base table in the function being fused.
+     */
     protected class CorrMapVisitor extends SqlBasicVisitor<Void> {
       List<RexNode> inputRefs;
       List<RexNode> fieldRefs;
@@ -373,6 +406,13 @@ public class BodoSqlToRelConverter extends SqlToRelConverter {
       public Void visit(SqlIdentifier id) {
         // Add the input ref
         RexNode convertedNode = BodoBlackboard.this.convertExpression(id);
+        // Right now we don't handle more complex conversions. This may
+        // not be fully correct (for example if the id were to convert to
+        // a cast of an input ref), then we may not be fully correct.
+        // This is likely a bug we need to fix.
+        //
+        // This check is however needed for situations where the id doesn't
+        // convert to a column directly.
         if (!(convertedNode instanceof RexInputRef)) {
           return null;
         }
@@ -405,7 +445,6 @@ public class BodoSqlToRelConverter extends SqlToRelConverter {
           final RelDataTypeFactory.Builder builder = typeFactory.builder();
           final ListScope ancestorScope1 =
               (ListScope) requireNonNull(resolve.scope, "resolve.scope");
-          final ImmutableMap.Builder<String, Integer> fields = ImmutableMap.builder();
           int i = 0;
           // The child namespaces build the type for this namespace.
           for (SqlValidatorNamespace c : ancestorScope1.getChildren()) {
@@ -486,9 +525,11 @@ public class BodoSqlToRelConverter extends SqlToRelConverter {
       SqlUserDefinedTableFunction udf = (SqlUserDefinedTableFunction) call.getOperator();
       Function function = udf.getFunction();
       if (function instanceof SnowflakeNamedArgumentSqlCatalogTableFunction) {
+        // Implementation of built-in table function that don't require
+        // any changes.
         super.convertCollectionTable(bb, call);
-        return;
       } else if (udf instanceof SqlUserDefinedTableFunction) {
+        // Implementation of UDTF that should be inlined.
         replaceSubQueries(bb, call, RelOptUtil.Logic.TRUE_FALSE_UNKNOWN);
         SnowflakeUserDefinedTableFunction snowflakeTableUdf =
             (SnowflakeUserDefinedTableFunction) function;
@@ -511,15 +552,17 @@ public class BodoSqlToRelConverter extends SqlToRelConverter {
                 snowflakeTableUdf.getRowType(typeFactory, List.of()),
                 cluster);
         bb.setRoot(expandedFunction, true);
-        return;
       }
     } else if (operator instanceof SnowflakeNamedArgumentSqlTableFunction) {
+      // Implementation of other built-in table functions that do require
+      // conversion/processing for default values.
       // Convert the table function call for Snowflake.
       SnowflakeNamedArgumentSqlTableFunction tableFunction =
           (SnowflakeNamedArgumentSqlTableFunction) operator;
       replaceSubQueries(bb, call, RelOptUtil.Logic.TRUE_FALSE_UNKNOWN);
       SqlCall extendedCall = new SqlCallBinding(validator, bb.scope, call).permutedCall();
       RelDataType outputType = bb.getValidator().getValidatedNodeType(call);
+      // Implementation of Flatten
       if (tableFunction.getType() == SnowflakeSqlTableFunction.FunctionType.FLATTEN) {
         // Update the arguments and replace any default values in the arguments.
         List<RexNode> arguments = new ArrayList<>();
@@ -560,8 +603,8 @@ public class BodoSqlToRelConverter extends SqlToRelConverter {
         RexCall updatedCall = (RexCall) this.rexBuilder.makeCall(operator, flattenRexNodes);
         RelNode output = BodoLogicalFlatten.create(input, updatedCall, outputType);
         bb.setRoot(output, true);
-        return;
       } else if (tableFunction.getType() == SnowflakeSqlTableFunction.FunctionType.GENERATOR) {
+        // Implementation of Generator
         // Update the arguments and replace any default values in the arguments.
         List<RexNode> arguments = new ArrayList<>();
         for (int i = 0; i < extendedCall.operandCount(); i++) {
@@ -578,10 +621,11 @@ public class BodoSqlToRelConverter extends SqlToRelConverter {
         RelNode output =
             BodoLogicalTableFunctionScan.create(cluster, List.of(), newCall, outputType);
         bb.setRoot(output, true);
-        return;
       }
+    } else {
+      // Just fall back to the Calcite built-in.
+      super.convertCollectionTable(bb, call);
     }
-    super.convertCollectionTable(bb, call);
   }
 
   @Override
