@@ -534,14 +534,14 @@ public class SqlValidatorImpl implements SqlValidatorWithHints {
 
 
   private static SqlNode expandExprFromJoin(SqlJoin join,
-      SqlIdentifier identifier, JoinScope scope, SqlValidatorImpl validator) {
-
+      SqlIdentifier identifier, SelectScope scope, SqlValidatorImpl validator) {
+     JoinScope joinScope = (JoinScope) validator.getJoinScope(join);
     // BODO CHANGE:
     // Several changes were made to this function to enable properly expanding
     // USING columns.
 
     //List of joinChildren that have not yet been traversed when looking for instances of identifier
-    final List<ScopeChild> joinChildrenToBeTraversed = new ArrayList<>(requireNonNull(scope, "scope").children);
+    final List<ScopeChild> joinChildrenToBeTraversed = new ArrayList<>(requireNonNull(joinScope, "scope").children);
     //List of possible expansions of the input identifier
     final List<SqlNode> qualifiedNode = new ArrayList<>();
 
@@ -550,7 +550,7 @@ public class SqlValidatorImpl implements SqlValidatorWithHints {
       SqlJoin leftSubJoin = (SqlJoin) join.getLeft();
       //Join scope is a ListScope, so this should always be valid
       JoinScope leftSubJoinScope = (JoinScope) validator.getJoinScope(leftSubJoin);
-      SqlNode unExpandedOutput = expandExprFromJoin(leftSubJoin, identifier, leftSubJoinScope, validator);
+      SqlNode unExpandedOutput = expandExprFromJoin(leftSubJoin, identifier, scope, validator);
       if (identifier != unExpandedOutput) {
         qualifiedNode.add(unExpandedOutput);
         // Remove the already traversed children from joinChildrenToBeTraversed
@@ -564,8 +564,8 @@ public class SqlValidatorImpl implements SqlValidatorWithHints {
       SqlJoin rightSubJoin = (SqlJoin) join.getRight();
       //Join scope is a ListScope, so this should always be valid
       JoinScope rightSubJoinScope = (JoinScope) validator.getJoinScope(rightSubJoin);
-      identifier = (SqlIdentifier) expandExprFromJoin(rightSubJoin, identifier, rightSubJoinScope, validator);
-      SqlNode unExpandedOutput = expandExprFromJoin(rightSubJoin, identifier, rightSubJoinScope, validator);
+      identifier = (SqlIdentifier) expandExprFromJoin(rightSubJoin, identifier, scope, validator);
+      SqlNode unExpandedOutput = expandExprFromJoin(rightSubJoin, identifier, scope, validator);
       if (identifier != unExpandedOutput){
         qualifiedNode.add(unExpandedOutput);
         for (int i = 0; i < rightSubJoinScope.getChildren().size(); i++){
@@ -713,7 +713,7 @@ public class SqlValidatorImpl implements SqlValidatorWithHints {
     }
 
     assert validator.getJoinScope(from) instanceof JoinScope: "Error in expandCommonColumn: scope is not a JoinScope";
-    return expandExprFromJoin((SqlJoin) from, identifier, (JoinScope) validator.getJoinScope(from), validator);
+    return expandExprFromJoin((SqlJoin) from, identifier, scope, validator);
   }
 
   private static void validateQualifiedCommonColumn(SqlJoin join,
