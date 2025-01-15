@@ -31,7 +31,7 @@ def array_op_any(arr, skipna=True):  # pragma: no cover
 
 
 # TODO: implement skipna
-@overload(array_op_any)
+@overload(array_op_any, jit_options={"cache": True})
 def overload_array_op_any(A, skipna=True):
     """Returns whether an array contains any truthy values.
 
@@ -81,7 +81,7 @@ def array_op_all(arr, skipna=True):  # pragma: no cover
 
 
 # TODO: implement skipna
-@overload(array_op_all)
+@overload(array_op_all, jit_options={"cache": True})
 def overload_array_op_all(A, skipna=True):
     """Returns whether an array contains only truthy values.
 
@@ -138,7 +138,7 @@ def array_op_isna(arr):  # pragma: no cover
     pass
 
 
-@overload(array_op_isna)
+@overload(array_op_isna, jit_options={"cache": True})
 def overload_array_op_isna(arr):
     def impl(arr):  # pragma: no cover
         numba.parfors.parfor.init_prange()
@@ -159,7 +159,7 @@ def drop_duplicates_local_dictionary_if_dict(arr):  # pragma: no cover
     """
 
 
-@overload(drop_duplicates_local_dictionary_if_dict)
+@overload(drop_duplicates_local_dictionary_if_dict, jit_options={"cache": True})
 def overload_drop_duplicates_local_dictionary_if_dict(arr):
     if arr == bodo.dict_str_arr_type:
         return lambda arr: bodo.libs.array.drop_duplicates_local_dictionary(
@@ -173,7 +173,7 @@ def array_op_count(arr):  # pragma: no cover
     pass
 
 
-@overload(array_op_count)
+@overload(array_op_count, jit_options={"cache": True})
 def overload_array_op_count(arr):
     def impl(arr):  # pragma: no cover
         numba.parfors.parfor.init_prange()
@@ -220,7 +220,7 @@ def array_op_describe_dt_impl(arr):  # pragma: no cover
     return (a_count, a_mean, a_min, q25, q50, q75, a_max)
 
 
-@overload(array_op_describe)
+@overload(array_op_describe, jit_options={"cache": True})
 def overload_array_op_describe(arr):
     # Pandas doesn't return std for describe of datetime64 data
     # https://github.com/pandas-dev/pandas/blob/059c8bac51e47d6eaaa3e36d6a293a22312925e6/pandas/core/describe.py#L328
@@ -372,7 +372,7 @@ def array_op_max(arr):  # pragma: no cover
     pass
 
 
-@overload(array_op_max)
+@overload(array_op_max, jit_options={"cache": True})
 def overload_array_op_max(arr):
     if arr.dtype == bodo.timedelta64ns:
 
@@ -497,7 +497,7 @@ def array_op_mean(arr):  # pragma: no cover
     pass
 
 
-@overload(array_op_mean)
+@overload(array_op_mean, jit_options={"cache": True})
 def overload_array_op_mean(arr):
     # datetime
     if arr.dtype == bodo.datetime64ns:
@@ -544,7 +544,7 @@ def array_op_var(arr, skipna, ddof):  # pragma: no cover
     pass
 
 
-@overload(array_op_var)
+@overload(array_op_var, jit_options={"cache": True})
 def overload_array_op_var(arr, skipna, ddof):
     def impl(arr, skipna, ddof):  # pragma: no cover
         numba.parfors.parfor.init_prange()
@@ -574,7 +574,7 @@ def array_op_std(arr, skipna=True, ddof=1):  # pragma: no cover
     pass
 
 
-@overload(array_op_std)
+@overload(array_op_std, jit_options={"cache": True})
 def overload_array_op_std(arr, skipna=True, ddof=1):
     # datetime
     if arr.dtype == bodo.datetime64ns:
@@ -595,7 +595,7 @@ def array_op_quantile(arr, q):  # pragma: no cover
     pass
 
 
-@overload(array_op_quantile)
+@overload(array_op_quantile, jit_options={"cache": True})
 def overload_array_op_quantile(arr, q):
     if is_iterable_type(q):
         if arr.dtype == bodo.datetime64ns:
@@ -672,7 +672,7 @@ def array_op_sum(arr, skipna, min_count):  # pragma: no cover
     pass
 
 
-@overload(array_op_sum, no_unliteral=True)
+@overload(array_op_sum, no_unliteral=True, jit_options={"cache": True})
 def overload_array_op_sum(arr, skipna, min_count):
     if isinstance(arr, bodo.DecimalArrayType):
 
@@ -734,7 +734,7 @@ def array_op_prod(arr, skipna, min_count):  # pragma: no cover
     pass
 
 
-@overload(array_op_prod)
+@overload(array_op_prod, jit_options={"cache": True})
 def overload_array_op_prod(arr, skipna, min_count):
     val_one = arr.dtype(1)
     # Using True fails for some reason in test_dataframe.py::test_df_prod"[df_value2]"
@@ -780,7 +780,7 @@ def array_op_idxmax(arr, index):  # pragma: no cover
     pass
 
 
-@overload(array_op_idxmax, inline="always")
+@overload(array_op_idxmax, inline="always", jit_options={"cache": True})
 def overload_array_op_idxmax(arr, index):
     # TODO: Make sure -1 is replaced with np.nan
     def impl(arr, index):  # pragma: no cover
@@ -794,7 +794,7 @@ def array_op_idxmin(arr, index):  # pragma: no cover
     pass
 
 
-@overload(array_op_idxmin, inline="always")
+@overload(array_op_idxmin, inline="always", jit_options={"cache": True})
 def overload_array_op_idxmin(arr, index):
     # TODO: Make sure -1 is replaced with np.nan
     def impl(arr, index):  # pragma: no cover
@@ -808,7 +808,7 @@ def _convert_isin_values(values, use_hash_impl):  # pragma: no cover
     pass
 
 
-@overload(_convert_isin_values, no_unliteral=True)
+@overload(_convert_isin_values, no_unliteral=True, jit_options={"cache": True})
 def overload_convert_isin_values(values, use_hash_impl):
     if is_overload_true(use_hash_impl):
 
@@ -831,7 +831,7 @@ def array_op_isin(arr, values):  # pragma: no cover
     pass
 
 
-@overload(array_op_isin, inline="always")
+@overload(array_op_isin, inline="always", jit_options={"cache": True})
 def overload_array_op_isin(arr, values):
     # For now we're only using the hash implementation when the dtypes of values
     # and the series are the same, and they are hashable.

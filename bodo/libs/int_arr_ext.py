@@ -337,7 +337,7 @@ numba.core.ir_utils.alias_func_extensions[
 
 
 # high-level allocation function for int arrays
-@numba.njit(no_cpython_wrapper=True)
+@numba.njit(cache=True, no_cpython_wrapper=True)
 def alloc_int_array(n, dtype):  # pragma: no cover
     data_arr = np.empty(n, dtype)
     nulls = np.empty((n + 7) >> 3, dtype=np.uint8)
@@ -358,7 +358,7 @@ ArrayAnalysis._analyze_op_call_bodo_libs_int_arr_ext_alloc_int_array = (
 
 
 # NOTE: also used in regular Python in lower_constant_str_arr
-@numba.njit
+@numba.njit(cache=True)
 def set_bit_to_arr(bits, i, bit_is_set):  # pragma: no cover
     bits[i // 8] ^= np.uint8(-np.uint8(bit_is_set) ^ bits[i // 8]) & kBitmask[i % 8]
 
@@ -368,7 +368,7 @@ def get_bit_bitmap_arr(bits, i):  # pragma: no cover
     return (bits[i >> 3] >> (i & 0x07)) & 1
 
 
-@overload(operator.getitem, no_unliteral=True)
+@overload(operator.getitem, no_unliteral=True, jit_options={"cache": True})
 def int_arr_getitem(A, ind):
     if not isinstance(A, IntegerArrayType):
         return
@@ -411,7 +411,7 @@ def int_arr_getitem(A, ind):
     )  # pragma: no cover
 
 
-@overload(operator.setitem, no_unliteral=True)
+@overload(operator.setitem, no_unliteral=True, jit_options={"cache": True})
 def int_arr_setitem(A, idx, val):
     if not isinstance(A, IntegerArrayType):
         return
@@ -485,7 +485,7 @@ def int_arr_setitem(A, idx, val):
     )  # pragma: no cover
 
 
-@overload(operator.setitem, no_unliteral=True)
+@overload(operator.setitem, no_unliteral=True, jit_options={"cache": True})
 def numpy_arr_setitem(A, idx, val):
     """Support setitem of Numpy arrays with nullable int arrays"""
     if not (
@@ -505,18 +505,18 @@ def numpy_arr_setitem(A, idx, val):
     return impl_np_setitem_int_arr
 
 
-@overload(len, no_unliteral=True)
+@overload(len, no_unliteral=True, jit_options={"cache": True})
 def overload_int_arr_len(A):
     if isinstance(A, IntegerArrayType):
         return lambda A: len(A._data)  # pragma: no cover
 
 
-@overload_attribute(IntegerArrayType, "shape")
+@overload_attribute(IntegerArrayType, "shape", jit_options={"cache": True})
 def overload_int_arr_shape(A):
     return lambda A: (len(A._data),)  # pragma: no cover
 
 
-@overload_attribute(IntegerArrayType, "dtype")
+@overload_attribute(IntegerArrayType, "dtype", jit_options={"cache": True})
 def overload_int_arr_dtype(A):
     dtype_class = getattr(
         pd, "{}Int{}Dtype".format("" if A.dtype.signed else "U", A.dtype.bitwidth)
@@ -524,17 +524,19 @@ def overload_int_arr_dtype(A):
     return lambda A: dtype_class()  # pragma: no cover
 
 
-@overload_attribute(IntegerArrayType, "ndim")
+@overload_attribute(IntegerArrayType, "ndim", jit_options={"cache": True})
 def overload_int_arr_ndim(A):
     return lambda A: 1  # pragma: no cover
 
 
-@overload_attribute(IntegerArrayType, "nbytes")
+@overload_attribute(IntegerArrayType, "nbytes", jit_options={"cache": True})
 def int_arr_nbytes_overload(A):
     return lambda A: A._data.nbytes + A._null_bitmap.nbytes  # pragma: no cover
 
 
-@overload_method(IntegerArrayType, "copy", no_unliteral=True)
+@overload_method(
+    IntegerArrayType, "copy", no_unliteral=True, jit_options={"cache": True}
+)
 def overload_int_arr_copy(A, dtype=None):
     # TODO: Update dtype to do proper parsing with supported types.
     if not is_overload_none(dtype):
@@ -546,7 +548,9 @@ def overload_int_arr_copy(A, dtype=None):
         )  # pragma: no cover
 
 
-@overload_method(IntegerArrayType, "astype", no_unliteral=True)
+@overload_method(
+    IntegerArrayType, "astype", no_unliteral=True, jit_options={"cache": True}
+)
 def overload_int_arr_astype(A, dtype, copy=True):
     # dtype becomes NumberClass if type reference is passed
     # see convert_to_nullable_tup in array_kernels.py
@@ -652,7 +656,7 @@ def cast_nullable_int_array_to_numpy(context, builder, fromty, toty, val):
     return context.compile_internal(builder, f, toty(fromty), [val])
 
 
-@overload(np.asarray)
+@overload(np.asarray, jit_options={"cache": True})
 def overload_asarray(A):
     """Support np.asarray() for nullable int arrays"""
     if not isinstance(A, IntegerArrayType):
@@ -775,7 +779,9 @@ _install_unary_ops()
 
 # inlining in Series pass but avoiding inline="always" since there are Numba-only cases
 # that don't need inlining such as repeats.sum() in repeat_kernel()
-@overload_method(IntegerArrayType, "sum", no_unliteral=True)
+@overload_method(
+    IntegerArrayType, "sum", no_unliteral=True, jit_options={"cache": True}
+)
 def overload_int_arr_sum(A, skipna=True, min_count=0):
     """A.sum() for nullable integer arrays"""
     unsupported_args = {"skipna": skipna, "min_count": min_count}
@@ -795,7 +801,9 @@ def overload_int_arr_sum(A, skipna=True, min_count=0):
     return impl
 
 
-@overload_method(IntegerArrayType, "unique", no_unliteral=True)
+@overload_method(
+    IntegerArrayType, "unique", no_unliteral=True, jit_options={"cache": True}
+)
 def overload_unique(A):
     dtype = A.dtype
 

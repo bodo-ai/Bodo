@@ -178,19 +178,19 @@ def lower_get_rank(context, builder, sig, args):
     return out
 
 
-@numba.njit
+@numba.njit(cache=True)
 def get_size():  # pragma: no cover
     """wrapper for getting number of processes (MPI COMM size currently)"""
     return _get_size()
 
 
-@numba.njit
+@numba.njit(cache=True)
 def barrier():  # pragma: no cover
     """wrapper for barrier (MPI barrier currently)"""
     _barrier()
 
 
-@numba.njit
+@numba.njit(cache=True)
 def get_cpu_id():  # pragma: no cover
     """
     Wrapper for get_cpu_id -- get id of the cpu that the process
@@ -235,7 +235,7 @@ _send = types.ExternalFunction(
 )
 
 
-@numba.njit
+@numba.njit(cache=True)
 def send(val, rank, tag):  # pragma: no cover
     # dummy array for val
     send_arr = np.full(1, val)
@@ -249,7 +249,7 @@ _recv = types.ExternalFunction(
 )
 
 
-@numba.njit
+@numba.njit(cache=True)
 def recv(dtype, rank, tag):  # pragma: no cover
     # dummy array for val
     recv_arr = np.empty(1, dtype)
@@ -521,7 +521,7 @@ _alltoall = types.ExternalFunction(
 )
 
 
-@numba.njit
+@numba.njit(cache=True)
 def alltoall(send_arr, recv_arr, count):  # pragma: no cover
     # TODO: handle int64 counts
     assert count < INT_MAX
@@ -529,7 +529,7 @@ def alltoall(send_arr, recv_arr, count):  # pragma: no cover
     _alltoall(send_arr.ctypes, recv_arr.ctypes, np.int32(count), type_enum)
 
 
-@numba.njit
+@numba.njit(cache=True)
 def gather_scalar(data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT, comm=0):
     return gather_scalar_impl_jit(data, allgather, warn_if_rep, root, comm)
 
@@ -659,7 +659,7 @@ _decimal_reduce = types.ExternalFunction(
 )
 
 
-@numba.njit
+@numba.njit(cache=True)
 def dist_reduce(value, reduce_op, comm=0):
     return dist_reduce_impl(value, reduce_op, comm)
 
@@ -793,7 +793,7 @@ _dist_exscan = types.ExternalFunction(
 )
 
 
-@numba.njit
+@numba.njit(cache=True)
 def dist_exscan(value, reduce_op):
     return dist_exscan_impl(value, reduce_op)
 
@@ -814,12 +814,12 @@ def dist_exscan_impl(value, reduce_op):
 
 
 # from GetBit() in Arrow
-@numba.njit
+@numba.njit(cache=True)
 def get_bit(bits, i):  # pragma: no cover
     return (bits[i >> 3] >> (i & 0x07)) & 1
 
 
-@numba.njit
+@numba.njit(cache=True)
 def copy_gathered_null_bytes(
     null_bitmap_ptr, tmp_null_bytes, recv_counts_nulls, recv_counts
 ):  # pragma: no cover
@@ -894,7 +894,7 @@ def gatherv_overload(
     )  # pragma: no cover
 
 
-@numba.njit
+@numba.njit(cache=True)
 def gatherv_impl_wrapper(
     data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT, comm=0
 ):
@@ -1515,7 +1515,7 @@ def overload_distributed_transpose(arr):
     return impl
 
 
-@numba.njit
+@numba.njit(cache=True)
 def rebalance(data, dests=None, random=False, random_seed=None, parallel=False):
     return rebalance_impl(data, dests, random, random_seed, parallel)
 
@@ -1627,7 +1627,7 @@ def rebalance_impl(data, dests=None, random=False, random_seed=None, parallel=Fa
     return impl
 
 
-@numba.njit
+@numba.njit(cache=True)
 def random_shuffle(data, seed=None, dests=None, n_samples=None, parallel=False):
     return random_shuffle_impl(data, seed, dests, n_samples, parallel)
 
@@ -1692,7 +1692,7 @@ def random_shuffle_impl(data, seed=None, dests=None, n_samples=None, parallel=Fa
     return impl
 
 
-@numba.njit
+@numba.njit(cache=True)
 def allgatherv(data, warn_if_rep=True, root=DEFAULT_ROOT):
     return allgatherv_impl(data, warn_if_rep, root)
 
@@ -1704,7 +1704,7 @@ def allgatherv_impl(data, warn_if_rep=True, root=DEFAULT_ROOT):
     )  # pragma: no cover
 
 
-@numba.njit
+@numba.njit(cache=True)
 def get_scatter_null_bytes_buff(
     null_bitmap_ptr, sendcounts, sendcounts_nulls, is_sender
 ):  # pragma: no cover
@@ -2064,7 +2064,7 @@ def get_value_for_type(dtype, use_arrow_time=False):  # pragma: no cover
     raise BodoError(f"get_value_for_type(dtype): Missing data type {dtype}")
 
 
-@numba.njit(no_cpython_wrapper=True)
+@numba.njit(cache=True, no_cpython_wrapper=True)
 def get_scatter_comm_info(root, comm):
     """Return communication attributes for scatterv based on root and intercomm"""
     is_intercomm = comm != 0
@@ -2133,7 +2133,7 @@ def scatterv_overload(
     )  # pragma: no cover
 
 
-@numba.njit
+@numba.njit(cache=True)
 def scatterv_impl(data, send_counts=None, warn_if_dist=True, root=DEFAULT_ROOT, comm=0):
     return scatterv_impl_jit(data, send_counts, warn_if_dist, root, comm)
 
@@ -2997,7 +2997,7 @@ def scatterv_impl_jit(
 char_typ_enum = np.int32(numba_to_c_type(types.uint8))
 
 
-@numba.njit(no_cpython_wrapper=True)
+@numba.njit(cache=True, no_cpython_wrapper=True)
 def _scatterv_null_bitmap(null_bitmap, send_counts, n_in, root, comm):
     """Scatter null bitmap for nullable arrays"""
     rank, is_intercomm, is_sender, n_pes = get_scatter_comm_info(root, comm)
@@ -3131,7 +3131,7 @@ c_bcast = types.ExternalFunction(
 )
 
 
-@numba.njit
+@numba.njit(cache=True)
 def bcast_scalar(val, root=DEFAULT_ROOT, comm=0):
     """broadcast for a scalar value.
     Assumes all ranks `val` has same type.
@@ -3277,7 +3277,7 @@ def bcast_scalar_impl_any(context, builder, sig, args):
     return context.compile_internal(builder, impl, sig, args)
 
 
-@numba.njit
+@numba.njit(cache=True)
 def bcast_tuple(val, root=DEFAULT_ROOT, comm=0):
     return bcast_tuple_impl_jit(val, root, comm)
 
@@ -3386,7 +3386,7 @@ def slice_getitem_overload(arr, slice_index, arr_start, total_len):
     return getitem_impl
 
 
-dummy_use = numba.njit(no_cpython_wrapper=True)(lambda a: None)
+dummy_use = numba.njit(cache=True, no_cpython_wrapper=True)(lambda a: None)
 
 
 def int_getitem(arr, ind, arr_start, total_len, is_1D):  # pragma: no cover
@@ -3958,7 +3958,7 @@ def alltoallv_tup_overload(
     return a2a_impl
 
 
-@numba.njit
+@numba.njit(cache=True)
 def get_start_count(n):  # pragma: no cover
     rank = bodo.libs.distributed_api.get_rank()
     n_pes = bodo.libs.distributed_api.get_size()
@@ -3967,7 +3967,7 @@ def get_start_count(n):  # pragma: no cover
     return start, count
 
 
-@numba.njit
+@numba.njit(cache=True)
 def get_start(total_size, pes, rank):  # pragma: no cover
     """get start index in 1D distribution"""
     res = total_size % pes
@@ -3983,7 +3983,7 @@ def get_end(total_size, pes, rank):  # pragma: no cover
     return (rank + 1) * blk_size + min(rank + 1, res)
 
 
-@numba.njit
+@numba.njit(cache=True)
 def get_node_portion(total_size, pes, rank):  # pragma: no cover
     """get portion of size for alloc division"""
     res = total_size % pes
@@ -3994,7 +3994,7 @@ def get_node_portion(total_size, pes, rank):  # pragma: no cover
         return blk_size
 
 
-@numba.njit
+@numba.njit(cache=True)
 def dist_cumsum(in_arr, out_arr):
     return dist_cumsum_impl(in_arr, out_arr)
 
@@ -4017,7 +4017,7 @@ def dist_cumsum_impl(in_arr, out_arr):
     return cumsum_impl
 
 
-@numba.njit
+@numba.njit(cache=True)
 def dist_cumprod(in_arr, out_arr):
     return dist_cumprod_impl(in_arr, out_arr)
 
@@ -4047,7 +4047,7 @@ def dist_cumprod_impl(in_arr, out_arr):
     return cumprod_impl
 
 
-@numba.njit
+@numba.njit(cache=True)
 def dist_cummin(in_arr, out_arr):
     return dist_cummin_impl(in_arr, out_arr)
 
@@ -4076,7 +4076,7 @@ def dist_cummin_impl(in_arr, out_arr):
     return cummin_impl
 
 
-@numba.njit
+@numba.njit(cache=True)
 def dist_cummax(in_arr, out_arr):
     return dist_cummax_impl(in_arr, out_arr)
 
@@ -4111,7 +4111,7 @@ _allgather = types.ExternalFunction(
 )
 
 
-@numba.njit
+@numba.njit(cache=True)
 def allgather(arr, val):  # pragma: no cover
     type_enum = get_type_enum(arr)
     _allgather(arr.ctypes, 1, value_to_ptr(val), type_enum)
@@ -4145,14 +4145,14 @@ def threaded_return(A):  # pragma: no cover
 
 # dummy function to set a distributed array without changing the index in distributed
 # pass
-@numba.njit
+@numba.njit(cache=True)
 def set_arr_local(arr, ind, val):  # pragma: no cover
     arr[ind] = val
 
 
 # dummy function to specify local allocation size, to enable bypassing distributed
 # transformations
-@numba.njit
+@numba.njit(cache=True)
 def local_alloc_size(n, in_arr):  # pragma: no cover
     return n
 
@@ -4168,12 +4168,12 @@ class ThreadedRetTyper(AbstractTemplate):
         return signature(args[0], *args)
 
 
-@numba.njit
+@numba.njit(cache=True)
 def parallel_print(*args):  # pragma: no cover
     print(*args)
 
 
-@numba.njit
+@numba.njit(cache=True)
 def single_print(*args):  # pragma: no cover
     if bodo.libs.distributed_api.get_rank() == 0:
         print(*args)
@@ -4283,7 +4283,7 @@ sig = types.void(
 oneD_reshape_shuffle = types.ExternalFunction("oneD_reshape_shuffle", sig)
 
 
-@numba.njit(no_cpython_wrapper=True, cache=True)
+@numba.njit(cache=True, no_cpython_wrapper=True)
 def dist_oneD_reshape_shuffle(
     lhs, in_arr, new_dim0_global_len, dest_ranks=None
 ):  # pragma: no cover
@@ -4317,7 +4317,7 @@ permutation_int = types.ExternalFunction(
 )
 
 
-@numba.njit
+@numba.njit(cache=True)
 def dist_permutation_int(lhs, n):  # pragma: no cover
     permutation_int(lhs.ctypes, n)
 
@@ -4337,7 +4337,7 @@ permutation_array_index = types.ExternalFunction(
 )
 
 
-@numba.njit
+@numba.njit(cache=True)
 def dist_permutation_array_index(
     lhs, lhs_len, dtype_size, rhs, p, p_len, n_samples
 ):  # pragma: no cover
@@ -4370,7 +4370,7 @@ ll.add_symbol("disconnect_hdfs", hdfs_reader.disconnect_hdfs)
 disconnect_hdfs = types.ExternalFunction("disconnect_hdfs", types.int32())
 
 
-@numba.njit
+@numba.njit(cache=True)
 def disconnect_hdfs_njit():  # pragma: no cover
     """
     Simple njit wrapper around disconnect_hdfs.
@@ -4441,7 +4441,7 @@ def bcast(data, comm_ranks=None, root=DEFAULT_ROOT, comm=None):  # pragma: no co
     return bcast_impl_wrapper(data, comm_ranks, root, comm_ptr)
 
 
-@numba.njit
+@numba.njit(cache=True)
 def bcast_impl_wrapper(data, comm_ranks, root, comm):
     return bcast_impl(data, comm_ranks, root, comm)
 
@@ -4690,7 +4690,7 @@ sync_iters = (
 )
 
 
-@numba.njit
+@numba.njit(cache=True)
 def sync_is_last(condition, iter):  # pragma: no cover
     """Check if condition is true for all ranks if iter % bodo.stream_loop_sync_iters == 0, return false otherwise"""
     if iter % sync_iters == 0:
