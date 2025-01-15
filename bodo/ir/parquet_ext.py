@@ -63,7 +63,9 @@ from bodo.utils.typing import (
     is_nullable_ignore_sentinels,
 )
 from bodo.utils.utils import (
+    bodo_exec,
     check_and_propagate_cpp_exception,
+    create_arg_hash,
     inlined_check_and_propagate_cpp_exception,
     numba_to_c_type,
     sanitize_varname,
@@ -774,23 +776,6 @@ def _gen_pq_reader_py(
     pyarrow_schema: pa.Schema,
     use_hive: bool,
 ):
-    # a unique int used to create global variables with unique names
-    call_id = next_label()
-
-    comma = "," if extra_args else ""
-    func_text = f"def pq_reader_py(fname,{extra_args}):\n"
-    # if it's an s3 url, get the region and pass it into the c++ code
-    func_text += f"    ev = bodo.utils.tracing.Event('read_parquet', {is_parallel})\n"
-    func_text += "    ev.add_attribute('g_fname', fname)\n"
-    func_text += f'    _, filters = get_filters_pyobject("[]", "{expr_filter_str}", ({extra_args}{comma}))\n'
-    # convert the filename, which could be a string or a list of strings, to a
-    # PyObject to pass to C++. C++ just passes it through to parquet_pio.py::get_parquet_dataset()
-    func_text += "    fname_py = get_fname_pyobject(fname)\n"
-
-    # Add a dummy variable to the dict (empty dicts are not yet supported in Numba).
-    storage_options["bodo_dummy"] = "dummy"
-    func_text += f"    storage_options_py = get_storage_options_pyobject({str(storage_options)})\n"
-
     (
         tot_rows_to_read,
         _,
@@ -817,6 +802,38 @@ def _gen_pq_reader_py(
         index_column_type,
         out_types,
     )
+
+    comma = "," if extra_args else ""
+    call_id = create_arg_hash(
+        is_parallel,
+        expr_filter_str,
+        storage_options,
+        tot_rows_to_read,
+        selected_cols,
+        selected_cols_map,
+        selected_partition_cols,
+        partition_col_cat_dtypes,
+        str_as_dict_cols,
+        nullable_cols,
+        sel_partition_names,
+        partition_indices,
+        sanitized_col_names,
+        sel_partition_names_map,
+        *extra_args,
+    )
+    gen_func_name = f"bodo_pq_reader_py_{call_id}"
+    func_text = f"def {gen_func_name}(fname,{extra_args}):\n"
+    # if it's an s3 url, get the region and pass it into the c++ code
+    func_text += f"    ev = bodo.utils.tracing.Event('read_parquet', {is_parallel})\n"
+    func_text += "    ev.add_attribute('g_fname', fname)\n"
+    func_text += f'    _, filters = get_filters_pyobject("[]", "{expr_filter_str}", ({extra_args}{comma}))\n'
+    # convert the filename, which could be a string or a list of strings, to a
+    # PyObject to pass to C++. C++ just passes it through to parquet_pio.py::get_parquet_dataset()
+    func_text += "    fname_py = get_fname_pyobject(fname)\n"
+
+    # Add a dummy variable to the dict (empty dicts are not yet supported in Numba).
+    storage_options["bodo_dummy"] = "dummy"
+    func_text += f"    storage_options_py = get_storage_options_pyobject({str(storage_options)})\n"
 
     # Call pq_read_py_entry() in C++
     # single-element numpy array to return number of global rows from C++
@@ -948,10 +965,11 @@ def _gen_pq_reader_py(
         "set_table_len": bodo.hiframes.table.set_table_len,
     }
 
-    exec(func_text, glbs, loc_vars)
-    pq_reader_py = loc_vars["pq_reader_py"]
+    pq_reader_py = bodo_exec(
+        gen_func_name, func_text, glbs, loc_vars, globals(), __name__
+    )
 
-    jit_func = numba.njit(pq_reader_py, no_cpython_wrapper=True)
+    jit_func = numba.njit(pq_reader_py, no_cpython_wrapper=True, cache=True)
     return jit_func
 
 
