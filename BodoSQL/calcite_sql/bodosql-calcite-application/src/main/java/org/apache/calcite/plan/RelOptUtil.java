@@ -3184,7 +3184,7 @@ public abstract class RelOptUtil {
   public static @Nullable RexNode pushPastProjectUnlessBloat(RexNode node,
       Project project, int bloat) {
     List<RexNode> newConditions =
-            pushPastProjectUnlessBloat(Collections.singletonList(node), project, bloat);
+        pushPastProjectUnlessBloat(Collections.singletonList(node), project, bloat);
     if (newConditions == null || newConditions.size() != 1) {
       return null;
     }
@@ -3852,14 +3852,14 @@ public abstract class RelOptUtil {
     if (joinType == JoinRelType.ASOF || joinType == JoinRelType.LEFT_ASOF) {
       LogicalAsofJoin ljoin = (LogicalAsofJoin) originalJoin;
       RexNode match =
-              RexUtil.shift(ljoin.getMatchCondition(), leftCount, extraLeftExprs.size());
+          RexUtil.shift(ljoin.getMatchCondition(), leftCount, extraLeftExprs.size());
       RelNode copy =
-              ljoin.copy(originalJoin.getTraitSet(), joinCond, match, left, right);
+          ljoin.copy(originalJoin.getTraitSet(), joinCond, match, left, right);
       relBuilder.push(copy);
     } else {
       relBuilder.push(
-              originalJoin.copy(originalJoin.getTraitSet(),
-                      joinCond, left, right, joinType, originalJoin.isSemiJoinDone()));
+          originalJoin.copy(originalJoin.getTraitSet(),
+              joinCond, left, right, joinType, originalJoin.isSemiJoinDone()));
     }
     if (!extraLeftExprs.isEmpty() || !extraRightExprs.isEmpty()) {
       final int totalFields = joinType.projectsRight()
@@ -4367,9 +4367,9 @@ public abstract class RelOptUtil {
         return (RelNode) hintable;
       }
       final List<RelHint> resetHints =
-           hintable.getHints().stream()
-               .filter(hint -> hint.inheritPath.isEmpty())
-               .collect(Collectors.toList());
+          hintable.getHints().stream()
+              .filter(hint -> hint.inheritPath.isEmpty())
+              .collect(Collectors.toList());
       return hintable.withHints(resetHints);
     }
   }

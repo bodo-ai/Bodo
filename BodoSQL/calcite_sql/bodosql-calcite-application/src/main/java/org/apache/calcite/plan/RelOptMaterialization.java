@@ -136,7 +136,7 @@ public class RelOptMaterialization {
                     match(left, right, join.getCluster());
                   } catch (Util.FoundOne e) {
                     return (RelNode) requireNonNull(e.getNode(),
-                            "FoundOne.getNode");
+                        "FoundOne.getNode");
                   }
                 }
               }
