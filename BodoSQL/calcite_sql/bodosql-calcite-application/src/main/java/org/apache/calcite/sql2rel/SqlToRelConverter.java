@@ -7259,7 +7259,7 @@ public class SqlToRelConverter {
                   ? rexBuilder.makeReinterpretCast(
                   call.getParserPosition(), histogramType, exprs.get(0),
                   rexBuilder.makeLiteral(false))
-                  : rexBuilder.makeCast(call.getParserPosition(), histogramType, exprs.get(0)))
+                  : rexBuilder.makeCast(call.getParserPosition(), histogramType, exprs.get(0)));
         }
 
         RexNode over =
@@ -7301,7 +7301,7 @@ public class SqlToRelConverter {
         return histogramCall;
       } else {
         boolean nullWhenCountZero = aggOp == SqlStdOperatorTable.SUM;
-        return relBuilder.aggregateCall(call.getParserPosition(), aggOp, exprs);
+        return relBuilder.aggregateCall(call.getParserPosition(), aggOp, exprs)
             .distinct(distinct)
             .ignoreNulls(ignoreNulls)
             .over()
