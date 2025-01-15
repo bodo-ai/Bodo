@@ -769,7 +769,7 @@ void hash_array(uint32_t* const out_hashes, std::shared_ptr<array_info> array,
                 start_row_offset);
         }
         case Bodo_CTypes::DECIMAL: {
-            return hash_array_inner<__int128, use_murmurhash>(
+            return hash_array_inner<__int128_t, use_murmurhash>(
                 out_hashes, data1, n_rows, seed, null_bitmask,
                 start_row_offset);
         }
@@ -1099,8 +1099,8 @@ void hash_array_combine(uint32_t* const out_hashes,
     }
     if (array->dtype == Bodo_CTypes::DECIMAL ||
         array->dtype == Bodo_CTypes::INT128) {
-        return hash_array_combine_inner<__int128>(
-            out_hashes, (__int128*)array->data1(), n_rows, seed,
+        return hash_array_combine_inner<__int128_t>(
+            out_hashes, (__int128_t*)array->data1(), n_rows, seed,
             (uint8_t*)array->null_bitmask(), start_row_offset);
     }
     Bodo_PyErr_SetString(PyExc_RuntimeError,

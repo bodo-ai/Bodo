@@ -24,6 +24,7 @@
 
 
 build/
+CMakeFiles/
 docs/_build/
 docs/gh-pages/
 docs/Bodo-tutorial/
