@@ -408,7 +408,7 @@ public class RexSimplify {
             return e;
         }
         // Bodo Change: Avoid passing the output type to allow deriving it.
-        return rexBuilder.makeCall(e.getParserPosition(), e.getType(), e.getOperator(), operands);
+        return rexBuilder.makeCall(e.getParserPosition(), e.getOperator(), operands);
     }
 
     /**

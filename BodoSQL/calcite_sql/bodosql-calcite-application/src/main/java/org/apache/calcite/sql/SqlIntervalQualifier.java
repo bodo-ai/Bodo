@@ -763,9 +763,6 @@ public class SqlIntervalQualifier extends SqlNode {
       // Validate individual fields
       checkLeadFieldInRange(typeSystem, sign, quarter, TimeUnit.QUARTER, pos);
 
-      // Bodo Change: Convert into months
-      BigDecimal month = quarter.multiply(MONTHS_IN_QUARTER);
-
       // package values up for return
       final BigDecimal months = quarter.multiply(BigDecimal.valueOf(3));
       return fillYearMonthIntervalValueArray(sign, ZERO, months);
