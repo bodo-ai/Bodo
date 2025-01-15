@@ -12,7 +12,7 @@ import bodo
 from bodo.tests.utils import _get_dist_arg, check_func
 from bodo.utils.typing import BodoError
 
-pytestmark = [pytest.mark.ml, pytest.mark.weekly]
+pytestmark = [pytest.mark.ml, pytest.mark.slow]
 
 
 # ----------------------------shuffle-----------------------------
