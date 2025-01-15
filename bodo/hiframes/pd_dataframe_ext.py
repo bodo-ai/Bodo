@@ -1171,10 +1171,9 @@ def init_dataframe(typingctx, data_tup_typ, index_typ, col_names_typ):
         parent = None
         # set df parent to parent of input table in case unboxing columns is necessary
         if is_table_format:
-            table = cgutils.create_struct_proxy(ret_typ.table_type)(
+            cgutils.create_struct_proxy(ret_typ.table_type)(
                 context, builder, builder.extract_value(data_tup, 0)
             )
-            parent = table.parent
 
         dataframe_val = construct_dataframe(
             context, builder, df_type, data_tup, index_val, parent, None
@@ -2065,7 +2064,6 @@ def _cast_df_data_to_table_format(
     )
     table_type = toty.table_type
     table = cgutils.create_struct_proxy(table_type)(context, builder)
-    table.parent = in_dataframe_payload.parent
 
     # create blocks in output
     for t, blk in table_type.type_to_blk.items():
@@ -2158,7 +2156,6 @@ def _cast_df_data_keep_table_format(
     )
     out_table_type = toty.table_type
     out_table = cgutils.create_struct_proxy(out_table_type)(context, builder)
-    out_table.parent = in_dataframe_payload.parent
 
     # create blocks in output
     for t, blk in out_table_type.type_to_blk.items():

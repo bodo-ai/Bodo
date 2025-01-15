@@ -1985,7 +1985,6 @@ def cpp_table_to_py_table(
 
         # create python table
         table = cgutils.create_struct_proxy(py_table_type)(context, builder)
-        table.parent = cgutils.get_null_value(table.parent.type)
         cpp_table_idx_struct = context.make_array(table_idx_arr_t)(
             context, builder, table_idx_arr
         )
