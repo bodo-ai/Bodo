@@ -10,9 +10,6 @@ on:
       - 'pixi.lock'
       - '.github/workflows/release.yml'
       - '.github/workflows/_build_*.yml'
-    #TODO: undo before merge
-    branches: [develop]
-
 
 jobs:
   # For Linux, we need to build conda inside a docker container for best support. 
@@ -84,8 +81,7 @@ jobs:
     secrets: inherit
 
   docker-img:
-    # TODO: Undo before merge
-    # needs: [bodo-conda-linux-x86, bodo-conda-linux-arm, iceberg-conda, bodosql-conda, azurefs-sas-conda]
+    needs: [bodo-conda-linux-x86, bodo-conda-linux-arm, iceberg-conda, bodosql-conda, azurefs-sas-conda]
     uses: ./.github/workflows/docker_build_and_publish.yml
     with:
       is-release: ${{ github.event_name == 'release' }}
