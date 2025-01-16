@@ -1335,6 +1335,8 @@ pin_guard<Spillable, Args...> pin(Spillable& s, Args&&... args) {
 
 #define NOMINMAX
 #include <windows.h>
+#undef DeleteFile
+#undef CopyFile
 
 /**
  * @brief Get the total memory available on this node.

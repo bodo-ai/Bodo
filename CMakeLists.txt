@@ -3,6 +3,7 @@ project(${SKBUILD_PROJECT_NAME} LANGUAGES C CXX)
 message(STATUS "CMake generator: ${CMAKE_GENERATOR}")
 message(STATUS "PLATFORM: ${CMAKE_GENERATOR_PLATFORM}")
 message(STATUS "PROCESSOR: ${CMAKE_SYSTEM_PROCESSOR}")
+message(STATUS "The CXX compiler identification is ${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION}")
 
 # External Packages
 include(FetchContent)
@@ -131,7 +132,7 @@ function(include_general_directories)
 
   if (WIN32)
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /external:I ${CONDA_INCLUDE_DIR}")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /external:I ${CONDA_INCLUDE_DIR}")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /external:I ${CONDA_INCLUDE_DIR} /permissive- /std:c++14")
   else()
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -isystem ${CONDA_INCLUDE_DIR}")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -isystem ${CONDA_INCLUDE_DIR}")

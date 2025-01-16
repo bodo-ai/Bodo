@@ -9,6 +9,7 @@
 #include <arrow/status.h>
 
 #include "../libs/_bodo_common.h"
+#include "pyfs.h"
 
 // Silence warnings from including generated code
 #ifndef _MSC_VER
