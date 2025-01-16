@@ -849,15 +849,14 @@ def alloc_arr_tup_overload(n, data, init_vals=()):
             [f"np.full(n, init_vals[{i}], data[{i}].dtype)" for i in range(count)]
         )
 
-    func_text = "def f(n, data, init_vals=()):\n"
+    func_text = "def bodo_pd_date_range_overload(n, data, init_vals=()):\n"
     func_text += "  return ({}{})\n".format(
         allocs, "," if count == 1 else ""
     )  # single value needs comma to become tuple
 
-    loc_vars = {}
-    exec(func_text, {"empty_like_type": empty_like_type, "np": np}, loc_vars)
-    alloc_impl = loc_vars["f"]
-    return alloc_impl
+    return bodo_exec(
+        func_text, {"empty_like_type": empty_like_type, "np": np}, {}, globals()
+    )
 
 
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True)
@@ -1898,18 +1897,26 @@ def create_arg_hash(*args, **kwargs):
     return arg_hash.hexdigest()
 
 
-def bodo_exec(func_name, func_text, glbls, loc_vars, real_globals, mod_name):
+def bodo_exec(func_text, glbls, loc_vars, real_globals):
     """
     Take a string containing a dynamically generated function with a given name and exec
     it into existence and make the resulting function Numba cacheable.
     Args:
-        func_name: the name of the new function created within func_text
         func_text: the text of the new function to be created
         glbls: the globals to be passed to exec
         loc_vars: the local var dict to be passed to exec
         real_globals: should be passed globals() from the calling scope
-        mod_name: should be __name__ from the calling scope
     """
+    # Get hash of function text.
+    text_hash = hashlib.sha256(func_text.encode("utf-8")).hexdigest()
+    # Use a regular expression to find and add hash to the function name.
+    pattern = r"(def\s+)(\w+)(\s*\()"
+    found_pattern = re.search(pattern, func_text)
+    assert found_pattern
+    func_name = found_pattern.group(2) + f"_{text_hash}"
+    func_text = re.sub(
+        pattern, lambda m: m.group(1) + func_name + m.group(3), func_text
+    )
     # Exec the function into existence.
     exec(func_text, glbls, loc_vars)
     # Register the code associated with this function so that it is cacheable.
@@ -1920,5 +1927,5 @@ def bodo_exec(func_name, func_text, glbls, loc_vars, real_globals, mod_name):
     real_globals[func_name] = new_func
     # Make the function know what module it resides in.
     # Also necessary for caching/pickling.
-    new_func.__module__ = mod_name
+    new_func.__module__ = real_globals["__name__"]
     return new_func

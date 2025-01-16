@@ -1042,8 +1042,7 @@ def _gen_csv_reader_py(
         idx_col_index,
         idx_col_typ,
     )
-    gen_func_name = f"bodo_csv_reader_py_{call_id}"
-    func_text = f"def {gen_func_name}(fname, nrows, skiprows):\n"
+    func_text = "def bodo_csv_reader_py(fname, nrows, skiprows):\n"
     # If we reached this code path we don't have a chunksize, so set it to -1
     func_text += _gen_csv_file_reader_init(
         parallel,
@@ -1089,9 +1088,7 @@ def _gen_csv_reader_py(
         func_text += "  return (T, None)\n"
     loc_vars = {}
     glbls["get_storage_options_pyobject"] = get_storage_options_pyobject
-    csv_reader_py = bodo_exec(
-        gen_func_name, func_text, glbls, loc_vars, globals(), __name__
-    )
+    csv_reader_py = bodo_exec(func_text, glbls, loc_vars, globals())
 
     # TODO: no_cpython_wrapper=True crashes for some reason
     jit_func = numba.njit(csv_reader_py, cache=True)

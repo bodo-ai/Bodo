@@ -88,6 +88,7 @@ from bodo.utils.typing import (
     to_str_arr_if_dict_array,
 )
 from bodo.utils.utils import (
+    bodo_exec,
     build_set_seen_na,
     check_and_propagate_cpp_exception,
     numba_to_c_type,
@@ -503,15 +504,12 @@ def setna_tup(arr_tup, ind, int_nan_const=0):  # pragma: no cover
 def overload_setna_tup(arr_tup, ind, int_nan_const=0):
     count = arr_tup.count
 
-    func_text = "def f(arr_tup, ind, int_nan_const=0):\n"
+    func_text = "def bodo_setna_tup(arr_tup, ind, int_nan_const=0):\n"
     for i in range(count):
         func_text += f"  setna(arr_tup[{i}], ind, int_nan_const)\n"
     func_text += "  return\n"
 
-    loc_vars = {}
-    exec(func_text, {"setna": setna}, loc_vars)
-    impl = loc_vars["f"]
-    return impl
+    return bodo_exec(func_text, {"setna": setna}, {}, globals())
 
 
 def setna_slice(arr, s):  # pragma: no cover
@@ -2300,16 +2298,13 @@ def overload_astype_float_tup(arr_tup):
     assert isinstance(arr_tup, types.BaseTuple)
     count = len(arr_tup.types)
 
-    func_text = "def f(arr_tup):\n"
+    func_text = "def bodo_astype_float_tup(arr_tup):\n"
     func_text += "  return ({}{})\n".format(
         ",".join(f"arr_tup[{i}].astype(np.float64)" for i in range(count)),
         "," if count == 1 else "",
     )  # single value needs comma to become tuple
 
-    loc_vars = {}
-    exec(func_text, {"np": np}, loc_vars)
-    astype_impl = loc_vars["f"]
-    return astype_impl
+    return bodo_exec(func_text, {"np": np}, {}, globals())
 
 
 def convert_to_nullable_tup(arr_tup):
@@ -2341,7 +2336,7 @@ def overload_convert_to_nullable_tup(arr_tup):
         out_dtype = bodo.libs.float_arr_ext.FloatDtype(comm_dtype)
         astype_str = ".astype(out_dtype, False)"
 
-    func_text = "def f(arr_tup):\n"
+    func_text = "def bodo_convert_to_nullable_tup(arr_tup):\n"
     func_text += "  return ({}{})\n".format(
         ",".join(
             f"bodo.utils.conversion.coerce_to_array(arr_tup[{i}], use_nullable_array=True){astype_str}"
@@ -2350,10 +2345,7 @@ def overload_convert_to_nullable_tup(arr_tup):
         "," if count == 1 else "",
     )  # single value needs comma to become tuple
 
-    loc_vars = {}
-    exec(func_text, {"bodo": bodo, "out_dtype": out_dtype}, loc_vars)
-    convert_impl = loc_vars["f"]
-    return convert_impl
+    return bodo_exec(func_text, {"bodo": bodo, "out_dtype": out_dtype}, {}, globals())
 
 
 def nunique(A, dropna):  # pragma: no cover
