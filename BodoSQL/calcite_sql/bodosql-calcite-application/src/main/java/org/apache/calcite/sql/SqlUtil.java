@@ -549,7 +549,11 @@ public abstract class SqlUtil {
       Iterator<SqlOperator> routines, final SqlKind sqlKind) {
     return Iterators.filter(routines,
         operator -> requireNonNull(operator, "operator")
-            .getKind().getFunctionKind() == sqlKind);
+            // Bodo Change: Using getFunctionKind causes some functions such as TIMESTAMPDIFF
+            // to fail to match. This is potentially because of the way
+            // we add new functions and we should investigate this further.
+            //.getKind().getFunctionKind() == sqlKind);
+            .getKind() == sqlKind);
   }
 
   /**
