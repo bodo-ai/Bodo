@@ -41,10 +41,10 @@ data class NonEqualityJoinFilterColumnInfo(
             }
             val leftIndex = left.index
             val rightIndex = right.index
-            if (leftIndex < numLeftCols && rightIndex >= numLeftCols) {
+            if (numLeftCols in (leftIndex + 1)..rightIndex) {
                 // Probe is on the left, no need to swap the operator.
                 return Triple(leftIndex, rightIndex, nonEqualityTypeFromKind(node.op.kind))
-            } else if (rightIndex < numLeftCols && leftIndex >= numLeftCols) {
+            } else if (numLeftCols in (rightIndex + 1)..leftIndex) {
                 // Probe is on the right, swap the operator.
                 return Triple(rightIndex, leftIndex, nonEqualityTypeFromKind(node.op.kind).reverse())
             } else {
