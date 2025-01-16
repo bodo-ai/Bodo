@@ -415,7 +415,7 @@ ArrayAnalysis._analyze_op_call_bodo_hiframes_pd_index_ext_init_datetime_index = 
 # support DatetimeIndex date fields such as I.year
 def gen_dti_field_impl(field):
     # TODO: NaN
-    func_text = "def impl(dti):\n"
+    func_text = "def bodo_gen_dti_field(dti):\n"
     func_text += "    numba.parfors.parfor.init_prange()\n"
     func_text += "    A = bodo.hiframes.pd_index_ext.get_index_data(dti)\n"
     func_text += "    name = bodo.hiframes.pd_index_ext.get_index_name(dti)\n"
@@ -438,10 +438,7 @@ def gen_dti_field_impl(field):
     else:
         func_text += "        S[i] = ts." + field + "\n"
     func_text += "    return bodo.hiframes.pd_index_ext.init_numeric_index(S, name)\n"
-    loc_vars = {}
-    exec(func_text, {"numba": numba, "np": np, "bodo": bodo}, loc_vars)
-    impl = loc_vars["impl"]
-    return impl
+    return bodo_exec(func_text, {"numba": numba, "np": np, "bodo": bodo}, {}, globals())
 
 
 def _install_dti_field_overload(field):
@@ -744,7 +741,7 @@ def overload_sub_operator_datetime_index(lhs, rhs):
 def gen_dti_str_binop_impl(op, is_lhs_dti):
     # is_arg1_dti: is the first argument DatetimeIndex and second argument str
     op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
-    func_text = "def impl(lhs, rhs):\n"
+    func_text = "def bodo_gen_dti_str_binop(lhs, rhs):\n"
     if is_lhs_dti:
         func_text += "  dt_index, _str = lhs, rhs\n"
         comp = f"arr[i] {op_str} other"
@@ -758,10 +755,7 @@ def gen_dti_str_binop_impl(op, is_lhs_dti):
     func_text += "  for i in numba.parfors.parfor.internal_prange(l):\n"
     func_text += f"    S[i] = {comp}\n"
     func_text += "  return S\n"
-    loc_vars = {}
-    exec(func_text, {"bodo": bodo, "numba": numba, "np": np}, loc_vars)
-    impl = loc_vars["impl"]
-    return impl
+    return bodo_exec(func_text, {"bodo": bodo, "numba": numba, "np": np}, {}, globals())
 
 
 def overload_binop_dti_str(op):
@@ -1625,7 +1619,7 @@ def overload_timedelta_index_max(tdi, axis=None, skipna=True):
 # support TimedeltaIndex time fields such as T.days
 def gen_tdi_field_impl(field):
     # TODO: NaN
-    func_text = "def impl(tdi):\n"
+    func_text = "def bodo_gen_tdi_field(tdi):\n"
     func_text += "    numba.parfors.parfor.init_prange()\n"
     func_text += "    A = bodo.hiframes.pd_index_ext.get_index_data(tdi)\n"
     func_text += "    name = bodo.hiframes.pd_index_ext.get_index_name(tdi)\n"
@@ -1655,10 +1649,7 @@ def gen_tdi_field_impl(field):
     else:
         assert False, "invalid timedelta field"
     func_text += "    return bodo.hiframes.pd_index_ext.init_numeric_index(S, name)\n"
-    loc_vars = {}
-    exec(func_text, {"numba": numba, "np": np, "bodo": bodo}, loc_vars)
-    impl = loc_vars["impl"]
-    return impl
+    return bodo_exec(func_text, {"numba": numba, "np": np, "bodo": bodo}, {}, globals())
 
 
 def _install_tdi_field_overload(field):
@@ -1997,12 +1988,9 @@ def range_index_overload(
     if is_overload_none(step):
         _step = "1"
 
-    func_text = "def _pd_range_index_imp(start=None, stop=None, step=None, dtype=None, copy=False, name=None):\n"
+    func_text = "def bodo_pd_range_index(start=None, stop=None, step=None, dtype=None, copy=False, name=None):\n"
     func_text += f"  return init_range_index({_start}, {_stop}, {_step}, name)\n"
-    loc_vars = {}
-    exec(func_text, {"init_range_index": init_range_index}, loc_vars)
-    _pd_range_index_imp = loc_vars["_pd_range_index_imp"]
-    return _pd_range_index_imp
+    return bodo_exec(func_text, {"init_range_index": init_range_index}, {}, globals())
 
 
 @overload(
@@ -3073,7 +3061,7 @@ def get_binary_str_codegen(is_binary=False):
     else:
         scalar_dtype_string = "string_type"
 
-    func_text = "def impl(context, builder, signature, args):\n"
+    func_text = "def bodo_get_binary_str_codegen(context, builder, signature, args):\n"
     func_text += "    assert len(args) == 2\n"
     func_text += "    index_typ = signature.return_type\n"
     func_text += (
@@ -3093,8 +3081,7 @@ def get_binary_str_codegen(is_binary=False):
     func_text += f"        types.DictType({scalar_dtype_string}, types.int64)(), [],)\n"
     func_text += "    return index_val._getvalue()\n"
 
-    loc_vars = {}
-    exec(
+    return bodo_exec(
         func_text,
         {
             "bodo": bodo,
@@ -3105,10 +3092,9 @@ def get_binary_str_codegen(is_binary=False):
             "bytes_type": bytes_type,
             "string_type": string_type,
         },
-        loc_vars,
+        {},
+        globals(),
     )
-    impl = loc_vars["impl"]
-    return impl
 
 
 @overload_method(
@@ -3835,7 +3821,7 @@ def create_isna_specific_method(overload_name):
             return impl
 
         func_text = (
-            "def impl(I):\n"
+            "def bodo_index_isna_specific_method(I):\n"
             "    numba.parfors.parfor.init_prange()\n"
             "    arr = bodo.hiframes.pd_index_ext.get_index_data(I)\n"
             "    n = len(arr)\n"
@@ -3845,10 +3831,9 @@ def create_isna_specific_method(overload_name):
             "bodo.libs.array_kernels.isna(arr, i)\n"
             "    return out_arr\n"
         )
-        loc_vars = {}
-        exec(func_text, {"bodo": bodo, "np": np, "numba": numba}, loc_vars)
-        impl = loc_vars["impl"]
-        return impl
+        return bodo_exec(
+            func_text, {"bodo": bodo, "np": np, "numba": numba}, {}, globals()
+        )
 
     return overload_index_isna_specific_method
 
@@ -4313,7 +4298,7 @@ def overload_index_drop_duplicates(I, keep="first"):
         return lambda I, keep="first": I.copy()  # pragma: no cover
 
     func_text = (
-        "def impl(I, keep='first'):\n"
+        "def bodo_index_drop_duplicates(I, keep='first'):\n"
         "    data = bodo.hiframes.pd_index_ext.get_index_data(I)\n"
         "    arr = bodo.libs.array_kernels.drop_duplicates_array(data)\n"
         "    name = bodo.hiframes.pd_index_ext.get_index_name(I)\n"
@@ -4323,10 +4308,7 @@ def overload_index_drop_duplicates(I, keep="first"):
     else:
         func_text += "    return bodo.utils.conversion.index_from_array(arr, name)"
 
-    loc_vars = {}
-    exec(func_text, {"bodo": bodo}, loc_vars)
-    impl = loc_vars["impl"]
-    return impl
+    return bodo_exec(func_text, {"bodo": bodo}, {}, globals())
 
 
 @numba.generated_jit(cache=True, nopython=True)
@@ -4557,7 +4539,7 @@ def create_binary_op_overload(op):
         # left arg is Index
         if is_index_type(lhs):
             func_text = (
-                "def impl(lhs, rhs):\n"
+                "def bodo_index_binary_op_lhs(lhs, rhs):\n"
                 "  arr = bodo.utils.conversion.coerce_to_array(lhs)\n"
             )
             if rhs in [
@@ -4573,19 +4555,17 @@ def create_binary_op_overload(op):
                     "  rhs_arr = bodo.utils.conversion.get_array_if_series_or_index(rhs)\n"
                     "  return op(arr, rhs_arr)\n"
                 )
-            loc_vars = {}
-            exec(
+            return bodo_exec(
                 func_text,
                 {"bodo": bodo, "op": op},
-                loc_vars,
+                {},
+                globals(),
             )
-            impl = loc_vars["impl"]
-            return impl
 
         # right arg is Index
         if is_index_type(rhs):
             func_text = (
-                "def impl(lhs, rhs):\n"
+                "def bodo_index_binary_op_rhs(lhs, rhs):\n"
                 "  arr = bodo.utils.conversion.coerce_to_array(rhs)\n"
             )
             if lhs in [
@@ -4601,14 +4581,12 @@ def create_binary_op_overload(op):
                     "  lhs_arr = bodo.utils.conversion.get_array_if_series_or_index(lhs)\n"
                     "  return op(lhs_arr, arr)\n"
                 )
-            loc_vars = {}
-            exec(
+            return bodo_exec(
                 func_text,
                 {"bodo": bodo, "op": op},
-                loc_vars,
+                {},
+                globals(),
             )
-            impl = loc_vars["impl"]
-            return impl
 
         if isinstance(lhs, HeterogeneousIndexType):
             # handle as regular array data if not actually heterogeneous
@@ -4912,15 +4890,13 @@ def overload_nbytes(I):
 
         return _impl_nbytes
     elif isinstance(I, MultiIndexType):
-        func_text = "def _impl_nbytes(I):\n"
+        func_text = "def bodo_impl_nbytes(I):\n"
         func_text += "    total = 0\n"
         func_text += "    data = I._data\n"
         for i in range(I.nlevels):
             func_text += f"    total += data[{i}].nbytes\n"
         func_text += "    return total\n"
-        local_vars = {}
-        exec(func_text, {}, local_vars)
-        return local_vars["_impl_nbytes"]
+        return bodo_exec(func_text, {}, {}, globals())
 
     else:
 
@@ -4979,7 +4955,7 @@ def overload_index_to_series(I, index=None, name=None):
     else:
         name_str = "name"
 
-    func_text = "def impl(I, index=None, name=None):\n"
+    func_text = "def bodo_index_to_series(I, index=None, name=None):\n"
     func_text += "    data = bodo.utils.conversion.index_to_array(I)\n"
     if is_overload_none(index):
         func_text += "    new_index = I\n"
@@ -5008,11 +4984,7 @@ def overload_index_to_series(I, index=None, name=None):
     func_text += (
         "    return bodo.hiframes.pd_series_ext.init_series(data, new_index, new_name)"
     )
-    loc_vars = {}
-    exec(func_text, {"bodo": bodo, "np": np}, loc_vars)
-    impl = loc_vars["impl"]
-
-    return impl
+    return bodo_exec(func_text, {"bodo": bodo, "np": np}, {}, globals())
 
 
 @overload_method(
@@ -5084,7 +5056,7 @@ def overload_index_to_frame(I, index=True, name=None):
             "Index.to_frame(): index argument must be a compile time constant"
         )
 
-    func_text = "def impl(I, index=True, name=None):\n"
+    func_text = "def bodo_index_to_frame(I, index=True, name=None):\n"
     func_text += "    data = bodo.utils.conversion.index_to_array(I)\n"
     func_text += f"    new_index = {index_str}\n"
 
@@ -5107,19 +5079,16 @@ def overload_index_to_frame(I, index=True, name=None):
 
     func_text += "    return bodo.hiframes.pd_dataframe_ext.init_dataframe((data,), new_index, __col_name_meta_value)\n"
 
-    loc_vars = {}
-    exec(
+    return bodo_exec(
         func_text,
         {
             "bodo": bodo,
             "np": np,
             "__col_name_meta_value": columns,
         },
-        loc_vars,
+        {},
+        globals(),
     )
-    impl = loc_vars["impl"]
-
-    return impl
 
 
 @overload_method(
@@ -5157,7 +5126,7 @@ def overload_multi_index_to_frame(I, index=True, name=None):
             "MultiIndex.to_frame(): index argument must be a compile time constant"
         )
 
-    func_text = "def impl(I, index=True, name=None):\n"
+    func_text = "def bodo_multi_index_to_frame(I, index=True, name=None):\n"
     func_text += "    data = bodo.hiframes.pd_index_ext.get_index_data(I)\n"
     func_text += f"    new_index = {index_str}\n"
 
@@ -5196,13 +5165,12 @@ def overload_multi_index_to_frame(I, index=True, name=None):
                 )
 
     func_text += "    return bodo.hiframes.pd_dataframe_ext.init_dataframe(data, new_index, __col_name_meta_value,)\n"
-    loc_vars = {}
-    exec(
-        func_text, {"bodo": bodo, "np": np, "__col_name_meta_value": columns}, loc_vars
+    return bodo_exec(
+        func_text,
+        {"bodo": bodo, "np": np, "__col_name_meta_value": columns},
+        {},
+        globals(),
     )
-    impl = loc_vars["impl"]
-
-    return impl
 
 
 @overload_method(
@@ -6590,7 +6558,7 @@ def overload_index_where(I, cond, other=np.nan):
     else:
         other_str = "other"
 
-    func_text = "def impl(I, cond, other=np.nan):\n"
+    func_text = "def bodo_index_where(I, cond, other=np.nan):\n"
     if isinstance(I, RangeIndexType):
         func_text += "  arr = np.arange(I._start, I._stop, I._step)\n"
         constructor = "init_numeric_index"
@@ -6601,16 +6569,14 @@ def overload_index_where(I, cond, other=np.nan):
         f"  out_arr = bodo.hiframes.series_impl.where_impl(cond, arr, {other_str})\n"
     )
     func_text += "  return constructor(out_arr, name)\n"
-    loc_vars = {}
     constructor = (
         init_numeric_index
         if isinstance(I, RangeIndexType)
         else get_index_constructor(I)
     )
-    exec(func_text, {"bodo": bodo, "np": np, "constructor": constructor}, loc_vars)
-    impl = loc_vars["impl"]
-
-    return impl
+    return bodo_exec(
+        func_text, {"bodo": bodo, "np": np, "constructor": constructor}, {}, globals()
+    )
 
 
 @overload_method(
@@ -6700,7 +6666,7 @@ def overload_index_putmask(I, cond, other):
     else:
         other_str = "other"
 
-    func_text = "def impl(I, cond, other):\n"
+    func_text = "def bodo_index_putmask(I, cond, other):\n"
     func_text += "  cond = ~cond\n"
     if isinstance(I, RangeIndexType):
         func_text += "  arr = np.arange(I._start, I._stop, I._step)\n"
@@ -6711,16 +6677,14 @@ def overload_index_putmask(I, cond, other):
         f"  out_arr = bodo.hiframes.series_impl.where_impl(cond, arr, {other_str})\n"
     )
     func_text += "  return constructor(out_arr, name)\n"
-    loc_vars = {}
     constructor = (
         init_numeric_index
         if isinstance(I, RangeIndexType)
         else get_index_constructor(I)
     )
-    exec(func_text, {"bodo": bodo, "np": np, "constructor": constructor}, loc_vars)
-    impl = loc_vars["impl"]
-
-    return impl
+    return bodo_exec(
+        func_text, {"bodo": bodo, "np": np, "constructor": constructor}, {}, globals()
+    )
 
 
 @overload_method(
@@ -6799,7 +6763,7 @@ def overload_index_repeat(I, repeats, axis=None):
             "Index.repeat(): 'repeats' should be an integer or array of integers"
         )
 
-    func_text = "def impl(I, repeats, axis=None):\n"
+    func_text = "def bodo_index_repeat(I, repeats, axis=None):\n"
     if not isinstance(repeats, types.Integer):
         func_text += "    repeats = bodo.utils.conversion.coerce_to_array(repeats)\n"
     if isinstance(I, RangeIndexType):
@@ -6810,16 +6774,14 @@ def overload_index_repeat(I, repeats, axis=None):
     func_text += "    out_arr = bodo.libs.array_kernels.repeat_kernel(arr, repeats)\n"
     func_text += "    return constructor(out_arr, name)"
 
-    loc_vars = {}
     constructor = (
         init_numeric_index
         if isinstance(I, RangeIndexType)
         else get_index_constructor(I)
     )
-    exec(func_text, {"bodo": bodo, "np": np, "constructor": constructor}, loc_vars)
-    impl = loc_vars["impl"]
-
-    return impl
+    return bodo_exec(
+        func_text, {"bodo": bodo, "np": np, "constructor": constructor}, {}, globals()
+    )
 
 
 @overload_method(
