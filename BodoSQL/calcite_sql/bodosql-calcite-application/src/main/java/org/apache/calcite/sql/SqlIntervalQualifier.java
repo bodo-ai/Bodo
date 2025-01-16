@@ -256,13 +256,6 @@ public class SqlIntervalQualifier extends SqlNode {
     }
   }
 
-  @Override public SqlNode deepCopy(@Nullable SqlParserPos pos) {
-    if (pos == null) {
-      pos = this.pos;
-    }
-    return this.clone(pos);
-  }
-
   /** Whether this is a DATE interval (including all week intervals). */
   public boolean isDate() {
     return DATE_UNITS.contains(timeUnitRange)

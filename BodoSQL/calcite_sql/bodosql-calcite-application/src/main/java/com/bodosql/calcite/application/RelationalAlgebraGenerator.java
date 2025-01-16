@@ -9,7 +9,6 @@ import com.bodosql.calcite.ddl.DDLExecutionResult;
 import com.bodosql.calcite.ddl.GenerateDDLTypes;
 import com.bodosql.calcite.prepare.AbstractPlannerImpl;
 import com.bodosql.calcite.prepare.PlannerImpl;
-import com.bodosql.calcite.prepare.PlannerType;
 import com.bodosql.calcite.schema.BodoSqlSchema;
 import com.bodosql.calcite.schema.RootSchema;
 import com.bodosql.calcite.table.ColumnDataTypeInfo;
@@ -96,9 +95,6 @@ public class RelationalAlgebraGenerator {
   /** Store the type system being used to access timezone info during Bodo codegen */
   private final RelDataTypeSystem typeSystem;
 
-  /** Which planner should be utilized. */
-  private final PlannerType plannerType;
-
   /** The Bodo verbose level. This is used to control code generated and/or compilation info. */
   private final int verboseLevel;
 
@@ -164,8 +160,7 @@ public class RelationalAlgebraGenerator {
    * the Planner member variables.
    */
   private void setupPlanner(List<SchemaPlus> defaultSchemas, RelDataTypeSystem typeSystem) {
-    PlannerImpl.Config config =
-        new PlannerImpl.Config(defaultSchemas, typeSystem, plannerType, sqlStyle);
+    PlannerImpl.Config config = new PlannerImpl.Config(defaultSchemas, typeSystem, sqlStyle);
     try {
       this.planner = new PlannerImpl(config);
     } catch (Exception e) {
@@ -199,7 +194,6 @@ public class RelationalAlgebraGenerator {
       @NonNull boolean prefetchSFIceberg,
       @Nullable String defaultTz) {
     this.catalog = catalog;
-    this.plannerType = choosePlannerType(isStreaming);
     this.verboseLevel = verboseLevel;
     this.tracingLevel = tracingLevel;
     this.streamingBatchSize = streamingBatchSize;
@@ -528,14 +522,6 @@ public class RelationalAlgebraGenerator {
 
   Map<String, String> getLoweredGlobalVariables() {
     return this.loweredGlobalVariables;
-  }
-
-  private static PlannerType choosePlannerType(boolean isStreaming) {
-    if (isStreaming) {
-      return PlannerType.STREAMING;
-    } else {
-      return PlannerType.VOLCANO;
-    }
   }
 
   // ~~~~~~~~~~~~~Called by the Python Entry Points~~~~~~~~~~~~~~
