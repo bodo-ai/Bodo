@@ -1334,6 +1334,7 @@ pin_guard<Spillable, Args...> pin(Spillable& s, Args&&... args) {
 #ifdef MS_WINDOWS
 
 #define NOMINMAX
+#define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #undef DeleteFile
 #undef CopyFile

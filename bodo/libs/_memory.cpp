@@ -17,7 +17,12 @@
 // Needed for 'malloc_trim'
 #include <malloc.h>
 #endif
+
+#ifndef _WIN32
 #include <sys/mman.h>
+#else
+#include <arrow/io/mman.h>
+#endif
 
 #include <fmt/args.h>
 #include <fmt/chrono.h>

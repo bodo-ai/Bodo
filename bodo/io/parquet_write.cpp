@@ -259,7 +259,7 @@ int64_t pq_write(const char *_path_name,
         std::filesystem::path out_path(dirname);
         out_path /= fname;  // append file name to output path
         arrow::Result<std::shared_ptr<arrow::io::OutputStream>> result =
-            arrow_fs->OpenOutputStream(out_path);
+            arrow_fs->OpenOutputStream(out_path.string());
         CHECK_ARROW_AND_ASSIGN(result, "FileOutputStream::Open", out_stream);
     } else {
         open_outstream(fs_option, is_parallel, "parquet", dirname, fname,
