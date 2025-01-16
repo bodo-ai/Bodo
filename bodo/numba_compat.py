@@ -4847,8 +4847,6 @@ def BaseNativeLowering_run_pass(self, state):
     from numba.core import funcdesc, lowering
     from numba.core.typed_passes import fallback_context
 
-    print("lower", state.func_id.func_name, state.func_id.filename, state.func_id.firstlineno)
-
     if state.library is None:
         codegen = state.targetctx.codegen()
         state.library = codegen.create_library(state.func_id.func_qualname)
