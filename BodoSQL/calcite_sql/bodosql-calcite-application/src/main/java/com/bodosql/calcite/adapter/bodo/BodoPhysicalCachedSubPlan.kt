@@ -125,7 +125,7 @@ class BodoPhysicalCachedSubPlan private constructor(
                 } else {
                     listOf(cachedPlan.plan)
                 }
-            implementor.build(inputs) { ctx, inputs ->
+            implementor.build(inputs) { _, inputs ->
                 if (isCached) {
                     relationalOperatorCache.getCachedTable(cacheID)
                 } else {
