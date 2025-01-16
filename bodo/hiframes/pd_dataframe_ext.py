@@ -1211,11 +1211,11 @@ def overload_pushdown_safe_init_df(table, colNames):
         [DataFrame] the data from the table wrapped in a DataFrame.
     """
 
-    def impl(table, colNames):
+    def bodo_pushdown_safe_init_df(table, colNames):
         index = bodo.hiframes.pd_index_ext.init_range_index(0, len(table), 1, None)
         return bodo.hiframes.pd_dataframe_ext.init_dataframe((table,), index, colNames)
 
-    return impl
+    return bodo_pushdown_safe_init_df
 
 
 @intrinsic
