@@ -2104,14 +2104,12 @@ def overload_series_notna(S):
     "astype",
     inline="always",
     no_unliteral=True,
-    jit_options={"cache": True},
 )
 @overload_method(
     HeterogeneousSeriesType,
     "astype",
     inline="always",
     no_unliteral=True,
-    jit_options={"cache": True},
 )
 def overload_series_astype(S, dtype, copy=True, errors="raise", _bodo_nan_to_str=True):
     unsupported_args = {"errors": errors}
@@ -3800,9 +3798,7 @@ fillna_specific_methods = (
 def _install_fillna_specific_methods():
     for overload_name in fillna_specific_methods:
         overload_impl = create_fillna_specific_method_overload(overload_name)
-        overload_method(
-            SeriesType, overload_name, jit_options={"cache": True}, no_unliteral=True
-        )(overload_impl)
+        overload_method(SeriesType, overload_name, no_unliteral=True)(overload_impl)
 
 
 _install_fillna_specific_methods()
@@ -4451,9 +4447,7 @@ def create_series_mask_where_overload(func_name):
 def _install_series_mask_where_overload():
     for func_name in ("mask", "where"):
         overload_impl = create_series_mask_where_overload(func_name)
-        overload_method(
-            SeriesType, func_name, jit_options={"cache": True}, no_unliteral=True
-        )(overload_impl)
+        overload_method(SeriesType, func_name, no_unliteral=True)(overload_impl)
 
 
 _install_series_mask_where_overload()
@@ -4938,18 +4932,14 @@ def _install_explicit_binary_ops():
                 overload_binop_declarative(name, overload_impl)
                 overload_binop_declarative(r_name, overload_reverse_impl)
             else:
-                overload_method(
-                    SeriesType, name, jit_options={"cache": True}, no_unliteral=True
-                )(overload_impl)
-                overload_method(
-                    SeriesType, r_name, jit_options={"cache": True}, no_unliteral=True
-                )(overload_reverse_impl)
+                overload_method(SeriesType, name, no_unliteral=True)(overload_impl)
+                overload_method(SeriesType, r_name, no_unliteral=True)(
+                    overload_reverse_impl
+                )
             explicit_binop_funcs.add(name)
     for op, name in explicit_binop_funcs_single.items():
         overload_impl = create_explicit_binary_op_overload(op)
-        overload_method(
-            SeriesType, name, jit_options={"cache": True}, no_unliteral=True
-        )(overload_impl)
+        overload_method(SeriesType, name, no_unliteral=True)(overload_impl)
         explicit_binop_funcs.add(name)
 
 
@@ -5101,7 +5091,7 @@ def _install_binary_ops():
             continue
         overload_impl = create_binary_op_overload(op)
         # NOTE: cannot use inline="always". See test_pd_categorical
-        overload(op, jit_options={"cache": True})(overload_impl)
+        overload(op)(overload_impl)
 
 
 _install_binary_ops()
@@ -5160,7 +5150,7 @@ def _install_inplace_binary_ops():
     # install inplace binary ops such as iadd, isub, ...
     for op in bodo.hiframes.pd_series_ext.series_inplace_binary_ops:
         overload_impl = create_inplace_binary_op_overload(op)
-        overload(op, jit_options={"cache": True}, no_unliteral=True)(overload_impl)
+        overload(op, no_unliteral=True)(overload_impl)
 
 
 _install_inplace_binary_ops()
@@ -5189,7 +5179,7 @@ def _install_unary_ops():
     # install unary operators: ~, -, +
     for op in bodo.hiframes.pd_series_ext.series_unary_ops:
         overload_impl = create_unary_op_overload(op)
-        overload(op, jit_options={"cache": True}, no_unliteral=True)(overload_impl)
+        overload(op, no_unliteral=True)(overload_impl)
 
 
 _install_unary_ops()
@@ -5252,7 +5242,7 @@ def _install_np_ufuncs():
 
     for ufunc in numba.np.ufunc_db.get_ufuncs():
         overload_impl = create_ufunc_overload(ufunc)
-        overload(ufunc, jit_options={"cache": True}, no_unliteral=True)(overload_impl)
+        overload(ufunc, no_unliteral=True)(overload_impl)
 
 
 _install_np_ufuncs()
