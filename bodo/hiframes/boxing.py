@@ -82,7 +82,7 @@ TABLE_FORMAT_THRESHOLD = 0
 
 
 # Unbox dataframe columns eagerly, which improves compilation time by disabling lazy
-# unboxing calls.
+# unboxing calls (only for table format since non-table format is deprecated).
 UNBOX_DATAFRAME_EAGERLY = True
 
 
