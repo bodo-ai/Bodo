@@ -95,6 +95,9 @@ public class RelationalAlgebraGenerator {
   /** Store the type system being used to access timezone info during Bodo codegen */
   private final RelDataTypeSystem typeSystem;
 
+  /** Should the planner output streaming code. */
+  private final boolean isStreaming;
+
   /** The Bodo verbose level. This is used to control code generated and/or compilation info. */
   private final int verboseLevel;
 
@@ -160,7 +163,8 @@ public class RelationalAlgebraGenerator {
    * the Planner member variables.
    */
   private void setupPlanner(List<SchemaPlus> defaultSchemas, RelDataTypeSystem typeSystem) {
-    PlannerImpl.Config config = new PlannerImpl.Config(defaultSchemas, typeSystem, sqlStyle);
+    PlannerImpl.Config config =
+        new PlannerImpl.Config(defaultSchemas, typeSystem, sqlStyle, isStreaming);
     try {
       this.planner = new PlannerImpl(config);
     } catch (Exception e) {
@@ -193,6 +197,7 @@ public class RelationalAlgebraGenerator {
       @NonNull boolean coveringExpressionCaching,
       @NonNull boolean prefetchSFIceberg,
       @Nullable String defaultTz) {
+    this.isStreaming = isStreaming;
     this.catalog = catalog;
     this.verboseLevel = verboseLevel;
     this.tracingLevel = tracingLevel;
