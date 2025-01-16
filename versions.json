@@ -2,7 +2,9 @@
   {
     "version": "2025.1",
     "title": "2025.1",
-    "aliases": []
+    "aliases": [
+      "latest"
+    ]
   },
   {
     "version": "2024.12.3",
@@ -12,9 +14,7 @@
   {
     "version": "2024.12",
     "title": "2024.12",
-    "aliases": [
-      "latest"
-    ]
+    "aliases": []
   },
   {
     "version": "2024.11",
