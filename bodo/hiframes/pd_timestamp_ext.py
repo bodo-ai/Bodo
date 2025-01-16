@@ -1165,7 +1165,7 @@ def overload_pd_timestamp_tz_localize(ptt, tz, ambiguous="raise", nonexistent="r
     else:
         sign = "+"
 
-    func_text = "def impl(ptt, tz, ambiguous='raise', nonexistent='raise'):\n"
+    func_text = "def bodo_pd_timestamp_tz_localize(ptt, tz, ambiguous='raise', nonexistent='raise'):\n"
     func_text += "    value =  ptt.value\n"
     func_text += f"    delta =  {delta_str}\n"
     func_text += f"    new_value = value {sign} delta\n"
@@ -1174,8 +1174,7 @@ def overload_pd_timestamp_tz_localize(ptt, tz, ambiguous="raise", nonexistent="r
         func_text += "    offset = delta - end_delta\n"
         func_text += "    new_value = new_value + offset\n"
     func_text += "    return convert_val_to_timestamp(new_value, tz=tz)\n"
-    loc_vars = {}
-    exec(
+    return bodo.utils.utils.bodo_exec(
         func_text,
         {
             "np": np,
@@ -1183,10 +1182,9 @@ def overload_pd_timestamp_tz_localize(ptt, tz, ambiguous="raise", nonexistent="r
             "trans": trans,
             "deltas": deltas,
         },
-        loc_vars,
+        {},
+        globals(),
     )
-    impl = loc_vars["impl"]
-    return impl
 
 
 @overload_method(PandasTimestampType, "__str__", jit_options={"cache": True})
