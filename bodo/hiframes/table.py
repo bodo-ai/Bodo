@@ -1222,6 +1222,10 @@ def ensure_table_unboxed(typingctx, table_type, used_cols_typ):
     """
 
     def codegen(context, builder, sig, args):
+        # No need to unbox if already unboxed eagerly (improves compilation time)
+        if bodo.hiframes.boxing.UNBOX_DATAFRAME_EAGERLY:
+            return
+
         table_arg, used_col_set = args
 
         use_all = used_cols_typ == types.none
@@ -1304,6 +1308,10 @@ def ensure_column_unboxed_codegen(context, builder, sig, args):
     used by intrinsics.
     """
     from bodo.hiframes.boxing import get_df_obj_column_codegen
+
+    # No need to unbox if already unboxed eagerly (improves compilation time)
+    if bodo.hiframes.boxing.UNBOX_DATAFRAME_EAGERLY:
+        return
 
     table_arg, list_arg, i_arg, arr_ind_arg = args
     pyapi = context.get_python_api(builder)

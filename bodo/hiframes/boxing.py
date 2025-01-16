@@ -80,6 +80,12 @@ ll.add_symbol("array_getptr1", hstr_ext.array_getptr1)
 # the number of dataframe columns above which we use table format in unboxing
 TABLE_FORMAT_THRESHOLD = 0
 
+
+# Unbox dataframe columns eagerly, which improves compilation time by disabling lazy
+# unboxing calls.
+UNBOX_DATAFRAME_EAGERLY = True
+
+
 # A flag to use dictionary-encode string arrays for all string arrays
 # Used for testing purposes
 _use_dict_str_type = False
@@ -223,42 +229,39 @@ def unbox_dataframe(typ, val, c):
             )
             out_arr_list.size = n_arrs
 
-            # lower array of array indices for block to use within the loop
-            # using array since list doesn't have constant lowering
-            arr_inds = c.context.make_constant_array(
-                c.builder,
-                types.Array(types.int64, 1, "C"),
-                # On windows np.array defaults to the np.int32 for integers.
-                # As a result, we manually specify int64 during the array
-                # creation to keep the lowered constant consistent with the
-                # expected type.
-                np.array(typ.table_type.block_to_arr_ind[blk], dtype=np.int64),
-            )
-            arr_inds_struct = c.context.make_array(types.Array(types.int64, 1, "C"))(
-                c.context, c.builder, arr_inds
-            )
-            with cgutils.for_range(c.builder, n_arrs) as loop:
-                i = loop.index
-                # get array index in dataframe columns and unbox array
-                arr_ind = _getitem_array_single_int(
-                    c.context,
+            if UNBOX_DATAFRAME_EAGERLY:
+                # lower array of array indices for block to use within the loop
+                # using array since list doesn't have constant lowering
+                arr_inds = c.context.make_constant_array(
                     c.builder,
-                    types.int64,
                     types.Array(types.int64, 1, "C"),
-                    arr_inds_struct,
-                    i,
+                    np.array(typ.table_type.block_to_arr_ind[blk], dtype=np.int64),
                 )
-                arr_obj = get_df_obj_column_codegen(
-                    c.context,
-                    c.builder,
-                    c.pyapi,
-                    val,
-                    arr_ind,
-                    t,
-                )
-                arr = c.pyapi.to_native_value(t, arr_obj).value
-                out_arr_list.inititem(i, arr, incref=False)
-                c.pyapi.decref(arr_obj)
+                arr_inds_struct = c.context.make_array(
+                    types.Array(types.int64, 1, "C")
+                )(c.context, c.builder, arr_inds)
+                with cgutils.for_range(c.builder, n_arrs) as loop:
+                    i = loop.index
+                    # get array index in dataframe columns and unbox array
+                    arr_ind = _getitem_array_single_int(
+                        c.context,
+                        c.builder,
+                        types.int64,
+                        types.Array(types.int64, 1, "C"),
+                        arr_inds_struct,
+                        i,
+                    )
+                    arr_obj = get_df_obj_column_codegen(
+                        c.context,
+                        c.builder,
+                        c.pyapi,
+                        val,
+                        arr_ind,
+                        t,
+                    )
+                    arr = c.pyapi.to_native_value(t, arr_obj).value
+                    out_arr_list.inititem(i, arr, incref=False)
+                    c.pyapi.decref(arr_obj)
 
             setattr(table, f"block_{blk}", out_arr_list.value)
 
@@ -277,13 +280,7 @@ def unbox_dataframe(typ, val, c):
         data_tup = c.context.make_tuple(c.builder, types.Tuple(typ.data), data_nulls)
 
     dataframe_val = construct_dataframe(
-        c.context,
-        c.builder,
-        typ,
-        data_tup,
-        index_val,
-        val,
-        None,
+        c.context, c.builder, typ, data_tup, index_val, val, None
     )
 
     return NativeValue(dataframe_val)
