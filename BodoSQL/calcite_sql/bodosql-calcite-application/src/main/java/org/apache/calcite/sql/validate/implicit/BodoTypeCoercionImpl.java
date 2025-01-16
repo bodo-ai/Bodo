@@ -247,6 +247,11 @@ public class BodoTypeCoercionImpl extends TypeCoercionImpl {
     }
   }
 
+  private static SqlNode simpleCastTo(SqlNode node, RelDataType type) {
+    return SqlStdOperatorTable.CAST.createCall(SqlParserPos.ZERO, node,
+            BodoSqlTypeUtil.convertTypeToSpec(type).withNullable(type.isNullable()));
+  }
+
   private static class TypeCoercionFactoryImpl implements TypeCoercionFactory {
     @Override
     public TypeCoercion create(RelDataTypeFactory typeFactory, SqlValidator validator) {
@@ -514,7 +519,7 @@ public class BodoTypeCoercionImpl extends TypeCoercionImpl {
           return false;
         }
         RelDataType targetType2 = syncAttributes(validator.deriveType(scope, operand), targetType);
-        final SqlNode casted = castTo(operand, targetType2);
+        final SqlNode casted = simpleCastTo(operand, targetType2);
         node2.setOperand(0, casted);
         updateInferredType(casted, targetType2);
         return true;
@@ -524,7 +529,7 @@ public class BodoTypeCoercionImpl extends TypeCoercionImpl {
       return false;
     }
     RelDataType targetType3 = syncAttributes(validator.deriveType(scope, node), targetType);
-    final SqlNode node3 = castTo(node, targetType3);
+    final SqlNode node3 = simpleCastTo(node, targetType3);
     nodeList.set(index, node3);
     updateInferredType(node3, targetType3);
     return true;
