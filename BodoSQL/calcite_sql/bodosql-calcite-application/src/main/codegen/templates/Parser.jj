@@ -4360,7 +4360,9 @@ List<Object> Expression2(ExprContext exprContext) :
                 ( <OFFSET> { itemOp = SqlLibraryOperators.OFFSET; } <LPAREN> { e = Expression(ExprContext.ACCEPT_SUB_QUERY); } <RPAREN>
                 | <ORDINAL> { itemOp = SqlLibraryOperators.ORDINAL; } <LPAREN> { e = Expression(ExprContext.ACCEPT_SUB_QUERY); } <RPAREN>
                 | <SAFE_OFFSET> { itemOp = SqlLibraryOperators.SAFE_OFFSET; } <LPAREN> { e = Expression(ExprContext.ACCEPT_SUB_QUERY); } <RPAREN>
-                | <SAFE_ORDINAL> { itemOp = SqlLibraryOperators.SAFE_ORDINAL; } <LPAREN> { e = Expression(ExprContext.ACCEPT_SUB_QUERY); } <RPAREN>
+                // BODO CHANGE: Replaced Calcite's default Item operator with our
+                // own custom operator that handles variant
+                | <SAFE_ORDINAL> { itemOp = ArrayOperatorTable.ARRAY_MAP_GET_BRACKET; } <LPAREN> { e = Expression(ExprContext.ACCEPT_SUB_QUERY); } <RPAREN>
                 | { itemOp = SqlStdOperatorTable.ITEM; } e = Expression(ExprContext.ACCEPT_SUB_QUERY)
                 )
                 <RBRACKET> {
