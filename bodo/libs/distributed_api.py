@@ -81,6 +81,7 @@ from bodo.utils.typing import (
 )
 from bodo.utils.utils import (
     CTypeEnum,
+    bodo_exec,
     check_and_propagate_cpp_exception,
     empty_like_type,
     is_array_typ,
@@ -3945,17 +3946,12 @@ def alltoallv_tup_overload(
     count = send_data.count
     assert out_data.count == count
 
-    func_text = (
-        "def f(send_data, out_data, send_counts, recv_counts, send_disp, recv_disp):\n"
-    )
+    func_text = "def bodo_alltoallv_tup(send_data, out_data, send_counts, recv_counts, send_disp, recv_disp):\n"
     for i in range(count):
         func_text += f"  alltoallv(send_data[{i}], out_data[{i}], send_counts, recv_counts, send_disp, recv_disp)\n"
     func_text += "  return\n"
 
-    loc_vars = {}
-    exec(func_text, {"alltoallv": alltoallv}, loc_vars)
-    a2a_impl = loc_vars["f"]
-    return a2a_impl
+    return bodo_exec(func_text, {"alltoallv": alltoallv}, {}, globals())
 
 
 @numba.njit(cache=True)
@@ -4222,12 +4218,9 @@ def wait(req, cond=True):
     if isinstance(req, types.BaseTuple):
         count = len(req.types)
         tup_call = ",".join(f"_wait(req[{i}], cond)" for i in range(count))
-        func_text = "def f(req, cond=True):\n"
+        func_text = "def bodo_wait(req, cond=True):\n"
         func_text += f"  return {tup_call}\n"
-        loc_vars = {}
-        exec(func_text, {"_wait": _wait}, loc_vars)
-        impl = loc_vars["f"]
-        return impl
+        return bodo_exec(func_text, {"_wait": _wait}, {}, globals())
 
     # None passed means no request to wait on (no-op), happens for shift() for string
     # arrays since we use blocking communication instead

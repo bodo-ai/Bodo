@@ -121,7 +121,6 @@ from bodo.utils.typing import (
 )
 from bodo.utils.utils import (
     bodo_exec,
-    create_arg_hash,
     is_null_pointer,
 )
 
@@ -2283,20 +2282,14 @@ def pd_dataframe_overload(data=None, index=None, columns=None, dtype=None, copy=
     col_args, data_args, index_arg = _get_df_args(data, index, columns, dtype, copy)
     col_var = ColNamesMetaType(tuple(col_args))
 
-    arg_hash = create_arg_hash(data_args, index_arg, col_args, col_var)
-    gen_func_name = f"bodo_init_df_{arg_hash}"
-    func_text = f"def {gen_func_name}(data=None, index=None, columns=None, dtype=None, copy=False):\n"
+    func_text = "def bodo_init_df(data=None, index=None, columns=None, dtype=None, copy=False):\n"
     func_text += f"  return bodo.hiframes.pd_dataframe_ext.init_dataframe({data_args}, {index_arg}, __col_name_meta_value_pd_overload)\n"
-    loc_vars = {}
-    _init_df = bodo_exec(
-        gen_func_name,
+    return bodo_exec(
         func_text,
         {"bodo": bodo, "np": np, "__col_name_meta_value_pd_overload": col_var},
-        loc_vars,
+        {},
         globals(),
-        __name__,
     )
-    return _init_df
 
 
 @intrinsic
@@ -3960,17 +3953,7 @@ def to_parquet_overload(
             # wrap the name with quotation mark to indicate it is a string
             pandas_metadata_str = pandas_metadata_str.replace('"%s"', "%s")
 
-    arg_hash = create_arg_hash(
-        df.is_table_format,
-        df.columns,
-        df.has_runtime_cols,
-        partition_cols,
-        df.runtime_data_types,
-        part_col_idxs,
-        write_rangeindex_to_metadata,
-    )
-    gen_func_name = f"bodo_df_to_parquet_{arg_hash}"
-    func_text = f"def {gen_func_name}(df, path, engine='auto', compression='snappy', index=None, partition_cols=None, storage_options=None, row_group_size=-1, _bodo_file_prefix='part-', _bodo_timestamp_tz=None, _is_parallel=False):\n"
+    func_text = "def bodo_df_to_parquet(df, path, engine='auto', compression='snappy', index=None, partition_cols=None, storage_options=None, row_group_size=-1, _bodo_file_prefix='part-', _bodo_timestamp_tz=None, _is_parallel=False):\n"
 
     # Why we are calling drop_duplicates_local_dictionary on all dict encoded arrays?
     # Arrow doesn't support writing DictionaryArrays with nulls in the dictionary.
@@ -4161,15 +4144,12 @@ def to_parquet_overload(
         "decode_if_dict_table": decode_if_dict_table,
     }
     glbls.update(extra_globals)
-    df_to_parquet = bodo_exec(
-        gen_func_name,
+    return bodo_exec(
         func_text,
         glbls,
         loc_vars,
         globals(),
-        __name__,
     )
-    return df_to_parquet
 
 
 # -------------------------------------- to_sql ------------------------------------------

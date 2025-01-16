@@ -2421,13 +2421,10 @@ def overload_to_tuple(val):
             if isinstance(val, types.LiteralList)
             else get_overload_const_list(val)
         )
-        func_text = "def f(val):\n"
+        func_text = "def bodo_to_tuple(val):\n"
         res = ",".join(f"val[{i}]" for i in range(n_values))
         func_text += f"  return ({res},)\n"
-        loc_vars = {}
-        exec(func_text, {}, loc_vars)
-        impl = loc_vars["f"]
-        return impl
+        return bodo.utils.utils.bodo_exec(func_text, {}, {}, globals())
 
     assert isinstance(val, types.BaseTuple), "tuple type expected"
     return lambda val: val  # pragma: no cover
@@ -2524,16 +2521,13 @@ def overload_struct_if_heter_dict(values, names):
         )  # pragma: no cover
 
     n_fields = len(values.types)
-    func_text = "def f(values, names):\n"
+    func_text = "def bodo_struct_if_heter_dict(values, names):\n"
     res = ",".join(
         f"'{get_overload_const_str(names.types[i])}': values[{i}]"
         for i in range(n_fields)
     )
     func_text += f"  return {{{res}}}\n"
-    loc_vars = {}
-    exec(func_text, {}, loc_vars)
-    impl = loc_vars["f"]
-    return impl
+    return bodo.utils.utils.bodo_exec(func_text, {}, {}, globals())
 
 
 def list_to_array(lst, arr_type, parallel=False):

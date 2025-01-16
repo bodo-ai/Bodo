@@ -59,7 +59,6 @@ from bodo.utils.typing import (
 from bodo.utils.utils import (
     alloc_type,
     bodo_exec,
-    create_arg_hash,
     is_array_typ,
     is_whole_slice,
     numba_to_c_array_types,
@@ -540,6 +539,11 @@ def box_table(typ, val, c, ensure_unboxed=None):
     return out_table_obj
 
 
+# @numba.njit(cache=True)
+# def table_len_lower_njit(T):
+#    return T._len
+
+
 @lower_builtin(len, TableType)
 def table_len_lower(context, builder, sig, args):
     """
@@ -547,6 +551,10 @@ def table_len_lower(context, builder, sig, args):
     done in a shared template for many different types.
     See LenTemplate.
     """
+    # breakpoint()
+    # table_len_lower_njit.compile(sig)
+    # fn = context.get_function("table_len_lower_njit", sig)
+    # return builder.call(fn, args)
     return context.compile_internal(builder, lambda T: T._len, sig, args)
 
 
@@ -940,8 +948,7 @@ def generate_set_table_data_code(table, ind, arr_type, used_cols, is_null=False)
         "alloc_list_like": alloc_list_like,
         "out_table_typ": out_table_typ,
     }
-    gen_func_name = f"bodo_set_table_data_{create_arg_hash(table, ind, arr_type, used_cols, is_null)}"
-    func_text = f"def {gen_func_name}(table, ind, arr, used_cols=None):\n"
+    func_text = "def bodo_set_table_data(table, ind, arr, used_cols=None):\n"
     func_text += "  T2 = init_table(out_table_typ, False)\n"
     # Length of the table cannot change.
     func_text += "  T2 = set_table_len(T2, len(table))\n"
@@ -1000,8 +1007,7 @@ def generate_set_table_data_code(table, ind, arr_type, used_cols, is_null=False)
         func_text += f"  T2 = set_table_block(T2, out_arr_list_{blk}, {blk})\n"
     func_text += "  return T2\n"
 
-    loc_vars = {}
-    return bodo_exec(gen_func_name, func_text, glbls, loc_vars, globals(), __name__)
+    return bodo_exec(func_text, glbls, {}, globals())
 
 
 @numba.generated_jit(

@@ -955,23 +955,21 @@ def to_list_if_immutable_arr_overload(data, str_null_bools=None):
                 if is_str_arr_type(data.types[i]) or data.types[i] == binary_array_type
             ]
 
-        func_text = "def f(data, str_null_bools=None):\n"
+        func_text = "def bodo_to_list_if_immutable_arr(data, str_null_bools=None):\n"
         func_text += "  return ({}{})\n".format(
             ", ".join(out), "," if count == 1 else ""
         )  # single value needs comma to become tuple
 
-        loc_vars = {}
-        exec(
+        return bodo.utils.utils.bodo_exec(
             func_text,
             {
                 "to_list_if_immutable_arr": to_list_if_immutable_arr,
                 "get_str_null_bools": get_str_null_bools,
                 "bodo": bodo,
             },
-            loc_vars,
+            {},
+            globals(),
         )
-        to_str_impl = loc_vars["f"]
-        return to_str_impl
 
     return lambda data, str_null_bools=None: data  # pragma: no cover
 
@@ -1018,7 +1016,9 @@ def cp_str_list_to_array_overload(str_arr, list_data, str_null_bools=None):
         count = str_arr.count
 
         str_ind = 0
-        func_text = "def f(str_arr, list_data, str_null_bools=None):\n"
+        func_text = (
+            "def bodo_cp_str_list_to_array(str_arr, list_data, str_null_bools=None):\n"
+        )
         for i in range(count):
             if (
                 is_overload_true(str_null_bools)
@@ -1030,10 +1030,9 @@ def cp_str_list_to_array_overload(str_arr, list_data, str_null_bools=None):
                 func_text += f"  cp_str_list_to_array(str_arr[{i}], list_data[{i}])\n"
         func_text += "  return\n"
 
-        loc_vars = {}
-        exec(func_text, {"cp_str_list_to_array": cp_str_list_to_array}, loc_vars)
-        cp_str_impl = loc_vars["f"]
-        return cp_str_impl
+        return bodo.utils.utils.bodo_exec(
+            func_text, {"cp_str_list_to_array": cp_str_list_to_array}, {}, globals()
+        )
 
     return lambda str_arr, list_data, str_null_bools=None: None  # pragma: no cover
 
@@ -1193,20 +1192,18 @@ _print_str_arr = types.ExternalFunction(
 
 @numba.generated_jit(nopython=True)
 def empty_str_arr(in_seq):  # pragma: no cover
-    func_text = "def f(in_seq):\n"
+    func_text = "def bodo_empty_str_arr(in_seq):\n"
     func_text += "    n_strs = len(in_seq)\n"
     func_text += "    A = pre_alloc_string_array(n_strs, -1)\n"
     func_text += "    return A\n"
-    loc_vars = {}
-    exec(
+    return bodo.utils.utils.bodo_exec(
         func_text,
         {
             "pre_alloc_string_array": pre_alloc_string_array,
         },
-        loc_vars,
+        {},
+        globals(),
     )
-    f = loc_vars["f"]
-    return f
 
 
 @numba.generated_jit(nopython=True)
@@ -1220,23 +1217,21 @@ def str_arr_from_sequence(in_seq):  # pragma: no cover
     else:
         alloc_fn = "pre_alloc_string_array"
 
-    func_text = "def f(in_seq):\n"
+    func_text = "def bodo_str_arr_from_sequence(in_seq):\n"
     func_text += "    n_strs = len(in_seq)\n"
     func_text += f"    A = {alloc_fn}(n_strs, -1)\n"
     func_text += "    for i in range(n_strs):\n"
     func_text += "        A[i] = in_seq[i]\n"
     func_text += "    return A\n"
-    loc_vars = {}
-    exec(
+    return bodo.utils.utils.bodo_exec(
         func_text,
         {
             "pre_alloc_string_array": pre_alloc_string_array,
             "pre_alloc_binary_array": pre_alloc_binary_array,
         },
-        loc_vars,
+        {},
+        globals(),
     )
-    f = loc_vars["f"]
-    return f
 
 
 @intrinsic

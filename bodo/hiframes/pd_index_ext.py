@@ -72,7 +72,10 @@ from bodo.utils.typing import (
     parse_dtype,
     raise_bodo_error,
 )
-from bodo.utils.utils import is_null_value
+from bodo.utils.utils import (
+    bodo_exec,
+    is_null_value,
+)
 
 _dt_index_data_typ = types.Array(types.NPDatetime("ns"), 1, "C")
 _timedelta_index_data_typ = types.Array(types.NPTimedelta("ns"), 1, "C")
@@ -1115,7 +1118,7 @@ def pd_date_range_overload(
 
     # TODO: check start and end for NaT
 
-    func_text = "def f(start=None, end=None, periods=None, freq=None, tz=None, normalize=False, name=None, closed=None):\n"
+    func_text = "def bodo_pd_date_range_overload(start=None, end=None, periods=None, freq=None, tz=None, normalize=False, name=None, closed=None):\n"
 
     func_text += freq_set
 
@@ -1180,11 +1183,7 @@ def pd_date_range_overload(
     func_text += "  A = bodo.utils.conversion.convert_to_dt64ns(arr)\n"
     func_text += "  return bodo.hiframes.pd_index_ext.init_datetime_index(A, name)\n"
 
-    loc_vars = {}
-    exec(func_text, {"bodo": bodo, "np": np, "pd": pd}, loc_vars)
-    f = loc_vars["f"]
-
-    return f
+    return bodo_exec(func_text, {"bodo": bodo, "np": np, "pd": pd}, {}, globals())
 
 
 @overload(pd.timedelta_range, no_unliteral=True, jit_options={"cache": True})
@@ -4480,7 +4479,7 @@ def overload_index_map(I, mapper, na_action=None):
 
     # Just default to ignore?
     func = get_overload_const_func(mapper, None)
-    func_text = "def f(I, mapper, na_action=None):\n"
+    func_text = "def bodo_overload_index_map(I, mapper, na_action=None):\n"
     func_text += "  name = bodo.hiframes.pd_index_ext.get_index_name(I)\n"
     func_text += "  A = bodo.utils.conversion.coerce_to_array(I)\n"
     func_text += "  numba.parfors.parfor.init_prange()\n"
@@ -4494,8 +4493,7 @@ def overload_index_map(I, mapper, na_action=None):
 
     map_func = bodo.compiler.udf_jit(func)
 
-    loc_vars = {}
-    exec(
+    return bodo_exec(
         func_text,
         {
             "numba": numba,
@@ -4508,10 +4506,9 @@ def overload_index_map(I, mapper, na_action=None):
             "add_nested_counts": bodo.utils.indexing.add_nested_counts,
             "data_arr_type": out_arr_type.dtype,
         },
-        loc_vars,
+        {},
+        globals(),
     )
-    f = loc_vars["f"]
-    return f
 
 
 @lower_builtin(operator.is_, NumericIndexType, NumericIndexType)
@@ -4628,7 +4625,7 @@ def create_binary_op_overload(op):
 
             count = len(lhs.data.types)
             # TODO(ehsan): return Numpy array (fix Numba errors)
-            func_text = "def f(lhs, rhs):\n"
+            func_text = "def bodo_index_binary_op(lhs, rhs):\n"
             func_text += "  return [{}]\n".format(
                 ",".join(
                     "op(lhs[{}], rhs{})".format(
@@ -4637,10 +4634,7 @@ def create_binary_op_overload(op):
                     for i in range(count)
                 ),
             )
-            loc_vars = {}
-            exec(func_text, {"op": op, "np": np}, loc_vars)
-            impl = loc_vars["f"]
-            return impl
+            return bodo_exec(func_text, {"op": op, "np": np}, {}, globals())
 
         if isinstance(rhs, HeterogeneousIndexType):
             # handle as regular array data if not actually heterogeneous
@@ -4657,7 +4651,7 @@ def create_binary_op_overload(op):
 
             count = len(rhs.data.types)
             # TODO(ehsan): return Numpy array (fix Numba errors)
-            func_text = "def f(lhs, rhs):\n"
+            func_text = "def bodo_index_binary_op(lhs, rhs):\n"
             func_text += "  return [{}]\n".format(
                 ",".join(
                     "op(lhs{}, rhs[{}])".format(
@@ -4666,10 +4660,7 @@ def create_binary_op_overload(op):
                     for i in range(count)
                 ),
             )
-            loc_vars = {}
-            exec(func_text, {"op": op, "np": np}, loc_vars)
-            impl = loc_vars["f"]
-            return impl
+            return bodo_exec(func_text, {"op": op, "np": np}, {}, globals())
 
     return overload_index_binary_op
 
