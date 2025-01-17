@@ -426,6 +426,8 @@ class DistributedAnalysisCallRegistry:
                 "get_valid_entries_from_date_offset",
                 "bodo.libs.array_kernels",
             ): no_op_analysis,
+            ("shift", "bodo.hiframes.rolling"): meet_out_first_arg_analysis,
+            ("pct_change", "bodo.hiframes.rolling"): meet_out_first_arg_analysis,
         }
 
     def analyze_call(self, ctx, inst, fdef):

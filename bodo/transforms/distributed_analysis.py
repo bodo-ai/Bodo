@@ -1842,14 +1842,6 @@ class DistributedAnalysis:
             array_dists[rhs.args[1].name] = new_dist
             return
 
-        if fdef == ("shift", "bodo.hiframes.rolling"):
-            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
-            return
-
-        if fdef == ("pct_change", "bodo.hiframes.rolling"):
-            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
-            return
-
         if fdef == ("nlargest", "bodo.libs.array_kernels"):
             # data and index arrays have the same distributions
             _meet_array_dists(
