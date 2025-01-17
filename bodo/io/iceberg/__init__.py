@@ -1,3 +1,11 @@
+"""
+General support for reading and writing Iceberg tables with
+underlying Parquet files. Most of the functionality is implemented
+in other files and exported out of this module.
+"""
+
+from __future__ import annotations
+
 import os
 import time
 import typing as pt
@@ -14,17 +22,19 @@ from bodo.io.parquet_pio import get_fpath_without_protocol_prefix, parse_fpath
 from bodo.mpi4py import MPI
 
 from . import merge_into
-from .common import ICEBERG_FIELD_ID_MD_KEY as ICEBERG_FIELD_ID_MD_KEY
-from .common import IcebergConnectionType as IcebergConnectionType
-from .common import flatten_concatenation, flatten_tuple, get_iceberg_fs
-from .common import format_iceberg_conn as format_iceberg_conn
-from .common import format_iceberg_conn_njit as format_iceberg_conn_njit
-from .read_compilation import (
-    determine_str_as_dict_columns as determine_str_as_dict_columns,
+from .common import (
+    ICEBERG_FIELD_ID_MD_KEY,
+    IcebergConnectionType,
+    flatten_concatenation,
+    flatten_tuple,
+    format_iceberg_conn,
+    format_iceberg_conn_njit,
+    get_iceberg_fs,
 )
-from .read_compilation import get_iceberg_type_info as get_iceberg_type_info
 from .read_compilation import (
-    is_snowflake_managed_iceberg_wh as is_snowflake_managed_iceberg_wh,
+    determine_str_as_dict_columns,
+    get_iceberg_type_info,
+    is_snowflake_managed_iceberg_wh,
 )
 from .read_metadata import (
     get_iceberg_file_list_parallel,
@@ -341,4 +351,7 @@ __all__ = [
     "format_iceberg_conn",
     "format_iceberg_conn_njit",
     "get_iceberg_pq_dataset",
+    "determine_str_as_dict_columns",
+    "get_iceberg_type_info",
+    "is_snowflake_managed_iceberg_wh",
 ]

@@ -1,3 +1,9 @@
+"""
+Helper code related to Snowflake-managed Iceberg tables
+In particular, special optimizations to reduce the communication overhead
+of fetching metadata for Snowflake-managed Iceberg tables from Snowflake.
+"""
+
 from __future__ import annotations
 
 from numba.extending import overload

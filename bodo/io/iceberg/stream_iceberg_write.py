@@ -1,3 +1,8 @@
+"""
+Operator for streaming Iceberg writer. Currently used by BodoSQL only.
+Not intended for external use
+"""
+
 import operator
 import os
 import traceback

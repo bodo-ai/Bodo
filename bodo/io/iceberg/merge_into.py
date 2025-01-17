@@ -1,3 +1,9 @@
+"""
+Helper for performing MERGE INTO on Iceberg tables. Note that
+MERGE INTO is only supported for BodoSQL and is currently disabled
+due to various issues.
+"""
+
 import typing as pt
 
 import numba

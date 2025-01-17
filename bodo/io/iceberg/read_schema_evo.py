@@ -1,3 +1,8 @@
+"""
+Helper functions for checking schema compatibility
+between an Iceberg tables schema and its underlying Parquet files
+"""
+
 import pyarrow as pa
 
 from bodo.io.iceberg.common import b_ICEBERG_FIELD_ID_MD_KEY

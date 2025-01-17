@@ -1,3 +1,10 @@
+"""
+Operations for performing writes to Iceberg tables.
+This file contains both code for
+- The transaction handling (setup and teardown)
+- Writing the Parquet files in the expected format
+"""
+
 import sys
 import typing as pt
 from copy import deepcopy

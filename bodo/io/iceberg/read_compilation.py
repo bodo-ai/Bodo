@@ -1,6 +1,6 @@
 """
 Operations to get basic metadata about an Iceberg table
-needed for compilation. For example, the table schema
+needed for compilation. For example, the table schema, dictionary encoding
 """
 
 from __future__ import annotations

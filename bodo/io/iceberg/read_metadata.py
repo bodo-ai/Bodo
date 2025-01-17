@@ -1,3 +1,9 @@
+"""
+Operations to get file metadata from Iceberg tables during
+read runtime. This includes getting a list of parquet files
+and processing their metadata for later steps.
+"""
+
 from __future__ import annotations
 
 import itertools

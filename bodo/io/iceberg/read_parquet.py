@@ -1,3 +1,9 @@
+"""
+Operations related to reading a Parquet dataset from an Iceberg table.
+For example, getting Parquet metadata, applying pushdowns, estimating
+the size for distributed read planning, and actually reading the dataset.
+"""
+
 from __future__ import annotations
 
 import os
