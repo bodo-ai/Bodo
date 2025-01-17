@@ -583,7 +583,7 @@ class DistributedPass:
             ),
             (
                 "iceberg_writer_init",
-                "bodo.io.stream_iceberg_write",
+                "bodo.io.iceberg.stream_iceberg_write",
             ),
             (
                 "parquet_writer_init",

@@ -988,23 +988,6 @@ class DistributedAnalysis:
             )
             return
 
-        if func_mod in ("sklearn.metrics._regression", "sklearn.metrics"):
-            if func_name in {"mean_squared_error", "mean_absolute_error", "r2_score"}:
-                _set_REP(
-                    self.typemap,
-                    self.metadata,
-                    self.diag_info,
-                    lhs,
-                    array_dists,
-                    f"output of {func_name} is REP",
-                    rhs.loc,
-                )
-                self._analyze_sklearn_score_err_ytrue_ypred_optional_sample_weight(
-                    lhs, func_name, rhs, kws, array_dists
-                )
-
-            return
-
         if func_mod == "sklearn.metrics.pairwise" and func_name == "cosine_similarity":
             # Match distribution of X to the output.
             # The output distribution is intended to match X and should ignore Y.
@@ -1473,7 +1456,10 @@ class DistributedAnalysis:
             )
             return
 
-        if fdef == ("iceberg_writer_fetch_theta", "bodo.io.stream_iceberg_write"):
+        if fdef == (
+            "iceberg_writer_fetch_theta",
+            "bodo.io.iceberg.stream_iceberg_write",
+        ):
             # Used to obtain the current value of a theta sketch collection from
             # an Iceberg writer as an array, where each row is the current estimate
             # for that column of the table. Answer is replicated since there is
@@ -1481,7 +1467,7 @@ class DistributedAnalysis:
             _set_REP(self.typemap, self.metadata, self.diag_info, lhs, array_dists)
             return
 
-        if fdef == ("read_puffin_file_ndvs", "bodo.io.stream_iceberg_write"):
+        if fdef == ("read_puffin_file_ndvs", "bodo.io.iceberg.stream_iceberg_write"):
             # Used to the ndvs from a puffin file for testing.
             _set_REP(self.typemap, self.metadata, self.diag_info, lhs, array_dists)
             return
@@ -1493,7 +1479,7 @@ class DistributedAnalysis:
             ),
             (
                 "iceberg_writer_append_table",
-                "bodo.io.stream_iceberg_write",
+                "bodo.io.iceberg.stream_iceberg_write",
             ),
             (
                 "parquet_writer_append_table",

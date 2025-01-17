@@ -10,7 +10,7 @@ from sklearn.utils._testing import assert_array_equal
 import bodo
 from bodo.tests.utils import _get_dist_arg, check_func
 
-pytestmark = [pytest.mark.ml, pytest.mark.weekly]
+pytestmark = [pytest.mark.ml, pytest.mark.slow]
 
 
 # --------------------Multinomial Naive Bayes Tests-----------------#

@@ -68,7 +68,7 @@ object BodoPrograms {
     /**
      * Standard program utilizing the volcano planner to perform optimization and conversion.
      */
-    fun standard(optimize: Boolean = true): Program =
+    fun standard(): Program =
         Programs.sequence(
             TrimFieldsProgram(false),
             SnowflakeColumnPruning(),
@@ -78,78 +78,46 @@ object BodoPrograms {
             // run our CSE changes up front until we can develop more robust CSE support. After
             // simplification new similarities may be uncovered, so we also include those rules
             // in the simplification step.
-            if (optimize) {
-                HepOptimizerProgram(BodoRules.CSE_RULES)
-            } else {
-                NoopProgram
-            },
+            HepOptimizerProgram(BodoRules.CSE_RULES),
             // Simplification & filter push down step.
-            if (optimize) {
-                FilterPushdownPass()
-            } else {
-                NoopProgram
-            },
+            FilterPushDownPass(),
             // We eliminate common subexpressions in filters only after all filters have been pushed down.
-            if (optimize) {
-                HepOptimizerProgram(listOf(BodoRules.CSE_IN_FILTERS_RULE))
-            } else {
-                NoopProgram
-            },
-            // Field pushdown step
-            // This includes generic projection pushdown code,
+            HepOptimizerProgram(listOf(BodoRules.CSE_IN_FILTERS_RULE)),
+            // Field push down step
+            // This includes generic projection push down code,
             // and some specialized rules to handle semi-structure field accesses
-            if (optimize) {
-                FieldPushdownPass()
-            } else {
-                NoopProgram
-            },
+            FieldPushDownPass(),
             // Projection pull up pass
-            if (optimize) {
-                ProjectionPullUpPass()
-            } else {
-                NoopProgram
-            },
-            // Even when set to 0 bloat, several rules in the pushdown/pull up pass sometimes break CSE incorrectly,
-            // the reason for this is not immediately clear.
-            // Therefore, we perform a second CSE pass after the pushdown/pull up rules run in order to
-            // re-introduce CSE wherever possible
-            if (optimize) {
-                HepOptimizerProgram(listOf(BodoRules.CSE_IN_FILTERS_RULE))
-            } else {
-                NoopProgram
-            },
+            ProjectionPullUpPass(),
+            // Even when set to 0 bloat, several rules in the push down/pull up pass
+            // sometimes break CSE incorrectly, the reason for this is not immediately clear.
+            // Therefore, we perform a second CSE pass after the push down/pull up rules
+            // run in order to re-introduce CSE wherever possible
+            HepOptimizerProgram(listOf(BodoRules.CSE_IN_FILTERS_RULE)),
             // Rewrite step. The Filter Case changes risk keeping a filter from passing through a join by inserting
             // a projection, so we run it after filter pushdown.
-            if (optimize) {
-                HepOptimizerProgram(BodoRules.REWRITE_RULES)
-            } else {
-                NoopProgram
-            },
+            HepOptimizerProgram(BodoRules.REWRITE_RULES),
             // Multi Join building step.
-            if (optimize) {
-                Programs.of(
-                    HepProgramBuilder()
-                        // Note: You must build the multi-join BOTTOM_UP
-                        .addMatchOrder(HepMatchOrder.BOTTOM_UP)
-                        .addRuleCollection(MULTI_JOIN_CONSTRUCTION_RULES)
-                        .build(),
-                    false,
-                    BodoRelMetadataProvider(),
-                )
-            } else {
-                NoopProgram
-            },
+            Programs.of(
+                HepProgramBuilder()
+                    // Note: You must build the multi-join BOTTOM_UP
+                    .addMatchOrder(HepMatchOrder.BOTTOM_UP)
+                    .addRuleCollection(MULTI_JOIN_CONSTRUCTION_RULES)
+                    .build(),
+                false,
+                BodoRelMetadataProvider(),
+            ),
             AnalysisSuite.multiJoinAnalyzer,
             WindowConversionProgram(),
             MetadataPreprocessProgram(),
             RuleSetProgram(
                 Iterables.concat(
                     BodoRules.VOLCANO_MINIMAL_RULE_SET,
-                    ifTrue(optimize, BodoRules.VOLCANO_OPTIMIZE_RULE_SET),
+                    BodoRules.VOLCANO_OPTIMIZE_RULE_SET,
                 ),
             ),
             // This analysis pass has to come after VOLCANO_MINIMAL_RULE_SET which
-            // contains the filterPushdown step.
+            // contains the filter push down step.
             AnalysisSuite.filterPushdownAnalysis,
             // Convert Window nodes back to Project nodes
             WindowProjectTransformProgram,
@@ -180,7 +148,7 @@ object BodoPrograms {
         )
 
     /**
-     * Preprocessor program to remove subqueries, correlations, and perform other
+     * Preprocessor program to remove sub queries, correlations, and perform other
      * necessary transformations on the plan before the optimization pass.
      */
     fun preprocessor(): Program = PreprocessorProgram()
@@ -285,9 +253,9 @@ object BodoPrograms {
      */
     private class PreprocessorProgram :
         Program by Programs.sequence(
-            // Remove subqueries and correlation nodes from the query.
+            // Remove sub queries and correlation nodes from the query.
             SubQueryRemoveProgram(),
-            DecorrelateProgram(),
+            DecorrelationProgram(),
             RewriteProgram(),
             FlattenCaseExpressionsProgram,
             // Convert calcite logical nodes to bodo logical nodes
@@ -339,7 +307,7 @@ object BodoPrograms {
      *
      * This prevents the use of correlate within the program.
      */
-    private class DecorrelateProgram : Program {
+    private class DecorrelationProgram : Program {
         override fun run(
             planner: RelOptPlanner?,
             rel: RelNode,
@@ -591,7 +559,7 @@ object BodoPrograms {
             PROJECTION_PULL_UP_RULES,
         )
 
-    private class FilterPushdownPass :
+    private class FilterPushDownPass :
         Program by HepOptimizerProgram(
             Iterables.concat(BodoRules.FILTER_PUSH_DOWN_RULES, BodoRules.SIMPLIFICATION_RULES),
             mapOf(
@@ -603,7 +571,7 @@ object BodoPrograms {
             ),
         )
 
-    private class FieldPushdownPass :
+    private class FieldPushDownPass :
         Program by HepOptimizerProgram(
             ProjectionPushdownRules.plus(FieldPushdownRules),
         )
@@ -657,16 +625,6 @@ object BodoPrograms {
         }
     }
 
-    private object NoopProgram : Program {
-        override fun run(
-            planner: RelOptPlanner,
-            rel: RelNode,
-            requiredOutputTraits: RelTraitSet,
-            materializations: List<RelOptMaterialization>,
-            lattices: List<RelOptLattice>,
-        ): RelNode = rel
-    }
-
     /**
      * Simple program that does nothing but dump the output to stdout.
      * Should only be used for debugging
@@ -675,27 +633,14 @@ object BodoPrograms {
         private val prefixMessage: String = "",
     ) : Program {
         override fun run(
-            planner: RelOptPlanner?,
+            planner: RelOptPlanner,
             rel: RelNode,
-            requiredOutputTraits: RelTraitSet?,
-            materializations: MutableList<RelOptMaterialization>?,
-            lattices: MutableList<RelOptLattice>?,
+            requiredOutputTraits: RelTraitSet,
+            materializations: MutableList<RelOptMaterialization>,
+            lattices: MutableList<RelOptLattice>,
         ): RelNode {
             println(RelOptUtil.dumpPlan(prefixMessage, rel, SqlExplainFormat.TEXT, SqlExplainLevel.NON_COST_ATTRIBUTES))
             return rel
         }
     }
 }
-
-/**
- * Return the passed in iterable on true otherwise return an empty iterable.
- */
-private fun <T> ifTrue(
-    condition: Boolean,
-    onTrue: Iterable<T>,
-): Iterable<T> =
-    if (condition) {
-        onTrue
-    } else {
-        listOf()
-    }

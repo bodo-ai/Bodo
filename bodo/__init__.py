@@ -310,7 +310,7 @@ import bodo.io.np_io
 import bodo.io.csv_iterator_ext
 import bodo.io.iceberg
 import bodo.io.snowflake_write
-import bodo.io.stream_iceberg_write
+import bodo.io.iceberg.stream_iceberg_write
 import bodo.io.stream_parquet_write
 
 from bodo.libs.distributed_api import (

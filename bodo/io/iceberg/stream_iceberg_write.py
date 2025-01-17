@@ -1,3 +1,8 @@
+"""
+Operator for streaming Iceberg writer. Currently used by BodoSQL only.
+Not intended for external use
+"""
+
 import operator
 import os
 import traceback
@@ -32,13 +37,13 @@ from bodo.io.helpers import (
     pyarrow_schema_type,
     stream_writer_alloc_codegen,
 )
-from bodo.io.iceberg import (
+from bodo.io.iceberg.common import get_rest_catalog_fs
+from bodo.io.iceberg.write import (
     commit_statistics_file,
     fetch_puffin_metadata,
     generate_data_file_info,
     get_old_statistics_file_path,
     get_rest_catalog_config,
-    get_rest_catalog_fs,
     get_table_details_before_write,
     iceberg_pq_write,
     python_list_of_heterogeneous_tuples_type,

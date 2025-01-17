@@ -56,7 +56,7 @@ open class IcebergWriteTarget(
                 "allow_theta_sketches" to Expr.BooleanLiteral(allowsThetaSketches()),
             )
         return Expr.Call(
-            "bodo.io.stream_iceberg_write.iceberg_writer_init",
+            "bodo.io.iceberg.stream_iceberg_write.iceberg_writer_init",
             args,
             kwargs,
         )
@@ -98,6 +98,6 @@ open class IcebergWriteTarget(
         meta: CreateTableMetadata,
     ): Expr {
         val args = listOf(stateVar, tableVar, columnNamesGlobal, isLastVar, iterVar)
-        return Expr.Call("bodo.io.stream_iceberg_write.iceberg_writer_append_table", args)
+        return Expr.Call("bodo.io.iceberg.stream_iceberg_write.iceberg_writer_append_table", args)
     }
 }

@@ -24,10 +24,14 @@ package com.bodosql.calcite.prepare
 
 import com.bodosql.calcite.plan.CostFactory
 import com.bodosql.calcite.sql.parser.SqlBodoParserImpl
+import com.bodosql.calcite.traits.BatchingPropertyTraitDef
 import com.google.common.collect.ImmutableList
 import org.apache.calcite.avatica.util.Casing
 import org.apache.calcite.config.NullCollation
 import org.apache.calcite.jdbc.CalciteSchema
+import org.apache.calcite.plan.ConventionTraitDef
+import org.apache.calcite.plan.RelTrait
+import org.apache.calcite.plan.RelTraitDef
 import org.apache.calcite.prepare.CalciteCatalogReader
 import org.apache.calcite.rel.hint.HintPredicates
 import org.apache.calcite.rel.hint.HintStrategyTable
@@ -42,6 +46,7 @@ import org.apache.calcite.sql2rel.SqlToRelConverter
 import org.apache.calcite.sql2rel.StandardConvertletTableConfig
 import org.apache.calcite.tools.FrameworkConfig
 import org.apache.calcite.tools.Frameworks
+import org.apache.calcite.tools.Program
 
 class PlannerImpl(
     config: Config,
@@ -147,6 +152,32 @@ class PlannerImpl(
             return hintStrategies.build()
         }
 
+        /**
+         * Get the trait definitions defined for our planner. We currently
+         * only provide traits for streaming.
+         * @return The list of trait definitions for our planner.
+         */
+        @JvmStatic
+        private fun getTraitDefs(isStreaming: Boolean): List<RelTraitDef<out RelTrait>> =
+            if (isStreaming) {
+                // Only include BatchingPropertyTraitDef with streaming.
+                listOf(ConventionTraitDef.INSTANCE, BatchingPropertyTraitDef.INSTANCE)
+            } else {
+                listOf(ConventionTraitDef.INSTANCE)
+            }
+
+        /**
+         * Get the programs that are defined for our planner. We currently
+         * only provide programs for streaming.
+         * @return The list of programs for our planner.
+         */
+        @JvmStatic
+        private fun getPrograms(): List<Program> =
+            listOf(
+                BodoPrograms.preprocessor(),
+                BodoPrograms.standard(),
+            )
+
         private fun frameworkConfig(config: Config): FrameworkConfig {
             val parserConfig = getParserConfig(config.sqlStyle)
             val validatorConfig = getValidatorConfig(config.sqlStyle)
@@ -161,8 +192,8 @@ class PlannerImpl(
                 .convertletTable(convertletTable)
                 .sqlValidatorConfig(validatorConfig)
                 .costFactory(CostFactory())
-                .traitDefs(config.plannerType.traitDefs())
-                .programs(config.plannerType.programs().toList())
+                .traitDefs(getTraitDefs(isStreaming = config.isStreaming))
+                .programs(getPrograms())
                 .build()
         }
 
@@ -227,7 +258,7 @@ class PlannerImpl(
     class Config(
         val defaultSchemas: List<SchemaPlus>,
         val typeSystem: RelDataTypeSystem,
-        val plannerType: PlannerType,
         val sqlStyle: String,
+        val isStreaming: Boolean,
     )
 }
