@@ -12,6 +12,7 @@ import socket
 import sys
 import time
 import typing as pt
+from collections import deque
 
 import cloudpickle
 import numba
@@ -162,6 +163,12 @@ class Spawner:
         )
         self.exec_intercomm_addr = MPI._addressof(self.worker_intercomm)
 
+        # A queue of del tasks to send delete command to workers.
+        # Necessary since garbage collection can be triggered at any time during
+        # execution of commands, leading to invalid data being broadcast to workers.
+        self._del_queue = deque()
+        self._is_running = False
+
     @property
     def bcast_root(self):
         """MPI bcast root rank"""
@@ -241,6 +248,8 @@ class Spawner:
         self, dispatcher: "SpawnDispatcher", propagate_env, *args, **kwargs
     ):
         """Send func to be compiled and executed on spawned process"""
+        assert not self._is_running, "submit_func_to_workers: already running"
+        self._is_running = True
 
         if sys.platform != "win32":
             # Install a signal handler for SIGUSR1 as a notification mechanism
@@ -292,6 +301,8 @@ class Spawner:
 
         assert caught_exceptions is not None
         if any(caught_exceptions):
+            self._is_running = False
+            self._run_del_queue()
             types = {type(excep) for excep in caught_exceptions}
             msgs = {
                 str(excep) if excep is not None else None for excep in caught_exceptions
@@ -325,6 +336,8 @@ class Spawner:
 
         self._recv_updated_args(args, args_meta, kwargs, kwargs_meta)
 
+        self._is_running = False
+        self._run_del_queue()
         return res
 
     def wrap_distributed_result(
@@ -335,16 +348,20 @@ class Spawner:
         root = MPI.ROOT if self.comm_world.Get_rank() == 0 else MPI.PROC_NULL
 
         def collect_func(res_id: str):
+            assert not self._is_running, "collect_func: already running"
+            self._is_running = True
             self.worker_intercomm.bcast(CommandType.GATHER.value, root=root)
             self.worker_intercomm.bcast(res_id, root=root)
-            return bodo.libs.distributed_api.gatherv(
+            res = bodo.libs.distributed_api.gatherv(
                 None, root=root, comm=self.worker_intercomm
             )
+            self._is_running = False
+            self._run_del_queue()
+            return res
 
         def del_func(res_id: str):
-            if not self.destroyed:
-                self.worker_intercomm.bcast(CommandType.DELETE_RESULT.value, root=root)
-                self.worker_intercomm.bcast(res_id, root=root)
+            self._del_queue.append(res_id)
+            self._run_del_queue()
 
         if isinstance(lazy_metadata, list):
             return [self.wrap_distributed_result(d) for d in lazy_metadata]
@@ -548,14 +565,44 @@ class Spawner:
             self._send_arg_meta(arg, arg_meta)
         return args_meta, kwargs_meta
 
+    def _run_del_queue(self):
+        if not self._is_running and self._del_queue and not self.destroyed:
+            self._is_running = True
+            res_id = self._del_queue.popleft()
+            self.worker_intercomm.bcast(
+                CommandType.DELETE_RESULT.value, root=self.bcast_root
+            )
+            self.worker_intercomm.bcast(res_id, root=self.bcast_root)
+            self._is_running = False
+            self._run_del_queue()
+
+    def set_config(self, name, value):
+        assert not self._is_running, "set_config: already running"
+        self._is_running = True
+        spawner.worker_intercomm.bcast(CommandType.SET_CONFIG.value, self.bcast_root)
+        spawner.worker_intercomm.bcast((name, value), self.bcast_root)
+        self._is_running = False
+        self._run_del_queue()
+
+    def register_type(self, type_name, type_value):
+        assert not self._is_running, "register_type: already running"
+        self._is_running = True
+        spawner.worker_intercomm.bcast(CommandType.REGISTER_TYPE.value, self.bcast_root)
+        spawner.worker_intercomm.bcast((type_name, type_value), self.bcast_root)
+        self._is_running = False
+        self._run_del_queue()
+
     def reset(self):
         """Destroy spawned processes"""
+        assert not self._is_running, "collect_func: already running"
+        self._is_running = True
         try:
             debug_msg(self.logger, "Destroying spawned processes")
         except Exception:
             # We might not be able to log during process teardown
             pass
         self.worker_intercomm.bcast(CommandType.EXIT.value, root=self.bcast_root)
+        self._is_running = False
         self.destroyed = True
 
 
