@@ -1075,10 +1075,6 @@ class DistributedAnalysis:
                     _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
             return
 
-        if fdef == ("accum_func", "bodo.libs.array_kernels"):
-            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
-            return
-
         # handle array.func calls
         if isinstance(func_mod, ir.Var) and is_array_typ(self.typemap[func_mod.name]):
             self._analyze_call_array(
