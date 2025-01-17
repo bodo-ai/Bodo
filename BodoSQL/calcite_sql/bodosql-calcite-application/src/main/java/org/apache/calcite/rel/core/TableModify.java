@@ -65,8 +65,8 @@ public abstract class TableModify extends SingleRel {
    * Enumeration of supported modification operations.
    */
   public enum Operation {
-
-    //We assign each enum an integer value. This is used when converting "MERGE INTO" into a
+    // Bodo Change:
+    // We assign each enum an integer value. This is used when converting "MERGE INTO" into a
     // LogicalTableModify node, to enumerate which action should be taken for each row.
     DELETE(0),
     INSERT(1),
@@ -106,7 +106,7 @@ public abstract class TableModify extends SingleRel {
   /**
    * The connection to the optimizing session.
    */
-  protected Prepare.CatalogReader catalogReader;
+  protected final Prepare.CatalogReader catalogReader;
 
   /**
    * The table definition.
@@ -184,8 +184,8 @@ public abstract class TableModify extends SingleRel {
     this(input.getCluster(),
         input.getTraitSet(),
         input.getTable("table"),
-        (Prepare.CatalogReader) requireNonNull(
-            input.getTable("table").getRelOptSchema(),
+        requireNonNull(
+            (Prepare.CatalogReader) input.getTable("table").getRelOptSchema(),
             "relOptSchema"),
         input.getInput(),
         requireNonNull(input.getEnum("operation", Operation.class), "operation"),
@@ -252,14 +252,20 @@ public abstract class TableModify extends SingleRel {
     final RelDataType rowType = table.getRowType();
     switch (operation) {
     case UPDATE:
-      assert updateColumnList != null : "updateColumnList must not be null for " + operation;
+      if (updateColumnList == null) {
+        throw new AssertionError("updateColumnList must not be null for "
+            + operation);
+      }
       inputRowType =
           typeFactory.createJoinType(rowType,
               getCatalogReader().createTypeFromProjection(rowType,
                   updateColumnList));
       break;
     case MERGE:
-      assert updateColumnList != null : "updateColumnList must not be null for " + operation;
+      if (updateColumnList == null) {
+        throw new AssertionError("updateColumnList must not be null for "
+            + operation);
+      }
       inputRowType =
           typeFactory.createJoinType(
               typeFactory.createJoinType(rowType, rowType),

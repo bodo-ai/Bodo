@@ -993,6 +993,7 @@ public class BodoRelFieldTrimmer extends RelFieldTrimmer {
                 oldGroup.isRows,
                 oldGroup.lowerBound,
                 oldGroup.upperBound,
+                oldGroup.exclude,
                 RelCollations.of(newCollations),
                 aggCalls);
         newGroups.add(newGroup);

@@ -66,12 +66,12 @@ public class BodoSqlTypeUtil {
       if (isAtomic(type) || isNull(type)
               || type.getSqlTypeName() == SqlTypeName.UNKNOWN
               || type.getSqlTypeName() == SqlTypeName.GEOMETRY) {
-        int precision = typeName.allowsPrec() ? type.getPrecision() : -1;
+        int precision = typeName.allowsPrec() ? type.getPrecision() : RelDataType.PRECISION_NOT_SPECIFIED ;
         // fix up the precision.
         if (maxPrecision > 0 && precision > maxPrecision) {
           precision = maxPrecision;
         }
-        int scale = typeName.allowsScale() ? type.getScale() : -1;
+        int scale = typeName.allowsScale() ? type.getScale() : RelDataType.SCALE_NOT_SPECIFIED;
         if (maxScale > 0 && scale > maxScale) {
           scale = maxScale;
         }
@@ -151,20 +151,34 @@ public class BodoSqlTypeUtil {
   }
 
   /**
-   * Expansion of SqlTypeUtil.isValidDecimalValue to also consider scale differences.
+   * Expansion of SqlTypeUtil.isValidDecimalValue to also consider scale differences and integer types
    */
   public static boolean isValidDecimalValue(@Nullable BigDecimal value, RelDataType toType) {
     if (value == null) {
       return true;
     }
+    int intDigits;
+    int maxIntDigits;
+    int scale;
     switch (toType.getSqlTypeName()) {
       case DECIMAL:
-        final int intDigits = value.precision() - value.scale();
-        final int maxIntDigits = toType.getPrecision() - toType.getScale();
-        return intDigits <= maxIntDigits && value.scale() <= toType.getScale();
+        intDigits = value.precision() - value.scale();
+        maxIntDigits = toType.getPrecision() - toType.getScale();
+        scale = value.scale();
+        break;
+      case TINYINT:
+      case SMALLINT:
+      case INTEGER:
+      case BIGINT:
+        assert value.scale() == 0 : "Unexpected scale for integer type";
+        intDigits = value.precision();
+        maxIntDigits = toType.getPrecision();
+        scale = 0;
+        break;
       default:
         return true;
     }
+    return intDigits <= maxIntDigits && scale <= toType.getScale();
   }
 
   /**

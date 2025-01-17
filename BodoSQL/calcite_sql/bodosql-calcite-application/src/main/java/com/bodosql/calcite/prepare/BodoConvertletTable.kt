@@ -83,7 +83,6 @@ class BodoConvertletTable(
         addAlias(DatetimeOperatorTable.TIMEDIFF, DatetimeOperatorTable.DATEDIFF)
         addAlias(SqlBodoOperatorTable.TIMESTAMP_DIFF, DatetimeOperatorTable.DATEDIFF)
         addAlias(SqlStdOperatorTable.POSITION, StringOperatorTable.CHARINDEX)
-        addAlias(StringOperatorTable.POSITION, StringOperatorTable.CHARINDEX)
         addAlias(StringOperatorTable.SUBSTR, SqlStdOperatorTable.SUBSTRING)
         addAlias(StringOperatorTable.MID, SqlStdOperatorTable.SUBSTRING)
         addAlias(SqlLibraryOperators.RLIKE, StringOperatorTable.REGEXP_LIKE)
