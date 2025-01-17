@@ -381,6 +381,10 @@ class DistributedAnalysisCallRegistry:
                 "rebalance",
                 "bodo",
             ): meet_out_first_arg_analysis,
+            (
+                "random_shuffle",
+                "bodo",
+            ): meet_out_first_arg_analysis,
         }
 
     def analyze_call(self, ctx, inst, fdef):
