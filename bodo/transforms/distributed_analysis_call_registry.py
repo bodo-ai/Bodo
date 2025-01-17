@@ -316,6 +316,12 @@ class DistributedAnalysisCallRegistry:
                 "r2_score",
                 "sklearn.metrics._regression",
             ): analyze_call_sklearn_metrics,
+            # Match distribution of X to the output.
+            # The output distribution is intended to match X and should ignore Y.
+            (
+                "cosine_similarity",
+                "sklearn.metrics.pairwise",
+            ): meet_out_first_arg_analysis,
         }
 
     def analyze_call(self, ctx, inst, fdef):
