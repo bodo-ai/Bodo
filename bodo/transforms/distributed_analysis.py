@@ -1313,18 +1313,6 @@ class DistributedAnalysis:
             _set_var_dist(self.typemap, rhs.args[0].name, array_dists, out_dist)
             return
 
-        if fdef == ("series_contains_regex", "bodo.hiframes.series_str_impl"):
-            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
-            return
-
-        if fdef == ("series_match_regex", "bodo.hiframes.series_str_impl"):
-            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
-            return
-
-        if fdef == ("series_fullmatch_regex", "bodo.hiframes.series_str_impl"):
-            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
-            return
-
         if fdef == ("setna", "bodo.libs.array_kernels"):
             return
 
