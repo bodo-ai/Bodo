@@ -1869,10 +1869,6 @@ class DistributedAnalysis:
             _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
             return
 
-        if fdef == ("set_table_data_null", "bodo.hiframes.table"):
-            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
-            return
-
         if fdef == ("sample_table_operation", "bodo.libs.array_kernels"):
             in_dist = Distribution(
                 min(
@@ -1883,27 +1879,6 @@ class DistributedAnalysis:
             _set_var_dist(self.typemap, rhs.args[0].name, array_dists, in_dist)
             _set_var_dist(self.typemap, rhs.args[1].name, array_dists, in_dist)
             _set_var_dist(self.typemap, lhs, array_dists, in_dist)
-            return
-
-        if fdef == (
-            "str_arr_encode",
-            "bodo.libs.str_arr_ext",
-        ):
-            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
-            return
-
-        if fdef == (
-            "pandas_string_array_to_datetime",
-            "bodo.hiframes.pd_timestamp_ext",
-        ):
-            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
-            return
-
-        if fdef == (
-            "pandas_dict_string_array_to_datetime",
-            "bodo.hiframes.pd_timestamp_ext",
-        ):
-            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
             return
 
         if fdef in (

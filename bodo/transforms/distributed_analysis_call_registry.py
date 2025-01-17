@@ -428,6 +428,19 @@ class DistributedAnalysisCallRegistry:
             ): no_op_analysis,
             ("shift", "bodo.hiframes.rolling"): meet_out_first_arg_analysis,
             ("pct_change", "bodo.hiframes.rolling"): meet_out_first_arg_analysis,
+            ("set_table_data_null", "bodo.hiframes.table"): meet_out_first_arg_analysis,
+            (
+                "str_arr_encode",
+                "bodo.libs.str_arr_ext",
+            ): meet_out_first_arg_analysis,
+            (
+                "pandas_string_array_to_datetime",
+                "bodo.hiframes.pd_timestamp_ext",
+            ): meet_out_first_arg_analysis,
+            (
+                "pandas_dict_string_array_to_datetime",
+                "bodo.hiframes.pd_timestamp_ext",
+            ): meet_out_first_arg_analysis,
         }
 
     def analyze_call(self, ctx, inst, fdef):
