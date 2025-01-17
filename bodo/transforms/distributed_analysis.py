@@ -1629,21 +1629,6 @@ class DistributedAnalysis:
                     _set_var_dist(self.typemap, lhs, array_dists, Distribution.OneD_Var)
             return
 
-        if fdef == ("series_str_dt64_astype", "bodo.hiframes.pd_timestamp_ext"):
-            # LHS should match RHS
-            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
-            return
-
-        if fdef == ("series_str_td64_astype", "bodo.hiframes.pd_timestamp_ext"):
-            # LHS should match RHS
-            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
-            return
-
-        if fdef == ("cat_replace", "bodo.hiframes.pd_categorical_ext"):
-            # LHS should match RHS
-            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
-            return
-
         if fdef == ("interp_bin_search", "bodo.libs.array_kernels"):
             _meet_array_dists(
                 self.typemap, rhs.args[1].name, rhs.args[2].name, array_dists

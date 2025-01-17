@@ -400,6 +400,18 @@ class DistributedAnalysisCallRegistry:
             ("bitor_agg", "bodo.libs.array_kernels"): no_op_analysis,
             ("bitand_agg", "bodo.libs.array_kernels"): no_op_analysis,
             ("bitxor_agg", "bodo.libs.array_kernels"): no_op_analysis,
+            (
+                "series_str_dt64_astype",
+                "bodo.hiframes.pd_timestamp_ext",
+            ): meet_out_first_arg_analysis,
+            (
+                "series_str_td64_astype",
+                "bodo.hiframes.pd_timestamp_ext",
+            ): meet_out_first_arg_analysis,
+            (
+                "cat_replace",
+                "bodo.hiframes.pd_categorical_ext",
+            ): meet_out_first_arg_analysis,
         }
 
     def analyze_call(self, ctx, inst, fdef):
