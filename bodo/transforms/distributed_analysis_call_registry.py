@@ -322,6 +322,14 @@ class DistributedAnalysisCallRegistry:
                 "cosine_similarity",
                 "sklearn.metrics.pairwise",
             ): meet_out_first_arg_analysis,
+            (
+                "datetime_date_arr_to_dt64_arr",
+                "bodo.hiframes.pd_timestamp_ext",
+            ): meet_out_first_arg_analysis,
+            (
+                "unwrap_tz_array",
+                "bodo.libs.pd_datetime_arr_ext",
+            ): meet_out_first_arg_analysis,
         }
 
     def analyze_call(self, ctx, inst, fdef):
