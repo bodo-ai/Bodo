@@ -1435,25 +1435,6 @@ class DistributedAnalysis:
             return
 
         if fdef in (
-            (
-                "snowflake_writer_append_table",
-                "bodo.io.snowflake_write",
-            ),
-            (
-                "iceberg_writer_append_table",
-                "bodo.io.iceberg.stream_iceberg_write",
-            ),
-            (
-                "parquet_writer_append_table",
-                "bodo.io.stream_parquet_write",
-            ),
-        ):
-            _meet_array_dists(
-                self.typemap, rhs.args[0].name, rhs.args[1].name, array_dists
-            )
-            return
-
-        if fdef in (
             ("init_groupby_state", "bodo.libs.streaming.groupby"),
             ("init_grouping_sets_state", "bodo.libs.streaming.groupby"),
             ("init_table_builder_state", "bodo.libs.table_builder"),

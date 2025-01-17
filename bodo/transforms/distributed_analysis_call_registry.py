@@ -345,6 +345,18 @@ class DistributedAnalysisCallRegistry:
                 "bodo.hiframes.series_str_impl",
             ): meet_out_first_arg_analysis,
             ("setna", "bodo.libs.array_kernels"): no_op_analysis,
+            (
+                "snowflake_writer_append_table",
+                "bodo.io.snowflake_write",
+            ): meet_first_2_args_analysis,
+            (
+                "iceberg_writer_append_table",
+                "bodo.io.iceberg.stream_iceberg_write",
+            ): meet_first_2_args_analysis,
+            (
+                "parquet_writer_append_table",
+                "bodo.io.stream_parquet_write",
+            ): meet_first_2_args_analysis,
         }
 
     def analyze_call(self, ctx, inst, fdef):
