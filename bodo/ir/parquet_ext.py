@@ -803,10 +803,64 @@ def _gen_pq_reader_py(
         out_types,
     )
 
+    index_arr_ind = (
+        selected_cols_map[index_column_index]
+        if index_column_index is not None
+        else None
+    )
+    index_arr_type = index_column_type
+    py_table_type = TableType(tuple(out_types))
+    if is_dead_table:
+        py_table_type = types.none
+
+    # table_idx is a list of index values for each array in the bodo.TableType being loaded from C++.
+    # For a list column, the value is an integer which is the location of the column in the C++ Table.
+    # Dead columns have the value -1.
+
+    # For example if the Table Type is mapped like this: Table(arr0, arr1, arr2, arr3) and the
+    # C++ representation is CPPTable(arr1, arr2), then table_idx = [-1, 0, 1, -1]
+
+    # Note: By construction arrays will never be reordered (e.g. CPPTable(arr2, arr1)) in Iceberg
+    # because we pass the col_names ordering.
+    if is_dead_table:
+        # If a table is dead we can skip the array for the table
+        table_idx = None
+    else:
+        # index in cpp table for each column.
+        # If a column isn't loaded we set the value to -1
+        # and mark it as null in the conversion to Python
+        table_idx = []
+        j = 0
+        input_file_name_col_idx = (
+            col_indices[col_names.index(input_file_name_col)]
+            if input_file_name_col is not None
+            else None
+        )
+        for i, col_num in enumerate(col_indices):
+            if j < len(out_used_cols) and i == out_used_cols[j]:
+                col_idx = col_indices[i]
+                if input_file_name_col_idx and col_idx == input_file_name_col_idx:
+                    # input_file_name column goes at the end
+                    table_idx.append(len(selected_cols) + len(sel_partition_names))
+                elif col_idx in partition_indices:
+                    c_name = sanitized_col_names[i]
+                    table_idx.append(
+                        len(selected_cols) + sel_partition_names_map[c_name]
+                    )
+                else:
+                    table_idx.append(selected_cols_map[col_num])
+                j += 1
+            else:
+                table_idx.append(-1)
+        table_idx = np.array(table_idx, dtype=np.int64)
+
+    pyarrow_schema_no_meta = pyarrow_schema.remove_metadata()
+
     comma = "," if extra_args else ""
     call_id = create_arg_hash(
         is_parallel,
         expr_filter_str,
+        comma,
         storage_options,
         tot_rows_to_read,
         selected_cols,
@@ -819,9 +873,17 @@ def _gen_pq_reader_py(
         partition_indices,
         sanitized_col_names,
         sel_partition_names_map,
+        input_file_name_col,
+        index_arr_ind,
+        use_hive,
+        is_dead_table,
+        table_idx,
+        index_arr_type,
+        pyarrow_schema_no_meta,
         *extra_args,
     )
-    func_text = f"def bodo_pq_reader_py(fname,{extra_args}):\n"
+    gen_func_name = f"bodo_pq_reader_py_{call_id}"
+    func_text = f"def {gen_func_name}(fname,{extra_args}):\n"
     # if it's an s3 url, get the region and pass it into the c++ code
     func_text += f"    ev = bodo.utils.tracing.Event('read_parquet', {is_parallel})\n"
     func_text += "    ev.add_attribute('g_fname', fname)\n"
@@ -879,52 +941,6 @@ def _gen_pq_reader_py(
     else:
         func_text += "    local_rows = total_rows\n"
 
-    index_arr_type = index_column_type
-    py_table_type = TableType(tuple(out_types))
-    if is_dead_table:
-        py_table_type = types.none
-
-    # table_idx is a list of index values for each array in the bodo.TableType being loaded from C++.
-    # For a list column, the value is an integer which is the location of the column in the C++ Table.
-    # Dead columns have the value -1.
-
-    # For example if the Table Type is mapped like this: Table(arr0, arr1, arr2, arr3) and the
-    # C++ representation is CPPTable(arr1, arr2), then table_idx = [-1, 0, 1, -1]
-
-    # Note: By construction arrays will never be reordered (e.g. CPPTable(arr2, arr1)) in Iceberg
-    # because we pass the col_names ordering.
-    if is_dead_table:
-        # If a table is dead we can skip the array for the table
-        table_idx = None
-    else:
-        # index in cpp table for each column.
-        # If a column isn't loaded we set the value to -1
-        # and mark it as null in the conversion to Python
-        table_idx = []
-        j = 0
-        input_file_name_col_idx = (
-            col_indices[col_names.index(input_file_name_col)]
-            if input_file_name_col is not None
-            else None
-        )
-        for i, col_num in enumerate(col_indices):
-            if j < len(out_used_cols) and i == out_used_cols[j]:
-                col_idx = col_indices[i]
-                if input_file_name_col_idx and col_idx == input_file_name_col_idx:
-                    # input_file_name column goes at the end
-                    table_idx.append(len(selected_cols) + len(sel_partition_names))
-                elif col_idx in partition_indices:
-                    c_name = sanitized_col_names[i]
-                    table_idx.append(
-                        len(selected_cols) + sel_partition_names_map[c_name]
-                    )
-                else:
-                    table_idx.append(selected_cols_map[col_num])
-                j += 1
-            else:
-                table_idx.append(-1)
-        table_idx = np.array(table_idx, dtype=np.int64)
-
     # Extract the table and index from C++.
     if is_dead_table:
         func_text += "    T = None\n"
@@ -936,7 +952,6 @@ def _gen_pq_reader_py(
     if index_column_index is None:
         func_text += "    index_arr = None\n"
     else:
-        index_arr_ind = selected_cols_map[index_column_index]
         func_text += f"    index_arr = array_from_cpp_table(out_table, {index_arr_ind}, index_arr_type)\n"
     func_text += "    delete_table(out_table)\n"
     func_text += "    ev.finalize()\n"
@@ -947,7 +962,7 @@ def _gen_pq_reader_py(
         f"table_idx_{call_id}": table_idx,
         f"selected_cols_arr_{call_id}": np.array(selected_cols, np.int32),
         f"nullable_cols_arr_{call_id}": np.array(nullable_cols, np.int32),
-        f"pyarrow_schema_{call_id}": pyarrow_schema.remove_metadata(),
+        f"pyarrow_schema_{call_id}": pyarrow_schema_no_meta,
         "index_arr_type": index_arr_type,
         "cpp_table_to_py_table": cpp_table_to_py_table,
         "array_from_cpp_table": array_from_cpp_table,
@@ -964,7 +979,9 @@ def _gen_pq_reader_py(
         "set_table_len": bodo.hiframes.table.set_table_len,
     }
 
-    pq_reader_py = bodo_exec(func_text, glbs, loc_vars, globals())
+    pq_reader_py = bodo_exec(
+        gen_func_name, func_text, glbs, loc_vars, globals(), __name__
+    )
 
     jit_func = numba.njit(pq_reader_py, no_cpython_wrapper=True, cache=True)
     return jit_func
