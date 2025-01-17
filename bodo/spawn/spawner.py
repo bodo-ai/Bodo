@@ -18,6 +18,7 @@ import cloudpickle
 import numba
 import pandas as pd
 import psutil
+from numba.core import types
 from pandas.core.arrays.arrow.array import ArrowExtensionArray
 
 import bodo
@@ -566,6 +567,7 @@ class Spawner:
         return args_meta, kwargs_meta
 
     def _run_del_queue(self):
+        """Run delete tasks in the queue if no other tasks are running."""
         if not self._is_running and self._del_queue and not self.destroyed:
             self._is_running = True
             res_id = self._del_queue.popleft()
@@ -576,7 +578,8 @@ class Spawner:
             self._is_running = False
             self._run_del_queue()
 
-    def set_config(self, name, value):
+    def set_config(self, name: str, value: pt.Any):
+        """Set configuration value on workers"""
         assert not self._is_running, "set_config: already running"
         self._is_running = True
         spawner.worker_intercomm.bcast(CommandType.SET_CONFIG.value, self.bcast_root)
@@ -584,7 +587,8 @@ class Spawner:
         self._is_running = False
         self._run_del_queue()
 
-    def register_type(self, type_name, type_value):
+    def register_type(self, type_name: str, type_value: types.Type):
+        """Register a new type on workers"""
         assert not self._is_running, "register_type: already running"
         self._is_running = True
         spawner.worker_intercomm.bcast(CommandType.REGISTER_TYPE.value, self.bcast_root)
