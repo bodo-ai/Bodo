@@ -3287,12 +3287,9 @@ def set_config(name, val):
     set_global_config(name, val)
     if test_spawn_mode_enabled:
         import bodo.spawn.spawner
-        from bodo.spawn.spawner import CommandType
 
         spawner = bodo.spawn.spawner.get_spawner()
-        bcast_root = MPI.ROOT if bodo.get_rank() == 0 else MPI.PROC_NULL
-        spawner.worker_intercomm.bcast(CommandType.SET_CONFIG.value, bcast_root)
-        spawner.worker_intercomm.bcast((name, val), bcast_root)
+        spawner.set_config(name, val)
 
 
 @contextmanager
