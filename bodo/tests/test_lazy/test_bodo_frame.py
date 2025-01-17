@@ -494,8 +494,6 @@ def test_parquet_param(collect_func):
         ):
             bodo_df.to_parquet(fname, row_group_size="a")
 
-    del bodo_df
-
 
 @pytest_mark_spawn_mode
 @pytest.mark.iceberg
