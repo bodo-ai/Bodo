@@ -7,24 +7,30 @@ from __future__ import annotations
 import typing as pt
 from urllib.parse import parse_qs, urlencode, urlparse
 
-import numba
-import pyarrow as pa
 import requests
 from numba.core import types
 from numba.extending import overload
+from pyiceberg.table import FileScanTask
 
 import bodo
-from bodo.io.fs_io import validate_gcsfs_installed
-from bodo.io.parquet_pio import getfs
-from bodo.io.s3_fs import (
-    create_iceberg_aws_credentials_provider,
-    create_s3_fs_instance,
-    get_region_from_creds_provider,
-)
 from bodo.utils.utils import BodoError, run_rank0
 
-if pt.TYPE_CHECKING:  # pragma: no cover
-    from pyarrow._fs import PyFileSystem
+
+class IcebergParquetInfo(pt.NamedTuple):
+    """Named Tuple for Parquet info needed by Bodo"""
+
+    # Iceberg file info
+    file_task: FileScanTask
+    # Iceberg Schema ID the parquet file was written with
+    schema_id: int
+
+    @property
+    def path(self) -> str:
+        return self.file_task.file.file_path
+
+    @property
+    def row_count(self) -> int:
+        return self.file_task.file.record_count
 
 
 T = pt.TypeVar("T")
@@ -136,55 +142,6 @@ def get_rest_catalog_config(conn: str) -> tuple[str, str, str] | None:
             f"Unable to authenticate with {uri}. Please check your connection string."
         )
     return uri, str(user_token), str(warehouse)
-
-
-@numba.njit
-def get_rest_catalog_fs(
-    catalog_uri: str,
-    bearer_token: str,
-    warehouse: str,
-    database_schema: str,
-    table_name: str,
-) -> pa.fs.FileSystem:
-    """
-    Get a filesystem object for the rest catalog.
-    args:
-        catalog_uri: URI of the rest catalog.
-        bearer_token: Bearer token for authentication.
-        warehouse: Warehouse name.
-        database_schema: Schema the relevant table is in
-        table_name: Name of the table
-    """
-    creds_provider = create_iceberg_aws_credentials_provider(
-        catalog_uri, bearer_token, warehouse, database_schema, table_name
-    )
-    region = get_region_from_creds_provider(creds_provider)
-    return create_s3_fs_instance(credentials_provider=creds_provider, region=region)
-
-
-def get_iceberg_fs(
-    protocol: str,
-    conn: str,
-    database_schema: str,
-    table_name: str,
-    pq_abs_path_file_list: list[str],
-) -> PyFileSystem | pa.fs.FileSystem:
-    if protocol in {"gcs", "gs"}:
-        validate_gcsfs_installed()
-
-    rest_catalog_conf = get_rest_catalog_config(conn)
-    if rest_catalog_conf is not None:
-        uri, bearer_token, warehouse = rest_catalog_conf
-        return get_rest_catalog_fs(
-            uri, bearer_token, warehouse, database_schema, table_name
-        )
-    else:
-        return getfs(
-            pq_abs_path_file_list,
-            protocol,
-            storage_options=None,
-            parallel=True,
-        )
 
 
 # ----------------------- Connection String Handling ----------------------- #

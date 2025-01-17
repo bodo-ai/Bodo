@@ -10,7 +10,6 @@ from bodo_iceberg_connector.filter_to_java import (
 from bodo_iceberg_connector.parquet_info import (
     IcebergParquetInfo,
     get_bodo_parquet_info,
-    bodo_connector_get_total_num_pq_files_in_table,
 )
 from bodo_iceberg_connector.py4j_support import launch_jvm, set_core_site_path
 from bodo_iceberg_connector.schema import (
@@ -42,6 +41,7 @@ from bodo_iceberg_connector.puffin import (
     table_columns_enabled_theta_sketches,
 )
 from bodo_iceberg_connector.snowflake_prefetch import prefetch_sf_tables
+from bodo_iceberg_connector.catalog_wrapper import JavaCatalog, JavaTable
 
 # ----------------------- Version Import from Metadata -----------------------
 try:

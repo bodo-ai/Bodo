@@ -116,21 +116,3 @@ def _has_uri_scheme(path: str):
         return urlparse(path).scheme != ""
     except Exception:
         return False
-
-
-def bodo_connector_get_total_num_pq_files_in_table(
-    conn_str: str, db_name: str, table: str
-) -> int:
-    """
-    Returns the number of parquet files in the given Iceberg table.
-    Throws a IcebergJavaError if an error occurs.
-    """
-    try:
-        catalog_type, _ = parse_conn_str(conn_str)
-
-        bodo_iceberg_table_reader = get_catalog(conn_str, catalog_type)
-
-        return bodo_iceberg_table_reader.getNumParquetFiles(db_name, table)
-
-    except Py4JError as e:
-        raise IcebergJavaError.from_java_error(e)

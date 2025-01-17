@@ -4371,7 +4371,6 @@ def to_sql_overload(
     # ------------------------------ Iceberg Write -----------------------------
     func_text += (
         "    if con.startswith('iceberg'):\n"
-        "        con_str = bodo.io.iceberg.format_iceberg_conn_njit(con)\n"
         "        if schema is None:\n"
         "            raise ValueError('DataFrame.to_sql(): schema must be provided when writing to an Iceberg table.')\n"
         "        if chunksize is not None:\n"

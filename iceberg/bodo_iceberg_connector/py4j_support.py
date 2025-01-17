@@ -196,6 +196,10 @@ get_iceberg_schema_class = get_class_wrapper(
     "IcebergSchemaClass",
     lambda gateway: gateway.jvm.org.apache.iceberg.Schema,  # type: ignore
 )
+get_table_id = get_class_wrapper(
+    "IcebergTableIdentifier",
+    lambda gateway: gateway.jvm.org.apache.iceberg.TableIdentifier,  # type: ignore
+)
 get_iceberg_type_class = get_class_wrapper(
     "IcebergTypeClass",
     lambda gateway: gateway.jvm.org.apache.iceberg.types.Types,  # type: ignore
