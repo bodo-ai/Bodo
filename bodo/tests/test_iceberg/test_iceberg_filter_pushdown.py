@@ -13,7 +13,7 @@ from bodo.tests.iceberg_database_helpers.utils import (
     PartitionField,
     create_iceberg_table,
 )
-from bodo.tests.test_stream_iceberg_write import _write_iceberg_table
+from bodo.tests.test_iceberg.test_stream_iceberg_write import _write_iceberg_table
 from bodo.tests.user_logging_utils import (
     check_logger_msg,
     check_logger_no_msg,

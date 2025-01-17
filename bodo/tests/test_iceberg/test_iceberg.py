@@ -1692,8 +1692,8 @@ def _setup_test_iceberg_field_ids_in_pq_schema(
     expected_schema = None
     if bodo.get_rank() == 0:
         try:
-            expected_schema = bodo.io.iceberg.add_iceberg_field_id_md_to_pa_schema(
-                pa_schema
+            expected_schema = (
+                bodo.io.iceberg.write.add_iceberg_field_id_md_to_pa_schema(pa_schema)
             )
             iceberg_schema_str = bodo_iceberg_connector.pyarrow_to_iceberg_schema_str(
                 expected_schema
@@ -3593,7 +3593,7 @@ def test_merge_into_cow_simple_e2e(iceberg_database, iceberg_table_conn):
         df["A"] = df["A_y"].fillna(df["A_x"])
 
         df = df.drop(columns=["_BODO_ROW_ID", "A_y", "A_x"])
-        bodo.io.iceberg.iceberg_merge_cow_py(
+        bodo.io.iceberg.merge_into.iceberg_merge_cow_py(
             table_name, conn, db_schema, df, old_snapshot_id, old_fnames
         )
         return old_snapshot_id
@@ -3696,7 +3696,7 @@ def test_merge_into_cow_simple_e2e_partitions(iceberg_database, iceberg_table_co
         df["A"] = df["A_y"].fillna(df["A_x"])
 
         df = df[["A", "B", "C", "D"]]
-        bodo.io.iceberg.iceberg_merge_cow_py(
+        bodo.io.iceberg.merge_into.iceberg_merge_cow_py(
             table_name, conn, db_schema, df, old_snapshot_id, old_fnames
         )
         return old_snapshot_id
