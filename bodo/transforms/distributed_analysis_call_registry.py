@@ -412,6 +412,10 @@ class DistributedAnalysisCallRegistry:
                 "cat_replace",
                 "bodo.hiframes.pd_categorical_ext",
             ): meet_out_first_arg_analysis,
+            (
+                "intersection_mask",
+                "bodo.libs.array_kernels",
+            ): meet_out_first_arg_analysis,
         }
 
     def analyze_call(self, ctx, inst, fdef):

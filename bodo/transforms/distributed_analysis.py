@@ -1646,10 +1646,6 @@ class DistributedAnalysis:
             array_dists[lhs] = new_dist
             return
 
-        if fdef == ("intersection_mask", "bodo.libs.array_kernels"):
-            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
-            return
-
         if fdef == ("random_seedless", "bodosql.kernels"):
             if self.typemap[rhs.args[0].name] != bodo.none:
                 _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
