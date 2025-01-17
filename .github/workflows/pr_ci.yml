@@ -115,7 +115,7 @@ jobs:
     with:
       batch: 1
       total-batches: 1
-      pytest-marker: "spawn_mode"
+      pytest-marker: "spawn_mode and test_quickstart_local_iceberg"
       collect-coverage: false
     secrets: inherit
 
