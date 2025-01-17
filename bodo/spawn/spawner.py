@@ -343,10 +343,8 @@ class Spawner:
 
         def del_func(res_id: str):
             if not self.destroyed:
-                pass
-                # TODO: revert
-                # self.worker_intercomm.bcast(CommandType.DELETE_RESULT.value, root=root)
-                # self.worker_intercomm.bcast(res_id, root=root)
+                self.worker_intercomm.bcast(CommandType.DELETE_RESULT.value, root=root)
+                self.worker_intercomm.bcast(res_id, root=root)
 
         if isinstance(lazy_metadata, list):
             return [self.wrap_distributed_result(d) for d in lazy_metadata]
