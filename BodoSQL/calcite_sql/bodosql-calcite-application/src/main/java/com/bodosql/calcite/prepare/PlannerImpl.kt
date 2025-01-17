@@ -157,13 +157,21 @@ class PlannerImpl(
          * only provide traits for streaming.
          * @return The list of trait definitions for our planner.
          */
-        private fun getTraitDefs(): List<RelTraitDef<out RelTrait>> = listOf(ConventionTraitDef.INSTANCE, BatchingPropertyTraitDef.INSTANCE)
+        @JvmStatic
+        private fun getTraitDefs(isStreaming: Boolean): List<RelTraitDef<out RelTrait>> =
+            if (isStreaming) {
+                // Only include BatchingPropertyTraitDef with streaming.
+                listOf(ConventionTraitDef.INSTANCE, BatchingPropertyTraitDef.INSTANCE)
+            } else {
+                listOf(ConventionTraitDef.INSTANCE)
+            }
 
         /**
          * Get the programs that are defined for our planner. We currently
          * only provide programs for streaming.
          * @return The list of programs for our planner.
          */
+        @JvmStatic
         private fun getPrograms(): List<Program> =
             listOf(
                 BodoPrograms.preprocessor(),
@@ -184,7 +192,7 @@ class PlannerImpl(
                 .convertletTable(convertletTable)
                 .sqlValidatorConfig(validatorConfig)
                 .costFactory(CostFactory())
-                .traitDefs(getTraitDefs())
+                .traitDefs(getTraitDefs(isStreaming = config.isStreaming))
                 .programs(getPrograms())
                 .build()
         }
@@ -251,5 +259,6 @@ class PlannerImpl(
         val defaultSchemas: List<SchemaPlus>,
         val typeSystem: RelDataTypeSystem,
         val sqlStyle: String,
+        val isStreaming: Boolean,
     )
 }
