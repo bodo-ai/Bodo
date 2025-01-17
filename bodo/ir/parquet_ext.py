@@ -882,8 +882,7 @@ def _gen_pq_reader_py(
         pyarrow_schema_no_meta,
         *extra_args,
     )
-    gen_func_name = f"bodo_pq_reader_py_{call_id}"
-    func_text = f"def {gen_func_name}(fname,{extra_args}):\n"
+    func_text = f"def bodo_pq_reader_py(fname,{extra_args}):\n"
     # if it's an s3 url, get the region and pass it into the c++ code
     func_text += f"    ev = bodo.utils.tracing.Event('read_parquet', {is_parallel})\n"
     func_text += "    ev.add_attribute('g_fname', fname)\n"
@@ -979,9 +978,7 @@ def _gen_pq_reader_py(
         "set_table_len": bodo.hiframes.table.set_table_len,
     }
 
-    pq_reader_py = bodo_exec(
-        gen_func_name, func_text, glbs, loc_vars, globals(), __name__
-    )
+    pq_reader_py = bodo_exec(func_text, glbs, loc_vars, globals())
 
     jit_func = numba.njit(pq_reader_py, no_cpython_wrapper=True, cache=True)
     return jit_func
