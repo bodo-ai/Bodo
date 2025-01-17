@@ -344,6 +344,7 @@ class DistributedAnalysisCallRegistry:
                 "series_fullmatch_regex",
                 "bodo.hiframes.series_str_impl",
             ): meet_out_first_arg_analysis,
+            ("setna", "bodo.libs.array_kernels"): no_op_analysis,
         }
 
     def analyze_call(self, ctx, inst, fdef):

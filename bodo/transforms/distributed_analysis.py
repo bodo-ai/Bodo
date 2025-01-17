@@ -1313,9 +1313,6 @@ class DistributedAnalysis:
             _set_var_dist(self.typemap, rhs.args[0].name, array_dists, out_dist)
             return
 
-        if fdef == ("setna", "bodo.libs.array_kernels"):
-            return
-
         if fdef == ("read_arrow_next", "bodo.io.arrow_reader"):  # pragma: no cover
             if lhs not in array_dists:
                 _set_var_dist(self.typemap, lhs, array_dists, Distribution.OneD_Var)
