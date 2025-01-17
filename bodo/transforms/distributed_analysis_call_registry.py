@@ -416,6 +416,11 @@ class DistributedAnalysisCallRegistry:
                 "intersection_mask",
                 "bodo.libs.array_kernels",
             ): meet_out_first_arg_analysis,
+            # Output is a decimal, so we don't need to explicitly set the distribution
+            (
+                "sum_decimal_array",
+                "bodo.libs.decimal_arr_ext",
+            ): no_op_analysis,
         }
 
     def analyze_call(self, ctx, inst, fdef):

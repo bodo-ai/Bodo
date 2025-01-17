@@ -1652,13 +1652,6 @@ class DistributedAnalysis:
             return
 
         if fdef == (
-            "sum_decimal_array",
-            "bodo.libs.decimal_arr_ext",
-        ):
-            # Output is a decimal, so we don't need to explicitly set the distribution
-            return
-
-        if fdef == (
             "bodosql_listagg_distributed",
             "bodosql.kernels.listagg",
         ) or fdef == ("bodosql_listagg", "bodosql.kernels.listagg"):
