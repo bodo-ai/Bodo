@@ -1481,13 +1481,6 @@ class DistributedAnalysis:
             return
 
         if fdef == (
-            "table_builder_finalize",
-            "bodo.libs.table_builder",
-        ):  # pragma: no cover
-            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
-            return
-
-        if fdef == (
             "table_builder_pop_chunk",
             "bodo.libs.table_builder",
         ):  # pragma: no cover

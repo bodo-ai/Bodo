@@ -373,6 +373,10 @@ class DistributedAnalysisCallRegistry:
                 "sort_build_consume_batch",
                 "bodo.libs.streaming.sort",
             ): meet_first_2_args_analysis,
+            (
+                "table_builder_finalize",
+                "bodo.libs.table_builder",
+            ): meet_out_first_arg_analysis,
         }
 
     def analyze_call(self, ctx, inst, fdef):
