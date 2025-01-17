@@ -275,7 +275,8 @@ Make sure you have your environment ready:
     ```bash
     export AWS_REGION="us-east-2"
     ```
-5. Create a namespace in the table bucket. For example (replace region, account number and bucket name):
+5. Make sure you have the latest AWS CLI (see [here](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html))
+   since this is a new feature and create a namespace in the table bucket. For example (replace region, account number and bucket name):
     ```bash
     aws s3tables create-namespace --table-bucket-arn arn:aws:s3tables:us-east-2:111122223333:bucket/my-test-bucket --namespace my_namespace
     ```
@@ -297,7 +298,7 @@ NUM_GROUPS = 30
 NUM_ROWS = 20_000_000
 
 
-@bodo.jit(spawn=False)
+@bodo.jit
 def example_write_iceberg_table():
     df = pd.DataFrame({
         "A": np.arange(NUM_ROWS) % NUM_GROUPS,
