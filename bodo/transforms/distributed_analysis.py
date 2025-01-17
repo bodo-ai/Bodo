@@ -1448,20 +1448,6 @@ class DistributedAnalysis:
             return
 
         if fdef in (
-            ("groupby_build_consume_batch", "bodo.libs.streaming.groupby"),
-            (
-                "groupby_grouping_sets_build_consume_batch",
-                "bodo.libs.streaming.groupby",
-            ),
-            ("window_build_consume_batch", "bodo.libs.streaming.window"),
-            ("sort_build_consume_batch", "bodo.libs.streaming.sort"),
-        ):  # pragma: no cover
-            _meet_array_dists(
-                self.typemap, rhs.args[0].name, rhs.args[1].name, array_dists
-            )
-            return
-
-        if fdef in (
             ("groupby_produce_output_batch", "bodo.libs.streaming.groupby"),
             (
                 "groupby_grouping_sets_produce_output_batch",

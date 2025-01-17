@@ -357,6 +357,22 @@ class DistributedAnalysisCallRegistry:
                 "parquet_writer_append_table",
                 "bodo.io.stream_parquet_write",
             ): meet_first_2_args_analysis,
+            (
+                "groupby_build_consume_batch",
+                "bodo.libs.streaming.groupby",
+            ): meet_first_2_args_analysis,
+            (
+                "groupby_grouping_sets_build_consume_batch",
+                "bodo.libs.streaming.groupby",
+            ): meet_first_2_args_analysis,
+            (
+                "window_build_consume_batch",
+                "bodo.libs.streaming.window",
+            ): meet_first_2_args_analysis,
+            (
+                "sort_build_consume_batch",
+                "bodo.libs.streaming.sort",
+            ): meet_first_2_args_analysis,
         }
 
     def analyze_call(self, ctx, inst, fdef):
