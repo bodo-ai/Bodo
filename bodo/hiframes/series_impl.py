@@ -1709,7 +1709,9 @@ def overload_series_head(S, n=5):
     return impl
 
 
-@overload_method(SeriesType, "clip", inline="always", no_unliteral=True)
+@overload_method(
+    SeriesType, "clip", inline="always", no_unliteral=True, jit_options={"cache": True}
+)
 def overload_series_clip(
     S,
     lower=None,

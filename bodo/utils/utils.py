@@ -618,7 +618,7 @@ def build_set_seen_na(A):
     # TODO: use more efficient hash table optimized for addition and
     # membership check
     # XXX using dict for now due to Numba's #4577
-    def impl(A):  # pragma: no cover
+    def bodo_build_set_seen_na(A):  # pragma: no cover
         s = {}
         seen_na = False
         for i in range(len(A)):
@@ -628,7 +628,7 @@ def build_set_seen_na(A):
             s[A[i]] = 0
         return s, seen_na
 
-    return impl
+    return bodo_build_set_seen_na
 
 
 def empty_like_type(n, arr):  # pragma: no cover
@@ -1247,35 +1247,35 @@ def overload_full_type(n, val, t):
     # nullable bool array
     if typ == boolean_array_type:
 
-        def impl(n, val, t):  # pragma: no cover
+        def bodo_full_type_bool(n, val, t):  # pragma: no cover
             length = tuple_to_scalar(n)
             if val:
                 return bodo.libs.bool_arr_ext.alloc_true_bool_array(length)
             else:
                 return bodo.libs.bool_arr_ext.alloc_false_bool_array(length)
 
-        return impl
+        return bodo_full_type_bool
 
     # string array
     if typ == string_array_type:
 
-        def impl_str(n, val, t):  # pragma: no cover
+        def bodo_full_type_str(n, val, t):  # pragma: no cover
             n_chars = n * bodo.libs.str_arr_ext.get_utf8_size(val)
             A = pre_alloc_string_array(n, n_chars)
             for i in range(n):
                 A[i] = val
             return A
 
-        return impl_str
+        return bodo_full_type_str
 
     # generic implementation
-    def impl(n, val, t):  # pragma: no cover
+    def bodo_full_type(n, val, t):  # pragma: no cover
         A = alloc_type(n, typ, (-1,))
         for i in range(n):
             A[i] = val
         return A
 
-    return impl
+    return bodo_full_type
 
 
 @intrinsic
@@ -1305,7 +1305,7 @@ def is_null_value(typingctx, val_typ=None):
     return types.bool_(val_typ), codegen
 
 
-@numba.generated_jit(nopython=True, no_cpython_wrapper=True)
+@numba.generated_jit(nopython=True, no_cpython_wrapper=True, cache=True)
 def tuple_list_to_array(A, data, elem_type):
     """
     Function used to keep list -> array transformation
@@ -1320,16 +1320,13 @@ def tuple_list_to_array(A, data, elem_type):
     bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
         elem_type, "tuple_list_to_array()"
     )
-    func_text = "def impl(A, data, elem_type):\n"
+    func_text = "def bodo_tuple_list_to_array(A, data, elem_type):\n"
     func_text += "  for i, d in enumerate(data):\n"
     if elem_type == bodo.hiframes.pd_timestamp_ext.pd_timestamp_tz_naive_type:
         func_text += "    A[i] = bodo.utils.conversion.unbox_if_tz_naive_timestamp(d)\n"
     else:
         func_text += "    A[i] = d\n"
-    loc_vars = {}
-    exec(func_text, {"bodo": bodo}, loc_vars)
-    impl = loc_vars["impl"]
-    return impl
+    return bodo_exec(func_text, {"bodo": bodo}, {}, globals())
 
 
 def object_length(c, obj):
@@ -1914,8 +1911,10 @@ def bodo_exec(func_text, glbls, loc_vars, real_globals):
     found_pattern = re.search(pattern, func_text)
     assert found_pattern
     func_name = found_pattern.group(2) + f"_{text_hash}"
+    # count=1 means substitute only the first instance.  This way nested
+    # functions aren't name replaced.
     func_text = re.sub(
-        pattern, lambda m: m.group(1) + func_name + m.group(3), func_text
+        pattern, lambda m: m.group(1) + func_name + m.group(3), func_text, count=1
     )
     # Exec the function into existence.
     exec(func_text, glbls, loc_vars)
