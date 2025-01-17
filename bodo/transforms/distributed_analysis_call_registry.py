@@ -421,6 +421,11 @@ class DistributedAnalysisCallRegistry:
                 "sum_decimal_array",
                 "bodo.libs.decimal_arr_ext",
             ): no_op_analysis,
+            ("first_last_valid_index", "bodo.libs.array_kernels"): no_op_analysis,
+            (
+                "get_valid_entries_from_date_offset",
+                "bodo.libs.array_kernels",
+            ): no_op_analysis,
         }
 
     def analyze_call(self, ctx, inst, fdef):
