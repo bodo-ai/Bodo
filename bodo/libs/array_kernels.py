@@ -1507,7 +1507,7 @@ def overload_dropna(data, how, thresh, subset):
         isna_check = "not ({})".format(" and ".join(isna_calls))
 
     # count the number of elements in output arrays, allocate output arrays, fill data
-    func_text = "def _dropna_imp(data, how, thresh, subset):\n"
+    func_text = "def bodo_dropna_imp(data, how, thresh, subset):\n"
     func_text += "  old_len = len(data[0])\n"
     func_text += "  new_len = 0\n"
     func_text += "  for i in range(old_len):\n"
@@ -1534,7 +1534,6 @@ def overload_dropna(data, how, thresh, subset):
         func_text += f"        {out_names[i]}[curr_ind] = data[{i}][i]\n"
     func_text += "      curr_ind += 1\n"
     func_text += "  return {}\n".format(", ".join(out_names))
-    loc_vars = {}
     # pass data types to generated code
     _globals = {f"t{i}": t for i, t in enumerate(data.types)}
     _globals.update(
@@ -1546,9 +1545,7 @@ def overload_dropna(data, how, thresh, subset):
             "bodo": bodo,
         }
     )
-    exec(func_text, _globals, loc_vars)
-    _dropna_imp = loc_vars["_dropna_imp"]
-    return _dropna_imp
+    return bodo_exec(func_text, _globals, {}, globals())
 
 
 def get(arr, ind):  # pragma: no cover
