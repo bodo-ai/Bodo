@@ -257,3 +257,70 @@ E.g. if you run the code with 8 cores, here's the expected print out:
 
 Note that this quickstart uses a local Iceberg table, but you can also use Bodo with Iceberg tables on S3, ADLS, and GCS as well.
 
+
+## S3 Tables
+
+[Amazon S3 Tables](https://aws.amazon.com/s3/features/tables/) simplify Iceberg use
+and table maintenance by providing builtin Apache Iceberg support.
+Bodo supports S3 Tables in both Python and SQL seamlessly.
+Here is a step by step example for using S3 Tables in Bodo.
+
+Make sure you have your environment ready:
+
+1. Create a Table bucket on S3 (not a regular bucket).
+   You can simply use the console with [this link](https://us-east-2.console.aws.amazon.com/s3/table-buckets?region=us-east-2) (replace region if desired).
+2. Make sure you have AWS credentials in your environment (e.g. `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`).
+3. Make sure the user associated with your credentials has `AmazonS3TablesFullAccess` policy attached. You can use IAM in the AWS console (e.g. [this link](https://us-east-1.console.aws.amazon.com/iam/home?region=us-east-2#/home)).
+4. Set default region to the bucket region in the environment. For example:
+    ```bash
+    export AWS_REGION="us-east-2"
+    ```
+5. Create a namespace in the table bucket. For example (replace region, account number and bucket name):
+    ```bash
+    aws s3tables create-namespace --table-bucket-arn arn:aws:s3tables:us-east-2:111122223333:bucket/my-test-bucket --namespace my_namespace
+    ```
+
+Now you are ready to use Bodo to read and write S3 Tables. Run this example code (replace bucket name, account ID, region, namespace):
+
+```python
+import pandas as pd
+import numpy as np
+import bodo
+
+BUCKET_NAME="my-test-bucket"
+ACCOUNT_ID="111122223333"
+REGION="us-east-2"
+NAMESPACE="my_namespace"
+CONN_STR=f"iceberg+arn:aws:s3tables:{REGION}:{ACCOUNT_ID}:bucket/{BUCKET_NAME}"
+
+NUM_GROUPS = 30
+NUM_ROWS = 20_000_000
+
+
+@bodo.jit(spawn=False)
+def example_write_iceberg_table():
+    df = pd.DataFrame({
+        "A": np.arange(NUM_ROWS) % NUM_GROUPS,
+        "B": np.arange(NUM_ROWS)
+    })
+    df.to_sql(
+        name="my_table_1",
+        con=CONN_STR,
+        schema=NAMESPACE,
+        if_exists="replace"
+    )
+
+example_write_iceberg_table()
+
+@bodo.jit
+def example_read_iceberg():
+    df = pd.read_sql_table(
+            table_name="my_table_1",
+            con=CONN_STR,
+            schema=NAMESPACE
+         )
+    print(df)
+    return df
+
+df_read = example_read_iceberg()
+```
