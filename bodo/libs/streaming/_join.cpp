@@ -29,7 +29,7 @@
 // When estimating the required size of the OperatorBufferPool, we add some
 // headroom to be conservative. These macros define the bounds of this headroom.
 // The headroom is at most 16MiB or 5% of the size of the largest partition.
-#define OP_POOL_EST_MAX_HEADROOM 16UL * 1024 * 1024
+#define OP_POOL_EST_MAX_HEADROOM (size_t)(16UL * 1024 * 1024)
 #define OP_POOL_EST_HEADROOM_FRACTION 0.05
 
 /* --------------------------- HashHashJoinTable -------------------------- */

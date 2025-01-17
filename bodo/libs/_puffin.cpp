@@ -360,10 +360,10 @@ std::unique_ptr<PuffinFile> PuffinFile::from_theta_sketches(
             metadata.push_back({
                 "apache-datasketches-theta-v1",  // type
                 {field_id},                      // field ids
-                snapshot_id,                     // snapshot-id
-                sequence_number,                 // sequence-number
-                (int64_t)curr_offset,            // offset
-                (int64_t)blob.size(),            // length
+                (long)snapshot_id,               // snapshot-id
+                (long)sequence_number,           // sequence-number
+                (long)curr_offset,               // offset
+                (long)blob.size(),               // length
                 std::nullopt,                    // codec (absent)
                 properties                       // properties (ndv estimate)
             });
@@ -640,7 +640,7 @@ PyObject *write_puffin_file_py_entrypt(
                 std::filesystem::path out_path(dirname);
                 out_path /= fname;  // append file name to output path
                 arrow::Result<std::shared_ptr<arrow::io::OutputStream>> result =
-                    arrow_fs.value->OpenOutputStream(out_path);
+                    arrow_fs.value->OpenOutputStream(out_path.string());
                 CHECK_ARROW_AND_ASSIGN(result, "FileOutputStream::Open",
                                        out_stream);
             } else {

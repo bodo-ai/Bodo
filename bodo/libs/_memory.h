@@ -6,6 +6,7 @@
 #include <arrow/compute/exec.h>
 #include <arrow/io/interfaces.h>
 #include <arrow/memory_pool.h>
+#include <arrow/util/windows_compatibility.h>
 
 #include "_storage_manager.h"
 
@@ -1332,12 +1333,6 @@ pin_guard<Spillable, Args...> pin(Spillable& s, Args&&... args) {
 }  // namespace bodo
 
 #ifdef MS_WINDOWS
-
-#define NOMINMAX
-#define WIN32_LEAN_AND_MEAN
-#include <windows.h>
-#undef DeleteFile
-#undef CopyFile
 
 /**
  * @brief Get the total memory available on this node.

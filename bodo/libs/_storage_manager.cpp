@@ -9,7 +9,7 @@
 
 #include <arrow/status.h>
 #include <fcntl.h>
-#include <sys/errno.h>
+#include <cerrno>
 #ifdef __linux__
 // For fallocate
 #include <linux/falloc.h>
@@ -19,6 +19,7 @@
 #include <arrow/filesystem/localfs.h>
 #include <arrow/filesystem/s3fs.h>
 #include <arrow/result.h>
+#include <arrow/util/windows_compatibility.h>
 
 #include <boost/json.hpp>
 #include <boost/uuid/uuid.hpp>             // uuid class
@@ -32,6 +33,35 @@
 
 #include "_mpi.h"
 #include "_utils.h"
+
+/// Cross platform interface for truncating a file
+int truncate_file(int fd, off_t new_size_) {
+#ifdef _WIN32
+    HANDLE hfile = (HANDLE)_get_osfhandle(fd);
+    if (hfile == INVALID_HANDLE_VALUE) {
+        perror("Invalid file descriptor");
+        return -1;
+    }
+
+    // Move the file pointer to the desired length
+    LARGE_INTEGER new_size;
+    new_size.QuadPart = (LONGLONG)new_size_;
+    if (!SetFilePointerEx(hfile, new_size, NULL, FILE_BEGIN)) {
+        perror("SetFilePointerEx failed");
+        return -1;
+    }
+
+    // Truncate the file at the current file pointer
+    if (!SetEndOfFile(hfile)) {
+        perror("SetEndOfFile failed");
+        return -1;
+    }
+
+    return 0;
+#else
+    return ftruncate(fd, new_size);
+#endif
+}
 
 #undef CHECK_ARROW_AND_ASSIGN
 #define CHECK_ARROW_MEM_AND_ASSIGN(expr, msg, lhs) \
@@ -446,7 +476,7 @@ class SparseFileStorageManager final : public StorageManager {
 #endif
 
             // Construct 1 Frame per File
-            int err = ftruncate(fi.file_descriptor, fi.block_size);
+            int err = truncate_file(fi.file_descriptor, (off_t)(fi.block_size));
             if (err == -1) {
                 this->Cleanup();
                 throw std::runtime_error(
@@ -607,8 +637,9 @@ class SparseFileStorageManager final : public StorageManager {
         } else {
             if (fi.blocks_used == fi.block_capacity) {
                 fi.block_capacity *= 2;
-                int err = ftruncate(fi.file_descriptor,
-                                    (off_t)(fi.block_capacity * fi.block_size));
+                int err =
+                    truncate_file(fi.file_descriptor,
+                                  (off_t)(fi.block_capacity * fi.block_size));
                 if (err == -1) {
                     throw std::runtime_error(
                         "SparseFileStorageManager::WriteBlock: Error when "

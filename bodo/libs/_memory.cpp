@@ -20,8 +20,15 @@
 
 #ifndef _WIN32
 #include <sys/mman.h>
+#define MMAP_FLAGS MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE
+#define ASSUME_ALIGNED(x) std::assume_aligned<4096>(x)
 #else
 #include <arrow/io/mman.h>
+#include <intrin.h>
+// todo check if this is equivalent on windows
+#define MMAP_FLAGS MAP_PRIVATE | MAP_ANONYMOUS
+// todo check if we can use __assume with some custom logic here
+#define ASSUME_ALIGNED(x) (x)
 #endif
 
 #include <fmt/args.h>
@@ -124,7 +131,7 @@ SizeClass::SizeClass(
       address_(
           // Mmap guarantees alignment to page size.
           // 4096 is the smallest page size on x86_64 and ARM64.
-          std::assume_aligned<4096>(static_cast<uint8_t* const>(
+          ASSUME_ALIGNED(static_cast<uint8_t* const>(
               // Allocate the address range using mmap.
               // Create a private (i.e. only visible to this process) anonymous
               // (i.e. not backed by a physical file) mapping. Ref:
@@ -140,7 +147,7 @@ SizeClass::SizeClass(
               // /proc/sys/vm/overcommit_memory section)
               mmap(/*addr*/ nullptr, this->byteSize_,
                    /*We need both read/write access*/ PROT_READ | PROT_WRITE,
-                   MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, /*fd*/ -1,
+                   MMAP_FLAGS, /*fd*/ -1,
                    /*offset*/ 0)))) {
     if (this->address_ == MAP_FAILED || this->address_ == nullptr) {
         throw std::runtime_error(
@@ -217,6 +224,7 @@ uint64_t SizeClass::getFrameIndex(uint8_t* ptr) const {
     return (uint64_t)((ptr - this->address_) / this->block_size_);
 }
 
+#ifndef _WIN32
 void SizeClass::adviseAwayFrame(uint64_t idx) {
     auto start = start_now(this->tracing_mode_);
 
@@ -236,6 +244,10 @@ void SizeClass::adviseAwayFrame(uint64_t idx) {
         this->stats_.total_advise_away_time += dur;
     }
 }
+#else
+// todo enable windows
+void SizeClass::adviseAwayFrame(uint64_t idx) { (void)idx; }
+#endif
 
 int64_t SizeClass::findUnmappedFrame() noexcept {
     auto start = start_now(this->tracing_mode_);
@@ -786,6 +798,24 @@ BufferPoolOptions BufferPoolOptions::Defaults() {
 
 //// BufferPool
 
+// Define cross platform utilities
+#ifdef _WIN32
+// count leading zeros before number x
+inline int clzll(uint64_t x) {
+    unsigned long
+        index;  // Will store the position of the most significant set bit
+    _BitScanReverse64(&index, x);
+    return 63 - index;  // MSVC's bit index is zero-based from the least
+                        // significant bit
+}
+
+#define aligned_alloc(alignment, size) _aligned_malloc(size, alignment)
+
+#else
+#define clzll __builtin_clzll
+#define aligned_alloc(alignment, size) std::aligned_alloc(alignment, size)
+#endif
+
 /**
  * @brief Find the highest power of 2 that is lesser than or equal
  * to N. Note that 0 returns 0.
@@ -807,7 +837,7 @@ static inline int64_t highest_power_of_2(int64_t N) {
     if (!(N & (N - 1)))
         return N;
     // else set only the most significant bit
-    return 0x8000000000000000UL >> (__builtin_clzll(N));
+    return 0x8000000000000000UL >> (clzll(N));
 }
 
 BufferPool::BufferPool(const BufferPoolOptions& options)
@@ -939,9 +969,9 @@ inline int64_t BufferPool::find_size_class_idx(int64_t size) const {
     if (static_cast<uint64_t>(size) > this->size_class_bytes_.back()) {
         return -1;
     }
-    return std::distance(
-        this->size_class_bytes_.begin(),
-        std::ranges::lower_bound(this->size_class_bytes_, size));
+    return std::distance(this->size_class_bytes_.begin(),
+                         std::ranges::lower_bound(this->size_class_bytes_,
+                                                  static_cast<uint64_t>(size)));
 }
 
 // static
@@ -1219,7 +1249,8 @@ arrow::Result<bool> BufferPool::best_effort_evict_helper(const uint64_t bytes) {
     } else {
         // Mmap-ed memory is always page (typically 4096B) aligned
         // (https://stackoverflow.com/questions/42259495/does-mmap-return-aligned-pointer-values).
-        const static long page_size = sysconf(_SC_PAGE_SIZE);
+        const static long page_size =
+            4096L;  // TODO make X platform sysconf(_SC_PAGE_SIZE);
         if (alignment > page_size) {
             return ::arrow::Status::Invalid(
                 "Requested alignment (" + std::to_string(alignment) +
