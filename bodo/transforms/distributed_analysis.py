@@ -1615,54 +1615,6 @@ class DistributedAnalysis:
                 array_dists[lhs] = Distribution.OneD
             return
 
-        if fdef == ("quantile", "bodo.libs.array_kernels"):
-            # quantile doesn't affect input's distribution
-            return
-
-        if fdef == ("approx_percentile", "bodo.libs.array_kernels"):
-            # approx_percentile doesn't affect input's distribution
-            return
-
-        if fdef == ("percentile_cont", "bodo.libs.array_kernels"):
-            # percentile_cont doesn't affect input's distribution
-            return
-
-        if fdef == ("percentile_disc", "bodo.libs.array_kernels"):
-            # percentile_disc doesn't affect input's distribution
-            return
-
-        if fdef == ("nunique", "bodo.libs.array_kernels"):
-            # nunique doesn't affect input's distribution
-            return
-
-        if fdef == ("anyvalue_agg", "bodo.libs.array_kernels"):
-            # anyvalue_agg doesn't affect input's distribution
-            return
-
-        if fdef == ("boolor_agg", "bodo.libs.array_kernels"):
-            # boolor_agg doesn't affect input's distribution
-            return
-
-        if fdef == ("booland_agg", "bodo.libs.array_kernels"):
-            # booland_agg doesn't affect input's distribution
-            return
-
-        if fdef == ("boolxor_agg", "bodo.libs.array_kernels"):
-            # boolxor_agg doesn't affect input's distribution
-            return
-
-        if fdef == ("bitor_agg", "bodo.libs.array_kernels"):
-            # bitor_agg doesn't affect input's distribution
-            return
-
-        if fdef == ("bitand_agg", "bodo.libs.array_kernels"):
-            # bitand_agg doesn't affect input's distribution
-            return
-
-        if fdef == ("bitxor_agg", "bodo.libs.array_kernels"):
-            # bitxor_agg doesn't affect input's distribution
-            return
-
         if fdef == ("lateral_flatten", "bodosql.kernels.lateral"):
             # If the input is replicated the output is replicated, otherwise
             # the output is always 1D_Var since each rank may explode its

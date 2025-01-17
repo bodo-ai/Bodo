@@ -388,6 +388,18 @@ class DistributedAnalysisCallRegistry:
             ("len", "__builtin__"): no_op_analysis,
             ("len", "builtins"): no_op_analysis,
             ("local_len", "bodo.hiframes.table"): no_op_analysis,
+            ("quantile", "bodo.libs.array_kernels"): no_op_analysis,
+            ("approx_percentile", "bodo.libs.array_kernels"): no_op_analysis,
+            ("percentile_cont", "bodo.libs.array_kernels"): no_op_analysis,
+            ("percentile_disc", "bodo.libs.array_kernels"): no_op_analysis,
+            ("nunique", "bodo.libs.array_kernels"): no_op_analysis,
+            ("anyvalue_agg", "bodo.libs.array_kernels"): no_op_analysis,
+            ("boolor_agg", "bodo.libs.array_kernels"): no_op_analysis,
+            ("booland_agg", "bodo.libs.array_kernels"): no_op_analysis,
+            ("boolxor_agg", "bodo.libs.array_kernels"): no_op_analysis,
+            ("bitor_agg", "bodo.libs.array_kernels"): no_op_analysis,
+            ("bitand_agg", "bodo.libs.array_kernels"): no_op_analysis,
+            ("bitxor_agg", "bodo.libs.array_kernels"): no_op_analysis,
         }
 
     def analyze_call(self, ctx, inst, fdef):
