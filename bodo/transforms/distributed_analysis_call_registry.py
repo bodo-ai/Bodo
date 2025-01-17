@@ -385,6 +385,9 @@ class DistributedAnalysisCallRegistry:
                 "random_shuffle",
                 "bodo",
             ): meet_out_first_arg_analysis,
+            ("len", "__builtin__"): no_op_analysis,
+            ("len", "builtins"): no_op_analysis,
+            ("local_len", "bodo.hiframes.table"): no_op_analysis,
         }
 
     def analyze_call(self, ctx, inst, fdef):

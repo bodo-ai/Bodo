@@ -1581,14 +1581,6 @@ class DistributedAnalysis:
             self._analyze_call_bodo_dist(lhs, func_name, args, array_dists, rhs.loc)
             return
 
-        # len()
-        if func_name == "len" and func_mod in ("__builtin__", "builtins"):
-            return
-
-        # bodo.hiframes.table.local_len
-        if fdef == ("local_len", "bodo.hiframes.table"):
-            return
-
         # handle list.func calls
         if isinstance(func_mod, ir.Var) and isinstance(
             self.typemap[func_mod.name], types.List
