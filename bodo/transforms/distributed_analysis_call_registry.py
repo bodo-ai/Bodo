@@ -377,6 +377,10 @@ class DistributedAnalysisCallRegistry:
                 "table_builder_finalize",
                 "bodo.libs.table_builder",
             ): meet_out_first_arg_analysis,
+            (
+                "rebalance",
+                "bodo",
+            ): meet_out_first_arg_analysis,
         }
 
     def analyze_call(self, ctx, inst, fdef):

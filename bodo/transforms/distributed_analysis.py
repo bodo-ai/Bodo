@@ -1578,12 +1578,6 @@ class DistributedAnalysis:
 
         if (
             isinstance(func_mod, str) and func_mod == "bodo"
-        ) and func_name == "rebalance":
-            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
-            return
-
-        if (
-            isinstance(func_mod, str) and func_mod == "bodo"
         ) and func_name == "random_shuffle":
             _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
             return
