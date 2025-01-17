@@ -349,15 +349,20 @@ class Spawner:
         root = MPI.ROOT if self.comm_world.Get_rank() == 0 else MPI.PROC_NULL
 
         def collect_func(res_id: str):
-            assert not self._is_running, "collect_func: already running"
-            self._is_running = True
+            # collect is sometimes triggered during receive (e.g. for unsupported types
+            # like IntervalIndex) so we may be in the middle of function execution
+            # already.
+            initial_running = self._is_running
+            if not initial_running:
+                self._is_running = True
             self.worker_intercomm.bcast(CommandType.GATHER.value, root=root)
             self.worker_intercomm.bcast(res_id, root=root)
             res = bodo.libs.distributed_api.gatherv(
                 None, root=root, comm=self.worker_intercomm
             )
-            self._is_running = False
-            self._run_del_queue()
+            if not initial_running:
+                self._is_running = False
+                self._run_del_queue()
             return res
 
         def del_func(res_id: str):
@@ -598,7 +603,7 @@ class Spawner:
 
     def reset(self):
         """Destroy spawned processes"""
-        assert not self._is_running, "collect_func: already running"
+        assert not self._is_running, "reset: already running"
         self._is_running = True
         try:
             debug_msg(self.logger, "Destroying spawned processes")
