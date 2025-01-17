@@ -323,4 +323,31 @@ def example_read_iceberg():
     return df
 
 df_read = example_read_iceberg()
+print(df_read)
+```
+
+You can use BodoSQL to work with S3 Tables as well. Here is a simple example:
+
+```python
+import pandas as pd
+import bodosql
+
+BUCKET_NAME="my-test-bucket"
+ACCOUNT_ID="111122223333"
+REGION="us-east-2"
+NAMESPACE="my_namespace"
+ARN_STR=f"arn:aws:s3tables:{REGION}:{ACCOUNT_ID}:bucket/{BUCKET_NAME}"
+
+catalog = bodosql.S3TablesCatalog(ARN_STR)
+bc = bodosql.BodoSQLContext(catalog=catalog)
+df = pd.DataFrame({"A": [1, 2, 3], "B": ["a", "b", "c"]})
+bc = bc.add_or_replace_view("TABLE1", df)
+
+query = f"""
+CREATE OR REPLACE TABLE "{NAMESPACE}"."my_table" AS SELECT * FROM __bodolocal__.table1
+"""
+bc.sql(query)
+
+df_read = bc.sql(f"SELECT * FROM \"{NAMESPACE}\".\"my_table\"")
+print(df_read)
 ```
