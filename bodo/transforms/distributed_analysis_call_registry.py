@@ -331,6 +331,7 @@ class DistributedAnalysisCallRegistry:
                 "bodo.libs.pd_datetime_arr_ext",
             ): meet_out_first_arg_analysis,
             ("accum_func", "bodo.libs.array_kernels"): meet_out_first_arg_analysis,
+            ("parallel_print", "bodo"): no_op_analysis,
         }
 
     def analyze_call(self, ctx, inst, fdef):

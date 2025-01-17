@@ -1166,9 +1166,6 @@ class DistributedAnalysis:
             )
             return
 
-        if fdef == ("parallel_print", "bodo"):
-            return
-
         # input of gatherv should be distributed (likely a user mistake),
         # but the output is REP
         if fdef == ("gatherv", "bodo") or fdef == ("allgatherv", "bodo"):
