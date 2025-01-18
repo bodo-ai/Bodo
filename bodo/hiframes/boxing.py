@@ -80,6 +80,12 @@ ll.add_symbol("array_getptr1", hstr_ext.array_getptr1)
 # the number of dataframe columns above which we use table format in unboxing
 TABLE_FORMAT_THRESHOLD = 0
 
+
+# Unbox dataframe columns eagerly, which improves compilation time by disabling lazy
+# unboxing calls (only for table format since non-table format is deprecated).
+UNBOX_DATAFRAME_EAGERLY = True
+
+
 # A flag to use dictionary-encode string arrays for all string arrays
 # Used for testing purposes
 _use_dict_str_type = False
@@ -222,6 +228,41 @@ def unbox_dataframe(typ, val, c):
                 c.context, c.builder, types.List(t), n_arrs
             )
             out_arr_list.size = n_arrs
+
+            if UNBOX_DATAFRAME_EAGERLY:
+                # lower array of array indices for block to use within the loop
+                # using array since list doesn't have constant lowering
+                arr_inds = c.context.make_constant_array(
+                    c.builder,
+                    types.Array(types.int64, 1, "C"),
+                    np.array(typ.table_type.block_to_arr_ind[blk], dtype=np.int64),
+                )
+                arr_inds_struct = c.context.make_array(
+                    types.Array(types.int64, 1, "C")
+                )(c.context, c.builder, arr_inds)
+                with cgutils.for_range(c.builder, n_arrs) as loop:
+                    i = loop.index
+                    # get array index in dataframe columns and unbox array
+                    arr_ind = _getitem_array_single_int(
+                        c.context,
+                        c.builder,
+                        types.int64,
+                        types.Array(types.int64, 1, "C"),
+                        arr_inds_struct,
+                        i,
+                    )
+                    arr_obj = get_df_obj_column_codegen(
+                        c.context,
+                        c.builder,
+                        c.pyapi,
+                        val,
+                        arr_ind,
+                        t,
+                    )
+                    arr = c.pyapi.to_native_value(t, arr_obj).value
+                    out_arr_list.inititem(i, arr, incref=False)
+                    c.pyapi.decref(arr_obj)
+
             setattr(table, f"block_{blk}", out_arr_list.value)
 
         # Set the length of the table. This should be valid even
