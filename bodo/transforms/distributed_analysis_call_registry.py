@@ -316,6 +316,131 @@ class DistributedAnalysisCallRegistry:
                 "r2_score",
                 "sklearn.metrics._regression",
             ): analyze_call_sklearn_metrics,
+            # Match distribution of X to the output.
+            # The output distribution is intended to match X and should ignore Y.
+            (
+                "cosine_similarity",
+                "sklearn.metrics.pairwise",
+            ): meet_out_first_arg_analysis,
+            (
+                "datetime_date_arr_to_dt64_arr",
+                "bodo.hiframes.pd_timestamp_ext",
+            ): meet_out_first_arg_analysis,
+            (
+                "unwrap_tz_array",
+                "bodo.libs.pd_datetime_arr_ext",
+            ): meet_out_first_arg_analysis,
+            ("accum_func", "bodo.libs.array_kernels"): meet_out_first_arg_analysis,
+            ("parallel_print", "bodo"): no_op_analysis,
+            (
+                "series_contains_regex",
+                "bodo.hiframes.series_str_impl",
+            ): meet_out_first_arg_analysis,
+            (
+                "series_match_regex",
+                "bodo.hiframes.series_str_impl",
+            ): meet_out_first_arg_analysis,
+            (
+                "series_fullmatch_regex",
+                "bodo.hiframes.series_str_impl",
+            ): meet_out_first_arg_analysis,
+            ("setna", "bodo.libs.array_kernels"): no_op_analysis,
+            (
+                "snowflake_writer_append_table",
+                "bodo.io.snowflake_write",
+            ): meet_first_2_args_analysis,
+            (
+                "iceberg_writer_append_table",
+                "bodo.io.iceberg.stream_iceberg_write",
+            ): meet_first_2_args_analysis,
+            (
+                "parquet_writer_append_table",
+                "bodo.io.stream_parquet_write",
+            ): meet_first_2_args_analysis,
+            (
+                "groupby_build_consume_batch",
+                "bodo.libs.streaming.groupby",
+            ): meet_first_2_args_analysis,
+            (
+                "groupby_grouping_sets_build_consume_batch",
+                "bodo.libs.streaming.groupby",
+            ): meet_first_2_args_analysis,
+            (
+                "window_build_consume_batch",
+                "bodo.libs.streaming.window",
+            ): meet_first_2_args_analysis,
+            (
+                "sort_build_consume_batch",
+                "bodo.libs.streaming.sort",
+            ): meet_first_2_args_analysis,
+            (
+                "table_builder_finalize",
+                "bodo.libs.table_builder",
+            ): meet_out_first_arg_analysis,
+            (
+                "rebalance",
+                "bodo",
+            ): meet_out_first_arg_analysis,
+            (
+                "random_shuffle",
+                "bodo",
+            ): meet_out_first_arg_analysis,
+            ("len", "__builtin__"): no_op_analysis,
+            ("len", "builtins"): no_op_analysis,
+            ("local_len", "bodo.hiframes.table"): no_op_analysis,
+            ("quantile", "bodo.libs.array_kernels"): no_op_analysis,
+            ("approx_percentile", "bodo.libs.array_kernels"): no_op_analysis,
+            ("percentile_cont", "bodo.libs.array_kernels"): no_op_analysis,
+            ("percentile_disc", "bodo.libs.array_kernels"): no_op_analysis,
+            ("nunique", "bodo.libs.array_kernels"): no_op_analysis,
+            ("anyvalue_agg", "bodo.libs.array_kernels"): no_op_analysis,
+            ("boolor_agg", "bodo.libs.array_kernels"): no_op_analysis,
+            ("booland_agg", "bodo.libs.array_kernels"): no_op_analysis,
+            ("boolxor_agg", "bodo.libs.array_kernels"): no_op_analysis,
+            ("bitor_agg", "bodo.libs.array_kernels"): no_op_analysis,
+            ("bitand_agg", "bodo.libs.array_kernels"): no_op_analysis,
+            ("bitxor_agg", "bodo.libs.array_kernels"): no_op_analysis,
+            (
+                "series_str_dt64_astype",
+                "bodo.hiframes.pd_timestamp_ext",
+            ): meet_out_first_arg_analysis,
+            (
+                "series_str_td64_astype",
+                "bodo.hiframes.pd_timestamp_ext",
+            ): meet_out_first_arg_analysis,
+            (
+                "cat_replace",
+                "bodo.hiframes.pd_categorical_ext",
+            ): meet_out_first_arg_analysis,
+            (
+                "intersection_mask",
+                "bodo.libs.array_kernels",
+            ): meet_out_first_arg_analysis,
+            # Output is a decimal, so we don't need to explicitly set the distribution
+            (
+                "sum_decimal_array",
+                "bodo.libs.decimal_arr_ext",
+            ): no_op_analysis,
+            ("first_last_valid_index", "bodo.libs.array_kernels"): no_op_analysis,
+            (
+                "get_valid_entries_from_date_offset",
+                "bodo.libs.array_kernels",
+            ): no_op_analysis,
+            ("shift", "bodo.hiframes.rolling"): meet_out_first_arg_analysis,
+            ("pct_change", "bodo.hiframes.rolling"): meet_out_first_arg_analysis,
+            ("set_table_data_null", "bodo.hiframes.table"): meet_out_first_arg_analysis,
+            (
+                "str_arr_encode",
+                "bodo.libs.str_arr_ext",
+            ): meet_out_first_arg_analysis,
+            (
+                "pandas_string_array_to_datetime",
+                "bodo.hiframes.pd_timestamp_ext",
+            ): meet_out_first_arg_analysis,
+            (
+                "pandas_dict_string_array_to_datetime",
+                "bodo.hiframes.pd_timestamp_ext",
+            ): meet_out_first_arg_analysis,
         }
 
     def analyze_call(self, ctx, inst, fdef):
