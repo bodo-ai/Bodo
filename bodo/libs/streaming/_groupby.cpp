@@ -5219,8 +5219,9 @@ uint32_t get_partition_top_bitmask_by_idx(GroupbyState* groupby_state,
 PyMODINIT_FUNC PyInit_stream_groupby_cpp(void) {
     PyObject* m;
     MOD_DEF(m, "stream_groupby_cpp", "No docs", nullptr);
-    if (m == nullptr)
+    if (m == nullptr) {
         return nullptr;
+    }
 
     bodo_common_init();
 

@@ -6,5 +6,8 @@ Checks: >
     -modernize-use-trailing-return-type,
     -modernize-return-braced-init-list,
     -modernize-macro-to-enum,
-    -modernize-use-nodiscard
+    -modernize-use-nodiscard,
+    readability-braces-around-statements
 WarningsAsErrors: ''
+# HeaderFilterRegex: '.*bodo\/libs\/.*\.h$'
+ExcludeHeaderFilterRegex: '.*build\/.*\.h$'

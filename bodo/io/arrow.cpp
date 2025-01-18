@@ -136,8 +136,9 @@ PyMethodDef fetch_row_count_method_def = {
 PyMODINIT_FUNC PyInit_arrow_cpp(void) {
     PyObject* m;
     MOD_DEF(m, "arrow_cpp", "No docs", nullptr);
-    if (m == nullptr)
+    if (m == nullptr) {
         return nullptr;
+    }
 
     bodo_common_init();
 

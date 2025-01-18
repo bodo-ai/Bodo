@@ -689,14 +689,15 @@ void median_series_computation_T(double *res, std::shared_ptr<array_info> arr,
     bodo::vector<T> my_array;
     collecting_non_nan_entries<T, DType>(my_array, arr, e_stat);
     int64_t glob_nb_ok = e_stat.glob_nb_ok;
-    if (DType == Bodo_CTypes::DECIMAL)
+    if (DType == Bodo_CTypes::DECIMAL) {
         median_series_computation_eff<T, Bodo_CTypes::FLOAT64,
                                       bodo::STLBufferPoolAllocator<T>>(
             res, my_array, parallel, glob_nb_ok);
-    else
+    } else {
         median_series_computation_eff<T, DType,
                                       bodo::STLBufferPoolAllocator<T>>(
             res, my_array, parallel, glob_nb_ok);
+    }
 }
 
 /** Compute the median of the series.
@@ -910,10 +911,11 @@ std::shared_ptr<array_info> compute_ghost_rows(std::shared_ptr<array_info> arr,
     for (int64_t i_next = 0; i_next < n_next; i_next++) {
         size_t siz = ListNextSizes[i_next];
         size_t siz_recv;
-        if (siz + pos_index <= ghost_length)
+        if (siz + pos_index <= ghost_length) {
             siz_recv = siz;
-        else
+        } else {
             siz_recv = ghost_length - pos_index;
+        }
         if (siz_recv > 0) {
             MPI_Request mpi_recv;
             char *ptr_recv = ghost_arr->data1<bodo_array_type::NUMPY>() +
@@ -932,13 +934,14 @@ std::shared_ptr<array_info> compute_ghost_rows(std::shared_ptr<array_info> arr,
     for (int64_t i_prev = 0; i_prev < n_prev; i_prev++) {
         size_t siz_prev = ListPrevSizes[i_prev];
         size_t siz_send;
-        if (loc_nrows + pos_already <= level_next)
+        if (loc_nrows + pos_already <= level_next) {
             siz_send = loc_nrows;
-        else {
-            if (level_next >= pos_already)
+        } else {
+            if (level_next >= pos_already) {
                 siz_send = level_next - pos_already;
-            else
+            } else {
                 siz_send = 0;
+            }
         }
         if (siz_send > 0) {
             MPI_Request mpi_send;

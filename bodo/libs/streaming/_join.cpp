@@ -4549,8 +4549,9 @@ PyObject* get_runtime_join_filter_unique_values_py_entrypt(
 PyMODINIT_FUNC PyInit_stream_join_cpp(void) {
     PyObject* m;
     MOD_DEF(m, "stream_join_cpp", "No docs", nullptr);
-    if (m == nullptr)
+    if (m == nullptr) {
         return nullptr;
+    }
 
     bodo_common_init();
 
