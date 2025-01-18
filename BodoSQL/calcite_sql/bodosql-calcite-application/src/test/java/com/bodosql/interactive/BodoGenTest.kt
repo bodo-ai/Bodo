@@ -90,8 +90,7 @@ object BodoGenTest {
                 true, // Always hide credentials
                 true, // Enable Iceberg for testing
                 true, // Enable TIMESTAMP_TZ for testing
-                true, // Enable Join Runtime filters for Testing
-                true, // Disable Streaming Sort for Testing
+                true, // Enable Streaming Sort for Testing
                 false, // Disable Streaming Sort Limit Offset for Testing
                 "SNOWFLAKE", // Maintain case sensitivity in the Snowflake style by default
                 false, // Only cache identical nodes
