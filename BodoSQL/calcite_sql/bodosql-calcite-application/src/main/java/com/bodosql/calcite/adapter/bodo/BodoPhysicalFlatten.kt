@@ -136,7 +136,7 @@ class BodoPhysicalFlatten(
     override fun deleteStateVariable(
         ctx: BodoPhysicalRel.BuildContext,
         stateVar: StateVariable,
-    ) {}
+    ) = Unit
 
     override fun expectedOutputBatchingProperty(inputBatchingProperty: BatchingProperty): BatchingProperty =
         ExpectedBatchingProperty.streamingIfPossibleProperty(getRowType())

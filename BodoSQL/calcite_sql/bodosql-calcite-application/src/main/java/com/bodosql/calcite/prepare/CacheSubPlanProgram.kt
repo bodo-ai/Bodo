@@ -64,8 +64,13 @@ class CacheSubPlanProgram : Program {
         lattices: MutableList<RelOptLattice>,
     ): RelNode =
         if (RelationalAlgebraGenerator.coveringExpressionCaching) {
+            // This section allows generating common ancestors that aren't
+            // exact matches. For example Select A, B, SUM(C) group by A, B
+            // and Select A, B, SUM(D) group by A, B could generate a common
+            // cache node.
             runCoveringExpressions(rel, planner.executor)
         } else {
+            // This only matches on identical sections of the plan.
             runExactMatch(rel)
         }
 
@@ -1276,6 +1281,14 @@ class CacheSubPlanProgram : Program {
         }
     }
 
+    /**
+     * Computes the set of nodes that should be included as cache nodes
+     * because the RelNode ids are identical. This requires a prior step
+     * to ensure identical plan components are mapped to the same RelNode.
+     *
+     * When this step is finished the relevant cache nodes can be found in
+     * cacheNodes.
+     */
     private class CacheCandidateFinder : RelVisitor() {
         // Set of seen IDs
         private val seenNodes = mutableSetOf<Int>()
@@ -1289,7 +1302,9 @@ class CacheSubPlanProgram : Program {
         ) {
             if (seenNodes.contains(node.id)) {
                 // We have seen this node before, so we should cache it.
-                // We can only cache Pandas sections as they represent whole operations.
+                // We can only cache Bodo sections as they represent whole
+                // operations. It would not be legal for example to just cache
+                // the IcebergScan because this is only a component of IO.
                 if (node is BodoPhysicalRel) {
                     // TODO: Add a check for non-deterministic nodes? Right now
                     // we don't have any that we don't allow caching.
@@ -1302,6 +1317,12 @@ class CacheSubPlanProgram : Program {
         }
     }
 
+    /**
+     * Class that is responsible for replacing the nodes described by the given
+     * set of IDs with a proper cache node. This maintains a mapping from ID
+     * to generate cache node to ensure the underlying CachedSubPlanBase will
+     * be identical even when RelNodes are copied.
+     */
     private class CacheReplacement(
         private val cluster: BodoRelOptCluster,
         private val cacheNodes: Set<Int>,
@@ -1314,11 +1335,14 @@ class CacheSubPlanProgram : Program {
             return if (cacheNodeMap.contains(id)) {
                 val result = cacheNodeMap[id]!!
                 result.cachedPlan.addConsumer()
-                // Create a copy to get separate operator IDs for timing
+                // Create a copy to get separate operator IDs for timing.
+                // Right now our metrics are dependent on the exact RelNode
+                // operator ID so every ID must be distinct.
                 result.copy(result.traitSet, listOf())
             } else {
                 val children = rel.inputs.map { it.accept(this) }
                 val node = rel.copy(rel.traitSet, children)
+                // Check if we should cache this node.
                 if (cacheNodes.contains(id)) {
                     val plan = CachedPlanInfo.create(node, 1)
                     val cachedSubPlan = BodoPhysicalCachedSubPlan.create(plan, cluster.nextCacheId())
