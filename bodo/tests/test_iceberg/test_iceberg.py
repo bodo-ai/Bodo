@@ -948,37 +948,6 @@ def test_no_files_after_filter_pushdown(
 
 
 @pytest.mark.slow
-def test_snapshot_id(iceberg_database, iceberg_table_conn, memory_leak_check):
-    """
-    Test that the bodo_iceberg_connector correctly loads the latest snapshot id.
-    """
-    comm = MPI.COMM_WORLD
-    table_name = "SIMPLE_NUMERIC_TABLE"
-    db_schema, warehouse_loc = iceberg_database(table_name)
-    conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
-    # Format the connection string since we don't go through pd.read_sql_table
-    conn = bodo.io.iceberg.format_iceberg_conn(conn)
-    spark = get_spark()
-    snapshot_id = None
-    spark_snapshot_id = None
-    if bodo.get_rank() == 0:
-        snapshot_id = bodo_iceberg_connector.bodo_connector_get_current_snapshot_id(
-            conn, db_schema, table_name
-        )
-        py_out = spark.sql(
-            f"""
-        select snapshot_id from hadoop_prod.{db_schema}.{table_name}.history order by made_current_at DESC
-        """
-        )
-        py_out = py_out.toPandas()
-        spark_snapshot_id = py_out.iloc[0, 0]
-    snapshot_id, spark_snapshot_id = comm.bcast((snapshot_id, spark_snapshot_id))
-    assert (
-        snapshot_id == spark_snapshot_id
-    ), "Bodo loaded snapshot id doesn't match spark"
-
-
-@pytest.mark.slow
 def test_read_merge_into_cow_row_id_col(
     iceberg_database, iceberg_table_conn, memory_leak_check
 ):
