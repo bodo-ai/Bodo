@@ -7,10 +7,6 @@ from bodo_iceberg_connector.filter_to_java import (
     FilterExpr,
     Scalar,
 )
-from bodo_iceberg_connector.parquet_info import (
-    IcebergParquetInfo,
-    get_bodo_parquet_info,
-)
 from bodo_iceberg_connector.py4j_support import launch_jvm, set_core_site_path
 from bodo_iceberg_connector.schema import (
     get_iceberg_runtime_schema,
