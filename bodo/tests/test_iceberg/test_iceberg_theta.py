@@ -234,11 +234,8 @@ def get_statistics_ndvs(puffin_file_name, iceberg_schema):
 
 @run_rank0
 def get_iceberg_pyarrow_schema(conn, db_schema, table_name):
-    import bodo_iceberg_connector
-
-    conn = remove_iceberg_prefix(conn)
-    _, _, pyarrow_schema = bodo_iceberg_connector.get_iceberg_typing_schema(
-        conn, db_schema, table_name
+    _, _, pyarrow_schema = bodo.io.iceberg.get_iceberg_orig_schema(
+        conn, f"{db_schema}.{table_name}"
     )
     return pyarrow_schema
 

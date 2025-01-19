@@ -9,8 +9,6 @@ from bodo_iceberg_connector.filter_to_java import (
 )
 from bodo_iceberg_connector.py4j_support import launch_jvm, set_core_site_path
 from bodo_iceberg_connector.schema import (
-    get_iceberg_runtime_schema,
-    get_iceberg_typing_schema,
     get_typing_info,
 )
 from bodo_iceberg_connector.catalog_conn import parse_conn_str as parse_iceberg_conn_str
