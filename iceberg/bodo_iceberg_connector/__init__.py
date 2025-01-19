@@ -41,7 +41,6 @@ from bodo_iceberg_connector.puffin import (
     table_columns_enabled_theta_sketches,
 )
 from bodo_iceberg_connector.snowflake_prefetch import prefetch_sf_tables
-from bodo_iceberg_connector.catalog_wrapper import JavaCatalog, JavaTable
 
 # ----------------------- Version Import from Metadata -----------------------
 try:
