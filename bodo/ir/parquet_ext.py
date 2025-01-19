@@ -63,7 +63,9 @@ from bodo.utils.typing import (
     is_nullable_ignore_sentinels,
 )
 from bodo.utils.utils import (
+    bodo_exec,
     check_and_propagate_cpp_exception,
+    create_arg_hash,
     inlined_check_and_propagate_cpp_exception,
     numba_to_c_type,
     sanitize_varname,
@@ -774,23 +776,6 @@ def _gen_pq_reader_py(
     pyarrow_schema: pa.Schema,
     use_hive: bool,
 ):
-    # a unique int used to create global variables with unique names
-    call_id = next_label()
-
-    comma = "," if extra_args else ""
-    func_text = f"def pq_reader_py(fname,{extra_args}):\n"
-    # if it's an s3 url, get the region and pass it into the c++ code
-    func_text += f"    ev = bodo.utils.tracing.Event('read_parquet', {is_parallel})\n"
-    func_text += "    ev.add_attribute('g_fname', fname)\n"
-    func_text += f'    _, filters = get_filters_pyobject("[]", "{expr_filter_str}", ({extra_args}{comma}))\n'
-    # convert the filename, which could be a string or a list of strings, to a
-    # PyObject to pass to C++. C++ just passes it through to parquet_pio.py::get_parquet_dataset()
-    func_text += "    fname_py = get_fname_pyobject(fname)\n"
-
-    # Add a dummy variable to the dict (empty dicts are not yet supported in Numba).
-    storage_options["bodo_dummy"] = "dummy"
-    func_text += f"    storage_options_py = get_storage_options_pyobject({str(storage_options)})\n"
-
     (
         tot_rows_to_read,
         _,
@@ -818,51 +803,11 @@ def _gen_pq_reader_py(
         out_types,
     )
 
-    # Call pq_read_py_entry() in C++
-    # single-element numpy array to return number of global rows from C++
-    func_text += (
-        f"    total_rows_np = np.array([0], dtype=np.int64)\n"
-        f"    out_table = pq_read_py_entry(\n"
-        f"        fname_py,\n"
-        f"        {is_parallel},\n"
-        f"        filters,\n"
-        f"        storage_options_py,\n"
-        f"        pyarrow_schema_{call_id},\n"
-        f"        {tot_rows_to_read},\n"
-        f"        selected_cols_arr_{call_id}.ctypes,\n"
-        f"        {len(selected_cols)},\n"
-        f"        nullable_cols_arr_{call_id}.ctypes,\n"
+    index_arr_ind = (
+        selected_cols_map[index_column_index]
+        if index_column_index is not None
+        else None
     )
-
-    if len(selected_partition_cols) > 0:
-        func_text += (
-            f"        np.array({selected_partition_cols}, dtype=np.int32).ctypes,\n"
-            f"        np.array({partition_col_cat_dtypes}, dtype=np.int32).ctypes,\n"
-            f"        {len(selected_partition_cols)},\n"
-        )
-    else:
-        func_text += "        0, 0, 0,\n"
-    if len(str_as_dict_cols) > 0:
-        # TODO pass array as global to function instead?
-        func_text += f"        np.array({str_as_dict_cols}, dtype=np.int32).ctypes, {len(str_as_dict_cols)},\n"
-    else:
-        func_text += "        0, 0,\n"
-    func_text += "        total_rows_np.ctypes,\n"
-    # The C++ code only needs a flag
-    func_text += f"        {input_file_name_col is not None},\n"
-    func_text += f"        {use_hive},\n"
-    func_text += "    )\n"
-    func_text += "    check_and_propagate_cpp_exception()\n"
-
-    func_text += "    total_rows = total_rows_np[0]\n"
-    # Compute the number of rows that are stored in your chunk of the data.
-    # This is necessary because we may avoid reading any columns but may not
-    # be able to do the head only optimization.
-    if is_parallel:
-        func_text += "    local_rows = get_node_portion(total_rows, bodo.get_size(), bodo.get_rank())\n"
-    else:
-        func_text += "    local_rows = total_rows\n"
-
     index_arr_type = index_column_type
     py_table_type = TableType(tuple(out_types))
     if is_dead_table:
@@ -909,6 +854,92 @@ def _gen_pq_reader_py(
                 table_idx.append(-1)
         table_idx = np.array(table_idx, dtype=np.int64)
 
+    pyarrow_schema_no_meta = pyarrow_schema.remove_metadata()
+
+    comma = "," if extra_args else ""
+    call_id = create_arg_hash(
+        is_parallel,
+        expr_filter_str,
+        comma,
+        storage_options,
+        tot_rows_to_read,
+        selected_cols,
+        selected_cols_map,
+        selected_partition_cols,
+        partition_col_cat_dtypes,
+        str_as_dict_cols,
+        nullable_cols,
+        sel_partition_names,
+        partition_indices,
+        sanitized_col_names,
+        sel_partition_names_map,
+        input_file_name_col,
+        index_arr_ind,
+        use_hive,
+        is_dead_table,
+        table_idx,
+        index_arr_type,
+        pyarrow_schema_no_meta,
+        *extra_args,
+    )
+    func_text = f"def bodo_pq_reader_py(fname,{extra_args}):\n"
+    # if it's an s3 url, get the region and pass it into the c++ code
+    func_text += f"    ev = bodo.utils.tracing.Event('read_parquet', {is_parallel})\n"
+    func_text += "    ev.add_attribute('g_fname', fname)\n"
+    func_text += f'    _, filters = get_filters_pyobject("[]", "{expr_filter_str}", ({extra_args}{comma}))\n'
+    # convert the filename, which could be a string or a list of strings, to a
+    # PyObject to pass to C++. C++ just passes it through to parquet_pio.py::get_parquet_dataset()
+    func_text += "    fname_py = get_fname_pyobject(fname)\n"
+
+    # Add a dummy variable to the dict (empty dicts are not yet supported in Numba).
+    storage_options["bodo_dummy"] = "dummy"
+    func_text += f"    storage_options_py = get_storage_options_pyobject({str(storage_options)})\n"
+
+    # Call pq_read_py_entry() in C++
+    # single-element numpy array to return number of global rows from C++
+    func_text += (
+        f"    total_rows_np = np.array([0], dtype=np.int64)\n"
+        f"    out_table = pq_read_py_entry(\n"
+        f"        fname_py,\n"
+        f"        {is_parallel},\n"
+        f"        filters,\n"
+        f"        storage_options_py,\n"
+        f"        pyarrow_schema_{call_id},\n"
+        f"        {tot_rows_to_read},\n"
+        f"        selected_cols_arr_{call_id}.ctypes,\n"
+        f"        {len(selected_cols)},\n"
+        f"        nullable_cols_arr_{call_id}.ctypes,\n"
+    )
+
+    if len(selected_partition_cols) > 0:
+        func_text += (
+            f"        np.array({selected_partition_cols}, dtype=np.int32).ctypes,\n"
+            f"        np.array({partition_col_cat_dtypes}, dtype=np.int32).ctypes,\n"
+            f"        {len(selected_partition_cols)},\n"
+        )
+    else:
+        func_text += "        0, 0, 0,\n"
+    if len(str_as_dict_cols) > 0:
+        # TODO pass array as global to function instead?
+        func_text += f"        np.array({str_as_dict_cols}, dtype=np.int32).ctypes, {len(str_as_dict_cols)},\n"
+    else:
+        func_text += "        0, 0,\n"
+    func_text += "        total_rows_np.ctypes,\n"
+    # The C++ code only needs a flag
+    func_text += f"        {input_file_name_col is not None},\n"
+    func_text += f"        {use_hive},\n"
+    func_text += "    )\n"
+    func_text += "    check_and_propagate_cpp_exception()\n"
+
+    func_text += "    total_rows = total_rows_np[0]\n"
+    # Compute the number of rows that are stored in your chunk of the data.
+    # This is necessary because we may avoid reading any columns but may not
+    # be able to do the head only optimization.
+    if is_parallel:
+        func_text += "    local_rows = get_node_portion(total_rows, bodo.get_size(), bodo.get_rank())\n"
+    else:
+        func_text += "    local_rows = total_rows\n"
+
     # Extract the table and index from C++.
     if is_dead_table:
         func_text += "    T = None\n"
@@ -920,7 +951,6 @@ def _gen_pq_reader_py(
     if index_column_index is None:
         func_text += "    index_arr = None\n"
     else:
-        index_arr_ind = selected_cols_map[index_column_index]
         func_text += f"    index_arr = array_from_cpp_table(out_table, {index_arr_ind}, index_arr_type)\n"
     func_text += "    delete_table(out_table)\n"
     func_text += "    ev.finalize()\n"
@@ -931,7 +961,7 @@ def _gen_pq_reader_py(
         f"table_idx_{call_id}": table_idx,
         f"selected_cols_arr_{call_id}": np.array(selected_cols, np.int32),
         f"nullable_cols_arr_{call_id}": np.array(nullable_cols, np.int32),
-        f"pyarrow_schema_{call_id}": pyarrow_schema.remove_metadata(),
+        f"pyarrow_schema_{call_id}": pyarrow_schema_no_meta,
         "index_arr_type": index_arr_type,
         "cpp_table_to_py_table": cpp_table_to_py_table,
         "array_from_cpp_table": array_from_cpp_table,
@@ -948,10 +978,9 @@ def _gen_pq_reader_py(
         "set_table_len": bodo.hiframes.table.set_table_len,
     }
 
-    exec(func_text, glbs, loc_vars)
-    pq_reader_py = loc_vars["pq_reader_py"]
+    pq_reader_py = bodo_exec(func_text, glbs, loc_vars, globals())
 
-    jit_func = numba.njit(pq_reader_py, no_cpython_wrapper=True)
+    jit_func = numba.njit(pq_reader_py, no_cpython_wrapper=True, cache=True)
     return jit_func
 
 

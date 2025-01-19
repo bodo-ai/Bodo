@@ -369,28 +369,30 @@ def box_dict_arr(typ, val, c):
     return np_str_arr_obj
 
 
-@overload(len, no_unliteral=True)
+@overload(len, no_unliteral=True, jit_options={"cache": True})
 def overload_dict_arr_len(A):
     if isinstance(A, DictionaryArrayType):
         return lambda A: len(A._indices)  # pragma: no cover
 
 
-@overload_attribute(DictionaryArrayType, "shape")
+@overload_attribute(DictionaryArrayType, "shape", jit_options={"cache": True})
 def overload_dict_arr_shape(A):
     return lambda A: (len(A._indices),)  # pragma: no cover
 
 
-@overload_attribute(DictionaryArrayType, "ndim")
+@overload_attribute(DictionaryArrayType, "ndim", jit_options={"cache": True})
 def overload_dict_arr_ndim(A):
     return lambda A: 1  # pragma: no cover
 
 
-@overload_attribute(DictionaryArrayType, "size")
+@overload_attribute(DictionaryArrayType, "size", jit_options={"cache": True})
 def overload_dict_arr_size(A):
     return lambda A: len(A._indices)  # pragma: no cover
 
 
-@overload_method(DictionaryArrayType, "tolist", no_unliteral=True)
+@overload_method(
+    DictionaryArrayType, "tolist", no_unliteral=True, jit_options={"cache": True}
+)
 def overload_dict_arr_tolist(A):
     return lambda A: list(A)  # pragma: no cover
 
@@ -401,7 +403,9 @@ overload_method(DictionaryArrayType, "astype", no_unliteral=True)(
 )
 
 
-@overload_method(DictionaryArrayType, "copy", no_unliteral=True)
+@overload_method(
+    DictionaryArrayType, "copy", no_unliteral=True, jit_options={"cache": True}
+)
 def overload_dict_arr_copy(A):
     def copy_impl(A):  # pragma: no cover
         return init_dict_arr(
@@ -415,12 +419,12 @@ def overload_dict_arr_copy(A):
     return copy_impl
 
 
-@overload_attribute(DictionaryArrayType, "dtype")
+@overload_attribute(DictionaryArrayType, "dtype", jit_options={"cache": True})
 def overload_dict_arr_dtype(A):
     return lambda A: A._data.dtype  # pragma: no cover
 
 
-@overload_attribute(DictionaryArrayType, "nbytes")
+@overload_attribute(DictionaryArrayType, "nbytes", jit_options={"cache": True})
 def dict_arr_nbytes_overload(A):
     return lambda A: A._data.nbytes + A._indices.nbytes  # pragma: no cover
 
@@ -466,7 +470,7 @@ def lower_constant_dict_arr(context, builder, typ, pyval):
     return dict_array
 
 
-@overload(operator.getitem, no_unliteral=True)
+@overload(operator.getitem, no_unliteral=True, jit_options={"cache": True})
 def dict_arr_getitem(A, ind):
     if not isinstance(A, DictionaryArrayType):
         return
@@ -493,7 +497,9 @@ def dict_arr_getitem(A, ind):
     )  # pragma: no cover
 
 
-@overload_method(DictionaryArrayType, "_decode", no_unliteral=True)
+@overload_method(
+    DictionaryArrayType, "_decode", no_unliteral=True, jit_options={"cache": True}
+)
 def overload_dict_arr_decode(A):
     """decode dictionary encoded array to a regular string array.
     Used as a fallback when dict array is not supported yet.
@@ -526,7 +532,7 @@ def overload_dict_arr_decode(A):
     return impl
 
 
-@overload(operator.setitem)
+@overload(operator.setitem, jit_options={"cache": True})
 def dict_arr_setitem(A, idx, val):
     if not isinstance(A, DictionaryArrayType):
         return
@@ -702,7 +708,7 @@ def convert_dict_arr_to_int(arr, dtype):  # pragma: no cover
     return arr
 
 
-@overload(convert_dict_arr_to_int)
+@overload(convert_dict_arr_to_int, jit_options={"cache": True})
 def convert_dict_arr_to_int_overload(arr, dtype):
     """convert dictionary array to integer array without materializing all strings"""
 
@@ -795,7 +801,7 @@ def unset_dict_global(arr):  # pragma: no cover
     pass
 
 
-@overload(unset_dict_global)
+@overload(unset_dict_global, jit_options={"cache": True})
 def overload_unset_global_dict(arr):
     """Unset global dictionary flag if input is a dictionary-encoded array"""
     if arr != dict_str_arr_type:

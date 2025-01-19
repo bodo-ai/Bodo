@@ -105,14 +105,18 @@ from bodo.utils.typing import (
 )
 
 
-@overload_attribute(HeterogeneousSeriesType, "index", inline="always")
-@overload_attribute(SeriesType, "index", inline="always")
+@overload_attribute(
+    HeterogeneousSeriesType, "index", inline="always", jit_options={"cache": True}
+)
+@overload_attribute(SeriesType, "index", inline="always", jit_options={"cache": True})
 def overload_series_index(s):
     return lambda s: bodo.hiframes.pd_series_ext.get_series_index(s)  # pragma: no cover
 
 
-@overload_attribute(HeterogeneousSeriesType, "values", inline="always")
-@overload_attribute(SeriesType, "values", inline="always")
+@overload_attribute(
+    HeterogeneousSeriesType, "values", inline="always", jit_options={"cache": True}
+)
+@overload_attribute(SeriesType, "values", inline="always", jit_options={"cache": True})
 def overload_series_values(s):
     # Series.values returns the underlying dt64 array for tz-aware series
     if isinstance(s.data, bodo.DatetimeArrayType):
@@ -126,7 +130,7 @@ def overload_series_values(s):
     return lambda s: bodo.hiframes.pd_series_ext.get_series_data(s)  # pragma: no cover
 
 
-@overload_attribute(SeriesType, "dtype", inline="always")
+@overload_attribute(SeriesType, "dtype", inline="always", jit_options={"cache": True})
 def overload_series_dtype(s):
     # TODO: check other dtypes like tuple, etc.
     if s.dtype == bodo.string_type:
@@ -137,59 +141,65 @@ def overload_series_dtype(s):
     ).dtype  # pragma: no cover
 
 
-@overload_attribute(HeterogeneousSeriesType, "shape")
-@overload_attribute(SeriesType, "shape")
+@overload_attribute(HeterogeneousSeriesType, "shape", jit_options={"cache": True})
+@overload_attribute(SeriesType, "shape", jit_options={"cache": True})
 def overload_series_shape(s):
     return lambda s: (
         len(bodo.hiframes.pd_series_ext.get_series_data(s)),
     )  # pragma: no cover
 
 
-@overload_attribute(HeterogeneousSeriesType, "ndim", inline="always")
-@overload_attribute(SeriesType, "ndim", inline="always")
+@overload_attribute(
+    HeterogeneousSeriesType, "ndim", inline="always", jit_options={"cache": True}
+)
+@overload_attribute(SeriesType, "ndim", inline="always", jit_options={"cache": True})
 def overload_series_ndim(s):
     return lambda s: 1  # pragma: no cover
 
 
-@overload_attribute(HeterogeneousSeriesType, "size")
-@overload_attribute(SeriesType, "size")
+@overload_attribute(HeterogeneousSeriesType, "size", jit_options={"cache": True})
+@overload_attribute(SeriesType, "size", jit_options={"cache": True})
 def overload_series_size(s):
     return lambda s: len(
         bodo.hiframes.pd_series_ext.get_series_data(s)
     )  # pragma: no cover
 
 
-@overload_attribute(HeterogeneousSeriesType, "T", inline="always")
-@overload_attribute(SeriesType, "T", inline="always")
+@overload_attribute(
+    HeterogeneousSeriesType, "T", inline="always", jit_options={"cache": True}
+)
+@overload_attribute(SeriesType, "T", inline="always", jit_options={"cache": True})
 def overload_series_T(s):
     return lambda s: s  # pragma: no cover
 
 
-@overload_attribute(SeriesType, "hasnans", inline="always")
+@overload_attribute(SeriesType, "hasnans", inline="always", jit_options={"cache": True})
 def overload_series_hasnans(s):
     return lambda s: s.isna().sum() != 0  # pragma: no cover
 
 
-@overload_attribute(HeterogeneousSeriesType, "empty")
-@overload_attribute(SeriesType, "empty")
+@overload_attribute(HeterogeneousSeriesType, "empty", jit_options={"cache": True})
+@overload_attribute(SeriesType, "empty", jit_options={"cache": True})
 def overload_series_empty(s):
     return (
         lambda s: len(bodo.hiframes.pd_series_ext.get_series_data(s)) == 0
     )  # pragma: no cover
 
 
-@overload_attribute(SeriesType, "dtypes", inline="always")
+@overload_attribute(SeriesType, "dtypes", inline="always", jit_options={"cache": True})
 def overload_series_dtypes(s):
     return lambda s: s.dtype  # pragma: no cover
 
 
-@overload_attribute(HeterogeneousSeriesType, "name", inline="always")
-@overload_attribute(SeriesType, "name", inline="always")
+@overload_attribute(
+    HeterogeneousSeriesType, "name", inline="always", jit_options={"cache": True}
+)
+@overload_attribute(SeriesType, "name", inline="always", jit_options={"cache": True})
 def overload_series_name(s):
     return lambda s: bodo.hiframes.pd_series_ext.get_series_name(s)  # pragma: no cover
 
 
-@overload(len, no_unliteral=True)
+@overload(len, no_unliteral=True, jit_options={"cache": True})
 def overload_series_len(S):
     if isinstance(S, (SeriesType, HeterogeneousSeriesType)):
         return lambda S: len(
@@ -197,7 +207,9 @@ def overload_series_len(S):
         )  # pragma: no cover
 
 
-@overload_method(SeriesType, "copy", inline="always", no_unliteral=True)
+@overload_method(
+    SeriesType, "copy", inline="always", no_unliteral=True, jit_options={"cache": True}
+)
 def overload_series_copy(S, deep=True):
     # TODO: test all Series data types
     # XXX specialized kinds until branch pruning is tested and working well
@@ -232,8 +244,8 @@ def overload_series_copy(S, deep=True):
     return impl
 
 
-@overload_method(SeriesType, "to_list", no_unliteral=True)
-@overload_method(SeriesType, "tolist", no_unliteral=True)
+@overload_method(SeriesType, "to_list", no_unliteral=True, jit_options={"cache": True})
+@overload_method(SeriesType, "tolist", no_unliteral=True, jit_options={"cache": True})
 def overload_series_to_list(S):
     # TODO: test all Series data types
     if isinstance(S.dtype, types.Float):
@@ -261,7 +273,13 @@ def overload_series_to_list(S):
     return impl
 
 
-@overload_method(SeriesType, "to_numpy", inline="always", no_unliteral=True)
+@overload_method(
+    SeriesType,
+    "to_numpy",
+    inline="always",
+    no_unliteral=True,
+    jit_options={"cache": True},
+)
 def overload_series_to_numpy(S, dtype=None, copy=False, na_value=None):
     unsupported_args = {"dtype": dtype, "copy": copy, "na_value": na_value}
     arg_defaults = {"dtype": None, "copy": False, "na_value": None}
@@ -279,7 +297,13 @@ def overload_series_to_numpy(S, dtype=None, copy=False, na_value=None):
     return impl
 
 
-@overload_method(SeriesType, "reset_index", inline="always", no_unliteral=True)
+@overload_method(
+    SeriesType,
+    "reset_index",
+    inline="always",
+    no_unliteral=True,
+    jit_options={"cache": True},
+)
 def overload_series_reset_index(S, level=None, drop=False, name=None, inplace=False):
     """overload for Series.reset_index(). Note that it requires the series'
     name and index name to be literal values, and so will only currently
@@ -348,7 +372,7 @@ def overload_series_reset_index(S, level=None, drop=False, name=None, inplace=Fa
     columns = list(index_names)
     columns.append(series_name)
 
-    func_text = "def _impl(S, level=None, drop=False, name=None, inplace=False):\n"
+    func_text = "def bodo_series_reset_index(S, level=None, drop=False, name=None, inplace=False):\n"
     func_text += "    arr = bodo.hiframes.pd_series_ext.get_series_data(S)\n"
     func_text += "    index = bodo.hiframes.pd_series_ext.get_series_index(S)\n"
     if isinstance(S.index, bodo.hiframes.pd_multi_index_ext.MultiIndexType):
@@ -359,8 +383,7 @@ def overload_series_reset_index(S, level=None, drop=False, name=None, inplace=Fa
         )
     func_text += "    df_index = bodo.hiframes.pd_index_ext.init_range_index(0, len(S), 1, None)\n"
     func_text += f"    return bodo.hiframes.pd_dataframe_ext.init_dataframe(({ind_arrs}, arr), df_index, __col_name_meta_value_series_reset_index)\n"
-    loc_vars = {}
-    exec(
+    return bodo.utils.utils.bodo_exec(
         func_text,
         {
             "bodo": bodo,
@@ -368,14 +391,21 @@ def overload_series_reset_index(S, level=None, drop=False, name=None, inplace=Fa
                 tuple(columns)
             ),
         },
-        loc_vars,
+        {},
+        globals(),
     )
-    _impl = loc_vars["_impl"]
-    return _impl
 
 
-@overload_method(SeriesType, "isna", inline="always", no_unliteral=True)
-@overload_method(SeriesType, "isnull", inline="always", no_unliteral=True)
+@overload_method(
+    SeriesType, "isna", inline="always", no_unliteral=True, jit_options={"cache": True}
+)
+@overload_method(
+    SeriesType,
+    "isnull",
+    inline="always",
+    no_unliteral=True,
+    jit_options={"cache": True},
+)
 def overload_series_isna(S):
     # TODO: series that have different underlying data type than dtype
     # like records/tuples
@@ -389,7 +419,9 @@ def overload_series_isna(S):
     return impl
 
 
-@overload_method(SeriesType, "round", inline="always", no_unliteral=True)
+@overload_method(
+    SeriesType, "round", inline="always", no_unliteral=True, jit_options={"cache": True}
+)
 def overload_series_round(S, decimals=0):
     def impl(S, decimals=0):  # pragma: no cover
         arr = bodo.hiframes.pd_series_ext.get_series_data(S)
@@ -410,7 +442,9 @@ def overload_series_round(S, decimals=0):
     return impl
 
 
-@overload_method(SeriesType, "sum", inline="always", no_unliteral=True)
+@overload_method(
+    SeriesType, "sum", inline="always", no_unliteral=True, jit_options={"cache": True}
+)
 def overload_series_sum(
     S, axis=None, skipna=True, level=None, numeric_only=None, min_count=0
 ):
@@ -442,8 +476,16 @@ def overload_series_sum(
     return impl
 
 
-@overload_method(SeriesType, "prod", inline="always", no_unliteral=True)
-@overload_method(SeriesType, "product", inline="always", no_unliteral=True)
+@overload_method(
+    SeriesType, "prod", inline="always", no_unliteral=True, jit_options={"cache": True}
+)
+@overload_method(
+    SeriesType,
+    "product",
+    inline="always",
+    no_unliteral=True,
+    jit_options={"cache": True},
+)
 def overload_series_prod(
     S, axis=None, skipna=True, level=None, numeric_only=None, min_count=0
 ):
@@ -482,6 +524,7 @@ def overload_series_prod(
     compatibility""",
     changed_defaults={"bool_only"},
     inline="always",
+    jit_options={"cache": True},
     no_unliteral=True,
 )
 def overload_series_any(S, axis=0, bool_only=None, skipna=True):
@@ -492,7 +535,13 @@ def overload_series_any(S, axis=0, bool_only=None, skipna=True):
     return impl
 
 
-@overload_method(SeriesType, "equals", inline="always", no_unliteral=True)
+@overload_method(
+    SeriesType,
+    "equals",
+    inline="always",
+    no_unliteral=True,
+    jit_options={"cache": True},
+)
 def overload_series_equals(S, other):
     if not isinstance(other, SeriesType):
         raise BodoError("Series.equals() 'other' must be a Series")
@@ -538,7 +587,9 @@ def overload_series_equals(S, other):
     return impl
 
 
-@overload_method(SeriesType, "all", inline="always", no_unliteral=True)
+@overload_method(
+    SeriesType, "all", inline="always", no_unliteral=True, jit_options={"cache": True}
+)
 def overload_series_all(S, axis=0, bool_only=None, skipna=True, level=None):
     unsupported_args = {
         "axis": axis,
@@ -562,7 +613,9 @@ def overload_series_all(S, axis=0, bool_only=None, skipna=True, level=None):
     return impl
 
 
-@overload_method(SeriesType, "mean", inline="always", no_unliteral=True)
+@overload_method(
+    SeriesType, "mean", inline="always", no_unliteral=True, jit_options={"cache": True}
+)
 def overload_series_mean(S, axis=None, skipna=None, level=None, numeric_only=None):
     # Mean is supported for integer, float, datetime, and boolean Series
     if not isinstance(S.dtype, (types.Number)) and S.dtype not in [
@@ -592,7 +645,9 @@ def overload_series_mean(S, axis=None, skipna=None, level=None, numeric_only=Non
     return impl
 
 
-@overload_method(SeriesType, "sem", inline="always", no_unliteral=True)
+@overload_method(
+    SeriesType, "sem", inline="always", no_unliteral=True, jit_options={"cache": True}
+)
 def overload_series_sem(
     S, axis=None, skipna=True, level=None, ddof=1, numeric_only=None
 ):
@@ -645,8 +700,16 @@ def overload_series_sem(
 # Formula for Kurtosis is available at
 # https://en.wikipedia.org/wiki/Kurtosis
 # Precise formula taken from ./pandas/core/nanops.py [nankurt]
-@overload_method(SeriesType, "kurt", inline="always", no_unliteral=True)
-@overload_method(SeriesType, "kurtosis", inline="always", no_unliteral=True)
+@overload_method(
+    SeriesType, "kurt", inline="always", no_unliteral=True, jit_options={"cache": True}
+)
+@overload_method(
+    SeriesType,
+    "kurtosis",
+    inline="always",
+    no_unliteral=True,
+    jit_options={"cache": True},
+)
 def overload_series_kurt(S, axis=None, skipna=True, level=None, numeric_only=None):
     unsupported_args = {"level": level, "numeric_only": numeric_only}
     arg_defaults = {"level": None, "numeric_only": None}
@@ -696,7 +759,9 @@ def overload_series_kurt(S, axis=None, skipna=True, level=None, numeric_only=Non
 # Formula for skewness is available at
 # https://en.wikipedia.org/wiki/Skewness
 # Precise formula taken from ./pandas/core/nanops.py [nanskew]
-@overload_method(SeriesType, "skew", inline="always", no_unliteral=True)
+@overload_method(
+    SeriesType, "skew", inline="always", no_unliteral=True, jit_options={"cache": True}
+)
 def overload_series_skew(S, axis=None, skipna=True, level=None, numeric_only=None):
     unsupported_args = {"level": level, "numeric_only": numeric_only}
     arg_defaults = {"level": None, "numeric_only": None}
@@ -741,7 +806,9 @@ def overload_series_skew(S, axis=None, skipna=True, level=None, numeric_only=Non
     return impl
 
 
-@overload_method(SeriesType, "var", inline="always", no_unliteral=True)
+@overload_method(
+    SeriesType, "var", inline="always", no_unliteral=True, jit_options={"cache": True}
+)
 def overload_series_var(
     S, axis=None, skipna=True, level=None, ddof=1, numeric_only=None
 ):
@@ -773,7 +840,9 @@ def overload_series_var(
     return impl
 
 
-@overload_method(SeriesType, "std", inline="always", no_unliteral=True)
+@overload_method(
+    SeriesType, "std", inline="always", no_unliteral=True, jit_options={"cache": True}
+)
 def overload_series_std(
     S, axis=None, skipna=True, level=None, ddof=1, numeric_only=None
 ):
@@ -805,7 +874,9 @@ def overload_series_std(
     return impl
 
 
-@overload_method(SeriesType, "dot", inline="always", no_unliteral=True)
+@overload_method(
+    SeriesType, "dot", inline="always", no_unliteral=True, jit_options={"cache": True}
+)
 def overload_series_dot(S, other):
     def impl(S, other):  # pragma: no cover
         A1 = bodo.hiframes.pd_series_ext.get_series_data(S)
@@ -822,7 +893,13 @@ def overload_series_dot(S, other):
     return impl
 
 
-@overload_method(SeriesType, "cumsum", inline="always", no_unliteral=True)
+@overload_method(
+    SeriesType,
+    "cumsum",
+    inline="always",
+    no_unliteral=True,
+    jit_options={"cache": True},
+)
 def overload_series_cumsum(S, axis=None, skipna=True):
     unsupported_args = {"skipna": skipna}
     arg_defaults = {"skipna": True}
@@ -849,7 +926,13 @@ def overload_series_cumsum(S, axis=None, skipna=True):
     return impl
 
 
-@overload_method(SeriesType, "cumprod", inline="always", no_unliteral=True)
+@overload_method(
+    SeriesType,
+    "cumprod",
+    inline="always",
+    no_unliteral=True,
+    jit_options={"cache": True},
+)
 def overload_series_cumprod(S, axis=None, skipna=True):
     unsupported_args = {"skipna": skipna}
     arg_defaults = {"skipna": True}
@@ -876,7 +959,13 @@ def overload_series_cumprod(S, axis=None, skipna=True):
     return impl
 
 
-@overload_method(SeriesType, "cummin", inline="always", no_unliteral=True)
+@overload_method(
+    SeriesType,
+    "cummin",
+    inline="always",
+    no_unliteral=True,
+    jit_options={"cache": True},
+)
 def overload_series_cummin(S, axis=None, skipna=True):
     unsupported_args = {"skipna": skipna}
     arg_defaults = {"skipna": True}
@@ -903,7 +992,13 @@ def overload_series_cummin(S, axis=None, skipna=True):
     return impl
 
 
-@overload_method(SeriesType, "cummax", inline="always", no_unliteral=True)
+@overload_method(
+    SeriesType,
+    "cummax",
+    inline="always",
+    no_unliteral=True,
+    jit_options={"cache": True},
+)
 def overload_series_cummax(S, axis=None, skipna=True):
     unsupported_args = {"skipna": skipna}
     arg_defaults = {"skipna": True}
@@ -931,7 +1026,13 @@ def overload_series_cummax(S, axis=None, skipna=True):
     return impl
 
 
-@overload_method(SeriesType, "rename", inline="always", no_unliteral=True)
+@overload_method(
+    SeriesType,
+    "rename",
+    inline="always",
+    no_unliteral=True,
+    jit_options={"cache": True},
+)
 def overload_series_rename(
     S, index=None, axis=None, copy=True, inplace=False, level=None, errors="ignore"
 ):
@@ -971,7 +1072,13 @@ def overload_series_rename(
     return impl
 
 
-@overload_method(SeriesType, "rename_axis", inline="always", no_unliteral=True)
+@overload_method(
+    SeriesType,
+    "rename_axis",
+    inline="always",
+    no_unliteral=True,
+    jit_options={"cache": True},
+)
 def overload_series_rename_axis(
     S, mapper=None, index=None, columns=None, axis=None, copy=True, inplace=False
 ):
@@ -1014,7 +1121,9 @@ def overload_series_rename_axis(
     return impl
 
 
-@overload_method(SeriesType, "abs", inline="always", no_unliteral=True)
+@overload_method(
+    SeriesType, "abs", inline="always", no_unliteral=True, jit_options={"cache": True}
+)
 def overload_series_abs(S):
     out_arr_type = S.data
 
@@ -1036,7 +1145,7 @@ def overload_series_abs(S):
     return impl
 
 
-@overload_method(SeriesType, "count", no_unliteral=True)
+@overload_method(SeriesType, "count", no_unliteral=True, jit_options={"cache": True})
 def overload_series_count(S, level=None):
     unsupported_args = {"level": level}
     arg_defaults = {"level": None}
@@ -1055,7 +1164,9 @@ def overload_series_count(S, level=None):
     return impl
 
 
-@overload_method(SeriesType, "corr", inline="always", no_unliteral=True)
+@overload_method(
+    SeriesType, "corr", inline="always", no_unliteral=True, jit_options={"cache": True}
+)
 def overload_series_corr(S, other, method="pearson", min_periods=None):
     unsupported_args = {"method": method, "min_periods": min_periods}
     arg_defaults = {"method": "pearson", "min_periods": None}
@@ -1083,7 +1194,9 @@ def overload_series_corr(S, other, method="pearson", min_periods=None):
     return impl
 
 
-@overload_method(SeriesType, "cov", inline="always", no_unliteral=True)
+@overload_method(
+    SeriesType, "cov", inline="always", no_unliteral=True, jit_options={"cache": True}
+)
 def overload_series_cov(S, other, min_periods=None, ddof=1):
     unsupported_args = {"min_periods": min_periods}
     arg_defaults = {"min_periods": None}
@@ -1115,7 +1228,7 @@ def _series_cov_helper(sum_val, N, nonzero_len):  # pragma: no cover
     return
 
 
-@overload(_series_cov_helper, no_unliteral=True)
+@overload(_series_cov_helper, no_unliteral=True, jit_options={"cache": True})
 def _overload_series_cov_helper(sum_val, N, nonzero_len):
     def impl(sum_val, N, nonzero_len):  # pragma: no cover
         if not nonzero_len:
@@ -1132,7 +1245,9 @@ def _overload_series_cov_helper(sum_val, N, nonzero_len):
     return impl
 
 
-@overload_method(SeriesType, "min", inline="always", no_unliteral=True)
+@overload_method(
+    SeriesType, "min", inline="always", no_unliteral=True, jit_options={"cache": True}
+)
 def overload_series_min(S, axis=None, skipna=None, level=None, numeric_only=None):
     unsupported_args = {"skipna": skipna, "level": level, "numeric_only": numeric_only}
     arg_defaults = {"skipna": None, "level": None, "numeric_only": None}
@@ -1176,7 +1291,7 @@ def overload_series_min(S, axis=None, skipna=None, level=None, numeric_only=None
 
 # inlining manually instead of inline="always" since Numba's max overload for iterables
 # causes confusion for the inliner. TODO(ehsan): fix Numba's bug
-@overload(max, no_unliteral=True)
+@overload(max, no_unliteral=True, jit_options={"cache": True})
 def overload_series_builtins_max(S):
     if isinstance(S, SeriesType):
 
@@ -1186,7 +1301,7 @@ def overload_series_builtins_max(S):
         return impl
 
 
-@overload(min, no_unliteral=True)
+@overload(min, no_unliteral=True, jit_options={"cache": True})
 def overload_series_builtins_min(S):
     if isinstance(S, SeriesType):
 
@@ -1196,7 +1311,7 @@ def overload_series_builtins_min(S):
         return impl
 
 
-@overload(sum, no_unliteral=True)
+@overload(sum, no_unliteral=True, jit_options={"cache": True})
 def overload_series_builtins_sum(S):
     if isinstance(S, SeriesType):
 
@@ -1206,7 +1321,7 @@ def overload_series_builtins_sum(S):
         return impl
 
 
-@overload(np.prod, inline="always", no_unliteral=True)
+@overload(np.prod, inline="always", no_unliteral=True, jit_options={"cache": True})
 def overload_series_np_prod(S):
     if isinstance(S, SeriesType):
 
@@ -1216,7 +1331,9 @@ def overload_series_np_prod(S):
         return impl
 
 
-@overload_method(SeriesType, "max", inline="always", no_unliteral=True)
+@overload_method(
+    SeriesType, "max", inline="always", no_unliteral=True, jit_options={"cache": True}
+)
 def overload_series_max(S, axis=None, skipna=None, level=None, numeric_only=None):
     unsupported_args = {"skipna": skipna, "level": level, "numeric_only": numeric_only}
     arg_defaults = {"skipna": None, "level": None, "numeric_only": None}
@@ -1258,7 +1375,13 @@ def overload_series_max(S, axis=None, skipna=None, level=None, numeric_only=None
     return impl
 
 
-@overload_method(SeriesType, "idxmin", inline="always", no_unliteral=True)
+@overload_method(
+    SeriesType,
+    "idxmin",
+    inline="always",
+    no_unliteral=True,
+    jit_options={"cache": True},
+)
 def overload_series_idxmin(S, axis=0, skipna=True):
     unsupported_args = {"axis": axis, "skipna": skipna}
     arg_defaults = {"axis": 0, "skipna": True}
@@ -1311,7 +1434,13 @@ def overload_series_idxmin(S, axis=0, skipna=True):
     return impl
 
 
-@overload_method(SeriesType, "idxmax", inline="always", no_unliteral=True)
+@overload_method(
+    SeriesType,
+    "idxmax",
+    inline="always",
+    no_unliteral=True,
+    jit_options={"cache": True},
+)
 def overload_series_idxmax(S, axis=0, skipna=True):
     unsupported_args = {"axis": axis, "skipna": skipna}
     arg_defaults = {"axis": 0, "skipna": True}
@@ -1411,7 +1540,13 @@ def check_argmax_min_args(func_name, S):
         raise BodoError(f"Series.{func_name}(): only ordered categoricals are possible")
 
 
-@overload_method(SeriesType, "argmin", inline="always", no_unliteral=True)
+@overload_method(
+    SeriesType,
+    "argmin",
+    inline="always",
+    no_unliteral=True,
+    jit_options={"cache": True},
+)
 def overload_series_argmin(S, axis=None, skipna=True):
     unsupported_args = {"axis": axis, "skipna": skipna}
     arg_defaults = {"axis": None, "skipna": True}
@@ -1440,7 +1575,13 @@ def overload_series_argmin(S, axis=None, skipna=True):
     return impl
 
 
-@overload_method(SeriesType, "argmax", inline="always", no_unliteral=True)
+@overload_method(
+    SeriesType,
+    "argmax",
+    inline="always",
+    no_unliteral=True,
+    jit_options={"cache": True},
+)
 def overload_series_argmax(S, axis=None, skipna=True):
     unsupported_args = {"axis": axis, "skipna": skipna}
     arg_defaults = {"axis": None, "skipna": True}
@@ -1469,7 +1610,9 @@ def overload_series_argmax(S, axis=None, skipna=True):
     return impl
 
 
-@overload_method(SeriesType, "infer_objects", inline="always")
+@overload_method(
+    SeriesType, "infer_objects", inline="always", jit_options={"cache": True}
+)
 def overload_series_infer_objects(S):
     """
     Performs deep copy as per pandas FrameOrSeries infer_objects() implementation:
@@ -1479,21 +1622,25 @@ def overload_series_infer_objects(S):
     return lambda S: S.copy()  # pragma: no cover
 
 
-@overload_attribute(SeriesType, "is_monotonic_increasing", inline="always")
+@overload_attribute(
+    SeriesType, "is_monotonic_increasing", inline="always", jit_options={"cache": True}
+)
 def overload_series_is_monotonic_increasing(S):
     return lambda S: bodo.libs.array_kernels.series_monotonicity(
         bodo.hiframes.pd_series_ext.get_series_data(S), 1
     )
 
 
-@overload_attribute(SeriesType, "is_monotonic_decreasing", inline="always")
+@overload_attribute(
+    SeriesType, "is_monotonic_decreasing", inline="always", jit_options={"cache": True}
+)
 def overload_series_is_monotonic_decreasing(S):
     return lambda S: bodo.libs.array_kernels.series_monotonicity(
         bodo.hiframes.pd_series_ext.get_series_data(S), 2
     )
 
 
-@overload_attribute(SeriesType, "nbytes", inline="always")
+@overload_attribute(SeriesType, "nbytes", inline="always", jit_options={"cache": True})
 def overload_series_nbytes(S):
     """Support Series.nbytes. It returns nbytes for data only (without index)"""
     return lambda S: bodo.hiframes.pd_series_ext.get_series_data(
@@ -1501,14 +1648,26 @@ def overload_series_nbytes(S):
     ).nbytes  # pragma: no cover
 
 
-@overload_method(SeriesType, "autocorr", inline="always", no_unliteral=True)
+@overload_method(
+    SeriesType,
+    "autocorr",
+    inline="always",
+    no_unliteral=True,
+    jit_options={"cache": True},
+)
 def overload_series_autocorr(S, lag=1):
     return lambda S, lag=1: bodo.libs.array_kernels.autocorr(
         bodo.hiframes.pd_series_ext.get_series_data(S), lag
     )
 
 
-@overload_method(SeriesType, "median", inline="always", no_unliteral=True)
+@overload_method(
+    SeriesType,
+    "median",
+    inline="always",
+    no_unliteral=True,
+    jit_options={"cache": True},
+)
 def overload_series_median(S, axis=None, skipna=True, level=None, numeric_only=None):
     unsupported_args = {"level": level, "numeric_only": numeric_only}
     arg_defaults = {"level": None, "numeric_only": None}
@@ -1550,7 +1709,9 @@ def overload_series_head(S, n=5):
     return impl
 
 
-@overload_method(SeriesType, "clip", inline="always", no_unliteral=True)
+@overload_method(
+    SeriesType, "clip", inline="always", no_unliteral=True, jit_options={"cache": True}
+)
 def overload_series_clip(
     S,
     lower=None,
@@ -1716,7 +1877,9 @@ def tail_slice(k, n):
     return -n
 
 
-@overload_method(SeriesType, "tail", inline="always", no_unliteral=True)
+@overload_method(
+    SeriesType, "tail", inline="always", no_unliteral=True, jit_options={"cache": True}
+)
 def overload_series_tail(S, n=5):
     # n must be an integer for indexing.
     if not is_overload_int(n):
@@ -1734,7 +1897,9 @@ def overload_series_tail(S, n=5):
     return impl
 
 
-@overload_method(SeriesType, "first", inline="always", no_unliteral=True)
+@overload_method(
+    SeriesType, "first", inline="always", no_unliteral=True, jit_options={"cache": True}
+)
 def overload_series_first(S, offset):
     supp_types = (
         types.unicode_type,
@@ -1765,7 +1930,9 @@ def overload_series_first(S, offset):
     return impl
 
 
-@overload_method(SeriesType, "last", inline="always", no_unliteral=True)
+@overload_method(
+    SeriesType, "last", inline="always", no_unliteral=True, jit_options={"cache": True}
+)
 def overload_series_last(S, offset):
     supp_types = (
         types.unicode_type,
@@ -1796,7 +1963,13 @@ def overload_series_last(S, offset):
     return impl
 
 
-@overload_method(SeriesType, "first_valid_index", inline="always", no_unliteral=True)
+@overload_method(
+    SeriesType,
+    "first_valid_index",
+    inline="always",
+    no_unliteral=True,
+    jit_options={"cache": True},
+)
 def overload_series_first_valid_index(S):
     def impl(S):  # pragma: no cover
         arr = bodo.hiframes.pd_series_ext.get_series_data(S)
@@ -1810,7 +1983,13 @@ def overload_series_first_valid_index(S):
     return impl
 
 
-@overload_method(SeriesType, "last_valid_index", inline="always", no_unliteral=True)
+@overload_method(
+    SeriesType,
+    "last_valid_index",
+    inline="always",
+    no_unliteral=True,
+    jit_options={"cache": True},
+)
 def overload_series_last_valid_index(S):
     def impl(S):  # pragma: no cover
         arr = bodo.hiframes.pd_series_ext.get_series_data(S)
@@ -1824,7 +2003,13 @@ def overload_series_last_valid_index(S):
     return impl
 
 
-@overload_method(SeriesType, "nlargest", inline="always", no_unliteral=True)
+@overload_method(
+    SeriesType,
+    "nlargest",
+    inline="always",
+    no_unliteral=True,
+    jit_options={"cache": True},
+)
 def overload_series_nlargest(S, n=5, keep="first"):
     # TODO: cache implementation
     # TODO: strings, categoricals
@@ -1859,7 +2044,13 @@ def overload_series_nlargest(S, n=5, keep="first"):
     return impl
 
 
-@overload_method(SeriesType, "nsmallest", inline="always", no_unliteral=True)
+@overload_method(
+    SeriesType,
+    "nsmallest",
+    inline="always",
+    no_unliteral=True,
+    jit_options={"cache": True},
+)
 def overload_series_nsmallest(S, n=5, keep="first"):
     # TODO: cache implementation
 
@@ -1893,15 +2084,33 @@ def overload_series_nsmallest(S, n=5, keep="first"):
     return impl
 
 
-@overload_method(SeriesType, "notnull", inline="always", no_unliteral=True)
-@overload_method(SeriesType, "notna", inline="always", no_unliteral=True)
+@overload_method(
+    SeriesType,
+    "notnull",
+    inline="always",
+    no_unliteral=True,
+    jit_options={"cache": True},
+)
+@overload_method(
+    SeriesType, "notna", inline="always", no_unliteral=True, jit_options={"cache": True}
+)
 def overload_series_notna(S):
     # TODO: make sure this is fused and optimized properly
     return lambda S: S.isna() == False
 
 
-@overload_method(SeriesType, "astype", inline="always", no_unliteral=True)
-@overload_method(HeterogeneousSeriesType, "astype", inline="always", no_unliteral=True)
+@overload_method(
+    SeriesType,
+    "astype",
+    inline="always",
+    no_unliteral=True,
+)
+@overload_method(
+    HeterogeneousSeriesType,
+    "astype",
+    inline="always",
+    no_unliteral=True,
+)
 def overload_series_astype(S, dtype, copy=True, errors="raise", _bodo_nan_to_str=True):
     unsupported_args = {"errors": errors}
     arg_defaults = {"errors": "raise"}
@@ -1934,7 +2143,9 @@ def overload_series_astype(S, dtype, copy=True, errors="raise", _bodo_nan_to_str
     return impl
 
 
-@overload_method(SeriesType, "take", inline="always", no_unliteral=True)
+@overload_method(
+    SeriesType, "take", inline="always", no_unliteral=True, jit_options={"cache": True}
+)
 def overload_series_take(S, indices, axis=0, is_copy=True):
     # TODO: Pandas accepts but ignores additional kwargs from Numpy
     # https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.Series.take.html
@@ -1969,7 +2180,13 @@ def overload_series_take(S, indices, axis=0, is_copy=True):
     return impl
 
 
-@overload_method(SeriesType, "argsort", inline="always", no_unliteral=True)
+@overload_method(
+    SeriesType,
+    "argsort",
+    inline="always",
+    no_unliteral=True,
+    jit_options={"cache": True},
+)
 def overload_series_argsort(S, axis=0, kind="quicksort", order=None):
     # TODO: categorical, etc.
     # TODO: optimize the if path of known to be no NaNs (e.g. after fillna)
@@ -2000,7 +2217,9 @@ def overload_series_argsort(S, axis=0, kind="quicksort", order=None):
     return impl
 
 
-@overload_method(SeriesType, "rank", inline="always", no_unliteral=True)
+@overload_method(
+    SeriesType, "rank", inline="always", no_unliteral=True, jit_options={"cache": True}
+)
 def overload_series_rank(
     S,
     axis=0,
@@ -2053,7 +2272,13 @@ def overload_series_rank(
     return impl
 
 
-@overload_method(SeriesType, "sort_index", inline="always", no_unliteral=True)
+@overload_method(
+    SeriesType,
+    "sort_index",
+    inline="always",
+    no_unliteral=True,
+    jit_options={"cache": True},
+)
 def overload_series_sort_index(
     S,
     axis=0,
@@ -2138,7 +2363,13 @@ def overload_series_sort_index(
     return impl
 
 
-@overload_method(SeriesType, "sort_values", inline="always", no_unliteral=True)
+@overload_method(
+    SeriesType,
+    "sort_values",
+    inline="always",
+    no_unliteral=True,
+    jit_options={"cache": True},
+)
 def overload_series_sort_values(
     S,
     axis=0,
@@ -2220,7 +2451,7 @@ def get_bin_inds(bins, arr):  # pragma: no cover
     return arr
 
 
-@overload(get_bin_inds, inline="always", no_unliteral=True)
+@overload(get_bin_inds, inline="always", no_unliteral=True, jit_options={"cache": True})
 def overload_get_bin_inds(bins, arr, is_nullable=True, include_lowest=True):
     """get bin indices for values in array. equivalent to Pandas code here:
     https://github.com/pandas-dev/pandas/blob/ee18cb5b19357776deffa434a3b9a552fe50af32/pandas/core/reshape/tile.py#L421-L426
@@ -2232,7 +2463,9 @@ def overload_get_bin_inds(bins, arr, is_nullable=True, include_lowest=True):
     assert is_overload_constant_bool(is_nullable)
     gen_nullable = is_overload_true(is_nullable)
 
-    func_text = "def impl(bins, arr, is_nullable=True, include_lowest=True):\n"
+    func_text = (
+        "def bodo_get_bin_inds(bins, arr, is_nullable=True, include_lowest=True):\n"
+    )
     func_text += "  numba.parfors.parfor.init_prange()\n"
     func_text += "  n = len(arr)\n"
     if gen_nullable:
@@ -2261,14 +2494,12 @@ def overload_get_bin_inds(bins, arr, is_nullable=True, include_lowest=True):
     func_text += "      out_arr[i] = ind - 1\n"
     func_text += "  return out_arr\n"
 
-    loc_vars = {}
-    exec(
+    return bodo.utils.utils.bodo_exec(
         func_text,
         {"bodo": bodo, "np": np, "numba": numba},
-        loc_vars,
+        {},
+        globals(),
     )
-    impl = loc_vars["impl"]
-    return impl
 
 
 # copied from Pandas with minor modification:
@@ -2310,7 +2541,7 @@ def get_bin_labels(bins):  # pragma: no cover
     pass
 
 
-@overload(get_bin_labels, no_unliteral=True)
+@overload(get_bin_labels, no_unliteral=True, jit_options={"cache": True})
 def overload_get_bin_labels(bins, right=True, include_lowest=True):
     """
     Get labels from bins. Equivalent to Pandas code here:
@@ -2358,7 +2589,7 @@ def get_output_bin_counts(count_series, nbins):  # pragma: no cover
     pass
 
 
-@overload(get_output_bin_counts, no_unliteral=True)
+@overload(get_output_bin_counts, no_unliteral=True, jit_options={"cache": True})
 def overload_get_output_bin_counts(count_series, nbins):
     """
     Get output bin counts from value counts. Needs special handling since some bins
@@ -2383,7 +2614,7 @@ def compute_bins(nbins, min_val, max_val):
     pass
 
 
-@overload(compute_bins, no_unliteral=True)
+@overload(compute_bins, no_unliteral=True, jit_options={"cache": True})
 def overload_compute_bins(nbins, min_val, max_val, right=True):
     """compute bin boundaries from number of bins and min/max of dataset values. See:
     https://github.com/pandas-dev/pandas/blob/ee18cb5b19357776deffa434a3b9a552fe50af32/pandas/core/reshape/tile.py#L239
@@ -2415,7 +2646,13 @@ def overload_compute_bins(nbins, min_val, max_val, right=True):
     return impl
 
 
-@overload_method(SeriesType, "value_counts", inline="always", no_unliteral=True)
+@overload_method(
+    SeriesType,
+    "value_counts",
+    inline="always",
+    no_unliteral=True,
+    jit_options={"cache": True},
+)
 def overload_series_value_counts(
     S,
     normalize=False,
@@ -2453,7 +2690,7 @@ def overload_series_value_counts(
 
     # reusing aggregate/count
     # TODO(ehsan): write optimized implementation
-    func_text = "def impl(\n"
+    func_text = "def bodo_series_value_counts(\n"
     func_text += "    S,\n"
     func_text += "    normalize=False,\n"
     func_text += "    sort=True,\n"
@@ -2506,8 +2743,7 @@ def overload_series_value_counts(
         func_text += f"    res = res / float({size_str})\n"
     func_text += "    return res\n"
 
-    loc_vars = {}
-    exec(
+    return bodo.utils.utils.bodo_exec(
         func_text,
         {
             "bodo": bodo,
@@ -2521,10 +2757,9 @@ def overload_series_value_counts(
                 ("$_bodo_col2_",)
             ),
         },
-        loc_vars,
+        {},
+        globals(),
     )
-    impl = loc_vars["impl"]
-    return impl
 
 
 def _gen_bins_handling(bins, dtype):
@@ -2552,7 +2787,7 @@ def _gen_bins_handling(bins, dtype):
     return func_text
 
 
-@overload(pd.cut, inline="always", no_unliteral=True)
+@overload(pd.cut, inline="always", no_unliteral=True, jit_options={"cache": True})
 def overload_cut(
     x,
     bins,
@@ -2592,7 +2827,7 @@ def overload_cut(
     bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(x, "pandas.cut()")
 
     # TODO(ehsan): some helper functions support 'right' but more work is needed
-    func_text = "def impl(\n"
+    func_text = "def bodo_cut(\n"
     func_text += "    x,\n"
     func_text += "    bins,\n"
     func_text += "    right=True,\n"
@@ -2633,8 +2868,7 @@ def overload_cut(
     else:
         func_text += "    return out_arr\n"
 
-    loc_vars = {}
-    exec(
+    return bodo.utils.utils.bodo_exec(
         func_text,
         {
             "bodo": bodo,
@@ -2645,17 +2879,16 @@ def overload_cut(
             "get_output_bin_counts": get_output_bin_counts,
             "compute_bins": compute_bins,
         },
-        loc_vars,
+        {},
+        globals(),
     )
-    impl = loc_vars["impl"]
-    return impl
 
 
 def _get_q_list(q):  # pragma: no cover
     return q
 
 
-@overload(_get_q_list, no_unliteral=True)
+@overload(_get_q_list, no_unliteral=True, jit_options={"cache": True})
 def get_q_list_overload(q):
     """return an array of equally spaced quantiles between 0 and 1 if 'q' is integer"""
     if is_overload_int(q):
@@ -2664,7 +2897,7 @@ def get_q_list_overload(q):
     return lambda q: q  # pragma: no cover
 
 
-@overload(pd.unique, inline="always", no_unliteral=True)
+@overload(pd.unique, inline="always", no_unliteral=True, jit_options={"cache": True})
 def overload_unique(values):
     # TODO: accept values of list and index types
 
@@ -2687,7 +2920,7 @@ def overload_unique(values):
         )  # pragma: no cover
 
 
-@overload(pd.qcut, inline="always", no_unliteral=True)
+@overload(pd.qcut, inline="always", no_unliteral=True, jit_options={"cache": True})
 def overload_qcut(
     x,
     q,
@@ -2737,7 +2970,13 @@ def overload_qcut(
     return impl
 
 
-@overload_method(SeriesType, "groupby", inline="always", no_unliteral=True)
+@overload_method(
+    SeriesType,
+    "groupby",
+    inline="always",
+    no_unliteral=True,
+    jit_options={"cache": True},
+)
 def overload_series_groupby(
     S,
     by=None,
@@ -2875,7 +3114,9 @@ def overload_series_groupby(
     return impl
 
 
-@overload_method(SeriesType, "isin", inline="always", no_unliteral=True)
+@overload_method(
+    SeriesType, "isin", inline="always", no_unliteral=True, jit_options={"cache": True}
+)
 def overload_series_isin(S, values):
     # if input is Series or array, special implementation is necessary since it may
     # require hash-based shuffling of both inputs for parallelization
@@ -2907,7 +3148,13 @@ def overload_series_isin(S, values):
     return impl
 
 
-@overload_method(SeriesType, "quantile", inline="always", no_unliteral=True)
+@overload_method(
+    SeriesType,
+    "quantile",
+    inline="always",
+    no_unliteral=True,
+    jit_options={"cache": True},
+)
 def overload_series_quantile(S, q=0.5, interpolation="linear"):
     unsupported_args = {"interpolation": interpolation}
     arg_defaults = {"interpolation": "linear"}
@@ -2946,7 +3193,13 @@ def overload_series_quantile(S, q=0.5, interpolation="linear"):
         )
 
 
-@overload_method(SeriesType, "nunique", inline="always", no_unliteral=True)
+@overload_method(
+    SeriesType,
+    "nunique",
+    inline="always",
+    no_unliteral=True,
+    jit_options={"cache": True},
+)
 def overload_series_nunique(S, dropna=True):
     if not is_overload_bool(dropna):
         raise BodoError("Series.nunique: dropna must be a boolean value")
@@ -2958,7 +3211,13 @@ def overload_series_nunique(S, dropna=True):
     return impl
 
 
-@overload_method(SeriesType, "unique", inline="always", no_unliteral=True)
+@overload_method(
+    SeriesType,
+    "unique",
+    inline="always",
+    no_unliteral=True,
+    jit_options={"cache": True},
+)
 def overload_series_unique(S):
     # TODO: refactor, support dt64
     def impl(S):  # pragma: no cover
@@ -2969,7 +3228,13 @@ def overload_series_unique(S):
     return impl
 
 
-@overload_method(SeriesType, "describe", inline="always", no_unliteral=True)
+@overload_method(
+    SeriesType,
+    "describe",
+    inline="always",
+    no_unliteral=True,
+    jit_options={"cache": True},
+)
 def overload_series_describe(S, percentiles=None, include=None, exclude=None):
     """
     Support S.describe with numeric and datetime column.
@@ -3039,7 +3304,13 @@ def overload_series_describe(S, percentiles=None, include=None, exclude=None):
     return impl
 
 
-@overload_method(SeriesType, "memory_usage", inline="always", no_unliteral=True)
+@overload_method(
+    SeriesType,
+    "memory_usage",
+    inline="always",
+    no_unliteral=True,
+    jit_options={"cache": True},
+)
 def overload_series_memory_usage(S, index=True, deep=False):
     """
     Support S.memory_usage by getting nbytes from underlying array
@@ -3077,7 +3348,7 @@ def binary_str_fillna_inplace_series_impl(is_binary=False):
 
     func_text = "\n".join(
         (
-            "def impl(",
+            "def bodo_binary_str_fillna_inplace_series(",
             "    S,",
             "    value=None,",
             "    method=None,",
@@ -3103,18 +3374,15 @@ def binary_str_fillna_inplace_series_impl(is_binary=False):
         )
     )
 
-    locs = {}
-    exec(
+    return bodo.utils.utils.bodo_exec(
         func_text,
         {
             "bodo": bodo,
             "numba": numba,
         },
-        locs,
+        {},
+        globals(),
     )
-    f = locs["impl"]
-
-    return f
 
 
 # Since string/binary arrays can't be changed, we have to create a new
@@ -3127,7 +3395,7 @@ def binary_str_fillna_inplace_impl(is_binary=False):
     else:
         alloc_fn = "bodo.libs.str_arr_ext.pre_alloc_string_array"
 
-    func_text = "def impl(S,\n"
+    func_text = "def bodo_binary_str_fillna_inplace(S,\n"
     func_text += "     value=None,\n"
     func_text += "    method=None,\n"
     func_text += "    axis=None,\n"
@@ -3147,18 +3415,15 @@ def binary_str_fillna_inplace_impl(is_binary=False):
         "    bodo.libs.str_arr_ext.move_str_binary_arr_payload(in_arr, out_arr)\n"
     )
 
-    locs = {}
-    exec(
+    return bodo.utils.utils.bodo_exec(
         func_text,
         {
             "bodo": bodo,
             "numba": numba,
         },
-        locs,
+        {},
+        globals(),
     )
-    f = locs["impl"]
-
-    return f
 
 
 def fillna_inplace_series_impl(
@@ -3254,7 +3519,7 @@ def fillna_series_impl(
     return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
 
-@overload_method(SeriesType, "fillna", no_unliteral=True)
+@overload_method(SeriesType, "fillna", no_unliteral=True, jit_options={"cache": True})
 def overload_series_fillna(
     S, value=None, method=None, axis=None, inplace=False, limit=None, downcast=None
 ):
@@ -3584,7 +3849,13 @@ def series_replace_error_checking(S, to_replace, value, inplace, limit, regex, m
     check_unsupported_types(S, to_replace, value)
 
 
-@overload_method(SeriesType, "replace", inline="always", no_unliteral=True)
+@overload_method(
+    SeriesType,
+    "replace",
+    inline="always",
+    no_unliteral=True,
+    jit_options={"cache": True},
+)
 def overload_series_replace(
     S,
     to_replace=None,
@@ -3725,7 +3996,7 @@ def build_replace_dict(to_replace, value, key_dtype_conv):
     pass
 
 
-@overload(build_replace_dict)
+@overload(build_replace_dict, jit_options={"cache": True})
 def _build_replace_dict(to_replace, value, key_dtype_conv):
     # TODO: replace with something that captures all scalars
     is_scalar_replace = isinstance(
@@ -3816,7 +4087,9 @@ def _build_replace_dict(to_replace, value, key_dtype_conv):
     # List, List case
 
 
-@overload_method(SeriesType, "diff", inline="always", no_unliteral=True)
+@overload_method(
+    SeriesType, "diff", inline="always", no_unliteral=True, jit_options={"cache": True}
+)
 def overload_series_diff(S, periods=1):
     """Series.diff() support which is the same as S - S.shift(periods)"""
 
@@ -3861,7 +4134,13 @@ def overload_series_diff(S, periods=1):
     return impl
 
 
-@overload_method(SeriesType, "explode", inline="always", no_unliteral=True)
+@overload_method(
+    SeriesType,
+    "explode",
+    inline="always",
+    no_unliteral=True,
+    jit_options={"cache": True},
+)
 def overload_series_explode(S, ignore_index=False):
     from bodo.hiframes.split_impl import string_array_split_view_type
 
@@ -3893,7 +4172,7 @@ def overload_series_explode(S, ignore_index=False):
     return impl
 
 
-@overload(np.digitize, inline="always", no_unliteral=True)
+@overload(np.digitize, inline="always", no_unliteral=True, jit_options={"cache": True})
 def overload_series_np_digitize(x, bins, right=False):
     # TODO [BE-2453]: Better errorchecking in general?
     bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(x, "numpy.digitize()")
@@ -3908,7 +4187,7 @@ def overload_series_np_digitize(x, bins, right=False):
         return impl
 
 
-@overload(np.argmax, inline="always", no_unliteral=True)
+@overload(np.argmax, inline="always", no_unliteral=True, jit_options={"cache": True})
 def argmax_overload(a, axis=None, out=None):
     if (
         isinstance(a, types.Array)
@@ -3927,7 +4206,7 @@ def argmax_overload(a, axis=None, out=None):
         return impl
 
 
-@overload(np.argmin, inline="always", no_unliteral=True)
+@overload(np.argmin, inline="always", no_unliteral=True, jit_options={"cache": True})
 def argmin_overload(a, axis=None, out=None):
     if (
         isinstance(a, types.Array)
@@ -3994,7 +4273,13 @@ overload(np.dot, inline="always", no_unliteral=True)(overload_series_np_dot)
 overload(operator.matmul, inline="always", no_unliteral=True)(overload_series_np_dot)
 
 
-@overload_method(SeriesType, "dropna", inline="always", no_unliteral=True)
+@overload_method(
+    SeriesType,
+    "dropna",
+    inline="always",
+    no_unliteral=True,
+    jit_options={"cache": True},
+)
 def overload_series_dropna(S, axis=0, inplace=False, how=None):
     unsupported_args = {"axis": axis, "inplace": inplace, "how": how}
     default_args = {"axis": 0, "inplace": False, "how": None}
@@ -4034,7 +4319,9 @@ def overload_series_dropna(S, axis=0, inplace=False, how=None):
         return dropna_impl
 
 
-@overload_method(SeriesType, "shift", inline="always", no_unliteral=True)
+@overload_method(
+    SeriesType, "shift", inline="always", no_unliteral=True, jit_options={"cache": True}
+)
 def overload_series_shift(S, periods=1, freq=None, axis=0, fill_value=None):
     unsupported_args = {"freq": freq, "axis": axis}
     arg_defaults = {"freq": None, "axis": 0}
@@ -4069,7 +4356,13 @@ def overload_series_shift(S, periods=1, freq=None, axis=0, fill_value=None):
     return impl
 
 
-@overload_method(SeriesType, "pct_change", inline="always", no_unliteral=True)
+@overload_method(
+    SeriesType,
+    "pct_change",
+    inline="always",
+    no_unliteral=True,
+    jit_options={"cache": True},
+)
 def overload_series_pct_change(S, periods=1, fill_method="pad", limit=None, freq=None):
     unsupported_args = {"fill_method": fill_method, "limit": limit, "freq": freq}
     arg_defaults = {"fill_method": "pad", "limit": None, "freq": None}
@@ -4133,7 +4426,7 @@ def create_series_mask_where_overload(func_name):
         else:
             other_str = "other"
 
-        func_text = "def impl(S, cond, other=np.nan, inplace=False, axis=None, level=None, errors='raise',try_cast=False):\n"
+        func_text = "def bodo_series_mask_where(S, cond, other=np.nan, inplace=False, axis=None, level=None, errors='raise',try_cast=False):\n"
         if func_name == "mask":
             # if Series.mask, same functionality as Series.where except condition is inverted.
             func_text += "  cond = ~cond\n"
@@ -4144,11 +4437,9 @@ def create_series_mask_where_overload(func_name):
         func_text += (
             "  return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)\n"
         )
-        loc_vars = {}
-        exec(func_text, {"bodo": bodo, "np": np}, loc_vars)
-        impl = loc_vars["impl"]
-
-        return impl
+        return bodo.utils.utils.bodo_exec(
+            func_text, {"bodo": bodo, "np": np}, {}, globals()
+        )
 
     return overload_series_mask_where
 
@@ -4811,7 +5102,7 @@ def dt64_arr_sub(arg1, arg2):  # pragma: no cover
     return arg1 - arg2
 
 
-@overload(dt64_arr_sub, no_unliteral=True)
+@overload(dt64_arr_sub, no_unliteral=True, jit_options={"cache": True})
 def overload_dt64_arr_sub(arg1, arg2):
     assert arg1 == types.Array(bodo.datetime64ns, 1, "C") and arg2 == types.Array(
         bodo.datetime64ns, 1, "C"
@@ -4961,7 +5252,7 @@ def argsort(A):  # pragma: no cover
     return np.argsort(A)
 
 
-@overload(argsort, no_unliteral=True)
+@overload(argsort, no_unliteral=True, jit_options={"cache": True})
 def overload_argsort(A):
     def impl(A):  # pragma: no cover
         n = len(A)
@@ -4973,7 +5264,9 @@ def overload_argsort(A):
     return impl
 
 
-@overload(pd.to_numeric, inline="always", no_unliteral=True)
+@overload(
+    pd.to_numeric, inline="always", no_unliteral=True, jit_options={"cache": True}
+)
 def overload_to_numeric(arg_a, errors="raise", downcast=None):
     """pd.to_numeric() converts input to a numeric type determined dynamically, but we
     use the 'downcast' as type annotation (instead of downcasting the dynamic type).
@@ -5072,7 +5365,7 @@ def where_impl_one_arg(c):  # pragma: no cover
     return np.where(c)
 
 
-@overload(where_impl_one_arg, no_unliteral=True)
+@overload(where_impl_one_arg, no_unliteral=True, jit_options={"cache": True})
 def overload_where_unsupported_one_arg(condition):
     if isinstance(condition, SeriesType) or bodo.utils.utils.is_array_typ(
         condition, False
@@ -5107,7 +5400,7 @@ def where_impl(c, x, y):
     return np.where(c, x, y)
 
 
-@overload(where_impl, no_unliteral=True)
+@overload(where_impl, no_unliteral=True, jit_options={"cache": True})
 def overload_where_unsupported(condition, x, y):
     if (
         not isinstance(condition, (SeriesType, types.Array, BooleanArrayType))
@@ -5116,8 +5409,8 @@ def overload_where_unsupported(condition, x, y):
         return lambda condition, x, y: np.where(condition, x, y)  # pragma: no cover
 
 
-@overload(where_impl, no_unliteral=True)
-@overload(np.where, no_unliteral=True)
+@overload(where_impl, no_unliteral=True, jit_options={"cache": True})
+@overload(np.where, no_unliteral=True, jit_options={"cache": True})
 def overload_np_where(condition, x, y):
     """
     Implement parallelizable np.where() for Series and 1D arrays.
@@ -5137,7 +5430,7 @@ def overload_np_where(condition, x, y):
     is_x_arr = bodo.utils.utils.is_array_typ(x, True)
     is_y_arr = bodo.utils.utils.is_array_typ(y, True)
 
-    func_text = "def _impl(condition, x, y):\n"
+    func_text = "def bodo_np_where(condition, x, y):\n"
     # get array data of Series inputs
     if isinstance(condition, SeriesType):
         func_text += (
@@ -5265,8 +5558,7 @@ def overload_np_where(condition, x, y):
             "y[j]" if is_y_arr else "y"
         )
     func_text += "  return out_arr\n"
-    loc_vars = {}
-    exec(
+    return bodo.utils.utils.bodo_exec(
         func_text,
         {
             "bodo": bodo,
@@ -5275,10 +5567,9 @@ def overload_np_where(condition, x, y):
             "np": np,
             "out_dtype": out_dtype,
         },
-        loc_vars,
+        {},
+        globals(),
     )
-    _impl = loc_vars["_impl"]
-    return _impl
 
 
 def _verify_np_select_arg_typs(condlist, choicelist, default):
@@ -5386,7 +5677,7 @@ def _verify_np_select_arg_typs(condlist, choicelist, default):
         )
 
 
-@overload(np.select)
+@overload(np.select, jit_options={"cache": True})
 def overload_np_select(condlist, choicelist, default=0):
     _verify_np_select_arg_typs(condlist, choicelist, default)
 
@@ -5458,7 +5749,7 @@ def overload_np_select(condlist, choicelist, default=0):
             default_is_na = True
             alloc_typ = to_nullable_type(alloc_typ)
 
-    func_text = "def np_select_impl(condlist, choicelist, default=0):\n"
+    func_text = "def bodo_np_select(condlist, choicelist, default=0):\n"
     func_text += "  if len(condlist) != len(choicelist):\n"
     func_text += "    raise ValueError('list of cases must be same length as list of conditions')\n"
     func_text += "  output_len = len(choicelist[0])\n"
@@ -5492,8 +5783,7 @@ def overload_np_select(condlist, choicelist, default=0):
             func_text += "  out = np.where(cond, choice, out)\n"
     func_text += "  return out"
 
-    loc_vars = {}
-    exec(
+    return bodo.utils.utils.bodo_exec(
         func_text,
         {
             "bodo": bodo,
@@ -5502,13 +5792,18 @@ def overload_np_select(condlist, choicelist, default=0):
             "np": np,
             "alloc_typ": alloc_typ,
         },
-        loc_vars,
+        {},
+        globals(),
     )
-    impl = loc_vars["np_select_impl"]
-    return impl
 
 
-@overload_method(SeriesType, "duplicated", inline="always", no_unliteral=True)
+@overload_method(
+    SeriesType,
+    "duplicated",
+    inline="always",
+    no_unliteral=True,
+    jit_options={"cache": True},
+)
 def overload_series_duplicated(S, keep="first"):
     """
     Support for Series.duplicated()
@@ -5524,7 +5819,13 @@ def overload_series_duplicated(S, keep="first"):
     return impl
 
 
-@overload_method(SeriesType, "drop_duplicates", inline="always", no_unliteral=True)
+@overload_method(
+    SeriesType,
+    "drop_duplicates",
+    inline="always",
+    no_unliteral=True,
+    jit_options={"cache": True},
+)
 def overload_series_drop_duplicates(S, subset=None, keep="first", inplace=False):
     # TODO: support inplace
     unsupported_args = {"subset": subset, "inplace": inplace}
@@ -5574,7 +5875,13 @@ def overload_series_drop_duplicates(S, subset=None, keep="first", inplace=False)
     return impl
 
 
-@overload_method(SeriesType, "between", inline="always", no_unliteral=True)
+@overload_method(
+    SeriesType,
+    "between",
+    inline="always",
+    no_unliteral=True,
+    jit_options={"cache": True},
+)
 def overload_series_between(S, left, right, inclusive="both"):
     series_scalar_type = element_type(S.data)
     # TODO: Update check to check comparison <
@@ -5619,7 +5926,13 @@ def overload_series_between(S, left, right, inclusive="both"):
     return impl
 
 
-@overload_method(SeriesType, "repeat", inline="always", no_unliteral=True)
+@overload_method(
+    SeriesType,
+    "repeat",
+    inline="always",
+    no_unliteral=True,
+    jit_options={"cache": True},
+)
 def overload_series_repeat(S, repeats, axis=None):
     unsupported_args = {"axis": axis}
     arg_defaults = {"axis": None}
@@ -5677,7 +5990,7 @@ def overload_series_repeat(S, repeats, axis=None):
     return impl_arr
 
 
-@overload_method(SeriesType, "to_dict", no_unliteral=True)
+@overload_method(SeriesType, "to_dict", no_unliteral=True, jit_options={"cache": True})
 def overload_to_dict(S, into=None):
     """Support Series.to_dict()."""
 
@@ -5699,7 +6012,13 @@ def overload_to_dict(S, into=None):
     return impl
 
 
-@overload_method(SeriesType, "to_frame", inline="always", no_unliteral=True)
+@overload_method(
+    SeriesType,
+    "to_frame",
+    inline="always",
+    no_unliteral=True,
+    jit_options={"cache": True},
+)
 def overload_series_to_frame(S, name=None):
     """Support Series.to_frame(). Series name should be constant if name not provided."""
     err_msg = "Series.to_frame(): output column name should be known at compile time. Set 'name' to a constant value."
@@ -5731,7 +6050,9 @@ def overload_series_to_frame(S, name=None):
     return impl
 
 
-@overload_method(SeriesType, "keys", inline="always", no_unliteral=True)
+@overload_method(
+    SeriesType, "keys", inline="always", no_unliteral=True, jit_options={"cache": True}
+)
 def overload_series_keys(S):
     def impl(S):  # pragma: no cover
         return bodo.hiframes.pd_series_ext.get_series_index(S)

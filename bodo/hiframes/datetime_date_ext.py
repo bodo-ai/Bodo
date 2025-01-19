@@ -450,7 +450,7 @@ def fromordinal_impl(n):  # pragma: no cover
 
 
 # TODO: support general string formatting
-@numba.njit
+@numba.njit(cache=True)
 def str_2d(a):  # pragma: no cover
     """Takes in a number representing an date/time unit and formats it as a
     2 character string, adding a leading zero if necessary."""
@@ -865,7 +865,7 @@ def lower_constant_datetime_date_arr(context, builder, typ, pyval):
     return lir.Constant.literal_struct([data_const_arr, nulls_const_arr])
 
 
-@numba.njit(no_cpython_wrapper=True)
+@numba.njit(cache=True, no_cpython_wrapper=True)
 def alloc_datetime_date_array(n):  # pragma: no cover
     data_arr = np.empty(n, dtype=np.int32)
     # XXX: set all bits to not null since datetime.date array operations do not support
