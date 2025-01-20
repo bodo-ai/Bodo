@@ -526,6 +526,11 @@ class DistributedAnalysisCallRegistry:
                 "init_interval_index",
                 "bodo.hiframes.pd_index_ext",
             ): meet_out_first_arg_analysis,
+            ("get_table_data", "bodo.hiframes.table"): meet_out_first_arg_analysis,
+            (
+                "compute_split_view",
+                "bodo.hiframes.split_impl",
+            ): meet_out_first_arg_analysis,
         }
 
     def analyze_call(self, ctx, inst, fdef):

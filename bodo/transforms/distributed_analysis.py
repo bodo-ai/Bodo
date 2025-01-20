@@ -2588,10 +2588,6 @@ class DistributedAnalysis:
             _set_var_dist(self.typemap, in_df, array_dists, min_dist)
             return
 
-        if fdef == ("get_table_data", "bodo.hiframes.table"):
-            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
-            return
-
         if fdef == ("logical_table_to_table", "bodo.hiframes.table"):
             if lhs not in array_dists:
                 _set_var_dist(self.typemap, lhs, array_dists, Distribution.OneD, False)
@@ -2638,10 +2634,6 @@ class DistributedAnalysis:
                 "DataFrame column names is REP",
                 rhs.loc,
             )
-            return
-
-        if fdef == ("compute_split_view", "bodo.hiframes.split_impl"):
-            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
             return
 
         if fdef == ("get_split_view_index", "bodo.hiframes.split_impl"):
