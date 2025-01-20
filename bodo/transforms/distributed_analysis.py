@@ -1881,26 +1881,6 @@ class DistributedAnalysis:
             _set_var_dist(self.typemap, lhs, array_dists, in_dist)
             return
 
-        if fdef in (
-            (
-                "_table_to_tuple_format_decoded",
-                "bodo.hiframes.pd_dataframe_ext",
-            ),
-            (
-                "_tuple_to_table_format_decoded",
-                "bodo.hiframes.pd_dataframe_ext",
-            ),
-        ):
-            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
-            return
-
-        if fdef == (
-            "pandas_string_array_to_timedelta",
-            "bodo.hiframes.pd_timestamp_ext",
-        ):
-            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
-            return
-
         if fdef == ("nonzero", "bodo.libs.array_kernels"):
             # output of nonzero is variable-length even if input is 1D
             if lhs not in array_dists:

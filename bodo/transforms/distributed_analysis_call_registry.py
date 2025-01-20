@@ -441,6 +441,18 @@ class DistributedAnalysisCallRegistry:
                 "pandas_dict_string_array_to_datetime",
                 "bodo.hiframes.pd_timestamp_ext",
             ): meet_out_first_arg_analysis,
+            (
+                "_table_to_tuple_format_decoded",
+                "bodo.hiframes.pd_dataframe_ext",
+            ): meet_out_first_arg_analysis,
+            (
+                "_tuple_to_table_format_decoded",
+                "bodo.hiframes.pd_dataframe_ext",
+            ): meet_out_first_arg_analysis,
+            (
+                "pandas_string_array_to_timedelta",
+                "bodo.hiframes.pd_timestamp_ext",
+            ): meet_out_first_arg_analysis,
         }
 
     def analyze_call(self, ctx, inst, fdef):
