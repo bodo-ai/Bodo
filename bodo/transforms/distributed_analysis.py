@@ -2290,20 +2290,6 @@ class DistributedAnalysis:
             _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
             return
 
-        if func_mod == "bodo.libs.int_arr_ext" and func_name in (
-            "get_int_arr_data",
-            "get_int_arr_bitmap",
-        ):
-            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
-            return
-
-        if func_mod == "bodo.libs.float_arr_ext" and func_name in (
-            "get_float_arr_data",
-            "get_float_arr_bitmap",
-        ):
-            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
-            return
-
         if func_mod == "bodo.hiframes.pd_categorical_ext" and func_name in (
             "get_categorical_arr_codes",
         ):

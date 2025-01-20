@@ -467,6 +467,19 @@ class DistributedAnalysisCallRegistry:
                 "range_index_to_numeric",
                 "bodo.hiframes.pd_index_ext",
             ): meet_out_first_arg_analysis,
+            ("get_int_arr_data", "bodo.libs.int_arr_ext"): meet_out_first_arg_analysis,
+            (
+                "get_int_arr_bitmap",
+                "bodo.libs.int_arr_ext",
+            ): meet_out_first_arg_analysis,
+            (
+                "get_float_arr_data",
+                "bodo.libs.float_arr_ext",
+            ): meet_out_first_arg_analysis,
+            (
+                "get_float_arr_bitmap",
+                "bodo.libs.float_arr_ext",
+            ): meet_out_first_arg_analysis,
         }
 
     def analyze_call(self, ctx, inst, fdef):
