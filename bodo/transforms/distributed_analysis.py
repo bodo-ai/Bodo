@@ -2304,14 +2304,6 @@ class DistributedAnalysis:
             )
             return
 
-        if fdef == ("decode_if_dict_array", "bodo.utils.typing"):
-            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
-            return
-
-        if fdef == ("np_to_nullable_array", "bodo.utils.conversion"):
-            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
-            return
-
         # from flat map pattern: pd.Series(list(itertools.chain(*A)))
         if fdef == ("flatten_array", "bodo.utils.conversion"):
             # output of flatten_array is variable-length even if input is 1D

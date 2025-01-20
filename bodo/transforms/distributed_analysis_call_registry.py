@@ -490,6 +490,11 @@ class DistributedAnalysisCallRegistry:
             # iceberg_merge_cow_py doesn't have a return value
             # or alter the distribution of any input.
             ("iceberg_merge_cow_py", "bodo.io.iceberg"): no_op_analysis,
+            ("decode_if_dict_array", "bodo.utils.typing"): meet_out_first_arg_analysis,
+            (
+                "np_to_nullable_array",
+                "bodo.utils.conversion",
+            ): meet_out_first_arg_analysis,
         }
 
     def analyze_call(self, ctx, inst, fdef):
