@@ -1,3 +1,9 @@
+"""
+A simpler implementation of the Iceberg Java Hadoop Catalog.
+Only supports loading, creating/replacing/appending to tables
+from a directory structure.
+"""
+
 import pyarrow as pa
 from pyiceberg.catalog import (
     WAREHOUSE_LOCATION,

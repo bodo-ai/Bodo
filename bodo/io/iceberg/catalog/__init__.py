@@ -2,7 +2,7 @@
 Helper code for:
 - Constructing Iceberg catalogs from connection strings
 - Additional Iceberg catalogs supported on the Java side
-  but currently with no PyIceberg equivalent
+  but currently have no PyIceberg equivalent
 """
 
 from __future__ import annotations

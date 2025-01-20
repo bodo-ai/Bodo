@@ -1,5 +1,11 @@
+"""
+An implementation of the S3 tables Iceberg catalog.
+Vendored from a PyIceberg PR:
+https://github.com/apache/iceberg-python/pull/1429
+"""
+
 import re
-from typing import TYPE_CHECKING, Union
+import typing as pt
 
 import boto3
 from pyiceberg.catalog import (
@@ -31,7 +37,7 @@ from pyiceberg.table.update import TableRequirement, TableUpdate
 from pyiceberg.typedef import EMPTY_DICT, Identifier, Properties
 from pyiceberg.utils.properties import get_first_property_value
 
-if TYPE_CHECKING:
+if pt.TYPE_CHECKING:
     import pyarrow as pa
 
 S3TABLES_PROFILE_NAME = "s3tables.profile-name"
@@ -168,7 +174,7 @@ class S3TablesCatalog(MetastoreCatalog):
     def create_table_transaction(
         self,
         identifier: str | Identifier,
-        schema: Union[Schema, "pa.Schema"],
+        schema: Schema | pa.Schema,
         location: str | None = None,
         partition_spec: PartitionSpec = UNPARTITIONED_PARTITION_SPEC,
         sort_order: SortOrder = UNSORTED_SORT_ORDER,
@@ -216,7 +222,7 @@ class S3TablesCatalog(MetastoreCatalog):
     def create_table(
         self,
         identifier: str | Identifier,
-        schema: Union[Schema, "pa.Schema"],
+        schema: Schema | pa.Schema,
         location: str | None = None,
         partition_spec: PartitionSpec = UNPARTITIONED_PARTITION_SPEC,
         sort_order: SortOrder = UNSORTED_SORT_ORDER,

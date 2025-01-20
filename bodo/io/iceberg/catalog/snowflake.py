@@ -1,3 +1,10 @@
+"""
+An implementation of the Snowflake-managed Iceberg tables catalog.
+Vendored from a PyIceberg PR:
+https://github.com/apache/iceberg-python/pull/687
+Note that the PR is currently closed and abandoned
+"""
+
 from __future__ import annotations
 
 import json
