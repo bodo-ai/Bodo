@@ -495,6 +495,9 @@ class DistributedAnalysisCallRegistry:
                 "np_to_nullable_array",
                 "bodo.utils.conversion",
             ): meet_out_first_arg_analysis,
+            ("get_arr_lens", "bodo.libs.array_kernels"): meet_out_first_arg_analysis,
+            ("str_split", "bodo.libs.str_ext"): meet_out_first_arg_analysis,
+            ("str_split_empty_n", "bodo.libs.str_ext"): meet_out_first_arg_analysis,
         }
 
     def analyze_call(self, ctx, inst, fdef):

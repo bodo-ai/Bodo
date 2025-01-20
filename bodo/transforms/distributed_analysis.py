@@ -2358,17 +2358,6 @@ class DistributedAnalysis:
             array_dists[rhs.args[1].name] = in_dist
             return
 
-        if fdef == ("get_arr_lens", "bodo.libs.array_kernels"):
-            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
-            return
-
-        if fdef == ("str_split", "bodo.libs.str_ext") or fdef == (
-            "str_split_empty_n",
-            "bodo.libs.str_ext",
-        ):
-            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
-            return
-
         if fdef == ("explode_str_split", "bodo.libs.array_kernels"):
             # output of explode is variable-length even if input is 1D
             if lhs not in array_dists:
