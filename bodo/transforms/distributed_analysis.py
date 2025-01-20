@@ -2277,12 +2277,6 @@ class DistributedAnalysis:
                     _set_var_dist(self.typemap, lhs, array_dists, out_dist)
             return
 
-        if fdef == ("get_series_name", "bodo.hiframes.pd_series_ext"):
-            return
-
-        if fdef == ("get_index_name", "bodo.hiframes.pd_index_ext"):
-            return
-
         if fdef == ("order_range", "bodo.hiframes.pd_index_ext"):
             _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
             return

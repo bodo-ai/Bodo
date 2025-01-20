@@ -460,6 +460,8 @@ class DistributedAnalysisCallRegistry:
             ("str_arr_min_max", "bodo.libs.str_arr_ext"): no_op_analysis,
             ("isna", "bodo.libs.array_kernels"): no_op_analysis,
             ("get_str_arr_str_length", "bodo.libs.str_arr_ext"): no_op_analysis,
+            ("get_series_name", "bodo.hiframes.pd_series_ext"): no_op_analysis,
+            ("get_index_name", "bodo.hiframes.pd_index_ext"): no_op_analysis,
         }
 
     def analyze_call(self, ctx, inst, fdef):
