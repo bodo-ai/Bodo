@@ -16,7 +16,7 @@ This guide describes how to attach a notebook to a cluster to perform computatio
 
 ---
 
-## [Running Jobs][running-batch-jobs]
+## [Running Jobs][running-jobs]
 This guide shows how to run jobs using the Bodo Cloud Platform.
 
 ---
