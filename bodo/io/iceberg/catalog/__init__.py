@@ -1,9 +1,14 @@
+"""
+Helper code for:
+- Constructing Iceberg catalogs from connection strings
+- Additional Iceberg catalogs supported on the Java side
+  but currently with no PyIceberg equivalent
+"""
+
 from __future__ import annotations
 
 import typing as pt
 from urllib.parse import parse_qs, urlparse
-
-from pyiceberg.catalog import URI, WAREHOUSE_LOCATION
 
 if pt.TYPE_CHECKING:  # pragma: no cover
     from pyiceberg.catalog import Catalog
@@ -38,6 +43,8 @@ def validate_conn_str(conn_str: str) -> None:
 
 def conn_str_to_catalog(conn_str: str) -> Catalog:
     """TODO"""
+    from pyiceberg.catalog import URI, WAREHOUSE_LOCATION
+
     validate_conn_str(conn_str)
     parse_res = urlparse(conn_str)
 
@@ -52,7 +59,7 @@ def conn_str_to_catalog(conn_str: str) -> Catalog:
     base_url = (
         f"{parse_res.netloc}{parse_res.path}"
         if parse_res.scheme == "iceberg"
-        else f"{parse_res.scheme.removeprefix("iceberg+")}://{parse_res.netloc}{parse_res.path}"
+        else f"{parse_res.scheme.removeprefix('iceberg+')}://{parse_res.netloc}{parse_res.path}"
     )
 
     catalog: type[Catalog]
