@@ -2685,14 +2685,6 @@ class DistributedAnalysis:
             _meet_array_dists(self.typemap, lhs, in_df_name, array_dists)
             return
 
-        # np.fromfile()
-        if fdef == ("file_read", "bodo.io.np_io"):
-            return
-
-        if fdef == ("array_to_string", "bodosql.kernels"):
-            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
-            return
-
         # str_arr_from_sequence() applies to lists/tuples so output is REP
         # e.g. column names in df.mean()
         if fdef == ("str_arr_from_sequence", "bodo.libs.str_arr_ext"):

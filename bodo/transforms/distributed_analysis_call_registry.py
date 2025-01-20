@@ -551,6 +551,9 @@ class DistributedAnalysisCallRegistry:
             ): meet_out_first_arg_analysis,
             ("array_op_describe", "bodo.libs.array_ops"): no_op_analysis,
             ("array_op_nbytes", "bodo.libs.array_ops"): no_op_analysis,
+            # np.fromfile()
+            ("file_read", "bodo.io.np_io"): no_op_analysis,
+            ("array_to_string", "bodosql.kernels"): meet_out_first_arg_analysis,
         }
 
     def analyze_call(self, ctx, inst, fdef):
