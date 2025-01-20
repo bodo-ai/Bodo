@@ -453,6 +453,11 @@ class DistributedAnalysisCallRegistry:
                 "pandas_string_array_to_timedelta",
                 "bodo.hiframes.pd_timestamp_ext",
             ): meet_out_first_arg_analysis,
+            ("get", "bodo.libs.array_kernels"): meet_out_first_arg_analysis,
+            ("series_monotonicity", "bodo.libs.array_kernels"): no_op_analysis,
+            ("autocorr", "bodo.libs.array_kernels"): no_op_analysis,
+            ("array_op_median", "bodo.libs.array_ops"): no_op_analysis,
+            ("str_arr_min_max", "bodo.libs.str_arr_ext"): no_op_analysis,
         }
 
     def analyze_call(self, ctx, inst, fdef):

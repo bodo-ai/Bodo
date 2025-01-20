@@ -2231,10 +2231,6 @@ class DistributedAnalysis:
                 )
             return
 
-        if fdef == ("get", "bodo.libs.array_kernels"):
-            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
-            return
-
         if fdef == ("nancorr", "bodo.libs.array_kernels"):
             _set_REP(
                 self.typemap,
@@ -2245,18 +2241,6 @@ class DistributedAnalysis:
                 "output of nancorr is REP",
                 rhs.loc,
             )
-            return
-
-        if fdef == ("series_monotonicity", "bodo.libs.array_kernels"):
-            return
-
-        if fdef == ("autocorr", "bodo.libs.array_kernels"):
-            return
-
-        if fdef == ("array_op_median", "bodo.libs.array_ops"):
-            return
-
-        if fdef == ("str_arr_min_max", "bodo.libs.str_arr_ext"):
             return
 
         if fdef in (
