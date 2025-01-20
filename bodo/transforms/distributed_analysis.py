@@ -2380,18 +2380,6 @@ class DistributedAnalysis:
             array_dists[rhs.args[3].name] = in_dist
             return
 
-        if func_mod == "bodo.hiframes.pd_index_ext" and func_name in (
-            "init_numeric_index",
-            "init_binary_str_index",
-            "init_categorical_index",
-            "init_datetime_index",
-            "init_timedelta_index",
-            "init_period_index",
-            "init_interval_index",
-        ):
-            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
-            return
-
         if fdef == ("get_index_data", "bodo.hiframes.pd_index_ext"):
             idx_typ = self.typemap[rhs.args[0].name]
             if isinstance(idx_typ, MultiIndexType):

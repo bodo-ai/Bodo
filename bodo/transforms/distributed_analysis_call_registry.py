@@ -498,6 +498,34 @@ class DistributedAnalysisCallRegistry:
             ("get_arr_lens", "bodo.libs.array_kernels"): meet_out_first_arg_analysis,
             ("str_split", "bodo.libs.str_ext"): meet_out_first_arg_analysis,
             ("str_split_empty_n", "bodo.libs.str_ext"): meet_out_first_arg_analysis,
+            (
+                "init_numeric_index",
+                "bodo.hiframes.pd_index_ext",
+            ): meet_out_first_arg_analysis,
+            (
+                "init_binary_str_index",
+                "bodo.hiframes.pd_index_ext",
+            ): meet_out_first_arg_analysis,
+            (
+                "init_categorical_index",
+                "bodo.hiframes.pd_index_ext",
+            ): meet_out_first_arg_analysis,
+            (
+                "init_datetime_index",
+                "bodo.hiframes.pd_index_ext",
+            ): meet_out_first_arg_analysis,
+            (
+                "init_timedelta_index",
+                "bodo.hiframes.pd_index_ext",
+            ): meet_out_first_arg_analysis,
+            (
+                "init_period_index",
+                "bodo.hiframes.pd_index_ext",
+            ): meet_out_first_arg_analysis,
+            (
+                "init_interval_index",
+                "bodo.hiframes.pd_index_ext",
+            ): meet_out_first_arg_analysis,
         }
 
     def analyze_call(self, ctx, inst, fdef):
