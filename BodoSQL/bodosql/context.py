@@ -441,7 +441,7 @@ def compute_df_types(df_list, is_bodo_type):
                         col_names,
                         col_types,
                         _pyarrow_table_schema,
-                    ) = bodo.io.iceberg.get_iceberg_schema(
+                    ) = bodo.io.iceberg.get_iceberg_orig_schema(
                         iceberg_table_name, pruned_conn_str, db_schema
                     )
                 else:

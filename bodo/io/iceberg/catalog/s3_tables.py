@@ -4,6 +4,8 @@ Vendored from a PyIceberg PR:
 https://github.com/apache/iceberg-python/pull/1429
 """
 
+from __future__ import annotations
+
 import re
 import typing as pt
 
@@ -101,7 +103,7 @@ class S3TablesCatalog(MetastoreCatalog):
             )
         except boto3.session.UnknownServiceError as e:
             raise S3TablesError(
-                "'s3tables' requires boto3>=1.35.74. Current version: {boto3.__version__}."
+                f"'s3tables' requires boto3>=1.35.74. Current version: {boto3.__version__}."
             ) from e
 
         try:

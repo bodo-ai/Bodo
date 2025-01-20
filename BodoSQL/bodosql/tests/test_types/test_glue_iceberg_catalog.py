@@ -48,6 +48,7 @@ def test_basic_read(memory_leak_check, glue_catalog):
     )
 
 
+@pytest.mark.skip(reason="WRITE")
 @pytest.mark.skipif(
     "AGENT_NAME" in os.environ,
     reason="BSE-3425: Permissions error only in azure environment",

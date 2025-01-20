@@ -945,10 +945,13 @@ class IcebergFilterVisitor(FilterVisitor[str]):
             "!=": "NotEqualTo",
             "STARTSWITH": "StartsWith",
             "IS_NULL": "IsNull",
+            "IS_NOT_NULL": "NotNull",
             "IN": "In",
             "OR": "Or",
             "AND": "And",
             "NOT": "Not",
+            "ALWAYS_TRUE": "AlwaysTrue",
+            "ALWAYS_FALSE": "AlwaysFalse",
         }[op_name]
         return f"pie.{op_func}({', '.join(self.visit(x) for x in op.args)})"
 

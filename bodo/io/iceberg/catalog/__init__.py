@@ -7,11 +7,18 @@ Helper code for:
 
 from __future__ import annotations
 
+import os
+import re
 import typing as pt
 from urllib.parse import parse_qs, urlparse
 
 if pt.TYPE_CHECKING:  # pragma: no cover
     from pyiceberg.catalog import Catalog
+
+# iceberg+arn:aws:s3tables:<region>:<account_number>:bucket/<bucket>
+S3_TABLES_PAT = re.compile(
+    r"^iceberg\+arn:aws:s3tables:([a-z0-9-]+):([0-9]+):bucket/([a-z0-9-]+)$"
+)
 
 
 def validate_conn_str(conn_str: str) -> None:
@@ -91,9 +98,23 @@ def conn_str_to_catalog(conn_str: str) -> Catalog:
             catalog = HiveCatalog
             properties[URI] = base_url
         case "iceberg+arn":
-            from .s3_tables import S3TablesCatalog
+            from .s3_tables import (
+                S3TABLES_ACCESS_KEY_ID,
+                S3TABLES_REGION,
+                S3TABLES_SECRET_ACCESS_KEY,
+                S3TABLES_TABLE_BUCKET_ARN,
+                S3TablesCatalog,
+            )
 
             catalog = S3TablesCatalog
+            properties[S3TABLES_TABLE_BUCKET_ARN] = base_url
+
+            parsed = re.match(S3_TABLES_PAT, conn_str)
+            if not parsed:
+                raise ValueError(f"Invalid S3 Tables ARN: {conn_str}")
+            properties[S3TABLES_REGION] = parsed.group(1)
+            properties[S3TABLES_ACCESS_KEY_ID] = os.environ["AWS_ACCESS_KEY_ID"]
+            properties[S3TABLES_SECRET_ACCESS_KEY] = os.environ["AWS_SECRET_ACCESS_KEY"]
         case "iceberg+snowflake":
             from .snowflake import SnowflakeCatalog
 
