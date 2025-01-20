@@ -13,11 +13,6 @@ import time
 import typing as pt
 
 import pyarrow as pa
-from avro.datafile import DataFileReader
-from avro.io import DatumReader
-from pyiceberg.expressions import BooleanExpression
-from pyiceberg.manifest import ManifestContent
-from pyiceberg.table import FileScanTask, Table
 
 import bodo
 import bodo.utils.tracing as tracing
@@ -35,11 +30,18 @@ from bodo.io.iceberg.read_parquet import (
 )
 from bodo.utils.utils import BodoError, run_rank0
 
+if pt.TYPE_CHECKING:  # pragma: no cover
+    from pyiceberg.expressions import BooleanExpression
+    from pyiceberg.table import FileScanTask, Table
+
 
 def _construct_parquet_infos(
     table: Table, tasks: pt.Iterable[FileScanTask]
 ) -> tuple[list[IcebergParquetInfo], int]:
     """TODO"""
+    from avro.datafile import DataFileReader
+    from avro.io import DatumReader
+
     mapper = {}
 
     s = time.monotonic_ns()
@@ -66,12 +68,14 @@ def _construct_parquet_infos(
     ], get_file_to_schema_us // 1000
 
 
-def get_total_num_pq_files_in_table(table: Table) -> int:
+def _get_total_num_pq_files_in_table(table: Table) -> int:
     """
     Returns the total number of Parquet files in the given Iceberg table
     at the current snapshot. Used for logging the # of filtered files.
     Expected to only run on 1 rank
     """
+    from pyiceberg.manifest import ManifestContent
+
     snap = table.current_snapshot()
     assert snap is not None
 
@@ -163,7 +167,7 @@ def get_iceberg_file_list_parallel(
     if bodo.user_logging.get_verbose_level() >= 1 and table and pq_infos:
         # This should never fail given that pq_infos is not None, but just to be safe.
         try:
-            total_num_files = str(get_total_num_pq_files_in_table(table))
+            total_num_files = str(_get_total_num_pq_files_in_table(table))
         except Exception as e:
             total_num_files = (
                 "unknown (error getting total number of files: " + str(e) + ")"
