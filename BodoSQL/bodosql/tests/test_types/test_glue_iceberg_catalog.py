@@ -112,18 +112,14 @@ def test_glue_catalog_iceberg_write(glue_catalog, memory_leak_check):
         exception_occurred_in_test_body = True
         raise e
     finally:
-        if exception_occurred_in_test_body:
-            try:
-                run_rank0(bic.delete_table)(
-                    bodo.io.iceberg.format_iceberg_conn(con_str),
-                    schema,
-                    table_name,
-                )
-            except Exception:
-                pass
-        else:
+        try:
             run_rank0(bic.delete_table)(
                 bodo.io.iceberg.format_iceberg_conn(con_str),
                 schema,
                 table_name,
             )
+        except Exception:
+            if exception_occurred_in_test_body:
+                pass
+            else:
+                raise

@@ -12,7 +12,7 @@ from numba.extending import (
 
 def install_py_obj_class(
     types_name, module, python_type=None, class_name=None, model_name=None
-):
+) -> type[types.Opaque]:
     """
     Helper for generating Python Object types with opaque
     models. This dynamically generates the class,

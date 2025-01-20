@@ -371,21 +371,17 @@ def test_tabular_catalog_iceberg_write(
         exception_occurred_in_test_body = True
         raise e
     finally:
-        if exception_occurred_in_test_body:
-            try:
-                run_rank0(bic.delete_table)(
-                    bodo.io.iceberg.format_iceberg_conn(con_str),
-                    schema,
-                    table_name,
-                )
-            except Exception:
-                pass
-        else:
+        try:
             run_rank0(bic.delete_table)(
                 bodo.io.iceberg.format_iceberg_conn(con_str),
                 schema,
                 table_name,
             )
+        except Exception:
+            if exception_occurred_in_test_body:
+                pass
+            else:
+                raise
 
 
 def test_limit_pushdown(memory_leak_check, tabular_catalog):

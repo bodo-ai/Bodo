@@ -3,10 +3,12 @@ from uuid import uuid4
 import bodo_iceberg_connector as bic
 import numpy as np
 import pandas as pd
+import pyarrow.fs as pa_fs
 import pytest
+from pyiceberg.io.pyarrow import _fs_from_file_path
 
 import bodo
-from bodo.io.iceberg.common import get_rest_catalog_config, get_rest_catalog_fs
+from bodo.io.iceberg.catalog import conn_str_to_catalog
 from bodo.tests.utils import (
     _get_dist_arg,
     check_func,
@@ -50,16 +52,11 @@ def test_iceberg_tabular_read_region_detection(tabular_connection, memory_leak_c
     rest_uri, tabular_warehouse, tabular_credential = tabular_connection
     con_str = get_rest_catalog_connection_string(
         rest_uri, tabular_warehouse, tabular_credential
-    ).removeprefix("iceberg+")
-    _, token, _ = get_rest_catalog_config(con_str)
-
-    @bodo.jit
-    def f():
-        return get_rest_catalog_fs(
-            rest_uri, token, tabular_warehouse, "examples", "nyc_taxi_locations"
-        )
-
-    assert f().region == "us-east-1"
+    )
+    catalog = conn_str_to_catalog(con_str)
+    fs = _fs_from_file_path(tabular_connection, catalog._load_file_io())
+    assert isinstance(fs, pa_fs.S3FileSystem)
+    assert fs.region == "us-east-1"
 
 
 def test_iceberg_tabular_read_credential_refresh(

@@ -23,6 +23,7 @@ requirements:
     - python >=3.10,<3.13
     - openjdk >=9.0,<12
     - py4j ==0.10.9.7
+    - pyiceberg >=0.8,<0.9
 
 about:
 home: https://bodo.ai/
