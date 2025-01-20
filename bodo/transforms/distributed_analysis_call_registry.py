@@ -531,6 +531,26 @@ class DistributedAnalysisCallRegistry:
                 "compute_split_view",
                 "bodo.hiframes.split_impl",
             ): meet_out_first_arg_analysis,
+            # just used in str.get() implementation for now so we know it is
+            # parallel
+            # TODO: handle index similar to getitem to support more cases
+            ("get_split_view_index", "bodo.hiframes.split_impl"): no_op_analysis,
+            ("get_split_view_data_ptr", "bodo.hiframes.split_impl"): no_op_analysis,
+            ("setitem_str_arr_ptr", "bodo.libs.str_arr_ext"): no_op_analysis,
+            ("num_total_chars", "bodo.libs.str_arr_ext"): no_op_analysis,
+            ("inplace_eq", "bodo.libs.str_arr_ext"): no_op_analysis,
+            ("get_str_arr_item_copy", "bodo.libs.str_arr_ext"): no_op_analysis,
+            ("copy_array_element", "bodo.libs.array_kernels"): no_op_analysis,
+            ("str_arr_setitem_int_to_str", "bodo.libs.str_arr_ext"): no_op_analysis,
+            ("str_arr_setitem_NA_str", "bodo.libs.str_arr_ext"): no_op_analysis,
+            ("str_arr_set_not_na", "bodo.libs.str_arr_ext"): no_op_analysis,
+            ("set_null_bits_to_value", "bodo.libs.str_arr_ext"): no_op_analysis,
+            (
+                "str_arr_to_dict_str_arr",
+                "bodo.libs.str_arr_ext",
+            ): meet_out_first_arg_analysis,
+            ("array_op_describe", "bodo.libs.array_ops"): no_op_analysis,
+            ("array_op_nbytes", "bodo.libs.array_ops"): no_op_analysis,
         }
 
     def analyze_call(self, ctx, inst, fdef):

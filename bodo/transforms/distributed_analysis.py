@@ -2636,53 +2636,6 @@ class DistributedAnalysis:
             )
             return
 
-        if fdef == ("get_split_view_index", "bodo.hiframes.split_impl"):
-            # just used in str.get() implementation for now so we know it is
-            # parallel
-            # TODO: handle index similar to getitem to support more cases
-            return
-
-        if fdef == ("get_split_view_data_ptr", "bodo.hiframes.split_impl"):
-            return
-
-        if fdef == ("setitem_str_arr_ptr", "bodo.libs.str_arr_ext"):
-            return
-
-        if fdef == ("num_total_chars", "bodo.libs.str_arr_ext"):
-            return
-
-        if fdef == ("inplace_eq", "bodo.libs.str_arr_ext"):
-            return
-
-        if fdef == ("get_str_arr_item_copy", "bodo.libs.str_arr_ext"):
-            return
-
-        if fdef == ("copy_array_element", "bodo.libs.array_kernels"):
-            return
-
-        if fdef == ("str_arr_setitem_int_to_str", "bodo.libs.str_arr_ext"):
-            return
-
-        if fdef == ("str_arr_setitem_NA_str", "bodo.libs.str_arr_ext"):
-            return
-
-        if fdef == ("str_arr_set_not_na", "bodo.libs.str_arr_ext"):
-            return
-
-        if fdef == ("set_null_bits_to_value", "bodo.libs.str_arr_ext"):
-            return
-
-        if fdef == ("str_arr_to_dict_str_arr", "bodo.libs.str_arr_ext"):
-            # LHS should match RHS
-            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
-            return
-
-        if fdef == ("array_op_describe", "bodo.libs.array_ops"):
-            return
-
-        if fdef == ("array_op_nbytes", "bodo.libs.array_ops"):
-            return
-
         if fdef == ("generate_table_nbytes", "bodo.utils.table_utils"):
             # Arg1 is the output array and is always replicated.
             _set_REP(
