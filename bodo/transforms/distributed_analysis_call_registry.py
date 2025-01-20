@@ -458,6 +458,8 @@ class DistributedAnalysisCallRegistry:
             ("autocorr", "bodo.libs.array_kernels"): no_op_analysis,
             ("array_op_median", "bodo.libs.array_ops"): no_op_analysis,
             ("str_arr_min_max", "bodo.libs.str_arr_ext"): no_op_analysis,
+            ("isna", "bodo.libs.array_kernels"): no_op_analysis,
+            ("get_str_arr_str_length", "bodo.libs.str_arr_ext"): no_op_analysis,
         }
 
     def analyze_call(self, ctx, inst, fdef):

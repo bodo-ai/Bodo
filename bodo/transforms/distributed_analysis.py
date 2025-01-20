@@ -2251,12 +2251,6 @@ class DistributedAnalysis:
             self._analyze_call_concat(lhs, args, array_dists)
             return
 
-        if fdef == ("isna", "bodo.libs.array_kernels"):
-            return
-
-        if fdef == ("get_str_arr_str_length", "bodo.libs.str_arr_ext"):
-            return
-
         if fdef == ("move_str_binary_arr_payload", "bodo.libs.str_arr_ext"):
             _meet_array_dists(
                 self.typemap, rhs.args[0].name, rhs.args[1].name, array_dists
