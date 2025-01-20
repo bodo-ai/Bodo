@@ -161,6 +161,7 @@ numba.core.errors.error_extras = {
 np_alloc_callnames = ("empty", "zeros", "ones", "full")
 
 
+# Internal allocation function names used in analysis and transformation codes
 alloc_calls = {
     ("empty", "numpy"),
     ("zeros", "numpy"),
