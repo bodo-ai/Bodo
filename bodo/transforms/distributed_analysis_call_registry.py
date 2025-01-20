@@ -554,6 +554,9 @@ class DistributedAnalysisCallRegistry:
             # np.fromfile()
             ("file_read", "bodo.io.np_io"): no_op_analysis,
             ("array_to_string", "bodosql.kernels"): meet_out_first_arg_analysis,
+            # TODO: make sure assert_equiv is not generated unnecessarily
+            # TODO: fix assert_equiv for np.stack from df.value
+            ("assert_equiv", "numba.parfors.array_analysis"): no_op_analysis,
         }
 
     def analyze_call(self, ctx, inst, fdef):

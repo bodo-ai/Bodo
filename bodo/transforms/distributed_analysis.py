@@ -2699,11 +2699,6 @@ class DistributedAnalysis:
             )
             return
 
-        # TODO: make sure assert_equiv is not generated unnecessarily
-        # TODO: fix assert_equiv for np.stack from df.value
-        if fdef == ("assert_equiv", "numba.parfors.array_analysis"):
-            return
-
         if fdef == ("_bodo_groupby_apply_impl", ""):
             # output is variable-length even if input is 1D
             if lhs not in array_dists:
