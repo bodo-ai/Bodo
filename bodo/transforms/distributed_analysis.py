@@ -1215,52 +1215,6 @@ class DistributedAnalysis:
                 _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
             return
 
-        if func_mod == "bodo.libs.dict_arr_ext" and func_name in (
-            "dict_arr_eq",
-            "dict_arr_ne",
-            "convert_dict_arr_to_int",
-            "dict_arr_to_numeric",
-            "str_replace",
-            "str_startswith",
-            "str_endswith",
-            "str_contains_non_regex",
-            "str_series_contains_regex",
-            "str_capitalize",
-            "str_lower",
-            "str_swapcase",
-            "str_title",
-            "str_upper",
-            "str_center",
-            "str_extract",
-            "str_get",
-            "str_repeat_int",
-            "str_lstrip",
-            "str_rstrip",
-            "str_strip",
-            "str_ljust",
-            "str_rjust",
-            "str_zfill",
-            "str_find",
-            "str_rfind",
-            "str_index",
-            "str_rindex",
-            "str_slice",
-            "str_len",
-            "str_count",
-            "str_isalnum",
-            "str_isalpha",
-            "str_isdigit",
-            "str_isspace",
-            "str_islower",
-            "str_isupper",
-            "str_istitle",
-            "str_isnumeric",
-            "str_isdecimal",
-            "str_match",
-        ):
-            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
-            return
-
         # dict-arr extractall
         if func_mod == "bodo.libs.dict_arr_ext" and func_name in (
             "str_extractall",
