@@ -480,6 +480,16 @@ class DistributedAnalysisCallRegistry:
                 "get_float_arr_bitmap",
                 "bodo.libs.float_arr_ext",
             ): meet_out_first_arg_analysis,
+            (
+                "get_categorical_arr_codes",
+                "bodo.hiframes.pd_categorical_ext",
+            ): meet_out_first_arg_analysis,
+            ("ffill_bfill_arr", "bodo.libs.array_kernels"): meet_out_first_arg_analysis,
+            ("get_bit_bitmap_arr", "bodo.libs.int_arr_ext"): no_op_analysis,
+            ("set_bit_to_arr", "bodo.libs.int_arr_ext"): no_op_analysis,
+            # iceberg_merge_cow_py doesn't have a return value
+            # or alter the distribution of any input.
+            ("iceberg_merge_cow_py", "bodo.io.iceberg"): no_op_analysis,
         }
 
     def analyze_call(self, ctx, inst, fdef):
