@@ -6,21 +6,23 @@ needed for compilation. For example, the table schema & dictionary encoding
 from __future__ import annotations
 
 import random
+import typing as pt
 
 import numpy as np
 import pyarrow as pa
 import pyarrow.parquet as pq
-import pyiceberg.exceptions
 from numba.core import types
-from pyiceberg.io.pyarrow import _fs_from_file_path, schema_to_pyarrow
-from pyiceberg.table import Table
 
 import bodo
 from bodo.io.helpers import _get_numba_typ_from_pa_typ
 from bodo.io.iceberg.catalog import conn_str_to_catalog
-from bodo.io.iceberg.common import b_ICEBERG_FIELD_ID_MD_KEY
+from bodo.io.iceberg.common import b_ICEBERG_FIELD_ID_MD_KEY, verify_pyiceberg_installed
 from bodo.mpi4py import MPI
 from bodo.utils.utils import BodoError, run_rank0
+
+if pt.TYPE_CHECKING:  # pragma: no cover
+    from pyiceberg.table import Table
+
 
 EMPTY_LIST = []
 
@@ -45,6 +47,8 @@ def _get_table_schema(
     selected_cols: list[str] | None = None,
     is_merge_into_cow: bool = False,
 ) -> tuple[list[str], list[types.ArrayCompatible], pa.Schema]:
+    from pyiceberg.io.pyarrow import schema_to_pyarrow
+
     # Base PyArrow Schema
     pa_schema: pa.Schema = schema_to_pyarrow(table.schema())
 
@@ -93,6 +97,8 @@ def _determine_str_as_dict_columns(
         set[str]: Set of column names that should be dict-encoded
             (subset of str_col_names_to_check).
     """
+    from pyiceberg.io.pyarrow import _fs_from_file_path
+
     comm = MPI.COMM_WORLD
     if len(str_col_names_to_check) == 0:
         return set()  # No string as dict columns
@@ -204,6 +210,8 @@ def get_iceberg_orig_schema(
         - List of column Bodo types
         - PyArrow Schema Object
     """
+    _ = verify_pyiceberg_installed()
+
     # Get the pyarrow schema from Iceberg
     catalog = conn_str_to_catalog(conn_str)
     table = catalog.load_table(table_id)
@@ -225,6 +233,10 @@ def get_orig_and_runtime_schema(
     # Runtime Types
     list[types.ArrayCompatible],
 ]:
+    _ = verify_pyiceberg_installed()
+
+    import pyiceberg.exceptions
+
     try:
         catalog = conn_str_to_catalog(conn_str)
         table = catalog.load_table(table_id)

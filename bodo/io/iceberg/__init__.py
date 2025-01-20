@@ -13,8 +13,6 @@ import typing as pt
 import numpy as np
 import pyarrow as pa
 import pyarrow.dataset as ds
-from pyiceberg.expressions import BooleanExpression
-from pyiceberg.io.pyarrow import _fs_from_file_path, schema_to_pyarrow
 
 import bodo
 import bodo.utils.tracing as tracing
@@ -30,6 +28,7 @@ from .common import (
     flatten_tuple,
     format_iceberg_conn,
     format_iceberg_conn_njit,
+    verify_pyiceberg_installed,
 )
 from .read_compilation import (
     get_iceberg_orig_schema,
@@ -49,6 +48,9 @@ from .read_parquet import (
     get_row_counts_for_schema_group,
     warn_if_non_ideal_io_parallelism,
 )
+
+if pt.TYPE_CHECKING:  # pragma: no cover
+    from pyiceberg.expressions import BooleanExpression
 
 
 def get_iceberg_pq_dataset(
@@ -96,6 +98,10 @@ def get_iceberg_pq_dataset(
         have all pieces in their dataset. The caller is expected to
         split the work for the actual read.
     """
+    _ = verify_pyiceberg_installed()
+
+    from pyiceberg.io.pyarrow import _fs_from_file_path, schema_to_pyarrow
+
     ev = tracing.Event("get_iceberg_pq_dataset")
     metrics = IcebergPqDatasetMetrics()
     comm = MPI.COMM_WORLD
@@ -292,7 +298,7 @@ def get_iceberg_pq_dataset(
     #    pieces and other relevant details.
     snap = table.current_snapshot()
     assert snap is not None
-    iceberg_pq_dataset: IcebergParquetDataset = IcebergParquetDataset(
+    iceberg_pq_dataset = IcebergParquetDataset(
         row_level,
         typing_pa_table_schema,
         [x.path for x in pq_infos],

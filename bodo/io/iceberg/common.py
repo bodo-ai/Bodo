@@ -4,16 +4,19 @@ Common helper functions and types for Iceberg support.
 
 from __future__ import annotations
 
+import importlib
 import typing as pt
 from urllib.parse import parse_qs, urlencode, urlparse
 
 import requests
 from numba.core import types
 from numba.extending import overload
-from pyiceberg.table import FileScanTask
 
 import bodo
 from bodo.utils.utils import BodoError, run_rank0
+
+if pt.TYPE_CHECKING:  # pragma: no cover
+    from pyiceberg.table import FileScanTask
 
 
 class IcebergParquetInfo(pt.NamedTuple):
@@ -31,6 +34,20 @@ class IcebergParquetInfo(pt.NamedTuple):
     @property
     def row_count(self) -> int:
         return self.file_task.file.record_count
+
+
+def verify_pyiceberg_installed():
+    """
+    Verify that the PyIceberg package is installed.
+    """
+
+    try:
+        return importlib.import_module("pyiceberg")
+    except ImportError:
+        raise BodoError(
+            "Please install the pyiceberg package to use Iceberg functionality. "
+            "You can install it by running 'pip install pyiceberg'."
+        ) from None
 
 
 T = pt.TypeVar("T")
