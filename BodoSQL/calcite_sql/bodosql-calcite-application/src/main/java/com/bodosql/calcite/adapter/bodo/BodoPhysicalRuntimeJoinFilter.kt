@@ -82,7 +82,6 @@ class BodoPhysicalRuntimeJoinFilter private constructor(
         val stage =
             OutputtingStageEmission(
                 { ctx, _, table ->
-                    val joinStateCache = ctx.builder().getJoinStateCache()
                     var currentTable: BodoEngineTable = table!!
 
                     // zip lists of joinFilterID, filterColumns, isFirstLocation, sort by joinID
@@ -178,7 +177,9 @@ class BodoPhysicalRuntimeJoinFilter private constructor(
             input: Expr,
         ): Expr? {
             val joinStateCache = ctx.builder().getJoinStateCache()
-            val joinStatesInfo = joinFilterIDs.map { joinStateCache.getStreamingJoinInfo(it) } // (stateVar, keyLocations)
+            // Output is basically a tuple of (stateVar, keyLocations) that we
+            // care about.
+            val joinStatesInfo = joinFilterIDs.map { joinStateCache.getStreamingJoinInfo(it) }
 
             val stateVars = mutableListOf<StateVariable>()
             val columnVars = mutableListOf<Variable>()
