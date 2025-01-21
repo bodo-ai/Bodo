@@ -3822,7 +3822,6 @@ def to_parquet_overload(
             + str(get_overload_const_str(compression))
         )
 
-    part_col_idxs = None
     if not is_overload_none(partition_cols):
         assert_bodo_error(is_overload_constant_list(partition_cols))
         partition_cols = get_overload_const_list(partition_cols)

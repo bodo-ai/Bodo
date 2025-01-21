@@ -380,7 +380,13 @@ def _get_dtype_str(dtype):
     return f"'{dtype}'"
 
 
-@overload_method(DataFrameType, "astype", inline="always", no_unliteral=True)
+@overload_method(
+    DataFrameType,
+    "astype",
+    inline="always",
+    no_unliteral=True,
+    jit_options={"cache": True},
+)
 def overload_dataframe_astype(
     df,
     dtype,
@@ -507,7 +513,13 @@ def overload_dataframe_astype(
     return _gen_init_df(header, df.columns, data_args, extra_globals=extra_globals)
 
 
-@overload_method(DataFrameType, "copy", inline="always", no_unliteral=True)
+@overload_method(
+    DataFrameType,
+    "copy",
+    inline="always",
+    no_unliteral=True,
+    jit_options={"cache": True},
+)
 def overload_dataframe_copy(df, deep=True):
     # just call copy() on all arrays
     check_runtime_cols_unsupported(df, "DataFrame.copy()")
@@ -566,7 +578,13 @@ def overload_dataframe_copy(df, deep=True):
     )
 
 
-@overload_method(DataFrameType, "rename", inline="always", no_unliteral=True)
+@overload_method(
+    DataFrameType,
+    "rename",
+    inline="always",
+    no_unliteral=True,
+    jit_options={"cache": True},
+)
 def overload_dataframe_rename(
     df,
     mapper=None,
@@ -696,7 +714,9 @@ def overload_dataframe_rename(
     )
 
 
-@overload_method(DataFrameType, "filter", no_unliteral=True)
+@overload_method(
+    DataFrameType, "filter", no_unliteral=True, jit_options={"cache": True}
+)
 def overload_dataframe_filter(df, items=None, like=None, regex=None, axis=None):
     check_runtime_cols_unsupported(df, "DataFrame.filter()")
 
@@ -803,8 +823,20 @@ def overload_dataframe_filter(df, items=None, like=None, regex=None, axis=None):
         return _gen_init_df(func_text, selected_cols, data_args)
 
 
-@overload_method(DataFrameType, "isna", inline="always", no_unliteral=True)
-@overload_method(DataFrameType, "isnull", inline="always", no_unliteral=True)
+@overload_method(
+    DataFrameType,
+    "isna",
+    inline="always",
+    no_unliteral=True,
+    jit_options={"cache": True},
+)
+@overload_method(
+    DataFrameType,
+    "isnull",
+    inline="always",
+    no_unliteral=True,
+    jit_options={"cache": True},
+)
 def overload_dataframe_isna(df):
     check_runtime_cols_unsupported(df, "DataFrame.isna()")
 
@@ -836,7 +868,13 @@ def overload_dataframe_isna(df):
     )
 
 
-@overload_method(DataFrameType, "select_dtypes", inline="always", no_unliteral=True)
+@overload_method(
+    DataFrameType,
+    "select_dtypes",
+    inline="always",
+    no_unliteral=True,
+    jit_options={"cache": True},
+)
 def overload_dataframe_select_dtypes(df, include=None, exclude=None):
     check_runtime_cols_unsupported(df, "DataFrame.select_dtypes")
     # Check that at least one of include or exclude exists
@@ -922,8 +960,20 @@ def overload_dataframe_select_dtypes(df, include=None, exclude=None):
     return _gen_init_df(header, chosen_columns, data_args)
 
 
-@overload_method(DataFrameType, "notna", inline="always", no_unliteral=True)
-@overload_method(DataFrameType, "notnull", inline="always", no_unliteral=True)
+@overload_method(
+    DataFrameType,
+    "notna",
+    inline="always",
+    no_unliteral=True,
+    jit_options={"cache": True},
+)
+@overload_method(
+    DataFrameType,
+    "notnull",
+    inline="always",
+    no_unliteral=True,
+    jit_options={"cache": True},
+)
 def overload_dataframe_notna(df):
     check_runtime_cols_unsupported(df, "DataFrame.notna()")
     header = "def bodo_dataframe_notna(df):\n"
@@ -976,7 +1026,13 @@ def dataframe_head_lower(context, builder, sig, args):
     return context.compile_internal(builder, impl, sig, args)
 
 
-@overload_method(DataFrameType, "tail", inline="always", no_unliteral=True)
+@overload_method(
+    DataFrameType,
+    "tail",
+    inline="always",
+    no_unliteral=True,
+    jit_options={"cache": True},
+)
 def overload_dataframe_tail(df, n=5):
     check_runtime_cols_unsupported(df, "DataFrame.tail()")
     # n must be an integer for indexing.
@@ -997,7 +1053,13 @@ def overload_dataframe_tail(df, n=5):
     return _gen_init_df(header, df.columns, data_args, index)
 
 
-@overload_method(DataFrameType, "first", inline="always", no_unliteral=True)
+@overload_method(
+    DataFrameType,
+    "first",
+    inline="always",
+    no_unliteral=True,
+    jit_options={"cache": True},
+)
 def overload_dataframe_first(df, offset):
     check_runtime_cols_unsupported(df, "DataFrame.first()")
     supp_types = (
@@ -1028,7 +1090,13 @@ def overload_dataframe_first(df, offset):
     return _gen_init_df(header, df.columns, data_args, index)
 
 
-@overload_method(DataFrameType, "last", inline="always", no_unliteral=True)
+@overload_method(
+    DataFrameType,
+    "last",
+    inline="always",
+    no_unliteral=True,
+    jit_options={"cache": True},
+)
 def overload_dataframe_last(df, offset):
     check_runtime_cols_unsupported(df, "DataFrame.last()")
     supp_types = (
@@ -1051,7 +1119,7 @@ def overload_dataframe_last(df, offset):
         f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i})[len(df)-valid_entries:]"
         for i in range(len(df.columns))
     )
-    header = "def bodo_dataframe_list(df, offset):\n"
+    header = "def bodo_dataframe_last(df, offset):\n"
     header += "  df_index = bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)\n"
     header += "  if len(df_index):\n"
     header += "    final_date = df_index[-1]\n"
@@ -1135,7 +1203,13 @@ def to_string_overload(
     return impl
 
 
-@overload_method(DataFrameType, "isin", inline="always", no_unliteral=True)
+@overload_method(
+    DataFrameType,
+    "isin",
+    inline="always",
+    no_unliteral=True,
+    jit_options={"cache": True},
+)
 def overload_dataframe_isin(df, values):
     check_runtime_cols_unsupported(df, "DataFrame.isin()")
     # TODO: call isin on Series
@@ -1201,7 +1275,13 @@ def overload_dataframe_isin(df, values):
     return _gen_init_df(func_text, df.columns, ",".join(out_data))
 
 
-@overload_method(DataFrameType, "abs", inline="always", no_unliteral=True)
+@overload_method(
+    DataFrameType,
+    "abs",
+    inline="always",
+    no_unliteral=True,
+    jit_options={"cache": True},
+)
 def overload_dataframe_abs(df):
     check_runtime_cols_unsupported(df, "DataFrame.abs()")
     # only works for numerical data and Timedelta
@@ -1267,7 +1347,13 @@ def dataframe_corr_lower(context, builder, sig, args):
     return context.compile_internal(builder, impl, sig, args)
 
 
-@overload_method(DataFrameType, "cov", inline="always", no_unliteral=True)
+@overload_method(
+    DataFrameType,
+    "cov",
+    inline="always",
+    no_unliteral=True,
+    jit_options={"cache": True},
+)
 def overload_dataframe_cov(df, min_periods=None, ddof=1):
     check_runtime_cols_unsupported(df, "DataFrame.cov()")
 
@@ -1856,7 +1942,13 @@ def _gen_reduce_impl_axis1(func_name, out_colnames, comm_dtype, df_type):
         raise BodoError(f"DataFrame.{func_name}(): Not supported for axis=1")
 
 
-@overload_method(DataFrameType, "pct_change", inline="always", no_unliteral=True)
+@overload_method(
+    DataFrameType,
+    "pct_change",
+    inline="always",
+    no_unliteral=True,
+    jit_options={"cache": True},
+)
 def overload_dataframe_pct_change(
     df, periods=1, fill_method="pad", limit=None, freq=None
 ):
@@ -1879,7 +1971,13 @@ def overload_dataframe_pct_change(
     return _gen_init_df(header, df.columns, data_args)
 
 
-@overload_method(DataFrameType, "cumprod", inline="always", no_unliteral=True)
+@overload_method(
+    DataFrameType,
+    "cumprod",
+    inline="always",
+    no_unliteral=True,
+    jit_options={"cache": True},
+)
 def overload_dataframe_cumprod(df, axis=None, skipna=True):
     check_runtime_cols_unsupported(df, "DataFrame.cumprod()")
     unsupported_args = {"axis": axis, "skipna": skipna}
@@ -1900,7 +1998,13 @@ def overload_dataframe_cumprod(df, axis=None, skipna=True):
     return _gen_init_df(header, df.columns, data_args)
 
 
-@overload_method(DataFrameType, "cumsum", inline="always", no_unliteral=True)
+@overload_method(
+    DataFrameType,
+    "cumsum",
+    inline="always",
+    no_unliteral=True,
+    jit_options={"cache": True},
+)
 def overload_dataframe_cumsum(df, axis=None, skipna=True):
     check_runtime_cols_unsupported(df, "DataFrame.cumsum()")
     unsupported_args = {"skipna": skipna}
@@ -1931,7 +2035,13 @@ def _is_describe_type(data):
     )
 
 
-@overload_method(DataFrameType, "describe", inline="always", no_unliteral=True)
+@overload_method(
+    DataFrameType,
+    "describe",
+    inline="always",
+    no_unliteral=True,
+    jit_options={"cache": True},
+)
 def overload_dataframe_describe(df, percentiles=None, include=None, exclude=None):
     """
     Support df.describe with numeric and datetime column.
@@ -1995,7 +2105,13 @@ def overload_dataframe_describe(df, percentiles=None, include=None, exclude=None
     return _gen_init_df(header, numeric_cols, data_args, index)
 
 
-@overload_method(DataFrameType, "take", inline="always", no_unliteral=True)
+@overload_method(
+    DataFrameType,
+    "take",
+    inline="always",
+    no_unliteral=True,
+    jit_options={"cache": True},
+)
 def overload_dataframe_take(df, indices, axis=0, convert=None, is_copy=True):
     check_runtime_cols_unsupported(df, "DataFrame.take()")
     unsupported_args = {"axis": axis, "convert": convert, "is_copy": is_copy}
@@ -2064,7 +2180,13 @@ def overload_dataframe_shift(df, periods=1, freq=None, axis=0, fill_value=None):
     return _gen_init_df(header, df.columns, data_args)
 
 
-@overload_method(DataFrameType, "diff", inline="always", no_unliteral=True)
+@overload_method(
+    DataFrameType,
+    "diff",
+    inline="always",
+    no_unliteral=True,
+    jit_options={"cache": True},
+)
 def overload_dataframe_diff(df, periods=1, axis=0):
     """DataFrame.diff() support which is the same as df - df.shift(periods)"""
     check_runtime_cols_unsupported(df, "DataFrame.diff()")
@@ -2113,7 +2235,13 @@ def overload_dataframe_diff(df, periods=1, axis=0):
     return _gen_init_df(header, df.columns, data_args)
 
 
-@overload_method(DataFrameType, "explode", inline="always", no_unliteral=True)
+@overload_method(
+    DataFrameType,
+    "explode",
+    inline="always",
+    no_unliteral=True,
+    jit_options={"cache": True},
+)
 def overload_dataframe_explode(df, column, ignore_index=False):
     """
     DataFrame.explode support: explodes columns specified, asserting all desired columns be array-like and have equal
@@ -2161,7 +2289,13 @@ def overload_dataframe_explode(df, column, ignore_index=False):
     return _gen_init_df(header, df.columns, data_args, index)
 
 
-@overload_method(DataFrameType, "set_index", inline="always", no_unliteral=True)
+@overload_method(
+    DataFrameType,
+    "set_index",
+    inline="always",
+    no_unliteral=True,
+    jit_options={"cache": True},
+)
 def overload_dataframe_set_index(
     df, keys, drop=True, append=False, inplace=False, verify_integrity=False
 ):
