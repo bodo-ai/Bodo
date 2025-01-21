@@ -973,7 +973,6 @@ public class SqlToRelConverter {
           LogicalProject.create(rel, ImmutableList.of(),
               newProjects.leftList(), newProjects.rightList(),
               project.getVariablesSet());
-      bb.root = rel;
       distinctify(bb, false);
       final RelNode rel3 = bb.root();
 
@@ -7300,7 +7299,9 @@ public class SqlToRelConverter {
 
         return histogramCall;
       } else {
-        boolean nullWhenCountZero = aggOp == SqlStdOperatorTable.SUM;
+        // BODO CHANGE: disable rewriting SUM to SUM0.
+        boolean nullWhenCountZero = false;
+        //boolean nullWhenCountZero = aggOp == SqlStdOperatorTable.SUM;
         return relBuilder.aggregateCall(call.getParserPosition(), aggOp, exprs)
             .distinct(distinct)
             .ignoreNulls(ignoreNulls)

@@ -661,6 +661,10 @@ public class SqlValidatorImpl implements SqlValidatorWithHints {
         }
 
         final SqlIdentifier fieldIdentifier = call.operand(0);
+        // Bodo Change: Can't support complex expressions in field aliases
+        if (!fieldIdentifier.isSimple()) {
+          continue;
+        }
         fieldAliases.put(fieldIdentifier.getSimple(),
             ((SqlIdentifier) call.operand(1)).getSimple());
       }
