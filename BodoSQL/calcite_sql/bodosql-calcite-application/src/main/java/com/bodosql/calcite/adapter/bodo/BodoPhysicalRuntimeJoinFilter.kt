@@ -136,9 +136,7 @@ class BodoPhysicalRuntimeJoinFilter private constructor(
     override fun deleteStateVariable(
         ctx: BodoPhysicalRel.BuildContext,
         stateVar: StateVariable,
-    ) {
-        // Do nothing
-    }
+    ) = Unit
 
     companion object {
         fun create(
