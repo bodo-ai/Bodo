@@ -1332,6 +1332,12 @@ GetDataFrameDataInfer.prefer_literal = True
 
 def get_dataframe_data_impl(df, i):
     if df.is_table_format:
+        if bodo.hiframes.boxing.UNBOX_DATAFRAME_EAGERLY:
+
+            def _impl(df, i):  # pragma: no cover
+                return get_table_data(_get_dataframe_data(df)[0], i)
+
+            return _impl
 
         def _impl(df, i):  # pragma: no cover
             if has_parent(df) and _column_needs_unboxing(df, i):

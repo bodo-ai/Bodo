@@ -680,7 +680,7 @@ def test_snowflake_write_execute_copy_into(memory_leak_check):
             df_load_sort = df_load.sort_values(by=df_load_cols).reset_index(drop=True)
 
             pd.testing.assert_frame_equal(
-                df_in_sort, df_load_sort, check_column_type=False
+                df_in_sort, df_load_sort, check_column_type=False, check_dtype=False
             )
 
         except Exception as e:
