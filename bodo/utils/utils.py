@@ -1909,7 +1909,7 @@ def bodo_exec(func_text, glbls, loc_vars, real_globals):
     # Use a regular expression to find and add hash to the function name.
     pattern = r"(def\s+)(\w+)(\s*\()"
     found_pattern = re.search(pattern, func_text)
-    assert found_pattern
+    assert found_pattern, "bodo_exec: function definition not found"
     func_name = found_pattern.group(2) + f"_{text_hash}"
     # count=1 means substitute only the first instance.  This way nested
     # functions aren't name replaced.
