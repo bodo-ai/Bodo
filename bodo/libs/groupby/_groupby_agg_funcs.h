@@ -166,7 +166,11 @@ struct aggfunc<T, DType, Bodo_FTypes::sum> {
     }
 };
 
+template <typename t>
+concept not_decimal = t != type_to_type<Bodo_CTypes::DECIMAL>::type;
+
 template <typename T_out, typename T_in, Bodo_CTypes::CTypeEnum In_DType>
+    requires(not_decimal<T_in>)
 struct casted_aggfunc<T_out, T_in, In_DType, Bodo_FTypes::sum> {
     /**
      * @brief Used for the case where we upcast integers to their 64-bit
