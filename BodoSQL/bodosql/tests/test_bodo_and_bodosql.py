@@ -7,7 +7,7 @@ import pandas as pd
 
 import bodosql
 from bodo.tests.utils import check_func, pytest_mark_one_rank
-from bodosql.imported_java_classes import JavaEntryPoint
+from bodosql.imported_java_classes import getJavaEntryPoint
 
 
 def test_count_head(datapath, memory_leak_check):
@@ -40,9 +40,9 @@ def test_planner_reset(memory_leak_check):
     queries = ["SELECT 1", "SELECT COUNT(*) FROM TABLE1", "Select MAX(A) FROM TABLE1"]
     final_query = "DESCRIBE TABLE MYTABLE"
     for query in queries:
-        JavaEntryPoint.parseQuery(generator, query)
-        JavaEntryPoint.resetPlanner(generator)
-    JavaEntryPoint.parseQuery(generator, final_query)
+        getJavaEntryPoint().parseQuery(generator, query)
+        getJavaEntryPoint().resetPlanner(generator)
+    getJavaEntryPoint().parseQuery(generator, final_query)
     # Verify that the internal state is based on the final query
     # (e.g. its been reset). All other queries are not DDL.
-    assert JavaEntryPoint.isDDLProcessedQuery(generator)
+    assert getJavaEntryPoint().isDDLProcessedQuery(generator)

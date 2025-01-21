@@ -5,7 +5,7 @@ BodoSQL utils used to help construct Python code.
 import py4j
 
 from bodo.utils.typing import BodoError
-from bodosql.imported_java_classes import JavaEntryPoint
+from bodosql.imported_java_classes import getJavaEntryPoint
 
 
 class BodoSQLWarning(Warning):
@@ -32,22 +32,22 @@ def error_to_string(e: Exception) -> str:
         message = e.msg
     elif isinstance(e, py4j.protocol.Py4JJavaError):
         java_exception = e.java_exception
-        message = JavaEntryPoint.getThrowableMessage(java_exception)
+        message = getJavaEntryPoint().getThrowableMessage(java_exception)
         if not message:
             # If the message is None, rather than return None we should provide a stack
             # trace.
             msg_header = (
                 "No message found for java exception. Displaying stack trace:\n"
             )
-            msg_body = JavaEntryPoint.getStackTrace(java_exception)
+            msg_body = getJavaEntryPoint().getStackTrace(java_exception)
             message = msg_header + msg_body
         # Append the cause if it exists
-        cause = JavaEntryPoint.getThrowableCause(java_exception)
+        cause = getJavaEntryPoint().getThrowableCause(java_exception)
         while cause is not None:
-            cause_message = JavaEntryPoint.getThrowableMessage(cause)
+            cause_message = getJavaEntryPoint().getThrowableMessage(cause)
             if cause_message is not None:
                 message += f"\nCaused by: {cause_message}"
-            cause = JavaEntryPoint.getThrowableCause(cause)
+            cause = getJavaEntryPoint().getThrowableCause(cause)
     elif isinstance(e, py4j.protocol.Py4JNetworkError):
         message = "Unexpected Py4J Network Error: " + str(e)
     elif isinstance(e, py4j.protocol.Py4JError):

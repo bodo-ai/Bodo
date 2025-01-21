@@ -2,6 +2,7 @@
 Infrastructure used to test correctness.
 """
 
+import functools
 import os
 import re
 import warnings
@@ -39,6 +40,7 @@ from bodo.tests.utils import (
     gen_unique_table_id,
     reduce_sum,
 )
+from bodosql.imported_java_classes import init_imported_java_classes
 
 if TYPE_CHECKING:
     from pyspark.sql.session import SparkSession
@@ -1717,3 +1719,19 @@ def replace_type_varchar(output: pd.DataFrame):
     type_is_varchar = res["TYPE"].map(lambda x: x.startswith("VARCHAR"))
     res["TYPE"][type_is_varchar] = "VARCHAR"
     return res
+
+
+def fresh_jvm(func):
+    """
+    Decorator to ensure that a fresh JVM is used for the decorated function.
+    """
+
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        import bodosql.py4j_gateway as py4j_gateway
+
+        py4j_gateway.shutdown_gateway()
+        init_imported_java_classes(py4j_gateway.get_gateway())
+        return func(*args, **kwargs)
+
+    return wrapper

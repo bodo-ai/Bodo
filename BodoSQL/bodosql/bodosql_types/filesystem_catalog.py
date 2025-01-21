@@ -14,7 +14,7 @@ from numba.extending import (
 )
 
 from bodosql import DatabaseCatalog, DatabaseCatalogType
-from bodosql.imported_java_classes import JavaEntryPoint
+from bodosql.imported_java_classes import getJavaEntryPoint
 
 
 def _create_java_filesystem_catalog(
@@ -31,7 +31,7 @@ def _create_java_filesystem_catalog(
     Returns:
         JavaObject: A Java FileSystemCatalog object.
     """
-    return JavaEntryPoint.buildFileSystemCatalog(
+    return getJavaEntryPoint().buildFileSystemCatalog(
         connection_string,
         default_write_format,
         default_schema,

@@ -52,7 +52,7 @@ from bodosql.context import (
     update_schema,
 )
 from bodosql.imported_java_classes import (
-    JavaEntryPoint,
+    getJavaEntryPoint,
 )
 from bodosql.utils import error_to_string
 
@@ -445,7 +445,7 @@ def _gen_sql_plan_pd_func_text_and_lowered_globals(
                 default_tz_str = None
             else:
                 default_tz_str = bodo_sql_context_type.default_tz.literal_value
-            generator = JavaEntryPoint.buildRelationalAlgebraGenerator(
+            generator = getJavaEntryPoint().buildRelationalAlgebraGenerator(
                 catalog_obj,
                 schema,
                 bodo.bodosql_use_streaming_plan,
@@ -469,7 +469,7 @@ def _gen_sql_plan_pd_func_text_and_lowered_globals(
         if not failed:
             try:
                 # Handle the parsing step.
-                JavaEntryPoint.parseQuery(generator, sql_str)
+                getJavaEntryPoint().parseQuery(generator, sql_str)
             except Exception as e:
                 # Raise BodoError outside except to avoid stack trace
                 func_text_or_error_msg = f"Failure encountered while parsing SQL Query. Error message: {error_to_string(e)}"
@@ -477,7 +477,7 @@ def _gen_sql_plan_pd_func_text_and_lowered_globals(
         if not failed:
             try:
                 # Determine the write type
-                write_type = JavaEntryPoint.getWriteType(generator, sql_str)
+                write_type = getJavaEntryPoint().getWriteType(generator, sql_str)
 
                 # Get the row counts and NDV estimates for the tables:
                 estimated_row_counts = []
@@ -512,20 +512,22 @@ def _gen_sql_plan_pd_func_text_and_lowered_globals(
                 java_named_params_map = create_java_named_parameter_type_map(
                     named_params_dict
                 )
-                code_plan_pair = JavaEntryPoint.getPandasAndPlanString(
+                code_plan_pair = getJavaEntryPoint().getPandasAndPlanString(
                     generator,
                     sql_str,
                     True,
                     java_params_array,
                     java_named_params_map,
                 )
-                code = JavaEntryPoint.getCodeFromPair(code_plan_pair)
-                plan = JavaEntryPoint.getPlanFromPair(code_plan_pair)
+                code = getJavaEntryPoint().getCodeFromPair(code_plan_pair)
+                plan = getJavaEntryPoint().getPlanFromPair(code_plan_pair)
                 # Convert to tuple of string tuples, to allow bcast to work
                 globalsToLower = tuple(
                     [
                         (str(k), str(v))
-                        for k, v in JavaEntryPoint.getLoweredGlobals(generator).items()
+                        for k, v in getJavaEntryPoint()
+                        .getLoweredGlobals(generator)
+                        .items()
                     ]
                 )
             except Exception as e:

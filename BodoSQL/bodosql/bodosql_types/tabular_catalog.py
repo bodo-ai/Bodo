@@ -23,7 +23,7 @@ from bodo.io.iceberg import IcebergConnectionType
 from bodo.utils.typing import get_literal_value, raise_bodo_error
 from bodo.utils.utils import run_rank0
 from bodosql import DatabaseCatalog, DatabaseCatalogType
-from bodosql.imported_java_classes import JavaEntryPoint
+from bodosql.imported_java_classes import getJavaEntryPoint
 
 
 def _create_java_tabular_catalog(
@@ -39,7 +39,7 @@ def _create_java_tabular_catalog(
     Returns:
         JavaObject: A Java TabularCatalog object.
     """
-    return JavaEntryPoint.buildTabularCatalog(
+    return getJavaEntryPoint().buildTabularCatalog(
         warehouse,
         rest_uri,
         token,
