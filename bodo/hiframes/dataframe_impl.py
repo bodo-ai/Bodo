@@ -385,7 +385,7 @@ def _get_dtype_str(dtype):
     "astype",
     inline="always",
     no_unliteral=True,
-    jit_options={"cache": True},
+    # jit_options={"cache": True},   # TODO: Get this working.  Right now error pickling get_rank.
 )
 def overload_dataframe_astype(
     df,
