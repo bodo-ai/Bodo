@@ -208,6 +208,42 @@ def get_s3_fs_from_path(
     return get_s3_fs(region, storage_options)
 
 
+def get_gcs_fs(path, storage_options=None):
+    """Get PyArrow GcsFileSystem object to read GCS path. Tries accessing the path
+    with anonymous=True if not authenticated since Arrow doesn't try automatically.
+    """
+    import datetime
+
+    from pyarrow.fs import GcsFileSystem
+
+    # PyArrow seems to hang for a long time if retry isn't set
+    retry_time_limit = 3
+    options = {"retry_time_limit": datetime.timedelta(seconds=retry_time_limit)}
+
+    anon = False
+    if storage_options:
+        anon = storage_options.pop("anon", anon)
+        anon = storage_options.pop("anonymous", anon)
+        options.update(storage_options)
+
+    fs = GcsFileSystem(anonymous=anon, **options)
+
+    if anon:
+        return fs
+
+    # Try with anonymous=True if not authenticated since Arrow doesn't try automatically
+    try:
+        parsed_url = urlparse(path)
+        path_ = (parsed_url.netloc + parsed_url.path).rstrip("/")
+        fs.get_file_info(path_)
+    except OSError as e:
+        if "Could not create a OAuth2 access token to authenticate the request" in str(
+            e
+        ):
+            return GcsFileSystem(anonymous=True, **options)
+        raise e
+
+
 # hdfs related functions(hdfs_list_dir_fnames) should be included in
 # coverage once hdfs tests are included in CI
 def get_hdfs_fs(path):  # pragma: no cover
@@ -256,9 +292,9 @@ def gcs_list_dir_fnames(path):
     return [f.split("/")[-1] for f in fs.ls(path)]
 
 
-def s3_is_directory(fs, path):
+def pa_fs_is_directory(fs, path):
     """
-    Return whether s3 path is a directory or not
+    Return whether a path (S3, GCS, ...) is a directory or not
     """
     from pyarrow import fs as pa_fs
 
@@ -281,11 +317,11 @@ def s3_is_directory(fs, path):
         # credential issues, region issues, etc. in pyarrow (unlike s3fs).
         # So we include a blanket message to verify these details.
         raise BodoError(
-            f"error from pyarrow S3FileSystem: {type(e).__name__}: {str(e)}\n{bodo_error_msg}"
+            f"error from pyarrow FileSystem: {type(e).__name__}: {str(e)}\n{bodo_error_msg}"
         )
 
 
-def s3_list_dir_fnames(fs, path):
+def pa_fs_list_dir_fnames(fs, path):
     """
     If path is a directory, return all file names in the directory.
     This returns the base name without the path:
@@ -301,7 +337,7 @@ def s3_list_dir_fnames(fs, path):
         # with the name of the directory. If there is, we have to omit it
         # because pq.ParquetDataset will throw Invalid Parquet file size is 0
         # bytes
-        if s3_is_directory(fs, path):
+        if pa_fs_is_directory(fs, path):
             options = urlparse(path)
             # Remove the s3:// prefix if it exists (and other path sanitization)
             path_ = (options.netloc + options.path).rstrip("/")
@@ -329,7 +365,7 @@ def s3_list_dir_fnames(fs, path):
         # credential issues, region issues, etc. in pyarrow (unlike s3fs).
         # So we include a blanket message to verify these details.
         raise BodoError(
-            f"error from pyarrow S3FileSystem: {type(e).__name__}: {str(e)}\n{bodo_error_msg}"
+            f"error from pyarrow FileSystem: {type(e).__name__}: {str(e)}\n{bodo_error_msg}"
         )
 
     return file_names
@@ -538,10 +574,15 @@ def find_file_name_or_handler(path, ftype, storage_options=None):
 
     filter_func = directory_of_files_common_filter
 
-    if parsed_url.scheme == "s3":
+    # Use PyArrow FileSystem for S3 and GCS
+    if parsed_url.scheme in ("s3", "gcs", "gs"):
         is_handler = True
-        fs = get_s3_fs_from_path(path, storage_options=storage_options)
-        all_files = s3_list_dir_fnames(fs, path)  # can return None if not dir
+        if parsed_url.scheme == "s3":
+            fs = get_s3_fs_from_path(path, storage_options=storage_options)
+        else:
+            fs = get_gcs_fs(path, storage_options=storage_options)
+
+        all_files = pa_fs_list_dir_fnames(fs, path)  # can return None if not dir
         path_ = (parsed_url.netloc + parsed_url.path).rstrip("/")
         fname = path_
 
