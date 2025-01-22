@@ -45,6 +45,7 @@ import org.checkerframework.checker.nullness.qual.Nullable;
 import static com.bodosql.calcite.application.operatorTables.CastingOperatorTable.TO_NUMBER;
 import static java.util.Objects.requireNonNull;
 import static org.apache.calcite.sql.type.SqlTypeUtil.convertTypeToSpec;
+import static org.apache.calcite.sql.type.SqlTypeUtil.getMaxPrecisionScaleDecimal;
 import static org.apache.calcite.sql.validate.SqlNonNullableAccessors.getScope;
 
 public class BodoTypeCoercionImpl extends TypeCoercionImpl {
@@ -181,6 +182,18 @@ public class BodoTypeCoercionImpl extends TypeCoercionImpl {
     if (SqlTypeUtil.isNumeric(type1) && SqlTypeUtil.isBoolean(type2)) {
       return type2;
     }
+
+    if (SqlTypeUtil.isExactNumeric(type1) && SqlTypeUtil.isExactNumeric(type2)) {
+      int l1 = type1.getPrecision() - type1.getScale();
+      int l2 = type2.getPrecision() - type2.getScale();
+      int newLeading = Math.max(l1, l2);
+      int newScale = Math.max(type1.getScale(), type2.getScale());
+      int maxPrecision = factory.getTypeSystem().getMaxPrecision(SqlTypeName.DECIMAL);
+      int newPrecision = Math.min(newLeading + newScale, maxPrecision);
+      newScale = Math.min(newScale, maxPrecision - newLeading);
+      return factory.createSqlType(SqlTypeName.DECIMAL, newPrecision, newScale);
+    }
+
     return super.commonTypeForBinaryComparison(type1, type2);
   }
 
