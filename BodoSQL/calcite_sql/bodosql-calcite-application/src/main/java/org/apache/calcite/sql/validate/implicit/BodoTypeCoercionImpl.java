@@ -183,7 +183,8 @@ public class BodoTypeCoercionImpl extends TypeCoercionImpl {
       return type2;
     }
 
-    if (SqlTypeUtil.isExactNumeric(type1) && SqlTypeUtil.isExactNumeric(type2)) {
+    // Fix new precision and scale for integer - decimal and decimal - decimal comparisons
+    if ((SqlTypeUtil.isDecimal(type1) || SqlTypeUtil.isDecimal(type2)) && (SqlTypeUtil.isExactNumeric(type1) && SqlTypeUtil.isExactNumeric(type2))) {
       int l1 = type1.getPrecision() - type1.getScale();
       int l2 = type2.getPrecision() - type2.getScale();
       int newLeading = Math.max(l1, l2);
