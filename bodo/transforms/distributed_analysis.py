@@ -988,12 +988,6 @@ class DistributedAnalysis:
             )
             return
 
-        if func_mod == "sklearn.metrics.pairwise" and func_name == "cosine_similarity":
-            # Match distribution of X to the output.
-            # The output distribution is intended to match X and should ignore Y.
-            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
-            return
-
         if (
             func_name in {"split"}
             and "bodo.ml_support.sklearn_model_selection_ext" in sys.modules
@@ -1044,16 +1038,6 @@ class DistributedAnalysis:
                 array_dists[arg0] = min_dist
             return
 
-        if fdef == ("datetime_date_arr_to_dt64_arr", "bodo.hiframes.pd_timestamp_ext"):
-            # LHS should match RHS
-            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
-            return
-
-        if fdef == ("unwrap_tz_array", "bodo.libs.pd_datetime_arr_ext"):
-            # LHS should match RHS
-            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
-            return
-
         if is_alloc_callname(func_name, func_mod):
             if lhs not in array_dists:
                 array_dists[lhs] = Distribution.OneD
@@ -1089,10 +1073,6 @@ class DistributedAnalysis:
                     # With axis=1 (the only version supported at the moment), the
                     # input and the output have the same distribution.
                     _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
-            return
-
-        if fdef == ("accum_func", "bodo.libs.array_kernels"):
-            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
             return
 
         # handle array.func calls
@@ -1186,9 +1166,6 @@ class DistributedAnalysis:
             )
             return
 
-        if fdef == ("parallel_print", "bodo"):
-            return
-
         # input of gatherv should be distributed (likely a user mistake),
         # but the output is REP
         if fdef == ("gatherv", "bodo") or fdef == ("allgatherv", "bodo"):
@@ -1236,52 +1213,6 @@ class DistributedAnalysis:
             # scatterv() is no-op if input is dist, so output can be 1D_Var
             if _is_1D_or_1D_Var_arr(rhs.args[0].name, array_dists):
                 _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
-            return
-
-        if func_mod == "bodo.libs.dict_arr_ext" and func_name in (
-            "dict_arr_eq",
-            "dict_arr_ne",
-            "convert_dict_arr_to_int",
-            "dict_arr_to_numeric",
-            "str_replace",
-            "str_startswith",
-            "str_endswith",
-            "str_contains_non_regex",
-            "str_series_contains_regex",
-            "str_capitalize",
-            "str_lower",
-            "str_swapcase",
-            "str_title",
-            "str_upper",
-            "str_center",
-            "str_extract",
-            "str_get",
-            "str_repeat_int",
-            "str_lstrip",
-            "str_rstrip",
-            "str_strip",
-            "str_ljust",
-            "str_rjust",
-            "str_zfill",
-            "str_find",
-            "str_rfind",
-            "str_index",
-            "str_rindex",
-            "str_slice",
-            "str_len",
-            "str_count",
-            "str_isalnum",
-            "str_isalpha",
-            "str_isdigit",
-            "str_isspace",
-            "str_islower",
-            "str_isupper",
-            "str_istitle",
-            "str_isnumeric",
-            "str_isdecimal",
-            "str_match",
-        ):
-            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
             return
 
         # dict-arr extractall
@@ -1334,21 +1265,6 @@ class DistributedAnalysis:
             )
             _set_var_dist(self.typemap, lhs, array_dists, out_dist)
             _set_var_dist(self.typemap, rhs.args[0].name, array_dists, out_dist)
-            return
-
-        if fdef == ("series_contains_regex", "bodo.hiframes.series_str_impl"):
-            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
-            return
-
-        if fdef == ("series_match_regex", "bodo.hiframes.series_str_impl"):
-            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
-            return
-
-        if fdef == ("series_fullmatch_regex", "bodo.hiframes.series_str_impl"):
-            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
-            return
-
-        if fdef == ("setna", "bodo.libs.array_kernels"):
             return
 
         if fdef == ("read_arrow_next", "bodo.io.arrow_reader"):  # pragma: no cover
@@ -1473,25 +1389,6 @@ class DistributedAnalysis:
             return
 
         if fdef in (
-            (
-                "snowflake_writer_append_table",
-                "bodo.io.snowflake_write",
-            ),
-            (
-                "iceberg_writer_append_table",
-                "bodo.io.iceberg.stream_iceberg_write",
-            ),
-            (
-                "parquet_writer_append_table",
-                "bodo.io.stream_parquet_write",
-            ),
-        ):
-            _meet_array_dists(
-                self.typemap, rhs.args[0].name, rhs.args[1].name, array_dists
-            )
-            return
-
-        if fdef in (
             ("init_groupby_state", "bodo.libs.streaming.groupby"),
             ("init_grouping_sets_state", "bodo.libs.streaming.groupby"),
             ("init_table_builder_state", "bodo.libs.table_builder"),
@@ -1502,20 +1399,6 @@ class DistributedAnalysis:
             # Initialize groupby state to 1D
             if lhs not in array_dists:
                 _set_var_dist(self.typemap, lhs, array_dists, Distribution.OneD, False)
-            return
-
-        if fdef in (
-            ("groupby_build_consume_batch", "bodo.libs.streaming.groupby"),
-            (
-                "groupby_grouping_sets_build_consume_batch",
-                "bodo.libs.streaming.groupby",
-            ),
-            ("window_build_consume_batch", "bodo.libs.streaming.window"),
-            ("sort_build_consume_batch", "bodo.libs.streaming.sort"),
-        ):  # pragma: no cover
-            _meet_array_dists(
-                self.typemap, rhs.args[0].name, rhs.args[1].name, array_dists
-            )
             return
 
         if fdef in (
@@ -1549,13 +1432,6 @@ class DistributedAnalysis:
             _set_var_dist(
                 self.typemap, rhs.args[0].name, array_dists, state_dist, False
             )
-            return
-
-        if fdef == (
-            "table_builder_finalize",
-            "bodo.libs.table_builder",
-        ):  # pragma: no cover
-            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
             return
 
         if fdef == (
@@ -1654,29 +1530,9 @@ class DistributedAnalysis:
                 )
             return
 
-        if (
-            isinstance(func_mod, str) and func_mod == "bodo"
-        ) and func_name == "rebalance":
-            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
-            return
-
-        if (
-            isinstance(func_mod, str) and func_mod == "bodo"
-        ) and func_name == "random_shuffle":
-            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
-            return
-
         # bodo.libs.distributed_api functions
         if isinstance(func_mod, str) and func_mod == "bodo.libs.distributed_api":
             self._analyze_call_bodo_dist(lhs, func_name, args, array_dists, rhs.loc)
-            return
-
-        # len()
-        if func_name == "len" and func_mod in ("__builtin__", "builtins"):
-            return
-
-        # bodo.hiframes.table.local_len
-        if fdef == ("local_len", "bodo.hiframes.table"):
             return
 
         # handle list.func calls
@@ -1713,54 +1569,6 @@ class DistributedAnalysis:
                 array_dists[lhs] = Distribution.OneD
             return
 
-        if fdef == ("quantile", "bodo.libs.array_kernels"):
-            # quantile doesn't affect input's distribution
-            return
-
-        if fdef == ("approx_percentile", "bodo.libs.array_kernels"):
-            # approx_percentile doesn't affect input's distribution
-            return
-
-        if fdef == ("percentile_cont", "bodo.libs.array_kernels"):
-            # percentile_cont doesn't affect input's distribution
-            return
-
-        if fdef == ("percentile_disc", "bodo.libs.array_kernels"):
-            # percentile_disc doesn't affect input's distribution
-            return
-
-        if fdef == ("nunique", "bodo.libs.array_kernels"):
-            # nunique doesn't affect input's distribution
-            return
-
-        if fdef == ("anyvalue_agg", "bodo.libs.array_kernels"):
-            # anyvalue_agg doesn't affect input's distribution
-            return
-
-        if fdef == ("boolor_agg", "bodo.libs.array_kernels"):
-            # boolor_agg doesn't affect input's distribution
-            return
-
-        if fdef == ("booland_agg", "bodo.libs.array_kernels"):
-            # booland_agg doesn't affect input's distribution
-            return
-
-        if fdef == ("boolxor_agg", "bodo.libs.array_kernels"):
-            # boolxor_agg doesn't affect input's distribution
-            return
-
-        if fdef == ("bitor_agg", "bodo.libs.array_kernels"):
-            # bitor_agg doesn't affect input's distribution
-            return
-
-        if fdef == ("bitand_agg", "bodo.libs.array_kernels"):
-            # bitand_agg doesn't affect input's distribution
-            return
-
-        if fdef == ("bitxor_agg", "bodo.libs.array_kernels"):
-            # bitxor_agg doesn't affect input's distribution
-            return
-
         if fdef == ("lateral_flatten", "bodosql.kernels.lateral"):
             # If the input is replicated the output is replicated, otherwise
             # the output is always 1D_Var since each rank may explode its
@@ -1773,21 +1581,6 @@ class DistributedAnalysis:
                     _set_var_dist(self.typemap, lhs, array_dists, Distribution.REP)
                 else:
                     _set_var_dist(self.typemap, lhs, array_dists, Distribution.OneD_Var)
-            return
-
-        if fdef == ("series_str_dt64_astype", "bodo.hiframes.pd_timestamp_ext"):
-            # LHS should match RHS
-            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
-            return
-
-        if fdef == ("series_str_td64_astype", "bodo.hiframes.pd_timestamp_ext"):
-            # LHS should match RHS
-            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
-            return
-
-        if fdef == ("cat_replace", "bodo.hiframes.pd_categorical_ext"):
-            # LHS should match RHS
-            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
             return
 
         if fdef == ("interp_bin_search", "bodo.libs.array_kernels"):
@@ -1807,20 +1600,9 @@ class DistributedAnalysis:
             array_dists[lhs] = new_dist
             return
 
-        if fdef == ("intersection_mask", "bodo.libs.array_kernels"):
-            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
-            return
-
         if fdef == ("random_seedless", "bodosql.kernels"):
             if self.typemap[rhs.args[0].name] != bodo.none:
                 _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
-            return
-
-        if fdef == (
-            "sum_decimal_array",
-            "bodo.libs.decimal_arr_ext",
-        ):
-            # Output is a decimal, so we don't need to explicitly set the distribution
             return
 
         if fdef == (
@@ -1954,14 +1736,6 @@ class DistributedAnalysis:
             _set_var_dist(self.typemap, lhs, array_dists, Distribution.OneD_Var)
             return
 
-        if fdef == ("first_last_valid_index", "bodo.libs.array_kernels"):
-            # doesn't affect distribution of either input or output
-            return
-
-        if fdef == ("get_valid_entries_from_date_offset", "bodo.libs.array_kernels"):
-            # doesn't affect distribution of either input or output
-            return
-
         if fdef == ("array_isin", "bodo.libs.array"):
             # Case 1: DIST DIST -> DIST, is_parallel=True
             # Case 2: REP  REP  -> REP, is_parallel=False
@@ -2022,14 +1796,6 @@ class DistributedAnalysis:
             array_dists[rhs.args[1].name] = new_dist
             return
 
-        if fdef == ("shift", "bodo.hiframes.rolling"):
-            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
-            return
-
-        if fdef == ("pct_change", "bodo.hiframes.rolling"):
-            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
-            return
-
         if fdef == ("nlargest", "bodo.libs.array_kernels"):
             # data and index arrays have the same distributions
             _meet_array_dists(
@@ -2057,10 +1823,6 @@ class DistributedAnalysis:
             _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
             return
 
-        if fdef == ("set_table_data_null", "bodo.hiframes.table"):
-            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
-            return
-
         if fdef == ("sample_table_operation", "bodo.libs.array_kernels"):
             in_dist = Distribution(
                 min(
@@ -2071,47 +1833,6 @@ class DistributedAnalysis:
             _set_var_dist(self.typemap, rhs.args[0].name, array_dists, in_dist)
             _set_var_dist(self.typemap, rhs.args[1].name, array_dists, in_dist)
             _set_var_dist(self.typemap, lhs, array_dists, in_dist)
-            return
-
-        if fdef == (
-            "str_arr_encode",
-            "bodo.libs.str_arr_ext",
-        ):
-            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
-            return
-
-        if fdef == (
-            "pandas_string_array_to_datetime",
-            "bodo.hiframes.pd_timestamp_ext",
-        ):
-            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
-            return
-
-        if fdef == (
-            "pandas_dict_string_array_to_datetime",
-            "bodo.hiframes.pd_timestamp_ext",
-        ):
-            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
-            return
-
-        if fdef in (
-            (
-                "_table_to_tuple_format_decoded",
-                "bodo.hiframes.pd_dataframe_ext",
-            ),
-            (
-                "_tuple_to_table_format_decoded",
-                "bodo.hiframes.pd_dataframe_ext",
-            ),
-        ):
-            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
-            return
-
-        if fdef == (
-            "pandas_string_array_to_timedelta",
-            "bodo.hiframes.pd_timestamp_ext",
-        ):
-            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
             return
 
         if fdef == ("nonzero", "bodo.libs.array_kernels"):
@@ -2464,10 +2185,6 @@ class DistributedAnalysis:
                 )
             return
 
-        if fdef == ("get", "bodo.libs.array_kernels"):
-            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
-            return
-
         if fdef == ("nancorr", "bodo.libs.array_kernels"):
             _set_REP(
                 self.typemap,
@@ -2480,30 +2197,12 @@ class DistributedAnalysis:
             )
             return
 
-        if fdef == ("series_monotonicity", "bodo.libs.array_kernels"):
-            return
-
-        if fdef == ("autocorr", "bodo.libs.array_kernels"):
-            return
-
-        if fdef == ("array_op_median", "bodo.libs.array_ops"):
-            return
-
-        if fdef == ("str_arr_min_max", "bodo.libs.str_arr_ext"):
-            return
-
         if fdef in (
             ("concat", "bodo.libs.array_kernels"),
             ("concat_tables", "bodo.utils.table_utils"),
         ):
             # array/table concat() is similar to np.concatenate
             self._analyze_call_concat(lhs, args, array_dists)
-            return
-
-        if fdef == ("isna", "bodo.libs.array_kernels"):
-            return
-
-        if fdef == ("get_str_arr_str_length", "bodo.libs.str_arr_ext"):
             return
 
         if fdef == ("move_str_binary_arr_payload", "bodo.libs.str_arr_ext"):
@@ -2532,20 +2231,6 @@ class DistributedAnalysis:
                     _set_var_dist(self.typemap, lhs, array_dists, out_dist)
             return
 
-        if fdef == ("get_series_name", "bodo.hiframes.pd_series_ext"):
-            return
-
-        if fdef == ("get_index_name", "bodo.hiframes.pd_index_ext"):
-            return
-
-        if fdef == ("order_range", "bodo.hiframes.pd_index_ext"):
-            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
-            return
-
-        if fdef == ("range_index_to_numeric", "bodo.hiframes.pd_index_ext"):
-            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
-            return
-
         # dummy hiframes functions
         if func_mod == "bodo.hiframes.pd_series_ext" and func_name in (
             "get_series_data",
@@ -2557,41 +2242,6 @@ class DistributedAnalysis:
                 return
 
             _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
-            return
-
-        if func_mod == "bodo.libs.int_arr_ext" and func_name in (
-            "get_int_arr_data",
-            "get_int_arr_bitmap",
-        ):
-            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
-            return
-
-        if func_mod == "bodo.libs.float_arr_ext" and func_name in (
-            "get_float_arr_data",
-            "get_float_arr_bitmap",
-        ):
-            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
-            return
-
-        if func_mod == "bodo.hiframes.pd_categorical_ext" and func_name in (
-            "get_categorical_arr_codes",
-        ):
-            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
-            return
-
-        if fdef == ("ffill_bfill_arr", "bodo.libs.array_kernels"):
-            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
-            return
-
-        if fdef == ("get_bit_bitmap_arr", "bodo.libs.int_arr_ext"):
-            return
-
-        if fdef == ("set_bit_to_arr", "bodo.libs.int_arr_ext"):
-            return
-
-        if fdef == ("iceberg_merge_cow_py", "bodo.io.iceberg"):
-            # iceberg_merge_cow_py doesn't have a return value
-            # or alter the distribution of any input.
             return
 
         # add proper diagnostic info for tuple/list to array since usually happens
@@ -2606,14 +2256,6 @@ class DistributedAnalysis:
                 "Tuples and lists are not distributed by default. Convert to array/Series/DataFrame and use bodo.scatterv() to distribute if necessary.",
                 rhs.loc,
             )
-            return
-
-        if fdef == ("decode_if_dict_array", "bodo.utils.typing"):
-            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
-            return
-
-        if fdef == ("np_to_nullable_array", "bodo.utils.conversion"):
-            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
             return
 
         # from flat map pattern: pd.Series(list(itertools.chain(*A)))
@@ -2670,17 +2312,6 @@ class DistributedAnalysis:
             array_dists[rhs.args[1].name] = in_dist
             return
 
-        if fdef == ("get_arr_lens", "bodo.libs.array_kernels"):
-            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
-            return
-
-        if fdef == ("str_split", "bodo.libs.str_ext") or fdef == (
-            "str_split_empty_n",
-            "bodo.libs.str_ext",
-        ):
-            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
-            return
-
         if fdef == ("explode_str_split", "bodo.libs.array_kernels"):
             # output of explode is variable-length even if input is 1D
             if lhs not in array_dists:
@@ -2701,18 +2332,6 @@ class DistributedAnalysis:
 
             array_dists[rhs.args[0].name] = in_dist
             array_dists[rhs.args[3].name] = in_dist
-            return
-
-        if func_mod == "bodo.hiframes.pd_index_ext" and func_name in (
-            "init_numeric_index",
-            "init_binary_str_index",
-            "init_categorical_index",
-            "init_datetime_index",
-            "init_timedelta_index",
-            "init_period_index",
-            "init_interval_index",
-        ):
-            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
             return
 
         if fdef == ("get_index_data", "bodo.hiframes.pd_index_ext"):
@@ -2923,10 +2542,6 @@ class DistributedAnalysis:
             _set_var_dist(self.typemap, in_df, array_dists, min_dist)
             return
 
-        if fdef == ("get_table_data", "bodo.hiframes.table"):
-            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
-            return
-
         if fdef == ("logical_table_to_table", "bodo.hiframes.table"):
             if lhs not in array_dists:
                 _set_var_dist(self.typemap, lhs, array_dists, Distribution.OneD, False)
@@ -2973,57 +2588,6 @@ class DistributedAnalysis:
                 "DataFrame column names is REP",
                 rhs.loc,
             )
-            return
-
-        if fdef == ("compute_split_view", "bodo.hiframes.split_impl"):
-            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
-            return
-
-        if fdef == ("get_split_view_index", "bodo.hiframes.split_impl"):
-            # just used in str.get() implementation for now so we know it is
-            # parallel
-            # TODO: handle index similar to getitem to support more cases
-            return
-
-        if fdef == ("get_split_view_data_ptr", "bodo.hiframes.split_impl"):
-            return
-
-        if fdef == ("setitem_str_arr_ptr", "bodo.libs.str_arr_ext"):
-            return
-
-        if fdef == ("num_total_chars", "bodo.libs.str_arr_ext"):
-            return
-
-        if fdef == ("inplace_eq", "bodo.libs.str_arr_ext"):
-            return
-
-        if fdef == ("get_str_arr_item_copy", "bodo.libs.str_arr_ext"):
-            return
-
-        if fdef == ("copy_array_element", "bodo.libs.array_kernels"):
-            return
-
-        if fdef == ("str_arr_setitem_int_to_str", "bodo.libs.str_arr_ext"):
-            return
-
-        if fdef == ("str_arr_setitem_NA_str", "bodo.libs.str_arr_ext"):
-            return
-
-        if fdef == ("str_arr_set_not_na", "bodo.libs.str_arr_ext"):
-            return
-
-        if fdef == ("set_null_bits_to_value", "bodo.libs.str_arr_ext"):
-            return
-
-        if fdef == ("str_arr_to_dict_str_arr", "bodo.libs.str_arr_ext"):
-            # LHS should match RHS
-            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
-            return
-
-        if fdef == ("array_op_describe", "bodo.libs.array_ops"):
-            return
-
-        if fdef == ("array_op_nbytes", "bodo.libs.array_ops"):
             return
 
         if fdef == ("generate_table_nbytes", "bodo.utils.table_utils"):
@@ -3075,14 +2639,6 @@ class DistributedAnalysis:
             _meet_array_dists(self.typemap, lhs, in_df_name, array_dists)
             return
 
-        # np.fromfile()
-        if fdef == ("file_read", "bodo.io.np_io"):
-            return
-
-        if fdef == ("array_to_string", "bodosql.kernels"):
-            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
-            return
-
         # str_arr_from_sequence() applies to lists/tuples so output is REP
         # e.g. column names in df.mean()
         if fdef == ("str_arr_from_sequence", "bodo.libs.str_arr_ext"):
@@ -3095,11 +2651,6 @@ class DistributedAnalysis:
                 "output of str_arr_from_sequence is REP",
                 rhs.loc,
             )
-            return
-
-        # TODO: make sure assert_equiv is not generated unnecessarily
-        # TODO: fix assert_equiv for np.stack from df.value
-        if fdef == ("assert_equiv", "numba.parfors.array_analysis"):
             return
 
         if fdef == ("_bodo_groupby_apply_impl", ""):
