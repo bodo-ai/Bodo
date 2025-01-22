@@ -12,6 +12,7 @@ import com.bodosql.calcite.table.IcebergCatalogTable
 import com.google.common.collect.ImmutableList
 import org.apache.calcite.sql.ddl.SqlCreateTable
 import software.amazon.s3tables.iceberg.S3TablesCatalog
+import software.amazon.s3tables.iceberg.imports.AwsClientProperties.CLIENT_REGION
 
 class BodoS3TablesCatalog(
     private val warehouse: String,
@@ -208,7 +209,13 @@ class BodoS3TablesCatalog(
         @JvmStatic
         private fun createS3TablesCatalog(warehouse: String): S3TablesCatalog {
             val catalog = S3TablesCatalog()
-            catalog.initialize("S3TablesCatalog", mapOf(Pair("warehouse", warehouse)))
+            val region =
+                warehouse
+                    .split("arn:aws:s3tables:")
+                    .last()
+                    .split(":")
+                    .first()
+            catalog.initialize("S3TablesCatalog", mapOf(Pair("warehouse", warehouse), Pair(CLIENT_REGION, region)))
             return catalog
         }
     }
