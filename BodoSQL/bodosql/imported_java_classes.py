@@ -10,66 +10,55 @@ from bodo.libs.distributed_api import bcast_scalar
 from bodo.utils.typing import BodoError
 from bodosql.py4j_gateway import configure_java_logging, get_gateway
 
-JavaEntryPoint = None
+error = None
+# Based on my understanding of the Py4J Memory model, it should be safe to just
+# Create/use java objects in much the same way as we did with jpype.
+# https://www.py4j.org/advanced_topics.html#py4j-memory-model
+saw_error = False
+msg = ""
+gateway = get_gateway()
+if bodo.get_rank() == 0:
+    try:
+        # Note: Although this isn't used it must be imported.
+        SnowflakeDriver = gateway.jvm.net.snowflake.client.jdbc.SnowflakeDriver
+        # Note: We call this JavaEntryPoint so its clear the Python code enters java
+        # and the class is named PythonEntryPoint to make it clear the Java code
+        # is being entered from Python.
+        JavaEntryPoint = gateway.jvm.com.bodosql.calcite.application.PythonEntryPoint
+        # Initialize logging. Must be done after importing all classes to ensure
+        # JavaEntryPoint is available.
+        configure_java_logging(bodo.user_logging.get_verbose_level())
+    except Exception as e:
+        saw_error = True
+        msg = str(e)
+else:
+    JavaEntryPoint = None
 
-
-def getJavaEntryPoint():
-    global JavaEntryPoint
-    if JavaEntryPoint is None:
-        init_imported_java_classes(get_gateway())
-    return JavaEntryPoint
-
-
-def init_imported_java_classes(gateway):
-    global JavaEntryPoint
-    # Based on my understanding of the Py4J Memory model, it should be safe to just
-    # Create/use java objects in much the same way as we did with jpype.
-    # https://www.py4j.org/advanced_topics.html#py4j-memory-model
-    saw_error = False
-    msg = ""
-    if bodo.get_rank() == 0:
-        try:
-            # Note: Although this isn't used it must be imported.
-            # Note: We call this JavaEntryPoint so its clear the Python code enters java
-            # and the class is named PythonEntryPoint to make it clear the Java code
-            # is being entered from Python.
-            JavaEntryPoint = (
-                gateway.jvm.com.bodosql.calcite.application.PythonEntryPoint
-            )
-            # Initialize logging. Must be done after importing all classes to ensure
-            # JavaEntryPoint is available.
-            configure_java_logging(bodo.user_logging.get_verbose_level())
-        except Exception as e:
-            saw_error = True
-            msg = str(e)
-    else:
-        JavaEntryPoint = None
-
-    saw_error = bcast_scalar(saw_error)
-    msg = bcast_scalar(msg)
-    if saw_error:
-        raise BodoError(msg)
+saw_error = bcast_scalar(saw_error)
+msg = bcast_scalar(msg)
+if saw_error:
+    raise BodoError(msg)
 
 
 def build_java_array_list(elems: list[Any]):
     if bodo.get_rank() == 0:
-        output_list = getJavaEntryPoint().buildArrayList()
+        output_list = JavaEntryPoint.buildArrayList()
         for elem in elems:
-            getJavaEntryPoint().appendToArrayList(output_list, elem)
+            JavaEntryPoint.appendToArrayList(output_list, elem)
         return output_list
 
 
 def build_java_hash_map(d: dict[Any, Any]):
     if bodo.get_rank() == 0:
-        output_map = getJavaEntryPoint().buildMap()
+        output_map = JavaEntryPoint.buildMap()
         for key, value in d.items():
-            getJavaEntryPoint().mapPut(output_map, key, value)
+            JavaEntryPoint.mapPut(output_map, key, value)
         return output_map
 
 
 def build_java_properties(d: dict[str, str]):
     if bodo.get_rank() == 0:
-        output_map = getJavaEntryPoint().buildProperties()
+        output_map = JavaEntryPoint.buildProperties()
         for key, value in d.items():
-            getJavaEntryPoint().setProperty(output_map, key, value)
+            JavaEntryPoint.setProperty(output_map, key, value)
         return output_map

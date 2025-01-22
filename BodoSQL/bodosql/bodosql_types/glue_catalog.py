@@ -19,7 +19,7 @@ from numba.extending import (
 from bodo.io.iceberg import IcebergConnectionType
 from bodo.utils.typing import get_literal_value, raise_bodo_error
 from bodosql import DatabaseCatalog, DatabaseCatalogType
-from bodosql.imported_java_classes import getJavaEntryPoint
+from bodosql.imported_java_classes import JavaEntryPoint
 
 
 def _create_java_glue_catalog(warehouse: str):
@@ -30,7 +30,7 @@ def _create_java_glue_catalog(warehouse: str):
     Returns:
         JavaObject: A Java GlueCatalog object.
     """
-    return getJavaEntryPoint().buildBodoGlueCatalog(warehouse)
+    return JavaEntryPoint.buildBodoGlueCatalog(warehouse)
 
 
 class GlueCatalog(DatabaseCatalog):

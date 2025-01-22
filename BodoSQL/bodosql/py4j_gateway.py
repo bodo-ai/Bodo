@@ -74,8 +74,6 @@ def get_gateway():
     msg = ""
 
     if bodo.get_rank() == 0 and gateway is None:
-        from bodosql.imported_java_classes import init_imported_java_classes
-
         cur_file_path = os.path.dirname(os.path.abspath(__file__))
         # Get the jar path
         full_path = os.path.join(cur_file_path, "jars/bodosql-executable.jar")
@@ -94,34 +92,9 @@ def get_gateway():
                 ),
             )
             gateway = JavaGateway(gateway_parameters=GatewayParameters(port=port_no))
-            init_imported_java_classes(gateway)
         except Exception as e:
             msg = f"Error when launching the BodoSQL JVM. {str(e)}"
             failed = True
-
-    failed = bcast_scalar(failed)
-    msg = bcast_scalar(msg)
-    if failed:
-        raise Exception(msg)
-    return gateway
-
-
-def shutdown_gateway():
-    """
-    Shutdown the gateway server on rank 0 if it is running.
-    """
-    global gateway
-
-    failed = False
-    msg = ""
-
-    try:
-        if gateway is not None:
-            gateway.shutdown()
-            gateway = None
-    except Exception as e:
-        msg = f"Error when shutting down the BodoSQL JVM. {str(e)}"
-        failed = True
 
     failed = bcast_scalar(failed)
     msg = bcast_scalar(msg)
@@ -141,6 +114,6 @@ def configure_java_logging(level: int):
     """
     # Java logging is only on rank 0
     if bodo.get_rank() == 0:
-        from bodosql.imported_java_classes import getJavaEntryPoint
+        from bodosql.imported_java_classes import JavaEntryPoint
 
-        getJavaEntryPoint().configureJavaLogging(level)
+        JavaEntryPoint.configureJavaLogging(level)
