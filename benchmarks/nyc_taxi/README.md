@@ -1,6 +1,4 @@
-# Benchmarks
-
-## NYC Taxi Monthly Trips with Precipitation
+# NYC Taxi Monthly Trips with Precipitation
 
 For this benchmark, we adapt [an example data science workload](https://github.com/toddwschneider/nyc-taxi-data/blob/c65ad8332a44f49770644b11576c0529b40bbc76/citibike_comparison/analysis/analysis_queries.sql#L1) into a pandas workload that reads from a public S3 bucket and calculates the average trip duration and number of trips based on features like weather conditions, pickup and dropoff location, month, and whether the trip was on a weekday.
 
@@ -32,7 +30,7 @@ Each benchmark is collected on a cluster containing 4 worker instances and 128 p
 
 The graph below summarizes the total execution time of each system (averaged over 3 runs). Results were last collected on December 12th, 2024.
 
-<img src="./img/nyc-taxi-benchmark.png" alt="Monthly High Volume for Hire Vehicle Trips with Precipitation Benchmark Execution Time" title="Monthly High Volume for Hire Vehicle Trips with Precipitation Average Execution Time" width="30%">
+<img src="../img/nyc-taxi-benchmark.png" alt="Monthly High Volume for Hire Vehicle Trips with Precipitation Benchmark Execution Time" title="Monthly High Volume for Hire Vehicle Trips with Precipitation Average Execution Time" width="30%">
 
 ## Local Benchmark
 
