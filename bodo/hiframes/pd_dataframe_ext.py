@@ -1332,6 +1332,12 @@ GetDataFrameDataInfer.prefer_literal = True
 
 def get_dataframe_data_impl(df, i):
     if df.is_table_format:
+        if bodo.hiframes.boxing.UNBOX_DATAFRAME_EAGERLY:
+
+            def _impl(df, i):  # pragma: no cover
+                return get_table_data(_get_dataframe_data(df)[0], i)
+
+            return _impl
 
         def _impl(df, i):  # pragma: no cover
             if has_parent(df) and _column_needs_unboxing(df, i):
@@ -4410,7 +4416,7 @@ def to_sql_overload(
     # Partition columns not supported through this API.
     func_text += (
         "        col_names = array_to_info(col_names_arr)\n"
-        "        bodo.io.iceberg.iceberg_write(\n"
+        "        bodo.io.iceberg.write.iceberg_write(\n"
         "            con_str, schema, name, table, col_names,\n"
         "            None, if_exists, _is_parallel, pyarrow_table_schema,\n"
         f"            {n_cols}, _bodo_allow_downcasting,\n"

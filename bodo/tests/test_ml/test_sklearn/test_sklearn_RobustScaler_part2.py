@@ -17,7 +17,7 @@ from bodo.tests.test_ml.test_sklearn.test_sklearn_RobustScaler_part1 import (
 )
 from bodo.tests.utils import check_func
 
-pytestmark = [pytest.mark.ml, pytest.mark.weekly]
+pytestmark = [pytest.mark.ml, pytest.mark.slow]
 
 # ---------------------RobustScaler Tests, part 2--------------------
 

@@ -17,6 +17,7 @@ We compared Bodo's performance on this workload to other systems including [Dask
 | Package      | Version      |
 |----------------|----------------|
 | bodo   | 2024.10   |
+| bodosdk | 2.2.0 |
 | dask   | 2024.9.1  |
 | dask-cloudprovider  | 2024.9.1  |
 | modin   | 0.32.0   |
@@ -25,7 +26,7 @@ We compared Bodo's performance on this workload to other systems including [Dask
 
 For cluster creation and configuration, we use the [Bodo SDK](https://docs.bodo.ai/2024.12/guides/using_bodo_platform/bodo_platform_sdk_guide/) for Bodo, Dask Cloud Provider for Dask, Ray for Modin, and AWS EMR for Spark. Scripts to configure and launch clusters for each system can be found in the same directory as the implementation.
 
-Each benchmark is collected on a cluster containing 4 worker instances and 128 physical cores. Dask, Modin, and Spark use 4 `r6i.16xlarge` instances, each consisting of 32 physical cores and 256 GiB of memory. Dask Cloud Provider also allocates an additional `c6i.xlarge` instance for the distributed scheduler which contains 2 cores. Bodo is run on 4 `c6i.16xlarge` instances, each consisting of 32 physical cores and 64 GiB of memory.
+Each benchmark is collected on a cluster containing 4 worker instances and 128 physical cores. For the workers, we use `r6i.16xlarge` instances, each consisting of 32 physical cores and 512 GiB of memory. Dask Cloud Provider also allocates an additional `c6i.xlarge` instance for the distributed scheduler which contains 2 cores.
 
 ### Results
 

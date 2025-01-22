@@ -10,3 +10,5 @@ updates:
       "github-actions":
         patterns:
           - "*"
+    "commit-message":
+      prefix: "[run ci]"

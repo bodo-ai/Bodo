@@ -524,7 +524,9 @@ def test_unbox_df1(df_value, memory_leak_check):
     def impl2(df_arg):
         return df_arg
 
-    check_func(impl2, (df_value,))
+    # copy_input=True is necessary since Bodo sets columns of input object arg so using
+    # df_value keeps Bodo data around, leading to memory leak check false positives.
+    check_func(impl2, (df_value,), copy_input=True)
 
     # unbox and return Series data with index
     # (previous test can box Index unintentionally)

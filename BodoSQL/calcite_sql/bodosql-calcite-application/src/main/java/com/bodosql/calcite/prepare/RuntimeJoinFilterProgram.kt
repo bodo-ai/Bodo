@@ -20,7 +20,6 @@ import com.bodosql.calcite.adapter.iceberg.IcebergToBodoPhysicalConverter
 import com.bodosql.calcite.adapter.snowflake.SnowflakeRel
 import com.bodosql.calcite.adapter.snowflake.SnowflakeRuntimeJoinFilter
 import com.bodosql.calcite.adapter.snowflake.SnowflakeToBodoPhysicalConverter
-import com.bodosql.calcite.application.RelationalAlgebraGenerator
 import com.bodosql.calcite.application.logicalRules.WindowFilterTranspose
 import com.bodosql.calcite.prepare.NonEqualityJoinFilterColumnInfo.Companion.splitRexNodeByType
 import com.bodosql.calcite.rel.core.CachedPlanInfo
@@ -53,24 +52,21 @@ object RuntimeJoinFilterProgram : Program {
         requiredOutputTraits: RelTraitSet,
         materializations: MutableList<RelOptMaterialization>,
         lattices: MutableList<RelOptLattice>,
-    ): RelNode =
-        if (RelationalAlgebraGenerator.enableRuntimeJoinFilters) {
-            val cluster = rel.cluster
-            if (cluster !is BodoRelOptCluster) {
-                throw InternalError("Cluster must be a BodoRelOptCluster")
-            }
-            val filterShuttle = RuntimeJoinFilterShuttle(cluster, true)
-            val result = rel.accept(filterShuttle)
-            filterShuttle.visitCacheNodes()
-            val cacheReplaceShuttle =
-                JoinFilterCacheReplace(
-                    filterShuttle.keptCacheConsumerUpdates,
-                    filterShuttle.inlinedCacheConsumerUpdates,
-                )
-            result.accept(cacheReplaceShuttle)
-        } else {
-            rel
+    ): RelNode {
+        val cluster = rel.cluster
+        if (cluster !is BodoRelOptCluster) {
+            throw InternalError("Cluster must be a BodoRelOptCluster")
         }
+        val filterShuttle = RuntimeJoinFilterShuttle(cluster, true)
+        val result = rel.accept(filterShuttle)
+        filterShuttle.visitCacheNodes()
+        val cacheReplaceShuttle =
+            JoinFilterCacheReplace(
+                filterShuttle.keptCacheConsumerUpdates,
+                filterShuttle.inlinedCacheConsumerUpdates,
+            )
+        return result.accept(cacheReplaceShuttle)
+    }
 
     /**
      * Visitor for generating runtime join filters. This code is reused by caching first pass without generating filters,
@@ -969,6 +965,11 @@ object RuntimeJoinFilterProgram : Program {
             }
     }
 
+    /**
+     * This shuttle visits each cache node, either replacing
+     * it when it should be inlined or replacing the actual
+     * body.
+     */
     internal class JoinFilterCacheReplace(
         private val keptCacheUpdates: Map<Int, RelNode>,
         private val inlinedCacheUpdates: Map<Int, RelNode>,

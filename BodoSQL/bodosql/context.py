@@ -540,7 +540,7 @@ def add_table_type(
             # Note. We only support MERGE for Iceberg. We check this in the
             # Java code to ensure we also handle catalogs. Note the
             # last argument is for passing additional arguments as key=value pairs.
-            write_format_code = f"bodo.io.iceberg.iceberg_merge_cow_py('{bodo_type._file_path}', '{bodo_type._conn_str}', '{bodo_type._db_schema}', %s, %s)"
+            write_format_code = f"bodo.io.iceberg.merge_into.iceberg_merge_cow_py('{bodo_type._file_path}', '{bodo_type._conn_str}', '{bodo_type._db_schema}', %s, %s)"
         else:
             write_format_code = f"%s.to_sql('{bodo_type._file_path}', '{bodo_type._conn_str}', if_exists='append', index=False, {schema_code_to_sql}, %s)"
     else:
@@ -1240,7 +1240,6 @@ class BodoSQLContext:
             hide_credentials,
             bodo.enable_snowflake_iceberg,
             bodo.enable_timestamp_tz,
-            bodo.enable_runtime_join_filters,
             bodo.enable_streaming_sort,
             bodo.enable_streaming_sort_limit_offset,
             bodo.bodo_sql_style,

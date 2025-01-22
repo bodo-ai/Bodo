@@ -12,7 +12,6 @@ from bodo.pandas.series import BodoSeries
 from bodo.tests.dataframe_common import df_value_params
 from bodo.tests.series_common import series_val_params
 from bodo.tests.utils import (
-    _get_dist_arg,
     _test_equal_guard,
     check_func,
     pytest_spawn_mode,
@@ -180,7 +179,7 @@ def test_spawn_distributed():
         return s
 
     A = pd.Series(np.ones(1000, dtype=np.int64))
-    assert test(_get_dist_arg(A)) == 1000
+    assert test(A) == 1000
 
 
 @pytest.mark.parametrize(
