@@ -3391,7 +3391,7 @@ def _get_json_df_type_from_file(
 
         is_handler = None
         try:
-            is_handler, file_name_or_handler, f_size, _ = find_file_name_or_handler(
+            is_handler, file_name_or_handler, _ = find_file_name_or_handler(
                 fname_const, "json", storage_options
             )
             if is_handler and compression == "infer":
@@ -4008,7 +4008,7 @@ def _get_csv_df_type_from_file(
 
         is_handler = None
         try:
-            is_handler, file_name_or_handler, _, _ = find_file_name_or_handler(
+            is_handler, file_name_or_handler, _ = find_file_name_or_handler(
                 fname_const, "csv", csv_storage_options
             )
 

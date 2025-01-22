@@ -522,11 +522,10 @@ def find_file_name_or_handler(path, ftype, storage_options=None):
         path: path to the object we are reading, this can be a file or a directory
         ftype: 'csv' or 'json'
     Returns:
-        (is_handler, file_name_or_handler, f_size, fs)
+        (is_handler, file_name_or_handler, fs)
         is_handler: True if file_name_or_handler is a handler,
                     False otherwise(file_name_or_handler is a file_name)
         file_name_or_handler: file_name or handler to pass to pd.read_csv()/pd.read_json()
-        f_size: size of file_name_or_handler
         fs: file system for s3/hdfs
     """
     from urllib.parse import urlparse
@@ -561,10 +560,6 @@ def find_file_name_or_handler(path, ftype, storage_options=None):
                 raise BodoError(err_msg)
             fname = all_csv_files[0]
 
-        f_size = int(
-            fs.get_file_info(fname).size or 0
-        )  # will be None for directories, so convert to 0 if that's the case
-
         # Arrow's S3FileSystem has some performance issues when used
         # with pandas.read_csv, which we do at compile-time.
         # Currently the issue seems related to using the output of
@@ -583,7 +578,6 @@ def find_file_name_or_handler(path, ftype, storage_options=None):
     elif parsed_url.scheme == "hdfs":  # pragma: no cover
         is_handler = True
         (fs, all_files) = hdfs_list_dir_fnames(path)
-        f_size = fs.get_file_info([parsed_url.path])[0].size
 
         if all_files:
             path = path.rstrip("/")
@@ -598,7 +592,6 @@ def find_file_name_or_handler(path, ftype, storage_options=None):
                 raise BodoError(err_msg)
             fname = all_csv_files[0]
             fname = urlparse(fname).path  # strip off hdfs://port:host/
-            f_size = fs.get_file_info([fname])[0].size
 
         file_name_or_handler = fs.open_input_file(fname)
     # TODO: this can be merged with hdfs path above when pyarrow's new
@@ -606,7 +599,6 @@ def find_file_name_or_handler(path, ftype, storage_options=None):
     elif parsed_url.scheme in ("abfs", "abfss"):  # pragma: no cover
         is_handler = True
         (fs, all_files) = abfs_list_dir_fnames(path)
-        f_size = fs.info(fname)["size"]
 
         if all_files:
             path = path.rstrip("/")
@@ -618,7 +610,6 @@ def find_file_name_or_handler(path, ftype, storage_options=None):
                 # TODO: test
                 raise BodoError(err_msg)
             fname = all_csv_files[0]
-            f_size = fs.info(fname)["size"]
             fname = urlparse(fname).path  # strip off abfs[s]://port:host/
 
         file_name_or_handler = fs.open(fname, "rb")
@@ -639,12 +630,11 @@ def find_file_name_or_handler(path, ftype, storage_options=None):
                 raise BodoError(err_msg)
             fname = all_csv_files[0]
 
-        f_size = os.path.getsize(fname)
         file_name_or_handler = fname
 
     # although fs is never used, we need to return it so that s3/hdfs
     # connections are not closed
-    return is_handler, file_name_or_handler, f_size, fs
+    return is_handler, file_name_or_handler, fs
 
 
 def get_s3_bucket_region(s3_filepath, parallel):
