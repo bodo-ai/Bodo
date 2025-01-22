@@ -14,10 +14,15 @@ In order to run the bodo benchmark:
 
 1. Log in to the [Bodo Platform](https://platform.bodo.ai/workspaces)
 2. Click on the folder icon, drag and drop `bodo/nyc_taxi_precipitation.py`, which will add the file to the `/` directory on your cluster.
+
+<div style="text-align: center;">
     <img src="../img/File Explorer.png" alt="" width="70%">
+</div>
 3. Click on the person icon in the bottom left corner. From there navigate to **Admin Console** > **Personal Tokens** and click **Generate Token**, then copy the Client ID and Secret Key.
 
+ <div style="text-align: center;">
     <img src="../img/Account.png" alt="" width="70%">
+</div>
 4. Set the enviornment variables `BODO_CLIENT_ID` and `BODO_SECRET_KEY` to your Client ID and Secret Key.
 5. Install the Bodo SDK using `pip install bodosdk`
 6. Run the script: `python bodo/nyc_taxi_precipitation.py` this will create a cluster, run the benchmark 3 times and print the results to your local terminal.
