@@ -209,6 +209,8 @@ class BodoS3TablesCatalog(
         @JvmStatic
         private fun createS3TablesCatalog(warehouse: String): S3TablesCatalog {
             val catalog = S3TablesCatalog()
+            // Extract the region from the warehouse path
+            // Warehouse path is of the form "arn:aws:s3tables:Region:OwnerAccountID:bucket/bucket-name/table/tableID"
             val region =
                 warehouse
                     .split("arn:aws:s3tables:")
