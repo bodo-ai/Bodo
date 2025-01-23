@@ -57,9 +57,9 @@ In order to run the Bodo benchmark:
     <div style="text-align: center;">
         <img src="../img/Account.png" alt="" width="70%">
     </div>
-4. Set the enviornment variables `BODO_CLIENT_ID` and `BODO_SECRET_KEY` to your Client ID and Secret Key.
+4. Set the environment variables `BODO_CLIENT_ID` and `BODO_SECRET_KEY` to your Client ID and Secret Key.
 5. Install the Bodo SDK using `pip install bodosdk`.
-6. Run the script: `python bodo/run_bodo.py` this will create a cluster, run the benchmark 3 times and print the results to your local terminal.
+6. Run the script: `python bodo/run_bodo.py` which will create a cluster, run the benchmark 3 times and print the results to your local terminal.
 
 ### Dask
 
@@ -69,7 +69,7 @@ In order to run the Dask benchmark:
 2. Activate the environment using `conda activate benchmark_dask`.
 3. Ensure that you have set your aws credentials e.g. by running `aws configure`. This will be used by Dask Cloud Provider to launch EC2 instances.
 4. Run the benchmark script using `python dask/nyc_taxi_precipitation.py`. This creates the cluster, runs the benchmark 3
-times and prints the results to your local terminal. There is also a notebook version of the script availible.
+times and prints the results to your local terminal. There is also a notebook version of the script available.
 
 ### Modin on Ray
 
@@ -80,7 +80,7 @@ In order to run the Modin on Ray benchmark:
 cd modin_ray
 conda env create -f env.yml
 ```
-2. Activate the environment using `conda activate benchmark_modin`
+2. Activate the environment using `conda activate benchmark_modin`.
 3. Ensure that you have set your aws credentials e.g. by running `aws configure`. This will be used by Ray to launch EC2 instances.
 4. Run the script `./run_modin.sh`, which will run the benchmark 3 times and print the results to your local terminal. Note that this is a long running script, and if it is interrupted, additional cleanup of resources may be required e.g. running `ray down modin-cluster.yaml -y` in your terminal or terminating the instances in your EC2 console.
 
@@ -101,7 +101,7 @@ cd spark
 terraform init
 ```
 3. Apply the Terraform script to deploy resources and run the benchmark: `terraform apply` and type `yes` when prompted. The python script will be automatically uploaded to an S3 bucket and run on an EMR cluster.
-4. Run the following command to wait for the benchmark to complete: `./wait_for_steps.sh`
+4. Run the following command to wait for the benchmark to complete: `./wait_for_steps.sh`.
 5. To view the output, download and print the logs using:
 ```bash
 aws s3 cp s3://"$(terraform output --json | jq -r '.s3_bucket_id.value')"/logs/"$(terraform output --json | jq -r '.emr_cluster_id.value')" ./emr-logs --recursive --region "$(terraform output --json | jq -r '.emr_cluster_region.value')"
