@@ -8,16 +8,13 @@ from modin.pandas.io import to_ray
 def get_monthly_travels_weather(weather_dataset, hvfhv_dataset):
     start_read = time.time()
     central_park_weather_observations = pd.read_csv(
-        weather_dataset,
-        parse_dates=["DATE"],
+        weather_dataset, parse_dates=["DATE"], storage_options={"anon": True}
     )
     central_park_weather_observations = central_park_weather_observations.rename(
         columns={"DATE": "date", "PRCP": "precipitation"},
         copy=False,
     )
-    fhvhv_tripdata = pd.read_parquet(
-        hvfhv_dataset,
-    )
+    fhvhv_tripdata = pd.read_parquet(hvfhv_dataset, storage_options={"anon": True})
     end = time.time()
     print("Reading Time: ", (end - start_read))
 
