@@ -12,6 +12,7 @@ import com.bodosql.calcite.table.IcebergCatalogTable
 import com.google.common.collect.ImmutableList
 import org.apache.calcite.sql.ddl.SqlCreateTable
 import software.amazon.s3tables.iceberg.S3TablesCatalog
+import software.amazon.s3tables.iceberg.imports.AwsClientProperties.CLIENT_REGION
 
 class BodoS3TablesCatalog(
     private val warehouse: String,
@@ -200,6 +201,9 @@ class BodoS3TablesCatalog(
         )
 
     companion object {
+        // Regex to extract the region from a warehouse path
+        val warehousePathRegion = """arn:aws:s3tables:(\S+):\S+:bucket/\S*""".toRegex()
+
         /**
          * Create a RESTCatalog object from the given connection string.
          * @param connStr The connection string to the REST catalog.
@@ -208,7 +212,13 @@ class BodoS3TablesCatalog(
         @JvmStatic
         private fun createS3TablesCatalog(warehouse: String): S3TablesCatalog {
             val catalog = S3TablesCatalog()
-            catalog.initialize("S3TablesCatalog", mapOf(Pair("warehouse", warehouse)))
+            // Extract the region from the warehouse path
+            // Warehouse path is of the form "arn:aws:s3tables:Region:OwnerAccountID:bucket/bucket-name/table/tableID"
+            val region =
+                warehousePathRegion.matchEntire(warehouse) ?.let {
+                    it.groupValues[1]
+                } ?: throw Exception("Malformed warehouse string '$warehouse'")
+            catalog.initialize("S3TablesCatalog", mapOf(Pair("warehouse", warehouse), Pair(CLIENT_REGION, region)))
             return catalog
         }
     }
