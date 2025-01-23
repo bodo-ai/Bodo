@@ -539,11 +539,6 @@ def box_table(typ, val, c, ensure_unboxed=None):
     return out_table_obj
 
 
-# @numba.njit(cache=True)
-# def table_len_lower_njit(T):
-#    return T._len
-
-
 @lower_builtin(len, TableType)
 def table_len_lower(context, builder, sig, args):
     """
@@ -551,10 +546,6 @@ def table_len_lower(context, builder, sig, args):
     done in a shared template for many different types.
     See LenTemplate.
     """
-    # breakpoint()
-    # table_len_lower_njit.compile(sig)
-    # fn = context.get_function("table_len_lower_njit", sig)
-    # return builder.call(fn, args)
     return context.compile_internal(builder, lambda T: T._len, sig, args)
 
 
