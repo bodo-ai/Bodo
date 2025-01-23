@@ -8,7 +8,7 @@ The New York City Taxi and Limousine Commission's [For Hire Vehicle High Volume 
 
 ### Setting
 
-For this benchmark, we use the full FHVHV dataset stored in Parquet files on S3. The total size of this dataset is 24.7 GiB. The Central Park Weather data ia stored in a single CSV file on S3 and its total size is 514 KiB.
+For this benchmark, we use the full FHVHV dataset stored in Parquet files on S3. The total size of this dataset is 24.7 GiB. The Central Park Weather data is stored in a single CSV file on S3 and its total size is 514 KiB.
 
 We compared Bodo's performance on this workload to other systems including [Dask](https://www.dask.org/), [Modin on Ray](https://docs.ray.io/en/latest/ray-more-libs/modin/index.html), and [PySpark](https://spark.apache.org/docs/latest/api/python/index.html) and observed a speedup of 20-240x. The implementations for all of these systems can be found in [`nyc_taxi`](./nyc_taxi/). Versions of the packages used are summarized below.
 
@@ -32,7 +32,7 @@ The graph below summarizes the total execution time of each system (averaged ove
 
 <img src="../img/nyc-taxi-benchmark.png" alt="Monthly High Volume for Hire Vehicle Trips with Precipitation Benchmark Execution Time" title="Monthly High Volume for Hire Vehicle Trips with Precipitation Average Execution Time" width="30%">
 
-## Instructions for Reproducing
+## Instructions for Reproducing Benchmark Results
 
 ### Pre-requisites
 
@@ -96,7 +96,7 @@ In order to run the Spark benchmark:
 * [**gzip**](https://www.gnu.org/software/gzip/): Installed on your local machine.
 
 2. Enter the `spark` directory and initialize terraform:
-``` shell
+``` bash
 cd spark
 terraform init
 ```
