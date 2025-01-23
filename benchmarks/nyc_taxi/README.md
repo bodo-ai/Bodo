@@ -39,7 +39,7 @@ The graph below summarizes the total execution time of each system (averaged ove
 In order to reproduce the results from this benchmark, you will need:
 
 * An AWS account, permissions for using EC2, EMR, and S3 services.
-* An account on [Bodo Platform](https://platform.bodo.ai/workspaces). Sign up for free trial on AWS Marketplace [here](https://aws.amazon.com/marketplace/pp/prodview-zg6n2qyj5h74o?sr=0-1&ref_=beagle&applicationId=AWSMPContessa).
+* An account on [Bodo Platform](https://platform.bodo.ai/). Sign up for free trial on AWS Marketplace [here](https://aws.amazon.com/marketplace/pp/prodview-zg6n2qyj5h74o?sr=0-1&ref_=beagle&applicationId=AWSMPContessa). For more details, refer to our [Platform Quick Start documentation](https://docs.bodo.ai/latest/quick_start/quickstart_platform/#aws-marketplace-registration).
 * A personal machine with Conda installed/set up.
 
 ### Bodo
