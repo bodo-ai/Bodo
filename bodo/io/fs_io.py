@@ -545,6 +545,23 @@ def directory_of_files_common_filter(fname):
     )
 
 
+def get_complression_from_file_name(fname: str):
+    """Get compression scheme from file name"""
+
+    compression = None
+
+    if fname.endswith(".gz"):
+        compression = "gzip"
+    elif fname.endswith(".bz2"):
+        compression = "bz2"
+    elif fname.endswith(".zip"):
+        compression = "zip"
+    elif fname.endswith(".xz"):
+        compression = "xz"
+
+    return compression
+
+
 def find_file_name_or_handler(path, ftype, storage_options=None):
     """
     Find path_or_buf argument for pd.read_csv()/pd.read_json()
@@ -565,6 +582,7 @@ def find_file_name_or_handler(path, ftype, storage_options=None):
         is_handler: True if file_name_or_handler is a handler,
                     False otherwise(file_name_or_handler is a file_name)
         file_name_or_handler: file_name or handler to pass to pd.read_csv()/pd.read_json()
+        compression: compression scheme inferred from file name
         fs: file system for s3/hdfs
     """
     from urllib.parse import urlparse
@@ -676,9 +694,11 @@ def find_file_name_or_handler(path, ftype, storage_options=None):
 
         file_name_or_handler = fname
 
+    compression = get_complression_from_file_name(fname)
+
     # although fs is never used, we need to return it so that s3/hdfs
     # connections are not closed
-    return is_handler, file_name_or_handler, fs
+    return is_handler, file_name_or_handler, compression, fs
 
 
 def get_s3_bucket_region(s3_filepath, parallel):

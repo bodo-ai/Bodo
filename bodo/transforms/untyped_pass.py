@@ -3391,17 +3391,12 @@ def _get_json_df_type_from_file(
 
         is_handler = None
         try:
-            is_handler, file_name_or_handler, _ = find_file_name_or_handler(
-                fname_const, "json", storage_options
+            is_handler, file_name_or_handler, file_compression, _ = (
+                find_file_name_or_handler(fname_const, "json", storage_options)
             )
             if is_handler and compression == "infer":
                 # pandas can't infer compression without filename, we need to do it
-                if fname_const.endswith(".gz"):
-                    compression = "gzip"
-                elif fname_const.endswith(".bz2"):
-                    compression = "bz2"
-                else:
-                    compression = None
+                compression = file_compression
 
             # nrows: This can only be passed if lines=True.
             # https://pandas.pydata.org/docs/reference/api/pandas.read_json.html
@@ -4008,22 +4003,13 @@ def _get_csv_df_type_from_file(
 
         is_handler = None
         try:
-            is_handler, file_name_or_handler, _ = find_file_name_or_handler(
-                fname_const, "csv", csv_storage_options
+            is_handler, file_name_or_handler, file_compression, _ = (
+                find_file_name_or_handler(fname_const, "csv", csv_storage_options)
             )
 
             if is_handler and compression == "infer":
                 # pandas can't infer compression without filename, we need to do it
-                if fname_const.endswith(".gz"):
-                    compression = "gzip"
-                elif fname_const.endswith(".bz2"):
-                    compression = "bz2"
-                elif fname_const.endswith(".zip"):
-                    compression = "zip"
-                elif fname_const.endswith(".xz"):
-                    compression = "xz"
-                else:
-                    compression = None
+                compression = file_compression
 
             df = pd.read_csv(
                 file_name_or_handler,
