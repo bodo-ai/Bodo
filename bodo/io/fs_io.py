@@ -238,6 +238,7 @@ def get_gcs_fs(path, storage_options=None):
         parsed_url = urlparse(path)
         path_ = (parsed_url.netloc + parsed_url.path).rstrip("/")
         fs.get_file_info(path_)
+        return fs
     except OSError as e:
         if "Could not create a OAuth2 access token to authenticate the request" in str(
             e
