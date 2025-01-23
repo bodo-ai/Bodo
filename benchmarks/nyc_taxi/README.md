@@ -110,7 +110,7 @@ aws s3 cp s3://"$(terraform output --json | jq -r '.s3_bucket_id.value')"/logs/"
 gzip -d ./emr-logs/steps/*/*
 cat ./emr-logs/steps/*/stdout
 ```
-6. Finally, cleanup resources: `terraform destroy`.
+6. Finally, cleanup resources: `terraform destroy` and type `yes` when prompted.
 
 ## Local Benchmark
 
