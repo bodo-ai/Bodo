@@ -2,6 +2,7 @@
 Helper functions to enable typing.
 """
 
+import builtins
 import copy
 import itertools
 import operator
@@ -2273,6 +2274,14 @@ def _gen_objmode_overload(
 
         # Matplotlib specifies some arguments as `<deprecated parameter>`.
         # We can't support them, and it breaks our infrastructure, so omit them.
+        #
+        def get_default(default_val):
+            default_val_type = type(default_val)
+            match default_val_type:
+                case builtins.str:
+                    return "'" + default_val + "'"
+                case _:
+                    return str(default_val)
 
         args = func_spec.args[1:] if attr_name else func_spec.args[:]
         arg_strs = []
@@ -2280,7 +2289,7 @@ def _gen_objmode_overload(
             if i < n_pos_args:
                 arg_strs.append(arg)
             elif str(defaults[i - n_pos_args]) != "<deprecated parameter>":
-                arg_strs.append(arg + "=" + str(defaults[i - n_pos_args]))
+                arg_strs.append(arg + "=" + get_default(defaults[i - n_pos_args]))
             else:
                 args.remove(arg)
 
