@@ -37,7 +37,7 @@ times and prints the results to your local terminal. There is also a notebook ve
 
 # Modin on Ray
 
-1. Create a new conda environment using `modin-ray/env.yml`: `conda env create -f modin-ray/env.yml`.
+1. Create a new conda environment using `modin_ray/env.yml`: `conda env create -f modin-ray/env.yml`.
 2. Activate the environment using `conda activate benchmark_modin`
 3. Ensure that you have set your aws credentials e.g. by running `aws configure`. This will be used by Ray to launch EC2 instances.
 4. Run the script `./run_modin.sh`, which will run the benchmark 3 times and print the results to your local terminal.
