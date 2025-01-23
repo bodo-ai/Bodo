@@ -2360,7 +2360,7 @@ class DistributedPass:
             )
 
         # Iceberg Merge Into
-        if fdef == ("iceberg_merge_cow_py", "bodo.io.iceberg"):
+        if fdef == ("iceberg_merge_cow_py", "bodo.io.iceberg.merge_into"):
             # Dataframe is the 3rd argument (counting from 0)
             df_arg = rhs.args[3].name
             if not self._is_1D_or_1D_Var_arr(df_arg):
