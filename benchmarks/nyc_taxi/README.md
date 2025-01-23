@@ -82,7 +82,7 @@ conda env create -f env.yml
 ```
 2. Activate the environment using `conda activate benchmark_modin`
 3. Ensure that you have set your aws credentials e.g. by running `aws configure`. This will be used by Ray to launch EC2 instances.
-4. Run the script `./run_modin.sh`, which will run the benchmark 3 times and print the results to your local terminal.
+4. Run the script `./run_modin.sh`, which will run the benchmark 3 times and print the results to your local terminal. Note that this is a long running script, and if it is interrupted, additional cleanup of resources may be required e.g. running `ray down modin-cluster.yaml -y` in your terminal or terminating the instances in your EC2 console.
 
 ### Spark
 
