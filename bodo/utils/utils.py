@@ -1907,7 +1907,7 @@ def bodo_exec(func_text, glbls, loc_vars, real_globals):
     # Get hash of function text.
     text_hash = hashlib.sha256(func_text.encode("utf-8")).hexdigest()
     # Use a regular expression to find and add hash to the function name.
-    pattern = r"(def\s+)(\w+)(\s*\()"
+    pattern = r"(^def\s+)(\w+)(\s*\()"
     found_pattern = re.search(pattern, func_text)
     assert found_pattern, "bodo_exec: function definition not found"
     func_name = found_pattern.group(2) + f"_{text_hash}"
