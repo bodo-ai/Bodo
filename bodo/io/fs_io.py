@@ -545,7 +545,7 @@ def directory_of_files_common_filter(fname):
     )
 
 
-def get_complression_from_file_name(fname: str):
+def get_compression_from_file_name(fname: str):
     """Get compression scheme from file name"""
 
     compression = None
@@ -694,7 +694,7 @@ def find_file_name_or_handler(path, ftype, storage_options=None):
 
         file_name_or_handler = fname
 
-    compression = get_complression_from_file_name(fname)
+    compression = get_compression_from_file_name(fname)
 
     # although fs is never used, we need to return it so that s3/hdfs
     # connections are not closed
