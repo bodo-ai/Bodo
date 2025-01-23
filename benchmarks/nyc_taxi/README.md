@@ -38,7 +38,7 @@ The graph below summarizes the total execution time of each system (averaged ove
 
 In order to reproduce the results from this benchmark, you will need:
 
-* An AWS account, permissions for using EC2 and EMR services.
+* An AWS account, permissions for using EC2, EMR, and S3 services.
 * An account on [Bodo Platform](https://platform.bodo.ai/workspaces). Sign up for free trial on AWS Marketplace [here](https://aws.amazon.com/marketplace/pp/prodview-zg6n2qyj5h74o?sr=0-1&ref_=beagle&applicationId=AWSMPContessa).
 * A personal machine with Conda installed/set up.
 
@@ -100,8 +100,8 @@ In order to run the Spark benchmark:
 cd spark
 terraform init
 ```
-3. Apply the Terraform script to deploy the resources: `terraform apply`.
-4. Run the benchmark `./wait_for_steps.sh`, this script will run the benchmark 3 times and output logs to your cluster.
+3. Apply the Terraform script to deploy resources and run the benchmark: `terraform apply` and type `yes` when prompted. The python script will be automatically uploaded to an S3 bucket and run on an EMR cluster.
+4. Run the following command to wait for the benchmark to complete: `./wait_for_steps.sh`
 5. To view the output, download and print the logs using:
 ```bash
 aws s3 cp s3://"$(terraform output --json | jq -r '.s3_bucket_id.value')"/logs/"$(terraform output --json | jq -r '.emr_cluster_id.value')" ./emr-logs --recursive --region "$(terraform output --json | jq -r '.emr_cluster_region.value')"
@@ -110,7 +110,7 @@ aws s3 cp s3://"$(terraform output --json | jq -r '.s3_bucket_id.value')"/logs/"
 gzip -d ./emr-logs/steps/*/*
 cat ./emr-logs/steps/*/stdout
 ```
-6. Finally, cleanup resources: `terraform destroy`
+6. Finally, cleanup resources: `terraform destroy`.
 
 ## Local Benchmark
 
