@@ -349,20 +349,15 @@ def box_pd_datetime_array(typ, val, c):
             types.unicode_type, dtype_str, c.env_manager
         )
         c.pyapi.incref(dtype_obj)
-    # Get the constructor
-    pd_array_class_obj = c.pyapi.object_getattr_string(pd_class_obj, "arrays")
 
     # Call the constructor.
     # The null bitmap is ignored at this stage because the corresponding entry in the DatetimeArray is also NaT
-    res = c.pyapi.call_method(
-        pd_array_class_obj, "DatetimeArray", (np_arr_obj, dtype_obj)
-    )
+    res = c.pyapi.call_method(pd_class_obj, "array", (np_arr_obj, dtype_obj))
 
     c.pyapi.decref(np_arr_obj)
     c.pyapi.decref(unit_str_obj)
     c.pyapi.decref(dtype_obj)
     c.pyapi.decref(pd_class_obj)
-    c.pyapi.decref(pd_array_class_obj)
     # decref() should be called on native value
     # see https://github.com/numba/numba/blob/13ece9b97e6f01f750e870347f231282325f60c3/numba/core/boxing.py#L389
     c.context.nrt.decref(c.builder, typ, val)
