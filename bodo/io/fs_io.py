@@ -35,6 +35,9 @@ from bodo.libs.str_ext import unicode_to_utf8, unicode_to_utf8_and_len
 from bodo.utils.typing import BodoError, BodoWarning, get_overload_constant_dict
 from bodo.utils.utils import AWSCredentials, check_java_installation
 
+# Same as _fs_io.cpp
+GCS_RETRY_LIMIT_SECONDS = 2
+
 
 # ----- monkey-patch fsspec.implementations.arrow.ArrowFSWrapper._open --------
 def fsspec_arrowfswrapper__open(self, path, mode="rb", block_size=None, **kwargs):
@@ -217,8 +220,7 @@ def get_gcs_fs(path, storage_options=None):
     from pyarrow.fs import GcsFileSystem
 
     # PyArrow seems to hang for a long time if retry isn't set
-    retry_time_limit = 3
-    options = {"retry_time_limit": datetime.timedelta(seconds=retry_time_limit)}
+    options = {"retry_time_limit": datetime.timedelta(seconds=GCS_RETRY_LIMIT_SECONDS)}
 
     anon = False
     if storage_options:

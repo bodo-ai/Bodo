@@ -6,6 +6,7 @@
 
 #include <arrow/filesystem/azurefs.h>
 #include <arrow/filesystem/filesystem.h>
+#include <arrow/filesystem/gcsfs.h>
 #include <arrow/filesystem/localfs.h>
 #include <arrow/filesystem/s3fs.h>
 #include <arrow/io/api.h>
@@ -65,6 +66,9 @@ static void ensure_pa_wrappers_imported() {
         throw std::runtime_error(err_msg);                                 \
     }                                                                      \
     lhs = std::move(res).ValueOrDie();
+
+// Same as fs_io.py
+#define GCS_RETRY_LIMIT_SECONDS 3
 
 std::shared_ptr<arrow::fs::S3FileSystem> s3_fs;
 
@@ -128,6 +132,8 @@ get_reader_file_system(std::string file_path, std::string s3_bucket_region,
                    file_path.starts_with("abfs://") ||
                    file_path.starts_with("abfss://");
     bool is_s3 = file_path.starts_with("s3://");
+    bool is_gcs =
+        file_path.starts_with("gcs://") || file_path.starts_with("gs://");
     std::shared_ptr<arrow::fs::FileSystem> fs;
     if (is_s3 || is_hdfs) {
         arrow::util::Uri uri;
@@ -157,6 +163,34 @@ get_reader_file_system(std::string file_path, std::string s3_bucket_region,
         }
         Py_DECREF(fs_mod);
         Py_DECREF(func_obj);
+    } else if (is_gcs) {
+        arrow::fs::GcsOptions options = arrow::fs::GcsOptions::Defaults();
+        // Arrow seems to hang for a long time if retry isn't set
+        options.retry_limit_seconds = GCS_RETRY_LIMIT_SECONDS;
+        arrow::Result<std::shared_ptr<arrow::fs::GcsFileSystem>> result =
+            arrow::fs::GcsFileSystem::Make(options,
+                                           bodo::default_buffer_io_context());
+
+        CHECK_ARROW_AND_ASSIGN(result, "GcsFileSystem::Make", fs,
+                               std::string("GCS"));
+        file_path = fs->PathFromUri(file_path).ValueOrDie();
+
+        // Try with anonymous=True if not authenticated since Arrow doesn't try
+        // automatically
+        arrow::Status status = fs->GetFileInfo(file_path).status();
+        if (!status.ok() && status.IsIOError() &&
+            (status.message().find("Could not create a OAuth2 access token to "
+                                   "authenticate the request") !=
+             std::string::npos)) {
+            arrow::fs::GcsOptions options = arrow::fs::GcsOptions::Anonymous();
+            options.retry_limit_seconds = GCS_RETRY_LIMIT_SECONDS;
+            arrow::Result<std::shared_ptr<arrow::fs::GcsFileSystem>> result =
+                arrow::fs::GcsFileSystem::Make(
+                    options, bodo::default_buffer_io_context());
+
+            CHECK_ARROW_AND_ASSIGN(result, "GcsFileSystem::Make", fs,
+                                   std::string("GCS"));
+        }
     } else {
         fs = std::make_shared<arrow::fs::LocalFileSystem>();
     }
