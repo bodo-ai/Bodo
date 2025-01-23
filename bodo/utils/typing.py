@@ -2,7 +2,6 @@
 Helper functions to enable typing.
 """
 
-import builtins
 import copy
 import itertools
 import operator
@@ -2276,9 +2275,8 @@ def _gen_objmode_overload(
         # We can't support them, and it breaks our infrastructure, so omit them.
         #
         def get_default(default_val):
-            default_val_type = type(default_val)
-            match default_val_type:
-                case builtins.str:
+            match default_val:
+                case str():
                     return "'" + default_val + "'"
                 case _:
                     return str(default_val)
