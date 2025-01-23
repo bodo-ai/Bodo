@@ -59,7 +59,7 @@ In order to run the Bodo benchmark:
     </div>
 4. Set the enviornment variables `BODO_CLIENT_ID` and `BODO_SECRET_KEY` to your Client ID and Secret Key.
 5. Install the Bodo SDK using `pip install bodosdk`.
-6. Run the script: `python bodo/nyc_taxi_precipitation.py` this will create a cluster, run the benchmark 3 times and print the results to your local terminal.
+6. Run the script: `python bodo/run_bodo.py` this will create a cluster, run the benchmark 3 times and print the results to your local terminal.
 
 ### Dask
 
