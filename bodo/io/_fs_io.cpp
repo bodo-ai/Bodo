@@ -263,8 +263,9 @@ void create_dir_posix(int myrank, std::string &dirname,
     // create output directory
     int error = 0;
     if (std::filesystem::exists(dirname)) {
-        if (!std::filesystem::is_directory(dirname))
+        if (!std::filesystem::is_directory(dirname)) {
             error = 1;
+        }
     } else {
         // for the parallel case, 'dirname' is the directory where the
         // different parts of the distributed table are stored (each as
@@ -275,11 +276,12 @@ void create_dir_posix(int myrank, std::string &dirname,
                             MPI_COMM_WORLD),
               "create_dir_posix: MPI error on MPI_Allreduce:");
     if (error) {
-        if (myrank == 0)
+        if (myrank == 0) {
             std::cerr << "Bodo parquet write ERROR: a process reports "
                          "that path "
                       << path_name << " exists and is not a directory"
                       << std::endl;
+        }
     }
 }
 

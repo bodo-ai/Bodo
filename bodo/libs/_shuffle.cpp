@@ -409,8 +409,9 @@ static void fill_send_array_inner_array_item(
     tracing::Event ev("fill_send_array_inner_array_item", is_parallel);
     std::vector<int64_t> tmp_offset(send_disp);
     for (size_t i = 0; i < n_rows; i++) {
-        if (row_dest[i] == -1)
+        if (row_dest[i] == -1) {
             continue;
+        }
         int64_t& ind = tmp_offset[row_dest[i]];
         send_length_buff[ind++] = arr_offsets[i + 1] - arr_offsets[i];
     }
@@ -441,8 +442,9 @@ static void fill_send_array_string_inner(
     for (size_t i = 0; i < n_rows; i++) {
         // write length
         const int node = row_dest[i];
-        if (node == -1)
+        if (node == -1) {
             continue;
+        }
         int64_t& ind = tmp_offset[node];
         const uint32_t str_len = arr_offsets[i + 1] - arr_offsets[i];
         send_length_buff[ind++] = str_len;
@@ -952,8 +954,9 @@ std::shared_ptr<arrow::Buffer> shuffle_arrow_offset_buffer(
     std::vector<int64_t> list_shift = send_disp;
     for (size_t i_row = 0; i_row < n_rows; i_row++) {
         int node = row_dest[i_row];
-        if (node == -1)
+        if (node == -1) {
             continue;
+        }
         int64_t off1 = input_array->value_offset(i_row);
         int64_t off2 = input_array->value_offset(i_row + 1);
         offset_t e_len = off2 - off1;
@@ -994,8 +997,9 @@ bodo::vector<int> map_hashes_array(std::vector<int64_t> const& send_count,
     bodo::vector<int> row_dest_out(n_ent, -1);
     for (size_t i_row = 0; i_row < n_rows; i_row++) {
         int node = row_dest[i_row];
-        if (node == -1)
+        if (node == -1) {
             continue;
+        }
         int64_t off1 = input_array->value_offset(i_row);
         int64_t off2 = input_array->value_offset(i_row + 1);
         for (int64_t idx = off1; idx < off2; idx++) {
@@ -1082,8 +1086,9 @@ std::shared_ptr<arrow::Buffer> shuffle_arrow_primitive_buffer(
         std::vector<int64_t> tmp_offset(send_disp);
         for (size_t i = 0; i < n_rows; i++) {
             int node = row_dest[i];
-            if (node == -1)
+            if (node == -1) {
                 continue;
+            }
             int64_t ind = tmp_offset[node];
             memcpy(send_arr.data() + ind * siztype, values + i * siztype,
                    siztype);
@@ -1121,8 +1126,9 @@ std::shared_ptr<arrow::Buffer> shuffle_string_buffer(
     std::vector<int64_t> recv_count_char(n_pes);
     for (size_t i_row = 0; i_row < n_rows; i_row++) {
         int node = row_dest[i_row];
-        if (node == -1)
+        if (node == -1) {
             continue;
+        }
         int64_t n_char = string_array->value_length(i_row);
         send_count_char[node] += n_char;
     }
@@ -1151,8 +1157,9 @@ std::shared_ptr<arrow::Buffer> shuffle_string_buffer(
     std::vector<int64_t> list_shift = send_disp_char;
     for (size_t i_row = 0; i_row < n_rows; i_row++) {
         int node = row_dest[i_row];
-        if (node == -1)
+        if (node == -1) {
             continue;
+        }
         std::string_view e_str = string_array->GetView(i_row);
         int64_t n_char = e_str.size();
         for (int64_t i_char = 0; i_char < n_char; i_char++) {
@@ -1327,10 +1334,11 @@ std::shared_ptr<array_info> reverse_shuffle_string_array(
     int n_pes = comm_info.n_pes;
     std::vector<int64_t> recv_count_sub(n_pes),
         recv_disp_sub(n_pes);  // we continue using here the recv/send
-    for (int i = 0; i < n_pes; i++)
+    for (int i = 0; i < n_pes; i++) {
         recv_count_sub[i] =
             in_offset[comm_info.recv_disp[i] + comm_info.recv_count[i]] -
             in_offset[comm_info.recv_disp[i]];
+    }
     std::vector<int64_t> send_count_sub(n_pes), send_disp_sub(n_pes);
 
     CHECK_MPI(
@@ -1352,8 +1360,9 @@ std::shared_ptr<array_info> reverse_shuffle_string_array(
     // 3: the offsets
     bodo::vector<uint32_t> list_len_send(in_len);
     offset_t* out_offset = (offset_t*)out_arr->data2();
-    for (int64_t i = 0; i < in_len; i++)
+    for (int64_t i = 0; i < in_len; i++) {
         list_len_send[i] = in_offset[i + 1] - in_offset[i];
+    }
     MPI_Datatype mpi_typ = get_MPI_typ(Bodo_CTypes::UINT32);
     bodo::vector<uint32_t> list_len_recv(out_len);
     bodo_alltoallv(list_len_send.data(), comm_info.recv_count,
@@ -1450,8 +1459,9 @@ void reverse_shuffle_offsets(offset_t* in_offset, offset_t* out_offset,
                              int64_t in_len, int64_t out_len,
                              mpi_comm_info const& comm_info) {
     bodo::vector<uint32_t> send_arr_lens(in_len);
-    for (int64_t i = 0; i < in_len; i++)
+    for (int64_t i = 0; i < in_len; i++) {
         send_arr_lens[i] = in_offset[i + 1] - in_offset[i];
+    }
     MPI_Datatype mpi_typ = get_MPI_typ(Bodo_CTypes::UINT32);
     bodo::vector<uint32_t> recv_arr_lens(out_len);
     bodo_alltoallv(send_arr_lens.data(), comm_info.recv_count,
@@ -2016,8 +2026,9 @@ bool need_reshuffling(std::shared_ptr<table_info> in_table,
     int64_t n_rows = in_table->nrows(), sum_n_rows, max_n_rows;
     int n_pes;
     MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
-    if (n_pes == 1)
+    if (n_pes == 1) {
         return false;
+    }
     CHECK_MPI(MPI_Allreduce(&n_rows, &sum_n_rows, 1, MPI_LONG_LONG_INT, MPI_SUM,
                             MPI_COMM_WORLD),
               "need_reshuffling: MPI error on MPI_Allreduce:");

@@ -11,11 +11,9 @@
 
 // Forward declare boost::json::object to avoid including the entire header and
 // increasing compile times
-namespace boost {
-namespace json {
+namespace boost::json {
 class object;
 }
-}  // namespace boost
 
 // Fraction of the smallest mmap-ed SizeClass
 // that should be used as threshold for allocation
