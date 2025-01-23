@@ -45,6 +45,15 @@ def recursive_count_dir(start_dir, to_count):
 
 
 def test_internal_caching(df):
+    """This test is here because if we put it in a regular pytest file then you
+    have no control over the order in which it is run.  You could check the
+    output of the function there but that isn't what we are trying to test
+    but instead making sure that an internal function is cached properly.
+    Again, if you put that check in a pytest file then that file could be
+    run in whatever order and some other test might create that internal
+    function which invalidates the purpose of this test.  This test included
+    here has to be the first thing run after clearing the internal caches.
+    """
     df1 = df.groupby(["A"], as_index=False)
     df2 = df1.agg({"B": ["sum", "count"], "C": ["sum", "count"]})
     return df2.columns
