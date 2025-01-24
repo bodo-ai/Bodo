@@ -17,6 +17,18 @@ def test_read_csv_hf(datapath, memory_leak_check):
 
 
 @pytest.mark.slow
+def test_read_json_hf(datapath, memory_leak_check):
+    """Test read_json from Hugging Face"""
+
+    def test_impl():
+        return pd.read_json(
+            "hf://datasets/HuggingFaceH4/MATH-500/test.jsonl", lines=True
+        )
+
+    check_func(test_impl, ())
+
+
+@pytest.mark.slow
 def test_read_parquet_hf(datapath, memory_leak_check):
     """Test read_parquet from Hugging Face"""
 
