@@ -794,8 +794,9 @@ void delete_window_state(WindowState* window_state) { delete window_state; }
 PyMODINIT_FUNC PyInit_stream_window_cpp(void) {
     PyObject* m;
     MOD_DEF(m, "stream_window_cpp", "No docs", nullptr);
-    if (m == nullptr)
+    if (m == nullptr) {
         return nullptr;
+    }
 
     bodo_common_init();
 

@@ -708,20 +708,27 @@ std::shared_ptr<array_info> iceberg_identity_transform(
 std::shared_ptr<array_info> iceberg_transform(
     std::shared_ptr<array_info> in_arr, std::string transform_name, int64_t arg,
     bool is_parallel) {
-    if (transform_name == "bucket")
+    if (transform_name == "bucket") {
         return array_transform_bucket_N(in_arr, arg, is_parallel);
-    if (transform_name == "truncate")
+    }
+    if (transform_name == "truncate") {
         return array_transform_truncate_W(in_arr, arg, is_parallel);
-    if (transform_name == "void")
+    }
+    if (transform_name == "void") {
         return array_transform_void(in_arr, is_parallel);
-    if (transform_name == "year")
+    }
+    if (transform_name == "year") {
         return array_transform_year(in_arr, is_parallel);
-    if (transform_name == "month")
+    }
+    if (transform_name == "month") {
         return array_transform_month(in_arr, is_parallel);
-    if (transform_name == "day")
+    }
+    if (transform_name == "day") {
         return array_transform_day(in_arr, is_parallel);
-    if (transform_name == "hour")
+    }
+    if (transform_name == "hour") {
         return array_transform_hour(in_arr, is_parallel);
+    }
 
     throw std::runtime_error("Unrecognized transform '" + transform_name +
                              "' provided.");
@@ -739,11 +746,13 @@ std::string transform_val_to_str(std::string transform_name,
         }
     }
 
-    if (transform_name == "year")
+    if (transform_name == "year") {
         return std::to_string(transformed_arr->at<int32_t>(idx) + 1970);
+    }
     if ((transform_name == "identity" || transform_name == "day") &&
-        in_arr->dtype == Bodo_CTypes::DATE)
+        in_arr->dtype == Bodo_CTypes::DATE) {
         return in_arr->val_to_str(idx);
+    }
     if (transform_name == "day") {
         // day transform is only supported for DATETIME and DATE types.
         // DATE is handled right above, so this must be DATETIME.

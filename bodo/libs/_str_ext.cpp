@@ -122,8 +122,9 @@ void re_escape_with_output(char* pattern, int64_t length, char* out_pattern,
 PyMODINIT_FUNC PyInit_hstr_ext(void) {
     PyObject* m;
     MOD_DEF(m, "hstr_ext", "No docs", nullptr);
-    if (m == nullptr)
+    if (m == nullptr) {
         return nullptr;
+    }
 
     // init numpy
     import_array();
@@ -236,8 +237,9 @@ void str_arr_split_view_impl(str_arr_split_view_payload* out_view,
             data_offs.push_back(data_ind);
             index_offsets[str_ind + 1] = data_offs.size();
             str_ind++;
-            if (str_ind == n_strs)
+            if (str_ind == n_strs) {
                 break;  // all finished
+            }
             // start new string
             data_offs.push_back(data_ind - 1);
             continue;  // stay on same data_ind for start of next string
@@ -317,8 +319,9 @@ void setitem_string_array(offset_t* offsets, char* data, uint64_t n_bytes,
         return;                        \
     }
     // std::cout << "setitem str: " << *str << " " << index << std::endl;
-    if (index == 0)
+    if (index == 0) {
         offsets[index] = 0;
+    }
     offset_t start = offsets[index];
     offset_t utf8_len = 0;
     // std::cout << "start " << start << " len " << len << std::endl;
@@ -348,8 +351,9 @@ void setitem_binary_array(offset_t* offsets, char* data, uint64_t n_bytes,
     }
     offset_t utf8_len = (offset_t)len;
 
-    if (index == 0)
+    if (index == 0) {
         offsets[index] = 0;
+    }
     offset_t start = offsets[index];
 
     // Bytes objects in python are always just an array of chars,
@@ -374,8 +378,9 @@ void set_string_array_range(offset_t* out_offsets, char* out_data,
                             int64_t num_strs, int64_t num_chars) {
     // printf("%d %d\n", start_str_ind, start_chars_ind); fflush(stdout);
     offset_t curr_offset = 0;
-    if (start_str_ind != 0)
+    if (start_str_ind != 0) {
         curr_offset = out_offsets[start_str_ind];
+    }
 
     // set offsets
     for (size_t i = 0; i < (size_t)num_strs; i++) {
@@ -635,8 +640,9 @@ void print_list_str_arr(uint64_t n, const char* data,
         std::cout << "index_offsets: " << index_offsets[i] << " "
                   << index_offsets[i + 1] << "  lists:";
         for (uint64_t j = index_offsets[i]; j < index_offsets[i + 1]; j++) {
-            for (uint64_t k = data_offsets[j]; k < data_offsets[j + 1]; k++)
+            for (uint64_t k = data_offsets[j]; k < data_offsets[j + 1]; k++) {
                 std::cout << data[k] << " ";
+            }
             std::cout << "\n";
         }
         std::cout << "\n";
@@ -698,8 +704,9 @@ int64_t bytes_fromhex(unsigned char* output, unsigned char* data,
                 data++;
             } while (Py_ISSPACE(*data));
             // This break is taken if we end with a space character
-            if (data >= end)
+            if (data >= end) {
                 break;
+            }
         }
         CHECK((end - data) >= 2,
               "bytes.fromhex, must provide two hex values per byte");
@@ -756,8 +763,9 @@ array_info* str_to_dict_str_array(array_info* str_arr) {
 
     offset_t* offsets = (offset_t*)str_arr->data2<bodo_array_type::STRING>();
     for (uint64_t i = 0; i < arr_len; i++) {
-        if (!str_arr->get_null_bit<bodo_array_type::STRING>(i))
+        if (!str_arr->get_null_bit<bodo_array_type::STRING>(i)) {
             continue;
+        }
         std::string_view elem(
             str_arr->data1<bodo_array_type::STRING>() + offsets[i],
             offsets[i + 1] - offsets[i]);
