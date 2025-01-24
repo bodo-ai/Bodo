@@ -657,7 +657,7 @@ read and write of data on GCS.
 
 ### Hugging Face Datasets
 
-Bodo supports reading CSV, JSON, and Parquet data from Hugging Face datasets using the [huggingface_hub](https://huggingface.co/docs/huggingface_hub) library
+Bodo supports reading CSV and Parquet data from Hugging Face datasets using the [huggingface_hub](https://huggingface.co/docs/huggingface_hub) library
 (which can be installed using pip or Conda).
 The data path should start with `hf://`. For example:
 
