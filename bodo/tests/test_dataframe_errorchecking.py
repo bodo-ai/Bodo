@@ -987,15 +987,18 @@ def test_concat_const_args(memory_leak_check):
 
 
 def test_df_getitem_non_const_columname_error(memory_leak_check):
-    g = bodo.jit(lambda a: a)
+    @bodo.jit
+    def g(flag, a):
+        if flag:
+            col = a
+        else:
+            col = df.columns[0]
+        return col
 
     @bodo.jit
     def f(df, a):
         flag = len(df) > 10
-        if flag:
-            col = g(a)
-        else:
-            col = df.columns[0]
+        col = g(flag, a)
         return df[col]
 
     message = r"df\[\] getitem selecting a subset of columns requires providing constant column names. For more information, see https://docs.bodo.ai/latest/bodo_parallelism/typing_considerations/#require_constants."
