@@ -133,6 +133,19 @@ def validate_gcsfs_installed():
         )
 
 
+def validate_huggingface_hub_installed():
+    """
+    Validate that huggingface_hub is installed. Raise an error if not.
+    """
+    try:
+        import huggingface_hub  # noqa
+    except ImportError:
+        raise BodoError(
+            "Cannot import huggingface_hub, which is required for reading from Hugging Face."
+            " Please make sure the huggingface_hub package is installed."
+        )
+
+
 def get_s3_fs(
     region=None, storage_options=None, aws_credentials: AWSCredentials | None = None
 ):
@@ -249,6 +262,7 @@ def get_gcs_fs(path, storage_options=None):
 
 def get_hf_fs(storage_options=None):
     """Create an Arrow file system object for reading Hugging Face datasets."""
+    validate_huggingface_hub_installed()
     import huggingface_hub
     from pyarrow.fs import FSSpecHandler, PyFileSystem
 
