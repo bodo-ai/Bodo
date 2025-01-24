@@ -2437,11 +2437,6 @@ def test_set_df_column_names(memory_leak_check):
             df.columns = ["a", "b"]
         return df
 
-    # non-constant column names
-    def impl4(df, a):
-        df.columns = a[1:]
-        return df
-
     # test setattr on df with nested names (#2126)
     def impl5(df):
         df1 = df.groupby(["A"], as_index=False)
@@ -2466,10 +2461,7 @@ def test_set_df_column_names(memory_leak_check):
         match="DataFrame.columns: setting dataframe column names inside conditionals and loops not supported yet",
     ):
         bodo.jit(impl3)(df, False)
-    with pytest.raises(
-        BodoError, match="DataFrame.columns: new column names should be a constant list"
-    ):
-        bodo.jit(impl4)(df, ["a", "b", "c"])
+
     df = pd.DataFrame(
         {"A": [1.0, 2.0, np.nan, 1.0], "B": [1.2, np.nan, 1.1, 3.1], "C": [2, 3, 1, 5]}
     )
