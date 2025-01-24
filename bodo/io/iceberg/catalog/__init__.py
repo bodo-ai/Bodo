@@ -7,7 +7,6 @@ Helper code for:
 
 from __future__ import annotations
 
-import os
 import re
 import typing as pt
 from urllib.parse import parse_qs, urlparse
@@ -49,7 +48,10 @@ def validate_conn_str(conn_str: str) -> None:
 
 
 def conn_str_to_catalog(conn_str: str) -> Catalog:
-    """TODO"""
+    """
+    Construct a PyIceberg catalog from a connection string
+    """
+
     from pyiceberg.catalog import URI, WAREHOUSE_LOCATION
 
     validate_conn_str(conn_str)
@@ -99,9 +101,7 @@ def conn_str_to_catalog(conn_str: str) -> Catalog:
             properties[URI] = base_url
         case "iceberg+arn":
             from .s3_tables import (
-                S3TABLES_ACCESS_KEY_ID,
                 S3TABLES_REGION,
-                S3TABLES_SECRET_ACCESS_KEY,
                 S3TABLES_TABLE_BUCKET_ARN,
                 S3TablesCatalog,
             )
@@ -113,8 +113,6 @@ def conn_str_to_catalog(conn_str: str) -> Catalog:
             if not parsed:
                 raise ValueError(f"Invalid S3 Tables ARN: {conn_str}")
             properties[S3TABLES_REGION] = parsed.group(1)
-            properties[S3TABLES_ACCESS_KEY_ID] = os.environ["AWS_ACCESS_KEY_ID"]
-            properties[S3TABLES_SECRET_ACCESS_KEY] = os.environ["AWS_SECRET_ACCESS_KEY"]
         case "iceberg+snowflake":
             from .snowflake import SnowflakeCatalog
 

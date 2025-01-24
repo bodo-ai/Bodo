@@ -68,6 +68,7 @@ from bodo.utils.utils import (
 if pt.TYPE_CHECKING:  # pragma: no cover
     from llvmlite.ir.builder import IRBuilder
     from numba.core.base import BaseContext
+    from pyiceberg.expressions.literals import Literal
 
 
 ll.add_symbol("iceberg_pq_read_py_entry", arrow_cpp.iceberg_pq_read_py_entry)
@@ -864,7 +865,7 @@ except ImportError:
     pie = None
 
 
-def literal(val):
+def literal(val) -> Literal:
     """
     Wrapper over PyIceberg's literal function for constructing filters.
     This is needed to convert other Python literals to Iceberg-compatible ones
@@ -876,7 +877,7 @@ def literal(val):
     if isinstance(val, datetime.datetime):
         return TimestampLiteral((val - datetime.datetime(1970, 1, 1)).microseconds)
     if isinstance(val, list):
-        return {literal(v) for v in val}
+        return {literal(v) for v in val}  # type: ignore
     return literal(val)
 
 
@@ -1052,21 +1053,23 @@ def add_rtjf_iceberg_filter(
                 filtered_cols, bounds, filter_ops
             ):
                 if unique_vals != None and len(unique_vals) > 0 and op == "==":
-                    rtjf_filters = pie.And(rtjf_filters, pie.In(col, unique_vals))
+                    rtjf_filters = pie.And(
+                        rtjf_filters, pie.In(col, literal(unique_vals))
+                    )
                 else:
                     if min is not None and op in ("==", ">=", ">"):
                         rtjf_filters = pie.And(
                             rtjf_filters,
-                            pie.GreaterThan(col, min)
+                            pie.GreaterThan(col, literal(min))
                             if op == ">"
-                            else pie.GreaterThanOrEqual(col, min),
+                            else pie.GreaterThanOrEqual(col, literal(min)),
                         )
                     if max is not None and op in ("==", "<=", "<"):
                         rtjf_filters = pie.And(
                             rtjf_filters,
-                            pie.LessThan(col, min)
+                            pie.LessThan(col, literal(max))
                             if op == "<"
-                            else pie.LessThanOrEqual(col, max),
+                            else pie.LessThanOrEqual(col, literal(max)),
                         )
 
             combined_filters = pie.And(file_filters, rtjf_filters)

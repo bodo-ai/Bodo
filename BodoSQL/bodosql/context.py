@@ -16,7 +16,7 @@ import pyarrow as pa
 from numba.core import ir, types
 
 import bodo
-from bodo.ir.sql_ext import parse_dbtype, remove_iceberg_prefix
+from bodo.ir.sql_ext import parse_dbtype
 from bodo.libs.distributed_api import bcast_scalar
 from bodo.utils.typing import BodoError, dtype_to_array_type
 from bodosql.bodosql_types.database_catalog import DatabaseCatalog
@@ -431,7 +431,6 @@ def compute_df_types(df_list, is_bodo_type):
                 const_conn_str = table_info._conn_str
                 db_type, _ = parse_dbtype(const_conn_str)
                 if db_type == "iceberg":
-                    pruned_conn_str = remove_iceberg_prefix(const_conn_str)
                     db_schema = table_info._db_schema
                     iceberg_table_name = table_info._file_path
                     # table_name = table_info.
@@ -442,7 +441,8 @@ def compute_df_types(df_list, is_bodo_type):
                         col_types,
                         _pyarrow_table_schema,
                     ) = bodo.io.iceberg.get_iceberg_orig_schema(
-                        iceberg_table_name, pruned_conn_str, db_schema
+                        const_conn_str,
+                        f"{db_schema}.{iceberg_table_name}",
                     )
                 else:
                     type_info = (
