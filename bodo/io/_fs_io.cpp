@@ -18,6 +18,11 @@
 #include "_fs_io.h"
 #include "arrow_compat.h"
 
+// Forward declaration from pyfs.pyx
+struct c_PyFileSystemBodo;
+extern "C++" std::shared_ptr<arrow::fs::FileSystem> get_cpp_fs(
+    struct c_PyFileSystemBodo *);
+
 // Helper to ensure that the pyarrow wrappers have been imported.
 // We use a static variable to make sure we only do the import once.
 static bool imported_pyarrow_wrappers = false;
@@ -134,6 +139,7 @@ get_reader_file_system(std::string file_path, std::string s3_bucket_region,
     bool is_s3 = file_path.starts_with("s3://");
     bool is_gcs =
         file_path.starts_with("gcs://") || file_path.starts_with("gs://");
+    bool is_hf = file_path.starts_with("hf://");
     std::shared_ptr<arrow::fs::FileSystem> fs;
     if (is_s3 || is_hdfs) {
         arrow::util::Uri uri;
@@ -191,6 +197,46 @@ get_reader_file_system(std::string file_path, std::string s3_bucket_region,
             CHECK_ARROW_AND_ASSIGN(result, "GcsFileSystem::Make", fs,
                                    std::string("GCS"));
         }
+    } else if (is_hf) {
+        // Python code to run:
+        //
+        // import huggingface_hub
+        // fs = huggingface_hub.HfFileSystem()
+        // import pyarrow.fs
+        // import bodo.io.pyfs
+        // pyfs = bodo.io.pyfs.PyFileSystemBodo(pyarrow.fs.FSSpecHandler(fs))
+        //
+        // In C++ we get pointer to arrow::py::fs::PyFileSystem by calling
+        // get_cpp_fs(pyfs) which we defined in pyfs.pyx
+
+        // import huggingface_hub
+        PyObject *huggingface_hub_mod =
+            PyImport_ImportModule("huggingface_hub");
+        // fs = huggingface_hub.HfFileSystem()
+        PyObject *pyfs =
+            PyObject_CallMethod(huggingface_hub_mod, "HfFileSystem", "");
+        Py_DECREF(huggingface_hub_mod);
+
+        // import pyarrow.fs
+        PyObject *pyarrow_fs_mod = PyImport_ImportModule("pyarrow.fs");
+        // handler = pyarrow.fs.FSSpecHandler(fs)
+        PyObject *handler =
+            PyObject_CallMethod(pyarrow_fs_mod, "FSSpecHandler", "O", pyfs);
+        Py_DECREF(pyarrow_fs_mod);
+        Py_DECREF(pyfs);
+
+        // import bodo.io.pyfs
+        PyObject *bodo_pyfs_mod = PyImport_ImportModule("bodo.io.pyfs");
+        // pyfs = bodo.io.pyfs.PyFileSystemBodo(handler)
+        PyObject *pyfs_obj = PyObject_CallMethod(
+            bodo_pyfs_mod, "PyFileSystemBodo", "O", handler);
+
+        fs = std::dynamic_pointer_cast<arrow::py::fs::PyFileSystem>(
+            get_cpp_fs((c_PyFileSystemBodo *)pyfs_obj));
+
+        Py_DECREF(bodo_pyfs_mod);
+        Py_DECREF(handler);
+        Py_DECREF(pyfs_obj);
     } else {
         fs = std::make_shared<arrow::fs::LocalFileSystem>();
     }

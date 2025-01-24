@@ -133,6 +133,19 @@ def validate_gcsfs_installed():
         )
 
 
+def validate_huggingface_hub_installed():
+    """
+    Validate that huggingface_hub is installed. Raise an error if not.
+    """
+    try:
+        import huggingface_hub  # noqa
+    except ImportError:
+        raise BodoError(
+            "Cannot import huggingface_hub, which is required for reading from Hugging Face."
+            " Please make sure the huggingface_hub package is installed."
+        )
+
+
 def get_s3_fs(
     region=None, storage_options=None, aws_credentials: AWSCredentials | None = None
 ):
@@ -245,6 +258,20 @@ def get_gcs_fs(path, storage_options=None):
         ):
             return GcsFileSystem(anonymous=True, **options)
         raise e
+
+
+def get_hf_fs(storage_options=None):
+    """Create an Arrow file system object for reading Hugging Face datasets."""
+    validate_huggingface_hub_installed()
+    import huggingface_hub
+    from pyarrow.fs import FSSpecHandler, PyFileSystem
+
+    options = {}
+    if storage_options:
+        options.update(storage_options)
+
+    fs = huggingface_hub.HfFileSystem(**options)
+    return PyFileSystem(FSSpecHandler(fs))
 
 
 # hdfs related functions(hdfs_list_dir_fnames) should be included in
@@ -595,11 +622,13 @@ def find_file_name_or_handler(path, ftype, storage_options=None):
 
     filter_func = directory_of_files_common_filter
 
-    # Use PyArrow FileSystem for S3 and GCS
-    if parsed_url.scheme in ("s3", "gcs", "gs"):
+    # Use PyArrow FileSystem for S3, GCS, and Hugging Face
+    if parsed_url.scheme in ("s3", "gcs", "gs", "hf"):
         is_handler = True
         if parsed_url.scheme == "s3":
             fs = get_s3_fs_from_path(path, storage_options=storage_options)
+        elif parsed_url.scheme == "hf":
+            fs = get_hf_fs(storage_options=storage_options)
         else:
             fs = get_gcs_fs(path, storage_options=storage_options)
 
