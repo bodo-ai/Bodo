@@ -654,6 +654,19 @@ docs [here](https://cloud.google.com/docs/authentication/getting-started#setting
 Bodo uses the fsspec-based [gcsfs](https://gcsfs.readthedocs.io/en/latest/){target="blank"} library internally for
 read and write of data on GCS.
 
+
+### Hugging Face Datasets
+
+Bodo supports reading CSV, JSON, and Parquet data from Hugging Face datasets using the [huggingface_hub](https://huggingface.co/docs/huggingface_hub) library.
+The data path should start with `hf://`. For example:
+
+```py
+@bodo.jit
+def example_hf_dataset():
+    return pd.read_parquet("hf://datasets/openai/gsm8k/main/train-00000-of-00001.parquet")
+```
+
+
 ### Hadoop Distributed File System (HDFS) and Azure Data Lake Storage (ADLS) Gen2 {#HDFS}
 
 Reading and writing [CSV][csv-section], [Parquet][parquet-section], [JSON][json-section], and
