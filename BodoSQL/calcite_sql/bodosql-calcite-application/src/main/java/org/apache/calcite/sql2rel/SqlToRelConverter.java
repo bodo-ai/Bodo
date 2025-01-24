@@ -2442,7 +2442,7 @@ public class SqlToRelConverter {
         // ROW_NUMBER() expects specific kind of framing.
         rows = true;
       }
-    } else if (orderList.isEmpty() && !rows) {
+    } else if (orderList.isEmpty() && rows) {
       // In RANGE without ORDER BY, all rows are equivalent, so bracketing has
       // no effect.
       sqlLowerBound = SqlWindow.createUnboundedPreceding(SqlParserPos.ZERO);
