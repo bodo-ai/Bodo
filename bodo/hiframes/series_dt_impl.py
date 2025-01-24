@@ -88,7 +88,7 @@ def init_series_dt_properties(typingctx, obj):
     return SeriesDatetimePropertiesType(obj)(obj), codegen
 
 
-@overload_attribute(SeriesType, "dt")
+@overload_attribute(SeriesType, "dt", jit_options={"cache": True})
 def overload_series_dt(s):
     if not (
         bodo.hiframes.pd_series_ext.is_dt64_series_typ(s)
@@ -257,7 +257,7 @@ def _install_date_methods():
 _install_date_methods()
 
 
-@overload_attribute(SeriesDatetimePropertiesType, "date")
+@overload_attribute(SeriesDatetimePropertiesType, "date", jit_options={"cache": True})
 def series_dt_date_overload(S_dt):
     if not (
         S_dt.stype.dtype == types.NPDatetime("ns")
@@ -493,7 +493,11 @@ _install_S_dt_timedelta_methods()
 
 
 @overload_method(
-    SeriesDatetimePropertiesType, "strftime", inline="always", no_unliteral=True
+    SeriesDatetimePropertiesType,
+    "strftime",
+    inline="always",
+    no_unliteral=True,
+    jit_options={"cache": True},
 )
 def dt_strftime(S_dt, date_format):
     if not (
@@ -528,7 +532,11 @@ def dt_strftime(S_dt, date_format):
 
 
 @overload_method(
-    SeriesDatetimePropertiesType, "tz_convert", inline="always", no_unliteral=True
+    SeriesDatetimePropertiesType,
+    "tz_convert",
+    inline="always",
+    no_unliteral=True,
+    jit_options={"cache": True},
 )
 def overload_dt_tz_convert(S_dt, tz):
     def impl(S_dt, tz):

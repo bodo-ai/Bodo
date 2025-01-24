@@ -199,7 +199,7 @@ def np_to_nullable_array(data):
     pass
 
 
-@overload(np_to_nullable_array)
+@overload(np_to_nullable_array, jit_options={"cache": True})
 def overload_np_to_nullable_array(data):
     """Converts a Numpy array (bool, float, int) to an equivalent nullable array. This
     function should not be inlined since the bitmap length calculations can cause issues
@@ -657,7 +657,7 @@ def coerce_scalar_to_array(
     pass
 
 
-@overload(coerce_scalar_to_array)
+@overload(coerce_scalar_to_array, jit_options={"cache": True})
 def overload_coerce_scalar_to_array(scalar, length, arr_type, dict_encode=True):
     """
     Converts the given scalar to an array with the given length.
@@ -756,7 +756,7 @@ def ndarray_if_nullable_arr(data):
     pass
 
 
-@overload(ndarray_if_nullable_arr)
+@overload(ndarray_if_nullable_arr, jit_options={"cache": True})
 def overload_ndarray_if_nullable_arr(data):
     """convert input to Numpy array if it is a nullable array but return any other input as-is."""
     if data == bodo.libs.bool_arr_ext.boolean_array_type:
@@ -790,7 +790,7 @@ def coerce_to_array(
     return data
 
 
-@overload(coerce_to_array, no_unliteral=True)
+@overload(coerce_to_array, no_unliteral=True, jit_options={"cache": True})
 def overload_coerce_to_array(
     data,
     error_on_nonarray=True,
@@ -2003,7 +2003,7 @@ def array_type_from_dtype(dtype):
     return dtype_to_array_type(bodo.utils.typing.parse_dtype(dtype))
 
 
-@overload(array_type_from_dtype)
+@overload(array_type_from_dtype, jit_options={"cache": True})
 def overload_array_type_from_dtype(dtype):
     """parse dtype and return corresponding array type TypeRef"""
     arr_type = dtype_to_array_type(bodo.utils.typing.parse_dtype(dtype))
@@ -2027,7 +2027,7 @@ def parse_datetimes_from_strings(data):  # pragma: no cover
     return data
 
 
-@overload(parse_datetimes_from_strings, no_unliteral=True)
+@overload(parse_datetimes_from_strings, no_unliteral=True, jit_options={"cache": True})
 def overload_parse_datetimes_from_strings(data):
     assert is_str_arr_type(data), "parse_datetimes_from_strings: string array expected"
 
@@ -2047,7 +2047,7 @@ def convert_to_dt64ns(data):  # pragma: no cover
     return data
 
 
-@overload(convert_to_dt64ns, no_unliteral=True)
+@overload(convert_to_dt64ns, no_unliteral=True, jit_options={"cache": True})
 def overload_convert_to_dt64ns(data):
     """Converts data formats like int64 and arrays of strings to dt64ns"""
     # see pd.core.arrays.datetimes.sequence_to_dt64ns for constructor types
@@ -2080,7 +2080,7 @@ def convert_to_td64ns(data):  # pragma: no cover
     return data
 
 
-@overload(convert_to_td64ns, no_unliteral=True)
+@overload(convert_to_td64ns, no_unliteral=True, jit_options={"cache": True})
 def overload_convert_to_td64ns(data):
     """Converts data formats like int64 to timedelta64ns"""
     # TODO: array of strings
@@ -2105,7 +2105,7 @@ def convert_to_index(data, name=None):  # pragma: no cover
     return data
 
 
-@overload(convert_to_index, no_unliteral=True)
+@overload(convert_to_index, no_unliteral=True, jit_options={"cache": True})
 def overload_convert_to_index(data, name=None):
     """
     convert data to Index object if necessary.
@@ -2149,7 +2149,7 @@ def force_convert_index(I1, I2):  # pragma: no cover
     return I2
 
 
-@overload(force_convert_index, no_unliteral=True)
+@overload(force_convert_index, no_unliteral=True, jit_options={"cache": True})
 def overload_force_convert_index(I1, I2):
     """
     Convert I1 to type of I2, with possible loss of data. TODO: remove this
@@ -2166,7 +2166,7 @@ def index_from_array(data, name=None):  # pragma: no cover
     return data
 
 
-@overload(index_from_array, no_unliteral=True)
+@overload(index_from_array, no_unliteral=True, jit_options={"cache": True})
 def overload_index_from_array(data, name=None):
     """
     convert data array to Index object.
@@ -2231,7 +2231,7 @@ def index_to_array(data):  # pragma: no cover
     return data
 
 
-@overload(index_to_array, no_unliteral=True)
+@overload(index_to_array, no_unliteral=True, jit_options={"cache": True})
 def overload_index_to_array(I):
     """
     convert Index object to data array.
@@ -2249,7 +2249,7 @@ def false_if_none(val):  # pragma: no cover
     return False if val is None else val
 
 
-@overload(false_if_none, no_unliteral=True)
+@overload(false_if_none, no_unliteral=True, jit_options={"cache": True})
 def overload_false_if_none(val):
     """Return False if 'val' is None, otherwise same value"""
 
@@ -2263,7 +2263,7 @@ def extract_name_if_none(data, name):  # pragma: no cover
     return name
 
 
-@overload(extract_name_if_none, no_unliteral=True)
+@overload(extract_name_if_none, no_unliteral=True, jit_options={"cache": True})
 def overload_extract_name_if_none(data, name):
     """Extract name if `data` is has name (Series/Index) and `name` is None"""
     from bodo.hiframes.pd_index_ext import (
@@ -2305,7 +2305,7 @@ def extract_index_if_none(data, index):  # pragma: no cover
     return index
 
 
-@overload(extract_index_if_none, no_unliteral=True)
+@overload(extract_index_if_none, no_unliteral=True, jit_options={"cache": True})
 def overload_extract_index_if_none(data, index):
     """Extract index if `data` is Series and `index` is None"""
     from bodo.hiframes.pd_series_ext import SeriesType
@@ -2330,7 +2330,7 @@ def box_if_dt64(val):  # pragma: no cover
     return val
 
 
-@overload(box_if_dt64, no_unliteral=True)
+@overload(box_if_dt64, no_unliteral=True, jit_options={"cache": True})
 def overload_box_if_dt64(val):
     """If 'val' is dt64, box it to Timestamp otherwise just return 'val'"""
     if val == types.NPDatetime("ns"):
@@ -2354,7 +2354,7 @@ def unbox_if_tz_naive_timestamp(val):  # pragma: no cover
     return val
 
 
-@overload(unbox_if_tz_naive_timestamp, no_unliteral=True)
+@overload(unbox_if_tz_naive_timestamp, no_unliteral=True, jit_options={"cache": True})
 def overload_unbox_if_tz_naive_timestamp(val):
     """If 'val' is Timestamp without a Timezone,
     "unbox" it to dt64 otherwise just return 'val'"""
@@ -2411,7 +2411,7 @@ def to_tuple(val):  # pragma: no cover
     return val
 
 
-@overload(to_tuple, no_unliteral=True)
+@overload(to_tuple, no_unliteral=True, jit_options={"cache": True})
 def overload_to_tuple(val):
     """convert tuple-like 'val' (e.g. constant list) to a tuple"""
     if not isinstance(val, types.BaseTuple) and is_overload_constant_list(val):
@@ -2421,13 +2421,10 @@ def overload_to_tuple(val):
             if isinstance(val, types.LiteralList)
             else get_overload_const_list(val)
         )
-        func_text = "def f(val):\n"
+        func_text = "def bodo_to_tuple(val):\n"
         res = ",".join(f"val[{i}]" for i in range(n_values))
         func_text += f"  return ({res},)\n"
-        loc_vars = {}
-        exec(func_text, {}, loc_vars)
-        impl = loc_vars["f"]
-        return impl
+        return bodo.utils.utils.bodo_exec(func_text, {}, {}, globals())
 
     assert isinstance(val, types.BaseTuple), "tuple type expected"
     return lambda val: val  # pragma: no cover
@@ -2437,7 +2434,7 @@ def get_array_if_series_or_index(data):  # pragma: no cover
     return data
 
 
-@overload(get_array_if_series_or_index)
+@overload(get_array_if_series_or_index, jit_options={"cache": True})
 def overload_get_array_if_series_or_index(data):
     from bodo.hiframes.pd_series_ext import SeriesType
 
@@ -2474,7 +2471,7 @@ def extract_index_array(A):  # pragma: no cover
     return np.arange(len(A))
 
 
-@overload(extract_index_array, no_unliteral=True)
+@overload(extract_index_array, no_unliteral=True, jit_options={"cache": True})
 def overload_extract_index_array(A):
     """Returns an index array for Series or array.
     if Series, return it's index array. Otherwise, create an index array.
@@ -2497,7 +2494,7 @@ def ensure_contig_if_np(arr):  # pragma: no cover
     return np.ascontiguousarray(arr)
 
 
-@overload(ensure_contig_if_np, no_unliteral=True)
+@overload(ensure_contig_if_np, no_unliteral=True, jit_options={"cache": True})
 def overload_ensure_contig_if_np(arr):
     """make sure array 'arr' is contiguous in memory if it is a numpy array.
     Other arrays are always contiguous.
@@ -2512,7 +2509,7 @@ def struct_if_heter_dict(values, names):  # pragma: no cover
     return dict(zip(names, values))
 
 
-@overload(struct_if_heter_dict, no_unliteral=True)
+@overload(struct_if_heter_dict, no_unliteral=True, jit_options={"cache": True})
 def overload_struct_if_heter_dict(values, names):
     """returns a struct with fields names 'names' and data 'values' if value types are
     heterogeneous, otherwise a regular dict.
@@ -2524,16 +2521,13 @@ def overload_struct_if_heter_dict(values, names):
         )  # pragma: no cover
 
     n_fields = len(values.types)
-    func_text = "def f(values, names):\n"
+    func_text = "def bodo_struct_if_heter_dict(values, names):\n"
     res = ",".join(
         f"'{get_overload_const_str(names.types[i])}': values[{i}]"
         for i in range(n_fields)
     )
     func_text += f"  return {{{res}}}\n"
-    loc_vars = {}
-    exec(func_text, {}, loc_vars)
-    impl = loc_vars["f"]
-    return impl
+    return bodo.utils.utils.bodo_exec(func_text, {}, {}, globals())
 
 
 def list_to_array(lst, arr_type, parallel=False):

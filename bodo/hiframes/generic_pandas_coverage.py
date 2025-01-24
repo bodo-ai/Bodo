@@ -62,13 +62,15 @@ def generate_simple_series_impl(
 
     # Create the function definition line
     if arg_defaults is None:
-        func_text = "def impl(" + ", ".join(arg_names) + "):\n"
+        func_text = "def bodo_generate_simple_series(" + ", ".join(arg_names) + "):\n"
     else:
         arg_def_strings = [
             name if name not in arg_defaults else f"{name}={arg_defaults.get(name)}"
             for name in arg_names
         ]
-        func_text = "def impl(" + ", ".join(arg_def_strings) + "):\n"
+        func_text = (
+            "def bodo_generate_simple_series(" + ", ".join(arg_def_strings) + "):\n"
+        )
 
     # Extract the underlying array of the series as a variable called "data"
     if isinstance(series_arg, bodo.hiframes.pd_series_ext.SeriesType):
@@ -178,8 +180,7 @@ def generate_simple_series_impl(
         raise_bodo_error(
             f"generate_simple_series_impl: unsupported output type {out_type}"
         )
-    loc_vars = {}
-    exec(
+    return bodo.utils.utils.bodo_exec(
         func_text,
         {
             "bodo": bodo,
@@ -188,10 +189,9 @@ def generate_simple_series_impl(
             "np": np,
             "out_dtype": out_arr_type,
         },
-        loc_vars,
+        {},
+        globals(),
     )
-    impl = loc_vars["impl"]
-    return impl
 
 
 def generate_series_to_df_impl(
@@ -252,7 +252,7 @@ def generate_series_to_df_impl(
         name if default is None else f"{name}={default}"
         for name, default in zip(arg_names, arg_defaults)
     ]
-    func_text = "def impl(" + ", ".join(arg_strings) + "):\n"
+    func_text = "def bodo_generate_series_to_df(" + ", ".join(arg_strings) + "):\n"
 
     # Extract the underlying array of the series as a variable called "data"
     if isinstance(series_arg, bodo.hiframes.pd_series_ext.SeriesType):
@@ -357,11 +357,9 @@ def generate_series_to_df_impl(
     for i in range(n_out):
         glbls[f"out_dtype{i}"] = out_types[i]
 
-    loc_vars = {}
-    exec(
+    return bodo.utils.utils.bodo_exec(
         func_text,
         glbls,
-        loc_vars,
+        {},
+        globals(),
     )
-    impl = loc_vars["impl"]
-    return impl

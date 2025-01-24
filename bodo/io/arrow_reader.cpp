@@ -285,8 +285,9 @@ inline void copy_nulls_categorical_inner(uint8_t* out_data,
     T* data = (T*)out_data;
     for (size_t i = 0; i < size_t(num_values); i++) {
         auto bit = ::arrow::bit_util::GetBit(null_bitmap_buff, skip + i);
-        if (!bit)
+        if (!bit) {
             data[i] = -1;
+        }
     }
 }
 

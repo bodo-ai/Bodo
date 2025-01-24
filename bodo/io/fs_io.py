@@ -779,7 +779,7 @@ def get_s3_bucket_region_wrapper(s3_filepath, parallel):  # pragma: no cover
     return bucket_loc
 
 
-@overload(get_s3_bucket_region_wrapper)
+@overload(get_s3_bucket_region_wrapper, jit_options={"cache": True})
 def overload_get_s3_bucket_region_wrapper(s3_filepath, parallel):
     def impl(s3_filepath, parallel):
         with bodo.no_warning_objmode(bucket_loc="unicode_type"):
@@ -794,7 +794,7 @@ def csv_write(path_or_buf, D, filename_prefix, is_parallel=False):  # pragma: no
     return None
 
 
-@overload(csv_write, no_unliteral=True)
+@overload(csv_write, no_unliteral=True, jit_options={"cache": True})
 def csv_write_overload(path_or_buf, D, filename_prefix, is_parallel=False):
     def impl(path_or_buf, D, filename_prefix, is_parallel=False):  # pragma: no cover
         # Assuming that path_or_buf is a string
@@ -896,7 +896,7 @@ def arrow_filesystem_del(fs_instance):
     pass
 
 
-@overload(arrow_filesystem_del)
+@overload(arrow_filesystem_del, jit_options={"cache": True})
 def overload_arrow_filesystem_del(fs_instance):
     """Delete ArrowFs instance"""
 

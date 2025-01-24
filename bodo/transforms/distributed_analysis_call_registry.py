@@ -489,7 +489,7 @@ class DistributedAnalysisCallRegistry:
             ("set_bit_to_arr", "bodo.libs.int_arr_ext"): no_op_analysis,
             # iceberg_merge_cow_py doesn't have a return value
             # or alter the distribution of any input.
-            ("iceberg_merge_cow_py", "bodo.io.iceberg"): no_op_analysis,
+            ("iceberg_merge_cow_py", "bodo.io.iceberg.merge_into"): no_op_analysis,
             ("decode_if_dict_array", "bodo.utils.typing"): meet_out_first_arg_analysis,
             (
                 "np_to_nullable_array",
