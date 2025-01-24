@@ -769,7 +769,7 @@ def get_bodo_pq_dataset_from_fpath(
 
         return dataset
     except Exception as e:
-        # See note in s3_list_dir_fnames
+        # See note in pa_fs_list_dir_fnames
         # In some cases, OSError/FileNotFoundError can propagate
         # back to numba and come back as an InternalError.
         # where numba errors are hidden from the user.
