@@ -24,6 +24,8 @@ requirements:
     - openjdk >=9.0,<12
     - py4j ==0.10.9.7
     - pyiceberg >=0.8,<0.9
+    - boto3 *
+    - mypy-boto3-glue *
 
 about:
 home: https://bodo.ai/
