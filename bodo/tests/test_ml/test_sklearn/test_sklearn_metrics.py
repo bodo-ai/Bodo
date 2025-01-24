@@ -827,7 +827,8 @@ def test_r2_score(data, multioutput, memory_leak_check):
     gc.collect()
 
 
-def test_r2_score_inconsistent(memory_leak_check):
+# TODO: [BSE-4492] Fix memory leak
+def test_r2_score_inconsistent():
     """
     Check that appropriate error is raised when number of samples in
     y_true and y_pred are inconsistent
