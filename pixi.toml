@@ -95,6 +95,7 @@ botocore = "*"
 s3fs = ">=2022.1"
 adlfs = ">=2022.1"
 gcsfs = ">=2022.1"
+huggingface_hub = "*"
 # Databases
 pymysql = "*"
 psycopg2 = "*"
