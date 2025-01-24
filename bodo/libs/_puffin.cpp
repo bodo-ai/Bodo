@@ -384,8 +384,9 @@ std::unique_ptr<PuffinFile> PuffinFile::from_theta_sketches(
 
 std::string PuffinFile::get_blob(size_t idx) {
     std::string blob = blobs[idx];
-    if (!get_blob_metadata(idx).has_compression_codec())
+    if (!get_blob_metadata(idx).has_compression_codec()) {
         return blob;
+    }
     std::string compression_codec =
         get_blob_metadata(idx).get_compression_codec();
     if (compression_codec == "zstd") {

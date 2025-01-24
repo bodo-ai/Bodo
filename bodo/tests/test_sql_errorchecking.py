@@ -1,9 +1,7 @@
 """Tests I/O error checking for SQL"""
 # TODO: Move error checking tests from test_sql to here.
 
-import random
 import re
-import string
 
 import numpy as np
 import pandas as pd
@@ -64,16 +62,10 @@ def test_to_sql_oracle():
     def test_impl_write_sql(df, table_name, conn):
         df.to_sql(table_name, conn, index=False, if_exists="replace")
 
-    np.random.seed(5)
-    random.seed(5)
-    len_list = 1
-    letters = string.ascii_letters
-    list_string = [
-        "".join(random.choice(letters) for i in range(4002)) for _ in range(len_list)
-    ]
+    list_int = [np.iinfo(np.int64).max + 1]
     df_in = pd.DataFrame(
         {
-            "AB": list_string,
+            "AB": list_int,
         }
     )
     table_name = "to_sql_table"

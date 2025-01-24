@@ -344,9 +344,10 @@ int64_t pq_write(const char *_path_name,
             if ((primitive_node->physical_type() !=
                  parquet::Type::BYTE_ARRAY) ||
                 (!primitive_node->logical_type()->Equals(
-                    *parquet::LogicalType::String())))
+                    *parquet::LogicalType::String()))) {
                 throw std::runtime_error(
                     "Arrow is not storing dictionary array as parquet string");
+            }
         } else {
             throw std::runtime_error(
                 "Arrow is not storing dictionary array as parquet string");
@@ -487,9 +488,10 @@ void pq_write_partitioned_py_entry(
     // (see array_info::val_to_str)
 
     try {
-        if (!is_parallel)
+        if (!is_parallel) {
             throw std::runtime_error(
                 "to_parquet partitioned not implemented in sequential mode");
+        }
 
         // convert raw pointers to smart pointers to enable automatic
         // refcounting
@@ -521,8 +523,9 @@ void pq_write_partitioned_py_entry(
             part_col_names.emplace_back(cur_str, len);
         }
         for (uint64_t i = 0; i < table->ncols(); i++) {
-            if (!is_part_col[i])
+            if (!is_part_col[i]) {
                 new_table->columns.push_back(table->columns[i]);
+            }
         }
         // Convert all local dictionaries to global for dict columns.
         // to enable hashing. Here we need a global dictionary with
@@ -552,8 +555,9 @@ void pq_write_partitioned_py_entry(
             if (p.rows.size() == 0) {
                 // generate output file name
                 p.fpath = std::string(_path_name);
-                if (p.fpath.back() != '/')
+                if (p.fpath.back() != '/') {
                     p.fpath += "/";
+                }
                 int64_t cat_col_idx = 0;
                 for (int j = 0; j < num_partition_cols; j++) {
                     auto part_col = partition_cols[j];

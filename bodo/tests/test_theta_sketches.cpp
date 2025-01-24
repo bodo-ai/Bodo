@@ -141,8 +141,9 @@ static bodo::tests::suite tests([] {
                     datasketches::update_theta_sketch::resize_factor::X1)
                 .build();
         const int n = 8000;
-        for (int i = 0; i < n; i++)
+        for (int i = 0; i < n; i++) {
             update_sketch.update(i);
+        }
         double lower_estimate = ((double)n) * 0.99;
         double upper_estimate = ((double)n) * 1.01;
         bodo::tests::check(!update_sketch.is_empty());
@@ -173,8 +174,9 @@ static bodo::tests::suite tests([] {
         // Test copied from theta_sketch_test.cpp in the theta_sketch library
         auto update_sketch =
             datasketches::update_theta_sketch::builder().build();
-        for (int i = 0; i < 10000; i++)
+        for (int i = 0; i < 10000; i++) {
             update_sketch.update(i);
+        }
         auto compact_sketch = update_sketch.compact();
 
         auto bytes = compact_sketch.serialize_compressed();
@@ -296,8 +298,9 @@ static bodo::tests::suite tests([] {
                     int64_t value = 0;
                     for (size_t j = 1; j < 16; j++) {
                         value += (i % j) + batch;
-                        if (j % 3 == 0)
+                        if (j % 3 == 0) {
                             value <<= 1;
+                        }
                     }
                     data.push_back(value);
                     nulls.push_back(true);

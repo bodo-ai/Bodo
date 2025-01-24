@@ -40,6 +40,7 @@ from bodo.io.fs_io import (
     abfs_get_fs,
     azure_storage_account_from_path,
     get_hdfs_fs,
+    get_hf_fs,
     get_s3_fs_from_path,
     validate_gcsfs_installed,
     validate_s3fs_installed,
@@ -529,6 +530,9 @@ def getfs(
         return (
             get_hdfs_fs(fpath) if not isinstance(fpath, list) else get_hdfs_fs(fpath[0])
         )
+    # HuggingFace datasets
+    elif protocol == "hf":
+        return get_hf_fs(storage_options)
     else:
         return pa.fs.LocalFileSystem()
 
@@ -647,6 +651,8 @@ def get_fpath_without_protocol_prefix(
         prefix = f"{protocol}://{parsed_url.netloc}"
     elif protocol in {"gcs", "gs"}:
         prefix = f"{protocol}://"
+    elif protocol == "hf":
+        prefix = "hf://"
 
     if prefix:
         if isinstance(fpath, list):
@@ -769,7 +775,7 @@ def get_bodo_pq_dataset_from_fpath(
 
         return dataset
     except Exception as e:
-        # See note in s3_list_dir_fnames
+        # See note in pa_fs_list_dir_fnames
         # In some cases, OSError/FileNotFoundError can propagate
         # back to numba and come back as an InternalError.
         # where numba errors are hidden from the user.

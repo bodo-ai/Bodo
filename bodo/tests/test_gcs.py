@@ -43,3 +43,12 @@ def test_read_parquet_gcs_filters():
         "gs://anaconda-public-data/nyc-taxi/nyc.parquet/part.0.parquet",
     ]:
         check_func(impl, (pq_file,), py_output=expected_length)
+
+
+def test_read_csv_gcs(datapath, memory_leak_check):
+    """Test read_csv from public GCS bucket"""
+
+    def test_impl():
+        return pd.read_csv("gs://anaconda-public-data/iris/iris.csv")
+
+    check_func(test_impl, ())

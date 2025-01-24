@@ -1716,8 +1716,9 @@ std::shared_ptr<table_info> drop_duplicates_table(
     // reduction after shuffling
     // We don't drop NA values again because the first
     // drop_duplicates_table_inner should have already handled this
-    if (drop_local_first)
+    if (drop_local_first) {
         dropna = false;
+    }
     std::shared_ptr<table_info> ret_table = drop_duplicates_table_inner(
         shuf_table, num_keys, keep, 1, is_parallel, dropna,
         /*drop_duplicates_dict=*/true, std::shared_ptr<uint32_t[]>(nullptr),

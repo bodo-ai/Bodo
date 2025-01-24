@@ -166,8 +166,9 @@ PyTypeObject PyTestCase::TYPE = {
 PyMODINIT_FUNC PyInit_test_cpp(void) {
     PyObject *m;
     MOD_DEF(m, "test_cpp", "No docs", nullptr);
-    if (m == nullptr)
+    if (m == nullptr) {
         return nullptr;
+    }
 
     if (PyType_Ready(&PyTestCase::TYPE) != 0) {
         Py_DECREF(m);
@@ -211,8 +212,9 @@ const std::vector<bodo::tests::suite *> &bodo::tests::suite::get_all() {
 }
 
 void bodo::tests::check(bool b, std::source_location loc) {
-    if (b)
+    if (b) {
         return;
+    }
     std::stringstream error;
     error << "Assertion failed at " << loc.file_name() << ":" << loc.line()
           << "," << loc.column();
@@ -221,8 +223,9 @@ void bodo::tests::check(bool b, std::source_location loc) {
 }
 
 void bodo::tests::check(bool b, const char *msg, std::source_location loc) {
-    if (b)
+    if (b) {
         return;
+    }
 
     std::cerr << "Assertion failed: " << msg << std::endl;
     throw std::runtime_error("Check failure");

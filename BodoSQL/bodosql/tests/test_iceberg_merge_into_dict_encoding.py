@@ -146,7 +146,7 @@ def test_merge_into_dict_encoding_inserts(
     )
 
     verify_dict_encoding_in_columns(
-        ("iceberg_merge_cow_py", "bodo.io.iceberg"),
+        ("iceberg_merge_cow_py", "bodo.io.iceberg.merge_into"),
         (bodo.typeof(bc),),
         bodo.jit(parallel=True)(impl),
         dict_col_names,
@@ -193,7 +193,7 @@ def test_merge_into_dict_encoding_updates(
     )
 
     verify_dict_encoding_in_columns(
-        ("iceberg_merge_cow_py", "bodo.io.iceberg"),
+        ("iceberg_merge_cow_py", "bodo.io.iceberg.merge_into"),
         (bodo.typeof(bc),),
         bodo.jit(parallel=True)(impl),
         dict_col_names,
@@ -237,7 +237,7 @@ def test_merge_into_dict_encoding_deletes(bodosql_dict_context):
     )
 
     verify_dict_encoding_in_columns(
-        ("iceberg_merge_cow_py", "bodo.io.iceberg"),
+        ("iceberg_merge_cow_py", "bodo.io.iceberg.merge_into"),
         (bodo.typeof(bc),),
         bodo.jit(parallel=True)(impl),
         dict_col_names,
@@ -287,7 +287,7 @@ def test_merge_into_dict_encoding_all(bodosql_dict_context):
     )
 
     verify_dict_encoding_in_columns(
-        ("iceberg_merge_cow_py", "bodo.io.iceberg"),
+        ("iceberg_merge_cow_py", "bodo.io.iceberg.merge_into"),
         (bodo.typeof(bc),),
         bodo.jit(parallel=True)(impl),
         dict_col_names,
@@ -355,7 +355,7 @@ def test_merge_into_dict_encoding_no_merge(iceberg_database, iceberg_table_conn)
     )
 
     args = (bodo.typeof(bc),)
-    func_name = ("iceberg_merge_cow_py", "bodo.io.iceberg")
+    func_name = ("iceberg_merge_cow_py", "bodo.io.iceberg.merge_into")
     dict_encoded_column_names = ["A"]
 
     # TODO: Fix dict encoding?
