@@ -125,7 +125,7 @@ class BodoPhysicalCachedSubPlan private constructor(
                 } else {
                     listOf(cachedPlan.plan)
                 }
-            implementor.build(inputs) { ctx, inputs ->
+            implementor.build(inputs) { _, inputs ->
                 if (isCached) {
                     relationalOperatorCache.getCachedTable(cacheID)
                 } else {
@@ -150,9 +150,7 @@ class BodoPhysicalCachedSubPlan private constructor(
     override fun deleteStateVariable(
         ctx: BodoPhysicalRel.BuildContext,
         stateVar: StateVariable,
-    ) {
-        // Do Nothing
-    }
+    ) = Unit
 
     override fun expectedOutputBatchingProperty(inputBatchingProperty: BatchingProperty): BatchingProperty =
         ExpectedBatchingProperty.streamingIfPossibleProperty(getRowType())

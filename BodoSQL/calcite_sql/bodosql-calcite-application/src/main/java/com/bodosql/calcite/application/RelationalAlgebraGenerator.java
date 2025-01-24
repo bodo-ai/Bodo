@@ -125,9 +125,6 @@ public class RelationalAlgebraGenerator {
   /** Should we read TIMESTAMP_TZ as its own type instead of TIMESTAMP_LTZ */
   public static boolean enableTimestampTz = false;
 
-  /** Should we enabled planner nodes to insert runtime filters for Joins */
-  public static boolean enableRuntimeJoinFilters = false;
-
   /**
    * Should we insert placeholders for operator IDs to minimize codegen changes with respect to plan
    * changes *
@@ -190,7 +187,6 @@ public class RelationalAlgebraGenerator {
       @NonNull boolean hideCredentials,
       @NonNull boolean enableSnowflakeIcebergTables,
       @NonNull boolean enableTimestampTz,
-      @NonNull boolean enableRuntimeJoinFilters,
       @NonNull boolean enableStreamingSort,
       @NonNull boolean enableStreamingSortLimitOffset,
       @NonNull String sqlStyle,
@@ -306,7 +302,6 @@ public class RelationalAlgebraGenerator {
     this.hideCredentials = hideCredentials;
     this.enableSnowflakeIcebergTables = enableSnowflakeIcebergTables;
     this.enableTimestampTz = enableTimestampTz;
-    this.enableRuntimeJoinFilters = enableRuntimeJoinFilters;
     this.coveringExpressionCaching = coveringExpressionCaching;
     this.prefetchSFIceberg = prefetchSFIceberg;
   }

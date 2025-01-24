@@ -1240,7 +1240,6 @@ class BodoSQLContext:
             hide_credentials,
             bodo.enable_snowflake_iceberg,
             bodo.enable_timestamp_tz,
-            bodo.enable_runtime_join_filters,
             bodo.enable_streaming_sort,
             bodo.enable_streaming_sort_limit_offset,
             bodo.bodo_sql_style,

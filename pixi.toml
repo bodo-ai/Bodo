@@ -69,10 +69,10 @@ macos = "12.0"
 python = "3.12.*"
 pip = "*"
 # Core Python Deps
-numba = "0.60.0"
+numba = "==0.60.0"
 numpy = ">=1.24,<1.27"
 pandas = ">=2.2,<2.3"
-pyarrow = { version = "18.1.0", channel = "conda-forge" }
+pyarrow = { version = "==18.1.0", channel = "conda-forge" }
 fsspec = ">=2021.09"
 requests = "*"
 cloudpickle = ">=3.0,<4.0"
@@ -109,8 +109,8 @@ xlsxwriter = "*"
 openpyxl = "*"
 [target.linux-64.dependencies]
 cx_oracle = "*"
-pyarrow = { version = "18.1.0", channel = "bodo.ai" }
-libarrow = { version = "18.1.0", channel = "bodo.ai" }
+pyarrow = { version = "==18.1.0", channel = "bodo.ai" }
+libarrow = { version = "==18.1.0", channel = "bodo.ai" }
 [target.osx-64.dependencies]
 cx_oracle = "*"
 
@@ -119,7 +119,7 @@ cx_oracle = "*"
 libcurl = "~=8.0"
 zstd = "<=1.5.6"
 hdf5 = { version = ">=1.14.3,<1.14.4.0a0", build = "*mpi_mpich_*" }
-boost-cpp = "1.85"
+boost-cpp = "1.85.*"
 aws-sdk-cpp = "1.11.*"
 
 [feature.dev.dependencies]
@@ -142,7 +142,7 @@ maven = "*"
 sqlglot = "*"
 duckdb = "*"
 # Note: PySpark 3.5 is necessary for Python 3.12
-pyspark = "3.5"
+pyspark = "3.5.*"
 # Iceberg Testing
 mmh3 = "*"
 avro = "*"  # Reading avro
@@ -206,8 +206,8 @@ platforms = ["linux-64"]
 ipython = "==8.16.1"
 ipykernel = "==6.29.3"
 ipywidgets = "==8.1.1"
-nbconvert = "6.5.0"
-bodo-azurefs-sas-token-provider = "1.0"
+nbconvert = "6.5.*"
+bodo-azurefs-sas-token-provider = "1.0.*"
 _openmp_mutex = { version = "*", build = "*gnu*" }
 jupyter_client = "==8.6.1"
 uvicorn = "*"
@@ -224,7 +224,7 @@ channels = ["conda-forge", "conda-forge/label/broken"]
 platforms = ["linux-64"]
 # Want to use Intel MPI on platform, so use "external_*"
 # https://conda-forge.org/docs/user/tipsandtricks/#using-external-message-passing-interface-mpi-libraries
-dependencies = { mpich = { version = "4.1.2", build = "external_4", channel = "conda-forge/label/broken" } }
+dependencies = { mpich = { version = "==4.1.2", build = "external_4", channel = "conda-forge/label/broken" } }
 
 # Azure CI
 [feature.azure.dependencies]

@@ -2273,6 +2273,13 @@ def _gen_objmode_overload(
 
         # Matplotlib specifies some arguments as `<deprecated parameter>`.
         # We can't support them, and it breaks our infrastructure, so omit them.
+        #
+        def get_default(default_val):
+            match default_val:
+                case str():
+                    return "'" + default_val + "'"
+                case _:
+                    return str(default_val)
 
         args = func_spec.args[1:] if attr_name else func_spec.args[:]
         arg_strs = []
@@ -2280,7 +2287,7 @@ def _gen_objmode_overload(
             if i < n_pos_args:
                 arg_strs.append(arg)
             elif str(defaults[i - n_pos_args]) != "<deprecated parameter>":
-                arg_strs.append(arg + "=" + str(defaults[i - n_pos_args]))
+                arg_strs.append(arg + "=" + get_default(defaults[i - n_pos_args]))
             else:
                 args.remove(arg)
 
@@ -2690,8 +2697,6 @@ def is_safe_arrow_cast(lhs_scalar_typ, rhs_scalar_typ):
 def register_type(type_name, type_value):
     """register a data type to be used in objmode blocks"""
     import bodo.spawn.spawner
-    from bodo.mpi4py import MPI
-    from bodo.spawn.spawner import CommandType
 
     # check input
     if not isinstance(type_name, str):
@@ -2714,9 +2719,7 @@ def register_type(type_name, type_value):
     # TODO[BSE-4170]: simplify test flags
     if bodo.spawn_mode or bodo.tests.utils.test_spawn_mode_enabled:
         spawner = bodo.spawn.spawner.get_spawner()
-        bcast_root = MPI.ROOT if bodo.get_rank() == 0 else MPI.PROC_NULL
-        spawner.worker_intercomm.bcast(CommandType.REGISTER_TYPE.value, bcast_root)
-        spawner.worker_intercomm.bcast((type_name, type_value), bcast_root)
+        spawner.register_type(type_name, type_value)
 
 
 # boxing TypeRef is necessary for passing type to objmode calls

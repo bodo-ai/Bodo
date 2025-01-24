@@ -161,6 +161,39 @@ numba.core.errors.error_extras = {
 np_alloc_callnames = ("empty", "zeros", "ones", "full")
 
 
+# Internal allocation function names used in analysis and transformation codes
+alloc_calls = {
+    ("empty", "numpy"),
+    ("zeros", "numpy"),
+    ("ones", "numpy"),
+    ("full", "numpy"),
+    ("empty_inferred", "numba.extending"),
+    ("empty_inferred", "numba.np.unsafe.ndarray"),
+    ("pre_alloc_string_array", "bodo.libs.str_arr_ext"),
+    ("pre_alloc_binary_array", "bodo.libs.binary_arr_ext"),
+    ("alloc_random_access_string_array", "bodo.libs.str_ext"),
+    ("pre_alloc_array_item_array", "bodo.libs.array_item_arr_ext"),
+    ("pre_alloc_struct_array", "bodo.libs.struct_arr_ext"),
+    ("pre_alloc_map_array", "bodo.libs.map_arr_ext"),
+    ("pre_alloc_tuple_array", "bodo.libs.tuple_arr_ext"),
+    ("alloc_bool_array", "bodo.libs.bool_arr_ext"),
+    ("alloc_false_bool_array", "bodo.libs.bool_arr_ext"),
+    ("alloc_true_bool_array", "bodo.libs.bool_arr_ext"),
+    ("alloc_int_array", "bodo.libs.int_arr_ext"),
+    ("alloc_float_array", "bodo.libs.float_arr_ext"),
+    ("alloc_datetime_date_array", "bodo.hiframes.datetime_date_ext"),
+    ("alloc_datetime_timedelta_array", "bodo.hiframes.datetime_timedelta_ext"),
+    ("alloc_decimal_array", "bodo.libs.decimal_arr_ext"),
+    ("alloc_categorical_array", "bodo.hiframes.pd_categorical_ext"),
+    ("gen_na_array", "bodo.libs.array_kernels"),
+    ("alloc_pd_datetime_array", "bodo.libs.pd_datetime_arr_ext"),
+    ("alloc_time_array", "bodo.hiframes.time_ext"),
+    ("alloc_timestamptz_array", "bodo.hiframes.timestamptz_ext"),
+    ("init_null_array", "bodo.libs.null_arr_ext"),
+    ("full_type", "bodo.utils.utils"),
+}
+
+
 # size threshold for throwing warning for const dictionary lowering (in slow path)
 CONST_DICT_SLOW_WARN_THRESHOLD = 100
 
@@ -323,77 +356,7 @@ def is_alloc_callname(func_name, mod_name):
     """
     return true if function represents an array creation call
     """
-    return isinstance(mod_name, str) and (
-        (mod_name == "numpy" and func_name in np_alloc_callnames)
-        or (
-            func_name == "empty_inferred"
-            and mod_name in ("numba.extending", "numba.np.unsafe.ndarray")
-        )
-        or (
-            func_name == "pre_alloc_string_array"
-            and mod_name == "bodo.libs.str_arr_ext"
-        )
-        or (
-            func_name == "pre_alloc_binary_array"
-            and mod_name == "bodo.libs.binary_arr_ext"
-        )
-        or (
-            func_name == "alloc_random_access_string_array"
-            and mod_name == "bodo.libs.str_ext"
-        )
-        or (
-            func_name == "pre_alloc_array_item_array"
-            and mod_name == "bodo.libs.array_item_arr_ext"
-        )
-        or (
-            func_name == "pre_alloc_struct_array"
-            and mod_name == "bodo.libs.struct_arr_ext"
-        )
-        or (func_name == "pre_alloc_map_array" and mod_name == "bodo.libs.map_arr_ext")
-        or (
-            func_name == "pre_alloc_tuple_array"
-            and mod_name == "bodo.libs.tuple_arr_ext"
-        )
-        or (func_name == "alloc_bool_array" and mod_name == "bodo.libs.bool_arr_ext")
-        or (
-            func_name == "alloc_false_bool_array"
-            and mod_name == "bodo.libs.bool_arr_ext"
-        )
-        or (
-            func_name == "alloc_true_bool_array"
-            and mod_name == "bodo.libs.bool_arr_ext"
-        )
-        or (func_name == "alloc_int_array" and mod_name == "bodo.libs.int_arr_ext")
-        or (func_name == "alloc_float_array" and mod_name == "bodo.libs.float_arr_ext")
-        or (
-            func_name == "alloc_datetime_date_array"
-            and mod_name == "bodo.hiframes.datetime_date_ext"
-        )
-        or (
-            func_name == "alloc_datetime_timedelta_array"
-            and mod_name == "bodo.hiframes.datetime_timedelta_ext"
-        )
-        or (
-            func_name == "alloc_decimal_array"
-            and mod_name == "bodo.libs.decimal_arr_ext"
-        )
-        or (
-            func_name == "alloc_categorical_array"
-            and mod_name == "bodo.hiframes.pd_categorical_ext"
-        )
-        or (func_name == "gen_na_array" and mod_name == "bodo.libs.array_kernels")
-        or (
-            func_name == "alloc_pd_datetime_array"
-            and mod_name == "bodo.libs.pd_datetime_arr_ext"
-        )
-        or (func_name == "alloc_time_array" and mod_name == "bodo.hiframes.time_ext")
-        or (
-            func_name == "alloc_timestamptz_array"
-            and mod_name == "bodo.hiframes.timestamptz_ext"
-        )
-        or (func_name == "init_null_array" and mod_name == "bodo.libs.null_arr_ext")
-        or (func_name == "full_type" and mod_name == "bodo.utils.utils")
-    )
+    return (func_name, mod_name) in alloc_calls
 
 
 def find_build_tuple(func_ir, var, handle_const_tuple=False):
