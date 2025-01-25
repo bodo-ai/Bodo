@@ -2846,7 +2846,7 @@ def overload_resize_and_copy(A, old_size, new_len):
 # calculation is replaced with explicit call for easier matching
 # (e.g. for handling 1D_Var RangeIndex)
 # TODO: move this to upstream Numba
-@register_jitable
+@register_jitable(cache=True)
 def calc_nitems(start, stop, step):  # pragma: no cover
     nitems_r = math.ceil((stop - start) / step)
     return int(max(nitems_r, 0))
@@ -3766,7 +3766,7 @@ def overload_intersect1d(A1, A2, assume_unique=False, return_indices=False):
     return impl
 
 
-@register_jitable
+@register_jitable(cache=True)
 def slice_array_intersect1d(arr):  # pragma: no cover
     mask = arr[1:] == arr[:-1]
     return arr[:-1][mask]
@@ -3863,7 +3863,7 @@ def overload_setdiff1d(A1, A2, assume_unique=False):
     return impl
 
 
-@register_jitable
+@register_jitable(cache=True)
 def calculate_mask_setdiff1d(A1, A2):  # pragma: no cover
     mask = np.ones(len(A1), np.bool_)
     for i in range(len(A2)):
@@ -4100,7 +4100,7 @@ def np_cbrt(
 # TODO: Remove when Numba ufunc gets merged https://github.com/numba/numba/pull/6075
 # Numpy implementation
 # https://github.com/numpy/numpy/blob/31ffdecf07d18ed4dbb66b171cb0f998d4b190fa/numpy/core/src/npymath/npy_math_internal.h.src#L513
-@register_jitable
+@register_jitable(cache=True)
 def np_cbrt_scalar(x, float_dtype):  # pragma: no cover
     if np.isnan(x):
         return np.nan
@@ -4675,7 +4675,7 @@ def np_nan_to_num(x, copy=True, nan=0.0, posinf=None, neginf=None):
     return impl
 
 
-@register_jitable
+@register_jitable(cache=True)
 def scalar_nan_to_num(scalar, nan, posinf, neginf):  # pragma: no cover
     """
     Helper function for nan_to_num to transform a scalar float

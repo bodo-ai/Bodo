@@ -380,29 +380,29 @@ def int_arr_getitem(A, ind):
     # bool arr indexing.
     if is_list_like_index_type(ind) and ind.dtype == types.bool_:
 
-        def impl_bool(A, ind):  # pragma: no cover
+        def impl_int_arr_getitem_bool(A, ind):  # pragma: no cover
             new_data, new_mask = array_getitem_bool_index(A, ind)
             return init_integer_array(new_data, new_mask)
 
-        return impl_bool
+        return impl_int_arr_getitem_bool
 
     # int arr indexing
     if is_list_like_index_type(ind) and isinstance(ind.dtype, types.Integer):
 
-        def impl(A, ind):  # pragma: no cover
+        def impl_int_arr_getitem(A, ind):  # pragma: no cover
             new_data, new_mask = array_getitem_int_index(A, ind)
             return init_integer_array(new_data, new_mask)
 
-        return impl
+        return impl_int_arr_getitem
 
     # slice case
     if isinstance(ind, types.SliceType):
 
-        def impl_slice(A, ind):  # pragma: no cover
+        def impl_int_arr_getitem_slice(A, ind):  # pragma: no cover
             new_data, new_mask = array_getitem_slice_index(A, ind)
             return init_integer_array(new_data, new_mask)
 
-        return impl_slice
+        return impl_int_arr_getitem_slice
 
     # This should be the only IntegerArray implementation.
     # We only expect to reach this case if more idx options are added.
@@ -435,11 +435,11 @@ def int_arr_setitem(A, idx, val):
     if isinstance(idx, types.Integer):
         if is_scalar:
 
-            def impl_scalar(A, idx, val):  # pragma: no cover
+            def impl_int_arr_setitem_scalar(A, idx, val):  # pragma: no cover
                 A._data[idx] = val
                 bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, idx, 1)
 
-            return impl_scalar
+            return impl_int_arr_setitem_scalar
 
         else:
             raise BodoError(typ_err_msg)
@@ -715,7 +715,7 @@ def _install_np_ufuncs():
 
     for ufunc in numba.np.ufunc_db.get_ufuncs():
         overload_impl = create_op_overload(ufunc, ufunc.nin)
-        overload(ufunc, no_unliteral=True)(overload_impl)
+        overload(ufunc, no_unliteral=True, jit_options={"cache": True})(overload_impl)
 
 
 _install_np_ufuncs()
@@ -745,7 +745,7 @@ def _install_binary_ops():
         if op in skips:
             continue
         overload_impl = create_op_overload(op, 2)
-        overload(op)(overload_impl)
+        overload(op, jit_options={"cache": True})(overload_impl)
 
 
 _install_binary_ops()
@@ -758,7 +758,7 @@ def _install_inplace_binary_ops():
     # install inplace binary ops such as iadd, isub, ...
     for op in numba.core.typing.npydecl.NumpyRulesInplaceArrayOperator._op_map.keys():
         overload_impl = create_op_overload(op, 2)
-        overload(op, no_unliteral=True)(overload_impl)
+        overload(op, no_unliteral=True, jit_options={"cache": True})(overload_impl)
 
 
 _install_inplace_binary_ops()
@@ -771,7 +771,7 @@ def _install_unary_ops():
     # install unary operators: ~, -, +
     for op in (operator.neg, operator.invert, operator.pos):
         overload_impl = create_op_overload(op, 1)
-        overload(op, no_unliteral=True)(overload_impl)
+        overload(op, no_unliteral=True, jit_options={"cache": True})(overload_impl)
 
 
 _install_unary_ops()
@@ -845,7 +845,7 @@ def get_nullable_array_unary_impl(op, A):
     ).return_type
     ret_dtype = to_nullable_type(ret_dtype)
 
-    def impl(A):  # pragma: no cover
+    def bodo_get_nullable_array_unary_impl(A):  # pragma: no cover
         n = len(A)
         out_arr = bodo.utils.utils.alloc_type(n, ret_dtype, None)
         for i in numba.parfors.parfor.internal_prange(n):
@@ -855,7 +855,7 @@ def get_nullable_array_unary_impl(op, A):
             out_arr[i] = op(A[i])
         return out_arr
 
-    return impl
+    return bodo_get_nullable_array_unary_impl
 
 
 def get_nullable_array_binary_impl(op, lhs, rhs):
@@ -899,7 +899,7 @@ def get_nullable_array_binary_impl(op, lhs, rhs):
     access_str2 = "rhs" if is_rhs_scalar else "rhs[i]"
     na_str1 = "False" if is_lhs_scalar else "bodo.libs.array_kernels.isna(lhs, i)"
     na_str2 = "False" if is_rhs_scalar else "bodo.libs.array_kernels.isna(rhs, i)"
-    func_text = "def impl(lhs, rhs):\n"
+    func_text = "def bodo_get_nullable_array_binary_impl(lhs, rhs):\n"
     func_text += "  n = len({})\n".format("lhs" if not is_lhs_scalar else "rhs")
     if inplace:
         func_text += "  out_arr = {}\n".format("lhs" if not is_lhs_scalar else "rhs")
@@ -912,8 +912,7 @@ def get_nullable_array_binary_impl(op, lhs, rhs):
     func_text += "      continue\n"
     func_text += f"    out_arr[i] = bodo.utils.conversion.unbox_if_tz_naive_timestamp(op({access_str1}, {access_str2}))\n"
     func_text += "  return out_arr\n"
-    loc_vars = {}
-    exec(
+    return bodo.utils.utils.bodo_exec(
         func_text,
         {
             "bodo": bodo,
@@ -922,10 +921,9 @@ def get_nullable_array_binary_impl(op, lhs, rhs):
             "ret_dtype": ret_dtype,
             "op": op,
         },
-        loc_vars,
+        {},
+        globals(),
     )
-    impl = loc_vars["impl"]
-    return impl
 
 
 def get_int_array_op_pd_td(op):

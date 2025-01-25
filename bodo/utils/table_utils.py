@@ -24,10 +24,15 @@ from bodo.utils.typing import (
     raise_bodo_error,
     unwrap_typeref,
 )
-from bodo.utils.utils import set_wrapper
+from bodo.utils.utils import (
+    bodo_exec,
+    set_wrapper,
+)
 
 
-@numba.generated_jit(nopython=True, no_cpython_wrapper=True, no_unliteral=True)
+@numba.generated_jit(
+    nopython=True, no_cpython_wrapper=True, no_unliteral=True, cache=True
+)
 def generate_mappable_table_func(
     table, func_name, out_arr_typ, is_method, used_cols=None
 ):
@@ -90,7 +95,7 @@ def generate_mappable_table_func(
         "set_wrapper": set_wrapper,
     }
 
-    func_text = "def impl(table, func_name, out_arr_typ, is_method, used_cols=None):\n"
+    func_text = "def bodo_generate_mappable_table_func_impl(table, func_name, out_arr_typ, is_method, used_cols=None):\n"
     if keep_input_typ:
         # We maintain the original types.
         func_text += "  out_table = bodo.hiframes.table.init_table(table, False)\n"
@@ -165,9 +170,7 @@ def generate_mappable_table_func(
     else:
         func_text += "  return bodo.hiframes.table.init_table_from_lists((out_list,), table_typ)\n"
 
-    local_vars = {}
-    exec(func_text, glbls, local_vars)
-    return local_vars["impl"]
+    return bodo_exec(func_text, glbls, {}, globals())
 
 
 def generate_mappable_table_func_equiv(self, scope, equiv_set, loc, args, kws):
@@ -183,7 +186,7 @@ ArrayAnalysis._analyze_op_call_bodo_utils_table_utils_generate_mappable_table_fu
 )
 
 
-@numba.generated_jit(nopython=True, no_cpython_wrapper=True)
+@numba.generated_jit(nopython=True, no_cpython_wrapper=True, cache=True)
 def generate_table_nbytes(table, out_arr, start_offset, parallel=False):
     """
     Function to compute nbytes on a table. Since nbytes requires a reduction
@@ -209,7 +212,7 @@ def generate_table_nbytes(table, out_arr, start_offset, parallel=False):
         "sum_op": np.int32(bodo.libs.distributed_api.Reduce_Type.Sum.value),
     }
 
-    func_text = "def impl(table, out_arr, start_offset, parallel=False):\n"
+    func_text = "def bodo_generate_table_nbytes_impl(table, out_arr, start_offset, parallel=False):\n"
     # Ensure the whole table is unboxed as we will use every column. Bodo loads
     # Tables/DataFrames from Python with "lazy" unboxing and some columns
     # may not be loaded yet.
@@ -233,12 +236,10 @@ def generate_table_nbytes(table, out_arr, start_offset, parallel=False):
         "      out_arr[i] = bodo.libs.distributed_api.dist_reduce(out_arr[i], sum_op)\n"
     )
 
-    local_vars = {}
-    exec(func_text, glbls, local_vars)
-    return local_vars["impl"]
+    return bodo_exec(func_text, glbls, {}, globals())
 
 
-@numba.generated_jit(nopython=True, no_cpython_wrapper=True)
+@numba.generated_jit(nopython=True, no_cpython_wrapper=True, cache=True)
 def table_concat(table, col_nums_meta, arr_type):
     """
     Concatenates the columns from table corresponding to col_nums, which will be a list of column numbers. Requires
@@ -255,7 +256,7 @@ def table_concat(table, col_nums_meta, arr_type):
     # Lower the col_nums as an array. We do this to keep the used columns
     # visible in the IR for table column deletion.
     glbls["col_nums"] = np.array(col_nums.meta, np.int64)
-    func_text = "def impl(table, col_nums_meta, arr_type):\n"
+    func_text = "def bodo_table_concat_impl(table, col_nums_meta, arr_type):\n"
     func_text += f"  blk = bodo.hiframes.table.get_table_block(table, {concat_blk})\n"
     func_text += (
         "  col_num_to_ind_in_blk = {c : i for i, c in enumerate(col_indices)}\n"
@@ -285,14 +286,10 @@ def table_concat(table, col_nums_meta, arr_type):
     func_text += "        out_arr[off+j] = arr[j]\n"
     func_text += "  return out_arr\n"
 
-    loc_vars = {}
-    exec(func_text, glbls, loc_vars)
-    impl = loc_vars["impl"]
-
-    return impl
+    return bodo_exec(func_text, glbls, {}, globals())
 
 
-@numba.generated_jit(nopython=True, no_cpython_wrapper=True)
+@numba.generated_jit(nopython=True, no_cpython_wrapper=True, cache=True)
 def concat_tables(in_tables, used_cols=None):
     """Concatenate rows of all tables in a list of tables.
 
@@ -330,7 +327,7 @@ def concat_tables(in_tables, used_cols=None):
     else:
         used_cols_data = None
 
-    func_text = "def table_concat_func(in_tables, used_cols=None):\n"
+    func_text = "def bodo_table_concat_func(in_tables, used_cols=None):\n"
     func_text += "  T2 = init_table(table_type, False)\n"
     func_text += "  l = 0\n"
 
@@ -379,9 +376,7 @@ def concat_tables(in_tables, used_cols=None):
     func_text += "  T2 = set_table_len(T2, l)\n"
     func_text += "  return T2\n"
 
-    loc_vars = {}
-    exec(func_text, glbls, loc_vars)
-    return loc_vars["table_concat_func"]
+    return bodo_exec(func_text, glbls, {}, globals())
 
 
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True, no_unliteral=True)
@@ -604,7 +599,7 @@ def drop_duplicates_table(
     pass
 
 
-@overload(drop_duplicates_table, no_unliteral=True)
+@overload(drop_duplicates_table, no_unliteral=True, jit_options={"cache": True})
 def overload_drop_duplicates(in_table, ind_arr, ncols, keep_i, parallel=False):
     """
     Kernel implementation for drop_duplicates. ncols is the number of
@@ -620,7 +615,9 @@ def overload_drop_duplicates(in_table, ind_arr, ncols, keep_i, parallel=False):
 
     extra_arrs = "()" if ignore_index else "(ind_arr,)"
 
-    func_text = "def impl(in_table, ind_arr, ncols, keep_i, parallel=False):\n"
+    func_text = (
+        "def bodo_drop_duplicates(in_table, ind_arr, ncols, keep_i, parallel=False):\n"
+    )
     func_text += f"  in_cpp_table = py_data_to_cpp_table(in_table, {extra_arrs}, in_col_inds, {n_table_cols})\n"
     # NOTE: C++ will delete table pointer
     func_text += "  out_cpp_table = drop_duplicates_cpp_table(in_cpp_table, parallel, ncols, keep_i, False, True)\n"
@@ -632,8 +629,7 @@ def overload_drop_duplicates(in_table, ind_arr, ncols, keep_i, parallel=False):
         func_text += f"  out_arr_index = array_from_cpp_table(out_cpp_table, {n_table_cols}, ind_arr)\n"
     func_text += "  delete_table(out_cpp_table)\n"
     func_text += "  return out_table, out_arr_index\n"
-    loc_vars = {}
-    exec(
+    return bodo_exec(
         func_text,
         {
             "py_data_to_cpp_table": bodo.libs.array.py_data_to_cpp_table,
@@ -647,7 +643,6 @@ def overload_drop_duplicates(in_table, ind_arr, ncols, keep_i, parallel=False):
             ),
             "table_idxs": np.arange(n_table_cols, dtype=np.int64),
         },
-        loc_vars,
+        {},
+        globals(),
     )
-    impl = loc_vars["impl"]
-    return impl

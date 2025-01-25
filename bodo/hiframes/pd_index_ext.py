@@ -74,6 +74,7 @@ from bodo.utils.typing import (
 )
 from bodo.utils.utils import (
     bodo_exec,
+    cached_call_internal,
     is_null_value,
 )
 
@@ -2795,7 +2796,8 @@ def init_numeric_index(typingctx, data, name=None):
         context.nrt.incref(builder, index_typ.name_typ, args[1])
         # create empty dict for get_loc hashmap
         dtype = index_typ.dtype
-        index_val.dict = context.compile_internal(
+        index_val.dict = cached_call_internal(
+            context,
             builder,
             lambda: numba.typed.Dict.empty(dtype, types.int64),
             types.DictType(dtype, types.int64)(),

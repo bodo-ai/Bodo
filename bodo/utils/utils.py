@@ -20,7 +20,7 @@ import numba
 import numpy as np
 import pandas as pd
 from llvmlite import ir as lir
-from numba.core import cgutils, ir, ir_utils, types
+from numba.core import cgutils, ir, ir_utils, sigutils, types
 from numba.core.imputils import lower_builtin, lower_constant
 from numba.core.ir_utils import (
     find_callname,
@@ -1928,3 +1928,16 @@ def bodo_exec(func_text, glbls, loc_vars, real_globals):
     # Also necessary for caching/pickling.
     new_func.__module__ = real_globals["__name__"]
     return new_func
+
+
+def cached_call_internal(context, builder, impl, sig, args):
+    """Enable lower_builtin impls to be cached."""
+    # First make it a cacheable njit.
+    impl = numba.njit(cache=True)(impl)
+    # Compile the impl for this signature.
+    impl.compile(sig)
+    sig_args, _ = sigutils.normalize_signature(sig)
+    # Get the compile_result for this signature.
+    call_target = impl.overloads.get(tuple(sig_args))
+    # Call the implementation.
+    return context.call_internal(builder, call_target.fndesc, sig, args)

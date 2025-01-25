@@ -309,7 +309,7 @@ ArrayAnalysis._analyze_op_call_bodo_libs_float_arr_ext_alloc_float_array = (
 )
 
 
-@overload(operator.getitem, no_unliteral=True)
+@overload(operator.getitem, no_unliteral=True, jit_options={"cache": True})
 def float_arr_getitem(A, ind):  # pragma: no cover
     if not isinstance(A, FloatingArrayType):
         return
@@ -352,7 +352,7 @@ def float_arr_getitem(A, ind):  # pragma: no cover
     )  # pragma: no cover
 
 
-@overload(operator.setitem, no_unliteral=True)
+@overload(operator.setitem, no_unliteral=True, jit_options={"cache": True})
 def float_arr_setitem(A, idx, val):  # pragma: no cover
     if not isinstance(A, FloatingArrayType):
         return
@@ -420,7 +420,7 @@ def float_arr_setitem(A, idx, val):  # pragma: no cover
     )  # pragma: no cover
 
 
-@overload(operator.setitem, no_unliteral=True)
+@overload(operator.setitem, no_unliteral=True, jit_options={"cache": True})
 def numpy_arr_setitem(A, idx, val):
     """Support setitem of Numpy arrays with nullable float arrays"""
     if not (
@@ -448,39 +448,41 @@ def numpy_arr_setitem(A, idx, val):
     return impl_np_setitem_float_arr
 
 
-@overload(len, no_unliteral=True)
+@overload(len, no_unliteral=True, jit_options={"cache": True})
 def overload_float_arr_len(A):  # pragma: no cover
     if isinstance(A, FloatingArrayType):
         return lambda A: len(A._data)
 
 
-@overload_attribute(FloatingArrayType, "shape")
+@overload_attribute(FloatingArrayType, "shape", jit_options={"cache": True})
 def overload_float_arr_shape(A):  # pragma: no cover
     return lambda A: (len(A._data),)
 
 
-@overload_attribute(FloatingArrayType, "dtype")
+@overload_attribute(FloatingArrayType, "dtype", jit_options={"cache": True})
 def overload_float_arr_dtype(A):  # pragma: no cover
     dtype_class = pd.Float32Dtype if A.dtype == types.float32 else pd.Float64Dtype
     return lambda A: dtype_class()
 
 
-@overload_attribute(FloatingArrayType, "ndim")
+@overload_attribute(FloatingArrayType, "ndim", jit_options={"cache": True})
 def overload_float_arr_ndim(A):  # pragma: no cover
     return lambda A: 1
 
 
-@overload_attribute(FloatingArrayType, "size")
+@overload_attribute(FloatingArrayType, "size", jit_options={"cache": True})
 def overload_float_size(A):
     return lambda A: len(A._data)  # pragma: no cover
 
 
-@overload_attribute(FloatingArrayType, "nbytes")
+@overload_attribute(FloatingArrayType, "nbytes", jit_options={"cache": True})
 def float_arr_nbytes_overload(A):  # pragma: no cover
     return lambda A: A._data.nbytes + A._null_bitmap.nbytes  # pragma: no cover
 
 
-@overload_method(FloatingArrayType, "copy", no_unliteral=True)
+@overload_method(
+    FloatingArrayType, "copy", no_unliteral=True, jit_options={"cache": True}
+)
 def overload_float_arr_copy(A, dtype=None):  # pragma: no cover
     # TODO: Update dtype to do proper parsing with supported types.
     if not is_overload_none(dtype):
@@ -582,7 +584,7 @@ def cast_float_array(context, builder, fromty, toty, val):
     return context.compile_internal(builder, f, toty(fromty), [val])
 
 
-@overload(np.asarray)
+@overload(np.asarray, jit_options={"cache": True})
 def overload_asarray(A):
     """Support np.asarray() for nullable float arrays"""
     if not isinstance(A, FloatingArrayType):
@@ -704,7 +706,7 @@ def _install_unary_ops():
 _install_unary_ops()
 
 
-@overload(np.var, inline="always")
+@overload(np.var, inline="always", jit_options={"cache": True})
 def overload_var(A):
     """Implements np.var() for nullable float arrays.
     Unlike Numpy arrays, this currently skips NAs to match SQL behavior since it's
@@ -720,7 +722,7 @@ def overload_var(A):
     return impl
 
 
-@overload(np.std, inline="always")
+@overload(np.std, inline="always", jit_options={"cache": True})
 def overload_std(A):
     """Implements np.std() for nullable float arrays.
     Unlike Numpy arrays, this currently skips NAs to match SQL behavior since it's
@@ -738,7 +740,9 @@ def overload_std(A):
 
 # inlining in Series pass but avoiding inline="always" since there are Numba-only cases
 # that don't need inlining such as repeats.sum() in repeat_kernel()
-@overload_method(FloatingArrayType, "sum", no_unliteral=True)
+@overload_method(
+    FloatingArrayType, "sum", no_unliteral=True, jit_options={"cache": True}
+)
 def overload_float_arr_sum(A, skipna=True, min_count=0):  # pragma: no cover
     """A.sum() for nullable float arrays"""
     unsupported_args = {"skipna": skipna, "min_count": min_count}
@@ -758,7 +762,9 @@ def overload_float_arr_sum(A, skipna=True, min_count=0):  # pragma: no cover
     return impl
 
 
-@overload_method(FloatingArrayType, "unique", no_unliteral=True)
+@overload_method(
+    FloatingArrayType, "unique", no_unliteral=True, jit_options={"cache": True}
+)
 def overload_unique(A):  # pragma: no cover
     dtype = A.dtype
 

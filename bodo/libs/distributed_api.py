@@ -82,6 +82,7 @@ from bodo.utils.typing import (
 from bodo.utils.utils import (
     CTypeEnum,
     bodo_exec,
+    cached_call_internal,
     check_and_propagate_cpp_exception,
     empty_like_type,
     is_array_typ,
@@ -214,7 +215,7 @@ class TimeInfer(ConcreteTemplate):
 
 @lower_builtin(time.time)
 def lower_time_time(context, builder, sig, args):
-    return context.compile_internal(builder, lambda: _get_time(), sig, args)
+    return cached_call_internal(context, builder, lambda: _get_time(), sig, args)
 
 
 @numba.generated_jit(nopython=True)
