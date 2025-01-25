@@ -205,7 +205,7 @@ def impl_ctor_datetime_date(context, builder, sig, args):
         return days_since_1_1_0001 - UNIX_EPOCH_ORD
 
     sig = typing.signature(types.int64, types.int64, types.int64, types.int64)
-    o = bodo.utils.utils.cached_call_internal(context, builder, build_date, sig, args)
+    o = context.compile_internal(builder, build_date, sig, args)
     return builder.trunc(o, lir.IntType(32))
 
 
