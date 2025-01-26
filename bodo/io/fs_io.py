@@ -665,12 +665,7 @@ def getfs(
         )
 
     if protocol in {"gcs", "gs"}:
-        validate_gcsfs_installed()
-        import gcsfs
-
-        # TODO pass storage_options to GCSFileSystem
-        google_fs = gcsfs.GCSFileSystem(token=None)
-        return PyFileSystem(FSSpecHandler(google_fs))
+        return get_gcs_fs(fpath, storage_options=storage_options)
     elif protocol == "http":
         import fsspec
 
@@ -816,12 +811,7 @@ def find_file_name_or_handler(path, ftype, storage_options=None):
     # Use PyArrow FileSystem for S3, GCS, and Hugging Face
     if protocol in ("s3", "gcs", "gs", "hf"):
         is_handler = True
-        if protocol == "s3":
-            fs = get_s3_fs_from_path(path, storage_options=storage_options)
-        elif protocol == "hf":
-            fs = get_hf_fs(storage_options=storage_options)
-        else:
-            fs = get_gcs_fs(path, storage_options=storage_options)
+        fs = getfs(path, protocol, storage_options=storage_options)
 
         all_files = pa_fs_list_dir_fnames(fs, path)  # can return None if not dir
         path_ = (parsed_url.netloc + parsed_url.path).rstrip("/")
