@@ -804,7 +804,6 @@ def find_file_name_or_handler(path, ftype, storage_options=None):
     """
     from urllib.parse import urlparse
 
-    parsed_url = urlparse(path)
     fname = path
     fs = None
     func_name = "read_json" if ftype == "json" else "read_csv"
@@ -812,12 +811,14 @@ def find_file_name_or_handler(path, ftype, storage_options=None):
 
     filter_func = directory_of_files_common_filter
 
+    path, parsed_url, protocol = parse_fpath(path)
+
     # Use PyArrow FileSystem for S3, GCS, and Hugging Face
-    if parsed_url.scheme in ("s3", "gcs", "gs", "hf"):
+    if protocol in ("s3", "gcs", "gs", "hf"):
         is_handler = True
-        if parsed_url.scheme == "s3":
+        if protocol == "s3":
             fs = get_s3_fs_from_path(path, storage_options=storage_options)
-        elif parsed_url.scheme == "hf":
+        elif protocol == "hf":
             fs = get_hf_fs(storage_options=storage_options)
         else:
             fs = get_gcs_fs(path, storage_options=storage_options)
@@ -856,7 +857,7 @@ def find_file_name_or_handler(path, ftype, storage_options=None):
         # but in the meantime, we're using an ArrowFSWrapper for good performance.
         fs = ArrowFSWrapper(fs)
         file_name_or_handler = fs._open(fname)
-    elif parsed_url.scheme == "hdfs":  # pragma: no cover
+    elif protocol == "hdfs":  # pragma: no cover
         is_handler = True
         (fs, all_files) = hdfs_list_dir_fnames(path)
 
@@ -877,7 +878,7 @@ def find_file_name_or_handler(path, ftype, storage_options=None):
         file_name_or_handler = fs.open_input_file(fname)
     # TODO: this can be merged with hdfs path above when pyarrow's new
     # HadoopFileSystem wrapper supports abfs scheme
-    elif parsed_url.scheme in ("abfs", "abfss"):  # pragma: no cover
+    elif protocol in ("abfs", "abfss"):  # pragma: no cover
         is_handler = True
         (fs, all_files) = abfs_list_dir_fnames(path)
 
@@ -895,9 +896,9 @@ def find_file_name_or_handler(path, ftype, storage_options=None):
 
         file_name_or_handler = fs.open(fname, "rb")
     else:
-        if parsed_url.scheme != "":
+        if protocol != "":
             raise BodoError(
-                f"Unrecognized scheme {parsed_url.scheme}. Please refer to https://docs.bodo.ai/latest/file_io/."
+                f"Unrecognized scheme {protocol}. Please refer to https://docs.bodo.ai/latest/file_io/."
             )
         is_handler = False
 
