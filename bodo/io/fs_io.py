@@ -333,10 +333,7 @@ def pa_fs_is_directory(fs, path):
     from pyarrow import fs as pa_fs
 
     try:
-        options = urlparse(path)
-        # Remove the s3:// prefix if it exists (and other path sanitization)
-        path_ = (options.netloc + options.path).rstrip("/")
-        path_info = fs.get_file_info(path_)
+        path_info = fs.get_file_info(path)
         if path_info.type in (pa_fs.FileType.NotFound, pa_fs.FileType.Unknown):
             raise FileNotFoundError(f"{path} is a non-existing or unreachable file")
         if (not path_info.size) and path_info.type == pa_fs.FileType.Directory:
@@ -365,42 +362,42 @@ def pa_fs_list_dir_fnames(fs, path):
 
     from pyarrow import fs as pa_fs
 
-    file_names = None
-    try:
-        # check if path is a directory, and if there is a zero-size object
-        # with the name of the directory. If there is, we have to omit it
-        # because pq.ParquetDataset will throw Invalid Parquet file size is 0
-        # bytes
-        if pa_fs_is_directory(fs, path):
-            options = urlparse(path)
-            # Remove the s3:// prefix if it exists (and other path sanitization)
-            path_ = (options.netloc + options.path).rstrip("/")
-            file_selector = pa_fs.FileSelector(path_, recursive=False)
-            file_stats = fs.get_file_info(
-                file_selector
-            )  # this is "s3://bucket/path-to-dir"
+    file_names = []
+    for p in path:
+        try:
+            # check if path is a directory, and if there is a zero-size object
+            # with the name of the directory. If there is, we have to omit it
+            # because pq.ParquetDataset will throw Invalid Parquet file size is 0
+            # bytes
+            if pa_fs_is_directory(fs, p):
+                file_selector = pa_fs.FileSelector(p, recursive=False)
+                file_stats = fs.get_file_info(
+                    file_selector
+                )  # this is "s3://bucket/path-to-dir"
 
-            if (
-                file_stats
-                and file_stats[0].path in [path_, f"{path_}/"]
-                and int(file_stats[0].size or 0)
-                == 0  # FileInfo.size is None for directories, so convert to 0 before comparison
-            ):  # pragma: no cover
-                # excluded from coverage because haven't found a reliable way
-                # to create 0 size object that is a directory. For example:
-                # fs.mkdir(path) sometimes doesn't do anything at all
-                # get actual names of objects inside the dir
-                file_stats = file_stats[1:]
-            file_names = [file_stat.base_name for file_stat in file_stats]
-    except BodoError:  # pragma: no cover
-        raise
-    except Exception as e:  # pragma: no cover
-        # There doesn't seem to be a way to get special errors for
-        # credential issues, region issues, etc. in pyarrow (unlike s3fs).
-        # So we include a blanket message to verify these details.
-        raise BodoError(
-            f"error from pyarrow FileSystem: {type(e).__name__}: {str(e)}\n{bodo_error_msg}"
-        )
+                if (
+                    file_stats
+                    and file_stats[0].path in [p, f"{p}/"]
+                    and int(file_stats[0].size or 0)
+                    == 0  # FileInfo.size is None for directories, so convert to 0 before comparison
+                ):  # pragma: no cover
+                    # excluded from coverage because haven't found a reliable way
+                    # to create 0 size object that is a directory. For example:
+                    # fs.mkdir(path) sometimes doesn't do anything at all
+                    # get actual names of objects inside the dir
+                    file_stats = file_stats[1:]
+                file_names += [file_stat.base_name for file_stat in file_stats]
+            else:
+                file_names.append(p)
+        except BodoError:  # pragma: no cover
+            raise
+        except Exception as e:  # pragma: no cover
+            # There doesn't seem to be a way to get special errors for
+            # credential issues, region issues, etc. in pyarrow (unlike s3fs).
+            # So we include a blanket message to verify these details.
+            raise BodoError(
+                f"error from pyarrow FileSystem: {type(e).__name__}: {str(e)}\n{bodo_error_msg}"
+            )
 
     return file_names
 
@@ -839,6 +836,8 @@ def find_file_name_or_handler(path, ftype, storage_options=None):
     """
     from urllib.parse import urlparse
 
+    from bodo.io.parquet_pio import get_fpath_without_protocol_prefix
+
     fname = path
     fs = None
     func_name = "read_json" if ftype == "json" else "read_csv"
@@ -853,24 +852,23 @@ def find_file_name_or_handler(path, ftype, storage_options=None):
         is_handler = True
         fs = getfs(path, protocol, storage_options=storage_options)
 
-        all_files = pa_fs_list_dir_fnames(fs, path)  # can return None if not dir
-        path_ = (parsed_url.netloc + parsed_url.path).rstrip("/")
-        fname = path_
+        fpath_noprefix, _ = get_fpath_without_protocol_prefix(
+            path, protocol, parsed_url
+        )
 
-        if all_files:
-            all_files = [
-                (path_ + "/" + f) for f in sorted(filter(filter_func, all_files))
-            ]
-            # FileInfo.size is None for directories, so we convert None to 0
-            # before comparison with 0
-            all_csv_files = [
-                f for f in all_files if int(fs.get_file_info(f).size or 0) > 0
-            ]
+        fpath_noprefix = expand_path_globs(fpath_noprefix, protocol, fs)
 
-            if len(all_csv_files) == 0:  # pragma: no cover
-                # TODO: test
-                raise BodoError(err_msg)
-            fname = all_csv_files[0]
+        all_files = pa_fs_list_dir_fnames(fs, fpath_noprefix)
+
+        all_files = sorted(filter(filter_func, all_files))
+        # FileInfo.size is None for directories, so we convert None to 0
+        # before comparison with 0
+        all_csv_files = [f for f in all_files if int(fs.get_file_info(f).size or 0) > 0]
+
+        if len(all_csv_files) == 0:  # pragma: no cover
+            # TODO: test
+            raise BodoError(err_msg)
+        fname = all_csv_files[0]
 
         # Arrow's S3FileSystem has some performance issues when used
         # with pandas.read_csv, which we do at compile-time.
