@@ -430,6 +430,7 @@ class PathInfo {
         }
     }
 
+   private:
     /// original file path passed through read_csv/read_json
     std::string file_path;
     std::string bucket_region;  // only useful if it's an s3 path
