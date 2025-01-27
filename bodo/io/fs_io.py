@@ -362,31 +362,19 @@ def pa_fs_list_dir_fnames(fs, path):
 
     from pyarrow import fs as pa_fs
 
+    path = path if isinstance(path, list) else [path]
+
     file_names = []
     for p in path:
         try:
-            # check if path is a directory, and if there is a zero-size object
-            # with the name of the directory. If there is, we have to omit it
-            # because pq.ParquetDataset will throw Invalid Parquet file size is 0
-            # bytes
             if pa_fs_is_directory(fs, p):
-                file_selector = pa_fs.FileSelector(p, recursive=False)
-                file_stats = fs.get_file_info(
-                    file_selector
-                )  # this is "s3://bucket/path-to-dir"
-
-                if (
-                    file_stats
-                    and file_stats[0].path in [p, f"{p}/"]
-                    and int(file_stats[0].size or 0)
-                    == 0  # FileInfo.size is None for directories, so convert to 0 before comparison
-                ):  # pragma: no cover
-                    # excluded from coverage because haven't found a reliable way
-                    # to create 0 size object that is a directory. For example:
-                    # fs.mkdir(path) sometimes doesn't do anything at all
-                    # get actual names of objects inside the dir
-                    file_stats = file_stats[1:]
-                file_names += [file_stat.base_name for file_stat in file_stats]
+                file_selector = pa_fs.FileSelector(p, recursive=True)
+                file_stats = fs.get_file_info(file_selector)
+                file_names += [
+                    file_stat.path
+                    for file_stat in file_stats
+                    if file_stat.type != pa_fs.FileType.Directory
+                ]
             else:
                 file_names.append(p)
         except BodoError:  # pragma: no cover
