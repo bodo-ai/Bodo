@@ -26,3 +26,18 @@ def test_read_parquet_hf(datapath, memory_leak_check):
         )
 
     check_func(test_impl, ())
+
+
+@pytest.mark.slow
+def test_read_parquet_hf_split(datapath, memory_leak_check):
+    """Test read_parquet from Hugging Face when a split is specified
+    (similar to Hugging Face online code examples)"""
+
+    def test_impl():
+        splits = {
+            "train": "main/train-00000-of-00001.parquet",
+            "test": "main/test-00000-of-00001.parquet",
+        }
+        return pd.read_parquet("hf://datasets/openai/gsm8k/" + splits["train"])
+
+    check_func(test_impl, ())

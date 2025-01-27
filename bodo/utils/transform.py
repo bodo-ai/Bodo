@@ -801,6 +801,13 @@ def get_const_value_inner(
         )
         return value[index]
 
+    if is_expr(var_def, "static_getitem"):
+        index = var_def.index
+        value = get_const_value_inner(
+            func_ir, var_def.value, arg_types, typemap, updated_containers
+        )
+        return value[index]
+
     # list/set/dict cases
 
     # try dict.keys()
