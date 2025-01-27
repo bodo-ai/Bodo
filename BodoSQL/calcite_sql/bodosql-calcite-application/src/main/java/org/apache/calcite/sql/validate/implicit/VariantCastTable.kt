@@ -614,7 +614,7 @@ internal class VariantCastTable {
             SqlLibraryOperators.TRANSLATE3 to anyArgVarcharCast,
             StringOperatorTable.CHARINDEX to varcharVarcharIntegerCast,
             StringOperatorTable.EDITDISTANCE to varcharVarcharIntegerCast,
-            StringOperatorTable.POSITION to varcharVarcharIntegerCast,
+            SqlStdOperatorTable.POSITION to varcharVarcharIntegerCast,
             SqlStdOperatorTable.REPLACE to anyArgVarcharCast,
             SqlStdOperatorTable.SUBSTRING to varcharBigintBigintCast,
             StringOperatorTable.SUBSTR to varcharBigintBigintCast,

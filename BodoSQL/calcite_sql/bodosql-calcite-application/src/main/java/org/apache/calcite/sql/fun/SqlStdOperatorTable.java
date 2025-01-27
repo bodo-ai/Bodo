@@ -329,6 +329,7 @@ public class SqlStdOperatorTable extends ReflectiveSqlOperatorTable {
     public static final SqlBasicFunction RAND = SqlBasicFunction
       .create("RAND", ReturnTypes.DOUBLE,
           OperandTypes.NILADIC.or(OperandTypes.NUMERIC), SqlFunctionCategory.NUMERIC)
+      .withDeterministic(false)
       .withDynamic(true);
 
     /**
@@ -864,7 +865,7 @@ public class SqlStdOperatorTable extends ReflectiveSqlOperatorTable {
                     "IS JSON VALUE",
                     SqlKind.OTHER,
                     28,
-                    ReturnTypes.BOOLEAN,
+                    ReturnTypes.BOOLEAN_NULLABLE,
                     null,
                     OperandTypes.CHARACTER);
 
@@ -873,7 +874,7 @@ public class SqlStdOperatorTable extends ReflectiveSqlOperatorTable {
                     "IS NOT JSON VALUE",
                     SqlKind.OTHER,
                     28,
-                    ReturnTypes.BOOLEAN,
+                    ReturnTypes.BOOLEAN_NULLABLE,
                     null,
                     OperandTypes.CHARACTER);
 
@@ -882,7 +883,7 @@ public class SqlStdOperatorTable extends ReflectiveSqlOperatorTable {
                     "IS JSON OBJECT",
                     SqlKind.OTHER,
                     28,
-                    ReturnTypes.BOOLEAN,
+                    ReturnTypes.BOOLEAN_NULLABLE,
                     null,
                     OperandTypes.CHARACTER);
 
@@ -891,7 +892,7 @@ public class SqlStdOperatorTable extends ReflectiveSqlOperatorTable {
                     "IS NOT JSON OBJECT",
                     SqlKind.OTHER,
                     28,
-                    ReturnTypes.BOOLEAN,
+                    ReturnTypes.BOOLEAN_NULLABLE,
                     null,
                     OperandTypes.CHARACTER);
 
@@ -900,7 +901,7 @@ public class SqlStdOperatorTable extends ReflectiveSqlOperatorTable {
                     "IS JSON ARRAY",
                     SqlKind.OTHER,
                     28,
-                    ReturnTypes.BOOLEAN,
+                    ReturnTypes.BOOLEAN_NULLABLE,
                     null,
                     OperandTypes.CHARACTER);
 
@@ -909,7 +910,7 @@ public class SqlStdOperatorTable extends ReflectiveSqlOperatorTable {
                     "IS NOT JSON ARRAY",
                     SqlKind.OTHER,
                     28,
-                    ReturnTypes.BOOLEAN,
+                    ReturnTypes.BOOLEAN_NULLABLE,
                     null,
                     OperandTypes.CHARACTER);
 
@@ -918,7 +919,7 @@ public class SqlStdOperatorTable extends ReflectiveSqlOperatorTable {
                     "IS JSON SCALAR",
                     SqlKind.OTHER,
                     28,
-                    ReturnTypes.BOOLEAN,
+                    ReturnTypes.BOOLEAN_NULLABLE,
                     null,
                     OperandTypes.CHARACTER);
 
@@ -927,7 +928,7 @@ public class SqlStdOperatorTable extends ReflectiveSqlOperatorTable {
                     "IS NOT JSON SCALAR",
                     SqlKind.OTHER,
                     28,
-                    ReturnTypes.BOOLEAN,
+                    ReturnTypes.BOOLEAN_NULLABLE,
                     null,
                     OperandTypes.CHARACTER);
 
@@ -1262,7 +1263,45 @@ public class SqlStdOperatorTable extends ReflectiveSqlOperatorTable {
     public static final SqlAggFunction VARIANCE =
             new SqlAvgAggFunction("VARIANCE", SqlKind.VAR_SAMP);
 
-    /**
+  public static final SqlBasicFunction BITCOUNT =
+      SqlBasicFunction
+          .create("BITCOUNT", ReturnTypes.BIGINT_NULLABLE,
+              OperandTypes.INTEGER.or(OperandTypes.BINARY), SqlFunctionCategory.NUMERIC);
+
+  /**
+   * <code>BITAND</code> scalar function.
+   */
+  public static final SqlFunction BITAND =
+      SqlBasicFunction.create("BITAND", SqlKind.BITAND,
+          ReturnTypes.LARGEST_INT_OR_FIRST_NON_NULL,
+          OperandTypes.INTEGER_INTEGER.or(OperandTypes.BINARY_BINARY));
+
+  /**
+   * <code>BITOR</code> scalar function.
+   */
+  public static final SqlFunction BITOR =
+      SqlBasicFunction.create("BITOR", SqlKind.BITOR,
+          ReturnTypes.LARGEST_INT_OR_FIRST_NON_NULL,
+          OperandTypes.INTEGER_INTEGER.or(OperandTypes.BINARY_BINARY));
+
+  /**
+   * <code>BITXOR</code> scalar function.
+   */
+  public static final SqlFunction BITXOR =
+      SqlBasicFunction.create("BITXOR", SqlKind.BITXOR,
+          ReturnTypes.LARGEST_INT_OR_FIRST_NON_NULL,
+          OperandTypes.INTEGER_INTEGER.or(OperandTypes.BINARY_BINARY));
+
+  /**
+   * <code>BITNOT</code> scalar function.
+   */
+  public static final SqlFunction BITNOT =
+      SqlBasicFunction.create("BITNOT", SqlKind.BITNOT,
+          ReturnTypes.ARG0_OR_INTEGER,
+          OperandTypes.INTEGER.or(OperandTypes.BINARY));
+
+
+  /**
      * <code>BIT_AND</code> aggregate function.
      */
     public static final SqlAggFunction BIT_AND =
@@ -2075,7 +2114,7 @@ public class SqlStdOperatorTable extends ReflectiveSqlOperatorTable {
      * <code>EXTRACT(HOUR FROM INTERVAL '364 23:59:59')</code> returns <code>
      * 23</code>
      */
-    public static final SqlFunction EXTRACT = new SqlExtractFunction("EXTRACT");
+    public static final SqlFunction EXTRACT = new SqlExtractFunction("EXTRACT", false);
 
     /**
      * The SQL <code>YEAR</code> operator. Returns the Year

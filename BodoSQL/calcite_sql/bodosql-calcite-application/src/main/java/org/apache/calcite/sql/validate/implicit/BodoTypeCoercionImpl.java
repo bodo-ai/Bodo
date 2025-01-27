@@ -45,6 +45,7 @@ import org.checkerframework.checker.nullness.qual.Nullable;
 import static com.bodosql.calcite.application.operatorTables.CastingOperatorTable.TO_NUMBER;
 import static java.util.Objects.requireNonNull;
 import static org.apache.calcite.sql.type.SqlTypeUtil.convertTypeToSpec;
+import static org.apache.calcite.sql.type.SqlTypeUtil.getMaxPrecisionScaleDecimal;
 import static org.apache.calcite.sql.validate.SqlNonNullableAccessors.getScope;
 
 public class BodoTypeCoercionImpl extends TypeCoercionImpl {
@@ -181,6 +182,19 @@ public class BodoTypeCoercionImpl extends TypeCoercionImpl {
     if (SqlTypeUtil.isNumeric(type1) && SqlTypeUtil.isBoolean(type2)) {
       return type2;
     }
+
+    // Fix new precision and scale for integer - decimal and decimal - decimal comparisons
+    if ((SqlTypeUtil.isDecimal(type1) || SqlTypeUtil.isDecimal(type2)) && (SqlTypeUtil.isExactNumeric(type1) && SqlTypeUtil.isExactNumeric(type2))) {
+      int l1 = type1.getPrecision() - type1.getScale();
+      int l2 = type2.getPrecision() - type2.getScale();
+      int newLeading = Math.max(l1, l2);
+      int newScale = Math.max(type1.getScale(), type2.getScale());
+      int maxPrecision = factory.getTypeSystem().getMaxPrecision(SqlTypeName.DECIMAL);
+      int newPrecision = Math.min(newLeading + newScale, maxPrecision);
+      newScale = Math.min(newScale, maxPrecision - newLeading);
+      return factory.createSqlType(SqlTypeName.DECIMAL, newPrecision, newScale);
+    }
+
     return super.commonTypeForBinaryComparison(type1, type2);
   }
 
@@ -245,6 +259,11 @@ public class BodoTypeCoercionImpl extends TypeCoercionImpl {
       return SqlStdOperatorTable.CAST.createCall(SqlParserPos.ZERO, node,
               BodoSqlTypeUtil.convertTypeToSpec(type).withNullable(type.isNullable()));
     }
+  }
+
+  private static SqlNode simpleCastTo(SqlNode node, RelDataType type) {
+    return SqlStdOperatorTable.CAST.createCall(SqlParserPos.ZERO, node,
+            BodoSqlTypeUtil.convertTypeToSpec(type).withNullable(type.isNullable()));
   }
 
   private static class TypeCoercionFactoryImpl implements TypeCoercionFactory {
@@ -514,7 +533,7 @@ public class BodoTypeCoercionImpl extends TypeCoercionImpl {
           return false;
         }
         RelDataType targetType2 = syncAttributes(validator.deriveType(scope, operand), targetType);
-        final SqlNode casted = castTo(operand, targetType2);
+        final SqlNode casted = simpleCastTo(operand, targetType2);
         node2.setOperand(0, casted);
         updateInferredType(casted, targetType2);
         return true;
@@ -524,7 +543,7 @@ public class BodoTypeCoercionImpl extends TypeCoercionImpl {
       return false;
     }
     RelDataType targetType3 = syncAttributes(validator.deriveType(scope, node), targetType);
-    final SqlNode node3 = castTo(node, targetType3);
+    final SqlNode node3 = simpleCastTo(node, targetType3);
     nodeList.set(index, node3);
     updateInferredType(node3, targetType3);
     return true;

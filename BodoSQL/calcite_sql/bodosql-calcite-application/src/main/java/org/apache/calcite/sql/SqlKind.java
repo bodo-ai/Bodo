@@ -29,7 +29,7 @@ import java.util.Set;
  * Enumerates the possible types of {@link SqlNode}.
  *
  * <p>The values are immutable, canonical constants, so you can use Kinds to
- * find particular types of expressions quickly. To identity a call to a common
+ * find particular types of expressions quickly. To identify a call to a common
  * operator such as '=', use {@link org.apache.calcite.sql.SqlNode#isA}:
  *
  * <blockquote>
@@ -239,6 +239,29 @@ public enum SqlKind {
 
   /** {@code AS} operator. */
   AS,
+
+  /** {@code MEASURE} operator. */
+  MEASURE,
+
+  /** {@code V2M} (value-to-measure) internal operator. */
+  V2M,
+
+  /** {@code M2V} (measure-to-value) internal operator. */
+  M2V,
+
+  /** {@code M2X} (evaluate measure in context) internal operator. */
+  M2X,
+
+  /** {@code AGG_M2M} (aggregate measure to measure) internal aggregate
+   * function. */
+  AGG_M2M,
+
+  /** {@code AGG_M2V} (aggregate measure to value) internal aggregate
+   * function. */
+  AGG_M2V,
+
+  /** {@code SAME_PARTITION} pseudo-function. */
+  SAME_PARTITION,
 
   /** Argument assignment operator, {@code =>}. */
   ARGUMENT_ASSIGNMENT,
@@ -453,11 +476,17 @@ public enum SqlKind {
   /** {@code DECODE} function (Oracle). */
   DECODE,
 
-  /** {@code NVL} function (Oracle). */
+  /** {@code NVL} function (Oracle, Spark). */
   NVL,
+
+  /** {@code NVL2} function (Oracle, Spark). */
+  NVL2,
 
   /** {@code GREATEST} function (Oracle). */
   GREATEST,
+
+  /** {@code GREATEST} function (PostgreSQL). */
+  GREATEST_PG,
 
   /** The two-argument {@code CONCAT} function (Oracle). */
   CONCAT2,
@@ -468,14 +497,30 @@ public enum SqlKind {
   /** The {@code CONCAT_WS} function (MSSQL). */
   CONCAT_WS_MSSQL,
 
+  /** The {@code CONCAT_WS} function (Postgresql). */
+  CONCAT_WS_POSTGRESQL,
+
+
+  /** The {@code CONCAT_WS} function (Spark). */
+  CONCAT_WS_SPARK,
+
   /** The "IF" function (BigQuery, Hive, Spark). */
   IF,
 
   /** {@code LEAST} function (Oracle). */
   LEAST,
 
+  /** {@code LEAST} function (PostgreSQL). */
+  LEAST_PG,
+
+  /** {@code LOG} function. (Mysql, Spark). */
+  LOG,
+
   /** {@code DATE_ADD} function (BigQuery Semantics). */
   DATE_ADD,
+
+  /** {@code ADD_MONTHS} function (Oracle, Spark). */
+  ADD_MONTHS,
 
   /** {@code DATE_TRUNC} function (BigQuery). */
   DATE_TRUNC,
@@ -823,8 +868,14 @@ public enum SqlKind {
   /** {@code STR_TO_MAP} function (Spark semantics). */
   STR_TO_MAP,
 
+  /** {@code SUBSTRING_INDEX} function (Spark semantics). */
+  SUBSTRING_INDEX,
+
   /** {@code REVERSE} function (SQL Server, MySQL). */
   REVERSE,
+
+  /** {@code REVERSE} function (Spark semantics). */
+  REVERSE_SPARK,
 
   /** {@code SOUNDEX} function (Spark semantics). */
   SOUNDEX_SPARK,
@@ -1093,6 +1144,18 @@ public enum SqlKind {
 
   /** The {@code AGGREGATE} aggregate function. */
   AGGREGATE_FN,
+
+  /** The {@code BITAND} scalar function. */
+  BITAND,
+
+  /** The {@code BITOR} scalar function. */
+  BITOR,
+
+  /** The {@code BITXOR} scalar function. */
+  BITXOR,
+
+  /** The {@code BITNOT} scalar function. */
+  BITNOT,
 
   /** The {@code BIT_AND} aggregate function. */
   BIT_AND,
@@ -1464,6 +1527,7 @@ public enum SqlKind {
    *
    * <p>Consists of:
    * {@link #IN},
+   * {@link #NOT_IN},
    * {@link #EQUALS},
    * {@link #NOT_EQUALS},
    * {@link #LESS_THAN},
@@ -1473,7 +1537,21 @@ public enum SqlKind {
    */
   public static final Set<SqlKind> COMPARISON =
       EnumSet.of(
-          IN, EQUALS, NOT_EQUALS,
+          IN, NOT_IN, EQUALS, NOT_EQUALS,
+          LESS_THAN, GREATER_THAN,
+          GREATER_THAN_OR_EQUAL, LESS_THAN_OR_EQUAL);
+
+  /**
+   * Comparison operators that order values.
+   *
+   * <p>Consists of:
+   * {@link #LESS_THAN},
+   * {@link #GREATER_THAN},
+   * {@link #LESS_THAN_OR_EQUAL},
+   * {@link #GREATER_THAN_OR_EQUAL}.
+   */
+  public static final Set<SqlKind> ORDER_COMPARISON =
+      EnumSet.of(
           LESS_THAN, GREATER_THAN,
           GREATER_THAN_OR_EQUAL, LESS_THAN_OR_EQUAL);
 
@@ -1698,6 +1776,98 @@ public enum SqlKind {
    */
   public final boolean belongsTo(Collection<SqlKind> category) {
     return category.contains(this);
+  }
+
+  /**
+   * If this kind represents a non-standard function, return OTHER_FUNCTION, otherwise
+   * return this.  Do not add standard functions here.
+   */
+  public SqlKind getFunctionKind() {
+    switch (this) {
+      case CONVERT:
+      case TRANSLATE:
+      case POSITION:
+      case DECODE:
+      case NVL:
+      case NVL2:
+      case GREATEST:
+      case GREATEST_PG:
+      case CONCAT2:
+      case CONCAT_WITH_NULL:
+      case CONCAT_WS_MSSQL:
+      case CONCAT_WS_POSTGRESQL:
+      case CONCAT_WS_SPARK:
+      case IF:
+      case LEAST:
+      case LEAST_PG:
+      case LOG:
+      case DATE_ADD:
+      case DATE_TRUNC:
+      case DATE_SUB:
+      case TIME_ADD:
+      case TIME_SUB:
+      case TIMESTAMP_ADD:
+      case TIMESTAMP_DIFF:
+      case TIMESTAMP_SUB:
+      case SAFE_CAST:
+      case FLOOR:
+      case CEIL:
+      case TRIM:
+      case LTRIM:
+      case RTRIM:
+      case ARRAY_APPEND:
+      case ARRAY_COMPACT:
+      case ARRAY_CONCAT:
+      case ARRAY_CONTAINS:
+      case ARRAY_DISTINCT:
+      case ARRAY_EXCEPT:
+      case ARRAY_INSERT:
+      case ARRAY_INTERSECT:
+      case ARRAY_JOIN:
+      case ARRAY_LENGTH:
+      case ARRAY_MAX:
+      case ARRAY_MIN:
+      case ARRAY_POSITION:
+      case ARRAY_PREPEND:
+      case ARRAY_REMOVE:
+      case ARRAY_REPEAT:
+      case ARRAY_REVERSE:
+      case ARRAY_SIZE:
+      case ARRAY_TO_STRING:
+      case ARRAY_UNION:
+      case ARRAYS_OVERLAP:
+      case ARRAYS_ZIP:
+      case SORT_ARRAY:
+      case MAP_CONCAT:
+      case MAP_ENTRIES:
+      case MAP_KEYS:
+      case MAP_VALUES:
+      case MAP_CONTAINS_KEY:
+      case MAP_FROM_ARRAYS:
+      case MAP_FROM_ENTRIES:
+      case STR_TO_MAP:
+      case REVERSE:
+      case REVERSE_SPARK:
+      case SOUNDEX_SPARK:
+      case SUBSTR_BIG_QUERY:
+      case SUBSTR_MYSQL:
+      case SUBSTR_ORACLE:
+      case SUBSTR_POSTGRESQL:
+      case CHAR_LENGTH:
+      case ENDS_WITH:
+      case STARTS_WITH:
+      case JSON_TYPE:
+      case CONTAINS_SUBSTR:
+      case ST_DWITHIN:
+      case ST_POINT:
+      case ST_POINT3:
+      case ST_MAKE_LINE:
+      case ST_CONTAINS:
+      case HILBERT:
+        return OTHER_FUNCTION;
+      default:
+        return this;
+    }
   }
 
   @SafeVarargs

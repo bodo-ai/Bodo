@@ -188,13 +188,19 @@ class BodoPhysicalWindow(
                         -> group.lowerBound.isUnbounded && group.upperBound.isUnbounded
                         SqlKind.FIRST_VALUE,
                         SqlKind.LAST_VALUE,
-                        SqlKind.ANY_VALUE,
                         SqlKind.MIN,
                         SqlKind.MAX,
                         ->
                             group.lowerBound.isUnbounded &&
                                 group.upperBound.isUnbounded &&
                                 supportedSelectionTypes.contains(aggCall.operands[0].type.sqlTypeName)
+                        SqlKind.ANY_VALUE,
+                        ->
+                            group.lowerBound.isUnbounded &&
+                                (
+                                    group.upperBound.isUnbounded ||
+                                        group.upperBound.isCurrentRow
+                                )
                         SqlKind.BIT_AND, SqlKind.BIT_OR, SqlKind.BIT_XOR,
                         SqlKind.OTHER, SqlKind.OTHER_FUNCTION,
                         ->
