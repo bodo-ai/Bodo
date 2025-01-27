@@ -6,6 +6,7 @@ import glob
 import os
 import typing as pt
 import warnings
+from glob import has_magic
 from urllib.parse import ParseResult, urlparse
 
 import llvmlite.binding as ll
@@ -602,6 +603,45 @@ def expand_glob(protocol: str, fs: pa.fs.FileSystem | None, path: str) -> list[s
         raise BodoError(f"glob pattern expansion not supported for {protocol}")
 
     return files
+
+
+def expand_path_globs(fpath: str | list[str], protocol: str, fs) -> list[str]:
+    """Expand any glob strings in the provided file path(s).
+
+    Args:
+        fpath (str | list[str]): file paths or list of file paths.
+        protocol (str): protocol for filesystem, e.g. "s3", "gcs", and "" for local.
+        fs (pa.fs.Filesystem): filesystem object
+
+    Raises:
+        BodoError: error if no files found matching glob pattern
+
+    Returns:
+        list[str]: expanded list of paths
+    """
+
+    new_fpath = fpath
+
+    if isinstance(fpath, list):
+        # Expand any glob strings in the list in order to generate a
+        # single list of fully realized paths to parquet files.
+        # For example: ["A/a.pq", "B/*.pq"] might expand to
+        # ["A/a.pq", "B/part-0.pq", "B/part-1.pq"]
+        new_fpath = []
+        for p in fpath:
+            if has_magic(p):
+                new_fpath += expand_glob(protocol, fs, p)
+            else:
+                new_fpath.append(p)
+        if len(new_fpath) == 0:
+            raise BodoError("No files found matching glob pattern")
+
+    elif has_magic(fpath):
+        new_fpath = expand_glob(protocol, fs, fpath)
+        if len(new_fpath) == 0:
+            raise BodoError("No files found matching glob pattern")
+
+    return new_fpath
 
 
 def getfs(
