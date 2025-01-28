@@ -43,7 +43,7 @@ cdef public void get_read_path_info(
         c_string& compression,
         vector[c_string]& file_names,
         vector[int64_t]& file_sizes,
-        shared_ptr[CFileSystem] c_fs
+        shared_ptr[CFileSystem]& c_fs
     ):
 
 
