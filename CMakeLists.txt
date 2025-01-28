@@ -330,8 +330,12 @@ add_custom_command(
   COMMENT "Cythonizing Source bodo/io/csv_json_reader.pyx into bodo/io/csv_json_reader.cpp"
 )
 
-python_add_library(csv_json_reader MODULE WITH_SOABI "bodo/io/csv_json_reader.cpp")
-target_include_directories(csv_json_reader PRIVATE ${BASE_INCLUDE_DIRS})
+python_add_library(csv_json_reader
+MODULE WITH_SOABI
+"bodo/io/_csv_json_reader.cpp"
+"bodo/io/csv_json_reader.cpp"
+)
+target_include_directories(csv_json_reader PRIVATE ${BASE_INCLUDE_DIRS} "${CMAKE_CURRENT_SOURCE_DIR}/bodo/io/" "${CMAKE_CURRENT_BINARY_DIR}/bodo/io/")
 target_link_directories(csv_json_reader PRIVATE ${PYARROW_LIB_DIR} ${CONDA_LIB_DIR})
 target_link_libraries(csv_json_reader PRIVATE arrow arrow_python)
 install(TARGETS csv_json_reader DESTINATION "bodo/io/")
@@ -468,8 +472,6 @@ install(TARGETS native_typer DESTINATION "bodo/transforms/type_inference/")
 
 # ------------------------- Main Bodo Extension -------------------------
 set(sources_list
-  "bodo/io/_csv_json_reader.cpp"
-  "bodo/io/csv_json_reader.cpp"
   "bodo/io/_csv_json_writer.cpp"
   "bodo/io/_fs_io.cpp"
   "bodo/io/_fsspec_reader.cpp"

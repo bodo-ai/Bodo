@@ -15,6 +15,25 @@ import bodo.io.fs_io
 from bodo.io.fs_io import parse_fpath, getfs, get_all_csv_json_data_files, get_compression_from_file_name
 
 
+cdef extern from "_csv_json_reader.h" nogil:
+    object csv_file_chunk_reader(
+        const char *fname, c_bool is_parallel, int64_t *skiprows, int64_t nrows,
+        c_bool header, const char *compression, const char *bucket_region,
+        object storage_options, int64_t chunksize,
+        c_bool is_skiprows_list, int64_t skiprows_list_len,
+        c_bool pd_low_memory)
+
+    c_bool update_csv_reader(object reader)
+
+    void initialize_csv_reader(object reader)
+
+    object json_file_chunk_reader(const char *fname, c_bool lines,
+                                            c_bool is_parallel, int64_t nrows,
+                                            const char *compression,
+                                            const char *bucket_region,
+                                            object storage_options);
+
+
 cdef public void get_read_path_info(
         const char* file_path,
         c_string compression_pyarg,
@@ -49,8 +68,25 @@ cdef public void get_read_path_info(
 
     for p in all_csv_files:
         file_names.push_back(p)
-    
+
     for p in all_csv_files:
         file_sizes.push_back(fs.get_file_info(p).size)
 
     c_fs = (<FileSystem>fs).unwrap()
+
+
+def get_function_address(func_name):
+    """
+    Get the address of the function with the given name defined in
+    _csv_json_reader.cpp and exported by the csv_json_reader module.
+    """
+    if func_name == "csv_file_chunk_reader"
+        return <size_t>csv_file_chunk_reader
+    elif func_name == "json_file_chunk_reader"
+        return <size_t>json_file_chunk_reader
+    elif func_name == "update_csv_reader"
+        return <size_t>update_csv_reader
+    elif func_name == "initialize_csv_reader"
+        return <size_t>initialize_csv_reader
+
+    raise ValueError("Unknown function name: " + func_name)

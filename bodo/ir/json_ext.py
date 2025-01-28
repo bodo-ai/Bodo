@@ -10,7 +10,7 @@ from numba.extending import intrinsic
 import bodo
 import bodo.ir.connector
 import bodo.user_logging
-from bodo.io import json_cpp
+from bodo.io import csv_json_reader
 from bodo.io.fs_io import (
     get_storage_options_pyobject,
     storage_options_dict_type,
@@ -23,7 +23,10 @@ from bodo.utils.utils import (
     sanitize_varname,
 )
 
-ll.add_symbol("json_file_chunk_reader", json_cpp.json_file_chunk_reader)
+ll.add_symbol(
+    "json_file_chunk_reader",
+    csv_json_reader.get_function_address("json_file_chunk_reader"),
+)
 
 
 class JsonReader(Connector):

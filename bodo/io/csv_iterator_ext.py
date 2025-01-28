@@ -20,7 +20,7 @@ import bodo.ir.csv_ext
 from bodo import objmode  # noqa
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.hiframes.table import Table, TableType  # noqa
-from bodo.io import csv_cpp
+from bodo.io import csv_json_reader
 from bodo.ir.csv_ext import _gen_read_csv_objmode, astype  # noqa
 from bodo.utils.typing import ColNamesMetaType
 from bodo.utils.utils import (
@@ -28,8 +28,13 @@ from bodo.utils.utils import (
     sanitize_varname,
 )
 
-ll.add_symbol("update_csv_reader", csv_cpp.update_csv_reader)
-ll.add_symbol("initialize_csv_reader", csv_cpp.initialize_csv_reader)
+ll.add_symbol(
+    "update_csv_reader", csv_json_reader.get_function_address("update_csv_reader")
+)
+ll.add_symbol(
+    "initialize_csv_reader",
+    csv_json_reader.get_function_address("initialize_csv_reader"),
+)
 
 
 class CSVIteratorType(types.SimpleIteratorType):

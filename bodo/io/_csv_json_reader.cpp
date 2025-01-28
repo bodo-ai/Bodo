@@ -604,31 +604,6 @@ static PyTypeObject stream_reader_type = {
     stream_reader_new,      /* tp_new */
 };
 
-// at module load time we need to make our type known ot Python
-extern "C" void PyInit_csv(PyObject *m) {
-    if (PyType_Ready(&stream_reader_type) < 0) {
-        return;
-    }
-    Py_INCREF(&stream_reader_type);
-    PyModule_AddObject(m, "StreamReader", (PyObject *)&stream_reader_type);
-    SetAttrStringFromVoidPtr(m, csv_file_chunk_reader);
-    SetAttrStringFromVoidPtr(m, update_csv_reader);
-    SetAttrStringFromVoidPtr(m, initialize_csv_reader);
-    // NOTE: old testing code that is commented out due to
-    // introduction of FileReader interface.
-    // TODO: update testing code
-    // SetAttrStringFromVoidPtr(m, csv_string_chunk_reader);
-}
-
-extern "C" void PyInit_json(PyObject *m) {
-    if (PyType_Ready(&stream_reader_type) < 0) {
-        return;
-    }
-    Py_INCREF(&stream_reader_type);
-    PyModule_AddObject(m, "StreamReader", (PyObject *)&stream_reader_type);
-    SetAttrStringFromVoidPtr(m, json_file_chunk_reader);
-}
-
 /**
  * Get size of header in bytes. Header is understood to be the first row of the
  * file (up to and including the first row_separator). This is only used for
