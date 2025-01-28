@@ -107,8 +107,9 @@ def conn_str_to_catalog(conn_str: str) -> Catalog:
             )
 
             catalog = S3TablesCatalog
-            properties[S3TABLES_TABLE_BUCKET_ARN] = base_url
-
+            properties[S3TABLES_TABLE_BUCKET_ARN] = (
+                f"arn:{parse_res.netloc}{parse_res.path}"
+            )
             parsed = re.match(S3_TABLES_PAT, conn_str)
             if not parsed:
                 raise ValueError(f"Invalid S3 Tables ARN: {conn_str}")

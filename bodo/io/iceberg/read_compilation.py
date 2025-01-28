@@ -17,6 +17,7 @@ import bodo
 from bodo.io.helpers import _get_numba_typ_from_pa_typ
 from bodo.io.iceberg.catalog import conn_str_to_catalog
 from bodo.io.iceberg.common import b_ICEBERG_FIELD_ID_MD_KEY, verify_pyiceberg_installed
+from bodo.io.parquet_pio import fpath_without_protocol_prefix
 from bodo.mpi4py import MPI
 from bodo.utils.utils import BodoError, run_rank0
 
@@ -24,7 +25,7 @@ if pt.TYPE_CHECKING:  # pragma: no cover
     from pyiceberg.table import Table
 
 
-EMPTY_LIST = []
+EMPTY_LIST: pt.Final = []
 
 
 def is_snowflake_managed_iceberg_wh(con: str) -> bool:
@@ -155,6 +156,7 @@ def _determine_str_as_dict_columns(
     if bodo.get_rank() < len(sample_files):
         fpath = sample_files[bodo.get_rank()]
         try:
+            fpath_without_protocol_prefix(fpath.file.file_path)
             pq_file = pq.ParquetFile(fpath.file.file_path, filesystem=fs)
             metadata = pq_file.metadata
             for idx, field in enumerate(pq_file.schema_arrow):
