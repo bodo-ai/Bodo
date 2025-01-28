@@ -928,9 +928,14 @@ def test_json_sample_nrows_size(memory_leak_check):
     def impl2(fname):
         return pd.read_json(fname, sample_nrows="no thanks")
 
+    @bodo.jit
+    def g(ilist):
+        print(ilist)
+        return ilist
+
     # nonconstant
     def impl3(fname, ilist):
-        return pd.read_json(fname, sample_nrows=ilist[0])
+        return pd.read_json(fname, sample_nrows=g(ilist))
 
     with pytest.raises(
         BodoError,
