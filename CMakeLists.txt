@@ -217,7 +217,10 @@ if("$ENV{CONDA_PREFIX}" STREQUAL "")
     install(TARGETS aws-cpp-sdk-core DESTINATION "${SKBUILD_PLATLIB_DIR}")
     unset(BUILD_ONLY)
     unset(ENABLE_TESTING)
+else()
+find_package(AWSSDK REQUIRED COMPONENTS core)
 endif()
+
 
 
 # ----------------------------- Download Apache Datasketches -------------------------
@@ -247,7 +250,7 @@ message("Source dir of datasketches = ${datasketches_INSTALL_DIR}")
 
 # Add boost as a dependency
 # set(Boost_USE_STATIC_LIBS OFF)
-find_package(Boost 1.85 REQUIRED COMPONENTS json)
+find_package(Boost 1.85 REQUIRED COMPONENTS)
 # find_package(Boost 1.85 REQUIRED COMPONENTS)
 message(STATUS "BOOST INCLUDE DIRS: ${Boost_INCLUDE_DIRS}")
 # set(Boost_INCLUDE_DIRS, "C:\\Users\\owner\\dev\\Bodo\\.pixi\\envs\\default\\Library\\include")
@@ -806,19 +809,35 @@ target_link_directories(ext PRIVATE ${PYARROW_LIB_DIR} "${Python_NumPy_INCLUDE_D
 
 target_include_directories(ext PRIVATE ${datasketches_INSTALL_DIR}/include/DataSketches)
 
-target_link_libraries(ext PRIVATE
-  pthread
-  npymath
-  ${MPI_LIBRARIES}
-  arrow
-  arrow_python
-  arrow_dataset
-  parquet
-  fmt::fmt
-  zstd
-  aws-cpp-sdk-core
-  ${Boost_LIBRARIES}
-)
+if (NOT WIN32)
+  target_link_libraries(ext PRIVATE
+    pthread
+    npymath
+    ${MPI_LIBRARIES}
+    arrow
+    arrow_python
+    arrow_dataset
+    parquet
+    fmt::fmt
+    zstd
+    AWS::aws-cpp-sdk-core
+    ${Boost_LIBRARIES}
+  )
+else()
+  # Windows doesn't need to link pthreads
+  target_link_libraries(ext PRIVATE
+    npymath
+    ${MPI_LIBRARIES}
+    arrow
+    arrow_python
+    arrow_dataset
+    parquet
+    fmt::fmt
+    zstd
+    aws-cpp-sdk-core
+    ${Boost_LIBRARIES}
+  )
+endif()
 
 set(IS_PLATFORM "$ENV{IS_BODO_PLATFORM}")
 cmake_print_variables(IS_PLATFORM)
