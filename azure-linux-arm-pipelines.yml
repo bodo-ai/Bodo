@@ -50,6 +50,7 @@ stages:
       caching_test: false
       spawn_mode_test: false
       pool_name: 'linux-arm'
+      use_bodo_arrow_fork: 1
       matrix:
         ${{ each slice in split(variables.bodo_1p_each, ',') }}:
           ${{ format('BODO_1P_{0}_OF_{1}', slice, variables.bodo_1p_total) }}:
@@ -66,6 +67,7 @@ stages:
       caching_test: true
       spawn_mode_test: false
       pool_name: 'linux-arm'
+      use_bodo_arrow_fork: 1
       matrix:
         TEST_2P:
           NP: 2
@@ -77,6 +79,7 @@ stages:
       caching_test: false
       spawn_mode_test: true
       pool_name: 'linux-arm'
+      use_bodo_arrow_fork: 1
       matrix:
         TEST_1P:
           NP: 1
@@ -98,6 +101,7 @@ stages:
       name: BodoSQL_Streaming_Tests
       SPAWN_MODE_TEST: false
       pool_name: 'linux-arm'
+      use_bodo_arrow_fork: 1
       matrix:
         ${{ each slice in split(variables.bodosql_1p_each, ',') }}:
           ${{ format('BODOSQL_1P_{0}_OF_{1}', slice, variables.bodosql_1p_total) }}:
@@ -116,6 +120,7 @@ stages:
       CACHE_TEST: true
       SPAWN_MODE_TEST: false
       pool_name: 'linux-arm'
+      use_bodo_arrow_fork: 1
       matrix:
         TEST_2P:
           NP: 2
@@ -129,6 +134,7 @@ stages:
       CACHE_TEST: false
       SPAWN_MODE_TEST: true
       pool_name: 'linux-arm'
+      use_bodo_arrow_fork: 1
       matrix:
         TEST_1P:
           NP: 1
