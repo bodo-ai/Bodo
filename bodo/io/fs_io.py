@@ -595,7 +595,7 @@ def expand_path_globs(fpath: str | list[str], protocol: str, fs) -> list[str]:
     Args:
         fpath (str | list[str]): file paths or list of file paths.
         protocol (str): protocol for filesystem, e.g. "s3", "gcs", and "" for local.
-        fs (pa.fs.Filesystem): filesystem object
+        fs (pa.fs.FileSystem): filesystem object
 
     Raises:
         BodoError: error if no files found matching glob pattern
@@ -799,7 +799,7 @@ def get_compression_from_file_name(fname: str):
 
 
 def get_all_csv_json_data_files(
-    fs: pa.fs.Filesystem,
+    fs: pa.fs.FileSystem,
     path: str,
     protocol: str,
     parsed_url: ParseResult,
