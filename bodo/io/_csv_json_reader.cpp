@@ -609,6 +609,13 @@ static PyTypeObject stream_reader_type = {
     stream_reader_new,      /* tp_new */
 };
 
+void init_stream_reader_type() {
+    if (PyType_Ready(&stream_reader_type) < 0) {
+        PyErr_SetString(PyExc_RuntimeError,
+                        "stream_reader_type is not initialized properly");
+    }
+}
+
 /**
  * Get size of header in bytes. Header is understood to be the first row of the
  * file (up to and including the first row_separator). This is only used for

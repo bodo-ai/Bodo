@@ -75,6 +75,14 @@ extern "C" bool update_csv_reader(PyObject *reader);
 extern "C" void initialize_csv_reader(PyObject *reader);
 
 /**
+ * @brief Initializes Python type stream_reader_type defined in
+_csv_json_reader.cpp. # Has to be called only once before using the
+stream_reader_type.
+ *
+ */
+void init_stream_reader_type();
+
+/**
  * Split string into chunks and return a file-like object per rank. The returned
  *object
  * represents the data to be read on each process.

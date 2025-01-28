@@ -33,6 +33,13 @@ cdef extern from "_csv_json_reader.h" nogil:
                                             const char *bucket_region,
                                             object storage_options);
 
+    void init_stream_reader_type()
+
+
+# Initialize Python type stream_reader_type defined in _csv_json_reader.cpp.
+# Has to be called only once before using the stream_reader_type.
+init_stream_reader_type()
+
 
 cdef public void get_read_path_info(
         const char* file_path,
