@@ -79,7 +79,7 @@ stages:
       caching_test: false
       spawn_mode_test: true
       pool_name: 'linux-arm'
-      use_bodo_arrow_fork: 1
+      use_bodo_arrow_fork: 0
       matrix:
         TEST_1P:
           NP: 1
@@ -134,7 +134,7 @@ stages:
       CACHE_TEST: false
       SPAWN_MODE_TEST: true
       pool_name: 'linux-arm'
-      use_bodo_arrow_fork: 1
+      use_bodo_arrow_fork: 0
       matrix:
         TEST_1P:
           NP: 1
