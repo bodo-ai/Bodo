@@ -400,9 +400,14 @@ def test_csv_skiprows_nonconstant_incorrect_values():
     """
     fname = os.path.join("bodo", "tests", "data", "example.csv")
 
+    @bodo.jit
+    def g(skiprow_list):
+        print(skiprow_list)
+        return skiprow_list[0]
+
     def impl(skiprow_list):
         return pd.read_csv(
-            fname, skiprows=skiprow_list[0], names=["X", "Y", "Z", "MM", "AA"]
+            fname, skiprows=g(skiprow_list), names=["X", "Y", "Z", "MM", "AA"]
         )
 
     skiprow_list = [-2]
@@ -411,6 +416,7 @@ def test_csv_skiprows_nonconstant_incorrect_values():
 
     @bodo.jit
     def f2():
+        print("f2")
         return [1, -3, 0]
 
     def impl2():
