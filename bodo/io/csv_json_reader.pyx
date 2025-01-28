@@ -61,8 +61,10 @@ cdef public void get_read_path_info(
     all_csv_files = get_all_csv_json_data_files(fs, path, protocol, parsed_url, err_msg)
 
     c = <object>compression_pyarg
+    uncompressed = "uncompressed"
     if c == "infer":
-        compression = get_compression_from_file_name(all_csv_files[0])
+        inferred_compression = get_compression_from_file_name(all_csv_files[0])
+        compression = uncompressed if inferred_compression is None else inferred_compression
     else:
         compression = compression_pyarg
 
