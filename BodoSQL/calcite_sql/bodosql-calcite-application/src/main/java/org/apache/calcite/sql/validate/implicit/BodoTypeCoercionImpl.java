@@ -185,13 +185,13 @@ public class BodoTypeCoercionImpl extends TypeCoercionImpl {
 
     // Fix new precision and scale for integer - decimal and decimal - decimal comparisons
     if ((SqlTypeUtil.isDecimal(type1) || SqlTypeUtil.isDecimal(type2)) && (SqlTypeUtil.isExactNumeric(type1) && SqlTypeUtil.isExactNumeric(type2))) {
-      int l1 = type1.getPrecision() - type1.getScale();
-      int l2 = type2.getPrecision() - type2.getScale();
+      final RelDataType type1AsDecimal = factory.decimalOf(type1);
+      final RelDataType type2AsDecimal = factory.decimalOf(type2);
+      int l1 = type1AsDecimal.getPrecision() - type1AsDecimal.getScale();
+      int l2 = type2AsDecimal.getPrecision() - type2AsDecimal.getScale();
       int newLeading = Math.max(l1, l2);
-      int newScale = Math.max(type1.getScale(), type2.getScale());
-      int maxPrecision = factory.getTypeSystem().getMaxPrecision(SqlTypeName.DECIMAL);
-      int newPrecision = Math.min(newLeading + newScale, maxPrecision);
-      newScale = Math.min(newScale, maxPrecision - newLeading);
+      final int newScale = Math.min(Math.max(type1AsDecimal.getScale(), type2AsDecimal.getScale()), factory.getTypeSystem().getMaxScale(SqlTypeName.DECIMAL));
+      final int newPrecision = Math.min(newLeading + newScale, factory.getTypeSystem().getMaxPrecision(SqlTypeName.DECIMAL));
       return factory.createSqlType(SqlTypeName.DECIMAL, newPrecision, newScale);
     }
 
