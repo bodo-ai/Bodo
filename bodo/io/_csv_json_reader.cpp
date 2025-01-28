@@ -29,6 +29,8 @@
 #include "_bodo_file_reader.h"
 #include "_fs_io.h"
 
+#include "csv_json_reader.h"
+
 // lines argument of read_json(lines = json_lines)
 // when json_lines=true, we are reading Json line format where each
 // DataFrame row/json record takes up exactly one line, ended with '\n'
@@ -143,26 +145,20 @@ class PathInfo {
      * @param file_path : path passed in pd.read_csv/pd.read_json call
      */
     PathInfo(const char *file_path, const std::string &compression_pyarg,
-             const char *bucket_region, bool is_anon)
-        : file_path(file_path),
-          bucket_region(bucket_region),
-          s3fs_anon(is_anon) {
-        // obtain path info on rank 0, broadcast to other ranks.
-        // this sets PathInfo attributes on all ranks
-        obtain_is_directory();
-        if (!is_valid) {
-            return;
-        }
-        obtain_file_names_and_sizes();
-        obtain_compression_scheme(compression_pyarg);
+             const char *bucket_region, bool is_anon) {
+        get_read_path_info(file_path, compression_pyarg, is_anon,
+                           this->is_remote_fs, this->compression,
+                           this->file_names, this->file_sizes, this->fs);
+
+        /// sum of all file sizes
+        this->total_ds_size =
+            std::reduce(this->file_sizes.begin(), this->file_sizes.end());
+        ;
     }
     ~PathInfo() = default;
 
     /// get the compression scheme used by this file(s)
     const std::string &get_compression_scheme() const { return compression; }
-
-    /// true if path refers to a directory
-    bool is_directory() const { return is_dir; }
 
     /**
      * Get file names for this path.
@@ -201,17 +197,7 @@ class PathInfo {
     /**
      * Get arrow::fs::FileSystem object necessary to read data from this path.
      */
-    std::shared_ptr<arrow::fs::FileSystem> get_fs() {
-        if (!this->fs) {
-            auto info = get_reader_file_system(
-                this->file_path, this->bucket_region, this->s3fs_anon);
-            this->fs = info.first;
-            // Check for LocalFileSystem.type_name()
-            this->is_remote_fs = this->fs->type_name() != "local";
-            this->file_path = info.second;
-        }
-        return this->fs;
-    }
+    std::shared_ptr<arrow::fs::FileSystem> get_fs() { return this->fs; }
 
     /**
      * @brief return whether the provided path is valid or not
@@ -222,220 +208,7 @@ class PathInfo {
     bool is_path_valid() { return is_valid; }
 
    private:
-    /**
-     * Determines if path is a directory or a single file.
-     * The filesystem is accessed only on rank 0, result is communicated to
-     * other processes using MPI.
-     */
-    void obtain_is_directory() {
-        int c_is_dir = 0;
-        bool raise_runtime_err = false;
-        std::string runtime_err_msg = "";
-        if (dist_get_rank() == 0) {
-            std::shared_ptr<arrow::fs::FileSystem> fs = get_fs();
-            arrow::Result<arrow::fs::FileInfo> file_stat_result =
-                fs->GetFileInfo(file_path);
-            CHECK_ARROW_ONE_PROC(file_stat_result, "obtain_is_directory",
-                                 "fs->GetFileInfo", raise_runtime_err,
-                                 runtime_err_msg);
-            if (!raise_runtime_err) {
-                arrow::fs::FileInfo file_stat = file_stat_result.ValueOrDie();
-                if (file_stat.IsDirectory()) {
-                    c_is_dir = 1;
-                } else if (file_stat.IsFile()) {
-                    c_is_dir = 0;
-                } else {
-                    c_is_dir = -1;
-                    raise_runtime_err = true;
-                    runtime_err_msg =
-                        std::string(
-                            "Error in PathInfo::is_directory: invalid path ") +
-                        std::string(file_path);
-                }
-            }
-        }
-        ARROW_ONE_PROC_ERR_SYNC_USING_MPI(raise_runtime_err, runtime_err_msg);
-        CHECK_MPI(MPI_Bcast(&c_is_dir, 1, MPI_INT, 0, MPI_COMM_WORLD),
-                  "PathInfo::obtain_is_directory: MPI error on MPI_Bcast:");
-        is_valid = (c_is_dir != -1);
-        is_dir = bool(c_is_dir);
-    }
-
-    /**
-     * Obtain and store the vectors of file names and sizes for this path.
-     * If the path is a directory, it only considers files of size greater than
-     * zero which are not one of the excluded paths (like hidden files).
-     * The filesystem is accessed only on rank 0, result is communicated to
-     * other processes using MPI.
-     */
-    void obtain_file_names_and_sizes() {
-        file_names.clear();
-        file_sizes.clear();
-        total_ds_size = 0;  // this attribute tracks the sum of all file sizes
-
-        bool raise_runtime_err = false;
-        std::string runtime_err_msg = "";
-
-        int64_t total_len =
-            0;  // total length of file names (including
-                // null bytes at end of each) (only used by proc0)
-        if (dist_get_rank() == 0) {
-            std::shared_ptr<arrow::fs::FileSystem> fs = get_fs();
-
-            if (!is_directory()) {
-                // we always send file name to other ranks, even if just a
-                // single file, because it might be modified by
-                // PathInfo::get_fs(), which initially is only done on rank 0
-                file_names.push_back(file_path);
-                arrow::Result<arrow::fs::FileInfo> fi_result =
-                    fs->GetFileInfo(file_path);
-                CHECK_ARROW_ONE_PROC(fi_result, "obtain_file_names_and_sizes",
-                                     "fs->GetFileInfo", raise_runtime_err,
-                                     runtime_err_msg);
-                if (!raise_runtime_err) {
-                    const arrow::fs::FileInfo &fi = fi_result.ValueOrDie();
-                    file_sizes.push_back(fi.size());
-                    total_ds_size += fi.size();
-                    total_len = int64_t(file_path.size() + 1);
-                }
-            } else {
-                arrow::fs::FileSelector dir_selector;
-                // initialize dir_selector
-                dir_selector.base_dir = file_path;
-                // FileInfo used to determine names and sizes
-                arrow::Result<std::vector<arrow::fs::FileInfo>>
-                    file_infos_results = fs->GetFileInfo(dir_selector);
-                CHECK_ARROW_ONE_PROC(
-                    file_infos_results, "obtain_file_names_and_sizes",
-                    "fs->GetFileInfo", raise_runtime_err, runtime_err_msg);
-                if (!raise_runtime_err) {
-                    std::vector<arrow::fs::FileInfo> file_infos =
-                        file_infos_results.ValueOrDie();
-                    // sort files by name
-                    std::ranges::sort(file_infos,
-                                      arrow::fs::FileInfo::ByPath{});
-
-                    for (auto &fi : file_infos) {
-                        const std::string &path = fi.path();
-                        const std::string &fname = fi.base_name();
-                        int64_t fsize = fi.size();
-                        // Skip certain files, similar to
-                        // what arrow does for parquet:
-                        // https://github.com/apache/arrow/blob/c6143a2396058dcc31506050238dc0f932aae9ba/python/pyarrow/parquet.py#L1180
-                        if (
-                            // skip 0 size files
-                            (fsize <= 0) ||
-                            // Skip checksums
-                            (fname.ends_with(".crc")) ||
-                            // Skip HDFS directories in S3
-                            (fname.ends_with("_$folder$")) ||
-                            // Skip hidden files starting with "_" (e.g.
-                            // "_SUCCESS")
-                            (fname.starts_with("_")) ||
-                            // Skip hidden files starting with "."
-                            (fname.starts_with("."))) {
-                            continue;
-                        }
-
-                        total_len += int64_t(path.size() + 1);
-                        total_ds_size += fi.size();
-                        // NOTE: this gives the full path and file name.
-                        // we might just want to get the file name
-                        file_names.push_back(path);
-                        file_sizes.push_back(fsize);
-                    }
-                }
-            }
-        }
-
-        ARROW_ONE_PROC_ERR_SYNC_USING_MPI(raise_runtime_err, runtime_err_msg);
-
-        if (dist_get_size() > 1) {
-            if (dist_get_rank() == 0) {
-                // send file names to other ranks
-                std::vector<char> str_data(total_len);
-                char *str_data_ptr = str_data.data();
-                for (auto &fname : file_names) {
-                    memcpy(str_data_ptr, fname.c_str(), fname.size());
-                    str_data_ptr[fname.size()] = 0;  // null terminate string
-                    str_data_ptr += fname.size() + 1;
-                }
-                CHECK_MPI(
-                    MPI_Bcast(&total_len, 1, MPI_INT64_T, 0, MPI_COMM_WORLD),
-                    "PathInfo::obtain_file_names_and_sizes: MPI error on "
-                    "MPI_Bcast:");
-                CHECK_MPI(MPI_Bcast(str_data.data(), str_data.size(), MPI_CHAR,
-                                    0, MPI_COMM_WORLD),
-                          "PathInfo::obtain_file_names_and_sizes: MPI "
-                          "error on MPI_Bcast:");
-            } else {
-                // receive file names from rank 0
-                int64_t recv_size;
-                CHECK_MPI(
-                    MPI_Bcast(&recv_size, 1, MPI_INT64_T, 0, MPI_COMM_WORLD),
-                    "PathInfo::obtain_file_names_and_sizes: MPI error on "
-                    "MPI_Bcast:");
-                std::vector<char> str_data(recv_size);
-                CHECK_MPI(MPI_Bcast(str_data.data(), str_data.size(), MPI_CHAR,
-                                    0, MPI_COMM_WORLD),
-                          "PathInfo::obtain_file_names_and_sizes: MPI "
-                          "error on MPI_Bcast:");
-                char *cur_str = str_data.data();
-                while (cur_str < str_data.data() + recv_size) {
-                    file_names.emplace_back(cur_str);
-                    cur_str += file_names.back().size() + 1;
-                }
-                file_sizes.resize(file_names.size());
-            }
-        }
-
-        // communicate file sizes to all processes
-        CHECK_MPI(
-            MPI_Bcast(file_sizes.data(), file_sizes.size(), MPI_INT64_T, 0,
-                      MPI_COMM_WORLD),
-            "PathInfo::obtain_file_names_and_sizes: MPI error on MPI_Bcast:");
-        CHECK_MPI(
-            MPI_Bcast(&total_ds_size, 1, MPI_INT64_T, 0, MPI_COMM_WORLD),
-            "PathInfo::obtain_file_names_and_sizes: MPI error on MPI_Bcast:");
-    }
-
-    /**
-     * Given the compression argument received from pd.read_csv()/pd.read_json
-     * set and return the compression scheme used.
-     * @param compression_pyarg : compression argument of read_csv/read_json
-     * @return the compression scheme used, in Arrow string representation
-     * (see arrow/util/compression.h/cc)
-     */
-    void obtain_compression_scheme(const std::string &compression_pyarg) {
-        if (compression == "UNKNOWN") {
-            compression = compression_pyarg;
-            std::string fname;
-            if (compression_pyarg == "infer") {
-                if (!is_directory()) {
-                    fname = file_path;
-                } else {
-                    // infer compression scheme from the name of the first file
-                    fname = get_first_file();
-                }
-                if (fname.ends_with(".gz")) {
-                    compression = "gzip";  // using arrow-cpp's representation
-                } else if (fname.ends_with(".bz2")) {
-                    compression = "bz2";  // using arrow-cpp's representation
-                    // ... TODO: more compression formats
-                } else {
-                    compression =
-                        "uncompressed";  // using arrow-cpp's representation
-                }
-            }
-        }
-    }
-
-   private:
-    /// original file path passed through read_csv/read_json
-    std::string file_path;
-    std::string bucket_region;  // only useful if it's an s3 path
-    bool is_valid;
-    bool is_dir;
+    bool is_valid = true;
     bool is_remote_fs = false;  // like S3 or HDFS
     std::string compression = "UNKNOWN";
     std::vector<std::string> file_names;
@@ -443,8 +216,6 @@ class PathInfo {
     std::shared_ptr<arrow::fs::FileSystem> fs;
     /// sum of all file sizes
     int64_t total_ds_size = -1;
-    // anonymous connection
-    bool s3fs_anon = false;
 };
 
 // read local files

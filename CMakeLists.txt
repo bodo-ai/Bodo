@@ -319,6 +319,23 @@ target_link_directories(pyfs PRIVATE ${PYARROW_LIB_DIR} ${CONDA_LIB_DIR})
 target_link_libraries(pyfs PRIVATE arrow arrow_python)
 install(TARGETS pyfs DESTINATION "bodo/io/")
 
+
+add_custom_command(
+  OUTPUT bodo/io/csv_json_reader.cpp
+  DEPENDS bodo/io/csv_json_reader.pyx
+  VERBATIM
+  WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+  COMMAND "${CYTHON_EXECUTABLE}" --cplus -3 --output-file "bodo/io/csv_json_reader.cpp" "bodo/io/csv_json_reader.pyx"
+  COMMAND cp "bodo/io/csv_json_reader.cpp" "${CMAKE_CURRENT_BINARY_DIR}/bodo/io/csv_json_reader.cpp"
+  COMMENT "Cythonizing Source bodo/io/csv_json_reader.pyx into bodo/io/csv_json_reader.cpp"
+)
+
+python_add_library(csv_json_reader MODULE WITH_SOABI "bodo/io/csv_json_reader.cpp")
+target_include_directories(csv_json_reader PRIVATE ${BASE_INCLUDE_DIRS})
+target_link_directories(csv_json_reader PRIVATE ${PYARROW_LIB_DIR} ${CONDA_LIB_DIR})
+target_link_libraries(csv_json_reader PRIVATE arrow arrow_python)
+install(TARGETS csv_json_reader DESTINATION "bodo/io/")
+
 # ------------------------ Cython Target - bodo.io.pyarrow_wrappers ---------------
 add_custom_command(
  OUTPUT bodo/io/pyarrow_wrappers.cpp
@@ -452,6 +469,7 @@ install(TARGETS native_typer DESTINATION "bodo/transforms/type_inference/")
 # ------------------------- Main Bodo Extension -------------------------
 set(sources_list
   "bodo/io/_csv_json_reader.cpp"
+  "bodo/io/csv_json_reader.cpp"
   "bodo/io/_csv_json_writer.cpp"
   "bodo/io/_fs_io.cpp"
   "bodo/io/_fsspec_reader.cpp"
@@ -707,5 +725,5 @@ else()
 endif()
 
 set_target_properties(ext PROPERTIES CXX_CLANG_TIDY "${CLANG_TIDY_COMMAND}")
-add_dependencies(ext pyfs _hdfs tracing pyarrow_wrappers datasketches)
+add_dependencies(ext csv_json_reader pyfs _hdfs tracing pyarrow_wrappers datasketches)
 install(TARGETS ext DESTINATION "bodo/")

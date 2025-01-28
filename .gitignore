@@ -58,6 +58,8 @@ algebra.log
 # Bodo Generated
 bodo/io/pyfs.h
 bodo/io/pyfs.cpp
+bodo/io/csv_json_reader.h
+bodo/io/csv_json_reader.cpp
 bodo/io/arrow_ext.h
 bodo/io/arrow_ext.cpp
 bodo/io/_hdfs.cpp
