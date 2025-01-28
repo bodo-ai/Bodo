@@ -188,6 +188,7 @@ public class BodoProjectWindowTransposeRule extends RelRule<BodoProjectWindowTra
               group.isRows,
               group.lowerBound,
               group.upperBound,
+              group.exclude,
               RelCollations.of(orderKeys),
               aggCalls));
     }

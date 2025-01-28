@@ -245,8 +245,6 @@ public final class StringOperatorTable implements SqlOperatorTable {
           argumentRange(2, SqlTypeFamily.STRING, SqlTypeFamily.STRING, SqlTypeFamily.INTEGER),
           SqlFunctionCategory.STRING);
 
-  public static final SqlFunction POSITION = CHARINDEX.withName("POSITION");
-
   public static final SqlFunction SPLIT_PART =
       SqlNullPolicyFunction.createAnyPolicy(
           "SPLIT_PART",
@@ -603,7 +601,6 @@ public final class StringOperatorTable implements SqlOperatorTable {
           STARTSWITH,
           ENDSWITH,
           INSERT,
-          POSITION,
           CHARINDEX,
           SHA2,
           SHA2_HEX,
