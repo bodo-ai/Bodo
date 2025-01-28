@@ -150,6 +150,11 @@ class PathInfo {
                            this->is_remote_fs, this->compression,
                            this->file_names, this->file_sizes, this->fs);
 
+        if (PyErr_Occurred()) {
+            is_valid = false;
+            return;
+        }
+
         /// sum of all file sizes
         this->total_ds_size =
             std::reduce(this->file_sizes.begin(), this->file_sizes.end());
