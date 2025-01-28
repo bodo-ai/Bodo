@@ -378,9 +378,14 @@ def test_csv_skiprows_type_nonconstant(memory_leak_check):
     """
     fname = os.path.join("bodo", "tests", "data", "example.csv")
 
+    @bodo.jit
+    def g(skiprow_list):
+        print(skiprow_list)
+        return skiprow_list[0]
+
     def impl(skiprow_list):
         return pd.read_csv(
-            fname, skiprows=skiprow_list[0], names=["X", "Y", "Z", "MM", "AA"]
+            fname, skiprows=g(skiprow_list), names=["X", "Y", "Z", "MM", "AA"]
         )
 
     skiprow_list = ["abcd"]
