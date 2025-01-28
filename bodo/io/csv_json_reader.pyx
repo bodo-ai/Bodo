@@ -10,6 +10,7 @@ cimport pyarrow.lib
 from pyarrow._fs cimport FileSystem
 from pyarrow.includes.libarrow_fs cimport CFileSystem
 
+from bodo.mpi4py import MPI
 import bodo
 import bodo.io.fs_io
 from bodo.io.fs_io import parse_fpath, getfs, get_all_csv_json_data_files, get_compression_from_file_name
@@ -64,8 +65,23 @@ cdef public void get_read_path_info(
 
     fs = getfs(path, protocol, storage_options=storage_options)
 
-    err_msg = "Invalid data path path: " + path
-    all_csv_files = get_all_csv_json_data_files(fs, path, protocol, parsed_url, err_msg)
+    # Get file names and sizes on rank 0 and propagate to all ranks
+    metadata_or_err = None
+    comm = MPI.COMM_WORLD
+    if bodo.get_rank() == 0:
+        try:
+            err_msg = "Invalid data path path: " + path
+            all_csv_files = get_all_csv_json_data_files(fs, path, protocol, parsed_url, err_msg)
+            f_sizes = [fs.get_file_info(p).size for p in all_csv_files]
+            metadata_or_err = (all_csv_files, f_sizes)
+        except Exception as e:
+            metadata_or_err = e
+
+    metadata_or_err = comm.bcast(metadata_or_err)
+    if isinstance(metadata_or_err, Exception):
+        raise metadata_or_err
+
+    all_csv_files, f_sizes = metadata_or_err
 
     c = <object>compression_pyarg
     uncompressed = "uncompressed"
@@ -78,8 +94,8 @@ cdef public void get_read_path_info(
     for p in all_csv_files:
         file_names.push_back(p)
 
-    for p in all_csv_files:
-        file_sizes.push_back(fs.get_file_info(p).size)
+    for s in f_sizes:
+        file_sizes.push_back(s)
 
     c_fs = (<FileSystem>fs).unwrap()
 
