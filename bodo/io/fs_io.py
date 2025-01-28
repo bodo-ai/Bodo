@@ -33,7 +33,6 @@ from pyarrow.fs import FSSpecHandler, PyFileSystem
 import bodo
 from bodo.ext import arrow_cpp
 from bodo.io import csv_cpp
-from bodo.io.pyfs import get_pyarrow_fs_from_ptr
 from bodo.libs.distributed_api import Reduce_Type
 from bodo.libs.str_ext import unicode_to_utf8, unicode_to_utf8_and_len
 from bodo.utils.typing import BodoError, BodoWarning, get_overload_constant_dict
@@ -799,6 +798,50 @@ def get_compression_from_file_name(fname: str):
     return compression
 
 
+def get_all_csv_json_data_files(
+    fs: pa.fs.Filesystem,
+    path: str,
+    protocol: str,
+    parsed_url: ParseResult,
+    err_msg: str,
+) -> list[str]:
+    """Get all data files to CSV/JSON read from path. Handles glob patterns, directories
+    (including nested directories), and single files. Filters out some metadata files
+    as well.
+
+    Args:
+        fs (pa.fs.FileSystem): file system to use for storage operations
+        path (str): input path
+        protocol (str): protocol for remote access (e.g. "s3", "gcs", "hf")
+        parsed_url (ParseResult): parsed URL object for path
+        err_msg (str): error message to raise if no data files are found
+
+    Raises:
+        BodoError: error when there are no data files found
+
+    Returns:
+        list[str]: list of files to read
+    """
+    from bodo.io.parquet_pio import get_fpath_without_protocol_prefix
+
+    fpath_noprefix, _ = get_fpath_without_protocol_prefix(path, protocol, parsed_url)
+
+    fpath_noprefix = expand_path_globs(fpath_noprefix, protocol, fs)
+
+    all_files = pa_fs_list_dir_fnames(fs, fpath_noprefix)
+
+    all_files = sorted(filter(directory_of_files_common_filter, all_files))
+    # FileInfo.size is None for directories, so we convert None to 0
+    # before comparison with 0
+    all_csv_files = [f for f in all_files if int(fs.get_file_info(f).size or 0) > 0]
+
+    if len(all_csv_files) == 0:  # pragma: no cover
+        # TODO: test
+        raise BodoError(err_msg)
+
+    return all_csv_files
+
+
 def find_file_name_or_handler(path, ftype, storage_options=None):
     """
     Find path_or_buf argument for pd.read_csv()/pd.read_json()
@@ -824,8 +867,6 @@ def find_file_name_or_handler(path, ftype, storage_options=None):
     """
     from urllib.parse import urlparse
 
-    from bodo.io.parquet_pio import get_fpath_without_protocol_prefix
-
     fname = path
     fs = None
     func_name = "read_json" if ftype == "json" else "read_csv"
@@ -840,22 +881,9 @@ def find_file_name_or_handler(path, ftype, storage_options=None):
         is_handler = True
         fs = getfs(path, protocol, storage_options=storage_options)
 
-        fpath_noprefix, _ = get_fpath_without_protocol_prefix(
-            path, protocol, parsed_url
+        all_csv_files = get_all_csv_json_data_files(
+            fs, path, protocol, parsed_url, err_msg
         )
-
-        fpath_noprefix = expand_path_globs(fpath_noprefix, protocol, fs)
-
-        all_files = pa_fs_list_dir_fnames(fs, fpath_noprefix)
-
-        all_files = sorted(filter(filter_func, all_files))
-        # FileInfo.size is None for directories, so we convert None to 0
-        # before comparison with 0
-        all_csv_files = [f for f in all_files if int(fs.get_file_info(f).size or 0) > 0]
-
-        if len(all_csv_files) == 0:  # pragma: no cover
-            # TODO: test
-            raise BodoError(err_msg)
         fname = all_csv_files[0]
 
         # Arrow's S3FileSystem has some performance issues when used
@@ -1072,6 +1100,8 @@ register_model(ArrowFs)(models.OpaqueModel)
 
 @box(ArrowFs)
 def box_ArrowFs(typ, val, c):
+    from bodo.io.pyfs import get_pyarrow_fs_from_ptr
+
     fs_ptr_obj = c.pyapi.from_native_value(types.RawPointer("fs_ptr"), val)
     get_fs_obj = c.pyapi.unserialize(c.pyapi.serialize_object(get_pyarrow_fs_from_ptr))
     fs_obj = c.pyapi.call_function_objargs(get_fs_obj, [fs_ptr_obj])
