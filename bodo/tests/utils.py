@@ -3114,8 +3114,8 @@ pytest_one_rank = [
 tabular_markers = (
     pytest.mark.tabular,
     pytest.mark.iceberg,
-    pytest.mark.skipif(
-        "TABULAR_CREDENTIAL" not in os.environ, reason="requires tabular credentials"
+    pytest.mark.skip(
+        "Tabular's platform is deactivated, we will replace these with Polaris"
     ),
 )
 
