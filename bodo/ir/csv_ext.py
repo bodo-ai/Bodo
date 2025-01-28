@@ -1091,7 +1091,8 @@ def _gen_csv_reader_py(
     csv_reader_py = bodo_exec(func_text, glbls, loc_vars, globals())
 
     # TODO: no_cpython_wrapper=True crashes for some reason
-    jit_func = numba.njit(csv_reader_py, cache=True)
+    # TODO: objmode and caching doesn't work
+    jit_func = numba.njit(csv_reader_py, cache=False)
     compiled_funcs.append(jit_func)
 
     return jit_func
