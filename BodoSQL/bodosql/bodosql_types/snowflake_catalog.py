@@ -28,8 +28,7 @@ from bodo.utils.typing import (
     raise_bodo_error,
 )
 from bodosql import DatabaseCatalog, DatabaseCatalogType
-from bodosql.imported_java_classes import JavaEntryPoint
-from bodosql.py4j_gateway import build_java_properties
+from bodosql.imported_java_classes import JavaEntryPoint, build_java_properties
 
 
 def _validate_constructor_args(

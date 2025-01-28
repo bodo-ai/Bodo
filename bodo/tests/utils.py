@@ -3088,6 +3088,19 @@ pytest_mark_one_rank = compose_decos(
     )
 )
 
+
+pytest_mark_multi_rank_nightly = compose_decos(
+    (
+        pytest.mark.multi_rank_nightly,
+        pytest.mark.skipif(
+            bodo.get_size() == 1
+            and os.environ.get("BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST", False),
+            reason="Skipping test on one rank, will run the test on multiple ranks.",
+        ),
+    )
+)
+
+
 # This is for using a "mark" or marking a whole file.
 pytest_one_rank = [
     pytest.mark.one_rank,
