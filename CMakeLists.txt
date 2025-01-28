@@ -679,7 +679,7 @@ set(IS_PLATFORM "$ENV{IS_BODO_PLATFORM}")
 cmake_print_variables(IS_PLATFORM)
 
 # Build with our fork of Arrow
-if (IS_PLATFORM OR DEFINED ENV{USE_BODO_ARROW_FORK})
+if (IS_PLATFORM OR ("$ENV{USE_BODO_ARROW_FORK}" STREQUAL "1"))
   target_compile_definitions(ext PRIVATE "USE_BODO_ARROW_FORK=1")
 endif()
 
