@@ -80,13 +80,13 @@ def get_function_address(func_name):
     Get the address of the function with the given name defined in
     _csv_json_reader.cpp and exported by the csv_json_reader module.
     """
-    if func_name == "csv_file_chunk_reader"
+    if func_name == "csv_file_chunk_reader":
         return <size_t>csv_file_chunk_reader
-    elif func_name == "json_file_chunk_reader"
+    elif func_name == "json_file_chunk_reader":
         return <size_t>json_file_chunk_reader
-    elif func_name == "update_csv_reader"
+    elif func_name == "update_csv_reader":
         return <size_t>update_csv_reader
-    elif func_name == "initialize_csv_reader"
+    elif func_name == "initialize_csv_reader":
         return <size_t>initialize_csv_reader
 
     raise ValueError("Unknown function name: " + func_name)
