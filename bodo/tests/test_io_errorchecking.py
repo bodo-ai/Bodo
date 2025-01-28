@@ -877,9 +877,14 @@ def test_csv_sample_nrows_size(memory_leak_check):
     def impl2(fname):
         return pd.read_csv(fname, sample_nrows="no thanks")
 
+    @bodo.jit
+    def g(ilist):
+        print(ilist)
+        return ilist[0]
+
     # nonconstant
     def impl3(fname, ilist):
-        return pd.read_csv(fname, sample_nrows=ilist[0])
+        return pd.read_csv(fname, sample_nrows=g(ilist))
 
     with pytest.raises(
         BodoError,
