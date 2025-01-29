@@ -205,10 +205,6 @@ get_bodo_arrow_schema_utils_class = get_class_wrapper(
     "BodoArrowSchemaUtil",
     lambda gateway: gateway.jvm.com.bodo.iceberg.BodoArrowSchemaUtil,  # type: ignore
 )
-get_snowflake_prefetch_class = get_class_wrapper(
-    "SnowflakePrefetchClass",
-    lambda gateway: gateway.jvm.com.bodo.iceberg.SnowflakePrefetch,  # type: ignore
-)
 
 # Bodo Filter Pushdown Classes
 get_column_ref_class = get_class_wrapper(
