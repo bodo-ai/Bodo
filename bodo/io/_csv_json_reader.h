@@ -83,6 +83,15 @@ stream_reader_type.
 void init_stream_reader_type();
 
 /**
+ * @brief Initialize the buffer pool pointer to be the one from the main module
+ and make sure we have a single buffer pool. Necessary since csv_json_reader is
+ a separate module from bodo.ext.
+ *
+ * @param buffer_pool_ptr
+ */
+void init_buffer_pool_ptr(int64_t buffer_pool_ptr);
+
+/**
  * Split string into chunks and return a file-like object per rank. The returned
  *object
  * represents the data to be read on each process.

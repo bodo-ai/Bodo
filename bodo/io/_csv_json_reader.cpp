@@ -23,6 +23,7 @@
 #include <vector>
 
 #include <arrow/io/compressed.h>
+#include <arrow/memory_pool.h>
 #include <arrow/util/compression.h>
 
 #include "../libs/_distributed.h"
@@ -87,6 +88,20 @@
             "ARROW_ONE_PROC_ERR_SYNC_USING_MPI: MPI error on MPI_Bcast:");   \
         throw std::runtime_error(err_msg_var);                               \
     }
+
+// Copied from _bodo_common.cpp to avoid importing it here
+void Bodo_PyErr_SetString(PyObject *type, const char *message) {
+    PyErr_SetString(type, message);
+    throw std::runtime_error(message);
+}
+
+// Buffer pool pointer that points to the central buffer pool from the main
+// module. Necessary since csv_json_reader is a separate module from bodo.ext.
+static arrow::MemoryPool *memory_pool = nullptr;
+
+void init_buffer_pool_ptr(int64_t buffer_pool_ptr) {
+    memory_pool = reinterpret_cast<arrow::MemoryPool *>(buffer_pool_ptr);
+}
 
 /**
  * A SkiprowsListInfo object collects information about the skiprows with list
@@ -848,7 +863,7 @@ class MemReader : public FileReader {
 
         arrow::Result<std::shared_ptr<arrow::io::CompressedInputStream>>
             istream_result = arrow::io::CompressedInputStream::Make(
-                codec.get(), raw_istream, bodo::BufferPool::DefaultPtr());
+                codec.get(), raw_istream, memory_pool);
         CHECK_ARROW(istream_result, "read_compressed_file",
                     "arrow::io::CompressedInputStream::Make")
         std::shared_ptr<arrow::io::CompressedInputStream> istream =

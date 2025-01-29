@@ -12,6 +12,7 @@ from pyarrow.includes.libarrow_fs cimport CFileSystem
 
 from bodo.mpi4py import MPI
 import bodo
+import bodo.ext
 import bodo.io.fs_io
 from bodo.io.fs_io import parse_fpath, getfs, get_all_csv_json_data_files, get_compression_from_file_name
 
@@ -35,11 +36,17 @@ cdef extern from "_csv_json_reader.h" nogil:
                                             object storage_options);
 
     void init_stream_reader_type()
+    void init_buffer_pool_ptr(int64_t ptr)
 
 
 # Initialize Python type stream_reader_type defined in _csv_json_reader.cpp.
 # Has to be called only once before using the stream_reader_type.
 init_stream_reader_type()
+
+# Initialize the buffer pool pointer to be the one from the main module and
+# make sure we have a single buffer pool. Necessary since csv_json_reader is a separate module
+# from bodo.ext.
+init_buffer_pool_ptr(bodo.ext.memory_cpp.default_buffer_pool_ptr())
 
 
 cdef public void get_read_path_info(
