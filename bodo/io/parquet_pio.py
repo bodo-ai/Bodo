@@ -13,7 +13,7 @@ from urllib.parse import ParseResult, urlparse
 import llvmlite.binding as ll
 import numpy as np
 import pyarrow  # noqa
-import pyarrow as pa  # noqa
+import pyarrow as pa
 import pyarrow.compute as pc
 import pyarrow.dataset as ds
 import pyarrow.parquet as pq
@@ -27,8 +27,6 @@ from numba.extending import (
     register_model,
     unbox,
 )
-from pyarrow._fs import PyFileSystem
-from pyarrow.fs import FSSpecHandler
 
 import bodo
 import bodo.utils.tracing as tracing
@@ -37,13 +35,9 @@ from bodo.hiframes.pd_categorical_ext import (
     PDCategoricalDtype,
 )
 from bodo.io.fs_io import (
-    abfs_get_fs,
-    azure_storage_account_from_path,
-    get_hdfs_fs,
-    get_hf_fs,
-    get_s3_fs_from_path,
-    validate_gcsfs_installed,
-    validate_s3fs_installed,
+    expand_glob,
+    getfs,
+    parse_fpath,
 )
 from bodo.io.helpers import _get_numba_typ_from_pa_typ
 from bodo.libs.dict_arr_ext import dict_str_arr_type
@@ -402,193 +396,6 @@ class ParquetPiece:
         return self.frag.num_row_groups
 
 
-def glob(protocol: str, fs: pa.fs.FileSystem | None, path: str) -> list[str]:
-    """
-    Return a list of path names that match glob pattern
-    given by path.
-
-    Args:
-        protocol (str): Protocol for the path. e.g.
-            "" -> local
-            "s3" -> S3
-        fs (pa.fs.FileSystem | None): Filesystem to use
-            for getting list of files. This can be None
-            in the local filesystem case, i.e. protocol
-            is an empty string.
-        path (str): Glob pattern.
-
-    Returns:
-        list[str]: List of files returned by expanding the glob
-            pattern.
-    """
-    if not protocol and fs is None:
-        from fsspec.implementations.local import LocalFileSystem
-
-        fs = LocalFileSystem()
-    elif fs is None:
-        raise ValueError(
-            f"glob: 'fs' cannot be None in the non-local ({protocol}) filesystem case!"
-        )
-
-    if isinstance(fs, pa.fs.FileSystem):
-        from fsspec.implementations.arrow import ArrowFSWrapper
-
-        fs = ArrowFSWrapper(fs)
-
-    try:
-        files = fs.glob(path)
-    except Exception:  # pragma: no cover
-        raise BodoError(f"glob pattern expansion not supported for {protocol}")
-
-    return files
-
-
-def getfs(
-    fpath: str | list[str],
-    protocol: str,
-    storage_options: dict[str, pt.Any] | None = None,
-    parallel: bool = False,
-) -> PyFileSystem | pa.fs.FileSystem:
-    """
-    Get filesystem for the provided file path(s).
-
-    Args:
-        fpath (str | list[str]): Filename or list of filenames.
-        protocol (str): Protocol for the filesystem. e.g. "" (for local), "s3", etc.
-        storage_options (Optional[dict], optional): Optional storage_options to
-            use when building the filesystem. Only supported in the S3 case
-            at this time. Defaults to None.
-        parallel (bool, optional): Whether this function is being called in parallel.
-            Defaults to False.
-
-    Returns:
-        Filesystem implementation. This is either a PyFileSystem wrapper over
-        s3fs/gcsfs or a native PyArrow filesystem.
-    """
-    # NOTE: add remote filesystems to REMOTE_FILESYSTEMS
-    if (
-        protocol == "s3"
-        and storage_options
-        and ("anon" not in storage_options or len(storage_options) > 1)
-    ):
-        # "anon" is the only storage_options supported by PyArrow
-        # If other storage_options fields are given,
-        # we need to use S3Fs to read instead
-        validate_s3fs_installed()
-        import s3fs
-
-        sopts = storage_options.copy()
-        if "AWS_S3_ENDPOINT" in os.environ and "endpoint_url" not in sopts:
-            sopts["endpoint_url"] = os.environ["AWS_S3_ENDPOINT"]
-        s3_fs = s3fs.S3FileSystem(
-            **sopts,
-        )
-        return PyFileSystem(FSSpecHandler(s3_fs))
-    if protocol == "s3":
-        return (
-            get_s3_fs_from_path(
-                fpath,
-                parallel=parallel,
-                storage_options=storage_options,
-            )
-            if not isinstance(fpath, list)
-            else get_s3_fs_from_path(
-                fpath[0],
-                parallel=parallel,
-                storage_options=storage_options,
-            )
-        )
-    if storage_options is not None and len(storage_options) > 0:
-        raise BodoError(
-            f"ParquetReader: `storage_options` is not supported for protocol {protocol}"
-        )
-
-    if protocol in {"gcs", "gs"}:
-        validate_gcsfs_installed()
-        import gcsfs
-
-        # TODO pass storage_options to GCSFileSystem
-        google_fs = gcsfs.GCSFileSystem(token=None)
-        return PyFileSystem(FSSpecHandler(google_fs))
-    elif protocol == "http":
-        import fsspec
-
-        return PyFileSystem(FSSpecHandler(fsspec.filesystem("http")))
-    elif protocol in {"abfs", "abfss"} and bodo.enable_azure_fs:  # pragma: no cover
-        if not storage_options:
-            storage_options = {}
-        if "account_name" not in storage_options:
-            # Extract the storage account from the path, assumes all files are in the same storage account
-            account_name = azure_storage_account_from_path(
-                fpath if not isinstance(fpath, list) else fpath[0]
-            )
-            if account_name is not None:
-                storage_options["account_name"] = account_name
-
-        return abfs_get_fs(storage_options)
-    elif protocol in {"hdfs", "abfs", "abfss"}:  # pragma: no cover
-        return (
-            get_hdfs_fs(fpath) if not isinstance(fpath, list) else get_hdfs_fs(fpath[0])
-        )
-    # HuggingFace datasets
-    elif protocol == "hf":
-        return get_hf_fs(storage_options)
-    else:
-        return pa.fs.LocalFileSystem()
-
-
-@pt.overload
-def parse_fpath(fpath: str) -> tuple[str, ParseResult, str]: ...
-
-
-@pt.overload
-def parse_fpath(fpath: list[str]) -> tuple[list[str], ParseResult, str]: ...
-
-
-def parse_fpath(fpath: str | list[str]) -> tuple[str | list[str], ParseResult, str]:
-    """
-    Parse a filepath and extract properties such as the relevant
-    protocol, scheme, netloc, etc.
-    In case it's a list of filepaths, this validates that properties
-    such as the protocol and netloc (i.e. the bucket in the S3 case)
-    are the same for all filepaths in the list.
-
-    Args:
-        fpath (str | list[str]): Filepath or list of filepaths to parse.
-
-    Returns:
-        tuple[str | list[str], ParseResult, str]:
-            - str: Sanitized version of the filepath(s).
-            - ParseResult: ParseResult object containing the
-                scheme, netloc, etc.
-            - str: The protocol associate with the filepath(s).
-                e.g. "" (local), "s3" (S3), etc.
-    """
-
-    if isinstance(fpath, list):
-        # list of file paths
-        parsed_url = urlparse(fpath[0])
-        protocol = parsed_url.scheme
-        bucket_name = parsed_url.netloc  # netloc can be empty string (e.g. non s3)
-        for i in range(len(fpath)):
-            f = fpath[i]
-            u_p = urlparse(f)
-            # make sure protocol and bucket name of every file matches
-            if u_p.scheme != protocol:
-                raise BodoError(
-                    "All parquet files must use the same filesystem protocol"
-                )
-            if u_p.netloc != bucket_name:
-                raise BodoError("All parquet files must be in the same S3 bucket")
-            fpath[i] = f.rstrip("/")
-    else:
-        parsed_url: ParseResult = urlparse(fpath)
-        protocol = parsed_url.scheme
-        fpath = fpath.rstrip("/")
-
-    return fpath, parsed_url, protocol
-
-
 @pt.overload
 def get_fpath_without_protocol_prefix(
     fpath: str, protocol: str, parsed_url: ParseResult
@@ -729,14 +536,14 @@ def get_bodo_pq_dataset_from_fpath(
             new_fpath = []
             for p in fpath_noprefix:
                 if has_magic(p):
-                    new_fpath += glob(protocol, fs, p)
+                    new_fpath += expand_glob(protocol, fs, p)
                 else:
                     new_fpath.append(p)
             fpath_noprefix = new_fpath
             if len(fpath_noprefix) == 0:
                 raise BodoError("No files found matching glob pattern")
         elif has_magic(fpath_noprefix):
-            fpath_noprefix = glob(protocol, fs, fpath_noprefix)
+            fpath_noprefix = expand_glob(protocol, fs, fpath_noprefix)
             if len(fpath_noprefix) == 0:
                 raise BodoError("No files found matching glob pattern")
 

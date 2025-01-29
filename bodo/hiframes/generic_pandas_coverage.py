@@ -190,7 +190,7 @@ def generate_simple_series_impl(
             "out_dtype": out_arr_type,
         },
         {},
-        globals(),
+        __name__,
     )
 
 
@@ -361,5 +361,5 @@ def generate_series_to_df_impl(
         func_text,
         glbls,
         {},
-        globals(),
+        __name__,
     )

@@ -144,7 +144,7 @@ def decode_if_dict_array_overload(A):
         res = ",".join(f"decode_if_dict_array(A[{i}])" for i in range(n))
         func_text += "  return ({}{})\n".format(res, "," if n == 1 else "")
         return bodo.utils.utils.bodo_exec(
-            func_text, {"decode_if_dict_array": decode_if_dict_array}, {}, globals()
+            func_text, {"decode_if_dict_array": decode_if_dict_array}, {}, __name__
         )
 
     if isinstance(A, types.List):

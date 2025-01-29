@@ -385,7 +385,6 @@ def _get_dtype_str(dtype):
     "astype",
     inline="always",
     no_unliteral=True,
-    # jit_options={"cache": True},   # TODO: Get this working.  Right now error pickling get_rank.
 )
 def overload_dataframe_astype(
     df,
@@ -2757,7 +2756,7 @@ def _gen_init_df(
     }
     _global.update(extra_globals)
 
-    return bodo_exec(func_text, _global, {}, globals())
+    return bodo_exec(func_text, _global, {}, __name__)
 
 
 ############################ binary operators #############################
@@ -5321,7 +5320,7 @@ def overload_dataframe_fillna(
     func_text = "def bodo_dataframe_fillna(df, value=None, method=None, axis=None, inplace=False, limit=None, downcast=None):\n"
     if is_overload_true(inplace):
         func_text += "  " + "  \n".join(data_args) + "\n"
-        return bodo_exec(func_text, {}, {}, globals())
+        return bodo_exec(func_text, {}, {}, __name__)
     else:
         return _gen_init_df(
             func_text, df.columns, ", ".join(d + ".values" for d in data_args)

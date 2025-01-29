@@ -3951,7 +3951,7 @@ def alltoallv_tup_overload(
         func_text += f"  alltoallv(send_data[{i}], out_data[{i}], send_counts, recv_counts, send_disp, recv_disp)\n"
     func_text += "  return\n"
 
-    return bodo_exec(func_text, {"alltoallv": alltoallv}, {}, globals())
+    return bodo_exec(func_text, {"alltoallv": alltoallv}, {}, __name__)
 
 
 @numba.njit(cache=True)
@@ -4220,7 +4220,7 @@ def wait(req, cond=True):
         tup_call = ",".join(f"_wait(req[{i}], cond)" for i in range(count))
         func_text = "def bodo_wait(req, cond=True):\n"
         func_text += f"  return {tup_call}\n"
-        return bodo_exec(func_text, {"_wait": _wait}, {}, globals())
+        return bodo_exec(func_text, {"_wait": _wait}, {}, __name__)
 
     # None passed means no request to wait on (no-op), happens for shift() for string
     # arrays since we use blocking communication instead

@@ -4,6 +4,7 @@ Collection of utility functions. Needs to be refactored in separate files.
 
 import functools
 import hashlib
+import importlib
 import inspect
 import keyword
 import re
@@ -20,7 +21,7 @@ import numba
 import numpy as np
 import pandas as pd
 from llvmlite import ir as lir
-from numba.core import cgutils, ir, ir_utils, types
+from numba.core import cgutils, ir, ir_utils, sigutils, types
 from numba.core.imputils import lower_builtin, lower_constant
 from numba.core.ir_utils import (
     find_callname,
@@ -818,7 +819,7 @@ def alloc_arr_tup_overload(n, data, init_vals=()):
     )  # single value needs comma to become tuple
 
     return bodo_exec(
-        func_text, {"empty_like_type": empty_like_type, "np": np}, {}, globals()
+        func_text, {"empty_like_type": empty_like_type, "np": np}, {}, __name__
     )
 
 
@@ -1289,7 +1290,7 @@ def tuple_list_to_array(A, data, elem_type):
         func_text += "    A[i] = bodo.utils.conversion.unbox_if_tz_naive_timestamp(d)\n"
     else:
         func_text += "    A[i] = d\n"
-    return bodo_exec(func_text, {"bodo": bodo}, {}, globals())
+    return bodo_exec(func_text, {"bodo": bodo}, {}, __name__)
 
 
 def object_length(c, obj):
@@ -1857,7 +1858,24 @@ def create_arg_hash(*args, **kwargs):
     return arg_hash.hexdigest()
 
 
-def bodo_exec(func_text, glbls, loc_vars, real_globals):
+def bodo_exec_internal(func_name, func_text, glbls, loc_vars, mod_name):
+    print("bodo_exec_internal", func_name, mod_name)
+    # Register the code associated with this function so that it is cacheable.
+    bodo.numba_compat.BodoCacheLocator.register(func_name, func_text)
+    # Exec the function into existence.
+    exec(func_text, glbls, loc_vars)
+    # Get the new function from the local environment.
+    new_func = loc_vars[func_name]
+    # Make the new function a member of the module that it was exec'ed in.
+    mod = importlib.import_module(mod_name)
+    setattr(mod, func_name, new_func)
+    # Make the function know what module it resides in.
+    # Also necessary for caching/pickling.
+    new_func.__module__ = mod_name
+    return new_func
+
+
+def bodo_exec(func_text, glbls, loc_vars, mod_name):
     """
     Take a string containing a dynamically generated function with a given name and exec
     it into existence and make the resulting function Numba cacheable.
@@ -1865,7 +1883,7 @@ def bodo_exec(func_text, glbls, loc_vars, real_globals):
         func_text: the text of the new function to be created
         glbls: the globals to be passed to exec
         loc_vars: the local var dict to be passed to exec
-        real_globals: should be passed globals() from the calling scope
+        mod_name: the name of the module to create this function in
     """
     # Get hash of function text.
     text_hash = hashlib.sha256(func_text.encode("utf-8")).hexdigest()
@@ -1879,15 +1897,17 @@ def bodo_exec(func_text, glbls, loc_vars, real_globals):
     func_text = re.sub(
         pattern, lambda m: m.group(1) + func_name + m.group(3), func_text, count=1
     )
-    # Exec the function into existence.
-    exec(func_text, glbls, loc_vars)
-    # Register the code associated with this function so that it is cacheable.
-    bodo.numba_compat.BodoCacheLocator.register(func_name, func_text)
-    # Get the new function from the local environment.
-    new_func = loc_vars[func_name]
-    # Make the new function a member of the module that it was exec'ed in.
-    real_globals[func_name] = new_func
-    # Make the function know what module it resides in.
-    # Also necessary for caching/pickling.
-    new_func.__module__ = real_globals["__name__"]
-    return new_func
+    return bodo_exec_internal(func_name, func_text, glbls, loc_vars, mod_name)
+
+
+def cached_call_internal(context, builder, impl, sig, args):
+    """Enable lower_builtin impls to be cached."""
+    # First make it a cacheable njit.
+    impl = numba.njit(cache=True)(impl)
+    # Compile the impl for this signature.
+    impl.compile(sig)
+    sig_args, _ = sigutils.normalize_signature(sig)
+    # Get the compile_result for this signature.
+    call_target = impl.overloads.get(tuple(sig_args))
+    # Call the implementation.
+    return context.call_internal(builder, call_target.fndesc, sig, args)

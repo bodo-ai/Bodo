@@ -998,7 +998,7 @@ def generate_set_table_data_code(table, ind, arr_type, used_cols, is_null=False)
         func_text += f"  T2 = set_table_block(T2, out_arr_list_{blk}, {blk})\n"
     func_text += "  return T2\n"
 
-    return bodo_exec(func_text, glbls, {}, globals())
+    return bodo_exec(func_text, glbls, {}, __name__)
 
 
 @numba.generated_jit(

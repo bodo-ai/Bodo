@@ -155,7 +155,7 @@ def overload_datetime_field_declarative(field, overload_impl):
     """
     Use declarative overload template to create an overload of dt fields that are only
     implemented for datetimes. This check is performed at compile time and is
-    documenteded using overload_attribute_declarative.
+    documented using overload_attribute_declarative.
     """
     overload_attribute_declarative(
         SeriesDatetimePropertiesType,

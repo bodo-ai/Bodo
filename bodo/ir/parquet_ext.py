@@ -978,7 +978,7 @@ def _gen_pq_reader_py(
         "set_table_len": bodo.hiframes.table.set_table_len,
     }
 
-    pq_reader_py = bodo_exec(func_text, glbs, loc_vars, globals())
+    pq_reader_py = bodo_exec(func_text, glbs, loc_vars, __name__)
 
     jit_func = numba.njit(pq_reader_py, no_cpython_wrapper=True, cache=True)
     return jit_func
