@@ -832,7 +832,6 @@ if (NOT WIN32)
     ${Boost_LIBRARIES}
   )
 else()
-  # Windows doesn't need to link pthreads
   target_link_libraries(ext PRIVATE
     npymath
     ${MPI_LIBRARIES}

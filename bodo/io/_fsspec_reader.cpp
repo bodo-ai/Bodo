@@ -18,11 +18,17 @@ PUSH_IGNORED_COMPILER_ERROR("-Wunused-variable")
 PUSH_IGNORED_COMPILER_ERROR("-Wunused-function")
 #else
 #endif
-// #include "pyfs.cpp"
 
 #ifndef _MSC_VER
 POP_IGNORED_COMPILER_ERROR()
 #else
+#endif
+
+#ifdef _WIN32
+std::shared_ptr<arrow::fs::FileSystem> get_cpp_fs(
+    struct c_PyFileSystemBodo *__pyx_v_fs) {
+    throw std::runtime_error("get_cpp_fs not supported on Windows yet.");
+}
 #endif
 
 using std::string;
