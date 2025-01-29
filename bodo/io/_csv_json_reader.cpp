@@ -16,19 +16,17 @@
 #include <algorithm>
 #include <ciso646>
 #include <cstdint>
-#include <filesystem>
-#include <fstream>
 #include <iostream>
 #include <string>
 #include <vector>
 
+#include <arrow/filesystem/filesystem.h>
 #include <arrow/io/compressed.h>
 #include <arrow/memory_pool.h>
 #include <arrow/util/compression.h>
 
 #include "../libs/_distributed.h"
 #include "_bodo_file_reader.h"
-#include "_fs_io.h"
 
 #include "csv_json_reader.h"
 
