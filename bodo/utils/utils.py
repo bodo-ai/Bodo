@@ -1859,7 +1859,6 @@ def create_arg_hash(*args, **kwargs):
 
 
 def bodo_exec_internal(func_name, func_text, glbls, loc_vars, mod_name):
-    print("bodo_exec_internal", func_name, mod_name)
     # Register the code associated with this function so that it is cacheable.
     bodo.numba_compat.BodoCacheLocator.register(func_name, func_text)
     # Exec the function into existence.

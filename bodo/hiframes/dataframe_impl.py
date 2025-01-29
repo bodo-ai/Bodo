@@ -3441,8 +3441,14 @@ def _parse_merge_cond(on_str, left_columns, left_data, right_columns, right_data
     )
 
 
-@overload_method(DataFrameType, "merge", inline="always", no_unliteral=True)
-@overload(pd.merge, inline="always", no_unliteral=True)
+@overload_method(
+    DataFrameType,
+    "merge",
+    inline="always",
+    no_unliteral=True,
+    jit_options={"cache": True},
+)
+@overload(pd.merge, inline="always", no_unliteral=True, jit_options={"cache": True})
 def overload_dataframe_merge(
     left,
     right,
@@ -3583,14 +3589,13 @@ def overload_dataframe_merge(
     right_keys = gen_const_tup(right_keys)
 
     # generating code since typers can't find constants easily
-    func_text = "def _impl(left, right, how='inner', on=None, left_on=None,\n"
+    func_text = (
+        "def bodo_dataframe_merge(left, right, how='inner', on=None, left_on=None,\n"
+    )
     func_text += "    right_on=None, left_index=False, right_index=False, sort=False,\n"
     func_text += "    suffixes=('_x', '_y'), copy=True, indicator=False, validate=None, _bodo_na_equal=True, _bodo_rebalance_output_if_skewed=False):\n"
     func_text += f"  return bodo.hiframes.pd_dataframe_ext.join_dummy(left, right, {left_keys}, {right_keys}, '{how}', '{suffix_x}', '{suffix_y}', False, {indicator_val}, {_bodo_na_equal_val}, {_bodo_rebalance_output_if_skewed_val}, {gen_cond!r})\n"
-    loc_vars = {}
-    exec(func_text, {"bodo": bodo}, loc_vars)
-    _impl = loc_vars["_impl"]
-    return _impl
+    return bodo_exec(func_text, {"bodo": bodo}, {}, __name__)
 
 
 def common_validate_merge_merge_asof_spec(
@@ -4127,7 +4132,13 @@ def overload_dataframe_merge_asof(
     return _impl
 
 
-@overload_method(DataFrameType, "groupby", inline="always", no_unliteral=True)
+@overload_method(
+    DataFrameType,
+    "groupby",
+    inline="always",
+    no_unliteral=True,
+    jit_options={"cache": True},
+)
 def overload_dataframe_groupby(
     df,
     by=None,
@@ -4973,7 +4984,13 @@ def crosstab_overload(
     return _impl
 
 
-@overload_method(DataFrameType, "sort_values", inline="always", no_unliteral=True)
+@overload_method(
+    DataFrameType,
+    "sort_values",
+    inline="always",
+    no_unliteral=True,
+    jit_options={"cache": True},
+)
 def overload_dataframe_sort_values(
     df,
     by,
