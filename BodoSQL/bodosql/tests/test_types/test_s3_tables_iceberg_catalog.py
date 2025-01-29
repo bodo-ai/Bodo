@@ -18,7 +18,6 @@ pytestmark = pytest_s3_tables
 
 # Refer to bodo/tests/test_s3_tables_iceberg.py for infrastructure
 # required to run these tests
-@pytest.mark.skip(reason="Failing on main as well")
 @temp_env_override({"AWS_DEFAULT_REGION": "us-east-2"})
 def test_basic_read(memory_leak_check, s3_tables_catalog):
     """

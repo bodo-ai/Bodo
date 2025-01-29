@@ -156,8 +156,8 @@ def _determine_str_as_dict_columns(
     if bodo.get_rank() < len(sample_files):
         fpath = sample_files[bodo.get_rank()]
         try:
-            fpath_without_protocol_prefix(fpath.file.file_path)
-            pq_file = pq.ParquetFile(fpath.file.file_path, filesystem=fs)
+            sanitized_path = fpath_without_protocol_prefix(fpath.file.file_path)
+            pq_file = pq.ParquetFile(sanitized_path, filesystem=fs)
             metadata = pq_file.metadata
             for idx, field in enumerate(pq_file.schema_arrow):
                 if (

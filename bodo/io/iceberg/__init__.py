@@ -100,7 +100,7 @@ def get_iceberg_pq_dataset(
     """
     _ = verify_pyiceberg_installed()
 
-    from pyiceberg.io.pyarrow import _fs_from_file_path, schema_to_pyarrow
+    from pyiceberg.io.pyarrow import _fs_from_file_path
 
     ev = tracing.Event("get_iceberg_pq_dataset")
     metrics = IcebergPqDatasetMetrics()
@@ -110,8 +110,10 @@ def get_iceberg_pq_dataset(
     # applying the iceberg_filter (metadata-level).
     start_time = time.monotonic()
     (
-        table,
         pq_infos,
+        all_schemas,
+        snapshot_id,
+        io,
         get_file_to_schema_us,
     ) = get_iceberg_file_list_parallel(
         conn,
@@ -127,7 +129,7 @@ def get_iceberg_pq_dataset(
             True,
             typing_pa_table_schema,
             [],
-            snap.snapshot_id if (snap := table.current_snapshot()) else -1,
+            snapshot_id,
             filesystem=None,
             pieces=[],
             schema_groups=[],
@@ -136,7 +138,7 @@ def get_iceberg_pq_dataset(
         )
 
     start_time = time.monotonic()
-    fs = _fs_from_file_path(pq_infos[0].path, table.io)
+    fs = _fs_from_file_path(pq_infos[0].path, io)
     metrics.get_fs_time += int((time.monotonic() - start_time) * 1_000_000)
 
     if expr_filter_f_str is not None and len(expr_filter_f_str) == 0:
@@ -173,14 +175,14 @@ def get_iceberg_pq_dataset(
     if any(pa.types.is_struct(ty) for ty in typing_pa_table_schema.types):
         pq_format = ds.ParquetFileFormat()
         pq_frags = [
-            pq_format.make_fragment(pq_info.path, fs) for pq_info in local_pq_infos
+            pq_format.make_fragment(pq_info.sanitized_path, fs)
+            for pq_info in local_pq_infos
         ]
         arrow_cpp.fetch_parquet_frags_metadata(pq_frags)
         file_schemas = [
             pq_frag.metadata.schema.to_arrow_schema() for pq_frag in pq_frags
         ]
     else:
-        all_schemas = {i: schema_to_pyarrow(s) for i, s in table.schemas().items()}
         file_schemas = [all_schemas[pq_info.schema_id] for pq_info in local_pq_infos]
 
     err = None
@@ -296,13 +298,12 @@ def get_iceberg_pq_dataset(
 
     # 6. Create an IcebergParquetDataset object with this list of schema-groups,
     #    pieces and other relevant details.
-    snap = table.current_snapshot()
-    assert snap is not None
+    assert snapshot_id != -1
     iceberg_pq_dataset = IcebergParquetDataset(
         row_level,
         typing_pa_table_schema,
         [x.path for x in pq_infos],
-        snap.snapshot_id,
+        snapshot_id,
         fs,
         iceberg_pieces,
         schema_groups,

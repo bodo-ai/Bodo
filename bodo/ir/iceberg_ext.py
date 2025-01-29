@@ -870,15 +870,18 @@ def literal(val) -> Literal:
     Wrapper over PyIceberg's literal function for constructing filters.
     This is needed to convert other Python literals to Iceberg-compatible ones
     """
-    from pyiceberg.expressions.literals import DateLiteral, TimestampLiteral, literal
+    from pyiceberg.expressions.literals import DateLiteral, TimestampLiteral
+    from pyiceberg.expressions.literals import literal as inner_literal
 
+    # PyIceberg literal doesn't support all data types
+    # See https://github.com/apache/iceberg-python/issues/1456
     if isinstance(val, datetime.date):
         return DateLiteral((val - datetime.date(1970, 1, 1)).days)
     if isinstance(val, datetime.datetime):
         return TimestampLiteral((val - datetime.datetime(1970, 1, 1)).microseconds)
     if isinstance(val, list):
         return {literal(v) for v in val}  # type: ignore
-    return literal(val)
+    return inner_literal(val)
 
 
 @overload(get_filters_pyobject, no_unliteral=True)
@@ -1052,10 +1055,11 @@ def add_rtjf_iceberg_filter(
             for col, (min, max, unique_vals), op in zip(
                 filtered_cols, bounds, filter_ops
             ):
-                if unique_vals != None and len(unique_vals) > 0 and op == "==":
+                if unique_vals is not None and len(unique_vals) > 0 and op == "==":
                     rtjf_filters = pie.And(
                         rtjf_filters, pie.In(col, literal(unique_vals))
                     )
+                    print(rtjf_filters, unique_vals)
                 else:
                     if min is not None and op in ("==", ">=", ">"):
                         rtjf_filters = pie.And(

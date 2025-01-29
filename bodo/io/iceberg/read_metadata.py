@@ -28,21 +28,28 @@ from bodo.io.iceberg.read_parquet import (
     IcebergPqDatasetMetrics,
     get_schema_group_identifier_from_pa_schema,
 )
+from bodo.io.parquet_pio import fpath_without_protocol_prefix
 from bodo.utils.utils import BodoError, run_rank0
 
 if pt.TYPE_CHECKING:  # pragma: no cover
     from pyiceberg.expressions import BooleanExpression
+    from pyiceberg.io import FileIO
     from pyiceberg.table import FileScanTask, Table
 
 
 def _construct_parquet_infos(
     table: Table, tasks: pt.Iterable[FileScanTask]
 ) -> tuple[list[IcebergParquetInfo], int]:
-    """TODO"""
+    """
+    Construct IcebergParquetInfo objects for each file
+    from the Iceberg table scanner. This includes performing additional
+    operations to get the schema ID and sanitized path for each file.
+    """
+
     from avro.datafile import DataFileReader
     from avro.io import DatumReader
 
-    mapper = {}
+    file_path_to_schema_id = {}
 
     s = time.monotonic_ns()
     # Construct a mapping from file path to schema ID
@@ -51,19 +58,23 @@ def _construct_parquet_infos(
 
     for manifest_file in snap.manifests(table.io):
         # Open Avro file
-        with open(manifest_file.manifest_path, "rb") as f:
+        with table.io.new_input(manifest_file.manifest_path).open(seekable=True) as f:
             reader = DataFileReader(f, DatumReader())
             schema_serialized = reader.get_meta("schema")
             assert schema_serialized is not None
             schema_id = int(json.loads(schema_serialized)["schema-id"])
 
             for line in reader:
-                mapper[line["data_file"]["file_path"]] = schema_id
+                file_path_to_schema_id[line["data_file"]["file_path"]] = schema_id
     get_file_to_schema_us = time.monotonic_ns() - s
 
     # Construct the list of Parquet file info
     return [
-        IcebergParquetInfo(file_task=task, schema_id=mapper[task.file.file_path])
+        IcebergParquetInfo(
+            file_task=task,
+            schema_id=file_path_to_schema_id[task.file.file_path],
+            sanitized_path=fpath_without_protocol_prefix(task.file.file_path),
+        )
         for task in tasks
     ], get_file_to_schema_us // 1000
 
@@ -116,7 +127,7 @@ def _get_total_num_pq_files_in_table(table: Table) -> int:
 @run_rank0
 def get_iceberg_file_list_parallel(
     conn_str: str, table_id: str, filters: BooleanExpression
-) -> tuple[Table, list[IcebergParquetInfo], int]:
+) -> tuple[list[IcebergParquetInfo], dict, int, FileIO, int]:
     """
     Wrapper around 'get_iceberg_file_list' which calls it
     on rank 0 and handles all the required error
@@ -161,11 +172,10 @@ def get_iceberg_file_list_parallel(
         raise BodoError(
             f"Error reading Iceberg Table: {type(exc).__name__}: {str(exc)}\n"
         ) from exc
+    finally:
+        ev_iceberg_fl.finalize()
 
-    ev_iceberg_fl.finalize()
-
-    if bodo.user_logging.get_verbose_level() >= 1 and table and pq_infos:
-        # This should never fail given that pq_infos is not None, but just to be safe.
+    if bodo.user_logging.get_verbose_level() >= 1:
         try:
             total_num_files = str(_get_total_num_pq_files_in_table(table))
         except Exception as e:
@@ -189,9 +199,13 @@ def get_iceberg_file_list_parallel(
 
         bodo.user_logging.log_message("Iceberg File Pruning:", log_msg)
 
+    from pyiceberg.io.pyarrow import schema_to_pyarrow
+
     return (
-        table,
         pq_infos,
+        {i: schema_to_pyarrow(s) for i, s in table.schemas().items()},
+        snap.snapshot_id if (snap := table.current_snapshot()) else -1,
+        table.io,
         get_file_to_schema_us,
     )
 

@@ -20,33 +20,6 @@ S3_TABLES_PAT = re.compile(
 )
 
 
-def validate_conn_str(conn_str: str) -> None:
-    parse_res = urlparse(conn_str)
-    if not conn_str.startswith("iceberg+glue") and parse_res.scheme not in (
-        "iceberg",
-        "iceberg+file",
-        "iceberg+s3",
-        "iceberg+thrift",
-        "iceberg+http",
-        "iceberg+https",
-        "iceberg+snowflake",
-        "iceberg+abfs",
-        "iceberg+abfss",
-        "iceberg+rest",
-        "iceberg+arn",
-    ):
-        raise ValueError(
-            "Iceberg connection strings must start with one of the following: \n"
-            "  Hadoop / Directory Catalog: 'iceberg://', 'iceberg+file://', 'iceberg+s3://', 'iceberg+abfs://', 'iceberg+abfss://'\n"
-            "  REST Catalog: 'iceberg+http://', 'iceberg+https://', 'iceberg+rest://'\n"
-            "  Glue Catalog: 'iceberg+glue'\n"
-            "  Hive Catalog: 'iceberg+thrift://'\n"
-            "  Snowflake Catalog: 'iceberg+snowflake://'\n"
-            "  S3 Tables Catalog: 'iceberg+arn'\n"
-            f"Checking '{conn_str}' ('{parse_res.scheme}')"
-        )
-
-
 def conn_str_to_catalog(conn_str: str) -> Catalog:
     """
     Construct a PyIceberg catalog from a connection string
@@ -54,7 +27,6 @@ def conn_str_to_catalog(conn_str: str) -> Catalog:
 
     from pyiceberg.catalog import URI, WAREHOUSE_LOCATION
 
-    validate_conn_str(conn_str)
     parse_res = urlparse(conn_str)
 
     # Property Parsing
@@ -119,5 +91,16 @@ def conn_str_to_catalog(conn_str: str) -> Catalog:
 
             catalog = SnowflakeCatalog
             properties[URI] = base_url
+        case _:
+            raise ValueError(
+                "Iceberg connection strings must start with one of the following: \n"
+                "  Hadoop / Directory Catalog: 'iceberg://', 'iceberg+file://', 'iceberg+s3://', 'iceberg+abfs://', 'iceberg+abfss://'\n"
+                "  REST Catalog: 'iceberg+http://', 'iceberg+https://', 'iceberg+rest://'\n"
+                "  Glue Catalog: 'iceberg+glue'\n"
+                "  Hive Catalog: 'iceberg+thrift://'\n"
+                "  Snowflake Catalog: 'iceberg+snowflake://'\n"
+                "  S3 Tables Catalog: 'iceberg+arn'\n"
+                f"Checking '{conn_str}' ('{parse_res.scheme}')"
+            )
 
     return catalog("catalog", **properties)

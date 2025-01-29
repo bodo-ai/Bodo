@@ -217,6 +217,8 @@ class DirCatalog(Catalog):
             metadata_location=updated_staged_table.metadata_location,
         )
 
+    # All of the following functions are impossible to implement with just a FileIO
+
     def list_tables(self, namespace: str | Identifier) -> list[Identifier]:
         raise NotImplementedError
 

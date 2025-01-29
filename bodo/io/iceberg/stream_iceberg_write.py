@@ -465,6 +465,7 @@ def create_iceberg_rest_s3_fs(
 ):
     if catalog_uri == "" or bearer_token == "" or warehouse == "":
         return None
+    # TODO: Fix in write PR
     pass
 
 

@@ -1091,7 +1091,9 @@ def get_pieces_with_exact_row_counts(
     start = time.monotonic()
     pq_file_fragments: list[ds.ParquetFileFragment] = []
     for pq_info in pq_infos:
-        pq_file_fragments.append(pq_file_format.make_fragment(pq_info.path, fs))
+        pq_file_fragments.append(
+            pq_file_format.make_fragment(pq_info.sanitized_path, fs)
+        )
     metrics.file_frags_creation_time += int((time.monotonic() - start) * 1_000_000)
 
     pieces: list[IcebergPiece] = []
@@ -1208,7 +1210,7 @@ def get_row_counts_for_schema_group(
     if bodo.check_parquet_schema:
         pq_file_format = ds.ParquetFileFormat()
         for pq_info in pq_infos:
-            frag = pq_file_format.make_fragment(pq_info.path, fs)
+            frag = pq_file_format.make_fragment(pq_info.sanitized_path, fs)
             file_schema = frag.metadata.schema.to_arrow_schema()
             try:
                 # We use the original read-schema from the schema group
@@ -1245,7 +1247,7 @@ def get_row_counts_for_schema_group(
         for pq_info in pq_infos:
             pieces.append(
                 IcebergPiece(
-                    pq_info.path,
+                    pq_info.sanitized_path,
                     -1,
                     schema_group_identifier,
                     pq_info.row_count,

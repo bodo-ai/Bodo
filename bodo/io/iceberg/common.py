@@ -26,6 +26,8 @@ class IcebergParquetInfo(pt.NamedTuple):
     file_task: FileScanTask
     # Iceberg Schema ID the parquet file was written with
     schema_id: int
+    # Sanitized path to the parquet file for filesystem
+    sanitized_path: str
 
     @property
     def path(self) -> str:
