@@ -10,7 +10,7 @@ namespace bodo {
 /// too early.
 
 // Minimal base class for STL allocators that use our buffer pool. The child
-// clasess plug in the buffer pool pointer manually, which is needed in modules
+// classes plug in the buffer pool pointer manually, which is needed in modules
 // other than bodo.ext.
 template <class T>
 class STLBufferPoolAllocator {
