@@ -86,11 +86,17 @@ def conn_str_to_catalog(conn_str: str) -> Catalog:
             if not parsed:
                 raise ValueError(f"Invalid S3 Tables ARN: {conn_str}")
             properties[S3TABLES_REGION] = parsed.group(1)
+
         case "iceberg+snowflake":
+            from bodo.io.snowflake import parse_conn_str
+
             from .snowflake import SnowflakeCatalog
 
             catalog = SnowflakeCatalog
             properties[URI] = base_url
+            # Need to extract properties from the connection string and add them
+            properties = {**properties, **(parse_conn_str(base_url))}
+
         case _:
             raise ValueError(
                 "Iceberg connection strings must start with one of the following: \n"

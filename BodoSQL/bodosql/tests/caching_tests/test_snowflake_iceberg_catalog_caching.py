@@ -23,10 +23,6 @@ from bodo.tests.utils import (
 pytestmark = [pytest.mark.iceberg] + pytest_snowflake
 
 
-@pytest.mark.skip(
-    "TODO[BSE-4283]: fix Java error when relaunching gateway with redirect"
-)
-@temp_env_override({"AWS_REGION": "us-east-1"})
 def test_prefetch_flag(fn_distribution, is_cached, tmp_path, memory_leak_check):
     """
     Test that if the prefetch flag is set, a prefetch occurs
@@ -92,7 +88,7 @@ def test_prefetch_flag(fn_distribution, is_cached, tmp_path, memory_leak_check):
                 with open(connector_output) as f:
                     contents = f.read()
                     assert (
-                        'BODO VERBOSE: PrefetchSnowflakeCatalog::loadTable: Loading `"TEST_DB"."PUBLIC"."BODOSQL_ICEBERG_READ_TEST"` from prefetch'
+                        'Loading `"TEST_DB"."PUBLIC"."BODOSQL_ICEBERG_READ_TEST"` from prefetch'
                         in contents
                     )
 

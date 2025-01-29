@@ -576,7 +576,6 @@ def test_azure_basic_write(memory_leak_check):
         drop_snowflake_table(table_name, db, schema, user=3)
 
 
-@pytest.mark.skip(reason="PREFETCHING")
 def test_prefetch_flag(sf_iceberg_catalog, memory_leak_check):
     """
     Test that if the prefetch flag is set, a prefetch occurs
@@ -612,5 +611,3 @@ def test_prefetch_flag(sf_iceberg_catalog, memory_leak_check):
                 stream,
                 'Execution time for prefetching SF-managed Iceberg metadata "TEST_DB"."PUBLIC"."BODOSQL_ICEBERG_READ_TEST"',
             )
-            # TODO: How can we check that the table was loaded from the CachingCatalog
-            # It doesn't have logging support
