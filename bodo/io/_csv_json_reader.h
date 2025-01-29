@@ -76,7 +76,7 @@ extern "C" void initialize_csv_reader(PyObject *reader);
 
 /**
  * @brief Initializes Python type stream_reader_type defined in
-_csv_json_reader.cpp. # Has to be called only once before using the
+_csv_json_reader.cpp. Has to be called only once before using the
 stream_reader_type.
  *
  */
