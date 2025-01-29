@@ -2192,7 +2192,7 @@ extern "C" PyObject *file_chunk_reader(
         // seem like something that should worry us right now
 
         char row_separator = '\n';
-        if (strcmp(suffix, "json") == 0) {
+        if ((strcmp(suffix, "json") == 0) && !json_lines) {
             row_separator = '}';
         }
 
