@@ -49,6 +49,7 @@ from .read_parquet import (
     get_row_counts_for_schema_group,
     warn_if_non_ideal_io_parallelism,
 )
+from .sf_prefetch import prefetch_sf_tables_njit
 
 
 def get_iceberg_pq_dataset(
@@ -354,4 +355,5 @@ __all__ = [
     "determine_str_as_dict_columns",
     "get_iceberg_type_info",
     "is_snowflake_managed_iceberg_wh",
+    "prefetch_sf_tables_njit",
 ]
