@@ -46,6 +46,15 @@ logger = logging.getLogger(__name__)
 METADATA_QUERY = "SELECT SYSTEM$GET_ICEBERG_TABLE_INFORMATION(%s) AS METADATA"
 
 
+def escape_name(part_name: str) -> str:
+    """Escape the part name to be used in Snowflake connector queries."""
+    return (
+        part_name
+        if part_name.startswith('"') and part_name.endswith('"')
+        else f'"{part_name}"'
+    )
+
+
 class SnowflakeCatalog(MetastoreCatalog):
     @dataclass(frozen=True, eq=True)
     class _SnowflakeIdentifier:
@@ -74,16 +83,18 @@ class SnowflakeCatalog(MetastoreCatalog):
             yield from filter(None, [self.database, self.schema, self.table])
 
         @classmethod
-        def table_from_string(
-            cls, identifier: str
+        def table_from_id(
+            cls, identifier: str | Identifier
         ) -> SnowflakeCatalog._SnowflakeIdentifier:
-            parts = identifier.split(".")
+            parts = SnowflakeCatalog.identifier_to_tuple(identifier)
             if len(parts) == 1:
-                return cls(None, None, parts[0])
+                return cls(None, None, escape_name(parts[0]))
             elif len(parts) == 2:
-                return cls(None, parts[0], parts[1])
+                return cls(None, escape_name(parts[0]), escape_name(parts[1]))
             elif len(parts) == 3:
-                return cls(parts[0], parts[1], parts[2])
+                return cls(
+                    escape_name(parts[0]), escape_name(parts[1]), escape_name(parts[2])
+                )
 
             raise ValueError(f"Invalid identifier: {identifier}")
 
@@ -165,12 +176,13 @@ class SnowflakeCatalog(MetastoreCatalog):
         self.open_metadata_requests = {}
 
     def load_table(self, identifier: str | Identifier) -> Table:
-        id_str = identifier if isinstance(identifier, str) else ".".join(identifier)
-        sf_identifier = SnowflakeCatalog._SnowflakeIdentifier.table_from_string(id_str)
+        sf_identifier = SnowflakeCatalog._SnowflakeIdentifier.table_from_id(identifier)
         with self.connection.cursor(DictCursor) as cursor:
             try:
-                if id_str in self.open_metadata_requests:
-                    cursor.get_results_from_sfqid(self.open_metadata_requests[id_str])
+                if sf_identifier.table_name in self.open_metadata_requests:
+                    cursor.get_results_from_sfqid(
+                        self.open_metadata_requests[sf_identifier.table_name]
+                    )
                     load_str = "prefetch"
                 else:
                     cursor.execute(METADATA_QUERY, (sf_identifier.table_name,))
@@ -179,7 +191,7 @@ class SnowflakeCatalog(MetastoreCatalog):
                 if bodo.user_logging.get_verbose_level() >= 1:
                     bodo.user_logging.log_message(
                         "Snowflake-Managed Iceberg - Load Metadata",
-                        f"Loading table `{id_str}` from {load_str}",
+                        f"Loading table `{sf_identifier.table_name}` from {load_str}",
                     )
 
                 # Extract the metadata path from the output
@@ -213,7 +225,7 @@ class SnowflakeCatalog(MetastoreCatalog):
         self, identifier: str | Identifier, metadata_location: str
     ) -> Table:
         query = "CREATE ICEBERG TABLE (%s) METADATA_FILE_PATH = (%s)"
-        sf_identifier = SnowflakeCatalog._SnowflakeIdentifier.table_from_string(
+        sf_identifier = SnowflakeCatalog._SnowflakeIdentifier.table_from_id(
             identifier if isinstance(identifier, str) else ".".join(identifier)
         )
 
@@ -228,7 +240,7 @@ class SnowflakeCatalog(MetastoreCatalog):
         return self.load_table(identifier)
 
     def drop_table(self, identifier: str | Identifier) -> None:
-        sf_identifier = SnowflakeCatalog._SnowflakeIdentifier.table_from_string(
+        sf_identifier = SnowflakeCatalog._SnowflakeIdentifier.table_from_id(
             identifier if isinstance(identifier, str) else ".".join(identifier)
         )
 
@@ -240,12 +252,12 @@ class SnowflakeCatalog(MetastoreCatalog):
     def rename_table(
         self, from_identifier: str | Identifier, to_identifier: str | Identifier
     ) -> Table:
-        sf_from_identifier = SnowflakeCatalog._SnowflakeIdentifier.table_from_string(
+        sf_from_identifier = SnowflakeCatalog._SnowflakeIdentifier.table_from_id(
             from_identifier
             if isinstance(from_identifier, str)
             else ".".join(from_identifier)
         )
-        sf_to_identifier = SnowflakeCatalog._SnowflakeIdentifier.table_from_string(
+        sf_to_identifier = SnowflakeCatalog._SnowflakeIdentifier.table_from_id(
             to_identifier if isinstance(to_identifier, str) else ".".join(to_identifier)
         )
 
@@ -364,9 +376,8 @@ class SnowflakeCatalog(MetastoreCatalog):
         """
 
         for table_id in table_ids:
-            table_id_str = table_id if isinstance(table_id, str) else ".".join(table_id)
-            sf_identifier = SnowflakeCatalog._SnowflakeIdentifier.table_from_string(
-                table_id_str
+            sf_identifier = SnowflakeCatalog._SnowflakeIdentifier.table_from_id(
+                table_id
             )
 
             with self.connection.cursor(DictCursor) as cursor:
@@ -374,4 +385,4 @@ class SnowflakeCatalog(MetastoreCatalog):
                 query_id = cursor.sfqid
                 assert query_id is not None
 
-            self.open_metadata_requests[table_id_str] = query_id
+            self.open_metadata_requests[sf_identifier.table_name] = query_id

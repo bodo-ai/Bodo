@@ -19,6 +19,12 @@ S3_TABLES_PAT = re.compile(
     r"^iceberg\+arn:aws:s3tables:([a-z0-9-]+):([0-9]+):bucket/([a-z0-9-]+)$"
 )
 
+CATALOG_CACHE: dict[str, Catalog] = {}
+
+"iceberg+snowflake://BNASRE:giHfxehdsQQeqbpmwUR7@bodopartner.us-east-1/TEST_DB/PUBLIC?warehouse=DEMO_WH&session_parameters=%7B%22schema%22%3A%22PUBLIC%22%2C%22role%22%3A%22ACCOUNTADMIN%22%7D"
+"iceberg+snowflake://BNASRE:giHfxehdsQQeqbpmwUR7@bodopartner.us-east-1?warehouse=DEMO_WH&session_parameters=%7B%22schema%22%3A%22PUBLIC%22%2C%22role%22%3A%22ACCOUNTADMIN%22%7D"
+"iceberg+snowflake://BNASRE:giHfxehdsQQeqbpmwUR7@bodopartner.us-east-1/TEST_DB/PUBLIC?warehouse=DEMO_WH&session_parameters=%7B%22schema%22%3A%22PUBLIC%22%2C%22role%22%3A%22ACCOUNTADMIN%22%7D"
+
 
 def conn_str_to_catalog(conn_str: str) -> Catalog:
     """
@@ -48,6 +54,8 @@ def conn_str_to_catalog(conn_str: str) -> Catalog:
         from pyiceberg.catalog.glue import GlueCatalog
 
         catalog = GlueCatalog
+        # Every instance of the Glue catalog can be used to access all Glue resources
+        cache_key = "glue"
 
     match parse_res.scheme:
         case (
@@ -61,16 +69,22 @@ def conn_str_to_catalog(conn_str: str) -> Catalog:
 
             catalog = DirCatalog
             properties[WAREHOUSE_LOCATION] = base_url
+            cache_key = base_url
+
         case "iceberg+http" | "iceberg+https" | "iceberg+rest":
             from pyiceberg.catalog.rest import RestCatalog
 
             catalog = RestCatalog
             properties[URI] = base_url
+            cache_key = base_url
+
         case "iceberg+thrift":
             from pyiceberg.catalog.hive import HiveCatalog
 
             catalog = HiveCatalog
             properties[URI] = base_url
+            cache_key = base_url
+
         case "iceberg+arn":
             from .s3_tables import (
                 S3TABLES_REGION,
@@ -86,6 +100,7 @@ def conn_str_to_catalog(conn_str: str) -> Catalog:
             if not parsed:
                 raise ValueError(f"Invalid S3 Tables ARN: {conn_str}")
             properties[S3TABLES_REGION] = parsed.group(1)
+            cache_key = properties[S3TABLES_TABLE_BUCKET_ARN]
 
         case "iceberg+snowflake":
             from bodo.io.snowflake import parse_conn_str
@@ -95,7 +110,9 @@ def conn_str_to_catalog(conn_str: str) -> Catalog:
             catalog = SnowflakeCatalog
             properties[URI] = base_url
             # Need to extract properties from the connection string and add them
-            properties = {**properties, **(parse_conn_str(base_url))}
+            comps = parse_conn_str(base_url)
+            properties = {**properties, **comps}
+            cache_key = comps["account"]
 
         case _:
             raise ValueError(
@@ -109,4 +126,9 @@ def conn_str_to_catalog(conn_str: str) -> Catalog:
                 f"Checking '{conn_str}' ('{parse_res.scheme}')"
             )
 
-    return catalog("catalog", **properties)
+    if cache_key in CATALOG_CACHE:
+        return CATALOG_CACHE[cache_key]
+    else:
+        cat_inst = catalog("catalog", **properties)
+        CATALOG_CACHE[cache_key] = cat_inst
+        return cat_inst
