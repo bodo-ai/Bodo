@@ -653,7 +653,9 @@ def directory_of_files_common_filter(fname):
     return not (
         fname.endswith(".crc")  # Checksums
         or fname.endswith("_$folder$")  # HDFS directories in S3
-        or fname.startswith(".")  # Hidden files starting with .
+        or (
+            fname.startswith(".") and not fname.startswith("./")
+        )  # Hidden files starting with .
         or fname.startswith("_")
         and fname != "_delta_log"  # Hidden files starting with _ skip deltalake
     )
