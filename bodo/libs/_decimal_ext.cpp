@@ -101,13 +101,15 @@ std::string decimal_to_std_string(arrow::Decimal128 const& arrow_decimal,
         // We want to remove trailing zeroes after the decimal point.
         size_t last_char = str.length();
         while (true) {
-            if (str[last_char - 1] != '0')
+            if (str[last_char - 1] != '0') {
                 break;
+            }
             last_char--;
         }
         // position reduce str to 0.45  or 4.
-        if (str[last_char - 1] == '.')
+        if (str[last_char - 1] == '.') {
             last_char--;
+        }
 
         // Slice String to New Range
         str = str.substr(0, last_char);
@@ -2716,8 +2718,9 @@ array_info* decimal_array_to_str_array_py_entry(array_info* arr_) {
 PyMODINIT_FUNC PyInit_decimal_ext(void) {
     PyObject* m;
     MOD_DEF(m, "decimal_ext", "No docs", nullptr);
-    if (m == nullptr)
+    if (m == nullptr) {
         return nullptr;
+    }
 
     // init numpy
     import_array();
@@ -2725,8 +2728,9 @@ PyMODINIT_FUNC PyInit_decimal_ext(void) {
     bodo_common_init();
 
     // decimal_value should be exactly 128 bits to match Python
-    if (sizeof(decimal_value) != 16)
+    if (sizeof(decimal_value) != 16) {
         std::cerr << "invalid decimal struct size" << std::endl;
+    }
 
     // These are all C functions, so they don't throw any exceptions.
     // We might still need to add better error handling in the future.

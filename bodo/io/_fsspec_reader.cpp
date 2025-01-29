@@ -193,8 +193,9 @@ static PyMethodDef ext_methods[] = {
 PyMODINIT_FUNC PyInit_fsspec_reader(void) {
     PyObject *m;
     MOD_DEF(m, "fsspec_reader", "No docs", ext_methods);
-    if (m == nullptr)
+    if (m == nullptr) {
         return nullptr;
+    }
 
     return m;
 }

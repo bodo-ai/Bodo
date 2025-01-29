@@ -1773,10 +1773,6 @@ def test_series_to_frame(memory_leak_check):
     def impl3(S, name):
         return S.to_frame(name)
 
-    # name is not constant
-    def impl4(S, A):
-        return S.to_frame(A[0])
-
     check_func(impl1, (), only_seq=True)
     # name is None case
     S = pd.Series([1, 2, 5, 1, 11, 12])
@@ -1790,11 +1786,6 @@ def test_series_to_frame(memory_leak_check):
         bodo.jit(impl2)(S)
 
     check_func(impl3, (S, "A"))
-    with pytest.raises(
-        BodoError,
-        match=r"Series.to_frame\(\): output column name should be known at compile time",
-    ):
-        bodo.jit(impl4)(S, ["A", "B"])
 
 
 def test_series_drop_inplace_check(memory_leak_check):

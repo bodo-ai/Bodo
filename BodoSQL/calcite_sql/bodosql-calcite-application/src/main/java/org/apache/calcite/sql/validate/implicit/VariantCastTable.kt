@@ -120,24 +120,24 @@ internal class VariantCastTable {
         }
 
         /**
-         * @param prec The precision of the decimal type.
+         * @param precision The precision of the decimal type.
          * @return An integer type that can represent it.
          */
-        private fun chooseIntegerType(prec: Int): SqlTypeName =
-            if (prec < 3) { SqlTypeName.TINYINT } else {
-                if (prec < 5) { SqlTypeName.SMALLINT } else {
-                    if (prec < 10) { SqlTypeName.INTEGER } else { SqlTypeName.BIGINT }
-                }
-            }
+        private fun chooseIntegerType(precision: Int): SqlTypeName = when {
+            precision < 3 -> SqlTypeName.TINYINT
+            precision < 5 -> SqlTypeName.SMALLINT
+            precision < 10 -> SqlTypeName.INTEGER
+            else -> SqlTypeName.BIGINT
+        }
 
         /**
          * @param precisions: the precision that each argument should be casted to.
          *
          * @return A function that returns the type to implicitly cast each variant
-         * arguments to, where each argument is casted to a decimal type with the
+         * arguments to, where each argument is cast to a decimal type with the
          * specified precision.
          *
-         * Note: for the time being it is casted to an integer type based on
+         * Note: for the time being it is cast to an integer type based on
          * the precision. In future, we will switch this to use the correct
          * decimal type.
          */
@@ -614,7 +614,7 @@ internal class VariantCastTable {
             SqlLibraryOperators.TRANSLATE3 to anyArgVarcharCast,
             StringOperatorTable.CHARINDEX to varcharVarcharIntegerCast,
             StringOperatorTable.EDITDISTANCE to varcharVarcharIntegerCast,
-            StringOperatorTable.POSITION to varcharVarcharIntegerCast,
+            SqlStdOperatorTable.POSITION to varcharVarcharIntegerCast,
             SqlStdOperatorTable.REPLACE to anyArgVarcharCast,
             SqlStdOperatorTable.SUBSTRING to varcharBigintBigintCast,
             StringOperatorTable.SUBSTR to varcharBigintBigintCast,

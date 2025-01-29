@@ -114,6 +114,7 @@ def ec2_get_monthly_travels_weather(weather_dataset, hvfhv_dataset):
         n_workers=4,
         scheduler_instance_type="c6i.xlarge",
         worker_instance_type="r6i.16xlarge",
+        docker_image="daskdev/dask:2024.9.1-py3.10",
         # Region for accessing bodo-example-data
         region="us-east-2",
         env_vars=env_vars,

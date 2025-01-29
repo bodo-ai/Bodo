@@ -610,11 +610,11 @@ class ArrowFilterVisitor(FilterVisitor[VisitorOut]):
             # with parquet (see test_read_partitions_string_int).
             # We skip this with Iceberg because partitions are hidden.
             if col_type == types.unicode_type:
-                col_cast = ".cast(pyarrow.string(), safe=False)"
+                col_cast = ".cast(pa.string(), safe=False)"
             elif isinstance(col_type, types.Integer):
                 # all arrow types integer type names are the same as numba
                 # type names.
-                col_cast = f".cast(pyarrow.{col_type.name}(), safe=False)"
+                col_cast = f".cast(pa.{col_type.name}(), safe=False)"
             else:
                 # Currently arrow support int and string partitions, so we only capture those casts
                 # https://github.com/apache/arrow/blob/230afef57f0ccc2135ced23093bac4298d5ba9e4/python/pyarrow/parquet.py#L989
@@ -848,7 +848,7 @@ def determine_filter_cast(
             bodo.datetime64ns,
             bodo.pd_timestamp_tz_naive_type,
         ):  # pragma: no cover
-            return ".cast(pyarrow.timestamp('ns'), safe=False)", ""
+            return ".cast(pa.timestamp('ns'), safe=False)", ""
         elif rhs_scalar_typ == types.unicode_type and lhs_scalar_typ in (
             bodo.datetime64ns,
             bodo.pd_timestamp_tz_naive_type,
@@ -860,17 +860,17 @@ def determine_filter_cast(
                 raise BodoError(
                     f"Cannot cast {type_name} values with isin filter pushdown."
                 )
-            return col_cast, ".cast(pyarrow.timestamp('ns'), safe=False)"
+            return col_cast, ".cast(pa.timestamp('ns'), safe=False)"
         elif lhs_scalar_typ == bodo.datetime_date_type and rhs_scalar_typ in (
             bodo.datetime64ns,
             bodo.pd_timestamp_tz_naive_type,
         ):
-            return ".cast(pyarrow.timestamp('ns'), safe=False)", ""
+            return ".cast(pa.timestamp('ns'), safe=False)", ""
         elif rhs_scalar_typ == bodo.datetime_date_type and lhs_scalar_typ in (
             bodo.datetime64ns,
             bodo.pd_timestamp_tz_naive_type,
         ):  # pragma: no cover
-            return col_cast, ".cast(pyarrow.timestamp('ns'), safe=False)"
+            return col_cast, ".cast(pa.timestamp('ns'), safe=False)"
     return col_cast, ""
 
 

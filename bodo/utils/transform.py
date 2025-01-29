@@ -801,6 +801,13 @@ def get_const_value_inner(
         )
         return value[index]
 
+    if is_expr(var_def, "static_getitem"):
+        index = var_def.index
+        value = get_const_value_inner(
+            func_ir, var_def.value, arg_types, typemap, updated_containers
+        )
+        return value[index]
+
     # list/set/dict cases
 
     # try dict.keys()
@@ -1698,13 +1705,18 @@ def set_ith_arg_to_omitted_value(
     assert call_type.args[pos_idx] == types.Omitted(
         expected_existing_value
     ), f"Omitted({expected_existing_value}) {pos_idx}th argument expected"
-    pass_info.calltypes[rhs] = pass_info.typemap[rhs.func.name].get_call_type(
+    new_sig = pass_info.typemap[rhs.func.name].get_call_type(
         pass_info.typingctx,
         call_type.args[:pos_idx]
         + (types.Omitted(new_value),)
         + call_type.args[pos_idx + 1 :],
         {},
     )
+    # We use Numba's type refinement to update output type for streaming states
+    # which needs preserved here.
+    if isinstance(call_type.return_type, bodo.libs.streaming.base.StreamingStateType):
+        new_sig = new_sig.replace(return_type=call_type.return_type)
+    pass_info.calltypes[rhs] = new_sig
 
 
 def set_last_arg_to_true(pass_info, rhs):

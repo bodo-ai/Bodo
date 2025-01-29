@@ -9,7 +9,6 @@ import com.bodosql.calcite.ddl.DDLExecutionResult;
 import com.bodosql.calcite.ddl.GenerateDDLTypes;
 import com.bodosql.calcite.prepare.AbstractPlannerImpl;
 import com.bodosql.calcite.prepare.PlannerImpl;
-import com.bodosql.calcite.prepare.PlannerType;
 import com.bodosql.calcite.schema.BodoSqlSchema;
 import com.bodosql.calcite.schema.RootSchema;
 import com.bodosql.calcite.table.ColumnDataTypeInfo;
@@ -96,8 +95,8 @@ public class RelationalAlgebraGenerator {
   /** Store the type system being used to access timezone info during Bodo codegen */
   private final RelDataTypeSystem typeSystem;
 
-  /** Which planner should be utilized. */
-  private final PlannerType plannerType;
+  /** Should the planner output streaming code. */
+  private final boolean isStreaming;
 
   /** The Bodo verbose level. This is used to control code generated and/or compilation info. */
   private final int verboseLevel;
@@ -125,9 +124,6 @@ public class RelationalAlgebraGenerator {
 
   /** Should we read TIMESTAMP_TZ as its own type instead of TIMESTAMP_LTZ */
   public static boolean enableTimestampTz = false;
-
-  /** Should we enabled planner nodes to insert runtime filters for Joins */
-  public static boolean enableRuntimeJoinFilters = false;
 
   /**
    * Should we insert placeholders for operator IDs to minimize codegen changes with respect to plan
@@ -165,7 +161,7 @@ public class RelationalAlgebraGenerator {
    */
   private void setupPlanner(List<SchemaPlus> defaultSchemas, RelDataTypeSystem typeSystem) {
     PlannerImpl.Config config =
-        new PlannerImpl.Config(defaultSchemas, typeSystem, plannerType, sqlStyle);
+        new PlannerImpl.Config(defaultSchemas, typeSystem, sqlStyle, isStreaming);
     try {
       this.planner = new PlannerImpl(config);
     } catch (Exception e) {
@@ -191,15 +187,14 @@ public class RelationalAlgebraGenerator {
       @NonNull boolean hideCredentials,
       @NonNull boolean enableSnowflakeIcebergTables,
       @NonNull boolean enableTimestampTz,
-      @NonNull boolean enableRuntimeJoinFilters,
       @NonNull boolean enableStreamingSort,
       @NonNull boolean enableStreamingSortLimitOffset,
       @NonNull String sqlStyle,
       @NonNull boolean coveringExpressionCaching,
       @NonNull boolean prefetchSFIceberg,
       @Nullable String defaultTz) {
+    this.isStreaming = isStreaming;
     this.catalog = catalog;
-    this.plannerType = choosePlannerType(isStreaming);
     this.verboseLevel = verboseLevel;
     this.tracingLevel = tracingLevel;
     this.streamingBatchSize = streamingBatchSize;
@@ -307,7 +302,6 @@ public class RelationalAlgebraGenerator {
     this.hideCredentials = hideCredentials;
     this.enableSnowflakeIcebergTables = enableSnowflakeIcebergTables;
     this.enableTimestampTz = enableTimestampTz;
-    this.enableRuntimeJoinFilters = enableRuntimeJoinFilters;
     this.coveringExpressionCaching = coveringExpressionCaching;
     this.prefetchSFIceberg = prefetchSFIceberg;
   }
@@ -528,14 +522,6 @@ public class RelationalAlgebraGenerator {
 
   Map<String, String> getLoweredGlobalVariables() {
     return this.loweredGlobalVariables;
-  }
-
-  private static PlannerType choosePlannerType(boolean isStreaming) {
-    if (isStreaming) {
-      return PlannerType.STREAMING;
-    } else {
-      return PlannerType.VOLCANO;
-    }
   }
 
   // ~~~~~~~~~~~~~Called by the Python Entry Points~~~~~~~~~~~~~~

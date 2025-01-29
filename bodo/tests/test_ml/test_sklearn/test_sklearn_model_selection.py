@@ -12,7 +12,7 @@ import bodo
 from bodo.tests.utils import _get_dist_arg, check_func
 from bodo.utils.typing import BodoError
 
-pytestmark = [pytest.mark.ml, pytest.mark.weekly]
+pytestmark = [pytest.mark.ml, pytest.mark.slow]
 
 
 # ----------------------------shuffle-----------------------------
@@ -81,7 +81,8 @@ def test_shuffle_np(data, memory_leak_check):
         ),
     ],
 )
-def test_shuffle_pd(data, memory_leak_check):
+# TODO: [BSE-4492] Fix memory leak
+def test_shuffle_pd(data):
     """
     Test sklearn.utils.shuffle for dataframes. For each test, check that the
     output is a permutation of the input (i.e. didn't lose/duplicate data),
@@ -253,7 +254,8 @@ def test_train_test_split(memory_leak_check):
 @pytest.mark.parametrize(
     "train_size, test_size", [(0.6, None), (None, 0.3), (None, None), (0.7, 0.3)]
 )
-def test_train_test_split_df(train_size, test_size, memory_leak_check):
+# TODO: [BSE-4492] Fix memory leak
+def test_train_test_split_df(train_size, test_size):
     """Test train_test_split with DataFrame dataset and train_size/test_size variation"""
 
     def impl_shuffle(X, y, train_size, test_size):

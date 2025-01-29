@@ -140,17 +140,16 @@ def decode_if_dict_array_overload(A):
 
     if isinstance(A, types.BaseTuple):
         n = len(A.types)
-        func_text = "def f(A):\n"
+        func_text = "def bodo_decode_if_dict_array_basetuple(A):\n"
         res = ",".join(f"decode_if_dict_array(A[{i}])" for i in range(n))
         func_text += "  return ({}{})\n".format(res, "," if n == 1 else "")
-        loc_vars = {}
-        exec(func_text, {"decode_if_dict_array": decode_if_dict_array}, loc_vars)
-        impl = loc_vars["f"]
-        return impl
+        return bodo.utils.utils.bodo_exec(
+            func_text, {"decode_if_dict_array": decode_if_dict_array}, {}, globals()
+        )
 
     if isinstance(A, types.List):
 
-        def impl(A):  # pragma: no cover
+        def bodo_decode_if_dict_array_list(A):  # pragma: no cover
             n = 0
             for a in A:
                 n += 1
@@ -159,20 +158,20 @@ def decode_if_dict_array_overload(A):
                 ans.append(decode_if_dict_array(A[i]))
             return ans
 
-        return impl
+        return bodo_decode_if_dict_array_list
     if A == bodo.dict_str_arr_type:
         return lambda A: A._decode()  # pragma: no cover
 
     if isinstance(A, bodo.SeriesType):
 
-        def impl(A):  # pragma: no cover
+        def bodo_decode_if_dict_array_series(A):  # pragma: no cover
             arr = bodo.hiframes.pd_series_ext.get_series_data(A)
             index = bodo.hiframes.pd_series_ext.get_series_index(A)
             name = bodo.hiframes.pd_series_ext.get_series_name(A)
             out_arr = decode_if_dict_array(arr)
             return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
-        return impl
+        return bodo_decode_if_dict_array_series
 
     if isinstance(A, bodo.DataFrameType):
         if A.is_table_format:
@@ -2273,6 +2272,13 @@ def _gen_objmode_overload(
 
         # Matplotlib specifies some arguments as `<deprecated parameter>`.
         # We can't support them, and it breaks our infrastructure, so omit them.
+        #
+        def get_default(default_val):
+            match default_val:
+                case str():
+                    return "'" + default_val + "'"
+                case _:
+                    return str(default_val)
 
         args = func_spec.args[1:] if attr_name else func_spec.args[:]
         arg_strs = []
@@ -2280,7 +2286,7 @@ def _gen_objmode_overload(
             if i < n_pos_args:
                 arg_strs.append(arg)
             elif str(defaults[i - n_pos_args]) != "<deprecated parameter>":
-                arg_strs.append(arg + "=" + str(defaults[i - n_pos_args]))
+                arg_strs.append(arg + "=" + get_default(defaults[i - n_pos_args]))
             else:
                 args.remove(arg)
 
@@ -2690,8 +2696,6 @@ def is_safe_arrow_cast(lhs_scalar_typ, rhs_scalar_typ):
 def register_type(type_name, type_value):
     """register a data type to be used in objmode blocks"""
     import bodo.spawn.spawner
-    from bodo.mpi4py import MPI
-    from bodo.spawn.spawner import CommandType
 
     # check input
     if not isinstance(type_name, str):
@@ -2714,9 +2718,7 @@ def register_type(type_name, type_value):
     # TODO[BSE-4170]: simplify test flags
     if bodo.spawn_mode or bodo.tests.utils.test_spawn_mode_enabled:
         spawner = bodo.spawn.spawner.get_spawner()
-        bcast_root = MPI.ROOT if bodo.get_rank() == 0 else MPI.PROC_NULL
-        spawner.worker_intercomm.bcast(CommandType.REGISTER_TYPE.value, bcast_root)
-        spawner.worker_intercomm.bcast((type_name, type_value), bcast_root)
+        spawner.register_type(type_name, type_value)
 
 
 # boxing TypeRef is necessary for passing type to objmode calls
@@ -3004,7 +3006,7 @@ if PYVERSION >= (3, 12):
     def overload_warn(
         message, category=None, stacklevel=1, source=None, skip_file_prefixes=None
     ):
-        def impl(
+        def overload_warn_impl(
             message, category=None, stacklevel=1, source=None, skip_file_prefixes=None
         ):  # pragma: no cover
             if bodo.get_rank() == 0:
@@ -3019,7 +3021,7 @@ if PYVERSION >= (3, 12):
                         skip_file_prefixes=skip_file_prefixes,
                     )
 
-        return impl
+        return overload_warn_impl
 
 else:
     gen_objmode_func_overload(warnings.warn, "none")

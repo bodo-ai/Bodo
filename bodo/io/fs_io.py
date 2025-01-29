@@ -4,11 +4,13 @@ S3 & Hadoop file system supports, and file system dependent calls
 
 import glob
 import os
+import typing as pt
 import warnings
-from urllib.parse import urlparse
+from urllib.parse import ParseResult, urlparse
 
 import llvmlite.binding as ll
 import numpy as np
+import pyarrow as pa
 from fsspec.implementations.arrow import (
     ArrowFile,
     ArrowFSWrapper,
@@ -25,6 +27,7 @@ from numba.extending import (
     register_model,
     unbox,
 )
+from pyarrow.fs import FSSpecHandler, PyFileSystem
 
 import bodo
 from bodo.ext import arrow_cpp
@@ -34,6 +37,9 @@ from bodo.libs.distributed_api import Reduce_Type
 from bodo.libs.str_ext import unicode_to_utf8, unicode_to_utf8_and_len
 from bodo.utils.typing import BodoError, BodoWarning, get_overload_constant_dict
 from bodo.utils.utils import AWSCredentials, check_java_installation
+
+# Same as _fs_io.cpp
+GCS_RETRY_LIMIT_SECONDS = 2
 
 
 # ----- monkey-patch fsspec.implementations.arrow.ArrowFSWrapper._open --------
@@ -130,6 +136,19 @@ def validate_gcsfs_installed():
         )
 
 
+def validate_huggingface_hub_installed():
+    """
+    Validate that huggingface_hub is installed. Raise an error if not.
+    """
+    try:
+        import huggingface_hub  # noqa
+    except ImportError:
+        raise BodoError(
+            "Cannot import huggingface_hub, which is required for reading from Hugging Face."
+            " Please make sure the huggingface_hub package is installed."
+        )
+
+
 def get_s3_fs(
     region=None, storage_options=None, aws_credentials: AWSCredentials | None = None
 ):
@@ -208,6 +227,56 @@ def get_s3_fs_from_path(
     return get_s3_fs(region, storage_options)
 
 
+def get_gcs_fs(path, storage_options=None):
+    """Get PyArrow GcsFileSystem object to read GCS path. Tries accessing the path
+    with anonymous=True if not authenticated since Arrow doesn't try automatically.
+    """
+    import datetime
+
+    from pyarrow.fs import GcsFileSystem
+
+    # PyArrow seems to hang for a long time if retry isn't set
+    options = {"retry_time_limit": datetime.timedelta(seconds=GCS_RETRY_LIMIT_SECONDS)}
+
+    anon = False
+    if storage_options:
+        anon = storage_options.pop("anon", anon)
+        anon = storage_options.pop("anonymous", anon)
+        options.update(storage_options)
+
+    fs = GcsFileSystem(anonymous=anon, **options)
+
+    if anon:
+        return fs
+
+    # Try with anonymous=True if not authenticated since Arrow doesn't try automatically
+    try:
+        parsed_url = urlparse(path)
+        path_ = (parsed_url.netloc + parsed_url.path).rstrip("/")
+        fs.get_file_info(path_)
+        return fs
+    except OSError as e:
+        if "Could not create a OAuth2 access token to authenticate the request" in str(
+            e
+        ):
+            return GcsFileSystem(anonymous=True, **options)
+        raise e
+
+
+def get_hf_fs(storage_options=None):
+    """Create an Arrow file system object for reading Hugging Face datasets."""
+    validate_huggingface_hub_installed()
+    import huggingface_hub
+    from pyarrow.fs import FSSpecHandler, PyFileSystem
+
+    options = {}
+    if storage_options:
+        options.update(storage_options)
+
+    fs = huggingface_hub.HfFileSystem(**options)
+    return PyFileSystem(FSSpecHandler(fs))
+
+
 # hdfs related functions(hdfs_list_dir_fnames) should be included in
 # coverage once hdfs tests are included in CI
 def get_hdfs_fs(path):  # pragma: no cover
@@ -256,9 +325,9 @@ def gcs_list_dir_fnames(path):
     return [f.split("/")[-1] for f in fs.ls(path)]
 
 
-def s3_is_directory(fs, path):
+def pa_fs_is_directory(fs, path):
     """
-    Return whether s3 path is a directory or not
+    Return whether a path (S3, GCS, ...) is a directory or not
     """
     from pyarrow import fs as pa_fs
 
@@ -281,11 +350,11 @@ def s3_is_directory(fs, path):
         # credential issues, region issues, etc. in pyarrow (unlike s3fs).
         # So we include a blanket message to verify these details.
         raise BodoError(
-            f"error from pyarrow S3FileSystem: {type(e).__name__}: {str(e)}\n{bodo_error_msg}"
+            f"error from pyarrow FileSystem: {type(e).__name__}: {str(e)}\n{bodo_error_msg}"
         )
 
 
-def s3_list_dir_fnames(fs, path):
+def pa_fs_list_dir_fnames(fs, path):
     """
     If path is a directory, return all file names in the directory.
     This returns the base name without the path:
@@ -301,7 +370,7 @@ def s3_list_dir_fnames(fs, path):
         # with the name of the directory. If there is, we have to omit it
         # because pq.ParquetDataset will throw Invalid Parquet file size is 0
         # bytes
-        if s3_is_directory(fs, path):
+        if pa_fs_is_directory(fs, path):
             options = urlparse(path)
             # Remove the s3:// prefix if it exists (and other path sanitization)
             path_ = (options.netloc + options.path).rstrip("/")
@@ -329,7 +398,7 @@ def s3_list_dir_fnames(fs, path):
         # credential issues, region issues, etc. in pyarrow (unlike s3fs).
         # So we include a blanket message to verify these details.
         raise BodoError(
-            f"error from pyarrow S3FileSystem: {type(e).__name__}: {str(e)}\n{bodo_error_msg}"
+            f"error from pyarrow FileSystem: {type(e).__name__}: {str(e)}\n{bodo_error_msg}"
         )
 
     return file_names
@@ -494,6 +563,193 @@ def azure_storage_account_from_path(path: str) -> str | None:
     return parsed.username
 
 
+def expand_glob(protocol: str, fs: pa.fs.FileSystem | None, path: str) -> list[str]:
+    """
+    Return a list of path names that match glob pattern
+    given by path.
+
+    Args:
+        protocol (str): Protocol for the path. e.g.
+            "" -> local
+            "s3" -> S3
+        fs (pa.fs.FileSystem | None): Filesystem to use
+            for getting list of files. This can be None
+            in the local filesystem case, i.e. protocol
+            is an empty string.
+        path (str): Glob pattern.
+
+    Returns:
+        list[str]: List of files returned by expanding the glob
+            pattern.
+    """
+    if not protocol and fs is None:
+        from fsspec.implementations.local import LocalFileSystem
+
+        fs = LocalFileSystem()
+    elif fs is None:
+        raise ValueError(
+            f"glob: 'fs' cannot be None in the non-local ({protocol}) filesystem case!"
+        )
+
+    if isinstance(fs, pa.fs.FileSystem):
+        from fsspec.implementations.arrow import ArrowFSWrapper
+
+        fs = ArrowFSWrapper(fs)
+
+    try:
+        files = fs.glob(path)
+    except Exception:  # pragma: no cover
+        raise BodoError(f"glob pattern expansion not supported for {protocol}")
+
+    return files
+
+
+def getfs(
+    fpath: str | list[str],
+    protocol: str,
+    storage_options: dict[str, pt.Any] | None = None,
+    parallel: bool = False,
+) -> PyFileSystem | pa.fs.FileSystem:
+    """
+    Get filesystem for the provided file path(s).
+
+    Args:
+        fpath (str | list[str]): Filename or list of filenames.
+        protocol (str): Protocol for the filesystem. e.g. "" (for local), "s3", etc.
+        storage_options (Optional[dict], optional): Optional storage_options to
+            use when building the filesystem. Only supported in the S3 case
+            at this time. Defaults to None.
+        parallel (bool, optional): Whether this function is being called in parallel.
+            Defaults to False.
+
+    Returns:
+        Filesystem implementation. This is either a PyFileSystem wrapper over
+        s3fs/gcsfs or a native PyArrow filesystem.
+    """
+    # NOTE: add remote filesystems to REMOTE_FILESYSTEMS
+    if (
+        protocol == "s3"
+        and storage_options
+        and ("anon" not in storage_options or len(storage_options) > 1)
+    ):
+        # "anon" is the only storage_options supported by PyArrow
+        # If other storage_options fields are given,
+        # we need to use S3Fs to read instead
+        validate_s3fs_installed()
+        import s3fs
+
+        sopts = storage_options.copy()
+        if "AWS_S3_ENDPOINT" in os.environ and "endpoint_url" not in sopts:
+            sopts["endpoint_url"] = os.environ["AWS_S3_ENDPOINT"]
+        s3_fs = s3fs.S3FileSystem(
+            **sopts,
+        )
+        return PyFileSystem(FSSpecHandler(s3_fs))
+    if protocol == "s3":
+        return (
+            get_s3_fs_from_path(
+                fpath,
+                parallel=parallel,
+                storage_options=storage_options,
+            )
+            if not isinstance(fpath, list)
+            else get_s3_fs_from_path(
+                fpath[0],
+                parallel=parallel,
+                storage_options=storage_options,
+            )
+        )
+    if storage_options is not None and len(storage_options) > 0:
+        raise BodoError(
+            f"ParquetReader: `storage_options` is not supported for protocol {protocol}"
+        )
+
+    if protocol in {"gcs", "gs"}:
+        validate_gcsfs_installed()
+        import gcsfs
+
+        # TODO pass storage_options to GCSFileSystem
+        google_fs = gcsfs.GCSFileSystem(token=None)
+        return PyFileSystem(FSSpecHandler(google_fs))
+    elif protocol == "http":
+        import fsspec
+
+        return PyFileSystem(FSSpecHandler(fsspec.filesystem("http")))
+    elif protocol in {"abfs", "abfss"} and bodo.enable_azure_fs:  # pragma: no cover
+        if not storage_options:
+            storage_options = {}
+        if "account_name" not in storage_options:
+            # Extract the storage account from the path, assumes all files are in the same storage account
+            account_name = azure_storage_account_from_path(
+                fpath if not isinstance(fpath, list) else fpath[0]
+            )
+            if account_name is not None:
+                storage_options["account_name"] = account_name
+
+        return abfs_get_fs(storage_options)
+    elif protocol in {"hdfs", "abfs", "abfss"}:  # pragma: no cover
+        return (
+            get_hdfs_fs(fpath) if not isinstance(fpath, list) else get_hdfs_fs(fpath[0])
+        )
+    # HuggingFace datasets
+    elif protocol == "hf":
+        return get_hf_fs(storage_options)
+    else:
+        return pa.fs.LocalFileSystem()
+
+
+@pt.overload
+def parse_fpath(fpath: str) -> tuple[str, ParseResult, str]: ...
+
+
+@pt.overload
+def parse_fpath(fpath: list[str]) -> tuple[list[str], ParseResult, str]: ...
+
+
+def parse_fpath(fpath: str | list[str]) -> tuple[str | list[str], ParseResult, str]:
+    """
+    Parse a filepath and extract properties such as the relevant
+    protocol, scheme, netloc, etc.
+    In case it's a list of filepaths, this validates that properties
+    such as the protocol and netloc (i.e. the bucket in the S3 case)
+    are the same for all filepaths in the list.
+
+    Args:
+        fpath (str | list[str]): Filepath or list of filepaths to parse.
+
+    Returns:
+        tuple[str | list[str], ParseResult, str]:
+            - str: Sanitized version of the filepath(s).
+            - ParseResult: ParseResult object containing the
+                scheme, netloc, etc.
+            - str: The protocol associate with the filepath(s).
+                e.g. "" (local), "s3" (S3), etc.
+    """
+
+    if isinstance(fpath, list):
+        # list of file paths
+        parsed_url = urlparse(fpath[0])
+        protocol = parsed_url.scheme
+        bucket_name = parsed_url.netloc  # netloc can be empty string (e.g. non s3)
+        for i in range(len(fpath)):
+            f = fpath[i]
+            u_p = urlparse(f)
+            # make sure protocol and bucket name of every file matches
+            if u_p.scheme != protocol:
+                raise BodoError(
+                    "All parquet files must use the same filesystem protocol"
+                )
+            if u_p.netloc != bucket_name:
+                raise BodoError("All parquet files must be in the same S3 bucket")
+            fpath[i] = f.rstrip("/")
+    else:
+        parsed_url: ParseResult = urlparse(fpath)
+        protocol = parsed_url.scheme
+        fpath = fpath.rstrip("/")
+
+    return fpath, parsed_url, protocol
+
+
 def directory_of_files_common_filter(fname):
     # Ignore the same files as pyarrow,
     # https://github.com/apache/arrow/blob/4beb514d071c9beec69b8917b5265e77ade22fb3/python/pyarrow/parquet.py#L1039
@@ -504,6 +760,23 @@ def directory_of_files_common_filter(fname):
         or fname.startswith("_")
         and fname != "_delta_log"  # Hidden files starting with _ skip deltalake
     )
+
+
+def get_compression_from_file_name(fname: str):
+    """Get compression scheme from file name"""
+
+    compression = None
+
+    if fname.endswith(".gz"):
+        compression = "gzip"
+    elif fname.endswith(".bz2"):
+        compression = "bz2"
+    elif fname.endswith(".zip"):
+        compression = "zip"
+    elif fname.endswith(".xz"):
+        compression = "xz"
+
+    return compression
 
 
 def find_file_name_or_handler(path, ftype, storage_options=None):
@@ -522,11 +795,11 @@ def find_file_name_or_handler(path, ftype, storage_options=None):
         path: path to the object we are reading, this can be a file or a directory
         ftype: 'csv' or 'json'
     Returns:
-        (is_handler, file_name_or_handler, f_size, fs)
+        (is_handler, file_name_or_handler, fs)
         is_handler: True if file_name_or_handler is a handler,
                     False otherwise(file_name_or_handler is a file_name)
         file_name_or_handler: file_name or handler to pass to pd.read_csv()/pd.read_json()
-        f_size: size of file_name_or_handler
+        compression: compression scheme inferred from file name
         fs: file system for s3/hdfs
     """
     from urllib.parse import urlparse
@@ -539,10 +812,17 @@ def find_file_name_or_handler(path, ftype, storage_options=None):
 
     filter_func = directory_of_files_common_filter
 
-    if parsed_url.scheme == "s3":
+    # Use PyArrow FileSystem for S3, GCS, and Hugging Face
+    if parsed_url.scheme in ("s3", "gcs", "gs", "hf"):
         is_handler = True
-        fs = get_s3_fs_from_path(path, storage_options=storage_options)
-        all_files = s3_list_dir_fnames(fs, path)  # can return None if not dir
+        if parsed_url.scheme == "s3":
+            fs = get_s3_fs_from_path(path, storage_options=storage_options)
+        elif parsed_url.scheme == "hf":
+            fs = get_hf_fs(storage_options=storage_options)
+        else:
+            fs = get_gcs_fs(path, storage_options=storage_options)
+
+        all_files = pa_fs_list_dir_fnames(fs, path)  # can return None if not dir
         path_ = (parsed_url.netloc + parsed_url.path).rstrip("/")
         fname = path_
 
@@ -560,10 +840,6 @@ def find_file_name_or_handler(path, ftype, storage_options=None):
                 # TODO: test
                 raise BodoError(err_msg)
             fname = all_csv_files[0]
-
-        f_size = int(
-            fs.get_file_info(fname).size or 0
-        )  # will be None for directories, so convert to 0 if that's the case
 
         # Arrow's S3FileSystem has some performance issues when used
         # with pandas.read_csv, which we do at compile-time.
@@ -583,7 +859,6 @@ def find_file_name_or_handler(path, ftype, storage_options=None):
     elif parsed_url.scheme == "hdfs":  # pragma: no cover
         is_handler = True
         (fs, all_files) = hdfs_list_dir_fnames(path)
-        f_size = fs.get_file_info([parsed_url.path])[0].size
 
         if all_files:
             path = path.rstrip("/")
@@ -598,7 +873,6 @@ def find_file_name_or_handler(path, ftype, storage_options=None):
                 raise BodoError(err_msg)
             fname = all_csv_files[0]
             fname = urlparse(fname).path  # strip off hdfs://port:host/
-            f_size = fs.get_file_info([fname])[0].size
 
         file_name_or_handler = fs.open_input_file(fname)
     # TODO: this can be merged with hdfs path above when pyarrow's new
@@ -606,7 +880,6 @@ def find_file_name_or_handler(path, ftype, storage_options=None):
     elif parsed_url.scheme in ("abfs", "abfss"):  # pragma: no cover
         is_handler = True
         (fs, all_files) = abfs_list_dir_fnames(path)
-        f_size = fs.info(fname)["size"]
 
         if all_files:
             path = path.rstrip("/")
@@ -618,7 +891,6 @@ def find_file_name_or_handler(path, ftype, storage_options=None):
                 # TODO: test
                 raise BodoError(err_msg)
             fname = all_csv_files[0]
-            f_size = fs.info(fname)["size"]
             fname = urlparse(fname).path  # strip off abfs[s]://port:host/
 
         file_name_or_handler = fs.open(fname, "rb")
@@ -639,12 +911,13 @@ def find_file_name_or_handler(path, ftype, storage_options=None):
                 raise BodoError(err_msg)
             fname = all_csv_files[0]
 
-        f_size = os.path.getsize(fname)
         file_name_or_handler = fname
+
+    compression = get_compression_from_file_name(fname)
 
     # although fs is never used, we need to return it so that s3/hdfs
     # connections are not closed
-    return is_handler, file_name_or_handler, f_size, fs
+    return is_handler, file_name_or_handler, compression, fs
 
 
 def get_s3_bucket_region(s3_filepath, parallel):
@@ -696,7 +969,7 @@ def get_s3_bucket_region_wrapper(s3_filepath, parallel):  # pragma: no cover
     return bucket_loc
 
 
-@overload(get_s3_bucket_region_wrapper)
+@overload(get_s3_bucket_region_wrapper, jit_options={"cache": True})
 def overload_get_s3_bucket_region_wrapper(s3_filepath, parallel):
     def impl(s3_filepath, parallel):
         with bodo.no_warning_objmode(bucket_loc="unicode_type"):
@@ -711,7 +984,7 @@ def csv_write(path_or_buf, D, filename_prefix, is_parallel=False):  # pragma: no
     return None
 
 
-@overload(csv_write, no_unliteral=True)
+@overload(csv_write, no_unliteral=True, jit_options={"cache": True})
 def csv_write_overload(path_or_buf, D, filename_prefix, is_parallel=False):
     def impl(path_or_buf, D, filename_prefix, is_parallel=False):  # pragma: no cover
         # Assuming that path_or_buf is a string
@@ -813,7 +1086,7 @@ def arrow_filesystem_del(fs_instance):
     pass
 
 
-@overload(arrow_filesystem_del)
+@overload(arrow_filesystem_del, jit_options={"cache": True})
 def overload_arrow_filesystem_del(fs_instance):
     """Delete ArrowFs instance"""
 

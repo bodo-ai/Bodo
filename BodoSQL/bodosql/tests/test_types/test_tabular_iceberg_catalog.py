@@ -9,7 +9,7 @@ import pytest
 import bodo
 import bodosql
 from bodo.tests.iceberg_database_helpers.utils import (
-    get_spark_tabular,
+    get_spark,
 )
 from bodo.tests.user_logging_utils import (
     check_logger_msg,
@@ -219,7 +219,7 @@ def check_table_comment(
     if bodo.get_rank() != 0:
         return
 
-    spark = get_spark_tabular(tabular_connection)
+    spark = get_spark(tabular_connection)
     table_cmt = (
         spark.sql(f"DESCRIBE TABLE EXTENDED {schema}.{table_name}")
         .filter("col_name = 'Comment'")

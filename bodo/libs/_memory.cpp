@@ -851,8 +851,9 @@ static inline int64_t highest_power_of_2(int64_t N) {
                                  std::to_string(N) + ") must be >0");
     }
     // if N is a power of two simply return it
-    if (!(N & (N - 1)))
+    if (!(N & (N - 1))) {
         return N;
+    }
     // else set only the most significant bit
     return 0x8000000000000000UL >> (clzll(N));
 }
@@ -1859,8 +1860,9 @@ void BufferPool::print_stats() {
 
     fmt::dynamic_format_arg_store<fmt::format_context> store;
     store.push_back("");
-    for (const auto& x : col_widths)
+    for (const auto& x : col_widths) {
         store.push_back(x);
+    }
 
     fmt::println(stderr, "{0:─^{1}}", " Size Class Metrics ",
                  col_widths.size() * 3 +

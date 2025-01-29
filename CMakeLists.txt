@@ -221,6 +221,8 @@ else()
 find_package(AWSSDK REQUIRED COMPONENTS core)
 endif()
 
+find_package(CURL REQUIRED)
+find_package(OpenSSL REQUIRED)
 
 
 # ----------------------------- Download Apache Datasketches -------------------------
@@ -321,6 +323,7 @@ endif()
 # Build Package + Program Dependencies
 find_package(Python COMPONENTS Interpreter Development.Module REQUIRED)
 find_program(CYTHON_EXECUTABLE "cython" REQUIRED)
+find_program(PYTHON_EXECUTABLE "python" REQUIRED)
 
 # Include for All Targets in General
 if (WIN32)
@@ -430,6 +433,7 @@ add_custom_command(
   VERBATIM
   WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
   COMMAND "${CYTHON_EXECUTABLE}" --cplus -3 --output-file "bodo/io/pyfs.cpp" "bodo/io/pyfs.pyx"
+  COMMAND "${PYTHON_EXECUTABLE}" patch_pyfs.py
   COMMAND "${CMAKE_COMMAND}" -E copy "bodo/io/pyfs.cpp" "${CMAKE_CURRENT_BINARY_DIR}/bodo/io/pyfs.cpp"
   COMMENT "Cythonizing Source bodo/io/pyfs.pyx into bodo/io/pyfs.cpp"
 )
@@ -438,6 +442,7 @@ python_add_library(pyfs MODULE WITH_SOABI "bodo/io/pyfs.cpp")
 target_include_directories(pyfs PRIVATE ${BASE_INCLUDE_DIRS})
 target_link_directories(pyfs PRIVATE ${PYARROW_LIB_DIR} ${CONDA_LIB_DIR})
 target_link_libraries(pyfs PRIVATE arrow arrow_python)
+# target_compile_definitions(pyfs PRIVATE ARROW_PYTHON_EXPORTING)
 install(TARGETS pyfs DESTINATION "bodo/io/")
 
 # ------------------------ Cython Target - bodo.io.pyarrow_wrappers ---------------
@@ -455,7 +460,7 @@ python_add_library(pyarrow_wrappers MODULE WITH_SOABI "${pyarrow_wrappers_source
 target_include_directories(pyarrow_wrappers PRIVATE ${BASE_INCLUDE_DIRS})
 target_link_directories(pyarrow_wrappers PRIVATE ${PYARROW_LIB_DIR} ${CONDA_LIB_DIR} ${MPI_LIB_DIR})
 target_link_libraries(pyarrow_wrappers PRIVATE arrow arrow_python arrow_dataset "${MPI_LIBRARIES}")
-target_compile_definitions(pyarrow_wrappers PRIVATE ARROW_PYTHON_EXPORTING)
+# target_compile_definitions(pyarrow_wrappers PRIVATE ARROW_PYTHON_EXPORTING)
 install(TARGETS pyarrow_wrappers DESTINATION "bodo/io/")
 
 # ----------------------- Cython Target - bodo.io._hdfs -----------------------
@@ -473,6 +478,7 @@ python_add_library(_hdfs MODULE WITH_SOABI "bodo/io/_hdfs.cpp")
 target_include_directories(_hdfs PUBLIC ${BASE_INCLUDE_DIRS})
 target_link_directories(_hdfs PRIVATE ${PYARROW_LIB_DIR} ${CONDA_LIB_DIR})
 target_link_libraries(_hdfs PRIVATE arrow arrow_python)
+# target_compile_definitions(_hdfs PRIVATE ARROW_PYTHON_EXPORTING)
 install(TARGETS _hdfs DESTINATION "bodo/io/")
 
 # ---------------------- Cython Target - bodo.io.tracing ----------------------
@@ -511,6 +517,7 @@ python_add_library(memory MODULE WITH_SOABI "bodo/memory.cpp")
 target_include_directories(memory PRIVATE ${BASE_INCLUDE_DIRS} "${CMAKE_CURRENT_SOURCE_DIR}/bodo/")
 target_link_directories(memory PRIVATE ${PYARROW_LIB_DIR} ${CONDA_LIB_DIR})
 target_link_libraries(memory PRIVATE arrow arrow_python)
+# target_compile_definitions(memory PRIVATE ARROW_PYTHON_EXPORTING)
 install(TARGETS memory DESTINATION "bodo/")
 
 # ---------------------- Cython Target - bodo.tests.memory_tester -----------------------
@@ -537,6 +544,7 @@ python_add_library(
 target_include_directories(memory_tester PRIVATE ${BASE_INCLUDE_DIRS} "${CMAKE_CURRENT_SOURCE_DIR}/bodo/tests/")
 target_link_directories(memory_tester PRIVATE ${PYARROW_LIB_DIR} ${CONDA_LIB_DIR} ${MPI_LIB_DIR})
 target_link_libraries(memory_tester PRIVATE "${MPI_LIBRARIES}" arrow arrow_python fmt::fmt)
+# target_compile_definitions(memory_tester PRIVATE ARROW_PYTHON_EXPORTING)
 if(NOT(CMAKE_BUILD_TYPE STREQUAL "Release"))
   target_compile_definitions(
     memory_tester
@@ -698,7 +706,7 @@ if (NOT (CMAKE_BUILD_TYPE STREQUAL "Release") AND NOT DEFINED ENV{BODO_SKIP_CPP_
     "bodo/tests/test_query_profile_collector.cpp"
     "bodo/tests/test_theta_sketches.cpp"
     "bodo/tests/test_puffin.cpp"
-    "bodo/tests/test_iceberg_rest_aws_credentials_provider.cpp"
+    "bodo/tests/test_iceberg/test_iceberg_rest_aws_credentials_provider.cpp"
     "bodo/tests/test_sorted_window_computation.cpp"
     "bodo/tests/test_thread_pool.cpp"
     "bodo/tests/test_datatypes.cpp"
@@ -836,6 +844,9 @@ else()
     zstd
     aws-cpp-sdk-core
     ${Boost_LIBRARIES}
+    CURL::libcurl
+    OpenSSL::SSL 
+    OpenSSL::Crypto
   )
 endif()
 

@@ -1973,6 +1973,16 @@ def glue_catalog():
     return bodosql.GlueCatalog(warehouse=warehouse)
 
 
+@pytest.fixture
+def s3_tables_catalog():
+    """
+    Returns a s3 tables catalog object
+    """
+
+    warehouse = "arn:aws:s3tables:us-east-2:427443013497:bucket/unittest-bucket"
+    return bodosql.S3TablesCatalog(warehouse=warehouse)
+
+
 @pytest.fixture(
     params=[
         pytest.param(

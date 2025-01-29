@@ -193,11 +193,12 @@ void append_to_out_array(std::shared_ptr<arrow::Array> input_array,
         int64_t num_elems = end_offset - start_offset;
         // TODO: optimize
         for (int64_t i = 0; i < num_elems; i++) {
-            if (str_array->IsNull(start_offset + i))
+            if (str_array->IsNull(start_offset + i)) {
                 (void)str_builder->AppendNull();
-            else
+            } else {
                 (void)str_builder->AppendValues(
                     {str_array->GetString(start_offset + i)});
+            }
         }
     } else if (input_array->type_id() == arrow::Type::MAP) {
         std::shared_ptr<arrow::MapArray> map_array =
@@ -385,10 +386,11 @@ std::shared_ptr<array_info> RetrieveArray_SingleColumn_F_numpy(
             char* out_ptr = out_data1 + siztype * iRow;
             char* in_ptr;
             // To allow NaN values in the column.
-            if (idx >= 0)
+            if (idx >= 0) {
                 in_ptr = in_data1 + siztype * idx;
-            else
+            } else {
                 in_ptr = vectNaN.data();
+            }
             memcpy(out_ptr, in_ptr, siztype);
         }
     }
@@ -676,10 +678,11 @@ std::shared_ptr<array_info> RetrieveArray_SingleColumn_F(
                 char* out_ptr = out_data1 + siztype * iRow;
                 char* in_ptr;
                 // To allow NaN values in the column.
-                if (idx >= 0)
+                if (idx >= 0) {
                     in_ptr = in_data1 + siztype * idx;
-                else
+                } else {
                     in_ptr = vectNaN.data();
+                }
                 memcpy(out_ptr, in_ptr, siztype);
             }
             break;
@@ -958,11 +961,12 @@ std::shared_ptr<array_info> RetrieveArray_TwoColumns(
             char* out_ptr =
                 out_arr->data1<bodo_array_type::CATEGORICAL>() + siztype * iRow;
             char* in_ptr;
-            if (ArrRow.second >= 0)
+            if (ArrRow.second >= 0) {
                 in_ptr = ArrRow.first->data1<bodo_array_type::CATEGORICAL>() +
                          siztype * ArrRow.second;
-            else
+            } else {
                 in_ptr = vectNaN.data();
+            }
             memcpy(out_ptr, in_ptr, siztype);
         }
     }
@@ -985,11 +989,12 @@ std::shared_ptr<array_info> RetrieveArray_TwoColumns(
             char* out_ptr =
                 out_arr->data1<bodo_array_type::NUMPY>() + siztype * iRow;
             char* in_ptr;
-            if (ArrRow.second >= 0)
+            if (ArrRow.second >= 0) {
                 in_ptr = ArrRow.first->data1<bodo_array_type::NUMPY>() +
                          siztype * ArrRow.second;
-            else
+            } else {
                 in_ptr = vectNaN.data();
+            }
             memcpy(out_ptr, in_ptr, siztype);
         }
     }
@@ -1202,14 +1207,16 @@ std::pair<int, bool> process_arrow_bitmap(bool const& na_position_bis,
     }
     if (bit1 && !bit2) {
         int val = -1;
-        if (na_position_bis)
+        if (na_position_bis) {
             val = 1;
+        }
         return {val, true};
     }
     if (!bit1 && bit2) {
         int val = 1;
-        if (na_position_bis)
+        if (na_position_bis) {
             val = -1;
+        }
         return {val, true};
     }
     return {0, bit1};
@@ -1383,8 +1390,9 @@ int KeyComparisonAsPython_Column_impl<bodo_array_type::STRING>(
     bool bit2 = arr2->get_null_bit<bodo_array_type::STRING>(iRow2);
     // If bitmasks are different then we can conclude the comparison
     int reply = CompareNAValues(na_position_bis, bit1, bit2);
-    if (reply != 0)
+    if (reply != 0) {
         return reply;
+    }
     // If bitmasks are both false, then no need to compare the string
     // values.
     if (bit1) {
@@ -1395,8 +1403,9 @@ int KeyComparisonAsPython_Column_impl<bodo_array_type::STRING>(
         offset_t len2 = data2_2[iRow2 + 1] - data2_2[iRow2];
         // Compute minimal length
         offset_t minlen = len1;
-        if (len2 < len1)
+        if (len2 < len1) {
             minlen = len2;
+        }
         // From the common characters, we may be able to conclude.
         offset_t pos1_prev = data2_1[iRow1];
         offset_t pos2_prev = data2_2[iRow2];
@@ -1404,13 +1413,16 @@ int KeyComparisonAsPython_Column_impl<bodo_array_type::STRING>(
             (char*)arr1->data1<bodo_array_type::STRING>() + pos1_prev;
         char* data1_2 = (char*)arr2->data1() + pos2_prev;
         int test = std::memcmp(data1_2, data1_1, minlen);
-        if (test)
+        if (test) {
             return test;
+        }
         // If not, we may be able to conclude via the string length.
-        if (len1 > len2)
+        if (len1 > len2) {
             return -1;
-        if (len1 < len2)
+        }
+        if (len1 < len2) {
             return 1;
+        }
     }
     return 0;
 }
@@ -1450,8 +1462,9 @@ int KeyComparisonAsPython_Column_impl<bodo_array_type::DICT>(
     // If one bitmask is T and the other the reverse then they are
     // clearly not equal.
     int reply = CompareNAValues(na_position_bis, bit1, bit2);
-    if (reply != 0)
+    if (reply != 0) {
         return reply;
+    }
 
     // Currently we assume there are no null values in the dictionary
     // itself, so no special handling is needed, but this might change
@@ -1646,8 +1659,9 @@ bool KeyComparisonAsPython(
             na_position_bis, columns1[shift_key1 + iKey], iRow1,
             columns2[shift_key2 + iKey], iRow2);
         if (test) {
-            if (ascending)
+            if (ascending) {
                 return test > 0;
+            }
             return test < 0;
         }
     }
@@ -1903,7 +1917,7 @@ std::string GetTimestamptzString(const std::shared_ptr<array_info>& arr,
     int16_t offset_hours = std::abs(offset_mintues_raw) / 60;
     int16_t offset_minutes = std::abs(offset_mintues_raw) % 60;
     std::string sign = (offset_mintues_raw > 0 ? " +" : " -");
-    // Conver the offset to ±hh:mm format
+    // Convert the offset to ±hh:mm format
     std::string hour_str = std::to_string(offset_hours);
     std::string minute_str = std::to_string(offset_minutes);
     if (hour_str.size() == 1) {
@@ -1919,11 +1933,12 @@ std::string GetTimestamptzString(const std::shared_ptr<array_info>& arr,
     auto ts = std::gmtime(&seconds);
     char ts_buff[32];
     std::strftime(ts_buff, 32, "%Y-%m-%d %T", ts);
-    // Connvert the subsecond components into a length-9 string
+    // Convert the subsecond components into a length-9 string
     // by left-padding with zeros
     std::string subsecond_str = std::to_string(subsecond);
-    while (subsecond_str.size() < 9)
+    while (subsecond_str.size() < 9) {
         subsecond_str = "0" + subsecond_str;
+    }
     return std::string(ts_buff) + "." + subsecond_str + sign + hour_str + ":" +
            minute_str;
 }
@@ -1934,8 +1949,9 @@ void DEBUG_append_to_primitive_T(const T* values, int64_t offset,
                                  const std::vector<uint8_t>& valid_elems) {
     string_builder += "[";
     for (int64_t i = 0; i < length; i++) {
-        if (i > 0)
+        if (i > 0) {
             string_builder += ",";
+        }
         if (valid_elems[i]) {
             T val = values[offset + i];
             string_builder += std::to_string(val);
@@ -1969,8 +1985,9 @@ void DEBUG_append_to_primitive_decimal(
     std::string& string_builder, const std::vector<uint8_t>& valid_elems) {
     string_builder += "[";
     for (int64_t i = 0; i < length; i++) {
-        if (i > 0)
+        if (i > 0) {
             string_builder += ",";
+        }
         if (valid_elems[i]) {
             __int128_t val = values[offset + i];
             int scale = 18;
@@ -2060,8 +2077,9 @@ void DEBUG_append_to_out_array(std::shared_ptr<arrow::Array> input_array,
         auto map_array =
             std::dynamic_pointer_cast<arrow::MapArray>(input_array);
         for (int64_t idx = start_offset; idx < end_offset; idx++) {
-            if (idx > start_offset)
+            if (idx > start_offset) {
                 string_builder += ",";
+            }
             if (map_array->IsNull(idx)) {
                 string_builder += "None";
                 continue;
@@ -2078,8 +2096,9 @@ void DEBUG_append_to_out_array(std::shared_ptr<arrow::Array> input_array,
         auto struct_type =
             std::dynamic_pointer_cast<arrow::StructType>(struct_array->type());
         for (int64_t idx = start_offset; idx < end_offset; idx++) {
-            if (idx > start_offset)
+            if (idx > start_offset) {
                 string_builder += ",";
+            }
             if (struct_array->IsNull(idx)) {
                 string_builder += "None";
                 continue;
@@ -2087,8 +2106,9 @@ void DEBUG_append_to_out_array(std::shared_ptr<arrow::Array> input_array,
             string_builder += "{";
             for (int i = 0; i < struct_type->num_fields();
                  i++) {  // each field is an array
-                if (i > 0)
+                if (i > 0) {
                     string_builder += ", ";
+                }
                 DEBUG_append_to_out_array(struct_array->field(i), idx, idx + 1,
                                           string_builder);
             }
@@ -2105,12 +2125,14 @@ void DEBUG_append_to_out_array(std::shared_ptr<arrow::Array> input_array,
 #endif
         string_builder += "[";
         for (int64_t i = start_offset; i < end_offset; i++) {
-            if (i > 0)
+            if (i > 0) {
                 string_builder += ", ";
-            if (str_array->IsNull(i))
+            }
+            if (str_array->IsNull(i)) {
                 string_builder += "None";
-            else
+            } else {
                 string_builder += "\"" + str_array->GetString(i) + "\"";
+            }
         }
         string_builder += "]";
     } else if (input_array->type_id() == arrow::Type::DICTIONARY) {
@@ -2121,14 +2143,16 @@ void DEBUG_append_to_out_array(std::shared_ptr<arrow::Array> input_array,
 
         string_builder += "[";
         for (int64_t i = start_offset; i < end_offset; i++) {
-            if (i > 0)
+            if (i > 0) {
                 string_builder += ", ";
-            if (str_array->IsNull(i))
+            }
+            if (str_array->IsNull(i)) {
                 string_builder += "None";
-            else
+            } else {
                 string_builder +=
                     "\"" + dict_arr->GetString(str_array->GetValueIndex(i)) +
                     "\"";
+            }
         }
         string_builder += "]";
     } else {
@@ -2137,8 +2161,9 @@ void DEBUG_append_to_out_array(std::shared_ptr<arrow::Array> input_array,
             std::dynamic_pointer_cast<arrow::PrimitiveArray>(input_array);
         std::vector<uint8_t> valid_elems(num_elems, 0);
         size_t j = 0;
-        for (int64_t i = start_offset; i < start_offset + num_elems; i++)
+        for (int64_t i = start_offset; i < start_offset + num_elems; i++) {
             valid_elems[j++] = !primitive_array->IsNull(i);
+        }
         arrow::Type::type type = primitive_array->type()->id();
         DEBUG_append_to_primitive(type, primitive_array->values()->data(),
                                   start_offset, num_elems, string_builder,
@@ -2279,15 +2304,17 @@ void DEBUG_PrintVectorArrayInfo(
     int nRowMax = 0;
     for (int iCol = 0; iCol < nCol; iCol++) {
         int nRow = ListArr[iCol]->length;
-        if (nRow > nRowMax)
+        if (nRow > nRowMax) {
             nRowMax = nRow;
+        }
         ListLen[iCol] = nRow;
     }
     bodo::vector<bodo::vector<std::string>> ListListStr;
     for (int iCol = 0; iCol < nCol; iCol++) {
         bodo::vector<std::string> LStr = GetColumn_as_ListString(ListArr[iCol]);
-        for (int iRow = ListLen[iCol]; iRow < nRowMax; iRow++)
+        for (int iRow = ListLen[iCol]; iRow < nRowMax; iRow++) {
             LStr.emplace_back("");
+        }
         ListListStr.emplace_back(LStr);
     }
     bodo::vector<std::string> ListStrOut(nRowMax);
@@ -2301,19 +2328,22 @@ void DEBUG_PrintVectorArrayInfo(
         for (int iRow = 0; iRow < nRowMax; iRow++) {
             size_t elen = ListListStr[iCol][iRow].size();
             ListLen[iRow] = elen;
-            if (elen > maxlen)
+            if (elen > maxlen) {
                 maxlen = elen;
+            }
         }
         for (int iRow = 0; iRow < nRowMax; iRow++) {
             std::string str = ListStrOut[iRow] + " " + ListListStr[iCol][iRow];
             size_t diff = maxlen - ListLen[iRow];
-            for (size_t u = 0; u < diff; u++)
+            for (size_t u = 0; u < diff; u++) {
                 str += " ";
+            }
             ListStrOut[iRow] = str;
         }
     }
-    for (int iRow = 0; iRow < nRowMax; iRow++)
+    for (int iRow = 0; iRow < nRowMax; iRow++) {
         os << ListStrOut[iRow] << "\n";
+    }
 }
 
 void DEBUG_PrintSetOfColumn(
@@ -2337,8 +2367,9 @@ void DEBUG_PrintSetOfColumn(
     for (int iCol = 0; iCol < nCol; iCol++) {
         int nRow = ListArr[iCol]->length;
         os << " " << nRow;
-        if (nRow > nRowMax)
+        if (nRow > nRowMax) {
             nRowMax = nRow;
+        }
         ListLen[iCol] = nRow;
     }
     os << "\n";
@@ -2382,8 +2413,9 @@ void DEBUG_PrintRefct(std::ostream& os,
                       std::vector<std::shared_ptr<array_info>> const& ListArr) {
     int nCol = ListArr.size();
     auto GetNRTinfo = [](NRT_MemInfo* meminf) -> std::string {
-        if (meminf == nullptr)
+        if (meminf == nullptr) {
             return "NULL";
+        }
         return "(refct=" + std::to_string(meminf->refct) + ")";
     };
     for (int iCol = 0; iCol < nCol; iCol++) {
@@ -2416,8 +2448,9 @@ void DEBUG_PrintColumn(std::ostream& os,
        << " dtype=" << GetDtype_as_string(arr->dtype) << "\n";
     if (arr->arr_type == bodo_array_type::STRUCT) {
         os << "Fields: ";
-        for (auto f : arr->field_names)
+        for (auto f : arr->field_names) {
             os << f << " ";
+        }
         os << "\n";
     }
     bodo::vector<std::string> LStr = GetColumn_as_ListString(arr);

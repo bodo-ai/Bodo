@@ -7,7 +7,8 @@ Reading and Writing Iceberg in Bodo {#iceberg_read_write}
 BodoSQL can be used to read, create, or insert into an Iceberg table. Iceberg Tables are automatically detected by existing catalogs and are used during read:
 
 - Snowflake Iceberg Tables are automatically detected when using the [`SnowflakeCatalog`][snowflake-catalog-api].
-- Tables within the specified warehouse are automatically detected when using the [`TabularCatalog`][tabular-catalog-api].
+- Tables within the specified warehouse are automatically detected when using the [`GlueCatalog`][glue-catalog-api].
+- Tables within the specified warehouse are automatically detected when using the [`S3TablesCatalog`][s3-tables-catalog-api].
 - Hadoop Iceberg Catalogs and Tables are detected when using the [`FileSystemCatalog`][fs-catalog-api].
 - Other Catalogs supported in the Python APIs can be accessed via the [`TablePath`][table-path-api] API using the same [connection string syntax][iceberg-conn-str].
 
@@ -89,6 +90,11 @@ The following catalogs are supported:
     - Parameter `type` will be ignored if specified.
     - Parameter `warehouse` is required to create a table.
     - E.g. `iceberg+glue` or `iceberg+glue?warehouse=s3://<ICEBERG-BUCKET>`
+
+- S3 Tables Catalog
+    - Connection string must be of the form `iceberg+arn:aws:s3tables:<region>:<account_number>:bucket/<bucket>`
+    - `params` is unused
+    - E.g. `iceberg+arn:aws:s3tables:<region>:<account_number>:bucket/<bucket>`
 
 - Hive / Thrift Catalog
     - Used when `type=hive` is specified **or** when `<conn>` is `thrift`.

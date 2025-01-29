@@ -10,7 +10,7 @@ from sklearn.utils.validation import check_random_state
 import bodo
 from bodo.tests.utils import _get_dist_arg
 
-pytestmark = [pytest.mark.ml, pytest.mark.weekly]
+pytestmark = [pytest.mark.ml, pytest.mark.slow]
 
 # --------------------Linear SVC -----------------#
 # also load the iris dataset

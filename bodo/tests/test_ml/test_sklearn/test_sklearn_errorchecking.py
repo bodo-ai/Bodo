@@ -21,7 +21,7 @@ import bodo
 from bodo.tests.utils import _get_dist_arg
 from bodo.utils.typing import BodoError
 
-pytestmark = [pytest.mark.ml, pytest.mark.weekly]
+pytestmark = [pytest.mark.ml, pytest.mark.slow]
 
 
 def generate_X_y_regression(n_samples, n_features):

@@ -1098,6 +1098,33 @@ SqlDrop SqlDropSchema(Span s) :
 //     AddExpression2b(ExprContext.ACCEPT_SUB_QUERY, list)
 // }
 
+//SqlNode DatePartFunctionCall() :
+//{
+//    final Span s;
+//    final SqlOperator op;
+//    final SqlNode unit;
+//    final List<SqlNode> args;
+//    SqlNode e;
+//}
+//{
+//    <DATE_PART> { op = SqlLibraryOperators.DATE_PART; }
+//    { s = span(); }
+//    <LPAREN>
+//    (   unit = TimeUnitOrName() {
+//            args = startList(unit);
+//        }
+//    |   unit = Expression(ExprContext.ACCEPT_NON_QUERY) {
+//            args = startList(unit);
+//        }
+//    )
+//    <COMMA> e = Expression(ExprContext.ACCEPT_SUB_QUERY) {
+//        args.add(e);
+//    }
+//    <RPAREN> {
+//        return op.createCall(s.end(this), args);
+//    }
+//}
+
 SqlNode DatePartFunctionCall() :
 {
     final Span s;

@@ -367,8 +367,9 @@ arrow::Result<std::shared_ptr<arrow::fs::S3FileSystem>> init_s3fs_instance(
         options.region = std::string(default_region);
     }
     char *custom_endpoint = std::getenv("AWS_S3_ENDPOINT");
-    if (custom_endpoint)
+    if (custom_endpoint) {
         options.endpoint_override = std::string(custom_endpoint);
+    }
     if (aws_credentials_provider.get() != nullptr) {
         // Give ownership to S3FileSystem so the credentials_provider is
         // deallocated when the filesystem is destroyed
@@ -675,8 +676,9 @@ void s3_open_file(const char *fname,
 PyMODINIT_FUNC PyInit_s3_reader(void) {
     PyObject *m;
     MOD_DEF(m, "s3_reader", "No docs", nullptr);
-    if (m == nullptr)
+    if (m == nullptr) {
         return nullptr;
+    }
 
     // Both only ever called from C++
     SetAttrStringFromVoidPtr(m, init_s3_reader);

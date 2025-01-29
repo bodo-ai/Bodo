@@ -71,6 +71,7 @@ from numba.experimental.jitclass import decorators as jitclass_decorators
 from numba.extending import NativeValue, lower_builtin, typeof_impl
 from numba.core.utils import _dynamic_modname
 from numba.parfors.parfor import get_expr_args
+from numba.misc.appdirs import AppDirs
 
 from bodo.utils.python_310_bytecode_pass import (
     Bodo310ByteCodePass,
@@ -2961,6 +2962,36 @@ numba.core.lowering.Lower._lower_call_ExternalFunction = _lower_call_ExternalFun
 def CallConstraint_resolve(self, typeinfer, typevars, fnty):
     from bodo.transforms.type_inference.native_typer import bodo_resolve_call
     from bodo.transforms.type_inference.typeinfer import BodoFunction
+    from bodo.libs.streaming.base import StreamingStateType
+    from bodo.libs.streaming.groupby import (
+        groupby_build_consume_batch,
+        groupby_grouping_sets_build_consume_batch,
+    )
+    from bodo.libs.streaming.join import (
+        join_build_consume_batch,
+        join_probe_consume_batch,
+    )
+    from bodo.libs.streaming.window import window_build_consume_batch
+    from bodo.libs.streaming.union import union_consume_batch
+    from bodo.libs.streaming.sort import sort_build_consume_batch
+    from bodo.libs.table_builder import table_builder_append
+    from bodo.io.snowflake_write import snowflake_writer_append_table
+    from bodo.io.iceberg.stream_iceberg_write import iceberg_writer_append_table
+    from bodo.io.stream_parquet_write import parquet_writer_append_table
+
+    streaming_build_funcs = (
+        groupby_build_consume_batch,
+        groupby_grouping_sets_build_consume_batch,
+        join_build_consume_batch,
+        join_probe_consume_batch,
+        window_build_consume_batch,
+        union_consume_batch,
+        table_builder_append,
+        sort_build_consume_batch,
+        snowflake_writer_append_table,
+        iceberg_writer_append_table,
+        parquet_writer_append_table,
+    )
 
     assert fnty
     context = typeinfer.context
@@ -2975,6 +3006,9 @@ def CallConstraint_resolve(self, typeinfer, typevars, fnty):
     for a in itertools.chain(pos_args, kw_args.values()):
         # Forbids imprecise type except array of undefined dtype
         if not a.is_precise() and not isinstance(a, types.Array):
+            # Bodo change: allow streaming state type to be imprecise
+            if getattr(fnty, "typing_key", None) in streaming_build_funcs and isinstance(a, StreamingStateType):
+                continue
             return
 
     # Resolve call type
@@ -3032,6 +3066,10 @@ def CallConstraint_resolve(self, typeinfer, typevars, fnty):
         raise TypingError(msg)
 
     typeinfer.add_type(self.target, sig.return_type, loc=self.loc)
+
+    # Bodo change: update streaming state type
+    if getattr(fnty, "typing_key", None) in streaming_build_funcs and pos_args[0] != sig.args[0]:
+        typeinfer.add_type(self.args[0].name, sig.args[0], loc=self.loc)
 
     # If the function is a bound function and its receiver type
     # was refined, propagate it.
@@ -6847,3 +6885,65 @@ if _check_numba_change:  # pragma: no cover
 
 
 numba.core.funcdesc.FunctionDescriptor._from_python_function = _from_python_function
+
+
+class BodoCacheLocator(numba.core.caching._CacheLocator):
+    """
+    A CacheLocator for Numba that handles functions created from strings.
+    """
+    __slots__ = ('_py_file', '_cache_path', '_bytes_source')
+    registered_funcs = {}   # Holds mapping of generated function name to its source.
+    if os.environ.get("BODO_PLATFORM_CACHE_LOCATION") is not None:
+        cache_path = numba.config.CACHE_DIR
+    else:
+        appdirs = AppDirs(appname="bodo", appauthor=False)
+        cache_path = os.path.join(appdirs.user_cache_dir, ".bodo_strfunc_cache")
+
+    def __init__(self, py_func, py_file):
+        source = BodoCacheLocator.registered_funcs[py_func.__qualname__]
+        if isinstance(source, bytes):
+            self._bytes_source = source
+        else:
+            self._bytes_source = source.encode('utf-8')
+
+    def get_cache_path(self):
+        return BodoCacheLocator.cache_path
+
+    def get_source_stamp(self):
+        return hashlib.sha256(self._bytes_source).hexdigest()
+
+    def get_disambiguator(self):
+        firstlines = b''.join(self._bytes_source.splitlines(True)[:3])
+        return hashlib.sha256(firstlines).hexdigest()[:10]
+
+    @classmethod
+    def from_function(cls, py_func, py_file):
+        if not py_func.__qualname__.startswith("bodo"):
+            return
+        self = cls(py_func, py_file)
+        try:
+            self.ensure_cache_path()
+        except OSError:
+            # Cannot ensure the cache directory exists
+            return
+        return self
+
+    @classmethod
+    def register(cls, name, source):
+        """
+        There is no way to go from from a Python function object back to hashable source code
+        once you exec a string containing a function into existence.  For this purpose, we
+        use this function to associate what must be a unique function name with that function's
+        source code.  One way to get reproducible and almost certainly unique names is to append
+        a hash of the function's argument types to the function name.
+        """
+        if name not in cls.registered_funcs:
+            cls.registered_funcs[name] = source
+
+
+if hasattr(numba.core.caching, "CacheImpl"):
+    # Add the BodoCacheLocator to the set of Numba cache implementations.
+    # For each function Numba will try to cache, it will call from_function in the
+    # list of CacheLocators it has and uses the first one that doesn't return None.
+    # This allows for the caching of text-generation functions created through bodo_exec.
+    numba.core.caching.CacheImpl._locator_classes.append(BodoCacheLocator)

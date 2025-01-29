@@ -85,7 +85,7 @@ class BodoRelMdRowCount : RelMdRowCount() {
     fun getRowCount(
         rel: TableFunctionScan,
         mq: RelMetadataQuery,
-    ): Double? = (rel as TableFunctionScanBase).estimateRowCount(mq)
+    ): Double = (rel as TableFunctionScanBase).estimateRowCount(mq)
 
     /**
      * This is a copy of RelMdRowCount, but it also handles named parameters.
@@ -204,7 +204,7 @@ class BodoRelMdRowCount : RelMdRowCount() {
         mq: BodoRelMetadataQuery,
         comparison: RexNode,
     ): Pair<Double?, Double?> {
-        val leftCount = rel.left.getRowType().fieldCount
+        val leftCount = rel.left.rowType.fieldCount
         val valid = isValidDistinctCountJoinPredicate(comparison, leftCount)
         return if (valid) {
             val equalsCall = comparison as RexCall
