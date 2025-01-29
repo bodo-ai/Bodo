@@ -80,7 +80,6 @@ static inline DWORD __map_mmap_prot_file(const int prot) {
 
 static inline void* mmap(void* addr, size_t len, int prot, int flags,
                          int fildes, off_t off) {
-    std::cout << "calling windows mmap: " << std::endl;
     HANDLE fm, h;
 
     void* map = MAP_FAILED;

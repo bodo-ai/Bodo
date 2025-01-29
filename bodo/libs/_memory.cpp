@@ -149,8 +149,6 @@ SizeClass::SizeClass(
                    /*We need both read/write access*/ PROT_READ | PROT_WRITE,
                    MMAP_FLAGS, /*fd*/ -1,
                    /*offset*/ 0)))) {
-    printf("result of mmapping %lu bytes : %d", this->address_,
-           capacity * block_size);
     if (this->address_ == MAP_FAILED || this->address_ == nullptr) {
         throw std::runtime_error(
             fmt::format("SizeClass::SizeClass: Could not allocate memory for "
@@ -864,7 +862,6 @@ BufferPool::BufferPool(const BufferPoolOptions& options)
     : options_(std::move(options)),
       // Convert MiB to bytes
       memory_size_bytes_(options.memory_size * 1024 * 1024) {
-    std::cout << "entering buffer pool constuctor " << std::endl;
     // Verify that min-size-class is a power of 2
     if (((this->options_.min_size_class &
           (this->options_.min_size_class - 1)) != 0) ||
@@ -879,13 +876,10 @@ BufferPool::BufferPool(const BufferPoolOptions& options)
 
     // Calculate max possible size-class based on available memory
     // (i.e. highest power of 2 lower or equal to this->memory_size_bytes_).
-    std::cout << "getting next highest power of two " << std::endl;
     uint64_t max_size_class_possible_bytes =
         static_cast<uint64_t>(highest_power_of_2(this->memory_size_bytes_));
-    std::cout << "the size is " << max_size_class_possible_bytes << std::endl;
 
     if (min_size_class_bytes > max_size_class_possible_bytes) {
-        std::cout << "uh oh" << std::endl;
         throw std::runtime_error("BufferPool(): min_size_class " +
                                  std::to_string(min_size_class_bytes) +
                                  " is larger than available "
@@ -914,20 +908,18 @@ BufferPool::BufferPool(const BufferPoolOptions& options)
     }
 
     // Construct Storage Managers
-    std::cout << "making storage manager... " << std::endl;
     for (auto& storage_option : this->options_.storage_options) {
         auto manager = MakeStorageManager(storage_option, size_class_bytes_);
         // std::move is needed to push a unique_ptr
         this->storage_managers_.push_back(std::move(manager));
     }
-    std::cout << "done making storage manager" << std::endl;
 
     std::vector<size_t> size_class_num_frames(num_size_classes);
     for (uint8_t i = 0; i < num_size_classes; i++) {
         size_class_num_frames[i] = static_cast<size_t>(
             this->memory_size_bytes_ / size_class_bytes_[i]);
     }
-    std::cout << "allocate extra frames" << std::endl;
+
     if (this->options_.allocate_extra_frames()) {
         int64_t n_size_classes_ = static_cast<int64_t>(num_size_classes);
         constexpr int64_t zero = 0;
@@ -951,22 +943,15 @@ BufferPool::BufferPool(const BufferPoolOptions& options)
                 static_cast<double>(size_class_num_frames[i]) * 1.5);
         }
     }
-    std::cout << "done allocating extra frames" << std::endl;
 
-    std::cout << "creating " << num_size_classes << " size class objects"
-              << std::endl;
     // Create the SizeClass objects
     this->size_classes_.reserve(num_size_classes);
     for (uint8_t i = 0; i < num_size_classes; i++) {
-        std::cout << "creating size class ";
-        printf("%d", i);
-        std::cout << std::endl;
         this->size_classes_.emplace_back(std::make_unique<SizeClass>(
             i, std::span(this->storage_managers_), size_class_num_frames[i],
             size_class_bytes_[i], this->options_.spill_on_unpin,
             this->options_.move_on_unpin, this->options_.tracing_mode()));
     }
-    std::cout << "done constructor for BufferPool" << std::endl;
 }
 
 BufferPool::BufferPool() : BufferPool(BufferPoolOptions::Defaults()) {}
