@@ -35,6 +35,9 @@ from bodo.libs.str_ext import unicode_to_utf8, unicode_to_utf8_and_len
 from bodo.utils.typing import BodoError, BodoWarning, get_overload_constant_dict
 from bodo.utils.utils import AWSCredentials, check_java_installation
 
+# Same as _fs_io.cpp
+GCS_RETRY_LIMIT_SECONDS = 2
+
 
 # ----- monkey-patch fsspec.implementations.arrow.ArrowFSWrapper._open --------
 def fsspec_arrowfswrapper__open(self, path, mode="rb", block_size=None, **kwargs):
@@ -130,6 +133,19 @@ def validate_gcsfs_installed():
         )
 
 
+def validate_huggingface_hub_installed():
+    """
+    Validate that huggingface_hub is installed. Raise an error if not.
+    """
+    try:
+        import huggingface_hub  # noqa
+    except ImportError:
+        raise BodoError(
+            "Cannot import huggingface_hub, which is required for reading from Hugging Face."
+            " Please make sure the huggingface_hub package is installed."
+        )
+
+
 def get_s3_fs(
     region=None, storage_options=None, aws_credentials: AWSCredentials | None = None
 ):
@@ -208,6 +224,56 @@ def get_s3_fs_from_path(
     return get_s3_fs(region, storage_options)
 
 
+def get_gcs_fs(path, storage_options=None):
+    """Get PyArrow GcsFileSystem object to read GCS path. Tries accessing the path
+    with anonymous=True if not authenticated since Arrow doesn't try automatically.
+    """
+    import datetime
+
+    from pyarrow.fs import GcsFileSystem
+
+    # PyArrow seems to hang for a long time if retry isn't set
+    options = {"retry_time_limit": datetime.timedelta(seconds=GCS_RETRY_LIMIT_SECONDS)}
+
+    anon = False
+    if storage_options:
+        anon = storage_options.pop("anon", anon)
+        anon = storage_options.pop("anonymous", anon)
+        options.update(storage_options)
+
+    fs = GcsFileSystem(anonymous=anon, **options)
+
+    if anon:
+        return fs
+
+    # Try with anonymous=True if not authenticated since Arrow doesn't try automatically
+    try:
+        parsed_url = urlparse(path)
+        path_ = (parsed_url.netloc + parsed_url.path).rstrip("/")
+        fs.get_file_info(path_)
+        return fs
+    except OSError as e:
+        if "Could not create a OAuth2 access token to authenticate the request" in str(
+            e
+        ):
+            return GcsFileSystem(anonymous=True, **options)
+        raise e
+
+
+def get_hf_fs(storage_options=None):
+    """Create an Arrow file system object for reading Hugging Face datasets."""
+    validate_huggingface_hub_installed()
+    import huggingface_hub
+    from pyarrow.fs import FSSpecHandler, PyFileSystem
+
+    options = {}
+    if storage_options:
+        options.update(storage_options)
+
+    fs = huggingface_hub.HfFileSystem(**options)
+    return PyFileSystem(FSSpecHandler(fs))
+
+
 # hdfs related functions(hdfs_list_dir_fnames) should be included in
 # coverage once hdfs tests are included in CI
 def get_hdfs_fs(path):  # pragma: no cover
@@ -256,9 +322,9 @@ def gcs_list_dir_fnames(path):
     return [f.split("/")[-1] for f in fs.ls(path)]
 
 
-def s3_is_directory(fs, path):
+def pa_fs_is_directory(fs, path):
     """
-    Return whether s3 path is a directory or not
+    Return whether a path (S3, GCS, ...) is a directory or not
     """
     from pyarrow import fs as pa_fs
 
@@ -281,11 +347,11 @@ def s3_is_directory(fs, path):
         # credential issues, region issues, etc. in pyarrow (unlike s3fs).
         # So we include a blanket message to verify these details.
         raise BodoError(
-            f"error from pyarrow S3FileSystem: {type(e).__name__}: {str(e)}\n{bodo_error_msg}"
+            f"error from pyarrow FileSystem: {type(e).__name__}: {str(e)}\n{bodo_error_msg}"
         )
 
 
-def s3_list_dir_fnames(fs, path):
+def pa_fs_list_dir_fnames(fs, path):
     """
     If path is a directory, return all file names in the directory.
     This returns the base name without the path:
@@ -301,7 +367,7 @@ def s3_list_dir_fnames(fs, path):
         # with the name of the directory. If there is, we have to omit it
         # because pq.ParquetDataset will throw Invalid Parquet file size is 0
         # bytes
-        if s3_is_directory(fs, path):
+        if pa_fs_is_directory(fs, path):
             options = urlparse(path)
             # Remove the s3:// prefix if it exists (and other path sanitization)
             path_ = (options.netloc + options.path).rstrip("/")
@@ -329,7 +395,7 @@ def s3_list_dir_fnames(fs, path):
         # credential issues, region issues, etc. in pyarrow (unlike s3fs).
         # So we include a blanket message to verify these details.
         raise BodoError(
-            f"error from pyarrow S3FileSystem: {type(e).__name__}: {str(e)}\n{bodo_error_msg}"
+            f"error from pyarrow FileSystem: {type(e).__name__}: {str(e)}\n{bodo_error_msg}"
         )
 
     return file_names
@@ -506,6 +572,23 @@ def directory_of_files_common_filter(fname):
     )
 
 
+def get_compression_from_file_name(fname: str):
+    """Get compression scheme from file name"""
+
+    compression = None
+
+    if fname.endswith(".gz"):
+        compression = "gzip"
+    elif fname.endswith(".bz2"):
+        compression = "bz2"
+    elif fname.endswith(".zip"):
+        compression = "zip"
+    elif fname.endswith(".xz"):
+        compression = "xz"
+
+    return compression
+
+
 def find_file_name_or_handler(path, ftype, storage_options=None):
     """
     Find path_or_buf argument for pd.read_csv()/pd.read_json()
@@ -522,11 +605,11 @@ def find_file_name_or_handler(path, ftype, storage_options=None):
         path: path to the object we are reading, this can be a file or a directory
         ftype: 'csv' or 'json'
     Returns:
-        (is_handler, file_name_or_handler, f_size, fs)
+        (is_handler, file_name_or_handler, fs)
         is_handler: True if file_name_or_handler is a handler,
                     False otherwise(file_name_or_handler is a file_name)
         file_name_or_handler: file_name or handler to pass to pd.read_csv()/pd.read_json()
-        f_size: size of file_name_or_handler
+        compression: compression scheme inferred from file name
         fs: file system for s3/hdfs
     """
     from urllib.parse import urlparse
@@ -539,10 +622,17 @@ def find_file_name_or_handler(path, ftype, storage_options=None):
 
     filter_func = directory_of_files_common_filter
 
-    if parsed_url.scheme == "s3":
+    # Use PyArrow FileSystem for S3, GCS, and Hugging Face
+    if parsed_url.scheme in ("s3", "gcs", "gs", "hf"):
         is_handler = True
-        fs = get_s3_fs_from_path(path, storage_options=storage_options)
-        all_files = s3_list_dir_fnames(fs, path)  # can return None if not dir
+        if parsed_url.scheme == "s3":
+            fs = get_s3_fs_from_path(path, storage_options=storage_options)
+        elif parsed_url.scheme == "hf":
+            fs = get_hf_fs(storage_options=storage_options)
+        else:
+            fs = get_gcs_fs(path, storage_options=storage_options)
+
+        all_files = pa_fs_list_dir_fnames(fs, path)  # can return None if not dir
         path_ = (parsed_url.netloc + parsed_url.path).rstrip("/")
         fname = path_
 
@@ -560,10 +650,6 @@ def find_file_name_or_handler(path, ftype, storage_options=None):
                 # TODO: test
                 raise BodoError(err_msg)
             fname = all_csv_files[0]
-
-        f_size = int(
-            fs.get_file_info(fname).size or 0
-        )  # will be None for directories, so convert to 0 if that's the case
 
         # Arrow's S3FileSystem has some performance issues when used
         # with pandas.read_csv, which we do at compile-time.
@@ -583,7 +669,6 @@ def find_file_name_or_handler(path, ftype, storage_options=None):
     elif parsed_url.scheme == "hdfs":  # pragma: no cover
         is_handler = True
         (fs, all_files) = hdfs_list_dir_fnames(path)
-        f_size = fs.get_file_info([parsed_url.path])[0].size
 
         if all_files:
             path = path.rstrip("/")
@@ -598,7 +683,6 @@ def find_file_name_or_handler(path, ftype, storage_options=None):
                 raise BodoError(err_msg)
             fname = all_csv_files[0]
             fname = urlparse(fname).path  # strip off hdfs://port:host/
-            f_size = fs.get_file_info([fname])[0].size
 
         file_name_or_handler = fs.open_input_file(fname)
     # TODO: this can be merged with hdfs path above when pyarrow's new
@@ -606,7 +690,6 @@ def find_file_name_or_handler(path, ftype, storage_options=None):
     elif parsed_url.scheme in ("abfs", "abfss"):  # pragma: no cover
         is_handler = True
         (fs, all_files) = abfs_list_dir_fnames(path)
-        f_size = fs.info(fname)["size"]
 
         if all_files:
             path = path.rstrip("/")
@@ -618,7 +701,6 @@ def find_file_name_or_handler(path, ftype, storage_options=None):
                 # TODO: test
                 raise BodoError(err_msg)
             fname = all_csv_files[0]
-            f_size = fs.info(fname)["size"]
             fname = urlparse(fname).path  # strip off abfs[s]://port:host/
 
         file_name_or_handler = fs.open(fname, "rb")
@@ -639,12 +721,13 @@ def find_file_name_or_handler(path, ftype, storage_options=None):
                 raise BodoError(err_msg)
             fname = all_csv_files[0]
 
-        f_size = os.path.getsize(fname)
         file_name_or_handler = fname
+
+    compression = get_compression_from_file_name(fname)
 
     # although fs is never used, we need to return it so that s3/hdfs
     # connections are not closed
-    return is_handler, file_name_or_handler, f_size, fs
+    return is_handler, file_name_or_handler, compression, fs
 
 
 def get_s3_bucket_region(s3_filepath, parallel):
@@ -696,7 +779,7 @@ def get_s3_bucket_region_wrapper(s3_filepath, parallel):  # pragma: no cover
     return bucket_loc
 
 
-@overload(get_s3_bucket_region_wrapper)
+@overload(get_s3_bucket_region_wrapper, jit_options={"cache": True})
 def overload_get_s3_bucket_region_wrapper(s3_filepath, parallel):
     def impl(s3_filepath, parallel):
         with bodo.no_warning_objmode(bucket_loc="unicode_type"):
@@ -711,7 +794,7 @@ def csv_write(path_or_buf, D, filename_prefix, is_parallel=False):  # pragma: no
     return None
 
 
-@overload(csv_write, no_unliteral=True)
+@overload(csv_write, no_unliteral=True, jit_options={"cache": True})
 def csv_write_overload(path_or_buf, D, filename_prefix, is_parallel=False):
     def impl(path_or_buf, D, filename_prefix, is_parallel=False):  # pragma: no cover
         # Assuming that path_or_buf is a string
@@ -813,7 +896,7 @@ def arrow_filesystem_del(fs_instance):
     pass
 
 
-@overload(arrow_filesystem_del)
+@overload(arrow_filesystem_del, jit_options={"cache": True})
 def overload_arrow_filesystem_del(fs_instance):
     """Delete ArrowFs instance"""
 

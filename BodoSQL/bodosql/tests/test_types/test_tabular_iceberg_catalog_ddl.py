@@ -13,7 +13,7 @@ import pytest
 
 import bodo
 import bodosql
-from bodo.tests.iceberg_database_helpers.utils import get_spark_tabular
+from bodo.tests.iceberg_database_helpers.utils import get_spark
 from bodo.tests.utils import (
     _test_equal_guard,
     check_func_seq,
@@ -32,7 +32,7 @@ def check_view_exists(tabular_connection, view_name) -> bool:
     # These should only be run from rank 0, but we can't mark them as
     # run_rank0 since they are used in other run_rank0 functions
     assert bodo.get_rank() == 0
-    spark = get_spark_tabular(tabular_connection)
+    spark = get_spark(tabular_connection)
     tables = spark.sql(f"SHOW VIEWS LIKE '{view_name}'").toPandas()
     return len(tables) == 1
 
@@ -41,7 +41,7 @@ def check_table_exists(tabular_connection, table_name) -> bool:
     # These should only be run from rank 0, but we can't mark them as
     # run_rank0 since they are used in other run_rank0 functions
     assert bodo.get_rank() == 0
-    spark = get_spark_tabular(tabular_connection)
+    spark = get_spark(tabular_connection)
     tables = spark.sql(f"SHOW TABLES LIKE '{table_name}'").toPandas()
     return len(tables) == 1
 
@@ -52,7 +52,7 @@ def view_helper(tabular_connection, view_name, create=True):
 
         @run_rank0
         def create_view():
-            get_spark_tabular(tabular_connection).sql(
+            get_spark(tabular_connection).sql(
                 f"CREATE OR REPLACE VIEW {view_name} AS SELECT 0 AS A"
             )
             assert check_view_exists(tabular_connection, view_name)
@@ -65,9 +65,7 @@ def view_helper(tabular_connection, view_name, create=True):
 
         @run_rank0
         def destroy_view():
-            get_spark_tabular(tabular_connection).sql(
-                f"DROP VIEW IF EXISTS {view_name}"
-            )
+            get_spark(tabular_connection).sql(f"DROP VIEW IF EXISTS {view_name}")
             assert not check_view_exists(tabular_connection, view_name)
 
         destroy_view()
@@ -115,7 +113,7 @@ def test_create_view(tabular_catalog, tabular_connection, memory_leak_check):
 
 def check_schema_exists(tabular_connection, schema_name) -> bool:
     tables = (
-        get_spark_tabular(tabular_connection)
+        get_spark(tabular_connection)
         .sql(f"SHOW SCHEMAS LIKE '{schema_name}'")
         .toPandas()
     )
@@ -128,7 +126,7 @@ def schema_helper(tabular_connection, schema_name, create=True):
 
         @run_rank0
         def create_schema():
-            get_spark_tabular(tabular_connection).sql(f"CREATE SCHEMA {schema_name}")
+            get_spark(tabular_connection).sql(f"CREATE SCHEMA {schema_name}")
             assert check_schema_exists(tabular_connection, schema_name)
 
         create_schema()
@@ -140,9 +138,7 @@ def schema_helper(tabular_connection, schema_name, create=True):
 
         @run_rank0
         def destroy_schema():
-            get_spark_tabular(tabular_connection).sql(
-                f"DROP SCHEMA IF EXISTS {schema_name}"
-            )
+            get_spark(tabular_connection).sql(f"DROP SCHEMA IF EXISTS {schema_name}")
             assert not check_schema_exists(tabular_connection, schema_name)
 
         destroy_schema()
@@ -186,7 +182,7 @@ def test_create_view_validates(tabular_catalog, tabular_connection, memory_leak_
             # drop created table and view so that the schema can be dropped
             @run_rank0
             def cleanup():
-                spark = get_spark_tabular(tabular_connection)
+                spark = get_spark(tabular_connection)
                 spark.sql(f"DROP TABLE IF EXISTS {schema_1}.TABLE1")
                 spark.sql(f"DROP VIEW IF EXISTS {schema_1}.VIEW2")
                 spark.sql(f"DROP VIEW IF EXISTS {schema_1}.VIEW3")
@@ -208,9 +204,7 @@ def view_helper_nontrivialview(bc, tabular_connection, view_name, create=True):
 
         @run_rank0
         def destroy_view():
-            get_spark_tabular(tabular_connection).sql(
-                f"DROP VIEW IF EXISTS {view_name}"
-            )
+            get_spark(tabular_connection).sql(f"DROP VIEW IF EXISTS {view_name}")
             assert not check_view_exists(tabular_connection, view_name)
 
         destroy_view()
@@ -382,10 +376,8 @@ def create_test_table(table_name, bc):
 
 def drop_test_table(table_name, tabular_connection):
     # drop created table
-    get_spark_tabular(tabular_connection).sql(f"DROP TABLE IF EXISTS {table_name}")
-    get_spark_tabular(tabular_connection).sql(
-        f"DROP TABLE IF EXISTS {table_name}_renamed"
-    )
+    get_spark(tabular_connection).sql(f"DROP TABLE IF EXISTS {table_name}")
+    get_spark(tabular_connection).sql(f"DROP TABLE IF EXISTS {table_name}_renamed")
 
 
 # Verify view was created.
@@ -404,10 +396,8 @@ def create_test_view(view_name, bc):
 
 def drop_test_view(view_name, tabular_connection):
     # drop created view
-    get_spark_tabular(tabular_connection).sql(f"DROP VIEW IF EXISTS {view_name}")
-    get_spark_tabular(tabular_connection).sql(
-        f"DROP VIEW IF EXISTS {view_name}_renamed"
-    )
+    get_spark(tabular_connection).sql(f"DROP VIEW IF EXISTS {view_name}")
+    get_spark(tabular_connection).sql(f"DROP VIEW IF EXISTS {view_name}_renamed")
 
 
 @pytest_mark_one_rank

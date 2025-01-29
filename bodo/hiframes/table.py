@@ -58,6 +58,7 @@ from bodo.utils.typing import (
 )
 from bodo.utils.utils import (
     alloc_type,
+    bodo_exec,
     is_array_typ,
     is_whole_slice,
     numba_to_c_array_types,
@@ -586,7 +587,7 @@ def lower_table_shape(context, builder, typ, val):
 
 def table_shape_overload(T):
     """
-    Actual implementation used to implement TableType.shpae.
+    Actual implementation used to implement TableType.shape.
     """
     if T.has_runtime_cols:
         # If the number of columns is determined at runtime we can't
@@ -938,7 +939,7 @@ def generate_set_table_data_code(table, ind, arr_type, used_cols, is_null=False)
         "alloc_list_like": alloc_list_like,
         "out_table_typ": out_table_typ,
     }
-    func_text = "def set_table_data(table, ind, arr, used_cols=None):\n"
+    func_text = "def bodo_set_table_data(table, ind, arr, used_cols=None):\n"
     func_text += "  T2 = init_table(out_table_typ, False)\n"
     # Length of the table cannot change.
     func_text += "  T2 = set_table_len(T2, len(table))\n"
@@ -997,12 +998,12 @@ def generate_set_table_data_code(table, ind, arr_type, used_cols, is_null=False)
         func_text += f"  T2 = set_table_block(T2, out_arr_list_{blk}, {blk})\n"
     func_text += "  return T2\n"
 
-    loc_vars = {}
-    exec(func_text, glbls, loc_vars)
-    return loc_vars["set_table_data"]
+    return bodo_exec(func_text, glbls, {}, globals())
 
 
-@numba.generated_jit(nopython=True, no_cpython_wrapper=True, no_unliteral=True)
+@numba.generated_jit(
+    nopython=True, no_cpython_wrapper=True, no_unliteral=True, cache=True
+)
 def set_table_data(table, ind, arr, used_cols=None):
     """Returns a new table with the contents as table
     except arr is inserted at ind. There are two main cases,

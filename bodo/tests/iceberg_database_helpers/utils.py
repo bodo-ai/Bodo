@@ -5,8 +5,6 @@ from typing import NamedTuple
 import pandas as pd
 from pyspark.sql import SparkSession
 
-import bodo
-
 DATABASE_NAME = "iceberg_db"
 
 
@@ -61,7 +59,9 @@ def get_spark(path: str = ".") -> SparkSession:
         # Note that we need to have all catalogs registered on the same instance
         # because otherwise spark will cache the instance, and not pick up new
         # configuration changes.
-        if "TABULAR_CREDENTIAL" in os.environ:
+        # Tabular's platform seems to be dead but we will reuse this for general
+        # rest catalog testing.
+        if "TABULAR_CREDENTIAL" in os.environ and False:
             # TODO(aneesh) this is mildly sketchy - ideally a tabular spark
             # instance should be provided as pytest fixture
             from bodo.tests.conftest import get_tabular_connection
@@ -104,14 +104,6 @@ def get_spark(path: str = ".") -> SparkSession:
         shutil.rmtree("/root/.ivy2", ignore_errors=True)
         shutil.rmtree("/root/.m2/repository", ignore_errors=True)
     return do_get_spark()
-
-
-def get_spark_tabular(tabular_connection, path="."):
-    if bodo.get_rank() != 0:
-        return None
-    spark = get_spark(path=path)
-    spark.sql("use default;")
-    return spark
 
 
 def transform_str(col_name: str, transform: str, val: int) -> str:

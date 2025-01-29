@@ -343,16 +343,6 @@ def test_df_rename_errors(memory_leak_check):
         df = pd.DataFrame({"A": np.random.randn(10)})
         return df.rename({"A": "B"})
 
-    def test_impl7(cols):
-        d = {"A": cols[0]}
-        df = pd.DataFrame({"A": np.random.randn(10)})
-        return df.rename(d, axis=1)
-
-    def test_impl8(cols):
-        d = {"A": cols[0]}
-        df = pd.DataFrame({"A": np.random.randn(10)})
-        return df.rename(columns=d)
-
     def test_impl9():
         df = pd.DataFrame({"A": np.random.randn(10)})
         return df.rename(columns={"A": "B"}, axis=1)
@@ -397,16 +387,7 @@ def test_df_rename_errors(memory_leak_check):
         match="DataFrame.rename.*: 'mapper' only supported with axis=1",
     ):
         bodo.jit(test_impl6)()
-    with pytest.raises(
-        BodoError,
-        match="'mapper' argument to DataFrame.rename.* should be a constant dictionary",
-    ):
-        bodo.jit(test_impl7)(["B", "C"])
-    with pytest.raises(
-        BodoError,
-        match="'columns' argument to DataFrame.rename.* should be a constant dictionary",
-    ):
-        bodo.jit(test_impl8)(["B", "C"])
+
     with pytest.raises(
         BodoError,
         match="DataFrame.rename.*: Cannot specify both 'axis' and 'columns'",
@@ -575,14 +556,6 @@ def test_df_drop_errors(memory_leak_check):
         df = pd.DataFrame({"A": np.random.randn(10), "B": np.arange(10)})
         return df.drop(labels="A")
 
-    def impl7(labels):
-        df = pd.DataFrame({"A": np.random.randn(10), "B": np.arange(10)})
-        return df.drop(labels=labels[0], axis=1)
-
-    def impl8(labels):
-        df = pd.DataFrame({"A": np.random.randn(10), "B": np.arange(10)})
-        return df.drop(columns=labels[0], axis=1)
-
     def impl9():
         df = pd.DataFrame({"A": np.random.randn(10), "B": np.arange(10)})
         return df.drop(columns=["A", "C"], axis=1)
@@ -592,8 +565,6 @@ def test_df_drop_errors(memory_leak_check):
         return df.drop()
 
     unsupported_arg_err_msg = "DataFrame.drop.* parameter only supports default value"
-    const_err_msg = "constant list of columns expected for labels in DataFrame.drop.*"
-    col = ["A"]
     with pytest.raises(BodoError, match=unsupported_arg_err_msg):
         bodo.jit(impl1)()
     with pytest.raises(BodoError, match=unsupported_arg_err_msg):
@@ -611,10 +582,7 @@ def test_df_drop_errors(memory_leak_check):
         bodo.jit(impl5)()
     with pytest.raises(BodoError, match="DataFrame.drop.*: only axis=1 supported"):
         bodo.jit(impl6)()
-    with pytest.raises(BodoError, match=const_err_msg):
-        bodo.jit(impl7)(col)
-    with pytest.raises(BodoError, match=const_err_msg):
-        bodo.jit(impl8)(col)
+
     with pytest.raises(
         BodoError, match="DataFrame.drop.*: column C not in DataFrame columns .*"
     ):
@@ -938,8 +906,15 @@ def test_astype_non_constant_string(memory_leak_check):
     is not a compile time constant will produce a reasonable BodoError.
     """
 
-    def impl(df, type_str):
-        return df.astype(type_str[0])
+    @bodo.jit
+    def g(flag, type_str):
+        # Adding a print to make sure the functions isn't pure and cannot be evaluated
+        # in compilation time
+        print(flag)
+        return type_str[0] if flag else "float64"
+
+    def impl(df, type_str, flag):
+        return df.astype(g(flag, type_str))
 
     df = pd.DataFrame({"A": [1, 2, 3, 4] * 10})
     type_str = ["uint64"]
@@ -948,7 +923,7 @@ def test_astype_non_constant_string(memory_leak_check):
         BodoError,
         match="DataFrame.astype\\(\\): 'dtype' when passed as string must be a constant value",
     ):
-        bodo.jit(impl)(df, type_str)
+        print(bodo.jit(impl)(df, type_str, False))
 
 
 @pytest.mark.slow
@@ -987,15 +962,18 @@ def test_concat_const_args(memory_leak_check):
 
 
 def test_df_getitem_non_const_columname_error(memory_leak_check):
-    g = bodo.jit(lambda a: a)
+    @bodo.jit
+    def g(flag, a, cols):
+        if flag:
+            col = a
+        else:
+            col = cols[0]
+        return col
 
     @bodo.jit
     def f(df, a):
         flag = len(df) > 10
-        if flag:
-            col = g(a)
-        else:
-            col = df.columns[0]
+        col = g(flag, a, df.columns)
         return df[col]
 
     message = r"df\[\] getitem selecting a subset of columns requires providing constant column names. For more information, see https://docs.bodo.ai/latest/bodo_parallelism/typing_considerations/#require_constants."
@@ -1010,15 +988,18 @@ def test_df_getitem_non_const_columname_error(memory_leak_check):
 
 
 def test_df_getitem_non_const_columname_list_error(memory_leak_check):
-    g = bodo.jit(lambda a: a)
+    @bodo.jit
+    def g(flag, a, cols):
+        if flag:
+            col = a
+        else:
+            col = [cols[0]]
+        return col
 
     @bodo.jit
     def f(df, a):
         flag = len(df) > 10
-        if flag:
-            cols = g(a)
-        else:
-            cols = [df.columns[0]]
+        cols = g(flag, a, df.columns)
         return df[cols]
 
     message = r"df\[\] getitem using .* not supported. If you are trying to select a subset of the columns, you must provide the column names you are selecting as a constant. See https://docs.bodo.ai/latest/bodo_parallelism/typing_considerations/#require_constants."
