@@ -39,8 +39,8 @@ def prefetch_sf_tables_njit(
 
 
 @overload(prefetch_sf_tables_njit)
-def overload_prefetch_sf_tables_njit(conn_str, table_paths, verbose_level):
-    def impl(conn_str, table_paths, verbose_level):
+def overload_prefetch_sf_tables_njit(conn_str, table_paths):
+    def impl(conn_str, table_paths):
         with bodo.no_warning_objmode():
             prefetch_sf_tables(conn_str, table_paths)
 

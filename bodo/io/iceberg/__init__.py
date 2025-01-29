@@ -341,5 +341,4 @@ __all__ = [
     "prefetch_sf_tables_njit",
     "get_iceberg_orig_schema",
     "get_orig_and_runtime_schema",
-    "prefetch_sf_tables_njit",
 ]
