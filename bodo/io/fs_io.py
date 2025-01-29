@@ -35,7 +35,7 @@ from bodo.io import csv_cpp
 from bodo.libs.distributed_api import Reduce_Type
 from bodo.libs.str_ext import unicode_to_utf8, unicode_to_utf8_and_len
 from bodo.utils.typing import BodoError, BodoWarning, get_overload_constant_dict
-from bodo.utils.utils import AWSCredentials, check_java_installation
+from bodo.utils.utils import AWSCredentials
 
 # Same as _fs_io.cpp
 GCS_RETRY_LIMIT_SECONDS = 2
@@ -276,7 +276,7 @@ def get_hf_fs(storage_options=None):
     return PyFileSystem(FSSpecHandler(fs))
 
 
-# hdfs related functions(hdfs_list_dir_fnames) should be included in
+# hdfs related functions should be included in
 # coverage once hdfs tests are included in CI
 def get_hdfs_fs(path):  # pragma: no cover
     """
@@ -304,24 +304,6 @@ def get_hdfs_fs(path):  # pragma: no cover
         raise BodoError(f"Hadoop file system cannot be created: {e}")
 
     return fs
-
-
-def gcs_is_directory(path):
-    import gcsfs
-
-    fs = gcsfs.GCSFileSystem(token=None)
-    try:
-        isdir = fs.isdir(path)
-    except gcsfs.utils.HttpError as e:
-        raise BodoError(f"{e}. Make sure your google cloud credentials are set!")
-    return isdir
-
-
-def gcs_list_dir_fnames(path):
-    import gcsfs
-
-    fs = gcsfs.GCSFileSystem(token=None)
-    return [f.split("/")[-1] for f in fs.ls(path)]
 
 
 def pa_fs_is_directory(fs, path):
@@ -386,109 +368,6 @@ def pa_fs_list_dir_fnames(fs, path):
             )
 
     return file_names
-
-
-def hdfs_is_directory(path):
-    """
-    Return whether hdfs path is a directory or not
-    """
-    # this HadoopFileSystem is the new file system of pyarrow
-    from pyarrow.fs import FileType, HadoopFileSystem
-
-    check_java_installation(path)
-
-    options = urlparse(path)
-    hdfs_path = options.path  # path within hdfs(i.e. dir/file)
-
-    try:
-        hdfs = HadoopFileSystem.from_uri(path)
-    except Exception as e:
-        raise BodoError(f" Hadoop file system cannot be created: {e}")
-    # target stat of the path: file or just the directory itself
-    target_stat = hdfs.get_file_info([hdfs_path])
-
-    if target_stat[0].type in (FileType.NotFound, FileType.Unknown):
-        raise BodoError(f"{path} is a " "non-existing or unreachable file")
-
-    if (not target_stat[0].size) and target_stat[0].type == FileType.Directory:
-        return hdfs, True
-
-    return hdfs, False
-
-
-def hdfs_list_dir_fnames(path):  # pragma: no cover
-    """
-    initialize pyarrow.fs.HadoopFileSystem from path
-    If path is a directory, return all file names in the directory.
-    This returns the base name without the path:
-    ["file_name1", "file_name2", ...]
-    If path is a file, return None
-    return (pyarrow.fs.HadoopFileSystem, file_names)
-    """
-
-    from pyarrow.fs import FileSelector
-
-    file_names = None
-    hdfs, isdir = hdfs_is_directory(path)
-    if isdir:
-        options = urlparse(path)
-        hdfs_path = options.path  # path within hdfs(i.e. dir/file)
-
-        file_selector = FileSelector(hdfs_path, recursive=True)
-        try:
-            file_stats = hdfs.get_file_info(file_selector)
-        except Exception as e:
-            raise BodoError(
-                "Exception on getting directory info " f"of {hdfs_path}: {e}"
-            )
-        file_names = [file_stat.base_name for file_stat in file_stats]
-
-    return (hdfs, file_names)
-
-
-def abfs_is_directory(path):  # pragma: no cover
-    """
-    Return whether abfs path is a directory or not
-    """
-
-    hdfs = get_hdfs_fs(path)
-    try:
-        # target stat of the path: file or just the directory itself
-        target_stat = hdfs.info(path)
-    except OSError:
-        raise BodoError(f"{path} is a " "non-existing or unreachable file")
-
-    if (target_stat["size"] == 0) and target_stat["kind"].lower() == "directory":
-        return hdfs, True
-
-    return hdfs, False
-
-
-def abfs_list_dir_fnames(path):  # pragma: no cover
-    """
-    initialize pyarrow.fs.HadoopFileSystem from path
-    If path is a directory, return all file names in the directory.
-    This returns the base name without the path:
-    ["file_name1", "file_name2", ...]
-    If path is a file, return None
-    return (pyarrow.fs.HadoopFileSystem, file_names)
-    """
-
-    file_names = None
-    hdfs, isdir = abfs_is_directory(path)
-    if isdir:
-        options = urlparse(path)
-        hdfs_path = options.path  # path within hdfs(i.e. dir/file)
-
-        try:
-            files = hdfs.ls(hdfs_path)
-        except Exception as e:
-            raise BodoError(
-                "Exception on getting directory info " f"of {hdfs_path}: {e}"
-            )
-        file_names = [fname[fname.rindex("/") + 1 :] for fname in files]
-
-    return (hdfs, file_names)
 
 
 def abfs_get_fs(storage_options: dict[str, str] | None):  # pragma: no cover
