@@ -2,7 +2,6 @@
 S3 & Hadoop file system supports, and file system dependent calls
 """
 
-import glob
 import os
 import typing as pt
 import warnings
@@ -865,98 +864,25 @@ def find_file_name_or_handler(path, ftype, storage_options=None):
         compression: compression scheme inferred from file name
         fs: file system for s3/hdfs
     """
-    from urllib.parse import urlparse
 
     fname = path
     fs = None
     func_name = "read_json" if ftype == "json" else "read_csv"
     err_msg = f"pd.{func_name}(): there is no {ftype} file in directory: {fname}"
 
-    filter_func = directory_of_files_common_filter
-
     path, parsed_url, protocol = parse_fpath(path)
 
-    # Use PyArrow FileSystem for S3, GCS, and Hugging Face
-    if protocol in ("s3", "gcs", "gs", "hf"):
-        is_handler = True
-        fs = getfs(path, protocol, storage_options=storage_options)
+    fs = getfs(path, protocol, storage_options=storage_options)
 
-        all_csv_files = get_all_csv_json_data_files(
-            fs, path, protocol, parsed_url, err_msg
-        )
-        fname = all_csv_files[0]
+    all_csv_files = get_all_csv_json_data_files(fs, path, protocol, parsed_url, err_msg)
+    fname = all_csv_files[0]
 
-        # Arrow's S3FileSystem has some performance issues when used
-        # with pandas.read_csv, which we do at compile-time.
-        # Currently the issue seems related to using the output of
-        # fs.open_input_file / fs.open_input_stream
-        # which is a NativeFile.
-        # Performance is much better (and on par with s3fs)
-        # when we use an fsspec wrapper. The only difference
-        # we see is that the output of fs._open is an
-        # ArrowFile, which shouldn't make a difference, but it seems to.
-        # We've reported the issue to
-        # Pandas (https://github.com/pandas-dev/pandas/issues/46823)
-        # and Arrow (https://issues.apache.org/jira/browse/ARROW-16272),
-        # but in the meantime, we're using an ArrowFSWrapper for good performance.
-        fs = ArrowFSWrapper(fs)
-        file_name_or_handler = fs._open(fname)
-    elif protocol == "hdfs":  # pragma: no cover
-        is_handler = True
-        (fs, all_files) = hdfs_list_dir_fnames(path)
-
-        if all_files:
-            path = path.rstrip("/")
-            all_files = [
-                (path + "/" + f) for f in sorted(filter(filter_func, all_files))
-            ]
-            all_csv_files = [
-                f for f in all_files if fs.get_file_info([urlparse(f).path])[0].size > 0
-            ]
-            if len(all_csv_files) == 0:  # pragma: no cover
-                # TODO: test
-                raise BodoError(err_msg)
-            fname = all_csv_files[0]
-            fname = urlparse(fname).path  # strip off hdfs://port:host/
-
-        file_name_or_handler = fs.open_input_file(fname)
-    # TODO: this can be merged with hdfs path above when pyarrow's new
-    # HadoopFileSystem wrapper supports abfs scheme
-    elif protocol in ("abfs", "abfss"):  # pragma: no cover
-        is_handler = True
-        (fs, all_files) = abfs_list_dir_fnames(path)
-
-        if all_files:
-            path = path.rstrip("/")
-            all_files = [
-                (path + "/" + f) for f in sorted(filter(filter_func, all_files))
-            ]
-            all_csv_files = [f for f in all_files if fs.info(f)["size"] > 0]
-            if len(all_csv_files) == 0:  # pragma: no cover
-                # TODO: test
-                raise BodoError(err_msg)
-            fname = all_csv_files[0]
-            fname = urlparse(fname).path  # strip off abfs[s]://port:host/
-
-        file_name_or_handler = fs.open(fname, "rb")
-    else:
-        if protocol != "":
-            raise BodoError(
-                f"Unrecognized scheme {protocol}. Please refer to https://docs.bodo.ai/latest/file_io/."
-            )
-        is_handler = False
-
-        if os.path.isdir(path):
-            files = filter(
-                filter_func, glob.glob(os.path.join(os.path.abspath(path), "*"))
-            )
-            all_csv_files = [f for f in sorted(files) if os.path.getsize(f) > 0]
-            if len(all_csv_files) == 0:  # pragma: no cover
-                # TODO: test
-                raise BodoError(err_msg)
-            fname = all_csv_files[0]
-
+    if protocol == "":
         file_name_or_handler = fname
+        is_handler = False
+    else:
+        file_name_or_handler = fs.open_input_file(fname)
+        is_handler = True
 
     compression = get_compression_from_file_name(fname)
 
