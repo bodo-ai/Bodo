@@ -26,6 +26,7 @@
 #include <arrow/util/compression.h>
 
 #include "../libs/_distributed.h"
+#include "../libs/_stl_allocator.h"
 #include "_bodo_file_reader.h"
 
 #include "csv_json_reader.h"
@@ -100,6 +101,54 @@ static arrow::MemoryPool *memory_pool = nullptr;
 void init_buffer_pool_ptr(int64_t buffer_pool_ptr) {
     memory_pool = reinterpret_cast<arrow::MemoryPool *>(buffer_pool_ptr);
 }
+
+// STL allocator that plugs in the central buffer pool from memory_pool above.
+// Cannot use DefaultSTLBufferPoolAllocator since it's defined in the bodo.ext
+// module.
+template <class T>
+class ReaderSTLBufferPoolAllocator : public bodo::STLBufferPoolAllocator<T> {
+   public:
+    template <class U>
+    struct rebind {
+        using other = ReaderSTLBufferPoolAllocator<U>;
+    };
+
+    template <class U>
+    ReaderSTLBufferPoolAllocator(
+        const ReaderSTLBufferPoolAllocator<U> &other) noexcept
+        : ReaderSTLBufferPoolAllocator(other.pool(), other.size()) {}
+
+    template <class U>
+    ReaderSTLBufferPoolAllocator(ReaderSTLBufferPoolAllocator<U> &&other)
+        : ReaderSTLBufferPoolAllocator(other.pool(), other.size()) {}
+
+    template <class U>
+    ReaderSTLBufferPoolAllocator &operator=(
+        const ReaderSTLBufferPoolAllocator<U> &other) {
+        this->pool_ = other.pool();
+        this->size_ = other.size();
+    }
+
+    template <class U>
+    ReaderSTLBufferPoolAllocator &operator=(
+        ReaderSTLBufferPoolAllocator<U> &&other) {
+        this->pool_ = other.pool();
+        this->size_ = other.size();
+    }
+
+    ReaderSTLBufferPoolAllocator(arrow::MemoryPool *pool, size_t size) noexcept
+        : bodo::STLBufferPoolAllocator<T>(pool, size) {}
+
+    ReaderSTLBufferPoolAllocator(arrow::MemoryPool *pool) noexcept
+        : ReaderSTLBufferPoolAllocator(pool, 0) {}
+
+    ReaderSTLBufferPoolAllocator() noexcept
+        : bodo::STLBufferPoolAllocator<T>(memory_pool) {}
+};
+
+// std vector with buffer pool allocator plugged in
+template <typename T, class Allocator = ReaderSTLBufferPoolAllocator<T>>
+using bodo_vector = std::vector<T, Allocator>;
 
 /**
  * A SkiprowsListInfo object collects information about the skiprows with list
@@ -248,7 +297,7 @@ using stream_reader = struct {
     size_t chunk_size;    // size of our chunk
     size_t chunk_pos;     // current position in our chunk
 
-    std::shared_ptr<bodo::vector<char>>
+    std::shared_ptr<bodo_vector<char>>
         buf;  // internal buffer for converting stream input to Unicode object
 
     // The following attributes are needed for chunksize Iterator support
@@ -315,7 +364,7 @@ static PyObject *stream_reader_new(PyTypeObject *type, PyObject *args,
     self->header_size_bytes = 0;
     self->path_info = nullptr;
     self->first_read = false;
-    self->buf = std::make_shared<bodo::vector<char>>(0);
+    self->buf = std::make_shared<bodo_vector<char>>(0);
 
     return (PyObject *)self;
 }
@@ -606,13 +655,13 @@ class MemReader : public FileReader {
     /// current read position
     int64_t pos = start;
     /// data stored by this MemReader
-    bodo::vector<char> data;
+    bodo_vector<char> data;
     /// character that constitutes the row separator for this data
     char row_separator;
     /// true if the content refers to JSON where records span multiple lines
     bool json_multi_line = false;
     /// starting offset of each row
-    bodo::vector<int64_t> row_offsets;
+    bodo_vector<int64_t> row_offsets;
     /// FileReader status
     bool status_ok = true;
 
@@ -706,7 +755,7 @@ class MemReader : public FileReader {
     /**
      * Replace data with new_data (MemReader takes ownership of it).
      */
-    void set_data(bodo::vector<char> &new_data) {
+    void set_data(bodo_vector<char> &new_data) {
         data = std::move(new_data);
         start = pos = 0;
         row_offsets.clear();
@@ -859,7 +908,7 @@ void data_row_correction(MemReader *reader, char row_separator) {
     int rank = dist_get_rank();
     int num_ranks = dist_get_size();
 
-    bodo::vector<char> &data = reader->data;
+    bodo_vector<char> &data = reader->data;
     if (rank < num_ranks - 1) {  // receive chunk from right, append to my data
         size_t cur_data_size = data.size();
         MPI_Status status;
@@ -1254,7 +1303,7 @@ void balance_rows(MemReader *reader) {
         cur_offset += recvcounts[rank];
         total_recv_size += recvcounts[rank];
     }
-    bodo::vector<char> recvbuf(total_recv_size);
+    bodo_vector<char> recvbuf(total_recv_size);
     char *sendbuf = reader->data.data() + reader->start;
 
     bodo_alltoallv(sendbuf, sendcounts, sdispls, MPI_CHAR, recvbuf.data(),
@@ -1308,7 +1357,7 @@ void balance_rows(MemReader *reader) {
  * of local_data. Needed to identify i_start for nrows/chunksize-iterator case.
  */
 static int64_t compute_offsets(int64_t i_start, int64_t bytes_read,
-                               const bodo::vector<char> &local_data,
+                               const bodo_vector<char> &local_data,
                                char row_separator, int64_t &rows_count,
                                int64_t &global_offset, int64_t global_start,
                                int64_t &total_bytes, bool is_skiplist,
@@ -1375,7 +1424,7 @@ static int64_t compute_offsets(int64_t i_start, int64_t bytes_read,
  *
  */
 static void compute_skiprows_list_offsets(
-    int64_t i_start, int64_t bytes_read, const bodo::vector<char> &local_data,
+    int64_t i_start, int64_t bytes_read, const bodo_vector<char> &local_data,
     char row_separator, SkiprowsListInfo *skiprows_list_info,
     int64_t &skiplist_idx, int64_t &rows_count, int64_t &total_bytes,
     bool csv_header) {
@@ -1454,7 +1503,7 @@ void read_file_info(const std::vector<std::string> &file_names,
 
     // TODO Tune (https://bodo.atlassian.net/browse/BE-2600)
     constexpr int64_t CHUNK_SIZE = 1024 * 1024;
-    bodo::vector<char> local_data(CHUNK_SIZE);
+    bodo_vector<char> local_data(CHUNK_SIZE);
     // Bytes skipped from the beginning based on how many rows to skip when
     // using skiprows
     int64_t total_skipped = 0;
