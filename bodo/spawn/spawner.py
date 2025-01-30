@@ -67,7 +67,7 @@ def no_stdin():
     # Close stdin
     os.close(0)
     # open /dev/null as fd 0
-    nullfd = os.open("/dev/null", os.O_RDONLY)
+    nullfd = os.open(os.devnull, os.O_RDONLY)
     os.dup2(nullfd, 0)
     try:
         yield
@@ -137,25 +137,19 @@ class Spawner:
         # and then restore STDIN afterwards. This is necessary for environments where
         # interactivity is needed, e.g. ipython/python REPL.
         with no_stdin():
-            # Send spawner log level to workers
-            environ_args = [
-                f"BODO_WORKER_VERBOSE_LEVEL={bodo.user_logging.get_verbose_level()}"
-            ]
-            if "BODO_DYLD_INSERT_LIBRARIES" in os.environ:
-                environ_args.append(
-                    f"DYLD_INSERT_LIBRARIES={os.environ['BODO_DYLD_INSERT_LIBRARIES']}"
-                )
+            command, args = self._get_spawn_command_args()
 
             # run python with -u to prevent STDOUT from buffering
             self.worker_intercomm = self.comm_world.Spawn(
                 # get the same python executable that is currently running
-                "env",
-                environ_args + [sys.executable, "-u", "-m", "bodo.spawn.worker"],
+                command,
+                args,
                 n_pes,
                 MPI.INFO_NULL,
                 0,
                 errcodes,
             )
+
             # Send PID of spawner to worker
             self.worker_intercomm.bcast(os.getpid(), self.bcast_root)
             self.worker_intercomm.send(socket.gethostname(), dest=0)
@@ -169,6 +163,30 @@ class Spawner:
         # execution of commands, leading to invalid data being broadcast to workers.
         self._del_queue = deque()
         self._is_running = False
+
+    def _get_spawn_command_args(self) -> tuple[str, list[str]]:
+        py_args = ["-u", "-m", "bodo.spawn.worker"]
+
+        if sys.platform == "win32":
+            # TODO set logging level on Windows / general environment management
+            return sys.executable, py_args
+
+        else:
+            # Send spawner log level to workers
+            environ_args = [
+                f"BODO_WORKER_VERBOSE_LEVEL={bodo.user_logging.get_verbose_level()}"
+            ]
+            if "BODO_DYLD_INSERT_LIBRARIES" in os.environ:
+                environ_args.append(
+                    f"DYLD_INSERT_LIBRARIES={os.environ['BODO_DYLD_INSERT_LIBRARIES']}"
+                )
+
+            return "env", environ_args + [
+                sys.executable,
+                "-u",
+                "-m",
+                "bodo.spawn.worker",
+            ]
 
     @property
     def bcast_root(self):
