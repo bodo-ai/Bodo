@@ -16,9 +16,6 @@ cdef public class PyFileSystemBodo(PyFileSystem) [object c_PyFileSystemBodo, typ
         PyFileSystem.__init__(self, handler)
 
 
-cdef public shared_ptr[CFileSystem] get_cpp_fs(PyFileSystemBodo fs):
-    return fs.unwrap()
-
 def get_pyarrow_fs_from_ptr(long fs_ptr_long):
     cdef CFileSystem *fs_ptr = <CFileSystem*>fs_ptr_long
     return FileSystem.wrap(shared_ptr[CFileSystem](fs_ptr))
