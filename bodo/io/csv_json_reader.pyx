@@ -78,9 +78,9 @@ cdef public void get_read_path_info(
     if bodo.get_rank() == 0:
         try:
             err_msg = "Invalid data path path: " + path
-            all_csv_files = get_all_csv_json_data_files(fs, path, protocol, parsed_url, err_msg)
-            f_sizes = [fs.get_file_info(p).size for p in all_csv_files]
-            metadata_or_err = (all_csv_files, f_sizes)
+            all_data_files = get_all_csv_json_data_files(fs, path, protocol, parsed_url, err_msg)
+            f_sizes = [fs.get_file_info(p).size for p in all_data_files]
+            metadata_or_err = (all_data_files, f_sizes)
         except Exception as e:
             metadata_or_err = e
 
@@ -88,17 +88,17 @@ cdef public void get_read_path_info(
     if isinstance(metadata_or_err, Exception):
         raise metadata_or_err
 
-    all_csv_files, f_sizes = metadata_or_err
+    all_data_files, f_sizes = metadata_or_err
 
     c = <object>compression_pyarg
     uncompressed = "uncompressed"
     if c == "infer":
-        inferred_compression = get_compression_from_file_name(all_csv_files[0])
+        inferred_compression = get_compression_from_file_name(all_data_files[0])
         compression = uncompressed if inferred_compression is None else inferred_compression
     else:
         compression = compression_pyarg
 
-    for p in all_csv_files:
+    for p in all_data_files:
         file_names.push_back(p)
 
     for s in f_sizes:

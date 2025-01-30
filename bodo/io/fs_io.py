@@ -713,13 +713,13 @@ def get_all_csv_json_data_files(
     all_files = sorted(filter(directory_of_files_common_filter, all_files))
     # FileInfo.size is None for directories, so we convert None to 0
     # before comparison with 0
-    all_csv_files = [f for f in all_files if int(fs.get_file_info(f).size or 0) > 0]
+    all_data_files = [f for f in all_files if int(fs.get_file_info(f).size or 0) > 0]
 
-    if len(all_csv_files) == 0:  # pragma: no cover
+    if len(all_data_files) == 0:  # pragma: no cover
         # TODO: test
         raise BodoError(err_msg)
 
-    return all_csv_files
+    return all_data_files
 
 
 def find_file_name_or_handler(path, ftype, storage_options=None):
@@ -755,8 +755,10 @@ def find_file_name_or_handler(path, ftype, storage_options=None):
 
     fs = getfs(path, protocol, storage_options=storage_options)
 
-    all_csv_files = get_all_csv_json_data_files(fs, path, protocol, parsed_url, err_msg)
-    fname = all_csv_files[0]
+    all_data_files = get_all_csv_json_data_files(
+        fs, path, protocol, parsed_url, err_msg
+    )
+    fname = all_data_files[0]
 
     if protocol == "":
         file_name_or_handler = fname
