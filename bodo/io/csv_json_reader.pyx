@@ -122,3 +122,8 @@ def get_function_address(func_name):
         return <size_t>initialize_csv_reader
 
     raise ValueError("Unknown function name: " + func_name)
+
+
+def get_pyarrow_fs_from_ptr(long fs_ptr_long):
+    cdef CFileSystem *fs_ptr = <CFileSystem*>fs_ptr_long
+    return FileSystem.wrap(shared_ptr[CFileSystem](fs_ptr))
