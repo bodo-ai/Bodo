@@ -26,13 +26,15 @@ namespace bodo {
 
 template <typename Key, typename T, typename Hash = UNORD_HASH<Key>,
           class KeyEqual = std::equal_to<Key>,
-          class Allocator = bodo::STLBufferPoolAllocator<std::pair<Key, T>>>
+          class Allocator =
+              bodo::DefaultSTLBufferPoolAllocator<std::pair<Key, T>>>
 using unord_map_container =
     UNORD_MAP_CONTAINER<Key, T, Hash, KeyEqual, Allocator>;
 
 template <typename Key, typename Hash = UNORD_HASH<Key>,
           class KeyEqual = std::equal_to<Key>>
 using unord_set_container =
-    UNORD_SET_CONTAINER<Key, Hash, KeyEqual, bodo::STLBufferPoolAllocator<Key>>;
+    UNORD_SET_CONTAINER<Key, Hash, KeyEqual,
+                        bodo::DefaultSTLBufferPoolAllocator<Key>>;
 
 }  // namespace bodo

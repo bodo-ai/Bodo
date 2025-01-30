@@ -170,9 +170,12 @@ def check_node_typing(node, typemap):
 
 import llvmlite.binding as ll
 
-from bodo.io import csv_cpp
+from bodo.io import csv_json_reader
 
-ll.add_symbol("csv_file_chunk_reader", csv_cpp.csv_file_chunk_reader)
+ll.add_symbol(
+    "csv_file_chunk_reader",
+    csv_json_reader.get_function_address("csv_file_chunk_reader"),
+)
 
 
 @intrinsic

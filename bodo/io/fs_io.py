@@ -2,10 +2,10 @@
 S3 & Hadoop file system supports, and file system dependent calls
 """
 
-import glob
 import os
 import typing as pt
 import warnings
+from glob import has_magic
 from urllib.parse import ParseResult, urlparse
 
 import llvmlite.binding as ll
@@ -32,11 +32,10 @@ from pyarrow.fs import FSSpecHandler, PyFileSystem
 import bodo
 from bodo.ext import arrow_cpp
 from bodo.io import csv_cpp
-from bodo.io.pyfs import get_pyarrow_fs_from_ptr
 from bodo.libs.distributed_api import Reduce_Type
 from bodo.libs.str_ext import unicode_to_utf8, unicode_to_utf8_and_len
 from bodo.utils.typing import BodoError, BodoWarning, get_overload_constant_dict
-from bodo.utils.utils import AWSCredentials, check_java_installation
+from bodo.utils.utils import AWSCredentials
 
 # Same as _fs_io.cpp
 GCS_RETRY_LIMIT_SECONDS = 2
@@ -277,7 +276,7 @@ def get_hf_fs(storage_options=None):
     return PyFileSystem(FSSpecHandler(fs))
 
 
-# hdfs related functions(hdfs_list_dir_fnames) should be included in
+# hdfs related functions should be included in
 # coverage once hdfs tests are included in CI
 def get_hdfs_fs(path):  # pragma: no cover
     """
@@ -307,24 +306,6 @@ def get_hdfs_fs(path):  # pragma: no cover
     return fs
 
 
-def gcs_is_directory(path):
-    import gcsfs
-
-    fs = gcsfs.GCSFileSystem(token=None)
-    try:
-        isdir = fs.isdir(path)
-    except gcsfs.utils.HttpError as e:
-        raise BodoError(f"{e}. Make sure your google cloud credentials are set!")
-    return isdir
-
-
-def gcs_list_dir_fnames(path):
-    import gcsfs
-
-    fs = gcsfs.GCSFileSystem(token=None)
-    return [f.split("/")[-1] for f in fs.ls(path)]
-
-
 def pa_fs_is_directory(fs, path):
     """
     Return whether a path (S3, GCS, ...) is a directory or not
@@ -332,10 +313,7 @@ def pa_fs_is_directory(fs, path):
     from pyarrow import fs as pa_fs
 
     try:
-        options = urlparse(path)
-        # Remove the s3:// prefix if it exists (and other path sanitization)
-        path_ = (options.netloc + options.path).rstrip("/")
-        path_info = fs.get_file_info(path_)
+        path_info = fs.get_file_info(path)
         if path_info.type in (pa_fs.FileType.NotFound, pa_fs.FileType.Unknown):
             raise FileNotFoundError(f"{path} is a non-existing or unreachable file")
         if (not path_info.size) and path_info.type == pa_fs.FileType.Directory:
@@ -364,147 +342,32 @@ def pa_fs_list_dir_fnames(fs, path):
 
     from pyarrow import fs as pa_fs
 
-    file_names = None
-    try:
-        # check if path is a directory, and if there is a zero-size object
-        # with the name of the directory. If there is, we have to omit it
-        # because pq.ParquetDataset will throw Invalid Parquet file size is 0
-        # bytes
-        if pa_fs_is_directory(fs, path):
-            options = urlparse(path)
-            # Remove the s3:// prefix if it exists (and other path sanitization)
-            path_ = (options.netloc + options.path).rstrip("/")
-            file_selector = pa_fs.FileSelector(path_, recursive=False)
-            file_stats = fs.get_file_info(
-                file_selector
-            )  # this is "s3://bucket/path-to-dir"
+    path = path if isinstance(path, list) else [path]
 
-            if (
-                file_stats
-                and file_stats[0].path in [path_, f"{path_}/"]
-                and int(file_stats[0].size or 0)
-                == 0  # FileInfo.size is None for directories, so convert to 0 before comparison
-            ):  # pragma: no cover
-                # excluded from coverage because haven't found a reliable way
-                # to create 0 size object that is a directory. For example:
-                # fs.mkdir(path) sometimes doesn't do anything at all
-                # get actual names of objects inside the dir
-                file_stats = file_stats[1:]
-            file_names = [file_stat.base_name for file_stat in file_stats]
-    except BodoError:  # pragma: no cover
-        raise
-    except Exception as e:  # pragma: no cover
-        # There doesn't seem to be a way to get special errors for
-        # credential issues, region issues, etc. in pyarrow (unlike s3fs).
-        # So we include a blanket message to verify these details.
-        raise BodoError(
-            f"error from pyarrow FileSystem: {type(e).__name__}: {str(e)}\n{bodo_error_msg}"
-        )
+    file_names = []
+    for p in path:
+        try:
+            if pa_fs_is_directory(fs, p):
+                file_selector = pa_fs.FileSelector(p, recursive=True)
+                file_stats = fs.get_file_info(file_selector)
+                file_names += [
+                    file_stat.path
+                    for file_stat in file_stats
+                    if file_stat.type != pa_fs.FileType.Directory
+                ]
+            else:
+                file_names.append(p)
+        except BodoError:  # pragma: no cover
+            raise
+        except Exception as e:  # pragma: no cover
+            # There doesn't seem to be a way to get special errors for
+            # credential issues, region issues, etc. in pyarrow (unlike s3fs).
+            # So we include a blanket message to verify these details.
+            raise BodoError(
+                f"error from pyarrow FileSystem: {type(e).__name__}: {str(e)}\n{bodo_error_msg}"
+            )
 
     return file_names
-
-
-def hdfs_is_directory(path):
-    """
-    Return whether hdfs path is a directory or not
-    """
-    # this HadoopFileSystem is the new file system of pyarrow
-    from pyarrow.fs import FileType, HadoopFileSystem
-
-    check_java_installation(path)
-
-    options = urlparse(path)
-    hdfs_path = options.path  # path within hdfs(i.e. dir/file)
-
-    try:
-        hdfs = HadoopFileSystem.from_uri(path)
-    except Exception as e:
-        raise BodoError(f" Hadoop file system cannot be created: {e}")
-    # target stat of the path: file or just the directory itself
-    target_stat = hdfs.get_file_info([hdfs_path])
-
-    if target_stat[0].type in (FileType.NotFound, FileType.Unknown):
-        raise BodoError(f"{path} is a " "non-existing or unreachable file")
-
-    if (not target_stat[0].size) and target_stat[0].type == FileType.Directory:
-        return hdfs, True
-
-    return hdfs, False
-
-
-def hdfs_list_dir_fnames(path):  # pragma: no cover
-    """
-    initialize pyarrow.fs.HadoopFileSystem from path
-    If path is a directory, return all file names in the directory.
-    This returns the base name without the path:
-    ["file_name1", "file_name2", ...]
-    If path is a file, return None
-    return (pyarrow.fs.HadoopFileSystem, file_names)
-    """
-
-    from pyarrow.fs import FileSelector
-
-    file_names = None
-    hdfs, isdir = hdfs_is_directory(path)
-    if isdir:
-        options = urlparse(path)
-        hdfs_path = options.path  # path within hdfs(i.e. dir/file)
-
-        file_selector = FileSelector(hdfs_path, recursive=True)
-        try:
-            file_stats = hdfs.get_file_info(file_selector)
-        except Exception as e:
-            raise BodoError(
-                "Exception on getting directory info " f"of {hdfs_path}: {e}"
-            )
-        file_names = [file_stat.base_name for file_stat in file_stats]
-
-    return (hdfs, file_names)
-
-
-def abfs_is_directory(path):  # pragma: no cover
-    """
-    Return whether abfs path is a directory or not
-    """
-
-    hdfs = get_hdfs_fs(path)
-    try:
-        # target stat of the path: file or just the directory itself
-        target_stat = hdfs.info(path)
-    except OSError:
-        raise BodoError(f"{path} is a " "non-existing or unreachable file")
-
-    if (target_stat["size"] == 0) and target_stat["kind"].lower() == "directory":
-        return hdfs, True
-
-    return hdfs, False
-
-
-def abfs_list_dir_fnames(path):  # pragma: no cover
-    """
-    initialize pyarrow.fs.HadoopFileSystem from path
-    If path is a directory, return all file names in the directory.
-    This returns the base name without the path:
-    ["file_name1", "file_name2", ...]
-    If path is a file, return None
-    return (pyarrow.fs.HadoopFileSystem, file_names)
-    """
-
-    file_names = None
-    hdfs, isdir = abfs_is_directory(path)
-    if isdir:
-        options = urlparse(path)
-        hdfs_path = options.path  # path within hdfs(i.e. dir/file)
-
-        try:
-            files = hdfs.ls(hdfs_path)
-        except Exception as e:
-            raise BodoError(
-                "Exception on getting directory info " f"of {hdfs_path}: {e}"
-            )
-        file_names = [fname[fname.rindex("/") + 1 :] for fname in files]
-
-    return (hdfs, file_names)
 
 
 def abfs_get_fs(storage_options: dict[str, str] | None):  # pragma: no cover
@@ -604,6 +467,45 @@ def expand_glob(protocol: str, fs: pa.fs.FileSystem | None, path: str) -> list[s
     return files
 
 
+def expand_path_globs(fpath: str | list[str], protocol: str, fs) -> list[str]:
+    """Expand any glob strings in the provided file path(s).
+
+    Args:
+        fpath (str | list[str]): file paths or list of file paths.
+        protocol (str): protocol for filesystem, e.g. "s3", "gcs", and "" for local.
+        fs (pa.fs.FileSystem): filesystem object
+
+    Raises:
+        BodoError: error if no files found matching glob pattern
+
+    Returns:
+        list[str]: expanded list of paths
+    """
+
+    new_fpath = fpath
+
+    if isinstance(fpath, list):
+        # Expand any glob strings in the list in order to generate a
+        # single list of fully realized paths to parquet files.
+        # For example: ["A/a.pq", "B/*.pq"] might expand to
+        # ["A/a.pq", "B/part-0.pq", "B/part-1.pq"]
+        new_fpath = []
+        for p in fpath:
+            if has_magic(p):
+                new_fpath += expand_glob(protocol, fs, p)
+            else:
+                new_fpath.append(p)
+        if len(new_fpath) == 0:
+            raise BodoError("No files found matching glob pattern")
+
+    elif has_magic(fpath):
+        new_fpath = expand_glob(protocol, fs, fpath)
+        if len(new_fpath) == 0:
+            raise BodoError("No files found matching glob pattern")
+
+    return new_fpath
+
+
 def getfs(
     fpath: str | list[str],
     protocol: str,
@@ -665,12 +567,7 @@ def getfs(
         )
 
     if protocol in {"gcs", "gs"}:
-        validate_gcsfs_installed()
-        import gcsfs
-
-        # TODO pass storage_options to GCSFileSystem
-        google_fs = gcsfs.GCSFileSystem(token=None)
-        return PyFileSystem(FSSpecHandler(google_fs))
+        return get_gcs_fs(fpath, storage_options=storage_options)
     elif protocol == "http":
         import fsspec
 
@@ -756,7 +653,9 @@ def directory_of_files_common_filter(fname):
     return not (
         fname.endswith(".crc")  # Checksums
         or fname.endswith("_$folder$")  # HDFS directories in S3
-        or fname.startswith(".")  # Hidden files starting with .
+        or (
+            fname.startswith(".") and not fname.startswith("./")
+        )  # Hidden files starting with .
         or fname.startswith("_")
         and fname != "_delta_log"  # Hidden files starting with _ skip deltalake
     )
@@ -777,6 +676,50 @@ def get_compression_from_file_name(fname: str):
         compression = "xz"
 
     return compression
+
+
+def get_all_csv_json_data_files(
+    fs: pa.fs.FileSystem,
+    path: str,
+    protocol: str,
+    parsed_url: ParseResult,
+    err_msg: str,
+) -> list[str]:
+    """Get all data files to CSV/JSON read from path. Handles glob patterns, directories
+    (including nested directories), and single files. Filters out some metadata files
+    as well.
+
+    Args:
+        fs (pa.fs.FileSystem): file system to use for storage operations
+        path (str): input path
+        protocol (str): protocol for remote access (e.g. "s3", "gcs", "hf")
+        parsed_url (ParseResult): parsed URL object for path
+        err_msg (str): error message to raise if no data files are found
+
+    Raises:
+        BodoError: error when there are no data files found
+
+    Returns:
+        list[str]: list of files to read
+    """
+    from bodo.io.parquet_pio import get_fpath_without_protocol_prefix
+
+    fpath_noprefix, _ = get_fpath_without_protocol_prefix(path, protocol, parsed_url)
+
+    fpath_noprefix = expand_path_globs(fpath_noprefix, protocol, fs)
+
+    all_files = pa_fs_list_dir_fnames(fs, fpath_noprefix)
+
+    all_files = sorted(filter(directory_of_files_common_filter, all_files))
+    # FileInfo.size is None for directories, so we convert None to 0
+    # before comparison with 0
+    all_data_files = [f for f in all_files if int(fs.get_file_info(f).size or 0) > 0]
+
+    if len(all_data_files) == 0:  # pragma: no cover
+        # TODO: test
+        raise BodoError(err_msg)
+
+    return all_data_files
 
 
 def find_file_name_or_handler(path, ftype, storage_options=None):
@@ -802,116 +745,27 @@ def find_file_name_or_handler(path, ftype, storage_options=None):
         compression: compression scheme inferred from file name
         fs: file system for s3/hdfs
     """
-    from urllib.parse import urlparse
 
-    parsed_url = urlparse(path)
     fname = path
     fs = None
     func_name = "read_json" if ftype == "json" else "read_csv"
     err_msg = f"pd.{func_name}(): there is no {ftype} file in directory: {fname}"
 
-    filter_func = directory_of_files_common_filter
+    path, parsed_url, protocol = parse_fpath(path)
 
-    # Use PyArrow FileSystem for S3, GCS, and Hugging Face
-    if parsed_url.scheme in ("s3", "gcs", "gs", "hf"):
-        is_handler = True
-        if parsed_url.scheme == "s3":
-            fs = get_s3_fs_from_path(path, storage_options=storage_options)
-        elif parsed_url.scheme == "hf":
-            fs = get_hf_fs(storage_options=storage_options)
-        else:
-            fs = get_gcs_fs(path, storage_options=storage_options)
+    fs = getfs(path, protocol, storage_options=storage_options)
 
-        all_files = pa_fs_list_dir_fnames(fs, path)  # can return None if not dir
-        path_ = (parsed_url.netloc + parsed_url.path).rstrip("/")
-        fname = path_
+    all_data_files = get_all_csv_json_data_files(
+        fs, path, protocol, parsed_url, err_msg
+    )
+    fname = all_data_files[0]
 
-        if all_files:
-            all_files = [
-                (path_ + "/" + f) for f in sorted(filter(filter_func, all_files))
-            ]
-            # FileInfo.size is None for directories, so we convert None to 0
-            # before comparison with 0
-            all_csv_files = [
-                f for f in all_files if int(fs.get_file_info(f).size or 0) > 0
-            ]
-
-            if len(all_csv_files) == 0:  # pragma: no cover
-                # TODO: test
-                raise BodoError(err_msg)
-            fname = all_csv_files[0]
-
-        # Arrow's S3FileSystem has some performance issues when used
-        # with pandas.read_csv, which we do at compile-time.
-        # Currently the issue seems related to using the output of
-        # fs.open_input_file / fs.open_input_stream
-        # which is a NativeFile.
-        # Performance is much better (and on par with s3fs)
-        # when we use an fsspec wrapper. The only difference
-        # we see is that the output of fs._open is an
-        # ArrowFile, which shouldn't make a difference, but it seems to.
-        # We've reported the issue to
-        # Pandas (https://github.com/pandas-dev/pandas/issues/46823)
-        # and Arrow (https://issues.apache.org/jira/browse/ARROW-16272),
-        # but in the meantime, we're using an ArrowFSWrapper for good performance.
-        fs = ArrowFSWrapper(fs)
-        file_name_or_handler = fs._open(fname)
-    elif parsed_url.scheme == "hdfs":  # pragma: no cover
-        is_handler = True
-        (fs, all_files) = hdfs_list_dir_fnames(path)
-
-        if all_files:
-            path = path.rstrip("/")
-            all_files = [
-                (path + "/" + f) for f in sorted(filter(filter_func, all_files))
-            ]
-            all_csv_files = [
-                f for f in all_files if fs.get_file_info([urlparse(f).path])[0].size > 0
-            ]
-            if len(all_csv_files) == 0:  # pragma: no cover
-                # TODO: test
-                raise BodoError(err_msg)
-            fname = all_csv_files[0]
-            fname = urlparse(fname).path  # strip off hdfs://port:host/
-
-        file_name_or_handler = fs.open_input_file(fname)
-    # TODO: this can be merged with hdfs path above when pyarrow's new
-    # HadoopFileSystem wrapper supports abfs scheme
-    elif parsed_url.scheme in ("abfs", "abfss"):  # pragma: no cover
-        is_handler = True
-        (fs, all_files) = abfs_list_dir_fnames(path)
-
-        if all_files:
-            path = path.rstrip("/")
-            all_files = [
-                (path + "/" + f) for f in sorted(filter(filter_func, all_files))
-            ]
-            all_csv_files = [f for f in all_files if fs.info(f)["size"] > 0]
-            if len(all_csv_files) == 0:  # pragma: no cover
-                # TODO: test
-                raise BodoError(err_msg)
-            fname = all_csv_files[0]
-            fname = urlparse(fname).path  # strip off abfs[s]://port:host/
-
-        file_name_or_handler = fs.open(fname, "rb")
-    else:
-        if parsed_url.scheme != "":
-            raise BodoError(
-                f"Unrecognized scheme {parsed_url.scheme}. Please refer to https://docs.bodo.ai/latest/file_io/."
-            )
-        is_handler = False
-
-        if os.path.isdir(path):
-            files = filter(
-                filter_func, glob.glob(os.path.join(os.path.abspath(path), "*"))
-            )
-            all_csv_files = [f for f in sorted(files) if os.path.getsize(f) > 0]
-            if len(all_csv_files) == 0:  # pragma: no cover
-                # TODO: test
-                raise BodoError(err_msg)
-            fname = all_csv_files[0]
-
+    if protocol == "":
         file_name_or_handler = fname
+        is_handler = False
+    else:
+        file_name_or_handler = fs.open_input_file(fname)
+        is_handler = True
 
     compression = get_compression_from_file_name(fname)
 
@@ -1055,6 +909,8 @@ register_model(ArrowFs)(models.OpaqueModel)
 
 @box(ArrowFs)
 def box_ArrowFs(typ, val, c):
+    from bodo.io.pyfs import get_pyarrow_fs_from_ptr
+
     fs_ptr_obj = c.pyapi.from_native_value(types.RawPointer("fs_ptr"), val)
     get_fs_obj = c.pyapi.unserialize(c.pyapi.serialize_object(get_pyarrow_fs_from_ptr))
     fs_obj = c.pyapi.call_function_objargs(get_fs_obj, [fs_ptr_obj])
