@@ -87,7 +87,7 @@ if("$ENV{CONDA_PREFIX}" STREQUAL "")
       AWSSDK
       GIT_REPOSITORY   https://github.com/aws/aws-sdk-cpp
       GIT_TAG         1.11.472
-      OVERRIDE_FIND_PACKAGE 
+      OVERRIDE_FIND_PACKAGE
     )
     FetchContent_MakeAvailable(AWSSDK)
     find_package(AWSSDK REQUIRED COMPONENTS core)
@@ -111,7 +111,7 @@ ExternalProject_Add(datasketches
   # generation, as CMake otherwise picks up the Datasketch files when building
   # an RPM for a dependent package. (RPM scans the directory for files in addition to installing
   # those files referenced in an "install" rule in the cmake file)
-  INSTALL_COMMAND env DESTDIR= ${CMAKE_COMMAND} --build . --target install
+  INSTALL_COMMAND "${CMAKE_COMMAND}" -E env DESTDIR= ${CMAKE_COMMAND} --build . --target install
   LOG_CONFIGURE ON
   LOG_BUILD ON
   LOG_INSTALL ON
@@ -247,7 +247,7 @@ if(DEFINED ENV{BODO_VENDOR_MPICH})
   execute_process(COMMAND ${Python_EXECUTABLE} -m pip download mpich==${MPICH_VERSION} -i https://pypi.anaconda.org/mpi4py/simple --default-timeout=100)
   execute_process(COMMAND unzip "mpich-*.whl" "mpich*.data/*" -d mpich-tmp-extract-dir)
   file(GLOB MPICH_DATA_DIR "mpich-tmp-extract-dir/mpich-*.data/data/*")
-  file(COPY ${MPICH_DATA_DIR} DESTINATION "${SKBUILD_DATA_DIR}" FOLLOW_SYMLINK_CHAIN 
+  file(COPY ${MPICH_DATA_DIR} DESTINATION "${SKBUILD_DATA_DIR}" FOLLOW_SYMLINK_CHAIN
     FILE_PERMISSIONS OWNER_EXECUTE GROUP_EXECUTE WORLD_EXECUTE OWNER_READ GROUP_READ WORLD_READ OWNER_WRITE GROUP_WRITE)
   file(GLOB MPICH_WHEEL "mpich-*.whl")
   file(REMOVE_RECURSE ${MPICH_WHEEL} mpich-tmp-extract-dir)
@@ -310,7 +310,7 @@ add_custom_command(
   VERBATIM
   WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
   COMMAND "${CYTHON_EXECUTABLE}" --cplus -3 --output-file "bodo/io/csv_json_reader.cpp" "bodo/io/csv_json_reader.pyx"
-  COMMAND cp "bodo/io/csv_json_reader.cpp" "${CMAKE_CURRENT_BINARY_DIR}/bodo/io/csv_json_reader.cpp"
+  COMMAND "${CMAKE_COMMAND}" -E copy "bodo/io/csv_json_reader.cpp" "${CMAKE_CURRENT_BINARY_DIR}/bodo/io/csv_json_reader.cpp"
   COMMENT "Cythonizing Source bodo/io/csv_json_reader.pyx into bodo/io/csv_json_reader.cpp"
 )
 
@@ -331,7 +331,7 @@ add_custom_command(
  VERBATIM
  WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
  COMMAND "${CYTHON_EXECUTABLE}" --cplus -3 --output-file "bodo/io/pyarrow_wrappers.cpp" "bodo/io/pyarrow_wrappers.pyx"
- COMMAND cp "bodo/io/pyarrow_wrappers.cpp" "${CMAKE_CURRENT_BINARY_DIR}/bodo/io/pyarrow_wrappers.cpp"
+ COMMAND "${CMAKE_COMMAND}" -E copy "bodo/io/pyarrow_wrappers.cpp" "${CMAKE_CURRENT_BINARY_DIR}/bodo/io/pyarrow_wrappers.cpp"
  COMMENT "Cythonizing Source bodo/io/pyarrow_wrappers.pyx into bodo/io/pyarrow_wrappers.cpp"
 )
 set(pyarrow_wrappers_sources "bodo/io/pyarrow_wrappers.cpp" "bodo/io/arrow_compat.cpp")
@@ -590,7 +590,7 @@ if (NOT (CMAKE_BUILD_TYPE STREQUAL "Release") AND NOT DEFINED ENV{BODO_SKIP_CPP_
       )
   endif()
   list(APPEND sources_list "${test_list}")
-  list(APPEND allow_implicit_fallthrough_list 
+  list(APPEND allow_implicit_fallthrough_list
     "bodo/tests/test_puffin.cpp"
     "bodo/tests/test_theta_sketches.cpp")
 endif()
