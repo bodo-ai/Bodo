@@ -42,8 +42,9 @@ def is_in_overload(arr_to_check, search_arg, is_parallel=False):
     Args:
         arr_to_check (pandas Array): The values array. For each element, we check if it is present in
             arr_search_vals, and set True/False in the output boolean array accordingly.
-        arr_search_vals (pandas Array): The values to search for in arr_to_check. Currently, is always
-            replicated
+        search_arg tuple[(pandas Array), bool]:
+            IDX 0: The values to search for in arr_to_check. Currently, is always replicated
+            IDX 1: Whether null in the search array should be considered as a match
         is_parallel (bool, optional): Indicates if we should perform a distributed is_in check.
             Set in distributed pass depending on the distribution of arr_search_vals. Defaults to False.
 
