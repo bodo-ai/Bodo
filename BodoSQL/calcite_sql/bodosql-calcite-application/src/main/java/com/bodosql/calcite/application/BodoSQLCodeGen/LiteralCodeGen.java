@@ -105,16 +105,22 @@ public class LiteralCodeGen {
           Expr expr = sargValToPyLiteral(curRange.lowerEndpoint());
           literalList.add(expr);
         }
+        Expr nullAsExpr;
         if (sargVal.nullAs.equals(RexUnknownAs.TRUE)) {
           // Add a None to match Nulls
           literalList.add(Expr.None.INSTANCE);
+          nullAsExpr = Expr.True.INSTANCE;
+        } else if (sargVal.nullAs.equals(RexUnknownAs.FALSE)) {
+          nullAsExpr = Expr.False.INSTANCE;
+        } else {
+          nullAsExpr = Expr.None.INSTANCE;
         }
         // initialize the array, and lower it as a global
 
         // Note, currently, setting the dtype of this array directly can cause
         // issues in typing. So, we just let Bodo infer the type of the lowered array.
         Expr arrayExpr = new Expr.Call("pd.array", List.of(new Expr.List(literalList)));
-        return visitor.lowerAsGlobal(arrayExpr);
+        return visitor.lowerAsGlobal(new Expr.Tuple(arrayExpr, nullAsExpr));
 
       default:
         // TODO: investigate if this is the correct default value

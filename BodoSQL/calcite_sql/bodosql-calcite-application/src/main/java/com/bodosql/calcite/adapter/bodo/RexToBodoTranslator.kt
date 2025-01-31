@@ -650,6 +650,10 @@ open class RexToBodoTranslator(
         val inputType = operation.operands[0].type
         val outputType = operation.getType()
         val operands = this.visitList(operation.getOperands())
+        // If both types are interval types, we can skip the cast.
+        if (inputType.intervalQualifier != null && outputType.intervalQualifier != null) {
+            return operands[0]
+        }
         val fnName = getConversionName(outputType, isSafe)
         val (precision, scale) =
             if (SqlTypeFamily.EXACT_NUMERIC.contains(outputType)) {
@@ -824,6 +828,12 @@ open class RexToBodoTranslator(
         streamingNamedArgs: List<Pair<String, Expr>>,
     ): Expr {
         val fnName = getConversionName(outputType, false)
+
+        // If both types are interval types, we can skip the cast.
+        if (inputType.intervalQualifier != null && outputType.intervalQualifier != null) {
+            return arg
+        }
+
         val (precision, scale) =
             if (SqlTypeFamily.EXACT_NUMERIC.contains(outputType)) {
                 Pair(outputType.precision, outputType.scale)
