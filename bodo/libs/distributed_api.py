@@ -4353,10 +4353,9 @@ def dist_permutation_array_index(
 ########### finalize MPI & s3_reader, disconnect hdfs when exiting ############
 
 
-from bodo.io import fsspec_reader, hdfs_reader
+from bodo.io import hdfs_reader
 
 finalize = hdist.finalize_py_wrapper
-finalize_fsspec = fsspec_reader.finalize_fsspec_py_wrapper
 disconnect_hdfs_py_wrapper = hdfs_reader.disconnect_hdfs_py_wrapper
 
 ll.add_symbol("disconnect_hdfs", hdfs_reader.disconnect_hdfs)
@@ -4376,7 +4375,6 @@ def disconnect_hdfs_njit():  # pragma: no cover
 
 def call_finalize():  # pragma: no cover
     finalize()
-    finalize_fsspec()
     disconnect_hdfs_py_wrapper()
 
 
