@@ -610,7 +610,7 @@ def test_match_getitem(memory_leak_check):
     assert test_impl(m, "A") == bodo.jit(test_impl)(m, "A")
 
 
-@pytest.skip(
+@pytest.mark.skip(
     "BSE-4448: Numba fails in unboxing list(optional) when first element is None"
 )
 def test_match_groups(memory_leak_check):
