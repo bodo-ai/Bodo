@@ -37,7 +37,6 @@ from bodo.transforms.table_column_del_pass import (
 )
 from bodo.utils.typing import BodoError
 from bodo.utils.utils import (
-    bodo_exec,
     check_java_installation,  # noqa
     create_arg_hash,
     sanitize_varname,
@@ -171,9 +170,12 @@ def check_node_typing(node, typemap):
 
 import llvmlite.binding as ll
 
-from bodo.io import csv_cpp
+from bodo.io import csv_json_reader
 
-ll.add_symbol("csv_file_chunk_reader", csv_cpp.csv_file_chunk_reader)
+ll.add_symbol(
+    "csv_file_chunk_reader",
+    csv_json_reader.get_function_address("csv_file_chunk_reader"),
+)
 
 
 @intrinsic
@@ -1088,10 +1090,12 @@ def _gen_csv_reader_py(
         func_text += "  return (T, None)\n"
     loc_vars = {}
     glbls["get_storage_options_pyobject"] = get_storage_options_pyobject
-    csv_reader_py = bodo_exec(func_text, glbls, loc_vars, globals())
+    exec(func_text, glbls, loc_vars)
+    csv_reader_py = loc_vars["bodo_csv_reader_py"]
 
     # TODO: no_cpython_wrapper=True crashes for some reason
-    jit_func = numba.njit(csv_reader_py, cache=True)
+    # TODO: objmode and caching doesn't work
+    jit_func = numba.njit(csv_reader_py, cache=False)
     compiled_funcs.append(jit_func)
 
     return jit_func

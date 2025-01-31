@@ -1940,7 +1940,9 @@ public class SqlToRelConverter {
       if (leftKeys.size() == 1) {
         SqlCall sqlCall =
             comparisonOp.createCall(rightVals.getParserPosition(), leftKeys.get(0), rightVals);
-        rexComparison = bb.convertExpression(sqlCall);
+        // Bodo Change: Register the sql call so it has a type and
+        // any calls to addAlias will work correctly
+        rexComparison = bb.convertExpression(reg(bb.scope, sqlCall));
       } else {
         assert rightVals instanceof SqlCall;
         final SqlBasicCall call = (SqlBasicCall) rightVals;

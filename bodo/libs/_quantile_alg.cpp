@@ -691,11 +691,11 @@ void median_series_computation_T(double *res, std::shared_ptr<array_info> arr,
     int64_t glob_nb_ok = e_stat.glob_nb_ok;
     if (DType == Bodo_CTypes::DECIMAL) {
         median_series_computation_eff<T, Bodo_CTypes::FLOAT64,
-                                      bodo::STLBufferPoolAllocator<T>>(
+                                      bodo::DefaultSTLBufferPoolAllocator<T>>(
             res, my_array, parallel, glob_nb_ok);
     } else {
         median_series_computation_eff<T, DType,
-                                      bodo::STLBufferPoolAllocator<T>>(
+                                      bodo::DefaultSTLBufferPoolAllocator<T>>(
             res, my_array, parallel, glob_nb_ok);
     }
 }

@@ -239,7 +239,7 @@ ExternalProject_Add(datasketches
   # generation, as CMake otherwise picks up the Datasketch files when building
   # an RPM for a dependent package. (RPM scans the directory for files in addition to installing
   # those files referenced in an "install" rule in the cmake file)
-  INSTALL_COMMAND ${CMAKE_COMMAND} -E env DESTDIR= ${CMAKE_COMMAND} --build . --target install
+  INSTALL_COMMAND "${CMAKE_COMMAND}" -E env DESTDIR= ${CMAKE_COMMAND} --build . --target install
   LOG_CONFIGURE ON
   LOG_BUILD ON
   LOG_INSTALL ON
@@ -426,24 +426,27 @@ cmake_print_variables(Python_NumPy_INCLUDE_DIR)
 set(BASE_INCLUDE_DIRS ${PYARROW_INCLUDE_DIR} ${Python_NumPy_INCLUDE_DIR} ${MPI_INCLUDE_DIR})
 
 
-# ------------------------ Cython Target - bodo.io.pyfs -----------------------
+# ------------------------ Cython Target - bodo.io.csv_json_reader -----------------------
+
 add_custom_command(
-  OUTPUT bodo/io/pyfs.cpp
-  DEPENDS bodo/io/pyfs.pyx
+  OUTPUT bodo/io/csv_json_reader.cpp
+  DEPENDS bodo/io/csv_json_reader.pyx
   VERBATIM
   WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-  COMMAND "${CYTHON_EXECUTABLE}" --cplus -3 --output-file "bodo/io/pyfs.cpp" "bodo/io/pyfs.pyx"
-  COMMAND "${PYTHON_EXECUTABLE}" patch_pyfs.py
-  COMMAND "${CMAKE_COMMAND}" -E copy "bodo/io/pyfs.cpp" "${CMAKE_CURRENT_BINARY_DIR}/bodo/io/pyfs.cpp"
-  COMMENT "Cythonizing Source bodo/io/pyfs.pyx into bodo/io/pyfs.cpp"
+  COMMAND "${CYTHON_EXECUTABLE}" --cplus -3 --output-file "bodo/io/csv_json_reader.cpp" "bodo/io/csv_json_reader.pyx"
+  COMMAND "${CMAKE_COMMAND}" -E copy "bodo/io/csv_json_reader.cpp" "${CMAKE_CURRENT_BINARY_DIR}/bodo/io/csv_json_reader.cpp"
+  COMMENT "Cythonizing Source bodo/io/csv_json_reader.pyx into bodo/io/csv_json_reader.cpp"
 )
 
-python_add_library(pyfs MODULE WITH_SOABI "bodo/io/pyfs.cpp")
-target_include_directories(pyfs PRIVATE ${BASE_INCLUDE_DIRS})
-target_link_directories(pyfs PRIVATE ${PYARROW_LIB_DIR} ${CONDA_LIB_DIR})
-target_link_libraries(pyfs PRIVATE arrow arrow_python)
-# target_compile_definitions(pyfs PRIVATE ARROW_PYTHON_EXPORTING)
-install(TARGETS pyfs DESTINATION "bodo/io/")
+python_add_library(csv_json_reader
+MODULE WITH_SOABI
+"bodo/io/_csv_json_reader.cpp"
+"bodo/io/csv_json_reader.cpp"
+)
+target_include_directories(csv_json_reader PRIVATE ${BASE_INCLUDE_DIRS} "${CMAKE_CURRENT_SOURCE_DIR}/bodo/io/" "${CMAKE_CURRENT_BINARY_DIR}/bodo/io/")
+target_link_directories(csv_json_reader PRIVATE ${PYARROW_LIB_DIR} ${CONDA_LIB_DIR} ${MPI_LIB_DIR})
+target_link_libraries(csv_json_reader PRIVATE arrow arrow_python ${MPI_LIBRARIES})
+install(TARGETS csv_json_reader DESTINATION "bodo/io/")
 
 # ------------------------ Cython Target - bodo.io.pyarrow_wrappers ---------------
 add_custom_command(
@@ -581,10 +584,8 @@ install(TARGETS native_typer DESTINATION "bodo/transforms/type_inference/")
 
 # ------------------------- Main Bodo Extension -------------------------
 set(sources_list
-  "bodo/io/_csv_json_reader.cpp"
   "bodo/io/_csv_json_writer.cpp"
   "bodo/io/_fs_io.cpp"
-  "bodo/io/_fsspec_reader.cpp"
   "bodo/io/_hdfs_reader.cpp"
   "bodo/io/_io.cpp"
   "bodo/io/_s3_reader.cpp"
@@ -881,5 +882,5 @@ else()
 endif()
 
 set_target_properties(ext PROPERTIES CXX_CLANG_TIDY "${CLANG_TIDY_COMMAND}")
-add_dependencies(ext pyfs _hdfs tracing pyarrow_wrappers datasketches)
+add_dependencies(ext csv_json_reader _hdfs tracing pyarrow_wrappers datasketches)
 install(TARGETS ext DESTINATION "bodo/")

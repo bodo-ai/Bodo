@@ -469,7 +469,7 @@ struct pinning_allocator_traits {
 };
 
 template <typename T>
-struct pinning_allocator_traits<STLBufferPoolAllocator<T>> {
+struct pinning_allocator_traits<DefaultSTLBufferPoolAllocator<T>> {
     static constexpr bool is_pinnable = true;
 
     using pinnable_type =

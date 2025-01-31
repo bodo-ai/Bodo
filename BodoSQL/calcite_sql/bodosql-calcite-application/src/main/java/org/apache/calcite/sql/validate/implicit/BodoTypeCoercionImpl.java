@@ -185,13 +185,20 @@ public class BodoTypeCoercionImpl extends TypeCoercionImpl {
 
     // Fix new precision and scale for integer - decimal and decimal - decimal comparisons
     if ((SqlTypeUtil.isDecimal(type1) || SqlTypeUtil.isDecimal(type2)) && (SqlTypeUtil.isExactNumeric(type1) && SqlTypeUtil.isExactNumeric(type2))) {
-      int l1 = type1.getPrecision() - type1.getScale();
-      int l2 = type2.getPrecision() - type2.getScale();
+      // Convert all types to decimal so we can get an accurate precision and scale
+      // Integer types return defaultMaxPrecision and defaultMaxScale which creates
+      // an incorrect precision and scale for the resulting decimal type.
+      final RelDataType type1AsDecimal = factory.decimalOf(type1);
+      final RelDataType type2AsDecimal = factory.decimalOf(type2);
+      // Get the number of leading digits for each type
+      int l1 = type1AsDecimal.getPrecision() - type1AsDecimal.getScale();
+      int l2 = type2AsDecimal.getPrecision() - type2AsDecimal.getScale();
+      // New leading digits is the max of the two types to ensure we don't lose any information
       int newLeading = Math.max(l1, l2);
-      int newScale = Math.max(type1.getScale(), type2.getScale());
-      int maxPrecision = factory.getTypeSystem().getMaxPrecision(SqlTypeName.DECIMAL);
-      int newPrecision = Math.min(newLeading + newScale, maxPrecision);
-      newScale = Math.min(newScale, maxPrecision - newLeading);
+      // New scale is the max of the two types clamped to the max scale to ensure we don't lose any information when possible
+      final int newScale = Math.min(Math.max(type1AsDecimal.getScale(), type2AsDecimal.getScale()), factory.getTypeSystem().getMaxScale(SqlTypeName.DECIMAL));
+      // New precision is the sum of the new leading and new scale clamped to the max precision to ensure we don't lose any information when possible
+      final int newPrecision = Math.min(newLeading + newScale, factory.getTypeSystem().getMaxPrecision(SqlTypeName.DECIMAL));
       return factory.createSqlType(SqlTypeName.DECIMAL, newPrecision, newScale);
     }
 

@@ -2120,7 +2120,6 @@ PyMODINIT_FUNC PyInit_hdatetime_ext(void);
 PyMODINIT_FUNC PyInit_hio(void);
 PyMODINIT_FUNC PyInit_array_ext(void);
 PyMODINIT_FUNC PyInit_s3_reader(void);
-PyMODINIT_FUNC PyInit_fsspec_reader(void);
 PyMODINIT_FUNC PyInit_hdfs_reader(void);
 #ifndef NO_HDF5
 PyMODINIT_FUNC PyInit__hdf5(void);
