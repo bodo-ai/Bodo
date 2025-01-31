@@ -1,8 +1,6 @@
 package com.bodo.iceberg;
 
 import com.bodo.iceberg.catalog.CatalogCreator;
-import com.bodo.iceberg.catalog.PrefetchSnowflakeCatalog;
-import com.bodo.iceberg.catalog.SnowflakeBuilder;
 import java.net.URISyntaxException;
 import java.sql.SQLException;
 import java.util.*;
@@ -15,7 +13,6 @@ import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.types.TypeUtil;
 import org.apache.iceberg.types.Types;
-import org.json.JSONArray;
 
 public class BodoIcebergHandler {
   /**
@@ -36,44 +33,6 @@ public class BodoIcebergHandler {
   public BodoIcebergHandler(String connStr, String catalogType, String coreSitePath)
       throws URISyntaxException {
     this(CatalogCreator.create(connStr, catalogType, coreSitePath));
-  }
-
-  /**
-   * Start the Snowflake query to get the metadata paths for a list of Snowflake-managed Iceberg
-   * tables. NOTE: This API is exposed to Python.
-   *
-   * <p>The query is not expected to finish until the table is needed for initialization / read.
-   *
-   * @param tablePathsStr A JSON string of a list of tablePaths Py4J can't pass the direct list of
-   *     strings in
-   */
-  public static BodoIcebergHandler buildPrefetcher(
-      String connStr,
-      String catalogType,
-      String coreSitePath,
-      String tablePathsStr,
-      int verboseLevel)
-      throws SQLException, URISyntaxException {
-
-    if (!Objects.equals(catalogType, "snowflake")) {
-      throw new RuntimeException(
-          "BodoIcebergHandler::buildPrefetcher: Cannot prefetch SF metadata paths for a"
-              + " catalog of type "
-              + catalogType);
-    }
-
-    // Convert table paths to list of strings
-    var tablePathsJSON = new JSONArray(tablePathsStr);
-    var tablePaths = new ArrayList<String>();
-    for (int i = 0; i < tablePathsJSON.length(); i++) {
-      tablePaths.add(tablePathsJSON.getString(i));
-    }
-
-    // Construct Catalog
-    var out = CatalogCreator.prepareInput(connStr, catalogType, coreSitePath);
-    var catalog = new PrefetchSnowflakeCatalog(connStr, tablePaths, verboseLevel);
-    SnowflakeBuilder.initialize(catalog, out.getFirst(), out.getSecond());
-    return new BodoIcebergHandler(CachingCatalog.wrap(catalog));
   }
 
   private static TableIdentifier genTableID(String dbName, String tableName) {

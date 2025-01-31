@@ -65,9 +65,6 @@ public class CatalogCreator {
     URIBuilder uriBuilder = out.getThird();
 
     switch (catalogType.toLowerCase()) {
-      case "nessie":
-        catalog = NessieBuilder.create(conf, params);
-        break;
       case "hive":
         catalog = ThriftBuilder.create(conf, params);
         break;
@@ -82,9 +79,6 @@ public class CatalogCreator {
       case "hadoop-s3":
       case "hadoop-abfs":
         catalog = HadoopBuilder.create(uriBuilder.removeQuery().build().toString(), conf, params);
-        break;
-      case "snowflake":
-        catalog = SnowflakeBuilder.create(conf, params);
         break;
       case "rest":
         catalog = RESTBuilder.create(conf, params);

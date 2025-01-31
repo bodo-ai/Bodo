@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import typing as pt
 import warnings
 from collections.abc import Iterator
 from dataclasses import dataclass
@@ -37,7 +38,21 @@ from pyiceberg.table import (
 from pyiceberg.typedef import EMPTY_DICT, Identifier, Properties
 from snowflake.connector import DictCursor, SnowflakeConnection
 
+import bodo.user_logging
+
 logger = logging.getLogger(__name__)
+
+
+METADATA_QUERY = "SELECT SYSTEM$GET_ICEBERG_TABLE_INFORMATION(%s) AS METADATA"
+
+
+def escape_name(part_name: str) -> str:
+    """Escape the part name to be used in Snowflake connector queries."""
+    return (
+        part_name
+        if part_name.startswith('"') and part_name.endswith('"')
+        else f'"{part_name}"'
+    )
 
 
 class SnowflakeCatalog(MetastoreCatalog):
@@ -68,16 +83,18 @@ class SnowflakeCatalog(MetastoreCatalog):
             yield from filter(None, [self.database, self.schema, self.table])
 
         @classmethod
-        def table_from_string(
-            cls, identifier: str
+        def table_from_id(
+            cls, identifier: str | Identifier
         ) -> SnowflakeCatalog._SnowflakeIdentifier:
-            parts = identifier.split(".")
+            parts = SnowflakeCatalog.identifier_to_tuple(identifier)
             if len(parts) == 1:
-                return cls(None, None, parts[0])
+                return cls(None, None, escape_name(parts[0]))
             elif len(parts) == 2:
-                return cls(None, parts[0], parts[1])
+                return cls(None, escape_name(parts[0]), escape_name(parts[1]))
             elif len(parts) == 3:
-                return cls(parts[0], parts[1], parts[2])
+                return cls(
+                    escape_name(parts[0]), escape_name(parts[1]), escape_name(parts[2])
+                )
 
             raise ValueError(f"Invalid identifier: {identifier}")
 
@@ -100,6 +117,8 @@ class SnowflakeCatalog(MetastoreCatalog):
         @property
         def schema_name(self) -> str:
             return ".".join(self)
+
+    open_metadata_requests: dict[str, str]
 
     def __init__(self, name: str, **properties: str):
         """
@@ -139,18 +158,43 @@ class SnowflakeCatalog(MetastoreCatalog):
         if "role" in properties:
             params["role"] = properties["role"]
 
+        if "warehouse" in properties:
+            params["warehouse"] = properties["warehouse"]
+
+        if "database" in properties:
+            params["database"] = properties["database"]
+
+        if "schema" in properties:
+            params["schema"] = properties["schema"]
+
+        if "session_parameters" in properties:
+            session_params = json.loads(properties["session_parameters"])
+            params["session_parameters"] = session_params
+            params.update(session_params)
+
         self.connection = SnowflakeConnection(**params)
+        self.open_metadata_requests = {}
 
     def load_table(self, identifier: str | Identifier) -> Table:
-        sf_identifier = SnowflakeCatalog._SnowflakeIdentifier.table_from_string(
-            identifier if isinstance(identifier, str) else ".".join(identifier)
-        )
-
-        metadata_query = "SELECT SYSTEM$GET_ICEBERG_TABLE_INFORMATION(%s) AS METADATA"
-
+        sf_identifier = SnowflakeCatalog._SnowflakeIdentifier.table_from_id(identifier)
         with self.connection.cursor(DictCursor) as cursor:
             try:
-                cursor.execute(metadata_query, (sf_identifier.table_name,))
+                if sf_identifier.table_name in self.open_metadata_requests:
+                    cursor.get_results_from_sfqid(
+                        self.open_metadata_requests[sf_identifier.table_name]
+                    )
+                    load_str = "prefetch"
+                else:
+                    cursor.execute(METADATA_QUERY, (sf_identifier.table_name,))
+                    load_str = "normal load"
+
+                if bodo.user_logging.get_verbose_level() >= 1:
+                    bodo.user_logging.log_message(
+                        "Snowflake-Managed Iceberg - Load Metadata",
+                        f"Loading table `{sf_identifier.table_name}` from {load_str}",
+                    )
+
+                # Extract the metadata path from the output
                 metadata = json.loads(cursor.fetchone()["METADATA"])["metadataLocation"]
             except Exception as e:
                 raise NoSuchTableError(
@@ -170,7 +214,7 @@ class SnowflakeCatalog(MetastoreCatalog):
             warnings.warn(f"Unsupported filesystem scheme: {_fs_scheme.scheme}")
 
         tbl = StaticTable.from_metadata(metadata, properties=_fs_props)
-        tbl.identifier = (
+        tbl._identifier = (
             tuple(identifier.split(".")) if isinstance(identifier, str) else identifier
         )
         tbl.catalog = self
@@ -181,7 +225,7 @@ class SnowflakeCatalog(MetastoreCatalog):
         self, identifier: str | Identifier, metadata_location: str
     ) -> Table:
         query = "CREATE ICEBERG TABLE (%s) METADATA_FILE_PATH = (%s)"
-        sf_identifier = SnowflakeCatalog._SnowflakeIdentifier.table_from_string(
+        sf_identifier = SnowflakeCatalog._SnowflakeIdentifier.table_from_id(
             identifier if isinstance(identifier, str) else ".".join(identifier)
         )
 
@@ -196,7 +240,7 @@ class SnowflakeCatalog(MetastoreCatalog):
         return self.load_table(identifier)
 
     def drop_table(self, identifier: str | Identifier) -> None:
-        sf_identifier = SnowflakeCatalog._SnowflakeIdentifier.table_from_string(
+        sf_identifier = SnowflakeCatalog._SnowflakeIdentifier.table_from_id(
             identifier if isinstance(identifier, str) else ".".join(identifier)
         )
 
@@ -208,12 +252,12 @@ class SnowflakeCatalog(MetastoreCatalog):
     def rename_table(
         self, from_identifier: str | Identifier, to_identifier: str | Identifier
     ) -> Table:
-        sf_from_identifier = SnowflakeCatalog._SnowflakeIdentifier.table_from_string(
+        sf_from_identifier = SnowflakeCatalog._SnowflakeIdentifier.table_from_id(
             from_identifier
             if isinstance(from_identifier, str)
             else ".".join(from_identifier)
         )
-        sf_to_identifier = SnowflakeCatalog._SnowflakeIdentifier.table_from_string(
+        sf_to_identifier = SnowflakeCatalog._SnowflakeIdentifier.table_from_id(
             to_identifier if isinstance(to_identifier, str) else ".".join(to_identifier)
         )
 
@@ -320,3 +364,25 @@ class SnowflakeCatalog(MetastoreCatalog):
 
     def drop_view(self, identifier: str | Identifier) -> None:
         raise NotImplementedError
+
+    def prefetch_metadata_paths(self, table_ids: pt.Sequence[str | Identifier]) -> None:
+        """
+        For a given list of tables (by their identifiers), start the initial
+        fetch for the head metadata file for each table by submitting an async
+        SQL query through the Snowflake connector.
+
+        During load_table, if the catalog sees an open metadata file request,
+        it will block for the async query to complete and use the result.
+        """
+
+        for table_id in table_ids:
+            sf_identifier = SnowflakeCatalog._SnowflakeIdentifier.table_from_id(
+                table_id
+            )
+
+            with self.connection.cursor(DictCursor) as cursor:
+                cursor.execute_async(METADATA_QUERY, (sf_identifier.table_name,))
+                query_id = cursor.sfqid
+                assert query_id is not None
+
+            self.open_metadata_requests[sf_identifier.table_name] = query_id

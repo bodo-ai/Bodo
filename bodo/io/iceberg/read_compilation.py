@@ -242,8 +242,8 @@ def get_orig_and_runtime_schema(
     try:
         catalog = conn_str_to_catalog(conn_str)
         table = catalog.load_table(table_id)
-    except pyiceberg.exceptions.NoSuchTableError:
-        raise BodoError("No such Iceberg table found")
+    except pyiceberg.exceptions.NoSuchTableError as e:
+        raise BodoError("No such Iceberg table found") from e
 
     col_names, orig_col_types, pa_schema = _get_table_schema(
         table, selected_cols, is_merge_into_cow
