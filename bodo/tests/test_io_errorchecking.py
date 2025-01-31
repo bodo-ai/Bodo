@@ -35,7 +35,7 @@ def test_csv_invalid_path():
     def test_impl(fname):
         return pd.read_csv(fname, names=["A"], dtype={"A": np.int64})
 
-    with pytest.raises(RuntimeError, match="invalid path"):
+    with pytest.raises(BodoError, match=r"FileNotFoundError"):
         bodo.jit(test_impl)("f.csv")
 
 
@@ -45,7 +45,7 @@ def test_csv_invalid_path_const(memory_leak_check):
     def test_impl():
         return pd.read_csv("in_csv.csv")
 
-    with pytest.raises(BodoError, match="No such file or directory"):
+    with pytest.raises(BodoError, match="FileNotFoundError"):
         bodo.jit(test_impl)()
 
 
@@ -109,7 +109,7 @@ def test_io_error_nested_calls(memory_leak_check):
         return test_csv(filename)
 
     filename = "I_dont_exist.csv"
-    with pytest.raises(BodoError, match="No such file or directory"):
+    with pytest.raises(BodoError, match="FileNotFoundError"):
         bodo.jit(test_impl_csv)(filename)
 
     @bodo.jit

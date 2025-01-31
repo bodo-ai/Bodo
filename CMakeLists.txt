@@ -87,7 +87,7 @@ if("$ENV{CONDA_PREFIX}" STREQUAL "")
       AWSSDK
       GIT_REPOSITORY   https://github.com/aws/aws-sdk-cpp
       GIT_TAG         1.11.472
-      OVERRIDE_FIND_PACKAGE 
+      OVERRIDE_FIND_PACKAGE
     )
     FetchContent_MakeAvailable(AWSSDK)
     find_package(AWSSDK REQUIRED COMPONENTS core)
@@ -111,7 +111,7 @@ ExternalProject_Add(datasketches
   # generation, as CMake otherwise picks up the Datasketch files when building
   # an RPM for a dependent package. (RPM scans the directory for files in addition to installing
   # those files referenced in an "install" rule in the cmake file)
-  INSTALL_COMMAND env DESTDIR= ${CMAKE_COMMAND} --build . --target install
+  INSTALL_COMMAND "${CMAKE_COMMAND}" -E env DESTDIR= ${CMAKE_COMMAND} --build . --target install
   LOG_CONFIGURE ON
   LOG_BUILD ON
   LOG_INSTALL ON
@@ -247,7 +247,7 @@ if(DEFINED ENV{BODO_VENDOR_MPICH})
   execute_process(COMMAND ${Python_EXECUTABLE} -m pip download mpich==${MPICH_VERSION} -i https://pypi.anaconda.org/mpi4py/simple --default-timeout=100)
   execute_process(COMMAND unzip "mpich-*.whl" "mpich*.data/*" -d mpich-tmp-extract-dir)
   file(GLOB MPICH_DATA_DIR "mpich-tmp-extract-dir/mpich-*.data/data/*")
-  file(COPY ${MPICH_DATA_DIR} DESTINATION "${SKBUILD_DATA_DIR}" FOLLOW_SYMLINK_CHAIN 
+  file(COPY ${MPICH_DATA_DIR} DESTINATION "${SKBUILD_DATA_DIR}" FOLLOW_SYMLINK_CHAIN
     FILE_PERMISSIONS OWNER_EXECUTE GROUP_EXECUTE WORLD_EXECUTE OWNER_READ GROUP_READ WORLD_READ OWNER_WRITE GROUP_WRITE)
   file(GLOB MPICH_WHEEL "mpich-*.whl")
   file(REMOVE_RECURSE ${MPICH_WHEEL} mpich-tmp-extract-dir)
@@ -302,22 +302,27 @@ cmake_print_variables(Python_NumPy_INCLUDE_DIR)
 set(BASE_INCLUDE_DIRS ${PYARROW_INCLUDE_DIR} ${Python_NumPy_INCLUDE_DIR} ${MPICH_INCLUDE_DIR})
 
 
-# ------------------------ Cython Target - bodo.io.pyfs -----------------------
+# ------------------------ Cython Target - bodo.io.csv_json_reader -----------------------
+
 add_custom_command(
-  OUTPUT bodo/io/pyfs.cpp
-  DEPENDS bodo/io/pyfs.pyx
+  OUTPUT bodo/io/csv_json_reader.cpp
+  DEPENDS bodo/io/csv_json_reader.pyx
   VERBATIM
   WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-  COMMAND "${CYTHON_EXECUTABLE}" --cplus -3 --output-file "bodo/io/pyfs.cpp" "bodo/io/pyfs.pyx"
-  COMMAND cp "bodo/io/pyfs.cpp" "${CMAKE_CURRENT_BINARY_DIR}/bodo/io/pyfs.cpp"
-  COMMENT "Cythonizing Source bodo/io/pyfs.pyx into bodo/io/pyfs.cpp"
+  COMMAND "${CYTHON_EXECUTABLE}" --cplus -3 --output-file "bodo/io/csv_json_reader.cpp" "bodo/io/csv_json_reader.pyx"
+  COMMAND "${CMAKE_COMMAND}" -E copy "bodo/io/csv_json_reader.cpp" "${CMAKE_CURRENT_BINARY_DIR}/bodo/io/csv_json_reader.cpp"
+  COMMENT "Cythonizing Source bodo/io/csv_json_reader.pyx into bodo/io/csv_json_reader.cpp"
 )
 
-python_add_library(pyfs MODULE WITH_SOABI "bodo/io/pyfs.cpp")
-target_include_directories(pyfs PRIVATE ${BASE_INCLUDE_DIRS})
-target_link_directories(pyfs PRIVATE ${PYARROW_LIB_DIR} ${CONDA_LIB_DIR})
-target_link_libraries(pyfs PRIVATE arrow arrow_python)
-install(TARGETS pyfs DESTINATION "bodo/io/")
+python_add_library(csv_json_reader
+MODULE WITH_SOABI
+"bodo/io/_csv_json_reader.cpp"
+"bodo/io/csv_json_reader.cpp"
+)
+target_include_directories(csv_json_reader PRIVATE ${BASE_INCLUDE_DIRS} "${CMAKE_CURRENT_SOURCE_DIR}/bodo/io/" "${CMAKE_CURRENT_BINARY_DIR}/bodo/io/")
+target_link_directories(csv_json_reader PRIVATE ${PYARROW_LIB_DIR} ${CONDA_LIB_DIR} ${MPICH_LIB_DIR})
+target_link_libraries(csv_json_reader PRIVATE arrow arrow_python mpi)
+install(TARGETS csv_json_reader DESTINATION "bodo/io/")
 
 # ------------------------ Cython Target - bodo.io.pyarrow_wrappers ---------------
 add_custom_command(
@@ -326,7 +331,7 @@ add_custom_command(
  VERBATIM
  WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
  COMMAND "${CYTHON_EXECUTABLE}" --cplus -3 --output-file "bodo/io/pyarrow_wrappers.cpp" "bodo/io/pyarrow_wrappers.pyx"
- COMMAND cp "bodo/io/pyarrow_wrappers.cpp" "${CMAKE_CURRENT_BINARY_DIR}/bodo/io/pyarrow_wrappers.cpp"
+ COMMAND "${CMAKE_COMMAND}" -E copy "bodo/io/pyarrow_wrappers.cpp" "${CMAKE_CURRENT_BINARY_DIR}/bodo/io/pyarrow_wrappers.cpp"
  COMMENT "Cythonizing Source bodo/io/pyarrow_wrappers.pyx into bodo/io/pyarrow_wrappers.cpp"
 )
 set(pyarrow_wrappers_sources "bodo/io/pyarrow_wrappers.cpp" "bodo/io/arrow_compat.cpp")
@@ -451,10 +456,8 @@ install(TARGETS native_typer DESTINATION "bodo/transforms/type_inference/")
 
 # ------------------------- Main Bodo Extension -------------------------
 set(sources_list
-  "bodo/io/_csv_json_reader.cpp"
   "bodo/io/_csv_json_writer.cpp"
   "bodo/io/_fs_io.cpp"
-  "bodo/io/_fsspec_reader.cpp"
   "bodo/io/_hdfs_reader.cpp"
   "bodo/io/_io.cpp"
   "bodo/io/_s3_reader.cpp"
@@ -587,7 +590,7 @@ if (NOT (CMAKE_BUILD_TYPE STREQUAL "Release") AND NOT DEFINED ENV{BODO_SKIP_CPP_
       )
   endif()
   list(APPEND sources_list "${test_list}")
-  list(APPEND allow_implicit_fallthrough_list 
+  list(APPEND allow_implicit_fallthrough_list
     "bodo/tests/test_puffin.cpp"
     "bodo/tests/test_theta_sketches.cpp")
 endif()
@@ -707,5 +710,5 @@ else()
 endif()
 
 set_target_properties(ext PROPERTIES CXX_CLANG_TIDY "${CLANG_TIDY_COMMAND}")
-add_dependencies(ext pyfs _hdfs tracing pyarrow_wrappers datasketches)
+add_dependencies(ext csv_json_reader _hdfs tracing pyarrow_wrappers datasketches)
 install(TARGETS ext DESTINATION "bodo/")
