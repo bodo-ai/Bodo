@@ -566,12 +566,14 @@ class DistributedPass:
                 assert call_type.args[-2] == types.Omitted(False) and call_type.args[
                     -1
                 ] == types.Omitted(False)
-                self.calltypes[rhs] = self.typemap[rhs.func.name].get_call_type(
+                new_sig = self.typemap[rhs.func.name].get_call_type(
                     self.typingctx,
                     call_type.args[:-2]
                     + (types.Omitted(build_parallel), types.Omitted(probe_parallel)),
                     {},
                 )
+                new_sig = new_sig.replace(return_type=call_type.return_type)
+                self.calltypes[rhs] = new_sig
                 return [assign]
 
         if fdef in (
@@ -581,7 +583,7 @@ class DistributedPass:
             ),
             (
                 "iceberg_writer_init",
-                "bodo.io.stream_iceberg_write",
+                "bodo.io.iceberg.stream_iceberg_write",
             ),
             (
                 "parquet_writer_init",
@@ -2358,7 +2360,7 @@ class DistributedPass:
             )
 
         # Iceberg Merge Into
-        if fdef == ("iceberg_merge_cow_py", "bodo.io.iceberg"):
+        if fdef == ("iceberg_merge_cow_py", "bodo.io.iceberg.merge_into"):
             # Dataframe is the 3rd argument (counting from 0)
             df_arg = rhs.args[3].name
             if not self._is_1D_or_1D_Var_arr(df_arg):

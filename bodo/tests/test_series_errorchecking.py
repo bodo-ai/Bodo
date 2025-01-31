@@ -405,8 +405,14 @@ def test_astype_non_constant_string(memory_leak_check):
     is not a compile time constant will produce a reasonable BodoError.
     """
 
+    @bodo.jit
+    def g(s):
+        # Add print to avoid constant inference to call the function at compile time
+        print(s)
+        return s[0]
+
     def impl(S, type_str):
-        return S.astype(type_str[0])
+        return S.astype(g(type_str))
 
     S = pd.Series([1, 2, 3, 4] * 10)
     type_str = ["uint64"]

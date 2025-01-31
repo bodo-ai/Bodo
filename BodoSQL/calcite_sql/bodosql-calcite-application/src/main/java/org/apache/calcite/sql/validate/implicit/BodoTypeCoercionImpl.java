@@ -9,6 +9,7 @@ import java.util.Map;
 import kotlin.Pair;
 import kotlin.jvm.functions.Function4;
 import org.apache.calcite.adapter.java.JavaTypeFactory;
+import org.apache.calcite.rel.type.DynamicRecordType;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.rel.type.RelDataTypeFactoryImpl;
@@ -38,10 +39,13 @@ import org.apache.calcite.sql.validate.SqlUserDefinedFunction;
 import org.apache.calcite.sql.validate.SqlUserDefinedTableFunction;
 import org.apache.calcite.sql.validate.SqlValidator;
 import org.apache.calcite.sql.validate.SqlValidatorScope;
+import org.apache.calcite.util.Util;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
 import static com.bodosql.calcite.application.operatorTables.CastingOperatorTable.TO_NUMBER;
 import static java.util.Objects.requireNonNull;
+import static org.apache.calcite.sql.type.SqlTypeUtil.convertTypeToSpec;
+import static org.apache.calcite.sql.type.SqlTypeUtil.getMaxPrecisionScaleDecimal;
 import static org.apache.calcite.sql.validate.SqlNonNullableAccessors.getScope;
 
 public class BodoTypeCoercionImpl extends TypeCoercionImpl {
@@ -178,6 +182,26 @@ public class BodoTypeCoercionImpl extends TypeCoercionImpl {
     if (SqlTypeUtil.isNumeric(type1) && SqlTypeUtil.isBoolean(type2)) {
       return type2;
     }
+
+    // Fix new precision and scale for integer - decimal and decimal - decimal comparisons
+    if ((SqlTypeUtil.isDecimal(type1) || SqlTypeUtil.isDecimal(type2)) && (SqlTypeUtil.isExactNumeric(type1) && SqlTypeUtil.isExactNumeric(type2))) {
+      // Convert all types to decimal so we can get an accurate precision and scale
+      // Integer types return defaultMaxPrecision and defaultMaxScale which creates
+      // an incorrect precision and scale for the resulting decimal type.
+      final RelDataType type1AsDecimal = factory.decimalOf(type1);
+      final RelDataType type2AsDecimal = factory.decimalOf(type2);
+      // Get the number of leading digits for each type
+      int l1 = type1AsDecimal.getPrecision() - type1AsDecimal.getScale();
+      int l2 = type2AsDecimal.getPrecision() - type2AsDecimal.getScale();
+      // New leading digits is the max of the two types to ensure we don't lose any information
+      int newLeading = Math.max(l1, l2);
+      // New scale is the max of the two types clamped to the max scale to ensure we don't lose any information when possible
+      final int newScale = Math.min(Math.max(type1AsDecimal.getScale(), type2AsDecimal.getScale()), factory.getTypeSystem().getMaxScale(SqlTypeName.DECIMAL));
+      // New precision is the sum of the new leading and new scale clamped to the max precision to ensure we don't lose any information when possible
+      final int newPrecision = Math.min(newLeading + newScale, factory.getTypeSystem().getMaxPrecision(SqlTypeName.DECIMAL));
+      return factory.createSqlType(SqlTypeName.DECIMAL, newPrecision, newScale);
+    }
+
     return super.commonTypeForBinaryComparison(type1, type2);
   }
 
@@ -244,6 +268,11 @@ public class BodoTypeCoercionImpl extends TypeCoercionImpl {
     }
   }
 
+  private static SqlNode simpleCastTo(SqlNode node, RelDataType type) {
+    return SqlStdOperatorTable.CAST.createCall(SqlParserPos.ZERO, node,
+            BodoSqlTypeUtil.convertTypeToSpec(type).withNullable(type.isNullable()));
+  }
+
   private static class TypeCoercionFactoryImpl implements TypeCoercionFactory {
     @Override
     public TypeCoercion create(RelDataTypeFactory typeFactory, SqlValidator validator) {
@@ -260,7 +289,7 @@ public class BodoTypeCoercionImpl extends TypeCoercionImpl {
    * Our version of this type coercion can differ from snowflake's semantics due to evaluation order difference,
    * but should otherwise be comprable
    */
-  @Override public boolean coalesceCoercion(SqlCallBinding callBinding) {
+  public boolean coalesceCoercion(SqlCallBinding callBinding) {
     // For sql statement like:
     // `case when ... then (a, b, c) when ... then (d, e, f) else (g, h, i)`
     // an exception throws when entering this method.
@@ -269,7 +298,6 @@ public class BodoTypeCoercionImpl extends TypeCoercionImpl {
     return coalesceCoercionImpl(callBinding);
   }
 
-  // This is copied from TypeCoersionImpl.coalesceCoercion but without the assertion that callBinding is a COALESCE call.
   private boolean coalesceCoercionDefaultImpl(SqlCallBinding callBinding) {
     SqlCall call = callBinding.getCall();
     SqlNodeList operandList = new SqlNodeList(call.getOperandList(), call.getParserPosition());
@@ -428,5 +456,103 @@ public class BodoTypeCoercionImpl extends TypeCoercionImpl {
       }
     }
     return coerced;
+  }
+
+  /**
+   * Extension of getWiderTypeForTwo to fix a bug in Array types.
+   */
+  @Override public @Nullable RelDataType getWiderTypeForTwo(
+          @Nullable RelDataType type1,
+          @Nullable RelDataType type2,
+          boolean stringPromotion) {
+    RelDataType resultType = super.getWiderTypeForTwo(type1, type2, stringPromotion);
+    if (resultType == null) {
+      return null;
+    }
+    // There is a bug in getWiderTypeForTwo where it just creates an array type
+    // without considering nullability
+    if (resultType.getSqlTypeName() == SqlTypeName.ARRAY && !resultType.isNullable()) {
+      if (type1.isNullable() || type2.isNullable()) {
+        resultType = factory.createTypeWithNullability(resultType, true);
+      }
+    }
+    return resultType;
+  }
+
+  /**
+   * Copy of AbstractTypeCoercion so we can modify
+   * the CastTo usage.
+   *
+   * Cast column at index {@code index} to target type.
+   *
+   * @param scope      Validator scope for the node list
+   * @param nodeList   Column node list
+   * @param index      Index of column
+   * @param targetType Target type to cast to
+   */
+  @Override
+  protected boolean coerceColumnType(
+          @Nullable SqlValidatorScope scope,
+          SqlNodeList nodeList,
+          int index,
+          RelDataType targetType) {
+    // Transform the JavaType to SQL type because the SqlDataTypeSpec
+    // does not support deriving JavaType yet.
+    if (RelDataTypeFactoryImpl.isJavaType(targetType)) {
+      targetType = ((JavaTypeFactory) factory).toSql(targetType);
+    }
+
+    // This will happen when there is a star/dynamic-star column in the select list,
+    // and the source is values expression, i.e. `select * from (values(1, 2, 3))`.
+    // There is no need to coerce the column type, only remark
+    // the inferred row type has changed, we will then add in type coercion
+    // when expanding star/dynamic-star.
+
+    // See SqlToRelConverter#convertSelectList for details.
+    if (index >= nodeList.size()) {
+      // Can only happen when there is a star(*) in the column,
+      // just return true.
+      return true;
+    }
+
+    final SqlNode node = nodeList.get(index);
+    if (node instanceof SqlDynamicParam) {
+      // Do not support implicit type coercion for dynamic param.
+      return false;
+    }
+    if (node instanceof SqlIdentifier) {
+      // Do not expand a star/dynamic table col.
+      SqlIdentifier node1 = (SqlIdentifier) node;
+      if (node1.isStar()) {
+        return true;
+      } else if (DynamicRecordType.isDynamicStarColName(Util.last(node1.names))) {
+        // Should support implicit cast for dynamic table.
+        return false;
+      }
+    }
+
+    requireNonNull(scope, "scope is needed for needToCast(scope, operand, targetType)");
+    if (node instanceof SqlCall) {
+      SqlCall node2 = (SqlCall) node;
+      if (node2.getOperator().kind == SqlKind.AS) {
+        final SqlNode operand = node2.operand(0);
+        if (!needToCast(scope, operand, targetType)) {
+          return false;
+        }
+        RelDataType targetType2 = syncAttributes(validator.deriveType(scope, operand), targetType);
+        final SqlNode casted = simpleCastTo(operand, targetType2);
+        node2.setOperand(0, casted);
+        updateInferredType(casted, targetType2);
+        return true;
+      }
+    }
+    if (!needToCast(scope, node, targetType)) {
+      return false;
+    }
+    RelDataType targetType3 = syncAttributes(validator.deriveType(scope, node), targetType);
+    final SqlNode node3 = simpleCastTo(node, targetType3);
+    nodeList.set(index, node3);
+    updateInferredType(node3, targetType3);
+    return true;
   }
 }

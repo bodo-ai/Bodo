@@ -26,7 +26,7 @@ def regexp_strings_df():
                     None,
                 ],
                 "B": [1, 2, 3, 1, 2, 3],
-                "P": [".*The.*", ".*\W+o\w*.*", None, "the.*", None, ".*\w+-\w+.*"],
+                "P": [".*The.*", r".*\W+o\w*.*", None, "the.*", None, r".*\w+-\w+.*"],
             }
         )
     }
@@ -81,7 +81,7 @@ def regexp_strings_df():
         ),
         pytest.param(
             (
-                "SELECT A RLIKE '.*\W+o\w*.*' FROM table1",
+                r"SELECT A RLIKE '.*\W+o\w*.*' FROM table1",
                 pd.DataFrame(
                     {
                         0: pd.Series(
@@ -95,7 +95,7 @@ def regexp_strings_df():
         ),
         pytest.param(
             (
-                "SELECT A REGEXP '.*\W+o\w*.*' FROM table1",
+                r"SELECT A REGEXP '.*\W+o\w*.*' FROM table1",
                 pd.DataFrame(
                     {
                         0: pd.Series(
@@ -153,7 +153,7 @@ def regexp_strings_df():
         ),
         pytest.param(
             (
-                "SELECT REGEXP_LIKE(A, '.*\W+o\w*.*') FROM table1",
+                r"SELECT REGEXP_LIKE(A, '.*\W+o\w*.*') FROM table1",
                 pd.DataFrame(
                     {
                         0: pd.Series(
@@ -168,7 +168,7 @@ def regexp_strings_df():
         ),
         pytest.param(
             (
-                "SELECT CASE WHEN REGEXP_LIKE(A, '.*\w+-\w+.*', 'i') THEN 'Y' ELSE 'N' END FROM table1",
+                r"SELECT CASE WHEN REGEXP_LIKE(A, '.*\w+-\w+.*', 'i') THEN 'Y' ELSE 'N' END FROM table1",
                 pd.DataFrame({0: pd.Series(["N", "N", "Y", "N", "Y", "N"])}),
             ),
             id="CASE-medium_pattern-ignore_case",
@@ -244,7 +244,7 @@ def test_regexp_like_non_scalar_pattern(regexp_strings_df, args, memory_leak_che
         ),
         pytest.param(
             (
-                "SELECT REGEXP_COUNT(A, '\W+o\w*', 36) FROM table1",
+                r"SELECT REGEXP_COUNT(A, '\W+o\w*', 36) FROM table1",
                 pd.DataFrame(
                     {0: pd.Series([1, 2, 0, 1, 2, None], dtype=pd.Int32Dtype())}
                 ),
@@ -254,7 +254,7 @@ def test_regexp_like_non_scalar_pattern(regexp_strings_df, args, memory_leak_che
         ),
         pytest.param(
             (
-                "SELECT CASE WHEN REGEXP_COUNT(A, '\w+-\w+', 1, 'i') > 0 THEN ':)' ELSE ':(' END FROM table1",
+                r"SELECT CASE WHEN REGEXP_COUNT(A, '\w+-\w+', 1, 'i') > 0 THEN ':)' ELSE ':(' END FROM table1",
                 pd.DataFrame({0: pd.Series([":(", ":(", ":)", ":(", ":)", ":("])}),
             ),
             id="CASE-medium_pattern-1-ignore_case",
@@ -348,7 +348,7 @@ def test_regexp_count_non_scalar_pattern(regexp_strings_df, args, memory_leak_ch
         ),
         pytest.param(
             (
-                "SELECT REGEXP_REPLACE(A, 'the \w+', 'the ???', 1, 2, 'i') FROM table1",
+                r"SELECT REGEXP_REPLACE(A, 'the \w+', 'the ???', 1, 2, 'i') FROM table1",
                 pd.DataFrame(
                     {
                         0: pd.Series(
@@ -368,7 +368,7 @@ def test_regexp_count_non_scalar_pattern(regexp_strings_df, args, memory_leak_ch
         ),
         pytest.param(
             (
-                "SELECT REGEXP_REPLACE(A, 'the \w+', 'the ***', 5, 0, 'i') FROM table1",
+                r"SELECT REGEXP_REPLACE(A, 'the \w+', 'the ***', 5, 0, 'i') FROM table1",
                 pd.DataFrame(
                     {
                         0: pd.Series(
@@ -389,7 +389,7 @@ def test_regexp_count_non_scalar_pattern(regexp_strings_df, args, memory_leak_ch
         ),
         pytest.param(
             (
-                "SELECT REGEXP_REPLACE(A, 'the (\w+)', 'the (\\\\1)', 1, 1, 'i') FROM table1",
+                r"SELECT REGEXP_REPLACE(A, 'the (\w+)', 'the (\\1)', 1, 1, 'i') FROM table1",
                 pd.DataFrame(
                     {
                         0: pd.Series(
@@ -409,7 +409,7 @@ def test_regexp_count_non_scalar_pattern(regexp_strings_df, args, memory_leak_ch
         ),
         pytest.param(
             (
-                "SELECT CASE WHEN INSTR(A, '-') > 0 THEN REGEXP_REPLACE(A, '\W+([[:alpha:]]+)-([[:alpha:]]+)', ' \\\\2-\\\\1') ELSE REGEXP_REPLACE(A, '(\W+)(\w+) (\w+) (\w+)', '\\\\1[\\\\4,\\\\3,\\\\2]', 6) END FROM table1",
+                r"SELECT CASE WHEN INSTR(A, '-') > 0 THEN REGEXP_REPLACE(A, '\W+([[:alpha:]]+)-([[:alpha:]]+)', ' \\2-\\1') ELSE REGEXP_REPLACE(A, '(\W+)(\w+) (\w+) (\w+)', '\\1[\\4,\\3,\\2]', 6) END FROM table1",
                 pd.DataFrame(
                     {
                         0: pd.Series(
@@ -447,7 +447,7 @@ def test_regexp_replace(regexp_strings_df, args, memory_leak_check):
     [
         pytest.param(
             (
-                "SELECT REGEXP_SUBSTR(A, 'the \w+', 1, 2) FROM table1",
+                r"SELECT REGEXP_SUBSTR(A, 'the \w+', 1, 2) FROM table1",
                 pd.DataFrame(
                     {0: pd.Series([None, "the far", None, "the truth", None, None])}
                 ),
@@ -456,7 +456,7 @@ def test_regexp_replace(regexp_strings_df, args, memory_leak_check):
         ),
         pytest.param(
             (
-                "SELECT REGEXP_SUBSTR(A, 'the \w+', 1, 1, 'i') FROM table1",
+                r"SELECT REGEXP_SUBSTR(A, 'the \w+', 1, 1, 'i') FROM table1",
                 pd.DataFrame(
                     {
                         0: pd.Series(
@@ -476,7 +476,7 @@ def test_regexp_replace(regexp_strings_df, args, memory_leak_check):
         ),
         pytest.param(
             (
-                "SELECT REGEXP_SUBSTR(A, '(\w*-\w*)|(the .* the)') FROM table1",
+                r"SELECT REGEXP_SUBSTR(A, '(\w*-\w*)|(the .* the)') FROM table1",
                 pd.DataFrame(
                     {
                         0: pd.Series(
@@ -497,7 +497,7 @@ def test_regexp_replace(regexp_strings_df, args, memory_leak_check):
         ),
         pytest.param(
             (
-                "SELECT REGEXP_SUBSTR(A, 'the (\w+)', 1, 1, 'ie') FROM table1",
+                r"SELECT REGEXP_SUBSTR(A, 'the (\w+)', 1, 1, 'ie') FROM table1",
                 pd.DataFrame(
                     {
                         0: pd.Series(
@@ -511,7 +511,7 @@ def test_regexp_replace(regexp_strings_df, args, memory_leak_check):
         ),
         pytest.param(
             (
-                "SELECT REGEXP_SUBSTR(A, '(\w+)-(\w+)', 1, 2, '', 2) FROM table1",
+                r"SELECT REGEXP_SUBSTR(A, '(\w+)-(\w+)', 1, 2, '', 2) FROM table1",
                 pd.DataFrame(
                     {
                         0: pd.Series(
@@ -524,7 +524,7 @@ def test_regexp_replace(regexp_strings_df, args, memory_leak_check):
         ),
         pytest.param(
             (
-                "SELECT REGEXP_SUBSTR(A, '\W+(\w+) (\w+) (\w+)', 6, 1, 'e', B) FROM table1",
+                r"SELECT REGEXP_SUBSTR(A, '\W+(\w+) (\w+) (\w+)', 6, 1, 'e', B) FROM table1",
                 pd.DataFrame(
                     {
                         0: pd.Series(
@@ -538,7 +538,7 @@ def test_regexp_replace(regexp_strings_df, args, memory_leak_check):
         ),
         pytest.param(
             (
-                "SELECT CASE WHEN INSTR(A, 'of') = 0 THEN REGEXP_SUBSTR(A, '(\w+)\W+(\w+)\.', 31, 1, 'e', 2) ELSE REGEXP_SUBSTR(A, '(\w+) of (\w+)', 31, 1, 'e', 1) END FROM table1",
+                r"SELECT CASE WHEN INSTR(A, 'of') = 0 THEN REGEXP_SUBSTR(A, '(\w+)\W+(\w+)\.', 31, 1, 'e', 2) ELSE REGEXP_SUBSTR(A, '(\w+) of (\w+)', 31, 1, 'e', 1) END FROM table1",
                 pd.DataFrame(
                     {0: pd.Series(["wine", "edge", "break", "did", "out", None])}
                 ),
@@ -565,7 +565,7 @@ def test_regexp_substr(regexp_strings_df, args, spark_info, memory_leak_check):
     [
         pytest.param(
             (
-                "SELECT REGEXP_INSTR(A, 'the \w+', 1, 2) FROM table1",
+                r"SELECT REGEXP_INSTR(A, 'the \w+', 1, 2) FROM table1",
                 pd.DataFrame(
                     {0: pd.Series([0, 53, 0, 54, 0, None], dtype=pd.Int32Dtype())}
                 ),
@@ -574,7 +574,7 @@ def test_regexp_substr(regexp_strings_df, args, spark_info, memory_leak_check):
         ),
         pytest.param(
             (
-                "SELECT REGEXP_INSTR(A, 'the \w+', 1, 1, 0, 'i') FROM table1",
+                r"SELECT REGEXP_INSTR(A, 'the \w+', 1, 1, 0, 'i') FROM table1",
                 pd.DataFrame(
                     {0: pd.Series([43, 1, 0, 11, 1, None], dtype=pd.Int32Dtype())}
                 ),
@@ -584,7 +584,7 @@ def test_regexp_substr(regexp_strings_df, args, spark_info, memory_leak_check):
         ),
         pytest.param(
             (
-                "SELECT REGEXP_INSTR(A, '(\w*-\w*)|(the .* the)') FROM table1",
+                r"SELECT REGEXP_INSTR(A, '(\w*-\w*)|(the .* the)') FROM table1",
                 pd.DataFrame(
                     {0: pd.Series([0, 37, 31, 11, 5, None], dtype=pd.Int32Dtype())}
                 ),
@@ -594,7 +594,7 @@ def test_regexp_substr(regexp_strings_df, args, spark_info, memory_leak_check):
         ),
         pytest.param(
             (
-                "SELECT REGEXP_INSTR(A, 'the (\w+)', 1, 1, 0, 'ie') FROM table1",
+                r"SELECT REGEXP_INSTR(A, 'the (\w+)', 1, 1, 0, 'ie') FROM table1",
                 pd.DataFrame(
                     {0: pd.Series([47, 5, 0, 15, 5, None], dtype=pd.Int32Dtype())}
                 ),
@@ -603,7 +603,7 @@ def test_regexp_substr(regexp_strings_df, args, spark_info, memory_leak_check):
         ),
         pytest.param(
             (
-                "SELECT REGEXP_INSTR(A, '(\w+)-(\w+)', 1, 2, 1, '', 2) FROM table1",
+                r"SELECT REGEXP_INSTR(A, '(\w+)-(\w+)', 1, 2, 1, '', 2) FROM table1",
                 pd.DataFrame(
                     {0: pd.Series([0, 0, 51, 0, 77, None], dtype=pd.Int32Dtype())}
                 ),
@@ -613,7 +613,7 @@ def test_regexp_substr(regexp_strings_df, args, spark_info, memory_leak_check):
         ),
         pytest.param(
             (
-                "SELECT REGEXP_INSTR(A, '\W+(\w+) (\w+) (\w+)', 6, 1, 0, 'e', B) FROM table1",
+                r"SELECT REGEXP_INSTR(A, '\W+(\w+) (\w+) (\w+)', 6, 1, 0, 'e', B) FROM table1",
                 pd.DataFrame(
                     {0: pd.Series([12, 20, 17, 11, 18, None], dtype=pd.Int32Dtype())}
                 ),
@@ -623,7 +623,7 @@ def test_regexp_substr(regexp_strings_df, args, spark_info, memory_leak_check):
         ),
         pytest.param(
             (
-                "SELECT CASE WHEN INSTR(A, 'of') = 0 THEN REGEXP_INSTR(A, '(\w+)\W+(\w+)\.', 31, 1, 0, 'e', 2) ELSE REGEXP_INSTR(A, '(\w+) of (\w+)', 31, 1, 1, 'e', 1) END FROM table1",
+                r"SELECT CASE WHEN INSTR(A, 'of') = 0 THEN REGEXP_INSTR(A, '(\w+)\W+(\w+)\.', 31, 1, 0, 'e', 2) ELSE REGEXP_INSTR(A, '(\w+) of (\w+)', 31, 1, 1, 'e', 1) END FROM table1",
                 pd.DataFrame(
                     {0: pd.Series([39, 65, 46, 76, 57, None], dtype=pd.Int32Dtype())}
                 ),

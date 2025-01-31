@@ -16,7 +16,7 @@ from sklearn.utils.validation import check_random_state
 import bodo
 from bodo.tests.utils import _get_dist_arg, check_func
 
-pytestmark = [pytest.mark.ml, pytest.mark.weekly]
+pytestmark = [pytest.mark.ml, pytest.mark.slow]
 
 # --------------------KMeans Clustering Tests-----------------#
 

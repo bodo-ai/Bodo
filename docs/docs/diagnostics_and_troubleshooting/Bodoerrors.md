@@ -32,7 +32,7 @@ on how to proceed with resolving them.
     discussions, please join our [discourse](https://discourse.bodo.ai).
 
     !!! seealso "See Also"
-        [Object Mode][objmode] can be used to switch to
+        [@bodo.wrap_python][objmode] can be used to switch to
         Python interpreted context to be able to run your workload, but we
         strongly recommend trying to find a Bodo-native workaround.
 

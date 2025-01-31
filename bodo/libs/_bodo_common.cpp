@@ -612,11 +612,13 @@ std::string array_info::val_to_str(size_t idx) {
             std::string date_str;
             date_str.reserve(10);
             date_str += std::to_string(year) + "-";
-            if (month < 10)
+            if (month < 10) {
                 date_str += "0";
+            }
             date_str += std::to_string(month) + "-";
-            if (day < 10)
+            if (day < 10) {
                 date_str += "0";
+            }
             date_str += std::to_string(day);
             return date_str;
         }
@@ -1214,8 +1216,9 @@ int64_t arrow_array_memory_size(std::shared_ptr<arrow::Array> arr) {
             std::dynamic_pointer_cast<arrow::StructType>(struct_arr->type());
         int64_t num_fields = struct_type->num_fields();
         int64_t total_siz = n_bytes;
-        for (int64_t i_field = 0; i_field < num_fields; i_field++)
+        for (int64_t i_field = 0; i_field < num_fields; i_field++) {
             total_siz += arrow_array_memory_size(struct_arr->field(i_field));
+        }
         return total_siz;
     }
 #if OFFSET_BITWIDTH == 32
@@ -1771,8 +1774,9 @@ extern "C" {
 PyMODINIT_FUNC PyInit_ext(void) {
     PyObject* m;
     MOD_DEF(m, "ext", "No docs", nullptr);
-    if (m == nullptr)
+    if (m == nullptr) {
         return nullptr;
+    }
 
     bodo_common_init();
 
@@ -1791,8 +1795,9 @@ PyMODINIT_FUNC PyInit_ext(void) {
     SetAttrStringFromPyInit(m, s3_reader);
     SetAttrStringFromPyInit(m, fsspec_reader);
     SetAttrStringFromPyInit(m, hdfs_reader);
-
+#ifndef NO_HDF5
     SetAttrStringFromPyInit(m, _hdf5);
+#endif
     SetAttrStringFromPyInit(m, arrow_cpp);
     SetAttrStringFromPyInit(m, csv_cpp);
     SetAttrStringFromPyInit(m, json_cpp);

@@ -7,15 +7,14 @@
 #include <arrow/io/interfaces.h>
 #include <arrow/memory_pool.h>
 
+#include "_stl_allocator.h"
 #include "_storage_manager.h"
 
 // Forward declare boost::json::object to avoid including the entire header and
 // increasing compile times
-namespace boost {
-namespace json {
+namespace boost::json {
 class object;
 }
-}  // namespace boost
 
 // Fraction of the smallest mmap-ed SizeClass
 // that should be used as threshold for allocation
@@ -1015,106 +1014,50 @@ class BufferPool final : public IBufferPool {
     ::arrow::Status evict_handler(uint64_t bytes, const std::string& caller);
 };
 
-/// Helper Tools for using BufferPool in STL Containers
-/// Based on ::arrow::stl::allocator class. We did not extend from that
-/// class due to buggy behavior when the destructor was being called
-/// too early.
-
+// Default STL allocator that plugs in the central buffer pool (used in bodo.ext
+// module)
 template <class T>
-class STLBufferPoolAllocator {
+class DefaultSTLBufferPoolAllocator : public STLBufferPoolAllocator<T> {
    public:
-    using value_type = T;
-    using is_always_equal = std::true_type;
-
     template <class U>
     struct rebind {
-        using other = STLBufferPoolAllocator<U>;
+        using other = DefaultSTLBufferPoolAllocator<U>;
     };
 
-    STLBufferPoolAllocator(IBufferPool* pool, size_t size) noexcept
-        : pool_(pool), size_(size) {}
-
-    STLBufferPoolAllocator(IBufferPool* pool) noexcept
-        : STLBufferPoolAllocator(pool, 0) {}
-
-    STLBufferPoolAllocator() noexcept
-        : STLBufferPoolAllocator(BufferPool::DefaultPtr()) {}
-
-    ~STLBufferPoolAllocator() {}
+    template <class U>
+    DefaultSTLBufferPoolAllocator(
+        const DefaultSTLBufferPoolAllocator<U>& other) noexcept
+        : DefaultSTLBufferPoolAllocator(other.pool(), other.size()) {}
 
     template <class U>
-    STLBufferPoolAllocator(const STLBufferPoolAllocator<U>& other) noexcept
-        : STLBufferPoolAllocator(other.pool(), other.size()) {}
+    DefaultSTLBufferPoolAllocator(DefaultSTLBufferPoolAllocator<U>&& other)
+        : DefaultSTLBufferPoolAllocator(other.pool(), other.size()) {}
 
     template <class U>
-    STLBufferPoolAllocator(STLBufferPoolAllocator<U>&& other)
-        : STLBufferPoolAllocator(other.pool(), other.size()) {}
-
-    template <class U>
-    STLBufferPoolAllocator& operator=(const STLBufferPoolAllocator<U>& other) {
+    DefaultSTLBufferPoolAllocator& operator=(
+        const DefaultSTLBufferPoolAllocator<U>& other) {
         this->pool_ = other.pool();
         this->size_ = other.size();
     }
 
     template <class U>
-    STLBufferPoolAllocator& operator=(STLBufferPoolAllocator<U>&& other) {
+    DefaultSTLBufferPoolAllocator& operator=(
+        DefaultSTLBufferPoolAllocator<U>&& other) {
         this->pool_ = other.pool();
         this->size_ = other.size();
     }
 
-    T* address(T& r) const noexcept { return std::addressof(r); }
+    DefaultSTLBufferPoolAllocator(arrow::MemoryPool* pool, size_t size) noexcept
+        : STLBufferPoolAllocator<T>(pool, size) {}
 
-    const T* address(const T& r) const noexcept { return std::addressof(r); }
+    DefaultSTLBufferPoolAllocator(arrow::MemoryPool* pool) noexcept
+        : DefaultSTLBufferPoolAllocator(pool, 0) {}
 
-    template <class U>
-    inline bool operator==(const STLBufferPoolAllocator<U>& rhs) {
-        return this->pool_ == rhs.pool() && this->size_ == rhs.size();
-    }
-
-    template <class U>
-    inline bool operator!=(const STLBufferPoolAllocator<U>& rhs) {
-        return this->pool_ != rhs.pool() || this->size_ != rhs.size();
-    }
-
-    T* allocate(size_t n) {
-        uint8_t* data;
-        size_t bytes = n * sizeof(T);
-        ::arrow::Status s = this->pool_->Allocate(bytes, &data);
-        if (!s.ok()) {
-            throw std::bad_alloc();
-        }
-        this->size_ += bytes;
-        return reinterpret_cast<T*>(data);
-    }
-
-    void deallocate(T* p, size_t n) {
-        size_t bytes = n * sizeof(T);
-        this->pool_->Free(reinterpret_cast<uint8_t*>(p), bytes);
-        this->size_ -= bytes;
-    }
-
-    size_t size_max() const noexcept { return size_t(-1) / sizeof(T); }
-
-    template <class U, class... Args>
-    void construct(U* p, Args&&... args) {
-        new (reinterpret_cast<void*>(p)) U(std::forward<Args>(args)...);
-    }
-
-    template <class U>
-    void destroy(U* p) {
-        p->~U();
-    }
-
-    IBufferPool* pool() const noexcept { return this->pool_; }
-    size_t size() const noexcept { return this->size_; }
-
-   private:
-    IBufferPool* const pool_;
-    // Size of all allocations made through this allocator in bytes.
-    size_t size_;
+    DefaultSTLBufferPoolAllocator() noexcept
+        : STLBufferPoolAllocator<T>(BufferPool::DefaultPtr()) {}
 };
 
-template <typename T, class Allocator = STLBufferPoolAllocator<T>>
+template <typename T, class Allocator = DefaultSTLBufferPoolAllocator<T>>
 using vector = std::vector<T, Allocator>;
 
 /**

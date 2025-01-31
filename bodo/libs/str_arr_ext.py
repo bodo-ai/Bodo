@@ -928,7 +928,7 @@ def to_list_if_immutable_arr(arr, str_null_bools=None):  # pragma: no cover
     return arr
 
 
-@overload(to_list_if_immutable_arr, no_unliteral=True)
+@overload(to_list_if_immutable_arr, no_unliteral=True, jit_options={"cache": True})
 def to_list_if_immutable_arr_overload(data, str_null_bools=None):
     """if str_null_bools is True and data is tuple, output tuple contains
     an array of bools as null mask for each string array
@@ -955,23 +955,21 @@ def to_list_if_immutable_arr_overload(data, str_null_bools=None):
                 if is_str_arr_type(data.types[i]) or data.types[i] == binary_array_type
             ]
 
-        func_text = "def f(data, str_null_bools=None):\n"
+        func_text = "def bodo_to_list_if_immutable_arr(data, str_null_bools=None):\n"
         func_text += "  return ({}{})\n".format(
             ", ".join(out), "," if count == 1 else ""
         )  # single value needs comma to become tuple
 
-        loc_vars = {}
-        exec(
+        return bodo.utils.utils.bodo_exec(
             func_text,
             {
                 "to_list_if_immutable_arr": to_list_if_immutable_arr,
                 "get_str_null_bools": get_str_null_bools,
                 "bodo": bodo,
             },
-            loc_vars,
+            {},
+            globals(),
         )
-        to_str_impl = loc_vars["f"]
-        return to_str_impl
 
     return lambda data, str_null_bools=None: data  # pragma: no cover
 
@@ -980,7 +978,7 @@ def cp_str_list_to_array(str_arr, str_list, str_null_bools=None):  # pragma: no 
     return
 
 
-@overload(cp_str_list_to_array, no_unliteral=True)
+@overload(cp_str_list_to_array, no_unliteral=True, jit_options={"cache": True})
 def cp_str_list_to_array_overload(str_arr, list_data, str_null_bools=None):
     """when str_arr is tuple, str_null_bools is a flag indicating whether
     list_data includes an extra bool array for each string array's null masks.
@@ -1018,7 +1016,9 @@ def cp_str_list_to_array_overload(str_arr, list_data, str_null_bools=None):
         count = str_arr.count
 
         str_ind = 0
-        func_text = "def f(str_arr, list_data, str_null_bools=None):\n"
+        func_text = (
+            "def bodo_cp_str_list_to_array(str_arr, list_data, str_null_bools=None):\n"
+        )
         for i in range(count):
             if (
                 is_overload_true(str_null_bools)
@@ -1030,10 +1030,9 @@ def cp_str_list_to_array_overload(str_arr, list_data, str_null_bools=None):
                 func_text += f"  cp_str_list_to_array(str_arr[{i}], list_data[{i}])\n"
         func_text += "  return\n"
 
-        loc_vars = {}
-        exec(func_text, {"cp_str_list_to_array": cp_str_list_to_array}, loc_vars)
-        cp_str_impl = loc_vars["f"]
-        return cp_str_impl
+        return bodo.utils.utils.bodo_exec(
+            func_text, {"cp_str_list_to_array": cp_str_list_to_array}, {}, globals()
+        )
 
     return lambda str_arr, list_data, str_null_bools=None: None  # pragma: no cover
 
@@ -1042,7 +1041,7 @@ def str_list_to_array(str_list):
     return str_list
 
 
-@overload(str_list_to_array, no_unliteral=True)
+@overload(str_list_to_array, no_unliteral=True, jit_options={"cache": True})
 def str_list_to_array_overload(str_list):
     """same as cp_str_list_to_array, except this call allocates output"""
     if isinstance(str_list, types.List) and str_list.dtype == bodo.string_type:
@@ -1064,7 +1063,7 @@ def get_num_total_chars(A):  # pragma: no cover
     pass
 
 
-@overload(get_num_total_chars)
+@overload(get_num_total_chars, jit_options={"cache": True})
 def overload_get_num_total_chars(A):
     """get total number of characters in a list(str) or string array"""
     if isinstance(A, types.List) and A.dtype == string_type:
@@ -1083,7 +1082,9 @@ def overload_get_num_total_chars(A):
     return lambda A: num_total_chars(A)  # pragma: no cover
 
 
-@overload_method(StringArrayType, "copy", no_unliteral=True)
+@overload_method(
+    StringArrayType, "copy", no_unliteral=True, jit_options={"cache": True}
+)
 def str_arr_copy_overload(arr):
     def copy_impl(arr):  # pragma: no cover
         n = len(arr)
@@ -1095,7 +1096,7 @@ def str_arr_copy_overload(arr):
     return copy_impl
 
 
-@overload(len, no_unliteral=True)
+@overload(len, no_unliteral=True, jit_options={"cache": True})
 def str_arr_len_overload(str_arr):
     if str_arr == string_array_type:
 
@@ -1105,23 +1106,25 @@ def str_arr_len_overload(str_arr):
         return str_arr_len
 
 
-@overload_attribute(StringArrayType, "size")
+@overload_attribute(StringArrayType, "size", jit_options={"cache": True})
 def str_arr_size_overload(str_arr):
     return lambda str_arr: len(str_arr._data)  # pragma: no cover
 
 
-@overload_attribute(StringArrayType, "shape")
+@overload_attribute(StringArrayType, "shape", jit_options={"cache": True})
 def str_arr_shape_overload(str_arr):
     return lambda str_arr: (str_arr.size,)  # pragma: no cover
 
 
-@overload_attribute(StringArrayType, "nbytes")
+@overload_attribute(StringArrayType, "nbytes", jit_options={"cache": True})
 def str_arr_nbytes_overload(str_arr):
     return lambda str_arr: str_arr._data.nbytes  # pragma: no cover
 
 
-@overload_method(types.Array, "tolist", no_unliteral=True)
-@overload_method(StringArrayType, "tolist", no_unliteral=True)
+@overload_method(types.Array, "tolist", no_unliteral=True, jit_options={"cache": True})
+@overload_method(
+    StringArrayType, "tolist", no_unliteral=True, jit_options={"cache": True}
+)
 def overload_to_list(arr):
     return lambda arr: list(arr)  # pragma: no cover
 
@@ -1189,20 +1192,18 @@ _print_str_arr = types.ExternalFunction(
 
 @numba.generated_jit(nopython=True)
 def empty_str_arr(in_seq):  # pragma: no cover
-    func_text = "def f(in_seq):\n"
+    func_text = "def bodo_empty_str_arr(in_seq):\n"
     func_text += "    n_strs = len(in_seq)\n"
     func_text += "    A = pre_alloc_string_array(n_strs, -1)\n"
     func_text += "    return A\n"
-    loc_vars = {}
-    exec(
+    return bodo.utils.utils.bodo_exec(
         func_text,
         {
             "pre_alloc_string_array": pre_alloc_string_array,
         },
-        loc_vars,
+        {},
+        globals(),
     )
-    f = loc_vars["f"]
-    return f
 
 
 @numba.generated_jit(nopython=True)
@@ -1216,23 +1217,21 @@ def str_arr_from_sequence(in_seq):  # pragma: no cover
     else:
         alloc_fn = "pre_alloc_string_array"
 
-    func_text = "def f(in_seq):\n"
+    func_text = "def bodo_str_arr_from_sequence(in_seq):\n"
     func_text += "    n_strs = len(in_seq)\n"
     func_text += f"    A = {alloc_fn}(n_strs, -1)\n"
     func_text += "    for i in range(n_strs):\n"
     func_text += "        A[i] = in_seq[i]\n"
     func_text += "    return A\n"
-    loc_vars = {}
-    exec(
+    return bodo.utils.utils.bodo_exec(
         func_text,
         {
             "pre_alloc_string_array": pre_alloc_string_array,
             "pre_alloc_binary_array": pre_alloc_binary_array,
         },
-        loc_vars,
+        {},
+        globals(),
     )
-    f = loc_vars["f"]
-    return f
 
 
 @intrinsic
@@ -1304,7 +1303,7 @@ def set_bitmap_all_NA(typingctx, arr_typ):
     return types.none(arr_typ), codegen
 
 
-@numba.njit
+@numba.njit(cache=True)
 def pre_alloc_string_array(n_strs, n_chars):  # pragma: no cover
     """
     Wrapper for String Array Allocation with Pre- and Post- Processing
@@ -1814,7 +1813,7 @@ def inplace_eq(A, i, val):  # pragma: no cover
     return A[i] == val
 
 
-@overload(inplace_eq)
+@overload(inplace_eq, jit_options={"cache": True})
 def inplace_eq_overload(A, ind, val):
     """compare string array element to a string value inplace, without creating a string
     value from the element (which incurrs allocation overhead).
@@ -1839,7 +1838,7 @@ def str_arr_setitem_int_to_str(A, ind, value):
     A[ind] = str(value)
 
 
-@overload(str_arr_setitem_int_to_str)
+@overload(str_arr_setitem_int_to_str, jit_options={"cache": True})
 def overload_str_arr_setitem_int_to_str(A, ind, val):
     """
     Set string array element to string representation of an integer value
@@ -1882,7 +1881,7 @@ def str_arr_setitem_NA_str(A, ind):
     A[ind] = "<NA>"
 
 
-@overload(str_arr_setitem_NA_str)
+@overload(str_arr_setitem_NA_str, jit_options={"cache": True})
 def overload_str_arr_setitem_NA_str(A, ind):
     """
     Set string array element to "<NA>" (string representation of pd.NA)
@@ -1904,7 +1903,7 @@ def overload_str_arr_setitem_NA_str(A, ind):
     return impl
 
 
-@overload(operator.getitem, no_unliteral=True)
+@overload(operator.getitem, no_unliteral=True, jit_options={"cache": True})
 def str_arr_getitem_int(A, ind):
     if A != string_array_type:
         return
@@ -2086,12 +2085,12 @@ def str_arr_getitem_int(A, ind):
     )  # pragma: no cover
 
 
-dummy_use = numba.njit(lambda a: None)
+dummy_use = numba.njit(cache=True)(lambda a: None)
 
 
 # TODO: support literals directly and turn on `no_unliteral=True`
 # @overload(operator.setitem, no_unliteral=True)
-@overload(operator.setitem)
+@overload(operator.setitem, jit_options={"cache": True})
 def str_arr_setitem(A, idx, val):
     if A != string_array_type:
         return
@@ -2252,17 +2251,19 @@ def str_arr_setitem(A, idx, val):
     raise BodoError(typ_err_msg)
 
 
-@overload_attribute(StringArrayType, "dtype")
+@overload_attribute(StringArrayType, "dtype", jit_options={"cache": True})
 def overload_str_arr_dtype(A):
     return lambda A: pd.StringDtype()  # pragma: no cover
 
 
-@overload_attribute(StringArrayType, "ndim")
+@overload_attribute(StringArrayType, "ndim", jit_options={"cache": True})
 def overload_str_arr_ndim(A):
     return lambda A: 1  # pragma: no cover
 
 
-@overload_method(StringArrayType, "astype", no_unliteral=True)
+@overload_method(
+    StringArrayType, "astype", no_unliteral=True, jit_options={"cache": True}
+)
 def overload_str_arr_astype(A, dtype, copy=True):
     # If dtype is a string, force it to be a literal
     if dtype == types.unicode_type:
@@ -2433,7 +2434,7 @@ def get_arr_data_ptr(arr, ind):  # pragma: no cover
     return arr
 
 
-@overload(get_arr_data_ptr, no_unliteral=True)
+@overload(get_arr_data_ptr, no_unliteral=True, jit_options={"cache": True})
 def overload_get_arr_data_ptr(arr, ind):
     """return data pointer for array 'arr' at index 'ind'
     currently only used in 'str_arr_item_to_numeric' for nullable int and numpy arrays
@@ -2461,7 +2462,7 @@ def set_to_numeric_out_na_err(out_arr, out_ind, err_code):  # pragma: no cover
     pass
 
 
-@overload(set_to_numeric_out_na_err)
+@overload(set_to_numeric_out_na_err, jit_options={"cache": True})
 def set_to_numeric_out_na_err_overload(out_arr, out_ind, err_code):
     """set NA to output of to_numeric() based on error code from C++ code."""
     # nullable int array
@@ -2571,7 +2572,7 @@ def str_arr_min_max_seq(arr, min_or_max):  # pragma: no cover
 
 
 # NOTE: no_unliteral=True is necessary for min_or_max argument to be constant
-@overload(str_arr_min_max_seq, no_unliteral=True)
+@overload(str_arr_min_max_seq, no_unliteral=True, jit_options={"cache": True})
 def overload_str_arr_min_max_seq(arr, min_or_max):
     """String array min/max sequential implementation"""
     # TODO: optimize for dictionary-encoded case
@@ -2603,7 +2604,7 @@ def str_arr_min_max(arr, min_or_max, parallel=False):  # pragma: no cover
 
 
 # NOTE: no_unliteral=True is necessary for min_or_max argument to be constant
-@overload(str_arr_min_max, no_unliteral=True)
+@overload(str_arr_min_max, no_unliteral=True, jit_options={"cache": True})
 def overload_str_arr_min_max(arr, min_or_max, parallel=False):
     """String array min/max implementation"""
     # TODO: optimize for dictionary-encoded case
@@ -2835,7 +2836,7 @@ ArrayAnalysis._analyze_op_call_bodo_libs_str_arr_ext_pre_alloc_string_array = ( 
 #### glob support #####
 
 
-@overload(glob.glob, no_unliteral=True)
+@overload(glob.glob, no_unliteral=True, jit_options={"cache": True})
 def overload_glob_glob(pathname, recursive=False):
     def _glob_glob_impl(pathname, recursive=False):  # pragma: no cover
         with bodo.objmode(l="list_str_type"):

@@ -45,14 +45,15 @@ from bodosql.context import (
     DYNAMIC_PARAM_ARG_PREFIX,
     NAMED_PARAM_ARG_PREFIX,
     BodoSQLContext,
-    _PlannerType,
     compute_df_types,
     create_java_dynamic_parameter_type_list,
     create_java_named_parameter_type_map,
     initialize_schema,
     update_schema,
 )
-from bodosql.imported_java_classes import RelationalAlgebraGeneratorClass
+from bodosql.imported_java_classes import (
+    JavaEntryPoint,
+)
 from bodosql.utils import error_to_string
 
 
@@ -425,7 +426,7 @@ def _gen_sql_plan_pd_func_text_and_lowered_globals(
             f"Unable to determine one or more DataFrames in BodoSQL query: {e}"
         )
     failed = False
-    sql_plan = None
+    plan = None
     if bodo.get_rank() == 0:
         # This outermost try except should normally never be invoked, but it's here for safety
         # So the other ranks don't hang forever if we encounter an unexpected runtime error
@@ -434,52 +435,33 @@ def _gen_sql_plan_pd_func_text_and_lowered_globals(
             schema = initialize_schema()
             verbose_level = bodo.user_logging.get_verbose_level()
             tracing_level = bodo.tracing_level
-            if bodo.bodosql_use_streaming_plan:
-                planner_type = _PlannerType.Streaming.value
-            else:
-                planner_type = _PlannerType.Volcano.value
             if bodo_sql_context_type.catalog_type != types.none:
-                generator = RelationalAlgebraGeneratorClass(
-                    bodo_sql_context_type.catalog_type.get_java_object(),
-                    schema,
-                    planner_type,
-                    verbose_level,
-                    tracing_level,
-                    bodo.bodosql_streaming_batch_size,
-                    hide_credentials,
-                    bodo.enable_snowflake_iceberg,
-                    bodo.enable_timestamp_tz,
-                    bodo.enable_runtime_join_filters,
-                    bodo.enable_streaming_sort,
-                    bodo.enable_streaming_sort_limit_offset,
-                    bodo.bodo_sql_style,
-                    bodo.bodosql_full_caching,
-                    bodo.prefetch_sf_iceberg,
-                )
+                catalog_obj = bodo_sql_context_type.catalog_type.get_java_object()
             else:
-                extra_args = (
-                    ()
-                    if bodo_sql_context_type.default_tz is None
-                    or isinstance(bodo_sql_context_type.default_tz, types.NoneType)
-                    else (bodo_sql_context_type.default_tz.literal_value,)
-                )
-                generator = RelationalAlgebraGeneratorClass(
-                    schema,
-                    planner_type,
-                    verbose_level,
-                    tracing_level,
-                    bodo.bodosql_streaming_batch_size,
-                    hide_credentials,
-                    bodo.enable_snowflake_iceberg,
-                    bodo.enable_timestamp_tz,
-                    bodo.enable_runtime_join_filters,
-                    bodo.enable_streaming_sort,
-                    bodo.enable_streaming_sort_limit_offset,
-                    bodo.bodo_sql_style,
-                    bodo.bodosql_full_caching,
-                    bodo.prefetch_sf_iceberg,
-                    *extra_args,
-                )
+                catalog_obj = None
+            if bodo_sql_context_type.default_tz is None or isinstance(
+                bodo_sql_context_type.default_tz, types.NoneType
+            ):
+                default_tz_str = None
+            else:
+                default_tz_str = bodo_sql_context_type.default_tz.literal_value
+            generator = JavaEntryPoint.buildRelationalAlgebraGenerator(
+                catalog_obj,
+                schema,
+                bodo.bodosql_use_streaming_plan,
+                verbose_level,
+                tracing_level,
+                bodo.bodosql_streaming_batch_size,
+                hide_credentials,
+                bodo.enable_snowflake_iceberg,
+                bodo.enable_timestamp_tz,
+                bodo.enable_streaming_sort,
+                bodo.enable_streaming_sort_limit_offset,
+                bodo.bodo_sql_style,
+                bodo.bodosql_full_caching,
+                bodo.prefetch_sf_iceberg,
+                default_tz_str,
+            )
         except Exception as e:
             # Raise BodoError outside except to avoid stack trace
             func_text_or_error_msg = f"Unable to initialize BodoSQL Tables when parsing SQL Query. Error message: {error_to_string(e)}"
@@ -487,7 +469,7 @@ def _gen_sql_plan_pd_func_text_and_lowered_globals(
         if not failed:
             try:
                 # Handle the parsing step.
-                generator.parseQuery(sql_str)
+                JavaEntryPoint.parseQuery(generator, sql_str)
             except Exception as e:
                 # Raise BodoError outside except to avoid stack trace
                 func_text_or_error_msg = f"Failure encountered while parsing SQL Query. Error message: {error_to_string(e)}"
@@ -495,7 +477,7 @@ def _gen_sql_plan_pd_func_text_and_lowered_globals(
         if not failed:
             try:
                 # Determine the write type
-                write_type = generator.getWriteType(sql_str)
+                write_type = JavaEntryPoint.getWriteType(generator, sql_str)
 
                 # Get the row counts and NDV estimates for the tables:
                 estimated_row_counts = []
@@ -530,16 +512,20 @@ def _gen_sql_plan_pd_func_text_and_lowered_globals(
                 java_named_params_map = create_java_named_parameter_type_map(
                     named_params_dict
                 )
-                pd_code_sql_plan_pair = generator.getPandasAndPlanString(
-                    sql_str, True, java_params_array, java_named_params_map
+                code_plan_pair = JavaEntryPoint.getPandasAndPlanString(
+                    generator,
+                    sql_str,
+                    True,
+                    java_params_array,
+                    java_named_params_map,
                 )
-                pd_code = str(pd_code_sql_plan_pair.getPdCode())
-                sql_plan = str(pd_code_sql_plan_pair.getSqlPlan())
+                code = JavaEntryPoint.getCodeFromPair(code_plan_pair)
+                plan = JavaEntryPoint.getPlanFromPair(code_plan_pair)
                 # Convert to tuple of string tuples, to allow bcast to work
                 globalsToLower = tuple(
                     [
                         (str(k), str(v))
-                        for k, v in generator.getLoweredGlobalVariables().items()
+                        for k, v in JavaEntryPoint.getLoweredGlobals(generator).items()
                     ]
                 )
             except Exception as e:
@@ -558,13 +544,13 @@ def _gen_sql_plan_pd_func_text_and_lowered_globals(
                     ["bodo_sql_context"] + dynamic_param_names + named_param_names
                 )
                 func_text_or_error_msg = f"def impl({args}):\n"
-                func_text_or_error_msg += f"{pd_code}\n"
+                func_text_or_error_msg += f"{code}\n"
 
     failed = bcast_scalar(failed)
     func_text_or_error_msg = bcast_scalar(func_text_or_error_msg)
     if failed:
         raise bodo.utils.typing.BodoError(func_text_or_error_msg)
-    sql_plan = comm.bcast(sql_plan)
+    plan = comm.bcast(plan)
     globalsToLower = comm.bcast(globalsToLower)
 
     # Convert the globalsToLower from a list of tuples of strings to a dict of string varname -> value
@@ -588,7 +574,7 @@ def _gen_sql_plan_pd_func_text_and_lowered_globals(
             locs,
         )
         outGlobalsDict[varname] = locs["value"]
-    return func_text_or_error_msg, outGlobalsDict, sql_plan
+    return func_text_or_error_msg, outGlobalsDict, plan
 
 
 def _gen_sql_plan_pd_func_and_glbls_for_query(

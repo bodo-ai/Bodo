@@ -9,7 +9,6 @@ import com.bodosql.calcite.ddl.DDLExecutionResult;
 import com.bodosql.calcite.ddl.GenerateDDLTypes;
 import com.bodosql.calcite.prepare.AbstractPlannerImpl;
 import com.bodosql.calcite.prepare.PlannerImpl;
-import com.bodosql.calcite.prepare.PlannerType;
 import com.bodosql.calcite.schema.BodoSqlSchema;
 import com.bodosql.calcite.schema.RootSchema;
 import com.bodosql.calcite.table.ColumnDataTypeInfo;
@@ -40,6 +39,7 @@ import org.apache.calcite.sql.type.BodoTZInfo;
 import org.apache.calcite.tools.RelConversionException;
 import org.apache.calcite.tools.ValidationException;
 import org.apache.commons.lang3.tuple.Pair;
+import org.checkerframework.checker.nullness.qual.NonNull;
 import org.checkerframework.checker.nullness.qual.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -95,8 +95,8 @@ public class RelationalAlgebraGenerator {
   /** Store the type system being used to access timezone info during Bodo codegen */
   private final RelDataTypeSystem typeSystem;
 
-  /** Which planner should be utilized. */
-  private final PlannerType plannerType;
+  /** Should the planner output streaming code. */
+  private final boolean isStreaming;
 
   /** The Bodo verbose level. This is used to control code generated and/or compilation info. */
   private final int verboseLevel;
@@ -124,9 +124,6 @@ public class RelationalAlgebraGenerator {
 
   /** Should we read TIMESTAMP_TZ as its own type instead of TIMESTAMP_LTZ */
   public static boolean enableTimestampTz = false;
-
-  /** Should we enabled planner nodes to insert runtime filters for Joins */
-  public static boolean enableRuntimeJoinFilters = false;
 
   /**
    * Should we insert placeholders for operator IDs to minimize codegen changes with respect to plan
@@ -164,7 +161,7 @@ public class RelationalAlgebraGenerator {
    */
   private void setupPlanner(List<SchemaPlus> defaultSchemas, RelDataTypeSystem typeSystem) {
     PlannerImpl.Config config =
-        new PlannerImpl.Config(defaultSchemas, typeSystem, plannerType, sqlStyle);
+        new PlannerImpl.Config(defaultSchemas, typeSystem, sqlStyle, isStreaming);
     try {
       this.planner = new PlannerImpl(config);
     } catch (Exception e) {
@@ -176,212 +173,137 @@ public class RelationalAlgebraGenerator {
     }
   }
 
-  public static final int VOLCANO_PLANNER = 0;
-  public static final int STREAMING_PLANNER = 1;
-
   /**
    * Constructor for the relational algebra generator class. It will take the schema store it in the
    * config and then set up the program for optimizing and the {@link #planner} for parsing.
-   *
-   * @param localSchema This is the schema which contains any of our local tables.
    */
   public RelationalAlgebraGenerator(
-      BodoSqlSchema localSchema,
-      int plannerType,
-      int verboseLevel,
-      int tracingLevel,
-      int streamingBatchSize,
-      boolean hideCredentials,
-      boolean enableSnowflakeIcebergTables,
-      boolean enableTimestampTz,
-      boolean enableRuntimeJoinFilters,
-      boolean enableStreamingSort,
-      boolean enableStreamingSortLimitOffset,
-      String sqlStyle,
-      boolean coveringExpressionCaching,
-      boolean prefetchSFIceberg) {
-    this.catalog = null;
-    this.plannerType = choosePlannerType(plannerType);
-    this.verboseLevel = verboseLevel;
-    this.tracingLevel = tracingLevel;
-    this.streamingBatchSize = streamingBatchSize;
-    System.setProperty("calcite.default.charset", "UTF-8");
-    List<SchemaPlus> defaultSchemas =
-        setupSchema(
-            (root, defaults) -> {
-              defaults.add(root.add(localSchema.getName(), localSchema));
-            });
-    RelDataTypeSystem typeSystem =
-        new BodoSQLRelDataTypeSystem(enableStreamingSort, enableStreamingSortLimitOffset);
-    this.typeSystem = typeSystem;
-    this.sqlStyle = sqlStyle;
-    setupPlanner(defaultSchemas, typeSystem);
-    this.hideCredentials = hideCredentials;
-    this.enableSnowflakeIcebergTables = enableSnowflakeIcebergTables;
-    this.enableTimestampTz = enableTimestampTz;
-    this.enableRuntimeJoinFilters = enableRuntimeJoinFilters;
-    this.coveringExpressionCaching = coveringExpressionCaching;
-    this.prefetchSFIceberg = prefetchSFIceberg;
-  }
-
-  /** Constructor for the relational algebra generator class that takes in the default timezone. */
-  public RelationalAlgebraGenerator(
-      BodoSqlSchema localSchema,
-      int plannerType,
-      int verboseLevel,
-      int tracingLevel,
-      int streamingBatchSize,
-      boolean hideCredentials,
-      boolean enableSnowflakeIcebergTables,
-      boolean enableTimestampTz,
-      boolean enableRuntimeJoinFilters,
-      boolean enableStreamingSort,
-      boolean enableStreamingSortLimitOffset,
-      String sqlStyle,
-      boolean coveringExpressionCaching,
-      boolean prefetchSFIceberg,
-      String defaultTz) {
-    this.catalog = null;
-    this.plannerType = choosePlannerType(plannerType);
-    this.verboseLevel = verboseLevel;
-    this.tracingLevel = tracingLevel;
-    this.streamingBatchSize = streamingBatchSize;
-    System.setProperty("calcite.default.charset", "UTF-8");
-    List<SchemaPlus> defaultSchemas =
-        setupSchema(
-            (root, defaults) -> {
-              defaults.add(root.add(localSchema.getName(), localSchema));
-            });
-    BodoTZInfo tzInfo = new BodoTZInfo(defaultTz, "str");
-    RelDataTypeSystem typeSystem =
-        new BodoSQLRelDataTypeSystem(
-            tzInfo, 0, 0, null, enableStreamingSort, enableStreamingSortLimitOffset);
-    this.typeSystem = typeSystem;
-    this.sqlStyle = sqlStyle;
-    setupPlanner(defaultSchemas, typeSystem);
-    this.hideCredentials = hideCredentials;
-    this.enableSnowflakeIcebergTables = enableSnowflakeIcebergTables;
-    this.enableTimestampTz = enableTimestampTz;
-    this.enableRuntimeJoinFilters = enableRuntimeJoinFilters;
-    this.coveringExpressionCaching = coveringExpressionCaching;
-    this.prefetchSFIceberg = prefetchSFIceberg;
-  }
-
-  /**
-   * Constructor for the relational algebra generator class that accepts a Catalog and Schema
-   * objects. It will take the schema objects in the Catalog as well as the Schema object store it
-   * in the schemas and then set up the program for optimizing and the {@link #planner} for parsing.
-   */
-  public RelationalAlgebraGenerator(
-      BodoSQLCatalog catalog,
-      BodoSqlSchema localSchema,
-      // int is a bad choice for this variable, but we're limited by either
-      // forcing py4j to initialize another Java object or use some plain old data
-      // that it can use so we're choosing the latter.
-      // Something like this can be replaced with a more formal API like GRPC and protobuf.
-      int plannerType,
-      int verboseLevel,
-      int tracingLevel,
-      int streamingBatchSize,
-      boolean hideCredentials,
-      boolean enableSnowflakeIcebergTables,
-      boolean enableTimestampTz,
-      boolean enableRuntimeJoinFilters,
-      boolean enableStreamingSort,
-      boolean enableStreamingSortLimitOffset,
-      String sqlStyle,
-      boolean coveringExpressionCaching,
-      boolean prefetchSFIceberg) {
+      @Nullable BodoSQLCatalog catalog,
+      @NonNull BodoSqlSchema localSchema,
+      @NonNull boolean isStreaming,
+      @NonNull int verboseLevel,
+      @NonNull int tracingLevel,
+      @NonNull int streamingBatchSize,
+      @NonNull boolean hideCredentials,
+      @NonNull boolean enableSnowflakeIcebergTables,
+      @NonNull boolean enableTimestampTz,
+      @NonNull boolean enableStreamingSort,
+      @NonNull boolean enableStreamingSortLimitOffset,
+      @NonNull String sqlStyle,
+      @NonNull boolean coveringExpressionCaching,
+      @NonNull boolean prefetchSFIceberg,
+      @Nullable String defaultTz) {
+    this.isStreaming = isStreaming;
     this.catalog = catalog;
-    this.plannerType = choosePlannerType(plannerType);
     this.verboseLevel = verboseLevel;
     this.tracingLevel = tracingLevel;
     this.streamingBatchSize = streamingBatchSize;
-    this.hideCredentials = hideCredentials;
-    this.enableSnowflakeIcebergTables = enableSnowflakeIcebergTables;
-    this.enableTimestampTz = enableTimestampTz;
-    this.enableRuntimeJoinFilters = enableRuntimeJoinFilters;
-    this.sqlStyle = sqlStyle;
-    this.coveringExpressionCaching = coveringExpressionCaching;
-    this.prefetchSFIceberg = prefetchSFIceberg;
     System.setProperty("calcite.default.charset", "UTF-8");
-    List<String> catalogDefaultSchema = catalog.getDefaultSchema(0);
-    final @Nullable String currentDatabase;
-    if (catalogDefaultSchema.isEmpty()) {
-      currentDatabase = null;
-    } else {
-      currentDatabase = catalogDefaultSchema.get(0);
-    }
-    List<SchemaPlus> defaultSchemas =
-        setupSchema(
-            (root, defaults) -> {
-              // Create a schema object with the name of the catalog,
-              // and register all the schemas with this catalog as sub-schemas
-              // Note that the order of adding to default matters. Earlier
-              // elements are given higher priority during resolution.
-              // The correct attempted order of resolution should be:
-              //     catalog_default_path1.(table_identifier)
-              //     catalog_default_path2.(table_identifier)
-              //     ...
-              //     __BODOLOCAL__.(table_identifier)
-              //     (table_identifier) (Note: this case will never yield a match,
-              //     as the root schema is currently always empty. This may change
-              //     in the future)
+    List<SchemaPlus> defaultSchemas;
+    final RelDataTypeSystem typeSystem;
+    if (catalog != null) {
+      // Set the default schemas for the catalog.
+      List<String> catalogDefaultSchema = catalog.getDefaultSchema(0);
+      final @Nullable String currentDatabase;
+      if (catalogDefaultSchema.isEmpty()) {
+        currentDatabase = null;
+      } else {
+        currentDatabase = catalogDefaultSchema.get(0);
+      }
+      defaultSchemas =
+          setupSchema(
+              (root, defaults) -> {
+                // Create a schema object with the name of the catalog,
+                // and register all the schemas with this catalog as sub-schemas
+                // Note that the order of adding to default matters. Earlier
+                // elements are given higher priority during resolution.
+                // The correct attempted order of resolution should be:
+                //     catalog_default_path1.(table_identifier)
+                //     catalog_default_path2.(table_identifier)
+                //     ...
+                //     __BODOLOCAL__.(table_identifier)
+                //     (table_identifier) (Note: this case will never yield a match,
+                //     as the root schema is currently always empty. This may change
+                //     in the future)
 
-              List<SchemaPlus> schemas = new ArrayList();
-              int numLevels = catalog.numDefaultSchemaLevels();
-              SchemaPlus parent = root;
-              for (int i = 0; i < catalog.numDefaultSchemaLevels(); i++) {
-                List<String> schemaNames = catalog.getDefaultSchema(i);
-                // The current default schema API is awkward and needs to be
-                // rewritten. Snowflake allows there to be multiple current
-                // schemas, but this doesn't generalize to other catalogs as
-                // this can lead to diverging paths. We add this check as a
-                // temporary fix and will revisit the API later.
-                // TODO: Fix the API.
-                if ((i + 1) != numLevels && schemaNames.size() > 1) {
-                  throw new RuntimeException(
-                      String.format(
-                          Locale.ROOT,
-                          "BodoSQL only supports multiple default schema paths that differ in the"
-                              + " last level"));
-                }
-                SchemaPlus newParent = parent;
-                for (int j = schemaNames.size() - 1; j >= 0; j--) {
-                  String schemaName = schemaNames.get(j);
-                  SchemaPlus newSchema = parent.getSubSchema(schemaName);
-                  if (newSchema == null) {
+                List<SchemaPlus> schemas = new ArrayList();
+                int numLevels = catalog.numDefaultSchemaLevels();
+                SchemaPlus parent = root;
+                for (int i = 0; i < catalog.numDefaultSchemaLevels(); i++) {
+                  List<String> schemaNames = catalog.getDefaultSchema(i);
+                  // The current default schema API is awkward and needs to be
+                  // rewritten. Snowflake allows there to be multiple current
+                  // schemas, but this doesn't generalize to other catalogs as
+                  // this can lead to diverging paths. We add this check as a
+                  // temporary fix and will revisit the API later.
+                  // TODO: Fix the API.
+                  if ((i + 1) != numLevels && schemaNames.size() > 1) {
                     throw new RuntimeException(
                         String.format(
-                            Locale.ROOT, "Unable to find default schema: %s", schemaName));
+                            Locale.ROOT,
+                            "BodoSQL only supports multiple default schema paths that differ in the"
+                                + " last level"));
                   }
-                  schemas.add(newSchema);
-                  newParent = newSchema;
+                  SchemaPlus newParent = parent;
+                  for (int j = schemaNames.size() - 1; j >= 0; j--) {
+                    String schemaName = schemaNames.get(j);
+                    SchemaPlus newSchema = parent.getSubSchema(schemaName);
+                    if (newSchema == null) {
+                      throw new RuntimeException(
+                          String.format(
+                              Locale.ROOT, "Unable to find default schema: %s", schemaName));
+                    }
+                    schemas.add(newSchema);
+                    newParent = newSchema;
+                  }
+                  parent = newParent;
                 }
-                parent = newParent;
-              }
-              // Add the list in reverse order.
-              for (int i = schemas.size() - 1; i >= 0; i--) {
-                defaults.add(schemas.get(i));
-              }
-              // Add the local schema to the list of schemas.
-              defaults.add(root.add(localSchema.getName(), localSchema));
-            });
+                // Add the list in reverse order.
+                for (int i = schemas.size() - 1; i >= 0; i--) {
+                  defaults.add(schemas.get(i));
+                }
+                // Add the local schema to the list of schemas.
+                defaults.add(root.add(localSchema.getName(), localSchema));
+              });
+      // Create a type system with the correct default Timezone.
+      BodoTZInfo tzInfo = catalog.getDefaultTimezone();
+      Integer weekStart = catalog.getWeekStart();
+      Integer weekOfYearPolicy = catalog.getWeekOfYearPolicy();
+      typeSystem =
+          new BodoSQLRelDataTypeSystem(
+              tzInfo,
+              weekStart,
+              weekOfYearPolicy,
+              new BodoSQLRelDataTypeSystem.CatalogContext(
+                  currentDatabase, catalog.getAccountName()),
+              enableStreamingSort,
+              enableStreamingSortLimitOffset);
 
-    // Create a type system with the correct default Timezone.
-    BodoTZInfo tzInfo = catalog.getDefaultTimezone();
-    Integer weekStart = catalog.getWeekStart();
-    Integer weekOfYearPolicy = catalog.getWeekOfYearPolicy();
-    RelDataTypeSystem typeSystem =
-        new BodoSQLRelDataTypeSystem(
-            tzInfo,
-            weekStart,
-            weekOfYearPolicy,
-            new BodoSQLRelDataTypeSystem.CatalogContext(currentDatabase, catalog.getAccountName()),
-            enableStreamingSort,
-            enableStreamingSortLimitOffset);
+    } else {
+      // Set the default schema as just based on local schema.
+      defaultSchemas =
+          setupSchema(
+              (root, defaults) -> {
+                defaults.add(root.add(localSchema.getName(), localSchema));
+              });
+      if (defaultTz != null) {
+        BodoTZInfo tzInfo = new BodoTZInfo(defaultTz, "str");
+        typeSystem =
+            new BodoSQLRelDataTypeSystem(
+                tzInfo, 0, 0, null, enableStreamingSort, enableStreamingSortLimitOffset);
+      } else {
+        typeSystem =
+            new BodoSQLRelDataTypeSystem(enableStreamingSort, enableStreamingSortLimitOffset);
+      }
+    }
     this.typeSystem = typeSystem;
+    this.sqlStyle = sqlStyle;
     setupPlanner(defaultSchemas, typeSystem);
+    this.hideCredentials = hideCredentials;
+    this.enableSnowflakeIcebergTables = enableSnowflakeIcebergTables;
+    this.enableTimestampTz = enableTimestampTz;
+    this.coveringExpressionCaching = coveringExpressionCaching;
+    this.prefetchSFIceberg = prefetchSFIceberg;
   }
 
   // TODO: Determine a better location for this.
@@ -410,10 +332,8 @@ public class RelationalAlgebraGenerator {
   /**
    * Calls "RESET" on the current planner and clears any cached state need to compile a single query
    * (but not configuration).
-   *
-   * <p>Note: This is exposed to Python.
    */
-  public void resetPlanner() {
+  void reset() {
     this.planner.close();
     this.parseNode = null;
   }
@@ -424,7 +344,7 @@ public class RelationalAlgebraGenerator {
    * @param sql Query to parse Sets parseNode to the generated SQLNode
    * @throws SqlSyntaxException if the SQL syntax is incorrect.
    */
-  public void parseQuery(String sql) throws SqlSyntaxException {
+  void parseQuery(String sql) throws SqlSyntaxException {
     try {
       this.parseNode = planner.parse(sql);
     } catch (SqlParseException e) {
@@ -474,23 +394,6 @@ public class RelationalAlgebraGenerator {
     s.visit(optimizedPlan.rel, 0, null);
     Map<Integer, Integer> idMapping = s.getIDMapping();
     return Pair.of(optimizedPlan, idMapping);
-  }
-
-  /**
-   * Takes a sql statement and converts it into an optimized relational algebra node. The result of
-   * this function is a logical plan that has been optimized using a rule based optimizer. This is
-   * used when we just want to get the optimized plan and not the pandas code.
-   *
-   * @param sql a string sql query that is to be parsed, converted into relational algebra, then
-   *     optimized
-   * @return a RelNode which contains the relational algebra tree generated from the sql statement
-   *     provided after an optimization step has been completed.
-   * @throws SqlSyntaxException, SqlValidationException, RelConversionException
-   */
-  @VisibleForTesting
-  public Pair<RelRoot, Map<Integer, Integer>> getRelationalAlgebra(String sql)
-      throws SqlSyntaxException, SqlValidationException, RelConversionException {
-    return getRelationalAlgebra(sql, List.of(), Map.of());
   }
 
   @VisibleForTesting
@@ -617,27 +520,23 @@ public class RelationalAlgebraGenerator {
     return codegen.getGeneratedCode();
   }
 
-  public HashMap<String, String> getLoweredGlobalVariables() {
+  Map<String, String> getLoweredGlobalVariables() {
     return this.loweredGlobalVariables;
   }
 
-  private static PlannerType choosePlannerType(int plannerType) {
-    switch (plannerType) {
-      case VOLCANO_PLANNER:
-        return PlannerType.VOLCANO;
-      case STREAMING_PLANNER:
-        return PlannerType.STREAMING;
-      default:
-        throw new RuntimeException("Unexpected Planner option");
-    }
-  }
+  // ~~~~~~~~~~~~~Called by the Python Entry Points~~~~~~~~~~~~~~
 
-  // ~~~~~~~~~~~~~PYTHON EXPOSED APIS~~~~~~~~~~~~~~
-  public String getOptimizedPlanString(String sql, Boolean includeCosts) throws Exception {
-    return getOptimizedPlanString(sql, includeCosts, List.of(), Map.of());
-  }
-
-  public String getOptimizedPlanString(
+  /**
+   * Get the optimized plan string for the given SQL query.
+   *
+   * @param sql The SQL query to process.
+   * @param includeCosts Should the costs be included in the plan string.
+   * @param dynamicParamTypes The dynamic parameter types.
+   * @param namedParamTypeMap The named parameter types.
+   * @return The optimized plan string for the given SQL query.
+   * @throws Exception If an error occurs while processing the SQL query.
+   */
+  String getOptimizedPlanString(
       String sql,
       Boolean includeCosts,
       List<ColumnDataTypeInfo> dynamicParamTypes,
@@ -660,12 +559,17 @@ public class RelationalAlgebraGenerator {
     }
   }
 
-  public PandasCodeSqlPlanPair getPandasAndPlanString(String sql, boolean includeCosts)
-      throws Exception {
-    return getPandasAndPlanString(sql, includeCosts, List.of(), Map.of());
-  }
-
-  public PandasCodeSqlPlanPair getPandasAndPlanString(
+  /**
+   * Get the Pandas code and the optimized plan string for the given SQL query.
+   *
+   * @param sql The SQL query to process.
+   * @param includeCosts Should the costs be included in the plan string.
+   * @param dynamicParamTypes The dynamic parameter types.
+   * @param namedParamTypeMap The named parameter types.
+   * @return The Pandas code and the optimized plan string for the given SQL query.
+   * @throws Exception If an error occurs while processing the SQL query.
+   */
+  CodePlanPair getPandasAndPlanString(
       String sql,
       boolean includeCosts,
       List<ColumnDataTypeInfo> dynamicParamTypes,
@@ -678,12 +582,12 @@ public class RelationalAlgebraGenerator {
         String pandasString =
             getPandasStringFromPlan(optimizedPlan, sql, dynamicParamTypes, namedParamTypeMap);
         String planString = getOptimizedPlanStringFromRoot(optimizedPlan, includeCosts);
-        return new PandasCodeSqlPlanPair(pandasString, planString);
+        return new CodePlanPair(pandasString, planString);
       } else {
         String pandasString =
             getDDLPandasString(validatedSqlNode, sql, dynamicParamTypes, namedParamTypeMap);
         String planString = getDDLPlanString(validatedSqlNode);
-        return new PandasCodeSqlPlanPair(pandasString, planString);
+        return new CodePlanPair(pandasString, planString);
       }
     } finally {
       planner.close();
@@ -694,14 +598,19 @@ public class RelationalAlgebraGenerator {
     }
   }
 
-  public String getPandasString(String sql) throws Exception {
-    return getPandasString(sql, List.of(), Map.of());
-  }
-
-  public String getPandasString(
-      String sql,
-      List<ColumnDataTypeInfo> dynamicParamTypes,
-      Map<String, ColumnDataTypeInfo> namedParamTypeMap)
+  /**
+   * Return the Python code generated for the given SQL query.
+   *
+   * @param sql The SQL query to process.
+   * @param dynamicParamTypes The dynamic parameter types.
+   * @param namedParamTypeMap The named parameter types.
+   * @return The Python code generated for the given SQL query.
+   * @throws Exception If an error occurs while processing the SQL query.
+   */
+  String getPandasString(
+      @NonNull String sql,
+      @NonNull List<ColumnDataTypeInfo> dynamicParamTypes,
+      @NonNull Map<String, ColumnDataTypeInfo> namedParamTypeMap)
       throws Exception {
     try {
       SqlNode validatedSqlNode = validateQuery(sql, dynamicParamTypes, namedParamTypeMap);
@@ -730,7 +639,7 @@ public class RelationalAlgebraGenerator {
    * @param sql The SQL query to parse.
    * @return A string representing the type of write.
    */
-  public String getWriteType(String sql) throws Exception {
+  String getWriteType(String sql) throws Exception {
     // Parse the query if we haven't already
     if (this.parseNode == null) {
       parseQuery(sql);
@@ -745,7 +654,14 @@ public class RelationalAlgebraGenerator {
     }
   }
 
-  public DDLExecutionResult executeDDL(String sql) throws Exception {
+  /**
+   * Execute the given DDL statement in an interpreted manner. This assumes/requires that sql is a
+   * DDL statement, which should have already been checked.
+   *
+   * @param sql The DDL statement to execute
+   * @return The result of the DDL execution.
+   */
+  DDLExecutionResult executeDDL(String sql) throws Exception {
     try {
       // DDL doesn't support dynamic or named parameters at this time.
       SqlNode validatedSqlNode = validateQuery(sql, List.of(), Map.of());
@@ -767,7 +683,7 @@ public class RelationalAlgebraGenerator {
    *
    * @return Is the query DDL?
    */
-  public boolean isDDLProcessedQuery() {
+  boolean isDDLProcessedQuery() {
     if (this.parseNode == null) {
       throw new RuntimeException("No SQL query has been parsed yet. Cannot determine query type");
     }

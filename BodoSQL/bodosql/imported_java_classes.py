@@ -3,6 +3,8 @@ Common location for importing all java classes from Py4j. This is used so they
 can be imported in multiple locations.
 """
 
+from typing import Any
+
 import bodo
 from bodo.libs.distributed_api import bcast_scalar
 from bodo.utils.typing import BodoError
@@ -17,62 +19,46 @@ msg = ""
 gateway = get_gateway()
 if bodo.get_rank() == 0:
     try:
-        ArrayListClass = gateway.jvm.java.util.ArrayList
-        HashMapClass = gateway.jvm.java.util.HashMap
-        ColumnDataEnum = (
-            gateway.jvm.com.bodosql.calcite.table.BodoSQLColumn.BodoSQLColumnDataType
-        )
-        ColumnClass = gateway.jvm.com.bodosql.calcite.table.BodoSQLColumnImpl
-        ColumnDataTypeClass = gateway.jvm.com.bodosql.calcite.table.ColumnDataTypeInfo
-        LocalTableClass = gateway.jvm.com.bodosql.calcite.table.LocalTable
-        LocalSchemaClass = gateway.jvm.com.bodosql.calcite.schema.LocalSchema
-        PandasCodeSqlPlanPairClass = (
-            gateway.jvm.com.bodosql.calcite.schema.PandasCodeSqlPlanPair
-        )
-        RelationalAlgebraGeneratorClass = (
-            gateway.jvm.com.bodosql.calcite.application.RelationalAlgebraGenerator
-        )
-        PropertiesClass = gateway.jvm.java.util.Properties
-        SnowflakeCatalogClass = gateway.jvm.com.bodosql.calcite.catalog.SnowflakeCatalog
         # Note: Although this isn't used it must be imported.
         SnowflakeDriver = gateway.jvm.net.snowflake.client.jdbc.SnowflakeDriver
-        CommonsExceptionUtilsClass = (
-            gateway.jvm.org.apache.commons.lang3.exception.ExceptionUtils
-        )
-        PythonLoggersClass = gateway.jvm.com.bodosql.calcite.application.PythonLoggers
-        FileSystemCatalogClass = (
-            gateway.jvm.com.bodosql.calcite.catalog.FileSystemCatalog
-        )
-        WriteTargetEnum = gateway.jvm.com.bodosql.calcite.application.write.WriteTarget.WriteTargetEnum
-        TabularCatalogClass = gateway.jvm.com.bodosql.calcite.catalog.TabularCatalog
-        BodoGlueCatalogClass = gateway.jvm.com.bodosql.calcite.catalog.BodoGlueCatalog
+        # Note: We call this JavaEntryPoint so its clear the Python code enters java
+        # and the class is named PythonEntryPoint to make it clear the Java code
+        # is being entered from Python.
+        JavaEntryPoint = gateway.jvm.com.bodosql.calcite.application.PythonEntryPoint
         # Initialize logging. Must be done after importing all classes to ensure
-        # PythonLoggersClass is available.
+        # JavaEntryPoint is available.
         configure_java_logging(bodo.user_logging.get_verbose_level())
     except Exception as e:
         saw_error = True
         msg = str(e)
 else:
-    ArrayListClass = None
-    HashMapClass = None
-    ColumnDataEnum = None
-    ColumnClass = None
-    ColumnDataTypeClass = None
-    LocalTableClass = None
-    LocalSchemaClass = None
-    PandasCodeSqlPlanPairClass = None
-    RelationalAlgebraGeneratorClass = None
-    PropertiesClass = None
-    SnowflakeCatalogClass = None
-    SnowflakeDriver = None
-    CommonsExceptionUtilsClass = None
-    PythonLoggersClass = None
-    FileSystemCatalogClass = None
-    WriteTargetEnum = None
-    TabularCatalogClass = None
-    BodoGlueCatalogClass = None
+    JavaEntryPoint = None
 
 saw_error = bcast_scalar(saw_error)
 msg = bcast_scalar(msg)
 if saw_error:
     raise BodoError(msg)
+
+
+def build_java_array_list(elems: list[Any]):
+    if bodo.get_rank() == 0:
+        output_list = JavaEntryPoint.buildArrayList()
+        for elem in elems:
+            JavaEntryPoint.appendToArrayList(output_list, elem)
+        return output_list
+
+
+def build_java_hash_map(d: dict[Any, Any]):
+    if bodo.get_rank() == 0:
+        output_map = JavaEntryPoint.buildMap()
+        for key, value in d.items():
+            JavaEntryPoint.mapPut(output_map, key, value)
+        return output_map
+
+
+def build_java_properties(d: dict[str, str]):
+    if bodo.get_rank() == 0:
+        output_map = JavaEntryPoint.buildProperties()
+        for key, value in d.items():
+            JavaEntryPoint.setProperty(output_map, key, value)
+        return output_map

@@ -396,8 +396,9 @@ void mpi_exscan_computation_nullable_T(
                     bool bit_o = bit_i;
                     work_col->at<T>(i_row) = new_val;
                     if (skip_na_data) {
-                        if (bit_i)
+                        if (bit_i) {
                             cumulative[pos] = new_val;
+                        }
                     } else {
                         if (bit_i) {
                             if (cumulative_mask[pos] == 1) {

@@ -524,7 +524,9 @@ def test_unbox_df1(df_value, memory_leak_check):
     def impl2(df_arg):
         return df_arg
 
-    check_func(impl2, (df_value,))
+    # copy_input=True is necessary since Bodo sets columns of input object arg so using
+    # df_value keeps Bodo data around, leading to memory leak check false positives.
+    check_func(impl2, (df_value,), copy_input=True)
 
     # unbox and return Series data with index
     # (previous test can box Index unintentionally)
@@ -1276,7 +1278,7 @@ def test_df_rename_all_types(df_value, memory_leak_check):
     """
 
     def test_impl(df):
-        df.rename(columns={"A": "first", "B": "second"})
+        return df.rename(columns={"A": "first", "B": "second"})
 
     check_func(test_impl, (df_value,))
 
@@ -1289,7 +1291,7 @@ def test_df_rename_mapper_all_types(df_value, memory_leak_check):
     """
 
     def test_impl(df):
-        df.rename({"A": "first", "B": "second"}, axis=1)
+        return df.rename({"A": "first", "B": "second"}, axis=1)
 
     check_func(test_impl, (df_value,))
 

@@ -51,6 +51,7 @@ jobs:
             role-to-assume: arn:aws:iam::427443013497:role/BodoEngineNightlyRole
             role-session-name: BodoEnginePrCiSession
             role-skip-session-tagging: true
+            role-duration-seconds: 10800
   
         # Run Tests
         - name: Run Tests
@@ -85,6 +86,7 @@ jobs:
             BODO_TEST_SPAWN_MODE: ${{ inputs.pytest-marker == 'spawn_mode' && '1' || '0' }}
             BODOSQL_PY4J_GATEWAY_PORT: "auto"
             BODO_SPAWN_MODE: "0"
+            BODO_BUFFER_POOL_REMOTE_MODE: "1"
             # Testing Credentials
             SF_USERNAME: ${{ secrets.SF_USERNAME }}
             SF_PASSWORD: ${{ secrets.SF_PASSWORD }}

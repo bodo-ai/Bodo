@@ -6,7 +6,7 @@ import re
 import time
 import traceback
 import warnings
-from enum import Enum, IntEnum
+from enum import Enum
 from typing import Any
 
 import numba
@@ -22,14 +22,9 @@ from bodo.utils.typing import BodoError, dtype_to_array_type
 from bodosql.bodosql_types.database_catalog import DatabaseCatalog
 from bodosql.bodosql_types.table_path import TablePath, TablePathType
 from bodosql.imported_java_classes import (
-    ArrayListClass,
-    ColumnClass,
-    ColumnDataEnum,
-    ColumnDataTypeClass,
-    HashMapClass,
-    LocalSchemaClass,
-    LocalTableClass,
-    RelationalAlgebraGeneratorClass,
+    JavaEntryPoint,
+    build_java_array_list,
+    build_java_hash_map,
 )
 from bodosql.utils import BodoSQLWarning, error_to_string
 
@@ -127,17 +122,6 @@ _numba_to_sql_param_type_map = {
 }
 
 
-# Hacky way to get the planner type option to Java.
-# I don't want to access the Java enum class or the constants
-# defined in Java that are used for this decision from Python
-# so we're going to redefine the enum here.
-#
-# Not intended as a public API.
-class _PlannerType(IntEnum):
-    Volcano = 0
-    Streaming = 1
-
-
 def construct_tz_aware_array_type(typ, nullable):
     """Construct a BodoSQL data type for a tz-aware timestamp array
 
@@ -152,11 +136,15 @@ def construct_tz_aware_array_type(typ, nullable):
     precision = 9
     if typ.tz is None:
         # TZ = None is a timezone naive timestamp
-        type_enum = ColumnDataEnum.fromTypeId(SqlTypeEnum.Timestamp_Ntz.value)
-        return ColumnDataTypeClass(type_enum, nullable, precision)
+        type_enum = JavaEntryPoint.buildBodoSQLColumnDataTypeFromTypeId(
+            SqlTypeEnum.Timestamp_Ntz.value
+        )
+        return JavaEntryPoint.buildColumnDataTypeInfo(type_enum, nullable, precision)
     else:
-        type_enum = ColumnDataEnum.fromTypeId(SqlTypeEnum.Timestamp_Ltz.value)
-        return ColumnDataTypeClass(type_enum, nullable, precision)
+        type_enum = JavaEntryPoint.buildBodoSQLColumnDataTypeFromTypeId(
+            SqlTypeEnum.Timestamp_Ltz.value
+        )
+        return JavaEntryPoint.buildColumnDataTypeInfo(type_enum, nullable, precision)
 
 
 def construct_time_array_type(typ: bodo.TimeArrayType | bodo.TimeType, nullable: bool):
@@ -169,8 +157,10 @@ def construct_time_array_type(typ: bodo.TimeArrayType | bodo.TimeType, nullable:
     Returns:
         JavaObject: The Java Object for the BodoSQL column type data info.
     """
-    type_enum = ColumnDataEnum.fromTypeId(SqlTypeEnum.Time.value)
-    return ColumnDataTypeClass(type_enum, nullable, typ.precision)
+    type_enum = JavaEntryPoint.buildBodoSQLColumnDataTypeFromTypeId(
+        SqlTypeEnum.Time.value
+    )
+    return JavaEntryPoint.buildColumnDataTypeInfo(type_enum, nullable, typ.precision)
 
 
 def construct_array_item_array_type(arr_type):
@@ -185,8 +175,10 @@ def construct_array_item_array_type(arr_type):
         JavaObject: The Java Object for the BodoSQL column type data info.
     """
     child = get_sql_data_type(arr_type.dtype)
-    type_enum = ColumnDataEnum.fromTypeId(SqlTypeEnum.Array.value)
-    return ColumnDataTypeClass(type_enum, True, child)
+    type_enum = JavaEntryPoint.buildBodoSQLColumnDataTypeFromTypeId(
+        SqlTypeEnum.Array.value
+    )
+    return JavaEntryPoint.buildColumnDataTypeInfo(type_enum, True, child)
 
 
 def construct_json_array_type(arr_type):
@@ -203,23 +195,31 @@ def construct_json_array_type(arr_type):
     if isinstance(arr_type, bodo.StructArrayType):
         # TODO: FIXME. We don't support full structs of types yet.
         # As a placeholder we will just match Snowflake.
-        key_enum = ColumnDataEnum.fromTypeId(SqlTypeEnum.String.value)
-        key = ColumnDataTypeClass(key_enum, True)
-        value_enum = ColumnDataEnum.fromTypeId(SqlTypeEnum.Variant.value)
-        value = ColumnDataTypeClass(value_enum, True)
-        type_enum = ColumnDataEnum.fromTypeId(SqlTypeEnum.Json_Object.value)
-        return ColumnDataTypeClass(type_enum, True, key, value)
+        key_enum = JavaEntryPoint.buildBodoSQLColumnDataTypeFromTypeId(
+            SqlTypeEnum.String.value
+        )
+        key = JavaEntryPoint.buildColumnDataTypeInfo(key_enum, True)
+        value_enum = JavaEntryPoint.buildBodoSQLColumnDataTypeFromTypeId(
+            SqlTypeEnum.Variant.value
+        )
+        value = JavaEntryPoint.buildColumnDataTypeInfo(value_enum, True)
+        type_enum = JavaEntryPoint.buildBodoSQLColumnDataTypeFromTypeId(
+            SqlTypeEnum.Json_Object.value
+        )
+        return JavaEntryPoint.buildColumnDataTypeInfo(type_enum, True, key, value)
     else:
         # TODO: Add map scalar support
         key = get_sql_data_type(arr_type.key_arr_type)
         value = get_sql_data_type(arr_type.value_arr_type)
-        type_enum = ColumnDataEnum.fromTypeId(SqlTypeEnum.Json_Object.value)
-        return ColumnDataTypeClass(type_enum, True, key, value)
+        type_enum = JavaEntryPoint.buildBodoSQLColumnDataTypeFromTypeId(
+            SqlTypeEnum.Json_Object.value
+        )
+        return JavaEntryPoint.buildColumnDataTypeInfo(type_enum, True, key, value)
 
 
 def get_sql_column_type(arr_type, col_name):
     data_type = get_sql_data_type(arr_type)
-    return ColumnClass(col_name, data_type)
+    return JavaEntryPoint.buildBodoSQLColumnImpl(col_name, data_type)
 
 
 def get_sql_data_type(arr_type):
@@ -236,14 +236,18 @@ def get_sql_data_type(arr_type):
         # Timezone-aware Timestamp columns have their own special handling.
         return construct_tz_aware_array_type(arr_type, nullable)
     elif arr_type == bodo.timestamptz_array_type:
-        type_enum = ColumnDataEnum.fromTypeId(SqlTypeEnum.Timestamp_Tz.value)
-        return ColumnDataTypeClass(type_enum, nullable)
+        type_enum = JavaEntryPoint.buildBodoSQLColumnDataTypeFromTypeId(
+            SqlTypeEnum.Timestamp_Tz.value
+        )
+        return JavaEntryPoint.buildColumnDataTypeInfo(type_enum, nullable)
     elif isinstance(arr_type, bodo.TimeArrayType):
         # Time array types have their own special handling for precision
         return construct_time_array_type(arr_type, nullable)
     elif isinstance(arr_type, bodo.DecimalArrayType):
-        type_enum = ColumnDataEnum.fromTypeId(SqlTypeEnum.Decimal.value)
-        return ColumnDataTypeClass(
+        type_enum = JavaEntryPoint.buildBodoSQLColumnDataTypeFromTypeId(
+            SqlTypeEnum.Decimal.value
+        )
+        return JavaEntryPoint.buildColumnDataTypeInfo(
             type_enum, nullable, arr_type.precision, arr_type.scale
         )
     elif isinstance(arr_type, bodo.ArrayItemArrayType):
@@ -251,21 +255,25 @@ def get_sql_data_type(arr_type):
     elif isinstance(arr_type, (bodo.StructArrayType, bodo.MapArrayType)):
         return construct_json_array_type(arr_type)
     elif arr_type.dtype in _numba_to_sql_column_type_map:
-        type_enum = ColumnDataEnum.fromTypeId(
+        type_enum = JavaEntryPoint.buildBodoSQLColumnDataTypeFromTypeId(
             _numba_to_sql_column_type_map[arr_type.dtype]
         )
-        return ColumnDataTypeClass(type_enum, nullable)
+        return JavaEntryPoint.buildColumnDataTypeInfo(type_enum, nullable)
     elif isinstance(arr_type.dtype, bodo.PDCategoricalDtype):
-        type_enum = ColumnDataEnum.fromTypeId(SqlTypeEnum.Categorical.value)
+        type_enum = JavaEntryPoint.buildBodoSQLColumnDataTypeFromTypeId(
+            SqlTypeEnum.Categorical.value
+        )
         child = get_sql_data_type(dtype_to_array_type(arr_type.dtype.elem_type, True))
-        return ColumnDataTypeClass(type_enum, nullable, child)
+        return JavaEntryPoint.buildColumnDataTypeInfo(type_enum, nullable, child)
     else:
         # The type is unsupported we raise a warning indicating this is a possible
         # error but we generate a dummy type because we may be able to support it
         # if its optimized out.
         warnings.warn(BodoSQLWarning(warning_msg))
-        type_enum = ColumnDataEnum.fromTypeId(SqlTypeEnum.Unsupported.value)
-        return ColumnDataTypeClass(type_enum, nullable)
+        type_enum = JavaEntryPoint.buildBodoSQLColumnDataTypeFromTypeId(
+            SqlTypeEnum.Unsupported.value
+        )
+        return JavaEntryPoint.buildColumnDataTypeInfo(type_enum, nullable)
 
 
 def create_java_dynamic_parameter_type_list(dynamic_params_list: list[Any]):
@@ -279,11 +287,11 @@ def create_java_dynamic_parameter_type_list(dynamic_params_list: list[Any]):
     Returns:
         JavaObject: A java array to pass to code generation.
     """
-    output_list = ArrayListClass()
+    types_list = []
     for val in dynamic_params_list:
         typ = val if isinstance(val, types.Type) else bodo.typeof(val)
-        output_list.add(get_sql_param_column_type_info(typ))
-    return output_list
+        types_list.append(get_sql_param_column_type_info(typ))
+    return build_java_array_list(types_list)
 
 
 def create_java_named_parameter_type_map(named_params: dict[str, Any]):
@@ -297,11 +305,13 @@ def create_java_named_parameter_type_map(named_params: dict[str, Any]):
     Returns:
         JavaObject: A java map to pass to code generation.
     """
-    output_map = HashMapClass()
-    for key, val in named_params.items():
-        typ = val if isinstance(val, types.Type) else bodo.typeof(val)
-        output_map.put(key, get_sql_param_column_type_info(typ))
-    return output_map
+    d = {
+        key: get_sql_param_column_type_info(
+            val if isinstance(val, types.Type) else bodo.typeof(val)
+        )
+        for key, val in named_params.items()
+    }
+    return build_java_hash_map(d)
 
 
 def get_sql_param_column_type_info(param_type: types.Type):
@@ -311,7 +321,7 @@ def get_sql_param_column_type_info(param_type: types.Type):
     Args:
         param_type (types.Type): The bodo type to lower as a parameter.
     Return:
-        JavaObject: The ColumnDataTypeClass for the parameter type.
+        JavaObject: The ColumnDataTypeInfo for the parameter type.
     """
     unliteral_type = types.unliteral(param_type)
     # The named parameters are always scalars. We don't support
@@ -328,15 +338,17 @@ def get_sql_param_column_type_info(param_type: types.Type):
         return construct_time_array_type(param_type, nullable)
     elif isinstance(unliteral_type, bodo.Decimal128Type):
         # Decimal types need handling for precision and scale.
-        type_enum = ColumnDataEnum.fromTypeId(SqlTypeEnum.Decimal.value)
-        return ColumnDataTypeClass(
+        type_enum = JavaEntryPoint.buildBodoSQLColumnDataTypeFromTypeId(
+            SqlTypeEnum.Decimal.value
+        )
+        return JavaEntryPoint.buildColumnDataTypeInfo(
             type_enum, nullable, unliteral_type.precision, unliteral_type.scale
         )
     elif unliteral_type in _numba_to_sql_param_type_map:
-        type_enum = ColumnDataEnum.fromTypeId(
+        type_enum = JavaEntryPoint.buildBodoSQLColumnDataTypeFromTypeId(
             _numba_to_sql_param_type_map[unliteral_type]
         )
-        return ColumnDataTypeClass(type_enum, nullable)
+        return JavaEntryPoint.buildColumnDataTypeInfo(type_enum, nullable)
     raise TypeError(
         f"Dynamic Parameter with type {param_type} not supported in BodoSQL. Please cast your data to a supported type. https://docs.bodo.ai/latest/source/BodoSQL.html#supported-data-types"
     )
@@ -476,7 +488,7 @@ def compute_df_types(df_list, is_bodo_type):
 
 def add_table_type(
     table_name: str,
-    schema: LocalSchemaClass,
+    schema,
     df_type: bodo.DataFrameType,
     estimated_row_count: int | None,
     estimated_ndvs: dict[str, int] | None,
@@ -490,7 +502,7 @@ def add_table_type(
 
     Args:
         table_name (str): The name of the table.
-        schema (LocalSchemaClass): The schema to update.
+        schema (Java LocalSchema): The schema to update.
         df_type (bodo.DataFrameType): The Bodo DataFrame type.
         estimated_row_count (Optional[int]): The expected number of rows in the table for the
             Volcano Planner. None if no estimate is provided.
@@ -506,10 +518,11 @@ def add_table_type(
             queries.
     """
     assert bodo.get_rank() == 0, "add_table_type should only be called on rank 0."
-    col_arr = ArrayListClass()
-    for i, cname in enumerate(df_type.columns):
-        column = get_sql_column_type(df_type.data[i], cname)
-        col_arr.add(column)
+    sql_types = [
+        get_sql_column_type(df_type.data[i], cname)
+        for i, cname in enumerate(df_type.columns)
+    ]
+    col_arr = build_java_array_list(sql_types)
 
     # To support writing to SQL Databases we register is_writeable
     # for SQL databases.
@@ -527,7 +540,7 @@ def add_table_type(
             # Note. We only support MERGE for Iceberg. We check this in the
             # Java code to ensure we also handle catalogs. Note the
             # last argument is for passing additional arguments as key=value pairs.
-            write_format_code = f"bodo.io.iceberg.iceberg_merge_cow_py('{bodo_type._file_path}', '{bodo_type._conn_str}', '{bodo_type._db_schema}', %s, %s)"
+            write_format_code = f"bodo.io.iceberg.merge_into.iceberg_merge_cow_py('{bodo_type._file_path}', '{bodo_type._conn_str}', '{bodo_type._db_schema}', %s, %s)"
         else:
             write_format_code = f"%s.to_sql('{bodo_type._file_path}', '{bodo_type._conn_str}', if_exists='append', index=False, {schema_code_to_sql}, %s)"
     else:
@@ -549,14 +562,12 @@ def add_table_type(
     read_code = _generate_table_read(table_name, bodo_type, table_num, from_jit)
 
     # Convert the Python dict to a Java HashMap:
-    estimated_ndvs_java_map = HashMapClass()
-    if estimated_ndvs:
-        for k, v in estimated_ndvs.items():
-            estimated_ndvs_java_map.put(k, v)
+    estimated_ndvs = {} if estimated_ndvs is None else estimated_ndvs
+    estimated_ndvs_java_map = build_java_hash_map(estimated_ndvs)
 
-    table = LocalTableClass(
+    table = JavaEntryPoint.buildLocalTable(
         table_name,
-        schema.getFullPath(),
+        schema,
         col_arr,
         is_writeable,
         read_code,
@@ -568,7 +579,7 @@ def add_table_type(
         estimated_row_count,
         estimated_ndvs_java_map,
     )
-    schema.addTable(table)
+    JavaEntryPoint.addTableToSchema(schema, table)
 
 
 def _get_estimated_row_count(table: pd.DataFrame | TablePath) -> int | None:
@@ -765,11 +776,11 @@ class BodoSQLContext:
             False,  # We need to execute the code so don't hide credentials.
         )
         if bodo.get_rank() == 0:
-            is_dll = generator.isDDLProcessedQuery()
+            is_ddl = JavaEntryPoint.isDDLProcessedQuery(generator)
         else:
-            is_dll = False
-        is_dll = bcast_scalar(is_dll)
-        if is_dll:
+            is_ddl = False
+        is_ddl = bcast_scalar(is_ddl)
+        if is_ddl:
             warning_msg = "Encountered a DDL query. These queries are executed directly by bc.sql() so this wont't properly test compilation."
             warnings.warn(BodoSQLWarning(warning_msg))
         func_text, lowered_globals = self._convert_to_pandas(
@@ -777,7 +788,7 @@ class BodoSQLContext:
             dynamic_params_list,
             params_dict,
             generator,
-            is_dll,
+            is_ddl,
         )
 
         glbls = {
@@ -853,11 +864,11 @@ class BodoSQLContext:
             hide_credentials,
         )
         if bodo.get_rank() == 0:
-            is_dll = generator.isDDLProcessedQuery()
+            is_ddl = JavaEntryPoint.isDDLProcessedQuery(generator)
         else:
-            is_dll = False
-        is_dll = bcast_scalar(is_dll)
-        if is_dll:
+            is_ddl = False
+        is_ddl = bcast_scalar(is_ddl)
+        if is_ddl:
             warning_msg = "Encountered a DDL query. These queries are executed directly by bc.sql() so this wont't properly represent generated code."
             warnings.warn(BodoSQLWarning(warning_msg))
         pd_code, lowered_globals = self._convert_to_pandas(
@@ -865,7 +876,7 @@ class BodoSQLContext:
             dynamic_params_list,
             params_dict,
             generator,
-            is_dll,
+            is_ddl,
         )
         # add the imports so someone can directly run the code.
         imports = [
@@ -911,10 +922,10 @@ class BodoSQLContext:
                     bodo.utils.typing.raise_bodo_error(
                         "BodoSQLContext passed empty query string"
                     )
-                plan_generator.parseQuery(sql)
+                JavaEntryPoint.parseQuery(plan_generator, sql)
                 # Write type is used for the current Merge Into code path decisions.
                 # This should be removed when we revisit Merge Into
-                write_type = plan_generator.getWriteType(sql)
+                write_type = JavaEntryPoint.getWriteType(plan_generator, sql)
                 update_schema(
                     self.schema,
                     self.names,
@@ -940,7 +951,7 @@ class BodoSQLContext:
         sql: str,
         dynamic_params_list: list[Any],
         named_params_dict: dict[str, Any],
-        generator: RelationalAlgebraGeneratorClass,
+        generator,
         is_ddl: bool,
     ) -> tuple[str, dict[str, Any]]:
         """Generate the func_text for the Python code generated for the given SQL query.
@@ -948,12 +959,11 @@ class BodoSQLContext:
 
         Args:
             sql (str): The SQL query to process.
-            optimize_plan (bool): Should the generated plan be optimized?
-            params_dict (Dict[str, Any]): A python dictionary mapping Python variables
-                to usable SQL names that can be referenced in the query.
-            hide_credentials (bool): Should credentials be hidden in the generated code. This
-                is set to true when we want to inspect the code but not run the code.
-
+            dynamic_params_list (List[Any]): The list of dynamic parameters to lower.
+            named_params_dict (Dict[str, Any]): The named parameters to lower.
+            generator (RelationalAlgebraGenerator Java Object): The relational algebra generator
+                used to generate the code.
+            is_ddl (bool): Is this a DDL query?
         Raises:
             BodoError: If the SQL query cannot be processed.
 
@@ -1044,11 +1054,11 @@ class BodoSQLContext:
             False,  # We need to execute the code so don't hide credentials.
         )
         if bodo.get_rank() == 0:
-            is_dll = generator.isDDLProcessedQuery()
+            is_ddl = JavaEntryPoint.isDDLProcessedQuery(generator)
         else:
-            is_dll = False
-        is_dll = bcast_scalar(is_dll)
-        if is_dll:
+            is_ddl = False
+        is_ddl = bcast_scalar(is_ddl)
+        if is_ddl:
             # Just execute DDL operations directly and return the DataFrame.
             return self.execute_ddl(sql, generator)
         else:
@@ -1141,8 +1151,12 @@ class BodoSQLContext:
                     params_dict
                 )
                 plan_or_err_msg = str(
-                    generator.getOptimizedPlanString(
-                        sql, show_cost, java_params_array, java_named_params_map
+                    JavaEntryPoint.getOptimizedPlanString(
+                        generator,
+                        sql,
+                        show_cost,
+                        java_params_array,
+                        java_named_params_map,
                     )
                 )
             except Exception as e:
@@ -1158,7 +1172,7 @@ class BodoSQLContext:
     def _get_pandas_code(
         self,
         sql: str,
-        generator: RelationalAlgebraGeneratorClass,
+        generator,
         dynamic_params_list: list[Any],
         named_params_dict: dict[str, Any],
     ) -> tuple[str, dict[str, Any]]:
@@ -1166,7 +1180,7 @@ class BodoSQLContext:
 
         Args:
             sql (str): The SQL query text.
-            generator (RelationalAlgebraGeneratorClass): The relational algebra generator
+            generator (RelationalAlgebraGenerator Java Object): The relational algebra generator
                 used to generate the code.
 
         Raises:
@@ -1184,7 +1198,9 @@ class BodoSQLContext:
                 named_params_dict
             )
             pd_code = str(
-                generator.getPandasString(sql, java_params_array, java_named_params_map)
+                JavaEntryPoint.getPandasString(
+                    generator, sql, java_params_array, java_named_params_map
+                )
             )
             failed = False
         except Exception as e:
@@ -1195,7 +1211,7 @@ class BodoSQLContext:
             raise bodo.utils.typing.BodoError(
                 f"Unable to compile SQL Query. Error message:\n{message}"
             )
-        return pd_code, generator.getLoweredGlobalVariables()
+        return pd_code, JavaEntryPoint.getLoweredGlobals(generator)
 
     def _create_generator(self, hide_credentials: bool):
         """Creates a RelationalAlgebraGenerator from the schema.
@@ -1205,54 +1221,36 @@ class BodoSQLContext:
                 any generated code.
 
         Returns:
-            RelationalAlgebraGeneratorClass: The java object holding
+            RelationalAlgebraGenerator Java Object: The java object holding
                 the relational algebra generator.
         """
         verbose_level = bodo.user_logging.get_verbose_level()
         tracing_level = bodo.tracing_level
-        if bodo.bodosql_use_streaming_plan:
-            planner_type = _PlannerType.Streaming.value
-        else:
-            planner_type = _PlannerType.Volcano.value
         if self.catalog is not None:
-            return RelationalAlgebraGeneratorClass(
-                self.catalog.get_java_object(),
-                self.schema,
-                planner_type,
-                verbose_level,
-                tracing_level,
-                bodo.bodosql_streaming_batch_size,
-                hide_credentials,
-                bodo.enable_snowflake_iceberg,
-                bodo.enable_timestamp_tz,
-                bodo.enable_runtime_join_filters,
-                bodo.enable_streaming_sort,
-                bodo.enable_streaming_sort_limit_offset,
-                bodo.bodo_sql_style,
-                bodo.bodosql_full_caching,
-                bodo.prefetch_sf_iceberg,
-            )
-        extra_args = () if self.default_tz is None else (self.default_tz,)
-        generator = RelationalAlgebraGeneratorClass(
+            catalog_obj = self.catalog.get_java_object()
+        else:
+            catalog_obj = None
+        return JavaEntryPoint.buildRelationalAlgebraGenerator(
+            catalog_obj,
             self.schema,
-            planner_type,
+            bodo.bodosql_use_streaming_plan,
             verbose_level,
             tracing_level,
             bodo.bodosql_streaming_batch_size,
             hide_credentials,
             bodo.enable_snowflake_iceberg,
             bodo.enable_timestamp_tz,
-            bodo.enable_runtime_join_filters,
             bodo.enable_streaming_sort,
             bodo.enable_streaming_sort_limit_offset,
             bodo.bodo_sql_style,
             bodo.bodosql_full_caching,
             bodo.prefetch_sf_iceberg,
-            *extra_args,
+            self.default_tz,
         )
-        return generator
 
-    def add_or_replace_view(self, name: str, table: pd.DataFrame | TablePath):
+    def add_or_replace_view(
+        self, name: str, table: pd.DataFrame | TablePath
+    ) -> BodoSQLContext:
         """Create a new BodoSQLContext that contains all of the old DataFrames and the
         new table being provided. If there is a DataFrame in the old BodoSQLContext with
         the same name, it is replaced by the new table in the new BodoSQLContext. Otherwise
@@ -1372,9 +1370,7 @@ class BodoSQLContext:
                 return self.catalog == bc.catalog
         return False  # pragma: no cover
 
-    def execute_ddl(
-        self, sql: str, generator: RelationalAlgebraGeneratorClass | None = None
-    ) -> pd.DataFrame:
+    def execute_ddl(self, sql: str, generator=None) -> pd.DataFrame:
         """API to directly execute DDL queries. This is used by the JIT
         path to execute DDL queries and can be used as a fast path when you
         statically know the query you want to execute is a DDL query to avoid the
@@ -1385,7 +1381,7 @@ class BodoSQLContext:
 
         Args:
             sql (str): The DDL query to execute.
-            generator (Optional[RelationalAlgebraGeneratorClass]): The prepared planner
+            generator (Optional[RelationalAlgebraGenerator Java object]): The prepared planner
                 information used for executing the query. If None we need to create
                 the planner.
 
@@ -1409,16 +1405,21 @@ class BodoSQLContext:
 
         if bodo.get_rank() == 0:
             try:
-                ddl_result = generator.executeDDL(sql)
+                ddl_result = JavaEntryPoint.executeDDL(generator, sql)
                 # Convert the output to a DataFrame.
-                column_names = list(ddl_result.getColumnNames())
+                column_names = list(
+                    JavaEntryPoint.getDDLExecutionColumnNames(ddl_result)
+                )
                 column_types = [
-                    _generate_ddl_column_type(t) for t in ddl_result.getColumnTypes()
+                    _generate_ddl_column_type(t)
+                    for t in JavaEntryPoint.getDDLExecutionColumnTypes(ddl_result)
                 ]
                 data = [
                     # Use astype to avoid issues with Java conversion.
                     pd.array(column, dtype=object).astype(column_types[i])
-                    for i, column in enumerate(ddl_result.getColumnValues())
+                    for i, column in enumerate(
+                        JavaEntryPoint.getDDLColumnValues(ddl_result)
+                    )
                 ]
                 df_dict = {column_names[i]: data[i] for i in range(len(column_names))}
                 result = pd.DataFrame(
@@ -1455,18 +1456,18 @@ def initialize_schema():
     """Create the BodoSQL Schema used to store all local DataFrames.
 
     Returns:
-        LocalSchemaClass: Java type for the BodoSQL schema.
+        Java LocalSchema: Java type for the BodoSQL schema.
     """
     # TODO(ehsan): create and store generator during bodo_sql_context initialization
     if bodo.get_rank() == 0:
-        schema = LocalSchemaClass("__BODOLOCAL__")
+        schema = JavaEntryPoint.buildLocalSchema("__BODOLOCAL__")
     else:
         schema = None
     return schema
 
 
 def update_schema(
-    schema: LocalSchemaClass,
+    schema,
     table_names: list[str],
     df_types: list[bodo.DataFrameType],
     estimated_row_counts: list[int | None],
@@ -1478,7 +1479,7 @@ def update_schema(
     """Update a local schema with local tables.
 
     Args:
-        schema (LocalSchemaClass): The schema to update.
+        schema (Java LocalSchema): The schema to update.
         table_names (List[str]): List of tables to add to the schema.
         df_types (List[bodo.DataFrameType]): List of Bodo DataFrame types for each table.
         estimated_row_counts (List[Optional[int]]): The expected number of rows in each input

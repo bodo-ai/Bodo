@@ -126,18 +126,23 @@ class BodoRexSimplify(
      */
     private fun integerStringLiteralToEpoch(literalString: String): BigDecimal {
         val offset = BigDecimal(literalString)
-        return if (offset < BigDecimal(SECOND_EPOCH_THRESHOLD)) {
-            // Value is in seconds.
-            offset * BigDecimal(NANOSEC_PER_SECOND)
-        } else if (offset < BigDecimal(MILLISECOND_EPOCH_THRESHOLD)) {
-            // Value is in milliseconds
-            offset * BigDecimal(NANOSEC_PER_MILLISECOND)
-        } else if (offset < BigDecimal(MICROSECOND_EPOCH_THRESHOLD)) {
-            // Value is in microseconds
-            offset * BigDecimal(NANOSEC_PER_MICROSECOND)
-        } else {
-            // Value is in nanoseconds
-            offset
+        return when {
+            offset < BigDecimal(SECOND_EPOCH_THRESHOLD) -> {
+                // Convert seconds to nanoseconds
+                offset * BigDecimal(NANOSEC_PER_SECOND)
+            }
+            offset < BigDecimal(MILLISECOND_EPOCH_THRESHOLD) -> {
+                // Convert milliseconds to nanoseconds
+                offset * BigDecimal(NANOSEC_PER_MILLISECOND)
+            }
+            offset < BigDecimal(MICROSECOND_EPOCH_THRESHOLD) -> {
+                // Convert microseconds to nanoseconds
+                offset * BigDecimal(NANOSEC_PER_MICROSECOND)
+            }
+            else -> {
+                // Value is already in nanoseconds
+                offset
+            }
         }
     }
 
@@ -166,8 +171,9 @@ class BodoRexSimplify(
     }
 
     private fun stringLiteralToDateString(literalString: String): Pair<DateString?, String> {
-        // Just support the main Snowflake patterns without whitespace. Note that Snowflake
-        // appends leading 0s if they are absent
+        // Just support the main Snowflake patterns without whitespace.
+        // Note that Snowflake appends leading 0s if they are absent.
+        // Each pattern should be reviewed as a separate string literal case.
         val pattern1 = Pattern.compile("^(\\d{1,4})-(\\d{1,2})-(\\d{1,2})")
         val matcher1 = pattern1.matcher(literalString)
         return if (matcher1.find()) {
@@ -218,7 +224,7 @@ class BodoRexSimplify(
             val nanoseconds = integerStringLiteralToEpoch(literalString)
             rexBuilder.makeDateLiteral(epochToDateString(nanoseconds))
         } else {
-            val decomposed = stringLiteralToTimestampString(literalString, true, false)
+            val decomposed = stringLiteralToTimestampString(literalString)
             if (decomposed == null) {
                 call
             } else {
@@ -237,12 +243,26 @@ class BodoRexSimplify(
      */
     private fun dateLiteralToTimestamp(literal: RexLiteral, precision: Int, isTzAware: Boolean, isOffset: Boolean): RexNode {
         val calendar = literal.getValueAs(Calendar::class.java)!!
-        val tsString = TimestampString(calendar.get(Calendar.YEAR), calendar.get(Calendar.MONTH) + 1, calendar.get(Calendar.DAY_OF_MONTH), 0, 0, 0)
+        val tsString = TimestampString(
+            calendar.get(Calendar.YEAR),
+            calendar.get(Calendar.MONTH) + 1,
+            calendar.get(Calendar.DAY_OF_MONTH),
+            0,
+            0,
+            0
+        )
         return if (isTzAware) {
             rexBuilder.makeTimestampWithLocalTimeZoneLiteral(tsString, precision)
         } else if (isOffset) {
             val defaultZone = TimeZone.getTimeZone(BodoTZInfo.getDefaultTZInfo(this.rexBuilder.typeFactory.typeSystem).zone)
-            val zoneOffset = getOffsetOfTimestamp(calendar.get(Calendar.YEAR), calendar.get(Calendar.MONTH) + 1, calendar.get(Calendar.DAY_OF_MONTH), 0, 0, defaultZone)
+            val zoneOffset = getOffsetOfTimestamp(
+                calendar.get(Calendar.YEAR),
+                calendar.get(Calendar.MONTH) + 1,
+                calendar.get(Calendar.DAY_OF_MONTH),
+                0,
+                0,
+                defaultZone
+            )
             rexBuilder.makeTimestampTzLiteral(TimestampWithTimeZoneString(tsString, zoneOffset), precision)
         } else {
             rexBuilder.makeTimestampLiteral(tsString, precision)
@@ -285,29 +305,32 @@ class BodoRexSimplify(
      * Simplify ::date and to_date functions for supported literals.
      */
     private fun simplifyDateCast(call: RexCall, operand: RexNode): RexNode {
-        return if (operand is RexLiteral) {
-            // Resolve constant casts for literals
-            if (operand.type.sqlTypeName == SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE) {
-                timestampLiteralToDate(operand)
-            } else {
-                when (operand.typeName) {
-                    SqlTypeName.DATE -> operand
-                    SqlTypeName.NULL -> rexBuilder.makeNullLiteral(call.getType())
-                    SqlTypeName.VARCHAR, SqlTypeName.CHAR -> stringLiteralToDate(call, operand)
-                    SqlTypeName.TIMESTAMP -> timestampLiteralToDate(operand)
-                    else -> call
+        return when (operand) {
+            is RexLiteral -> {
+                // Resolve constant casts for literals
+                if (operand.type.sqlTypeName == SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE) {
+                    timestampLiteralToDate(operand)
+                } else {
+                    when (operand.typeName) {
+                        SqlTypeName.DATE -> operand
+                        SqlTypeName.NULL -> rexBuilder.makeNullLiteral(call.getType())
+                        SqlTypeName.VARCHAR, SqlTypeName.CHAR -> stringLiteralToDate(call, operand)
+                        SqlTypeName.TIMESTAMP -> timestampLiteralToDate(operand)
+                        else -> call
+                    }
                 }
             }
-        } else if (operand is RexCall) {
-            val innerCall = call.operands[0] as RexCall
-            if (innerCall.operator.name == DatetimeOperatorTable.GETDATE.name) {
-                // Replace GETDATE::DATE with CURRENT_DATE
-                rexBuilder.makeCall(SqlStdOperatorTable.CURRENT_DATE)
-            } else {
-                call
+
+            is RexCall -> {
+                val innerCall = call.operands[0] as RexCall
+                if (innerCall.operator.name == DatetimeOperatorTable.GETDATE.name) {
+                    // Replace GETDATE::DATE with CURRENT_DATE
+                    rexBuilder.makeCall(SqlStdOperatorTable.CURRENT_DATE)
+                } else {
+                    call
+                }
             }
-        } else {
-            call
+            else -> call
         }
     }
 
@@ -326,8 +349,12 @@ class BodoRexSimplify(
             val innerCastType = operand.type
             val innerMostNode = operand.operands[0]
             val innerMostNodeType = innerMostNode.type
-            val allNumeric = SqlTypeFamily.EXACT_NUMERIC.contains(outerCastType) && SqlTypeFamily.EXACT_NUMERIC.contains(innerCastType) && SqlTypeFamily.EXACT_NUMERIC.contains(innerMostNodeType)
-            val allInteger = outerCastType.scale == 0 && innerCastType.scale == 0 && innerMostNodeType.scale == 0
+            val allNumeric = SqlTypeFamily.EXACT_NUMERIC.contains(outerCastType) &&
+                    SqlTypeFamily.EXACT_NUMERIC.contains(innerCastType) &&
+                    SqlTypeFamily.EXACT_NUMERIC.contains(innerMostNodeType)
+            val allInteger = outerCastType.scale == 0 &&
+                    innerCastType.scale == 0 &&
+                    innerMostNodeType.scale == 0
             val innerIsUpcast = innerCastType.precision >= innerMostNodeType.precision
             // We can remove at least 1 cast if it's all integers and there is an upcast for the first cast.
             if (allNumeric && allInteger && innerIsUpcast) {
@@ -361,30 +388,33 @@ class BodoRexSimplify(
                         errorValue
                     } else {
                         val storedValue = asDecimal.setScale(0, RoundingMode.HALF_UP).toBigInteger()
+                        // Casting is only performed when it's statically safe in case
+                        // we generate an error at runtime. We don't error at compile time
+                        // to be conservative.
                         val isSafe = when (call.type.sqlTypeName) {
                             SqlTypeName.TINYINT -> (storedValue >= BigInteger.valueOf(Byte.MIN_VALUE.toLong())) && (
                                 storedValue <= BigInteger.valueOf(
                                     Byte.MAX_VALUE.toLong(),
                                 )
-                                )
+                            )
 
                             SqlTypeName.SMALLINT -> (storedValue >= BigInteger.valueOf(Short.MIN_VALUE.toLong())) && (
                                 storedValue <= BigInteger.valueOf(
                                     Short.MAX_VALUE.toLong(),
                                 )
-                                )
+                            )
 
                             SqlTypeName.INTEGER -> (storedValue >= BigInteger.valueOf(Int.MIN_VALUE.toLong())) && (
                                 storedValue <= BigInteger.valueOf(
                                     Int.MAX_VALUE.toLong(),
                                 )
-                                )
+                            )
 
                             SqlTypeName.BIGINT -> (storedValue >= BigInteger.valueOf(Long.MIN_VALUE)) && (
                                 storedValue <= BigInteger.valueOf(
                                     Long.MAX_VALUE,
                                 )
-                                )
+                            )
 
                             else -> true
                         }
@@ -398,6 +428,7 @@ class BodoRexSimplify(
                 SqlTypeName.CHAR,
                 SqlTypeName.VARCHAR,
                 -> {
+                    // Strings require parsing.
                     val asString = operand.getValueAs(String::class.java)?.uppercase()?.trim()
                     val asDecimal = if (asString.equals("E") || asString.equals("-E")) {
                         BigDecimal(0)
@@ -423,6 +454,7 @@ class BodoRexSimplify(
                     }
                 }
                 SqlTypeName.BOOLEAN -> {
+                    // Boolean becomnes 1 or 0
                     val isTrue = operand.isAlwaysTrue
                     val isFalse = operand.isAlwaysFalse
                     if (isTrue) {
@@ -686,7 +718,7 @@ class BodoRexSimplify(
     /**
      * Convert a String literal that represents a datetime value to a TimestampString
      */
-    private fun stringLiteralToTimestampString(literalString: String, isNaive: Boolean, isOffset: Boolean): Pair<TimestampString, TimeZone>? {
+    private fun stringLiteralToTimestampString(literalString: String): Pair<TimestampString, TimeZone>? {
         // Convert a SQL literal being cast to a timestamp with the default Snowflake
         // parsing to a timestamp literal. If the parsed date doesn't match our supported
         // formats then we return the original cast call.
@@ -719,7 +751,7 @@ class BodoRexSimplify(
         val (hour, minute, second) = timeParts
         var timeZone = TimeZone.getTimeZone(BodoTZInfo.getDefaultTZInfo(this.rexBuilder.typeFactory.typeSystem).zone)
         // Identify the UTC offset component of the string
-        val offsetPattern = Pattern.compile("^[ ]{0,1}[+-]((\\d{1,2}[:]\\d{1,2})|(\\d{4}))$")
+        val offsetPattern = Pattern.compile("^ ?[+-]((\\d{1,2}:\\d{1,2})|(\\d{4}))$")
         val offsetMatcher = offsetPattern.matcher(remainingString)
         if (offsetMatcher.find()) {
             val start = offsetMatcher.start()
@@ -753,9 +785,12 @@ class BodoRexSimplify(
         }
     }
 
-    // Takes in a TimeZone and a specific day and returns another time zone object referencing the fixed offset of
-    // that time zone in that time of year.
-    fun getOffsetOfTimestamp(year: Int, month: Int, day: Int, hour: Int, minute: Int, zone: TimeZone): TimeZone {
+    /**
+     * Takes in a TimeZone and a specific day and returns another time zone
+     * object referencing the fixed offset of that time zone in that time
+     * of year.
+     */
+    private fun getOffsetOfTimestamp(year: Int, month: Int, day: Int, hour: Int, minute: Int, zone: TimeZone): TimeZone {
         // Get the raw offset in milliseconds from UTC of the current timezone in the specified time of year
         val hourMinuteAsMs = hour * 3_600_000 + minute * 60_000
         val msOffset = zone.getOffset(1, year, month - 1, day, 1, hourMinuteAsMs)
@@ -800,7 +835,7 @@ class BodoRexSimplify(
                 rexBuilder.makeTimestampWithLocalTimeZoneLiteral(tsString, call.getType().precision)
             }
         } else {
-            val decomposed = stringLiteralToTimestampString(literalString, isNaive, isOffset)
+            val decomposed = stringLiteralToTimestampString(literalString)
             return if (decomposed == null) {
                 call
             } else {
@@ -865,9 +900,12 @@ class BodoRexSimplify(
                     SqlTypeName.NULL -> rexBuilder.makeNullLiteral(call.getType())
                     SqlTypeName.VARCHAR,
                     SqlTypeName.CHAR,
-                    -> stringLiteralToTimestamp(call, operand, true, false)
+                    -> stringLiteralToTimestamp(call, operand, isNaive = true, isOffset = false)
 
-                    SqlTypeName.DATE -> dateLiteralToTimestamp(operand, call.getType().precision, false, false)
+                    SqlTypeName.DATE -> dateLiteralToTimestamp(operand, call.getType().precision,
+                        isTzAware = false,
+                        isOffset = false
+                    )
                     SqlTypeName.TIMESTAMP -> {
                         // Support change of precision
                         val timestampString = operand.getValueAs(TimestampString::class.java)
@@ -885,9 +923,16 @@ class BodoRexSimplify(
         }
     }
 
-    private fun timestampToTimestampTz(call: RexCall, tsString: TimestampString, zone: TimeZone, isNaive: Boolean): RexNode {
+    private fun timestampToTimestampTz(call: RexCall, tsString: TimestampString, zone: TimeZone): RexNode {
         val calendar = tsString.toCalendar()
-        val zoneOffset = getOffsetOfTimestamp(calendar.get(Calendar.YEAR), calendar.get(Calendar.MONTH) + 1, calendar.get(Calendar.DAY_OF_MONTH), calendar.get(Calendar.HOUR), calendar.get(Calendar.MINUTE), zone)
+        val zoneOffset = getOffsetOfTimestamp(
+            calendar.get(Calendar.YEAR),
+            calendar.get(Calendar.MONTH) + 1,
+            calendar.get(Calendar.DAY_OF_MONTH),
+            calendar.get(Calendar.HOUR),
+            calendar.get(Calendar.MINUTE),
+            zone
+        )
         val tsStringWithTz = TimestampWithTimeZoneString(tsString, zoneOffset)
         return rexBuilder.makeTimestampTzLiteral(tsStringWithTz, call.type.precision)
     }
@@ -905,7 +950,7 @@ class BodoRexSimplify(
                     errorValue
                 } else {
                     val defaultZone = TimeZone.getTimeZone(BodoTZInfo.getDefaultTZInfo(this.rexBuilder.typeFactory.typeSystem).zone)
-                    timestampToTimestampTz(call, timestampString, defaultZone, false)
+                    timestampToTimestampTz(call, timestampString, defaultZone)
                 }
             } else {
                 when (operand.typeName) {
@@ -913,11 +958,11 @@ class BodoRexSimplify(
                     SqlTypeName.VARCHAR,
                     SqlTypeName.CHAR,
                     -> {
-                        stringLiteralToTimestamp(call, operand, false, true)
+                        stringLiteralToTimestamp(call, operand, isNaive = false, isOffset = true)
                     }
 
                     SqlTypeName.DATE -> {
-                        dateLiteralToTimestamp(operand, call.getType().precision, false, true)
+                        dateLiteralToTimestamp(operand, call.getType().precision, isTzAware = false, isOffset = true)
                     }
                     SqlTypeName.TIMESTAMP -> {
                         // Support change of precision
@@ -926,7 +971,7 @@ class BodoRexSimplify(
                             errorValue
                         } else {
                             val defaultZone = TimeZone.getTimeZone(BodoTZInfo.getDefaultTZInfo(this.rexBuilder.typeFactory.typeSystem).zone)
-                            timestampToTimestampTz(call, timestampString, defaultZone, true)
+                            timestampToTimestampTz(call, timestampString, defaultZone)
                         }
                     }
                     else -> call
@@ -1002,11 +1047,9 @@ class BodoRexSimplify(
                     val isFalse = operand.isAlwaysFalse
                     if (isTrue) {
                         rexBuilder.makeLiteral("true", call.getType())
-                    } else if (isFalse) {
-                        rexBuilder.makeLiteral("false", call.getType())
                     } else {
-                        // This shouldn't be reachable.
-                        call
+                        assert(isFalse) { "Literal should be always true or false" }
+                        rexBuilder.makeLiteral("false", call.getType())
                     }
                 }
                 SqlTypeName.BINARY, SqlTypeName.VARBINARY -> {
@@ -1245,7 +1288,10 @@ class BodoRexSimplify(
      */
     private fun bodoLiteralPlusMinus(call: RexCall, lit1: RexLiteral, lit2: RexLiteral, isPlus: Boolean): RexNode {
         val supportedIntervals = listOf(SqlTypeName.INTERVAL_DAY, SqlTypeName.INTERVAL_MONTH, SqlTypeName.INTERVAL_YEAR)
-        if ((lit1.type.sqlTypeName in listOf(SqlTypeName.DATE, SqlTypeName.TIMESTAMP) && supportedIntervals.contains(lit2.type.sqlTypeName)) || (isPlus && supportedIntervals.contains(lit1.type.sqlTypeName) && lit2.type.sqlTypeName in listOf(SqlTypeName.DATE, SqlTypeName.TIMESTAMP))) {
+        if ((lit1.type.sqlTypeName in listOf(SqlTypeName.DATE, SqlTypeName.TIMESTAMP)
+                    && supportedIntervals.contains(lit2.type.sqlTypeName))
+                    || (isPlus && supportedIntervals.contains(lit1.type.sqlTypeName)
+                    && lit2.type.sqlTypeName in listOf(SqlTypeName.DATE, SqlTypeName.TIMESTAMP))) {
             val (dateLiteral, intervalLiteral, signMultiplier) = getDateMathArguments(lit1, lit2, isPlus)
             val calendarVal = dateLiteral.getValueAs(Calendar::class.java)!!
             val intervalDecimal = intervalLiteral.getValueAs(BigDecimal::class.java)!!
@@ -1259,10 +1305,10 @@ class BodoRexSimplify(
                 else -> return call
             }
             calendarVal.add(calendarUnit, intervalInt * signMultiplier)
-            if (dateLiteral.type.sqlTypeName == SqlTypeName.DATE) {
-                return rexBuilder.makeDateLiteral(DateString.fromCalendarFields(calendarVal))
+            return if (dateLiteral.type.sqlTypeName == SqlTypeName.DATE) {
+                rexBuilder.makeDateLiteral(DateString.fromCalendarFields(calendarVal))
             } else {
-                return rexBuilder.makeTimestampLiteral(TimestampString.fromCalendarFields(calendarVal), 9)
+                rexBuilder.makeTimestampLiteral(TimestampString.fromCalendarFields(calendarVal), 9)
             }
         }
         return call
@@ -1273,9 +1319,12 @@ class BodoRexSimplify(
      * Calcite's behavior, so we only support Interval * Integer.
      */
     private fun bodoLiteralTimes(call: RexCall, lit1: RexLiteral, lit2: RexLiteral): RexNode {
-        val type1 = lit1.getType()
-        val type2 = lit2.getType()
-        return if ((SqlTypeFamily.INTEGER.contains(type1) && SqlTypeFamily.INTERVAL_DAY_TIME.contains(type2)) || (SqlTypeFamily.INTERVAL_DAY_TIME.contains(type1) && SqlTypeFamily.INTEGER.contains(type2))) {
+        val type1 = lit1.type
+        val type2 = lit2.type
+        return if ((SqlTypeFamily.INTEGER.contains(type1)
+                    && SqlTypeFamily.INTERVAL_DAY_TIME.contains(type2))
+                    || (SqlTypeFamily.INTERVAL_DAY_TIME.contains(type1)
+                    && SqlTypeFamily.INTEGER.contains(type2))) {
             val firstInteger = SqlTypeFamily.INTEGER.contains(type1)
             val intLiteral = if (firstInteger) {
                 lit1
@@ -1402,7 +1451,7 @@ class BodoRexSimplify(
                             } else {
                                 val matchSection = patternString.substring(startIndex, endIndex)
                                 if (matchSection.contains(safeSpecialCharacter)) {
-                                    // If we have a % in the middle, we can simplify if there is exactly "1" location.
+                                    // If we have a % in the middle, we can simplify if there is exactly 1 "location".
                                     // We search through the string to find the first and last %.
                                     val canSimplify = if (startIndex == 0 && endIndex == patternString.length) {
                                         while (startIndex < patternString.length && patternString[startIndex] != safeSpecialCharacter) {
@@ -1931,9 +1980,9 @@ class BodoRexSimplify(
         val hour = newNs / NANOSEC_PER_HOUR
         val minute = (newNs / NANOSEC_PER_MINUTE) % 60
         val second = (newNs / NANOSEC_PER_SECOND) % 60
-        val subsecond = newNs % NANOSEC_PER_SECOND
+        val subSecond = newNs % NANOSEC_PER_SECOND
         // Use the components to construct the new time
-        var newTime = TimeString(hour.toInt(), minute.toInt(), second.toInt()).withNanos(subsecond.toInt())
+        var newTime = TimeString(hour.toInt(), minute.toInt(), second.toInt()).withNanos(subSecond.toInt())
         return rexBuilder.makeTimeLiteral(newTime, BodoSQLRelDataTypeSystem.MAX_DATETIME_PRECISION)
     }
 
@@ -1960,7 +2009,7 @@ class BodoRexSimplify(
             val (field, multiplier) = unitAndMultiplier
             date.add(field, offset.toInt() * multiplier)
             // Reconstruct the timestamp by replacing the subsecond components with the
-            // subsecond components of the original timestamp
+            // sub second components of the original timestamp
             val ts = TimestampString.fromCalendarFields(date).withNanos(ns)
             return rexBuilder.makeTimestampLiteral(ts, BodoSQLRelDataTypeSystem.MAX_DATETIME_PRECISION)
         } else {
@@ -1971,10 +2020,10 @@ class BodoRexSimplify(
             // new milliseconds since the epoch as well as the subsecond components
             val newNs = ns + offset * multiplier
             val newMsEpoch = newNs / NANOSEC_PER_MILLISECOND
-            val newSubsecond = newNs % NANOSEC_PER_SECOND
+            val newSubSecond = newNs % NANOSEC_PER_SECOND
             // Reconstruct the timestamp using the milliseconds since the unix epoch,
-            // then replace the subsecond components with the correct subsecond amounts
-            val ts = TimestampString.fromMillisSinceEpoch(newMsEpoch).withNanos(newSubsecond.toInt())
+            // then replace the sub second components with the correct sub second amounts
+            val ts = TimestampString.fromMillisSinceEpoch(newMsEpoch).withNanos(newSubSecond.toInt())
             return rexBuilder.makeTimestampLiteral(ts, BodoSQLRelDataTypeSystem.MAX_DATETIME_PRECISION)
         }
     }
@@ -2016,11 +2065,18 @@ class BodoRexSimplify(
                 // to timestamp then use timestamp addition
                 val dateLiteral = base.getValueAs(DateString::class.java)!!
                 val calendar = dateLiteral.toCalendar()
-                if (isTime) {
-                    val timestampLiteral = TimestampString(calendar.get(Calendar.YEAR), calendar.get(Calendar.MONTH) + 1, calendar.get(Calendar.DAY_OF_MONTH), 0, 0, 0)
-                    return simplifyAddToTimestamp(e, timestampLiteral, unit, offset)
+                return if (isTime) {
+                    val timestampLiteral = TimestampString(
+                        calendar.get(Calendar.YEAR),
+                        calendar.get(Calendar.MONTH) + 1,
+                        calendar.get(Calendar.DAY_OF_MONTH),
+                        0,
+                        0,
+                        0
+                    )
+                    simplifyAddToTimestamp(e, timestampLiteral, unit, offset)
                 } else {
-                    return simplifyAddToDate(e, calendar, unit, offset)
+                    simplifyAddToDate(e, calendar, unit, offset)
                 }
             }
 

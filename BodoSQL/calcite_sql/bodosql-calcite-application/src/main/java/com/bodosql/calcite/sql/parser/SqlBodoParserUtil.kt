@@ -5,8 +5,12 @@ import com.bodosql.calcite.application.operatorTables.DatetimeOperatorTable
 import com.bodosql.calcite.application.operatorTables.StringOperatorTable
 import com.bodosql.calcite.application.operatorTables.TableFunctionOperatorTable
 import com.bodosql.calcite.sql.func.SqlBodoOperatorTable
+import com.google.common.base.Preconditions
 import org.apache.calcite.avatica.util.TimeUnit
+import org.apache.calcite.rel.type.RelDataTypeSystem
+import org.apache.calcite.runtime.CalciteContextException
 import org.apache.calcite.sql.SqlIdentifier
+import org.apache.calcite.sql.SqlIntervalLiteral.IntervalValue
 import org.apache.calcite.sql.SqlIntervalQualifier
 import org.apache.calcite.sql.SqlKind
 import org.apache.calcite.sql.SqlLiteral
@@ -278,6 +282,84 @@ class SqlBodoParserUtil {
                 res = SqlBodoOperatorTable.COMBINE_INTERVALS.createCall(pos, listOf(res, interval))
             }
             return res
+        }
+
+        /**
+         * Converts the interval value into a nanosecond representation.
+         * Note: This is largely copied from the intervalToMillis function in
+         * SqlParserUtil.
+         *
+         * @param interval Interval
+         * @param typeSystem RelDataTypeSystem The type system that is used to
+         * evaluate the interval literal.
+         * @return a long value that represents nanosecond equivalent of the
+         * interval value.
+         *
+         */
+        @JvmStatic
+        fun intervalToNanos(
+            interval: IntervalValue,
+            typeSystem: RelDataTypeSystem,
+        ): Long =
+            intervalToNanos(
+                interval.intervalLiteral,
+                interval.intervalQualifier,
+                typeSystem,
+            )
+
+        /**
+         * Converts an interval value, represented by a string literal and interval
+         * qualifier into a nanosecond representation.
+         * Note: This is largely copied from the intervalToMillis function in
+         * SqlParserUtil.
+         *
+         * @param literal Interval string literal. For example for `INTERVAL '1' DAY`
+         * the literal is '1'.
+         * @param intervalQualifier SqlIntervalQualifier The interval qualifier that
+         * represents the interval type. For example for `INTERVAL '1' DAY` the
+         * interval qualifier is the DAY component.
+         * @param typeSystem RelDataTypeSystem The type system that is used to
+         * evaluate the interval literal.
+         * @return a long value that represents nanosecond equivalent of the
+         * interval value.
+         *
+         */
+        @JvmStatic
+        fun intervalToNanos(
+            literal: String,
+            intervalQualifier: SqlIntervalQualifier,
+            typeSystem: RelDataTypeSystem,
+        ): Long {
+            Preconditions.checkArgument(
+                !intervalQualifier.isYearMonth,
+                "interval must be day time",
+            )
+            val ret: IntArray =
+                try {
+                    intervalQualifier.evaluateIntervalLiteral(
+                        literal,
+                        intervalQualifier.parserPosition,
+                        typeSystem,
+                    )
+                } catch (e: CalciteContextException) {
+                    throw RuntimeException(
+                        "while parsing day-to-second interval " +
+                            literal,
+                        e,
+                    )
+                }
+            var l: Long = 0
+            val conv = LongArray(6)
+            conv[5] = 1 // nanosecond
+            conv[4] = 1000000 // millisecond
+            conv[3] = conv[4] * 1000 // second
+            conv[2] = conv[3] * 60 // minute
+            conv[1] = conv[2] * 60 // hour
+            conv[0] = conv[1] * 24 // day
+            for (i in 1 until ret.size) {
+                l += conv[i - 1] * ret[i]
+            }
+            return ret[0] * l
         }
     }
 }

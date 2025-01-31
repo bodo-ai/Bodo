@@ -58,6 +58,7 @@ from bodo.utils.typing import (
 )
 from bodo.utils.utils import (
     alloc_type,
+    bodo_exec,
     is_array_typ,
     is_whole_slice,
     numba_to_c_array_types,
@@ -158,6 +159,26 @@ class Table:
         return df
 
 
+def _unify_array_types(typingctx, t1, t2):
+    """Unify two array types for table unification.
+    Uses _derive_common_key_type() if necessary to expand integer types since regular
+    unify functions don't handle that case (necessary for runtime join filter typing,
+    and doesn't hurt other use cases).
+    """
+    if t1 == t2:
+        return t1
+
+    unified = typingctx.unify_types(t1, t2)
+
+    if unified is not None:
+        return unified
+
+    # TODO[BSE-4462]: revisit table unification functions
+
+    # NOTE: may raise BodoError if cannot unify
+    return bodo.libs.streaming.join.JoinStateType._derive_common_key_type([t1, t2])
+
+
 class TableType(types.ArrayCompatible):
     """Bodo Table type that stores column arrays for DataFrames.
     Arrays of the same type are stored in the same "block" (kind of similar to Pandas).
@@ -222,6 +243,24 @@ class TableType(types.ArrayCompatible):
     @property
     def key(self):
         return self.arr_types, self.has_runtime_cols
+
+    def unify(self, typingctx, other):
+        """Unify two TableType instances (required for runtime join filter typing)."""
+        if (
+            isinstance(other, TableType)
+            and (len(self.arr_types) == len(other.arr_types))
+            # TODO: revisit unify for runtime columns case
+            and (not self.has_runtime_cols and not other.has_runtime_cols)
+            and (self.dist == other.dist)
+        ):
+            try:
+                new_arr_types = tuple(
+                    _unify_array_types(typingctx, t1, t2)
+                    for t1, t2 in zip(self.arr_types, other.arr_types)
+                )
+            except BodoError:
+                return None
+            return TableType(new_arr_types, self.has_runtime_cols, self.dist)
 
     @property
     def mangling_args(self):
@@ -548,7 +587,7 @@ def lower_table_shape(context, builder, typ, val):
 
 def table_shape_overload(T):
     """
-    Actual implementation used to implement TableType.shpae.
+    Actual implementation used to implement TableType.shape.
     """
     if T.has_runtime_cols:
         # If the number of columns is determined at runtime we can't
@@ -900,7 +939,7 @@ def generate_set_table_data_code(table, ind, arr_type, used_cols, is_null=False)
         "alloc_list_like": alloc_list_like,
         "out_table_typ": out_table_typ,
     }
-    func_text = "def set_table_data(table, ind, arr, used_cols=None):\n"
+    func_text = "def bodo_set_table_data(table, ind, arr, used_cols=None):\n"
     func_text += "  T2 = init_table(out_table_typ, False)\n"
     # Length of the table cannot change.
     func_text += "  T2 = set_table_len(T2, len(table))\n"
@@ -959,12 +998,12 @@ def generate_set_table_data_code(table, ind, arr_type, used_cols, is_null=False)
         func_text += f"  T2 = set_table_block(T2, out_arr_list_{blk}, {blk})\n"
     func_text += "  return T2\n"
 
-    loc_vars = {}
-    exec(func_text, glbls, loc_vars)
-    return loc_vars["set_table_data"]
+    return bodo_exec(func_text, glbls, {}, globals())
 
 
-@numba.generated_jit(nopython=True, no_cpython_wrapper=True, no_unliteral=True)
+@numba.generated_jit(
+    nopython=True, no_cpython_wrapper=True, no_unliteral=True, cache=True
+)
 def set_table_data(table, ind, arr, used_cols=None):
     """Returns a new table with the contents as table
     except arr is inserted at ind. There are two main cases,
@@ -1184,6 +1223,10 @@ def ensure_table_unboxed(typingctx, table_type, used_cols_typ):
     """
 
     def codegen(context, builder, sig, args):
+        # No need to unbox if already unboxed eagerly (improves compilation time)
+        if bodo.hiframes.boxing.UNBOX_DATAFRAME_EAGERLY:
+            return
+
         table_arg, used_col_set = args
 
         use_all = used_cols_typ == types.none
@@ -1266,6 +1309,10 @@ def ensure_column_unboxed_codegen(context, builder, sig, args):
     used by intrinsics.
     """
     from bodo.hiframes.boxing import get_df_obj_column_codegen
+
+    # No need to unbox if already unboxed eagerly (improves compilation time)
+    if bodo.hiframes.boxing.UNBOX_DATAFRAME_EAGERLY:
+        return
 
     table_arg, list_arg, i_arg, arr_ind_arg = args
     pyapi = context.get_python_api(builder)

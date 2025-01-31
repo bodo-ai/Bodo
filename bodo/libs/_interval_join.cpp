@@ -169,8 +169,9 @@ std::pair<bodo::vector<int64_t>, bodo::vector<int64_t>> interval_merge(
                                                  is_strict_start_cond)) {
             point_pos++;
         }
-        if (point_pos >= point_table->nrows())
+        if (point_pos >= point_table->nrows()) {
             break;
+        }
 
         // Starting location for the current interval. If the
         // start is the same as the previous interval we can skip

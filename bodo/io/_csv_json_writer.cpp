@@ -3,7 +3,6 @@
 #include <arrow/io/api.h>
 #include <mpi.h>
 
-#include "_csv_json_reader.h"
 #include "_fs_io.h"
 #include "_io.h"
 
@@ -161,25 +160,25 @@ int8_t csv_output_is_dir(char *_path_name) {
 PyMODINIT_FUNC PyInit_csv_cpp(void) {
     PyObject *m;
     MOD_DEF(m, "csv_cpp", "No docs", nullptr);
-    if (m == nullptr)
+    if (m == nullptr) {
         return nullptr;
+    }
 
     SetAttrStringFromVoidPtr(m, csv_write);
     SetAttrStringFromVoidPtr(m, csv_output_is_dir);
 
-    PyInit_csv(m);
     return m;
 }
 
 PyMODINIT_FUNC PyInit_json_cpp(void) {
     PyObject *m;
     MOD_DEF(m, "json_cpp", "No docs", nullptr);
-    if (m == nullptr)
+    if (m == nullptr) {
         return nullptr;
+    }
 
     SetAttrStringFromVoidPtr(m, json_write);
 
-    PyInit_json(m);
     return m;
 }
 

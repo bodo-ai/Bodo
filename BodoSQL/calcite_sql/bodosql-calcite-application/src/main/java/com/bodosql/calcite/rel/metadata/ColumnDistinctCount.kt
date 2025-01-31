@@ -39,8 +39,8 @@ interface ColumnDistinctCount : Metadata {
                 ColumnDistinctCount::class.java,
                 "getColumnDistinctCount",
                 Int::class.java,
-            )
+            )!!
 
-        val DEF = MetadataDef.of(ColumnDistinctCount::class.java, Handler::class.java, METHOD)
+        val DEF = MetadataDef.of(ColumnDistinctCount::class.java, Handler::class.java, METHOD)!!
     }
 }

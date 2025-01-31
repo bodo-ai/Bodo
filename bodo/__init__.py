@@ -119,10 +119,6 @@ enable_snowflake_iceberg = os.environ.get("BODO_ENABLE_SNOWFLAKE_ICEBERG", "1") 
 # Flag used to enable reading TIMESTAMP_TZ as its own type instead of as an alias
 # for TIMESTAMP_LTZ. (will be removed once TIMESTAMP_TZ support is complete)
 enable_timestamp_tz = os.environ.get("BODO_ENABLE_TIMESTAMP_TZ", "1") != "0"
-# Flag used to enable Runtime join filters inside BodoSQL plans
-enable_runtime_join_filters = (
-    os.environ.get("BODO_ENABLE_RUNTIME_JOIN_FILTERS", "1") != "0"
-)
 # When applying multiple filters in a single call to runtime_join_filter, materialization
 # occurs after each filter unless the table has at least this many variable-length type
 # columns at which point materialization occurs just once after all filters have been applied.
@@ -166,7 +162,7 @@ def get_sql_config_str() -> str:
     """
     conf_str = (
         f"{bodosql_use_streaming_plan=};{bodosql_streaming_batch_size=};{stream_loop_sync_iters=};{enable_snowflake_iceberg=};"
-        f"{enable_timestamp_tz=};{enable_runtime_join_filters=};{runtime_join_filters_copy_threshold=};{enable_streaming_sort=};"
+        f"{enable_timestamp_tz=};{runtime_join_filters_copy_threshold=};{enable_streaming_sort=};"
         f"{enable_streaming_sort_limit_offset=};{enable_theta_sketches=};{bodo_use_decimal=};"
         f"{bodo_sql_style=};{bodosql_full_caching=};{bodo_disable_streaming_window_sort=};{prefetch_sf_iceberg=};{spawn_mode=};"
     )
@@ -310,7 +306,7 @@ import bodo.io.np_io
 import bodo.io.csv_iterator_ext
 import bodo.io.iceberg
 import bodo.io.snowflake_write
-import bodo.io.stream_iceberg_write
+import bodo.io.iceberg.stream_iceberg_write
 import bodo.io.stream_parquet_write
 
 from bodo.libs.distributed_api import (

@@ -230,7 +230,7 @@ def check_func(
 
     # We allow the environment flag BODO_TESTING_ONLY_RUN_1D_VAR to change the default
     # testing behavior, to test with only 1D_var. This environment variable is set in our
-    # AWS PR CI environment
+    # PR CI environment
     if only_1DVar is None and not (only_seq or only_1D):
         only_1DVar = os.environ.get("BODO_TESTING_ONLY_RUN_1D_VAR", None) is not None
 
@@ -3088,6 +3088,19 @@ pytest_mark_one_rank = compose_decos(
     )
 )
 
+
+pytest_mark_multi_rank_nightly = compose_decos(
+    (
+        pytest.mark.multi_rank_nightly,
+        pytest.mark.skipif(
+            bodo.get_size() == 1
+            and os.environ.get("BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST", False),
+            reason="Skipping test on one rank, will run the test on multiple ranks.",
+        ),
+    )
+)
+
+
 # This is for using a "mark" or marking a whole file.
 pytest_one_rank = [
     pytest.mark.one_rank,
@@ -3101,8 +3114,8 @@ pytest_one_rank = [
 tabular_markers = (
     pytest.mark.tabular,
     pytest.mark.iceberg,
-    pytest.mark.skipif(
-        "TABULAR_CREDENTIAL" not in os.environ, reason="requires tabular credentials"
+    pytest.mark.skip(
+        "Tabular's platform is deactivated, we will replace these with Polaris"
     ),
 )
 
@@ -3127,6 +3140,17 @@ pytest_mark_glue = compose_decos(glue_markers)
 
 # This is for using a "mark" or marking a whole file.
 pytest_glue = list(glue_markers)
+
+s3_tables_markers = (
+    pytest.mark.s3_tables,
+    pytest.mark.iceberg,
+)
+
+# Decorate
+pytest_mark_s3_tables = compose_decos(s3_tables_markers)
+
+# This is for using a "mark" or marking a whole file.
+pytest_s3_tables = list(s3_tables_markers)
 
 
 spawn_mode_markers = (
@@ -3263,12 +3287,9 @@ def set_config(name, val):
     set_global_config(name, val)
     if test_spawn_mode_enabled:
         import bodo.spawn.spawner
-        from bodo.spawn.spawner import CommandType
 
         spawner = bodo.spawn.spawner.get_spawner()
-        bcast_root = MPI.ROOT if bodo.get_rank() == 0 else MPI.PROC_NULL
-        spawner.worker_intercomm.bcast(CommandType.SET_CONFIG.value, bcast_root)
-        spawner.worker_intercomm.bcast((name, val), bcast_root)
+        spawner.set_config(name, val)
 
 
 @contextmanager

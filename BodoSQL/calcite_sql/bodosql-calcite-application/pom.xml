@@ -24,7 +24,7 @@
         <maven.compiler.target>${java.version}</maven.compiler.target>
         <kotlin.compiler.incremental>true</kotlin.compiler.incremental>
         <org.slf4j-version>1.7.36</org.slf4j-version>
-        <org.apache.calcite-version>1.37.0</org.apache.calcite-version>
+        <org.apache.calcite-version>1.38.0</org.apache.calcite-version>
         <org.apache.calcite.avatica-version>1.23.0</org.apache.calcite.avatica-version>
         <com.google.protobuf-version>3.21.5</com.google.protobuf-version>
         <!-- TODO(njriasan): Upgrade to 3.14.1. This changes retry behavior so we need to test -->
@@ -33,7 +33,7 @@
         <!-- Start Iceberg Dependencies. We may remove these as we cleanup the relationship with the Iceberg Connector. -->
         <iceberg.version>1.5.2</iceberg.version>
         <hadoop.version>3.3.3</hadoop.version>
-        <aws.version>2.20.26</aws.version>
+        <aws.version>2.29.26</aws.version>
         <janino.version>3.1.10</janino.version>
         <!-- End Iceberg Dependencies -->
     </properties>
@@ -220,6 +220,18 @@
             <artifactId>s3</artifactId>
             <version>${aws.version}</version>
         </dependency>
+        <!-- S3Tables Dependencies -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>s3tables</artifactId>
+            <version>${aws.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>software.amazon.s3tables</groupId>
+            <artifactId>s3-tables-catalog-for-iceberg</artifactId>
+            <version>0.1.3</version>
+        </dependency>
+
         <dependency>
             <groupId>org.testcontainers</groupId>
             <artifactId>testcontainers</artifactId>
@@ -428,8 +440,6 @@
                                         <exclude>org/apache/calcite/rel/rules/CalcRelSplitter$MaxInputFinder.class</exclude>
                                         <exclude>org/apache/calcite/rel/rules/CalcRelSplitter$HighestUsageFinder.class</exclude>
                                         <exclude>org/apache/calcite/rel/logical/LogicalTargetTableScan.class</exclude>
-                                        <exclude>org/apache/calcite/rel/metadata/RelMdColumnUniqueness$1.class</exclude>
-                                        <exclude>org/apache/calcite/rel/metadata/RelMdColumnUniqueness.class</exclude>
                                         <exclude>org/apache/calcite/rel2sql/SqlImplementor.class</exclude>
                                         <exclude>org/apache/calcite/rex/LogicVisitor$1.class</exclude>
                                         <exclude>org/apache/calcite/rex/LogicVisitor.class</exclude>
@@ -488,15 +498,12 @@
                                         <exclude>org/apache/calcite/rex/RexUtil$SubQueryFinder.class</exclude>
                                         <exclude>org/apache/calcite/rex/RexUtil.class</exclude>
                                         <exclude>org/apache/calcite/sql/SqlBasicTypeNameSpec.class</exclude>
-                                        <exclude>org/apache/calcite/sql/SqlCall.class</exclude>
                                         <exclude>org/apache/calcite/sql/SqlCallBinding$1.class</exclude>
                                         <exclude>org/apache/calcite/sql/SqlCallBinding$DefaultCallHolder.class</exclude>
                                         <exclude>org/apache/calcite/sql/SqlCallBinding.class</exclude>
-                                        <exclude>org/apache/calcite/sql/SqlDataTypeSpec.class</exclude>
                                         <exclude>org/apache/calcite/sql/SqlDelete.class</exclude>
                                         <exclude>org/apache/calcite/sql/SqlDeleteUsingItem$SqlDeleteUsingItemOperator.class</exclude>
                                         <exclude>org/apache/calcite/sql/SqlDeleteUsingItem.class</exclude>
-                                        <exclude>org/apache/calcite/sql/SqlDynamicParam.class</exclude>
                                         <exclude>org/apache/calcite/sql/SqlIdentifier.class</exclude>
                                         <exclude>org/apache/calcite/sql/SqlInsert$1.class</exclude>
                                         <exclude>org/apache/calcite/sql/SqlInsert.class</exclude>
@@ -509,8 +516,6 @@
                                         <exclude>org/apache/calcite/sql/SqlLiteral$SqlSymbol.class</exclude>
                                         <exclude>org/apache/calcite/sql/SqlLiteral.class</exclude>
                                         <exclude>org/apache/calcite/sql/SqlMerge.class</exclude>
-                                        <exclude>org/apache/calcite/sql/SqlNode.class</exclude>
-                                        <exclude>org/apache/calcite/sql/SqlNodeList.class</exclude>
                                         <exclude>org/apache/calcite/sql/SqlTableIdentifierWithID.class</exclude>
                                         <exclude>org/apache/calcite/sql/SqlTableRefWithID$1.class</exclude>
                                         <exclude>org/apache/calcite/sql/SqlTableRefWithID.class</exclude>
@@ -624,10 +629,6 @@
                                         <exclude>org/apache/calcite/sql/validate/TableNamespace.class</exclude>
                                         <exclude>org/apache/calcite/sql/validate/WindowedAggChecker.class</exclude>
                                         <exclude>org/apache/calcite/sql/validate/WithScope.class</exclude>
-                                        <exclude>org/apache/calcite/sql/validate/implicit/TypeCoercion.class</exclude>
-                                        <exclude>org/apache/calcite/sql/validate/implicit/TypeCoercionImpl$1.class</exclude>
-                                        <exclude>org/apache/calcite/sql/validate/implicit/TypeCoercionImpl$2.class</exclude>
-                                        <exclude>org/apache/calcite/sql/validate/implicit/TypeCoercionImpl.class</exclude>
                                         <exclude>org/apache/calcite/sql/type/ArraySqlType.class</exclude>
                                         <exclude>org/apache/calcite/sql/type/ReturnTypes$1.class</exclude>
                                         <exclude>org/apache/calcite/sql/type/ReturnTypes$2.class</exclude>

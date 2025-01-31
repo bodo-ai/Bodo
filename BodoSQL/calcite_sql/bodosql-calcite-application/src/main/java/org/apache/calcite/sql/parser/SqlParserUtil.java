@@ -50,6 +50,7 @@ import org.apache.calcite.util.TimeString;
 import org.apache.calcite.util.TimeWithTimeZoneString;
 import org.apache.calcite.util.TimestampString;
 import org.apache.calcite.util.TimestampWithTimeZoneString;
+import org.apache.calcite.util.TryThreadLocal;
 import org.apache.calcite.util.Util;
 import org.apache.calcite.util.trace.CalciteTrace;
 
@@ -476,51 +477,6 @@ public final class SqlParserUtil {
   public static void checkDateFormat(String pattern) {
     SimpleDateFormat df = new SimpleDateFormat(pattern, Locale.ROOT);
     Util.discard(df);
-  }
-
-  /**
-   * Converts the interval value into a millisecond representation.
-   *
-   * @param interval Interval
-   * @return a long value that represents millisecond equivalent of the
-   * interval value.
-   *
-   * Bodo Change: intervalToMillis has been replaced by intervalToNanos.
-   */
-  public static long intervalToNanos(
-      SqlIntervalLiteral.IntervalValue interval, RelDataTypeSystem typeSystem) {
-    return intervalToNanos(
-        interval.getIntervalLiteral(),
-        interval.getIntervalQualifier(),
-        typeSystem);
-  }
-
-  public static long intervalToNanos(
-      String literal,
-      SqlIntervalQualifier intervalQualifier, RelDataTypeSystem typeSystem) {
-    checkArgument(!intervalQualifier.isYearMonth(),
-        "interval must be day time");
-    int[] ret;
-    try {
-      ret =
-          intervalQualifier.evaluateIntervalLiteral(literal,
-              intervalQualifier.getParserPosition(), typeSystem);
-    } catch (CalciteContextException e) {
-      throw new RuntimeException("while parsing day-to-second interval "
-          + literal, e);
-    }
-    long l = 0;
-    long[] conv = new long[6];
-    conv[5] = 1; // nanosecond
-    conv[4] = 1000000; // millisecond
-    conv[3] = conv[4] * 1000; // second
-    conv[2] = conv[3] * 60; // minute
-    conv[1] = conv[2] * 60; // hour
-    conv[0] = conv[1] * 24; // day
-    for (int i = 1; i < ret.length; i++) {
-      l += conv[i - 1] * ret[i];
-    }
-    return ret[0] * l;
   }
 
   /**
@@ -1224,11 +1180,11 @@ public final class SqlParserUtil {
   /** Pre-initialized {@link DateFormat} objects, to be used within the current
    * thread, because {@code DateFormat} is not thread-safe. */
   private static class Format {
-    private static final ThreadLocal<@Nullable Format> PER_THREAD =
-        ThreadLocal.withInitial(Format::new);
+    private static final TryThreadLocal<Format> PER_THREAD =
+        TryThreadLocal.withInitial(Format::new);
 
     private static Format get() {
-      return requireNonNull(PER_THREAD.get(), "PER_THREAD.get()");
+      return PER_THREAD.get();
     }
 
     final DateFormat timestamp =

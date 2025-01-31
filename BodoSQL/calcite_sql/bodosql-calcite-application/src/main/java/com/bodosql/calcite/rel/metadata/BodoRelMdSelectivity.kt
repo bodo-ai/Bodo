@@ -19,7 +19,7 @@ class BodoRelMdSelectivity : RelMdSelectivity() {
         rel: RelSubset,
         mq: RelMetadataQuery,
         predicate: RexNode?,
-    ): Double? = getSelectivity(rel.getBestOrOriginal(), mq, predicate)
+    ): Double = getSelectivity(rel.bestOrOriginal, mq, predicate)
 
     override fun getSelectivity(
         rel: Aggregate,
@@ -35,13 +35,13 @@ class BodoRelMdSelectivity : RelMdSelectivity() {
             notPushable,
         )
         val rexBuilder = rel.cluster.rexBuilder
-        val childPred = RexUtil.composeConjunction(rexBuilder, pushable, true)
-        val selectivity = mq.getSelectivity(rel.input, childPred)
+        val childPredicate = RexUtil.composeConjunction(rexBuilder, pushable, true)
+        val selectivity = mq.getSelectivity(rel.input, childPredicate)
         return if (selectivity == null) {
             null
         } else {
-            val pred = RexUtil.composeConjunction(rexBuilder, notPushable, true)
-            selectivity * guessSelectivity(pred)
+            val predicate = RexUtil.composeConjunction(rexBuilder, notPushable, true)
+            selectivity * guessSelectivity(predicate)
         }
     }
 
@@ -59,20 +59,19 @@ class BodoRelMdSelectivity : RelMdSelectivity() {
             notPushable,
         )
         val rexBuilder = rel.cluster.rexBuilder
-        val childPred = RexUtil.composeConjunction(rexBuilder, pushable, true)
-        val modifiedPred: RexNode?
-        modifiedPred =
-            if (childPred == null) {
+        val childPredicate = RexUtil.composeConjunction(rexBuilder, pushable, true)
+        val modifiedPredicate: RexNode? =
+            if (childPredicate == null) {
                 null
             } else {
-                RelOptUtil.pushPastProject(childPred, rel)
+                RelOptUtil.pushPastProject(childPredicate, rel)
             }
-        val selectivity = mq.getSelectivity(rel.input, modifiedPred)
+        val selectivity = mq.getSelectivity(rel.input, modifiedPredicate)
         return if (selectivity == null) {
             null
         } else {
-            val pred = RexUtil.composeConjunction(rexBuilder, notPushable, true)
-            selectivity * guessSelectivity(pred)
+            val predicate = RexUtil.composeConjunction(rexBuilder, notPushable, true)
+            selectivity * guessSelectivity(predicate)
         }
     }
 

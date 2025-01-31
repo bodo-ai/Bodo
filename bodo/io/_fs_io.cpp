@@ -6,6 +6,7 @@
 
 #include <arrow/filesystem/azurefs.h>
 #include <arrow/filesystem/filesystem.h>
+#include <arrow/filesystem/gcsfs.h>
 #include <arrow/filesystem/localfs.h>
 #include <arrow/filesystem/s3fs.h>
 #include <arrow/io/api.h>
@@ -16,6 +17,11 @@
 #include "../libs/_distributed.h"
 #include "_fs_io.h"
 #include "arrow_compat.h"
+
+// Forward declaration from pyfs.pyx
+struct c_PyFileSystemBodo;
+extern "C++" std::shared_ptr<arrow::fs::FileSystem> get_cpp_fs(
+    struct c_PyFileSystemBodo *);
 
 // Helper to ensure that the pyarrow wrappers have been imported.
 // We use a static variable to make sure we only do the import once.
@@ -65,6 +71,9 @@ static void ensure_pa_wrappers_imported() {
         throw std::runtime_error(err_msg);                                 \
     }                                                                      \
     lhs = std::move(res).ValueOrDie();
+
+// Same as fs_io.py
+#define GCS_RETRY_LIMIT_SECONDS 3
 
 std::shared_ptr<arrow::fs::S3FileSystem> s3_fs;
 
@@ -128,6 +137,9 @@ get_reader_file_system(std::string file_path, std::string s3_bucket_region,
                    file_path.starts_with("abfs://") ||
                    file_path.starts_with("abfss://");
     bool is_s3 = file_path.starts_with("s3://");
+    bool is_gcs =
+        file_path.starts_with("gcs://") || file_path.starts_with("gs://");
+    bool is_hf = file_path.starts_with("hf://");
     std::shared_ptr<arrow::fs::FileSystem> fs;
     if (is_s3 || is_hdfs) {
         arrow::util::Uri uri;
@@ -157,6 +169,74 @@ get_reader_file_system(std::string file_path, std::string s3_bucket_region,
         }
         Py_DECREF(fs_mod);
         Py_DECREF(func_obj);
+    } else if (is_gcs) {
+        arrow::fs::GcsOptions options = arrow::fs::GcsOptions::Defaults();
+        // Arrow seems to hang for a long time if retry isn't set
+        options.retry_limit_seconds = GCS_RETRY_LIMIT_SECONDS;
+        arrow::Result<std::shared_ptr<arrow::fs::GcsFileSystem>> result =
+            arrow::fs::GcsFileSystem::Make(options,
+                                           bodo::default_buffer_io_context());
+
+        CHECK_ARROW_AND_ASSIGN(result, "GcsFileSystem::Make", fs,
+                               std::string("GCS"));
+        file_path = fs->PathFromUri(file_path).ValueOrDie();
+
+        // Try with anonymous=True if not authenticated since Arrow doesn't try
+        // automatically
+        arrow::Status status = fs->GetFileInfo(file_path).status();
+        if (!status.ok() && status.IsIOError() &&
+            (status.message().find("Could not create a OAuth2 access token to "
+                                   "authenticate the request") !=
+             std::string::npos)) {
+            arrow::fs::GcsOptions options = arrow::fs::GcsOptions::Anonymous();
+            options.retry_limit_seconds = GCS_RETRY_LIMIT_SECONDS;
+            arrow::Result<std::shared_ptr<arrow::fs::GcsFileSystem>> result =
+                arrow::fs::GcsFileSystem::Make(
+                    options, bodo::default_buffer_io_context());
+
+            CHECK_ARROW_AND_ASSIGN(result, "GcsFileSystem::Make", fs,
+                                   std::string("GCS"));
+        }
+    } else if (is_hf) {
+        // Python code to run:
+        //
+        // import huggingface_hub
+        // fs = huggingface_hub.HfFileSystem()
+        // import pyarrow.fs
+        // import bodo.io.pyfs
+        // pyfs = bodo.io.pyfs.PyFileSystemBodo(pyarrow.fs.FSSpecHandler(fs))
+        //
+        // In C++ we get pointer to arrow::py::fs::PyFileSystem by calling
+        // get_cpp_fs(pyfs) which we defined in pyfs.pyx
+
+        // import huggingface_hub
+        PyObject *huggingface_hub_mod =
+            PyImport_ImportModule("huggingface_hub");
+        // fs = huggingface_hub.HfFileSystem()
+        PyObject *pyfs =
+            PyObject_CallMethod(huggingface_hub_mod, "HfFileSystem", "");
+        Py_DECREF(huggingface_hub_mod);
+
+        // import pyarrow.fs
+        PyObject *pyarrow_fs_mod = PyImport_ImportModule("pyarrow.fs");
+        // handler = pyarrow.fs.FSSpecHandler(fs)
+        PyObject *handler =
+            PyObject_CallMethod(pyarrow_fs_mod, "FSSpecHandler", "O", pyfs);
+        Py_DECREF(pyarrow_fs_mod);
+        Py_DECREF(pyfs);
+
+        // import bodo.io.pyfs
+        PyObject *bodo_pyfs_mod = PyImport_ImportModule("bodo.io.pyfs");
+        // pyfs = bodo.io.pyfs.PyFileSystemBodo(handler)
+        PyObject *pyfs_obj = PyObject_CallMethod(
+            bodo_pyfs_mod, "PyFileSystemBodo", "O", handler);
+
+        fs = std::dynamic_pointer_cast<arrow::py::fs::PyFileSystem>(
+            get_cpp_fs((c_PyFileSystemBodo *)pyfs_obj));
+
+        Py_DECREF(bodo_pyfs_mod);
+        Py_DECREF(handler);
+        Py_DECREF(pyfs_obj);
     } else {
         fs = std::make_shared<arrow::fs::LocalFileSystem>();
     }
@@ -263,8 +343,9 @@ void create_dir_posix(int myrank, std::string &dirname,
     // create output directory
     int error = 0;
     if (std::filesystem::exists(dirname)) {
-        if (!std::filesystem::is_directory(dirname))
+        if (!std::filesystem::is_directory(dirname)) {
             error = 1;
+        }
     } else {
         // for the parallel case, 'dirname' is the directory where the
         // different parts of the distributed table are stored (each as
@@ -275,11 +356,12 @@ void create_dir_posix(int myrank, std::string &dirname,
                             MPI_COMM_WORLD),
               "create_dir_posix: MPI error on MPI_Allreduce:");
     if (error) {
-        if (myrank == 0)
+        if (myrank == 0) {
             std::cerr << "Bodo parquet write ERROR: a process reports "
                          "that path "
                       << path_name << " exists and is not a directory"
                       << std::endl;
+        }
     }
 }
 

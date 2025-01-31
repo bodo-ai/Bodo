@@ -19,7 +19,7 @@ from sklearn.preprocessing import StandardScaler
 import bodo
 from bodo.tests.utils import check_func
 
-pytestmark = [pytest.mark.ml, pytest.mark.weekly]
+pytestmark = [pytest.mark.ml, pytest.mark.slow]
 
 
 # ---------------------- SGDClassifer tests ----------------------

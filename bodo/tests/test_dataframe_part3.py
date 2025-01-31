@@ -516,7 +516,10 @@ def test_update_df_type(memory_leak_check):
         return pd.DataFrame(
             {
                 "A": [1, 2, 4, 5, 9, 22],
-                "B": [{str(j): j % n for j in range(n)} for i in range(1, 7)],
+                "B": pd.array(
+                    [{str(j): j % n for j in range(n)} for _ in range(1, 7)],
+                    pd.ArrowDtype(pa.map_(pa.large_string(), pa.int64())),
+                ),
             }
         )
 

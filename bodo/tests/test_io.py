@@ -1555,6 +1555,32 @@ def test_read_csv_dict_encoded_string_arrays(datapath, memory_leak_check):
 
 
 @pytest.mark.slow
+def test_csv_glob(datapath, memory_leak_check):
+    """Test pd.read_csv with glob pattern"""
+
+    path = datapath("example_multi.csv") + "/*.csv"
+    py_output = pd.read_csv(datapath("example.csv"))
+
+    def impl1(path):
+        return pd.read_csv(path)
+
+    check_func(impl1, (path,), check_dtype=False, py_output=py_output)
+
+
+@pytest.mark.slow
+def test_csv_nested_dir(datapath, memory_leak_check):
+    """Test pd.read_csv with nested directory of data files"""
+
+    path = datapath("example_multi_nested.csv")
+    py_output = pd.read_csv(datapath("example.csv"))
+
+    def impl1(path):
+        return pd.read_csv(path)
+
+    check_func(impl1, (path,), check_dtype=False, py_output=py_output, sort_output=True)
+
+
+@pytest.mark.slow
 def test_csv_nrows(memory_leak_check):
     """Test pd.read_csv with nrows argument"""
     fname = os.path.join("bodo", "tests", "data", "example.csv")

@@ -38,6 +38,7 @@ from bodo.transforms.table_column_del_pass import (
 from bodo.utils.typing import BodoError
 from bodo.utils.utils import (
     check_java_installation,  # noqa
+    create_arg_hash,
     sanitize_varname,
 )
 
@@ -169,9 +170,12 @@ def check_node_typing(node, typemap):
 
 import llvmlite.binding as ll
 
-from bodo.io import csv_cpp
+from bodo.io import csv_json_reader
 
-ll.add_symbol("csv_file_chunk_reader", csv_cpp.csv_file_chunk_reader)
+ll.add_symbol(
+    "csv_file_chunk_reader",
+    csv_json_reader.get_function_address("csv_file_chunk_reader"),
+)
 
 
 @intrinsic
@@ -1021,7 +1025,26 @@ def _gen_csv_reader_py(
     """
     # TODO: support non-numpy types like strings
     sanitized_cnames = [sanitize_varname(c) for c in col_names]
-    func_text = "def csv_reader_py(fname, nrows, skiprows):\n"
+    call_id = create_arg_hash(
+        parallel,
+        header,
+        compression,
+        -1,
+        is_skiprows_list,
+        pd_low_memory,
+        storage_options,
+        col_names,
+        sanitized_cnames,
+        col_typs,
+        usecols,
+        out_used_cols,
+        sep,
+        escapechar,
+        False,
+        idx_col_index,
+        idx_col_typ,
+    )
+    func_text = "def bodo_csv_reader_py(fname, nrows, skiprows):\n"
     # If we reached this code path we don't have a chunksize, so set it to -1
     func_text += _gen_csv_file_reader_init(
         parallel,
@@ -1032,8 +1055,6 @@ def _gen_csv_reader_py(
         pd_low_memory,
         storage_options,
     )
-    # a unique int used to create global variables with unique names
-    call_id = ir_utils.next_label()
     glbls = globals()  # TODO: fix globals after Numba's #3355 is resolved
     # {'objmode': objmode, 'csv_file_chunk_reader': csv_file_chunk_reader,
     # 'pd': pd, 'np': np}
@@ -1070,10 +1091,11 @@ def _gen_csv_reader_py(
     loc_vars = {}
     glbls["get_storage_options_pyobject"] = get_storage_options_pyobject
     exec(func_text, glbls, loc_vars)
-    csv_reader_py = loc_vars["csv_reader_py"]
+    csv_reader_py = loc_vars["bodo_csv_reader_py"]
 
     # TODO: no_cpython_wrapper=True crashes for some reason
-    jit_func = numba.njit(csv_reader_py)
+    # TODO: objmode and caching doesn't work
+    jit_func = numba.njit(csv_reader_py, cache=False)
     compiled_funcs.append(jit_func)
 
     return jit_func

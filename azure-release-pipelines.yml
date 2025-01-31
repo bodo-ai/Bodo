@@ -2,7 +2,7 @@
 trigger: none
 pr: none
 
-# Currently nightly can take up to ~12 hours to run. 1 AM is a good time to start.
+# Currently nightly can take up to ~8 hours to run. 1 AM is a good time to start.
 # (Note that this is in UTC time, so 1AM UTC is 8PM EST)
 schedules:
 - cron: "0 1 * * MON-FRI"
@@ -37,9 +37,8 @@ variables:
   bodosql_2p_total: 22
 
 stages:
-  # Bodo tests
-- stage: Test_Bodo
-  displayName: 'Test Bodo'
+- stage: Test_Bodo_x86
+  displayName: 'Test Bodo on Linux x86'
   dependsOn: []
   jobs:
   - template: buildscripts/bodo/azure/azure-test-conda-linux-macos.yml
@@ -53,13 +52,10 @@ stages:
           ${{ format('BODO_1P_{0}_OF_{1}', slice, variables.bodo_1p_total) }}:
             NP: 1
             PYTEST_MARKER: ${{ format('bodo_{0}of{1} and ({2})', slice, variables.bodo_1p_total, parameters.PYTEST_MARKER) }}
-            BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
-
         ${{ each slice in split(variables.bodo_2p_each, ',') }}:
           ${{ format('BODO_2P_{0}_OF_{1}', slice, variables.bodo_2p_total) }}:
             NP: 2
             PYTEST_MARKER: ${{ format('bodo_{0}of{1} and ({2})', slice, variables.bodo_2p_total, parameters.PYTEST_MARKER) }}
-            BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
 
   - template: buildscripts/bodo/azure/azure-test-conda-linux-macos.yml
     parameters:
@@ -85,9 +81,8 @@ stages:
           PYTEST_MARKER: "spawn_mode"
 
 
-  # BodoSQL tests
-- stage: Test_BodoSQL_Streaming
-  displayName: 'Test BodoSQL Streaming'
+- stage: Test_BodoSQL_x86
+  displayName: 'Test BodoSQL on Linux x86'
   dependsOn: []
   jobs:
 
@@ -97,18 +92,15 @@ stages:
       # for the bodoSQL tests
       name: BodoSQL_Streaming_Tests
       SPAWN_MODE_TEST: false
-      BODO_STREAMING_ENABLED: 1
       matrix:
         ${{ each slice in split(variables.bodosql_1p_each, ',') }}:
           ${{ format('BODOSQL_1P_{0}_OF_{1}', slice, variables.bodosql_1p_total) }}:
             NP: 1
             PYTEST_MARKER: ${{ format('bodosql_{0}of{1} and ({2})', slice, variables.bodosql_1p_total, parameters.PYTEST_MARKER) }}
-            BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
         ${{ each slice in split(variables.bodosql_2p_each, ',') }}:
           ${{ format('BODOSQL_2P_{0}_OF_{1}', slice, variables.bodosql_2p_total) }}:
             NP: 2
             PYTEST_MARKER: ${{ format('bodosql_{0}of{1} and ({2})', slice, variables.bodosql_2p_total, parameters.PYTEST_MARKER) }}
-            BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
 
   - template: buildscripts/bodosql/azure/azure-test-conda-linux-macos.yml
     parameters:
@@ -117,7 +109,6 @@ stages:
       name: BodoSQL_Streaming_Caching_Tests
       CACHE_TEST: true
       SPAWN_MODE_TEST: false
-      BODO_STREAMING_ENABLED: 1
       matrix:
         TEST_2P:
           NP: 2
@@ -130,7 +121,6 @@ stages:
       name: BodoSQL_Streaming_Spawn_mode_tests
       CACHE_TEST: false
       SPAWN_MODE_TEST: true
-      BODO_STREAMING_ENABLED: 1
       matrix:
         TEST_1P:
           NP: 1
@@ -138,3 +128,103 @@ stages:
         TEST_2P:
           NP: 2
           PYTEST_MARKER: "spawn_mode"
+
+
+ # ------------------------------- ARM Tests -------------------------------- #
+# - stage: Test_Bodo_ARM
+#   displayName: 'Test Bodo on Linux ARM'
+#   dependsOn: []
+#   jobs:
+#   - template: buildscripts/bodo/azure/azure-test-conda-linux-macos.yml
+#     parameters:
+#       # Note: name is used later in the buildscripts to determine which version of conda to install
+#       name: Bodo_Tests
+#       caching_test: false
+#       spawn_mode_test: false
+#       pool_name: 'ARM-VMSet'
+#       matrix:
+#         ${{ each slice in split(variables.bodo_1p_each, ',') }}:
+#           ${{ format('BODO_1P_{0}_OF_{1}', slice, variables.bodo_1p_total) }}:
+#             NP: 1
+#             PYTEST_MARKER: ${{ format('bodo_{0}of{1} and ({2})', slice, variables.bodo_1p_total, parameters.PYTEST_MARKER) }}
+#         ${{ each slice in split(variables.bodo_2p_each, ',') }}:
+#           ${{ format('BODO_2P_{0}_OF_{1}', slice, variables.bodo_2p_total) }}:
+#             NP: 2
+#             PYTEST_MARKER: ${{ format('bodo_{0}of{1} and ({2})', slice, variables.bodo_2p_total, parameters.PYTEST_MARKER) }}
+
+#   - template: buildscripts/bodo/azure/azure-test-conda-linux-macos.yml
+#     parameters:
+#       name: Linux_cache
+#       caching_test: true
+#       spawn_mode_test: false
+#       pool_name: 'ARM-VMSet'
+#       matrix:
+#         TEST_2P:
+#           NP: 2
+#           PYTEST_MARKER: ""
+    
+#   - template: buildscripts/bodo/azure/azure-test-conda-linux-macos.yml
+#     parameters:
+#       name: Bodo_Spawn_mode_tests
+#       caching_test: false
+#       spawn_mode_test: true
+#       pool_name: 'ARM-VMSet'
+#       matrix:
+#         TEST_1P:
+#           NP: 1
+#           PYTEST_MARKER: "spawn_mode"
+#         TEST_2P:
+#           NP: 2
+#           PYTEST_MARKER: "spawn_mode"
+
+
+# - stage: Test_BodoSQL_ARM
+#   displayName: 'Test BodoSQL on Linux ARM'
+#   dependsOn: []
+#   jobs:
+
+#   - template: buildscripts/bodosql/azure/azure-test-conda-linux-macos.yml
+#     parameters:
+#       # Note: this name is not important, as we explicitly check uname to determine the os
+#       # for the bodoSQL tests
+#       name: BodoSQL_Streaming_Tests
+#       SPAWN_MODE_TEST: false
+#       pool_name: 'ARM-VMSet'
+#       matrix:
+#         ${{ each slice in split(variables.bodosql_1p_each, ',') }}:
+#           ${{ format('BODOSQL_1P_{0}_OF_{1}', slice, variables.bodosql_1p_total) }}:
+#             NP: 1
+#             PYTEST_MARKER: ${{ format('bodosql_{0}of{1} and ({2})', slice, variables.bodosql_1p_total, parameters.PYTEST_MARKER) }}
+#         ${{ each slice in split(variables.bodosql_2p_each, ',') }}:
+#           ${{ format('BODOSQL_2P_{0}_OF_{1}', slice, variables.bodosql_2p_total) }}:
+#             NP: 2
+#             PYTEST_MARKER: ${{ format('bodosql_{0}of{1} and ({2})', slice, variables.bodosql_2p_total, parameters.PYTEST_MARKER) }}
+
+#   - template: buildscripts/bodosql/azure/azure-test-conda-linux-macos.yml
+#     parameters:
+#       # Note: this name is not important, as we explicitly pass CACHE_TEST and
+#       # check uname to determine the os for the bodoSQL tests
+#       name: BodoSQL_Streaming_Caching_Tests
+#       CACHE_TEST: true
+#       SPAWN_MODE_TEST: false
+#       pool_name: 'ARM-VMSet'
+#       matrix:
+#         TEST_2P:
+#           NP: 2
+#           PYTEST_MARKER: ""
+  
+#   - template: buildscripts/bodosql/azure/azure-test-conda-linux-macos.yml
+#     parameters:
+#       # Note: this name is not important, as we explicitly pass CACHE_TEST and
+#       # check uname to determine the os for the bodoSQL tests
+#       name: BodoSQL_Streaming_Spawn_mode_tests
+#       CACHE_TEST: false
+#       SPAWN_MODE_TEST: true
+#       pool_name: 'ARM-VMSet'
+#       matrix:
+#         TEST_1P:
+#           NP: 1
+#           PYTEST_MARKER: "spawn_mode"
+#         TEST_2P:
+#           NP: 2
+#           PYTEST_MARKER: "spawn_mode"

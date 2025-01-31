@@ -13,19 +13,86 @@
 #include "_distributed.h"
 #include "_mpi.h"
 
-#define root 0
+constexpr int root = 0;
 
-template <class T, typename Alloc>
+template <typename T, typename Alloc>
 std::pair<T, T> get_lower_upper_kth_parallel(std::vector<T, Alloc> my_array,
                                              int64_t total_size, int myrank,
                                              int n_pes, int64_t k,
-                                             int type_enum);
+                                             int type_enum) {
+    MPI_Datatype mpi_typ = get_MPI_typ(type_enum);
+    int64_t local_size = my_array.size();
+    // This random number generation is deterministic
+    std::default_random_engine r_engine(myrank);
+    std::uniform_real_distribution<double> uniform_dist(0.0, 1.0);
 
-template <class T, typename Alloc>
+    int64_t sample_size = (int64_t)(pow(10.0, 5.0) / n_pes);  // 100000 total
+    int64_t my_sample_size = std::min(sample_size, local_size);
+
+    std::vector<T> my_sample;
+    for (int64_t i = 0; i < my_sample_size; i++) {
+        int64_t index = (int64_t)(local_size * uniform_dist(r_engine));
+        my_sample.push_back(my_array[index]);
+    }
+    /* select sample */
+    // get total sample size;
+    bodo::vector<T> all_sample_vec;
+    int *rcounts = new int[n_pes];
+    int *displs = new int[n_pes];
+    int total_sample_size = 0;
+    // gather the sample sizes
+    CHECK_MPI(MPI_Gather(&my_sample_size, 1, MPI_INT, rcounts, 1, MPI_INT, root,
+                         MPI_COMM_WORLD),
+              "get_lower_upper_kth_parallel: MPI error on MPI_Gather:");
+    // calculate size and displacements on root
+    if (myrank == root) {
+        for (int i = 0; i < n_pes; i++) {
+            // printf("rc %d\n", rcounts[i]);
+            displs[i] = total_sample_size;
+            total_sample_size += rcounts[i];
+        }
+        // printf("total sample size: %d\n", total_sample_size);
+        all_sample_vec.resize(total_sample_size);
+    }
+    // gather sample data
+    CHECK_MPI(MPI_Gatherv(my_sample.data(), my_sample_size, mpi_typ,
+                          all_sample_vec.data(), rcounts, displs, mpi_typ, root,
+                          MPI_COMM_WORLD),
+              "get_lower_upper_kth_parallel: MPI error on MPI_Gatherv:");
+    T k1_val;
+    T k2_val;
+    if (myrank == root) {
+        int local_k = (int)(k * (total_sample_size / (double)total_size));
+        // printf("k:%ld local_k:%d\n", k, local_k);
+        int k1 = (int)(local_k - sqrt(total_sample_size * log(total_size)));
+        int k2 = (int)(local_k + sqrt(total_sample_size * log(total_size)));
+        k1 = std::max(k1, 0);
+        k2 = std::min(k2, total_sample_size - 1);
+        // printf("k1: %d k2: %d\n", k1, k2);
+        std::nth_element(all_sample_vec.begin(), all_sample_vec.begin() + k1,
+                         all_sample_vec.end());
+        k1_val = all_sample_vec[k1];
+        std::nth_element(all_sample_vec.begin(), all_sample_vec.begin() + k2,
+                         all_sample_vec.end());
+        k2_val = all_sample_vec[k2];
+        // printf("k1: %d k2: %d k1_val: %lf k2_val:%lf\n", k1, k2, k1_val,
+        // k2_val);
+    }
+    CHECK_MPI(MPI_Bcast(&k1_val, 1, mpi_typ, root, MPI_COMM_WORLD),
+              "get_lower_upper_kth_parallel: MPI error on MPI_Bcast[k1]:");
+    CHECK_MPI(MPI_Bcast(&k2_val, 1, mpi_typ, root, MPI_COMM_WORLD),
+              "get_lower_upper_kth_parallel: MPI error on MPI_Bcast[k2]:");
+    // cleanup
+    delete[] rcounts;
+    delete[] displs;
+    return std::make_pair(k1_val, k2_val);
+}
+
+template <typename T, typename Alloc>
 T small_get_nth_parallel(std::vector<T, Alloc> my_array, int64_t total_size,
                          int myrank, int n_pes, int64_t k, int type_enum);
 
-template <class T, typename Alloc>
+template <typename T, typename Alloc>
 T get_nth_parallel(std::vector<T, Alloc> my_array, int64_t k, int myrank,
                    int n_pes, int type_enum);
 
@@ -33,10 +100,10 @@ double quantile_sequential(void *data, int64_t local_size, double quantile,
                            int type_enum);
 double quantile_parallel(void *data, int64_t local_size, int64_t total_size,
                          double quantile, int type_enum);
-template <class T>
+template <typename T>
 double quantile_int(T *data, int64_t local_size, double at, int type_enum,
                     bool parallel);
-template <class T>
+template <typename T>
 double quantile_float(T *data, int64_t local_size, double quantile,
                       int type_enum, bool parallel);
 
@@ -176,7 +243,7 @@ double quantile_dispatch(void *data, int64_t local_size, double quantile,
     return -1.0;
 }
 
-template <class T, typename Alloc>
+template <typename T, typename Alloc>
 double get_nth_q(std::vector<T, Alloc> my_array, int64_t local_size, int64_t k,
                  int type_enum, int myrank, int n_pes, bool parallel) {
     // get nth element and store in res pointer
@@ -199,7 +266,7 @@ double get_nth_q(std::vector<T, Alloc> my_array, int64_t local_size, int64_t k,
     return (double)val;
 }
 
-template <class T>
+template <typename T>
 double quantile_int(T *data, int64_t local_size, double at, int type_enum,
                     bool parallel) {
     int64_t k1 = (int64_t)at;
@@ -220,7 +287,7 @@ double quantile_int(T *data, int64_t local_size, double at, int type_enum,
     return res1 + (res2 - res1) * fraction;
 }
 
-template <class T>
+template <typename T>
 double quantile_float(T *data, int64_t local_size, double quantile,
                       int type_enum, bool parallel) {
     int myrank, n_pes;
@@ -253,7 +320,7 @@ double quantile_float(T *data, int64_t local_size, double quantile,
     return res1 + (res2 - res1) * fraction;
 }
 
-template <class T, typename Alloc>
+template <typename T, typename Alloc>
 T get_nth_parallel(std::vector<T, Alloc> my_array, int64_t k, int myrank,
                    int n_pes, int type_enum) {
     int64_t local_size = my_array.size();
@@ -349,80 +416,7 @@ T get_nth_parallel(std::vector<T, Alloc> my_array, int64_t k, int myrank,
     return (T)-1.0;
 }
 
-template <class T, typename Alloc>
-std::pair<T, T> get_lower_upper_kth_parallel(std::vector<T, Alloc> my_array,
-                                             int64_t total_size, int myrank,
-                                             int n_pes, int64_t k,
-                                             int type_enum) {
-    MPI_Datatype mpi_typ = get_MPI_typ(type_enum);
-    int64_t local_size = my_array.size();
-    // This random number generation is deterministic
-    std::default_random_engine r_engine(myrank);
-    std::uniform_real_distribution<double> uniform_dist(0.0, 1.0);
-
-    int64_t sample_size = (int64_t)(pow(10.0, 5.0) / n_pes);  // 100000 total
-    int64_t my_sample_size = std::min(sample_size, local_size);
-
-    std::vector<T> my_sample;
-    for (int64_t i = 0; i < my_sample_size; i++) {
-        int64_t index = (int64_t)(local_size * uniform_dist(r_engine));
-        my_sample.push_back(my_array[index]);
-    }
-    /* select sample */
-    // get total sample size;
-    bodo::vector<T> all_sample_vec;
-    int *rcounts = new int[n_pes];
-    int *displs = new int[n_pes];
-    int total_sample_size = 0;
-    // gather the sample sizes
-    CHECK_MPI(MPI_Gather(&my_sample_size, 1, MPI_INT, rcounts, 1, MPI_INT, root,
-                         MPI_COMM_WORLD),
-              "get_lower_upper_kth_parallel: MPI error on MPI_Gather:");
-    // calculate size and displacements on root
-    if (myrank == root) {
-        for (int i = 0; i < n_pes; i++) {
-            // printf("rc %d\n", rcounts[i]);
-            displs[i] = total_sample_size;
-            total_sample_size += rcounts[i];
-        }
-        // printf("total sample size: %d\n", total_sample_size);
-        all_sample_vec.resize(total_sample_size);
-    }
-    // gather sample data
-    CHECK_MPI(MPI_Gatherv(my_sample.data(), my_sample_size, mpi_typ,
-                          all_sample_vec.data(), rcounts, displs, mpi_typ, root,
-                          MPI_COMM_WORLD),
-              "get_lower_upper_kth_parallel: MPI error on MPI_Gatherv:");
-    T k1_val;
-    T k2_val;
-    if (myrank == root) {
-        int local_k = (int)(k * (total_sample_size / (double)total_size));
-        // printf("k:%ld local_k:%d\n", k, local_k);
-        int k1 = (int)(local_k - sqrt(total_sample_size * log(total_size)));
-        int k2 = (int)(local_k + sqrt(total_sample_size * log(total_size)));
-        k1 = std::max(k1, 0);
-        k2 = std::min(k2, total_sample_size - 1);
-        // printf("k1: %d k2: %d\n", k1, k2);
-        std::nth_element(all_sample_vec.begin(), all_sample_vec.begin() + k1,
-                         all_sample_vec.end());
-        k1_val = all_sample_vec[k1];
-        std::nth_element(all_sample_vec.begin(), all_sample_vec.begin() + k2,
-                         all_sample_vec.end());
-        k2_val = all_sample_vec[k2];
-        // printf("k1: %d k2: %d k1_val: %lf k2_val:%lf\n", k1, k2, k1_val,
-        // k2_val);
-    }
-    CHECK_MPI(MPI_Bcast(&k1_val, 1, mpi_typ, root, MPI_COMM_WORLD),
-              "get_lower_upper_kth_parallel: MPI error on MPI_Bcast[k1]:");
-    CHECK_MPI(MPI_Bcast(&k2_val, 1, mpi_typ, root, MPI_COMM_WORLD),
-              "get_lower_upper_kth_parallel: MPI error on MPI_Bcast[k2]:");
-    // cleanup
-    delete[] rcounts;
-    delete[] displs;
-    return std::make_pair(k1_val, k2_val);
-}
-
-template <class T, typename Alloc>
+template <typename T, typename Alloc>
 T small_get_nth_parallel(std::vector<T, Alloc> my_array, int64_t total_size,
                          int myrank, int n_pes, int64_t k, int type_enum) {
     MPI_Datatype mpi_typ = get_MPI_typ(type_enum);
@@ -494,7 +488,7 @@ struct local_global_stat_nan {
     Depending on numpy/nullable-int-bool case a different also is used.
     This is only for non-decimal arrays.
  */
-template <class T, Bodo_CTypes::CTypeEnum DType>
+template <typename T, Bodo_CTypes::CTypeEnum DType>
     requires(!decimal<DType>)
 inline void collecting_non_nan_entries(bodo::vector<T> &my_array,
                                        std::shared_ptr<array_info> arr,
@@ -538,7 +532,7 @@ inline void collecting_non_nan_entries(bodo::vector<T> &my_array,
    input. But: 1) This would be more complex code 2) Pandas uses double just as
    well.
  */
-template <class T, Bodo_CTypes::CTypeEnum DType>
+template <typename T, Bodo_CTypes::CTypeEnum DType>
     requires decimal<DType>
 inline void collecting_non_nan_entries(bodo::vector<T> &my_array,
                                        std::shared_ptr<array_info> arr,
@@ -561,7 +555,7 @@ inline void collecting_non_nan_entries(bodo::vector<T> &my_array,
     ---
     Two algorithms depending on serial or not.
  */
-template <class T, int dtype, typename Alloc>
+template <typename T, int dtype, typename Alloc>
 T get_nth(std::vector<T, Alloc> my_array, int64_t k, bool parallel) {
     if (parallel) {
         int myrank, n_pes;
@@ -695,14 +689,15 @@ void median_series_computation_T(double *res, std::shared_ptr<array_info> arr,
     bodo::vector<T> my_array;
     collecting_non_nan_entries<T, DType>(my_array, arr, e_stat);
     int64_t glob_nb_ok = e_stat.glob_nb_ok;
-    if (DType == Bodo_CTypes::DECIMAL)
+    if (DType == Bodo_CTypes::DECIMAL) {
         median_series_computation_eff<T, Bodo_CTypes::FLOAT64,
-                                      bodo::STLBufferPoolAllocator<T>>(
+                                      bodo::DefaultSTLBufferPoolAllocator<T>>(
             res, my_array, parallel, glob_nb_ok);
-    else
+    } else {
         median_series_computation_eff<T, DType,
-                                      bodo::STLBufferPoolAllocator<T>>(
+                                      bodo::DefaultSTLBufferPoolAllocator<T>>(
             res, my_array, parallel, glob_nb_ok);
+    }
 }
 
 /** Compute the median of the series.
@@ -916,10 +911,11 @@ std::shared_ptr<array_info> compute_ghost_rows(std::shared_ptr<array_info> arr,
     for (int64_t i_next = 0; i_next < n_next; i_next++) {
         size_t siz = ListNextSizes[i_next];
         size_t siz_recv;
-        if (siz + pos_index <= ghost_length)
+        if (siz + pos_index <= ghost_length) {
             siz_recv = siz;
-        else
+        } else {
             siz_recv = ghost_length - pos_index;
+        }
         if (siz_recv > 0) {
             MPI_Request mpi_recv;
             char *ptr_recv = ghost_arr->data1<bodo_array_type::NUMPY>() +
@@ -938,13 +934,14 @@ std::shared_ptr<array_info> compute_ghost_rows(std::shared_ptr<array_info> arr,
     for (int64_t i_prev = 0; i_prev < n_prev; i_prev++) {
         size_t siz_prev = ListPrevSizes[i_prev];
         size_t siz_send;
-        if (loc_nrows + pos_already <= level_next)
+        if (loc_nrows + pos_already <= level_next) {
             siz_send = loc_nrows;
-        else {
-            if (level_next >= pos_already)
+        } else {
+            if (level_next >= pos_already) {
                 siz_send = level_next - pos_already;
-            else
+            } else {
                 siz_send = 0;
+            }
         }
         if (siz_send > 0) {
             MPI_Request mpi_send;

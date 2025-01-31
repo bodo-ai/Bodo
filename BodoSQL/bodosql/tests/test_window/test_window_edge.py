@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from bodo.tests.utils import pytest_slow_unless_window
+from bodo.tests.utils import pytest_mark_multi_rank_nightly, pytest_slow_unless_window
 from bodosql.tests.test_window.window_common import (  # noqa
     all_window_df,
     count_window_applies,
@@ -93,6 +93,7 @@ def test_window_no_rows(uint8_window_df, spark_info, memory_leak_check):
 
 @pytest.mark.timeout(600)
 @pytest.mark.slow
+@pytest_mark_multi_rank_nightly
 def test_window_case(uint8_window_df, spark_info):
     """Tests windowed window function calls inside of CASE statements. The
        case_args is a list of lists of tuples with the following format:

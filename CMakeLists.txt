@@ -9,6 +9,12 @@ include(CMakePrintHelpers)
 include(CheckIPOSupported)
 check_ipo_supported(LANGUAGES CXX)
 
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "(x86)|(X86)|(amd64)|(AMD64)")
+  set (X86 TRUE)
+else()
+  set (X86 FALSE)
+endif()
+
 
 # ------------------------- Enable Compilation Caches -------------------------
 # Enable CCache or SCCache if Found
@@ -73,6 +79,24 @@ FetchContent_MakeAvailable(fmt)
 set_target_properties(fmt PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 
+# If we're building dependencies (not getting them from conda), we need to build AWS SDK
+if("$ENV{CONDA_PREFIX}" STREQUAL "")
+    set(BUILD_ONLY "core" CACHE INTERNAL "only build core")
+    set(ENABLE_TESTING OFF CACHE INTERNAL "disabling fmt tests")
+    FetchContent_Declare(
+      AWSSDK
+      GIT_REPOSITORY   https://github.com/aws/aws-sdk-cpp
+      GIT_TAG         1.11.472
+      OVERRIDE_FIND_PACKAGE 
+    )
+    FetchContent_MakeAvailable(AWSSDK)
+    find_package(AWSSDK REQUIRED COMPONENTS core)
+    install(TARGETS aws-cpp-sdk-core DESTINATION "${SKBUILD_PLATLIB_DIR}")
+    unset(BUILD_ONLY)
+    unset(ENABLE_TESTING)
+endif()
+
+
 # ----------------------------- Download Apache Datasketches -------------------------
 include(ExternalProject)
 ExternalProject_Add(datasketches
@@ -97,6 +121,10 @@ ExternalProject_Add(datasketches
 ExternalProject_Get_property(datasketches INSTALL_DIR)
 set(datasketches_INSTALL_DIR ${INSTALL_DIR})
 message("Source dir of datasketches = ${datasketches_INSTALL_DIR}")
+
+# Add boost as a dependency
+find_package(Boost 1.85 REQUIRED COMPONENTS json)
+include_directories(${Boost_INCLUDE_DIRS})
 
 
 # ---------------------------- Set CMake Options -----------------------------
@@ -148,7 +176,7 @@ add_compile_options(
   "-fstack-protector-strong"    # Conda used to force-add. Remove in follow up PR
   "-D_FORTIFY_SOURCE=2"         # Conda used to force-add. Remove in follow up PR
 )
-if (LINUX)
+if (LINUX AND X86)
   add_compile_options(
     # -march=haswell is used to enable AVX2 support (required by SIMD bloom filter implementation)
     "-march=haswell"
@@ -216,7 +244,7 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -isystem ${CONDA_INCLUDE_DIR}")
 # Vendor MPICH
 if(DEFINED ENV{BODO_VENDOR_MPICH})
   message(STATUS "Downloading MPICH")
-  execute_process(COMMAND ${Python_EXECUTABLE} -m pip download mpich==${MPICH_VERSION} -i https://pypi.anaconda.org/mpi4py/simple)
+  execute_process(COMMAND ${Python_EXECUTABLE} -m pip download mpich==${MPICH_VERSION} -i https://pypi.anaconda.org/mpi4py/simple --default-timeout=100)
   execute_process(COMMAND unzip "mpich-*.whl" "mpich*.data/*" -d mpich-tmp-extract-dir)
   file(GLOB MPICH_DATA_DIR "mpich-tmp-extract-dir/mpich-*.data/data/*")
   file(COPY ${MPICH_DATA_DIR} DESTINATION "${SKBUILD_DATA_DIR}" FOLLOW_SYMLINK_CHAIN 
@@ -290,6 +318,27 @@ target_include_directories(pyfs PRIVATE ${BASE_INCLUDE_DIRS})
 target_link_directories(pyfs PRIVATE ${PYARROW_LIB_DIR} ${CONDA_LIB_DIR})
 target_link_libraries(pyfs PRIVATE arrow arrow_python)
 install(TARGETS pyfs DESTINATION "bodo/io/")
+
+
+add_custom_command(
+  OUTPUT bodo/io/csv_json_reader.cpp
+  DEPENDS bodo/io/csv_json_reader.pyx
+  VERBATIM
+  WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+  COMMAND "${CYTHON_EXECUTABLE}" --cplus -3 --output-file "bodo/io/csv_json_reader.cpp" "bodo/io/csv_json_reader.pyx"
+  COMMAND cp "bodo/io/csv_json_reader.cpp" "${CMAKE_CURRENT_BINARY_DIR}/bodo/io/csv_json_reader.cpp"
+  COMMENT "Cythonizing Source bodo/io/csv_json_reader.pyx into bodo/io/csv_json_reader.cpp"
+)
+
+python_add_library(csv_json_reader
+MODULE WITH_SOABI
+"bodo/io/_csv_json_reader.cpp"
+"bodo/io/csv_json_reader.cpp"
+)
+target_include_directories(csv_json_reader PRIVATE ${BASE_INCLUDE_DIRS} "${CMAKE_CURRENT_SOURCE_DIR}/bodo/io/" "${CMAKE_CURRENT_BINARY_DIR}/bodo/io/")
+target_link_directories(csv_json_reader PRIVATE ${PYARROW_LIB_DIR} ${CONDA_LIB_DIR})
+target_link_libraries(csv_json_reader PRIVATE arrow arrow_python mpi)
+install(TARGETS csv_json_reader DESTINATION "bodo/io/")
 
 # ------------------------ Cython Target - bodo.io.pyarrow_wrappers ---------------
 add_custom_command(
@@ -423,11 +472,9 @@ install(TARGETS native_typer DESTINATION "bodo/transforms/type_inference/")
 
 # ------------------------- Main Bodo Extension -------------------------
 set(sources_list
-  "bodo/io/_csv_json_reader.cpp"
   "bodo/io/_csv_json_writer.cpp"
   "bodo/io/_fs_io.cpp"
   "bodo/io/_fsspec_reader.cpp"
-  "bodo/io/_hdf5.cpp"
   "bodo/io/_hdfs_reader.cpp"
   "bodo/io/_io.cpp"
   "bodo/io/_s3_reader.cpp"
@@ -532,7 +579,8 @@ if (NOT (CMAKE_BUILD_TYPE STREQUAL "Release") AND NOT DEFINED ENV{BODO_SKIP_CPP_
     "bodo/tests/test_external_sort.cpp"
     "bodo/tests/test_dict_builder.cpp"
     "bodo/tests/test_groupby_common.cpp"
-    "bodo/tests/test_groupby_and_window.cpp"
+    "bodo/tests/test_groupby.cpp"
+    "bodo/tests/test_window.cpp"
     "bodo/tests/test_json_col_reader.cpp"
     "bodo/tests/test_memory_budget.cpp"
     "bodo/tests/test_pinnable.cpp"
@@ -548,7 +596,7 @@ if (NOT (CMAKE_BUILD_TYPE STREQUAL "Release") AND NOT DEFINED ENV{BODO_SKIP_CPP_
     "bodo/tests/test_query_profile_collector.cpp"
     "bodo/tests/test_theta_sketches.cpp"
     "bodo/tests/test_puffin.cpp"
-    "bodo/tests/test_iceberg_rest_aws_credentials_provider.cpp"
+    "bodo/tests/test_iceberg/test_iceberg_rest_aws_credentials_provider.cpp"
     "bodo/tests/test_sorted_window_computation.cpp"
     "bodo/tests/test_thread_pool.cpp"
     "bodo/tests/test_datatypes.cpp"
@@ -563,6 +611,14 @@ if (NOT (CMAKE_BUILD_TYPE STREQUAL "Release") AND NOT DEFINED ENV{BODO_SKIP_CPP_
     "bodo/tests/test_puffin.cpp"
     "bodo/tests/test_theta_sketches.cpp")
 endif()
+
+if("$ENV{NO_HDF5}" STREQUAL "1")
+    set(NO_HDF5 TRUE)
+else()
+    list(APPEND sources_list "bodo/io/_hdf5.cpp")
+    set(NO_HDF5 FALSE)
+endif()
+cmake_print_variables(NO_HDF5)
 
 python_add_library(ext MODULE WITH_SOABI "${sources_list}")
 
@@ -619,18 +675,25 @@ target_compile_options(
     "-Wall"
 )
 
+
 target_link_directories(ext PRIVATE ${PYARROW_LIB_DIR} "${Python_NumPy_INCLUDE_DIR}/../lib")
+
+target_include_directories(ext PRIVATE ${datasketches_INSTALL_DIR}/include/DataSketches)
+
 target_link_libraries(ext PRIVATE
+  pthread
   npymath
   mpi
-  hdf5
   arrow
   arrow_python
   arrow_dataset
   parquet
   fmt::fmt
+  zstd
   aws-cpp-sdk-core
+  ${Boost_LIBRARIES}
 )
+
 
 set(IS_PLATFORM "$ENV{IS_BODO_PLATFORM}")
 cmake_print_variables(IS_PLATFORM)
@@ -657,9 +720,12 @@ if (BUILD_WITH_V8)
   target_compile_definitions(ext PRIVATE "BUILD_WITH_V8=1")
 endif()
 
-target_include_directories(ext PRIVATE ${datasketches_INSTALL_DIR}/include/DataSketches)
-add_dependencies(ext datasketches)
+if(NO_HDF5)
+  target_compile_definitions(ext PRIVATE "NO_HDF5=1")
+else()
+  target_link_libraries(ext PRIVATE hdf5)
+endif()
 
 set_target_properties(ext PROPERTIES CXX_CLANG_TIDY "${CLANG_TIDY_COMMAND}")
-add_dependencies(ext pyfs _hdfs tracing pyarrow_wrappers datasketches)
+add_dependencies(ext csv_json_reader pyfs _hdfs tracing pyarrow_wrappers datasketches)
 install(TARGETS ext DESTINATION "bodo/")

@@ -1,6 +1,7 @@
 package com.bodosql.calcite.adapter.bodo
 
 import com.bodosql.calcite.adapter.bodo.BodoCostEstimator.Companion.averageTypeValueSize
+import com.bodosql.calcite.application.operatorTables.AggOperatorTable
 import com.bodosql.calcite.plan.Cost
 import org.apache.calcite.rex.RexCall
 import org.apache.calcite.rex.RexCorrelVariable
@@ -80,7 +81,7 @@ object RexCostEstimator : RexVisitor<Cost> {
         // this optimization is represented in the plan
         // such as considering a special relational node
         // for this rather than using Filter/RexOver.
-        if (op.name == "MIN_ROW_NUMBER_FILTER") {
+        if (op.name == AggOperatorTable.MIN_ROW_NUMBER_FILTER.name) {
             1.0
         } else {
             100.0

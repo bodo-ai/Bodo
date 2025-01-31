@@ -53,7 +53,7 @@ This set of guides explains the basics of using the Bodo cloud platform and asso
 - [Organization Basics][organization-basics]
 - [Creating a Cluster][creating_clusters]
 - [Using Notebooks][notebooks]
-- [Running Jobs][running-batch-jobs]
+- [Running Jobs][running-jobs]
 - [Native SQL with Catalogs][sql_catalog]
 - [Instance Role for a Cluster][instance_role_cluster]
 - [Managing Packages on the cluster using Jupyter magics - Conda and Pip][managing-packages]
@@ -64,7 +64,7 @@ This set of guides explains the basics of using the Bodo cloud platform and asso
 ---
 
 
-### [Using Regular Python inside Bodo (Object Mode)][objmode]
+### [Using Regular Python inside JIT with @bodo.wrap_python][objmode]
 
 This guide teaches you how to can interleave regular Python code with Bodo functions using Bodo's object mode.
 

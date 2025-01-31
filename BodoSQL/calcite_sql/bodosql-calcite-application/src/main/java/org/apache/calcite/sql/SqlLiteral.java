@@ -17,6 +17,7 @@
 package org.apache.calcite.sql;
 
 import com.bodosql.calcite.application.BodoSQLTypeSystems.BodoSQLRelDataTypeSystem;
+import com.bodosql.calcite.sql.parser.SqlBodoParserUtil;
 import org.apache.calcite.avatica.util.TimeUnit;
 import org.apache.calcite.avatica.util.TimeUnitRange;
 import org.apache.calcite.rel.metadata.NullSentinel;
@@ -53,8 +54,12 @@ import java.nio.charset.UnsupportedCharsetException;
 import java.util.Calendar;
 import java.util.Objects;
 
+import static com.google.common.base.Preconditions.checkArgument;
+
 import static org.apache.calcite.linq4j.Nullness.castNonNull;
 import static org.apache.calcite.util.Static.RESOURCE;
+
+import static java.lang.Integer.parseInt;
 
 import static java.util.Objects.requireNonNull;
 
@@ -180,9 +185,8 @@ public class SqlLiteral extends SqlNode {
       SqlParserPos pos) {
     super(pos);
     this.value = value;
-    this.typeName = typeName;
-    assert typeName != null;
-    assert valueMatchesType(value, typeName);
+    this.typeName = requireNonNull(typeName, "typeName");
+    checkArgument(valueMatchesType(value, typeName));
   }
 
   //~ Methods ----------------------------------------------------------------
@@ -254,14 +258,6 @@ public class SqlLiteral extends SqlNode {
 
   @Override public SqlLiteral clone(SqlParserPos pos) {
     return new SqlLiteral(value, typeName, pos);
-  }
-
-  // Bodo Change: Override deepCopy
-  @Override public SqlNode deepCopy(@Nullable SqlParserPos pos) {
-    if (pos == null) {
-      pos = this.pos;
-    }
-    return this.clone(pos);
   }
 
   @Override public SqlKind getKind() {
@@ -408,7 +404,7 @@ public class SqlLiteral extends SqlNode {
         return clazz.cast(getValueAs(BigDecimal.class, typeSystem).longValue());
       } else if (clazz == BigDecimal.class) {
         // Bodo Change: Include typeSystem and compute with nanoseconds
-        long timeInNanos = valTime.getSign() * SqlParserUtil.intervalToNanos(valTime, typeSystem);
+        long timeInNanos = valTime.getSign() * SqlBodoParserUtil.intervalToNanos(valTime, typeSystem);
         BigDecimal factor = BigDecimal.ONE.scaleByPowerOfTen(6);
         BigDecimal timeInMillis = null;
         if (typeName != SqlTypeName.INTERVAL_SECOND) {
@@ -506,7 +502,7 @@ public class SqlLiteral extends SqlNode {
         final SqlIntervalLiteral.IntervalValue valTime =
             literal.getValueAs(SqlIntervalLiteral.IntervalValue.class);
         // Bodo Change: Include typeSystem
-        return valTime.getSign() * SqlParserUtil.intervalToNanos(valTime, typeSystem);
+        return valTime.getSign() * SqlBodoParserUtil.intervalToNanos(valTime, typeSystem);
       default:
         break;
       }
@@ -784,8 +780,7 @@ public class SqlLiteral extends SqlNode {
       int rightPrec) {
     switch (typeName) {
     case BOOLEAN:
-      writer.keyword(
-          value == null ? "UNKNOWN" : (Boolean) value ? "TRUE" : "FALSE");
+      writer.getDialect().unparseBoolLiteral(writer, this, leftPrec, rightPrec);
       break;
     case NULL:
       writer.keyword("NULL");
@@ -865,7 +860,7 @@ public class SqlLiteral extends SqlNode {
     case VARBINARY: // should never happen
 
     default:
-      throw Util.needToImplement(toString() + ", operand=" + value);
+      throw Util.needToImplement(this + ", operand=" + value);
     }
   }
 
@@ -1133,7 +1128,7 @@ public class SqlLiteral extends SqlNode {
         final String u = s.substring(i + 1, i + 5);
         final int v;
         try {
-          v = Integer.parseInt(u, 16);
+          v = parseInt(u, 16);
         } catch (NumberFormatException ex) {
           throw SqlUtil.newContextException(getParserPosition(),
               RESOURCE.unicodeEscapeMalformed(i));

@@ -166,7 +166,7 @@ class BodoMetadataRestrictionScan {
                     } else {
                         (node as IcebergTableScan).getCatalogTable()
                     }
-                val names = node.getRowType().fieldNames
+                val names = node.rowType.fieldNames
                 cols.forEach {
                     val columnName = names[it]
                     val tablePath = table.fullPath.joinToString(".")

@@ -13,7 +13,6 @@ from llvmlite import ir as lir
 from numba.core import cgutils, types, typing
 from numba.core.imputils import lower_builtin, lower_constant
 from numba.core.typing.templates import AttributeTemplate, infer_getattr
-from numba.core.utils import PYVERSION
 from numba.extending import (
     NativeValue,
     box,
@@ -451,7 +450,7 @@ def fromordinal_impl(n):  # pragma: no cover
 
 
 # TODO: support general string formatting
-@numba.njit
+@numba.njit(cache=True)
 def str_2d(a):  # pragma: no cover
     """Takes in a number representing an date/time unit and formats it as a
     2 character string, adding a leading zero if necessary."""
@@ -673,21 +672,23 @@ def date_to_bool(date):
 
 
 # Python 3.9 uses a namedtuple-like calss for isocalendar output instead of tuple
-if PYVERSION >= (3, 9):
-    # IsoCalendarDate class is hidden from import, so use a value to retrieve it
-    IsoCalendarDate = datetime.date(2011, 1, 1).isocalendar().__class__
+# IsoCalendarDate class is hidden from import, so use a value to retrieve it
+IsoCalendarDate = datetime.date(2011, 1, 1).isocalendar().__class__
 
-    # TODO: [BE-251] support full functionality
+# TODO: [BE-251] support full functionality
 
-    class IsoCalendarDateType(types.Type):
-        def __init__(self):
-            super().__init__(name="IsoCalendarDateType()")
 
-    iso_calendar_date_type = DatetimeDateType()
+class IsoCalendarDateType(types.Type):
+    def __init__(self):
+        super().__init__(name="IsoCalendarDateType()")
 
-    @typeof_impl.register(IsoCalendarDate)
-    def typeof_datetime_date(val, c):
-        return iso_calendar_date_type
+
+iso_calendar_date_type = DatetimeDateType()
+
+
+@typeof_impl.register(IsoCalendarDate)
+def typeof_datetime_date(val, c):
+    return iso_calendar_date_type
 
 
 ##################### Array of datetime.date objects ##########################
@@ -864,7 +865,7 @@ def lower_constant_datetime_date_arr(context, builder, typ, pyval):
     return lir.Constant.literal_struct([data_const_arr, nulls_const_arr])
 
 
-@numba.njit(no_cpython_wrapper=True)
+@numba.njit(cache=True, no_cpython_wrapper=True)
 def alloc_datetime_date_array(n):  # pragma: no cover
     data_arr = np.empty(n, dtype=np.int32)
     # XXX: set all bits to not null since datetime.date array operations do not support

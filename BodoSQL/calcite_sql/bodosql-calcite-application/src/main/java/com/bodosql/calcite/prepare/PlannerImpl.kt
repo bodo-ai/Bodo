@@ -24,10 +24,14 @@ package com.bodosql.calcite.prepare
 
 import com.bodosql.calcite.plan.CostFactory
 import com.bodosql.calcite.sql.parser.SqlBodoParserImpl
+import com.bodosql.calcite.traits.BatchingPropertyTraitDef
 import com.google.common.collect.ImmutableList
 import org.apache.calcite.avatica.util.Casing
 import org.apache.calcite.config.NullCollation
 import org.apache.calcite.jdbc.CalciteSchema
+import org.apache.calcite.plan.ConventionTraitDef
+import org.apache.calcite.plan.RelTrait
+import org.apache.calcite.plan.RelTraitDef
 import org.apache.calcite.prepare.CalciteCatalogReader
 import org.apache.calcite.rel.hint.HintPredicates
 import org.apache.calcite.rel.hint.HintStrategyTable
@@ -42,6 +46,7 @@ import org.apache.calcite.sql2rel.SqlToRelConverter
 import org.apache.calcite.sql2rel.StandardConvertletTableConfig
 import org.apache.calcite.tools.FrameworkConfig
 import org.apache.calcite.tools.Frameworks
+import org.apache.calcite.tools.Program
 
 class PlannerImpl(
     config: Config,
@@ -49,6 +54,94 @@ class PlannerImpl(
     private val defaultSchemas = config.defaultSchemas
 
     companion object {
+        /**
+         * Define the parser configuration to use within BodoSQL. The "target"
+         * dialect (Spark or Snowflake) has different case sensitivity rules
+         * by default, so we modify the parser based on the "sqlStyle" to
+         * allow translating code more easily.
+         * @param sqlStyle The base dialect for the majority of the SQL code.
+         *     This should be one of "SNOWFLAKE" or "SPARK".
+         * @return The parser configuration to use for the given SQL style.
+         */
+        @JvmStatic
+        private fun getParserConfig(sqlStyle: String): SqlParser.Config {
+            val baseConfig =
+                SqlParser.Config.DEFAULT
+                    .withConformance(SqlConformanceEnum.LENIENT)
+                    .withParserFactory(SqlBodoParserImpl.FACTORY)
+            return when (sqlStyle) {
+                "SNOWFLAKE" -> {
+                    baseConfig
+                        .withCaseSensitive(true)
+                        .withQuotedCasing(Casing.UNCHANGED)
+                        .withUnquotedCasing(Casing.TO_UPPER)
+                }
+                "SPARK" -> {
+                    baseConfig
+                        .withCaseSensitive(false)
+                        .withQuotedCasing(Casing.UNCHANGED)
+                        .withUnquotedCasing(Casing.UNCHANGED)
+                }
+                else -> {
+                    throw Exception("Unrecognized bodo sql style: $sqlStyle")
+                }
+            }
+        }
+
+        /**
+         * Get the Convertlet Table that we use for BodoSQL. A convertlet table is
+         * responsible for unifying implementations between similar or identical
+         * functions by converting 1 implementation to another. This is useful for
+         * reducing code rewrite and increasing the effectiveness of the optimizer.
+         * @return The convertlet table to use for BodoSQL.
+         */
+        @JvmStatic
+        private fun getConvertletTable(): BodoConvertletTable =
+            BodoConvertletTable(
+                StandardConvertletTableConfig(false, false),
+            )
+
+        /**
+         * Define the validator configuration to use within BodoSQL. The "target"
+         * dialect (Spark or Snowflake) has different default null collation rules
+         * (e.g. the default nulls first/last) so we modify the validator based on
+         * the "sqlStyle" to allow translating code more easily. This is especially
+         * import for window functions as it can lead to subtle runtime differences
+         * that are hard to debug.
+         *
+         * @param sqlStyle The base dialect for the majority of the SQL code.
+         * @return The validator configuration to use for the given SQL style.
+         */
+        @JvmStatic
+        private fun getValidatorConfig(sqlStyle: String): SqlValidator.Config {
+            val baseConfig =
+                SqlValidator.Config.DEFAULT
+                    .withCallRewrite(false)
+                    .withTypeCoercionFactory(BodoTypeCoercionImpl.FACTORY)
+                    .withTypeCoercionRules(BodoSqlTypeCoercionRule.instance())
+            // Ensure order by defaults match. The only differences
+            // are in the default behavior for nulls first/last.
+            return when (sqlStyle) {
+                "SNOWFLAKE" -> baseConfig.withDefaultNullCollation(NullCollation.HIGH)
+                "SPARK" -> baseConfig.withDefaultNullCollation(NullCollation.LOW)
+                else ->
+                    throw Exception("Unrecognized bodo sql style: $sqlStyle")
+            }
+        }
+
+        /**
+         * Get the SqlToRelConverter configuration to use within BodoSQL. This
+         * is used to define characteristics like our hint handling and
+         * sub query handling.
+         * @return The SqlToRelConverter configuration to use for BodoSQL.
+         */
+        @JvmStatic
+        private fun getSqlToRelConverterConfig(): SqlToRelConverter.Config =
+            SqlToRelConverter
+                .config()
+                .withInSubQueryThreshold(Integer.MAX_VALUE)
+                .withHintStrategyTable(getHintStrategyTable())
+
         /**
          * @return The table with the hints that BodoSQL supports.
          */
@@ -59,64 +152,48 @@ class PlannerImpl(
             return hintStrategies.build()
         }
 
+        /**
+         * Get the trait definitions defined for our planner. We currently
+         * only provide traits for streaming.
+         * @return The list of trait definitions for our planner.
+         */
+        @JvmStatic
+        private fun getTraitDefs(isStreaming: Boolean): List<RelTraitDef<out RelTrait>> =
+            if (isStreaming) {
+                // Only include BatchingPropertyTraitDef with streaming.
+                listOf(ConventionTraitDef.INSTANCE, BatchingPropertyTraitDef.INSTANCE)
+            } else {
+                listOf(ConventionTraitDef.INSTANCE)
+            }
+
+        /**
+         * Get the programs that are defined for our planner. We currently
+         * only provide programs for streaming.
+         * @return The list of programs for our planner.
+         */
+        @JvmStatic
+        private fun getPrograms(): List<Program> =
+            listOf(
+                BodoPrograms.preprocessor(),
+                BodoPrograms.standard(),
+            )
+
         private fun frameworkConfig(config: Config): FrameworkConfig {
-            // Set up the parser config based on which case sensitivity
-            // protocol was selected
-            var parserConfig =
-                SqlParser.Config.DEFAULT
-                    .withConformance(SqlConformanceEnum.LENIENT)
-                    .withParserFactory(SqlBodoParserImpl.FACTORY)
-            parserConfig =
-                when (config.sqlStyle) {
-                    "SNOWFLAKE" ->
-                        parserConfig
-                            .withCaseSensitive(true)
-                            .withQuotedCasing(Casing.UNCHANGED)
-                            .withUnquotedCasing(Casing.TO_UPPER)
-                    "SPARK" ->
-                        parserConfig
-                            .withCaseSensitive(false)
-                            .withQuotedCasing(Casing.UNCHANGED)
-                            .withUnquotedCasing(Casing.UNCHANGED)
-                    else ->
-                        throw Exception("Unrecognized bodo sql style: " + config.sqlStyle)
-                }
-            var validator =
-                SqlValidator.Config.DEFAULT
-                    .withCallRewrite(false)
-                    .withTypeCoercionFactory(BodoTypeCoercionImpl.FACTORY)
-                    .withTypeCoercionRules(BodoSqlTypeCoercionRule.instance())
-            validator =
-                when (config.sqlStyle) {
-                    // Ensure order by defaults match. The only differences
-                    // are in the default behavior for nulls first/last.
-                    "SNOWFLAKE" ->
-                        validator
-                            .withDefaultNullCollation(NullCollation.HIGH)
-                    "SPARK" ->
-                        validator
-                            .withDefaultNullCollation(NullCollation.LOW)
-                    else ->
-                        throw Exception("Unrecognized bodo sql style: " + config.sqlStyle)
-                }
+            val parserConfig = getParserConfig(config.sqlStyle)
+            val validatorConfig = getValidatorConfig(config.sqlStyle)
+            val convertletTable = getConvertletTable()
+            val sqlToRelConverterConfig = getSqlToRelConverterConfig()
             return Frameworks
                 .newConfigBuilder()
                 .operatorTable(BodoOperatorTable)
                 .typeSystem(config.typeSystem)
-                .sqlToRelConverterConfig(
-                    SqlToRelConverter
-                        .config()
-                        .withInSubQueryThreshold(Integer.MAX_VALUE)
-                        .withHintStrategyTable(getHintStrategyTable()),
-                ).parserConfig(parserConfig)
-                .convertletTable(
-                    BodoConvertletTable(
-                        StandardConvertletTableConfig(false, false),
-                    ),
-                ).sqlValidatorConfig(validator)
+                .sqlToRelConverterConfig(sqlToRelConverterConfig)
+                .parserConfig(parserConfig)
+                .convertletTable(convertletTable)
+                .sqlValidatorConfig(validatorConfig)
                 .costFactory(CostFactory())
-                .traitDefs(config.plannerType.traitDefs())
-                .programs(config.plannerType.programs().toList())
+                .traitDefs(getTraitDefs(isStreaming = config.isStreaming))
+                .programs(getPrograms())
                 .build()
         }
 
@@ -181,7 +258,7 @@ class PlannerImpl(
     class Config(
         val defaultSchemas: List<SchemaPlus>,
         val typeSystem: RelDataTypeSystem,
-        val plannerType: PlannerType,
         val sqlStyle: String,
+        val isStreaming: Boolean,
     )
 }
