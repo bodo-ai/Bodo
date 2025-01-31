@@ -14,6 +14,7 @@ import java.util.List;
 import java.util.Objects;
 import kotlin.Pair;
 import org.apache.calcite.rex.RexLiteral;
+import org.apache.calcite.rex.RexUnknownAs;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.util.NlsString;
 import org.apache.calcite.util.Sarg;
@@ -103,6 +104,10 @@ public class LiteralCodeGen {
               : "Internal error: Attempted to convert a non-discrete sarg into a literal value.";
           Expr expr = sargValToPyLiteral(curRange.lowerEndpoint());
           literalList.add(expr);
+        }
+        if (sargVal.nullAs.equals(RexUnknownAs.TRUE)) {
+          // Add a None to match Nulls
+          literalList.add(Expr.None.INSTANCE);
         }
         // initialize the array, and lower it as a global
 
