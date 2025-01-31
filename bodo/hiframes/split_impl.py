@@ -220,7 +220,7 @@ def box_str_arr_split_view(typ, val, c):
 
     # create array of objects with num_items shape
     mod_name = context.insert_const_string(builder.module, "numpy")
-    np_class_obj = c.pyapi.import_module_noblock(mod_name)
+    np_class_obj = c.pyapi.import_module(mod_name)
     dtype = c.pyapi.object_getattr_string(np_class_obj, "object_")
     l_num_items = builder.sext(sp_view.num_items, c.pyapi.longlong)
     num_items_obj = c.pyapi.long_from_longlong(l_num_items)
