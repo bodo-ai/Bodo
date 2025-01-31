@@ -110,7 +110,7 @@ Here are high level steps for integrating Bodo into Python workloads:
 
     * The jitted function should receive the final list of files/tables and other necessary parameters explicitly.
 
-    c. Keep I/O of large data inside JIT functions if the storage format is supported by Bodo (Parquet, CSV, JSONL, Iceberg, Snowflake).
+    c. Keep I/O of large data inside JIT functions if the storage format is supported by Bodo (Parquet, CSV, JSON, Iceberg, Snowflake).
 
     Example code:
 
