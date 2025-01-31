@@ -302,23 +302,7 @@ cmake_print_variables(Python_NumPy_INCLUDE_DIR)
 set(BASE_INCLUDE_DIRS ${PYARROW_INCLUDE_DIR} ${Python_NumPy_INCLUDE_DIR} ${MPICH_INCLUDE_DIR})
 
 
-# ------------------------ Cython Target - bodo.io.pyfs -----------------------
-add_custom_command(
-  OUTPUT bodo/io/pyfs.cpp
-  DEPENDS bodo/io/pyfs.pyx
-  VERBATIM
-  WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-  COMMAND "${CYTHON_EXECUTABLE}" --cplus -3 --output-file "bodo/io/pyfs.cpp" "bodo/io/pyfs.pyx"
-  COMMAND cp "bodo/io/pyfs.cpp" "${CMAKE_CURRENT_BINARY_DIR}/bodo/io/pyfs.cpp"
-  COMMENT "Cythonizing Source bodo/io/pyfs.pyx into bodo/io/pyfs.cpp"
-)
-
-python_add_library(pyfs MODULE WITH_SOABI "bodo/io/pyfs.cpp")
-target_include_directories(pyfs PRIVATE ${BASE_INCLUDE_DIRS})
-target_link_directories(pyfs PRIVATE ${PYARROW_LIB_DIR} ${CONDA_LIB_DIR})
-target_link_libraries(pyfs PRIVATE arrow arrow_python)
-install(TARGETS pyfs DESTINATION "bodo/io/")
-
+# ------------------------ Cython Target - bodo.io.csv_json_reader -----------------------
 
 add_custom_command(
   OUTPUT bodo/io/csv_json_reader.cpp
@@ -474,7 +458,6 @@ install(TARGETS native_typer DESTINATION "bodo/transforms/type_inference/")
 set(sources_list
   "bodo/io/_csv_json_writer.cpp"
   "bodo/io/_fs_io.cpp"
-  "bodo/io/_fsspec_reader.cpp"
   "bodo/io/_hdfs_reader.cpp"
   "bodo/io/_io.cpp"
   "bodo/io/_s3_reader.cpp"
@@ -727,5 +710,5 @@ else()
 endif()
 
 set_target_properties(ext PROPERTIES CXX_CLANG_TIDY "${CLANG_TIDY_COMMAND}")
-add_dependencies(ext csv_json_reader pyfs _hdfs tracing pyarrow_wrappers datasketches)
+add_dependencies(ext csv_json_reader _hdfs tracing pyarrow_wrappers datasketches)
 install(TARGETS ext DESTINATION "bodo/")
