@@ -909,7 +909,7 @@ register_model(ArrowFs)(models.OpaqueModel)
 
 @box(ArrowFs)
 def box_ArrowFs(typ, val, c):
-    from bodo.io.pyfs import get_pyarrow_fs_from_ptr
+    from bodo.io.csv_json_reader import get_pyarrow_fs_from_ptr
 
     fs_ptr_obj = c.pyapi.from_native_value(types.RawPointer("fs_ptr"), val)
     get_fs_obj = c.pyapi.unserialize(c.pyapi.serialize_object(get_pyarrow_fs_from_ptr))
