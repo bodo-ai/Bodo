@@ -59,6 +59,7 @@ from bodo.utils.typing import (
 from bodo.utils.utils import (
     alloc_type,
     bodo_exec,
+    cached_call_internal,
     is_array_typ,
     is_whole_slice,
     numba_to_c_array_types,
@@ -580,8 +581,8 @@ def lower_table_shape(context, builder, typ, val):
     an implementation with overload style.
     """
     impl = table_shape_overload(typ)
-    return context.compile_internal(
-        builder, impl, types.Tuple([types.int64, types.int64])(typ), (val,)
+    return cached_call_internal(
+        context, builder, impl, types.Tuple([types.int64, types.int64])(typ), (val,)
     )
 
 
