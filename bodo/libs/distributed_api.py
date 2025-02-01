@@ -82,6 +82,7 @@ from bodo.utils.typing import (
 from bodo.utils.utils import (
     CTypeEnum,
     bodo_exec,
+    cached_call_internal,
     check_and_propagate_cpp_exception,
     empty_like_type,
     is_array_typ,
@@ -214,7 +215,7 @@ class TimeInfer(ConcreteTemplate):
 
 @lower_builtin(time.time)
 def lower_time_time(context, builder, sig, args):
-    return context.compile_internal(builder, lambda: _get_time(), sig, args)
+    return cached_call_internal(context, builder, lambda: _get_time(), sig, args)
 
 
 @numba.generated_jit(nopython=True)
@@ -3971,7 +3972,7 @@ def get_start(total_size, pes, rank):  # pragma: no cover
     return rank * blk_size + min(rank, res)
 
 
-@numba.njit
+@numba.njit(cache=True)
 def get_end(total_size, pes, rank):  # pragma: no cover
     """get end point of range for parfor division"""
     res = total_size % pes
