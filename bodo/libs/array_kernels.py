@@ -2846,7 +2846,7 @@ def overload_resize_and_copy(A, old_size, new_len):
 # calculation is replaced with explicit call for easier matching
 # (e.g. for handling 1D_Var RangeIndex)
 # TODO: move this to upstream Numba
-@register_jitable
+@register_jitable(cache=True)
 def calc_nitems(start, stop, step):  # pragma: no cover
     nitems_r = math.ceil((stop - start) / step)
     return int(max(nitems_r, 0))
