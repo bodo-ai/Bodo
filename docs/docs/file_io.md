@@ -276,7 +276,7 @@ def read_csv_folder():
     doSomething(df)
 ```
 
-Use `sep="n"` to read text files line by line into a single-column
+Use `sep="\n"` to read text files line by line into a single-column
 dataframe (without creating separate columns, useful when text data is
 unstructured or there are too many columns to read efficiently):
 
