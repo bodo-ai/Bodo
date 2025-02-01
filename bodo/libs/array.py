@@ -72,7 +72,12 @@ from bodo.utils.typing import (
     type_has_unknown_cats,
     unwrap_typeref,
 )
-from bodo.utils.utils import check_and_propagate_cpp_exception, numba_to_c_type
+from bodo.utils.utils import (
+    bodo_exec,
+    cached_call_internal,
+    check_and_propagate_cpp_exception,
+    numba_to_c_type,
+)
 
 ll.add_symbol("array_item_array_to_info", array_ext.array_item_array_to_info)
 ll.add_symbol("struct_array_to_info", array_ext.struct_array_to_info)
@@ -2071,7 +2076,9 @@ def cpp_table_to_py_table(
     )
 
 
-@numba.generated_jit(nopython=True, no_cpython_wrapper=True, no_unliteral=True)
+@numba.generated_jit(
+    nopython=True, no_cpython_wrapper=True, no_unliteral=True, cache=True
+)
 def cpp_table_to_py_data(
     cpp_table,
     out_col_inds_t,
@@ -2135,7 +2142,7 @@ def cpp_table_to_py_data(
 
     out_vars = []
 
-    func_text = "def impl(cpp_table, out_col_inds_t, out_types_t, n_rows_t, n_table_cols_t, unknown_cat_arrs_t=None, cat_inds_t=None):\n"
+    func_text = "def bodo_cpp_table_to_py_data(cpp_table, out_col_inds_t, out_types_t, n_rows_t, n_table_cols_t, unknown_cat_arrs_t=None, cat_inds_t=None):\n"
 
     if isinstance(py_table_type, bodo.TableType):
         func_text += "  py_table = init_table(py_table_type, False)\n"
@@ -2228,9 +2235,7 @@ def cpp_table_to_py_data(
         }
     )
 
-    loc_vars = {}
-    exec(func_text, glbls, loc_vars)
-    return loc_vars["impl"]
+    return bodo_exec(func_text, glbls, {}, __name__)
 
 
 @intrinsic
@@ -2403,7 +2408,7 @@ PyDataToCppTableInfer._no_unliteral = True
 def lower_py_data_to_cpp_table(context, builder, sig, args):
     """lower table_filter() using gen_table_filter_impl above"""
     impl = gen_py_data_to_cpp_table_impl(*sig.args)
-    return context.compile_internal(builder, impl, sig, args)
+    return cached_call_internal(context, builder, impl, sig, args)
 
 
 def gen_py_data_to_cpp_table_impl(
@@ -2444,7 +2449,7 @@ def gen_py_data_to_cpp_table_impl(
     #     if array_ind in output_inds:
     #       output_list[out_ind] = array_to_info(block[array_ind])
 
-    func_text = "def impl_py_data_to_cpp_table(py_table, extra_arrs_tup, in_col_inds_t, n_table_cols_t):\n"
+    func_text = "def bodo_impl_py_data_to_cpp_table(py_table, extra_arrs_tup, in_col_inds_t, n_table_cols_t):\n"
     func_text += (
         f"  cpp_arr_list = alloc_empty_list_type({len(in_col_inds)}, array_info_type)\n"
     )
@@ -2498,9 +2503,7 @@ def gen_py_data_to_cpp_table_impl(
         }
     )
 
-    loc_vars = {}
-    exec(func_text, glbls, loc_vars)
-    return loc_vars["impl_py_data_to_cpp_table"]
+    return bodo_exec(func_text, glbls, {}, __name__)
 
 
 delete_info = types.ExternalFunction(
