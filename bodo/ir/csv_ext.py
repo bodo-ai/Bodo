@@ -680,7 +680,7 @@ def _get_pd_dtype_str(t):
 compiled_funcs = []
 
 
-@numba.njit
+@numba.njit(cache=True)
 def check_nrows_skiprows_value(nrows, skiprows):
     """Check at runtime that nrows and skiprows values are >= 0"""
     # Corner case: if user did nrows=-1, this will pass. -1 to mean all rows.
