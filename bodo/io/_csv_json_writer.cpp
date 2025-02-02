@@ -5,6 +5,25 @@
 
 #include "_fs_io.h"
 #include "_io.h"
+#include "arrow_compat.h"
+
+// Helper to ensure that the pyarrow wrappers have been imported.
+// We use a static variable to make sure we only do the import once.
+static bool imported_pyarrow_wrappers = false;
+static void ensure_pa_wrappers_imported() {
+#define CHECK(expr, msg)                                            \
+    if (expr) {                                                     \
+        throw std::runtime_error(std::string("csv_write: ") + msg); \
+    }
+    if (imported_pyarrow_wrappers) {
+        return;
+    }
+    CHECK(arrow::py::import_pyarrow_wrappers(),
+          "importing pyarrow_wrappers failed!");
+    imported_pyarrow_wrappers = true;
+
+#undef CHECK
+}
 
 extern "C" {
 
@@ -16,6 +35,11 @@ extern "C" {
                               " " + expr.ToString();                       \
         throw std::runtime_error(err_msg);                                 \
     }
+
+#undef CHECK_ARROW_AND_ASSIGN
+#define CHECK_ARROW_AND_ASSIGN(res, msg, lhs) \
+    CHECK_ARROW(res.status(), msg)            \
+    lhs = std::move(res).ValueOrDie();
 
 /*
  * Write output of pandas to_csv/to_json string to a csv/json file
@@ -56,6 +80,7 @@ void write_buff(char *_path_name, char *buff, int64_t start, int64_t count,
         std::string fname;      // name of parquet file to write (excludes path)
         std::shared_ptr<::arrow::io::OutputStream> out_stream;
         Bodo_Fs::FsEnum fs_option;
+        std::shared_ptr<arrow::fs::FileSystem> fs;
         arrow::Status status;
         extract_fs_dir_path(_path_name, is_parallel, prefix, suffix, myrank,
                             num_ranks, &fs_option, &dirname, &fname, &orig_path,
@@ -86,10 +111,25 @@ void write_buff(char *_path_name, char *buff, int64_t start, int64_t count,
             create_dir_parallel(fs_option, myrank, dirname, path_name,
                                 orig_path, suffix.substr(1));
         }
-        // handling s3 and hdfs with arrow
-        // & handling posix json directory outputs with std::filesystem
-        open_outstream(fs_option, is_parallel, suffix.substr(1), dirname, fname,
-                       orig_path, &out_stream, bucket_region);
+
+        ensure_pa_wrappers_imported();
+        PyObject *fs_io_mod = PyImport_ImportModule("bodo.io.fs_io");
+        PyObject *scheme =
+            PyObject_CallMethod(fs_io_mod, "get_uri_scheme", "s", _path_name);
+        PyObject *fs_obj =
+            PyObject_CallMethod(fs_io_mod, "getfs", "sO", _path_name, scheme);
+        CHECK_ARROW_AND_ASSIGN(arrow::py::unwrap_filesystem(fs_obj),
+                               "arrow::py::unwrap_filesystem", fs);
+        Py_DECREF(fs_io_mod);
+        Py_DECREF(scheme);
+        Py_DECREF(fs_obj);
+
+        std::filesystem::path out_path(dirname);
+        out_path /= fname;  // append file name to output path
+        arrow::Result<std::shared_ptr<arrow::io::OutputStream>> result =
+            fs->OpenOutputStream(out_path);
+        CHECK_ARROW_AND_ASSIGN(result, "FileOutputStream::Open", out_stream);
+
         status = out_stream->Write(buff, count);
         CHECK_ARROW(status, "arrow::io::OutputStream::Write");
         // writing an extra '\n' to the end of json files inside of directory

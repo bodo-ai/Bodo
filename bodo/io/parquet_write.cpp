@@ -258,18 +258,13 @@ int64_t pq_write(const char *_path_name,
     // Get filesystem object if not provided
     if (arrow_fs == nullptr) {
         ensure_pa_wrappers_imported();
-
         PyObject *fs_io_mod = PyImport_ImportModule("bodo.io.fs_io");
-
         PyObject *scheme =
             PyObject_CallMethod(fs_io_mod, "get_uri_scheme", "s", _path_name);
-
         PyObject *fs_obj =
             PyObject_CallMethod(fs_io_mod, "getfs", "sO", _path_name, scheme);
-
         CHECK_ARROW_AND_ASSIGN(arrow::py::unwrap_filesystem(fs_obj),
                                "arrow::py::unwrap_filesystem", fs);
-
         arrow_fs = fs.get();
         Py_DECREF(fs_io_mod);
         Py_DECREF(scheme);
