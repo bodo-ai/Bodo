@@ -19,6 +19,8 @@
 #include <parquet/arrow/writer.h>
 #include <parquet/file_writer.h>
 
+#include "arrow_compat.h"
+
 #include "../libs/_array_hash.h"
 #include "../libs/_bodo_common.h"
 #include "../libs/_bodo_to_arrow.h"
@@ -35,6 +37,24 @@
 // We also have to account for column projection. So, for example, we would like
 // each column to be at least 1 MB on disk.
 constexpr int64_t DEFAULT_ROW_GROUP_SIZE = 1000000;  // in number of rows
+
+// Helper to ensure that the pyarrow wrappers have been imported.
+// We use a static variable to make sure we only do the import once.
+static bool imported_pyarrow_wrappers = false;
+static void ensure_pa_wrappers_imported() {
+#define CHECK(expr, msg)                                                \
+    if (expr) {                                                         \
+        throw std::runtime_error(std::string("parquet_write: ") + msg); \
+    }
+    if (imported_pyarrow_wrappers) {
+        return;
+    }
+    CHECK(arrow::py::import_pyarrow_wrappers(),
+          "importing pyarrow_wrappers failed!");
+    imported_pyarrow_wrappers = true;
+
+#undef CHECK
+}
 
 // if status of arrow::Result is not ok, form an err msg and raise a
 // runtime_error with it
@@ -230,6 +250,27 @@ int64_t pq_write(const char *_path_name,
     std::shared_ptr<::arrow::io::OutputStream> out_stream;
     Bodo_Fs::FsEnum fs_option;
 
+    // Filesystem object to use if arrow_fs not provided.
+    // Needs to be declared here so that it is not destroyed before
+    // write is done.
+    std::shared_ptr<arrow::fs::FileSystem> fs;
+
+    // Get filesystem object if not provided
+    if (arrow_fs == nullptr) {
+        ensure_pa_wrappers_imported();
+
+        PyObject *fs_io_mod = PyImport_ImportModule("bodo.io.fs_io");
+        PyObject *fs_obj =
+            PyObject_CallMethod(fs_io_mod, "getfs", "ss", _path_name, "");
+
+        CHECK_ARROW_AND_ASSIGN(arrow::py::unwrap_filesystem(fs_obj),
+                               "arrow::py::unwrap_filesystem", fs);
+
+        arrow_fs = fs.get();
+        Py_DECREF(fs_io_mod);
+        Py_DECREF(fs_obj);
+    }
+
     extract_fs_dir_path(_path_name, is_parallel, prefix, ".parquet", myrank,
                         num_ranks, &fs_option, &dirname, &fname, &orig_path,
                         &path_name, force_hdfs);
@@ -254,17 +295,11 @@ int64_t pq_write(const char *_path_name,
         return 0;
     }
 
-    // If we already have a filesystem, use it
-    if (arrow_fs != nullptr) {
-        std::filesystem::path out_path(dirname);
-        out_path /= fname;  // append file name to output path
-        arrow::Result<std::shared_ptr<arrow::io::OutputStream>> result =
-            arrow_fs->OpenOutputStream(out_path);
-        CHECK_ARROW_AND_ASSIGN(result, "FileOutputStream::Open", out_stream);
-    } else {
-        open_outstream(fs_option, is_parallel, "parquet", dirname, fname,
-                       orig_path, &out_stream, bucket_region);
-    }
+    std::filesystem::path out_path(dirname);
+    out_path /= fname;  // append file name to output path
+    arrow::Result<std::shared_ptr<arrow::io::OutputStream>> result =
+        arrow_fs->OpenOutputStream(out_path);
+    CHECK_ARROW_AND_ASSIGN(result, "FileOutputStream::Open", out_stream);
 
     auto pool = bodo::BufferPool::DefaultPtr();
 
