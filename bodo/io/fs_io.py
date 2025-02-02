@@ -595,6 +595,14 @@ def getfs(
         return pa.fs.LocalFileSystem()
 
 
+def get_uri_scheme(path):
+    """Get URI scheme from path (e.g. "s3", "gcs").
+    Used in C++ code to avoid including extra dependencies like boost::url.
+    """
+    parsed_url: ParseResult = urlparse(path)
+    return parsed_url.scheme
+
+
 @pt.overload
 def parse_fpath(fpath: str) -> tuple[str, ParseResult, str]: ...
 
