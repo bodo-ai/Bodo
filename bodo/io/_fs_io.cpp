@@ -110,6 +110,9 @@ void extract_fs_dir_path(const char *_path_name, bool is_parallel,
     } else if ((strncmp(_path_name, "gcs://", 6) == 0) ||
                (strncmp(_path_name, "gs://", 5) == 0)) {
         *fs_option = Bodo_Fs::gcs;
+        // remove gcs:// or gs://
+        int chars_to_remove = (strncmp(_path_name, "gcs://", 6) == 0) ? 6 : 5;
+        *path_name = std::string(_path_name + chars_to_remove);
     } else {  // posix
         *fs_option = Bodo_Fs::posix;
         *path_name = *orig_path;
