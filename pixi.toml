@@ -151,6 +151,8 @@ beautifulsoup4 = "*"
 snowflake-sqlalchemy = "*"
 # S3 Testing
 minio-server = "*"
+# GCS testing
+gcsfs = ">=2022.1"
 
 # Testing and CI Tools
 pytest = "*"
