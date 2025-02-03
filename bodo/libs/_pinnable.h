@@ -108,10 +108,7 @@ struct pinnable_ptr {
     using iterator_category = std::random_access_iterator_tag;
 
     /// @brief Needed for MSVC compatibility
-    static pinnable_ptr pointer_to(element_type &obj) {
-        throw std::runtime_error(
-            "_pinnable.h: pinnable_ptr pointer_to should not be used.");
-    }
+    static pinnable_ptr pointer_to(element_type &obj) { return pinnable_ptr(); }
 
     /// @brief  Construct a null pinnable_ptr
     pinnable_ptr() : base_(nullptr), offset_(0) {}

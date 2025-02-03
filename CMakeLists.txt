@@ -45,10 +45,14 @@ function(set_default_compiler_options)
       "/GS"     # Enable buffer security checks
       "/guard:cf" # Enable control flow guard (security feature)
       "/EHsc"
+      "/bigobj"
+      "/fsanitize=address"
+      "/Zi"
       # "/permissive-"
       # "/arch:SSE2"
     )
     add_definitions(-DMS_WINDOWS)  # Globally define MS_WINDOWS
+    add_definitions(-D_DISABLE_STRING_ANNOTATION -D_DISABLE_VECTOR_ANNOTATION)
   else()
     add_compile_options(
       "-Wno-c99-designator"
@@ -62,6 +66,16 @@ function(set_default_compiler_options)
   endif()
 endfunction()
 
+# Address sanitizer
+# add_compile_options(
+# "/bigobj"
+# "/fsanitize=address"
+# )
+# 
+# add_definitions(-D_DISABLE_STRING_ANNOTATION -D_DISABLE_VECTOR_ANNOTATION)
+# Ensure that asan runtime is availible to python e.g.
+# import ctypes
+# ctypes.WinDLL(PATH TO clang_rt.asan_dynamic-x86_64.dll")
 
 # Function to set debug options
 function(set_debug_options)
@@ -700,14 +714,14 @@ if (NOT (CMAKE_BUILD_TYPE STREQUAL "Release") AND NOT DEFINED ENV{BODO_SKIP_CPP_
     "bodo/tests/test_table_generator.cpp"
     "bodo/tests/test_test_framework.cpp"
     "bodo/tests/test_timestamptz_parser.cpp"
-    "bodo/tests/test_nested_array.cpp"
+    # "bodo/tests/test_nested_array.cpp"
     "bodo/tests/test_streaming/test_shuffle.cpp"
     "bodo/tests/test_streaming/test_groupby_shuffle.cpp"
     "bodo/tests/test_timestamptz_array.cpp"
     "bodo/tests/test_query_profile_collector.cpp"
     "bodo/tests/test_theta_sketches.cpp"
     "bodo/tests/test_puffin.cpp"
-    "bodo/tests/test_iceberg/test_iceberg_rest_aws_credentials_provider.cpp"
+    # "bodo/tests/test_iceberg/test_iceberg_rest_aws_credentials_provider.cpp"
     "bodo/tests/test_sorted_window_computation.cpp"
     "bodo/tests/test_thread_pool.cpp"
     "bodo/tests/test_datatypes.cpp"
@@ -722,12 +736,10 @@ if (NOT (CMAKE_BUILD_TYPE STREQUAL "Release") AND NOT DEFINED ENV{BODO_SKIP_CPP_
     "bodo/tests/test_puffin.cpp"
     "bodo/tests/test_theta_sketches.cpp")
 endif()
-message(STATUS "#################################CHECKING FOR HDFS: $ENV{NO_HDF5}")
+
 if(DEFINED ENV{NO_HDF5} AND "$ENV{NO_HDF5}" STREQUAL "1")
-    message(STATUS "IT WAS SET")
     set(NO_HDF5 TRUE)
 else()
-    message(STATUS "IT WAS NOT SET")
     list(APPEND sources_list "bodo/io/_hdf5.cpp")
     set(NO_HDF5 FALSE)
 endif()

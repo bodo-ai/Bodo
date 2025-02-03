@@ -1,7 +1,13 @@
+#if !defined(_WIN32)
 #include <unistd.h>
+#endif
 
 #include "../libs/_query_profile_collector.h"
 #include "./test.hpp"
+
+#if defined(_WIN32)
+#define usleep(x) Sleep(x / 1000)
+#endif
 
 bodo::tests::suite query_profile_collector_tests([] {
     bodo::tests::test("test_record_timestamps", [] {

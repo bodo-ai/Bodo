@@ -10,7 +10,6 @@
 #include <aws/core/auth/AWSCredentialsProvider.h>
 
 #include "_bodo_file_reader.h"
-#include "pyfs.h"
 
 struct Bodo_Fs {
     enum FsEnum { posix = 0, s3 = 1, hdfs = 2, gcs = 3, abfs = 4 };

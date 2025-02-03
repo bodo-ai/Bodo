@@ -113,7 +113,8 @@ void simple_pin(const std::string &nm, Args &&...args) {
         bodo::pinnable<T> pinnable;
         T ref;
 
-        auto seed(random());
+        // int seed = rand();
+        int seed = 1;
 
         srand(seed);  // Need to keep the random seed the same for all three
                       // tests
@@ -258,7 +259,6 @@ void insert_erase_and_move_map(int count) {
 }
 
 static bodo::tests::suite tests([] {
-    // TODO: [BSE-4151] Test segfaulting on PR CI
     bodo::tests::test("pinnable_vector_uint32_t", [] {
         auto pool = bodo::BufferPool();
         auto allocator = bodo::PinnableAllocator<uint32_t>(&pool);

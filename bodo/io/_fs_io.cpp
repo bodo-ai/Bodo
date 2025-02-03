@@ -17,7 +17,6 @@
 #include "../libs/_distributed.h"
 #include "_fs_io.h"
 #include "arrow_compat.h"
-#include "pyfs.h"
 
 // Helper to ensure that the pyarrow wrappers have been imported.
 // We use a static variable to make sure we only do the import once.
