@@ -640,3 +640,20 @@ void parallel_in_order_write(
     CHECK_MPI(MPI_Barrier(MPI_COMM_WORLD),
               "parallel_in_order_write: MPI error on MPI_Barrier:");
 }
+
+std::shared_ptr<::arrow::fs::FileSystem> get_fs_for_path(const char *_path_name,
+                                                         bool force_hdfs) {
+    ensure_pa_wrappers_imported();
+    std::shared_ptr<arrow::fs::FileSystem> fs;
+    PyObject *fs_io_mod = PyImport_ImportModule("bodo.io.fs_io");
+    PyObject *scheme =
+        PyObject_CallMethod(fs_io_mod, "get_uri_scheme", "s", _path_name);
+    PyObject *fs_obj =
+        PyObject_CallMethod(fs_io_mod, "getfs", "sO", _path_name, scheme);
+    CHECK_ARROW_AND_ASSIGN(arrow::py::unwrap_filesystem(fs_obj),
+                           "arrow::py::unwrap_filesystem", fs, "");
+    Py_DECREF(fs_io_mod);
+    Py_DECREF(scheme);
+    Py_DECREF(fs_obj);
+    return fs;
+}

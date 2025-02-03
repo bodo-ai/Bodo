@@ -38,24 +38,6 @@
 // each column to be at least 1 MB on disk.
 constexpr int64_t DEFAULT_ROW_GROUP_SIZE = 1000000;  // in number of rows
 
-// Helper to ensure that the pyarrow wrappers have been imported.
-// We use a static variable to make sure we only do the import once.
-static bool imported_pyarrow_wrappers = false;
-static void ensure_pa_wrappers_imported() {
-#define CHECK(expr, msg)                                                \
-    if (expr) {                                                         \
-        throw std::runtime_error(std::string("parquet_write: ") + msg); \
-    }
-    if (imported_pyarrow_wrappers) {
-        return;
-    }
-    CHECK(arrow::py::import_pyarrow_wrappers(),
-          "importing pyarrow_wrappers failed!");
-    imported_pyarrow_wrappers = true;
-
-#undef CHECK
-}
-
 // if status of arrow::Result is not ok, form an err msg and raise a
 // runtime_error with it
 #define CHECK_ARROW(expr, msg)                                              \
@@ -257,18 +239,8 @@ int64_t pq_write(const char *_path_name,
 
     // Get filesystem object if not provided
     if (arrow_fs == nullptr) {
-        ensure_pa_wrappers_imported();
-        PyObject *fs_io_mod = PyImport_ImportModule("bodo.io.fs_io");
-        PyObject *scheme =
-            PyObject_CallMethod(fs_io_mod, "get_uri_scheme", "s", _path_name);
-        PyObject *fs_obj =
-            PyObject_CallMethod(fs_io_mod, "getfs", "sO", _path_name, scheme);
-        CHECK_ARROW_AND_ASSIGN(arrow::py::unwrap_filesystem(fs_obj),
-                               "arrow::py::unwrap_filesystem", fs);
+        fs = get_fs_for_path(_path_name, force_hdfs);
         arrow_fs = fs.get();
-        Py_DECREF(fs_io_mod);
-        Py_DECREF(scheme);
-        Py_DECREF(fs_obj);
     }
 
     extract_fs_dir_path(_path_name, is_parallel, prefix, ".parquet", myrank,

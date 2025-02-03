@@ -5,25 +5,6 @@
 
 #include "_fs_io.h"
 #include "_io.h"
-#include "arrow_compat.h"
-
-// Helper to ensure that the pyarrow wrappers have been imported.
-// We use a static variable to make sure we only do the import once.
-static bool imported_pyarrow_wrappers = false;
-static void ensure_pa_wrappers_imported() {
-#define CHECK(expr, msg)                                            \
-    if (expr) {                                                     \
-        throw std::runtime_error(std::string("csv_write: ") + msg); \
-    }
-    if (imported_pyarrow_wrappers) {
-        return;
-    }
-    CHECK(arrow::py::import_pyarrow_wrappers(),
-          "importing pyarrow_wrappers failed!");
-    imported_pyarrow_wrappers = true;
-
-#undef CHECK
-}
 
 extern "C" {
 
@@ -112,17 +93,7 @@ void write_buff(char *_path_name, char *buff, int64_t start, int64_t count,
                                 orig_path, suffix.substr(1));
         }
 
-        ensure_pa_wrappers_imported();
-        PyObject *fs_io_mod = PyImport_ImportModule("bodo.io.fs_io");
-        PyObject *scheme =
-            PyObject_CallMethod(fs_io_mod, "get_uri_scheme", "s", _path_name);
-        PyObject *fs_obj =
-            PyObject_CallMethod(fs_io_mod, "getfs", "sO", _path_name, scheme);
-        CHECK_ARROW_AND_ASSIGN(arrow::py::unwrap_filesystem(fs_obj),
-                               "arrow::py::unwrap_filesystem", fs);
-        Py_DECREF(fs_io_mod);
-        Py_DECREF(scheme);
-        Py_DECREF(fs_obj);
+        fs = get_fs_for_path(_path_name);
 
         std::filesystem::path out_path(dirname);
         out_path /= fname;  // append file name to output path
