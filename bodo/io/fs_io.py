@@ -496,6 +496,7 @@ def getfs(
     protocol: str,
     storage_options: dict[str, pt.Any] | None = None,
     parallel: bool = False,
+    force_hdfs: bool = False,
 ) -> PyFileSystem | pa.fs.FileSystem:
     """
     Get filesystem for the provided file path(s).
@@ -557,7 +558,9 @@ def getfs(
         import fsspec
 
         return PyFileSystem(FSSpecHandler(fsspec.filesystem("http")))
-    elif protocol in {"abfs", "abfss"} and bodo.enable_azure_fs:  # pragma: no cover
+    elif (
+        protocol in {"abfs", "abfss"} and bodo.enable_azure_fs and not force_hdfs
+    ):  # pragma: no cover
         if not storage_options:
             storage_options = {}
         if "account_name" not in storage_options:

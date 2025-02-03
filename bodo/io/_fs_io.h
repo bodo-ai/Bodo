@@ -212,10 +212,11 @@ void parallel_in_order_write(
  * Python as the common filesystem provider.
  *
  * @param _path_name storage path (full URI like s3://bucket/path)
+ * @param is_parallel this is called in parallel
  * @param force_hdfs Use HDFS filesystem for abfs paths, needed for Snowflake
  * write until Arrow 19 upgrade to support SAS tokens
  * @return std::shared_ptr<::arrow::fs::FileSystem> Arrow filesystem object for
  * the path
  */
 std::shared_ptr<::arrow::fs::FileSystem> get_fs_for_path(
-    const char *_path_name, bool force_hdfs = false);
+    const char *_path_name, bool is_parallel, bool force_hdfs = false);

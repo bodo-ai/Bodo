@@ -93,7 +93,7 @@ void write_buff(char *_path_name, char *buff, int64_t start, int64_t count,
                                 orig_path, suffix.substr(1));
         }
 
-        fs = get_fs_for_path(_path_name);
+        fs = get_fs_for_path(_path_name, is_parallel);
 
         std::filesystem::path out_path(dirname);
         out_path /= fname;  // append file name to output path
