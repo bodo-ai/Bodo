@@ -39,10 +39,10 @@ requirements:
     - ninja
     - mpi4py =3.1.5
 
-    - numba =0.60.0
+    - numba =0.61.0
     # Compatible with Numba requirements.
     # Resolves build issues on nightly
-    - numpy >=1.24,<1.27
+    - numpy >=1.24,<2.2
     - pandas >=2.2,<2.3
     - fsspec >=2021.09
     - libarrow =18.1.0
@@ -67,7 +67,7 @@ requirements:
     - pandas >=2.2,<2.3
     - fsspec >=2021.09
     - pyarrow =18.1.0
-    - numba 0.60.0
+    - numba 0.61.0
     - mpich *=h* # [not win]
     - msmpi # [win]
     - vs2015_runtime # [win]
@@ -82,7 +82,7 @@ requirements:
   # but will restrict them if they are present in the conda env.
   run_constrained:
     - matplotlib <= 3.8.2
-    - numpy >=1.24,<1.27
+    - numpy >=1.24,<2.2
     - scikit-learn =1.4.*
     - s3fs >=2022.1.0
     - adlfs >=2022.1.0
