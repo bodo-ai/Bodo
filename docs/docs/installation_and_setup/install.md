@@ -58,14 +58,14 @@ the table below.
 All optional dependencies except Hadoop, HDF5, and OpenJDK can be installed through pip using the command:
 
 ```console
-pip install gcsfs sqlalchemy snowflake-connector-python deltalake
+pip install sqlalchemy snowflake-connector-python deltalake
 ```
 
 All optional dependencies except Hadoop can be
 installed through conda using the command:
 
 ```console
-conda install gcsfs sqlalchemy snowflake-connector-python hdf5='1.14.*=*mpich*' openjdk=11 deltalake -c conda-forge
+conda install sqlalchemy snowflake-connector-python hdf5='1.14.*=*mpich*' openjdk=11 deltalake -c conda-forge
 ```
 
 
@@ -76,7 +76,6 @@ conda install gcsfs sqlalchemy snowflake-connector-python hdf5='1.14.*=*mpich*' 
 |--------------------------|------------------------------------------------------------------------------------
 |`pd.read_sql / df.to_sql` |`sqlalchemy`                                                                       
 |`Snowflake I/O`           |`snowflake-connector-python`                                                       
-|`GCS I/O`                 |`gcsfs`                                                                            
 |`Delta Lake`              |`deltalake`                                                                        
 |`HDFS or ADLS Gen2`       |[hadoop](http://hadoop.apache.org/docs/stable/){target="html"} (only the Hadoop client is needed) 
 |`HDF5`                    |`hdf5 (MPI version)`                                                               

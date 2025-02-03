@@ -14,7 +14,6 @@ from numba.core import types
 from numba.extending import overload
 
 import bodo
-from bodo.io.fs_io import validate_gcsfs_installed
 from bodo.io.parquet_pio import getfs
 from bodo.io.s3_fs import (
     create_iceberg_aws_credentials_provider,
@@ -169,9 +168,6 @@ def get_iceberg_fs(
     table_name: str,
     pq_abs_path_file_list: list[str],
 ) -> PyFileSystem | pa.fs.FileSystem:
-    if protocol in {"gcs", "gs"}:
-        validate_gcsfs_installed()
-
     rest_catalog_conf = get_rest_catalog_config(conn)
     if rest_catalog_conf is not None:
         uri, bearer_token, warehouse = rest_catalog_conf
