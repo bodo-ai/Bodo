@@ -775,9 +775,9 @@ def test_default_table_type(
 
         table_type = comm.bcast(table_type)
         expected_table_type = "TRANSIENT" if transient_default else "TABLE"
-        assert (
-            table_type == expected_table_type
-        ), f"Table type is not as expected. Expected {expected_table_type} but found {table_type}"
+        assert table_type == expected_table_type, (
+            f"Table type is not as expected. Expected {expected_table_type} but found {table_type}"
+        )
 
     except Exception as e:
         # In the case that another exception ocurred within the body of the try,
@@ -980,9 +980,9 @@ def test_snowflake_catalog_create_table_transient(memory_leak_check):
             )["kind"][0]
 
         output_table_type = comm.bcast(output_table_type)
-        assert (
-            output_table_type == "TRANSIENT"
-        ), f"Table type is not as expected. Expected TRANSIENT but found {output_table_type}"
+        assert output_table_type == "TRANSIENT", (
+            f"Table type is not as expected. Expected TRANSIENT but found {output_table_type}"
+        )
 
     except Exception as e:
         # In the case that another exception ocurred within the body of the try,
@@ -2011,9 +2011,9 @@ def test_filter_pushdown_row_count_caching(
     df = pd.read_sql(metadata_query, conn_str)
     # We expect two rows, one for each filter
     assert len(df) == 2, "We should have two rows in the query history"
-    assert (
-        df["query_text"].str.contains("SELECT COUNT(*)", regex=False).all()
-    ), "We should have two queries for the row count"
+    assert df["query_text"].str.contains("SELECT COUNT(*)", regex=False).all(), (
+        "We should have two queries for the row count"
+    )
     assert (
         df["query_text"].str.contains('WHERE "C_NATIONKEY" = 3', regex=False).sum() == 1
     ), "We should have one query for the C_NATIONKEY row estimate"
@@ -2039,7 +2039,7 @@ def test_snowflake_catalog_string_format(test_db_snowflake_catalog, memory_leak_
 
     bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
     out = bc.sql(query)
-    assert out.iloc[0, 0] == 1, f"Expected one row in output, found {out.iloc[0,0]}"
+    assert out.iloc[0, 0] == 1, f"Expected one row in output, found {out.iloc[0, 0]}"
 
 
 def test_read_with_array(test_db_snowflake_catalog, memory_leak_check):
@@ -2641,9 +2641,9 @@ def _check_stream_unify_opt(impl, bc, query, fdef, arg_no):
     for block in fir.blocks.values():
         for stmt in block.body:
             if is_call_assign(stmt) and guard(find_callname, fir, stmt.value) == fdef:
-                assert calltypes[stmt.value].args[arg_no] == types.Omitted(
-                    True
-                ), "input_dicts_unified is not set to true in init"
+                assert calltypes[stmt.value].args[arg_no] == types.Omitted(True), (
+                    "input_dicts_unified is not set to true in init"
+                )
                 init_found = True
 
     assert init_found

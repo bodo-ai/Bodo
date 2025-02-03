@@ -70,6 +70,6 @@ if __name__ == "__main__":
     search_all(categories, strategies, df_prod, grids, results_file)
 
     if require_cache and isinstance(search_all, numba.core.dispatcher.Dispatcher):
-        assert (
-            search_all._cache_hits[search_all.signatures[0]] == 1
-        ), "ERROR: Bodo did not load from cache"
+        assert search_all._cache_hits[search_all.signatures[0]] == 1, (
+            "ERROR: Bodo did not load from cache"
+        )

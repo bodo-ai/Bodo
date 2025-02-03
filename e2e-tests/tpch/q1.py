@@ -69,6 +69,6 @@ def q01():
 if __name__ == "__main__":
     t0 = time.time()
     q01()
-    print(f"E2E time taken to execute Q1: {time.time()-t0}")
+    print(f"E2E time taken to execute Q1: {time.time() - t0}")
     # TODO Compute and write the checksum to a file that the caller process
     # can read and verify the output from.

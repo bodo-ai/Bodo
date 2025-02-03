@@ -164,9 +164,9 @@ def start_write(
             additional_properties[key_value[0]] = key_value[1]
 
     if mode == "create":
-        assert (
-            iceberg_schema_id == -1
-        ), "bodo_iceberg_connector Internal Error: Should never create existing table"
+        assert iceberg_schema_id == -1, (
+            "bodo_iceberg_connector Internal Error: Should never create existing table"
+        )
         try:
             txn_id = handler.startCreateOrReplaceTable(
                 db_name,
@@ -192,9 +192,9 @@ def start_write(
             print("Error during Iceberg table replace: ", e)
             return None
     else:
-        assert (
-            mode == "append"
-        ), "bodo_iceberg_connector Internal Error: Unknown write mode. Supported modes: 'create', 'replace', 'append'."
+        assert mode == "append", (
+            "bodo_iceberg_connector Internal Error: Unknown write mode. Supported modes: 'create', 'replace', 'append'."
+        )
         assert iceberg_schema_id is not None
 
         try:
@@ -258,9 +258,9 @@ def commit_write(
             return False
 
     else:
-        assert (
-            mode == "append"
-        ), "bodo_iceberg_connector Internal Error: Unknown write mode. Supported modes: 'create', 'replace', 'append'."
+        assert mode == "append", (
+            "bodo_iceberg_connector Internal Error: Unknown write mode. Supported modes: 'create', 'replace', 'append'."
+        )
         assert iceberg_schema_id is not None
 
         try:

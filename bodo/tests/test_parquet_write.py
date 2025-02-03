@@ -626,17 +626,17 @@ def test_write_parquet_dict(memory_leak_check):
             schema = bodo_table.schema
             expected_dtype = pa.string()
             for c in py_output.columns:
-                assert (
-                    schema.field(c).type == expected_dtype
-                ), f"Field '{c}' has an incorrect type"
+                assert schema.field(c).type == expected_dtype, (
+                    f"Field '{c}' has an incorrect type"
+                )
         except Exception:
             passed = 0
         finally:
             shutil.rmtree("arr_dict_test.pq")
     n_passed = reduce_sum(passed)
-    assert (
-        n_passed == bodo.get_size()
-    ), "to_parquet output doesn't match expected pandas output"
+    assert n_passed == bodo.get_size(), (
+        "to_parquet output doesn't match expected pandas output"
+    )
 
 
 def test_write_parquet_dict_table(memory_leak_check):
@@ -681,18 +681,18 @@ def test_write_parquet_dict_table(memory_leak_check):
             schema = bodo_table.schema
             expected_dtype = pa.string()
             for c in py_output.columns:
-                assert (
-                    schema.field(c).type == expected_dtype
-                ), f"Field '{c}' has an incorrect type"
+                assert schema.field(c).type == expected_dtype, (
+                    f"Field '{c}' has an incorrect type"
+                )
         except Exception:
             passed = 0
         finally:
             shutil.rmtree("arr_dict_test.pq")
             os.remove("dummy_source.pq")
     n_passed = reduce_sum(passed)
-    assert (
-        n_passed == bodo.get_size()
-    ), "to_parquet output doesn't match expected pandas output"
+    assert n_passed == bodo.get_size(), (
+        "to_parquet output doesn't match expected pandas output"
+    )
 
 
 def test_write_parquet_row_group_size(memory_leak_check):
@@ -807,20 +807,20 @@ def test_tz_to_parquet(memory_leak_check):
             for col_name in tz_columns:
                 col_index = result.columns.get_loc(col_name)
                 col_metadata = columns_info[col_index]
-                assert (
-                    col_metadata["pandas_type"] == "datetimetz"
-                ), f"incorrect pandas_type metadata for column {col_name}"
-                assert (
-                    col_metadata["numpy_type"] == "datetime64[ns]"
-                ), f"incorrect numpy_type metadata for column {col_name}"
+                assert col_metadata["pandas_type"] == "datetimetz", (
+                    f"incorrect pandas_type metadata for column {col_name}"
+                )
+                assert col_metadata["numpy_type"] == "datetime64[ns]", (
+                    f"incorrect numpy_type metadata for column {col_name}"
+                )
                 metadata_field = col_metadata["metadata"]
-                assert isinstance(
-                    metadata_field, dict
-                ), f"incorrect metadata field for column {col_name}"
+                assert isinstance(metadata_field, dict), (
+                    f"incorrect metadata field for column {col_name}"
+                )
                 fields = list(metadata_field.items())
-                assert fields == [
-                    ("timezone", result.dtypes[col_index].tz.zone)
-                ], f"incorrect metadata field for column {col_name}"
+                assert fields == [("timezone", result.dtypes[col_index].tz.zone)], (
+                    f"incorrect metadata field for column {col_name}"
+                )
         except Exception:
             passed = 0
         finally:

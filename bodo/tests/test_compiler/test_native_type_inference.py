@@ -99,14 +99,14 @@ def test_conversion_rules(memory_leak_check):
     """
 
     conv = check_compatible_types(types.boolean, types.int8)
-    assert (
-        conv == Conversion.safe
-    ), "check_compatible_types(types.boolean, types.int8) failed"
+    assert conv == Conversion.safe, (
+        "check_compatible_types(types.boolean, types.int8) failed"
+    )
 
     conv = check_compatible_types(types.int8, types.bool_)
-    assert (
-        conv == Conversion.unsafe
-    ), "check_compatible_types(types.int8, types.bool_) failed"
+    assert conv == Conversion.unsafe, (
+        "check_compatible_types(types.int8, types.bool_) failed"
+    )
 
 
 def test_getattr(memory_leak_check):

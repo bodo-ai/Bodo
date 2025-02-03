@@ -4797,9 +4797,9 @@ def test_join_semistructured_cond_func(memory_leak_check):
 # the output makes checking correctness slow.
 @pytest.mark.slow
 def test_shuffle_batching(memory_leak_check):
-    assert (
-        bodo.bodosql_streaming_batch_size < 10000
-    ), "If the batch size is more than 10k there will only be one batch and this won't test anything"
+    assert bodo.bodosql_streaming_batch_size < 10000, (
+        "If the batch size is more than 10k there will only be one batch and this won't test anything"
+    )
     build = pd.DataFrame({"A": np.arange(60000), "B": [1, 2, 3, 4, 5, 6] * 10000})
     probe = pd.DataFrame({"C": np.arange(60000), "D": [1, 2, 3, 4, 5, 6] * 10000})
     expected_df = pd.DataFrame(
@@ -5036,9 +5036,9 @@ def test_runtime_join_filter(memory_leak_check):
         _get_dist_arg(build_df), _get_dist_arg(df_to_filter), _get_dist_arg(probe_df)
     )
     len_after_filter = reduce_sum(len_after_filter)
-    assert (
-        400 <= len_after_filter < df_to_filter.shape[0]
-    ), f"Expected len_after_filter to be between 400 and {df_to_filter.shape[0]}, but it was {len_after_filter} instead."
+    assert 400 <= len_after_filter < df_to_filter.shape[0], (
+        f"Expected len_after_filter to be between 400 and {df_to_filter.shape[0]}, but it was {len_after_filter} instead."
+    )
 
 
 @pytest.mark.skipif(
@@ -5200,9 +5200,9 @@ def test_multiple_runtime_join_filter_materialize(memory_leak_check):
         _get_dist_arg(build_df1), _get_dist_arg(build_df2), _get_dist_arg(probe_df)
     )
     len_after_filter = reduce_sum(len_after_filter)
-    assert (
-        len_after_filter == 3
-    ), f"Expected len_after_filter to be exactly 3, but found {len_after_filter}."
+    assert len_after_filter == 3, (
+        f"Expected len_after_filter to be exactly 3, but found {len_after_filter}."
+    )
 
 
 @pytest.mark.skipif(
@@ -5367,9 +5367,9 @@ def test_multiple_runtime_join_filter_no_materialize(memory_leak_check):
         _get_dist_arg(build_df1), _get_dist_arg(build_df2), _get_dist_arg(probe_df)
     )
     len_after_filter = reduce_sum(len_after_filter)
-    assert (
-        len_after_filter == 3
-    ), f"Expected len_after_filter to be exactly 3, but found {len_after_filter}."
+    assert len_after_filter == 3, (
+        f"Expected len_after_filter to be exactly 3, but found {len_after_filter}."
+    )
 
 
 @pytest.mark.parametrize("merge_join_filters", [True, False])
@@ -5529,15 +5529,15 @@ def test_runtime_join_filter_dict_encoding(merge_join_filters, memory_leak_check
     len_after_filter2 = reduce_sum(len_after_filter2)
     out_df_len = reduce_sum(out_df.shape[0])
     if not merge_join_filters:
-        assert (
-            len_after_filter1 == 400
-        ), f"Expected len_after_filter1 to be 400, but got {len_after_filter1} instead!"
-    assert (
-        100 <= len_after_filter2 <= 200
-    ), f"Expected len_after_filter2 to be between 100 and 200, but got {len_after_filter2} instead!"
-    assert (
-        out_df_len == 10000
-    ), f"Expected output dataframe to have 10000 rows, but got {out_df_len} instead!"
+        assert len_after_filter1 == 400, (
+            f"Expected len_after_filter1 to be 400, but got {len_after_filter1} instead!"
+        )
+    assert 100 <= len_after_filter2 <= 200, (
+        f"Expected len_after_filter2 to be between 100 and 200, but got {len_after_filter2} instead!"
+    )
+    assert out_df_len == 10000, (
+        f"Expected output dataframe to have 10000 rows, but got {out_df_len} instead!"
+    )
 
 
 def test_runtime_join_filter_err_checking():
@@ -5778,16 +5778,16 @@ def test_runtime_join_filter_simple_casts(merge_join_filters, memory_leak_check)
     out_df_len = reduce_sum(out_df.shape[0])
     if not merge_join_filters:
         # The column level filter is not expected to prune anything since its a NOP in the int case.
-        assert (
-            len_after_filter1 == 500
-        ), f"Expected len_after_filter1 to be 500, but got {len_after_filter1} instead!"
+        assert len_after_filter1 == 500, (
+            f"Expected len_after_filter1 to be 500, but got {len_after_filter1} instead!"
+        )
     # The bloom filter should filter out all rows that don't match.
-    assert (
-        len_after_filter2 == 100
-    ), f"Expected len_after_filter2 to be 100, but got {len_after_filter2} instead!"
-    assert (
-        out_df_len == 5000
-    ), f"Expected output dataframe to have 5000 rows, but got {out_df_len} instead!"
+    assert len_after_filter2 == 100, (
+        f"Expected len_after_filter2 to be 100, but got {len_after_filter2} instead!"
+    )
+    assert out_df_len == 5000, (
+        f"Expected output dataframe to have 5000 rows, but got {out_df_len} instead!"
+    )
 
 
 @pytest.mark.skipif(
@@ -5968,16 +5968,16 @@ def test_runtime_join_filter_str_input_dict_key(merge_join_filters, memory_leak_
     out_df_len = reduce_sum(out_df.shape[0])
     # Column level filtering should result in no filtering
     if not merge_join_filters:
-        assert (
-            len_after_filter1 == 1000
-        ), f"Expected len_after_filter1 to be 1000, but got {len_after_filter1} instead!"
+        assert len_after_filter1 == 1000, (
+            f"Expected len_after_filter1 to be 1000, but got {len_after_filter1} instead!"
+        )
     # Bloom-filter should filter out elements correctly
-    assert (
-        len_after_filter2 == 600
-    ), f"Expected len_after_filter2 to be 600, but got {len_after_filter2} instead!"
-    assert (
-        out_df_len == 10000
-    ), f"Expected output dataframe to have 10000 rows, but got {out_df_len} instead!"
+    assert len_after_filter2 == 600, (
+        f"Expected len_after_filter2 to be 600, but got {len_after_filter2} instead!"
+    )
+    assert out_df_len == 10000, (
+        f"Expected output dataframe to have 10000 rows, but got {out_df_len} instead!"
+    )
 
 
 @pytest.mark.skipif(
@@ -6160,16 +6160,16 @@ def test_runtime_join_filter_dict_to_str_cast(merge_join_filters, memory_leak_ch
 
     if not merge_join_filters:
         # Column level filtering should result in no filtering since there's no hashmap
-        assert (
-            len_after_filter1 == 1000
-        ), f"Expected len_after_filter1 to be 1000, but got {len_after_filter1} instead!"
+        assert len_after_filter1 == 1000, (
+            f"Expected len_after_filter1 to be 1000, but got {len_after_filter1} instead!"
+        )
     # Bloom-filter should filter out elements correctly
-    assert (
-        len_after_filter2 == 600
-    ), f"Expected len_after_filter2 to be 600, but got {len_after_filter2} instead!"
-    assert (
-        out_df_len == 10000
-    ), f"Expected output dataframe to have 10000 rows, but got {out_df_len} instead!"
+    assert len_after_filter2 == 600, (
+        f"Expected len_after_filter2 to be 600, but got {len_after_filter2} instead!"
+    )
+    assert out_df_len == 10000, (
+        f"Expected output dataframe to have 10000 rows, but got {out_df_len} instead!"
+    )
 
 
 @pytest.mark.skipif(
@@ -6389,12 +6389,12 @@ def test_merging_runtime_join_filters(materialization_threshold, memory_leak_che
         len_after_filter = reduce_sum(len_after_filter)
         out_df_len = reduce_sum(out_df.shape[0])
 
-        assert (
-            len_after_filter == 100
-        ), f"Expected length after filtering to be 100, found {len_after_filter} instead"
-        assert (
-            out_df_len == 10_000
-        ), f"Expected output dataframe to have 10000 rows, but got {out_df_len} instead!"
+        assert len_after_filter == 100, (
+            f"Expected length after filtering to be 100, found {len_after_filter} instead"
+        )
+        assert out_df_len == 10_000, (
+            f"Expected output dataframe to have 10000 rows, but got {out_df_len} instead!"
+        )
 
         # check final result / types match expected
         run_rank0(pd.testing.assert_frame_equal)(expected_out, out_df)
@@ -6510,9 +6510,9 @@ def test_runtime_join_no_materialization(memory_leak_check):
     len_after_filter = reduce_sum(len_after_filter)
     out_df_len = reduce_sum(out_df.shape[0])
 
-    assert (
-        len_after_filter == 500
-    ), f"Expected length after filtering to be 500, found {len_after_filter} instead"
-    assert (
-        out_df_len == 50_000
-    ), f"Expected output dataframe to have 50,000 rows, but got {out_df_len} instead!"
+    assert len_after_filter == 500, (
+        f"Expected length after filtering to be 500, found {len_after_filter} instead"
+    )
+    assert out_df_len == 50_000, (
+        f"Expected output dataframe to have 50,000 rows, but got {out_df_len} instead!"
+    )

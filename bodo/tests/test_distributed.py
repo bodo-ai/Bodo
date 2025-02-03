@@ -1807,9 +1807,9 @@ def test_replicated_flag(memory_leak_check):
     ), "df1 should be distributed and df2 replicated based on user flags"
 
     impl2()
-    assert not impl2.overloads[impl2.signatures[0]].metadata[
-        "is_return_distributed"
-    ], "output of impl2 should be replicated since replicated=True is set"
+    assert not impl2.overloads[impl2.signatures[0]].metadata["is_return_distributed"], (
+        "output of impl2 should be replicated since replicated=True is set"
+    )
 
     impl3()
     assert impl3.overloads[impl3.signatures[0]].metadata["is_return_distributed"] == [

@@ -25,9 +25,9 @@ def create_table(table_name=TABLE_NAME, spark=None):
     if spark is None:
         spark = get_spark()
 
-    assert (
-        f"SIMPLE_{BASE_NAME}" in TABLE_MAP
-    ), f"Didn't find table definition for {BASE_NAME}."
+    assert f"SIMPLE_{BASE_NAME}" in TABLE_MAP, (
+        f"Didn't find table definition for {BASE_NAME}."
+    )
     df, sql_schema = TABLE_MAP[f"SIMPLE_{BASE_NAME}"]
     create_iceberg_table(df, sql_schema, table_name, spark, PARTITION_SPEC, SORT_ORDER)
 

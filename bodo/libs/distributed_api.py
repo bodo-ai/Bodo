@@ -713,9 +713,9 @@ def dist_reduce_impl(value, reduce_op, comm):
         if isinstance(types.unliteral(value), IndexValueType):
 
             def impl(value, reduce_op, comm):  # pragma: no cover
-                assert (
-                    comm == 0
-                ), "dist_reduce_impl: intercomm not supported for decimal"
+                assert comm == 0, (
+                    "dist_reduce_impl: intercomm not supported for decimal"
+                )
                 if reduce_op in {Reduce_Type.Argmin.value, Reduce_Type.Argmax.value}:
                     in_ptr = value_to_ptr(value.value)
                     out_ptr = value_to_ptr(value)
@@ -1475,9 +1475,9 @@ def overload_distributed_transpose(arr):
     See here for example code with similar algorithm:
     https://docs.oracle.com/cd/E19061-01/hpc.cluster5/817-0090-10/1-sided.html
     """
-    assert (
-        isinstance(arr, types.Array) and arr.ndim == 2
-    ), "distributed_transpose: 2D array expected"
+    assert isinstance(arr, types.Array) and arr.ndim == 2, (
+        "distributed_transpose: 2D array expected"
+    )
     c_type = numba_to_c_type(arr.dtype)
 
     def impl(arr):  # pragma: no cover
@@ -1989,9 +1989,9 @@ def get_value_for_type(dtype, use_arrow_time=False):  # pragma: no cover
     if isinstance(dtype, TimeArrayType):
         precision = dtype.precision
         if use_arrow_time:
-            assert (
-                precision == 9
-            ), "get_value_for_type: only nanosecond precision is supported for nested data"
+            assert precision == 9, (
+                "get_value_for_type: only nanosecond precision is supported for nested data"
+            )
             return pd.array(
                 [bodo.Time(3, precision=precision)], pd.ArrowDtype(pa.time64("ns"))
             )
@@ -3288,9 +3288,9 @@ def bcast_tuple_impl_jit(val, root=DEFAULT_ROOT, comm=0):
     """broadcast a tuple value
     calls bcast_scalar() on individual elements
     """
-    assert isinstance(
-        val, types.BaseTuple
-    ), "Internal Error: Argument to bcast tuple must be of type tuple"
+    assert isinstance(val, types.BaseTuple), (
+        "Internal Error: Argument to bcast tuple must be of type tuple"
+    )
     n_elem = len(val)
     func_text = f"def bcast_tuple_impl(val, root={DEFAULT_ROOT}, comm=0):\n"
     func_text += "  return ({}{})".format(
@@ -3669,12 +3669,12 @@ def int_getitem_overload(arr, ind, arr_start, total_len, is_1D):
     np_dtype = arr.dtype
 
     if isinstance(ind, types.BaseTuple):
-        assert isinstance(
-            arr, types.Array
-        ), "int_getitem_overload: Numpy array expected"
-        assert all(
-            isinstance(a, types.Integer) for a in ind.types
-        ), "int_getitem_overload: only integer indices supported"
+        assert isinstance(arr, types.Array), (
+            "int_getitem_overload: Numpy array expected"
+        )
+        assert all(isinstance(a, types.Integer) for a in ind.types), (
+            "int_getitem_overload: only integer indices supported"
+        )
         # TODO[BSE-2374]: support non-integer indices
 
         def getitem_impl(arr, ind, arr_start, total_len, is_1D):  # pragma: no cover

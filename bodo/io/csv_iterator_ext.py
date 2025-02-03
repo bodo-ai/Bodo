@@ -194,9 +194,9 @@ def init_csv_iterator(typingctx, csv_reader, csv_iterator_typeref):
         iterator.index = cgutils.alloca_once_value(builder, zero)
         return iterator._getvalue()
 
-    assert isinstance(
-        csv_iterator_typeref, types.TypeRef
-    ), "Initializing a csv iterator requires a typeref"
+    assert isinstance(csv_iterator_typeref, types.TypeRef), (
+        "Initializing a csv iterator requires a typeref"
+    )
     ret_typ = csv_iterator_typeref.instance_type
     sig = signature(ret_typ, csv_reader, csv_iterator_typeref)
     return sig, codegen

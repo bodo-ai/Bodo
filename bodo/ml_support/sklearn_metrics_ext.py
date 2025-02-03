@@ -1529,7 +1529,7 @@ def confusion_matrix_dist_helper(
 
     # Shamelessly copied from https://github.com/scikit-learn/scikit-learn/blob/2beed55847ee70d363bdbfe14ee4401438fba057/sklearn/metrics/_classification.py#L322-#L324
     if normalize not in ["true", "pred", "all", None]:  # pragma: no cover
-        raise ValueError("normalize must be one of {'true', 'pred', " "'all', None}")
+        raise ValueError("normalize must be one of {'true', 'pred', 'all', None}")
 
     comm = MPI.COMM_WORLD
 

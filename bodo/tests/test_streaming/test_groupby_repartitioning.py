@@ -194,24 +194,28 @@ def _test_helper(
         assert_success = comm.allreduce(assert_success, op=MPI.LAND)
         assert assert_success
 
-    assert (
-        global_output.shape[0] == expected_output_size
-    ), f"Final output size ({global_output.shape[0]}) is not as expected ({expected_output_size})"
+    assert global_output.shape[0] == expected_output_size, (
+        f"Final output size ({global_output.shape[0]}) is not as expected ({expected_output_size})"
+    )
 
     # After the build step, all memory should've been released:
     assert_success = final_bytes_pinned == 0
     assert_success = comm.allreduce(assert_success, op=MPI.LAND)
-    assert (
-        assert_success
-    ), f"Final bytes pinned by the Operator BufferPool ({final_bytes_pinned}) is not 0!"
+    assert assert_success, (
+        f"Final bytes pinned by the Operator BufferPool ({final_bytes_pinned}) is not 0!"
+    )
 
     assert_success = final_bytes_allocated == 0
     assert_success = comm.allreduce(assert_success, op=MPI.LAND)
-    assert assert_success, f"Final bytes allocated by the Operator BufferPool ({final_bytes_allocated}) is not 0!"
+    assert assert_success, (
+        f"Final bytes allocated by the Operator BufferPool ({final_bytes_allocated}) is not 0!"
+    )
 
     assert_success = final_partition_state == expected_partition_state
     assert_success = comm.allreduce(assert_success, op=MPI.LAND)
-    assert assert_success, f"Final partition state ({final_partition_state}) is not as expected ({expected_partition_state})"
+    assert assert_success, (
+        f"Final partition state ({final_partition_state}) is not as expected ({expected_partition_state})"
+    )
 
     pd.testing.assert_frame_equal(
         global_output.sort_values(
@@ -619,9 +623,9 @@ def test_split_during_acc_finalize_build_str_running_vals(
     # measuring bytes_allocated.
     gc.collect()
     bytes_after = default_buffer_pool_bytes_allocated()
-    assert (
-        bytes_before == bytes_after
-    ), f"Potential memory leak! bytes_before ({bytes_before}) != bytes_after ({bytes_after})"
+    assert bytes_before == bytes_after, (
+        f"Potential memory leak! bytes_before ({bytes_before}) != bytes_after ({bytes_after})"
+    )
 
 
 @pytest.mark.skipif(bodo.get_size() != 2, reason="Only calibrated for two cores case")
@@ -1529,9 +1533,9 @@ def test_rank_skew_repartition(capfd):
             )
         n_passed = reduce_sum(passed)
         assert n_passed == bodo.get_size()
-        assert (
-            bytes_before == bytes_after
-        ), f"Potential memory leak! bytes_before ({bytes_before}) != bytes_after ({bytes_after})"
+        assert bytes_before == bytes_after, (
+            f"Potential memory leak! bytes_before ({bytes_before}) != bytes_after ({bytes_after})"
+        )
 
     output, err = capfd.readouterr()
     # Uncomment to view the output for debugging.

@@ -311,9 +311,9 @@ ll.add_symbol("unbox_time_array", hdatetime_ext.unbox_time_array)
 # Does not need refcounted object wrapping since it is immutable
 class TimeType(types.Type):
     def __init__(self, precision):
-        assert (
-            isinstance(precision, int) and precision >= 0 and precision <= 9
-        ), "precision must be an integer between 0 and 9"
+        assert isinstance(precision, int) and precision >= 0 and precision <= 9, (
+            "precision must be an integer between 0 and 9"
+        )
         self.precision = precision
         super().__init__(name=f"TimeType({precision})")
         self.bitwidth = 64  # needed for using IntegerModel
@@ -620,9 +620,9 @@ def cast_time_to_int(typingctx, val):
 
 class TimeArrayType(types.ArrayCompatible):
     def __init__(self, precision):
-        assert (
-            isinstance(precision, int) and precision >= 0 and precision <= 9
-        ), "precision must be an integer between 0 and 9"
+        assert isinstance(precision, int) and precision >= 0 and precision <= 9, (
+            "precision must be an integer between 0 and 9"
+        )
         self.precision = precision
         super().__init__(name=f"TimeArrayType({precision})")
 
@@ -754,9 +754,9 @@ def init_time_array(typingctx, data, nulls, precision):
     """Create a TimeArrayType with provided data values."""
     assert data == types.Array(types.int64, 1, "C"), "data must be an array of int64"
     assert nulls == types.Array(types.uint8, 1, "C"), "nulls must be an array of uint8"
-    assert isinstance(
-        precision, types.IntegerLiteral
-    ), "precision must be an integer literal"
+    assert isinstance(precision, types.IntegerLiteral), (
+        "precision must be an integer literal"
+    )
 
     def codegen(context, builder, signature, args):
         (data_val, bitmap_val, _) = args

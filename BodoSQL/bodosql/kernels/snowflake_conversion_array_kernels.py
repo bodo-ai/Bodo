@@ -1967,9 +1967,9 @@ def string_to_decimal_overload(expr, precision, scale, null_on_error):
         return impl
 
     else:
-        assert (
-            expr == bodo.dict_str_arr_type
-        ), "string_to_decimal_overload: dictionary-encoded string array type expected"
+        assert expr == bodo.dict_str_arr_type, (
+            "string_to_decimal_overload: dictionary-encoded string array type expected"
+        )
 
         def impl(expr, precision, scale, null_on_error):  # pragma: no cover
             # Just cast the data array. Note: Since a value may no longer exist
@@ -2258,7 +2258,9 @@ def to_number_util_overload(
 
         # Since np.int64 will always round towards zero
         # the cast to np.int64 is fine for our purposes
-        scalar_text += f"  if np.abs(np.int64(arg0)) >= {10 ** allowed_digits_lhs_decimal_point}:\n"
+        scalar_text += (
+            f"  if np.abs(np.int64(arg0)) >= {10**allowed_digits_lhs_decimal_point}:\n"
+        )
         if _try:
             scalar_text += "    bodo.libs.array_kernels.setna(res, i)\n"
             scalar_text += "    seen_invalid=True\n"

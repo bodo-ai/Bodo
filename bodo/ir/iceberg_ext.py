@@ -275,10 +275,11 @@ def iceberg_pq_reader_init_py_entry(
         arrow_reader_t (ArrowReader): The typing of the output ArrowReader
     """
 
-    assert (
-        isinstance(arrow_reader_t, types.TypeRef)
-        and isinstance(arrow_reader_t.instance_type, ArrowReaderType)
-    ), "iceberg_pq_reader_init_py_entry(): The last argument arrow_reader must by a TypeRef to an ArrowReader"
+    assert isinstance(arrow_reader_t, types.TypeRef) and isinstance(
+        arrow_reader_t.instance_type, ArrowReaderType
+    ), (
+        "iceberg_pq_reader_init_py_entry(): The last argument arrow_reader must by a TypeRef to an ArrowReader"
+    )
 
     def codegen(context: BaseContext, builder: IRBuilder, signature, args):
         fnty = lir.FunctionType(
@@ -1206,9 +1207,9 @@ def _gen_iceberg_reader_chunked_py(
         correct indices.
     """
     source_pyarrow_schema = pyarrow_schema
-    assert (
-        source_pyarrow_schema is not None
-    ), "SQLReader node must contain a source_pyarrow_schema if reading from Iceberg"
+    assert source_pyarrow_schema is not None, (
+        "SQLReader node must contain a source_pyarrow_schema if reading from Iceberg"
+    )
 
     # Generate output pyarrow schema for used cols (from BodoSQL)
     if used_cols is None:  # pragma: no cover
@@ -1477,9 +1478,9 @@ def _gen_iceberg_reader_py(
         f"def sql_reader_py(sql_request, conn, database_schema, {filter_args}):\n"
     )
 
-    assert (
-        pyarrow_schema is not None
-    ), "SQLNode must contain a pyarrow_schema if reading from an Iceberg database"
+    assert pyarrow_schema is not None, (
+        "SQLNode must contain a pyarrow_schema if reading from an Iceberg database"
+    )
 
     # Generate the predicate filters. Note we pass
     # all col names as possible partitions via partition names.
