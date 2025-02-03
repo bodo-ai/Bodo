@@ -311,7 +311,7 @@ def overload_datetime_index_copy(A, name=None, deep=False, dtype=None, names=Non
 def box_dt_index(typ, val, c):
     """"""
     mod_name = c.context.insert_const_string(c.builder.module, "pandas")
-    pd_class_obj = c.pyapi.import_module_noblock(mod_name)
+    pd_class_obj = c.pyapi.import_module(mod_name)
 
     dt_index = numba.core.cgutils.create_struct_proxy(typ)(c.context, c.builder, val)
 
@@ -1386,7 +1386,7 @@ def typeof_timedelta_index(val, c):
 def box_timedelta_index(typ, val, c):
     """"""
     mod_name = c.context.insert_const_string(c.builder.module, "pandas")
-    pd_class_obj = c.pyapi.import_module_noblock(mod_name)
+    pd_class_obj = c.pyapi.import_module(mod_name)
 
     timedelta_index = numba.core.cgutils.create_struct_proxy(typ)(
         c.context, c.builder, val
@@ -1824,7 +1824,7 @@ def overload_range_index_copy(A, name=None, deep=False, dtype=None, names=None):
 @box(RangeIndexType)
 def box_range_index(typ, val, c):
     mod_name = c.context.insert_const_string(c.builder.module, "pandas")
-    class_obj = c.pyapi.import_module_noblock(mod_name)
+    class_obj = c.pyapi.import_module(mod_name)
     range_val = cgutils.create_struct_proxy(typ)(c.context, c.builder, val)
     start_obj = c.pyapi.from_native_value(types.int64, range_val.start, c.env_manager)
     stop_obj = c.pyapi.from_native_value(types.int64, range_val.stop, c.env_manager)
@@ -2191,7 +2191,7 @@ def init_period_index(typingctx, data, name, freq):
 @box(PeriodIndexType)
 def box_period_index(typ, val, c):
     mod_name = c.context.insert_const_string(c.builder.module, "pandas")
-    class_obj = c.pyapi.import_module_noblock(mod_name)
+    class_obj = c.pyapi.import_module(mod_name)
 
     index_val = cgutils.create_struct_proxy(typ)(c.context, c.builder, val)
 
@@ -2232,7 +2232,7 @@ def unbox_period_index(typ, val, c):
     name = c.pyapi.to_native_value(typ.name_typ, name_obj).value
 
     mod_name = c.context.insert_const_string(c.builder.module, "pandas")
-    pd_class_obj = c.pyapi.import_module_noblock(mod_name)
+    pd_class_obj = c.pyapi.import_module(mod_name)
     arr_mod_obj = c.pyapi.object_getattr_string(pd_class_obj, "arrays")
     data_obj = c.pyapi.call_method(arr_mod_obj, "IntegerArray", (asi8_obj, isna_obj))
     data = c.pyapi.to_native_value(arr_typ, data_obj).value
@@ -2350,7 +2350,7 @@ def typeof_categorical_index(val, c):
 def box_categorical_index(typ, val, c):
     """"""
     mod_name = c.context.insert_const_string(c.builder.module, "pandas")
-    pd_class_obj = c.pyapi.import_module_noblock(mod_name)
+    pd_class_obj = c.pyapi.import_module(mod_name)
 
     categorical_index = numba.core.cgutils.create_struct_proxy(typ)(
         c.context, c.builder, val
@@ -2564,7 +2564,7 @@ def typeof_interval_index(val, c):
 def box_interval_index(typ, val, c):
     """"""
     mod_name = c.context.insert_const_string(c.builder.module, "pandas")
-    pd_class_obj = c.pyapi.import_module_noblock(mod_name)
+    pd_class_obj = c.pyapi.import_module(mod_name)
 
     interval_index = numba.core.cgutils.create_struct_proxy(typ)(
         c.context, c.builder, val
@@ -2756,7 +2756,7 @@ def box_numeric_index(typ, val, c):
     Int64/UInt64/Float64. pd.Index() will convert to the available Index type.
     """
     mod_name = c.context.insert_const_string(c.builder.module, "pandas")
-    class_obj = c.pyapi.import_module_noblock(mod_name)
+    class_obj = c.pyapi.import_module(mod_name)
     index_val = cgutils.create_struct_proxy(typ)(c.context, c.builder, val)
     c.context.nrt.incref(c.builder, typ.data, index_val.data)
     data_obj = c.pyapi.from_native_value(typ.data, index_val.data, c.env_manager)
@@ -3009,7 +3009,7 @@ def box_binary_str_index(typ, val, c):
     """
     array_type = typ.data
     mod_name = c.context.insert_const_string(c.builder.module, "pandas")
-    class_obj = c.pyapi.import_module_noblock(mod_name)
+    class_obj = c.pyapi.import_module(mod_name)
 
     index_val = cgutils.create_struct_proxy(typ)(c.context, c.builder, val)
     c.context.nrt.incref(c.builder, array_type, index_val.data)
@@ -4814,7 +4814,7 @@ def overload_heter_index_copy(A, name=None, deep=False, dtype=None, names=None):
 @box(HeterogeneousIndexType)
 def box_heter_index(typ, val, c):  # pragma: no cover
     mod_name = c.context.insert_const_string(c.builder.module, "pandas")
-    class_obj = c.pyapi.import_module_noblock(mod_name)
+    class_obj = c.pyapi.import_module(mod_name)
 
     index_val = cgutils.create_struct_proxy(typ)(c.context, c.builder, val)
     c.context.nrt.incref(c.builder, typ.data, index_val.data)

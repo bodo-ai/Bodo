@@ -174,7 +174,7 @@ def box_bodosql_context(typ, val, c):
         )
 
     mod_name = c.context.insert_const_string(c.builder.module, "bodosql")
-    bodosql_class_obj = c.pyapi.import_module_noblock(mod_name)
+    bodosql_class_obj = c.pyapi.import_module(mod_name)
     res = c.pyapi.call_method(
         bodosql_class_obj, "BodoSQLContext", (py_dict_obj, catalog_obj)
     )

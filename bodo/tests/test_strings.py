@@ -610,6 +610,9 @@ def test_match_getitem(memory_leak_check):
     assert test_impl(m, "A") == bodo.jit(test_impl)(m, "A")
 
 
+@pytest.mark.skip(
+    "BSE-4448: Numba fails in unboxing list(optional) when first element is None"
+)
 def test_match_groups(memory_leak_check):
     """test Match.groups(). Python returns a tuple but we return a list since length
     of tuple is not known in advance.
