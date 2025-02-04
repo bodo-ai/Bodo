@@ -45,14 +45,9 @@ function(set_default_compiler_options)
       "/GS"     # Enable buffer security checks
       "/guard:cf" # Enable control flow guard (security feature)
       "/EHsc"
-      "/bigobj"
-      "/fsanitize=address"
-      "/Zi"
-      # "/permissive-"
       # "/arch:SSE2"
     )
     add_definitions(-DMS_WINDOWS)  # Globally define MS_WINDOWS
-    add_definitions(-D_DISABLE_STRING_ANNOTATION -D_DISABLE_VECTOR_ANNOTATION)
   else()
     add_compile_options(
       "-Wno-c99-designator"
@@ -66,16 +61,6 @@ function(set_default_compiler_options)
   endif()
 endfunction()
 
-# Address sanitizer
-# add_compile_options(
-# "/bigobj"
-# "/fsanitize=address"
-# )
-# 
-# add_definitions(-D_DISABLE_STRING_ANNOTATION -D_DISABLE_VECTOR_ANNOTATION)
-# Ensure that asan runtime is availible to python e.g.
-# import ctypes
-# ctypes.WinDLL(PATH TO clang_rt.asan_dynamic-x86_64.dll")
 
 # Function to set debug options
 function(set_debug_options)
@@ -104,6 +89,15 @@ function(set_sanitizer_options)
     add_link_options(
       "-fsanitize=address"
       "-fsanitize=undefined"
+    )
+  else()
+    add_compile_options(
+      "/bigobj"
+      "/fsanitize=address"
+    )
+    add_definitions(
+      -D_DISABLE_STRING_ANNOTATION 
+      -D_DISABLE_VECTOR_ANNOTATION
     )
   endif()
 endfunction()
@@ -272,6 +266,7 @@ message(STATUS "BOOST INCLUDE DIRS: ${Boost_INCLUDE_DIRS}")
 # set(Boost_INCLUDE_DIRS, "C:\\Users\\owner\\dev\\Bodo\\.pixi\\envs\\default\\Library\\include")
 include_directories(${Boost_INCLUDE_DIRS})
 
+find_package(HDF5 REQUIRED COMPONENTS C HL)
 
 # ---------------------------- Set CMake Options -----------------------------
 # Use RelWithDebInfo Mode by Default
@@ -736,10 +731,12 @@ if (NOT (CMAKE_BUILD_TYPE STREQUAL "Release") AND NOT DEFINED ENV{BODO_SKIP_CPP_
     "bodo/tests/test_puffin.cpp"
     "bodo/tests/test_theta_sketches.cpp")
 endif()
-
+message(STATUS "#################################CHECKING FOR HDFS: $ENV{NO_HDF5}")
 if(DEFINED ENV{NO_HDF5} AND "$ENV{NO_HDF5}" STREQUAL "1")
+    message(STATUS "IT WAS SET")
     set(NO_HDF5 TRUE)
 else()
+    message(STATUS "IT WAS NOT SET")
     list(APPEND sources_list "bodo/io/_hdf5.cpp")
     set(NO_HDF5 FALSE)
 endif()
@@ -859,6 +856,7 @@ else()
     CURL::libcurl
     OpenSSL::SSL 
     OpenSSL::Crypto
+    ${HDF5_LIBRARIES}
   )
 endif()
 

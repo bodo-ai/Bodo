@@ -947,9 +947,12 @@ class BufferPool final : public IBufferPool {
      * was done through malloc, set this to -1.
      * @param size_aligned Aligned size of the allocation (from the BufferPool
      * perspective). In case of mmap allocation, this will be the frame size.
+     * @param alignment The expected alignment of the memory. Used on Windows
+     * to determine whether to use _aligned_free.
      */
     void free_helper(uint8_t* ptr, bool is_mmap_alloc, int64_t size_class_idx,
-                     int64_t frame_idx, int64_t size_aligned);
+                     int64_t frame_idx, int64_t size_aligned,
+                     int64_t alignment);
 
     /**
      * @brief Zero pad the extra bytes allocated during an allocation.

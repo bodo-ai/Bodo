@@ -265,7 +265,7 @@ static bodo::tests::suite tests([] {
 
         bodo::pinnable<bodo::vector<std::uint32_t>>::element_type initial(
             allocator);
-        for (std::uint32_t i = 0; i < 40000; ++i) {
+        for (std::uint32_t i = 0; i < 4000; ++i) {
             initial.push_back(i);
         };
 

@@ -4,12 +4,6 @@ Top-level init file for bodo package
 isort:skip_file
 """
 
-# Needed for address sanitizer to work properly
-# May also change behavior in buffer pool
-import ctypes
-print("including clang_rt asan dll")
-ctypes.WinDLL(r"C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.42.34433\bin\Hostx64\x64\clang_rt.asan_dynamic-x86_64.dll")
-
 
 def _global_except_hook(exctype, value, traceback):
     """Custom excepthook function that replaces sys.excepthook (see sys.excepthook

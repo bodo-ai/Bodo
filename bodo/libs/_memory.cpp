@@ -1236,8 +1236,9 @@ arrow::Result<bool> BufferPool::best_effort_evict_helper(const uint64_t bytes) {
         // those cases.
         // All these allocations can be free-d using 'free'.
         void* result = alignment > kMinAlignment
-                           ? ::aligned_alloc(alignment, aligned_size)
+                           ? aligned_alloc(alignment, aligned_size)
                            : ::malloc(aligned_size);
+        printf("%d %d: %p\n", aligned_size, alignment > kMinAlignment, result);
         if (result == nullptr) {
             // XXX This is an unlikely branch, so it would
             // be good to indicate that to the compiler
@@ -1415,7 +1416,7 @@ std::tuple<bool, int64_t, int64_t, int64_t> BufferPool::get_alloc_details(
 
 void BufferPool::free_helper(uint8_t* ptr, bool is_mmap_alloc,
                              int64_t size_class_idx, int64_t frame_idx,
-                             int64_t size_aligned) {
+                             int64_t size_aligned, int64_t alignment) {
     bool frame_pinned;
     if (is_mmap_alloc) {
         frame_pinned =
@@ -1423,7 +1424,16 @@ void BufferPool::free_helper(uint8_t* ptr, bool is_mmap_alloc,
         this->size_classes_[size_class_idx]->FreeFrame(frame_idx);
     } else {
         frame_pinned = true;
+
+#if defined(_WIN32)
+        if (alignment < kMinAlignment) {
+            ::free(ptr);
+        } else {
+            _aligned_free(ptr);
+        }
+#else
         ::free(ptr);
+#endif
 
         if (size_aligned != -1) {
             this->stats_.curr_bytes_malloced -= size_aligned;
@@ -1506,13 +1516,16 @@ void BufferPool::Free(uint8_t* buffer, int64_t size, int64_t alignment) {
     }
 
     // Add debug markers to indicate dead memory only for frames in memory.
-    memset(buffer, 0xDE, std::min(size, (int64_t)256));
+    // memset(buffer, 0xDE, std::min(size, (int64_t)256));
+    printf("size %ld | alignment %ld", size, alignment);
 
     auto [is_mmap_alloc, size_class_idx, frame_idx, size_freed] =
         this->get_alloc_details(buffer, size, alignment);
 
+    printf("is_mmap_alloc %d", is_mmap_alloc);
+
     this->free_helper(buffer, is_mmap_alloc, size_class_idx, frame_idx,
-                      size_freed);
+                      size_freed, alignment);
     // XXX In the case where we still don't know the size of the allocation and
     // it was through malloc, we can't update stats_. Should we just enforce
     // that size be provided?
@@ -1663,7 +1676,7 @@ int64_t BufferPool::get_bytes_freed_through_malloc_since_last_trim() const {
 
     // Free original memory (re-use information from get_alloc_details output)
     this->free_helper(old_memory_ptr, is_mmap_alloc, size_class_idx, frame_idx,
-                      old_size_aligned);
+                      old_size_aligned, alignment);
 
     stats_.total_num_reallocations++;
     if (this->options_.tracing_mode()) {
