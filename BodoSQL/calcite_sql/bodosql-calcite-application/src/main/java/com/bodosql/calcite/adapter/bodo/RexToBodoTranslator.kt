@@ -61,6 +61,7 @@ import org.apache.calcite.rex.RexShuttle
 import org.apache.calcite.rex.RexSlot
 import org.apache.calcite.rex.RexSubQuery
 import org.apache.calcite.rex.RexTableInputRef
+import org.apache.calcite.rex.RexUnknownAs
 import org.apache.calcite.rex.RexVisitor
 import org.apache.calcite.sql.SqlBinaryOperator
 import org.apache.calcite.sql.SqlFunction
@@ -81,6 +82,7 @@ import org.apache.calcite.sql.type.BodoSqlTypeUtil
 import org.apache.calcite.sql.type.BodoTZInfo
 import org.apache.calcite.sql.type.SqlTypeFamily
 import org.apache.calcite.sql.type.SqlTypeName
+import org.apache.calcite.util.Sarg
 import java.math.BigDecimal
 import java.util.Locale
 
@@ -300,7 +302,26 @@ open class RexToBodoTranslator(
             SqlKind.SEARCH -> {
                 // Note the valid use of Search args are enforced by the
                 // SearchArgExpandProgram.
-                val args = visitList(node.operands)
+                assert(node.operands[1] is RexLiteral)
+                val argOneLiteral = node.operands[1] as RexLiteral
+                assert(argOneLiteral.value is Sarg<*>)
+                val sarg = argOneLiteral.value as Sarg<*>
+                val nullAs =
+                    when (sarg.nullAs) {
+                        RexUnknownAs.TRUE -> {
+                            Expr.BooleanLiteral(true)
+                        }
+                        RexUnknownAs.FALSE -> {
+                            Expr.BooleanLiteral(false)
+                        }
+                        else -> {
+                            Expr.None
+                        }
+                    }
+
+                val visitedArgs = visitList(node.operands)
+                val args = visitedArgs.toMutableList()
+                args.add(nullAs)
                 return bodoSQLKernel("is_in", args)
             }
 
