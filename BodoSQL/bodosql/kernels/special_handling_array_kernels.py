@@ -27,6 +27,7 @@ def is_in_set_null_overload(arr_to_check, out_arr, null_as):
     """
     Sets values in out_arr based on null values in arr_to_check and null_as
     """
+    # BSE-4544
     # TODO: only do this null setting in the case that arr_to_check is nullable
     # TODO: directly copy/clone the whole bit mask
     if null_as == types.none:
