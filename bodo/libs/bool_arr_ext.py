@@ -127,7 +127,7 @@ register_model(BooleanDtype)(models.OpaqueModel)
 @box(BooleanDtype)
 def box_boolean_dtype(typ, val, c):
     mod_name = c.context.insert_const_string(c.builder.module, "pandas")
-    pd_class_obj = c.pyapi.import_module_noblock(mod_name)
+    pd_class_obj = c.pyapi.import_module(mod_name)
     res = c.pyapi.call_method(pd_class_obj, "BooleanDtype", ())
     c.pyapi.decref(pd_class_obj)
     return res

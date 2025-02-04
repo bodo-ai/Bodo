@@ -274,7 +274,7 @@ def unbox_dict_arr(typ, val, c):
     # dict_arr.indices = pd.array(val.indices, "Int32")
     indices_obj = c.pyapi.object_getattr_string(val, "indices")
     mod_name = c.context.insert_const_string(c.builder.module, "pandas")
-    pd_class_obj = c.pyapi.import_module_noblock(mod_name)
+    pd_class_obj = c.pyapi.import_module(mod_name)
     int32_str_obj = c.pyapi.string_from_constant_string("Int32")
     pd_int_arr_obj = c.pyapi.call_method(
         pd_class_obj, "array", (indices_obj, int32_str_obj)
@@ -341,7 +341,7 @@ def box_dict_arr(typ, val, c):
         # create a PyArrow dictionary array from indices and data
         # pa.DictionaryArray.from_arrays(dict_arr.data, dict_arr.indices)
         mod_name = c.context.insert_const_string(c.builder.module, "pyarrow")
-        pa_class_obj = c.pyapi.import_module_noblock(mod_name)
+        pa_class_obj = c.pyapi.import_module(mod_name)
         pa_dict_arr_class = c.pyapi.object_getattr_string(
             pa_class_obj, "DictionaryArray"
         )
