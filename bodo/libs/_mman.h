@@ -117,7 +117,9 @@ static inline void* mmap(void* addr, size_t len, int prot, int flags,
 
     // Bodo Change: Don't commit memory upfront
     // https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-createfilemappinga
-    fm = CreateFileMapping(h, NULL, protect | SEC_RESERVE, dwMaxSizeHigh,
+    const DWORD protect_reserve = protect | (flags & SEC_RESERVE);
+
+    fm = CreateFileMapping(h, NULL, protect_reserve, dwMaxSizeHigh,
                            dwMaxSizeLow, NULL);
 
     if (fm == NULL) {

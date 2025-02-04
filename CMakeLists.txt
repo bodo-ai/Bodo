@@ -232,7 +232,6 @@ endif()
 find_package(CURL REQUIRED)
 find_package(OpenSSL REQUIRED)
 
-
 # ----------------------------- Download Apache Datasketches -------------------------
 include(ExternalProject)
 ExternalProject_Add(datasketches
@@ -273,7 +272,7 @@ find_package(HDF5 REQUIRED COMPONENTS C HL)
 cmake_print_variables(CMAKE_BUILD_TYPE)
 if (NOT CMAKE_BUILD_TYPE)
     message(STATUS "No build type selected, default to RelWithDebInfo")
-    set(CMAKE_BUILD_TYPE "RelWithDebInfo")
+    set(CMAKE_BUILD_TYPE "DebugSanitize")
 endif()
 
 # Ensure We are Inside a Conda Environment
@@ -720,6 +719,7 @@ if (NOT (CMAKE_BUILD_TYPE STREQUAL "Release") AND NOT DEFINED ENV{BODO_SKIP_CPP_
     "bodo/tests/test_sorted_window_computation.cpp"
     "bodo/tests/test_thread_pool.cpp"
     "bodo/tests/test_datatypes.cpp"
+    "bodo/tests/test_mman.cpp"
   )
   if (BUILD_WITH_V8)
       set(test_list "${test_list}"
