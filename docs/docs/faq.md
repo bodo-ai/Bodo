@@ -111,7 +111,7 @@ We plan to investigate and provide a solution.
 
 Yes, Bodo is particularly good at accelerating UDFs in Pandas APIs such as `DataFrame.apply` and `Series.map`.
 
-### What is the difference between the open source compute enginee and the Bodo Cloud Platform?
+### What is the difference between the open source compute engine and the Bodo Cloud Platform?
 
 The Bodo Cloud Platform simplifies managing compute clusters, notebooks and jobs that use the Bodo engine.
 Bodo Cloud Platform currently supports AWS and Azure.
