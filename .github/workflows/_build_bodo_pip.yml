@@ -59,13 +59,6 @@ jobs:
         if: contains(inputs.os, 'macos')
         run: |
           pixi global install sccache
-      # TODO: Remove once the self-hosted runners use Ubuntu
-      - name: Install Pipx on Self-Hosted Runner
-        if: inputs.name == 'linux-arm'
-        run: |
-          sudo dnf install -y python3-pip
-          python3 -m pip install --user pipx
-          python3 -m pipx ensurepath 
 
       - name: Build Wheels
         run: ${{ contains(inputs.os, 'macos') && 'pipx' || 'python3 -m pipx' }} run cibuildwheel==2.22.0
