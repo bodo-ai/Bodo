@@ -2042,8 +2042,8 @@ std::string BufferPool::oom_err_msg(uint64_t requested_bytes) const {
     }
 
     // If the % of memory allowed is too low, consider increasing it
-    if (!options_.remote_mode &&
-        total_bytes_needed < (options_.sys_mem_mib * 1024 * 1024)) {
+    if (!options_.remote_mode && static_cast<int64_t>(total_bytes_needed) <
+                                     (options_.sys_mem_mib * 1024 * 1024)) {
         auto set_percent = 100.0 * static_cast<double>(options_.memory_size) /
                            static_cast<double>(options_.sys_mem_mib);
         auto min_limit = 100.0 * static_cast<double>(total_bytes_needed) /
