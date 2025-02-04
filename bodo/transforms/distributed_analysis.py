@@ -1692,7 +1692,7 @@ class DistributedAnalysis:
                     self.typemap, rhs.args[0].name, lhs, array_dists
                 )
 
-            assert is_array_typ(self.typemap[rhs.args[1].name][0])
+            assert is_array_typ(self.typemap[rhs.args[1].name])
 
             # if arg0 is replicated, then we must force arg1 to be replicated as well
             if is_REP(array_dists.get(rhs.args[0].name, None)):
