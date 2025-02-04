@@ -302,10 +302,14 @@ open class RexToBodoTranslator(
             SqlKind.SEARCH -> {
                 // Note the valid use of Search args are enforced by the
                 // SearchArgExpandProgram.
+
+                // Ensure the the second arg is a Sarg
                 assert(node.operands[1] is RexLiteral)
                 val argOneLiteral = node.operands[1] as RexLiteral
                 assert(argOneLiteral.value is Sarg<*>)
                 val sarg = argOneLiteral.value as Sarg<*>
+                // Get the nullAs parameter from the Sarg
+                // as a Expr
                 val nullAs =
                     when (sarg.nullAs) {
                         RexUnknownAs.TRUE -> {
@@ -321,6 +325,8 @@ open class RexToBodoTranslator(
 
                 val visitedArgs = visitList(node.operands)
                 val args = visitedArgs.toMutableList()
+                // Add the Expr of Sarg.nullAs as the last arg
+                // to is_in
                 args.add(nullAs)
                 return bodoSQLKernel("is_in", args)
             }
