@@ -17,8 +17,8 @@ jobs:
     outputs:
       # https://docs.github.com/en/actions/learn-github-actions/expressions#contains
       # contains is case-insensitive
-      run_tests: ${{ contains(steps.check_msg.outputs.commit_message, '[run ci]') }}
-      run_bodosql_customer_tests: ${{ steps.changes.outputs.bodosql_customer_tests }}
+      run_tests: ${{ contains(steps.check_msg.outputs.commit_message, '[run ci]') || github.event_name == 'workflow_dispatch' }}
+      run_bodosql_customer_tests: ${{ steps.changes.outputs.bodosql_customer_tests || github.event_name == 'workflow_dispatch' }}
 
     steps:
       - uses: actions/checkout@v4
