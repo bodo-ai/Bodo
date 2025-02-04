@@ -61,6 +61,7 @@ import org.apache.calcite.rex.RexShuttle
 import org.apache.calcite.rex.RexSlot
 import org.apache.calcite.rex.RexSubQuery
 import org.apache.calcite.rex.RexTableInputRef
+import org.apache.calcite.rex.RexUnknownAs
 import org.apache.calcite.rex.RexVisitor
 import org.apache.calcite.sql.SqlBinaryOperator
 import org.apache.calcite.sql.SqlFunction
@@ -81,6 +82,7 @@ import org.apache.calcite.sql.type.BodoSqlTypeUtil
 import org.apache.calcite.sql.type.BodoTZInfo
 import org.apache.calcite.sql.type.SqlTypeFamily
 import org.apache.calcite.sql.type.SqlTypeName
+import org.apache.calcite.util.Sarg
 import java.math.BigDecimal
 import java.util.Locale
 
@@ -300,7 +302,32 @@ open class RexToBodoTranslator(
             SqlKind.SEARCH -> {
                 // Note the valid use of Search args are enforced by the
                 // SearchArgExpandProgram.
-                val args = visitList(node.operands)
+
+                // Ensure the the second arg is a Sarg
+                assert(node.operands[1] is RexLiteral)
+                val argOneLiteral = node.operands[1] as RexLiteral
+                assert(argOneLiteral.value is Sarg<*>)
+                val sarg = argOneLiteral.value as Sarg<*>
+                // Get the nullAs parameter from the Sarg
+                // as a Expr
+                val nullAs =
+                    when (sarg.nullAs) {
+                        RexUnknownAs.TRUE -> {
+                            Expr.BooleanLiteral(true)
+                        }
+                        RexUnknownAs.FALSE -> {
+                            Expr.BooleanLiteral(false)
+                        }
+                        else -> {
+                            Expr.None
+                        }
+                    }
+
+                val visitedArgs = visitList(node.operands)
+                val args = visitedArgs.toMutableList()
+                // Add the Expr of Sarg.nullAs as the last arg
+                // to is_in
+                args.add(nullAs)
                 return bodoSQLKernel("is_in", args)
             }
 
@@ -650,6 +677,10 @@ open class RexToBodoTranslator(
         val inputType = operation.operands[0].type
         val outputType = operation.getType()
         val operands = this.visitList(operation.getOperands())
+        // If both types are interval types, we can skip the cast.
+        if (inputType.intervalQualifier != null && outputType.intervalQualifier != null) {
+            return operands[0]
+        }
         val fnName = getConversionName(outputType, isSafe)
         val (precision, scale) =
             if (SqlTypeFamily.EXACT_NUMERIC.contains(outputType)) {
@@ -824,6 +855,12 @@ open class RexToBodoTranslator(
         streamingNamedArgs: List<Pair<String, Expr>>,
     ): Expr {
         val fnName = getConversionName(outputType, false)
+
+        // If both types are interval types, we can skip the cast.
+        if (inputType.intervalQualifier != null && outputType.intervalQualifier != null) {
+            return arg
+        }
+
         val (precision, scale) =
             if (SqlTypeFamily.EXACT_NUMERIC.contains(outputType)) {
                 Pair(outputType.precision, outputType.scale)
