@@ -42,7 +42,11 @@ def compress_file(fname, dummy_extension=""):
             os.rename(fname + ".bz2", fname + ".bz2" + dummy_extension)
             os.rename(fname + ".zst", fname + ".zst" + dummy_extension)
     bodo.barrier()
-    return [fname + ".gz" + dummy_extension, fname + ".bz2" + dummy_extension]
+    return [
+        fname + ".gz" + dummy_extension,
+        fname + ".bz2" + dummy_extension,
+        fname + ".zst" + dummy_extension,
+    ]
 
 
 def remove_files(file_names):
