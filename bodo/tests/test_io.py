@@ -36,9 +36,11 @@ def compress_file(fname, dummy_extension=""):
     if bodo.get_rank() == 0:
         subprocess.run(["gzip", "-k", "-f", fname])
         subprocess.run(["bzip2", "-k", "-f", fname])
+        subprocess.run(["zstd", "-k", "-f", fname])
         if dummy_extension != "":
             os.rename(fname + ".gz", fname + ".gz" + dummy_extension)
             os.rename(fname + ".bz2", fname + ".bz2" + dummy_extension)
+            os.rename(fname + ".zst", fname + ".zst" + dummy_extension)
     bodo.barrier()
     return [fname + ".gz" + dummy_extension, fname + ".bz2" + dummy_extension]
 

@@ -23,6 +23,7 @@ def compress_file(fname):
     if bodo.get_rank() == 0:
         subprocess.run(["gzip", "-k", "-f", fname])
         subprocess.run(["bzip2", "-k", "-f", fname])
+        subprocess.run(["zstd", "-k", "-f", fname])
     bodo.barrier()
     return [fname + ".gz", fname + ".bz2"]
 
