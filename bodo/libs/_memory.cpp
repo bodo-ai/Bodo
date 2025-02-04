@@ -12,6 +12,7 @@
 // The source header has to be included by _memory.cpp so that it's available in
 // the memory shared object and the main extension shared object.
 #include <boost/json/src.hpp>
+#include "_distributed.h"
 
 #ifdef __linux__
 // Needed for 'malloc_trim'
@@ -656,6 +657,7 @@ BufferPoolOptions BufferPoolOptions::Defaults() {
             auto storage_option = StorageOptions::Defaults(i);
             if (storage_option != nullptr) {
                 storage_option->tracing_mode = options.tracing_mode();
+                storage_option->debug_mode = options.debug_mode;
                 options.storage_options.push_back(storage_option);
             } else {
                 break;
@@ -715,9 +717,10 @@ BufferPoolOptions BufferPoolOptions::Defaults() {
         // amounts of memory pressure or heavy swapping, since it's not shared.
         // However, on local systems, like a laptop, we should be more careful.
         // TODO(srilman): Remove when we configure default spill support.
-        if (const char* bodo_mode_ =
+        if (const char* remote_mode_ =
                 std::getenv("BODO_BUFFER_POOL_REMOTE_MODE")) {
-            if (!std::strcmp(bodo_mode_, "1")) {
+            if (!std::strcmp(remote_mode_, "1")) {
+                options.remote_mode = true;
                 // Its useful to have more large size classes available for
                 // skewed data We let the OS handle memory pressure and trigger
                 // OOMs. But if spilling is enabled, skew can be spilled instead
@@ -1105,8 +1108,10 @@ arrow::Result<bool> BufferPool::best_effort_evict_helper(const uint64_t bytes) {
     } else {
         if (this->options_.enforce_max_limit_during_allocation) {
             return ::arrow::Status::OutOfMemory(
-                "Spilling is not available to free up sufficient space in "
-                "memory!");
+                this->options_.debug_mode ? "Spilling is not available to free "
+                                            "up sufficient space in "
+                                            "memory!"
+                                          : this->oom_err_msg(bytes));
         } else if (this->options_.debug_mode) {
             // Raise a warning if debug mode is enabled.
             std::cerr
@@ -1139,8 +1144,8 @@ arrow::Result<bool> BufferPool::best_effort_evict_helper(const uint64_t bytes) {
     // Copied from Arrow (they are probably just being conservative for
     // compatibility with 32-bit architectures).
     if (static_cast<uint64_t>(size) >= std::numeric_limits<size_t>::max()) {
-        return ::arrow::Status::OutOfMemory(
-            "malloc size (" + std::to_string(size) + ") overflows size_t");
+        return ::arrow::Status::Invalid("malloc size (" + std::to_string(size) +
+                                        ") overflows size_t");
     }
 
     // If size 0 allocation, point to a pre-defined area (same as Arrow)
@@ -1165,13 +1170,22 @@ arrow::Result<bool> BufferPool::best_effort_evict_helper(const uint64_t bytes) {
 
         // If non-pinned memory is less than needed, immediately fail
         // if enforce_max_limit_during_allocation is set.
+        auto available_bytes = static_cast<int64_t>(this->memory_size_bytes_) -
+                               static_cast<int64_t>(this->bytes_pinned());
         if (this->options_.enforce_max_limit_during_allocation &&
-            aligned_size > (static_cast<int64_t>(this->memory_size_bytes_) -
-                            static_cast<int64_t>(this->bytes_pinned()))) {
-            return ::arrow::Status::OutOfMemory(
-                "Allocation failed. Not enough space in the buffer pool to "
-                "allocate (" +
-                std::to_string(size) + ").");
+            aligned_size > available_bytes) {
+            auto output_str =
+                options_.debug_mode
+                    ? (fmt::format(
+                          "Malloc canceled beforehand. Not enough space in the "
+                          "buffer pool to "
+                          "allocate (requested {}, aligned {}, available {}).",
+                          BytesToHumanReadableString(size),
+                          BytesToHumanReadableString(aligned_size),
+                          BytesToHumanReadableString(available_bytes)))
+                    : this->oom_err_msg(aligned_size);
+
+            return ::arrow::Status::OutOfMemory(output_str);
         }
 
         // Note that this can be negative if max limit isn't
@@ -1258,13 +1272,22 @@ arrow::Result<bool> BufferPool::best_effort_evict_helper(const uint64_t bytes) {
 
         // If non-pinned memory is less than needed, immediately fail
         // if enforce_max_limit_during_allocation is set.
+        auto available_bytes = static_cast<int64_t>(this->memory_size_bytes_) -
+                               static_cast<int64_t>(this->bytes_pinned());
         if (this->options_.enforce_max_limit_during_allocation &&
-            size_class_bytes > (static_cast<int64_t>(this->memory_size_bytes_) -
-                                static_cast<int64_t>(this->bytes_pinned()))) {
-            return ::arrow::Status::OutOfMemory(
-                "Allocation failed. Not enough space in the buffer pool to "
-                "allocate (" +
-                std::to_string(size) + ").");
+            size_class_bytes > available_bytes) {
+            auto output_str =
+                options_.debug_mode
+                    ? (fmt::format(
+                          "Allocation canceled beforehand. Not enough space in "
+                          "the buffer pool to "
+                          "allocate (requested {}, aligned {}, available {}).",
+                          BytesToHumanReadableString(size),
+                          BytesToHumanReadableString(aligned_size),
+                          BytesToHumanReadableString(available_bytes)))
+                    : this->oom_err_msg(aligned_size);
+
+            return ::arrow::Status::OutOfMemory(output_str);
         }
 
         // Note that this can be negative if max limit isn't
@@ -1299,9 +1322,13 @@ arrow::Result<bool> BufferPool::best_effort_evict_helper(const uint64_t bytes) {
         int64_t frame_idx =
             this->size_classes_[size_class_idx]->AllocateFrame(out);
         if (frame_idx == -1) {
-            return ::arrow::Status::OutOfMemory(fmt::format(
-                "Could not find an empty frame of required size ({})!",
-                this->size_class_bytes_[size_class_idx]));
+            auto requested_bytes = this->size_class_bytes_[size_class_idx];
+            return ::arrow::Status::OutOfMemory(
+                this->options_.debug_mode
+                    ? fmt::format("Could not find an empty frame of required "
+                                  "size ({})!",
+                                  requested_bytes)
+                    : this->oom_err_msg(requested_bytes));
         }
 
         *out = this->size_classes_[size_class_idx]->getFrameAddress(frame_idx);
@@ -1524,8 +1551,8 @@ int64_t BufferPool::get_bytes_freed_through_malloc_since_last_trim() const {
                                         ") requested.");
     }
     if (static_cast<uint64_t>(new_size) >= std::numeric_limits<size_t>::max()) {
-        return ::arrow::Status::OutOfMemory(
-            "realloc (" + std::to_string(new_size) + ") overflows size_t");
+        return ::arrow::Status::Invalid("realloc (" + std::to_string(new_size) +
+                                        ") overflows size_t");
     }
 
     uint8_t* old_memory_ptr = *ptr;
@@ -1672,8 +1699,10 @@ int64_t BufferPool::get_bytes_freed_through_malloc_since_last_trim() const {
              (static_cast<int64_t>(this->memory_size_bytes_) -
               static_cast<int64_t>(this->bytes_pinned())))) {
             return ::arrow::Status::OutOfMemory(
-                "Pin failed. Not enough space in the buffer pool to pin " +
-                std::to_string(size) + " bytes.");
+                this->options_.debug_mode ? "Pin failed. Not enough space in "
+                                            "the buffer pool to pin " +
+                                                std::to_string(size) + " bytes."
+                                          : this->oom_err_msg(block_bytes));
         }
 
         // Note that this can be negative if max limit isn't
@@ -1696,7 +1725,9 @@ int64_t BufferPool::get_bytes_freed_through_malloc_since_last_trim() const {
             // Should be impossible at this point unless max limit enforcement
             // is disabled.
             return ::arrow::Status::OutOfMemory(
-                "Pin failed. Unable to find available frame");
+                this->options_.debug_mode
+                    ? "Pin failed. Unable to find available frame"
+                    : this->oom_err_msg(block_bytes));
         }
 
         // Load Block from Storage into Frame
@@ -1972,6 +2003,85 @@ boost::json::object BufferPool::get_stats() const {
     }
 
     return out_stats;
+}
+
+std::string BufferPool::oom_err_msg(uint64_t requested_bytes) const {
+    auto total_bytes_needed =
+        this->stats_.curr_bytes_in_memory + requested_bytes;
+    std::vector<std::string> fix_msgs;
+
+    // Spill Configuration Suggestions
+    // Note that the spill suggestions are sparse because we need more details
+    // about the workload to make more specific suggestions.
+    // TODO: Improve suggestions with Python spill support
+    if (options_.storage_options.size() > 0) {
+        fix_msgs.emplace_back(
+            "If you're using BodoSQL, consider increasing the size of your "
+            "spill directory. In addition, consider adding a second spill "
+            "directory to AWS S3 or Azure ABFS.");
+    } else {
+        fix_msgs.emplace_back(
+            "If you're using BodoSQL, consider enabling spilling to disk or "
+            "object store (S3 / ABFS).");
+    }
+
+    // Use a larger cluster
+    fix_msgs.emplace_back(fmt::format(
+        "Consider using a larger machine or cluster with at least {} of "
+        "memory. Note, this is only an estimate based on the current state.",
+        BytesToHumanReadableString(total_bytes_needed * dist_get_size())));
+
+    // On remote clusters, we can use more resources because OS OOMs are not as
+    // bad
+    if (!options_.remote_mode) {
+        fix_msgs.emplace_back(
+            "If you're running Bodo on a remote cluster, set "
+            "`BODO_BUFFER_POOL_REMOTE_MODE=1` so it can use more resources "
+            "without concern. Note that this may lead to OS OOMs if the "
+            "cluster is under-provisioned.");
+    }
+
+    // If the % of memory allowed is too low, consider increasing it
+    if (!options_.remote_mode &&
+        total_bytes_needed < (options_.sys_mem_mib * 1024 * 1024)) {
+        auto set_percent = 100.0 * static_cast<double>(options_.memory_size) /
+                           static_cast<double>(options_.sys_mem_mib);
+        auto min_limit = 100.0 * static_cast<double>(total_bytes_needed) /
+                         static_cast<double>(options_.sys_mem_mib);
+
+        fix_msgs.emplace_back(fmt::format(
+            "Only {}% of the total memory available is allocated to Bodo. "
+            "Increase this limit to {}% by setting env "
+            "`BODO_BUFFER_POOL_MEMORY_USABLE_PERCENT={}`. This will increase "
+            "the chance of OS OOMs or other system issues, so do with caution. "
+            "We recommend a max of 95% only if other applications are closed.",
+            set_percent, min_limit, static_cast<int64_t>(min_limit)));
+    }
+
+    // Worst case, just disable buffer pool checks
+    if (this->options_.enforce_max_limit_during_allocation) {
+        fix_msgs.emplace_back(
+            "Set env `BODO_BUFFER_POOL_ENFORCE_MAX_ALLOCATION_LIMIT=0` so Bodo "
+            "doesn't detect OOMs. Note that this can easily lead to OS OOMs or "
+            "other major system issues like slowdowns or hangs. Please use as "
+            "a last resort.");
+    }
+
+    auto base_str = fmt::format(
+        "Bodo detected an out-of-memory error. Rank {}/{} requires {} of "
+        "memory ({} in use + {} requested) but only has {} available. To "
+        "address the issue:\n",
+        dist_get_rank(), dist_get_size(),
+        BytesToHumanReadableString(total_bytes_needed),
+        BytesToHumanReadableString(this->stats_.curr_bytes_in_memory),
+        BytesToHumanReadableString(requested_bytes),
+        BytesToHumanReadableString(this->memory_size_bytes_));
+
+    for (auto& fix_msg : fix_msgs) {
+        base_str += fmt::format("  - {}\n", fix_msg);
+    }
+
+    return base_str;
 }
 
 /// Helper Functions for using BufferPool in Arrow

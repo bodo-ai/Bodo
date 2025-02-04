@@ -228,9 +228,10 @@ inline void buffer_pool_aligned_data_alloc(size_t size, unsigned align,
     // Using the default value at Free/Realloc time and using another
     // value at Alloc time can lead to issues since the BufferPool might
     // calculate the sizes incorrectly and search in the incorrect SizeClass.
-    CHECK_ARROW_MEM(
-        pool->Allocate(size, reinterpret_cast<uint8_t **>(&(mi->data))),
-        "Allocation failed!");
+    auto status =
+        pool->Allocate(size, reinterpret_cast<uint8_t **>(&(mi->data)));
+
+    CHECK_ARROW_MEM(status, "Allocation failed!");
     // Update stats for memory_leak_check.
     NRT_MemSys::instance()->stats_alloc++;
 }
