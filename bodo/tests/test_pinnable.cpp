@@ -113,8 +113,7 @@ void simple_pin(const std::string &nm, Args &&...args) {
         bodo::pinnable<T> pinnable;
         T ref;
 
-        // int seed = rand();
-        int seed = 1;
+        auto seed(rand());
 
         srand(seed);  // Need to keep the random seed the same for all three
                       // tests
@@ -259,31 +258,30 @@ void insert_erase_and_move_map(int count) {
 }
 
 static bodo::tests::suite tests([] {
+    // TODO: [BSE-4151] Test segfaulting on PR CI
     bodo::tests::test("pinnable_vector_uint32_t", [] {
-        // auto pool = bodo::BufferPool();
-        // auto allocator = bodo::PinnableAllocator<uint32_t>(&pool);
+        auto pool = bodo::BufferPool();
+        auto allocator = bodo::PinnableAllocator<uint32_t>(&pool);
 
-        // bodo::pinnable<bodo::vector<std::uint32_t>>::element_type initial(
-        //     allocator);
-        bodo::vector<uint32_t> initial;
-        for (std::uint32_t i = 0; i < 2399; ++i) {
-            // std::cout << i << std::endl;
+        bodo::pinnable<bodo::vector<std::uint32_t>>::element_type initial(
+            allocator);
+        for (std::uint32_t i = 0; i < 40000; ++i) {
             initial.push_back(i);
         };
 
-        // bodo::tests::check(
-        //     pool.bytes_allocated() ==
-        //     (int64_t)(pool.bytes_pinned()));  // Everything is pinned
+        bodo::tests::check(
+            pool.bytes_allocated() ==
+            (int64_t)(pool.bytes_pinned()));  // Everything is pinned
 
-        // bodo::pinnable<bodo::vector<std::uint32_t>>::element_type expected(
-        //     initial);
+        bodo::pinnable<bodo::vector<std::uint32_t>>::element_type expected(
+            initial);
 
-        // bodo::pinnable<bodo::vector<std::uint32_t>> pinnable_ints(
-        //     std::move(initial));
+        bodo::pinnable<bodo::vector<std::uint32_t>> pinnable_ints(
+            std::move(initial));
 
-        // bodo::tests::check(pool.bytes_allocated() ==
-        //                    (int64_t)(pool.bytes_pinned()));
-        // bodo::tests::check(*bodo::pin(pinnable_ints) == expected);
+        bodo::tests::check(pool.bytes_allocated() >
+                           (int64_t)(pool.bytes_pinned()));
+        bodo::tests::check(*bodo::pin(pinnable_ints) == expected);
     });
 
     bodo::tests::test("simple_insert", [] {
