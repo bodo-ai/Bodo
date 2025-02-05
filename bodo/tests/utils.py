@@ -2663,7 +2663,7 @@ def get_rest_catalog_connection_string(
     auth_param = (
         f"credential={credential}" if credential is not None else f"token={token}"
     )
-    return f"iceberg+{rest_uri.replace('https://', 'REST://')}?{auth_param}&warehouse={warehouse}"
+    return f"iceberg+{rest_uri}?{auth_param}&warehouse={warehouse}"
 
 
 def snowflake_cred_env_vars_present(user: int = 1) -> bool:
@@ -2782,6 +2782,8 @@ def create_polaris_iceberg_table(
         str: The final table name.
     """
     import bodo_iceberg_connector as bic
+
+    raise NotImplementedError("Polaris Iceberg table creation is not yet supported")
 
     comm = MPI.COMM_WORLD
     iceberg_table_name = None
