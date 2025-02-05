@@ -1179,10 +1179,9 @@ arrow::Result<bool> BufferPool::best_effort_evict_helper(const uint64_t bytes) {
                     ? (fmt::format(
                           "Malloc canceled beforehand. Not enough space in the "
                           "buffer pool to "
-                          "allocate (requested {}, aligned {}, available {}).",
-                          BytesToHumanReadableString(size),
-                          BytesToHumanReadableString(aligned_size),
-                          BytesToHumanReadableString(available_bytes)))
+                          "allocate (requested {} bytes, aligned {} bytes, "
+                          "available {} bytes).",
+                          size, aligned_size, available_bytes))
                     : this->oom_err_msg(aligned_size);
 
             return ::arrow::Status::OutOfMemory(output_str);
@@ -1281,10 +1280,9 @@ arrow::Result<bool> BufferPool::best_effort_evict_helper(const uint64_t bytes) {
                     ? (fmt::format(
                           "Allocation canceled beforehand. Not enough space in "
                           "the buffer pool to "
-                          "allocate (requested {}, aligned {}, available {}).",
-                          BytesToHumanReadableString(size),
-                          BytesToHumanReadableString(aligned_size),
-                          BytesToHumanReadableString(available_bytes)))
+                          "allocate (requested {} bytes, aligned {} bytes, "
+                          "available {} bytes).",
+                          size, aligned_size, available_bytes))
                     : this->oom_err_msg(aligned_size);
 
             return ::arrow::Status::OutOfMemory(output_str);
