@@ -51,7 +51,7 @@ def is_in_set_null_overload(arr_to_check, out_arr, null_as):
 
 
 def is_in(
-    arr_to_check, arr_search_vals, null_as, is_parallel=False
+    arr_to_check, arr_search_vals, null_as=None, is_parallel=False
 ):  # pragma: no cover
     pass
 
