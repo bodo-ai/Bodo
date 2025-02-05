@@ -117,7 +117,7 @@ std::shared_ptr<array_info> get_sample_struct(size_t nfields = 1) {
     // Create the array item array with one child array
     auto struct_arr = alloc_struct(10, children);
     // Name the fields alphabetically
-    for (size_t i = 0; i < nfields; ++i) {
+    for (uint64_t i = 0; i < nfields; ++i) {
         struct_arr->field_names.emplace_back(i / 26 + 1, 'a' + i % 26);
     }
     return struct_arr;

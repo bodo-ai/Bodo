@@ -708,14 +708,14 @@ if (NOT (CMAKE_BUILD_TYPE STREQUAL "Release") AND NOT DEFINED ENV{BODO_SKIP_CPP_
     "bodo/tests/test_table_generator.cpp"
     "bodo/tests/test_test_framework.cpp"
     "bodo/tests/test_timestamptz_parser.cpp"
-    # "bodo/tests/test_nested_array.cpp"
+    "bodo/tests/test_nested_array.cpp"
     "bodo/tests/test_streaming/test_shuffle.cpp"
     "bodo/tests/test_streaming/test_groupby_shuffle.cpp"
     "bodo/tests/test_timestamptz_array.cpp"
     "bodo/tests/test_query_profile_collector.cpp"
     "bodo/tests/test_theta_sketches.cpp"
     "bodo/tests/test_puffin.cpp"
-    # "bodo/tests/test_iceberg/test_iceberg_rest_aws_credentials_provider.cpp"
+    "bodo/tests/test_iceberg/test_iceberg_rest_aws_credentials_provider.cpp"
     "bodo/tests/test_sorted_window_computation.cpp"
     "bodo/tests/test_thread_pool.cpp"
     "bodo/tests/test_datatypes.cpp"
@@ -731,12 +731,9 @@ if (NOT (CMAKE_BUILD_TYPE STREQUAL "Release") AND NOT DEFINED ENV{BODO_SKIP_CPP_
     "bodo/tests/test_puffin.cpp"
     "bodo/tests/test_theta_sketches.cpp")
 endif()
-message(STATUS "#################################CHECKING FOR HDFS: $ENV{NO_HDF5}")
 if(DEFINED ENV{NO_HDF5} AND "$ENV{NO_HDF5}" STREQUAL "1")
-    message(STATUS "IT WAS SET")
     set(NO_HDF5 TRUE)
 else()
-    message(STATUS "IT WAS NOT SET")
     list(APPEND sources_list "bodo/io/_hdf5.cpp")
     set(NO_HDF5 FALSE)
 endif()
@@ -808,8 +805,6 @@ if (WIN32)
   target_compile_options(
     ext
     PRIVATE
-    # "/permissive-" # ignore override not overriding method in the base class error.
-    # "/Wall"
   )
 else()
   target_compile_options(
