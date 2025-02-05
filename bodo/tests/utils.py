@@ -2762,19 +2762,19 @@ def create_snowflake_iceberg_table(
 
 
 @contextmanager
-def create_tabular_iceberg_table(
+def create_polaris_iceberg_table(
     df: pd.DataFrame, base_table_name: str, warehouse: str, schema: str, credential: str
 ) -> Generator[str, None, None]:
-    """Creates a new Iceberg table in Tabular derived from the base table name
+    """Creates a new Iceberg table in polaris derived from the base table name
     and using the DataFrame.
 
-    Returns the name of the table added to Tabular.
+    Returns the name of the table added to polaris.
 
     Args:
         df (pd.DataFrame): DataFrame to insert
         base_table_name (str): Base string for generating the table name.
-        warehouse (str): Name of the Tabular warehouse
-        schema (str): Name of the Tabular schema
+        warehouse (str): Name of the polaris warehouse
+        schema (str): Name of the polaris schema
         credential (str): Credential to authenticate
 
 
@@ -2796,7 +2796,7 @@ def create_tabular_iceberg_table(
         def write_table(df, table_name, schema, con_str):
             df.to_sql(table_name, con=con_str, schema=schema, if_exists="replace")
 
-        con_str = f"iceberg+REST://api.tabular.io/ws?credential={credential}&warehouse={warehouse}"
+        con_str = f"iceberg+REST://api.polaris.io/ws?credential={credential}&warehouse={warehouse}"
         write_table(_get_dist_arg(df), iceberg_table_name, schema, con_str)
         table_written = True
 
@@ -3111,20 +3111,17 @@ pytest_one_rank = [
 ]
 
 
-tabular_markers = (
-    pytest.mark.tabular,
+polaris_markers = (
+    pytest.mark.polaris,
     pytest.mark.iceberg,
-    pytest.mark.skip(
-        "Tabular's platform is deactivated, we will replace these with Polaris"
-    ),
 )
 
 # Decorate
-pytest_mark_tabular = compose_decos(tabular_markers)
+pytest_mark_polaris = compose_decos(polaris_markers)
 
 
 # This is for using a "mark" or marking a whole file.
-pytest_tabular = list(tabular_markers)
+pytest_polaris = list(polaris_markers)
 
 
 glue_markers = (

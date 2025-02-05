@@ -4,6 +4,7 @@ import glob
 import hashlib
 import operator
 import os
+import random
 import shutil
 import subprocess
 import time
@@ -251,6 +252,80 @@ def group_from_hash(testname, num_groups):
     hash_val = hashlib.sha1(testname.encode("utf-8")).digest()
     int_hash = int.from_bytes(hash_val) % num_groups
     return str(int_hash)
+
+
+@pytest.fixture(scope="session")
+def polaris_server():
+    """
+    Install Polaris if it is not already installed.
+    Start Polaris server if it is not already running.
+    Returns the host port, and credentials of the server.
+    """
+    # Check if Polaris server is already running
+    try:
+        subprocess.run(["docker", "inspect", "polaris-server-unittests"], check=True)
+        # Kill it if it is running
+        subprocess.run(["docker", "stop", "polaris-server-unittests"], check=True)
+    except subprocess.CalledProcessError:
+        # Polaris server is not running, ignore the error
+        pass
+
+    # Start Polaris server
+    # Once Polaris publishes their own docker image, we can use that instead of ours
+    # https://github.com/apache/polaris/issues/152
+    subprocess.run(
+        [
+            "docker",
+            "run",
+            "-d",
+            "--health-cmd",
+            "curl http://localhost:8182/healthcheck",
+            "--health-interval",
+            "2s",
+            "--health-retries",
+            "5",
+            "--health-timeout",
+            "10s",
+            "-e",
+            "quarkus.otel.sdk.disabled=true",
+            "-e",
+            "POLARIS_BOOTSTRAP_CREDENTIALS=default-realm,root,s3cr3t",
+            "-e",
+            "polaris.realm-context.realms=default-realm",
+            "-p",
+            "8181:8181",
+            "-p",
+            "8282:8282",
+            "--name",
+            "polaris-server-unittests",
+            "427443013497.dkr.ecr.us-east-2.amazonaws.com/polaris:latest",
+        ],
+        check=True,
+    )
+    # Wait for Polaris server to start
+    while (
+        "healthy"
+        not in subprocess.run(
+            [
+                "docker",
+                "ps",
+                "--filter",
+                "name=polaris-server-unittests",
+                "--format",
+                "{{.Status}}",
+            ],
+            capture_output=True,
+            text=True,
+        )
+        .stdout.strip()
+        .lower()
+    ):
+        time.sleep(1)
+    yield "localhost", 8181, "root", "s3cr3t"
+
+    # Stop Polaris server
+    subprocess.run(["docker", "stop", "polaris-server-unittests"], check=True)
+    subprocess.run(["docker", "rm", "polaris-server-unittests"], check=True)
 
 
 @pytest.fixture(scope="session")
@@ -800,26 +875,107 @@ def pytest_collect_file(parent, file_path: Path):
         )
 
 
-def get_tabular_connection(tabular_credential: str):
-    return (
-        "https://api.tabular.io/ws",
-        os.getenv("TABULAR_WAREHOUSE", "Bodo-Test-Iceberg-Warehouse"),
-        os.getenv("TABULAR_CREDENTIAL"),
+@pytest.fixture(scope="session")
+def polaris_catalog_api_client(polaris_server):
+    """
+    Configure the polaris client to connect to the polaris server
+    """
+    # Install the polaris client if it is not already installed
+    # This is a temporary solution until the polaris client is published
+    # https://github.com/apache/polaris/issues/19
+    try:
+        subprocess.run(["pip", "show", "polaris.management"], check=True)
+    except subprocess.CalledProcessError:
+        subprocess.run(
+            [
+                "pip",
+                "install",
+                "git+https://github.com/apache/polaris.git#subdirectory=regtests/client/python",
+            ]
+        )
+    host, port, user, password = polaris_server
+    from polaris.catalog.api_client import ApiClient as CatalogApiClient
+    from polaris.catalog.api_client import (
+        Configuration as CatalogApiClientConfiguration,
+    )
+
+    client = CatalogApiClient(
+        CatalogApiClientConfiguration(
+            username=user, password=password, host=f"http://{host}:{port}/api/catalog"
+        )
+    )
+    return client
+
+
+@pytest.fixture
+def polaris_token(polaris_catalog_api_client, polaris_server):
+    """
+    Fixture to get a polaris access token
+    """
+    from polaris.catalog.api.iceberg_o_auth2_api import IcebergOAuth2API
+
+    _, _, user, password = polaris_server
+    oauth_api = IcebergOAuth2API(polaris_catalog_api_client)
+    token = oauth_api.get_token(
+        scope="PRINCIPAL_ROLE:ALL",
+        client_id=user,
+        client_secret=password,
+        grant_type="client_credentials",
+        _headers={"realm": "default-realm"},
+    )
+    return token
+
+
+@pytest.fixture
+def aws_polaris_warehouse(polaris_token, polaris_server):
+    """
+    Configure an S3 warehouse in the polaris server
+    """
+    from polaris.management import (
+        ApiClient,
+        AwsStorageConfigInfo,
+        Catalog,
+        Configuration,
+        CreateCatalogRequest,
+        PolarisDefaultApi,
+    )
+
+    host, port, _, _ = polaris_server
+
+    client = ApiClient(
+        Configuration(
+            access_token=polaris_token.access_token,
+            host=f"http://{host}:{port}/api/management/v1",
+        )
+    )
+    root_client = PolarisDefaultApi(client)
+    storage_conf = AwsStorageConfigInfo(
+        role_arn="arn:aws:iam::427443013497:role/Polaris-Unittests", storage_type="S3"
+    )
+    catalog_name = "aws_polaris_warehouse"
+    suffix = "".join(random.choices("abcdefghijklmnopqrstuvwxyz", k=10))
+    catalog = Catalog(
+        name=catalog_name,
+        type="EXTERNAL",
+        properties={"default-base-location": f"s3://polaris-unittests/{suffix}"},
+        storage_config_info=storage_conf,
+    )
+    root_client.create_catalog(
+        create_catalog_request=CreateCatalogRequest(catalog=catalog)
     )
 
 
 @pytest.fixture
-def tabular_connection(request):
+def polaris_connection(request, polaris_server, aws_polaris_warehouse):
     """
-    Fixture to create a connection to the tabular warehouse.
+    Fixture to create a connection to the polaris warehouse.
     Returns the catalog url, warehouse name, and credential.
     """
-    assert "TABULAR_CREDENTIAL" in os.environ, "TABULAR_CREDENTIAL is not set"
     assert (
-        request.node.get_closest_marker("tabular") is not None
-    ), "tabular marker not set"
+        request.node.get_closest_marker("polaris") is not None
+    ), "polaris marker not set"
     # Unset the AWS credentials to avoid using them
-    # to confirm that the tests are getting aws credentials from Tabular
+    # to confirm that the tests are getting aws credentials from polaris
     with temp_env_override(
         {
             "AWS_ACCESS_KEY_ID": None,
@@ -827,14 +983,9 @@ def tabular_connection(request):
             "AWS_SESSION_TOKEN": None,
         }
     ):
-        yield get_tabular_connection(os.getenv("TABULAR_CREDENTIAL"))
-
-
-def pytest_runtest_setup(item):
-    tabular = len(list(item.iter_markers(name="tabular")))
-    if tabular:
-        if "TABULAR_CREDENTIAL" not in os.environ or "AGENT_NAME" not in os.environ:
-            pytest.skip("Tabular tests must be run on Azure CI")
+        host, port, user, password = polaris_server
+        url = f"http://{host}:{port}"
+        yield url, aws_polaris_warehouse, f"{user}:{password}"
 
 
 @pytest.fixture(
