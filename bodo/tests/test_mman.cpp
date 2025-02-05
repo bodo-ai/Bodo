@@ -20,7 +20,7 @@ void test_mmap_helper(bool reserve) {
     void* addr = mmap(nullptr, size, prot, flags, -1, 0);
 
     if (addr == MAP_FAILED) {
-        printf("uh oh\n");
+        bodo::tests::check(false);
         return;
     }
 

@@ -1160,9 +1160,6 @@ arrow::Result<bool> BufferPool::best_effort_evict_helper(const uint64_t bytes) {
 
 ::arrow::Status BufferPool::Allocate(int64_t size, int64_t alignment,
                                      uint8_t** out) {
-    printf("Allocating : (size, alignment, out) = (%ld, %ld, %p)\n", size,
-           alignment, out);
-
     if (size < 0) {
         return ::arrow::Status::Invalid("Negative allocation size (" +
                                         std::to_string(size) + ") requested.");
@@ -1196,8 +1193,6 @@ arrow::Result<bool> BufferPool::best_effort_evict_helper(const uint64_t bytes) {
     // lock will be released when the function ends (even if
     // there's an exception).
     std::scoped_lock lock(this->mtx_);
-
-    printf("%ld <= %ld ? \n", aligned_size, this->malloc_threshold_);
 
     if (aligned_size <= static_cast<int64_t>(this->malloc_threshold_)) {
         // Use malloc
@@ -1243,8 +1238,6 @@ arrow::Result<bool> BufferPool::best_effort_evict_helper(const uint64_t bytes) {
         void* result = alignment > kMinAlignment
                            ? aligned_alloc(alignment, aligned_size)
                            : ::malloc(aligned_size);
-        // printf("%d %d: %p\n", aligned_size, alignment > kMinAlignment,
-        // result);
         if (result == nullptr) {
             // XXX This is an unlikely branch, so it would
             // be good to indicate that to the compiler
@@ -1319,7 +1312,6 @@ arrow::Result<bool> BufferPool::best_effort_evict_helper(const uint64_t bytes) {
         // If available memory is less than needed, handle it based
         // on spilling config and buffer pool options.
         if (size_class_bytes > bytes_available_in_mem) {
-            printf("spilling...\n");
             int64_t rem_bytes = size_class_bytes - bytes_available_in_mem;
             CHECK_ARROW_MEM_RET(this->evict_handler(/*bytes*/ rem_bytes,
                                                     /*caller*/ "Allocate"),
@@ -1347,9 +1339,6 @@ arrow::Result<bool> BufferPool::best_effort_evict_helper(const uint64_t bytes) {
                 "Could not find an empty frame of required size ({})!",
                 this->size_class_bytes_[size_class_idx]));
         }
-
-        printf("frame idx: %d, size class idx: %d, size=%ld", frame_idx,
-               size_class_idx, size_class_bytes);
 
         *out = this->size_classes_[size_class_idx]->getFrameAddress(frame_idx);
 
@@ -1427,10 +1416,6 @@ std::tuple<bool, int64_t, int64_t, int64_t> BufferPool::get_alloc_details(
 void BufferPool::free_helper(uint8_t* ptr, bool is_mmap_alloc,
                              int64_t size_class_idx, int64_t frame_idx,
                              int64_t size_aligned, int64_t alignment) {
-    printf(
-        "Free (ptr, is_mmap, size idx, frame idx, size, align) : (%p, %d, %ld, "
-        "%ld, %ld, %ld) \n",
-        ptr, is_mmap_alloc, size_class_idx, frame_idx, size_aligned, alignment);
     bool frame_pinned;
     if (is_mmap_alloc) {
         frame_pinned =
@@ -1530,13 +1515,10 @@ void BufferPool::Free(uint8_t* buffer, int64_t size, int64_t alignment) {
     }
 
     // Add debug markers to indicate dead memory only for frames in memory.
-    // memset(buffer, 0xDE, std::min(size, (int64_t)256));
-    // printf("size %ld | alignment %ld", size, alignment);
+    memset(buffer, 0xDE, std::min(size, (int64_t)256));
 
     auto [is_mmap_alloc, size_class_idx, frame_idx, size_freed] =
         this->get_alloc_details(buffer, size, alignment);
-
-    // printf("is_mmap_alloc %d", is_mmap_alloc);
 
     this->free_helper(buffer, is_mmap_alloc, size_class_idx, frame_idx,
                       size_freed, alignment);
