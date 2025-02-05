@@ -94,7 +94,6 @@ botocore = "*"
 # Due to s3fs pinning aiobotocore and not regularly updating
 s3fs = ">=2022.1"
 adlfs = ">=2022.1"
-gcsfs = ">=2022.1"
 huggingface_hub = "*"
 # Databases
 pymysql = "*"
@@ -152,6 +151,8 @@ beautifulsoup4 = "*"
 snowflake-sqlalchemy = "*"
 # S3 Testing
 minio-server = "*"
+# GCS testing
+gcsfs = ">=2022.1"
 
 # Testing and CI Tools
 pytest = "*"

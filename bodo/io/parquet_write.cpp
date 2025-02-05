@@ -19,6 +19,8 @@
 #include <parquet/arrow/writer.h>
 #include <parquet/file_writer.h>
 
+#include "arrow_compat.h"
+
 #include "../libs/_array_hash.h"
 #include "../libs/_bodo_common.h"
 #include "../libs/_bodo_to_arrow.h"
@@ -230,6 +232,17 @@ int64_t pq_write(const char *_path_name,
     std::shared_ptr<::arrow::io::OutputStream> out_stream;
     Bodo_Fs::FsEnum fs_option;
 
+    // Filesystem object to use if arrow_fs not provided.
+    // Needs to be declared here so that it is not destroyed before
+    // write is done.
+    std::shared_ptr<arrow::fs::FileSystem> fs;
+
+    // Get filesystem object if not provided
+    if (arrow_fs == nullptr) {
+        fs = get_fs_for_path(_path_name, is_parallel, force_hdfs);
+        arrow_fs = fs.get();
+    }
+
     extract_fs_dir_path(_path_name, is_parallel, prefix, ".parquet", myrank,
                         num_ranks, &fs_option, &dirname, &fname, &orig_path,
                         &path_name, force_hdfs);
@@ -254,17 +267,11 @@ int64_t pq_write(const char *_path_name,
         return 0;
     }
 
-    // If we already have a filesystem, use it
-    if (arrow_fs != nullptr) {
-        std::filesystem::path out_path(dirname);
-        out_path /= fname;  // append file name to output path
-        arrow::Result<std::shared_ptr<arrow::io::OutputStream>> result =
-            arrow_fs->OpenOutputStream(out_path);
-        CHECK_ARROW_AND_ASSIGN(result, "FileOutputStream::Open", out_stream);
-    } else {
-        open_outstream(fs_option, is_parallel, "parquet", dirname, fname,
-                       orig_path, &out_stream, bucket_region);
-    }
+    std::filesystem::path out_path(dirname);
+    out_path /= fname;  // append file name to output path
+    arrow::Result<std::shared_ptr<arrow::io::OutputStream>> result =
+        arrow_fs->OpenOutputStream(out_path);
+    CHECK_ARROW_AND_ASSIGN(result, "FileOutputStream::Open", out_stream);
 
     auto pool = bodo::BufferPool::DefaultPtr();
 

@@ -633,9 +633,9 @@ pip install "s3fs>=2022.1.0"
 conda install -c conda-forge "s3fs>=2022.1.0"
 ```
 
-### Google Cloud Storage {#GCS}
+### Google Cloud Storage (GCS) {#GCS}
 
-Reading and writing [Parquet][parquet-section] files from and to Google Cloud is supported.
+Reading and writing [CSV][csv-section], [JSON][json-section] and [Parquet][parquet-section] files from and to Google Cloud Storage (GCS) is supported.
 
 The file path should start with `gs://` or `gcs://`:
 
@@ -644,15 +644,16 @@ The file path should start with `gs://` or `gcs://`:
 def example_gcs_parquet():
     df = pd.read_parquet("gcs://bucket-name/file_name.parquet")
 ```
-These environment variables are used for File I/O with GCS credentials:
 
-- `GOOGLE_APPLICATION_CREDENTIALS`
-
+By default uses the process described in [here](https://google.aip.dev/auth/4110){target="blank"} to resolve credentials.
+If not running on Google Cloud Platform (GCP), this may require the environment variable `GOOGLE_APPLICATION_CREDENTIALS` to point to a JSON file containing credentials.
 Details for `GOOGLE_APPLICATION_CREDENTIALS` can be seen in the Google
 docs [here](https://cloud.google.com/docs/authentication/getting-started#setting_the_environment_variable){target="blank"}.
+Locally, one may use the `gcloud` CLI tool to authenticate:
 
-Bodo uses the fsspec-based [gcsfs](https://gcsfs.readthedocs.io/en/latest/){target="blank"} library internally for
-read and write of data on GCS.
+```shell
+gcloud auth application-default login
+```
 
 
 ### Hugging Face Datasets
