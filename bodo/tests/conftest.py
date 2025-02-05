@@ -929,7 +929,7 @@ def polaris_catalog_api_client(polaris_server):
     return client
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def polaris_token(polaris_catalog_api_client, polaris_server):
     """
     Fixture to get a polaris access token
@@ -948,7 +948,7 @@ def polaris_token(polaris_catalog_api_client, polaris_server):
     return token
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def aws_polaris_warehouse(polaris_token, polaris_server):
     """
     Configure an S3 warehouse in the polaris server
@@ -1006,7 +1006,7 @@ def polaris_connection(request, polaris_server, aws_polaris_warehouse):
         }
     ):
         host, port, user, password = polaris_server
-        url = f"http://{host}:{port}"
+        url = f"http://{host}:{port}/api/catalog"
         yield url, aws_polaris_warehouse, f"{user}:{password}"
 
 

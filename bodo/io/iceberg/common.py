@@ -95,9 +95,8 @@ def get_rest_catalog_config(conn: str) -> tuple[str, str, str] | None:
     @return: Tuple of uri, user_token, warehouse if successful, None otherwise (e.g. invalid connection string or not a rest catalog).
     """
     parsed_conn = urlparse(conn)
-    if parsed_conn.scheme.lower() != "rest":
+    if parsed_conn.scheme.lower() not in {"http", "https"}:
         return None
-    parsed_conn = parsed_conn._replace(scheme="https")
     parsed_params = parse_qs(parsed_conn.query)
     # Clear the params
     parsed_conn = parsed_conn._replace(query="")
@@ -221,13 +220,14 @@ def format_iceberg_conn(conn_str: str) -> str:
         "iceberg+snowflake",
         "iceberg+abfs",
         "iceberg+abfss",
-        "iceberg+rest",
+        "iceberg+http",
+        "iceberg+https",
         "iceberg+arn",
     ):
         raise BodoError(
             "'con' must start with one of the following: 'iceberg://', 'iceberg+file://', "
             "'iceberg+s3://', 'iceberg+thrift://', 'iceberg+http://', 'iceberg+https://', 'iceberg+glue', 'iceberg+snowflake://', "
-            "'iceberg+abfs://', 'iceberg+abfss://', 'iceberg+rest://', 'iceberg+arn'"
+            "'iceberg+abfs://', 'iceberg+abfss://', 'iceberg+http(s)://', 'iceberg+arn'"
         )
 
     # Remove Iceberg Prefix when using Internally

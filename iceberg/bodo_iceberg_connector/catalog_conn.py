@@ -64,7 +64,7 @@ def parse_conn_str(
             warehouse = f"{parsed_conn.netloc}{parsed_conn.path}"
         elif parsed_conn.scheme == "snowflake":
             catalog_type = "snowflake"
-        elif parsed_conn.scheme == "rest":
+        elif parsed_conn.scheme in {"http", "https"}:
             catalog_type = "rest"
         elif parsed_conn.scheme == "arn" and "aws:s3tables" in parsed_conn.path:
             catalog_type = "s3tables"
