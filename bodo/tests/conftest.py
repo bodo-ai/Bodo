@@ -270,28 +270,50 @@ def polaris_server():
         # Polaris server is not running, ignore the error
         pass
 
+    health_check_args = [
+        "--health-cmd",
+        "curl http://localhost:8182/healthcheck",
+        "--health-interval",
+        "2s",
+        "--health-retries",
+        "5",
+        "--health-timeout",
+        "10s",
+    ]
+    env_args = [
+        "-e",
+        "quarkus.otel.sdk.disabled=true",
+        "-e",
+        "POLARIS_BOOTSTRAP_CREDENTIALS=default-realm,root,s3cr3t",
+        "-e",
+        "polaris.realm-context.realms=default-realm",
+        "-e",
+        f"AWS_REGION={os.environ.get('AWS_REGION', 'us-east-2')}",
+    ]
+    if "AWS_ACCESS_KEY_ID" in os.environ:
+        env_args += ["-e", f"AWS_ACCESS_KEY_ID={os.environ['AWS_ACCESS_KEY_ID']}"]
+    if "AWS_SECRET_ACCESS_KEY" in os.environ:
+        env_args += [
+            "-e",
+            f"AWS_SECRET_ACCESS_KEY={os.environ['AWS_SECRET_ACCESS_KEY']}",
+        ]
+    if "AWS_SESSION_TOKEN" in os.environ:
+        env_args += ["-e", f"AWS_SESSION_TOKEN={os.environ['AWS_SESSION_TOKEN']}"]
+    if "AWS_PROFILE" in os.environ:
+        env_args += ["-e", f"AWS_PROFILE={os.environ['AWS_PROFILE']}"]
+    [
+        "-v",
+        f"{Path.home()}/.aws/credentials:/home/app/.aws/credentials:ro",
+    ] if Path.home().joinpath(".aws/credentials").exists() else []
+
     # Start Polaris server
     # Once Polaris publishes their own docker image, we can use that instead of ours
     # https://github.com/apache/polaris/issues/152
     subprocess.run(
-        [
-            "docker",
-            "run",
-            "-d",
-            "--health-cmd",
-            "curl http://localhost:8182/healthcheck",
-            "--health-interval",
-            "2s",
-            "--health-retries",
-            "5",
-            "--health-timeout",
-            "10s",
-            "-e",
-            "quarkus.otel.sdk.disabled=true",
-            "-e",
-            "POLARIS_BOOTSTRAP_CREDENTIALS=default-realm,root,s3cr3t",
-            "-e",
-            "polaris.realm-context.realms=default-realm",
+        ["docker", "run", "-d"]
+        + health_check_args
+        + env_args
+        + [
             "-p",
             "8181:8181",
             "-p",
