@@ -45,6 +45,7 @@ import org.checkerframework.checker.nullness.qual.Nullable;
 import static com.bodosql.calcite.application.operatorTables.CastingOperatorTable.TO_NUMBER;
 import static java.util.Objects.requireNonNull;
 import static org.apache.calcite.sql.type.SqlTypeUtil.convertTypeToSpec;
+import static org.apache.calcite.sql.type.SqlTypeUtil.getMaxPrecisionScaleDecimal;
 import static org.apache.calcite.sql.validate.SqlNonNullableAccessors.getScope;
 
 public class BodoTypeCoercionImpl extends TypeCoercionImpl {
@@ -181,6 +182,26 @@ public class BodoTypeCoercionImpl extends TypeCoercionImpl {
     if (SqlTypeUtil.isNumeric(type1) && SqlTypeUtil.isBoolean(type2)) {
       return type2;
     }
+
+    // Fix new precision and scale for integer - decimal and decimal - decimal comparisons
+    if ((SqlTypeUtil.isDecimal(type1) || SqlTypeUtil.isDecimal(type2)) && (SqlTypeUtil.isExactNumeric(type1) && SqlTypeUtil.isExactNumeric(type2))) {
+      // Convert all types to decimal so we can get an accurate precision and scale
+      // Integer types return defaultMaxPrecision and defaultMaxScale which creates
+      // an incorrect precision and scale for the resulting decimal type.
+      final RelDataType type1AsDecimal = factory.decimalOf(type1);
+      final RelDataType type2AsDecimal = factory.decimalOf(type2);
+      // Get the number of leading digits for each type
+      int l1 = type1AsDecimal.getPrecision() - type1AsDecimal.getScale();
+      int l2 = type2AsDecimal.getPrecision() - type2AsDecimal.getScale();
+      // New leading digits is the max of the two types to ensure we don't lose any information
+      int newLeading = Math.max(l1, l2);
+      // New scale is the max of the two types clamped to the max scale to ensure we don't lose any information when possible
+      final int newScale = Math.min(Math.max(type1AsDecimal.getScale(), type2AsDecimal.getScale()), factory.getTypeSystem().getMaxScale(SqlTypeName.DECIMAL));
+      // New precision is the sum of the new leading and new scale clamped to the max precision to ensure we don't lose any information when possible
+      final int newPrecision = Math.min(newLeading + newScale, factory.getTypeSystem().getMaxPrecision(SqlTypeName.DECIMAL));
+      return factory.createSqlType(SqlTypeName.DECIMAL, newPrecision, newScale);
+    }
+
     return super.commonTypeForBinaryComparison(type1, type2);
   }
 
@@ -245,6 +266,11 @@ public class BodoTypeCoercionImpl extends TypeCoercionImpl {
       return SqlStdOperatorTable.CAST.createCall(SqlParserPos.ZERO, node,
               BodoSqlTypeUtil.convertTypeToSpec(type).withNullable(type.isNullable()));
     }
+  }
+
+  private static SqlNode simpleCastTo(SqlNode node, RelDataType type) {
+    return SqlStdOperatorTable.CAST.createCall(SqlParserPos.ZERO, node,
+            BodoSqlTypeUtil.convertTypeToSpec(type).withNullable(type.isNullable()));
   }
 
   private static class TypeCoercionFactoryImpl implements TypeCoercionFactory {
@@ -514,7 +540,7 @@ public class BodoTypeCoercionImpl extends TypeCoercionImpl {
           return false;
         }
         RelDataType targetType2 = syncAttributes(validator.deriveType(scope, operand), targetType);
-        final SqlNode casted = castTo(operand, targetType2);
+        final SqlNode casted = simpleCastTo(operand, targetType2);
         node2.setOperand(0, casted);
         updateInferredType(casted, targetType2);
         return true;
@@ -524,7 +550,7 @@ public class BodoTypeCoercionImpl extends TypeCoercionImpl {
       return false;
     }
     RelDataType targetType3 = syncAttributes(validator.deriveType(scope, node), targetType);
-    final SqlNode node3 = castTo(node, targetType3);
+    final SqlNode node3 = simpleCastTo(node, targetType3);
     nodeList.set(index, node3);
     updateInferredType(node3, targetType3);
     return true;

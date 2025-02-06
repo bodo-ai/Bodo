@@ -407,9 +407,9 @@ make_attribute_wrapper(MapScalarType, "null_bitmask", "_null_bitmask")
 @intrinsic
 def init_map_value(typingctx, key_arr_type, value_arr_type, null_bitmask_type):
     """Create a MapValue from key and value arrays"""
-    assert null_bitmask_type == types.Array(
-        types.uint8, 1, "C"
-    ), "init_map_value invalid null_bitmask_type"
+    assert null_bitmask_type == types.Array(types.uint8, 1, "C"), (
+        "init_map_value invalid null_bitmask_type"
+    )
 
     def codegen(context, builder, signature, args):
         map_val = cgutils.create_struct_proxy(signature.return_type)(context, builder)

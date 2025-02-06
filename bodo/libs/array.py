@@ -711,9 +711,9 @@ def array_to_info_codegen(context, builder, sig, args):
 
     # interval array
     if isinstance(arr_type, IntervalArrayType):
-        assert isinstance(
-            arr_type.arr_type, types.Array
-        ), "array_to_info(): only IntervalArrayType with Numpy arrays supported"
+        assert isinstance(arr_type.arr_type, types.Array), (
+            "array_to_info(): only IntervalArrayType with Numpy arrays supported"
+        )
         arr = cgutils.create_struct_proxy(arr_type)(context, builder, in_arr)
         left_arr = context.make_array(arr_type.arr_type)(context, builder, arr.left)
         right_arr = context.make_array(arr_type.arr_type)(context, builder, arr.right)
@@ -1135,9 +1135,9 @@ def info_to_array_codegen(context, builder, sig, args, raise_py_err=True):
         )
         # set categorical dtype of output array to be same as input array
         if isinstance(array_type, types.TypeRef):
-            assert (
-                arr_type.dtype.categories is not None
-            ), "info_to_array: unknown categories"
+            assert arr_type.dtype.categories is not None, (
+                "info_to_array: unknown categories"
+            )
             # create the new categorical dtype inside the function instead of passing as
             # constant. This avoids constant lowered Index inside the dtype, which can
             # be slow since it cannot have a dictionary.
@@ -2209,7 +2209,7 @@ def cpp_table_to_py_data(
             out_type = f"extra_arr_type_{i}"
             if type_has_unknown_cats(t):
                 if is_overload_none(unknown_cat_arrs_t):
-                    out_type = f"out_types_t[{i+1}]"
+                    out_type = f"out_types_t[{i + 1}]"
                 else:
                     out_type = (
                         f"unknown_cat_arrs_t[{cat_arr_inds[n_py_table_arrs + i]}]"
@@ -2241,9 +2241,9 @@ def cpp_table_to_py_data(
 @intrinsic
 def py_table_to_cpp_table(typingctx, py_table_t, py_table_type_t):
     """Extract columns of a Python table and creates a C++ table."""
-    assert isinstance(
-        py_table_t, bodo.hiframes.table.TableType
-    ), "invalid py table type"
+    assert isinstance(py_table_t, bodo.hiframes.table.TableType), (
+        "invalid py table type"
+    )
     assert isinstance(py_table_type_t, types.TypeRef), "invalid py table ref"
     py_table_type = py_table_type_t.instance_type
 
@@ -2527,9 +2527,9 @@ cpp_table_map_to_list = types.ExternalFunction(
 # TODO add a test for this
 @intrinsic
 def concat_tables_cpp(typing_ctx, table_info_list_t):  # pragma: no cover
-    assert table_info_list_t == types.List(
-        table_type
-    ), "table_info_list_t must be a list of table_type"
+    assert table_info_list_t == types.List(table_type), (
+        "table_info_list_t must be a list of table_type"
+    )
 
     def codegen(context, builder, sig, args):
         (info_list,) = args
@@ -2556,15 +2556,15 @@ def concat_tables_cpp(typing_ctx, table_info_list_t):  # pragma: no cover
 
 @intrinsic
 def union_tables_cpp(typing_ctx, table_info_list_t, drop_duplicates_t, is_parallel_t):
-    assert table_info_list_t == types.List(
-        table_type
-    ), "table_info_list_t must be a list of table_type"
-    assert (
-        types.unliteral(drop_duplicates_t) == types.bool_
-    ), "drop_duplicates_t must be an boolean"
-    assert (
-        types.unliteral(is_parallel_t) == types.bool_
-    ), "is_parallel_t must be an boolean"
+    assert table_info_list_t == types.List(table_type), (
+        "table_info_list_t must be a list of table_type"
+    )
+    assert types.unliteral(drop_duplicates_t) == types.bool_, (
+        "drop_duplicates_t must be an boolean"
+    )
+    assert types.unliteral(is_parallel_t) == types.bool_, (
+        "is_parallel_t must be an boolean"
+    )
 
     def codegen(context, builder, sig, args):
         info_list, drop_duplicates, is_parallel = args
@@ -2859,9 +2859,9 @@ def nested_loop_join_table(
     Call cpp function for cross join of two tables.
     """
     assert left_table_t == table_type, "nested_loop_join_table: cpp table type expected"
-    assert (
-        right_table_t == table_type
-    ), "nested_loop_join_table: cpp table type expected"
+    assert right_table_t == table_type, (
+        "nested_loop_join_table: cpp table type expected"
+    )
 
     def codegen(context, builder, sig, args):
         fnty = lir.FunctionType(

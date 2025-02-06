@@ -136,7 +136,7 @@ register_model(FloatDtype)(models.OpaqueModel)
 @box(FloatDtype)
 def box_floatdtype(typ, val, c):  # pragma: no cover
     mod_name = c.context.insert_const_string(c.builder.module, "pandas")
-    pd_class_obj = c.pyapi.import_module_noblock(mod_name)
+    pd_class_obj = c.pyapi.import_module(mod_name)
     res = c.pyapi.call_method(pd_class_obj, str(typ)[:-2], ())
     c.pyapi.decref(pd_class_obj)
     return res

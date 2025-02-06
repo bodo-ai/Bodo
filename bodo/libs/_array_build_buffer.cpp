@@ -411,20 +411,20 @@ void ArrayBuildBuffer::IncrementSize(size_t addln_size) {
     switch (this->data_array->arr_type) {
         case bodo_array_type::NULLABLE_INT_BOOL: {
             if (this->data_array->dtype == Bodo_CTypes::_BOOL) {
-                CHECK_ARROW_MEM(
+                CHECK_ARROW_BASE(
                     data_array->buffers[0]->SetSize(
                         arrow::bit_util::BytesForBits(new_size)),
                     "ArrayBuildBuffer::IncrementSize: SetSize failed!");
-                CHECK_ARROW_MEM(
+                CHECK_ARROW_BASE(
                     data_array->buffers[1]->SetSize(
                         arrow::bit_util::BytesForBits(new_size)),
                     "ArrayBuildBuffer::IncrementSize: SetSize failed!");
             } else {
                 uint64_t size_type = numpy_item_size[this->data_array->dtype];
-                CHECK_ARROW_MEM(
+                CHECK_ARROW_BASE(
                     data_array->buffers[0]->SetSize(new_size * size_type),
                     "ArrayBuildBuffer::IncrementSize: SetSize failed!");
-                CHECK_ARROW_MEM(
+                CHECK_ARROW_BASE(
                     data_array->buffers[1]->SetSize(
                         arrow::bit_util::BytesForBits(new_size)),
                     "ArrayBuildBuffer::IncrementSize: SetSize failed!");
@@ -434,16 +434,17 @@ void ArrayBuildBuffer::IncrementSize(size_t addln_size) {
         case bodo_array_type::TIMESTAMPTZ: {
             uint64_t utc_size_type = numpy_item_size[this->data_array->dtype];
             uint64_t offset_size_type = numpy_item_size[Bodo_CTypes::INT16];
-            CHECK_ARROW_MEM(
+            CHECK_ARROW_BASE(
                 data_array->buffers[0]->SetSize(new_size * utc_size_type),
                 "ArrayBuildBuffer::IncrementSize: SetSize failed!");
-            CHECK_ARROW_MEM(
+            CHECK_ARROW_BASE(
                 data_array->buffers[1]->SetSize(
                     arrow::bit_util::BytesForBits(new_size * offset_size_type)),
                 "ArrayBuildBuffer::IncrementSize: SetSize failed!");
-            CHECK_ARROW_MEM(data_array->buffers[2]->SetSize(
-                                arrow::bit_util::BytesForBits(new_size)),
-                            "ArrayBuildBuffer::IncrementSize: SetSize failed!");
+            CHECK_ARROW_BASE(
+                data_array->buffers[2]->SetSize(
+                    arrow::bit_util::BytesForBits(new_size)),
+                "ArrayBuildBuffer::IncrementSize: SetSize failed!");
 
         } break;
         case bodo_array_type::STRING: {
@@ -456,7 +457,7 @@ void ArrayBuildBuffer::IncrementSize(size_t addln_size) {
         case bodo_array_type::CATEGORICAL:
         case bodo_array_type::NUMPY: {
             uint64_t size_type = numpy_item_size[this->data_array->dtype];
-            CHECK_ARROW_MEM(
+            CHECK_ARROW_BASE(
                 data_array->buffers[0]->SetSize(new_size * size_type),
                 "ArrayBuildBuffer::IncrementSize: SetSize failed!");
         } break;
@@ -495,7 +496,7 @@ void ArrayBuildBuffer::ReserveSpaceForStringAppend(size_t new_char_count) {
     if (min_capacity_chars > capacity_chars) {
         int64_t new_capacity_chars =
             std::max(min_capacity_chars, capacity_chars * 2);
-        CHECK_ARROW_MEM(
+        CHECK_ARROW_BASE(
             data_array->buffers[0]->Reserve(new_capacity_chars),
             "ArrayBuildBuffer::ReserveSpaceForStringAppend: Reserve failed!");
     }
@@ -611,22 +612,22 @@ void ArrayBuildBuffer::ReserveSize(uint64_t new_data_len) {
             if (min_capacity > capacity) {
                 int64_t new_capacity = std::max(min_capacity, capacity * 2);
                 if (this->data_array->dtype == Bodo_CTypes::_BOOL) {
-                    CHECK_ARROW_MEM(
+                    CHECK_ARROW_BASE(
                         this->data_array->buffers[0]->Reserve(
                             arrow::bit_util::BytesForBits(new_capacity)),
                         "ArrayBuildBuffer::ReserveSize: Reserve failed!");
-                    CHECK_ARROW_MEM(
+                    CHECK_ARROW_BASE(
                         this->data_array->buffers[1]->Reserve(
                             arrow::bit_util::BytesForBits(new_capacity)),
                         "ArrayBuildBuffer::ReserveSize: Reserve failed!");
                 } else {
                     uint64_t size_type =
                         numpy_item_size[this->data_array->dtype];
-                    CHECK_ARROW_MEM(
+                    CHECK_ARROW_BASE(
                         data_array->buffers[0]->Reserve(new_capacity *
                                                         size_type),
                         "ArrayBuildBuffer::ReserveSize: Reserve failed!");
-                    CHECK_ARROW_MEM(
+                    CHECK_ARROW_BASE(
                         this->data_array->buffers[1]->Reserve(
                             arrow::bit_util::BytesForBits(new_capacity)),
                         "ArrayBuildBuffer::ReserveSize: Reserve failed!");
@@ -638,11 +639,11 @@ void ArrayBuildBuffer::ReserveSize(uint64_t new_data_len) {
             // update offset and null bitmap buffers
             if (min_capacity > capacity) {
                 int64_t new_capacity = std::max(min_capacity, capacity * 2);
-                CHECK_ARROW_MEM(
+                CHECK_ARROW_BASE(
                     data_array->buffers[1]->Reserve((new_capacity + 1) *
                                                     sizeof(offset_t)),
                     "ArrayBuildBuffer::ReserveSize: Reserve failed!");
-                CHECK_ARROW_MEM(
+                CHECK_ARROW_BASE(
                     this->data_array->buffers[2]->Reserve(
                         arrow::bit_util::BytesForBits(new_capacity)),
                     "ArrayBuildBuffer::ReserveSize: Reserve failed!");
@@ -657,7 +658,7 @@ void ArrayBuildBuffer::ReserveSize(uint64_t new_data_len) {
             uint64_t size_type = numpy_item_size[this->data_array->dtype];
             if (min_capacity > capacity) {
                 int64_t new_capacity = std::max(min_capacity, capacity * 2);
-                CHECK_ARROW_MEM(
+                CHECK_ARROW_BASE(
                     this->data_array->buffers[0]->Reserve(new_capacity *
                                                           size_type),
                     "ArrayBuildBuffer::ReserveSize: Reserve failed!");
@@ -668,11 +669,11 @@ void ArrayBuildBuffer::ReserveSize(uint64_t new_data_len) {
             // update offset and null bitmap buffers
             if (min_capacity > capacity) {
                 int64_t new_capacity = std::max(min_capacity, capacity * 2);
-                CHECK_ARROW_MEM(
+                CHECK_ARROW_BASE(
                     data_array->buffers[0]->Reserve((new_capacity + 1) *
                                                     sizeof(offset_t)),
                     "ArrayBuildBuffer::ReserveSize: Reserve failed!");
-                CHECK_ARROW_MEM(
+                CHECK_ARROW_BASE(
                     this->data_array->buffers[1]->Reserve(
                         arrow::bit_util::BytesForBits(new_capacity)),
                     "ArrayBuildBuffer::ReserveSize: Reserve failed!");
@@ -685,7 +686,7 @@ void ArrayBuildBuffer::ReserveSize(uint64_t new_data_len) {
         case bodo_array_type::STRUCT: {
             if (min_capacity > capacity) {
                 int64_t new_capacity = std::max(min_capacity, capacity * 2);
-                CHECK_ARROW_MEM(
+                CHECK_ARROW_BASE(
                     this->data_array->buffers[0]->Reserve(
                         arrow::bit_util::BytesForBits(new_capacity)),
                     "ArrayBuildBuffer::ReserveSize: Reserve failed!");
@@ -697,15 +698,15 @@ void ArrayBuildBuffer::ReserveSize(uint64_t new_data_len) {
             uint64_t offset_size_type = numpy_item_size[Bodo_CTypes::INT16];
             if (min_capacity > capacity) {
                 int64_t new_capacity = std::max(min_capacity, capacity * 2);
-                CHECK_ARROW_MEM(
+                CHECK_ARROW_BASE(
                     this->data_array->buffers[0]->Reserve(new_capacity *
                                                           ts_size_type),
                     "ArrayBuildBuffer::ReserveSize: Reserve failed!");
-                CHECK_ARROW_MEM(
+                CHECK_ARROW_BASE(
                     this->data_array->buffers[1]->Reserve(new_capacity *
                                                           offset_size_type),
                     "ArrayBuildBuffer::ReserveSize: Reserve failed!");
-                CHECK_ARROW_MEM(
+                CHECK_ARROW_BASE(
                     this->data_array->buffers[2]->Reserve(
                         arrow::bit_util::BytesForBits(new_capacity)),
                     "ArrayBuildBuffer::ReserveSize: Reserve failed!");
@@ -725,34 +726,34 @@ void ArrayBuildBuffer::Reset() {
     set_array_dict_from_builder(this->data_array, this->dict_builder);
     switch (data_array->arr_type) {
         case bodo_array_type::NULLABLE_INT_BOOL: {
-            CHECK_ARROW_MEM(data_array->buffers[0]->SetSize(0),
-                            "ArrayBuildBuffer::Reset: SetSize failed!");
-            CHECK_ARROW_MEM(data_array->buffers[1]->SetSize(0),
-                            "ArrayBuildBuffer::Reset: SetSize failed!");
+            CHECK_ARROW_BASE(data_array->buffers[0]->SetSize(0),
+                             "ArrayBuildBuffer::Reset: SetSize failed!");
+            CHECK_ARROW_BASE(data_array->buffers[1]->SetSize(0),
+                             "ArrayBuildBuffer::Reset: SetSize failed!");
         } break;
         case bodo_array_type::CATEGORICAL:
         case bodo_array_type::NUMPY: {
-            CHECK_ARROW_MEM(data_array->buffers[0]->SetSize(0),
-                            "ArrayBuildBuffer::Reset: SetSize failed!");
+            CHECK_ARROW_BASE(data_array->buffers[0]->SetSize(0),
+                             "ArrayBuildBuffer::Reset: SetSize failed!");
 
         } break;
         case bodo_array_type::STRING: {
-            CHECK_ARROW_MEM(data_array->buffers[0]->SetSize(0),
-                            "ArrayBuildBuffer::Reset: SetSize failed!");
-            CHECK_ARROW_MEM(data_array->buffers[1]->SetSize(0),
-                            "ArrayBuildBuffer::Reset: SetSize failed!");
-            CHECK_ARROW_MEM(data_array->buffers[2]->SetSize(0),
-                            "ArrayBuildBuffer::Reset: SetSize failed!");
+            CHECK_ARROW_BASE(data_array->buffers[0]->SetSize(0),
+                             "ArrayBuildBuffer::Reset: SetSize failed!");
+            CHECK_ARROW_BASE(data_array->buffers[1]->SetSize(0),
+                             "ArrayBuildBuffer::Reset: SetSize failed!");
+            CHECK_ARROW_BASE(data_array->buffers[2]->SetSize(0),
+                             "ArrayBuildBuffer::Reset: SetSize failed!");
         } break;
         case bodo_array_type::DICT: {
             this->dict_indices->Reset();
         } break;
         case bodo_array_type::ARRAY_ITEM: {
             this->child_array_builders.front().Reset();
-            CHECK_ARROW_MEM(data_array->buffers[0]->SetSize(0),
-                            "ArrayBuildBuffer::Reset: SetSize failed!");
-            CHECK_ARROW_MEM(data_array->buffers[1]->SetSize(0),
-                            "ArrayBuildBuffer::Reset: SetSize failed!");
+            CHECK_ARROW_BASE(data_array->buffers[0]->SetSize(0),
+                             "ArrayBuildBuffer::Reset: SetSize failed!");
+            CHECK_ARROW_BASE(data_array->buffers[1]->SetSize(0),
+                             "ArrayBuildBuffer::Reset: SetSize failed!");
         } break;
         case bodo_array_type::MAP: {
             this->child_array_builders.front().Reset();
@@ -762,16 +763,16 @@ void ArrayBuildBuffer::Reset() {
                  this->child_array_builders) {
                 child_array_builder.Reset();
             }
-            CHECK_ARROW_MEM(data_array->buffers[0]->SetSize(0),
-                            "ArrayBuildBuffer::Reset: SetSize failed!");
+            CHECK_ARROW_BASE(data_array->buffers[0]->SetSize(0),
+                             "ArrayBuildBuffer::Reset: SetSize failed!");
         } break;
         case bodo_array_type::TIMESTAMPTZ: {
-            CHECK_ARROW_MEM(data_array->buffers[0]->SetSize(0),
-                            "ArrayBuildBuffer::Reset: SetSize failed!");
-            CHECK_ARROW_MEM(data_array->buffers[1]->SetSize(0),
-                            "ArrayBuildBuffer::Reset: SetSize failed!");
-            CHECK_ARROW_MEM(data_array->buffers[2]->SetSize(0),
-                            "ArrayBuildBuffer::Reset: SetSize failed!");
+            CHECK_ARROW_BASE(data_array->buffers[0]->SetSize(0),
+                             "ArrayBuildBuffer::Reset: SetSize failed!");
+            CHECK_ARROW_BASE(data_array->buffers[1]->SetSize(0),
+                             "ArrayBuildBuffer::Reset: SetSize failed!");
+            CHECK_ARROW_BASE(data_array->buffers[2]->SetSize(0),
+                             "ArrayBuildBuffer::Reset: SetSize failed!");
         } break;
         default: {
             throw std::runtime_error(

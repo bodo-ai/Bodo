@@ -959,9 +959,9 @@ class TypingTransforms:
             # avoid empty dataframe
             require(len(value_def.args) > 0)
             data_def = get_definition(self.func_ir, value_def.args[0])
-            assert is_expr(
-                data_def, "build_tuple"
-            ), "invalid data tuple in init_dataframe"
+            assert is_expr(data_def, "build_tuple"), (
+                "invalid data tuple in init_dataframe"
+            )
 
             # table_def_node is the IR node that creates the input table, which is
             # read_arrow_next() in the streaming read case but otherwise same as read node.
@@ -1533,9 +1533,9 @@ class TypingTransforms:
                 new_target_block = new_body + filter_nodes + non_filter_nodes
                 new_target_label = pred
                 read_found = True
-            assert (
-                read_found
-            ), "_reorder_filter_nodes: read node not found in streaming I/O"
+            assert read_found, (
+                "_reorder_filter_nodes: read node not found in streaming I/O"
+            )
             require(new_target_label != -1)
             func_ir.blocks[new_target_label].body = new_target_block
 
@@ -4156,9 +4156,9 @@ class TypingTransforms:
             self.func_ir, _bodo_runtime_join_filters_arg
         )
         if rtjf_terms is not None and len(rtjf_terms):
-            assert (
-                chunksize is not None
-            ), "Cannot provide rtjf_terms in a non-streaming read"
+            assert chunksize is not None, (
+                "Cannot provide rtjf_terms in a non-streaming read"
+            )
 
         nodes = [
             bodo.ir.iceberg_ext.IcebergReader(
@@ -5028,9 +5028,9 @@ class TypingTransforms:
                 func, args, out_var, self, extra_globals={"_inplace": inplace}
             )
             self.typemap.pop(out_var.name, None)
-            assert (
-                nodes[-1].value.name in self.typemap
-            ), f"Internal error in _run_df_set_column: {nodes[-1].value.name} not present in type map"
+            assert nodes[-1].value.name in self.typemap, (
+                f"Internal error in _run_df_set_column: {nodes[-1].value.name} not present in type map"
+            )
             self.typemap[out_var.name] = self.typemap[nodes[-1].value.name]
         else:
             nodes += compile_func_single_block(
@@ -6433,9 +6433,9 @@ def _replace_load_deref_code(code, freevar_arg_map, prev_argcount, prev_n_locals
     from numba.core.bytecode import ARG_LEN, CODE_LEN, NO_ARG_LEN
 
     # assuming these constants are 1 to simplify the code, very unlikely to change
-    assert (
-        CODE_LEN == 1 and ARG_LEN == 1 and NO_ARG_LEN == 1
-    ), "invalid bytecode version"
+    assert CODE_LEN == 1 and ARG_LEN == 1 and NO_ARG_LEN == 1, (
+        "invalid bytecode version"
+    )
     # cannot handle cases that write to free variables
     banned_ops = (dis.opmap["STORE_DEREF"], dis.opmap["LOAD_CLOSURE"])
     # local variable access to be adjusted

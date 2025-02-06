@@ -170,9 +170,12 @@ def check_node_typing(node, typemap):
 
 import llvmlite.binding as ll
 
-from bodo.io import csv_cpp
+from bodo.io import csv_json_reader
 
-ll.add_symbol("csv_file_chunk_reader", csv_cpp.csv_file_chunk_reader)
+ll.add_symbol(
+    "csv_file_chunk_reader",
+    csv_json_reader.get_function_address("csv_file_chunk_reader"),
+)
 
 
 @intrinsic
@@ -197,9 +200,9 @@ def csv_file_chunk_reader(
     """
     # TODO: Update storage options to pyobject once the type is updated to do refcounting
     # properly.
-    assert (
-        storage_options_t == storage_options_dict_type
-    ), "Storage options don't match expected type"
+    assert storage_options_t == storage_options_dict_type, (
+        "Storage options don't match expected type"
+    )
 
     def codegen(context, builder, sig, args):
         fnty = lir.FunctionType(
@@ -520,9 +523,9 @@ def csv_distributed_run(
     # At most one of the table and the index
     # can be dead because otherwise the whole
     # node should have already been removed.
-    assert not (
-        csv_node.index_column_index is None and not final_usecols
-    ), "At most one of table and index should be dead if the CSV IR node is live"
+    assert not (csv_node.index_column_index is None and not final_usecols), (
+        "At most one of table and index should be dead if the CSV IR node is live"
+    )
     if csv_node.index_column_index is None:
         # If the index_col is dead, remove the node.
         nodes.pop(-1)

@@ -9,7 +9,7 @@ import pytest
 import bodo
 import bodosql
 from bodo.tests.iceberg_database_helpers.utils import (
-    get_spark_tabular,
+    get_spark,
 )
 from bodo.tests.user_logging_utils import (
     check_logger_msg,
@@ -219,7 +219,7 @@ def check_table_comment(
     if bodo.get_rank() != 0:
         return
 
-    spark = get_spark_tabular(tabular_connection)
+    spark = get_spark(tabular_connection)
     table_cmt = (
         spark.sql(f"DESCRIBE TABLE EXTENDED {schema}.{table_name}")
         .filter("col_name = 'Comment'")
@@ -227,20 +227,20 @@ def check_table_comment(
         .head()
     )
     if table_comments is not None:
-        assert (
-            table_cmt[0] == table_comments
-        ), f'Expected table comment to be "{table_comments}", got "{table_cmt}"'
+        assert table_cmt[0] == table_comments, (
+            f'Expected table comment to be "{table_comments}", got "{table_cmt}"'
+        )
 
     df = spark.sql(f"DESCRIBE TABLE {schema}.{table_name}").toPandas()
     for i in range(number_columns):
         if not column_comments or i % 2 == 1:
-            assert (
-                df.iloc[i]["comment"] is None
-            ), f"Expected column {i} comment to be None, but actual comment is not None"
+            assert df.iloc[i]["comment"] is None, (
+                f"Expected column {i} comment to be None, but actual comment is not None"
+            )
         else:
-            assert (
-                df.iloc[i]["comment"] == f"{table_name}_test_colcmt_{i}"
-            ), f'Expected column {i} comment to be "{table_name}_test_colcmt_{i}", got a different one'
+            assert df.iloc[i]["comment"] == f"{table_name}_test_colcmt_{i}", (
+                f'Expected column {i} comment to be "{table_name}_test_colcmt_{i}", got a different one'
+            )
 
     if table_properties is not None:
         str = (
@@ -252,12 +252,12 @@ def check_table_comment(
         parsed_properties = parse_table_property(str)
 
         for keys in table_properties:
-            assert (
-                keys in parsed_properties
-            ), f"Expected table properties {keys}, find nothing"
-            assert (
-                parsed_properties[keys] == table_properties[keys]
-            ), f"Expected key {keys} with value {table_properties[keys]}, got {parsed_properties[keys]}"
+            assert keys in parsed_properties, (
+                f"Expected table properties {keys}, find nothing"
+            )
+            assert parsed_properties[keys] == table_properties[keys], (
+                f"Expected key {keys} with value {table_properties[keys]}, got {parsed_properties[keys]}"
+            )
 
 
 @pytest.mark.parametrize("column_comments", [True, False])
@@ -628,9 +628,9 @@ def test_tabular_catalog_token_caching(memory_leak_check):
                 == "rest://test_uri?warehouse=test_warehouse&token=test_token1"
             )
             sig = dispatcher.signatures[0]
-            assert (
-                dispatcher._cache_hits[sig] == 0
-            ), "Expected no cache hit for function signature"
+            assert dispatcher._cache_hits[sig] == 0, (
+                "Expected no cache hit for function signature"
+            )
 
             # Ensure that the cache is shared across all ranks
             bodo.barrier()
@@ -642,9 +642,9 @@ def test_tabular_catalog_token_caching(memory_leak_check):
                 == "rest://test_uri?warehouse=test_warehouse&token=test_token2"
             )
             sig = dispatcher_2.signatures[0]
-            assert (
-                dispatcher_2._cache_hits[sig] == 1
-            ), "Expected a cache hit for function signature"
+            assert dispatcher_2._cache_hits[sig] == 1, (
+                "Expected a cache hit for function signature"
+            )
 
     finally:
         # Ensure all ranks are done before cleanup

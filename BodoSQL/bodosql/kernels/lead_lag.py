@@ -124,13 +124,13 @@ def lead_lag_seq(in_col, shift_amt, default_fill_val=None, ignore_nulls=False):
         f"""
     def _lead_lag_seq_impl(in_col, shift_amt, default_fill_val=None, ignore_nulls=False):
         fill_val_len = 0
-        {ctx['array_conv']}
+        {ctx["array_conv"]}
 
         if shift_amt == 0:
-            {ctx['return_in_col_nullable']}
+            {ctx["return_in_col_nullable"]}
 
         in_col_info = array_to_info(in_col)
-        {ctx['fill_val']}
+        {ctx["fill_val"]}
         result_info = _lead_lag_seq_py_entry(
             in_col_info,
             shift_amt,
@@ -138,7 +138,7 @@ def lead_lag_seq(in_col, shift_amt, default_fill_val=None, ignore_nulls=False):
             fill_val_len,
             ignore_nulls,
         )
-        {ctx['fill_val_post_call']}
+        {ctx["fill_val_post_call"]}
         result = info_to_array(
             result_info,
             result_type,

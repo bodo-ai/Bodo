@@ -396,16 +396,16 @@ class DataFramePass:
                 "init_dataframe",
                 "bodo.hiframes.pd_dataframe_ext",
             ):
-                assert (
-                    self.typemap[df_var.name].is_table_format
-                ), "set_table_data called on a DataFrame without a table format"
+                assert self.typemap[df_var.name].is_table_format, (
+                    "set_table_data called on a DataFrame without a table format"
+                )
                 # Extra the original table to enable eliminating the original DataFrame
                 tuple_var = df_def.args[0]
                 tuple_def = guard(get_definition, self.func_ir, tuple_var)
                 if is_expr(tuple_def, "build_tuple"):
-                    assert len(
-                        tuple_def.items
-                    ), "init_dataframe with Table called on a tuple with multiple data values"
+                    assert len(tuple_def.items), (
+                        "init_dataframe with Table called on a tuple with multiple data values"
+                    )
                     assign.value = tuple_def.items[0]
 
         if fdef == ("get_dataframe_data", "bodo.hiframes.pd_dataframe_ext"):
@@ -967,9 +967,9 @@ class DataFramePass:
             err_msg="ascending should be bool or a list of bool of the number of keys",
         )
         # already checked in validate_sort_values_spec() so assertion is enough
-        assert all(
-            k in valid_keys_set for k in key_names
-        ), f"invalid sort keys {key_names}"
+        assert all(k in valid_keys_set for k in key_names), (
+            f"invalid sort keys {key_names}"
+        )
 
         nodes = []
         if is_table_format:
@@ -1409,23 +1409,23 @@ class DataFramePass:
 
         df_var = rhs.args[0]
         col_indicies = guard(find_build_tuple, self.func_ir, rhs.args[1])
-        assert (
-            col_indicies is not None
-        ), "Internal error, unable to find build tuple for arg1 of __bodosql_replace_columns_dummy"
+        assert col_indicies is not None, (
+            "Internal error, unable to find build tuple for arg1 of __bodosql_replace_columns_dummy"
+        )
         # column names must be consts
         col_names_to_replace = [
             guard(find_const, self.func_ir, col_indicie) for col_indicie in col_indicies
         ]
 
         for name in col_names_to_replace:
-            assert (
-                name is not None
-            ), "Internal error, unable to find build tuple for arg1 of __bodosql_replace_columns_dummy"
+            assert name is not None, (
+                "Internal error, unable to find build tuple for arg1 of __bodosql_replace_columns_dummy"
+            )
 
         new_arrs = guard(find_build_tuple, self.func_ir, rhs.args[2])
-        assert (
-            new_arrs is not None
-        ), "Internal error, unable to find build tuple for arg2 of __bodosql_replace_columns_dummy"
+        assert new_arrs is not None, (
+            "Internal error, unable to find build tuple for arg2 of __bodosql_replace_columns_dummy"
+        )
 
         in_df_typ = self.typemap[df_var.name]
         out_df_typ = self.typemap[assign.target.name]
@@ -1495,7 +1495,7 @@ class DataFramePass:
             # In the future, we could likely restructure set_table_data to allow multiple simultaneous set actions
             for i in range(len(col_inds)):
                 col_ind = col_inds[i]
-                func_text += f"  T{i+1} = bodo.hiframes.table.set_table_data(T{i}, {col_ind}, bodo.utils.conversion.coerce_to_array({data_args[i+1]}))\n"
+                func_text += f"  T{i + 1} = bodo.hiframes.table.set_table_data(T{i}, {col_ind}, bodo.utils.conversion.coerce_to_array({data_args[i + 1]}))\n"
             func_text += f"  df = bodo.hiframes.pd_dataframe_ext.init_dataframe((T{len(col_names_to_replace)},), df_index, out_col_names)\n"
             func_text += "  return df\n"
         else:
@@ -1573,9 +1573,9 @@ class DataFramePass:
         rebalance_output_if_skewed = guard(
             find_const, self.func_ir, _bodo_rebalance_output_if_skewed_var
         )
-        assert (
-            rebalance_output_if_skewed is not None
-        ), "Internal error with Join IR node"
+        assert rebalance_output_if_skewed is not None, (
+            "Internal error with Join IR node"
+        )
         gen_cond_expr = guard(find_const, self.func_ir, gen_cond_var)
         assert gen_cond_expr is not None, "Internal error with Join IR node"
         out_typ = self.typemap[lhs.name]
@@ -1779,12 +1779,12 @@ class DataFramePass:
                 else 0
             )
             f = agg_funcs[i]
-            assert (
-                out_col_ind not in gb_info_out
-            ), "Internal error in _gen_gb_info_out: duplicate output column assignment"
-            assert (
-                fname == f.fname
-            ), "Internal error in _gen_gb_info_out: fname mismatch"
+            assert out_col_ind not in gb_info_out, (
+                "Internal error in _gen_gb_info_out: duplicate output column assignment"
+            )
+            assert fname == f.fname, (
+                "Internal error in _gen_gb_info_out: fname mismatch"
+            )
             gb_info_out[out_col_ind] = (in_col_inds, f)
             used_colnames.update(in_cols)
             i += 1
@@ -2243,7 +2243,7 @@ class DataFramePass:
             else:
                 func_text += f"  in_key_arrs{i} = bodo.utils.utils.alloc_type(ngroups, s_key{i}, (-1,))\n"
         for i in range(n_out_cols - n_out_keys):
-            func_text += f"  arrs{i} = bodo.utils.utils.alloc_type(ngroups, _arr_typ{i+n_out_keys}, (-1,))\n"
+            func_text += f"  arrs{i} = bodo.utils.utils.alloc_type(ngroups, _arr_typ{i + n_out_keys}, (-1,))\n"
         # as_index=False includes group number as Index
         # NOTE: Pandas assigns group numbers in sorted order to Index when
         # as_index=False. Matching it exactly requires expensive sorting, so we assign

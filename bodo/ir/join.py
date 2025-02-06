@@ -1694,9 +1694,9 @@ def join_distributed_run(
         for ind in left_physical_to_logical_list:
             if ind < join_node.n_left_table_cols:
                 # This should never be reached if the table is dead
-                assert (
-                    join_node.has_live_left_table_var
-                ), "No logical columns should refer to a dead table"
+                assert join_node.has_live_left_table_var, (
+                    "No logical columns should refer to a dead table"
+                )
                 typ = table_type.arr_types[ind]
             else:
                 # The source is an index array.
@@ -1720,9 +1720,9 @@ def join_distributed_run(
         for ind in right_physical_to_logical_list:
             if ind < join_node.n_right_table_cols:
                 # This should never be reached if the table is dead
-                assert (
-                    join_node.has_live_right_table_var
-                ), "No logical columns should refer to a dead table"
+                assert join_node.has_live_right_table_var, (
+                    "No logical columns should refer to a dead table"
+                )
                 typ = table_type.arr_types[ind]
             else:
                 # The source is an index array.
@@ -1770,9 +1770,9 @@ def join_distributed_run(
                 table_arrs = None
             for col_num, typ in cast_map.items():
                 if col_num < join_node.n_left_table_cols:
-                    assert (
-                        join_node.has_live_left_table_var
-                    ), "Casting columns for a dead table should not occur"
+                    assert join_node.has_live_left_table_var, (
+                        "Casting columns for a dead table should not occur"
+                    )
                     table_arrs[col_num] = typ
                     table_changed = True
                 else:
@@ -1834,9 +1834,9 @@ def join_distributed_run(
                 table_arrs = None
             for col_num, typ in cast_map.items():
                 if col_num < join_node.n_right_table_cols:
-                    assert (
-                        join_node.has_live_right_table_var
-                    ), "Casting columns for a dead table should not occur"
+                    assert join_node.has_live_right_table_var, (
+                        "Casting columns for a dead table should not occur"
+                    )
                     table_arrs[col_num] = typ
                     table_changed = True
                 else:
@@ -1918,9 +1918,9 @@ def join_distributed_run(
     # TODO: Update asof to use table format.
     if join_node.how == "asof":
         if left_parallel or right_parallel:
-            assert (
-                left_parallel and right_parallel
-            ), "pd.merge_asof requires both left and right to be replicated or distributed"
+            assert left_parallel and right_parallel, (
+                "pd.merge_asof requires both left and right to be replicated or distributed"
+            )
             # only the right key needs to be aligned
             func_text += "    t2_keys, data_right = parallel_asof_comm(t1_keys, t2_keys, data_right)\n"
         func_text += (
@@ -2015,9 +2015,9 @@ def join_distributed_run(
         nodes[-1].target = join_node.out_data_vars[1]
     if join_node.has_live_out_table_var:
         nodes[-2].target = join_node.out_data_vars[0]
-    assert (
-        join_node.has_live_out_index_var or join_node.has_live_out_table_var
-    ), "At most one of table and index should be dead if the Join IR node is live"
+    assert join_node.has_live_out_index_var or join_node.has_live_out_table_var, (
+        "At most one of table and index should be dead if the Join IR node is live"
+    )
     if not join_node.has_live_out_index_var:
         # If the index_col is dead, remove the node.
         nodes.pop(-1)
@@ -2702,9 +2702,9 @@ def _gen_join_cpp_call(
             table_arrs = None
         for col_num, typ in cast_map.items():
             if col_num < join_node.n_out_table_cols:
-                assert (
-                    join_node.has_live_out_table_var
-                ), "Casting columns for a dead table should not occur"
+                assert join_node.has_live_out_table_var, (
+                    "Casting columns for a dead table should not occur"
+                )
                 table_arrs[col_num] = typ
                 table_changed = True
             else:

@@ -126,16 +126,16 @@ make_attribute_wrapper(PDCategoricalDtype, "ordered", "ordered")
 @intrinsic(prefer_literal=True)
 def init_cat_dtype(typingctx, categories_typ, ordered_typ, int_type, cat_vals_typ):
     """Create a CategoricalDtype from categories array and ordered flag"""
-    assert bodo.hiframes.pd_index_ext.is_index_type(
-        categories_typ
-    ), "init_cat_dtype requires index type for categories"
-    assert is_overload_constant_bool(
-        ordered_typ
-    ), "init_cat_dtype requires constant ordered flag"
+    assert bodo.hiframes.pd_index_ext.is_index_type(categories_typ), (
+        "init_cat_dtype requires index type for categories"
+    )
+    assert is_overload_constant_bool(ordered_typ), (
+        "init_cat_dtype requires constant ordered flag"
+    )
     cat_int_type = None if is_overload_none(int_type) else int_type.dtype
-    assert is_overload_none(cat_vals_typ) or isinstance(
-        cat_vals_typ, types.TypeRef
-    ), "init_cat_dtype requires constant category values"
+    assert is_overload_none(cat_vals_typ) or isinstance(cat_vals_typ, types.TypeRef), (
+        "init_cat_dtype requires constant category values"
+    )
     cat_vals = (
         None if is_overload_none(cat_vals_typ) else cat_vals_typ.instance_type.meta
     )
@@ -196,7 +196,7 @@ def box_cat_dtype(typ, val, c):
     )
     # call pd.CategoricalDtype()
     mod_name = c.context.insert_const_string(c.builder.module, "pandas")
-    pd_class_obj = c.pyapi.import_module_noblock(mod_name)
+    pd_class_obj = c.pyapi.import_module(mod_name)
     dtype_obj = c.pyapi.call_method(
         pd_class_obj, "CategoricalDtype", (categories_obj, ordered_obj)
     )
@@ -317,7 +317,7 @@ def box_categorical_array(typ, val, c):
     """box native CategoricalArrayType to pd.Categorical array object"""
     dtype = typ.dtype
     mod_name = c.context.insert_const_string(c.builder.module, "pandas")
-    pd_class_obj = c.pyapi.import_module_noblock(mod_name)
+    pd_class_obj = c.pyapi.import_module(mod_name)
 
     # get codes and dtype objects
     int_dtype = get_categories_int_type(dtype)

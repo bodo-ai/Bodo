@@ -1118,9 +1118,9 @@ def lower_constant_table(context, builder, table_type, pyval):
 def get_init_table_output_type(table_type, to_str_if_dict_t):
     out_table_type = unwrap_typeref(table_type)
     assert isinstance(out_table_type, TableType), "table type or typeref expected"
-    assert is_overload_constant_bool(
-        to_str_if_dict_t
-    ), "constant to_str_if_dict_t expected"
+    assert is_overload_constant_bool(to_str_if_dict_t), (
+        "constant to_str_if_dict_t expected"
+    )
 
     # convert dictionary-encoded string arrays to regular string arrays
     if is_overload_true(to_str_if_dict_t):
@@ -1416,9 +1416,9 @@ def alloc_list_like(typingctx, list_type, len_type, to_str_if_dict_t):
     )
     assert isinstance(out_list_type, types.List), "list type or typeref expected"
     assert isinstance(len_type, types.Integer), "integer type expected"
-    assert is_overload_constant_bool(
-        to_str_if_dict_t
-    ), "constant to_str_if_dict_t expected"
+    assert is_overload_constant_bool(to_str_if_dict_t), (
+        "constant to_str_if_dict_t expected"
+    )
 
     # convert dictionary-encoded string arrays to regular string arrays
     if is_overload_true(to_str_if_dict_t):
@@ -1861,7 +1861,9 @@ def gen_str_and_dict_enc_cols_to_one_block_fn_txt(
     assert (
         bodo.string_array_type in in_table_type.type_to_blk
         and bodo.string_array_type in in_table_type.type_to_blk
-    ), f"Error in gen_str_and_dict_enc_cols_to_one_block_fn_txt: Table type {in_table_type} does not contain both a string, and encoded string column"
+    ), (
+        f"Error in gen_str_and_dict_enc_cols_to_one_block_fn_txt: Table type {in_table_type} does not contain both a string, and encoded string column"
+    )
 
     input_string_ary_blk = in_table_type.type_to_blk[bodo.string_array_type]
     input_dict_encoded_string_ary_blk = in_table_type.type_to_blk[
@@ -1931,15 +1933,15 @@ def gen_str_and_dict_enc_cols_to_one_block_fn_txt(
             )
             cur_dict_enc_str_ary_idx += 1
 
-    assert (
-        "output_table_str_arr_offsets_in_combined_block" not in glbls
-    ), "Error in gen_str_and_dict_enc_cols_to_one_block_fn_txt: key 'output_table_str_arr_idxs_in_combined_block' already present as a global variable"
+    assert "output_table_str_arr_offsets_in_combined_block" not in glbls, (
+        "Error in gen_str_and_dict_enc_cols_to_one_block_fn_txt: key 'output_table_str_arr_idxs_in_combined_block' already present as a global variable"
+    )
     glbls["output_table_str_arr_offsets_in_combined_block"] = np.array(
         string_array_physical_offset_in_output_block
     )
-    assert (
-        "output_table_dict_enc_str_arr_offsets_in_combined_block" not in glbls
-    ), "Error in gen_str_and_dict_enc_cols_to_one_block_fn_txt: key 'output_table_str_arr_idxs_in_combined_block' already present as a global variable"
+    assert "output_table_dict_enc_str_arr_offsets_in_combined_block" not in glbls, (
+        "Error in gen_str_and_dict_enc_cols_to_one_block_fn_txt: key 'output_table_str_arr_idxs_in_combined_block' already present as a global variable"
+    )
     glbls["output_table_dict_enc_str_arr_offsets_in_combined_block"] = np.array(
         dict_enc_string_array_physical_offset_in_output_block
     )
@@ -1948,16 +1950,16 @@ def gen_str_and_dict_enc_cols_to_one_block_fn_txt(
 
     out_table_block = out_table_type.type_to_blk[bodo.string_array_type]
 
-    assert (
-        f"arr_inds_{input_string_ary_blk}" not in glbls
-    ), f"Error in gen_str_and_dict_enc_cols_to_one_block_fn_txt: arr_inds_{input_string_ary_blk} already present in global variables"
+    assert f"arr_inds_{input_string_ary_blk}" not in glbls, (
+        f"Error in gen_str_and_dict_enc_cols_to_one_block_fn_txt: arr_inds_{input_string_ary_blk} already present in global variables"
+    )
     glbls[f"arr_inds_{input_string_ary_blk}"] = np.array(
         in_table_type.block_to_arr_ind[input_string_ary_blk], dtype=np.int64
     )
 
-    assert (
-        f"arr_inds_{input_dict_encoded_string_ary_blk}" not in glbls
-    ), f"Error in gen_str_and_dict_enc_cols_to_one_block_fn_txt: arr_inds_{input_dict_encoded_string_ary_blk} already present in global variables"
+    assert f"arr_inds_{input_dict_encoded_string_ary_blk}" not in glbls, (
+        f"Error in gen_str_and_dict_enc_cols_to_one_block_fn_txt: arr_inds_{input_dict_encoded_string_ary_blk} already present in global variables"
+    )
     glbls[f"arr_inds_{input_dict_encoded_string_ary_blk}"] = np.array(
         in_table_type.block_to_arr_ind[input_dict_encoded_string_ary_blk],
         dtype=np.int64,
@@ -2049,14 +2051,14 @@ def decode_if_dict_table(T):
         # Specifically, if the input table has a string and dict encoded string block,
         # which will be fused into one block in the output table.
         if typ == bodo.dict_str_arr_type:
-            assert (
-                bodo.string_array_type in out_table_type.type_to_blk
-            ), "Error in decode_if_dict_table: If encoded string type is present in the input, then non-encoded string type should be present in the output"
+            assert bodo.string_array_type in out_table_type.type_to_blk, (
+                "Error in decode_if_dict_table: If encoded string type is present in the input, then non-encoded string type should be present in the output"
+            )
             output_blk = out_table_type.type_to_blk[bodo.string_array_type]
         else:
-            assert (
-                typ in out_table_type.type_to_blk
-            ), "Error in decode_if_dict_table: All non-encoded string types present in the input should be present in the output"
+            assert typ in out_table_type.type_to_blk, (
+                "Error in decode_if_dict_table: All non-encoded string types present in the input should be present in the output"
+            )
             output_blk = out_table_type.type_to_blk[typ]
 
         glbls[f"arr_inds_{input_blk}"] = np.array(
@@ -2097,9 +2099,9 @@ def init_runtime_table_from_lists(typingctx, arr_list_tup_typ, nrows_typ):
 
     The number of arrays in this table is NOT known at compile time.
     """
-    assert isinstance(
-        arr_list_tup_typ, types.BaseTuple
-    ), "init_runtime_table_from_lists requires a tuple of list of arrays"
+    assert isinstance(arr_list_tup_typ, types.BaseTuple), (
+        "init_runtime_table_from_lists requires a tuple of list of arrays"
+    )
     if isinstance(arr_list_tup_typ, types.UniTuple):
         # When running type inference, we may require further transformations
         # to determine the types of the lists. As a result we return None
@@ -2113,9 +2115,9 @@ def init_runtime_table_from_lists(typingctx, arr_list_tup_typ, nrows_typ):
             if typ.dtype == types.undefined:
                 return
             arr_list_typs.append(typ.dtype)
-    assert isinstance(
-        nrows_typ, types.Integer
-    ), "init_runtime_table_from_lists requires an integer length"
+    assert isinstance(nrows_typ, types.Integer), (
+        "init_runtime_table_from_lists requires an integer length"
+    )
 
     def codegen(context, builder, sig, args):
         (arr_list_tup, nrows) = args
@@ -2263,9 +2265,9 @@ def gen_logical_table_to_table_impl(
         TableType: converted table
     """
     in_col_inds = in_col_inds_t.instance_type.meta
-    assert isinstance(
-        in_table_t, (TableType, types.BaseTuple, types.NoneType)
-    ), "logical_table_to_table: input table must be a TableType or tuple of arrays or None (for dead table)"
+    assert isinstance(in_table_t, (TableType, types.BaseTuple, types.NoneType)), (
+        "logical_table_to_table: input table must be a TableType or tuple of arrays or None (for dead table)"
+    )
 
     glbls = {"set_wrapper": set_wrapper}
     # prune columns if used_cols is provided
@@ -2389,7 +2391,7 @@ def gen_logical_table_to_table_impl(
                 continue
             in_arr_ind = in_col_inds[out_arr_ind]
             if in_arr_ind >= n_in_table_arrs:
-                func_text += f"  out_arr_list_{blk}[{i}] = extra_arrs_t[{in_arr_ind-n_in_table_arrs}]\n"
+                func_text += f"  out_arr_list_{blk}[{i}] = extra_arrs_t[{in_arr_ind - n_in_table_arrs}]\n"
 
         func_text += f"  T2 = set_table_block(T2, out_arr_list_{blk}, {blk})\n"
 
@@ -2496,7 +2498,7 @@ def _logical_tuple_table_to_table_codegen(
             if in_arr_ind < n_in_table_arrs:
                 func_text += f"  out_arr_list_{blk}[{i}] = T1[{in_arr_ind}]\n"
             else:
-                func_text += f"  out_arr_list_{blk}[{i}] = extra_arrs_t[{in_arr_ind-n_in_table_arrs}]\n"
+                func_text += f"  out_arr_list_{blk}[{i}] = extra_arrs_t[{in_arr_ind - n_in_table_arrs}]\n"
 
         func_text += f"  T2 = set_table_block(T2, out_arr_list_{blk}, {blk})\n"
 
@@ -2548,9 +2550,9 @@ class LogicalTableToTableInfer(AbstractTemplate):
             )
             # Make sure inputs are arrays (also catches types.unknown)
             for t in extra_arrs_t:
-                assert is_array_typ(
-                    t, True
-                ), f"logical_table_to_table: array type expected but got {t}"
+                assert is_array_typ(t, True), (
+                    f"logical_table_to_table: array type expected but got {t}"
+                )
 
             in_col_inds = unwrap_typeref(in_col_inds_t).meta
             # handle array-only input data

@@ -2319,9 +2319,9 @@ def overload_convert_to_nullable_tup(arr_tup):
     ):
         return lambda arr_tup: arr_tup  # pragma: no cover
 
-    assert isinstance(
-        arr_tup, types.BaseTuple
-    ), "convert_to_nullable_tup: tuple expected"
+    assert isinstance(arr_tup, types.BaseTuple), (
+        "convert_to_nullable_tup: tuple expected"
+    )
     count = len(arr_tup.types)
     comm_dtype = find_common_np_dtype(arr_tup.types)
     out_dtype = None
@@ -4424,9 +4424,9 @@ def _overload_nan_argmin(arr):
         return impl_bodo_arr
 
     if isinstance(arr, CategoricalArrayType):
-        assert (
-            arr.dtype.ordered
-        ), "Categorical Array must be ordered to select an argmin"
+        assert arr.dtype.ordered, (
+            "Categorical Array must be ordered to select an argmin"
+        )
         elem_width = bodo.hiframes.pd_categorical_ext.get_categories_int_type(arr.dtype)
 
         def impl_cat_arr(arr):  # pragma: no cover
@@ -4507,9 +4507,9 @@ def _overload_nan_argmax(arr):
         return impl_bodo_arr
 
     if isinstance(arr, CategoricalArrayType):
-        assert (
-            arr.dtype.ordered
-        ), "Categorical Array must be ordered to select an argmin"
+        assert arr.dtype.ordered, (
+            "Categorical Array must be ordered to select an argmin"
+        )
         elem_width = bodo.hiframes.pd_categorical_ext.get_categories_int_type(arr.dtype)
 
         def impl_cat_arr(arr):  # pragma: no cover
