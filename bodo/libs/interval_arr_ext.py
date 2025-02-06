@@ -438,7 +438,7 @@ def box_interval_arr(typ, val, c):
 
     # call pd.arrays.IntervalArray.from_arrays(left, right)
     mod_name = c.context.insert_const_string(c.builder.module, "pandas")
-    pd_class_obj = c.pyapi.import_module_noblock(mod_name)
+    pd_class_obj = c.pyapi.import_module(mod_name)
     arrays_mod_obj = c.pyapi.object_getattr_string(pd_class_obj, "arrays")
     interval_array_class_obj = c.pyapi.object_getattr_string(
         arrays_mod_obj, "IntervalArray"

@@ -196,7 +196,7 @@ def box_cat_dtype(typ, val, c):
     )
     # call pd.CategoricalDtype()
     mod_name = c.context.insert_const_string(c.builder.module, "pandas")
-    pd_class_obj = c.pyapi.import_module_noblock(mod_name)
+    pd_class_obj = c.pyapi.import_module(mod_name)
     dtype_obj = c.pyapi.call_method(
         pd_class_obj, "CategoricalDtype", (categories_obj, ordered_obj)
     )
@@ -317,7 +317,7 @@ def box_categorical_array(typ, val, c):
     """box native CategoricalArrayType to pd.Categorical array object"""
     dtype = typ.dtype
     mod_name = c.context.insert_const_string(c.builder.module, "pandas")
-    pd_class_obj = c.pyapi.import_module_noblock(mod_name)
+    pd_class_obj = c.pyapi.import_module(mod_name)
 
     # get codes and dtype objects
     int_dtype = get_categories_int_type(dtype)

@@ -1729,6 +1729,7 @@ def test_reallocate_unpinned_frame():
         min_size_class=16,
         max_num_size_classes=10,
         enforce_max_limit_during_allocation=True,
+        debug_mode=True,
     )
     pool: BufferPool = BufferPool.from_options(options)
 
@@ -1759,7 +1760,7 @@ def test_reallocate_unpinned_frame():
     with pytest.raises(
         pyarrow.lib.ArrowMemoryError,
         match=re.escape(
-            "BufferPool::Reallocate: Allocation of new memory failed: Out of memory: Allocation failed. Not enough space in the buffer pool to allocate (3145728)."
+            "BufferPool::Reallocate: Allocation of new memory failed: Out of memory: Allocation canceled beforehand. Not enough space in the buffer pool to allocate (requested 3145728 bytes, aligned 3145728 bytes, available 2097152 bytes)."
         ),
     ):
         pool.reallocate(3 * 1024 * 1024, allocation)
@@ -1896,7 +1897,10 @@ def test_oom_all_mem_pinned():
 
     # Allocate a very small pool for testing
     options = BufferPoolOptions(
-        memory_size=4, min_size_class=1024, enforce_max_limit_during_allocation=True
+        memory_size=4,
+        min_size_class=1024,
+        enforce_max_limit_during_allocation=True,
+        debug_mode=True,
     )
     pool: BufferPool = BufferPool.from_options(options)
     size_class_1MiB: SizeClass = pool.get_size_class(0)
@@ -1916,7 +1920,7 @@ def test_oom_all_mem_pinned():
     # Trying to allocate 1MiB should fail
     with pytest.raises(
         pyarrow.lib.ArrowMemoryError,
-        match="Allocation failed. Not enough space in the buffer pool.",
+        match="Malloc canceled beforehand. Not enough space in the buffer pool.",
     ):
         _: BufferPoolAllocation = pool.allocate(600 * 1024)
 
@@ -1945,7 +1949,10 @@ def test_oom_some_mem_unpinned():
 
     # Allocate a very small pool for testing
     options = BufferPoolOptions(
-        memory_size=4, min_size_class=1024, enforce_max_limit_during_allocation=True
+        memory_size=4,
+        min_size_class=1024,
+        enforce_max_limit_during_allocation=True,
+        debug_mode=True,
     )
     pool: BufferPool = BufferPool.from_options(options)
     size_class_1MiB: SizeClass = pool.get_size_class(0)
@@ -1969,7 +1976,7 @@ def test_oom_some_mem_unpinned():
     # Trying to allocate 2MiB should fail
     with pytest.raises(
         pyarrow.lib.ArrowMemoryError,
-        match="Allocation failed. Not enough space in the buffer pool.",
+        match="Allocation canceled beforehand. Not enough space in the buffer pool.",
     ):
         _: BufferPoolAllocation = pool.allocate(2 * 1024 * 1024)
 
@@ -2000,7 +2007,10 @@ def test_oom_no_storage():
 
     # Allocate a very small pool for testing
     options = BufferPoolOptions(
-        memory_size=4, min_size_class=1024, enforce_max_limit_during_allocation=True
+        memory_size=4,
+        min_size_class=1024,
+        enforce_max_limit_during_allocation=True,
+        debug_mode=True,
     )
     pool: BufferPool = BufferPool.from_options(options)
     size_class_2MiB: SizeClass = pool.get_size_class(1)
@@ -2872,6 +2882,7 @@ def test_repin_eviction(tmp_path: Path):
         min_size_class=1024,
         enforce_max_limit_during_allocation=True,
         storage_options=[local_opt],
+        debug_mode=True,
     )
     pool: BufferPool = BufferPool.from_options(options)
     size_class_1MiB: SizeClass = pool.get_size_class(0)
@@ -3087,6 +3098,7 @@ def test_reallocate_spilled_block(tmp_path: Path):
         min_size_class=16,
         enforce_max_limit_during_allocation=True,
         storage_options=[local_opt],
+        debug_mode=True,
     )
     pool: BufferPool = BufferPool.from_options(options)
 
@@ -3159,7 +3171,7 @@ def test_reallocate_spilled_block(tmp_path: Path):
     with pytest.raises(
         pyarrow.lib.ArrowMemoryError,
         match=re.escape(
-            "BufferPool::Reallocate: Allocation of new memory failed: Out of memory: Allocation failed. Not enough space in the buffer pool to allocate (3145728)."
+            "BufferPool::Reallocate: Allocation of new memory failed: Out of memory: Allocation canceled beforehand. Not enough space in the buffer pool to allocate (requested 3145728 bytes, aligned 3145728 bytes, available 2097152 bytes)."
         ),
     ):
         pool.reallocate(3 * 1024 * 1024, allocation1)
@@ -4156,7 +4168,10 @@ def test_operator_pool_allocation():
 
     # Allocate a very small pool for testing
     options = BufferPoolOptions(
-        memory_size=4, min_size_class=8, enforce_max_limit_during_allocation=True
+        memory_size=4,
+        min_size_class=8,
+        enforce_max_limit_during_allocation=True,
+        debug_mode=True,
     )  # 4MiB, 8KiB
     pool: BufferPool = BufferPool.from_options(options)
 
@@ -4373,7 +4388,7 @@ def test_operator_pool_allocation():
 
     with pytest.raises(
         pyarrow.lib.ArrowMemoryError,
-        match=re.escape("Allocation failed. Not enough space in the buffer pool"),
+        match=re.escape("Not enough space in the buffer pool to allocate"),
     ):
         # This would take the total to over 4MiB, which is higher than
         # the BufferPool limit.
@@ -4392,7 +4407,9 @@ def test_operator_pool_allocation():
     # Test the same through the allocate_scratch API
     with pytest.raises(
         pyarrow.lib.ArrowMemoryError,
-        match=re.escape("Allocation failed. Not enough space in the buffer pool"),
+        match=re.escape(
+            "Allocation canceled beforehand. Not enough space in the buffer pool"
+        ),
     ):
         # This would take the total to over 4MiB, which is higher than
         # the BufferPool limit.
@@ -4433,6 +4450,7 @@ def test_operator_pool_pin_unpin():
         memory_size=2,
         min_size_class=8,
         enforce_max_limit_during_allocation=True,
+        debug_mode=True,
     )  # 2MiB total, 8KiB min size class
     pool: BufferPool = BufferPool.from_options(options)
 
@@ -4795,7 +4813,10 @@ def test_operator_pool_reallocate_edge_cases():
 
     # Allocate a very small pool for testing
     options = BufferPoolOptions(
-        memory_size=4, min_size_class=8, enforce_max_limit_during_allocation=True
+        memory_size=4,
+        min_size_class=8,
+        enforce_max_limit_during_allocation=True,
+        debug_mode=True,
     )  # 4MiB, 8KiB
     pool: BufferPool = BufferPool.from_options(options)
 
@@ -4879,7 +4900,9 @@ def test_operator_pool_reallocate_edge_cases():
     allocation = op_pool.allocate(250 * 1024)
     with pytest.raises(
         pyarrow.lib.ArrowMemoryError,
-        match=re.escape("Allocation failed. Not enough space in the buffer pool"),
+        match=re.escape(
+            "Allocation canceled beforehand. Not enough space in the buffer pool"
+        ),
     ):
         op_pool.reallocate(int(3.8 * 1024 * 1024), allocation)
     assert op_pool.bytes_allocated() == 250 * 1024
@@ -4898,7 +4921,9 @@ def test_operator_pool_reallocate_edge_cases():
 
     with pytest.raises(
         pyarrow.lib.ArrowMemoryError,
-        match=re.escape("Allocation failed. Not enough space in the buffer pool"),
+        match=re.escape(
+            "Allocation canceled beforehand. Not enough space in the buffer pool"
+        ),
     ):
         op_pool.reallocate(int(3.8 * 1024 * 1024), allocation)
     assert op_pool.bytes_allocated() == 250 * 1024

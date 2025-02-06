@@ -39,10 +39,10 @@ requirements:
     - ninja
     - mpi4py =3.1.5  # [not win]
 
-    - numba =0.60.0
+    - numba =0.61.0
     # Compatible with Numba requirements.
     # Resolves build issues on nightly
-    - numpy >=1.24,<1.27
+    - numpy >=1.24,<2.2
     - pandas >=2.2,<2.3
     - fsspec >=2021.09
     - libarrow =18.1.0
@@ -55,7 +55,7 @@ requirements:
     - impi-devel=2021.13.1  # [win64]
     - mpi4py ~= 4.0         # [win64]
     - requests
-    - aws-sdk-cpp
+    - aws-sdk-cpp <=1.11.485
     - zstd<=1.5.6
     - cloudpickle >=3.0,<4.0
 
@@ -65,11 +65,11 @@ requirements:
     - pandas >=2.2,<2.3
     - fsspec >=2021.09
     - pyarrow =18.1.0
-    - numba 0.60.0
+    - numba 0.61.0
     - mpich *=h* # [not win]
     - impi-devel=2021.13.1  # [win64]
     - requests
-    - aws-sdk-cpp
+    - aws-sdk-cpp <=1.11.485
     - zstd<=1.5.6
     - cloudpickle >=3.0,<4.0
     - psutil
@@ -78,7 +78,7 @@ requirements:
   # but will restrict them if they are present in the conda env.
   run_constrained:
     - matplotlib <= 3.8.2
-    - numpy >=1.24,<1.27
+    - numpy >=1.24,<2.2
     - scikit-learn =1.4.*
     - s3fs >=2022.1.0
     - adlfs >=2022.1.0

@@ -674,6 +674,8 @@ def get_compression_from_file_name(fname: str):
         compression = "zip"
     elif fname.endswith(".xz"):
         compression = "xz"
+    elif fname.endswith(".zst"):
+        compression = "zstd"
 
     return compression
 

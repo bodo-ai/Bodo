@@ -252,7 +252,7 @@ std::shared_ptr<::arrow::Array> EvolveArray(
                         target_field_type->field(i)->type(), column_->length(),
                         bodo::BufferPool::DefaultPtr());
                 std::shared_ptr<arrow::Array> null_arr;
-                CHECK_ARROW_AND_ASSIGN(
+                CHECK_ARROW_READER_AND_ASSIGN(
                     null_arr_res,
                     fmt::format(
                         "IcebergParquetReader::EvolveArray: Failed to "
@@ -382,28 +382,29 @@ static std::shared_ptr<::arrow::dataset::ScanOptions> make_scan_options(
         std::make_shared<arrow::dataset::ScannerBuilder>(dataset);
 
     auto bind_res = expr_filter.Bind(*(builder->schema()));
-    CHECK_ARROW_AND_ASSIGN(bind_res, "Error while binding schema to the filter",
-                           auto bound_expr_filter);
+    CHECK_ARROW_READER_AND_ASSIGN(bind_res,
+                                  "Error while binding schema to the filter",
+                                  auto bound_expr_filter);
     auto filter_res = builder->Filter(bound_expr_filter);
-    CHECK_ARROW(filter_res, "Error during filter");
+    CHECK_ARROW_READER(filter_res, "Error during filter");
     auto project_res = builder->Project(column_names);
-    CHECK_ARROW(project_res, "Error during projection ");
+    CHECK_ARROW_READER(project_res, "Error during projection ");
     auto batch_size_res = builder->BatchSize(batch_size);
-    CHECK_ARROW(batch_size_res, "Error setting batch_size");
+    CHECK_ARROW_READER(batch_size_res, "Error setting batch_size");
     auto batch_readahead_res = builder->BatchReadahead(batch_readahead);
-    CHECK_ARROW(builder->BatchReadahead(batch_readahead),
-                "Error setting batch_readahead");
+    CHECK_ARROW_READER(builder->BatchReadahead(batch_readahead),
+                       "Error setting batch_readahead");
     auto fragment_readahead_res =
         builder->FragmentReadahead(fragment_readahead);
-    CHECK_ARROW(builder->FragmentReadahead(fragment_readahead),
-                "Error setting fragment_readahead");
+    CHECK_ARROW_READER(builder->FragmentReadahead(fragment_readahead),
+                       "Error setting fragment_readahead");
     auto use_threads_res = builder->UseThreads(use_threads);
-    CHECK_ARROW(use_threads_res, "Error setting use_threads");
+    CHECK_ARROW_READER(use_threads_res, "Error setting use_threads");
     auto pool_res = builder->Pool(bodo::BufferPool::DefaultPtr());
-    CHECK_ARROW(pool_res, "Error setting pool");
+    CHECK_ARROW_READER(pool_res, "Error setting pool");
     // XXX Could set FragmentScanOptions similarly
 
-    CHECK_ARROW_AND_ASSIGN(
+    CHECK_ARROW_READER_AND_ASSIGN(
         builder->GetScanOptions(), "Error during GetScanOptions",
         std::shared_ptr<::arrow::dataset::ScanOptions> scan_options);
 
@@ -448,11 +449,12 @@ std::shared_ptr<::arrow::dataset::Scanner> scanner_from_py_dataset(
     ensure_pa_wrappers_imported();
     // Unwrap Python objects into C++
     auto unwrap_expr_res = arrow::py::unwrap_expression(expr_filter_py);
-    CHECK_ARROW_AND_ASSIGN(unwrap_expr_res, "Error unwrapping filter",
-                           arrow::compute::Expression expr_filter);
+    CHECK_ARROW_READER_AND_ASSIGN(unwrap_expr_res, "Error unwrapping filter",
+                                  arrow::compute::Expression expr_filter);
     auto unwrap_dataset_res = arrow::py::unwrap_dataset(dataset_py);
-    CHECK_ARROW_AND_ASSIGN(unwrap_dataset_res, "Error unwrapping dataset",
-                           std::shared_ptr<arrow::dataset::Dataset> dataset);
+    CHECK_ARROW_READER_AND_ASSIGN(
+        unwrap_dataset_res, "Error unwrapping dataset",
+        std::shared_ptr<arrow::dataset::Dataset> dataset);
 
     std::vector<std::string> column_names;
     for (int field_num : selected_fields) {
@@ -468,8 +470,9 @@ std::shared_ptr<::arrow::dataset::Scanner> scanner_from_py_dataset(
         std::make_shared<arrow::dataset::ScannerBuilder>(dataset, scan_options);
 
     auto builder_res = scanner_builder->Finish();
-    CHECK_ARROW_AND_ASSIGN(builder_res, "Error finalizing ScannerBuilder!",
-                           std::shared_ptr<arrow::dataset::Scanner> scanner);
+    CHECK_ARROW_READER_AND_ASSIGN(
+        builder_res, "Error finalizing ScannerBuilder!",
+        std::shared_ptr<arrow::dataset::Scanner> scanner);
     return scanner;
 }
 
@@ -483,7 +486,7 @@ static std::shared_ptr<arrow::RecordBatchReader> scanner_to_rb_reader(
     std::shared_ptr<::arrow::dataset::Scanner> scanner) {
     std::shared_ptr<arrow::RecordBatchReader> reader;
     auto to_reader_res = scanner->ToRecordBatchReader();
-    CHECK_ARROW_AND_ASSIGN(
+    CHECK_ARROW_READER_AND_ASSIGN(
         to_reader_res,
         "scanner_to_rb_reader: Error creating RecordBatchReader from Scanner!",
         reader)
@@ -1249,7 +1252,7 @@ class IcebergParquetReader : public ArrowReader {
         // if (cpu_count == 0) {
         //     cpu_count = 2;
         // }
-        // CHECK_ARROW(arrow::io::SetIOThreadPoolCapacity(4),
+        // CHECK_ARROW_READER(arrow::io::SetIOThreadPoolCapacity(4),
         //             "Error setting IO thread pool capacity!");
 
         // get_pyarrow_datasets returns a tuple with the a list of PyArrow
@@ -1323,7 +1326,7 @@ class IcebergParquetReader : public ArrowReader {
             PyObject* read_schema_py =
                 PyList_GetItem(scanner_read_schemas_py, i);
             std::shared_ptr<arrow::Schema> read_schema;
-            CHECK_ARROW_AND_ASSIGN(
+            CHECK_ARROW_READER_AND_ASSIGN(
                 arrow::py::unwrap_schema(read_schema_py),
                 "Iceberg Scanner Read Schema Couldn't Unwrap from Python",
                 read_schema);
@@ -1546,9 +1549,10 @@ class IcebergParquetReader : public ArrowReader {
         }
         std::shared_ptr<arrow::RecordBatch> batch = nullptr;
         auto batch_res = this->curr_reader->ReadNext(&batch);
-        CHECK_ARROW(batch_res,
-                    "IcebergParquetReader::get_next_batch_: Error reading "
-                    "next batch!");
+        CHECK_ARROW_READER(
+            batch_res,
+            "IcebergParquetReader::get_next_batch_: Error reading "
+            "next batch!");
         if (batch == nullptr) {
             // Reset the reader to free it. This will
             // prompt the next invocation to create a reader from the

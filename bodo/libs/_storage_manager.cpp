@@ -425,7 +425,7 @@ class SparseFileStorageManager final : public StorageManager {
         bool created = std::filesystem::create_directories(location);
         if (!created) {
             throw std::runtime_error(
-                "SparseFileStorageManager(): Unable to create "
+                "SparseFileStorageManager(): Unable to create spill "
                 "directory");
         }
 
