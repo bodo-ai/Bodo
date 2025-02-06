@@ -266,6 +266,7 @@ def polaris_server():
         subprocess.run(["docker", "inspect", "polaris-server-unittests"], check=True)
         # Kill it if it is running
         subprocess.run(["docker", "stop", "polaris-server-unittests"], check=True)
+        subprocess.run(["docker", "rm", "polaris-server-unittests"], check=True)
     except subprocess.CalledProcessError:
         # Polaris server is not running, ignore the error
         pass
@@ -898,9 +899,9 @@ def pytest_collect_file(parent, file_path: Path):
 
 
 @pytest.fixture(scope="session")
-def polaris_catalog_api_client(polaris_server):
+def polaris_package():
     """
-    Configure the polaris client to connect to the polaris server
+    Ensure that the polaris client is installed
     """
     # Install the polaris client if it is not already installed
     # This is a temporary solution until the polaris client is published
@@ -915,29 +916,28 @@ def polaris_catalog_api_client(polaris_server):
                 "git+https://github.com/apache/polaris.git#subdirectory=regtests/client/python",
             ]
         )
-    host, port, user, password = polaris_server
+
+
+@pytest.fixture(scope="session")
+def polaris_token(polaris_server, polaris_package):
+    """
+    Fixture to get a polaris access token
+    """
+    from polaris.catalog.api.iceberg_o_auth2_api import IcebergOAuth2API
     from polaris.catalog.api_client import ApiClient as CatalogApiClient
     from polaris.catalog.api_client import (
         Configuration as CatalogApiClientConfiguration,
     )
+
+    host, port, user, password = polaris_server
 
     client = CatalogApiClient(
         CatalogApiClientConfiguration(
             username=user, password=password, host=f"http://{host}:{port}/api/catalog"
         )
     )
-    return client
-
-
-@pytest.fixture(scope="session")
-def polaris_token(polaris_catalog_api_client, polaris_server):
-    """
-    Fixture to get a polaris access token
-    """
-    from polaris.catalog.api.iceberg_o_auth2_api import IcebergOAuth2API
-
     _, _, user, password = polaris_server
-    oauth_api = IcebergOAuth2API(polaris_catalog_api_client)
+    oauth_api = IcebergOAuth2API(client)
     token = oauth_api.get_token(
         scope="PRINCIPAL_ROLE:ALL",
         client_id=user,
@@ -949,12 +949,16 @@ def polaris_token(polaris_catalog_api_client, polaris_server):
 
 
 @pytest.fixture(scope="session")
-def aws_polaris_warehouse(polaris_token, polaris_server):
+def aws_polaris_warehouse(polaris_token, polaris_server, polaris_package):
     """
     Configure an S3 warehouse in the polaris server
     """
+    from polaris.catalog import ApiClient as CatalogApiClient
+    from polaris.catalog import CreateNamespaceRequest, IcebergCatalogAPI
     from polaris.management import (
-        ApiClient,
+        ApiClient as ManagementApiClient,
+    )
+    from polaris.management import (
         AwsStorageConfigInfo,
         Catalog,
         Configuration,
@@ -964,13 +968,13 @@ def aws_polaris_warehouse(polaris_token, polaris_server):
 
     host, port, _, _ = polaris_server
 
-    client = ApiClient(
+    management_client = ManagementApiClient(
         Configuration(
             access_token=polaris_token.access_token,
             host=f"http://{host}:{port}/api/management/v1",
         )
     )
-    root_client = PolarisDefaultApi(client)
+    root_client = PolarisDefaultApi(management_client)
     storage_conf = AwsStorageConfigInfo(
         role_arn="arn:aws:iam::427443013497:role/Polaris-Unittests", storage_type="S3"
     )
@@ -978,13 +982,28 @@ def aws_polaris_warehouse(polaris_token, polaris_server):
     suffix = "".join(random.choices("abcdefghijklmnopqrstuvwxyz", k=10))
     catalog = Catalog(
         name=catalog_name,
-        type="EXTERNAL",
+        type="INTERNAL",
         properties={"default-base-location": f"s3://polaris-unittests/{suffix}"},
         storage_config_info=storage_conf,
     )
+
     root_client.create_catalog(
         create_catalog_request=CreateCatalogRequest(catalog=catalog)
     )
+
+    catalog_client = CatalogApiClient(
+        Configuration(
+            access_token=polaris_token.access_token,
+            host=f"http://{host}:{port}/api/catalog",
+        )
+    )
+    catalog_api = IcebergCatalogAPI(catalog_client)
+    catalog_api.create_namespace(
+        prefix=catalog_name,
+        create_namespace_request=CreateNamespaceRequest(namespace=["CI"]),
+    )
+
+    return catalog_name
 
 
 @pytest.fixture
