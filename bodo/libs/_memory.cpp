@@ -923,8 +923,13 @@ BufferPool::BufferPool(const BufferPoolOptions& options)
         static_cast<uint8_t>(std::min({this->options_.max_num_size_classes,
                                        max_num_size_classes, (uint64_t)63}));
 
+#ifdef _WIN32
+    // TODO xx enable buffer pool on Windows.
+    this->malloc_threshold_ = std::numeric_limits<int64_t>::max();
+#else
     this->malloc_threshold_ =
         static_cast<uint64_t>(MALLOC_THRESHOLD_RATIO * min_size_class_bytes);
+#endif
 
     // Construct Size Class Sizes in Bytes
     for (uint8_t i = 0; i < num_size_classes; i++) {
