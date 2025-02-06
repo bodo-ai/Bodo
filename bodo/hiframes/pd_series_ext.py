@@ -206,9 +206,9 @@ class HeterogeneousSeriesType(types.Type):
         # potential distribution updates (with hasattr(typ, "dist") check)
         from bodo.transforms.distributed_analysis import Distribution
 
-        assert (
-            dist == Distribution.REP
-        ), "invalid distribution for HeterogeneousSeriesType"
+        assert dist == Distribution.REP, (
+            "invalid distribution for HeterogeneousSeriesType"
+        )
 
         if index is None:
             index = self.index.copy()

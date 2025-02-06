@@ -605,9 +605,9 @@ def pq_distributed_run(
     # At most one of the table and the index
     # can be dead because otherwise the whole
     # node should have already been removed.
-    assert not (
-        pq_node.index_column_index is None and not pq_node.is_live_table
-    ), "At most one of table and index should be dead if the Parquet IR node is live"
+    assert not (pq_node.index_column_index is None and not pq_node.is_live_table), (
+        "At most one of table and index should be dead if the Parquet IR node is live"
+    )
     if pq_node.index_column_index is None:
         # If the index_col is dead, remove the node.
         nodes.pop(-1)
@@ -1201,13 +1201,14 @@ def pq_reader_init_py_entry(
     op_id_t,
     arrow_reader_t,
 ):  # pragma: no cover
-    assert (
-        isinstance(arrow_reader_t, types.TypeRef)
-        and isinstance(arrow_reader_t.instance_type, ArrowReaderType)
-    ), "pq_reader_init_py_entry(): The last argument arrow_reader must by a TypeRef to an ArrowReader"
-    assert (
-        pyarrow_schema_t == pyarrow_schema_type
-    ), "pq_reader_init_py_entry(): The 5th argument pyarrow_schema must by a PyArrow schema"
+    assert isinstance(arrow_reader_t, types.TypeRef) and isinstance(
+        arrow_reader_t.instance_type, ArrowReaderType
+    ), (
+        "pq_reader_init_py_entry(): The last argument arrow_reader must by a TypeRef to an ArrowReader"
+    )
+    assert pyarrow_schema_t == pyarrow_schema_type, (
+        "pq_reader_init_py_entry(): The 5th argument pyarrow_schema must by a PyArrow schema"
+    )
 
     def codegen(context: "BaseContext", builder: "IRBuilder", signature, args):
         fnty = lir.FunctionType(

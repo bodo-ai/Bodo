@@ -144,9 +144,9 @@ def test_pandas_pysigs(get_apis, keys):
 
     invalid_ser_attrs_str = ", ".join(invalid_ser_attrs)
 
-    assert (
-        len(invalid_ser_attrs) == 0
-    ), f"Found {len(invalid_ser_attrs)} Series attribute(s) that either do not have an overload or have both unsupported and supported overloads: {invalid_ser_attrs_str}"
-    assert (
-        total_decl_methods == total_correct_signature
-    ), f"Found differences in the following method signatures:\n{diff_str}"
+    assert len(invalid_ser_attrs) == 0, (
+        f"Found {len(invalid_ser_attrs)} Series attribute(s) that either do not have an overload or have both unsupported and supported overloads: {invalid_ser_attrs_str}"
+    )
+    assert total_decl_methods == total_correct_signature, (
+        f"Found differences in the following method signatures:\n{diff_str}"
+    )

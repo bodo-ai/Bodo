@@ -2551,20 +2551,20 @@ def check_caching(
 
     if is_cached:
         # assert that it was loaded from cache
-        assert (
-            bodo_func._cache_hits[sig] == 1
-        ), "Expected a cache hit for function signature"
-        assert (
-            bodo_func._cache_misses[sig] == 0
-        ), "Expected no cache miss for function signature"
+        assert bodo_func._cache_hits[sig] == 1, (
+            "Expected a cache hit for function signature"
+        )
+        assert bodo_func._cache_misses[sig] == 0, (
+            "Expected no cache miss for function signature"
+        )
     else:
         # assert that it wasn't loaded from cache
-        assert (
-            bodo_func._cache_hits[sig] == 0
-        ), "Expected no cache hits for function signature"
-        assert (
-            bodo_func._cache_misses[sig] == 1
-        ), "Expected a miss for function signature"
+        assert bodo_func._cache_hits[sig] == 0, (
+            "Expected no cache hits for function signature"
+        )
+        assert bodo_func._cache_misses[sig] == 1, (
+            "Expected a miss for function signature"
+        )
 
     return bodo_output
 
@@ -2603,9 +2603,9 @@ def _ensure_func_calls_optimized_out(bodo_func, call_names):
                 and stmt.value.op == "call"
             ):
                 call_name = guard(find_callname, fir, stmt.value, typemap)
-                assert (
-                    call_name not in call_names
-                ), f"{call_name} found in IR when it should be optimized out"
+                assert call_name not in call_names, (
+                    f"{call_name} found in IR when it should be optimized out"
+                )
 
 
 # We only run snowflake tests on Azure Pipelines because the Snowflake account credentials
@@ -2657,9 +2657,9 @@ def get_rest_catalog_connection_string(
         credential: permanent credential to use for authentication
         token: temporary token to use for authentication
     """
-    assert (
-        credential is not None or token is not None
-    ), "credential or token should be provided"
+    assert credential is not None or token is not None, (
+        "credential or token should be provided"
+    )
     auth_param = (
         f"credential={credential}" if credential is not None else f"token={token}"
     )

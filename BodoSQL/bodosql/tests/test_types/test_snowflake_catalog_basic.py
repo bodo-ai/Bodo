@@ -141,9 +141,9 @@ def test_snowflake_catalog_from_conn_str(conn_str: str):
 
     params_sorted = sorted(params.items())
     expected = f"snowflake://{c.username}{password_str}@{c.account}/{c.database}{schema_str}?{urlencode(params_sorted)}"
-    assert (
-        expected == conn_str
-    ), "Connection String from SnowflakeCatalog does not match input arg"
+    assert expected == conn_str, (
+        "Connection String from SnowflakeCatalog does not match input arg"
+    )
 
 
 @pytest.mark.parametrize(

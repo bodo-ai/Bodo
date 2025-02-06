@@ -252,6 +252,6 @@ if __name__ == "__main__":
         json.dump({"checksum": final_checksum}, f)
 
     if args.require_cache and isinstance(sequences, numba.core.dispatcher.Dispatcher):
-        assert (
-            sequences._cache_hits[sequences.signatures[0]] == 1
-        ), "ERROR: Bodo did not load from cache"
+        assert sequences._cache_hits[sequences.signatures[0]] == 1, (
+            "ERROR: Bodo did not load from cache"
+        )

@@ -50,9 +50,9 @@ np_offset_type = numba.np.numpy_support.as_dtype(offset_type)
 
 class ArrayItemArrayType(types.ArrayCompatible):
     def __init__(self, dtype):
-        assert bodo.utils.utils.is_array_typ(
-            dtype, False
-        ), "ArrayItemArrayType dtype should be an array type"
+        assert bodo.utils.utils.is_array_typ(dtype, False), (
+            "ArrayItemArrayType dtype should be an array type"
+        )
         self.dtype = dtype
         super().__init__(name=f"ArrayItemArrayType({dtype})")
 
@@ -286,9 +286,9 @@ def lower_pre_alloc_array_item_array(context, builder, sig, args):
 
 @intrinsic
 def pre_alloc_array_item_array(typingctx, num_arrs_typ, num_values_typ, dtype_typ):
-    assert isinstance(
-        num_arrs_typ, types.Integer
-    ), "pre_alloc_array_item_array: num_arrs should be integer"
+    assert isinstance(num_arrs_typ, types.Integer), (
+        "pre_alloc_array_item_array: num_arrs should be integer"
+    )
 
     array_item_type = ArrayItemArrayType(unwrap_typeref(dtype_typ))
     num_values_typ = types.unliteral(num_values_typ)  # avoid e.g. (int64, literal(0))
@@ -397,9 +397,9 @@ def init_array_item_array(
     typingctx, n_arrays_typ, data_type, offsets_typ, null_bitmap_typ
 ):
     """Create a ArrayItemArray with provided offsets, data and null bitmap values."""
-    assert null_bitmap_typ == types.Array(
-        types.uint8, 1, "C"
-    ), "init_array_item_array: null_bitmap should be Numpy array of uint8 values"
+    assert null_bitmap_typ == types.Array(types.uint8, 1, "C"), (
+        "init_array_item_array: null_bitmap should be Numpy array of uint8 values"
+    )
 
     ret_typ = ArrayItemArrayType(data_type)
     sig = ret_typ(types.int64, data_type, offsets_typ, null_bitmap_typ)
@@ -408,9 +408,9 @@ def init_array_item_array(
 
 @intrinsic
 def get_offsets(typingctx, arr_typ):
-    assert isinstance(
-        arr_typ, ArrayItemArrayType
-    ), "get_offsets: ArrayItemArrayType expected"
+    assert isinstance(arr_typ, ArrayItemArrayType), (
+        "get_offsets: ArrayItemArrayType expected"
+    )
 
     def codegen(context, builder, sig, args):
         (arr,) = args

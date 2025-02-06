@@ -210,7 +210,7 @@ def create_iceberg_table(
         spark.sql(
             f"""
             ALTER TABLE hadoop_prod.{DATABASE_NAME}.{table_name}
-            WRITE ORDERED BY {', '.join(sort_defs)}
+            WRITE ORDERED BY {", ".join(sort_defs)}
         """
         )
     append_to_iceberg_table(df, sql_schema, table_name, spark)

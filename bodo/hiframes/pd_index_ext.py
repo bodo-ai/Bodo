@@ -1146,8 +1146,7 @@ def pd_date_range_overload(
             func_text += "  b = np.int64(e) + addend\n"
         else:
             raise_bodo_error(
-                "at least 'start' or 'end' should be specified "
-                "if a 'period' is given."
+                "at least 'start' or 'end' should be specified if a 'period' is given."
             )
         # TODO: handle overflows
         func_text += "  arr = np.arange(b, e, stride, np.int64)\n"
@@ -2267,9 +2266,9 @@ class CategoricalIndexType(types.IterableType, types.ArrayCompatible):
     def __init__(self, data, name_typ=None):
         from bodo.hiframes.pd_categorical_ext import CategoricalArrayType
 
-        assert isinstance(
-            data, CategoricalArrayType
-        ), "CategoricalIndexType expects CategoricalArrayType"
+        assert isinstance(data, CategoricalArrayType), (
+            "CategoricalIndexType expects CategoricalArrayType"
+        )
         name_typ = types.none if name_typ is None else name_typ
         self.name_typ = name_typ
         self.data = data
@@ -2493,9 +2492,9 @@ class IntervalIndexType(types.ArrayCompatible):
     def __init__(self, data, name_typ=None):
         from bodo.libs.interval_arr_ext import IntervalArrayType
 
-        assert isinstance(
-            data, IntervalArrayType
-        ), "IntervalIndexType expects IntervalArrayType"
+        assert isinstance(data, IntervalArrayType), (
+            "IntervalIndexType expects IntervalArrayType"
+        )
         name_typ = types.none if name_typ is None else name_typ
         self.name_typ = name_typ
         self.data = data
@@ -2911,9 +2910,9 @@ class BinaryIndexType(types.IterableType, types.ArrayCompatible):
 
     def __init__(self, name_typ=None, data_typ=None):
         # data_typ is added just for compatibility with StringIndexType
-        assert (
-            data_typ is None or data_typ == binary_array_type
-        ), "data_typ must be binary_array_type"
+        assert data_typ is None or data_typ == binary_array_type, (
+            "data_typ must be binary_array_type"
+        )
         name_typ = types.none if name_typ is None else name_typ
         self.name_typ = name_typ
         # Add a .data field for consistency with other index types

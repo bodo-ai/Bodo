@@ -197,9 +197,9 @@ def aggregate_helper(
     if key == "trace_level":
         trace_level = profile0[key]
         # Assert that the trace_level is consistent across all profiles
-        assert all(
-            profile[key] == trace_level for profile in profiles
-        ), "Inconsistent trace levels"
+        assert all(profile[key] == trace_level for profile in profiles), (
+            "Inconsistent trace levels"
+        )
         # Keep the trace level since it might be useful to double check when
         # analyzing profiles
         aggregated[key] = profile0[key]

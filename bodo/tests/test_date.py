@@ -2591,9 +2591,9 @@ def test_today_rank_consistent(memory_leak_check):
 
     res = impl()
     results = bodo.allgatherv(np.array([res]))
-    assert all(
-        r == results[0] for r in results
-    ), "Results are not consistent across ranks"
+    assert all(r == results[0] for r in results), (
+        "Results are not consistent across ranks"
+    )
 
 
 def test_now_date_wrapper_rank_consistent(memory_leak_check):
@@ -2607,9 +2607,9 @@ def test_now_date_wrapper_rank_consistent(memory_leak_check):
 
     res = impl()
     results = bodo.allgatherv(np.array([res]))
-    assert all(
-        r == results[0] for r in results
-    ), "Results are not consistent across ranks"
+    assert all(r == results[0] for r in results), (
+        "Results are not consistent across ranks"
+    )
 
 
 def test_now_impl_consistent(memory_leak_check):
@@ -2623,6 +2623,6 @@ def test_now_impl_consistent(memory_leak_check):
 
     res = impl().date()
     results = bodo.allgatherv(np.array([res]))
-    assert all(
-        r == results[0] for r in results
-    ), "Results are not consistent across ranks"
+    assert all(r == results[0] for r in results), (
+        "Results are not consistent across ranks"
+    )

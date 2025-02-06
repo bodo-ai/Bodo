@@ -601,9 +601,9 @@ def _compute_table_column_use(blocks, func_ir, typemap):
                     # Fetch the number of elements from the exhaust_iter
                     num_elems = rhs.count
                     elem_types = lhs_type.types
-                    assert num_elems <= len(
-                        elem_types
-                    ), "Internal Error: Invalid exhaust_iter count"
+                    assert num_elems <= len(elem_types), (
+                        "Internal Error: Invalid exhaust_iter count"
+                    )
                     for i in range(num_elems):
                         if isinstance(elem_types[i], TableType):
                             lhs_key = (lhs_name, i)
@@ -653,9 +653,9 @@ def _compute_table_column_use(blocks, func_ir, typemap):
                     fdef = guard(numba.core.ir_utils.find_callname, func_ir, rhs)
                     if fdef == ("get_table_data", "bodo.hiframes.table"):
                         table_var_name = rhs.args[0].name
-                        assert isinstance(
-                            typemap[table_var_name], TableType
-                        ), "Internal Error: Invalid get_table_data call"
+                        assert isinstance(typemap[table_var_name], TableType), (
+                            "Internal Error: Invalid get_table_data call"
+                        )
                         col_num = typemap[rhs.args[1].name].literal_value
                         table_key = (table_var_name, None)
                         col_num_set = block_use_map[table_key][0]

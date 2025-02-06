@@ -171,9 +171,9 @@ valid_not_matched_actions = [
 
 
 def apply_not_matched_action(df, action):
-    assert (
-        action in valid_not_matched_actions
-    ), f"Found impossible not matched action: {action}"
+    assert action in valid_not_matched_actions, (
+        f"Found impossible not matched action: {action}"
+    )
 
     # Insert sets to NA by default
     df["A"] = pd.NA

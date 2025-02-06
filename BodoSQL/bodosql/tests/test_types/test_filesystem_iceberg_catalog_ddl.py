@@ -268,9 +268,9 @@ def test_drop_table_not_found(iceberg_filesystem_catalog, memory_leak_check):
         existing_tables = spark.sql(
             f"show tables in hadoop_prod.{db_schema} like '{table_name}'"
         ).toPandas()
-        assert (
-            len(existing_tables) == 0
-        ), "Table Name already exists. Please choose a different table name."
+        assert len(existing_tables) == 0, (
+            "Table Name already exists. Please choose a different table name."
+        )
         with pytest.raises(BodoError, match=""):
             query = f"DROP TABLE {table_name}"
             bc = bodosql.BodoSQLContext(catalog=iceberg_filesystem_catalog)
@@ -304,9 +304,9 @@ def test_drop_table_not_found_if_exists(iceberg_filesystem_catalog, memory_leak_
         existing_tables = spark.sql(
             f"show tables in hadoop_prod.{db_schema} like '{table_name}'"
         ).toPandas()
-        assert (
-            len(existing_tables) == 0
-        ), "Table Name already exists. Please choose a different table name."
+        assert len(existing_tables) == 0, (
+            "Table Name already exists. Please choose a different table name."
+        )
         query = f"DROP TABLE IF EXISTS {table_name}"
         py_output = pd.DataFrame(
             {

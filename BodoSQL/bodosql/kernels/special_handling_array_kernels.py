@@ -113,9 +113,9 @@ def is_in_util_overload(arr_to_check, arr_search_vals, null_as, is_parallel=Fals
     Helper function for is_in. See is_in for information on arguments
     """
 
-    assert is_array_typ(
-        arr_search_vals
-    ), f"expected argument 'arr_search_vals' to be array type. Found: {arr_search_vals}"
+    assert is_array_typ(arr_search_vals), (
+        f"expected argument 'arr_search_vals' to be array type. Found: {arr_search_vals}"
+    )
 
     if arr_to_check == types.none:
 
@@ -157,9 +157,9 @@ def is_in_util_overload(arr_to_check, arr_search_vals, null_as, is_parallel=Fals
         """
 
         # Check the types match
-        assert (
-            arr_search_vals.dtype == bodo.string_type
-        ), "Internal error: arr_to_check is dict encoded, but arr_search_vals does not have string dtype"
+        assert arr_search_vals.dtype == bodo.string_type, (
+            "Internal error: arr_to_check is dict encoded, but arr_search_vals does not have string dtype"
+        )
 
         def impl(
             arr_to_check, arr_search_vals, null_as, is_parallel=False
@@ -187,9 +187,9 @@ def is_in_util_overload(arr_to_check, arr_search_vals, null_as, is_parallel=Fals
     lhs_scalar_type = arr_to_check.dtype if is_array_typ(arr_to_check) else arr_to_check
     rhs_scalar_type = arr_search_vals.dtype
     common_scalar_typ, _ = get_common_scalar_dtype([lhs_scalar_type, rhs_scalar_type])
-    assert (
-        common_scalar_typ is not None
-    ), "Internal error in is_in_util: arguments do not have a common scalar dtype"
+    assert common_scalar_typ is not None, (
+        "Internal error in is_in_util: arguments do not have a common scalar dtype"
+    )
 
     needs_nullable_conversion = is_nullable(arr_to_check) or is_nullable(
         arr_search_vals
@@ -204,9 +204,9 @@ def is_in_util_overload(arr_to_check, arr_search_vals, null_as, is_parallel=Fals
         common_scalar_typ, needs_nullable_conversion
     )
     if needs_nullable_conversion:
-        assert is_nullable(
-            unified_array_type
-        ), "Internal error in is_in_util: unified_array_type is not nullable, but is required to be"
+        assert is_nullable(unified_array_type), (
+            "Internal error in is_in_util: unified_array_type is not nullable, but is required to be"
+        )
 
     if is_array_typ(arr_to_check):
 

@@ -205,9 +205,9 @@ class IcebergSchemaGroup:
                 schema group.
         """
 
-        assert (
-            final_field.metadata is not None
-        ), f"Field {field_name_for_err_msg} does not have metadata! This is most likely a bug in Bodo."
+        assert final_field.metadata is not None, (
+            f"Field {field_name_for_err_msg} does not have metadata! This is most likely a bug in Bodo."
+        )
         assert b_ICEBERG_FIELD_ID_MD_KEY in final_field.metadata, (
             f"Field {field_name_for_err_msg} does not have the Iceberg Field ID in its metadata. "
             f"Metadata:\n{final_field.metadata}\nThis is most likely a bug in Bodo."
@@ -426,9 +426,9 @@ class IcebergSchemaGroup:
 
         read_schema_fields: list[pa.Field] = []
         for i, field in enumerate(final_schema):
-            assert (
-                field.metadata is not None
-            ), f"Target schema field doesn't have metadata! This is most likely a bug in Bodo. Field:\n{field}."
+            assert field.metadata is not None, (
+                f"Target schema field doesn't have metadata! This is most likely a bug in Bodo. Field:\n{field}."
+            )
             assert b_ICEBERG_FIELD_ID_MD_KEY in field.metadata, (
                 f"Target schema field metadata doesn't have the required Iceberg Field ID. "
                 f"This is most likely a bug in Bodo.\nField: {field}\nField metadata: {field.metadata}."

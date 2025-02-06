@@ -168,7 +168,7 @@ detail""",
     dbg_directives_only = Option(
         type=bool,
         default=False,
-        doc=("Make debug emissions directives-only. " "Used when generating lineinfo."),
+        doc=("Make debug emissions directives-only. Used when generating lineinfo."),
     )
 
     # Bodo change: add Bodo-specific options

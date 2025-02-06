@@ -24,7 +24,7 @@ def main(parquet_file: str, output_directory: str, max_queries: int):
     os.chdir(output_directory)
     # Iterate over the row, generating a file
     for _, row in df.iterrows():
-        filename = f'{row["dag_id"]}-{row["task_id"]}.sql'
+        filename = f"{row['dag_id']}-{row['task_id']}.sql"
         with open(filename, "w") as f:
             f.write(row["query_text"])
 

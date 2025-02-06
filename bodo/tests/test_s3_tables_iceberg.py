@@ -111,7 +111,7 @@ def test_basic_write(memory_leak_check):
     conn = "iceberg+" + bucket_arn
     r = random.Random()
     table_name = (
-        f"bodo_iceberg_write_test_{''.join(r.choices(string.ascii_lowercase , k=4))}"
+        f"bodo_iceberg_write_test_{''.join(r.choices(string.ascii_lowercase, k=4))}"
     )
 
     try:
