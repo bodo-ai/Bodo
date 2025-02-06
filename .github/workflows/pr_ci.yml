@@ -65,12 +65,12 @@ jobs:
           ref: master
           client_payload: '{ "branch" : "${{ github.head_ref || github.ref_name }}" }'
 
-  
+
   # 3) Pre-Build Bodo to save build artifacts to sccache
   compile-bodo:
     needs: [validate]
     name: Pre-Build Bodo for Cache
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
     if: needs.validate.outputs.run_tests == 'true'
     permissions:
       id-token: write
@@ -91,6 +91,7 @@ jobs:
         if: steps.hadoop-cache.outputs.cache-hit != 'true'
         run: |
           wget -O hadoop.tar.gz "https://www.apache.org/dyn/mirrors/mirrors.cgi?action=download&filename=hadoop/common/hadoop-3.3.2/hadoop-3.3.2.tar.gz"
+        shell: bash
 
   # 4) Actually run tests
   pr-ci:
@@ -162,7 +163,7 @@ jobs:
           # -S to sort by key, -s to read as arrays, 'add' to merge
           jq -S -s 'add' test_dur_bodo_*.json > outputs/test_dur_bodo.json
           jq -S -s 'add' test_dur_bodosql_*.json > outputs/test_dur_bodosql.json
-          
+
           printf "Slowest Bodo Tests"  
           slowest-tests --durations-path outputs/test_dur_bodo.json -c 20
           printf "Slowest BodoSQL Tests"
