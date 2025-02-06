@@ -5,7 +5,6 @@ Utility functions for testing such as check_func() that tests a function.
 import datetime
 import io
 import os
-import platform
 import random
 import re
 import string
@@ -3453,25 +3452,3 @@ def get_num_test_workers():
         return spawner.worker_intercomm.Get_remote_size()
 
     return bodo.get_size()
-
-
-pytest_mark_oracle = compose_decos(
-    (
-        pytest.mark.oracle,
-        pytest.mark.slow,
-        pytest.mark.skipif(
-            os.name == "posix"
-            and platform.system() == "Linux"
-            and "arm" in platform.machine().lower()
-        ),
-    )
-)
-pytest_oracle = [
-    pytest.mark.oracle,
-    pytest.mark.slow,
-    pytest.mark.skipif(
-        os.name == "posix"
-        and platform.system() == "Linux"
-        and "arm" in platform.machine().lower()
-    ),
-]
