@@ -187,7 +187,7 @@ sdf = spark.createDataFrame(data, schema)
 sdf.write.parquet("list_float32.pq", "overwrite")
 
 # CSV reader test
-data = "0,2.3,4.6,47736\n" "1,2.3,4.6,47736\n" "2,2.3,4.6,47736\n" "4,2.3,4.6,47736\n"
+data = "0,2.3,4.6,47736\n1,2.3,4.6,47736\n2,2.3,4.6,47736\n4,2.3,4.6,47736\n"
 
 with open("csv_data1.csv", "w") as f:
     f.write(data)
@@ -206,7 +206,7 @@ data = (
 with open("csv_data_date1.csv", "w") as f:
     f.write(data)
 
-data = "2015-01-03\n" "1966-11-13\n" "1998-05-21\n" "2018-07-11\n"
+data = "2015-01-03\n1966-11-13\n1998-05-21\n2018-07-11\n"
 
 with open("csv_data_only_date1.csv", "w") as f:
     f.write(data)
@@ -222,13 +222,13 @@ with open("csv_data_only_date2.csv", "w") as f:
     f.write(data)
 
 # test_csv_cat1
-data = "2,B,SA\n" "3,A,SBC\n" "4,C,S123\n" "5,B,BCD\n"
+data = "2,B,SA\n3,A,SBC\n4,C,S123\n5,B,BCD\n"
 
 with open("csv_data_cat1.csv", "w") as f:
     f.write(data)
 
 # test_csv_single_dtype1
-data = "2,4.1\n" "3,3.4\n" "4,1.3\n" "5,1.1\n"
+data = "2,4.1\n3,3.4\n4,1.3\n5,1.1\n"
 
 with open("csv_data_dtype1.csv", "w") as f:
     f.write(data)

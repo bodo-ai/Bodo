@@ -264,7 +264,7 @@ def test_window_using_function(
 )
 def test_row_number_without_partition(orders, spark_info, memory_leak_check):
     """Test using ROW_NUMBER without a partition"""
-    query = f"SELECT I32, {', '.join(f'ROW_NUMBER() OVER ({o}) AS C{i}' for i,o in enumerate(orders))} FROM table1"
+    query = f"SELECT I32, {', '.join(f'ROW_NUMBER() OVER ({o}) AS C{i}' for i, o in enumerate(orders))} FROM table1"
     ctx = {
         "TABLE1": pd.DataFrame(
             {

@@ -1421,9 +1421,9 @@ def test_window_output_work_stealing(memory_leak_check, capfd, tmp_path):
         assert assert_success
 
     # Verify that the output itself is correct.
-    assert (
-        global_output.shape[0] == df.shape[0]
-    ), f"Final output size ({global_output.shape[0]}) is not as expected ({df.shape[0]})"
+    assert global_output.shape[0] == df.shape[0], (
+        f"Final output size ({global_output.shape[0]}) is not as expected ({df.shape[0]})"
+    )
 
     pd.testing.assert_frame_equal(
         global_output.sort_values(list(expected_out.columns)).reset_index(drop=True),

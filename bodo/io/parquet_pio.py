@@ -6,7 +6,6 @@ import time
 import typing as pt
 import warnings
 from collections import defaultdict
-from glob import has_magic
 from typing import Any
 from urllib.parse import ParseResult, urlparse
 
@@ -35,7 +34,7 @@ from bodo.hiframes.pd_categorical_ext import (
     PDCategoricalDtype,
 )
 from bodo.io.fs_io import (
-    expand_glob,
+    expand_path_globs,
     getfs,
     parse_fpath,
 )
@@ -528,24 +527,7 @@ def get_bodo_pq_dataset_from_fpath(
             fpath, protocol, parsed_url
         )
 
-        if isinstance(fpath_noprefix, list):
-            # Expand any glob strings in the list in order to generate a
-            # single list of fully realized paths to parquet files.
-            # For example: ["A/a.pq", "B/*.pq"] might expand to
-            # ["A/a.pq", "B/part-0.pq", "B/part-1.pq"]
-            new_fpath = []
-            for p in fpath_noprefix:
-                if has_magic(p):
-                    new_fpath += expand_glob(protocol, fs, p)
-                else:
-                    new_fpath.append(p)
-            fpath_noprefix = new_fpath
-            if len(fpath_noprefix) == 0:
-                raise BodoError("No files found matching glob pattern")
-        elif has_magic(fpath_noprefix):
-            fpath_noprefix = expand_glob(protocol, fs, fpath_noprefix)
-            if len(fpath_noprefix) == 0:
-                raise BodoError("No files found matching glob pattern")
+        fpath_noprefix = expand_path_globs(fpath_noprefix, protocol, fs)
 
         dataset = pq.ParquetDataset(
             fpath_noprefix,

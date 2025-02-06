@@ -17,7 +17,7 @@ def create_table(table_name=TABLE_NAME, spark=None):
     df = pd.DataFrame(
         {
             "DAY": [datetime.date.fromordinal(737425 + i) for i in range(1000)],
-            "EVENT": [f"{chr(i//26 + 65)}{i%100:02}" for i in range(1000)],
+            "EVENT": [f"{chr(i // 26 + 65)}{i % 100:02}" for i in range(1000)],
         }
     )
     sql_schema = [

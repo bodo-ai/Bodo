@@ -20,10 +20,10 @@ std::shared_ptr<arrow::Array> vecToArrowArray(const std::vector<T>& data) {
     using Builder = arrow::CTypeTraits<T>::BuilderType;
     Builder builder;
     for (const auto& element : data) {
-        CHECK_ARROW_MEM(builder.Append(element), "");
+        CHECK_ARROW_BASE(builder.Append(element), "");
     }
     std::shared_ptr<arrow::Array> ret;
-    CHECK_ARROW_MEM(builder.Finish(&ret), "");
+    CHECK_ARROW_BASE(builder.Finish(&ret), "");
     return ret;
 }
 

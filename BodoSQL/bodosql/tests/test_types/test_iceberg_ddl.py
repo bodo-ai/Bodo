@@ -700,9 +700,9 @@ def test_alter_table_comment(request, harness_name: str):
 
         harness.refresh_table(table_identifier)
         output = harness.describe_table_extended(table_identifier)
-        assert not (
-            output["col_name"] == "Comment"
-        ).any(), "Comment is not unset correctly"
+        assert not (output["col_name"] == "Comment").any(), (
+            "Comment is not unset correctly"
+        )
 
     finally:
         harness.drop_test_table(table_identifier)
@@ -785,7 +785,7 @@ def test_alter_table_add_column(request, harness_name: str):
         # # Convert to list to maintain order throughout testing
         typeNames = list(sqlnode_type_names.keys())
         for t in typeNames:
-            query = f'ALTER TABLE {table_identifier} add column COL_{t.translate(str.maketrans("(), ", "____"))} {t}'
+            query = f"ALTER TABLE {table_identifier} add column COL_{t.translate(str.maketrans('(), ', '____'))} {t}"
             py_output = pd.DataFrame({"STATUS": ["Statement executed successfully."]})
             bodo_output = harness.run_bodo_query(query)
             assert_equal_par(bodo_output, py_output)

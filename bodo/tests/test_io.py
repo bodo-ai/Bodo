@@ -36,11 +36,17 @@ def compress_file(fname, dummy_extension=""):
     if bodo.get_rank() == 0:
         subprocess.run(["gzip", "-k", "-f", fname])
         subprocess.run(["bzip2", "-k", "-f", fname])
+        subprocess.run(["zstd", "-k", "-f", fname])
         if dummy_extension != "":
             os.rename(fname + ".gz", fname + ".gz" + dummy_extension)
             os.rename(fname + ".bz2", fname + ".bz2" + dummy_extension)
+            os.rename(fname + ".zst", fname + ".zst" + dummy_extension)
     bodo.barrier()
-    return [fname + ".gz" + dummy_extension, fname + ".bz2" + dummy_extension]
+    return [
+        fname + ".gz" + dummy_extension,
+        fname + ".bz2" + dummy_extension,
+        fname + ".zst" + dummy_extension,
+    ]
 
 
 def remove_files(file_names):
@@ -1552,6 +1558,32 @@ def test_read_csv_dict_encoded_string_arrays(datapath, memory_leak_check):
             return df
 
         bodo.jit(impl6)(fname)
+
+
+@pytest.mark.slow
+def test_csv_glob(datapath, memory_leak_check):
+    """Test pd.read_csv with glob pattern"""
+
+    path = datapath("example_multi.csv") + "/*.csv"
+    py_output = pd.read_csv(datapath("example.csv"))
+
+    def impl1(path):
+        return pd.read_csv(path)
+
+    check_func(impl1, (path,), check_dtype=False, py_output=py_output)
+
+
+@pytest.mark.slow
+def test_csv_nested_dir(datapath, memory_leak_check):
+    """Test pd.read_csv with nested directory of data files"""
+
+    path = datapath("example_multi_nested.csv")
+    py_output = pd.read_csv(datapath("example.csv"))
+
+    def impl1(path):
+        return pd.read_csv(path)
+
+    check_func(impl1, (path,), check_dtype=False, py_output=py_output, sort_output=True)
 
 
 @pytest.mark.slow

@@ -199,14 +199,14 @@ def test_lead_lag_shift(func, shift_amt, spark_info, capfd):
             id="binary",
         ),
         pytest.param(
-            pd.array([f"{i}{i+1}{i+3}" for i in range(1000)]),
+            pd.array([f"{i}{i + 1}{i + 3}" for i in range(1000)]),
             "hello",
             "'hello'",
             id="string",
         ),
         pytest.param(
             pd.array(
-                [Decimal(str(f"{i+1}{i+2}{i+3}")) for i in range(1000)],
+                [Decimal(str(f"{i + 1}{i + 2}{i + 3}")) for i in range(1000)],
                 dtype=pd.ArrowDtype(pa.decimal128(38, 0)),
             ),
             Decimal("-1"),

@@ -460,7 +460,7 @@ class PrimitiveBuilder : public TableBuilder::BuilderColumn {
             arrow::Result<std::shared_ptr<arrow::Array>> res =
                 arrow::Concatenate(arrays, pool);
             std::shared_ptr<arrow::Array> concat_res;
-            CHECK_ARROW_AND_ASSIGN(res, "Concatenate", concat_res);
+            CHECK_ARROW_READER_AND_ASSIGN(res, "Concatenate", concat_res);
             out_array = arrow_array_to_bodo(concat_res, pool);
         }
         return out_array;
@@ -500,7 +500,7 @@ class StringBuilder : public TableBuilder::BuilderColumn {
                                          arrow::compute::CastOptions::Safe(),
                                          bodo::default_buffer_exec_context());
                 std::shared_ptr<arrow::Array> casted_arr;
-                CHECK_ARROW_AND_ASSIGN(res, "Cast", casted_arr);
+                CHECK_ARROW_READER_AND_ASSIGN(res, "Cast", casted_arr);
                 arrays.push_back(std::move(casted_arr));
             } else if (chunk->type_id() == arrow::Type::BINARY) {
                 static_assert(OFFSET_BITWIDTH == 64);
@@ -512,7 +512,7 @@ class StringBuilder : public TableBuilder::BuilderColumn {
                                          arrow::compute::CastOptions::Safe(),
                                          bodo::default_buffer_exec_context());
                 std::shared_ptr<arrow::Array> casted_arr;
-                CHECK_ARROW_AND_ASSIGN(res, "Cast", casted_arr);
+                CHECK_ARROW_READER_AND_ASSIGN(res, "Cast", casted_arr);
                 arrays.push_back(std::move(casted_arr));
             } else {  // LARGE_STRING or LARGE_BINARY
                 arrays.push_back(chunk);
@@ -530,7 +530,7 @@ class StringBuilder : public TableBuilder::BuilderColumn {
             arrow::Result<std::shared_ptr<arrow::Array>> res =
                 arrow::Concatenate(arrays, pool);
             std::shared_ptr<arrow::Array> concat_res;
-            CHECK_ARROW_AND_ASSIGN(res, "Concatenate", concat_res);
+            CHECK_ARROW_READER_AND_ASSIGN(res, "Concatenate", concat_res);
             out_array = arrow_array_to_bodo(concat_res, pool, array_id);
         }
         return out_array;
@@ -1469,10 +1469,11 @@ std::shared_ptr<arrow::Table> ArrowReader::cast_arrow_table(
                 col, exp_type, arrow::compute::CastOptions::Safe(),
                 bodo::default_buffer_exec_context());
             // TODO: Use fmt::format or std::format on C++23
-            CHECK_ARROW(res.status(), "Failed to safely cast from " +
-                                          col->type()->ToString() + " to " +
-                                          exp_type->ToString() +
-                                          " before appending to TableBuilder");
+            CHECK_ARROW_READER(res.status(),
+                               "Failed to safely cast from " +
+                                   col->type()->ToString() + " to " +
+                                   exp_type->ToString() +
+                                   " before appending to TableBuilder");
             auto casted_datum = res.ValueOrDie();
             new_cols.push_back(casted_datum.chunked_array());
 
@@ -1487,9 +1488,9 @@ std::shared_ptr<arrow::Table> ArrowReader::cast_arrow_table(
 
             auto res = arrow::compute::Cast(
                 col, exp_type, opt, bodo::default_buffer_exec_context());
-            CHECK_ARROW(res.status(), "Failed to downcast from " +
-                                          col->type()->ToString() + " to " +
-                                          exp_type->ToString());
+            CHECK_ARROW_READER(res.status(), "Failed to downcast from " +
+                                                 col->type()->ToString() +
+                                                 " to " + exp_type->ToString());
 
             auto casted_datum = res.ValueOrDie();
             new_cols.push_back(casted_datum.chunked_array());
@@ -1536,9 +1537,10 @@ std::shared_ptr<arrow::Table> ArrowReader::cast_arrow_table(
 
                 auto res = arrow::compute::Cast(
                     col, exp_type, opt, bodo::default_buffer_exec_context());
-                CHECK_ARROW(res.status(), "Failed to cast from " +
-                                              col->type()->ToString() + " to " +
-                                              exp_type->ToString());
+                CHECK_ARROW_READER(res.status(), "Failed to cast from " +
+                                                     col->type()->ToString() +
+                                                     " to " +
+                                                     exp_type->ToString());
 
                 auto casted_datum = res.ValueOrDie();
                 new_cols.push_back(casted_datum.chunked_array());
@@ -1651,9 +1653,9 @@ std::shared_ptr<arrow::Schema> unwrap_schema(PyObject* pyarrow_schema) {
 
     CHECK(!arrow::py::import_pyarrow(), "importing pyarrow failed");
     std::shared_ptr<arrow::Schema> schema;
-    CHECK_ARROW_AND_ASSIGN(arrow::py::unwrap_schema(pyarrow_schema),
-                           "Unwrapping Arrow Schema from Python Object Failed",
-                           schema);
+    CHECK_ARROW_READER_AND_ASSIGN(
+        arrow::py::unwrap_schema(pyarrow_schema),
+        "Unwrapping Arrow Schema from Python Object Failed", schema);
     return schema;
 #undef CHECK
 }

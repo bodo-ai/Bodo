@@ -1088,7 +1088,7 @@ struct ChunkedTableArrayBuilder {
         // In case it's still not sufficient (single very large string
         // case), just resize to required length.
         buffer_size = std::max(buffer_size, total_memory);
-        CHECK_ARROW_MEM(
+        CHECK_ARROW_BASE(
             this->data_array->buffers[0]->Resize(buffer_size, false),
             "ChunkedTableArrayBuilder::AppendRows: Resize failed!");
         // Now simply append into the buffer.

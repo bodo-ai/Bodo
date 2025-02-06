@@ -392,9 +392,9 @@ def exec_func_handler(
     try:
         func = cloudpickle.loads(pickled_func)
         # ensure that we have a CPUDispatcher to compile and execute code
-        assert isinstance(
-            func, numba.core.registry.CPUDispatcher
-        ), "Unexpected function type"
+        assert isinstance(func, numba.core.registry.CPUDispatcher), (
+            "Unexpected function type"
+        )
     except Exception as e:
         logger.error(f"Exception while trying to receive code: {e}")
         # TODO: check that all ranks raise an exception
@@ -478,9 +478,9 @@ def worker_loop(
     spawnerpid = spawner_intercomm.bcast(None, 0)
     if bodo.get_rank() == 0:
         spawner_hostname = spawner_intercomm.recv(source=0)
-        assert (
-            spawner_hostname == socket.gethostname()
-        ), "Spawner and worker 0 must be on the same machine"
+        assert spawner_hostname == socket.gethostname(), (
+            "Spawner and worker 0 must be on the same machine"
+        )
 
     while True:
         debug_worker_msg(logger, "Waiting for command")

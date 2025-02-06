@@ -3,7 +3,6 @@
 #include <arrow/io/api.h>
 #include <mpi.h>
 
-#include "_csv_json_reader.h"
 #include "_fs_io.h"
 #include "_io.h"
 
@@ -168,7 +167,6 @@ PyMODINIT_FUNC PyInit_csv_cpp(void) {
     SetAttrStringFromVoidPtr(m, csv_write);
     SetAttrStringFromVoidPtr(m, csv_output_is_dir);
 
-    PyInit_csv(m);
     return m;
 }
 
@@ -181,7 +179,6 @@ PyMODINIT_FUNC PyInit_json_cpp(void) {
 
     SetAttrStringFromVoidPtr(m, json_write);
 
-    PyInit_json(m);
     return m;
 }
 

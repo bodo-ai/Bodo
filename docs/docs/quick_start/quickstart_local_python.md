@@ -85,3 +85,75 @@ python test_bodo.py
 By default Bodo will use all available cores. To set a limit on the number of processes spawned, set the environment variable `BODO_NUM_WORKERS`.
 Note that the first time you run this code, it may take a few seconds to compile the code.
 Next time you run the code, it will execute much faster. Check the [Python API Reference][pythonreference] for the full list of supported Python operations.
+
+
+## Bodo Integration Quickstart
+
+Here are high level steps for integrating Bodo into Python workloads:
+
+1. Installation and Import
+
+    a. [Install Bodo](../installation_and_setup/install.md) (e.g. `pip install bodo`).
+
+    b. In each file where parallelization is desired, add:
+        ```python
+        import bodo
+        ```
+
+2. JIT-Compile Your Main Processing Functions
+
+    a. Decorate computationally intensive functions with `@bodo.jit(cache=True)`.
+
+    b. Gather all configuration inputs (e.g., file lists) outside of the jitted function and pass those inputs into the jitted function as parameters.
+
+    * Any file discovery logic (e.g., `glob.glob`, or referencing environment variables) should happen _outside_ your jitted function.
+
+    * The jitted function should receive the final list of files/tables and other necessary parameters explicitly.
+
+    c. Keep I/O of large data inside JIT functions if the storage format is supported by Bodo (Parquet, CSV, JSON, Iceberg, Snowflake).
+
+    Example code:
+
+    ```python
+    @bodo.jit(cache=True)
+    def process_data(file_list):
+       df = pd.read_parquet(file_list)
+       print(df.A.sum())
+
+    file_list = get_file_list()
+    process_data(file_list)
+    ```
+
+3. Avoid Python Features Incompatible With Bodo
+
+    Inside jitted functions, avoid:
+
+    - Using list/set/dict data structures for large data.
+    - Unusual dynamic Python features (e.g., closures capturing changing state).
+    - Unused imports or library calls that Bodo cannot compile.
+
+    Generally, use Pandas DataFrames and Numpy arrays for large data and use idiomatic Pandas code to process data.
+
+
+4. Use `@bodo.wrap_python` for Calling Non-JIT Libraries inside JIT
+
+    A common pattern is calling a Python function using a domain-specific library on every row of a dataframe. Use `@bodo.wrap_python` for this case.
+    Provide output type of the Python call using a sample of representative output:
+
+    ```python
+    tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
+    out_list_type = bodo.typeof([1, 2])
+
+    @bodo.wrap_python(out_list_type)
+    def run_tokenizer(text):
+        tokenized = tokenizer(text)
+        return tokenized["input_ids"]
+
+    @bodo.jit
+    def preprocess_pile(file_list):
+        df = pd.read_parquet(file_list)
+        df["input_ids"] = df["text"].map(run_tokenizer)
+        ...
+    ```
+
+See [Compilation Tips and Troubleshooting][compilation] for more tips on handling compilation issues.

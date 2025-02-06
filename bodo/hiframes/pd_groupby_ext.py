@@ -200,9 +200,9 @@ def init_groupby(
     elif is_literal_type(by_type):
         keys = (get_literal_value(by_type),)
     else:
-        assert (
-            False
-        ), "Reached unreachable code in init_groupby; there is an validate_groupby_spec"
+        assert False, (
+            "Reached unreachable code in init_groupby; there is an validate_groupby_spec"
+        )
 
     selection = list(obj_type.columns)
     for k in keys:
@@ -549,7 +549,7 @@ def check_args_kwargs(func_name, len_args, args, kws):
         )
     elif len(args) > len_args:
         raise BodoError(
-            f"Groupby.{func_name}() takes {len_args+1} positional argument but {len(args)} were given."
+            f"Groupby.{func_name}() takes {len_args + 1} positional argument but {len(args)} were given."
         )
 
 
@@ -988,16 +988,16 @@ def get_agg_funcname_and_outtyp(
 def handle_extended_named_agg_input_cols(
     data_col_name, f_name, args
 ):  # pragma: no cover
-    assert (
-        len(args) == 3
-    ), "Internal error in handle_extended_named_agg_input_cols: args length does not equal 3"
+    assert len(args) == 3, (
+        "Internal error in handle_extended_named_agg_input_cols: args length does not equal 3"
+    )
     assert_bodo_error(
         is_literal_type(args[0]),
         "Internal error in handle_extended_named_agg_input_cols: data column name is not a literal value",
     )
-    assert (
-        get_literal_value(args[0]) == data_col_name
-    ), f"Internal error in handle_extended_named_agg_input_cols: data column name mismatch: {data_col_name} and {get_literal_value(args[0])}"
+    assert get_literal_value(args[0]) == data_col_name, (
+        f"Internal error in handle_extended_named_agg_input_cols: data column name mismatch: {data_col_name} and {get_literal_value(args[0])}"
+    )
 
     additional_args = args[2]
     additional_args_made_literal = get_overload_const_tuple(additional_args)
@@ -1008,21 +1008,21 @@ def handle_extended_named_agg_input_cols(
         )
 
     if f_name == "listagg":
-        assert (
-            get_literal_value(args[1]) == "listagg"
-        ), "Internal error in resolve_listagg_func_inputs: Called on not listagg function."
+        assert get_literal_value(args[1]) == "listagg", (
+            "Internal error in resolve_listagg_func_inputs: Called on not listagg function."
+        )
         return resolve_listagg_func_inputs(data_col_name, additional_args_made_literal)
     if f_name in {"array_agg", "array_agg_distinct"}:
-        assert (
-            get_literal_value(args[1]) == f_name
-        ), "Internal error in resolve_array_agg_func_inputs: Called on not array_agg function."
+        assert get_literal_value(args[1]) == f_name, (
+            "Internal error in resolve_array_agg_func_inputs: Called on not array_agg function."
+        )
         return resolve_array_agg_func_inputs(
             data_col_name, additional_args_made_literal
         )
     if f_name in {"percentile_cont", "percentile_disc"}:
-        assert (
-            get_literal_value(args[1]) == f_name
-        ), f"Internal error in resolve_listagg_func_inputs: Called on not {f_name} function."
+        assert get_literal_value(args[1]) == f_name, (
+            f"Internal error in resolve_listagg_func_inputs: Called on not {f_name} function."
+        )
         percentile = additional_args_made_literal[0]
         if not (isinstance(percentile, str)):
             raise_bodo_error(
@@ -1030,9 +1030,9 @@ def handle_extended_named_agg_input_cols(
             )
         return (data_col_name, additional_args_made_literal[0]), ()
     if f_name == "object_agg":
-        assert (
-            get_literal_value(args[1]) == f_name
-        ), "Internal error in resolve_array_agg_func_inputs: Called on not object_agg function."
+        assert get_literal_value(args[1]) == f_name, (
+            "Internal error in resolve_array_agg_func_inputs: Called on not object_agg function."
+        )
         key_col_name = additional_args_made_literal[0]
         if not (isinstance(key_col_name, str)):
             raise_bodo_error(
@@ -2455,9 +2455,9 @@ def gen_shuffle_dataframe(df, keys, _is_parallel):
     """shuffle a dataframe using a tuple of key arrays."""
     n_cols = len(df.columns)
     n_keys = len(keys.types)
-    assert is_overload_constant_bool(
-        _is_parallel
-    ), "shuffle_dataframe: _is_parallel is not a constant"
+    assert is_overload_constant_bool(_is_parallel), (
+        "shuffle_dataframe: _is_parallel is not a constant"
+    )
 
     func_text = "def impl(df, keys, _is_parallel):\n"
 
@@ -2499,7 +2499,7 @@ def gen_shuffle_dataframe(df, keys, _is_parallel):
         )
 
     for i in range(n_cols):
-        func_text += f"  out_arr{i} = array_from_cpp_table(out_table, {i+n_keys}, in_arr{i}_typ)\n"
+        func_text += f"  out_arr{i} = array_from_cpp_table(out_table, {i + n_keys}, in_arr{i}_typ)\n"
 
     func_text += f"  out_arr_index = array_from_cpp_table(out_table, {n_keys + n_cols}, ind_arr_typ)\n"
 

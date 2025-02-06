@@ -173,20 +173,20 @@ def check_table_comment(
         .head()
     )
     if table_comments is not None:
-        assert (
-            table_cmt[0] == table_comments
-        ), f'Expected table comment to be "{table_comments}", got "{table_cmt}"'
+        assert table_cmt[0] == table_comments, (
+            f'Expected table comment to be "{table_comments}", got "{table_cmt}"'
+        )
 
     df = spark.sql(f"DESCRIBE TABLE hadoop_prod.{db_schema}.{table_name}").toPandas()
     for i in range(number_columns):
         if column_comments is None or i >= 2:
-            assert (
-                df.iloc[i]["comment"] is None
-            ), f"Expected column {i} comment to be None, but actual comment is {df.iloc[i]['comment']}"
+            assert df.iloc[i]["comment"] is None, (
+                f"Expected column {i} comment to be None, but actual comment is {df.iloc[i]['comment']}"
+            )
         else:
-            assert (
-                df.iloc[i]["comment"] == f"{column_comments}{i}"
-            ), f'Expected column {i} comment to be "{column_comments}{i}", got {df.iloc[i]["comment"]}'
+            assert df.iloc[i]["comment"] == f"{column_comments}{i}", (
+                f'Expected column {i} comment to be "{column_comments}{i}", got {df.iloc[i]["comment"]}'
+            )
 
     if table_properties is not None:
         str = (
@@ -199,12 +199,12 @@ def check_table_comment(
         parsed_properties = parse_table_property(str)
 
         for keys in table_properties:
-            assert (
-                keys in parsed_properties
-            ), f"Expected table properties {keys}, find nothing"
-            assert (
-                parsed_properties[keys] == table_properties[keys]
-            ), f"Expected key {keys} with value {table_properties[keys]}, got {parsed_properties[keys]}"
+            assert keys in parsed_properties, (
+                f"Expected table properties {keys}, find nothing"
+            )
+            assert parsed_properties[keys] == table_properties[keys], (
+                f"Expected key {keys} with value {table_properties[keys]}, got {parsed_properties[keys]}"
+            )
 
 
 @pytest.mark.timeout(1000)
@@ -565,14 +565,14 @@ def test_iceberg_max_pq_chunksize(
     def check_files():
         expected_num_files = math.ceil(total_write_size / (max_pq_chunksize))
         new_files = list(set(files_after_write) - set(files_before_write))
-        assert (
-            len(new_files) == expected_num_files
-        ), "Expected number of files does not match"
+        assert len(new_files) == expected_num_files, (
+            "Expected number of files does not match"
+        )
         for file in new_files:
             size_in_bytes = os.stat(file).st_size
             # actual size of files may be much smaller after compression
-            assert (
-                size_in_bytes < max_pq_chunksize
-            ), "Found file larger than expected size"
+            assert size_in_bytes < max_pq_chunksize, (
+                "Found file larger than expected size"
+            )
 
     check_files()

@@ -235,3 +235,4 @@ nav:
                 - Type Predicates: api_docs/sql/functions/type
       - Bodo Platform SDK Reference: api_docs/platform_sdk.md
   - Release Notes: release_notes
+  - FAQ: faq.md

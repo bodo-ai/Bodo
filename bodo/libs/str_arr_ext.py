@@ -167,7 +167,7 @@ register_model(StringDtype)(models.OpaqueModel)
 @box(StringDtype)
 def box_string_dtype(typ, val, c):
     mod_name = c.context.insert_const_string(c.builder.module, "pandas")
-    pd_class_obj = c.pyapi.import_module_noblock(mod_name)
+    pd_class_obj = c.pyapi.import_module(mod_name)
     res = c.pyapi.call_method(pd_class_obj, "StringDtype", ())
     c.pyapi.decref(pd_class_obj)
     return res
@@ -2405,9 +2405,9 @@ def str_arr_to_dict_str_arr_cpp(typingctx, str_arr_t):
 
         return dict_arr
 
-    assert (
-        str_arr_t == bodo.string_array_type
-    ), "str_arr_to_dict_str_arr: Input Array is not a Bodo String Array"
+    assert str_arr_t == bodo.string_array_type, (
+        "str_arr_to_dict_str_arr: Input Array is not a Bodo String Array"
+    )
 
     sig = bodo.dict_str_arr_type(bodo.string_array_type)
     return sig, codegen

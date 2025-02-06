@@ -4,7 +4,6 @@ import pyarrow.fs
 from bodo.ext import (  # noqa
     arrow_cpp,
     csv_cpp,
-    fsspec_reader,
     hdfs_reader,
     json_cpp,
     s3_reader,

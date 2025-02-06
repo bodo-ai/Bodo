@@ -16,18 +16,20 @@
 #include <algorithm>
 #include <ciso646>
 #include <cstdint>
-#include <filesystem>
-#include <fstream>
 #include <iostream>
 #include <string>
 #include <vector>
 
+#include <arrow/filesystem/filesystem.h>
 #include <arrow/io/compressed.h>
+#include <arrow/memory_pool.h>
 #include <arrow/util/compression.h>
 
 #include "../libs/_distributed.h"
+#include "../libs/_stl_allocator.h"
 #include "_bodo_file_reader.h"
-#include "_fs_io.h"
+
+#include "csv_json_reader.h"
 
 // lines argument of read_json(lines = json_lines)
 // when json_lines=true, we are reading Json line format where each
@@ -86,6 +88,68 @@
         throw std::runtime_error(err_msg_var);                               \
     }
 
+// Copied from _bodo_common.cpp to avoid importing it here
+void Bodo_PyErr_SetString(PyObject *type, const char *message) {
+    PyErr_SetString(type, message);
+    throw std::runtime_error(message);
+}
+
+// Buffer pool pointer that points to the central buffer pool from the main
+// module. Necessary since csv_json_reader is a separate module from bodo.ext.
+static arrow::MemoryPool *memory_pool = nullptr;
+
+void init_buffer_pool_ptr(int64_t buffer_pool_ptr) {
+    memory_pool = reinterpret_cast<arrow::MemoryPool *>(buffer_pool_ptr);
+}
+
+// STL allocator that plugs in the central buffer pool from memory_pool above.
+// Cannot use DefaultSTLBufferPoolAllocator since it's defined in the bodo.ext
+// module.
+template <class T>
+class ReaderSTLBufferPoolAllocator : public bodo::STLBufferPoolAllocator<T> {
+   public:
+    template <class U>
+    struct rebind {
+        using other = ReaderSTLBufferPoolAllocator<U>;
+    };
+
+    template <class U>
+    ReaderSTLBufferPoolAllocator(
+        const ReaderSTLBufferPoolAllocator<U> &other) noexcept
+        : ReaderSTLBufferPoolAllocator(other.pool(), other.size()) {}
+
+    template <class U>
+    ReaderSTLBufferPoolAllocator(ReaderSTLBufferPoolAllocator<U> &&other)
+        : ReaderSTLBufferPoolAllocator(other.pool(), other.size()) {}
+
+    template <class U>
+    ReaderSTLBufferPoolAllocator &operator=(
+        const ReaderSTLBufferPoolAllocator<U> &other) {
+        this->pool_ = other.pool();
+        this->size_ = other.size();
+    }
+
+    template <class U>
+    ReaderSTLBufferPoolAllocator &operator=(
+        ReaderSTLBufferPoolAllocator<U> &&other) {
+        this->pool_ = other.pool();
+        this->size_ = other.size();
+    }
+
+    ReaderSTLBufferPoolAllocator(arrow::MemoryPool *pool, size_t size) noexcept
+        : bodo::STLBufferPoolAllocator<T>(pool, size) {}
+
+    ReaderSTLBufferPoolAllocator(arrow::MemoryPool *pool) noexcept
+        : ReaderSTLBufferPoolAllocator(pool, 0) {}
+
+    ReaderSTLBufferPoolAllocator() noexcept
+        : bodo::STLBufferPoolAllocator<T>(memory_pool) {}
+};
+
+// std vector with buffer pool allocator plugged in
+template <typename T, class Allocator = ReaderSTLBufferPoolAllocator<T>>
+using bodo_vector = std::vector<T, Allocator>;
+
 /**
  * A SkiprowsListInfo object collects information about the skiprows with list
  * to avoid reading certain rows. It's needed when low_memory path is used.
@@ -143,26 +207,25 @@ class PathInfo {
      * @param file_path : path passed in pd.read_csv/pd.read_json call
      */
     PathInfo(const char *file_path, const std::string &compression_pyarg,
-             const char *bucket_region, bool is_anon)
-        : file_path(file_path),
-          bucket_region(bucket_region),
-          s3fs_anon(is_anon) {
-        // obtain path info on rank 0, broadcast to other ranks.
-        // this sets PathInfo attributes on all ranks
-        obtain_is_directory();
-        if (!is_valid) {
+             const char *bucket_region, bool is_anon) {
+        get_read_path_info(file_path, compression_pyarg, is_anon,
+                           this->is_remote_fs, this->compression,
+                           this->file_names, this->file_sizes, this->fs);
+
+        if (PyErr_Occurred()) {
+            is_valid = false;
             return;
         }
-        obtain_file_names_and_sizes();
-        obtain_compression_scheme(compression_pyarg);
+
+        /// sum of all file sizes
+        this->total_ds_size =
+            std::reduce(this->file_sizes.begin(), this->file_sizes.end());
+        ;
     }
     ~PathInfo() = default;
 
     /// get the compression scheme used by this file(s)
     const std::string &get_compression_scheme() const { return compression; }
-
-    /// true if path refers to a directory
-    bool is_directory() const { return is_dir; }
 
     /**
      * Get file names for this path.
@@ -201,17 +264,7 @@ class PathInfo {
     /**
      * Get arrow::fs::FileSystem object necessary to read data from this path.
      */
-    std::shared_ptr<arrow::fs::FileSystem> get_fs() {
-        if (!this->fs) {
-            auto info = get_reader_file_system(
-                this->file_path, this->bucket_region, this->s3fs_anon);
-            this->fs = info.first;
-            // Check for LocalFileSystem.type_name()
-            this->is_remote_fs = this->fs->type_name() != "local";
-            this->file_path = info.second;
-        }
-        return this->fs;
-    }
+    std::shared_ptr<arrow::fs::FileSystem> get_fs() { return this->fs; }
 
     /**
      * @brief return whether the provided path is valid or not
@@ -222,219 +275,7 @@ class PathInfo {
     bool is_path_valid() { return is_valid; }
 
    private:
-    /**
-     * Determines if path is a directory or a single file.
-     * The filesystem is accessed only on rank 0, result is communicated to
-     * other processes using MPI.
-     */
-    void obtain_is_directory() {
-        int c_is_dir = 0;
-        bool raise_runtime_err = false;
-        std::string runtime_err_msg = "";
-        if (dist_get_rank() == 0) {
-            std::shared_ptr<arrow::fs::FileSystem> fs = get_fs();
-            arrow::Result<arrow::fs::FileInfo> file_stat_result =
-                fs->GetFileInfo(file_path);
-            CHECK_ARROW_ONE_PROC(file_stat_result, "obtain_is_directory",
-                                 "fs->GetFileInfo", raise_runtime_err,
-                                 runtime_err_msg);
-            if (!raise_runtime_err) {
-                arrow::fs::FileInfo file_stat = file_stat_result.ValueOrDie();
-                if (file_stat.IsDirectory()) {
-                    c_is_dir = 1;
-                } else if (file_stat.IsFile()) {
-                    c_is_dir = 0;
-                } else {
-                    c_is_dir = -1;
-                    raise_runtime_err = true;
-                    runtime_err_msg =
-                        std::string(
-                            "Error in PathInfo::is_directory: invalid path ") +
-                        std::string(file_path);
-                }
-            }
-        }
-        ARROW_ONE_PROC_ERR_SYNC_USING_MPI(raise_runtime_err, runtime_err_msg);
-        CHECK_MPI(MPI_Bcast(&c_is_dir, 1, MPI_INT, 0, MPI_COMM_WORLD),
-                  "PathInfo::obtain_is_directory: MPI error on MPI_Bcast:");
-        is_valid = (c_is_dir != -1);
-        is_dir = bool(c_is_dir);
-    }
-
-    /**
-     * Obtain and store the vectors of file names and sizes for this path.
-     * If the path is a directory, it only considers files of size greater than
-     * zero which are not one of the excluded paths (like hidden files).
-     * The filesystem is accessed only on rank 0, result is communicated to
-     * other processes using MPI.
-     */
-    void obtain_file_names_and_sizes() {
-        file_names.clear();
-        file_sizes.clear();
-        total_ds_size = 0;  // this attribute tracks the sum of all file sizes
-
-        bool raise_runtime_err = false;
-        std::string runtime_err_msg = "";
-
-        int64_t total_len =
-            0;  // total length of file names (including
-                // null bytes at end of each) (only used by proc0)
-        if (dist_get_rank() == 0) {
-            std::shared_ptr<arrow::fs::FileSystem> fs = get_fs();
-
-            if (!is_directory()) {
-                // we always send file name to other ranks, even if just a
-                // single file, because it might be modified by
-                // PathInfo::get_fs(), which initially is only done on rank 0
-                file_names.push_back(file_path);
-                arrow::Result<arrow::fs::FileInfo> fi_result =
-                    fs->GetFileInfo(file_path);
-                CHECK_ARROW_ONE_PROC(fi_result, "obtain_file_names_and_sizes",
-                                     "fs->GetFileInfo", raise_runtime_err,
-                                     runtime_err_msg);
-                if (!raise_runtime_err) {
-                    const arrow::fs::FileInfo &fi = fi_result.ValueOrDie();
-                    file_sizes.push_back(fi.size());
-                    total_ds_size += fi.size();
-                    total_len = int64_t(file_path.size() + 1);
-                }
-            } else {
-                arrow::fs::FileSelector dir_selector;
-                // initialize dir_selector
-                dir_selector.base_dir = file_path;
-                // FileInfo used to determine names and sizes
-                arrow::Result<std::vector<arrow::fs::FileInfo>>
-                    file_infos_results = fs->GetFileInfo(dir_selector);
-                CHECK_ARROW_ONE_PROC(
-                    file_infos_results, "obtain_file_names_and_sizes",
-                    "fs->GetFileInfo", raise_runtime_err, runtime_err_msg);
-                if (!raise_runtime_err) {
-                    std::vector<arrow::fs::FileInfo> file_infos =
-                        file_infos_results.ValueOrDie();
-                    // sort files by name
-                    std::ranges::sort(file_infos,
-                                      arrow::fs::FileInfo::ByPath{});
-
-                    for (auto &fi : file_infos) {
-                        const std::string &path = fi.path();
-                        const std::string &fname = fi.base_name();
-                        int64_t fsize = fi.size();
-                        // Skip certain files, similar to
-                        // what arrow does for parquet:
-                        // https://github.com/apache/arrow/blob/c6143a2396058dcc31506050238dc0f932aae9ba/python/pyarrow/parquet.py#L1180
-                        if (
-                            // skip 0 size files
-                            (fsize <= 0) ||
-                            // Skip checksums
-                            (fname.ends_with(".crc")) ||
-                            // Skip HDFS directories in S3
-                            (fname.ends_with("_$folder$")) ||
-                            // Skip hidden files starting with "_" (e.g.
-                            // "_SUCCESS")
-                            (fname.starts_with("_")) ||
-                            // Skip hidden files starting with "."
-                            (fname.starts_with("."))) {
-                            continue;
-                        }
-
-                        total_len += int64_t(path.size() + 1);
-                        total_ds_size += fi.size();
-                        // NOTE: this gives the full path and file name.
-                        // we might just want to get the file name
-                        file_names.push_back(path);
-                        file_sizes.push_back(fsize);
-                    }
-                }
-            }
-        }
-
-        ARROW_ONE_PROC_ERR_SYNC_USING_MPI(raise_runtime_err, runtime_err_msg);
-
-        if (dist_get_size() > 1) {
-            if (dist_get_rank() == 0) {
-                // send file names to other ranks
-                std::vector<char> str_data(total_len);
-                char *str_data_ptr = str_data.data();
-                for (auto &fname : file_names) {
-                    memcpy(str_data_ptr, fname.c_str(), fname.size());
-                    str_data_ptr[fname.size()] = 0;  // null terminate string
-                    str_data_ptr += fname.size() + 1;
-                }
-                CHECK_MPI(
-                    MPI_Bcast(&total_len, 1, MPI_INT64_T, 0, MPI_COMM_WORLD),
-                    "PathInfo::obtain_file_names_and_sizes: MPI error on "
-                    "MPI_Bcast:");
-                CHECK_MPI(MPI_Bcast(str_data.data(), str_data.size(), MPI_CHAR,
-                                    0, MPI_COMM_WORLD),
-                          "PathInfo::obtain_file_names_and_sizes: MPI "
-                          "error on MPI_Bcast:");
-            } else {
-                // receive file names from rank 0
-                int64_t recv_size;
-                CHECK_MPI(
-                    MPI_Bcast(&recv_size, 1, MPI_INT64_T, 0, MPI_COMM_WORLD),
-                    "PathInfo::obtain_file_names_and_sizes: MPI error on "
-                    "MPI_Bcast:");
-                std::vector<char> str_data(recv_size);
-                CHECK_MPI(MPI_Bcast(str_data.data(), str_data.size(), MPI_CHAR,
-                                    0, MPI_COMM_WORLD),
-                          "PathInfo::obtain_file_names_and_sizes: MPI "
-                          "error on MPI_Bcast:");
-                char *cur_str = str_data.data();
-                while (cur_str < str_data.data() + recv_size) {
-                    file_names.emplace_back(cur_str);
-                    cur_str += file_names.back().size() + 1;
-                }
-                file_sizes.resize(file_names.size());
-            }
-        }
-
-        // communicate file sizes to all processes
-        CHECK_MPI(
-            MPI_Bcast(file_sizes.data(), file_sizes.size(), MPI_INT64_T, 0,
-                      MPI_COMM_WORLD),
-            "PathInfo::obtain_file_names_and_sizes: MPI error on MPI_Bcast:");
-        CHECK_MPI(
-            MPI_Bcast(&total_ds_size, 1, MPI_INT64_T, 0, MPI_COMM_WORLD),
-            "PathInfo::obtain_file_names_and_sizes: MPI error on MPI_Bcast:");
-    }
-
-    /**
-     * Given the compression argument received from pd.read_csv()/pd.read_json
-     * set and return the compression scheme used.
-     * @param compression_pyarg : compression argument of read_csv/read_json
-     * @return the compression scheme used, in Arrow string representation
-     * (see arrow/util/compression.h/cc)
-     */
-    void obtain_compression_scheme(const std::string &compression_pyarg) {
-        if (compression == "UNKNOWN") {
-            compression = compression_pyarg;
-            std::string fname;
-            if (compression_pyarg == "infer") {
-                if (!is_directory()) {
-                    fname = file_path;
-                } else {
-                    // infer compression scheme from the name of the first file
-                    fname = get_first_file();
-                }
-                if (fname.ends_with(".gz")) {
-                    compression = "gzip";  // using arrow-cpp's representation
-                } else if (fname.ends_with(".bz2")) {
-                    compression = "bz2";  // using arrow-cpp's representation
-                    // ... TODO: more compression formats
-                } else {
-                    compression =
-                        "uncompressed";  // using arrow-cpp's representation
-                }
-            }
-        }
-    }
-
-    /// original file path passed through read_csv/read_json
-    std::string file_path;
-    std::string bucket_region;  // only useful if it's an s3 path
-    bool is_valid;
-    bool is_dir;
+    bool is_valid = true;
     bool is_remote_fs = false;  // like S3 or HDFS
     std::string compression = "UNKNOWN";
     std::vector<std::string> file_names;
@@ -442,97 +283,6 @@ class PathInfo {
     std::shared_ptr<arrow::fs::FileSystem> fs;
     /// sum of all file sizes
     int64_t total_ds_size = -1;
-    // anonymous connection
-    bool s3fs_anon = false;
-};
-
-// read local files
-// currently using ifstream, TODO: benchmark Arrow's LocalFS
-class LocalFileReader : public SingleFileReader {
-   public:
-    std::ifstream *fstream;
-    LocalFileReader(const char *_fname, const char *f_type, bool csv_header,
-                    bool json_lines)
-        : SingleFileReader(_fname, f_type, csv_header, json_lines) {
-        this->fstream = new std::ifstream(fname);
-        CHECK(fstream->good() && !fstream->eof() && fstream->is_open(),
-              "could not open file.");
-    }
-    uint64_t getSize() override { return std::filesystem::file_size(fname); }
-    bool seek(int64_t pos) override {
-        this->fstream->seekg(pos + this->csv_header_bytes, std::ios_base::beg);
-        return this->ok();
-    }
-    bool ok() override {
-        return (this->fstream->good() and !this->fstream->eof());
-    }
-    bool read_to_buff(char *s, int64_t size) override {
-        this->fstream->read(s, size);
-        return this->ok();
-    }
-    ~LocalFileReader() override {
-        if (fstream) {
-            delete fstream;
-        }
-    }
-};
-
-class LocalDirectoryFileReader : public DirectoryFileReader {
-   public:
-    path_vec
-        file_paths;  // sorted paths of each csv/json file inside the directory
-    LocalDirectoryFileReader(const char *_dirname, const char *f_type,
-                             bool csv_header, bool json_lines)
-        : DirectoryFileReader(_dirname, f_type, csv_header, json_lines) {
-        // only keep the files that are csv/json files
-        std::string dirname(_dirname);
-        const char *suffix = this->f_type_to_string();
-
-        auto nonEmptyEndsWithSuffix =
-            [suffix](const std::filesystem::path &path) -> bool {
-            return (std::filesystem::is_regular_file(path) &&
-                    path.string().ends_with(suffix) &&
-                    std::filesystem::file_size(path) > 0);
-        };
-
-        std::copy_if(std::filesystem::directory_iterator(_dirname),
-                     std::filesystem::directory_iterator(),
-                     std::back_inserter(this->file_paths),
-                     nonEmptyEndsWithSuffix);
-
-        if ((this->file_paths).size() == 0) {
-            Bodo_PyErr_SetString(
-                PyExc_RuntimeError,
-                ("No valid file to read from directory: " + dirname).c_str());
-        }
-        // sort all files in directory
-        std::ranges::sort(this->file_paths);
-
-        // find & set all file name
-        for (auto &file_path : this->file_paths) {
-            (this->file_names).push_back(file_path.string());
-        }
-
-        // find and set header row size in bytes
-        this->findHeaderRowSize();
-
-        // find dir_size and construct file_sizes
-        // assuming the directory contains files only, i.e. no subdirectory
-        this->dir_size = 0;
-        for (auto &file_path : this->file_paths) {
-            (this->file_sizes).push_back(this->dir_size);
-            this->dir_size += std::filesystem::file_size(file_path);
-            this->dir_size -= this->csv_header_bytes;
-        }
-        this->file_sizes.push_back(this->dir_size);
-    };
-
-    void initFileReader(const char *fname) override {
-        this->f_reader =
-            new LocalFileReader(fname, this->f_type_to_string(),
-                                this->csv_header, this->json_lines);
-        this->f_reader->csv_header_bytes = this->csv_header_bytes;
-    };
 };
 
 // ***********************************************************************************
@@ -547,7 +297,7 @@ using stream_reader = struct {
     size_t chunk_size;    // size of our chunk
     size_t chunk_pos;     // current position in our chunk
 
-    std::shared_ptr<bodo::vector<char>>
+    std::shared_ptr<bodo_vector<char>>
         buf;  // internal buffer for converting stream input to Unicode object
 
     // The following attributes are needed for chunksize Iterator support
@@ -614,7 +364,7 @@ static PyObject *stream_reader_new(PyTypeObject *type, PyObject *args,
     self->header_size_bytes = 0;
     self->path_info = nullptr;
     self->first_read = false;
-    self->buf = std::make_shared<bodo::vector<char>>(0);
+    self->buf = std::make_shared<bodo_vector<char>>(0);
 
     return (PyObject *)self;
 }
@@ -832,29 +582,11 @@ static PyTypeObject stream_reader_type = {
     stream_reader_new,      /* tp_new */
 };
 
-// at module load time we need to make our type known ot Python
-extern "C" void PyInit_csv(PyObject *m) {
+void init_stream_reader_type() {
     if (PyType_Ready(&stream_reader_type) < 0) {
-        return;
+        PyErr_SetString(PyExc_RuntimeError,
+                        "stream_reader_type is not initialized properly");
     }
-    Py_INCREF(&stream_reader_type);
-    PyModule_AddObject(m, "StreamReader", (PyObject *)&stream_reader_type);
-    SetAttrStringFromVoidPtr(m, csv_file_chunk_reader);
-    SetAttrStringFromVoidPtr(m, update_csv_reader);
-    SetAttrStringFromVoidPtr(m, initialize_csv_reader);
-    // NOTE: old testing code that is commented out due to
-    // introduction of FileReader interface.
-    // TODO: update testing code
-    // SetAttrStringFromVoidPtr(m, csv_string_chunk_reader);
-}
-
-extern "C" void PyInit_json(PyObject *m) {
-    if (PyType_Ready(&stream_reader_type) < 0) {
-        return;
-    }
-    Py_INCREF(&stream_reader_type);
-    PyModule_AddObject(m, "StreamReader", (PyObject *)&stream_reader_type);
-    SetAttrStringFromVoidPtr(m, json_file_chunk_reader);
 }
 
 /**
@@ -923,13 +655,13 @@ class MemReader : public FileReader {
     /// current read position
     int64_t pos = start;
     /// data stored by this MemReader
-    bodo::vector<char> data;
+    bodo_vector<char> data;
     /// character that constitutes the row separator for this data
     char row_separator;
     /// true if the content refers to JSON where records span multiple lines
     bool json_multi_line = false;
     /// starting offset of each row
-    bodo::vector<int64_t> row_offsets;
+    bodo_vector<int64_t> row_offsets;
     /// FileReader status
     bool status_ok = true;
 
@@ -1023,7 +755,7 @@ class MemReader : public FileReader {
     /**
      * Replace data with new_data (MemReader takes ownership of it).
      */
-    void set_data(bodo::vector<char> &new_data) {
+    void set_data(bodo_vector<char> &new_data) {
         data = std::move(new_data);
         start = pos = 0;
         row_offsets.clear();
@@ -1089,7 +821,7 @@ class MemReader : public FileReader {
 
         arrow::Result<std::shared_ptr<arrow::io::CompressedInputStream>>
             istream_result = arrow::io::CompressedInputStream::Make(
-                codec.get(), raw_istream, bodo::BufferPool::DefaultPtr());
+                codec.get(), raw_istream, memory_pool);
         CHECK_ARROW(istream_result, "read_compressed_file",
                     "arrow::io::CompressedInputStream::Make")
         std::shared_ptr<arrow::io::CompressedInputStream> istream =
@@ -1176,7 +908,7 @@ void data_row_correction(MemReader *reader, char row_separator) {
     int rank = dist_get_rank();
     int num_ranks = dist_get_size();
 
-    bodo::vector<char> &data = reader->data;
+    bodo_vector<char> &data = reader->data;
     if (rank < num_ranks - 1) {  // receive chunk from right, append to my data
         size_t cur_data_size = data.size();
         MPI_Status status;
@@ -1571,7 +1303,7 @@ void balance_rows(MemReader *reader) {
         cur_offset += recvcounts[rank];
         total_recv_size += recvcounts[rank];
     }
-    bodo::vector<char> recvbuf(total_recv_size);
+    bodo_vector<char> recvbuf(total_recv_size);
     char *sendbuf = reader->data.data() + reader->start;
 
     bodo_alltoallv(sendbuf, sendcounts, sdispls, MPI_CHAR, recvbuf.data(),
@@ -1625,7 +1357,7 @@ void balance_rows(MemReader *reader) {
  * of local_data. Needed to identify i_start for nrows/chunksize-iterator case.
  */
 static int64_t compute_offsets(int64_t i_start, int64_t bytes_read,
-                               const bodo::vector<char> &local_data,
+                               const bodo_vector<char> &local_data,
                                char row_separator, int64_t &rows_count,
                                int64_t &global_offset, int64_t global_start,
                                int64_t &total_bytes, bool is_skiplist,
@@ -1692,7 +1424,7 @@ static int64_t compute_offsets(int64_t i_start, int64_t bytes_read,
  *
  */
 static void compute_skiprows_list_offsets(
-    int64_t i_start, int64_t bytes_read, const bodo::vector<char> &local_data,
+    int64_t i_start, int64_t bytes_read, const bodo_vector<char> &local_data,
     char row_separator, SkiprowsListInfo *skiprows_list_info,
     int64_t &skiplist_idx, int64_t &rows_count, int64_t &total_bytes,
     bool csv_header) {
@@ -1771,7 +1503,7 @@ void read_file_info(const std::vector<std::string> &file_names,
 
     // TODO Tune (https://bodo.atlassian.net/browse/BE-2600)
     constexpr int64_t CHUNK_SIZE = 1024 * 1024;
-    bodo::vector<char> local_data(CHUNK_SIZE);
+    bodo_vector<char> local_data(CHUNK_SIZE);
     // Bytes skipped from the beginning based on how many rows to skip when
     // using skiprows
     int64_t total_skipped = 0;
@@ -2192,7 +1924,7 @@ extern "C" PyObject *file_chunk_reader(
         // seem like something that should worry us right now
 
         char row_separator = '\n';
-        if (strcmp(suffix, "json") == 0) {
+        if ((strcmp(suffix, "json") == 0) && !json_lines) {
             row_separator = '}';
         }
 

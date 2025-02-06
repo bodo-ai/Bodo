@@ -96,9 +96,7 @@ def test_dict_enc_ops_set_global_dict_flag(args, memory_leak_check):
         f"  output_series = pd.Series(global_A).str.{fn_name}({args_str})\n"
         "  return output_series.values._has_unique_local_dictionary, output_series\n"
     )
-    func_text += (
-        "def py_impl(A):\n" f"  return pd.Series(A).str.{fn_name}({args_str})\n"
-    )
+    func_text += f"def py_impl(A):\n  return pd.Series(A).str.{fn_name}({args_str})\n"
     loc_vars = {}
     global_vars = {
         "pd": pd,
