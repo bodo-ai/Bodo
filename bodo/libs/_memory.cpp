@@ -122,7 +122,7 @@ uint8_t* const create_frame(size_t size) {
     // https://man7.org/linux/man-pages/man5/proc.5.html (see the
     // /proc/sys/vm/overcommit_memory section)
     return static_cast<uint8_t* const>(
-        mmap(/*addr*/ nullptr, this->byteSize_,
+        mmap(/*addr*/ nullptr, size,
              /*We need both read/write access*/ PROT_READ | PROT_WRITE,
              MMAP_FLAGS, /*fd*/ -1,
              /*offset*/ 0));

@@ -59,7 +59,7 @@ int truncate_file(int fd, off_t new_size_) {
 
     return 0;
 #else
-    return ftruncate(fd, new_size);
+    return ftruncate(fd, new_size_);
 #endif
 }
 

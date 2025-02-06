@@ -94,7 +94,7 @@ function(set_sanitizer_options)
       "/fsanitize=address"
     )
     add_definitions(
-      -D_DISABLE_STRING_ANNOTATION 
+      -D_DISABLE_STRING_ANNOTATION
       -D_DISABLE_VECTOR_ANNOTATION
     )
   endif()
@@ -830,7 +830,7 @@ if (NOT WIN32)
     parquet
     fmt::fmt
     zstd
-    AWS::aws-cpp-sdk-core
+    aws-cpp-sdk-core
     ${Boost_LIBRARIES}
   )
 else()
@@ -846,7 +846,7 @@ else()
     aws-cpp-sdk-core
     ${Boost_LIBRARIES}
     CURL::libcurl
-    OpenSSL::SSL 
+    OpenSSL::SSL
     OpenSSL::Crypto
     ${HDF5_LIBRARIES}
   )

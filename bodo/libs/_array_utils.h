@@ -1816,7 +1816,7 @@ inline void set_arr_item(array_info& arr, size_t idx, T val) {
  */
 template <bodo_array_type::arr_type_enum ArrType, typename T,
           Bodo_CTypes::CTypeEnum DType>
-    requires(nullable_array<ArrType> && bool_dtype<DType> && bool_dtype<T>)
+    requires(nullable_array<ArrType> && bool_dtype<DType>)
 inline void set_arr_item(array_info& arr, size_t idx, T val) {
     SetBitTo((uint8_t*)arr.data1<ArrType>(), idx, val);
 }
