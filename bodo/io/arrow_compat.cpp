@@ -7,13 +7,12 @@
 PUSH_IGNORED_COMPILER_ERROR("-Wreturn-type-c-linkage")
 PUSH_IGNORED_COMPILER_ERROR("-Wunused-variable")
 PUSH_IGNORED_COMPILER_ERROR("-Wunused-function")
-#elif defined(_MSC_VER)
-PUSH_IGNORED_COMPILER_ERROR(4273)
-// PUSH_IGNORED_COMPILER_ERROR("-Wunused-variable")
-// PUSH_IGNORED_COMPILER_ERROR("-Wunused-function")
 #endif
 #include "pyarrow_wrappers_api.h"
+
+#if defined(__GNUC__) || defined(__clang__)
 POP_IGNORED_COMPILER_ERROR()
+#endif
 
 namespace arrow::py {
 

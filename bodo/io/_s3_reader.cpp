@@ -21,10 +21,8 @@
 #include "_bodo_file_reader.h"
 #include "_s3_reader.h"
 
-#ifdef _MSC_VER
-#define SLEEP Sleep
-#else
-#define SLEEP sleep
+#ifdef _WIN32
+#define sleep Sleep
 #endif
 
 // helper macro for CHECK_ARROW to add a message regarding AWS creds or S3
@@ -101,7 +99,7 @@ arrow::fs::S3ProxyOptions get_s3_proxy_options_from_env_vars() {
 }
 
 void _sleep_exponential_backoff(unsigned int n, unsigned int max = 10) {
-    SLEEP(std::min<unsigned int>((1 << n), max));
+    sleep(std::min<unsigned int>((1 << n), max));
 }
 // a global singleton instance of S3FileSystem that is
 // initialized the first time it is needed and reused afterwards

@@ -63,25 +63,6 @@ int truncate_file(int fd, off_t new_size_) {
 #endif
 }
 
-// TODO make cross platform interface
-// Allows Sparse file system on Windows.
-// pread
-// int read_file(){
-//     return -1;
-// }
-
-// pwrite
-// int write_file(){
-//     return -1;
-// }
-
-// open
-// int open_file() {
-//     return -1;
-// }
-
-//
-
 #undef CHECK_ARROW_AND_ASSIGN
 #define CHECK_ARROW_MEM_AND_ASSIGN(expr, msg, lhs) \
     {                                              \
@@ -420,7 +401,7 @@ struct SparseFileSizeInfo {
     std::vector<uint32_t> free_block_list;
 };
 
-// TOOD sparse file storage manager support Windows
+// TOOD XXX sparse file storage manager support Windows
 #ifndef _WIN32
 class SparseFileStorageManager final : public StorageManager {
    public:

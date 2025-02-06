@@ -15,14 +15,13 @@ void test_mmap_helper(bool reserve) {
     }
 
     int prot = PROT_READ | PROT_WRITE;
-    size_t size = 16484;
+    size_t virt_size = 68719476736;
 
-    void* addr = mmap(nullptr, size, prot, flags, -1, 0);
+    void* addr = VirtualAlloc(0, virt_size, MEM_RESERVE, PAGE_NOACCESS);
 
-    if (addr == MAP_FAILED) {
-        bodo::tests::check(false);
-        return;
-    }
+    size_t size = 16384;
+
+    VirtualAlloc(addr, size, MEM_COMMIT, PAGE_READWRITE);
 
     memset(addr, 0xCB, size);
 }
@@ -34,7 +33,7 @@ static bodo::tests::suite tests([] {
         test_mmap_helper(false);
 
         // Reserve don't commit
-        // test_mmap_helper(true);
+        test_mmap_helper(true);
 #endif
     });
 });
