@@ -17,6 +17,7 @@ from typing import (
     Protocol,
 )
 
+import boto3
 import pandas as pd
 import psutil
 import pytest
@@ -291,21 +292,18 @@ def polaris_server():
         "-e",
         f"AWS_REGION={os.environ.get('AWS_REGION', 'us-east-2')}",
     ]
-    if "AWS_ACCESS_KEY_ID" in os.environ:
-        env_args += ["-e", f"AWS_ACCESS_KEY_ID={os.environ['AWS_ACCESS_KEY_ID']}"]
-    if "AWS_SECRET_ACCESS_KEY" in os.environ:
+    # Use boto to get credentials from all possible sources
+    session = boto3.Session()
+    credentials = session.get_credentials()
+    if credentials.access_key is not None:
+        env_args += ["-e", f"AWS_ACCESS_KEY_ID={credentials.access_key}"]
+    if credentials.secret_key is not None:
         env_args += [
             "-e",
-            f"AWS_SECRET_ACCESS_KEY={os.environ['AWS_SECRET_ACCESS_KEY']}",
+            f"AWS_SECRET_ACCESS_KEY={credentials.secret_key}",
         ]
-    if "AWS_SESSION_TOKEN" in os.environ:
-        env_args += ["-e", f"AWS_SESSION_TOKEN={os.environ['AWS_SESSION_TOKEN']}"]
-    if "AWS_PROFILE" in os.environ:
-        env_args += ["-e", f"AWS_PROFILE={os.environ['AWS_PROFILE']}"]
-    [
-        "-v",
-        f"{Path.home()}/.aws/credentials:/home/app/.aws/credentials:ro",
-    ] if Path.home().joinpath(".aws/credentials").exists() else []
+    if credentials.token is not None:
+        env_args += ["-e", f"AWS_SESSION_TOKEN={credentials.token}"]
 
     # Start Polaris server
     # Once Polaris publishes their own docker image, we can use that instead of ours
