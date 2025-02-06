@@ -197,9 +197,9 @@ std::shared_ptr<array_info> fft2(std::shared_ptr<array_info> arr,
     std::shared_ptr<array_info> out_arr =
         alloc_array_top_level(arr->length, 0, 0, arr->arr_type, dtype);
     // FFTW might need more memory than the array has for scratch space
-    CHECK_ARROW_MEM(out_arr->buffers[0]->Reserve(
-                        local_alloc * sizeof(fftw_complex_type<dtype>)),
-                    "fft2: failed to allocate memory for output");
+    CHECK_ARROW_BASE(out_arr->buffers[0]->Reserve(
+                         local_alloc * sizeof(fftw_complex_type<dtype>)),
+                     "fft2: failed to allocate memory for output");
 
     // FFTW hangs in this case
     if (shape[0] * shape[1] < 2) {
@@ -490,9 +490,9 @@ void fftshift(std::shared_ptr<array_info> arr, uint64_t shape[2],
         for (auto [recv_arr, _1, _2] : recv_data) {
             total_recv_len += recv_arr->length;
         }
-        CHECK_ARROW_MEM(arr->buffers[0]->Reserve(
-                            total_recv_len * sizeof(fftw_complex_type<dtype>)),
-                        "fftshift: failed to allocate memory for output");
+        CHECK_ARROW_BASE(arr->buffers[0]->Reserve(
+                             total_recv_len * sizeof(fftw_complex_type<dtype>)),
+                         "fftshift: failed to allocate memory for output");
     } else {
         std::shared_ptr<array_info> recv_arr =
             alloc_array_top_level(arr->length, 0, 0, arr->arr_type, dtype);
