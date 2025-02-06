@@ -1,9 +1,5 @@
 cmake_minimum_required(VERSION 3.23 FATAL_ERROR)
 project(${SKBUILD_PROJECT_NAME} LANGUAGES C CXX)
-message(STATUS "CMake generator: ${CMAKE_GENERATOR}")
-message(STATUS "PLATFORM: ${CMAKE_GENERATOR_PLATFORM}")
-message(STATUS "PROCESSOR: ${CMAKE_SYSTEM_PROCESSOR}")
-message(STATUS "The CXX compiler identification is ${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION}")
 
 # External Packages
 include(FetchContent)
@@ -260,21 +256,25 @@ set(datasketches_INSTALL_DIR ${INSTALL_DIR})
 message("Source dir of datasketches = ${datasketches_INSTALL_DIR}")
 
 # Add boost as a dependency
-# set(Boost_USE_STATIC_LIBS OFF)
-find_package(Boost 1.85 REQUIRED COMPONENTS)
-# find_package(Boost 1.85 REQUIRED COMPONENTS)
-message(STATUS "BOOST INCLUDE DIRS: ${Boost_INCLUDE_DIRS}")
-# set(Boost_INCLUDE_DIRS, "C:\\Users\\owner\\dev\\Bodo\\.pixi\\envs\\default\\Library\\include")
-include_directories(${Boost_INCLUDE_DIRS})
+if (NOT WIN32)
+  find_package(Boost 1.85 REQUIRED COMPONENTS json)
+else()
+  find_package(Boost 1.85 REQUIRED COMPONENTS)
+endif()
 
-find_package(HDF5 REQUIRED COMPONENTS C HL)
+include_directories(${Boost_INCLUDE_DIRS})
 
 # ---------------------------- Set CMake Options -----------------------------
 # Use RelWithDebInfo Mode by Default
 cmake_print_variables(CMAKE_BUILD_TYPE)
-if (NOT CMAKE_BUILD_TYPE)
-    message(STATUS "No build type selected, default to RelWithDebInfo")
-    set(CMAKE_BUILD_TYPE "DebugSanitize")
+
+# Enable sanitizer through environment varaible since
+# "DebugSanitize" is not recognized as a valid build type
+if (WIN32 AND DEFINED ENV{BUILD_BODO_SAN})
+  set(CMAKE_BUILD_TYPE "DebugSanitize")
+elseif (NOT CMAKE_BUILD_TYPE)
+  message(STATUS "No build type selected, default to RelWithDebInfo")
+  set(CMAKE_BUILD_TYPE "RelWithDebInfo")
 endif()
 
 # Ensure We are Inside a Conda Environment
@@ -717,7 +717,6 @@ if (NOT (CMAKE_BUILD_TYPE STREQUAL "Release") AND NOT DEFINED ENV{BODO_SKIP_CPP_
     "bodo/tests/test_sorted_window_computation.cpp"
     "bodo/tests/test_thread_pool.cpp"
     "bodo/tests/test_datatypes.cpp"
-    "bodo/tests/test_mman.cpp"
   )
   if (BUILD_WITH_V8)
       set(test_list "${test_list}"

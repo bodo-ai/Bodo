@@ -24,11 +24,8 @@
 #define ASSUME_ALIGNED(x) std::assume_aligned<4096>(x)
 #else
 #include <intrin.h>
-#include "_mman.h"
-// todo check if this is equivalent on windows
-#define MMAP_FLAGS MAP_PRIVATE | MAP_ANONYMOUS | SEC_RESERVE
-// todo check if we can use __assume with some custom logic here
-#define ASSUME_ALIGNED(x) (x)
+// TODO xx assume aligned
+#define ASSUME_ALIGNED(x) x
 #endif
 
 #include <fmt/args.h>
@@ -104,6 +101,37 @@ Swip construct_unswizzled_swip(uint8_t size_class_idx,
     return (Swip)((1ull << 63) | size_class_enc | storage_class_enc | bid);
 }
 
+/**
+ * @brief Create a continguous range of memory in the Virtual address space.
+ *
+ * @param
+ **/
+uint8_t* const create_frame(size_t size) {
+#ifndef _WIN32
+    // Allocate the address range using mmap.
+    // Create a private (i.e. only visible to this process) anonymous
+    // (i.e. not backed by a physical file) mapping. Ref:
+    // https://man7.org/linux/man-pages/man2/mmap.2.html We use
+    // MAP_NORESERVE which doesn't reserve swap space up front. It
+    // will reserve swap space lazily when it needs it. This is fine
+    // for our use-case since we're mapping a large address space up
+    // front. If we reserve swap space, it will block other
+    // applications (e.g. Spark in our unit tests) from being able to
+    // allocate memory. Ref:
+    // https://unix.stackexchange.com/questions/571043/what-is-lazy-swap-reservation
+    // https://man7.org/linux/man-pages/man5/proc.5.html (see the
+    // /proc/sys/vm/overcommit_memory section)
+    return static_cast<uint8_t* const>(
+        mmap(/*addr*/ nullptr, this->byteSize_,
+             /*We need both read/write access*/ PROT_READ | PROT_WRITE,
+             MMAP_FLAGS, /*fd*/ -1,
+             /*offset*/ 0));
+#else
+    // TODO xxx use VirtualAlloc on Windows
+    return nullptr;
+#endif
+}
+
 //// SizeClass
 
 SizeClass::SizeClass(
@@ -131,35 +159,22 @@ SizeClass::SizeClass(
       address_(
           // Mmap guarantees alignment to page size.
           // 4096 is the smallest page size on x86_64 and ARM64.
-          ASSUME_ALIGNED(static_cast<uint8_t* const>(
-              // Allocate the address range using mmap.
-              // Create a private (i.e. only visible to this process) anonymous
-              // (i.e. not backed by a physical file) mapping. Ref:
-              // https://man7.org/linux/man-pages/man2/mmap.2.html We use
-              // MAP_NORESERVE which doesn't reserve swap space up front. It
-              // will reserve swap space lazily when it needs it. This is fine
-              // for our use-case since we're mapping a large address space up
-              // front. If we reserve swap space, it will block other
-              // applications (e.g. Spark in our unit tests) from being able to
-              // allocate memory. Ref:
-              // https://unix.stackexchange.com/questions/571043/what-is-lazy-swap-reservation
-              // https://man7.org/linux/man-pages/man5/proc.5.html (see the
-              // /proc/sys/vm/overcommit_memory section)
-              mmap(/*addr*/ nullptr, this->byteSize_,
-                   /*We need both read/write access*/ PROT_READ | PROT_WRITE,
-                   MMAP_FLAGS, /*fd*/ -1,
-                   /*offset*/ 0)))) {
+          ASSUME_ALIGNED(create_frame(this->byteSize_))) {
+#ifndef _WIN32
     if (this->address_ == MAP_FAILED || this->address_ == nullptr) {
         throw std::runtime_error(
             fmt::format("SizeClass::SizeClass: Could not allocate memory for "
                         "SizeClass {}. Failed with errno: {}.",
                         block_size, std::strerror(errno)));
     }
+#endif
 }
 
 SizeClass::~SizeClass() {
     // Unmap the allocated address range.
+#ifndef _WIN32
     munmap(this->address_, this->byteSize_);
+#endif
 }
 
 bool SizeClass::isInRange(uint8_t* ptr) const {
