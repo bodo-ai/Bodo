@@ -3033,11 +3033,14 @@ def check_for_compiler_file_changes():
     print("FILES CHANGED", files_changed)
     for filename in files_changed:
         if filename in core_compiler_files:
+            print("RETURNING TRUE")
             return True
+    print("RETURNING FALSE")
     return False
 
 
 compiler_files_were_changed = check_for_compiler_file_changes()
+print("COMPILER_FILES_WERE_CHANGED", compiler_files_were_changed)
 
 
 # Determine if we are re-running a test due to a flaky failure.
@@ -3228,12 +3231,14 @@ pytest_mark_pandas = (
     if compiler_files_were_changed
     else pytest.mark.pandas
 )
+print("PYTEST_MARK_PANDAS", pytest_mark_pandas)
 
 # This is for marking an entire test file
 # (pytestmark = pytest_pandas)
 pytest_pandas = [pytest.mark.pandas] + (
     [pytest.mark.slow] if compiler_files_were_changed else []
 )
+print("PYTEST_PANDAS", pytest_pandas)
 
 # This is for marking an entire test file
 # (pytestmark = pytest_perf_regression)
