@@ -4,6 +4,7 @@ Top-level init file for bodo package
 isort:skip_file
 """
 
+
 def _global_except_hook(exctype, value, traceback):
     """Custom excepthook function that replaces sys.excepthook (see sys.excepthook
     documentation for more details on its API)

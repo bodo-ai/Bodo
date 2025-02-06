@@ -136,6 +136,7 @@ std::pair<int64_t, int16_t> Parser::parse_timestamptz() {
     // "YYYY-MM-DD HH:MM:SS.S... [+-]TZH:TZM"
     // "YYYY-MM-DD HH:MM:SS.S... 'Z'" (for the 0 offset)
     CHECK_CHAR('"');
+
     // Parse the timestamp
     auto year = CHECK(parse_year());
     CHECK_CHAR('-');
