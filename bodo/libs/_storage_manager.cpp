@@ -401,7 +401,6 @@ struct SparseFileSizeInfo {
     std::vector<uint32_t> free_block_list;
 };
 
-// TOOD XXX sparse file storage manager support Windows
 #ifndef _WIN32
 class SparseFileStorageManager final : public StorageManager {
    public:
@@ -729,7 +728,7 @@ static std::unique_ptr<StorageManager> MakeLocal(
 //   - gfs2 in Linux 4.16 (2018)
 // - FALLOC_FL_KEEP_SIZE in glib 2.18 (2013)
 // - ftruncate: glibc 2.3.5 (2006)
-// TODO windows compatibility
+// TODO xxx: Windows support.
 #ifndef _WIN32
     // Just in case, we test if SparseFileStorageManager works
     // and default to LocalStorageManager if it doesn't
@@ -746,7 +745,6 @@ static std::unique_ptr<StorageManager> MakeLocal(
         return std::make_unique<LocalStorageManager>(
             options, "LocalStorageManager", fs, size_class_bytes, false);
     }
-// Windows use LocalStorageManager for now...
 #else
     auto fs = std::make_shared<arrow::fs::LocalFileSystem>();
     return std::make_unique<LocalStorageManager>(options, "LocalStorageManager",

@@ -10,8 +10,10 @@ include(FetchContent)
 # Debug Helpers
 include(CMakePrintHelpers)
 # LTO Support
-# include(CheckIPOSupported)
-# check_ipo_supported(LANGUAGES CXX)
+if (NOT WIN32)
+  include(CheckIPOSupported)
+  check_ipo_supported(LANGUAGES CXX)
+endif()
 
 if(CMAKE_SYSTEM_PROCESSOR MATCHES "(x86)|(X86)|(amd64)|(AMD64)")
   set (X86 TRUE)
@@ -31,21 +33,21 @@ function(set_default_compiler_options)
   endif()
 
   if (WIN32)
+    # TODO xx: enable warnings.
     add_compile_options(
       "/wd4819" # Suppress warnings about file character encoding
       "/wd4996" # Suppress warnings about deprecated functions
       "/wd4312" # Suppress warnings about conversion
-      "/wd4365" # Supress warnings about conversions (signed/unsigned) TODO fix
-      "/wd4244" # Supress warning about conversions (loss of data) TODO fix
-      "/wd4061" # Supress warning about switch not being explicitly handled TODO fix
+      "/wd4365" # Supress warnings about conversions (signed/unsigned)
+      "/wd4244" # Supress warning about conversions (loss of data)
+      "/wd4061" # Supress warning about switch not being explicitly handled
       "/wd4100" # Supress warning about unreferenced formal parameter.
       "/wd4551" # Suppress warnings about function call missing argument list
-      "/w" # disable all warnings: TODO fix
+      "/w"      # disable other warnings
       "/FS"
-      "/GS"     # Enable buffer security checks
+      "/GS"       # Enable buffer security checks
       "/guard:cf" # Enable control flow guard (security feature)
       "/EHsc"
-      # "/arch:SSE2"
     )
     add_definitions(-DMS_WINDOWS)  # Globally define MS_WINDOWS
   else()
@@ -471,7 +473,6 @@ python_add_library(pyarrow_wrappers MODULE WITH_SOABI "${pyarrow_wrappers_source
 target_include_directories(pyarrow_wrappers PRIVATE ${BASE_INCLUDE_DIRS})
 target_link_directories(pyarrow_wrappers PRIVATE ${PYARROW_LIB_DIR} ${CONDA_LIB_DIR} ${MPI_LIB_DIR})
 target_link_libraries(pyarrow_wrappers PRIVATE arrow arrow_python arrow_dataset "${MPI_LIBRARIES}")
-# target_compile_definitions(pyarrow_wrappers PRIVATE ARROW_PYTHON_EXPORTING)
 install(TARGETS pyarrow_wrappers DESTINATION "bodo/io/")
 
 # ----------------------- Cython Target - bodo.io._hdfs -----------------------
@@ -489,7 +490,6 @@ python_add_library(_hdfs MODULE WITH_SOABI "bodo/io/_hdfs.cpp")
 target_include_directories(_hdfs PUBLIC ${BASE_INCLUDE_DIRS})
 target_link_directories(_hdfs PRIVATE ${PYARROW_LIB_DIR} ${CONDA_LIB_DIR})
 target_link_libraries(_hdfs PRIVATE arrow arrow_python)
-# target_compile_definitions(_hdfs PRIVATE ARROW_PYTHON_EXPORTING)
 install(TARGETS _hdfs DESTINATION "bodo/io/")
 
 # ---------------------- Cython Target - bodo.io.tracing ----------------------
@@ -528,7 +528,6 @@ python_add_library(memory MODULE WITH_SOABI "bodo/memory.cpp")
 target_include_directories(memory PRIVATE ${BASE_INCLUDE_DIRS} "${CMAKE_CURRENT_SOURCE_DIR}/bodo/")
 target_link_directories(memory PRIVATE ${PYARROW_LIB_DIR} ${CONDA_LIB_DIR})
 target_link_libraries(memory PRIVATE arrow arrow_python)
-# target_compile_definitions(memory PRIVATE ARROW_PYTHON_EXPORTING)
 install(TARGETS memory DESTINATION "bodo/")
 
 # ---------------------- Cython Target - bodo.tests.memory_tester -----------------------
@@ -555,7 +554,6 @@ python_add_library(
 target_include_directories(memory_tester PRIVATE ${BASE_INCLUDE_DIRS} "${CMAKE_CURRENT_SOURCE_DIR}/bodo/tests/")
 target_link_directories(memory_tester PRIVATE ${PYARROW_LIB_DIR} ${CONDA_LIB_DIR} ${MPI_LIB_DIR})
 target_link_libraries(memory_tester PRIVATE "${MPI_LIBRARIES}" arrow arrow_python fmt::fmt)
-# target_compile_definitions(memory_tester PRIVATE ARROW_PYTHON_EXPORTING)
 if(NOT(CMAKE_BUILD_TYPE STREQUAL "Release"))
   target_compile_definitions(
     memory_tester
@@ -731,7 +729,7 @@ if (NOT (CMAKE_BUILD_TYPE STREQUAL "Release") AND NOT DEFINED ENV{BODO_SKIP_CPP_
     "bodo/tests/test_puffin.cpp"
     "bodo/tests/test_theta_sketches.cpp")
 endif()
-if(DEFINED ENV{NO_HDF5} AND "$ENV{NO_HDF5}" STREQUAL "1")
+if(WIN32 OR (DEFINED ENV{NO_HDF5} AND "$ENV{NO_HDF5}" STREQUAL "1"))
     set(NO_HDF5 TRUE)
 else()
     list(APPEND sources_list "bodo/io/_hdf5.cpp")

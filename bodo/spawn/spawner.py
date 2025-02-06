@@ -165,6 +165,12 @@ class Spawner:
         self._is_running = False
 
     def _get_spawn_command_args(self) -> tuple[str, list[str]]:
+        """
+        Get the platform-dependent command to launch spawned processes.
+
+        Returns:
+            tuple[str, list[str]]: The command to run and a list of arguments.
+        """
         py_args = ["-u", "-m", "bodo.spawn.worker"]
 
         if sys.platform == "win32":
@@ -181,12 +187,7 @@ class Spawner:
                     f"DYLD_INSERT_LIBRARIES={os.environ['BODO_DYLD_INSERT_LIBRARIES']}"
                 )
 
-            return "env", environ_args + [
-                sys.executable,
-                "-u",
-                "-m",
-                "bodo.spawn.worker",
-            ]
+            return "env", environ_args + [sys.executable] + py_args
 
     @property
     def bcast_root(self):

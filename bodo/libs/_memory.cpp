@@ -815,15 +815,12 @@ BufferPoolOptions BufferPoolOptions::Defaults() {
 
 //// BufferPool
 
-// Define cross platform utilities
+/// Define cross platform utilities
 #ifdef _WIN32
-// count leading zeros before number x
 inline int clzll(uint64_t x) {
-    unsigned long
-        index;  // Will store the position of the most significant set bit
+    unsigned long index;
     _BitScanReverse64(&index, x);
-    return 63 - index;  // MSVC's bit index is zero-based from the least
-                        // significant bit
+    return 63 - index;
 }
 
 #define aligned_alloc(alignment, size) _aligned_malloc(size, alignment)
@@ -832,6 +829,16 @@ inline int clzll(uint64_t x) {
 #define clzll __builtin_clzll
 #define aligned_alloc(alignment, size) std::aligned_alloc(alignment, size)
 #endif
+
+static long get_page_size() {
+#ifdef _WIN32
+    SYSTEM_INFO si;
+    GetSystemInfo(&si);
+    return si.dwPageSize;
+#else
+    return sysconf(_SC_PAGE_SIZE);
+#endif
+}
 
 /**
  * @brief Find the highest power of 2 that is lesser than or equal
@@ -1267,8 +1274,7 @@ arrow::Result<bool> BufferPool::best_effort_evict_helper(const uint64_t bytes) {
     } else {
         // Mmap-ed memory is always page (typically 4096B) aligned
         // (https://stackoverflow.com/questions/42259495/does-mmap-return-aligned-pointer-values).
-        const static long page_size =
-            4096L;  // TODO make X platform sysconf(_SC_PAGE_SIZE);
+        const static long page_size = get_page_size();
         if (alignment > page_size) {
             return ::arrow::Status::Invalid(
                 "Requested alignment (" + std::to_string(alignment) +

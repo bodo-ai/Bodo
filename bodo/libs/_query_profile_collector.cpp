@@ -21,7 +21,6 @@
     }
 
 int makedir(std::string path, int mode) {
-// TODO make recursive on windows ?
 #ifdef _WIN32
     return _mkdir(path.data());
 #else

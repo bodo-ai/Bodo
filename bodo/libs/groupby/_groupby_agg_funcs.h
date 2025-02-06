@@ -177,8 +177,12 @@ struct casted_aggfunc<T_out, T_in, In_DType, Bodo_FTypes::sum> {
      */
     inline static void apply(T_out& v1, T_in& v2) {
         if (!isnan_alltype<T_in, In_DType>(v2)) {
-            throw std::runtime_error("TOOD: fix templating logic here");
-            // v1 += v2;
+#ifdef _WIN32
+            throw std::runtime_error(
+                "casted_aggfunc sum: not implemented yet Windows.");
+#else
+            v1 += v2;
+#endif
         }
     }
 };
