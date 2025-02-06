@@ -38,7 +38,7 @@ requirements:
     - cmake
     - ninja
     - mpi4py =3.1.5  # [not win]
-
+    - mpi4py ~= 4.0  # [win64]
     - numba =0.61.0
     # Compatible with Numba requirements.
     # Resolves build issues on nightly
@@ -53,7 +53,6 @@ requirements:
     - h5py
     - mpich 4.1.*=h*        # [not win]
     - impi-devel=2021.13.1  # [win64]
-    - mpi4py ~= 4.0         # [win64]
     - requests
     - aws-sdk-cpp <=1.11.485
     - zstd<=1.5.6
