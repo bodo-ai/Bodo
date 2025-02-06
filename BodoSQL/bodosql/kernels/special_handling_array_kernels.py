@@ -51,7 +51,7 @@ def is_in_set_null_overload(arr_to_check, out_arr, null_as):
 
 
 def is_in(
-    arr_to_check, arr_search_vals, null_as, is_parallel=False
+    arr_to_check, arr_search_vals, null_as=None, is_parallel=False
 ):  # pragma: no cover
     pass
 
@@ -63,7 +63,7 @@ def is_in_util(
 
 
 @overload(is_in)
-def is_in_overload(arr_to_check, arr_search_vals, null_as, is_parallel=False):
+def is_in_overload(arr_to_check, arr_search_vals, null_as=None, is_parallel=False):
     """
     Handles cases where IS_IN receives optional arguments and forwards
     the arguments to appropriate version of the real implementation.
@@ -80,8 +80,9 @@ def is_in_overload(arr_to_check, arr_search_vals, null_as, is_parallel=False):
             arr_search_vals, and set True/False in the output boolean array accordingly.
         arr_search_vals (pandas Array): The values to search for in arr_to_check. Currently, is always
             replicated
-        null_as (scalar): The value to set in the output array if the corresponding value in arr_to_check
-            is null. If null_as is None, then the output array will have nulls where arr_to_check has nulls.
+        null_as (scalar, optional): The value to set in the output array if the corresponding value in
+            arr_to_check is null. If null_as is None, then the output array will have nulls where
+            arr_to_check has nulls. Defaults to None.
         is_parallel (bool, optional): Indicates if we should perform a distributed is_in check.
             Set in distributed pass depending on the distribution of arr_search_vals. Defaults to False.
 
@@ -99,7 +100,7 @@ def is_in_overload(arr_to_check, arr_search_vals, null_as, is_parallel=False):
             )
 
     def impl(
-        arr_to_check, arr_search_vals, null_as, is_parallel=False
+        arr_to_check, arr_search_vals, null_as=None, is_parallel=False
     ):  # pragma: no cover
         return is_in_util(arr_to_check, arr_search_vals, null_as, is_parallel)
 

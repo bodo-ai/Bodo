@@ -150,6 +150,7 @@ jobs:
       BODO_TEST_ORACLE_DB_CREDENTIAL: $(ORACLE_DB_CREDENTIAL)
       BODO_SPAWN_MODE: "0"
       BODO_BUFFER_POOL_REMOTE_MODE: "1"
+      BODO_BUFFER_POOL_DEBUG_MODE: "1"
       # For debugging purposes
       BODO_SF_WRITE_DEBUG: "1"
     displayName: 'Test Bodo'

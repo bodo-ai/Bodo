@@ -57,7 +57,7 @@ requirements:
     - vs2015_runtime # [win]
     - vs2015_win-64 # [win]
     - requests
-    - aws-sdk-cpp
+    - aws-sdk-cpp <=1.11.485
     - zstd<=1.5.6
     - cloudpickle >=3.0,<4.0
 
@@ -73,7 +73,7 @@ requirements:
     - vs2015_runtime # [win]
     - vs2015_win-64 # [win]
     - requests
-    - aws-sdk-cpp
+    - aws-sdk-cpp <=1.11.485
     - zstd<=1.5.6
     - cloudpickle >=3.0,<4.0
     - psutil
