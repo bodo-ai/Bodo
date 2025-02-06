@@ -35,7 +35,7 @@ runs:
           # We should just use sccache directly on CI
           DISABLE_CCACHE: 1
           # Build Bodo with our fork of Arrow
-          USE_BODO_ARROW_FORK: 1
+          # USE_BODO_ARROW_FORK: 1
 
       - name: Build Remaining
         if: inputs.build-all == 'true'
