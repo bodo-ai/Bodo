@@ -305,8 +305,6 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             doublequote=doublequote,
             escapechar=escapechar,
             decimal=decimal,
-            errors=errors,
-            storage_options=storage_options,
         )
 
     def to_json(
