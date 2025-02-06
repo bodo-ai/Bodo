@@ -1853,7 +1853,7 @@ def create_arg_hash(*args, **kwargs):
     concat_str_args = "".join(map(str, args)) + "".join(
         f"{k}={v}" for k, v in kwargs.items()
     )
-    arg_hash = hashlib.sha256(concat_str_args.encode("utf-8"))
+    arg_hash = hashlib.md5(concat_str_args.encode("utf-8"))
     return arg_hash.hexdigest()
 
 
@@ -1868,7 +1868,9 @@ def bodo_exec(func_text, glbls, loc_vars, real_globals):
         real_globals: should be passed globals() from the calling scope
     """
     # Get hash of function text.
-    text_hash = hashlib.sha256(func_text.encode("utf-8")).hexdigest()
+    # Using shorter md5 hash vs sha256 to reduce chances of hitting 260 character limit
+    # on Windows.
+    text_hash = hashlib.md5(func_text.encode("utf-8")).hexdigest()
     # Use a regular expression to find and add hash to the function name.
     pattern = r"(^def\s+)(\w+)(\s*\()"
     found_pattern = re.search(pattern, func_text)
