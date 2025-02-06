@@ -13,12 +13,12 @@ from bodo.tests.utils import (
     _get_dist_arg,
     check_func,
     get_rest_catalog_connection_string,
-    pytest_tabular,
+    pytest_polaris,
     temp_env_override,
 )
 from bodo.utils.utils import run_rank0
 
-pytestmark = pytest_tabular
+pytestmark = pytest_polaris
 
 
 def test_iceberg_tabular_read(tabular_connection, memory_leak_check):
@@ -66,6 +66,9 @@ def test_iceberg_tabular_read_credential_refresh(
     Test reading an Iceberg table from a Tabular REST catalog. Sets credentials to be refreshed every request and confirms appropriate logs are present.
     """
     rest_uri, tabular_warehouse, tabular_credential = tabular_connection
+    conn_str = get_rest_catalog_connection_string(
+        rest_uri, tabular_warehouse, tabular_credential
+    )
     with temp_env_override(
         {
             "DEFAULT_ICEBERG_REST_AWS_CREDENTIALS_PROVIDER_TIMEOUT": "0",
@@ -75,15 +78,15 @@ def test_iceberg_tabular_read_credential_refresh(
         try:
 
             @bodo.jit
-            def f():
+            def f(conn_str):
                 df = pd.read_sql_table(
                     "nyc_taxi_locations",
-                    con=f"iceberg+{rest_uri.replace('https://', 'REST://')}?warehouse={tabular_warehouse}&credential={tabular_credential}",
+                    con=conn_str,
                     schema="examples",
                 )
                 return df
 
-            f()
+            f(conn_str)
         except Exception:
             out, err = capfd.readouterr()
             with capfd.disabled():
@@ -110,13 +113,13 @@ def test_iceberg_tabular_read_credential_refresh(
     ],
 )
 def test_iceberg_tabular_write_basic(
-    df, tabular_connection, memory_leak_check, rank_skew
+    df, polaris_connection, memory_leak_check, rank_skew
 ):
     """
     Test writing to an Iceberg table in a Tabular REST catalog.
     Checksum is used to verify the data is written correctly.
     """
-    rest_uri, tabular_warehouse, tabular_credential = tabular_connection
+    rest_uri, tabular_warehouse, tabular_credential = polaris_connection
     table_uuid = run_rank0(uuid4)()
     table_name = f"bodo_write_test_{table_uuid}"
 
