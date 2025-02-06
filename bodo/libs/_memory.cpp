@@ -104,7 +104,7 @@ Swip construct_unswizzled_swip(uint8_t size_class_idx,
 /**
  * @brief Create a continguous range of memory in the Virtual address space.
  *
- * @param
+ * @param size The size of the frame to create in bytes.
  **/
 uint8_t* const create_frame(size_t size) {
 #ifndef _WIN32
