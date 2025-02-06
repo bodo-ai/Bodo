@@ -79,7 +79,7 @@
 void Bodo_PyErr_SetString(PyObject* type, const char* message);
 
 // --------- Winows Compatibility ------------ //
-#if defined(_MSC_VER)
+#if defined(_WIN32)
 typedef boost::multiprecision::int128_t __int128_t;
 #endif
 
