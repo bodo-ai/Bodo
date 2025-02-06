@@ -223,8 +223,8 @@ if("$ENV{CONDA_PREFIX}" STREQUAL "")
     install(TARGETS aws-cpp-sdk-core DESTINATION "${SKBUILD_PLATLIB_DIR}")
     unset(BUILD_ONLY)
     unset(ENABLE_TESTING)
-else()
-find_package(AWSSDK REQUIRED COMPONENTS core)
+elseif(WIN32)
+  find_package(AWSSDK REQUIRED COMPONENTS core)
 endif()
 
 find_package(CURL REQUIRED)
@@ -819,36 +819,26 @@ target_link_directories(ext PRIVATE ${PYARROW_LIB_DIR} "${Python_NumPy_INCLUDE_D
 
 target_include_directories(ext PRIVATE ${datasketches_INSTALL_DIR}/include/DataSketches)
 
+target_link_libraries(ext PRIVATE
+  npymath
+  arrow
+  arrow_python
+  arrow_dataset
+  parquet
+  fmt::fmt
+  zstd
+  aws-cpp-sdk-core
+  ${MPI_LIBRARIES}
+  ${Boost_LIBRARIES}
+)
+
 if (NOT WIN32)
-  target_link_libraries(ext PRIVATE
-    pthread
-    npymath
-    ${MPI_LIBRARIES}
-    arrow
-    arrow_python
-    arrow_dataset
-    parquet
-    fmt::fmt
-    zstd
-    aws-cpp-sdk-core
-    ${Boost_LIBRARIES}
-  )
+  target_link_libraries(ext PRIVATE pthread)
 else()
   target_link_libraries(ext PRIVATE
-    npymath
-    ${MPI_LIBRARIES}
-    arrow
-    arrow_python
-    arrow_dataset
-    parquet
-    fmt::fmt
-    zstd
-    aws-cpp-sdk-core
-    ${Boost_LIBRARIES}
     CURL::libcurl
     OpenSSL::SSL
     OpenSSL::Crypto
-    ${HDF5_LIBRARIES}
   )
 endif()
 

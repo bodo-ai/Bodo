@@ -8,7 +8,6 @@
 #include <memory>
 #include <vector>
 
-// https://github.com/apache/arrow/blob/982c469b16611e590325b6530766e224403f5740/cpp/src/arrow/util/macros.h#L39
 #ifndef ARROW_PREDICT_FALSE
 #ifdef __GNUC__
 #define ARROW_PREDICT_FALSE(x) (__builtin_expect(!!(x), 0))
