@@ -619,10 +619,7 @@ def test_tabular_catalog_token_caching(memory_leak_check):
                 return tc.conn_str
 
             dispatcher = bodo.jit(cache=True)(f)
-            assert (
-                dispatcher()
-                == "rest://test_uri?warehouse=test_warehouse&token=test_token1"
-            )
+            assert dispatcher() == "test_uri?warehouse=test_warehouse&token=test_token1"
             sig = dispatcher.signatures[0]
             assert (
                 dispatcher._cache_hits[sig] == 0
@@ -634,8 +631,7 @@ def test_tabular_catalog_token_caching(memory_leak_check):
             dispatcher_2 = bodo.jit(cache=True)(f)
             os.environ["__BODOSQL_TABULAR_TOKEN"] = "test_token2"
             assert (
-                dispatcher_2()
-                == "rest://test_uri?warehouse=test_warehouse&token=test_token2"
+                dispatcher_2() == "test_uri?warehouse=test_warehouse&token=test_token2"
             )
             sig = dispatcher_2.signatures[0]
             assert (

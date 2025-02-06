@@ -2663,7 +2663,7 @@ def get_rest_catalog_connection_string(
     auth_param = (
         f"credential={credential}" if credential is not None else f"token={token}"
     )
-    return f"iceberg+{rest_uri}?{auth_param}&warehouse={warehouse}"
+    return f"iceberg+{rest_uri}?{auth_param}&warehouse={warehouse}&scope=PRINCIPAL_ROLE:ALL"
 
 
 def snowflake_cred_env_vars_present(user: int = 1) -> bool:
