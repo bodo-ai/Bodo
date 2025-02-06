@@ -19,7 +19,7 @@ from bodo.tests.user_logging_utils import (
 from bodo.tests.utils import (
     assert_tables_equal,
     check_func,
-    create_tabular_iceberg_table,
+    create_polaris_iceberg_table,
     gen_unique_table_id,
     get_rest_catalog_connection_string,
     pytest_tabular,
@@ -561,13 +561,14 @@ def test_filter_limit_filter_pushdown(memory_leak_check, tabular_catalog):
 
 
 def test_dynamic_scalar_filter_pushdown(
-    memory_leak_check, tabular_catalog, tabular_connection
+    memory_leak_check, polaris_catalog, polaris_connection
 ):
     """
     Test that a dynamically generated filter can be pushed down to Iceberg.
     """
-    _, tabular_warehouse, tabular_credential = tabular_connection
-    catalog = tabular_catalog
+    rest_url, warehouse, credential = polaris_connection
+    conn_str = get_rest_catalog_connection_string(rest_url, warehouse, credential)
+    catalog = polaris_catalog
     bc = bodosql.BodoSQLContext(catalog=catalog)
     schema = "CI"
 
@@ -580,8 +581,8 @@ def test_dynamic_scalar_filter_pushdown(
     column = [current_date + pd.Timedelta(days=offset) for offset in offsets]
     input_df = pd.DataFrame({"A": column})
     py_output = pd.DataFrame({"A": [x for x in column if x <= current_date]})
-    with create_tabular_iceberg_table(
-        input_df, "current_date_table", tabular_warehouse, schema, tabular_credential
+    with create_polaris_iceberg_table(
+        input_df, "current_date_table", conn_str, schema
     ) as table_name:
         query = f'SELECT * FROM {schema}."{table_name}" WHERE A <= CURRENT_DATE'
         stream = StringIO()

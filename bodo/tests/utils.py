@@ -2763,7 +2763,7 @@ def create_snowflake_iceberg_table(
 
 @contextmanager
 def create_polaris_iceberg_table(
-    df: pd.DataFrame, base_table_name: str, warehouse: str, schema: str, credential: str
+    df: pd.DataFrame, base_table_name: str, conn_str: str, schema: str
 ) -> Generator[str, None, None]:
     """Creates a new Iceberg table in polaris derived from the base table name
     and using the DataFrame.
@@ -2773,17 +2773,12 @@ def create_polaris_iceberg_table(
     Args:
         df (pd.DataFrame): DataFrame to insert
         base_table_name (str): Base string for generating the table name.
-        warehouse (str): Name of the polaris warehouse
+        conn_str (str): Connection string for the polaris server
         schema (str): Name of the polaris schema
-        credential (str): Credential to authenticate
-
-
     Returns:
         str: The final table name.
     """
     import bodo_iceberg_connector as bic
-
-    raise NotImplementedError("Polaris Iceberg table creation is not yet supported")
 
     comm = MPI.COMM_WORLD
     iceberg_table_name = None
@@ -2798,15 +2793,16 @@ def create_polaris_iceberg_table(
         def write_table(df, table_name, schema, con_str):
             df.to_sql(table_name, con=con_str, schema=schema, if_exists="replace")
 
-        con_str = f"iceberg+REST://api.polaris.io/ws?credential={credential}&warehouse={warehouse}"
-        write_table(_get_dist_arg(df), iceberg_table_name, schema, con_str)
+        write_table(_get_dist_arg(df), iceberg_table_name, schema, conn_str)
         table_written = True
 
         yield iceberg_table_name
     finally:
         if table_written:
             run_rank0(bic.delete_table)(
-                bodo.io.iceberg.format_iceberg_conn(con_str), schema, iceberg_table_name
+                bodo.io.iceberg.format_iceberg_conn(conn_str),
+                schema,
+                iceberg_table_name,
             )
 
 
