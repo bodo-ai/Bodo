@@ -227,8 +227,11 @@ elseif(WIN32)
   find_package(AWSSDK REQUIRED COMPONENTS core)
 endif()
 
-find_package(CURL REQUIRED)
-find_package(OpenSSL REQUIRED)
+# Find additional packages for Windows
+if(WIN32)
+  find_package(CURL REQUIRED)
+  find_package(OpenSSL REQUIRED)
+endif()
 
 # ----------------------------- Download Apache Datasketches -------------------------
 include(ExternalProject)
