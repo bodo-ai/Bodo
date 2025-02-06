@@ -3030,6 +3030,7 @@ def check_for_compiler_file_changes():
         "bodo/utils/transform.py",
         "bodo/utils/typing.py",
     }
+    print("FILES CHANGED", files_changed)
     for filename in files_changed:
         if filename in core_compiler_files:
             return True
