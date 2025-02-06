@@ -57,7 +57,7 @@ def is_in(
 
 
 def is_in_util(
-    arr_to_check, arr_search_vals, null_as, is_parallel=False
+    arr_to_check, arr_search_vals, null_as=None, is_parallel=False
 ):  # pragma: no cover
     pass
 
@@ -94,9 +94,9 @@ def is_in_overload(arr_to_check, arr_search_vals, null_as=None, is_parallel=Fals
         if isinstance(args[i], types.optional):  # pragma: no cover
             return unopt_argument(
                 "bodosql.kernels.is_in",
-                ["arr_to_check", "arr_search_vals", "is_parallel"],
+                ["arr_to_check", "arr_search_vals", "null_as", "is_parallel"],
                 i,
-                default_map={"is_parallel": False},
+                default_map={"null_as": None, "is_parallel": False},
             )
 
     def impl(
@@ -108,7 +108,7 @@ def is_in_overload(arr_to_check, arr_search_vals, null_as=None, is_parallel=Fals
 
 
 @overload(is_in_util)
-def is_in_util_overload(arr_to_check, arr_search_vals, null_as, is_parallel=False):
+def is_in_util_overload(arr_to_check, arr_search_vals, null_as=None, is_parallel=False):
     """
     Helper function for is_in. See is_in for information on arguments
     """
@@ -120,7 +120,7 @@ def is_in_util_overload(arr_to_check, arr_search_vals, null_as, is_parallel=Fals
     if arr_to_check == types.none:
 
         def impl(
-            arr_to_check, arr_search_vals, null_as, is_parallel=False
+            arr_to_check, arr_search_vals, null_as=None, is_parallel=False
         ):  # pragma: no cover
             return None
 
@@ -130,7 +130,7 @@ def is_in_util_overload(arr_to_check, arr_search_vals, null_as, is_parallel=Fals
         """If the types match, we don't have to do any casting, we can just use the array isin kernel"""
 
         def impl(
-            arr_to_check, arr_search_vals, null_as, is_parallel=False
+            arr_to_check, arr_search_vals, null_as=None, is_parallel=False
         ):  # pragma: no cover
             # code modified from overload_series_isin
             n = len(arr_to_check)
@@ -162,7 +162,7 @@ def is_in_util_overload(arr_to_check, arr_search_vals, null_as, is_parallel=Fals
         )
 
         def impl(
-            arr_to_check, arr_search_vals, null_as, is_parallel=False
+            arr_to_check, arr_search_vals, null_as=None, is_parallel=False
         ):  # pragma: no cover
             # code modified from overload_series_isin
             n = len(arr_to_check)
@@ -211,7 +211,7 @@ def is_in_util_overload(arr_to_check, arr_search_vals, null_as, is_parallel=Fals
     if is_array_typ(arr_to_check):
 
         def impl(
-            arr_to_check, arr_search_vals, null_as, is_parallel=False
+            arr_to_check, arr_search_vals, null_as=None, is_parallel=False
         ):  # pragma: no cover
             # code modified from overload_series_isin
             n = len(arr_to_check)
@@ -237,7 +237,7 @@ def is_in_util_overload(arr_to_check, arr_search_vals, null_as, is_parallel=Fals
     elif is_scalar_type(arr_to_check):
 
         def impl(
-            arr_to_check, arr_search_vals, null_as, is_parallel=False
+            arr_to_check, arr_search_vals, null_as=None, is_parallel=False
         ):  # pragma: no cover
             # convert scalar to array, do the operation, and then return the scalar value
             arr_to_check = bodo.utils.conversion.fix_arr_dtype(
