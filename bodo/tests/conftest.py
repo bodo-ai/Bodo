@@ -28,6 +28,7 @@ import bodo.utils.allocation_tracking
 from bodo.mpi4py import MPI
 from bodo.tests.iceberg_database_helpers.utils import DATABASE_NAME
 from bodo.tests.utils import temp_env_override
+from bodo.utils.utils import run_rank0
 
 if TYPE_CHECKING:
     from pyspark.sql import SparkSession
@@ -304,6 +305,17 @@ def polaris_server():
         ]
     if credentials.token is not None:
         env_args += ["-e", f"AWS_SESSION_TOKEN={credentials.token}"]
+    # Add Azure credentials
+    if os.environ.get("AZURE_STORAGE_ACCOUNT_NAME") is not None:
+        env_args += [
+            "-e",
+            f"AZURE_STORAGE_ACCOUNT_NAME={os.environ['AZURE_STORAGE_ACCOUNT_NAME']}",
+        ]
+    if os.environ.get("AZURE_STORAGE_ACCOUNT_KEY") is not None:
+        env_args += [
+            "-e",
+            f"AZURE_STORAGE_ACCOUNT_KEY={os.environ['AZURE_STORAGE_ACCOUNT_KEY']}",
+        ]
 
     # Start Polaris server
     # Once Polaris publishes their own docker image, we can use that instead of ours
@@ -929,21 +941,27 @@ def polaris_token(polaris_server, polaris_package):
 
     host, port, user, password = polaris_server
 
-    client = CatalogApiClient(
-        CatalogApiClientConfiguration(
-            username=user, password=password, host=f"http://{host}:{port}/api/catalog"
+    @run_rank0
+    def get_token():
+        _, _, user, password = polaris_server
+        client = CatalogApiClient(
+            CatalogApiClientConfiguration(
+                username=user,
+                password=password,
+                host=f"http://{host}:{port}/api/catalog",
+            )
         )
-    )
-    _, _, user, password = polaris_server
-    oauth_api = IcebergOAuth2API(client)
-    token = oauth_api.get_token(
-        scope="PRINCIPAL_ROLE:ALL",
-        client_id=user,
-        client_secret=password,
-        grant_type="client_credentials",
-        _headers={"realm": "default-realm"},
-    )
-    return token
+        oauth_api = IcebergOAuth2API(client)
+        token = oauth_api.get_token(
+            scope="PRINCIPAL_ROLE:ALL",
+            client_id=user,
+            client_secret=password,
+            grant_type="client_credentials",
+            _headers={"realm": "default-realm"},
+        )
+        return token
+
+    return get_token()
 
 
 @pytest.fixture(scope="session")
@@ -966,46 +984,126 @@ def aws_polaris_warehouse(polaris_token, polaris_server, polaris_package):
 
     host, port, _, _ = polaris_server
 
-    management_client = ManagementApiClient(
-        Configuration(
-            access_token=polaris_token.access_token,
-            host=f"http://{host}:{port}/api/management/v1",
+    @run_rank0
+    def create_aws_warehouse():
+        management_client = ManagementApiClient(
+            Configuration(
+                access_token=polaris_token.access_token,
+                host=f"http://{host}:{port}/api/management/v1",
+            )
         )
-    )
-    root_client = PolarisDefaultApi(management_client)
-    storage_conf = AwsStorageConfigInfo(
-        role_arn="arn:aws:iam::427443013497:role/Polaris-Unittests", storage_type="S3"
-    )
-    catalog_name = "aws_polaris_warehouse"
-    suffix = "".join(random.choices("abcdefghijklmnopqrstuvwxyz", k=10))
-    catalog = Catalog(
-        name=catalog_name,
-        type="INTERNAL",
-        properties={"default-base-location": f"s3://polaris-unittests/{suffix}"},
-        storage_config_info=storage_conf,
-    )
-
-    root_client.create_catalog(
-        create_catalog_request=CreateCatalogRequest(catalog=catalog)
-    )
-
-    catalog_client = CatalogApiClient(
-        Configuration(
-            access_token=polaris_token.access_token,
-            host=f"http://{host}:{port}/api/catalog",
+        root_client = PolarisDefaultApi(management_client)
+        storage_conf = AwsStorageConfigInfo(
+            role_arn="arn:aws:iam::427443013497:role/Polaris-Unittests",
+            storage_type="S3",
         )
+        catalog_name = "aws_polaris_warehouse"
+        suffix = "".join(random.choices("abcdefghijklmnopqrstuvwxyz", k=10))
+        catalog = Catalog(
+            name=catalog_name,
+            type="INTERNAL",
+            properties={"default-base-location": f"s3://polaris-unittests/{suffix}"},
+            storage_config_info=storage_conf,
+        )
+
+        root_client.create_catalog(
+            create_catalog_request=CreateCatalogRequest(catalog=catalog)
+        )
+
+        catalog_client = CatalogApiClient(
+            Configuration(
+                access_token=polaris_token.access_token,
+                host=f"http://{host}:{port}/api/catalog",
+            )
+        )
+        catalog_api = IcebergCatalogAPI(catalog_client)
+        catalog_api.create_namespace(
+            prefix=catalog_name,
+            create_namespace_request=CreateNamespaceRequest(namespace=["CI"]),
+        )
+
+        return catalog_name
+
+    return create_aws_warehouse()
+
+
+@pytest.fixture(scope="session")
+def azure_polaris_warehouse(polaris_token, polaris_server, polaris_package):
+    """
+    Configure an Azure warehouse in the polaris server
+    """
+    from polaris.catalog import ApiClient as CatalogApiClient
+    from polaris.catalog import CreateNamespaceRequest, IcebergCatalogAPI
+    from polaris.management import (
+        ApiClient as ManagementApiClient,
     )
-    catalog_api = IcebergCatalogAPI(catalog_client)
-    catalog_api.create_namespace(
-        prefix=catalog_name,
-        create_namespace_request=CreateNamespaceRequest(namespace=["CI"]),
+    from polaris.management import (
+        AzureStorageConfigInfo,
+        Catalog,
+        Configuration,
+        CreateCatalogRequest,
+        PolarisDefaultApi,
     )
 
-    return catalog_name
+    assert (
+        os.environ.get("AZURE_STORAGE_ACCOUNT_NAME") is not None
+    ), "AZURE_STORAGE_ACCOUNT_NAME not set"
+    assert (
+        os.environ.get("AZURE_STORAGE_ACCOUNT_KEY") is not None
+    ), "AZURE_STORAGE_ACCOUNT_KEY not set"
+
+    host, port, _, _ = polaris_server
+
+    @run_rank0
+    def create_azure_warehouse():
+        management_client = ManagementApiClient(
+            Configuration(
+                access_token=polaris_token.access_token,
+                host=f"http://{host}:{port}/api/management/v1",
+            )
+        )
+        root_client = PolarisDefaultApi(management_client)
+        storage_conf = AzureStorageConfigInfo(
+            storage_type="AZURE",
+            tenant_id="72f988bf-86f1-41af-91ab-2d7cd011db47",
+        )
+
+        catalog_name = "azure_polaris_warehouse"
+        suffix = "".join(random.choices("abcdefghijklmnopqrstuvwxyz", k=10))
+        catalog = Catalog(
+            name=catalog_name,
+            type="INTERNAL",
+            properties={
+                "default-base-location": f"abfs://polaris-unittests@{os.environ.get("AZURE_STORAGE_ACCOUNT_NAME")}.dfs.core.windows.net/{suffix}"
+            },
+            storage_config_info=storage_conf,
+        )
+
+        root_client.create_catalog(
+            create_catalog_request=CreateCatalogRequest(catalog=catalog)
+        )
+
+        catalog_client = CatalogApiClient(
+            Configuration(
+                access_token=polaris_token.access_token,
+                host=f"http://{host}:{port}/api/catalog",
+            )
+        )
+        catalog_api = IcebergCatalogAPI(catalog_client)
+        catalog_api.create_namespace(
+            prefix=catalog_name,
+            create_namespace_request=CreateNamespaceRequest(namespace=["CI"]),
+        )
+
+        return catalog_name
+
+    return create_azure_warehouse()
 
 
-@pytest.fixture
-def polaris_connection(request, polaris_server, aws_polaris_warehouse):
+@pytest.fixture(params=["aws_polaris_warehouse", "azure_polaris_warehouse"])
+def polaris_connection(
+    request, polaris_server, aws_polaris_warehouse, azure_polaris_warehouse
+):
     """
     Fixture to create a connection to the polaris warehouse.
     Returns the catalog url, warehouse name, and credential.
@@ -1013,18 +1111,31 @@ def polaris_connection(request, polaris_server, aws_polaris_warehouse):
     assert (
         request.node.get_closest_marker("polaris") is not None
     ), "polaris marker not set"
-    # Unset the AWS credentials to avoid using them
-    # to confirm that the tests are getting aws credentials from polaris
-    with temp_env_override(
-        {
-            "AWS_ACCESS_KEY_ID": None,
-            "AWS_SECRET_ACCESS_KEY": None,
-            "AWS_SESSION_TOKEN": None,
-        }
-    ):
-        host, port, user, password = polaris_server
-        url = f"http://{host}:{port}/api/catalog"
-        yield url, aws_polaris_warehouse, f"{user}:{password}"
+    host, port, user, password = polaris_server
+    url = f"http://{host}:{port}/api/catalog"
+    if request.param == "aws_polaris_warehouse":
+        # Unset the AWS credentials to avoid using them
+        # to confirm that the tests are getting aws credentials from polaris
+        with temp_env_override(
+            {
+                "AWS_ACCESS_KEY_ID": None,
+                "AWS_SECRET_ACCESS_KEY": None,
+                "AWS_SESSION_TOKEN": None,
+            }
+        ):
+            yield url, aws_polaris_warehouse, f"{user}:{password}"
+    elif request.param == "azure_polaris_warehouse":
+        # Unset the Azure credentials to avoid using them
+        # to confirm that the tests are getting azure credentials from polaris
+        with temp_env_override(
+            {
+                "AZURE_STORAGE_ACCOUNT_NAME": None,
+                "AZURE_STORAGE_ACCOUNT_KEY": None,
+            }
+        ):
+            yield url, azure_polaris_warehouse, f"{user}:{password}"
+    else:
+        raise ValueError(f"Unknown polaris warehouse: {request.param}")
 
 
 @pytest.fixture(
