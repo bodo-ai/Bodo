@@ -1776,7 +1776,11 @@ def set_wrapper(a):
     return set(a)
 
 
-def run_rank0(func: Callable, bcast_result: bool = True, result_default=None):
+T = pt.TypeVar("T")
+P = pt.ParamSpec("P")
+
+
+def run_rank0(func: Callable[P, T], bcast_result: bool = True, result_default=None):
     """
     Utility function decorator to run a function on just rank 0
     but re-raise any Exceptions safely on all ranks.
@@ -1795,7 +1799,7 @@ def run_rank0(func: Callable, bcast_result: bool = True, result_default=None):
     """
 
     @functools.wraps(func)
-    def inner(*args, **kwargs):
+    def inner(*args, **kwargs) -> T:
         comm = MPI.COMM_WORLD
         result = result_default
         err = None
@@ -1813,7 +1817,7 @@ def run_rank0(func: Callable, bcast_result: bool = True, result_default=None):
         # Broadcast the result to all ranks.
         if bcast_result:
             result = comm.bcast(result)
-        return result
+        return result  # type: ignore
 
     return inner
 

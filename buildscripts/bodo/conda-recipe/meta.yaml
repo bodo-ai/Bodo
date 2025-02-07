@@ -87,6 +87,9 @@ requirements:
     - s3fs >=2022.1.0
     - adlfs >=2022.1.0
     - gcsfs >=2022.1.0
+    - pyiceberg >=0.8,<0.9
+    - boto3 *
+    - mypy-boto3-glue *
 
 test:
   imports:

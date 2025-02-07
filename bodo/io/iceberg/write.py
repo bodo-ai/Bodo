@@ -21,14 +21,8 @@ import bodo
 import bodo.utils.tracing as tracing
 from bodo.ext import s3_reader
 from bodo.io import arrow_cpp
-from bodo.io.fs_io import (
-    ArrowFs,
-    arrow_filesystem_del,
-)
-from bodo.io.helpers import (
-    is_pyarrow_list_type,
-    pyarrow_schema_type,
-)
+from bodo.io.fs_io import ArrowFs, arrow_filesystem_del
+from bodo.io.helpers import is_pyarrow_list_type, pyarrow_schema_type
 from bodo.io.iceberg.common import b_ICEBERG_FIELD_ID_MD_KEY, get_rest_catalog_config
 from bodo.io.s3_fs import create_iceberg_aws_credentials_provider, create_s3_fs_instance
 from bodo.libs.bool_arr_ext import alloc_false_bool_array

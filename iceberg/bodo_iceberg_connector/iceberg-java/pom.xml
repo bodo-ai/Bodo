@@ -76,18 +76,6 @@
       <artifactId>iceberg-bundled-guava</artifactId>
       <version>${iceberg.version}</version>
     </dependency>
-    <!-- https://mvnrepository.com/artifact/org.apache.iceberg/iceberg-nessie -->
-    <dependency>
-      <groupId>org.apache.iceberg</groupId>
-      <artifactId>iceberg-nessie</artifactId>
-      <version>${iceberg.version}</version>
-    </dependency>
-    <!-- https://mvnrepository.com/artifact/org.apache.iceberg/iceberg-snowflake -->
-    <dependency>
-      <groupId>org.apache.iceberg</groupId>
-      <artifactId>iceberg-snowflake</artifactId>
-      <version>${iceberg.version}</version>
-    </dependency>
 
     <!-- Hive Catalog Runtime Dependencies -->
     <!-- https://mvnrepository.com/artifact/org.apache.hive/hive-standalone-metastore -->
@@ -255,12 +243,6 @@
     </dependency>
 
     <!-- Remaining Runtime Dependencies -->
-    <!-- https://mvnrepository.com/artifact/net.snowflake/snowflake-jdbc -->
-    <dependency>
-      <groupId>net.snowflake</groupId>
-      <artifactId>snowflake-jdbc</artifactId>
-      <version>3.18.0</version>
-    </dependency>
     <!-- https://mvnrepository.com/artifact/org.apache.arrow/arrow-vector -->
     <dependency>
       <groupId>org.apache.arrow</groupId>

@@ -15,21 +15,46 @@ from bodo.tests.user_logging_utils import (
 from bodo.tests.utils import (
     check_func,
     get_snowflake_connection_string,
+    pytest_mark_one_rank,
     pytest_snowflake,
     snowflake_cred_env_vars_present,
-    temp_env_override,
 )
 
 pytestmark = [pytest.mark.iceberg] + pytest_snowflake
 
 
-@temp_env_override({"AWS_REGION": "us-east-1"})
+@pytest_mark_one_rank
+def test_get_iceberg_schema_snowflake(memory_leak_check):
+    """Get the Iceberg read schema from a Snowflake-managed table"""
+
+    conn = "iceberg+" + get_snowflake_connection_string(
+        "TEST_DB", "PUBLIC", {"role": "ACCOUNTADMIN", "warehouse": "DEMO_WH"}
+    )
+
+    col_names, bodo_col_types, pyarrow_schema = bodo.io.iceberg.get_iceberg_orig_schema(
+        conn, "TEST_DB.PUBLIC", "TEST_ICEBERG_TABLE"
+    )
+
+    assert col_names == ["VAL", "B"]
+    assert bodo_col_types == [
+        bodo.bool_,
+        bodo.int32,
+    ]
+    assert pyarrow_schema == pyarrow.schema(
+        [
+            pyarrow.field("VAL", pyarrow.bool_(), nullable=False),
+            pyarrow.field("B", pyarrow.int32()),
+        ]
+    )
+
+
+@pytest.mark.skip(
+    reason="Current uses get_iceberg_info from the connector which is used for write support. Only read is currently working with PyIceberg"
+)
+@pytest_mark_one_rank
 @pytest.mark.skipif(
     not snowflake_cred_env_vars_present(),
     reason="Snowflake environment variables not set",
-)
-@pytest.mark.skipif(
-    bodo.get_size() != 1, reason="get_iceberg_info should only be called on 1 rank"
 )
 def test_get_iceberg_info_snowflake(memory_leak_check):
     SF_USERNAME = os.environ["SF_USERNAME"]
@@ -64,7 +89,6 @@ def test_get_iceberg_info_snowflake(memory_leak_check):
     assert info[6] == []
 
 
-@temp_env_override({"AWS_REGION": "us-east-1"})
 def test_basic_read(memory_leak_check):
     """
     Test reading a complete Iceberg table from Snowflake
@@ -94,7 +118,6 @@ def test_basic_read(memory_leak_check):
     )
 
 
-@temp_env_override({"AWS_REGION": "us-east-1"})
 def test_read_implicit_pruning(memory_leak_check):
     """
     Test reading an Iceberg table from Snowflake with Bodo

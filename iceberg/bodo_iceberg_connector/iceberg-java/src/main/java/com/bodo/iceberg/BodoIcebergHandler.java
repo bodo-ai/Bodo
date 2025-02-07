@@ -1,10 +1,6 @@
 package com.bodo.iceberg;
 
 import com.bodo.iceberg.catalog.CatalogCreator;
-import com.bodo.iceberg.catalog.PrefetchSnowflakeCatalog;
-import com.bodo.iceberg.catalog.SnowflakeBuilder;
-import com.bodo.iceberg.filters.FilterExpr;
-import java.io.IOException;
 import java.net.URISyntaxException;
 import java.sql.SQLException;
 import java.util.*;
@@ -15,10 +11,8 @@ import org.apache.iceberg.*;
 import org.apache.iceberg.catalog.Catalog;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.TableIdentifier;
-import org.apache.iceberg.io.FileIO;
 import org.apache.iceberg.types.TypeUtil;
 import org.apache.iceberg.types.Types;
-import org.json.JSONArray;
 
 public class BodoIcebergHandler {
   /**
@@ -39,44 +33,6 @@ public class BodoIcebergHandler {
   public BodoIcebergHandler(String connStr, String catalogType, String coreSitePath)
       throws URISyntaxException {
     this(CatalogCreator.create(connStr, catalogType, coreSitePath));
-  }
-
-  /**
-   * Start the Snowflake query to get the metadata paths for a list of Snowflake-managed Iceberg
-   * tables. NOTE: This API is exposed to Python.
-   *
-   * <p>The query is not expected to finish until the table is needed for initialization / read.
-   *
-   * @param tablePathsStr A JSON string of a list of tablePaths Py4J can't pass the direct list of
-   *     strings in
-   */
-  public static BodoIcebergHandler buildPrefetcher(
-      String connStr,
-      String catalogType,
-      String coreSitePath,
-      String tablePathsStr,
-      int verboseLevel)
-      throws SQLException, URISyntaxException {
-
-    if (!Objects.equals(catalogType, "snowflake")) {
-      throw new RuntimeException(
-          "BodoIcebergHandler::buildPrefetcher: Cannot prefetch SF metadata paths for a"
-              + " catalog of type "
-              + catalogType);
-    }
-
-    // Convert table paths to list of strings
-    var tablePathsJSON = new JSONArray(tablePathsStr);
-    var tablePaths = new ArrayList<String>();
-    for (int i = 0; i < tablePathsJSON.length(); i++) {
-      tablePaths.add(tablePathsJSON.getString(i));
-    }
-
-    // Construct Catalog
-    var out = CatalogCreator.prepareInput(connStr, catalogType, coreSitePath);
-    var catalog = new PrefetchSnowflakeCatalog(connStr, tablePaths, verboseLevel);
-    SnowflakeBuilder.initialize(catalog, out.getFirst(), out.getSecond());
-    return new BodoIcebergHandler(CachingCatalog.wrap(catalog));
   }
 
   private static TableIdentifier genTableID(String dbName, String tableName) {
@@ -170,17 +126,6 @@ public class BodoIcebergHandler {
   }
 
   /**
-   * Returns a list of parquet files that construct the given Iceberg table.
-   *
-   * <p>Note: This API is exposed to Python.
-   */
-  public Triple<
-          List<BodoParquetInfo>, Map<Integer, org.apache.arrow.vector.types.pojo.Schema>, Long>
-      getParquetInfo(String dbName, String tableName, FilterExpr filters) throws IOException {
-    return FileHandler.getParquetInfo(loadTable(dbName, tableName), filters);
-  }
-
-  /**
    * Return a boolean list indicating which columns have theta sketch blobs.
    *
    * <p>Note: This API is exposed to Python.
@@ -251,60 +196,6 @@ public class BodoIcebergHandler {
         enabledThetaSketches.set(i, true);
     }
     return enabledThetaSketches;
-  }
-
-  /**
-   * Helper function that returns the total number of files present in the given Iceberg table.
-   * Currently only used for logging purposes.
-   *
-   * <p>Note: This API is exposed to Python.
-   */
-  public int getNumParquetFiles(String dbName, String tableName) {
-
-    // First, check if we can get the information from the summary
-    Table table = loadTable(dbName, tableName);
-    Snapshot currentSnapshot = table.currentSnapshot();
-
-    if (currentSnapshot.summary().containsKey("total-data-files")) {
-      return Integer.parseInt(currentSnapshot.summary().get("total-data-files"));
-    }
-
-    // If it doesn't exist in the summary, check the manifestList
-    // TODO: is this doable? I can get the manifestList location, but I don't see a way
-    // to get any metadata from this list.
-    // A manifest list includes summary metadata that can be used to avoid scanning all of the
-    // manifests
-    // in a snapshot when planning a table scan. This includes the number of added, existing, and
-    // deleted files,
-    // and a summary of values for each field of the partition spec used to write the manifest.
-
-    // If it doesn't exit in the manifestList, calculate it by iterating over each manifest file
-    FileIO io = table.io();
-    List<ManifestFile> manifestFilesList = currentSnapshot.allManifests(io);
-    int totalFiles = 0;
-    for (ManifestFile manifestFile : manifestFilesList) {
-      // content = 0 means the manifest file is for a data file
-      if (0 != manifestFile.content().id()) {
-        continue;
-      }
-      Integer existingFiles = manifestFile.existingFilesCount();
-      Integer addedFiles = manifestFile.addedFilesCount();
-      Integer deletedFiles = manifestFile.deletedFilesCount();
-
-      if (existingFiles == null || addedFiles == null || deletedFiles == null) {
-        // If any of the option fields are null, we have to manually read the file
-        ManifestReader<DataFile> manifestContents = ManifestFiles.read(manifestFile, io);
-        if (!manifestContents.isDeleteManifestReader()) {
-          for (DataFile _manifestContent : manifestContents) {
-            totalFiles += 1;
-          }
-        }
-      } else {
-        totalFiles += existingFiles + addedFiles - deletedFiles;
-      }
-    }
-
-    return totalFiles;
   }
 
   /**

@@ -210,7 +210,6 @@ class Module(
                         "bodo.io.iceberg.prefetch_sf_tables_njit",
                         Expr.StringLiteral(sfConnStr!!),
                         Expr.List(sfIcebergTablePaths.map { Expr.StringLiteral(it) }),
-                        Expr.IntegerLiteral(this.verboseLevel),
                     ),
                 ),
             )
