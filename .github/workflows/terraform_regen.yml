@@ -5,12 +5,12 @@ on:
     branches:
     - main
     paths:
-      - "buildscripts/github/**"
+      - "buildscripts/github/self_hosted_tf/**"
   push:
     branches:
     - main
     paths:
-      - "buildscripts/github/**"
+      - "buildscripts/github/self_hosted_tf/**"
 
 jobs:
   build:
