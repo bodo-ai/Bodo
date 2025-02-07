@@ -70,13 +70,15 @@ class SparkRestIcebergCatalog(SparkIcebergCatalog):
 
 
 # This should probably be wrapped into a class or fixture in the future
-spark_catalogs: set[SparkIcebergCatalog] = {
-    SparkFilesystemIcebergCatalog(catalog_name="hadoop_prod", path=".")
-}
+spark_catalogs: set[SparkIcebergCatalog] = set()
 spark: SparkSession | None = None
 
 
-def get_spark(catalog: SparkIcebergCatalog) -> SparkSession:
+def get_spark(
+    catalog: SparkIcebergCatalog = SparkFilesystemIcebergCatalog(
+        catalog_name="hadoop_prod", path="."
+    ),
+) -> SparkSession:
     global spark
     global spark_catalogs
     import bodo
