@@ -1,4 +1,5 @@
 import shutil
+from dataclasses import dataclass
 from typing import NamedTuple
 
 import pandas as pd
@@ -30,13 +31,15 @@ SPARK_JAR_PACKAGES = [
 ]
 
 
-class SparkIcebergCatalog(NamedTuple):
+@dataclass(frozen=True)
+class SparkIcebergCatalog:
     catalog_name: str
 
     def __equals__(self, other: object) -> bool:
         return isinstance(other, SparkIcebergCatalog) and self.catalog_name == other
 
 
+@dataclass(frozen=True)
 class SparkFilesystemIcebergCatalog(SparkIcebergCatalog):
     def __equals__(self, other: object) -> bool:
         return (
@@ -48,6 +51,7 @@ class SparkFilesystemIcebergCatalog(SparkIcebergCatalog):
     path: str
 
 
+@dataclass(frozen=True)
 class SparkRestIcebergCatalog(SparkIcebergCatalog):
     uri: str
     credential: str
@@ -66,7 +70,9 @@ class SparkRestIcebergCatalog(SparkIcebergCatalog):
 
 
 # This should probably be wrapped into a class or fixture in the future
-spark_catalogs: set[SparkIcebergCatalog] = set()
+spark_catalogs: set[SparkIcebergCatalog] = {
+    SparkFilesystemIcebergCatalog(catalog_name="hadoop_prod", path=".")
+}
 spark: SparkSession | None = None
 
 
