@@ -1478,8 +1478,8 @@ void BufferPool::free_helper(uint8_t* ptr, bool is_mmap_alloc,
         frame_pinned = true;
 
 #if defined(_WIN32)
-        // Calls to _aligned_malloc must be matched with a call to
-        // _aligned_free.
+        // Calls to _aligned_malloc must be matched with a call to _aligned_free
+        // https://learn.microsoft.com/en-us/cpp/c-runtime-library/reference/aligned-malloc?view=msvc-170
         if (alignment > kMinAlignment) {
             _aligned_free(ptr);
         } else {

@@ -6,6 +6,7 @@
 #include "./test.hpp"
 
 #if defined(_WIN32)
+// Windows does not have a usleep equivalent so we convert to ms first.
 #define usleep(x) Sleep(x / 1000)
 #endif
 
@@ -19,8 +20,8 @@ bodo::tests::suite query_profile_collector_tests([] {
         collector.EndPipeline(0, 100);
 
         collector.StartPipeline(1);
-        // Sleep for 500us
-        size_t expected_1 = 500;
+        // Sleep for 1ms
+        size_t expected_1 = 1000;
         usleep(expected_1);
         collector.EndPipeline(1, 200);
 
