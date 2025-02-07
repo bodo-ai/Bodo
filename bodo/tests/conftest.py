@@ -272,7 +272,11 @@ def polaris_server():
     except subprocess.CalledProcessError:
         # Polaris server is not running, ignore the error
         pass
-
+    subprocess.run(
+        "aws ecr get-login-password --region us-east-2 | docker login --username AWS --password-stdin 427443013497.dkr.ecr.us-east-2.amazonaws.com",
+        shell=True,
+        check=True,
+    )
     health_check_args = [
         "--health-cmd",
         "curl http://localhost:8182/healthcheck",

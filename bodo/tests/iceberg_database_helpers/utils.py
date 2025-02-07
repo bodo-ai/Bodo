@@ -28,6 +28,7 @@ SPARK_JAR_PACKAGES = [
     "org.apache.iceberg:iceberg-spark-runtime-3.4_2.12:1.5.2",
     "software.amazon.awssdk:bundle:2.29.19",
     "software.amazon.awssdk:url-connection-client:2.29.19",
+    "org.apache.iceberg:iceberg-azure-bundle:1.7.1",
 ]
 
 
@@ -101,11 +102,11 @@ def get_spark(
                 )
             case SparkRestIcebergCatalog():
                 builder.config(
-                    "spark.sql.catalog.rest_prod",
+                    f"spark.sql.catalog.{catalog.catalog_name}",
                     "org.apache.iceberg.spark.SparkCatalog",
                 )
                 builder.config(
-                    "spark.sql.catalog.rest_prod.catalog-impl",
+                    f"spark.sql.catalog.{catalog.catalog_name}.catalog-impl",
                     "org.apache.iceberg.rest.RESTCatalog",
                 )
                 builder.config(
@@ -119,10 +120,13 @@ def get_spark(
                     f"spark.sql.catalog.{catalog.catalog_name}.warehouse",
                     catalog.warehouse,
                 )
-                # Todo figure out how to change this for azure
                 builder.config(
                     f"spark.sql.catalog.{catalog.catalog_name}.io-impl",
                     catalog.io_impl,
+                )
+                builder.config(
+                    f"spark.sql.catalog.{catalog.catalog_name}.scope",
+                    "PRINCIPAL_ROLE:ALL",
                 )
 
     def do_get_spark():
@@ -139,8 +143,6 @@ def get_spark(
 
         for catalog in spark_catalogs:
             add_catalog(builder, catalog)
-
-        builder.config("spark.sql.defaultCatalog", "rest_prod")
 
         spark = builder.getOrCreate()
 
@@ -160,7 +162,7 @@ def get_spark(
         # clear your cache manually. The path is in the logs.
         shutil.rmtree("/root/.ivy2", ignore_errors=True)
         shutil.rmtree("/root/.m2/repository", ignore_errors=True)
-    spark = do_get_spark()
+        spark = do_get_spark()
     spark.catalog.setCurrentCatalog(catalog.catalog_name)
     return spark
 
