@@ -65,27 +65,6 @@ def get_typing_info(conn_str: str, schema: str, table: str):
     )
 
 
-def get_iceberg_typing_schema(conn_str: str, schema: str, table: str):
-    """
-    Returns the table schema information for a given iceberg table
-    used at typing. Also returns the pyarrow schema object.
-    """
-    # TODO: Combine with get_typing_info?
-    _, _, schemas, pyarrow_schema, _, _, _ = get_iceberg_info(conn_str, schema, table)
-    assert schemas is not None
-    return (schemas.colnames, schemas.coltypes, pyarrow_schema)
-
-
-def get_iceberg_runtime_schema(conn_str: str, schema: str, table: str):
-    """
-    Returns the table schema information for a given iceberg table
-    used at runtime.
-    """
-    _, _, schemas, _, _, _, _ = get_iceberg_info(conn_str, schema, table)
-    assert schemas is not None
-    return (schemas.field_ids, schemas.coltypes)
-
-
 def get_iceberg_info(conn_str: str, schema: str, table: str, error: bool = True):
     """
     Returns all of the necessary Bodo schemas for an iceberg table,

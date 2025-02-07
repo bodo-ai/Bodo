@@ -470,6 +470,52 @@ def get_fpath_without_protocol_prefix(
     return fpath_noprefix, prefix
 
 
+def fpath_without_protocol_prefix(fpath: str) -> str:
+    """
+    Get the filepath(s) without the prefix associated with
+    the protocol. e.g. in the s3 case, this will remove the
+    "s3://" from the start of the path(s).
+
+    Args:
+        fpath (str | list[str]): Filepath or list of filepaths.
+
+    Returns:
+        tuple[str | list[str], str]: Filepath(s) without the prefix
+            and the prefix itself.
+    """
+    parsed_url = urlparse(fpath)
+    protocol = parsed_url.scheme
+
+    if protocol in {"abfs", "abfss"} and bodo.enable_azure_fs:  # pragma: no cover
+        # PyArrow AzureBlobFileSystem is initialized with account_name only
+        # so the host / container name should be included in the files
+        prefix = f"{protocol}://"
+
+        def norm_path(p: str) -> str:
+            url = urlparse(p)
+            container = (
+                parsed_url.netloc
+                if parsed_url.username is None
+                else parsed_url.username
+            )
+            return f"{container}{url.path}"
+
+        mod_fpath = norm_path(fpath)
+        return mod_fpath
+
+    prefix = ""
+
+    if protocol in {"hdfs", "abfs", "abfss"}:
+        # HDFS filesystem is initialized with host:port info. Once
+        # initialized, the filesystem needs the <protocol>://<host><port>
+        # prefix removed to query and access files
+        prefix = f"{protocol}://{parsed_url.netloc}"
+    elif protocol in {"s3", "gcs", "gs"}:
+        prefix = f"{protocol}://"
+
+    return fpath[len(prefix) :]
+
+
 def get_bodo_pq_dataset_from_fpath(
     fpath: str | list[str],
     protocol: str,

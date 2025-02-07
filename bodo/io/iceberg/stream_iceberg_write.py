@@ -37,7 +37,6 @@ from bodo.io.helpers import (
     pyarrow_schema_type,
     stream_writer_alloc_codegen,
 )
-from bodo.io.iceberg.common import get_rest_catalog_fs
 from bodo.io.iceberg.write import (
     commit_statistics_file,
     fetch_puffin_metadata,
@@ -466,7 +465,8 @@ def create_iceberg_rest_s3_fs(
 ):
     if catalog_uri == "" or bearer_token == "" or warehouse == "":
         return None
-    return get_rest_catalog_fs(catalog_uri, bearer_token, warehouse, schema, table_name)
+    # TODO: Fix in write PR
+    pass
 
 
 class IcebergWriterType(StreamingStateType):
