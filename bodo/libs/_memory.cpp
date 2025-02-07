@@ -21,7 +21,6 @@
 
 #ifndef _WIN32
 #include <sys/mman.h>
-#define MMAP_FLAGS MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE
 #define ASSUME_ALIGNED(x) std::assume_aligned<4096>(x)
 #else
 #include <intrin.h>
@@ -125,7 +124,7 @@ uint8_t* const create_frame(size_t size) {
     return static_cast<uint8_t* const>(
         mmap(/*addr*/ nullptr, size,
              /*We need both read/write access*/ PROT_READ | PROT_WRITE,
-             MMAP_FLAGS, /*fd*/ -1,
+             MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, /*fd*/ -1,
              /*offset*/ 0));
 #else
     // TODO xxx use VirtualAlloc on Windows
@@ -836,6 +835,9 @@ BufferPoolOptions BufferPoolOptions::Defaults() {
 /// Define cross platform utilities
 #ifdef _WIN32
 inline int clzll(uint64_t x) {
+    if (x == 0) {
+        return 64;
+    }
     unsigned long index;
     _BitScanReverse64(&index, x);
     return 63 - index;
@@ -1476,10 +1478,12 @@ void BufferPool::free_helper(uint8_t* ptr, bool is_mmap_alloc,
         frame_pinned = true;
 
 #if defined(_WIN32)
-        if (alignment < kMinAlignment) {
-            ::free(ptr);
-        } else {
+        // Calls to _aligned_malloc must be matched with a call to
+        // _aligned_free.
+        if (alignment > kMinAlignment) {
             _aligned_free(ptr);
+        } else {
+            ::free(ptr);
         }
 #else
         ::free(ptr);
