@@ -31,7 +31,6 @@ from bodo.utils.typing import BodoError, BodoWarning
 from bodo.utils.utils import is_call_assign
 
 pytestmark = pytest_pandas
-print("test_dataframe_part1.py pytestmark", pytestmark)
 
 
 @pytest.fixture(params=[1, -3, 20, 0, 1000])
