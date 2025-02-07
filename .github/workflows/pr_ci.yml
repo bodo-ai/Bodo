@@ -81,18 +81,18 @@ jobs:
         uses: ./.github/actions/build-source
         with:
           build-all: false
-      - name: Load and Save Hadoop to Cache
-        id: hadoop-cache
-        uses: actions/cache@v4
-        with:
-          path: hadoop.tar.gz
-          key: hadoop-3.3.2-${{ runner.os }}
-      - name: Download Hadoop for SAS
-        if: steps.hadoop-cache.outputs.cache-hit != 'true'
-        run: |
-          choco install wget -y
-          wget -O hadoop.tar.gz "https://www.apache.org/dyn/mirrors/mirrors.cgi?action=download&filename=hadoop/common/hadoop-3.3.2/hadoop-3.3.2.tar.gz"
-        shell: bash
+      # - name: Load and Save Hadoop to Cache
+      #   id: hadoop-cache
+      #   uses: actions/cache@v4
+      #   with:
+      #     path: hadoop.tar.gz
+      #     key: hadoop-3.3.2-${{ runner.os }}
+      # - name: Download Hadoop for SAS
+      #   if: steps.hadoop-cache.outputs.cache-hit != 'true'
+      #   run: |
+      #     choco install wget -y
+      #     wget -O hadoop.tar.gz "https://www.apache.org/dyn/mirrors/mirrors.cgi?action=download&filename=hadoop/common/hadoop-3.3.2/hadoop-3.3.2.tar.gz"
+      #   shell: bash
 
   # 4) Actually run tests
   pr-ci:
