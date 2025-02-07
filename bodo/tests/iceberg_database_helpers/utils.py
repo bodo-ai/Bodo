@@ -1,4 +1,3 @@
-import os
 import shutil
 from typing import NamedTuple
 
@@ -31,59 +30,119 @@ SPARK_JAR_PACKAGES = [
 ]
 
 
-def get_spark(path: str = ".") -> SparkSession:
+class SparkIcebergCatalog(NamedTuple):
+    catalog_name: str
+
+    def __equals__(self, other: object) -> bool:
+        return isinstance(other, SparkIcebergCatalog) and self.catalog_name == other
+
+
+class SparkFilesystemIcebergCatalog(SparkIcebergCatalog):
+    def __equals__(self, other: object) -> bool:
+        return (
+            isinstance(other, SparkFilesystemIcebergCatalog)
+            and self.path == other.path
+            and super().__equals__(other)
+        )
+
+    path: str
+
+
+class SparkRestIcebergCatalog(SparkIcebergCatalog):
+    uri: str
+    credential: str
+    warehouse: str
+
+    def __equals__(self, other: object) -> bool:
+        return (
+            isinstance(other, SparkRestIcebergCatalog)
+            and self.uri == other.uri
+            and self.credential == other.credential
+            and self.warehouse == other.warehouse
+            and super().__equals__(other)
+        )
+
+    pass
+
+
+# This should probably be wrapped into a class or fixture in the future
+spark_catalogs: set[SparkIcebergCatalog] = set()
+spark: SparkSession | None = None
+
+
+def get_spark(catalog: SparkIcebergCatalog) -> SparkSession:
+    global spark
+    global spark_catalogs
     import bodo
 
     # Only run Spark on one rank to run faster and avoid Spark issues
     if bodo.get_rank() != 0:
         return None
 
+    if spark is not None:
+        if catalog in spark_catalogs:
+            return spark
+        else:
+            # Clear the spark instance and reinitialize
+            # we can't add a new catalog to an existing spark instance
+            spark.stop()
+    spark_catalogs.add(catalog)
+
+    def add_catalog(builder: SparkSession.Builder, catalog: SparkIcebergCatalog):
+        match catalog:
+            case SparkFilesystemIcebergCatalog():
+                builder.config(
+                    f"spark.sql.catalog.{catalog.catalog_name}",
+                    "org.apache.iceberg.spark.SparkCatalog",
+                )
+                builder.config(
+                    f"spark.sql.catalog.{catalog.catalog_name}.type", "hadoop"
+                )
+                builder.config(
+                    f"spark.sql.catalog.{catalog.catalog_name}.warehouse", catalog.path
+                )
+            case SparkRestIcebergCatalog():
+                builder.config(
+                    "spark.sql.catalog.rest_prod",
+                    "org.apache.iceberg.spark.SparkCatalog",
+                )
+                builder.config(
+                    "spark.sql.catalog.rest_prod.catalog-impl",
+                    "org.apache.iceberg.rest.RESTCatalog",
+                )
+                builder.config(
+                    f"spark.sql.catalog.{catalog.catalog_name}.uri", catalog.uri
+                )
+                builder.config(
+                    f"spark.sql.catalog.{catalog.catalog_name}.credential",
+                    catalog.credential,
+                )
+                builder.config(
+                    f"spark.sql.catalog.{catalog.catalog_name}.warehouse",
+                    catalog.warehouse,
+                )
+                # Todo figure out how to change this for azure
+                builder.config(
+                    "spark.sql.catalog.rest_prod.io-impl",
+                    "org.apache.iceberg.aws.s3.S3FileIO",
+                )
+
     def do_get_spark():
         builder = SparkSession.builder.appName("spark")
         builder.config("spark.jars.packages", ",".join(SPARK_JAR_PACKAGES))
-
-        builder.config(
-            "spark.sql.catalog.hadoop_prod", "org.apache.iceberg.spark.SparkCatalog"
-        )
-        builder.config("spark.sql.catalog.hadoop_prod.type", "hadoop")
-        builder.config("spark.sql.catalog.hadoop_prod.warehouse", path)
-        builder.config(
-            "spark.sql.extensions",
-            "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions",
-        )
         # NOTE: This is deprecated, but some Iceberg tests with nested data types
         # don't work without it. Let's try to avoid using Spark for those tests
         # as much as possible.
         builder.config("spark.sql.execution.arrow.enabled", "true")
+        builder.config(
+            "spark.sql.extensions",
+            "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions",
+        )
 
-        # Note that we need to have all catalogs registered on the same instance
-        # because otherwise spark will cache the instance, and not pick up new
-        # configuration changes.
-        # Tabular's platform seems to be dead but we will reuse this for general
-        # rest catalog testing.
-        if "TABULAR_CREDENTIAL" in os.environ and False:
-            # TODO(aneesh) this is mildly sketchy - ideally a tabular spark
-            # instance should be provided as pytest fixture
-            from bodo.tests.conftest import get_tabular_connection
+        for catalog in spark_catalogs:
+            add_catalog(builder, catalog)
 
-            rest_uri, tabular_warehouse, tabular_credential = get_tabular_connection(
-                os.getenv("TABULAR_CREDENTIAL")
-            )
-            builder.config(
-                "spark.sql.catalog.rest_prod", "org.apache.iceberg.spark.SparkCatalog"
-            )
-            builder.config(
-                "spark.sql.catalog.rest_prod.catalog-impl",
-                "org.apache.iceberg.rest.RESTCatalog",
-            )
-            builder.config("spark.sql.catalog.rest_prod.uri", rest_uri)
-            builder.config("spark.sql.catalog.rest_prod.credential", tabular_credential)
-            builder.config("spark.sql.catalog.rest_prod.warehouse", tabular_warehouse)
-            builder.config("spark.sql.defaultCatalog", "rest_prod")
-            builder.config(
-                "spark.sql.catalog.rest_prod.io-impl",
-                "org.apache.iceberg.aws.s3.S3FileIO",
-            )
+        builder.config("spark.sql.defaultCatalog", "rest_prod")
 
         spark = builder.getOrCreate()
 
@@ -96,14 +155,16 @@ def get_spark(path: str = ".") -> SparkSession:
         return spark
 
     try:
-        return do_get_spark()
+        spark = do_get_spark()
     except Exception:
         # Clear cache and try again - note that this is only for use in CI.
         # Sometimes packages fail to download - if this happens to you locally,
         # clear your cache manually. The path is in the logs.
         shutil.rmtree("/root/.ivy2", ignore_errors=True)
         shutil.rmtree("/root/.m2/repository", ignore_errors=True)
-    return do_get_spark()
+    spark = do_get_spark()
+    spark.catalog.setCurrentCatalog(catalog.catalog_name)
+    return spark
 
 
 def transform_str(col_name: str, transform: str, val: int) -> str:
