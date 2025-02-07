@@ -24,6 +24,8 @@ from bodo.tests.utils import (
 )
 from bodo.utils.utils import is_expr
 
+pytestmark = pytest.mark.slow
+
 
 def _check_column_dels(bodo_func, col_del_lists):
     """
