@@ -1,10 +1,10 @@
 from uuid import uuid4
 
-import bodo_iceberg_connector as bic
 import numpy as np
 import pandas as pd
 import pyarrow.fs as pa_fs
 import pytest
+from pyiceberg.catalog.rest import RestCatalog
 from pyiceberg.io.pyarrow import _fs_from_file_path
 
 import bodo
@@ -156,11 +156,10 @@ def test_iceberg_tabular_write_basic(
             reset_index=True,
         )
     finally:
-        delete_succeeded = run_rank0(bic.delete_table)(
-            bodo.io.iceberg.format_iceberg_conn(con_str),
-            "CI",
-            table_name,
-        )
-        assert not write_complete or delete_succeeded, (
-            f"Cleanup failed, {table_name} may need manual cleanup"
-        )
+        catalog = RestCatalog("rest_catalog", uri=rest_uri)
+        try:
+            catalog.purge_table(f"CI.{table_name}")
+        except Exception:
+            assert not write_complete, (
+                f"Cleanup failed, {table_name} may need manual cleanup"
+            )

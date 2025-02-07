@@ -24,7 +24,7 @@ this_module = sys.modules[__name__]
 
 # We don't technically need to get class from the method,
 # but it's useful to avoid IDE not found errors.
-BodoKMeansClusteringType = install_py_obj_class(
+BodoKMeansClusteringType, _ = install_py_obj_class(
     types_name="kmeans_clustering_type",
     python_type=sklearn.cluster.KMeans,
     module=this_module,

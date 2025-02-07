@@ -12,7 +12,7 @@ from numba.extending import (
 
 def install_py_obj_class(
     types_name, module, python_type=None, class_name=None, model_name=None
-) -> type[types.Opaque]:
+) -> tuple[type[types.Opaque], types.Opaque]:
     """
     Helper for generating Python Object types with opaque
     models. This dynamically generates the class,
@@ -89,10 +89,10 @@ def install_py_obj_class(
     unbox(class_value)(unbox_py_obj)
     box(class_value)(box_py_obj)
 
-    # We return the class for convenience (better IDE compatibility).
+    # We return the class and type for convenience (better IDE compatibility).
     # If the function is called from the module specified in 'module',
     # this is essentially a no-op.
-    return class_value
+    return class_value, class_instance
 
 
 def box_py_obj(typ, val, c):
@@ -122,3 +122,56 @@ def create_struct_from_pyobject(typ, obj, context, builder, pyapi):
     )
     struct_proxy.pyobj = obj
     return struct_proxy._getvalue()
+
+
+def install_opaque_class(
+    types_name: str, module, python_type=None, class_name: str | None = None
+) -> tuple[type[types.Opaque], types.Opaque]:
+    """TODO"""
+    # If not provided, create class_name by converting the types_name to camel_case
+    class_name = (
+        "".join(map(str.title, types_name.split("_")))
+        if class_name is None
+        else class_name
+    )
+
+    class_text = (
+        f"class {class_name}(types.Opaque):\n"
+        "    def __init__(self):\n"
+        f"       super().__init__(name='{class_name}')\n"
+    )
+
+    locs = {}
+    exec(class_text, {"types": types}, locs)
+    class_value = locs[class_name]
+    # Register the class in the given module for outside use
+    setattr(module, class_name, class_value)
+    class_instance = class_value()
+    # Register the type in numba.core.types
+    setattr(types, types_name, class_instance)
+
+    # Back the type with a completely Opaque memory model
+    register_model(class_value)(models.OpaqueModel)
+    # TypeOf for the type
+    if python_type is not None:
+        typeof_impl.register(python_type)(lambda val, c: class_instance)
+    # Custom boxing and unboxing
+    unbox(class_value)(unbox_opaque)
+    box(class_value)(box_opaque)
+
+    # We return the class and type for convenience (better IDE compatibility).
+    # If the function is called from the module specified in 'module',
+    # this is essentially a no-op.
+    return class_value, class_instance
+
+
+def unbox_opaque(typ, val, c):
+    # Just return the Python object pointer
+    c.pyapi.incref(val)
+    return NativeValue(val)
+
+
+def box_opaque(typ, val, c):
+    # Just return the Python object pointer
+    c.pyapi.incref(val)
+    return val
