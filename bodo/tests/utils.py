@@ -3223,15 +3223,15 @@ pytest_slow_unless_join = pytest_slow_unless_changed(["library", "codegen", "joi
 # This is for use as a decorator for a single test function.
 # (@pytest_mark_pandas)
 pytest_mark_pandas = (
-    compose_decos((pytest.mark.slow, pytest.mark.pandas))
+    pytest.mark.pandas
     if compiler_files_were_changed
-    else pytest.mark.pandas
+    else compose_decos((pytest.mark.slow, pytest.mark.pandas))
 )
 
 # This is for marking an entire test file
 # (pytestmark = pytest_pandas)
 pytest_pandas = [pytest.mark.pandas] + (
-    [pytest.mark.slow] if compiler_files_were_changed else []
+    [] if compiler_files_were_changed else [pytest.mark.slow]
 )
 
 # This is for marking an entire test file

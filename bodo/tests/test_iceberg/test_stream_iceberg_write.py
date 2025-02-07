@@ -207,14 +207,7 @@ def check_table_comment(
             )
 
 
-@pytest.mark.timeout(1000)
-@pytest.mark.parametrize("column_comments", ["test_col_comments", None])
-@pytest.mark.parametrize("table_comments", ["test_tbl_comments", "", None])
-@pytest.mark.parametrize("table_properties", [True, False])
 def test_iceberg_write_basic(
-    table_comments,
-    column_comments,
-    table_properties,
     iceberg_database,
     iceberg_table_conn,
     simple_dataframe,
@@ -234,6 +227,63 @@ def test_iceberg_write_basic(
     # set chunk size to a small number to make sure multiple iterations write files
     bodo.io.iceberg.stream_iceberg_write.ICEBERG_WRITE_PARQUET_CHUNK_SIZE = 300
 
+    create_table_meta = init_create_table_meta()
+
+    try:
+        _write_iceberg_table(
+            df, table_name, conn, db_schema, create_table_meta, "replace"
+        )
+    finally:
+        bodo.hiframes.boxing._use_dict_str_type = orig_use_dict_str_type
+        bodo.io.iceberg.stream_iceberg_write.ICEBERG_WRITE_PARQUET_CHUNK_SIZE = (
+            orig_chunk_size
+        )
+
+    py_out = bodo.jit()(lambda: pd.read_sql_table(table_name, conn, db_schema))()
+    py_out = _gather_output(py_out)
+
+    comm = MPI.COMM_WORLD
+    passed = None
+
+    if comm.Get_rank() == 0:
+        if "LIST" in table_name or "STRUCT" in table_name:
+            df = convert_non_pandas_columns(df)
+            py_out = convert_non_pandas_columns(py_out)
+        passed = _test_equal_guard(
+            df,
+            py_out,
+            sort_output=True,
+            check_dtype=False,
+            reset_index=True,
+        )
+
+    passed = comm.bcast(passed)
+    assert passed == 1
+
+
+@pytest.mark.parametrize("column_comments", ["test_col_comments", None])
+@pytest.mark.parametrize("table_comments", ["test_tbl_comments", "", None])
+@pytest.mark.parametrize("table_properties", [True, False])
+def test_iceberg_write_with_comment_and_properties(
+    table_comments,
+    column_comments,
+    table_properties,
+    iceberg_database,
+    iceberg_table_conn,
+    memory_leak_check,
+):
+    """Test basic streaming Iceberg write"""
+    table_name = "SIMPLE_STRING_TABLE"
+    df = SIMPLE_TABLES_MAP["SIMPLE_STRING_TABLE"][0]
+    db_schema, warehouse_loc = iceberg_database(table_name)
+    conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=False)
+
+    orig_chunk_size = (
+        bodo.io.iceberg.stream_iceberg_write.ICEBERG_WRITE_PARQUET_CHUNK_SIZE
+    )
+    # set chunk size to a small number to make sure multiple iterations write files
+    bodo.io.iceberg.stream_iceberg_write.ICEBERG_WRITE_PARQUET_CHUNK_SIZE = 300
+
     create_table_meta = init_create_table_meta(
         table_comments=table_comments,
         column_comments=column_comments,
@@ -245,7 +295,6 @@ def test_iceberg_write_basic(
             df, table_name, conn, db_schema, create_table_meta, "replace"
         )
     finally:
-        bodo.hiframes.boxing._use_dict_str_type = orig_use_dict_str_type
         bodo.io.iceberg.stream_iceberg_write.ICEBERG_WRITE_PARQUET_CHUNK_SIZE = (
             orig_chunk_size
         )
@@ -322,15 +371,9 @@ def test_iceberg_write_basic_rep(
 
 
 @pytest.mark.parametrize("use_dict_encoding_boxing", [False, True])
-@pytest.mark.parametrize("column_comments", ["test_col_comments", None])
-@pytest.mark.parametrize("table_comments", ["test_tbl_comments", "", None])
-@pytest.mark.parametrize("table_properties", [True, False])
 def test_iceberg_write_part_sort(
     iceberg_database,
     iceberg_table_conn,
-    table_comments,
-    column_comments,
-    table_properties,
     use_dict_encoding_boxing,
     memory_leak_check,
 ):
@@ -339,7 +382,9 @@ def test_iceberg_write_part_sort(
     and verify that the append was done correctly, i.e. validate
     that each file is correctly sorted and partitioned.
     """
-    table_name = f"PARTSORT_{PART_SORT_TABLE_BASE_NAME}_streaming_{use_dict_encoding_boxing}_{column_comments}_{table_properties}_{table_comments}"
+    table_name = (
+        f"PARTSORT_{PART_SORT_TABLE_BASE_NAME}_streaming_{use_dict_encoding_boxing}"
+    )
     df, sql_schema = SIMPLE_TABLES_MAP[f"SIMPLE_{PART_SORT_TABLE_BASE_NAME}"]
     if use_dict_encoding_boxing:
         table_name += "_DICT_ENCODING"
@@ -363,12 +408,7 @@ def test_iceberg_write_part_sort(
         bodo.io.iceberg.stream_iceberg_write.ICEBERG_WRITE_PARQUET_CHUNK_SIZE
     )
     bodo.io.iceberg.stream_iceberg_write.ICEBERG_WRITE_PARQUET_CHUNK_SIZE = 300
-
-    create_table_meta = init_create_table_meta(
-        table_comments=table_comments,
-        column_comments=column_comments,
-        table_property=table_properties,
-    )
+    create_table_meta = init_create_table_meta()
 
     try:
         _write_iceberg_table(
@@ -418,18 +458,6 @@ def test_iceberg_write_part_sort(
             sort_output=True,
             check_dtype=False,
             reset_index=True,
-        )
-        ref_table_properties = (
-            None if not table_properties else {"TBLPROPERTIES": "A", "TEST_TBL": "TRUE"}
-        )
-        check_table_comment(
-            db_schema,
-            table_name,
-            # Not checking column_comments here. Currently adding column comments for append is not supported
-            0,
-            table_comments=table_comments,
-            column_comments=column_comments,
-            table_properties=ref_table_properties,
         )
 
     passed = comm.bcast(passed)
