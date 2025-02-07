@@ -3769,14 +3769,6 @@ class TypingTransforms:
                     con_arg, label, rhs.loc, err_msg=err_msg
                 )
 
-            # Parse `con` String and Ensure its an Iceberg Connection
-            try:
-                con_str = bodo.io.iceberg.format_iceberg_conn(con_str)
-            except BodoError as e:
-                raise BodoError(
-                    "pandas.read_sql_table(): Only Iceberg is currently supported. "
-                    + e.msg
-                )
             # TODO: BSE-3331: This shouldn't have to change the con_arg, con_arg should be able to stay as an ir.Var but
             # right now it does because we need to call format_iceberg_conn on the value before passing to the IcebergReader
             if not isinstance(con_type, bodo.io.iceberg.IcebergConnectionType):
@@ -3972,7 +3964,7 @@ class TypingTransforms:
             use_default=True,
         )
         err_msg = "pandas.read_sql_table(): '_bodo_columns_var', if provided, must be a constant."
-        columns_obj = (
+        columns_obj: list[str] | None = (
             self._get_const_value(_bodo_columns_var, label, rhs.loc, err_msg=err_msg)
             if _bodo_columns_var
             else None
@@ -3980,6 +3972,11 @@ class TypingTransforms:
         if chunksize is None and columns_obj is not None:  # pragma: no cover
             raise BodoError(
                 "pandas.read_sql_table(): '_bodo_columns' can only be used with '_bodo_chunksize'"
+            )
+
+        if _bodo_merge_into and chunksize is not None:
+            raise BodoError(
+                "pandas.read_sql_table(): Batched reads does not support MERGE INTO"
             )
 
         _bodo_filter_var = get_call_expr_arg(
@@ -4035,78 +4032,26 @@ class TypingTransforms:
             else -1
         )
 
-        (
-            orig_col_names,
-            orig_arr_types,
-            pyarrow_table_schema,
-        ) = bodo.io.iceberg.get_iceberg_type_info(
-            table_name,
-            con_str,
-            database_schema,
-            is_merge_into_cow=_bodo_merge_into,
+        table_id: str = (
+            f"{database_schema}.{table_name}" if database_schema else table_name
+        )
+        (col_names, orig_arr_types, pyarrow_table_schema, arr_types) = (
+            bodo.io.iceberg.get_orig_and_runtime_schema(
+                con_str,
+                table_id,
+                selected_cols=columns_obj,
+                read_as_dict_cols=_bodo_read_as_dict,
+                detect_dict_cols=detect_dict_cols,
+                is_merge_into_cow=_bodo_merge_into,
+            )
         )
 
-        if columns_obj is not None:
-            name_to_type = dict(zip(orig_col_names, orig_arr_types))
-            col_names = columns_obj
-            arr_types = [name_to_type[col] for col in col_names]
-        else:
-            col_names = orig_col_names
-            arr_types = orig_arr_types
-
-        # check user-provided dict-encoded columns for errors
-        col_name_map = {c: i for i, c in enumerate(col_names)}
-        for c in _bodo_read_as_dict:
-            if c not in col_name_map:
-                raise BodoError(
-                    f"pandas.read_sql_table(): column name '{c}' in _bodo_read_as_dict is not in table columns {col_names}"
-                )
-            col_ind = col_name_map[c]
-            if arr_types[col_ind] != bodo.string_array_type:
-                raise BodoError(
-                    f"pandas.read_sql_table(): column name '{c}' in _bodo_read_as_dict is not a string column"
-                )
-
-        all_dict_str_cols = set(_bodo_read_as_dict)
-        if detect_dict_cols:
-            # Estimate which string columns should be dict-encoded using existing Parquet
-            # infrastructure.
-            str_columns: list[str] = bodo.io.parquet_pio.get_str_columns_from_pa_schema(
-                pyarrow_table_schema
-            )
-            # remove user provided dict-encoded columns
-            str_columns = list(
-                set(str_columns).intersection(col_names) - set(_bodo_read_as_dict)
-            )
-            # Sort the columns to ensure same order on all ranks
-            str_columns = sorted(str_columns)
-
-            dict_str_cols = bodo.io.iceberg.determine_str_as_dict_columns(
-                con_str,
-                database_schema,
-                table_name,
-                str_columns,
-                pyarrow_table_schema,
-            )
-            all_dict_str_cols.update(dict_str_cols)
-
-        # change string array types to dict-encoded
-        for c in all_dict_str_cols:
-            col_ind = col_name_map[c]
-            arr_types[col_ind] = bodo.dict_str_arr_type
-
-        index = bodo.RangeIndexType(None)
         df_type = DataFrameType(
             tuple(arr_types),
-            index,
+            bodo.RangeIndexType(None),
             tuple(col_names),
             is_table_format=True,
         )
-
-        if _bodo_merge_into and chunksize is not None:
-            raise BodoError(
-                "pandas.read_sql_table(): Batched reads does not support MERGE INTO"
-            )
 
         # Merge INTO default output types
         file_list_type = types.pyobject_of_list_type
@@ -4162,7 +4107,7 @@ class TypingTransforms:
 
         nodes = [
             bodo.ir.iceberg_ext.IcebergReader(
-                table_name,
+                table_id,
                 con,
                 lhs.name,
                 list(df_type.columns),
@@ -4173,7 +4118,6 @@ class TypingTransforms:
                 [],  # unsupported_arrow_types
                 None,  # index_column_name
                 types.none,  # index_column_type
-                database_schema,  # database_schema
                 pyarrow_table_schema,  # pyarrow_table_schema
                 _bodo_merge_into,  # is_merge_into
                 file_list_type,  # file_list_type
@@ -4182,7 +4126,7 @@ class TypingTransforms:
                 used_cols=columns_obj,
                 initial_filter=filter_obj,
                 initial_limit=limit_obj,
-                orig_col_names=orig_col_names,
+                orig_col_names=col_names,
                 orig_col_types=orig_arr_types,
                 sql_op_id=_bodo_sql_op_id_const,
                 dict_encode_in_bodo=dict_encode_in_bodo,

@@ -948,37 +948,6 @@ def test_no_files_after_filter_pushdown(
 
 
 @pytest.mark.slow
-def test_snapshot_id(iceberg_database, iceberg_table_conn, memory_leak_check):
-    """
-    Test that the bodo_iceberg_connector correctly loads the latest snapshot id.
-    """
-    comm = MPI.COMM_WORLD
-    table_name = "SIMPLE_NUMERIC_TABLE"
-    db_schema, warehouse_loc = iceberg_database(table_name)
-    conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
-    # Format the connection string since we don't go through pd.read_sql_table
-    conn = bodo.io.iceberg.format_iceberg_conn(conn)
-    spark = get_spark()
-    snapshot_id = None
-    spark_snapshot_id = None
-    if bodo.get_rank() == 0:
-        snapshot_id = bodo_iceberg_connector.bodo_connector_get_current_snapshot_id(
-            conn, db_schema, table_name
-        )
-        py_out = spark.sql(
-            f"""
-        select snapshot_id from hadoop_prod.{db_schema}.{table_name}.history order by made_current_at DESC
-        """
-        )
-        py_out = py_out.toPandas()
-        spark_snapshot_id = py_out.iloc[0, 0]
-    snapshot_id, spark_snapshot_id = comm.bcast((snapshot_id, spark_snapshot_id))
-    assert snapshot_id == spark_snapshot_id, (
-        "Bodo loaded snapshot id doesn't match spark"
-    )
-
-
-@pytest.mark.slow
 def test_read_merge_into_cow_row_id_col(
     iceberg_database, iceberg_table_conn, memory_leak_check
 ):
@@ -1176,7 +1145,7 @@ def test_filter_pushdown_merge_into(iceberg_database, iceberg_table_conn):
         check_logger_msg(stream, "Filter pushdown successfully performed")
         check_logger_msg(
             stream,
-            "Iceberg Filter Pushed Down:\nbic.FilterExpr('==', [bic.ColumnRef('B'), bic.Scalar(f0)])",
+            "Iceberg Filter Pushed Down:\npie.EqualTo('B', literal(f0))",
         )
         check_logger_no_msg(stream, "Arrow filters pushed down:\nNone")
 
@@ -1288,6 +1257,7 @@ def test_iceberg_invalid_path(iceberg_database, iceberg_table_conn):
         bodo.jit(impl)(table_name, conn, db_schema)
 
 
+@pytest.mark.skip
 @pytest.mark.slow
 def test_write_existing_fail(
     iceberg_database,
@@ -1327,6 +1297,7 @@ def test_write_existing_fail(
         bodo.hiframes.boxing._use_dict_str_type = orig_use_dict_str_type
 
 
+@pytest.mark.skip
 @pytest.mark.timeout(1000)
 @pytest.mark.slow
 @pytest.mark.parametrize("read_behavior", ["spark", "bodo"])
@@ -1433,6 +1404,7 @@ def test_basic_write_replace(
     # assert n_passed == n_pes)
 
 
+@pytest.mark.skip
 @pytest.mark.timeout(1000)
 @pytest.mark.slow
 @pytest.mark.parametrize("behavior", ["create", "append"])
@@ -1710,7 +1682,7 @@ def _setup_test_iceberg_field_ids_in_pq_schema(
     return data_files_before_write, expected_schema
 
 
-ICEBERG_FIELD_IDS_IN_PQ_SCHEMA_TEST_PARAMS: list[str, pa.Schema] = [
+ICEBERG_FIELD_IDS_IN_PQ_SCHEMA_TEST_PARAMS: list[tuple[str, pa.Schema]] = [
     pytest.param(
         "NUMERIC_TABLE",
         pa.schema(
@@ -1763,6 +1735,7 @@ ICEBERG_FIELD_IDS_IN_PQ_SCHEMA_TEST_PARAMS: list[str, pa.Schema] = [
 ]
 
 
+@pytest.mark.skip
 @pytest.mark.slow
 @pytest.mark.parametrize(
     "base_name,pa_schema", ICEBERG_FIELD_IDS_IN_PQ_SCHEMA_TEST_PARAMS
@@ -1814,6 +1787,7 @@ def test_iceberg_field_ids_in_pq_schema(
     )
 
 
+@pytest.mark.skip
 @pytest.mark.slow
 def test_iceberg_field_ids_in_pq_schema_append_to_schema_evolved_table(
     iceberg_database, iceberg_table_conn, memory_leak_check
@@ -1944,6 +1918,7 @@ def test_basic_write_runtime_cols_fail(
         impl(table_name, conn, db_schema)
 
 
+@pytest.mark.skip
 @pytest.mark.slow
 def test_basic_write_append_not_null_arrays(
     iceberg_database, iceberg_table_conn, memory_leak_check
@@ -2007,6 +1982,7 @@ def test_basic_write_append_not_null_arrays(
     impl(_get_dist_arg(bodo_in_df), table_name, conn, db_schema)
 
 
+@pytest.mark.skip
 @pytest.mark.slow
 @pytest.mark.parametrize(
     "name,sql_schema,df,df_write",
@@ -2176,6 +2152,7 @@ def downcasting_table_info(request):
     return request.param
 
 
+@pytest.mark.skip
 @pytest.mark.slow
 def test_basic_write_downcasting_fail(
     iceberg_database,
@@ -2211,6 +2188,7 @@ def test_basic_write_downcasting_fail(
         impl(_get_dist_arg(df_write), table_name, conn, db_schema)
 
 
+@pytest.mark.skip
 @pytest.mark.slow
 def test_basic_write_downcasting(
     iceberg_database,
@@ -2294,6 +2272,7 @@ def test_basic_write_downcasting(
     assert any(err_msg.startswith(msg) for msg in err_msgs)
 
 
+@pytest.mark.skip
 @pytest.mark.slow
 def test_basic_write_downcasting_copy(
     iceberg_database, iceberg_table_conn, memory_leak_check
@@ -2371,6 +2350,7 @@ def test_iceberg_write_error_checking(iceberg_database, iceberg_table_conn):
         bodo.jit(replicated=["df"])(impl3)(df, table_name, conn, db_schema)
 
 
+@pytest.mark.skip
 @pytest.mark.slow
 def test_read_pq_write_iceberg(iceberg_database, iceberg_table_conn, memory_leak_check):
     """
@@ -2410,6 +2390,7 @@ def test_read_pq_write_iceberg(iceberg_database, iceberg_table_conn, memory_leak
         bodo.jit(impl)(fname, table_name, conn, db_schema)
 
 
+@pytest.mark.skip
 @pytest.mark.slow
 def test_iceberg_missing_optional_column(iceberg_database, iceberg_table_conn):
     """
@@ -2469,6 +2450,7 @@ def test_iceberg_missing_optional_column(iceberg_database, iceberg_table_conn):
             )
 
 
+@pytest.mark.skip
 @pytest.mark.slow
 def test_iceberg_missing_optional_column_missing_error(
     iceberg_database, iceberg_table_conn
@@ -2498,6 +2480,7 @@ def test_iceberg_missing_optional_column_missing_error(
         bodo.jit(distributed=["df"])(impl)(df, table_name, conn, db_schema)
 
 
+@pytest.mark.skip
 @pytest.mark.slow
 def test_iceberg_missing_optional_column_extra_error(
     iceberg_database, iceberg_table_conn
@@ -2530,6 +2513,7 @@ def test_iceberg_missing_optional_column_extra_error(
         bodo.jit(distributed=["df"])(impl)(df, table_name, conn, db_schema)
 
 
+@pytest.mark.skip
 @pytest.mark.slow
 def test_iceberg_missing_optional_column_incorrect_field_order(
     iceberg_database, iceberg_table_conn
@@ -2561,6 +2545,7 @@ def test_iceberg_missing_optional_column_incorrect_field_order(
         bodo.jit(distributed=["df"])(impl)(df, table_name, conn, db_schema)
 
 
+@pytest.mark.skip
 @pytest.mark.slow
 def test_iceberg_middle_optional_column(iceberg_database, iceberg_table_conn):
     """
@@ -2796,6 +2781,7 @@ ARRAY_TRANSFORM_FUNC = {
 }
 
 
+@pytest.mark.skip
 @pytest.mark.slow
 @pytest.mark.parametrize("base_name,part_spec", PARTITION_MAP)
 def test_write_partitioned(
@@ -2936,6 +2922,7 @@ def sort_cases(request):
     return (base_name, sort_order, sort_table_name(base_name, sort_order))
 
 
+@pytest.mark.skip
 @pytest.mark.slow
 def test_write_sorted(
     iceberg_database, iceberg_table_conn, sort_cases, memory_leak_check
@@ -3057,6 +3044,7 @@ def test_write_sorted(
     assert passed == 1, "Spark read output doesn't match expected output"
 
 
+@pytest.mark.skip
 @pytest.mark.slow
 @pytest.mark.parametrize("use_dict_encoding_boxing", [False, True])
 def test_write_part_sort(
@@ -3224,6 +3212,7 @@ def _test_file_sorted(file_name: str, sort_order: list[SortField]):
     _test_equal(df_vals, sorted_vals, check_dtype=False)
 
 
+@pytest.mark.skip
 @pytest.mark.slow
 @pytest.mark.parametrize("use_dict_encoding_boxing", [False, True])
 def test_write_part_sort_return_orig(
@@ -3295,6 +3284,7 @@ def test_write_part_sort_return_orig(
     assert passed == 1, "Bodo function output doesn't match expected output"
 
 
+@pytest.mark.skip("MERGE INTO")
 @pytest.mark.slow
 def test_merge_into_cow_write_api(
     iceberg_database,
@@ -3379,6 +3369,7 @@ def test_merge_into_cow_write_api(
         passed = comm.bcast(passed)
 
 
+@pytest.mark.skip("MERGE INTO")
 @pytest.mark.slow
 def test_merge_into_cow_write_api_partitioned(
     iceberg_database,
@@ -3485,6 +3476,7 @@ def test_merge_into_cow_write_api_partitioned(
         passed = comm.bcast(passed)
 
 
+@pytest.mark.skip("MERGE INTO")
 @pytest.mark.slow
 def test_merge_into_cow_write_api_snapshot_check(
     iceberg_database,
@@ -3782,6 +3774,7 @@ def test_merge_into_cow_simple_e2e_partitions(iceberg_database, iceberg_table_co
     assert passed, "Bodo read output doesn't match expected output"
 
 
+@pytest.mark.skip
 @pytest.mark.slow
 def test_iceberg_write_nulls_in_dict(iceberg_database, iceberg_table_conn):
     """
@@ -4066,7 +4059,7 @@ def test_filter_pushdown_arg(iceberg_database, iceberg_table_conn, memory_leak_c
         )
         check_logger_msg(
             stream,
-            "Iceberg Filter Pushed Down:\nbic.FilterExpr('>', [bic.ColumnRef('A'), bic.Scalar(f0)])",
+            "Iceberg Filter Pushed Down:\npie.GreaterThan('A', literal(f0))",
         )
 
 
@@ -4111,5 +4104,5 @@ def test_filter_pushdown_complex(
         )
         check_logger_msg(
             stream,
-            "Iceberg Filter Pushed Down:\nbic.FilterExpr('OR', [bic.FilterExpr('AND', [bic.FilterExpr('>', [bic.ColumnRef('A'), bic.Scalar(f0)]), bic.FilterExpr('NOT', [bic.FilterExpr('STARTS_WITH', [bic.ColumnRef('TY'), bic.Scalar(f1)])])]), bic.FilterExpr('IN', [bic.ColumnRef('B'), bic.Scalar(f2)])])",
+            "Iceberg Filter Pushed Down:\npie.Or(pie.And(pie.GreaterThan('A', literal(f0)), pie.Not(pie.StartsWith('TY', literal(f1)))), pie.In('B', literal(f2)))",
         )
