@@ -138,7 +138,7 @@ function(include_general_directories)
 
   if (WIN32)
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /external:I ${CONDA_INCLUDE_DIR}")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /external:I ${CONDA_INCLUDE_DIR} /permissive- /std:c++14")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /external:I ${CONDA_INCLUDE_DIR} /permissive-")
   else()
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -isystem ${CONDA_INCLUDE_DIR}")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -isystem ${CONDA_INCLUDE_DIR}")
@@ -475,6 +475,7 @@ set(pyarrow_wrappers_sources "bodo/io/pyarrow_wrappers.cpp" "bodo/io/arrow_compa
 python_add_library(pyarrow_wrappers MODULE WITH_SOABI "${pyarrow_wrappers_sources}")
 target_include_directories(pyarrow_wrappers PRIVATE ${BASE_INCLUDE_DIRS})
 target_link_directories(pyarrow_wrappers PRIVATE ${PYARROW_LIB_DIR} ${CONDA_LIB_DIR} ${MPI_LIB_DIR})
+target_compile_definitions(pyarrow_wrappers PRIVATE ARROW_PYTHON_EXPORTING)
 target_link_libraries(pyarrow_wrappers PRIVATE arrow arrow_python arrow_dataset "${MPI_LIBRARIES}")
 install(TARGETS pyarrow_wrappers DESTINATION "bodo/io/")
 

@@ -5,9 +5,10 @@
 #include <arrow/python/pyarrow.h>
 
 namespace arrow::py {
-#define DECLARE_WRAP_FUNCTIONS(FUNC_SUFFIX, TYPE_NAME)        \
-    ARROW_PYTHON_EXPORT bool is_##FUNC_SUFFIX(PyObject*);     \
-    arrow::Result<TYPE_NAME> unwrap_##FUNC_SUFFIX(PyObject*); \
+#define DECLARE_WRAP_FUNCTIONS(FUNC_SUFFIX, TYPE_NAME)                 \
+    ARROW_PYTHON_EXPORT bool is_##FUNC_SUFFIX(PyObject*);              \
+    ARROW_PYTHON_EXPORT arrow::Result<TYPE_NAME> unwrap_##FUNC_SUFFIX( \
+        PyObject*);                                                    \
     ARROW_PYTHON_EXPORT PyObject* wrap_##FUNC_SUFFIX(const TYPE_NAME&);
 
 #define DEFINE_WRAP_FUNCTIONS(FUNC_SUFFIX, TYPE_NAME, IS_VALID_CHECK)        \
