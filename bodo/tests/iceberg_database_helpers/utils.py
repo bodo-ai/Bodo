@@ -35,19 +35,9 @@ SPARK_JAR_PACKAGES = [
 class SparkIcebergCatalog:
     catalog_name: str
 
-    def __equals__(self, other: object) -> bool:
-        return isinstance(other, SparkIcebergCatalog) and self.catalog_name == other
-
 
 @dataclass(frozen=True)
 class SparkFilesystemIcebergCatalog(SparkIcebergCatalog):
-    def __equals__(self, other: object) -> bool:
-        return (
-            isinstance(other, SparkFilesystemIcebergCatalog)
-            and self.path == other.path
-            and super().__equals__(other)
-        )
-
     path: str
 
 
@@ -56,17 +46,17 @@ class SparkRestIcebergCatalog(SparkIcebergCatalog):
     uri: str
     credential: str
     warehouse: str
+    io_impl: str
 
-    def __equals__(self, other: object) -> bool:
-        return (
-            isinstance(other, SparkRestIcebergCatalog)
-            and self.uri == other.uri
-            and self.credential == other.credential
-            and self.warehouse == other.warehouse
-            and super().__equals__(other)
-        )
 
-    pass
+@dataclass(frozen=True)
+class SparkAzureIcebergCatalog(SparkRestIcebergCatalog):
+    io_impl: str = "org.apache.iceberg.azure.adlsv2.ADLSFileIO"
+
+
+@dataclass(frozen=True)
+class SparkAwsIcebergCatalog(SparkRestIcebergCatalog):
+    io_impl: str = "org.apache.iceberg.aws.s3.S3FileIO"
 
 
 # This should probably be wrapped into a class or fixture in the future
@@ -131,8 +121,8 @@ def get_spark(
                 )
                 # Todo figure out how to change this for azure
                 builder.config(
-                    "spark.sql.catalog.rest_prod.io-impl",
-                    "org.apache.iceberg.aws.s3.S3FileIO",
+                    f"spark.sql.catalog.{catalog.catalog_name}.io-impl",
+                    catalog.io_impl,
                 )
 
     def do_get_spark():

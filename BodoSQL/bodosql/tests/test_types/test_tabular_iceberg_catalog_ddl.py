@@ -13,7 +13,7 @@ import pytest
 
 import bodo
 import bodosql
-from bodo.tests.iceberg_database_helpers.utils import SparkRestIcebergCatalog, get_spark
+from bodo.tests.iceberg_database_helpers.utils import SparkAwsIcebergCatalog, get_spark
 from bodo.tests.utils import (
     _test_equal_guard,
     check_func_seq,
@@ -34,7 +34,7 @@ def check_view_exists(polaris_connection, view_name) -> bool:
     assert bodo.get_rank() == 0
     uri, warehouse, credential = polaris_connection
     spark = get_spark(
-        SparkRestIcebergCatalog(
+        SparkAwsIcebergCatalog(
             catalog_name=warehouse, uri=uri, warehouse=warehouse, credential=credential
         )
     )
@@ -48,7 +48,7 @@ def check_table_exists(polaris_connection, table_name) -> bool:
     assert bodo.get_rank() == 0
     uri, warehouse, credential = polaris_connection
     spark = get_spark(
-        SparkRestIcebergCatalog(
+        SparkAwsIcebergCatalog(
             catalog_name=warehouse, uri=uri, warehouse=warehouse, credential=credential
         )
     )
@@ -194,7 +194,7 @@ def test_create_view_validates(tabular_catalog, polaris_connection, memory_leak_
             def cleanup():
                 uri, warehouse, credential = polaris_connection
                 spark = get_spark(
-                    SparkRestIcebergCatalog(
+                    SparkAwsIcebergCatalog(
                         catalog_name=warehouse,
                         uri=uri,
                         warehouse=warehouse,
