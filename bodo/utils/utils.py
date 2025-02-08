@@ -1901,6 +1901,10 @@ def bodo_exec(func_text, glbls, loc_vars, mod_name):
 
 def cached_call_internal(context, builder, impl, sig, args):
     """Enable lower_builtin impls to be cached."""
+    return context.compile_internal(builder, impl, sig, args)
+    # The below code doesn't quite work correctly but leave it here to be
+    # fixed soon.
+
     # First make it a cacheable njit.
     impl = numba.njit(cache=True)(impl)
     # Compile the impl for this signature.
