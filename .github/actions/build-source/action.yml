@@ -30,7 +30,7 @@ runs:
 
       - name: Build Bodo
         run: |
-          if [[ ${{ runner.os }} != 'Windows' ]]; then
+          if [[ $RUNNER_OS != 'Windows' ]]; then
             # Build Bodo with our fork of Arrow
             export USE_BODO_ARROW_FORK=1
           fi
