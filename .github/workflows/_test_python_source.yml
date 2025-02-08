@@ -33,18 +33,20 @@ jobs:
           uses: ./.github/actions/build-source
           with:
             build-all: true
-        # - name: Load Hadoop from Cache
-        #   uses: actions/cache/restore@v4
-        #   with:
-        #     path: hadoop.tar.gz
-        #     key: hadoop-3.3.2-${{ runner.os }}
-        # - name: Install SAS and Clean Cache
-        #   run: |
-        #     # Build SAS Token Provider
-        #     ./buildscripts/install_azurefs_sas_token_provider.sh
-        #     # Clean Maven and Spark Ivy Cache
-        #     rm -rf "$HOME"/.ivy2/cache "$HOME"/.ivy2/jars "$HOME"/.m2/repository
-        #   shell: bash
+        - name: Load Hadoop from Cache
+          if: runner.os != 'Windows'
+          uses: actions/cache/restore@v4
+          with:
+            path: hadoop.tar.gz
+            key: hadoop-3.3.2-${{ runner.os }}
+        - name: Install SAS and Clean Cache
+          if: runner.os != 'Windows'
+          run: |
+            # Build SAS Token Provider
+            ./buildscripts/install_azurefs_sas_token_provider.sh
+            # Clean Maven and Spark Ivy Cache
+            rm -rf "$HOME"/.ivy2/cache "$HOME"/.ivy2/jars "$HOME"/.m2/repository
+          shell: bash
         - name: Configure AWS Credentials
           uses: aws-actions/configure-aws-credentials@v4
           with:
