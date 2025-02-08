@@ -224,6 +224,7 @@ mpi4py = "~=4.0"
 
 [feature.platform]
 platforms = ["linux-64"]
+channels = ["bodo.ai", "conda-forge"]
 [feature.platform.target.linux-64.dependencies]
 ipython = "==8.16.1"
 ipykernel = "==6.29.3"
