@@ -1,7 +1,7 @@
 [project]
 name = "bodo"
 channels = ["bodo.ai", "conda-forge"]
-platforms = ["linux-64", "osx-64", "osx-arm64", "linux-aarch64", "win-64"]
+platforms = ["linux-64", "linux-aarch64", "osx-64", "osx-arm64", "win-64"]
 conda-pypi-map = { "bodo.ai" = "buildscripts/bodo_mapping.json" }
 
 [environments]
@@ -72,7 +72,7 @@ pip = "*"
 numba = "==0.61.0"
 numpy = ">=1.24,<2.2"
 pandas = ">=2.2,<2.3"
-pyarrow = { version = "==18.1.0", channel = "conda-forge" }
+pyarrow = { version = "==19.0.0", channel = "conda-forge" }
 fsspec = ">=2021.09"
 requests = "*"
 cloudpickle = ">=3.0,<4.0"
@@ -109,8 +109,8 @@ openpyxl = "*"
 
 [target.linux-64.dependencies]
 cx_oracle = "*"
-pyarrow = { version = "==18.1.0", channel = "bodo.ai" }
-libarrow = { version = "==18.1.0", channel = "bodo.ai" }
+pyarrow = { version = "==19.0.0", channel = "bodo.ai" }
+libarrow = { version = "==19.0.0", channel = "bodo.ai" }
 [target.osx-64.dependencies]
 cx_oracle = "*"
 
@@ -220,7 +220,6 @@ mpi4py = "~=4.0"
 
 [feature.platform]
 platforms = ["linux-64"]
-
 [feature.platform.target.linux-64.dependencies]
 ipython = "==8.16.1"
 ipykernel = "==6.29.3"
