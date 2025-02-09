@@ -18,6 +18,11 @@ on:
         description: 'Collect Coverage'
         required: true
         type: boolean
+      os:
+        description: 'The OS of the runners.'
+        required: false
+        default: 'ubuntu-latest'
+        type: string
 
 jobs:
   run:
@@ -25,7 +30,7 @@ jobs:
       id-token: write
       contents: read
     name: Build and Run Tests Helper
-    runs-on: windows-latest
+    runs-on: ${{ inputs.os }}
     steps:
         # Setup
         - uses: actions/checkout@v4
