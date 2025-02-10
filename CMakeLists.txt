@@ -234,6 +234,9 @@ if("$ENV{CONDA_PREFIX}" STREQUAL "")
     unset(BUILD_ONLY)
     unset(ENABLE_TESTING)
 elseif(WIN32)
+  # On Windows we need to link with the import library (.lib) in order to resolve references into dynamically loaded libraries.
+  # find_package locates the import library so we can make it availible to our extension.
+  # https://learn.microsoft.com/en-us/windows/win32/dlls/dynamic-link-library-creation
   find_package(AWSSDK REQUIRED COMPONENTS core)
 endif()
 
