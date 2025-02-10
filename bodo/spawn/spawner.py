@@ -174,7 +174,7 @@ class Spawner:
         py_args = ["-u", "-m", "bodo.spawn.worker"]
 
         if sys.platform == "win32":
-            # TODO set logging level on Windows / general environment management
+            # TODO [BSE-4553] set logging level on Windows / general environment management
             return sys.executable, py_args
 
         else:

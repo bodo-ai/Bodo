@@ -24,7 +24,7 @@
 #define ASSUME_ALIGNED(x) std::assume_aligned<4096>(x)
 #else
 #include <intrin.h>
-// TODO xx assume aligned
+// TODO [BSE-4556] assume aligned
 #define ASSUME_ALIGNED(x) x
 #endif
 
@@ -127,7 +127,7 @@ uint8_t* const create_frame(size_t size) {
              MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, /*fd*/ -1,
              /*offset*/ 0));
 #else
-    // TODO xxx use VirtualAlloc on Windows
+    // TODO [BSE-4556] use VirtualAlloc on Windows
     return nullptr;
 #endif
 }
@@ -260,7 +260,7 @@ void SizeClass::adviseAwayFrame(uint64_t idx) {
     }
 }
 #else
-// todo enable windows
+// TODO [BSE-4556] Enable this path on Windows.
 void SizeClass::adviseAwayFrame(uint64_t idx) { (void)idx; }
 #endif
 
@@ -926,7 +926,7 @@ BufferPool::BufferPool(const BufferPoolOptions& options)
                                        max_num_size_classes, (uint64_t)63}));
 
 #ifdef _WIN32
-    // TODO xx enable buffer pool on Windows.
+    // TODO [BSE-4556] Enable buffer pool on Windows.
     this->malloc_threshold_ = std::numeric_limits<int64_t>::max();
 #else
     this->malloc_threshold_ =

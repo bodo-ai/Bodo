@@ -698,7 +698,7 @@ static std::unique_ptr<StorageManager> MakeLocal(
 //   - gfs2 in Linux 4.16 (2018)
 // - FALLOC_FL_KEEP_SIZE in glib 2.18 (2013)
 // - ftruncate: glibc 2.3.5 (2006)
-// TODO xxx: Windows support.
+// TODO [BSE-4555]: Add Windows support for SparseFileStorageManager.
 #ifndef _WIN32
     // Just in case, we test if SparseFileStorageManager works
     // and default to LocalStorageManager if it doesn't
