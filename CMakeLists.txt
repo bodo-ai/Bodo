@@ -22,8 +22,11 @@ endif()
 function(set_default_compiler_options)
   if (LINUX AND X86)
     add_compile_options(
+      # -march=haswell is used to enable AVX2 support (required by SIMD bloom filter implementation)
       "-march=haswell"
+      # Avoid GCC errors for using int64 in allocations
       "-Wno-alloc-size-larger-than"
+      # Avoid GCC errors for unknown pragmas like "region"
       "-Wno-error=unknown-pragmas"
     )
   endif()
@@ -48,13 +51,13 @@ function(set_default_compiler_options)
     add_definitions(-DMS_WINDOWS)  # Globally define MS_WINDOWS
   else()
     add_compile_options(
-      "-Wno-c99-designator"
-      "-Wno-return-type-c-linkage"
-      "-Wno-macro-redefined"
-      "-Wno-implicit-const-int-float-conversion"
-      "-fwrapv"
-      "-fstack-protector-strong"
-      "-D_FORTIFY_SOURCE=2"
+      "-Wno-c99-designator"         # Check if still necessary?
+      "-Wno-return-type-c-linkage"  # Check if still necessary?
+      "-Wno-macro-redefined"        # Check if still necessary?
+      "-Wno-implicit-const-int-float-conversion" # Necessary for DataSketches
+      "-fwrapv"                     # Conda used to force-add. Remove in follow up PR
+      "-fstack-protector-strong"    # Conda used to force-add. Remove in follow up PR
+      "-D_FORTIFY_SOURCE=2"         # Conda used to force-add. Remove in follow up PR
     )
   endif()
 endfunction()
@@ -89,10 +92,16 @@ function(set_sanitizer_options)
       "-fsanitize=undefined"
     )
   else()
+    # Note for DebugSanitize builds we have to compile with /bigobj to allow larger object files
+    # https://learn.microsoft.com/en-us/cpp/build/reference/bigobj-increase-number-of-sections-in-dot-obj-file?view=msvc-170 
     add_compile_options(
       "/bigobj"
       "/fsanitize=address"
     )
+    # These definitions are necessary for now because of conflicts between our extensions and other
+    # build dependencies e.g. fmt. In the future we can look into enabling them:
+    # https://learn.microsoft.com/en-us/cpp/sanitizers/error-container-overflow?view=msvc-170
+    # TODO [BSE-4552] Remove once we have fully working DebugSanitize config
     add_definitions(
       -D_DISABLE_STRING_ANNOTATION
       -D_DISABLE_VECTOR_ANNOTATION
@@ -107,6 +116,7 @@ function(set_release_options)
     add_compile_options(
       "-O3"
       "-ftree-vectorize"
+      # Encourages LTO & increase obfuscations
       $<$<COMPILE_LANGUAGE:CXX>:-fvisibility=hidden>
     )
   endif()
@@ -224,14 +234,22 @@ if("$ENV{CONDA_PREFIX}" STREQUAL "")
     unset(BUILD_ONLY)
     unset(ENABLE_TESTING)
 elseif(WIN32)
-  find_package(AWSSDK REQUIRED COMPONENTS core)
+ find_package(AWSSDK REQUIRED COMPONENTS core)
 endif()
 
-# Find additional packages for Windows
 if(WIN32)
-  find_package(CURL REQUIRED)
-  find_package(OpenSSL REQUIRED)
+ find_package(CURL REQUIRED)
+ find_package(OpenSSL REQUIRED)
 endif()
+
+# Add boost as a dependency
+find_package(Boost 1.85 REQUIRED COMPONENTS json)
+include_directories(${Boost_INCLUDE_DIRS})
+
+cmake_print_variables(CURL_INCLUDE_DIRS CURL_LIBRARIES CURL_LIBRARY_DIRS)
+cmake_print_variables(AWSSDK_INCLUDE_DIRS AWSSDK_LIBRARIES AWSSDK_LIBRARY_DIRS)
+cmake_print_variables(OPENSSL_INCLUDE_DIRS OPENSSL_LIBRARIES OPENSSL_LIBRARY_DIRS)
+cmake_print_variables(Boost_INCLUDE_DIRS Boost_LIBRARIES Boost_LIBRARY_DIRS)
 
 # ----------------------------- Download Apache Datasketches -------------------------
 include(ExternalProject)
@@ -258,21 +276,13 @@ ExternalProject_Get_property(datasketches INSTALL_DIR)
 set(datasketches_INSTALL_DIR ${INSTALL_DIR})
 message("Source dir of datasketches = ${datasketches_INSTALL_DIR}")
 
-# Add boost as a dependency
-if (NOT WIN32)
-  find_package(Boost 1.85 REQUIRED COMPONENTS json)
-else()
-  find_package(Boost 1.85 REQUIRED COMPONENTS)
-endif()
-
-include_directories(${Boost_INCLUDE_DIRS})
-
 # ---------------------------- Set CMake Options -----------------------------
 # Use RelWithDebInfo Mode by Default
 cmake_print_variables(CMAKE_BUILD_TYPE)
 
 # Enable sanitizer through environment varaible since
 # "DebugSanitize" is not recognized as a valid build type
+# TODO [BSE-4552]: Add santizier config for Windows builds.
 if (WIN32 AND DEFINED ENV{BUILD_BODO_SAN})
   set(CMAKE_BUILD_TYPE "DebugSanitize")
 elseif (NOT CMAKE_BUILD_TYPE)
@@ -475,6 +485,8 @@ set(pyarrow_wrappers_sources "bodo/io/pyarrow_wrappers.cpp" "bodo/io/arrow_compa
 python_add_library(pyarrow_wrappers MODULE WITH_SOABI "${pyarrow_wrappers_sources}")
 target_include_directories(pyarrow_wrappers PRIVATE ${BASE_INCLUDE_DIRS})
 target_link_directories(pyarrow_wrappers PRIVATE ${PYARROW_LIB_DIR} ${CONDA_LIB_DIR} ${MPI_LIB_DIR})
+# On Windows this is necessary to define due to importing/exporting DLL semantics.
+# See https://github.com/apache/arrow/blob/9105a4109a80a1c01eabb24ee4b9f7c94ee942cb/python/CMakeLists.txt#L472
 target_compile_definitions(pyarrow_wrappers PRIVATE ARROW_PYTHON_EXPORTING)
 target_link_libraries(pyarrow_wrappers PRIVATE arrow arrow_python arrow_dataset "${MPI_LIBRARIES}")
 install(TARGETS pyarrow_wrappers DESTINATION "bodo/io/")
@@ -732,6 +744,8 @@ if (NOT (CMAKE_BUILD_TYPE STREQUAL "Release") AND NOT DEFINED ENV{BODO_SKIP_CPP_
     "bodo/tests/test_puffin.cpp"
     "bodo/tests/test_theta_sketches.cpp")
 endif()
+
+# TODO [BSE-4554] HDF5 support on Windows
 if(WIN32 OR (DEFINED ENV{NO_HDF5} AND "$ENV{NO_HDF5}" STREQUAL "1"))
     set(NO_HDF5 TRUE)
 else()
@@ -822,6 +836,7 @@ endif()
 target_link_directories(ext PRIVATE ${PYARROW_LIB_DIR} "${Python_NumPy_INCLUDE_DIR}/../lib")
 
 target_include_directories(ext PRIVATE ${datasketches_INSTALL_DIR}/include/DataSketches)
+target_compile_definitions(ext PRIVATE ARROW_PYTHON_EXPORTING)
 
 target_link_libraries(ext PRIVATE
   npymath
@@ -833,12 +848,14 @@ target_link_libraries(ext PRIVATE
   zstd
   aws-cpp-sdk-core
   ${MPI_LIBRARIES}
-  ${Boost_LIBRARIES}
 )
 
 if (NOT WIN32)
-  target_link_libraries(ext PRIVATE pthread)
+  # On Windows we do not link Boost_LIBRARIES here to avoid having multiple defnitions of everything.
+  # We use the header-only version of boost::json: https://www.boost.org/doc/libs/1_87_0/libs/json/doc/html/json/overview.html
+  target_link_libraries(ext PRIVATE pthread ${Boost_LIBRARIES})
 else()
+  target_compile_definitions(ext PRIVATE)
   target_link_libraries(ext PRIVATE
     CURL::libcurl
     OpenSSL::SSL

@@ -107,11 +107,13 @@ struct pinnable_ptr {
     using difference_type = typename std::iterator_traits<T *>::difference_type;
     using iterator_category = std::random_access_iterator_tag;
 
+#ifdef _WIN32
     /// @brief Needed for MSVC compatibility
     static pinnable_ptr pointer_to(element_type &obj) {
         throw std::runtime_error(
             "pinnable_ptr: pointer_to not implemeneted yet.");
     }
+#endif
 
     /// @brief  Construct a null pinnable_ptr
     pinnable_ptr() : base_(nullptr), offset_(0) {}
