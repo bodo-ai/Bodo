@@ -490,7 +490,12 @@ def validate_append_target(
     table: Table,
     allow_downcasting: bool,
 ) -> None:
-    """TODO"""
+    """
+    Validate that the DataFrame we are appending is compatible with the target table.
+    In particular, ensure that the schemas are compatible and that columns
+    for partitioning and sorting are present in the DataFrame.
+    """
+
     df_col_names = set(df_schema.names)
 
     table_schema = table.schema()
@@ -532,7 +537,11 @@ def build_partition_sort_tuples(
     partition_spec: PartitionSpec,
     sort_order: SortOrder,
 ) -> tuple[list[tuple[int, str, int, str]], list[tuple[int, str, int, bool, bool]]]:
-    """TODO"""
+    """
+    Convert PyIceberg PartitionSpec and SortOrder objects into
+    primitive Python containers (list of tuples of primitive types)
+    for easier passing and using in C++.
+    """
     from pyiceberg.table.sorting import NullOrder, SortDirection
 
     iceberg_source_id_to_col_idx = {
@@ -570,7 +579,12 @@ def build_partition_sort_tuples(
 def list_field_names(
     df_schema: pa.StructType | pa.Schema, prefix: str = ""
 ) -> pt.Generator[str]:
-    """TODO"""
+    """
+    Iterate over all field names in a PyArrow schema, including nested fields
+    inside of structs and the elements of lists. Note that we don't
+    need to output the outer struct or list field name cause PyIceberg
+    will auto-include it if any nested fields are used.
+    """
     for field in df_schema:
         if pa.types.is_struct(field.type):
             yield from list_field_names(field.type, prefix + field.name + ".")

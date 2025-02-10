@@ -14,24 +14,29 @@ def install_py_obj_class(
     types_name, module, python_type=None, class_name=None, model_name=None
 ) -> tuple[type[types.Opaque], types.Opaque]:
     """
-    Helper for generating Python Object types with opaque
-    models. This dynamically generates the class,
+    Helper for generating Python Object types with lightweight models
+    containing the object and MemInfo.
+
+    This dynamically generates the class,
     creates a single instance of the type, and
     registers the type inside Numba with proper argument
     registering, boxing, and unboxing.
     We also create a custom memory model for better memory management
     to avoid memory leaks (see notes below).
     We create these classes and set them in the provided module.
-    For convenience, we also return a reference to the new type class.
-    @params:
-    types_name: Name of the type to register inside numba.core.types
-    module: The module to declare the new classes in.
-    python_type (optional): The actual python type for registering types
-    of arguments to functions. We skip the `typeof_impl.register` step
-    when not provided
-    class_name (optional): Name of the class for the generated type class.
-    model_name (optional): Name of the class for the generated model class.
-    @returns: The created type class.
+
+    Args:
+        types_name: Name of the type to register inside numba.core.types
+        module: The module to declare the new classes in.
+        python_type (optional): The actual python type for registering types
+        of arguments to functions. We skip the `typeof_impl.register` step
+        when not provided
+        class_name (optional): Name of the class for the generated type class.
+        model_name (optional): Name of the class for the generated model class.
+
+    Returns:
+        - The created type class.
+        - The created type instance.
     """
     # If not provided, create class_name by converting the types_name to camel_case
     class_name = (
@@ -127,7 +132,24 @@ def create_struct_from_pyobject(typ, obj, context, builder, pyapi):
 def install_opaque_class(
     types_name: str, module, python_type=None, class_name: str | None = None
 ) -> tuple[type[types.Opaque], types.Opaque]:
-    """TODO"""
+    """
+    Helper for generating Python Object types with full opaque models.
+    This is like install_py_obj_class but with a completely opaque model
+    thats useful for passing objects between C++ and Numba.
+
+    Args:
+        types_name: Name of the type to register inside numba.core.types
+        module: The module to declare the new classes in.
+        python_type (optional): The actual python type for registering types
+        of arguments to functions. We skip the `typeof_impl.register` step
+        when not provided
+        class_name (optional): Name of the class for the generated type class.
+
+    Returns:
+        - The created type class.
+        - The created type instance.
+    """
+
     # If not provided, create class_name by converting the types_name to camel_case
     class_name = (
         "".join(map(str.title, types_name.split("_")))
