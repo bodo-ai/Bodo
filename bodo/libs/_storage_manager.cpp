@@ -448,7 +448,7 @@ class SparseFileStorageManager final : public StorageManager {
 #endif
 
             // Construct 1 Frame per File
-            int err = truncate_file(fi.file_descriptor, (off_t)(fi.block_size));
+            int err = ftruncate(fi.file_descriptor, (off_t)(fi.block_size));
             if (err == -1) {
                 this->Cleanup();
                 throw std::runtime_error(
@@ -609,9 +609,8 @@ class SparseFileStorageManager final : public StorageManager {
         } else {
             if (fi.blocks_used == fi.block_capacity) {
                 fi.block_capacity *= 2;
-                int err =
-                    truncate_file(fi.file_descriptor,
-                                  (off_t)(fi.block_capacity * fi.block_size));
+                int err = ftruncate(fi.file_descriptor,
+                                    (off_t)(fi.block_capacity * fi.block_size));
                 if (err == -1) {
                     throw std::runtime_error(
                         "SparseFileStorageManager::WriteBlock: Error when "
@@ -808,6 +807,8 @@ using AzureStorageManager = StorageManager;
 static std::unique_ptr<AzureStorageManager> MakeAzure(
     const std::shared_ptr<StorageOptions> options,
     const std::span<const uint64_t> size_class_bytes) {
+    // Including AzureFileSystem leads to a compilation error on Windows.
+    // https://github.com/apache/arrow/issues/41990
     throw std::runtime_error(
         "MakeAzure: arrow::fs::AzureFileSystem Not supported on Windows.");
 }
