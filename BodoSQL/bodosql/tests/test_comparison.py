@@ -112,7 +112,7 @@ def between_clause(request):
                     b"ZEBRA",
                     b"40",
                     b"123",
-                    b"zebra" b" ",
+                    b"zebra ",
                     b"\t",
                 ],
                 None,

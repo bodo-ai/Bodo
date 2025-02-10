@@ -59,8 +59,8 @@ def test_gen_documentation(capfd):
                 if changed_file.startswith(docs_path):
                     changed_docs.append(changed_file)
 
-        assert (
-            len(changed_docs) == 0
-        ), f"Documentation out of date: {changed_docs}, to update documentation, run python -m bodo.utils.generate_docs"
+        assert len(changed_docs) == 0, (
+            f"Documentation out of date: {changed_docs}, to update documentation, run python -m bodo.utils.generate_docs"
+        )
     finally:
         os.chdir(working_dir)

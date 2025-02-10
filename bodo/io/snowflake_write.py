@@ -627,7 +627,7 @@ def gen_snowflake_writer_append_table_impl_inner(
             if out_table_len > 0:
                 ev_upload_table = tracing.Event("upload_table", is_parallel=False)
                 # Note: writer['stage_path'] already has trailing slash
-                chunk_path = f'{writer["stage_path"]}{writer["copy_into_dir"]}/file{writer["file_count_local"]}_rank{bodo.get_rank()}_{bodo.io.helpers.uuid4_helper()}.parquet'
+                chunk_path = f"{writer['stage_path']}{writer['copy_into_dir']}/file{writer['file_count_local']}_rank{bodo.get_rank()}_{bodo.io.helpers.uuid4_helper()}.parquet"
                 # To escape backslashes, we want to replace ( \ ) with ( \\ ), which can
                 # be written as the string literals ( \\ ) and ( \\\\ ).
                 # To escape quotes, we want to replace ( ' ) with ( \' ), which can

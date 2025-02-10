@@ -103,9 +103,9 @@ def create_nullable_table(table: str, spark=None, postfix=""):
     if spark is None:
         spark = get_spark()
     base_name = NULLABLE_TABLES_MAP[table]
-    assert (
-        base_name in PARTITION_TABLE_NAME_MAP
-    ), f"Didn't find table definition for {base_name}."
+    assert base_name in PARTITION_TABLE_NAME_MAP, (
+        f"Didn't find table definition for {base_name}."
+    )
     partition_columns = [
         part.col_name for part in PARTITION_TABLE_NAME_MAP[base_name][1]
     ]
@@ -135,9 +135,9 @@ def create_promotion_table(table: str, spark=None, postfix=""):
     if spark is None:
         spark = get_spark()
     base_name = PROMOTION_TABLES_MAP[table]
-    assert (
-        base_name in PARTITION_TABLE_NAME_MAP
-    ), f"Didn't find table definition for {base_name}."
+    assert base_name in PARTITION_TABLE_NAME_MAP, (
+        f"Didn't find table definition for {base_name}."
+    )
     partition_columns = [
         part.col_name for part in PARTITION_TABLE_NAME_MAP[base_name][1]
     ]
@@ -186,9 +186,9 @@ def create_column_reorder_table(table: str, spark=None, postfix=""):
     if spark is None:
         spark = get_spark()
     base_name = COLUMN_REORDER_TABLES_MAP[table]
-    assert (
-        base_name in PARTITION_TABLE_NAME_MAP
-    ), f"Didn't find table definition for {base_name}."
+    assert base_name in PARTITION_TABLE_NAME_MAP, (
+        f"Didn't find table definition for {base_name}."
+    )
     postfix = f"_REORDER_COLUMN{postfix}"
     df, sql_schema = SIMPLE_TABLE_MAP[
         f"SIMPLE_{PARTITION_TABLE_NAME_MAP[base_name][0]}"
@@ -220,9 +220,9 @@ def create_column_rename_table(table: str, spark=None, postfix=""):
     if spark is None:
         spark = get_spark()
     base_name = COLUMN_RENAME_TABLES_MAP[table]
-    assert (
-        base_name in PARTITION_TABLE_NAME_MAP
-    ), f"Didn't find table definition for {base_name}."
+    assert base_name in PARTITION_TABLE_NAME_MAP, (
+        f"Didn't find table definition for {base_name}."
+    )
     postfix = f"_RENAME_COLUMN{postfix}"
     df, sql_schema = SIMPLE_TABLE_MAP[
         f"SIMPLE_{PARTITION_TABLE_NAME_MAP[base_name][0]}"
@@ -254,9 +254,9 @@ def create_struct_field_type_promotion_table(table: str, spark=None, postfix="")
     if spark is None:
         spark = get_spark()
     base_name = STRUCT_FIELD_TYPE_PROMOTION_TABLES_MAP[table]
-    assert (
-        base_name in PARTITION_TABLE_NAME_MAP
-    ), f"Didn't find table definition for {base_name}."
+    assert base_name in PARTITION_TABLE_NAME_MAP, (
+        f"Didn't find table definition for {base_name}."
+    )
     postfix = f"_STRUCT_FIELD_TYPE_PROMOTION{postfix}"
     df, sql_schema = SIMPLE_TABLE_MAP[
         f"SIMPLE_{PARTITION_TABLE_NAME_MAP[base_name][0]}"
@@ -286,9 +286,9 @@ def create_struct_field_nullable_table(table: str, spark=None, postfix=""):
     if spark is None:
         spark = get_spark()
     base_name = STRUCT_FIELD_NULLABLE_TABLES_MAP[table]
-    assert (
-        base_name in PARTITION_TABLE_NAME_MAP
-    ), f"Didn't find table definition for {base_name}."
+    assert base_name in PARTITION_TABLE_NAME_MAP, (
+        f"Didn't find table definition for {base_name}."
+    )
     postfix = f"_STRUCT_FIELD_NULLABLE{postfix}"
     df, sql_schema = SIMPLE_TABLE_MAP[
         f"SIMPLE_{PARTITION_TABLE_NAME_MAP[base_name][0]}"
@@ -309,9 +309,9 @@ def create_change_part_column_table(table: str, spark=None, postfix=""):
     if spark is None:
         spark = get_spark()
     base_name = CHANGE_PART_COLUMN_TABLES_MAP[table]
-    assert (
-        base_name in PARTITION_TABLE_NAME_MAP
-    ), f"Didn't find table definition for {base_name}."
+    assert base_name in PARTITION_TABLE_NAME_MAP, (
+        f"Didn't find table definition for {base_name}."
+    )
     postfix = f"_CHANGE_PART_COLUMN{postfix}"
     df, sql_schema = SIMPLE_TABLE_MAP[
         f"SIMPLE_{PARTITION_TABLE_NAME_MAP[base_name][0]}"

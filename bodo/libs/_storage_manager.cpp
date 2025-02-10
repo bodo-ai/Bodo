@@ -34,35 +34,6 @@
 #include "_mpi.h"
 #include "_utils.h"
 
-/// Cross platform interface for truncating a file
-int truncate_file(int fd, off_t new_size_) {
-#ifdef _WIN32
-    HANDLE hfile = (HANDLE)_get_osfhandle(fd);
-    if (hfile == INVALID_HANDLE_VALUE) {
-        perror("Invalid file descriptor");
-        return -1;
-    }
-
-    // Move the file pointer to the desired length
-    LARGE_INTEGER new_size;
-    new_size.QuadPart = (LONGLONG)new_size_;
-    if (!SetFilePointerEx(hfile, new_size, NULL, FILE_BEGIN)) {
-        perror("SetFilePointerEx failed");
-        return -1;
-    }
-
-    // Truncate the file at the current file pointer
-    if (!SetEndOfFile(hfile)) {
-        perror("SetEndOfFile failed");
-        return -1;
-    }
-
-    return 0;
-#else
-    return ftruncate(fd, new_size_);
-#endif
-}
-
 #undef CHECK_ARROW_AND_ASSIGN
 #define CHECK_ARROW_MEM_AND_ASSIGN(expr, msg, lhs) \
     {                                              \
@@ -477,7 +448,7 @@ class SparseFileStorageManager final : public StorageManager {
 #endif
 
             // Construct 1 Frame per File
-            int err = truncate_file(fi.file_descriptor, (off_t)(fi.block_size));
+            int err = ftruncate(fi.file_descriptor, (off_t)(fi.block_size));
             if (err == -1) {
                 this->Cleanup();
                 throw std::runtime_error(
@@ -638,9 +609,8 @@ class SparseFileStorageManager final : public StorageManager {
         } else {
             if (fi.blocks_used == fi.block_capacity) {
                 fi.block_capacity *= 2;
-                int err =
-                    truncate_file(fi.file_descriptor,
-                                  (off_t)(fi.block_capacity * fi.block_size));
+                int err = ftruncate(fi.file_descriptor,
+                                    (off_t)(fi.block_capacity * fi.block_size));
                 if (err == -1) {
                     throw std::runtime_error(
                         "SparseFileStorageManager::WriteBlock: Error when "
@@ -728,7 +698,7 @@ static std::unique_ptr<StorageManager> MakeLocal(
 //   - gfs2 in Linux 4.16 (2018)
 // - FALLOC_FL_KEEP_SIZE in glib 2.18 (2013)
 // - ftruncate: glibc 2.3.5 (2006)
-// TODO xxx: Windows support.
+// TODO [BSE-4555]: Add Windows support for SparseFileStorageManager.
 #ifndef _WIN32
     // Just in case, we test if SparseFileStorageManager works
     // and default to LocalStorageManager if it doesn't
@@ -790,8 +760,6 @@ static std::unique_ptr<S3StorageManager> MakeS3(
                                               size_class_bytes, true);
 }
 
-// Azure filesystem is currently broken on windows:
-// https://github.com/apache/arrow/issues/41990
 #ifndef _WIN32
 using AzureStorageManager = ArrowStorageManager<arrow::fs::AzureFileSystem>;
 static std::unique_ptr<AzureStorageManager> MakeAzure(
@@ -837,6 +805,8 @@ using AzureStorageManager = StorageManager;
 static std::unique_ptr<AzureStorageManager> MakeAzure(
     const std::shared_ptr<StorageOptions> options,
     const std::span<const uint64_t> size_class_bytes) {
+    // Using AzureFileSystem leads to a compilation error on Windows.
+    // https://github.com/apache/arrow/issues/41990
     throw std::runtime_error(
         "MakeAzure: arrow::fs::AzureFileSystem Not supported on Windows.");
 }

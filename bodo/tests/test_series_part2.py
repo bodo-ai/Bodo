@@ -921,7 +921,7 @@ def test_series_idxmax(series_val, memory_leak_check):
             pd.Series(
                 [
                     pd.Timestamp(
-                        f"200{9-i % 10}-{i % 12 + 1}-{i % 28 + 1} {(i + 6) % 24}:{(i + 16) % 60}:{(i + 3) % 60}"
+                        f"200{9 - i % 10}-{i % 12 + 1}-{i % 28 + 1} {(i + 6) % 24}:{(i + 16) % 60}:{(i + 3) % 60}"
                     )
                     for i in range(10)
                 ]
@@ -3710,7 +3710,7 @@ def test_series_keys(S, memory_leak_check):
             id="timestamp-tz-series-bound",
         ),
         pytest.param(
-            pd.Series([pd.Timestamp(f"2017-01-{i+1}") for i in range(10)]),
+            pd.Series([pd.Timestamp(f"2017-01-{i + 1}") for i in range(10)]),
             pd.Series([pd.Timestamp("2017-01-3") for i in range(10)]),
             pd.Series([pd.Timestamp("2017-01-7") for i in range(10)]),
             id="timestamp-series-bound",

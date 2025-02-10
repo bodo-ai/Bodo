@@ -875,9 +875,9 @@ def overload_decimal_arr_to_float64(arr):
     """
     from bodo.libs.array import array_to_info, delete_info, info_to_array
 
-    assert isinstance(
-        arr, DecimalArrayType
-    ), "decimal_arr_to_float64: decimal array expected"
+    assert isinstance(arr, DecimalArrayType), (
+        "decimal_arr_to_float64: decimal array expected"
+    )
 
     output_arr_type = bodo.FloatingArrayType(types.float64)
 
@@ -1443,9 +1443,9 @@ def overload_decimal_scalar_sign(val):
     """
     Returns the sign of the decimal scalar. 0 for 0, 1 for positive, -1 for negative.
     """
-    assert isinstance(
-        val, Decimal128Type
-    ), "decimal_scalar_sign: Decimal128Type expected"
+    assert isinstance(val, Decimal128Type), (
+        "decimal_scalar_sign: Decimal128Type expected"
+    )
 
     def impl(val):  # pragma: no cover
         return _decimal_scalar_sign(val)
@@ -1489,9 +1489,9 @@ def overload_decimal_array_sign(arr):
     """
     from bodo.libs.array import array_to_info, delete_info, info_to_array
 
-    assert isinstance(
-        arr, DecimalArrayType
-    ), "decimal_array_sign: DecimalArrayType expected"
+    assert isinstance(arr, DecimalArrayType), (
+        "decimal_array_sign: DecimalArrayType expected"
+    )
 
     output_arr_type = bodo.IntegerArrayType(types.int8)
 
@@ -1921,15 +1921,15 @@ def overload_multiply_decimal_arrays(d1, d2):
     """
     from bodo.libs.array import delete_info, info_to_array
 
-    assert isinstance(
-        d1, (DecimalArrayType, Decimal128Type)
-    ), "multiply_decimal_arrays: decimal input1 expected"
-    assert isinstance(
-        d2, (DecimalArrayType, Decimal128Type)
-    ), "multiply_decimal_arrays: decimal input2 expected"
-    assert isinstance(d1, DecimalArrayType) or isinstance(
-        d2, DecimalArrayType
-    ), "multiply_decimal_arrays: decimal array expected"
+    assert isinstance(d1, (DecimalArrayType, Decimal128Type)), (
+        "multiply_decimal_arrays: decimal input1 expected"
+    )
+    assert isinstance(d2, (DecimalArrayType, Decimal128Type)), (
+        "multiply_decimal_arrays: decimal input2 expected"
+    )
+    assert isinstance(d1, DecimalArrayType) or isinstance(d2, DecimalArrayType), (
+        "multiply_decimal_arrays: decimal array expected"
+    )
 
     p, s = decimal_multiplication_output_precision_scale(
         d1.precision, d1.scale, d2.precision, d2.scale
@@ -2112,15 +2112,15 @@ def overload_modulo_decimal_arrays(d1, d2):
     """
     from bodo.libs.array import delete_info, info_to_array
 
-    assert isinstance(
-        d1, (DecimalArrayType, Decimal128Type)
-    ), "modulo_decimal_arrays: decimal input1 expected"
-    assert isinstance(
-        d2, (DecimalArrayType, Decimal128Type)
-    ), "modulo_decimal_arrays: decimal input2 expected"
-    assert isinstance(d1, DecimalArrayType) or isinstance(
-        d2, DecimalArrayType
-    ), "modulo_decimal_arrays: decimal array expected"
+    assert isinstance(d1, (DecimalArrayType, Decimal128Type)), (
+        "modulo_decimal_arrays: decimal input1 expected"
+    )
+    assert isinstance(d2, (DecimalArrayType, Decimal128Type)), (
+        "modulo_decimal_arrays: decimal input2 expected"
+    )
+    assert isinstance(d1, DecimalArrayType) or isinstance(d2, DecimalArrayType), (
+        "modulo_decimal_arrays: decimal array expected"
+    )
 
     p, s = decimal_misc_nary_output_precision_scale(
         [d1.precision, d2.precision], [d1.scale, d2.scale]
@@ -2306,15 +2306,15 @@ def overload_divide_decimal_arrays(d1, d2, do_div0=False):
     """
     from bodo.libs.array import delete_info, info_to_array
 
-    assert isinstance(
-        d1, (DecimalArrayType, Decimal128Type)
-    ), "divide_decimal_arrays: decimal input1 expected"
-    assert isinstance(
-        d2, (DecimalArrayType, Decimal128Type)
-    ), "divide_decimal_arrays: decimal input2 expected"
-    assert isinstance(d1, DecimalArrayType) or isinstance(
-        d2, DecimalArrayType
-    ), "divide_decimal_arrays: decimal array expected"
+    assert isinstance(d1, (DecimalArrayType, Decimal128Type)), (
+        "divide_decimal_arrays: decimal input1 expected"
+    )
+    assert isinstance(d2, (DecimalArrayType, Decimal128Type)), (
+        "divide_decimal_arrays: decimal input2 expected"
+    )
+    assert isinstance(d1, DecimalArrayType) or isinstance(d2, DecimalArrayType), (
+        "divide_decimal_arrays: decimal array expected"
+    )
 
     p, s = decimal_division_output_precision_scale(
         d1.precision, d1.scale, d2.precision, d2.scale
@@ -2424,19 +2424,19 @@ def overload_round_decimal_array(arr, round_scale, output_p, output_s):
     """
     from bodo.libs.array import array_to_info, delete_info, info_to_array
 
-    assert isinstance(
-        arr, DecimalArrayType
-    ), "round_decimal_array: decimal arr expected"
-    assert isinstance(
-        round_scale, types.Integer
-    ), "round_decimal_array: integer round_scale expected"
-    assert isinstance(
-        output_p, types.Integer
-    ), "round_decimal_array: integer output_p expected"
+    assert isinstance(arr, DecimalArrayType), (
+        "round_decimal_array: decimal arr expected"
+    )
+    assert isinstance(round_scale, types.Integer), (
+        "round_decimal_array: integer round_scale expected"
+    )
+    assert isinstance(output_p, types.Integer), (
+        "round_decimal_array: integer output_p expected"
+    )
 
-    assert isinstance(
-        output_s, types.Integer
-    ), "round_decimal_array: integer output_s expected"
+    assert isinstance(output_s, types.Integer), (
+        "round_decimal_array: integer output_s expected"
+    )
 
     output_p_val = get_overload_const_int(output_p)
     output_s_val = get_overload_const_int(output_s)
@@ -2533,9 +2533,9 @@ def _round_decimal_scalar(
     typingctx, val_t, round_scale_t, input_p_t, input_s_t, output_p_t, output_s_t
 ):
     assert isinstance(val_t, Decimal128Type), "_round_decimal_scalar: decimal expected"
-    assert isinstance(
-        round_scale_t, types.Integer
-    ), "_round_decimal_scalar: integer expected"
+    assert isinstance(round_scale_t, types.Integer), (
+        "_round_decimal_scalar: integer expected"
+    )
     assert_bodo_error(is_overload_constant_int(output_p_t))
     assert_bodo_error(is_overload_constant_int(output_s_t))
     assert_bodo_error(is_overload_constant_int(input_p_t))
@@ -2611,9 +2611,9 @@ def _ceil_floor_decimal_scalar(
     round_scale_t,
     is_ceil_t,
 ):
-    assert isinstance(
-        value_t, Decimal128Type
-    ), "_ceil_floor_decimal_scalar: decimal expected for value"
+    assert isinstance(value_t, Decimal128Type), (
+        "_ceil_floor_decimal_scalar: decimal expected for value"
+    )
 
     def codegen(context, builder, signature, args):
         value, input_p, input_s, output_p, output_s, round_scale, is_ceil = args
@@ -2668,18 +2668,18 @@ def overload_ceil_floor_decimal_array(arr, round_scale, output_p, output_s, is_c
 
     from bodo.libs.array import array_to_info, delete_info, info_to_array
 
-    assert isinstance(
-        arr, DecimalArrayType
-    ), "ceil_floor_decimal_array: decimal arr expected"
-    assert isinstance(
-        round_scale, types.Integer
-    ), "ceil_floor_decimal_array: integer round_scale expected"
-    assert isinstance(
-        output_p, types.Integer
-    ), "ceil_floor_decimal_array: integer output_p expected"
-    assert isinstance(
-        output_s, types.Integer
-    ), "ceil_floor_decimal_array: integer output_s expected"
+    assert isinstance(arr, DecimalArrayType), (
+        "ceil_floor_decimal_array: decimal arr expected"
+    )
+    assert isinstance(round_scale, types.Integer), (
+        "ceil_floor_decimal_array: integer round_scale expected"
+    )
+    assert isinstance(output_p, types.Integer), (
+        "ceil_floor_decimal_array: integer output_p expected"
+    )
+    assert isinstance(output_s, types.Integer), (
+        "ceil_floor_decimal_array: integer output_s expected"
+    )
 
     output_p_val = get_overload_const_int(output_p)
     output_s_val = get_overload_const_int(output_s)
@@ -2792,9 +2792,9 @@ def _trunc_decimal_scalar(
     output_s_t,
     round_scale_t,
 ):
-    assert isinstance(
-        value_t, Decimal128Type
-    ), "_trunc_decimal_scalar: decimal expected for value"
+    assert isinstance(value_t, Decimal128Type), (
+        "_trunc_decimal_scalar: decimal expected for value"
+    )
 
     def codegen(context, builder, signature, args):
         value, input_p, input_s, output_p, output_s, round_scale = args
@@ -2854,18 +2854,18 @@ def overload_trunc_decimal_array(arr, round_scale, output_p, output_s):
 
     from bodo.libs.array import array_to_info, delete_info, info_to_array
 
-    assert isinstance(
-        arr, DecimalArrayType
-    ), "trunc_decimal_array: decimal arr expected"
-    assert isinstance(
-        round_scale, types.Integer
-    ), "trunc_decimal_array: integer round_scale expected"
-    assert isinstance(
-        output_p, types.Integer
-    ), "trunc_decimal_array: integer output_p expected"
-    assert isinstance(
-        output_s, types.Integer
-    ), "trunc_decimal_array: integer output_s expected"
+    assert isinstance(arr, DecimalArrayType), (
+        "trunc_decimal_array: decimal arr expected"
+    )
+    assert isinstance(round_scale, types.Integer), (
+        "trunc_decimal_array: integer round_scale expected"
+    )
+    assert isinstance(output_p, types.Integer), (
+        "trunc_decimal_array: integer output_p expected"
+    )
+    assert isinstance(output_s, types.Integer), (
+        "trunc_decimal_array: integer output_s expected"
+    )
 
     output_p_val = get_overload_const_int(output_p)
     output_s_val = get_overload_const_int(output_s)
@@ -2926,9 +2926,9 @@ def overload_abs_decimal_array(arr):
     """
     Return the absolute value of a decimal array.
     """
-    assert isinstance(
-        arr, DecimalArrayType
-    ), "abs_decimal_array: decimal array expected"
+    assert isinstance(arr, DecimalArrayType), (
+        "abs_decimal_array: decimal array expected"
+    )
     from bodo.libs.array import array_to_info, delete_info, info_to_array
 
     out_precision = arr.precision
@@ -3053,9 +3053,9 @@ def overload_factorial_decimal_scalar(val):
 
 @intrinsic
 def _factorial_decimal_scalar(typingctx, val_t, input_s):
-    assert isinstance(
-        val_t, Decimal128Type
-    ), "_factorial_decimal_scalar: decimal expected"
+    assert isinstance(val_t, Decimal128Type), (
+        "_factorial_decimal_scalar: decimal expected"
+    )
 
     def codegen(context, builder, signature, args):
         val, input_s = args
@@ -3091,9 +3091,9 @@ def overload_factorial_decimal_array(arr):
     """
     Calculate the factorial of a decimal array.
     """
-    assert isinstance(
-        arr, DecimalArrayType
-    ), "factorial_decimal_array: decimal array expected"
+    assert isinstance(arr, DecimalArrayType), (
+        "factorial_decimal_array: decimal array expected"
+    )
     from bodo.libs.array import array_to_info, delete_info, info_to_array
 
     out_precision = 37
@@ -3548,9 +3548,9 @@ def overload_array_or_scalar_to_info(a):
     if bodo.utils.utils.is_array_typ(a, False):
         return lambda a: (array_to_info(a), False)  # pragma: no cover
 
-    assert is_scalar_type(
-        a
-    ), f"array_or_scalar_to_info: scalar type expected but input is {a}"
+    assert is_scalar_type(a), (
+        f"array_or_scalar_to_info: scalar type expected but input is {a}"
+    )
 
     return lambda a: (
         array_to_info(bodo.utils.conversion.coerce_to_array(a, True, True, 1, False)),

@@ -50,7 +50,7 @@ def test_numeric_window_functions(
     for i in range(len(funcs)):
         for j, col in enumerate(all_numeric_window_col_names):
             selects.append(
-                f"{funcs[i]}({col}) OVER ({window_frames[0][(i+j) % len(window_frames[0])]}) AS c_{funcs[i].lower()}_{col}"
+                f"{funcs[i]}({col}) OVER ({window_frames[0][(i + j) % len(window_frames[0])]}) AS c_{funcs[i].lower()}_{col}"
             )
     query = f"SELECT W4, {', '.join(selects)} FROM table1"
     spark_query = get_equivalent_spark_agg_query(query)
@@ -92,14 +92,16 @@ def test_two_arg_numeric_window_functions(memory_leak_check):
             "P": [(i**2) % 9 for i in range(n_rows)],
             "X": pd.array(
                 [
-                    None if i % 5 == 1 or (i**2) % 9 == 7 else Decimal(f"{i}.{i%10}")
+                    None if i % 5 == 1 or (i**2) % 9 == 7 else Decimal(f"{i}.{i % 10}")
                     for i in range(n_rows)
                 ],
                 dtype=pd.ArrowDtype(pa.decimal128(38, 1)),
             ),
             "Y": pd.array(
                 [
-                    None if i % 7 == 3 or (i**2) % 9 == 7 else Decimal(f"{i*i}.{i%10}")
+                    None
+                    if i % 7 == 3 or (i**2) % 9 == 7
+                    else Decimal(f"{i * i}.{i % 10}")
                     for i in range(n_rows)
                 ],
                 dtype=pd.ArrowDtype(pa.decimal128(38, 1)),
@@ -156,7 +158,7 @@ def test_non_numeric_window_functions(
     for i in range(len(funcs)):
         for j, col in enumerate(all_window_col_names):
             selects.append(
-                f"{funcs[i]}({col}) OVER ({window_frames[0][(i+j) % len(window_frames[0])]}) AS C_{i}_{j}"
+                f"{funcs[i]}({col}) OVER ({window_frames[0][(i + j) % len(window_frames[0])]}) AS C_{i}_{j}"
             )
             # If taking the min/max of a binary column, add the output to
             # the list of conversion columns

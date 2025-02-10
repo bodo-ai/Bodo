@@ -21,11 +21,10 @@
 
 #ifndef _WIN32
 #include <sys/mman.h>
-#define MMAP_FLAGS MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE
 #define ASSUME_ALIGNED(x) std::assume_aligned<4096>(x)
 #else
 #include <intrin.h>
-// TODO xx assume aligned
+// TODO [BSE-4556] assume aligned
 #define ASSUME_ALIGNED(x) x
 #endif
 
@@ -125,10 +124,10 @@ uint8_t* const create_frame(size_t size) {
     return static_cast<uint8_t* const>(
         mmap(/*addr*/ nullptr, size,
              /*We need both read/write access*/ PROT_READ | PROT_WRITE,
-             MMAP_FLAGS, /*fd*/ -1,
+             MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, /*fd*/ -1,
              /*offset*/ 0));
 #else
-    // TODO xxx use VirtualAlloc on Windows
+    // TODO [BSE-4556] use VirtualAlloc on Windows
     return nullptr;
 #endif
 }
@@ -261,7 +260,7 @@ void SizeClass::adviseAwayFrame(uint64_t idx) {
     }
 }
 #else
-// todo enable windows
+// TODO [BSE-4556] Enable this path on Windows.
 void SizeClass::adviseAwayFrame(uint64_t idx) { (void)idx; }
 #endif
 
@@ -836,6 +835,9 @@ BufferPoolOptions BufferPoolOptions::Defaults() {
 /// Define cross platform utilities
 #ifdef _WIN32
 inline int clzll(uint64_t x) {
+    if (x == 0) {
+        return 64;
+    }
     unsigned long index;
     _BitScanReverse64(&index, x);
     return 63 - index;
@@ -924,7 +926,7 @@ BufferPool::BufferPool(const BufferPoolOptions& options)
                                        max_num_size_classes, (uint64_t)63}));
 
 #ifdef _WIN32
-    // TODO xx enable buffer pool on Windows.
+    // TODO [BSE-4556] Enable buffer pool on Windows.
     this->malloc_threshold_ = std::numeric_limits<int64_t>::max();
 #else
     this->malloc_threshold_ =
@@ -1476,10 +1478,12 @@ void BufferPool::free_helper(uint8_t* ptr, bool is_mmap_alloc,
         frame_pinned = true;
 
 #if defined(_WIN32)
-        if (alignment < kMinAlignment) {
-            ::free(ptr);
-        } else {
+        // Calls to _aligned_malloc must be matched with a call to _aligned_free
+        // https://learn.microsoft.com/en-us/cpp/c-runtime-library/reference/aligned-malloc?view=msvc-170
+        if (alignment > kMinAlignment) {
             _aligned_free(ptr);
+        } else {
+            ::free(ptr);
         }
 #else
         ::free(ptr);

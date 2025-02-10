@@ -451,12 +451,12 @@ make_attribute_wrapper(TimestampTZArrayType, "null_bitmap", "_null_bitmap")
 @intrinsic
 def init_timestamptz_array(typingctx, data_ts, data_offset, nulls):
     """Create a TimestampTZArrayType with provided data values."""
-    assert data_ts == types.Array(
-        types.int64, 1, "C"
-    ), "timestamps must be an array of int64"
-    assert data_offset == types.Array(
-        types.int16, 1, "C"
-    ), "offsets must be an array of int16"
+    assert data_ts == types.Array(types.int64, 1, "C"), (
+        "timestamps must be an array of int64"
+    )
+    assert data_offset == types.Array(types.int16, 1, "C"), (
+        "offsets must be an array of int16"
+    )
     assert nulls == types.Array(types.uint8, 1, "C"), "nulls must be an array of uint8"
 
     def codegen(context, builder, signature, args):

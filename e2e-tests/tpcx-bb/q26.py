@@ -182,10 +182,10 @@ if __name__ == "__main__":
     with open("wssse.txt", "w") as f:
         f.write(str(ml_result_dict["wssse"]))
     if require_cache and isinstance(run_clustering, numba.core.dispatcher.Dispatcher):
-        assert (
-            run_clustering._cache_hits[run_clustering.signatures[0]] == 1
-        ), "ERROR: Bodo did not load from cache"
+        assert run_clustering._cache_hits[run_clustering.signatures[0]] == 1, (
+            "ERROR: Bodo did not load from cache"
+        )
     if require_cache and isinstance(tpcx_bb_q26_etl, numba.core.dispatcher.Dispatcher):
-        assert (
-            tpcx_bb_q26_etl._cache_hits[tpcx_bb_q26_etl.signatures[0]] == 1
-        ), "ERROR: Bodo did not load from cache"
+        assert tpcx_bb_q26_etl._cache_hits[tpcx_bb_q26_etl.signatures[0]] == 1, (
+            "ERROR: Bodo did not load from cache"
+        )

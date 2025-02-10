@@ -360,10 +360,10 @@ std::unique_ptr<PuffinFile> PuffinFile::from_theta_sketches(
             metadata.push_back({
                 "apache-datasketches-theta-v1",  // type
                 {field_id},                      // field ids
-                (long)snapshot_id,               // snapshot-id
-                (long)sequence_number,           // sequence-number
-                (long)curr_offset,               // offset
-                (long)blob.size(),               // length
+                snapshot_id,                     // snapshot-id
+                sequence_number,                 // sequence-number
+                (int64_t)curr_offset,            // offset
+                (int64_t)blob.size(),            // length
                 std::nullopt,                    // codec (absent)
                 properties                       // properties (ndv estimate)
             });

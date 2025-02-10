@@ -35,6 +35,7 @@ std::optional<std::chrono::steady_clock::time_point> start_now(bool get);
 uint64_t get_physically_installed_memory();
 
 #ifndef __FILE_NAME__
+// Windows does define __FILE_NAME__
 #define __FILE_NAME__ __FILE__
 #endif
 

@@ -132,9 +132,9 @@ if __name__ == "__main__":
 
     print("Total time: ", time.time() - t0, " s")
     if args.require_cache and isinstance(main, numba.core.dispatcher.Dispatcher):
-        assert (
-            main._cache_hits[main.signatures[0]] == 1
-        ), "ERROR: Bodo did not load from cache"
+        assert main._cache_hits[main.signatures[0]] == 1, (
+            "ERROR: Bodo did not load from cache"
+        )
 
     print("Getting table from Snowflake for comparison")
     # Get the table from Snowflake, so we can verify that
@@ -144,14 +144,14 @@ if __name__ == "__main__":
     # Compute checksum and make sure it's correct
     sf_df_checksum, len_sf_df = read_and_compute_checksum_and_len(table_name, sf_conn)
 
-    assert (
-        len_out_df == len_sf_df
-    ), f"Expected length ({len_out_df}) != Table length in Snowflake ({len_sf_df})"
+    assert len_out_df == len_sf_df, (
+        f"Expected length ({len_out_df}) != Table length in Snowflake ({len_sf_df})"
+    )
 
     # Checksum can be off-by-one due to rounding issues (e.g. in disc_price and charge columns)
-    assert (
-        1903874716870990 <= sf_df_checksum <= 1903874716871000
-    ), f"Expected checksum (between 1903874716870990 and 1903874716871000) != Checksum of table in Snowflake ({sf_df_checksum})"
+    assert 1903874716870990 <= sf_df_checksum <= 1903874716871000, (
+        f"Expected checksum (between 1903874716870990 and 1903874716871000) != Checksum of table in Snowflake ({sf_df_checksum})"
+    )
 
     # Drop the table, to avoid dangling tables on our account.
     drop_result = drop_sf_table(

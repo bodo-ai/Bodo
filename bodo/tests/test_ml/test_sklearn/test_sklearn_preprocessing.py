@@ -231,9 +231,9 @@ def test_one_hot_encoder_fit_attributes():
             and not callable(getattr(python_m, py_attr_name))
         ):
             assert hasattr(bodo_m, py_attr_name), f"{py_attr_name} not found in bodo_m"
-            assert getattr(python_m, py_attr_name) == getattr(
-                bodo_m, py_attr_name
-            ), f"Attribute {py_attr_name} does not match between python and bodo"
+            assert getattr(python_m, py_attr_name) == getattr(bodo_m, py_attr_name), (
+                f"Attribute {py_attr_name} does not match between python and bodo"
+            )
 
 
 @pytest.mark.parametrize(

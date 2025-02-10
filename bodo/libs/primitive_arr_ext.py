@@ -84,9 +84,9 @@ def overload_primitive_arr_shape(A):
 @intrinsic
 def alloc_primitive_array(typingctx, n_typ, dtype_typ):
     """Allocate a primitive array with specified length and dtype"""
-    assert isinstance(n_typ, types.Integer) and isinstance(
-        dtype_typ, types.DType
-    ), "alloc_primitive_array: invalid arg types"
+    assert isinstance(n_typ, types.Integer) and isinstance(dtype_typ, types.DType), (
+        "alloc_primitive_array: invalid arg types"
+    )
     dtype = dtype_typ.dtype
 
     def codegen(context, builder, signature, args):
@@ -113,9 +113,9 @@ def primitive_to_np(typingctx, primitive_arr_t):
     """Convert primitive array to Numpy array (view with same meminfo) to allow reusing
     Numpy operations.
     """
-    assert isinstance(
-        primitive_arr_t, PrimitiveArrayType
-    ), "primitive_to_np: primitive arr expected"
+    assert isinstance(primitive_arr_t, PrimitiveArrayType), (
+        "primitive_to_np: primitive arr expected"
+    )
     np_arr_type = types.Array(primitive_arr_t.dtype, 1, "C")
 
     def codegen(context, builder, signature, args):

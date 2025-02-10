@@ -91,12 +91,12 @@ make_attribute_wrapper(NullableTupleType, "null_values", "_null_values")
 
 @intrinsic
 def build_nullable_tuple(typingctx, data_tuple, null_values):
-    assert isinstance(
-        data_tuple, types.BaseTuple
-    ), "build_nullable_tuple 'data_tuple' argument must be a tuple"
-    assert isinstance(
-        null_values, types.BaseTuple
-    ), "build_nullable_tuple 'null_values' argument must be a tuple"
+    assert isinstance(data_tuple, types.BaseTuple), (
+        "build_nullable_tuple 'data_tuple' argument must be a tuple"
+    )
+    assert isinstance(null_values, types.BaseTuple), (
+        "build_nullable_tuple 'null_values' argument must be a tuple"
+    )
 
     # Unliteral to prevent mismatch when Null value may or may not be
     # known at compile time. This occurs when typing with dummy values.

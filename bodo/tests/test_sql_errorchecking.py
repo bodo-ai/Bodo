@@ -14,7 +14,7 @@ from bodo.tests.utils import (
 )
 from bodo.utils.typing import BodoError
 
-pytestmark = pytest.mark.sql
+pytestmark = [pytest.mark.sql, pytest.mark.slow]
 
 
 @pytest.mark.slow
