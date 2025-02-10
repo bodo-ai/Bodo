@@ -45,9 +45,9 @@ def test_plan_caching_basic(memory_leak_check, tmp_path):
         expected_cache_loc = BodoSqlPlanCache.get_cache_loc(query)
 
         # Verify that the file exists. Read the file and do some keyword checks.
-        assert os.path.isfile(
-            expected_cache_loc
-        ), f"Plan not found at expected cache location ({expected_cache_loc})"
+        assert os.path.isfile(expected_cache_loc), (
+            f"Plan not found at expected cache location ({expected_cache_loc})"
+        )
 
         with open(expected_cache_loc) as f:
             plan_str = f.read()

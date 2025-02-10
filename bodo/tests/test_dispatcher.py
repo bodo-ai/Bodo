@@ -21,6 +21,6 @@ def test_reduce_pipeline_class():
 
     unpickle_f = cloudpickle.loads(pickled_f)
 
-    assert (
-        unpickle_f._compiler.pipeline_class == bodo.compiler.BodoCompiler
-    ), "expected f to use BodoCompiler as it's pipeline"
+    assert unpickle_f._compiler.pipeline_class == bodo.compiler.BodoCompiler, (
+        "expected f to use BodoCompiler as it's pipeline"
+    )

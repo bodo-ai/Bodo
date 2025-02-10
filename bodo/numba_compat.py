@@ -1915,6 +1915,8 @@ def CacheImpl__init__(self, py_func):
     )
 
     conf_str_hash = hashlib.md5(get_sql_config_str().encode()).hexdigest()
+    # Remove unnecessary prefix to make path shorter (important on Windows)
+    fullname = fullname.removeprefix("<string>.")
     self._filename_base = f"{self.get_filename_base(fullname, abiflags)}bodo{bodo_version}-{conf_str_hash}"
 
 
@@ -6842,7 +6844,7 @@ class BodoCacheLocator(numba.core.caching._CacheLocator):
         cache_path = numba.config.CACHE_DIR
     else:
         appdirs = AppDirs(appname="bodo", appauthor=False)
-        cache_path = os.path.join(appdirs.user_cache_dir, ".bodo_strfunc_cache")
+        cache_path = os.path.join(appdirs.user_cache_dir, ".strfunc_cache")
 
     def __init__(self, py_func, py_file):
         source = BodoCacheLocator.registered_funcs[py_func.__qualname__]

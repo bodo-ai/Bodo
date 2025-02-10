@@ -45,7 +45,7 @@ class IcebergJavaError(IcebergError):
         elif isinstance(e, Py4JNetworkError):
             return cls("Unexpected Py4J Network Error: " + str(e))
         else:
-            assert isinstance(
-                e, Py4JError
-            ), "from_java_error(): Only Py4JErrors should be handled."
+            assert isinstance(e, Py4JError), (
+                "from_java_error(): Only Py4JErrors should be handled."
+            )
             return cls("Unexpected Py4J Error: " + str(e))

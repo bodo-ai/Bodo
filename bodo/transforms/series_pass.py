@@ -1963,9 +1963,9 @@ class SeriesPass:
                 else:
                     assert (
                         isinstance(t, types.SliceType) and t.has_step == False
-                    ) or isinstance(
-                        t, types.Integer
-                    ), "only simple slice without step supported for reading hdf5"
+                    ) or isinstance(t, types.Integer), (
+                        "only simple slice without step supported for reading hdf5"
+                    )
 
             func_text = "def _h5_read_impl(dset_id, ndim, dtype_str, index):\n"
 
@@ -2177,10 +2177,7 @@ class SeriesPass:
             nodes = []
 
             func_text = (
-                ""
-                "def _get_indices(S):\n"
-                "    n = len(S)\n"
-                "    return np.arange(n)\n"
+                "def _get_indices(S):\n    n = len(S)\n    return np.arange(n)\n"
             )
 
             loc_vars = {}

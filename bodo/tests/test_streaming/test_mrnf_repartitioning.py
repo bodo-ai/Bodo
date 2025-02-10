@@ -196,24 +196,28 @@ def _test_helper(
         assert_success = comm.allreduce(assert_success, op=MPI.LAND)
         assert assert_success
 
-    assert (
-        global_output.shape[0] == expected_output_size
-    ), f"Final output size ({global_output.shape[0]}) is not as expected ({expected_output_size})"
+    assert global_output.shape[0] == expected_output_size, (
+        f"Final output size ({global_output.shape[0]}) is not as expected ({expected_output_size})"
+    )
 
     # After the build step, all memory should've been released:
     assert_success = final_bytes_pinned == 0
     assert_success = comm.allreduce(assert_success, op=MPI.LAND)
-    assert (
-        assert_success
-    ), f"Final bytes pinned by the Operator BufferPool ({final_bytes_pinned}) is not 0!"
+    assert assert_success, (
+        f"Final bytes pinned by the Operator BufferPool ({final_bytes_pinned}) is not 0!"
+    )
 
     assert_success = final_bytes_allocated == 0
     assert_success = comm.allreduce(assert_success, op=MPI.LAND)
-    assert assert_success, f"Final bytes allocated by the Operator BufferPool ({final_bytes_allocated}) is not 0!"
+    assert assert_success, (
+        f"Final bytes allocated by the Operator BufferPool ({final_bytes_allocated}) is not 0!"
+    )
 
     assert_success = final_partition_state == expected_partition_state
     assert_success = comm.allreduce(assert_success, op=MPI.LAND)
-    assert assert_success, f"Final partition state ({final_partition_state}) is not as expected ({expected_partition_state})"
+    assert assert_success, (
+        f"Final partition state ({final_partition_state}) is not as expected ({expected_partition_state})"
+    )
 
     pd.testing.assert_frame_equal(
         global_output.sort_values(list(expected_out.columns)).reset_index(drop=True),

@@ -278,9 +278,9 @@ def overload_format_iceberg_conn_njit(conn):  # pragma: no cover
 
         return impl
     else:
-        assert isinstance(
-            conn, IcebergConnectionType
-        ), f"format_iceberg_conn_njit: Invalid type for conn, got {conn}"
+        assert isinstance(conn, IcebergConnectionType), (
+            f"format_iceberg_conn_njit: Invalid type for conn, got {conn}"
+        )
 
         def impl(conn):
             return conn.conn_str

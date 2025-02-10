@@ -617,12 +617,12 @@ def test_malloc_allocation():
         assert not size_class.is_in_range(allocation)
         num_blocks = size_class.get_num_blocks()
         for frame_idx in range(num_blocks):
-            assert not size_class.is_frame_mapped(
-                frame_idx
-            ), f"Frame at index {frame_idx} is mapped even though it shouldn't be!"
-            assert not size_class.is_frame_pinned(
-                frame_idx
-            ), f"Frame at index {frame_idx} is pinned even though it shouldn't be!"
+            assert not size_class.is_frame_mapped(frame_idx), (
+                f"Frame at index {frame_idx} is mapped even though it shouldn't be!"
+            )
+            assert not size_class.is_frame_pinned(frame_idx), (
+                f"Frame at index {frame_idx} is pinned even though it shouldn't be!"
+            )
 
     # Free allocation
     pool.free(allocation)
@@ -895,12 +895,12 @@ def test_larger_than_pool_allocation():
         size_class: SizeClass = pool.get_size_class(size_class_idx)
         num_blocks = size_class.get_num_blocks()
         for frame_idx in range(num_blocks):
-            assert not size_class.is_frame_mapped(
-                frame_idx
-            ), f"Frame at index {frame_idx} is mapped even though it shouldn't be!"
-            assert not size_class.is_frame_pinned(
-                frame_idx
-            ), f"Frame at index {frame_idx} is pinned even though it shouldn't be!"
+            assert not size_class.is_frame_mapped(frame_idx), (
+                f"Frame at index {frame_idx} is mapped even though it shouldn't be!"
+            )
+            assert not size_class.is_frame_pinned(frame_idx), (
+                f"Frame at index {frame_idx} is pinned even though it shouldn't be!"
+            )
 
     # Cleanup and delete pool (to be conservative)
     pool.cleanup()
@@ -1417,12 +1417,12 @@ def test_reallocate_0_to_mmap():
         size_class: SizeClass = pool.get_size_class(size_class_idx)
         num_blocks = size_class.get_num_blocks()
         for frame_idx in range(num_blocks):
-            assert not size_class.is_frame_mapped(
-                frame_idx
-            ), f"Frame at index {frame_idx} is mapped even though it shouldn't be!"
-            assert not size_class.is_frame_pinned(
-                frame_idx
-            ), f"Frame at index {frame_idx} is pinned even though it shouldn't be!"
+            assert not size_class.is_frame_mapped(frame_idx), (
+                f"Frame at index {frame_idx} is mapped even though it shouldn't be!"
+            )
+            assert not size_class.is_frame_pinned(frame_idx), (
+                f"Frame at index {frame_idx} is pinned even though it shouldn't be!"
+            )
 
     assert pool.bytes_allocated() == 0
     assert pool.max_memory() == 0
@@ -1479,12 +1479,12 @@ def test_reallocate_0_to_malloc():
         size_class: SizeClass = pool.get_size_class(size_class_idx)
         num_blocks = size_class.get_num_blocks()
         for frame_idx in range(num_blocks):
-            assert not size_class.is_frame_mapped(
-                frame_idx
-            ), f"Frame at index {frame_idx} is mapped even though it shouldn't be!"
-            assert not size_class.is_frame_pinned(
-                frame_idx
-            ), f"Frame at index {frame_idx} is pinned even though it shouldn't be!"
+            assert not size_class.is_frame_mapped(frame_idx), (
+                f"Frame at index {frame_idx} is mapped even though it shouldn't be!"
+            )
+            assert not size_class.is_frame_pinned(frame_idx), (
+                f"Frame at index {frame_idx} is pinned even though it shouldn't be!"
+            )
 
     assert pool.bytes_allocated() == 0
     assert pool.max_memory() == 0
@@ -1496,12 +1496,12 @@ def test_reallocate_0_to_malloc():
         size_class: SizeClass = pool.get_size_class(size_class_idx)
         num_blocks = size_class.get_num_blocks()
         for frame_idx in range(num_blocks):
-            assert not size_class.is_frame_mapped(
-                frame_idx
-            ), f"Frame at index {frame_idx} is mapped even though it shouldn't be!"
-            assert not size_class.is_frame_pinned(
-                frame_idx
-            ), f"Frame at index {frame_idx} is pinned even though it shouldn't be!"
+            assert not size_class.is_frame_mapped(frame_idx), (
+                f"Frame at index {frame_idx} is mapped even though it shouldn't be!"
+            )
+            assert not size_class.is_frame_pinned(frame_idx), (
+                f"Frame at index {frame_idx} is pinned even though it shouldn't be!"
+            )
 
     assert pool.bytes_allocated() == 5 * 1024
     assert pool.max_memory() == 5 * 1024
@@ -2546,9 +2546,9 @@ def test_extra_frames_no_enforcement():
     ]:
         size_class_: SizeClass = pool.get_size_class(idx)
         n_blocks = size_class_.get_num_blocks()
-        assert (
-            n_blocks == exp_num_frames
-        ), f"Expected SizeClass at idx {idx} to have {exp_num_frames} frames but it has {n_blocks} frames instead!"
+        assert n_blocks == exp_num_frames, (
+            f"Expected SizeClass at idx {idx} to have {exp_num_frames} frames but it has {n_blocks} frames instead!"
+        )
 
     assert pool.bytes_pinned() == 0
     assert pool.bytes_allocated() == 0
@@ -2586,9 +2586,9 @@ def test_extra_frames_no_enforcement():
     ]:
         size_class_: SizeClass = pool.get_size_class(idx)
         n_blocks = size_class_.get_num_blocks()
-        assert (
-            n_blocks == exp_num_frames
-        ), f"Expected SizeClass at idx {idx} to have {exp_num_frames} frames but it has {n_blocks} frames instead!"
+        assert n_blocks == exp_num_frames, (
+            f"Expected SizeClass at idx {idx} to have {exp_num_frames} frames but it has {n_blocks} frames instead!"
+        )
 
     assert pool.bytes_pinned() == 0
     assert pool.bytes_allocated() == 0
@@ -2615,9 +2615,9 @@ def test_extra_frames_no_enforcement():
     ]:
         size_class_: SizeClass = pool.get_size_class(idx)
         n_blocks = size_class_.get_num_blocks()
-        assert (
-            n_blocks == exp_num_frames
-        ), f"Expected SizeClass at idx {idx} to have {exp_num_frames} frames but it has {n_blocks} frames instead!"
+        assert n_blocks == exp_num_frames, (
+            f"Expected SizeClass at idx {idx} to have {exp_num_frames} frames but it has {n_blocks} frames instead!"
+        )
 
     assert pool.bytes_pinned() == 0
     assert pool.bytes_allocated() == 0

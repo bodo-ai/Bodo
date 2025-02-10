@@ -940,9 +940,9 @@ def test_no_files_after_filter_pushdown(
         where TY IS NULL;
         """
     )
-    assert (
-        py_out.shape[0] == 0
-    ), f"Expected DataFrame to be empty, found {py_out.shape[0]} rows instead."
+    assert py_out.shape[0] == 0, (
+        f"Expected DataFrame to be empty, found {py_out.shape[0]} rows instead."
+    )
 
     check_func(impl, (table_name, conn, db_schema), py_output=py_out)
 
@@ -973,9 +973,9 @@ def test_snapshot_id(iceberg_database, iceberg_table_conn, memory_leak_check):
         py_out = py_out.toPandas()
         spark_snapshot_id = py_out.iloc[0, 0]
     snapshot_id, spark_snapshot_id = comm.bcast((snapshot_id, spark_snapshot_id))
-    assert (
-        snapshot_id == spark_snapshot_id
-    ), "Bodo loaded snapshot id doesn't match spark"
+    assert snapshot_id == spark_snapshot_id, (
+        "Bodo loaded snapshot id doesn't match spark"
+    )
 
 
 @pytest.mark.slow
@@ -1377,9 +1377,9 @@ def test_basic_write_replace(
         if base_name == "DT_TSZ_TABLE":
             py_out["B"] = py_out["B"].astype("datetime64[ns]")
     else:
-        assert (
-            read_behavior == "bodo"
-        ), "Read Behavior can only be either `spark` or `bodo`"
+        assert read_behavior == "bodo", (
+            "Read Behavior can only be either `spark` or `bodo`"
+        )
         py_out = bodo.jit()(lambda: pd.read_sql_table(table_name, conn, db_schema))()
         py_out = _gather_output(py_out)
 
@@ -1399,9 +1399,9 @@ def test_basic_write_replace(
             .select("data_type")
             .head()
         )
-        assert (
-            table_cmt is None
-        ), "Expected table comment to be None, but actual comment is not None"
+        assert table_cmt is None, (
+            "Expected table comment to be None, but actual comment is not None"
+        )
     passed = comm.bcast(passed)
     assert passed == 1
 
@@ -1543,9 +1543,9 @@ def test_basic_write_new_append(
             .select("data_type")
             .head()
         )
-        assert (
-            table_cmt is None
-        ), "Expected table comment to be None, but actual comment is not None"
+        assert table_cmt is None, (
+            "Expected table comment to be None, but actual comment is not None"
+        )
 
         passed = _test_equal_guard(
             bodo_out,
@@ -1637,9 +1637,9 @@ def _verify_pq_schema_in_files(
             for data_file in data_files:
                 pq_file = pq.ParquetFile(data_file)
                 file_schema = pq_file.schema.to_arrow_schema()
-                assert expected_schema.equals(
-                    file_schema, check_metadata=True
-                ), data_file
+                assert expected_schema.equals(file_schema, check_metadata=True), (
+                    data_file
+                )
         except Exception as e:
             err = "".join(traceback.format_exception(None, e, e.__traceback__))
             passed = 0
@@ -2448,9 +2448,9 @@ def test_iceberg_missing_optional_column(iceberg_database, iceberg_table_conn):
             write_table_name, db_schema
         )
 
-        assert (
-            list(spark_out["B"]).count(None) == 100
-        ), "Missing column not filled with nulls on spark read"
+        assert list(spark_out["B"]).count(None) == 100, (
+            "Missing column not filled with nulls on spark read"
+        )
 
         # Read the columns with Bodo and check that the missing column is filled
         # with NAs.
@@ -2459,9 +2459,9 @@ def test_iceberg_missing_optional_column(iceberg_database, iceberg_table_conn):
             return pd.read_sql_table(table_name, conn, db_schema)
 
         bodo_out = read_bodo(write_table_name, conn, db_schema)
-        assert (
-            reduce_sum(bodo_out["B"].isna().sum()) == 100
-        ), "Missing column not filled with nulls on Bodo read"
+        assert reduce_sum(bodo_out["B"].isna().sum()) == 100, (
+            "Missing column not filled with nulls on Bodo read"
+        )
     finally:
         if bodo.get_rank() == 0:
             spark.sql(
@@ -2622,18 +2622,18 @@ def test_iceberg_middle_optional_column(iceberg_database, iceberg_table_conn):
             spark_out, _, _ = spark_reader.read_iceberg_table(
                 write_table_name, db_schema
             )
-            assert (
-                spark_out["B"].isna().sum() == 100
-            ), "Missing column not filled with nulls on spark read"
-            assert (
-                spark_out["C"].map(lambda x: x["f2"]).isna().sum() == 100
-            ), "Missing field not filled with nulls on spark read"
-            assert (
-                bodo_out["B"].isna().sum() == 100
-            ), "Missing column not filled with nulls on Bodo read"
-            assert (
-                bodo_out["C"].map(lambda x: x["f2"]).isna().sum() == 100
-            ), "Missing field not filled with nulls on Bodo read"
+            assert spark_out["B"].isna().sum() == 100, (
+                "Missing column not filled with nulls on spark read"
+            )
+            assert spark_out["C"].map(lambda x: x["f2"]).isna().sum() == 100, (
+                "Missing field not filled with nulls on spark read"
+            )
+            assert bodo_out["B"].isna().sum() == 100, (
+                "Missing column not filled with nulls on Bodo read"
+            )
+            assert bodo_out["C"].map(lambda x: x["f2"]).isna().sum() == 100, (
+                "Missing field not filled with nulls on Bodo read"
+            )
             bodo_out = convert_non_pandas_columns(bodo_out)
             spark_out = convert_non_pandas_columns(spark_out)
             assert _test_equal_guard(
@@ -3184,14 +3184,14 @@ def _test_file_part(file_name: str, part_spec: list[PartitionField]):
         trans_col = ARRAY_TRANSFORM_FUNC[trans](df[col], tval)
 
         if expected_val is None:
-            assert (
-                trans_col.isnull()
-            ).all(), "Partition value does not equal the result after applying the transformation"
+            assert (trans_col.isnull()).all(), (
+                "Partition value does not equal the result after applying the transformation"
+            )
         else:
             expected_col = pd.Series([expected_val]).astype(trans_col.dtype)[0]
-            assert (
-                trans_col == expected_col
-            ).all(), "Partition value does not equal the result after applying the transformation"
+            assert (trans_col == expected_col).all(), (
+                "Partition value does not equal the result after applying the transformation"
+            )
 
 
 def _test_file_sorted(file_name: str, sort_order: list[SortField]):

@@ -154,7 +154,7 @@ class Spawner:
             self.worker_intercomm.bcast(os.getpid(), self.bcast_root)
             self.worker_intercomm.send(socket.gethostname(), dest=0)
         debug_msg(
-            self.logger, f"Spawned {n_pes} workers in {(time.monotonic()-t0):0.4f}s"
+            self.logger, f"Spawned {n_pes} workers in {(time.monotonic() - t0):0.4f}s"
         )
         self.exec_intercomm_addr = MPI._addressof(self.worker_intercomm)
 
