@@ -42,6 +42,7 @@ jobs:
       os: 'windows-latest'
     secrets: inherit
 
+  # TODO: enabke spawn mode tests
   # spawn-ci:
   #   needs: [compile-bodo]
   #   name: Test Spawn
