@@ -760,8 +760,6 @@ static std::unique_ptr<S3StorageManager> MakeS3(
                                               size_class_bytes, true);
 }
 
-// Azure filesystem is currently broken on windows:
-// https://github.com/apache/arrow/issues/41990
 #ifndef _WIN32
 using AzureStorageManager = ArrowStorageManager<arrow::fs::AzureFileSystem>;
 static std::unique_ptr<AzureStorageManager> MakeAzure(
@@ -807,7 +805,7 @@ using AzureStorageManager = StorageManager;
 static std::unique_ptr<AzureStorageManager> MakeAzure(
     const std::shared_ptr<StorageOptions> options,
     const std::span<const uint64_t> size_class_bytes) {
-    // Including AzureFileSystem leads to a compilation error on Windows.
+    // Using AzureFileSystem leads to a compilation error on Windows.
     // https://github.com/apache/arrow/issues/41990
     throw std::runtime_error(
         "MakeAzure: arrow::fs::AzureFileSystem Not supported on Windows.");
