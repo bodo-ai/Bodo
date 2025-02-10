@@ -90,7 +90,6 @@ jobs:
       - name: Download Hadoop for SAS
         if: steps.hadoop-cache.outputs.cache-hit != 'true'
         run: |
-          choco install wget -y
           wget -O hadoop.tar.gz "https://www.apache.org/dyn/mirrors/mirrors.cgi?action=download&filename=hadoop/common/hadoop-3.3.2/hadoop-3.3.2.tar.gz"
         shell: bash
 

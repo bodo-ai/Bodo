@@ -1,5 +1,6 @@
 name: Run PR CI on Windows
 on:
+  pull_request:
   workflow_dispatch:
 
 # Limit CI to cancel previous runs in the same PR
