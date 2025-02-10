@@ -103,7 +103,7 @@ def test_s3_tables_catalog_iceberg_write(s3_tables_catalog, memory_leak_check):
             "s3_tables_catalog", **{"s3tables.warehouse": s3_tables_catalog.warehouse}
         )
         try:
-            catalog.purge_table(f"write_namespace.{table_name}")
+            catalog.drop_table(f"write_namespace.{table_name}")
         except Exception:
             if exception_occurred_in_test_body:
                 pass
