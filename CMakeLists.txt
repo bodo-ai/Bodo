@@ -32,7 +32,7 @@ function(set_default_compiler_options)
   endif()
 
   if (WIN32)
-    # TODO xx: enable warnings.
+    # TODO [BSE-4559]: enable warnings.
     add_compile_options(
       "/wd4819" # Suppress warnings about file character encoding
       "/wd4996" # Suppress warnings about deprecated functions
@@ -234,12 +234,12 @@ if("$ENV{CONDA_PREFIX}" STREQUAL "")
     unset(BUILD_ONLY)
     unset(ENABLE_TESTING)
 elseif(WIN32)
- find_package(AWSSDK REQUIRED COMPONENTS core)
+  find_package(AWSSDK REQUIRED COMPONENTS core)
 endif()
 
 if(WIN32)
- find_package(CURL REQUIRED)
- find_package(OpenSSL REQUIRED)
+  find_package(CURL REQUIRED)
+  find_package(OpenSSL REQUIRED)
 endif()
 
 # Add boost as a dependency
@@ -832,10 +832,10 @@ else()
   )
 endif()
 
-
 target_link_directories(ext PRIVATE ${PYARROW_LIB_DIR} "${Python_NumPy_INCLUDE_DIR}/../lib")
 
 target_include_directories(ext PRIVATE ${datasketches_INSTALL_DIR}/include/DataSketches)
+
 target_compile_definitions(ext PRIVATE ARROW_PYTHON_EXPORTING)
 
 target_link_libraries(ext PRIVATE
@@ -855,7 +855,6 @@ if (NOT WIN32)
   # We use the header-only version of boost::json: https://www.boost.org/doc/libs/1_87_0/libs/json/doc/html/json/overview.html
   target_link_libraries(ext PRIVATE pthread ${Boost_LIBRARIES})
 else()
-  target_compile_definitions(ext PRIVATE)
   target_link_libraries(ext PRIVATE
     CURL::libcurl
     OpenSSL::SSL

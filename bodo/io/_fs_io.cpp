@@ -467,6 +467,8 @@ void open_outstream(Bodo_Fs::FsEnum fs_option, bool is_parallel,
             CHECK_ARROW_AND_ASSIGN(result, "AzureFileSystem::OpenOutputStream",
                                    *out_stream, file_type)
 #else
+            // Using AzureFileSystem leads to a compilation error on Windows.
+            // https://github.com/apache/arrow/issues/41990
             throw std::runtime_error(
                 "open_outstream: AzureFileSystem not supported on Windows.");
 #endif
