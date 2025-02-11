@@ -36,7 +36,7 @@ jobs:
       echo "##vso[task.prependpath]$HOME/.pixi/bin"
     displayName: Install Pixi
 
-  - bash: pixi install -v --locked -e azure
+  - bash: sudo pixi install -v --locked -e azure
     displayName: Install Test Environment
 
   - bash: |
