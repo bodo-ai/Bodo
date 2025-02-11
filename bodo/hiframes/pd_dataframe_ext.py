@@ -178,7 +178,9 @@ class DataFrameType(types.ArrayCompatible):  # TODO: IterableType over column na
         self.is_table_format = is_table_format
         # If columns is None, we are determining the number of columns art runtime.
         if columns is None:
-            assert is_table_format, "Determining columns at runtime is only supported for DataFrame with table format"
+            assert is_table_format, (
+                "Determining columns at runtime is only supported for DataFrame with table format"
+            )
             # If we have columns determined at runtime, we change the arguments to create the table.
             self.table_type = TableType(tuple(data[:-1]), True)
         else:
@@ -1046,7 +1048,9 @@ def construct_dataframe(
     dataframe_payload.data = data_tup
     dataframe_payload.index = index_val
     if colnames is not None:
-        assert df_type.has_runtime_cols, "construct_dataframe can only provide colnames if columns are determined at runtime"
+        assert df_type.has_runtime_cols, (
+            "construct_dataframe can only provide colnames if columns are determined at runtime"
+        )
         dataframe_payload.columns = colnames
 
     # create meminfo and store payload
@@ -1089,7 +1093,9 @@ def init_runtime_cols_dataframe(typingctx, data_typ, index_typ, colnames_index_t
         isinstance(data_typ, types.BaseTuple)
         and isinstance(data_typ.dtype, TableType)
         and data_typ.dtype.has_runtime_cols
-    ), "init_runtime_cols_dataframe must be called with a table that determines columns at runtime."
+    ), (
+        "init_runtime_cols_dataframe must be called with a table that determines columns at runtime."
+    )
     assert bodo.hiframes.pd_index_ext.is_pd_index_type(
         colnames_index_typ
     ) or isinstance(
@@ -1132,9 +1138,9 @@ def init_dataframe(typingctx, data_tup_typ, index_typ, col_names_typ):
     data has changed, and get the array variables from init_dataframe() args if
     not changed.
     """
-    assert is_pd_index_type(index_typ) or isinstance(
-        index_typ, MultiIndexType
-    ), "init_dataframe(): invalid index type"
+    assert is_pd_index_type(index_typ) or isinstance(index_typ, MultiIndexType), (
+        "init_dataframe(): invalid index type"
+    )
 
     n_cols = len(data_tup_typ.types)
     if n_cols == 0:
@@ -1142,19 +1148,20 @@ def init_dataframe(typingctx, data_tup_typ, index_typ, col_names_typ):
 
     untyperefed_col_names_typ = unwrap_typeref(col_names_typ)
 
-    assert (
-        isinstance(untyperefed_col_names_typ, ColNamesMetaType)
-        and isinstance(untyperefed_col_names_typ.meta, tuple)
-    ), "Third argument to init_dataframe must be of type ColNamesMetaType, and must contain a tuple of column names"
+    assert isinstance(untyperefed_col_names_typ, ColNamesMetaType) and isinstance(
+        untyperefed_col_names_typ.meta, tuple
+    ), (
+        "Third argument to init_dataframe must be of type ColNamesMetaType, and must contain a tuple of column names"
+    )
     column_names = untyperefed_col_names_typ.meta
 
     # handle the new table format
     if n_cols == 1 and isinstance(data_tup_typ.types[0], TableType):
         n_cols = len(data_tup_typ.types[0].arr_types)
 
-    assert (
-        len(column_names) == n_cols
-    ), "init_dataframe(): number of column names does not match number of columns"
+    assert len(column_names) == n_cols, (
+        "init_dataframe(): number of column names does not match number of columns"
+    )
 
     # get data array types for new table format
     is_table_format = False
@@ -1441,9 +1448,9 @@ def lower_get_dataframe_all_data(context, builder, sig, args):
 @intrinsic
 def get_dataframe_column_names(typingctx, df_typ):
     """return internal column names for dataframe with runtime columns"""
-    assert (
-        df_typ.has_runtime_cols
-    ), "get_dataframe_column_names() expects columns to be determined at runtime"
+    assert df_typ.has_runtime_cols, (
+        "get_dataframe_column_names() expects columns to be determined at runtime"
+    )
 
     def codegen(context, builder, signature, args):
         dataframe_payload = get_dataframe_payload(
@@ -2300,9 +2307,9 @@ def _tuple_to_table_format_decoded(typingctx, df_typ):
     arrays to string arrays. This leads to
     a cast and is used to test casting between formats.
     """
-    assert (
-        not df_typ.is_table_format
-    ), "_tuple_to_table_format requires a tuple format input"
+    assert not df_typ.is_table_format, (
+        "_tuple_to_table_format requires a tuple format input"
+    )
 
     def codegen(context, builder, signature, args):
         # Force a cast.
@@ -2335,9 +2342,9 @@ def _table_to_tuple_format_decoded(typingctx, df_typ):
     a cast and is used to test casting between formats.
     """
 
-    assert (
-        df_typ.is_table_format
-    ), "_tuple_to_table_format requires a table format input"
+    assert df_typ.is_table_format, (
+        "_tuple_to_table_format requires a table format input"
+    )
 
     def codegen(context, builder, signature, args):
         # Force a cast
@@ -4853,26 +4860,26 @@ def to_csv_overload(
             with bodo.no_warning_objmode(D="unicode_type"):
                 D = df.to_csv(
                     path_or_buf,
-                    sep,
-                    na_rep,
-                    float_format,
-                    columns,
-                    header,
-                    index,
-                    index_label,
-                    mode,
-                    encoding,
-                    compression,
-                    quoting,
-                    quotechar,
-                    lineterminator,
-                    chunksize,
-                    date_format,
-                    doublequote,
-                    escapechar,
-                    decimal,
-                    errors,
-                    storage_options,
+                    sep=sep,
+                    na_rep=na_rep,
+                    float_format=float_format,
+                    columns=columns,
+                    header=header,
+                    index=index,
+                    index_label=index_label,
+                    mode=mode,
+                    encoding=encoding,
+                    compression=compression,
+                    quoting=quoting,
+                    quotechar=quotechar,
+                    lineterminator=lineterminator,
+                    chunksize=chunksize,
+                    date_format=date_format,
+                    doublequote=doublequote,
+                    escapechar=escapechar,
+                    decimal=decimal,
+                    errors=errors,
+                    storage_options=storage_options,
                 )
             return D
 
@@ -4908,26 +4915,26 @@ def to_csv_overload(
         with bodo.no_warning_objmode(D="unicode_type"):
             D = df.to_csv(
                 None,
-                sep,
-                na_rep,
-                float_format,
-                columns,
-                header,
-                index,
-                index_label,
-                mode,
-                encoding,
-                compression,
-                quoting,
-                quotechar,
-                lineterminator,
-                chunksize,
-                date_format,
-                doublequote,
-                escapechar,
-                decimal,
-                errors,
-                storage_options,
+                sep=sep,
+                na_rep=na_rep,
+                float_format=float_format,
+                columns=columns,
+                header=header,
+                index=index,
+                index_label=index_label,
+                mode=mode,
+                encoding=encoding,
+                compression=compression,
+                quoting=quoting,
+                quotechar=quotechar,
+                lineterminator=lineterminator,
+                chunksize=chunksize,
+                date_format=date_format,
+                doublequote=doublequote,
+                escapechar=escapechar,
+                decimal=decimal,
+                errors=errors,
+                storage_options=storage_options,
             )
 
         bodo.io.fs_io.csv_write(path_or_buf, D, _bodo_file_prefix)
@@ -4994,18 +5001,18 @@ def to_json_overload(
             with bodo.no_warning_objmode(D="unicode_type"):
                 D = df.to_json(
                     path_or_buf,
-                    orient,
-                    date_format,
-                    double_precision,
-                    force_ascii,
-                    date_unit,
-                    default_handler,
-                    lines,
-                    compression,
-                    index,
-                    indent,
-                    storage_options,
-                    mode,
+                    orient=orient,
+                    date_format=date_format,
+                    double_precision=double_precision,
+                    force_ascii=force_ascii,
+                    date_unit=date_unit,
+                    default_handler=default_handler,
+                    lines=lines,
+                    compression=compression,
+                    index=index,
+                    indent=indent,
+                    storage_options=storage_options,
+                    mode=mode,
                 )
             return D
 
@@ -5033,18 +5040,18 @@ def to_json_overload(
         with bodo.no_warning_objmode(D="unicode_type"):
             D = df.to_json(
                 None,
-                orient,
-                date_format,
-                double_precision,
-                force_ascii,
-                date_unit,
-                default_handler,
-                lines,
-                compression,
-                index,
-                indent,
-                storage_options,
-                mode,
+                orient=orient,
+                date_format=date_format,
+                double_precision=double_precision,
+                force_ascii=force_ascii,
+                date_unit=date_unit,
+                default_handler=default_handler,
+                lines=lines,
+                compression=compression,
+                index=index,
+                indent=indent,
+                storage_options=storage_options,
+                mode=mode,
             )
 
         # Assuming that path_or_buf is a string

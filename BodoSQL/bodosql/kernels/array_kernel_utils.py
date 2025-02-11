@@ -235,9 +235,9 @@ def gen_vectorized(
         involved).
     - Nulls are never converted to non-null values.
     """
-    assert not (
-        res_list and support_dict_encoding
-    ), "Cannot use res_list with support_dict_encoding"
+    assert not (res_list and support_dict_encoding), (
+        "Cannot use res_list with support_dict_encoding"
+    )
 
     if are_arrays is None:
         are_arrays = [bodo.utils.utils.is_array_typ(typ) for typ in arg_types]
@@ -250,12 +250,12 @@ def gen_vectorized(
     # 'S'/'?' arguments are scalars.
     use_dict_synthesis = False
     if synthesize_dict_if_vector is not None:
-        assert (
-            synthesize_dict_setup_text is not None
-        ), "synthesize_dict_setup_text must be provided if synthesize_dict_if_vector is provided"
-        assert (
-            synthesize_dict_scalar_text is not None
-        ), "synthesize_dict_scalar_text must be provided if synthesize_dict_if_vector is provided"
+        assert synthesize_dict_setup_text is not None, (
+            "synthesize_dict_setup_text must be provided if synthesize_dict_if_vector is provided"
+        )
+        assert synthesize_dict_scalar_text is not None, (
+            "synthesize_dict_scalar_text must be provided if synthesize_dict_if_vector is provided"
+        )
         use_dict_synthesis = True
         for i in range(len(arg_types)):
             if are_arrays[i] and synthesize_dict_if_vector[i] == "S":

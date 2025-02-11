@@ -524,9 +524,9 @@ def is_cached(pytestconfig):
 
 
 @pytest.fixture(scope="session")
-def iceberg_database() -> (
-    Generator[Callable[[list[str] | str], tuple[str, str]], None, None]
-):
+def iceberg_database() -> Generator[
+    Callable[[list[str] | str], tuple[str, str]], None, None
+]:
     """
     Create and populate Iceberg test tables.
     """
@@ -815,9 +815,9 @@ def tabular_connection(request):
     Returns the catalog url, warehouse name, and credential.
     """
     assert "TABULAR_CREDENTIAL" in os.environ, "TABULAR_CREDENTIAL is not set"
-    assert (
-        request.node.get_closest_marker("tabular") is not None
-    ), "tabular marker not set"
+    assert request.node.get_closest_marker("tabular") is not None, (
+        "tabular marker not set"
+    )
     # Unset the AWS credentials to avoid using them
     # to confirm that the tests are getting aws credentials from Tabular
     with temp_env_override(

@@ -1975,7 +1975,7 @@ def test_change_sort_order(iceberg_database, iceberg_table_conn, memory_leak_che
         spark.sql(
             f"""
                 ALTER TABLE hadoop_prod.{DATABASE_NAME}.{table_name}
-                WRITE ORDERED BY {', '.join(sort_defs)}
+                WRITE ORDERED BY {", ".join(sort_defs)}
             """
         )
 

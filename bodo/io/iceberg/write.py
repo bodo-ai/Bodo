@@ -311,9 +311,9 @@ def add_iceberg_field_id_md_to_pa_schema(
     """
     import bodo_iceberg_connector as bic
 
-    assert (
-        bodo.get_rank() == 0
-    ), "bodo/io/iceberg.py::add_iceberg_field_id_md_to_pa_schema must be called from rank 0 only"
+    assert bodo.get_rank() == 0, (
+        "bodo/io/iceberg.py::add_iceberg_field_id_md_to_pa_schema must be called from rank 0 only"
+    )
 
     if ref_schema is None:
         new_fields = []
@@ -557,13 +557,13 @@ def get_table_details_before_write(
                 # Ensure that all column names in the partition spec and sort order are
                 # in the DataFrame being written
                 for col_name, *_ in partition_spec:
-                    assert (
-                        col_name in col_name_to_idx_map
-                    ), f"Iceberg Partition column {col_name} not found in dataframe"
+                    assert col_name in col_name_to_idx_map, (
+                        f"Iceberg Partition column {col_name} not found in dataframe"
+                    )
                 for col_name, *_ in sort_order:
-                    assert (
-                        col_name in col_name_to_idx_map
-                    ), f"Iceberg Sort column {col_name} not found in dataframe"
+                    assert col_name in col_name_to_idx_map, (
+                        f"Iceberg Sort column {col_name} not found in dataframe"
+                    )
 
                 # Transform the partition spec and sort order tuples to convert
                 # column name to index in Bodo table
@@ -841,9 +841,9 @@ def remove_transaction(
     """
     import bodo_iceberg_connector
 
-    assert (
-        bodo.get_rank() == 0
-    ), "bodo/io/iceberg.py::remove_transaction must be called from rank 0 only"
+    assert bodo.get_rank() == 0, (
+        "bodo/io/iceberg.py::remove_transaction must be called from rank 0 only"
+    )
 
     bodo_iceberg_connector.remove_transaction(
         transaction_id, conn_str, db_name, table_name
@@ -875,9 +875,9 @@ def fetch_puffin_metadata(
     """
     import bodo_iceberg_connector
 
-    assert (
-        bodo.get_rank() == 0
-    ), "bodo/io/iceberg.py::fetch_puffin_metadata must be called from rank 0 only"
+    assert bodo.get_rank() == 0, (
+        "bodo/io/iceberg.py::fetch_puffin_metadata must be called from rank 0 only"
+    )
 
     ev = tracing.Event("fetch_puffin_file_metadata")
     metadata = bodo_iceberg_connector.fetch_puffin_metadata(
@@ -909,9 +909,9 @@ def commit_statistics_file(
     """
     import bodo_iceberg_connector
 
-    assert (
-        bodo.get_rank() == 0
-    ), "bodo/io/iceberg.py::commit_statistics_file must be called from rank 0 only"
+    assert bodo.get_rank() == 0, (
+        "bodo/io/iceberg.py::commit_statistics_file must be called from rank 0 only"
+    )
 
     ev = tracing.Event("commit_statistics_file")
     bodo_iceberg_connector.commit_statistics_file(
@@ -924,9 +924,9 @@ def commit_statistics_file(
 def table_columns_have_theta_sketches(conn_str: str, db_name: str, table_name: str):
     import bodo_iceberg_connector
 
-    assert (
-        bodo.get_rank() == 0
-    ), "bodo/io/iceberg.py::table_columns_have_theta_sketches must be called from rank 0 only"
+    assert bodo.get_rank() == 0, (
+        "bodo/io/iceberg.py::table_columns_have_theta_sketches must be called from rank 0 only"
+    )
     return bodo_iceberg_connector.table_columns_have_theta_sketches(
         conn_str, db_name, table_name
     )
@@ -946,9 +946,9 @@ def table_columns_enabled_theta_sketches(conn_str: str, db_name: str, table_name
     """
     import bodo_iceberg_connector
 
-    assert (
-        bodo.get_rank() == 0
-    ), "bodo/io/iceberg.py::table_columns_enabled_theta_sketches must be called from rank 0 only"
+    assert bodo.get_rank() == 0, (
+        "bodo/io/iceberg.py::table_columns_enabled_theta_sketches must be called from rank 0 only"
+    )
     return bodo_iceberg_connector.table_columns_enabled_theta_sketches(
         conn_str, db_name, table_name
     )
@@ -964,9 +964,9 @@ def get_old_statistics_file_path(
     """
     import bodo_iceberg_connector
 
-    assert (
-        bodo.get_rank() == 0
-    ), "bodo/io/iceberg.py::get_old_statistics_file_path must be called from rank 0 only"
+    assert bodo.get_rank() == 0, (
+        "bodo/io/iceberg.py::get_old_statistics_file_path must be called from rank 0 only"
+    )
     return bodo_iceberg_connector.get_old_statistics_file_path(
         txn_id, conn_str, db_name, table_name
     )
@@ -1071,9 +1071,9 @@ def wrap_start_write(
     """
     import bodo_iceberg_connector as bic
 
-    assert (
-        bodo.get_rank() == 0
-    ), "bodo/io/iceberg.py::wrap_start_write must be called from rank 0 only"
+    assert bodo.get_rank() == 0, (
+        "bodo/io/iceberg.py::wrap_start_write must be called from rank 0 only"
+    )
 
     return bic.start_write(
         conn,

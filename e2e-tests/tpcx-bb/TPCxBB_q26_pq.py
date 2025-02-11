@@ -107,6 +107,6 @@ if __name__ == "__main__":
     q26(ss_file, i_file, q26_i_category_IN, q26_count_ss_item_sk)
 
     if require_cache and isinstance(q26, numba.core.dispatcher.Dispatcher):
-        assert (
-            q26._cache_hits[q26.signatures[0]] == 1
-        ), "ERROR: Bodo did not load from cache"
+        assert q26._cache_hits[q26.signatures[0]] == 1, (
+            "ERROR: Bodo did not load from cache"
+        )

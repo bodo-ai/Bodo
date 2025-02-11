@@ -86,9 +86,9 @@ def json_file_chunk_reader(
     """
     # TODO: Update storage options to pyobject once the type is updated to do refcounting
     # properly.
-    assert (
-        storage_options_t == storage_options_dict_type
-    ), "Storage options don't match expected type"
+    assert storage_options_t == storage_options_dict_type, (
+        "Storage options don't match expected type"
+    )
 
     def codegen(context, builder, sig, args):
         fnty = lir.FunctionType(

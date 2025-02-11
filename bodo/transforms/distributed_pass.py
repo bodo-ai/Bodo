@@ -2553,10 +2553,7 @@ class DistributedPass:
         assert not (
             self._is_1D_or_1D_Var_arr(lhs)
             and func_name in bodo.utils.utils.np_alloc_callnames
-        ), (
-            "allocation calls handled separately "
-            "'empty', 'zeros', 'ones', 'full' etc."
-        )
+        ), "allocation calls handled separately 'empty', 'zeros', 'ones', 'full' etc."
         out = [assign]
         scope = assign.target.scope
         loc = assign.loc
@@ -4041,9 +4038,9 @@ class DistributedPass:
         parfor.loop_nests[0].stop = new_stop_var
 
         for arr, index, _ in array_accesses:
-            assert not guard(
-                _is_transposed_array, self.func_ir, arr
-            ), "1D_Var parfor for transposed parallel array not supported"
+            assert not guard(_is_transposed_array, self.func_ir, arr), (
+                "1D_Var parfor for transposed parallel array not supported"
+            )
 
         # see if parfor index is used in compute other than array access
         # (e.g. argmin)

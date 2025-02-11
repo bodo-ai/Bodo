@@ -338,8 +338,8 @@ def test_mrnf_order_edgecases(
             SELECT
                 I,
                 ROW_NUMBER() OVER(
-                    PARTITION BY {', '.join(partition_cols)}
-                    ORDER BY {', '.join(order_cols)}) as rn
+                    PARTITION BY {", ".join(partition_cols)}
+                    ORDER BY {", ".join(order_cols)}) as rn
             FROM table1
         )
     WHERE rn = 1

@@ -1728,7 +1728,7 @@ def test_object_filter_keys(
         if isinstance(keys_to_filter[i], str):
             arg_text.append(repr(keys_to_filter[i]))
         else:
-            arg_text.append(f"arg{i+1}")
+            arg_text.append(f"arg{i + 1}")
     func_text = f"def impl({raw_arg_text}):\n"
     func_text += f"   res = bodosql.kernels.object_filter_keys(({', '.join(arg_text)},), {keep_mode}, scalars)\n"
     if any(isinstance(arg, pd.Series) for arg in keys_to_filter + (json_data, answer)):

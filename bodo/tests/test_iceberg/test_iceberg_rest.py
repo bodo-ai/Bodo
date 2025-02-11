@@ -164,6 +164,6 @@ def test_iceberg_tabular_write_basic(
             "CI",
             table_name,
         )
-        assert (
-            not write_complete or delete_succeeded
-        ), f"Cleanup failed, {table_name} may need manual cleanup"
+        assert not write_complete or delete_succeeded, (
+            f"Cleanup failed, {table_name} may need manual cleanup"
+        )

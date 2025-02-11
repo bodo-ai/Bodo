@@ -52,9 +52,9 @@ def get_iceberg_file_list(
     """
     import bodo_iceberg_connector as bic
 
-    assert (
-        bodo.get_rank() == 0
-    ), "get_iceberg_file_list should only ever be called on rank 0, as the operation requires access to the py4j server, which is only available on rank 0"
+    assert bodo.get_rank() == 0, (
+        "get_iceberg_file_list should only ever be called on rank 0, as the operation requires access to the py4j server, which is only available on rank 0"
+    )
 
     try:
         return bic.get_bodo_parquet_info(conn, database_schema, table_name, filters)
@@ -78,9 +78,9 @@ def get_iceberg_snapshot_id(table_name: str, conn: str, database_schema: str) ->
     """
     import bodo_iceberg_connector
 
-    assert (
-        bodo.get_rank() == 0
-    ), "get_iceberg_snapshot_id should only ever be called on rank 0, as the operation requires access to the py4j server, which is only available on rank 0"
+    assert bodo.get_rank() == 0, (
+        "get_iceberg_snapshot_id should only ever be called on rank 0, as the operation requires access to the py4j server, which is only available on rank 0"
+    )
 
     try:
         return bodo_iceberg_connector.bodo_connector_get_current_snapshot_id(
@@ -193,7 +193,7 @@ def get_iceberg_file_list_parallel(
                 log_msg = f"Total number of files is {total_num_files}. Reading {num_files_read} files: {file_list}"
 
                 if num_files_read > num_files_to_list:
-                    log_msg += f", ... and {num_files_read-num_files_to_list} more."
+                    log_msg += f", ... and {num_files_read - num_files_to_list} more."
             else:
                 log_msg = f"Total number of files is {total_num_files}. Reading {num_files_read} files."
 

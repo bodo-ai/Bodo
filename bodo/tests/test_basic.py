@@ -1062,9 +1062,10 @@ def test_objmode_types():
             B, C = f(A)
         return B, C
 
-    check_func(impl, (np.arange(11),))
+    # Setting data type here is necessary since Windows with Numpy <2 defaults to int32
+    check_func(impl, (np.arange(11, dtype=np.int64),))
     check_func(impl2, (), only_seq=True)
-    check_func(impl3, (np.arange(11),))
+    check_func(impl3, (np.arange(11, dtype=np.int64),))
 
 
 def test_enumerate_unituple(memory_leak_check):
