@@ -620,9 +620,9 @@ def is_cached(pytestconfig):
 
 
 @pytest.fixture(scope="session")
-def iceberg_database() -> (
-    Generator[Callable[[list[str] | str], tuple[str, str]], None, None]
-):
+def iceberg_database() -> Generator[
+    Callable[[list[str] | str], tuple[str, str]], None, None
+]:
     """
     Create and populate Iceberg test tables.
     """
@@ -1010,9 +1010,9 @@ def polaris_connection(request, polaris_server, aws_polaris_warehouse):
     Fixture to create a connection to the polaris warehouse.
     Returns the catalog url, warehouse name, and credential.
     """
-    assert (
-        request.node.get_closest_marker("polaris") is not None
-    ), "polaris marker not set"
+    assert request.node.get_closest_marker("polaris") is not None, (
+        "polaris marker not set"
+    )
     # Unset the AWS credentials to avoid using them
     # to confirm that the tests are getting aws credentials from polaris
     with temp_env_override(

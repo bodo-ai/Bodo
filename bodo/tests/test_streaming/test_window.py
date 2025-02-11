@@ -674,22 +674,22 @@ def test_multi_function_repartition(capfd):
             assert_success = expected_log_message in err
         assert assert_success
 
-    assert (
-        output.shape[0] == expected_output_size
-    ), f"Final output size ({output.shape[0]}) is not as expected ({expected_output_size})"
+    assert output.shape[0] == expected_output_size, (
+        f"Final output size ({output.shape[0]}) is not as expected ({expected_output_size})"
+    )
 
     # After the build step, all memory should've been released:
-    assert (
-        final_bytes_pinned == 0
-    ), f"Final bytes pinned by the Operator BufferPool ({final_bytes_pinned}) is not 0!"
+    assert final_bytes_pinned == 0, (
+        f"Final bytes pinned by the Operator BufferPool ({final_bytes_pinned}) is not 0!"
+    )
 
-    assert (
-        final_bytes_allocated == 0
-    ), f"Final bytes allocated by the Operator BufferPool ({final_bytes_allocated}) is not 0!"
+    assert final_bytes_allocated == 0, (
+        f"Final bytes allocated by the Operator BufferPool ({final_bytes_allocated}) is not 0!"
+    )
 
-    assert (
-        final_partition_state == expected_partition_state
-    ), f"Final partition state ({final_partition_state}) is not as expected ({expected_partition_state})"
+    assert final_partition_state == expected_partition_state, (
+        f"Final partition state ({final_partition_state}) is not as expected ({expected_partition_state})"
+    )
 
     pd.testing.assert_frame_equal(
         output.sort_values(list(expected_out.columns)).reset_index(drop=True),
@@ -759,7 +759,7 @@ def test_multi_function_repartition(capfd):
             pd.DataFrame(
                 {
                     "IDX": range(1000),
-                    "O": [f"{(i//10):02}" for i in range(1000)],
+                    "O": [f"{(i // 10):02}" for i in range(1000)],
                 }
             ),
             pd.DataFrame(
@@ -777,7 +777,7 @@ def test_multi_function_repartition(capfd):
                 {
                     "IDX": range(1000),
                     "O": pd.array(
-                        [f"{(i//10):02}" for i in range(1000)],
+                        [f"{(i // 10):02}" for i in range(1000)],
                         dtype=pd.ArrowDtype(pa.dictionary(pa.int32(), pa.string())),
                     ),
                 },

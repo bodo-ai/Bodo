@@ -929,9 +929,9 @@ def major_types_nullable(request):
     have a distinct column for sorting called ORDERBY_COl.
     """
     df = request.param.copy()
-    assert not (
-        len(df) % 3
-    ), "Appending a boolean column requires the DataFrame to be divisible by 3"
+    assert not (len(df) % 3), (
+        "Appending a boolean column requires the DataFrame to be divisible by 3"
+    )
     df["COND_COL"] = pd.Series([True, False, None] * (len(df) // 3))
     df["ORDERBY_COl"] = np.arange(len(df))
     return {"TABLE1": df}

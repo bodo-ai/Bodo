@@ -24,6 +24,8 @@ from bodo.tests.utils import (
 )
 from bodo.utils.utils import is_expr
 
+pytestmark = pytest.mark.slow
+
 
 def _check_column_dels(bodo_func, col_del_lists):
     """
@@ -64,9 +66,9 @@ def _check_column_dels(bodo_func, col_del_lists):
                             break
                     assert removed, f"Unexpected Del Column list {col_nums}"
                     col_del_lists.pop(to_pop)
-    assert (
-        not col_del_lists
-    ), f"Some expected del columns were not encountered: {col_del_lists}"
+    assert not col_del_lists, (
+        f"Some expected del columns were not encountered: {col_del_lists}"
+    )
 
 
 @pytest.fixture(params=["csv", "parquet"])
@@ -1558,7 +1560,7 @@ def test_table_column_del_past_setitem(memory_leak_check, datapath, file_type):
     func_text += "def impl():\n"
     func_text += f"    df = pd.read_{file_type}({filename!r})\n"
     for i in range(num_layers):
-        func_text += f"    df['Column{i+1}'] = df['Column{i}']\n"
+        func_text += f"    df['Column{i + 1}'] = df['Column{i}']\n"
 
     func_text += f"    return df['Column{num_layers + 1}']\n"
 
@@ -1585,7 +1587,7 @@ def test_table_column_filter_past_setitem(memory_leak_check, datapath, num_layer
     func_text += "def impl():\n"
     func_text += f"    df = pd.read_parquet({filename!r})\n"
     for i in range(num_layers):
-        func_text += f"    df['Column{i+1}'] = df['Column{i}']\n"
+        func_text += f"    df['Column{i + 1}'] = df['Column{i}']\n"
     func_text += "    df2 = df[df['Column96'] > 10]\n"
     # func_text += f"    df2 = df\n"
     func_text += f"    return df2['Column{num_layers + 1}']\n"
@@ -2005,9 +2007,9 @@ def test_concat_tables_used_cols(datapath, memory_leak_check):
                     used_cols = bodo.utils.typing.unwrap_typeref(
                         typemap[kws["used_cols"].name]
                     )
-                    assert used_cols == bodo.utils.typing.MetaType(
-                        (3, 6)
-                    ), "invalid used_cols"
+                    assert used_cols == bodo.utils.typing.MetaType((3, 6)), (
+                        "invalid used_cols"
+                    )
 
     assert found, "concat_tables not found."
 

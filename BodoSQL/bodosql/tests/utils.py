@@ -1486,9 +1486,9 @@ def _get_dist_df(df, var_length=False, check_typing_issues=True):
     get distributed chunk for a dataframe df on current rank (for input to test functions).
     Wrapper around bodo's _get_dist_arg that requires a dataframe input
     """
-    assert isinstance(
-        df, pd.DataFrame
-    ), "Error: _get_dist_df was passed a non dataframe object"
+    assert isinstance(df, pd.DataFrame), (
+        "Error: _get_dist_df was passed a non dataframe object"
+    )
 
     return _get_dist_arg(
         df, var_length=var_length, check_typing_issues=check_typing_issues
@@ -1587,9 +1587,9 @@ def check_num_parquet_readers(bodo_func, n):
             if isinstance(stmt, bodo.ir.parquet_ext.ParquetReader):
                 num_pq_readers += 1
 
-    assert (
-        num_pq_readers == n
-    ), "Number of ParquetReaders in the IR doesn't match the expectation"
+    assert num_pq_readers == n, (
+        "Number of ParquetReaders in the IR doesn't match the expectation"
+    )
 
 
 def create_pyspark_schema_from_dataframe(df):

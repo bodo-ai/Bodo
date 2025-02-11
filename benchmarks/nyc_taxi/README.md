@@ -61,6 +61,8 @@ In order to run the Bodo benchmark:
 5. Install the Bodo SDK using `pip install bodosdk`.
 6. Run the script: `python bodo/run_bodo.py` which will create a cluster, run the benchmark 3 times and print the results to your local terminal.
 
+> :warning: The Bodo Platform uses a forked version of Arrow to improve parquet read performance. The fork can be found [here](https://github.com/bodo-ai/arrow-cpp-feedstock) and [here](https://github.com/bodo-ai/pyarrow-feedstock).
+
 ### Dask
 
 In order to run the Dask benchmark:

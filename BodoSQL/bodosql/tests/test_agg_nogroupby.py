@@ -525,9 +525,9 @@ def test_agg_replicated(datapath, memory_leak_check):
     #       see https://bodo.atlassian.net/browse/BSE-1970
     # assert count_array_OneDs() > 1, "Expected distributed read from parquet"
     f_ir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
-    assert dist_IR_contains(
-        f_ir, "dist_reduce"
-    ), "Expected distributed reduction in the compute."
+    assert dist_IR_contains(f_ir, "dist_reduce"), (
+        "Expected distributed reduction in the compute."
+    )
 
 
 @pytest.mark.parametrize(

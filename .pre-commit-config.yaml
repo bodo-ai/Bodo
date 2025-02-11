@@ -18,7 +18,7 @@ repos:
         args: [--allow-missing-credentials]
   # Python
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.8.6
+    rev: v0.9.4
     hooks:
       - id: ruff
         args: [ --fix, --exit-non-zero-on-fix ]
@@ -40,7 +40,7 @@ repos:
         args: ["--autofix"]
   # C++
   - repo: https://github.com/pre-commit/mirrors-clang-format
-    rev: v19.1.6
+    rev: v19.1.7
     hooks:
       - id: clang-format
         types_or: [c++]
@@ -48,7 +48,7 @@ repos:
           (?x)^(bodo/libs/vendored/.*)$
   # GitHub Actions
   - repo: https://github.com/rhysd/actionlint
-    rev: v1.7.6
+    rev: v1.7.7
     hooks:
       - id: actionlint
 

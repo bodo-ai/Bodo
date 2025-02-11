@@ -48,7 +48,7 @@ def regexp_strings():
             "fun",
             "WHEE",
             "\n\t    \nz \v   \v\fy x\r",
-            "<...>!!!" " \t\n",
+            "<...>!!! \t\n",
             ' "$(2<}',
             "A1F096",
             "alphabet soup is delicious",

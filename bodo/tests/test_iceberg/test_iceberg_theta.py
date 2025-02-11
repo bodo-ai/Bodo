@@ -11,7 +11,7 @@ from bodo.io.iceberg.stream_iceberg_write import (
     iceberg_writer_init,
     read_puffin_file_ndvs,
 )
-from bodo.io.iceberg.write import table_columns_have_theta_sketches
+from bodo.io.iceberg.theta import table_columns_have_theta_sketches
 from bodo.ir.sql_ext import remove_iceberg_prefix
 from bodo.tests.iceberg_database_helpers.metadata_utils import (
     get_metadata_field,
@@ -184,9 +184,9 @@ def check_ndv_metadata(
     metadata_path = get_metadata_path(warehouse_loc, db_schema, table_name)
     statistics_lst = get_metadata_field(metadata_path, "statistics")
     print("statistics_lst", statistics_lst)
-    assert (
-        len(statistics_lst) == num_statistics
-    ), f"Expected only {num_statistics} statistics file(s)"
+    assert len(statistics_lst) == num_statistics, (
+        f"Expected only {num_statistics} statistics file(s)"
+    )
     if num_statistics > 1:
         # Need to fetch the latest snapshot and iterate through them to select the match statistics file
         latest_snapshot_id = get_metadata_field(metadata_path, "current-snapshot-id")
@@ -195,9 +195,9 @@ def check_ndv_metadata(
                 statistics = entry
                 break
     elif num_statistics == 0:
-        assert (
-            len(statistics_lst) == 0
-        ), "Found a statistics file when none should exist"
+        assert len(statistics_lst) == 0, (
+            "Found a statistics file when none should exist"
+        )
         return None
     else:
         statistics = statistics_lst[0]
@@ -213,9 +213,9 @@ def check_ndv_metadata(
         assert field in expected_ndvs, "Unexpected field ID blob"
         assert ndv == expected_ndvs[field], f"Incorrect NDV for blob {field}"
         seen_fields.add(field)
-    assert len(seen_fields) == len(
-        expected_ndvs
-    ), "An expected column didn't have a theta sketch"
+    assert len(seen_fields) == len(expected_ndvs), (
+        "An expected column didn't have a theta sketch"
+    )
     # Check the puffin file exists, can be read, and the theta sketch is correct.
     return statistics["statistics-path"]
 

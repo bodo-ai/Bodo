@@ -31,7 +31,7 @@ this_module = sys.modules[__name__]
 
 # We don't technically need to get class from the method,
 # but it's useful to avoid IDE not found errors.
-BodoLinearSVCType = install_py_obj_class(
+BodoLinearSVCType, _ = install_py_obj_class(
     types_name="linear_svc_type",
     python_type=sklearn.svm.LinearSVC,
     module=this_module,

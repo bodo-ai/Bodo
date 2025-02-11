@@ -151,8 +151,7 @@ def test_snowflake_write_drop_internal_stage(is_temporary, memory_leak_check):
     try:
         if bodo.get_rank() == 0:
             show_stages_sql = (
-                "SHOW STAGES "
-                "/* tests.test_sql:test_snowflake_drop_internal_stage() */"
+                "SHOW STAGES /* tests.test_sql:test_snowflake_drop_internal_stage() */"
             )
             all_stages = cursor.execute(show_stages_sql, _is_internal=True).fetchall()
             all_stage_names = [x[1] for x in all_stages]
@@ -419,9 +418,9 @@ def test_snowflake_write_create_table_handle_exists():
                 "TRANSIENT",
                 "TEMPORARY",
             ), "Table type is not an expected value"
-            assert (
-                first_table_creation_time[4] == "TRANSIENT"
-            ), "Table schema is not TRANSIENT"
+            assert first_table_creation_time[4] == "TRANSIENT", (
+                "Table schema is not TRANSIENT"
+            )
 
             describe_table_columns_sql = (
                 f"DESCRIBE TABLE {table_name} TYPE=COLUMNS "
@@ -2200,9 +2199,9 @@ def test_decimal_sub_38_precision_write(memory_leak_check):
             bodo.jit(cache=False)(impl)(conn)
             table_info = pd.read_sql(f"DESCRIBE TABLE {read_table_name}", conn)
             expected_types = ["NUMBER(25,0)"]
-            assert (
-                table_info["type"].to_list() == expected_types
-            ), "Incorrect type found"
+            assert table_info["type"].to_list() == expected_types, (
+                "Incorrect type found"
+            )
             # Verify the result of an except query with these tables is empty
             result = pd.read_sql(
                 f"SELECT * FROM {write_table_name} EXCEPT SELECT * FROM {read_table_name}",
@@ -2251,9 +2250,9 @@ def test_aborted_detached_query(memory_leak_check):
         cur.execute("show parameters like 'ABORT_DETACHED_QUERY'")
         rows = cur.fetchall()
         result = rows[0][1]
-        assert (
-            result.lower() == "false"
-        ), "ABORT_DETACHED_QUERY not set to False by snowflake_connect()"
+        assert result.lower() == "false", (
+            "ABORT_DETACHED_QUERY not set to False by snowflake_connect()"
+        )
     finally:
         pd.read_sql(f"alter user set ABORT_DETACHED_QUERY={old_value}", conn)
 
@@ -2345,6 +2344,6 @@ def test_create_table_with_comments(memory_leak_check):
         )
         assert len(table_info == 1), "Wrong number of tables found"
         assert table_info["rows"][0] == 5, "Wrong number of rows"
-        assert (
-            table_info["comment"][0] == "Records of notable events"
-        ), "Wrong table comment"
+        assert table_info["comment"][0] == "Records of notable events", (
+            "Wrong table comment"
+        )

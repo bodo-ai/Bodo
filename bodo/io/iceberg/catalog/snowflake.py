@@ -207,9 +207,9 @@ class SnowflakeCatalog(MetastoreCatalog):
         if _fs_scheme.scheme == "s3":
             _fs_props.update(self._generate_s3_access_credentials())
         elif _fs_scheme.scheme == "gcs":
-            assert os.environ.get(
-                "GOOGLE_APPLICATION_CREDENTIALS"
-            ), "GOOGLE_APPLICATION_CREDENTIALS not set. This is required for GCS access."
+            assert os.environ.get("GOOGLE_APPLICATION_CREDENTIALS"), (
+                "GOOGLE_APPLICATION_CREDENTIALS not set. This is required for GCS access."
+            )
         else:
             warnings.warn(f"Unsupported filesystem scheme: {_fs_scheme.scheme}")
 

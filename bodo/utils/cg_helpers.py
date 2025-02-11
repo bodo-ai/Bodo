@@ -581,9 +581,9 @@ def meminfo_to_np_arr(context, builder, meminfo, meminfo_offset, length, arrtype
 
     from numba.np.arrayobj import get_itemsize, populate_array
 
-    assert (
-        arrtype.ndim == 1 and arrtype.layout == "C"
-    ), "meminfo_to_np_arr: 1D array type with C layout expected"
+    assert arrtype.ndim == 1 and arrtype.layout == "C", (
+        "meminfo_to_np_arr: 1D array type with C layout expected"
+    )
 
     arr = context.make_array(arrtype)(context, builder)
 

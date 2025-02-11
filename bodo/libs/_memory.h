@@ -179,6 +179,12 @@ struct BufferPoolOptions {
     /// enforced.
     bool _allocate_extra_frames = true;
 
+    /// @brief Flag indicating if Bodo is running on a remote system
+    /// such as a cloud instance or the platform. Indicates that the pool
+    /// can perform more dangerous actions without the risk of swap or other
+    /// OS actions being a concern.
+    bool remote_mode = false;
+
     static BufferPoolOptions Defaults();
 
     /// @brief Is tracing mode enabled?
@@ -1012,6 +1018,9 @@ class BufferPool final : public IBufferPool {
      * @return ::arrow::Status
      */
     ::arrow::Status evict_handler(uint64_t bytes, const std::string& caller);
+
+    /// @brief Construct a user-facing error message for OOMs.
+    std::string oom_err_msg(uint64_t requested_bytes) const;
 };
 
 // Default STL allocator that plugs in the central buffer pool (used in bodo.ext
