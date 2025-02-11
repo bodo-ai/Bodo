@@ -17,38 +17,6 @@ else()
   set (X86 FALSE)
 endif()
 
-# -------------------- Include for All Targets in General ---------------------
-function(include_general_directories)
-  if (WIN32)
-    set(CONDA_INCLUDE_DIR "$ENV{CONDA_PREFIX}\\Library\\include")
-    set(CONDA_LIB_DIR "$ENV{CONDA_PREFIX}\\Library\\lib")
-  else()
-    set(CONDA_INCLUDE_DIR "$ENV{CONDA_PREFIX}/include")
-    set(CONDA_LIB_DIR "$ENV{CONDA_PREFIX}/lib")
-  endif()
-
-  cmake_print_variables(CONDA_INCLUDE_DIR)
-  cmake_print_variables(CONDA_LIB_DIR)
-
-  # This is supposed to work, but isn't. I don't know why
-  # include_directories(SYSTEM "${CONDA_INCLUDE_DIR}")
-  # Similarly, the following line doesn't work
-  # target_include_directories(ext SYSTEM PRIVATE ${CONDA_INCLUDE_DIR})
-  # In both cases, I'm certain that CMake believes that the directory is included
-  # But the Ninja file and GCC / Clang command doesn't include the directory
-  # TODO: Figure out what's going on here
-  # As an alternative, we can manually construct the generated arguments
-  # and append to the CMAKE_*_FLAGS variables directly
-
-  if (WIN32)
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /external:I ${CONDA_INCLUDE_DIR}")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /external:I ${CONDA_INCLUDE_DIR} /permissive-")
-  else()
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -isystem ${CONDA_INCLUDE_DIR}")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -isystem ${CONDA_INCLUDE_DIR}")
-  endif()
-endfunction()
-
 # ------------------------- Enable Compilation Caches -------------------------
 # Enable CCache or SCCache if Found
 # CCache is very useful when developing C++ code, because on
