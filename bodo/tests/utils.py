@@ -3354,11 +3354,6 @@ def nullable_float_arr_maker(L, to_null, to_nan):
     dtype: Float64
     """
     S = _nullable_float_arr_maker(L, to_null, to_nan)
-    # Remove the bodo metadata. It improperly assigns
-    # 1D_Var to the series which interferes with the test
-    # functionality. Deleting the metadata sets it back to
-    # the default of REP distribution.
-    del S._bodo_meta
     return S
 
 
@@ -3375,7 +3370,7 @@ def _nullable_float_arr_maker(L, to_null, to_nan):
             A[i] = np.nan
         else:
             A[i] = L[i]
-    return pd.Series(A)
+    return A
 
 
 def cast_dt64_to_ns(df):
