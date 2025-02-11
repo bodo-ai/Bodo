@@ -50,7 +50,9 @@ try:
     from pyiceberg.table import Transaction
 except ImportError:
     # PyIceberg is not installed
-    pass
+    Catalog = None
+    PartitionSpec = None
+    Transaction = None
 
 this_module = sys.modules[__name__]
 _, iceberg_catalog_type = install_py_obj_class(

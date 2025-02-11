@@ -197,8 +197,8 @@ public class BodoIcebergHandler {
    * @return An existing table file for snapshot of the table in the current transaction state.
    */
   public @Nonnull String getStatisticsFilePath(String tableId) {
-    Table table = loadTable(TableIdentifier.of(tableId));
-    Snapshot snapshot = txn.table().currentSnapshot();
+    Table table = loadTable(tableId);
+    Snapshot snapshot = table.currentSnapshot();
     if (snapshot == null) {
       throw new RuntimeException(
           "Table does not have a snapshot. Cannot get statistics file location.");
