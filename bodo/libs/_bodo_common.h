@@ -82,6 +82,9 @@ void Bodo_PyErr_SetString(PyObject* type, const char* message);
 #if defined(_WIN32)
 #include <__msvc_int128.hpp>
 
+template <typename T>
+concept FloatOrDouble = std::is_same_v<T, float> || std::is_same_v<T, double>;
+
 // Subclass std::_Signed128 to add missing C++ operators
 // such as casting and conversion.
 // Avoiding error checking and exceptions to behave like a native
@@ -94,15 +97,8 @@ struct __int128_t : std::_Signed128 {
     template <std::integral T>
     constexpr __int128_t(T in_val) noexcept : std::_Signed128(in_val) {}
 
-    __int128_t(float in_val) {
-        _Word[0] = in_val;
-        _Word[1] = 0;
-    }
-
-    __int128_t(double in_val) {
-        _Word[0] = in_val;
-        _Word[1] = 0;
-    }
+    template <FloatOrDouble T>
+    __int128_t(T in_val);
 
     operator float() const { return _Word[0]; }
 

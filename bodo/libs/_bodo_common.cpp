@@ -541,6 +541,69 @@ std::unique_ptr<Schema> Schema::Project(
 
 // ---------------------------------------------------------------------------
 
+#if defined(_WIN32)
+
+template <FloatOrDouble T>
+__int128_t::__int128_t(T in_val) {
+    _Word[0] = _Word[1] = 0;
+
+    // Return 0 for NaN and infinity special cases
+    if (std::isnan(in_val) || std::isinf(in_val)) {
+        return;
+    }
+
+    // Check the sign and get magnitude
+    bool negative = (in_val < 0.0f);
+    double mag =
+        negative ? -static_cast<double>(in_val) : static_cast<double>(in_val);
+
+    // If magnitude < 1, the integer part is 0
+    if (mag < 1.0L) {
+        return;
+    }
+
+    // Saturate if mag >= 2^127
+    static const double TWO_POW_127 = std::ldexpl((double)1.0, 127);
+    if (mag >= TWO_POW_127) {
+        // Saturate to INT128_MAX or INT128_MIN
+        if (!negative) {
+            _Word[0] = 0xFFFFFFFFFFFFFFFFULL;
+            _Word[1] = 0x7FFFFFFFFFFFFFFFULL;
+        } else {
+            _Word[0] = 0ULL;
+            _Word[1] = static_cast<int64_t>(0x8000000000000000ULL);
+        }
+        return;
+    }
+
+    // Divide the long double by 2^64 to get the "high" part.
+    // floorl(...) ensures we only keep the integer part.
+    static const double TWO_POW_64 = std::ldexpl((double)1.0, 64);
+    ;
+    long double hiPart = std::floorl(mag / TWO_POW_64);
+    long double loPart = mag - hiPart * TWO_POW_64;
+
+    uint64_t lo64 = static_cast<uint64_t>(loPart);
+    uint64_t hi64 = static_cast<uint64_t>(hiPart);
+
+    _Word[0] = lo64;
+    _Word[1] = hi64;
+
+    if (negative) {
+        // -x = ~x + 1
+        uint64_t negLo = ~_Word[0] + 1ULL;
+        uint64_t negHi = ~_Word[1];
+        if (negLo == 0ULL) {
+            // carry into high part
+            negHi += 1;
+        }
+        _Word[0] = negLo;
+        _Word[1] = negHi;
+    }
+}
+
+#endif
+
 std::shared_ptr<arrow::Array> to_arrow(const std::shared_ptr<array_info> arr) {
     arrow::TimeUnit::type time_unit = arrow::TimeUnit::NANO;
     return bodo_array_to_arrow(bodo::BufferPool::DefaultPtr(), std::move(arr),
