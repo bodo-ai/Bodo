@@ -632,9 +632,9 @@ def is_cached(pytestconfig):
 
 
 @pytest.fixture(scope="session")
-def iceberg_database() -> (
-    Generator[Callable[[list[str] | str], tuple[str, str]], None, None]
-):
+def iceberg_database() -> Generator[
+    Callable[[list[str] | str], tuple[str, str]], None, None
+]:
     """
     Create and populate Iceberg test tables.
     """
@@ -1045,12 +1045,12 @@ def azure_polaris_warehouse(polaris_token, polaris_server, polaris_package):
         PolarisDefaultApi,
     )
 
-    assert (
-        os.environ.get("AZURE_STORAGE_ACCOUNT_NAME") is not None
-    ), "AZURE_STORAGE_ACCOUNT_NAME not set"
-    assert (
-        os.environ.get("AZURE_STORAGE_ACCOUNT_KEY") is not None
-    ), "AZURE_STORAGE_ACCOUNT_KEY not set"
+    assert os.environ.get("AZURE_STORAGE_ACCOUNT_NAME") is not None, (
+        "AZURE_STORAGE_ACCOUNT_NAME not set"
+    )
+    assert os.environ.get("AZURE_STORAGE_ACCOUNT_KEY") is not None, (
+        "AZURE_STORAGE_ACCOUNT_KEY not set"
+    )
 
     host, port, _, _ = polaris_server
 
@@ -1074,7 +1074,7 @@ def azure_polaris_warehouse(polaris_token, polaris_server, polaris_package):
             name=catalog_name,
             type="INTERNAL",
             properties={
-                "default-base-location": f"abfs://polaris-unittests@{os.environ.get("AZURE_STORAGE_ACCOUNT_NAME")}.dfs.core.windows.net/{suffix}"
+                "default-base-location": f"abfs://polaris-unittests@{os.environ.get('AZURE_STORAGE_ACCOUNT_NAME')}.dfs.core.windows.net/{suffix}"
             },
             storage_config_info=storage_conf,
         )
@@ -1108,9 +1108,9 @@ def polaris_connection(
     Fixture to create a connection to the polaris warehouse.
     Returns the catalog url, warehouse name, and credential.
     """
-    assert (
-        request.node.get_closest_marker("polaris") is not None
-    ), "polaris marker not set"
+    assert request.node.get_closest_marker("polaris") is not None, (
+        "polaris marker not set"
+    )
     host, port, user, password = polaris_server
     url = f"http://{host}:{port}/api/catalog"
     if request.param == "aws_polaris_warehouse":

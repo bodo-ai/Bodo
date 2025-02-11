@@ -234,9 +234,9 @@ class TabularConnectionType(IcebergConnectionType):
     def __init__(self, rest_uri, warehouse):
         self.warehouse = warehouse
         token = os.getenv("__BODOSQL_TABULAR_TOKEN")
-        assert (
-            token is not None
-        ), "TabularConnectionType: Expected __BODOSQL_TABULAR_TOKEN to be defined"
+        assert token is not None, (
+            "TabularConnectionType: Expected __BODOSQL_TABULAR_TOKEN to be defined"
+        )
 
         self.conn_str = get_conn_str(rest_uri, warehouse, token)
 
@@ -279,9 +279,9 @@ def overload_get_tabular_connection(rest_uri: str, warehouse: str):
     def impl(rest_uri: str, warehouse: str):  # pragma: no cover
         with bodo.no_warning_objmode(token="unicode_type"):
             token = os.getenv("__BODOSQL_TABULAR_TOKEN", "")
-        assert (
-            token != ""
-        ), "get_tabular_connection: Expected __BODOSQL_TABULAR_TOKEN to be defined"
+        assert token != "", (
+            "get_tabular_connection: Expected __BODOSQL_TABULAR_TOKEN to be defined"
+        )
         conn_str = get_conn_str(rest_uri, warehouse, token)
         conn = _get_tabular_connection(rest_uri, warehouse, conn_str)
         return conn

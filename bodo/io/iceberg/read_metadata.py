@@ -193,7 +193,7 @@ def get_iceberg_file_list_parallel(
             log_msg = f"Total number of files is {total_num_files}. Reading {num_files_read} files: {file_list}"
 
             if num_files_read > num_files_to_list:
-                log_msg += f", ... and {num_files_read-num_files_to_list} more."
+                log_msg += f", ... and {num_files_read - num_files_to_list} more."
         else:
             log_msg = f"Total number of files is {total_num_files}. Reading {num_files_read} files."
 

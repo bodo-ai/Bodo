@@ -206,9 +206,9 @@ class HeterogeneousSeriesType(types.Type):
         # potential distribution updates (with hasattr(typ, "dist") check)
         from bodo.transforms.distributed_analysis import Distribution
 
-        assert (
-            dist == Distribution.REP
-        ), "invalid distribution for HeterogeneousSeriesType"
+        assert dist == Distribution.REP, (
+            "invalid distribution for HeterogeneousSeriesType"
+        )
 
         if index is None:
             index = self.index.copy()
@@ -1174,31 +1174,33 @@ def to_csv_overload(
             escapechar=None,
             decimal=".",
             errors="strict",
+            storage_options=None,
             _bodo_file_prefix="part-",
             _is_parallel=False,
         ):  # pragma: no cover
             with bodo.no_warning_objmode(D="unicode_type"):
                 D = series.to_csv(
                     None,
-                    sep,
-                    na_rep,
-                    float_format,
-                    columns,
-                    header,
-                    index,
-                    index_label,
-                    mode,
-                    encoding,
-                    compression,
-                    quoting,
-                    quotechar,
-                    lineterminator,
-                    chunksize,
-                    date_format,
-                    doublequote,
-                    escapechar,
-                    decimal,
-                    errors,
+                    sep=sep,
+                    na_rep=na_rep,
+                    float_format=float_format,
+                    columns=columns,
+                    header=header,
+                    index=index,
+                    index_label=index_label,
+                    mode=mode,
+                    encoding=encoding,
+                    compression=compression,
+                    quoting=quoting,
+                    quotechar=quotechar,
+                    lineterminator=lineterminator,
+                    chunksize=chunksize,
+                    date_format=date_format,
+                    doublequote=doublequote,
+                    escapechar=escapechar,
+                    decimal=decimal,
+                    errors=errors,
+                    storage_options=storage_options,
                 )
             return D
 
@@ -1226,6 +1228,7 @@ def to_csv_overload(
         escapechar=None,
         decimal=".",
         errors="strict",
+        storage_options=None,
         _bodo_file_prefix="part-",
         _is_parallel=False,
     ):  # pragma: no cover
@@ -1238,25 +1241,26 @@ def to_csv_overload(
         with bodo.no_warning_objmode(D="unicode_type"):
             D = series.to_csv(
                 None,
-                sep,
-                na_rep,
-                float_format,
-                columns,
-                header,
-                index,
-                index_label,
-                mode,
-                encoding,
-                compression,
-                quoting,
-                quotechar,
-                lineterminator,
-                chunksize,
-                date_format,
-                doublequote,
-                escapechar,
-                decimal,
-                errors,
+                sep=sep,
+                na_rep=na_rep,
+                float_format=float_format,
+                columns=columns,
+                header=header,
+                index=index,
+                index_label=index_label,
+                mode=mode,
+                encoding=encoding,
+                compression=compression,
+                quoting=quoting,
+                quotechar=quotechar,
+                lineterminator=lineterminator,
+                chunksize=chunksize,
+                date_format=date_format,
+                doublequote=doublequote,
+                escapechar=escapechar,
+                decimal=decimal,
+                errors=errors,
+                storage_options=storage_options,
             )
 
         bodo.io.fs_io.csv_write(path_or_buf, D, _bodo_file_prefix, _is_parallel)

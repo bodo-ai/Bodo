@@ -149,7 +149,7 @@ from bodo.tests.utils import check_func, nullable_float_arr_maker
                     [
                         None
                         if i % 2 == 0
-                        else ("" if i % 7 == 1 else f"{chr(65+i%10)}{i%7}")
+                        else ("" if i % 7 == 1 else f"{chr(65 + i % 10)}{i % 7}")
                         for i in range(26)
                     ]
                 ),

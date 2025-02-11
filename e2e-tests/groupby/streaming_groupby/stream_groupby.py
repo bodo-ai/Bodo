@@ -182,20 +182,20 @@ if __name__ == "__main__":
     print("Output table checksum: ", sf_df_checksum)
     print("Output table length: ", len_sf_df)
 
-    assert (
-        expected_out_len == len_sf_df
-    ), f"Expected length ({expected_out_len}) != Table length in Snowflake ({len_sf_df})"
+    assert expected_out_len == len_sf_df, (
+        f"Expected length ({expected_out_len}) != Table length in Snowflake ({len_sf_df})"
+    )
 
-    assert (
-        expected_checksum_lower <= sf_df_checksum <= expected_checksum_upper
-    ), f"Expected checksum (between {expected_checksum_lower} and {expected_checksum_upper}) != checksum of table in Snowflake ({sf_df_checksum})"
+    assert expected_checksum_lower <= sf_df_checksum <= expected_checksum_upper, (
+        f"Expected checksum (between {expected_checksum_lower} and {expected_checksum_upper}) != checksum of table in Snowflake ({sf_df_checksum})"
+    )
 
     if args.require_cache and isinstance(
         run_query_func, numba.core.dispatcher.Dispatcher
     ):
-        assert (
-            run_query_func._cache_hits[run_query_func.signatures[0]] == 1
-        ), "ERROR: Bodo did not load from cache"
+        assert run_query_func._cache_hits[run_query_func.signatures[0]] == 1, (
+            "ERROR: Bodo did not load from cache"
+        )
 
     # Drop the table, to avoid dangling tables on our account.
     # This is done on a single rank, and any errors are then
@@ -214,7 +214,9 @@ if __name__ == "__main__":
             and (len(drop_result) == 1)
             and (len(drop_result[0]) == 1)
             and "successfully dropped" in drop_result[0][0]
-        ), "Snowflake DROP table failed, see result above. Might require manual cleanup."
+        ), (
+            "Snowflake DROP table failed, see result above. Might require manual cleanup."
+        )
     except Exception as e:
         drop_err = e
     if isinstance(drop_err, Exception):

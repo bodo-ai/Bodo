@@ -33,9 +33,9 @@ def verify_dict_encoding_in_columns(
 
     for column_name, column_type in zip(df_type.columns, df_type.data):
         if column_name in dict_encoded_column_names:
-            assert (
-                column_type == bodo.dict_str_arr_type
-            ), f"Column {column_name} is not dictionary encoded"
+            assert column_type == bodo.dict_str_arr_type, (
+                f"Column {column_name} is not dictionary encoded"
+            )
             dict_encoded_column_names.remove(column_name)
 
     assert len(dict_encoded_column_names) == 0

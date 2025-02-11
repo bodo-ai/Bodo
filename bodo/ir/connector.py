@@ -355,7 +355,7 @@ def generate_filter_map(filters):
 
 
 this_module = sys.modules[__name__]
-StreamReaderType = install_py_obj_class(
+StreamReaderType, _ = install_py_obj_class(
     types_name="stream_reader_type",
     module=this_module,
     class_name="StreamReaderType",
@@ -443,9 +443,9 @@ def base_connector_remove_dead_columns(
     table_key = (table_var_name, None)
 
     # Arrow reader is equivalent to tables for column elimination purposes
-    assert isinstance(
-        typemap[table_var_name], (TableType, ArrowReaderType)
-    ), f"{nodename} Node Table must be a TableType or ArrowReaderMetaType"
+    assert isinstance(typemap[table_var_name], (TableType, ArrowReaderType)), (
+        f"{nodename} Node Table must be a TableType or ArrowReaderMetaType"
+    )
 
     # if possible_cols == [] then the table is dead and we are only loading
     # the index. See 'remove_dead_sql' or 'remove_dead_pq' for examples.
@@ -529,7 +529,9 @@ def is_chunked_connector_table_parallel(node, array_dists, node_name):
     Returns if the parallel implementation should be used for
     a connector that returns an iterator
     """
-    assert node.is_streaming, f"is_chunked_connector_table_parallel: {node_name} must be a connector in streaming mode"
+    assert node.is_streaming, (
+        f"is_chunked_connector_table_parallel: {node_name} must be a connector in streaming mode"
+    )
 
     parallel = False
     if array_dists is not None:

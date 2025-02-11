@@ -3,6 +3,8 @@ import pytest
 
 from bodo.tests.utils import check_func
 
+pytestmark = pytest.mark.slow
+
 
 @pytest.fixture(
     params=[

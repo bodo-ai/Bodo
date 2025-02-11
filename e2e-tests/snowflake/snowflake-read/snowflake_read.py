@@ -163,28 +163,28 @@ if __name__ == "__main__":
     print("Total time: ", time.time() - t0, " s")
 
     # Compare our output to the desired output
-    assert (
-        sorted_a_count == desired_out
-    ), f"Expected out {desired_out} != output calculated from dictionary-encoded arrays from Snowflake {sorted_a_count}"
+    assert sorted_a_count == desired_out, (
+        f"Expected out {desired_out} != output calculated from dictionary-encoded arrays from Snowflake {sorted_a_count}"
+    )
 
     # Verify that cache was used
     if args.require_cache and isinstance(main, numba.core.dispatcher.Dispatcher):
-        assert (
-            main._cache_hits[main.signatures[0]] == 1
-        ), "ERROR: Bodo did not load from cache"
+        assert main._cache_hits[main.signatures[0]] == 1, (
+            "ERROR: Bodo did not load from cache"
+        )
 
     # Compute checksum and length and make sure they're correct
     sf_df_checksum, len_sf_df = read_and_compute_checksum_and_len(
         table_name, sf_write_conn
     )
 
-    assert (
-        6001215 == len_sf_df
-    ), f"Expected length (6001215) != Table length in Snowflake ({len_sf_df})"
+    assert 6001215 == len_sf_df, (
+        f"Expected length (6001215) != Table length in Snowflake ({len_sf_df})"
+    )
 
-    assert (
-        3716926710 <= sf_df_checksum <= 3716926730
-    ), f"Expected checksum (between 3716926710 and 3716926730) != checksum of table in Snowflake ({sf_df_checksum})"
+    assert 3716926710 <= sf_df_checksum <= 3716926730, (
+        f"Expected checksum (between 3716926710 and 3716926730) != checksum of table in Snowflake ({sf_df_checksum})"
+    )
 
     # Drop the table, to avoid dangling tables on our account.
     drop_result = drop_sf_table(

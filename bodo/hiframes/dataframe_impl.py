@@ -439,13 +439,13 @@ def overload_dataframe_astype(
     if _bodo_object_typeref is not None:
         # If _bodo_object_typeref is provided then we have a typeref that should be used to generate the appropriate
         # schema
-        assert isinstance(
-            _bodo_object_typeref, types.TypeRef
-        ), "Bodo schema used in DataFrame.astype should be a TypeRef"
+        assert isinstance(_bodo_object_typeref, types.TypeRef), (
+            "Bodo schema used in DataFrame.astype should be a TypeRef"
+        )
         schema_type = _bodo_object_typeref.instance_type
-        assert isinstance(
-            schema_type, DataFrameType
-        ), "Bodo schema used in DataFrame.astype is only supported for DataFrame schemas"
+        assert isinstance(schema_type, DataFrameType), (
+            "Bodo schema used in DataFrame.astype is only supported for DataFrame schemas"
+        )
         if df.is_table_format:
             # Find the names in the new schema and convert those.
             for i, name in enumerate(df.columns):
@@ -2132,7 +2132,7 @@ def overload_dataframe_take(df, indices, axis=0, convert=None, is_copy=True):
         "def bodo_dataframe_take(df, indices, axis=0, convert=None, is_copy=True):\n"
     )
     header += "  indices_t = bodo.utils.conversion.coerce_to_ndarray(indices)\n"
-    index = "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)" "[indices_t]"
+    index = "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)[indices_t]"
     return _gen_init_df(header, df.columns, data_args, index)
 
 
@@ -2616,7 +2616,7 @@ def create_dataframe_mask_where_overload(func_name):
 
         n_cols = len(df.columns)
         data_args = ", ".join(
-            f"bodo.hiframes.series_impl.where_impl({cond_str(i,gen_all_false)}, bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i}), {other_str(i)})"
+            f"bodo.hiframes.series_impl.where_impl({cond_str(i, gen_all_false)}, bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i}), {other_str(i)})"
             for i in range(n_cols)
         )
 
@@ -5102,7 +5102,7 @@ def validate_sort_values_spec(
     # make sure axis has default value 0
     if not is_overload_zero(axis):
         raise_bodo_error(
-            "sort_values(): 'axis' parameter only " "supports integer value 0."
+            "sort_values(): 'axis' parameter only supports integer value 0."
         )
 
     # make sure 'ascending' is of type bool
@@ -5128,8 +5128,7 @@ def validate_sort_values_spec(
     # make sure 'inplace' is of type bool
     if not is_overload_bool(inplace):
         raise_bodo_error(
-            "sort_values(): 'inplace' parameter must be of type bool, "
-            f"not {inplace}."
+            f"sort_values(): 'inplace' parameter must be of type bool, not {inplace}."
         )
 
     # make sure 'kind' is not specified
@@ -6201,21 +6200,23 @@ class BodoSQLReplaceColsInfer(AbstractTemplate):  # pragma: no cover
 
         assert (
             isinstance(input_df_typ, DataFrameType) and len(input_df_typ.columns) > 0
-        ), "Error while typechecking __bodosql_replace_columns_dummy: we should only generate a call __bodosql_replace_columns_dummy if the input dataframe"
+        ), (
+            "Error while typechecking __bodosql_replace_columns_dummy: we should only generate a call __bodosql_replace_columns_dummy if the input dataframe"
+        )
 
         col_names_to_replace = get_overload_const_tuple(args[1])
         replacement_columns = args[2]
-        assert (
-            len(col_names_to_replace) == len(replacement_columns)
-        ), "Error while typechecking __bodosql_replace_columns_dummy: the tuple of column indicies to replace should be equal to the number of columns to replace them with"
-        assert (
-            len(col_names_to_replace) <= len(input_df_typ.columns)
-        ), "Error while typechecking __bodosql_replace_columns_dummy: The number of indicies provided should be less than or equal to the number of columns in the input dataframe"
+        assert len(col_names_to_replace) == len(replacement_columns), (
+            "Error while typechecking __bodosql_replace_columns_dummy: the tuple of column indicies to replace should be equal to the number of columns to replace them with"
+        )
+        assert len(col_names_to_replace) <= len(input_df_typ.columns), (
+            "Error while typechecking __bodosql_replace_columns_dummy: The number of indicies provided should be less than or equal to the number of columns in the input dataframe"
+        )
 
         for col_name in col_names_to_replace:
-            assert (
-                col_name in input_df_typ.columns
-            ), "Error while typechecking __bodosql_replace_columns_dummy: All columns specified to be replaced should already be present in input dataframe"
+            assert col_name in input_df_typ.columns, (
+                "Error while typechecking __bodosql_replace_columns_dummy: All columns specified to be replaced should already be present in input dataframe"
+            )
 
         # I don't think this check should ever be needed, due to the way bodosql does
         # codegen, but better safe than sorry
@@ -6232,9 +6233,9 @@ class BodoSQLReplaceColsInfer(AbstractTemplate):  # pragma: no cover
             replace_col = replacement_columns[i]
             # Currently, replace_col should always be series type
             # But, we may pass non series values to this function in the future
-            assert isinstance(
-                replace_col, SeriesType
-            ), "Error while typechecking __bodosql_replace_columns_dummy: the values to replace the columns with are expected to be series"
+            assert isinstance(replace_col, SeriesType), (
+                "Error while typechecking __bodosql_replace_columns_dummy: the values to replace the columns with are expected to be series"
+            )
             if isinstance(replace_col, SeriesType):
                 replace_col = replace_col.data
 

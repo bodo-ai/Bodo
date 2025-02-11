@@ -65,7 +65,7 @@ def conn_str_to_catalog(conn_str: str) -> Catalog:
                 from .dir import DirCatalog
 
                 catalog = DirCatalog
-                properties[WAREHOUSE_LOCATION] = base_url
+                properties[WAREHOUSE_LOCATION] = base_url.removeprefix("file://")
                 cache_key = base_url
 
             case "iceberg+http" | "iceberg+https" | "iceberg+rest":

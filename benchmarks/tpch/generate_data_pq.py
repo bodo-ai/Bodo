@@ -63,9 +63,11 @@ def to_parquet(args):
         output_prefix,
     ) = args
     # generate `piece+1` of the table for the given scale factor with dbgen
-    dbgen_fname = f"{tpch_dbgen_location}/{table_name}.tbl.{piece+1}"
+    dbgen_fname = f"{tpch_dbgen_location}/{table_name}.tbl.{piece + 1}"
     remove_file_if_exists(dbgen_fname)
-    cmd = f"./dbgen -f -s {SCALE_FACTOR} -S {piece+1} -C {num_pieces} -T {table_short}"
+    cmd = (
+        f"./dbgen -f -s {SCALE_FACTOR} -S {piece + 1} -C {num_pieces} -T {table_short}"
+    )
     subprocess.run(cmd.split(), check=True, cwd=tpch_dbgen_location)
     # load csv file into pandas dataframe
     df = load_func(dbgen_fname)

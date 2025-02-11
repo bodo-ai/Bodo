@@ -82,12 +82,12 @@ def test_logical_filter_rule(basic_df, spark_info, query_info, memory_leak_check
     # TODO: Validate the actual generated plans.
     result1 = check_query(query, basic_df, spark_info, return_codegen=True)
     gen_code1 = result1["pandas_code"]
-    assert (
-        gen_code1.count("booland") == booland_count
-    ), f"Expected {booland_count} booland after optimization"
-    assert (
-        gen_code1.count("boolor") == boolor_count
-    ), f"Expected {boolor_count} boolor after optimization"
+    assert gen_code1.count("booland") == booland_count, (
+        f"Expected {booland_count} booland after optimization"
+    )
+    assert gen_code1.count("boolor") == boolor_count, (
+        f"Expected {boolor_count} boolor after optimization"
+    )
 
 
 @pytest.mark.slow
@@ -169,9 +169,9 @@ def test_join_filter_rule(spark_info, query_info, memory_leak_check):
 
     result1 = check_query(query, ctx, spark_info, return_codegen=True)
     gen_code1 = result1["pandas_code"]
-    assert (
-        gen_code1.count("booland") == booland_count
-    ), f"Expected {booland_count} booland after optimization"
-    assert (
-        gen_code1.count("|") == boolor_count
-    ), f"Expected {boolor_count} | after optimization"
+    assert gen_code1.count("booland") == booland_count, (
+        f"Expected {booland_count} booland after optimization"
+    )
+    assert gen_code1.count("|") == boolor_count, (
+        f"Expected {boolor_count} | after optimization"
+    )

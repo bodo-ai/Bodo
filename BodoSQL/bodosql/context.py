@@ -551,9 +551,9 @@ def add_table_type(
         if bodo_type._file_type == "pq":
             db_type = "PARQUET"
         else:
-            assert (
-                bodo_type._file_type == "sql"
-            ), "TablePathType is only implement for parquet and SQL APIs"
+            assert bodo_type._file_type == "sql", (
+                "TablePathType is only implement for parquet and SQL APIs"
+            )
             const_conn_str = bodo_type._conn_str
             db_type, _ = parse_dbtype(const_conn_str)
     else:

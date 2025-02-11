@@ -24,7 +24,7 @@ from bodo.tests.utils import (
 )
 from bodo.utils.testing import ensure_clean_mysql_psql_table
 
-pytestmark = pytest.mark.sql
+pytestmark = [pytest.mark.sql, pytest.mark.slow]
 
 
 @pytest.mark.parametrize("chunksize", [None, 4])

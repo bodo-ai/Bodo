@@ -4055,9 +4055,9 @@ def _build_replace_dict(to_replace, value, key_dtype_conv):
 
             def impl_cast(to_replace, value, key_dtype_conv):  # pragma: no cover
                 replace_dict = {}
-                assert len(to_replace) == len(
-                    value
-                ), "To_replace and value lengths must be the same"
+                assert len(to_replace) == len(value), (
+                    "To_replace and value lengths must be the same"
+                )
                 for i in range(len(to_replace)):
                     replace_dict[key_dtype_conv(to_replace[i])] = value[i]
                 return replace_dict
@@ -4066,9 +4066,9 @@ def _build_replace_dict(to_replace, value, key_dtype_conv):
 
         def impl(to_replace, value, key_dtype_conv):  # pragma: no cover
             replace_dict = {}
-            assert len(to_replace) == len(
-                value
-            ), "To_replace and value lengths must be the same"
+            assert len(to_replace) == len(value), (
+                "To_replace and value lengths must be the same"
+            )
             for i in range(len(to_replace)):
                 replace_dict[to_replace[i]] = value[i]
             return replace_dict

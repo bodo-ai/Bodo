@@ -111,7 +111,7 @@ def gen_combo_tables(input_table: str) -> dict[str, str]:
         chain.from_iterable(combinations(funcs, r) for r in range(1, len(funcs) + 1))
     )
     tables = {
-        f'{"_".join(combo)}_TABLE': input_table
+        f"{'_'.join(combo)}_TABLE": input_table
         for combo in combos
         if "DROP" not in combo[:-1]
     }
@@ -148,9 +148,9 @@ def create_nullable_table(table: str, spark=None, postfix: str = ""):
     if spark is None:
         spark = get_spark()
     base_name = NULLABLE_TABLES_MAP[table]
-    assert (
-        f"SIMPLE_{base_name}" in SIMPLE_TABLE_MAP
-    ), f"Didn't find table definition for {base_name}."
+    assert f"SIMPLE_{base_name}" in SIMPLE_TABLE_MAP, (
+        f"Didn't find table definition for {base_name}."
+    )
     df, sql_schema = SIMPLE_TABLE_MAP[f"SIMPLE_{base_name}"]
     df = deepcopy(df)
     sql_schema = sql_schema.copy()
@@ -172,9 +172,9 @@ def create_promotion_table(table: str, spark=None, postfix: str = ""):
     if spark is None:
         spark = get_spark()
     base_name = PROMOTION_TABLES_MAP[table]
-    assert (
-        f"SIMPLE_{base_name}" in SIMPLE_TABLE_MAP
-    ), f"Didn't find table definition for {base_name}."
+    assert f"SIMPLE_{base_name}" in SIMPLE_TABLE_MAP, (
+        f"Didn't find table definition for {base_name}."
+    )
     df, sql_schema = SIMPLE_TABLE_MAP[f"SIMPLE_{base_name}"]
     df = deepcopy(df)
     sql_schema = sql_schema.copy()
@@ -195,11 +195,11 @@ def create_promotion_table(table: str, spark=None, postfix: str = ""):
                 precision = int(re.search(r"\((\d+),", type).group(1))
                 scale = int(re.search(r",(\d+)\)", type).group(1))
                 spark.sql(
-                    f"ALTER TABLE hadoop_prod.{DATABASE_NAME}.{table} ALTER COLUMN {column} TYPE DECIMAL({min(38, precision+1)}, {scale})"
+                    f"ALTER TABLE hadoop_prod.{DATABASE_NAME}.{table} ALTER COLUMN {column} TYPE DECIMAL({min(38, precision + 1)}, {scale})"
                 )
                 sql_schema[i] = (
                     column,
-                    f"DECIMAL({min(38, precision+1)}, {scale})",
+                    f"DECIMAL({min(38, precision + 1)}, {scale})",
                     sql_schema[i][2],
                 )
         append_to_iceberg_table(df, sql_schema, table, spark)
@@ -210,9 +210,9 @@ def create_column_add_table(table: str, spark=None, postfix: str = ""):
     if spark is None:
         spark = get_spark()
     base_name = COLUMN_ADD_TABLES_MAP[table]
-    assert (
-        f"SIMPLE_{base_name}" in SIMPLE_TABLE_MAP
-    ), f"Didn't find table definition for {base_name}."
+    assert f"SIMPLE_{base_name}" in SIMPLE_TABLE_MAP, (
+        f"Didn't find table definition for {base_name}."
+    )
     df, sql_schema = SIMPLE_TABLE_MAP[f"SIMPLE_{base_name}"]
     df = deepcopy(df)
     sql_schema = sql_schema.copy()
@@ -237,9 +237,9 @@ def create_column_drop_table(table: str, spark=None, postfix: str = ""):
     if spark is None:
         spark = get_spark()
     base_name = COLUMN_DROP_TABLES_MAP[table]
-    assert (
-        f"SIMPLE_{base_name}" in SIMPLE_TABLE_MAP
-    ), f"Didn't find table definition for {base_name}."
+    assert f"SIMPLE_{base_name}" in SIMPLE_TABLE_MAP, (
+        f"Didn't find table definition for {base_name}."
+    )
     df, sql_schema = SIMPLE_TABLE_MAP[f"SIMPLE_{base_name}"]
     df = deepcopy(df)
     sql_schema = sql_schema.copy()
@@ -260,9 +260,9 @@ def create_column_rename_table(table: str, spark=None, postfix: str = ""):
     if spark is None:
         spark = get_spark()
     base_name = COLUMN_RENAME_TABLES_MAP[table]
-    assert (
-        f"SIMPLE_{base_name}" in SIMPLE_TABLE_MAP
-    ), f"Didn't find table definition for {base_name}."
+    assert f"SIMPLE_{base_name}" in SIMPLE_TABLE_MAP, (
+        f"Didn't find table definition for {base_name}."
+    )
     df, sql_schema = SIMPLE_TABLE_MAP[f"SIMPLE_{base_name}"]
     df = deepcopy(df)
     sql_schema = sql_schema.copy()
@@ -285,9 +285,9 @@ def create_column_reorder_table(table: str, spark=None, postfix: str = ""):
     if spark is None:
         spark = get_spark()
     base_name = COLUMN_REORDER_TABLES_MAP[table]
-    assert (
-        f"SIMPLE_{base_name}" in SIMPLE_TABLE_MAP
-    ), f"Didn't find table definition for {base_name}."
+    assert f"SIMPLE_{base_name}" in SIMPLE_TABLE_MAP, (
+        f"Didn't find table definition for {base_name}."
+    )
     df, sql_schema = SIMPLE_TABLE_MAP[f"SIMPLE_{base_name}"]
     df = deepcopy(df)
     sql_schema = sql_schema.copy()
@@ -314,9 +314,9 @@ def create_struct_field_type_promotion_table(table: str, spark=None, postfix: st
     if spark is None:
         spark = get_spark()
     base_name = STRUCT_FIELD_TYPE_PROMOTION_TABLES_MAP[table]
-    assert (
-        f"SIMPLE_{base_name}" in SIMPLE_TABLE_MAP
-    ), f"Didn't find table definition for {base_name}."
+    assert f"SIMPLE_{base_name}" in SIMPLE_TABLE_MAP, (
+        f"Didn't find table definition for {base_name}."
+    )
     df, sql_schema = SIMPLE_TABLE_MAP[f"SIMPLE_{base_name}"]
     df = deepcopy(df)
     sql_schema = sql_schema.copy()
@@ -334,9 +334,9 @@ def create_struct_field_nullable_table(table: str, spark=None, postfix: str = ""
     if spark is None:
         spark = get_spark()
     base_name = STRUCT_FIELD_NULLABLE_TABLES_MAP[table]
-    assert (
-        f"SIMPLE_{base_name}" in SIMPLE_TABLE_MAP
-    ), f"Didn't find table definition for {base_name}."
+    assert f"SIMPLE_{base_name}" in SIMPLE_TABLE_MAP, (
+        f"Didn't find table definition for {base_name}."
+    )
     df, sql_schema = SIMPLE_TABLE_MAP[f"SIMPLE_{base_name}"]
     df = deepcopy(df)
     table = f"{table}{postfix}"
@@ -363,9 +363,9 @@ def create_struct_field_evolution_table(table: str, spark=None, postfix: str = "
     if spark is None:
         spark = get_spark()
     base_name = STRUCT_FIELD_EVOLUTIONS_TABLES_MAP[table]
-    assert (
-        f"SIMPLE_{base_name}" in SIMPLE_TABLE_MAP
-    ), f"Didn't find table definition for {base_name}."
+    assert f"SIMPLE_{base_name}" in SIMPLE_TABLE_MAP, (
+        f"Didn't find table definition for {base_name}."
+    )
     df, sql_schema = SIMPLE_TABLE_MAP[f"SIMPLE_{base_name}"]
     df = deepcopy(df)
     sql_schema = sql_schema.copy()
@@ -528,9 +528,9 @@ def create_combo_table(table: str, spark=None, postfix: str = ""):
     if spark is None:
         spark = get_spark()
     base_name = COMBO_TABLES_MAP[table]
-    assert (
-        f"SIMPLE_{base_name}" in SIMPLE_TABLE_MAP
-    ), f"Didn't find table definition for {base_name}."
+    assert f"SIMPLE_{base_name}" in SIMPLE_TABLE_MAP, (
+        f"Didn't find table definition for {base_name}."
+    )
     df, sql_schema = SIMPLE_TABLE_MAP[f"SIMPLE_{base_name}"]
     df = deepcopy(df)
     sql_schema = sql_schema.copy()
@@ -611,9 +611,9 @@ def create_adversarial_table(table: str, spark=None, postfix: str = ""):
     if spark is None:
         spark = get_spark()
     base_name = ADVERSARIAL_TABLES_MAP[table]
-    assert (
-        f"SIMPLE_{base_name}" in SIMPLE_TABLE_MAP
-    ), f"Didn't find table definition for {base_name}."
+    assert f"SIMPLE_{base_name}" in SIMPLE_TABLE_MAP, (
+        f"Didn't find table definition for {base_name}."
+    )
     df, sql_schema = SIMPLE_TABLE_MAP[f"SIMPLE_{base_name}"]
     df = deepcopy(df)
     sql_schema = sql_schema.copy()
@@ -734,9 +734,9 @@ def create_map_fields_evolution_table(table: str, spark=None, postfix: str = "")
     if spark is None:
         spark = get_spark()
     base_name = MAP_FIELDS_EVOLUTION_TABLES_MAP[table]
-    assert (
-        f"SIMPLE_{base_name}" in SIMPLE_TABLE_MAP
-    ), f"Didn't find table definition for {base_name}."
+    assert f"SIMPLE_{base_name}" in SIMPLE_TABLE_MAP, (
+        f"Didn't find table definition for {base_name}."
+    )
     df, sql_schema = SIMPLE_TABLE_MAP[f"SIMPLE_{base_name}"]
     df = deepcopy(df)
     sql_schema = sql_schema.copy()
@@ -759,9 +759,9 @@ def create_list_element_evolution_table(table: str, spark=None, postfix: str = "
     if spark is None:
         spark = get_spark()
     base_name = LIST_ELEMENT_EVOLUTION_TABLES_MAP[table]
-    assert (
-        f"SIMPLE_{base_name}" in SIMPLE_TABLE_MAP
-    ), f"Didn't find table definition for {base_name}."
+    assert f"SIMPLE_{base_name}" in SIMPLE_TABLE_MAP, (
+        f"Didn't find table definition for {base_name}."
+    )
     df, sql_schema = SIMPLE_TABLE_MAP[f"SIMPLE_{base_name}"]
     df = deepcopy(df)
     sql_schema = sql_schema.copy()

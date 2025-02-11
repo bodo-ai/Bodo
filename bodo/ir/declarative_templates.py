@@ -140,9 +140,7 @@ class _OverloadDeclarativeMethodTemplate(DeclarativeTemplate, _OverloadMethodTem
         # Separate restriction on "self" argument from other arguments for clarity
         supported_types_str = ""
         if "self" in arg_restrictions:
-            supported_types_str += (
-                "!!! note\n\t" f"Input {arg_restrictions['self']}.\n\n"
-            )
+            supported_types_str += f"!!! note\n\tInput {arg_restrictions['self']}.\n\n"
         argument_restrictions_str += supported_types_str
 
         # Defaults that have changed between Bodo and Package (optional)
@@ -205,18 +203,18 @@ class _OverloadDeclarativeMethodTemplate(DeclarativeTemplate, _OverloadMethodTem
             kws: The key word arguments to check.
         """
         path = cls.path.split(".")
-        assert (
-            len(path) > 2
-        ), "Path expected to begin with '<package_name>.<module_name>.'"
+        assert len(path) > 2, (
+            "Path expected to begin with '<package_name>.<module_name>.'"
+        )
         module_name = path[1]
 
         # use default args from pysig (only the ones that are in cls.unsupported_args)
         parameters_dict = utils.pysignature(cls._overload_func).parameters
 
         # TODO: handle cases where argument does not appear in function signature
-        assert all(
-            k in parameters_dict for k in cls.unsupported_args
-        ), "Unsupported default arguments must be found in function definition."
+        assert all(k in parameters_dict for k in cls.unsupported_args), (
+            "Unsupported default arguments must be found in function definition."
+        )
 
         args_default_dict = {
             k: parameters_dict[k].default for k in cls.unsupported_args
@@ -334,7 +332,7 @@ class _OverloadDeclarativeAttributeTemplate(
         supported_types = ""
         if self.arg_checker is not None:
             explain_attr = self.arg_checker.explain_args()
-            supported_types += "!!! note\n\t" f"Input {explain_attr}.\n\n"
+            supported_types += f"!!! note\n\tInput {explain_attr}.\n\n"
 
         description_str = (
             "" if self.description is None else f"{self.description.strip()}\n\n"

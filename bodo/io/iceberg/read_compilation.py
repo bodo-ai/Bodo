@@ -6,6 +6,7 @@ needed for compilation. For example, the table schema & dictionary encoding
 from __future__ import annotations
 
 import random
+import sys
 import typing as pt
 
 import numpy as np
@@ -19,6 +20,7 @@ from bodo.io.iceberg.catalog import conn_str_to_catalog
 from bodo.io.iceberg.common import b_ICEBERG_FIELD_ID_MD_KEY, verify_pyiceberg_installed
 from bodo.io.parquet_pio import fpath_without_protocol_prefix
 from bodo.mpi4py import MPI
+from bodo.utils.py_objs import install_py_obj_class
 from bodo.utils.utils import BodoError, run_rank0
 
 if pt.TYPE_CHECKING:  # pragma: no cover
@@ -26,6 +28,17 @@ if pt.TYPE_CHECKING:  # pragma: no cover
 
 
 EMPTY_LIST: pt.Final = []
+
+
+# Class for a PyObject that is a list.
+this_module = sys.modules[__name__]
+install_py_obj_class(
+    types_name="pyobject_of_list_type",
+    python_type=None,
+    module=this_module,
+    class_name="PyObjectOfListType",
+    model_name="PyObjectOfListModel",
+)
 
 
 def is_snowflake_managed_iceberg_wh(con: str) -> bool:

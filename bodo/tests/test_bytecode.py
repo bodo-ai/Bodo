@@ -34,6 +34,6 @@ def test_very_large_tuple(memory_leak_check):
                 and stmt.value.op == "build_tuple"
             ):
                 num_build_tuples += 1
-    assert (
-        num_build_tuples == 1
-    ), "After DCE the IR should only contain a single build tuple"
+    assert num_build_tuples == 1, (
+        "After DCE the IR should only contain a single build tuple"
+    )

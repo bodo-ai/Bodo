@@ -238,9 +238,9 @@ def test_snowflake_catalog_iceberg_write(memory_leak_check):
             )["iceberg_table_type"][0]
 
         output_table_type = comm.bcast(output_table_type)
-        assert (
-            output_table_type == "MANAGED"
-        ), f"Table type is not as expected. Expected MANAGED but found {output_table_type}"
+        assert output_table_type == "MANAGED", (
+            f"Table type is not as expected. Expected MANAGED but found {output_table_type}"
+        )
 
     except Exception as e:
         # In the case that another exception ocurred within the body of the try,
@@ -569,9 +569,9 @@ def test_azure_basic_write(memory_leak_check):
 
         # Make sure the table is a managed Iceberg table
         output_table_type = check_table_type()
-        assert (
-            output_table_type == "MANAGED"
-        ), f"Table type is not as expected. Expected MANAGED but found {output_table_type}"
+        assert output_table_type == "MANAGED", (
+            f"Table type is not as expected. Expected MANAGED but found {output_table_type}"
+        )
     finally:
         drop_snowflake_table(table_name, db, schema, user=3)
 

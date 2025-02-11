@@ -500,7 +500,7 @@ def str_arr_split_view_getitem_overload(A, ind):
             n = len(A)
             if n != len(ind):
                 raise IndexError(
-                    "boolean index did not match indexed array" " along dimension 0"
+                    "boolean index did not match indexed array along dimension 0"
                 )
 
             num_items = 0
