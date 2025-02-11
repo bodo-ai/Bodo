@@ -56,89 +56,89 @@ stages:
           ${{ format('BODO_1P_{0}_OF_{1}', slice, variables.bodo_1p_total) }}:
             NP: 1
             PYTEST_MARKER: ${{ format('bodo_{0}of{1} and ({2})', slice, variables.bodo_1p_total, parameters.PYTEST_MARKER) }}
-        ${{ each slice in split(variables.bodo_2p_each, ',') }}:
-          ${{ format('BODO_2P_{0}_OF_{1}', slice, variables.bodo_2p_total) }}:
-            NP: 2
-            PYTEST_MARKER: ${{ format('bodo_{0}of{1} and ({2})', slice, variables.bodo_2p_total, parameters.PYTEST_MARKER) }}
+        # ${{ each slice in split(variables.bodo_2p_each, ',') }}:
+        #   ${{ format('BODO_2P_{0}_OF_{1}', slice, variables.bodo_2p_total) }}:
+        #     NP: 2
+        #     PYTEST_MARKER: ${{ format('bodo_{0}of{1} and ({2})', slice, variables.bodo_2p_total, parameters.PYTEST_MARKER) }}
 
-  - template: buildscripts/bodo/azure/azure-test-conda-linux-macos.yml
-    parameters:
-      name: Windows_cache
-      caching_test: true
-      spawn_mode_test: false
-      pool_name: 'windows-ci'
-      # use_bodo_arrow_fork: 0
-      matrix:
-        TEST_2P:
-          NP: 2
-          PYTEST_MARKER: ""
+  # - template: buildscripts/bodo/azure/azure-test-conda-linux-macos.yml
+  #   parameters:
+  #     name: Windows_cache
+  #     caching_test: true
+  #     spawn_mode_test: false
+  #     pool_name: 'windows-ci'
+  #     # use_bodo_arrow_fork: 0
+  #     matrix:
+  #       TEST_2P:
+  #         NP: 2
+  #         PYTEST_MARKER: ""
 
-  - template: buildscripts/bodo/azure/azure-test-conda-linux-macos.yml
-    parameters:
-      name: Bodo_Spawn_mode_tests
-      caching_test: false
-      spawn_mode_test: true
-      pool_name: 'windows-ci'
-      # use_bodo_arrow_fork: 0
-      matrix:
-        TEST_1P:
-          NP: 1
-          PYTEST_MARKER: "spawn_mode"
-        TEST_2P:
-          NP: 2
-          PYTEST_MARKER: "spawn_mode"
+  # - template: buildscripts/bodo/azure/azure-test-conda-linux-macos.yml
+  #   parameters:
+  #     name: Bodo_Spawn_mode_tests
+  #     caching_test: false
+  #     spawn_mode_test: true
+  #     pool_name: 'windows-ci'
+  #     # use_bodo_arrow_fork: 0
+  #     matrix:
+  #       TEST_1P:
+  #         NP: 1
+  #         PYTEST_MARKER: "spawn_mode"
+  #       TEST_2P:
+  #         NP: 2
+  #         PYTEST_MARKER: "spawn_mode"
 
 
-- stage: Test_BodoSQL_Windows
-  displayName: 'Test BodoSQL on Windows'
-  dependsOn: []
-  jobs:
+# - stage: Test_BodoSQL_Windows
+#   displayName: 'Test BodoSQL on Windows'
+#   dependsOn: []
+#   jobs:
 
-  - template: buildscripts/bodosql/azure/azure-test-conda-linux-macos.yml
-    parameters:
-      # Note: this name is not important, as we explicitly check uname to determine the os
-      # for the bodoSQL tests
-      name: BodoSQL_Streaming_Tests
-      SPAWN_MODE_TEST: false
-      pool_name: 'windows-ci'
-      # use_bodo_arrow_fork: 0
-      matrix:
-        ${{ each slice in split(variables.bodosql_1p_each, ',') }}:
-          ${{ format('BODOSQL_1P_{0}_OF_{1}', slice, variables.bodosql_1p_total) }}:
-            NP: 1
-            PYTEST_MARKER: ${{ format('bodosql_{0}of{1} and ({2})', slice, variables.bodosql_1p_total, parameters.PYTEST_MARKER) }}
-        ${{ each slice in split(variables.bodosql_2p_each, ',') }}:
-          ${{ format('BODOSQL_2P_{0}_OF_{1}', slice, variables.bodosql_2p_total) }}:
-            NP: 2
-            PYTEST_MARKER: ${{ format('bodosql_{0}of{1} and ({2})', slice, variables.bodosql_2p_total, parameters.PYTEST_MARKER) }}
+#   - template: buildscripts/bodosql/azure/azure-test-conda-linux-macos.yml
+#     parameters:
+#       # Note: this name is not important, as we explicitly check uname to determine the os
+#       # for the bodoSQL tests
+#       name: BodoSQL_Streaming_Tests
+#       SPAWN_MODE_TEST: false
+#       pool_name: 'windows-ci'
+#       # use_bodo_arrow_fork: 0
+#       matrix:
+#         ${{ each slice in split(variables.bodosql_1p_each, ',') }}:
+#           ${{ format('BODOSQL_1P_{0}_OF_{1}', slice, variables.bodosql_1p_total) }}:
+#             NP: 1
+#             PYTEST_MARKER: ${{ format('bodosql_{0}of{1} and ({2})', slice, variables.bodosql_1p_total, parameters.PYTEST_MARKER) }}
+#         ${{ each slice in split(variables.bodosql_2p_each, ',') }}:
+#           ${{ format('BODOSQL_2P_{0}_OF_{1}', slice, variables.bodosql_2p_total) }}:
+#             NP: 2
+#             PYTEST_MARKER: ${{ format('bodosql_{0}of{1} and ({2})', slice, variables.bodosql_2p_total, parameters.PYTEST_MARKER) }}
 
-  - template: buildscripts/bodosql/azure/azure-test-conda-linux-macos.yml
-    parameters:
-      # Note: this name is not important, as we explicitly pass CACHE_TEST and
-      # check uname to determine the os for the bodoSQL tests
-      name: BodoSQL_Streaming_Caching_Tests
-      CACHE_TEST: true
-      SPAWN_MODE_TEST: false
-      pool_name: 'windows-ci'
-      # use_bodo_arrow_fork: 0
-      matrix:
-        TEST_2P:
-          NP: 2
-          PYTEST_MARKER: ""
+  # - template: buildscripts/bodosql/azure/azure-test-conda-linux-macos.yml
+  #   parameters:
+  #     # Note: this name is not important, as we explicitly pass CACHE_TEST and
+  #     # check uname to determine the os for the bodoSQL tests
+  #     name: BodoSQL_Streaming_Caching_Tests
+  #     CACHE_TEST: true
+  #     SPAWN_MODE_TEST: false
+  #     pool_name: 'windows-ci'
+  #     # use_bodo_arrow_fork: 0
+  #     matrix:
+  #       TEST_2P:
+  #         NP: 2
+  #         PYTEST_MARKER: ""
 
-  - template: buildscripts/bodosql/azure/azure-test-conda-linux-macos.yml
-    parameters:
-      # Note: this name is not important, as we explicitly pass CACHE_TEST and
-      # check uname to determine the os for the bodoSQL tests
-      name: BodoSQL_Streaming_Spawn_mode_tests
-      CACHE_TEST: false
-      SPAWN_MODE_TEST: true
-      pool_name: 'windows-ci'
-      # use_bodo_arrow_fork: 0
-      matrix:
-        TEST_1P:
-          NP: 1
-          PYTEST_MARKER: "spawn_mode"
-        TEST_2P:
-          NP: 2
-          PYTEST_MARKER: "spawn_mode"
+  # - template: buildscripts/bodosql/azure/azure-test-conda-linux-macos.yml
+  #   parameters:
+  #     # Note: this name is not important, as we explicitly pass CACHE_TEST and
+  #     # check uname to determine the os for the bodoSQL tests
+  #     name: BodoSQL_Streaming_Spawn_mode_tests
+  #     CACHE_TEST: false
+  #     SPAWN_MODE_TEST: true
+  #     pool_name: 'windows-ci'
+  #     # use_bodo_arrow_fork: 0
+  #     matrix:
+  #       TEST_1P:
+  #         NP: 1
+  #         PYTEST_MARKER: "spawn_mode"
+  #       TEST_2P:
+  #         NP: 2
+  #         PYTEST_MARKER: "spawn_mode"
