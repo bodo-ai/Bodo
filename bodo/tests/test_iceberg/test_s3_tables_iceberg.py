@@ -4,7 +4,6 @@ from io import StringIO
 
 import boto3
 import pandas as pd
-import pytest
 
 import bodo
 from bodo.tests.user_logging_utils import (
@@ -88,8 +87,6 @@ def test_read_implicit_pruning(memory_leak_check):
         check_logger_msg(stream, "Columns loaded ['A', 'B']")
 
 
-@pytest.mark.skip(reason="WRITE")
-@temp_env_override({"AWS_REGION": "us-east-2"})
 @temp_env_override({"AWS_DEFAULT_REGION": "us-east-2"})
 def test_basic_write(memory_leak_check):
     """

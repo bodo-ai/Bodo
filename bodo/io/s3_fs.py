@@ -5,7 +5,7 @@ from numba.core.extending import intrinsic, models, overload, register_model
 
 import bodo
 from bodo.ext import s3_reader
-from bodo.io.fs_io import ArrowFs
+from bodo.io.fs_io import pyarrow_fs_type
 from bodo.libs.str_ext import gen_std_str_to_unicode, unicode_to_utf8
 
 ll.add_symbol(
@@ -183,7 +183,7 @@ def _create_s3_fs_instance(typingctx, region, anonymous, credentials_provider):
         return ret
 
     return (
-        ArrowFs()(
+        pyarrow_fs_type(
             types.voidptr,
             types.boolean,
             types.Optional(IcebergAwsCredentialsProviderType()),

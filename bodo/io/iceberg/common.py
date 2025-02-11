@@ -6,13 +6,11 @@ from __future__ import annotations
 
 import importlib
 import typing as pt
-from urllib.parse import parse_qs, urlencode, urlparse
+from urllib.parse import parse_qs, urlparse
 
 import requests
 from numba.core import types
-from numba.extending import overload
 
-import bodo
 from bodo.utils.utils import BodoError, run_rank0
 
 if pt.TYPE_CHECKING:  # pragma: no cover
@@ -172,93 +170,7 @@ class IcebergConnectionType(types.Type):
     """
 
     def __init__(self, name):  # pragma: no cover
-        super().__init__(
-            name=name,
-        )
+        super().__init__(name=name)
 
     def get_conn_str(self) -> str:
         raise NotImplementedError("IcebergConnectionType should not be instantiated")
-
-
-def format_iceberg_conn(conn_str: str) -> str:
-    """
-    Determine if connection string points to an Iceberg database and reconstruct
-    the correct connection string needed to connect to the Iceberg metastore
-    """
-
-    parse_res = urlparse(conn_str)
-    if not conn_str.startswith("iceberg+glue") and parse_res.scheme not in (
-        "iceberg",
-        "iceberg+file",
-        "iceberg+s3",
-        "iceberg+thrift",
-        "iceberg+http",
-        "iceberg+https",
-        "iceberg+snowflake",
-        "iceberg+abfs",
-        "iceberg+abfss",
-        "iceberg+rest",
-        "iceberg+arn",
-    ):
-        raise BodoError(
-            "'con' must start with one of the following: 'iceberg://', 'iceberg+file://', "
-            "'iceberg+s3://', 'iceberg+thrift://', 'iceberg+http://', 'iceberg+https://', 'iceberg+glue', 'iceberg+snowflake://', "
-            "'iceberg+abfs://', 'iceberg+abfss://', 'iceberg+rest://', 'iceberg+arn'"
-        )
-
-    # Remove Iceberg Prefix when using Internally
-    conn_str = conn_str.removeprefix("iceberg+").removeprefix("iceberg://")
-
-    # Reformat Snowflake connection string to be iceberg-connector compatible
-    if conn_str.startswith("snowflake://"):
-        from bodo.io.snowflake import parse_conn_str
-
-        conn_contents = parse_conn_str(conn_str)
-        account: str = conn_contents.pop("account")
-        # Flatten Session Parameters
-        session_params = conn_contents.pop("session_parameters", {})
-        conn_contents.update(session_params)
-        # Remove Snowflake Specific Parameters
-        conn_contents.pop("warehouse", None)
-        conn_contents.pop("database", None)
-        conn_contents.pop("schema", None)
-        conn_str = (
-            f"snowflake://{account}.snowflakecomputing.com/?{urlencode(conn_contents)}"
-        )
-
-    return conn_str
-
-
-def format_iceberg_conn_njit(conn: str) -> str:  # type: ignore
-    pass
-
-
-@overload(format_iceberg_conn_njit)
-def overload_format_iceberg_conn_njit(conn):  # pragma: no cover
-    """
-    Wrapper around format_iceberg_conn for strings
-    Gets the connection string from conn_str attr for IcebergConnectionType
-
-    Args:
-        conn_str (str | IcebergConnectionType): connection passed in read_sql/read_sql_table/to_sql
-
-    Returns:
-        str: connection string without the iceberg(+*?) prefix
-    """
-    if isinstance(conn, (types.UnicodeType, types.StringLiteral)):
-
-        def impl(conn):
-            with bodo.no_warning_objmode(conn_str="unicode_type"):
-                conn_str = format_iceberg_conn(conn)
-            return conn_str
-
-        return impl
-    else:
-        assert isinstance(conn, IcebergConnectionType), (
-            f"format_iceberg_conn_njit: Invalid type for conn, got {conn}"
-        )
-
-        def impl(conn):
-            return conn.conn_str
-
-        return impl

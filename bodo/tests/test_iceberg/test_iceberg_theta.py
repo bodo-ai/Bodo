@@ -11,7 +11,7 @@ from bodo.io.iceberg.stream_iceberg_write import (
     iceberg_writer_init,
     read_puffin_file_ndvs,
 )
-from bodo.io.iceberg.write import table_columns_have_theta_sketches
+from bodo.io.iceberg.theta import table_columns_have_theta_sketches
 from bodo.ir.sql_ext import remove_iceberg_prefix
 from bodo.tests.iceberg_database_helpers.metadata_utils import (
     get_metadata_field,

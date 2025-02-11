@@ -33,12 +33,14 @@ this_module = sys.modules[__name__]
 
 # We don't technically need to get class from the method,
 # but it's useful to avoid IDE not found errors.
-BodoFExtractHashingVectorizerType = install_py_obj_class(
-    types_name="f_extract_hashing_vectorizer_type",
-    python_type=sklearn.feature_extraction.text.HashingVectorizer,
-    module=this_module,
-    class_name="BodoFExtractHashingVectorizerType",
-    model_name="BodoFExtractHashingVectorizerModel",
+BodoFExtractHashingVectorizerType, f_extract_hashing_vectorizer_type = (
+    install_py_obj_class(
+        types_name="f_extract_hashing_vectorizer_type",
+        python_type=sklearn.feature_extraction.text.HashingVectorizer,
+        module=this_module,
+        class_name="BodoFExtractHashingVectorizerType",
+        model_name="BodoFExtractHashingVectorizerModel",
+    )
 )
 
 
@@ -147,7 +149,7 @@ def overload_hashing_vectorizer_fit_transform(
 
 # We don't technically need to get class from the method,
 # but it's useful to avoid IDE not found errors.
-BodoFExtractCountVectorizerType = install_py_obj_class(
+BodoFExtractCountVectorizerType, _ = install_py_obj_class(
     types_name="f_extract_count_vectorizer_type",
     python_type=sklearn.feature_extraction.text.CountVectorizer,
     module=this_module,
