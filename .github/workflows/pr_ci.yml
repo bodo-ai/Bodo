@@ -95,7 +95,7 @@ jobs:
           path: hadoop.tar.gz
           key: hadoop-3.3.2-${{ runner.os }}
       - name: Download Hadoop for SAS
-        if: ${{ runner.os != 'Windows' }}
+        if: ${{ runner.os != 'Windows' && steps.hadoop-cache.outputs.cache-hit != 'true' }}
         run: |
           wget -O hadoop.tar.gz "https://www.apache.org/dyn/mirrors/mirrors.cgi?action=download&filename=hadoop/common/hadoop-3.3.2/hadoop-3.3.2.tar.gz"
         shell: bash
