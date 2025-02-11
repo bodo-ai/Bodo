@@ -580,7 +580,7 @@ __int128_t::__int128_t(T in_val) {
     // Divide the long double by 2^64 to get the "high" part.
     // floorl(...) ensures we only keep the integer part.
     static const double TWO_POW_64 = std::ldexpl((double)1.0, 64);
-    ;
+
     long double hiPart = std::floorl(mag / TWO_POW_64);
     long double loPart = mag - hiPart * TWO_POW_64;
 
