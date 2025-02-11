@@ -1,8 +1,8 @@
 import pandas as pd
-import pytest
 
 import bodo
 import bodosql
+from bodo.io.iceberg.catalog.s3_tables import S3TablesCatalog
 from bodo.tests.utils import (
     assert_tables_equal,
     check_func,
@@ -46,11 +46,9 @@ def test_basic_read(memory_leak_check, s3_tables_catalog):
     )
 
 
-@pytest.mark.skip(reason="WRITE")
 @temp_env_override({"AWS_DEFAULT_REGION": "us-east-2"})
 def test_s3_tables_catalog_iceberg_write(s3_tables_catalog, memory_leak_check):
     """tests that writing tables works"""
-    import bodo_iceberg_connector as bic
 
     in_df = pd.DataFrame(
         {
@@ -101,18 +99,13 @@ def test_s3_tables_catalog_iceberg_write(s3_tables_catalog, memory_leak_check):
         exception_occurred_in_test_body = True
         raise e
     finally:
-        if exception_occurred_in_test_body:
-            try:
-                run_rank0(bic.delete_table)(
-                    bodo.io.iceberg.format_iceberg_conn(con_str),
-                    "write_namespace",
-                    table_name,
-                )
-            except Exception:
+        catalog = S3TablesCatalog(
+            "s3_tables_catalog", **{"s3tables.warehouse": s3_tables_catalog.warehouse}
+        )
+        try:
+            catalog.drop_table(f"write_namespace.{table_name}")
+        except Exception:
+            if exception_occurred_in_test_body:
                 pass
-        else:
-            run_rank0(bic.delete_table)(
-                bodo.io.iceberg.format_iceberg_conn(con_str),
-                "write_namespace",
-                table_name,
-            )
+            else:
+                raise

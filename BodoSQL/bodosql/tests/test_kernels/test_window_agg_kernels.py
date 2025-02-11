@@ -1524,7 +1524,7 @@ def test_window_object_agg(value_data, value_dtype, memory_leak_check):
     [
         pytest.param(
             pd.array(
-                [None if i % 4 < 2 else f"{i}.{i%10}" for i in range(10)],
+                [None if i % 4 < 2 else f"{i}.{i % 10}" for i in range(10)],
                 dtype=pd.ArrowDtype(pa.decimal128(38, 1)),
             ),
             -500,
@@ -1541,7 +1541,7 @@ def test_window_object_agg(value_data, value_dtype, memory_leak_check):
         ),
         pytest.param(
             pd.array(
-                [None if i % 4 < 2 else f"{i}.{i%10}" for i in range(10)],
+                [None if i % 4 < 2 else f"{i}.{i % 10}" for i in range(10)],
                 dtype=pd.ArrowDtype(pa.decimal128(38, 1)),
             ),
             -500,

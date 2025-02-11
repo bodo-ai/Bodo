@@ -98,6 +98,7 @@ gcsfs = ">=2022.1"
 pyiceberg = ">=0.8,<0.9"
 mypy-boto3-glue = "*"  # Required for PyIceberg Glue Catalog
 huggingface_hub = "*"
+zstandard = "*"
 # Databases
 pymysql = "*"
 psycopg2 = "*"
@@ -121,7 +122,7 @@ libcurl = "~=8.0"
 zstd = "<=1.5.6"
 hdf5 = { version = ">=1.14.3,<1.14.4.0a0", build = "*mpi_mpich_*" }
 boost-cpp = "1.85.*"
-aws-sdk-cpp = "1.11.*"
+aws-sdk-cpp = "<=1.11.485"
 
 [feature.dev.dependencies]
 # Build Python

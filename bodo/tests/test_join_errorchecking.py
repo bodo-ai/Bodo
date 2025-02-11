@@ -148,7 +148,7 @@ def test_merge_on_incompatible_dtype(memory_leak_check):
 
     with pytest.raises(
         BodoError,
-        match="You are trying to merge on column .* of .*" "and column .* of .*",
+        match="You are trying to merge on column .* of .*and column .* of .*",
     ):
         bodo.jit(impl)(df1, df2)
 
@@ -170,13 +170,13 @@ def test_merge_on_incompatible_dtype_no_unliteral(memory_leak_check):
 
     with pytest.raises(
         BodoError,
-        match="You are trying to merge on column .* of .*" "and column .* of .*",
+        match="You are trying to merge on column .* of .*and column .* of .*",
     ):
         bodo.jit(impl)(df1, df2)
 
     with pytest.raises(
         BodoError,
-        match="You are trying to merge on column .* of .*" "and column .* of .*",
+        match="You are trying to merge on column .* of .*and column .* of .*",
     ):
         bodo.jit(impl2)(df1, df2)
 

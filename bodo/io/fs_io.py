@@ -3,6 +3,7 @@ S3 & Hadoop file system supports, and file system dependent calls
 """
 
 import os
+import sys
 import typing as pt
 import warnings
 from glob import has_magic
@@ -16,24 +17,21 @@ from fsspec.implementations.arrow import (
     ArrowFSWrapper,
     wrap_exceptions,
 )
-from llvmlite import ir as lir
-from numba.core import cgutils, types
+from numba.core import types
 from numba.extending import (
     NativeValue,
-    box,
-    intrinsic,
     models,
     overload,
     register_model,
     unbox,
 )
-from pyarrow.fs import FSSpecHandler, PyFileSystem
+from pyarrow.fs import FileSystem, FSSpecHandler, PyFileSystem
 
 import bodo
-from bodo.ext import arrow_cpp
 from bodo.io import csv_cpp
 from bodo.libs.distributed_api import Reduce_Type
 from bodo.libs.str_ext import unicode_to_utf8, unicode_to_utf8_and_len
+from bodo.utils.py_objs import install_opaque_class
 from bodo.utils.typing import BodoError, BodoWarning, get_overload_constant_dict
 from bodo.utils.utils import AWSCredentials
 
@@ -674,6 +672,8 @@ def get_compression_from_file_name(fname: str):
         compression = "zip"
     elif fname.endswith(".xz"):
         compression = "xz"
+    elif fname.endswith(".zst"):
+        compression = "zstd"
 
     return compression
 
@@ -899,54 +899,10 @@ def overload_get_storage_options_pyobject(storage_options):
     return loc_vars["impl"]
 
 
-class ArrowFs(types.Type):
-    def __init__(self, name=""):  # pragma: no cover
-        super().__init__(name=f"ArrowFs({name})")
-
-
-register_model(ArrowFs)(models.OpaqueModel)
-
-
-@box(ArrowFs)
-def box_ArrowFs(typ, val, c):
-    from bodo.io.csv_json_reader import get_pyarrow_fs_from_ptr
-
-    fs_ptr_obj = c.pyapi.from_native_value(types.RawPointer("fs_ptr"), val)
-    get_fs_obj = c.pyapi.unserialize(c.pyapi.serialize_object(get_pyarrow_fs_from_ptr))
-    fs_obj = c.pyapi.call_function_objargs(get_fs_obj, [fs_ptr_obj])
-    c.pyapi.decref(fs_ptr_obj)
-    c.pyapi.decref(get_fs_obj)
-    return fs_obj
-
-
-ll.add_symbol("arrow_filesystem_del_py_entry", arrow_cpp.arrow_filesystem_del_py_entry)
-
-
-@intrinsic
-def _arrow_filesystem_del(typingctx, fs_instance):
-    def codegen(context, builder, sig, args):
-        fnty = lir.FunctionType(
-            lir.VoidType(),
-            [lir.LiteralStructType([lir.IntType(8).as_pointer(), lir.IntType(1)])],
-        )
-        fn_tp = cgutils.get_or_insert_function(
-            builder.module, fnty, name="arrow_filesystem_del_py_entry"
-        )
-        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
-        builder.call(fn_tp, args)
-
-    return types.void(types.optional(ArrowFs())), codegen
-
-
-def arrow_filesystem_del(fs_instance):
-    pass
-
-
-@overload(arrow_filesystem_del, jit_options={"cache": True})
-def overload_arrow_filesystem_del(fs_instance):
-    """Delete ArrowFs instance"""
-
-    def impl(fs_instance):
-        return _arrow_filesystem_del(fs_instance)
-
-    return impl
+this_module = sys.modules[__name__]
+PyArrowFSType, pyarrow_fs_type = install_opaque_class(
+    types_name="pyarrow_fs_type",
+    python_type=FileSystem,
+    module=this_module,
+    class_name="PyArrowFSType",
+)

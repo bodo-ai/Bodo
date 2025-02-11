@@ -104,27 +104,12 @@ void pq_write_partitioned_py_entry(
 
 // ---------- functions defined in iceberg_parquet_write.cpp ----
 PyObject* iceberg_pq_write_py_entry(
-    const char* table_data_loc, table_info* table, array_info* col_names_arr,
-    PyObject* partition_spec, PyObject* sort_order, const char* compression,
-    bool is_parallel, const char* bucket_region, int64_t row_group_size,
-    char* iceberg_metadata, PyObject* iceberg_arrow_schema_py,
-    numba_optional<arrow::fs::FileSystem> arrow_fs,
+    const char* table_data_loc, table_info* in_table,
+    array_info* in_col_names_arr, PyObject* partition_spec,
+    PyObject* sort_order, const char* compression, bool is_parallel,
+    const char* bucket_region, int64_t row_group_size, char* iceberg_metadata,
+    PyObject* iceberg_arrow_schema_py, PyObject* arrow_fs,
     UpdateSketchCollection* sketches);
-
-/**
- * @brief Delete the given Arrow FileSystem object if it is not NULL.
- *
- * @param fs The Arrow FileSystem object to delete.
- */
-void arrow_filesystem_del_py_entry(numba_optional<arrow::fs::FileSystem> fs) {
-    try {
-        if (fs.has_value) {
-            delete fs.value;
-        }
-    } catch (const std::exception& e) {
-        PyErr_SetString(PyExc_RuntimeError, e.what());
-    }
-}
 
 PyMethodDef fetch_frags_method_def = {"fetch_parquet_frags_metadata",
                                       (PyCFunction)fetch_parquet_frags_metadata,
@@ -162,8 +147,6 @@ PyMODINIT_FUNC PyInit_arrow_cpp(void) {
                            PyCFunction_New(&fetch_frags_method_def, NULL));
     PyObject_SetAttrString(m, "fetch_parquet_frag_row_counts",
                            PyCFunction_New(&fetch_row_count_method_def, NULL));
-
-    SetAttrStringFromVoidPtr(m, arrow_filesystem_del_py_entry);
 
     return m;
 }

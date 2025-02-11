@@ -868,7 +868,7 @@ class UntypedPass:
             "builtins",
         ):
             # gen pd.RangeIndex() call
-            func_text = "" "def _call_range_index():\n" "    return pd.RangeIndex()\n"
+            func_text = "def _call_range_index():\n    return pd.RangeIndex()\n"
 
             loc_vars = {}
             exec(func_text, globals(), loc_vars)
@@ -1092,9 +1092,9 @@ class UntypedPass:
             self.func_ir, _bodo_runtime_join_filters_arg
         )
         if rtjf_terms is not None and len(rtjf_terms):
-            assert (
-                chunksize is not None
-            ), "Cannot provide rtjf_terms in a non-streaming read"
+            assert chunksize is not None, (
+                "Cannot provide rtjf_terms in a non-streaming read"
+            )
 
         # coerce_float = self._get_const_arg(
         #     "read_sql", rhs.args, kws, 3, "coerce_float", default=True
@@ -3038,9 +3038,9 @@ class UntypedPass:
             elif ret_name in self.metadata["replicated"]:
                 flag = "replicated"
             else:
-                assert (
-                    ret_name in self.metadata["threaded"]
-                ), f"invalid return flag for {ret_name}"
+                assert ret_name in self.metadata["threaded"], (
+                    f"invalid return flag for {ret_name}"
+                )
                 flag = "threaded"
             # save in metadata that the return value is distributed
             # TODO(ehsan): support other flags like distributed_block?
@@ -3080,9 +3080,9 @@ class UntypedPass:
                     elif vname in self.metadata["replicated"]:
                         flag = "replicated"
                     else:
-                        assert (
-                            vname in self.metadata["threaded"]
-                        ), f"invalid return flag for {vname}"
+                        assert vname in self.metadata["threaded"], (
+                            f"invalid return flag for {vname}"
+                        )
                         flag = "threaded"
                     nodes += self._gen_replace_dist_return(v, flag)
                     new_var_list.append(nodes[-1].target)

@@ -8,11 +8,7 @@ from bodo_iceberg_connector.filter_to_java import (
     Scalar,
 )
 from bodo_iceberg_connector.py4j_support import launch_jvm, set_core_site_path
-from bodo_iceberg_connector.schema import (
-    get_typing_info,
-)
 from bodo_iceberg_connector.catalog_conn import parse_conn_str as parse_iceberg_conn_str
-from bodo_iceberg_connector.schema_helper import pyarrow_to_iceberg_schema_str
 from bodo_iceberg_connector.write import (
     commit_merge_cow,
     commit_statistics_file,
@@ -20,9 +16,6 @@ from bodo_iceberg_connector.write import (
     delete_table,
     fetch_puffin_metadata,
     get_table_metadata_path,
-    get_schema_with_init_field_ids,
-    remove_transaction,
-    start_write,
 )
 from bodo_iceberg_connector.puffin import (
     BlobMetadata,

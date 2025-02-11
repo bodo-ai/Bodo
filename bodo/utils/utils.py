@@ -14,7 +14,6 @@ import warnings
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from enum import Enum
-from typing import TypeGuard
 
 import numba
 import numpy as np
@@ -487,7 +486,7 @@ def get_slice_step(typemap, func_ir, var):
 
 def is_array_typ(
     var_typ, include_index_series=True
-) -> TypeGuard[types.ArrayCompatible]:
+) -> pt.TypeGuard[types.ArrayCompatible]:
     """return True if var_typ is an array type.
     include_index_series=True also includes Index and Series types (as "array-like").
     """
@@ -1354,7 +1353,7 @@ import copy
 ir.Const.__deepcopy__ = lambda self, memo: ir.Const(self.value, copy.deepcopy(self.loc))
 
 
-def is_call_assign(stmt) -> TypeGuard[ir.Assign]:
+def is_call_assign(stmt) -> pt.TypeGuard[ir.Assign]:
     return (
         isinstance(stmt, ir.Assign)
         and isinstance(stmt.value, ir.Expr)
@@ -1362,19 +1361,19 @@ def is_call_assign(stmt) -> TypeGuard[ir.Assign]:
     )
 
 
-def is_call(expr) -> TypeGuard[ir.Expr]:
+def is_call(expr) -> pt.TypeGuard[ir.Expr]:
     return isinstance(expr, ir.Expr) and expr.op == "call"
 
 
-def is_var_assign(inst) -> TypeGuard[ir.Assign]:
+def is_var_assign(inst) -> pt.TypeGuard[ir.Assign]:
     return isinstance(inst, ir.Assign) and isinstance(inst.value, ir.Var)
 
 
-def is_assign(inst) -> TypeGuard[ir.Assign]:
+def is_assign(inst) -> pt.TypeGuard[ir.Assign]:
     return isinstance(inst, ir.Assign)
 
 
-def is_expr(val, op) -> TypeGuard[ir.Expr]:
+def is_expr(val, op) -> pt.TypeGuard[ir.Expr]:
     return isinstance(val, ir.Expr) and val.op == op
 
 
@@ -1857,7 +1856,7 @@ def create_arg_hash(*args, **kwargs):
     concat_str_args = "".join(map(str, args)) + "".join(
         f"{k}={v}" for k, v in kwargs.items()
     )
-    arg_hash = hashlib.sha256(concat_str_args.encode("utf-8"))
+    arg_hash = hashlib.md5(concat_str_args.encode("utf-8"))
     return arg_hash.hexdigest()
 
 
@@ -1872,7 +1871,9 @@ def bodo_exec(func_text, glbls, loc_vars, real_globals):
         real_globals: should be passed globals() from the calling scope
     """
     # Get hash of function text.
-    text_hash = hashlib.sha256(func_text.encode("utf-8")).hexdigest()
+    # Using shorter md5 hash vs sha256 to reduce chances of hitting 260 character limit
+    # on Windows.
+    text_hash = hashlib.md5(func_text.encode("utf-8")).hexdigest()
     # Use a regular expression to find and add hash to the function name.
     pattern = r"(^def\s+)(\w+)(\s*\()"
     found_pattern = re.search(pattern, func_text)

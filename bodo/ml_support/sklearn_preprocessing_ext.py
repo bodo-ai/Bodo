@@ -52,7 +52,7 @@ this_module = sys.modules[__name__]
 
 # We don't technically need to get class from the method,
 # but it's useful to avoid IDE not found errors.
-BodoPreprocessingOneHotEncoderType = install_py_obj_class(
+BodoPreprocessingOneHotEncoderType, _ = install_py_obj_class(
     types_name="preprocessing_one_hot_encoder_type",
     python_type=sklearn.preprocessing.OneHotEncoder,
     module=this_module,
@@ -63,7 +63,7 @@ BodoPreprocessingOneHotEncoderType = install_py_obj_class(
 
 # We don't technically need to get class from the method,
 # but it's useful to avoid IDE not found errors.
-BodoPreprocessingOneHotEncoderCategoriesType = install_py_obj_class(
+BodoPreprocessingOneHotEncoderCategoriesType, _ = install_py_obj_class(
     types_name="preprocessing_one_hot_encoder_categories_type",
     module=this_module,
     class_name="BodoPreprocessingOneHotEncoderCategoriesType",
@@ -73,7 +73,7 @@ BodoPreprocessingOneHotEncoderCategoriesType = install_py_obj_class(
 
 # We don't technically need to get class from the method,
 # but it's useful to avoid IDE not found errors.
-BodoPreprocessingOneHotEncoderDropIdxType = install_py_obj_class(
+BodoPreprocessingOneHotEncoderDropIdxType, _ = install_py_obj_class(
     types_name="preprocessing_one_hot_encoder_drop_idx_type",
     module=this_module,
     class_name="BodoPreprocessingOneHotEncoderDropIdxType",
@@ -477,7 +477,7 @@ def overload_preprocessing_one_hot_encoder_get_feature_names_out(
 
 # We don't technically need to get class from the method,
 # but it's useful to avoid IDE not found errors.
-BodoPreprocessingStandardScalerType = install_py_obj_class(
+BodoPreprocessingStandardScalerType, _ = install_py_obj_class(
     types_name="preprocessing_standard_scaler_type",
     python_type=sklearn.preprocessing.StandardScaler,
     module=this_module,
@@ -738,7 +738,7 @@ def overload_preprocessing_standard_scaler_inverse_transform(
 
 # We don't technically need to get class from the method,
 # but it's useful to avoid IDE not found errors.
-BodoPreprocessingMaxAbsScalerType = install_py_obj_class(
+BodoPreprocessingMaxAbsScalerType, _ = install_py_obj_class(
     types_name="preprocessing_max_abs_scaler_type",
     python_type=sklearn.preprocessing.MaxAbsScaler,
     module=this_module,
@@ -1004,7 +1004,7 @@ def overload_preprocessing_max_abs_scaler_inverse_transform(
 
 # We don't technically need to get class from the method,
 # but it's useful to avoid IDE not found errors.
-BodoPreprocessingMinMaxScalerType = install_py_obj_class(
+BodoPreprocessingMinMaxScalerType, _ = install_py_obj_class(
     types_name="preprocessing_minmax_scaler_type",
     python_type=sklearn.preprocessing.MinMaxScaler,
     module=this_module,
@@ -1174,7 +1174,7 @@ def overload_preprocessing_minmax_scaler_inverse_transform(
 
 # We don't technically need to get class from the method,
 # but it's useful to avoid IDE not found errors.
-BodoPreprocessingRobustScalerType = install_py_obj_class(
+BodoPreprocessingRobustScalerType, _ = install_py_obj_class(
     types_name="preprocessing_robust_scaler_type",
     python_type=sklearn.preprocessing.RobustScaler,
     module=this_module,
@@ -1485,7 +1485,7 @@ def _pa_str_to_obj(a):
 
 # We don't technically need to get class from the method,
 # but it's useful to avoid IDE not found errors.
-BodoPreprocessingLabelEncoderType = install_py_obj_class(
+BodoPreprocessingLabelEncoderType, _ = install_py_obj_class(
     types_name="preprocessing_label_encoder_type",
     python_type=sklearn.preprocessing.LabelEncoder,
     module=this_module,

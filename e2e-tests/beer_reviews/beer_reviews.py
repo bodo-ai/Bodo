@@ -80,6 +80,6 @@ if __name__ == "__main__":
         require_cache = bool(sys.argv[2])
     find_top_words(fname)
     if require_cache and isinstance(find_top_words, numba.core.dispatcher.Dispatcher):
-        assert (
-            find_top_words._cache_hits[find_top_words.signatures[0]] == 1
-        ), "ERROR: Bodo did not load from cache"
+        assert find_top_words._cache_hits[find_top_words.signatures[0]] == 1, (
+            "ERROR: Bodo did not load from cache"
+        )

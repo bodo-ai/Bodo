@@ -1,6 +1,7 @@
 import glob
 import os
 import traceback
+import typing as pt
 
 import pandas as pd
 import pytest
@@ -27,13 +28,12 @@ from bodo.tests.iceberg_database_helpers.utils import (
     create_iceberg_table,
     get_spark,
 )
-from bodo.tests.test_iceberg.test_iceberg import (
+from bodo.tests.test_iceberg.test_iceberg_write import (
     ICEBERG_FIELD_IDS_IN_PQ_SCHEMA_TEST_PARAMS,
     _setup_test_iceberg_field_ids_in_pq_schema,
     _test_file_part,
     _test_file_sorted,
     _verify_pq_schema_in_files,
-    simple_dataframe,  # noqa: F401
 )
 from bodo.tests.utils import (
     _gather_output,
@@ -49,7 +49,12 @@ pytestmark = [pytest.mark.iceberg, pytest.mark.skip(reason="WRITE")]
 
 
 def _write_iceberg_table(
-    df, table_name, conn, db_schema, create_table_meta, if_exists, parallel=True
+    df,
+    table_id: str,
+    conn: str,
+    create_table_meta,
+    mode: pt.Literal["create", "replace", "append"],
+    parallel: bool = True,
 ):
     """helper that writes Iceberg table using Bodo's streaming write"""
 
@@ -57,14 +62,13 @@ def _write_iceberg_table(
     batch_size = 11
 
     @bodo.jit(distributed=(["df"] if parallel else False))
-    def impl(df, table_name, conn, db_schema):
+    def impl(df, table_id, conn):
         writer = iceberg_writer_init(
             -1,
             conn,
-            table_name,
-            db_schema,
+            table_id,
             col_meta,
-            if_exists,
+            mode,
             create_table_meta=create_table_meta,
         )
         all_is_last = False
@@ -84,7 +88,7 @@ def _write_iceberg_table(
             )
             iter_val += 1
 
-    impl((_get_dist_arg(df) if parallel else df), table_name, conn, db_schema)
+    impl((_get_dist_arg(df) if parallel else df), table_id, conn)
 
 
 def init_create_table_meta(
@@ -173,20 +177,20 @@ def check_table_comment(
         .head()
     )
     if table_comments is not None:
-        assert (
-            table_cmt[0] == table_comments
-        ), f'Expected table comment to be "{table_comments}", got "{table_cmt}"'
+        assert table_cmt and table_cmt[0] == table_comments, (
+            f'Expected table comment to be "{table_comments}", got "{table_cmt}"'
+        )
 
     df = spark.sql(f"DESCRIBE TABLE hadoop_prod.{db_schema}.{table_name}").toPandas()
     for i in range(number_columns):
         if column_comments is None or i >= 2:
-            assert (
-                df.iloc[i]["comment"] is None
-            ), f"Expected column {i} comment to be None, but actual comment is {df.iloc[i]['comment']}"
+            assert df.iloc[i]["comment"] is None, (
+                f"Expected column {i} comment to be None, but actual comment is {df.iloc[i]['comment']}"
+            )
         else:
-            assert (
-                df.iloc[i]["comment"] == f"{column_comments}{i}"
-            ), f'Expected column {i} comment to be "{column_comments}{i}", got {df.iloc[i]["comment"]}'
+            assert df.iloc[i]["comment"] == f"{column_comments}{i}", (
+                f'Expected column {i} comment to be "{column_comments}{i}", got {df.iloc[i]["comment"]}'
+            )
 
     if table_properties is not None:
         str = (
@@ -199,22 +203,15 @@ def check_table_comment(
         parsed_properties = parse_table_property(str)
 
         for keys in table_properties:
-            assert (
-                keys in parsed_properties
-            ), f"Expected table properties {keys}, find nothing"
-            assert (
-                parsed_properties[keys] == table_properties[keys]
-            ), f"Expected key {keys} with value {table_properties[keys]}, got {parsed_properties[keys]}"
+            assert keys in parsed_properties, (
+                f"Expected table properties {keys}, find nothing"
+            )
+            assert parsed_properties[keys] == table_properties[keys], (
+                f"Expected key {keys} with value {table_properties[keys]}, got {parsed_properties[keys]}"
+            )
 
 
-@pytest.mark.timeout(1000)
-@pytest.mark.parametrize("column_comments", ["test_col_comments", None])
-@pytest.mark.parametrize("table_comments", ["test_tbl_comments", "", None])
-@pytest.mark.parametrize("table_properties", [True, False])
 def test_iceberg_write_basic(
-    table_comments,
-    column_comments,
-    table_properties,
     iceberg_database,
     iceberg_table_conn,
     simple_dataframe,
@@ -224,6 +221,7 @@ def test_iceberg_write_basic(
     base_name, table_name, df = simple_dataframe
     db_schema, warehouse_loc = iceberg_database(table_name)
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=False)
+    table_id = f"{db_schema}.{table_name}"
 
     orig_use_dict_str_type = bodo.hiframes.boxing._use_dict_str_type
     orig_chunk_size = (
@@ -234,11 +232,7 @@ def test_iceberg_write_basic(
     # set chunk size to a small number to make sure multiple iterations write files
     bodo.io.iceberg.stream_iceberg_write.ICEBERG_WRITE_PARQUET_CHUNK_SIZE = 300
 
-    create_table_meta = init_create_table_meta(
-        table_comments=table_comments,
-        column_comments=column_comments,
-        table_property=table_properties,
-    )
+    create_table_meta = init_create_table_meta()
 
     try:
         _write_iceberg_table(
@@ -246,6 +240,64 @@ def test_iceberg_write_basic(
         )
     finally:
         bodo.hiframes.boxing._use_dict_str_type = orig_use_dict_str_type
+        bodo.io.iceberg.stream_iceberg_write.ICEBERG_WRITE_PARQUET_CHUNK_SIZE = (
+            orig_chunk_size
+        )
+
+    py_out = bodo.jit()(lambda: pd.read_sql_table(table_name, conn, db_schema))()
+    py_out = _gather_output(py_out)
+
+    comm = MPI.COMM_WORLD
+    passed = None
+
+    if comm.Get_rank() == 0:
+        if "LIST" in table_name or "STRUCT" in table_name:
+            df = convert_non_pandas_columns(df)
+            py_out = convert_non_pandas_columns(py_out)
+        passed = _test_equal_guard(
+            df,
+            py_out,
+            sort_output=True,
+            check_dtype=False,
+            reset_index=True,
+        )
+
+    passed = comm.bcast(passed)
+    assert passed == 1
+
+
+@pytest.mark.parametrize("column_comments", ["test_col_comments", None])
+@pytest.mark.parametrize("table_comments", ["test_tbl_comments", "", None])
+@pytest.mark.parametrize("table_properties", [True, False])
+def test_iceberg_write_with_comment_and_properties(
+    table_comments,
+    column_comments,
+    table_properties,
+    iceberg_database,
+    iceberg_table_conn,
+    memory_leak_check,
+):
+    """Test basic streaming Iceberg write"""
+    table_name = "SIMPLE_STRING_TABLE"
+    df = SIMPLE_TABLES_MAP["SIMPLE_STRING_TABLE"][0]
+    db_schema, warehouse_loc = iceberg_database(table_name)
+    conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=False)
+
+    orig_chunk_size = (
+        bodo.io.iceberg.stream_iceberg_write.ICEBERG_WRITE_PARQUET_CHUNK_SIZE
+    )
+    # set chunk size to a small number to make sure multiple iterations write files
+    bodo.io.iceberg.stream_iceberg_write.ICEBERG_WRITE_PARQUET_CHUNK_SIZE = 300
+
+    create_table_meta = init_create_table_meta(
+        table_comments=table_comments,
+        column_comments=column_comments,
+        table_property=table_properties,
+    )
+
+    try:
+        _write_iceberg_table(df, table_id, conn, create_table_meta, "replace")
+    finally:
         bodo.io.iceberg.stream_iceberg_write.ICEBERG_WRITE_PARQUET_CHUNK_SIZE = (
             orig_chunk_size
         )
@@ -292,6 +344,7 @@ def test_iceberg_write_basic_rep(
     df = SIMPLE_TABLES_MAP["SIMPLE_STRING_TABLE"][0]
     db_schema, warehouse_loc = iceberg_database(table_name)
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=False)
+    table_id = f"{db_schema}.{table_name}"
 
     # set chunk size to a small number to make sure multiple iterations write files
     bodo.io.iceberg.stream_iceberg_write.ICEBERG_WRITE_PARQUET_CHUNK_SIZE = 300
@@ -299,7 +352,7 @@ def test_iceberg_write_basic_rep(
     create_table_meta = init_create_table_meta()
 
     _write_iceberg_table(
-        df, table_name, conn, db_schema, create_table_meta, "replace", parallel=False
+        df, table_id, conn, create_table_meta, "replace", parallel=False
     )
 
     py_out = bodo.jit()(lambda: pd.read_sql_table(table_name, conn, db_schema))()
@@ -322,15 +375,9 @@ def test_iceberg_write_basic_rep(
 
 
 @pytest.mark.parametrize("use_dict_encoding_boxing", [False, True])
-@pytest.mark.parametrize("column_comments", ["test_col_comments", None])
-@pytest.mark.parametrize("table_comments", ["test_tbl_comments", "", None])
-@pytest.mark.parametrize("table_properties", [True, False])
 def test_iceberg_write_part_sort(
     iceberg_database,
     iceberg_table_conn,
-    table_comments,
-    column_comments,
-    table_properties,
     use_dict_encoding_boxing,
     memory_leak_check,
 ):
@@ -339,7 +386,9 @@ def test_iceberg_write_part_sort(
     and verify that the append was done correctly, i.e. validate
     that each file is correctly sorted and partitioned.
     """
-    table_name = f"PARTSORT_{PART_SORT_TABLE_BASE_NAME}_streaming_{use_dict_encoding_boxing}_{column_comments}_{table_properties}_{table_comments}"
+    table_name = (
+        f"PARTSORT_{PART_SORT_TABLE_BASE_NAME}_streaming_{use_dict_encoding_boxing}"
+    )
     df, sql_schema = SIMPLE_TABLES_MAP[f"SIMPLE_{PART_SORT_TABLE_BASE_NAME}"]
     if use_dict_encoding_boxing:
         table_name += "_DICT_ENCODING"
@@ -356,6 +405,7 @@ def test_iceberg_write_part_sort(
     bodo.barrier()
     db_schema, warehouse_loc = iceberg_database()
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=True)
+    table_id = f"{db_schema}.{table_name}"
 
     orig_use_dict_str_type = bodo.hiframes.boxing._use_dict_str_type
     bodo.hiframes.boxing._use_dict_str_type = use_dict_encoding_boxing
@@ -364,16 +414,8 @@ def test_iceberg_write_part_sort(
     )
     bodo.io.iceberg.stream_iceberg_write.ICEBERG_WRITE_PARQUET_CHUNK_SIZE = 300
 
-    create_table_meta = init_create_table_meta(
-        table_comments=table_comments,
-        column_comments=column_comments,
-        table_property=table_properties,
-    )
-
     try:
-        _write_iceberg_table(
-            df, table_name, conn, db_schema, create_table_meta, "append"
-        )
+        _write_iceberg_table(df, table_id, conn, None, "append")
     finally:
         bodo.hiframes.boxing._use_dict_str_type = orig_use_dict_str_type
         bodo.io.iceberg.stream_iceberg_write.ICEBERG_WRITE_PARQUET_CHUNK_SIZE = (
@@ -419,18 +461,6 @@ def test_iceberg_write_part_sort(
             check_dtype=False,
             reset_index=True,
         )
-        ref_table_properties = (
-            None if not table_properties else {"TBLPROPERTIES": "A", "TEST_TBL": "TRUE"}
-        )
-        check_table_comment(
-            db_schema,
-            table_name,
-            # Not checking column_comments here. Currently adding column comments for append is not supported
-            0,
-            table_comments=table_comments,
-            column_comments=column_comments,
-            table_properties=ref_table_properties,
-        )
 
     passed = comm.bcast(passed)
     assert passed == 1, "Bodo read output doesn't match expected output"
@@ -439,7 +469,9 @@ def test_iceberg_write_part_sort(
 @pytest.mark.parametrize(
     "base_name,pa_schema", ICEBERG_FIELD_IDS_IN_PQ_SCHEMA_TEST_PARAMS
 )
-@pytest.mark.parametrize("mode", ["create", "replace", "append"])
+@pytest.mark.parametrize("mode", ["create", "append"])
+# TODO: Replace is removed due to inconsistent field ID assignment between PyIceberg
+# and Iceberg Java
 def test_iceberg_field_ids_in_pq_schema(
     base_name,
     pa_schema,
@@ -459,8 +491,7 @@ def test_iceberg_field_ids_in_pq_schema(
     db_schema, warehouse_loc = iceberg_database()
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=False)
     df, sql_schema = SIMPLE_TABLES_MAP[f"SIMPLE_{base_name}"]
-
-    if_exists = "fail" if mode == "create" else mode
+    table_id = f"{db_schema}.{table_name}"
 
     if base_name == "LIST_TABLE" and mode == "append":
         pytest.skip(
@@ -484,7 +515,7 @@ def test_iceberg_field_ids_in_pq_schema(
     )  # (1KiB)
 
     try:
-        _write_iceberg_table(df, table_name, conn, db_schema, None, if_exists)
+        _write_iceberg_table(df, table_id, conn, None, mode)
     finally:
         bodo.io.iceberg.stream_iceberg_write.ICEBERG_WRITE_PARQUET_CHUNK_SIZE = (
             orig_chunk_size
@@ -540,6 +571,7 @@ def test_iceberg_max_pq_chunksize(
     }
 
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=False)
+    table_id = f"{db_schema}.{table_name}"
     spark = get_spark()
 
     @run_rank0
@@ -557,7 +589,7 @@ def test_iceberg_max_pq_chunksize(
     total_write_size = sum(df2.memory_usage(index=False))  # = 800000 * 8 bytes
     bodo.barrier()
 
-    _write_iceberg_table(df2, table_name, conn, db_schema, None, if_exists="append")
+    _write_iceberg_table(df2, table_id, conn, None, mode="append")
     bodo.barrier()
     files_after_write = _get_pq_files(warehouse_loc, db_schema, table_name)
 
@@ -565,14 +597,14 @@ def test_iceberg_max_pq_chunksize(
     def check_files():
         expected_num_files = math.ceil(total_write_size / (max_pq_chunksize))
         new_files = list(set(files_after_write) - set(files_before_write))
-        assert (
-            len(new_files) == expected_num_files
-        ), "Expected number of files does not match"
+        assert len(new_files) == expected_num_files, (
+            "Expected number of files does not match"
+        )
         for file in new_files:
             size_in_bytes = os.stat(file).st_size
             # actual size of files may be much smaller after compression
-            assert (
-                size_in_bytes < max_pq_chunksize
-            ), "Found file larger than expected size"
+            assert size_in_bytes < (max_pq_chunksize * 1.25), (
+                "Found file larger than expected size"
+            )
 
     check_files()

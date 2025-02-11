@@ -1,13 +1,17 @@
 import os
 import tempfile
+import typing as pt
+from contextlib import contextmanager
 from io import StringIO
 
 import numba
 import pandas as pd
 import pytest
+from pyiceberg.catalog.rest import RestCatalog
 
 import bodo
 import bodosql
+from bodo.mpi4py import MPI
 from bodo.tests.iceberg_database_helpers.utils import (
     get_spark,
 )
@@ -17,6 +21,7 @@ from bodo.tests.user_logging_utils import (
     set_logging_stream,
 )
 from bodo.tests.utils import (
+    _get_dist_arg,
     assert_tables_equal,
     check_func,
     create_polaris_iceberg_table,
@@ -29,6 +34,55 @@ from bodo.utils.utils import run_rank0
 from bodosql.bodosql_types.tabular_catalog import get_tabular_connection
 
 pytestmark = pytest_tabular
+
+
+@contextmanager
+def create_tabular_iceberg_table(
+    df: pd.DataFrame, base_table_name: str, warehouse: str, schema: str, credential: str
+) -> pt.Generator[str, None, None]:
+    """Creates a new Iceberg table in Tabular derived from the base table name
+    and using the DataFrame.
+
+    Returns the name of the table added to Tabular.
+
+    Args:
+        df (pd.DataFrame): DataFrame to insert
+        base_table_name (str): Base string for generating the table name.
+        warehouse (str): Name of the Tabular warehouse
+        schema (str): Name of the Tabular schema
+        credential (str): Credential to authenticate
+
+    Returns:
+        str: The final table name.
+    """
+    comm = MPI.COMM_WORLD
+    iceberg_table_name = None
+    table_written = False
+    try:
+        if bodo.get_rank() == 0:
+            iceberg_table_name = gen_unique_table_id(base_table_name)
+
+        iceberg_table_name = comm.bcast(iceberg_table_name)
+
+        @bodo.jit(distributed=["df"])
+        def write_table(df, table_name, schema, con_str):
+            df.to_sql(table_name, con=con_str, schema=schema, if_exists="replace")
+
+        con_str = f"iceberg+REST://api.tabular.io/ws?credential={credential}&warehouse={warehouse}"
+        write_table(_get_dist_arg(df), iceberg_table_name, schema, con_str)
+        table_written = True
+
+        yield iceberg_table_name
+    finally:
+        if table_written:
+            run_rank0(
+                lambda: (
+                    RestCatalog(
+                        "tabular_catalog",
+                        uri=f"http://api.tabular.io/ws?credential={credential}&warehouse={warehouse}",
+                    ).purge_table(f"{schema}.{iceberg_table_name}")
+                )
+            )()
 
 
 def test_basic_read(memory_leak_check, tabular_catalog):
@@ -227,20 +281,20 @@ def check_table_comment(
         .head()
     )
     if table_comments is not None:
-        assert (
-            table_cmt[0] == table_comments
-        ), f'Expected table comment to be "{table_comments}", got "{table_cmt}"'
+        assert table_cmt[0] == table_comments, (
+            f'Expected table comment to be "{table_comments}", got "{table_cmt}"'
+        )
 
     df = spark.sql(f"DESCRIBE TABLE {schema}.{table_name}").toPandas()
     for i in range(number_columns):
         if not column_comments or i % 2 == 1:
-            assert (
-                df.iloc[i]["comment"] is None
-            ), f"Expected column {i} comment to be None, but actual comment is not None"
+            assert df.iloc[i]["comment"] is None, (
+                f"Expected column {i} comment to be None, but actual comment is not None"
+            )
         else:
-            assert (
-                df.iloc[i]["comment"] == f"{table_name}_test_colcmt_{i}"
-            ), f'Expected column {i} comment to be "{table_name}_test_colcmt_{i}", got a different one'
+            assert df.iloc[i]["comment"] == f"{table_name}_test_colcmt_{i}", (
+                f'Expected column {i} comment to be "{table_name}_test_colcmt_{i}", got a different one'
+            )
 
     if table_properties is not None:
         str = (
@@ -252,12 +306,12 @@ def check_table_comment(
         parsed_properties = parse_table_property(str)
 
         for keys in table_properties:
-            assert (
-                keys in parsed_properties
-            ), f"Expected table properties {keys}, find nothing"
-            assert (
-                parsed_properties[keys] == table_properties[keys]
-            ), f"Expected key {keys} with value {table_properties[keys]}, got {parsed_properties[keys]}"
+            assert keys in parsed_properties, (
+                f"Expected table properties {keys}, find nothing"
+            )
+            assert parsed_properties[keys] == table_properties[keys], (
+                f"Expected key {keys} with value {table_properties[keys]}, got {parsed_properties[keys]}"
+            )
 
 
 @pytest.mark.parametrize("column_comments", [True, False])
@@ -275,7 +329,6 @@ def test_tabular_catalog_iceberg_write(
     memory_leak_check,
 ):
     """tests that writing tables works"""
-    import bodo_iceberg_connector as bic
 
     rest_uri, tabular_warehouse, tabular_credential = tabular_connection
     catalog = tabular_catalog
@@ -372,11 +425,11 @@ def test_tabular_catalog_iceberg_write(
         raise e
     finally:
         try:
-            run_rank0(bic.delete_table)(
-                bodo.io.iceberg.format_iceberg_conn(con_str),
-                schema,
-                table_name,
-            )
+            run_rank0(
+                lambda: RestCatalog("tabular_catalog", uri=rest_uri).purge_table(
+                    f"{schema}.{table_name}"
+                )
+            )()
         except Exception:
             if exception_occurred_in_test_body:
                 pass
@@ -622,9 +675,9 @@ def test_tabular_catalog_token_caching(memory_leak_check):
             dispatcher = bodo.jit(cache=True)(f)
             assert dispatcher() == "test_uri?warehouse=test_warehouse&token=test_token1"
             sig = dispatcher.signatures[0]
-            assert (
-                dispatcher._cache_hits[sig] == 0
-            ), "Expected no cache hit for function signature"
+            assert dispatcher._cache_hits[sig] == 0, (
+                "Expected no cache hit for function signature"
+            )
 
             # Ensure that the cache is shared across all ranks
             bodo.barrier()
@@ -635,9 +688,9 @@ def test_tabular_catalog_token_caching(memory_leak_check):
                 dispatcher_2() == "test_uri?warehouse=test_warehouse&token=test_token2"
             )
             sig = dispatcher_2.signatures[0]
-            assert (
-                dispatcher_2._cache_hits[sig] == 1
-            ), "Expected a cache hit for function signature"
+            assert dispatcher_2._cache_hits[sig] == 1, (
+                "Expected a cache hit for function signature"
+            )
 
     finally:
         # Ensure all ranks are done before cleanup

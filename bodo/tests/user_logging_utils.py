@@ -72,13 +72,13 @@ def check_logger_msg(stream, msg, check_case=True):
         return
     if bodo.get_rank() == 0:
         if check_case:
-            assert (
-                msg in stream.getvalue()
-            ), f"Cannot find message in logging stream: '{msg}'"
+            assert msg in stream.getvalue(), (
+                f"Cannot find message in logging stream: '{msg}'"
+            )
         else:
-            assert (
-                msg.lower() in stream.getvalue().lower()
-            ), f"Cannot find message in logging stream: '{msg}'"
+            assert msg.lower() in stream.getvalue().lower(), (
+                f"Cannot find message in logging stream: '{msg}'"
+            )
 
 
 def check_logger_no_msg(stream, msg):
@@ -94,6 +94,6 @@ def check_logger_no_msg(stream, msg):
     if bodo.tests.utils.test_spawn_mode_enabled:
         return
     if bodo.get_rank() == 0:
-        assert (
-            msg not in stream.getvalue()
-        ), f"Found find message in logging stream that should have been absent: '{msg}'"
+        assert msg not in stream.getvalue(), (
+            f"Found find message in logging stream that should have been absent: '{msg}'"
+        )

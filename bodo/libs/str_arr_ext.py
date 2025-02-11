@@ -2405,9 +2405,9 @@ def str_arr_to_dict_str_arr_cpp(typingctx, str_arr_t):
 
         return dict_arr
 
-    assert (
-        str_arr_t == bodo.string_array_type
-    ), "str_arr_to_dict_str_arr: Input Array is not a Bodo String Array"
+    assert str_arr_t == bodo.string_array_type, (
+        "str_arr_to_dict_str_arr: Input Array is not a Bodo String Array"
+    )
 
     sig = bodo.dict_str_arr_type(bodo.string_array_type)
     return sig, codegen

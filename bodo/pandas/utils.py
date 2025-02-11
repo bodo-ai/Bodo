@@ -29,9 +29,9 @@ def get_lazy_manager_class() -> type[LazyArrayManager | LazyBlockManager]:
     )
 
 
-def get_lazy_single_manager_class() -> (
-    type[LazySingleArrayManager | LazySingleBlockManager]
-):
+def get_lazy_single_manager_class() -> type[
+    LazySingleArrayManager | LazySingleBlockManager
+]:
     """Get the lazy manager class based on the pandas option mode.data_manager, suitable for Series."""
     data_manager = get_data_manager_pandas()
     if data_manager == "block":

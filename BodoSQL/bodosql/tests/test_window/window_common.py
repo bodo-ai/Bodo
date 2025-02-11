@@ -98,7 +98,7 @@ datetime64_col = pd.Series(
     [
         None
         if 1 / math.cos(i) < -1
-        else pd.Timestamp(f"201{(i**2)%10}-{1+(i**3)%12:02}-{1+(i**4)%15:02}")
+        else pd.Timestamp(f"201{(i**2) % 10}-{1 + (i**3) % 12:02}-{1 + (i**4) % 15:02}")
         for i in range(window_col_size)
     ]
 )

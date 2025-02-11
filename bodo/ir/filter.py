@@ -222,9 +222,9 @@ class RefTyper(AbstractTemplate):
         assert not kws
         assert len(args) == 1, "bodo.ir.filter.Ref takes exactly 1 argument"
         (val_arg,) = args
-        assert (
-            val_arg == types.unicode_type
-        ), "Argumnt to bodo.ir.filter.Ref must be type string"
+        assert val_arg == types.unicode_type, (
+            "Argumnt to bodo.ir.filter.Ref must be type string"
+        )
         return signature(types.bool_, val_arg)
 
 
@@ -392,14 +392,14 @@ def get_filter_predicate_compute_func(col_val) -> str:
 
     Returns the compute function name as a string literal.
     """
-    assert isinstance(
-        col_val, Op
-    ), f"Filter must of type bodo.ir.filter.Op. Invalid filter: {col_val}"
+    assert isinstance(col_val, Op), (
+        f"Filter must of type bodo.ir.filter.Op. Invalid filter: {col_val}"
+    )
 
     compute_func = col_val.op
-    assert (
-        compute_func in supported_funcs_map
-    ), f"Unsupported compute function for column in filter predicate: {compute_func}"
+    assert compute_func in supported_funcs_map, (
+        f"Unsupported compute function for column in filter predicate: {compute_func}"
+    )
     return compute_func
 
 

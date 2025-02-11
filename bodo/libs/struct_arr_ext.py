@@ -650,9 +650,9 @@ def init_struct_with_nulls(values, nulls, names):
         and the specified indices as nulls.
     """
     names_unwrapped = unwrap_typeref(names)
-    assert isinstance(
-        names_unwrapped, bodo.utils.typing.ColNamesMetaType
-    ), f"Internal error in init_struct_with_nulls: 'names' must be a ColNamesMetaType. Got: {names}"
+    assert isinstance(names_unwrapped, bodo.utils.typing.ColNamesMetaType), (
+        f"Internal error in init_struct_with_nulls: 'names' must be a ColNamesMetaType. Got: {names}"
+    )
     names_tup = names_unwrapped.meta
     func_text = "def impl(values, nulls, names):\n"
     func_text += f"  s = init_struct(values, {names_tup})\n"

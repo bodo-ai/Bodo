@@ -308,4 +308,4 @@ def test_filter_pushdown_logging_msg(iceberg_database, iceberg_table_conn):
         )
         check_logger_msg(stream, "Total number of files is 100. Reading 10 files:")
         for i in range(10):
-            check_logger_msg(stream, f"partition_col_1=0/partition_col_2={i*10}")
+            check_logger_msg(stream, f"partition_col_1=0/partition_col_2={i * 10}")

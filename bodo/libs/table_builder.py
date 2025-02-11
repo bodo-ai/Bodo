@@ -293,7 +293,9 @@ def gen_init_table_builder_state_impl(
     n_arrs = len(arr_array_types)
 
     if get_overload_const_bool(use_chunked_builder):
-        assert output_type.is_chunked_builder, "Error in init_table_builder_state: expected_state_type.is_chunked_builder must be True if use_chunked_builder is True"
+        assert output_type.is_chunked_builder, (
+            "Error in init_table_builder_state: expected_state_type.is_chunked_builder must be True if use_chunked_builder is True"
+        )
 
         def impl(
             operator_id,

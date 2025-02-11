@@ -65,20 +65,6 @@ public class BodoIcebergHandler {
   }
 
   /**
-   * Remove a transaction from the transactions map if it exists. This is done manually, so we can
-   * access the underlying transaction information even after the transaction has been committed.
-   * This is useful because the Transaction.table() should hold the status of the last snapshot used
-   * to commit the table.
-   *
-   * <p>Note: This API is exposed to Python.
-   *
-   * @param txnID The id of the transaction to remove. If this id is not found this is a NO-OP.
-   */
-  public void removeTransaction(int txnID) {
-    this.transactions.remove(txnID);
-  }
-
-  /**
    * When creating a new table using createOrReplaceTable, we pass it a schema with valid field IDs
    * populated. However, as part of the transaction, Iceberg Java library creates a "fresh schema"
    * and re-assigns field IDs. They say it's for "consistency" reasons. However, this is problematic

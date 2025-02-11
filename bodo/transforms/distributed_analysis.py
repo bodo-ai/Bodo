@@ -711,9 +711,11 @@ class DistributedAnalysis:
         ):
             # attribute dist spec should be compatible with distribution of value
             attr_dist = rhs_typ.class_type.dist_spec[attr]
-            assert (
-                is_distributable_typ(lhs_typ) or is_distributable_tuple_typ(lhs_typ)
-            ), f"Variable {lhs} is not distributable since it is of type {lhs_typ} (required for getting distributed class field)"
+            assert is_distributable_typ(lhs_typ) or is_distributable_tuple_typ(
+                lhs_typ
+            ), (
+                f"Variable {lhs} is not distributable since it is of type {lhs_typ} (required for getting distributed class field)"
+            )
             if lhs not in array_dists:
                 array_dists[lhs] = attr_dist
             else:
@@ -1629,9 +1631,9 @@ class DistributedAnalysis:
             and is_bodosql_kernel_mod(func_mod)
         ) and not is_overload_constant_tuple(self.typemap[rhs.args[0].name]):
             elems = guard(find_build_tuple, self.func_ir, rhs.args[0])
-            assert (
-                elems is not None
-            ), f"Internal error, unable to find build tuple for arg0 of {func_name}"
+            assert elems is not None, (
+                f"Internal error, unable to find build tuple for arg0 of {func_name}"
+            )
 
             arrays = [lhs]
             for arg in elems:
@@ -1649,9 +1651,9 @@ class DistributedAnalysis:
             if lhs not in array_dists:
                 array_dists[lhs] = Distribution.OneD
             elems = guard(find_build_tuple, self.func_ir, rhs.args[0])
-            assert (
-                elems is not None
-            ), "Internal error, unable to find build tuple for arg0 of bodosql_case_kernel"
+            assert elems is not None, (
+                "Internal error, unable to find build tuple for arg0 of bodosql_case_kernel"
+            )
 
             arrays = [lhs] + [elem.name for elem in elems]
             if len(arrays) > 1:
@@ -1663,9 +1665,9 @@ class DistributedAnalysis:
             # cannot have any arrays.
             if not is_overload_constant_tuple(self.typemap[rhs.args[0].name]):
                 elems = guard(find_build_tuple, self.func_ir, rhs.args[0])
-                assert (
-                    elems is not None
-                ), f"Internal error, unable to find build tuple for arg0 of {func_name}"
+                assert elems is not None, (
+                    f"Internal error, unable to find build tuple for arg0 of {func_name}"
+                )
 
                 arrays = [lhs]
                 for arg in elems:
@@ -3018,9 +3020,9 @@ class DistributedAnalysis:
             if isinstance(shape_typ, types.Integer):
                 shape_vars = [shape_var]
             else:
-                assert isinstance(
-                    shape_typ, types.BaseTuple
-                ), "np.reshape(): invalid shape argument"
+                assert isinstance(shape_typ, types.BaseTuple), (
+                    "np.reshape(): invalid shape argument"
+                )
                 shape_vars = find_build_tuple(self.func_ir, shape_var, True)
             return self._analyze_call_np_reshape(
                 lhs, arr_var, shape_vars, array_dists, loc
@@ -3109,14 +3111,14 @@ class DistributedAnalysis:
         """analyze distributions of array functions (arr.func_name)"""
         if func_name == "transpose":
             if len(args) == 0:
-                raise BodoError("Transpose with no arguments is not" " supported", loc)
+                raise BodoError("Transpose with no arguments is not supported", loc)
             in_arr_name = arr.name
             arg0 = guard(get_constant, self.func_ir, args[0])
             if isinstance(arg0, tuple):
                 arg0 = arg0[0]
             if arg0 != 0:
                 raise BodoError(
-                    "Transpose with non-zero first argument" " is not supported", loc
+                    "Transpose with non-zero first argument is not supported", loc
                 )
             _meet_array_dists(self.typemap, lhs, in_arr_name, array_dists)
             return
@@ -3247,7 +3249,7 @@ class DistributedAnalysis:
             assert arr_name in array_dists, "array distribution not found"
             if is_REP(array_dists[arr_name]):
                 raise BodoError(
-                    "threaded return of array {} not valid" " since it is replicated",
+                    "threaded return of array {} not valid since it is replicated",
                     loc,
                 )
             array_dists[arr_name] = Distribution.Thread
@@ -3485,15 +3487,16 @@ class DistributedAnalysis:
             nullable_tup_def = guard(get_definition, self.func_ir, args[0])
             assert (
                 isinstance(nullable_tup_def, ir.Expr) and nullable_tup_def.op == "call"
-            ), "bodo.libs.array_kernels.concat only nullable tuples created with build_nullable_tuple"
+            ), (
+                "bodo.libs.array_kernels.concat only nullable tuples created with build_nullable_tuple"
+            )
             fdef = find_callname(self.func_ir, nullable_tup_def, self.typemap)
-            assert (
-                fdef
-                == (
-                    "build_nullable_tuple",
-                    "bodo.libs.nullable_tuple_ext",
-                )
-            ), "bodo.libs.array_kernels.concat only nullable tuples created with build_nullable_tuple"
+            assert fdef == (
+                "build_nullable_tuple",
+                "bodo.libs.nullable_tuple_ext",
+            ), (
+                "bodo.libs.array_kernels.concat only nullable tuples created with build_nullable_tuple"
+            )
             tup_val = nullable_tup_def.args[0]
         else:
             tup_val = args[0]
@@ -4053,9 +4056,11 @@ class DistributedAnalysis:
         ):
             # attribute dist spec should be compatible with distribution of value
             attr_dist = target_type.class_type.dist_spec[attr]
-            assert (
-                is_distributable_typ(val_type) or is_distributable_tuple_typ(val_type)
-            ), f"Variable {value.name} is not distributable since it is of type {val_type} (required for setting class field)"
+            assert is_distributable_typ(val_type) or is_distributable_tuple_typ(
+                val_type
+            ), (
+                f"Variable {value.name} is not distributable since it is of type {val_type} (required for setting class field)"
+            )
             assert value.name in array_dists, "array distribution not found"
             val_dist = array_dists[value.name]
             # value shouldn't have a more restrictive distribution than the dist spec
@@ -4088,7 +4093,9 @@ class DistributedAnalysis:
                 typ = self.typemap[var.name]
                 assert not (
                     is_distributable_typ(typ) or is_distributable_tuple_typ(typ)
-                ), "Internal error: distributable type does not have assigned distribution at return"
+                ), (
+                    "Internal error: distributable type does not have assigned distribution at return"
+                )
                 return
             is_1D_or_1D_Var = lambda d: d in (Distribution.OneD, Distribution.OneD_Var)
             ret_dist = array_dists[var.name]

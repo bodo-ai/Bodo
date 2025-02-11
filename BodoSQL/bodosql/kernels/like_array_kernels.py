@@ -497,18 +497,18 @@ def overload_convert_sql_pattern_to_python_runtime_dict_encoding(
     Returns: Tuple[bodo.string_array, bodo.boolean_array_type, bodo.boolean_array_type, bodo.boolean_array_type, bodo.boolean_array_type]
     """
     if pattern == bodo.dict_str_arr_type:
-        assert (
-            types.unliteral(escape) == types.unicode_type
-        ), "escape must be a scalar if pattern is a dictionary encoded array"
+        assert types.unliteral(escape) == types.unicode_type, (
+            "escape must be a scalar if pattern is a dictionary encoded array"
+        )
         dict_input = "pattern"
         call_inputs = "dict_arr[i], escape, case_insensitive"
     else:
-        assert (
-            escape == bodo.dict_str_arr_type
-        ), "At least one of pattern or escape must be a dictionary encoded array"
-        assert (
-            types.unliteral(pattern) == types.unicode_type
-        ), "pattern must be a scalar if escape is a dictionary encoded array"
+        assert escape == bodo.dict_str_arr_type, (
+            "At least one of pattern or escape must be a dictionary encoded array"
+        )
+        assert types.unliteral(pattern) == types.unicode_type, (
+            "pattern must be a scalar if escape is a dictionary encoded array"
+        )
         dict_input = "escape"
         call_inputs = "pattern, dict_arr[i], case_insensitive"
     func_text = f"""def impl(pattern, escape, case_insensitive):

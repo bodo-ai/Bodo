@@ -270,10 +270,11 @@ def iceberg_pq_reader_init_py_entry(
         arrow_reader_t (ArrowReader): The typing of the output ArrowReader
     """
 
-    assert (
-        isinstance(arrow_reader_t, types.TypeRef)
-        and isinstance(arrow_reader_t.instance_type, ArrowReaderType)
-    ), "iceberg_pq_reader_init_py_entry(): The last argument arrow_reader must by a TypeRef to an ArrowReader"
+    assert isinstance(arrow_reader_t, types.TypeRef) and isinstance(
+        arrow_reader_t.instance_type, ArrowReaderType
+    ), (
+        "iceberg_pq_reader_init_py_entry(): The last argument arrow_reader must by a TypeRef to an ArrowReader"
+    )
 
     def codegen(context: BaseContext, builder: IRBuilder, signature, args):
         fnty = lir.FunctionType(
@@ -914,7 +915,7 @@ def overload_get_filters_pyobject(filters_str, var_tup):
 class IcebergFilterVisitor(FilterVisitor[str]):
     """
     Convert a Bodo IR Filter term to a string representation
-    of the bodo_iceberg_connector's FilterExpr class.
+    of PyIceberg's filter classes.
     See filters_to_iceberg_expr for more details.
 
     Args:
@@ -1209,9 +1210,9 @@ def _gen_iceberg_reader_chunked_py(
         correct indices.
     """
     source_pyarrow_schema = pyarrow_schema
-    assert (
-        source_pyarrow_schema is not None
-    ), "SQLReader node must contain a source_pyarrow_schema if reading from Iceberg"
+    assert source_pyarrow_schema is not None, (
+        "SQLReader node must contain a source_pyarrow_schema if reading from Iceberg"
+    )
 
     # Generate output pyarrow schema for used cols (from BodoSQL)
     if used_cols is None:  # pragma: no cover
@@ -1472,9 +1473,9 @@ def _gen_iceberg_reader_py(
         filter_map, _ = bodo.ir.connector.generate_filter_map(filters)
         filter_args = ", ".join(filter_map.values())
 
-    assert (
-        pyarrow_schema is not None
-    ), "SQLNode must contain a pyarrow_schema if reading from an Iceberg database"
+    assert pyarrow_schema is not None, (
+        "SQLNode must contain a pyarrow_schema if reading from an Iceberg database"
+    )
 
     # Generate the predicate filters. Note we pass
     # all col names as possible partitions via partition names.

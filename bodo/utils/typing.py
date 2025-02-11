@@ -1308,9 +1308,9 @@ def is_bodosql_context_type(t):
             from bodosql.context_ext import BodoSQLContextType
         except ImportError:  # pragma: no cover
             raise ImportError("BodoSQL not installed properly")
-        assert isinstance(
-            t, BodoSQLContextType
-        ), "is_bodosql_context_type: expected BodoSQLContextType"
+        assert isinstance(t, BodoSQLContextType), (
+            "is_bodosql_context_type: expected BodoSQLContextType"
+        )
         return True
 
     return False
@@ -1483,6 +1483,7 @@ class CreateTableMetaType(MetaType):
         types.Type.__init__(self, f"CreateTableMetaType({meta})")
 
 
+EMPTY_CREATE_TABLE_META = CreateTableMetaType(None, None, None)
 register_model(CreateTableMetaType)(models.OpaqueModel)
 
 
@@ -2556,9 +2557,9 @@ def fold_typing_args(
         arg_defaults = {}
         for i, arg_name in enumerate(arg_names):
             if arg_name in unsupported_arg_names:
-                assert (
-                    arg_name in defaults
-                ), f"{func_name}(): '{arg_name}' is unsupported but no default is provided"
+                assert arg_name in defaults, (
+                    f"{func_name}(): '{arg_name}' is unsupported but no default is provided"
+                )
                 unsupported_args[arg_name] = folded_args[i]
                 arg_defaults[arg_name] = defaults[arg_name]
 
@@ -3127,9 +3128,9 @@ def error_on_unsupported_streaming_arrays(table_type):
     if table_type in (None, types.unknown, types.undefined):
         return
 
-    assert isinstance(
-        table_type, bodo.TableType
-    ), "error_on_unsupported_streaming_arrays: TableType expected"
+    assert isinstance(table_type, bodo.TableType), (
+        "error_on_unsupported_streaming_arrays: TableType expected"
+    )
 
     for arr_type in table_type.arr_types:
         if isinstance(arr_type, bodo.IntervalArrayType):

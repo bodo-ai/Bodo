@@ -1448,9 +1448,9 @@ def get_schema_from_metadata(
         if isinstance(dtype, UnknownSnowflakeType):
             can_system_sample = can_table_be_system_sampled(cursor, orig_table)
             if orig_table is None:
-                src, cur_col = f"({desc_query})", f"${i+1}"
+                src, cur_col = f"({desc_query})", f"${i + 1}"
             else:
-                src, cur_col = orig_table, f"${orig_table_indices[i]+1}"
+                src, cur_col = orig_table, f"${orig_table_indices[i] + 1}"
             if dtype == UnknownSnowflakeType.LIST:
                 dtype = get_list_type_from_metadata(
                     cursor,
@@ -1489,9 +1489,9 @@ def get_schema_from_metadata(
         if dtype == pa.null():
             is_nullable = True
 
-        assert isinstance(
-            dtype, pa.DataType
-        ), "All Snowflake Columns Should Have a PyArrow DataType by Now"
+        assert isinstance(dtype, pa.DataType), (
+            "All Snowflake Columns Should Have a PyArrow DataType by Now"
+        )
         arrow_dtypes.append((field_meta.name, dtype, is_nullable))
 
     # For any NUMBER columns, fetch SYSTEM$TYPEOF metadata to determine
@@ -2007,9 +2007,9 @@ def execute_length_query_helper(
     # all of the data.
     arrow_data = cur.fetch_arrow_all()
     num_rows = arrow_data[0][0].as_py()  # type: ignore
-    assert isinstance(
-        num_rows, int
-    ), f"Expected 'num_rows' to be an int, but got {type(num_rows)} instead."
+    assert isinstance(num_rows, int), (
+        f"Expected 'num_rows' to be an int, but got {type(num_rows)} instead."
+    )
     cur.close()
     return num_rows, int(sf_exec_time * 1e6)
 
@@ -2043,9 +2043,9 @@ def execute_query_helper(
     sf_exec_time = time.monotonic() - t0
     # Fetch the total number of rows that will be loaded globally
     num_rows: int = cur.rowcount  # type: ignore
-    assert isinstance(
-        num_rows, int
-    ), f"Expected 'num_rows' to be an int, but got {type(num_rows)} instead."
+    assert isinstance(num_rows, int), (
+        f"Expected 'num_rows' to be an int, but got {type(num_rows)} instead."
+    )
     if bodo.user_logging.get_verbose_level() >= 2:
         bodo.user_logging.log_message(
             "Snowflake Query Submission (Read)",
@@ -2059,9 +2059,9 @@ def execute_query_helper(
 
     # Get the list of result batches (this doesn't load data).
     batches: list[ResultBatch] = cur.get_result_batches()  # type: ignore
-    assert isinstance(
-        batches, list
-    ), f"Expected 'batches' to be a list, but got {type(batches)} instead."
+    assert isinstance(batches, list), (
+        f"Expected 'batches' to be a list, but got {type(batches)} instead."
+    )
 
     if len(batches) > 0 and not isinstance(batches[0], ArrowResultBatch):
         if (
@@ -2124,14 +2124,14 @@ def get_dataset(
               the actual data results.
             - The number of rows in the output.
     """
-    assert not (
-        only_fetch_length and not is_select_query
-    ), "The only length optimization can only be run with select queries"
+    assert not (only_fetch_length and not is_select_query), (
+        "The only length optimization can only be run with select queries"
+    )
 
     # Data cannot be distributed if each rank is independent
-    assert not (
-        is_parallel and is_independent
-    ), "Snowflake get_dataset: is_parallel and is_independent cannot be True at the same time"
+    assert not (is_parallel and is_independent), (
+        "Snowflake get_dataset: is_parallel and is_independent cannot be True at the same time"
+    )
 
     # Snowflake import
     try:
@@ -2304,8 +2304,7 @@ def drop_internal_stage(cursor: SnowflakeCursor, stage_name: str):  # pragma: no
     ev = tracing.Event("drop_internal_stage", is_parallel=False)
 
     drop_stage_sql = (
-        f'DROP STAGE IF EXISTS "{stage_name}" '
-        f"/* io.snowflake.drop_internal_stage() */ "
+        f'DROP STAGE IF EXISTS "{stage_name}" /* io.snowflake.drop_internal_stage() */ '
     )
     cursor.execute(drop_stage_sql, _is_internal=True)
 
@@ -2815,25 +2814,23 @@ try:
 except (ImportError, AttributeError):
     snowflake_connector_cursor_python_type = None
 
-SnowflakeConnectorCursorType = install_py_obj_class(
+SnowflakeConnectorCursorType, snowflake_connector_cursor_type = install_py_obj_class(
     types_name="snowflake_connector_cursor_type",
     python_type=snowflake_connector_cursor_python_type,
     module=sys.modules[__name__],
     class_name="SnowflakeConnectorCursorType",
     model_name="SnowflakeConnectorCursorModel",
 )
-snowflake_connector_cursor_type = types.snowflake_connector_cursor_type  # noqa
 
 # Register opaque type for TemporaryDirectory so it can be shared between
 # different sections of jitted code
-TemporaryDirectoryType = install_py_obj_class(
+TemporaryDirectoryType, temporary_directory_type = install_py_obj_class(
     types_name="temporary_directory_type",
     python_type=TemporaryDirectory,
     module=sys.modules[__name__],
     class_name="TemporaryDirectoryType",
     model_name="TemporaryDirectoryModel",
 )
-temporary_directory_type = types.temporary_directory_type  # noqa
 
 
 def get_snowflake_stage_info(

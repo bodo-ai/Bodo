@@ -27,11 +27,12 @@ from pyiceberg.io import (
     AWS_REGION,
     AWS_SECRET_ACCESS_KEY,
     AWS_SESSION_TOKEN,
+    FileIO,
     load_file_io,
 )
 from pyiceberg.partitioning import UNPARTITIONED_PARTITION_SPEC, PartitionSpec
 from pyiceberg.schema import Schema
-from pyiceberg.serializers import FromInputFile
+from pyiceberg.serializers import FromInputFile, ToOutputFile
 from pyiceberg.table import CommitTableResponse, CreateTableTransaction, Table
 from pyiceberg.table.metadata import new_table_metadata
 from pyiceberg.table.sorting import UNSORTED_SORT_ORDER, SortOrder
@@ -53,7 +54,7 @@ S3TABLES_TABLE_BUCKET_ARN = "s3tables.warehouse"
 S3TABLES_ENDPOINT = "s3tables.endpoint"
 
 # for naming rules see: https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-tables-buckets-naming.html
-S3TABLES_VALID_NAME_REGEX = pattern = re.compile("[a-z0-9][a-z0-9_]{1,61}[a-z0-9]")
+S3TABLES_VALID_NAME_REGEX = pattern = re.compile("[a-z0-9][a-z0-9_]{0,253}[a-z0-9]")
 S3TABLES_RESERVED_NAMESPACE = "aws_s3_metadata"
 
 S3TABLES_FORMAT = "ICEBERG"
@@ -221,6 +222,14 @@ class S3TablesCatalog(MetastoreCatalog):
 
         return namespace, table_name
 
+    @staticmethod
+    def _write_metadata(
+        metadata, io: FileIO, metadata_path: str, overwrite: bool = False
+    ) -> None:
+        ToOutputFile.table_metadata(
+            metadata, io.new_output(metadata_path), overwrite=overwrite
+        )
+
     def create_table(
         self,
         identifier: str | Identifier,
@@ -236,7 +245,7 @@ class S3TablesCatalog(MetastoreCatalog):
             )
         namespace, table_name = self._validate_database_and_table_identifier(identifier)
 
-        schema: Schema = self._convert_schema_if_needed(schema)  # type: ignore
+        ice_schema = self._convert_schema_if_needed(schema)
 
         # creating a new table with S3 Tables is a two step process. We first have to create an S3 Table with the
         # S3 Tables API and then write the new metadata.json to the warehouseLocation associated with the newly
@@ -268,7 +277,7 @@ class S3TablesCatalog(MetastoreCatalog):
             metadata_location = self._get_metadata_location(location=warehouse_location)
             metadata = new_table_metadata(
                 location=warehouse_location,
-                schema=schema,
+                schema=ice_schema,
                 partition_spec=partition_spec,
                 sort_order=sort_order,
                 properties=properties,
