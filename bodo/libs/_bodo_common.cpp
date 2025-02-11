@@ -543,6 +543,7 @@ std::unique_ptr<Schema> Schema::Project(
 
 #if defined(_WIN32)
 
+// Constructor for float/double to int128 conversion
 template <FloatOrDouble T>
 __int128_t::__int128_t(T in_val) {
     _Word[0] = _Word[1] = 0;
@@ -605,6 +606,7 @@ __int128_t::__int128_t(T in_val) {
 template __int128_t::__int128_t(float in_val);
 template __int128_t::__int128_t(double in_val);
 
+// Helper for int128 for float/double conversion
 template <FloatOrDouble T>
 T __int128_t::int128_to_float() const {
     const __int128_t& value = *this;
