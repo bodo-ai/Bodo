@@ -102,7 +102,7 @@ elseif(WIN32)
   find_package(AWSSDK REQUIRED COMPONENTS core)
 endif()
 
-# Find additional import libraries need to compile on Windows
+# Find additional import libraries needed to compile on Windows
 if(WIN32)
   find_package(CURL REQUIRED)
   find_package(OpenSSL REQUIRED)
