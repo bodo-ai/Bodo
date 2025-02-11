@@ -26,8 +26,6 @@ from .common import (
     IcebergConnectionType,
     flatten_concatenation,
     flatten_tuple,
-    format_iceberg_conn,
-    format_iceberg_conn_njit,
     verify_pyiceberg_installed,
 )
 from .read_compilation import (
@@ -334,8 +332,6 @@ __all__ = [
     "merge_into",
     "ICEBERG_FIELD_ID_MD_KEY",
     "IcebergConnectionType",
-    "format_iceberg_conn",
-    "format_iceberg_conn_njit",
     "get_iceberg_pq_dataset",
     "is_snowflake_managed_iceberg_wh",
     "prefetch_sf_tables_njit",

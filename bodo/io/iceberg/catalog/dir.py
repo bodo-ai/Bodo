@@ -115,13 +115,13 @@ class DirCatalog(Catalog):
             raise NotImplementedError(
                 "DirCatalog does not support user specified table locations."
             )
-        schema: Schema = self._convert_schema_if_needed(schema)  # type: ignore
+        ice_schema = self._convert_schema_if_needed(schema)
         iden = self.identifier_to_tuple(identifier)
         table_dir_path = self._table_path(iden)
 
         metadata = new_table_metadata(
             location=table_dir_path,
-            schema=schema,
+            schema=ice_schema,
             partition_spec=partition_spec,
             sort_order=sort_order,
             properties=properties,
@@ -259,4 +259,32 @@ class DirCatalog(Catalog):
         sort_order: sorting.SortOrder = sorting.UNSORTED_SORT_ORDER,
         properties: Properties = EMPTY_DICT,
     ) -> CreateTableTransaction:
-        raise NotImplementedError("create_table_transaction currently not supported.")
+        if location:
+            raise NotImplementedError(
+                "DirCatalog does not support user specified table locations."
+            )
+        ice_schema = self._convert_schema_if_needed(schema)
+        iden = self.identifier_to_tuple(identifier)
+        table_dir_path = self._table_path(iden)
+
+        metadata = new_table_metadata(
+            location=table_dir_path,
+            schema=ice_schema,
+            partition_spec=partition_spec,
+            sort_order=sort_order,
+            properties=properties,
+        )
+
+        # Write metadata file
+        metadata_loc = f"{table_dir_path}/metadata/v1.metadata.json"
+        io = load_file_io(self.properties, metadata_loc)
+
+        return CreateTableTransaction(
+            StagedTable(
+                identifier=iden,
+                metadata=metadata,
+                metadata_location=metadata_loc,
+                io=io,
+                catalog=self,
+            )
+        )

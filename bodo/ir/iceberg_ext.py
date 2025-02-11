@@ -915,7 +915,7 @@ def overload_get_filters_pyobject(filters_str, var_tup):
 class IcebergFilterVisitor(FilterVisitor[str]):
     """
     Convert a Bodo IR Filter term to a string representation
-    of the bodo_iceberg_connector's FilterExpr class.
+    of PyIceberg's filter classes.
     See filters_to_iceberg_expr for more details.
 
     Args:
