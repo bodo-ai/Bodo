@@ -11,10 +11,9 @@ import pandas as pd
 
 import bodo
 import bodo.utils.tracing as tracing
-from bodo.io.iceberg.common import format_iceberg_conn_njit, get_rest_catalog_config
+from bodo.io.iceberg.common import get_rest_catalog_config
 from bodo.io.iceberg.write import (
     generate_data_file_info,
-    get_table_details_before_write,
     iceberg_pq_write,
 )
 from bodo.io.s3_fs import (
@@ -270,3 +269,11 @@ def iceberg_merge_cow_py(
         impl = locals["impl"]
 
     return impl
+
+
+def format_iceberg_conn_njit():
+    pass
+
+
+def get_table_details_before_write():
+    pass

@@ -3769,8 +3769,7 @@ class TypingTransforms:
                     con_arg, label, rhs.loc, err_msg=err_msg
                 )
 
-            # TODO: BSE-3331: This shouldn't have to change the con_arg, con_arg should be able to stay as an ir.Var but
-            # right now it does because we need to call format_iceberg_conn on the value before passing to the IcebergReader
+            # TODO: BSE-3331: This shouldn't have to change the con_arg, con_arg should be able to stay as an ir.Var
             if not isinstance(con_type, bodo.io.iceberg.IcebergConnectionType):
                 con_arg = ir.Const(con_str, con_arg.loc)
 
