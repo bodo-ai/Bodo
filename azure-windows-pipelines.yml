@@ -120,7 +120,7 @@ stages:
       CACHE_TEST: true
       SPAWN_MODE_TEST: false
       pool_name: 'windows-ci'
-      use_bodo_arrow_fork: 0
+      # use_bodo_arrow_fork: 0
       matrix:
         TEST_2P:
           NP: 2
