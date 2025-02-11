@@ -286,7 +286,7 @@ struct ChunkedTableArrayBuilder {
 
         for (size_t i = 0; i < idx_length; i++) {
             int64_t row_idx = idxs[i + idx_start];
-            T new_data = row_idx < 0 ? 0 : in_data[row_idx];
+            T new_data = row_idx < 0 ? static_cast<T>(0) : in_data[row_idx];
             out_data[this->size + i] = new_data;
         }
         for (size_t i = 0; i < idx_length; i++) {
@@ -426,7 +426,7 @@ struct ChunkedTableArrayBuilder {
 
         for (size_t i = 0; i < idx_length; i++) {
             int64_t row_idx = idxs[i + idx_start];
-            T new_data = row_idx < 0 ? 0 : in_data[row_idx];
+            T new_data = row_idx < 0 ? static_cast<T>(0) : in_data[row_idx];
             out_data[this->size + i] = new_data;
         }
         for (size_t i = 0; i < idx_length; i++) {
@@ -511,7 +511,7 @@ struct ChunkedTableArrayBuilder {
 
         for (size_t i = 0; i < idx_length; i++) {
             int64_t row_idx = idxs[i + idx_start];
-            T new_data = row_idx < 0 ? 0 : in_data[row_idx];
+            T new_data = row_idx < 0 ? static_cast<T>(0) : in_data[row_idx];
             out_data[this->size + i] = new_data;
         }
         this->data_array->length += idx_length;
@@ -556,7 +556,7 @@ struct ChunkedTableArrayBuilder {
 
         for (size_t i = 0; i < idx_length; i++) {
             int64_t row_idx = idxs[i + idx_start];
-            T new_data = row_idx < 0 ? 0 : in_data[row_idx];
+            T new_data = row_idx < 0 ? static_cast<T>(0) : in_data[row_idx];
             out_data[this->size + i] = new_data;
         }
         this->data_array->length += idx_length;
