@@ -602,8 +602,38 @@ __int128_t::__int128_t(T in_val) {
     }
 }
 
-template __int128_t::__int128_t<float>(float in_val);
-template __int128_t::__int128_t<double>(double in_val);
+template __int128_t::__int128_t(float in_val);
+template __int128_t::__int128_t(double in_val);
+
+template <FloatOrDouble T>
+T __int128_t::int128_to_float() const {
+    const __int128_t& value = *this;
+
+    bool negative = (value < __int128_t(0));
+    __int128_t mag = negative ? static_cast<__int128_t>(-value)
+                              : static_cast<__int128_t>(value);
+
+    // Combine (high64 * 2^64 + low64) in a higher-precision type
+    static const double TWO_POW_64 = std::ldexpl((double)1.0, 64);
+    double temp = static_cast<double>(value._Word[1]) * TWO_POW_64 +
+                  static_cast<double>(value._Word[0]);
+
+    // If outside float range, clamp or set to infinity.
+    if (temp > std::numeric_limits<T>::max()) {
+        temp = std::numeric_limits<T>::infinity();
+    }
+
+    // Convert to float and restore sign
+    T result = static_cast<T>(temp);
+    if (negative) {
+        result = -result;
+    }
+
+    return result;
+}
+
+template float __int128_t::int128_to_float<float>() const;
+template double __int128_t::int128_to_float<double>() const;
 
 #endif
 

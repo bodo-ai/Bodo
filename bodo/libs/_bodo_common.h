@@ -100,9 +100,12 @@ struct __int128_t : std::_Signed128 {
     template <FloatOrDouble T>
     __int128_t(T in_val);
 
-    operator float() const { return _Word[0]; }
+    template <FloatOrDouble T>
+    T int128_to_float() const;
 
-    operator double() const { return _Word[0]; }
+    operator float() const { return int128_to_float<float>(); }
+
+    operator double() const { return int128_to_float<double>(); }
 
     template <std::integral T>
     friend constexpr __int128_t operator<<(const __int128_t& _Left,
