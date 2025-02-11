@@ -17,144 +17,6 @@ else()
   set (X86 FALSE)
 endif()
 
-#----------------------- Helper functions -----------------------
-# Function to set default compiler options
-function(set_default_compiler_options)
-  if (LINUX AND X86)
-    add_compile_options(
-      # -march=haswell is used to enable AVX2 support (required by SIMD bloom filter implementation)
-      "-march=haswell"
-      # Avoid GCC errors for using int64 in allocations
-      "-Wno-alloc-size-larger-than"
-      # Avoid GCC errors for unknown pragmas like "region"
-      "-Wno-error=unknown-pragmas"
-    )
-  endif()
-
-  if (WIN32)
-    # TODO xx: enable warnings.
-    add_compile_options(
-      "/wd4819" # Suppress warnings about file character encoding
-      "/wd4996" # Suppress warnings about deprecated functions
-      "/wd4312" # Suppress warnings about conversion
-      "/wd4365" # Supress warnings about conversions (signed/unsigned)
-      "/wd4244" # Supress warning about conversions (loss of data)
-      "/wd4061" # Supress warning about switch not being explicitly handled
-      "/wd4100" # Supress warning about unreferenced formal parameter.
-      "/wd4551" # Suppress warnings about function call missing argument list
-      "/w"      # disable other warnings
-      "/FS"
-      "/GS"       # Enable buffer security checks
-      "/guard:cf" # Enable control flow guard (security feature)
-      "/EHsc"
-    )
-    add_definitions(-DMS_WINDOWS)  # Globally define MS_WINDOWS
-  else()
-    add_compile_options(
-      "-Wno-c99-designator"         # Check if still necessary?
-      "-Wno-return-type-c-linkage"  # Check if still necessary?
-      "-Wno-macro-redefined"        # Check if still necessary?
-      "-Wno-implicit-const-int-float-conversion" # Necessary for DataSketches
-      "-fwrapv"                     # Conda used to force-add. Remove in follow up PR
-      "-fstack-protector-strong"    # Conda used to force-add. Remove in follow up PR
-      "-D_FORTIFY_SOURCE=2"         # Conda used to force-add. Remove in follow up PR
-    )
-  endif()
-endfunction()
-
-
-# Function to set debug options
-function(set_debug_options)
-  if (WIN32)
-    add_compile_options(
-      "/Zi"  # Generate debug information
-    )
-    add_link_options("/DEBUG") # Generate debug symbols
-  else()
-    add_compile_options(
-      "-g"
-      "-O1"
-      "-fno-omit-frame-pointer"
-    )
-  endif()
-endfunction()
-
-
-# Function to set sanitizer options
-function(set_sanitizer_options)
-  if (NOT WIN32)
-    add_compile_options(
-      "-fsanitize=address"
-      "-fsanitize=undefined"
-    )
-    add_link_options(
-      "-fsanitize=address"
-      "-fsanitize=undefined"
-    )
-  else()
-    # Note for DebugSanitize builds we have to compile with /bigobj to allow larger object files
-    # https://learn.microsoft.com/en-us/cpp/build/reference/bigobj-increase-number-of-sections-in-dot-obj-file?view=msvc-170 
-    add_compile_options(
-      "/bigobj"
-      "/fsanitize=address"
-    )
-    # These definitions are necessary for now because of conflicts between our extensions and other
-    # build dependencies e.g. fmt. In the future we can look into enabling them:
-    # https://learn.microsoft.com/en-us/cpp/sanitizers/error-container-overflow?view=msvc-170
-    # TODO [BSE-4552] Remove once we have fully working DebugSanitize config
-    add_definitions(
-      -D_DISABLE_STRING_ANNOTATION
-      -D_DISABLE_VECTOR_ANNOTATION
-    )
-  endif()
-endfunction()
-
-
-# Function to set release options
-function(set_release_options)
-  if (NOT WIN32)
-    add_compile_options(
-      "-O3"
-      "-ftree-vectorize"
-      # Encourages LTO & increase obfuscations
-      $<$<COMPILE_LANGUAGE:CXX>:-fvisibility=hidden>
-    )
-  endif()
-endfunction()
-
-
-# -------------------- Include for All Targets in General ---------------------
-function(include_general_directories)
-  if (WIN32)
-    set(CONDA_INCLUDE_DIR "$ENV{CONDA_PREFIX}\\Library\\include")
-    set(CONDA_LIB_DIR "$ENV{CONDA_PREFIX}\\Library\\lib")
-  else()
-    set(CONDA_INCLUDE_DIR "$ENV{CONDA_PREFIX}/include")
-    set(CONDA_LIB_DIR "$ENV{CONDA_PREFIX}/lib")
-  endif()
-
-  cmake_print_variables(CONDA_INCLUDE_DIR)
-  cmake_print_variables(CONDA_LIB_DIR)
-
-  # This is supposed to work, but isn't. I don't know why
-  # include_directories(SYSTEM "${CONDA_INCLUDE_DIR}")
-  # Similarly, the following line doesn't work
-  # target_include_directories(ext SYSTEM PRIVATE ${CONDA_INCLUDE_DIR})
-  # In both cases, I'm certain that CMake believes that the directory is included
-  # But the Ninja file and GCC / Clang command doesn't include the directory
-  # TODO: Figure out what's going on here
-  # As an alternative, we can manually construct the generated arguments
-  # and append to the CMAKE_*_FLAGS variables directly
-
-  if (WIN32)
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /external:I ${CONDA_INCLUDE_DIR}")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /external:I ${CONDA_INCLUDE_DIR} /permissive-")
-  else()
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -isystem ${CONDA_INCLUDE_DIR}")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -isystem ${CONDA_INCLUDE_DIR}")
-  endif()
-endfunction()
-
 # ------------------------- Enable Compilation Caches -------------------------
 # Enable CCache or SCCache if Found
 # CCache is very useful when developing C++ code, because on
@@ -234,12 +96,15 @@ if("$ENV{CONDA_PREFIX}" STREQUAL "")
     unset(BUILD_ONLY)
     unset(ENABLE_TESTING)
 elseif(WIN32)
- find_package(AWSSDK REQUIRED COMPONENTS core)
+  # On Windows we need to link with the import library (.lib) in order to resolve references into dynamically loaded libraries.
+  # find_package locates the import library so we can make it availible to our extension.
+  # https://learn.microsoft.com/en-us/windows/win32/dlls/dynamic-link-library-creation
+  find_package(AWSSDK REQUIRED COMPONENTS core)
 endif()
 
 if(WIN32)
- find_package(CURL REQUIRED)
- find_package(OpenSSL REQUIRED)
+  find_package(CURL REQUIRED)
+  find_package(OpenSSL REQUIRED)
 endif()
 
 # Add boost as a dependency
@@ -280,12 +145,7 @@ message("Source dir of datasketches = ${datasketches_INSTALL_DIR}")
 # Use RelWithDebInfo Mode by Default
 cmake_print_variables(CMAKE_BUILD_TYPE)
 
-# Enable sanitizer through environment varaible since
-# "DebugSanitize" is not recognized as a valid build type
-# TODO [BSE-4552]: Add santizier config for Windows builds.
-if (WIN32 AND DEFINED ENV{BUILD_BODO_SAN})
-  set(CMAKE_BUILD_TYPE "DebugSanitize")
-elseif (NOT CMAKE_BUILD_TYPE)
+if (NOT CMAKE_BUILD_TYPE)
   message(STATUS "No build type selected, default to RelWithDebInfo")
   set(CMAKE_BUILD_TYPE "RelWithDebInfo")
 endif()
@@ -324,21 +184,103 @@ endif()
 message(STATUS "\n*** Apply Compiler Flags for Targets")
 
 # Default Compiler Args
-set_default_compiler_options()
+if (LINUX AND X86)
+  add_compile_options(
+    # -march=haswell is used to enable AVX2 support (required by SIMD bloom filter implementation)
+    "-march=haswell"
+    # Avoid GCC errors for using int64 in allocations
+    "-Wno-alloc-size-larger-than"
+    # Avoid GCC errors for unknown pragmas like "region"
+    "-Wno-error=unknown-pragmas"
+  )
+endif()
+
+if (WIN32)
+  # TODO [BSE-4559]: enable warnings.
+  add_compile_options(
+    "/wd4819" # Suppress warnings about file character encoding
+    "/wd4996" # Suppress warnings about deprecated functions
+    "/wd4312" # Suppress warnings about conversion
+    "/wd4365" # Supress warnings about conversions (signed/unsigned)
+    "/wd4244" # Supress warning about conversions (loss of data)
+    "/wd4061" # Supress warning about switch not being explicitly handled
+    "/wd4100" # Supress warning about unreferenced formal parameter.
+    "/wd4551" # Suppress warnings about function call missing argument list
+    "/w"      # disable other warnings
+    "/FS"
+    "/GS"       # Enable buffer security checks
+    "/guard:cf" # Enable control flow guard (security feature)
+    "/EHsc"
+  )
+  add_definitions(-DMS_WINDOWS)  # Globally define MS_WINDOWS
+  else()
+  add_compile_options(
+    "-Wno-c99-designator"         # Check if still necessary?
+    "-Wno-return-type-c-linkage"  # Check if still necessary?
+    "-Wno-macro-redefined"        # Check if still necessary?
+    "-Wno-implicit-const-int-float-conversion" # Necessary for DataSketches
+    "-fwrapv"                     # Conda used to force-add. Remove in follow up PR
+    "-fstack-protector-strong"    # Conda used to force-add. Remove in follow up PR
+    "-D_FORTIFY_SOURCE=2"         # Conda used to force-add. Remove in follow up PR
+  )
+endif()
 
 # Debug Compiler Args
 if (CMAKE_BUILD_TYPE STREQUAL "Debug" OR CMAKE_BUILD_TYPE STREQUAL "DebugSanitize")
-  set_debug_options()
+  if (NOT WIN32)
+    add_compile_options(
+      "-g"
+      "-O1"
+      "-fno-omit-frame-pointer"
+    )
+  else()
+    add_compile_options(
+      "/Zi"  # Generate debug information
+    )
+    add_link_options("/DEBUG") # Generate debug symbols
+  endif()
 endif()
 
 # Debug with Sanitizer Flags
+# TODO [BSE-4552]: Add DebugSanitize as a build type for Windows builds.
 if (CMAKE_BUILD_TYPE STREQUAL "DebugSanitize")
-  set_sanitizer_options()
+  if (NOT WIN32)
+    add_compile_options(
+      "-fsanitize=address"
+      "-fsanitize=undefined"
+    )
+    add_link_options(
+      "-fsanitize=address"
+      "-fsanitize=undefined"
+    )
+  else()
+    # Note for DebugSanitize builds we have to compile with /bigobj to allow larger object files
+    # https://learn.microsoft.com/en-us/cpp/build/reference/bigobj-increase-number-of-sections-in-dot-obj-file?view=msvc-170
+    add_compile_options(
+      "/bigobj"
+      "/fsanitize=address"
+    )
+    # These definitions are necessary for now because of conflicts between our extensions and other
+    # build dependencies e.g. fmt. In the future we can look into enabling them:
+    # https://learn.microsoft.com/en-us/cpp/sanitizers/error-container-overflow?view=msvc-170
+    # TODO [BSE-4552] Remove once we have fully working DebugSanitize config
+    add_definitions(
+      -D_DISABLE_STRING_ANNOTATION
+      -D_DISABLE_VECTOR_ANNOTATION
+    )
+  endif()
 endif()
 
 # Release Compiler Args
 if (CMAKE_BUILD_TYPE STREQUAL "Release" OR CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
-  set_release_options()
+  if (NOT WIN32)
+    add_compile_options(
+      "-O3"
+      "-ftree-vectorize"
+      # Encourages LTO & increase obfuscations
+      $<$<COMPILE_LANGUAGE:CXX>:-fvisibility=hidden>
+    )
+  endif()
 endif()
 
 
@@ -346,7 +288,6 @@ endif()
 # Build Package + Program Dependencies
 find_package(Python COMPONENTS Interpreter Development.Module REQUIRED)
 find_program(CYTHON_EXECUTABLE "cython" REQUIRED)
-find_program(PYTHON_EXECUTABLE "python" REQUIRED)
 
 # Include for All Targets in General
 if (WIN32)
@@ -832,10 +773,10 @@ else()
   )
 endif()
 
-
 target_link_directories(ext PRIVATE ${PYARROW_LIB_DIR} "${Python_NumPy_INCLUDE_DIR}/../lib")
 
 target_include_directories(ext PRIVATE ${datasketches_INSTALL_DIR}/include/DataSketches)
+
 target_compile_definitions(ext PRIVATE ARROW_PYTHON_EXPORTING)
 
 target_link_libraries(ext PRIVATE
@@ -855,7 +796,6 @@ if (NOT WIN32)
   # We use the header-only version of boost::json: https://www.boost.org/doc/libs/1_87_0/libs/json/doc/html/json/overview.html
   target_link_libraries(ext PRIVATE pthread ${Boost_LIBRARIES})
 else()
-  target_compile_definitions(ext PRIVATE)
   target_link_libraries(ext PRIVATE
     CURL::libcurl
     OpenSSL::SSL
