@@ -74,11 +74,14 @@ def create_tabular_iceberg_table(
         yield iceberg_table_name
     finally:
         if table_written:
-            catalog = RestCatalog(
-                "tabular_catalog",
-                uri=f"http://api.tabular.io/ws?credential={credential}&warehouse={warehouse}",
-            )
-            catalog.purge_table(f"{schema}.{iceberg_table_name}")
+            run_rank0(
+                lambda: (
+                    RestCatalog(
+                        "tabular_catalog",
+                        uri=f"http://api.tabular.io/ws?credential={credential}&warehouse={warehouse}",
+                    ).purge_table(f"{schema}.{iceberg_table_name}")
+                )
+            )()
 
 
 def test_basic_read(memory_leak_check, tabular_catalog):
@@ -420,9 +423,12 @@ def test_tabular_catalog_iceberg_write(
         exception_occurred_in_test_body = True
         raise e
     finally:
-        catalog = RestCatalog("tabular_catalog", uri=rest_uri)
         try:
-            catalog.purge_table(f"{schema}.{table_name}")
+            run_rank0(
+                lambda: RestCatalog("tabular_catalog", uri=rest_uri).purge_table(
+                    f"{schema}.{table_name}"
+                )
+            )()
         except Exception:
             if exception_occurred_in_test_body:
                 pass

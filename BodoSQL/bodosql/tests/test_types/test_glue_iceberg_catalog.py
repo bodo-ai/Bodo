@@ -111,9 +111,12 @@ def test_glue_catalog_iceberg_write(glue_catalog, memory_leak_check):
         exception_occurred_in_test_body = True
         raise e
     finally:
-        catalog = GlueCatalog("glue_catalog")
         try:
-            catalog.purge_table(f"{schema}.{table_name}")
+            run_rank0(
+                lambda: GlueCatalog("glue_catalog").purge_table(
+                    f"{schema}.{table_name}"
+                )
+            )()
         except Exception:
             if exception_occurred_in_test_body:
                 pass

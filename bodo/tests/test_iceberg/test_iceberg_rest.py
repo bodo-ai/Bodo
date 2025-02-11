@@ -156,9 +156,12 @@ def test_iceberg_tabular_write_basic(
             reset_index=True,
         )
     finally:
-        catalog = RestCatalog("rest_catalog", uri=rest_uri)
         try:
-            catalog.purge_table(f"CI.{table_name}")
+            run_rank0(
+                lambda: RestCatalog("rest_catalog", uri=rest_uri).purge_table(
+                    f"CI.{table_name}"
+                )
+            )()
         except Exception:
             assert not write_complete, (
                 f"Cleanup failed, {table_name} may need manual cleanup"

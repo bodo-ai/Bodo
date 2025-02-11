@@ -53,23 +53,26 @@ except ImportError:
     pass
 
 this_module = sys.modules[__name__]
-_, iceberg_catalog_type = install_opaque_class(
+_, iceberg_catalog_type = install_py_obj_class(
     types_name="iceberg_catalog_type",
     module=this_module,
     python_type=Catalog,
     class_name="IcebergCatalogType",
+    model_name="IcebergCatalogModel",
 )
-_, transaction_type = install_opaque_class(
+_, transaction_type = install_py_obj_class(
     types_name="transaction_type",
     module=this_module,
     python_type=Transaction,
     class_name="TransactionType",
+    model_name="TransactionModel",
 )
-_, partition_spec_type = install_opaque_class(
+_, partition_spec_type = install_py_obj_class(
     types_name="partition_spec_type",
     module=this_module,
     python_type=PartitionSpec,
     class_name="PartitionSpecType",
+    model_name="PartitionSpecModel",
 )
 _, python_list_of_heterogeneous_tuples_type = install_opaque_class(
     types_name="python_list_of_heterogeneous_tuples_type",
