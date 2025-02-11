@@ -25,7 +25,6 @@ jobs:
       # contains is case-insensitive
       run_tests: ${{ contains(steps.check_msg.outputs.commit_message, '[run ci]') || github.event_name == 'workflow_dispatch' }}
       run_bodosql_customer_tests: ${{ steps.changes.outputs.bodosql_customer_tests || github.event_name == 'workflow_dispatch' }}
-      runner_os: ${{ inputs.runner_os || 'ubuntu-latest' }}
 
     steps:
       - uses: actions/checkout@v4
@@ -77,7 +76,7 @@ jobs:
   compile-bodo:
     needs: [validate]
     name: Pre-Build Bodo for Cache
-    runs-on: ${{ needs.validate.outputs.runner_os }}
+    runs-on: ${{ inputs.runner_os || 'ubuntu-latest' }}
     if: needs.validate.outputs.run_tests == 'true'
     permissions:
       id-token: write
@@ -90,13 +89,13 @@ jobs:
           build-all: false
       - name: Load and Save Hadoop to Cache
         id: hadoop-cache
-        if: needs.validate.outputs.runner_os == 'ubuntu-latest'
+        if: ${{ runner.os != 'Windows' }}
         uses: actions/cache@v4
         with:
           path: hadoop.tar.gz
           key: hadoop-3.3.2-${{ runner.os }}
       - name: Download Hadoop for SAS
-        if: ${{ steps.hadoop-cache.outputs.cache-hit != 'true' && needs.validate.outputs.runner_os == 'ubuntu-latest' }}
+        if: ${{ runner.os != 'Windows' }}
         run: |
           wget -O hadoop.tar.gz "https://www.apache.org/dyn/mirrors/mirrors.cgi?action=download&filename=hadoop/common/hadoop-3.3.2/hadoop-3.3.2.tar.gz"
         shell: bash
@@ -116,7 +115,7 @@ jobs:
       total-batches: 12
       pytest-marker: "not slow and not weekly or smoke"
       collect-coverage: true
-      os: needs.validate.outputs.runner_os
+      os: ${{ inputs.runner_os || 'ubuntu-latest' }}
     secrets: inherit
 
   spawn-ci:
@@ -128,7 +127,7 @@ jobs:
       total-batches: 1
       pytest-marker: "spawn_mode"
       collect-coverage: false
-      os: needs.validate.outputs.runner_os
+      os: ${{ inputs.runner_os || 'ubuntu-latest' }}
     secrets: inherit
 
   java-ci:
