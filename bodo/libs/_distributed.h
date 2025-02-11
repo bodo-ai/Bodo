@@ -520,12 +520,8 @@ static void decimal_reduce(int64_t index, uint64_t* in_ptr, char* out_ptr,
 
             char out_val[struct_size];
 
-            uint64_t lo = in_ptr[0];
-            uint64_t hi = in_ptr[1];
-            __int128_t val = static_cast<__int128_t>(hi) << 64 | lo;
-
-            CHECK_MPI(MPI_Allreduce(&val, out_val, 1, decimal_type, cmp_decimal,
-                                    MPI_COMM_WORLD),
+            CHECK_MPI(MPI_Allreduce(in_ptr, out_val, 1, decimal_type,
+                                    cmp_decimal, MPI_COMM_WORLD),
                       "_distributed.h::decimal_reduce");
 
             CHECK_MPI(MPI_Op_free(&cmp_decimal),
@@ -561,14 +557,10 @@ static void decimal_reduce(int64_t index, uint64_t* in_ptr, char* out_ptr,
             char in_val[struct_size];
             char out_val[struct_size];
 
-            uint64_t lo = in_ptr[0];
-            uint64_t hi = in_ptr[1];
-            __int128_t val = static_cast<__int128_t>(hi) << 64 | lo;
-
             // remove padding by representing the index, decimal struct as 3
             // int64's
             memcpy(in_val, &index, sizeof(uint64_t));
-            memcpy(in_val + sizeof(uint64_t), &val, sizeof(__int128_t));
+            memcpy(in_val + sizeof(uint64_t), in_ptr, sizeof(__int128_t));
             CHECK_MPI(MPI_Allreduce(&in_val, out_val, 1, index_decimal_type,
                                     argcmp_decimal, MPI_COMM_WORLD),
                       "_distributed.h::decimal_reduce");
