@@ -3458,6 +3458,7 @@ pytest_mark_oracle = compose_decos(
             os.name == "posix"
             and platform.system() == "Linux"
             and "arm" in platform.machine().lower()
+            or "aarch64" in platform.machine().lower()
         ),
     )
 )
@@ -3468,5 +3469,6 @@ pytest_oracle = [
         os.name == "posix"
         and platform.system() == "Linux"
         and "arm" in platform.machine().lower()
+        or "aarch64" in platform.machine().lower()
     ),
 ]
