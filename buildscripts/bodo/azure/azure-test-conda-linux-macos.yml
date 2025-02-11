@@ -39,10 +39,6 @@ jobs:
   - bash: pixi install -v --locked -e azure
     displayName: Install Test Environment
 
-  - bash: choco install wget -y
-    displayName: Install Wget
-    condition: eq(variables['Agent.OS'], 'Windows_NT')
-
   - bash: |
       set -exo pipefail
       pixi global install unzip
@@ -56,6 +52,7 @@ jobs:
         sudo $(which unzip) instantclient-basic-macos.x64-19.8.0.0.0dbru.zip -d /usr/local/lib
       fi
     displayName: 'Setup Oracle Database Testing'
+    condition: ne(variables['Agent.OS'], 'Windows_NT')
     retryCountOnTaskFailure: 5
 
   - bash: |
