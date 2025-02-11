@@ -283,12 +283,7 @@ message("Source dir of datasketches = ${datasketches_INSTALL_DIR}")
 # Use RelWithDebInfo Mode by Default
 cmake_print_variables(CMAKE_BUILD_TYPE)
 
-# Enable sanitizer through environment varaible since
-# "DebugSanitize" is not recognized as a valid build type
-# TODO [BSE-4552]: Add santizier config for Windows builds.
-if (WIN32 AND DEFINED ENV{BUILD_BODO_SAN})
-  set(CMAKE_BUILD_TYPE "DebugSanitize")
-elseif (NOT CMAKE_BUILD_TYPE)
+if (NOT CMAKE_BUILD_TYPE)
   message(STATUS "No build type selected, default to RelWithDebInfo")
   set(CMAKE_BUILD_TYPE "RelWithDebInfo")
 endif()
@@ -335,6 +330,7 @@ if (CMAKE_BUILD_TYPE STREQUAL "Debug" OR CMAKE_BUILD_TYPE STREQUAL "DebugSanitiz
 endif()
 
 # Debug with Sanitizer Flags
+# TODO [BSE-4552]: Add DebugSanitize as a build type for Windows builds.
 if (CMAKE_BUILD_TYPE STREQUAL "DebugSanitize")
   set_sanitizer_options()
 endif()
@@ -349,7 +345,6 @@ endif()
 # Build Package + Program Dependencies
 find_package(Python COMPONENTS Interpreter Development.Module REQUIRED)
 find_program(CYTHON_EXECUTABLE "cython" REQUIRED)
-find_program(PYTHON_EXECUTABLE "python" REQUIRED)
 
 # Include for All Targets in General
 if (WIN32)
