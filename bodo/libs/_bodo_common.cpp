@@ -602,6 +602,9 @@ __int128_t::__int128_t(T in_val) {
     }
 }
 
+template __int128_t::__int128_t<float>(float in_val);
+template __int128_t::__int128_t<double>(double in_val);
+
 #endif
 
 std::shared_ptr<arrow::Array> to_arrow(const std::shared_ptr<array_info> arr) {
