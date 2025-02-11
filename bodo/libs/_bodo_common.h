@@ -87,12 +87,11 @@ void Bodo_PyErr_SetString(PyObject* type, const char* message);
 // Avoiding error checking and exceptions to behave like a native
 // type as much as possible.
 struct __int128_t : std::_Signed128 {
-
     __int128_t() : std::_Signed128() {}
 
     __int128_t(std::_Signed128 in_val) : std::_Signed128(in_val) {}
 
-    template<std::integral T>
+    template <std::integral T>
     constexpr __int128_t(T in_val) noexcept : std::_Signed128(in_val) {}
 
     __int128_t(float in_val) {
@@ -105,36 +104,33 @@ struct __int128_t : std::_Signed128 {
         _Word[1] = 0;
     }
 
-    operator float() const
-    {
-        return _Word[0];
-    }
+    operator float() const { return _Word[0]; }
 
-    operator double() const
-    {
-        return _Word[0];
-    }
+    operator double() const { return _Word[0]; }
 
-    template<std::integral T>
-    friend constexpr __int128_t operator<<(const __int128_t& _Left, const T& _Right) noexcept {
+    template <std::integral T>
+    friend constexpr __int128_t operator<<(const __int128_t& _Left,
+                                           const T& _Right) noexcept {
         return __int128_t(_Left << __int128_t(_Right));
     }
 
-    template<std::integral T>
-    friend constexpr __int128_t operator>>(const __int128_t& _Left, const T& _Right) noexcept {
+    template <std::integral T>
+    friend constexpr __int128_t operator>>(const __int128_t& _Left,
+                                           const T& _Right) noexcept {
         return __int128_t(_Left >> __int128_t(_Right));
     }
 
-    template<std::integral T>
-    friend constexpr bool operator==(const __int128_t& _Left, const T& _Right) noexcept {
+    template <std::integral T>
+    friend constexpr bool operator==(const __int128_t& _Left,
+                                     const T& _Right) noexcept {
         return (_Left == __int128_t(_Right));
     }
 
-    template<std::integral T>
-    friend constexpr __int128_t operator|(const __int128_t& _Left, const T& _Right) noexcept {
+    template <std::integral T>
+    friend constexpr __int128_t operator|(const __int128_t& _Left,
+                                          const T& _Right) noexcept {
         return __int128_t(_Left | __int128_t(_Right));
     }
-
 };
 #endif
 
