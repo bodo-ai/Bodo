@@ -63,10 +63,10 @@ stages:
 
   - template: buildscripts/bodo/azure/azure-test-conda-linux-macos.yml
     parameters:
-      name: Linux_cache
+      name: Windows_cache
       caching_test: true
       spawn_mode_test: false
-      pool_name: 'linux-arm'
+      pool_name: 'windows-ci'
       # use_bodo_arrow_fork: 0
       matrix:
         TEST_2P:
@@ -78,7 +78,7 @@ stages:
       name: Bodo_Spawn_mode_tests
       caching_test: false
       spawn_mode_test: true
-      pool_name: 'linux-arm'
+      pool_name: 'windows-ci'
       # use_bodo_arrow_fork: 0
       matrix:
         TEST_1P:
@@ -89,8 +89,8 @@ stages:
           PYTEST_MARKER: "spawn_mode"
 
 
-- stage: Test_BodoSQL_ARM
-  displayName: 'Test BodoSQL on Linux ARM'
+- stage: Test_BodoSQL_Windows
+  displayName: 'Test BodoSQL on Windows'
   dependsOn: []
   jobs:
 

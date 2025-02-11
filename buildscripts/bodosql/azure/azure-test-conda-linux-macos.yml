@@ -47,7 +47,7 @@ jobs:
       AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
       AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
       DISABLE_CCACHE: 1  # Just use sccache directly on CI
-      USE_BODO_ARROW_FORK: 1  # Build from Source with Arrow Fork
+      # USE_BODO_ARROW_FORK: 1  # Build from Source with Arrow Fork
     displayName: 'Build Bodo, BodoSQL, and Iceberg Connector'
 
   - script: |
@@ -59,6 +59,7 @@ jobs:
       pip install --no-deps --no-build-isolation -ve .
     displayName: "Setup Snowflake ADLS Testing (only Linux)"
     retryCountOnTaskFailure: 5
+    condition: ne(variables['Agent.OS'], 'Windows_NT')
 
   - script: |
       pixi list

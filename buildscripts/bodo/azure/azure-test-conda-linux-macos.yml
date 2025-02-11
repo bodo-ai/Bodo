@@ -35,8 +35,13 @@ jobs:
       source ~/.bashrc
       echo "##vso[task.prependpath]$HOME/.pixi/bin"
     displayName: Install Pixi
+
   - bash: pixi install -v --locked -e azure
     displayName: Install Test Environment
+
+  - bash: choco install wget -y
+    displayName: Install Wget
+    condition: eq(variables['Agent.OS'], 'Windows_NT')
 
   - bash: |
       set -exo pipefail
@@ -62,7 +67,7 @@ jobs:
       AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
       AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
       DISABLE_CCACHE: 1  # Just use sccache directly on CI
-      USE_BODO_ARROW_FORK: 1  # Build from Source with Arrow Fork
+      # USE_BODO_ARROW_FORK: 1  # Build from Source with Arrow Fork
     displayName: 'Build Bodo & Iceberg Connector'
 
   - bash: |
