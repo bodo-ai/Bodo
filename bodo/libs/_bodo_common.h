@@ -80,7 +80,57 @@ void Bodo_PyErr_SetString(PyObject* type, const char* message);
 
 // --------- Windows Compatibility ------------ //
 #if defined(_WIN32)
-typedef boost::multiprecision::int128_t __int128_t;
+#include <__msvc_int128.hpp>
+
+template <typename T>
+concept FloatOrDouble = std::is_same_v<T, float> || std::is_same_v<T, double>;
+
+// Subclass std::_Signed128 to add missing C++ operators
+// such as casting and conversion.
+// Avoiding error checking and exceptions to behave like a native
+// type as much as possible.
+struct __int128_t : std::_Signed128 {
+    __int128_t() : std::_Signed128() {}
+
+    __int128_t(std::_Signed128 in_val) : std::_Signed128(in_val) {}
+
+    template <std::integral T>
+    constexpr __int128_t(T in_val) noexcept : std::_Signed128(in_val) {}
+
+    template <FloatOrDouble T>
+    __int128_t(T in_val);
+
+    template <FloatOrDouble T>
+    T int128_to_float() const;
+
+    operator float() const { return int128_to_float<float>(); }
+
+    operator double() const { return int128_to_float<double>(); }
+
+    template <std::integral T>
+    friend constexpr __int128_t operator<<(const __int128_t& _Left,
+                                           const T& _Right) noexcept {
+        return __int128_t(_Left << __int128_t(_Right));
+    }
+
+    template <std::integral T>
+    friend constexpr __int128_t operator>>(const __int128_t& _Left,
+                                           const T& _Right) noexcept {
+        return __int128_t(_Left >> __int128_t(_Right));
+    }
+
+    template <std::integral T>
+    friend constexpr bool operator==(const __int128_t& _Left,
+                                     const T& _Right) noexcept {
+        return (_Left == __int128_t(_Right));
+    }
+
+    template <std::integral T>
+    friend constexpr __int128_t operator|(const __int128_t& _Left,
+                                          const T& _Right) noexcept {
+        return __int128_t(_Left | __int128_t(_Right));
+    }
+};
 #endif
 
 // --------- MemInfo Helper Functions --------- //
