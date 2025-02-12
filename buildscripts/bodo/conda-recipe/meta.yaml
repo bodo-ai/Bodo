@@ -66,7 +66,6 @@ requirements:
     - pyarrow =18.1.0
     - numba 0.61.0
     - mpich *=h* # [not win]
-    - impi-devel=2021.13.1  # [win64]
     - requests
     - aws-sdk-cpp <=1.11.485
     - zstd<=1.5.6
