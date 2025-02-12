@@ -30,13 +30,13 @@ def parse_conn_str(
     catalog_type = _get_first(conn_query, "type")
     warehouse = _get_first(conn_query, "warehouse")
     if catalog_type is None:
-        if parsed_conn.scheme == "thrift":
+        if parsed_conn.scheme == "iceberg+thrift":
             catalog_type = "hive"
 
-        elif parsed_conn.scheme == "" and parsed_conn.path == "glue":
+        elif parsed_conn.scheme == "" and parsed_conn.path == "iceberg+glue":
             catalog_type = "glue"
 
-        elif parsed_conn.scheme == "s3":
+        elif parsed_conn.scheme == "iceberg+s3":
             catalog_type = "hadoop-s3"
             if warehouse is not None:
                 warnings.warn(
@@ -45,7 +45,7 @@ def parse_conn_str(
                 )
             warehouse = f"s3://{parsed_conn.netloc}{parsed_conn.path}"
 
-        elif parsed_conn.scheme in ("abfs", "abfss"):
+        elif parsed_conn.scheme in ("iceberg+abfs", "iceberg+abfss"):
             catalog_type = "hadoop-abfs"
             if warehouse is not None:
                 warnings.warn(
@@ -54,7 +54,7 @@ def parse_conn_str(
                 )
             warehouse = f"{parsed_conn.scheme}://{parsed_conn.netloc}{parsed_conn.path}"
 
-        elif parsed_conn.scheme == "" or parsed_conn.scheme == "file":
+        elif parsed_conn.scheme == "iceberg" or parsed_conn.scheme == "iceberg+file":
             catalog_type = "hadoop"
             if warehouse is not None:
                 warnings.warn(
@@ -62,11 +62,11 @@ def parse_conn_str(
                     IcebergWarning,
                 )
             warehouse = f"{parsed_conn.netloc}{parsed_conn.path}"
-        elif parsed_conn.scheme == "snowflake":
+        elif parsed_conn.scheme == "iceberg+snowflake":
             catalog_type = "snowflake"
-        elif parsed_conn.scheme == "rest":
+        elif parsed_conn.scheme == "iceberg+rest":
             catalog_type = "rest"
-        elif parsed_conn.scheme == "arn" and "aws:s3tables" in parsed_conn.path:
+        elif parsed_conn.scheme == "iceberg+arn" and "aws:s3tables" in parsed_conn.path:
             catalog_type = "s3tables"
 
         else:
@@ -145,7 +145,7 @@ def gen_file_loc(table_loc: str, db_name: str, table_name: str, file_name: str) 
         return os.path.join(db_name, table_name, "data", file_name)
 
 
-def normalize_loc(loc: str):
+def normalize_loc(loc: str) -> str:
     return loc.replace("s3a://", "s3://").removeprefix("file:")
 
 

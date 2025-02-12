@@ -92,10 +92,8 @@ def iceberg_merge_cow(
             ),
         )
 
-    dummy_theta_sketch = (
-        bodo.io.iceberg.stream_iceberg_write.init_theta_sketches_wrapper(
-            alloc_false_bool_array(num_cols)
-        )
+    dummy_theta_sketch = bodo.io.iceberg.theta.init_theta_sketches_wrapper(
+        alloc_false_bool_array(num_cols)
     )
     bucket_region = bodo.io.fs_io.get_s3_bucket_region_wrapper(table_loc, is_parallel)
     iceberg_files_info = iceberg_pq_write(
@@ -134,7 +132,7 @@ def iceberg_merge_cow(
         # we might not have DeleteObject permissions, for instance.
         raise BodoError("Iceberg MERGE INTO: write failed")
 
-    bodo.io.iceberg.stream_iceberg_write.delete_theta_sketches(dummy_theta_sketch)
+    bodo.io.iceberg.theta.delete_theta_sketches(dummy_theta_sketch)
 
     ev.finalize()
 
