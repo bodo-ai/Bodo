@@ -11,6 +11,8 @@ import re
 import typing as pt
 from urllib.parse import parse_qs, urlparse
 
+from pyiceberg.catalog.rest import OAUTH2_SERVER_URI
+
 if pt.TYPE_CHECKING:  # pragma: no cover
     from pyiceberg.catalog import Catalog
 
@@ -73,6 +75,9 @@ def conn_str_to_catalog(conn_str: str) -> Catalog:
 
                 catalog = RestCatalog
                 properties[URI] = base_url
+                properties[OAUTH2_SERVER_URI] = (
+                    base_url + ("/" if base_url[-1] != "/" else "") + "v1/oauth/tokens"
+                )
                 cache_key = base_url
 
             case "iceberg+thrift":

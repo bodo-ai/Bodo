@@ -141,6 +141,7 @@ def test_iceberg_polaris_write_basic(
         dist_df = _get_dist_arg(df)
         if rank_skew and bodo.get_rank() != 0:
             dist_df = dist_df[:0]
+        # breakpoint()
         bodo.jit(f, distributed=["df"])(dist_df, table_name)
         write_complete = True
 
@@ -163,10 +164,13 @@ def test_iceberg_polaris_write_basic(
             run_rank0(
                 lambda: RestCatalog(
                     "rest_catalog",
-                    credential=polaris_credential,
-                    uri=rest_uri,
-                    warehouse=polaris_warehouse,
-                    scope="PRINCIPAL_ROLE:ALL",
+                    **{
+                        "credential": polaris_credential,
+                        "uri": rest_uri,
+                        "warehouse": polaris_warehouse,
+                        "scope": "PRINCIPAL_ROLE:ALL",
+                        "oauth2-server-uri": rest_uri + "/v1/oauth/tokens",
+                    },
                 ).purge_table(f"CI.{table_name}")
             )()
         except Exception:
