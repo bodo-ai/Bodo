@@ -31,23 +31,15 @@ jobs:
   steps:
 
   - powershell: |
-      $progressPreference = 'silentlyContinue'
-      Write-Information "Downloading WinGet and its dependencies..."
-      Invoke-WebRequest -Uri https://aka.ms/getwinget -OutFile Microsoft.DesktopAppInstaller_8wekyb3d8bbwe.msixbundle
-      Invoke-WebRequest -Uri https://aka.ms/Microsoft.VCLibs.x64.14.00.Desktop.appx -OutFile Microsoft.VCLibs.x64.14.00.Desktop.appx
-      Invoke-WebRequest -Uri https://github.com/microsoft/microsoft-ui-xaml/releases/download/v2.8.6/Microsoft.UI.Xaml.2.8.x64.appx -OutFile Microsoft.UI.Xaml.2.8.x64.appx
-      Invoke-WebRequest -Uri https://github.com/microsoft/winget-cli/releases/download/v1.8.1522/cdc44a3f51ec4512b990fb5516afe12d_License1.xml -OutFile  cdc44a3f51ec4512b990fb5516afe12d_License1.xml
 
-      Add-AppxPackage Microsoft.VCLibs.x64.14.00.Desktop.appx
-      Add-AppxPackage Microsoft.UI.Xaml.2.8.x64.appx
+      powershell -ExecutionPolicy ByPass -c "irm -useb https://pixi.sh/install.ps1 | iex"
 
-      Add-AppxProvisionedPackage  -Online -PackagePath Microsoft.DesktopAppInstaller_8wekyb3d8bbwe.msixbundle -LicensePath cdc44a3f51ec4512b990fb5516afe12d_License1.xml -Verbose
-    displayName: 'Install/configure Winget'
-
-  - powershell: |
-      winget  --version 
-      winget install prefix-dev.pixi --silent --accept-package-agreements --accept-source-agreements
     displayName: 'Install pixi'
+
+  # - powershell: |
+  #     winget  --version
+  #     winget install prefix-dev.pixi --silent --accept-package-agreements --accept-source-agreements
+  #   displayName: 'Install pixi'
 
   - powershell: |
       pixi install -v --locked -e azure
