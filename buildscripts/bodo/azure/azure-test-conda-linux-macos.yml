@@ -34,6 +34,12 @@ jobs:
 
       powershell -ExecutionPolicy ByPass -c "irm -useb https://pixi.sh/install.ps1 | iex"
 
+      $pixiPath = [System.IO.Path]::Combine($env:USERPROFILE, '.pixi', 'bin')
+
+      # Update the PATH environment variable
+      $newPath = "$pixiPath;$env:PATH"
+      Write-Host "##vso[task.setvariable variable=PATH]$newPath"
+
     displayName: 'Install pixi'
 
   # - powershell: |
