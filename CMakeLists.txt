@@ -285,7 +285,6 @@ endif()
 # Build Package + Program Dependencies
 find_package(Python COMPONENTS Interpreter Development.Module REQUIRED)
 find_program(CYTHON_EXECUTABLE "cython" REQUIRED)
-find_program(PYTHON_EXECUTABLE "python" REQUIRED)
 
 # Include for All Targets in General
 if (WIN32)
