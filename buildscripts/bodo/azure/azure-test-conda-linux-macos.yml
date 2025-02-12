@@ -86,6 +86,11 @@ jobs:
     continueOnError: true
     displayName: Export Environment Spec
 
+  - script: |
+      pixi shell -e azure
+      python -c "import pyarrow"
+    displayName: Activate pixi env
+
   - bash: |
       set -exo pipefail
       # eval "$(pixi shell-hook --shell bash -e azure)"
@@ -126,8 +131,6 @@ jobs:
         pytest -s -v -Wignore -m "$(PYTEST_MARKER)" bodo/tests --junitxml=pytest-report-spawn-mode.xml --test-run-title="${{ parameters.name }}"
       else
         echo "running python tests!!!"
-        echo "$(which python)"
-        pixi shell -e azure
         echo "$(which python)"
         pixi list
         python -c "import pyarrow"
