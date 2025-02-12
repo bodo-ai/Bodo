@@ -51,17 +51,6 @@ jobs:
       pixi install -v --locked -e azure
     displayName: 'Install test env'
 
-  - powershell: |
-      pixi list
-      pixi run pip list
-    # continueOnError: true
-    displayName: Export Environment Spec
-
-  - powershell: |
-      pixi shell -e azure
-    # continueOnError: true
-    displayName: Activate shell
-
   # - bash: |
   #     set -exo pipefail
   #     curl -fsSL https://pixi.sh/install.sh | bash
@@ -89,18 +78,22 @@ jobs:
   #   condition: ne(variables['Agent.OS'], 'Windows_NT')
   #   retryCountOnTaskFailure: 5
 
-  # - bash: |
-  #     set -exo pipefail
-  #     # pixi run -e azure build-bodo -Cbuild.verbose=true
-  #     # pixi run -e azure build-iceberg
-  #     # pixi run -e azure -- sccache --show-stats
-  #     echo "building bodo"
-  #   env:
-  #     AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
-  #     AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
-  #     DISABLE_CCACHE: 1  # Just use sccache directly on CI
-  #     # USE_BODO_ARROW_FORK: 1  # Build from Source with Arrow Fork
-  #   displayName: 'Build Bodo & Iceberg Connector'
+  - powershell: |
+      pixi run -e azure build-bodo -Cbuild.verbose=true
+      pixi run -e azure build-iceberg
+      pixi run -e azure -- sccache --show-stats
+    env:
+      AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
+      AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
+      DISABLE_CCACHE: 1  # Just use sccache directly on CI
+      # USE_BODO_ARROW_FORK: 1  # Build from Source with Arrow Fork
+    displayName: 'Build Bodo & Iceberg Connector'
+
+  - powershell: |
+      pixi list
+      pixi run pip list
+    # continueOnError: true
+    displayName: Export Environment Spec
 
   # - bash: |
   #     set -exo pipefail
@@ -113,16 +106,36 @@ jobs:
   #   retryCountOnTaskFailure: 5
   #   condition: ne(variables['Agent.OS'], 'Windows_NT')
 
-  # - bash: |
-  #     pixi list
-  #     pixi run pip list
-  #   continueOnError: true
-  #   displayName: Export Environment Spec
+  - powershell: |
+      pixi list
+      pixi run pip list
+    continueOnError: true
+    displayName: Export Environment Spec
 
-  # - script: |
-  #     pixi shell -e azure
-  #     python -c "import pyarrow"
-  #   displayName: Activate pixi env
+  - powershell: |
+      pixi shell -e azure
+
+      python -m bodo.runtests "${{ parameters.name }}" "$NP" --pyargs bodo -s -v -m "$(PYTEST_MARKER)"
+    env:
+      SF_USERNAME: $(SNOWFLAKE_USER)
+      SF_PASSWORD: $(SNOWFLAKE_PASSWORD)
+      SF_USER2: $(SNOWFLAKE_USER2)
+      SF_PASSWORD2: $(SNOWFLAKE_PASSWORD2)
+      SF_AZURE_USER: $(SF_AZURE_USER)
+      SF_AZURE_PASSWORD: $(SF_AZURE_PASSWORD)
+      AZURE_STORAGE_ACCOUNT_NAME: $(AZURE_ICEBERG_STORAGE_ACCOUNT)
+      AZURE_STORAGE_ACCOUNT_KEY: $(AZURE_ICEBERG_ACCESS_KEY)
+      AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
+      AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
+      TABULAR_CREDENTIAL: $(TABULAR_CREDENTIAL)
+      BODO_TEST_SQL_DB_CREDENTIAL: $(SQL_DB_CREDENTIAL)
+      BODO_TEST_ORACLE_DB_CREDENTIAL: $(ORACLE_DB_CREDENTIAL)
+      BODO_SPAWN_MODE: "0"
+      BODO_BUFFER_POOL_REMOTE_MODE: "1"
+      BODO_BUFFER_POOL_DEBUG_MODE: "1"
+      # For debugging purposes
+      BODO_SF_WRITE_DEBUG: "1"
+    displayName: 'Test Bodo'
 
   # - bash: |
   #     set -exo pipefail
