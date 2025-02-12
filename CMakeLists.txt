@@ -112,11 +112,6 @@ endif()
 find_package(Boost 1.85 REQUIRED COMPONENTS json)
 include_directories(${Boost_INCLUDE_DIRS})
 
-cmake_print_variables(CURL_INCLUDE_DIRS CURL_LIBRARIES CURL_LIBRARY_DIRS)
-cmake_print_variables(AWSSDK_INCLUDE_DIRS AWSSDK_LIBRARIES AWSSDK_LIBRARY_DIRS)
-cmake_print_variables(OPENSSL_INCLUDE_DIRS OPENSSL_LIBRARIES OPENSSL_LIBRARY_DIRS)
-cmake_print_variables(Boost_INCLUDE_DIRS Boost_LIBRARIES Boost_LIBRARY_DIRS)
-
 # ----------------------------- Download Apache Datasketches -------------------------
 include(ExternalProject)
 ExternalProject_Add(datasketches
@@ -345,9 +340,7 @@ else()
  set(MPI_LIBRARIES "mpi")
 endif()
 
-cmake_print_variables(MPI_LIBRARIES)
 cmake_print_variables(MPI_INCLUDE_DIR)
-cmake_print_variables(MPI_LIB_DIR)
 
 # Vendor MPI4Py
 if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/bodo/mpi4py")
