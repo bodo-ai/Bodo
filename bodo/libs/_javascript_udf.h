@@ -6,14 +6,18 @@
 #include "_dict_builder.h"
 #include "_table_builder.h"
 #include "include/libplatform/libplatform.h"
+#if defined(__GNUC__) || defined(__clang__)
 PUSH_IGNORED_COMPILER_ERROR("-Wtemplate-id-cdtor")
+#endif
 #include "include/v8-context.h"
 #include "include/v8-exception.h"
 #include "include/v8-isolate.h"
 #include "include/v8-persistent-handle.h"
 #include "include/v8-script.h"
 #include "include/v8-typed-array.h"
+#if defined(__GNUC__) || defined(__clang__)
 POP_IGNORED_COMPILER_ERROR()
+#endif
 
 #ifndef CHECK_v8_EXCEPTION
 #define CHECK_V8_EXCEPTION(isolate, context, try_catch, error_prefix)         \

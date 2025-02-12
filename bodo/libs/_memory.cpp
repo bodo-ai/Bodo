@@ -18,7 +18,15 @@
 // Needed for 'malloc_trim'
 #include <malloc.h>
 #endif
+
+#ifndef _WIN32
 #include <sys/mman.h>
+#define ASSUME_ALIGNED(x) std::assume_aligned<4096>(x)
+#else
+#include <intrin.h>
+// TODO [BSE-4556] assume aligned
+#define ASSUME_ALIGNED(x) x
+#endif
 
 #include <fmt/args.h>
 #include <fmt/chrono.h>
@@ -93,6 +101,37 @@ Swip construct_unswizzled_swip(uint8_t size_class_idx,
     return (Swip)((1ull << 63) | size_class_enc | storage_class_enc | bid);
 }
 
+/**
+ * @brief Create a continguous range of memory in the Virtual address space.
+ *
+ * @param size The size of the frame to create in bytes.
+ **/
+uint8_t* const create_frame(size_t size) {
+#ifndef _WIN32
+    // Allocate the address range using mmap.
+    // Create a private (i.e. only visible to this process) anonymous
+    // (i.e. not backed by a physical file) mapping. Ref:
+    // https://man7.org/linux/man-pages/man2/mmap.2.html We use
+    // MAP_NORESERVE which doesn't reserve swap space up front. It
+    // will reserve swap space lazily when it needs it. This is fine
+    // for our use-case since we're mapping a large address space up
+    // front. If we reserve swap space, it will block other
+    // applications (e.g. Spark in our unit tests) from being able to
+    // allocate memory. Ref:
+    // https://unix.stackexchange.com/questions/571043/what-is-lazy-swap-reservation
+    // https://man7.org/linux/man-pages/man5/proc.5.html (see the
+    // /proc/sys/vm/overcommit_memory section)
+    return static_cast<uint8_t* const>(
+        mmap(/*addr*/ nullptr, size,
+             /*We need both read/write access*/ PROT_READ | PROT_WRITE,
+             MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, /*fd*/ -1,
+             /*offset*/ 0));
+#else
+    // TODO [BSE-4556] use VirtualAlloc on Windows
+    return nullptr;
+#endif
+}
+
 //// SizeClass
 
 SizeClass::SizeClass(
@@ -120,35 +159,22 @@ SizeClass::SizeClass(
       address_(
           // Mmap guarantees alignment to page size.
           // 4096 is the smallest page size on x86_64 and ARM64.
-          std::assume_aligned<4096>(static_cast<uint8_t* const>(
-              // Allocate the address range using mmap.
-              // Create a private (i.e. only visible to this process) anonymous
-              // (i.e. not backed by a physical file) mapping. Ref:
-              // https://man7.org/linux/man-pages/man2/mmap.2.html We use
-              // MAP_NORESERVE which doesn't reserve swap space up front. It
-              // will reserve swap space lazily when it needs it. This is fine
-              // for our use-case since we're mapping a large address space up
-              // front. If we reserve swap space, it will block other
-              // applications (e.g. Spark in our unit tests) from being able to
-              // allocate memory. Ref:
-              // https://unix.stackexchange.com/questions/571043/what-is-lazy-swap-reservation
-              // https://man7.org/linux/man-pages/man5/proc.5.html (see the
-              // /proc/sys/vm/overcommit_memory section)
-              mmap(/*addr*/ nullptr, this->byteSize_,
-                   /*We need both read/write access*/ PROT_READ | PROT_WRITE,
-                   MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, /*fd*/ -1,
-                   /*offset*/ 0)))) {
+          ASSUME_ALIGNED(create_frame(this->byteSize_))) {
+#ifndef _WIN32
     if (this->address_ == MAP_FAILED || this->address_ == nullptr) {
         throw std::runtime_error(
             fmt::format("SizeClass::SizeClass: Could not allocate memory for "
                         "SizeClass {}. Failed with errno: {}.",
                         block_size, std::strerror(errno)));
     }
+#endif
 }
 
 SizeClass::~SizeClass() {
     // Unmap the allocated address range.
+#ifndef _WIN32
     munmap(this->address_, this->byteSize_);
+#endif
 }
 
 bool SizeClass::isInRange(uint8_t* ptr) const {
@@ -213,6 +239,7 @@ uint64_t SizeClass::getFrameIndex(uint8_t* ptr) const {
     return (uint64_t)((ptr - this->address_) / this->block_size_);
 }
 
+#ifndef _WIN32
 void SizeClass::adviseAwayFrame(uint64_t idx) {
     auto start = start_now(this->tracing_mode_);
 
@@ -232,6 +259,10 @@ void SizeClass::adviseAwayFrame(uint64_t idx) {
         this->stats_.total_advise_away_time += dur;
     }
 }
+#else
+// TODO [BSE-4556] Enable this path on Windows.
+void SizeClass::adviseAwayFrame(uint64_t idx) { (void)idx; }
+#endif
 
 int64_t SizeClass::findUnmappedFrame() noexcept {
     auto start = start_now(this->tracing_mode_);
@@ -801,6 +832,34 @@ BufferPoolOptions BufferPoolOptions::Defaults() {
 
 //// BufferPool
 
+/// Define cross platform utilities
+#ifdef _WIN32
+inline int clzll(uint64_t x) {
+    if (x == 0) {
+        return 64;
+    }
+    unsigned long index;
+    _BitScanReverse64(&index, x);
+    return 63 - index;
+}
+
+#define aligned_alloc(alignment, size) _aligned_malloc(size, alignment)
+
+#else
+#define clzll __builtin_clzll
+#define aligned_alloc(alignment, size) std::aligned_alloc(alignment, size)
+#endif
+
+static long get_page_size() {
+#ifdef _WIN32
+    SYSTEM_INFO si;
+    GetSystemInfo(&si);
+    return si.dwPageSize;
+#else
+    return sysconf(_SC_PAGE_SIZE);
+#endif
+}
+
 /**
  * @brief Find the highest power of 2 that is lesser than or equal
  * to N. Note that 0 returns 0.
@@ -823,7 +882,7 @@ static inline int64_t highest_power_of_2(int64_t N) {
         return N;
     }
     // else set only the most significant bit
-    return 0x8000000000000000UL >> (__builtin_clzll(N));
+    return 0x8000000000000000UL >> (clzll(N));
 }
 
 BufferPool::BufferPool(const BufferPoolOptions& options)
@@ -866,8 +925,13 @@ BufferPool::BufferPool(const BufferPoolOptions& options)
         static_cast<uint8_t>(std::min({this->options_.max_num_size_classes,
                                        max_num_size_classes, (uint64_t)63}));
 
+#ifdef _WIN32
+    // TODO [BSE-4556] Enable buffer pool on Windows.
+    this->malloc_threshold_ = std::numeric_limits<int64_t>::max();
+#else
     this->malloc_threshold_ =
         static_cast<uint64_t>(MALLOC_THRESHOLD_RATIO * min_size_class_bytes);
+#endif
 
     // Construct Size Class Sizes in Bytes
     for (uint8_t i = 0; i < num_size_classes; i++) {
@@ -955,9 +1019,9 @@ inline int64_t BufferPool::find_size_class_idx(int64_t size) const {
     if (static_cast<uint64_t>(size) > this->size_class_bytes_.back()) {
         return -1;
     }
-    return std::distance(
-        this->size_class_bytes_.begin(),
-        std::ranges::lower_bound(this->size_class_bytes_, size));
+    return std::distance(this->size_class_bytes_.begin(),
+                         std::ranges::lower_bound(this->size_class_bytes_,
+                                                  static_cast<uint64_t>(size)));
 }
 
 // static
@@ -1214,7 +1278,7 @@ arrow::Result<bool> BufferPool::best_effort_evict_helper(const uint64_t bytes) {
         // those cases.
         // All these allocations can be free-d using 'free'.
         void* result = alignment > kMinAlignment
-                           ? ::aligned_alloc(alignment, aligned_size)
+                           ? aligned_alloc(alignment, aligned_size)
                            : ::malloc(aligned_size);
         if (result == nullptr) {
             // XXX This is an unlikely branch, so it would
@@ -1245,7 +1309,7 @@ arrow::Result<bool> BufferPool::best_effort_evict_helper(const uint64_t bytes) {
     } else {
         // Mmap-ed memory is always page (typically 4096B) aligned
         // (https://stackoverflow.com/questions/42259495/does-mmap-return-aligned-pointer-values).
-        const static long page_size = sysconf(_SC_PAGE_SIZE);
+        const static long page_size = get_page_size();
         if (alignment > page_size) {
             return ::arrow::Status::Invalid(
                 "Requested alignment (" + std::to_string(alignment) +
@@ -1404,7 +1468,7 @@ std::tuple<bool, int64_t, int64_t, int64_t> BufferPool::get_alloc_details(
 
 void BufferPool::free_helper(uint8_t* ptr, bool is_mmap_alloc,
                              int64_t size_class_idx, int64_t frame_idx,
-                             int64_t size_aligned) {
+                             int64_t size_aligned, int64_t alignment) {
     bool frame_pinned;
     if (is_mmap_alloc) {
         frame_pinned =
@@ -1412,7 +1476,18 @@ void BufferPool::free_helper(uint8_t* ptr, bool is_mmap_alloc,
         this->size_classes_[size_class_idx]->FreeFrame(frame_idx);
     } else {
         frame_pinned = true;
+
+#if defined(_WIN32)
+        // Calls to _aligned_malloc must be matched with a call to _aligned_free
+        // https://learn.microsoft.com/en-us/cpp/c-runtime-library/reference/aligned-malloc?view=msvc-170
+        if (alignment > kMinAlignment) {
+            _aligned_free(ptr);
+        } else {
+            ::free(ptr);
+        }
+#else
         ::free(ptr);
+#endif
 
         if (size_aligned != -1) {
             this->stats_.curr_bytes_malloced -= size_aligned;
@@ -1501,7 +1576,7 @@ void BufferPool::Free(uint8_t* buffer, int64_t size, int64_t alignment) {
         this->get_alloc_details(buffer, size, alignment);
 
     this->free_helper(buffer, is_mmap_alloc, size_class_idx, frame_idx,
-                      size_freed);
+                      size_freed, alignment);
     // XXX In the case where we still don't know the size of the allocation and
     // it was through malloc, we can't update stats_. Should we just enforce
     // that size be provided?
@@ -1652,7 +1727,7 @@ int64_t BufferPool::get_bytes_freed_through_malloc_since_last_trim() const {
 
     // Free original memory (re-use information from get_alloc_details output)
     this->free_helper(old_memory_ptr, is_mmap_alloc, size_class_idx, frame_idx,
-                      old_size_aligned);
+                      old_size_aligned, alignment);
 
     stats_.total_num_reallocations++;
     if (this->options_.tracing_mode()) {

@@ -8,6 +8,7 @@
 #endif
 
 #include <Python.h>
+#include <boost/multiprecision/cpp_int.hpp>
 #include <vector>
 
 #include "_meminfo.h"
@@ -24,6 +25,7 @@
 //     POP_IGNORED_COMPILER_ERROR();
 //   }
 // See https://gcc.gnu.org/onlinedocs/gcc/Diagnostic-Pragmas.html
+#if defined(__GNUC__) || defined(__clang__)
 #define DO_PRAGMA(x) _Pragma(#x)
 #define PUSH_IGNORED_COMPILER_ERROR(err)                                      \
     DO_PRAGMA(GCC diagnostic push);                                           \
@@ -39,6 +41,17 @@
 // POP_IGNORED_COMPILER_ERROR. Otherwise the error will be disabled for the rest
 // of compilation
 #define POP_IGNORED_COMPILER_ERROR() DO_PRAGMA(GCC diagnostic pop)
+#elif defined(_MSC_VER)
+#define PUSH_IGNORED_COMPILER_ERROR(err) \
+    __pragma(warning(push));             \
+    __pragma(warning(disable : err))
+#define POP_IGNORED_COMPILER_ERROR() __pragma(warning(pop))
+#else
+#define PUSH_IGNORED_COMPILER_ERROR(err) \
+    static_assert(false, "Unsupported compiler: Cannot disable warnings")
+#define POP_IGNORED_COMPILER_ERROR() \
+    static_assert(false, "Unsupported compiler: Cannot pop ignored warnings")
+#endif
 
 // Convenience macros from
 // https://github.com/numba/numba/blob/main/numba/_pymodule.h
@@ -64,6 +77,11 @@
     } while (0)
 
 void Bodo_PyErr_SetString(PyObject* type, const char* message);
+
+// --------- Windows Compatibility ------------ //
+#if defined(_WIN32)
+typedef boost::multiprecision::int128_t __int128_t;
+#endif
 
 // --------- MemInfo Helper Functions --------- //
 NRT_MemInfo* alloc_meminfo(int64_t length);
@@ -427,8 +445,8 @@ inline std::vector<char> RetrieveNaNentry(Bodo_CTypes::CTypeEnum const& dtype) {
     if (dtype == Bodo_CTypes::DECIMAL) {
         // Normally the null value of decimal_value should never show up
         // anywhere. A value is assigned for simplicity of the code
-        __int128 e_val = 0;
-        return GetCharVector<__int128>(e_val);
+        __int128_t e_val = 0;
+        return GetCharVector<__int128_t>(e_val);
     }
     return {};
 }

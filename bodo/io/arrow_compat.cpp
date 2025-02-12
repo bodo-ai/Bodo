@@ -3,11 +3,16 @@
 #include "arrow/dataset/dataset.h"
 
 // Silence warnings from including generated code
+#if defined(__GNUC__) || defined(__clang__)
 PUSH_IGNORED_COMPILER_ERROR("-Wreturn-type-c-linkage")
 PUSH_IGNORED_COMPILER_ERROR("-Wunused-variable")
 PUSH_IGNORED_COMPILER_ERROR("-Wunused-function")
+#endif
 #include "pyarrow_wrappers_api.h"
+
+#if defined(__GNUC__) || defined(__clang__)
 POP_IGNORED_COMPILER_ERROR()
+#endif
 
 namespace arrow::py {
 

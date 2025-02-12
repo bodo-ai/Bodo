@@ -8,6 +8,8 @@
 #include <sys/sysctl.h>
 #endif
 
+#include <arrow/util/windows_compatibility.h>
+
 #include "_distributed.h"
 #include "_mpi.h"
 
@@ -94,5 +96,13 @@ uint64_t get_physically_installed_memory() {
         throw std::runtime_error("Failed to get memory size");
     };
     return memory;
+#endif
+
+#ifdef _WIN32
+    uint64_t memory;
+    if (!GetPhysicallyInstalledSystemMemory(&memory)) {
+        throw std::runtime_error("Failed to get memory size");
+    }
+    return memory * 1024;
 #endif
 }
