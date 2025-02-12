@@ -1917,17 +1917,22 @@ arrow::Decimal128 factorial_decimal_scalar(arrow::Decimal128 val,
 /**
  * @brief Python entry point for taking the factorial of a decimal scalar.
  *
- * @param val Input decimal
- * @param input_s Scale of the input
- * @return arrow::Decimal128 Result of the factorial
+ * @param[in] in_low Low 64 bits of the input decimal.
+ * @param[in] in_high High 64 bits of the input decimal.
+ * @param[in] input_s Scale of the input
+ * @param[out] out_low_ptr Pointer to the low 64 bits of the result.
+ * @param[out] out_high_ptr Pointer to the high 64 bits of the result.
  */
-arrow::Decimal128 factorial_decimal_scalar_py_entry(arrow::Decimal128 val,
-                                                    int64_t input_s) {
+void factorial_decimal_scalar_py_entry(uint64_t in_low, int64_t in_high,
+                                       int64_t input_s, uint64_t* out_low,
+                                       int64_t* out_high) {
     try {
-        return factorial_decimal_scalar(val, input_s);
+        arrow::Decimal128 val = arrow::Decimal128(in_high, in_low);
+        arrow::Decimal128 out = factorial_decimal_scalar(val, input_s);
+        *out_low = out.low_bits();
+        *out_high = out.high_bits();
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
-        return arrow::Decimal128(0);
     }
 }
 
