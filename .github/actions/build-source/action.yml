@@ -30,8 +30,6 @@ runs:
 
       - name: Build Bodo
         run: |
-          echo "$RUNNER_ARCH"
-          echo "$RUNNER_OS"
           if [[ "$RUNNER_OS" == 'Linux' && "$RUNNER_ARCH" == 'X64' ]]; then
             # Build Bodo with our fork of Arrow
             export USE_BODO_ARROW_FORK=1
