@@ -316,9 +316,7 @@ array_info* cast_decimal_to_decimal_array_safe_py_entry(
     }
 }
 
-double decimal_to_double_py_entry(decimal_value val, uint8_t scale) {
-    auto high = static_cast<uint64_t>(val.high);
-    auto low = static_cast<uint64_t>(val.low);
+double decimal_to_double_py_entry(uint64_t low, uint64_t high, uint8_t scale) {
     return decimal_to_double((static_cast<__int128_t>(high) << 64) | low,
                              scale);
 }
@@ -2555,17 +2553,21 @@ arrow::Decimal128 str_to_decimal_scalar(const std::string_view& str_val,
  * @param str_val The string value to convert.
  * @param precision The output precision.
  * @param scale The output scale.
+ * @param[out] out_low low 64 bits of output.
+ * @param[out] out_high high 64 bits of output.
  * @param[out] error If an error occurs, set this to true.
- * @return arrow::Decimal128
  */
-arrow::Decimal128 str_to_decimal_scalar_py_entry(const std::string& str_val,
-                                                 int64_t precision,
-                                                 int64_t scale, bool* error) {
+void str_to_decimal_scalar_py_entry(const std::string* str_val,
+                                    int64_t precision, int64_t scale,
+                                    uint64_t* out_low, int64_t* out_high,
+                                    bool* error) {
     try {
-        return str_to_decimal_scalar(str_val, precision, scale, error);
+        arrow::Decimal128 res =
+            str_to_decimal_scalar(*str_val, precision, scale, error);
+        *out_low = res.low_bits();
+        *out_high = res.high_bits();
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
-        return arrow::Decimal128(0);
     }
 }
 
