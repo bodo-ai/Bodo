@@ -830,6 +830,15 @@ def decimal_to_bool(dec):
     return impl
 
 
+def _ll_get_int128_low_high(builder, val):
+    """Return low/high int64 portions of an int128 LLVM value"""
+    low = builder.trunc(val, lir.IntType(64))
+    high = builder.trunc(
+        builder.lshr(val, lir.Constant(lir.IntType(128), 64)), lir.IntType(64)
+    )
+    return low, high
+
+
 def decimal_to_float64_codegen(context, builder, signature, args, scale):
     (val,) = args
     scale = context.get_constant(types.int8, scale)
@@ -843,10 +852,7 @@ def decimal_to_float64_codegen(context, builder, signature, args, scale):
         ],
     )
     fn = cgutils.get_or_insert_function(builder.module, fnty, name="decimal_to_double")
-    low = builder.trunc(val, lir.IntType(64))
-    high = builder.trunc(
-        builder.lshr(val, lir.Constant(lir.IntType(128), 64)), lir.IntType(64)
-    )
+    low, high = _ll_get_int128_low_high(builder, val)
     ret = builder.call(fn, [low, high, scale])
     bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
     return ret
@@ -1023,7 +1029,8 @@ def box_decimal(typ, val, c):
     fnty = lir.FunctionType(
         lir.IntType(8).as_pointer(),
         [
-            lir.IntType(128),
+            lir.IntType(64),
+            lir.IntType(64),
             lir.IntType(8),
             lir.IntType(8),
         ],
@@ -1032,10 +1039,11 @@ def box_decimal(typ, val, c):
 
     precision = c.context.get_constant(types.int8, typ.precision)
     scale = c.context.get_constant(types.int8, typ.scale)
+    low, high = _ll_get_int128_low_high(c.builder, val)
 
     return c.builder.call(
         fn,
-        [val, precision, scale],
+        [low, high, precision, scale],
     )
 
 

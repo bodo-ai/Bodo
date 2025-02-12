@@ -2237,9 +2237,10 @@ decimal_value int64_to_decimal(int64_t value) {
 
 void unbox_decimal(PyObject* obj, uint8_t* data);
 
-PyObject* box_decimal(decimal_value val, int8_t precision, int8_t scale) {
+PyObject* box_decimal(uint64_t low, int64_t high, int8_t precision,
+                      int8_t scale) {
     // convert input to Arrow scalar
-    arrow::Decimal128 arrow_decimal(val.high, val.low);
+    arrow::Decimal128 arrow_decimal(high, low);
     std::shared_ptr<arrow::Decimal128Scalar> scalar =
         std::make_shared<arrow::Decimal128Scalar>(
             arrow_decimal, arrow::decimal128(precision, scale));
