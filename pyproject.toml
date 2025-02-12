@@ -175,9 +175,10 @@ exclude = [
 
 # ------------------------------------ CIBuildWheel ------------------------------------ #
 [tool.cibuildwheel]
-# Disable building PyPy wheels on all platforms
-# Disable building wheels for musllinux
-skip = ["pp*", "*musllinux*", "*i686*"]
+# Disable building wheels for musllinux, i686 and power pc
+# Don't publish linux arm until we can get nightly fixed
+#skip = ["pp*", "*musllinux*", "*i686*"]
+skip = ["pp*", "*musllinux*", "*i686*", "*arm*", "*aarch64*"]
 # Increase pip debugging output
 build-verbosity = 1
 build-frontend = { name = "pip" }
