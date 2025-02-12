@@ -4,10 +4,11 @@ on:
   workflow_dispatch:
     inputs:
       runner_os:
-        description: 'The OS of the runners that will build and test bodo. Must be one of {"ubuntu-latest", "windows-latest"}'
-        required: false
-        type: string
-        default: 'ubuntu-latest'
+        type: choice
+        description: The OS of the runners that will build and test bodo.
+        options:
+        - ubuntu-latest
+        - windows-latest
 
 # Limit CI to cancel previous runs in the same PR
 concurrency:
