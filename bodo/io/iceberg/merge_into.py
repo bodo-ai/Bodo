@@ -132,7 +132,7 @@ def iceberg_merge_cow(
         # we might not have DeleteObject permissions, for instance.
         raise BodoError("Iceberg MERGE INTO: write failed")
 
-    bodo.io.iceberg.stream_iceberg_write.delete_theta_sketches(dummy_theta_sketch)
+    bodo.io.iceberg.theta.delete_theta_sketches(dummy_theta_sketch)
 
     ev.finalize()
 

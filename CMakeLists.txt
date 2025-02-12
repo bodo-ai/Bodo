@@ -315,9 +315,9 @@ add_custom_command(
 )
 
 python_add_library(csv_json_reader
-MODULE WITH_SOABI
-"bodo/io/_csv_json_reader.cpp"
-"bodo/io/csv_json_reader.cpp"
+  MODULE WITH_SOABI
+  "bodo/io/_csv_json_reader.cpp"
+  "bodo/io/csv_json_reader.cpp"
 )
 target_include_directories(csv_json_reader PRIVATE ${BASE_INCLUDE_DIRS} "${CMAKE_CURRENT_SOURCE_DIR}/bodo/io/" "${CMAKE_CURRENT_BINARY_DIR}/bodo/io/")
 target_link_directories(csv_json_reader PRIVATE ${PYARROW_LIB_DIR} ${CONDA_LIB_DIR} ${MPICH_LIB_DIR})

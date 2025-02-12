@@ -426,7 +426,9 @@ def fetch_puffin_metadata(txn: Transaction) -> tuple[int, int, str]:
 
 @run_rank0
 def commit_statistics_file(
-    txn: Transaction,
+    conn_str: str,
+    table_id: str,
+    snapshot_id: int,
     statistic_file_info,
 ) -> None:
     """
@@ -436,12 +438,19 @@ def commit_statistics_file(
 
     Args:
         conn_str (str): The Iceberg connector string.
-        db_name (str): The iceberg database name.
-        table_name (str): The iceberg table.
+        table_id (str): The iceberg table identifier.
+        snapshot_id (int): The snapshot ID of the committed data.
         statistic_file_info (bodo_iceberg_connector.StatisticsFile):
             The Python object containing the statistics file information.
     """
-    raise NotImplementedError
+    import bodo_iceberg_connector
+
+    assert bodo.get_rank() == 0, (
+        "bodo/io/iceberg.py::get_old_statistics_file_path must be called from rank 0 only"
+    )
+    return bodo_iceberg_connector.commit_statistics_file(
+        conn_str, table_id, snapshot_id, statistic_file_info
+    )
 
 
 @run_rank0
@@ -490,3 +499,39 @@ def get_old_statistics_file_path(conn_str: str, table_id: str) -> str:
         "bodo/io/iceberg.py::get_old_statistics_file_path must be called from rank 0 only"
     )
     return bodo_iceberg_connector.get_old_statistics_file_path(conn_str, table_id)
+
+
+def delete_theta_sketches(theta_sketches):  # pragma: no cover
+    pass
+
+
+@overload(delete_theta_sketches)
+def overload_delete_theta_sketches(theta_sketches):
+    """Delete the theta sketches"""
+
+    def impl(theta_sketches):  # pragma: no cover
+        _delete_theta_sketches(theta_sketches)
+
+    return impl
+
+
+@intrinsic
+def _delete_theta_sketches(typingctx, theta_sketches_t):
+    def codegen(context, builder, sig, args):
+        fnty = lir.FunctionType(
+            lir.VoidType(),
+            [
+                lir.IntType(8).as_pointer(),
+            ],
+        )
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module, fnty, name="delete_theta_sketches"
+        )
+        ret = builder.call(fn_tp, args)
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        return ret
+
+    return (
+        types.void(theta_sketch_collection_type),
+        codegen,
+    )

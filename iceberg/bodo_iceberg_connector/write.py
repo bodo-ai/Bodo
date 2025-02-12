@@ -132,8 +132,7 @@ def commit_write(
 
 def commit_statistics_file(
     conn_str: str,
-    db_name: str,
-    table_name: str,
+    table_id: str,
     snapshot_id: int,
     statistic_file_info: StatisticsFile,
 ):
@@ -141,9 +140,7 @@ def commit_statistics_file(
     handler = get_catalog(conn_str, catalog_type)
     # Json encode the statistics file info
     statistic_file_info_str = json.dumps(asdict(statistic_file_info))
-    handler.commitStatisticsFile(
-        db_name, table_name, snapshot_id, statistic_file_info_str
-    )
+    handler.commitStatisticsFile(table_id, snapshot_id, statistic_file_info_str)
 
 
 def commit_merge_cow(

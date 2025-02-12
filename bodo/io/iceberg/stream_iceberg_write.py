@@ -15,8 +15,7 @@ import typing as pt
 import numba
 import pandas as pd
 import pyarrow as pa
-from llvmlite import ir as lir
-from numba.core import cgutils, types
+from numba.core import types
 from numba.core.imputils import impl_ret_borrowed
 from numba.core.typing.templates import (
     AbstractTemplate,
@@ -46,6 +45,7 @@ from bodo.io.iceberg.common import IcebergConnectionType
 from bodo.io.iceberg.theta import (
     _write_puffin_file,
     commit_statistics_file,
+    delete_theta_sketches,
     fetch_puffin_metadata,
     get_default_theta_sketch_columns,
     get_old_statistics_file_path,
@@ -94,7 +94,7 @@ if pt.TYPE_CHECKING:  # pragma: no cover
 ICEBERG_WRITE_PARQUET_CHUNK_SIZE = int(256e6)
 
 
-def get_enable_theta():  # pragma: no cover
+def get_enable_theta() -> bool:  # pragma: no cover
     pass
 
 
@@ -106,16 +106,17 @@ def overload_get_enable_theta():
 
     def impl():  # pragma: no cover
         with bodo.no_warning_objmode(ret_var="bool_"):
-            if not bodo.enable_theta_sketches:
-                return False
+            if bodo.enable_theta_sketches:
+                try:
+                    if importlib.util.find_spec("bodo_iceberg_connector") is None:
+                        ret_var = False
+                    else:
+                        ret_var = True
+                except ValueError:
+                    ret_var = False
+            else:
+                ret_var = False
 
-            try:
-                if importlib.util.find_spec("bodo_iceberg_connector") is None:
-                    return False
-            except ValueError:
-                return False
-
-            ret_var = True
         return ret_var
 
     return impl
@@ -398,7 +399,6 @@ def overload_start_write_wrapper(
         df_schema,
         create_table_info,
     ):  # pragma: no cover
-        conn_str = conn_wrapper_to_str(conn)
         with bodo.no_warning_objmode(
             txn=transaction_type,
             fs="pyarrow_fs_type",
@@ -423,7 +423,7 @@ def overload_start_write_wrapper(
                 sort_tuples,
                 properties,
             ) = wrap_start_write(
-                conn_str,
+                conn,
                 table_id,
                 df_schema,
                 if_exists,
@@ -546,6 +546,7 @@ def gen_iceberg_writer_init_impl(
         _is_parallel=False,
     ):
         ev = tracing.Event("iceberg_writer_init", is_parallel=_is_parallel)
+        conn_str = conn_wrapper_to_str(conn)
         (
             txn,
             fs,
@@ -558,7 +559,7 @@ def gen_iceberg_writer_init_impl(
             sort_tuples,
             properties,
         ) = start_write_wrapper(
-            conn,
+            conn_str,
             table_id,
             if_exists,
             df_pyarrow_schema,
@@ -567,7 +568,7 @@ def gen_iceberg_writer_init_impl(
 
         # Initialize writer
         writer = iceberg_writer_alloc(iceberg_writer_type)
-        writer["conn"] = conn
+        writer["conn"] = conn_str
         writer["table_id"] = table_id
         writer["if_exists"] = if_exists
         writer["table_loc"] = table_loc
@@ -669,42 +670,6 @@ def overload_table_columns_enabled_theta_sketches_wrapper(txn):
         return enabled_columns
 
     return impl
-
-
-def delete_theta_sketches(theta_sketches):  # pragma: no cover
-    pass
-
-
-@overload(delete_theta_sketches)
-def overload_delete_theta_sketches(theta_sketches):
-    """Delete the theta sketches"""
-
-    def impl(theta_sketches):  # pragma: no cover
-        _delete_theta_sketches(theta_sketches)
-
-    return impl
-
-
-@intrinsic
-def _delete_theta_sketches(typingctx, theta_sketches_t):
-    def codegen(context, builder, sig, args):
-        fnty = lir.FunctionType(
-            lir.VoidType(),
-            [
-                lir.IntType(8).as_pointer(),
-            ],
-        )
-        fn_tp = cgutils.get_or_insert_function(
-            builder.module, fnty, name="delete_theta_sketches"
-        )
-        ret = builder.call(fn_tp, args)
-        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
-        return ret
-
-    return (
-        types.void(theta_sketch_collection_type),
-        codegen,
-    )
 
 
 @infer_global(iceberg_writer_init)
@@ -905,7 +870,9 @@ def gen_iceberg_writer_append_table_impl_inner(
                 conn_str = writer["conn"]
                 table_id = writer["table_id"]
                 with bodo.no_warning_objmode():
-                    commit_statistics_file(conn_str, table_id, statistic_file_info)
+                    commit_statistics_file(
+                        conn_str, table_id, snapshot_id, statistic_file_info
+                    )
 
             # Delete the theta sketches. An object exists even if there are no sketches.
             delete_theta_sketches(writer["theta_sketches"])
