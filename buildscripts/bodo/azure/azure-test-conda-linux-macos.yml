@@ -79,7 +79,7 @@ jobs:
   #   retryCountOnTaskFailure: 5
 
   - powershell: |
-      pixi run -e azure build-bodo -Cbuild.verbose=true
+      pixi run -e azure build-bodo
       pixi run -e azure build-iceberg
       pixi run -e azure -- sccache --show-stats
     env:
@@ -88,12 +88,6 @@ jobs:
       DISABLE_CCACHE: 1  # Just use sccache directly on CI
       # USE_BODO_ARROW_FORK: 1  # Build from Source with Arrow Fork
     displayName: 'Build Bodo & Iceberg Connector'
-
-  - powershell: |
-      pixi list
-      pixi run pip list
-    # continueOnError: true
-    displayName: Export Environment Spec
 
   # - bash: |
   #     set -exo pipefail
@@ -113,7 +107,12 @@ jobs:
     displayName: Export Environment Spec
 
   - powershell: |
-      pixi shell -e azure
+      pixi shell-hook -s powershell -e azure > activate.ps1
+      . .\activate.ps1
+
+      cd "$(System.DefaultWorkingDirectory)"
+
+      python -c "import pyarrow"
 
       python -m bodo.runtests "${{ parameters.name }}" "$NP" --pyargs bodo -s -v -m "$(PYTEST_MARKER)"
     env:
