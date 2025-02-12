@@ -112,21 +112,21 @@ def test_iceberg_tabular_read_credential_refresh(
         ),
     ],
 )
-def test_iceberg_tabular_write_basic(
+def test_iceberg_polaris_write_basic(
     df, polaris_connection, memory_leak_check, rank_skew
 ):
     """
-    Test writing to an Iceberg table in a Tabular REST catalog.
+    Test writing to an Iceberg table in a Polaris REST catalog.
     Checksum is used to verify the data is written correctly.
     """
-    rest_uri, tabular_warehouse, tabular_credential = polaris_connection
+    rest_uri, polaris_warehouse, polaris_credential = polaris_connection
     table_uuid = run_rank0(uuid4)()
     table_name = f"bodo_write_test_{table_uuid}"
 
     write_complete = False
     try:
         con_str = get_rest_catalog_connection_string(
-            rest_uri, tabular_warehouse, tabular_credential
+            rest_uri, polaris_warehouse, polaris_credential
         )
 
         def f(df, table_name):
@@ -139,7 +139,7 @@ def test_iceberg_tabular_write_basic(
             )
 
         dist_df = _get_dist_arg(df)
-        if rank_skew and bodo.get_rank != 0:
+        if rank_skew and bodo.get_rank() != 0:
             dist_df = dist_df[:0]
         bodo.jit(f, distributed=["df"])(dist_df, table_name)
         write_complete = True
@@ -161,9 +161,13 @@ def test_iceberg_tabular_write_basic(
     finally:
         try:
             run_rank0(
-                lambda: RestCatalog("rest_catalog", uri=rest_uri).purge_table(
-                    f"CI.{table_name}"
-                )
+                lambda: RestCatalog(
+                    "rest_catalog",
+                    credential=polaris_credential,
+                    uri=rest_uri,
+                    warehouse=polaris_warehouse,
+                    scope="PRINCIPAL_ROLE:ALL",
+                ).purge_table(f"CI.{table_name}")
             )()
         except Exception:
             assert not write_complete, (

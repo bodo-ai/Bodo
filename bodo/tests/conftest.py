@@ -287,6 +287,8 @@ def polaris_server():
         "--health-timeout",
         "10s",
     ]
+    session = boto3.Session()
+    credentials = session.get_credentials()
     env_args = [
         "-e",
         "quarkus.otel.sdk.disabled=true",
@@ -295,11 +297,9 @@ def polaris_server():
         "-e",
         "polaris.realm-context.realms=default-realm",
         "-e",
-        f"AWS_REGION={os.environ.get('AWS_REGION', 'us-east-2')}",
+        f"AWS_REGION={session.region_name if session.region_name else 'us-east-2'}",
     ]
     # Use boto to get credentials from all possible sources
-    session = boto3.Session()
-    credentials = session.get_credentials()
     if credentials.access_key is not None:
         env_args += ["-e", f"AWS_ACCESS_KEY_ID={credentials.access_key}"]
     if credentials.secret_key is not None:
@@ -976,14 +976,17 @@ def aws_polaris_warehouse(polaris_token, polaris_server, polaris_package):
     from polaris.catalog import ApiClient as CatalogApiClient
     from polaris.catalog import CreateNamespaceRequest, IcebergCatalogAPI
     from polaris.management import (
-        ApiClient as ManagementApiClient,
-    )
-    from polaris.management import (
+        AddGrantRequest,
         AwsStorageConfigInfo,
         Catalog,
+        CatalogGrant,
+        CatalogPrivilege,
         Configuration,
         CreateCatalogRequest,
         PolarisDefaultApi,
+    )
+    from polaris.management import (
+        ApiClient as ManagementApiClient,
     )
 
     host, port, _, _ = polaris_server
@@ -1012,6 +1015,15 @@ def aws_polaris_warehouse(polaris_token, polaris_server, polaris_package):
 
         root_client.create_catalog(
             create_catalog_request=CreateCatalogRequest(catalog=catalog)
+        )
+        root_client.add_grant_to_catalog_role(
+            catalog_name,
+            "catalog_admin",
+            AddGrantRequest(
+                grant=CatalogGrant(
+                    type="catalog", privilege=CatalogPrivilege.CATALOG_MANAGE_CONTENT
+                )
+            ),
         )
 
         catalog_client = CatalogApiClient(

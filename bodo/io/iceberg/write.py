@@ -382,9 +382,12 @@ def register_table_write(
     from pyiceberg.typedef import Record
 
     ev = tracing.Event("iceberg_register_table_write")
-    assert (
-        fnames is not None and file_records is not None and partition_infos is not None
-    )
+    if fnames is None:
+        fnames = []
+    if file_records is None:
+        file_records = []
+    if partition_infos is None:
+        partition_infos = []
 
     with transaction.update_snapshot().fast_append() as add:
         for file_name, file_record, partition_info in zip(
