@@ -198,8 +198,11 @@ class BodoPhysicalWindow(
                         ->
                             group.lowerBound.isUnbounded &&
                                 (
-                                    group.upperBound.isUnbounded ||
-                                        group.upperBound.isCurrentRow
+                                    (
+                                        group.upperBound.isUnbounded ||
+                                            group.upperBound.isCurrentRow
+                                    ) &&
+                                        supportedSelectionTypes.contains(aggCall.operands[0].type.sqlTypeName)
                                 )
                         SqlKind.BIT_AND, SqlKind.BIT_OR, SqlKind.BIT_XOR,
                         SqlKind.OTHER, SqlKind.OTHER_FUNCTION,
