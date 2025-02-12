@@ -268,6 +268,7 @@ if (CMAKE_BUILD_TYPE STREQUAL "DebugSanitize")
 endif()
 
 # Release Compiler Args
+# TODO [BSE-4561] Configure release options for windows.
 if (CMAKE_BUILD_TYPE STREQUAL "Release" OR CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
   if (NOT WIN32)
     add_compile_options(
