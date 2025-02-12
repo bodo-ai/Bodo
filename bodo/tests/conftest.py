@@ -1051,15 +1051,16 @@ def azure_polaris_warehouse(polaris_token, polaris_server, polaris_package):
     from polaris.catalog import ApiClient as CatalogApiClient
     from polaris.catalog import CreateNamespaceRequest, IcebergCatalogAPI
     from polaris.management import (
-        ApiClient as ManagementApiClient,
-    )
-    from polaris.management import (
+        AddGrantRequest,
         AzureStorageConfigInfo,
         Catalog,
+        CatalogGrant,
+        CatalogPrivilege,
         Configuration,
         CreateCatalogRequest,
         PolarisDefaultApi,
     )
+    from polaris.management import ApiClient as ManagementApiClient
 
     assert os.environ.get("AZURE_STORAGE_ACCOUNT_NAME") is not None, (
         "AZURE_STORAGE_ACCOUNT_NAME not set"
@@ -1097,6 +1098,15 @@ def azure_polaris_warehouse(polaris_token, polaris_server, polaris_package):
 
         root_client.create_catalog(
             create_catalog_request=CreateCatalogRequest(catalog=catalog)
+        )
+        root_client.add_grant_to_catalog_role(
+            catalog_name,
+            "catalog_admin",
+            AddGrantRequest(
+                grant=CatalogGrant(
+                    type="catalog", privilege=CatalogPrivilege.CATALOG_MANAGE_CONTENT
+                )
+            ),
         )
 
         catalog_client = CatalogApiClient(
