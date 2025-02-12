@@ -93,7 +93,7 @@ jobs:
       if [[ "$unamestr" == 'Linux' ]]; then
         export LD_LIBRARY_PATH=/usr/local/lib/instantclient_21_5:$LD_LIBRARY_PATH
       else
-        export LD_LIBRARY_PATH=/usr/local/lib/instantclient_19_8:$LD_LIBRARY_PATH
+        # export LD_LIBRARY_PATH=/usr/local/lib/instantclient_19_8:$LD_LIBRARY_PATH
       fi
 
       if [[ "$unamestr" == 'Linux' ]]; then
@@ -124,6 +124,11 @@ jobs:
         export BODO_NUM_WORKERS="$NP"
         pytest -s -v -Wignore -m "$(PYTEST_MARKER)" bodo/tests --junitxml=pytest-report-spawn-mode.xml --test-run-title="${{ parameters.name }}"
       else
+        echo "running python tests!!!"
+        echo "$(which python)"
+        pixi shell -e azure
+        echo "$(which python)"
+        pixi list
         python -m bodo.runtests "${{ parameters.name }}" "$NP" --pyargs bodo -s -v -m "$(PYTEST_MARKER)"
       fi
     env:
