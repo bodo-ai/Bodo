@@ -1137,6 +1137,7 @@ def to_csv_overload(
     escapechar=None,
     decimal=".",
     errors="strict",
+    storage_options=None,
     _bodo_file_prefix="part-",
     _is_parallel=False,  # IMPORTANT: this is a Bodo parameter and must be in the last position
 ):

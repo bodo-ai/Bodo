@@ -175,8 +175,9 @@ exclude = [
 
 # ------------------------------------ CIBuildWheel ------------------------------------ #
 [tool.cibuildwheel]
-# Disable building PyPy wheels on all platforms
-# Disable building wheels for musllinux
+# Disable building wheels for musllinux, i686 and power pc
+# Don't publish linux arm until we can get nightly fixed
+#skip = ["pp*", "*musllinux*", "*i686*"]
 skip = ["pp*", "*musllinux*", "*i686*"]
 # Increase pip debugging output
 build-verbosity = 1
