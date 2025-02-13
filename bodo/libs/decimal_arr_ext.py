@@ -411,11 +411,7 @@ def _str_to_decimal_scalar(typingctx, val, precision_tp, scale_tp):
             ],
         )
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
-        low = builder.zext(builder.load(out_low_ptr), lir.IntType(128))
-        high = builder.zext(builder.load(out_high_ptr), lir.IntType(128))
-        decimal_val = builder.or_(
-            builder.shl(high, lir.Constant(lir.IntType(128), 64)), low
-        )
+        decimal_val = _ll_int128_from_low_high(builder, out_low_ptr, out_high_ptr)
         errors = builder.load(error_ptr)
         return context.make_tuple(builder, signature.return_type, [decimal_val, errors])
 
@@ -837,6 +833,16 @@ def _ll_get_int128_low_high(builder, val):
         builder.lshr(val, lir.Constant(lir.IntType(128), 64)), lir.IntType(64)
     )
     return low, high
+
+
+def _ll_int128_from_low_high(builder, low_ptr, high_ptr):
+    """Returns an int128 LLVM value from low/high int64 portions"""
+    low = builder.zext(builder.load(low_ptr), lir.IntType(128))
+    high = builder.zext(builder.load(high_ptr), lir.IntType(128))
+    decimal_val = builder.or_(
+        builder.shl(high, lir.Constant(lir.IntType(128), 64)), low
+    )
+    return decimal_val
 
 
 def decimal_to_float64_codegen(context, builder, signature, args, scale):
@@ -3083,22 +3089,29 @@ def _factorial_decimal_scalar(typingctx, val_t, input_s):
 
     def codegen(context, builder, signature, args):
         val, input_s = args
+        out_low_ptr = cgutils.alloca_once(builder, lir.IntType(64))
+        out_high_ptr = cgutils.alloca_once(builder, lir.IntType(64))
+        in_low, in_high = _ll_get_int128_low_high(builder, val)
         fnty = lir.FunctionType(
-            lir.IntType(128),
+            lir.VoidType(),
             [
-                lir.IntType(128),
                 lir.IntType(64),
+                lir.IntType(64),
+                lir.IntType(64),
+                lir.IntType(64).as_pointer(),
+                lir.IntType(64).as_pointer(),
             ],
         )
         fn = cgutils.get_or_insert_function(
             builder.module, fnty, name="factorial_decimal_scalar"
         )
-        ret = builder.call(
+        builder.call(
             fn,
-            [val, input_s],
+            [in_low, in_high, input_s, out_low_ptr, out_high_ptr],
         )
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
-        return ret
+        decimal_val = _ll_int128_from_low_high(builder, out_low_ptr, out_high_ptr)
+        return decimal_val
 
     output_precision = 37
     output_scale = 0
