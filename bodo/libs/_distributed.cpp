@@ -587,8 +587,8 @@ array_info *gather_array_py_entry(array_info *in_array, bool all_gather,
     }
 }
 
-static void dist_reduce(char *in_ptr, char *out_ptr, int op_enum, int type_enum,
-                        int64_t comm_ptr) {
+void dist_reduce(char *in_ptr, char *out_ptr, int op_enum, int type_enum,
+                 int64_t comm_ptr) {
     MPI_Datatype mpi_typ = get_MPI_typ(type_enum);
     MPI_Op mpi_op = get_MPI_op(op_enum);
     MPI_Comm comm = MPI_COMM_WORLD;
