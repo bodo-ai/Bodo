@@ -110,7 +110,7 @@ jobs:
         echo "Skipping hadoop/arrow env var setup"
       fi
 
-      cd $(System.DefaultWorkingDirectory)
+      cd "$(System.DefaultWorkingDirectory)"
       # For caching tests we need to update the location of the decryption file.
       # We set the absolute path as an environment variable.
       export BODO_TRACING_DECRYPTION_FILE_PATH=`echo "$(System.DefaultWorkingDirectory)/buildscripts/decompress_traces.py"`
