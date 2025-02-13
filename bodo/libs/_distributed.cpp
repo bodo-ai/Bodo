@@ -735,37 +735,35 @@ MPI_Op createArgMinMaxOp(MPI_Datatype mpi_typ, MPI_Op mpi_op) {
 
 void dist_reduce(char *in_ptr, char *out_ptr, int op_enum, int type_enum,
                  int64_t comm_ptr) {
-    MPI_Datatype mpi_typ = get_MPI_typ(type_enum);
-    MPI_Op mpi_op = get_MPI_op(op_enum);
-    MPI_Comm comm = MPI_COMM_WORLD;
-    if (comm_ptr != 0) {
-        comm = *(reinterpret_cast<MPI_Comm *>(comm_ptr));
-    }
-
-    // argmax and argmin need special handling
-    if (mpi_op == MPI_MAXLOC || mpi_op == MPI_MINLOC) {
-        MPI_Datatype pairMPIType = createPairDatatype(mpi_typ);
-        MPI_Op argMPIOp = createArgMinMaxOp(mpi_typ, mpi_op);
-
-        CHECK_MPI(
-            MPI_Allreduce(in_ptr, out_ptr, 1, pairMPIType, argMPIOp, comm),
-            "_distributed.h::dist_reduce: MPI error on MPI_Allreduce "
-            "(argmin/argmax):");
-
-        CHECK_MPI(MPI_Op_free(&argMPIOp),
-                  "_distributed.h::dist_reduce: MPI error on MPI_Op_free:");
-        CHECK_MPI(MPI_Type_free(&pairMPIType),
-                  "_distributed.h::dist_reduce: MPI error on MPI_Type_free:");
-        return;
-    }
-
     try {
-        CHECK_MPI(MPI_Allreduce(in_ptr, out_ptr, 1, mpi_typ, mpi_op, comm),
-                  "_distributed.h::dist_reduce:");
-        return;
+        MPI_Datatype mpi_typ = get_MPI_typ(type_enum);
+        MPI_Op mpi_op = get_MPI_op(op_enum);
+        MPI_Comm comm = MPI_COMM_WORLD;
+        if (comm_ptr != 0) {
+            comm = *(reinterpret_cast<MPI_Comm *>(comm_ptr));
+        }
+
+        // argmax and argmin need special handling
+        if (mpi_op == MPI_MAXLOC || mpi_op == MPI_MINLOC) {
+            MPI_Datatype pairMPIType = createPairDatatype(mpi_typ);
+            MPI_Op argMPIOp = createArgMinMaxOp(mpi_typ, mpi_op);
+
+            CHECK_MPI(
+                MPI_Allreduce(in_ptr, out_ptr, 1, pairMPIType, argMPIOp, comm),
+                "_distributed.h::dist_reduce: MPI error on MPI_Allreduce "
+                "(argmin/argmax):");
+
+            CHECK_MPI(MPI_Op_free(&argMPIOp),
+                      "_distributed.h::dist_reduce: MPI error on MPI_Op_free:");
+            CHECK_MPI(
+                MPI_Type_free(&pairMPIType),
+                "_distributed.h::dist_reduce: MPI error on MPI_Type_free:");
+        } else {
+            CHECK_MPI(MPI_Allreduce(in_ptr, out_ptr, 1, mpi_typ, mpi_op, comm),
+                      "_distributed.h::dist_reduce:");
+        }
     } catch (const std::exception &e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
-        return;
     }
 }
 
