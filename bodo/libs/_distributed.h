@@ -96,8 +96,8 @@ static int get_elem_size(int type_enum) __UNUSED__;
 static void timestamptz_reduce(int64_t in_timestamp, int64_t in_offset,
                                int64_t* out_timestamp, int64_t* out_offset,
                                bool is_max) __UNUSED__;
-static void dist_reduce(char* in_ptr, char* out_ptr, int op, int type_enum,
-                        int64_t comm_ptr) __UNUSED__;
+void dist_reduce(char* in_ptr, char* out_ptr, int op, int type_enum,
+                 int64_t comm_ptr);
 static void decimal_reduce(int64_t index, uint64_t* in_ptr, char* out_ptr,
                            int op, int type_enum) __UNUSED__;
 static void MPI_Allreduce_bool_or(std::span<uint8_t>) __UNUSED__;
