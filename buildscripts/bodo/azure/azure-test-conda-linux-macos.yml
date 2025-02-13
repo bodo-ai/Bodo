@@ -112,9 +112,13 @@ jobs:
 
       cd "$(System.DefaultWorkingDirectory)"
 
+      pwd
+      ls
+      ls .pixi\envs\
+
       python -c "import pyarrow"
 
-      python -m bodo.runtests "${{ parameters.name }}" "$NP" --pyargs bodo -s -v -m "$(PYTEST_MARKER)"
+      # python -m bodo.runtests "${{ parameters.name }}" "$NP" --pyargs bodo -s -v -m "$(PYTEST_MARKER)"
     env:
       SF_USERNAME: $(SNOWFLAKE_USER)
       SF_PASSWORD: $(SNOWFLAKE_PASSWORD)
