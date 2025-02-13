@@ -1280,20 +1280,31 @@ def _cast_decimal_to_decimal_scalar_unsafe(typingctx, val_t, precision_t, scale_
 
     def codegen(context, builder, signature, args):
         val, _, _ = args
+
+        out_low_ptr = cgutils.alloca_once(builder, lir.IntType(64))
+        out_high_ptr = cgutils.alloca_once(builder, lir.IntType(64))
+        in_low, in_high = _ll_get_int128_low_high(builder, val)
+
         fnty = lir.FunctionType(
-            lir.IntType(128),
+            lir.VoidType(),
             [
-                lir.IntType(128),
                 lir.IntType(64),
+                lir.IntType(64),
+                lir.IntType(64),
+                lir.IntType(64).as_pointer(),
+                lir.IntType(64).as_pointer(),
             ],
         )
         scale_amount_const = context.get_constant(types.int64, shift_amount)
         fn = cgutils.get_or_insert_function(
             builder.module, fnty, name="cast_decimal_to_decimal_scalar_unsafe"
         )
-        ret = builder.call(fn, [val, scale_amount_const])
+        builder.call(
+            fn, [in_low, in_high, scale_amount_const, out_low_ptr, out_high_ptr]
+        )
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
-        return ret
+        decimal_val = _ll_int128_from_low_high(builder, out_low_ptr, out_high_ptr)
+        return decimal_val
 
     decimal_type = Decimal128Type(precision, scale)
     return decimal_type(val_t, precision_t, scale_t), codegen
@@ -1316,13 +1327,21 @@ def _cast_decimal_to_decimal_scalar_safe(typingctx, val_t, precision_t, scale_t)
 
     def codegen(context, builder, signature, args):
         val, _, _ = args
+
+        out_low_ptr = cgutils.alloca_once(builder, lir.IntType(64))
+        out_high_ptr = cgutils.alloca_once(builder, lir.IntType(64))
+        in_low, in_high = _ll_get_int128_low_high(builder, val)
+
         fnty = lir.FunctionType(
-            lir.IntType(128),
+            lir.VoidType(),
             [
-                lir.IntType(128),
+                lir.IntType(64),
+                lir.IntType(64),
                 lir.IntType(64),
                 lir.IntType(64),
                 lir.IntType(1).as_pointer(),
+                lir.IntType(64).as_pointer(),
+                lir.IntType(64).as_pointer(),
             ],
         )
         scale_amount_const = context.get_constant(types.int64, shift_amount)
@@ -1331,10 +1350,22 @@ def _cast_decimal_to_decimal_scalar_safe(typingctx, val_t, precision_t, scale_t)
         fn = cgutils.get_or_insert_function(
             builder.module, fnty, name="cast_decimal_to_decimal_scalar_safe"
         )
-        ret = builder.call(fn, [val, scale_amount_const, n_const, safe_pointer])
+        builder.call(
+            fn,
+            [
+                in_low,
+                in_high,
+                scale_amount_const,
+                n_const,
+                safe_pointer,
+                out_low_ptr,
+                out_high_ptr,
+            ],
+        )
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        decimal_val = _ll_int128_from_low_high(builder, out_low_ptr, out_high_ptr)
         safe = builder.load(safe_pointer)
-        return context.make_tuple(builder, signature.return_type, [ret, safe])
+        return context.make_tuple(builder, signature.return_type, [decimal_val, safe])
 
     decimal_type = Decimal128Type(precision, scale)
     ret_type = types.Tuple([decimal_type, types.bool_])

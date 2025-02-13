@@ -155,30 +155,39 @@ arrow::Decimal128 shift_decimal_scalar(arrow::Decimal128 val,
     }
 }
 
-arrow::Decimal128 cast_decimal_to_decimal_scalar_unsafe_py_entry(
-    arrow::Decimal128 val, int64_t shift_amount) {
+void cast_decimal_to_decimal_scalar_unsafe_py_entry(uint64_t in_low,
+                                                    int64_t in_high,
+                                                    int64_t shift_amount,
+                                                    uint64_t* out_low_ptr,
+                                                    int64_t* out_high_ptr) {
     try {
-        return shift_decimal_scalar(val, shift_amount);
+        arrow::Decimal128 val = arrow::Decimal128(in_high, in_low);
+        arrow::Decimal128 res = shift_decimal_scalar(val, shift_amount);
+        *out_low_ptr = res.low_bits();
+        *out_high_ptr = res.high_bits();
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
-        return arrow::Decimal128(0);
     }
 }
 
-arrow::Decimal128 cast_decimal_to_decimal_scalar_safe_py_entry(
-    arrow::Decimal128 val, int64_t shift_amount, int64_t max_power_of_ten,
-    bool* safe) {
+void cast_decimal_to_decimal_scalar_safe_py_entry(
+    uint64_t in_low, int64_t in_high, int64_t shift_amount,
+    int64_t max_power_of_ten, bool* safe, uint64_t* out_low_ptr,
+    int64_t* out_high_ptr) {
     try {
+        arrow::Decimal128 val = arrow::Decimal128(in_high, in_low);
         bool safe_cast = val.FitsInPrecision(max_power_of_ten);
         *safe = safe_cast;
         if (!safe_cast) {
-            return val;
+            *out_low_ptr = in_low;
+            *out_high_ptr = in_high;
         } else {
-            return shift_decimal_scalar(val, shift_amount);
+            arrow::Decimal128 res = shift_decimal_scalar(val, shift_amount);
+            *out_low_ptr = res.low_bits();
+            *out_high_ptr = res.high_bits();
         }
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
-        return arrow::Decimal128(0);
     }
 }
 
