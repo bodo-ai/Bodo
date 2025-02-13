@@ -587,6 +587,116 @@ array_info *gather_array_py_entry(array_info *in_array, bool all_gather,
     }
 }
 
+static void dist_reduce(char *in_ptr, char *out_ptr, int op_enum, int type_enum,
+                        int64_t comm_ptr) {
+    MPI_Datatype mpi_typ = get_MPI_typ(type_enum);
+    MPI_Op mpi_op = get_MPI_op(op_enum);
+    MPI_Comm comm = MPI_COMM_WORLD;
+    if (comm_ptr != 0) {
+        comm = *(reinterpret_cast<MPI_Comm *>(comm_ptr));
+    }
+
+    // argmax and argmin need special handling
+    if (mpi_op == MPI_MAXLOC || mpi_op == MPI_MINLOC) {
+        // TODO: support intercomm in minloc/maxloc
+        assert(comm_ptr == 0);
+        // since MPI's indexed types use 32 bit integers, we workaround by
+        // using rank as index, then broadcasting the actual values from the
+        // target rank.
+        // TODO: generate user-defined reduce operation to avoid this workaround
+        int rank;
+        MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
+        // allreduce struct is value + integer
+        int value_size;
+        CHECK_MPI(MPI_Type_size(mpi_typ, &value_size),
+                  "dist_reduce: MPI error on MPI_Type_size:");
+        // TODO: support int64_int value on Windows
+        MPI_Datatype val_rank_mpi_typ = get_val_rank_MPI_typ(type_enum);
+        // copy input index_value to output
+        memcpy(out_ptr, in_ptr, value_size + sizeof(int64_t));
+
+        // Determine the size of the pointer to allocate.
+        // argmin/argmax in MPI communicates a struct of 2 values:
+        // the actual value and a 32-bit index.
+        int val_idx_struct_size;
+        CHECK_MPI(MPI_Type_size(val_rank_mpi_typ, &val_idx_struct_size),
+                  "dist_reduce: MPI error on MPI_Type_size:");
+
+        // format: value + int (input format is int64+value)
+        char *in_val_rank = (char *)malloc(val_idx_struct_size);
+        if (in_val_rank == nullptr) {
+            return;
+        }
+        char *out_val_rank = (char *)malloc(val_idx_struct_size);
+        if (out_val_rank == nullptr) {
+            free(in_val_rank);
+            return;
+        }
+
+        char *in_val_ptr = in_ptr + sizeof(int64_t);
+
+        // MPI doesn't support values smaller than int and unsigned values, so
+        // cast values when they don't fit originally.
+        // TODO: Add support value_size > struct_val_size (int64 and long on
+        // Windows) and equal size but unsigned uint64 and long on Linux
+        int struct_val_size = val_idx_struct_size - sizeof(MPI_INT);
+        if (struct_val_size > value_size) {
+            // Case 1: uint32 and long on Linux
+            if (struct_val_size == sizeof(int64_t)) {
+                uint32_t orig_val = *((uint32_t *)in_val_ptr);
+                int64_t value = (int64_t)orig_val;
+                memcpy(in_val_rank, (char *)&value, struct_val_size);
+                // Case 2: Values smaller than int32_t (int8, uint8, int16,
+                // uint16)
+                // TODO: Can int be smaller on Windows?
+            } else if (struct_val_size == sizeof(int32_t)) {
+                int32_t value = 0;
+                switch (type_enum) {
+                    case Bodo_CTypes::_BOOL:
+                    case Bodo_CTypes::INT8:
+                        value = (int32_t)*((int8_t *)in_val_ptr);
+                        break;
+                    case Bodo_CTypes::UINT8:
+                        value = (int32_t)*((uint8_t *)in_val_ptr);
+                        break;
+                    case Bodo_CTypes::INT16:
+                        value = (int32_t)*((int16_t *)in_val_ptr);
+                        break;
+                    case Bodo_CTypes::UINT16:
+                        value = (int32_t)*((uint16_t *)in_val_ptr);
+                        break;
+                }
+                memcpy(in_val_rank, &value, struct_val_size);
+            }
+        } else {
+            memcpy(in_val_rank, in_val_ptr, struct_val_size);
+        }
+        memcpy(in_val_rank + struct_val_size, &rank, sizeof(int));
+        CHECK_MPI(MPI_Allreduce(in_val_rank, out_val_rank, 1, val_rank_mpi_typ,
+                                mpi_op, MPI_COMM_WORLD),
+                  "_distributed.h::dist_reduce: MPI error on MPI_Allreduce:");
+
+        int target_rank = *((int *)(out_val_rank + struct_val_size));
+
+        CHECK_MPI(MPI_Bcast(out_ptr, value_size + sizeof(int64_t), MPI_BYTE,
+                            target_rank, MPI_COMM_WORLD),
+                  "_distributed.h::dist_reduce: MPI error on MPI_Bcast:");
+        free(in_val_rank);
+        free(out_val_rank);
+        return;
+    }
+
+    try {
+        CHECK_MPI(MPI_Allreduce(in_ptr, out_ptr, 1, mpi_typ, mpi_op, comm),
+                  "_distributed.h::dist_reduce:");
+        return;
+    } catch (const std::exception &e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return;
+    }
+}
+
 // Only works on x86 Apple machines
 #if defined(__APPLE__) && defined(__x86_64__)
 #include <cpuid.h>
