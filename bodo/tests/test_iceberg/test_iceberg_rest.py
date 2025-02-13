@@ -4,7 +4,6 @@ import numpy as np
 import pandas as pd
 import pyarrow.fs as pa_fs
 import pytest
-from pyiceberg.catalog.rest import RestCatalog
 from pyiceberg.io.pyarrow import _fs_from_file_path
 
 import bodo
@@ -123,11 +122,11 @@ def test_iceberg_polaris_write_basic(
     table_uuid = run_rank0(uuid4)()
     table_name = f"bodo_write_test_{table_uuid}"
 
+    con_str = get_rest_catalog_connection_string(
+        rest_uri, polaris_warehouse, polaris_credential
+    )
     write_complete = False
     try:
-        con_str = get_rest_catalog_connection_string(
-            rest_uri, polaris_warehouse, polaris_credential
-        )
 
         def f(df, table_name):
             df.to_sql(
@@ -141,7 +140,6 @@ def test_iceberg_polaris_write_basic(
         dist_df = _get_dist_arg(df)
         if rank_skew and bodo.get_rank() != 0:
             dist_df = dist_df[:0]
-        # breakpoint()
         bodo.jit(f, distributed=["df"])(dist_df, table_name)
         write_complete = True
 
@@ -162,16 +160,7 @@ def test_iceberg_polaris_write_basic(
     finally:
         try:
             run_rank0(
-                lambda: RestCatalog(
-                    polaris_warehouse,
-                    **{
-                        "credential": polaris_credential,
-                        "uri": rest_uri,
-                        "warehouse": polaris_warehouse,
-                        "scope": "PRINCIPAL_ROLE:ALL",
-                        "oauth2-server-uri": rest_uri + "/v1/oauth/tokens",
-                    },
-                ).purge_table(f"CI.{table_name}")
+                lambda: conn_str_to_catalog(con_str).purge_table(f"CI.{table_name}")
             )()
         except Exception:
             assert not write_complete, (

@@ -13,6 +13,7 @@ import typing as pt
 import numpy as np
 import pyarrow as pa
 import pyarrow.dataset as ds
+import pyarrow.fs as pa_fs
 
 import bodo
 import bodo.utils.tracing as tracing
@@ -138,6 +139,18 @@ def get_iceberg_pq_dataset(
 
     start_time = time.monotonic()
     fs = _fs_from_file_path(pq_infos[0].path, io)
+    if fs.type_name.startswith("py::fsspec"):
+        # Fsspec filesystems hang in our reader (maybe because it calls back to python from a threadpool)
+        # so for azure we create an Arrow AzureBlobFileSsytem with the credentials we already have.
+        if "abfs" in fs.type_name:
+            fs = pa_fs.AzureFileSystem(
+                account_name=io.properties.get("adls.account-name"),
+                account_key=io.properties.get("adls.account-key"),
+            )
+        else:
+            raise ValueError(
+                f"Get_iceberg_pq_dataset unsupported filesystem: {fs.type_name}"
+            )
     metrics.get_fs_time += int((time.monotonic() - start_time) * 1_000_000)
 
     if expr_filter_f_str is not None and len(expr_filter_f_str) == 0:
