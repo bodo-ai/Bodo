@@ -52,8 +52,9 @@ jobs:
             name: macos-x86
           - os: macos-latest
             name: macos-arm
-          - os: ubuntu-24.04-arm
-            name: linux-arm
+          # Don't publish linux arm until we can get nightly fixed
+          #- os: ubuntu-24.04-arm
+          #  name: linux-arm
     with:
       os: ${{ matrix.os }}
       name: ${{ matrix.name }}
