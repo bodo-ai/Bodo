@@ -310,15 +310,14 @@ def polaris_server():
     if credentials.token is not None:
         env_args += ["-e", f"AWS_SESSION_TOKEN={credentials.token}"]
     # Add Azure credentials
-    if os.environ.get("AZURE_STORAGE_ACCOUNT_NAME") is not None:
+    if "AZURE_CLIENT_ID" in os.environ:
+        env_args += ["-e", f"AZURE_CLIENT_ID={os.environ['AZURE_CLIENT_ID']}"]
+    if "AZURE_CLIENT_SECRET" in os.environ:
+        env_args += ["-e", f"AZURE_CLIENT_SECRET={os.environ['AZURE_CLIENT_SECRET']}"]
+    if "AZURE_TENANT_ID" in os.environ:
         env_args += [
             "-e",
-            f"AZURE_STORAGE_ACCOUNT_NAME={os.environ['AZURE_STORAGE_ACCOUNT_NAME']}",
-        ]
-    if os.environ.get("AZURE_STORAGE_ACCOUNT_KEY") is not None:
-        env_args += [
-            "-e",
-            f"AZURE_STORAGE_ACCOUNT_KEY={os.environ['AZURE_STORAGE_ACCOUNT_KEY']}",
+            f"AZURE_TENANT_ID={os.environ.get('AZURE_TENANT_ID', '72f988bf-86f1-41af-91ab-2d7cd011db47')}",
         ]
 
     # Start Polaris server
@@ -1004,7 +1003,7 @@ def aws_polaris_warehouse(polaris_token, polaris_server, polaris_package):
             role_arn="arn:aws:iam::427443013497:role/Polaris-Unittests",
             storage_type="S3",
         )
-        catalog_name = "aws_polaris_warehouse"
+        catalog_name = "aws-polaris-warehouse"
         suffix = "".join(random.choices("abcdefghijklmnopqrstuvwxyz", k=10))
         catalog = Catalog(
             name=catalog_name,
@@ -1062,13 +1061,6 @@ def azure_polaris_warehouse(polaris_token, polaris_server, polaris_package):
     )
     from polaris.management import ApiClient as ManagementApiClient
 
-    assert os.environ.get("AZURE_STORAGE_ACCOUNT_NAME") is not None, (
-        "AZURE_STORAGE_ACCOUNT_NAME not set"
-    )
-    assert os.environ.get("AZURE_STORAGE_ACCOUNT_KEY") is not None, (
-        "AZURE_STORAGE_ACCOUNT_KEY not set"
-    )
-
     host, port, _, _ = polaris_server
 
     @run_rank0
@@ -1082,16 +1074,19 @@ def azure_polaris_warehouse(polaris_token, polaris_server, polaris_package):
         root_client = PolarisDefaultApi(management_client)
         storage_conf = AzureStorageConfigInfo(
             storage_type="AZURE",
-            tenant_id="72f988bf-86f1-41af-91ab-2d7cd011db47",
+            tenant_id=os.environ.get(
+                "AZURE_TENANT_ID", "ac373ae0-dc77-4cbb-bbb7-deddcf6133b3"
+            ),
+            multi_tenant_app_name="",
         )
 
-        catalog_name = "azure_polaris_warehouse"
+        catalog_name = "azure-polaris-warehouse"
         suffix = "".join(random.choices("abcdefghijklmnopqrstuvwxyz", k=10))
         catalog = Catalog(
             name=catalog_name,
             type="INTERNAL",
             properties={
-                "default-base-location": f"abfs://polaris-unittests@{os.environ.get('AZURE_STORAGE_ACCOUNT_NAME')}.dfs.core.windows.net/{suffix}"
+                "default-base-location": f"abfs://polaris-unittests@bodosficebergazue2.blob.core.windows.net/{suffix}"
             },
             storage_config_info=storage_conf,
         )
@@ -1126,7 +1121,7 @@ def azure_polaris_warehouse(polaris_token, polaris_server, polaris_package):
     return create_azure_warehouse()
 
 
-@pytest.fixture(params=["aws_polaris_warehouse", "azure_polaris_warehouse"])
+@pytest.fixture(params=["aws-polaris-warehouse", "azure-polaris-warehouse"])
 def polaris_connection(
     request, polaris_server, aws_polaris_warehouse, azure_polaris_warehouse
 ):
@@ -1139,7 +1134,7 @@ def polaris_connection(
     )
     host, port, user, password = polaris_server
     url = f"http://{host}:{port}/api/catalog"
-    if request.param == "aws_polaris_warehouse":
+    if request.param == "aws-polaris-warehouse":
         # Unset the AWS credentials to avoid using them
         # to confirm that the tests are getting aws credentials from polaris
         with temp_env_override(
@@ -1147,16 +1142,36 @@ def polaris_connection(
                 "AWS_ACCESS_KEY_ID": None,
                 "AWS_SECRET_ACCESS_KEY": None,
                 "AWS_SESSION_TOKEN": None,
+                "AWS_REGION": "us-east-2",
             }
         ):
             yield url, aws_polaris_warehouse, f"{user}:{password}"
-    elif request.param == "azure_polaris_warehouse":
+    elif request.param == "azure-polaris-warehouse":
         # Unset the Azure credentials to avoid using them
         # to confirm that the tests are getting azure credentials from polaris
         with temp_env_override(
             {
-                "AZURE_STORAGE_ACCOUNT_NAME": None,
-                "AZURE_STORAGE_ACCOUNT_KEY": None,
+                # Pyiceberg doesn't support azure vended credentials, it will in 0.9
+                #        "AZURE_STORAGE_ACCOUNT_NAME": None,
+                #        "AZURE_STORAGE_ACCOUNT_KEY": None,
+                #        "AZURE_CLIENT_ID": None,
+                #        "AZURE_CLIENT_SECRET": None,
+                #        "AZURE_TENANT_ID": None
+                f"PYICEBERG_CATALOG__{azure_polaris_warehouse}__ADLS__ACCOUNT_NAME": os.environ.get(
+                    "AZURE_STORAGE_ACCOUNT_NAME", "bodosficebergazue2"
+                ),
+                f"PYICEBERG_CATALOG__{azure_polaris_warehouse}__ADLS__ACCOUNT_KEY": os.environ.get(
+                    "AZURE_STORAGE_ACCOUNT_KEY"
+                ),
+                f"PYICEBERG_CATALOG__{azure_polaris_warehouse}__ADLS__CLIENT_ID": os.environ.get(
+                    "AZURE_CLIENT_ID"
+                ),
+                f"PYICEBERG_CATALOG__{azure_polaris_warehouse}__ADLS__CLIENT_SECRET": os.environ.get(
+                    "AZURE_CLIENT_SECRET"
+                ),
+                f"PYICEBERG_CATALOG__{azure_polaris_warehouse}__ADLS__TENANT_ID": os.environ.get(
+                    "AZURE_TENANT_ID"
+                ),
             }
         ):
             yield url, azure_polaris_warehouse, f"{user}:{password}"

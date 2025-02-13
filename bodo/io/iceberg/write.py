@@ -17,6 +17,7 @@ import pyarrow as pa
 from llvmlite import ir as lir
 from numba.core import cgutils, types
 from numba.extending import intrinsic
+from pyiceberg.io import load_file_io
 
 import bodo
 import bodo.utils.tracing as tracing
@@ -698,10 +699,16 @@ def start_write_rank_0(
                 properties=properties,
             ).transaction()
 
-        io = catalog._load_file_io()
         data_loc = _get_write_data_path(
             txn.table_metadata.properties, txn.table_metadata.location
         )
+        io = load_file_io(
+            {**catalog.properties, **txn._table.io.properties},
+            txn.table_metadata.location,
+        )
+        # The default created transaction io doesn't do correct file path resolution
+        # for table create transactions because metadata_location is None
+        txn._table.io = io
         # Empty Partition Spec and Sort Order
         partition_spec = UNPARTITIONED_PARTITION_SPEC
         sort_order = UNSORTED_SORT_ORDER

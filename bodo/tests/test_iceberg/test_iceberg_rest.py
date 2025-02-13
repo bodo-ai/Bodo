@@ -163,7 +163,7 @@ def test_iceberg_polaris_write_basic(
         try:
             run_rank0(
                 lambda: RestCatalog(
-                    "rest_catalog",
+                    polaris_warehouse,
                     **{
                         "credential": polaris_credential,
                         "uri": rest_uri,

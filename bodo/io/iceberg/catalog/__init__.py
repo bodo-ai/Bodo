@@ -9,9 +9,12 @@ from __future__ import annotations
 
 import re
 import typing as pt
+from typing import cast
 from urllib.parse import parse_qs, urlparse
 
+import pyiceberg.utils.config
 from pyiceberg.catalog.rest import OAUTH2_SERVER_URI
+from pyiceberg.typedef import RecursiveDict
 
 if pt.TYPE_CHECKING:  # pragma: no cover
     from pyiceberg.catalog import Catalog
@@ -131,6 +134,14 @@ def conn_str_to_catalog(conn_str: str) -> Catalog:
     if cache_key in CATALOG_CACHE:
         return CATALOG_CACHE[cache_key]
     else:
-        cat_inst = catalog("catalog", **properties)
+        pyiceberg_config = pyiceberg.utils.config.Config()
+        catalog_name = properties.get(
+            WAREHOUSE_LOCATION, pyiceberg_config.get_default_catalog_name()
+        )
+        merged_conf = pyiceberg.utils.config.merge_config(
+            pyiceberg_config.get_catalog_config(catalog_name) or {},
+            cast(RecursiveDict, properties),
+        )
+        cat_inst = catalog(catalog_name, **cast(dict[str, str], merged_conf))
         CATALOG_CACHE[cache_key] = cat_inst
         return cat_inst
