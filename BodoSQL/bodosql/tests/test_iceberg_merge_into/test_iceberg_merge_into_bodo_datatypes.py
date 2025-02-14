@@ -13,7 +13,12 @@ from bodo.tests.iceberg_database_helpers.utils import (
 )
 from bodo.tests.utils import check_func
 
-pytestmark = pytest.mark.iceberg
+pytestmark = [
+    pytest.mark.iceberg,
+    pytest.mark.skip(
+        reason="[BSE-4569] MERGE INTO with PyIceberg is not supported yet"
+    ),
+]
 
 bodo_datatype_cols = {
     "INT_COL": pd.Series([np.int32(i) for i in range(10)], dtype=np.int32),
