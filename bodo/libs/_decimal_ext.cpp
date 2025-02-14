@@ -1056,24 +1056,32 @@ inline void modulo_decimal_scalars(const arrow::Decimal128& d1,
  * the provided output scale. If overflow is detected, then the overflow
  * need to be updated to true.
  *
- * @param v1 First decimal value
+ * @param[in] v1_low The low 64 bits of the first Decimal128 argument.
+ * @param[in] v1_high The high 64 bits of the first Decimal128 argument.
  * @param p1 Precision of first decimal value
  * @param s1 Scale of first decimal value
- * @param v2 Second decimal value
+ * @param[in] v2_low The low 64 bits of the second Decimal128 argument.
+ * @param[in] v2_high The high 64 bits of the second Decimal128 argument.
  * @param p2 Precision of second decimal value
  * @param s2 Scale of second decimal value
  * @param out_precision Output precision
  * @param out_scale Output scale
- * @return arrow::Decimal128
+ * @param[out] out_low_ptr Pointer to the low 64 bits of the result.
+ * @param[out] out_high_ptr Pointer to the high 64 bits of the result.
  */
-arrow::Decimal128 modulo_decimal_scalars_py_entry(
-    arrow::Decimal128 v1, int64_t p1, int64_t s1, arrow::Decimal128 v2,
-    int64_t p2, int64_t s2, int64_t out_precision, int64_t out_scale) noexcept {
+void modulo_decimal_scalars_py_entry(uint64_t v1_low, int64_t v1_high,
+                                     int64_t p1, int64_t s1, uint64_t v2_low,
+                                     int64_t v2_high, int64_t p2, int64_t s2,
+                                     int64_t out_precision, int64_t out_scale,
+                                     uint64_t* out_low_ptr,
+                                     uint64_t* out_high_ptr) noexcept {
     try {
         // We only need to do safe checks if there is a chance that either side
         // could be rescaled into an invalid value.
         bool fast_mod = out_precision < decimalops::kMaxPrecision ||
                         (s1 == out_scale && s2 == out_scale);
+        arrow::Decimal128 v1(v1_high, v1_low);
+        arrow::Decimal128 v2(v2_high, v2_low);
         arrow::Decimal128 result;
         if (fast_mod) {
             if (s1 < s2) {
@@ -1098,11 +1106,10 @@ arrow::Decimal128 modulo_decimal_scalars_py_entry(
                                                             out_scale, &result);
             }
         }
-
-        return result;
+        *out_low_ptr = result.low_bits();
+        *out_high_ptr = result.high_bits();
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
-        return arrow::Decimal128(0);
     }
 }
 

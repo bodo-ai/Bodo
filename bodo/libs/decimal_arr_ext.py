@@ -2149,16 +2149,20 @@ def _modulo_decimal_scalars(typingctx, d1_t, d2_t, out_precision_t, out_scale_t)
     def codegen(context, builder, signature, args):
         d1, d2, output_precision, output_scale = args
         fnty = lir.FunctionType(
-            lir.IntType(128),
+            lir.VoidType(),
             [
-                lir.IntType(128),
-                lir.IntType(64),
-                lir.IntType(64),
-                lir.IntType(128),
                 lir.IntType(64),
                 lir.IntType(64),
                 lir.IntType(64),
                 lir.IntType(64),
+                lir.IntType(64),
+                lir.IntType(64),
+                lir.IntType(64),
+                lir.IntType(64),
+                lir.IntType(64),
+                lir.IntType(64),
+                lir.IntType(64).as_pointer(),  # out_low_ptr
+                lir.IntType(64).as_pointer(),  # out_high_ptr
             ],
         )
         d1_precision_const = context.get_constant(types.int64, d1_precision)
@@ -2168,21 +2172,30 @@ def _modulo_decimal_scalars(typingctx, d1_t, d2_t, out_precision_t, out_scale_t)
         fn = cgutils.get_or_insert_function(
             builder.module, fnty, name="modulo_decimal_scalars"
         )
-        ret = builder.call(
+        d1_low, d1_high = _ll_get_int128_low_high(builder, d1)
+        d2_low, d2_high = _ll_get_int128_low_high(builder, d2)
+        out_low_ptr = cgutils.alloca_once(builder, lir.IntType(64))
+        out_high_ptr = cgutils.alloca_once(builder, lir.IntType(64))
+        builder.call(
             fn,
             [
-                d1,
+                d1_low,
+                d1_high,
                 d1_precision_const,
                 d1_scale_const,
-                d2,
+                d2_low,
+                d2_high,
                 d2_precision_const,
                 d2_scale_const,
                 output_precision,
                 output_scale,
+                out_low_ptr,
+                out_high_ptr,
             ],
         )
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
-        return ret
+        res = _ll_int128_from_low_high(builder, out_low_ptr, out_high_ptr)
+        return res
 
     output_decimal_type = Decimal128Type(output_precision, output_scale)
     return output_decimal_type(d1_t, d2_t, out_precision_t, out_scale_t), codegen
