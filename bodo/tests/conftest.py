@@ -1002,6 +1002,7 @@ def aws_polaris_warehouse(polaris_token, polaris_server, polaris_package):
         storage_conf = AwsStorageConfigInfo(
             role_arn="arn:aws:iam::427443013497:role/Polaris-Unittests",
             storage_type="S3",
+            region="us-east-2",
         )
         catalog_name = "aws-polaris-warehouse"
         suffix = "".join(random.choices("abcdefghijklmnopqrstuvwxyz", k=10))
@@ -1136,13 +1137,14 @@ def polaris_connection(
     url = f"http://{host}:{port}/api/catalog"
     if request.param == "aws-polaris-warehouse":
         # Unset the AWS credentials to avoid using them
-        # to confirm that the tests are getting aws credentials from polaris
+        # to confirm that the tests are getting aws credentials and region
+        # from polaris
         with temp_env_override(
             {
                 "AWS_ACCESS_KEY_ID": None,
                 "AWS_SECRET_ACCESS_KEY": None,
                 "AWS_SESSION_TOKEN": None,
-                "AWS_REGION": "us-east-2",
+                "AWS_REGION": None,
             }
         ):
             yield url, aws_polaris_warehouse, f"{user}:{password}"
