@@ -900,11 +900,13 @@ def decimal_to_int64(typingctx, val_t):
         (val,) = args
         precision = context.get_constant(types.int8, sig.args[0].precision)
         scale = context.get_constant(types.int8, sig.args[0].scale)
+        in_low, in_high = _ll_get_int128_low_high(builder, val)
 
         fnty = lir.FunctionType(
             lir.IntType(64),
             [
-                lir.IntType(128),
+                lir.IntType(64),
+                lir.IntType(64),
                 lir.IntType(8),
                 lir.IntType(8),
             ],
@@ -912,7 +914,7 @@ def decimal_to_int64(typingctx, val_t):
         fn = cgutils.get_or_insert_function(
             builder.module, fnty, name="decimal_to_int64"
         )
-        ret = builder.call(fn, [val, precision, scale])
+        ret = builder.call(fn, [in_low, in_high, precision, scale])
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
         return ret
 

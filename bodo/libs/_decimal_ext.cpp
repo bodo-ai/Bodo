@@ -429,8 +429,8 @@ int8_t decimal_scalar_sign_py_entry(uint64_t in_low, int64_t in_high) {
  * @param[out] is_null The pointer used to indicate whether the final answer is
  * null.
  * @param[in] parallel Do we need a parallel merge step.
- * @param[out]
- * @param[out]
+ * @param[out] out_low_ptr Pointer to the low 64 bits of the result.
+ * @param[out] out_high_ptr Pointer to the high 64 bits of the result.
  */
 void sum_decimal_array_py_entry(array_info* arr_raw, bool* is_null,
                                 bool parallel, uint64_t* out_low_ptr,
@@ -2042,17 +2042,18 @@ array_info* factorial_decimal_array_py_entry(array_info* arr_) {
 /**
  * @brief Convert decimal value to int64 (unsafe cast)
  *
- * @param val input decimal value
+ * @param in_low low 64 bits of the input decimal
+ * @param in_high high 64 bits of the input decimal
  * @param precision input's precision
  * @param scale input's scale
  * @return int64_t input converted to int64
  */
-int64_t decimal_to_int64_py_entry(decimal_value val, uint8_t precision,
-                                  uint8_t scale) {
+int64_t decimal_to_int64_py_entry(uint64_t in_low, int64_t in_high,
+                                  uint8_t precision, uint8_t scale) {
     try {
         // NOTE: using cast to allow unsafe cast (Rescale/ToInteger may throw
         // data loss error)
-        arrow::Decimal128 arrow_decimal(val.high, val.low);
+        arrow::Decimal128 arrow_decimal(in_high, in_low);
         arrow::Decimal128Scalar val_scalar(arrow_decimal,
                                            arrow::decimal128(precision, scale));
 
