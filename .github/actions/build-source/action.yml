@@ -29,13 +29,16 @@ runs:
           role-skip-session-tagging: true
 
       - name: Build Bodo
-        run: pixi run build-bodo -Cbuild.verbose=true
+        run: |
+          if [[ "$RUNNER_OS" == 'Linux' && "$RUNNER_ARCH" == 'X64' ]]; then
+            # Build Bodo with our fork of Arrow
+            export USE_BODO_ARROW_FORK=1
+          fi
+          pixi run build-bodo -Cbuild.verbose=true
         shell: bash
         env:
           # We should just use sccache directly on CI
           DISABLE_CCACHE: 1
-          # Build Bodo with our fork of Arrow
-          USE_BODO_ARROW_FORK: 1
 
       - name: Build Remaining
         if: inputs.build-all == 'true'

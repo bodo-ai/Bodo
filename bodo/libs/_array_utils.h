@@ -54,8 +54,8 @@ DTYPE_TO_C_TYPE(int64_t, Bodo_CTypes::TIMEDELTA)
 DTYPE_TO_C_TYPE(int64_t, Bodo_CTypes::TIMESTAMPTZ)
 DTYPE_TO_C_TYPE(int64_t, Bodo_CTypes::TIME)
 DTYPE_TO_C_TYPE(int32_t, Bodo_CTypes::DATE)
-DTYPE_TO_C_TYPE(__int128, Bodo_CTypes::DECIMAL)
-DTYPE_TO_C_TYPE(__int128, Bodo_CTypes::INT128)
+DTYPE_TO_C_TYPE(__int128_t, Bodo_CTypes::DECIMAL)
+DTYPE_TO_C_TYPE(__int128_t, Bodo_CTypes::INT128)
 DTYPE_TO_C_TYPE(std::complex<double>, Bodo_CTypes::COMPLEX128)
 DTYPE_TO_C_TYPE(std::complex<float>, Bodo_CTypes::COMPLEX64)
 
@@ -264,7 +264,7 @@ inline double GetDoubleEntry(Bodo_CTypes::CTypeEnum dtype, const char* ptr) {
     if (dtype == Bodo_CTypes::TIMEDELTA)
         return double(GetTentry<int64_t>(ptr));
     if (dtype == Bodo_CTypes::DECIMAL)
-        return decimal_to_double(GetTentry<__int128>(ptr));
+        return decimal_to_double(GetTentry<__int128_t>(ptr));
     throw std::runtime_error(
         "_array_utils.h::GetDoubleEntry: Unsupported case in GetDoubleEntry");
 }
@@ -949,8 +949,8 @@ int NumericComparison_int(char* ptr1, char* ptr2, bool const& na_position) {
  */
 inline int NumericComparison_decimal(char* ptr1, char* ptr2,
                                      bool const& na_position) {
-    __int128* ptr1_dec = (__int128*)ptr1;
-    __int128* ptr2_dec = (__int128*)ptr2;
+    __int128_t* ptr1_dec = (__int128_t*)ptr1;
+    __int128_t* ptr2_dec = (__int128_t*)ptr2;
     double value1 = decimal_to_double(*ptr1_dec);
     double value2 = decimal_to_double(*ptr2_dec);
     if (value1 > value2) {
@@ -1818,5 +1818,6 @@ template <bodo_array_type::arr_type_enum ArrType, typename T,
           Bodo_CTypes::CTypeEnum DType>
     requires(nullable_array<ArrType> && bool_dtype<DType>)
 inline void set_arr_item(array_info& arr, size_t idx, T val) {
-    SetBitTo((uint8_t*)arr.data1<ArrType>(), idx, val);
+    SetBitTo(reinterpret_cast<uint8_t*>(arr.data1<ArrType>()), idx,
+             static_cast<bool>(val));
 }

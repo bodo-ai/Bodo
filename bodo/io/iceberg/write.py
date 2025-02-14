@@ -50,7 +50,9 @@ try:
     from pyiceberg.table import Transaction
 except ImportError:
     # PyIceberg is not installed
-    pass
+    Catalog = None
+    PartitionSpec = None
+    Transaction = None
 
 this_module = sys.modules[__name__]
 _, iceberg_catalog_type = install_py_obj_class(
@@ -875,10 +877,8 @@ def iceberg_write(
         )
         num_cols = len(df_pyarrow_schema)
 
-    dummy_theta_sketch = (
-        bodo.io.iceberg.stream_iceberg_write.init_theta_sketches_wrapper(
-            alloc_false_bool_array(num_cols)
-        )
+    dummy_theta_sketch = bodo.io.iceberg.theta.init_theta_sketches_wrapper(
+        alloc_false_bool_array(num_cols)
     )
     bucket_region = bodo.io.fs_io.get_s3_bucket_region_wrapper(data_loc, is_parallel)
     iceberg_files_info = iceberg_pq_write(
@@ -917,5 +917,5 @@ def iceberg_write(
         # we might not have DeleteObject permissions, for instance.
         raise BodoError("Iceberg write failed.")
 
-    bodo.io.iceberg.stream_iceberg_write.delete_theta_sketches(dummy_theta_sketch)
+    bodo.io.iceberg.theta.delete_theta_sketches(dummy_theta_sketch)
     ev.finalize()

@@ -95,7 +95,14 @@ arrow::fs::S3ProxyOptions get_s3_proxy_options_from_env_vars() {
 }
 
 void _sleep_exponential_backoff(unsigned int n, unsigned int max = 10) {
+#ifdef _WIN32
+    // convert to miliseconds before calling Sleep
+    DWORD sleep_ms = (DWORD)((1 << n) * 1000);
+    DWORD max_ms = (DWORD)(max * 1000);
+    Sleep(std::min<DWORD>(sleep_ms, max_ms));
+#else
     sleep(std::min<unsigned int>((1 << n), max));
+#endif
 }
 // a global singleton instance of S3FileSystem that is
 // initialized the first time it is needed and reused afterwards

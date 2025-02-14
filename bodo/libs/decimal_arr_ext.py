@@ -383,28 +383,39 @@ def _str_to_decimal_scalar(typingctx, val, precision_tp, scale_tp):
         val, precision, scale = args
         val = bodo.libs.str_ext.gen_unicode_to_std_str(context, builder, val)
         error_ptr = cgutils.alloca_once(builder, lir.IntType(1))
+        out_low_ptr = cgutils.alloca_once(builder, lir.IntType(64))
+        out_high_ptr = cgutils.alloca_once(builder, lir.IntType(64))
         fnty = lir.FunctionType(
-            lir.IntType(128),
+            lir.VoidType(),
             [
                 lir.IntType(8).as_pointer(),
                 lir.IntType(64),
                 lir.IntType(64),
+                lir.IntType(64).as_pointer(),
+                lir.IntType(64).as_pointer(),
                 lir.IntType(1).as_pointer(),
             ],
         )
         fn = cgutils.get_or_insert_function(
             builder.module, fnty, name="str_to_decimal_scalar_py_entry"
         )
-        decimal_val = builder.call(
+        builder.call(
             fn,
             [
                 val,
                 precision,
                 scale,
+                out_low_ptr,
+                out_high_ptr,
                 error_ptr,
             ],
         )
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        low = builder.zext(builder.load(out_low_ptr), lir.IntType(128))
+        high = builder.zext(builder.load(out_high_ptr), lir.IntType(128))
+        decimal_val = builder.or_(
+            builder.shl(high, lir.Constant(lir.IntType(128), 64)), low
+        )
         errors = builder.load(error_ptr)
         return context.make_tuple(builder, signature.return_type, [decimal_val, errors])
 
@@ -819,6 +830,15 @@ def decimal_to_bool(dec):
     return impl
 
 
+def _ll_get_int128_low_high(builder, val):
+    """Return low/high int64 portions of an int128 LLVM value"""
+    low = builder.trunc(val, lir.IntType(64))
+    high = builder.trunc(
+        builder.lshr(val, lir.Constant(lir.IntType(128), 64)), lir.IntType(64)
+    )
+    return low, high
+
+
 def decimal_to_float64_codegen(context, builder, signature, args, scale):
     (val,) = args
     scale = context.get_constant(types.int8, scale)
@@ -826,12 +846,14 @@ def decimal_to_float64_codegen(context, builder, signature, args, scale):
     fnty = lir.FunctionType(
         lir.DoubleType(),
         [
-            lir.IntType(128),
+            lir.IntType(64),
+            lir.IntType(64),
             lir.IntType(8),
         ],
     )
     fn = cgutils.get_or_insert_function(builder.module, fnty, name="decimal_to_double")
-    ret = builder.call(fn, [val, scale])
+    low, high = _ll_get_int128_low_high(builder, val)
+    ret = builder.call(fn, [low, high, scale])
     bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
     return ret
 
@@ -1007,7 +1029,8 @@ def box_decimal(typ, val, c):
     fnty = lir.FunctionType(
         lir.IntType(8).as_pointer(),
         [
-            lir.IntType(128),
+            lir.IntType(64),
+            lir.IntType(64),
             lir.IntType(8),
             lir.IntType(8),
         ],
@@ -1016,10 +1039,11 @@ def box_decimal(typ, val, c):
 
     precision = c.context.get_constant(types.int8, typ.precision)
     scale = c.context.get_constant(types.int8, typ.scale)
+    low, high = _ll_get_int128_low_high(c.builder, val)
 
     return c.builder.call(
         fn,
-        [val, precision, scale],
+        [low, high, precision, scale],
     )
 
 

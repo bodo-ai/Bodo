@@ -421,8 +421,8 @@ static void argmin_argmax_decimal(void* in, void* out, int* len,
     uint64_t out_lo = out64[1];
     uint64_t out_hi = out64[2];
 
-    __int128 in_val = static_cast<__int128>(in_hi) << 64 | in_lo;
-    __int128 out_val = static_cast<__int128>(out_hi) << 64 | out_lo;
+    __int128_t in_val = static_cast<__int128_t>(in_hi) << 64 | in_lo;
+    __int128_t out_val = static_cast<__int128_t>(out_hi) << 64 | out_lo;
 
     if (in_val == out_val) {
         if (in_index < out_index)
@@ -462,8 +462,8 @@ static void min_max_decimal(void* in, void* out, int* len, MPI_Datatype* type,
     uint64_t out_lo = out64[0];
     uint64_t out_hi = out64[1];
 
-    __int128 in_val = static_cast<__int128>(in_hi) << 64 | in_lo;
-    __int128 out_val = static_cast<__int128>(out_hi) << 64 | out_lo;
+    __int128_t in_val = static_cast<__int128_t>(in_hi) << 64 | in_lo;
+    __int128_t out_val = static_cast<__int128_t>(out_hi) << 64 | out_lo;
 
     bool in_is_greater = in_val > out_val;
     if (in_is_greater == is_max) {
@@ -520,12 +520,8 @@ static void decimal_reduce(int64_t index, uint64_t* in_ptr, char* out_ptr,
 
             char out_val[struct_size];
 
-            uint64_t lo = in_ptr[0];
-            uint64_t hi = in_ptr[1];
-            __int128 val = static_cast<__int128>(hi) << 64 | lo;
-
-            CHECK_MPI(MPI_Allreduce(&val, out_val, 1, decimal_type, cmp_decimal,
-                                    MPI_COMM_WORLD),
+            CHECK_MPI(MPI_Allreduce(in_ptr, out_val, 1, decimal_type,
+                                    cmp_decimal, MPI_COMM_WORLD),
                       "_distributed.h::decimal_reduce");
 
             CHECK_MPI(MPI_Op_free(&cmp_decimal),
@@ -561,14 +557,10 @@ static void decimal_reduce(int64_t index, uint64_t* in_ptr, char* out_ptr,
             char in_val[struct_size];
             char out_val[struct_size];
 
-            uint64_t lo = in_ptr[0];
-            uint64_t hi = in_ptr[1];
-            __int128 val = static_cast<__int128>(hi) << 64 | lo;
-
             // remove padding by representing the index, decimal struct as 3
             // int64's
             memcpy(in_val, &index, sizeof(uint64_t));
-            memcpy(in_val + sizeof(uint64_t), &val, sizeof(__int128));
+            memcpy(in_val + sizeof(uint64_t), in_ptr, sizeof(__int128_t));
             CHECK_MPI(MPI_Allreduce(&in_val, out_val, 1, index_decimal_type,
                                     argcmp_decimal, MPI_COMM_WORLD),
                       "_distributed.h::decimal_reduce");
@@ -823,7 +815,7 @@ static MPI_Datatype get_MPI_typ() {
         case Bodo_CTypes::UINT16:
             return MPI_UNSIGNED_SHORT;
         case Bodo_CTypes::INT128:
-        case Bodo_CTypes::DECIMAL:
+        case Bodo_CTypes::DECIMAL: {
             // data type for Decimal128 values (2 64-bit ints)
             static MPI_Datatype decimal_mpi_type = MPI_DATATYPE_NULL;
             // initialize decimal_mpi_type
@@ -838,6 +830,7 @@ static MPI_Datatype get_MPI_typ() {
                           "MPI_Type_commit:");
             }
             return decimal_mpi_type;
+        }
         case Bodo_CTypes::COMPLEX128:
             return MPI_C_DOUBLE_COMPLEX;
         case Bodo_CTypes::COMPLEX64:

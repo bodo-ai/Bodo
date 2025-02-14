@@ -8,13 +8,11 @@ from bodo_iceberg_connector.filter_to_java import (
     Scalar,
 )
 from bodo_iceberg_connector.py4j_support import launch_jvm, set_core_site_path
-from bodo_iceberg_connector.catalog_conn import parse_conn_str as parse_iceberg_conn_str
 from bodo_iceberg_connector.write import (
     commit_merge_cow,
     commit_statistics_file,
     commit_write,
     delete_table,
-    fetch_puffin_metadata,
     get_table_metadata_path,
 )
 from bodo_iceberg_connector.puffin import (
@@ -22,7 +20,6 @@ from bodo_iceberg_connector.puffin import (
     StatisticsFile,
     get_old_statistics_file_path,
     table_columns_have_theta_sketches,
-    table_columns_enabled_theta_sketches,
 )
 
 # ----------------------- Version Import from Metadata -----------------------

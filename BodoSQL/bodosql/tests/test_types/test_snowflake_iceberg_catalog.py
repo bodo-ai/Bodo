@@ -132,7 +132,7 @@ def test_filter_pushdown(sf_iceberg_catalog, memory_leak_check):
         check_logger_msg(stream, "Columns loaded ['A', 'B']")
         check_logger_msg(
             stream,
-            "Iceberg Filter Pushed Down:\nbic.FilterExpr('AND', [bic.FilterExpr('>', [bic.ColumnRef('B'), bic.Scalar(f0)]), bic.FilterExpr('IS_NOT_NULL', [bic.ColumnRef('A')])])",
+            "Iceberg Filter Pushed Down:\npie.And(pie.GreaterThan('B', literal(f0)), pie.NotNull('A'))",
         )
 
 
@@ -168,7 +168,7 @@ def test_filter_pushdown_col_not_read(sf_iceberg_catalog, memory_leak_check):
         check_logger_msg(stream, "Columns loaded ['A']")
         check_logger_msg(
             stream,
-            "Iceberg Filter Pushed Down:\nbic.FilterExpr('AND', [bic.FilterExpr('>', [bic.ColumnRef('B'), bic.Scalar(f0)]), bic.FilterExpr('IS_NOT_NULL', [bic.ColumnRef('A')])])",
+            "Iceberg Filter Pushed Down:\npie.And(pie.GreaterThan('B', literal(f0)), pie.NotNull('A'))",
         )
 
 
@@ -323,7 +323,7 @@ def test_limit_filter_pushdown(sf_iceberg_catalog, memory_leak_check):
         check_logger_msg(stream, "Constant limit detected, reading at most 2 rows")
         check_logger_msg(
             stream,
-            "Iceberg Filter Pushed Down:\nbic.FilterExpr('>', [bic.ColumnRef('B'), bic.Scalar(f0)])",
+            "Iceberg Filter Pushed Down:\npie.GreaterThan('B', literal(f0))",
         )
 
 
@@ -389,7 +389,7 @@ def test_limit_filter_limit_pushdown(sf_iceberg_catalog, memory_leak_check):
         check_logger_msg(stream, "Constant limit detected, reading at most 2 rows")
         check_logger_msg(
             stream,
-            "Iceberg Filter Pushed Down:\nbic.FilterExpr('>', [bic.ColumnRef('B'), bic.Scalar(f0)])",
+            "Iceberg Filter Pushed Down:\npie.GreaterThan('B', literal(f0))",
         )
 
 
@@ -423,7 +423,7 @@ def test_filter_limit_filter_pushdown(sf_iceberg_catalog, memory_leak_check):
         check_logger_msg(stream, "Constant limit detected, reading at most 4 rows")
         check_logger_msg(
             stream,
-            "Iceberg Filter Pushed Down:\nbic.FilterExpr('AND', [bic.FilterExpr('!=', [bic.ColumnRef('A'), bic.Scalar(f0)]), bic.FilterExpr('>', [bic.ColumnRef('B'), bic.Scalar(f1)])])",
+            "Iceberg Filter Pushed Down:\npie.And(pie.NotEqualTo('A', literal(f0)), pie.GreaterThan('B', literal(f1)))",
         )
 
 
@@ -471,7 +471,7 @@ def test_dynamic_scalar_filter_pushdown(memory_leak_check):
             # Verify filter pushdown
             check_logger_msg(
                 stream,
-                "Iceberg Filter Pushed Down:\nbic.FilterExpr('<=', [bic.ColumnRef('A'), bic.Scalar(f0)])",
+                "Iceberg Filter Pushed Down:\npie.LessThanOrEqual('A', literal(f0))",
             )
 
 
