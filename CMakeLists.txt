@@ -681,7 +681,7 @@ if (NOT (CMAKE_BUILD_TYPE STREQUAL "Release") AND NOT DEFINED ENV{BODO_SKIP_CPP_
 endif()
 
 # TODO [BSE-4554] HDF5 support on Windows
-if(WIN32 OR (DEFINED ENV{NO_HDF5} AND "$ENV{NO_HDF5}" STREQUAL "1"))
+if(DEFINED ENV{NO_HDF5} AND "$ENV{NO_HDF5}" STREQUAL "1")
     set(NO_HDF5 TRUE)
 else()
     list(APPEND sources_list "bodo/io/_hdf5.cpp")
