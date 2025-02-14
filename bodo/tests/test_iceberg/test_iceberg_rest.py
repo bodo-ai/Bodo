@@ -2,7 +2,9 @@ from uuid import uuid4
 
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 import pytest
+from pyiceberg.catalog import Catalog
 
 import bodo
 from bodo.io.iceberg.catalog import conn_str_to_catalog
@@ -17,28 +19,46 @@ from bodo.utils.utils import run_rank0
 pytestmark = pytest_polaris
 
 
-def test_iceberg_tabular_read(tabular_connection, memory_leak_check):
+def test_iceberg_polaris_read(polaris_connection, memory_leak_check):
     """
-    Test reading an Iceberg table from a Tabular REST catalog.
+    Test reading an Iceberg table from a Polaris REST catalog.
     Checksum is used to verify the data is read correctly.
     Column names are used to verify the schema is read correctly.
     """
-
-    rest_uri, tabular_warehouse, tabular_credential = tabular_connection
+    rest_uri, polaris_warehouse, polaris_credential = polaris_connection
     con_str = get_rest_catalog_connection_string(
-        rest_uri, tabular_warehouse, tabular_credential
+        rest_uri, polaris_warehouse, polaris_credential
     )
+    df = pd.DataFrame(
+        {
+            "A": [1, 2, 3],
+            "B": ["a", "b", "c"],
+            "C": [1.1, 2.2, 3.3],
+            "D": [True, False, True],
+        }
+    )
+    namespace = "CI"
+    table_name = "read_test"
+    table_id = f"{namespace}.{table_name}"
+    try:
+        py_catalog: Catalog = conn_str_to_catalog(con_str)
+        run_rank0(
+            lambda: py_catalog.create_table(table_id, pa.Schema.from_pandas(df)).append(
+                pa.Table.from_pandas(df)
+            )
+        )()
 
-    def f():
-        df = pd.read_sql_table(
-            "nyc_taxi_locations",
-            con=con_str,
-            schema="examples",
-        )
-        checksum = df["location_id"].sum()
-        return checksum, len(df), list(df.columns)
+        def f():
+            df = pd.read_sql_table(
+                table_name,
+                con=con_str,
+                schema=namespace,
+            )
+            return df
 
-    check_func(f, (), py_output=(35245, 265, ["location_id", "borough", "zone_name"]))
+        check_func(f, (), py_output=df)
+    finally:
+        run_rank0(lambda: py_catalog.purge_table(table_id))()
 
 
 @pytest.mark.parametrize(
