@@ -417,7 +417,8 @@ array_info* decimal_array_sign_py_entry(array_info* arr_) {
     }
 }
 
-int8_t decimal_scalar_sign_py_entry(arrow::Decimal128 val) {
+int8_t decimal_scalar_sign_py_entry(uint64_t in_low, int64_t in_high) {
+    arrow::Decimal128 val = arrow::Decimal128(in_high, in_low);
     return val == arrow::Decimal128(0) ? 0 : val.Sign();
 }
 
@@ -1834,17 +1835,23 @@ array_info* trunc_decimal_array_py_entry(array_info* arr_, int32_t output_p,
 /**
  * Computes the absolute value of a given decimal scalar.
  *
- * @param val The decimal value for which the absolute value is to be computed.
- * @return The absolute value of the input as a scalar.
+ * @param[in] in_low The low 64 bits of the decimal value for which the absolute
+ * value is to be computed.
+ * @param[in] in_high The high 64 bits of the decimal value for which the
+ * absolute value is to be computed.
+ * @param[out] out_low_ptr Pointer to the low 64 bits of the result.
+ * @param[out] out_high_ptr Pointer to the high 64 bits of the result.
  */
-arrow::Decimal128 abs_decimal_scalar_py_entry(arrow::Decimal128 val) {
-    arrow::Decimal128 result;
+void abs_decimal_scalar_py_entry(uint64_t in_low, int64_t in_high,
+                                 uint64_t* out_low_ptr, int64_t* out_high_ptr) {
     try {
-        result = val.Abs();
+        arrow::Decimal128 val = arrow::Decimal128(in_high, in_low);
+        arrow::Decimal128 result = val.Abs();
+        *out_low_ptr = result.low_bits();
+        *out_high_ptr = result.high_bits();
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
     }
-    return result;
 }
 
 /**
@@ -1873,11 +1880,11 @@ array_info* abs_decimal_array_py_entry(array_info* arr_) {
                     out_arr->data1<bodo_array_type::NULLABLE_INT_BOOL,
                                    arrow::Decimal128>() +
                     i;
-                const arrow::Decimal128& in_val =
+                arrow::Decimal128 in_val =
                     *(arr->data1<bodo_array_type::NULLABLE_INT_BOOL,
                                  arrow::Decimal128>() +
                       i);
-                *out_ptr = abs_decimal_scalar_py_entry(in_val);
+                *out_ptr = in_val.Abs();
             }
         }
         return new array_info(*out_arr);
