@@ -854,16 +854,22 @@ arrow::Decimal128 multiply_decimal_scalars_util(
 /**
  * @brief Python entry point to multiply two decimal scalars.
  */
-arrow::Decimal128 multiply_decimal_scalars_py_entry(
-    arrow::Decimal128 v1, int64_t p1, int64_t s1, arrow::Decimal128 v2,
-    int64_t p2, int64_t s2, int64_t out_precision, int64_t out_scale,
-    bool* overflow) noexcept {
+void multiply_decimal_scalars_py_entry(uint64_t v1_low, int64_t v1_high,
+                                       int64_t p1, int64_t s1, uint64_t v2_low,
+                                       int64_t v2_high, int64_t p2, int64_t s2,
+                                       int64_t out_precision, int64_t out_scale,
+                                       uint64_t* out_low_ptr,
+                                       uint64_t* out_high_ptr,
+                                       bool* overflow) noexcept {
     try {
-        return multiply_decimal_scalars_util(
+        arrow::Decimal128 v1(v1_high, v1_low);
+        arrow::Decimal128 v2(v2_high, v2_low);
+        arrow::Decimal128 res = multiply_decimal_scalars_util(
             v1, p1, s1, v2, p2, s2, out_precision, out_scale, overflow);
+        *out_low_ptr = res.low_bits();
+        *out_high_ptr = res.high_bits();
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
-        return arrow::Decimal128(0);
     }
 }
 
