@@ -1552,22 +1552,27 @@ def _decimal_array_sign(typingctx, val_t):
 def _sum_decimal_array(typingctx, arr_t, in_scale_t, parallel_t):
     def codegen(context, builder, signature, args):
         (arr, _, parallel) = args
+        out_low_ptr = cgutils.alloca_once(builder, lir.IntType(64))
+        out_high_ptr = cgutils.alloca_once(builder, lir.IntType(64))
         fnty = lir.FunctionType(
-            lir.IntType(128),
+            lir.VoidType(),
             [
                 lir.IntType(8).as_pointer(),
                 lir.IntType(1).as_pointer(),
                 lir.IntType(1),
+                lir.IntType(64).as_pointer(),
+                lir.IntType(64).as_pointer(),
             ],
         )
         fn = cgutils.get_or_insert_function(
             builder.module, fnty, name="sum_decimal_array"
         )
         is_null_pointer = cgutils.alloca_once(builder, lir.IntType(1))
-        ret = builder.call(fn, [arr, is_null_pointer, parallel])
+        builder.call(fn, [arr, is_null_pointer, parallel, out_low_ptr, out_high_ptr])
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
         is_null = builder.load(is_null_pointer)
-        return context.make_tuple(builder, signature.return_type, [ret, is_null])
+        res = _ll_int128_from_low_high(builder, out_low_ptr, out_high_ptr)
+        return context.make_tuple(builder, signature.return_type, [res, is_null])
 
     in_scale = get_overload_const_int(in_scale_t)
     output_decimal_type = Decimal128Type(DECIMAL128_MAX_PRECISION, in_scale)
