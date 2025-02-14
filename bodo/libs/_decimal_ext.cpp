@@ -1444,19 +1444,24 @@ inline void round_decimal_scalar(const arrow::Decimal128& value,
  * This function is a Python entry point to round a Decimal128 value to a
  * specified scale by calling the `round_decimal_scalar` C++ function.
  *
- * @param value The Decimal128 value to be rounded.
- * @param round_scale The scale to which the value should be rounded.
- * @param input_s The scale of the input value.
- * @param overflow Pointer to a boolean that indicates if an overflow occurred.
- * @return The rounded Decimal128 value.
+ * @param[in] in_low The low 64 bits of the Decimal128 to be rounded.
+ * @param[in] in_high The high 64 bits of the Decimal128 to be rounded.
+ * @param[in] round_scale The scale to which the value should be rounded.
+ * @param[in] input_s The scale of the input value.
+ * @param[out] overflow Pointer to a boolean that indicates if an overflow
+ * occurred.
+ * @param[out] out_low_ptr Pointer to the low 64 bits of the result.
+ * @param[out] out_high_ptr Pointer to the high 64 bits of the result.
  */
-arrow::Decimal128 round_decimal_scalar_py_entry(arrow::Decimal128 value,
-                                                int64_t round_scale,
-                                                int64_t input_p,
-                                                int64_t input_s,
-                                                bool* overflow) noexcept {
+void round_decimal_scalar_py_entry(uint64_t in_low, int64_t in_high,
+                                   int64_t round_scale, int64_t input_p,
+                                   int64_t input_s, bool* overflow,
+                                   uint64_t* out_low_ptr,
+                                   uint64_t* out_high_ptr) noexcept {
     arrow::Decimal128 result;
     try {
+        arrow::Decimal128 value = arrow::Decimal128(in_high, in_low);
+
         if (round_scale < 0) {
             if (input_p != 38) {
                 round_decimal_scalar<true, true>(value, round_scale, input_s,
@@ -1470,10 +1475,11 @@ arrow::Decimal128 round_decimal_scalar_py_entry(arrow::Decimal128 value,
             round_decimal_scalar<false, false>(value, round_scale, input_s,
                                                overflow, &result);
         }
+        *out_low_ptr = result.low_bits();
+        *out_high_ptr = result.high_bits();
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
     }
-    return result;
 }
 
 /**
