@@ -2660,27 +2660,43 @@ def _round_decimal_scalar(
 
     def codegen(context, builder, signature, args):
         val, round_scale, input_p, input_s, output_p, output_s = args
+        in_low, in_high = _ll_get_int128_low_high(builder, val)
+        out_low_ptr = cgutils.alloca_once(builder, lir.IntType(64))
+        out_high_ptr = cgutils.alloca_once(builder, lir.IntType(64))
         fnty = lir.FunctionType(
-            lir.IntType(128),
+            lir.VoidType(),
             [
-                lir.IntType(128),
+                lir.IntType(64),  # in_low
+                lir.IntType(64),  # in_high
                 lir.IntType(64),
                 lir.IntType(64),
                 lir.IntType(64),
                 lir.IntType(1).as_pointer(),
+                lir.IntType(64).as_pointer(),  # out_low_ptr
+                lir.IntType(64).as_pointer(),  # out_high_ptr
             ],
         )
         fn = cgutils.get_or_insert_function(
             builder.module, fnty, name="round_decimal_scalar"
         )
         overflow_pointer = cgutils.alloca_once(builder, lir.IntType(1))
-        ret = builder.call(
+        builder.call(
             fn,
-            [val, round_scale, input_p, input_s, overflow_pointer],
+            [
+                in_low,
+                in_high,
+                round_scale,
+                input_p,
+                input_s,
+                overflow_pointer,
+                out_low_ptr,
+                out_high_ptr,
+            ],
         )
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        res = _ll_int128_from_low_high(builder, out_low_ptr, out_high_ptr)
         overflow = builder.load(overflow_pointer)
-        return context.make_tuple(builder, signature.return_type, [ret, overflow])
+        return context.make_tuple(builder, signature.return_type, [res, overflow])
 
     output_precision = get_overload_const_int(output_p_t)
     output_scale = get_overload_const_int(output_s_t)
@@ -2734,25 +2750,41 @@ def _ceil_floor_decimal_scalar(
 
     def codegen(context, builder, signature, args):
         value, input_p, input_s, output_p, output_s, round_scale, is_ceil = args
+        in_low, in_high = _ll_get_int128_low_high(builder, value)
+        out_low_ptr = cgutils.alloca_once(builder, lir.IntType(64))
+        out_high_ptr = cgutils.alloca_once(builder, lir.IntType(64))
         fnty = lir.FunctionType(
-            lir.IntType(128),
+            lir.VoidType(),
             [
-                lir.IntType(128),
+                lir.IntType(64),  # in_low
+                lir.IntType(64),  # in_high
                 lir.IntType(64),
                 lir.IntType(64),
                 lir.IntType(64),
                 lir.IntType(1),
+                lir.IntType(64).as_pointer(),  # out_low_ptr
+                lir.IntType(64).as_pointer(),  # out_high_ptr
             ],
         )
         fn = cgutils.get_or_insert_function(
             builder.module, fnty, name="ceil_floor_decimal_scalar"
         )
-        ret = builder.call(
+        builder.call(
             fn,
-            [value, input_p, input_s, round_scale, is_ceil],
+            [
+                in_low,
+                in_high,
+                input_p,
+                input_s,
+                round_scale,
+                is_ceil,
+                out_low_ptr,
+                out_high_ptr,
+            ],
         )
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
-        return ret
+        res = _ll_int128_from_low_high(builder, out_low_ptr, out_high_ptr)
+        return res
 
     output_precision = get_overload_const_int(output_p_t)
     output_scale = get_overload_const_int(output_s_t)
@@ -2915,33 +2947,43 @@ def _trunc_decimal_scalar(
 
     def codegen(context, builder, signature, args):
         value, input_p, input_s, output_p, output_s, round_scale = args
+        in_low, in_high = _ll_get_int128_low_high(builder, value)
+        out_low_ptr = cgutils.alloca_once(builder, lir.IntType(64))
+        out_high_ptr = cgutils.alloca_once(builder, lir.IntType(64))
         fnty = lir.FunctionType(
-            lir.IntType(128),
+            lir.VoidType(),
             [
-                lir.IntType(128),
+                lir.IntType(64),  # in_low
+                lir.IntType(64),  # in_high
                 lir.IntType(64),
                 lir.IntType(64),
                 lir.IntType(64),
                 lir.IntType(64),
                 lir.IntType(64),
+                lir.IntType(64).as_pointer(),  # out_low_ptr
+                lir.IntType(64).as_pointer(),  # out_high_ptr
             ],
         )
         fn = cgutils.get_or_insert_function(
             builder.module, fnty, name="trunc_decimal_scalar"
         )
-        ret = builder.call(
+        builder.call(
             fn,
             [
-                value,
+                in_low,
+                in_high,
                 input_p,
                 input_s,
                 output_p,
                 output_s,
                 round_scale,
+                out_low_ptr,
+                out_high_ptr,
             ],
         )
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
-        return ret
+        res = _ll_int128_from_low_high(builder, out_low_ptr, out_high_ptr)
+        return res
 
     output_precision = get_overload_const_int(output_p_t)
     output_scale = get_overload_const_int(output_s_t)
