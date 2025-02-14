@@ -23,7 +23,12 @@ from bodo.tests.utils import (
     gen_nonascii_list,
 )
 
-pytestmark = [pytest.mark.iceberg, pytest.mark.skip(reason="MERGE INTO")]
+pytestmark = [
+    pytest.mark.iceberg,
+    pytest.mark.skip(
+        reason="[BSE-4569] MERGE INTO with PyIceberg is not supported yet"
+    ),
+]
 
 
 @pytest.mark.slow
