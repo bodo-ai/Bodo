@@ -2879,33 +2879,43 @@ def _trunc_decimal_scalar(
 
     def codegen(context, builder, signature, args):
         value, input_p, input_s, output_p, output_s, round_scale = args
+        in_low, in_high = _ll_get_int128_low_high(builder, value)
+        out_low_ptr = cgutils.alloca_once(builder, lir.IntType(64))
+        out_high_ptr = cgutils.alloca_once(builder, lir.IntType(64))
         fnty = lir.FunctionType(
-            lir.IntType(128),
+            lir.VoidType(),
             [
-                lir.IntType(128),
+                lir.IntType(64),  # in_low
+                lir.IntType(64),  # in_high
                 lir.IntType(64),
                 lir.IntType(64),
                 lir.IntType(64),
                 lir.IntType(64),
                 lir.IntType(64),
+                lir.IntType(64).as_pointer(),  # out_low_ptr
+                lir.IntType(64).as_pointer(),  # out_high_ptr
             ],
         )
         fn = cgutils.get_or_insert_function(
             builder.module, fnty, name="trunc_decimal_scalar"
         )
-        ret = builder.call(
+        builder.call(
             fn,
             [
-                value,
+                in_low,
+                in_high,
                 input_p,
                 input_s,
                 output_p,
                 output_s,
                 round_scale,
+                out_low_ptr,
+                out_high_ptr,
             ],
         )
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
-        return ret
+        res = _ll_int128_from_low_high(builder, out_low_ptr, out_high_ptr)
+        return res
 
     output_precision = get_overload_const_int(output_p_t)
     output_scale = get_overload_const_int(output_s_t)
