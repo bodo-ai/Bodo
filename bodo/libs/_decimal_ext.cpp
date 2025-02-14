@@ -1575,23 +1575,27 @@ array_info* round_decimal_array_py_entry(array_info* arr_, int64_t round_scale,
  * @brief Python entrypoint for taking the ceil or floor of a given Decimal128
  * value.
  *
- * @param value The Decimal128 value
+ * @param in_low The Decimal128 value
+ * @param in_high The Decimal128 value
  * @param input_p The precision of the input decimal value.
  * @param input_s The scale of the input decimal value.
  * @param round_scale The scale to which the value should be rounded. Negative
  * scales indicate rounding to the left of the decimal point.
  * @param is_ceil A boolean indicating whether to apply the ceiling (true) or
  * floor (false) operation.
- * @return The resulting Decimal128 value.
+ * @param out_low_ptr The Decimal128 value
+ * @param out_high_ptr The Decimal128 value
  */
-arrow::Decimal128 ceil_floor_decimal_scalar_py_entry(arrow::Decimal128 value,
-                                                     int32_t input_p,
-                                                     int32_t input_s,
-                                                     int32_t round_scale,
-                                                     bool is_ceil) {
+void ceil_floor_decimal_scalar_py_entry(uint64_t in_low, int64_t in_high,
+                                        int32_t input_p, int32_t input_s,
+                                        int32_t round_scale, bool is_ceil,
+                                        uint64_t* out_low_ptr,
+                                        int64_t* out_high_ptr) {
     arrow::Decimal128 result;
     try {
         bool overflow = false;
+        arrow::Decimal128 value = arrow::Decimal128(in_high, in_low);
+
         if (is_ceil) {
             if (round_scale < 0) {
                 result = decimalops::Ceil<true>(value, input_p, input_s,
@@ -1612,10 +1616,10 @@ arrow::Decimal128 ceil_floor_decimal_scalar_py_entry(arrow::Decimal128 value,
         if (overflow) {
             throw std::runtime_error("Number out of representable range");
         }
-        return result;
+        *out_low_ptr = result.low_bits();
+        *out_high_ptr = result.high_bits();
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
-        return arrow::Decimal128(0);
     }
 }
 
