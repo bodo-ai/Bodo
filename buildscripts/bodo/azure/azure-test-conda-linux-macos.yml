@@ -84,7 +84,7 @@ jobs:
 
   - bash: |
       set -exo pipefail
-      eval "$(pixi shell-hook --shell bash | sed 's/^export [Pp][Aa][Tt][Hh]=/export PATH=/I; s/;/:/g')"
+      eval "$(pixi shell-hook -e azure --shell bash | sed 's/^export [Pp][Aa][Tt][Hh]=/export PATH=/I; s/;/:/g')"
 
       LibFabricDir="$(pwd)/.pixi/envs/azure/Library/bin/libfabric"
       export PATH="$PATH:$LibFabricDir:$LibFabricDir/utils"
