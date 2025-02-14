@@ -1,7 +1,5 @@
 import os
 import tempfile
-import typing as pt
-from contextlib import contextmanager
 from io import StringIO
 
 import numba
@@ -11,7 +9,6 @@ from pyiceberg.catalog.rest import RestCatalog
 
 import bodo
 import bodosql
-from bodo.mpi4py import MPI
 from bodo.tests.iceberg_database_helpers.utils import (
     get_spark,
 )
@@ -21,7 +18,6 @@ from bodo.tests.user_logging_utils import (
     set_logging_stream,
 )
 from bodo.tests.utils import (
-    _get_dist_arg,
     assert_tables_equal,
     check_func,
     create_polaris_iceberg_table,
@@ -34,55 +30,6 @@ from bodo.utils.utils import run_rank0
 from bodosql.bodosql_types.tabular_catalog import get_tabular_connection
 
 pytestmark = pytest_tabular
-
-
-@contextmanager
-def create_tabular_iceberg_table(
-    df: pd.DataFrame, base_table_name: str, warehouse: str, schema: str, credential: str
-) -> pt.Generator[str, None, None]:
-    """Creates a new Iceberg table in Tabular derived from the base table name
-    and using the DataFrame.
-
-    Returns the name of the table added to Tabular.
-
-    Args:
-        df (pd.DataFrame): DataFrame to insert
-        base_table_name (str): Base string for generating the table name.
-        warehouse (str): Name of the Tabular warehouse
-        schema (str): Name of the Tabular schema
-        credential (str): Credential to authenticate
-
-    Returns:
-        str: The final table name.
-    """
-    comm = MPI.COMM_WORLD
-    iceberg_table_name = None
-    table_written = False
-    try:
-        if bodo.get_rank() == 0:
-            iceberg_table_name = gen_unique_table_id(base_table_name)
-
-        iceberg_table_name = comm.bcast(iceberg_table_name)
-
-        @bodo.jit(distributed=["df"])
-        def write_table(df, table_name, schema, con_str):
-            df.to_sql(table_name, con=con_str, schema=schema, if_exists="replace")
-
-        con_str = f"iceberg+REST://api.tabular.io/ws?credential={credential}&warehouse={warehouse}"
-        write_table(_get_dist_arg(df), iceberg_table_name, schema, con_str)
-        table_written = True
-
-        yield iceberg_table_name
-    finally:
-        if table_written:
-            run_rank0(
-                lambda: (
-                    RestCatalog(
-                        "tabular_catalog",
-                        uri=f"http://api.tabular.io/ws?credential={credential}&warehouse={warehouse}",
-                    ).purge_table(f"{schema}.{iceberg_table_name}")
-                )
-            )()
 
 
 def test_basic_read(memory_leak_check, tabular_catalog):
@@ -179,7 +126,7 @@ def test_filter_pushdown(memory_leak_check, tabular_catalog):
         check_logger_msg(stream, "Columns loaded ['A', 'B']")
         check_logger_msg(
             stream,
-            "Iceberg Filter Pushed Down:\nbic.FilterExpr('AND', [bic.FilterExpr('>', [bic.ColumnRef('B'), bic.Scalar(f0)]), bic.FilterExpr('IS_NOT_NULL', [bic.ColumnRef('A')])])",
+            "Iceberg Filter Pushed Down:\npie.And(pie.GreaterThan('B', literal(f0)), pie.NotNull('A'))",
         )
 
 
@@ -216,7 +163,7 @@ def test_filter_pushdown_col_not_read(memory_leak_check, tabular_catalog):
         check_logger_msg(stream, "Columns loaded ['A']")
         check_logger_msg(
             stream,
-            "Iceberg Filter Pushed Down:\nbic.FilterExpr('AND', [bic.FilterExpr('>', [bic.ColumnRef('B'), bic.Scalar(f0)]), bic.FilterExpr('IS_NOT_NULL', [bic.ColumnRef('A')])])",
+            "Iceberg Filter Pushed Down:\npie.And(pie.GreaterThan('B', literal(f0)), pie.NotNull('A'))",
         )
 
 
@@ -505,7 +452,7 @@ def test_limit_filter_pushdown(memory_leak_check, tabular_catalog):
         check_logger_msg(stream, "Constant limit detected, reading at most 2 rows")
         check_logger_msg(
             stream,
-            "Iceberg Filter Pushed Down:\nbic.FilterExpr('>', [bic.ColumnRef('B'), bic.Scalar(f0)])",
+            "Iceberg Filter Pushed Down:\npie.GreaterThan('B', literal(f0))",
         )
 
 
@@ -573,7 +520,7 @@ def test_limit_filter_limit_pushdown(memory_leak_check, tabular_catalog):
         check_logger_msg(stream, "Constant limit detected, reading at most 2 rows")
         check_logger_msg(
             stream,
-            "Iceberg Filter Pushed Down:\nbic.FilterExpr('>', [bic.ColumnRef('B'), bic.Scalar(f0)])",
+            "Iceberg Filter Pushed Down:\npie.GreaterThan('B', literal(f0))",
         )
 
 
@@ -609,7 +556,7 @@ def test_filter_limit_filter_pushdown(memory_leak_check, tabular_catalog):
         check_logger_msg(stream, "Constant limit detected, reading at most 4 rows")
         check_logger_msg(
             stream,
-            "Iceberg Filter Pushed Down:\nbic.FilterExpr('AND', [bic.FilterExpr('!=', [bic.ColumnRef('A'), bic.Scalar(f0)]), bic.FilterExpr('>', [bic.ColumnRef('B'), bic.Scalar(f1)])])",
+            "Iceberg Filter Pushed Down:\npie.And(pie.NotEqualTo('A', literal(f0)), pie.GreaterThan('B', literal(f1)))",
         )
 
 
@@ -651,7 +598,7 @@ def test_dynamic_scalar_filter_pushdown(
             # Verify filter pushdown
             check_logger_msg(
                 stream,
-                "Iceberg Filter Pushed Down:\nbic.FilterExpr('<=', [bic.ColumnRef('A'), bic.Scalar(f0)])",
+                "Iceberg Filter Pushed Down:\npie.LessThanOrEqual('A', literal(f0))",
             )
 
 
