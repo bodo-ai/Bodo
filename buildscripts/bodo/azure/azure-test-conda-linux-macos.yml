@@ -84,7 +84,12 @@ jobs:
 
   - bash: |
       set -exo pipefail
-      # eval "$(pixi shell-hook --shell bash -e azure)"
+      eval "$(pixi shell-hook --shell bash | sed 's/^export [Pp][Aa][Tt][Hh]=/export PATH=/I; s/;/:/g')"
+
+      LibFabricDir="$(pwd)/.pixi/envs/azure/Library/bin/libfabric"
+      LibFabricUtilsDir="$(pwd)/.pixi/envs/azure/Library/bin/libfabric/utils"
+
+      export PATH="$PATH:$LibFabricDir:$LibFabricUtilsDir"
 
       unamestr=`uname`
       if [[ "$unamestr" == 'Linux' ]]; then
@@ -111,6 +116,7 @@ jobs:
       fi
 
       cd "$(System.DefaultWorkingDirectory)"
+
       # For caching tests we need to update the location of the decryption file.
       # We set the absolute path as an environment variable.
       export BODO_TRACING_DECRYPTION_FILE_PATH=`echo "$(System.DefaultWorkingDirectory)/buildscripts/decompress_traces.py"`
@@ -121,7 +127,7 @@ jobs:
         export BODO_NUM_WORKERS="$NP"
         pytest -s -v -Wignore -m "$(PYTEST_MARKER)" bodo/tests --junitxml=pytest-report-spawn-mode.xml --test-run-title="${{ parameters.name }}"
       else
-        pixi run -e azure python -m bodo.runtests "${{ parameters.name }}" "$NP" --pyargs bodo -s -v -m "$(PYTEST_MARKER)"
+        python -m bodo.runtests "${{ parameters.name }}" "$NP" --pyargs bodo -s -v -m "$(PYTEST_MARKER)"
       fi
     env:
       SF_USERNAME: $(SNOWFLAKE_USER)
