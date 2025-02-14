@@ -2126,26 +2126,26 @@ void copy_integer_arr_to_decimal_arr(std::shared_ptr<array_info>& int_arr,
     }
 }
 
-arrow::Decimal128 cast_float_to_decimal_scalar_py_entry(double f,
-                                                        int32_t precision,
-                                                        int32_t scale,
-                                                        bool* safe) {
+void cast_float_to_decimal_scalar_py_entry(double f, int32_t precision,
+                                           int32_t scale, bool* safe,
+                                           uint64_t* out_low_ptr,
+                                           int64_t* out_high_ptr) {
     try {
+        arrow::Decimal128 answer;
         double max_value = std::pow(10.0, precision - scale);
         bool safe_cast = std::abs(f) < max_value;
         *safe = safe_cast;
         if (!safe_cast) {
-            return arrow::Decimal128(0);
+            answer = arrow::Decimal128(0);
         } else {
-            arrow::Decimal128 answer;
             auto result = arrow::Decimal128::FromReal(f, precision, scale);
             CHECK_ARROW_AND_ASSIGN(result, "failed to convert float to decimal",
                                    answer)
-            return answer;
         }
+        *out_low_ptr = answer.low_bits();
+        *out_high_ptr = answer.high_bits();
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
-        return arrow::Decimal128(0);
     }
 }
 
@@ -2315,7 +2315,7 @@ PyObject* box_decimal(uint64_t low, int64_t high, int8_t precision,
     return arrow::py::wrap_scalar(scalar);
 }
 
-void decimal_to_str(decimal_value val, NRT_MemInfo** meminfo_ptr,
+void decimal_to_str(uint64_t in_low, int64_t in_high, NRT_MemInfo** meminfo_ptr,
                     int64_t* len_ptr, int scale, bool remove_trailing_zeroes);
 
 /**
@@ -2888,16 +2888,17 @@ void unbox_decimal(PyObject* pa_decimal_obj, uint8_t* data_ptr) {
  * @brief convert decimal128 value to string and create a memptr pointer with
  * the data
  *
- * @param val decimal128 input value
+ * @param in_low low 64 bits of the input value
+ * @param in_high high 64 bits of the input value
  * @param meminfo_ptr output memptr pointer to set
  * @param len_ptr output length to set
  * @param scale scale parameter of decimal128
  */
-void decimal_to_str(decimal_value val, NRT_MemInfo** meminfo_ptr,
+void decimal_to_str(uint64_t in_low, int64_t in_high, NRT_MemInfo** meminfo_ptr,
                     int64_t* len_ptr, int scale,
                     bool remove_trailing_zeroes = true) {
     // Creating the arrow_decimal value
-    arrow::Decimal128 arrow_decimal(val.high, val.low);
+    arrow::Decimal128 arrow_decimal(in_high, in_low);
     // Getting the string
     std::string str;
     if (remove_trailing_zeroes) {

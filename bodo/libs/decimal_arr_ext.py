@@ -318,58 +318,6 @@ def decimal_max(lhs, rhs):
         return impl
 
 
-def decimal_to_str_codegen(context, builder, signature, args, scale):
-    (val,) = args
-    scale = context.get_constant(types.int32, scale)
-    remove_trailing_zeros = context.get_constant(types.bool_, 1)
-    uni_str = cgutils.create_struct_proxy(types.unicode_type)(context, builder)
-
-    fnty = lir.FunctionType(
-        lir.VoidType(),
-        [
-            lir.IntType(128),
-            lir.IntType(8).as_pointer().as_pointer(),
-            lir.IntType(64).as_pointer(),
-            lir.IntType(32),
-            lir.IntType(1),
-        ],
-    )
-    fn = cgutils.get_or_insert_function(builder.module, fnty, name="decimal_to_str")
-    builder.call(
-        fn,
-        [
-            val,
-            uni_str._get_ptr_by_name("meminfo"),
-            uni_str._get_ptr_by_name("length"),
-            scale,
-            remove_trailing_zeros,
-        ],
-    )
-
-    # output is always ASCII
-    uni_str.kind = context.get_constant(
-        types.int32, numba.cpython.unicode.PY_UNICODE_1BYTE_KIND
-    )
-    uni_str.is_ascii = context.get_constant(types.int32, 1)
-    # set hash value -1 to indicate "need to compute hash"
-    uni_str.hash = context.get_constant(numba.cpython.unicode._Py_hash_t, -1)
-    uni_str.data = context.nrt.meminfo_data(builder, uni_str.meminfo)
-    # Set parent to NULL
-    uni_str.parent = cgutils.get_null_value(uni_str.parent.type)
-    return uni_str._getvalue()
-
-
-@intrinsic
-def decimal_to_str(typingctx, val_t=None):
-    """convert decimal128 to string"""
-    assert isinstance(val_t, Decimal128Type)
-
-    def codegen(context, builder, signature, args):
-        return decimal_to_str_codegen(context, builder, signature, args, val_t.scale)
-
-    return bodo.string_type(val_t), codegen
-
-
 @intrinsic(prefer_literal=True)
 def _str_to_decimal_scalar(typingctx, val, precision_tp, scale_tp):
     """convert string to decimal128. This returns a tuple of
@@ -573,11 +521,13 @@ def _decimal_scalar_to_str(typingctx, arr_t):
         remove_trailing_zeros = context.get_constant(types.bool_, 0)
 
         uni_str = cgutils.create_struct_proxy(types.unicode_type)(context, builder)
+        in_low, in_high = _ll_get_int128_low_high(builder, val)
 
         fnty = lir.FunctionType(
             lir.VoidType(),
             [
-                lir.IntType(128),
+                lir.IntType(64),
+                lir.IntType(64),
                 lir.IntType(8).as_pointer().as_pointer(),
                 lir.IntType(64).as_pointer(),
                 lir.IntType(32),
@@ -588,7 +538,8 @@ def _decimal_scalar_to_str(typingctx, arr_t):
         builder.call(
             fn,
             [
-                val,
+                in_low,
+                in_high,
                 uni_str._get_ptr_by_name("meminfo"),
                 uni_str._get_ptr_by_name("length"),
                 scale,
@@ -619,7 +570,7 @@ def _decimal_scalar_to_str(typingctx, arr_t):
 @overload_method(Decimal128Type, "__str__")
 def overload_str_decimal(val):
     def impl(val):  # pragma: no cover
-        return decimal_to_str(val)
+        return decimal_scalar_to_str(val)
 
     return impl
 
@@ -1070,7 +1021,7 @@ def cast_decimal_to_int(context, builder, fromty, toty, val):
 @overload_method(Decimal128Type, "__hash__", no_unliteral=True)
 def decimal_hash(val):  # pragma: no cover
     def impl(val):
-        return hash(decimal_to_str(val))
+        return hash(decimal_scalar_to_str(val))
 
     return impl
 
@@ -1472,23 +1423,29 @@ def _cast_float_to_decimal_scalar(typingctx, val_t, precision_t, scale_t):
 
     def codegen(context, builder, signature, args):
         val, prec, scale = args
+        out_low_ptr = cgutils.alloca_once(builder, lir.IntType(64))
+        out_high_ptr = cgutils.alloca_once(builder, lir.IntType(64))
+
         fnty = lir.FunctionType(
-            lir.IntType(128),
+            lir.VoidType(),
             [
                 lir.DoubleType(),
                 lir.IntType(32),
                 lir.IntType(32),
                 lir.IntType(1).as_pointer(),
+                lir.IntType(64).as_pointer(),
+                lir.IntType(64).as_pointer(),
             ],
         )
         safe_pointer = cgutils.alloca_once(builder, lir.IntType(1))
         fn = cgutils.get_or_insert_function(
             builder.module, fnty, name="cast_float_to_decimal_scalar"
         )
-        ret = builder.call(fn, [val, prec, scale, safe_pointer])
+        builder.call(fn, [val, prec, scale, safe_pointer, out_low_ptr, out_high_ptr])
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
         safe = builder.load(safe_pointer)
-        return context.make_tuple(builder, signature.return_type, [ret, safe])
+        res = _ll_int128_from_low_high(builder, out_low_ptr, out_high_ptr)
+        return context.make_tuple(builder, signature.return_type, [res, safe])
 
     decimal_type = Decimal128Type(precision, scale)
     ret_type = types.Tuple([decimal_type, types.bool_])
