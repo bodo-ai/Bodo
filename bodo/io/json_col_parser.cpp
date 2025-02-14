@@ -14,6 +14,19 @@
 
 #include "../libs/_bodo_common.h"
 
+// Cross platform case '0'...'9'
+#define DIGIT_CASE \
+    case '0':      \
+    case '1':      \
+    case '2':      \
+    case '3':      \
+    case '4':      \
+    case '5':      \
+    case '6':      \
+    case '7':      \
+    case '8':      \
+    case '9'
+
 // ------------------------------- JSON PARSER -------------------------------
 
 const char* TokenStr[] = {
@@ -148,7 +161,7 @@ Token Tokenizer::next() {
         // We are reading a number
         case '+':
         case '-':
-        case '0' ... '9': {
+        DIGIT_CASE: {
             value_start = offset - 1;
             Token token = Integer;
 
@@ -160,8 +173,8 @@ Token Tokenizer::next() {
             while (!endOfInput()) {
                 b = source[offset];
                 switch (b) {
-                    case '0' ... '9':
-                        break;
+                DIGIT_CASE:
+                    break;
                     case '.':
                         token = Float;
                         break;

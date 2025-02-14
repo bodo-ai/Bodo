@@ -6,7 +6,6 @@ import java.sql.SQLException;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
 import org.apache.iceberg.*;
 import org.apache.iceberg.catalog.Catalog;
 import org.apache.iceberg.catalog.Namespace;
@@ -49,6 +48,15 @@ public class BodoIcebergHandler {
    */
   private Table loadTable(String dbName, String tableName) {
     return catalog.loadTable(genTableID(dbName, tableName));
+  }
+
+  /**
+   * Inner function to help load tables
+   *
+   * @return Iceberg table associated with ID
+   */
+  private Table loadTable(String tableId) {
+    return catalog.loadTable(TableIdentifier.of(tableId));
   }
 
   /**
@@ -119,8 +127,8 @@ public class BodoIcebergHandler {
    * @return List of booleans indicating which columns have theta sketches. The booleans correspond
    *     to the columns in the schema, not the field IDs.
    */
-  public List<Boolean> tableColumnsHaveThetaSketches(String dbName, String tableName) {
-    Table table = loadTable(dbName, tableName);
+  public List<Boolean> tableColumnsHaveThetaSketches(String tableId) {
+    Table table = loadTable(tableId);
     Schema schema = table.schema();
     List<Types.NestedField> columns = schema.columns();
     List<Boolean> hasThetaSketches = new ArrayList<>(Collections.nCopies(columns.size(), false));
@@ -159,32 +167,6 @@ public class BodoIcebergHandler {
   }
 
   /**
-   * Return a boolean list indicating which columns have theta sketches enabled, as per the <code>
-   * bodo.write.theta_sketch_enabled.COLUMN_NAME</code> table property. If the property does not
-   * exist for a column, the decision will default to enabled / bodo's engine decision.
-   *
-   * <p>Note: This API is exposed to Python.
-   *
-   * @return List of booleans indicating which columns have theta sketches enabled. The booleans
-   *     correspond to the columns in the schema, not the field IDs.
-   */
-  public List<Boolean> tableColumnsEnabledThetaSketches(String dbName, String tableName) {
-    Table table = loadTable(dbName, tableName);
-    Schema schema = table.schema();
-    List<Types.NestedField> columns = schema.columns();
-    List<Boolean> enabledThetaSketches =
-        new ArrayList<>(Collections.nCopies(columns.size(), false));
-    // Iterate through properties
-    for (int i = 0; i < columns.size(); i++) {
-      String colName = columns.get(i).name();
-      String isEnabled = table.properties().get("bodo.write.theta_sketch_enabled." + colName);
-      if (isEnabled == null || isEnabled.equalsIgnoreCase("true"))
-        enabledThetaSketches.set(i, true);
-    }
-    return enabledThetaSketches;
-  }
-
-  /**
    * Updates a Snapshot update operation with the app-id field. This is used to easily identify
    * tables created by Bodo.
    */
@@ -206,67 +188,6 @@ public class BodoIcebergHandler {
   }
 
   /**
-   * Get the snapshot ID of the table for the underlying transaction. To ensure this is the final
-   * snapshot ID, we likely want to call this after the transaction has been committed. However, the
-   * transaction ID should remain constant even if we retry.
-   *
-   * <p>Note: This API is exposed to Python.
-   *
-   * @param txnID Transaction ID of transaction.
-   * @return Snapshot ID of the table for the transaction or null if there is no snapshot.
-   */
-  public @Nullable Long getTransactionSnapshotID(int txnID) {
-    Transaction txn = this.transactions.get(txnID);
-    Snapshot snapshot = txn.table().currentSnapshot();
-    if (snapshot == null) {
-      return null;
-    } else {
-      return snapshot.snapshotId();
-    }
-  }
-
-  /**
-   * Get the sequence number of the table for the underlying transaction. This must be called AFTER
-   * the transaction has been committed because the sequence number is only finalized after commit.
-   * Any value before may be incorrect if the commit needs to retry.
-   *
-   * <p>Note: This API is exposed to Python.
-   *
-   * @param txnID Transaction ID of transaction.
-   * @return Sequence number of the table for the transaction or null if there is no snapshot.
-   */
-  public @Nullable Long getTransactionSequenceNumber(int txnID) {
-    Transaction txn = this.transactions.get(txnID);
-    Snapshot snapshot = txn.table().currentSnapshot();
-    if (snapshot == null) {
-      return null;
-    } else {
-      return snapshot.sequenceNumber();
-    }
-  }
-
-  /**
-   * Get the Statistics file location for a transaction's table. This should be safe to call before
-   * or after the transaction has been committed, but we will always call it after commit.
-   *
-   * <p>Note: This API is exposed to Python.
-   *
-   * @param txnID Transaction ID of transaction.
-   * @return Sequence number of the table for the transaction or null if there is no snapshot.
-   */
-  public @Nonnull String getTransactionStatisticFileLocation(int txnID) {
-    String tableLocation = getTransactionTableLocation(txnID);
-    @Nullable Long snapshotId = getTransactionSnapshotID(txnID);
-    if (snapshotId == null) {
-      throw new RuntimeException(
-          "Table does not have a snapshot. Cannot get statistics file location.");
-    }
-    // Generate a random file name based upon the snapshot ID, so it's always unique.
-    String statsFileName = String.format(Locale.ROOT, "%d-%s.stats", snapshotId, UUID.randomUUID());
-    return String.format(Locale.ROOT, "%s/metadata/%s", tableLocation, statsFileName);
-  }
-
-  /**
    * Get the existing statistics files for the table. This function raises an exception if the table
    * does not have a valid statistics file as that should already be checked.
    *
@@ -275,10 +196,9 @@ public class BodoIcebergHandler {
    * @param txnID Transaction ID of transaction.
    * @return An existing table file for snapshot of the table in the current transaction state.
    */
-  public @Nonnull String getStatisticsFilePath(int txnID) {
-    Transaction txn = this.transactions.get(txnID);
-    Table table = txn.table();
-    Snapshot snapshot = txn.table().currentSnapshot();
+  public @Nonnull String getStatisticsFilePath(String tableId) {
+    Table table = loadTable(tableId);
+    Snapshot snapshot = table.currentSnapshot();
     if (snapshot == null) {
       throw new RuntimeException(
           "Table does not have a snapshot. Cannot get statistics file location.");
@@ -414,10 +334,9 @@ public class BodoIcebergHandler {
    *
    * <p>Note: This API is exposed to Python.
    */
-  public void commitStatisticsFile(
-      String dbName, String tableName, long snapshotID, String statisticsFileJson) {
+  public void commitStatisticsFile(String tableId, long snapshotID, String statisticsFileJson) {
     StatisticsFile statisticsFile = BodoStatisticFile.fromJson(statisticsFileJson);
-    Table table = loadTable(dbName, tableName);
+    Table table = loadTable(tableId);
     Transaction txn = table.newTransaction();
     txn.updateStatistics().setStatistics(snapshotID, statisticsFile).commit();
     txn.commitTransaction();

@@ -1103,6 +1103,11 @@ def parse_dtype(dtype, func_name=None):
             return bodo.libs.bool_arr_ext.boolean_dtype
         if d_str == "str":
             return bodo.string_type
+
+        # Handle separately since Numpy < 2 on Windows returns int32 in np.dtype
+        if d_str == "int":
+            return types.int64
+
         return numba.np.numpy_support.from_dtype(np.dtype(d_str))
     except Exception:
         pass

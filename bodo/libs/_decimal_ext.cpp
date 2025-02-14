@@ -118,14 +118,14 @@ std::string decimal_to_std_string(arrow::Decimal128 const& arrow_decimal,
     return str;
 }
 
-std::string int128_decimal_to_std_string(__int128 const& val,
+std::string int128_decimal_to_std_string(__int128_t const& val,
                                          int const& scale) {
     arrow::Decimal128 arrow_decimal((int64_t)(val >> 64), (int64_t)(val));
     return decimal_to_std_string(arrow_decimal, scale);
 }
 
-double decimal_to_double(__int128 const& val, uint8_t scale) {
-    // TODO: Zero-copy (cast __int128 to int64[2] for Decimal128 constructor)
+double decimal_to_double(__int128_t const& val, uint8_t scale) {
+    // TODO: Zero-copy (cast __int128_t to int64[2] for Decimal128 constructor)
     // Can't figure out how to do this in C++
     arrow::Decimal128 dec((int64_t)(val >> 64), (int64_t)(val));
     return dec.ToDouble(scale);
@@ -316,10 +316,9 @@ array_info* cast_decimal_to_decimal_array_safe_py_entry(
     }
 }
 
-double decimal_to_double_py_entry(decimal_value val, uint8_t scale) {
-    auto high = static_cast<uint64_t>(val.high);
-    auto low = static_cast<uint64_t>(val.low);
-    return decimal_to_double((static_cast<__int128>(high) << 64) | low, scale);
+double decimal_to_double_py_entry(uint64_t low, uint64_t high, uint8_t scale) {
+    return decimal_to_double((static_cast<__int128_t>(high) << 64) | low,
+                             scale);
 }
 
 /**
@@ -2238,9 +2237,10 @@ decimal_value int64_to_decimal(int64_t value) {
 
 void unbox_decimal(PyObject* obj, uint8_t* data);
 
-PyObject* box_decimal(decimal_value val, int8_t precision, int8_t scale) {
+PyObject* box_decimal(uint64_t low, int64_t high, int8_t precision,
+                      int8_t scale) {
     // convert input to Arrow scalar
-    arrow::Decimal128 arrow_decimal(val.high, val.low);
+    arrow::Decimal128 arrow_decimal(high, low);
     std::shared_ptr<arrow::Decimal128Scalar> scalar =
         std::make_shared<arrow::Decimal128Scalar>(
             arrow_decimal, arrow::decimal128(precision, scale));
@@ -2554,17 +2554,21 @@ arrow::Decimal128 str_to_decimal_scalar(const std::string_view& str_val,
  * @param str_val The string value to convert.
  * @param precision The output precision.
  * @param scale The output scale.
+ * @param[out] out_low low 64 bits of output.
+ * @param[out] out_high high 64 bits of output.
  * @param[out] error If an error occurs, set this to true.
- * @return arrow::Decimal128
  */
-arrow::Decimal128 str_to_decimal_scalar_py_entry(const std::string& str_val,
-                                                 int64_t precision,
-                                                 int64_t scale, bool* error) {
+void str_to_decimal_scalar_py_entry(const std::string* str_val,
+                                    int64_t precision, int64_t scale,
+                                    uint64_t* out_low, int64_t* out_high,
+                                    bool* error) {
     try {
-        return str_to_decimal_scalar(str_val, precision, scale, error);
+        arrow::Decimal128 res =
+            str_to_decimal_scalar(*str_val, precision, scale, error);
+        *out_low = res.low_bits();
+        *out_high = res.high_bits();
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
-        return arrow::Decimal128(0);
     }
 }
 
