@@ -1575,16 +1575,16 @@ array_info* round_decimal_array_py_entry(array_info* arr_, int64_t round_scale,
  * @brief Python entrypoint for taking the ceil or floor of a given Decimal128
  * value.
  *
- * @param in_low The Decimal128 value
- * @param in_high The Decimal128 value
- * @param input_p The precision of the input decimal value.
- * @param input_s The scale of the input decimal value.
- * @param round_scale The scale to which the value should be rounded. Negative
- * scales indicate rounding to the left of the decimal point.
- * @param is_ceil A boolean indicating whether to apply the ceiling (true) or
- * floor (false) operation.
- * @param out_low_ptr The Decimal128 value
- * @param out_high_ptr The Decimal128 value
+ * @param[in] in_low The low 64 bits of the input Decimal128 value.
+ * @param[in] in_high The high 64 bits of the input Decimal128 value.
+ * @param[in] input_p The precision of the input decimal value.
+ * @param[in] input_s The scale of the input decimal value.
+ * @param[in] round_scale The scale to which the value should be rounded.
+ * Negative scales indicate rounding to the left of the decimal point.
+ * @param[in] is_ceil A boolean indicating whether to apply the ceiling (true)
+ * or floor (false) operation.
+ * @param[out] out_low_ptr A pointer to the low 64 bits of the result.
+ * @param[out] out_high_ptr A pointer to the high 64 bits of the result.
  */
 void ceil_floor_decimal_scalar_py_entry(uint64_t in_low, int64_t in_high,
                                         int32_t input_p, int32_t input_s,
