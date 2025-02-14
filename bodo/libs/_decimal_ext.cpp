@@ -1896,7 +1896,7 @@ array_info* abs_decimal_array_py_entry(array_info* arr_) {
                     out_arr->data1<bodo_array_type::NULLABLE_INT_BOOL,
                                    arrow::Decimal128>() +
                     i;
-                arrow::Decimal128 in_val =
+                arrow::Decimal128& in_val =
                     *(arr->data1<bodo_array_type::NULLABLE_INT_BOOL,
                                  arrow::Decimal128>() +
                       i);
