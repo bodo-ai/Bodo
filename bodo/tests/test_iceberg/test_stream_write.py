@@ -221,6 +221,7 @@ def test_iceberg_write_basic(
     base_name, table_name, df = simple_dataframe
     db_schema, warehouse_loc = iceberg_database(table_name)
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=False)
+    table_id = f"{db_schema}.{table_name}"
 
     orig_use_dict_str_type = bodo.hiframes.boxing._use_dict_str_type
     orig_chunk_size = (
@@ -234,9 +235,7 @@ def test_iceberg_write_basic(
     create_table_meta = init_create_table_meta()
 
     try:
-        _write_iceberg_table(
-            df, table_name, conn, db_schema, create_table_meta, "replace"
-        )
+        _write_iceberg_table(df, table_id, conn, create_table_meta, "replace")
     finally:
         bodo.hiframes.boxing._use_dict_str_type = orig_use_dict_str_type
         bodo.io.iceberg.stream_iceberg_write.ICEBERG_WRITE_PARQUET_CHUNK_SIZE = (
@@ -281,6 +280,7 @@ def test_iceberg_write_with_comment_and_properties(
     df = SIMPLE_TABLES_MAP["SIMPLE_STRING_TABLE"][0]
     db_schema, warehouse_loc = iceberg_database(table_name)
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=False)
+    table_id = f"{db_schema}.{table_name}"
 
     orig_chunk_size = (
         bodo.io.iceberg.stream_iceberg_write.ICEBERG_WRITE_PARQUET_CHUNK_SIZE

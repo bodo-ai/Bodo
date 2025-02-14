@@ -187,7 +187,7 @@ class QueryProfileCollector {
 
     using operator_id_t = uint32_t;
     using stage_id_t = uint32_t;
-    using operator_stage_t = struct operator_stage;
+    using operator_stage_t = struct ::operator_stage;
     using pipeline_id_t = uint32_t;
 
     /**
@@ -201,7 +201,7 @@ class QueryProfileCollector {
      */
     static operator_stage_t MakeOperatorStageID(operator_id_t operator_id,
                                                 stage_id_t stage_id) {
-        return (operator_stage_t){operator_id, stage_id};
+        return operator_stage_t{operator_id, stage_id};
     }
 
     void Init();

@@ -5,14 +5,18 @@
 #include <stdexcept>
 #include "_bodo_common.h"
 #include "_utils.h"
+#if defined(__GNUC__) || defined(__clang__)
 PUSH_IGNORED_COMPILER_ERROR("-Wtemplate-id-cdtor")
+#endif
 #include "include/v8-date.h"
 #include "include/v8-exception.h"
 #include "include/v8-function.h"
 #include "include/v8-initialization.h"
 #include "include/v8-local-handle.h"
 #include "include/v8-primitive.h"
+#if defined(__GNUC__) || defined(__clang__)
 POP_IGNORED_COMPILER_ERROR()
+#endif
 
 static v8::Isolate::CreateParams create_params;
 static bool v8_initialized = false;

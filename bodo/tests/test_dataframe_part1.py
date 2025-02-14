@@ -1480,7 +1480,7 @@ def test_df_abs3(memory_leak_check):
     df = pd.DataFrame(
         {
             "A": pd.Series(
-                np.random.randint(0, np.iinfo(np.int64).max, size=12)
+                np.random.randint(0, np.iinfo(np.int64).max, size=12, dtype=np.int64)
             ).astype("timedelta64[ns]")
         }
     )

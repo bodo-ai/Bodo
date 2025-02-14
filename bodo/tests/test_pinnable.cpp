@@ -113,7 +113,7 @@ void simple_pin(const std::string &nm, Args &&...args) {
         bodo::pinnable<T> pinnable;
         T ref;
 
-        auto seed(random());
+        auto seed(rand());
 
         srand(seed);  // Need to keep the random seed the same for all three
                       // tests

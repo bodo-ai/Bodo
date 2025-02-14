@@ -130,42 +130,9 @@ def commit_write(
     return True
 
 
-def fetch_puffin_metadata(
-    transaction_id: int,
-    conn_str: str,
-    db_name: str,
-    table_name: str,
-):
-    """Fetch the puffin file metadata that we need from the committed
-    transaction to write the puffin file. These are the:
-        1. Snapshot ID for the committed data
-        2. Sequence Number for the committed data
-        3. The Location at which to write the puffin file.
-
-    Args:
-        transaction_id (int): Transaction ID to remove.
-        conn_str (str): Connection string for indexing into our object list.
-        db_name (str): Name of the database for indexing into our object list.
-        table_name (str): Name of the table for indexing into our object list.
-
-    Returns:
-        tuple[int, int, str]: Tuple of the snapshot ID, sequence number, and
-        location at which to write the puffin file.
-    """
-    catalog_type, _ = parse_conn_str(conn_str)
-    handler = get_catalog(conn_str, catalog_type)
-    snapshot_id = handler.getTransactionSnapshotID(transaction_id)
-    sequence_number = handler.getTransactionSequenceNumber(transaction_id)
-    location = normalize_loc(
-        handler.getTransactionStatisticFileLocation(transaction_id)
-    )
-    return snapshot_id, sequence_number, location
-
-
 def commit_statistics_file(
     conn_str: str,
-    db_name: str,
-    table_name: str,
+    table_id: str,
     snapshot_id: int,
     statistic_file_info: StatisticsFile,
 ):
@@ -173,9 +140,7 @@ def commit_statistics_file(
     handler = get_catalog(conn_str, catalog_type)
     # Json encode the statistics file info
     statistic_file_info_str = json.dumps(asdict(statistic_file_info))
-    handler.commitStatisticsFile(
-        db_name, table_name, snapshot_id, statistic_file_info_str
-    )
+    handler.commitStatisticsFile(table_id, snapshot_id, statistic_file_info_str)
 
 
 def commit_merge_cow(

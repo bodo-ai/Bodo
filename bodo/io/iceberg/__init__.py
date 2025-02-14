@@ -6,6 +6,7 @@ in other files and exported out of this module.
 
 from __future__ import annotations
 
+import importlib
 import os
 import time
 import typing as pt
@@ -50,6 +51,13 @@ from .sf_prefetch import prefetch_sf_tables_njit
 
 if pt.TYPE_CHECKING:  # pragma: no cover
     from pyiceberg.expressions import BooleanExpression
+
+
+try:
+    importlib.import_module("pyiceberg")
+    from . import monkey_patch as _  # noqa: F401
+except ImportError:
+    pass
 
 
 def get_iceberg_pq_dataset(
