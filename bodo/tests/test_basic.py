@@ -289,51 +289,37 @@ def test_funcs_input(request, memory_leak_check):
 
 @pytest.mark.smoke
 def test_reduce(test_dtypes_input, test_funcs_input, memory_leak_check):
-    import sys
-
     # loc allreduce doesn't support int64 on windows
     dtype = test_dtypes_input
     func = test_funcs_input
-    if not (
-        sys.platform.startswith("win")
-        and dtype == "int64"
-        and func in ["argmin", "argmax"]
-    ):
-        func_text = f"""def f(n):
-            A = np.arange(0, n, 1, np.{dtype})
-            return A.{func}()
-        """
-        loc_vars = {}
-        exec(func_text, {"np": np, "bodo": bodo}, loc_vars)
-        test_impl = loc_vars["f"]
-        n = 21  # XXX arange() on float32 has overflow issues on large n
-        check_func(test_impl, (n,))
+
+    func_text = f"""def f(n):
+        A = np.arange(0, n, 1, np.{dtype})
+        return A.{func}()
+    """
+    loc_vars = {}
+    exec(func_text, {"np": np, "bodo": bodo}, loc_vars)
+    test_impl = loc_vars["f"]
+    n = 21  # XXX arange() on float32 has overflow issues on large n
+    check_func(test_impl, (n,))
 
 
 @pytest.mark.slow
 def test_reduce2(test_dtypes_input, test_funcs_input, memory_leak_check):
-    import sys
-
     dtype = test_dtypes_input
     func = test_funcs_input
 
-    # loc allreduce doesn't support int64 on windows
-    if not (
-        sys.platform.startswith("win")
-        and dtype == "int64"
-        and func in ["argmin", "argmax"]
-    ):
-        func_text = f"""def f(A):
-            return A.{func}()
-        """
-        loc_vars = {}
-        exec(func_text, {"np": np}, loc_vars)
-        test_impl = loc_vars["f"]
+    func_text = f"""def f(A):
+        return A.{func}()
+    """
+    loc_vars = {}
+    exec(func_text, {"np": np}, loc_vars)
+    test_impl = loc_vars["f"]
 
-        n = 21
-        np.random.seed(0)
-        A = np.random.randint(0, 10, n).astype(dtype)
-        check_func(test_impl, (A,), convert_to_nullable_float=False)
+    n = 21
+    np.random.seed(0)
+    A = np.random.randint(0, 10, n).astype(dtype)
+    check_func(test_impl, (A,), convert_to_nullable_float=False)
 
 
 @pytest.mark.slow
@@ -353,27 +339,20 @@ def test_reduce_init_val(memory_leak_check):
 
 @pytest.mark.smoke
 def test_reduce_filter1(test_dtypes_input, test_funcs_input, memory_leak_check):
-    import sys
-
     dtype = test_dtypes_input
     func = test_funcs_input
-    # loc allreduce doesn't support int64 on windows
-    if not (
-        sys.platform.startswith("win")
-        and dtype == "int64"
-        and func in ["argmin", "argmax"]
-    ):
-        func_text = f"""def f(A):
-            A = A[A>5]
-            return A.{func}()
-        """
-        loc_vars = {}
-        exec(func_text, {"np": np}, loc_vars)
-        test_impl = loc_vars["f"]
-        n = 21
-        np.random.seed(0)
-        A = np.random.randint(0, 10, n).astype(dtype)
-        check_func(test_impl, (A,), convert_to_nullable_float=False)
+
+    func_text = f"""def f(A):
+        A = A[A>5]
+        return A.{func}()
+    """
+    loc_vars = {}
+    exec(func_text, {"np": np}, loc_vars)
+    test_impl = loc_vars["f"]
+    n = 21
+    np.random.seed(0)
+    A = np.random.randint(0, 10, n).astype(dtype)
+    check_func(test_impl, (A,), convert_to_nullable_float=False)
 
 
 def test_array_reduce(memory_leak_check):
