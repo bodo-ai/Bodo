@@ -1522,16 +1522,20 @@ def _decimal_scalar_sign(typingctx, val_t):
     assert isinstance(val_t, Decimal128Type), "Decimal128Type expected"
 
     def codegen(context, builder, signature, args):
+        val = args[0]
+        in_low, in_high = _ll_get_int128_low_high(builder, val)
+
         fnty = lir.FunctionType(
             lir.IntType(8),
             [
-                lir.IntType(128),
+                lir.IntType(64),
+                lir.IntType(64),
             ],
         )
         fn = cgutils.get_or_insert_function(
             builder.module, fnty, name="decimal_scalar_sign"
         )
-        ret = builder.call(fn, args)
+        ret = builder.call(fn, [in_low, in_high])
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
         return ret
 
@@ -3050,24 +3054,29 @@ def _abs_decimal_scalar(typingctx, arr_t):
     assert isinstance(arr_t, Decimal128Type), "_abs_decimal_scalar: decimal expected"
 
     def codegen(context, builder, signature, args):
-        arr = args[0]
+        val = args[0]
+        in_low, in_high = _ll_get_int128_low_high(builder, val)
+        out_low_ptr = cgutils.alloca_once(builder, lir.IntType(64))
+        out_high_ptr = cgutils.alloca_once(builder, lir.IntType(64))
         fnty = lir.FunctionType(
-            lir.IntType(128),
+            lir.VoidType(),
             [
-                lir.IntType(128),
+                lir.IntType(64),
+                lir.IntType(64),
+                lir.IntType(64).as_pointer(),
+                lir.IntType(64).as_pointer(),
             ],
         )
         fn = cgutils.get_or_insert_function(
             builder.module, fnty, name="abs_decimal_scalar"
         )
-        ret = builder.call(
+        builder.call(
             fn,
-            [
-                arr,
-            ],
+            [in_low, in_high, out_low_ptr, out_high_ptr],
         )
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
-        return ret
+        res = _ll_int128_from_low_high(builder, out_low_ptr, out_high_ptr)
+        return res
 
     output_precision = arr_t.precision
     output_scale = arr_t.scale
