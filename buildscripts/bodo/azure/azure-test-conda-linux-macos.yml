@@ -87,9 +87,7 @@ jobs:
       eval "$(pixi shell-hook --shell bash | sed 's/^export [Pp][Aa][Tt][Hh]=/export PATH=/I; s/;/:/g')"
 
       LibFabricDir="$(pwd)/.pixi/envs/azure/Library/bin/libfabric"
-      LibFabricUtilsDir="$(pwd)/.pixi/envs/azure/Library/bin/libfabric/utils"
-
-      export PATH="$PATH:$LibFabricDir:$LibFabricUtilsDir"
+      export PATH="$PATH:$LibFabricDir:$LibFabricDir/utils"
 
       unamestr=`uname`
       if [[ "$unamestr" == 'Linux' ]]; then
