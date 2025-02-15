@@ -806,6 +806,7 @@ if(NO_HDF5)
   target_compile_definitions(ext PRIVATE "NO_HDF5=1")
 else()
   if(WIN32)
+    # Needed to fix DLL import on Windows
     # https://forum.hdfgroup.org/t/unresolved-external-symbol-h5t-native-int-g/7550
     target_compile_definitions(ext PRIVATE "H5_BUILT_AS_DYNAMIC_LIB=1")
   endif()
