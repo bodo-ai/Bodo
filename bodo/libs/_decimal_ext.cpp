@@ -2452,18 +2452,20 @@ inline bool arrow_compute_cmp_scalar(int32_t op_enum, T0 arg0_scalar,
  * @brief compare decimal scalar to integer scalar
  *
  * @param op_enum enum designating comparison operator to call
- * @param arg0 first argument of comparison (decimal)
+ * @param arg0_low first argument of comparison (decimal)
+ * @param arg0_high first argument of comparison (decimal)
  * @param precision decimal argument's precision
  * @param scale decimal argument's scale
  * @param arg1 second argument (int)
  * @return bool output of comparison
  */
-bool arrow_compute_cmp_decimal_int_py_entry(int32_t op_enum, decimal_value arg0,
+bool arrow_compute_cmp_decimal_int_py_entry(int32_t op_enum, uint64_t arg0_low,
+                                            int64_t arg0_high,
                                             int32_t precision, int32_t scale,
                                             int64_t arg1) {
     try {
         // convert input to Arrow scalars
-        arrow::Decimal128 arrow_decimal(arg0.high, arg0.low);
+        arrow::Decimal128 arrow_decimal(arg0_high, arg0_low);
         arrow::Decimal128Scalar arg0_scalar(
             arrow_decimal, arrow::decimal128(precision, scale));
         arrow::Int64Scalar arg1_scalar(arg1);
@@ -2479,19 +2481,21 @@ bool arrow_compute_cmp_decimal_int_py_entry(int32_t op_enum, decimal_value arg0,
  * @brief compare decimal scalar to float scalar
  *
  * @param op_enum enum designating comparison operator to call
- * @param arg0 first argument of comparison (decimal)
+ * @param arg0_low first argument of comparison (decimal)
+ * @param arg0_high first argument of comparison (decimal)
  * @param precision decimal argument's precision
  * @param scale decimal argument's scale
  * @param arg1 second argument (float)
  * @return bool output of comparison
  */
 bool arrow_compute_cmp_decimal_float_py_entry(int32_t op_enum,
-                                              decimal_value arg0,
+                                              uint64_t arg0_low,
+                                              int64_t arg0_high,
                                               int32_t precision, int32_t scale,
                                               double arg1) {
     try {
         // convert input to Arrow scalars
-        arrow::Decimal128 arrow_decimal(arg0.high, arg0.low);
+        arrow::Decimal128 arrow_decimal(arg0_high, arg0_low);
         arrow::Decimal128Scalar arg0_scalar(
             arrow_decimal, arrow::decimal128(precision, scale));
         arrow::DoubleScalar arg1_scalar(arg1);
@@ -2506,23 +2510,26 @@ bool arrow_compute_cmp_decimal_float_py_entry(int32_t op_enum,
  * @brief compare decimal scalar to decimal scalar
  *
  * @param op_enum enum designating comparison operator to call
- * @param arg0 first argument of comparison (decimal)
+ * @param arg0_low first argument of comparison (decimal)
+ * @param arg0_high first argument of comparison (decimal)
  * @param precision0 first argument's precision
  * @param scale0 first argument's scale
- * @param arg1 second argument (decimal)
+ * @param arg1_low second argument (decimal)
+ * @param arg1_high second argument (decimal)
  * @param precision1 second argument's precision
  * @param scale1 second argument's scale
  * @return bool output of comparison
  */
 bool arrow_compute_cmp_decimal_decimal_py_entry(
-    int32_t op_enum, decimal_value arg0, int32_t precision0, int32_t scale0,
-    int32_t precision1, int32_t scale1, decimal_value arg1) {
+    int32_t op_enum, uint64_t arg0_low, int64_t arg0_high, int32_t precision0,
+    int32_t scale0, int32_t precision1, int32_t scale1, uint64_t arg1_low,
+    int64_t arg1_high) {
     try {
         // convert input to Arrow scalars
-        arrow::Decimal128 arrow_decimal0(arg0.high, arg0.low);
+        arrow::Decimal128 arrow_decimal0(arg0_high, arg0_low);
         arrow::Decimal128Scalar arg0_scalar(
             arrow_decimal0, arrow::decimal128(precision0, scale0));
-        arrow::Decimal128 arrow_decimal1(arg1.high, arg1.low);
+        arrow::Decimal128 arrow_decimal1(arg1_high, arg1_low);
         arrow::Decimal128Scalar arg1_scalar(
             arrow_decimal1, arrow::decimal128(precision1, scale1));
         return arrow_compute_cmp_scalar(op_enum, arg0_scalar, arg1_scalar);
