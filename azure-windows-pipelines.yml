@@ -27,7 +27,7 @@ variables:
   # Azure Pipelines currently doesn't have a "range" function to count from 1 to total
   # We have to manually add the element and split into an array
   # TODO: Replace with range when available
-  bodo_1p_each: "1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22"
+  bodo_1p_each: "1" # 2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22"
   bodo_1p_total: 22
   bodo_2p_each: "1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30"
   bodo_2p_total: 30
@@ -89,28 +89,28 @@ stages:
   #         PYTEST_MARKER: "spawn_mode"
 
 
-# - stage: Test_BodoSQL_Windows
-#   displayName: 'Test BodoSQL on Windows'
-#   dependsOn: []
-#   jobs:
+- stage: Test_BodoSQL_Windows
+  displayName: 'Test BodoSQL on Windows'
+  dependsOn: []
+  jobs:
 
-#   - template: buildscripts/bodosql/azure/azure-test-conda-linux-macos.yml
-#     parameters:
-#       # Note: this name is not important, as we explicitly check uname to determine the os
-#       # for the bodoSQL tests
-#       name: BodoSQL_Streaming_Tests
-#       SPAWN_MODE_TEST: false
-#       pool_name: 'windows-ci'
-#       # use_bodo_arrow_fork: 0
-#       matrix:
-#         ${{ each slice in split(variables.bodosql_1p_each, ',') }}:
-#           ${{ format('BODOSQL_1P_{0}_OF_{1}', slice, variables.bodosql_1p_total) }}:
-#             NP: 1
-#             PYTEST_MARKER: ${{ format('bodosql_{0}of{1} and ({2})', slice, variables.bodosql_1p_total, parameters.PYTEST_MARKER) }}
-#         ${{ each slice in split(variables.bodosql_2p_each, ',') }}:
-#           ${{ format('BODOSQL_2P_{0}_OF_{1}', slice, variables.bodosql_2p_total) }}:
-#             NP: 2
-#             PYTEST_MARKER: ${{ format('bodosql_{0}of{1} and ({2})', slice, variables.bodosql_2p_total, parameters.PYTEST_MARKER) }}
+  - template: buildscripts/bodosql/azure/azure-test-conda-linux-macos.yml
+    parameters:
+      # Note: this name is not important, as we explicitly check uname to determine the os
+      # for the bodoSQL tests
+      name: BodoSQL_Streaming_Tests
+      SPAWN_MODE_TEST: false
+      pool_name: 'windows-ci'
+      # use_bodo_arrow_fork: 0
+      matrix:
+        ${{ each slice in split(variables.bodosql_1p_each, ',') }}:
+          ${{ format('BODOSQL_1P_{0}_OF_{1}', slice, variables.bodosql_1p_total) }}:
+            NP: 1
+            PYTEST_MARKER: ${{ format('bodosql_{0}of{1} and ({2})', slice, variables.bodosql_1p_total, parameters.PYTEST_MARKER) }}
+        # ${{ each slice in split(variables.bodosql_2p_each, ',') }}:
+        #   ${{ format('BODOSQL_2P_{0}_OF_{1}', slice, variables.bodosql_2p_total) }}:
+        #     NP: 2
+        #     PYTEST_MARKER: ${{ format('bodosql_{0}of{1} and ({2})', slice, variables.bodosql_2p_total, parameters.PYTEST_MARKER) }}
 
   # - template: buildscripts/bodosql/azure/azure-test-conda-linux-macos.yml
   #   parameters:

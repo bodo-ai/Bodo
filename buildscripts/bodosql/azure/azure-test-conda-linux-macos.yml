@@ -35,6 +35,7 @@ jobs:
       echo "##vso[task.prependpath]$HOME/.pixi/bin"
     displayName: Install Pixi
   - bash: pixi install -v --locked -e azure
+    retryCountOnTaskFailure: 3
     displayName: Install Test Environment
 
   - bash: |
@@ -69,10 +70,10 @@ jobs:
 
   - bash: |
       set -exo pipefail
-      eval "$(pixi shell-hook --shell bash -e azure)"
+      # eval "$(pixi shell-hook --shell bash -e azure)"
 
-      python -c "import bodo; print(bodo.__version__)"
-      python -c "import bodosql; print(bodosql.__version__)"
+      pixi run -e azure python -c "import bodo; print(bodo.__version__)"
+      pixi run -e azure python -c "import bodosql; print(bodosql.__version__)"
 
       unamestr=`uname`
       if [[ "$unamestr" == 'Linux' ]]; then
@@ -101,9 +102,9 @@ jobs:
       elif [[ "${{ parameters.SPAWN_MODE_TEST }}" == "True" ]]; then
         export BODO_TEST_SPAWN_MODE=1
         export BODO_NUM_WORKERS="$NP"
-        pytest -s -v -p no:faulthandler -Wignore -m "$(PYTEST_MARKER)" bodosql/tests --junitxml=pytest-report-sql-spawn-mode.xml --test-run-title="${{ parameters.name }}"
+        pixi run -e azure pytest -s -v -p no:faulthandler -Wignore -m "$(PYTEST_MARKER)" bodosql/tests --junitxml=pytest-report-sql-spawn-mode.xml --test-run-title="${{ parameters.name }}"
       else
-        python -u -m bodosql.runtests "${{ parameters.name }}" "$(NP)" -s -v -p no:faulthandler -m "$(PYTEST_MARKER)" bodosql/tests/
+        pixi run -e azure python -u -m bodosql.runtests "${{ parameters.name }}" "$(NP)" -s -v -p no:faulthandler -m "$(PYTEST_MARKER)" bodosql/tests/
       fi
     env:
       SF_USERNAME: $(SNOWFLAKE_USER)
