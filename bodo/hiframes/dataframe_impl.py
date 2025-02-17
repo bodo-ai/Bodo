@@ -3278,11 +3278,14 @@ def _insert_NA_cond(expr_node, left_columns, left_data, right_columns, right_dat
             )
         return binop
 
-    def _insert_NA_cond_body(expr_node, null_set):
+    def _insert_NA_cond_body(expr_node, null_set) -> None:
         """
-        Returns an updated version of the sub expr and a set
-        of all column checks (i.e. right.A) that need a null value
-        inserted.
+        Scans through expr_node and inserts names for all
+        columns that have a column checks (i.e. right.A) and need a
+        null value inserted.
+
+        Also modified expr_node in-place to add null checks,
+        but only for the OR case.
         """
         if isinstance(expr_node, pandas.core.computation.ops.BinOp):
             if expr_node.op == "|":
@@ -3325,7 +3328,6 @@ def _insert_NA_cond(expr_node, left_columns, left_data, right_columns, right_dat
             arr_type = data[cols.index(col_name)]
             if bodo.utils.typing.is_nullable(arr_type):
                 null_set.add(expr_node.name)
-        return expr_node
 
     null_set = set()
     _insert_NA_cond_body(expr_node, null_set)
