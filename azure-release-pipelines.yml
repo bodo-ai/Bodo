@@ -45,10 +45,7 @@ variables:
 
 stages:
 - stage: Test_Bodo
-  ${{ if eq(variables['Agent.OS'], 'Windows_NT') }}:
-    displayName: 'Test Bodo on Windows'
-  ${{ else }}:
-    displayName: 'Test Bodo on Linux x86'
+  displayName: 'Test Bodo'
   dependsOn: []
   jobs:
   - template: buildscripts/bodo/azure/azure-test-conda-linux-macos.yml
@@ -70,7 +67,7 @@ stages:
 
   - template: buildscripts/bodo/azure/azure-test-conda-linux-macos.yml
     parameters:
-      name: Linux_cache
+      name: Cache_tests
       caching_test: true
       spawn_mode_test: false
       pool_name: ${{ parameters.AGENT_POOL }}
@@ -94,8 +91,8 @@ stages:
           PYTEST_MARKER: "spawn_mode"
 
 
-- stage: Test_BodoSQL_x86
-  displayName: 'Test BodoSQL on Linux x86'
+- stage: Test_BodoSQL
+  displayName: 'Test BodoSQL'
   dependsOn: []
   jobs:
 
