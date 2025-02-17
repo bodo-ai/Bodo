@@ -21,7 +21,7 @@ parameters:
   - name: AGENT_POOL
     displayName: Agent Pool
     type: string
-    default: ''
+    default: 'ScalingVMSet'
 
 # NOTE: these variables determine artifactory channel to publish Bodo/BodoSQL/Iceberg packages.
 # See get_channel.sh
@@ -51,43 +51,41 @@ stages:
       name: Bodo_Tests
       caching_test: false
       spawn_mode_test: false
+      pool_name: ${{ parameters.AGENT_POOL }}
       matrix:
         ${{ each slice in split(variables.bodo_1p_each, ',') }}:
           ${{ format('BODO_1P_{0}_OF_{1}', slice, variables.bodo_1p_total) }}:
             NP: 1
             PYTEST_MARKER: ${{ format('bodo_{0}of{1} and ({2})', slice, variables.bodo_1p_total, parameters.PYTEST_MARKER) }}
-            pool_name: ${{ parameters.AGENT_POOL }}
         ${{ each slice in split(variables.bodo_2p_each, ',') }}:
           ${{ format('BODO_2P_{0}_OF_{1}', slice, variables.bodo_2p_total) }}:
             NP: 2
             PYTEST_MARKER: ${{ format('bodo_{0}of{1} and ({2})', slice, variables.bodo_2p_total, parameters.PYTEST_MARKER) }}
-            pool_name: ${{ parameters.AGENT_POOL }}
 
   - template: buildscripts/bodo/azure/azure-test-conda-linux-macos.yml
     parameters:
       name: Linux_cache
       caching_test: true
       spawn_mode_test: false
+      pool_name: ${{ parameters.AGENT_POOL }}
       matrix:
         TEST_2P:
           NP: 2
           PYTEST_MARKER: ""
-          pool_name: ${{ parameters.AGENT_POOL }}
 
   - template: buildscripts/bodo/azure/azure-test-conda-linux-macos.yml
     parameters:
       name: Bodo_Spawn_mode_tests
       caching_test: false
       spawn_mode_test: true
+      pool_name: ${{ parameters.AGENT_POOL }}
       matrix:
         TEST_1P:
           NP: 1
           PYTEST_MARKER: "spawn_mode"
-          pool_name: ${{ parameters.AGENT_POOL }}
         TEST_2P:
           NP: 2
           PYTEST_MARKER: "spawn_mode"
-          pool_name: ${{ parameters.AGENT_POOL }}
 
 
 - stage: Test_BodoSQL_x86
@@ -101,17 +99,16 @@ stages:
       # for the bodoSQL tests
       name: BodoSQL_Streaming_Tests
       SPAWN_MODE_TEST: false
+      pool_name: ${{ parameters.AGENT_POOL }}
       matrix:
         ${{ each slice in split(variables.bodosql_1p_each, ',') }}:
           ${{ format('BODOSQL_1P_{0}_OF_{1}', slice, variables.bodosql_1p_total) }}:
             NP: 1
             PYTEST_MARKER: ${{ format('bodosql_{0}of{1} and ({2})', slice, variables.bodosql_1p_total, parameters.PYTEST_MARKER) }}
-            pool_name: ${{ parameters.AGENT_POOL }}
         ${{ each slice in split(variables.bodosql_2p_each, ',') }}:
           ${{ format('BODOSQL_2P_{0}_OF_{1}', slice, variables.bodosql_2p_total) }}:
             NP: 2
             PYTEST_MARKER: ${{ format('bodosql_{0}of{1} and ({2})', slice, variables.bodosql_2p_total, parameters.PYTEST_MARKER) }}
-            pool_name: ${{ parameters.AGENT_POOL }}
 
   - template: buildscripts/bodosql/azure/azure-test-conda-linux-macos.yml
     parameters:
@@ -120,11 +117,11 @@ stages:
       name: BodoSQL_Streaming_Caching_Tests
       CACHE_TEST: true
       SPAWN_MODE_TEST: false
+      pool_name: ${{ parameters.AGENT_POOL }}
       matrix:
         TEST_2P:
           NP: 2
           PYTEST_MARKER: ""
-          pool_name: ${{ parameters.AGENT_POOL }}
 
   - template: buildscripts/bodosql/azure/azure-test-conda-linux-macos.yml
     parameters:
@@ -133,15 +130,14 @@ stages:
       name: BodoSQL_Streaming_Spawn_mode_tests
       CACHE_TEST: false
       SPAWN_MODE_TEST: true
+      pool_name: ${{ parameters.AGENT_POOL }}
       matrix:
         TEST_1P:
           NP: 1
           PYTEST_MARKER: "spawn_mode"
-          pool_name: ${{ parameters.AGENT_POOL }}
         TEST_2P:
           NP: 2
           PYTEST_MARKER: "spawn_mode"
-          pool_name: ${{ parameters.AGENT_POOL }}
 
 
  # ------------------------------- ARM Tests -------------------------------- #
