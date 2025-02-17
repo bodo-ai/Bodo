@@ -1,7 +1,9 @@
 """Tests I/O for CSV, NP IO, etc."""
 
+import gzip
 import io
 import os
+import shutil
 import subprocess
 import unittest
 
@@ -61,16 +63,25 @@ def compress_dir(dir_name):
         for fname in [
             f
             for f in os.listdir(dir_name)
-            if f.endswith(".csv") and os.path.getsize(dir_name + "/" + f) > 0
+            if f.endswith(".csv") and os.path.getsize(os.path.join(dir_name, f)) > 0
         ]:
-            subprocess.run(["gzip", "-f", fname], cwd=dir_name)
+            full_fname = os.path.join(dir_name, fname)
+            out_fname = full_fname + ".gz"
+            with open(full_fname, "rb") as f_in:
+                with gzip.open(out_fname, "wb") as f_out:
+                    shutil.copyfileobj(f_in, f_out)
+            os.remove(full_fname)
     bodo.barrier()
 
 
 def uncompress_dir(dir_name):
     if bodo.get_rank() == 0:
         for fname in [f for f in os.listdir(dir_name) if f.endswith(".gz")]:
-            subprocess.run(["gunzip", fname], cwd=dir_name)
+            full_fname = os.path.join(dir_name, fname)
+            with gzip.open(full_fname, "rb") as f_in:
+                with open(full_fname.removesuffix(".gz"), "wb") as f_out:
+                    shutil.copyfileobj(f_in, f_out)
+            os.remove(full_fname)
     bodo.barrier()
 
 
