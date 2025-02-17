@@ -455,7 +455,8 @@ void JoinPartition::FinalizeGroups() {
                          num_rows_in_group_->cend(),
                          groups_offsets_->begin() + 1);
 #else
-        // std::partial_sum crashes on Windows for some reason. Use a loop
+        // std::partial_sum requires pointer_to method in pinnable_ptr on
+        // Windows, which seems difficult to implement correctly. Use a loop
         // instead.
         size_t sum = num_rows_in_group_->at(0);
         for (size_t i = 1; i < num_groups; ++i) {
