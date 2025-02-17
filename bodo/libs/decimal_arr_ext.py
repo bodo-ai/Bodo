@@ -520,7 +520,6 @@ def _decimal_scalar_to_str(typingctx, arr_t, remove_trailing_zeros_t):
     def codegen(context, builder, signature, args):
         (val, remove_trailing_zeros) = args
         scale = context.get_constant(types.int32, arr_t.scale)
-        # remove_trailing_zeros = context.get_constant(types.bool_, 0)
 
         uni_str = cgutils.create_struct_proxy(types.unicode_type)(context, builder)
         in_low, in_high = _ll_get_int128_low_high(builder, val)
