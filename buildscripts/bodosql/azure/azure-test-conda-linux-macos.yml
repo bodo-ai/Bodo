@@ -93,11 +93,14 @@ jobs:
         export HADOOP_OPTIONAL_TOOLS=hadoop-azure
         export ARROW_LIBHDFS_DIR=$HADOOP_HOME/lib/native
         export CLASSPATH=`$HADOOP_HOME/bin/hdfs classpath --glob`
+      elif [[ "$(Agent.OS)" == "Windows_NT" ]]; then
+        # On Windows we set HADOOP_HOME to a dummy directory.
+        # Spark need to verify HADOOP_HOME exists at initialization if it is unused.
+        export HADOOP_HOME="$(System.DefaultWorkingDirectory)/buildscripts/local_utils/hadoop_dummy"
       else
         echo "Skipping hadoop/arrow env var setup"
-        export HADOOP_HOME="$(System.DefaultWorkingDirectory)/buildscripts/local_utils/hadoop_dummy"
       fi
-      
+
       cd "$(System.DefaultWorkingDirectory)/BodoSQL"
       # For caching tests we need to update the location of the decryption file.
       # We set the absolute path as an environment variable.
