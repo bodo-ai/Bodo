@@ -450,9 +450,21 @@ void JoinPartition::FinalizeGroups() {
     (*groups_offsets_)[0] = 0;
     // Do a cumulative sum and fill the rest of groups_offsets:
     if (num_groups > 0) {
+#ifndef _WIN32
         std::partial_sum(num_rows_in_group_->cbegin(),
                          num_rows_in_group_->cend(),
                          groups_offsets_->begin() + 1);
+#else
+        // std::partial_sum requires pointer_to method in pinnable_ptr on
+        // Windows, which seems difficult to implement correctly. Use a loop
+        // instead.
+        size_t sum = num_rows_in_group_->at(0);
+        for (size_t i = 1; i < num_groups; ++i) {
+            (*groups_offsets_)[i] = sum;
+            sum += num_rows_in_group_->at(i);
+        }
+        (*groups_offsets_)[num_groups] = sum;
+#endif
     }
 
     // Release the pin guard
