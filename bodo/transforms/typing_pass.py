@@ -3763,7 +3763,7 @@ class TypingTransforms:
             con_type = self.typemap[con_arg.name]
 
             if isinstance(con_type, bodo.io.iceberg.IcebergConnectionType):
-                con_str = con_type.get_conn_str()
+                con_str = con_type.conn_str
             else:
                 con_str = self._get_const_value(
                     con_arg, label, rhs.loc, err_msg=err_msg

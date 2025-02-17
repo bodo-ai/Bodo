@@ -1037,6 +1037,10 @@ def aws_polaris_warehouse(polaris_token, polaris_server, polaris_package):
             prefix=catalog_name,
             create_namespace_request=CreateNamespaceRequest(namespace=["CI"]),
         )
+        catalog_api.create_namespace(
+            prefix=catalog_name,
+            create_namespace_request=CreateNamespaceRequest(namespace=["default"]),
+        )
 
         return catalog_name
 
@@ -1115,6 +1119,10 @@ def azure_polaris_warehouse(polaris_token, polaris_server, polaris_package):
         catalog_api.create_namespace(
             prefix=catalog_name,
             create_namespace_request=CreateNamespaceRequest(namespace=["CI"]),
+        )
+        catalog_api.create_namespace(
+            prefix=catalog_name,
+            create_namespace_request=CreateNamespaceRequest(namespace=["default"]),
         )
 
         return catalog_name

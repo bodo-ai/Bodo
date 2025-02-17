@@ -23,9 +23,14 @@ import bodo.utils.allocation_tracking
 import bodosql
 from bodo.io.iceberg.catalog import conn_str_to_catalog
 from bodo.tests.conftest import (  # noqa
+    aws_polaris_warehouse,
+    azure_polaris_warehouse,
     iceberg_database,
     memory_leak_check,
     polaris_connection,
+    polaris_package,
+    polaris_server,
+    polaris_token,
 )
 from bodo.tests.iceberg_database_helpers.utils import get_spark
 from bodo.tests.utils import gen_nonascii_list, get_rest_catalog_connection_string
@@ -1969,8 +1974,8 @@ def polaris_catalog(polaris_connection, polaris_catalog_iceberg_read_df):
     """
     Returns a polaris catalog object
     """
-
     rest_uri, polaris_warehouse, polaris_credential = polaris_connection
+
     con_str = get_rest_catalog_connection_string(
         rest_uri, polaris_warehouse, polaris_credential
     )
@@ -1980,9 +1985,12 @@ def polaris_catalog(polaris_connection, polaris_catalog_iceberg_read_df):
         lambda: py_catalog.create_table(
             table_id, pa.Schema.from_pandas(polaris_catalog_iceberg_read_df)
         ).append(pa.Table.from_pandas(polaris_catalog_iceberg_read_df))
-    )
+    )()
     return bodosql.RESTCatalog(
-        warehouse=polaris_warehouse, credential=polaris_credential
+        rest_uri=rest_uri,
+        warehouse=polaris_warehouse,
+        credential=polaris_credential,
+        scope="PRINCIPAL_ROLE:ALL",
     )
 
 

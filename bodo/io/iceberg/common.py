@@ -170,6 +170,3 @@ class IcebergConnectionType(types.Type):
 
     def __init__(self, name):  # pragma: no cover
         super().__init__(name=name)
-
-    def get_conn_str(self) -> str:
-        raise NotImplementedError("IcebergConnectionType should not be instantiated")

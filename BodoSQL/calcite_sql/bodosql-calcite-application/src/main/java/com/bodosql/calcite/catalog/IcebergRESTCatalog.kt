@@ -21,8 +21,9 @@ open class IcebergRESTCatalog(
     token: String? = null,
     credential: String? = null,
     val defaultSchema: String? = null,
+    val scope: String? = null,
 ) : IcebergCatalog<RESTCatalog>(
-        createRestCatalog(uri, warehouse, token, credential),
+        createRestCatalog(uri, warehouse, token, credential, scope),
     ) {
     /**
      * Returns a set of all table names with the given schema name.
@@ -82,7 +83,7 @@ open class IcebergRESTCatalog(
 
     /**
      * Return the number of levels at which a default schema may be found.
-     * Tabular catalogs don't have subSchemas, so this method always returns 1.
+     * REST catalogs don't have subSchemas as far as I can tell, so this method always returns 1.
      * @return The number of levels a default schema can be found.
      */
     override fun numDefaultSchemaLevels(): Int = 1
@@ -166,7 +167,7 @@ open class IcebergRESTCatalog(
 
     /**
      * Returns if a schema with the given depth is allowed to contain tables.
-     * Since Tabular catalogs don't have subSchemas, this method always returns true.
+     * Since REST catalogs don't have subSchemas, this method always returns true.
      *
      * @param depth The number of parent schemas that would need to be visited to reach the root.
      * @return True
@@ -175,7 +176,7 @@ open class IcebergRESTCatalog(
 
     /**
      * Returns if a schema with the given depth is allowed to contain subSchemas.
-     * Tabular catalogs do not support subSchemas, so this method always returns false for non-zero values.
+     * REST catalogs do not support subSchemas, so this method always returns false for non-zero values.
      *
      * @param depth The number of parent schemas that would need to be visited to reach the root.
      * @return false.
@@ -196,8 +197,19 @@ open class IcebergRESTCatalog(
     override fun generatePythonConnStr(schemaPath: ImmutableList<String>): Expr {
         val props = getIcebergConnection().properties()
         val warehouse = props[CatalogProperties.WAREHOUSE_LOCATION]!!
-        val uri = props[CatalogProperties.URI]!!.replace(Regex("https?://"), "")
-        return Expr.Call("bodosql.get_REST_connection", Expr.StringLiteral(uri), Expr.StringLiteral(warehouse))
+        val uri = props[CatalogProperties.URI]!!
+        return Expr.Call(
+            "bodosql.get_REST_connection",
+            Expr.StringLiteral(uri),
+            Expr.StringLiteral(warehouse),
+            if (scope !=
+                null
+            ) {
+                Expr.StringLiteral(scope)
+            } else {
+                Expr.None
+            },
+        )
     }
 
     /**
@@ -226,12 +238,6 @@ open class IcebergRESTCatalog(
             generatePythonConnStr(schema),
         )
 
-    /**
-     * Return the catalog's token.
-     * @return The catalog's token.
-     */
-    fun getToken(): String? = getIcebergConnection().properties()["token"]
-
     companion object {
         /**
          * Create a RESTCatalog object from the given connection string.
@@ -244,12 +250,16 @@ open class IcebergRESTCatalog(
             warehouse: String,
             token: String?,
             credential: String?,
+            scope: String?,
         ): RESTCatalog {
             val params: MutableMap<String, String> = HashMap()
 
             // Catalog URI (without parameters)
             params[CatalogProperties.URI] = uri
             params[CatalogProperties.WAREHOUSE_LOCATION] = warehouse
+            if (scope != null) {
+                params["scope"] = scope
+            }
             if (token != null) {
                 params["token"] = token
             } else if (credential != null) {

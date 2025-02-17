@@ -321,12 +321,13 @@ class PythonEntryPoint {
         fun buildBodoS3TablesCatalog(warehouse: String): BodoS3TablesCatalog = BodoS3TablesCatalog(warehouse)
 
         /**
-         * Build a TabularCatalog object.
+         * Build a IcebergRESTCatalog object.
          * @param warehouse The warehouse to use.
          * @param restUri The REST URI to use.
          * @param token The token to use. This may not always be required.
          * @param credential The credential to use. This may not always be required.
-         * @return The TabularCatalog object.
+         * @param defaultSchema The default schema to use.
+         * @return The IcebergRESTCatalog object.
          */
         @JvmStatic
         fun buildIcebergRESTCatalog(
@@ -334,8 +335,9 @@ class PythonEntryPoint {
             restUri: String,
             token: String?,
             credential: String?,
-            defaultSchema: String?,
-        ): IcebergRESTCatalog = IcebergRESTCatalog(warehouse, restUri, token, credential, defaultSchema)
+            defaultSchema: String,
+            scope: String?,
+        ): IcebergRESTCatalog = IcebergRESTCatalog(warehouse, restUri, token, credential, defaultSchema, scope)
 
         /**
          * Build a FileSystemCatalog object.
