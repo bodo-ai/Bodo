@@ -56,7 +56,7 @@ public class BodoIcebergHandler {
    * @return Iceberg table associated with ID
    */
   private Table loadTable(String tableId) {
-    return catalog.loadTable(TableIdentifier.of(tableId));
+    return catalog.loadTable(TableIdentifier.parse(tableId));
   }
 
   /**
@@ -337,6 +337,7 @@ public class BodoIcebergHandler {
   public void commitStatisticsFile(String tableId, long snapshotID, String statisticsFileJson) {
     StatisticsFile statisticsFile = BodoStatisticFile.fromJson(statisticsFileJson);
     Table table = loadTable(tableId);
+    table.refresh();
     Transaction txn = table.newTransaction();
     txn.updateStatistics().setStatistics(snapshotID, statisticsFile).commit();
     txn.commitTransaction();
