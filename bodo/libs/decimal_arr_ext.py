@@ -618,7 +618,7 @@ def _arrow_compute_cmp_decimal_decimal(
         rhs_low, rhs_high = _ll_get_int128_low_high(builder, rhs)
 
         fnty = lir.FunctionType(
-            lir.IntType(8),
+            lir.IntType(1),
             [
                 lir.IntType(32),
                 lir.IntType(64),  # lhs_low
@@ -663,7 +663,7 @@ def _arrow_compute_cmp_decimal_float(typingctx, op_enum, lhs, precision, scale, 
         lhs_low, lhs_high = _ll_get_int128_low_high(builder, lhs)
 
         fnty = lir.FunctionType(
-            lir.IntType(8),
+            lir.IntType(1),
             [
                 lir.IntType(32),
                 lir.IntType(64),  # lhs_low
@@ -690,7 +690,7 @@ def _arrow_compute_cmp_decimal_int(typingctx, op_enum, lhs, precision, scale, rh
         lhs_low, lhs_high = _ll_get_int128_low_high(builder, lhs)
 
         fnty = lir.FunctionType(
-            lir.IntType(8),
+            lir.IntType(1),
             [
                 lir.IntType(32),
                 lir.IntType(64),  # lhs_low
