@@ -48,7 +48,7 @@ jobs:
       # some of the envs is enough
       - name: Install Pixi for Compiler
         if: contains(inputs.os, 'macos')
-        uses: prefix-dev/setup-pixi@v0.8.1
+        uses: prefix-dev/setup-pixi@v0.8.2
         with:
           pixi-version: v0.40.2
           cache: true
