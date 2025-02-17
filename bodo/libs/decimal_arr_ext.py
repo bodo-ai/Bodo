@@ -319,7 +319,9 @@ def decimal_max(lhs, rhs):
 
 
 @intrinsic(prefer_literal=True)
-def _str_to_decimal_scalar(typingctx, val, precision_tp, scale_tp):
+def _str_to_decimal_scalar(
+    typingctx, val, precision_tp, scale_tp, remove_trailing_zeros=False
+):
     """convert string to decimal128. This returns a tuple of
     (Decimal128Type, bool) where the bool indicates if the value
     errored in parsing or fitting in the final decimal value."""
@@ -507,18 +509,18 @@ def decimal_scalar_to_str(arr):
 @overload(decimal_scalar_to_str)
 def overload_decimal_scalar_to_str(arr):
     def impl(arr):  # pragma: no cover
-        out = _decimal_scalar_to_str(arr)
+        out = _decimal_scalar_to_str(arr, False)
         return out
 
     return impl
 
 
 @intrinsic
-def _decimal_scalar_to_str(typingctx, arr_t):
+def _decimal_scalar_to_str(typingctx, arr_t, remove_trailing_zeros_t):
     def codegen(context, builder, signature, args):
-        (val,) = args
+        (val, remove_trailing_zeros) = args
         scale = context.get_constant(types.int32, arr_t.scale)
-        remove_trailing_zeros = context.get_constant(types.bool_, 0)
+        # remove_trailing_zeros = context.get_constant(types.bool_, 0)
 
         uni_str = cgutils.create_struct_proxy(types.unicode_type)(context, builder)
         in_low, in_high = _ll_get_int128_low_high(builder, val)
@@ -559,7 +561,7 @@ def _decimal_scalar_to_str(typingctx, arr_t):
         uni_str.parent = cgutils.get_null_value(uni_str.parent.type)
         return uni_str._getvalue()
 
-    return bodo.string_type(arr_t), codegen
+    return bodo.string_type(arr_t, remove_trailing_zeros_t), codegen
 
 
 # We cannot have exact matching between Python and Bodo
@@ -570,7 +572,7 @@ def _decimal_scalar_to_str(typingctx, arr_t):
 @overload_method(Decimal128Type, "__str__")
 def overload_str_decimal(val):
     def impl(val):  # pragma: no cover
-        return decimal_scalar_to_str(val)
+        return _decimal_scalar_to_str(val, True)
 
     return impl
 
@@ -1021,7 +1023,7 @@ def cast_decimal_to_int(context, builder, fromty, toty, val):
 @overload_method(Decimal128Type, "__hash__", no_unliteral=True)
 def decimal_hash(val):  # pragma: no cover
     def impl(val):
-        return hash(decimal_scalar_to_str(val))
+        return hash(_decimal_scalar_to_str(val, True))
 
     return impl
 
