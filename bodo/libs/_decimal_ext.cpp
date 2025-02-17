@@ -429,10 +429,12 @@ int8_t decimal_scalar_sign_py_entry(uint64_t in_low, int64_t in_high) {
  * @param[out] is_null The pointer used to indicate whether the final answer is
  * null.
  * @param[in] parallel Do we need a parallel merge step.
- * @return arrow::Decimal128
+ * @param[out] out_low_ptr Pointer to the low 64 bits of the result.
+ * @param[out] out_high_ptr Pointer to the high 64 bits of the result.
  */
-arrow::Decimal128 sum_decimal_array_py_entry(array_info* arr_raw, bool* is_null,
-                                             bool parallel) noexcept {
+void sum_decimal_array_py_entry(array_info* arr_raw, bool* is_null,
+                                bool parallel, uint64_t* out_low_ptr,
+                                int64_t* out_high_ptr) noexcept {
     try {
         std::shared_ptr<array_info> arr = std::shared_ptr<array_info>(arr_raw);
 
@@ -474,12 +476,13 @@ arrow::Decimal128 sum_decimal_array_py_entry(array_info* arr_raw, bool* is_null,
         // array.
         *is_null =
             !out_arr->get_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(0);
-        return out_arr
-            ->data1<bodo_array_type::NULLABLE_INT_BOOL, arrow::Decimal128>()[0];
-
+        arrow::Decimal128 result =
+            out_arr->data1<bodo_array_type::NULLABLE_INT_BOOL,
+                           arrow::Decimal128>()[0];
+        *out_low_ptr = result.low_bits();
+        *out_high_ptr = result.high_bits();
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
-        return arrow::Decimal128(0);
     }
 }
 
@@ -2039,17 +2042,18 @@ array_info* factorial_decimal_array_py_entry(array_info* arr_) {
 /**
  * @brief Convert decimal value to int64 (unsafe cast)
  *
- * @param val input decimal value
+ * @param in_low low 64 bits of the input decimal
+ * @param in_high high 64 bits of the input decimal
  * @param precision input's precision
  * @param scale input's scale
  * @return int64_t input converted to int64
  */
-int64_t decimal_to_int64_py_entry(decimal_value val, uint8_t precision,
-                                  uint8_t scale) {
+int64_t decimal_to_int64_py_entry(uint64_t in_low, int64_t in_high,
+                                  uint8_t precision, uint8_t scale) {
     try {
         // NOTE: using cast to allow unsafe cast (Rescale/ToInteger may throw
         // data loss error)
-        arrow::Decimal128 arrow_decimal(val.high, val.low);
+        arrow::Decimal128 arrow_decimal(in_high, in_low);
         arrow::Decimal128Scalar val_scalar(arrow_decimal,
                                            arrow::decimal128(precision, scale));
 
