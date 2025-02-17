@@ -3,10 +3,12 @@ Utility functions for testing such as check_func() that tests a function.
 """
 
 import datetime
+import gzip
 import io
 import os
 import random
 import re
+import shutil
 import string
 import subprocess
 import time
@@ -3454,3 +3456,30 @@ def get_num_test_workers():
         return spawner.worker_intercomm.Get_remote_size()
 
     return bodo.get_size()
+
+
+def compress_dir(dir_name):
+    if bodo.get_rank() == 0:
+        for fname in [
+            f
+            for f in os.listdir(dir_name)
+            if f.endswith(".csv") and os.path.getsize(os.path.join(dir_name, f)) > 0
+        ]:
+            full_fname = os.path.join(dir_name, fname)
+            out_fname = full_fname + ".gz"
+            with open(full_fname, "rb") as f_in:
+                with gzip.open(out_fname, "wb") as f_out:
+                    shutil.copyfileobj(f_in, f_out)
+            os.remove(full_fname)
+    bodo.barrier()
+
+
+def uncompress_dir(dir_name):
+    if bodo.get_rank() == 0:
+        for fname in [f for f in os.listdir(dir_name) if f.endswith(".gz")]:
+            full_fname = os.path.join(dir_name, fname)
+            with gzip.open(full_fname, "rb") as f_in:
+                with open(full_fname.removesuffix(".gz"), "wb") as f_out:
+                    shutil.copyfileobj(f_in, f_out)
+            os.remove(full_fname)
+    bodo.barrier()
