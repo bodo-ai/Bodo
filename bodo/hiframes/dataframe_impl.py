@@ -3281,7 +3281,7 @@ def _insert_NA_cond(expr_node, left_columns, left_data, right_columns, right_dat
     def _insert_NA_cond_body(expr_node, null_set) -> None:
         """
         Scans through expr_node and inserts names for all
-        columns that have a column checks (i.e. right.A) and need a
+        columns that have a column check (i.e. right.A) and need a
         null value inserted.
 
         Also modified expr_node in-place to add null checks,
