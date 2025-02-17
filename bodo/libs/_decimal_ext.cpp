@@ -118,14 +118,14 @@ std::string decimal_to_std_string(arrow::Decimal128 const& arrow_decimal,
     return str;
 }
 
-std::string int128_decimal_to_std_string(__int128 const& val,
+std::string int128_decimal_to_std_string(__int128_t const& val,
                                          int const& scale) {
     arrow::Decimal128 arrow_decimal((int64_t)(val >> 64), (int64_t)(val));
     return decimal_to_std_string(arrow_decimal, scale);
 }
 
-double decimal_to_double(__int128 const& val, uint8_t scale) {
-    // TODO: Zero-copy (cast __int128 to int64[2] for Decimal128 constructor)
+double decimal_to_double(__int128_t const& val, uint8_t scale) {
+    // TODO: Zero-copy (cast __int128_t to int64[2] for Decimal128 constructor)
     // Can't figure out how to do this in C++
     arrow::Decimal128 dec((int64_t)(val >> 64), (int64_t)(val));
     return dec.ToDouble(scale);
@@ -155,30 +155,39 @@ arrow::Decimal128 shift_decimal_scalar(arrow::Decimal128 val,
     }
 }
 
-arrow::Decimal128 cast_decimal_to_decimal_scalar_unsafe_py_entry(
-    arrow::Decimal128 val, int64_t shift_amount) {
+void cast_decimal_to_decimal_scalar_unsafe_py_entry(uint64_t in_low,
+                                                    int64_t in_high,
+                                                    int64_t shift_amount,
+                                                    uint64_t* out_low_ptr,
+                                                    int64_t* out_high_ptr) {
     try {
-        return shift_decimal_scalar(val, shift_amount);
+        arrow::Decimal128 val = arrow::Decimal128(in_high, in_low);
+        arrow::Decimal128 res = shift_decimal_scalar(val, shift_amount);
+        *out_low_ptr = res.low_bits();
+        *out_high_ptr = res.high_bits();
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
-        return arrow::Decimal128(0);
     }
 }
 
-arrow::Decimal128 cast_decimal_to_decimal_scalar_safe_py_entry(
-    arrow::Decimal128 val, int64_t shift_amount, int64_t max_power_of_ten,
-    bool* safe) {
+void cast_decimal_to_decimal_scalar_safe_py_entry(
+    uint64_t in_low, int64_t in_high, int64_t shift_amount,
+    int64_t max_power_of_ten, bool* safe, uint64_t* out_low_ptr,
+    int64_t* out_high_ptr) {
     try {
+        arrow::Decimal128 val = arrow::Decimal128(in_high, in_low);
         bool safe_cast = val.FitsInPrecision(max_power_of_ten);
         *safe = safe_cast;
         if (!safe_cast) {
-            return val;
+            *out_low_ptr = in_low;
+            *out_high_ptr = in_high;
         } else {
-            return shift_decimal_scalar(val, shift_amount);
+            arrow::Decimal128 res = shift_decimal_scalar(val, shift_amount);
+            *out_low_ptr = res.low_bits();
+            *out_high_ptr = res.high_bits();
         }
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
-        return arrow::Decimal128(0);
     }
 }
 
@@ -316,10 +325,9 @@ array_info* cast_decimal_to_decimal_array_safe_py_entry(
     }
 }
 
-double decimal_to_double_py_entry(decimal_value val, uint8_t scale) {
-    auto high = static_cast<uint64_t>(val.high);
-    auto low = static_cast<uint64_t>(val.low);
-    return decimal_to_double((static_cast<__int128>(high) << 64) | low, scale);
+double decimal_to_double_py_entry(uint64_t low, uint64_t high, uint8_t scale) {
+    return decimal_to_double((static_cast<__int128_t>(high) << 64) | low,
+                             scale);
 }
 
 /**
@@ -409,7 +417,8 @@ array_info* decimal_array_sign_py_entry(array_info* arr_) {
     }
 }
 
-int8_t decimal_scalar_sign_py_entry(arrow::Decimal128 val) {
+int8_t decimal_scalar_sign_py_entry(uint64_t in_low, int64_t in_high) {
+    arrow::Decimal128 val = arrow::Decimal128(in_high, in_low);
     return val == arrow::Decimal128(0) ? 0 : val.Sign();
 }
 
@@ -420,10 +429,12 @@ int8_t decimal_scalar_sign_py_entry(arrow::Decimal128 val) {
  * @param[out] is_null The pointer used to indicate whether the final answer is
  * null.
  * @param[in] parallel Do we need a parallel merge step.
- * @return arrow::Decimal128
+ * @param[out] out_low_ptr Pointer to the low 64 bits of the result.
+ * @param[out] out_high_ptr Pointer to the high 64 bits of the result.
  */
-arrow::Decimal128 sum_decimal_array_py_entry(array_info* arr_raw, bool* is_null,
-                                             bool parallel) noexcept {
+void sum_decimal_array_py_entry(array_info* arr_raw, bool* is_null,
+                                bool parallel, uint64_t* out_low_ptr,
+                                int64_t* out_high_ptr) noexcept {
     try {
         std::shared_ptr<array_info> arr = std::shared_ptr<array_info>(arr_raw);
 
@@ -465,12 +476,13 @@ arrow::Decimal128 sum_decimal_array_py_entry(array_info* arr_raw, bool* is_null,
         // array.
         *is_null =
             !out_arr->get_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(0);
-        return out_arr
-            ->data1<bodo_array_type::NULLABLE_INT_BOOL, arrow::Decimal128>()[0];
-
+        arrow::Decimal128 result =
+            out_arr->data1<bodo_array_type::NULLABLE_INT_BOOL,
+                           arrow::Decimal128>()[0];
+        *out_low_ptr = result.low_bits();
+        *out_high_ptr = result.high_bits();
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
-        return arrow::Decimal128(0);
     }
 }
 
@@ -598,17 +610,21 @@ arrow::Decimal128 add_or_subtract_decimal_scalars_util(
 /**
  * @brief Python entrypoint for addition and subtraction of decimal scalars.
  */
-arrow::Decimal128 add_or_subtract_decimal_scalars_py_entry(
-    arrow::Decimal128 v1, int64_t p1, int64_t s1, arrow::Decimal128 v2,
-    int64_t p2, int64_t s2, int64_t out_precision, int64_t out_scale,
+void add_or_subtract_decimal_scalars_py_entry(
+    uint64_t v1_low, int64_t v1_high, int64_t p1, int64_t s1, uint64_t v2_low,
+    int64_t v2_high, int64_t p2, int64_t s2, int64_t out_precision,
+    int64_t out_scale, uint64_t* out_low_ptr, uint64_t* out_high_ptr,
     bool do_addition, bool* overflow) noexcept {
     try {
-        return add_or_subtract_decimal_scalars_util(v1, p1, s1, v2, p2, s2,
-                                                    out_precision, out_scale,
-                                                    do_addition, overflow);
+        arrow::Decimal128 v1(v1_high, v1_low);
+        arrow::Decimal128 v2(v2_high, v2_low);
+        arrow::Decimal128 res = add_or_subtract_decimal_scalars_util(
+            v1, p1, s1, v2, p2, s2, out_precision, out_scale, do_addition,
+            overflow);
+        *out_low_ptr = res.low_bits();
+        *out_high_ptr = res.high_bits();
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
-        return arrow::Decimal128(0);
     }
 }
 
@@ -842,16 +858,22 @@ arrow::Decimal128 multiply_decimal_scalars_util(
 /**
  * @brief Python entry point to multiply two decimal scalars.
  */
-arrow::Decimal128 multiply_decimal_scalars_py_entry(
-    arrow::Decimal128 v1, int64_t p1, int64_t s1, arrow::Decimal128 v2,
-    int64_t p2, int64_t s2, int64_t out_precision, int64_t out_scale,
-    bool* overflow) noexcept {
+void multiply_decimal_scalars_py_entry(uint64_t v1_low, int64_t v1_high,
+                                       int64_t p1, int64_t s1, uint64_t v2_low,
+                                       int64_t v2_high, int64_t p2, int64_t s2,
+                                       int64_t out_precision, int64_t out_scale,
+                                       uint64_t* out_low_ptr,
+                                       uint64_t* out_high_ptr,
+                                       bool* overflow) noexcept {
     try {
-        return multiply_decimal_scalars_util(
+        arrow::Decimal128 v1(v1_high, v1_low);
+        arrow::Decimal128 v2(v2_high, v2_low);
+        arrow::Decimal128 res = multiply_decimal_scalars_util(
             v1, p1, s1, v2, p2, s2, out_precision, out_scale, overflow);
+        *out_low_ptr = res.low_bits();
+        *out_high_ptr = res.high_bits();
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
-        return arrow::Decimal128(0);
     }
 }
 
@@ -1038,24 +1060,32 @@ inline void modulo_decimal_scalars(const arrow::Decimal128& d1,
  * the provided output scale. If overflow is detected, then the overflow
  * need to be updated to true.
  *
- * @param v1 First decimal value
+ * @param[in] v1_low The low 64 bits of the first Decimal128 argument.
+ * @param[in] v1_high The high 64 bits of the first Decimal128 argument.
  * @param p1 Precision of first decimal value
  * @param s1 Scale of first decimal value
- * @param v2 Second decimal value
+ * @param[in] v2_low The low 64 bits of the second Decimal128 argument.
+ * @param[in] v2_high The high 64 bits of the second Decimal128 argument.
  * @param p2 Precision of second decimal value
  * @param s2 Scale of second decimal value
  * @param out_precision Output precision
  * @param out_scale Output scale
- * @return arrow::Decimal128
+ * @param[out] out_low_ptr Pointer to the low 64 bits of the result.
+ * @param[out] out_high_ptr Pointer to the high 64 bits of the result.
  */
-arrow::Decimal128 modulo_decimal_scalars_py_entry(
-    arrow::Decimal128 v1, int64_t p1, int64_t s1, arrow::Decimal128 v2,
-    int64_t p2, int64_t s2, int64_t out_precision, int64_t out_scale) noexcept {
+void modulo_decimal_scalars_py_entry(uint64_t v1_low, int64_t v1_high,
+                                     int64_t p1, int64_t s1, uint64_t v2_low,
+                                     int64_t v2_high, int64_t p2, int64_t s2,
+                                     int64_t out_precision, int64_t out_scale,
+                                     uint64_t* out_low_ptr,
+                                     uint64_t* out_high_ptr) noexcept {
     try {
         // We only need to do safe checks if there is a chance that either side
         // could be rescaled into an invalid value.
         bool fast_mod = out_precision < decimalops::kMaxPrecision ||
                         (s1 == out_scale && s2 == out_scale);
+        arrow::Decimal128 v1(v1_high, v1_low);
+        arrow::Decimal128 v2(v2_high, v2_low);
         arrow::Decimal128 result;
         if (fast_mod) {
             if (s1 < s2) {
@@ -1080,11 +1110,10 @@ arrow::Decimal128 modulo_decimal_scalars_py_entry(
                                                             out_scale, &result);
             }
         }
-
-        return result;
+        *out_low_ptr = result.low_bits();
+        *out_high_ptr = result.high_bits();
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
-        return arrow::Decimal128(0);
     }
 }
 
@@ -1242,31 +1271,43 @@ array_info* modulo_decimal_arrays_py_entry(array_info* arr1_, array_info* arr2_,
  * the provided output scale. If overflow is detected, then the overflow
  * need to be updated to true.
  *
- * @param v1 First decimal value
+ * @param[in] v1_low The low 64 bits of the first Decimal128 argument.
+ * @param[in] v1_high The high 64 bits of the first Decimal128 argument.
  * @param p1 Precision of first decimal value
  * @param s1 Scale of first decimal value
- * @param v2 Second decimal value
+ * @param[in] v2_low The low 64 bits of the second Decimal128 argument.
+ * @param[in] v2_high The high 64 bits of the second Decimal128 argument.
  * @param p2 Precision of second decimal value
  * @param s2 Scale of second decimal value
  * @param out_precision Output precision
  * @param out_scale Output scale
+ * @param[out] out_low_ptr Pointer to the low 64 bits of the result.
+ * @param[out] out_high_ptr Pointer to the high 64 bits of the result.
  * @param[out] overflow Overflow flag
  * @param do_div0 If true, return 0 if v2 is 0, otherwise return v1/v2
- * @return arrow::Decimal128
  */
-arrow::Decimal128 divide_decimal_scalars_py_entry(
-    arrow::Decimal128 v1, int64_t p1, int64_t s1, arrow::Decimal128 v2,
-    int64_t p2, int64_t s2, int64_t out_precision, int64_t out_scale,
-    bool* overflow, bool do_div0 = false) noexcept {
+void divide_decimal_scalars_py_entry(uint64_t v1_low, int64_t v1_high,
+                                     int64_t p1, int64_t s1, uint64_t v2_low,
+                                     int64_t v2_high, int64_t p2, int64_t s2,
+                                     int64_t out_precision, int64_t out_scale,
+                                     uint64_t* out_low_ptr,
+                                     uint64_t* out_high_ptr, bool* overflow,
+                                     bool do_div0 = false) noexcept {
     try {
+        arrow::Decimal128 v1(v1_high, v1_low);
+        arrow::Decimal128 v2(v2_high, v2_low);
         if (do_div0 && v2 == 0) {
-            return arrow::Decimal128(0);
+            *out_low_ptr = 0;
+            *out_high_ptr = 0;
+            return;
         }
         int32_t delta_scale = out_scale + s2 - s1;
-        return decimalops::Divide(v1, v2, delta_scale, overflow);
+        arrow::Decimal128 res =
+            decimalops::Divide(v1, v2, delta_scale, overflow);
+        *out_low_ptr = res.low_bits();
+        *out_high_ptr = res.high_bits();
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
-        return arrow::Decimal128(0);
     }
 }
 
@@ -1435,19 +1476,24 @@ inline void round_decimal_scalar(const arrow::Decimal128& value,
  * This function is a Python entry point to round a Decimal128 value to a
  * specified scale by calling the `round_decimal_scalar` C++ function.
  *
- * @param value The Decimal128 value to be rounded.
- * @param round_scale The scale to which the value should be rounded.
- * @param input_s The scale of the input value.
- * @param overflow Pointer to a boolean that indicates if an overflow occurred.
- * @return The rounded Decimal128 value.
+ * @param[in] in_low The low 64 bits of the Decimal128 to be rounded.
+ * @param[in] in_high The high 64 bits of the Decimal128 to be rounded.
+ * @param[in] round_scale The scale to which the value should be rounded.
+ * @param[in] input_s The scale of the input value.
+ * @param[out] overflow Pointer to a boolean that indicates if an overflow
+ * occurred.
+ * @param[out] out_low_ptr Pointer to the low 64 bits of the result.
+ * @param[out] out_high_ptr Pointer to the high 64 bits of the result.
  */
-arrow::Decimal128 round_decimal_scalar_py_entry(arrow::Decimal128 value,
-                                                int64_t round_scale,
-                                                int64_t input_p,
-                                                int64_t input_s,
-                                                bool* overflow) noexcept {
+void round_decimal_scalar_py_entry(uint64_t in_low, int64_t in_high,
+                                   int64_t round_scale, int64_t input_p,
+                                   int64_t input_s, bool* overflow,
+                                   uint64_t* out_low_ptr,
+                                   uint64_t* out_high_ptr) noexcept {
     arrow::Decimal128 result;
     try {
+        arrow::Decimal128 value = arrow::Decimal128(in_high, in_low);
+
         if (round_scale < 0) {
             if (input_p != 38) {
                 round_decimal_scalar<true, true>(value, round_scale, input_s,
@@ -1461,10 +1507,11 @@ arrow::Decimal128 round_decimal_scalar_py_entry(arrow::Decimal128 value,
             round_decimal_scalar<false, false>(value, round_scale, input_s,
                                                overflow, &result);
         }
+        *out_low_ptr = result.low_bits();
+        *out_high_ptr = result.high_bits();
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
     }
-    return result;
 }
 
 /**
@@ -1560,23 +1607,27 @@ array_info* round_decimal_array_py_entry(array_info* arr_, int64_t round_scale,
  * @brief Python entrypoint for taking the ceil or floor of a given Decimal128
  * value.
  *
- * @param value The Decimal128 value
- * @param input_p The precision of the input decimal value.
- * @param input_s The scale of the input decimal value.
- * @param round_scale The scale to which the value should be rounded. Negative
- * scales indicate rounding to the left of the decimal point.
- * @param is_ceil A boolean indicating whether to apply the ceiling (true) or
- * floor (false) operation.
- * @return The resulting Decimal128 value.
+ * @param[in] in_low The low 64 bits of the input Decimal128 value.
+ * @param[in] in_high The high 64 bits of the input Decimal128 value.
+ * @param[in] input_p The precision of the input decimal value.
+ * @param[in] input_s The scale of the input decimal value.
+ * @param[in] round_scale The scale to which the value should be rounded.
+ * Negative scales indicate rounding to the left of the decimal point.
+ * @param[in] is_ceil A boolean indicating whether to apply the ceiling (true)
+ * or floor (false) operation.
+ * @param[out] out_low_ptr A pointer to the low 64 bits of the result.
+ * @param[out] out_high_ptr A pointer to the high 64 bits of the result.
  */
-arrow::Decimal128 ceil_floor_decimal_scalar_py_entry(arrow::Decimal128 value,
-                                                     int32_t input_p,
-                                                     int32_t input_s,
-                                                     int32_t round_scale,
-                                                     bool is_ceil) {
+void ceil_floor_decimal_scalar_py_entry(uint64_t in_low, int64_t in_high,
+                                        int32_t input_p, int32_t input_s,
+                                        int32_t round_scale, bool is_ceil,
+                                        uint64_t* out_low_ptr,
+                                        int64_t* out_high_ptr) {
     arrow::Decimal128 result;
     try {
         bool overflow = false;
+        arrow::Decimal128 value = arrow::Decimal128(in_high, in_low);
+
         if (is_ceil) {
             if (round_scale < 0) {
                 result = decimalops::Ceil<true>(value, input_p, input_s,
@@ -1597,10 +1648,10 @@ arrow::Decimal128 ceil_floor_decimal_scalar_py_entry(arrow::Decimal128 value,
         if (overflow) {
             throw std::runtime_error("Number out of representable range");
         }
-        return result;
+        *out_low_ptr = result.low_bits();
+        *out_high_ptr = result.high_bits();
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
-        return arrow::Decimal128(0);
     }
 }
 
@@ -1709,20 +1760,26 @@ array_info* ceil_floor_decimal_array_py_entry(array_info* arr_,
 /**
  * @brief Python entrypoint for truncating a given Decimal128 value.
  *
- * @param value The Decimal128 value
- * @param input_p The precision of the input decimal value.
- * @param input_s The scale of the input decimal value.
- * @param round_scale The scale to which the value should be truncated. Negative
- * scales indicate truncating to the left of the decimal point.
- * @param overflow A pointer to a boolean indicating overflow.
- * @return The resulting Decimal128 value.
+ * @param[in] in_low The low 64 bits of the the Decimal128 value to truncate.
+ * @param[in] in_high The high 64 bits Decimal128 value.
+ * @param[in] input_p The precision of the input decimal value.
+ * @param[in] input_s The scale of the input decimal value.
+ * @param[in] round_scale The scale to which the value should be truncated.
+ * Negative scales indicate truncating to the left of the decimal point.
+ * @param[out] overflow A pointer to a boolean indicating overflow.
+ * @param[out] out_low_ptr A pointer to the low 64 bits of the result.
+ * @param[out] out_high_ptr A pointer to the high 64 bits of the result.
  */
-arrow::Decimal128 trunc_decimal_scalar_py_entry(
-    arrow::Decimal128 value, int32_t input_p, int32_t input_s, int32_t output_p,
-    int32_t output_s, int32_t round_scale) {
+void trunc_decimal_scalar_py_entry(uint64_t in_low, int64_t in_high,
+                                   int32_t input_p, int32_t input_s,
+                                   int32_t output_p, int32_t output_s,
+                                   int32_t round_scale, uint64_t* out_low_ptr,
+                                   int64_t* out_high_ptr) {
     arrow::Decimal128 result;
     bool overflow = false;
     try {
+        arrow::Decimal128 value = arrow::Decimal128(in_high, in_low);
+
         if (round_scale < 0) {
             result =
                 decimalops::Truncate<true>(value, input_p, input_s, output_p,
@@ -1735,10 +1792,10 @@ arrow::Decimal128 trunc_decimal_scalar_py_entry(
         if (overflow) {
             throw std::runtime_error("Number out of representable range");
         }
-        return result;
+        *out_low_ptr = result.low_bits();
+        *out_high_ptr = result.high_bits();
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
-        return arrow::Decimal128(0);
     }
 }
 
@@ -1826,17 +1883,23 @@ array_info* trunc_decimal_array_py_entry(array_info* arr_, int32_t output_p,
 /**
  * Computes the absolute value of a given decimal scalar.
  *
- * @param val The decimal value for which the absolute value is to be computed.
- * @return The absolute value of the input as a scalar.
+ * @param[in] in_low The low 64 bits of the decimal value for which the absolute
+ * value is to be computed.
+ * @param[in] in_high The high 64 bits of the decimal value for which the
+ * absolute value is to be computed.
+ * @param[out] out_low_ptr Pointer to the low 64 bits of the result.
+ * @param[out] out_high_ptr Pointer to the high 64 bits of the result.
  */
-arrow::Decimal128 abs_decimal_scalar_py_entry(arrow::Decimal128 val) {
-    arrow::Decimal128 result;
+void abs_decimal_scalar_py_entry(uint64_t in_low, int64_t in_high,
+                                 uint64_t* out_low_ptr, int64_t* out_high_ptr) {
     try {
-        result = val.Abs();
+        arrow::Decimal128 val = arrow::Decimal128(in_high, in_low);
+        arrow::Decimal128 result = val.Abs();
+        *out_low_ptr = result.low_bits();
+        *out_high_ptr = result.high_bits();
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
     }
-    return result;
 }
 
 /**
@@ -1865,11 +1928,11 @@ array_info* abs_decimal_array_py_entry(array_info* arr_) {
                     out_arr->data1<bodo_array_type::NULLABLE_INT_BOOL,
                                    arrow::Decimal128>() +
                     i;
-                const arrow::Decimal128& in_val =
+                arrow::Decimal128& in_val =
                     *(arr->data1<bodo_array_type::NULLABLE_INT_BOOL,
                                  arrow::Decimal128>() +
                       i);
-                *out_ptr = abs_decimal_scalar_py_entry(in_val);
+                *out_ptr = in_val.Abs();
             }
         }
         return new array_info(*out_arr);
@@ -1918,17 +1981,22 @@ arrow::Decimal128 factorial_decimal_scalar(arrow::Decimal128 val,
 /**
  * @brief Python entry point for taking the factorial of a decimal scalar.
  *
- * @param val Input decimal
- * @param input_s Scale of the input
- * @return arrow::Decimal128 Result of the factorial
+ * @param[in] in_low Low 64 bits of the input decimal.
+ * @param[in] in_high High 64 bits of the input decimal.
+ * @param[in] input_s Scale of the input
+ * @param[out] out_low_ptr Pointer to the low 64 bits of the result.
+ * @param[out] out_high_ptr Pointer to the high 64 bits of the result.
  */
-arrow::Decimal128 factorial_decimal_scalar_py_entry(arrow::Decimal128 val,
-                                                    int64_t input_s) {
+void factorial_decimal_scalar_py_entry(uint64_t in_low, int64_t in_high,
+                                       int64_t input_s, uint64_t* out_low,
+                                       int64_t* out_high) {
     try {
-        return factorial_decimal_scalar(val, input_s);
+        arrow::Decimal128 val = arrow::Decimal128(in_high, in_low);
+        arrow::Decimal128 out = factorial_decimal_scalar(val, input_s);
+        *out_low = out.low_bits();
+        *out_high = out.high_bits();
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
-        return arrow::Decimal128(0);
     }
 }
 
@@ -1974,17 +2042,18 @@ array_info* factorial_decimal_array_py_entry(array_info* arr_) {
 /**
  * @brief Convert decimal value to int64 (unsafe cast)
  *
- * @param val input decimal value
+ * @param in_low low 64 bits of the input decimal
+ * @param in_high high 64 bits of the input decimal
  * @param precision input's precision
  * @param scale input's scale
  * @return int64_t input converted to int64
  */
-int64_t decimal_to_int64_py_entry(decimal_value val, uint8_t precision,
-                                  uint8_t scale) {
+int64_t decimal_to_int64_py_entry(uint64_t in_low, int64_t in_high,
+                                  uint8_t precision, uint8_t scale) {
     try {
         // NOTE: using cast to allow unsafe cast (Rescale/ToInteger may throw
         // data loss error)
-        arrow::Decimal128 arrow_decimal(val.high, val.low);
+        arrow::Decimal128 arrow_decimal(in_high, in_low);
         arrow::Decimal128Scalar val_scalar(arrow_decimal,
                                            arrow::decimal128(precision, scale));
 
@@ -2061,26 +2130,26 @@ void copy_integer_arr_to_decimal_arr(std::shared_ptr<array_info>& int_arr,
     }
 }
 
-arrow::Decimal128 cast_float_to_decimal_scalar_py_entry(double f,
-                                                        int32_t precision,
-                                                        int32_t scale,
-                                                        bool* safe) {
+void cast_float_to_decimal_scalar_py_entry(double f, int32_t precision,
+                                           int32_t scale, bool* safe,
+                                           uint64_t* out_low_ptr,
+                                           int64_t* out_high_ptr) {
     try {
+        arrow::Decimal128 answer;
         double max_value = std::pow(10.0, precision - scale);
         bool safe_cast = std::abs(f) < max_value;
         *safe = safe_cast;
         if (!safe_cast) {
-            return arrow::Decimal128(0);
+            answer = arrow::Decimal128(0);
         } else {
-            arrow::Decimal128 answer;
             auto result = arrow::Decimal128::FromReal(f, precision, scale);
             CHECK_ARROW_AND_ASSIGN(result, "failed to convert float to decimal",
                                    answer)
-            return answer;
         }
+        *out_low_ptr = answer.low_bits();
+        *out_high_ptr = answer.high_bits();
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
-        return arrow::Decimal128(0);
     }
 }
 
@@ -2238,9 +2307,10 @@ decimal_value int64_to_decimal(int64_t value) {
 
 void unbox_decimal(PyObject* obj, uint8_t* data);
 
-PyObject* box_decimal(decimal_value val, int8_t precision, int8_t scale) {
+PyObject* box_decimal(uint64_t low, int64_t high, int8_t precision,
+                      int8_t scale) {
     // convert input to Arrow scalar
-    arrow::Decimal128 arrow_decimal(val.high, val.low);
+    arrow::Decimal128 arrow_decimal(high, low);
     std::shared_ptr<arrow::Decimal128Scalar> scalar =
         std::make_shared<arrow::Decimal128Scalar>(
             arrow_decimal, arrow::decimal128(precision, scale));
@@ -2249,7 +2319,7 @@ PyObject* box_decimal(decimal_value val, int8_t precision, int8_t scale) {
     return arrow::py::wrap_scalar(scalar);
 }
 
-void decimal_to_str(decimal_value val, NRT_MemInfo** meminfo_ptr,
+void decimal_to_str(uint64_t in_low, int64_t in_high, NRT_MemInfo** meminfo_ptr,
                     int64_t* len_ptr, int scale, bool remove_trailing_zeroes);
 
 /**
@@ -2554,17 +2624,21 @@ arrow::Decimal128 str_to_decimal_scalar(const std::string_view& str_val,
  * @param str_val The string value to convert.
  * @param precision The output precision.
  * @param scale The output scale.
+ * @param[out] out_low low 64 bits of output.
+ * @param[out] out_high high 64 bits of output.
  * @param[out] error If an error occurs, set this to true.
- * @return arrow::Decimal128
  */
-arrow::Decimal128 str_to_decimal_scalar_py_entry(const std::string& str_val,
-                                                 int64_t precision,
-                                                 int64_t scale, bool* error) {
+void str_to_decimal_scalar_py_entry(const std::string* str_val,
+                                    int64_t precision, int64_t scale,
+                                    uint64_t* out_low, int64_t* out_high,
+                                    bool* error) {
     try {
-        return str_to_decimal_scalar(str_val, precision, scale, error);
+        arrow::Decimal128 res =
+            str_to_decimal_scalar(*str_val, precision, scale, error);
+        *out_low = res.low_bits();
+        *out_high = res.high_bits();
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
-        return arrow::Decimal128(0);
     }
 }
 
@@ -2818,16 +2892,17 @@ void unbox_decimal(PyObject* pa_decimal_obj, uint8_t* data_ptr) {
  * @brief convert decimal128 value to string and create a memptr pointer with
  * the data
  *
- * @param val decimal128 input value
+ * @param in_low low 64 bits of the input value
+ * @param in_high high 64 bits of the input value
  * @param meminfo_ptr output memptr pointer to set
  * @param len_ptr output length to set
  * @param scale scale parameter of decimal128
  */
-void decimal_to_str(decimal_value val, NRT_MemInfo** meminfo_ptr,
+void decimal_to_str(uint64_t in_low, int64_t in_high, NRT_MemInfo** meminfo_ptr,
                     int64_t* len_ptr, int scale,
                     bool remove_trailing_zeroes = true) {
     // Creating the arrow_decimal value
-    arrow::Decimal128 arrow_decimal(val.high, val.low);
+    arrow::Decimal128 arrow_decimal(in_high, in_low);
     // Getting the string
     std::string str;
     if (remove_trailing_zeroes) {

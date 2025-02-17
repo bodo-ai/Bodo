@@ -3,7 +3,7 @@
 #include "../_array_utils.h"
 #include "../_bodo_common.h"
 #include "../_dict_builder.h"
-// Not directly used, but for defining std::hash<__int128>
+// Not directly used, but for defining std::hash<__int128_t>
 #include "_groupby_hashing.h"
 
 /**

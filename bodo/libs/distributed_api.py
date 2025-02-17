@@ -692,15 +692,13 @@ def dist_reduce_impl(value, reduce_op, comm):
             types.int32,
             types.float32,
             types.float64,
+            types.int64,
+            bodo.datetime64ns,
+            bodo.timedelta64ns,
+            bodo.datetime_date_type,
+            bodo.TimeType,
         ]
-        # TODO: Support uint64
-        if not sys.platform.startswith("win"):
-            # long is 4 byte on Windows
-            supported_typs.append(types.int64)
-            supported_typs.append(bodo.datetime64ns)
-            supported_typs.append(bodo.timedelta64ns)
-            supported_typs.append(bodo.datetime_date_type)
-            supported_typs.append(bodo.TimeType)
+
         if target_typ not in supported_typs and not isinstance(
             target_typ, (bodo.Decimal128Type, bodo.PandasTimestampType)
         ):  # pragma: no cover

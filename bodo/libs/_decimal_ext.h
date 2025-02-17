@@ -5,10 +5,10 @@
 
 #define DECIMAL128_MAX_PRECISION 38
 
-std::string int128_decimal_to_std_string(__int128 const& value,
+std::string int128_decimal_to_std_string(__int128_t const& value,
                                          int const& scale);
 
-double decimal_to_double(__int128 const& val, uint8_t scale = 18);
+double decimal_to_double(__int128_t const& val, uint8_t scale = 18);
 
 /**
  * @brief Add or subtract two decimal scalars with the given precision and scale

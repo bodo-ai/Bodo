@@ -5,6 +5,10 @@
 
 #include "../libs/_memory.h"
 
+#ifdef _WIN32
+#define timegm _mkgmtime
+#endif
+
 int Parser::consume_char(char c) {
     if (pos >= ts_str.size()) {
         return -1;
@@ -113,17 +117,17 @@ int Parser::parse_nanoseconds() {
 
 // TODO(aneesh): The error checking might not be needed in practice - we could
 // optimize it out unless it's a debug build.
-#define CHECK(expr...)                                                       \
-    ({                                                                       \
-        auto v = expr;                                                       \
+#define CHECK(expr)                                                          \
+    [&]() {                                                                  \
+        int v = expr;                                                        \
         if (v == -1) {                                                       \
             std::string msg = "Invalid timestamp: Failed executing: " #expr; \
             msg += "\n\tat position " + std::to_string(pos);                 \
             msg += "\n\tin string: " + std::string(ts_str);                  \
             throw std::runtime_error(msg);                                   \
         }                                                                    \
-        v;                                                                   \
-    })
+        return v;                                                            \
+    }()
 
 #define CHECK_CHAR(c) CHECK(consume_char(c))
 
