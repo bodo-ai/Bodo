@@ -4034,7 +4034,7 @@ class TypingTransforms:
         table_id: str = (
             f"{database_schema}.{table_name}" if database_schema else table_name
         )
-        (col_names, orig_arr_types, pyarrow_table_schema, arr_types) = (
+        (orig_col_names, orig_arr_types, pyarrow_table_schema, col_names, arr_types) = (
             bodo.io.iceberg.get_orig_and_runtime_schema(
                 con_str,
                 table_id,
@@ -4125,7 +4125,7 @@ class TypingTransforms:
                 used_cols=columns_obj,
                 initial_filter=filter_obj,
                 initial_limit=limit_obj,
-                orig_col_names=col_names,
+                orig_col_names=orig_col_names,
                 orig_col_types=orig_arr_types,
                 sql_op_id=_bodo_sql_op_id_const,
                 dict_encode_in_bodo=dict_encode_in_bodo,

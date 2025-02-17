@@ -486,22 +486,21 @@ def fpath_without_protocol_prefix(fpath: str) -> str:
     parsed_url = urlparse(fpath)
     protocol = parsed_url.scheme
 
-    if protocol in {"abfs", "abfss"} and bodo.enable_azure_fs:  # pragma: no cover
+    if (
+        protocol in {"abfs", "abfss", "wasb", "wasbs"} and bodo.enable_azure_fs
+    ):  # pragma: no cover
         # PyArrow AzureBlobFileSystem is initialized with account_name only
         # so the host / container name should be included in the files
-        prefix = f"{protocol}://"
+        url = urlparse(fpath)
+        container = (
+            parsed_url.netloc if parsed_url.username is None else parsed_url.username
+        )
+        return f"{container}{url.path}"
 
-        def norm_path(p: str) -> str:
-            url = urlparse(p)
-            container = (
-                parsed_url.netloc
-                if parsed_url.username is None
-                else parsed_url.username
-            )
-            return f"{container}{url.path}"
-
-        mod_fpath = norm_path(fpath)
-        return mod_fpath
+    if protocol in {"wasb", "wasbs"}:
+        raise BodoError(
+            "PyArrow AzureFileSystem support is required for reading this dataset"
+        )
 
     prefix = ""
 

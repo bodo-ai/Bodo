@@ -290,7 +290,7 @@ def test_implicit_dict_encoding(
             )
 
 
-@pytest.mark.slow
+@pytest.mark.skip(reason="[BSE-4569] MERGE INTO with PyIceberg is not supported yet")
 def test_merge_into_simple(iceberg_database, iceberg_table_conn):
     table_name = "TEST_MERGE_INTO_SIMPLE_TBL"
     db_schema, warehouse_loc = iceberg_database(table_name)
@@ -346,7 +346,7 @@ def test_merge_into_simple(iceberg_database, iceberg_table_conn):
     )
 
 
-@pytest.mark.slow
+@pytest.mark.skip(reason="[BSE-4569] MERGE INTO with PyIceberg is not supported yet")
 def test_merge_into_simple_2(iceberg_database, iceberg_table_conn):
     table_name = "TEST_MERGE_INTO_SIMPLE_TBL2"
     db_schema, warehouse_loc = iceberg_database(table_name)

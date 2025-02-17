@@ -5,10 +5,10 @@ import pandas as pd
 import pyarrow.fs as pa_fs
 import pytest
 from pyiceberg.catalog.rest import RestCatalog
-from pyiceberg.io.pyarrow import _fs_from_file_path
 
 import bodo
 from bodo.io.iceberg.catalog import conn_str_to_catalog
+from bodo.io.iceberg.common import _fs_from_file_path
 from bodo.tests.utils import (
     _get_dist_arg,
     check_func,
