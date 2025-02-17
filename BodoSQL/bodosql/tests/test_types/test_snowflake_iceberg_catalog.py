@@ -512,7 +512,6 @@ def test_azure_basic_read(memory_leak_check):
     )
 
 
-@pytest.mark.skip(reason="WRITE")
 def test_azure_basic_write(memory_leak_check):
     """
     Test writing an Iceberg table from Snowflake in SQL with

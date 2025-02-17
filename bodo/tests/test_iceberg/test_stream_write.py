@@ -45,7 +45,7 @@ from bodo.tests.utils import (
 )
 from bodo.utils.utils import run_rank0
 
-pytestmark = [pytest.mark.iceberg, pytest.mark.skip(reason="WRITE")]
+pytestmark = pytest.mark.iceberg
 
 
 def _write_iceberg_table(
