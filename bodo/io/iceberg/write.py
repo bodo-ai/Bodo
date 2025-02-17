@@ -593,8 +593,11 @@ def list_field_names(
     for field in df_schema:
         if pa.types.is_struct(field.type):
             yield from list_field_names(field.type, prefix + field.name + ".")
-        if pa.types.is_list(field.type) or pa.types.is_large_list(field.type):
+        elif pa.types.is_list(field.type) or pa.types.is_large_list(field.type):
             yield prefix + field.name + ".element"
+        elif pa.types.is_map(field.type):
+            yield prefix + field.name + ".key"
+            yield prefix + field.name + ".value"
         else:
             yield prefix + field.name
 
@@ -722,7 +725,6 @@ def start_write_rank_0(
         table = catalog.load_table(table_id)
         txn = table.transaction()
         txn.delete(ALWAYS_TRUE)
-        txn.remove_properties(*table.properties.keys())
         txn.set_properties(properties)
         if assign_fresh_schema_ids(output_schema) != assign_fresh_schema_ids(
             table.schema()
