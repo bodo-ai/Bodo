@@ -30,6 +30,10 @@ jobs:
 
   steps:
   - bash: |
+      if [[ "$(Agent.OS)" == "Windows_NT" ]]; then
+        echo "Hello world from Windows CI!"
+      fi
+
       set -exo pipefail
       curl -fsSL https://pixi.sh/install.sh | bash
       source ~/.bashrc
@@ -114,7 +118,7 @@ jobs:
         export CLASSPATH=`$HADOOP_HOME/bin/hdfs classpath --glob`
       elif [[ "$(Agent.OS)" == "Windows_NT" ]]; then
         # On Windows we set HADOOP_HOME to a dummy directory.
-        # Spark need to verify HADOOP_HOME exists at initialization if it is unused.
+        # Spark needs to verify HADOOP_HOME exists at initialization even if it is not used.
         export HADOOP_HOME="$(System.DefaultWorkingDirectory)/buildscripts/local_utils/hadoop_dummy"
       else
         echo "Skipping hadoop/arrow env var setup"
