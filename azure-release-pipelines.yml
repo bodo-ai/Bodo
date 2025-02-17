@@ -22,6 +22,9 @@ parameters:
     displayName: Agent Pool
     type: string
     default: 'ScalingVMSet'
+    values:
+    - 'ScalingVMSet'
+    - 'windows-ci'
 
 # NOTE: these variables determine artifactory channel to publish Bodo/BodoSQL/Iceberg packages.
 # See get_channel.sh
@@ -41,8 +44,11 @@ variables:
   bodosql_2p_total: 22
 
 stages:
-- stage: Test_Bodo_x86
-  displayName: 'Test Bodo on Linux x86'
+- stage: Test_Bodo
+  ${{ if eq(variables['Agent.OS'], 'Windows_NT') }}:
+    displayName: 'Test Bodo on Windows'
+  ${{ else }}:
+    displayName: 'Test Bodo on Linux x86'
   dependsOn: []
   jobs:
   - template: buildscripts/bodo/azure/azure-test-conda-linux-macos.yml
