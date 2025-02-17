@@ -399,6 +399,7 @@ def overload_start_write_wrapper(
         df_schema,
         create_table_info,
     ):  # pragma: no cover
+        conn_wrapper_to_str(conn)
         with bodo.no_warning_objmode(
             txn=transaction_type,
             fs="pyarrow_fs_type",
