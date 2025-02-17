@@ -25,7 +25,7 @@ from bodo.tests.iceberg_database_helpers.utils import (
 from bodo.tests.utils import _get_dist_arg
 from bodo.utils.utils import run_rank0
 
-pytestmark = [pytest.mark.iceberg, pytest.mark.skip(reason="WRITE")]
+pytestmark = pytest.mark.iceberg
 
 
 def write_iceberg_table_with_puffin_files(df, table_id, conn, write_type):
