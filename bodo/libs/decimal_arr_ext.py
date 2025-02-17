@@ -319,9 +319,7 @@ def decimal_max(lhs, rhs):
 
 
 @intrinsic(prefer_literal=True)
-def _str_to_decimal_scalar(
-    typingctx, val, precision_tp, scale_tp, remove_trailing_zeros=False
-):
+def _str_to_decimal_scalar(typingctx, val, precision_tp, scale_tp):
     """convert string to decimal128. This returns a tuple of
     (Decimal128Type, bool) where the bool indicates if the value
     errored in parsing or fitting in the final decimal value."""
