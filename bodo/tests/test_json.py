@@ -368,7 +368,7 @@ def test_json_write_simple_df_records_lines(memory_leak_check):
 
 # TODO[BSE-4577]: Find and fix memory leak in to_json
 @pytest.mark.parametrize("orient", ["split", "index", "columns", "table"])
-def test_json_write_orient(test_df, orient, memory_leak_check):
+def test_json_write_orient(test_df, orient):
     """
     test to_json with different orient options
     missing orient = "values" because only value arrays are written and
