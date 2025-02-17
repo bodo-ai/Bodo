@@ -747,7 +747,7 @@ def decimal_create_cmp_op_overload(op):
                     decimal128type_to_int128(lhs),
                     np.int32(precision),
                     np.int32(scale),
-                    rhs,
+                    np.int64(rhs),
                 )
                 bodo.utils.utils.check_and_propagate_cpp_exception()
                 return out
@@ -766,7 +766,7 @@ def decimal_create_cmp_op_overload(op):
                     decimal128type_to_int128(rhs),
                     np.int32(precision),
                     np.int32(scale),
-                    lhs,
+                    np.int64(lhs),
                 )
                 bodo.utils.utils.check_and_propagate_cpp_exception()
                 return out
@@ -784,7 +784,7 @@ def decimal_create_cmp_op_overload(op):
                     decimal128type_to_int128(lhs),
                     np.int32(precision),
                     np.int32(scale),
-                    rhs,
+                    np.float64(rhs),
                 )
                 bodo.utils.utils.check_and_propagate_cpp_exception()
                 return out
@@ -803,7 +803,7 @@ def decimal_create_cmp_op_overload(op):
                     decimal128type_to_int128(rhs),
                     np.int32(precision),
                     np.int32(scale),
-                    lhs,
+                    np.float64(lhs),
                 )
                 bodo.utils.utils.check_and_propagate_cpp_exception()
                 return out
