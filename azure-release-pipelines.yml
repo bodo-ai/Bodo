@@ -21,7 +21,7 @@ parameters:
   - name: AGENT_POOL
     displayName: Agent Pool
     type: string
-    default: 'ScalingVMSet'
+    default: ''
 
 # NOTE: these variables determine artifactory channel to publish Bodo/BodoSQL/Iceberg packages.
 # See get_channel.sh
