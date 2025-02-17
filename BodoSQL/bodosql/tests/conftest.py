@@ -21,13 +21,15 @@ from pyspark.sql.types import (
 import bodo
 import bodo.utils.allocation_tracking
 import bodosql
+from bodo.io.iceberg.catalog import conn_str_to_catalog
 from bodo.tests.conftest import (  # noqa
     iceberg_database,
     memory_leak_check,
     polaris_connection,
 )
 from bodo.tests.iceberg_database_helpers.utils import get_spark
-from bodo.tests.utils import gen_nonascii_list
+from bodo.tests.utils import gen_nonascii_list, get_rest_catalog_connection_string
+from bodo.utils.utils import run_rank0
 
 # Patch to avoid PySpark's Py4j exception handler in testing.
 # See:
@@ -1951,15 +1953,36 @@ def listagg_data():
     }
 
 
+@pytest.fixture()
+def polaris_catalog_iceberg_read_df():
+    return pd.DataFrame(
+        {
+            "A": pd.array(["ally", "bob", "cassie", "david", pd.NA]),
+            "B": pd.array([10.5, -124.0, 11.11, 456.2, -8e2], dtype="float64"),
+            "C": pd.array([True, pd.NA, False, pd.NA, pd.NA], dtype="boolean"),
+        }
+    )
+
+
 @pytest.fixture
-def tabular_catalog(tabular_connection):
+def polaris_catalog(polaris_connection, polaris_catalog_iceberg_read_df):
     """
-    Returns a tabular catalog object
+    Returns a polaris catalog object
     """
 
-    _, tabular_warehouse, tabular_credential = tabular_connection
-    return bodosql.TabularCatalog(
-        warehouse=tabular_warehouse, credential=tabular_credential
+    rest_uri, polaris_warehouse, polaris_credential = polaris_connection
+    con_str = get_rest_catalog_connection_string(
+        rest_uri, polaris_warehouse, polaris_credential
+    )
+    py_catalog = conn_str_to_catalog(con_str)
+    table_id = "CI.BODOSQL_ICEBERG_READ_TEST"
+    run_rank0(
+        lambda: py_catalog.create_table(
+            table_id, pa.Schema.from_pandas(polaris_catalog_iceberg_read_df)
+        ).append(pa.Table.from_pandas(polaris_catalog_iceberg_read_df))
+    )
+    return bodosql.RESTCatalog(
+        warehouse=polaris_warehouse, credential=polaris_credential
     )
 
 
