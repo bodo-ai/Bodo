@@ -30,11 +30,13 @@ from bodosql.bodosql_types.rest_catalog import get_REST_connection
 pytestmark = pytest_polaris
 
 
-def test_basic_read(memory_leak_check, rest_catalog, polaris_catalog_iceberg_read_df):
+def test_basic_read(
+    memory_leak_check, polaris_catalog, polaris_catalog_iceberg_read_df
+):
     """
     Test reading an entire Iceberg table from Polaris in SQL
     """
-    catalog = rest_catalog
+    catalog = polaris_catalog
     bc = bodosql.BodoSQLContext(catalog=catalog)
 
     def impl(bc, query):
@@ -51,13 +53,13 @@ def test_basic_read(memory_leak_check, rest_catalog, polaris_catalog_iceberg_rea
 
 
 def test_column_pruning(
-    memory_leak_check, rest_catalog, polaris_catalog_iceberg_read_df
+    memory_leak_check, polaris_catalog, polaris_catalog_iceberg_read_df
 ):
     """
     Test reading an Iceberg table from Polaris in SQL
     where columns are pruned and reordered
     """
-    catalog = rest_catalog
+    catalog = polaris_catalog
     bc = bodosql.BodoSQLContext(catalog=catalog)
 
     def impl(bc, query):
@@ -85,13 +87,13 @@ def test_column_pruning(
 
 
 def test_filter_pushdown(
-    memory_leak_check, rest_catalog, polaris_catalog_iceberg_read_df
+    memory_leak_check, polaris_catalog, polaris_catalog_iceberg_read_df
 ):
     """
     Test reading an Iceberg table from Polaris with filter pushdown
     """
 
-    catalog = rest_catalog
+    catalog = polaris_catalog
     bc = bodosql.BodoSQLContext(catalog=catalog)
 
     def impl(bc, query):
@@ -128,13 +130,13 @@ def test_filter_pushdown(
 
 
 def test_filter_pushdown_col_not_read(
-    memory_leak_check, rest_catalog, polaris_catalog_iceberg_read_df
+    memory_leak_check, polaris_catalog, polaris_catalog_iceberg_read_df
 ):
     """
     Test reading a Iceberg table with BodoSQL filter pushdown
     where a column used in the filter is not read in
     """
-    catalog = rest_catalog
+    catalog = polaris_catalog
     bc = bodosql.BodoSQLContext(catalog=catalog)
 
     def impl(bc, query):
@@ -277,7 +279,7 @@ def check_table_comment(
 @pytest.mark.parametrize("table_comments", ["test_tbl_comments", "", None])
 @pytest.mark.parametrize("construct", ["CREATE", "CREATE OR REPLACE"])
 def test_rest_catalog_iceberg_write(
-    rest_catalog,
+    polaris_catalog,
     polaris_connection,
     table_comments,
     # Here we are testing different combinations of column comments, so the comments are generated later
@@ -289,7 +291,7 @@ def test_rest_catalog_iceberg_write(
     """tests that writing tables works"""
 
     rest_uri, polaris_warehouse, polaris_credential = polaris_connection
-    catalog = rest_catalog
+    catalog = polaris_catalog
     bc = bodosql.BodoSQLContext(catalog=catalog)
     schema = "CI"
     con_str = get_rest_catalog_connection_string(
@@ -395,7 +397,7 @@ def test_rest_catalog_iceberg_write(
                 raise
 
 
-def test_limit_pushdown(memory_leak_check, rest_catalog):
+def test_limit_pushdown(memory_leak_check, polaris_catalog):
     """
     Test reading an Iceberg from Polaris with limit pushdown.
     Since the planner has access to length statistics, we need to actually
@@ -405,7 +407,7 @@ def test_limit_pushdown(memory_leak_check, rest_catalog):
     statistics and check that the number of rows read is identical
     """
 
-    catalog = rest_catalog
+    catalog = polaris_catalog
     bc = bodosql.BodoSQLContext(catalog=catalog)
 
     def impl(bc, query):
@@ -429,7 +431,7 @@ def test_limit_pushdown(memory_leak_check, rest_catalog):
         check_logger_msg(stream, "Constant limit detected, reading at most 2 rows")
 
 
-def test_limit_filter_pushdown(memory_leak_check, rest_catalog):
+def test_limit_filter_pushdown(memory_leak_check, polaris_catalog):
     """
     Test reading an Iceberg table from Polaris with limit + filter pushdown.
     Since the planner has access to length statistics, we need to actually
@@ -439,7 +441,7 @@ def test_limit_filter_pushdown(memory_leak_check, rest_catalog):
     statistics and check that the number of rows read is identical
     """
 
-    catalog = rest_catalog
+    catalog = polaris_catalog
     bc = bodosql.BodoSQLContext(catalog=catalog)
 
     def impl(bc, query):
@@ -467,7 +469,7 @@ def test_limit_filter_pushdown(memory_leak_check, rest_catalog):
         )
 
 
-def test_multi_limit_pushdown(memory_leak_check, rest_catalog):
+def test_multi_limit_pushdown(memory_leak_check, polaris_catalog):
     """
     Verify multiple limits are still simplified even though Iceberg trees
     only support a single limit.
@@ -475,7 +477,7 @@ def test_multi_limit_pushdown(memory_leak_check, rest_catalog):
     As a result, since this is no longer order we will instead compute summary
     statistics and check that the number of rows read is identical
     """
-    catalog = rest_catalog
+    catalog = polaris_catalog
     bc = bodosql.BodoSQLContext(catalog=catalog)
 
     def impl(bc, query):
@@ -499,7 +501,7 @@ def test_multi_limit_pushdown(memory_leak_check, rest_catalog):
         check_logger_msg(stream, "Constant limit detected, reading at most 1 rows")
 
 
-def test_limit_filter_limit_pushdown(memory_leak_check, rest_catalog):
+def test_limit_filter_limit_pushdown(memory_leak_check, polaris_catalog):
     """
     Test reading an Iceberg table from Polaris with limit pushdown. We can push down
     both limits and filters in a way that meets the requirements of this query
@@ -507,7 +509,7 @@ def test_limit_filter_limit_pushdown(memory_leak_check, rest_catalog):
 
     This may not result in a correct result since the ordering is not defined.
     """
-    catalog = rest_catalog
+    catalog = polaris_catalog
     bc = bodosql.BodoSQLContext(catalog=catalog)
 
     def impl(bc, query):
@@ -535,7 +537,7 @@ def test_limit_filter_limit_pushdown(memory_leak_check, rest_catalog):
         )
 
 
-def test_filter_limit_filter_pushdown(memory_leak_check, rest_catalog):
+def test_filter_limit_filter_pushdown(memory_leak_check, polaris_catalog):
     """
     Test reading an Iceberg table from Polaris with filters after the limit
     computes a valid result (enforcing the limit and the filters). This query
@@ -543,7 +545,7 @@ def test_filter_limit_filter_pushdown(memory_leak_check, rest_catalog):
     to apply the filter then limit (which is always correct but may be suboptimal).
     """
 
-    catalog = rest_catalog
+    catalog = polaris_catalog
     bc = bodosql.BodoSQLContext(catalog=catalog)
 
     def impl(bc, query):
@@ -627,7 +629,9 @@ def test_rest_catalog_token_caching(memory_leak_check):
             numba.config.CACHE_DIR = cache_loc
 
             def f():
-                tc = get_REST_connection("test_uri", "test_warehouse")
+                tc = get_REST_connection(
+                    "test_uri", "test_warehouse", "PRINCIPAL_ROLE:ALL"
+                )
                 return tc.conn_str
 
             dispatcher = bodo.jit(cache=True)(f)

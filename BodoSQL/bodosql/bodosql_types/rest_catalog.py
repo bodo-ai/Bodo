@@ -102,7 +102,9 @@ class RESTCatalog(DatabaseCatalog):
         """
         Get the token for the REST catalog from a pyiceberg catalog.
         """
-        con_str = get_conn_str(self.rest_uri, self.warehouse, self.token, self.scope)
+        con_str = get_conn_str(
+            self.rest_uri, self.warehouse, scope=self.scope, credential=self.credential
+        )
         py_catalog = conn_str_to_catalog(con_str)
         return py_catalog.properties["token"]
 
@@ -246,11 +248,15 @@ def unbox_REST_catalog(typ, val, c):
 
 
 @numba.jit
-def get_conn_str(rest_uri, warehouse, token, scope):
+def get_conn_str(rest_uri, warehouse, scope=None, token=None, credential=None):
     """Get the connection string for a REST Iceberg catalog."""
-    conn_str = f"iceberg+{rest_uri}?warehouse={warehouse}&token={token}"
+    conn_str = f"iceberg+{rest_uri}?warehouse={warehouse}"
     if scope is not None:
         conn_str += f"&scope={scope}"
+    if token is not None:
+        conn_str += f"&token={token}"
+    if credential is not None:
+        conn_str += f"&credential={credential}"
     return conn_str
 
 
@@ -270,7 +276,7 @@ class RESTConnectionType(IcebergConnectionType):
             "RESTConnectionType: Expected __BODOSQL_REST_TOKEN to be defined"
         )
 
-        self.conn_str = get_conn_str(rest_uri, warehouse, token, scope)
+        self.conn_str = get_conn_str(rest_uri, warehouse, token=token, scope=scope)
 
         super().__init__(
             name=f"RESTConnectionType({warehouse=}, {rest_uri=}, conn_str=*********, {scope=})",
@@ -314,7 +320,7 @@ def overload_get_REST_connection(rest_uri: str, warehouse: str, scope: str):
         assert token != "", (
             "get_REST_connection: Expected __BODOSQL_REST_TOKEN to be defined"
         )
-        conn_str = get_conn_str(rest_uri, warehouse, token, scope)
+        conn_str = get_conn_str(rest_uri, warehouse, token=token, scope=scope)
         conn = _get_REST_connection(rest_uri, warehouse, scope, conn_str)
         return conn
 
