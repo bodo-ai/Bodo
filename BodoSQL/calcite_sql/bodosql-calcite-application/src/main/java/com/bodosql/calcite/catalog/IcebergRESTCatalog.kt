@@ -2,7 +2,6 @@ package com.bodosql.calcite.catalog
 
 import com.bodosql.calcite.adapter.bodo.StreamingOptions
 import com.bodosql.calcite.application.BodoCodeGenVisitor
-import com.bodosql.calcite.application.RelationalAlgebraGenerator
 import com.bodosql.calcite.application.write.IcebergWriteTarget
 import com.bodosql.calcite.application.write.WriteTarget
 import com.bodosql.calcite.ir.Expr
@@ -198,13 +197,7 @@ open class IcebergRESTCatalog(
         val props = getIcebergConnection().properties()
         val warehouse = props[CatalogProperties.WAREHOUSE_LOCATION]!!
         val uri = props[CatalogProperties.URI]!!.replace(Regex("https?://"), "")
-        val token =
-            if (RelationalAlgebraGenerator.hideCredentials) {
-                "********"
-            } else {
-                props["token"]
-            }
-        return Expr.StringLiteral("REST://%s?token=%s&warehouse=%s".format(uri, token, warehouse))
+        return Expr.Call("bodosql.get_REST_connection", Expr.StringLiteral(uri), Expr.StringLiteral(warehouse))
     }
 
     /**
@@ -259,9 +252,10 @@ open class IcebergRESTCatalog(
             params[CatalogProperties.WAREHOUSE_LOCATION] = warehouse
             if (token != null) {
                 params["token"] = token
-            }
-            if (credential != null) {
+            } else if (credential != null) {
                 params["credential"] = credential
+            } else {
+                throw IllegalArgumentException("Either token or credential must be provided.")
             }
 
             val conf = Configuration()

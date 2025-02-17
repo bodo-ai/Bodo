@@ -6,8 +6,8 @@ import com.bodosql.calcite.catalog.BodoGlueCatalog
 import com.bodosql.calcite.catalog.BodoS3TablesCatalog
 import com.bodosql.calcite.catalog.BodoSQLCatalog
 import com.bodosql.calcite.catalog.FileSystemCatalog
+import com.bodosql.calcite.catalog.IcebergRESTCatalog
 import com.bodosql.calcite.catalog.SnowflakeCatalog
-import com.bodosql.calcite.catalog.TabularCatalog
 import com.bodosql.calcite.ddl.DDLExecutionResult
 import com.bodosql.calcite.schema.LocalSchema
 import com.bodosql.calcite.table.BodoSQLColumn
@@ -329,12 +329,13 @@ class PythonEntryPoint {
          * @return The TabularCatalog object.
          */
         @JvmStatic
-        fun buildTabularCatalog(
+        fun buildIcebergRESTCatalog(
             warehouse: String,
             restUri: String,
             token: String?,
             credential: String?,
-        ): TabularCatalog = TabularCatalog(warehouse, restUri, token, credential)
+            defaultSchema: String?,
+        ): IcebergRESTCatalog = IcebergRESTCatalog(warehouse, restUri, token, credential, defaultSchema)
 
         /**
          * Build a FileSystemCatalog object.

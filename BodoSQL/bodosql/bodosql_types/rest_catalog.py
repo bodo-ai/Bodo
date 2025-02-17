@@ -1,5 +1,5 @@
-"""Python and JIT class for describing a Tabular Iceberg catalog. A Tabular
-catalog contains all information needed to connect use Tabular Iceberg catalog for organizing and modifying tables.
+"""Python and JIT class for describing a REST Iceberg catalog. A REST
+catalog contains all information needed to connect use REST Iceberg catalog for organizing and modifying tables.
 """
 
 import os
@@ -26,42 +26,44 @@ from bodosql import DatabaseCatalog, DatabaseCatalogType
 from bodosql.imported_java_classes import JavaEntryPoint
 
 
-def _create_java_tabular_catalog(
+def _create_java_REST_catalog(
     warehouse: str, rest_uri: str, token: str | None, credential: str | None
 ):
     """
-    Create a Java TabularCatalog object.
+    Create a Java RESTCatalog object.
     Args:
         warehouse (str): The warehouse to connect to.
         rest_uri (str): The URI of the REST server.
         token (str): The token to use for authentication.
         credential (str): The credential to use for authentication.
     Returns:
-        JavaObject: A Java TabularCatalog object.
+        JavaObject: A Java RESTCatalog object.
     """
-    return JavaEntryPoint.buildTabularCatalog(
+    return JavaEntryPoint.buildRESTCatalog(
         warehouse,
         rest_uri,
         token,
         credential,
+        # We could add a way to configure this
+        "default",
     )
 
 
-class TabularCatalog(DatabaseCatalog):
+class RESTCatalog(DatabaseCatalog):
     """
     Python class for storing the information
-        needed to connect to a Tabular Iceberg catalog.
+        needed to connect to a REST Iceberg catalog.
     """
 
     def __init__(
         self,
         warehouse: str,
-        rest_uri: str = "https://api.tabular.io/ws",
+        rest_uri: str,
         token: str | None = None,
         credential: str | None = None,
     ):
         """
-        Create a tabular catalog from a connection string to a tabular catalog.
+        Create a REST catalog from a connection string to a REST catalog.
         Either a token or a credential must be provided.
         Args:
             warehouse (str): The warehouse to connect to.
@@ -77,35 +79,35 @@ class TabularCatalog(DatabaseCatalog):
             self.token = self.get_java_token()
 
         # Set the token as an environment variable so that it can be accessed at runtime
-        # Used by the TabularConnectionType
-        os.environ["__BODOSQL_TABULAR_TOKEN"] = self.token
+        # Used by the RESTConnectionType
+        os.environ["__BODOSQL_REST_TOKEN"] = self.token
 
     def get_java_object(self):
-        return _create_java_tabular_catalog(
+        return _create_java_REST_catalog(
             self.warehouse, self.rest_uri, self.token, self.credential
         )
 
     @run_rank0
     def get_java_token(self):
         """
-        Get the token for the tabular catalog from the Java catalog.
+        Get the token for the REST catalog from the Java catalog.
         """
         return self.get_java_object().getToken()
 
     def __eq__(self, other):
-        if not isinstance(other, TabularCatalog):
+        if not isinstance(other, RESTCatalog):
             return False
         return self.warehouse == other.warehouse
 
 
-@overload(TabularCatalog, no_unliteral=True)
-def overload_tabular_catalog_constructor(
+@overload(RESTCatalog, no_unliteral=True)
+def overload_REST_catalog_constructor(
     warehouse: str, token: str | None = None, credential: str | None = None
 ):
-    raise_bodo_error("TabularCatalog: Cannot be created in JIT mode.")
+    raise_bodo_error("RESTCatalog: Cannot be created in JIT mode.")
 
 
-class TabularCatalogType(DatabaseCatalogType):
+class RESTCatalogType(DatabaseCatalogType):
     def __init__(
         self,
         warehouse: str,
@@ -114,7 +116,7 @@ class TabularCatalogType(DatabaseCatalogType):
         credential: str | None = None,
     ):
         """
-        Create a tabular catalog type from a connection string to a tabular catalog.
+        Create a REST catalog type from a connection string to a REST catalog.
         Args:
             warehouse (str): The warehouse to connect to.
             rest_uri (str): The URI of the REST server.
@@ -127,11 +129,11 @@ class TabularCatalogType(DatabaseCatalogType):
         self.credential = credential
 
         super().__init__(
-            name=f"TabularCatalogType({self.warehouse=},{self.rest_uri},{'token' if self.token is not None else 'credential'}=*****)",
+            name=f"RESTCatalogType({self.warehouse=},{self.rest_uri},{'token' if self.token is not None else 'credential'}=*****)",
         )
 
     def get_java_object(self):
-        return _create_java_tabular_catalog(
+        return _create_java_REST_catalog(
             self.warehouse, self.rest_uri, self.token, self.credential
         )
 
@@ -140,9 +142,9 @@ class TabularCatalogType(DatabaseCatalogType):
         return self.warehouse, self.rest_uri
 
 
-@typeof_impl.register(TabularCatalog)
-def typeof_tabular_catalog(val, c):
-    return TabularCatalogType(
+@typeof_impl.register(RESTCatalog)
+def typeof_REST_catalog(val, c):
+    return RESTCatalogType(
         warehouse=val.warehouse,
         rest_uri=val.rest_uri,
         token=val.token,
@@ -150,13 +152,13 @@ def typeof_tabular_catalog(val, c):
     )
 
 
-register_model(TabularCatalogType)(models.OpaqueModel)
+register_model(RESTCatalogType)(models.OpaqueModel)
 
 
-@box(TabularCatalogType)
-def box_tabular_catalog(typ, val, c):
+@box(RESTCatalogType)
+def box_REST_catalog(typ, val, c):
     """
-    Box a Tabular Catalog native representation into a Python object. We populate
+    Box a REST Catalog native representation into a Python object. We populate
     the contents based on typing information.
     """
     warehouse_obj = c.pyapi.from_native_value(
@@ -189,9 +191,9 @@ def box_tabular_catalog(typ, val, c):
     else:
         credential_obj = c.pyapi.make_none()
 
-    tabular_catalog_obj = c.pyapi.unserialize(c.pyapi.serialize_object(TabularCatalog))
+    REST_catalog_obj = c.pyapi.unserialize(c.pyapi.serialize_object(RESTCatalog))
     res = c.pyapi.call_function_objargs(
-        tabular_catalog_obj,
+        REST_catalog_obj,
         (
             warehouse_obj,
             rest_uri_obj,
@@ -203,14 +205,14 @@ def box_tabular_catalog(typ, val, c):
     c.pyapi.decref(rest_uri_obj)
     c.pyapi.decref(token_obj)
     c.pyapi.decref(credential_obj)
-    c.pyapi.decref(tabular_catalog_obj)
+    c.pyapi.decref(REST_catalog_obj)
     return res
 
 
-@unbox(TabularCatalogType)
-def unbox_tabular_catalog(typ, val, c):
+@unbox(RESTCatalogType)
+def unbox_REST_catalog(typ, val, c):
     """
-    Unbox a Tabular Catalog Python object into its native representation.
+    Unbox a REST Catalog Python object into its native representation.
     Since the actual model is opaque we can just generate a dummy.
     """
     return NativeValue(c.context.get_dummy_value())
@@ -218,14 +220,14 @@ def unbox_tabular_catalog(typ, val, c):
 
 @numba.jit
 def get_conn_str(rest_uri, warehouse, token):
-    """Get the connection string for a Tabular Iceberg catalog."""
+    """Get the connection string for a REST Iceberg catalog."""
     return f"{rest_uri}?warehouse={warehouse}&token={token}"
 
 
-class TabularConnectionType(IcebergConnectionType):
+class RESTConnectionType(IcebergConnectionType):
     """
     Python class for storing the information
-        needed to connect to a Tabular Iceberg catalog.
+        needed to connect to a REST Iceberg catalog.
     Token is read from an environment variable so that it can be accessed at runtime.
     The compiler can get a connection string using the get_conn_str function.
     The runtime can get a connection string using the conn_str attribute.
@@ -233,15 +235,15 @@ class TabularConnectionType(IcebergConnectionType):
 
     def __init__(self, rest_uri, warehouse):
         self.warehouse = warehouse
-        token = os.getenv("__BODOSQL_TABULAR_TOKEN")
+        token = os.getenv("__BODOSQL_REST_TOKEN")
         assert token is not None, (
-            "TabularConnectionType: Expected __BODOSQL_TABULAR_TOKEN to be defined"
+            "RESTConnectionType: Expected __BODOSQL_REST_TOKEN to be defined"
         )
 
         self.conn_str = get_conn_str(rest_uri, warehouse, token)
 
         super().__init__(
-            name=f"TabularConnectionType({warehouse=}, {rest_uri=}, conn_str=*********)",
+            name=f"RESTConnectionType({warehouse=}, {rest_uri=}, conn_str=*********)",
         )
 
     def get_conn_str(self) -> str:
@@ -249,49 +251,49 @@ class TabularConnectionType(IcebergConnectionType):
 
 
 @intrinsic(prefer_literal=True)
-def _get_tabular_connection(typingctx, rest_uri, warehouse, conn_str):
-    """Create a struct model for a  TabularConnectionType from a uri, warehouse and connection string."""
+def _get_REST_connection(typingctx, rest_uri, warehouse, conn_str):
+    """Create a struct model for a  RESTConnectionType from a uri, warehouse and connection string."""
     literal_rest_uri = get_literal_value(rest_uri)
     literal_warehouse = get_literal_value(warehouse)
-    tabular_connection_type = TabularConnectionType(literal_rest_uri, literal_warehouse)
+    REST_connection_type = RESTConnectionType(literal_rest_uri, literal_warehouse)
 
     def codegen(context, builder, sig, args):
-        """lowering code to initialize a TabularConnectionType"""
-        tabular_connection_type = sig.return_type
-        tabular_connection_struct = cgutils.create_struct_proxy(
-            tabular_connection_type
-        )(context, builder)
+        """lowering code to initialize a RESTConnectionType"""
+        REST_connection_type = sig.return_type
+        REST_connection_struct = cgutils.create_struct_proxy(REST_connection_type)(
+            context, builder
+        )
         context.nrt.incref(builder, sig.args[2], args[2])
-        tabular_connection_struct.conn_str = args[2]
-        return tabular_connection_struct._getvalue()
+        REST_connection_struct.conn_str = args[2]
+        return REST_connection_struct._getvalue()
 
-    return tabular_connection_type(rest_uri, warehouse, conn_str), codegen
+    return REST_connection_type(rest_uri, warehouse, conn_str), codegen
 
 
-def get_tabular_connection(rest_uri: str, warehouse: str):
+def get_REST_connection(rest_uri: str, warehouse: str):
     pass
 
 
-@overload(get_tabular_connection, no_unliteral=True)
-def overload_get_tabular_connection(rest_uri: str, warehouse: str):
-    """Overload for get_tabular_connection that creates a TabularConnectionType."""
+@overload(get_REST_connection, no_unliteral=True)
+def overload_get_REST_connection(rest_uri: str, warehouse: str):
+    """Overload for get_REST_connection that creates a RESTConnectionType."""
 
     def impl(rest_uri: str, warehouse: str):  # pragma: no cover
         with bodo.no_warning_objmode(token="unicode_type"):
-            token = os.getenv("__BODOSQL_TABULAR_TOKEN", "")
+            token = os.getenv("__BODOSQL_REST_TOKEN", "")
         assert token != "", (
-            "get_tabular_connection: Expected __BODOSQL_TABULAR_TOKEN to be defined"
+            "get_REST_connection: Expected __BODOSQL_REST_TOKEN to be defined"
         )
         conn_str = get_conn_str(rest_uri, warehouse, token)
-        conn = _get_tabular_connection(rest_uri, warehouse, conn_str)
+        conn = _get_REST_connection(rest_uri, warehouse, conn_str)
         return conn
 
     return impl
 
 
-@register_model(TabularConnectionType)
-class TabularConnectionTypeModel(models.StructModel):
-    """Model for TabularConnectionType has one member, conn_str."""
+@register_model(RESTConnectionType)
+class RESTConnectionTypeModel(models.StructModel):
+    """Model for RESTConnectionType has one member, conn_str."""
 
     def __init__(self, dmm, fe_type):
         members = [
@@ -300,4 +302,4 @@ class TabularConnectionTypeModel(models.StructModel):
         super().__init__(dmm, fe_type, members)
 
 
-make_attribute_wrapper(TabularConnectionType, "conn_str", "conn_str")
+make_attribute_wrapper(RESTConnectionType, "conn_str", "conn_str")
