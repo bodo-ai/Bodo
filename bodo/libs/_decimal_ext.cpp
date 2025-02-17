@@ -2452,8 +2452,8 @@ inline bool arrow_compute_cmp_scalar(int32_t op_enum, T0 arg0_scalar,
  * @brief compare decimal scalar to integer scalar
  *
  * @param op_enum enum designating comparison operator to call
- * @param arg0_low first argument of comparison (decimal)
- * @param arg0_high first argument of comparison (decimal)
+ * @param arg0_low Low 64 bits of the input decimal.
+ * @param arg0_high High 64 bits of the input decimal.
  * @param precision decimal argument's precision
  * @param scale decimal argument's scale
  * @param arg1 second argument (int)
@@ -2481,8 +2481,8 @@ bool arrow_compute_cmp_decimal_int_py_entry(int32_t op_enum, uint64_t arg0_low,
  * @brief compare decimal scalar to float scalar
  *
  * @param op_enum enum designating comparison operator to call
- * @param arg0_low first argument of comparison (decimal)
- * @param arg0_high first argument of comparison (decimal)
+ * @param arg0_low Low 64 bits of the input decimal.
+ * @param arg0_high High 64 bits of the input decimal.
  * @param precision decimal argument's precision
  * @param scale decimal argument's scale
  * @param arg1 second argument (float)
@@ -2510,12 +2510,12 @@ bool arrow_compute_cmp_decimal_float_py_entry(int32_t op_enum,
  * @brief compare decimal scalar to decimal scalar
  *
  * @param op_enum enum designating comparison operator to call
- * @param arg0_low first argument of comparison (decimal)
- * @param arg0_high first argument of comparison (decimal)
+ * @param arg0_low Low 64 bits of the first input decimal.
+ * @param arg0_high High 64 bits of the first input decimal.
  * @param precision0 first argument's precision
  * @param scale0 first argument's scale
- * @param arg1_low second argument (decimal)
- * @param arg1_high second argument (decimal)
+ * @param arg1_low Low 64 bits of the second input decimal.
+ * @param arg1_high High 64 bits of the second input decimal.
  * @param precision1 second argument's precision
  * @param scale1 second argument's scale
  * @return bool output of comparison
