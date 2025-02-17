@@ -92,8 +92,6 @@ jobs:
   - bash: |
       set -exo pipefail
 
-      cd "$(System.DefaultWorkingDirectory)"
-
       unamestr=`uname`
       if [[ "$unamestr" == 'Linux' ]]; then
         export LD_LIBRARY_PATH=/usr/local/lib/instantclient_21_5:$LD_LIBRARY_PATH
@@ -116,9 +114,10 @@ jobs:
         export CLASSPATH=`$HADOOP_HOME/bin/hdfs classpath --glob`
       else
         echo "Skipping hadoop/arrow env var setup"
-        export HADOOP_HOME="./buildscripts/local_utils/hadoop_dummy"
+        export HADOOP_HOME="$(System.DefaultWorkingDirectory)/buildscripts/local_utils/hadoop_dummy"
       fi
 
+      cd "$(System.DefaultWorkingDirectory)"
       # For caching tests we need to update the location of the decryption file.
       # We set the absolute path as an environment variable.
       export BODO_TRACING_DECRYPTION_FILE_PATH=`echo "$(System.DefaultWorkingDirectory)/buildscripts/decompress_traces.py"`

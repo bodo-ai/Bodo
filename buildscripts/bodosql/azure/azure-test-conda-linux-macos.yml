@@ -79,8 +79,6 @@ jobs:
       pixi run -e azure python -c "import bodo; print(bodo.__version__)"
       pixi run -e azure python -c "import bodosql; print(bodosql.__version__)"
 
-      cd "$(System.DefaultWorkingDirectory)"
-
       unamestr=`uname`
       if [[ "$unamestr" == 'Linux' ]]; then
         echo "Setting up Hadoop (and Arrow) environment variables"
@@ -97,10 +95,10 @@ jobs:
         export CLASSPATH=`$HADOOP_HOME/bin/hdfs classpath --glob`
       else
         echo "Skipping hadoop/arrow env var setup"
-        export HADOOP_HOME="./buildscripts/local_utils/hadoop_dummy"
+        export HADOOP_HOME="$(System.DefaultWorkingDirectory)/buildscripts/local_utils/hadoop_dummy"
       fi
-
-      cd BodoSQL
+      
+      cd "$(System.DefaultWorkingDirectory)/BodoSQL"
       # For caching tests we need to update the location of the decryption file.
       # We set the absolute path as an environment variable.
       export BODO_TRACING_DECRYPTION_FILE_PATH=`echo "$(System.DefaultWorkingDirectory)/buildscripts/decompress_traces.py"`
