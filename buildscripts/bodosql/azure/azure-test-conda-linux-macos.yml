@@ -96,10 +96,7 @@ jobs:
         export ARROW_LIBHDFS_DIR=$HADOOP_HOME/lib/native
         export CLASSPATH=`$HADOOP_HOME/bin/hdfs classpath --glob`
       else
-        echo "$unamestr"
         echo "Skipping hadoop/arrow env var setup"
-        ls buildscripts
-        export HADOOP_HOME="./buildscripts/local_utils/hadoop_dummy"
       fi
 
       # For caching tests we need to update the location of the decryption file.
