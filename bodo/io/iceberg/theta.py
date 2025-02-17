@@ -481,7 +481,7 @@ def table_columns_enabled_theta_sketches(txn: Transaction) -> pd.arrays.BooleanA
     props: dict[str, str] = txn.table_metadata.properties
 
     enabled = [
-        props.get(f"bodo.write.theta_sketch_enabled.{col.name}", "true") == "true"
+        bool(props.get(f"bodo.write.theta_sketch_enabled.{col.name}", "false"))
         for col in cols
     ]
     return pd.array(enabled, dtype="boolean")  # type: ignore[return]

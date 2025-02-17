@@ -9,6 +9,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.hc.core5.http.NameValuePair;
 import org.apache.hc.core5.net.URIBuilder;
+import org.apache.iceberg.CachingCatalog;
 import org.apache.iceberg.CatalogProperties;
 import org.apache.iceberg.catalog.Catalog;
 
@@ -55,7 +56,7 @@ public class CatalogCreator {
     // S3Tables doesn't use a URI
     if (connStr.startsWith("arn:aws:s3tables") && catalogType.equals("s3tables")) {
       catalog = S3TablesBuilder.create(connStr);
-      return catalog;
+      return CachingCatalog.wrap(catalog);
     }
 
     var out = prepareInput(connStr, catalogType, coreSitePath);
@@ -86,7 +87,14 @@ public class CatalogCreator {
         throw new UnsupportedOperationException("Should never occur. Captured in Python");
     }
 
-    return catalog;
+    // CachingCatalog is a simple map between table names and their `Table` object
+    // Does not modify how the Table object works in any way
+    // Can be invalidated by CREATE / REPLACE ops or a timer (if time passed in as
+    // arg)
+    // Benefits: Potentially some speed up in collecting repeated metadata like
+    // schema
+    // Downsides: Does not refresh if another program modifies the Catalog
+    return CachingCatalog.wrap(catalog);
   }
 
   /**
