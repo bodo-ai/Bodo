@@ -30,10 +30,6 @@ jobs:
 
   steps:
   - bash: |
-      if [[ "$(Agent.OS)" == "Windows_NT" ]]; then
-        echo "Hello world from Windows CI!"
-      fi
-
       set -exo pipefail
       curl -fsSL https://pixi.sh/install.sh | bash
       source ~/.bashrc
