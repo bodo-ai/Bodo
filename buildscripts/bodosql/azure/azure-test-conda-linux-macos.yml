@@ -40,6 +40,12 @@ jobs:
 
   - bash: |
       set -exo pipefail
+
+      unamestr=`uname`
+      if [[ "$unamestr" == 'Linux' ]]; then
+        export USE_BODO_ARROW_FORK=1
+      fi
+
       pixi run -e azure build-bodo -Cbuild.verbose=true
       pixi run -e azure build-bodosql
       pixi run -e azure build-iceberg
@@ -48,7 +54,6 @@ jobs:
       AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
       AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
       DISABLE_CCACHE: 1  # Just use sccache directly on CI
-      # USE_BODO_ARROW_FORK: 1  # Build from Source with Arrow Fork
     displayName: 'Build Bodo, BodoSQL, and Iceberg Connector'
 
   - bash: |
@@ -70,7 +75,6 @@ jobs:
 
   - bash: |
       set -exo pipefail
-      # eval "$(pixi shell-hook --shell bash -e azure)"
 
       pixi run -e azure python -c "import bodo; print(bodo.__version__)"
       pixi run -e azure python -c "import bodosql; print(bodosql.__version__)"

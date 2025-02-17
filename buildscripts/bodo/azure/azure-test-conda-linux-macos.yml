@@ -57,6 +57,12 @@ jobs:
 
   - bash: |
       set -exo pipefail
+
+      unamestr=`uname`
+      if [[ "$unamestr" == 'Linux' ]]; then
+        export USE_BODO_ARROW_FORK=1
+      fi
+
       pixi run -e azure build-bodo -Cbuild.verbose=true
       pixi run -e azure build-iceberg
       pixi run -e azure -- sccache --show-stats
@@ -85,10 +91,6 @@ jobs:
 
   - bash: |
       set -exo pipefail
-      eval "$(pixi shell-hook -e azure --shell bash | sed 's/^export [Pp][Aa][Tt][Hh]=/export PATH=/I; s/;/:/g')"
-
-      LibFabricDir="$(pwd)/.pixi/envs/azure/Library/bin/libfabric"
-      export PATH="$PATH:$LibFabricDir:$LibFabricDir/utils"
 
       unamestr=`uname`
       if [[ "$unamestr" == 'Linux' ]]; then
@@ -120,13 +122,13 @@ jobs:
       # We set the absolute path as an environment variable.
       export BODO_TRACING_DECRYPTION_FILE_PATH=`echo "$(System.DefaultWorkingDirectory)/buildscripts/decompress_traces.py"`
       if [[ "${{ parameters.caching_test }}" == "True" ]]; then
-        python -m bodo.runtests_caching "${{ parameters.name }}" "$NP" bodo/tests/caching_tests
+        pixi run -e azure python -m bodo.runtests_caching "${{ parameters.name }}" "$NP" bodo/tests/caching_tests
       elif [[ "${{ parameters.spawn_mode_test }}" == "True" ]]; then
         export BODO_TEST_SPAWN_MODE=1
         export BODO_NUM_WORKERS="$NP"
-        pytest -s -v -Wignore -m "$(PYTEST_MARKER)" bodo/tests --junitxml=pytest-report-spawn-mode.xml --test-run-title="${{ parameters.name }}"
+        pixi run -e azure pytest -s -v -Wignore -m "$(PYTEST_MARKER)" bodo/tests --junitxml=pytest-report-spawn-mode.xml --test-run-title="${{ parameters.name }}"
       else
-        python -m bodo.runtests "${{ parameters.name }}" "$NP" --pyargs bodo -s -v -m "$(PYTEST_MARKER)"
+        pixi run -e azure python -m bodo.runtests "${{ parameters.name }}" "$NP" --pyargs bodo -s -v -m "$(PYTEST_MARKER)"
       fi
     env:
       SF_USERNAME: $(SNOWFLAKE_USER)
