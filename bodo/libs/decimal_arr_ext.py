@@ -242,6 +242,25 @@ class Decimal128Type(types.Type):
             return self
 
 
+def _ll_get_int128_low_high(builder, val):
+    """Return low/high int64 portions of an int128 LLVM value"""
+    low = builder.trunc(val, lir.IntType(64))
+    high = builder.trunc(
+        builder.lshr(val, lir.Constant(lir.IntType(128), 64)), lir.IntType(64)
+    )
+    return low, high
+
+
+def _ll_int128_from_low_high(builder, low_ptr, high_ptr):
+    """Returns an int128 LLVM value from low/high int64 portions"""
+    low = builder.zext(builder.load(low_ptr), lir.IntType(128))
+    high = builder.zext(builder.load(high_ptr), lir.IntType(128))
+    decimal_val = builder.or_(
+        builder.shl(high, lir.Constant(lir.IntType(128), 64)), low
+    )
+    return decimal_val
+
+
 # For the processing of the data we have to put a precision and scale.
 # As it turn out when reading boxed data we may certainly have precision not 38
 # and scale not 18.
@@ -589,42 +608,106 @@ def decimal128type_to_int64_tuple(typingctx, val):
     return types.UniTuple(types.int64, 2)(val), codegen
 
 
-_arrow_compute_cmp_decimal_int = types.ExternalFunction(
-    "arrow_compute_cmp_decimal_int_py_entry",
-    types.bool_(
-        types.int32,
-        int128_type,
-        types.int32,
-        types.int32,
-        types.int64,
-    ),
-)
+@intrinsic
+def _arrow_compute_cmp_decimal_decimal(
+    typingctx, op_enum, lhs, precision1, scale1, precision2, scale2, rhs
+):
+    def codegen(context, builder, signature, args):
+        (op_enum, lhs, precision1, scale1, precision2, scale2, rhs) = args
+        lhs_low, lhs_high = _ll_get_int128_low_high(builder, lhs)
+        rhs_low, rhs_high = _ll_get_int128_low_high(builder, rhs)
+
+        fnty = lir.FunctionType(
+            lir.IntType(1),
+            [
+                lir.IntType(32),
+                lir.IntType(64),  # lhs_low
+                lir.IntType(64),  # lhs_high
+                lir.IntType(32),
+                lir.IntType(32),
+                lir.IntType(32),
+                lir.IntType(32),
+                lir.IntType(64),  # rhs_low
+                lir.IntType(64),  # rhs_high
+            ],
+        )
+        fn = cgutils.get_or_insert_function(
+            builder.module, fnty, name="arrow_compute_cmp_decimal_decimal_py_entry"
+        )
+        ret = builder.call(
+            fn,
+            [
+                op_enum,
+                lhs_low,
+                lhs_high,
+                precision1,
+                scale1,
+                precision2,
+                scale2,
+                rhs_low,
+                rhs_high,
+            ],
+        )
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        return ret
+
+    return types.bool_(
+        op_enum, lhs, precision1, scale1, precision2, scale2, rhs
+    ), codegen
 
 
-_arrow_compute_cmp_decimal_float = types.ExternalFunction(
-    "arrow_compute_cmp_decimal_float_py_entry",
-    types.bool_(
-        types.int32,
-        int128_type,
-        types.int32,
-        types.int32,
-        types.float64,
-    ),
-)
+@intrinsic
+def _arrow_compute_cmp_decimal_float(typingctx, op_enum, lhs, precision, scale, rhs):
+    def codegen(context, builder, signature, args):
+        (op_enum, lhs, precision, scale, rhs) = args
+        lhs_low, lhs_high = _ll_get_int128_low_high(builder, lhs)
+
+        fnty = lir.FunctionType(
+            lir.IntType(1),
+            [
+                lir.IntType(32),
+                lir.IntType(64),  # lhs_low
+                lir.IntType(64),  # lhs_high
+                lir.IntType(32),
+                lir.IntType(32),
+                lir.DoubleType(),
+            ],
+        )
+        fn = cgutils.get_or_insert_function(
+            builder.module, fnty, name="arrow_compute_cmp_decimal_float_py_entry"
+        )
+        ret = builder.call(fn, [op_enum, lhs_low, lhs_high, precision, scale, rhs])
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        return ret
+
+    return types.bool_(op_enum, lhs, precision, scale, rhs), codegen
 
 
-_arrow_compute_cmp_decimal_decimal = types.ExternalFunction(
-    "arrow_compute_cmp_decimal_decimal_py_entry",
-    types.bool_(
-        types.int32,
-        int128_type,
-        types.int32,
-        types.int32,
-        types.int32,
-        types.int32,
-        int128_type,
-    ),
-)
+@intrinsic
+def _arrow_compute_cmp_decimal_int(typingctx, op_enum, lhs, precision, scale, rhs):
+    def codegen(context, builder, signature, args):
+        (op_enum, lhs, precision, scale, rhs) = args
+        lhs_low, lhs_high = _ll_get_int128_low_high(builder, lhs)
+
+        fnty = lir.FunctionType(
+            lir.IntType(1),
+            [
+                lir.IntType(32),
+                lir.IntType(64),  # lhs_low
+                lir.IntType(64),  # lhs_high
+                lir.IntType(32),
+                lir.IntType(32),
+                lir.IntType(64),
+            ],
+        )
+        fn = cgutils.get_or_insert_function(
+            builder.module, fnty, name="arrow_compute_cmp_decimal_int_py_entry"
+        )
+        ret = builder.call(fn, [op_enum, lhs_low, lhs_high, precision, scale, rhs])
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        return ret
+
+    return types.bool_(op_enum, lhs, precision, scale, rhs), codegen
 
 
 def decimal_create_cmp_op_overload(op):
@@ -640,12 +723,12 @@ def decimal_create_cmp_op_overload(op):
 
             def impl(lhs, rhs):  # pragma: no cover
                 out = _arrow_compute_cmp_decimal_decimal(
-                    op_enum,
+                    np.int32(op_enum),
                     decimal128type_to_int128(lhs),
-                    precision1,
-                    scale1,
-                    precision2,
-                    scale2,
+                    np.int32(precision1),
+                    np.int32(scale1),
+                    np.int32(precision2),
+                    np.int32(scale2),
                     decimal128type_to_int128(rhs),
                 )
                 bodo.utils.utils.check_and_propagate_cpp_exception()
@@ -660,7 +743,11 @@ def decimal_create_cmp_op_overload(op):
 
             def impl(lhs, rhs):  # pragma: no cover
                 out = _arrow_compute_cmp_decimal_int(
-                    op_enum, decimal128type_to_int128(lhs), precision, scale, rhs
+                    np.int32(op_enum),
+                    decimal128type_to_int128(lhs),
+                    np.int32(precision),
+                    np.int32(scale),
+                    np.int64(rhs),
                 )
                 bodo.utils.utils.check_and_propagate_cpp_exception()
                 return out
@@ -675,7 +762,11 @@ def decimal_create_cmp_op_overload(op):
 
             def impl(lhs, rhs):  # pragma: no cover
                 out = _arrow_compute_cmp_decimal_int(
-                    op_enum, decimal128type_to_int128(rhs), precision, scale, lhs
+                    np.int32(op_enum),
+                    decimal128type_to_int128(rhs),
+                    np.int32(precision),
+                    np.int32(scale),
+                    np.int64(lhs),
                 )
                 bodo.utils.utils.check_and_propagate_cpp_exception()
                 return out
@@ -689,7 +780,11 @@ def decimal_create_cmp_op_overload(op):
 
             def impl(lhs, rhs):  # pragma: no cover
                 out = _arrow_compute_cmp_decimal_float(
-                    op_enum, decimal128type_to_int128(lhs), precision, scale, rhs
+                    np.int32(op_enum),
+                    decimal128type_to_int128(lhs),
+                    np.int32(precision),
+                    np.int32(scale),
+                    np.float64(rhs),
                 )
                 bodo.utils.utils.check_and_propagate_cpp_exception()
                 return out
@@ -704,7 +799,11 @@ def decimal_create_cmp_op_overload(op):
 
             def impl(lhs, rhs):  # pragma: no cover
                 out = _arrow_compute_cmp_decimal_float(
-                    op_enum, decimal128type_to_int128(rhs), precision, scale, lhs
+                    np.int32(op_enum),
+                    decimal128type_to_int128(rhs),
+                    np.int32(precision),
+                    np.int32(scale),
+                    np.float64(lhs),
                 )
                 bodo.utils.utils.check_and_propagate_cpp_exception()
                 return out
@@ -775,25 +874,6 @@ def decimal_to_bool(dec):
         return bool(decimal128type_to_int128(dec))
 
     return impl
-
-
-def _ll_get_int128_low_high(builder, val):
-    """Return low/high int64 portions of an int128 LLVM value"""
-    low = builder.trunc(val, lir.IntType(64))
-    high = builder.trunc(
-        builder.lshr(val, lir.Constant(lir.IntType(128), 64)), lir.IntType(64)
-    )
-    return low, high
-
-
-def _ll_int128_from_low_high(builder, low_ptr, high_ptr):
-    """Returns an int128 LLVM value from low/high int64 portions"""
-    low = builder.zext(builder.load(low_ptr), lir.IntType(128))
-    high = builder.zext(builder.load(high_ptr), lir.IntType(128))
-    decimal_val = builder.or_(
-        builder.shl(high, lir.Constant(lir.IntType(128), 64)), low
-    )
-    return decimal_val
 
 
 def decimal_to_float64_codegen(context, builder, signature, args, scale):
