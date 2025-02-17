@@ -604,7 +604,7 @@ def gen_iceberg_writer_init_impl(
                 # For insert into the columns are an intersection of the existing sketches
                 # and the types we can support.
                 existing_columns = table_columns_have_theta_sketches_wrapper(
-                    writer["txn"]
+                    writer["conn"], writer["table_id"]
                 )
                 possible_columns = get_supported_theta_sketch_columns(
                     writer["output_pyarrow_schema"]
@@ -636,19 +636,19 @@ def gen_iceberg_writer_init_impl(
     return impl_iceberg_writer_init
 
 
-def table_columns_have_theta_sketches_wrapper(txn):  # pragma: no cover
+def table_columns_have_theta_sketches_wrapper(conn_str, table_id):  # pragma: no cover
     pass
 
 
 @overload(table_columns_have_theta_sketches_wrapper)
-def overload_table_columns_have_theta_sketches_wrapper(txn):
+def overload_table_columns_have_theta_sketches_wrapper(conn_str, table_id):
     """Check if the columns in the table have theta sketches enabled. This extra
     wrapper is added to avoid calling into objmode inside control flow."""
     _output_type = bodo.boolean_array_type
 
-    def impl(txn):  # pragma: no cover
+    def impl(conn_str, table_id):  # pragma: no cover
         with bodo.no_warning_objmode(existing_columns=_output_type):
-            existing_columns = table_columns_have_theta_sketches(txn)
+            existing_columns = table_columns_have_theta_sketches(conn_str, table_id)
         return existing_columns
 
     return impl
@@ -825,10 +825,16 @@ def gen_iceberg_writer_append_table_impl_inner(
             sort_order_id = writer["sort_order_id"]
 
             # Fetch any existing puffin files:
-            if writer["use_theta_sketches"] and if_exists == "append":
-                old_puffin_file_path = get_old_statistics_file_path_wrapper(txn)
-            else:
-                old_puffin_file_path = ""
+            use_theta_sketches = writer["use_theta_sketches"]
+            conn_str = writer["conn"]
+            table_id = writer["table_id"]
+            with bodo.no_warning_objmode(old_puffin_file_path="unicode_type"):
+                if use_theta_sketches and if_exists == "append":
+                    old_puffin_file_path = get_old_statistics_file_path(
+                        conn_str, table_id
+                    )
+                else:
+                    old_puffin_file_path = ""
 
             with bodo.no_warning_objmode(success="bool_"):
                 (
@@ -847,7 +853,7 @@ def gen_iceberg_writer_append_table_impl_inner(
                     sort_order_id,
                 )
 
-            if writer["use_theta_sketches"]:
+            if use_theta_sketches:
                 with bodo.no_warning_objmode(
                     snapshot_id="int64",
                     sequence_number="int64",
@@ -930,20 +936,6 @@ def impl_wrapper(
 def lower_iceberg_writer_append_table(context, builder, sig, args):
     """lower iceberg_writer_append_table() using gen_iceberg_writer_append_table_impl above"""
     return context.compile_internal(builder, impl_wrapper, sig, args)
-
-
-def get_old_statistics_file_path_wrapper(txn) -> str:  # pragma: no cover
-    pass
-
-
-@overload(get_old_statistics_file_path_wrapper)
-def overload_get_old_statistics_file_path_wrapper(txn):
-    def impl(txn):  # pragma: no cover
-        with bodo.no_warning_objmode(old_puffin_file_path="unicode_type"):
-            old_puffin_file_path = get_old_statistics_file_path(txn)
-        return old_puffin_file_path
-
-    return impl
 
 
 def convert_to_snowflake_iceberg_table_py(
