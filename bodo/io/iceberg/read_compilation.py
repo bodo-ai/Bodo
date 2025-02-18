@@ -17,7 +17,11 @@ from numba.core import types
 import bodo
 from bodo.io.helpers import _get_numba_typ_from_pa_typ
 from bodo.io.iceberg.catalog import conn_str_to_catalog
-from bodo.io.iceberg.common import b_ICEBERG_FIELD_ID_MD_KEY, verify_pyiceberg_installed
+from bodo.io.iceberg.common import (
+    _fs_from_file_path,
+    b_ICEBERG_FIELD_ID_MD_KEY,
+    verify_pyiceberg_installed,
+)
 from bodo.io.parquet_pio import fpath_without_protocol_prefix
 from bodo.mpi4py import MPI
 from bodo.utils.py_objs import install_py_obj_class
@@ -58,7 +62,6 @@ def is_snowflake_managed_iceberg_wh(con: str) -> bool:
 @run_rank0
 def _get_table_schema(
     table: Table,
-    selected_cols: list[str] | None = None,
     is_merge_into_cow: bool = False,
 ) -> tuple[list[str], list[types.ArrayCompatible], pa.Schema]:
     from pyiceberg.io.pyarrow import schema_to_pyarrow
@@ -67,7 +70,7 @@ def _get_table_schema(
     pa_schema: pa.Schema = schema_to_pyarrow(table.schema())
 
     # Column Names to Scan
-    col_names = selected_cols if selected_cols else pa_schema.names.copy()
+    col_names = pa_schema.names.copy()
 
     # Convert to Bodo Schema
     bodo_types = [
@@ -111,7 +114,6 @@ def _determine_str_as_dict_columns(
         set[str]: Set of column names that should be dict-encoded
             (subset of str_col_names_to_check).
     """
-    from pyiceberg.io.pyarrow import _fs_from_file_path
 
     comm = MPI.COMM_WORLD
     if len(str_col_names_to_check) == 0:
@@ -212,7 +214,6 @@ def _determine_str_as_dict_columns(
 def get_iceberg_orig_schema(
     conn_str: str,
     table_id: str,
-    selected_cols: list[str] | None = None,
     is_merge_into_cow: bool = False,
 ) -> tuple[list[str], list[types.ArrayCompatible], pa.Schema]:
     """
@@ -230,7 +231,7 @@ def get_iceberg_orig_schema(
     # Get the pyarrow schema from Iceberg
     catalog = conn_str_to_catalog(conn_str)
     table = catalog.load_table(table_id)
-    return _get_table_schema(table, selected_cols, is_merge_into_cow)
+    return _get_table_schema(table, is_merge_into_cow)
 
 
 def get_orig_and_runtime_schema(
@@ -245,7 +246,8 @@ def get_orig_and_runtime_schema(
     list[str],
     list[types.ArrayCompatible],
     pa.Schema,
-    # Runtime Types
+    # Runtime Schema
+    list[str],
     list[types.ArrayCompatible],
 ]:
     _ = verify_pyiceberg_installed()
@@ -258,20 +260,27 @@ def get_orig_and_runtime_schema(
     except pyiceberg.exceptions.NoSuchTableError as e:
         raise BodoError("No such Iceberg table found") from e
 
-    col_names, orig_col_types, pa_schema = _get_table_schema(
-        table, selected_cols, is_merge_into_cow
+    orig_col_names, orig_col_types, pa_schema = _get_table_schema(
+        table, is_merge_into_cow
+    )
+
+    orig_col_name_to_type = dict(zip(orig_col_names, orig_col_types))
+    col_names = orig_col_names if selected_cols is None else selected_cols
+    col_types = (
+        orig_col_types
+        if selected_cols is None
+        else [orig_col_name_to_type[c] for c in col_names]
     )
 
     # ----------- Get dictionary-encoded string columns ----------- #
 
     # 1) Check user-provided dict-encoded columns for errors
-    col_name_to_idx = {c: i for i, c in enumerate(col_names)}
     for c in read_as_dict_cols:
-        if c not in col_name_to_idx:
+        if c not in orig_col_name_to_type:
             raise BodoError(
                 f"pandas.read_sql_table(): column name '{c}' in _bodo_read_as_dict is not in table columns {col_names}"
             )
-        if orig_col_types[col_name_to_idx[c]] != bodo.string_array_type:
+        if orig_col_name_to_type[c] != bodo.string_array_type:
             raise BodoError(
                 f"pandas.read_sql_table(): column name '{c}' in _bodo_read_as_dict is not a string column"
             )
@@ -297,9 +306,9 @@ def get_orig_and_runtime_schema(
         )
         all_dict_str_cols.update(dict_str_cols)
 
-    # change string array types to dict-encoded
-    col_types = orig_col_types.copy()
+    # Change string array types to dict-encoded
+    col_name_to_idx = {c: i for i, c in enumerate(col_names)}
     for c in all_dict_str_cols:
         col_types[col_name_to_idx[c]] = bodo.dict_str_arr_type
 
-    return col_names, orig_col_types, pa_schema, col_types
+    return orig_col_names, orig_col_types, pa_schema, col_names, col_types

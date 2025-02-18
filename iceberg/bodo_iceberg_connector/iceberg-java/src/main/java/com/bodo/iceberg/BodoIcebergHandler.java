@@ -193,7 +193,7 @@ public class BodoIcebergHandler {
    *
    * <p>Note: This API is exposed to Python.
    *
-   * @param txnID Transaction ID of transaction.
+   * @param tableId Table identifier on table modified.
    * @return An existing table file for snapshot of the table in the current transaction state.
    */
   public @Nonnull String getStatisticsFilePath(String tableId) {

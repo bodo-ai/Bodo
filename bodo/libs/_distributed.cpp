@@ -587,6 +587,186 @@ array_info *gather_array_py_entry(array_info *in_array, bool all_gather,
     }
 }
 
+// Corresponds to Numba's IndexValueType, used for MPI ArgMin/ArgMax.
+// https://github.com/numba/numba/blob/bced43d44b405a9db443b70171eb0125216770b6/numba/core/typing/new_builtins.py#L1152
+#pragma pack(1)
+template <typename T>
+struct IndexValuePair {
+    int64_t index;
+    T value;
+};
+
+/**
+ * @brief Create a pair MPI datatype (index & value) for the given MPI value
+ * type
+ *
+ * @param mpi_typ value type
+ * @return MPI_Datatype output pair MPI data type
+ */
+MPI_Datatype createPairDatatype(MPI_Datatype mpi_typ) {
+    MPI_Datatype newType;
+
+    // Each field is length 1 (1 index & 1 value)
+    int blocklengths[2] = {1, 1};
+
+    // The offsets for index/value members in IndexValuePair
+    MPI_Aint offsets[2] = {0, sizeof(int64_t)};
+
+    // Index/Value MPI data types
+    MPI_Datatype types[2] = {MPI_INT64_T, mpi_typ};
+
+    // Create and commit the custom datatype.
+    CHECK_MPI(MPI_Type_create_struct(2, blocklengths, offsets, types, &newType),
+              "dist_reduce: MPI error on MPI_Type_create_struct:");
+    CHECK_MPI(MPI_Type_commit(&newType),
+              "dist_reduce: MPI error on MPI_Type_commit:");
+
+    return newType;
+}
+
+/**
+ * @brief Custom MPI_Op function for ArgMin
+ *
+ * @tparam T value type
+ * @param invec input index/value
+ * @param inoutvec input/output index/value
+ * @param len number of elements (1 in our case but the op has to be general)
+ * @param datatype MPI data type of input (not used since templated)
+ */
+template <typename T>
+void ArgMinFunction(void *invec, void *inoutvec, int *len,
+                    MPI_Datatype *datatype) {
+    IndexValuePair<T> *in = static_cast<IndexValuePair<T> *>(invec);
+    IndexValuePair<T> *inout = static_cast<IndexValuePair<T> *>(inoutvec);
+
+    for (int i = 0; i < *len; i++) {
+        // If incoming value is smaller, take it
+        if (in[i].value < inout[i].value) {
+            inout[i].value = in[i].value;
+            inout[i].index = in[i].index;
+        }
+        // If tie, pick the smaller index
+        else if (in[i].value == inout[i].value) {
+            if (in[i].index < inout[i].index) {
+                inout[i].index = in[i].index;
+            }
+        }
+    }
+}
+
+/**
+ * @brief Custom MPI_Op function for ArgMax
+ *
+ * @tparam T value type
+ * @param invec input index/value
+ * @param inoutvec input/output index/value
+ * @param len number of elements (1 in our case but the op has to be general)
+ * @param datatype MPI data type of input (not used since templated)
+ */
+template <typename T>
+void ArgMaxFunction(void *invec, void *inoutvec, int *len,
+                    MPI_Datatype *datatype) {
+    IndexValuePair<T> *in = static_cast<IndexValuePair<T> *>(invec);
+    IndexValuePair<T> *inout = static_cast<IndexValuePair<T> *>(inoutvec);
+
+    for (int i = 0; i < *len; i++) {
+        // If incoming value is larger, take it
+        if (in[i].value > inout[i].value) {
+            inout[i].value = in[i].value;
+            inout[i].index = in[i].index;
+        }
+        // If tie, pick the smaller index
+        else if (in[i].value == inout[i].value) {
+            if (in[i].index < inout[i].index) {
+                inout[i].index = in[i].index;
+            }
+        }
+    }
+}
+
+template <typename T>
+MPI_Op createArgMinOp() {
+    MPI_Op op;
+    CHECK_MPI(MPI_Op_create(&ArgMinFunction<T>, /*commute=*/true, &op),
+              "dist_reduce: MPI error on MPI_Op_create:");
+    return op;
+}
+
+template <typename T>
+MPI_Op createArgMaxOp() {
+    MPI_Op op;
+    CHECK_MPI(MPI_Op_create(&ArgMaxFunction<T>, /*commute=*/true, &op),
+              "dist_reduce: MPI error on MPI_Op_create:");
+    return op;
+}
+
+#define EXPAND_ARGMINMAX(mpi_dtype, ctype)  \
+    if (mpi_typ == (mpi_dtype)) {           \
+        if (mpi_op == MPI_MINLOC) {         \
+            return createArgMinOp<ctype>(); \
+        } else if (mpi_op == MPI_MAXLOC) {  \
+            return createArgMaxOp<ctype>(); \
+        }                                   \
+    }
+
+/**
+ * @brief Create a custom MPI_Op for argmin/argmax for provided MPI data type
+ *
+ * @param mpi_typ value type
+ * @param mpi_op MPI_MINLOC or MPI_MAXLOC, specifying which operation to use
+ * @return MPI_Op custom MPI operator for reduction
+ */
+MPI_Op createArgMinMaxOp(MPI_Datatype mpi_typ, MPI_Op mpi_op) {
+    // Instantiate templates for argmin/argmax data types (should match relevant
+    // types in get_MPI_typ)
+    EXPAND_ARGMINMAX(MPI_UNSIGNED_CHAR, unsigned char)
+    EXPAND_ARGMINMAX(MPI_CHAR, char)
+    EXPAND_ARGMINMAX(MPI_INT, int)
+    EXPAND_ARGMINMAX(MPI_UNSIGNED, uint32_t)
+    EXPAND_ARGMINMAX(MPI_LONG_LONG_INT, int64_t)
+    EXPAND_ARGMINMAX(MPI_UNSIGNED_LONG_LONG, uint64_t)
+    EXPAND_ARGMINMAX(MPI_FLOAT, float)
+    EXPAND_ARGMINMAX(MPI_DOUBLE, double)
+    EXPAND_ARGMINMAX(MPI_SHORT, int16_t)
+    EXPAND_ARGMINMAX(MPI_UNSIGNED_SHORT, uint16_t)
+
+    throw std::runtime_error("Unsupported MPI operation for ArgMin/ArgMax");
+}
+
+void dist_reduce(char *in_ptr, char *out_ptr, int op_enum, int type_enum,
+                 int64_t comm_ptr) {
+    try {
+        MPI_Datatype mpi_typ = get_MPI_typ(type_enum);
+        MPI_Op mpi_op = get_MPI_op(op_enum);
+        MPI_Comm comm = MPI_COMM_WORLD;
+        if (comm_ptr != 0) {
+            comm = *(reinterpret_cast<MPI_Comm *>(comm_ptr));
+        }
+
+        // argmax and argmin need special handling
+        if (mpi_op == MPI_MAXLOC || mpi_op == MPI_MINLOC) {
+            MPI_Datatype pairMPIType = createPairDatatype(mpi_typ);
+            MPI_Op argMPIOp = createArgMinMaxOp(mpi_typ, mpi_op);
+
+            CHECK_MPI(
+                MPI_Allreduce(in_ptr, out_ptr, 1, pairMPIType, argMPIOp, comm),
+                "_distributed.h::dist_reduce: MPI error on MPI_Allreduce "
+                "(argmin/argmax):");
+
+            CHECK_MPI(MPI_Op_free(&argMPIOp),
+                      "_distributed.h::dist_reduce: MPI error on MPI_Op_free:");
+            CHECK_MPI(
+                MPI_Type_free(&pairMPIType),
+                "_distributed.h::dist_reduce: MPI error on MPI_Type_free:");
+        } else {
+            CHECK_MPI(MPI_Allreduce(in_ptr, out_ptr, 1, mpi_typ, mpi_op, comm),
+                      "_distributed.h::dist_reduce:");
+        }
+    } catch (const std::exception &e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+    }
+}
+
 // Only works on x86 Apple machines
 #if defined(__APPLE__) && defined(__x86_64__)
 #include <cpuid.h>
