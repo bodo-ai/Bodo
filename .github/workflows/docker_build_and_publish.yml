@@ -51,9 +51,8 @@ jobs:
         file: ./buildscripts/docker/docker_release/Dockerfile
         tags: ${{ env.TEST_TAG }}
  
-    - name: Test Jupyter notebooks inside the Docker image
+    - name: Test Jupyter Notebooks Inside the Docker Image
       run: |
-
         # Create folder to save output
         mkdir -p ./notebooks
 
@@ -63,8 +62,8 @@ jobs:
         # Step 2: Execute the notebook inside the container using jupyter nbconvert
         # NOTE: this doesn't check correctness of the output.
         # Only test setup and notebook works as expected.
-        docker exec test-container jupyter nbconvert --to notebook --execute /app/pi.ipynb --output /app/pi_output.ipynb
-        docker exec test-container jupyter nbconvert --to notebook --execute /app/quickstart.ipynb --output /app/quickstart_output.ipynb
+        docker exec test-container jupyter nbconvert --to notebook --execute "/app/# Getting-Started/pi.ipynb" --output /app/pi_output.ipynb
+        docker exec test-container jupyter nbconvert --to notebook --execute "/app/# Getting-Started/quickstart.ipynb" --output /app/quickstart_output.ipynb
 
         # Step 3: Copy the output notebooks from the container to the local directory
         docker cp test-container:/app/pi_output.ipynb ./notebooks/pi_output.ipynb
