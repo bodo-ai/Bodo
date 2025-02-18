@@ -302,7 +302,7 @@ def json_write_test(test_impl, read_impl, df, sort_col, reset_index=False):
         )
     ]
 )
-def test_df(request, memory_leak_check):
+def test_df(request):
     return request.param
 
 
