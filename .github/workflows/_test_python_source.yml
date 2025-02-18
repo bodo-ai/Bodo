@@ -67,6 +67,12 @@ jobs:
         # Run Tests
         - name: Run Tests
           run: |
+            if [[ "$RUNNER_OS" == "Windows" ]]; then
+              # On Windows we set HADOOP_HOME to a dummy directory.
+              # Spark needs to verify HADOOP_HOME exists at initialization even if it is not used.
+              export HADOOP_HOME="$(pwd)/buildscripts/local_utils/hadoop_dummy"
+            fi
+
             # Bodo Tests: Coverage is collected
             pytest -s -v -Wignore \
               --cov-report= --cov=bodo \
