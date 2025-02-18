@@ -10,10 +10,12 @@ from urllib.parse import parse_qs, urlparse
 
 import requests
 from numba.core import types
+from pyarrow.fs import FileSystem, FSSpecHandler
 
 from bodo.utils.utils import BodoError, run_rank0
 
 if pt.TYPE_CHECKING:  # pragma: no cover
+    from pyiceberg.io import FileIO
     from pyiceberg.table import FileScanTask
 
 
@@ -173,3 +175,26 @@ class IcebergConnectionType(types.Type):
 
     def get_conn_str(self) -> str:
         raise NotImplementedError("IcebergConnectionType should not be instantiated")
+
+
+def _fs_from_file_path(file_path: str, io: FileIO) -> FileSystem:
+    from pyiceberg.io.pyarrow import PyArrowFileIO
+
+    scheme, netloc, _ = PyArrowFileIO.parse_location(file_path)
+    if isinstance(io, PyArrowFileIO):
+        return io.fs_by_scheme(scheme, netloc)
+    else:
+        try:
+            from pyiceberg.io.fsspec import FsspecFileIO
+
+            if isinstance(io, FsspecFileIO):
+                from pyarrow.fs import PyFileSystem
+
+                return PyFileSystem(FSSpecHandler(io.get_fs(scheme)))
+            else:
+                raise ValueError(f"Expected PyArrowFileIO or FsspecFileIO, got: {io}")
+        except ModuleNotFoundError as e:
+            # When FsSpec is not installed
+            raise ValueError(
+                f"Expected PyArrowFileIO or FsspecFileIO, got: {io}"
+            ) from e

@@ -303,7 +303,8 @@ class Spawner:
         if sys.platform == "win32":
             # Signals work differently on Windows, so use an async MPI barrier
             # instead
-            poll_for_barrier(self.worker_intercomm)
+            # NOTE: polling req.Test() manually seems to hang on Windows with Intel MPI
+            poll_for_barrier(self.worker_intercomm, None)
         else:
             # Wait for execution to finish
             while not signaled:

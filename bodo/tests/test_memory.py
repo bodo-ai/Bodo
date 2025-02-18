@@ -39,9 +39,13 @@ from bodo.utils.typing import BodoWarning
 # when not handled correctly in Cython before v3.
 # PyTest can capture them as warnings, but to be extra
 # safe, we can treat those warnings as exceptions
-pytestmark = pytest.mark.filterwarnings(
-    "error::pytest.PytestUnraisableExceptionWarning"
-)
+pytestmark = [
+    pytest.mark.filterwarnings("error::pytest.PytestUnraisableExceptionWarning"),
+    # TODO[BSE-4556]: enable when bufferpool is enabled on Windows
+    pytest.mark.skipif(
+        sys.platform == "win32", reason="bufferpool disabled on Windows"
+    ),
+]
 
 
 @pytest.fixture

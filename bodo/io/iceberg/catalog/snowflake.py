@@ -210,6 +210,8 @@ class SnowflakeCatalog(MetastoreCatalog):
             assert os.environ.get("GOOGLE_APPLICATION_CREDENTIALS"), (
                 "GOOGLE_APPLICATION_CREDENTIALS not set. This is required for GCS access."
             )
+        elif _fs_scheme.scheme == "azure":
+            pass
         else:
             warnings.warn(f"Unsupported filesystem scheme: {_fs_scheme.scheme}")
 
