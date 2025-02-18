@@ -4125,7 +4125,7 @@ class TypingTransforms:
                 used_cols=columns_obj,
                 initial_filter=filter_obj,
                 initial_limit=limit_obj,
-                orig_col_names=col_names,
+                orig_col_names=orig_col_names,
                 orig_col_types=orig_arr_types,
                 sql_op_id=_bodo_sql_op_id_const,
                 dict_encode_in_bodo=dict_encode_in_bodo,
