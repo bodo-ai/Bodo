@@ -46,7 +46,7 @@ def test_basic_read(memory_leak_check, s3_tables_catalog):
     )
 
 
-@temp_env_override({"AWS_DEFAULT_REGION": "us-east-2"})
+@temp_env_override({"AWS_DEFAULT_REGION": "us-east-2", "AWS_REGION": "us-east-2"})
 def test_s3_tables_catalog_iceberg_write(s3_tables_catalog, memory_leak_check):
     """tests that writing tables works"""
 

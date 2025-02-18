@@ -3316,14 +3316,14 @@ def test_merge_general_cond_all_keys(memory_leak_check):
 
     df1 = pd.DataFrame(
         {
-            "A": np.arange(100) % 10,
-            "B": np.arange(100) % 12,
+            "A": np.arange(100, dtype=np.int64) % 10,
+            "B": np.arange(100, dtype=np.int64) % 12,
         }
     )
     df2 = pd.DataFrame(
         {
-            "A": np.arange(100) % 14,
-            "B": np.arange(100) % 11,
+            "A": np.arange(100, dtype=np.int64) % 14,
+            "B": np.arange(100, dtype=np.int64) % 11,
         }
     )
     py_out = df1.merge(df2, on=["A", "B"])

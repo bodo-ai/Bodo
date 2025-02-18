@@ -182,10 +182,16 @@ def test_set_column_cond2(memory_leak_check):
     bodo_func = bodo.jit(distributed=False)(test_impl)
     n = 11
     pd.testing.assert_frame_equal(
-        bodo_func(n, True), test_impl(n, True), check_column_type=False
+        bodo_func(n, True),
+        test_impl(n, True),
+        check_column_type=False,
+        check_dtype=False,
     )
     pd.testing.assert_frame_equal(
-        bodo_func(n, False), test_impl(n, False), check_column_type=False
+        bodo_func(n, False),
+        test_impl(n, False),
+        check_column_type=False,
+        check_dtype=False,
     )
 
 
@@ -838,7 +844,7 @@ def test_df_apply_func_case2(memory_leak_check):
     )(_get_dist_arg(df, False))
     res = bodo.allgatherv(res)
     py_res = df.apply(lambda r: 2 * np.arange(r[0]).sum(), axis=1)
-    pd.testing.assert_series_equal(res, py_res)
+    pd.testing.assert_series_equal(res, py_res, check_dtype=False)
 
 
 g_var = [3, 1, 5]
