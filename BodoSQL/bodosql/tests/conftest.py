@@ -131,13 +131,49 @@ def zeros_df():
 @pytest.fixture(
     params=[
         pytest.param(np.int8, marks=pytest.mark.slow),
-        pytest.param(np.uint8, marks=pytest.mark.slow),
+        pytest.param(
+            np.uint8,
+            marks=[
+                pytest.mark.slow,
+                pytest.mark.skipif(
+                    sys.platform == "win32",
+                    reason="Spark doesn't support unsigned int on Windows.",
+                ),
+            ],
+        ),
         pytest.param(np.int16, marks=pytest.mark.slow),
-        pytest.param(np.uint16, marks=pytest.mark.slow),
+        pytest.param(
+            np.uint16,
+            marks=[
+                pytest.mark.slow,
+                pytest.mark.skipif(
+                    sys.platform == "win32",
+                    reason="Spark doesn't support unsigned int on Windows.",
+                ),
+            ],
+        ),
         pytest.param(np.int32, marks=pytest.mark.slow),
-        pytest.param(np.uint32, marks=pytest.mark.slow),
+        pytest.param(
+            np.uint32,
+            marks=[
+                pytest.mark.slow,
+                pytest.mark.skipif(
+                    sys.platform == "win32",
+                    reason="Spark doesn't support unsigned int on Windows.",
+                ),
+            ],
+        ),
         np.int64,
-        pytest.param(np.uint64, marks=pytest.mark.slow),
+        pytest.param(
+            np.uint64,
+            marks=[
+                pytest.mark.slow,
+                pytest.mark.skipif(
+                    sys.platform == "win32",
+                    reason="Spark doesn't support unsigned int on Windows.",
+                ),
+            ],
+        ),
         pytest.param(np.float32, marks=pytest.mark.slow),
         np.float64,
     ]
@@ -316,7 +352,13 @@ def simple_join_fixture(request):
                     dtype=np.uint64,
                 )
             },
-            marks=pytest.mark.slow,
+            marks=[
+                pytest.mark.slow,
+                pytest.mark.skipif(
+                    sys.platform == "win32",
+                    reason="Spark doesn't support unsigned int on Windows.",
+                ),
+            ],
         ),
         pytest.param(
             {
@@ -337,7 +379,13 @@ def simple_join_fixture(request):
                         "E": [2**31, 2**30, 2**29] * 4,
                         "F": [2**28, 2**27, 2**26] * 4,
                     },
-                    dtype=np.uint32,
+                    marks=[
+                        pytest.mark.slow,
+                        pytest.mark.skipif(
+                            sys.platform == "win32",
+                            reason="Spark doesn't support unsigned int on Windows.",
+                        ),
+                    ],
                 )
             },
             marks=pytest.mark.slow,
