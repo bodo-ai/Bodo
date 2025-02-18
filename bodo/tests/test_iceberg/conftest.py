@@ -332,7 +332,9 @@ def azure_polaris_warehouse(polaris_token, polaris_server, polaris_package):
         root_client = PolarisDefaultApi(management_client)
         storage_conf = AzureStorageConfigInfo(
             storage_type="AZURE",
-            tenant_id="72f988bf-86f1-41af-91ab-2d7cd011db47",
+            tenant_id=os.environ.get(
+                "AZURE_TENANT_ID", "72f988bf-86f1-41af-91ab-2d7cd011db47"
+            ),
         )
 
         catalog_name = "azure_polaris_warehouse"
