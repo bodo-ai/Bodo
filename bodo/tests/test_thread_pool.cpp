@@ -3,8 +3,10 @@
 // https://github.com/apache/arrow/blob/apache-arrow-17.0.0/cpp/src/arrow/util/thread_pool_test.cc
 
 #include <sys/types.h>
+#if !defined(_WIN32)
 #include <sys/wait.h>
 #include <unistd.h>
+#endif
 #include "../libs/_io_cpu_thread_pool.h"
 #include "./test.hpp"
 

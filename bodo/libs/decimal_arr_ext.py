@@ -242,6 +242,25 @@ class Decimal128Type(types.Type):
             return self
 
 
+def _ll_get_int128_low_high(builder, val):
+    """Return low/high int64 portions of an int128 LLVM value"""
+    low = builder.trunc(val, lir.IntType(64))
+    high = builder.trunc(
+        builder.lshr(val, lir.Constant(lir.IntType(128), 64)), lir.IntType(64)
+    )
+    return low, high
+
+
+def _ll_int128_from_low_high(builder, low_ptr, high_ptr):
+    """Returns an int128 LLVM value from low/high int64 portions"""
+    low = builder.zext(builder.load(low_ptr), lir.IntType(128))
+    high = builder.zext(builder.load(high_ptr), lir.IntType(128))
+    decimal_val = builder.or_(
+        builder.shl(high, lir.Constant(lir.IntType(128), 64)), low
+    )
+    return decimal_val
+
+
 # For the processing of the data we have to put a precision and scale.
 # As it turn out when reading boxed data we may certainly have precision not 38
 # and scale not 18.
@@ -318,58 +337,6 @@ def decimal_max(lhs, rhs):
         return impl
 
 
-def decimal_to_str_codegen(context, builder, signature, args, scale):
-    (val,) = args
-    scale = context.get_constant(types.int32, scale)
-    remove_trailing_zeros = context.get_constant(types.bool_, 1)
-    uni_str = cgutils.create_struct_proxy(types.unicode_type)(context, builder)
-
-    fnty = lir.FunctionType(
-        lir.VoidType(),
-        [
-            lir.IntType(128),
-            lir.IntType(8).as_pointer().as_pointer(),
-            lir.IntType(64).as_pointer(),
-            lir.IntType(32),
-            lir.IntType(1),
-        ],
-    )
-    fn = cgutils.get_or_insert_function(builder.module, fnty, name="decimal_to_str")
-    builder.call(
-        fn,
-        [
-            val,
-            uni_str._get_ptr_by_name("meminfo"),
-            uni_str._get_ptr_by_name("length"),
-            scale,
-            remove_trailing_zeros,
-        ],
-    )
-
-    # output is always ASCII
-    uni_str.kind = context.get_constant(
-        types.int32, numba.cpython.unicode.PY_UNICODE_1BYTE_KIND
-    )
-    uni_str.is_ascii = context.get_constant(types.int32, 1)
-    # set hash value -1 to indicate "need to compute hash"
-    uni_str.hash = context.get_constant(numba.cpython.unicode._Py_hash_t, -1)
-    uni_str.data = context.nrt.meminfo_data(builder, uni_str.meminfo)
-    # Set parent to NULL
-    uni_str.parent = cgutils.get_null_value(uni_str.parent.type)
-    return uni_str._getvalue()
-
-
-@intrinsic
-def decimal_to_str(typingctx, val_t=None):
-    """convert decimal128 to string"""
-    assert isinstance(val_t, Decimal128Type)
-
-    def codegen(context, builder, signature, args):
-        return decimal_to_str_codegen(context, builder, signature, args, val_t.scale)
-
-    return bodo.string_type(val_t), codegen
-
-
 @intrinsic(prefer_literal=True)
 def _str_to_decimal_scalar(typingctx, val, precision_tp, scale_tp):
     """convert string to decimal128. This returns a tuple of
@@ -383,28 +350,35 @@ def _str_to_decimal_scalar(typingctx, val, precision_tp, scale_tp):
         val, precision, scale = args
         val = bodo.libs.str_ext.gen_unicode_to_std_str(context, builder, val)
         error_ptr = cgutils.alloca_once(builder, lir.IntType(1))
+        out_low_ptr = cgutils.alloca_once(builder, lir.IntType(64))
+        out_high_ptr = cgutils.alloca_once(builder, lir.IntType(64))
         fnty = lir.FunctionType(
-            lir.IntType(128),
+            lir.VoidType(),
             [
                 lir.IntType(8).as_pointer(),
                 lir.IntType(64),
                 lir.IntType(64),
+                lir.IntType(64).as_pointer(),
+                lir.IntType(64).as_pointer(),
                 lir.IntType(1).as_pointer(),
             ],
         )
         fn = cgutils.get_or_insert_function(
             builder.module, fnty, name="str_to_decimal_scalar_py_entry"
         )
-        decimal_val = builder.call(
+        builder.call(
             fn,
             [
                 val,
                 precision,
                 scale,
+                out_low_ptr,
+                out_high_ptr,
                 error_ptr,
             ],
         )
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        decimal_val = _ll_int128_from_low_high(builder, out_low_ptr, out_high_ptr)
         errors = builder.load(error_ptr)
         return context.make_tuple(builder, signature.return_type, [decimal_val, errors])
 
@@ -552,25 +526,26 @@ def decimal_scalar_to_str(arr):
 @overload(decimal_scalar_to_str)
 def overload_decimal_scalar_to_str(arr):
     def impl(arr):  # pragma: no cover
-        out = _decimal_scalar_to_str(arr)
+        out = _decimal_scalar_to_str(arr, False)
         return out
 
     return impl
 
 
 @intrinsic
-def _decimal_scalar_to_str(typingctx, arr_t):
+def _decimal_scalar_to_str(typingctx, arr_t, remove_trailing_zeros_t):
     def codegen(context, builder, signature, args):
-        (val,) = args
+        (val, remove_trailing_zeros) = args
         scale = context.get_constant(types.int32, arr_t.scale)
-        remove_trailing_zeros = context.get_constant(types.bool_, 0)
 
         uni_str = cgutils.create_struct_proxy(types.unicode_type)(context, builder)
+        in_low, in_high = _ll_get_int128_low_high(builder, val)
 
         fnty = lir.FunctionType(
             lir.VoidType(),
             [
-                lir.IntType(128),
+                lir.IntType(64),
+                lir.IntType(64),
                 lir.IntType(8).as_pointer().as_pointer(),
                 lir.IntType(64).as_pointer(),
                 lir.IntType(32),
@@ -581,7 +556,8 @@ def _decimal_scalar_to_str(typingctx, arr_t):
         builder.call(
             fn,
             [
-                val,
+                in_low,
+                in_high,
                 uni_str._get_ptr_by_name("meminfo"),
                 uni_str._get_ptr_by_name("length"),
                 scale,
@@ -601,7 +577,7 @@ def _decimal_scalar_to_str(typingctx, arr_t):
         uni_str.parent = cgutils.get_null_value(uni_str.parent.type)
         return uni_str._getvalue()
 
-    return bodo.string_type(arr_t), codegen
+    return bodo.string_type(arr_t, remove_trailing_zeros_t), codegen
 
 
 # We cannot have exact matching between Python and Bodo
@@ -612,7 +588,7 @@ def _decimal_scalar_to_str(typingctx, arr_t):
 @overload_method(Decimal128Type, "__str__")
 def overload_str_decimal(val):
     def impl(val):  # pragma: no cover
-        return decimal_to_str(val)
+        return _decimal_scalar_to_str(val, True)
 
     return impl
 
@@ -631,42 +607,106 @@ def decimal128type_to_int64_tuple(typingctx, val):
     return types.UniTuple(types.int64, 2)(val), codegen
 
 
-_arrow_compute_cmp_decimal_int = types.ExternalFunction(
-    "arrow_compute_cmp_decimal_int_py_entry",
-    types.bool_(
-        types.int32,
-        int128_type,
-        types.int32,
-        types.int32,
-        types.int64,
-    ),
-)
+@intrinsic
+def _arrow_compute_cmp_decimal_decimal(
+    typingctx, op_enum, lhs, precision1, scale1, precision2, scale2, rhs
+):
+    def codegen(context, builder, signature, args):
+        (op_enum, lhs, precision1, scale1, precision2, scale2, rhs) = args
+        lhs_low, lhs_high = _ll_get_int128_low_high(builder, lhs)
+        rhs_low, rhs_high = _ll_get_int128_low_high(builder, rhs)
+
+        fnty = lir.FunctionType(
+            lir.IntType(1),
+            [
+                lir.IntType(32),
+                lir.IntType(64),  # lhs_low
+                lir.IntType(64),  # lhs_high
+                lir.IntType(32),
+                lir.IntType(32),
+                lir.IntType(32),
+                lir.IntType(32),
+                lir.IntType(64),  # rhs_low
+                lir.IntType(64),  # rhs_high
+            ],
+        )
+        fn = cgutils.get_or_insert_function(
+            builder.module, fnty, name="arrow_compute_cmp_decimal_decimal_py_entry"
+        )
+        ret = builder.call(
+            fn,
+            [
+                op_enum,
+                lhs_low,
+                lhs_high,
+                precision1,
+                scale1,
+                precision2,
+                scale2,
+                rhs_low,
+                rhs_high,
+            ],
+        )
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        return ret
+
+    return types.bool_(
+        op_enum, lhs, precision1, scale1, precision2, scale2, rhs
+    ), codegen
 
 
-_arrow_compute_cmp_decimal_float = types.ExternalFunction(
-    "arrow_compute_cmp_decimal_float_py_entry",
-    types.bool_(
-        types.int32,
-        int128_type,
-        types.int32,
-        types.int32,
-        types.float64,
-    ),
-)
+@intrinsic
+def _arrow_compute_cmp_decimal_float(typingctx, op_enum, lhs, precision, scale, rhs):
+    def codegen(context, builder, signature, args):
+        (op_enum, lhs, precision, scale, rhs) = args
+        lhs_low, lhs_high = _ll_get_int128_low_high(builder, lhs)
+
+        fnty = lir.FunctionType(
+            lir.IntType(1),
+            [
+                lir.IntType(32),
+                lir.IntType(64),  # lhs_low
+                lir.IntType(64),  # lhs_high
+                lir.IntType(32),
+                lir.IntType(32),
+                lir.DoubleType(),
+            ],
+        )
+        fn = cgutils.get_or_insert_function(
+            builder.module, fnty, name="arrow_compute_cmp_decimal_float_py_entry"
+        )
+        ret = builder.call(fn, [op_enum, lhs_low, lhs_high, precision, scale, rhs])
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        return ret
+
+    return types.bool_(op_enum, lhs, precision, scale, rhs), codegen
 
 
-_arrow_compute_cmp_decimal_decimal = types.ExternalFunction(
-    "arrow_compute_cmp_decimal_decimal_py_entry",
-    types.bool_(
-        types.int32,
-        int128_type,
-        types.int32,
-        types.int32,
-        types.int32,
-        types.int32,
-        int128_type,
-    ),
-)
+@intrinsic
+def _arrow_compute_cmp_decimal_int(typingctx, op_enum, lhs, precision, scale, rhs):
+    def codegen(context, builder, signature, args):
+        (op_enum, lhs, precision, scale, rhs) = args
+        lhs_low, lhs_high = _ll_get_int128_low_high(builder, lhs)
+
+        fnty = lir.FunctionType(
+            lir.IntType(1),
+            [
+                lir.IntType(32),
+                lir.IntType(64),  # lhs_low
+                lir.IntType(64),  # lhs_high
+                lir.IntType(32),
+                lir.IntType(32),
+                lir.IntType(64),
+            ],
+        )
+        fn = cgutils.get_or_insert_function(
+            builder.module, fnty, name="arrow_compute_cmp_decimal_int_py_entry"
+        )
+        ret = builder.call(fn, [op_enum, lhs_low, lhs_high, precision, scale, rhs])
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        return ret
+
+    return types.bool_(op_enum, lhs, precision, scale, rhs), codegen
 
 
 def decimal_create_cmp_op_overload(op):
@@ -682,12 +722,12 @@ def decimal_create_cmp_op_overload(op):
 
             def impl(lhs, rhs):  # pragma: no cover
                 out = _arrow_compute_cmp_decimal_decimal(
-                    op_enum,
+                    np.int32(op_enum),
                     decimal128type_to_int128(lhs),
-                    precision1,
-                    scale1,
-                    precision2,
-                    scale2,
+                    np.int32(precision1),
+                    np.int32(scale1),
+                    np.int32(precision2),
+                    np.int32(scale2),
                     decimal128type_to_int128(rhs),
                 )
                 bodo.utils.utils.check_and_propagate_cpp_exception()
@@ -702,7 +742,11 @@ def decimal_create_cmp_op_overload(op):
 
             def impl(lhs, rhs):  # pragma: no cover
                 out = _arrow_compute_cmp_decimal_int(
-                    op_enum, decimal128type_to_int128(lhs), precision, scale, rhs
+                    np.int32(op_enum),
+                    decimal128type_to_int128(lhs),
+                    np.int32(precision),
+                    np.int32(scale),
+                    np.int64(rhs),
                 )
                 bodo.utils.utils.check_and_propagate_cpp_exception()
                 return out
@@ -717,7 +761,11 @@ def decimal_create_cmp_op_overload(op):
 
             def impl(lhs, rhs):  # pragma: no cover
                 out = _arrow_compute_cmp_decimal_int(
-                    op_enum, decimal128type_to_int128(rhs), precision, scale, lhs
+                    np.int32(op_enum),
+                    decimal128type_to_int128(rhs),
+                    np.int32(precision),
+                    np.int32(scale),
+                    np.int64(lhs),
                 )
                 bodo.utils.utils.check_and_propagate_cpp_exception()
                 return out
@@ -731,7 +779,11 @@ def decimal_create_cmp_op_overload(op):
 
             def impl(lhs, rhs):  # pragma: no cover
                 out = _arrow_compute_cmp_decimal_float(
-                    op_enum, decimal128type_to_int128(lhs), precision, scale, rhs
+                    np.int32(op_enum),
+                    decimal128type_to_int128(lhs),
+                    np.int32(precision),
+                    np.int32(scale),
+                    np.float64(rhs),
                 )
                 bodo.utils.utils.check_and_propagate_cpp_exception()
                 return out
@@ -746,7 +798,11 @@ def decimal_create_cmp_op_overload(op):
 
             def impl(lhs, rhs):  # pragma: no cover
                 out = _arrow_compute_cmp_decimal_float(
-                    op_enum, decimal128type_to_int128(rhs), precision, scale, lhs
+                    np.int32(op_enum),
+                    decimal128type_to_int128(rhs),
+                    np.int32(precision),
+                    np.int32(scale),
+                    np.float64(lhs),
                 )
                 bodo.utils.utils.check_and_propagate_cpp_exception()
                 return out
@@ -826,12 +882,14 @@ def decimal_to_float64_codegen(context, builder, signature, args, scale):
     fnty = lir.FunctionType(
         lir.DoubleType(),
         [
-            lir.IntType(128),
+            lir.IntType(64),
+            lir.IntType(64),
             lir.IntType(8),
         ],
     )
     fn = cgutils.get_or_insert_function(builder.module, fnty, name="decimal_to_double")
-    ret = builder.call(fn, [val, scale])
+    low, high = _ll_get_int128_low_high(builder, val)
+    ret = builder.call(fn, [low, high, scale])
     bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
     return ret
 
@@ -921,11 +979,13 @@ def decimal_to_int64(typingctx, val_t):
         (val,) = args
         precision = context.get_constant(types.int8, sig.args[0].precision)
         scale = context.get_constant(types.int8, sig.args[0].scale)
+        in_low, in_high = _ll_get_int128_low_high(builder, val)
 
         fnty = lir.FunctionType(
             lir.IntType(64),
             [
-                lir.IntType(128),
+                lir.IntType(64),
+                lir.IntType(64),
                 lir.IntType(8),
                 lir.IntType(8),
             ],
@@ -933,7 +993,7 @@ def decimal_to_int64(typingctx, val_t):
         fn = cgutils.get_or_insert_function(
             builder.module, fnty, name="decimal_to_int64"
         )
-        ret = builder.call(fn, [val, precision, scale])
+        ret = builder.call(fn, [in_low, in_high, precision, scale])
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
         return ret
 
@@ -1007,7 +1067,8 @@ def box_decimal(typ, val, c):
     fnty = lir.FunctionType(
         lir.IntType(8).as_pointer(),
         [
-            lir.IntType(128),
+            lir.IntType(64),
+            lir.IntType(64),
             lir.IntType(8),
             lir.IntType(8),
         ],
@@ -1016,10 +1077,11 @@ def box_decimal(typ, val, c):
 
     precision = c.context.get_constant(types.int8, typ.precision)
     scale = c.context.get_constant(types.int8, typ.scale)
+    low, high = _ll_get_int128_low_high(c.builder, val)
 
     return c.builder.call(
         fn,
-        [val, precision, scale],
+        [low, high, precision, scale],
     )
 
 
@@ -1040,7 +1102,7 @@ def cast_decimal_to_int(context, builder, fromty, toty, val):
 @overload_method(Decimal128Type, "__hash__", no_unliteral=True)
 def decimal_hash(val):  # pragma: no cover
     def impl(val):
-        return hash(decimal_to_str(val))
+        return hash(_decimal_scalar_to_str(val, True))
 
     return impl
 
@@ -1250,20 +1312,31 @@ def _cast_decimal_to_decimal_scalar_unsafe(typingctx, val_t, precision_t, scale_
 
     def codegen(context, builder, signature, args):
         val, _, _ = args
+
+        out_low_ptr = cgutils.alloca_once(builder, lir.IntType(64))
+        out_high_ptr = cgutils.alloca_once(builder, lir.IntType(64))
+        in_low, in_high = _ll_get_int128_low_high(builder, val)
+
         fnty = lir.FunctionType(
-            lir.IntType(128),
+            lir.VoidType(),
             [
-                lir.IntType(128),
                 lir.IntType(64),
+                lir.IntType(64),
+                lir.IntType(64),
+                lir.IntType(64).as_pointer(),
+                lir.IntType(64).as_pointer(),
             ],
         )
         scale_amount_const = context.get_constant(types.int64, shift_amount)
         fn = cgutils.get_or_insert_function(
             builder.module, fnty, name="cast_decimal_to_decimal_scalar_unsafe"
         )
-        ret = builder.call(fn, [val, scale_amount_const])
+        builder.call(
+            fn, [in_low, in_high, scale_amount_const, out_low_ptr, out_high_ptr]
+        )
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
-        return ret
+        decimal_val = _ll_int128_from_low_high(builder, out_low_ptr, out_high_ptr)
+        return decimal_val
 
     decimal_type = Decimal128Type(precision, scale)
     return decimal_type(val_t, precision_t, scale_t), codegen
@@ -1286,13 +1359,21 @@ def _cast_decimal_to_decimal_scalar_safe(typingctx, val_t, precision_t, scale_t)
 
     def codegen(context, builder, signature, args):
         val, _, _ = args
+
+        out_low_ptr = cgutils.alloca_once(builder, lir.IntType(64))
+        out_high_ptr = cgutils.alloca_once(builder, lir.IntType(64))
+        in_low, in_high = _ll_get_int128_low_high(builder, val)
+
         fnty = lir.FunctionType(
-            lir.IntType(128),
+            lir.VoidType(),
             [
-                lir.IntType(128),
+                lir.IntType(64),
+                lir.IntType(64),
                 lir.IntType(64),
                 lir.IntType(64),
                 lir.IntType(1).as_pointer(),
+                lir.IntType(64).as_pointer(),
+                lir.IntType(64).as_pointer(),
             ],
         )
         scale_amount_const = context.get_constant(types.int64, shift_amount)
@@ -1301,10 +1382,22 @@ def _cast_decimal_to_decimal_scalar_safe(typingctx, val_t, precision_t, scale_t)
         fn = cgutils.get_or_insert_function(
             builder.module, fnty, name="cast_decimal_to_decimal_scalar_safe"
         )
-        ret = builder.call(fn, [val, scale_amount_const, n_const, safe_pointer])
+        builder.call(
+            fn,
+            [
+                in_low,
+                in_high,
+                scale_amount_const,
+                n_const,
+                safe_pointer,
+                out_low_ptr,
+                out_high_ptr,
+            ],
+        )
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        decimal_val = _ll_int128_from_low_high(builder, out_low_ptr, out_high_ptr)
         safe = builder.load(safe_pointer)
-        return context.make_tuple(builder, signature.return_type, [ret, safe])
+        return context.make_tuple(builder, signature.return_type, [decimal_val, safe])
 
     decimal_type = Decimal128Type(precision, scale)
     ret_type = types.Tuple([decimal_type, types.bool_])
@@ -1411,23 +1504,29 @@ def _cast_float_to_decimal_scalar(typingctx, val_t, precision_t, scale_t):
 
     def codegen(context, builder, signature, args):
         val, prec, scale = args
+        out_low_ptr = cgutils.alloca_once(builder, lir.IntType(64))
+        out_high_ptr = cgutils.alloca_once(builder, lir.IntType(64))
+
         fnty = lir.FunctionType(
-            lir.IntType(128),
+            lir.VoidType(),
             [
                 lir.DoubleType(),
                 lir.IntType(32),
                 lir.IntType(32),
                 lir.IntType(1).as_pointer(),
+                lir.IntType(64).as_pointer(),
+                lir.IntType(64).as_pointer(),
             ],
         )
         safe_pointer = cgutils.alloca_once(builder, lir.IntType(1))
         fn = cgutils.get_or_insert_function(
             builder.module, fnty, name="cast_float_to_decimal_scalar"
         )
-        ret = builder.call(fn, [val, prec, scale, safe_pointer])
+        builder.call(fn, [val, prec, scale, safe_pointer, out_low_ptr, out_high_ptr])
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
         safe = builder.load(safe_pointer)
-        return context.make_tuple(builder, signature.return_type, [ret, safe])
+        res = _ll_int128_from_low_high(builder, out_low_ptr, out_high_ptr)
+        return context.make_tuple(builder, signature.return_type, [res, safe])
 
     decimal_type = Decimal128Type(precision, scale)
     ret_type = types.Tuple([decimal_type, types.bool_])
@@ -1461,16 +1560,20 @@ def _decimal_scalar_sign(typingctx, val_t):
     assert isinstance(val_t, Decimal128Type), "Decimal128Type expected"
 
     def codegen(context, builder, signature, args):
+        val = args[0]
+        in_low, in_high = _ll_get_int128_low_high(builder, val)
+
         fnty = lir.FunctionType(
             lir.IntType(8),
             [
-                lir.IntType(128),
+                lir.IntType(64),
+                lir.IntType(64),
             ],
         )
         fn = cgutils.get_or_insert_function(
             builder.module, fnty, name="decimal_scalar_sign"
         )
-        ret = builder.call(fn, args)
+        ret = builder.call(fn, [in_low, in_high])
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
         return ret
 
@@ -1530,22 +1633,27 @@ def _decimal_array_sign(typingctx, val_t):
 def _sum_decimal_array(typingctx, arr_t, in_scale_t, parallel_t):
     def codegen(context, builder, signature, args):
         (arr, _, parallel) = args
+        out_low_ptr = cgutils.alloca_once(builder, lir.IntType(64))
+        out_high_ptr = cgutils.alloca_once(builder, lir.IntType(64))
         fnty = lir.FunctionType(
-            lir.IntType(128),
+            lir.VoidType(),
             [
                 lir.IntType(8).as_pointer(),
                 lir.IntType(1).as_pointer(),
                 lir.IntType(1),
+                lir.IntType(64).as_pointer(),
+                lir.IntType(64).as_pointer(),
             ],
         )
         fn = cgutils.get_or_insert_function(
             builder.module, fnty, name="sum_decimal_array"
         )
         is_null_pointer = cgutils.alloca_once(builder, lir.IntType(1))
-        ret = builder.call(fn, [arr, is_null_pointer, parallel])
+        builder.call(fn, [arr, is_null_pointer, parallel, out_low_ptr, out_high_ptr])
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
         is_null = builder.load(is_null_pointer)
-        return context.make_tuple(builder, signature.return_type, [ret, is_null])
+        res = _ll_int128_from_low_high(builder, out_low_ptr, out_high_ptr)
+        return context.make_tuple(builder, signature.return_type, [res, is_null])
 
     in_scale = get_overload_const_int(in_scale_t)
     output_decimal_type = Decimal128Type(DECIMAL128_MAX_PRECISION, in_scale)
@@ -1641,16 +1749,20 @@ def _add_or_subtract_decimal_scalars(
     def codegen(context, builder, signature, args):
         d1, d2, output_precision, output_scale, do_addition = args
         fnty = lir.FunctionType(
-            lir.IntType(128),
+            lir.VoidType(),
             [
-                lir.IntType(128),
-                lir.IntType(64),
-                lir.IntType(64),
-                lir.IntType(128),
                 lir.IntType(64),
                 lir.IntType(64),
                 lir.IntType(64),
                 lir.IntType(64),
+                lir.IntType(64),
+                lir.IntType(64),
+                lir.IntType(64),
+                lir.IntType(64),
+                lir.IntType(64),
+                lir.IntType(64),
+                lir.IntType(64).as_pointer(),  # out_low_ptr
+                lir.IntType(64).as_pointer(),  # out_high_ptr
                 lir.IntType(1),
                 lir.IntType(1).as_pointer(),
             ],
@@ -1663,24 +1775,33 @@ def _add_or_subtract_decimal_scalars(
             builder.module, fnty, name="add_or_subtract_decimal_scalars"
         )
         overflow_pointer = cgutils.alloca_once(builder, lir.IntType(1))
-        ret = builder.call(
+        d1_low, d1_high = _ll_get_int128_low_high(builder, d1)
+        d2_low, d2_high = _ll_get_int128_low_high(builder, d2)
+        out_low_ptr = cgutils.alloca_once(builder, lir.IntType(64))
+        out_high_ptr = cgutils.alloca_once(builder, lir.IntType(64))
+        builder.call(
             fn,
             [
-                d1,
+                d1_low,
+                d1_high,
                 d1_precision_const,
                 d1_scale_const,
-                d2,
+                d2_low,
+                d2_high,
                 d2_precision_const,
                 d2_scale_const,
                 output_precision,
                 output_scale,
+                out_low_ptr,
+                out_high_ptr,
                 do_addition,
                 overflow_pointer,
             ],
         )
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        res = _ll_int128_from_low_high(builder, out_low_ptr, out_high_ptr)
         overflow = builder.load(overflow_pointer)
-        return context.make_tuple(builder, signature.return_type, [ret, overflow])
+        return context.make_tuple(builder, signature.return_type, [res, overflow])
 
     output_decimal_type = Decimal128Type(output_precision, output_scale)
     ret_type = types.Tuple([output_decimal_type, types.bool_])
@@ -1865,16 +1986,20 @@ def _multiply_decimal_scalars(typingctx, d1_t, d2_t, precision_t, scale_t):
     def codegen(context, builder, signature, args):
         d1, d2, output_precision, output_scale = args
         fnty = lir.FunctionType(
-            lir.IntType(128),
+            lir.VoidType(),
             [
-                lir.IntType(128),
-                lir.IntType(64),
-                lir.IntType(64),
-                lir.IntType(128),
                 lir.IntType(64),
                 lir.IntType(64),
                 lir.IntType(64),
                 lir.IntType(64),
+                lir.IntType(64),
+                lir.IntType(64),
+                lir.IntType(64),
+                lir.IntType(64),
+                lir.IntType(64),
+                lir.IntType(64),
+                lir.IntType(64).as_pointer(),  # out_low_ptr
+                lir.IntType(64).as_pointer(),  # out_high_ptr
                 lir.IntType(1).as_pointer(),
             ],
         )
@@ -1886,23 +2011,32 @@ def _multiply_decimal_scalars(typingctx, d1_t, d2_t, precision_t, scale_t):
             builder.module, fnty, name="multiply_decimal_scalars"
         )
         overflow_pointer = cgutils.alloca_once(builder, lir.IntType(1))
-        ret = builder.call(
+        d1_low, d1_high = _ll_get_int128_low_high(builder, d1)
+        d2_low, d2_high = _ll_get_int128_low_high(builder, d2)
+        out_low_ptr = cgutils.alloca_once(builder, lir.IntType(64))
+        out_high_ptr = cgutils.alloca_once(builder, lir.IntType(64))
+        builder.call(
             fn,
             [
-                d1,
+                d1_low,
+                d1_high,
                 d1_precision_const,
                 d1_scale_const,
-                d2,
+                d2_low,
+                d2_high,
                 d2_precision_const,
                 d2_scale_const,
                 output_precision,
                 output_scale,
+                out_low_ptr,
+                out_high_ptr,
                 overflow_pointer,
             ],
         )
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        res = _ll_int128_from_low_high(builder, out_low_ptr, out_high_ptr)
         overflow = builder.load(overflow_pointer)
-        return context.make_tuple(builder, signature.return_type, [ret, overflow])
+        return context.make_tuple(builder, signature.return_type, [res, overflow])
 
     output_decimal_type = Decimal128Type(output_precision, output_scale)
     ret_type = types.Tuple([output_decimal_type, types.bool_])
@@ -2062,16 +2196,20 @@ def _modulo_decimal_scalars(typingctx, d1_t, d2_t, out_precision_t, out_scale_t)
     def codegen(context, builder, signature, args):
         d1, d2, output_precision, output_scale = args
         fnty = lir.FunctionType(
-            lir.IntType(128),
+            lir.VoidType(),
             [
-                lir.IntType(128),
-                lir.IntType(64),
-                lir.IntType(64),
-                lir.IntType(128),
                 lir.IntType(64),
                 lir.IntType(64),
                 lir.IntType(64),
                 lir.IntType(64),
+                lir.IntType(64),
+                lir.IntType(64),
+                lir.IntType(64),
+                lir.IntType(64),
+                lir.IntType(64),
+                lir.IntType(64),
+                lir.IntType(64).as_pointer(),  # out_low_ptr
+                lir.IntType(64).as_pointer(),  # out_high_ptr
             ],
         )
         d1_precision_const = context.get_constant(types.int64, d1_precision)
@@ -2081,21 +2219,30 @@ def _modulo_decimal_scalars(typingctx, d1_t, d2_t, out_precision_t, out_scale_t)
         fn = cgutils.get_or_insert_function(
             builder.module, fnty, name="modulo_decimal_scalars"
         )
-        ret = builder.call(
+        d1_low, d1_high = _ll_get_int128_low_high(builder, d1)
+        d2_low, d2_high = _ll_get_int128_low_high(builder, d2)
+        out_low_ptr = cgutils.alloca_once(builder, lir.IntType(64))
+        out_high_ptr = cgutils.alloca_once(builder, lir.IntType(64))
+        builder.call(
             fn,
             [
-                d1,
+                d1_low,
+                d1_high,
                 d1_precision_const,
                 d1_scale_const,
-                d2,
+                d2_low,
+                d2_high,
                 d2_precision_const,
                 d2_scale_const,
                 output_precision,
                 output_scale,
+                out_low_ptr,
+                out_high_ptr,
             ],
         )
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
-        return ret
+        res = _ll_int128_from_low_high(builder, out_low_ptr, out_high_ptr)
+        return res
 
     output_decimal_type = Decimal128Type(output_precision, output_scale)
     return output_decimal_type(d1_t, d2_t, out_precision_t, out_scale_t), codegen
@@ -2248,16 +2395,20 @@ def _divide_decimal_scalars(typingctx, d1_t, d2_t, precision_t, scale_t, do_div0
     def codegen(context, builder, signature, args):
         d1, d2, output_precision, output_scale, do_div0 = args
         fnty = lir.FunctionType(
-            lir.IntType(128),
+            lir.VoidType(),
             [
-                lir.IntType(128),
-                lir.IntType(64),
-                lir.IntType(64),
-                lir.IntType(128),
                 lir.IntType(64),
                 lir.IntType(64),
                 lir.IntType(64),
                 lir.IntType(64),
+                lir.IntType(64),
+                lir.IntType(64),
+                lir.IntType(64),
+                lir.IntType(64),
+                lir.IntType(64),
+                lir.IntType(64),
+                lir.IntType(64).as_pointer(),  # out_low_ptr
+                lir.IntType(64).as_pointer(),  # out_high_ptr
                 lir.IntType(1).as_pointer(),
                 lir.IntType(1),
             ],
@@ -2270,24 +2421,33 @@ def _divide_decimal_scalars(typingctx, d1_t, d2_t, precision_t, scale_t, do_div0
             builder.module, fnty, name="divide_decimal_scalars"
         )
         overflow_pointer = cgutils.alloca_once(builder, lir.IntType(1))
-        ret = builder.call(
+        d1_low, d1_high = _ll_get_int128_low_high(builder, d1)
+        d2_low, d2_high = _ll_get_int128_low_high(builder, d2)
+        out_low_ptr = cgutils.alloca_once(builder, lir.IntType(64))
+        out_high_ptr = cgutils.alloca_once(builder, lir.IntType(64))
+        builder.call(
             fn,
             [
-                d1,
+                d1_low,
+                d1_high,
                 d1_precision_const,
                 d1_scale_const,
-                d2,
+                d2_low,
+                d2_high,
                 d2_precision_const,
                 d2_scale_const,
                 output_precision,
                 output_scale,
+                out_low_ptr,
+                out_high_ptr,
                 overflow_pointer,
                 do_div0,
             ],
         )
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        res = _ll_int128_from_low_high(builder, out_low_ptr, out_high_ptr)
         overflow = builder.load(overflow_pointer)
-        return context.make_tuple(builder, signature.return_type, [ret, overflow])
+        return context.make_tuple(builder, signature.return_type, [res, overflow])
 
     output_decimal_type = Decimal128Type(output_precision, output_scale)
     ret_type = types.Tuple([output_decimal_type, types.bool_])
@@ -2543,27 +2703,43 @@ def _round_decimal_scalar(
 
     def codegen(context, builder, signature, args):
         val, round_scale, input_p, input_s, output_p, output_s = args
+        in_low, in_high = _ll_get_int128_low_high(builder, val)
+        out_low_ptr = cgutils.alloca_once(builder, lir.IntType(64))
+        out_high_ptr = cgutils.alloca_once(builder, lir.IntType(64))
         fnty = lir.FunctionType(
-            lir.IntType(128),
+            lir.VoidType(),
             [
-                lir.IntType(128),
+                lir.IntType(64),  # in_low
+                lir.IntType(64),  # in_high
                 lir.IntType(64),
                 lir.IntType(64),
                 lir.IntType(64),
                 lir.IntType(1).as_pointer(),
+                lir.IntType(64).as_pointer(),  # out_low_ptr
+                lir.IntType(64).as_pointer(),  # out_high_ptr
             ],
         )
         fn = cgutils.get_or_insert_function(
             builder.module, fnty, name="round_decimal_scalar"
         )
         overflow_pointer = cgutils.alloca_once(builder, lir.IntType(1))
-        ret = builder.call(
+        builder.call(
             fn,
-            [val, round_scale, input_p, input_s, overflow_pointer],
+            [
+                in_low,
+                in_high,
+                round_scale,
+                input_p,
+                input_s,
+                overflow_pointer,
+                out_low_ptr,
+                out_high_ptr,
+            ],
         )
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        res = _ll_int128_from_low_high(builder, out_low_ptr, out_high_ptr)
         overflow = builder.load(overflow_pointer)
-        return context.make_tuple(builder, signature.return_type, [ret, overflow])
+        return context.make_tuple(builder, signature.return_type, [res, overflow])
 
     output_precision = get_overload_const_int(output_p_t)
     output_scale = get_overload_const_int(output_s_t)
@@ -2617,25 +2793,41 @@ def _ceil_floor_decimal_scalar(
 
     def codegen(context, builder, signature, args):
         value, input_p, input_s, output_p, output_s, round_scale, is_ceil = args
+        in_low, in_high = _ll_get_int128_low_high(builder, value)
+        out_low_ptr = cgutils.alloca_once(builder, lir.IntType(64))
+        out_high_ptr = cgutils.alloca_once(builder, lir.IntType(64))
         fnty = lir.FunctionType(
-            lir.IntType(128),
+            lir.VoidType(),
             [
-                lir.IntType(128),
+                lir.IntType(64),  # in_low
+                lir.IntType(64),  # in_high
                 lir.IntType(64),
                 lir.IntType(64),
                 lir.IntType(64),
                 lir.IntType(1),
+                lir.IntType(64).as_pointer(),  # out_low_ptr
+                lir.IntType(64).as_pointer(),  # out_high_ptr
             ],
         )
         fn = cgutils.get_or_insert_function(
             builder.module, fnty, name="ceil_floor_decimal_scalar"
         )
-        ret = builder.call(
+        builder.call(
             fn,
-            [value, input_p, input_s, round_scale, is_ceil],
+            [
+                in_low,
+                in_high,
+                input_p,
+                input_s,
+                round_scale,
+                is_ceil,
+                out_low_ptr,
+                out_high_ptr,
+            ],
         )
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
-        return ret
+        res = _ll_int128_from_low_high(builder, out_low_ptr, out_high_ptr)
+        return res
 
     output_precision = get_overload_const_int(output_p_t)
     output_scale = get_overload_const_int(output_s_t)
@@ -2798,33 +2990,43 @@ def _trunc_decimal_scalar(
 
     def codegen(context, builder, signature, args):
         value, input_p, input_s, output_p, output_s, round_scale = args
+        in_low, in_high = _ll_get_int128_low_high(builder, value)
+        out_low_ptr = cgutils.alloca_once(builder, lir.IntType(64))
+        out_high_ptr = cgutils.alloca_once(builder, lir.IntType(64))
         fnty = lir.FunctionType(
-            lir.IntType(128),
+            lir.VoidType(),
             [
-                lir.IntType(128),
+                lir.IntType(64),  # in_low
+                lir.IntType(64),  # in_high
                 lir.IntType(64),
                 lir.IntType(64),
                 lir.IntType(64),
                 lir.IntType(64),
                 lir.IntType(64),
+                lir.IntType(64).as_pointer(),  # out_low_ptr
+                lir.IntType(64).as_pointer(),  # out_high_ptr
             ],
         )
         fn = cgutils.get_or_insert_function(
             builder.module, fnty, name="trunc_decimal_scalar"
         )
-        ret = builder.call(
+        builder.call(
             fn,
             [
-                value,
+                in_low,
+                in_high,
                 input_p,
                 input_s,
                 output_p,
                 output_s,
                 round_scale,
+                out_low_ptr,
+                out_high_ptr,
             ],
         )
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
-        return ret
+        res = _ll_int128_from_low_high(builder, out_low_ptr, out_high_ptr)
+        return res
 
     output_precision = get_overload_const_int(output_p_t)
     output_scale = get_overload_const_int(output_s_t)
@@ -2989,24 +3191,29 @@ def _abs_decimal_scalar(typingctx, arr_t):
     assert isinstance(arr_t, Decimal128Type), "_abs_decimal_scalar: decimal expected"
 
     def codegen(context, builder, signature, args):
-        arr = args[0]
+        val = args[0]
+        in_low, in_high = _ll_get_int128_low_high(builder, val)
+        out_low_ptr = cgutils.alloca_once(builder, lir.IntType(64))
+        out_high_ptr = cgutils.alloca_once(builder, lir.IntType(64))
         fnty = lir.FunctionType(
-            lir.IntType(128),
+            lir.VoidType(),
             [
-                lir.IntType(128),
+                lir.IntType(64),
+                lir.IntType(64),
+                lir.IntType(64).as_pointer(),
+                lir.IntType(64).as_pointer(),
             ],
         )
         fn = cgutils.get_or_insert_function(
             builder.module, fnty, name="abs_decimal_scalar"
         )
-        ret = builder.call(
+        builder.call(
             fn,
-            [
-                arr,
-            ],
+            [in_low, in_high, out_low_ptr, out_high_ptr],
         )
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
-        return ret
+        res = _ll_int128_from_low_high(builder, out_low_ptr, out_high_ptr)
+        return res
 
     output_precision = arr_t.precision
     output_scale = arr_t.scale
@@ -3059,22 +3266,29 @@ def _factorial_decimal_scalar(typingctx, val_t, input_s):
 
     def codegen(context, builder, signature, args):
         val, input_s = args
+        out_low_ptr = cgutils.alloca_once(builder, lir.IntType(64))
+        out_high_ptr = cgutils.alloca_once(builder, lir.IntType(64))
+        in_low, in_high = _ll_get_int128_low_high(builder, val)
         fnty = lir.FunctionType(
-            lir.IntType(128),
+            lir.VoidType(),
             [
-                lir.IntType(128),
                 lir.IntType(64),
+                lir.IntType(64),
+                lir.IntType(64),
+                lir.IntType(64).as_pointer(),
+                lir.IntType(64).as_pointer(),
             ],
         )
         fn = cgutils.get_or_insert_function(
             builder.module, fnty, name="factorial_decimal_scalar"
         )
-        ret = builder.call(
+        builder.call(
             fn,
-            [val, input_s],
+            [in_low, in_high, input_s, out_low_ptr, out_high_ptr],
         )
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
-        return ret
+        decimal_val = _ll_int128_from_low_high(builder, out_low_ptr, out_high_ptr)
+        return decimal_val
 
     output_precision = 37
     output_scale = 0

@@ -130,12 +130,12 @@ def dist_IR_count(f_ir, func_name):
     return f_ir_text.count(func_name)
 
 
-@bodo.jit
+@numba.njit
 def get_rank():
     return bodo.libs.distributed_api.get_rank()
 
 
-@bodo.jit(cache=True)
+@numba.njit(cache=True)
 def get_start_end(n):
     rank = bodo.libs.distributed_api.get_rank()
     n_pes = bodo.libs.distributed_api.get_size()
@@ -952,6 +952,7 @@ def _get_dist_arg(
     l = len(a) if isinstance(a, pa.Array) else a.shape[0]
 
     start, end = get_start_end(l)
+
     # for var length case to be different than regular 1D in chunk sizes, add
     # one extra element to the second processor
     if var_length and bodo.get_size() >= 2 and l > bodo.get_size():
@@ -967,6 +968,7 @@ def _get_dist_arg(
 
     if check_typing_issues:
         _check_typing_issues(out_val)
+
     return out_val
 
 

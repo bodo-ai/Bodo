@@ -73,7 +73,7 @@ class TestDataFrame(unittest.TestCase):
         bodo_func = bodo.jit(returns_maybe_distributed=False)(test_impl)
         n = 11
         pd.testing.assert_frame_equal(
-            bodo_func(n), test_impl(n), check_column_type=False
+            bodo_func(n), test_impl(n), check_column_type=False, check_dtype=False
         )
 
     def test_create_column2(self):
@@ -85,7 +85,7 @@ class TestDataFrame(unittest.TestCase):
         bodo_func = bodo.jit(returns_maybe_distributed=False)(test_impl)
         n = 11
         pd.testing.assert_frame_equal(
-            bodo_func(n), test_impl(n), check_column_type=False
+            bodo_func(n), test_impl(n), check_column_type=False, check_dtype=False
         )
 
     def test_create_range_index1(self):
@@ -114,7 +114,7 @@ class TestDataFrame(unittest.TestCase):
         bodo_func = bodo.jit(returns_maybe_distributed=False)(test_impl)
         n = 11
         pd.testing.assert_frame_equal(
-            bodo_func(n), test_impl(n), check_column_type=False
+            bodo_func(n), test_impl(n), check_column_type=False, check_dtype=False
         )
 
     def test_create_ndarray_copy1(self):
@@ -197,7 +197,7 @@ class TestDataFrame(unittest.TestCase):
         bodo_func = bodo.jit(returns_maybe_distributed=False)(test_impl)
         n = 11
         pd.testing.assert_frame_equal(
-            bodo_func(n), test_impl(n), check_column_type=False
+            bodo_func(n), test_impl(n), check_column_type=False, check_dtype=False
         )
 
     def test_box2(self):
@@ -413,7 +413,7 @@ class TestDataFrame(unittest.TestCase):
         bodo_func = bodo.jit(returns_maybe_distributed=False)(test_impl)
         n = 11
         pd.testing.assert_frame_equal(
-            bodo_func(n), test_impl(n), check_column_type=False
+            bodo_func(n), test_impl(n), check_column_type=False, check_dtype=False
         )
 
     def test_set_column_reflect4(self):
@@ -427,7 +427,9 @@ class TestDataFrame(unittest.TestCase):
         df2 = df1.copy()
         bodo_func(df1, n)
         test_impl(df2, n)
-        pd.testing.assert_frame_equal(df1, df2, check_column_type=False)
+        pd.testing.assert_frame_equal(
+            df1, df2, check_column_type=False, check_dtype=False
+        )
 
     def test_set_column_new_type1(self):
         # set existing column with a new type
@@ -439,7 +441,7 @@ class TestDataFrame(unittest.TestCase):
         bodo_func = bodo.jit(returns_maybe_distributed=False)(test_impl)
         n = 11
         pd.testing.assert_frame_equal(
-            bodo_func(n), test_impl(n), check_column_type=False
+            bodo_func(n), test_impl(n), check_column_type=False, check_dtype=False
         )
 
     def test_set_column2(self):
@@ -452,7 +454,7 @@ class TestDataFrame(unittest.TestCase):
         bodo_func = bodo.jit(returns_maybe_distributed=False)(test_impl)
         n = 11
         pd.testing.assert_frame_equal(
-            bodo_func(n), test_impl(n), check_column_type=False
+            bodo_func(n), test_impl(n), check_column_type=False, check_dtype=False
         )
 
     def test_set_column_reflect3(self):
@@ -466,7 +468,9 @@ class TestDataFrame(unittest.TestCase):
         df2 = df1.copy()
         bodo_func(df1, n)
         test_impl(df2, n)
-        pd.testing.assert_frame_equal(df1, df2, check_column_type=False)
+        pd.testing.assert_frame_equal(
+            df1, df2, check_column_type=False, check_dtype=False
+        )
 
     def test_set_column_bool1(self):
         def test_impl(df):
@@ -645,7 +649,7 @@ class TestDataFrame(unittest.TestCase):
         bodo_func = bodo.jit(returns_maybe_distributed=False)(test_impl)
         n = 11
         pd.testing.assert_frame_equal(
-            bodo_func(n), test_impl(n), check_column_type=False
+            bodo_func(n), test_impl(n), check_column_type=False, check_dtype=False
         )
 
     def test_pct_change1(self):

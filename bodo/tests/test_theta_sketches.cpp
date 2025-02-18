@@ -794,38 +794,38 @@ static bodo::tests::suite tests([] {
         A0->precision = 2;
         A0->scale = 0;
         auto buffer0 =
-            A0->data1<bodo_array_type::NULLABLE_INT_BOOL, __int128>();
+            A0->data1<bodo_array_type::NULLABLE_INT_BOOL, __int128_t>();
         std::shared_ptr<array_info> A1 =
             alloc_nullable_array_no_nulls(length, Bodo_CTypes::DECIMAL);
         A1->precision = 4;
         A1->scale = 2;
         auto buffer1 =
-            A1->data1<bodo_array_type::NULLABLE_INT_BOOL, __int128>();
+            A1->data1<bodo_array_type::NULLABLE_INT_BOOL, __int128_t>();
         std::shared_ptr<array_info> A2 =
             alloc_nullable_array_no_nulls(length, Bodo_CTypes::DECIMAL);
         A2->precision = 9;
         A2->scale = 0;
         auto buffer2 =
-            A2->data1<bodo_array_type::NULLABLE_INT_BOOL, __int128>();
+            A2->data1<bodo_array_type::NULLABLE_INT_BOOL, __int128_t>();
         std::shared_ptr<array_info> A3 =
             alloc_nullable_array_no_nulls(length, Bodo_CTypes::DECIMAL);
         A3->precision = 16;
         A3->scale = 1;
         auto buffer3 =
-            A3->data1<bodo_array_type::NULLABLE_INT_BOOL, __int128>();
+            A3->data1<bodo_array_type::NULLABLE_INT_BOOL, __int128_t>();
         std::shared_ptr<array_info> A4 =
             alloc_nullable_array_no_nulls(length, Bodo_CTypes::DECIMAL);
         A4->precision = 38;
         A4->scale = 18;
         auto buffer4 =
-            A4->data1<bodo_array_type::NULLABLE_INT_BOOL, __int128>();
+            A4->data1<bodo_array_type::NULLABLE_INT_BOOL, __int128_t>();
 
         for (size_t row = 0; row < length; row++) {
-            buffer0[row] = (__int128)(row % 4);
-            buffer1[row] = (__int128)((row % 10) * 101);
-            buffer2[row] = (__int128)(row);
-            buffer3[row] = (__int128)(10000000 * (row >> 1) + (row >> 1));
-            __int128 v4 = (__int128)(row);
+            buffer0[row] = (__int128_t)(row % 4);
+            buffer1[row] = (__int128_t)((row % 10) * 101);
+            buffer2[row] = (__int128_t)(row);
+            buffer3[row] = (__int128_t)(10000000 * (row >> 1) + (row >> 1));
+            __int128_t v4 = (__int128_t)(row);
             v4 = v4 * v4;
             v4 = v4 * v4;
             v4 = v4 * v4;
