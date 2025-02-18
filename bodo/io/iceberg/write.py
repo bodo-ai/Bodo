@@ -10,14 +10,15 @@ from __future__ import annotations
 import sys
 import typing as pt
 from itertools import zip_longest
+from urllib.parse import urlparse
 
 import llvmlite.binding as ll
 import numba
 import pyarrow as pa
+import pyarrow.fs
 from llvmlite import ir as lir
 from numba.core import cgutils, types
 from numba.extending import intrinsic
-from pyiceberg.io import load_file_io
 
 import bodo
 import bodo.utils.tracing as tracing
@@ -170,9 +171,19 @@ def _get_write_data_path(properties: dict[str, str], location: str) -> str:
     Get the path to write Parquet files to for an Iceberg table
     given the tables properties and the tables base location.
     """
-
     data_path = properties.get("write.data.path")
     return data_path if data_path else f"{location}/data"
+
+
+def _format_data_loc(data_loc: str, fs: FileSystem) -> str:
+    """
+    Format the data location to be written to depending on the filesystem.
+    """
+    if isinstance(fs, pa.fs.AzureFileSystem) and data_loc.startswith("abfs"):
+        # Azure filesystem only wants the container/path
+        parsed = urlparse(data_loc)
+        return f"{parsed.username}{parsed.path}"
+    return data_loc
 
 
 def _update_field(
@@ -705,16 +716,10 @@ def start_write_rank_0(
                 properties=properties,
             ).transaction()
 
+        io = catalog._load_file_io()
         data_loc = _get_write_data_path(
             txn.table_metadata.properties, txn.table_metadata.location
         )
-        io = load_file_io(
-            {**catalog.properties, **txn._table.io.properties},
-            txn.table_metadata.location,
-        )
-        # The default created transaction io doesn't do correct file path resolution
-        # for table create transactions because metadata_location is None
-        txn._table.io = io
         # Empty Partition Spec and Sort Order
         partition_spec = UNPARTITIONED_PARTITION_SPEC
         sort_order = UNSORTED_SORT_ORDER
@@ -775,10 +780,13 @@ def start_write_rank_0(
     partition_tuple, sort_tuple = build_partition_sort_tuples(
         output_schema, partition_spec, sort_order
     )
+    fs = _fs_from_file_path(data_loc, io)
+
+    data_loc = _format_data_loc(data_loc, fs)
 
     return (
         txn,
-        _fs_from_file_path(data_loc, io),
+        fs,
         data_loc,
         output_pa_schema,
         iceberg_schema_str,
