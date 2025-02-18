@@ -47,7 +47,7 @@ def _create_java_REST_catalog(
     """
     return JavaEntryPoint.buildIcebergRESTCatalog(
         warehouse,
-        rest_uri,
+        rest_uri.lstrip("iceberg+"),
         token,
         credential,
         # We could add a way to configure this
