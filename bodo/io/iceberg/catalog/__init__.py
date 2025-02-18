@@ -126,7 +126,7 @@ def conn_str_to_catalog(conn_str: str) -> Catalog:
                     "  REST Catalog: 'iceberg+http://', 'iceberg+https://', 'iceberg+rest://'\n"
                     "  Glue Catalog: 'iceberg+glue'\n"
                     "  Hive Catalog: 'iceberg+thrift://'\n"
-                    "  Snowflake Catalog: 'iceberg+snowflake://'\n"
+                    "  Snowflake-Managed Iceberg Tables: 'iceberg+snowflake://'\n"
                     "  S3 Tables Catalog: 'iceberg+arn'\n"
                     f"Checking '{conn_str}' ('{parse_res.scheme}')"
                 )

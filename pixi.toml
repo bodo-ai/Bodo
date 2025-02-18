@@ -129,6 +129,9 @@ hdf5 = { version = ">=1.14.3,<1.14.4.0a0", build = "*mpi_mpich_*" }
 [feature.rcpp.target.linux.dependencies]
 hdf5 = { version = ">=1.14.3,<1.14.4.0a0", build = "*mpi_mpich_*" }
 
+[feature.rcpp.target.win.dependencies]
+hdf5 = { version = ">=1.14.3,<1.14.4.0a0", build = "*mpi_impi_*" }
+
 [feature.dev.dependencies]
 # Build Python
 setuptools = ">=64"
@@ -246,7 +249,7 @@ mpich = { version = "4.1.*", build = "h*" }
 mpich = { version = "4.1.*", build = "h*" }
 
 [feature.local-mpi.target.win.dependencies]
-impi-devel = { version = "=2021.13.1" }
+impi-devel = "*"
 
 [feature.platform-mpi]
 channels = ["conda-forge", "conda-forge/label/broken"]
