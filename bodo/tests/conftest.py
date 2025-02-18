@@ -319,7 +319,7 @@ def polaris_server():
             "8282:8282",
             "--name",
             "polaris-server-unittests",
-            "427443013497.dkr.ecr.us-east-2.amazonaws.com/polaris:latest",
+            "public.ecr.aws/k7f6m2y1/bodo/polaris-unittests:latest",
         ],
         check=True,
     )
