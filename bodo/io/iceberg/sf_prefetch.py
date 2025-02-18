@@ -9,14 +9,15 @@ from __future__ import annotations
 from numba.extending import overload
 
 import bodo
-from bodo.io.iceberg.catalog import conn_str_to_catalog
-from bodo.io.iceberg.catalog.snowflake import SnowflakeCatalog
 from bodo.utils.utils import run_rank0
 
 
 @run_rank0
 def prefetch_sf_tables(conn_str: str, table_paths: list[str]):
     "Helper function for the Python contents of prefetch_sf_tables_njit."
+    from bodo.io.iceberg.catalog import conn_str_to_catalog
+    from bodo.io.iceberg.catalog.snowflake import SnowflakeCatalog
+
     sf_catalog = conn_str_to_catalog(conn_str)
     assert isinstance(sf_catalog, SnowflakeCatalog)
 
