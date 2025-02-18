@@ -3291,8 +3291,8 @@ def _insert_NA_cond(expr_node, left_columns, left_data, right_columns, right_dat
                 left_null = set()
                 right_null = set()
 
-                left_body = _insert_NA_cond_body(expr_node.lhs, left_null)
-                right_body = _insert_NA_cond_body(expr_node.rhs, right_null)
+                _insert_NA_cond_body(expr_node.lhs, left_null)
+                _insert_NA_cond_body(expr_node.rhs, right_null)
 
                 # Elements found in both sets can be bubbled up
                 joint_nulls = left_null.intersection(right_null)
@@ -3305,13 +3305,13 @@ def _insert_NA_cond(expr_node, left_columns, left_data, right_columns, right_dat
                 null_set.update(joint_nulls)
 
                 # Add null checks where needed
-                expr_node.lhs = append_null_checks(left_body, left_null)
-                expr_node.rhs = append_null_checks(right_body, right_null)
+                expr_node.lhs = append_null_checks(expr_node.lhs, left_null)
+                expr_node.rhs = append_null_checks(expr_node.rhs, right_null)
                 # Update operands so print works properly
                 expr_node.operands = (expr_node.lhs, expr_node.rhs)
             else:
-                expr_node.lhs = _insert_NA_cond_body(expr_node.lhs, null_set)
-                expr_node.rhs = _insert_NA_cond_body(expr_node.rhs, null_set)
+                _insert_NA_cond_body(expr_node.lhs, null_set)
+                _insert_NA_cond_body(expr_node.rhs, null_set)
         elif _is_col_access(expr_node):
             # If we have a column add it to the nullset if the type is nullable.
             full_name = expr_node.name
