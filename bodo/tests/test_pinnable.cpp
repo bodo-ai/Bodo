@@ -260,6 +260,12 @@ void insert_erase_and_move_map(int count) {
 static bodo::tests::suite tests([] {
     // TODO: [BSE-4151] Test segfaulting on PR CI
     bodo::tests::test("pinnable_vector_uint32_t", [] {
+
+#if defined(_WIN32)
+        // skip on Windows since buffer pool is disabled.
+        return;
+#endif
+
         auto pool = bodo::BufferPool();
         auto allocator = bodo::PinnableAllocator<uint32_t>(&pool);
 
@@ -320,6 +326,12 @@ static bodo::tests::suite tests([] {
     // uint32_t>>(0, 10000000);
 
     bodo::tests::test("test_to_arrow_roundtrip_pinnable", [] {
+
+#if defined(_WIN32)
+        // skip on Windows since buffer pool is disabled.
+        return;
+#endif
+
         auto do_roundtrip_test = [](std::shared_ptr<array_info> arr) {
             auto arrow_arr = to_arrow(arr);
             auto out_arr =
