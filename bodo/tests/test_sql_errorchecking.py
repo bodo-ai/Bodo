@@ -10,6 +10,7 @@ import pytest
 import bodo
 from bodo.tests.utils import (
     oracle_user_pass_and_hostname,
+    pytest_mark_oracle,
     sql_user_pass_and_hostname,
 )
 from bodo.utils.typing import BodoError
@@ -55,6 +56,7 @@ def test_unsupported_query():
         bodo.jit(impl)(conn)
 
 
+@pytest_mark_oracle
 def test_to_sql_oracle():
     """This test that runtime error message for Oracle with string > 4000
     is displayed"""

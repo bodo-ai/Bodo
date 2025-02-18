@@ -14,6 +14,9 @@ parameters:
 - name: SPAWN_MODE_TEST
   type: boolean
   default: false
+- name: use_bodo_arrow_fork
+  type: number
+  default: 1
 
 jobs:
 - job: ${{ parameters.name }}
@@ -41,11 +44,6 @@ jobs:
   - bash: |
       set -exo pipefail
 
-      unamestr=`uname`
-      if [[ "$unamestr" == 'Linux' ]]; then
-        export USE_BODO_ARROW_FORK=1
-      fi
-
       pixi run -e azure build-bodo -Cbuild.verbose=true
       pixi run -e azure build-bodosql
       pixi run -e azure build-iceberg
@@ -54,13 +52,18 @@ jobs:
       AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
       AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
       DISABLE_CCACHE: 1  # Just use sccache directly on CI
+      USE_BODO_ARROW_FORK: ${{ parameters.use_bodo_arrow_fork }}  # Build from Source with Arrow Fork
     displayName: 'Build Bodo, BodoSQL, and Iceberg Connector'
 
   - bash: |
       set -exo pipefail
       eval "$(pixi shell-hook --shell bash -e azure)"
 
-      wget -q -O - "https://adlsresources.blob.core.windows.net/adlsresources/hadoop-3.3.2.tar.gz" | sudo tar -xzf - -C /opt
+      if [ "$(uname -m)" = "aarch64" ]; then
+        ARM_EXTENSION="-aarch64"
+      fi
+
+      wget -q -O - "https://adlsresources.blob.core.windows.net/adlsresources/hadoop-3.4.0${ARM_EXTENSION}.tar.gz" | sudo tar -xzf - -C /opt
       cd azurefs-sas-token-provider
       pip install --no-deps --no-build-isolation -ve .
     displayName: "Setup Snowflake ADLS Testing (only Linux)"
@@ -82,7 +85,7 @@ jobs:
       unamestr=`uname`
       if [[ "$unamestr" == 'Linux' ]]; then
         echo "Setting up Hadoop (and Arrow) environment variables"
-        export HADOOP_HOME=/opt/hadoop-3.3.2
+        export HADOOP_HOME=/opt/hadoop-3.4.0
         export HADOOP_INSTALL=$HADOOP_HOME
         export HADOOP_MAPRED_HOME=$HADOOP_HOME
         export HADOOP_COMMON_HOME=$HADOOP_HOME
