@@ -1,6 +1,5 @@
 import json
 import os
-import sys
 
 import numpy as np
 import pandas as pd
@@ -1620,7 +1619,6 @@ def test_iceberg_metrics_collection(
         pytest.param((10_000_000_000, 5_000), id="large_limit"),
     ],
 )
-@pytest.mark.skipif(sys.platform == "win32", reason="Hangs on Windows.")
 def test_sort_metrics_collection(memory_leak_check, tmp_path, limit_offset):
     """
     Test that generated query profile has the metrics that we expect
