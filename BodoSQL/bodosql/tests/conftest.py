@@ -24,7 +24,7 @@ import bodosql
 from bodo.tests.conftest import (  # noqa
     iceberg_database,
     memory_leak_check,
-    tabular_connection,
+    polaris_connection,
 )
 from bodo.tests.iceberg_database_helpers.utils import get_spark
 from bodo.tests.utils import gen_nonascii_list

@@ -5,6 +5,7 @@ from ddltest_harness import DDLTestHarness
 import bodosql
 from bodo.tests.conftest import iceberg_database  # noqa
 from bodo.tests.iceberg_database_helpers.utils import (
+    SparkFilesystemIcebergCatalog,
     get_spark,
 )
 from bodo.utils.utils import run_rank0
@@ -14,7 +15,12 @@ class FilesystemTestHarness(DDLTestHarness):
     def __init__(self, iceberg_filesystem_catalog):
         self.catalog = iceberg_filesystem_catalog
         self.bc = bodosql.BodoSQLContext(catalog=iceberg_filesystem_catalog)
-        self.spark = get_spark(path=iceberg_filesystem_catalog.connection_string)
+        self.spark = get_spark(
+            SparkFilesystemIcebergCatalog(
+                catalog_name="hadoop_prod",
+                path=iceberg_filesystem_catalog.connection_string,
+            )
+        )
 
     def run_bodo_query(self, query):
         return self.bc.sql(query)

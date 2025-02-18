@@ -221,7 +221,6 @@ def test_iceberg_write_basic(
     base_name, table_name, df = simple_dataframe
     db_schema, warehouse_loc = iceberg_database(table_name)
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=False)
-    table_id = f"{db_schema}.{table_name}"
 
     orig_use_dict_str_type = bodo.hiframes.boxing._use_dict_str_type
     orig_chunk_size = (
