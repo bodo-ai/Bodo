@@ -680,7 +680,7 @@ if (NOT (CMAKE_BUILD_TYPE STREQUAL "Release") AND NOT DEFINED ENV{BODO_SKIP_CPP_
 endif()
 
 # TODO [BSE-4554] HDF5 support on Windows
-if(WIN32 OR (DEFINED ENV{NO_HDF5} AND "$ENV{NO_HDF5}" STREQUAL "1"))
+if(DEFINED ENV{NO_HDF5} AND "$ENV{NO_HDF5}" STREQUAL "1")
     set(NO_HDF5 TRUE)
 else()
     list(APPEND sources_list "bodo/io/_hdf5.cpp")
@@ -804,6 +804,11 @@ endif()
 if(NO_HDF5)
   target_compile_definitions(ext PRIVATE "NO_HDF5=1")
 else()
+  if(WIN32)
+    # Needed to fix DLL import on Windows
+    # https://forum.hdfgroup.org/t/unresolved-external-symbol-h5t-native-int-g/7550
+    target_compile_definitions(ext PRIVATE "H5_BUILT_AS_DYNAMIC_LIB=1")
+  endif()
   target_link_libraries(ext PRIVATE hdf5)
 endif()
 

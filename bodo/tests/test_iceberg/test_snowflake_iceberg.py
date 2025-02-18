@@ -29,13 +29,13 @@ def test_get_iceberg_schema_snowflake(memory_leak_check):
     )
 
     col_names, bodo_col_types, pyarrow_schema = bodo.io.iceberg.get_iceberg_orig_schema(
-        conn, "TEST_DB.PUBLIC", "TEST_ICEBERG_TABLE"
+        conn, "TEST_DB.PUBLIC.TEST_ICEBERG_TABLE"
     )
 
     assert col_names == ["VAL", "B"]
     assert bodo_col_types == [
-        bodo.bool_,
-        bodo.int32,
+        bodo.boolean_array_type,
+        bodo.IntegerArrayType(bodo.int32),
     ]
     assert pyarrow_schema == pyarrow.schema(
         [

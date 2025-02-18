@@ -880,7 +880,7 @@ def literal(val) -> Literal:
         return DateLiteral((val - datetime.date(1970, 1, 1)).days)
     if isinstance(val, datetime.datetime):
         return TimestampLiteral((val - datetime.datetime(1970, 1, 1)).microseconds)
-    if isinstance(val, list):
+    if isinstance(val, (list, pd.core.arrays.ExtensionArray)):
         return {literal(v) for v in val}  # type: ignore
     return inner_literal(val)
 

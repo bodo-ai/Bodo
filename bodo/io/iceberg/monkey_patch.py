@@ -1,3 +1,5 @@
+import pyiceberg.io
+import pyiceberg.io.pyarrow
 import pyiceberg.schema
 from pyiceberg.schema import Accessor, Schema, SchemaVisitor, visit
 from pyiceberg.types import (
@@ -8,6 +10,8 @@ from pyiceberg.types import (
     PrimitiveType,
     StructType,
 )
+
+from .file_io import BodoPyArrowFileIO
 
 Position = int
 
@@ -70,3 +74,6 @@ def build_position_accessors(
 
 # Monkey-patch the original function
 pyiceberg.schema.build_position_accessors = build_position_accessors
+
+# Moneky-patch inferred IO to support Bodo's
+pyiceberg.io.pyarrow.PyArrowFileIO = BodoPyArrowFileIO

@@ -25,6 +25,7 @@ from . import merge_into
 from .common import (
     ICEBERG_FIELD_ID_MD_KEY,
     IcebergConnectionType,
+    _fs_from_file_path,
     flatten_concatenation,
     flatten_tuple,
     verify_pyiceberg_installed,
@@ -106,8 +107,6 @@ def get_iceberg_pq_dataset(
         split the work for the actual read.
     """
     _ = verify_pyiceberg_installed()
-
-    from pyiceberg.io.pyarrow import _fs_from_file_path
 
     ev = tracing.Event("get_iceberg_pq_dataset")
     metrics = IcebergPqDatasetMetrics()

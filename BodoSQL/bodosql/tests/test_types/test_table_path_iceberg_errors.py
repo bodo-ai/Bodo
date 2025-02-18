@@ -127,7 +127,9 @@ def test_iceberg_tablepath_DNE(iceberg_database, iceberg_table_conn):
     # test outside of JIT
     with pytest.raises(
         BodoError,
-        match=".*" + re.escape("No such Iceberg table found") + ".*",
+        match=".*"
+        + re.escape("No table with identifier iceberg_db.does_not_exist exists")
+        + ".*",
     ):
         bodosql.BodoSQLContext(
             {
@@ -140,7 +142,9 @@ def test_iceberg_tablepath_DNE(iceberg_database, iceberg_table_conn):
     # test inside of JIT
     with pytest.raises(
         BodoError,
-        match=".*" + re.escape("No such Iceberg table found") + ".*",
+        match=".*"
+        + re.escape("No table with identifier iceberg_db.does_not_exist exists")
+        + ".*",
     ):
         # Note, need to actually use the bodosqlContext, otherwise the error is not raised
         @bodo.jit()

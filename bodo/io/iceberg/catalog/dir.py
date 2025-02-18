@@ -43,7 +43,8 @@ class DirCatalog(Catalog):
         return self.properties[WAREHOUSE_LOCATION]
 
     def _table_path(self, identifier: Identifier) -> str:
-        return f"{self.warehouse_path}/{'/'.join(identifier)}"
+        wh_path = self.warehouse_path.removesuffix("/")
+        return f"{wh_path}/{'/'.join(identifier)}"
 
     def _load_table_and_version(
         self, identifier: str | Identifier

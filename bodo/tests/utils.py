@@ -129,12 +129,12 @@ def dist_IR_count(f_ir, func_name):
     return f_ir_text.count(func_name)
 
 
-@bodo.jit
+@numba.njit
 def get_rank():
     return bodo.libs.distributed_api.get_rank()
 
 
-@bodo.jit(cache=True)
+@numba.njit(cache=True)
 def get_start_end(n):
     rank = bodo.libs.distributed_api.get_rank()
     n_pes = bodo.libs.distributed_api.get_size()
@@ -951,6 +951,7 @@ def _get_dist_arg(
     l = len(a) if isinstance(a, pa.Array) else a.shape[0]
 
     start, end = get_start_end(l)
+
     # for var length case to be different than regular 1D in chunk sizes, add
     # one extra element to the second processor
     if var_length and bodo.get_size() >= 2 and l > bodo.get_size():
@@ -966,6 +967,7 @@ def _get_dist_arg(
 
     if check_typing_issues:
         _check_typing_issues(out_val)
+
     return out_val
 
 
@@ -2758,51 +2760,6 @@ def create_snowflake_iceberg_table(
         finally:
             drop_snowflake_table(
                 iceberg_table_name, db, schema, iceberg_volume=iceberg_volume
-            )
-
-
-@contextmanager
-def create_polaris_iceberg_table(
-    df: pd.DataFrame, base_table_name: str, conn_str: str, schema: str
-) -> Generator[str, None, None]:
-    """Creates a new Iceberg table in polaris derived from the base table name
-    and using the DataFrame.
-
-    Returns the name of the table added to polaris.
-
-    Args:
-        df (pd.DataFrame): DataFrame to insert
-        base_table_name (str): Base string for generating the table name.
-        conn_str (str): Connection string for the polaris server
-        schema (str): Name of the polaris schema
-    Returns:
-        str: The final table name.
-    """
-    import bodo_iceberg_connector as bic
-
-    comm = MPI.COMM_WORLD
-    iceberg_table_name = None
-    table_written = False
-    try:
-        if bodo.get_rank() == 0:
-            iceberg_table_name = gen_unique_table_id(base_table_name)
-
-        iceberg_table_name = comm.bcast(iceberg_table_name)
-
-        @bodo.jit(distributed=["df"])
-        def write_table(df, table_name, schema, con_str):
-            df.to_sql(table_name, con=con_str, schema=schema, if_exists="replace")
-
-        write_table(_get_dist_arg(df), iceberg_table_name, schema, conn_str)
-        table_written = True
-
-        yield iceberg_table_name
-    finally:
-        if table_written:
-            run_rank0(bic.delete_table)(
-                bodo.io.iceberg.format_iceberg_conn(conn_str),
-                schema,
-                iceberg_table_name,
             )
 
 
