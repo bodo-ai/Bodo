@@ -169,9 +169,6 @@ def get_sql_config_str() -> str:
     return conf_str
 
 
-# Should Bodo use the new Arrow Azure FileSystem implementation instead of
-# the old HDFS implementation.
-enable_azure_fs = os.environ.get("BODO_USE_AZURE_FS", "1") != "0"
 check_parquet_schema = os.environ.get("BODO_CHECK_PARQUET_SCHEMA", "0") != "0"
 
 # --------------------------- End Streaming Config ---------------------------
