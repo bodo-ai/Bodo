@@ -28,8 +28,8 @@ from bodosql.imported_java_classes import JavaEntryPoint
 
 
 def _create_java_REST_catalog(
-    warehouse: str,
     rest_uri: str,
+    warehouse: str,
     token: str | None,
     credential: str | None,
     scope: str | None = None,
@@ -46,8 +46,8 @@ def _create_java_REST_catalog(
         JavaObject: A Java RESTCatalog object.
     """
     return JavaEntryPoint.buildIcebergRESTCatalog(
+        rest_uri.removeprefix("iceberg+"),
         warehouse,
-        rest_uri.lstrip("iceberg+"),
         token,
         credential,
         # We could add a way to configure this

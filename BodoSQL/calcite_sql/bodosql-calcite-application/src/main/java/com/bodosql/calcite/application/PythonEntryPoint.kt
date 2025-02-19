@@ -331,13 +331,13 @@ class PythonEntryPoint {
          */
         @JvmStatic
         fun buildIcebergRESTCatalog(
-            warehouse: String,
             restUri: String,
+            warehouse: String,
             token: String?,
             credential: String?,
             defaultSchema: String,
             scope: String?,
-        ): IcebergRESTCatalog = IcebergRESTCatalog(warehouse, restUri, token, credential, defaultSchema, scope)
+        ): IcebergRESTCatalog = IcebergRESTCatalog(restUri, warehouse, token, credential, defaultSchema, scope)
 
         /**
          * Build a FileSystemCatalog object.
