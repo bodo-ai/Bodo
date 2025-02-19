@@ -107,9 +107,9 @@ use_run_name = "AGENT_NAME" in os.environ
 
 # String-generated bodo functions are cached in the directory
 # as defined in Numba (which is currently ~/.cache/bodo) with
-# .bodo_strfunc_cache appended.
+# .strfunc_cache appended.
 appdirs = AppDirs(appname="bodo", appauthor=False)
-cache_path = os.path.join(appdirs.user_cache_dir, ".bodo_strfunc_cache")
+cache_path = os.path.join(appdirs.user_cache_dir, ".strfunc_cache")
 # Remove the string-generated cache directory to make sure the tests
 # recreate it.
 shutil.rmtree(cache_path, ignore_errors=True)
