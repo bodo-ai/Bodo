@@ -228,6 +228,24 @@ def aws_polaris_warehouse(polaris_token, polaris_server, polaris_package):
                 )
             ),
         )
+        root_client.add_grant_to_catalog_role(
+            catalog_name,
+            "catalog_admin",
+            AddGrantRequest(
+                grant=CatalogGrant(
+                    type="catalog", privilege=CatalogPrivilege.CATALOG_MANAGE_ACCESS
+                )
+            ),
+        )
+        root_client.add_grant_to_catalog_role(
+            catalog_name,
+            "catalog_admin",
+            AddGrantRequest(
+                grant=CatalogGrant(
+                    type="catalog", privilege=CatalogPrivilege.CATALOG_MANAGE_METADATA
+                )
+            ),
+        )
 
         catalog_client = CatalogApiClient(
             Configuration(
@@ -239,6 +257,10 @@ def aws_polaris_warehouse(polaris_token, polaris_server, polaris_package):
         catalog_api.create_namespace(
             prefix=catalog_name,
             create_namespace_request=CreateNamespaceRequest(namespace=["CI"]),
+        )
+        catalog_api.create_namespace(
+            prefix=catalog_name,
+            create_namespace_request=CreateNamespaceRequest(namespace=["default"]),
         )
 
         return catalog_name
@@ -309,6 +331,24 @@ def azure_polaris_warehouse(polaris_token, polaris_server, polaris_package):
                 )
             ),
         )
+        root_client.add_grant_to_catalog_role(
+            catalog_name,
+            "catalog_admin",
+            AddGrantRequest(
+                grant=CatalogGrant(
+                    type="catalog", privilege=CatalogPrivilege.CATALOG_MANAGE_ACCESS
+                )
+            ),
+        )
+        root_client.add_grant_to_catalog_role(
+            catalog_name,
+            "catalog_admin",
+            AddGrantRequest(
+                grant=CatalogGrant(
+                    type="catalog", privilege=CatalogPrivilege.CATALOG_MANAGE_METADATA
+                )
+            ),
+        )
 
         catalog_client = CatalogApiClient(
             Configuration(
@@ -320,6 +360,10 @@ def azure_polaris_warehouse(polaris_token, polaris_server, polaris_package):
         catalog_api.create_namespace(
             prefix=catalog_name,
             create_namespace_request=CreateNamespaceRequest(namespace=["CI"]),
+        )
+        catalog_api.create_namespace(
+            prefix=catalog_name,
+            create_namespace_request=CreateNamespaceRequest(namespace=["default"]),
         )
 
         return catalog_name

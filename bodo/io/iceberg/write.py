@@ -10,7 +10,6 @@ from __future__ import annotations
 import sys
 import typing as pt
 from itertools import zip_longest
-from urllib.parse import urlparse
 
 import llvmlite.binding as ll
 import numba
@@ -27,7 +26,7 @@ from bodo.io import arrow_cpp
 from bodo.io.fs_io import pyarrow_fs_type
 from bodo.io.helpers import pyarrow_schema_type
 from bodo.io.iceberg.catalog import conn_str_to_catalog
-from bodo.io.iceberg.common import _fs_from_file_path
+from bodo.io.iceberg.common import _format_data_loc, _fs_from_file_path
 from bodo.io.iceberg.theta import theta_sketch_collection_type
 from bodo.libs.bool_arr_ext import alloc_false_bool_array
 from bodo.libs.str_ext import unicode_to_utf8
@@ -174,17 +173,6 @@ def _get_write_data_path(properties: dict[str, str], location: str) -> str:
     """
     data_path = properties.get("write.data.path")
     return data_path if data_path else f"{location}/data"
-
-
-def _format_data_loc(data_loc: str, fs: FileSystem) -> str:
-    """
-    Format the data location to be written to depending on the filesystem.
-    """
-    if isinstance(fs, pa.fs.AzureFileSystem) and data_loc.startswith("abfs"):
-        # Azure filesystem only wants the container/path
-        parsed = urlparse(data_loc)
-        return f"{parsed.username}{parsed.path}"
-    return data_loc
 
 
 def _update_field(
