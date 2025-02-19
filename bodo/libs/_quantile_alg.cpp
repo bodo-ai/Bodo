@@ -798,7 +798,7 @@ std::shared_ptr<array_info> compute_ghost_rows(std::shared_ptr<array_info> arr,
     bodo::vector<size_t> ListPrevSizes, ListNextSizes;
     size_t loc_nrows = arr->length;
     MPI_Datatype mpi_row_typ = MPI_LONG_LONG_INT;
-    using T_row_typ = long;
+    using T_row_typ = int64_t;
     int k = 0;
     while (true) {
         k++;
