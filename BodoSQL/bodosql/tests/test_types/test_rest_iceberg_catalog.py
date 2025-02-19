@@ -400,7 +400,9 @@ def test_rest_catalog_iceberg_write(
                 raise
 
 
-def test_limit_pushdown(memory_leak_check, polaris_catalog):
+def test_limit_pushdown(
+    memory_leak_check, polaris_catalog, polaris_catalog_iceberg_read_df
+):
     """
     Test reading an Iceberg from Polaris with limit pushdown.
     Since the planner has access to length statistics, we need to actually
@@ -434,7 +436,9 @@ def test_limit_pushdown(memory_leak_check, polaris_catalog):
         check_logger_msg(stream, "Constant limit detected, reading at most 2 rows")
 
 
-def test_limit_filter_pushdown(memory_leak_check, polaris_catalog):
+def test_limit_filter_pushdown(
+    memory_leak_check, polaris_catalog, polaris_catalog_iceberg_read_df
+):
     """
     Test reading an Iceberg table from Polaris with limit + filter pushdown.
     Since the planner has access to length statistics, we need to actually
@@ -472,7 +476,9 @@ def test_limit_filter_pushdown(memory_leak_check, polaris_catalog):
         )
 
 
-def test_multi_limit_pushdown(memory_leak_check, polaris_catalog):
+def test_multi_limit_pushdown(
+    memory_leak_check, polaris_catalog, polaris_catalog_iceberg_read_df
+):
     """
     Verify multiple limits are still simplified even though Iceberg trees
     only support a single limit.
@@ -504,7 +510,9 @@ def test_multi_limit_pushdown(memory_leak_check, polaris_catalog):
         check_logger_msg(stream, "Constant limit detected, reading at most 1 rows")
 
 
-def test_limit_filter_limit_pushdown(memory_leak_check, polaris_catalog):
+def test_limit_filter_limit_pushdown(
+    memory_leak_check, polaris_catalog, polaris_catalog_iceberg_read_df
+):
     """
     Test reading an Iceberg table from Polaris with limit pushdown. We can push down
     both limits and filters in a way that meets the requirements of this query
@@ -540,7 +548,9 @@ def test_limit_filter_limit_pushdown(memory_leak_check, polaris_catalog):
         )
 
 
-def test_filter_limit_filter_pushdown(memory_leak_check, polaris_catalog):
+def test_filter_limit_filter_pushdown(
+    memory_leak_check, polaris_catalog, polaris_catalog_iceberg_read_df
+):
     """
     Test reading an Iceberg table from Polaris with filters after the limit
     computes a valid result (enforcing the limit and the filters). This query
