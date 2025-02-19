@@ -486,9 +486,8 @@ def fpath_without_protocol_prefix(fpath: str) -> str:
     parsed_url = urlparse(fpath)
     protocol = parsed_url.scheme
 
-    if (
-        protocol in {"abfs", "abfss", "wasb", "wasbs"} and bodo.enable_azure_fs
-    ):  # pragma: no cover
+    if protocol in {"abfs", "abfss", "wasb", "wasbs"}:
+        # pragma: no cover
         # PyArrow AzureBlobFileSystem is initialized with account_name only
         # so the host / container name should be included in the files
         url = urlparse(fpath)
@@ -497,14 +496,9 @@ def fpath_without_protocol_prefix(fpath: str) -> str:
         )
         return f"{container}{url.path}"
 
-    if protocol in {"wasb", "wasbs"}:
-        raise BodoError(
-            "PyArrow AzureFileSystem support is required for reading this dataset"
-        )
-
     prefix = ""
 
-    if protocol in {"hdfs", "abfs", "abfss"}:
+    if protocol == "hdfs":
         # HDFS filesystem is initialized with host:port info. Once
         # initialized, the filesystem needs the <protocol>://<host><port>
         # prefix removed to query and access files

@@ -67,7 +67,7 @@ def build_position_accessors(
 ) -> dict[int, Accessor]:
     """
     Monkey-patched version of pyiceberg.schema.build_position_accessors to
-    use the new _BuildPositionAccessors class.
+    use the new _BuildPositionAccessors class that supports top-level nested fields.
     """
     return visit(schema_or_type, _BuildPositionAccessors())
 
@@ -75,5 +75,6 @@ def build_position_accessors(
 # Monkey-patch the original function
 pyiceberg.schema.build_position_accessors = build_position_accessors
 
-# Moneky-patch inferred IO to support Bodo's
+# Moneky-patch inferred IO to support Bodo's changes
+# In particular, PyArrow's AzureFileSystem support
 pyiceberg.io.pyarrow.PyArrowFileIO = BodoPyArrowFileIO

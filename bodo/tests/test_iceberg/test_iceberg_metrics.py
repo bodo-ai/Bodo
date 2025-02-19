@@ -24,7 +24,7 @@ from bodo.tests.iceberg_database_helpers.metadata_utils import (
 )
 from bodo.tests.utils import pytest_mark_one_rank
 
-pytestmark = [pytest.mark.iceberg, pytest.mark.skip]
+pytestmark = pytest.mark.iceberg
 
 
 # Note: We mark df as distributed but for testing we are only
@@ -298,11 +298,11 @@ def test_datetime_metrics(
             # Time
             "C": np.array(
                 [
-                    bodo.Time(2, 46, 40, precision=9),
-                    bodo.Time(0, 59, 59, microsecond=11, precision=9),
+                    bodo.Time(2, 46, 40, precision=6),
+                    bodo.Time(0, 59, 59, microsecond=11, precision=6),
                     None,
                     None,
-                    bodo.Time(23, 45, 45, millisecond=948, precision=9),
+                    bodo.Time(23, 45, 45, millisecond=948, precision=6),
                 ]
             ),
             # Date

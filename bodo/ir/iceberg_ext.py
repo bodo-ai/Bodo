@@ -372,7 +372,7 @@ class IcebergReader(Connector):
         # that have been pushed down to I/O.
         rtjf_terms: list[tuple[ir.Var, tuple[int], tuple[int, int, str]]] | None = None,
     ):
-        # Info requireds to connect to the catalog and table
+        # Info required to connect to the catalog and table
         self.table_id = table_id
         self.connection = connection
 
@@ -882,6 +882,7 @@ def literal(val) -> Literal:
         return TimestampLiteral((val - datetime.datetime(1970, 1, 1)).microseconds)
     if isinstance(val, (list, pd.core.arrays.ExtensionArray)):
         return {literal(v) for v in val}  # type: ignore
+    # TODO: Potentially need to support nested structures
     return inner_literal(val)
 
 
@@ -1060,7 +1061,6 @@ def add_rtjf_iceberg_filter(
                     rtjf_filters = pie.And(
                         rtjf_filters, pie.In(col, literal(unique_vals))
                     )
-                    print(rtjf_filters, unique_vals)
                 else:
                     if min is not None and op in ("==", ">=", ">"):
                         rtjf_filters = pie.And(
