@@ -224,7 +224,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-64/libsanitizer-14.2.0-h2a3dede_1.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/libsecret-0.21.6-h7ba1e32_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/libsndfile-1.2.2-hc60ed4a_1.conda
-      - conda: https://conda.anaconda.org/conda-forge/linux-64/libsqlite-3.48.0-hee588c1_1.conda
+      - conda: https://conda.anaconda.org/conda-forge/linux-64/libsqlite-3.49.1-hee588c1_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/libssh2-1.11.1-hf672d98_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/libstdcxx-14.2.0-hc0a3c3a_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/libstdcxx-devel_linux-64-14.2.0-h41c2201_101.conda
@@ -608,7 +608,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-aarch64/libprotobuf-5.28.3-h44a3b7b_1.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-aarch64/libre2-11-2024.07.02-h18dbdb1_2.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-aarch64/libsanitizer-14.2.0-hff26f3d_1.conda
-      - conda: https://conda.anaconda.org/conda-forge/linux-aarch64/libsqlite-3.48.0-h5eb1b54_1.conda
+      - conda: https://conda.anaconda.org/conda-forge/linux-aarch64/libsqlite-3.49.1-h5eb1b54_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-aarch64/libssh2-1.11.1-ha41c0db_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-aarch64/libstdcxx-14.2.0-h3f4de04_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/libstdcxx-devel_linux-aarch64-14.2.0-h46490cb_101.conda
@@ -972,7 +972,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-64/libprotobuf-5.28.3-h6401091_1.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-64/libre2-11-2024.07.02-h0e468a2_2.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-64/libsecret-0.21.6-h3dfed74_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/osx-64/libsqlite-3.48.0-hdb6dae5_1.conda
+      - conda: https://conda.anaconda.org/conda-forge/osx-64/libsqlite-3.49.1-hdb6dae5_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-64/libssh2-1.11.1-h3dc7d44_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-64/libthrift-0.21.0-h75589b3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-64/libtiff-4.7.0-hb77a491_3.conda
@@ -1325,7 +1325,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/libprotobuf-5.28.3-h3bd63a1_1.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/libre2-11-2024.07.02-h07bc746_2.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/libsecret-0.21.6-h4e030ea_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/osx-arm64/libsqlite-3.48.0-h3f77e49_1.conda
+      - conda: https://conda.anaconda.org/conda-forge/osx-arm64/libsqlite-3.49.1-h3f77e49_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/libssh2-1.11.1-h9cc3647_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/libthrift-0.21.0-h64651cc_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/libtiff-4.7.0-h551f018_3.conda
@@ -1644,7 +1644,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/win-64/libpq-17.3-h9087029_0.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/libprotobuf-5.28.3-h8309712_1.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/libre2-11-2024.07.02-h4eb7d71_2.conda
-      - conda: https://conda.anaconda.org/conda-forge/win-64/libsqlite-3.48.0-h67fdade_1.conda
+      - conda: https://conda.anaconda.org/conda-forge/win-64/libsqlite-3.49.1-h67fdade_0.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/libssh2-1.11.1-he619c9f_0.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/libthrift-0.21.0-hbe90ef8_0.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/libtiff-4.7.0-h797046b_3.conda
@@ -2033,7 +2033,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-64/libsanitizer-14.2.0-h2a3dede_1.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/libsecret-0.21.6-h7ba1e32_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/libsndfile-1.2.2-hc60ed4a_1.conda
-      - conda: https://conda.anaconda.org/conda-forge/linux-64/libsqlite-3.48.0-hee588c1_1.conda
+      - conda: https://conda.anaconda.org/conda-forge/linux-64/libsqlite-3.49.1-hee588c1_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/libssh2-1.11.1-hf672d98_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/libstdcxx-14.2.0-hc0a3c3a_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/libstdcxx-devel_linux-64-14.2.0-h41c2201_101.conda
@@ -2415,7 +2415,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-aarch64/libprotobuf-5.28.3-h44a3b7b_1.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-aarch64/libre2-11-2024.07.02-h18dbdb1_2.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-aarch64/libsanitizer-14.2.0-hff26f3d_1.conda
-      - conda: https://conda.anaconda.org/conda-forge/linux-aarch64/libsqlite-3.48.0-h5eb1b54_1.conda
+      - conda: https://conda.anaconda.org/conda-forge/linux-aarch64/libsqlite-3.49.1-h5eb1b54_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-aarch64/libssh2-1.11.1-ha41c0db_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-aarch64/libstdcxx-14.2.0-h3f4de04_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/libstdcxx-devel_linux-aarch64-14.2.0-h46490cb_101.conda
@@ -2777,7 +2777,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-64/libprotobuf-5.28.3-h6401091_1.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-64/libre2-11-2024.07.02-h0e468a2_2.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-64/libsecret-0.21.6-h3dfed74_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/osx-64/libsqlite-3.48.0-hdb6dae5_1.conda
+      - conda: https://conda.anaconda.org/conda-forge/osx-64/libsqlite-3.49.1-hdb6dae5_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-64/libssh2-1.11.1-h3dc7d44_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-64/libthrift-0.21.0-h75589b3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-64/libtiff-4.7.0-hb77a491_3.conda
@@ -3128,7 +3128,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/libprotobuf-5.28.3-h3bd63a1_1.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/libre2-11-2024.07.02-h07bc746_2.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/libsecret-0.21.6-h4e030ea_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/osx-arm64/libsqlite-3.48.0-h3f77e49_1.conda
+      - conda: https://conda.anaconda.org/conda-forge/osx-arm64/libsqlite-3.49.1-h3f77e49_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/libssh2-1.11.1-h9cc3647_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/libthrift-0.21.0-h64651cc_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/libtiff-4.7.0-h551f018_3.conda
@@ -3445,7 +3445,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/win-64/libpq-17.3-h9087029_0.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/libprotobuf-5.28.3-h8309712_1.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/libre2-11-2024.07.02-h4eb7d71_2.conda
-      - conda: https://conda.anaconda.org/conda-forge/win-64/libsqlite-3.48.0-h67fdade_1.conda
+      - conda: https://conda.anaconda.org/conda-forge/win-64/libsqlite-3.49.1-h67fdade_0.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/libssh2-1.11.1-he619c9f_0.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/libthrift-0.21.0-hbe90ef8_0.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/libtiff-4.7.0-h797046b_3.conda
@@ -4168,7 +4168,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-64/libsecret-0.21.6-h7ba1e32_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/libsndfile-1.2.2-hc60ed4a_1.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/libsodium-1.0.20-h4ab18f5_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/linux-64/libsqlite-3.48.0-hee588c1_1.conda
+      - conda: https://conda.anaconda.org/conda-forge/linux-64/libsqlite-3.49.1-hee588c1_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/libssh2-1.11.1-hf672d98_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/libstdcxx-14.2.0-hc0a3c3a_1.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/libstdcxx-ng-14.2.0-h4852527_1.conda
@@ -4597,7 +4597,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-64/libsanitizer-14.2.0-h2a3dede_1.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/libsecret-0.21.6-h7ba1e32_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/libsndfile-1.2.2-hc60ed4a_1.conda
-      - conda: https://conda.anaconda.org/conda-forge/linux-64/libsqlite-3.48.0-hee588c1_1.conda
+      - conda: https://conda.anaconda.org/conda-forge/linux-64/libsqlite-3.49.1-hee588c1_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/libssh2-1.11.1-hf672d98_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/libstdcxx-14.2.0-hc0a3c3a_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/libstdcxx-devel_linux-64-14.2.0-h41c2201_101.conda
@@ -14692,9 +14692,9 @@ packages:
   license: ISC
   size: 205978
   timestamp: 1716828628198
-- conda: https://conda.anaconda.org/conda-forge/linux-64/libsqlite-3.48.0-hee588c1_1.conda
-  sha256: 22853d289ef6ec8a5b20f1aa261895b06525439990d3b139f8bfd0b5c5e32a3a
-  md5: 3fa05c528d8a1e2a67bbf1e36f22d3bc
+- conda: https://conda.anaconda.org/conda-forge/linux-64/libsqlite-3.49.1-hee588c1_0.conda
+  sha256: 2094ebed4627d3ae6370f9e6ae8937e0ec6726f677b76efec0f35e1ea46ecbc1
+  md5: 782d806291be26eba7db79858a343919
   depends:
   - __glibc >=2.17,<3.0.a0
   - libgcc >=13
@@ -14702,44 +14702,44 @@ packages:
   arch: x86_64
   platform: linux
   license: Unlicense
-  size: 878223
-  timestamp: 1737564987837
-- conda: https://conda.anaconda.org/conda-forge/linux-aarch64/libsqlite-3.48.0-h5eb1b54_1.conda
-  sha256: 81dd9bf66c7f1d9064e007e2c787133100c406e7ca2de61dba9fb7b87372f255
-  md5: 4f3a61fe206f20b27c385ee608bcdfda
+  size: 918152
+  timestamp: 1739903912942
+- conda: https://conda.anaconda.org/conda-forge/linux-aarch64/libsqlite-3.49.1-h5eb1b54_0.conda
+  sha256: 0c25f6d10912603e56c299641b2ddb519407a41ff8ee5327fa08e7149b4b0177
+  md5: 8db872b093c3d6aec8724b3e63098ff8
   depends:
   - libgcc >=13
   - libzlib >=1.3.1,<2.0a0
   arch: aarch64
   platform: linux
   license: Unlicense
-  size: 1044879
-  timestamp: 1737565049785
-- conda: https://conda.anaconda.org/conda-forge/osx-64/libsqlite-3.48.0-hdb6dae5_1.conda
-  sha256: ccff3309ed7b1561d3bb00f1e4f36d9d1323af998013e3182a13bf0b5dcef4ec
-  md5: 6c4d367a4916ea169d614590bdf33b7c
+  size: 914758
+  timestamp: 1739904061527
+- conda: https://conda.anaconda.org/conda-forge/osx-64/libsqlite-3.49.1-hdb6dae5_0.conda
+  sha256: 02fc26551d72e7d56684c42fd6e3cc193c2bc1bc021e9e002570ba23f1bfcee5
+  md5: 54b5cf6b6cb777d5a742ac5fe2a72bde
   depends:
   - __osx >=10.13
   - libzlib >=1.3.1,<2.0a0
   arch: x86_64
   platform: osx
   license: Unlicense
-  size: 926014
-  timestamp: 1737565233282
-- conda: https://conda.anaconda.org/conda-forge/osx-arm64/libsqlite-3.48.0-h3f77e49_1.conda
-  sha256: 17c06940cc2a13fd6a17effabd6881b1477db38b2cd3ee2571092d293d3fdd75
-  md5: 4c55169502ecddf8077973a987d08f08
+  size: 977730
+  timestamp: 1739903983235
+- conda: https://conda.anaconda.org/conda-forge/osx-arm64/libsqlite-3.49.1-h3f77e49_0.conda
+  sha256: 8fb3a6620c311a004cf463473cf72e279092822b5782ac06bf333fdf485c0904
+  md5: 4680afddba51d1e47744d15d7199f653
   depends:
   - __osx >=11.0
   - libzlib >=1.3.1,<2.0a0
   arch: arm64
   platform: osx
   license: Unlicense
-  size: 852831
-  timestamp: 1737564996616
-- conda: https://conda.anaconda.org/conda-forge/win-64/libsqlite-3.48.0-h67fdade_1.conda
-  sha256: eb889b9ea754d30268fa740f91e62fae6c30ca40f9769051dd42390d2470a7ff
-  md5: 5a7a8f7f68ce1bdb7b58219786436f30
+  size: 899177
+  timestamp: 1739904027808
+- conda: https://conda.anaconda.org/conda-forge/win-64/libsqlite-3.49.1-h67fdade_0.conda
+  sha256: 649c71d65d6ff1abdf1bc30911e1b217648dbcfa3d69af65bde94032d93d4111
+  md5: adc5af31aab14afd625e5e41ef960d8f
   depends:
   - ucrt >=10.0.20348.0
   - vc >=14.2,<15
@@ -14747,8 +14747,8 @@ packages:
   arch: x86_64
   platform: win
   license: Unlicense
-  size: 897026
-  timestamp: 1737565547561
+  size: 1081244
+  timestamp: 1739904240955
 - conda: https://conda.anaconda.org/conda-forge/linux-64/libssh2-1.11.1-hf672d98_0.conda
   sha256: 0407ac9fda2bb67e11e357066eff144c845801d00b5f664efbc48813af1e7bb9
   md5: be2de152d8073ef1c01b7728475f2fe7

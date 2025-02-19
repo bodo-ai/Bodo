@@ -219,7 +219,7 @@ def unbox_tabular_catalog(typ, val, c):
 @numba.jit
 def get_conn_str(rest_uri, warehouse, token):
     """Get the connection string for a Tabular Iceberg catalog."""
-    return f"rest://{rest_uri}?warehouse={warehouse}&token={token}"
+    return f"{rest_uri}?warehouse={warehouse}&token={token}"
 
 
 class TabularConnectionType(IcebergConnectionType):
