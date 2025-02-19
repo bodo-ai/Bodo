@@ -28,17 +28,24 @@ jobs:
       ${{ insert }}: ${{ parameters.matrix }}
 
   steps:
-  - script: |
+  - bash: |
       set -exo pipefail
       curl -fsSL https://pixi.sh/install.sh | bash
       source ~/.bashrc
       echo "##vso[task.prependpath]$HOME/.pixi/bin"
     displayName: Install Pixi
-  - script: pixi install -v --locked -e azure
+  - bash: pixi install -v --locked -e azure
+    retryCountOnTaskFailure: 3
     displayName: Install Test Environment
 
-  - script: |
+  - bash: |
       set -exo pipefail
+
+      unamestr=`uname`
+      if [[ "$unamestr" == 'Linux' ]]; then
+        export USE_BODO_ARROW_FORK=1
+      fi
+
       pixi run -e azure build-bodo -Cbuild.verbose=true
       pixi run -e azure build-bodosql
       pixi run -e azure build-iceberg
@@ -47,10 +54,9 @@ jobs:
       AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
       AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
       DISABLE_CCACHE: 1  # Just use sccache directly on CI
-      USE_BODO_ARROW_FORK: 1  # Build from Source with Arrow Fork
     displayName: 'Build Bodo, BodoSQL, and Iceberg Connector'
 
-  - script: |
+  - bash: |
       set -exo pipefail
       eval "$(pixi shell-hook --shell bash -e azure)"
 
@@ -59,19 +65,19 @@ jobs:
       pip install --no-deps --no-build-isolation -ve .
     displayName: "Setup Snowflake ADLS Testing (only Linux)"
     retryCountOnTaskFailure: 5
+    condition: ne(variables['Agent.OS'], 'Windows_NT')
 
-  - script: |
+  - bash: |
       pixi list
       pixi run pip list
     continueOnError: true
     displayName: Export Environment Spec
 
-  - script: |
+  - bash: |
       set -exo pipefail
-      eval "$(pixi shell-hook --shell bash -e azure)"
 
-      python -c "import bodo; print(bodo.__version__)"
-      python -c "import bodosql; print(bodosql.__version__)"
+      pixi run -e azure python -c "import bodo; print(bodo.__version__)"
+      pixi run -e azure python -c "import bodosql; print(bodosql.__version__)"
 
       unamestr=`uname`
       if [[ "$unamestr" == 'Linux' ]]; then
@@ -87,22 +93,26 @@ jobs:
         export HADOOP_OPTIONAL_TOOLS=hadoop-azure
         export ARROW_LIBHDFS_DIR=$HADOOP_HOME/lib/native
         export CLASSPATH=`$HADOOP_HOME/bin/hdfs classpath --glob`
+      elif [[ "$(Agent.OS)" == "Windows_NT" ]]; then
+        # On Windows we set HADOOP_HOME to a dummy directory.
+        # Spark needs to verify HADOOP_HOME exists at initialization even if it is not used.
+        export HADOOP_HOME="$(System.DefaultWorkingDirectory)/buildscripts/local_utils/hadoop_dummy"
       else
         echo "Skipping hadoop/arrow env var setup"
       fi
 
-      cd $(System.DefaultWorkingDirectory)/BodoSQL
+      cd "$(System.DefaultWorkingDirectory)/BodoSQL"
       # For caching tests we need to update the location of the decryption file.
       # We set the absolute path as an environment variable.
       export BODO_TRACING_DECRYPTION_FILE_PATH=`echo "$(System.DefaultWorkingDirectory)/buildscripts/decompress_traces.py"`
       if [[ "${{ parameters.CACHE_TEST }}" == "True" ]]; then
-        python -u -m bodosql.runtests_caching "${{ parameters.name }}" "$(NP)" bodosql/tests/caching_tests/
+        pixi run -e azure python -u -m bodosql.runtests_caching "${{ parameters.name }}" "$(NP)" bodosql/tests/caching_tests/
       elif [[ "${{ parameters.SPAWN_MODE_TEST }}" == "True" ]]; then
         export BODO_TEST_SPAWN_MODE=1
         export BODO_NUM_WORKERS="$NP"
-        pytest -s -v -p no:faulthandler -Wignore -m "$(PYTEST_MARKER)" bodosql/tests --junitxml=pytest-report-sql-spawn-mode.xml --test-run-title="${{ parameters.name }}"
+        pixi run -e azure pytest -s -v -p no:faulthandler -Wignore -m "$(PYTEST_MARKER)" bodosql/tests --junitxml=pytest-report-sql-spawn-mode.xml --test-run-title="${{ parameters.name }}"
       else
-        python -u -m bodosql.runtests "${{ parameters.name }}" "$(NP)" -s -v -p no:faulthandler -m "$(PYTEST_MARKER)" bodosql/tests/
+        pixi run -e azure python -u -m bodosql.runtests "${{ parameters.name }}" "$(NP)" -s -v -p no:faulthandler -m "$(PYTEST_MARKER)" bodosql/tests/
       fi
     env:
       SF_USERNAME: $(SNOWFLAKE_USER)

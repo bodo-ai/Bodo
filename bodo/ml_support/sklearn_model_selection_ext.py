@@ -276,7 +276,8 @@ def sklearn_model_selection_kfold_generator_dist_helper(m, X, y=None, groups=Non
             f"number of splits n_splits={m.n_splits} greater than the number of samples {global_data_size}"
         )
 
-    global_indices = np.arange(global_data_size)
+    # Convert global_data_size from np.int64 to int to get platform int size (int32 on Windows, int64 on Linux) from np.arange
+    global_indices = np.arange(int(global_data_size))
     if m.shuffle:
         if m.random_state is None:
             seed = bodo.libs.distributed_api.bcast_scalar(np.random.randint(0, 2**31))
@@ -354,6 +355,13 @@ def overload_model_selection_kfold_generator(
     lowering the generator to numba and implementing `getiter` and `iternext`.
     """
 
+    is_int32 = (
+        sys.platform == "win32" and np.lib.NumpyVersion(np.__version__) < "2.0.0b1"
+    )
+    out_type = (
+        "List(UniTuple(int32[:], 2))" if is_int32 else "List(UniTuple(int64[:], 2))"
+    )
+
     if is_overload_true(_is_data_distributed):
         # If distributed, then use native implementation
 
@@ -362,7 +370,7 @@ def overload_model_selection_kfold_generator(
         ):  # pragma: no cover
             # Since we do not support iterating through generators directly,
             # as an unperformant hack, we convert the output to a list
-            with bodo.objmode(gen="List(UniTuple(int64[:], 2))"):
+            with bodo.objmode(gen=out_type):
                 gen = list(
                     sklearn_model_selection_kfold_generator_dist_helper(
                         m, X, y=None, groups=None
@@ -379,7 +387,7 @@ def overload_model_selection_kfold_generator(
         ):  # pragma: no cover
             # Since we do not support iterating through generators directly,
             # as an unperformant hack, we convert the output to a list
-            with bodo.objmode(gen="List(UniTuple(int64[:], 2))"):
+            with bodo.objmode(gen=out_type):
                 gen = list(m.split(X, y=y, groups=groups))
 
             return gen

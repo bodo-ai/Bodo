@@ -5,8 +5,10 @@
 `pandas.Series.str.encode(encoding, errors='strict')`
 
 ### Argument Restrictions:
- * `encoding`: must be type `String`.
- * `errors`: must be type `String`.
+| argument 	  | datatypes   | other requirements  |
+|-------------|-------------|---------------------|
+| `encoding`  | String      | 					  |
+| `errors`    | String      | 					  |
 
 !!! note
 	Input must be a Series of `String` data.
@@ -25,5 +27,5 @@
 4       b'@'
 5     b'a n'
 6    b'^ Ef'
-dtype: object
+dtype: large_binary[pyarrow]
 ```

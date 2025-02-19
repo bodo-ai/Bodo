@@ -570,7 +570,7 @@ def getfs(
         import fsspec
 
         return PyFileSystem(FSSpecHandler(fsspec.filesystem("http")))
-    elif protocol in {"abfs", "abfss"} and bodo.enable_azure_fs:  # pragma: no cover
+    elif protocol in {"abfs", "abfss"}:  # pragma: no cover
         if not storage_options:
             storage_options = {}
         if "account_name" not in storage_options:
@@ -582,7 +582,7 @@ def getfs(
                 storage_options["account_name"] = account_name
 
         return abfs_get_fs(storage_options)
-    elif protocol in {"hdfs", "abfs", "abfss"}:  # pragma: no cover
+    elif protocol == "hdfs":  # pragma: no cover
         return (
             get_hdfs_fs(fpath) if not isinstance(fpath, list) else get_hdfs_fs(fpath[0])
         )

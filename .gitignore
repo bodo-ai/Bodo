@@ -60,7 +60,6 @@ bodo/io/csv_json_reader.h
 bodo/io/csv_json_reader.cpp
 bodo/io/arrow_ext.h
 bodo/io/arrow_ext.cpp
-bodo/io/_hdfs.cpp
 bodo/utils/tracing.c
 bodo/libs/memory.cpp
 bodo/io/pyarrow_wrappers.cpp

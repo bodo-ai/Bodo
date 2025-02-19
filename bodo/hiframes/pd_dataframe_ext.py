@@ -5058,32 +5058,18 @@ def to_json_overload(
             path_or_buf, parallel=False
         )
 
-        if lines and orient == "records":
-            bodo.hiframes.pd_dataframe_ext._json_write(
-                unicode_to_utf8(path_or_buf),
-                unicode_to_utf8(D),
-                0,
-                len(D),
-                False,
-                True,
-                unicode_to_utf8(bucket_region),
-                unicode_to_utf8(_bodo_file_prefix),
-            )
-            # Check if there was an error in the C++ code. If so, raise it.
-            bodo.utils.utils.check_and_propagate_cpp_exception()
-        else:
-            bodo.hiframes.pd_dataframe_ext._json_write(
-                unicode_to_utf8(path_or_buf),
-                unicode_to_utf8(D),
-                0,
-                len(D),
-                False,
-                False,
-                unicode_to_utf8(bucket_region),
-                unicode_to_utf8(_bodo_file_prefix),
-            )
-            # Check if there was an error in the C++ code. If so, raise it.
-            bodo.utils.utils.check_and_propagate_cpp_exception()
+        bodo.hiframes.pd_dataframe_ext._json_write(
+            unicode_to_utf8(path_or_buf),
+            unicode_to_utf8(D),
+            0,
+            len(D),
+            False,
+            lines and orient == "records",
+            unicode_to_utf8(bucket_region),
+            unicode_to_utf8(_bodo_file_prefix),
+        )
+        # Check if there was an error in the C++ code. If so, raise it.
+        bodo.utils.utils.check_and_propagate_cpp_exception()
 
     return _impl
 
