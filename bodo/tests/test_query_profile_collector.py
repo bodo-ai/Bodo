@@ -1,5 +1,6 @@
 import json
 import os
+import sys
 
 import numpy as np
 import pandas as pd
@@ -30,6 +31,10 @@ from bodo.tests.utils import (
     temp_env_override,
 )
 from bodo.utils.typing import ColNamesMetaType, MetaType
+
+pytestmark = pytest.mark.skipif(
+    sys.platform == "win32", reason="TODO[BSE-4580]: fix nightly test hangs on Windows"
+)
 
 
 def test_query_profile_collection_compiles(memory_leak_check):

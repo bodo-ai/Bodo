@@ -2,6 +2,7 @@ import os
 
 import pandas as pd
 import pytest
+from pyiceberg.catalog.glue import GlueCatalog
 
 import bodo
 import bodosql
@@ -54,11 +55,8 @@ def test_basic_read(memory_leak_check, glue_catalog):
 )
 def test_glue_catalog_iceberg_write(glue_catalog, memory_leak_check):
     """tests that writing tables works"""
-    import bodo_iceberg_connector as bic
-
     bc = bodosql.BodoSQLContext(catalog=glue_catalog)
     con_str = GlueConnectionType(glue_catalog.warehouse).get_conn_str()
-
     schema = "icebergglueci"
 
     in_df = pd.DataFrame(
@@ -112,18 +110,14 @@ def test_glue_catalog_iceberg_write(glue_catalog, memory_leak_check):
         exception_occurred_in_test_body = True
         raise e
     finally:
-        if exception_occurred_in_test_body:
-            try:
-                run_rank0(bic.delete_table)(
-                    bodo.io.iceberg.format_iceberg_conn(con_str),
-                    schema,
-                    table_name,
+        try:
+            run_rank0(
+                lambda: GlueCatalog("glue_catalog").purge_table(
+                    f"{schema}.{table_name}"
                 )
-            except Exception:
+            )()
+        except Exception:
+            if exception_occurred_in_test_body:
                 pass
-        else:
-            run_rank0(bic.delete_table)(
-                bodo.io.iceberg.format_iceberg_conn(con_str),
-                schema,
-                table_name,
-            )
+            else:
+                raise

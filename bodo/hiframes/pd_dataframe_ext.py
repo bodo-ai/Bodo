@@ -4375,7 +4375,6 @@ def to_sql_overload(
                 "Python to modify column names."
             )
     col_names_arr = pd.array(df.columns)
-    n_cols = len(col_names_arr)
 
     func_text = (
         "def df_to_sql(\n"
@@ -4390,13 +4389,12 @@ def to_sql_overload(
     # ------------------------------ Iceberg Write -----------------------------
     func_text += (
         "    if con.startswith('iceberg'):\n"
-        "        con_str = bodo.io.iceberg.format_iceberg_conn_njit(con)\n"
         "        if schema is None:\n"
         "            raise ValueError('DataFrame.to_sql(): schema must be provided when writing to an Iceberg table.')\n"
         "        if chunksize is not None:\n"
         "            raise ValueError('DataFrame.to_sql(): chunksize not supported for Iceberg tables.')\n"
         "        if index and bodo.get_rank() == 0:\n"
-        "            warnings.warn('index is not supported for Iceberg tables.')      \n"
+        "            warnings.warn('index is not supported for Iceberg tables.')\n"
         "        if index_label is not None and bodo.get_rank() == 0:\n"
         "            warnings.warn('index_label is not supported for Iceberg tables.')\n"
     )
@@ -4429,10 +4427,11 @@ def to_sql_overload(
     # Partition columns not supported through this API.
     func_text += (
         "        col_names = array_to_info(col_names_arr)\n"
+        "        table_id = name if schema == '' else f'{schema}.{name}'\n"
         "        bodo.io.iceberg.write.iceberg_write(\n"
-        "            con_str, schema, name, table, col_names,\n"
-        "            None, if_exists, _is_parallel, pyarrow_table_schema,\n"
-        f"            {n_cols}, _bodo_allow_downcasting,\n"
+        "            con, table_id, table, col_names,\n"
+        "            if_exists, _is_parallel, pyarrow_table_schema,\n"
+        "           _bodo_allow_downcasting,\n"
         "        )\n"
     )
 

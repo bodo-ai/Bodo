@@ -27,7 +27,7 @@ pytest_mark = pytest_s3_tables
 bucket_arn = "arn:aws:s3tables:us-east-2:427443013497:bucket/unittest-bucket"
 
 
-@temp_env_override({"AWS_REGION": "us-east-2"})
+@temp_env_override({"AWS_DEFAULT_REGION": "us-east-2"})
 def test_basic_read(memory_leak_check):
     """
     Test reading a complete Iceberg table S3 Tables
@@ -54,7 +54,7 @@ def test_basic_read(memory_leak_check):
     )
 
 
-@temp_env_override({"AWS_REGION": "us-east-2"})
+@temp_env_override({"AWS_DEFAULT_REGION": "us-east-2"})
 def test_read_implicit_pruning(memory_leak_check):
     """
     Test reading an Iceberg table from S3 Tables with Bodo
@@ -87,7 +87,6 @@ def test_read_implicit_pruning(memory_leak_check):
         check_logger_msg(stream, "Columns loaded ['A', 'B']")
 
 
-@temp_env_override({"AWS_REGION": "us-east-2"})
 @temp_env_override({"AWS_DEFAULT_REGION": "us-east-2"})
 def test_basic_write(memory_leak_check):
     """

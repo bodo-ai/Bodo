@@ -1,4 +1,5 @@
 import gc
+import sys
 
 import numpy as np
 import pandas as pd
@@ -26,7 +27,13 @@ from bodo.tests.utils import (
     temp_env_override,
 )
 
-# NOTE: Once we're no longer actively working on Groupby Spill Support, most of these tests can be marked as "slow".
+pytestmark = [
+    pytest.mark.skipif(
+        sys.platform == "win32", reason="TODO[BSE-4556]: enable buffer pool on Windows"
+    ),
+    pytest.mark.slow,
+]
+
 
 ##################### COMMON HELPERS #####################
 

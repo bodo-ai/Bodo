@@ -1,3 +1,5 @@
+import sys
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -17,6 +19,13 @@ from bodo.libs.streaming.join import (
 )
 from bodo.mpi4py import MPI
 from bodo.tests.utils import pytest_mark_one_rank, set_broadcast_join, temp_env_override
+
+pytestmark = [
+    pytest.mark.skipif(
+        sys.platform == "win32", reason="TODO[BSE-4556]: enable buffer pool on Windows"
+    ),
+    pytest.mark.slow,
+]
 
 
 @pytest.fixture(params=[True, False])

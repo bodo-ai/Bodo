@@ -36,7 +36,7 @@ this_module = sys.modules[__name__]
 
 # We don't technically need to get class from the method,
 # but it's useful to avoid IDE not found errors.
-BodoMultinomialNBType = install_py_obj_class(
+BodoMultinomialNBType, _ = install_py_obj_class(
     types_name="multinomial_nb_type",
     python_type=sklearn.naive_bayes.MultinomialNB,
     module=this_module,

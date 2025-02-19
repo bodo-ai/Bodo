@@ -2765,53 +2765,6 @@ def create_snowflake_iceberg_table(
             )
 
 
-@contextmanager
-def create_tabular_iceberg_table(
-    df: pd.DataFrame, base_table_name: str, warehouse: str, schema: str, credential: str
-) -> Generator[str, None, None]:
-    """Creates a new Iceberg table in Tabular derived from the base table name
-    and using the DataFrame.
-
-    Returns the name of the table added to Tabular.
-
-    Args:
-        df (pd.DataFrame): DataFrame to insert
-        base_table_name (str): Base string for generating the table name.
-        warehouse (str): Name of the Tabular warehouse
-        schema (str): Name of the Tabular schema
-        credential (str): Credential to authenticate
-
-
-    Returns:
-        str: The final table name.
-    """
-    import bodo_iceberg_connector as bic
-
-    comm = MPI.COMM_WORLD
-    iceberg_table_name = None
-    table_written = False
-    try:
-        if bodo.get_rank() == 0:
-            iceberg_table_name = gen_unique_table_id(base_table_name)
-
-        iceberg_table_name = comm.bcast(iceberg_table_name)
-
-        @bodo.jit(distributed=["df"])
-        def write_table(df, table_name, schema, con_str):
-            df.to_sql(table_name, con=con_str, schema=schema, if_exists="replace")
-
-        con_str = f"iceberg+REST://api.tabular.io/ws?credential={credential}&warehouse={warehouse}"
-        write_table(_get_dist_arg(df), iceberg_table_name, schema, con_str)
-        table_written = True
-
-        yield iceberg_table_name
-    finally:
-        if table_written:
-            run_rank0(bic.delete_table)(
-                bodo.io.iceberg.format_iceberg_conn(con_str), schema, iceberg_table_name
-            )
-
-
 def gen_unique_table_id(base_table_name):
     unique_name = str(uuid4()).replace("-", "_")
     return f"{base_table_name}_{unique_name}".lower()

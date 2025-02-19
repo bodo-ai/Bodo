@@ -15,7 +15,6 @@ import warnings
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from enum import Enum
-from typing import TypeGuard
 
 import numba
 import numpy as np
@@ -488,7 +487,7 @@ def get_slice_step(typemap, func_ir, var):
 
 def is_array_typ(
     var_typ, include_index_series=True
-) -> TypeGuard[types.ArrayCompatible]:
+) -> pt.TypeGuard[types.ArrayCompatible]:
     """return True if var_typ is an array type.
     include_index_series=True also includes Index and Series types (as "array-like").
     """
@@ -1355,7 +1354,7 @@ import copy
 ir.Const.__deepcopy__ = lambda self, memo: ir.Const(self.value, copy.deepcopy(self.loc))
 
 
-def is_call_assign(stmt) -> TypeGuard[ir.Assign]:
+def is_call_assign(stmt) -> pt.TypeGuard[ir.Assign]:
     return (
         isinstance(stmt, ir.Assign)
         and isinstance(stmt.value, ir.Expr)
@@ -1363,19 +1362,19 @@ def is_call_assign(stmt) -> TypeGuard[ir.Assign]:
     )
 
 
-def is_call(expr) -> TypeGuard[ir.Expr]:
+def is_call(expr) -> pt.TypeGuard[ir.Expr]:
     return isinstance(expr, ir.Expr) and expr.op == "call"
 
 
-def is_var_assign(inst) -> TypeGuard[ir.Assign]:
+def is_var_assign(inst) -> pt.TypeGuard[ir.Assign]:
     return isinstance(inst, ir.Assign) and isinstance(inst.value, ir.Var)
 
 
-def is_assign(inst) -> TypeGuard[ir.Assign]:
+def is_assign(inst) -> pt.TypeGuard[ir.Assign]:
     return isinstance(inst, ir.Assign)
 
 
-def is_expr(val, op) -> TypeGuard[ir.Expr]:
+def is_expr(val, op) -> pt.TypeGuard[ir.Expr]:
     return isinstance(val, ir.Expr) and val.op == op
 
 
@@ -1777,7 +1776,11 @@ def set_wrapper(a):
     return set(a)
 
 
-def run_rank0(func: Callable, bcast_result: bool = True, result_default=None):
+T = pt.TypeVar("T")
+P = pt.ParamSpec("P")
+
+
+def run_rank0(func: Callable[P, T], bcast_result: bool = True, result_default=None):
     """
     Utility function decorator to run a function on just rank 0
     but re-raise any Exceptions safely on all ranks.
@@ -1796,7 +1799,7 @@ def run_rank0(func: Callable, bcast_result: bool = True, result_default=None):
     """
 
     @functools.wraps(func)
-    def inner(*args, **kwargs):
+    def inner(*args, **kwargs) -> T:
         comm = MPI.COMM_WORLD
         result = result_default
         err = None
@@ -1814,7 +1817,7 @@ def run_rank0(func: Callable, bcast_result: bool = True, result_default=None):
         # Broadcast the result to all ranks.
         if bcast_result:
             result = comm.bcast(result)
-        return result
+        return result  # type: ignore
 
     return inner
 
