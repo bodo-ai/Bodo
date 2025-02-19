@@ -102,10 +102,6 @@ def ec2_get_monthly_travels_weather(weather_dataset, hvfhv_dataset):
 
     # for reading from S3
     env_vars = {"EXTRA_CONDA_PACKAGES": "s3fs==2024.10.0"}
-
-    # use an anoymous session to avoid passing credentials to cluster
-    s3_options = {"anon": True}
-
     with EC2Cluster(
         # NOTE: Setting security = False to avoid large config size
         # https://github.com/dask/dask-cloudprovider/issues/249
@@ -126,7 +122,6 @@ def ec2_get_monthly_travels_weather(weather_dataset, hvfhv_dataset):
                     get_monthly_travels_weather,
                     weather_dataset,
                     hvfhv_dataset,
-                    storage_options=s3_options,
                 )
                 total_time = future.result()
                 client.restart()
