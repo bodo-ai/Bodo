@@ -89,8 +89,7 @@ def get_monthly_travels_weather(weather_dataset, hvfhv_dataset, storage_options=
         },
     )
 
-    # TODO: Write output to S3 once permissions issue is resolved.
-    monthly_trips_weather = monthly_trips_weather.compute()
+    monthly_trips_weather.to_parquet("s3://dask-results/result.pq", compute=True)
 
     end = time.time()
 
@@ -115,6 +114,8 @@ def ec2_get_monthly_travels_weather(weather_dataset, hvfhv_dataset):
         scheduler_instance_type="c6i.xlarge",
         worker_instance_type="r6i.16xlarge",
         docker_image="daskdev/dask:2024.9.1-py3.10",
+        # Profile with AmazonS3FullAccess
+        iam_instance_profile={"Name": "dask-benchmark"},
         # Region for accessing bodo-example-data
         region="us-east-2",
         env_vars=env_vars,
