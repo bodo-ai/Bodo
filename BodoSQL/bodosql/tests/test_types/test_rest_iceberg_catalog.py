@@ -11,7 +11,6 @@ import bodosql
 from bodo.io.iceberg.catalog import conn_str_to_catalog
 from bodo.tests.iceberg_database_helpers.utils import (
     SparkAwsIcebergCatalog,
-    create_iceberg_table,
     get_spark,
 )
 from bodo.tests.user_logging_utils import (
@@ -29,6 +28,7 @@ from bodo.tests.utils import (
 )
 from bodo.utils.utils import run_rank0
 from bodosql.bodosql_types.rest_catalog import get_REST_connection
+from bodosql.tests.test_types.utils import create_iceberg_table
 
 pytestmark = pytest_polaris
 
@@ -599,7 +599,7 @@ def test_dynamic_scalar_filter_pushdown(
     py_output = pd.DataFrame({"A": [x for x in column if x <= current_date]})
     conn_str_to_catalog(conn_str)
     table_name = "current_date_table"
-    table_id = f"{schema}.table_name"
+    table_id = f"{schema}.{table_name}"
     with create_iceberg_table(conn_str, table_id, input_df):
         query = f'SELECT * FROM {schema}."{table_name}" WHERE A <= CURRENT_DATE'
         stream = StringIO()
