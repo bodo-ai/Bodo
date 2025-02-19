@@ -18,6 +18,11 @@ on:
         description: 'Collect Coverage'
         required: true
         type: boolean
+      os:
+        description: 'The OS of the runners.'
+        required: false
+        default: 'ubuntu-latest'
+        type: string
 
 jobs:
   run:
@@ -25,7 +30,7 @@ jobs:
       id-token: write
       contents: read
     name: Build and Run Tests Helper
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.os }}
     steps:
         # Setup
         - uses: actions/checkout@v4
@@ -34,16 +39,22 @@ jobs:
           with:
             build-all: true
         - name: Load Hadoop from Cache
+          if: runner.os != 'Windows'
           uses: actions/cache/restore@v4
           with:
             path: hadoop.tar.gz
             key: hadoop-3.3.2-${{ runner.os }}
-        - name: Install SAS and Clean Cache
+        - name: Install SAS
+          if: runner.os != 'Windows'
           run: |
             # Build SAS Token Provider
             ./buildscripts/install_azurefs_sas_token_provider.sh
+          shell: bash
+        - name: Clean Cache
+          run: |
             # Clean Maven and Spark Ivy Cache
             rm -rf "$HOME"/.ivy2/cache "$HOME"/.ivy2/jars "$HOME"/.m2/repository
+          shell: bash
         - name: Configure AWS Credentials
           uses: aws-actions/configure-aws-credentials@v4
           with:
@@ -52,10 +63,16 @@ jobs:
             role-session-name: BodoEnginePrCiSession
             role-skip-session-tagging: true
             role-duration-seconds: 10800
-  
+
         # Run Tests
         - name: Run Tests
           run: |
+            if [[ "$RUNNER_OS" == "Windows" ]]; then
+              # On Windows we set HADOOP_HOME to a dummy directory.
+              # Spark needs to verify HADOOP_HOME exists at initialization even if it is not used.
+              export HADOOP_HOME="$(pwd)/buildscripts/local_utils/hadoop_dummy"
+            fi
+
             # Bodo Tests: Coverage is collected
             pytest -s -v -Wignore \
               --cov-report= --cov=bodo \
@@ -63,7 +80,7 @@ jobs:
               --store-durations --clean-durations \
               --durations-path=buildscripts/github/test_dur_bodo.json \
               -m "$PYTEST_MARKER" bodo/tests/
-            
+
             # Save Exit Code for Later
             test_exit_code=$?
 
@@ -80,6 +97,7 @@ jobs:
             # If one fails, the exit code will be 1
             # If both fail, the exit code will be 2
             exit $((test_exit_code + $?))
+          shell: bash
           env:
             BODO_TESTING_ONLY_RUN_1D_VAR: true
             PYTEST_MARKER: ${{ inputs.pytest-marker }}
@@ -108,6 +126,7 @@ jobs:
             mv buildscripts/github/test_dur_bodo.json outputs/test_dur_bodo_${{ inputs.batch }}.json
             mv .coverage outputs/.coverage_${{ inputs.batch }}
             mv buildscripts/github/test_dur_bodosql.json outputs/test_dur_bodosql_${{ inputs.batch }}.json
+          shell: bash
         - name: Upload Timings and Coverage
           uses: actions/upload-artifact@v4
           if: inputs.collect-coverage && (success() || failure())

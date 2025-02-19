@@ -8,6 +8,7 @@
 #endif
 
 #include <Python.h>
+#include <boost/multiprecision/cpp_int.hpp>
 #include <vector>
 
 #include "_meminfo.h"
@@ -24,6 +25,7 @@
 //     POP_IGNORED_COMPILER_ERROR();
 //   }
 // See https://gcc.gnu.org/onlinedocs/gcc/Diagnostic-Pragmas.html
+#if defined(__GNUC__) || defined(__clang__)
 #define DO_PRAGMA(x) _Pragma(#x)
 #define PUSH_IGNORED_COMPILER_ERROR(err)                                      \
     DO_PRAGMA(GCC diagnostic push);                                           \
@@ -39,6 +41,17 @@
 // POP_IGNORED_COMPILER_ERROR. Otherwise the error will be disabled for the rest
 // of compilation
 #define POP_IGNORED_COMPILER_ERROR() DO_PRAGMA(GCC diagnostic pop)
+#elif defined(_MSC_VER)
+#define PUSH_IGNORED_COMPILER_ERROR(err) \
+    __pragma(warning(push));             \
+    __pragma(warning(disable : err))
+#define POP_IGNORED_COMPILER_ERROR() __pragma(warning(pop))
+#else
+#define PUSH_IGNORED_COMPILER_ERROR(err) \
+    static_assert(false, "Unsupported compiler: Cannot disable warnings")
+#define POP_IGNORED_COMPILER_ERROR() \
+    static_assert(false, "Unsupported compiler: Cannot pop ignored warnings")
+#endif
 
 // Convenience macros from
 // https://github.com/numba/numba/blob/main/numba/_pymodule.h
@@ -64,6 +77,61 @@
     } while (0)
 
 void Bodo_PyErr_SetString(PyObject* type, const char* message);
+
+// --------- Windows Compatibility ------------ //
+#if defined(_WIN32)
+#include <__msvc_int128.hpp>
+
+template <typename T>
+concept FloatOrDouble = std::is_same_v<T, float> || std::is_same_v<T, double>;
+
+// Subclass std::_Signed128 to add missing C++ operators
+// such as casting and conversion.
+// Avoiding error checking and exceptions to behave like a native
+// type as much as possible.
+struct __int128_t : std::_Signed128 {
+    __int128_t() : std::_Signed128() {}
+
+    __int128_t(std::_Signed128 in_val) : std::_Signed128(in_val) {}
+
+    template <std::integral T>
+    constexpr __int128_t(T in_val) noexcept : std::_Signed128(in_val) {}
+
+    template <FloatOrDouble T>
+    __int128_t(T in_val);
+
+    template <FloatOrDouble T>
+    T int128_to_float() const;
+
+    operator float() const { return int128_to_float<float>(); }
+
+    operator double() const { return int128_to_float<double>(); }
+
+    template <std::integral T>
+    friend constexpr __int128_t operator<<(const __int128_t& _Left,
+                                           const T& _Right) noexcept {
+        return __int128_t(_Left << __int128_t(_Right));
+    }
+
+    template <std::integral T>
+    friend constexpr __int128_t operator>>(const __int128_t& _Left,
+                                           const T& _Right) noexcept {
+        return __int128_t(_Left >> __int128_t(_Right));
+    }
+
+    template <std::integral T>
+    friend constexpr bool operator==(const __int128_t& _Left,
+                                     const T& _Right) noexcept {
+        return (_Left == __int128_t(_Right));
+    }
+
+    template <std::integral T>
+    friend constexpr __int128_t operator|(const __int128_t& _Left,
+                                          const T& _Right) noexcept {
+        return __int128_t(_Left | __int128_t(_Right));
+    }
+};
+#endif
 
 // --------- MemInfo Helper Functions --------- //
 NRT_MemInfo* alloc_meminfo(int64_t length);
@@ -427,8 +495,8 @@ inline std::vector<char> RetrieveNaNentry(Bodo_CTypes::CTypeEnum const& dtype) {
     if (dtype == Bodo_CTypes::DECIMAL) {
         // Normally the null value of decimal_value should never show up
         // anywhere. A value is assigned for simplicity of the code
-        __int128 e_val = 0;
-        return GetCharVector<__int128>(e_val);
+        __int128_t e_val = 0;
+        return GetCharVector<__int128_t>(e_val);
     }
     return {};
 }

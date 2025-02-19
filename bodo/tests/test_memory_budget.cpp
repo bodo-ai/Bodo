@@ -1,9 +1,23 @@
+#include <cstdlib>
 #include "../libs/_memory_budget.h"
 #include "./test.hpp"
 
 bodo::tests::suite memory_budget_tests([] {
-    bodo::tests::before_each([] { setenv("BODO_USE_MEMORY_BUDGETS", "1", 1); });
-    bodo::tests::after_each([] { unsetenv("BODO_USE_MEMORY_BUDGETS"); });
+    bodo::tests::before_each([] {
+
+#ifdef _WIN32
+        _putenv("BODO_USE_MEMORY_BUDGETS=1");
+#else
+        setenv("BODO_USE_MEMORY_BUDGETS", "1", 1);
+#endif
+    });
+    bodo::tests::after_each([] {
+#ifdef _WIN32
+        _putenv("BODO_USE_MEMORY_BUDGETS=");
+#else
+        unsetenv("BODO_USE_MEMORY_BUDGETS");
+#endif
+    });
 
     bodo::tests::test("test_exception_if_invalid_start_end_pipeline_range", [] {
         auto comptroller = OperatorComptroller::Default();
@@ -87,9 +101,13 @@ bodo::tests::suite memory_budget_tests([] {
         comptroller->ReduceOperatorBudget(0, 50);
         bodo::tests::check(comptroller->GetOperatorBudget(0) == 50);
 
+// Avoid running this test on Windows because the cerr print causes a hang with
+// MPI on Git Bash for some reason.
+#ifndef _WIN32
         // Check that increasing the budget via ReduceOperatorBudget is illegal
         comptroller->ReduceOperatorBudget(0, 75);
         bodo::tests::check(comptroller->GetOperatorBudget(0) == 50);
+#endif
     });
 
     bodo::tests::test("test_increase_budget", [] {

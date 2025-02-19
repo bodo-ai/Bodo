@@ -5,7 +5,6 @@ Unittests for DataFrames
 import datetime
 import operator
 import random
-import sys
 
 import numba
 import numpy as np
@@ -1480,7 +1479,7 @@ def test_df_abs3(memory_leak_check):
     df = pd.DataFrame(
         {
             "A": pd.Series(
-                np.random.randint(0, np.iinfo(np.int64).max, size=12)
+                np.random.randint(0, np.iinfo(np.int64).max, size=12, dtype=np.int64)
             ).astype("timedelta64[ns]")
         }
     )
@@ -2003,11 +2002,13 @@ def test_df_nunique(df_value, memory_leak_check):
 
 def _is_supported_argminmax_typ(d):
     # distributed argmax types, see distributed_api.py
-    supported_typs = [np.int32, np.float32, np.float64]
-    if not sys.platform.startswith("win"):
-        # long is 4 byte on Windows
-        supported_typs.append(np.int64)
-        supported_typs.append(np.dtype("datetime64[ns]"))
+    supported_typs = [
+        np.int32,
+        np.float32,
+        np.float64,
+        np.int64,
+        np.dtype("datetime64[ns]"),
+    ]
     return d in supported_typs
 
 

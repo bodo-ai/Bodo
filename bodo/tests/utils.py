@@ -3,10 +3,12 @@ Utility functions for testing such as check_func() that tests a function.
 """
 
 import datetime
+import gzip
 import io
 import os
 import random
 import re
+import shutil
 import string
 import subprocess
 import time
@@ -129,12 +131,12 @@ def dist_IR_count(f_ir, func_name):
     return f_ir_text.count(func_name)
 
 
-@bodo.jit
+@numba.njit
 def get_rank():
     return bodo.libs.distributed_api.get_rank()
 
 
-@bodo.jit(cache=True)
+@numba.njit(cache=True)
 def get_start_end(n):
     rank = bodo.libs.distributed_api.get_rank()
     n_pes = bodo.libs.distributed_api.get_size()
@@ -951,6 +953,7 @@ def _get_dist_arg(
     l = len(a) if isinstance(a, pa.Array) else a.shape[0]
 
     start, end = get_start_end(l)
+
     # for var length case to be different than regular 1D in chunk sizes, add
     # one extra element to the second processor
     if var_length and bodo.get_size() >= 2 and l > bodo.get_size():
@@ -966,6 +969,7 @@ def _get_dist_arg(
 
     if check_typing_issues:
         _check_typing_issues(out_val)
+
     return out_val
 
 
@@ -3452,3 +3456,30 @@ def get_num_test_workers():
         return spawner.worker_intercomm.Get_remote_size()
 
     return bodo.get_size()
+
+
+def compress_dir(dir_name):
+    if bodo.get_rank() == 0:
+        for fname in [
+            f
+            for f in os.listdir(dir_name)
+            if f.endswith(".csv") and os.path.getsize(os.path.join(dir_name, f)) > 0
+        ]:
+            full_fname = os.path.join(dir_name, fname)
+            out_fname = full_fname + ".gz"
+            with open(full_fname, "rb") as f_in:
+                with gzip.open(out_fname, "wb") as f_out:
+                    shutil.copyfileobj(f_in, f_out)
+            os.remove(full_fname)
+    bodo.barrier()
+
+
+def uncompress_dir(dir_name):
+    if bodo.get_rank() == 0:
+        for fname in [f for f in os.listdir(dir_name) if f.endswith(".gz")]:
+            full_fname = os.path.join(dir_name, fname)
+            with gzip.open(full_fname, "rb") as f_in:
+                with open(full_fname.removesuffix(".gz"), "wb") as f_out:
+                    shutil.copyfileobj(f_in, f_out)
+            os.remove(full_fname)
+    bodo.barrier()
