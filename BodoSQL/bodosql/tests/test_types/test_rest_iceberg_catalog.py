@@ -639,7 +639,10 @@ def test_rest_catalog_token_caching(memory_leak_check):
                 return tc.conn_str
 
             dispatcher = bodo.jit(cache=True)(f)
-            assert dispatcher() == "test_uri?warehouse=test_warehouse&token=test_token1"
+            assert (
+                dispatcher()
+                == "iceberg+test_uri?warehouse=test_warehouse&token=test_token1"
+            )
             sig = dispatcher.signatures[0]
             assert dispatcher._cache_hits[sig] == 0, (
                 "Expected no cache hit for function signature"
@@ -651,7 +654,8 @@ def test_rest_catalog_token_caching(memory_leak_check):
             dispatcher_2 = bodo.jit(cache=True)(f)
             os.environ["__BODOSQL_REST_TOKEN"] = "test_token2"
             assert (
-                dispatcher_2() == "test_uri?warehouse=test_warehouse&token=test_token2"
+                dispatcher_2()
+                == "iceberg+test_uri?warehouse=test_warehouse&token=test_token2"
             )
             sig = dispatcher_2.signatures[0]
             assert dispatcher_2._cache_hits[sig] == 1, (
