@@ -1,11 +1,12 @@
 import os
 import random
 import subprocess
-import time
 
 import boto3
 import pytest
+from testcontainers.core.container import DockerContainer, wait_for_logs
 
+import bodo
 from bodo.tests.iceberg_database_helpers.simple_tables import (
     TABLE_MAP as SIMPLE_TABLES_MAP,
 )
@@ -60,115 +61,52 @@ def polaris_server():
     Install Polaris if it is not already installed.
     Start Polaris server if it is not already running.
     Returns the host port, and credentials of the server.
+
+    If it fails to start locally even with docker running try
+    enabling "Allow the default Docker socket to be used" in
+    advanced settings of Docker Desktop.
     """
 
-    @run_rank0
-    def create():
-        # Check if Polaris server is already running
-        try:
-            subprocess.run(
-                ["docker", "inspect", "polaris-server-unittests"], check=True
-            )
-            # Kill it if it is running
-            subprocess.run(["docker", "stop", "polaris-server-unittests"], check=True)
-            subprocess.run(["docker", "rm", "polaris-server-unittests"], check=True)
-        except subprocess.CalledProcessError:
-            # Polaris server is not running, ignore the error
-            pass
-
-        health_check_args = [
-            "--health-cmd",
-            "curl http://localhost:8182/healthcheck",
-            "--health-interval",
-            "2s",
-            "--health-retries",
-            "5",
-            "--health-timeout",
-            "10s",
-        ]
+    # Can't use run_rank0 because containers aren't pickelable
+    if bodo.get_rank() == 0:
         # Use boto to get credentials from all possible sources
         session = boto3.Session()
         credentials = session.get_credentials()
-        env_args = [
-            "-e",
-            "quarkus.otel.sdk.disabled=true",
-            "-e",
-            "POLARIS_BOOTSTRAP_CREDENTIALS=default-realm,root,s3cr3t",
-            "-e",
-            "polaris.realm-context.realms=default-realm",
-            "-e",
-            f"AWS_REGION={session.region_name if session.region_name else 'us-east-2'}",
-        ]
+        env = {
+            "quarkus.otel.sdk.disabled": "true",
+            "POLARIS_BOOTSTRAP_CREDENTIALS": "default-realm,root,s3cr3t",
+            "polaris.realm-context.realms": "default-realm",
+            "AWS_REGION": session.region_name if session.region_name else "us-east-2",
+        }
         if credentials.access_key is not None:
-            env_args += ["-e", f"AWS_ACCESS_KEY_ID={credentials.access_key}"]
+            env["AWS_ACCESS_KEY_ID"] = credentials.access_key
         if credentials.secret_key is not None:
-            env_args += [
-                "-e",
-                f"AWS_SECRET_ACCESS_KEY={credentials.secret_key}",
-            ]
+            env["AWS_SECRET_ACCESS_KEY"] = credentials.secret_key
         if credentials.token is not None:
-            env_args += ["-e", f"AWS_SESSION_TOKEN={credentials.token}"]
+            env["AWS_SESSION_TOKEN"] = credentials.token
         # Add Azure credentials
         if "AZURE_CLIENT_ID" in os.environ:
-            env_args += ["-e", f"AZURE_CLIENT_ID={os.environ['AZURE_CLIENT_ID']}"]
+            env["AZURE_CLIENT_ID"] = os.environ["AZURE_CLIENT_ID"]
         if "AZURE_CLIENT_SECRET" in os.environ:
-            env_args += [
-                "-e",
-                f"AZURE_CLIENT_SECRET={os.environ['AZURE_CLIENT_SECRET']}",
-            ]
+            env["AZURE_CLIENT_SECRET"] = os.environ["AZURE_CLIENT_SECRET"]
         if "AZURE_TENANT_ID" in os.environ:
-            env_args += [
-                "-e",
-                f"AZURE_TENANT_ID={os.environ.get('AZURE_TENANT_ID', '72f988bf-86f1-41af-91ab-2d7cd011db47')}",
-            ]
-        # Start Polaris server
-        # Once Polaris publishes their own docker image, we can use that instead of ours
-        # https://github.com/apache/polaris/issues/152
-        subprocess.run(
-            ["docker", "run", "-d"]
-            + health_check_args
-            + env_args
-            + [
-                "-p",
-                "8181:8181",
-                "-p",
-                "8282:8282",
-                "--name",
-                "polaris-server-unittests",
-                "public.ecr.aws/k7f6m2y1/bodo/polaris-unittests:latest",
-            ],
-            check=True,
-        )
-        # Wait for Polaris server to start
-        while (
-            "healthy"
-            not in subprocess.run(
-                [
-                    "docker",
-                    "ps",
-                    "--filter",
-                    "name=polaris-server-unittests",
-                    "--format",
-                    "{{.Status}}",
-                ],
-                capture_output=True,
-                text=True,
+            env["AZURE_TENANT_ID"] = os.environ.get(
+                "AZURE_TENANT_ID", "72f988bf-86f1-41af-91ab-2d7cd011db47"
             )
-            .stdout.strip()
-            .lower()
-        ):
-            time.sleep(1)
 
-    create()
+        polaris = (
+            DockerContainer("public.ecr.aws/k7f6m2y1/bodo/polaris-unittests:latest")
+            .with_bind_ports(8181, 8181)
+            .with_bind_ports(8282, 8182)
+            .with_name("polaris-server-unittests")
+        )
+        for key, value in env.items():
+            polaris.with_env(key, value)
+        wait_for_logs(polaris.start(), "Listening on")
+
     yield "localhost", 8181, "root", "s3cr3t"
-
-    @run_rank0
-    def cleanup():
-        # Stop Polaris server
-        subprocess.run(["docker", "stop", "polaris-server-unittests"], check=True)
-        subprocess.run(["docker", "rm", "polaris-server-unittests"], check=True)
-
-    cleanup()
+    if bodo.get_rank() == 0:
+        polaris.stop()
 
 
 @pytest.fixture(scope="session")
