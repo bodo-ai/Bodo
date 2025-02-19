@@ -227,7 +227,7 @@ void bodo::tests::check(bool b, const char *msg, std::source_location loc) {
         return;
     }
 
-    std::cerr << "Assertion failed: " << msg << std::endl;
+    std::cout << "Assertion failed: " << msg << std::endl;
     throw std::runtime_error("Check failure");
 }
 
@@ -244,13 +244,13 @@ void bodo::tests::check_exception(std::function<void()> f,
     }
 
     if (!caught) {
-        std::cerr << "No exception was thrown. Expected: " << expected_msg_start
+        std::cout << "No exception was thrown. Expected: " << expected_msg_start
                   << std::endl;
         throw std::runtime_error("check_exception failure");
     }
 
     if (!std::string_view(msg).starts_with(expected_msg_start)) {
-        std::cerr << "Exception message did not match."
+        std::cout << "Exception message did not match."
                   << "\nExpected: " << expected_msg_start << "\nActual: " << msg
                   << std::endl;
         throw std::runtime_error("check_exception failure");

@@ -101,9 +101,13 @@ bodo::tests::suite memory_budget_tests([] {
         comptroller->ReduceOperatorBudget(0, 50);
         bodo::tests::check(comptroller->GetOperatorBudget(0) == 50);
 
+// Avoid running this test on Windows because the cerr print causes a hang with
+// MPI on Git Bash for some reason.
+#ifndef _WIN32
         // Check that increasing the budget via ReduceOperatorBudget is illegal
         comptroller->ReduceOperatorBudget(0, 75);
         bodo::tests::check(comptroller->GetOperatorBudget(0) == 50);
+#endif
     });
 
     bodo::tests::test("test_increase_budget", [] {

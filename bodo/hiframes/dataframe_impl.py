@@ -3277,11 +3277,14 @@ def _insert_NA_cond(expr_node, left_columns, left_data, right_columns, right_dat
             )
         return binop
 
-    def _insert_NA_cond_body(expr_node, null_set):
+    def _insert_NA_cond_body(expr_node, null_set) -> None:
         """
-        Returns an updated version of the sub expr and a set
-        of all column checks (i.e. right.A) that need a null value
-        inserted.
+        Scans through expr_node and inserts names for all
+        columns that have a column check (i.e. right.A) and need a
+        null value inserted.
+
+        Also modified expr_node in-place to add null checks,
+        but only for the OR case.
         """
         if isinstance(expr_node, pandas.core.computation.ops.BinOp):
             if expr_node.op == "|":
@@ -3290,8 +3293,8 @@ def _insert_NA_cond(expr_node, left_columns, left_data, right_columns, right_dat
                 left_null = set()
                 right_null = set()
 
-                left_body = _insert_NA_cond_body(expr_node.lhs, left_null)
-                right_body = _insert_NA_cond_body(expr_node.rhs, right_null)
+                _insert_NA_cond_body(expr_node.lhs, left_null)
+                _insert_NA_cond_body(expr_node.rhs, right_null)
 
                 # Elements found in both sets can be bubbled up
                 joint_nulls = left_null.intersection(right_null)
@@ -3304,13 +3307,13 @@ def _insert_NA_cond(expr_node, left_columns, left_data, right_columns, right_dat
                 null_set.update(joint_nulls)
 
                 # Add null checks where needed
-                expr_node.lhs = append_null_checks(left_body, left_null)
-                expr_node.rhs = append_null_checks(right_body, right_null)
+                expr_node.lhs = append_null_checks(expr_node.lhs, left_null)
+                expr_node.rhs = append_null_checks(expr_node.rhs, right_null)
                 # Update operands so print works properly
                 expr_node.operands = (expr_node.lhs, expr_node.rhs)
             else:
-                expr_node.lhs = _insert_NA_cond_body(expr_node.lhs, null_set)
-                expr_node.rhs = _insert_NA_cond_body(expr_node.rhs, null_set)
+                _insert_NA_cond_body(expr_node.lhs, null_set)
+                _insert_NA_cond_body(expr_node.rhs, null_set)
         elif _is_col_access(expr_node):
             # If we have a column add it to the nullset if the type is nullable.
             full_name = expr_node.name
@@ -3324,7 +3327,6 @@ def _insert_NA_cond(expr_node, left_columns, left_data, right_columns, right_dat
             arr_type = data[cols.index(col_name)]
             if bodo.utils.typing.is_nullable(arr_type):
                 null_set.add(expr_node.name)
-        return expr_node
 
     null_set = set()
     _insert_NA_cond_body(expr_node, null_set)
