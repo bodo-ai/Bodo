@@ -10,7 +10,7 @@ from urllib.parse import parse_qs, urlparse
 
 import requests
 from numba.core import types
-from pyarrow.fs import FileSystem, FSSpecHandler
+from pyarrow.fs import AzureFileSystem, FileSystem, FSSpecHandler
 
 from bodo.utils.utils import BodoError, run_rank0
 
@@ -195,3 +195,14 @@ def _fs_from_file_path(file_path: str, io: FileIO) -> FileSystem:
             raise ValueError(
                 f"Expected PyArrowFileIO or FsspecFileIO, got: {io}"
             ) from e
+
+
+def _format_data_loc(data_loc: str, fs: FileSystem) -> str:
+    """
+    Format the data location to be written to depending on the filesystem.
+    """
+    if isinstance(fs, AzureFileSystem) and data_loc.startswith("abfs"):
+        # Azure filesystem only wants the container/path
+        parsed = urlparse(data_loc)
+        return f"{parsed.username}{parsed.path}"
+    return data_loc

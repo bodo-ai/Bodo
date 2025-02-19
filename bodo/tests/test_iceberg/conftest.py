@@ -228,6 +228,24 @@ def aws_polaris_warehouse(polaris_token, polaris_server, polaris_package):
                 )
             ),
         )
+        root_client.add_grant_to_catalog_role(
+            catalog_name,
+            "catalog_admin",
+            AddGrantRequest(
+                grant=CatalogGrant(
+                    type="catalog", privilege=CatalogPrivilege.CATALOG_MANAGE_ACCESS
+                )
+            ),
+        )
+        root_client.add_grant_to_catalog_role(
+            catalog_name,
+            "catalog_admin",
+            AddGrantRequest(
+                grant=CatalogGrant(
+                    type="catalog", privilege=CatalogPrivilege.CATALOG_MANAGE_METADATA
+                )
+            ),
+        )
 
         catalog_client = CatalogApiClient(
             Configuration(
@@ -310,6 +328,24 @@ def azure_polaris_warehouse(polaris_token, polaris_server, polaris_package):
             AddGrantRequest(
                 grant=CatalogGrant(
                     type="catalog", privilege=CatalogPrivilege.CATALOG_MANAGE_CONTENT
+                )
+            ),
+        )
+        root_client.add_grant_to_catalog_role(
+            catalog_name,
+            "catalog_admin",
+            AddGrantRequest(
+                grant=CatalogGrant(
+                    type="catalog", privilege=CatalogPrivilege.CATALOG_MANAGE_ACCESS
+                )
+            ),
+        )
+        root_client.add_grant_to_catalog_role(
+            catalog_name,
+            "catalog_admin",
+            AddGrantRequest(
+                grant=CatalogGrant(
+                    type="catalog", privilege=CatalogPrivilege.CATALOG_MANAGE_METADATA
                 )
             ),
         )

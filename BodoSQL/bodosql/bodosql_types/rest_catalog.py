@@ -50,8 +50,6 @@ def _create_java_REST_catalog(
         warehouse,
         token,
         credential,
-        # We could add a way to configure this
-        "default",
         scope,
     )
 

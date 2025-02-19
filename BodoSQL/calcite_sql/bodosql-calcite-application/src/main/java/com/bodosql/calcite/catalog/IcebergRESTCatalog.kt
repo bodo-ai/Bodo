@@ -20,7 +20,6 @@ open class IcebergRESTCatalog(
     warehouse: String,
     token: String? = null,
     credential: String? = null,
-    val defaultSchema: String? = null,
     val scope: String? = null,
 ) : IcebergCatalog<RESTCatalog>(
         createRestCatalog(uri, warehouse, token, credential, scope),
@@ -62,7 +61,8 @@ open class IcebergRESTCatalog(
      */
     override fun getSchemaNames(schemaPath: ImmutableList<String>): MutableSet<String> {
         val ns = schemaPathToNamespace(schemaPath)
-        return getIcebergConnection().listNamespaces(ns).map { it.level(it.length() - 1) }.toMutableSet()
+        val schemas = getIcebergConnection().listNamespaces(ns).map { it.level(it.length() - 1) }.toMutableSet()
+        return schemas
     }
 
     /**
@@ -74,19 +74,13 @@ open class IcebergRESTCatalog(
      * @param depth The depth at which to find the default.
      * @return List of default Schema for this catalog.
      */
-    override fun getDefaultSchema(depth: Int): List<String> {
-        if (depth == 0 && defaultSchema != null) {
-            return listOf(defaultSchema)
-        }
-        return listOf()
-    }
+    override fun getDefaultSchema(depth: Int): List<String> = listOf()
 
     /**
      * Return the number of levels at which a default schema may be found.
-     * REST catalogs don't have subSchemas as far as I can tell, so this method always returns 1.
      * @return The number of levels a default schema can be found.
      */
-    override fun numDefaultSchemaLevels(): Int = 1
+    override fun numDefaultSchemaLevels(): Int = 0
 
     /**
      * Generates the code necessary to produce an append write expression from the given catalog.
