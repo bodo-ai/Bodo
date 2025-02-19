@@ -16,8 +16,6 @@ if pt.TYPE_CHECKING:
 
 # The gateway object used to communicate with the JVM.
 gateway: JavaGateway | None = None
-# Output path for redirecting Java output
-global_redirect_path: str | None = None
 
 # Java Classes used by the Python Portion
 CLASSES: dict[str, "JavaClass"] = {}
@@ -89,18 +87,9 @@ def launch_jvm() -> JavaGateway:
     Returns:
         The active Py4J java gateway instance
     """
-    global CLASSES, gateway, global_redirect_path
+    global CLASSES, gateway
 
-    # If provided, redirect stdout and stderr to the specified file.
-    # Useful for testing because capsys will error when capturing Java output
-    # If the environment variable changes, we will relaunch the JVM
-    # TODO: Shared logging between Python and Java
-    redirect_path = os.environ.get("BODO_ICEBERG_OUTPUT_PATH", None)
-
-    if gateway is None or global_redirect_path != redirect_path:
-        # Set redirect_path value to current
-        global_redirect_path = redirect_path
-
+    if gateway is None:
         cur_file_path = os.path.dirname(os.path.abspath(__file__))
         full_path = os.path.join(cur_file_path, "jars", "bodo-iceberg-reader.jar")
 
@@ -110,15 +99,13 @@ def launch_jvm() -> JavaGateway:
         java_path = get_java_path()
         print(f"Launching JVM with Java executable: {java_path}", file=sys.stderr)
 
-        redirectf = None if redirect_path is None else open(redirect_path, "w")
-
         gateway_port = pt.cast(
             int,
             launch_gateway(
                 jarpath=full_path,
                 java_path=java_path,
-                redirect_stderr=sys.stderr if redirectf is None else redirectf,
-                redirect_stdout=sys.stdout if redirectf is None else redirectf,
+                redirect_stderr=sys.stderr,
+                redirect_stdout=sys.stdout,
                 die_on_exit=True,
             ),
         )
@@ -217,10 +204,6 @@ get_data_file_class = get_class_wrapper(
 get_bodo_arrow_schema_utils_class = get_class_wrapper(
     "BodoArrowSchemaUtil",
     lambda gateway: gateway.jvm.com.bodo.iceberg.BodoArrowSchemaUtil,  # type: ignore
-)
-get_snowflake_prefetch_class = get_class_wrapper(
-    "SnowflakePrefetchClass",
-    lambda gateway: gateway.jvm.com.bodo.iceberg.SnowflakePrefetch,  # type: ignore
 )
 
 # Bodo Filter Pushdown Classes

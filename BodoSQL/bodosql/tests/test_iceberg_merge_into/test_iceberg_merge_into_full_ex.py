@@ -7,7 +7,12 @@ from bodo.tests.conftest import iceberg_database, iceberg_table_conn  # noqa
 from bodo.tests.iceberg_database_helpers.utils import create_iceberg_table
 from bodo.tests.utils import check_func
 
-pytestmark = pytest.mark.iceberg
+pytestmark = [
+    pytest.mark.iceberg,
+    pytest.mark.skip(
+        reason="[BSE-4569] MERGE INTO with PyIceberg is not supported yet"
+    ),
+]
 
 
 @pytest.mark.timeout(700)

@@ -68,6 +68,7 @@ from bodo.utils.utils import (
 if pt.TYPE_CHECKING:  # pragma: no cover
     from llvmlite.ir.builder import IRBuilder
     from numba.core.base import BaseContext
+    from pyiceberg.expressions.literals import Literal
 
 
 ll.add_symbol("iceberg_pq_read_py_entry", arrow_cpp.iceberg_pq_read_py_entry)
@@ -84,8 +85,7 @@ parquet_filter_scalars_list_type = ParquetFilterScalarsListType()
 def iceberg_pq_read_py_entry(
     typingctx,
     conn_str,
-    db_schema,
-    sql_request_str,
+    table_id,
     parallel,
     limit,
     dnf_filters,
@@ -117,8 +117,7 @@ def iceberg_pq_read_py_entry(
     Args:
         typingctx (Context): Context used for typing
         conn_str (types.voidptr): C string for the connection
-        db_schema (types.voidptr): C string for the db_schema
-        sql_request_str (types.voidptr): C string for sql request
+        sql_request_str (types.voidptr): C string for the Iceberg table identifier
         parallel (types.boolean): Is the read in parallel
         limit (types.int64): Max number of rows to read. -1 if all rows
         dnf_filters (parquet_predicate_type): PyObject for DNF filters.
@@ -142,7 +141,6 @@ def iceberg_pq_read_py_entry(
         fnty = lir.FunctionType(
             lir.IntType(8).as_pointer(),
             [
-                lir.IntType(8).as_pointer(),  # void*
                 lir.IntType(8).as_pointer(),  # void*
                 lir.IntType(8).as_pointer(),  # void*
                 lir.IntType(1),  # bool
@@ -205,7 +203,6 @@ def iceberg_pq_read_py_entry(
     sig = ret_type(
         types.voidptr,
         types.voidptr,
-        types.voidptr,
         types.boolean,
         types.int64,
         parquet_predicate_type,  # dnf filters
@@ -227,8 +224,7 @@ def iceberg_pq_read_py_entry(
 def iceberg_pq_reader_init_py_entry(
     typingctx,
     conn_str,
-    db_schema,
-    table_name,
+    table_id,
     parallel,
     limit,
     dnf_filters,
@@ -251,8 +247,7 @@ def iceberg_pq_reader_init_py_entry(
     Args:
         typingctx (Context): Context used for typing
         conn_str (types.voidptr): C string for the connection
-        db_schema (types.voidptr): C string for the db_schema
-        table_name (types.voidptr): C string for sql request
+        table_id (types.voidptr): C string for Iceberg table id
         parallel (types.boolean): Is the read in parallel
         limit (types.int64): Max number of rows to read. -1 if all rows
         dnf_filters (parquet_predicate_type): PyObject for DNF filters.
@@ -286,8 +281,7 @@ def iceberg_pq_reader_init_py_entry(
             lir.IntType(8).as_pointer(),
             [
                 lir.IntType(8).as_pointer(),  # conn_str void*
-                lir.IntType(8).as_pointer(),  # schema void*
-                lir.IntType(8).as_pointer(),  # table_name void*
+                lir.IntType(8).as_pointer(),  # table_id void*
                 lir.IntType(1),  # parallel bool
                 lir.IntType(64),  # tot_rows_to_read int64
                 lir.IntType(8).as_pointer(),  # dnf_filters void*
@@ -316,7 +310,6 @@ def iceberg_pq_reader_init_py_entry(
     sig = arrow_reader_t.instance_type(
         types.voidptr,
         types.voidptr,
-        types.voidptr,
         types.boolean,
         types.int64,
         parquet_predicate_type,  # dnf filters
@@ -341,7 +334,7 @@ class IcebergReader(Connector):
 
     def __init__(
         self,
-        table_name: str,
+        table_id: str,
         connection: ir.AbstractRHS,
         df_out_varname: str,
         out_table_col_names: list[str],
@@ -352,7 +345,6 @@ class IcebergReader(Connector):
         unsupported_arrow_types: list[pa.DataType],
         index_column_name: str | None,
         index_column_type: types.ArrayCompatible | types.NoneType,
-        database_schema: str | None,
         pyarrow_schema: pa.Schema,
         # Only relevant for Iceberg MERGE INTO COW
         is_merge_into: bool,
@@ -380,6 +372,10 @@ class IcebergReader(Connector):
         # that have been pushed down to I/O.
         rtjf_terms: list[tuple[ir.Var, tuple[int], tuple[int, int, str]]] | None = None,
     ):
+        # Info required to connect to the catalog and table
+        self.table_id = table_id
+        self.connection = connection
+
         # Column Names and Types. Common for all Connectors
         # - Output Columns
         # - Original Columns
@@ -395,8 +391,6 @@ class IcebergReader(Connector):
         self.unsupported_columns = unsupported_columns
         self.unsupported_arrow_types = unsupported_arrow_types
 
-        self.table_name = table_name
-        self.connection = connection
         self.df_out_varname = df_out_varname  # used only for printing
         self.out_vars = out_vars
         self.loc = loc
@@ -407,10 +401,6 @@ class IcebergReader(Connector):
         # out_table_col_names is unchanged unless the table is deleted,
         # so this is used to track dead columns.
         self.out_used_cols = list(range(len(out_table_col_names)))
-        # The database schema used to load data. This is currently only
-        # supported/required for snowflake and must be provided
-        # at compile time.
-        self.database_schema = database_schema
         # This is the PyArrow schema object.
         self.pyarrow_schema = pyarrow_schema
         # Is this table load done as part of a merge into operation.
@@ -456,13 +446,13 @@ class IcebergReader(Connector):
         out_varnames = tuple(v.name for v in self.out_vars)
         runtime_join_filters = rtjf_term_repr(self.rtjf_terms)
         return (
-            f"{out_varnames} = IcebergReader(table_name={self.table_name}, connection={self.connection}, "
-            f"out_col_names={self.out_table_col_names}, out_col_types={self.out_table_col_types}, "
-            f"df_out_varname={self.df_out_varname}, unsupported_columns={self.unsupported_columns}, "
-            f"unsupported_arrow_types={self.unsupported_arrow_types}, index_column_name={self.index_column_name}, "
-            f"index_column_type={self.index_column_type}, out_used_cols={self.out_used_cols}, "
-            f"database_schema={self.database_schema}, pyarrow_schema={self.pyarrow_schema}, "
-            f"is_merge_into={self.is_merge_into}, sql_op_id={self.sql_op_id}, dict_encode_in_bodo={self.dict_encode_in_bodo}, {runtime_join_filters=})"
+            f"{out_varnames} = IcebergReader({self.table_id=}, {self.connection=}, "
+            f"{self.out_table_col_names=}, {self.out_table_col_types=}, "
+            f"{self.df_out_varname=}, {self.unsupported_columns=}, "
+            f"{self.unsupported_arrow_types=}, {self.index_column_name=}, "
+            f"{self.index_column_type=}, {self.out_used_cols=}, "
+            f"{self.pyarrow_schema=}, {self.is_merge_into=}, "
+            f"{self.sql_op_id=}, {self.dict_encode_in_bodo=}, {runtime_join_filters=})"
         )
 
     def out_vars_and_types(self) -> list[tuple[str, types.Type]]:
@@ -654,7 +644,7 @@ def iceberg_distributed_run(
                 "SQL I/O",
                 io_msg,
                 op_id_msg,
-                iceberg_node.table_name,
+                iceberg_node.table_id,
             )
 
     if iceberg_node.is_streaming:  # pragma: no cover
@@ -745,9 +735,7 @@ def iceberg_distributed_run(
         )
 
     extra_args = ", ".join(list(filter_map.values()) + list(rtjf_states_vars_names))
-    func_text = (
-        f"def sql_impl(sql_request, conn_wrapper, database_schema, {extra_args}):\n"
-    )
+    func_text = f"def sql_impl(table_id, conn_wrapper, {extra_args}):\n"
     if isinstance(iceberg_node.connection, ir.Var) and isinstance(
         typemap[iceberg_node.connection.name], IcebergConnectionType
     ):
@@ -763,9 +751,9 @@ def iceberg_distributed_run(
 
     # total_rows is used for setting total size variable below
     if iceberg_node.is_streaming:  # pragma: no cover
-        func_text += f"    reader = _iceberg_reader_py(sql_request, conn, database_schema, {extra_args})\n"
+        func_text += f"    reader = _iceberg_reader_py(table_id, conn, {extra_args})\n"
     else:
-        func_text += f"    (total_rows, table_var, index_var, file_list, snapshot_id) = _iceberg_reader_py(sql_request, conn, database_schema, {filter_args})\n"
+        func_text += f"    (total_rows, table_var, index_var, file_list, snapshot_id) = _iceberg_reader_py(table_id, conn, {filter_args})\n"
 
     loc_vars = {}
     exec(func_text, {}, loc_vars)
@@ -783,7 +771,7 @@ def iceberg_distributed_run(
         "filters": iceberg_node.filters,
         "is_dead_table": not iceberg_node.is_live_table,
         "is_merge_into": iceberg_node.is_merge_into,
-        "pyarrow_schema": iceberg_node.pyarrow_schema,
+        "pyarrow_schema": iceberg_node.pyarrow_schema.remove_metadata(),
         "dict_encode_in_bodo": iceberg_node.dict_encode_in_bodo,
     }
     if iceberg_node.is_streaming:
@@ -803,7 +791,6 @@ def iceberg_distributed_run(
     else:
         sql_reader_py = _gen_iceberg_reader_py(**genargs)
 
-    schema_type = types.none if iceberg_node.database_schema is None else string_type
     f_block = compile_to_numba_ir(
         sql_impl,
         {
@@ -812,7 +799,7 @@ def iceberg_distributed_run(
         },
         typingctx=typingctx,
         targetctx=targetctx,
-        arg_typs=(string_type, conn_type, schema_type)
+        arg_typs=(string_type, conn_type)
         + tuple(typemap[v.name] for v in filter_vars)
         + tuple(typemap[v.name] for v in rtjf_states_vars),
         typemap=typemap,
@@ -821,9 +808,8 @@ def iceberg_distributed_run(
     replace_arg_nodes(
         f_block,
         [
-            ir.Const(iceberg_node.table_name, iceberg_node.loc),
+            ir.Const(iceberg_node.table_id, iceberg_node.loc),
             iceberg_node.connection,
-            ir.Const(iceberg_node.database_schema, iceberg_node.loc),
         ]
         + filter_vars
         + rtjf_states_vars,
@@ -875,16 +861,36 @@ def get_filters_pyobject(filter_str, vars):  # pragma: no cover
 
 
 try:
-    import bodo_iceberg_connector as bic
+    import pyiceberg.expressions as pie
 except ImportError:
-    bic = None
+    pie = None
+
+
+def literal(val) -> Literal:
+    """
+    Wrapper over PyIceberg's literal function for constructing filters.
+    This is needed to convert other Python literals to Iceberg-compatible ones
+    """
+    from pyiceberg.expressions.literals import DateLiteral, TimestampLiteral
+    from pyiceberg.expressions.literals import literal as inner_literal
+
+    # PyIceberg literal doesn't support all data types
+    # See https://github.com/apache/iceberg-python/issues/1456
+    if isinstance(val, datetime.date):
+        return DateLiteral((val - datetime.date(1970, 1, 1)).days)
+    if isinstance(val, datetime.datetime):
+        return TimestampLiteral((val - datetime.datetime(1970, 1, 1)).microseconds)
+    if isinstance(val, (list, pd.core.arrays.ExtensionArray)):
+        return {literal(v) for v in val}  # type: ignore
+    # TODO: Potentially need to support nested structures
+    return inner_literal(val)
 
 
 @overload(get_filters_pyobject, no_unliteral=True)
 def overload_get_filters_pyobject(filters_str, var_tup):
     """generate a pyobject for filter expression to pass to C++"""
-    if bic == None:
-        raise_bodo_error("bodo_iceberg_connector not found")
+    if pie is None:
+        raise_bodo_error("pyiceberg not found")
 
     filter_str_val = get_overload_const_str(filters_str)
     var_unpack = ", ".join(f"f{i}" for i in range(len(var_tup)))
@@ -900,7 +906,8 @@ def overload_get_filters_pyobject(filters_str, var_tup):
     loc_vars = {}
     glbs = globals().copy()
     glbs["bodo"] = bodo
-    glbs["bic"] = bic
+    glbs["pie"] = pie
+    glbs["literal"] = literal
     exec(func_text, glbs, loc_vars)
 
     return loc_vars["impl"]
@@ -909,7 +916,7 @@ def overload_get_filters_pyobject(filters_str, var_tup):
 class IcebergFilterVisitor(FilterVisitor[str]):
     """
     Convert a Bodo IR Filter term to a string representation
-    of the bodo_iceberg_connector's FilterExpr class.
+    of PyIceberg's filter classes.
     See filters_to_iceberg_expr for more details.
 
     Args:
@@ -928,29 +935,37 @@ class IcebergFilterVisitor(FilterVisitor[str]):
         self.filter_map = filter_map
 
     def visit_scalar(self, scalar: bif.Scalar) -> str:
-        return f"bic.Scalar({self.filter_map[scalar.val.name]})"
+        return f"literal({self.filter_map[scalar.val.name]})"
 
     def visit_ref(self, ref: bif.Ref) -> str:
-        return f"bic.ColumnRef('{ref.val}')"
+        return f"'{ref.val}'"
 
     def visit_op(self, op: bif.Op) -> str:
         op_name = op.op.upper()
-        match op_name:
-            case "STARTSWITH":
-                op_name = "STARTS_WITH"
-            case "ENDSWITH":
-                op_name = "ENDS_WITH"
-        return f"bic.FilterExpr('{op_name}', [{', '.join(self.visit(x) for x in op.args)}])"
+        op_func = {
+            ">": "GreaterThan",
+            "<": "LessThan",
+            ">=": "GreaterThanOrEqual",
+            "<=": "LessThanOrEqual",
+            "==": "EqualTo",
+            "!=": "NotEqualTo",
+            "STARTSWITH": "StartsWith",
+            "IS_NULL": "IsNull",
+            "IS_NOT_NULL": "NotNull",
+            "IN": "In",
+            "OR": "Or",
+            "AND": "And",
+            "NOT": "Not",
+            "ALWAYS_TRUE": "AlwaysTrue",
+            "ALWAYS_FALSE": "AlwaysFalse",
+        }[op_name]
+        return f"pie.{op_func}({', '.join(self.visit(x) for x in op.args)})"
 
 
 def filters_to_iceberg_expr(filters: Filter | None, filter_map) -> str:
     """
     Convert a compiler Filter object to a string representation
-    of the bodo_iceberg_connector's FilterExpr class.
-    The FilterExpr class is used to represent an Iceberg filter expression
-    as a tree of FilterExpr objects. It can be easily converted to a
-    Java format for Iceberg.
-
+    of PyIceberg's BooleanExpression
     Args:
         filters: A list of lists of Filter objects. Each inner list
             represents a disjunction of conjunctions of Filter objects.
@@ -962,7 +977,7 @@ def filters_to_iceberg_expr(filters: Filter | None, filter_map) -> str:
     """
 
     if filters is None:
-        return "bic.FilterExpr.default()"
+        return "pie.AlwaysTrue()"
 
     visitor = IcebergFilterVisitor(filter_map)
     dict_expr = visitor.visit(filters)
@@ -1031,50 +1046,38 @@ def add_rtjf_iceberg_filter(
     """
     For each column in filtered_cols create a FilterExpr containing it's bounds and combine them all with file_filters
     """
+    assert pie is not None
+
     is_empty = bodo.ir.sql_ext.is_empty_build_table(state_var)
     with bodo.no_warning_objmode(combined_filters="parquet_predicate_type"):
         if is_empty:
-            combined_filters = bic.FilterExpr("ALWAYS_FALSE", [])
+            combined_filters = pie.AlwaysFalse()
         else:
-            rtjf_filters = bic.FilterExpr.default()
+            rtjf_filters = pie.AlwaysTrue()
             for col, (min, max, unique_vals), op in zip(
                 filtered_cols, bounds, filter_ops
             ):
-                if unique_vals != None and len(unique_vals) > 0 and op == "==":
-                    rtjf_filters = bic.FilterExpr(
-                        "AND",
-                        [
-                            rtjf_filters,
-                            bic.FilterExpr(
-                                "IN", [bic.ColumnRef(col), bic.Scalar(unique_vals)]
-                            ),
-                        ],
+                if unique_vals is not None and len(unique_vals) > 0 and op == "==":
+                    rtjf_filters = pie.And(
+                        rtjf_filters, pie.In(col, literal(unique_vals))
                     )
                 else:
                     if min is not None and op in ("==", ">=", ">"):
-                        filter_op = ">=" if op == "==" else op
-                        rtjf_filters = bic.FilterExpr(
-                            "AND",
-                            [
-                                rtjf_filters,
-                                bic.FilterExpr(
-                                    filter_op, [bic.ColumnRef(col), bic.Scalar(min)]
-                                ),
-                            ],
+                        rtjf_filters = pie.And(
+                            rtjf_filters,
+                            pie.GreaterThan(col, literal(min))
+                            if op == ">"
+                            else pie.GreaterThanOrEqual(col, literal(min)),
                         )
                     if max is not None and op in ("==", "<=", "<"):
-                        filter_op = "<=" if op == "==" else op
-                        rtjf_filters = bic.FilterExpr(
-                            "AND",
-                            [
-                                rtjf_filters,
-                                bic.FilterExpr(
-                                    filter_op, [bic.ColumnRef(col), bic.Scalar(max)]
-                                ),
-                            ],
+                        rtjf_filters = pie.And(
+                            rtjf_filters,
+                            pie.LessThan(col, literal(max))
+                            if op == "<"
+                            else pie.LessThanOrEqual(col, literal(max)),
                         )
 
-            combined_filters = bic.FilterExpr("AND", [file_filters, rtjf_filters])
+            combined_filters = pie.And(file_filters, rtjf_filters)
 
     return combined_filters
 
@@ -1320,7 +1323,7 @@ def _gen_iceberg_reader_chunked_py(
             rtjf_str += "  log_message('Iceberg I/O', f'Runtime join filter expression: {rtjf_expr}')\n"
 
     func_text = (
-        f"def sql_reader_chunked_py(sql_request, conn, database_schema, {filter_args}{comma} {','.join(rtjf_states_vars_names)}):\n"
+        f"def sql_reader_chunked_py(table_id, conn, {filter_args}{comma} {','.join(rtjf_states_vars_names)}):\n"
         f"  ev = bodo.utils.tracing.Event('read_iceberg', {parallel})\n"
         f'  iceberg_filters = get_filters_pyobject("{filter_str}", ({filter_args}{comma}))\n'
         f"  filter_scalars_pyobject = get_filter_scalars_pyobject(({filter_args}{comma}))\n"
@@ -1328,8 +1331,7 @@ def _gen_iceberg_reader_chunked_py(
         # Iceberg C++ Parquet Reader
         f"  iceberg_reader = iceberg_pq_reader_init_py_entry(\n"
         f"    unicode_to_utf8(conn),\n"
-        f"    unicode_to_utf8(database_schema),\n"
-        f"    unicode_to_utf8(sql_request),\n"
+        f"    unicode_to_utf8(table_id),\n"
         f"    {parallel},\n"
         f"    {-1 if limit is None else limit},\n"
         f"    iceberg_filters,\n"
@@ -1467,16 +1469,9 @@ def _gen_iceberg_reader_py(
     # Handle filter information because we may need to update the function header
     filter_args = ""
     filter_map = {}
-    filter_vars = []
     if filters:
-        filter_map, filter_vars = bodo.ir.connector.generate_filter_map(filters)
+        filter_map, _ = bodo.ir.connector.generate_filter_map(filters)
         filter_args = ", ".join(filter_map.values())
-
-    iceberg_expr_filter_f_str = ""
-
-    func_text = (
-        f"def sql_reader_py(sql_request, conn, database_schema, {filter_args}):\n"
-    )
 
     assert pyarrow_schema is not None, (
         "SQLNode must contain a pyarrow_schema if reading from an Iceberg database"
@@ -1497,7 +1492,7 @@ def _gen_iceberg_reader_py(
         "iceberg",
         output_expr_filters_as_f_string=True,
     )
-    filter_str: str = filters_to_iceberg_expr(filters, filter_map)
+    filter_str = filters_to_iceberg_expr(filters, filter_map)
 
     merge_into_row_id_col_idx = -1
     if is_merge_into and col_names.index("_BODO_ROW_ID") in out_used_cols:
@@ -1530,15 +1525,15 @@ def _gen_iceberg_reader_py(
 
     # Generate a temporary one for codegen:
     comma = "," if filter_args else ""
-    func_text += (
+    func_text = (
+        f"def sql_reader_py(table_id, conn, {filter_args}):\n"
         f"  ev = bodo.utils.tracing.Event('read_iceberg', {parallel})\n"
         f'  iceberg_filters = get_filters_pyobject("{filter_str}", ({filter_args}{comma}))\n'
         f"  filter_scalars_pyobject = get_filter_scalars_pyobject(({filter_args}{comma}))\n"
         # Iceberg C++ Parquet Reader
         f"  out_table, total_rows, file_list, snapshot_id = iceberg_pq_read_py_entry(\n"
         f"    unicode_to_utf8(conn),\n"
-        f"    unicode_to_utf8(database_schema),\n"
-        f"    unicode_to_utf8(sql_request),\n"
+        f"    unicode_to_utf8(table_id),\n"
         f"    {parallel},\n"
         f"    {-1 if limit is None else limit},\n"
         f"    iceberg_filters,\n"

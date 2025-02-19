@@ -14,7 +14,12 @@ from bodo.tests.iceberg_database_helpers.utils import (
 from bodo.tests.utils import check_func, pytest_mark_one_rank
 from bodo.utils.typing import BodoError
 
-pytestmark = pytest.mark.iceberg
+pytestmark = [
+    pytest.mark.iceberg,
+    pytest.mark.skip(
+        reason="[BSE-4569] MERGE INTO with PyIceberg is not supported yet"
+    ),
+]
 
 
 @pytest.fixture(scope="function")

@@ -58,7 +58,7 @@ def test_quickstart_local_iceberg():
     NUM_GROUPS = 30
     NUM_ROWS = 2_000
 
-    db_name = "MY_DATABASE"
+    db_name = "/tmp/MY_DATABASE"
     input_df = pd.DataFrame(
         {"A": np.arange(NUM_ROWS) % NUM_GROUPS, "B": np.arange(NUM_ROWS)}
     )

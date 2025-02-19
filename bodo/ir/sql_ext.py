@@ -459,7 +459,7 @@ class SnowflakeFilterVisitor(bif.FilterVisitor[str]):
 
 # Class for a the RTJF min/max/unique stored values
 this_module = sys.modules[__name__]
-install_py_obj_class(
+RtjfValueType, _ = install_py_obj_class(
     types_name="rtjf_value_type",
     python_type=None,
     module=this_module,
