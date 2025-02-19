@@ -1,24 +1,17 @@
 package com.bodo.iceberg;
 
 import com.bodo.iceberg.catalog.CatalogCreator;
-import com.bodo.iceberg.catalog.PrefetchSnowflakeCatalog;
-import com.bodo.iceberg.catalog.SnowflakeBuilder;
-import com.bodo.iceberg.filters.FilterExpr;
-import java.io.IOException;
 import java.net.URISyntaxException;
 import java.sql.SQLException;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
 import org.apache.iceberg.*;
 import org.apache.iceberg.catalog.Catalog;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.TableIdentifier;
-import org.apache.iceberg.io.FileIO;
 import org.apache.iceberg.types.TypeUtil;
 import org.apache.iceberg.types.Types;
-import org.json.JSONArray;
 
 public class BodoIcebergHandler {
   /**
@@ -41,44 +34,6 @@ public class BodoIcebergHandler {
     this(CatalogCreator.create(connStr, catalogType, coreSitePath));
   }
 
-  /**
-   * Start the Snowflake query to get the metadata paths for a list of Snowflake-managed Iceberg
-   * tables. NOTE: This API is exposed to Python.
-   *
-   * <p>The query is not expected to finish until the table is needed for initialization / read.
-   *
-   * @param tablePathsStr A JSON string of a list of tablePaths Py4J can't pass the direct list of
-   *     strings in
-   */
-  public static BodoIcebergHandler buildPrefetcher(
-      String connStr,
-      String catalogType,
-      String coreSitePath,
-      String tablePathsStr,
-      int verboseLevel)
-      throws SQLException, URISyntaxException {
-
-    if (!Objects.equals(catalogType, "snowflake")) {
-      throw new RuntimeException(
-          "BodoIcebergHandler::buildPrefetcher: Cannot prefetch SF metadata paths for a"
-              + " catalog of type "
-              + catalogType);
-    }
-
-    // Convert table paths to list of strings
-    var tablePathsJSON = new JSONArray(tablePathsStr);
-    var tablePaths = new ArrayList<String>();
-    for (int i = 0; i < tablePathsJSON.length(); i++) {
-      tablePaths.add(tablePathsJSON.getString(i));
-    }
-
-    // Construct Catalog
-    var out = CatalogCreator.prepareInput(connStr, catalogType, coreSitePath);
-    var catalog = new PrefetchSnowflakeCatalog(connStr, tablePaths, verboseLevel);
-    SnowflakeBuilder.initialize(catalog, out.getFirst(), out.getSecond());
-    return new BodoIcebergHandler(CachingCatalog.wrap(catalog));
-  }
-
   private static TableIdentifier genTableID(String dbName, String tableName) {
     // Snowflake uses dot separated strings for DB and schema names
     // Iceberg uses Namespaces with multiple levels to represent this
@@ -96,6 +51,15 @@ public class BodoIcebergHandler {
   }
 
   /**
+   * Inner function to help load tables
+   *
+   * @return Iceberg table associated with ID
+   */
+  private Table loadTable(String tableId) {
+    return catalog.loadTable(TableIdentifier.parse(tableId));
+  }
+
+  /**
    * Get a specific property from Table properties
    *
    * <p>Note: This API is exposed to Python.
@@ -106,20 +70,6 @@ public class BodoIcebergHandler {
   public String getTableProperty(String dbName, String tableName, String property) {
     Table table = loadTable(dbName, tableName);
     return table.properties().get(property);
-  }
-
-  /**
-   * Remove a transaction from the transactions map if it exists. This is done manually, so we can
-   * access the underlying transaction information even after the transaction has been committed.
-   * This is useful because the Transaction.table() should hold the status of the last snapshot used
-   * to commit the table.
-   *
-   * <p>Note: This API is exposed to Python.
-   *
-   * @param txnID The id of the transaction to remove. If this id is not found this is a NO-OP.
-   */
-  public void removeTransaction(int txnID) {
-    this.transactions.remove(txnID);
   }
 
   /**
@@ -170,17 +120,6 @@ public class BodoIcebergHandler {
   }
 
   /**
-   * Returns a list of parquet files that construct the given Iceberg table.
-   *
-   * <p>Note: This API is exposed to Python.
-   */
-  public Triple<
-          List<BodoParquetInfo>, Map<Integer, org.apache.arrow.vector.types.pojo.Schema>, Long>
-      getParquetInfo(String dbName, String tableName, FilterExpr filters) throws IOException {
-    return FileHandler.getParquetInfo(loadTable(dbName, tableName), filters);
-  }
-
-  /**
    * Return a boolean list indicating which columns have theta sketch blobs.
    *
    * <p>Note: This API is exposed to Python.
@@ -188,8 +127,8 @@ public class BodoIcebergHandler {
    * @return List of booleans indicating which columns have theta sketches. The booleans correspond
    *     to the columns in the schema, not the field IDs.
    */
-  public List<Boolean> tableColumnsHaveThetaSketches(String dbName, String tableName) {
-    Table table = loadTable(dbName, tableName);
+  public List<Boolean> tableColumnsHaveThetaSketches(String tableId) {
+    Table table = loadTable(tableId);
     Schema schema = table.schema();
     List<Types.NestedField> columns = schema.columns();
     List<Boolean> hasThetaSketches = new ArrayList<>(Collections.nCopies(columns.size(), false));
@@ -228,86 +167,6 @@ public class BodoIcebergHandler {
   }
 
   /**
-   * Return a boolean list indicating which columns have theta sketches enabled, as per the <code>
-   * bodo.write.theta_sketch_enabled.COLUMN_NAME</code> table property. If the property does not
-   * exist for a column, the decision will default to enabled / bodo's engine decision.
-   *
-   * <p>Note: This API is exposed to Python.
-   *
-   * @return List of booleans indicating which columns have theta sketches enabled. The booleans
-   *     correspond to the columns in the schema, not the field IDs.
-   */
-  public List<Boolean> tableColumnsEnabledThetaSketches(String dbName, String tableName) {
-    Table table = loadTable(dbName, tableName);
-    Schema schema = table.schema();
-    List<Types.NestedField> columns = schema.columns();
-    List<Boolean> enabledThetaSketches =
-        new ArrayList<>(Collections.nCopies(columns.size(), false));
-    // Iterate through properties
-    for (int i = 0; i < columns.size(); i++) {
-      String colName = columns.get(i).name();
-      String isEnabled = table.properties().get("bodo.write.theta_sketch_enabled." + colName);
-      if (isEnabled == null || isEnabled.equalsIgnoreCase("true"))
-        enabledThetaSketches.set(i, true);
-    }
-    return enabledThetaSketches;
-  }
-
-  /**
-   * Helper function that returns the total number of files present in the given Iceberg table.
-   * Currently only used for logging purposes.
-   *
-   * <p>Note: This API is exposed to Python.
-   */
-  public int getNumParquetFiles(String dbName, String tableName) {
-
-    // First, check if we can get the information from the summary
-    Table table = loadTable(dbName, tableName);
-    Snapshot currentSnapshot = table.currentSnapshot();
-
-    if (currentSnapshot.summary().containsKey("total-data-files")) {
-      return Integer.parseInt(currentSnapshot.summary().get("total-data-files"));
-    }
-
-    // If it doesn't exist in the summary, check the manifestList
-    // TODO: is this doable? I can get the manifestList location, but I don't see a way
-    // to get any metadata from this list.
-    // A manifest list includes summary metadata that can be used to avoid scanning all of the
-    // manifests
-    // in a snapshot when planning a table scan. This includes the number of added, existing, and
-    // deleted files,
-    // and a summary of values for each field of the partition spec used to write the manifest.
-
-    // If it doesn't exit in the manifestList, calculate it by iterating over each manifest file
-    FileIO io = table.io();
-    List<ManifestFile> manifestFilesList = currentSnapshot.allManifests(io);
-    int totalFiles = 0;
-    for (ManifestFile manifestFile : manifestFilesList) {
-      // content = 0 means the manifest file is for a data file
-      if (0 != manifestFile.content().id()) {
-        continue;
-      }
-      Integer existingFiles = manifestFile.existingFilesCount();
-      Integer addedFiles = manifestFile.addedFilesCount();
-      Integer deletedFiles = manifestFile.deletedFilesCount();
-
-      if (existingFiles == null || addedFiles == null || deletedFiles == null) {
-        // If any of the option fields are null, we have to manually read the file
-        ManifestReader<DataFile> manifestContents = ManifestFiles.read(manifestFile, io);
-        if (!manifestContents.isDeleteManifestReader()) {
-          for (DataFile _manifestContent : manifestContents) {
-            totalFiles += 1;
-          }
-        }
-      } else {
-        totalFiles += existingFiles + addedFiles - deletedFiles;
-      }
-    }
-
-    return totalFiles;
-  }
-
-  /**
    * Updates a Snapshot update operation with the app-id field. This is used to easily identify
    * tables created by Bodo.
    */
@@ -329,79 +188,17 @@ public class BodoIcebergHandler {
   }
 
   /**
-   * Get the snapshot ID of the table for the underlying transaction. To ensure this is the final
-   * snapshot ID, we likely want to call this after the transaction has been committed. However, the
-   * transaction ID should remain constant even if we retry.
-   *
-   * <p>Note: This API is exposed to Python.
-   *
-   * @param txnID Transaction ID of transaction.
-   * @return Snapshot ID of the table for the transaction or null if there is no snapshot.
-   */
-  public @Nullable Long getTransactionSnapshotID(int txnID) {
-    Transaction txn = this.transactions.get(txnID);
-    Snapshot snapshot = txn.table().currentSnapshot();
-    if (snapshot == null) {
-      return null;
-    } else {
-      return snapshot.snapshotId();
-    }
-  }
-
-  /**
-   * Get the sequence number of the table for the underlying transaction. This must be called AFTER
-   * the transaction has been committed because the sequence number is only finalized after commit.
-   * Any value before may be incorrect if the commit needs to retry.
-   *
-   * <p>Note: This API is exposed to Python.
-   *
-   * @param txnID Transaction ID of transaction.
-   * @return Sequence number of the table for the transaction or null if there is no snapshot.
-   */
-  public @Nullable Long getTransactionSequenceNumber(int txnID) {
-    Transaction txn = this.transactions.get(txnID);
-    Snapshot snapshot = txn.table().currentSnapshot();
-    if (snapshot == null) {
-      return null;
-    } else {
-      return snapshot.sequenceNumber();
-    }
-  }
-
-  /**
-   * Get the Statistics file location for a transaction's table. This should be safe to call before
-   * or after the transaction has been committed, but we will always call it after commit.
-   *
-   * <p>Note: This API is exposed to Python.
-   *
-   * @param txnID Transaction ID of transaction.
-   * @return Sequence number of the table for the transaction or null if there is no snapshot.
-   */
-  public @Nonnull String getTransactionStatisticFileLocation(int txnID) {
-    String tableLocation = getTransactionTableLocation(txnID);
-    @Nullable Long snapshotId = getTransactionSnapshotID(txnID);
-    if (snapshotId == null) {
-      throw new RuntimeException(
-          "Table does not have a snapshot. Cannot get statistics file location.");
-    }
-    // Generate a random file name based upon the snapshot ID, so it's always unique.
-    String statsFileName = String.format(Locale.ROOT, "%d-%s.stats", snapshotId, UUID.randomUUID());
-    return String.format(Locale.ROOT, "%s/metadata/%s", tableLocation, statsFileName);
-  }
-
-  /**
    * Get the existing statistics files for the table. This function raises an exception if the table
    * does not have a valid statistics file as that should already be checked.
    *
    * <p>Note: This API is exposed to Python.
    *
-   * @param txnID Transaction ID of transaction.
+   * @param tableId Table identifier on table modified.
    * @return An existing table file for snapshot of the table in the current transaction state.
    */
-  public @Nonnull String getStatisticsFilePath(int txnID) {
-    Transaction txn = this.transactions.get(txnID);
-    Table table = txn.table();
-    Snapshot snapshot = txn.table().currentSnapshot();
+  public @Nonnull String getStatisticsFilePath(String tableId) {
+    Table table = loadTable(tableId);
+    Snapshot snapshot = table.currentSnapshot();
     if (snapshot == null) {
       throw new RuntimeException(
           "Table does not have a snapshot. Cannot get statistics file location.");
@@ -537,10 +334,10 @@ public class BodoIcebergHandler {
    *
    * <p>Note: This API is exposed to Python.
    */
-  public void commitStatisticsFile(
-      String dbName, String tableName, long snapshotID, String statisticsFileJson) {
+  public void commitStatisticsFile(String tableId, long snapshotID, String statisticsFileJson) {
     StatisticsFile statisticsFile = BodoStatisticFile.fromJson(statisticsFileJson);
-    Table table = loadTable(dbName, tableName);
+    Table table = loadTable(tableId);
+    table.refresh();
     Transaction txn = table.newTransaction();
     txn.updateStatistics().setStatistics(snapshotID, statisticsFile).commit();
     txn.commitTransaction();

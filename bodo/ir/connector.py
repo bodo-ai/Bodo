@@ -355,7 +355,7 @@ def generate_filter_map(filters):
 
 
 this_module = sys.modules[__name__]
-StreamReaderType = install_py_obj_class(
+StreamReaderType, _ = install_py_obj_class(
     types_name="stream_reader_type",
     module=this_module,
     class_name="StreamReaderType",

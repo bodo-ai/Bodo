@@ -10,7 +10,7 @@ this_module = sys.modules[__name__]
 # don't work when done from Cython-compiled code (exact cause is yet unknown)
 
 
-BodoTracingEventType = install_py_obj_class(
+BodoTracingEventType, _ = install_py_obj_class(
     types_name="bodo_tracing_event_type",
     python_type=bodo.utils.tracing.Event,
     module=this_module,

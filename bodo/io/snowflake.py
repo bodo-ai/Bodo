@@ -2814,25 +2814,23 @@ try:
 except (ImportError, AttributeError):
     snowflake_connector_cursor_python_type = None
 
-SnowflakeConnectorCursorType = install_py_obj_class(
+SnowflakeConnectorCursorType, snowflake_connector_cursor_type = install_py_obj_class(
     types_name="snowflake_connector_cursor_type",
     python_type=snowflake_connector_cursor_python_type,
     module=sys.modules[__name__],
     class_name="SnowflakeConnectorCursorType",
     model_name="SnowflakeConnectorCursorModel",
 )
-snowflake_connector_cursor_type = types.snowflake_connector_cursor_type  # noqa
 
 # Register opaque type for TemporaryDirectory so it can be shared between
 # different sections of jitted code
-TemporaryDirectoryType = install_py_obj_class(
+TemporaryDirectoryType, temporary_directory_type = install_py_obj_class(
     types_name="temporary_directory_type",
     python_type=TemporaryDirectory,
     module=sys.modules[__name__],
     class_name="TemporaryDirectoryType",
     model_name="TemporaryDirectoryModel",
 )
-temporary_directory_type = types.temporary_directory_type  # noqa
 
 
 def get_snowflake_stage_info(
