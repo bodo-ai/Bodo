@@ -443,3 +443,18 @@ def polaris_connection(
             yield url, azure_polaris_warehouse, f"{user}:{password}"
     else:
         raise ValueError(f"Unknown polaris warehouse: {request.param}")
+
+
+# For cases where we can't used parameterized fixuteres like the ddl test harness
+@pytest.fixture
+def aws_polaris_connection(polaris_server, aws_polaris_warehouse):
+    host, port, user, password = polaris_server
+    url = f"http://{host}:{port}/api/catalog"
+    with temp_env_override(
+        {
+            "AWS_ACCESS_KEY_ID": None,
+            "AWS_SECRET_ACCESS_KEY": None,
+            "AWS_SESSION_TOKEN": None,
+        }
+    ):
+        yield url, aws_polaris_warehouse, f"{user}:{password}"

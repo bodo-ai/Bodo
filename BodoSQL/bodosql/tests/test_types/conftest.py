@@ -5,6 +5,7 @@ import pytest
 import bodosql
 from bodo.io.iceberg.catalog import conn_str_to_catalog
 from bodo.tests.test_iceberg.conftest import (  # noqa
+    aws_polaris_connection,
     aws_polaris_warehouse,
     azure_polaris_warehouse,
     polaris_connection,
@@ -46,6 +47,23 @@ def polaris_catalog(polaris_connection):
     Returns a polaris catalog object
     """
     rest_uri, polaris_warehouse, polaris_credential = polaris_connection
+
+    return bodosql.RESTCatalog(
+        rest_uri=rest_uri,
+        warehouse=polaris_warehouse,
+        credential=polaris_credential,
+        scope="PRINCIPAL_ROLE:ALL",
+    )
+
+
+@pytest.fixture
+def aws_polaris_catalog(aws_polaris_connection):
+    """
+    Returns a polaris catalog object
+    For cases where we can't used paratmerized fixtures
+    like the iceberg ddl test harness
+    """
+    rest_uri, polaris_warehouse, polaris_credential = aws_polaris_connection
 
     return bodosql.RESTCatalog(
         rest_uri=rest_uri,
