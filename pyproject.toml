@@ -7,6 +7,7 @@ requires = [
     # Build Libraries
     "numpy>=1.24,<2.2",
     "pyarrow==18.1.0",
+    "impi==2021.14.0",
     "mpi4py~=4.0",
     "pip"
 ]
