@@ -100,10 +100,6 @@ jobs:
           # Note: setting BODO_SKIP_CPP_TESTS for now because Release build-type is not being properly set on Windows.
           CIBW_ENVIRONMENT_WINDOWS: >
             DISABLE_CCACHE=1
-            SCCACHE_BUCKET=engine-codebuild-cache
-            SCCACHE_REGION=us-east-2
-            SCCACHE_S3_USE_SSL=true
-            SCCACHE_S3_SERVER_SIDE_ENCRYPTION=true
             PATH=$HOME/.pixi/bin:$PATH
             CONDA_PREFIX=$(pwd)/.pixi/envs/pip-cpp-macos
             SETUPTOOLS_SCM_PRETEND_VERSION=${{ inputs.bodo_version }}
