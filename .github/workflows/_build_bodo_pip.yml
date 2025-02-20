@@ -81,7 +81,9 @@ jobs:
               tar -xJf boost_1_85_0.tar.xz -C .
               (cd boost-1.85.0; ./bootstrap.sh --with-libraries=container,json,stacktrace; ./b2 install)
             fi
-          CIBW_BEFORE_BUILD: |
+          CIBW_BEFORE_BUILD_WINDOWS: |
+            echo "We are building a package for Windows."
+          CIBW_BEFORE_BUILD_MACOS: |
             # Delete mpi4py folder if it exists so correct version gets copied in
             rm -r {package}/bodo/mpi4py || true
             rm -rf {package}/build
