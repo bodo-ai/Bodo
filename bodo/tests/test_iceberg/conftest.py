@@ -7,6 +7,7 @@ import pytest
 from testcontainers.core.container import DockerContainer, wait_for_logs
 
 import bodo
+from bodo.mpi4py import MPI
 from bodo.tests.iceberg_database_helpers.simple_tables import (
     TABLE_MAP as SIMPLE_TABLES_MAP,
 )
@@ -68,45 +69,61 @@ def polaris_server():
     """
 
     # Can't use run_rank0 because containers aren't pickelable
+    err = None
     if bodo.get_rank() == 0:
-        # Use boto to get credentials from all possible sources
-        session = boto3.Session()
-        credentials = session.get_credentials()
-        env = {
-            "quarkus.otel.sdk.disabled": "true",
-            "POLARIS_BOOTSTRAP_CREDENTIALS": "default-realm,root,s3cr3t",
-            "polaris.realm-context.realms": "default-realm",
-            "AWS_REGION": session.region_name if session.region_name else "us-east-2",
-        }
-        if credentials.access_key is not None:
-            env["AWS_ACCESS_KEY_ID"] = credentials.access_key
-        if credentials.secret_key is not None:
-            env["AWS_SECRET_ACCESS_KEY"] = credentials.secret_key
-        if credentials.token is not None:
-            env["AWS_SESSION_TOKEN"] = credentials.token
-        # Add Azure credentials
-        if "AZURE_CLIENT_ID" in os.environ:
-            env["AZURE_CLIENT_ID"] = os.environ["AZURE_CLIENT_ID"]
-        if "AZURE_CLIENT_SECRET" in os.environ:
-            env["AZURE_CLIENT_SECRET"] = os.environ["AZURE_CLIENT_SECRET"]
-        if "AZURE_TENANT_ID" in os.environ:
-            env["AZURE_TENANT_ID"] = os.environ.get(
-                "AZURE_TENANT_ID", "72f988bf-86f1-41af-91ab-2d7cd011db47"
-            )
+        try:
+            # Use boto to get credentials from all possible sources
+            session = boto3.Session()
+            credentials = session.get_credentials()
+            env = {
+                "quarkus.otel.sdk.disabled": "true",
+                "POLARIS_BOOTSTRAP_CREDENTIALS": "default-realm,root,s3cr3t",
+                "polaris.realm-context.realms": "default-realm",
+                "AWS_REGION": session.region_name
+                if session.region_name
+                else "us-east-2",
+            }
+            if credentials.access_key is not None:
+                env["AWS_ACCESS_KEY_ID"] = credentials.access_key
+            if credentials.secret_key is not None:
+                env["AWS_SECRET_ACCESS_KEY"] = credentials.secret_key
+            if credentials.token is not None:
+                env["AWS_SESSION_TOKEN"] = credentials.token
+            # Add Azure credentials
+            if "AZURE_CLIENT_ID" in os.environ:
+                env["AZURE_CLIENT_ID"] = os.environ["AZURE_CLIENT_ID"]
+            if "AZURE_CLIENT_SECRET" in os.environ:
+                env["AZURE_CLIENT_SECRET"] = os.environ["AZURE_CLIENT_SECRET"]
+            if "AZURE_TENANT_ID" in os.environ:
+                env["AZURE_TENANT_ID"] = os.environ.get(
+                    "AZURE_TENANT_ID", "72f988bf-86f1-41af-91ab-2d7cd011db47"
+                )
 
-        polaris = (
-            DockerContainer("public.ecr.aws/k7f6m2y1/bodo/polaris-unittests:latest")
-            .with_bind_ports(8181, 8181)
-            .with_bind_ports(8282, 8182)
-            .with_name("polaris-server-unittests")
-        )
-        for key, value in env.items():
-            polaris.with_env(key, value)
-        wait_for_logs(polaris.start(), "Listening on")
+            polaris = (
+                DockerContainer("public.ecr.aws/k7f6m2y1/bodo/polaris-unittests:latest")
+                .with_bind_ports(8181, 8181)
+                .with_bind_ports(8282, 8182)
+                .with_name("polaris-server-unittests")
+            )
+            for key, value in env.items():
+                polaris.with_env(key, value)
+            wait_for_logs(polaris.start(), "Listening on")
+        except Exception as e:
+            err = e
+    err = MPI.COMM_WORLD.bcast(err, root=0)
+    if err is not None:
+        raise err
 
     yield "localhost", 8181, "root", "s3cr3t"
     if bodo.get_rank() == 0:
-        polaris.stop()
+        try:
+            polaris.stop()
+        except Exception as e:
+            err = e
+
+    err = MPI.COMM_WORLD.bcast(err, root=0)
+    if err is not None:
+        raise err
 
 
 @pytest.fixture(scope="session")
