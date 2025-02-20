@@ -1970,8 +1970,8 @@ std::shared_ptr<table_info> sample_table_inner_parallel(
 
     // Gather how many rows are on each rank
     std::vector<int64_t> ListSizes(n_pes);
-    CHECK_MPI(MPI_Allgather(&n_local, 1, MPI_LONG, ListSizes.data(), 1,
-                            MPI_LONG, MPI_COMM_WORLD),
+    CHECK_MPI(MPI_Allgather(&n_local, 1, MPI_LONG_LONG, ListSizes.data(), 1,
+                            MPI_LONG_LONG, MPI_COMM_WORLD),
               "sample_table_inner_parallel: MPI error on MPI_Allgather:");
 
     // Total number of rows across all ranks
@@ -2106,10 +2106,11 @@ std::shared_ptr<table_info> sample_table_inner_parallel(
                   "sample_table_inner_parallel: MPI error on MPI_Scatter:");
 
         ListIdxChosen.resize(n_samp_out);
-        CHECK_MPI(MPI_Scatterv(ListIdxSampledExport.data(), ListCounts.data(),
-                               ListDisps.data(), MPI_LONG, ListIdxChosen.data(),
-                               n_samp_out, MPI_LONG, 0, MPI_COMM_WORLD),
-                  "sample_table_inner_parallel: MPI error on MPI_Scatterv:");
+        CHECK_MPI(
+            MPI_Scatterv(ListIdxSampledExport.data(), ListCounts.data(),
+                         ListDisps.data(), MPI_LONG_LONG, ListIdxChosen.data(),
+                         n_samp_out, MPI_LONG_LONG, 0, MPI_COMM_WORLD),
+            "sample_table_inner_parallel: MPI error on MPI_Scatterv:");
 
         ListIdxSampledExport.clear();
         ListCounts.clear();

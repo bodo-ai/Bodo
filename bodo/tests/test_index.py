@@ -348,13 +348,13 @@ def test_binary_infer(memory_leak_check):
     "data,dtype",
     [
         (np.ones(3, dtype=np.int32), np.float64),
-        (np.arange(10), np.dtype("datetime64[ns]")),
+        (np.arange(10, dtype=np.int64), np.dtype("datetime64[ns]")),
         (
             pd.Series(["2020-9-1", "2019-10-11", "2018-1-4", "2015-8-3", "1990-11-21"]),
             np.dtype("datetime64[ns]"),
         ),
-        (np.arange(10), np.dtype("timedelta64[ns]")),
-        (pd.Series(np.arange(10)), np.dtype("timedelta64[ns]")),
+        (np.arange(10, dtype=np.int64), np.dtype("timedelta64[ns]")),
+        (pd.Series(np.arange(10, dtype=np.int64)), np.dtype("timedelta64[ns]")),
     ],
 )
 def test_generic_index_constructor_with_dtype(data, dtype):
