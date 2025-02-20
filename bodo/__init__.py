@@ -197,7 +197,7 @@ import pyarrow.parquet
 if platform.system() == "Windows":
     # importing our modified mpi4py (see buildscripts/mpi4py-pip/patch-3.1.2.diff)
     # guarantees that msmpi.dll is loaded, and therefore found when MPI calls are made
-    import mpi4py
+    import bodo.mpi4py
 
 # set number of threads to 1 for Numpy to avoid interference with Bodo's parallelism
 # NOTE: has to be done before importing Numpy, and for all threading backends
