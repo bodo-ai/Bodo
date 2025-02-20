@@ -62,6 +62,7 @@ jobs:
 
       - name: Build Wheels
         run: ${{ contains(inputs.os, 'macos') && 'pipx' || 'python3 -m pipx' }} run cibuildwheel==2.22.0
+        shell: bash
         env:
           CIBW_BEFORE_ALL_LINUX: |
             # Install Pixi and Environment
