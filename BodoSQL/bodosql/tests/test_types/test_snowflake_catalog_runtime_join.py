@@ -543,6 +543,7 @@ def test_float_key_join(test_db_snowflake_catalog, memory_leak_check):
             "rtjf_test_table_b",
             "Runtime join filter expression: ((ds.field('{NEUTRAL_TIME}') >= pa.scalar(1708513200000000000, pa.timestamp('ns'))) & (ds.field('{NEUTRAL_TIME}') <= pa.scalar(1726491600000000000, pa.timestamp('ns'))))",
             id="snowflake_iceberg",
+            marks=pytest.mark.iceberg,
         ),
         pytest.param(
             False,
