@@ -109,9 +109,11 @@ def test_basic_write(memory_leak_check):
     )
     conn = "iceberg+" + bucket_arn
     r = random.Random()
-    table_name = (
-        f"bodo_iceberg_write_test_{''.join(r.choices(string.ascii_lowercase, k=4))}"
-    )
+    table_name = run_rank0(
+        lambda: (
+            f"bodo_iceberg_write_test_{''.join(r.choices(string.ascii_lowercase, k=4))}"
+        )
+    )()
 
     try:
         write(_get_dist_arg(df), table_name, conn, "write_namespace")
