@@ -369,7 +369,7 @@ def test_json_write_orient(test_df, orient):
         else:
             dtype = None
 
-        return pd.read_json(fname, orient=orient, dtype=dtype)
+        return pd.read_json(fname, orient=orient, dtype=dtype, dtype_backend="pyarrow")
 
     json_write_test(test_impl, read_impl, test_df, "C")
 
