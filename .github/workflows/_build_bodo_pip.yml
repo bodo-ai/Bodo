@@ -101,6 +101,7 @@ jobs:
           CIBW_ENVIRONMENT_WINDOWS: >
             DISABLE_CCACHE=1
             BODO_SKIP_CPP_TESTS=1
+            PATH=$HOME/.pixi/bin:$PATH
             SETUPTOOLS_SCM_PRETEND_VERSION=${{ inputs.bodo_version }}
           CIBW_ENVIRONMENT_MACOS: >
             DISABLE_CCACHE=1
