@@ -1183,7 +1183,7 @@ def overload_pd_timestamp_tz_localize(ptt, tz, ambiguous="raise", nonexistent="r
             "deltas": deltas,
         },
         {},
-        globals(),
+        __name__,
     )
 
 

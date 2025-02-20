@@ -82,6 +82,7 @@ from bodo.utils.typing import (
 from bodo.utils.utils import (
     CTypeEnum,
     bodo_exec,
+    cached_call_internal,
     check_and_propagate_cpp_exception,
     empty_like_type,
     is_array_typ,
@@ -214,7 +215,7 @@ class TimeInfer(ConcreteTemplate):
 
 @lower_builtin(time.time)
 def lower_time_time(context, builder, sig, args):
-    return context.compile_internal(builder, lambda: _get_time(), sig, args)
+    return cached_call_internal(context, builder, lambda: _get_time(), sig, args)
 
 
 @numba.generated_jit(nopython=True)
@@ -3949,7 +3950,7 @@ def alltoallv_tup_overload(
         func_text += f"  alltoallv(send_data[{i}], out_data[{i}], send_counts, recv_counts, send_disp, recv_disp)\n"
     func_text += "  return\n"
 
-    return bodo_exec(func_text, {"alltoallv": alltoallv}, {}, globals())
+    return bodo_exec(func_text, {"alltoallv": alltoallv}, {}, __name__)
 
 
 @numba.njit(cache=True)
@@ -3969,7 +3970,7 @@ def get_start(total_size, pes, rank):  # pragma: no cover
     return rank * blk_size + min(rank, res)
 
 
-@numba.njit
+@numba.njit(cache=True)
 def get_end(total_size, pes, rank):  # pragma: no cover
     """get end point of range for parfor division"""
     res = total_size % pes
@@ -4218,7 +4219,7 @@ def wait(req, cond=True):
         tup_call = ",".join(f"_wait(req[{i}], cond)" for i in range(count))
         func_text = "def bodo_wait(req, cond=True):\n"
         func_text += f"  return {tup_call}\n"
-        return bodo_exec(func_text, {"_wait": _wait}, {}, globals())
+        return bodo_exec(func_text, {"_wait": _wait}, {}, __name__)
 
     # None passed means no request to wait on (no-op), happens for shift() for string
     # arrays since we use blocking communication instead

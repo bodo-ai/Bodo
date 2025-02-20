@@ -2295,7 +2295,7 @@ def pd_dataframe_overload(data=None, index=None, columns=None, dtype=None, copy=
         func_text,
         {"bodo": bodo, "np": np, "__col_name_meta_value_pd_overload": col_var},
         {},
-        globals(),
+        __name__,
     )
 
 
@@ -4154,7 +4154,7 @@ def to_parquet_overload(
         func_text,
         glbls,
         loc_vars,
-        globals(),
+        __name__,
     )
 
 

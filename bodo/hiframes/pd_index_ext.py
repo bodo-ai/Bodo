@@ -438,7 +438,7 @@ def gen_dti_field_impl(field):
     else:
         func_text += "        S[i] = ts." + field + "\n"
     func_text += "    return bodo.hiframes.pd_index_ext.init_numeric_index(S, name)\n"
-    return bodo_exec(func_text, {"numba": numba, "np": np, "bodo": bodo}, {}, globals())
+    return bodo_exec(func_text, {"numba": numba, "np": np, "bodo": bodo}, {}, __name__)
 
 
 def _install_dti_field_overload(field):
@@ -755,7 +755,7 @@ def gen_dti_str_binop_impl(op, is_lhs_dti):
     func_text += "  for i in numba.parfors.parfor.internal_prange(l):\n"
     func_text += f"    S[i] = {comp}\n"
     func_text += "  return S\n"
-    return bodo_exec(func_text, {"bodo": bodo, "numba": numba, "np": np}, {}, globals())
+    return bodo_exec(func_text, {"bodo": bodo, "numba": numba, "np": np}, {}, __name__)
 
 
 def overload_binop_dti_str(op):
@@ -1176,7 +1176,7 @@ def pd_date_range_overload(
     func_text += "  A = bodo.utils.conversion.convert_to_dt64ns(arr)\n"
     func_text += "  return bodo.hiframes.pd_index_ext.init_datetime_index(A, name)\n"
 
-    return bodo_exec(func_text, {"bodo": bodo, "np": np, "pd": pd}, {}, globals())
+    return bodo_exec(func_text, {"bodo": bodo, "np": np, "pd": pd}, {}, __name__)
 
 
 @overload(pd.timedelta_range, no_unliteral=True, jit_options={"cache": True})
@@ -1648,7 +1648,7 @@ def gen_tdi_field_impl(field):
     else:
         assert False, "invalid timedelta field"
     func_text += "    return bodo.hiframes.pd_index_ext.init_numeric_index(S, name)\n"
-    return bodo_exec(func_text, {"numba": numba, "np": np, "bodo": bodo}, {}, globals())
+    return bodo_exec(func_text, {"numba": numba, "np": np, "bodo": bodo}, {}, __name__)
 
 
 def _install_tdi_field_overload(field):
@@ -1989,7 +1989,7 @@ def range_index_overload(
 
     func_text = "def bodo_pd_range_index(start=None, stop=None, step=None, dtype=None, copy=False, name=None):\n"
     func_text += f"  return init_range_index({_start}, {_stop}, {_step}, name)\n"
-    return bodo_exec(func_text, {"init_range_index": init_range_index}, {}, globals())
+    return bodo_exec(func_text, {"init_range_index": init_range_index}, {}, __name__)
 
 
 @overload(
@@ -3092,7 +3092,7 @@ def get_binary_str_codegen(is_binary=False):
             "string_type": string_type,
         },
         {},
-        globals(),
+        __name__,
     )
 
 
@@ -3831,7 +3831,7 @@ def create_isna_specific_method(overload_name):
             "    return out_arr\n"
         )
         return bodo_exec(
-            func_text, {"bodo": bodo, "np": np, "numba": numba}, {}, globals()
+            func_text, {"bodo": bodo, "np": np, "numba": numba}, {}, __name__
         )
 
     return overload_index_isna_specific_method
@@ -4307,7 +4307,7 @@ def overload_index_drop_duplicates(I, keep="first"):
     else:
         func_text += "    return bodo.utils.conversion.index_from_array(arr, name)"
 
-    return bodo_exec(func_text, {"bodo": bodo}, {}, globals())
+    return bodo_exec(func_text, {"bodo": bodo}, {}, __name__)
 
 
 @numba.generated_jit(cache=True, nopython=True)
@@ -4488,7 +4488,7 @@ def overload_index_map(I, mapper, na_action=None):
             "data_arr_type": out_arr_type.dtype,
         },
         {},
-        globals(),
+        __name__,
     )
 
 
@@ -4558,7 +4558,7 @@ def create_binary_op_overload(op):
                 func_text,
                 {"bodo": bodo, "op": op},
                 {},
-                globals(),
+                __name__,
             )
 
         # right arg is Index
@@ -4584,7 +4584,7 @@ def create_binary_op_overload(op):
                 func_text,
                 {"bodo": bodo, "op": op},
                 {},
-                globals(),
+                __name__,
             )
 
         if isinstance(lhs, HeterogeneousIndexType):
@@ -4611,7 +4611,7 @@ def create_binary_op_overload(op):
                     for i in range(count)
                 ),
             )
-            return bodo_exec(func_text, {"op": op, "np": np}, {}, globals())
+            return bodo_exec(func_text, {"op": op, "np": np}, {}, __name__)
 
         if isinstance(rhs, HeterogeneousIndexType):
             # handle as regular array data if not actually heterogeneous
@@ -4637,7 +4637,7 @@ def create_binary_op_overload(op):
                     for i in range(count)
                 ),
             )
-            return bodo_exec(func_text, {"op": op, "np": np}, {}, globals())
+            return bodo_exec(func_text, {"op": op, "np": np}, {}, __name__)
 
     return overload_index_binary_op
 
@@ -4895,7 +4895,7 @@ def overload_nbytes(I):
         for i in range(I.nlevels):
             func_text += f"    total += data[{i}].nbytes\n"
         func_text += "    return total\n"
-        return bodo_exec(func_text, {}, {}, globals())
+        return bodo_exec(func_text, {}, {}, __name__)
 
     else:
 
@@ -4983,7 +4983,7 @@ def overload_index_to_series(I, index=None, name=None):
     func_text += (
         "    return bodo.hiframes.pd_series_ext.init_series(data, new_index, new_name)"
     )
-    return bodo_exec(func_text, {"bodo": bodo, "np": np}, {}, globals())
+    return bodo_exec(func_text, {"bodo": bodo, "np": np}, {}, __name__)
 
 
 @overload_method(
@@ -5086,7 +5086,7 @@ def overload_index_to_frame(I, index=True, name=None):
             "__col_name_meta_value": columns,
         },
         {},
-        globals(),
+        __name__,
     )
 
 
@@ -5168,7 +5168,7 @@ def overload_multi_index_to_frame(I, index=True, name=None):
         func_text,
         {"bodo": bodo, "np": np, "__col_name_meta_value": columns},
         {},
-        globals(),
+        __name__,
     )
 
 
@@ -6574,7 +6574,7 @@ def overload_index_where(I, cond, other=np.nan):
         else get_index_constructor(I)
     )
     return bodo_exec(
-        func_text, {"bodo": bodo, "np": np, "constructor": constructor}, {}, globals()
+        func_text, {"bodo": bodo, "np": np, "constructor": constructor}, {}, __name__
     )
 
 
@@ -6682,7 +6682,7 @@ def overload_index_putmask(I, cond, other):
         else get_index_constructor(I)
     )
     return bodo_exec(
-        func_text, {"bodo": bodo, "np": np, "constructor": constructor}, {}, globals()
+        func_text, {"bodo": bodo, "np": np, "constructor": constructor}, {}, __name__
     )
 
 
@@ -6779,7 +6779,7 @@ def overload_index_repeat(I, repeats, axis=None):
         else get_index_constructor(I)
     )
     return bodo_exec(
-        func_text, {"bodo": bodo, "np": np, "constructor": constructor}, {}, globals()
+        func_text, {"bodo": bodo, "np": np, "constructor": constructor}, {}, __name__
     )
 
 
