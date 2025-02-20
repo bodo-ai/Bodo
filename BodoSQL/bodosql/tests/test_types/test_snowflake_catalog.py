@@ -2940,6 +2940,8 @@ def test_missing_select_permission_no_inline(
     To recreate, perform the following steps in Snowflake:
 
     -- switch to security admin
+    -- Create role CANNOT_READ_TABLE_OWNER
+    -- Switch to role CANNOT_READ_TABLE_OWNER
     -- Create a table which won't have read permissions for sysadmin
     create table CANNOT_READ_TABLE as select 'literal' as literal
     from TABLE(GENERATOR(ROWCOUNT => 10));
@@ -2949,6 +2951,7 @@ def test_missing_select_permission_no_inline(
     grant REFERENCES on CANNOT_READ_TABLE to Sysadmin
     -- Grant reference and select to CAN_READ_VIEW
     grant REFERENCES, SELECT on CAN_READ_VIEW to Sysadmin
+    -- Switch back to sysadmin
     -- Verify you can read
     select * from CAN_READ_VIEW
     -- Verify you cannot read
