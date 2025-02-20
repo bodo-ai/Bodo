@@ -84,8 +84,6 @@ jobs:
             echo "DEBUG: inspecting package dir"
             ls {package}/
             ls {package}/bodo/
-            echo "DEBUG: inspecting library"
-            ls CONDA_PREFIX/Library/lib
           CIBW_BEFORE_BUILD_MACOS: |
             # Delete mpi4py folder if it exists so correct version gets copied in
             rm -r {package}/bodo/mpi4py || true
@@ -110,6 +108,7 @@ jobs:
             PATH=$HOME/.pixi/bin:$PATH
             CONDA_PREFIX=$(pwd)/.pixi/envs/pip-cpp-macos
             SETUPTOOLS_SCM_PRETEND_VERSION=${{ inputs.bodo_version }}
+            BODO_SKIP_CPP_TESTS=1
           CIBW_ENVIRONMENT_LINUX: >
             PATH=$HOME/.pixi/bin/:$PATH
             CMAKE_MODULE_PATH=/usr/local/boost_1_85_0

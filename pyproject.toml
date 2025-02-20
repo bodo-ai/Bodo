@@ -7,7 +7,7 @@ requires = [
     # Build Libraries
     "numpy>=1.24,<2.2",
     "pyarrow==18.1.0",
-    "impi==2021.14.0",
+    "impi==2021.14.0; sys_platform == 'windows'",
     "mpi4py~=4.0",
     "pip"
 ]
@@ -180,7 +180,8 @@ exclude = [
 # Disable building wheels for musllinux, i686 and power pc
 # Don't publish linux arm until we can get nightly fixed
 #skip = ["pp*", "*musllinux*", "*i686*"]
-skip = ["pp*", "*musllinux*", "*i686*", "*-win32*"]
+# TODO: enable 3.10 and 3.11
+skip = ["pp*", "*musllinux*", "*i686*", "*-win32*", "cp310*", "cp311*"]
 # Increase pip debugging output
 build-verbosity = 1
 build-frontend = { name = "pip" }
