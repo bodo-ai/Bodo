@@ -81,8 +81,11 @@ jobs:
               (cd boost-1.85.0; ./bootstrap.sh --with-libraries=container,json,stacktrace; ./b2 install)
             fi
           CIBW_BEFORE_BUILD_WINDOWS: |
-            echo "We are building a package for Windows."
-            git
+            echo "DEBUG: inspecting package dir"
+            ls {package}/
+            ls {package}/bodo/
+            echo "DEBUG: inspecting library"
+            ls CONDA_PREFIX/Library/lib
           CIBW_BEFORE_BUILD_MACOS: |
             # Delete mpi4py folder if it exists so correct version gets copied in
             rm -r {package}/bodo/mpi4py || true
@@ -99,14 +102,14 @@ jobs:
           CIBW_ENVIRONMENT: >-
             DISABLE_CCACHE=1
             SCCACHE_BUCKET=engine-codebuild-cache
-            SCCACHE_REGION=us-east-2
-            SCCACHE_S3_USE_SSL=true
-            SCCACHE_S3_SERVER_SIDE_ENCRYPTION=true
-            MACOSX_DEPLOYMENT_TARGET=${{ inputs.name == 'macos-arm' && '12.0' || '10.15' }}
-            BODO_VENDOR_MPICH=1
+            # SCCACHE_REGION=us-east-2
+            # SCCACHE_S3_USE_SSL=true
+            # SCCACHE_S3_SERVER_SIDE_ENCRYPTION=true
+            # MACOSX_DEPLOYMENT_TARGET=${{ inputs.name == 'macos-arm' && '12.0' || '10.15' }}
+            # BODO_VENDOR_MPICH=1
             PATH=$HOME/.pixi/bin:$PATH
             CONDA_PREFIX=$(pwd)/.pixi/envs/pip-cpp-macos
-            # SETUPTOOLS_SCM_PRETEND_VERSION=${{ inputs.bodo_version }}
+            SETUPTOOLS_SCM_PRETEND_VERSION=${{ inputs.bodo_version }}
           CIBW_ENVIRONMENT_LINUX: >
             PATH=$HOME/.pixi/bin/:$PATH
             CMAKE_MODULE_PATH=/usr/local/boost_1_85_0

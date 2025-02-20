@@ -329,21 +329,6 @@ if(DEFINED ENV{BODO_VENDOR_MPICH} AND (NOT WIN32))
 
   set(MPI_INCLUDE_DIR "${SKBUILD_DATA_DIR}/include")
   set(MPI_LIB_DIR "${SKBUILD_DATA_DIR}/lib")
-elseif(DEFINED ENV{BODO_VENDOR_MPICH} AND WIN32 AND FALSE)
-  message(STATUS "Downloading IMPI")
-
-  execute_process(COMMAND ${Python_EXECUTABLE} -m pip download impi-rt==${IMPI_VERSION} -i  --default-timeout=100)
-  execute_process(COMMAND unzip "impi-rt-*.whl" "impi-rt*.data/*" -d impi-tmp-extract-dir)
-  file(GLOB IMPI_DATA_DIR "impi-tmp-extract-dir/impi-rt-*.data/data/*")
-  file(COPY ${IMPI_DATA_DIR} DESTINATION "${SKBUILD_DATA_DIR}" FOLLOW_SYMLINK_CHAIN
-    FILE_PERMISSIONS OWNER_EXECUTE GROUP_EXECUTE WORLD_EXECUTE OWNER_READ GROUP_READ WORLD_READ OWNER_WRITE GROUP_WRITE)
-  file(GLOB IMPI_WHEEL "impi-rt-*.whl")
-  file(REMOVE_RECURSE ${IMPI_WHEEL} impi-tmp-extract-dir)
-  message(STATUS "Moved impi to ${SKBUILD_DATA_DIR}")
-
-  set(MPI_INCLUDE_DIR "${SKBUILD_DATA_DIR}/include")
-  set(MPI_LIB_DIR "${SKBUILD_DATA_DIR}/lib")
-
 else()
   set(MPI_INCLUDE_DIR "${CONDA_INCLUDE_DIR}")
   set(MPI_LIB_DIR "${CONDA_LIB_DIR}")
@@ -357,6 +342,7 @@ else()
 endif()
 
 cmake_print_variables(MPI_INCLUDE_DIR)
+cmake_print_variables(MPI_LIBRARIES)
 
 # Vendor MPI4Py
 if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/bodo/mpi4py")
