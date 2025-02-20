@@ -62,7 +62,6 @@ jobs:
 
       - name: Build Wheels
         run: ${{ contains(inputs.os, 'macos') && 'pipx' || 'python3 -m pipx' }} run cibuildwheel==2.22.0
-        shell: bash
         env:
           CIBW_BEFORE_ALL_LINUX: |
             # Install Pixi and Environment
@@ -83,6 +82,7 @@ jobs:
             fi
           CIBW_BEFORE_BUILD_WINDOWS: |
             echo "We are building a package for Windows."
+            git
           CIBW_BEFORE_BUILD_MACOS: |
             # Delete mpi4py folder if it exists so correct version gets copied in
             rm -r {package}/bodo/mpi4py || true
@@ -106,7 +106,7 @@ jobs:
             BODO_VENDOR_MPICH=1
             PATH=$HOME/.pixi/bin:$PATH
             CONDA_PREFIX=$(pwd)/.pixi/envs/pip-cpp-macos
-            SETUPTOOLS_SCM_PRETEND_VERSION=${{ inputs.bodo_version }}
+            # SETUPTOOLS_SCM_PRETEND_VERSION=${{ inputs.bodo_version }}
           CIBW_ENVIRONMENT_LINUX: >
             PATH=$HOME/.pixi/bin/:$PATH
             CMAKE_MODULE_PATH=/usr/local/boost_1_85_0

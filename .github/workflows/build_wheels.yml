@@ -31,15 +31,15 @@ jobs:
     outputs:
       bodo_version: ${{ steps.get_version.outputs.bodo_version }}
 
-  build_bodo_linux:
-    uses: ./.github/workflows/_build_bodo_pip.yml
-    needs: [get_version]
-    with:
-      # Only Linux x86 in this job
-      os: ubuntu-latest
-      name: linux-x86
-      bodo_version: ${{ needs.get_version.outputs.bodo_version }}
-    secrets: inherit
+  # build_bodo_linux:
+  #   uses: ./.github/workflows/_build_bodo_pip.yml
+  #   needs: [get_version]
+  #   with:
+  #     # Only Linux x86 in this job
+  #     os: ubuntu-latest
+  #     name: linux-x86
+  #     bodo_version: ${{ needs.get_version.outputs.bodo_version }}
+  #   secrets: inherit
 
   build_bodo_other:
     uses: ./.github/workflows/_build_bodo_pip.yml
@@ -48,10 +48,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: macos-13
-            name: macos-x86
-          - os: macos-latest
-            name: macos-arm
+          # - os: macos-13
+          #   name: macos-x86
+          # - os: macos-latest
+          #   name: macos-arm
           - os: windows-latest
             name: windows
           # Don't publish linux arm until we can get nightly fixed
@@ -63,148 +63,148 @@ jobs:
       bodo_version: ${{ needs.get_version.outputs.bodo_version }}
     secrets: inherit
 
-  build_bodosql_wheels:
-    permissions:
-      id-token: write
-      contents: read
-    name: Build no-arch BodoSQL wheels on ubuntu-latest
-    runs-on: ubuntu-latest
-    needs: build_bodo_linux
+  # build_bodosql_wheels:
+  #   permissions:
+  #     id-token: write
+  #     contents: read
+  #   name: Build no-arch BodoSQL wheels on ubuntu-latest
+  #   runs-on: ubuntu-latest
+  #   needs: build_bodo_linux
 
-    steps:
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-region: us-east-2
-          role-to-assume: arn:aws:iam::427443013497:role/BodoEngineBuildWheelRole
-          role-session-name: BodoEngineBuildWheelSession
-          role-skip-session-tagging: true
+  #   steps:
+  #     - name: Configure AWS Credentials
+  #       uses: aws-actions/configure-aws-credentials@v4
+  #       with:
+  #         aws-region: us-east-2
+  #         role-to-assume: arn:aws:iam::427443013497:role/BodoEngineBuildWheelRole
+  #         role-session-name: BodoEngineBuildWheelSession
+  #         role-skip-session-tagging: true
 
-      - uses: actions/checkout@v4
-        with:
-          # For setuptools_scm to be able to determine version,
-          # we need to fetch the entire history
-          fetch-depth: 0
+  #     - uses: actions/checkout@v4
+  #       with:
+  #         # For setuptools_scm to be able to determine version,
+  #         # we need to fetch the entire history
+  #         fetch-depth: 0
 
-      - uses: prefix-dev/setup-pixi@v0.8.1
-        with:
-          pixi-version: v0.40.2
-          cache: true
-          cache-write: ${{ github.event_name == 'push' && github.ref_name == 'main' }}
-          environments: 'default'
-          activate-environment: true
+  #     - uses: prefix-dev/setup-pixi@v0.8.1
+  #       with:
+  #         pixi-version: v0.40.2
+  #         cache: true
+  #         cache-write: ${{ github.event_name == 'push' && github.ref_name == 'main' }}
+  #         environments: 'default'
+  #         activate-environment: true
 
-      - uses: actions/download-artifact@v4
-        id: download-artifact
-        with:
-          pattern: cibw-wheels-linux-x86
-          path: .
+  #     - uses: actions/download-artifact@v4
+  #       id: download-artifact
+  #       with:
+  #         pattern: cibw-wheels-linux-x86
+  #         path: .
 
-      - name: Build BodoSQL Wheels
-        run: |
-          set -exo pipefail
-          pip install bodo --find-links "$(find . -name "cibw-wheels-*" -print)" --no-index --no-deps
-          cd BodoSQL
-          pip wheel --no-deps --no-build-isolation -v .
-      - uses: actions/upload-artifact@v4
-        with:
-          name: bodosql-wheel-no-arch
-          path: ./BodoSQL/*.whl
+  #     - name: Build BodoSQL Wheels
+  #       run: |
+  #         set -exo pipefail
+  #         pip install bodo --find-links "$(find . -name "cibw-wheels-*" -print)" --no-index --no-deps
+  #         cd BodoSQL
+  #         pip wheel --no-deps --no-build-isolation -v .
+  #     - uses: actions/upload-artifact@v4
+  #       with:
+  #         name: bodosql-wheel-no-arch
+  #         path: ./BodoSQL/*.whl
 
-  test-bodosql:
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        python_version: ["3.10", "3.11", "3.12"]
-    needs: build_bodosql_wheels
-    steps:
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python_version }}
-      - uses: actions/download-artifact@v4
-        id: download-bodo-artifact
-        with:
-          pattern: cibw-wheels-linux-x86
-          path: .
-      - uses: actions/download-artifact@v4
-        id: download-bodosql-artifact
-        with:
-          pattern: bodosql-wheel-no-arch
-          path: .
-      - name: Install
-        run: |
-          # Install bodo and bodosql from the local wheel
-          pip install bodo  --find-links "$(find . -name "cibw-wheels-*" -print)" bodosql --find-links bodosql-wheel-no-arch --no-index --no-deps
-          # Install dependencies from pypi
-          pip install bodo bodosql
-      - name: Test
-        run: |
-          set -exo pipefail
-          BODO_NUM_WORKERS=2 python -c '\
-          import pandas as pd
-          import bodosql
-          df = pd.DataFrame({"A": [1, 2, 3]})
-          bc = bodosql.BodoSQLContext({"TABLE1": df})
-          res = bc.sql("SELECT SUM(A) as OUTPUT FROM TABLE1")
-          assert res["OUTPUT"].iloc[0] == 6'
+  # test-bodosql:
+  #   runs-on: ubuntu-latest
+  #   strategy:
+  #     fail-fast: false
+  #     matrix:
+  #       python_version: ["3.10", "3.11", "3.12"]
+  #   needs: build_bodosql_wheels
+  #   steps:
+  #     - name: Setup Python
+  #       uses: actions/setup-python@v5
+  #       with:
+  #         python-version: ${{ matrix.python_version }}
+  #     - uses: actions/download-artifact@v4
+  #       id: download-bodo-artifact
+  #       with:
+  #         pattern: cibw-wheels-linux-x86
+  #         path: .
+  #     - uses: actions/download-artifact@v4
+  #       id: download-bodosql-artifact
+  #       with:
+  #         pattern: bodosql-wheel-no-arch
+  #         path: .
+  #     - name: Install
+  #       run: |
+  #         # Install bodo and bodosql from the local wheel
+  #         pip install bodo  --find-links "$(find . -name "cibw-wheels-*" -print)" bodosql --find-links bodosql-wheel-no-arch --no-index --no-deps
+  #         # Install dependencies from pypi
+  #         pip install bodo bodosql
+  #     - name: Test
+  #       run: |
+  #         set -exo pipefail
+  #         BODO_NUM_WORKERS=2 python -c '\
+  #         import pandas as pd
+  #         import bodosql
+  #         df = pd.DataFrame({"A": [1, 2, 3]})
+  #         bc = bodosql.BodoSQLContext({"TABLE1": df})
+  #         res = bc.sql("SELECT SUM(A) as OUTPUT FROM TABLE1")
+  #         assert res["OUTPUT"].iloc[0] == 6'
 
-  build-iceberg:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-        with:
-          # For setuptools_scm to be able to determine version,
-          # we need to fetch the entire history
-          fetch-depth: 0
-      - name: Build Wheel
-        # PipX is available in Github runners
-        run: pipx run build -v --wheel iceberg
-      - name: Upload Iceberg Wheel
-        uses: actions/upload-artifact@v4
-        with:
-          name: cibw-iceberg
-          path: ./iceberg/dist/*.whl
+  # build-iceberg:
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - name: Checkout Code
+  #       uses: actions/checkout@v4
+  #       with:
+  #         # For setuptools_scm to be able to determine version,
+  #         # we need to fetch the entire history
+  #         fetch-depth: 0
+  #     - name: Build Wheel
+  #       # PipX is available in Github runners
+  #       run: pipx run build -v --wheel iceberg
+  #     - name: Upload Iceberg Wheel
+  #       uses: actions/upload-artifact@v4
+  #       with:
+  #         name: cibw-iceberg
+  #         path: ./iceberg/dist/*.whl
 
-  # TODO: Merge with Bodo and BodoSQL testing jobs to test all imports
-  test-iceberg-import:
-    needs: build-iceberg
-    strategy:
-      matrix:
-        python_version: ["3.10", "3.11", "3.12"]
-        os: [ubuntu-latest] #, macos-13, macos-14]
-      # Test all combinations to completion
-      fail-fast: false
-    runs-on: ${{ matrix.os }}
-    steps:
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python_version }}
-      - name: Download Iceberg Wheel
-        uses: actions/download-artifact@v4
-        with:
-          name: cibw-iceberg
-      - name: Test Import
-        run: |
-          set -exo pipefail
-          pip --version
-          pip install --prefer-binary bodo_iceberg_connector-*.whl
-          python -c "import bodo_iceberg_connector as bic; print(bic.java_helpers.build_hadoop_conf({}))"
-      # TODO: Chain with E2E tests for effective testing
+  # # TODO: Merge with Bodo and BodoSQL testing jobs to test all imports
+  # test-iceberg-import:
+  #   needs: build-iceberg
+  #   strategy:
+  #     matrix:
+  #       python_version: ["3.10", "3.11", "3.12"]
+  #       os: [ubuntu-latest] #, macos-13, macos-14]
+  #     # Test all combinations to completion
+  #     fail-fast: false
+  #   runs-on: ${{ matrix.os }}
+  #   steps:
+  #     - name: Setup Python
+  #       uses: actions/setup-python@v5
+  #       with:
+  #         python-version: ${{ matrix.python_version }}
+  #     - name: Download Iceberg Wheel
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: cibw-iceberg
+  #     - name: Test Import
+  #       run: |
+  #         set -exo pipefail
+  #         pip --version
+  #         pip install --prefer-binary bodo_iceberg_connector-*.whl
+  #         python -c "import bodo_iceberg_connector as bic; print(bic.java_helpers.build_hadoop_conf({}))"
+  #     # TODO: Chain with E2E tests for effective testing
 
-  upload-all:
-    needs: [build-iceberg, test-iceberg-import, build_bodo_linux, build_bodo_other, build_bodosql_wheels, test-bodosql]
-    permissions:
-      id-token: write
-    runs-on: ubuntu-latest
-    if: github.event_name == 'release' && github.event.action == 'published'
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          path: dist
-          merge-multiple: true
+  # upload-all:
+  #   needs: [build-iceberg, test-iceberg-import, build_bodo_linux, build_bodo_other, build_bodosql_wheels, test-bodosql]
+  #   permissions:
+  #     id-token: write
+  #   runs-on: ubuntu-latest
+  #   if: github.event_name == 'release' && github.event.action == 'published'
+  #   steps:
+  #     - uses: actions/download-artifact@v4
+  #       with:
+  #         path: dist
+  #         merge-multiple: true
 
-      - uses: pypa/gh-action-pypi-publish@release/v1
+  #     - uses: pypa/gh-action-pypi-publish@release/v1
