@@ -80,10 +80,10 @@ jobs:
               tar -xJf boost_1_85_0.tar.xz -C .
               (cd boost-1.85.0; ./bootstrap.sh --with-libraries=container,json,stacktrace; ./b2 install)
             fi
+          # delvewheel is still relatively new and not installed by default
+          # https://cibuildwheel.pypa.io/en/stable/options/#repair-wheel-command
           CIBW_BEFORE_BUILD_WINDOWS: |
-            echo "DEBUG: inspecting package dir"
-            ls {package}/
-            ls {package}/bodo/
+            pip install delvewheel
           CIBW_BEFORE_BUILD_MACOS: |
             # Delete mpi4py folder if it exists so correct version gets copied in
             rm -r {package}/bodo/mpi4py || true
@@ -132,8 +132,13 @@ jobs:
             AWS_SESSION_TOKEN
             AWS_DEFAULT_REGION
           CIBW_REPAIR_WHEEL_COMMAND_WINDOWS: >
-            python -m pip install pipx
-            python -m pipx run delvewheel show {wheel}
+            delvewheel show {wheel}
+          # CIBW_REPAIR_WHEEL_COMMAND_WINDOWS: >
+          #   python -m pip install pipx
+          #   python -m pipx run delvewheel show {wheel}
+          #   python -m pipx run delvewheel repair -e msmpi.dll -e impi.dll 
+          #   -e arrow.dll -e arrow_acero.dll -e arrow_dataset.dll -e arrow_python.dll
+          #   -e parquet.dll
           CIBW_REPAIR_WHEEL_COMMAND_MACOS: >
             sccache --show-stats &&
             delocate-wheel --ignore-missing-dependencies --sanitize-rpaths
