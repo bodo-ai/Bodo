@@ -56,7 +56,7 @@ jobs:
           environments: 'pip-cpp-macos'
           activate-environment: true
       - name: Install Pixi Global Tools
-        if: contains(inputs.os, 'macos')
+        if: ${{ contains(inputs.os, 'macos') ||  contains(inputs.os, 'windows') }}
         run: |
           pixi global install sccache
 
@@ -140,7 +140,7 @@ jobs:
           CIBW_REPAIR_WHEEL_COMMAND_WINDOWS: >
             delvewheel repair --exclude msmpi.dll --exclude impi.dll
             --exclude arrow.dll --exclude arrow_acero.dll--exclude arrow_dataset.dll --exclude arrow_python.dll
-            --exclude parquet.dll -vvv {wheel} -w {dest_dir}
+            --exclude parquet.dll {wheel} -w {dest_dir}
           CIBW_REPAIR_WHEEL_COMMAND_MACOS: >
             sccache --show-stats &&
             delocate-wheel --ignore-missing-dependencies --sanitize-rpaths
