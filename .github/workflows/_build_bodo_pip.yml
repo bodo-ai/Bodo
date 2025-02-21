@@ -100,8 +100,11 @@ jobs:
           # Note: setting BODO_SKIP_CPP_TESTS for now because Release build-type is not being properly set on Windows.
           CIBW_ENVIRONMENT_WINDOWS: >
             DISABLE_CCACHE=1
+            SCCACHE_BUCKET=engine-codebuild-cache
+            SCCACHE_REGION=us-east-2
+            SCCACHE_S3_USE_SSL=true
+            SCCACHE_S3_SERVER_SIDE_ENCRYPTION=true
             BODO_SKIP_CPP_TESTS=1
-            PATH=$HOME/.pixi/bin:$PATH
             SETUPTOOLS_SCM_PRETEND_VERSION=${{ inputs.bodo_version }}
           CIBW_ENVIRONMENT_MACOS: >
             DISABLE_CCACHE=1
@@ -136,7 +139,7 @@ jobs:
           # CIBW_REPAIR_WHEEL_COMMAND_WINDOWS: >
           #   python -m pip install pipx
           #   python -m pipx run delvewheel show {wheel}
-          #   python -m pipx run delvewheel repair -e msmpi.dll -e impi.dll 
+          #   python -m pipx run delvewheel repair -e msmpi.dll -e impi.dll
           #   -e arrow.dll -e arrow_acero.dll -e arrow_dataset.dll -e arrow_python.dll
           #   -e parquet.dll
           CIBW_REPAIR_WHEEL_COMMAND_MACOS: >
