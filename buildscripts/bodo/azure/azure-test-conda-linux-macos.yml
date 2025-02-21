@@ -81,6 +81,8 @@ jobs:
     continueOnError: true
     displayName: Export Environment Spec
 
+  - task: DockerInstaller@0
+
   - bash: |
       set -exo pipefail
       eval "$(pixi shell-hook --shell bash -e azure)"
