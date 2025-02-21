@@ -1,5 +1,5 @@
 """Python and JIT class for describing a REST Iceberg catalog. A REST
-catalog contains all information needed to connect use REST Iceberg catalog for organizing and modifying tables.
+catalog contains all information needed to connect and use REST Iceberg catalog for organizing and modifying tables.
 """
 
 import os
