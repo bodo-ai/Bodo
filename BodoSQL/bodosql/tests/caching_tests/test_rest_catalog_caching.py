@@ -42,7 +42,9 @@ def test_rest_catalog_read_caching(
 
 
 @pytest_mark_polaris
-def test_rest_catalog_write_caching(fn_distribution, is_cached, polaris_catalog):
+def test_rest_catalog_write_caching(
+    fn_distribution, is_cached, polaris_catalog, polaris_catalog_iceberg_read_df
+):
     def impl(bc, write_query, read_query):
         # Write step
         bc.sql(write_query)
