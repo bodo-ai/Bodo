@@ -142,7 +142,7 @@ BODO_NUM_WORKERS=1 python example.py
     You may need to delete `example1.pq` between consecutive runs.
 
 
-## Enabling parallelism in Clusters
+## Enabling parallelism in clusters {#cluster_setup}
 
 Bodo relies on MPI for parallel compute. MPI can be configured on clusters
 easily. The cluster nodes need to have passwordless SSH enabled between them,
