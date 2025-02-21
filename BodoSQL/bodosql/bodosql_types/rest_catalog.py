@@ -33,6 +33,7 @@ def _create_java_REST_catalog(
     token: str | None,
     credential: str | None,
     scope: str | None = None,
+    default_schema: str | None = None,
 ):
     """
     Create a Java RESTCatalog object.
@@ -42,6 +43,7 @@ def _create_java_REST_catalog(
         token (str): The token to use for authentication.
         credential (str): The credential to use for authentication.
         scope (str): The scope to use for authentication.
+        default_schema (str): The default schema to use.
     Returns:
         JavaObject: A Java RESTCatalog object.
     """
@@ -51,6 +53,7 @@ def _create_java_REST_catalog(
         token,
         credential,
         scope,
+        default_schema,
     )
 
 
@@ -67,6 +70,7 @@ class RESTCatalog(DatabaseCatalog):
         token: str | None = None,
         credential: str | None = None,
         scope: str | None = None,
+        default_schema: str | None = None,
     ):
         """
         Create a REST catalog from a connection string to a REST catalog.
@@ -77,12 +81,14 @@ class RESTCatalog(DatabaseCatalog):
             token (str): The token to use for authentication.
             credential (str): The credential to use for authentication.
             scope (str): The scope to use for authentication.
+            default_schema (str): The default schema to use.
         """
         self.warehouse = warehouse
         self.rest_uri = rest_uri
         self.token = token
         self.credential = credential
         self.scope = scope
+        self.default_schema = default_schema
         if self.token is None:
             self.token = self.get_token()
 
@@ -92,7 +98,12 @@ class RESTCatalog(DatabaseCatalog):
 
     def get_java_object(self):
         return _create_java_REST_catalog(
-            self.rest_uri, self.warehouse, self.token, self.credential, self.scope
+            self.rest_uri,
+            self.warehouse,
+            self.token,
+            self.credential,
+            self.scope,
+            self.default_schema,
         )
 
     @run_rank0
@@ -127,6 +138,7 @@ class RESTCatalogType(DatabaseCatalogType):
         token: str | None = None,
         credential: str | None = None,
         scope: str | None = None,
+        default_schema: str | None = None,
     ):
         """
         Create a REST catalog type from a connection string to a REST catalog.
@@ -136,12 +148,14 @@ class RESTCatalogType(DatabaseCatalogType):
             token (str): The token to use for authentication.
             credential (str): The credential to use for authentication.
             scope (str): The scope to use for authentication.
+            default_schema (str): The default schema to use.
         """
         self.warehouse = warehouse
         self.rest_uri = rest_uri
         self.token = token
         self.credential = credential
         self.scope = scope
+        self.default_schema = default_schema
 
         super().__init__(
             name=f"RESTCatalogType({self.warehouse=},{self.rest_uri},{'token' if self.token is not None else 'credential'}=*****)",
@@ -149,7 +163,12 @@ class RESTCatalogType(DatabaseCatalogType):
 
     def get_java_object(self):
         return _create_java_REST_catalog(
-            self.rest_uri, self.warehouse, self.token, self.credential, self.scope
+            self.rest_uri,
+            self.warehouse,
+            self.token,
+            self.credential,
+            self.scope,
+            self.default_schema,
         )
 
     @property
@@ -165,6 +184,7 @@ def typeof_REST_catalog(val, c):
         token=val.token,
         credential=val.credential,
         scope=val.scope,
+        default_schema=val.default_schema,
     )
 
 
@@ -216,6 +236,17 @@ def box_REST_catalog(typ, val, c):
     else:
         scope_obj = c.pyapi.make_none()
 
+    if typ.default_schema is not None:
+        default_schema_obj = c.pyapi.from_native_value(
+            types.unicode_type,
+            c.context.get_constant_generic(
+                c.builder, types.unicode_type, typ.default_schema
+            ),
+            c.env_manager,
+        )
+    else:
+        default_schema_obj = c.pyapi.make_none()
+
     REST_catalog_obj = c.pyapi.unserialize(c.pyapi.serialize_object(RESTCatalog))
     res = c.pyapi.call_function_objargs(
         REST_catalog_obj,
@@ -225,6 +256,7 @@ def box_REST_catalog(typ, val, c):
             token_obj,
             credential_obj,
             scope_obj,
+            default_schema_obj,
         ),
     )
     c.pyapi.decref(warehouse_obj)
@@ -232,6 +264,7 @@ def box_REST_catalog(typ, val, c):
     c.pyapi.decref(token_obj)
     c.pyapi.decref(credential_obj)
     c.pyapi.decref(scope_obj)
+    c.pyapi.decref(default_schema_obj)
     c.pyapi.decref(REST_catalog_obj)
     return res
 
@@ -267,7 +300,7 @@ class RESTConnectionType(IcebergConnectionType):
     The runtime can get a connection string using the conn_str attribute.
     """
 
-    def __init__(self, rest_uri, warehouse, scope):
+    def __init__(self, rest_uri, warehouse, scope, default_schema):
         self.warehouse = warehouse
         token = os.getenv("__BODOSQL_REST_TOKEN")
         assert token is not None, (
@@ -277,7 +310,7 @@ class RESTConnectionType(IcebergConnectionType):
         self.conn_str = get_conn_str(rest_uri, warehouse, token=token, scope=scope)
 
         super().__init__(
-            name=f"RESTConnectionType({warehouse=}, {rest_uri=}, conn_str=*********, {scope=})",
+            name=f"RESTConnectionType({warehouse=}, {rest_uri=}, conn_str=*********, {scope=}, {default_schema=})",
         )
 
 

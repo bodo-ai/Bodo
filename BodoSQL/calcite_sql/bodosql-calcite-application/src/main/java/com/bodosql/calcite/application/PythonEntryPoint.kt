@@ -336,7 +336,8 @@ class PythonEntryPoint {
             token: String?,
             credential: String?,
             scope: String?,
-        ): IcebergRESTCatalog = IcebergRESTCatalog(restUri, warehouse, token, credential, scope)
+            defaultSchema: String?,
+        ): IcebergRESTCatalog = IcebergRESTCatalog(restUri, warehouse, token, credential, scope, defaultSchema)
 
         /**
          * Build a FileSystemCatalog object.

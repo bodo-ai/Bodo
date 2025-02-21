@@ -21,6 +21,7 @@ open class IcebergRESTCatalog(
     token: String? = null,
     credential: String? = null,
     val scope: String? = null,
+    val defaultSchema: String? = null,
 ) : IcebergCatalog<RESTCatalog>(
         createRestCatalog(uri, warehouse, token, credential, scope),
     ) {
@@ -74,13 +75,13 @@ open class IcebergRESTCatalog(
      * @param depth The depth at which to find the default.
      * @return List of default Schema for this catalog.
      */
-    override fun getDefaultSchema(depth: Int): List<String> = listOf()
+    override fun getDefaultSchema(depth: Int): List<String> = defaultSchema?.split(".")?.toList()?.subList(0, depth + 1) ?: listOf()
 
     /**
      * Return the number of levels at which a default schema may be found.
      * @return The number of levels a default schema can be found.
      */
-    override fun numDefaultSchemaLevels(): Int = 0
+    override fun numDefaultSchemaLevels(): Int = defaultSchema?.split(".")?.size ?: 0
 
     /**
      * Generates the code necessary to produce an append write expression from the given catalog.

@@ -1,5 +1,5 @@
 import shutil
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import NamedTuple
 
 import pandas as pd
@@ -35,6 +35,7 @@ SPARK_JAR_PACKAGES = [
 @dataclass(frozen=True)
 class SparkIcebergCatalog:
     catalog_name: str
+    default_schema: str | None = field(default=None, kw_only=True)
 
 
 @dataclass(frozen=True)
@@ -58,6 +59,7 @@ class SparkAzureIcebergCatalog(SparkRestIcebergCatalog):
 @dataclass(frozen=True)
 class SparkAwsIcebergCatalog(SparkRestIcebergCatalog):
     io_impl: str = "org.apache.iceberg.aws.s3.S3FileIO"
+    region: str = field(default="us-east-2", kw_only=True)
 
 
 def get_spark_catalog_for_connection(connection: tuple[str, str, str]):
@@ -139,6 +141,11 @@ def get_spark(
                     f"spark.sql.catalog.{catalog.catalog_name}.scope",
                     "PRINCIPAL_ROLE:ALL",
                 )
+        if catalog.default_schema:
+            builder.config(
+                f"spark.sql.catalog.{catalog.catalog_name}.default-namespace",
+                catalog.default_schema,
+            )
 
     def do_get_spark():
         builder = SparkSession.builder.appName("spark")
