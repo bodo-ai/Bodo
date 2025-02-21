@@ -1,5 +1,8 @@
+import sys
+
 import numpy as np
 import pandas as pd
+import pytest
 
 import bodo
 import bodo.io.snowflake
@@ -23,6 +26,13 @@ from bodo.libs.streaming.join import (
     get_op_pool_budget_bytes as join_get_op_pool_budget_bytes,
 )
 from bodo.tests.utils import pytest_mark_one_rank, temp_env_override
+
+pytestmark = [
+    pytest.mark.skipif(
+        sys.platform == "win32", reason="TODO[BSE-4556]: enable buffer pool on Windows"
+    ),
+    pytest.mark.slow,
+]
 
 
 def hash_join_impl(df1, df2):
