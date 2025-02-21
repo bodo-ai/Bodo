@@ -221,6 +221,9 @@ mpi4py = "~=3.1"
 [feature.dev.target.win.dependencies]
 mpi4py = "~=4.0"
 
+[feature.pip.target.win.dependencies]
+mpi4py = "~=4.0"
+
 [feature.platform]
 platforms = ["linux-64"]
 
