@@ -139,8 +139,8 @@ jobs:
           # https://pypi.org/project/delvewheel/
           CIBW_REPAIR_WHEEL_COMMAND_WINDOWS: >
             delvewheel repair --exclude msmpi.dll --exclude impi.dll
-            --exclude arrow.dll --exclude arrow_acero.dll--exclude arrow_dataset.dll --exclude arrow_python.dll
-            --exclude parquet.dll {wheel}
+            --exclude arrow.dll --exclude arrow_acero.dll --exclude arrow_dataset.dll --exclude arrow_python.dll
+            --exclude parquet.dll -v -w {dest_dir} {wheel}
           CIBW_REPAIR_WHEEL_COMMAND_MACOS: >
             sccache --show-stats &&
             delocate-wheel --ignore-missing-dependencies --sanitize-rpaths
