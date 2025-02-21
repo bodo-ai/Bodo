@@ -7,7 +7,6 @@ requires = [
     # Build Libraries
     "numpy>=1.24,<2.2",
     "pyarrow==18.1.0",
-    "impi-rt==2021.14.0; sys_platform == 'win32'",
     "mpi4py~=4.0",
     "pip"
 ]
@@ -45,6 +44,7 @@ dependencies = [
     "requests",
     "cloudpickle>=3.0,<4.0",
     "psutil",
+    "impi-rt==2021.14.0; sys_platform == 'win32'",
 ]
 
 [project.urls]

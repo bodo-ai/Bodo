@@ -131,6 +131,8 @@ jobs:
             AWS_SECRET_ACCESS_KEY
             AWS_SESSION_TOKEN
             AWS_DEFAULT_REGION
+          CIBW_REPAIR_WHEEL_COMMAND_WINDOWS: >
+            python -m pipx run delvewheel show {wheel}
           CIBW_REPAIR_WHEEL_COMMAND_MACOS: >
             sccache --show-stats &&
             delocate-wheel --ignore-missing-dependencies --sanitize-rpaths
