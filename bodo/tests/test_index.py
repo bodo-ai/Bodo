@@ -482,7 +482,7 @@ def test_index_values(index, memory_leak_check):
             marks=pytest.mark.slow,
         ),
         (pd.Index([1, 2, 3, 4, 5]), pd.Series([2, 4, 6, 8, 10])),
-        (pd.Index([1, 2, 3, 4, 5]), np.array([2, 4, 6, 8, 10])),
+        (pd.Index([1, 2, 3, 4, 5]), np.array([2, 4, 6, 8, 10], dtype=np.int64)),
         pytest.param(
             (pd.Index(list(range(-5, 100000))), pd.Index(list(range(100005)))),
             marks=pytest.mark.slow,
