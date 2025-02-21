@@ -4,6 +4,7 @@ Collection of utility functions. Needs to be refactored in separate files.
 
 import functools
 import hashlib
+import importlib
 import inspect
 import keyword
 import re
@@ -14,13 +15,12 @@ import warnings
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from enum import Enum
-from typing import TypeGuard
 
 import numba
 import numpy as np
 import pandas as pd
 from llvmlite import ir as lir
-from numba.core import cgutils, ir, ir_utils, types
+from numba.core import cgutils, ir, ir_utils, sigutils, types
 from numba.core.imputils import lower_builtin, lower_constant
 from numba.core.ir_utils import (
     find_callname,
@@ -487,7 +487,7 @@ def get_slice_step(typemap, func_ir, var):
 
 def is_array_typ(
     var_typ, include_index_series=True
-) -> TypeGuard[types.ArrayCompatible]:
+) -> pt.TypeGuard[types.ArrayCompatible]:
     """return True if var_typ is an array type.
     include_index_series=True also includes Index and Series types (as "array-like").
     """
@@ -818,7 +818,7 @@ def alloc_arr_tup_overload(n, data, init_vals=()):
     )  # single value needs comma to become tuple
 
     return bodo_exec(
-        func_text, {"empty_like_type": empty_like_type, "np": np}, {}, globals()
+        func_text, {"empty_like_type": empty_like_type, "np": np}, {}, __name__
     )
 
 
@@ -1289,7 +1289,7 @@ def tuple_list_to_array(A, data, elem_type):
         func_text += "    A[i] = bodo.utils.conversion.unbox_if_tz_naive_timestamp(d)\n"
     else:
         func_text += "    A[i] = d\n"
-    return bodo_exec(func_text, {"bodo": bodo}, {}, globals())
+    return bodo_exec(func_text, {"bodo": bodo}, {}, __name__)
 
 
 def object_length(c, obj):
@@ -1354,7 +1354,7 @@ import copy
 ir.Const.__deepcopy__ = lambda self, memo: ir.Const(self.value, copy.deepcopy(self.loc))
 
 
-def is_call_assign(stmt) -> TypeGuard[ir.Assign]:
+def is_call_assign(stmt) -> pt.TypeGuard[ir.Assign]:
     return (
         isinstance(stmt, ir.Assign)
         and isinstance(stmt.value, ir.Expr)
@@ -1362,19 +1362,19 @@ def is_call_assign(stmt) -> TypeGuard[ir.Assign]:
     )
 
 
-def is_call(expr) -> TypeGuard[ir.Expr]:
+def is_call(expr) -> pt.TypeGuard[ir.Expr]:
     return isinstance(expr, ir.Expr) and expr.op == "call"
 
 
-def is_var_assign(inst) -> TypeGuard[ir.Assign]:
+def is_var_assign(inst) -> pt.TypeGuard[ir.Assign]:
     return isinstance(inst, ir.Assign) and isinstance(inst.value, ir.Var)
 
 
-def is_assign(inst) -> TypeGuard[ir.Assign]:
+def is_assign(inst) -> pt.TypeGuard[ir.Assign]:
     return isinstance(inst, ir.Assign)
 
 
-def is_expr(val, op) -> TypeGuard[ir.Expr]:
+def is_expr(val, op) -> pt.TypeGuard[ir.Expr]:
     return isinstance(val, ir.Expr) and val.op == op
 
 
@@ -1776,7 +1776,11 @@ def set_wrapper(a):
     return set(a)
 
 
-def run_rank0(func: Callable, bcast_result: bool = True, result_default=None):
+T = pt.TypeVar("T")
+P = pt.ParamSpec("P")
+
+
+def run_rank0(func: Callable[P, T], bcast_result: bool = True, result_default=None):
     """
     Utility function decorator to run a function on just rank 0
     but re-raise any Exceptions safely on all ranks.
@@ -1795,7 +1799,7 @@ def run_rank0(func: Callable, bcast_result: bool = True, result_default=None):
     """
 
     @functools.wraps(func)
-    def inner(*args, **kwargs):
+    def inner(*args, **kwargs) -> T:
         comm = MPI.COMM_WORLD
         result = result_default
         err = None
@@ -1813,7 +1817,7 @@ def run_rank0(func: Callable, bcast_result: bool = True, result_default=None):
         # Broadcast the result to all ranks.
         if bcast_result:
             result = comm.bcast(result)
-        return result
+        return result  # type: ignore
 
     return inner
 
@@ -1857,7 +1861,23 @@ def create_arg_hash(*args, **kwargs):
     return arg_hash.hexdigest()
 
 
-def bodo_exec(func_text, glbls, loc_vars, real_globals):
+def bodo_exec_internal(func_name, func_text, glbls, loc_vars, mod_name):
+    # Register the code associated with this function so that it is cacheable.
+    bodo.numba_compat.BodoCacheLocator.register(func_name, func_text)
+    # Exec the function into existence.
+    exec(func_text, glbls, loc_vars)
+    # Get the new function from the local environment.
+    new_func = loc_vars[func_name]
+    # Make the new function a member of the module that it was exec'ed in.
+    mod = importlib.import_module(mod_name)
+    setattr(mod, func_name, new_func)
+    # Make the function know what module it resides in.
+    # Also necessary for caching/pickling.
+    new_func.__module__ = mod_name
+    return new_func
+
+
+def bodo_exec(func_text, glbls, loc_vars, mod_name):
     """
     Take a string containing a dynamically generated function with a given name and exec
     it into existence and make the resulting function Numba cacheable.
@@ -1865,7 +1885,7 @@ def bodo_exec(func_text, glbls, loc_vars, real_globals):
         func_text: the text of the new function to be created
         glbls: the globals to be passed to exec
         loc_vars: the local var dict to be passed to exec
-        real_globals: should be passed globals() from the calling scope
+        mod_name: the name of the module to create this function in
     """
     # Get hash of function text.
     # Using shorter md5 hash vs sha256 to reduce chances of hitting 260 character limit
@@ -1881,15 +1901,21 @@ def bodo_exec(func_text, glbls, loc_vars, real_globals):
     func_text = re.sub(
         pattern, lambda m: m.group(1) + func_name + m.group(3), func_text, count=1
     )
-    # Exec the function into existence.
-    exec(func_text, glbls, loc_vars)
-    # Register the code associated with this function so that it is cacheable.
-    bodo.numba_compat.BodoCacheLocator.register(func_name, func_text)
-    # Get the new function from the local environment.
-    new_func = loc_vars[func_name]
-    # Make the new function a member of the module that it was exec'ed in.
-    real_globals[func_name] = new_func
-    # Make the function know what module it resides in.
-    # Also necessary for caching/pickling.
-    new_func.__module__ = real_globals["__name__"]
-    return new_func
+    return bodo_exec_internal(func_name, func_text, glbls, loc_vars, mod_name)
+
+
+def cached_call_internal(context, builder, impl, sig, args):
+    """Enable lower_builtin impls to be cached."""
+    return context.compile_internal(builder, impl, sig, args)
+    # The below code doesn't quite work correctly but leave it here to be
+    # fixed soon.
+
+    # First make it a cacheable njit.
+    impl = numba.njit(cache=True)(impl)
+    # Compile the impl for this signature.
+    impl.compile(sig)
+    sig_args, _ = sigutils.normalize_signature(sig)
+    # Get the compile_result for this signature.
+    call_target = impl.overloads.get(tuple(sig_args))
+    # Call the implementation.
+    return context.call_internal(builder, call_target.fndesc, sig, args)

@@ -36,7 +36,7 @@ def create_table_jit(df, table_name, conn, db_schema):
 
 def update_field_mapping(
     field_id_map: dict[str, int], field: dict[str, pt.Any], prefix: str = ""
-):
+) -> None:
     """
     Update the field_id_map to include any arrays found within this field.
     This will map every field name to its field id.
@@ -298,11 +298,11 @@ def test_datetime_metrics(
             # Time
             "C": np.array(
                 [
-                    bodo.Time(2, 46, 40, precision=9),
-                    bodo.Time(0, 59, 59, microsecond=11, precision=9),
+                    bodo.Time(2, 46, 40, precision=6),
+                    bodo.Time(0, 59, 59, microsecond=11, precision=6),
                     None,
                     None,
-                    bodo.Time(23, 45, 45, millisecond=948, precision=9),
+                    bodo.Time(23, 45, 45, millisecond=948, precision=6),
                 ]
             ),
             # Date

@@ -41,7 +41,7 @@ this_module = sys.modules[__name__]
 
 # We don't technically need to get class from the method,
 # but it's useful to avoid IDE not found errors.
-BodoRandomForestClassifierType = install_py_obj_class(
+BodoRandomForestClassifierType, _ = install_py_obj_class(
     types_name="random_forest_classifier_type",
     python_type=sklearn.ensemble.RandomForestClassifier,
     module=this_module,
@@ -167,7 +167,7 @@ def overload_model_score(
 
 # We don't technically need to get class from the method,
 # but it's useful to avoid IDE not found errors.
-BodoRandomForestRegressorType = install_py_obj_class(
+BodoRandomForestRegressorType, random_forest_regressor_type = install_py_obj_class(
     types_name="random_forest_regressor_type",
     python_type=sklearn.ensemble.RandomForestRegressor,
     module=this_module,

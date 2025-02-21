@@ -3,6 +3,7 @@
 #include <algorithm>
 
 #include "../io/_fs_io.h"
+#include "../io/arrow_compat.h"
 #include "../io/iceberg_helpers.h"
 
 // Throw an error if there is a null pointer returned
@@ -48,7 +49,7 @@ inline void verify_magic(const std::string &src, size_t idx) {
                              std::string(errmsg));
 
 // Fetches an integer field from a json object representing a BlobMetadata.
-long fetch_numeric_field(boost::json::object obj, std::string field_name) {
+int64_t fetch_numeric_field(boost::json::object obj, std::string field_name) {
     boost::json::value *as_val = obj.if_contains(field_name);
     if (as_val == nullptr) {
         invalid_blob_metadata("missing required field '" + field_name + "'");
@@ -57,7 +58,7 @@ long fetch_numeric_field(boost::json::object obj, std::string field_name) {
     if (as_int == nullptr) {
         invalid_blob_metadata("field '" + field_name + "' must be an integer");
     }
-    return (long)(*as_int);
+    return *as_int;
 }
 
 BlobMetadata BlobMetadata::from_json(boost::json::object obj) {
@@ -91,10 +92,10 @@ BlobMetadata BlobMetadata::from_json(boost::json::object obj) {
     }
 
     // Extract the required fields snapshot-id, sequence-number, offset, length
-    long snapshot_id = fetch_numeric_field(obj, "snapshot-id");
-    long sequence_number = fetch_numeric_field(obj, "sequence-number");
-    long offset = fetch_numeric_field(obj, "offset");
-    long length = fetch_numeric_field(obj, "length");
+    int64_t snapshot_id = fetch_numeric_field(obj, "snapshot-id");
+    int64_t sequence_number = fetch_numeric_field(obj, "sequence-number");
+    int64_t offset = fetch_numeric_field(obj, "offset");
+    int64_t length = fetch_numeric_field(obj, "length");
 
     // Extract the optional 'compression_codec' field
     std::optional<std::string> compression_codec = std::nullopt;
@@ -591,8 +592,7 @@ std::unique_ptr<PuffinFile> read_puffin_file(std::string puffin_loc,
 PyObject *write_puffin_file_py_entrypt(
     const char *puffin_file_loc, const char *bucket_region, int64_t snapshot_id,
     int64_t sequence_number, UpdateSketchCollection *sketches,
-    PyObject *iceberg_arrow_schema_py,
-    numba_optional<arrow::fs::FileSystem> arrow_fs,
+    PyObject *iceberg_arrow_schema_py, PyObject *pyarrow_fs,
     const char *existing_puffin_file_loc) {
     try {
         std::shared_ptr<arrow::Schema> iceberg_schema;
@@ -611,7 +611,7 @@ PyObject *write_puffin_file_py_entrypt(
         MPI_Comm_rank(MPI_COMM_WORLD, &rank);
         MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
         if (rank == 0) {
-            if (existing_puffin_path != "") {
+            if (!existing_puffin_path.empty()) {
                 auto existing_puffin =
                     read_puffin_file(existing_puffin_path, bucket_region);
                 merged_sketches = CompactSketchCollection::merge_sketches(
@@ -636,19 +636,23 @@ PyObject *write_puffin_file_py_entrypt(
                                 &fs_option, &dirname, &fname, &puffin_loc,
                                 &path_name);
             std::shared_ptr<::arrow::io::OutputStream> out_stream;
-            // If we already have a filesystem, use it
-            if (arrow_fs.has_value) {
-                std::filesystem::path out_path(dirname);
-                out_path /= fname;  // append file name to output path
-                arrow::Result<std::shared_ptr<arrow::io::OutputStream>> result =
-                    arrow_fs.value->OpenOutputStream(out_path.string());
-                CHECK_ARROW_AND_ASSIGN(result, "FileOutputStream::Open",
-                                       out_stream);
-            } else {
-                // TODO: Simplify/refactor this function. Its doing too much.
-                open_outstream(fs_option, false, "puffin", dirname, fname,
-                               puffin_loc, &out_stream, bucket_region);
+
+            if (arrow::py::import_pyarrow_wrappers()) {
+                throw std::runtime_error("Importing pyarrow_wrappers failed!");
             }
+            std::shared_ptr<arrow::fs::FileSystem> arrow_fs;
+            CHECK_ARROW_AND_ASSIGN(
+                arrow::py::unwrap_filesystem(pyarrow_fs),
+                "Error during Iceberg write: Failed to unwrap Arrow filesystem",
+                arrow_fs);
+
+            std::filesystem::path out_path(dirname);
+            out_path /= fname;  // append file name to output path
+            arrow::Result<std::shared_ptr<arrow::io::OutputStream>> result =
+                arrow_fs->OpenOutputStream(out_path.string());
+            CHECK_ARROW_AND_ASSIGN(result, "FileOutputStream::Open",
+                                   out_stream);
+
             CHECK_ARROW(out_stream->Write(serialized.data(), serialized.size()),
                         "Failed to write puffin data");
             CHECK_ARROW(out_stream->Close(), "Failed to close puffin files");

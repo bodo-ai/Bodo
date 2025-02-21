@@ -1,12 +1,14 @@
 from uuid import uuid4
 
-import bodo_iceberg_connector as bic
 import numpy as np
 import pandas as pd
+import pyarrow.fs as pa_fs
 import pytest
+from pyiceberg.catalog.rest import RestCatalog
 
 import bodo
-from bodo.io.iceberg.common import get_rest_catalog_config, get_rest_catalog_fs
+from bodo.io.iceberg.catalog import conn_str_to_catalog
+from bodo.io.iceberg.common import _fs_from_file_path
 from bodo.tests.utils import (
     _get_dist_arg,
     check_func,
@@ -50,16 +52,11 @@ def test_iceberg_tabular_read_region_detection(tabular_connection, memory_leak_c
     rest_uri, tabular_warehouse, tabular_credential = tabular_connection
     con_str = get_rest_catalog_connection_string(
         rest_uri, tabular_warehouse, tabular_credential
-    ).removeprefix("iceberg+")
-    _, token, _ = get_rest_catalog_config(con_str)
-
-    @bodo.jit
-    def f():
-        return get_rest_catalog_fs(
-            rest_uri, token, tabular_warehouse, "examples", "nyc_taxi_locations"
-        )
-
-    assert f().region == "us-east-1"
+    )
+    catalog = conn_str_to_catalog(con_str)
+    fs = _fs_from_file_path(tabular_connection, catalog._load_file_io())
+    assert isinstance(fs, pa_fs.S3FileSystem)
+    assert fs.region == "us-east-1"
 
 
 def test_iceberg_tabular_read_credential_refresh(
@@ -159,11 +156,13 @@ def test_iceberg_tabular_write_basic(
             reset_index=True,
         )
     finally:
-        delete_succeeded = run_rank0(bic.delete_table)(
-            bodo.io.iceberg.format_iceberg_conn(con_str),
-            "CI",
-            table_name,
-        )
-        assert not write_complete or delete_succeeded, (
-            f"Cleanup failed, {table_name} may need manual cleanup"
-        )
+        try:
+            run_rank0(
+                lambda: RestCatalog("rest_catalog", uri=rest_uri).purge_table(
+                    f"CI.{table_name}"
+                )
+            )()
+        except Exception:
+            assert not write_complete, (
+                f"Cleanup failed, {table_name} may need manual cleanup"
+            )

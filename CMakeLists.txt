@@ -398,9 +398,9 @@ add_custom_command(
 )
 
 python_add_library(csv_json_reader
-MODULE WITH_SOABI
-"bodo/io/_csv_json_reader.cpp"
-"bodo/io/csv_json_reader.cpp"
+  MODULE WITH_SOABI
+  "bodo/io/_csv_json_reader.cpp"
+  "bodo/io/csv_json_reader.cpp"
 )
 target_include_directories(csv_json_reader PRIVATE ${BASE_INCLUDE_DIRS} "${CMAKE_CURRENT_SOURCE_DIR}/bodo/io/" "${CMAKE_CURRENT_BINARY_DIR}/bodo/io/")
 target_link_directories(csv_json_reader PRIVATE ${PYARROW_LIB_DIR} ${CONDA_LIB_DIR} ${MPI_LIB_DIR})
@@ -648,7 +648,6 @@ if (NOT (CMAKE_BUILD_TYPE STREQUAL "Release") AND NOT DEFINED ENV{BODO_SKIP_CPP_
     "bodo/tests/test_query_profile_collector.cpp"
     "bodo/tests/test_theta_sketches.cpp"
     "bodo/tests/test_puffin.cpp"
-    "bodo/tests/test_iceberg/test_iceberg_rest_aws_credentials_provider.cpp"
     "bodo/tests/test_sorted_window_computation.cpp"
     "bodo/tests/test_thread_pool.cpp"
     "bodo/tests/test_datatypes.cpp"

@@ -38,7 +38,7 @@ this_module = sys.modules[__name__]
 
 # We don't technically need to get class from the method,
 # but it's useful to avoid IDE not found errors.
-BodoModelSelectionLeavePOutType = install_py_obj_class(
+BodoModelSelectionLeavePOutType, _ = install_py_obj_class(
     types_name="model_selection_leave_p_out_type",
     python_type=sklearn.model_selection.LeavePOut,
     module=this_module,
@@ -49,7 +49,7 @@ BodoModelSelectionLeavePOutType = install_py_obj_class(
 
 # We don't technically need to get class from the method,
 # but it's useful to avoid IDE not found errors.
-BodoModelSelectionLeavePOutGeneratorType = install_py_obj_class(
+BodoModelSelectionLeavePOutGeneratorType, _ = install_py_obj_class(
     types_name="model_selection_leave_p_out_generator_type",
     module=this_module,
     class_name="BodoModelSelectionLeavePOutGeneratorType",
@@ -213,7 +213,7 @@ def overload_model_selection_leave_p_out_get_n_splits(
 
 # We don't technically need to get class from the method,
 # but it's useful to avoid IDE not found errors.
-BodoModelSelectionKFoldType = install_py_obj_class(
+BodoModelSelectionKFoldType, _ = install_py_obj_class(
     types_name="model_selection_kfold_type",
     python_type=sklearn.model_selection.KFold,
     module=this_module,

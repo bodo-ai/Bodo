@@ -63,6 +63,7 @@ snowflake = ["snowflake-connector-python"]
 mysql = ["sqlalchemy", "PyMySQL"]
 postgres = ["sqlalchemy", "psycopg2"]
 oracle = ["sqlalchemy", "cx-Oracle", "libaio"]
+iceberg = ["pyiceberg[glue]>=0.8,<0.9"]
 huggingface_hub = ["huggingface_hub"]
 
 

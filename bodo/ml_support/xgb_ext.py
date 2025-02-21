@@ -18,7 +18,7 @@ this_module = sys.modules[__name__]
 # directly via sklearn's API
 
 
-BodoXGBClassifierType = install_py_obj_class(
+BodoXGBClassifierType, _ = install_py_obj_class(
     types_name="xgbclassifier_type",
     python_type=xgboost.XGBClassifier,
     module=this_module,
@@ -249,7 +249,7 @@ def overload_xgbclassifier_predict_proba(
 
 # Tests are in engine-e2e-tests, so added #pragma: no cover
 
-BodoXGBRegressorType = install_py_obj_class(
+BodoXGBRegressorType, _ = install_py_obj_class(
     types_name="xgbregressor_type",
     python_type=xgboost.XGBRegressor,
     module=this_module,
