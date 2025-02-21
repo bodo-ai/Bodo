@@ -2017,16 +2017,18 @@ def test_timedelta_index_unbox(timedelta_index_val, memory_leak_check):
 @pytest.fixture(
     params=[
         pytest.param([100, 110]),
-        pytest.param(np.arange(10), marks=pytest.mark.slow),
+        pytest.param(np.arange(10, dtype=np.int64), marks=pytest.mark.slow),
         pytest.param(
-            np.arange(10).view(np.dtype("timedelta64[ns]")),
+            np.arange(10, dtype=np.int64).view(np.dtype("timedelta64[ns]")),
         ),
-        pytest.param(pd.Series(np.arange(10)), marks=pytest.mark.slow),
+        pytest.param(pd.Series(np.arange(10, dtype=np.int64)), marks=pytest.mark.slow),
         pytest.param(
-            pd.Series(np.arange(10).view(np.dtype("timedelta64[ns]"))),
+            pd.Series(np.arange(10, dtype=np.int64).view(np.dtype("timedelta64[ns]"))),
             marks=pytest.mark.slow,
         ),
-        pytest.param(pd.TimedeltaIndex(np.arange(10)), marks=pytest.mark.slow),
+        pytest.param(
+            pd.TimedeltaIndex(np.arange(10, dtype=np.int64)), marks=pytest.mark.slow
+        ),
     ],
 )
 def tdi_data(request):
