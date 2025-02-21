@@ -300,7 +300,7 @@ class RESTConnectionType(IcebergConnectionType):
     The runtime can get a connection string using the conn_str attribute.
     """
 
-    def __init__(self, rest_uri, warehouse, scope, default_schema):
+    def __init__(self, rest_uri, warehouse, scope):
         self.warehouse = warehouse
         token = os.getenv("__BODOSQL_REST_TOKEN")
         assert token is not None, (
@@ -310,7 +310,7 @@ class RESTConnectionType(IcebergConnectionType):
         self.conn_str = get_conn_str(rest_uri, warehouse, token=token, scope=scope)
 
         super().__init__(
-            name=f"RESTConnectionType({warehouse=}, {rest_uri=}, conn_str=*********, {scope=}, {default_schema=})",
+            name=f"RESTConnectionType({warehouse=}, {rest_uri=}, conn_str=*********, {scope=})",
         )
 
 
