@@ -9,12 +9,14 @@ from bodo.tests.caching_tests.caching_tests_common import (  # noqa
 )
 from bodo.tests.utils import (
     check_caching,
-    pytest_mark_tabular,
+    pytest_mark_polaris,
 )
 
 
-@pytest_mark_tabular
-def test_tabular_catalog_read_caching(fn_distribution, is_cached, tabular_catalog):
+@pytest_mark_polaris
+def test_rest_catalog_read_caching(
+    fn_distribution, is_cached, polaris_catalog, polaris_catalog_iceberg_read_df
+):
     def impl(bc, query):
         return bc.sql(query)
 
@@ -24,23 +26,23 @@ def test_tabular_catalog_read_caching(fn_distribution, is_cached, tabular_catalo
     # current test to be cached.
     check_cache = is_cached == "y"
 
-    query = 'SELECT "location_id" FROM "examples"."nyc_taxi_locations" ORDER BY "location_id"'
+    query = 'SELECT "A" FROM "CI"."BODOSQL_ICEBERG_READ_TEST"'
 
-    bc = bodosql.BodoSQLContext(catalog=tabular_catalog)
+    bc = bodosql.BodoSQLContext(catalog=polaris_catalog)
 
     check_caching(
         impl,
         (bc, query),
         check_cache,
         input_dist=fn_distribution,
-        py_output=pd.DataFrame({"location_id": pd.Series(list(range(1, 266)))}),
+        py_output=polaris_catalog_iceberg_read_df[["A"]],
         sort_output=True,
         reset_index=True,
     )
 
 
-@pytest_mark_tabular
-def test_tabular_catalog_write_caching(fn_distribution, is_cached, tabular_catalog):
+@pytest_mark_polaris
+def test_rest_catalog_write_caching(fn_distribution, is_cached, polaris_catalog):
     def impl(bc, write_query, read_query):
         # Write step
         bc.sql(write_query)
@@ -70,7 +72,7 @@ def test_tabular_catalog_write_caching(fn_distribution, is_cached, tabular_catal
         }
     )
 
-    bc = bodosql.BodoSQLContext(catalog=tabular_catalog)
+    bc = bodosql.BodoSQLContext(catalog=polaris_catalog)
     created = False
     try:
         # Make sure the table exists so the the read query doesn't fail to compile
