@@ -3,8 +3,6 @@ from pathlib import Path
 
 import pandas as pd
 import pytest
-
-# Add test harnesses when adding new catalogs.
 from ddltest_harness import DDLTestHarness
 from filesystem_test_harness import FilesystemTestHarness
 from numba.core.config import shutil
@@ -13,8 +11,11 @@ from rest_test_harness import RestTestHarness
 import bodo
 import bodosql
 from bodo.mpi4py import MPI
-from bodo.tests.utils import pytest_one_rank, pytest_polaris
+from bodo.tests.utils import pytest_one_rank, pytest_polaris, temp_env_override
 from bodo.utils.typing import BodoError
+
+# Add test harnesses when adding new catalogs.
+from BodoSQL.bodosql.bodosql_types.rest_catalog import RESTCatalog
 from bodosql.tests.utils import assert_equal_par, replace_type_varchar
 
 pytestmark = pytest_polaris + pytest_one_rank
@@ -45,7 +46,23 @@ def filesystem_test_harness(test_harness_path):
 
 @pytest.fixture
 def rest_test_harness(aws_polaris_catalog, aws_polaris_connection):
-    return RestTestHarness(aws_polaris_catalog, aws_polaris_connection)
+    # This is needed for Spark
+    with temp_env_override({"AWS_REGION": "us-east-2"}):
+        catalog = RESTCatalog(
+            aws_polaris_catalog.warehouse,
+            aws_polaris_catalog.rest_uri,
+            aws_polaris_catalog.token,
+            aws_polaris_catalog.credential,
+            aws_polaris_catalog.scope,
+            "default",
+        )
+        bc = bodosql.BodoSQLContext(catalog=catalog)
+        bc.sql("CREATE SCHEMA IF NOT EXISTS BODOSQL_DDL_TESTS")
+        bc.sql("CREATE SCHEMA IF NOT EXISTS BODOSQL_DDL_TESTS_ALTERNATE")
+        harness = RestTestHarness(catalog, aws_polaris_connection)
+        assert harness.check_schema_exists("BODOSQL_DDL_TESTS")
+        assert harness.check_schema_exists("BODOSQL_DDL_TESTS_ALTERNATE")
+        yield harness
 
 
 def trim_describe_table_output(output: pd.DataFrame):
@@ -78,17 +95,17 @@ def test_create_schema(request, harness_name: str, ifExists: bool):
         # Query
         ifExistsClause = "IF NOT EXISTS" if ifExists else ""
         bodo_output = harness.run_bodo_query(
-            f"CREATE SCHEMA {ifExistsClause} CI.{schema_name}"
+            f"CREATE SCHEMA {ifExistsClause} {schema_name}"
         )
         py_output = pd.DataFrame(
-            {"STATUS": [f"Schema 'CI.{schema_name}' successfully created."]}
+            {"STATUS": [f"Schema '{schema_name}' successfully created."]}
         )
         assert_equal_par(bodo_output, py_output)
 
         # Check schema exists
         assert harness.check_schema_exists(schema_name)
     finally:
-        harness.run_spark_query(f"DROP SCHEMA IF EXISTS CI.{schema_name}")
+        harness.run_spark_query(f"DROP SCHEMA IF EXISTS {schema_name}")
 
 
 @pytest.mark.parametrize(
@@ -104,7 +121,7 @@ def test_create_schema_already_exists(request, harness_name: str):
     schema_name = harness.gen_unique_id("TEST_SCHEMA_DDL").upper()
     try:
         # Query
-        bodo_output = harness.run_bodo_query(f"CREATE SCHEMA CI.{schema_name}")
+        bodo_output = harness.run_bodo_query(f"CREATE SCHEMA {schema_name}")
         py_output = pd.DataFrame(
             {"STATUS": [f"Schema '{schema_name}' successfully created."]}
         )
@@ -115,10 +132,10 @@ def test_create_schema_already_exists(request, harness_name: str):
 
         # Create schema again
         with pytest.raises(BodoError, match="already exists"):
-            bodo_output = harness.run_bodo_query(f"CREATE SCHEMA CI.{schema_name}")
+            bodo_output = harness.run_bodo_query(f"CREATE SCHEMA {schema_name}")
 
     finally:
-        harness.run_spark_query(f"DROP SCHEMA IF EXISTS CI.{schema_name}")
+        harness.run_spark_query(f"DROP SCHEMA IF EXISTS {schema_name}")
 
 
 @pytest.mark.parametrize(
@@ -134,7 +151,7 @@ def test_create_schema_ifnotexists_already_exists(request, harness_name: str):
     schema_name = harness.gen_unique_id("TEST_SCHEMA_DDL").upper()
     try:
         # Query
-        bodo_output = harness.run_bodo_query(f"CREATE SCHEMA CI.{schema_name}")
+        bodo_output = harness.run_bodo_query(f"CREATE SCHEMA {schema_name}")
         py_output = pd.DataFrame(
             {"STATUS": [f"Schema '{schema_name}' successfully created."]}
         )
@@ -145,14 +162,14 @@ def test_create_schema_ifnotexists_already_exists(request, harness_name: str):
 
         # Create schema again
         bodo_output = harness.run_bodo_query(
-            f"CREATE SCHEMA IF NOT EXISTS CI.{schema_name}"
+            f"CREATE SCHEMA IF NOT EXISTS {schema_name}"
         )
         py_output = pd.DataFrame(
             {"STATUS": [f"'{schema_name}' already exists, statement succeeded."]}
         )
         assert_equal_par(bodo_output, py_output)
     finally:
-        harness.run_spark_query(f"DROP SCHEMA IF EXISTS CI.{schema_name}")
+        harness.run_spark_query(f"DROP SCHEMA IF EXISTS {schema_name}")
 
 
 # DESCRIBE SCHEMA

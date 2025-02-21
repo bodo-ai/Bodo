@@ -14,6 +14,7 @@ class RestTestHarness(DDLTestHarness):
                 warehouse=warehouse,
                 uri=uri,
                 credential=credential,
+                default_schema="default",
             )
         )
         self.bc = bodosql.BodoSQLContext(catalog=polaris_catalog)
