@@ -2242,7 +2242,7 @@ def test_series_prod(memory_leak_check):
         A = S.product(min_count=min_count)
         return A
 
-    S_int = pd.Series(1 + np.arange(20))
+    S_int = pd.Series(1 + np.arange(20, dtype=np.int64))
     S_float = pd.Series([np.nan, 1.0, 2.0, 3.0])
     check_func(impl, (S_int,))
     check_func(impl_skipna, (S_float,))

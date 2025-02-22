@@ -81,7 +81,9 @@ def test_df_index_fix():
 
     def impl():
         with bodo.objmode(df=df_type1):
-            df = pd.DataFrame({"A": np.arange(10)}, index=np.arange(10) + 1)
+            df = pd.DataFrame(
+                {"A": np.arange(10, dtype=np.int64)}, index=np.arange(10) + 1
+            )
         return df
 
     check_func(impl, (), reset_index=True, only_seq=True)
