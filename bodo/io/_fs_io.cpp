@@ -388,8 +388,12 @@ void open_outstream(Bodo_Fs::FsEnum fs_option, bool is_parallel,
             if (is_parallel) {
                 std::filesystem::path out_path(dirname);
                 out_path /= fname;  // append file name to output path
-                open_file_outstream(fs_option, file_type, out_path.string(),
-                                    s3_fs, nullptr, out_stream);
+                std::string out_path_str = out_path.string();
+                // Avoid "\" generated on Windows for remote object storage
+                std::replace(out_path_str.begin(), out_path_str.end(), '\\',
+                             '/');
+                open_file_outstream(fs_option, file_type, out_path_str, s3_fs,
+                                    nullptr, out_stream);
             } else {
                 open_file_outstream(fs_option, file_type, fname, s3_fs, nullptr,
                                     out_stream);
@@ -482,10 +486,12 @@ void open_outstream(Bodo_Fs::FsEnum fs_option, bool is_parallel,
             std::shared_ptr<::arrow::py::fs::PyFileSystem> fs;
             gcs_get_fs(&fs);
             if (is_parallel) {
-                std::filesystem::path out_path(dirname);
-                out_path /= fname;
-                open_file_outstream_gcs(fs_option, file_type, out_path.string(),
-                                        fs, out_stream);
+                std::string out_path_str = out_path.string();
+                // Avoid "\" generated on Windows for remote object storage
+                std::replace(out_path_str.begin(), out_path_str.end(), '\\',
+                             '/');
+                open_file_outstream_gcs(fs_option, file_type, out_path_str, fs,
+                                        out_stream);
             } else {
                 open_file_outstream_gcs(fs_option, file_type, fname, fs,
                                         out_stream);
