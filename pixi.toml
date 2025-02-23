@@ -108,13 +108,11 @@ snowflake-connector-python = "*"
 xlrd = "*"
 xlsxwriter = "*"
 openpyxl = "*"
+cx_oracle = "*"
 
 [target.linux-64.dependencies]
-cx_oracle = "*"
 pyarrow = { version = "==18.1.0", channel = "bodo.ai" }
 libarrow = { version = "==18.1.0", channel = "bodo.ai" }
-[target.osx-64.dependencies]
-cx_oracle = "*"
 
 # Runtime C++ Deps
 [feature.rcpp.dependencies]
