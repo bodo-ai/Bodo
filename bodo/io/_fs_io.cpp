@@ -486,6 +486,8 @@ void open_outstream(Bodo_Fs::FsEnum fs_option, bool is_parallel,
             std::shared_ptr<::arrow::py::fs::PyFileSystem> fs;
             gcs_get_fs(&fs);
             if (is_parallel) {
+                std::filesystem::path out_path(dirname);
+                out_path /= fname;
                 std::string out_path_str = out_path.string();
                 // Avoid "\" generated on Windows for remote object storage
                 std::replace(out_path_str.begin(), out_path_str.end(), '\\',
