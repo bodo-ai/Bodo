@@ -240,6 +240,21 @@ for file in $DYLIBS_DIR/*; do
 done
 """
 
+[tool.cibuildwheel.windows]
+# Can't use pytest because we don't include tests in the wheel
+test-command = """
+BODO_NUM_WORKERS=2 python -c '\
+import bodo
+import pandas as pd
+pd.DataFrame({"a": [1, 2, 3]}).to_parquet("test.parquet")
+
+@bodo.jit
+def f():
+    df = pd.read_parquet("test.parquet")
+    return df.a.sum()
+assert f() == 6' && \
+"""
+
 # ---------------------------------------- PR CI ---------------------------------------- #
 [tool.coverage.run]
 source = ["bodo"]
