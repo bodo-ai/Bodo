@@ -81,11 +81,10 @@ jobs:
     continueOnError: true
     displayName: Export Environment Spec
 
-  - task: DockerInstaller@0
-
   - bash: |
       set -exo pipefail
       eval "$(pixi shell-hook --shell bash -e azure)"
+      sudo apt-get install containerd.io docker-ce
       sudo service docker start
 
       unamestr=`uname`

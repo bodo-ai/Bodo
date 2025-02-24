@@ -70,8 +70,9 @@ jobs:
 
   - script: |
       set -exo pipefail
-      sudo service docker start
       eval "$(pixi shell-hook --shell bash -e azure)"
+      sudo apt-get install containerd.io docker-ce
+      sudo service docker start
 
       python -c "import bodo; print(bodo.__version__)"
       python -c "import bodosql; print(bodosql.__version__)"
