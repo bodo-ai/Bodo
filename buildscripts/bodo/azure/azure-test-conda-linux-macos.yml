@@ -84,7 +84,7 @@ jobs:
   - bash: |
       set -exo pipefail
       eval "$(pixi shell-hook --shell bash -e azure)"
-      sudo apt-get install containerd.io docker-ce
+      sudo apt-get install -y docker.io
       sudo service docker start
 
       unamestr=`uname`
