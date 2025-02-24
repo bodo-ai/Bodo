@@ -70,6 +70,7 @@ jobs:
 
   - script: |
       set -exo pipefail
+      sudo service docker start
       eval "$(pixi shell-hook --shell bash -e azure)"
 
       python -c "import bodo; print(bodo.__version__)"

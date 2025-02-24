@@ -67,6 +67,7 @@ jobs:
 
   - bash: |
       set -exo pipefail
+      sudo service docker start
       eval "$(pixi shell-hook --shell bash -e azure)"
 
       wget -q -O - "https://adlsresources.blob.core.windows.net/adlsresources/hadoop-3.3.2.tar.gz" | sudo tar -xzf - -C /opt
