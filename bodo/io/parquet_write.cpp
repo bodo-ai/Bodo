@@ -260,11 +260,10 @@ int64_t pq_write(const char *_path_name,
     if (arrow_fs != nullptr) {
         std::filesystem::path out_path(dirname);
         out_path /= fname;  // append file name to output path
-        std::string out_path_str = out_path.string();
-        if (arrow_fs->type_name() != "local") {
-            // Avoid "\" generated on Windows for remote object storage
-            std::ranges::replace(out_path_str, '\\', '/');
-        }
+        // Avoid "\" generated on Windows for remote object storage
+        std::string out_path_str = arrow_fs->type_name() == "local"
+                                       ? out_path.string()
+                                       : out_path.generic_string();
         arrow::Result<std::shared_ptr<arrow::io::OutputStream>> result =
             arrow_fs->OpenOutputStream(out_path_str);
         CHECK_ARROW_AND_ASSIGN(result, "FileOutputStream::Open", out_stream);

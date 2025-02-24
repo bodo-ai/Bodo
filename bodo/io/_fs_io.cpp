@@ -389,9 +389,9 @@ void open_outstream(Bodo_Fs::FsEnum fs_option, bool is_parallel,
             if (is_parallel) {
                 std::filesystem::path out_path(dirname);
                 out_path /= fname;  // append file name to output path
-                std::string out_path_str = out_path.string();
-                // Avoid "\" generated on Windows for remote object storage
-                std::ranges::replace(out_path_str, '\\', '/');
+                // Using generic_string() to avoid "\" generated on Windows for
+                // remote object storage
+                std::string out_path_str = out_path.generic_string();
                 open_file_outstream(fs_option, file_type, out_path_str, s3_fs,
                                     nullptr, out_stream);
             } else {
@@ -488,9 +488,9 @@ void open_outstream(Bodo_Fs::FsEnum fs_option, bool is_parallel,
             if (is_parallel) {
                 std::filesystem::path out_path(dirname);
                 out_path /= fname;
-                std::string out_path_str = out_path.string();
-                // Avoid "\" generated on Windows for remote object storage
-                std::ranges::replace(out_path_str, '\\', '/');
+                // Using generic_string() to avoid "\" generated on Windows for
+                // remote object storage
+                std::string out_path_str = out_path.generic_string();
                 open_file_outstream_gcs(fs_option, file_type, out_path_str, fs,
                                         out_stream);
             } else {
