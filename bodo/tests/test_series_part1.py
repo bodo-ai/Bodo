@@ -1,5 +1,6 @@
 import datetime
 import operator
+import sys
 from decimal import Decimal
 
 import numba
@@ -2403,6 +2404,14 @@ def test_series_unary_ufunc_np_call(memory_leak_check):
 def test_series_binary_ufunc(ufunc, memory_leak_check):
     def test_impl(S1, S2):
         return ufunc(S1, S2)
+
+    # Numpy <2 seems to have a bug with ldexp on Windows for int64
+    if (
+        ufunc == np.ldexp
+        and sys.platform == "win32"
+        and np.lib.NumpyVersion(np.__version__) < "2.0.0b1"
+    ):
+        return
 
     S = pd.Series([4, 6, 7, 1], [3, 5, 0, 7], name="ABC")
     A = np.array([1, 3, 7, 11])

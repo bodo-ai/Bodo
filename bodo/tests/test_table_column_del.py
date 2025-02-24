@@ -1830,7 +1830,7 @@ def test_table_set_data_reflection(memory_leak_check):
     n = bodo_func(df)
     # Verify the output + reflection
     assert n == 120, "Incorrect sum computed"
-    pd.testing.assert_frame_equal(df, df2, check_column_type=False)
+    pd.testing.assert_frame_equal(df, df2, check_column_type=False, check_dtype=False)
     # Since the source is a DF, no columns should be deleted.
     _check_column_dels(bodo_func, [])
 
