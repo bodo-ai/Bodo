@@ -1,4 +1,5 @@
 #include <Python.h>
+#include <algorithm>
 #include <filesystem>
 #include <iostream>
 #include <sstream>
@@ -390,8 +391,7 @@ void open_outstream(Bodo_Fs::FsEnum fs_option, bool is_parallel,
                 out_path /= fname;  // append file name to output path
                 std::string out_path_str = out_path.string();
                 // Avoid "\" generated on Windows for remote object storage
-                std::replace(out_path_str.begin(), out_path_str.end(), '\\',
-                             '/');
+                std::ranges::replace(out_path_str, '\\', '/');
                 open_file_outstream(fs_option, file_type, out_path_str, s3_fs,
                                     nullptr, out_stream);
             } else {
@@ -490,8 +490,7 @@ void open_outstream(Bodo_Fs::FsEnum fs_option, bool is_parallel,
                 out_path /= fname;
                 std::string out_path_str = out_path.string();
                 // Avoid "\" generated on Windows for remote object storage
-                std::replace(out_path_str.begin(), out_path_str.end(), '\\',
-                             '/');
+                std::ranges::replace(out_path_str, '\\', '/');
                 open_file_outstream_gcs(fs_option, file_type, out_path_str, fs,
                                         out_stream);
             } else {

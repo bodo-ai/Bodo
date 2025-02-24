@@ -19,6 +19,8 @@
 #include <parquet/arrow/writer.h>
 #include <parquet/file_writer.h>
 
+#include <algorithm>
+
 #include "../libs/_array_hash.h"
 #include "../libs/_bodo_common.h"
 #include "../libs/_bodo_to_arrow.h"
@@ -261,7 +263,7 @@ int64_t pq_write(const char *_path_name,
         std::string out_path_str = out_path.string();
         if (arrow_fs->type_name() != "local") {
             // Avoid "\" generated on Windows for remote object storage
-            std::replace(out_path_str.begin(), out_path_str.end(), '\\', '/');
+            std::ranges::replace(out_path_str, '\\', '/');
         }
         arrow::Result<std::shared_ptr<arrow::io::OutputStream>> result =
             arrow_fs->OpenOutputStream(out_path_str);
