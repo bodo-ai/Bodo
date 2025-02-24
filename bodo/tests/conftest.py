@@ -384,7 +384,10 @@ def s3_bucket_helper(minio_server, datapath, bucket_name, region="us-east-1"):
                 rel_path = os.path.join(
                     "example_deltalake", os.path.relpath(full_path, path)
                 )
-                s3.meta.client.upload_file(full_path, bucket_name, rel_path)
+                # Avoid "\" generated on Windows that causes object name errors
+                s3.meta.client.upload_file(
+                    full_path, bucket_name, rel_path.replace("\\", "/")
+                )
 
     bodo.barrier()
     return bucket_name
