@@ -202,7 +202,7 @@ def fit_multinomial_nb(
         n_features * n_effective_classes
     )
     # Get count of elements and displacements for each rank.
-    sizes = np.ones(nranks) * (total_cols // nranks)
+    sizes = np.ones(nranks, dtype=np.int64) * (total_cols // nranks)
     remainder_cols = total_cols % nranks
     for rank in range(remainder_cols):
         sizes[rank] += 1

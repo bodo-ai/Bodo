@@ -482,7 +482,7 @@ def test_index_values(index, memory_leak_check):
             marks=pytest.mark.slow,
         ),
         (pd.Index([1, 2, 3, 4, 5]), pd.Series([2, 4, 6, 8, 10])),
-        (pd.Index([1, 2, 3, 4, 5]), np.array([2, 4, 6, 8, 10])),
+        (pd.Index([1, 2, 3, 4, 5]), np.array([2, 4, 6, 8, 10], dtype=np.int64)),
         pytest.param(
             (pd.Index(list(range(-5, 100000))), pd.Index(list(range(100005)))),
             marks=pytest.mark.slow,
@@ -2017,16 +2017,18 @@ def test_timedelta_index_unbox(timedelta_index_val, memory_leak_check):
 @pytest.fixture(
     params=[
         pytest.param([100, 110]),
-        pytest.param(np.arange(10), marks=pytest.mark.slow),
+        pytest.param(np.arange(10, dtype=np.int64), marks=pytest.mark.slow),
         pytest.param(
-            np.arange(10).view(np.dtype("timedelta64[ns]")),
+            np.arange(10, dtype=np.int64).view(np.dtype("timedelta64[ns]")),
         ),
-        pytest.param(pd.Series(np.arange(10)), marks=pytest.mark.slow),
+        pytest.param(pd.Series(np.arange(10, dtype=np.int64)), marks=pytest.mark.slow),
         pytest.param(
-            pd.Series(np.arange(10).view(np.dtype("timedelta64[ns]"))),
+            pd.Series(np.arange(10, dtype=np.int64).view(np.dtype("timedelta64[ns]"))),
             marks=pytest.mark.slow,
         ),
-        pytest.param(pd.TimedeltaIndex(np.arange(10)), marks=pytest.mark.slow),
+        pytest.param(
+            pd.TimedeltaIndex(np.arange(10, dtype=np.int64)), marks=pytest.mark.slow
+        ),
     ],
 )
 def tdi_data(request):
