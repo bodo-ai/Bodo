@@ -427,7 +427,7 @@ def get_fpath_without_protocol_prefix(
         tuple[str | list[str], str]: Filepath(s) without the prefix
             and the prefix itself.
     """
-    if protocol in {"abfs", "abfss"}:
+    if protocol in {"abfs", "abfss"} and bodo.enable_azure_fs:  # pragma: no cover
         # PyArrow AzureBlobFileSystem is initialized with account_name only
         # so the host / container name should be included in the files
         prefix = f"{protocol}://"
@@ -450,7 +450,7 @@ def get_fpath_without_protocol_prefix(
     prefix = ""
     if protocol == "s3":
         prefix = "s3://"
-    elif protocol == "hdfs":
+    elif protocol in {"hdfs", "abfs", "abfss"}:
         # HDFS filesystem is initialized with host:port info. Once
         # initialized, the filesystem needs the <protocol>://<host><port>
         # prefix removed to query and access files

@@ -1520,11 +1520,11 @@ SortLimits StreamSortLimitOffsetState::ComputeLocalLimit(
     size_t limit = this->sortlimit.limit;
     size_t offset = this->sortlimit.offset;
     std::vector<size_t> nrows_collect(n_pes);
-    CHECK_MPI(
-        MPI_Allgather(&local_nrows, 1, MPI_UNSIGNED_LONG, nrows_collect.data(),
-                      1, MPI_UNSIGNED_LONG, MPI_COMM_WORLD),
-        "StreamSortLimitOffsetState::ComputeLocalLimit: MPI error on "
-        "MPI_Allgather:");
+    CHECK_MPI(MPI_Allgather(&local_nrows, 1, MPI_UNSIGNED_LONG_LONG,
+                            nrows_collect.data(), 1, MPI_UNSIGNED_LONG_LONG,
+                            MPI_COMM_WORLD),
+              "StreamSortLimitOffsetState::ComputeLocalLimit: MPI error on "
+              "MPI_Allgather:");
     size_t total_rows_before = 0;
     for (int64_t i = 0; i < myrank; i++) {
         total_rows_before += nrows_collect[i];

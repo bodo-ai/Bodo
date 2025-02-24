@@ -298,16 +298,16 @@ bodo::tests::suite memory_budget_tests([] {
 
     bodo::tests::test("test_rel_op_min_alloc", [] {
         auto comptroller = OperatorComptroller::Default();
-        comptroller->Initialize(4L * 1024 * 1024 * 1024);
+        comptroller->Initialize(4LL * 1024 * 1024 * 1024);
         comptroller->RegisterOperator(0, OperatorType::JOIN, 0, 5, 248);
         comptroller->RegisterOperator(25, OperatorType::ACCUMULATE_TABLE, 0, 1,
                                       0);
         comptroller->RegisterOperator(22, OperatorType::JOIN, 4, 5,
-                                      1024L * 1024 * 1024);
+                                      1024LL * 1024 * 1024);
         comptroller->RegisterOperator(56, OperatorType::ACCUMULATE_TABLE, 2, 5,
                                       0);
         comptroller->RegisterOperator(60, OperatorType::ACCUMULATE_TABLE, 5, 5,
-                                      1024L * 1024 * 1024);
+                                      1024LL * 1024 * 1024);
         comptroller->ComputeSatisfiableBudgets();
 
         // Operator 0 should be given at least 16MiB
@@ -321,12 +321,12 @@ bodo::tests::suite memory_budget_tests([] {
         bodo::tests::check(comptroller->GetOperatorBudget(56) == 0);
         // The rest should be as expected
         bodo::tests::check(comptroller->GetOperatorBudget(22) >
-                           1.99 * 1024L * 1024 * 1024);
+                           1.99 * 1024LL * 1024 * 1024);
         bodo::tests::check(comptroller->GetOperatorBudget(22) <
-                           2L * 1024L * 1024 * 1024);
+                           2L * 1024LL * 1024 * 1024);
         bodo::tests::check(comptroller->GetOperatorBudget(60) >
-                           1.99 * 1024L * 1024 * 1024);
+                           1.99 * 1024LL * 1024 * 1024);
         bodo::tests::check(comptroller->GetOperatorBudget(60) <
-                           2L * 1024L * 1024 * 1024);
+                           2L * 1024LL * 1024 * 1024);
     });
 });

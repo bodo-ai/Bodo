@@ -1589,15 +1589,15 @@ def test_pivot_table_index_none(memory_leak_check):
         # Integer values
         pd.DataFrame(
             {
-                "A": np.arange(10),
+                "A": np.arange(10, dtype=np.int64),
                 "B": ["teq", "b", "ce", "32", "re2"] * 2,
-                "C": np.arange(10),
+                "C": np.arange(10, dtype=np.int64),
             }
         ),
         # String values
         pd.DataFrame(
             {
-                "A": np.arange(10),
+                "A": np.arange(10, dtype=np.int64),
                 "B": ["teq", "b", "ce", "32", "re2"] * 2,
                 "C": [str(i) for i in range(10)],
             }

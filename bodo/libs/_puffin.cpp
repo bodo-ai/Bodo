@@ -49,7 +49,7 @@ inline void verify_magic(const std::string &src, size_t idx) {
                              std::string(errmsg));
 
 // Fetches an integer field from a json object representing a BlobMetadata.
-long fetch_numeric_field(boost::json::object obj, std::string field_name) {
+int64_t fetch_numeric_field(boost::json::object obj, std::string field_name) {
     boost::json::value *as_val = obj.if_contains(field_name);
     if (as_val == nullptr) {
         invalid_blob_metadata("missing required field '" + field_name + "'");
@@ -58,7 +58,7 @@ long fetch_numeric_field(boost::json::object obj, std::string field_name) {
     if (as_int == nullptr) {
         invalid_blob_metadata("field '" + field_name + "' must be an integer");
     }
-    return (long)(*as_int);
+    return *as_int;
 }
 
 BlobMetadata BlobMetadata::from_json(boost::json::object obj) {
@@ -92,10 +92,10 @@ BlobMetadata BlobMetadata::from_json(boost::json::object obj) {
     }
 
     // Extract the required fields snapshot-id, sequence-number, offset, length
-    long snapshot_id = fetch_numeric_field(obj, "snapshot-id");
-    long sequence_number = fetch_numeric_field(obj, "sequence-number");
-    long offset = fetch_numeric_field(obj, "offset");
-    long length = fetch_numeric_field(obj, "length");
+    int64_t snapshot_id = fetch_numeric_field(obj, "snapshot-id");
+    int64_t sequence_number = fetch_numeric_field(obj, "sequence-number");
+    int64_t offset = fetch_numeric_field(obj, "offset");
+    int64_t length = fetch_numeric_field(obj, "length");
 
     // Extract the optional 'compression_codec' field
     std::optional<std::string> compression_codec = std::nullopt;

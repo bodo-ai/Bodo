@@ -570,7 +570,7 @@ def getfs(
         import fsspec
 
         return PyFileSystem(FSSpecHandler(fsspec.filesystem("http")))
-    elif protocol in {"abfs", "abfss"}:  # pragma: no cover
+    elif protocol in {"abfs", "abfss"} and bodo.enable_azure_fs:  # pragma: no cover
         if not storage_options:
             storage_options = {}
         if "account_name" not in storage_options:
@@ -582,7 +582,7 @@ def getfs(
                 storage_options["account_name"] = account_name
 
         return abfs_get_fs(storage_options)
-    elif protocol == "hdfs":  # pragma: no cover
+    elif protocol in {"hdfs", "abfs", "abfss"}:  # pragma: no cover
         return (
             get_hdfs_fs(fpath) if not isinstance(fpath, list) else get_hdfs_fs(fpath[0])
         )
@@ -652,7 +652,11 @@ def directory_of_files_common_filter(fname):
         fname.endswith(".crc")  # Checksums
         or fname.endswith("_$folder$")  # HDFS directories in S3
         or (
-            fname.startswith(".") and not fname.startswith("./")
+            fname.startswith(".")
+            and not fname.startswith("./")
+            and not fname.startswith("../")
+            and not fname.startswith(".\\")
+            and not fname.startswith("..\\\\")
         )  # Hidden files starting with .
         or fname.startswith("_")
         and fname != "_delta_log"  # Hidden files starting with _ skip deltalake
