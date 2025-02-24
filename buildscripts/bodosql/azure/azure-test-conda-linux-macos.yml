@@ -66,13 +66,12 @@ jobs:
     continueOnError: true
     displayName: Export Environment Spec
 
-  - task: DockerInstaller@0
-
   - script: |
       set -exo pipefail
       eval "$(pixi shell-hook --shell bash -e azure)"
       sudo apt-get install -y docker.io
       sudo service docker start
+      newgrp docker
 
       python -c "import bodo; print(bodo.__version__)"
       python -c "import bodosql; print(bodosql.__version__)"
