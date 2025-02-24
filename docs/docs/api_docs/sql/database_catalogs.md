@@ -223,6 +223,50 @@ To access S3 BodoSQL uses the following environment variables to connect to S3:
 If you encounter any issues connecting to s3 or accessing a table, please ensure that these environment variables are set.
 For more information please refer to the [AWS documentation.](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-envvars.html)
 
+## RESTCatalog {#REST-catalog-api}
+
+The `RESTCatalog` allows users to read and write tables to and from REST Iceberg catalogs.
+To use this catalog, you will need to provide the uri of the rest catalog and a token or credential.
+
+```py
+catalog = bodosql.RESTTablesCatalog(
+    warehouse="warehouse_name",
+    rest_uri="http://rest_uri",
+    token="token",
+)
+bc = bodosql.BodoSQLContext(catalog=catalog)
+df = bc.sql("SELECT * FROM MY_SCHEMA.MY_TABLE")
+```
+
+When constructing a query you must follow the BodoSQL rules for [identifier case sensitivity][identifier-case-sensitivity].
+### API Reference
+
+``` python
+bodosql.RESTCatalog(
+    warehouse: str,
+    rest_uri: str,
+    token: str | None = None,
+    credential: str | None = None,
+    scope: str | None = None,
+    default_schema: str | None = None)
+```
+    ***Arguments***
+
+    - `warehouse`: Name of the REST Iceberg catalog warehuose to connect to
+    - rest_uri: URI of the REST Iceberg catalog to connect to
+    - token: Token to use for authentication, if credential is not provided
+    - credential: Credential to use for authentication, if token is not provided
+    - scope: Scope to authenticate with, not always required
+    - default_schema: Default schema to use when resolving tables. If not provided, the root schema is used.
+
+#### Supported Query Types
+
+The `RESTCatalog` currently supports the following types of SQL queries:
+
+  * `#!sql SELECT`
+  * `#!sql CREATE TABLE AS`
+
+
 ## GlueCatalog {#glue-catalog-api}
 
 The `GlueCatalog` allows users to read and write tables using AWS Glue.

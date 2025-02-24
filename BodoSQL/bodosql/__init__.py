@@ -9,10 +9,10 @@ from bodosql.bodosql_types.snowflake_catalog import (
     SnowflakeCatalog,
     SnowflakeCatalogType,
 )
-from bodosql.bodosql_types.tabular_catalog import (
-    TabularCatalog,
-    TabularCatalogType,
-    get_tabular_connection,
+from bodosql.bodosql_types.rest_catalog import (
+    RESTCatalog,
+    RESTCatalogType,
+    get_REST_connection,
 )
 from bodosql.bodosql_types.glue_catalog import (
     GlueCatalog,

@@ -84,6 +84,9 @@ jobs:
   - bash: |
       set -exo pipefail
       eval "$(pixi shell-hook --shell bash -e azure)"
+      sudo apt-get install -y docker.io
+      sudo service docker start
+      newgrp docker
 
       unamestr=`uname`
       if [[ "$unamestr" == 'Linux' ]]; then

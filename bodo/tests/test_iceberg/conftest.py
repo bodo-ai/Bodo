@@ -245,6 +245,24 @@ def aws_polaris_warehouse(polaris_token, polaris_server, polaris_package):
                 )
             ),
         )
+        root_client.add_grant_to_catalog_role(
+            catalog_name,
+            "catalog_admin",
+            AddGrantRequest(
+                grant=CatalogGrant(
+                    type="catalog", privilege=CatalogPrivilege.CATALOG_MANAGE_ACCESS
+                )
+            ),
+        )
+        root_client.add_grant_to_catalog_role(
+            catalog_name,
+            "catalog_admin",
+            AddGrantRequest(
+                grant=CatalogGrant(
+                    type="catalog", privilege=CatalogPrivilege.CATALOG_MANAGE_METADATA
+                )
+            ),
+        )
 
         catalog_client = CatalogApiClient(
             Configuration(
@@ -256,6 +274,10 @@ def aws_polaris_warehouse(polaris_token, polaris_server, polaris_package):
         catalog_api.create_namespace(
             prefix=catalog_name,
             create_namespace_request=CreateNamespaceRequest(namespace=["CI"]),
+        )
+        catalog_api.create_namespace(
+            prefix=catalog_name,
+            create_namespace_request=CreateNamespaceRequest(namespace=["default"]),
         )
 
         return catalog_name
@@ -326,6 +348,24 @@ def azure_polaris_warehouse(polaris_token, polaris_server, polaris_package):
                 )
             ),
         )
+        root_client.add_grant_to_catalog_role(
+            catalog_name,
+            "catalog_admin",
+            AddGrantRequest(
+                grant=CatalogGrant(
+                    type="catalog", privilege=CatalogPrivilege.CATALOG_MANAGE_ACCESS
+                )
+            ),
+        )
+        root_client.add_grant_to_catalog_role(
+            catalog_name,
+            "catalog_admin",
+            AddGrantRequest(
+                grant=CatalogGrant(
+                    type="catalog", privilege=CatalogPrivilege.CATALOG_MANAGE_METADATA
+                )
+            ),
+        )
 
         catalog_client = CatalogApiClient(
             Configuration(
@@ -337,6 +377,10 @@ def azure_polaris_warehouse(polaris_token, polaris_server, polaris_package):
         catalog_api.create_namespace(
             prefix=catalog_name,
             create_namespace_request=CreateNamespaceRequest(namespace=["CI"]),
+        )
+        catalog_api.create_namespace(
+            prefix=catalog_name,
+            create_namespace_request=CreateNamespaceRequest(namespace=["default"]),
         )
 
         return catalog_name
@@ -399,3 +443,18 @@ def polaris_connection(
             yield url, azure_polaris_warehouse, f"{user}:{password}"
     else:
         raise ValueError(f"Unknown polaris warehouse: {request.param}")
+
+
+# For cases where we can't used parameterized fixuteres like the ddl test harness
+@pytest.fixture
+def aws_polaris_connection(polaris_server, aws_polaris_warehouse):
+    host, port, user, password = polaris_server
+    url = f"http://{host}:{port}/api/catalog"
+    with temp_env_override(
+        {
+            "AWS_ACCESS_KEY_ID": None,
+            "AWS_SECRET_ACCESS_KEY": None,
+            "AWS_SESSION_TOKEN": None,
+        }
+    ):
+        yield url, aws_polaris_warehouse, f"{user}:{password}"

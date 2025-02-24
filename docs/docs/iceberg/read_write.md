@@ -7,6 +7,7 @@ Reading and Writing Iceberg in Bodo {#iceberg_read_write}
 BodoSQL can be used to read, create, or insert into an Iceberg table. Iceberg Tables are automatically detected by existing catalogs and are used during read:
 
 - Snowflake Iceberg Tables are automatically detected when using the [`SnowflakeCatalog`][snowflake-catalog-api].
+- Tables within the specified warehouse are automatically detected when using the [`RESTCatalog`][REST-catalog-api].
 - Tables within the specified warehouse are automatically detected when using the [`GlueCatalog`][glue-catalog-api].
 - Tables within the specified warehouse are automatically detected when using the [`S3TablesCatalog`][s3-tables-catalog-api].
 - Hadoop Iceberg Catalogs and Tables are detected when using the [`FileSystemCatalog`][fs-catalog-api].

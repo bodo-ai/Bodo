@@ -22,6 +22,7 @@ from numba.extending import (
 import bodo
 from bodo.io.fs_io import pyarrow_fs_type
 from bodo.io.helpers import pyarrow_schema_type
+from bodo.io.iceberg.common import _format_data_loc, _fs_from_file_path
 from bodo.libs import puffin_file, theta_sketches
 from bodo.libs.array import (
     array_info_type,
@@ -419,7 +420,10 @@ def fetch_puffin_metadata(txn: Transaction) -> tuple[int, int, str]:
     assert sequence_number is not None
 
     # Statistics file location
-    location = f"{metadata.location}/metadata/{snapshot_id}-{uuid4()}.stats"
+    location = _format_data_loc(
+        f"{metadata.location}/metadata/{snapshot_id}-{uuid4()}.stats",
+        _fs_from_file_path(metadata.location, txn._table.io),
+    )
 
     return snapshot_id, sequence_number, location
 
