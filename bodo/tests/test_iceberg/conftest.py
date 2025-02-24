@@ -1,7 +1,6 @@
 import os
 import random
 import subprocess
-import time
 
 import boto3
 import pytest
@@ -100,27 +99,15 @@ def polaris_server():
                     "AZURE_TENANT_ID", "72f988bf-86f1-41af-91ab-2d7cd011db47"
                 )
 
-            # Retry starting the server a few times, it can be flaky
-            # on CI
-            for i in range(num_retries := 5):
-                try:
-                    polaris = (
-                        DockerContainer(
-                            "public.ecr.aws/k7f6m2y1/bodo/polaris-unittests:latest"
-                        )
-                        .with_bind_ports(8181, 8181)
-                        .with_bind_ports(8282, 8182)
-                        .with_name("polaris-server-unittests")
-                    )
-                    for key, value in env.items():
-                        polaris.with_env(key, value)
-                    wait_for_logs(polaris.start(), "Listening on")
-                    break
-                except Exception as e:
-                    print(f"Failed to start polaris server, retry {i}: {e}")
-                    time.sleep(5)
-                    if i == num_retries - 1:
-                        raise e
+            polaris = (
+                DockerContainer("public.ecr.aws/k7f6m2y1/bodo/polaris-unittests:latest")
+                .with_bind_ports(8181, 8181)
+                .with_bind_ports(8282, 8182)
+                .with_name("polaris-server-unittests")
+            )
+            for key, value in env.items():
+                polaris.with_env(key, value)
+            wait_for_logs(polaris.start(), "Listening on")
         except Exception as e:
             err = e
     err = MPI.COMM_WORLD.bcast(err, root=0)
