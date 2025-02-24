@@ -14,6 +14,7 @@ platform-dev = { features = ["rcpp", "dev", "platform-mpi"],       solve-group =
 # Pip C++ Deps
 pip-cpp-linux =      { features = ["local-mpi"], no-default-feature = true,   solve-group = "pip" }
 pip-cpp-macos =      { features = ["rcpp", "local-mpi", "pip"], no-default-feature = true,   solve-group = "pip" }
+pip-cpp-win =      { features = ["rcpp", "local-mpi", "pip"], no-default-feature = true,   solve-group = "pip" }
 
 # Build Commands
 [tasks.build-bodo]
@@ -247,7 +248,7 @@ mpich = { version = "4.1.*", build = "h*" }
 mpich = { version = "4.1.*", build = "h*" }
 
 [feature.local-mpi.target.win.dependencies]
-impi-devel = "*"
+impi-devel = "2021.14.0"
 
 [feature.platform-mpi]
 channels = ["conda-forge", "conda-forge/label/broken"]
