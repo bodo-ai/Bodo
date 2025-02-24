@@ -109,6 +109,7 @@ if(WIN32)
 endif()
 
 # Add boost as a dependency
+# We use the header-only version of boost::json: https://www.boost.org/doc/libs/1_87_0/libs/json/doc/html/json/overview.html
 find_package(Boost 1.85 REQUIRED COMPONENTS json)
 include_directories(${Boost_INCLUDE_DIRS})
 
@@ -218,15 +219,13 @@ if (WIN32)
     "/EHsc"
   )
   add_definitions(-DMS_WINDOWS)  # Globally define MS_WINDOWS
-  else()
+else()
   add_compile_options(
     "-Wno-c99-designator"         # Check if still necessary?
     "-Wno-return-type-c-linkage"  # Check if still necessary?
     "-Wno-macro-redefined"        # Check if still necessary?
     "-Wno-implicit-const-int-float-conversion" # Necessary for DataSketches
-    "-fwrapv"                     # Conda used to force-add. Remove in follow up PR
-    "-fstack-protector-strong"    # Conda used to force-add. Remove in follow up PR
-    "-D_FORTIFY_SOURCE=2"         # Conda used to force-add. Remove in follow up PR
+    "-fwrapv"                     # Conda used to force-add. Its an optimization for integer overflow
   )
 endif()
 
@@ -777,9 +776,7 @@ target_link_libraries(ext PRIVATE
 )
 
 if (NOT WIN32)
-  # On Windows we do not link Boost_LIBRARIES here to avoid having multiple defnitions of everything.
-  # We use the header-only version of boost::json: https://www.boost.org/doc/libs/1_87_0/libs/json/doc/html/json/overview.html
-  target_link_libraries(ext PRIVATE pthread ${Boost_LIBRARIES})
+  target_link_libraries(ext PRIVATE pthread)
 else()
   target_link_libraries(ext PRIVATE
     CURL::libcurl

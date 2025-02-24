@@ -1,5 +1,7 @@
 #include "_puffin.h"
+
 #include <arrow/python/api.h>
+#include <zstd.h>
 #include <algorithm>
 
 #include "../io/_fs_io.h"
@@ -59,6 +61,21 @@ int64_t fetch_numeric_field(boost::json::object obj, std::string field_name) {
         invalid_blob_metadata("field '" + field_name + "' must be an integer");
     }
     return *as_int;
+}
+
+std::string decode_zstd(std::string blob) {
+    auto const est_decomp_size =
+        ZSTD_getFrameContentSize(blob.data(), blob.size());
+    std::string decomp_buffer{};
+    decomp_buffer.resize(est_decomp_size);
+    size_t const decomp_size =
+        ZSTD_decompress((void *)decomp_buffer.data(), est_decomp_size,
+                        blob.data(), blob.size());
+    if (decomp_size == ZSTD_CONTENTSIZE_UNKNOWN ||
+        decomp_size == ZSTD_CONTENTSIZE_ERROR) {
+        throw std::runtime_error("Malformed ZSTD decompression");
+    }
+    return decomp_buffer;
 }
 
 BlobMetadata BlobMetadata::from_json(boost::json::object obj) {
