@@ -1,6 +1,7 @@
 import os
 import random
 import subprocess
+import time
 
 import boto3
 import pytest
@@ -117,6 +118,7 @@ def polaris_server():
                     break
                 except Exception as e:
                     print(f"Failed to start polaris server, retry {i}: {e}")
+                    time.sleep(5)
                     if i == num_retries - 1:
                         raise e
         except Exception as e:
