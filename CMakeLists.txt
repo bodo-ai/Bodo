@@ -344,7 +344,6 @@ endif()
 cmake_print_variables(MPI_INCLUDE_DIR)
 cmake_print_variables(MPI_LIBRARIES)
 
-# Vendor MPI4Py
 if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/bodo/mpi4py")
   message(STATUS "Copying MPI4Py to Source Directory")
   # Extract the location of the site-packages directory containing mpi4py

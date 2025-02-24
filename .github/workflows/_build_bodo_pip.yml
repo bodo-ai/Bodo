@@ -84,6 +84,7 @@ jobs:
           # https://cibuildwheel.pypa.io/en/stable/options/#repair-wheel-command
           CIBW_BEFORE_BUILD_WINDOWS: |
             pip install delvewheel
+            pip install mpi4py"=~4.0" -i https://pypi.anaconda.org/mpi4py/simple --default-timeout=100
           CIBW_BEFORE_BUILD_MACOS: |
             # Delete mpi4py folder if it exists so correct version gets copied in
             rm -r {package}/bodo/mpi4py || true
