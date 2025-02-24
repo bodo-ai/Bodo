@@ -11,6 +11,16 @@ from bodo.tests.utils import (
     check_caching,
     pytest_mark_polaris,
 )
+from bodosql.tests.test_types.conftest import (  # noqa
+    aws_polaris_warehouse,
+    azure_polaris_warehouse,
+    polaris_catalog,
+    polaris_catalog_iceberg_read_df,
+    polaris_connection,
+    polaris_package,
+    polaris_server,
+    polaris_token,
+)
 
 
 @pytest_mark_polaris
