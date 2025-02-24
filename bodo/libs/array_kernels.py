@@ -509,7 +509,7 @@ def overload_setna_tup(arr_tup, ind, int_nan_const=0):
         func_text += f"  setna(arr_tup[{i}], ind, int_nan_const)\n"
     func_text += "  return\n"
 
-    return bodo_exec(func_text, {"setna": setna}, {}, globals())
+    return bodo_exec(func_text, {"setna": setna}, {}, __name__)
 
 
 def setna_slice(arr, s):  # pragma: no cover
@@ -1545,7 +1545,7 @@ def overload_dropna(data, how, thresh, subset):
             "bodo": bodo,
         }
     )
-    return bodo_exec(func_text, _globals, {}, globals())
+    return bodo_exec(func_text, _globals, {}, __name__)
 
 
 def get(arr, ind):  # pragma: no cover
@@ -2301,7 +2301,7 @@ def overload_astype_float_tup(arr_tup):
         "," if count == 1 else "",
     )  # single value needs comma to become tuple
 
-    return bodo_exec(func_text, {"np": np}, {}, globals())
+    return bodo_exec(func_text, {"np": np}, {}, __name__)
 
 
 def convert_to_nullable_tup(arr_tup):
@@ -2342,7 +2342,7 @@ def overload_convert_to_nullable_tup(arr_tup):
         "," if count == 1 else "",
     )  # single value needs comma to become tuple
 
-    return bodo_exec(func_text, {"bodo": bodo, "out_dtype": out_dtype}, {}, globals())
+    return bodo_exec(func_text, {"bodo": bodo, "out_dtype": out_dtype}, {}, __name__)
 
 
 def nunique(A, dropna):  # pragma: no cover
@@ -2846,7 +2846,7 @@ def overload_resize_and_copy(A, old_size, new_len):
 # calculation is replaced with explicit call for easier matching
 # (e.g. for handling 1D_Var RangeIndex)
 # TODO: move this to upstream Numba
-@register_jitable
+@register_jitable(cache=True)
 def calc_nitems(start, stop, step):  # pragma: no cover
     nitems_r = math.ceil((stop - start) / step)
     return int(max(nitems_r, 0))

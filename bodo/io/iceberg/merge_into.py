@@ -11,10 +11,9 @@ import pandas as pd
 
 import bodo
 import bodo.utils.tracing as tracing
-from bodo.io.iceberg.common import format_iceberg_conn_njit, get_rest_catalog_config
+from bodo.io.iceberg.common import get_rest_catalog_config
 from bodo.io.iceberg.write import (
     generate_data_file_info,
-    get_table_details_before_write,
     iceberg_pq_write,
 )
 from bodo.io.s3_fs import (
@@ -93,10 +92,8 @@ def iceberg_merge_cow(
             ),
         )
 
-    dummy_theta_sketch = (
-        bodo.io.iceberg.stream_iceberg_write.init_theta_sketches_wrapper(
-            alloc_false_bool_array(num_cols)
-        )
+    dummy_theta_sketch = bodo.io.iceberg.theta.init_theta_sketches_wrapper(
+        alloc_false_bool_array(num_cols)
     )
     bucket_region = bodo.io.fs_io.get_s3_bucket_region_wrapper(table_loc, is_parallel)
     iceberg_files_info = iceberg_pq_write(
@@ -135,7 +132,7 @@ def iceberg_merge_cow(
         # we might not have DeleteObject permissions, for instance.
         raise BodoError("Iceberg MERGE INTO: write failed")
 
-    bodo.io.iceberg.stream_iceberg_write.delete_theta_sketches(dummy_theta_sketch)
+    bodo.io.iceberg.theta.delete_theta_sketches(dummy_theta_sketch)
 
     ev.finalize()
 
@@ -270,3 +267,11 @@ def iceberg_merge_cow_py(
         impl = locals["impl"]
 
     return impl
+
+
+def format_iceberg_conn_njit():
+    pass
+
+
+def get_table_details_before_write():
+    pass

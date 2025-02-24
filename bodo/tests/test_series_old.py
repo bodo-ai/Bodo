@@ -389,7 +389,7 @@ class TestSeries(unittest.TestCase):
             return A + i
 
         n = 11
-        df = pd.DataFrame({"A": np.arange(n)})
+        df = pd.DataFrame({"A": np.arange(n, dtype=np.int64)})
         bodo_func = bodo.jit(test_impl)
         pd.testing.assert_series_equal(
             bodo_func(df.A, 1), test_impl(df.A, 1), check_names=False

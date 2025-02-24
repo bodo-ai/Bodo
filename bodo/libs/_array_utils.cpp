@@ -2525,21 +2525,19 @@ std::pair<size_t, size_t> get_nunique_hashes_global(
                   "get_nunique_hashes_global: MPI error on MPI_Op_free:");
     }
 
-    // Cast to known MPI-compatible type since size_t is
-    // implementation defined.
-    unsigned long local_len = static_cast<unsigned long>(len);
-    unsigned long global_len = 0;
-    CHECK_MPI(MPI_Allreduce(&local_len, &global_len, 1, MPI_UNSIGNED_LONG,
+    uint64_t local_len = static_cast<uint64_t>(len);
+    uint64_t global_len = 0;
+    CHECK_MPI(MPI_Allreduce(&local_len, &global_len, 1, MPI_UNSIGNED_LONG_LONG,
                             MPI_SUM, MPI_COMM_WORLD),
               "get_nunique_hashes_global: MPI error on MPI_Allreduce:");
 
-    unsigned long est;
+    uint64_t est;
     if (my_rank == 0) {
         hll.overwrite_registers(std::move(hll_registers));
         using std::min;
-        est = min(global_len, static_cast<unsigned long>(hll.estimate()));
+        est = min(global_len, static_cast<uint64_t>(hll.estimate()));
     }
-    CHECK_MPI(MPI_Bcast(&est, 1, MPI_UNSIGNED_LONG, 0, MPI_COMM_WORLD),
+    CHECK_MPI(MPI_Bcast(&est, 1, MPI_UNSIGNED_LONG_LONG, 0, MPI_COMM_WORLD),
               "get_nunique_hashes_global: MPI error on MPI_Bcast:");
     // cast to `size_t` to avoid compilation error on Windows
     ev.add_attribute("g_global_estimate", static_cast<size_t>(est));

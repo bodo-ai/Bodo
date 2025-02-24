@@ -2424,7 +2424,7 @@ def overload_to_tuple(val):
         func_text = "def bodo_to_tuple(val):\n"
         res = ",".join(f"val[{i}]" for i in range(n_values))
         func_text += f"  return ({res},)\n"
-        return bodo.utils.utils.bodo_exec(func_text, {}, {}, globals())
+        return bodo.utils.utils.bodo_exec(func_text, {}, {}, __name__)
 
     assert isinstance(val, types.BaseTuple), "tuple type expected"
     return lambda val: val  # pragma: no cover
@@ -2527,7 +2527,7 @@ def overload_struct_if_heter_dict(values, names):
         for i in range(n_fields)
     )
     func_text += f"  return {{{res}}}\n"
-    return bodo.utils.utils.bodo_exec(func_text, {}, {}, globals())
+    return bodo.utils.utils.bodo_exec(func_text, {}, {}, __name__)
 
 
 def list_to_array(lst, arr_type, parallel=False):

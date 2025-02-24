@@ -70,6 +70,8 @@ In order to run the Dask benchmark:
 1. Create a fresh Conda environment with the required packages using the file `dask/env.yml`: `conda env create -f dask/env.yml`.
 2. Activate the environment using `conda activate benchmark_dask`.
 3. Ensure that you have set your aws credentials e.g. by running `aws configure`. This will be used by Dask Cloud Provider to launch EC2 instances.
+4. For reading and writing to S3, you will need to set up an IAM role with sufficient permissions. You can do this using the AWS console by going to __IAM__ > __Roles__ > __Create Role__, then selecting EC2 as the service and `AmazonS3FullAccess` as the permission policy. Name the role "dask-benchmark".
+
 4. Run the benchmark script using `python dask/nyc_taxi_precipitation.py`. This creates the cluster, runs the benchmark 3
 times and prints the results to your local terminal. There is also a notebook version of the script available.
 

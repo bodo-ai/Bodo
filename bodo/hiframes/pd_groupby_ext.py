@@ -1437,6 +1437,11 @@ def resolve_transformative(grp, args, kws, msg, name_operation):
         kws = dict(kws)
         # pop transform() unsupported keyword arguments from kws
         transform_func = args[0] if len(args) > 0 else kws.pop("func", None)
+        transform_func = get_literal_value(transform_func)
+        if bodo.utils.typing.is_builtin_function(transform_func):
+            # Builtin function case (e.g. df.groupby("B").transform(sum))
+            transform_func = bodo.utils.typing.get_builtin_function_name(transform_func)
+
         engine = kws.pop("engine", None)
         engine_kwargs = kws.pop("engine_kwargs", None)
         unsupported_args = {"engine": engine, "engine_kwargs": engine_kwargs}
@@ -1457,11 +1462,7 @@ def resolve_transformative(grp, args, kws, msg, name_operation):
         dict_add_multimap(gb_info, ((c,), (), name_operation), c)
         ind = grp.df_type.column_index[c]
         data = grp.df_type.data[ind]
-        operation = (
-            name_operation
-            if name_operation != "transform"
-            else get_literal_value(transform_func)
-        )
+        operation = name_operation if name_operation != "transform" else transform_func
         if operation in ("sum", "cumsum"):
             data = to_str_arr_if_dict_array(data)
         if name_operation == "cumprod":
@@ -1492,7 +1493,7 @@ def resolve_transformative(grp, args, kws, msg, name_operation):
         # Column output depends on the operation in transform.
         if name_operation == "transform":
             out_dtype, err_msg = get_groupby_output_dtype(
-                data, get_literal_value(transform_func), grp.df_type.index
+                data, transform_func, grp.df_type.index
             )
 
             if err_msg == "ok":
