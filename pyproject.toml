@@ -45,7 +45,7 @@ dependencies = [
     "requests",
     "cloudpickle>=3.0,<4.0",
     "psutil",
-    "impi-rt==2021.14.0; sys_platform == 'win32'",
+    "impi-rt; sys_platform == 'win32'",
 ]
 
 [project.urls]

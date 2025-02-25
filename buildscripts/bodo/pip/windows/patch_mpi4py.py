@@ -16,7 +16,9 @@ def patch_mpi4py(path: str) -> None:
         mpi_init_text: str = init_f.read()
 
     patched_mpi_init_text = mpi_init_text.replace("mpi4py.MPI", "bodo.mpi4py.MPI")
-    patched_mpi_init_text = "# patch successful!\n" + patched_mpi_init_text
+    patched_mpi_init_text = (
+        "# Bodo change: update paths to MPI module.\n" + patched_mpi_init_text
+    )
 
     with open(os.path.join(path, "__init__.py"), "w") as init_f:
         init_f.write(patched_mpi_init_text)

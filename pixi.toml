@@ -247,7 +247,7 @@ mpich = { version = "4.1.*", build = "h*" }
 mpich = { version = "4.1.*", build = "h*" }
 
 [feature.local-mpi.target.win.dependencies]
-impi-devel = "2021.14.0"
+impi-devel = "*"
 
 [feature.platform-mpi]
 channels = ["conda-forge", "conda-forge/label/broken"]

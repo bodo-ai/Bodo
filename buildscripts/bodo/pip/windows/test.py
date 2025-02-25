@@ -1,3 +1,7 @@
+"""
+Used by CIBW to test Windows pip wheel.
+"""
+
 import pandas as pd
 
 import bodo
