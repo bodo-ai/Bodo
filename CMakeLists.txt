@@ -316,7 +316,7 @@ else()
 endif()
 
 # Vendor MPICH
-if(DEFINED ENV{BODO_VENDOR_MPICH} AND (NOT WIN32))
+if(DEFINED ENV{BODO_VENDOR_MPICH})
   message(STATUS "Downloading MPICH")
   execute_process(COMMAND ${Python_EXECUTABLE} -m pip download mpich==${MPICH_VERSION} -i https://pypi.anaconda.org/mpi4py/simple --default-timeout=100)
   execute_process(COMMAND unzip "mpich-*.whl" "mpich*.data/*" -d mpich-tmp-extract-dir)
@@ -342,8 +342,8 @@ else()
 endif()
 
 cmake_print_variables(MPI_INCLUDE_DIR)
-cmake_print_variables(MPI_LIBRARIES)
 
+# Vendor MPI4Py
 if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/bodo/mpi4py")
   message(STATUS "Copying MPI4Py to Source Directory")
   # Extract the location of the site-packages directory containing mpi4py
