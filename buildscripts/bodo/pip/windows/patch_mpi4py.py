@@ -1,3 +1,8 @@
+"""
+Fix module paths in Bodo vendored mpi4py to enable finding impi DLLs and mpiexec
+in Windows pip.
+"""
+
 import argparse
 import os
 

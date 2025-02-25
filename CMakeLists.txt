@@ -211,7 +211,6 @@ if (WIN32)
     "/wd4100" # Supress warning about unreferenced formal parameter.
     "/wd4551" # Suppress warnings about function call missing argument list
     "/w"      # disable other warnings
-    "/FS"
     "/GS"       # Enable buffer security checks
     "/guard:cf" # Enable control flow guard (security feature)
     "/EHsc"
@@ -239,6 +238,7 @@ if (CMAKE_BUILD_TYPE STREQUAL "Debug" OR CMAKE_BUILD_TYPE STREQUAL "DebugSanitiz
     )
   else()
     add_compile_options(
+      "/FS"  # Force writes to PDBs to be serialized
       "/Zi"  # Generate debug information
     )
     add_link_options("/DEBUG") # Generate debug symbols
