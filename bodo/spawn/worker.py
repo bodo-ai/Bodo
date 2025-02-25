@@ -505,7 +505,8 @@ def worker_loop(
                 comm_world.bcast(uuid.uuid4() if bodo.get_rank() == 0 else None, root=0)
             )
             RESULT_REGISTRY[res_id] = data
-            spawner_intercomm.send(res_id, dest=0)
+            if bodo.get_rank() == 0:
+                spawner_intercomm.send(res_id, dest=0)
             debug_worker_msg(logger, "Scatter done")
         elif command == CommandType.GATHER.value:
             res_id = spawner_intercomm.bcast(None, 0)
