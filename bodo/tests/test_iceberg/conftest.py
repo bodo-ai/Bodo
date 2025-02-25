@@ -79,9 +79,7 @@ def polaris_server():
                 "quarkus.otel.sdk.disabled": "true",
                 "POLARIS_BOOTSTRAP_CREDENTIALS": "default-realm,root,s3cr3t",
                 "polaris.realm-context.realms": "default-realm",
-                "AWS_REGION": session.region_name
-                if session.region_name
-                else "us-east-2",
+                "AWS_REGION": "us-east-2",
             }
             if credentials.access_key is not None:
                 env["AWS_ACCESS_KEY_ID"] = credentials.access_key
