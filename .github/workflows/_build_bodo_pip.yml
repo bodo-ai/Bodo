@@ -89,9 +89,7 @@ jobs:
           CIBW_BEFORE_BUILD_MACOS: |
             # Delete mpi4py folder if it exists so correct version gets copied in
             rm -r {package}/bodo/mpi4py || true
-            echo "removing build!"
             rm -rf {package}/build
-            echo "removing mpich wheel!"
             rm -f {package}/mpich.whl
           CIBW_BEFORE_BUILD_LINUX: |
             # Delete mpi4py folder if it exists so correct version gets copied in
