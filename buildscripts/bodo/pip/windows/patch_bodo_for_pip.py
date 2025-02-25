@@ -50,7 +50,7 @@ def patch_wheels(path: str) -> None:
             z.extractall(tmp_dir)
 
         # apply patches
-        patch_init(tmp_dir)
+        # patch_init(tmp_dir)
         patch_mpi4py(tmp_dir)
 
         # This packs the wheel back
