@@ -20,7 +20,7 @@ jobs:
   variables:
     - group: AWS-427-S3-Access-Keys
     - group: SnowflakeCredentials
-    - group: TabularCredentials
+    - group: AzureCredentials
   timeoutInMinutes: 360
   pool: ${{ parameters.pool_name }}
   strategy:
