@@ -84,7 +84,7 @@ jobs:
           # https://cibuildwheel.pypa.io/en/stable/options/#repair-wheel-command
           CIBW_BEFORE_BUILD_WINDOWS: |
             pip install delvewheel
-            # Delete mpi4py folder if it exists so correct version gets copied in
+            dir "{package}\bodo\"
             if exist "{package}\bodo\mpi4py" rmdir /s /q "{package}\bodo\mpi4py"
             if exist "{package}\build" rmdir /s /q "{package}\build"
           CIBW_BEFORE_BUILD_MACOS: |
@@ -137,6 +137,7 @@ jobs:
             AWS_SESSION_TOKEN
             AWS_DEFAULT_REGION
           CIBW_REPAIR_WHEEL_COMMAND_WINDOWS: >
+            sccache --show-stats &&
             delvewheel repair --exclude impi.dll --exclude msmpi.dll
             --exclude arrow.dll --exclude arrow_acero.dll --exclude arrow_dataset.dll --exclude arrow_python.dll
             --exclude parquet.dll -v -w {dest_dir} {wheel} 
