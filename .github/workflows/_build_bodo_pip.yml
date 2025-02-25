@@ -116,7 +116,7 @@ jobs:
             MACOSX_DEPLOYMENT_TARGET=${{ inputs.name == 'macos-arm' && '12.0' || '10.15' }}
             BODO_VENDOR_MPICH=1
             PATH=$HOME/.pixi/bin:$PATH
-            CONDA_PREFIX=$(pwd)/.pixi/envs/pip-cpp-macos
+            CONDA_PREFIX=$(pwd)/.pixi/envs/pip-cpp-macos-win
             SETUPTOOLS_SCM_PRETEND_VERSION=${{ inputs.bodo_version }}
           CIBW_ENVIRONMENT_LINUX: >
             PATH=$HOME/.pixi/bin/:$PATH
