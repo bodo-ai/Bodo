@@ -48,17 +48,15 @@ class SparkRestIcebergCatalog(SparkIcebergCatalog):
     uri: str
     credential: str
     warehouse: str
-    io_impl: str
 
 
 @dataclass(frozen=True)
 class SparkAzureIcebergCatalog(SparkRestIcebergCatalog):
-    io_impl: str = "org.apache.iceberg.azure.adlsv2.ADLSFileIO"
+    pass
 
 
 @dataclass(frozen=True)
 class SparkAwsIcebergCatalog(SparkRestIcebergCatalog):
-    io_impl: str = "org.apache.iceberg.aws.s3.S3FileIO"
     region: str = field(default="us-east-2", kw_only=True)
 
 
@@ -134,12 +132,16 @@ def get_spark(
                     catalog.warehouse,
                 )
                 builder.config(
-                    f"spark.sql.catalog.{catalog.catalog_name}.io-impl",
-                    catalog.io_impl,
-                )
-                builder.config(
                     f"spark.sql.catalog.{catalog.catalog_name}.scope",
                     "PRINCIPAL_ROLE:ALL",
+                )
+                builder.config(
+                    f"spark.sql.catalog.{catalog.catalog_name}.X-Iceberg-Access-Delegation",
+                    "vended-credentials",
+                )
+                builder.config(
+                    f"spark.sql.catalog.{catalog.catalog_name}.token-refresh-enabled",
+                    "true",
                 )
         if catalog.default_schema:
             builder.config(
