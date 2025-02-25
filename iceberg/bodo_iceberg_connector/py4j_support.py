@@ -102,7 +102,7 @@ def launch_jvm() -> JavaGateway:
         gateway_port = pt.cast(
             int,
             launch_gateway(
-                jarpath=full_path,
+                classpath=full_path,
                 java_path=java_path,
                 redirect_stderr=sys.stderr,
                 redirect_stdout=sys.stdout,
