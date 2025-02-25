@@ -413,3 +413,17 @@ def test_spawn_globals_objmode():
         return val
 
     assert f() == VALUE
+
+
+def test_spawn_input():
+    """
+    Tests that using input after spawn mode doens't fail
+    """
+    sub = subprocess.Popen(
+        f"{sys.executable} -c 'import bodo; bodo.jit(spawn=True)(lambda x: x)(1); input()'",
+        shell=True,
+        stdin=subprocess.PIPE,
+        start_new_session=True,
+    )
+    sub.communicate(b"\n")
+    assert sub.returncode == 0
