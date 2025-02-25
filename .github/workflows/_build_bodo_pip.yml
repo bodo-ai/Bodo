@@ -53,7 +53,7 @@ jobs:
           pixi-version: v0.40.2
           cache: true
           cache-write: ${{ github.event_name == 'schedule'}}
-          environments: ${{ contains(inputs.os, 'macos') && 'pip-cpp-macos' || 'pip-cpp-win' }}
+          environments: 'pip-cpp-macos-win'
           activate-environment: true
       - name: Install Pixi Global Tools
         if: ${{ contains(inputs.os, 'macos') ||  contains(inputs.os, 'windows') }}
@@ -97,14 +97,13 @@ jobs:
             # Install mpich for mpi.h needed by mpi4py
             MPICH_VERSION=$(/opt/python/cp312-cp312/bin/python -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["tool"]["scikit-build"]["cmake"]["define"]["MPICH_VERSION"])')
             pip install mpich=="$MPICH_VERSION" -i https://pypi.anaconda.org/mpi4py/simple --default-timeout=100
-          # Note: setting BODO_SKIP_CPP_TESTS for now because Release build-type is not being properly set on Windows.
           CIBW_ENVIRONMENT_WINDOWS: >
             DISABLE_CCACHE=1
             SCCACHE_BUCKET=engine-codebuild-cache
             SCCACHE_REGION=us-east-2
             SCCACHE_S3_USE_SSL=true
             SCCACHE_S3_SERVER_SIDE_ENCRYPTION=true
-            BODO_SKIP_CPP_TESTS=1
+            BODO_WINDOWS_BUILD_TYPE="Release"
             SETUPTOOLS_SCM_PRETEND_VERSION=${{ inputs.bodo_version }}
           CIBW_ENVIRONMENT_MACOS: >
             DISABLE_CCACHE=1

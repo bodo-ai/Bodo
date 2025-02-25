@@ -138,6 +138,14 @@ set(datasketches_INSTALL_DIR ${INSTALL_DIR})
 message("Source dir of datasketches = ${datasketches_INSTALL_DIR}")
 
 # ---------------------------- Set CMake Options -----------------------------
+
+# CMAKE_BUILD_TYPE is not used on Windows, configuration happens at build time.
+# https://stackoverflow.com/questions/19024259/how-to-change-the-build-type-to-release-mode-in-cmake
+if (DEFINED ENV{BODO_WINDOWS_BUILD_TYPE})
+  message(STATUS "Setting build type to $ENV{BODO_WINDOWS_BUILD_TYPE}")
+  set(CMAKE_BUILD_TYPE "$ENV{BODO_WINDOWS_BUILD_TYPE}")
+endif()
+
 # Use RelWithDebInfo Mode by Default
 cmake_print_variables(CMAKE_BUILD_TYPE)
 
@@ -695,7 +703,9 @@ target_include_directories(ext SYSTEM PRIVATE ${BASE_INCLUDE_DIRS})
 target_link_directories(ext PRIVATE ${CONDA_LIB_DIR} ${MPI_LIB_DIR})
 
 if (CMAKE_BUILD_TYPE STREQUAL "Release")
-  target_compile_options(ext PRIVATE "-Wno-unknown-pragmas")
+  if (NOT WIN32)
+    target_compile_options(ext PRIVATE "-Wno-unknown-pragmas")
+  endif()
 elseif (DEFINED ENV{BODO_SKIP_CPP_TESTS})
   # Remove the IS_TESTING flag.
   target_compile_definitions(
