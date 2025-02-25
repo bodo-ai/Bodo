@@ -85,6 +85,7 @@ jobs:
       set -exo pipefail
       sudo apt-get install -y docker.io
       sudo service docker start
+      sudo chmod 666 /var/run/docker.sock
       sudo usermod -aG docker $USER
     displayName: Install Docker
 
