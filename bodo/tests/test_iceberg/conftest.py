@@ -92,10 +92,9 @@ def polaris_server():
                 env["AZURE_CLIENT_ID"] = os.environ["AZURE_CLIENT_ID"]
             if "AZURE_CLIENT_SECRET" in os.environ:
                 env["AZURE_CLIENT_SECRET"] = os.environ["AZURE_CLIENT_SECRET"]
-            if "AZURE_TENANT_ID" in os.environ:
-                env["AZURE_TENANT_ID"] = os.environ.get(
-                    "AZURE_TENANT_ID", "72f988bf-86f1-41af-91ab-2d7cd011db47"
-                )
+            env["AZURE_TENANT_ID"] = os.environ.get(
+                "AZURE_TENANT_ID", "72f988bf-86f1-41af-91ab-2d7cd011db47"
+            )
 
             polaris = (
                 DockerContainer("public.ecr.aws/k7f6m2y1/bodo/polaris-unittests:latest")
