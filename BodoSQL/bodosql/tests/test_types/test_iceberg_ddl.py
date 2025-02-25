@@ -45,15 +45,12 @@ def filesystem_test_harness(test_harness_path):
     return FilesystemTestHarness(catalog)
 
 
-@pytest.fixture(scope="session")
-def spark_init():
-    """Initialize Spark session, outside of polaris context so AWS credentials are set"""
-    with temp_env_override({"AWS_REGION": "us-east-2"}):
-        get_spark()
+# Get Spark to start it with all environment variables set, not overriden by polaris_connection fixture
+get_spark()
 
 
 @pytest.fixture
-def rest_test_harness(aws_polaris_catalog, aws_polaris_connection, spark_init):
+def rest_test_harness(aws_polaris_catalog, aws_polaris_connection):
     # This is needed for Spark
     with temp_env_override({"AWS_REGION": "us-east-2"}):
         catalog = RESTCatalog(
