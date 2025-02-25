@@ -418,7 +418,7 @@ SF_WRITE_ASYNC_QUERY_FREQ = 0.5
 # If False, `to_sql` directly uploads Parquet files to S3/ADLS/GCS using Bodo's
 #     internal filesystem-write infrastructure. This method is faster but does
 #     not support Azure and GCS-backed Snowflake accounts.
-SF_WRITE_UPLOAD_USING_PUT = False
+SF_WRITE_UPLOAD_USING_PUT = True
 
 # Content to put in core-site.xml for Snowflake write. For ADLS backed stages,
 # Snowflake gives us a SAS token for access to the stage. Unfortunately,
