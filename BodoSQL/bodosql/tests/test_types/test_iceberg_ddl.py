@@ -11,6 +11,7 @@ from rest_test_harness import RestTestHarness
 import bodo
 import bodosql
 from bodo.mpi4py import MPI
+from bodo.tests.iceberg_database_helpers.utils import get_spark
 from bodo.tests.utils import pytest_one_rank, pytest_polaris, temp_env_override
 from bodo.utils.typing import BodoError
 
@@ -44,8 +45,14 @@ def filesystem_test_harness(test_harness_path):
     return FilesystemTestHarness(catalog)
 
 
+@pytest.fixture(scope="session")
+def spark_init():
+    """Initialize Spark session, outside of polaris context so AWS credentials are set"""
+    get_spark()
+
+
 @pytest.fixture
-def rest_test_harness(aws_polaris_catalog, aws_polaris_connection):
+def rest_test_harness(aws_polaris_catalog, aws_polaris_connection, spark_init):
     # This is needed for Spark
     with temp_env_override({"AWS_REGION": "us-east-2"}):
         catalog = RESTCatalog(
