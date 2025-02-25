@@ -69,7 +69,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--path",
         "-p",
-        help="Path to a wheel or directory containing .so files to patch",
+        help="Path to a wheel directory containing files to patch",
     )
     args = parser.parse_args()
     patch_wheels(args.path)
