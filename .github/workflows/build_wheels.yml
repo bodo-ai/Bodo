@@ -48,8 +48,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # - os: macos-13
-          #   name: macos-x86
+          - os: macos-13
+            name: macos-x86
           # - os: macos-latest
           #   name: macos-arm
           - os: windows-latest
