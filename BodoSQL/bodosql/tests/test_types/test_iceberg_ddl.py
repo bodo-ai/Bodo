@@ -48,7 +48,8 @@ def filesystem_test_harness(test_harness_path):
 @pytest.fixture(scope="session")
 def spark_init():
     """Initialize Spark session, outside of polaris context so AWS credentials are set"""
-    get_spark()
+    with temp_env_override({"AWS_REGION": "us-east-2"}):
+        get_spark()
 
 
 @pytest.fixture
