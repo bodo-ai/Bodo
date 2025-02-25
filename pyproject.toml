@@ -243,8 +243,7 @@ done
 [tool.cibuildwheel.windows]
 # Can't use pytest because we don't include tests in the wheel
 test-command = """
-python -c '\
-import bodo
+python -c 'import bodo'
 """
 
 # ---------------------------------------- PR CI ---------------------------------------- #
