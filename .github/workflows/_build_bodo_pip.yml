@@ -83,6 +83,7 @@ jobs:
           # delvewheel is still relatively new and not installed by default
           # https://cibuildwheel.pypa.io/en/stable/options/#repair-wheel-command
           CIBW_BEFORE_BUILD_WINDOWS: >
+            pip install delvewheel && 
             if exist "{package}\bodo\mpi4py" rmdir /s /q "{package}\bodo\mpi4py" && 
             if exist "{package}\build" rmdir /s /q "{package}\build"
           CIBW_BEFORE_BUILD_MACOS: |

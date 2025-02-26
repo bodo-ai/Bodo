@@ -9,7 +9,6 @@ requires = [
     "pyarrow==18.1.0",
     "mpi4py~=4.0; sys_platform == 'win32'",
     "mpi4py~=3.1; sys_platform != 'win32'",
-    "delvewheel; sys_platform == 'win32'",
     "pip"
 ]
 build-backend = "scikit_build_core.build"
@@ -192,7 +191,7 @@ manylinux-x86_64-image = "quay.io/pypa/manylinux_2_28_x86_64:latest"
 manylinux-aarch64-image = "quay.io/pypa/manylinux_2_28_aarch64:latest"
 test-command = """
 set -exo pipefail
-export BODO_NUM_WORKERS=2 python {project}/buildscripts/bodo/pip/test.py
+BODO_NUM_WORKERS=2 python {project}/buildscripts/bodo/pip/test.py
 
 # Check that only expected libs are included in the wheel
 LIB_WHITELIST="^(libcom_err|libcrypto|libcurl|libfftw3_mpi|libfftw3f_mpi|libfftw3|libfftw3f|libgssapi_krb5|libhdf5|libk5crypto|libkeyutils|libkrb5support|libkrb5|libnghttp2|libs2n|libssh2|libssl|libsz|libzstd|libboost_container|libboost_json|libbrotli.*|libcrypt|libidn2|liblber-2|libpcre2|libpsl|libsasl2|libselinux|libssh|libunistring|libldap-2)-.*\\.so(\\.[0-9]+)*"
