@@ -1569,7 +1569,7 @@ def overload_preprocessing_label_encoder_transform(
         m, y, _is_data_distributed=False
     ):  # pragma: no cover
         with bodo.objmode(transformed_y="int64[:]"):
-            transformed_y = m.transform(y)
+            transformed_y = m.transform(y).astype(np.int64)
         return transformed_y
 
     return _preprocessing_label_encoder_transform_impl
@@ -1608,7 +1608,7 @@ def overload_preprocessing_label_encoder_fit_transform(
             m, y, _is_data_distributed=False
         ):  # pragma: no cover
             with bodo.objmode(transformed_y="int64[:]"):
-                transformed_y = m.fit_transform(y)
+                transformed_y = m.fit_transform(y).astype(np.int64)
             return transformed_y
 
         return _preprocessing_label_encoder_fit_transform_impl

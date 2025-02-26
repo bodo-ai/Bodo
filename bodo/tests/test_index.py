@@ -1921,10 +1921,10 @@ def test_datetime_str_comp(dti_val, comp, memory_leak_check):
     "data",
     [
         [100, 110],
-        np.arange(10),
-        np.arange(10).view(np.dtype("datetime64[ns]")),
-        pd.Series(np.arange(10)),
-        pd.Series(np.arange(10).view(np.dtype("datetime64[ns]"))),
+        np.arange(10, dtype=np.int64),
+        np.arange(10, dtype=np.int64).view(np.dtype("datetime64[ns]")),
+        pd.Series(np.arange(10, dtype=np.int64)),
+        pd.Series(np.arange(10, dtype=np.int64).view(np.dtype("datetime64[ns]"))),
         ["2015-8-3", "1990-11-21"],  # TODO: other time formats
         ["2015-8-3", "NaT", "", "1990-11-21"],  # NaT cases
         pd.Series(["2015-8-3", "1990-11-21"]),

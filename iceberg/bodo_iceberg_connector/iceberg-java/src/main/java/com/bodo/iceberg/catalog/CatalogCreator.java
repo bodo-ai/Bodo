@@ -2,6 +2,7 @@ package com.bodo.iceberg.catalog;
 
 import com.bodo.iceberg.Triple;
 import java.net.URISyntaxException;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
@@ -56,6 +57,15 @@ public class CatalogCreator {
     if (connStr.startsWith("iceberg+arn:aws:s3tables") && catalogType.equals("s3tables")) {
       catalog = S3TablesBuilder.create(connStr.replaceFirst("^iceberg\\+", ""));
       return catalog;
+    }
+
+    // Avoid URI parsing with Windows paths like "C:\..."
+    if (catalogType.equalsIgnoreCase("hadoop")
+        && System.getProperty("os.name").toLowerCase().contains("win")) {
+      Configuration conf = new Configuration(true);
+      Map<String, String> params = new HashMap<>();
+      String warehouse_loc = connStr.replaceFirst("^iceberg://+", "");
+      return HadoopBuilder.create(warehouse_loc, conf, params);
     }
 
     var out = prepareInput(connStr, catalogType, coreSitePath);

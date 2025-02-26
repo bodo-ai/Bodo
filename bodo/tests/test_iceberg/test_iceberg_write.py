@@ -2072,8 +2072,7 @@ def test_iceberg_write_nulls_in_dict(iceberg_database, iceberg_table_conn):
         np.array([0, 2, 1, 0, 1, 3, 0, 1, 3, 3, 2, 0], dtype=np.int32),
         pd.Series(["B", None, "A", None]),
     )
-    A = np.arange(12)
-    empty_df = pd.DataFrame({"S": [], "A": []})
+    A = np.arange(12, dtype=np.int64)
     sql_schema = [("S", "string", True), ("A", "long", False)]
     spark = None
     if bodo.get_rank() == 0:
@@ -2136,7 +2135,7 @@ def test_iceberg_write_nulls_in_dict(iceberg_database, iceberg_table_conn):
     table_name = "TEST_ICEBERG_WRITE_NULLS_IN_DICT_TABLE_PART_S"
     if bodo.get_rank() == 0:
         create_iceberg_table(
-            empty_df,
+            None,
             sql_schema,
             table_name,
             spark,
@@ -2147,7 +2146,7 @@ def test_iceberg_write_nulls_in_dict(iceberg_database, iceberg_table_conn):
     table_name = "TEST_ICEBERG_WRITE_NULLS_IN_DICT_TABLE_PART_S_TABLE_FORMAT"
     if bodo.get_rank() == 0:
         create_iceberg_table(
-            empty_df,
+            None,
             sql_schema,
             table_name,
             spark,
@@ -2159,7 +2158,7 @@ def test_iceberg_write_nulls_in_dict(iceberg_database, iceberg_table_conn):
     table_name = "TEST_ICEBERG_WRITE_NULLS_IN_DICT_TABLE_PART_A"
     if bodo.get_rank() == 0:
         create_iceberg_table(
-            empty_df,
+            None,
             sql_schema,
             table_name,
             spark,
@@ -2170,7 +2169,7 @@ def test_iceberg_write_nulls_in_dict(iceberg_database, iceberg_table_conn):
     table_name = "TEST_ICEBERG_WRITE_NULLS_IN_DICT_TABLE_PART_A_TABLE_FORMAT"
     if bodo.get_rank() == 0:
         create_iceberg_table(
-            empty_df,
+            None,
             sql_schema,
             table_name,
             spark,
@@ -2185,7 +2184,7 @@ def test_iceberg_write_nulls_in_dict(iceberg_database, iceberg_table_conn):
     table_name = "TEST_ICEBERG_WRITE_NULLS_IN_DICT_TABLE_PART_SS"
     if bodo.get_rank() == 0:
         create_iceberg_table(
-            empty_df,
+            None,
             sql_schema,
             table_name,
             spark,

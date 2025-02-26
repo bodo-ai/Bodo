@@ -571,7 +571,7 @@ class TestRolling(unittest.TestCase):
 
     def test_fixed_parallel_apply1(self):
         def test_impl(n, w, center):
-            df = pd.DataFrame({"B": np.arange(n)})
+            df = pd.DataFrame({"B": np.arange(n, dtype=np.int64)})
             R = df.rolling(w, center=center).apply(lambda a: a.sum())
             return R.B.sum()
 
@@ -733,8 +733,12 @@ class TestRolling(unittest.TestCase):
         # all functions except apply
         for w, func_name in itertools.product(wins, test_funcs):
             func_text = "def test_impl(n):\n"
-            func_text += "  df = pd.DataFrame({'B': np.arange(n), 'time': "
-            func_text += "    pd.DatetimeIndex(np.arange(n) * 1000000000)})\n"
+            func_text += (
+                "  df = pd.DataFrame({'B': np.arange(n, dtype=np.int64), 'time': "
+            )
+            func_text += (
+                "    pd.DatetimeIndex(np.arange(n, dtype=np.int64) * 1000000000)})\n"
+            )
             func_text += f"  res = df.rolling('{w}', on='time').{func_name}()\n"
             func_text += "  return res.B.sum()\n"
             loc_vars = {}
@@ -756,8 +760,12 @@ class TestRolling(unittest.TestCase):
         # all functions except apply
         for w in wins:
             func_text = "def test_impl(n):\n"
-            func_text += "  df = pd.DataFrame({'B': np.arange(n), 'time': "
-            func_text += "    pd.DatetimeIndex(np.arange(n) * 1000000000)})\n"
+            func_text += (
+                "  df = pd.DataFrame({'B': np.arange(n, dtype=np.int64), 'time': "
+            )
+            func_text += (
+                "    pd.DatetimeIndex(np.arange(n, dtype=np.int64) * 1000000000)})\n"
+            )
             func_text += (
                 f"  res = df.rolling('{w}', on='time').apply(lambda a: a.sum())\n"
             )

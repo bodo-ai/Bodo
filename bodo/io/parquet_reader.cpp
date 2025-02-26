@@ -186,7 +186,7 @@ void ParquetReader::init_pq_scanner() {
     // get_scanner_batches returns a tuple with the record batch reader and the
     // updated offset for the first batch.
     PyObject* scanner_batches_tup = PyObject_CallMethod(
-        pq_mod, "get_scanner_batches", "OOOdiOOllOOO", fnames_list_py,
+        pq_mod, "get_scanner_batches", "OOOdiOOLLOOO", fnames_list_py,
         this->expr_filters, selected_fields_py, avg_num_pieces, int(parallel),
         this->filesystem, str_as_dict_cols_py, this->start_row_first_piece,
         this->count, this->ds_partitioning, this->pyarrow_schema,
@@ -199,7 +199,8 @@ void ParquetReader::init_pq_scanner() {
     this->reader = PyTuple_GetItem(scanner_batches_tup, 0);
     Py_INCREF(this->reader);  // call incref to keep the reference
 
-    this->rows_to_skip = PyLong_AsLong(PyTuple_GetItem(scanner_batches_tup, 1));
+    this->rows_to_skip =
+        PyLong_AsLongLong(PyTuple_GetItem(scanner_batches_tup, 1));
     this->rows_left_cur_piece = this->pieces_nrows[0];
 
     Py_DECREF(pq_mod);

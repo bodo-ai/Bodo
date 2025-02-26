@@ -494,7 +494,7 @@ PyObject *get_statistics_file_metadata(
         }
 
         PyObject *blob_metadata_obj = PyObject_CallFunction(
-            blob_metadata_class, "sllOO", blob_metadata.get_type().c_str(),
+            blob_metadata_class, "sLLOO", blob_metadata.get_type().c_str(),
             blob_metadata.get_snapshot_id(),
             blob_metadata.get_sequence_number(), fields_list, properties_dict);
         CHECK(blob_metadata_obj, "creating BlobMetadata object failed");
@@ -512,7 +512,7 @@ PyObject *get_statistics_file_metadata(
     CHECK(statistics_file_class,
           "getting bodo_iceberg_connector.StatisticsFile failed");
     PyObject *statistics_file_obj = PyObject_CallFunction(
-        statistics_file_class, "lsliO", snapshot_id, puffin_loc.c_str(),
+        statistics_file_class, "LsLiO", snapshot_id, puffin_loc.c_str(),
         file_size_in_bytes, footer_size, blob_list);
     CHECK(statistics_file_obj, "creating StatisticsFile object failed");
     Py_DECREF(blob_list);

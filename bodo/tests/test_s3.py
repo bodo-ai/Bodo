@@ -745,7 +745,7 @@ def test_s3_csv_read_1D_header_var(minio_server_with_s3_envs, s3_bucket, test_df
     check_func(test_read, (), py_output=test_df)
 
 
-@pytest.fixture(params=[np.arange(5)])
+@pytest.fixture(params=[np.arange(5, dtype=np.int64)])
 def test_np_arr(request):
     return request.param
 
