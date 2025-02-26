@@ -9,6 +9,7 @@ requires = [
     "pyarrow==18.1.0",
     "mpi4py~=4.0; sys_platform == 'win32'",
     "mpi4py~=3.1; sys_platform != 'win32'",
+    "delvewheel; sys_platform == 'win32'",
     "pip"
 ]
 build-backend = "scikit_build_core.build"
