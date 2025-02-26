@@ -279,7 +279,7 @@ void QueryProfileCollector::Finalize(int64_t verbose_level) {
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
     if (rank == 0 && verbose_level > 0) {
-        std::cerr << "Writing profiles to " << output_dir << "\n";
+        std::cout << "Writing profiles to " << output_dir << "\n";
     }
 
     boost::json::object profile;

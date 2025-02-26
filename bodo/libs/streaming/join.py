@@ -1607,9 +1607,10 @@ def overload_runtime_join_filter(
         )  # pragma: no cover
 
     col_inds_t = MetaType(tuple(range(n_cols)))
-    col_ind_arr = np.arange(n_cols)
+    col_ind_arr = np.arange(n_cols, dtype=np.int64)
     join_key_idxs_arrs = tuple(
-        np.array(join_key_idxs_list) for join_key_idxs_list in join_key_idxs_lists
+        np.array(join_key_idxs_list, dtype=np.int64)
+        for join_key_idxs_list in join_key_idxs_lists
     )
     process_col_bitmask_arrs = tuple(
         np.array(unwrap_typeref(process_col_bitmask).meta)

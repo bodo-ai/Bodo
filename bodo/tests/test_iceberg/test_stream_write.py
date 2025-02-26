@@ -553,8 +553,8 @@ def test_iceberg_max_pq_chunksize(
     db_schema, warehouse_loc = iceberg_database([table_name])
     some_rows, sql_schema = (
         {
-            "A": np.array([0]),
-            "B": np.array([400000]),
+            "A": np.array([0], dtype=np.int64),
+            "B": np.array([400000], dtype=np.int64),
         },
         [
             ("A", "long", True),
@@ -565,8 +565,8 @@ def test_iceberg_max_pq_chunksize(
     # generate a large number of random data
     np.random.seed(42)
     large_number_of_rows = {
-        "A": np.arange(1, 400001),
-        "B": np.random.randint(1, 400000, size=400000),
+        "A": np.arange(1, 400001, dtype=np.int64),
+        "B": np.random.randint(1, 400000, size=400000, dtype=np.int64),
     }
 
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=False)
