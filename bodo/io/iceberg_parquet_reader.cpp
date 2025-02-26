@@ -1256,7 +1256,7 @@ class IcebergParquetReader : public ArrowReader {
         // offset for the first batch.
         time_pt start = start_timer();
         PyObject* datasets_updated_offset_tup = PyObject_CallMethod(
-            iceberg_mod, "get_pyarrow_datasets", "OOOOdiOOlO", fpaths_py,
+            iceberg_mod, "get_pyarrow_datasets", "OOOOdiOOLO", fpaths_py,
             file_nrows_to_read_py, file_schema_group_idxs_py,
             this->schema_groups_py, this->avg_num_pieces, int(this->parallel),
             this->filesystem, str_as_dict_cols_py, this->start_row_first_piece,

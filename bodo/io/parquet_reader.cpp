@@ -186,7 +186,7 @@ void ParquetReader::init_pq_scanner() {
     // get_scanner_batches returns a tuple with the record batch reader and the
     // updated offset for the first batch.
     PyObject* scanner_batches_tup = PyObject_CallMethod(
-        pq_mod, "get_scanner_batches", "OOOdiOOllOOO", fnames_list_py,
+        pq_mod, "get_scanner_batches", "OOOdiOOLLOOO", fnames_list_py,
         this->expr_filters, selected_fields_py, avg_num_pieces, int(parallel),
         this->filesystem, str_as_dict_cols_py, this->start_row_first_piece,
         this->count, this->ds_partitioning, this->pyarrow_schema,
