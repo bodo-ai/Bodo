@@ -14,7 +14,6 @@ import numba
 import numpy as np
 import pandas as pd
 from numba.core import event, ir, ir_utils, types
-from numba.core.bytecode import _unpack_opargs
 from numba.core.compiler_machinery import register_pass
 from numba.core.extending import register_jitable
 from numba.core.inline_closurecall import inline_closure_call
@@ -4370,7 +4369,8 @@ class TypingTransforms:
             f_ind: code.co_argcount + i for i, f_ind in enumerate(freevar_inds)
         }
         new_code = _replace_load_deref_code(
-            code.co_code, freevar_arg_map, code.co_argcount, code.co_nlocals
+            code,
+            freevar_arg_map,
         )
 
         # we can now change the IR/code since all checks are done (including
@@ -6365,13 +6365,17 @@ def _set_updated_container(varname, update_func, updated_containers, equiv_vars)
 
 
 def _bc_stream_to_bytecode(bc_stream, out_size):
-    """convert a stream of unpacked bytecode to a bytearray, reverses _unpack_opargs"""
+    """convert a stream of unpacked bytecode to a bytearray, reverses disassembly"""
     import dis
 
     from numba.core.bytecode import ARG_LEN, CODE_LEN
 
     out = bytearray(out_size)
-    for offset, op, arg, _ in bc_stream:
+    for (
+        offset,
+        op,
+        arg,
+    ) in bc_stream:
         out[offset] = op
         if op >= dis.HAVE_ARGUMENT:
             for i in range(ARG_LEN):
@@ -6379,11 +6383,11 @@ def _bc_stream_to_bytecode(bc_stream, out_size):
                 arg >>= 8
 
         else:
-            assert arg is None
+            assert arg == None
     return out
 
 
-def _replace_load_deref_code(code, freevar_arg_map, prev_argcount, prev_n_locals):
+def _replace_load_deref_code(code, freevar_arg_map):
     """replace load of free variables in byte code with load of new arguments and
     adjust local variable indices due to new arguments in co_varnames.
     # https://docs.python.org/3/library/dis.html#opcode-LOAD_FAST
@@ -6392,6 +6396,9 @@ def _replace_load_deref_code(code, freevar_arg_map, prev_argcount, prev_n_locals
     raises GuardException if there is STORE_DEREF in input code (for setting freevars)
     """
     import dis
+
+    prev_argcount = code.co_argcount
+    prev_n_locals = code.co_nlocals
 
     def _patch_opargs(code, freevar_arg_map, prev_argcount, prev_n_locals):
         # cannot handle cases that write to free variables
@@ -6403,7 +6410,12 @@ def _replace_load_deref_code(code, freevar_arg_map, prev_argcount, prev_n_locals
             dis.opmap["DELETE_FAST"],
         )
         n_new_args = len(freevar_arg_map)
-        for offset, op, arg, nextoffset in _unpack_opargs(code):
+        for inst in dis.get_instructions(code):
+            (
+                offset,
+                op,
+                arg,
+            ) = inst.offset, inst.opcode, inst.arg
             require(op not in banned_ops)
 
             # adjust local variable access since index includes arguments
@@ -6423,12 +6435,12 @@ def _replace_load_deref_code(code, freevar_arg_map, prev_argcount, prev_n_locals
             if op == dis.opmap["LOAD_DEREF"] and arg in freevar_arg_map:
                 op = dis.opmap["LOAD_FAST"]
                 arg = freevar_arg_map[arg]
-            yield offset, op, arg, nextoffset
+            yield offset, op, arg
 
     return bytes(
         _bc_stream_to_bytecode(
             _patch_opargs(code, freevar_arg_map, prev_argcount, prev_n_locals),
-            len(code),
+            len(code.co_code),
         )
     )
 
