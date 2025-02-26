@@ -81,7 +81,12 @@ def conn_str_to_catalog(conn_str: str) -> Catalog:
                 properties[OAUTH2_SERVER_URI] = (
                     base_url + ("/" if base_url[-1] != "/" else "") + "v1/oauth/tokens"
                 )
-                cache_key = base_url
+                cache_key = (
+                    base_url
+                    + properties[OAUTH2_SERVER_URI]
+                    + properties[WAREHOUSE_LOCATION]
+                    + properties.get("scope", "")
+                )
 
             case "iceberg+thrift":
                 from pyiceberg.catalog.hive import HiveCatalog

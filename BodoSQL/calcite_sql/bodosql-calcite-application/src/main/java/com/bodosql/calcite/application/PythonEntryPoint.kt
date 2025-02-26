@@ -6,8 +6,8 @@ import com.bodosql.calcite.catalog.BodoGlueCatalog
 import com.bodosql.calcite.catalog.BodoS3TablesCatalog
 import com.bodosql.calcite.catalog.BodoSQLCatalog
 import com.bodosql.calcite.catalog.FileSystemCatalog
+import com.bodosql.calcite.catalog.IcebergRESTCatalog
 import com.bodosql.calcite.catalog.SnowflakeCatalog
-import com.bodosql.calcite.catalog.TabularCatalog
 import com.bodosql.calcite.ddl.DDLExecutionResult
 import com.bodosql.calcite.schema.LocalSchema
 import com.bodosql.calcite.table.BodoSQLColumn
@@ -321,20 +321,23 @@ class PythonEntryPoint {
         fun buildBodoS3TablesCatalog(warehouse: String): BodoS3TablesCatalog = BodoS3TablesCatalog(warehouse)
 
         /**
-         * Build a TabularCatalog object.
+         * Build a IcebergRESTCatalog object.
          * @param warehouse The warehouse to use.
          * @param restUri The REST URI to use.
          * @param token The token to use. This may not always be required.
          * @param credential The credential to use. This may not always be required.
-         * @return The TabularCatalog object.
+         * @param defaultSchema The default schema to use.
+         * @return The IcebergRESTCatalog object.
          */
         @JvmStatic
-        fun buildTabularCatalog(
-            warehouse: String,
+        fun buildIcebergRESTCatalog(
             restUri: String,
+            warehouse: String,
             token: String?,
             credential: String?,
-        ): TabularCatalog = TabularCatalog(warehouse, restUri, token, credential)
+            scope: String?,
+            defaultSchema: String?,
+        ): IcebergRESTCatalog = IcebergRESTCatalog(restUri, warehouse, token, credential, scope, defaultSchema)
 
         /**
          * Build a FileSystemCatalog object.
