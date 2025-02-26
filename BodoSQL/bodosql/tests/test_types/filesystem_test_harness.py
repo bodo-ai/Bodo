@@ -15,12 +15,14 @@ class FilesystemTestHarness(DDLTestHarness):
     def __init__(self, iceberg_filesystem_catalog):
         self.catalog = iceberg_filesystem_catalog
         self.bc = bodosql.BodoSQLContext(catalog=iceberg_filesystem_catalog)
-        self.spark = get_spark(
-            SparkFilesystemIcebergCatalog(
-                catalog_name="ddl_test_filesystem",
-                path=iceberg_filesystem_catalog.connection_string,
-            )
+        self.spark_catalog = SparkFilesystemIcebergCatalog(
+            catalog_name="ddl_test_filesystem",
+            path=iceberg_filesystem_catalog.connection_string,
         )
+
+    @property
+    def spark(self):
+        return get_spark(self.spark_catalog)
 
     def run_bodo_query(self, query):
         return self.bc.sql(query)
