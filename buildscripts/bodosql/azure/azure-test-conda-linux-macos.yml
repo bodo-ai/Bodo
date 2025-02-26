@@ -73,6 +73,7 @@ jobs:
       sudo chmod 666 /var/run/docker.sock
       sudo usermod -aG docker $USER
     displayName: Install Docker
+    retryCountOnTaskFailure: 5
 
   - script: |
       set -exo pipefail
