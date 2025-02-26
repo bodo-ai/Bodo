@@ -93,7 +93,7 @@ def polaris_server():
             if "AZURE_CLIENT_SECRET" in os.environ:
                 env["AZURE_CLIENT_SECRET"] = os.environ["AZURE_CLIENT_SECRET"]
             env["AZURE_TENANT_ID"] = os.environ.get(
-                "AZURE_TENANT_ID", "72f988bf-86f1-41af-91ab-2d7cd011db47"
+                "AZURE_TENANT_ID", "ac373ae0-dc77-4cbb-bbb7-deddcf6133b3"
             )
 
             polaris = (
