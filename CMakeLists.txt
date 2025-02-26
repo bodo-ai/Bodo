@@ -139,8 +139,10 @@ message("Source dir of datasketches = ${datasketches_INSTALL_DIR}")
 
 # ---------------------------- Set CMake Options -----------------------------
 
-# CMAKE_BUILD_TYPE is not used on Windows, configuration happens at build time.
-# https://stackoverflow.com/questions/19024259/how-to-change-the-build-type-to-release-mode-in-cmake
+# CMAKE_BUILD_TYPE is not set when using Visual Studio generator because
+# technically there could be multiple build configurations in the same build
+# environment.
+# TODO [BSE-4599] Switch to Ninja on Windows for consistency.
 if (DEFINED ENV{BODO_WINDOWS_BUILD_TYPE})
   message(STATUS "Setting build type to $ENV{BODO_WINDOWS_BUILD_TYPE}")
   set(CMAKE_BUILD_TYPE "$ENV{BODO_WINDOWS_BUILD_TYPE}")
