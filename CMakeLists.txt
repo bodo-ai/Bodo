@@ -36,7 +36,6 @@ elseif ((NOT DEFINED ENV{DISABLE_SCCACHE}) AND SCCACHE_EXECUTABLE)
   set(CMAKE_C_COMPILER_LAUNCHER sccache)
 endif()
 
-
 # ---------------------------- Enable C++ Linting ----------------------------
 # Clang-Tidy is only available on MacOS as we use GCC on Linux
 find_program(CLANG_TIDY_EXE NAMES "clang-tidy")
@@ -56,10 +55,8 @@ endif()
 set(BUILD_WITH_V8 "$ENV{BUILD_WITH_V8}")
 cmake_print_variables(BUILD_WITH_V8)
 if (BUILD_WITH_V8)
-    # Needed for Prix64 to be defined in g++/Centos
-    add_compile_definitions("__STDC_FORMAT_MACROS")
-    include(FetchContent)
-
+  # Needed for Prix64 to be defined in g++/Centos
+  add_compile_definitions("__STDC_FORMAT_MACROS")
   FetchContent_Declare(
     v8
     GIT_REPOSITORY https://github.com/bnoordhuis/v8-cmake.git
@@ -79,22 +76,21 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(fmt)
 set_target_properties(fmt PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
-
 # If we're building dependencies (not getting them from conda), we need to build AWS SDK
 if("$ENV{CONDA_PREFIX}" STREQUAL "")
-    set(BUILD_ONLY "core" CACHE INTERNAL "only build core")
-    set(ENABLE_TESTING OFF CACHE INTERNAL "disabling fmt tests")
-    FetchContent_Declare(
-      AWSSDK
-      GIT_REPOSITORY   https://github.com/aws/aws-sdk-cpp
-      GIT_TAG         1.11.472
-      OVERRIDE_FIND_PACKAGE
-    )
-    FetchContent_MakeAvailable(AWSSDK)
-    find_package(AWSSDK REQUIRED COMPONENTS core)
-    install(TARGETS aws-cpp-sdk-core DESTINATION "${SKBUILD_PLATLIB_DIR}")
-    unset(BUILD_ONLY)
-    unset(ENABLE_TESTING)
+  set(BUILD_ONLY "core" CACHE INTERNAL "only build core")
+  set(ENABLE_TESTING OFF CACHE INTERNAL "disabling fmt tests")
+  FetchContent_Declare(
+    AWSSDK
+    GIT_REPOSITORY   https://github.com/aws/aws-sdk-cpp
+    GIT_TAG          1.11.472
+    OVERRIDE_FIND_PACKAGE
+  )
+  FetchContent_MakeAvailable(AWSSDK)
+  find_package(AWSSDK REQUIRED COMPONENTS core)
+  install(TARGETS aws-cpp-sdk-core DESTINATION "${SKBUILD_PLATLIB_DIR}")
+  unset(BUILD_ONLY)
+  unset(ENABLE_TESTING)
 elseif(WIN32)
   # On Windows we need to link with the import library (.lib) in order to resolve references into dynamically loaded libraries.
   # find_package locates the import library so we can make it availible to our extension.
@@ -104,14 +100,12 @@ endif()
 
 # Find additional import libraries needed to compile on Windows
 if(WIN32)
-  find_package(CURL REQUIRED)
   find_package(OpenSSL REQUIRED)
 endif()
 
 # Add boost as a dependency
 # We use the header-only version of boost::json: https://www.boost.org/doc/libs/1_87_0/libs/json/doc/html/json/overview.html
 find_package(Boost 1.85 REQUIRED COMPONENTS json)
-include_directories(${Boost_INCLUDE_DIRS})
 
 # ----------------------------- Download Apache Datasketches -------------------------
 include(ExternalProject)
@@ -151,7 +145,6 @@ endif()
 
 # Use RelWithDebInfo Mode by Default
 cmake_print_variables(CMAKE_BUILD_TYPE)
-
 if (NOT CMAKE_BUILD_TYPE)
   message(STATUS "No build type selected, default to RelWithDebInfo")
   set(CMAKE_BUILD_TYPE "RelWithDebInfo")
@@ -176,10 +169,6 @@ set(CMAKE_COLOR_DIAGNOSTICS ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # Enable -Werror by Default
 set(CMAKE_COMPILE_WARNING_AS_ERROR ON)
-
-# Ignore CFLAGS and CXXFLAGS from Conda
-set(CMAKE_C_FLAGS "")
-set(CMAKE_CXX_FLAGS "")
 
 # Enable Link-Time Optimizations (LTO)
 if (CMAKE_BUILD_TYPE STREQUAL "Release")
@@ -394,7 +383,6 @@ set(BASE_INCLUDE_DIRS ${PYARROW_INCLUDE_DIR} ${Python_NumPy_INCLUDE_DIR} ${MPI_I
 
 
 # ------------------------ Cython Target - bodo.io.csv_json_reader -----------------------
-
 add_custom_command(
   OUTPUT bodo/io/csv_json_reader.cpp
   DEPENDS bodo/io/csv_json_reader.pyx
@@ -700,7 +688,7 @@ cmake_print_variables(NO_HDF5)
 python_add_library(ext MODULE WITH_SOABI "${sources_list}")
 
 # Dependency Includes Are `-isystem` to Suppress Warnings
-target_include_directories(ext SYSTEM PRIVATE ${BASE_INCLUDE_DIRS})
+target_include_directories(ext SYSTEM PRIVATE ${BASE_INCLUDE_DIRS} ${Boost_INCLUDE_DIRS})
 target_link_directories(ext PRIVATE ${CONDA_LIB_DIR} ${MPI_LIB_DIR})
 
 if (CMAKE_BUILD_TYPE STREQUAL "Release")
@@ -758,11 +746,8 @@ if (NOT WIN32)
 endif()
 
 target_link_directories(ext PRIVATE ${PYARROW_LIB_DIR} "${Python_NumPy_INCLUDE_DIR}/../lib")
-
 target_include_directories(ext PRIVATE ${datasketches_INSTALL_DIR}/include/DataSketches)
-
 target_compile_definitions(ext PRIVATE ARROW_PYTHON_EXPORTING)
-
 target_link_libraries(ext PRIVATE
   npymath
   arrow
@@ -779,7 +764,6 @@ if (NOT WIN32)
   target_link_libraries(ext PRIVATE pthread)
 else()
   target_link_libraries(ext PRIVATE
-    CURL::libcurl
     OpenSSL::SSL
     OpenSSL::Crypto
   )
