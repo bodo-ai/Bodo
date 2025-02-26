@@ -361,13 +361,6 @@ if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/bodo/mpi4py")
     OUTPUT_STRIP_TRAILING_WHITESPACE
   )
   file(COPY ${MPI4PY_PACKAGE_DIR} DESTINATION "${CMAKE_CURRENT_SOURCE_DIR}/bodo/")
-  
-  # Replaces module path mpi4py.MPI with bodo.mpi4py.MPI
-  execute_process(
-    COMMAND "${PYTHON_EXECUTABLE}" 
-    "${CMAKE_CURRENT_SOURCE_DIR}/buildscripts/bodo/pip/windows/patch_mpi4py.py" 
-    -p "${CMAKE_CURRENT_SOURCE_DIR}/bodo/mpi4py"
-  )
 endif()
 message(STATUS "Copying MPI4Py to Bodo Directory")
 file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/bodo/mpi4py" DESTINATION "${SKBUILD_PLATLIB_DIR}/bodo/")
