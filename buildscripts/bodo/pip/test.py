@@ -1,5 +1,5 @@
 """
-Used by CIBW to test Windows pip wheel.
+Part of CIBW test command that runs on all pip wheels.
 """
 
 import pandas as pd
