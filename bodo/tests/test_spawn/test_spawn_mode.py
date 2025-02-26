@@ -417,7 +417,7 @@ def test_spawn_globals_objmode():
 
 def test_spawn_input():
     """
-    Tests that using input after spawn mode doens't fail
+    Tests that using input after spawn mode doesn't fail
     """
     sub = subprocess.Popen(
         f"{sys.executable} -c 'import bodo; bodo.jit(spawn=True)(lambda x: x)(1); input()'",
