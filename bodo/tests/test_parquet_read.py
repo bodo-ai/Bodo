@@ -474,6 +474,7 @@ def test_pq_RangeIndex(test_RangeIndex_input, pq_write_idx, memory_leak_check):
     finally:
         if bodo.libs.distributed_api.get_rank() == 0:
             os.remove("test.pq")
+        bodo.barrier()
 
 
 @pytest.mark.parametrize("index_name", [None, "HELLO"])
