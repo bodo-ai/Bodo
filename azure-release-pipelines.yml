@@ -59,11 +59,11 @@ stages:
         ${{ each slice in split(variables.bodo_1p_each, ',') }}:
           ${{ format('BODO_1P_{0}_OF_{1}', slice, variables.bodo_1p_total) }}:
             NP: 1
-            PYTEST_MARKER: ${{ format('bodo_{0}of{1} and ({2})', slice, variables.bodo_1p_total, parameters.PYTEST_MARKER) }}
+            PYTEST_MARKER: ${{ format('bodo_{0}of{1} and \({2}\)', slice, variables.bodo_1p_total, parameters.PYTEST_MARKER) }}
         ${{ each slice in split(variables.bodo_2p_each, ',') }}:
           ${{ format('BODO_2P_{0}_OF_{1}', slice, variables.bodo_2p_total) }}:
             NP: 2
-            PYTEST_MARKER: ${{ format('bodo_{0}of{1} and ({2})', slice, variables.bodo_2p_total, parameters.PYTEST_MARKER) }}
+            PYTEST_MARKER: ${{ format('bodo_{0}of{1} and \({2}\)', slice, variables.bodo_2p_total, parameters.PYTEST_MARKER) }}
 
   - template: buildscripts/bodo/azure/azure-test-conda-linux-macos.yml
     parameters:
