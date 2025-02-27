@@ -50,6 +50,8 @@ jobs:
           BUILD_WITH_V8: 1
           # Use sccache over ccache
           DISABLE_CCACHE: 1
+          # Limit the number of cores used by sccache to avoid OOM
+          CMAKE_BUILD_PARALLEL_LEVEL: 28
         run: |
           pixi run build
           # Azure SAS Provider Install
@@ -129,15 +131,16 @@ jobs:
 
       - name: Convert Notebooks scripts to Python
         run: |
+          set -exo pipefail
           pip install nbconvert
 
           export NOTEBOOK_FILES=$(find examples -name "*.ipynb")
-          echo "$NOTEBOOK_FILES" | xargs -n 10 jupyter nbconvert --to script
+          echo "$NOTEBOOK_FILES" | xargs -t -I {} jupyter nbconvert --to script "{}"
           export PYTHON_FILES=$(find examples -name "*.py" | grep -v -E "$(echo $SKIP_FILES | sed 's/ /|/g')")
 
           # replace notebook builtin display with a print
           export DISPLAY_DEF="display = print;"
-          echo "$PYTHON_FILES" | xargs -I {} sh -c 'echo $DISPLAY_DEF | cat - {} > temp && mv temp {}'
+          echo "$PYTHON_FILES" | xargs -I {} sh -c 'echo $DISPLAY_DEF | cat - "{}" > temp && mv temp "{}"'
 
       - name: Install Bodo Packages
         env:
