@@ -626,6 +626,8 @@ def _generate_table_read(
     if isinstance(bodo_type, TablePathType):
         file_type = bodo_type._file_type
         file_path = bodo_type._file_path
+        # Escape "\" in Windows paths
+        file_path = file_path.replace("\\", "\\\\")
 
         read_dict_list = (
             ""
