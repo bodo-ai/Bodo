@@ -513,7 +513,7 @@ def test_azure_basic_read(memory_leak_check):
 
 
 @pytest.mark.skip(
-    "[BSE-4601] Snowflake Azure Write temporarily broken. Unskip after Arrow 19 upgrade."
+    "[BSE-4601] Snowflake no-put temporarily broken. Unskip after Arrow 19 upgrade."
 )
 def test_azure_basic_write(memory_leak_check):
     """
