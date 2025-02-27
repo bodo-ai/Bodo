@@ -56,7 +56,7 @@ def test_basic_read(memory_leak_check, glue_catalog):
 def test_glue_catalog_iceberg_write(glue_catalog, memory_leak_check):
     """tests that writing tables works"""
     bc = bodosql.BodoSQLContext(catalog=glue_catalog)
-    con_str = GlueConnectionType(glue_catalog.warehouse).get_conn_str()
+    con_str = GlueConnectionType(glue_catalog.warehouse)
     schema = "icebergglueci"
 
     in_df = pd.DataFrame(

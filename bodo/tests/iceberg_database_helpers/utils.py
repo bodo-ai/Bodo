@@ -1,5 +1,5 @@
 import shutil
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import NamedTuple
 
 import pandas as pd
@@ -35,6 +35,7 @@ SPARK_JAR_PACKAGES = [
 @dataclass(frozen=True)
 class SparkIcebergCatalog:
     catalog_name: str
+    default_schema: str | None = field(default=None, kw_only=True)
 
 
 @dataclass(frozen=True)
@@ -47,17 +48,36 @@ class SparkRestIcebergCatalog(SparkIcebergCatalog):
     uri: str
     credential: str
     warehouse: str
-    io_impl: str
 
 
 @dataclass(frozen=True)
 class SparkAzureIcebergCatalog(SparkRestIcebergCatalog):
-    io_impl: str = "org.apache.iceberg.azure.adlsv2.ADLSFileIO"
+    pass
 
 
 @dataclass(frozen=True)
 class SparkAwsIcebergCatalog(SparkRestIcebergCatalog):
-    io_impl: str = "org.apache.iceberg.aws.s3.S3FileIO"
+    region: str = field(default="us-east-2", kw_only=True)
+
+
+def get_spark_catalog_for_connection(connection: tuple[str, str, str]):
+    uri, warehouse, credential = connection
+    if "aws" in warehouse:
+        return SparkAwsIcebergCatalog(
+            catalog_name=warehouse,
+            uri=uri,
+            warehouse=warehouse,
+            credential=credential,
+        )
+    elif "azure" in warehouse:
+        return SparkAzureIcebergCatalog(
+            catalog_name=warehouse,
+            uri=uri,
+            warehouse=warehouse,
+            credential=credential,
+        )
+    else:
+        raise ValueError(f"Unknown warehouse: {warehouse}")
 
 
 # This should probably be wrapped into a class or fixture in the future
@@ -77,15 +97,6 @@ def get_spark(
     # Only run Spark on one rank to run faster and avoid Spark issues
     if bodo.get_rank() != 0:
         return None
-
-    if spark is not None:
-        if catalog in spark_catalogs:
-            return spark
-        else:
-            # Clear the spark instance and reinitialize
-            # we can't add a new catalog to an existing spark instance
-            spark.stop()
-    spark_catalogs.add(catalog)
 
     def add_catalog(builder: SparkSession.Builder, catalog: SparkIcebergCatalog):
         match catalog:
@@ -121,13 +132,22 @@ def get_spark(
                     catalog.warehouse,
                 )
                 builder.config(
-                    f"spark.sql.catalog.{catalog.catalog_name}.io-impl",
-                    catalog.io_impl,
-                )
-                builder.config(
                     f"spark.sql.catalog.{catalog.catalog_name}.scope",
                     "PRINCIPAL_ROLE:ALL",
                 )
+                builder.config(
+                    f"spark.sql.catalog.{catalog.catalog_name}.X-Iceberg-Access-Delegation",
+                    "vended-credentials",
+                )
+                builder.config(
+                    f"spark.sql.catalog.{catalog.catalog_name}.token-refresh-enabled",
+                    "true",
+                )
+        if catalog.default_schema:
+            builder.config(
+                f"spark.sql.catalog.{catalog.catalog_name}.default-namespace",
+                catalog.default_schema,
+            )
 
     def do_get_spark():
         builder = SparkSession.builder.appName("spark")
@@ -154,15 +174,22 @@ def get_spark(
 
         return spark
 
-    try:
-        spark = do_get_spark()
-    except Exception:
-        # Clear cache and try again - note that this is only for use in CI.
-        # Sometimes packages fail to download - if this happens to you locally,
-        # clear your cache manually. The path is in the logs.
-        shutil.rmtree("/root/.ivy2", ignore_errors=True)
-        shutil.rmtree("/root/.m2/repository", ignore_errors=True)
-        spark = do_get_spark()
+    if catalog not in spark_catalogs:
+        # Clear the spark instance and reinitialize
+        # we can't add a new catalog to an existing spark instance
+        if spark is not None:
+            spark.stop()
+        spark_catalogs.add(catalog)
+
+        try:
+            spark = do_get_spark()
+        except Exception:
+            # Clear cache and try again - note that this is only for use in CI.
+            # Sometimes packages fail to download - if this happens to you locally,
+            # clear your cache manually. The path is in the logs.
+            shutil.rmtree("/root/.ivy2", ignore_errors=True)
+            shutil.rmtree("/root/.m2/repository", ignore_errors=True)
+            spark = do_get_spark()
     spark.catalog.setCurrentCatalog(catalog.catalog_name)
     return spark
 

@@ -130,9 +130,6 @@ class S3TablesConnectionType(IcebergConnectionType):
 
         super().__init__(name=f"S3TablesConnectionType({warehouse=})")
 
-    def get_conn_str(self) -> str:
-        return self.conn_str
-
 
 @intrinsic
 def _get_s3_tables_connection(typingctx, warehouse, conn_str):

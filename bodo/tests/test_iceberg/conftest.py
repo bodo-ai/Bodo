@@ -1,6 +1,7 @@
 import os
 import random
 import subprocess
+import time
 
 import boto3
 import pytest
@@ -79,9 +80,7 @@ def polaris_server():
                 "quarkus.otel.sdk.disabled": "true",
                 "POLARIS_BOOTSTRAP_CREDENTIALS": "default-realm,root,s3cr3t",
                 "polaris.realm-context.realms": "default-realm",
-                "AWS_REGION": session.region_name
-                if session.region_name
-                else "us-east-2",
+                "AWS_REGION": "us-east-2",
             }
             if credentials.access_key is not None:
                 env["AWS_ACCESS_KEY_ID"] = credentials.access_key
@@ -94,20 +93,30 @@ def polaris_server():
                 env["AZURE_CLIENT_ID"] = os.environ["AZURE_CLIENT_ID"]
             if "AZURE_CLIENT_SECRET" in os.environ:
                 env["AZURE_CLIENT_SECRET"] = os.environ["AZURE_CLIENT_SECRET"]
-            if "AZURE_TENANT_ID" in os.environ:
-                env["AZURE_TENANT_ID"] = os.environ.get(
-                    "AZURE_TENANT_ID", "72f988bf-86f1-41af-91ab-2d7cd011db47"
-                )
-
-            polaris = (
-                DockerContainer("public.ecr.aws/k7f6m2y1/bodo/polaris-unittests:latest")
-                .with_bind_ports(8181, 8181)
-                .with_bind_ports(8282, 8182)
-                .with_name("polaris-server-unittests")
+            env["AZURE_TENANT_ID"] = os.environ.get(
+                "AZURE_TENANT_ID", "ac373ae0-dc77-4cbb-bbb7-deddcf6133b3"
             )
-            for key, value in env.items():
-                polaris.with_env(key, value)
-            wait_for_logs(polaris.start(), "Listening on")
+
+            n_retries = 5
+            for i in range(n_retries):
+                try:
+                    polaris = (
+                        DockerContainer(
+                            "public.ecr.aws/k7f6m2y1/bodo/polaris-unittests:latest"
+                        )
+                        .with_bind_ports(8181, 8181)
+                        .with_bind_ports(8282, 8182)
+                        .with_name("polaris-server-unittests")
+                    )
+                    for key, value in env.items():
+                        polaris.with_env(key, value)
+                    wait_for_logs(polaris.start(), "Listening on")
+                    time.sleep(2**i)
+                    break
+                except Exception as e:
+                    if i == n_retries - 1:
+                        raise e
+                    continue
         except Exception as e:
             err = e
     err = MPI.COMM_WORLD.bcast(err, root=0)
@@ -245,6 +254,24 @@ def aws_polaris_warehouse(polaris_token, polaris_server, polaris_package):
                 )
             ),
         )
+        root_client.add_grant_to_catalog_role(
+            catalog_name,
+            "catalog_admin",
+            AddGrantRequest(
+                grant=CatalogGrant(
+                    type="catalog", privilege=CatalogPrivilege.CATALOG_MANAGE_ACCESS
+                )
+            ),
+        )
+        root_client.add_grant_to_catalog_role(
+            catalog_name,
+            "catalog_admin",
+            AddGrantRequest(
+                grant=CatalogGrant(
+                    type="catalog", privilege=CatalogPrivilege.CATALOG_MANAGE_METADATA
+                )
+            ),
+        )
 
         catalog_client = CatalogApiClient(
             Configuration(
@@ -256,6 +283,10 @@ def aws_polaris_warehouse(polaris_token, polaris_server, polaris_package):
         catalog_api.create_namespace(
             prefix=catalog_name,
             create_namespace_request=CreateNamespaceRequest(namespace=["CI"]),
+        )
+        catalog_api.create_namespace(
+            prefix=catalog_name,
+            create_namespace_request=CreateNamespaceRequest(namespace=["default"]),
         )
 
         return catalog_name
@@ -326,6 +357,24 @@ def azure_polaris_warehouse(polaris_token, polaris_server, polaris_package):
                 )
             ),
         )
+        root_client.add_grant_to_catalog_role(
+            catalog_name,
+            "catalog_admin",
+            AddGrantRequest(
+                grant=CatalogGrant(
+                    type="catalog", privilege=CatalogPrivilege.CATALOG_MANAGE_ACCESS
+                )
+            ),
+        )
+        root_client.add_grant_to_catalog_role(
+            catalog_name,
+            "catalog_admin",
+            AddGrantRequest(
+                grant=CatalogGrant(
+                    type="catalog", privilege=CatalogPrivilege.CATALOG_MANAGE_METADATA
+                )
+            ),
+        )
 
         catalog_client = CatalogApiClient(
             Configuration(
@@ -337,6 +386,10 @@ def azure_polaris_warehouse(polaris_token, polaris_server, polaris_package):
         catalog_api.create_namespace(
             prefix=catalog_name,
             create_namespace_request=CreateNamespaceRequest(namespace=["CI"]),
+        )
+        catalog_api.create_namespace(
+            prefix=catalog_name,
+            create_namespace_request=CreateNamespaceRequest(namespace=["default"]),
         )
 
         return catalog_name
@@ -399,3 +452,18 @@ def polaris_connection(
             yield url, azure_polaris_warehouse, f"{user}:{password}"
     else:
         raise ValueError(f"Unknown polaris warehouse: {request.param}")
+
+
+# For cases where we can't used parameterized fixuteres like the ddl test harness
+@pytest.fixture
+def aws_polaris_connection(polaris_server, aws_polaris_warehouse):
+    host, port, user, password = polaris_server
+    url = f"http://{host}:{port}/api/catalog"
+    with temp_env_override(
+        {
+            "AWS_ACCESS_KEY_ID": None,
+            "AWS_SECRET_ACCESS_KEY": None,
+            "AWS_SESSION_TOKEN": None,
+        }
+    ):
+        yield url, aws_polaris_warehouse, f"{user}:{password}"

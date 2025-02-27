@@ -53,8 +53,8 @@ public class CatalogCreator {
     final Catalog catalog;
 
     // S3Tables doesn't use a URI
-    if (connStr.startsWith("iceberg+arn:aws:s3tables") && catalogType.equals("s3tables")) {
-      catalog = S3TablesBuilder.create(connStr.replaceFirst("^iceberg\\+", ""));
+    if (connStr.startsWith("arn:aws:s3tables") && catalogType.equals("s3tables")) {
+      catalog = S3TablesBuilder.create(connStr);
       return catalog;
     }
 
