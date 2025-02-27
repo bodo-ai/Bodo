@@ -6,6 +6,7 @@ import random
 import re
 import shutil
 import string
+import sys
 
 import numba
 import numpy as np
@@ -1677,6 +1678,9 @@ def test_read_parquet_list_of_globs(memory_leak_check):
         "bodo/tests/data/test_partitioned.pq/A=7/part-0000[5-7]-bfd81e52-9210-4ee9-84a0-5ee2ab5e6345.c000.snappy.parquet",
     ]
 
+    if sys.platform == "win32":
+        globstrings = [p.replace("/", "\\") for p in globstrings]
+
     # construct expected pandas output manually (pandas doesn't support list of files)
     files = []
     for globstring in globstrings:
@@ -1686,7 +1690,8 @@ def test_read_parquet_list_of_globs(memory_leak_check):
     # So we need to add the partition column to pandas output
     chunks = []
 
-    regexp = re.compile(r"\/A=(\d+)\/")
+    regex_str = r"\/A=(\d+)\/" if sys.platform != "win32" else r"\\A=(\d+)\\"
+    regexp = re.compile(regex_str)
     for f in files:
         df = pd.read_parquet(f)
         df["A"] = int(regexp.search(f).group(1))
