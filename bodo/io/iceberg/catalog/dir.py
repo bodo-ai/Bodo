@@ -101,7 +101,7 @@ class DirCatalog(Catalog):
         self, identifier: str | Identifier, metadata_location: str
     ) -> Table:
         # TODO
-        pass
+        raise NotImplementedError("register_table is not implemented yet")
 
     def create_table(
         self,
@@ -144,11 +144,11 @@ class DirCatalog(Catalog):
 
     def drop_table(self, identifier: str | Identifier) -> None:
         # TODO
-        pass
+        raise NotImplementedError("drop_table is not implemented yet")
 
     def purge_table(self, identifier: str | Identifier) -> None:
         # TODO
-        pass
+        raise NotImplementedError("purge_table is not implemented yet")
 
     def commit_table(
         self,

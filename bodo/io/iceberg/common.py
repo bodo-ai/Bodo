@@ -175,8 +175,15 @@ class IcebergConnectionType(types.Type):
 
 
 def _fs_from_file_path(file_path: str, io: FileIO) -> FileSystem:
+    """
+    Construct a PyArrow FileSystem from a file path and a FileIO object.
+    This is copied from pyiceberg.io.pyarrow._fs_from_file_path with
+    a modification to use Bodo's changes to PyArrowFileIO in the monkey
+    patch.
+    """
     from pyiceberg.io.pyarrow import PyArrowFileIO
 
+    # Bodo Change: Use the parse_location function from BodoPyArrowFileIO
     scheme, netloc, _ = PyArrowFileIO.parse_location(file_path)
     if isinstance(io, PyArrowFileIO):
         return io.fs_by_scheme(scheme, netloc)

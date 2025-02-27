@@ -67,7 +67,7 @@ def build_position_accessors(
 ) -> dict[int, Accessor]:
     """
     Monkey-patched version of pyiceberg.schema.build_position_accessors to
-    use the new _BuildPositionAccessors class.
+    use the new _BuildPositionAccessors class that supports top-level nested fields.
     """
     return visit(schema_or_type, _BuildPositionAccessors())
 

@@ -104,7 +104,7 @@ def create_date_field_overload(field):
     def overload_field(S_dt):
         has_tz_aware_data = isinstance(S_dt.stype.dtype, PandasDatetimeTZDtype)
 
-        func_text = "def impl(S_dt):\n"
+        func_text = f"def bodo_overload_field_{field}(S_dt):\n"
         func_text += "    S = S_dt._obj\n"
         func_text += "    arr = bodo.hiframes.pd_series_ext.get_series_data(S)\n"
         func_text += "    index = bodo.hiframes.pd_series_ext.get_series_index(S)\n"
@@ -143,10 +143,9 @@ def create_date_field_overload(field):
         func_text += (
             "    return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)\n"
         )
-        loc_vars = {}
-        exec(func_text, {"bodo": bodo, "numba": numba, "np": np}, loc_vars)
-        impl = loc_vars["impl"]
-        return impl
+        return bodo.utils.utils.bodo_exec(
+            func_text, {"bodo": bodo, "numba": numba, "np": np}, {}, __name__
+        )
 
     return overload_field
 
@@ -155,7 +154,7 @@ def overload_datetime_field_declarative(field, overload_impl):
     """
     Use declarative overload template to create an overload of dt fields that are only
     implemented for datetimes. This check is performed at compile time and is
-    documenteded using overload_attribute_declarative.
+    documented using overload_attribute_declarative.
     """
     overload_attribute_declarative(
         SeriesDatetimePropertiesType,
@@ -166,6 +165,7 @@ def overload_datetime_field_declarative(field, overload_impl):
         ),
         description=None,
         inline="always",
+        jit_options={"cache": True},
     )(overload_impl)
 
 

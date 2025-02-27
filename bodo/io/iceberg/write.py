@@ -171,6 +171,7 @@ def _get_write_data_path(properties: dict[str, str], location: str) -> str:
     Get the path to write Parquet files to for an Iceberg table
     given the tables properties and the tables base location.
     """
+
     data_path = properties.get("write.data.path")
     return data_path if data_path else f"{location}/data"
 

@@ -29,16 +29,17 @@ jobs:
       ${{ insert }}: ${{ parameters.matrix }}
 
   steps:
-  - script: |
+  - bash: |
       set -exo pipefail
       curl -fsSL https://pixi.sh/install.sh | bash
       source ~/.bashrc
       echo "##vso[task.prependpath]$HOME/.pixi/bin"
     displayName: Install Pixi
-  - script: pixi install -v --locked -e azure
+  - bash: pixi install -v --locked -e azure
+    retryCountOnTaskFailure: 3
     displayName: Install Test Environment
 
-  - script: |
+  - bash: |
       set -exo pipefail
       pixi global install unzip
       which unzip
@@ -51,10 +52,17 @@ jobs:
         sudo $(which unzip) instantclient-basic-macos.x64-19.8.0.0.0dbru.zip -d /usr/local/lib
       fi
     displayName: 'Setup Oracle Database Testing'
+    condition: ne(variables['Agent.OS'], 'Windows_NT')
     retryCountOnTaskFailure: 5
 
-  - script: |
+  - bash: |
       set -exo pipefail
+
+      unamestr=`uname`
+      if [[ "$unamestr" == 'Linux' ]]; then
+        export USE_BODO_ARROW_FORK=1
+      fi
+
       pixi run -e azure build-bodo -Cbuild.verbose=true
       pixi run -e azure build-iceberg
       pixi run -e azure -- sccache --show-stats
@@ -62,7 +70,6 @@ jobs:
       AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
       AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
       DISABLE_CCACHE: 1  # Just use sccache directly on CI
-      USE_BODO_ARROW_FORK: 1  # Build from Source with Arrow Fork
     displayName: 'Build Bodo & Iceberg Connector'
 
   - bash: |
@@ -73,6 +80,7 @@ jobs:
       cd azurefs-sas-token-provider
       pip install --no-deps --no-build-isolation -ve .
     displayName: "Setup Snowflake ADLS Testing (only Linux)"
+    condition: ne(variables['Agent.OS'], 'Windows_NT')
     retryCountOnTaskFailure: 5
 
   - bash: |
@@ -114,22 +122,31 @@ jobs:
         export HADOOP_OPTIONAL_TOOLS=hadoop-azure
         export ARROW_LIBHDFS_DIR=$HADOOP_HOME/lib/native
         export CLASSPATH=`$HADOOP_HOME/bin/hdfs classpath --glob`
+      elif [[ "$(Agent.OS)" == "Windows_NT" ]]; then
+        # On Windows we set HADOOP_HOME to a dummy directory.
+        # Spark needs to verify HADOOP_HOME exists at initialization even if it is not used.
+        export HADOOP_HOME="$(System.DefaultWorkingDirectory)/buildscripts/local_utils/hadoop_dummy"
+        export PATH=$HADOOP_HOME/bin:$PATH
+        # Visual Studio 2010 DLLs are needed for winutils.exe
+        curl -LO https://download.microsoft.com/download/1/6/5/165255E7-1014-4D0A-B094-B6A430A6BFFC/vcredist_x64.exe
+        ./vcredist_x64.exe -passive
       else
         echo "Skipping hadoop/arrow env var setup"
       fi
 
-      cd $(System.DefaultWorkingDirectory)
+      cd "$(System.DefaultWorkingDirectory)"
+
       # For caching tests we need to update the location of the decryption file.
       # We set the absolute path as an environment variable.
       export BODO_TRACING_DECRYPTION_FILE_PATH=`echo "$(System.DefaultWorkingDirectory)/buildscripts/decompress_traces.py"`
       if [[ "${{ parameters.caching_test }}" == "True" ]]; then
-        python -m bodo.runtests_caching "${{ parameters.name }}" "$NP" bodo/tests/caching_tests
+        pixi run -e azure python -m bodo.runtests_caching "${{ parameters.name }}" "$NP" bodo/tests/caching_tests
       elif [[ "${{ parameters.spawn_mode_test }}" == "True" ]]; then
         export BODO_TEST_SPAWN_MODE=1
         export BODO_NUM_WORKERS="$NP"
-        pytest -s -v -Wignore -m "$(PYTEST_MARKER)" bodo/tests --junitxml=pytest-report-spawn-mode.xml --test-run-title="${{ parameters.name }}"
+        pixi run -e azure pytest -s -v -Wignore -m "$(PYTEST_MARKER)" bodo/tests --junitxml=pytest-report-spawn-mode.xml --test-run-title="${{ parameters.name }}"
       else
-        python -m bodo.runtests "${{ parameters.name }}" "$NP" --pyargs bodo -s -v -m "$(PYTEST_MARKER)"
+        pixi run -e azure python -m bodo.runtests "${{ parameters.name }}" "$NP" --pyargs bodo -s -v -m "$(PYTEST_MARKER)"
       fi
     env:
       SF_USERNAME: $(SNOWFLAKE_USER)

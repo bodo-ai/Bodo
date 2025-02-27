@@ -266,7 +266,7 @@ def test_snowflake_write_do_upload_and_cleanup(memory_leak_check):
         # Use GET to fetch all uploaded files
         with TemporaryDirectory() as tmp_folder:
             get_stage_sql = (
-                f"GET @\"{stage_name}\" 'file://{tmp_folder}' "
+                f"GET @\"{stage_name}\" 'file://{tmp_folder.replace('\\', '/')}' "
                 f"/* tests.test_sql:test_snowflake_do_upload_and_cleanup() */"
             )
             cursor.execute(get_stage_sql, _is_internal=True)
@@ -781,7 +781,16 @@ def test_to_sql_table_name(table_names):
 @pytest.mark.parametrize("df_size", [17000 * 3, 2, 0])
 @pytest.mark.parametrize(
     "sf_write_use_put",
-    [pytest.param(True, id="with-put"), pytest.param(False, id="no-put")],
+    [
+        pytest.param(True, id="with-put"),
+        pytest.param(
+            False,
+            id="no-put",
+            marks=pytest.mark.skip(
+                "[BSE-4601] Snowflake no-put write temporarily broken. Unskip after Arrow 19 upgrade."
+            ),
+        ),
+    ],
 )
 @pytest.mark.parametrize(
     "snowflake_user",
@@ -1559,7 +1568,13 @@ def test_snowflake_write_column_name_special_chars(memory_leak_check):
     "sf_write_use_put",
     [
         pytest.param(True, id="with-put"),
-        pytest.param(False, id="no-put"),
+        pytest.param(
+            False,
+            id="no-put",
+            marks=pytest.mark.skip(
+                "[BSE-4601] Snowflake no-put write temporarily broken. Unskip after Arrow 19 upgrade."
+            ),
+        ),
     ],
 )
 @pytest.mark.parametrize(

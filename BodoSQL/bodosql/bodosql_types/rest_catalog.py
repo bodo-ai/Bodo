@@ -48,7 +48,7 @@ def _create_java_REST_catalog(
         JavaObject: A Java RESTCatalog object.
     """
     return JavaEntryPoint.buildIcebergRESTCatalog(
-        rest_uri.removeprefix("iceberg+"),
+        rest_uri,
         warehouse,
         token,
         credential,

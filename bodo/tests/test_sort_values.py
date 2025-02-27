@@ -1306,7 +1306,7 @@ def test_sort_values_input_boundaries(memory_leak_check):
                 )
             ],
             [
-                np.array([0, 5, 10]),
+                np.array([0, 5, 10], dtype=np.int64),
             ],
             float("-inf"),
             float("inf"),

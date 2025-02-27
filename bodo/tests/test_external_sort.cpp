@@ -1209,8 +1209,12 @@ bodo::tests::suite external_sort_tests([] {
         bodo::tests::check(state.metrics.shuffle_total_recv_nrows >= 1990000);
         // It will typically be able to post all allowed (5000) sends, and have
         // >500 receives inflight at once.
+        // Intel MPI on Windows seems to have a different behavior and have
+        // fewer inflight sends/recvs.
+#ifndef _WIN32
         bodo::tests::check(state.metrics.max_concurrent_sends >= 4500);
         bodo::tests::check(state.metrics.max_concurrent_recvs >= 500);
+#endif
 
         // Merge tables and get a single output array
         std::shared_ptr<table_info> local_sorted_table =

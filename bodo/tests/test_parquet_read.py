@@ -2104,7 +2104,8 @@ def test_read_parquet_input_file_name_col_with_index(datapath, memory_leak_check
     # Unlike the other tests, we're only checking for a specific code path,
     # so we don't need to check against PySpark directly.
     py_output = pd.read_parquet(fname)
-    py_output["fname"] = fname
+    # PyArrow replaces "\" with "/" in file paths on Windows for some reason
+    py_output["fname"] = fname.replace("\\", "/")
 
     check_func(
         test_impl,

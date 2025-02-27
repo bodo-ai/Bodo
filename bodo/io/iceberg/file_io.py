@@ -1,5 +1,6 @@
 import os
 import typing as pt
+from pathlib import PureWindowsPath
 from urllib.parse import urlparse
 
 from pyarrow.fs import FileSystem
@@ -23,6 +24,23 @@ def _map_wasb_to_abfs(scheme: str, netloc: str) -> tuple[str, str]:
     return scheme, netloc
 
 
+def _is_windows_path(path: str) -> bool:
+    """
+    Check if the given path is a Windows path (e.g. C:\\user\\data).
+    """
+    p = PureWindowsPath(path)
+
+    # True if a typical Windows drive like "C:" or a UNC drive like "\\server\share"
+    if p.drive:
+        if len(p.drive) == 2 and p.drive[1] == ":":
+            return True
+
+        if p.drive.startswith("\\"):
+            return True
+
+    return False
+
+
 class BodoPyArrowFileIO(PyArrowFileIO):
     """
     A class that extends PyArrowFileIO to extend AzureFileSystem support.
@@ -32,6 +50,10 @@ class BodoPyArrowFileIO(PyArrowFileIO):
     @pt.override
     def parse_location(location: str) -> tuple[str, str, str]:
         """Return the path without the scheme."""
+
+        if _is_windows_path(location):
+            return "file", "", os.path.abspath(location)
+
         uri = urlparse(location)
         if not uri.scheme:
             return "file", uri.netloc, os.path.abspath(location)

@@ -52,6 +52,8 @@ jobs:
             name: macos-x86
           - os: macos-latest
             name: macos-arm
+          - os: windows-latest
+            name: windows
           # Don't publish linux arm until we can get nightly fixed
           #- os: ubuntu-24.04-arm
           #  name: linux-arm

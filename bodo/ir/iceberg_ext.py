@@ -372,7 +372,7 @@ class IcebergReader(Connector):
         # that have been pushed down to I/O.
         rtjf_terms: list[tuple[ir.Var, tuple[int], tuple[int, int, str]]] | None = None,
     ):
-        # Info requireds to connect to the catalog and table
+        # Info required to connect to the catalog and table
         self.table_id = table_id
         self.connection = connection
 
@@ -873,15 +873,18 @@ def literal(val) -> Literal:
     """
     from pyiceberg.expressions.literals import DateLiteral, TimestampLiteral
     from pyiceberg.expressions.literals import literal as inner_literal
+    from pyiceberg.utils.datetime import datetime_to_micros
 
     # PyIceberg literal doesn't support all data types
     # See https://github.com/apache/iceberg-python/issues/1456
+    if isinstance(val, (datetime.datetime, pd.Timestamp)):
+        return TimestampLiteral(datetime_to_micros(val))
+    # pd.Timestamp and datetime.datetime are subclasses of datetime.date
     if isinstance(val, datetime.date):
         return DateLiteral((val - datetime.date(1970, 1, 1)).days)
-    if isinstance(val, datetime.datetime):
-        return TimestampLiteral((val - datetime.datetime(1970, 1, 1)).microseconds)
     if isinstance(val, (list, pd.core.arrays.ExtensionArray)):
         return {literal(v) for v in val}  # type: ignore
+    # TODO: Potentially need to support nested structures
     return inner_literal(val)
 
 

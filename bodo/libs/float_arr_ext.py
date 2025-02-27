@@ -309,7 +309,7 @@ ArrayAnalysis._analyze_op_call_bodo_libs_float_arr_ext_alloc_float_array = (
 )
 
 
-@overload(operator.getitem, no_unliteral=True)
+@overload(operator.getitem, no_unliteral=True, jit_options={"cache": True})
 def float_arr_getitem(A, ind):  # pragma: no cover
     if not isinstance(A, FloatingArrayType):
         return
@@ -448,7 +448,7 @@ def numpy_arr_setitem(A, idx, val):
     return impl_np_setitem_float_arr
 
 
-@overload(len, no_unliteral=True)
+@overload(len, no_unliteral=True, jit_options={"cache": True})
 def overload_float_arr_len(A):  # pragma: no cover
     if isinstance(A, FloatingArrayType):
         return lambda A: len(A._data)
