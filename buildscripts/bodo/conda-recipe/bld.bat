@@ -3,9 +3,11 @@ echo "building bodo for Windows OS!!"
 echo %VSINSTALLDIR%
 
 set "SETUPTOOLS_SCM_PRETEND_VERSION=%PKG_VERSION%"
+echo "%SETUPTOOLS_SCM_PRETEND_VERSION%"
 
 set "CONDA_PREFIX=%PREFIX%"
-set "CMAKE_GEN=Visual Studio 17 2022"
+set "BODO_WINDOWS_BUILD_TYPE=Release"
+set "NO_HDF5=1"
 
 :: Build using pip and CMake
 "%PYTHON%" -m pip install --no-deps --no-build-isolation -vv ^
