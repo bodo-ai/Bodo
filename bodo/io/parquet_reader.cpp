@@ -199,7 +199,8 @@ void ParquetReader::init_pq_scanner() {
     this->reader = PyTuple_GetItem(scanner_batches_tup, 0);
     Py_INCREF(this->reader);  // call incref to keep the reference
 
-    this->rows_to_skip = PyLong_AsLong(PyTuple_GetItem(scanner_batches_tup, 1));
+    this->rows_to_skip =
+        PyLong_AsLongLong(PyTuple_GetItem(scanner_batches_tup, 1));
     this->rows_left_cur_piece = this->pieces_nrows[0];
 
     Py_DECREF(pq_mod);

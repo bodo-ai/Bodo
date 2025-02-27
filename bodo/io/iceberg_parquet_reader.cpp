@@ -782,7 +782,7 @@ class IcebergParquetReader : public ArrowReader {
         this->file_list = PyObject_GetAttrString(ds, "file_list");
         PyObject* py_snapshot_id = PyObject_GetAttrString(ds, "snapshot_id");
         // The snapshot Id is just an integer so store in native code.
-        this->snapshot_id = PyLong_AsLong(py_snapshot_id);
+        this->snapshot_id = PyLong_AsLongLong(py_snapshot_id);
         Py_DECREF(py_snapshot_id);
         // Returns a new reference.
         this->schema_groups_py = PyObject_GetAttrString(ds, "schema_groups");
@@ -1330,7 +1330,7 @@ class IcebergParquetReader : public ArrowReader {
         }
 
         this->rows_to_skip =
-            PyLong_AsLong(PyTuple_GetItem(datasets_updated_offset_tup, 3));
+            PyLong_AsLongLong(PyTuple_GetItem(datasets_updated_offset_tup, 3));
 
         Py_DECREF(iceberg_mod);
         Py_DECREF(fpaths_py);
