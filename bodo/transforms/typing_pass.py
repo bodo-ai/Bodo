@@ -6364,13 +6364,13 @@ def _set_updated_container(varname, update_func, updated_containers, equiv_vars)
         updated_containers[w] = update_func
 
 
-def _bc_stream_to_bytecode(bc_stream, out_size):
+def _bc_stream_to_bytecode(bc_stream, original_code):
     """convert a stream of unpacked bytecode to a bytearray, reverses disassembly"""
     import dis
 
     from numba.core.bytecode import ARG_LEN, CODE_LEN
 
-    out = bytearray(out_size)
+    out = bytearray(original_code.co_code)
     for (
         offset,
         op,
@@ -6445,7 +6445,7 @@ def _replace_load_deref_code(code, freevar_arg_map):
     return bytes(
         _bc_stream_to_bytecode(
             _patch_opargs(code, freevar_arg_map, prev_argcount, prev_n_locals),
-            len(code.co_code),
+            code,
         )
     )
 

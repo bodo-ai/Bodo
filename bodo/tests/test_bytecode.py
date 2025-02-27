@@ -54,8 +54,7 @@ def test_bc_stream_to_bytecode():
     """
     test_code = _bc_stream_to_bytecode.__code__
     assert (
-        _bc_stream_to_bytecode(get_bc_stream(test_code), len(test_code.co_code))
-        == test_code.co_code
+        _bc_stream_to_bytecode(get_bc_stream(test_code), test_code) == test_code.co_code
     )
 
 
@@ -70,6 +69,6 @@ def test_bc_stream_to_bytecode_all_typing_pass():
         if callable(obj) and hasattr(obj, "__code__"):
             test_code = obj.__code__
             assert (
-                _bc_stream_to_bytecode(get_bc_stream(test_code), len(test_code.co_code))
+                _bc_stream_to_bytecode(get_bc_stream(test_code), test_code)
                 == test_code.co_code
             )
