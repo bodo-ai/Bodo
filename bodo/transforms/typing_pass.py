@@ -6401,6 +6401,11 @@ def _replace_load_deref_code(code, freevar_arg_map):
     prev_n_locals = code.co_nlocals
 
     def _patch_opargs(code, freevar_arg_map, prev_argcount, prev_n_locals):
+        """
+        Patch the code object to replace the free variable load with an argument load.
+        Returns a stream of the updated bytecode.
+        """
+
         # cannot handle cases that write to free variables
         banned_ops = (dis.opmap["STORE_DEREF"], dis.opmap["LOAD_CLOSURE"])
         # local variable access to be adjusted
