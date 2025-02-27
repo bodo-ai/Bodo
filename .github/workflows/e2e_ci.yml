@@ -97,7 +97,7 @@ jobs:
     env:
       # Skip files that aren't testing core functionality or are covered in existing tests.
       SKIP_FILES: >
-        query_llm_ollama.py
+        llm_query_ollama.py
         preprocess_thepile_bodo.py
         generate_kmers.py
         llm_inference_speedtest.py
