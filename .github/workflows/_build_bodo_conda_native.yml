@@ -80,7 +80,6 @@ jobs:
 
           # Export Location for Artifacting
           echo "CONDA_BLD_PATH=$HOME/conda-bld" >> $GITHUB_ENV
-
         env:
           CONDA_SOLVER: libmamba
           # Sccache Creds
@@ -105,7 +104,6 @@ jobs:
           echo "BODO_VERSION: $BODO_VERSION"
           echo "ARTIFACTORY_CHANNEL: $ARTIFACTORY_CHANNEL"
           ./buildscripts/bodo/publish_binary.sh $ARTIFACTORY_CHANNEL $OS_DIR $BODO_VERSION
-
         env:
           IS_RELEASE: ${{ inputs.is-release }}
           ARTIFACTORY_CHANNEL: ${{ format('bodo.ai{0}{1}', (inputs.platform-build == true) && '-platform' || '', (inputs.is-release == false) && '-dev' || '') }}
