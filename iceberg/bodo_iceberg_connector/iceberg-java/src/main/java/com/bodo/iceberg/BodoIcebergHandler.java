@@ -167,14 +167,6 @@ public class BodoIcebergHandler {
   }
 
   /**
-   * Updates a Snapshot update operation with the app-id field. This is used to easily identify
-   * tables created by Bodo.
-   */
-  private static void appendAppID(SnapshotUpdate<?> op) {
-    op.set("app-id", "bodo");
-  }
-
-  /**
    * Get the location of the table in the underlying storage
    *
    * <p>Note: This API is exposed to Python.
@@ -374,7 +366,7 @@ public class BodoIcebergHandler {
   public void addData(
       AppendFiles action, PartitionSpec spec, SortOrder order, List<DataFileInfo> fileInfos) {
     // Make sure to set the app-id field to "bodo" for easy identification
-    appendAppID(action);
+    action.set("app-id", "bodo");
     boolean isPartitionedPaths = spec.isPartitioned();
 
     for (DataFileInfo info : fileInfos) {
@@ -398,7 +390,7 @@ public class BodoIcebergHandler {
     // not matter
     DeleteFiles delAction = transaction.newDelete();
     // Make sure to set the app-id field to "bodo" for easy identification
-    appendAppID(delAction);
+    delAction.set("app-id", "bodo");
     for (String oldFileName : oldFileNames) {
       delAction.deleteFile(oldFileName);
     }
@@ -406,7 +398,7 @@ public class BodoIcebergHandler {
 
     AppendFiles action = transaction.newAppend();
     // Make sure to set the app-id field to "bodo" for easy identification
-    appendAppID(action);
+    action.set("app-id", "bodo");
     for (DataFileInfo newFile : newFiles) {
       action.appendFile(newFile.toDataFile(spec, order, isPartitionedPaths));
     }

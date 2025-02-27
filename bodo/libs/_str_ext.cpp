@@ -480,7 +480,7 @@ int64_t str_to_int64_base(char* data, int64_t length, int64_t base) {
     buffer[length] = '\0';
     strncpy(buffer, data, length);
     // This assumes data is null terminated. Is that safe?
-    l = strtol(buffer, &end, base);
+    l = strtoll(buffer, &end, base);
     if (errno || *buffer == '\0' || *end != '\0') {
         free(buffer);
         PyErr_SetString(PyExc_RuntimeError, "invalid string to int conversion");

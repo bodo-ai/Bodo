@@ -158,7 +158,7 @@ def append_to_iceberg_table(
 
 
 def create_iceberg_table(
-    df: pd.DataFrame,
+    df: pd.DataFrame | None,
     sql_schema: list[tuple[str, str, bool]],
     table_name: str,
     spark: SparkSession | None = None,
@@ -213,6 +213,8 @@ def create_iceberg_table(
             WRITE ORDERED BY {", ".join(sort_defs)}
         """
         )
-    append_to_iceberg_table(df, sql_schema, table_name, spark)
+
+    if df is not None:
+        append_to_iceberg_table(df, sql_schema, table_name, spark)
 
     return table_name
