@@ -144,9 +144,9 @@ jobs:
       elif [[ "${{ parameters.spawn_mode_test }}" == "True" ]]; then
         export BODO_TEST_SPAWN_MODE=1
         export BODO_NUM_WORKERS="$NP"
-        pixi run -e azure pytest -s -v -Wignore -m "$(PYTEST_MARKER)" bodo/tests --junitxml=pytest-report-spawn-mode.xml --test-run-title="${{ parameters.name }}"
+        pixi run -e azure pytest -s -v -Wignore -m "\'$(PYTEST_MARKER)\'" bodo/tests --junitxml=pytest-report-spawn-mode.xml --test-run-title="${{ parameters.name }}"
       else
-        pixi run -e azure python -m bodo.runtests "${{ parameters.name }}" "$NP" --pyargs bodo -s -v -m "$(PYTEST_MARKER)"
+        pixi run -e azure python -m bodo.runtests "${{ parameters.name }}" "$NP" --pyargs bodo -s -v -m "\'$(PYTEST_MARKER)\'"
       fi
     env:
       SF_USERNAME: $(SNOWFLAKE_USER)
