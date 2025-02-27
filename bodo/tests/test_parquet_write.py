@@ -971,6 +971,7 @@ def test_streaming_parquet_write(memory_leak_check):
         bodo.io.stream_parquet_write.PARQUET_WRITE_CHUNK_SIZE = orig_chunk_size
         if bodo.get_rank() == 0:
             shutil.rmtree(write_filename)
+        bodo.barrier()
 
 
 def test_streaming_parquet_write_rep(memory_leak_check):
@@ -1034,6 +1035,7 @@ def test_streaming_parquet_write_rep(memory_leak_check):
         bodo.io.stream_parquet_write.PARQUET_WRITE_CHUNK_SIZE = orig_chunk_size
         if bodo.get_rank() == 0:
             shutil.rmtree(write_filename)
+        bodo.barrier()
 
 
 # ---------------------------- Test Error Checking ---------------------------- #
