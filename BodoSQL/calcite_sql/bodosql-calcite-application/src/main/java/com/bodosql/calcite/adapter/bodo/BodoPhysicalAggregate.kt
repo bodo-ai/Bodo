@@ -516,7 +516,7 @@ class BodoPhysicalAggregate(
 
         // Get the set of group by key indices to skip in type check below
         val keySet = mutableSetOf<Int>()
-        for (i in 0..<groupSet.size()) {
+        for (i in 0 until groupSet.size()) {
             if (groupSet[i]) {
                 keySet.add(i)
             }
