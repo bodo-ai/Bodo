@@ -2756,7 +2756,7 @@ def test_send_recv(val):
 
     if bodo.get_size() == 1:
         return
-    np.random.seed(np.uint32(hash(val)))
+    np.random.seed(hash(val))
     send_rank = np.random.randint(bodo.get_size())
     recv_rank = np.random.randint(bodo.get_size())
     # make sure send_rank != recv_rank
