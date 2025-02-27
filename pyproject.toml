@@ -15,8 +15,7 @@ build-backend = "scikit_build_core.build"
 
 [project]
 name = "bodo"
-# dynamic = ["version"]
-version = "2025.3.dev128+g3de95903z"
+dynamic = ["version"]
 description = "High-Performance Python Compute Engine for Data and AI"
 readme = "README.md"
 requires-python = ">=3.10,<3.13"
@@ -82,7 +81,7 @@ cmake.build-type = "Release"
 build.verbose = true
 logging.level = "INFO"
 
-# metadata.version.provider = "scikit_build_core.metadata.setuptools_scm"
+metadata.version.provider = "scikit_build_core.metadata.setuptools_scm"
 build-dir = "build/type_{build_type}"
 wheel.exclude = [
     "bodo/**/*.h",
