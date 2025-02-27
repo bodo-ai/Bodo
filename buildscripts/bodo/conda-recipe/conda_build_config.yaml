@@ -25,10 +25,10 @@ c_compiler_version:    # [osx]
 cxx_compiler_version:  # [osx]
   - 19                 # [osx]
 
-c_compiler_version:    # [win]
-  - vs2022             # [win]
-cxx_compiler_version:  # [win]
-  - vs2022             # [win]
+c_compiler:    # [win]
+  - vs2022     # [win]
+cxx_compiler:  # [win]
+  - vs2022     # [win]
 
 numpy:
   - 1.23
