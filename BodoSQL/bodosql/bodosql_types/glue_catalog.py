@@ -135,9 +135,6 @@ class GlueConnectionType(IcebergConnectionType):
 
         super().__init__(name=f"GlueConnectionType({warehouse=})")
 
-    def get_conn_str(self) -> str:
-        return self.conn_str
-
 
 @intrinsic(prefer_literal=True)
 def _get_glue_connection(typingctx, warehouse, conn_str):
