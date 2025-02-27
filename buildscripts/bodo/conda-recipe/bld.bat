@@ -1,10 +1,4 @@
-echo "building bodo for Windows OS!!"
-
-echo %VSINSTALLDIR%
-
 set "SETUPTOOLS_SCM_PRETEND_VERSION=%PKG_VERSION%"
-echo "%SETUPTOOLS_SCM_PRETEND_VERSION%"
-
 set "CONDA_PREFIX=%PREFIX%"
 set "BODO_WINDOWS_BUILD_TYPE=Release"
 

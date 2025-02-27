@@ -61,8 +61,6 @@ jobs:
           set -exo pipefail
           echo "BODO_VERSION=`python -m setuptools_scm`" >> $GITHUB_ENV
           echo "IS_RELEASE=`git tag --points-at HEAD`" >> $GITHUB_ENV
-          echo $BODO_VERSION
-        # shell: bash
 
       - name: Build Bodo Conda Package
         run: |
@@ -82,7 +80,7 @@ jobs:
 
           # Export Location for Artifacting
           echo "CONDA_BLD_PATH=$HOME/conda-bld" >> $GITHUB_ENV
-        # shell: bash
+
         env:
           CONDA_SOLVER: libmamba
           # Sccache Creds
@@ -107,7 +105,7 @@ jobs:
           echo "BODO_VERSION: $BODO_VERSION"
           echo "ARTIFACTORY_CHANNEL: $ARTIFACTORY_CHANNEL"
           ./buildscripts/bodo/publish_binary.sh $ARTIFACTORY_CHANNEL $OS_DIR $BODO_VERSION
-        # shell: bash
+
         env:
           IS_RELEASE: ${{ inputs.is-release }}
           ARTIFACTORY_CHANNEL: ${{ format('bodo.ai{0}{1}', (inputs.platform-build == true) && '-platform' || '', (inputs.is-release == false) && '-dev' || '') }}

@@ -12,9 +12,9 @@ on:
       - '.github/workflows/_build_*.yml'
 
 jobs:
-  # For Linux, we need to build conda inside a docker container for best support. 
-  # But for the platform package to have the best potential performance, 
-  # we want to build outside of a container on the native architecture. 
+  # For Linux, we need to build conda inside a docker container for best support.
+  # But for the platform package to have the best potential performance,
+  # we want to build outside of a container on the native architecture.
   # MacOS also builds on the native VM (no docker container). Thus, they are grouped together.
   bodo-conda-linux-x86:
     strategy:
@@ -43,7 +43,7 @@ jobs:
       is-release: ${{ github.event_name == 'release' }}
       arm: true
     secrets: inherit
-  bodo-conda-mac:
+  bodo-conda-mac-and-windows:
     strategy:
       # Don't cancel other jobs if one fails
       fail-fast: false
