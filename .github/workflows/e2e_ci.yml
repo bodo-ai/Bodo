@@ -99,7 +99,7 @@ jobs:
       SKIP_FILES: >
         llm_query_ollama.py
         preprocess_thepile_bodo.py
-        generate_kmers.py
+        bio_parallelizing_fasta_processing.py
         llm_inference_speedtest.py
         #Tutorials/*.py
     steps:
