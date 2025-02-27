@@ -4369,7 +4369,8 @@ class TypingTransforms:
             f_ind: code.co_argcount + i for i, f_ind in enumerate(freevar_inds)
         }
         new_code = _replace_load_deref_code(
-            code.co_code, freevar_arg_map, code.co_argcount, code.co_nlocals
+            code,
+            freevar_arg_map,
         )
 
         # we can now change the IR/code since all checks are done (including
@@ -6363,7 +6364,30 @@ def _set_updated_container(varname, update_func, updated_containers, equiv_vars)
         updated_containers[w] = update_func
 
 
-def _replace_load_deref_code(code, freevar_arg_map, prev_argcount, prev_n_locals):
+def _bc_stream_to_bytecode(bc_stream, original_code):
+    """convert a stream of unpacked bytecode to a bytearray, reverses disassembly"""
+    import dis
+
+    from numba.core.bytecode import ARG_LEN, CODE_LEN
+
+    out = bytearray(original_code.co_code)
+    for (
+        offset,
+        op,
+        arg,
+    ) in bc_stream:
+        out[offset] = op
+        if op >= dis.HAVE_ARGUMENT:
+            for i in range(ARG_LEN):
+                out[offset + CODE_LEN + i] = arg & 0xFF
+                arg >>= 8
+
+        else:
+            assert arg is None
+    return out
+
+
+def _replace_load_deref_code(code, freevar_arg_map):
     """replace load of free variables in byte code with load of new arguments and
     adjust local variable indices due to new arguments in co_varnames.
     # https://docs.python.org/3/library/dis.html#opcode-LOAD_FAST
@@ -6373,51 +6397,57 @@ def _replace_load_deref_code(code, freevar_arg_map, prev_argcount, prev_n_locals
     """
     import dis
 
-    from numba.core.bytecode import ARG_LEN, CODE_LEN, NO_ARG_LEN
+    prev_argcount = code.co_argcount
+    prev_n_locals = code.co_nlocals
 
-    # assuming these constants are 1 to simplify the code, very unlikely to change
-    assert CODE_LEN == 1 and ARG_LEN == 1 and NO_ARG_LEN == 1, (
-        "invalid bytecode version"
+    def _patch_opargs(code, freevar_arg_map, prev_argcount, prev_n_locals):
+        """
+        Patch the code object to replace the free variable load with an argument load.
+        Returns a stream of the updated bytecode.
+        """
+
+        # cannot handle cases that write to free variables
+        banned_ops = (dis.opmap["STORE_DEREF"], dis.opmap["LOAD_CLOSURE"])
+        # local variable access to be adjusted
+        local_varname_ops = (
+            dis.opmap["LOAD_FAST"],
+            dis.opmap["STORE_FAST"],
+            dis.opmap["DELETE_FAST"],
+        )
+        n_new_args = len(freevar_arg_map)
+        for inst in dis.get_instructions(code):
+            (
+                offset,
+                op,
+                arg,
+            ) = inst.offset, inst.opcode, inst.arg
+            require(op not in banned_ops)
+
+            # adjust local variable access since index includes arguments
+            if op in local_varname_ops and arg >= prev_argcount:
+                arg += n_new_args
+
+            # Python 3.11 copies free vars into local variables in the beginning of the
+            # function. We need to update LOAD_DEREF indices accordingly. See:
+            # https://docs.python.org/3.11/library/dis.html#opcode-COPY_FREE_VARS
+            # https://github.com/python/cpython/blob/cce6ba91b3a0111110d7e1db828bd6311d58a0a7/Python/ceval.c#L3206
+            if "COPY_FREE_VARS" in dis.opmap and op == dis.opmap["COPY_FREE_VARS"]:
+                freevar_arg_map = {
+                    k + prev_n_locals: v for k, v in freevar_arg_map.items()
+                }
+
+            # replace free variable load
+            if op == dis.opmap["LOAD_DEREF"] and arg in freevar_arg_map:
+                op = dis.opmap["LOAD_FAST"]
+                arg = freevar_arg_map[arg]
+            yield offset, op, arg
+
+    return bytes(
+        _bc_stream_to_bytecode(
+            _patch_opargs(code, freevar_arg_map, prev_argcount, prev_n_locals),
+            code,
+        )
     )
-    # cannot handle cases that write to free variables
-    banned_ops = (dis.opmap["STORE_DEREF"], dis.opmap["LOAD_CLOSURE"])
-    # local variable access to be adjusted
-    local_varname_ops = (
-        dis.opmap["LOAD_FAST"],
-        dis.opmap["STORE_FAST"],
-        dis.opmap["DELETE_FAST"],
-    )
-    n_new_args = len(freevar_arg_map)
-
-    new_code = np.empty(len(code), np.int8)
-    n = len(code)
-    i = 0
-    while i < n:
-        op = code[i]
-        arg = code[i + 1]
-        require(op not in banned_ops)
-
-        # adjust local variable access since index includes arguments
-        if op in local_varname_ops and arg >= prev_argcount:
-            arg += n_new_args
-
-        # Python 3.11 copies free vars into local variables in the beginning of the
-        # function. We need to update LOAD_DEREF indices accordingly. See:
-        # https://docs.python.org/3.11/library/dis.html#opcode-COPY_FREE_VARS
-        # https://github.com/python/cpython/blob/cce6ba91b3a0111110d7e1db828bd6311d58a0a7/Python/ceval.c#L3206
-        if "COPY_FREE_VARS" in dis.opmap and op == dis.opmap["COPY_FREE_VARS"]:
-            freevar_arg_map = {k + prev_n_locals: v for k, v in freevar_arg_map.items()}
-
-        # replace free variable load
-        if op == dis.opmap["LOAD_DEREF"] and arg in freevar_arg_map:
-            op = dis.opmap["LOAD_FAST"]
-            arg = freevar_arg_map[arg]
-
-        new_code[i] = op
-        new_code[i + 1] = arg
-        i += 2
-
-    return bytes(new_code)
 
 
 def _get_state_defining_call(func_ir, state, fn):
