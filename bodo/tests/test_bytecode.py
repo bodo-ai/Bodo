@@ -40,22 +40,18 @@ def test_very_large_tuple(memory_leak_check):
     )
 
 
+def get_bc_stream(code):
+    import dis
+
+    for inst in dis.get_instructions(code):
+        yield inst.offset, inst.opcode, inst.arg
+
+
 @pytest_mark_one_rank
 def test_bc_stream_to_bytecode():
     """
     Tests that _bc_stream_bytecode correctly reverses disassembled bytecode.
     """
-    import dis
-
-    def get_bc_stream(code):
-        for inst in dis.get_instructions(code):
-            (
-                offset,
-                op,
-                arg,
-            ) = inst.offset, inst.opcode, inst.arg
-            yield (offset, op, arg)
-
     test_code = _bc_stream_to_bytecode.__code__
     assert (
         _bc_stream_to_bytecode(get_bc_stream(test_code), len(test_code.co_code))
@@ -68,20 +64,9 @@ def test_bc_stream_to_bytecode_all_typing_pass():
     """
     Tests that _bc_stream_bytecode correctly reverses disassembled bytecode for all typing pass functions.
     """
-    import dis
-
-    def get_bc_stream(code):
-        for inst in dis.get_instructions(code):
-            (
-                offset,
-                op,
-                arg,
-            ) = inst.offset, inst.opcode, inst.arg
-            yield (offset, op, arg)
-
     import bodo.transforms.typing_pass
 
-    for _, obj in vars(bodo.transforms.typing_pass).items():
+    for obj in vars(bodo.transforms.typing_pass).values():
         if callable(obj) and hasattr(obj, "__code__"):
             test_code = obj.__code__
             assert (
