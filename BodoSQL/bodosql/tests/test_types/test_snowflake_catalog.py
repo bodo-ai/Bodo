@@ -165,7 +165,9 @@ def test_snowflake_catalog_insert_into(
         return 5
 
     bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
-    bc = bc.add_or_replace_view("TABLE1", pd.DataFrame({"A": np.arange(10)}))
+    bc = bc.add_or_replace_view(
+        "TABLE1", pd.DataFrame({"A": np.arange(10, dtype=np.int64)})
+    )
     # Create the table
     with create_snowflake_table(
         new_df, "bodosql_catalog_write_test1", db, schema
@@ -186,7 +188,10 @@ def test_snowflake_catalog_insert_into(
         output_df = comm.bcast(output_df)
         # Recreate the expected output by manually doing an append.
         result_df = pd.concat(
-            (new_df, pd.DataFrame({"B": "literal", "C": np.arange(1, 11)}))
+            (
+                new_df,
+                pd.DataFrame({"B": "literal", "C": np.arange(1, 11, dtype=np.int64)}),
+            )
         )
         assert_tables_equal(output_df, result_df)
 
@@ -208,10 +213,12 @@ def test_snowflake_catalog_insert_into_read(
         return bc.sql(read_query)
 
     bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
-    bc = bc.add_or_replace_view("TABLE1", pd.DataFrame({"A": np.arange(10)}))
+    bc = bc.add_or_replace_view(
+        "TABLE1", pd.DataFrame({"A": np.arange(10, dtype=np.int64)})
+    )
     # Recreate the expected output with an append.
     py_output = pd.concat(
-        (new_df, pd.DataFrame({"B": "literal", "C": np.arange(1, 11)}))
+        (new_df, pd.DataFrame({"B": "literal", "C": np.arange(1, 11, dtype=np.int64)}))
     )
     # Create the table
     with create_snowflake_table(
@@ -247,14 +254,19 @@ def test_snowflake_catalog_insert_into_null_literal(
         return bc.sql(read_query)
 
     bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
-    bc = bc.add_or_replace_view("TABLE1", pd.DataFrame({"A": np.arange(10)}))
+    bc = bc.add_or_replace_view(
+        "TABLE1", pd.DataFrame({"A": np.arange(10, dtype=np.int64)})
+    )
     # Create the table
     with create_snowflake_table(
         new_df, "bodosql_catalog_write_test_nulls", db, schema
     ) as table_name:
         # Generate the expected output.
         py_output = pd.concat(
-            (new_df, pd.DataFrame({"B": "literal", "C": np.arange(1, 11)}))
+            (
+                new_df,
+                pd.DataFrame({"B": "literal", "C": np.arange(1, 11, dtype=np.int64)}),
+            )
         )
         write_query = f"INSERT INTO {schema}.{table_name}(A, B, C) Select NULL as A, 'literal', A + 1 from __bodolocal__.table1"
         read_query = f"Select * from {schema}.{table_name}"
@@ -722,7 +734,9 @@ def test_default_table_type(
         schema = "PUBLIC"
 
     bc = bodosql.BodoSQLContext(catalog=catalog)
-    bc = bc.add_or_replace_view("TABLE1", pd.DataFrame({"A": np.arange(10)}))
+    bc = bc.add_or_replace_view(
+        "TABLE1", pd.DataFrame({"A": np.arange(10, dtype=np.int64)})
+    )
 
     # Create the table
 
@@ -760,7 +774,7 @@ def test_default_table_type(
         result_df = pd.DataFrame(
             {
                 "COLUMN1": "literal",
-                "COLUMN2": np.arange(1, 11),
+                "COLUMN2": np.arange(1, 11, dtype=np.int64),
                 "COLUMN3": datetime.date(2023, 2, 21),
             }
         )
@@ -809,7 +823,9 @@ def test_snowflake_catalog_create_table_temporary(
     catalog = test_db_snowflake_catalog
     schema = test_db_snowflake_catalog.connection_params["schema"]
     bc = bodosql.BodoSQLContext(catalog=catalog)
-    bc = bc.add_or_replace_view("TABLE1", pd.DataFrame({"A": np.arange(10)}))
+    bc = bc.add_or_replace_view(
+        "TABLE1", pd.DataFrame({"A": np.arange(10, dtype=np.int64)})
+    )
 
     def impl(bc, query):
         bc.sql(query)
@@ -932,7 +948,9 @@ def test_snowflake_catalog_create_table_transient(memory_leak_check):
     schema = "PUBLIC"
 
     bc = bodosql.BodoSQLContext(catalog=catalog)
-    bc = bc.add_or_replace_view("TABLE1", pd.DataFrame({"A": np.arange(10)}))
+    bc = bc.add_or_replace_view(
+        "TABLE1", pd.DataFrame({"A": np.arange(10, dtype=np.int64)})
+    )
 
     def impl(bc, query):
         bc.sql(query)
@@ -966,7 +984,7 @@ def test_snowflake_catalog_create_table_transient(memory_leak_check):
         result_df = pd.DataFrame(
             {
                 "COLUMN1": "literal",
-                "COLUMN2": np.arange(1, 11),
+                "COLUMN2": np.arange(1, 11, dtype=np.int64),
                 "COLUMN3": datetime.date(2023, 2, 21),
             }
         )
@@ -1013,7 +1031,9 @@ def test_snowflake_catalog_create_table_does_not_already_exists(
     schema = test_db_snowflake_catalog.connection_params["schema"]
 
     bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
-    bc = bc.add_or_replace_view("TABLE1", pd.DataFrame({"A": np.arange(10)}))
+    bc = bc.add_or_replace_view(
+        "TABLE1", pd.DataFrame({"A": np.arange(10, dtype=np.int64)})
+    )
     # Create the table
 
     def impl(bc, query):
@@ -1051,7 +1071,7 @@ def test_snowflake_catalog_create_table_does_not_already_exists(
         result_df = pd.DataFrame(
             {
                 "COLUMN1": "literal",
-                "COLUMN2": np.arange(1, 11),
+                "COLUMN2": np.arange(1, 11, dtype=np.int64),
                 "COLUMN3": datetime.date(2023, 2, 21),
             }
         )
@@ -1095,7 +1115,9 @@ def test_snowflake_catalog_create_table_already_exists_error(
         return 5
 
     bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
-    bc = bc.add_or_replace_view("TABLE1", pd.DataFrame({"A": np.arange(10)}))
+    bc = bc.add_or_replace_view(
+        "TABLE1", pd.DataFrame({"A": np.arange(10, dtype=np.int64)})
+    )
 
     # Create the table
     with create_snowflake_table(
@@ -1138,7 +1160,9 @@ def test_snowflake_catalog_create_table_already_exists(
         return 5
 
     bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
-    bc = bc.add_or_replace_view("TABLE1", pd.DataFrame({"A": np.arange(10)}))
+    bc = bc.add_or_replace_view(
+        "TABLE1", pd.DataFrame({"A": np.arange(10, dtype=np.int64)})
+    )
 
     # Create the table
     with create_snowflake_table(
@@ -1161,7 +1185,11 @@ def test_snowflake_catalog_create_table_already_exists(
         output_df = comm.bcast(output_df)
         # Recreate the expected output by manually doing an append.
         result_df = pd.DataFrame(
-            {"COLUMN1": 2, "COLUMN2": np.arange(10), "COLUMN3": "hello world"}
+            {
+                "COLUMN1": 2,
+                "COLUMN2": np.arange(10, dtype=np.int64),
+                "COLUMN3": "hello world",
+            }
         )
         assert_tables_equal(output_df, result_df)
         # create_snowflake_table handles dropping the table for us
@@ -1183,7 +1211,7 @@ def test_snowflake_catalog_simple_rewrite(
         return 5
 
     bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
-    local_table = pd.DataFrame({"A": np.arange(10)})
+    local_table = pd.DataFrame({"A": np.arange(10, dtype=np.int64)})
     bc = bc.add_or_replace_view("TABLE1", local_table)
 
     comm = MPI.COMM_WORLD
