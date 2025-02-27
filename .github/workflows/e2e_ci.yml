@@ -129,10 +129,13 @@ jobs:
 
       - name: Convert Notebooks scripts to Python
         run: |
-          pip install nbconvert
+          pip install nbconvert ipython
 
+          # Get notebook files and convert to python scripts
           export NOTEBOOK_FILES=$(find examples -name "*.ipynb")
           echo "$NOTEBOOK_FILES" | xargs -n 10 jupyter nbconvert --to script
+
+          # filter file names we want to skip 
           export PYTHON_FILES=$(find examples -name "*.py" | grep -v -E "$(echo $SKIP_FILES | sed 's/ /|/g')")
 
           # replace notebook builtin display with a print
@@ -162,6 +165,7 @@ jobs:
           # for ML examples
           pip install seaborn imblearn
 
+          # filter file names we want to skip 
           export PYTHON_FILES=$(find . -name "*.py" | grep -v -E "$(echo $SKIP_FILES | sed 's/ /|/g')")
           echo "$PYTHON_FILES"
 
