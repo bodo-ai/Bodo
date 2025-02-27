@@ -4689,6 +4689,8 @@
       
         
       
+        
+      
     
     
     
@@ -5033,6 +5035,27 @@
   
   <span class="md-ellipsis">
     pd.core.groupby.Groupby.min
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api_docs/pandas/groupby/ngroup/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    pd.core.groupby.DataFrameGroupby.ngroup
   </span>
   
 
@@ -24642,6 +24665,48 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#202521" class="md-nav__link">
+    <span class="md-ellipsis">
+      2025.2.1
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="2025.2.1">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#highlights_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      🎉 Highlights
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#new-features_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      ✨ New Features
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#behavior-changes" class="md-nav__link">
+    <span class="md-ellipsis">
+      🔄 Behavior Changes
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -24750,6 +24815,48 @@
       ⚙️ Dependency Upgrades
     </span>
   </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#202521" class="md-nav__link">
+    <span class="md-ellipsis">
+      2025.2.1
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="2025.2.1">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#highlights_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      🎉 Highlights
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#new-features_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      ✨ New Features
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#behavior-changes" class="md-nav__link">
+    <span class="md-ellipsis">
+      🔄 Behavior Changes
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -24879,6 +24986,17 @@
 <ul>
 <li>Upgraded Calcite to 1.38</li>
 <li>Upgraded Numba to 0.61</li>
+</ul>
+<h2 id="202521">2025.2.1<a class="headerlink" href="#202521" title="Permanent link">&para;</a></h2>
+<h3 id="highlights_1">🎉 Highlights<a class="headerlink" href="#highlights_1" title="Permanent link">&para;</a></h3>
+<p>This release focused on the introduction of our PyIceberg backend for Iceberg IO. Rather than using the Bodo Iceberg Connector, Bodo now uses the <a href="https://github.com/apache/iceberg-python">PyIceberg</a> library to work with Iceberg tables. See our <a href="https://www.bodo.ai/blog/bodo-pyiceberg-scalable-io-with-the-simplicity-of-python">blog post</a> for more details.</p>
+<h3 id="new-features_1">✨ New Features<a class="headerlink" href="#new-features_1" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Iceberg IO now uses PyIceberg instead of our custom Iceberg connector behind-the-scenes for working with Iceberg tables.</li>
+</ul>
+<h3 id="behavior-changes">🔄 Behavior Changes<a class="headerlink" href="#behavior-changes" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Snowflake write will use the PUT method instead of direct upload which is less performant. This is in preparation for upgrading to Arrow 19 which will enable writing to Azure backed storage without Hadoop and should be ready soon.</li>
 </ul>
 
 

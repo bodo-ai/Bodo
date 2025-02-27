@@ -4695,6 +4695,8 @@
       
         
       
+        
+      
     
     
     
@@ -5039,6 +5041,27 @@
   
   <span class="md-ellipsis">
     pd.core.groupby.Groupby.min
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../groupby/ngroup/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    pd.core.groupby.DataFrameGroupby.ngroup
   </span>
   
 
@@ -24870,10 +24893,27 @@
 <p><a href="https://pandas.pydata.org/docs/reference/api/pandas.Series.str.encode.html">Link to Pandas documentation</a></p>
 <p><code>pandas.Series.str.encode(encoding, errors='strict')</code></p>
 <h3 id="argument-restrictions">Argument Restrictions:<a class="headerlink" href="#argument-restrictions" title="Permanent link">&para;</a></h3>
-<ul>
-<li><code>encoding</code>: must be type <code>String</code>.</li>
-<li><code>errors</code>: must be type <code>String</code>.</li>
-</ul>
+<table>
+<thead>
+<tr>
+<th>argument</th>
+<th>datatypes</th>
+<th>other requirements</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>encoding</code></td>
+<td>String</td>
+<td></td>
+</tr>
+<tr>
+<td><code>errors</code></td>
+<td>String</td>
+<td></td>
+</tr>
+</tbody>
+</table>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
 <p>Input must be a Series of <code>String</code> data.</p>
@@ -24891,7 +24931,7 @@
 <a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="mi">4</span>       <span class="sa">b</span><span class="s1">&#39;@&#39;</span>
 <a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a><span class="mi">5</span>     <span class="sa">b</span><span class="s1">&#39;a n&#39;</span>
 <a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a><span class="mi">6</span>    <span class="sa">b</span><span class="s1">&#39;^ Ef&#39;</span>
-<a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a><span class="n">dtype</span><span class="p">:</span> <span class="nb">object</span>
+<a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a><span class="n">dtype</span><span class="p">:</span> <span class="n">large_binary</span><span class="p">[</span><span class="n">pyarrow</span><span class="p">]</span>
 </code></pre></div>
 
 
