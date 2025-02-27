@@ -7,12 +7,8 @@ echo "%SETUPTOOLS_SCM_PRETEND_VERSION%"
 
 set "CONDA_PREFIX=%PREFIX%"
 set "BODO_WINDOWS_BUILD_TYPE=Release"
-set "NO_HDF5=1"
 
 :: Build using pip and CMake
 "%PYTHON%" -m pip install --no-deps --no-build-isolation -vv ^
     --config-settings=build.verbose=true ^
     --config-settings=logging.level="DEBUG" .
-
-
-@REM conda build . -c conda-forge --no-verify --no-anaconda-upload --croot C:\Users\owner\dev\conda-bld --build-id-pat bb --python 3.12
