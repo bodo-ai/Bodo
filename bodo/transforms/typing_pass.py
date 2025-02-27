@@ -6383,7 +6383,7 @@ def _bc_stream_to_bytecode(bc_stream, out_size):
                 arg >>= 8
 
         else:
-            assert arg == None
+            assert arg is None
     return out
 
 
