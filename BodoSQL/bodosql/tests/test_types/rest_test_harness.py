@@ -1,14 +1,25 @@
 from ddltest_harness import DDLTestHarness
 
 import bodosql
-from bodo.tests.iceberg_database_helpers.utils import get_spark
+from bodo.tests.iceberg_database_helpers.utils import SparkAwsIcebergCatalog, get_spark
 from bodo.utils.utils import run_rank0
 
 
-class TabularTestHarness(DDLTestHarness):
-    def __init__(self, tabular_catalog, tabular_connection, tmppath):
-        self.spark = get_spark(tabular_connection, tmppath)
-        self.bc = bodosql.BodoSQLContext(catalog=tabular_catalog)
+class RestTestHarness(DDLTestHarness):
+    def __init__(self, polaris_catalog, polaris_connection):
+        uri, warehouse, credential = polaris_connection
+        self.spark_catalog = SparkAwsIcebergCatalog(
+            catalog_name=warehouse,
+            warehouse=warehouse,
+            uri=uri,
+            credential=credential,
+            default_schema="default",
+        )
+        self.bc = bodosql.BodoSQLContext(catalog=polaris_catalog)
+
+    @property
+    def spark(self):
+        return get_spark(self.spark_catalog)
 
     def run_bodo_query(self, query):
         return self.bc.sql(query)
