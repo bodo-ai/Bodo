@@ -8,7 +8,6 @@
 #endif
 
 #include <Python.h>
-#include <boost/multiprecision/cpp_int.hpp>
 #include <vector>
 
 #include "_meminfo.h"

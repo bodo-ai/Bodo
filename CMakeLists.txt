@@ -138,6 +138,16 @@ set(datasketches_INSTALL_DIR ${INSTALL_DIR})
 message("Source dir of datasketches = ${datasketches_INSTALL_DIR}")
 
 # ---------------------------- Set CMake Options -----------------------------
+
+# CMAKE_BUILD_TYPE is not set when using Visual Studio generator because
+# technically there could be multiple build configurations in the same build
+# environment.
+# TODO [BSE-4599] Switch to Ninja on Windows for consistency.
+if (DEFINED ENV{BODO_WINDOWS_BUILD_TYPE})
+  message(STATUS "Setting build type to $ENV{BODO_WINDOWS_BUILD_TYPE}")
+  set(CMAKE_BUILD_TYPE "$ENV{BODO_WINDOWS_BUILD_TYPE}")
+endif()
+
 # Use RelWithDebInfo Mode by Default
 cmake_print_variables(CMAKE_BUILD_TYPE)
 
@@ -203,7 +213,6 @@ if (WIN32)
     "/wd4100" # Supress warning about unreferenced formal parameter.
     "/wd4551" # Suppress warnings about function call missing argument list
     "/w"      # disable other warnings
-    "/FS"
     "/GS"       # Enable buffer security checks
     "/guard:cf" # Enable control flow guard (security feature)
     "/EHsc"
@@ -231,6 +240,7 @@ if (CMAKE_BUILD_TYPE STREQUAL "Debug" OR CMAKE_BUILD_TYPE STREQUAL "DebugSanitiz
     )
   else()
     add_compile_options(
+      "/FS"  # Force writes to PDBs to be serialized
       "/Zi"  # Generate debug information
     )
     add_link_options("/DEBUG") # Generate debug symbols
@@ -695,7 +705,9 @@ target_include_directories(ext SYSTEM PRIVATE ${BASE_INCLUDE_DIRS})
 target_link_directories(ext PRIVATE ${CONDA_LIB_DIR} ${MPI_LIB_DIR})
 
 if (CMAKE_BUILD_TYPE STREQUAL "Release")
-  target_compile_options(ext PRIVATE "-Wno-unknown-pragmas")
+  if (NOT WIN32)
+    target_compile_options(ext PRIVATE "-Wno-unknown-pragmas")
+  endif()
 elseif (DEFINED ENV{BODO_SKIP_CPP_TESTS})
   # Remove the IS_TESTING flag.
   target_compile_definitions(
