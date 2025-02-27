@@ -60,7 +60,7 @@ def test_s3_tables_catalog_iceberg_write(s3_tables_catalog, memory_leak_check):
     )
     bc = bodosql.BodoSQLContext(catalog=s3_tables_catalog)
     bc = bc.add_or_replace_view("TABLE1", in_df)
-    con_str = S3TablesConnectionType(s3_tables_catalog.warehouse).get_conn_str()
+    con_str = S3TablesConnectionType(s3_tables_catalog.warehouse).conn_str
     table_name = run_rank0(
         lambda: gen_unique_table_id("bodosql_catalog_write_iceberg_table").upper()
     )().lower()
