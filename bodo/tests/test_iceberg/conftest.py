@@ -1,6 +1,7 @@
 import os
 import random
 import subprocess
+import time
 
 import boto3
 import pytest
@@ -96,15 +97,26 @@ def polaris_server():
                 "AZURE_TENANT_ID", "ac373ae0-dc77-4cbb-bbb7-deddcf6133b3"
             )
 
-            polaris = (
-                DockerContainer("public.ecr.aws/k7f6m2y1/bodo/polaris-unittests:latest")
-                .with_bind_ports(8181, 8181)
-                .with_bind_ports(8282, 8182)
-                .with_name("polaris-server-unittests")
-            )
-            for key, value in env.items():
-                polaris.with_env(key, value)
-            wait_for_logs(polaris.start(), "Listening on")
+            n_retries = 5
+            for i in range(n_retries):
+                try:
+                    polaris = (
+                        DockerContainer(
+                            "public.ecr.aws/k7f6m2y1/bodo/polaris-unittests:latest"
+                        )
+                        .with_bind_ports(8181, 8181)
+                        .with_bind_ports(8282, 8182)
+                        .with_name("polaris-server-unittests")
+                    )
+                    for key, value in env.items():
+                        polaris.with_env(key, value)
+                    wait_for_logs(polaris.start(), "Listening on")
+                    time.sleep(2**i)
+                    break
+                except Exception as e:
+                    if i == n_retries - 1:
+                        raise e
+                    continue
         except Exception as e:
             err = e
     err = MPI.COMM_WORLD.bcast(err, root=0)
