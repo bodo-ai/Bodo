@@ -496,6 +496,7 @@ def test_pq_select_column(
     finally:
         if bodo.libs.distributed_api.get_rank() == 0:
             os.remove("test.pq")
+        bodo.barrier()
 
 
 def test_pq_index(datapath, memory_leak_check):
