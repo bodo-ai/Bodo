@@ -54,8 +54,8 @@ public class CatalogCreator {
     final Catalog catalog;
 
     // S3Tables doesn't use a URI
-    if (connStr.startsWith("iceberg+arn:aws:s3tables") && catalogType.equals("s3tables")) {
-      catalog = S3TablesBuilder.create(connStr.replaceFirst("^iceberg\\+", ""));
+    if (connStr.startsWith("arn:aws:s3tables") && catalogType.equals("s3tables")) {
+      catalog = S3TablesBuilder.create(connStr);
       return catalog;
     }
 
@@ -64,8 +64,7 @@ public class CatalogCreator {
         && System.getProperty("os.name").toLowerCase().contains("win")) {
       Configuration conf = new Configuration(true);
       Map<String, String> params = new HashMap<>();
-      String warehouse_loc = connStr.replaceFirst("^iceberg://+", "");
-      return HadoopBuilder.create(warehouse_loc, conf, params);
+      return HadoopBuilder.create(connStr, conf, params);
     }
 
     var out = prepareInput(connStr, catalogType, coreSitePath);
