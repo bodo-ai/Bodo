@@ -12,10 +12,6 @@ import typing as pt
 from typing import cast
 from urllib.parse import parse_qs, urlparse
 
-import pyiceberg.utils.config
-from pyiceberg.catalog.rest import OAUTH2_SERVER_URI
-from pyiceberg.typedef import RecursiveDict
-
 if pt.TYPE_CHECKING:  # pragma: no cover
     from pyiceberg.catalog import Catalog
 
@@ -32,7 +28,10 @@ def conn_str_to_catalog(conn_str: str) -> Catalog:
     Construct a PyIceberg catalog from a connection string
     """
 
+    import pyiceberg.utils.config
     from pyiceberg.catalog import URI, WAREHOUSE_LOCATION
+    from pyiceberg.catalog.rest import OAUTH2_SERVER_URI
+    from pyiceberg.typedef import RecursiveDict
 
     parse_res = urlparse(conn_str)
 
