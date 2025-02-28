@@ -62,7 +62,11 @@ class FileSystemCatalog(
         return if (baseString.startsWith("s3a://")) {
             baseString.replace("s3a://", "s3://")
         } else if (baseString.startsWith("file:")) {
-            val replacement = if (useUriScheme) "file://" else ""
+            var replacement = if (useUriScheme) "file://" else ""
+            // Make sure Unix path starts with "/"
+            if (!Path.WINDOWS) {
+                replacement = "$replacement/"
+            }
             replacement + baseString.replace("file://", "").replace("file:/", "")
         } else {
             baseString
