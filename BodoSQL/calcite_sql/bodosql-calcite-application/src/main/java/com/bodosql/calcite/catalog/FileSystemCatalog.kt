@@ -63,7 +63,7 @@ class FileSystemCatalog(
             baseString.replace("s3a://", "s3://")
         } else if (baseString.startsWith("file:")) {
             val replacement = if (useUriScheme) "file://" else ""
-            baseString.replace("file:", replacement)
+            replacement + baseString.replace("file://", "").replace("file:/", "")
         } else {
             baseString
         }
