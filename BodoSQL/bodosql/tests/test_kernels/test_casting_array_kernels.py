@@ -364,7 +364,7 @@ def test_cast_int16(numeric_arrays, memory_leak_check):
             # we normally must calculate the underflow/overflow behavior for ints
             # however casting to float64 first will handle this for us
             if f_elem.is_integer():
-                return np.int16(elem)
+                return np.int64(elem).astype(np.int16)
             else:
                 return np.int16(_round_float(f_elem))
 
