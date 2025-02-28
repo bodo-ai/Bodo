@@ -645,6 +645,8 @@ def _generate_table_read(
             conn_str = bodo_type._conn_str
             db_type, _ = parse_dbtype(conn_str)
             if db_type == "iceberg":
+                # Avoid errors for Windows path backslashes in generated code later
+                conn_str = conn_str.replace("\\", "/")
                 if read_dict_list:
                     read_line = f"pd.read_sql_table('{file_path}', '{conn_str}', '{bodo_type._db_schema}', {read_dict_list}, _bodo_read_as_table=True, %s)"
                 else:
