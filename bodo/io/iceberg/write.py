@@ -18,7 +18,6 @@ import pyarrow.fs
 from llvmlite import ir as lir
 from numba.core import cgutils, types
 from numba.extending import intrinsic
-from pyiceberg.io import load_file_io
 
 import bodo
 import bodo.utils.tracing as tracing
@@ -648,6 +647,7 @@ def start_write_rank_0(
         if_exists (str): What write operation we are doing. This must be one of
             ['fail', 'append', 'replace']
     """
+    from pyiceberg.io import load_file_io
     from pyiceberg.io.pyarrow import _pyarrow_to_schema_without_ids
     from pyiceberg.partitioning import UNPARTITIONED_PARTITION_SPEC
     from pyiceberg.schema import assign_fresh_schema_ids, prune_columns
