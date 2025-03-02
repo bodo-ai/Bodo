@@ -3278,7 +3278,7 @@ def test_read_timestamptz(test_db_snowflake_catalog, memory_leak_check):
             None,
             "2020-01-01 00:00:00.123456789 -0800",
             "2020-01-01 00:00:00.123456789 +0000",
-            "1900-01-01 01:01:01 +0000",
+            "1980-01-01 01:01:01 +0000",
         ]
         # In order to test nulls we need to convert None to "0" and then use an
         # IFF statement to convert it back to null. Otherwise flatten will drop
@@ -3307,7 +3307,7 @@ def test_read_timestamptz(test_db_snowflake_catalog, memory_leak_check):
                             bodo.TimestampTZ.fromLocal(
                                 "2020-01-01 00:00:00.123456789", 0
                             ),
-                            bodo.TimestampTZ.fromLocal("1900-01-01 01:01:01", 0),
+                            bodo.TimestampTZ.fromLocal("1980-01-01 01:01:01", 0),
                         ]
                     )
                 }
