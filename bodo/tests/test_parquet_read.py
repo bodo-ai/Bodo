@@ -1969,6 +1969,7 @@ def test_read_parquet_bodo_read_as_dict(memory_leak_check):
             test_impl10(fname)
 
     finally:
+        bodo.barrier()
         if bodo.get_rank() == 0:
             os.remove(fname)
 
