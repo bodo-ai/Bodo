@@ -85,7 +85,7 @@ h5py = "*"
 # Data Science
 scipy = "*"
 scikit-learn = "1.4.*"
-matplotlib = "<=3.8.2"
+matplotlib = "*"
 # IO
 boto3 = ">=1.35.74"
 botocore = "*"
@@ -122,10 +122,10 @@ boost-cpp = "1.85.*"
 aws-sdk-cpp = "<=1.11.485"
 
 [feature.rcpp.target.osx.dependencies]
-hdf5 = { version = ">=1.14.3,<1.14.4.0a0", build = "*mpi_mpich_*" }
+hdf5 = { version = "==1.14.3", build = "*mpi_mpich_*" }
 
 [feature.rcpp.target.linux.dependencies]
-hdf5 = { version = ">=1.14.3,<1.14.4.0a0", build = "*mpi_mpich_*" }
+hdf5 = { version = "==1.14.3", build = "*mpi_mpich_*" }
 
 [feature.rcpp.target.win.dependencies]
 hdf5 = { version = ">=1.14.3,<1.14.4.0a0", build = "*mpi_impi_*" }
