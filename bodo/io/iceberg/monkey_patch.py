@@ -75,6 +75,8 @@ def build_position_accessors(
 # Monkey-patch the original function
 pyiceberg.schema.build_position_accessors = build_position_accessors
 
-# Moneky-patch inferred IO to support Bodo's changes
-# In particular, PyArrow's AzureFileSystem support
+# Moneky-patch inferred IO to support Bodo's
 pyiceberg.io.pyarrow.PyArrowFileIO = BodoPyArrowFileIO
+# Monkey-patch to use patched ArrowFileIO for abfs and abfss
+pyiceberg.io.SCHEMA_TO_FILE_IO["abfs"].insert(0, pyiceberg.io.ARROW_FILE_IO)
+pyiceberg.io.SCHEMA_TO_FILE_IO["abfss"].insert(0, pyiceberg.io.ARROW_FILE_IO)

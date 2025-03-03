@@ -172,6 +172,7 @@ pytest-xdist = "*"
 pytest-timeout = "*"
 pytest-split = "*"
 flaky = "*"
+testcontainers = "*"
 
 # Other Deps
 pyyaml = "*"

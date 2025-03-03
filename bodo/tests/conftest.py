@@ -803,43 +803,6 @@ def pytest_collect_file(parent, file_path: Path):
         )
 
 
-def get_tabular_connection(tabular_credential: str):
-    return (
-        "https://api.tabular.io/ws",
-        os.getenv("TABULAR_WAREHOUSE", "Bodo-Test-Iceberg-Warehouse"),
-        os.getenv("TABULAR_CREDENTIAL"),
-    )
-
-
-@pytest.fixture
-def tabular_connection(request):
-    """
-    Fixture to create a connection to the tabular warehouse.
-    Returns the catalog url, warehouse name, and credential.
-    """
-    assert "TABULAR_CREDENTIAL" in os.environ, "TABULAR_CREDENTIAL is not set"
-    assert request.node.get_closest_marker("tabular") is not None, (
-        "tabular marker not set"
-    )
-    # Unset the AWS credentials to avoid using them
-    # to confirm that the tests are getting aws credentials from Tabular
-    with temp_env_override(
-        {
-            "AWS_ACCESS_KEY_ID": None,
-            "AWS_SECRET_ACCESS_KEY": None,
-            "AWS_SESSION_TOKEN": None,
-        }
-    ):
-        yield get_tabular_connection(os.getenv("TABULAR_CREDENTIAL"))
-
-
-def pytest_runtest_setup(item):
-    tabular = len(list(item.iter_markers(name="tabular")))
-    if tabular:
-        if "TABULAR_CREDENTIAL" not in os.environ or "AGENT_NAME" not in os.environ:
-            pytest.skip("Tabular tests must be run on Azure CI")
-
-
 @pytest.fixture(
     params=[
         "quarter",

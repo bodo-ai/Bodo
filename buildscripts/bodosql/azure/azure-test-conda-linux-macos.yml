@@ -20,7 +20,7 @@ jobs:
   variables:
     - group: AWS-427-S3-Access-Keys
     - group: SnowflakeCredentials
-    - group: TabularCredentials
+    - group: AzureCredentials
   timeoutInMinutes: 360
   pool: ${{ parameters.pool_name }}
   strategy:
@@ -75,9 +75,21 @@ jobs:
 
   - bash: |
       set -exo pipefail
+      sudo apt-get install -y docker.io
+      sudo service docker start
+      sudo chmod 666 /var/run/docker.sock
+      sudo usermod -aG docker $USER
+    displayName: Install Docker
+    retryCountOnTaskFailure: 5
+
+  - script: |
+      set -exo pipefail
 
       pixi run -e azure python -c "import bodo; print(bodo.__version__)"
       pixi run -e azure python -c "import bodosql; print(bodosql.__version__)"
+
+      # This isn't published on pypi so no good way to list it as a dependency
+      pip install 'git+https://github.com/apache/polaris.git#subdirectory=regtests/client/python'
 
       unamestr=`uname`
       if [[ "$unamestr" == 'Linux' ]]; then
@@ -123,7 +135,8 @@ jobs:
       SF_PASSWORD: $(SNOWFLAKE_PASSWORD)
       SF_AZURE_USER: $(SF_AZURE_USER)
       SF_AZURE_PASSWORD: $(SF_AZURE_PASSWORD)
-      TABULAR_CREDENTIAL: $(TABULAR_CREDENTIAL)
+      AZURE_CLIENT_ID: $(AZURE_CLIENT_ID)
+      AZURE_CLIENT_SECRET: $(AZURE_CLIENT_SECRET)
       AZURE_STORAGE_ACCOUNT_NAME: $(AZURE_ICEBERG_STORAGE_ACCOUNT)
       AZURE_STORAGE_ACCOUNT_KEY: $(AZURE_ICEBERG_ACCESS_KEY)
       AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)

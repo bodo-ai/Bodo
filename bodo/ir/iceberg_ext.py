@@ -1063,6 +1063,7 @@ def add_rtjf_iceberg_filter(
                     rtjf_filters = pie.And(
                         rtjf_filters, pie.In(col, literal(unique_vals))
                     )
+                    print(rtjf_filters, unique_vals)
                 else:
                     if min is not None and op in ("==", ">=", ">"):
                         rtjf_filters = pie.And(

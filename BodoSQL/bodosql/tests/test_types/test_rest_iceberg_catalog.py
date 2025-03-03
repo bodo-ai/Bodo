@@ -1,18 +1,16 @@
 import os
 import tempfile
-import typing as pt
-from contextlib import contextmanager
 from io import StringIO
 
 import numba
 import pandas as pd
 import pytest
-from pyiceberg.catalog.rest import RestCatalog
 
 import bodo
 import bodosql
-from bodo.mpi4py import MPI
+from bodo.io.iceberg.catalog import conn_str_to_catalog
 from bodo.tests.iceberg_database_helpers.utils import (
+    SparkAwsIcebergCatalog,
     get_spark,
 )
 from bodo.tests.user_logging_utils import (
@@ -21,103 +19,50 @@ from bodo.tests.user_logging_utils import (
     set_logging_stream,
 )
 from bodo.tests.utils import (
-    _get_dist_arg,
     assert_tables_equal,
     check_func,
     gen_unique_table_id,
     get_rest_catalog_connection_string,
-    pytest_tabular,
+    pytest_polaris,
     temp_env_override,
 )
 from bodo.utils.utils import run_rank0
-from bodosql.bodosql_types.tabular_catalog import get_tabular_connection
+from bodosql.bodosql_types.rest_catalog import get_REST_connection
+from bodosql.tests.test_types.utils import create_iceberg_table
 
-pytestmark = pytest_tabular
+pytestmark = pytest_polaris
 
 
-@contextmanager
-def create_tabular_iceberg_table(
-    df: pd.DataFrame, base_table_name: str, warehouse: str, schema: str, credential: str
-) -> pt.Generator[str, None, None]:
-    """Creates a new Iceberg table in Tabular derived from the base table name
-    and using the DataFrame.
-
-    Returns the name of the table added to Tabular.
-
-    Args:
-        df (pd.DataFrame): DataFrame to insert
-        base_table_name (str): Base string for generating the table name.
-        warehouse (str): Name of the Tabular warehouse
-        schema (str): Name of the Tabular schema
-        credential (str): Credential to authenticate
-
-    Returns:
-        str: The final table name.
+def test_basic_read(
+    memory_leak_check, polaris_catalog, polaris_catalog_iceberg_read_df
+):
     """
-    comm = MPI.COMM_WORLD
-    iceberg_table_name = None
-    table_written = False
-    try:
-        if bodo.get_rank() == 0:
-            iceberg_table_name = gen_unique_table_id(base_table_name)
-
-        iceberg_table_name = comm.bcast(iceberg_table_name)
-
-        @bodo.jit(distributed=["df"])
-        def write_table(df, table_name, schema, con_str):
-            df.to_sql(table_name, con=con_str, schema=schema, if_exists="replace")
-
-        con_str = f"iceberg+REST://api.tabular.io/ws?credential={credential}&warehouse={warehouse}"
-        write_table(_get_dist_arg(df), iceberg_table_name, schema, con_str)
-        table_written = True
-
-        yield iceberg_table_name
-    finally:
-        if table_written:
-            run_rank0(
-                lambda: (
-                    RestCatalog(
-                        "tabular_catalog",
-                        uri=f"http://api.tabular.io/ws?credential={credential}&warehouse={warehouse}",
-                    ).purge_table(f"{schema}.{iceberg_table_name}")
-                )
-            )()
-
-
-def test_basic_read(memory_leak_check, tabular_catalog):
+    Test reading an entire Iceberg table from Polaris in SQL
     """
-    Test reading an entire Iceberg table from Tabular in SQL
-    """
-    catalog = tabular_catalog
+    catalog = polaris_catalog
     bc = bodosql.BodoSQLContext(catalog=catalog)
 
     def impl(bc, query):
         return bc.sql(query)
-
-    py_out = pd.DataFrame(
-        {
-            "A": pd.array(["ally", "bob", "cassie", "david", pd.NA]),
-            "B": pd.array([10.5, -124.0, 11.11, 456.2, -8e2], dtype="float64"),
-            "C": pd.array([True, pd.NA, False, pd.NA, pd.NA], dtype="boolean"),
-        }
-    )
 
     query = "SELECT A, B, C FROM CI.BODOSQL_ICEBERG_READ_TEST"
     check_func(
         impl,
         (bc, query),
-        py_output=py_out,
+        py_output=polaris_catalog_iceberg_read_df,
         sort_output=True,
         reset_index=True,
     )
 
 
-def test_column_pruning(memory_leak_check, tabular_catalog):
+def test_column_pruning(
+    memory_leak_check, polaris_catalog, polaris_catalog_iceberg_read_df
+):
     """
-    Test reading an Iceberg table from Tabular in SQL
+    Test reading an Iceberg table from Polaris in SQL
     where columns are pruned and reordered
     """
-    catalog = tabular_catalog
+    catalog = polaris_catalog
     bc = bodosql.BodoSQLContext(catalog=catalog)
 
     def impl(bc, query):
@@ -125,12 +70,12 @@ def test_column_pruning(memory_leak_check, tabular_catalog):
 
     py_out = pd.DataFrame(
         {
-            "B": [10.5, 124.0, 11.11, 456.2, 8e2],
-            "A": ["ally", "bob", "cassie", "david", pd.NA],
+            "B": polaris_catalog_iceberg_read_df["B"],
+            "A": polaris_catalog_iceberg_read_df["A"],
         }
     )
 
-    query = "SELECT ABS(B) as B, A FROM CI.BODOSQL_ICEBERG_READ_TEST"
+    query = "SELECT B, A FROM CI.BODOSQL_ICEBERG_READ_TEST"
     stream = StringIO()
     logger = create_string_io_logger(stream)
     with set_logging_stream(logger, 1):
@@ -144,22 +89,27 @@ def test_column_pruning(memory_leak_check, tabular_catalog):
         check_logger_msg(stream, "Columns loaded ['A', 'B']")
 
 
-def test_filter_pushdown(memory_leak_check, tabular_catalog):
+def test_filter_pushdown(
+    memory_leak_check, polaris_catalog, polaris_catalog_iceberg_read_df
+):
     """
-    Test reading an Iceberg table from Tabular with filter pushdown
+    Test reading an Iceberg table from Polaris with filter pushdown
     """
 
-    catalog = tabular_catalog
+    catalog = polaris_catalog
     bc = bodosql.BodoSQLContext(catalog=catalog)
 
     def impl(bc, query):
         return bc.sql(query)
 
-    py_out = pd.DataFrame(
-        {
-            "B": [10.5, 11.11, 456.2],
-            "A": ["ally", "cassie", "david"],
-        }
+    py_out = (
+        polaris_catalog_iceberg_read_df.where(
+            polaris_catalog_iceberg_read_df["A"].str.contains("a")
+            & polaris_catalog_iceberg_read_df["B"]
+            > 0
+        )[["B", "A"]]
+        .dropna()
+        .reset_index(drop=True)
     )
 
     # A IS NOT NULL can be pushed down to iceberg
@@ -182,21 +132,27 @@ def test_filter_pushdown(memory_leak_check, tabular_catalog):
         )
 
 
-def test_filter_pushdown_col_not_read(memory_leak_check, tabular_catalog):
+def test_filter_pushdown_col_not_read(
+    memory_leak_check, polaris_catalog, polaris_catalog_iceberg_read_df
+):
     """
     Test reading a Iceberg table with BodoSQL filter pushdown
     where a column used in the filter is not read in
     """
-    catalog = tabular_catalog
+    catalog = polaris_catalog
     bc = bodosql.BodoSQLContext(catalog=catalog)
 
     def impl(bc, query):
         return bc.sql(query)
 
-    py_out = pd.DataFrame(
-        {
-            "A": ["ally", "cassie", "david"],
-        }
+    py_out = (
+        polaris_catalog_iceberg_read_df.where(
+            polaris_catalog_iceberg_read_df["A"].str.contains("a")
+            & polaris_catalog_iceberg_read_df["B"]
+            > 0
+        )[["A"]]
+        .dropna()
+        .reset_index(drop=True)
     )
 
     # A IS NOT NULL can be pushed down to iceberg
@@ -250,7 +206,7 @@ def parse_table_property(s):
 
 
 def check_table_comment(
-    tabular_connection,
+    polaris_connection,
     schema,
     table_name,
     number_columns,
@@ -261,7 +217,7 @@ def check_table_comment(
     """Helper function to test table comments are correctly added
 
     Args:
-        tabular_connection:
+        polaris_connection:
         schema (_type_): Databse schema
         table_name (_type_): Table name
         number_columns (int): Number of columns of the table
@@ -272,7 +228,15 @@ def check_table_comment(
     if bodo.get_rank() != 0:
         return
 
-    spark = get_spark(tabular_connection)
+    uri, warehouse, credential = polaris_connection
+    spark = get_spark(
+        SparkAwsIcebergCatalog(
+            catalog_name=warehouse,
+            warehouse=warehouse,
+            uri=uri,
+            credential=credential,
+        )
+    )
     table_cmt = (
         spark.sql(f"DESCRIBE TABLE EXTENDED {schema}.{table_name}")
         .filter("col_name = 'Comment'")
@@ -317,9 +281,9 @@ def check_table_comment(
 @pytest.mark.parametrize("table_properties", [True, False])
 @pytest.mark.parametrize("table_comments", ["test_tbl_comments", "", None])
 @pytest.mark.parametrize("construct", ["CREATE", "CREATE OR REPLACE"])
-def test_tabular_catalog_iceberg_write(
-    tabular_catalog,
-    tabular_connection,
+def test_rest_catalog_iceberg_write(
+    polaris_catalog,
+    polaris_connection,
     table_comments,
     # Here we are testing different combinations of column comments, so the comments are generated later
     column_comments,
@@ -329,12 +293,12 @@ def test_tabular_catalog_iceberg_write(
 ):
     """tests that writing tables works"""
 
-    rest_uri, tabular_warehouse, tabular_credential = tabular_connection
-    catalog = tabular_catalog
+    rest_uri, polaris_warehouse, polaris_credential = polaris_connection
+    catalog = polaris_catalog
     bc = bodosql.BodoSQLContext(catalog=catalog)
     schema = "CI"
     con_str = get_rest_catalog_connection_string(
-        rest_uri, tabular_warehouse, tabular_credential
+        rest_uri, polaris_warehouse, polaris_credential
     )
 
     in_df = pd.DataFrame(
@@ -405,7 +369,7 @@ def test_tabular_catalog_iceberg_write(
 
         output_df = read_results(con_str, schema, table_name)
         check_table_comment(
-            tabular_connection,
+            polaris_connection,
             schema,
             table_name,
             len(output_df.columns),
@@ -423,12 +387,12 @@ def test_tabular_catalog_iceberg_write(
         exception_occurred_in_test_body = True
         raise e
     finally:
+        con_str = get_rest_catalog_connection_string(
+            rest_uri, polaris_warehouse, polaris_credential
+        )
+        py_catalog = conn_str_to_catalog(con_str)
         try:
-            run_rank0(
-                lambda: RestCatalog("tabular_catalog", uri=rest_uri).purge_table(
-                    f"{schema}.{table_name}"
-                )
-            )()
+            run_rank0(lambda: py_catalog.purge_table(f"{schema}.{table_name}"))()
         except Exception:
             if exception_occurred_in_test_body:
                 pass
@@ -436,9 +400,11 @@ def test_tabular_catalog_iceberg_write(
                 raise
 
 
-def test_limit_pushdown(memory_leak_check, tabular_catalog):
+def test_limit_pushdown(
+    memory_leak_check, polaris_catalog, polaris_catalog_iceberg_read_df
+):
     """
-    Test reading an Iceberg from Tabular with limit pushdown.
+    Test reading an Iceberg from Polaris with limit pushdown.
     Since the planner has access to length statistics, we need to actually
     reduce the amount of data being read to test limit pushdown.
 
@@ -446,7 +412,7 @@ def test_limit_pushdown(memory_leak_check, tabular_catalog):
     statistics and check that the number of rows read is identical
     """
 
-    catalog = tabular_catalog
+    catalog = polaris_catalog
     bc = bodosql.BodoSQLContext(catalog=catalog)
 
     def impl(bc, query):
@@ -470,9 +436,11 @@ def test_limit_pushdown(memory_leak_check, tabular_catalog):
         check_logger_msg(stream, "Constant limit detected, reading at most 2 rows")
 
 
-def test_limit_filter_pushdown(memory_leak_check, tabular_catalog):
+def test_limit_filter_pushdown(
+    memory_leak_check, polaris_catalog, polaris_catalog_iceberg_read_df
+):
     """
-    Test reading an Iceberg table from Tabular with limit + filter pushdown.
+    Test reading an Iceberg table from Polaris with limit + filter pushdown.
     Since the planner has access to length statistics, we need to actually
     reduce the amount of data being read to test limit pushdown.
 
@@ -480,7 +448,7 @@ def test_limit_filter_pushdown(memory_leak_check, tabular_catalog):
     statistics and check that the number of rows read is identical
     """
 
-    catalog = tabular_catalog
+    catalog = polaris_catalog
     bc = bodosql.BodoSQLContext(catalog=catalog)
 
     def impl(bc, query):
@@ -508,7 +476,9 @@ def test_limit_filter_pushdown(memory_leak_check, tabular_catalog):
         )
 
 
-def test_multi_limit_pushdown(memory_leak_check, tabular_catalog):
+def test_multi_limit_pushdown(
+    memory_leak_check, polaris_catalog, polaris_catalog_iceberg_read_df
+):
     """
     Verify multiple limits are still simplified even though Iceberg trees
     only support a single limit.
@@ -516,7 +486,7 @@ def test_multi_limit_pushdown(memory_leak_check, tabular_catalog):
     As a result, since this is no longer order we will instead compute summary
     statistics and check that the number of rows read is identical
     """
-    catalog = tabular_catalog
+    catalog = polaris_catalog
     bc = bodosql.BodoSQLContext(catalog=catalog)
 
     def impl(bc, query):
@@ -540,15 +510,17 @@ def test_multi_limit_pushdown(memory_leak_check, tabular_catalog):
         check_logger_msg(stream, "Constant limit detected, reading at most 1 rows")
 
 
-def test_limit_filter_limit_pushdown(memory_leak_check, tabular_catalog):
+def test_limit_filter_limit_pushdown(
+    memory_leak_check, polaris_catalog, polaris_catalog_iceberg_read_df
+):
     """
-    Test reading an Iceberg table from Tabular with limit pushdown. We can push down
+    Test reading an Iceberg table from Polaris with limit pushdown. We can push down
     both limits and filters in a way that meets the requirements of this query
     (pushes the smallest limit and ensures the filter is applied).
 
     This may not result in a correct result since the ordering is not defined.
     """
-    catalog = tabular_catalog
+    catalog = polaris_catalog
     bc = bodosql.BodoSQLContext(catalog=catalog)
 
     def impl(bc, query):
@@ -576,15 +548,17 @@ def test_limit_filter_limit_pushdown(memory_leak_check, tabular_catalog):
         )
 
 
-def test_filter_limit_filter_pushdown(memory_leak_check, tabular_catalog):
+def test_filter_limit_filter_pushdown(
+    memory_leak_check, polaris_catalog, polaris_catalog_iceberg_read_df
+):
     """
-    Test reading an Iceberg table from Tabular with filters after the limit
+    Test reading an Iceberg table from Polaris with filters after the limit
     computes a valid result (enforcing the limit and the filters). This query
     doesn't have a strict ordering since limit can return any result and we opt
     to apply the filter then limit (which is always correct but may be suboptimal).
     """
 
-    catalog = tabular_catalog
+    catalog = polaris_catalog
     bc = bodosql.BodoSQLContext(catalog=catalog)
 
     def impl(bc, query):
@@ -613,13 +587,14 @@ def test_filter_limit_filter_pushdown(memory_leak_check, tabular_catalog):
 
 
 def test_dynamic_scalar_filter_pushdown(
-    memory_leak_check, tabular_catalog, tabular_connection
+    memory_leak_check, polaris_catalog, polaris_connection
 ):
     """
     Test that a dynamically generated filter can be pushed down to Iceberg.
     """
-    _, tabular_warehouse, tabular_credential = tabular_connection
-    catalog = tabular_catalog
+    rest_url, warehouse, credential = polaris_connection
+    conn_str = get_rest_catalog_connection_string(rest_url, warehouse, credential)
+    catalog = polaris_catalog
     bc = bodosql.BodoSQLContext(catalog=catalog)
     schema = "CI"
 
@@ -632,9 +607,10 @@ def test_dynamic_scalar_filter_pushdown(
     column = [current_date + pd.Timedelta(days=offset) for offset in offsets]
     input_df = pd.DataFrame({"A": column})
     py_output = pd.DataFrame({"A": [x for x in column if x <= current_date]})
-    with create_tabular_iceberg_table(
-        input_df, "current_date_table", tabular_warehouse, schema, tabular_credential
-    ) as table_name:
+    conn_str_to_catalog(conn_str)
+    table_name = "current_date_table"
+    table_id = f"{schema}.{table_name}"
+    with create_iceberg_table(conn_str, table_id, input_df):
         query = f'SELECT * FROM {schema}."{table_name}" WHERE A <= CURRENT_DATE'
         stream = StringIO()
         logger = create_string_io_logger(stream)
@@ -653,7 +629,7 @@ def test_dynamic_scalar_filter_pushdown(
             )
 
 
-def test_tabular_catalog_token_caching(memory_leak_check):
+def test_rest_catalog_token_caching(memory_leak_check):
     prev_cache_loc = numba.config.CACHE_DIR
     try:
         tempdir = run_rank0(tempfile.TemporaryDirectory)()
@@ -662,18 +638,20 @@ def test_tabular_catalog_token_caching(memory_leak_check):
         # environment. In those cases, the above line would be overridden.
         # Therefore, we also set it to the env var that numba reloads from.
         with temp_env_override(
-            {"NUMBA_CACHE_DIR": cache_loc, "__BODOSQL_TABULAR_TOKEN": "test_token1"}
+            {"NUMBA_CACHE_DIR": cache_loc, "__BODOSQL_REST_TOKEN": "test_token1"}
         ):
             numba.config.CACHE_DIR = cache_loc
 
             def f():
-                tc = get_tabular_connection("test_uri", "test_warehouse")
+                tc = get_REST_connection(
+                    "test_uri", "test_warehouse", "PRINCIPAL_ROLE:ALL"
+                )
                 return tc.conn_str
 
             dispatcher = bodo.jit(cache=True)(f)
             assert (
                 dispatcher()
-                == "rest://test_uri?warehouse=test_warehouse&token=test_token1"
+                == "iceberg+test_uri?warehouse=test_warehouse&scope=PRINCIPAL_ROLE:ALL&token=test_token1"
             )
             sig = dispatcher.signatures[0]
             assert dispatcher._cache_hits[sig] == 0, (
@@ -684,10 +662,10 @@ def test_tabular_catalog_token_caching(memory_leak_check):
             bodo.barrier()
 
             dispatcher_2 = bodo.jit(cache=True)(f)
-            os.environ["__BODOSQL_TABULAR_TOKEN"] = "test_token2"
+            os.environ["__BODOSQL_REST_TOKEN"] = "test_token2"
             assert (
                 dispatcher_2()
-                == "rest://test_uri?warehouse=test_warehouse&token=test_token2"
+                == "iceberg+test_uri?warehouse=test_warehouse&scope=PRINCIPAL_ROLE:ALL&token=test_token2"
             )
             sig = dispatcher_2.signatures[0]
             assert dispatcher_2._cache_hits[sig] == 1, (
