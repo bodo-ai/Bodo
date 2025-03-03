@@ -101,6 +101,9 @@ jobs:
   - bash: |
       set -exo pipefail
 
+      # This isn't published on pypi so no good way to list it as a dependency
+      pip install 'git+https://github.com/apache/polaris.git#subdirectory=regtests/client/python'
+
       unamestr=`uname`
       if [[ "$unamestr" == 'Linux' ]]; then
         export LD_LIBRARY_PATH=/usr/local/lib/instantclient_21_5:$LD_LIBRARY_PATH
