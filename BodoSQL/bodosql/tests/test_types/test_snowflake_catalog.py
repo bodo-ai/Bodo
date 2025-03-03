@@ -532,7 +532,7 @@ def test_delete_simple(test_db_snowflake_catalog, memory_leak_check):
     new_df = pd.DataFrame(
         {
             "A": [1, 2, 3] * 10,
-            "B": np.arange(30),
+            "B": np.arange(30, dtype=np.int64),
         }
     )
 
