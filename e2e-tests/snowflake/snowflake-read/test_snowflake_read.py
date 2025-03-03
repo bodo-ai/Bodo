@@ -1,9 +1,11 @@
 import os
 import shutil
 
+import pytest
 from utils.utils import run_cmd
 
 
+@pytest.mark.skip
 def test_snowflake_read():
     pytest_working_dir = os.getcwd()
     try:

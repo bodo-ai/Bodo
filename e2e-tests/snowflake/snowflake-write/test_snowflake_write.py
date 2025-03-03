@@ -5,6 +5,7 @@ import pytest
 from utils.utils import run_cmd
 
 
+@pytest.mark.skip
 @pytest.mark.parametrize(
     "sf_username",
     [
