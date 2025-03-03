@@ -63,6 +63,9 @@ jobs:
             role-session-name: BodoEnginePrCiSession
             role-skip-session-tagging: true
             role-duration-seconds: 10800
+        - name: Install Extra Test dependencies
+          # This isn't published on pypi so no good way to list it as a dependency
+          run: pip install 'git+https://github.com/apache/polaris.git#subdirectory=regtests/client/python'
 
         # Run Tests
         - name: Run Tests
