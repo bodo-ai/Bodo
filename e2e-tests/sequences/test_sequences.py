@@ -4,11 +4,10 @@ import random
 import shutil
 import string
 
-import pytest
 from utils.utils import run_cmd
 
 
-@pytest.mark.skip
+# @pytest.mark.skip
 def test_sequences():
     pytest_working_dir = os.getcwd()
     try:
