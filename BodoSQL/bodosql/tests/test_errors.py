@@ -24,7 +24,7 @@ def test_type_error(memory_leak_check):
         bc = bodosql.BodoSQLContext({"TABLE1": df})
         return bc.sql(query)
 
-    df = pd.DataFrame({"A": np.arange(100)})
+    df = pd.DataFrame({"A": np.arange(100, dtype=np.int64)})
     with pytest.raises(
         BodoError,
         match=r"Cannot apply '>' to arguments of type '<BIGINT> > <DATE>'",
@@ -44,7 +44,7 @@ def test_type_error_jit(memory_leak_check):
         bc = bodosql.BodoSQLContext({"TABLE1": df})
         return bc.sql(query)
 
-    df = pd.DataFrame({"A": np.arange(100)})
+    df = pd.DataFrame({"A": np.arange(100, dtype=np.int64)})
     with pytest.raises(
         BodoError,
         match=r"Cannot apply '>' to arguments of type '<BIGINT> > <DATE>'",

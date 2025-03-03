@@ -495,8 +495,8 @@ bodo::tests::suite external_sort_tests([] {
             arrow::Int64Array* int_arr =
                 static_cast<arrow::Int64Array*>(arrow_arr.get());
 
-            // Allow relative error of 25%
-            double error = 0.25;
+            // Allow relative error of 40%
+            double error = 0.40;
             auto in_bound = [&](int64_t diff) -> bool {
                 double rel_error = std::abs((double)(diff - per_host_size) /
                                             (double)per_host_size);

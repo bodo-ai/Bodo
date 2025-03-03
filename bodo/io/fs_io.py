@@ -458,7 +458,8 @@ def expand_glob(protocol: str, fs: pa.fs.FileSystem | None, path: str) -> list[s
         fs = ArrowFSWrapper(fs)
 
     try:
-        files = fs.glob(path)
+        # Arrow's FileSystem.glob() doesn't support Windows backslashes
+        files = fs.glob(path.replace("\\", "/"))
     except Exception:  # pragma: no cover
         raise BodoError(f"glob pattern expansion not supported for {protocol}")
 

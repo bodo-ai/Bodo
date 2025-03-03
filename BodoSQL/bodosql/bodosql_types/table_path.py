@@ -128,6 +128,17 @@ def convert_tablepath_constructor_args(
     )
 
 
+def _get_path_protocol(path: str) -> str:
+    """
+    Get protocol of a path (e.g. s3://, or "" for file).
+    """
+    if bodo.io.iceberg.file_io._is_windows_path(path):
+        return ""
+
+    parsed_url: ParseResult = urlparse(path)
+    return parsed_url.scheme
+
+
 def load_statistics(
     statistics_file: str,
 ) -> tuple[int | None, dict[str, int]]:
@@ -149,8 +160,7 @@ def load_statistics(
               have estimates for only some of the columns.
     """
 
-    parsed_url: ParseResult = urlparse(statistics_file)
-    protocol = parsed_url.scheme
+    protocol = _get_path_protocol(statistics_file)
     statistics_file = statistics_file.rstrip("/")
 
     # TODO Add support for loading the statistics from a S3/ADLS/HTTPS URI.

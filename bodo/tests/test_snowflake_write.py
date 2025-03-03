@@ -385,7 +385,7 @@ def test_snowflake_write_create_table_handle_exists():
         df_input.to_parquet(df_path)
 
         upload_put_sql = (
-            f"PUT 'file://{df_path}' @\"{stage_name}\" AUTO_COMPRESS=FALSE "
+            f"PUT 'file://{df_path.replace('\\', '/')}' @\"{stage_name}\" AUTO_COMPRESS=FALSE "
             f"/* tests.test_sql:test_snowflake_write_create_table_handle_exists() */"
         )
         cursor.execute(upload_put_sql, _is_internal=True)
@@ -622,7 +622,7 @@ def test_snowflake_write_execute_copy_into(memory_leak_check):
         bodo.jit(distributed=False)(test_write)(df_input)
 
         upload_put_sql = (
-            f"PUT 'file://{df_path}' @\"{stage_name}\" AUTO_COMPRESS=FALSE "
+            f"PUT 'file://{df_path.replace('\\', '/')}' @\"{stage_name}\" AUTO_COMPRESS=FALSE "
             f"/* tests.test_sql.test_snowflake_write_execute_copy_into() */ "
         )
         cursor.execute(upload_put_sql, _is_internal=True)

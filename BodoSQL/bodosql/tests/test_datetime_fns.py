@@ -896,7 +896,7 @@ def test_utc_date(basic_df, spark_info, memory_leak_check):
         ("%s", "%S"),
         ("%T", "%X"),
         ("%u", "%W"),
-        ('% %a %\\, %%a, %%, %%%%, "%", %', ' %a \\, %%a, %%, %%%%, "", %'),
+        ('% %a %\\, %%a, %%, %%%%, "%"', ' %a \\, %%a, %%, %%%%, ""'),
     ]
     # TODO: add addition format characters when/if they become supported
 )

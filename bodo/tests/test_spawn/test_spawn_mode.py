@@ -420,7 +420,11 @@ def test_spawn_input():
     Tests that using input after spawn mode doesn't fail
     """
     sub = subprocess.Popen(
-        f"{sys.executable} -c 'import bodo; bodo.jit(spawn=True)(lambda x: x)(1); input()'",
+        [
+            f"{sys.executable}",
+            "-c",
+            "'import bodo; bodo.jit(spawn=True)(lambda x: x)(1); input()'",
+        ],
         shell=True,
         stdin=subprocess.PIPE,
         start_new_session=True,

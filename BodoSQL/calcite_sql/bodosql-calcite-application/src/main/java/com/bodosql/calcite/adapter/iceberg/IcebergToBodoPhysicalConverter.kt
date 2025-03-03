@@ -263,7 +263,7 @@ class IcebergToBodoPhysicalConverter(
             val visitor =
                 object : RelVisitor() {
                     // Initialize all columns to be in the original location.
-                    var colMap: MutableList<Int> = (0..<node.rowType.fieldCount).toMutableList()
+                    var colMap: MutableList<Int> = (0 until node.rowType.fieldCount).toMutableList()
                     var filters: MutableList<RexNode> = mutableListOf()
                     var runtimeJoinFilters: MutableList<IcebergRuntimeJoinFilter> = mutableListOf()
                     var baseScan: IcebergTableScan? = null
@@ -299,7 +299,7 @@ class IcebergToBodoPhysicalConverter(
                             is IcebergProject -> {
                                 val newColMap = mutableListOf<Int>()
                                 // Projects may reorder columns, so we need to update the column mapping.
-                                for (i in 0..<colMap.size) {
+                                for (i in 0 until colMap.size) {
                                     val project = node.projects[colMap[i]]
                                     if (project !is RexInputRef) {
                                         throw RuntimeException("getOriginalColumnIndices() requires only InputRefs")

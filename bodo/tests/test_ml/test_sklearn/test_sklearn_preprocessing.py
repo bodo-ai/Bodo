@@ -125,6 +125,8 @@ def test_leave_p_out_error(memory_leak_check):
 # ---------------------- LabelEncoder -----------------------
 
 
+# This test is slow on Windows
+@pytest.mark.timeout(600)
 @pytest.mark.parametrize(
     "values, classes ",
     [

@@ -487,7 +487,7 @@ def test_write_parquet_empty_chunks(memory_leak_check):
     processes have empty chunks"""
 
     def f(n, write_filename):
-        df = pd.DataFrame({"A": np.arange(n)})
+        df = pd.DataFrame({"A": np.arange(n, dtype=np.int64)})
         df.to_parquet(write_filename)
 
     write_filename = "test__empty_chunks.pq"
@@ -497,7 +497,9 @@ def test_write_parquet_empty_chunks(memory_leak_check):
         bodo.barrier()
         if bodo.get_rank() == 0:
             df = pd.read_parquet(write_filename)
-            pd.testing.assert_frame_equal(df, pd.DataFrame({"A": np.arange(n)}))
+            pd.testing.assert_frame_equal(
+                df, pd.DataFrame({"A": np.arange(n, dtype=np.int64)})
+            )
     finally:
         if bodo.get_rank() == 0:
             shutil.rmtree(write_filename)
@@ -969,6 +971,7 @@ def test_streaming_parquet_write(memory_leak_check):
         bodo.io.stream_parquet_write.PARQUET_WRITE_CHUNK_SIZE = orig_chunk_size
         if bodo.get_rank() == 0:
             shutil.rmtree(write_filename)
+        bodo.barrier()
 
 
 def test_streaming_parquet_write_rep(memory_leak_check):
@@ -1032,6 +1035,7 @@ def test_streaming_parquet_write_rep(memory_leak_check):
         bodo.io.stream_parquet_write.PARQUET_WRITE_CHUNK_SIZE = orig_chunk_size
         if bodo.get_rank() == 0:
             shutil.rmtree(write_filename)
+        bodo.barrier()
 
 
 # ---------------------------- Test Error Checking ---------------------------- #
