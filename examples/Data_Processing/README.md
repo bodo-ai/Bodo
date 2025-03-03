@@ -23,6 +23,6 @@ Accelerating large data set analyses  using Pandas APIs.
 - **Bodo Benefits:** This demonstrates how Bodo can be applied to analyze large transportation datasets.  It showcases various Pandas operations, such as `read_parquet`, `read_csv`, `groupby`, `pivot_table`, and date/time functions, within a Bodo environment. 
 
 ### 5. `nyc_parking-tickets_analysis.ipynb` 
-Accelerating  large data sets location analytics
+Accelerating  large datasets location analytics
 - **Description:** This notebook analyzes NYC parking ticket data to create maps and extract insights. It demonstrates data loading, aggregation, filtering, and merging operations using Pandas, accelerated by Bodo.
 - **Bodo Benefits:** This is a practical example of urban data analysis, showing how Bodo can handle real-world datasets and provide performance improvements for operations like groupby, merge, and filtering.
