@@ -1338,6 +1338,8 @@ def test_read_predicates_isin(memory_leak_check):
             os.remove("pq_data")
 
 
+# This test is slow on Windows
+@pytest.mark.timeout(600)
 @pytest.mark.slow
 def test_read_partitions_isin(memory_leak_check):
     """test that partition pushdown with isin"""
@@ -1400,6 +1402,7 @@ def test_read_partitions_isin(memory_leak_check):
     finally:
         if bodo.get_rank() == 0:
             shutil.rmtree("pq_data", ignore_errors=True)
+        bodo.barrier()
 
 
 @pytest.mark.slow
