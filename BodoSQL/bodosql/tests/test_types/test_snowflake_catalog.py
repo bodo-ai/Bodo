@@ -1995,7 +1995,7 @@ def test_filter_pushdown_row_count_caching(
 
     # Empirically, it takes a moment for the query history to update,
     # so we sleep for a few seconds to ensure that the query history is updated
-    time.sleep(2)
+    time.sleep(4)
 
     # This query will get the list of all queries that match the specified pattern
     # in the past minute
