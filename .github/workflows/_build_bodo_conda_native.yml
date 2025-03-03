@@ -67,6 +67,8 @@ jobs:
           set -exo pipefail
           cd buildscripts/bodo/conda-recipe
 
+          conda --version
+
           # --no-verify because it doesn't work for Conda v2 packages
           # --no-anaconda-upload because we'll upload ourselves
           # Sccache works when the files are located in the same path.
