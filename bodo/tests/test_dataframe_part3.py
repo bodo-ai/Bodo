@@ -1712,6 +1712,8 @@ def test_df_table_rename(use_copy, datapath, memory_leak_check):
         check_logger_msg(stream, "Columns loaded ['Column1', 'Column5']")
 
 
+# This test is slow on Windows
+@pytest.mark.timeout(600)
 @pytest.mark.parametrize(
     "method",
     ["average", "first", "dense"],
