@@ -232,7 +232,6 @@ def get_statistics_ndvs(puffin_file_name, iceberg_schema):
     return read_puffin_file_ndvs(puffin_file_name, iceberg_schema)
 
 
-@run_rank0
 def get_iceberg_pyarrow_schema(conn, table_id):
     _, _, pyarrow_schema = bodo.io.iceberg.get_iceberg_orig_schema(conn, table_id)
     return pyarrow_schema
