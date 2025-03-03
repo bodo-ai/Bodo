@@ -11,7 +11,7 @@ More efficient preprocessing of large text datasets for LLM training.
 
 - **Bodo Benefits**: Efficient preprocessing is crucial for training LLMs. This script uses Bodo for parallel processing, drastically speeding up the preparation of massive datasets, which would otherwise be a major bottleneck.
 
-### 2. `llm_query_llam.py`
+### 2. `llm_query_ollama.py`
 More efficient preprocessing data for local model communication. 
 
 - **Description:** This example script uses the Python Ollama library to communicate with local models and shows an example of how-to Bodo-ify the LLM query process.
