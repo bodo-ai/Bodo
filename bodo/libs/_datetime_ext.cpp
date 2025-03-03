@@ -991,8 +991,10 @@ void* box_timestamptz_array(int64_t n, const int64_t* data_ts,
                 PyObject_CallFunction(timestamp_constructor, "L", ts_val);
 
             int16_t offset = data_offset[i];
-            PyObject* ts_tz = PyObject_CallFunction(
-                bodo_timestamptz_constructor, "OL", ts, offset);
+            // NOTE: int64_t casting of offset is necessary on Windows
+            PyObject* ts_tz =
+                PyObject_CallFunction(bodo_timestamptz_constructor, "OL", ts,
+                                      static_cast<int64_t>(offset));
             err = PyArray_SETITEM((PyArrayObject*)ret, (char*)p, ts_tz);
 
             Py_DECREF(ts);
