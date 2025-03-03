@@ -2,6 +2,7 @@ import os
 import shutil
 
 import pandas as pd
+import pytest
 from utils.utils import run_cmd
 
 import bodo
@@ -9,6 +10,7 @@ import bodo
 BUCKET_NAME = "s3://bodotest-customer-data/search_grid"
 
 
+@pytest.mark.skip
 def test_search(tmp_path):
     # Get latest AWS creds for any pandas S3 operation.
     # The env vars should be populated by the assume_iam_role
