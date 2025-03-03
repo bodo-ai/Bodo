@@ -1,5 +1,6 @@
 import datetime
 
+import numba
 import numpy as np
 import pandas as pd
 import pyarrow as pa
@@ -226,7 +227,7 @@ def check_no_statistics_file(warehouse_loc, db_schema, table_name):
     )
 
 
-@bodo.jit
+@numba.njit
 def get_statistics_ndvs(puffin_file_name, iceberg_schema):
     return read_puffin_file_ndvs(puffin_file_name, iceberg_schema)
 
