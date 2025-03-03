@@ -3364,7 +3364,7 @@ def test_write_timestamptz(test_db_snowflake_catalog, memory_leak_check):
             bodo.TimestampTZ.fromLocal("2020-01-02 03:04:05", 0),
             bodo.TimestampTZ.fromLocal("2020-01-02 03:04:05", 367),
             bodo.TimestampTZ.fromLocal("2020-01-01 00:00:00.123456789", -480),
-            bodo.TimestampTZ.fromLocal("1900-01-01 01:01:01", 0),
+            bodo.TimestampTZ.fromLocal("1970-01-01 01:01:01", 0),
             None,
             None,
             bodo.TimestampTZ.fromUTC("2024-03-10 12:30:00", -480),
