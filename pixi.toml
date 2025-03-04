@@ -70,7 +70,7 @@ python = "3.12.*"
 pip = "*"
 # Core Python Deps
 numba = "==0.61.0"
-numpy = ">=1.2.4,<2.2"
+numpy = ">=1.24,<2.2"
 pandas = ">=2.2,<2.3"
 pyarrow = { version = "==18.1.0", channel = "conda-forge" }
 fsspec = ">=2021.09"
@@ -85,7 +85,6 @@ h5py = "*"
 # Data Science
 scipy = "*"
 scikit-learn = "1.4.*"
-matplotlib = "*"
 # IO
 boto3 = ">=1.35.74"
 botocore = "*"
@@ -151,6 +150,9 @@ duckdb = "*"
 
 # Note: PySpark 3.5 is necessary for Python 3.12
 pyspark = "3.5.*"
+# Platform conda package needs numpy >2.0 which is not compatible with our matplotlib
+# requirement, removing from the platform for now.
+matplotlib = "<=3.8.2"
 # Iceberg Testing
 mmh3 = "*"
 avro = "*"  # Reading avro
