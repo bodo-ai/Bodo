@@ -90,6 +90,7 @@ jobs:
           SF_AZURE_PASSWORD: ${{ secrets.SF_AZURE_PASSWORD }}
           SF_AZURE_ACCOUNT: ${{ secrets.SF_AZURE_ACCOUNT }}
           NESSIE_AUTH_TOKEN: ${{ secrets.NESSIE_AUTH_TOKEN }}
+          BODO_BUFFER_POOL_REMOTE_MODE: "1"
 
   run-examples:
     name: Run Examples

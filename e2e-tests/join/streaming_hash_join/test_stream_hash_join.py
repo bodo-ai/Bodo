@@ -25,8 +25,8 @@ from utils.utils import run_cmd, temp_env_override
             184673545992169650,
             184673545992169700,
             None,
-            36,
-            id="sf10_basic_np36",
+            30,
+            id="sf10_basic_np30",
         ),
     ],
 )
