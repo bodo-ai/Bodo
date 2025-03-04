@@ -70,7 +70,7 @@ python = "3.12.*"
 pip = "*"
 # Core Python Deps
 numba = "==0.61.0"
-numpy = ">=2.0,<2.2"
+numpy = ">=1.2.4,<2.2"
 pandas = ">=2.2,<2.3"
 pyarrow = { version = "==18.1.0", channel = "conda-forge" }
 fsspec = ">=2021.09"
