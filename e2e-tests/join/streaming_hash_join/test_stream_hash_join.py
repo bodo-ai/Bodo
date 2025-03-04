@@ -5,6 +5,8 @@ import pytest
 from utils.utils import run_cmd, temp_env_override
 
 
+# @pytest.mark.skip
+@pytest.mark.streaming_hash_join
 @pytest.mark.parametrize(
     "input_schema, expected_out_len, expected_checksum_lower, expected_checksum_upper, mem_size_mib, num_ranks",
     [
@@ -23,8 +25,8 @@ from utils.utils import run_cmd, temp_env_override
             184673545992169650,
             184673545992169700,
             None,
-            36,
-            id="sf10_basic_np36",
+            30,
+            id="sf10_basic_np30",
         ),
     ],
 )
