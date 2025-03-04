@@ -16,10 +16,6 @@ from bodo.io.iceberg.write import (
     generate_data_file_info,
     iceberg_pq_write,
 )
-from bodo.io.s3_fs import (
-    create_iceberg_aws_credentials_provider,
-    create_s3_fs_instance,
-)
 from bodo.libs.array import (
     arr_info_list_to_table,
     array_to_info,
@@ -86,11 +82,8 @@ def iceberg_merge_cow(
 
     arrow_fs = None
     if catalog_uri and bearer_token and warehouse:
-        arrow_fs = create_s3_fs_instance(
-            credentials_provider=create_iceberg_aws_credentials_provider(
-                catalog_uri, bearer_token, warehouse, database_schema, table_name
-            ),
-        )
+        # TODO: Update MERGE INTO to use PyIceberg
+        pass
 
     dummy_theta_sketch = bodo.io.iceberg.theta.init_theta_sketches_wrapper(
         alloc_false_bool_array(num_cols)

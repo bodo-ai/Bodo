@@ -376,30 +376,32 @@ std::unique_ptr<BodoBuffer> AllocateBodoBuffer(
         bodo::default_buffer_memory_manager());
 
 constexpr inline bool is_unsigned_integer(Bodo_CTypes::CTypeEnum typ) {
-    if (typ == Bodo_CTypes::UINT8)
+    if (typ == Bodo_CTypes::UINT8) {
         return true;
-    if (typ == Bodo_CTypes::UINT16)
+    } else if (typ == Bodo_CTypes::UINT16) {
         return true;
-    if (typ == Bodo_CTypes::UINT32)
+    } else if (typ == Bodo_CTypes::UINT32) {
         return true;
-    if (typ == Bodo_CTypes::UINT64)
+    } else if (typ == Bodo_CTypes::UINT64) {
         return true;
+    }
     return false;
 }
 
 constexpr inline bool is_integer(Bodo_CTypes::CTypeEnum typ) {
-    if (is_unsigned_integer(typ))
+    if (is_unsigned_integer(typ)) {
         return true;
-    if (typ == Bodo_CTypes::INT8)
+    } else if (typ == Bodo_CTypes::INT8) {
         return true;
-    if (typ == Bodo_CTypes::INT16)
+    } else if (typ == Bodo_CTypes::INT16) {
         return true;
-    if (typ == Bodo_CTypes::INT32)
+    } else if (typ == Bodo_CTypes::INT32) {
         return true;
-    if (typ == Bodo_CTypes::INT64)
+    } else if (typ == Bodo_CTypes::INT64) {
         return true;
-    if (typ == Bodo_CTypes::INT128)
+    } else if (typ == Bodo_CTypes::INT128) {
         return true;
+    }
     return false;
 }
 
@@ -429,8 +431,8 @@ constexpr inline bool is_numerical(Bodo_CTypes::CTypeEnum typ) {
 template <Bodo_CTypes::CTypeEnum DType>
     requires(is_complex(DType))
 using complex_type =
-    typename std::conditional<DType == Bodo_CTypes::COMPLEX128,
-                              std::complex<double>, std::complex<float>>::type;
+    std::conditional_t<DType == Bodo_CTypes::COMPLEX128, std::complex<double>,
+                       std::complex<float>>;
 /** Getting the expression of a T value as a vector of characters
  *
  * The template parameter is T.
@@ -442,8 +444,9 @@ inline std::vector<char> GetCharVector(T const& val) {
     const T* valptr = &val;
     const char* charptr = (char*)valptr;
     std::vector<char> V(sizeof(T));
-    for (size_t u = 0; u < sizeof(T); u++)
+    for (size_t u = 0; u < sizeof(T); u++) {
         V[u] = charptr[u];
+    }
     return V;
 }
 
@@ -461,37 +464,37 @@ inline std::vector<char> GetCharVector(T const& val) {
  * @return the list of characters in output.
  */
 inline std::vector<char> RetrieveNaNentry(Bodo_CTypes::CTypeEnum const& dtype) {
-    if (dtype == Bodo_CTypes::_BOOL)
+    if (dtype == Bodo_CTypes::_BOOL) {
         return GetCharVector<bool>(false);
-    if (dtype == Bodo_CTypes::INT8)
+    } else if (dtype == Bodo_CTypes::INT8) {
         return GetCharVector<int8_t>(-1);
-    if (dtype == Bodo_CTypes::UINT8)
+    } else if (dtype == Bodo_CTypes::UINT8) {
         return GetCharVector<uint8_t>(0);
-    if (dtype == Bodo_CTypes::INT16)
+    } else if (dtype == Bodo_CTypes::INT16) {
         return GetCharVector<int16_t>(-1);
-    if (dtype == Bodo_CTypes::UINT16)
+    } else if (dtype == Bodo_CTypes::UINT16) {
         return GetCharVector<uint16_t>(0);
-    if (dtype == Bodo_CTypes::INT32)
+    } else if (dtype == Bodo_CTypes::INT32) {
         return GetCharVector<int32_t>(-1);
-    if (dtype == Bodo_CTypes::UINT32)
+    } else if (dtype == Bodo_CTypes::UINT32) {
         return GetCharVector<uint32_t>(0);
-    if (dtype == Bodo_CTypes::INT64)
+    } else if (dtype == Bodo_CTypes::INT64) {
         return GetCharVector<int64_t>(-1);
-    if (dtype == Bodo_CTypes::UINT64)
+    } else if (dtype == Bodo_CTypes::UINT64) {
         return GetCharVector<uint64_t>(0);
-    if (dtype == Bodo_CTypes::DATE) {
+    } else if (dtype == Bodo_CTypes::DATE) {
         Bodo_PyErr_SetString(PyExc_RuntimeError,
                              "In DATE case missing values are handled by "
                              "NULLABLE_INT_BOOL so this case is impossible");
-    }
-    if (dtype == Bodo_CTypes::DATETIME || dtype == Bodo_CTypes::TIMEDELTA ||
-        dtype == Bodo_CTypes::TIMESTAMPTZ)
+    } else if (dtype == Bodo_CTypes::DATETIME ||
+               dtype == Bodo_CTypes::TIMEDELTA ||
+               dtype == Bodo_CTypes::TIMESTAMPTZ) {
         return GetCharVector<int64_t>(std::numeric_limits<int64_t>::min());
-    if (dtype == Bodo_CTypes::FLOAT32)
+    } else if (dtype == Bodo_CTypes::FLOAT32) {
         return GetCharVector<float>(std::nanf("1"));
-    if (dtype == Bodo_CTypes::FLOAT64)
+    } else if (dtype == Bodo_CTypes::FLOAT64) {
         return GetCharVector<double>(std::nan("1"));
-    if (dtype == Bodo_CTypes::DECIMAL) {
+    } else if (dtype == Bodo_CTypes::DECIMAL) {
         // Normally the null value of decimal_value should never show up
         // anywhere. A value is assigned for simplicity of the code
         __int128_t e_val = 0;
@@ -2086,10 +2089,11 @@ inline void InitializeBitMask(uint8_t* bits, size_t length, bool val,
     }
     size_t n_bytes = (length - start_row + 7) >> 3;
     uint8_t* ptr = bits + (start_row >> 3);
-    if (!val)
+    if (!val) {
         memset(ptr, 0, n_bytes);
-    else
+    } else {
         memset(ptr, 0xff, n_bytes);
+    }
 }
 
 inline bool is_na(const uint8_t* null_bitmap, int64_t i) {
@@ -2099,11 +2103,6 @@ inline bool is_na(const uint8_t* null_bitmap, int64_t i) {
 
 // Retrieve the bodo version as a string.
 std::string get_bodo_version();
-
-// Use libzstd to decompress a blob string.
-// It is in this file for now because we don't have enough zstd functionality
-// to give it its own file.
-std::string decode_zstd(std::string blob);
 
 // C++20 magic to support "heterogeneous" access to unordered containers
 // makes the key "transparent", allowing std::string_view to be used similar to
