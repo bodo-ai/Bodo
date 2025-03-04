@@ -90,11 +90,18 @@ jobs:
           BUILD_WITH_V8: ${{ (inputs.platform-build == true) && '1' || '0' }}
           PLATFORM_CHANNEL: ${{ (inputs.platform-build == true) && '-c bodo.ai' || '' }}
 
+      - name: Debug Conda Package Path
+        run: |
+          ls ${{ env.CONDA_BLD_PATH }}
+          if [[ $RUNNER_OS == 'Windows' ]]; then
+            ls ${{ env.CONDA_BLD_PATH }}/win-64/
+          fi
+
       - name: Upload Conda Package
         uses: actions/upload-artifact@v4
         with:
           name: bodo-conda-${{ inputs.python-version }}-${{ inputs.platform-build == true && 'platform' || inputs.os }}
-          path: ${{ env.CONDA_BLD_PATH }}
+          path: ${{ inputs.os != 'windows-latest' && env.CONDA_BLD_PATH || 'C:\Users\runneradmin\conda-bld\' }}
 
       - name: Publish to Artifactory / Anaconda
         if: ${{ inputs.is-release }}
