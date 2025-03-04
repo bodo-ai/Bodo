@@ -459,11 +459,7 @@ def gen_pandas_parquet_metadata(
     pass
 
 
-@overload(
-    gen_pandas_parquet_metadata,
-    no_unliteral=True,
-    # jit_options={"cache": True}
-)
+@overload(gen_pandas_parquet_metadata, no_unliteral=True, jit_options={"cache": True})
 def overload_gen_pandas_parquet_metadata(
     df,
     col_names_arr,
