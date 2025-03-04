@@ -90,6 +90,10 @@ jobs:
           BUILD_WITH_V8: ${{ (inputs.platform-build == true) && '1' || '0' }}
           PLATFORM_CHANNEL: ${{ (inputs.platform-build == true) && '-c bodo.ai' || '' }}
 
+      - name: Debug Conda Package Path
+        run: |
+          ls ${{ env.CONDA_BLD_PATH }}
+
       - name: Upload Conda Package
         uses: actions/upload-artifact@v4
         with:
