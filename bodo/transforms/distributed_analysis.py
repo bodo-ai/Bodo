@@ -2405,12 +2405,14 @@ class DistributedAnalysis:
         if fdef == ("init_multi_index", "bodo.hiframes.pd_multi_index_ext"):
             # input arrays and output index have the same distribution
             tup_list = guard(find_build_tuple, self.func_ir, rhs.args[0])
-            assert tup_list is not None
-            for v in tup_list:
-                _meet_array_dists(self.typemap, lhs, v.name, array_dists)
-            for v in tup_list:
-                _meet_array_dists(self.typemap, lhs, v.name, array_dists)
-            return
+            if tup_list is not None:
+                for v in tup_list:
+                    _meet_array_dists(self.typemap, lhs, v.name, array_dists)
+                for v in tup_list:
+                    _meet_array_dists(self.typemap, lhs, v.name, array_dists)
+                return
+            else:
+                _meet_array_dists(self.typemap, lhs, rhs.args[0], array_dists)
 
         if fdef == ("init_series", "bodo.hiframes.pd_series_ext"):
             # NOTE: constant sizes Series/Index is not distributed
