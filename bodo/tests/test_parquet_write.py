@@ -26,6 +26,7 @@ from bodo.tests.utils import (
     gen_random_arrow_array_struct_int,
     gen_random_arrow_list_list_int,
     gen_random_arrow_struct_struct,
+    pytest_mark_one_rank,
     reduce_sum,
 )
 from bodo.utils.testing import ensure_clean2, ensure_clean_dir
@@ -227,8 +228,11 @@ def test_pq_write_metadata(df, index_name, memory_leak_check):
                     bodo.barrier()
     finally:
         if bodo.libs.distributed_api.get_size() == 1:
-            os.remove("bodo_metadatatest.pq")
-            os.remove("pandas_metadatatest.pq")
+            try:
+                os.remove("bodo_metadatatest.pq")
+                os.remove("pandas_metadatatest.pq")
+            except FileNotFoundError:
+                pass
         else:
             shutil.rmtree("bodo_metadatatest.pq", ignore_errors=True)
 
@@ -697,32 +701,31 @@ def test_write_parquet_dict_table(memory_leak_check):
     )
 
 
+@pytest_mark_one_rank
 def test_write_parquet_row_group_size(memory_leak_check):
     """Test df.to_parquet(..., row_group_size=n)"""
-    if bodo.get_rank() == 0:
-        # We don't need to test the distributed case, because in the distributed
-        # case each rank writes its own data to a separate file. row_group_size
-        # is passed to Arrow WriteTable in the same way regardless
+    # We don't need to test the distributed case, because in the distributed
+    # case each rank writes its own data to a separate file. row_group_size
+    # is passed to Arrow WriteTable in the same way regardless
 
-        @bodo.jit(replicated=["df"])
-        def impl(df, output_filename, n):
-            df.to_parquet(output_filename, row_group_size=n)
+    @bodo.jit(replicated=["df"])
+    def impl(df, output_filename, n):
+        df.to_parquet(output_filename, row_group_size=n)
 
-        output_filename = "bodo_temp.pq"
-        try:
-            df = pd.DataFrame({"A": range(93)})
-            impl(df, output_filename, 20)
-            m = pq.ParquetFile(output_filename).metadata
-            assert [m.row_group(i).num_rows for i in range(m.num_row_groups)] == [
-                20,
-                20,
-                20,
-                20,
-                13,
-            ]
-        finally:
-            os.remove(output_filename)
-    bodo.barrier()
+    output_filename = "bodo_temp.pq"
+    try:
+        df = pd.DataFrame({"A": range(93)})
+        impl(df, output_filename, 20)
+        m = pq.ParquetFile(output_filename).metadata
+        assert [m.row_group(i).num_rows for i in range(m.num_row_groups)] == [
+            20,
+            20,
+            20,
+            20,
+            13,
+        ]
+    finally:
+        os.remove(output_filename)
 
 
 def test_write_parquet_no_empty_files(memory_leak_check):
@@ -1038,6 +1041,50 @@ def test_streaming_parquet_write_rep(memory_leak_check):
         bodo.barrier()
 
 
+@pytest.mark.slow
+def test_to_pq_multiIdx(memory_leak_check):
+    """Test to_parquet with MultiIndexType"""
+    arrays = [
+        ["bar", "bar", "baz", "baz", "foo", "foo", "qux", "qux"],
+        ["one", "two", "one", "two", "one", "two", "one", "two"],
+    ]
+    tuples = list(zip(*arrays))
+    idx = pd.MultiIndex.from_tuples(tuples, names=["first", "second"])
+    df = pd.DataFrame(np.random.randn(8, 2), index=idx, columns=["A", "B"])
+    fname = "multi_idx_parquet.pq"
+
+    def impl(df):
+        df.to_parquet(fname)
+
+    with ensure_clean_dir(fname):
+        impl(df)
+
+        read_df = pd.read_parquet(fname)
+        pd.testing.assert_frame_equal(df, read_df)
+
+
+@pytest.mark.slow
+def test_to_pq_multiIdx_no_name(memory_leak_check):
+    """Test to_parquet with MultiIndexType with no name at 1 level"""
+    arrays = [
+        ["bar", "bar", "baz", "baz", "foo", "foo", "qux", "qux"],
+        ["one", "two", "one", "two", "one", "two", "one", "two"],
+    ]
+    tuples = list(zip(*arrays))
+    idx = pd.MultiIndex.from_tuples(tuples, names=["first", None])
+    df = pd.DataFrame(np.random.randn(8, 2), index=idx, columns=["A", "B"])
+    fname = "multi_idx_parquet_no_name.pq"
+
+    def impl(df):
+        df.to_parquet(fname)
+
+    with ensure_clean_dir(fname):
+        impl(df)
+
+        read_df = pd.read_parquet(fname)
+        pd.testing.assert_frame_equal(df, read_df)
+
+
 # ---------------------------- Test Error Checking ---------------------------- #
 @pytest.mark.slow
 def test_to_parquet_missing_arg(memory_leak_check):
@@ -1086,21 +1133,3 @@ def test_to_parquet_row_group_size():
     df = pd.DataFrame({"A": np.arange(10)})
     with pytest.raises(BodoError, match=msg):
         bodo.jit(lambda f: impl(df))(df)
-
-
-@pytest.mark.slow
-def test_to_pq_multiIdx_errcheck(memory_leak_check):
-    """Test unsupported to_parquet with MultiIndexType"""
-    arrays = [
-        ["bar", "bar", "baz", "baz", "foo", "foo", "qux", "qux"],
-        ["one", "two", "one", "two", "one", "two", "one", "two"],
-    ]
-    tuples = list(zip(*arrays))
-    idx = pd.MultiIndex.from_tuples(tuples, names=["first", "second"])
-    df = pd.DataFrame(np.random.randn(8, 2), index=idx, columns=["A", "B"])
-
-    def impl(df):
-        df.to_parquet("multi_idx_parquet.pq")
-
-    with pytest.raises(BodoError, match="to_parquet: MultiIndex not supported yet"):
-        bodo.jit(impl)(df)
