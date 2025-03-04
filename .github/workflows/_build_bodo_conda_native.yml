@@ -93,12 +93,13 @@ jobs:
       - name: Debug Conda Package Path
         run: |
           ls ${{ env.CONDA_BLD_PATH }}
+          ls ${{ env.CONDA_BLD_PATH }}/win64/
 
       - name: Upload Conda Package
         uses: actions/upload-artifact@v4
         with:
           name: bodo-conda-${{ inputs.python-version }}-${{ inputs.platform-build == true && 'platform' || inputs.os }}
-          path: ${{ env.CONDA_BLD_PATH }}
+          path: ${{ inputs.os != 'windows-latest' && env.CONDA_BLD_PATH || 'C:\Users\runneradmin\conda-bld\' }}
 
       - name: Publish to Artifactory / Anaconda
         if: ${{ inputs.is-release }}
