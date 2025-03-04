@@ -26,7 +26,7 @@ from bodo.io.helpers import (
     _get_stream_writer_payload,
     stream_writer_alloc_codegen,
 )
-from bodo.io.parquet_pio import parquet_write_table_cpp, pq_write_create_dir
+from bodo.io.parquet_write import parquet_write_table_cpp, pq_write_create_dir
 from bodo.libs.array import array_to_info, py_table_to_cpp_table
 from bodo.libs.str_ext import unicode_to_utf8
 from bodo.libs.streaming.base import StreamingStateType
@@ -466,23 +466,12 @@ def gen_parquet_writer_append_table_impl_inner(
                     unicode_to_utf8(writer["path"]),
                     py_table_to_cpp_table(out_table, py_table_typ),
                     array_to_info(col_names_arr),
-                    0,
-                    # write_index
-                    False,
                     # metadata
                     unicode_to_utf8("null"),
                     unicode_to_utf8(writer["compression"]),
                     # Set parallel=True even in replicated case since streaming write
                     # requires a directory to write multiple pieces.
                     True,
-                    # write_rangeindex_to_metadata
-                    0,
-                    # range index start, stop, step
-                    0,
-                    0,
-                    0,
-                    # idx_name
-                    unicode_to_utf8("null"),
                     unicode_to_utf8(writer["bucket_region"]),
                     writer["row_group_size"],
                     # prefix

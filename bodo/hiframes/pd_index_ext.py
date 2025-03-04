@@ -1,6 +1,7 @@
 import datetime
 import operator
 import warnings
+from abc import ABC, abstractmethod
 
 import numba
 import numpy as np
@@ -32,7 +33,7 @@ import bodo
 import bodo.hiframes
 import bodo.utils.conversion
 from bodo.hiframes.datetime_timedelta_ext import pd_timedelta_type
-from bodo.hiframes.pd_multi_index_ext import MultiIndexType
+from bodo.hiframes.pd_multi_index_ext import IndexNameType, MultiIndexType
 from bodo.hiframes.pd_series_ext import SeriesType
 from bodo.hiframes.pd_timestamp_ext import pd_timestamp_tz_naive_type
 from bodo.libs.binary_arr_ext import binary_array_type, bytes_type
@@ -196,10 +197,25 @@ def typeof_pd_index(val, c):
     raise NotImplementedError(f"unsupported pd.Index type {val}")
 
 
+# -------------------------  Base Index Type ------------------------------
+class SingleIndexType(ABC):
+    name_typ: IndexNameType
+
+    @property
+    @abstractmethod
+    def pandas_type_name(self):
+        raise NotImplementedError
+
+    @property
+    @abstractmethod
+    def numpy_type_name(self):
+        raise NotImplementedError
+
+
 # -------------------------  DatetimeIndex ------------------------------
 
 
-class DatetimeIndexType(types.IterableType, types.ArrayCompatible):
+class DatetimeIndexType(types.IterableType, types.ArrayCompatible, SingleIndexType):
     """type class for DatetimeIndex objects."""
 
     def __init__(self, name_typ=None, data=None):
@@ -1314,7 +1330,7 @@ def overload_pd_timestamp_isocalendar(idx):
 
 
 # similar to DatetimeIndex
-class TimedeltaIndexType(types.IterableType, types.ArrayCompatible):
+class TimedeltaIndexType(types.IterableType, types.ArrayCompatible, SingleIndexType):
     """Temporary type class for TimedeltaIndex objects."""
 
     def __init__(self, name_typ=None, data=None):
@@ -1722,7 +1738,7 @@ def pd_timedelta_index_overload(
 
 
 # pd.RangeIndex(): simply keep start/stop/step/name
-class RangeIndexType(types.IterableType, types.ArrayCompatible):
+class RangeIndexType(types.IterableType, types.ArrayCompatible, SingleIndexType):
     """type class for pd.RangeIndex() objects."""
 
     def __init__(self, name_typ=None):
@@ -2065,7 +2081,7 @@ def overload_range_len(r):
 
 
 # Simple type for PeriodIndex for now, freq is saved as a constant string
-class PeriodIndexType(types.IterableType, types.ArrayCompatible):
+class PeriodIndexType(types.IterableType, types.ArrayCompatible, SingleIndexType):
     """type class for pd.PeriodIndex. Contains frequency as constant string"""
 
     def __init__(self, freq, name_typ=None):
@@ -2260,7 +2276,7 @@ def unbox_period_index(typ, val, c):
 # ------------------------------ CategoricalIndex ---------------------------
 
 
-class CategoricalIndexType(types.IterableType, types.ArrayCompatible):
+class CategoricalIndexType(types.IterableType, types.ArrayCompatible, SingleIndexType):
     """data type for CategoricalIndex values"""
 
     def __init__(self, data, name_typ=None):
@@ -2486,7 +2502,7 @@ def overload_categorical_index_copy(A, name=None, deep=False, dtype=None, names=
 # ------------------------------ IntervalIndex ---------------------------
 
 
-class IntervalIndexType(types.ArrayCompatible):
+class IntervalIndexType(types.ArrayCompatible, SingleIndexType):
     """data type for IntervalIndex values"""
 
     def __init__(self, data, name_typ=None):
@@ -2665,7 +2681,7 @@ make_attribute_wrapper(IntervalIndexType, "dict", "_dict")
 
 
 # Represents numeric indices (excluding RangeIndex)
-class NumericIndexType(types.IterableType, types.ArrayCompatible):
+class NumericIndexType(types.IterableType, types.ArrayCompatible, SingleIndexType):
     """type class for pd.Index objects with numeric dtypes."""
 
     def __init__(self, dtype, name_typ=None, data=None):
@@ -2841,7 +2857,7 @@ def unbox_numeric_index(typ, val, c):
 
 # represents string index, which doesn't have direct Pandas type
 # pd.Index() infers string
-class StringIndexType(types.IterableType, types.ArrayCompatible):
+class StringIndexType(types.IterableType, types.ArrayCompatible, SingleIndexType):
     """type class for pd.Index() objects with 'string' as inferred_dtype."""
 
     def __init__(self, name_typ=None, data_typ=None):
@@ -2905,7 +2921,7 @@ make_attribute_wrapper(StringIndexType, "dict", "_dict")
 # represents binary index, which doesn't have direct Pandas type
 # pd.Index() infers binary
 # Largely copied from the StringIndexType class
-class BinaryIndexType(types.IterableType, types.ArrayCompatible):
+class BinaryIndexType(types.IterableType, types.ArrayCompatible, SingleIndexType):
     """type class for pd.Index() objects with 'binary' as inferred_dtype."""
 
     def __init__(self, name_typ=None, data_typ=None):
@@ -4725,7 +4741,7 @@ def range_index_to_numeric(I):  # pragma: no cover
     )
 
 
-class HeterogeneousIndexType(types.Type):
+class HeterogeneousIndexType(types.Type, SingleIndexType):
     """
     Type class for Index objects with potentially heterogeneous but limited number of
     values (e.g. pd.Index([1, 'A']))
