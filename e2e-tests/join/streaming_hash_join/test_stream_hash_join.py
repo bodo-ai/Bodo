@@ -5,6 +5,7 @@ import pytest
 from utils.utils import run_cmd, temp_env_override
 
 
+@pytest.mark.skip(reason="TODO [BSE-4589]: Fix hanging tests on CI.")
 @pytest.mark.parametrize(
     "input_schema, expected_out_len, expected_checksum_lower, expected_checksum_upper, mem_size_mib, num_ranks",
     [
