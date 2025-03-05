@@ -93,15 +93,14 @@ jobs:
       - name: Convert Build Path (Windows Only)
         if: ${{ inputs.os == 'windows-latest' }}
         run: |
-           cygpath -w $HOME/conda-bld
-           cygpath -w $CONDA_BLD_PATH
-           echo "WIN_CONDA_BLD_PATH=`cygpath -w $HOME/conda-bld`" >> $GITHUB_ENV 
+           echo "CONDA_BLD_PATH=`cygpath -w $CONDA_BLD_PATH`" >> $GITHUB_ENV 
+        shell: bash
 
       - name: Upload Conda Package
         uses: actions/upload-artifact@v4
         with:
           name: bodo-conda-${{ inputs.python-version }}-${{ inputs.platform-build == true && 'platform' || inputs.os }}
-          path: ${{ inputs.os != 'windows-latest' && env.CONDA_BLD_PATH || env.WIN_CONDA_BLD_PATH }}
+          path: ${{ env.CONDA_BLD_PATH }}
 
       - name: Publish to Artifactory / Anaconda
         if: ${{ inputs.is-release }}
