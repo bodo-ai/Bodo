@@ -10,7 +10,7 @@ import pandas as pd
 import pytest
 
 import bodo
-from bodo.tests.utils import pytest_mark_one_rank
+from bodo.tests.utils import pytest_mark_one_rank, temp_env_override
 from bodo.utils.testing import ensure_clean
 from bodo.utils.typing import BodoError, BodoWarning
 
@@ -75,17 +75,25 @@ def test_read_csv_incorrect_s3_credentials(memory_leak_check):
     # Test as a user
     numba.core.config.DEVELOPER_MODE = 0
 
-    @bodo.jit
-    def read(filename):
-        df = pd.read_csv(filename)
-        return df
+    with temp_env_override(
+        {
+            "AWS_ACCESS_KEY_ID": "bad_key_id",
+            "AWS_SECRET_ACCESS_KEY": "bad_key",
+            "AWS_SESSION_TOKEN": "bad_token",
+        }
+    ):
 
-    # Test with passing filename from bodo to bodo call error and S3
-    def test_impl_csv(filename):
-        return read(filename)
+        @bodo.jit
+        def read(filename):
+            df = pd.read_csv(filename)
+            return df
 
-    with pytest.raises(BodoError, match="No response body"):
-        bodo.jit(test_impl_csv)(filename)
+        # Test with passing filename from bodo to bodo call error and S3
+        def test_impl_csv(filename):
+            return read(filename)
+
+        with pytest.raises(BodoError, match="No response body"):
+            bodo.jit(test_impl_csv)(filename)
 
     # Reset developer mode
     numba.core.config.DEVELOPER_MODE = default_mode

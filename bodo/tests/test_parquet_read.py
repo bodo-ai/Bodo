@@ -35,6 +35,7 @@ from bodo.tests.utils import (
     gen_random_arrow_list_list_double,
     gen_random_arrow_list_list_int,
     gen_random_arrow_struct_struct,
+    temp_env_override,
 )
 from bodo.utils.testing import ensure_clean, ensure_clean2
 from bodo.utils.typing import BodoError, BodoWarning
@@ -2607,25 +2608,33 @@ def test_read_parquet_incorrect_s3_credentials(memory_leak_check):
     # Test as a user
     numba.core.config.DEVELOPER_MODE = 0
 
-    @bodo.jit
-    def read(filename):
-        df = pd.read_parquet(filename)
-        return df
+    with temp_env_override(
+        {
+            "AWS_ACCESS_KEY_ID": "bad_key_id",
+            "AWS_SECRET_ACCESS_KEY": "bad_key",
+            "AWS_SESSION_TOKEN": "bad_token",
+        }
+    ):
 
-    # Test CallConstraint error
-    def test_impl(filename):
-        return read(filename)
+        @bodo.jit
+        def read(filename):
+            df = pd.read_parquet(filename)
+            return df
 
-    with pytest.raises(BodoError, match="No response body"):
-        bodo.jit(test_impl)(filename)
+        # Test CallConstraint error
+        def test_impl(filename):
+            return read(filename)
 
-    # Test ForceLiteralArg error
-    def test_impl2(filename):
-        df = pd.read_parquet(filename)
-        return df
+        with pytest.raises(BodoError, match="No response body"):
+            bodo.jit(test_impl)(filename)
 
-    with pytest.raises(BodoError, match="No response body"):
-        bodo.jit(test_impl2)(filename)
+        # Test ForceLiteralArg error
+        def test_impl2(filename):
+            df = pd.read_parquet(filename)
+            return df
+
+        with pytest.raises(BodoError, match="No response body"):
+            bodo.jit(test_impl2)(filename)
 
     # Reset developer mode
     numba.core.config.DEVELOPER_MODE = default_mode
