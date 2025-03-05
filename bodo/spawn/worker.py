@@ -467,6 +467,28 @@ def exec_func_handler(
     os.environ = original_env_var
 
 
+class StdoutQueue:
+    """Replacement for stdout/stderr that sends output to the spawner via a ZeroMQ socket."""
+
+    def __init__(self, out_socket, is_stderr):
+        self.out_socket = out_socket
+        self.is_stderr = is_stderr
+        self.closed = False
+
+    def write(self, msg):
+        # TODO(Ehsan): buffer output similar to ipykernel
+        self.out_socket.send_string(f"{int(self.is_stderr)}{msg}")
+
+    def flush(self):
+        if self.is_stderr:
+            sys.__stderr__.flush()
+        else:
+            sys.__stdout__.flush()
+
+    def close(self):
+        self.closed = True
+
+
 def worker_loop(
     comm_world: MPI.Intracomm, spawner_intercomm: MPI.Intercomm, logger: logging.Logger
 ):
@@ -482,6 +504,23 @@ def worker_loop(
             "Spawner and worker 0 must be on the same machine"
         )
 
+    # Send output to spawner manually if we are in Jupyter on Windows since child processes
+    # don't inherit file descriptors from the parent process.
+    out_socket = None
+    if sys.platform == "win32" and (
+        "JPY_SESSION_NAME" in os.environ
+        or "PYDEVD_IPYTHON_COMPATIBLE_DEBUGGING" in os.environ
+    ):
+        port = spawner_intercomm.bcast(None, 0)
+
+        import zmq
+
+        context = zmq.Context()
+        out_socket = context.socket(zmq.PUSH)
+        out_socket.connect(f"tcp://127.0.0.1:{port}")
+        sys.stdout = StdoutQueue(out_socket, False)
+        sys.stderr = StdoutQueue(out_socket, True)
+
     while True:
         debug_worker_msg(logger, "Waiting for command")
         # TODO Change this to a wait that doesn't spin cycles
@@ -493,6 +532,8 @@ def worker_loop(
             exec_func_handler(comm_world, spawner_intercomm, logger)
         elif command == CommandType.EXIT.value:
             debug_worker_msg(logger, "Exiting...")
+            if out_socket:
+                out_socket.close()
             return
         elif command == CommandType.BROADCAST.value:
             bodo.libs.distributed_api.bcast(None, root=0, comm=spawner_intercomm)
