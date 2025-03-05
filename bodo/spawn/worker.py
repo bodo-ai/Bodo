@@ -508,6 +508,11 @@ def worker_loop(
     # don't inherit file descriptors from the parent process.
     out_socket = None
     if bodo.utils.utils.is_jupyter_on_windows():
+        # Multi-node Jupyter on Windows is not supported yet
+        if spawner_hostname != socket.gethostname():
+            raise bodo.utils.typing.BodoError(
+                "Jupyter is not supported on multi-node Windows clusters yet"
+            )
         port = spawner_intercomm.bcast(None, 0)
 
         import zmq
