@@ -601,6 +601,7 @@ class Spawner:
         so Jupyter's normal output routing doesn't work.
         This creates a socket using ZMQ to receive output from workers and print it.
         A separate thread is used to receive messages and print them.
+        Currently only works on single-node Windows setups.
 
         Some relevant links:
         https://discourse.jupyter.org/t/jupyterlab-no-longer-allows-ouput-to-be-redirected-to-stdout/11535/2
@@ -608,17 +609,10 @@ class Spawner:
         https://docs.python.org/3/howto/logging-cookbook.html#logging-to-a-single-file-from-multiple-processes
         https://stackoverflow.com/questions/7714868/multiprocessing-how-can-i-%ca%80%e1%b4%87%ca%9f%c9%aa%e1%b4%80%ca%99%ca%9f%ca%8f-redirect-stdout-from-a-child-process
         https://stackoverflow.com/questions/23947281/python-multiprocessing-redirect-stdout-of-a-child-process-to-a-tkinter-text
-
         """
 
         # Skip if not in Jupyter or not on Windows
-        if not (
-            sys.platform == "win32"
-            and (
-                "JPY_SESSION_NAME" in os.environ
-                or "PYDEVD_IPYTHON_COMPATIBLE_DEBUGGING" in os.environ
-            )
-        ):
+        if not bodo.utils.utils.is_jupyter_on_windows():
             self.worker_output_thread = None
             return
 

@@ -507,10 +507,7 @@ def worker_loop(
     # Send output to spawner manually if we are in Jupyter on Windows since child processes
     # don't inherit file descriptors from the parent process.
     out_socket = None
-    if sys.platform == "win32" and (
-        "JPY_SESSION_NAME" in os.environ
-        or "PYDEVD_IPYTHON_COMPATIBLE_DEBUGGING" in os.environ
-    ):
+    if bodo.utils.utils.is_jupyter_on_windows():
         port = spawner_intercomm.bcast(None, 0)
 
         import zmq
