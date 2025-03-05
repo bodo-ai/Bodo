@@ -84,8 +84,8 @@ py4j = "==0.10.9.7"
 h5py = "*"
 # Data Science
 scipy = "*"
-matplotlib ="*"
 scikit-learn = "1.4.*"
+matplotlib ="*"
 # IO
 boto3 = ">=1.35.74"
 botocore = "*"
