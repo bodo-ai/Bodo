@@ -76,7 +76,6 @@ requirements:
   # run_constrained means these packages are not required deps
   # but will restrict them if they are present in the conda env.
   run_constrained:
-    - matplotlib <= 3.8.2
     - numpy >=1.24,<2.2
     - scikit-learn =1.4.*
     - s3fs >=2022.1.0
