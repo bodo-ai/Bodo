@@ -159,6 +159,9 @@ class Spawner:
         )
         self.exec_intercomm_addr = MPI._addressof(self.worker_intercomm)
 
+        # Make sure worker output is displayed in Jupyter notebooks on Windows
+        self._init_win_jupyter()
+
         # A queue of del tasks to send delete command to workers.
         # Necessary since garbage collection can be triggered at any time during
         # execution of commands, leading to invalid data being broadcast to workers.
@@ -591,6 +594,69 @@ class Spawner:
         ):
             self._send_arg_meta(arg, arg_meta)
         return args_meta, kwargs_meta
+
+    def _init_win_jupyter(self):
+        """Make sure worker output is displayed in Jupyter notebooks on Windows.
+        Windows child processes don't inherit file descriptors from the parent,
+        so Jupyter's normal output routing doesn't work.
+        This creates a socket using ZMQ to receive output from workers and print it.
+        A separate thread is used to receive messages and print them.
+        Currently only works on single-node Windows setups.
+
+        Some relevant links:
+        https://discourse.jupyter.org/t/jupyterlab-no-longer-allows-ouput-to-be-redirected-to-stdout/11535/2
+        https://github.com/jupyterlab/jupyterlab/issues/9668
+        https://docs.python.org/3/howto/logging-cookbook.html#logging-to-a-single-file-from-multiple-processes
+        https://stackoverflow.com/questions/7714868/multiprocessing-how-can-i-%ca%80%e1%b4%87%ca%9f%c9%aa%e1%b4%80%ca%99%ca%9f%ca%8f-redirect-stdout-from-a-child-process
+        https://stackoverflow.com/questions/23947281/python-multiprocessing-redirect-stdout-of-a-child-process-to-a-tkinter-text
+        """
+
+        # Skip if not in Jupyter or not on Windows
+        if not bodo.utils.utils.is_jupyter_on_windows():
+            self.worker_output_thread = None
+            return
+
+        import errno
+        import threading
+
+        import zmq
+
+        context = zmq.Context()
+        out_socket = context.socket(zmq.PULL)
+        max_attempts = 100
+
+        # Similar to:
+        # https://github.com/ipython/ipykernel/blob/dab3b39e3f1e0258d99b189867d8f2e2d36c976e/ipykernel/kernelapp.py#L252
+        try:
+            win_in_use = errno.WSAEADDRINUSE  # type:ignore[attr-defined]
+        except AttributeError:
+            win_in_use = None
+
+        for attempt in range(max_attempts):
+            try:
+                port = out_socket.bind_to_random_port("tcp://127.0.0.1")
+            except zmq.ZMQError as ze:
+                # Raise if we have any error not related to socket binding
+                if ze.errno != errno.EADDRINUSE and ze.errno != win_in_use:
+                    raise
+                if attempt == max_attempts - 1:
+                    raise
+
+        self.worker_intercomm.bcast(port, self.bcast_root)
+
+        def worker_output_thread_func():
+            """Thread that receives all worker outputs and prints them."""
+
+            while True:
+                message = out_socket.recv_string()
+                is_stderr = message.startswith("1")
+                message = message[1:]
+                print(message, end="", file=sys.stderr if is_stderr else sys.stdout)
+
+        self.worker_output_thread = threading.Thread(
+            target=worker_output_thread_func, daemon=True
+        )
+        self.worker_output_thread.start()
 
     def _run_del_queue(self):
         """Run delete tasks in the queue if no other tasks are running."""

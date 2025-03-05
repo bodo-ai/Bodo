@@ -109,6 +109,7 @@ xlrd = "*"
 xlsxwriter = "*"
 openpyxl = "*"
 cx_oracle = "*"
+pyzmq = "*"
 
 [target.linux-64.dependencies]
 pyarrow = { version = "==18.1.0", channel = "bodo.ai" }
