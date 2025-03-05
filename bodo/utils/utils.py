@@ -1842,6 +1842,11 @@ def is_ml_support_loaded():
 
 def is_jupyter_on_windows() -> bool:
     """Returns True if running in Jupyter on Windows"""
+
+    # Flag for testing purposes
+    if os.environ.get("BODO_OUTPUT_REDIRECT_TEST", "0") == "1":
+        return True
+
     return sys.platform == "win32" and (
         "JPY_SESSION_NAME" in os.environ
         or "PYDEVD_IPYTHON_COMPATIBLE_DEBUGGING" in os.environ

@@ -698,8 +698,6 @@ class Spawner:
             # We might not be able to log during process teardown
             pass
         self.worker_intercomm.bcast(CommandType.EXIT.value, root=self.bcast_root)
-        if self.worker_output_thread:
-            self.worker_output_thread.join()
         self._is_running = False
         self.destroyed = True
 

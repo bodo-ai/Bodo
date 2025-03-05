@@ -431,3 +431,27 @@ def test_spawn_input():
     )
     sub.communicate(b"\n")
     assert sub.returncode == 0
+
+
+def test_spawn_jupyter_worker_output_redirect():
+    """
+    Make sure redirectiing worker output works in Jupyter on Windows
+    """
+    with temp_env_override(
+        {
+            "BODO_NUM_WORKERS": "1",
+            "BODO_OUTPUT_REDIRECT_TEST": "1",
+        }
+    ):
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                'import bodo; bodo.jit(spawn=True)(lambda: print("Hello from worker"))()',
+            ],
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0
+        assert result.stdout.strip() == "Hello from worker"
+        assert result.stderr == ""
