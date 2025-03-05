@@ -4,15 +4,17 @@ This folder contains various examples and scripts for performing data analysis u
 
 ## Examples
 
-### 1. `retail_analytics_clustering.ipynb` 
-Accelerating Pandas based retail consumer clustering.
+### 1. Accelerating Pandas based retail consumer clustering.
+
+- **File**: `retail_analytics_clustering.ipynb` 
 
 - **Description:** This Jupyter Notebook implements a retail analytics task (TPCxBB Q26) using Bodo's Pandas support. It clusters customers based on their in-store book purchasing history, demonstrating Bodo's ability to handle data analysis workloads.
 
 - **Bodo Benefits:** This shows Bodo's compatibility with Pandas, a core data science library. It provides a practical example of how Bodo can accelerate common data analysis and manipulation tasks, like joining, filtering, grouping and aggregation, on larger datasets.
 
-### 2. `social_media_review_scoring.ipynb` 
-Accelerating large text-based data set consumer review analysis.
+### 2. Accelerating large text-based data set consumer review analysis.
+
+- **File**: `social_media_review_scoring.ipynb` 
 
 - **Description:** This notebook analyzes beer reviews to identify the most frequent words in positive and negative reviews. It uses Bodo to optimize the text preprocessing and analysis pipeline, including string operations and data filtering.
 
