@@ -17678,6 +17678,8 @@ packages:
   - s3fs >=2023.1.0
   - gcsfs >=2023.1.0
   - python-snappy >=0.6.0,<1.0.0
+  arch: x86_64
+  platform: linux
   license: Apache-2.0
   license_family: APACHE
   size: 1055570
@@ -17757,6 +17759,8 @@ packages:
   - ray >=2.10.0,<3.0.0
   - gcsfs >=2023.1.0
   - s3fs >=2023.1.0
+  arch: x86_64
+  platform: osx
   license: Apache-2.0
   license_family: APACHE
   size: 1049843
@@ -17799,6 +17803,8 @@ packages:
   - sqlalchemy >=2.0.18,<3.0.0
   - ray >=2.10.0,<3.0.0
   - numpy >=1.22.4
+  arch: x86_64
+  platform: win
   license: Apache-2.0
   license_family: APACHE
   size: 1066227
@@ -20308,6 +20314,8 @@ packages:
   md5: 9098c5cfb418fc0b0204bf2efc1e9afa
   depends:
   - vc14_runtime >=14.42.34438
+  arch: x86_64
+  platform: win
   track_features:
   - vc14
   license: BSD-3-Clause
@@ -20321,6 +20329,8 @@ packages:
   - ucrt >=10.0.20348.0
   constrains:
   - vs2015_runtime 14.42.34438.* *_24
+  arch: x86_64
+  platform: win
   license: LicenseRef-MicrosoftVisualCpp2015-2022Runtime
   license_family: Proprietary
   size: 751362
@@ -20342,6 +20352,8 @@ packages:
   md5: 1dd2e838eb13190ae1f1e2760c036fdc
   depends:
   - vc14_runtime >=14.42.34438
+  arch: x86_64
+  platform: win
   license: BSD-3-Clause
   license_family: BSD
   size: 17474
