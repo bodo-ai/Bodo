@@ -449,7 +449,7 @@ def exec_func_handler(
 
     # TODO: handle other types
     if not is_dispatcher:
-        assert is_distributable_typ(res)
+        assert is_distributable_typ(bodo.typeof(res))
         is_distributed = True
 
     debug_worker_msg(logger, f"Function result {is_distributed=}")
