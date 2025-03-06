@@ -371,3 +371,11 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             storage_options=storage_options,
             mode=mode,
         )
+
+    def map_partitions(self, func, *args, **kwargs):
+        """
+        Apply a function to each partition of the dataframe.
+        """
+        return bodo.spawn.spawner.submit_func_to_workers(
+            func, [], self, *args, **kwargs
+        )

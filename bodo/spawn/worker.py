@@ -37,6 +37,7 @@ from bodo.spawn.utils import (
 )
 from bodo.spawn.worker_state import set_is_worker
 from bodo.utils.typing import BodoWarning
+from bodo.utils.utils import is_distributable_typ
 
 DISTRIBUTED_RETURN_HEAD_SIZE: int = 5
 
@@ -389,12 +390,10 @@ def exec_func_handler(
     caught_exception = None
     res = None
     func = None
+    is_dispatcher = False
     try:
         func = cloudpickle.loads(pickled_func)
-        # ensure that we have a CPUDispatcher to compile and execute code
-        assert isinstance(func, numba.core.registry.CPUDispatcher), (
-            "Unexpected function type"
-        )
+        is_dispatcher = isinstance(func, numba.core.registry.CPUDispatcher)
     except Exception as e:
         logger.error(f"Exception while trying to receive code: {e}")
         # TODO: check that all ranks raise an exception
@@ -440,13 +439,19 @@ def exec_func_handler(
         return
 
     is_distributed = False
-    if func is not None and len(func.signatures) > 0:
+    if is_dispatcher and func is not None and len(func.signatures) > 0:
         # There should only be one signature compiled for the input function
         sig = func.signatures[0]
         assert sig in func.overloads
 
         # Extract return value distribution from metadata
         is_distributed = func.overloads[sig].metadata["is_return_distributed"]
+
+    # TODO: handle other types
+    if not is_dispatcher:
+        assert is_distributable_typ(res)
+        is_distributed = True
+
     debug_worker_msg(logger, f"Function result {is_distributed=}")
 
     is_distributed, res = _gather_res(is_distributed, res)
