@@ -12,8 +12,7 @@ azure =        { features = ["rcpp", "dev", "local-mpi", "azure"], solve-group =
 platform =     { features = ["rcpp", "platform", "platform-mpi"],  solve-group = "312-platform" }
 platform-dev = { features = ["rcpp", "dev", "platform-mpi"],       solve-group = "312-platform" }
 # Pip C++ Deps
-pip-cpp-linux =      { features = ["local-mpi"], no-default-feature = true,   solve-group = "pip" }
-pip-cpp-macos-win =      { features = ["rcpp", "local-mpi", "pip"], no-default-feature = true,   solve-group = "pip" }
+pip-cpp-macos-win = { features = ["rcpp", "local-mpi", "pip"], no-default-feature = true, solve-group = "pip" }
 
 # Build Commands
 [tasks.build-bodo]
@@ -117,17 +116,14 @@ libarrow = { version = "==18.1.0", channel = "bodo.ai" }
 
 # Runtime C++ Deps
 [feature.rcpp.dependencies]
-libcurl = "~=8.0"
 zstd = "<=1.5.6"
 boost-cpp = "1.85.*"
 aws-sdk-cpp = "<=1.11.485"
 
 [feature.rcpp.target.osx.dependencies]
 hdf5 = { version = ">=1.14.3,<1.14.4.0a0", build = "*mpi_mpich_*" }
-
 [feature.rcpp.target.linux.dependencies]
 hdf5 = { version = ">=1.14.3,<1.14.4.0a0", build = "*mpi_mpich_*" }
-
 [feature.rcpp.target.win.dependencies]
 hdf5 = { version = ">=1.14.3,<1.14.4.0a0", build = "*mpi_impi_*" }
 
@@ -243,12 +239,10 @@ httpie = "*"
 
 # MPI Handling
 # Restricted to match Intel MPI. Upgrade with IMPI.
+# Using h* to avoid the "external_*" kind
 [feature.local-mpi.target.osx.dependencies]
-# Using h* to avoid the "external_*" kind
 mpich = { version = "4.1.*", build = "h*" }
-
 [feature.local-mpi.target.linux.dependencies]
-# Using h* to avoid the "external_*" kind
 mpich = { version = "4.1.*", build = "h*" }
 
 [feature.local-mpi.target.win.dependencies]
