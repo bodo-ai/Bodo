@@ -509,6 +509,9 @@ def worker_loop(
     out_socket = None
     if bodo.utils.utils.is_jupyter_on_windows():
         # Multi-node Jupyter on Windows is not supported yet
+        spawner_hostname = comm_world.bcast(
+            spawner_hostname if bodo.get_rank() == 0 else None, root=0
+        )
         if spawner_hostname != socket.gethostname():
             raise bodo.utils.typing.BodoError(
                 "Jupyter is not supported on multi-node Windows clusters yet"
