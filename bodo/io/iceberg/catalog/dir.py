@@ -229,9 +229,6 @@ class DirCatalog(Catalog):
     def load_namespace_properties(self, namespace: str | Identifier) -> Properties:
         raise NotImplementedError
 
-    def list_views(self, namespace: str | Identifier) -> list[Identifier]:
-        raise NotImplementedError
-
     def drop_view(self, identifier: str | Identifier) -> None:
         raise NotImplementedError
 
@@ -289,3 +286,9 @@ class DirCatalog(Catalog):
                 catalog=self,
             )
         )
+
+    def list_views(self, namespace: str | Identifier) -> list[Identifier]:
+        raise NotImplementedError("Views are not supported in DirCatalog")
+
+    def view_exists(self, identifier: str | Identifier) -> bool:
+        raise NotImplementedError("Views are not supported in DirCatalog")
