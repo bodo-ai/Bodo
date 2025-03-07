@@ -447,7 +447,9 @@ def exec_func_handler(
         # Extract return value distribution from metadata
         is_distributed = func.overloads[sig].metadata["is_return_distributed"]
 
-    # TODO: handle other types
+    # TODO(ehsan): handle other types like scalars. The challenge is that scalars may
+    # not be replicated in the non-JIT cases like map_partitions, so we have to define
+    # the semantics (e.g. gather all values across ranks in a list?).
     if not is_dispatcher:
         assert is_distributable_typ(bodo.typeof(res))
         is_distributed = True
