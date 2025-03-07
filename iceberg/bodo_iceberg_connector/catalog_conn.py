@@ -22,7 +22,7 @@ def parse_conn_str(
     Parse catalog / metastore connection string to determine catalog type
     and potentially the warehouse location
     """
-    # TODO: To Enum or Literal["hadoop", "hive", "nessie", "glue"]?
+    # TODO: To Enum or Literal["hadoop", "hive", "glue"]?
     parsed_conn = urlparse(conn_str)
     conn_query = parse_qs(parsed_conn.query)
 
@@ -62,8 +62,6 @@ def parse_conn_str(
                     IcebergWarning,
                 )
             warehouse = f"{parsed_conn.netloc}{parsed_conn.path}"
-        elif parsed_conn.scheme == "iceberg+snowflake":
-            catalog_type = "snowflake"
         elif parsed_conn.scheme in {"iceberg+http", "iceberg+https"}:
             catalog_type = "rest"
         elif parsed_conn.scheme == "iceberg+arn" and "aws:s3tables" in parsed_conn.path:
@@ -75,9 +73,7 @@ def parse_conn_str(
                     "hadoop-s3",
                     "hadoop",
                     "hive",
-                    "nessie",
                     "glue",
-                    "snowflake",
                     "rest",
                     "s3tables",
                 ]
@@ -91,17 +87,15 @@ def parse_conn_str(
         "hadoop-abfs",
         "hadoop",
         "hive",
-        "nessie",
         "glue",
-        "snowflake",
         "rest",
         "s3tables",
     ]
 
     # Get Warehouse Location
-    if catalog_type not in ("snowflake", "s3tables") and warehouse is None:
+    if catalog_type != "s3tables" and warehouse is None:
         warnings.warn(
-            "It is recommended that the `warehouse` property is included in the connection string for this type of catalog. Bodo can automatically infer what kind of FileIO to use from the warehouse location. It is also highly recommended to include with Glue and Nessie catalogs.",
+            "It is recommended that the `warehouse` property is included in the connection string for this type of catalog. Bodo can automatically infer what kind of FileIO to use from the warehouse location. It is also highly recommended to include with the Glue catalog.",
             IcebergWarning,
         )
 

@@ -17606,8 +17606,6 @@ packages:
   - adlfs >=2023.1.0
   - getdaft >=0.2.12
   - gcsfs >=2023.1.0
-  arch: x86_64
-  platform: linux
   license: Apache-2.0
   size: 1076691
   timestamp: 1741283542086
@@ -17647,8 +17645,6 @@ packages:
   - python-snappy >=0.6.0,<1.0.0
   - ray >=2.10.0,<3.0.0
   - pandas >=1.0.0,<3.0.0
-  arch: aarch64
-  platform: linux
   license: Apache-2.0
   size: 1076595
   timestamp: 1741283588399
@@ -17687,8 +17683,6 @@ packages:
   - boto3 >=1.24.59
   - pyarrow >=17.0.0,<20.0.0
   - python-snappy >=0.6.0,<1.0.0
-  arch: x86_64
-  platform: osx
   license: Apache-2.0
   size: 1074894
   timestamp: 1741283617812
@@ -17728,8 +17722,6 @@ packages:
   - mypy-boto3-glue >=1.28.18
   - python-snappy >=0.6.0,<1.0.0
   - boto3 >=1.24.59
-  arch: arm64
-  platform: osx
   license: Apache-2.0
   size: 1082010
   timestamp: 1741283624480
@@ -17769,8 +17761,6 @@ packages:
   - adlfs >=2023.1.0
   - duckdb >=0.5.0,<2.0.0
   - getdaft >=0.2.12
-  arch: x86_64
-  platform: win
   license: Apache-2.0
   size: 1097898
   timestamp: 1741283896076
