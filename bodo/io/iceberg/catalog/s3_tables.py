@@ -7,14 +7,10 @@ https://github.com/apache/iceberg-python/pull/1429
 from __future__ import annotations
 
 import re
-import typing as pt
+from typing import TYPE_CHECKING
 
 import boto3
-from pyiceberg.catalog import (
-    DEPRECATED_BOTOCORE_SESSION,
-    MetastoreCatalog,
-    PropertiesUpdateSummary,
-)
+from pyiceberg.catalog import MetastoreCatalog, PropertiesUpdateSummary
 from pyiceberg.exceptions import (
     CommitFailedException,
     NamespaceNotEmptyError,
@@ -34,13 +30,14 @@ from pyiceberg.partitioning import UNPARTITIONED_PARTITION_SPEC, PartitionSpec
 from pyiceberg.schema import Schema
 from pyiceberg.serializers import FromInputFile, ToOutputFile
 from pyiceberg.table import CommitTableResponse, CreateTableTransaction, Table
-from pyiceberg.table.metadata import new_table_metadata
+from pyiceberg.table.locations import load_location_provider
+from pyiceberg.table.metadata import TableMetadata, new_table_metadata
 from pyiceberg.table.sorting import UNSORTED_SORT_ORDER, SortOrder
 from pyiceberg.table.update import TableRequirement, TableUpdate
 from pyiceberg.typedef import EMPTY_DICT, Identifier, Properties
 from pyiceberg.utils.properties import get_first_property_value
 
-if pt.TYPE_CHECKING:
+if TYPE_CHECKING:
     import pyarrow as pa
 
 S3TABLES_PROFILE_NAME = "s3tables.profile-name"
@@ -77,9 +74,21 @@ class TableBucketNotFound(S3TablesError):
 
 
 class S3TablesCatalog(MetastoreCatalog):
+    @staticmethod
+    def _write_metadata(
+        metadata: TableMetadata, io: FileIO, metadata_path: str, overwrite: bool = False
+    ) -> None:
+        ToOutputFile.table_metadata(
+            metadata, io.new_output(metadata_path), overwrite=overwrite
+        )
+
     def __init__(self, name: str, **properties: str):
         super().__init__(name, **properties)
 
+        if S3TABLES_TABLE_BUCKET_ARN not in self.properties:
+            raise S3TablesError(
+                f"No table bucket arn specified. Set it via the {S3TABLES_TABLE_BUCKET_ARN} property."
+            )
         self.table_bucket_arn = self.properties[S3TABLES_TABLE_BUCKET_ARN]
 
         session = boto3.Session(
@@ -87,7 +96,6 @@ class S3TablesCatalog(MetastoreCatalog):
             region_name=get_first_property_value(
                 properties, S3TABLES_REGION, AWS_REGION
             ),
-            botocore_session=properties.get(DEPRECATED_BOTOCORE_SESSION),
             aws_access_key_id=get_first_property_value(
                 properties, S3TABLES_ACCESS_KEY_ID, AWS_ACCESS_KEY_ID
             ),
@@ -222,14 +230,6 @@ class S3TablesCatalog(MetastoreCatalog):
 
         return namespace, table_name
 
-    @staticmethod
-    def _write_metadata(
-        metadata, io: FileIO, metadata_path: str, overwrite: bool = False
-    ) -> None:
-        ToOutputFile.table_metadata(
-            metadata, io.new_output(metadata_path), overwrite=overwrite
-        )
-
     def create_table(
         self,
         identifier: str | Identifier,
@@ -245,7 +245,7 @@ class S3TablesCatalog(MetastoreCatalog):
             )
         namespace, table_name = self._validate_database_and_table_identifier(identifier)
 
-        ice_schema = self._convert_schema_if_needed(schema)
+        schema: Schema = self._convert_schema_if_needed(schema)  # type: ignore
 
         # creating a new table with S3 Tables is a two step process. We first have to create an S3 Table with the
         # S3 Tables API and then write the new metadata.json to the warehouseLocation associated with the newly
@@ -274,10 +274,11 @@ class S3TablesCatalog(MetastoreCatalog):
             )
             warehouse_location = response["warehouseLocation"]
 
-            metadata_location = self._get_metadata_location(location=warehouse_location)
+            provider = load_location_provider(warehouse_location, properties)
+            metadata_location = provider.new_table_metadata_file_location()
             metadata = new_table_metadata(
                 location=warehouse_location,
-                schema=ice_schema,
+                schema=schema,
                 partition_spec=partition_spec,
                 sort_order=sort_order,
                 properties=properties,
@@ -320,30 +321,9 @@ class S3TablesCatalog(MetastoreCatalog):
             raise NamespaceNotEmptyError(f"Namespace {namespace} is not empty.") from e
 
     def drop_table(self, identifier: str | Identifier) -> None:
-        namespace, table_name = self._validate_database_and_table_identifier(identifier)
-        try:
-            response = self.s3tables.get_table(
-                tableBucketARN=self.table_bucket_arn,
-                namespace=namespace,
-                name=table_name,
-            )
-        except self.s3tables.exceptions.NotFoundException as e:
-            raise NoSuchTableError(
-                f"No table with identifier {identifier} exists."
-            ) from e
-
-        version_token = response["versionToken"]
-        try:
-            self.s3tables.delete_table(
-                tableBucketARN=self.table_bucket_arn,
-                namespace=namespace,
-                name=table_name,
-                versionToken=version_token,
-            )
-        except self.s3tables.exceptions.ConflictException as e:
-            raise CommitFailedException(
-                f"Cannot delete {namespace}.{table_name} because of a concurrent update to the table version {version_token}."
-            ) from e
+        raise NotImplementedError(
+            "S3 Tables does not support the delete_table operation. You can retry with the purge_table operation."
+        )
 
     def list_namespaces(self, namespace: str | Identifier = ()) -> list[Identifier]:
         if namespace:
@@ -361,17 +341,23 @@ class S3TablesCatalog(MetastoreCatalog):
         namespace = self._validate_namespace_identifier(namespace)
         paginator = self.s3tables.get_paginator("list_tables")
         tables: list[Identifier] = []
-        for page in paginator.paginate(
-            tableBucketARN=self.table_bucket_arn, namespace=namespace
-        ):
-            tables.extend((namespace, table["name"]) for table in page["tables"])
+        try:
+            for page in paginator.paginate(
+                tableBucketARN=self.table_bucket_arn, namespace=namespace
+            ):
+                tables.extend((namespace, table["name"]) for table in page["tables"])
+        except self.s3tables.exceptions.NotFoundException as e:
+            raise NoSuchNamespaceError(f"Namespace {namespace} does not exist.") from e
         return tables
 
     def load_namespace_properties(self, namespace: str | Identifier) -> Properties:
         namespace = self._validate_namespace_identifier(namespace)
-        response = self.s3tables.get_namespace(
-            tableBucketARN=self.table_bucket_arn, namespace=namespace
-        )
+        try:
+            response = self.s3tables.get_namespace(
+                tableBucketARN=self.table_bucket_arn, namespace=namespace
+            )
+        except self.s3tables.exceptions.NotFoundException as e:
+            raise NoSuchNamespaceError(f"Namespace {namespace} does not exist.") from e
         return {
             "namespace": response["namespace"],
             "createdAt": response["createdAt"],
@@ -465,9 +451,30 @@ class S3TablesCatalog(MetastoreCatalog):
         raise NotImplementedError("Namespace properties are read only.")
 
     def purge_table(self, identifier: str | Identifier) -> None:
-        # purge is not supported as s3tables doesn't support delete operations
-        # table maintenance is automated
-        raise NotImplementedError
+        namespace, table_name = self._validate_database_and_table_identifier(identifier)
+        try:
+            response = self.s3tables.get_table(
+                tableBucketARN=self.table_bucket_arn,
+                namespace=namespace,
+                name=table_name,
+            )
+        except self.s3tables.exceptions.NotFoundException as e:
+            raise NoSuchTableError(
+                f"No table with identifier {identifier} exists."
+            ) from e
+
+        version_token = response["versionToken"]
+        try:
+            self.s3tables.delete_table(
+                tableBucketARN=self.table_bucket_arn,
+                namespace=namespace,
+                name=table_name,
+                versionToken=version_token,
+            )
+        except self.s3tables.exceptions.ConflictException as e:
+            raise CommitFailedException(
+                f"Cannot delete {namespace}.{table_name} because of a concurrent update to the table version {version_token}."
+            ) from e
 
     def register_table(
         self, identifier: str | Identifier, metadata_location: str
@@ -478,4 +485,7 @@ class S3TablesCatalog(MetastoreCatalog):
         raise NotImplementedError
 
     def list_views(self, namespace: str | Identifier) -> list[Identifier]:
+        raise NotImplementedError
+
+    def view_exists(self, identifier: str | Identifier) -> bool:
         raise NotImplementedError
