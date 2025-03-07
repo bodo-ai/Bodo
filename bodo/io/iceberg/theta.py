@@ -22,6 +22,7 @@ from numba.extending import (
 import bodo
 from bodo.io.fs_io import pyarrow_fs_type
 from bodo.io.helpers import pyarrow_schema_type
+from bodo.io.iceberg.catalog import conn_str_to_catalog
 from bodo.io.iceberg.common import _format_data_loc, _fs_from_file_path
 from bodo.libs import puffin_file, theta_sketches
 from bodo.libs.array import (
@@ -36,7 +37,8 @@ from bodo.utils.utils import run_rank0
 
 if pt.TYPE_CHECKING:  # pragma: no cover
     from pyiceberg.table import Transaction
-    from pyiceberg.table.metadata import TableMetadataV2
+    from pyiceberg.table.metadata import TableMetadata
+    from pyiceberg.table.statistics import StatisticsFile
 
 
 ll.add_symbol("init_theta_sketches", theta_sketches.init_theta_sketches_py_entrypt)
@@ -59,9 +61,9 @@ ll.add_symbol(
 # if we have the connector.
 statistics_file_type = None
 try:
-    import bodo_iceberg_connector
+    from pyiceberg.table.statistics import StatisticsFile
 
-    statistics_file_type = bodo_iceberg_connector.StatisticsFile
+    statistics_file_type = StatisticsFile
 except ImportError:
     pass
 
@@ -409,7 +411,7 @@ def fetch_puffin_metadata(txn: Transaction) -> tuple[int, int, str]:
         tuple[int, int, str]: Tuple of the snapshot ID, sequence number, and
         location at which to write the puffin file.
     """
-    metadata: TableMetadataV2 = txn.table_metadata
+    metadata = txn.table_metadata
 
     snapshot_id = metadata.current_snapshot_id
     assert snapshot_id is not None
@@ -432,8 +434,7 @@ def fetch_puffin_metadata(txn: Transaction) -> tuple[int, int, str]:
 def commit_statistics_file(
     conn_str: str,
     table_id: str,
-    snapshot_id: int,
-    statistic_file_info,
+    statistics_file: StatisticsFile,
 ) -> None:
     """
     Commit the statistics file to the iceberg table. This occurs after
@@ -443,30 +444,41 @@ def commit_statistics_file(
     Args:
         conn_str (str): The Iceberg connector string.
         table_id (str): The iceberg table identifier.
-        snapshot_id (int): The snapshot ID of the committed data.
-        statistic_file_info (bodo_iceberg_connector.StatisticsFile):
+        statistic_file (pyiceberg.table.statistics.StatisticsFile):
             The Python object containing the statistics file information.
     """
-    import bodo_iceberg_connector
-
-    assert bodo.get_rank() == 0, (
-        "bodo/io/iceberg.py::get_old_statistics_file_path must be called from rank 0 only"
-    )
-    return bodo_iceberg_connector.commit_statistics_file(
-        conn_str, table_id, snapshot_id, statistic_file_info
-    )
+    table = conn_str_to_catalog(conn_str).load_table(table_id).refresh()
+    with table.update_statistics() as update:
+        update.set_statistics(statistics_file)
 
 
 @run_rank0
 def table_columns_have_theta_sketches(
-    conn_str: str, table_id: str
+    table_metadata: TableMetadata,
 ) -> pd.arrays.BooleanArray:
-    import bodo_iceberg_connector
+    cols = table_metadata.schema().columns
+    snap_id = table_metadata.current_snapshot_id
+    have_theta_sketches = [False] * len(cols)
 
-    assert bodo.get_rank() == 0, (
-        "bodo/io/iceberg.py::table_columns_have_theta_sketches must be called from rank 0 only"
-    )
-    return bodo_iceberg_connector.table_columns_have_theta_sketches(conn_str, table_id)
+    if snap_id is None:
+        return pd.array(have_theta_sketches)  # type: ignore[return]
+
+    field_id_to_idx = {col.field_id: i for i, col in enumerate(cols)}
+
+    for stat_file in table_metadata.statistics:
+        if stat_file.snapshot_id == snap_id:
+            for blob_metadata in stat_file.blob_metadata:
+                if blob_metadata.type != "apache-datasketches-theta-v1":
+                    continue
+                if len(blob_metadata.fields) != 1:
+                    continue
+                field = blob_metadata.fields[0]
+                if field in field_id_to_idx:
+                    have_theta_sketches[field_id_to_idx[field]] = True
+
+            break
+
+    return pd.array(have_theta_sketches, dtype="boolean")  # type: ignore[return]
 
 
 @run_rank0
@@ -482,7 +494,7 @@ def table_columns_enabled_theta_sketches(txn: Transaction) -> pd.arrays.BooleanA
         table_name (str): The iceberg table.
     """
     cols = txn.table_metadata.schema().columns
-    props: dict[str, str] = txn.table_metadata.properties
+    props = txn.table_metadata.properties
 
     enabled = [
         props.get(f"bodo.write.theta_sketch_enabled.{col.name}", "true") == "true"
@@ -492,17 +504,24 @@ def table_columns_enabled_theta_sketches(txn: Transaction) -> pd.arrays.BooleanA
 
 
 @run_rank0
-def get_old_statistics_file_path(conn_str: str, table_id: str) -> str:
+def get_old_statistics_file_path(txn: Transaction) -> str:
     """
     Get the old puffin file path from the connector. We know that the puffin file
     must exist because of previous checks.
     """
-    import bodo_iceberg_connector
+    snap_id = txn.table_metadata.current_snapshot_id
+    if snap_id is None:
+        raise RuntimeError(
+            "Table does not have a snapshot. Cannot get statistics file location."
+        )
 
-    assert bodo.get_rank() == 0, (
-        "bodo/io/iceberg.py::get_old_statistics_file_path must be called from rank 0 only"
+    for stat_file in txn.table_metadata.statistics:
+        if stat_file.snapshot_id == snap_id:
+            return stat_file.statistics_path
+
+    raise RuntimeError(
+        "Table does not have a valid statistics file. Cannot get statistics file location."
     )
-    return bodo_iceberg_connector.get_old_statistics_file_path(conn_str, table_id)
 
 
 def delete_theta_sketches(theta_sketches):  # pragma: no cover

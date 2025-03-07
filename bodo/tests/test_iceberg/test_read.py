@@ -1140,7 +1140,6 @@ def test_limit_pushdown(iceberg_database, iceberg_table_conn, memory_leak_check)
 
 
 @pytest.mark.slow
-@pytest.mark.skip("[BE-3212] Fix Java failures on CI")
 def test_iceberg_invalid_table(iceberg_database, iceberg_table_conn):
     """Tests error raised when a nonexistent Iceberg table is provided."""
 
@@ -1179,14 +1178,7 @@ def test_batched_read_agg(iceberg_database, iceberg_table_conn, memory_leak_chec
     getting the max of a column
     """
 
-    col_meta = bodo.utils.typing.ColNamesMetaType(
-        (
-            "A",
-            "B",
-            "C",
-            "D",
-        )
-    )
+    col_meta = bodo.utils.typing.ColNamesMetaType(("A", "B", "C", "D"))
 
     def impl(table_name, conn, db_schema):
         total_max = pd.Timestamp(year=1970, month=1, day=1, tz="UTC")
@@ -1235,14 +1227,7 @@ def test_batched_read_only_len(iceberg_database, iceberg_table_conn, memory_leak
     Test shape pushdown with batched Snowflake reads
     """
 
-    col_meta = bodo.utils.typing.ColNamesMetaType(
-        (
-            "A",
-            "B",
-            "C",
-            "D",
-        )
-    )
+    col_meta = bodo.utils.typing.ColNamesMetaType(("A", "B", "C", "D"))
 
     def impl(table_name, conn, db_schema):
         total_len = 0
