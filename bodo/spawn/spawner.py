@@ -269,7 +269,11 @@ class Spawner:
         self.worker_intercomm.bcast(propagate_env, bcast_root)
 
     def submit_func_to_workers(
-        self, dispatcher: "SpawnDispatcher", propagate_env, *args, **kwargs
+        self,
+        func_to_execute: "SpawnDispatcher" | pt.Callable,
+        propagate_env,
+        *args,
+        **kwargs,
     ):
         """Send func to be compiled and executed on spawned process"""
         assert not self._is_running, "submit_func_to_workers: already running"
@@ -296,11 +300,11 @@ class Spawner:
 
         # Send arguments and update dispatcher distributed flags for arguments
         args_meta, kwargs_meta = self._send_args_update_dist_flags(
-            dispatcher, args, kwargs
+            func_to_execute, args, kwargs
         )
 
-        # Send dispatcher
-        pickled_func = cloudpickle.dumps(dispatcher)
+        # Send function
+        pickled_func = cloudpickle.dumps(func_to_execute)
         self.worker_intercomm.bcast(pickled_func, root=self.bcast_root)
         debug_msg(self.logger, "submit_func_to_workers - wait for results")
 
@@ -533,7 +537,7 @@ class Spawner:
                 self._send_arg_meta(val, out_val)
 
     def _send_args_update_dist_flags(
-        self, dispatcher: "SpawnDispatcher", args, kwargs
+        self, func_to_execute: "SpawnDispatcher" | pt.Callable, args, kwargs
     ) -> tuple[tuple[ArgMetadata | None, ...], dict[str, ArgMetadata | None]]:
         """Send function arguments from spawner to workers. DataFrame/Series/Index/array
         arguments are sent separately using broadcast or scatter (depending on flags).
@@ -542,12 +546,21 @@ class Spawner:
         compilation on the worker.
 
         Args:
-            dispatcher (SpawnDispatcher): dispatcher to run on workers
+            func_to_execute (SpawnDispatcher | callable): function to run on workers
             args (tuple[Any]): positional arguments
             kwargs (dict[str, Any]): keyword arguments
         """
-        param_names = list(numba.core.utils.pysignature(dispatcher.py_func).parameters)
-        replicated = set(dispatcher.decorator_args.get("replicated", ()))
+        is_dispatcher = isinstance(func_to_execute, SpawnDispatcher)
+        param_names = list(
+            numba.core.utils.pysignature(
+                func_to_execute.py_func if is_dispatcher else func_to_execute
+            ).parameters
+        )
+        replicated = set(
+            func_to_execute.decorator_args.get("replicated", ())
+            if is_dispatcher
+            else ()
+        )
         dist_flags = []
         args_meta = tuple(
             self._get_arg_metadata(
@@ -585,9 +598,10 @@ class Spawner:
         # See bodo/tests/test_series_part2.py::test_series_map_func_cases1
         pickled_args = cloudpickle.dumps((args_to_send, kwargs_to_send))
         self.worker_intercomm.bcast(pickled_args, root=self.bcast_root)
-        dispatcher.decorator_args["distributed_block"] = (
-            dispatcher.decorator_args.get("distributed_block", []) + dist_flags
-        )
+        if is_dispatcher:
+            func_to_execute.decorator_args["distributed_block"] = (
+                func_to_execute.decorator_args.get("distributed_block", []) + dist_flags
+            )
         # Send DataFrame/Series/Index/array arguments (others are already sent)
         for arg, arg_meta in itertools.chain(
             zip(args, args_meta), zip(kwargs.values(), kwargs_meta.values())
@@ -742,11 +756,13 @@ atexit.register(destroy_spawner)
 
 
 def submit_func_to_workers(
-    dispatcher: "SpawnDispatcher", propagate_env, *args, **kwargs
+    func_to_execute: "SpawnDispatcher" | pt.Callable, propagate_env, *args, **kwargs
 ):
-    """Get the global spawner and submit `func` for execution"""
+    """Get the global spawner and submit `func_to_execute` for execution"""
     spawner = get_spawner()
-    return spawner.submit_func_to_workers(dispatcher, propagate_env, *args, **kwargs)
+    return spawner.submit_func_to_workers(
+        func_to_execute, propagate_env, *args, **kwargs
+    )
 
 
 class SpawnDispatcher:
