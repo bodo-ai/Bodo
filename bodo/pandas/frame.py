@@ -375,6 +375,8 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
     def map_partitions(self, func, *args, **kwargs):
         """
         Apply a function to each partition of the dataframe.
+        NOTE: this pickles the function and sends it to the workers, so globals are
+        pickled. The use of lazy data structures as globals causes issues.
         """
         return bodo.spawn.spawner.submit_func_to_workers(
             func, [], self, *args, **kwargs
