@@ -661,17 +661,20 @@ class Spawner:
         def worker_output_thread_func():
             """Thread that receives all worker outputs and prints them."""
 
-            # ipykernel redirects the output of threads to the first cell using
-            # _thread_to_parent_header. We need to remove this thread to make sure
-            # prints apprear in the correct cell.
-            # https://github.com/ipython/ipykernel/blob/dab3b39e3f1e0258d99b189867d8f2e2d36c976e/ipykernel/ipkernel.py#L766
-            # https://github.com/ipython/ipykernel/blob/dab3b39e3f1e0258d99b189867d8f2e2d36c976e/ipykernel/iostream.py#L525
-            sys.stdout._thread_to_parent_header.pop(
-                threading.current_thread().ident, None
-            )
-            sys.stderr._thread_to_parent_header.pop(
-                threading.current_thread().ident, None
-            )
+            # NOTE: we test this without Jupyter so _thread_to_parent_header may not
+            # exist
+            if hasattr(sys.stdout, "_thread_to_parent_header"):
+                # ipykernel redirects the output of threads to the first cell using
+                # _thread_to_parent_header. We need to remove this thread to make sure
+                # prints apprear in the correct cell.
+                # https://github.com/ipython/ipykernel/blob/dab3b39e3f1e0258d99b189867d8f2e2d36c976e/ipykernel/ipkernel.py#L766
+                # https://github.com/ipython/ipykernel/blob/dab3b39e3f1e0258d99b189867d8f2e2d36c976e/ipykernel/iostream.py#L525
+                sys.stdout._thread_to_parent_header.pop(
+                    threading.current_thread().ident, None
+                )
+                sys.stderr._thread_to_parent_header.pop(
+                    threading.current_thread().ident, None
+                )
 
             while True:
                 message = out_socket.recv_string()
