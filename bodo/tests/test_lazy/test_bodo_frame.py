@@ -624,3 +624,26 @@ def test_json(collect_func):
         df,
         check_dtype=False,
     )
+
+
+@pytest_mark_spawn_mode
+def test_map_partitions():
+    """Test map_partitions on BodoDataFrame"""
+
+    @bodo.jit(spawn=True)
+    def _get_bodo_df(df):
+        return df
+
+    df = pd.DataFrame({"a": [1, 2, 3], "b": [4, 5, 6]})
+    bodo_df = _get_bodo_df(df)
+
+    def f(df, a, b=3):
+        return df + a + 2 * b
+
+    out = bodo_df.map_partitions(f, 2, b=4)
+    assert out._lazy
+    pd.testing.assert_frame_equal(
+        out,
+        f(df, 2, b=4),
+        check_dtype=False,
+    )
