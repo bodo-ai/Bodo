@@ -79,7 +79,7 @@ conda activate Bodo
 conda install bodo -c bodo.ai -c conda-forge
 ```
 
-Bodo works with Linux x86 and both Mac x86 and Mac ARM right now. We will have Windows support (and more) coming soon!
+Bodo works with Linux x86, both Mac x86 and Mac ARM, and Windows right now. We will have Linux ARM support (and more) coming soon!
 
 ## Example Code
 
