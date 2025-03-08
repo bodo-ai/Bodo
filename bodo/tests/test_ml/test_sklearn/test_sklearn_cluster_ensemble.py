@@ -383,9 +383,9 @@ def test_multinode_bigdata(memory_leak_check):
         clf = RandomForestClassifier(
             n_estimators=100, random_state=None, n_jobs=8, verbose=3
         )
-        start_time = time.time()
+        start_time = time.perf_counter()
         clf.fit(X_train, y_train)
-        end_time = time.time()
+        end_time = time.perf_counter()
         if bodo.get_rank() == 0:
             print(name, "Time: ", (end_time - start_time))
         score = clf.score(X_test, y_test)

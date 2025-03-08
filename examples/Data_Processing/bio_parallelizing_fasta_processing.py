@@ -46,7 +46,7 @@ def fasta4epitope(fasta_file):
 
 @bodo.jit(cache=True)
 def process_all_fastas(fasta_files, out_path):
-    t0 = time.time()
+    t0 = time.perf_counter()
 
     combined_df = pd.DataFrame()
     # Load each fasta file into a data frame and combine them
@@ -57,7 +57,7 @@ def process_all_fastas(fasta_files, out_path):
 
     # Save the combined data frame to a csv file
     combined_df.to_csv(out_path, index=False)
-    print("Execution time: ", time.time() - t0)
+    print("Execution time: ", time.perf_counter() - t0)
 
 
 if __name__ == "__main__":

@@ -173,7 +173,7 @@ def test_streaming_write(
 
         @bodo.jit(cache=False, distributed=["table", "reader0", "writer"])
         def impl_write(conn_r, conn_w):
-            t_start = time.time()
+            t_start = time.perf_counter()
 
             reader0 = pd.read_sql(
                 f"SELECT * FROM {table_r}", conn_r, _bodo_chunksize=sf_read_chunk_size
@@ -189,30 +189,30 @@ def test_streaming_write(
 
             all_is_last = False
             it = 1
-            t_stream_loop_write = time.time()
+            t_stream_loop_write = time.perf_counter()
 
             while not all_is_last:
-                t_read_next = time.time()
+                t_read_next = time.perf_counter()
                 table, is_last = read_arrow_next(reader0, True)
-                t_read_next = time.time() - t_read_next
+                t_read_next = time.perf_counter() - t_read_next
                 if verbose and t_read_next >= 5e-4:
                     print(
                         f"Rank {bodo.get_rank()}, it={it}: t_read_next={t_read_next:.3f}s"
                     )
 
-                t_sync_is_last = time.time()
+                t_sync_is_last = time.perf_counter()
                 all_is_last = bodo.libs.distributed_api.sync_is_last(is_last, it)
-                t_sync_is_last = time.time() - t_sync_is_last
+                t_sync_is_last = time.perf_counter() - t_sync_is_last
                 if verbose and t_sync_is_last >= 5e-4:
                     print(
                         f"Rank {bodo.get_rank()}, it={it}: t_sync_is_last={t_sync_is_last:.3f}s"
                     )
 
-                t_writer_append = time.time()
+                t_writer_append = time.perf_counter()
                 snowflake_writer_append_table(
                     writer, table, col_meta, all_is_last, None, ctas_meta
                 )
-                t_writer_append = time.time() - t_writer_append
+                t_writer_append = time.perf_counter() - t_writer_append
                 if verbose and t_writer_append >= 5e-4:
                     print(
                         f"Rank {bodo.get_rank()}, it={it}: t_writer_append={t_writer_append:.3f}s"
@@ -220,13 +220,13 @@ def test_streaming_write(
 
                 it += 1
 
-            t_stream_loop_write = time.time() - t_stream_loop_write
+            t_stream_loop_write = time.perf_counter() - t_stream_loop_write
             if verbose and t_stream_loop_write >= 5e-4:
                 print(
                     f"Rank {bodo.get_rank()}, niters={it}: t_stream_loop_write={t_stream_loop_write:.3f}s"
                 )
 
-            t_end = time.time()
+            t_end = time.perf_counter()
             return t_end - t_start
 
         write_time = impl_write(conn_r, conn_w)
@@ -283,15 +283,15 @@ def test_nonstream_write(
 
         @bodo.jit(cache=False, distributed=["df"])
         def impl_write(conn_r, conn_w):
-            t_start = time.time()
+            t_start = time.perf_counter()
 
-            t_read = time.time()
+            t_read = time.perf_counter()
             df = pd.read_sql(f"SELECT * FROM {table_r}", conn_r)  # type: ignore
-            t_read = time.time() - t_read
+            t_read = time.perf_counter() - t_read
             if verbose and t_read >= 5e-4:
                 print(f"Rank {bodo.get_rank()}: t_read={t_read:.3f}s")
 
-            t_write = time.time()
+            t_write = time.perf_counter()
             df.to_sql(
                 name=table_w,
                 con=conn_w,
@@ -299,11 +299,11 @@ def test_nonstream_write(
                 if_exists="replace",
                 _bodo_create_table_type="",
             )
-            t_write = time.time() - t_write
+            t_write = time.perf_counter() - t_write
             if verbose and t_write >= 5e-4:
                 print(f"Rank {bodo.get_rank()}: t_write={t_write:.3f}s")
 
-            t_end = time.time()
+            t_end = time.perf_counter()
             return df, t_end - t_start
 
         _, t_total = impl_write(conn_r, conn_w)

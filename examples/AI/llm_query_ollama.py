@@ -20,10 +20,10 @@ def query_model(prompt):
 @bodo.jit
 def query_model_all(df):
     """Clean up prompts and query the model for all prompts in the dataframe."""
-    t0 = time.time()
+    t0 = time.perf_counter()
     cleaned_prompts = df["prompt"].str.strip().str.lower()
     df["response"] = cleaned_prompts.map(query_model)
-    print("Processing time:", time.time() - t0)
+    print("Processing time:", time.perf_counter() - t0)
     return df
 
 

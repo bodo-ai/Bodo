@@ -244,7 +244,7 @@ def datetime_get_microsecond(dt):
 def date(dt):
     """Return the date part."""
 
-    # TODO: support datetime.datetime.time() method once datetime.time is implemented
+    # TODO: support datetime.datetime.perf_counter() method once datetime.time is implemented
     def impl(dt):  # pragma: no cover
         return datetime.date(dt.year, dt.month, dt.day)
 

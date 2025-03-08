@@ -204,10 +204,10 @@ def impl(conn_str):  # Codegen change: add conn_str
     """
     # Codegen change: Add print and overall timer
     print("Started executing query...")
-    t0 = time.time()
+    t0 = time.perf_counter()
     __bodo_is_last_streaming_output_1 = False
     _temp4 = 0.0
-    _temp5 = time.time()
+    _temp5 = time.perf_counter()
     __bodo_streaming_reader_1 = pd.read_sql(
         f'SELECT * FROM "SNOWFLAKE_SAMPLE_DATA"."TPCH_SF1"."ORDERS"\nFETCH NEXT {num_rows} ROWS ONLY',
         conn_str,  # Codegen change: use conn_str
@@ -216,12 +216,12 @@ def impl(conn_str):  # Codegen change: add conn_str
     )
     # Codegen change: timer for build step
     build_time = 0.0
-    _temp7 = time.time()
+    _temp7 = time.perf_counter()
     _temp8 = _temp7 - _temp5
     _temp4 = _temp4 + _temp8
     _temp15 = 0.0
     _temp1 = 0.0
-    _temp2 = time.time()
+    _temp2 = time.perf_counter()
     # Codegen change: Use global flags for build-outer and probe-outer
     _temp22 = bodo.libs.streaming.join.init_join_state(
         global_2,
@@ -234,21 +234,21 @@ def impl(conn_str):  # Codegen change: add conn_str
         False,
         non_equi_condition="(left.`L_SHIPDATE` < right.`O_ORDERDATE`)",
     )
-    _temp23 = time.time()
+    _temp23 = time.perf_counter()
     _temp24 = _temp23 - _temp2
     _temp1 = _temp1 + _temp24
     while not (__bodo_is_last_streaming_output_1):
-        _temp6 = time.time()
+        _temp6 = time.perf_counter()
         (
             T9,
             __bodo_is_last_streaming_output_1,
         ) = bodo.io.arrow_reader.read_arrow_next(__bodo_streaming_reader_1, True)
         _temp10 = bodo.hiframes.pd_index_ext.init_range_index(0, len(T9), 1, None)
         df11 = bodo.hiframes.pd_dataframe_ext.init_dataframe((T9,), _temp10, global_1)
-        _temp12 = time.time()
+        _temp12 = time.perf_counter()
         _temp13 = _temp12 - _temp6
         _temp4 = _temp4 + _temp13
-        _temp17 = time.time()
+        _temp17 = time.perf_counter()
         df18 = df11.loc[
             :, ["o_custkey", "o_orderdate", "o_orderpriority", "o_comment"]
         ].rename(
@@ -260,10 +260,10 @@ def impl(conn_str):  # Codegen change: add conn_str
             },
             copy=False,
         )
-        _temp19 = time.time()
+        _temp19 = time.perf_counter()
         _temp20 = _temp19 - _temp17
         _temp15 = _temp15 + _temp20
-        _temp3 = time.time()
+        _temp3 = time.perf_counter()
         __bodo_is_last_streaming_output_1 = bodo.libs.distributed_api.dist_reduce(
             __bodo_is_last_streaming_output_1,
             np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value),
@@ -272,12 +272,12 @@ def impl(conn_str):  # Codegen change: add conn_str
             bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(df18), (), global_6, 4
         )
         # Codegen change: Track build time
-        t_build = time.time()
+        t_build = time.perf_counter()
         bodo.libs.streaming.join.join_build_consume_batch(
             _temp22, T25, __bodo_is_last_streaming_output_1
         )
-        build_time += time.time() - t_build
-        _temp26 = time.time()
+        build_time += time.perf_counter() - t_build
+        _temp26 = time.perf_counter()
         _temp27 = _temp26 - _temp3
         _temp1 = _temp1 + _temp27
     _temp14 = f'SELECT * FROM "SNOWFLAKE_SAMPLE_DATA"."TPCH_SF1"."ORDERS"\nFETCH NEXT {num_rows} ROWS ONLY'
@@ -293,14 +293,14 @@ def impl(conn_str):  # Codegen change: add conn_str
     bodo.user_logging.log_message("RELNODE_TIMING", f"Join build took {build_time}s")
     __bodo_is_last_streaming_output_2 = False
     _temp28 = 0.0
-    _temp29 = time.time()
+    _temp29 = time.perf_counter()
     __bodo_streaming_reader_2 = pd.read_sql(
         f'SELECT * FROM "SNOWFLAKE_SAMPLE_DATA"."TPCH_SF1"."LINEITEM"\nFETCH NEXT {num_rows} ROWS ONLY',
         conn_str,  # Codegen change: use conn_str
         _bodo_is_table_input=False,
         _bodo_chunksize=4096,
     )
-    _temp31 = time.time()
+    _temp31 = time.perf_counter()
     _temp32 = _temp31 - _temp29
     _temp28 = _temp28 + _temp32
     _temp39 = 0.0
@@ -311,7 +311,7 @@ def impl(conn_str):  # Codegen change: add conn_str
     __bodo_streaming_batches_list_1 = []
     input_request1 = True
     while not (_temp46):
-        _temp30 = time.time()
+        _temp30 = time.perf_counter()
         (
             T33,
             __bodo_is_last_streaming_output_2,
@@ -320,10 +320,10 @@ def impl(conn_str):  # Codegen change: add conn_str
         )
         _temp34 = bodo.hiframes.pd_index_ext.init_range_index(0, len(T33), 1, None)
         df35 = bodo.hiframes.pd_dataframe_ext.init_dataframe((T33,), _temp34, global_7)
-        _temp36 = time.time()
+        _temp36 = time.perf_counter()
         _temp37 = _temp36 - _temp30
         _temp28 = _temp28 + _temp37
-        _temp41 = time.time()
+        _temp41 = time.perf_counter()
         df42 = df35.loc[
             :,
             [
@@ -345,10 +345,10 @@ def impl(conn_str):  # Codegen change: add conn_str
             },
             copy=False,
         )
-        _temp43 = time.time()
+        _temp43 = time.perf_counter()
         _temp44 = _temp43 - _temp41
         _temp39 = _temp39 + _temp44
-        _temp3 = time.time()
+        _temp3 = time.perf_counter()
         __bodo_is_last_streaming_output_2 = bodo.libs.distributed_api.dist_reduce(
             __bodo_is_last_streaming_output_2,
             np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value),
@@ -357,19 +357,19 @@ def impl(conn_str):  # Codegen change: add conn_str
             bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(df42), (), global_8, 6
         )
         # Codegen change: track probe time
-        t_probe = time.time()
+        t_probe = time.perf_counter()
         (T48, _temp46, input_request1) = (
             bodo.libs.streaming.join.join_probe_consume_batch(
                 _temp22, T47, __bodo_is_last_streaming_output_2, True
             )
         )
-        probe_time += time.time() - t_probe
+        probe_time += time.perf_counter() - t_probe
         index_1 = bodo.hiframes.pd_index_ext.init_range_index(0, len(T48), 1, None)
         df49 = bodo.hiframes.pd_dataframe_ext.init_dataframe((T48,), index_1, global_9)
-        _temp50 = time.time()
+        _temp50 = time.perf_counter()
         _temp51 = _temp50 - _temp3
         _temp1 = _temp1 + _temp51
-        _temp55 = time.time()
+        _temp55 = time.perf_counter()
         df56 = df49.loc[
             :,
             [
@@ -395,7 +395,7 @@ def impl(conn_str):  # Codegen change: add conn_str
             },
             copy=False,
         )
-        _temp57 = time.time()
+        _temp57 = time.perf_counter()
         _temp58 = _temp57 - _temp55
         _temp53 = _temp53 + _temp58
         __bodo_streaming_batches_list_1.append(df56)
@@ -423,13 +423,13 @@ def impl(conn_str):  # Codegen change: add conn_str
         "RELNODE_TIMING", f"""Execution time for RelNode {_temp59}: {_temp53}"""
     )
     # Codegen change: track concat time
-    concat_time_start = time.time()
+    concat_time_start = time.perf_counter()
     df60 = pd.concat(__bodo_streaming_batches_list_1, ignore_index=True)
     bodo.user_logging.log_message(
-        "RELNODE_TIMING", f"Concat Time: {time.time() - concat_time_start}"
+        "RELNODE_TIMING", f"Concat Time: {time.perf_counter() - concat_time_start}"
     )
     # Codegen change: print overall execution time
-    print(f"Finished executing the query. It took {time.time() - t0} seconds.")
+    print(f"Finished executing the query. It took {time.perf_counter() - t0} seconds.")
     print("Output shape: ", df60.shape)
     return df60
 
@@ -452,10 +452,10 @@ def impl_wo_condition(conn_str):  # Codegen change: add conn_str
     """
     # Codegen change: Add print and overall timer
     print("Started executing query...")
-    t0 = time.time()
+    t0 = time.perf_counter()
     __bodo_is_last_streaming_output_1 = False
     _temp4 = 0.0
-    _temp5 = time.time()
+    _temp5 = time.perf_counter()
     __bodo_streaming_reader_1 = pd.read_sql(
         f'SELECT * FROM "SNOWFLAKE_SAMPLE_DATA"."TPCH_SF1"."ORDERS"\nFETCH NEXT {num_rows} ROWS ONLY',
         conn_str,  # Codegen change: use conn_str
@@ -464,12 +464,12 @@ def impl_wo_condition(conn_str):  # Codegen change: add conn_str
     )
     # Codegen change: timer for build step
     build_time = 0.0
-    _temp7 = time.time()
+    _temp7 = time.perf_counter()
     _temp8 = _temp7 - _temp5
     _temp4 = _temp4 + _temp8
     _temp15 = 0.0
     _temp1 = 0.0
-    _temp2 = time.time()
+    _temp2 = time.perf_counter()
     # Codegen change: Use global flags for build-outer and probe-outer
     _temp22 = bodo.libs.streaming.join.init_join_state(
         global_2,
@@ -481,26 +481,26 @@ def impl_wo_condition(conn_str):  # Codegen change: add conn_str
         build_interval_cols,
         False,
     )
-    _temp23 = time.time()
+    _temp23 = time.perf_counter()
     _temp24 = _temp23 - _temp2
     _temp1 = _temp1 + _temp24
     while not (__bodo_is_last_streaming_output_1):
-        _temp6 = time.time()
+        _temp6 = time.perf_counter()
         (
             T9,
             __bodo_is_last_streaming_output_1,
         ) = bodo.io.arrow_reader.read_arrow_next(__bodo_streaming_reader_1, True)
         _temp10 = bodo.hiframes.pd_index_ext.init_range_index(0, len(T9), 1, None)
         df11 = bodo.hiframes.pd_dataframe_ext.init_dataframe((T9,), _temp10, global_1)
-        _temp12 = time.time()
+        _temp12 = time.perf_counter()
         _temp13 = _temp12 - _temp6
         _temp4 = _temp4 + _temp13
-        _temp17 = time.time()
+        _temp17 = time.perf_counter()
         df18 = df11.loc[:, ["o_custkey", "o_orderpriority", "o_comment"]]
-        _temp19 = time.time()
+        _temp19 = time.perf_counter()
         _temp20 = _temp19 - _temp17
         _temp15 = _temp15 + _temp20
-        _temp3 = time.time()
+        _temp3 = time.perf_counter()
         __bodo_is_last_streaming_output_1 = bodo.libs.distributed_api.dist_reduce(
             __bodo_is_last_streaming_output_1,
             np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value),
@@ -512,12 +512,12 @@ def impl_wo_condition(conn_str):  # Codegen change: add conn_str
             3,
         )
         # Codegen change: Track build time
-        t_build = time.time()
+        t_build = time.perf_counter()
         bodo.libs.streaming.join.join_build_consume_batch(
             _temp22, T25, __bodo_is_last_streaming_output_1
         )
-        build_time += time.time() - t_build
-        _temp26 = time.time()
+        build_time += time.perf_counter() - t_build
+        _temp26 = time.perf_counter()
         _temp27 = _temp26 - _temp3
         _temp1 = _temp1 + _temp27
     _temp14 = f'SELECT * FROM "SNOWFLAKE_SAMPLE_DATA"."TPCH_SF1"."ORDERS"\nFETCH NEXT {num_rows} ROWS ONLY'
@@ -533,14 +533,14 @@ def impl_wo_condition(conn_str):  # Codegen change: add conn_str
     bodo.user_logging.log_message("RELNODE_TIMING", f"Join build took {build_time}s")
     __bodo_is_last_streaming_output_2 = False
     _temp28 = 0.0
-    _temp29 = time.time()
+    _temp29 = time.perf_counter()
     __bodo_streaming_reader_2 = pd.read_sql(
         f'SELECT * FROM "SNOWFLAKE_SAMPLE_DATA"."TPCH_SF1"."LINEITEM"\nFETCH NEXT {num_rows} ROWS ONLY',
         conn_str,  # Codegen change: use conn_str
         _bodo_is_table_input=False,
         _bodo_chunksize=4096,
     )
-    _temp31 = time.time()
+    _temp31 = time.perf_counter()
     _temp32 = _temp31 - _temp29
     _temp28 = _temp28 + _temp32
     _temp39 = 0.0
@@ -551,7 +551,7 @@ def impl_wo_condition(conn_str):  # Codegen change: add conn_str
     __bodo_streaming_batches_list_1 = []
     input_request2 = True
     while not (_temp46):
-        _temp30 = time.time()
+        _temp30 = time.perf_counter()
         (
             T33,
             __bodo_is_last_streaming_output_2,
@@ -560,10 +560,10 @@ def impl_wo_condition(conn_str):  # Codegen change: add conn_str
         )
         _temp34 = bodo.hiframes.pd_index_ext.init_range_index(0, len(T33), 1, None)
         df35 = bodo.hiframes.pd_dataframe_ext.init_dataframe((T33,), _temp34, global_7)
-        _temp36 = time.time()
+        _temp36 = time.perf_counter()
         _temp37 = _temp36 - _temp30
         _temp28 = _temp28 + _temp37
-        _temp41 = time.time()
+        _temp41 = time.perf_counter()
         df42 = df35.loc[
             :,
             [
@@ -574,16 +574,16 @@ def impl_wo_condition(conn_str):  # Codegen change: add conn_str
                 "l_comment",
             ],
         ]
-        _temp43 = time.time()
+        _temp43 = time.perf_counter()
         _temp44 = _temp43 - _temp41
         _temp39 = _temp39 + _temp44
-        _temp3 = time.time()
+        _temp3 = time.perf_counter()
         __bodo_is_last_streaming_output_2 = bodo.libs.distributed_api.dist_reduce(
             __bodo_is_last_streaming_output_2,
             np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value),
         )
         # Codegen change: track probe time
-        t_probe = time.time()
+        t_probe = time.perf_counter()
         T47 = bodo.hiframes.table.logical_table_to_table(
             bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(df42),
             (),
@@ -595,15 +595,15 @@ def impl_wo_condition(conn_str):  # Codegen change: add conn_str
                 _temp22, T47, __bodo_is_last_streaming_output_2, True
             )
         )
-        probe_time += time.time() - t_probe
+        probe_time += time.perf_counter() - t_probe
         index_1 = bodo.hiframes.pd_index_ext.init_range_index(0, len(T48), 1, None)
         df49 = bodo.hiframes.pd_dataframe_ext.init_dataframe(
             (T48,), index_1, global_9_2
         )
-        _temp50 = time.time()
+        _temp50 = time.perf_counter()
         _temp51 = _temp50 - _temp3
         _temp1 = _temp1 + _temp51
-        _temp55 = time.time()
+        _temp55 = time.perf_counter()
         df56 = df49.loc[
             :,
             [
@@ -617,7 +617,7 @@ def impl_wo_condition(conn_str):  # Codegen change: add conn_str
                 "l_comment",
             ],
         ]
-        _temp57 = time.time()
+        _temp57 = time.perf_counter()
         _temp58 = _temp57 - _temp55
         _temp53 = _temp53 + _temp58
         __bodo_streaming_batches_list_1.append(df56)
@@ -645,13 +645,13 @@ def impl_wo_condition(conn_str):  # Codegen change: add conn_str
         "RELNODE_TIMING", f"""Execution time for RelNode {_temp59}: {_temp53}"""
     )
     # Codegen change: track concat time
-    concat_time_start = time.time()
+    concat_time_start = time.perf_counter()
     df60 = pd.concat(__bodo_streaming_batches_list_1, ignore_index=True)
     bodo.user_logging.log_message(
-        "RELNODE_TIMING", f"Concat Time: {time.time() - concat_time_start}"
+        "RELNODE_TIMING", f"Concat Time: {time.perf_counter() - concat_time_start}"
     )
     # Codegen change: print overall execution time
-    print(f"Finished executing the query. It took {time.time() - t0} seconds.")
+    print(f"Finished executing the query. It took {time.perf_counter() - t0} seconds.")
     print("Output shape: ", df60.shape)
     return df60
 
@@ -695,10 +695,10 @@ def impl_unbalanced(conn_str):  # Codegen change: add conn_str
     """
     # Codegen change: Add print and overall timer
     print("Started executing query...")
-    t0 = time.time()
+    t0 = time.perf_counter()
     __bodo_is_last_streaming_output_1 = False
     _temp4 = 0.0
-    _temp5 = time.time()
+    _temp5 = time.perf_counter()
     # Codegen change: Change number of rows for ORDERS
     __bodo_streaming_reader_1 = pd.read_sql(
         'SELECT * FROM "SNOWFLAKE_SAMPLE_DATA"."TPCH_SF100"."ORDERS"\nFETCH NEXT 100000000 ROWS ONLY',
@@ -708,12 +708,12 @@ def impl_unbalanced(conn_str):  # Codegen change: add conn_str
     )
     # Codegen change: timer for build step
     build_time = 0.0
-    _temp7 = time.time()
+    _temp7 = time.perf_counter()
     _temp8 = _temp7 - _temp5
     _temp4 = _temp4 + _temp8
     _temp15 = 0.0
     _temp1 = 0.0
-    _temp2 = time.time()
+    _temp2 = time.perf_counter()
     # Codegen change: Use global flags for build-outer and probe-outer
     _temp22 = bodo.libs.streaming.join.init_join_state(
         global_2,
@@ -726,21 +726,21 @@ def impl_unbalanced(conn_str):  # Codegen change: add conn_str
         False,
         non_equi_condition="(left.`L_SHIPDATE` < right.`O_ORDERDATE`)",
     )
-    _temp23 = time.time()
+    _temp23 = time.perf_counter()
     _temp24 = _temp23 - _temp2
     _temp1 = _temp1 + _temp24
     while not (__bodo_is_last_streaming_output_1):
-        _temp6 = time.time()
+        _temp6 = time.perf_counter()
         (
             T9,
             __bodo_is_last_streaming_output_1,
         ) = bodo.io.arrow_reader.read_arrow_next(__bodo_streaming_reader_1, True)
         _temp10 = bodo.hiframes.pd_index_ext.init_range_index(0, len(T9), 1, None)
         df11 = bodo.hiframes.pd_dataframe_ext.init_dataframe((T9,), _temp10, global_1)
-        _temp12 = time.time()
+        _temp12 = time.perf_counter()
         _temp13 = _temp12 - _temp6
         _temp4 = _temp4 + _temp13
-        _temp17 = time.time()
+        _temp17 = time.perf_counter()
         df18 = df11.loc[
             :, ["o_custkey", "o_orderdate", "o_orderpriority", "o_comment"]
         ].rename(
@@ -752,10 +752,10 @@ def impl_unbalanced(conn_str):  # Codegen change: add conn_str
             },
             copy=False,
         )
-        _temp19 = time.time()
+        _temp19 = time.perf_counter()
         _temp20 = _temp19 - _temp17
         _temp15 = _temp15 + _temp20
-        _temp3 = time.time()
+        _temp3 = time.perf_counter()
         __bodo_is_last_streaming_output_1 = bodo.libs.distributed_api.dist_reduce(
             __bodo_is_last_streaming_output_1,
             np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value),
@@ -764,12 +764,12 @@ def impl_unbalanced(conn_str):  # Codegen change: add conn_str
             bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(df18), (), global_6, 4
         )
         # Codegen change: Track build time
-        t_build = time.time()
+        t_build = time.perf_counter()
         bodo.libs.streaming.join.join_build_consume_batch(
             _temp22, T25, __bodo_is_last_streaming_output_1
         )
-        build_time += time.time() - t_build
-        _temp26 = time.time()
+        build_time += time.perf_counter() - t_build
+        _temp26 = time.perf_counter()
         _temp27 = _temp26 - _temp3
         _temp1 = _temp1 + _temp27
     # Codegen change: Change number of rows for ORDERS
@@ -786,7 +786,7 @@ def impl_unbalanced(conn_str):  # Codegen change: add conn_str
     bodo.user_logging.log_message("RELNODE_TIMING", f"Join build took {build_time}s")
     __bodo_is_last_streaming_output_2 = False
     _temp28 = 0.0
-    _temp29 = time.time()
+    _temp29 = time.perf_counter()
     # Codegen change: Change number of rows for LINEITEM
     __bodo_streaming_reader_2 = pd.read_sql(
         'SELECT * FROM "SNOWFLAKE_SAMPLE_DATA"."TPCH_SF100"."LINEITEM"\nFETCH NEXT 5 ROWS ONLY',
@@ -794,7 +794,7 @@ def impl_unbalanced(conn_str):  # Codegen change: add conn_str
         _bodo_is_table_input=False,
         _bodo_chunksize=4096,
     )
-    _temp31 = time.time()
+    _temp31 = time.perf_counter()
     _temp32 = _temp31 - _temp29
     _temp28 = _temp28 + _temp32
     _temp39 = 0.0
@@ -805,7 +805,7 @@ def impl_unbalanced(conn_str):  # Codegen change: add conn_str
     __bodo_streaming_batches_list_1 = []
     input_request3 = True
     while not (_temp46):
-        _temp30 = time.time()
+        _temp30 = time.perf_counter()
         (
             T33,
             __bodo_is_last_streaming_output_2,
@@ -814,10 +814,10 @@ def impl_unbalanced(conn_str):  # Codegen change: add conn_str
         )
         _temp34 = bodo.hiframes.pd_index_ext.init_range_index(0, len(T33), 1, None)
         df35 = bodo.hiframes.pd_dataframe_ext.init_dataframe((T33,), _temp34, global_7)
-        _temp36 = time.time()
+        _temp36 = time.perf_counter()
         _temp37 = _temp36 - _temp30
         _temp28 = _temp28 + _temp37
-        _temp41 = time.time()
+        _temp41 = time.perf_counter()
         df42 = df35.loc[
             :,
             [
@@ -839,16 +839,16 @@ def impl_unbalanced(conn_str):  # Codegen change: add conn_str
             },
             copy=False,
         )
-        _temp43 = time.time()
+        _temp43 = time.perf_counter()
         _temp44 = _temp43 - _temp41
         _temp39 = _temp39 + _temp44
-        _temp3 = time.time()
+        _temp3 = time.perf_counter()
         __bodo_is_last_streaming_output_2 = bodo.libs.distributed_api.dist_reduce(
             __bodo_is_last_streaming_output_2,
             np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value),
         )
         # Codegen change: track probe time
-        t_probe = time.time()
+        t_probe = time.perf_counter()
         T47 = bodo.hiframes.table.logical_table_to_table(
             bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(df42), (), global_8, 6
         )
@@ -859,13 +859,13 @@ def impl_unbalanced(conn_str):  # Codegen change: add conn_str
         ) = bodo.libs.streaming.join.join_probe_consume_batch(
             _temp22, T47, __bodo_is_last_streaming_output_2, True
         )
-        probe_time += time.time() - t_probe
+        probe_time += time.perf_counter() - t_probe
         index_1 = bodo.hiframes.pd_index_ext.init_range_index(0, len(T48), 1, None)
         df49 = bodo.hiframes.pd_dataframe_ext.init_dataframe((T48,), index_1, global_9)
-        _temp50 = time.time()
+        _temp50 = time.perf_counter()
         _temp51 = _temp50 - _temp3
         _temp1 = _temp1 + _temp51
-        _temp55 = time.time()
+        _temp55 = time.perf_counter()
         df56 = df49.loc[
             :,
             [
@@ -891,7 +891,7 @@ def impl_unbalanced(conn_str):  # Codegen change: add conn_str
             },
             copy=False,
         )
-        _temp57 = time.time()
+        _temp57 = time.perf_counter()
         _temp58 = _temp57 - _temp55
         _temp53 = _temp53 + _temp58
         __bodo_streaming_batches_list_1.append(df56)
@@ -920,13 +920,13 @@ def impl_unbalanced(conn_str):  # Codegen change: add conn_str
         "RELNODE_TIMING", f"""Execution time for RelNode {_temp59}: {_temp53}"""
     )
     # Codegen change: track concat time
-    concat_time_start = time.time()
+    concat_time_start = time.perf_counter()
     df60 = pd.concat(__bodo_streaming_batches_list_1, ignore_index=True)
     bodo.user_logging.log_message(
-        "RELNODE_TIMING", f"Concat Time: {time.time() - concat_time_start}"
+        "RELNODE_TIMING", f"Concat Time: {time.perf_counter() - concat_time_start}"
     )
     # Codegen change: print overall execution time
-    print(f"Finished executing the query. It took {time.time() - t0} seconds.")
+    print(f"Finished executing the query. It took {time.perf_counter() - t0} seconds.")
     print("Output shape: ", df60.shape)
     return df60
 

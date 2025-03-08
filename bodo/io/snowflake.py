@@ -1000,8 +1000,8 @@ def get_list_type_from_metadata(
     probe_query = f"SELECT DISTINCT TYPEOF(V) as VALUES_TYPE from ({flatten_query})"
 
     # Send the probe query until we breach the timeout, in case we are unlucky with sampling.
-    start_time = time.time()
-    while (time.time() - start_time) < SF_READ_SCHEMA_PROBE_TIMEOUT:
+    start_time = time.perf_counter()
+    while (time.perf_counter() - start_time) < SF_READ_SCHEMA_PROBE_TIMEOUT:
         probe_res = execute_query(
             cursor,
             probe_query,
@@ -1119,11 +1119,11 @@ def get_variant_type_from_metadata(
     )
     # Send the probe query until we breach the timeout (or at most 5 times),
     # in case we are unlucky with sampling.
-    start_time = time.time()
+    start_time = time.perf_counter()
     max_tries = 5
     tries = 0
     while (
-        time.time() - start_time
+        time.perf_counter() - start_time
     ) < SF_READ_SCHEMA_PROBE_TIMEOUT and tries < max_tries:
         tries += 1
         probe_res = execute_query(
@@ -1320,8 +1320,8 @@ def get_map_type_from_metadata(
     probe_query = f"SELECT DISTINCT TYPEOF(V) as VALUES_TYPE from ({flatten_query})"
 
     # Send the probe query until we breach the timeout, in case we are unlucky with sampling.
-    start_time = time.time()
-    while (time.time() - start_time) < SF_READ_SCHEMA_PROBE_TIMEOUT:
+    start_time = time.perf_counter()
+    while (time.perf_counter() - start_time) < SF_READ_SCHEMA_PROBE_TIMEOUT:
         probe_res = execute_query(
             cursor,
             probe_query,
@@ -2655,9 +2655,9 @@ def execute_copy_into(
     )
 
     if synchronous:
-        t0 = time.time()
+        t0 = time.perf_counter()
         copy_results = cursor.execute(copy_into_sql, _is_internal=True).fetchall()  # type: ignore
-        sf_exec_time = time.time() - t0
+        sf_exec_time = time.perf_counter() - t0
         if bodo.user_logging.get_verbose_level() >= 2:
             bodo.user_logging.log_message(
                 "Snowflake Query Submission (Write)",

@@ -18,9 +18,9 @@ few_unique_nkeys = 20
 
 
 def impl(bc):
-    start = time.time()
+    start = time.perf_counter()
     out = bc.sql("select a,sum(b) from t1 group by a")
-    return out, time.time() - start
+    return out, time.perf_counter() - start
 
 
 def test_groupby_regression_all_unique():

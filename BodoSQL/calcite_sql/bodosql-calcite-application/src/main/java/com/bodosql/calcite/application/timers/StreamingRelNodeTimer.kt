@@ -35,7 +35,7 @@ class StreamingRelNodeTimer(
     private val isNoOp = tracingLevel == 0
 
     /**
-     * Insert the initial time.time() before the state for a streaming operator.
+     * Insert the initial time.perf_counter() before the state for a streaming operator.
      * This should be used by operators where the state is potentially non-trivial
      * (e.g. Snowflake Read). This must be called before the state code is generated.
      */
@@ -50,7 +50,7 @@ class StreamingRelNodeTimer(
     }
 
     /**
-     * Insert the time.time() after the state for a streaming operator and compute
+     * Insert the time.perf_counter() after the state for a streaming operator and compute
      * the difference in time. This should be used by operators where the state is
      * potentially non-trivial (e.g. Snowflake Read). This requires insertStateStartTimer()
      * to have previously been called and must be called after the state code is generated.
@@ -82,7 +82,7 @@ class StreamingRelNodeTimer(
     }
 
     /**
-     * Insert the initial time.time() before the code in the body of a streaming operator.
+     * Insert the initial time.perf_counter() before the code in the body of a streaming operator.
      * This must be called before the code is generated that occurs on each batch
      * of a streaming operator. Optionally, isTermination can be provided to time finalizations.
      */
@@ -146,7 +146,7 @@ class StreamingRelNodeTimer(
     }
 
     /**
-     * Insert the time.time() after the code in the body of a streaming operator and compute
+     * Insert the time.perf_counter() after the code in the body of a streaming operator and compute
      * the difference in time. This must be called after the code is generated that occurs on
      * each batch of a streaming operator and requires insertLoopOperationStartTimer() to
      * have previously been called. Optionally, isTermination can be provided to time finalizations.

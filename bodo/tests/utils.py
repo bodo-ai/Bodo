@@ -1764,9 +1764,9 @@ def check_timing_func(func, args):
     run is to recompute with the compiled code"""
     bodo_func = bodo.jit(func)
     bodo_func(*args)
-    t1 = time.time()
+    t1 = time.perf_counter()
     bodo_func(*args)
-    t2: float = time.time()
+    t2: float = time.perf_counter()
     delta_t = round(t2 - t1, 4)
     print("Time:", delta_t, end=" ")
     assert True

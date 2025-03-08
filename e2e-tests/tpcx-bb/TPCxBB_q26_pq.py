@@ -10,7 +10,7 @@ import bodo
 
 @bodo.jit(cache=True, spawn=True)
 def q26(ss_file, i_file, category, item_count):
-    t1 = time.time()
+    t1 = time.perf_counter()
     store_sales = pd.read_parquet(ss_file)
     item = pd.read_parquet(i_file)
 
@@ -92,7 +92,7 @@ def q26(ss_file, i_file, category, item_count):
     customer_i_class = customer_i_class[customer_i_class.ss_item_count > item_count]
     res = customer_i_class.values.astype(np.float64).sum()
     print("checksum", res)
-    print("exec time", time.time() - t1)
+    print("exec time", time.perf_counter() - t1)
 
 
 if __name__ == "__main__":

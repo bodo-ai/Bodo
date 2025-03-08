@@ -767,7 +767,7 @@ def populate_row_counts_in_pq_dataset_pieces(
                     msg = f"Schema in {piece} was different.\n{str(e)}"
                     raise BodoError(msg)
 
-            t0 = time.time()
+            t0 = time.perf_counter()
             # We use the expected schema instead of the file schema. This schema
             # should be a less-restrictive superset of the file schema (after the
             # unification step above), so it should be valid.
@@ -776,7 +776,7 @@ def populate_row_counts_in_pq_dataset_pieces(
                 filter=filters,
                 use_threads=True,
             ).count_rows()
-            ds_scan_time += time.time() - t0
+            ds_scan_time += time.perf_counter() - t0
             piece._bodo_num_rows = row_count
             total_rows_chunk += row_count
             total_row_groups_chunk += frag.num_row_groups

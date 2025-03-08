@@ -751,14 +751,14 @@ class BodoSQLContext:
         Verifies BodoSQL can fully compile the query in Bodo.
         """
         try:
-            t1 = time.time()
+            t1 = time.perf_counter()
             self._compile(sql, params_dict, dynamic_params_list)
-            compile_time = time.time() - t1
+            compile_time = time.perf_counter() - t1
             compiles_flag = True
             error_message = "No error"
         except Exception as e:
             stack_trace = traceback.format_exc()
-            compile_time = time.time() - t1
+            compile_time = time.perf_counter() - t1
             compiles_flag = False
             error_message = repr(e)
             if os.environ.get("NUMBA_DEVELOPER_MODE", False):
