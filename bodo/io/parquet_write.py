@@ -375,42 +375,6 @@ def gen_pandas_parquet_metadata_template(
     return pandas_metadata
 
 
-def index_write_field_names(df_index) -> list[str]:  # type: ignore
-    """
-    Returns a list of index names for the given DataFrame to use when
-    writing to Parquet files, including the metadata.
-
-    If the DataFrame has a MultiIndex, it returns the names of all levels.
-    If the DataFrame has a single index, it returns the name of that index.
-
-    If an index (or subindex) has no name, it will be assigned a default name
-    of `__index_level_{level}__`. level = 0 for single indexes, and an whole
-    number for MultiIndex levels.
-    """
-    pass
-
-
-@overload(index_write_field_names)
-def overload_index_write_field_names(df_index):
-    if isinstance(df_index, MultiIndexType):
-
-        def impl(df_index):
-            return [
-                f"__index_level_{idx}__" if name is None else name
-                for idx, name in enumerate(df_index.names)
-            ]
-    elif df_index.name_typ == types.none:
-
-        def impl(df_index):
-            return ["__index_level_0__"]
-    else:
-
-        def impl(df_index):
-            return [df_index.name]
-
-    return impl
-
-
 def _apply_template(
     metadata_temp: dict[str, pt.Any],
     range_info: tuple[int, int, int] | None,
@@ -459,7 +423,8 @@ def gen_pandas_parquet_metadata(
     pass
 
 
-@overload(gen_pandas_parquet_metadata, no_unliteral=True, jit_options={"cache": True})
+# TODO: Determine caching issue and re-enable
+@overload(gen_pandas_parquet_metadata, no_unliteral=True)
 def overload_gen_pandas_parquet_metadata(
     df,
     col_names_arr,
@@ -523,7 +488,9 @@ def overload_gen_pandas_parquet_metadata(
         "def impl(df, col_names_arr, partition_cols, write_non_range_index_to_metadata, write_rangeindex_to_metadata):\n"
         # Fill in the metadata template with the actual values
         "    index = df.index\n"
-        "    index_field_names = index_write_field_names(index)\n"
+        # In the underlying Parquet file, for non-range index columns with no name,
+        # we use the name __index_level_{idx}__ to identify the column.
+        "    index_field_names = [f'__index_level_{idx}__' if name is None else name for idx, name in enumerate(index.names)]\n"
         "    index_names = index.names\n"
     )
     if write_rangeindex:
@@ -551,7 +518,6 @@ def overload_gen_pandas_parquet_metadata(
         "pd": pd,
         "bodo": bodo,
         "metadata_temp": metadata_temp,
-        "index_write_field_names": index_write_field_names,
         "_apply_template": _apply_template,
     }
     return bodo_exec(
