@@ -286,9 +286,9 @@ def test_describe_many_columns(memory_leak_check):
     )
     import time
 
-    t0 = time.time()
+    t0 = time.perf_counter()
     check_func(impl, (df,), is_out_distributed=False, check_dtype=False)
-    compilation_time = time.time() - t0
+    compilation_time = time.perf_counter() - t0
     # Determine the max compilation time on any rank to avoid hangs.
     comm = MPI.COMM_WORLD
     compilation_time = comm.allreduce(compilation_time, op=MPI.MAX)
@@ -1596,9 +1596,9 @@ def test_df_melt_many_columns(memory_leak_check):
         data={f"col{i}": np.arange(10) for i in range(num_cols)}, index=np.arange(10)
     )
 
-    t0 = time.time()
+    t0 = time.perf_counter()
     check_func(impl, (df,), sort_output=True, reset_index=True)
-    compilation_time = time.time() - t0
+    compilation_time = time.perf_counter() - t0
     # Determine the max compilation time on any rank to avoid hangs.
     comm = MPI.COMM_WORLD
     compilation_time = comm.allreduce(compilation_time, op=MPI.MAX)

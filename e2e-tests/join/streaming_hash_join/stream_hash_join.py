@@ -117,9 +117,9 @@ if __name__ == "__main__":
     print("output_table_name: ", output_table_name)
 
     ## Write output to Snowflake table
-    start_time = time.time()
+    start_time = time.perf_counter()
     out = run_query(bc, input_schema, output_table_name)
-    end_time = time.time()
+    end_time = time.perf_counter()
 
     # Add a barrier for synchronization purposes so that
     # the get length and drop commands are done after all the writes.

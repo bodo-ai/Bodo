@@ -20,7 +20,7 @@ from bodo import prange
 
 @bodo.jit(cache=True, spawn=True, replicated=["df_prod", "grids"])
 def search_all(categories, strategies, df_prod, grids, results_file):
-    t1 = time.time()
+    t1 = time.perf_counter()
     # The program does have communication though since
     # the parallel loop has a concatenation reduction
     # (dataframe append for each iteration).
@@ -33,14 +33,14 @@ def search_all(categories, strategies, df_prod, grids, results_file):
 
     df_rec = df_rec.sort_values(by="STRATEGY").reset_index(drop=True)
     df_rec.to_csv(results_file, index=False)
-    print("Execution time: ", time.time() - t1)
+    print("Execution time: ", time.perf_counter() - t1)
 
 
 if __name__ == "__main__":
     require_cache = False
     if len(sys.argv) > 3:
         require_cache = bool(sys.argv[3])
-    t1 = time.time()
+    t1 = time.perf_counter()
     bucket_name = sys.argv[1]
     results_file = sys.argv[2]
 
