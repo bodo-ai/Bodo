@@ -29,7 +29,6 @@ from bodo.utils.typing import (
     is_overload_none,
     is_str_arr_type,
 )
-from bodo.utils.utils import bodo_exec
 
 if pt.TYPE_CHECKING:
     from bodo.hiframes.pd_dataframe_ext import DataFrameType
@@ -488,9 +487,6 @@ def overload_gen_pandas_parquet_metadata(
         "def impl(df, col_names_arr, partition_cols, write_non_range_index_to_metadata, write_rangeindex_to_metadata):\n"
         # Fill in the metadata template with the actual values
         "    index = df.index\n"
-        # In the underlying Parquet file, for non-range index columns with no name,
-        # we use the name __index_level_{idx}__ to identify the column.
-        "    index_field_names = [f'__index_level_{idx}__' if name is None else name for idx, name in enumerate(index.names)]\n"
         "    index_names = index.names\n"
     )
     if write_rangeindex:
@@ -500,6 +496,9 @@ def overload_gen_pandas_parquet_metadata(
 
     func_text += (
         '    with bodo.no_warning_objmode(metadata_str="unicode_type", out_names_arr=bodo.string_array_type):\n'
+        # In the underlying Parquet file, for non-range index columns with no name,
+        # we use the name __index_level_{idx}__ to identify the column.
+        "        index_field_names = [f'__index_level_{idx}__' if name is None else name for idx, name in enumerate(index_names)]\n"
         "        metadata_str = _apply_template(\n"
         "            metadata_temp, \n"
         "            range_info, \n"
@@ -520,9 +519,5 @@ def overload_gen_pandas_parquet_metadata(
         "metadata_temp": metadata_temp,
         "_apply_template": _apply_template,
     }
-    return bodo_exec(
-        func_text,
-        glbls,
-        loc_vars,
-        __name__,
-    )
+    exec(func_text, glbls, loc_vars)
+    return loc_vars["impl"]
