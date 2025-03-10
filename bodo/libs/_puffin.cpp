@@ -1,6 +1,7 @@
 #include "_puffin.h"
 
 #include <arrow/python/api.h>
+#include <object.h>
 #include <zstd.h>
 #include <algorithm>
 
@@ -472,15 +473,21 @@ std::shared_ptr<CompactSketchCollection> PuffinFile::to_theta_sketches(
 PyObject *get_statistics_file_metadata(
     const std::unique_ptr<PuffinFile> &puffin, std::string puffin_loc,
     int64_t snapshot_id, size_t file_size_in_bytes, int32_t footer_size) {
-    PyObject *bic = PyImport_ImportModule("bodo_iceberg_connector");
-    CHECK(bic, "importing bodo_iceberg_connector module failed");
+    PyObject *ice = PyImport_ImportModule("pyiceberg.table.statistics");
+    CHECK(ice,
+          "importing PyIceberg submodule (pyiceberg.table.statistics) module "
+          "failed");
     // Create the list of BlobMetadata objects
-    PyObject *blob_metadata_class = PyObject_GetAttrString(bic, "BlobMetadata");
+    PyObject *blob_metadata_class = PyObject_GetAttrString(ice, "BlobMetadata");
     CHECK(blob_metadata_class,
-          "getting bodo_iceberg_connector.BlobMetadata failed");
+          "getting pyiceberg.table.statistics.BlobMetadata failed");
     size_t n_blobs = puffin->num_blobs();
     PyObject *blob_list = PyList_New(n_blobs);
     CHECK(blob_list, "creating blob list failed");
+
+    PyObject *args = PyTuple_New(0);
+    CHECK(args, "Creating empty args tuple failed");
+
     for (size_t i = 0; i < n_blobs; i++) {
         BlobMetadata blob_metadata = puffin->get_blob_metadata(i);
         // Get the fields
@@ -510,10 +517,18 @@ PyObject *get_statistics_file_metadata(
             }
         }
 
-        PyObject *blob_metadata_obj = PyObject_CallFunction(
-            blob_metadata_class, "sLLOO", blob_metadata.get_type().c_str(),
-            blob_metadata.get_snapshot_id(),
-            blob_metadata.get_sequence_number(), fields_list, properties_dict);
+        // Call BlobMetadata(type, snap_id, seq_num, fields, properties)
+        // Note, all args need to be kwargs
+        PyObject *kwargs = Py_BuildValue(
+            "{s:s,s:L,s:L,s:O,s:O}", "type", blob_metadata.get_type().c_str(),
+            "snapshot-id", blob_metadata.get_snapshot_id(), "sequence-number",
+            blob_metadata.get_sequence_number(), "fields", fields_list,
+            "properties", properties_dict);
+        CHECK(kwargs, "Creating args for BlobMetadata failed");
+        PyObject *blob_metadata_obj =
+            PyObject_Call(blob_metadata_class, args, kwargs);
+        Py_DECREF(kwargs);
+
         CHECK(blob_metadata_obj, "creating BlobMetadata object failed");
         // PyList_SetItem steals the reference created by
         // the constructor.
@@ -525,16 +540,24 @@ PyObject *get_statistics_file_metadata(
     Py_DECREF(blob_metadata_class);
     // Create the statistics file object
     PyObject *statistics_file_class =
-        PyObject_GetAttrString(bic, "StatisticsFile");
+        PyObject_GetAttrString(ice, "StatisticsFile");
     CHECK(statistics_file_class,
           "getting bodo_iceberg_connector.StatisticsFile failed");
-    PyObject *statistics_file_obj = PyObject_CallFunction(
-        statistics_file_class, "LsLiO", snapshot_id, puffin_loc.c_str(),
-        file_size_in_bytes, footer_size, blob_list);
+
+    PyObject *kwargs = Py_BuildValue(
+        "{s:L,s:s,s:L,s:i,s:O}", "snapshot-id", snapshot_id, "statistics-path",
+        puffin_loc.c_str(), "file-size-in-bytes", file_size_in_bytes,
+        "file-footer-size-in-bytes", footer_size, "blob-metadata", blob_list);
+    CHECK(kwargs, "Creating args for StatisticsFile failed");
+
+    PyObject *statistics_file_obj =
+        PyObject_Call(statistics_file_class, args, kwargs);
+
     CHECK(statistics_file_obj, "creating StatisticsFile object failed");
+    Py_DECREF(args);
     Py_DECREF(blob_list);
     Py_DECREF(statistics_file_class);
-    Py_DECREF(bic);
+    Py_DECREF(ice);
     return statistics_file_obj;
 }
 
