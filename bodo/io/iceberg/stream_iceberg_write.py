@@ -5,8 +5,6 @@ Not intended for external use
 
 from __future__ import annotations
 
-import importlib
-import importlib.util
 import operator
 import os
 import traceback
@@ -94,7 +92,7 @@ if pt.TYPE_CHECKING:  # pragma: no cover
 ICEBERG_WRITE_PARQUET_CHUNK_SIZE = int(256e6)
 
 
-def get_enable_theta() -> bool:  # pragma: no cover
+def get_enable_theta() -> bool:  # type: ignore
     pass
 
 
@@ -106,17 +104,7 @@ def overload_get_enable_theta():
 
     def impl():  # pragma: no cover
         with bodo.no_warning_objmode(ret_var="bool_"):
-            if bodo.enable_theta_sketches:
-                try:
-                    if importlib.util.find_spec("bodo_iceberg_connector") is None:
-                        ret_var = False
-                    else:
-                        ret_var = True
-                except ValueError:
-                    ret_var = False
-            else:
-                ret_var = False
-
+            ret_var = bodo.enable_theta_sketches
         return ret_var
 
     return impl
@@ -604,7 +592,7 @@ def gen_iceberg_writer_init_impl(
                 # For insert into the columns are an intersection of the existing sketches
                 # and the types we can support.
                 existing_columns = table_columns_have_theta_sketches_wrapper(
-                    writer["conn"], writer["table_id"]
+                    writer["txn"]
                 )
                 possible_columns = get_supported_theta_sketch_columns(
                     writer["output_pyarrow_schema"]
@@ -636,19 +624,19 @@ def gen_iceberg_writer_init_impl(
     return impl_iceberg_writer_init
 
 
-def table_columns_have_theta_sketches_wrapper(conn_str, table_id):  # pragma: no cover
+def table_columns_have_theta_sketches_wrapper(txn):  # pragma: no cover
     pass
 
 
 @overload(table_columns_have_theta_sketches_wrapper)
-def overload_table_columns_have_theta_sketches_wrapper(conn_str, table_id):
+def overload_table_columns_have_theta_sketches_wrapper(txn):
     """Check if the columns in the table have theta sketches enabled. This extra
     wrapper is added to avoid calling into objmode inside control flow."""
     _output_type = bodo.boolean_array_type
 
-    def impl(conn_str, table_id):  # pragma: no cover
+    def impl(txn):  # pragma: no cover
         with bodo.no_warning_objmode(existing_columns=_output_type):
-            existing_columns = table_columns_have_theta_sketches(conn_str, table_id)
+            existing_columns = table_columns_have_theta_sketches(txn.table_metadata)
         return existing_columns
 
     return impl
@@ -826,13 +814,9 @@ def gen_iceberg_writer_append_table_impl_inner(
 
             # Fetch any existing puffin files:
             use_theta_sketches = writer["use_theta_sketches"]
-            conn_str = writer["conn"]
-            table_id = writer["table_id"]
             with bodo.no_warning_objmode(old_puffin_file_path="unicode_type"):
                 if use_theta_sketches and if_exists == "append":
-                    old_puffin_file_path = get_old_statistics_file_path(
-                        conn_str, table_id
-                    )
+                    old_puffin_file_path = get_old_statistics_file_path(txn)
                 else:
                     old_puffin_file_path = ""
 
@@ -876,9 +860,7 @@ def gen_iceberg_writer_append_table_impl_inner(
                 conn_str = writer["conn"]
                 table_id = writer["table_id"]
                 with bodo.no_warning_objmode():
-                    commit_statistics_file(
-                        conn_str, table_id, snapshot_id, statistic_file_info
-                    )
+                    commit_statistics_file(conn_str, table_id, statistic_file_info)
 
             # Delete the theta sketches. An object exists even if there are no sketches.
             delete_theta_sketches(writer["theta_sketches"])

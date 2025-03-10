@@ -7,6 +7,7 @@ import pyarrow as pa
 import pytest
 
 import bodo
+from bodo.io.iceberg.catalog import conn_str_to_catalog
 from bodo.io.iceberg.stream_iceberg_write import (
     iceberg_writer_append_table,
     iceberg_writer_init,
@@ -198,7 +199,6 @@ def check_ndv_metadata(
     # Check the NDVs match expectations
     blob_metadata = statistics["blob-metadata"]
     seen_fields = set()
-    print("blob_metadata", blob_metadata)
     for blob in blob_metadata:
         fields = blob["fields"]
         assert len(fields) == 1, "Expected only one field in the puffin file"
@@ -324,7 +324,9 @@ def test_theta_sketch_detection(
         f = write_iceberg_table_with_puffin_files(df, table_id, conn, "replace")
         df = _get_dist_arg(df, var_length=True)
         bodo.jit(distributed=["df"])(f)(df, table_id, conn, "replace")
-        theta_sketch_columns = table_columns_have_theta_sketches(conn, table_id)
+
+        metadata = conn_str_to_catalog(conn).load_table(table_id).metadata
+        theta_sketch_columns = table_columns_have_theta_sketches(metadata)
         expected_theta_sketch_columns = pd.array(
             [True, False, True, False, True], dtype=pd.BooleanDtype()
         )

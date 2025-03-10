@@ -40,7 +40,7 @@ from bodo.tests.iceberg_database_helpers.utils import (
     get_spark,
     transform_str,
 )
-from bodo.tests.test_iceberg.test_iceberg import _check_for_sql_read_head_only
+from bodo.tests.test_iceberg.test_read import _check_for_sql_read_head_only
 from bodo.tests.user_logging_utils import (
     check_logger_msg,
     create_string_io_logger,
