@@ -2,6 +2,7 @@ import os
 import random
 import shutil
 import traceback
+from datetime import date
 from decimal import Decimal
 
 import numba
@@ -1112,11 +1113,62 @@ def test_to_pq_multiIdx_no_name(check_write_func, memory_leak_check):
         lambda df, fname: df.to_parquet(fname),
         df,
         "multi_idx_parquet_no_name",
-<<<<<<< HEAD
         check_index=["__index_level_0__", "__index_level_1__", "nums"],
-=======
-        check_index=["first", "__index_level_1__"],
->>>>>>> 5e4f2ecdeb ([run ci] fix tests)
+    )
+
+
+def test_to_pq_partition_by_index(memory_leak_check, check_write_func):
+    """Test to_parquet with a partitioned index"""
+    df = pd.DataFrame(
+        {
+            "date": [
+                date(2021, 1, 1),
+                date(2021, 1, 1),
+                date(2021, 1, 2),
+                date(2021, 1, 2),
+            ],
+            "sensor": ["Sensor1", "Sensor2", "Sensor1", "Sensor2"],
+            "value": np.random.randn(4),
+        }
+    )
+    df_date = df.set_index("date")
+
+    check_write_func(
+        lambda df, path: df.to_parquet(path, partition_cols=["date"]),
+        df_date,
+        "test_to_pq_partition_by_index",
+        check_index=["date"],
+    )
+
+    check_write_func(
+        lambda df, path: df.to_parquet(path, partition_cols=["date", "sensor"]),
+        df_date,
+        "test_to_pq_partition_by_index2",
+        check_index=["date", "sensor"],
+    )
+
+
+def test_to_pq_partition_by_multiIdx(memory_leak_check, check_write_func):
+    """Test to_parquet with a partitioning by all levels of a MultiIndex"""
+    df = pd.DataFrame(
+        {
+            "date": [
+                date(2021, 1, 1),
+                date(2021, 1, 1),
+                date(2021, 1, 2),
+                date(2021, 1, 2),
+            ],
+            "sensor": ["Sensor1", "Sensor2", "Sensor1", "Sensor2"],
+            "value": np.random.randn(4),
+        }
+    )
+    df_idx = df.set_index(["date", "sensor"])
+
+    check_write_func(
+        lambda df, path: df.to_parquet(path, partition_cols=["sensor", "date"]),
+        df_idx,
+        "test_to_pq_partition_by_multiIdx",
+        check_index=["sensor", "date"],
     )
 
 
