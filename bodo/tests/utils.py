@@ -2667,7 +2667,7 @@ def get_rest_catalog_connection_string(
     auth_param = (
         f"credential={credential}" if credential is not None else f"token={token}"
     )
-    return f"iceberg+{rest_uri.replace('https://', 'REST://')}?{auth_param}&warehouse={warehouse}"
+    return f"iceberg+{rest_uri}?{auth_param}&warehouse={warehouse}&scope=PRINCIPAL_ROLE:ALL"
 
 
 def snowflake_cred_env_vars_present(user: int = 1) -> bool:
@@ -3068,20 +3068,17 @@ pytest_one_rank = [
 ]
 
 
-tabular_markers = (
-    pytest.mark.tabular,
+polaris_markers = (
+    pytest.mark.polaris,
     pytest.mark.iceberg,
-    pytest.mark.skip(
-        "Tabular's platform is deactivated, we will replace these with Polaris"
-    ),
 )
 
 # Decorate
-pytest_mark_tabular = compose_decos(tabular_markers)
+pytest_mark_polaris = compose_decos(polaris_markers)
 
 
 # This is for using a "mark" or marking a whole file.
-pytest_tabular = list(tabular_markers)
+pytest_polaris = list(polaris_markers)
 
 
 glue_markers = (

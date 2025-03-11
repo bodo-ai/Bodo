@@ -6,6 +6,7 @@ import random
 import re
 import shutil
 import string
+import sys
 
 import numba
 import numpy as np
@@ -34,6 +35,7 @@ from bodo.tests.utils import (
     gen_random_arrow_list_list_double,
     gen_random_arrow_list_list_int,
     gen_random_arrow_struct_struct,
+    temp_env_override,
 )
 from bodo.utils.testing import ensure_clean, ensure_clean2
 from bodo.utils.typing import BodoError, BodoWarning
@@ -473,6 +475,7 @@ def test_pq_RangeIndex(test_RangeIndex_input, pq_write_idx, memory_leak_check):
     finally:
         if bodo.libs.distributed_api.get_rank() == 0:
             os.remove("test.pq")
+        bodo.barrier()
 
 
 @pytest.mark.parametrize("index_name", [None, "HELLO"])
@@ -494,6 +497,7 @@ def test_pq_select_column(
     finally:
         if bodo.libs.distributed_api.get_rank() == 0:
             os.remove("test.pq")
+        bodo.barrier()
 
 
 def test_pq_index(datapath, memory_leak_check):
@@ -1335,6 +1339,8 @@ def test_read_predicates_isin(memory_leak_check):
             os.remove("pq_data")
 
 
+# This test is slow on Windows
+@pytest.mark.timeout(600)
 @pytest.mark.slow
 def test_read_partitions_isin(memory_leak_check):
     """test that partition pushdown with isin"""
@@ -1397,6 +1403,7 @@ def test_read_partitions_isin(memory_leak_check):
     finally:
         if bodo.get_rank() == 0:
             shutil.rmtree("pq_data", ignore_errors=True)
+        bodo.barrier()
 
 
 @pytest.mark.slow
@@ -1677,6 +1684,9 @@ def test_read_parquet_list_of_globs(memory_leak_check):
         "bodo/tests/data/test_partitioned.pq/A=7/part-0000[5-7]-bfd81e52-9210-4ee9-84a0-5ee2ab5e6345.c000.snappy.parquet",
     ]
 
+    if sys.platform == "win32":
+        globstrings = [p.replace("/", "\\") for p in globstrings]
+
     # construct expected pandas output manually (pandas doesn't support list of files)
     files = []
     for globstring in globstrings:
@@ -1686,7 +1696,8 @@ def test_read_parquet_list_of_globs(memory_leak_check):
     # So we need to add the partition column to pandas output
     chunks = []
 
-    regexp = re.compile(r"\/A=(\d+)\/")
+    regex_str = r"\/A=(\d+)\/" if sys.platform != "win32" else r"\\A=(\d+)\\"
+    regexp = re.compile(regex_str)
     for f in files:
         df = pd.read_parquet(f)
         df["A"] = int(regexp.search(f).group(1))
@@ -1962,6 +1973,7 @@ def test_read_parquet_bodo_read_as_dict(memory_leak_check):
             test_impl10(fname)
 
     finally:
+        bodo.barrier()
         if bodo.get_rank() == 0:
             os.remove(fname)
 
@@ -2596,25 +2608,33 @@ def test_read_parquet_incorrect_s3_credentials(memory_leak_check):
     # Test as a user
     numba.core.config.DEVELOPER_MODE = 0
 
-    @bodo.jit
-    def read(filename):
-        df = pd.read_parquet(filename)
-        return df
+    with temp_env_override(
+        {
+            "AWS_ACCESS_KEY_ID": "bad_key_id",
+            "AWS_SECRET_ACCESS_KEY": "bad_key",
+            "AWS_SESSION_TOKEN": "bad_token",
+        }
+    ):
 
-    # Test CallConstraint error
-    def test_impl(filename):
-        return read(filename)
+        @bodo.jit
+        def read(filename):
+            df = pd.read_parquet(filename)
+            return df
 
-    with pytest.raises(BodoError, match="No response body"):
-        bodo.jit(test_impl)(filename)
+        # Test CallConstraint error
+        def test_impl(filename):
+            return read(filename)
 
-    # Test ForceLiteralArg error
-    def test_impl2(filename):
-        df = pd.read_parquet(filename)
-        return df
+        with pytest.raises(BodoError, match="No response body"):
+            bodo.jit(test_impl)(filename)
 
-    with pytest.raises(BodoError, match="No response body"):
-        bodo.jit(test_impl2)(filename)
+        # Test ForceLiteralArg error
+        def test_impl2(filename):
+            df = pd.read_parquet(filename)
+            return df
+
+        with pytest.raises(BodoError, match="No response body"):
+            bodo.jit(test_impl2)(filename)
 
     # Reset developer mode
     numba.core.config.DEVELOPER_MODE = default_mode

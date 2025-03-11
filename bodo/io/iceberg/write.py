@@ -14,6 +14,7 @@ from itertools import zip_longest
 import llvmlite.binding as ll
 import numba
 import pyarrow as pa
+import pyarrow.fs
 from llvmlite import ir as lir
 from numba.core import cgutils, types
 from numba.extending import intrinsic
@@ -24,7 +25,7 @@ from bodo.io import arrow_cpp
 from bodo.io.fs_io import pyarrow_fs_type
 from bodo.io.helpers import pyarrow_schema_type
 from bodo.io.iceberg.catalog import conn_str_to_catalog
-from bodo.io.iceberg.common import _fs_from_file_path
+from bodo.io.iceberg.common import _format_data_loc, _fs_from_file_path
 from bodo.io.iceberg.theta import theta_sketch_collection_type
 from bodo.libs.bool_arr_ext import alloc_false_bool_array
 from bodo.libs.str_ext import unicode_to_utf8
@@ -385,9 +386,12 @@ def register_table_write(
     from pyiceberg.typedef import Record
 
     ev = tracing.Event("iceberg_register_table_write")
-    assert (
-        fnames is not None and file_records is not None and partition_infos is not None
-    )
+    if fnames is None:
+        fnames = []
+    if file_records is None:
+        file_records = []
+    if partition_infos is None:
+        partition_infos = []
 
     with transaction.update_snapshot().fast_append() as add:
         for file_name, file_record, partition_info in zip(
@@ -643,6 +647,7 @@ def start_write_rank_0(
         if_exists (str): What write operation we are doing. This must be one of
             ['fail', 'append', 'replace']
     """
+    from pyiceberg.io import load_file_io
     from pyiceberg.io.pyarrow import _pyarrow_to_schema_without_ids
     from pyiceberg.partitioning import UNPARTITIONED_PARTITION_SPEC
     from pyiceberg.schema import assign_fresh_schema_ids, prune_columns
@@ -701,10 +706,16 @@ def start_write_rank_0(
                 properties=properties,
             ).transaction()
 
-        io = catalog._load_file_io()
         data_loc = _get_write_data_path(
             txn.table_metadata.properties, txn.table_metadata.location
         )
+        io = load_file_io(
+            {**catalog.properties, **txn._table.io.properties},
+            txn.table_metadata.location,
+        )
+        # The default created transaction io doesn't do correct file path resolution
+        # for table create transactions because metadata_location is None
+        txn._table.io = io
         # Empty Partition Spec and Sort Order
         partition_spec = UNPARTITIONED_PARTITION_SPEC
         sort_order = UNSORTED_SORT_ORDER
@@ -765,10 +776,13 @@ def start_write_rank_0(
     partition_tuple, sort_tuple = build_partition_sort_tuples(
         output_schema, partition_spec, sort_order
     )
+    fs = _fs_from_file_path(data_loc, io)
+
+    data_loc = _format_data_loc(data_loc, fs)
 
     return (
         txn,
-        _fs_from_file_path(data_loc, io),
+        fs,
         data_loc,
         output_pa_schema,
         iceberg_schema_str,

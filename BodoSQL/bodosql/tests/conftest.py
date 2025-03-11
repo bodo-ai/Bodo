@@ -24,7 +24,6 @@ import bodosql
 from bodo.tests.conftest import (  # noqa
     iceberg_database,
     memory_leak_check,
-    tabular_connection,
 )
 from bodo.tests.iceberg_database_helpers.utils import get_spark
 from bodo.tests.utils import gen_nonascii_list
@@ -1985,18 +1984,6 @@ def listagg_data():
             }
         )
     }
-
-
-@pytest.fixture
-def tabular_catalog(tabular_connection):
-    """
-    Returns a tabular catalog object
-    """
-
-    _, tabular_warehouse, tabular_credential = tabular_connection
-    return bodosql.TabularCatalog(
-        warehouse=tabular_warehouse, credential=tabular_credential
-    )
 
 
 @pytest.fixture

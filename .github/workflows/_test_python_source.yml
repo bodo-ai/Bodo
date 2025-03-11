@@ -63,6 +63,9 @@ jobs:
             role-session-name: BodoEnginePrCiSession
             role-skip-session-tagging: true
             role-duration-seconds: 10800
+        - name: Install Extra Test dependencies
+          # This isn't published on pypi so no good way to list it as a dependency
+          run: pip install 'git+https://github.com/apache/polaris.git#subdirectory=regtests/client/python'
 
         # Run Tests
         - name: Run Tests
@@ -72,6 +75,9 @@ jobs:
               # Spark needs to verify HADOOP_HOME exists at initialization even if it is not used.
               export HADOOP_HOME="$(pwd)/buildscripts/local_utils/hadoop_dummy"
               export PATH=$HADOOP_HOME/bin:$PATH
+              # Visual Studio 2010 DLLs are needed for winutils.exe
+              curl -LO https://download.microsoft.com/download/1/6/5/165255E7-1014-4D0A-B094-B6A430A6BFFC/vcredist_x64.exe
+              ./vcredist_x64.exe -passive
             fi
 
             # Bodo Tests: Coverage is collected
@@ -118,6 +124,8 @@ jobs:
             AZURE_STORAGE_ACCOUNT_KEY: ${{ secrets.AZURE_STORAGE_ACCOUNT_KEY }}
             BODO_TEST_SQL_DB_CREDENTIAL: ${{ secrets.BODO_TEST_SQL_DB_CREDENTIAL }}
             BODO_TEST_ORACLE_DB_CREDENTIAL: ${{ secrets.BODO_TEST_ORACLE_DB_CREDENTIAL }}
+            AZURE_CLIENT_ID:  ${{ secrets.AZURE_CLIENT_ID }}
+            AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
 
         # Upload
         - name: Prepare Outputs

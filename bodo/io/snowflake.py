@@ -2338,6 +2338,10 @@ def do_upload_and_cleanup(
     else:
         stage_name_with_dir = f'@"{stage_name}"/{stage_dir}/'
 
+    # Windows "\" should be replaced with "/" for Snowflake PUT command when using quotes:
+    # https://docs.snowflake.com/en/sql-reference/sql/put
+    chunk_path = chunk_path.replace("\\", "/")
+
     upload_sql = (
         f"PUT 'file://{chunk_path}' {stage_name_with_dir} AUTO_COMPRESS=FALSE "
         f"/* io.snowflake.do_upload_and_cleanup() */"

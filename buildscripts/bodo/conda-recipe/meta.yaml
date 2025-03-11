@@ -50,9 +50,10 @@ requirements:
     - boost-cpp =1.85
     - libcurl ~= 8.0
     - hdf5 >=1.14.3,<1.14.4.0a0=mpi_mpich_* # [not win]
+    - hdf5 >=1.14.3,<1.14.4.0a0=*mpi_impi_* # [win]
     - h5py
     - mpich 4.1.*=h*        # [not win]
-    - impi-devel  # [win64]
+    - impi-devel            # [win64]
     - requests
     - aws-sdk-cpp <=1.11.485
     - zstd<=1.5.6
@@ -75,7 +76,6 @@ requirements:
   # run_constrained means these packages are not required deps
   # but will restrict them if they are present in the conda env.
   run_constrained:
-    - matplotlib <= 3.8.2
     - numpy >=1.24,<2.2
     - scikit-learn =1.4.*
     - s3fs >=2022.1.0

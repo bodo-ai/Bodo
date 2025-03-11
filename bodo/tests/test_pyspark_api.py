@@ -1,5 +1,6 @@
 """Tests for pyspark APIs supported by Bodo"""
 
+import sys
 from datetime import date, datetime
 
 import numpy as np
@@ -14,8 +15,8 @@ from bodo.tests.utils import _get_dist_arg, check_func
 from bodo.utils.typing import BodoError
 
 pytestmark = pytest.mark.skipif(
-    bodo.tests.utils.test_spawn_mode_enabled,
-    reason="PySpark API not supported in spawn",
+    bodo.tests.utils.test_spawn_mode_enabled or sys.platform == "win32",
+    reason="PySpark API not supported in spawn or Windows",
 )
 
 

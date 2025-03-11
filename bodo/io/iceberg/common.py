@@ -120,9 +120,8 @@ def get_rest_catalog_config(conn: str) -> tuple[str, str, str] | None:
     @return: Tuple of uri, user_token, warehouse if successful, None otherwise (e.g. invalid connection string or not a rest catalog).
     """
     parsed_conn = urlparse(conn)
-    if parsed_conn.scheme.lower() != "rest":
+    if parsed_conn.scheme.lower() not in {"http", "https"}:
         return None
-    parsed_conn = parsed_conn._replace(scheme="https")
     parsed_params = parse_qs(parsed_conn.query)
     # Clear the params
     parsed_conn = parsed_conn._replace(query="")
@@ -174,9 +173,6 @@ class IcebergConnectionType(types.Type):
     def __init__(self, name):  # pragma: no cover
         super().__init__(name=name)
 
-    def get_conn_str(self) -> str:
-        raise NotImplementedError("IcebergConnectionType should not be instantiated")
-
 
 def _fs_from_file_path(file_path: str, io: FileIO) -> FileSystem:
     """
@@ -185,7 +181,6 @@ def _fs_from_file_path(file_path: str, io: FileIO) -> FileSystem:
     a modification to use Bodo's changes to PyArrowFileIO in the monkey
     patch.
     """
-
     from pyiceberg.io.pyarrow import PyArrowFileIO
 
     # Bodo Change: Use the parse_location function from BodoPyArrowFileIO
@@ -207,3 +202,16 @@ def _fs_from_file_path(file_path: str, io: FileIO) -> FileSystem:
             raise ValueError(
                 f"Expected PyArrowFileIO or FsspecFileIO, got: {io}"
             ) from e
+
+
+def _format_data_loc(data_loc: str, fs: FileSystem) -> str:
+    """
+    Format the data location to be written to depending on the filesystem.
+    """
+    from pyarrow.fs import AzureFileSystem
+
+    if isinstance(fs, AzureFileSystem) and data_loc.startswith("abfs"):
+        # Azure filesystem only wants the container/path
+        parsed = urlparse(data_loc)
+        return f"{parsed.username}{parsed.path}"
+    return data_loc

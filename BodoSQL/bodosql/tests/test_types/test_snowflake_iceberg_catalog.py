@@ -1,4 +1,5 @@
 import os
+import sys
 from io import StringIO
 
 import numpy as np
@@ -475,6 +476,9 @@ def test_dynamic_scalar_filter_pushdown(memory_leak_check):
             )
 
 
+@pytest.mark.skipif(
+    sys.platform == "win32", reason="Arrow AzureFileSystem not available for Windows"
+)
 def test_azure_basic_read(memory_leak_check):
     """
     Test reading an Iceberg table from Snowflake in SQL with
@@ -512,6 +516,9 @@ def test_azure_basic_read(memory_leak_check):
     )
 
 
+@pytest.mark.skip(
+    "[BSE-4601] Snowflake no-put write temporarily broken. Unskip after Arrow 19 upgrade."
+)
 def test_azure_basic_write(memory_leak_check):
     """
     Test writing an Iceberg table from Snowflake in SQL with

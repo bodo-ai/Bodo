@@ -102,7 +102,7 @@ def launch_jvm() -> JavaGateway:
         gateway_port = pt.cast(
             int,
             launch_gateway(
-                jarpath=full_path,
+                classpath=full_path,
                 java_path=java_path,
                 redirect_stderr=sys.stderr,
                 redirect_stdout=sys.stdout,
@@ -225,6 +225,7 @@ def get_catalog(conn_str: str, catalog_type: str):
     """
     Get the catalog object from the global cache
     """
+    conn_str = conn_str.removeprefix("iceberg+")
     reader_class = get_bodo_iceberg_handler_class()
     if conn_str not in catalog_dict:
         created_core_site = get_core_site_path()

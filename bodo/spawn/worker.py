@@ -37,6 +37,7 @@ from bodo.spawn.utils import (
 )
 from bodo.spawn.worker_state import set_is_worker
 from bodo.utils.typing import BodoWarning
+from bodo.utils.utils import is_distributable_typ
 
 DISTRIBUTED_RETURN_HEAD_SIZE: int = 5
 
@@ -389,12 +390,10 @@ def exec_func_handler(
     caught_exception = None
     res = None
     func = None
+    is_dispatcher = False
     try:
         func = cloudpickle.loads(pickled_func)
-        # ensure that we have a CPUDispatcher to compile and execute code
-        assert isinstance(func, numba.core.registry.CPUDispatcher), (
-            "Unexpected function type"
-        )
+        is_dispatcher = isinstance(func, numba.core.registry.CPUDispatcher)
     except Exception as e:
         logger.error(f"Exception while trying to receive code: {e}")
         # TODO: check that all ranks raise an exception
@@ -440,13 +439,21 @@ def exec_func_handler(
         return
 
     is_distributed = False
-    if func is not None and len(func.signatures) > 0:
+    if is_dispatcher and func is not None and len(func.signatures) > 0:
         # There should only be one signature compiled for the input function
         sig = func.signatures[0]
         assert sig in func.overloads
 
         # Extract return value distribution from metadata
         is_distributed = func.overloads[sig].metadata["is_return_distributed"]
+
+    # TODO(ehsan): handle other types like scalars. The challenge is that scalars may
+    # not be replicated in the non-JIT cases like map_partitions, so we have to define
+    # the semantics (e.g. gather all values across ranks in a list?).
+    if not is_dispatcher:
+        assert is_distributable_typ(bodo.typeof(res))
+        is_distributed = True
+
     debug_worker_msg(logger, f"Function result {is_distributed=}")
 
     is_distributed, res = _gather_res(is_distributed, res)
@@ -467,6 +474,28 @@ def exec_func_handler(
     os.environ = original_env_var
 
 
+class StdoutQueue:
+    """Replacement for stdout/stderr that sends output to the spawner via a ZeroMQ socket."""
+
+    def __init__(self, out_socket, is_stderr):
+        self.out_socket = out_socket
+        self.is_stderr = is_stderr
+        self.closed = False
+
+    def write(self, msg):
+        # TODO(Ehsan): buffer output similar to ipykernel
+        self.out_socket.send_string(f"{int(self.is_stderr)}{msg}")
+
+    def flush(self):
+        if self.is_stderr:
+            sys.__stderr__.flush()
+        else:
+            sys.__stdout__.flush()
+
+    def close(self):
+        self.closed = True
+
+
 def worker_loop(
     comm_world: MPI.Intracomm, spawner_intercomm: MPI.Intercomm, logger: logging.Logger
 ):
@@ -482,6 +511,28 @@ def worker_loop(
             "Spawner and worker 0 must be on the same machine"
         )
 
+    # Send output to spawner manually if we are in Jupyter on Windows since child processes
+    # don't inherit file descriptors from the parent process.
+    out_socket = None
+    if bodo.utils.utils.is_jupyter_on_windows():
+        # Multi-node Jupyter on Windows is not supported yet
+        spawner_hostname = comm_world.bcast(
+            spawner_hostname if bodo.get_rank() == 0 else None, root=0
+        )
+        if spawner_hostname != socket.gethostname():
+            raise bodo.utils.typing.BodoError(
+                "Jupyter is not supported on multi-node Windows clusters yet"
+            )
+        port = spawner_intercomm.bcast(None, 0)
+
+        import zmq
+
+        context = zmq.Context()
+        out_socket = context.socket(zmq.PUSH)
+        out_socket.connect(f"tcp://127.0.0.1:{port}")
+        sys.stdout = StdoutQueue(out_socket, False)
+        sys.stderr = StdoutQueue(out_socket, True)
+
     while True:
         debug_worker_msg(logger, "Waiting for command")
         # TODO Change this to a wait that doesn't spin cycles
@@ -493,6 +544,8 @@ def worker_loop(
             exec_func_handler(comm_world, spawner_intercomm, logger)
         elif command == CommandType.EXIT.value:
             debug_worker_msg(logger, "Exiting...")
+            if out_socket:
+                out_socket.close()
             return
         elif command == CommandType.BROADCAST.value:
             bodo.libs.distributed_api.bcast(None, root=0, comm=spawner_intercomm)
@@ -505,7 +558,8 @@ def worker_loop(
                 comm_world.bcast(uuid.uuid4() if bodo.get_rank() == 0 else None, root=0)
             )
             RESULT_REGISTRY[res_id] = data
-            spawner_intercomm.send(res_id, dest=0)
+            if bodo.get_rank() == 0:
+                spawner_intercomm.send(res_id, dest=0)
             debug_worker_msg(logger, "Scatter done")
         elif command == CommandType.GATHER.value:
             res_id = spawner_intercomm.bcast(None, 0)

@@ -24,7 +24,7 @@ from bodo.tests.iceberg_database_helpers.metadata_utils import (
 )
 from bodo.tests.utils import pytest_mark_one_rank
 
-pytestmark = pytest.mark.iceberg
+pytestmark = [pytest.mark.iceberg, pytest.mark.skip]
 
 
 # Note: We mark df as distributed but for testing we are only

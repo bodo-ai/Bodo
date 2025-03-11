@@ -84,12 +84,13 @@ def get_num_workers():
     Else, fallback to spawning as
     many workers as there are physical cores on this machine."""
     n_pes = 2
-    if n_pes_env := os.environ.get("BODO_NUM_WORKERS"):
-        n_pes = int(n_pes_env)
-    elif universe_size := MPI.COMM_WORLD.Get_attr(MPI.UNIVERSE_SIZE):
-        n_pes = universe_size
-    elif cpu_count := psutil.cpu_count(logical=False):
-        n_pes = cpu_count
+    with no_stdin():
+        if n_pes_env := os.environ.get("BODO_NUM_WORKERS"):
+            n_pes = int(n_pes_env)
+        elif universe_size := MPI.COMM_WORLD.Get_attr(MPI.UNIVERSE_SIZE):
+            n_pes = universe_size
+        elif cpu_count := psutil.cpu_count(logical=False):
+            n_pes = cpu_count
     return n_pes
 
 
@@ -157,6 +158,9 @@ class Spawner:
             self.logger, f"Spawned {n_pes} workers in {(time.monotonic() - t0):0.4f}s"
         )
         self.exec_intercomm_addr = MPI._addressof(self.worker_intercomm)
+
+        # Make sure worker output is displayed in Jupyter notebooks on Windows
+        self._init_win_jupyter()
 
         # A queue of del tasks to send delete command to workers.
         # Necessary since garbage collection can be triggered at any time during
@@ -265,7 +269,11 @@ class Spawner:
         self.worker_intercomm.bcast(propagate_env, bcast_root)
 
     def submit_func_to_workers(
-        self, dispatcher: "SpawnDispatcher", propagate_env, *args, **kwargs
+        self,
+        func_to_execute: "SpawnDispatcher" | pt.Callable,
+        propagate_env,
+        *args,
+        **kwargs,
     ):
         """Send func to be compiled and executed on spawned process"""
         assert not self._is_running, "submit_func_to_workers: already running"
@@ -292,11 +300,11 @@ class Spawner:
 
         # Send arguments and update dispatcher distributed flags for arguments
         args_meta, kwargs_meta = self._send_args_update_dist_flags(
-            dispatcher, args, kwargs
+            func_to_execute, args, kwargs
         )
 
-        # Send dispatcher
-        pickled_func = cloudpickle.dumps(dispatcher)
+        # Send function
+        pickled_func = cloudpickle.dumps(func_to_execute)
         self.worker_intercomm.bcast(pickled_func, root=self.bcast_root)
         debug_msg(self.logger, "submit_func_to_workers - wait for results")
 
@@ -529,7 +537,7 @@ class Spawner:
                 self._send_arg_meta(val, out_val)
 
     def _send_args_update_dist_flags(
-        self, dispatcher: "SpawnDispatcher", args, kwargs
+        self, func_to_execute: "SpawnDispatcher" | pt.Callable, args, kwargs
     ) -> tuple[tuple[ArgMetadata | None, ...], dict[str, ArgMetadata | None]]:
         """Send function arguments from spawner to workers. DataFrame/Series/Index/array
         arguments are sent separately using broadcast or scatter (depending on flags).
@@ -538,12 +546,21 @@ class Spawner:
         compilation on the worker.
 
         Args:
-            dispatcher (SpawnDispatcher): dispatcher to run on workers
+            func_to_execute (SpawnDispatcher | callable): function to run on workers
             args (tuple[Any]): positional arguments
             kwargs (dict[str, Any]): keyword arguments
         """
-        param_names = list(numba.core.utils.pysignature(dispatcher.py_func).parameters)
-        replicated = set(dispatcher.decorator_args.get("replicated", ()))
+        is_dispatcher = isinstance(func_to_execute, SpawnDispatcher)
+        param_names = list(
+            numba.core.utils.pysignature(
+                func_to_execute.py_func if is_dispatcher else func_to_execute
+            ).parameters
+        )
+        replicated = set(
+            func_to_execute.decorator_args.get("replicated", ())
+            if is_dispatcher
+            else ()
+        )
         dist_flags = []
         args_meta = tuple(
             self._get_arg_metadata(
@@ -581,15 +598,94 @@ class Spawner:
         # See bodo/tests/test_series_part2.py::test_series_map_func_cases1
         pickled_args = cloudpickle.dumps((args_to_send, kwargs_to_send))
         self.worker_intercomm.bcast(pickled_args, root=self.bcast_root)
-        dispatcher.decorator_args["distributed_block"] = (
-            dispatcher.decorator_args.get("distributed_block", []) + dist_flags
-        )
+        if is_dispatcher:
+            func_to_execute.decorator_args["distributed_block"] = (
+                func_to_execute.decorator_args.get("distributed_block", []) + dist_flags
+            )
         # Send DataFrame/Series/Index/array arguments (others are already sent)
         for arg, arg_meta in itertools.chain(
             zip(args, args_meta), zip(kwargs.values(), kwargs_meta.values())
         ):
             self._send_arg_meta(arg, arg_meta)
         return args_meta, kwargs_meta
+
+    def _init_win_jupyter(self):
+        """Make sure worker output is displayed in Jupyter notebooks on Windows.
+        Windows child processes don't inherit file descriptors from the parent,
+        so Jupyter's normal output routing doesn't work.
+        This creates a socket using ZMQ to receive output from workers and print it.
+        A separate thread is used to receive messages and print them.
+        Currently only works on single-node Windows setups.
+
+        Some relevant links:
+        https://discourse.jupyter.org/t/jupyterlab-no-longer-allows-ouput-to-be-redirected-to-stdout/11535/2
+        https://github.com/jupyterlab/jupyterlab/issues/9668
+        https://docs.python.org/3/howto/logging-cookbook.html#logging-to-a-single-file-from-multiple-processes
+        https://stackoverflow.com/questions/7714868/multiprocessing-how-can-i-%ca%80%e1%b4%87%ca%9f%c9%aa%e1%b4%80%ca%99%ca%9f%ca%8f-redirect-stdout-from-a-child-process
+        https://stackoverflow.com/questions/23947281/python-multiprocessing-redirect-stdout-of-a-child-process-to-a-tkinter-text
+        """
+
+        # Skip if not in Jupyter or not on Windows
+        if not bodo.utils.utils.is_jupyter_on_windows():
+            self.worker_output_thread = None
+            return
+
+        import errno
+        import threading
+
+        import zmq
+
+        context = zmq.Context()
+        out_socket = context.socket(zmq.PULL)
+        max_attempts = 100
+
+        # Similar to:
+        # https://github.com/ipython/ipykernel/blob/dab3b39e3f1e0258d99b189867d8f2e2d36c976e/ipykernel/kernelapp.py#L252
+        try:
+            win_in_use = errno.WSAEADDRINUSE  # type:ignore[attr-defined]
+        except AttributeError:
+            win_in_use = None
+
+        for attempt in range(max_attempts):
+            try:
+                port = out_socket.bind_to_random_port("tcp://127.0.0.1")
+            except zmq.ZMQError as ze:
+                # Raise if we have any error not related to socket binding
+                if ze.errno != errno.EADDRINUSE and ze.errno != win_in_use:
+                    raise
+                if attempt == max_attempts - 1:
+                    raise
+
+        self.worker_intercomm.bcast(port, self.bcast_root)
+
+        def worker_output_thread_func():
+            """Thread that receives all worker outputs and prints them."""
+
+            # NOTE: we test this without Jupyter so _thread_to_parent_header may not
+            # exist
+            if hasattr(sys.stdout, "_thread_to_parent_header"):
+                # ipykernel redirects the output of threads to the first cell using
+                # _thread_to_parent_header. We need to remove this thread to make sure
+                # prints apprear in the correct cell.
+                # https://github.com/ipython/ipykernel/blob/dab3b39e3f1e0258d99b189867d8f2e2d36c976e/ipykernel/ipkernel.py#L766
+                # https://github.com/ipython/ipykernel/blob/dab3b39e3f1e0258d99b189867d8f2e2d36c976e/ipykernel/iostream.py#L525
+                sys.stdout._thread_to_parent_header.pop(
+                    threading.current_thread().ident, None
+                )
+                sys.stderr._thread_to_parent_header.pop(
+                    threading.current_thread().ident, None
+                )
+
+            while True:
+                message = out_socket.recv_string()
+                is_stderr = message.startswith("1")
+                message = message[1:]
+                print(message, end="", file=sys.stderr if is_stderr else sys.stdout)
+
+        self.worker_output_thread = threading.Thread(
+            target=worker_output_thread_func, daemon=True
+        )
+        self.worker_output_thread.start()
 
     def _run_del_queue(self):
         """Run delete tasks in the queue if no other tasks are running."""
@@ -660,11 +756,13 @@ atexit.register(destroy_spawner)
 
 
 def submit_func_to_workers(
-    dispatcher: "SpawnDispatcher", propagate_env, *args, **kwargs
+    func_to_execute: "SpawnDispatcher" | pt.Callable, propagate_env, *args, **kwargs
 ):
-    """Get the global spawner and submit `func` for execution"""
+    """Get the global spawner and submit `func_to_execute` for execution"""
     spawner = get_spawner()
-    return spawner.submit_func_to_workers(dispatcher, propagate_env, *args, **kwargs)
+    return spawner.submit_func_to_workers(
+        func_to_execute, propagate_env, *args, **kwargs
+    )
 
 
 class SpawnDispatcher:

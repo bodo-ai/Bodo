@@ -2,97 +2,63 @@ from uuid import uuid4
 
 import numpy as np
 import pandas as pd
-import pyarrow.fs as pa_fs
+import pyarrow as pa
 import pytest
-from pyiceberg.catalog.rest import RestCatalog
+from pyiceberg.catalog import Catalog
 
 import bodo
 from bodo.io.iceberg.catalog import conn_str_to_catalog
-from bodo.io.iceberg.common import _fs_from_file_path
 from bodo.tests.utils import (
     _get_dist_arg,
     check_func,
     get_rest_catalog_connection_string,
-    pytest_tabular,
-    temp_env_override,
+    pytest_polaris,
 )
 from bodo.utils.utils import run_rank0
 
-pytestmark = pytest_tabular
+pytestmark = pytest_polaris
 
 
-def test_iceberg_tabular_read(tabular_connection, memory_leak_check):
+def test_iceberg_polaris_read(polaris_connection, memory_leak_check):
     """
-    Test reading an Iceberg table from a Tabular REST catalog.
+    Test reading an Iceberg table from a Polaris REST catalog.
     Checksum is used to verify the data is read correctly.
     Column names are used to verify the schema is read correctly.
     """
-
-    rest_uri, tabular_warehouse, tabular_credential = tabular_connection
+    rest_uri, polaris_warehouse, polaris_credential = polaris_connection
     con_str = get_rest_catalog_connection_string(
-        rest_uri, tabular_warehouse, tabular_credential
+        rest_uri, polaris_warehouse, polaris_credential
     )
-
-    def f():
-        df = pd.read_sql_table(
-            "nyc_taxi_locations",
-            con=con_str,
-            schema="examples",
-        )
-        checksum = df["location_id"].sum()
-        return checksum, len(df), list(df.columns)
-
-    check_func(f, (), py_output=(35245, 265, ["location_id", "borough", "zone_name"]))
-
-
-def test_iceberg_tabular_read_region_detection(tabular_connection, memory_leak_check):
-    """
-    Creates an s3 fs instance and checks that the region is detected correctly.
-    """
-    rest_uri, tabular_warehouse, tabular_credential = tabular_connection
-    con_str = get_rest_catalog_connection_string(
-        rest_uri, tabular_warehouse, tabular_credential
-    )
-    catalog = conn_str_to_catalog(con_str)
-    fs = _fs_from_file_path(tabular_connection, catalog._load_file_io())
-    assert isinstance(fs, pa_fs.S3FileSystem)
-    assert fs.region == "us-east-1"
-
-
-def test_iceberg_tabular_read_credential_refresh(
-    tabular_connection, memory_leak_check, capfd
-):
-    """
-    Test reading an Iceberg table from a Tabular REST catalog. Sets credentials to be refreshed every request and confirms appropriate logs are present.
-    """
-    rest_uri, tabular_warehouse, tabular_credential = tabular_connection
-    with temp_env_override(
+    df = pd.DataFrame(
         {
-            "DEFAULT_ICEBERG_REST_AWS_CREDENTIALS_PROVIDER_TIMEOUT": "0",
-            "DEBUG_ICEBERG_REST_AWS_CREDENTIALS_PROVIDER": "1",
+            "A": [1, 2, 3],
+            "B": ["a", "b", "c"],
+            "C": [1.1, 2.2, 3.3],
+            "D": [True, False, True],
         }
-    ):
-        try:
+    )
+    namespace = "CI"
+    table_name = "read_test"
+    table_id = f"{namespace}.{table_name}"
+    try:
+        py_catalog: Catalog = conn_str_to_catalog(con_str)
+        run_rank0(
+            lambda: py_catalog.create_table(table_id, pa.Schema.from_pandas(df)).append(
+                pa.Table.from_pandas(df)
+            )
+        )()
 
-            @bodo.jit
-            def f():
-                df = pd.read_sql_table(
-                    "nyc_taxi_locations",
-                    con=f"iceberg+{rest_uri.replace('https://', 'REST://')}?warehouse={tabular_warehouse}&credential={tabular_credential}",
-                    schema="examples",
-                )
-                return df
+        def f():
+            df = pd.read_sql_table(
+                table_name,
+                con=con_str,
+                schema=namespace,
+            )
+            return df
 
-            f()
-        except Exception:
-            out, err = capfd.readouterr()
-            with capfd.disabled():
-                print(f"STDOUT:\n{out}")
-                print(f"STDERR:\n{err}")
-            raise
-
-        out, err = capfd.readouterr()
-        assert "[DEBUG] Reloading AWS Credentials" in err
+        check_func(f, (), py_output=df)
+    finally:
+        run_rank0(lambda: py_catalog.purge_table(table_id))()
 
 
 @pytest.mark.parametrize(
@@ -109,22 +75,22 @@ def test_iceberg_tabular_read_credential_refresh(
         ),
     ],
 )
-def test_iceberg_tabular_write_basic(
-    df, tabular_connection, memory_leak_check, rank_skew
+def test_iceberg_polaris_write_basic(
+    df, polaris_connection, memory_leak_check, rank_skew
 ):
     """
-    Test writing to an Iceberg table in a Tabular REST catalog.
+    Test writing to an Iceberg table in a Polaris REST catalog.
     Checksum is used to verify the data is written correctly.
     """
-    rest_uri, tabular_warehouse, tabular_credential = tabular_connection
+    rest_uri, polaris_warehouse, polaris_credential = polaris_connection
     table_uuid = run_rank0(uuid4)()
     table_name = f"bodo_write_test_{table_uuid}"
 
+    con_str = get_rest_catalog_connection_string(
+        rest_uri, polaris_warehouse, polaris_credential
+    )
     write_complete = False
     try:
-        con_str = get_rest_catalog_connection_string(
-            rest_uri, tabular_warehouse, tabular_credential
-        )
 
         def f(df, table_name):
             df.to_sql(
@@ -136,7 +102,7 @@ def test_iceberg_tabular_write_basic(
             )
 
         dist_df = _get_dist_arg(df)
-        if rank_skew and bodo.get_rank != 0:
+        if rank_skew and bodo.get_rank() != 0:
             dist_df = dist_df[:0]
         bodo.jit(f, distributed=["df"])(dist_df, table_name)
         write_complete = True
@@ -158,9 +124,7 @@ def test_iceberg_tabular_write_basic(
     finally:
         try:
             run_rank0(
-                lambda: RestCatalog("rest_catalog", uri=rest_uri).purge_table(
-                    f"CI.{table_name}"
-                )
+                lambda: conn_str_to_catalog(con_str).purge_table(f"CI.{table_name}")
             )()
         except Exception:
             assert not write_complete, (

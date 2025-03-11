@@ -4,7 +4,7 @@ This page provides tips on measuring performance of Bodo programs. It
 is important to keep the following in mind when measuring program run
 time:
 
-1.  Every program has some overhead, so large data sets may be
+1.  Every program has some overhead, so large datasets may be
     necessary for useful measurements.
 2.  Performance can vary from one run to another. Several measurements
     are always needed.

@@ -782,7 +782,7 @@ class IcebergParquetReader : public ArrowReader {
         this->file_list = PyObject_GetAttrString(ds, "file_list");
         PyObject* py_snapshot_id = PyObject_GetAttrString(ds, "snapshot_id");
         // The snapshot Id is just an integer so store in native code.
-        this->snapshot_id = PyLong_AsLong(py_snapshot_id);
+        this->snapshot_id = PyLong_AsLongLong(py_snapshot_id);
         Py_DECREF(py_snapshot_id);
         // Returns a new reference.
         this->schema_groups_py = PyObject_GetAttrString(ds, "schema_groups");
@@ -1256,7 +1256,7 @@ class IcebergParquetReader : public ArrowReader {
         // offset for the first batch.
         time_pt start = start_timer();
         PyObject* datasets_updated_offset_tup = PyObject_CallMethod(
-            iceberg_mod, "get_pyarrow_datasets", "OOOOdiOOlO", fpaths_py,
+            iceberg_mod, "get_pyarrow_datasets", "OOOOdiOOLO", fpaths_py,
             file_nrows_to_read_py, file_schema_group_idxs_py,
             this->schema_groups_py, this->avg_num_pieces, int(this->parallel),
             this->filesystem, str_as_dict_cols_py, this->start_row_first_piece,
@@ -1330,7 +1330,7 @@ class IcebergParquetReader : public ArrowReader {
         }
 
         this->rows_to_skip =
-            PyLong_AsLong(PyTuple_GetItem(datasets_updated_offset_tup, 3));
+            PyLong_AsLongLong(PyTuple_GetItem(datasets_updated_offset_tup, 3));
 
         Py_DECREF(iceberg_mod);
         Py_DECREF(fpaths_py);
