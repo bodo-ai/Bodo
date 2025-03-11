@@ -211,6 +211,10 @@ class SingleIndexType(ABC):
     def numpy_type_name(self):
         raise NotImplementedError
 
+    @property
+    def nlevels(self):
+        return 1
+
 
 # -------------------------  DatetimeIndex ------------------------------
 

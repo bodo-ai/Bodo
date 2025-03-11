@@ -2257,11 +2257,11 @@ def overload_index_to_array_list(I):
     from bodo.hiframes.pd_multi_index_ext import MultiIndexType
 
     if isinstance(I, MultiIndexType):
-        return lambda I: list(
-            bodo.hiframes.pd_index_ext.get_index_data(I)
+        return lambda I: bodo.hiframes.pd_index_ext.get_index_data(
+            I
         )  # pragma: no cover
 
-    return lambda I: [bodo.utils.conversion.index_to_array(I)]  # pragma: no cover
+    return lambda I: (bodo.utils.conversion.index_to_array(I),)  # pragma: no cover
 
 
 def false_if_none(val):  # pragma: no cover

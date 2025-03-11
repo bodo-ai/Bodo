@@ -3833,9 +3833,14 @@ def to_parquet_overload(
         if is_overload_true(index) or (
             is_overload_none(index) and write_non_rangeindex
         ):
+            func_text += "    index_arr_list = index_to_array_list(df.index)\n"
+            func_text += "    index_info_list = []\n"
+            for i in range(df.index.nlevels):
+                func_text += (
+                    f"    index_info_list.append(array_to_info(index_arr_list[{i}]))\n"
+                )
             func_text += (
-                "    append_arr_info_list_to_cpp_table(table,\n"
-                "        [array_to_info(arr) for arr in index_to_array_list(df.index)])\n"
+                "    append_arr_info_list_to_cpp_table(table, index_info_list)\n"
             )
         func_text += (
             # Generate Pandas metadata string to store in the Parquet schema.

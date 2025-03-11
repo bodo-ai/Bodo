@@ -1083,16 +1083,17 @@ def test_to_pq_multiIdx(check_write_func, memory_leak_check):
     arrays = [
         ["bar", "bar", "baz", "baz", "foo", "foo", "qux", "qux"],
         ["one", "two", "one", "two", "one", "two", "one", "two"],
+        [1, 2, 2, 1] * 2,
     ]
     tuples = list(zip(*arrays))
-    idx = pd.MultiIndex.from_tuples(tuples, names=["first", "second"])
+    idx = pd.MultiIndex.from_tuples(tuples, names=["first", "second", "third"])
     df = pd.DataFrame(np.random.randn(8, 2), index=idx, columns=["A", "B"])
 
     check_write_func(
         lambda df, fname: df.to_parquet(fname),
         df,
         "multi_idx_parquet",
-        check_index=["first", "second"],
+        check_index=["first", "second", "third"],
     )
 
 
@@ -1101,16 +1102,17 @@ def test_to_pq_multiIdx_no_name(check_write_func, memory_leak_check):
     arrays = [
         ["bar", "bar", "baz", "baz", "foo", "foo", "qux", "qux"],
         ["one", "two", "one", "two", "one", "two", "one", "two"],
+        [1, 2, 2, 1] * 2,
     ]
     tuples = list(zip(*arrays))
-    idx = pd.MultiIndex.from_tuples(tuples, names=["first", None])
+    idx = pd.MultiIndex.from_tuples(tuples, names=[None, None, "nums"])
     df = pd.DataFrame(np.random.randn(8, 2), index=idx, columns=["A", "B"])
 
     check_write_func(
         lambda df, fname: df.to_parquet(fname),
         df,
         "multi_idx_parquet_no_name",
-        check_index=["first", "__index_level_1__"],
+        check_index=["__index_level_0__", "__index_level_1__", "nums"],
     )
 
 
