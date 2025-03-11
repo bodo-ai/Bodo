@@ -337,6 +337,7 @@ def gen_pandas_parquet_metadata_template(
                 zip(index_type.names_typ, index_type.array_types)
             ):
                 name_placeholder = None if name_type == types.none else f"{{i{idx}}}"
+                # Parquet doesn't support non-string index names
                 field_name_placeholder = (
                     f"__index_level_{idx}__"
                     if name_type == types.none
