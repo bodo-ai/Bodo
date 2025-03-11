@@ -1,0 +1,23 @@
+# This is a template configuration file for daft-launcher with AWS provider
+[setup]
+name = "test-daft"
+requires = "=0.0.1"
+python-version = "3.12.9"
+ray-version = "2.43.0"
+
+# AWS-specific configuration
+[setup.provisioned]
+region = "us-west-2"
+number-of-workers = 4
+ssh-user = "ubuntu"
+ssh-private-key = "TODO: FILL ME"
+instance-type = "r6i.16xlarge"
+image-id = "ami-04dd23e62ed049936"
+iam-instance-profile-name = "TODO: FILL ME" # Optional
+dependencies = []                                     # Optional additional Python packages to install
+run = []                                              # Optional commands to run during cluster-node initialization
+
+[[job]]
+name = "bench"
+command = "python nyc_precipitation.py"
+working-dir = "TODO: FILL ME"

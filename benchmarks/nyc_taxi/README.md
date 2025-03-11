@@ -116,6 +116,14 @@ cat ./emr-logs/steps/*/stdout
 ```
 6. Finally, cleanup resources: `terraform destroy` and type `yes` when prompted.
 
+### Daft
+
+1. Install daft, daft-cli, and other deps: `pip install "getdaft[aws,ray]" daft-cli`.
+2. cd into daft directory and launch cluster using daft-cli in [provisioned mode](https://www.getdaft.io/projects/docs/en/stable/distributed/#provisioned-mode), which will launch a ray cluster using your AWS account: `daft provisioned up`.
+3. Submit the benchmark as a job: `daft job submit bench`.
+4. Once the job is complete, you can view the logs with `daft job logs bench`.
+5. To cleanup resources, run `daft provisioned down`.
+
 ## Local Benchmark
 
 You can start to see the benefits of using Bodo from your laptop by running the notebooks found in [`./nyc_taxi/notebooks`](./nyc_taxi/notebooks) which include a smaller version of the NYC Taxi Monthly Trips with Precipitation benchmark. To set up, install the required packages using pip in a clean environment that includes Python 3.12:
