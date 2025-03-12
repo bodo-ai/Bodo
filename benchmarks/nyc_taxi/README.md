@@ -120,10 +120,10 @@ cat ./emr-logs/steps/*/stdout
 
 1. Before running the script, you will need to make sure you have created the following roles in your AWS IAM console
     * Role with S3FullAccess permissions to assign to **worker** nodes.
-    * Role with S3FullAccess + EC2FullAccess (required by Ray's autoscaler) in addition a policy that allows passing IAM roles to other nodes (i.e. `iam:PassRole` + `iamGetRole` on the role created above should be sufficient)
+    * Role with S3FullAccess + EC2FullAccess (required by Ray's autoscaler) in addition a policy that allows passing IAM roles to other nodes (i.e. `iam:PassRole` + `iam:GetRole` on the role created above should be sufficient as described [here](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_use_passrole.html)).
 
 2. Install daft, daft-cli, and other deps: `pip install "getdaft[aws,ray]" daft-cli`.
-3. Run the script, this will run the benchmark and write the output to `s3://test-daft/full_result.pq`.
+3. Run the script `./run_daft.sh`, this will create a ray cluster, run the benchmark and write the output to `s3://test-daft/full_result.pq` (if that bucket does not exist for you, you can create one with `aws s3 mb test-daft`).
 
 ## Local Benchmark
 
