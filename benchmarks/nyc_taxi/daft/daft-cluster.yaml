@@ -177,7 +177,7 @@ setup_commands:
     # that has the "nightly" (e.g. "rayproject/ray-ml:nightly-gpu") or uncomment the following line:
     # - pip install -U "ray[default] @ https://s3-us-west-2.amazonaws.com/ray-wheels/latest/ray-3.0.0.dev0-cp37-cp37m-manylinux2014_x86_64.whl"
     - conda create -n "bench" -c conda-forge "ray-default">=2.1.0,!=2.5.0 -y
-    - conda activate bench && pip install -U fsspec>=2022.11.0 s3fs boto3 pyopenssl
+    - conda activate bench && pip install -U fsspec>=2022.11.0 s3fs boto3 pyopenssl pandas "getdaft[ray,aws]"
     - echo "conda activate bench" >> ~/.bashrc
     - echo 'conda list'
 
