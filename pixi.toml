@@ -93,7 +93,7 @@ botocore = "*"
 s3fs = ">=2022.1"
 adlfs = ">=2022.1"
 gcsfs = ">=2022.1"
-pyiceberg = ">=0.8,<0.9"
+pyiceberg = ">=0.9,<0.10"
 mypy-boto3-glue = "*"  # Required for PyIceberg Glue Catalog
 huggingface_hub = "*"
 zstandard = "*"

@@ -362,10 +362,19 @@ class SnowflakeCatalog(MetastoreCatalog):
         }
 
     def list_views(self, namespace: str | Identifier) -> list[Identifier]:
-        raise NotImplementedError
+        raise NotImplementedError(
+            "Views are not supported for Snowflake-managed Iceberg tables"
+        )
 
     def drop_view(self, identifier: str | Identifier) -> None:
-        raise NotImplementedError
+        raise NotImplementedError(
+            "Views are not supported for Snowflake-managed Iceberg tables"
+        )
+
+    def view_exists(self, identifier: str | Identifier) -> bool:
+        raise NotImplementedError(
+            "Views are not supported for Snowflake-managed Iceberg tables"
+        )
 
     def prefetch_metadata_paths(self, table_ids: pt.Sequence[str | Identifier]) -> None:
         """
