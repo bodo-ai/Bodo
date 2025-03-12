@@ -3,6 +3,7 @@
 import time
 
 import daft
+import ray
 from daft import col
 
 
@@ -18,7 +19,9 @@ def get_monthly_travels_weather(weather_dataset_path, hvfhv_dataset_path):
     )
     hvfhv_dataset = daft.read_parquet(hvfhv_dataset_path)
 
-    # datetime manipulation
+    hvfhv_dataset.explain(show_all=True)
+
+    # parse dates
     central_park_weather_observations = central_park_weather_observations.with_column(
         "date",
         central_park_weather_observations["date"].dt.date(),
@@ -32,15 +35,15 @@ def get_monthly_travels_weather(weather_dataset_path, hvfhv_dataset_path):
         }
     )
 
-    # combine NYC taxi dataset with weather observations
+    # merge with weather observations
     monthly_trips_weather = hvfhv_dataset.join(
         central_park_weather_observations, on="date", how="inner"
     )
-
     monthly_trips_weather = monthly_trips_weather.with_column(
         "date_with_precipitation", col("precipitation") > 0.1
     )
 
+    # place rides in bucket determined by hour of the day
     def get_time_bucket(t):
         bucket = "other"
         if t in (8, 9, 10):
@@ -58,6 +61,7 @@ def get_monthly_travels_weather(weather_dataset_path, hvfhv_dataset_path):
         col("hour").apply(get_time_bucket, return_dtype=daft.DataType.string()),
     )
 
+    # get total trips and average distance for all trips
     monthly_trips_weather = monthly_trips_weather.groupby(
         [
             "PULocationID",
@@ -87,15 +91,29 @@ def get_monthly_travels_weather(weather_dataset_path, hvfhv_dataset_path):
         },
     )
 
-    monthly_trips_weather.write_parquet("result.pq")
+    # write output to S3
+    monthly_trips_weather.write_parquet(
+        "s3://test-daft/full_result.pq", write_mode="overwrite"
+    )
 
     end = time.time()
     print("Total E2E time:", (end - start))
 
+    monthly_trips_weather = monthly_trips_weather.collect()
+    print(monthly_trips_weather.show())
+    print(monthly_trips_weather.to_pandas())
+
     return monthly_trips_weather
 
 
-if __name__ == "__main__":
+def main():
+    ray.init(address="auto")
+    daft.context.set_runner_ray()
+
     weather_dataset = "s3://bodo-example-data/nyc-taxi/central_park_weather.csv"
-    hvfhv_dataset = "s3://bodo-example-data/nyc-taxi/fhvhv_tripdata/"
+    hvfhv_dataset = "s3://bodo-example-data/nyc-taxi/fhvhv_tripdata/**"
     get_monthly_travels_weather(weather_dataset, hvfhv_dataset)
+
+
+if __name__ == "__main__":
+    main()

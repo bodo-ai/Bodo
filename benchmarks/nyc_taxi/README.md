@@ -118,11 +118,12 @@ cat ./emr-logs/steps/*/stdout
 
 ### Daft
 
-1. Install daft, daft-cli, and other deps: `pip install "getdaft[aws,ray]" daft-cli`.
-2. cd into daft directory and launch cluster using daft-cli in [provisioned mode](https://www.getdaft.io/projects/docs/en/stable/distributed/#provisioned-mode), which will launch a ray cluster using your AWS account: `daft provisioned up`.
-3. Submit the benchmark as a job: `daft job submit bench`.
-4. Once the job is complete, you can view the logs with `daft job logs bench`.
-5. To cleanup resources, run `daft provisioned down`.
+1. Before running the script, you will need to make sure you have created the following roles in your AWS IAM console
+    * Role with S3FullAccess permissions to assign to **worker** nodes.
+    * Role with S3FullAccess + EC2FullAccess (required by Ray's autoscaler) in addition a policy that allows passing IAM roles to other nodes (i.e. `iam:PassRole` + `iamGetRole` on the role created above should be sufficient)
+
+2. Install daft, daft-cli, and other deps: `pip install "getdaft[aws,ray]" daft-cli`.
+3. Run the script, this will run the benchmark and write the output to `s3://test-daft/full_result.pq`.
 
 ## Local Benchmark
 
