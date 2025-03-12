@@ -107,6 +107,9 @@ ll.add_symbol("info_to_nullable_array", array_ext.info_to_nullable_array)
 ll.add_symbol("info_to_interval_array", array_ext.info_to_interval_array)
 ll.add_symbol("info_to_timestamptz_array", array_ext.info_to_timestamptz_array)
 ll.add_symbol("arr_info_list_to_table", array_ext.arr_info_list_to_table)
+ll.add_symbol(
+    "append_arr_info_list_to_cpp_table", array_ext.append_arr_info_list_to_cpp_table
+)
 ll.add_symbol("info_from_table", array_ext.info_from_table)
 ll.add_symbol("delete_info", array_ext.delete_info)
 ll.add_symbol(
@@ -1964,6 +1967,35 @@ def array_from_cpp_table(typingctx, table_t, ind_t, array_type_t):
     """
     arr_type = unwrap_typeref(array_type_t)
     return arr_type(table_t, ind_t, array_type_t), array_from_cpp_table_codegen
+
+
+def append_arr_info_list_to_cpp_table_codegen(context, builder, sig, args):
+    """
+    Codegen for append_arr_info_list_to_cpp_table. This isn't a closure so it can be
+    called from other intrinsics.
+    """
+    (table, info_list) = args
+    inst = numba.cpython.listobj.ListInstance(context, builder, sig.args[1], info_list)
+    fnty = lir.FunctionType(
+        lir.VoidType(),
+        [
+            lir.IntType(8).as_pointer(),
+            lir.IntType(8).as_pointer().as_pointer(),
+            lir.IntType(64),
+        ],
+    )
+    fn_tp = cgutils.get_or_insert_function(
+        builder.module, fnty, name="append_arr_info_list_to_cpp_table"
+    )
+    return builder.call(fn_tp, [table, inst.data, inst.size])
+
+
+@intrinsic
+def append_arr_info_list_to_cpp_table(typingctx, table_t, list_arr_info_typ=None):
+    assert list_arr_info_typ == types.List(array_info_type)
+    return types.void(
+        table_type, list_arr_info_typ
+    ), append_arr_info_list_to_cpp_table_codegen
 
 
 @intrinsic
