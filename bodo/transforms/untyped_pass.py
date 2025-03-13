@@ -2720,7 +2720,6 @@ class UntypedPass:
                 f"    __col_name_meta_value_pq_read\n"
                 f"  )\n"
             )
-            print(func_text)
             loc_vars = {}
             exec(func_text, {}, loc_vars)
             _init_df = loc_vars["_init_df"]

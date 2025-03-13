@@ -959,7 +959,6 @@ def _gen_pq_reader_py(
     func_text += "    delete_table(out_table)\n"
     func_text += "    ev.finalize()\n"
     func_text += "    return (total_rows, T, index_arr)\n"
-    print(func_text)
     loc_vars = {}
     glbs = {
         f"py_table_type_{call_id}": py_table_type,
@@ -967,7 +966,7 @@ def _gen_pq_reader_py(
         f"selected_cols_arr_{call_id}": np.array(selected_cols, np.int32),
         f"nullable_cols_arr_{call_id}": np.array(nullable_cols, np.int32),
         f"pyarrow_schema_{call_id}": pyarrow_schema_no_meta,
-        "index_arr_types": list(index_arr_inds.values()),
+        "index_arr_types": tuple(index_arr_inds.values()),
         "cpp_table_to_py_table": cpp_table_to_py_table,
         "array_from_cpp_table": array_from_cpp_table,
         "delete_table": delete_table,

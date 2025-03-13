@@ -529,9 +529,10 @@ def test_pq_multi_idx(memory_leak_check):
             arrays = [
                 ["bar", "bar", "baz", "baz", "foo", "foo", "qux", "qux"],
                 ["one", "two", "one", "two", "one", "two", "one", "two"],
+                [1, 2, 2, 1] * 2,
             ]
             tuples = list(zip(*arrays))
-            idx = pd.MultiIndex.from_tuples(tuples, names=["first", None])
+            idx = pd.MultiIndex.from_tuples(tuples, names=["first", None, "count"])
             df = pd.DataFrame(np.random.randn(8, 2), index=idx, columns=["A", "B"])
             df.to_parquet("multi_idx_parquet.pq")
         bodo.barrier()
