@@ -99,10 +99,6 @@ def get_monthly_travels_weather(weather_dataset_path, hvfhv_dataset_path):
     end = time.time()
     print("Total E2E time:", (end - start))
 
-    monthly_trips_weather = monthly_trips_weather.collect()
-    print(monthly_trips_weather.show())
-    print(monthly_trips_weather.to_pandas())
-
     return monthly_trips_weather
 
 
@@ -112,7 +108,11 @@ def main():
 
     weather_dataset = "s3://bodo-example-data/nyc-taxi/central_park_weather.csv"
     hvfhv_dataset = "s3://bodo-example-data/nyc-taxi/fhvhv_tripdata/**"
-    get_monthly_travels_weather(weather_dataset, hvfhv_dataset)
+    monthly_trips_weather = get_monthly_travels_weather(weather_dataset, hvfhv_dataset)
+
+    monthly_trips_weather = monthly_trips_weather.collect()
+    print(monthly_trips_weather.show())
+    print(monthly_trips_weather.to_pandas())
 
 
 if __name__ == "__main__":
