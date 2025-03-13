@@ -113,11 +113,11 @@ def impl(conn_str):  # Codegen change: add conn_str
     """
     # Codegen change: Add print and overall timer
     print("Started executing query...")
-    t0 = time.time()
+    t0 = time.perf_counter()
     __bodo_is_last_streaming_output_1 = False
     _iter_1 = 0
     _temp4 = 0.0
-    _temp5 = time.time()
+    _temp5 = time.perf_counter()
     state_1 = pd.read_sql(
         "ORDERS",
         conn_str,  # Codegen change: use conn_str
@@ -127,17 +127,17 @@ def impl(conn_str):  # Codegen change: add conn_str
     )
     # Codegen change: timer for build step
     build_time = 0.0
-    _temp7 = time.time()
+    _temp7 = time.perf_counter()
     _temp8 = _temp7 - _temp5
     _temp4 = _temp4 + _temp8
     _temp12 = 0.0
-    _temp13 = time.time()
+    _temp13 = time.perf_counter()
     state_2 = bodo.libs.streaming.dict_encoding.init_dict_encoding_state()
-    _temp15 = time.time()
+    _temp15 = time.perf_counter()
     _temp16 = _temp15 - _temp13
     _temp12 = _temp12 + _temp16
     _temp1 = 0.0
-    _temp2 = time.time()
+    _temp2 = time.perf_counter()
     # Codegen change: Use global flags for build-outer and probe-outer
     state_3 = bodo.libs.streaming.join.init_join_state(
         -1,
@@ -151,32 +151,32 @@ def impl(conn_str):  # Codegen change: add conn_str
         build_interval_cols,
         -1,
     )
-    _temp20 = time.time()
+    _temp20 = time.perf_counter()
     _temp21 = _temp20 - _temp2
     _temp1 = _temp1 + _temp21
     _temp22 = False
     while not (_temp22):
-        _temp6 = time.time()
+        _temp6 = time.perf_counter()
         (
             T1,
             __bodo_is_last_streaming_output_1,
         ) = bodo.io.arrow_reader.read_arrow_next(state_1, True)
-        _temp9 = time.time()
+        _temp9 = time.perf_counter()
         _temp10 = _temp9 - _temp6
         _temp4 = _temp4 + _temp10
-        _temp14 = time.time()
+        _temp14 = time.perf_counter()
         T2 = bodo.hiframes.table.table_subset(T1, global_1, False)
-        _temp17 = time.time()
+        _temp17 = time.perf_counter()
         _temp18 = _temp17 - _temp14
         _temp12 = _temp12 + _temp18
-        _temp3 = time.time()
+        _temp3 = time.perf_counter()
         # Codegen change: Track build time
-        t_build = time.time()
+        t_build = time.perf_counter()
         _temp22, _ = bodo.libs.streaming.join.join_build_consume_batch(
             state_3, T2, __bodo_is_last_streaming_output_1
         )
-        build_time += time.time() - t_build
-        _temp23 = time.time()
+        build_time += time.perf_counter() - t_build
+        _temp23 = time.perf_counter()
         _temp24 = _temp23 - _temp3
         _temp1 = _temp1 + _temp24
         _iter_1 = _iter_1 + 1
@@ -203,7 +203,7 @@ def impl(conn_str):  # Codegen change: add conn_str
     __bodo_is_last_streaming_output_2 = False
     _iter_2 = 0
     _temp25 = 0.0
-    _temp26 = time.time()
+    _temp26 = time.perf_counter()
     state_4 = pd.read_sql(
         "LINEITEM",
         conn_str,  # Codegen change: use conn_str
@@ -211,20 +211,20 @@ def impl(conn_str):  # Codegen change: add conn_str
         _bodo_chunksize=4096,
         _bodo_read_as_table=True,
     )
-    _temp28 = time.time()
+    _temp28 = time.perf_counter()
     _temp29 = _temp28 - _temp26
     _temp25 = _temp25 + _temp29
     _temp33 = 0.0
-    _temp34 = time.time()
+    _temp34 = time.perf_counter()
     state_5 = bodo.libs.streaming.dict_encoding.init_dict_encoding_state()
-    _temp36 = time.time()
+    _temp36 = time.perf_counter()
     _temp37 = _temp36 - _temp34
     _temp33 = _temp33 + _temp37
     _temp41 = False
     _temp45 = 0.0
-    _temp46 = time.time()
+    _temp46 = time.perf_counter()
     state_6 = bodo.libs.streaming.dict_encoding.init_dict_encoding_state()
-    _temp48 = time.time()
+    _temp48 = time.perf_counter()
     _temp49 = _temp48 - _temp46
     _temp45 = _temp45 + _temp49
     # Codegen change: timer for probe step
@@ -232,34 +232,34 @@ def impl(conn_str):  # Codegen change: add conn_str
     __bodo_streaming_batches_list_1 = []
     input_request = True
     while not (_temp41):
-        _temp27 = time.time()
+        _temp27 = time.perf_counter()
         (
             T3,
             __bodo_is_last_streaming_output_2,
         ) = bodo.io.arrow_reader.read_arrow_next(state_4, input_request)
-        _temp30 = time.time()
+        _temp30 = time.perf_counter()
         _temp31 = _temp30 - _temp27
         _temp25 = _temp25 + _temp31
-        _temp35 = time.time()
+        _temp35 = time.perf_counter()
         T4 = bodo.hiframes.table.table_subset(T3, global_5, False)
-        _temp38 = time.time()
+        _temp38 = time.perf_counter()
         _temp39 = _temp38 - _temp35
         _temp33 = _temp33 + _temp39
-        _temp3 = time.time()
+        _temp3 = time.perf_counter()
         # Codegen change: track probe time
-        t_probe = time.time()
+        t_probe = time.perf_counter()
         (T5, _temp41, input_request) = (
             bodo.libs.streaming.join.join_probe_consume_batch(
                 state_3, T4, __bodo_is_last_streaming_output_2, True
             )
         )
-        probe_time += time.time() - t_probe
-        _temp42 = time.time()
+        probe_time += time.perf_counter() - t_probe
+        _temp42 = time.perf_counter()
         _temp43 = _temp42 - _temp3
         _temp1 = _temp1 + _temp43
-        _temp47 = time.time()
+        _temp47 = time.perf_counter()
         T6 = bodo.hiframes.table.table_subset(T5, global_6, False)
-        _temp50 = time.time()
+        _temp50 = time.perf_counter()
         _temp51 = _temp50 - _temp47
         _temp45 = _temp45 + _temp51
         __bodo_streaming_batches_list_1.append(T6)
@@ -295,15 +295,15 @@ def impl(conn_str):  # Codegen change: add conn_str
         "RELNODE_TIMING", f"""Execution time for RelNode {_temp52}: {_temp45}"""
     )
     # Codegen change: track concat time
-    concat_time_start = time.time()
+    concat_time_start = time.perf_counter()
     T7 = bodo.utils.table_utils.concat_tables(__bodo_streaming_batches_list_1)
     index_1 = bodo.hiframes.pd_index_ext.init_range_index(0, len(T7), 1, None)
     df1 = bodo.hiframes.pd_dataframe_ext.init_dataframe((T7,), index_1, global_7)
     bodo.user_logging.log_message(
-        "RELNODE_TIMING", f"Concat Time: {time.time() - concat_time_start}"
+        "RELNODE_TIMING", f"Concat Time: {time.perf_counter() - concat_time_start}"
     )
     # Codegen change: print overall execution time
-    print(f"Finished executing the query. It took {time.time() - t0} seconds.")
+    print(f"Finished executing the query. It took {time.perf_counter() - t0} seconds.")
     print("Output shape: ", df1.shape)
     return df1
 

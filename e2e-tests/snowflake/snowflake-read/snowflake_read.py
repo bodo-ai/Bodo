@@ -73,37 +73,37 @@ def main(sf_read_conn, sf_write_conn, table_name):
     """
     query = "SELECT l_shipmode, l_shipinstruct, l_comment FROM LINEITEM ORDER BY L_ORDERKEY, L_PARTKEY, L_SUPPKEY"
     # Load in the data
-    t0 = time.time()
+    t0 = time.perf_counter()
     print("Starting read...")
     df = pd.read_sql(
         query, sf_read_conn, _bodo_read_as_dict=["l_shipmode", "l_shipinstruct"]
     )
     bodo.barrier()
     print("Length of input dataframe: ", len(df))
-    print("Read time: ", time.time() - t0)
+    print("Read time: ", time.perf_counter() - t0)
 
     # Perform simple series.str operation on string columns
-    t1 = time.time()
+    t1 = time.perf_counter()
     df["a_count"] = df["l_shipinstruct"].str.count("A")
     df["paded_mode"] = df["l_shipmode"].str.ljust(10)
     bodo.barrier()
-    print("string operations(count & ljust) time: ", time.time() - t1)
+    print("string operations(count & ljust) time: ", time.perf_counter() - t1)
 
     # Perform simple transformations
     # the transformations bear little meaning, and
     # they serve only as a means to demonstrate our ability
     # to carry out operations on dictionary-encoded arrays.
-    t2 = time.time()
+    t2 = time.perf_counter()
     print("Starting groupby transformation...")
     gb = df.groupby(["l_shipmode"])
     bodo.barrier()
-    print("Groupby time: ", time.time() - t2)
+    print("Groupby time: ", time.perf_counter() - t2)
     print("Number of groups: ", gb.size())
 
-    t3 = time.time()
+    t3 = time.perf_counter()
     agg_strs = gb["l_shipinstruct"].agg(["min", "nunique"])
     bodo.barrier()
-    print("Agg time: ", time.time() - t3)
+    print("Agg time: ", time.perf_counter() - t3)
     print("Number of unique l_shipinstruct for each group, sorted from high to low:")
     print("nunique:\n", agg_strs["nunique"])
 
@@ -112,11 +112,11 @@ def main(sf_read_conn, sf_write_conn, table_name):
     agg_counts = gb["a_count"].sum()
 
     # Write the transformed dataframe to a Snowflake table.
-    t4 = time.time()
+    t4 = time.perf_counter()
     print("Starting Snowflake write...")
     df.to_sql(table_name, sf_write_conn, if_exists="replace", index=False)
     bodo.barrier()
-    print("Snowflake Write time: ", time.time() - t4)
+    print("Snowflake Write time: ", time.perf_counter() - t4)
 
     return agg_counts
 
@@ -142,7 +142,7 @@ if __name__ == "__main__":
     logger = create_string_io_logger(stream)
     with set_logging_stream(logger, 1):
         # Perform the e2e test
-        t0 = time.time()
+        t0 = time.perf_counter()
         agg_counts = main(sf_read_conn, sf_write_conn, table_name)
         # Print the stream for debugging purposes
         print(stream.getvalue())
@@ -160,7 +160,7 @@ if __name__ == "__main__":
     # the get length and drop commands are done after all the writes. This is
     # technically not required since the main function
     # has barriers, but still good to have.
-    print("Total time: ", time.time() - t0, " s")
+    print("Total time: ", time.perf_counter() - t0, " s")
 
     # Compare our output to the desired output
     assert sorted_a_count == desired_out, (
