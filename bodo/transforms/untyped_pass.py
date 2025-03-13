@@ -2652,9 +2652,8 @@ class UntypedPass:
         (
             columns,
             data_arrs,
-            index_col,
+            index_cols,
             nodes,
-            _,
             _,
         ) = self.pq_handler.gen_parquet_read(
             fname,
@@ -2670,41 +2669,58 @@ class UntypedPass:
         )
         n_cols = len(columns)
 
-        if chunksize is not None and use_index and index_col is not None:
+        if chunksize is not None and use_index and index_cols:
             raise BodoError(
                 "pd.read_parquet(): Bodo currently does not support batched reads "
                 "of Parquet files with an index column"
             )
 
-        if not use_index or index_col is None:
+        if not use_index or len(index_cols) == 0:
             assert n_cols > 0
-            index_arg = (
+            agg_index_arg = [
                 "bodo.hiframes.pd_index_ext.init_range_index(0, len(T), 1, None)"
-            )
-
-        elif isinstance(index_col, dict):
-            if index_col["name"] is None:
-                index_col_name = None
-                index_col_name_str = None
+            ]
+        elif len(index_cols) == 1:
+            index_col = index_cols[0]
+            if isinstance(index_col, dict):
+                if index_col["name"] is None:
+                    index_col_name = None
+                    index_col_name_str = None
+                else:
+                    index_col_name = index_col["name"]
+                    index_col_name_str = f"'{index_col_name}'"
+                # ignore range index information in pandas metadata
+                agg_index_arg = f"bodo.hiframes.pd_index_ext.init_range_index(0, len(T), 1, {index_col_name_str})"
             else:
-                index_col_name = index_col["name"]
-                index_col_name_str = f"'{index_col_name}'"
-            # ignore range index information in pandas metadata
-            index_arg = f"bodo.hiframes.pd_index_ext.init_range_index(0, len(T), 1, {index_col_name_str})"
+                # if the index_col is __index_level_0__, it means it has no name.
+                # Thus we do not write the name instead of writing '__index_level_0__' as the name
+                field_name = None if "__index_level_" in index_col else index_col
+                agg_index_arg = (
+                    f"bodo.utils.conversion.convert_to_index(index_arr, {field_name!r})"
+                )
         else:
-            # if the index_col is __index_level_0_, it means it has no name.
-            # Thus we do not write the name instead of writing '__index_level_0_' as the name
-            index_name = None if "__index_level_" in index_col else index_col
-            index_arg = (
-                f"bodo.utils.conversion.convert_to_index(index_arr, {index_name!r})"
-            )
+            index_field_names = []
+            for index_col in index_cols:
+                # I don't think RangeIndex is possible here, but just in case
+                assert isinstance(index_col, str)
+                index_field_names.append(
+                    None if "__index_level_" in index_col else index_col
+                )
+            agg_index_arg = f"bodo.hiframes.pd_multi_index_ext.init_multi_index(bodo.libs.struct_arr_ext.get_data(index_arr), {tuple(index_field_names)!r})"
 
         # _bodo_read_as_table = do not wrap the output table in a DataFrame
-        if _bodo_read_as_table or chunksize is not None:  # pragma: no cover
+        if _bodo_read_as_table or chunksize is not None:
             nodes += [ir.Assign(data_arrs[0], lhs, lhs.loc)]
         else:
-            func_text = "def _init_df(T, index_arr):\n"
-            func_text += f"  return bodo.hiframes.pd_dataframe_ext.init_dataframe((T,), {index_arg}, __col_name_meta_value_pq_read)\n"
+            func_text = (
+                f"def _init_df(T, index_arr):\n"
+                f"  return bodo.hiframes.pd_dataframe_ext.init_dataframe(\n"
+                f"    (T,),\n"
+                f"    {agg_index_arg},\n"
+                f"    __col_name_meta_value_pq_read\n"
+                f"  )\n"
+            )
+            print(func_text)
             loc_vars = {}
             exec(func_text, {}, loc_vars)
             _init_df = loc_vars["_init_df"]
@@ -3353,6 +3369,7 @@ class JSONFileInfo(FileInfo):
         self.json_sample_nrows = json_sample_nrows
         super().__init__()
 
+    # TODO: Return type is not consistent with base class and Parquet?
     def _get_schema(self, fname):
         return _get_json_df_type_from_file(
             fname,
@@ -3958,6 +3975,7 @@ class CSVFileInfo(FileInfo):
         self.csv_sample_nrows = csv_sample_nrows
         super().__init__()
 
+    # TODO: Return type is not consistent with base class and Parquet?
     def _get_schema(self, fname):
         return _get_csv_df_type_from_file(
             fname,
