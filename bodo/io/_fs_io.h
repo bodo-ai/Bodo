@@ -63,8 +63,7 @@ void extract_fs_dir_path(const char *_path_name, bool is_parallel,
                          const std::string &prefix, const std::string &suffix,
                          int myrank, int num_ranks, Bodo_Fs::FsEnum *fs,
                          std::string *dirname, std::string *fname,
-                         std::string *orig_path, std::string *path_name,
-                         bool force_hdfs = false);
+                         std::string *orig_path, std::string *path_name);
 
 /**
  * @brief Determine the arrow file system to use based on the file path.

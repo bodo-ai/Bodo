@@ -70,11 +70,6 @@ jobs:
   iceberg-conda:
     uses: ./.github/workflows/_build_iceberg_conda.yml
     secrets: inherit
-  azurefs-sas-conda:
-    if: github.event_name == 'release'
-    uses: ./.github/workflows/_build_azurefs_sas_token_provider_conda.yml
-    secrets: inherit
-
   bodosql-conda:
     needs: bodo-conda-linux-x86
     uses: ./.github/workflows/_build_bodosql_conda.yml
@@ -84,8 +79,8 @@ jobs:
 
   docker-img:
     # Don't publish linux arm until we can get nightly fixed
-    #needs: [bodo-conda-linux-x86, bodo-conda-linux-arm, iceberg-conda, bodosql-conda, azurefs-sas-conda]
-    needs: [bodo-conda-linux-x86, iceberg-conda, bodosql-conda, azurefs-sas-conda]
+    #needs: [bodo-conda-linux-x86, bodo-conda-linux-arm, iceberg-conda, bodosql-conda]
+    needs: [bodo-conda-linux-x86, iceberg-conda, bodosql-conda]
     uses: ./.github/workflows/docker_build_and_publish.yml
     with:
       is-release: ${{ github.event_name == 'release' }}
