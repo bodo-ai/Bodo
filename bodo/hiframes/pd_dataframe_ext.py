@@ -3736,6 +3736,7 @@ def to_parquet_overload(
 
     from bodo.io.parquet_write import (
         gen_pandas_parquet_metadata,
+        get_index_field_names,
         parquet_write_table_cpp,
         parquet_write_table_partitioned_cpp,
     )
@@ -3749,17 +3750,11 @@ def to_parquet_overload(
     # if index=None and parallel:
     #    write index to the parquet file and write non-dict to metadata regardless of index type
     is_range_index = isinstance(df.index, bodo.hiframes.pd_index_ext.RangeIndexType)
-    (df.index is not None) and (
-        is_overload_true(_is_parallel)
-        or (not is_overload_true(_is_parallel) and not is_range_index)
-    )
-
     # we write index to metadata always if index=True
     write_non_range_index_to_metadata = is_overload_true(index) or (
         is_overload_none(index)
         and (not is_range_index or is_overload_true(_is_parallel))
     )
-
     write_rangeindex_to_metadata = (
         is_overload_none(index)
         and is_range_index
@@ -3779,12 +3774,6 @@ def to_parquet_overload(
         "    if _bodo_timestamp_tz is None:\n"
         "        _bodo_timestamp_tz = ''\n"
     )
-    # Parquet needs to include all columns, including index columns
-    if write_non_range_index_to_metadata:
-        func_text += (
-            "    append_arr_info_list_to_cpp_table(table,\n"
-            "        [array_to_info(arr) for arr in index_to_array_list(df.index)])\n"
-        )
     # Get all column names that will be written to parquet
     # Note, index columns are added later
     if df.has_runtime_cols:
@@ -3794,9 +3783,8 @@ def to_parquet_overload(
     # In the underlying Parquet file, for non-range index columns with no name,
     # we use the name __index_level_{idx}__ to identify the column.
     func_text += (
-        "    index_field_names_arr = pd.array(\n"
-        "        [f'__index_level_{idx}__' if name is None else name for idx, name in enumerate(index.names)])\n"
-        "    all_names_arr = np.concatenate((col_names_arr, index_field_names_arr))\n"
+        "    index_field_names = get_index_field_names(df.index.names)\n"
+        "    all_names_arr = bodo.libs.array_kernels.concat((col_names_arr, index_field_names))\n"
         "    all_names = array_to_info(all_names_arr)\n"
     )
 
@@ -3826,6 +3814,12 @@ def to_parquet_overload(
         data_args = ", ".join(f"array_to_info(arr{i})" for i in range(len(df.columns)))
         func_text += f"    info_list = [{data_args}]\n"
         func_text += "    table = arr_info_list_to_table(info_list)\n"
+    # Parquet needs to include all columns, including index columns
+    if write_non_range_index_to_metadata:
+        func_text += (
+            "    append_arr_info_list_to_cpp_table(table,\n"
+            "        [array_to_info(arr) for arr in index_to_array_list(df.index)])\n"
+        )
 
     # if it's an s3 url, get the region and pass it into the c++ code
     func_text += "    bucket_region = bodo.io.fs_io.get_s3_bucket_region_wrapper(path, parallel=_is_parallel)\n"
@@ -3845,10 +3839,12 @@ def to_parquet_overload(
         else:
             func_text += "    cat_table = 0\n"
         func_text += (
-            "    all_names_no_part_arr = pd.array([name for name in all_names_arr if name not in partition_cols])\n"
+            "    with bodo.no_warning_objmode(all_names_no_part_arr=bodo.string_array_type):\n"
+            "        all_names_no_part_arr = pd.array([name for name in all_names_arr if name not in partition_cols])\n"
             f"    part_cols_idxs = np.array({part_col_idxs}, dtype=np.int32)\n"
             "    all_names_no_part = array_to_info(all_names_no_part_arr)\n"
-            "    parquet_write_table_partitioned_cpp(unicode_to_utf8(path),\n"
+            "    parquet_write_table_partitioned_cpp(\n"
+            "        unicode_to_utf8(path),\n"
             "        table, all_names, all_names_no_part, cat_table,\n"
             "        part_cols_idxs.ctypes, len(part_cols_idxs),\n"
             "        unicode_to_utf8(compression),\n"
@@ -3919,6 +3915,7 @@ def to_parquet_overload(
         "decode_if_dict_table": decode_if_dict_table,
         "index_to_array_list": index_to_array_list,
         "append_arr_info_list_to_cpp_table": append_arr_info_list_to_cpp_table,
+        "get_index_field_names": get_index_field_names,
     }
     glbls.update(extra_globals)
     return bodo_exec(
