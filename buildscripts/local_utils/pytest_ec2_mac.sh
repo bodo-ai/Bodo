@@ -17,7 +17,6 @@ source venv/bin/activate
 # Install dependencies
 brew install unzip maven hadoop awscli
 pip install pytest wheel setuptools setuptools_scm psutil pyspark boto3 scipy s3fs snowflake-connector-python sqlalchemy snowflake-sqlalchemy scikit-learn mmh3 h5py avro adlfs pytest-azurepipelines pymysql openpyxl
-(cd Bodo/azurefs-sas-token-provider && python setup.py install)
 (cd Bodo/iceberg && pip install .)
 export HADOOP_HOME="/usr/local/Cellar/hadoop/3.3.0/libexec"
 echo "export JAVA_HOME=/opt/homebrew/opt/openjdk/libexec/openjdk.jdk/Contents/Home" | tee -a $HADOOP_HOME/etc/hadoop/hadoop-env.sh
