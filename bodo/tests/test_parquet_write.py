@@ -1112,11 +1112,7 @@ def test_to_pq_multiIdx_no_name(check_write_func, memory_leak_check):
         lambda df, fname: df.to_parquet(fname),
         df,
         "multi_idx_parquet_no_name",
-<<<<<<< HEAD
         check_index=["__index_level_0__", "__index_level_1__", "nums"],
-=======
-        check_index=["first", "__index_level_1__"],
->>>>>>> 5e4f2ecdeb ([run ci] fix tests)
     )
 
 
