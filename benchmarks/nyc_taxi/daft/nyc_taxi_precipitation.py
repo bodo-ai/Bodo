@@ -108,11 +108,7 @@ def main():
 
     weather_dataset = "s3://bodo-example-data/nyc-taxi/central_park_weather.csv"
     hvfhv_dataset = "s3://bodo-example-data/nyc-taxi/fhvhv_tripdata/**"
-    monthly_trips_weather = get_monthly_travels_weather(weather_dataset, hvfhv_dataset)
-
-    monthly_trips_weather = monthly_trips_weather.collect()
-    print(monthly_trips_weather.show())
-    print(monthly_trips_weather.to_pandas())
+    get_monthly_travels_weather(weather_dataset, hvfhv_dataset)
 
 
 if __name__ == "__main__":
