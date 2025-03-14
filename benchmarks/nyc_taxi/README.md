@@ -80,10 +80,10 @@ times and prints the results to your local terminal. There is also a notebook ve
 In order to run the Modin on Ray benchmark:
 
 1. Enter the benchmark Modin on Ray directory and create a new Conda environment using `env.yml`:
-``` bash
-cd modin_ray
-conda env create -f env.yml
-```
+    ``` bash
+    cd modin_ray
+    conda env create -f env.yml
+    ```
 2. Activate the environment using `conda activate benchmark_modin`.
 3. Ensure that you have set your aws credentials e.g. by running `aws configure`. This will be used by Ray to launch EC2 instances.
 4. Run the script `./run_modin.sh`, which will run the benchmark 3 times and print the results to your local terminal. Note that this is a long running script, and if it is interrupted, additional cleanup of resources may be required e.g. running `ray down modin-cluster.yaml -y` in your terminal or terminating the instances in your EC2 console.
@@ -100,20 +100,20 @@ In order to run the Spark benchmark:
 * [**gzip**](https://www.gnu.org/software/gzip/): Installed on your local machine.
 
 2. Enter the `spark` directory and initialize terraform:
-``` bash
-cd spark
-terraform init
-```
+    ``` bash
+    cd spark
+    terraform init
+    ```
 3. Apply the Terraform script to deploy resources and run the benchmark: `terraform apply` and type `yes` when prompted. The python script will be automatically uploaded to an S3 bucket and run on an EMR cluster.
 4. Run the following command to wait for the benchmark to complete: `./wait_for_steps.sh`.
 5. To view the output, download and print the logs using:
-```bash
-aws s3 cp s3://"$(terraform output --json | jq -r '.s3_bucket_id.value')"/logs/"$(terraform output --json | jq -r '.emr_cluster_id.value')" ./emr-logs --recursive --region "$(terraform output --json | jq -r '.emr_cluster_region.value')"
+    ```bash
+    aws s3 cp s3://"$(terraform output --json | jq -r '.s3_bucket_id.value')"/logs/"$(terraform output --json | jq -r '.emr_cluster_id.value')" ./emr-logs --recursive --region "$(terraform output --json | jq -r '.emr_cluster_region.value')"
 
-# View step logs with execution time result
-gzip -d ./emr-logs/steps/*/*
-cat ./emr-logs/steps/*/stdout
-```
+    # View step logs with execution time result
+    gzip -d ./emr-logs/steps/*/*
+    cat ./emr-logs/steps/*/stdout
+    ```
 6. Finally, cleanup resources: `terraform destroy` and type `yes` when prompted.
 
 ### Daft
@@ -123,11 +123,11 @@ cat ./emr-logs/steps/*/stdout
     * Role with S3FullAccess permissions to assign to **worker** nodes. Name the role `benchmark-using-ray-worker`.
 2. Install daft and other dependencies for a distributed run: `pip install "getdaft[aws,ray]"`.
 3. Run the script:
-``` bash
-cd daft
-./run_daft.sh
-```
-this will create a ray cluster, run the benchmark and write the output to `s3://test-daft/full_result.pq` (if that bucket does not exist for you, you can create one with `aws s3 mb test-daft`).
+    ``` bash
+    cd daft
+    ./run_daft.sh
+    ```
+    this will create a ray cluster, run the benchmark and write the output to `s3://test-daft/full_result.pq` (if that bucket does not exist for you, you can create one with `aws s3 mb test-daft`).
 
 ## Local Benchmark
 
