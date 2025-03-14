@@ -1133,7 +1133,7 @@ class BodoSQLContext:
 
     def generate_plan(
         self, sql, params_dict=None, dynamic_params_list=None, show_cost=False
-    ):
+    ) -> str:
         """
         Return the optimized plan for the SQL code as
         as a Python string.

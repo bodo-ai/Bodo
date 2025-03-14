@@ -517,29 +517,28 @@ def test_pq_index(datapath, memory_leak_check):
     check_func(test_impl2, (), only_seq=True, check_dtype=False)
 
 
-def test_pq_multiIdx_errcheck(memory_leak_check):
+def test_pq_multi_idx(memory_leak_check):
     """Remove this test when multi index is supported for read_parquet"""
     np.random.seed(0)
 
     def impl():
-        pd.read_parquet("multi_idx_parquet.pq")
+        return pd.read_parquet("multi_idx_parquet.pq")
 
     try:
         if bodo.libs.distributed_api.get_rank() == 0:
             arrays = [
                 ["bar", "bar", "baz", "baz", "foo", "foo", "qux", "qux"],
                 ["one", "two", "one", "two", "one", "two", "one", "two"],
+                [1, 2, 2, 1] * 2,
             ]
             tuples = list(zip(*arrays))
-            idx = pd.MultiIndex.from_tuples(tuples, names=["first", "second"])
+            idx = pd.MultiIndex.from_tuples(tuples, names=["first", None, "count"])
             df = pd.DataFrame(np.random.randn(8, 2), index=idx, columns=["A", "B"])
             df.to_parquet("multi_idx_parquet.pq")
         bodo.barrier()
-        with pytest.raises(
-            BodoError, match="read_parquet: MultiIndex not supported yet"
-        ):
-            bodo.jit(impl)()
-        bodo.barrier()
+
+        check_func(impl, ())
+
     finally:
         if bodo.libs.distributed_api.get_rank() == 0:
             os.remove("multi_idx_parquet.pq")

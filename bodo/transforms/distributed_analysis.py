@@ -912,7 +912,7 @@ class DistributedAnalysis:
         return out_dist, non_concat_redvars
 
     def _analyze_call(
-        self, inst, lhs, rhs, func_var, args, kws, equiv_set, array_dists
+        self, inst, lhs, rhs: ir.Expr, func_var, args, kws, equiv_set, array_dists
     ):
         """analyze array distributions in function calls"""
         from bodo.transforms.distributed_analysis_call_registry import (
@@ -2405,11 +2405,15 @@ class DistributedAnalysis:
         if fdef == ("init_multi_index", "bodo.hiframes.pd_multi_index_ext"):
             # input arrays and output index have the same distribution
             tup_list = guard(find_build_tuple, self.func_ir, rhs.args[0])
-            assert tup_list is not None
-            for v in tup_list:
-                _meet_array_dists(self.typemap, lhs, v.name, array_dists)
-            for v in tup_list:
-                _meet_array_dists(self.typemap, lhs, v.name, array_dists)
+            if tup_list is not None:
+                for v in tup_list:
+                    _meet_array_dists(self.typemap, lhs, v.name, array_dists)
+                for v in tup_list:
+                    _meet_array_dists(self.typemap, lhs, v.name, array_dists)
+            else:
+                tup_arr_dists = array_dists[rhs.args[0].name]
+                assert all(tup_arr_dists[0] == arr_dist for arr_dist in tup_arr_dists)
+                _set_var_dist(self.typemap, lhs, array_dists, tup_arr_dists[0])
             return
 
         if fdef == ("init_series", "bodo.hiframes.pd_series_ext"):
@@ -2633,6 +2637,23 @@ class DistributedAnalysis:
             out_arrname = rhs.args[0].name
             in_arrname = rhs.args[2].name
             _meet_array_dists(self.typemap, out_arrname, in_arrname, array_dists)
+            return
+
+        if fdef == ("get_data", "bodo.libs.struct_arr_ext"):
+            in_arrname = rhs.args[0].name
+            if lhs not in array_dists:
+                _set_var_dist(self.typemap, lhs, array_dists, Distribution.OneD)
+            if in_arrname not in array_dists:
+                _set_var_dist(self.typemap, in_arrname, array_dists, Distribution.OneD)
+
+            lhs_dists, rhs_dist = array_dists[lhs], array_dists[in_arrname]
+            new_dist = Distribution(
+                min(min(x.value for x in lhs_dists), rhs_dist.value)
+            )
+            new_dist = _min_dist_top(new_dist, Distribution.OneD)
+
+            array_dists[lhs] = [new_dist] * len(lhs_dists)
+            array_dists[in_arrname] = new_dist
             return
 
         if fdef == ("init_spark_df", "bodo.libs.pyspark_ext"):
@@ -4269,7 +4290,7 @@ def _get_user_varname(metadata, v):
     return v
 
 
-def _meet_array_dists(typemap, arr1, arr2, array_dists, top_dist=None):
+def _meet_array_dists(typemap, arr1: str, arr2: str, array_dists, top_dist=None):
     """meet distributions of arrays for consistent distribution"""
 
     if top_dist is None:
@@ -4311,7 +4332,7 @@ def _get_var_dist(varname, array_dists, typemap):
     return array_dists[varname]
 
 
-def _set_var_dist(typemap, varname, array_dists, dist, check_type=True):
+def _set_var_dist(typemap, varname: str, array_dists, dist, check_type=True):
     # some non-distributable types could need to be assigned distribution
     # sometimes, e.g. SeriesILocType. check_type=False handles these cases.
     typ = typemap[varname]

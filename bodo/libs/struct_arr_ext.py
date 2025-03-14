@@ -57,7 +57,7 @@ class StructArrayType(types.ArrayCompatible):
     data: tuple[types.ArrayCompatible, ...]
     names: tuple[str, ...]
 
-    def __init__(self, data, names=None):
+    def __init__(self, data: tuple[types.ArrayCompatible, ...], names=None):
         # data is tuple of Array types
         # names is a tuple of field names
         assert isinstance(data, tuple) and all(
