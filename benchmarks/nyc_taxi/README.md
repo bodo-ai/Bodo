@@ -128,7 +128,7 @@ In order to run the Spark benchmark:
     cd daft
     ./run_daft.sh BUCKET_NAME
     ```
-    this script takes in the name of an AWS S3 bucket `BUCKET_NAME`, creates a Ray cluster, and runs the benchmark, writing the result DataFrame to `BUCKET_NAME`. You can optionally create a new bucket to store the output using the AWS CLI:
+    this script takes in the name of an AWS S3 bucket `BUCKET_NAME`, creates a Ray cluster, and runs the benchmark, writing the resulting DataFrame to `BUCKET_NAME`. You can optionally create a new bucket to store the output using the AWS CLI:
     ``` bash
     BUCKET_NAME=nyc-taxi-benchmark-daft-$(uuidgen | tr -d - | tr '[:upper:]' '[:lower:]' )
     aws s3api create-bucket \
