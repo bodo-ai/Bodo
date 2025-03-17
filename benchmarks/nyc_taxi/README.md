@@ -142,6 +142,13 @@ In order to run the Spark benchmark:
     aws s3api delete-bucket --bucket $BUCKET_NAME --region us-east-2
     ```
 
+### Polars
+
+1. Install the [**AWS CLI**](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html) and run `aws configure` to set up your credentials.
+2. The script to reproduce this benchmark uses Ray to simplify the set up and clean up of an AWS EC2 instance, to install Ray, you can do `pip install -U "ray[default]"`. To run locally, you will also need to install polars: `pip install "polars[all]"`.
+3. Run the script `./run_polars` this will create a single instance on EC2 run the workload 3 times, and finally remove/clean up the instance.
+
+
 ## Local Benchmark
 
 You can start to see the benefits of using Bodo from your laptop by running the notebooks found in [`./nyc_taxi/notebooks`](./nyc_taxi/notebooks) which include a smaller version of the NYC Taxi Monthly Trips with Precipitation benchmark. To set up, install the required packages using pip in a clean environment that includes Python 3.12:
