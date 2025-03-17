@@ -19,7 +19,7 @@ def get_monthly_travels_weather(weather_dataset_path, hvfhv_dataset_path):
         pl.col("pickup_datetime").dt.date().alias("date"),
         pl.col("pickup_datetime").dt.month().alias("month"),
         pl.col("pickup_datetime").dt.hour().alias("hour"),
-        pl.col("pickup_datetime").dt.weekday().is_in([0, 1, 2, 3, 4]).alias("weekday"),
+        pl.col("pickup_datetime").dt.weekday().is_in([1, 2, 3, 4, 5]).alias("weekday"),
     )
 
     # merge with weather observations
