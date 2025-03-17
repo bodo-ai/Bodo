@@ -2677,9 +2677,9 @@ class UntypedPass:
 
         if not use_index or len(index_cols) == 0:
             assert n_cols > 0
-            agg_index_arg = [
+            agg_index_arg = (
                 "bodo.hiframes.pd_index_ext.init_range_index(0, len(T), 1, None)"
-            ]
+            )
         elif len(index_cols) == 1:
             index_col = index_cols[0]
             if isinstance(index_col, dict):

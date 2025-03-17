@@ -1139,7 +1139,7 @@ def init_dataframe(typingctx, data_tup_typ, index_typ, col_names_typ):
     not changed.
     """
     assert is_pd_index_type(index_typ) or isinstance(index_typ, MultiIndexType), (
-        "init_dataframe(): invalid index type"
+        f"init_dataframe(): invalid index type of {index_typ}"
     )
 
     n_cols = len(data_tup_typ.types)

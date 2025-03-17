@@ -1,5 +1,7 @@
 """IR node for the parquet data access"""
 
+from __future__ import annotations
+
 import typing as pt
 
 import llvmlite.binding as ll
@@ -347,9 +349,9 @@ class ParquetReader(Connector):
         # TODO
         return f"({self.df_out_varname}) = ReadParquet({self.file_name.name}, {self.out_table_col_names}, {self.col_indices}, {self.out_table_col_types}, {self.original_table_col_types}, {self.original_df_colnames}, {self.out_vars}, {self.partition_names}, {self.filters}, {self.storage_options}, {self.index_column_info}, {self.out_used_cols}, {self.input_file_name_col}, {self.unsupported_columns}, {self.unsupported_arrow_types}, {self.arrow_schema}, chunksize={self.chunksize}, sql_op_id={self.sql_op_id})"
 
-    def _index_type(self):
+    def _index_type(self) -> types.ArrayCompatible | types.NoneType:
         if len(self.index_column_info) == 0:
-            return None
+            return types.none
         if len(self.index_column_info) == 1:
             return next(iter(self.index_column_info.values()))
         return StructArrayType(tuple(self.index_column_info.values()))
@@ -1212,7 +1214,7 @@ def pq_reader_init_py_entry(
         "pq_reader_init_py_entry(): The 5th argument pyarrow_schema must by a PyArrow schema"
     )
 
-    def codegen(context: "BaseContext", builder: "IRBuilder", signature, args):
+    def codegen(context: BaseContext, builder: IRBuilder, signature, args):
         fnty = lir.FunctionType(
             lir.IntType(8).as_pointer(),
             [
