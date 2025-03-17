@@ -871,17 +871,13 @@ def literal(val) -> Literal:
     Wrapper over PyIceberg's literal function for constructing filters.
     This is needed to convert other Python literals to Iceberg-compatible ones
     """
-    from pyiceberg.expressions.literals import DateLiteral, TimestampLiteral
+    from pyiceberg.expressions.literals import TimestampLiteral
     from pyiceberg.expressions.literals import literal as inner_literal
     from pyiceberg.utils.datetime import datetime_to_micros
 
-    # PyIceberg literal doesn't support all data types
-    # See https://github.com/apache/iceberg-python/issues/1456
-    if isinstance(val, (datetime.datetime, pd.Timestamp)):
+    # PyIceberg literal doesn't support Pandas types
+    if isinstance(val, pd.Timestamp):
         return TimestampLiteral(datetime_to_micros(val))
-    # pd.Timestamp and datetime.datetime are subclasses of datetime.date
-    if isinstance(val, datetime.date):
-        return DateLiteral((val - datetime.date(1970, 1, 1)).days)
     if isinstance(val, (list, pd.core.arrays.ExtensionArray)):
         return {literal(v) for v in val}  # type: ignore
     # TODO: Potentially need to support nested structures

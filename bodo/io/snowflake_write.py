@@ -28,7 +28,7 @@ from bodo.io.helpers import (
     _get_stream_writer_payload,
     stream_writer_alloc_codegen,
 )
-from bodo.io.parquet_pio import parquet_write_table_cpp
+from bodo.io.parquet_write import parquet_write_table_cpp
 from bodo.io.snowflake import (
     snowflake_connector_cursor_type,
     temporary_directory_type,
@@ -648,16 +648,9 @@ def gen_snowflake_writer_append_table_impl_inner(
                         py_table_to_cpp_table(out_table, py_table_typ)
                     ),
                     array_to_info(col_names_arr),
-                    0,
-                    False,  # write_index
                     unicode_to_utf8("null"),  # metadata
                     unicode_to_utf8(bodo.io.snowflake.SF_WRITE_PARQUET_COMPRESSION),
                     False,  # is_parallel
-                    0,  # write_rangeindex_to_metadata
-                    0,
-                    0,
-                    0,  # range index start, stop, step
-                    unicode_to_utf8("null"),  # idx_name
                     unicode_to_utf8(writer["bucket_region"]),
                     out_table_len,  # row_group_size
                     unicode_to_utf8("null"),  # prefix

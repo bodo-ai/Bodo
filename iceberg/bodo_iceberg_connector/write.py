@@ -7,10 +7,8 @@ from py4j.protocol import Py4JError
 
 from bodo_iceberg_connector.catalog_conn import (
     gen_file_loc,
-    normalize_loc,
     parse_conn_str,
 )
-from bodo_iceberg_connector.puffin import StatisticsFile
 from bodo_iceberg_connector.py4j_support import (
     convert_list_to_java,
     get_catalog,
@@ -130,19 +128,6 @@ def commit_write(
     return True
 
 
-def commit_statistics_file(
-    conn_str: str,
-    table_id: str,
-    snapshot_id: int,
-    statistic_file_info: StatisticsFile,
-):
-    catalog_type, _ = parse_conn_str(conn_str)
-    handler = get_catalog(conn_str, catalog_type)
-    # Json encode the statistics file info
-    statistic_file_info_str = json.dumps(asdict(statistic_file_info))
-    handler.commitStatisticsFile(table_id, snapshot_id, statistic_file_info_str)
-
-
 def commit_merge_cow(
     conn_str: str,
     db_name: str,
@@ -194,31 +179,3 @@ def commit_merge_cow(
         return False
 
     return True
-
-
-def delete_table(conn_str: str, db_name: str, table_name: str, purge: bool = True):
-    """
-    Delete an Iceberg table.
-    args:
-        conn_str: Iceberg connection string
-        db_name: Database name
-        table_name: Table name
-        purge: If true, delete data/metadata files as well
-    return: True if successful, False otherwise
-    """
-    catalog_type, _ = parse_conn_str(conn_str)
-    handler = get_catalog(conn_str, catalog_type)
-    try:
-        return handler.deleteTable(db_name, table_name, purge)
-    except Py4JError as e:
-        print("Error during Iceberg table delete: ", e)
-        return False
-
-
-def get_table_metadata_path(conn_str: str, db_name: str, table_name: str):
-    """
-    Get the path to the current metadata file.
-    """
-    catalog_type, _ = parse_conn_str(conn_str)
-    handler = get_catalog(conn_str, catalog_type)
-    return normalize_loc(handler.getTableMetadataPath(db_name, table_name))

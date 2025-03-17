@@ -26,12 +26,70 @@ from bodo.tests.utils import (
     gen_random_arrow_array_struct_int,
     gen_random_arrow_list_list_int,
     gen_random_arrow_struct_struct,
+    pytest_mark_one_rank,
     reduce_sum,
 )
 from bodo.utils.testing import ensure_clean2, ensure_clean_dir
 from bodo.utils.typing import BodoError
+from bodo.utils.utils import run_rank0
 
 pytestmark = pytest.mark.parquet
+
+
+@pytest.fixture
+def check_write_func(datapath):
+    DISTRIBUTIONS = {
+        "sequential": [lambda x, *args: x, [], {}],
+        "1d-distributed": [
+            _get_dist_arg,
+            [False],
+            {"all_args_distributed_block": True},
+        ],
+        "1d-distributed-varlength": [
+            _get_dist_arg,
+            [False, True],
+            {"all_args_distributed_varlength": True},
+        ],
+    }
+
+    def impl(fn, df: pd.DataFrame, file_id: str, check_index: list[str] | None = None):
+        bodo_file_path = datapath(f"bodo_{file_id}.pq", check_exists=False)
+        pandas_file_path = datapath(f"pandas_{file_id}.pq", check_exists=False)
+        for dist_func, args, kwargs in DISTRIBUTIONS.values():
+            with ensure_clean2(bodo_file_path), ensure_clean2(pandas_file_path):
+                write_jit = bodo.jit(fn, **kwargs)
+                write_jit(dist_func(df, *args), bodo_file_path)
+                run_rank0(fn)(df, pandas_file_path)  # Pandas version
+                bodo.barrier()
+
+                df_bodo = pd.read_parquet(bodo_file_path)
+                df_pandas = pd.read_parquet(pandas_file_path)
+                df_pandas_test = pd.read_parquet(bodo_file_path)
+                pd.testing.assert_frame_equal(
+                    df_bodo, df_pandas, check_column_type=True
+                )
+                pd.testing.assert_frame_equal(
+                    df_bodo, df_pandas_test, check_column_type=True
+                )
+
+                if check_index is not None:
+                    pandas_meta = pq.read_schema(pandas_file_path)
+                    bodo_fps = (
+                        list(os.walk(bodo_file_path))
+                        if os.path.isdir(bodo_file_path)
+                        else [("", [], [bodo_file_path])]
+                    )
+                    for prefix, _, file_names in bodo_fps:
+                        for file in file_names:
+                            bodo_meta = pq.read_schema(os.path.join(prefix, file))
+                            index_cols = bodo_meta.pandas_metadata["index_columns"]
+                            assert set(check_index).issubset(index_cols)
+                            assert (
+                                index_cols
+                                == pandas_meta.pandas_metadata["index_columns"]
+                            )
+
+    return impl
 
 
 @pytest.mark.parametrize(
@@ -95,32 +153,12 @@ pytestmark = pytest.mark.parquet
         # "map_arrays"
     ),
 )
-def test_semi_structured_data(df, datapath: DataPath):
-    fp_bodo = datapath("bodo.pq", check_exists=False)
-    fp_pandas = datapath("pandas.pq", check_exists=False)
-    write = lambda df: df.to_parquet(fp_bodo)
-    distributions = {
-        "sequential": [lambda x, *args: x, [], {}],
-        "1d-distributed": [
-            _get_dist_arg,
-            [False],
-            {"all_args_distributed_block": True},
-        ],
-        "1d-distributed-varlength": [
-            _get_dist_arg,
-            [False, True],
-            {"all_args_distributed_varlength": True},
-        ],
-    }
-    for dist_func, args, kwargs in distributions.values():
-        with ensure_clean2(fp_bodo), ensure_clean2(fp_pandas):
-            write_jit = bodo.jit(write, **kwargs)
-            write_jit(dist_func(df, *args))
-            df.to_parquet(fp_pandas)
-            bodo.barrier()
-            df_bodo = pd.read_parquet(fp_bodo)
-            df_pandas = pd.read_parquet(fp_pandas)
-        pd.testing.assert_frame_equal(df_bodo, df_pandas, check_column_type=True)
+def test_semi_structured_data(df, check_write_func):
+    check_write_func(
+        lambda df, path: df.to_parquet(path),
+        df,
+        "semi_structured_data",
+    )
 
 
 def clean_pq_files(mode, pandas_pq_path, bodo_pq_path):
@@ -227,8 +265,11 @@ def test_pq_write_metadata(df, index_name, memory_leak_check):
                     bodo.barrier()
     finally:
         if bodo.libs.distributed_api.get_size() == 1:
-            os.remove("bodo_metadatatest.pq")
-            os.remove("pandas_metadatatest.pq")
+            try:
+                os.remove("bodo_metadatatest.pq")
+                os.remove("pandas_metadatatest.pq")
+            except FileNotFoundError:
+                pass
         else:
             shutil.rmtree("bodo_metadatatest.pq", ignore_errors=True)
 
@@ -697,32 +738,31 @@ def test_write_parquet_dict_table(memory_leak_check):
     )
 
 
+@pytest_mark_one_rank
 def test_write_parquet_row_group_size(memory_leak_check):
     """Test df.to_parquet(..., row_group_size=n)"""
-    if bodo.get_rank() == 0:
-        # We don't need to test the distributed case, because in the distributed
-        # case each rank writes its own data to a separate file. row_group_size
-        # is passed to Arrow WriteTable in the same way regardless
+    # We don't need to test the distributed case, because in the distributed
+    # case each rank writes its own data to a separate file. row_group_size
+    # is passed to Arrow WriteTable in the same way regardless
 
-        @bodo.jit(replicated=["df"])
-        def impl(df, output_filename, n):
-            df.to_parquet(output_filename, row_group_size=n)
+    @bodo.jit(replicated=["df"])
+    def impl(df, output_filename, n):
+        df.to_parquet(output_filename, row_group_size=n)
 
-        output_filename = "bodo_temp.pq"
-        try:
-            df = pd.DataFrame({"A": range(93)})
-            impl(df, output_filename, 20)
-            m = pq.ParquetFile(output_filename).metadata
-            assert [m.row_group(i).num_rows for i in range(m.num_row_groups)] == [
-                20,
-                20,
-                20,
-                20,
-                13,
-            ]
-        finally:
-            os.remove(output_filename)
-    bodo.barrier()
+    output_filename = "bodo_temp.pq"
+    try:
+        df = pd.DataFrame({"A": range(93)})
+        impl(df, output_filename, 20)
+        m = pq.ParquetFile(output_filename).metadata
+        assert [m.row_group(i).num_rows for i in range(m.num_row_groups)] == [
+            20,
+            20,
+            20,
+            20,
+            13,
+        ]
+    finally:
+        os.remove(output_filename)
 
 
 def test_write_parquet_no_empty_files(memory_leak_check):
@@ -1038,6 +1078,44 @@ def test_streaming_parquet_write_rep(memory_leak_check):
         bodo.barrier()
 
 
+def test_to_pq_multiIdx(check_write_func, memory_leak_check):
+    """Test to_parquet with MultiIndexType"""
+    arrays = [
+        ["bar", "bar", "baz", "baz", "foo", "foo", "qux", "qux"],
+        ["one", "two", "one", "two", "one", "two", "one", "two"],
+        [1, 2, 2, 1] * 2,
+    ]
+    tuples = list(zip(*arrays))
+    idx = pd.MultiIndex.from_tuples(tuples, names=["first", "second", "third"])
+    df = pd.DataFrame(np.random.randn(8, 2), index=idx, columns=["A", "B"])
+
+    check_write_func(
+        lambda df, fname: df.to_parquet(fname),
+        df,
+        "multi_idx_parquet",
+        check_index=["first", "second", "third"],
+    )
+
+
+def test_to_pq_multiIdx_no_name(check_write_func, memory_leak_check):
+    """Test to_parquet with MultiIndexType with no name at 1 level"""
+    arrays = [
+        ["bar", "bar", "baz", "baz", "foo", "foo", "qux", "qux"],
+        ["one", "two", "one", "two", "one", "two", "one", "two"],
+        [1, 2, 2, 1] * 2,
+    ]
+    tuples = list(zip(*arrays))
+    idx = pd.MultiIndex.from_tuples(tuples, names=[None, None, "nums"])
+    df = pd.DataFrame(np.random.randn(8, 2), index=idx, columns=["A", "B"])
+
+    check_write_func(
+        lambda df, fname: df.to_parquet(fname),
+        df,
+        "multi_idx_parquet_no_name",
+        check_index=["__index_level_0__", "__index_level_1__", "nums"],
+    )
+
+
 # ---------------------------- Test Error Checking ---------------------------- #
 @pytest.mark.slow
 def test_to_parquet_missing_arg(memory_leak_check):
@@ -1086,21 +1164,3 @@ def test_to_parquet_row_group_size():
     df = pd.DataFrame({"A": np.arange(10)})
     with pytest.raises(BodoError, match=msg):
         bodo.jit(lambda f: impl(df))(df)
-
-
-@pytest.mark.slow
-def test_to_pq_multiIdx_errcheck(memory_leak_check):
-    """Test unsupported to_parquet with MultiIndexType"""
-    arrays = [
-        ["bar", "bar", "baz", "baz", "foo", "foo", "qux", "qux"],
-        ["one", "two", "one", "two", "one", "two", "one", "two"],
-    ]
-    tuples = list(zip(*arrays))
-    idx = pd.MultiIndex.from_tuples(tuples, names=["first", "second"])
-    df = pd.DataFrame(np.random.randn(8, 2), index=idx, columns=["A", "B"])
-
-    def impl(df):
-        df.to_parquet("multi_idx_parquet.pq")
-
-    with pytest.raises(BodoError, match="to_parquet: MultiIndex not supported yet"):
-        bodo.jit(impl)(df)
