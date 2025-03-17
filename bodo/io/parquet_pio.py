@@ -1502,7 +1502,7 @@ def parquet_file_schema(
             raise BodoError(f"Selected column {c} not in Parquet file schema")
     for index_col in index_cols:
         if not isinstance(index_col, dict) and index_col not in selected_columns:
-            # if index_col is "__index__level_0" or some other name, append it.
+            # if index_col is "__index__level_0__" or some other name, append it.
             # If the index column is not selected when reading parquet, the index
             # should still be included.
             selected_columns.append(index_col)
