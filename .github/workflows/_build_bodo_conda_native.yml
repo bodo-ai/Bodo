@@ -88,7 +88,7 @@ jobs:
           # Platform specific
           IS_BODO_PLATFORM: ${{ (inputs.platform-build == true) && '1' || '0' }}
           BUILD_WITH_V8: ${{ (inputs.platform-build == true) && '1' || '0' }}
-          PLATFORM_CHANNEL: ''
+          PLATFORM_CHANNEL: ${{ (inputs.platform-build == true) && '-c bodo.ai' || '' }}
 
       - name: Convert Build Path (Windows Only)
         if: ${{ inputs.os == 'windows-latest' }}
