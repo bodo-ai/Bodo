@@ -1,12 +1,11 @@
 #!/bin/sh
 
-# Create a random bucket to store the output
-BUCKET_NAME=nyc-taxi-benchmark-daft-$(uuidgen | tr -d - | tr '[:upper:]' '[:lower:]' )
+BUCKET_NAME=$1
 
-aws s3api create-bucket \
-    --bucket $BUCKET_NAME \
-    --region us-east-2 \
-    --create-bucket-configuration LocationConstraint=us-east-2
+if [[ -z "$BUCKET_NAME" ]]; then
+  echo "Usage: $0 <bucket-name>"
+  exit 1
+fi
 
 # Create Ray cluster
 ray up daft-cluster.yaml

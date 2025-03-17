@@ -126,10 +126,17 @@ In order to run the Spark benchmark:
 3. Run the script:
     ``` bash
     cd daft
-    ./run_daft.sh
+    ./run_daft.sh BUCKET_NAME
     ```
-    this script will create a ray cluster and run the benchmark. The output will be written to a new S3 bucket named `nyc-taxi-benchmark-daft-{UUID}`.
-4. After inspecting the output, you can clean up S3 resources by running:
+    this script takes in the name of an AWS S3 bucket `BUCKET_NAME`, creates a Ray cluster, and runs the benchmark, writing the result DataFrame to `BUCKET_NAME`. You can optionally create a new bucket to store the output using the AWS CLI:
+    ``` bash
+    BUCKET_NAME=nyc-taxi-benchmark-daft-$(uuidgen | tr -d - | tr '[:upper:]' '[:lower:]' )
+    aws s3api create-bucket \
+        --bucket $BUCKET_NAME \
+        --region us-east-2 \
+        --create-bucket-configuration LocationConstraint=us-east-2
+    ```
+4. After inspecting the output, you can clean up any S3 resources created by running:
     ``` bash
     aws s3 rm s3://$BUCKET_NAME --recursive
     aws s3api delete-bucket --bucket $BUCKET_NAME --region us-east-2
