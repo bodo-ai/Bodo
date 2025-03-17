@@ -118,7 +118,8 @@ In order to run the Spark benchmark:
 
 ### Daft
 
-1. Before running the script, you will need to make sure you have created the following roles in your AWS IAM console
+1. Install the [**AWS CLI**](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html) and run `aws configure` to set up your credentials.
+2. You will need to make sure you have created the following roles in your AWS IAM console
     * Role with S3FullAccess + EC2FullAccess (required by Ray's autoscaler) in addition a policy that allows passing IAM roles to other nodes (i.e. `iam:PassRole` + `iam:GetRole` on the role created above should be sufficient as described [here](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_use_passrole.html)). Name the role `benchmark-using-ray-head`.
     * Role with S3FullAccess permissions to assign to **worker** nodes. Name the role `benchmark-using-ray-worker`.
 2. Install daft and other dependencies for a distributed run: `pip install "getdaft[aws,ray]"`.
@@ -127,7 +128,12 @@ In order to run the Spark benchmark:
     cd daft
     ./run_daft.sh
     ```
-    this will create a ray cluster, run the benchmark and write the output to `s3://test-daft/full_result.pq` (if that bucket does not exist for you, you can create one with `aws s3 mb test-daft`).
+    this script will create a ray cluster and run the benchmark. The output will be written to a new S3 bucket named `nyc-taxi-benchmark-daft-{UUID}`.
+4. After inspecting the output, you can clean up S3 resources by running:
+    ``` bash
+    aws s3 rm s3://$BUCKET_NAME --recursive
+    aws s3api delete-bucket --bucket $BUCKET_NAME --region us-east-2
+    ```
 
 ## Local Benchmark
 

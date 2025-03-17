@@ -1,5 +1,11 @@
-""" """
+"""
+Benchmark Daft on a Ray cluster, writing output to an S3 bucket.
 
+usage:
+    python nyc_taxi_precipitation.py --s3_bucket BUCKET
+"""
+
+import argparse
 import time
 
 import daft
@@ -7,7 +13,7 @@ import ray
 from daft import col
 
 
-def get_monthly_travels_weather(weather_dataset_path, hvfhv_dataset_path):
+def get_monthly_travels_weather(weather_dataset_path, hvfhv_dataset_path, bucket_name):
     start = time.time()
 
     # read data, rename some columns
@@ -18,8 +24,6 @@ def get_monthly_travels_weather(weather_dataset_path, hvfhv_dataset_path):
         )
     )
     hvfhv_dataset = daft.read_parquet(hvfhv_dataset_path)
-
-    hvfhv_dataset.explain(show_all=True)
 
     # parse dates
     central_park_weather_observations = central_park_weather_observations.with_column(
@@ -93,7 +97,7 @@ def get_monthly_travels_weather(weather_dataset_path, hvfhv_dataset_path):
 
     # write output to S3
     monthly_trips_weather.write_parquet(
-        "s3://test-daft/full_result.pq", write_mode="overwrite"
+        f"s3://{bucket_name}/monthly_trips_weather.pq", write_mode="overwrite"
     )
 
     end = time.time()
@@ -103,12 +107,21 @@ def get_monthly_travels_weather(weather_dataset_path, hvfhv_dataset_path):
 
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--s3_bucket",
+        type=str,
+        required=True,
+        help="The name of a valid S3 bucket or prefix to write output to.",
+    )
+    args = parser.parse_args()
+
     ray.init(address="auto")
     daft.context.set_runner_ray()
 
     weather_dataset = "s3://bodo-example-data/nyc-taxi/central_park_weather.csv"
     hvfhv_dataset = "s3://bodo-example-data/nyc-taxi/fhvhv_tripdata/**"
-    get_monthly_travels_weather(weather_dataset, hvfhv_dataset)
+    get_monthly_travels_weather(weather_dataset, hvfhv_dataset, args.s3_bucket)
 
 
 if __name__ == "__main__":
