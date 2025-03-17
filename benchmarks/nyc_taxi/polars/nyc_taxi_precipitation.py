@@ -15,15 +15,11 @@ def get_monthly_travels_weather(weather_dataset_path, hvfhv_dataset_path):
         (pl.col("PRCP") > 0.1).alias("date_with_precipitation"),
     )
 
-    hvfhv_dataset = hvfhv_dataset.select(
+    hvfhv_dataset = hvfhv_dataset.with_columns(
         pl.col("pickup_datetime").dt.date().alias("date"),
         pl.col("pickup_datetime").dt.month().alias("month"),
         pl.col("pickup_datetime").dt.hour().alias("hour"),
         pl.col("pickup_datetime").dt.weekday().is_in([0, 1, 2, 3, 4]).alias("weekday"),
-        pl.col("PULocationID"),
-        pl.col("DOLocationID"),
-        pl.col("trip_miles"),
-        pl.col("hvfhs_license_num"),
     )
 
     # merge with weather observations
