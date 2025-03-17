@@ -10,7 +10,7 @@ def get_monthly_travels_weather(weather_dataset_path, hvfhv_dataset_path):
     hvfhv_dataset = pl.scan_parquet(hvfhv_dataset_path)
     weather_dataset = pl.scan_csv(weather_dataset_path, try_parse_dates=True)
 
-    date_precipitation = weather_dataset.select(
+    weather_dataset = weather_dataset.select(
         pl.col("DATE").alias("date"),
         (pl.col("PRCP") > 0.1).alias("date_with_precipitation"),
     )
@@ -27,7 +27,7 @@ def get_monthly_travels_weather(weather_dataset_path, hvfhv_dataset_path):
     )
 
     # merge with weather observations
-    monthly_trips_weather = hvfhv_dataset.join(date_precipitation, on="date")
+    monthly_trips_weather = hvfhv_dataset.join(weather_dataset, on="date")
 
     # place rides in bucket determined by hour of the day
     def get_time_bucket(t):
@@ -58,19 +58,21 @@ def get_monthly_travels_weather(weather_dataset_path, hvfhv_dataset_path):
         "time_bucket",
     ]
 
-    monthly_trips_weather_grouped = monthly_trips_weather.group_by(groupby_columns).agg(
+    monthly_trips_weather = monthly_trips_weather.group_by(groupby_columns).agg(
         pl.col("hvfhs_license_num").count().alias("count"),
         pl.col("trip_miles").mean().alias("avg_distance"),
     )
 
-    monthly_trips_weather_sorted = monthly_trips_weather_grouped.sort(groupby_columns)
+    monthly_trips_weather = monthly_trips_weather.sort(groupby_columns)
 
-    monthly_trips_weather_sorted.collect().write_parquet("polars_out.pq")
+    # evaluate the LazyDataframe and store the output
+    monthly_trips_weather = monthly_trips_weather.collect()
+    monthly_trips_weather.write_parquet("polars_out.pq")
 
     end = time.time()
     print("Monthly Taxi Travel Times Computation Time: ", end - start)
 
-    return monthly_trips_weather_sorted
+    return monthly_trips_weather
 
 
 if __name__ == "__main__":
