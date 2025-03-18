@@ -6,7 +6,7 @@ requires = [
     "cython>=3.0,<3.1",
     # Build Libraries
     "numpy>=1.24,<2.2",
-    "pyarrow==18.1.0",
+    "pyarrow==19.0.0",
     "mpi4py~=4.0; sys_platform == 'win32'",
     "mpi4py~=3.1; sys_platform != 'win32'",
     "pip"
@@ -37,7 +37,7 @@ classifiers = [
 
 dependencies = [
     "numba==0.61.0",
-    "pyarrow==18.1.0",
+    "pyarrow==19.0.0",
     "pandas>=2.2,<2.3",
     "numpy>=1.24,<2.2",
     # fsspec >= 2021.09 because it includes Arrow filesystem wrappers (useful for fs.glob() for example)
@@ -64,7 +64,7 @@ snowflake = ["snowflake-connector-python"]
 mysql = ["sqlalchemy", "PyMySQL"]
 postgres = ["sqlalchemy", "psycopg2"]
 oracle = ["sqlalchemy", "cx-Oracle", "libaio"]
-iceberg = ["pyiceberg[glue]>=0.8,<0.9"]
+iceberg = ["pyiceberg[glue]>=0.9,<0.10"]
 huggingface_hub = ["huggingface_hub"]
 
 

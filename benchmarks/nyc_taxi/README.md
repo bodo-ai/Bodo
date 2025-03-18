@@ -146,8 +146,12 @@ In order to run the Spark benchmark:
 
 1. Install the [**AWS CLI**](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html) and run `aws configure` to set up your credentials.
 2. The script Ray to simplify setup and cleanup of an AWS EC2 instance, to install Ray, you can do `pip install -U "ray[default]"`. To run locally, you will also need to install polars: `pip install "polars[all]"`.
-3. Run the script `./run_polars` this will create a single instance on EC2 run the workload 3 times, and finally remove the instance.
-
+3. Run the script:
+    ``` bash
+    cd polars
+    ./run_polars.sh
+    ```
+    This will create a single EC2 instance, run the workload 3 times, and finally remove the instance.
 
 ## Local Benchmark
 

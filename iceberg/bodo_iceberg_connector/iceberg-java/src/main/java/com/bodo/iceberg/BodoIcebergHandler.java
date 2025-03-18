@@ -5,13 +5,11 @@ import java.net.URISyntaxException;
 import java.sql.SQLException;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
-import javax.annotation.Nonnull;
 import org.apache.iceberg.*;
 import org.apache.iceberg.catalog.Catalog;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.types.TypeUtil;
-import org.apache.iceberg.types.Types;
 
 public class BodoIcebergHandler {
   /**
@@ -60,19 +58,6 @@ public class BodoIcebergHandler {
   }
 
   /**
-   * Get a specific property from Table properties
-   *
-   * <p>Note: This API is exposed to Python.
-   *
-   * @param property The name of the property to get.
-   * @return the corresponding property value or null if key does not exist
-   */
-  public String getTableProperty(String dbName, String tableName, String property) {
-    Table table = loadTable(dbName, tableName);
-    return table.properties().get(property);
-  }
-
-  /**
    * When creating a new table using createOrReplaceTable, we pass it a schema with valid field IDs
    * populated. However, as part of the transaction, Iceberg Java library creates a "fresh schema"
    * and re-assigns field IDs. They say it's for "consistency" reasons. However, this is problematic
@@ -117,109 +102,6 @@ public class BodoIcebergHandler {
 
     // Note that repeated calls to loadTable are cheap due to CachingCatalog
     return new TableInfo(loadTable(dbName, tableName));
-  }
-
-  /**
-   * Return a boolean list indicating which columns have theta sketch blobs.
-   *
-   * <p>Note: This API is exposed to Python.
-   *
-   * @return List of booleans indicating which columns have theta sketches. The booleans correspond
-   *     to the columns in the schema, not the field IDs.
-   */
-  public List<Boolean> tableColumnsHaveThetaSketches(String tableId) {
-    Table table = loadTable(tableId);
-    Schema schema = table.schema();
-    List<Types.NestedField> columns = schema.columns();
-    List<Boolean> hasThetaSketches = new ArrayList<>(Collections.nCopies(columns.size(), false));
-    Snapshot currentSnapshot = table.currentSnapshot();
-    if (currentSnapshot != null) {
-      // Create a mapping of field ID to column index
-      Map<Integer, Integer> fieldIdToIndex = new HashMap<>();
-      for (int i = 0; i < columns.size(); i++) {
-        fieldIdToIndex.put(columns.get(i).fieldId(), i);
-      }
-      List<StatisticsFile> statisticsFiles = table.statisticsFiles();
-      for (StatisticsFile statisticsFile : statisticsFiles) {
-        if (statisticsFile.snapshotId() == currentSnapshot.snapshotId()) {
-          for (BlobMetadata blobMetadata : statisticsFile.blobMetadata()) {
-            // We only support theta sketches with a single field that is still
-            // in the schema.
-            String type = blobMetadata.type();
-            if (!type.equals("apache-datasketches-theta-v1")) {
-              continue;
-            }
-            List<Integer> fields = blobMetadata.fields();
-            if (fields.size() != 1) {
-              continue;
-            }
-            int field = fields.get(0);
-            if (fieldIdToIndex.containsKey(field)) {
-              hasThetaSketches.set(fieldIdToIndex.get(field), true);
-            }
-          }
-          // There can only be one statistics file per snapshot
-          return hasThetaSketches;
-        }
-      }
-    }
-    return hasThetaSketches;
-  }
-
-  /**
-   * Get the location of the table in the underlying storage
-   *
-   * <p>Note: This API is exposed to Python.
-   *
-   * @param txnID Transaction ID of transaction to get the table location
-   * @return Location of the table
-   */
-  public String getTransactionTableLocation(int txnID) {
-    Transaction txn = this.transactions.get(txnID);
-    return txn.table().location();
-  }
-
-  /**
-   * Get the existing statistics files for the table. This function raises an exception if the table
-   * does not have a valid statistics file as that should already be checked.
-   *
-   * <p>Note: This API is exposed to Python.
-   *
-   * @param tableId Table identifier on table modified.
-   * @return An existing table file for snapshot of the table in the current transaction state.
-   */
-  public @Nonnull String getStatisticsFilePath(String tableId) {
-    Table table = loadTable(tableId);
-    Snapshot snapshot = table.currentSnapshot();
-    if (snapshot == null) {
-      throw new RuntimeException(
-          "Table does not have a snapshot. Cannot get statistics file location.");
-    }
-    List<StatisticsFile> statisticsFiles = table.statisticsFiles();
-    for (StatisticsFile statisticsFile : statisticsFiles) {
-      if (statisticsFile.snapshotId() == snapshot.snapshotId()) {
-        return statisticsFile.path();
-      }
-    }
-    throw new RuntimeException(
-        "Table does not have a valid statistics file. Cannot get statistics file location.");
-  }
-
-  /**
-   * Return the location of the table metadata file.
-   *
-   * <p>Note: This API is exposed to Python.
-   *
-   * @return Location of the table metadata file.
-   */
-  public @Nonnull String getTableMetadataPath(String dbName, String tableName) {
-    Table table = loadTable(dbName, tableName);
-    if (table instanceof HasTableOperations) {
-      HasTableOperations opsTable = (HasTableOperations) table;
-      return opsTable.operations().current().metadataFileLocation();
-    } else {
-      throw new RuntimeException("Unable to determine table metadata path.");
-    }
   }
 
   /**
@@ -405,27 +287,5 @@ public class BodoIcebergHandler {
     action.commit();
 
     transaction.commitTransaction();
-  }
-
-  /**
-   * Fetch the snapshot id for a table. Returns -1 for a newly created table without any snapshots
-   */
-  public long getSnapshotId(String dbName, String tableName) {
-    Snapshot snapshot = loadTable(dbName, tableName).currentSnapshot();
-    // When the table has just been created
-    if (snapshot == null) {
-      return -1;
-    }
-    return snapshot.snapshotId();
-  }
-
-  /**
-   * Delete the table from the catalog
-   *
-   * @param purge Whether to purge the table from the underlying storage
-   * @return Whether the table was successfully deleted
-   */
-  public boolean deleteTable(String dbName, String tableName, boolean purge) {
-    return catalog.dropTable(genTableID(dbName, tableName), purge);
   }
 }
