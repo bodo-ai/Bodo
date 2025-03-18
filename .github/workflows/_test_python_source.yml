@@ -44,12 +44,6 @@ jobs:
           with:
             path: hadoop.tar.gz
             key: hadoop-3.3.2-${{ runner.os }}
-        - name: Install SAS
-          if: runner.os != 'Windows'
-          run: |
-            # Build SAS Token Provider
-            ./buildscripts/install_azurefs_sas_token_provider.sh
-          shell: bash
         - name: Clean Cache
           run: |
             # Clean Maven and Spark Ivy Cache

@@ -166,10 +166,6 @@ def get_sql_config_str() -> str:
     )
     return conf_str
 
-
-# Should Bodo use the new Arrow Azure FileSystem implementation instead of
-# the old HDFS implementation.
-enable_azure_fs = os.environ.get("BODO_USE_AZURE_FS", "1") != "0"
 check_parquet_schema = os.environ.get("BODO_CHECK_PARQUET_SCHEMA", "0") != "0"
 
 # --------------------------- End Streaming Config ---------------------------
@@ -302,8 +298,6 @@ import bodo.libs.table_builder
 import bodo.io
 
 # Rexport HDFS Locations
-# Needed for bodo.io.snowflake_write
-from bodo.io.snowflake_hdfs import HDFS_CORE_SITE_LOC_DIR, HDFS_CORE_SITE_LOC
 import bodo.io.np_io
 import bodo.io.csv_iterator_ext
 import bodo.io.iceberg

@@ -811,8 +811,6 @@ def test_to_sql_snowflake(df_size, sf_write_use_put, snowflake_user, memory_leak
     schema = "PUBLIC"
     conn = get_snowflake_connection_string(db, schema, user=snowflake_user)
 
-    import platform
-
     import bodo
     import bodo.io.snowflake
 
@@ -845,27 +843,7 @@ def test_to_sql_snowflake(df_size, sf_write_use_put, snowflake_user, memory_leak
         bodo.io.snowflake.SF_WRITE_UPLOAD_USING_PUT = sf_write_use_put
 
         with ensure_clean_snowflake_table(conn) as name:
-            # If using a Azure Snowflake account, the stage will be ADLS backed, so
-            # when writing to it directly, we need a proper ADLS/Hadoop setup
-            # and the bodo_azurefs_sas_token_provider library, both of which are only
-            # done for Linux. So we verify that it shows user the appropriate warning
-            # about falling back to the PUT method.
-            if (
-                snowflake_user == 3
-                and (not sf_write_use_put)
-                and (platform.system() != "Linux")
-            ):
-                if bodo.get_rank() == 0:
-                    # Warning is only raised on rank 0
-                    with pytest.warns(
-                        BodoWarning,
-                        match="Falling back to PUT command for upload for now.",
-                    ):
-                        test_write(df, name, conn, schema)
-                else:
-                    test_write(df, name, conn, schema)
-            else:
-                test_write(df, name, conn, schema)
+            test_write(df, name, conn, schema)
 
             bodo.barrier()
             passed = 1

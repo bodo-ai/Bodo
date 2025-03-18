@@ -201,7 +201,7 @@ int64_t pq_write(const char *_path_name,
                  const char *prefix,
                  std::vector<bodo_array_type::arr_type_enum> bodo_array_types,
                  bool create_dir, std::string filename,
-                 arrow::fs::FileSystem *arrow_fs, bool force_hdfs) {
+                 arrow::fs::FileSystem *arrow_fs) {
     tracing::Event ev("pq_write", is_parallel);
     ev.add_attribute("g_path", _path_name);
     ev.add_attribute("g_compression", compression);
@@ -231,7 +231,7 @@ int64_t pq_write(const char *_path_name,
 
     extract_fs_dir_path(_path_name, is_parallel, prefix, ".parquet", myrank,
                         num_ranks, &fs_option, &dirname, &fname, &orig_path,
-                        &path_name, force_hdfs);
+                        &path_name);
 
     // If filename is provided, use that instead of the generic one.
     // Currently this is used for Iceberg.
@@ -400,7 +400,7 @@ int64_t pq_write_py_entry(const char *_path_name, table_info *table,
                           const char *bucket_region, int64_t row_group_size,
                           const char *prefix, bool convert_timedelta_to_int64,
                           const char *tz, bool downcast_time_ns_to_us,
-                          bool create_dir, bool force_hdfs) {
+                          bool create_dir) {
     try {
         tracing::Event ev("pq_write_py_entry", is_parallel);
         ev.add_attribute("g_metadata", metadata);
@@ -423,10 +423,9 @@ int64_t pq_write_py_entry(const char *_path_name, table_info *table,
         for (auto col : table_ptr->columns) {
             bodo_array_types.emplace_back(col->arr_type);
         }
-        int64_t file_size =
-            pq_write(_path_name, arrow_table, compression, is_parallel,
-                     bucket_region, row_group_size, prefix, bodo_array_types,
-                     create_dir, "", nullptr, force_hdfs);
+        int64_t file_size = pq_write(
+            _path_name, arrow_table, compression, is_parallel, bucket_region,
+            row_group_size, prefix, bodo_array_types, create_dir, "", nullptr);
         return file_size;
     } catch (const std::exception &e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());

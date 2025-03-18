@@ -73,17 +73,6 @@ jobs:
     displayName: 'Build Bodo & Iceberg Connector'
 
   - bash: |
-      set -exo pipefail
-      eval "$(pixi shell-hook --shell bash -e azure)"
-
-      wget -q -O - "https://adlsresources.blob.core.windows.net/adlsresources/hadoop-3.3.2.tar.gz" | sudo tar -xzf - -C /opt
-      cd azurefs-sas-token-provider
-      pip install --no-deps --no-build-isolation -ve .
-    displayName: "Setup Snowflake ADLS Testing (only Linux)"
-    condition: ne(variables['Agent.OS'], 'Windows_NT')
-    retryCountOnTaskFailure: 5
-
-  - bash: |
       pixi list
       pixi run pip list
     continueOnError: true
