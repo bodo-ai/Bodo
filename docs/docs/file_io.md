@@ -633,6 +633,10 @@ pip install "s3fs>=2022.1.0"
 conda install -c conda-forge "s3fs>=2022.1.0"
 ```
 
+### Azure Storage (ABFS or ADLS) {#Azure}
+
+Reading and writing 
+
 ### Google Cloud Storage {#GCS}
 
 Reading and writing [Parquet][parquet-section] files from and to Google Cloud is supported.
@@ -668,14 +672,13 @@ def example_hf_dataset():
 ```
 
 
-### Hadoop Distributed File System (HDFS) and Azure Data Lake Storage (ADLS) Gen2 {#HDFS}
+### Hadoop Distributed File System (HDFS) {#HDFS}
 
 Reading and writing [CSV][csv-section], [Parquet][parquet-section], [JSON][json-section], and
 [Numpy binary][numpy-binary-section] files from and to Hadoop Distributed File System (HDFS) is supported.
-Note that Azure Data Lake Storage Gen2 can be accessed through HDFS.
 
 The `openjdk` version 11 package must be available, and the file path
-should start with `hdfs://` or `abfs[s]://`:
+should start with `hdfs://`:
 
 ```py
 @bodo.jit
@@ -699,11 +702,10 @@ Inconsistent configurations (e.g. `dfs.replication`) could potentially
 cause errors in Bodo programs.
 
 
-#### Setting up HDFS/ADLS Credentials
-There are 3 supported methods for authenticating to HDFS/ADLS:
+#### Setting up HDFS Credentials
+There are 3 supported methods for authenticating to HDFS:
 
 - Environment Variables
-- Azure Identities
 - core-site.xml
 
 ##### Environment Variables
@@ -716,7 +718,7 @@ Storage Blob Data Contributor role for the storage account to access. This is on
 
 ##### core-site.xml
 !!! note
-    core-site.xml authentication is not supported on Bodo Platform, instead use the environment variables or Azure Identities.
+    core-site.xml authentication is not supported on Bodo Platform, instead use the environment variables.
 
 To authenticate with a core-site.xml file Hadoop Filesystem sources its credentials from the first available
 `core-site.xml` file on the `CLASSPATH`. When Hadoop is set up (including
@@ -1137,20 +1139,6 @@ Direct Upload (preferred) or Put Upload.
     Snowflake accounts, respectively). Note that Bodo will drop the
     temporary stage once the data has been written. Temporary stages
     are also automatically cleaned up by Snowflake after the session ends.
-
-    !!! note
-        For writing to ADLS based stages, you must have Hadoop setup
-        correctly (see more details [here](#HDFS))
-        and have the `bodo-azurefs-sas-token-provider` package installed (it
-        can be installed using `pip install bodo-azurefs-sas-token-provider` or
-        `conda install bodo-azurefs-sas-token-provider -c bodo.ai -c conda-forge`).
-        Bodo will fall back to the Put Upload strategy if both these
-        conditions are not met. Also see
-        [Interleaving HDFS/ADLS I/O with Snowflake Write](#interleave-adls-snowflake-write).
-
-        Note that this is only applicable to
-        on-prem use cases since all of this is pre-configured on
-        the Bodo Platform.
 
 2.  Put Upload: In this strategy, Bodo creates a 'named' stage, writes
     parquet files to a temporary directory locally and then uses the
