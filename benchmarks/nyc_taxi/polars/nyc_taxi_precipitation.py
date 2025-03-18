@@ -62,8 +62,7 @@ def get_monthly_travels_weather(weather_dataset_path, hvfhv_dataset_path):
     monthly_trips_weather = monthly_trips_weather.sort(groupby_columns)
 
     # evaluate the LazyDataframe and store the output
-    monthly_trips_weather = monthly_trips_weather.collect()
-    monthly_trips_weather.write_parquet("monthly_trips_weather.pq")
+    monthly_trips_weather.sink_parquet("monthly_trips_weather.pq")
 
     end = time.time()
     print("Monthly Taxi Travel Times Computation Time: ", end - start)

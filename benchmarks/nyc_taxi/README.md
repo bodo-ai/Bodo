@@ -145,7 +145,7 @@ In order to run the Spark benchmark:
 ### Polars
 
 1. Install the [**AWS CLI**](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html) and run `aws configure` to set up your credentials.
-2. The script Ray to simplify setup and cleanup of an AWS EC2 instance, to install Ray, you can do `pip install -U "ray[default]"`. To run locally, you will also need to install polars: `pip install "polars[all]"`.
+2. The script uses Ray to simplify setup and cleanup of an AWS EC2 instance, to install Ray, you can do `pip install -U "ray[default]"`. To run locally, you will also need to install polars: `pip install "polars[all]"`.
 3. Run the script:
     ``` bash
     cd polars
