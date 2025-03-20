@@ -2,6 +2,7 @@ import os
 import random
 import shutil
 import traceback
+from datetime import date
 from decimal import Decimal
 
 import numba
@@ -52,10 +53,19 @@ def check_write_func(datapath):
         ],
     }
 
-    def impl(fn, df: pd.DataFrame, file_id: str, check_index: list[str] | None = None):
+    def impl(
+        fn,
+        df: pd.DataFrame,
+        file_id: str,
+        no_seq: bool = False,
+        partition_cols: list[str] | None = None,
+        check_index: list[str] | None = None,
+    ):
         bodo_file_path = datapath(f"bodo_{file_id}.pq", check_exists=False)
         pandas_file_path = datapath(f"pandas_{file_id}.pq", check_exists=False)
-        for dist_func, args, kwargs in DISTRIBUTIONS.values():
+        for dist_name, (dist_func, args, kwargs) in DISTRIBUTIONS.items():
+            if no_seq and dist_name == "sequential":
+                continue
             with ensure_clean2(bodo_file_path), ensure_clean2(pandas_file_path):
                 write_jit = bodo.jit(fn, **kwargs)
                 write_jit(dist_func(df, *args), bodo_file_path)
@@ -87,6 +97,23 @@ def check_write_func(datapath):
                             assert (
                                 index_cols
                                 == pandas_meta.pandas_metadata["index_columns"]
+                            )
+
+                if partition_cols is not None:
+                    pandas_meta = pq.read_schema(pandas_file_path)
+                    bodo_fps = (
+                        list(os.walk(bodo_file_path))
+                        if os.path.isdir(bodo_file_path)
+                        else [("", [], [bodo_file_path])]
+                    )
+                    for prefix, _, file_names in bodo_fps:
+                        for file in file_names:
+                            bodo_meta = pq.read_schema(os.path.join(prefix, file))
+                            assert set(partition_cols) == set(
+                                bodo_meta.pandas_metadata["partition_columns"]
+                            )
+                            assert set(partition_cols) == set(
+                                pandas_meta.pandas_metadata["partition_columns"]
                             )
 
     return impl
@@ -1113,6 +1140,68 @@ def test_to_pq_multiIdx_no_name(check_write_func, memory_leak_check):
         df,
         "multi_idx_parquet_no_name",
         check_index=["__index_level_0__", "__index_level_1__", "nums"],
+    )
+
+
+def test_to_pq_partition_by_index(memory_leak_check, check_write_func):
+    """Test to_parquet with a partitioned index"""
+    df = pd.DataFrame(
+        {
+            "date": [
+                date(2021, 1, 1),
+                date(2021, 1, 1),
+                date(2021, 1, 2),
+                date(2021, 1, 2),
+            ],
+            "sensor": ["Sensor1", "Sensor2", "Sensor1", "Sensor2"],
+            "value": np.random.randn(4),
+        }
+    )
+    df_date = df.set_index("date")
+
+    check_write_func(
+        lambda df, path: df.to_parquet(path, partition_cols=["date"]),
+        df_date,
+        "test_to_pq_partition_by_index",
+        no_seq=True,
+        partition_cols=["date"],
+        check_index=["date"],
+    )
+
+    check_write_func(
+        lambda df, path: df.to_parquet(path, partition_cols=["date", "sensor"]),
+        df_date,
+        "test_to_pq_partition_by_index2",
+        no_seq=True,
+        partition_cols=["date", "sensor"],
+        check_index=["date", "sensor"],
+    )
+
+
+def test_to_pq_partition_by_multiIdx(memory_leak_check, check_write_func):
+    """Test to_parquet with a partitioning by all levels of a MultiIndex"""
+    df = pd.DataFrame(
+        {
+            "date": [
+                date(2021, 1, 1),
+                date(2021, 1, 1),
+                date(2021, 1, 2),
+                date(2021, 1, 2),
+            ],
+            "sensor": ["Sensor1", "Sensor2", "Sensor1", "Sensor2"],
+            "flag": [True, True, True, True],
+            "value": np.random.randn(4),
+        }
+    )
+    df_idx = df.set_index(["date", "sensor"])
+
+    check_write_func(
+        lambda df, path: df.to_parquet(path, partition_cols=["flag", "sensor", "date"]),
+        df_idx,
+        "test_to_pq_partition_by_multiIdx",
+        no_seq=True,
+        partition_cols=["flag", "sensor", "date"],
+        check_index=["sensor", "date"],
     )
 
 

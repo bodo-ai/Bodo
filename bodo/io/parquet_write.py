@@ -526,3 +526,27 @@ def overload_gen_pandas_parquet_metadata(
     }
     exec(func_text, glbls, loc_vars)
     return loc_vars["impl"]
+
+
+def get_index_field_names(index_names) -> list[str]:  # type: ignore
+    """
+    Return a list of index field names for the given DataFrame.
+    Field names are used to identify the index columns in the Parquet file.
+    If an index doesn't have a name, we use the name __index_level_{idx}__ to identify the column.
+    """
+    pass
+
+
+@overload(get_index_field_names, no_unliteral=True)
+def overload_get_index_field_names(index_names):
+    def impl(index_names):
+        with bodo.no_warning_objmode(field_names=bodo.string_array_type):
+            field_names = pd.array(
+                [
+                    f"__index_level_{idx}__" if name is None else name
+                    for idx, name in enumerate(index_names)
+                ]
+            )
+        return field_names
+
+    return impl

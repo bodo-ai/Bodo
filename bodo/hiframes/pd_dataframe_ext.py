@@ -3694,18 +3694,31 @@ def to_parquet_overload(
     if not is_overload_none(partition_cols):
         assert_bodo_error(is_overload_constant_list(partition_cols))
         partition_cols = get_overload_const_list(partition_cols)
+        # Map column names to their dataframe location
+        column_to_idx = {col: idx for idx, col in enumerate(df.columns)}
+        # Include index columms as if appended to the end of the dataframe
+        if isinstance(df.index, SingleIndexType) and isinstance(
+            df.index.name_typ, types.StringLiteral
+        ):
+            column_to_idx[df.index.name_typ.literal_value] = len(df.columns)
+        else:
+            column_to_idx.update(
+                (name_type.literal_value, len(df.columns) + i)
+                for i, name_type in enumerate(df.index.names_typ)
+                if isinstance(name_type, types.StringLiteral)
+            )
+
         part_col_idxs = []
         for part_col_name in partition_cols:
-            try:
-                # TODO: Support index columns as partition columns
-                idx = df.columns.index(part_col_name)
-            except ValueError:
+            if part_col_name not in column_to_idx:
                 raise BodoError(
-                    f"Partition column `{part_col_name}` is not in dataframe"
+                    f"Partition column `{part_col_name}` is not in the DataFrame. "
+                    f"If `{part_col_name}` is an index column, make sure it has a compile-time known name."
                 )
-            part_col_idxs.append(idx)
+            part_col_idxs.append(column_to_idx[part_col_name])
     else:
         partition_cols = None
+        part_col_idxs = []
 
     if not is_overload_none(index) and not is_overload_constant_bool(index):
         raise BodoError("to_parquet(): index must be a constant bool or None")
@@ -3723,6 +3736,7 @@ def to_parquet_overload(
 
     from bodo.io.parquet_write import (
         gen_pandas_parquet_metadata,
+        get_index_field_names,
         parquet_write_table_cpp,
         parquet_write_table_partitioned_cpp,
     )
@@ -3736,33 +3750,43 @@ def to_parquet_overload(
     # if index=None and parallel:
     #    write index to the parquet file and write non-dict to metadata regardless of index type
     is_range_index = isinstance(df.index, bodo.hiframes.pd_index_ext.RangeIndexType)
-    write_non_rangeindex = (df.index is not None) and (
-        is_overload_true(_is_parallel)
-        or (not is_overload_true(_is_parallel) and not is_range_index)
-    )
-
     # we write index to metadata always if index=True
     write_non_range_index_to_metadata = is_overload_true(index) or (
         is_overload_none(index)
         and (not is_range_index or is_overload_true(_is_parallel))
     )
-
     write_rangeindex_to_metadata = (
         is_overload_none(index)
         and is_range_index
         and not is_overload_true(_is_parallel)
     )
 
-    func_text = "def bodo_df_to_parquet(df, path, engine='auto', compression='snappy', index=None, partition_cols=None, storage_options=None, row_group_size=-1, _bodo_file_prefix='part-', _bodo_timestamp_tz=None, _is_parallel=False):\n"
-
+    func_text = (
+        "def bodo_df_to_parquet(\n"
+        "    df, path,\n"
+        "    engine='auto', compression='snappy',\n"
+        "    index=None, partition_cols=None,\n"
+        "    storage_options=None, row_group_size=-1,\n"
+        "    _bodo_file_prefix='part-', _bodo_timestamp_tz=None, _is_parallel=False\n"
+        "):\n"
+        "    if compression is None:\n"
+        "        compression = 'none'\n"
+        "    if _bodo_timestamp_tz is None:\n"
+        "        _bodo_timestamp_tz = ''\n"
+    )
     # Get all column names that will be written to parquet
-    # Note, index columns are added later for the non-partition case
-    # TODO: Extend for partitioned writes as well
+    # Note, index columns are added later
     if df.has_runtime_cols:
         func_text += "    columns_index = get_dataframe_column_names(df)\n"
         # Note: C++ assumes the array is always a string array.
         func_text += "    col_names_arr = index_to_array(columns_index)\n"
-    func_text += "    col_names = array_to_info(col_names_arr)\n"
+    # In the underlying Parquet file, for non-range index columns with no name,
+    # we use the name __index_level_{idx}__ to identify the column.
+    func_text += (
+        "    index_field_names = get_index_field_names(df.index.names)\n"
+        "    all_names_arr = bodo.libs.array_kernels.concat((col_names_arr, index_field_names))\n"
+        "    all_names = array_to_info(all_names_arr)\n"
+    )
 
     # Why we are calling drop_duplicates_local_dictionary on all dict encoded arrays?
     # Arrow doesn't support writing DictionaryArrays with nulls in the dictionary.
@@ -3790,19 +3814,17 @@ def to_parquet_overload(
         data_args = ", ".join(f"array_to_info(arr{i})" for i in range(len(df.columns)))
         func_text += f"    info_list = [{data_args}]\n"
         func_text += "    table = arr_info_list_to_table(info_list)\n"
-
-    func_text += "    if compression is None:\n"
-    func_text += "        compression = 'none'\n"
-    func_text += "    if _bodo_timestamp_tz is None:\n"
-    func_text += "        _bodo_timestamp_tz = ''\n"
+    # Parquet needs to include all columns, including index columns
+    if write_non_range_index_to_metadata:
+        func_text += (
+            "    append_arr_info_list_to_cpp_table(table,\n"
+            "        [array_to_info(arr) for arr in index_to_array_list(df.index)])\n"
+        )
 
     # if it's an s3 url, get the region and pass it into the c++ code
     func_text += "    bucket_region = bodo.io.fs_io.get_s3_bucket_region_wrapper(path, parallel=_is_parallel)\n"
-    col_names_no_parts_arr = None
+
     if partition_cols:
-        col_names_no_parts_arr = pd.array(
-            [col_name for col_name in df.columns if col_name not in partition_cols]
-        )
         # We need the values of the categories for any partition columns that
         # are categorical arrays, because they are used to generate the
         # output directory name
@@ -3817,36 +3839,22 @@ def to_parquet_overload(
         else:
             func_text += "    cat_table = 0\n"
         func_text += (
-            "    col_names_no_partitions = array_to_info(col_names_no_parts_arr)\n"
-        )
-        func_text += f"    part_cols_idxs = np.array({part_col_idxs}, dtype=np.int32)\n"
-        func_text += "    parquet_write_table_partitioned_cpp(unicode_to_utf8(path),\n"
-        func_text += "                            table, col_names, col_names_no_partitions, cat_table,\n"
-        func_text += (
-            "                            part_cols_idxs.ctypes, len(part_cols_idxs),\n"
-        )
-        func_text += "                            unicode_to_utf8(compression),\n"
-        func_text += "                            _is_parallel,\n"
-        func_text += "                            unicode_to_utf8(bucket_region),\n"
-        func_text += "                            row_group_size,\n"
-        func_text += "                            unicode_to_utf8(_bodo_file_prefix),\n"
-        func_text += (
-            "                            unicode_to_utf8(_bodo_timestamp_tz))\n"
+            "    with bodo.no_warning_objmode(all_names_no_part_arr=bodo.string_array_type):\n"
+            "        all_names_no_part_arr = pd.array([name for name in all_names_arr if name not in partition_cols])\n"
+            f"    part_cols_idxs = np.array({part_col_idxs}, dtype=np.int32)\n"
+            "    all_names_no_part = array_to_info(all_names_no_part_arr)\n"
+            "    parquet_write_table_partitioned_cpp(\n"
+            "        unicode_to_utf8(path),\n"
+            "        table, all_names, all_names_no_part, cat_table,\n"
+            "        part_cols_idxs.ctypes, len(part_cols_idxs),\n"
+            "        unicode_to_utf8(compression),\n"
+            "        _is_parallel,\n"
+            "        unicode_to_utf8(bucket_region),\n"
+            "        row_group_size,\n"
+            "        unicode_to_utf8(_bodo_file_prefix),\n"
+            "        unicode_to_utf8(_bodo_timestamp_tz))\n"
         )
     else:
-        # Parquet needs to include all columns, including index columns
-        if is_overload_true(index) or (
-            is_overload_none(index) and write_non_rangeindex
-        ):
-            func_text += "    index_arr_list = index_to_array_list(df.index)\n"
-            func_text += "    index_info_list = []\n"
-            for i in range(df.index.nlevels):
-                func_text += (
-                    f"    index_info_list.append(array_to_info(index_arr_list[{i}]))\n"
-                )
-            func_text += (
-                "    append_arr_info_list_to_cpp_table(table, index_info_list)\n"
-            )
         func_text += (
             # Generate Pandas metadata string to store in the Parquet schema.
             # It requires both compile-time type info and runtime index name info
@@ -3886,6 +3894,7 @@ def to_parquet_overload(
         col_names_arr = pd.array(df.columns)
 
     glbls = {
+        "pd": pd,
         "np": np,
         "bodo": bodo,
         "unicode_to_utf8": unicode_to_utf8,
@@ -3900,13 +3909,13 @@ def to_parquet_overload(
         "py_table_to_cpp_table": py_table_to_cpp_table,
         "py_table_typ": df.table_type,
         "get_dataframe_table": get_dataframe_table,
-        "col_names_no_parts_arr": col_names_no_parts_arr,
         "get_dataframe_column_names": get_dataframe_column_names,
         "fix_arr_dtype": fix_arr_dtype,
         "decode_if_dict_array": decode_if_dict_array,
         "decode_if_dict_table": decode_if_dict_table,
         "index_to_array_list": index_to_array_list,
         "append_arr_info_list_to_cpp_table": append_arr_info_list_to_cpp_table,
+        "get_index_field_names": get_index_field_names,
     }
     glbls.update(extra_globals)
     return bodo_exec(
