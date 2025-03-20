@@ -535,7 +535,7 @@ python_add_library(
   MODULE WITH_SOABI
     "bodo/pandas/plan_optimizer.cpp"
 )
-target_include_directories(plan_optimizer PRIVATE ${BASE_INCLUDE_DIRS} "${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/" "${CMAKE_CURRENT_BINARY_DIR}/bodo/pandas/")
+target_include_directories(plan_optimizer PRIVATE ${BASE_INCLUDE_DIRS} "${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/" "${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/vendor/duckdb/include/" "${CMAKE_CURRENT_BINARY_DIR}/bodo/pandas/")
 target_link_directories(plan_optimizer PRIVATE ${CONDA_LIB_DIR})
 target_link_libraries(plan_optimizer PRIVATE fmt::fmt)
 install(TARGETS plan_optimizer DESTINATION "bodo/pandas/")
