@@ -92,7 +92,7 @@ jobs:
       set -exo pipefail
 
       # This isn't published on pypi so no good way to list it as a dependency
-      pixi run -e azure pip install 'git+https://github.com/apache/polaris.git#subdirectory=regtests/client/python'
+      pixi run -e azure pip install 'git+https://github.com/apache/polaris.git#subdirectory=client/python'
 
       unamestr=`uname`
       if [[ "$unamestr" == 'Linux' ]]; then
