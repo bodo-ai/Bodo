@@ -534,6 +534,7 @@ python_add_library(
   plan_optimizer
   MODULE WITH_SOABI
     "bodo/pandas/plan_optimizer.cpp"
+    "bodo/pandas/vendor/duckdb/planner/operator/logical_join.cpp"
     "bodo/pandas/vendor/duckdb/planner/operator/logical_comparison_join.cpp"
 )
 target_include_directories(plan_optimizer PRIVATE ${BASE_INCLUDE_DIRS} "${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/" "${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/vendor/duckdb/include/" "${CMAKE_CURRENT_BINARY_DIR}/bodo/pandas/")
