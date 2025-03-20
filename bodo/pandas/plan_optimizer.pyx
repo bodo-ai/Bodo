@@ -28,6 +28,5 @@ cdef class LogicalComparisonJoin:
     cdef:
         unique_ptr[CLogicalComparisonJoin] c_logical_comparison_join
 
-    def __cinit__(self):
-       # self.c_logical_comparison_join = make_unique[CLogicalComparisonJoin]()
-       pass
+    def __cinit__(self, CJoinType join_type):
+       self.c_logical_comparison_join = make_unique[CLogicalComparisonJoin](join_type)
