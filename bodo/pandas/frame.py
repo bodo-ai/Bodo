@@ -1,13 +1,15 @@
 import typing as pt
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 
 import pandas as pd
 
 import bodo
+from bodo.pandas import plan_operators
 from bodo.pandas.array_manager import LazyArrayManager
 from bodo.pandas.lazy_metadata import LazyMetadata
 from bodo.pandas.lazy_wrapper import BodoLazyWrapper
 from bodo.pandas.managers import LazyBlockManager, LazyMetadataMixin
+from bodo.pandas.series import BodoSeries
 from bodo.pandas.utils import get_lazy_manager_class
 from bodo.utils.typing import (
     BodoError,
@@ -23,6 +25,18 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
     # so some methods like head will still trigger data pull if we don't store head_df and
     # use it directly when available.
     _head_df: pd.DataFrame | None = None
+
+    def __init__(
+        self, data=None, index=None, columns=None, dtype=None, copy=None, plan=None
+    ):
+        self.__dict__["plan"] = plan
+        super().__init__(data, index, columns, dtype)
+
+    @classmethod
+    def from_plan(cls, plan):
+        new_df = BodoDataFrame.__new__(BodoDataFrame)
+        new_df.__dict__["plan"] = plan
+        return new_df
 
     @staticmethod
     def from_lazy_mgr(
@@ -381,3 +395,95 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         return bodo.spawn.spawner.submit_func_to_workers(
             func, [], self, *args, **kwargs
         )
+
+    def merge(
+        self,
+        right,  # BodoDataFrame | BodoSeries,
+        how="inner",  # MergeHow = "inner",
+        on=None,  # IndexLabel | AnyArrayLike | None = None,
+        left_on=None,  # IndexLabel | AnyArrayLike | None = None,
+        right_on=None,  # IndexLabel | AnyArrayLike | None = None,
+        left_index=False,  # bool = False,
+        right_index=False,  # bool = False,
+        sort=False,  # bool = False,
+        suffixes=("_x", "_y"),  # Suffixes = ("_x", "_y"),
+        copy=None,  # bool | None = None,
+        indicator=False,  # str | bool = False,
+        validate=None,  # MergeValidate | None = None,
+    ):  # -> BodoDataFrame:
+        if (
+            isinstance(right, BodoSeries)
+            or how != "inner"
+            or indicator != False
+            or validate != None
+        ):
+            assert False and "Unsupported option to DataFrame.merge"
+        if hasattr(self, "plan") and hasattr(right, "plan"):
+            zero_size_self = self.iloc[:0]
+            zero_size_right = right.iloc[:0]
+            new_metadata = zero_size_self.merge(
+                zero_size_right,
+                how=how,
+                on=on,
+                left_on=left_on,
+                right_on=right_on,
+                left_index=left_index,
+                right_index=right_index,
+                sort=sort,
+                suffixes=suffixes,
+            )
+
+            if on is None:
+                if left_on is None:
+                    on = tuple(set(self.columns).intersection(set(right.columns)))
+                else:
+                    on = []
+            elif not isinstance(on, list):
+                on = (on,)
+            if left_on is None:
+                left_on = []
+            if right_on is None:
+                right_on = []
+            planComparisonJoin = plan_operators.ComparisonJoin(
+                self.plan,
+                right.plan,
+                [(self.columns.get_loc(c), right.columns.get_loc(c)) for c in on]
+                + [
+                    (self.columns.get_loc(a), right.columns.get_loc(b))
+                    for a, b in zip(left_on, right_on)
+                ],
+            )
+
+            return BodoDataFrame(new_metadata, plan=planComparisonJoin)
+
+    def __getitem__(self, key):
+        if hasattr(self, "plan") and self.plan != None:
+            zero_size_self = self.iloc[:0]
+            if isinstance(key, BodoSeries):
+                assert hasattr(key, "plan") and key.plan != None
+                zero_size_key = key.iloc[:0]
+                new_metadata = zero_size_self.__getitem__(zero_size_key)
+                return BodoDataFrame(
+                    new_metadata,
+                    plan=plan_operators.FilterPlanOperator(self.plan, key.plan),
+                )
+            else:
+                if isinstance(key, str):
+                    key = [key]
+                assert isinstance(key, Iterable)
+                key = list(key)
+                if len(key) == 1:
+                    key = key[0]
+                    new_metadata = zero_size_self.__getitem__(key)
+                    return BodoSeries(
+                        new_metadata,
+                        plan=plan_operators.ProjectionPlanOperator(self.plan, key),
+                    )
+                else:
+                    new_metadata = zero_size_self.__getitem__(key)
+                    return BodoDataFrame(
+                        new_metadata,
+                        plan=plan_operators.ProjectionPlanOperator(self.plan, key),
+                    )
+
+        return super().__getitem__(key)

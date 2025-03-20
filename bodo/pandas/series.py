@@ -2,7 +2,10 @@ import typing as pt
 from collections.abc import Callable, Hashable
 
 import pandas as pd
+from pandas._libs import lib
+from pandas._typing import Dtype
 
+from bodo.pandas import plan_operators
 from bodo.pandas.array_manager import LazySingleArrayManager
 from bodo.pandas.lazy_metadata import LazyMetadata
 from bodo.pandas.lazy_wrapper import BodoLazyWrapper
@@ -17,6 +20,37 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
     # use it directly when available.
     _head_s: pd.Series | None = None
     _name: Hashable = None
+
+    def __init__(
+        self,
+        data=None,
+        index=None,
+        dtype: Dtype | None = None,
+        name=None,
+        copy: bool | None = None,
+        fastpath: bool | lib.NoDefault = lib.no_default,
+        plan: plan_operators.PlanOperator | None = None,
+    ) -> None:
+        self.__dict__["plan"] = plan
+        super().__init__(data, index, dtype, name, copy, fastpath)
+
+    def _cmp_method(self, other, op):
+        if hasattr(self, "plan") and self.plan != None:
+            zero_size_self = self.iloc[:0]
+            if hasattr(other, "iloc"):
+                zero_size_other = other.iloc[:0]
+            else:
+                zero_size_other = other
+            if hasattr(other, "plan") and other.plan != None:
+                other = other.plan
+            new_metadata = zero_size_self._cmp_method(zero_size_other, op)
+            assert isinstance(new_metadata, pd.Series)
+            return BodoSeries(
+                new_metadata,
+                plan=plan_operators.BinaryOpPlanOperator(self.plan, other, op),
+            )
+
+        return super()._cmp_method(other, op)
 
     @staticmethod
     def from_lazy_mgr(
