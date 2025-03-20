@@ -1545,6 +1545,15 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#Azure" class="md-nav__link">
+    <span class="md-ellipsis">
+      Azure Filesystems (ABFS or ADLS)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#GCS" class="md-nav__link">
     <span class="md-ellipsis">
       Google Cloud Storage
@@ -1565,31 +1574,22 @@
           <li class="md-nav__item">
   <a href="#HDFS" class="md-nav__link">
     <span class="md-ellipsis">
-      Hadoop Distributed File System (HDFS) and Azure Data Lake Storage (ADLS) Gen2
+      Hadoop Distributed File System (HDFS)
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="Hadoop Distributed File System (HDFS) and Azure Data Lake Storage (ADLS) Gen2">
+    <nav class="md-nav" aria-label="Hadoop Distributed File System (HDFS)">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#setting-up-hdfsadls-credentials" class="md-nav__link">
+  <a href="#setting-up-hdfs-credentials" class="md-nav__link">
     <span class="md-ellipsis">
-      Setting up HDFS/ADLS Credentials
+      Setting up HDFS Credentials
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="Setting up HDFS/ADLS Credentials">
+    <nav class="md-nav" aria-label="Setting up HDFS Credentials">
       <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#environment-variables" class="md-nav__link">
-    <span class="md-ellipsis">
-      Environment Variables
-    </span>
-  </a>
-  
-</li>
         
           <li class="md-nav__item">
   <a href="#azure-identities" class="md-nav__link">
@@ -1611,15 +1611,6 @@
         
       </ul>
     </nav>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#interleave-adls-snowflake-write" class="md-nav__link">
-    <span class="md-ellipsis">
-      Interleaving HDFS/ADLS I/O with Snowflake Write
-    </span>
-  </a>
   
 </li>
         
@@ -25338,6 +25329,15 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#Azure" class="md-nav__link">
+    <span class="md-ellipsis">
+      Azure Filesystems (ABFS or ADLS)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#GCS" class="md-nav__link">
     <span class="md-ellipsis">
       Google Cloud Storage
@@ -25358,31 +25358,22 @@
           <li class="md-nav__item">
   <a href="#HDFS" class="md-nav__link">
     <span class="md-ellipsis">
-      Hadoop Distributed File System (HDFS) and Azure Data Lake Storage (ADLS) Gen2
+      Hadoop Distributed File System (HDFS)
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="Hadoop Distributed File System (HDFS) and Azure Data Lake Storage (ADLS) Gen2">
+    <nav class="md-nav" aria-label="Hadoop Distributed File System (HDFS)">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#setting-up-hdfsadls-credentials" class="md-nav__link">
+  <a href="#setting-up-hdfs-credentials" class="md-nav__link">
     <span class="md-ellipsis">
-      Setting up HDFS/ADLS Credentials
+      Setting up HDFS Credentials
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="Setting up HDFS/ADLS Credentials">
+    <nav class="md-nav" aria-label="Setting up HDFS Credentials">
       <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#environment-variables" class="md-nav__link">
-    <span class="md-ellipsis">
-      Environment Variables
-    </span>
-  </a>
-  
-</li>
         
           <li class="md-nav__item">
   <a href="#azure-identities" class="md-nav__link">
@@ -25404,15 +25395,6 @@
         
       </ul>
     </nav>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#interleave-adls-snowflake-write" class="md-nav__link">
-    <span class="md-ellipsis">
-      Interleaving HDFS/ADLS I/O with Snowflake Write
-    </span>
-  </a>
   
 </li>
         
@@ -26279,12 +26261,40 @@ that Arrow does not support, then S3FS will be used instead. It can be optionall
 </code></pre></div>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-34-1" name="__codelineno-34-1" href="#__codelineno-34-1"></a>conda<span class="w"> </span>install<span class="w"> </span>-c<span class="w"> </span>conda-forge<span class="w"> </span><span class="s2">&quot;s3fs&gt;=2022.1.0&quot;</span>
 </code></pre></div>
+<h3 id="Azure">Azure Filesystems (ABFS or ADLS)<a class="headerlink" href="#Azure" title="Permanent link">&para;</a></h3>
+<p>Reading and writing <a class="autorefs autorefs-internal" href="#parquet-section">Parquet</a> files from and to Azure Filesystems is 
+supported.</p>
+<p>The file path should start with <code>abfs://</code> or <code>abfss://</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-35-1" name="__codelineno-35-1" href="#__codelineno-35-1"></a><span class="nd">@bodo</span><span class="o">.</span><span class="n">jit</span>
+<a id="__codelineno-35-2" name="__codelineno-35-2" href="#__codelineno-35-2"></a><span class="k">def</span> <span class="nf">example_abfs_parquet</span><span class="p">():</span>
+<a id="__codelineno-35-3" name="__codelineno-35-3" href="#__codelineno-35-3"></a>    <span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_parquet</span><span class="p">(</span><span class="s2">&quot;abfs://container-name/file_name.parquet&quot;</span><span class="p">)</span>
+</code></pre></div>
+<p>The following parameters are used for credentials:</p>
+<ul>
+<li><em>Required</em>: The name of the storage account, either<ul>
+<li>Set the <code>AZURE_STORAGE_ACCOUNT_NAME</code> environment variable</li>
+<li>Specify the <code>account_name</code> parameter in the <code>storage_options</code> argument of <code>pd.read_parquet</code></li>
+<li>Use the long-form URL syntax: <code>abfs://{CONTAINER_NAME}@{STORAGE_ACCOUNT_NAME}.dfs.core.windows.net/file_name.parquet</code></li>
+</ul>
+</li>
+<li><em>Optional</em>: The authentication key for the storage account, either<ul>
+<li>Set the <code>AZURE_STORAGE_ACCOUNT_KEY</code> environment variable</li>
+<li>Specify the <code>account_key</code> parameter in the <code>storage_options</code> argument of <code>pd.read_parquet</code></li>
+</ul>
+</li>
+<li><em>Optional</em> A SAS token for the storage account, either<ul>
+<li>Set the <code>AZURE_STORAGE_SAS_TOKEN</code> environment variable</li>
+<li>Include in the long-form URL syntax: <code>abfs://{CONTAINER_NAME}@{STORAGE_ACCOUNT_NAME}.dfs.core.windows.net/{PATH}/{SAS_TOKEN}/file_name.parquet</code></li>
+</ul>
+</li>
+</ul>
+<p>Bodo uses <a href="https://arrow.apache.org/">Apache Arrow</a> internally for Azure IO.</p>
 <h3 id="GCS">Google Cloud Storage<a class="headerlink" href="#GCS" title="Permanent link">&para;</a></h3>
 <p>Reading and writing <a class="autorefs autorefs-internal" href="#parquet-section">Parquet</a> files from and to Google Cloud is supported.</p>
 <p>The file path should start with <code>gs://</code> or <code>gcs://</code>:</p>
-<p><div class="highlight"><pre><span></span><code><a id="__codelineno-35-1" name="__codelineno-35-1" href="#__codelineno-35-1"></a><span class="nd">@bodo</span><span class="o">.</span><span class="n">jit</span>
-<a id="__codelineno-35-2" name="__codelineno-35-2" href="#__codelineno-35-2"></a><span class="k">def</span> <span class="nf">example_gcs_parquet</span><span class="p">():</span>
-<a id="__codelineno-35-3" name="__codelineno-35-3" href="#__codelineno-35-3"></a>    <span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_parquet</span><span class="p">(</span><span class="s2">&quot;gcs://bucket-name/file_name.parquet&quot;</span><span class="p">)</span>
+<p><div class="highlight"><pre><span></span><code><a id="__codelineno-36-1" name="__codelineno-36-1" href="#__codelineno-36-1"></a><span class="nd">@bodo</span><span class="o">.</span><span class="n">jit</span>
+<a id="__codelineno-36-2" name="__codelineno-36-2" href="#__codelineno-36-2"></a><span class="k">def</span> <span class="nf">example_gcs_parquet</span><span class="p">():</span>
+<a id="__codelineno-36-3" name="__codelineno-36-3" href="#__codelineno-36-3"></a>    <span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_parquet</span><span class="p">(</span><span class="s2">&quot;gcs://bucket-name/file_name.parquet&quot;</span><span class="p">)</span>
 </code></pre></div>
 These environment variables are used for File I/O with GCS credentials:</p>
 <ul>
@@ -26298,26 +26308,25 @@ read and write of data on GCS.</p>
 <p>Bodo supports reading CSV, JSON and Parquet data from Hugging Face datasets using the <a href="https://huggingface.co/docs/huggingface_hub">huggingface_hub</a> library
 (which can be installed using pip or Conda).
 The data path should start with <code>hf://</code>. For example:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-36-1" name="__codelineno-36-1" href="#__codelineno-36-1"></a><span class="nd">@bodo</span><span class="o">.</span><span class="n">jit</span>
-<a id="__codelineno-36-2" name="__codelineno-36-2" href="#__codelineno-36-2"></a><span class="k">def</span> <span class="nf">example_hf_dataset</span><span class="p">():</span>
-<a id="__codelineno-36-3" name="__codelineno-36-3" href="#__codelineno-36-3"></a>    <span class="k">return</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_parquet</span><span class="p">(</span><span class="s2">&quot;hf://datasets/openai/gsm8k/main/train-00000-of-00001.parquet&quot;</span><span class="p">)</span>
-</code></pre></div>
-<h3 id="HDFS">Hadoop Distributed File System (HDFS) and Azure Data Lake Storage (ADLS) Gen2<a class="headerlink" href="#HDFS" title="Permanent link">&para;</a></h3>
-<p>Reading and writing <a class="autorefs autorefs-internal" href="#csv-section">CSV</a>, <a class="autorefs autorefs-internal" href="#parquet-section">Parquet</a>, <a class="autorefs autorefs-internal" href="#json-section">JSON</a>, and
-<a class="autorefs autorefs-internal" href="#numpy-binary-section">Numpy binary</a> files from and to Hadoop Distributed File System (HDFS) is supported.
-Note that Azure Data Lake Storage Gen2 can be accessed through HDFS.</p>
-<p>The <code>openjdk</code> version 11 package must be available, and the file path
-should start with <code>hdfs://</code> or <code>abfs[s]://</code>:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-37-1" name="__codelineno-37-1" href="#__codelineno-37-1"></a><span class="nd">@bodo</span><span class="o">.</span><span class="n">jit</span>
-<a id="__codelineno-37-2" name="__codelineno-37-2" href="#__codelineno-37-2"></a><span class="k">def</span> <span class="nf">example_hdfs_parquet</span><span class="p">():</span>
-<a id="__codelineno-37-3" name="__codelineno-37-3" href="#__codelineno-37-3"></a>    <span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_parquet</span><span class="p">(</span><span class="s2">&quot;hdfs://host:port/dir/file_name.pq&quot;</span><span class="p">)</span>
+<a id="__codelineno-37-2" name="__codelineno-37-2" href="#__codelineno-37-2"></a><span class="k">def</span> <span class="nf">example_hf_dataset</span><span class="p">():</span>
+<a id="__codelineno-37-3" name="__codelineno-37-3" href="#__codelineno-37-3"></a>    <span class="k">return</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_parquet</span><span class="p">(</span><span class="s2">&quot;hf://datasets/openai/gsm8k/main/train-00000-of-00001.parquet&quot;</span><span class="p">)</span>
+</code></pre></div>
+<h3 id="HDFS">Hadoop Distributed File System (HDFS)<a class="headerlink" href="#HDFS" title="Permanent link">&para;</a></h3>
+<p>Reading and writing <a class="autorefs autorefs-internal" href="#csv-section">CSV</a>, <a class="autorefs autorefs-internal" href="#parquet-section">Parquet</a>, <a class="autorefs autorefs-internal" href="#json-section">JSON</a>, and
+<a class="autorefs autorefs-internal" href="#numpy-binary-section">Numpy binary</a> files from and to Hadoop Distributed File System (HDFS) is supported.</p>
+<p>The <code>openjdk</code> version 11 package must be available, and the file path
+should start with <code>hdfs://</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-38-1" name="__codelineno-38-1" href="#__codelineno-38-1"></a><span class="nd">@bodo</span><span class="o">.</span><span class="n">jit</span>
+<a id="__codelineno-38-2" name="__codelineno-38-2" href="#__codelineno-38-2"></a><span class="k">def</span> <span class="nf">example_hdfs_parquet</span><span class="p">():</span>
+<a id="__codelineno-38-3" name="__codelineno-38-3" href="#__codelineno-38-3"></a>    <span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_parquet</span><span class="p">(</span><span class="s2">&quot;hdfs://host:port/dir/file_name.pq&quot;</span><span class="p">)</span>
 </code></pre></div>
 <p>These environment variables are used for File I/O with HDFS:</p>
 <ul>
 <li><code>HADOOP_HOME</code>: the root of your installed Hadoop distribution. Often is <code>lib/native/libhdfs.so</code>.</li>
 <li><code>ARROW_LIBHDFS_DIR</code>: location of libhdfs. Often is <code>$HADOOP_HOME/lib/native</code>.</li>
 <li><code>CLASSPATH</code>: must contain the Hadoop jars. You can set these using:
-    <div class="highlight"><pre><span></span><code><a id="__codelineno-38-1" name="__codelineno-38-1" href="#__codelineno-38-1"></a><span class="nb">export</span><span class="w"> </span><span class="nv">CLASSPATH</span><span class="o">=</span><span class="sb">`</span><span class="nv">$HADOOP_HOME</span>/bin/hdfs<span class="w"> </span>classpath<span class="w"> </span>--glob<span class="sb">`</span>
+    <div class="highlight"><pre><span></span><code><a id="__codelineno-39-1" name="__codelineno-39-1" href="#__codelineno-39-1"></a><span class="nb">export</span><span class="w"> </span><span class="nv">CLASSPATH</span><span class="o">=</span><span class="sb">`</span><span class="nv">$HADOOP_HOME</span>/bin/hdfs<span class="w"> </span>classpath<span class="w"> </span>--glob<span class="sb">`</span>
 </code></pre></div></li>
 </ul>
 <p>Bodo uses <a href="https://arrow.apache.org/">Apache Arrow</a> internally for read
@@ -26325,23 +26334,19 @@ and write of data on HDFS. <code>$HADOOP_HOME/etc/hadoop/hdfs-site.xml</code>
 provides default behaviors for the HDFS client used by Bodo.
 Inconsistent configurations (e.g. <code>dfs.replication</code>) could potentially
 cause errors in Bodo programs.</p>
-<h4 id="setting-up-hdfsadls-credentials">Setting up HDFS/ADLS Credentials<a class="headerlink" href="#setting-up-hdfsadls-credentials" title="Permanent link">&para;</a></h4>
-<p>There are 3 supported methods for authenticating to HDFS/ADLS:</p>
+<h4 id="setting-up-hdfs-credentials">Setting up HDFS Credentials<a class="headerlink" href="#setting-up-hdfs-credentials" title="Permanent link">&para;</a></h4>
+<p>There are 3 supported methods for authenticating to HDFS:</p>
 <ul>
 <li>Environment Variables</li>
-<li>Azure Identities</li>
 <li>core-site.xml</li>
 </ul>
-<h5 id="environment-variables">Environment Variables<a class="headerlink" href="#environment-variables" title="Permanent link">&para;</a></h5>
-<p>To authenticate with environment variables set <code>AZURE_STORAGE_ACCOUNT_NAME</code> to the name of the Azure storage
-account to be accessed and <code>AZURE_STORAGE_ACCOUNT_KEY</code> to the key for the storage account.</p>
 <h5 id="azure-identities">Azure Identities<a class="headerlink" href="#azure-identities" title="Permanent link">&para;</a></h5>
 <p>To authenticate with Azure Identites assign an identity to your Azure VM and ensure it has the 
 Storage Blob Data Contributor role for the storage account to access. This is only supported on Bodo Platform.</p>
 <h5 id="core-sitexml">core-site.xml<a class="headerlink" href="#core-sitexml" title="Permanent link">&para;</a></h5>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
-<p>core-site.xml authentication is not supported on Bodo Platform, instead use the environment variables or Azure Identities.</p>
+<p>core-site.xml authentication is not supported on Bodo Platform, instead use the environment variables.</p>
 </div>
 <p>To authenticate with a core-site.xml file Hadoop Filesystem sources its credentials from the first available
 <code>core-site.xml</code> file on the <code>CLASSPATH</code>. When Hadoop is set up (including
@@ -26350,219 +26355,38 @@ on Bodo Platform), this file is usually created at
 You can edit this file and set credentials appropriately.</p>
 <p>You can also write the core-site configuration to <code>bodo.HDFS_CORE_SITE_LOC</code>,
 which is a temporary file Bodo adds to the <code>CLASSPATH</code> when it is initialized:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-39-1" name="__codelineno-39-1" href="#__codelineno-39-1"></a><span class="kn">import</span> <span class="nn">bodo</span>
-<a id="__codelineno-39-2" name="__codelineno-39-2" href="#__codelineno-39-2"></a>
-<a id="__codelineno-39-3" name="__codelineno-39-3" href="#__codelineno-39-3"></a><span class="c1"># Initialize the temporary directory where the core-site file</span>
-<a id="__codelineno-39-4" name="__codelineno-39-4" href="#__codelineno-39-4"></a><span class="c1"># will be written</span>
-<a id="__codelineno-39-5" name="__codelineno-39-5" href="#__codelineno-39-5"></a><span class="n">bodo</span><span class="o">.</span><span class="n">HDFS_CORE_SITE_LOC_DIR</span><span class="o">.</span><span class="n">initialize</span><span class="p">()</span>
-<a id="__codelineno-39-6" name="__codelineno-39-6" href="#__codelineno-39-6"></a>
-<a id="__codelineno-39-7" name="__codelineno-39-7" href="#__codelineno-39-7"></a><span class="c1"># Define the core-site for your regular ADLS/HDFS read/write</span>
-<a id="__codelineno-39-8" name="__codelineno-39-8" href="#__codelineno-39-8"></a><span class="c1"># operations</span>
-<a id="__codelineno-39-9" name="__codelineno-39-9" href="#__codelineno-39-9"></a><span class="n">CORE_SITE_SPEC</span> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;</span>
-<a id="__codelineno-39-10" name="__codelineno-39-10" href="#__codelineno-39-10"></a><span class="s2">&lt;configuration&gt;</span>
-<a id="__codelineno-39-11" name="__codelineno-39-11" href="#__codelineno-39-11"></a><span class="s2">...</span>
-<a id="__codelineno-39-12" name="__codelineno-39-12" href="#__codelineno-39-12"></a><span class="s2">&lt;/configuration&gt;</span>
-<a id="__codelineno-39-13" name="__codelineno-39-13" href="#__codelineno-39-13"></a><span class="s2">&quot;&quot;&quot;</span>
-<a id="__codelineno-39-14" name="__codelineno-39-14" href="#__codelineno-39-14"></a>
-<a id="__codelineno-39-15" name="__codelineno-39-15" href="#__codelineno-39-15"></a><span class="c1"># Write it to the temporary core-site file.</span>
-<a id="__codelineno-39-16" name="__codelineno-39-16" href="#__codelineno-39-16"></a><span class="c1"># Do it on one rank on every node to avoid filesystem conflicts.</span>
-<a id="__codelineno-39-17" name="__codelineno-39-17" href="#__codelineno-39-17"></a><span class="k">if</span> <span class="n">bodo</span><span class="o">.</span><span class="n">get_rank</span><span class="p">()</span> <span class="ow">in</span> <span class="n">bodo</span><span class="o">.</span><span class="n">get_nodes_first_ranks</span><span class="p">():</span>
-<a id="__codelineno-39-18" name="__codelineno-39-18" href="#__codelineno-39-18"></a>    <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">bodo</span><span class="o">.</span><span class="n">HDFS_CORE_SITE_LOC</span><span class="p">,</span> <span class="s1">&#39;w&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
-<a id="__codelineno-39-19" name="__codelineno-39-19" href="#__codelineno-39-19"></a>        <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">CORE_SITE_SPEC</span><span class="p">)</span>
-<a id="__codelineno-39-20" name="__codelineno-39-20" href="#__codelineno-39-20"></a>
-<a id="__codelineno-39-21" name="__codelineno-39-21" href="#__codelineno-39-21"></a>
-<a id="__codelineno-39-22" name="__codelineno-39-22" href="#__codelineno-39-22"></a><span class="nd">@bodo</span><span class="o">.</span><span class="n">jit</span>
-<a id="__codelineno-39-23" name="__codelineno-39-23" href="#__codelineno-39-23"></a><span class="k">def</span> <span class="nf">etl_job</span><span class="p">():</span>
-<a id="__codelineno-39-24" name="__codelineno-39-24" href="#__codelineno-39-24"></a>    <span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_parquet</span><span class="p">(</span><span class="s2">&quot;abfs://</span><span class="si">{CONTAINER_NAME}</span><span class="s2">@</span><span class="si">{STORAGE_ACCOUNT_NAME}</span><span class="s2">.dfs.core.windows.net/file.pq&quot;</span><span class="p">)</span>
-<a id="__codelineno-39-25" name="__codelineno-39-25" href="#__codelineno-39-25"></a>    <span class="c1"># ..</span>
-<a id="__codelineno-39-26" name="__codelineno-39-26" href="#__codelineno-39-26"></a>    <span class="c1"># .. Some ETL Processing</span>
-<a id="__codelineno-39-27" name="__codelineno-39-27" href="#__codelineno-39-27"></a>    <span class="c1"># ..</span>
-<a id="__codelineno-39-28" name="__codelineno-39-28" href="#__codelineno-39-28"></a>    <span class="n">df</span><span class="o">.</span><span class="n">to_parquet</span><span class="p">(</span><span class="s2">&quot;abfs://</span><span class="si">{CONTAINER_NAME}</span><span class="s2">@</span><span class="si">{STORAGE_ACCOUNT_NAME}</span><span class="s2">.dfs.core.windows.net/out_file.pq&quot;</span><span class="p">)</span>
-<a id="__codelineno-39-29" name="__codelineno-39-29" href="#__codelineno-39-29"></a>    <span class="k">return</span>
-<a id="__codelineno-39-30" name="__codelineno-39-30" href="#__codelineno-39-30"></a>
-<a id="__codelineno-39-31" name="__codelineno-39-31" href="#__codelineno-39-31"></a>
-<a id="__codelineno-39-32" name="__codelineno-39-32" href="#__codelineno-39-32"></a><span class="n">etl_job</span><span class="p">()</span>
-</code></pre></div>
-<p>There are several authorization methods for reading from or writing to ADLS Storage Containers using a core-site.xml file, all of which
-require slightly different core-site configurations. Here are some examples:</p>
-<ul>
-<li>
-<p>Using an ADLS Access Key</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-40-1" name="__codelineno-40-1" href="#__codelineno-40-1"></a><span class="kn">import</span> <span class="nn">bodo</span>
-<a id="__codelineno-40-2" name="__codelineno-40-2" href="#__codelineno-40-2"></a><span class="kn">import</span> <span class="nn">pandas</span> <span class="k">as</span> <span class="nn">pd</span>
-<a id="__codelineno-40-3" name="__codelineno-40-3" href="#__codelineno-40-3"></a>
-<a id="__codelineno-40-4" name="__codelineno-40-4" href="#__codelineno-40-4"></a><span class="c1"># Initialize the temporary directory where the core-site file</span>
-<a id="__codelineno-40-5" name="__codelineno-40-5" href="#__codelineno-40-5"></a><span class="c1"># will be written</span>
-<a id="__codelineno-40-6" name="__codelineno-40-6" href="#__codelineno-40-6"></a><span class="n">bodo</span><span class="o">.</span><span class="n">HDFS_CORE_SITE_LOC_DIR</span><span class="o">.</span><span class="n">initialize</span><span class="p">()</span>
-<a id="__codelineno-40-7" name="__codelineno-40-7" href="#__codelineno-40-7"></a>
-<a id="__codelineno-40-8" name="__codelineno-40-8" href="#__codelineno-40-8"></a>
-<a id="__codelineno-40-9" name="__codelineno-40-9" href="#__codelineno-40-9"></a><span class="c1"># Define the core-site for your regular ADLS/HDFS read/write</span>
-<a id="__codelineno-40-10" name="__codelineno-40-10" href="#__codelineno-40-10"></a><span class="c1"># operations</span>
-<a id="__codelineno-40-11" name="__codelineno-40-11" href="#__codelineno-40-11"></a><span class="n">CORE_SITE_SPEC</span> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;&lt;configuration&gt;</span>
-<a id="__codelineno-40-12" name="__codelineno-40-12" href="#__codelineno-40-12"></a><span class="s2">&lt;property&gt;</span>
-<a id="__codelineno-40-13" name="__codelineno-40-13" href="#__codelineno-40-13"></a><span class="s2">    &lt;name&gt;fs.abfs.impl&lt;/name&gt;</span>
-<a id="__codelineno-40-14" name="__codelineno-40-14" href="#__codelineno-40-14"></a><span class="s2">    &lt;value&gt;org.apache.hadoop.fs.azurebfs.AzureBlobFileSystem&lt;/value&gt;</span>
-<a id="__codelineno-40-15" name="__codelineno-40-15" href="#__codelineno-40-15"></a><span class="s2">&lt;/property&gt;</span>
-<a id="__codelineno-40-16" name="__codelineno-40-16" href="#__codelineno-40-16"></a><span class="s2">&lt;property&gt;</span>
-<a id="__codelineno-40-17" name="__codelineno-40-17" href="#__codelineno-40-17"></a><span class="s2">    &lt;name&gt;fs.azure.account.auth.type.</span><span class="si">{STORAGE_ACCOUNT_NAME}</span><span class="s2">.dfs.core.windows.net&lt;/name&gt;</span>
-<a id="__codelineno-40-18" name="__codelineno-40-18" href="#__codelineno-40-18"></a><span class="s2">    &lt;value&gt;SharedKey&lt;/value&gt;</span>
-<a id="__codelineno-40-19" name="__codelineno-40-19" href="#__codelineno-40-19"></a><span class="s2">&lt;/property&gt;</span>
-<a id="__codelineno-40-20" name="__codelineno-40-20" href="#__codelineno-40-20"></a><span class="s2">&lt;property&gt;</span>
-<a id="__codelineno-40-21" name="__codelineno-40-21" href="#__codelineno-40-21"></a><span class="s2">    &lt;name&gt;fs.azure.account.key.</span><span class="si">{STORAGE_ACCOUNT_NAME}</span><span class="s2">.dfs.core.windows.net&lt;/name&gt;</span>
-<a id="__codelineno-40-22" name="__codelineno-40-22" href="#__codelineno-40-22"></a><span class="s2">    &lt;value&gt;</span><span class="si">{ADLS_SECRET}</span><span class="s2">&lt;/value&gt;</span>
-<a id="__codelineno-40-23" name="__codelineno-40-23" href="#__codelineno-40-23"></a><span class="s2">    &lt;description&gt; The ADLS storage account access key itself.&lt;/description&gt;</span>
-<a id="__codelineno-40-24" name="__codelineno-40-24" href="#__codelineno-40-24"></a><span class="s2">&lt;/property&gt;</span>
-<a id="__codelineno-40-25" name="__codelineno-40-25" href="#__codelineno-40-25"></a><span class="s2">&lt;/configuration&gt;</span>
-<a id="__codelineno-40-26" name="__codelineno-40-26" href="#__codelineno-40-26"></a><span class="s2">&quot;&quot;&quot;</span>
-<a id="__codelineno-40-27" name="__codelineno-40-27" href="#__codelineno-40-27"></a>
-<a id="__codelineno-40-28" name="__codelineno-40-28" href="#__codelineno-40-28"></a><span class="c1"># Write it to the temporary core-site file.</span>
-<a id="__codelineno-40-29" name="__codelineno-40-29" href="#__codelineno-40-29"></a><span class="c1"># Do it on one rank on every node to avoid filesystem conflicts.</span>
-<a id="__codelineno-40-30" name="__codelineno-40-30" href="#__codelineno-40-30"></a><span class="k">if</span> <span class="n">bodo</span><span class="o">.</span><span class="n">get_rank</span><span class="p">()</span> <span class="ow">in</span> <span class="n">bodo</span><span class="o">.</span><span class="n">get_nodes_first_ranks</span><span class="p">():</span>
-<a id="__codelineno-40-31" name="__codelineno-40-31" href="#__codelineno-40-31"></a>    <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">bodo</span><span class="o">.</span><span class="n">HDFS_CORE_SITE_LOC</span><span class="p">,</span> <span class="s1">&#39;w&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
-<a id="__codelineno-40-32" name="__codelineno-40-32" href="#__codelineno-40-32"></a>        <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">CORE_SITE_SPEC</span><span class="p">)</span>
-<a id="__codelineno-40-33" name="__codelineno-40-33" href="#__codelineno-40-33"></a>
-<a id="__codelineno-40-34" name="__codelineno-40-34" href="#__codelineno-40-34"></a><span class="c1"># Run your ETL job</span>
-<a id="__codelineno-40-35" name="__codelineno-40-35" href="#__codelineno-40-35"></a><span class="nd">@bodo</span><span class="o">.</span><span class="n">jit</span>
-<a id="__codelineno-40-36" name="__codelineno-40-36" href="#__codelineno-40-36"></a><span class="k">def</span> <span class="nf">etl_job</span><span class="p">():</span>
-<a id="__codelineno-40-37" name="__codelineno-40-37" href="#__codelineno-40-37"></a>    <span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_parquet</span><span class="p">(</span><span class="s2">&quot;abfs://</span><span class="si">{CONTAINER_NAME}</span><span class="s2">@</span><span class="si">{STORAGE_ACCOUNT_NAME}</span><span class="s2">.dfs.core.windows.net/file.pq&quot;</span><span class="p">)</span>
-<a id="__codelineno-40-38" name="__codelineno-40-38" href="#__codelineno-40-38"></a>    <span class="c1"># ..</span>
-<a id="__codelineno-40-39" name="__codelineno-40-39" href="#__codelineno-40-39"></a>    <span class="c1"># .. Some ETL Processing</span>
-<a id="__codelineno-40-40" name="__codelineno-40-40" href="#__codelineno-40-40"></a>    <span class="c1"># ..</span>
-<a id="__codelineno-40-41" name="__codelineno-40-41" href="#__codelineno-40-41"></a>    <span class="n">df</span><span class="o">.</span><span class="n">to_parquet</span><span class="p">(</span><span class="s2">&quot;abfs://</span><span class="si">{CONTAINER_NAME}</span><span class="s2">@</span><span class="si">{STORAGE_ACCOUNT_NAME}</span><span class="s2">.dfs.core.windows.net/out_file.pq&quot;</span><span class="p">)</span>
-<a id="__codelineno-40-42" name="__codelineno-40-42" href="#__codelineno-40-42"></a>    <span class="k">return</span>
-<a id="__codelineno-40-43" name="__codelineno-40-43" href="#__codelineno-40-43"></a>
-<a id="__codelineno-40-44" name="__codelineno-40-44" href="#__codelineno-40-44"></a>
-<a id="__codelineno-40-45" name="__codelineno-40-45" href="#__codelineno-40-45"></a><span class="n">etl_job</span><span class="p">()</span>
-</code></pre></div>
-</li>
-<li>
-<p>Using a SAS Token</p>
-<p>To use SAS Tokens, you need to install the <code>bodo-azurefs-sas-token-provider</code>
-package (it can be installed using <code>pip install bodo-azurefs-sas-token-provider</code> or
-<code>conda install bodo-azurefs-sas-token-provider -c bodo.ai -c conda-forge</code>).
-This is already installed on the Bodo Platform.
-Then in your program, do the following:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-41-1" name="__codelineno-41-1" href="#__codelineno-41-1"></a><span class="kn">import</span> <span class="nn">bodo</span>
-<a id="__codelineno-41-2" name="__codelineno-41-2" href="#__codelineno-41-2"></a><span class="c1"># Importing this module adds the required JARs to the CLASSPATH</span>
-<a id="__codelineno-41-3" name="__codelineno-41-3" href="#__codelineno-41-3"></a><span class="kn">import</span> <span class="nn">bodo_azurefs_sas_token_provider</span>
-<a id="__codelineno-41-4" name="__codelineno-41-4" href="#__codelineno-41-4"></a><span class="kn">import</span> <span class="nn">pandas</span> <span class="k">as</span> <span class="nn">pd</span>
-<a id="__codelineno-41-5" name="__codelineno-41-5" href="#__codelineno-41-5"></a><span class="kn">import</span> <span class="nn">os</span>
-<a id="__codelineno-41-6" name="__codelineno-41-6" href="#__codelineno-41-6"></a>
-<a id="__codelineno-41-7" name="__codelineno-41-7" href="#__codelineno-41-7"></a><span class="c1"># Initialize the temporary directory where the core-site file</span>
-<a id="__codelineno-41-8" name="__codelineno-41-8" href="#__codelineno-41-8"></a><span class="c1"># will be written</span>
-<a id="__codelineno-41-9" name="__codelineno-41-9" href="#__codelineno-41-9"></a><span class="n">bodo</span><span class="o">.</span><span class="n">HDFS_CORE_SITE_LOC_DIR</span><span class="o">.</span><span class="n">initialize</span><span class="p">()</span>
-<a id="__codelineno-41-10" name="__codelineno-41-10" href="#__codelineno-41-10"></a>
-<a id="__codelineno-41-11" name="__codelineno-41-11" href="#__codelineno-41-11"></a>
-<a id="__codelineno-41-12" name="__codelineno-41-12" href="#__codelineno-41-12"></a><span class="c1"># Define the core-site for your regular ADLS/HDFS read/write</span>
-<a id="__codelineno-41-13" name="__codelineno-41-13" href="#__codelineno-41-13"></a><span class="c1"># operations</span>
-<a id="__codelineno-41-14" name="__codelineno-41-14" href="#__codelineno-41-14"></a><span class="n">CORE_SITE_SPEC</span> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;&lt;configuration&gt;</span>
-<a id="__codelineno-41-15" name="__codelineno-41-15" href="#__codelineno-41-15"></a><span class="s2">    &lt;property&gt;</span>
-<a id="__codelineno-41-16" name="__codelineno-41-16" href="#__codelineno-41-16"></a><span class="s2">        &lt;name&gt;fs.azure.account.auth.type.</span><span class="si">{STORAGE_ACCOUNT_NAME}</span><span class="s2">.dfs.core.windows.net&lt;/name&gt;</span>
-<a id="__codelineno-41-17" name="__codelineno-41-17" href="#__codelineno-41-17"></a><span class="s2">        &lt;value&gt;SAS&lt;/value&gt;</span>
-<a id="__codelineno-41-18" name="__codelineno-41-18" href="#__codelineno-41-18"></a><span class="s2">    &lt;/property&gt;</span>
-<a id="__codelineno-41-19" name="__codelineno-41-19" href="#__codelineno-41-19"></a><span class="s2">    &lt;property&gt;</span>
-<a id="__codelineno-41-20" name="__codelineno-41-20" href="#__codelineno-41-20"></a><span class="s2">        &lt;name&gt;fs.azure.sas.token.provider.type.</span><span class="si">{STORAGE_ACCOUNT_NAME}</span><span class="s2">.dfs.core.windows.net&lt;/name&gt;</span>
-<a id="__codelineno-41-21" name="__codelineno-41-21" href="#__codelineno-41-21"></a><span class="s2">        &lt;value&gt;org.bodo.azurefs.sas.BodoSASTokenProvider&lt;/value&gt;</span>
-<a id="__codelineno-41-22" name="__codelineno-41-22" href="#__codelineno-41-22"></a><span class="s2">    &lt;/property&gt;</span>
-<a id="__codelineno-41-23" name="__codelineno-41-23" href="#__codelineno-41-23"></a><span class="s2">    &lt;property&gt;</span>
-<a id="__codelineno-41-24" name="__codelineno-41-24" href="#__codelineno-41-24"></a><span class="s2">        &lt;name&gt;fs.abfs.impl&lt;/name&gt;</span>
-<a id="__codelineno-41-25" name="__codelineno-41-25" href="#__codelineno-41-25"></a><span class="s2">        &lt;value&gt;org.apache.hadoop.fs.azurebfs.AzureBlobFileSystem&lt;/value&gt;</span>
-<a id="__codelineno-41-26" name="__codelineno-41-26" href="#__codelineno-41-26"></a><span class="s2">    &lt;/property&gt;</span>
-<a id="__codelineno-41-27" name="__codelineno-41-27" href="#__codelineno-41-27"></a><span class="s2">&lt;/configuration&gt;</span>
-<a id="__codelineno-41-28" name="__codelineno-41-28" href="#__codelineno-41-28"></a><span class="s2">&quot;&quot;&quot;</span>
-<a id="__codelineno-41-29" name="__codelineno-41-29" href="#__codelineno-41-29"></a>
-<a id="__codelineno-41-30" name="__codelineno-41-30" href="#__codelineno-41-30"></a><span class="c1"># Write it to the temporary core-site file.</span>
-<a id="__codelineno-41-31" name="__codelineno-41-31" href="#__codelineno-41-31"></a><span class="c1"># Do it on one rank on every node to avoid filesystem conflicts.</span>
-<a id="__codelineno-41-32" name="__codelineno-41-32" href="#__codelineno-41-32"></a><span class="k">if</span> <span class="n">bodo</span><span class="o">.</span><span class="n">get_rank</span><span class="p">()</span> <span class="ow">in</span> <span class="n">bodo</span><span class="o">.</span><span class="n">get_nodes_first_ranks</span><span class="p">():</span>
-<a id="__codelineno-41-33" name="__codelineno-41-33" href="#__codelineno-41-33"></a>    <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">bodo</span><span class="o">.</span><span class="n">HDFS_CORE_SITE_LOC</span><span class="p">,</span> <span class="s1">&#39;w&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
-<a id="__codelineno-41-34" name="__codelineno-41-34" href="#__codelineno-41-34"></a>        <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">CORE_SITE_SPEC</span><span class="p">)</span>
-<a id="__codelineno-41-35" name="__codelineno-41-35" href="#__codelineno-41-35"></a>
-<a id="__codelineno-41-36" name="__codelineno-41-36" href="#__codelineno-41-36"></a><span class="c1"># Load the SAS token here.</span>
-<a id="__codelineno-41-37" name="__codelineno-41-37" href="#__codelineno-41-37"></a><span class="n">SAS_TOKEN</span> <span class="o">=</span> <span class="s2">&quot;...&quot;</span>
-<a id="__codelineno-41-38" name="__codelineno-41-38" href="#__codelineno-41-38"></a>
-<a id="__codelineno-41-39" name="__codelineno-41-39" href="#__codelineno-41-39"></a><span class="c1"># Write SAS Token to a file.</span>
-<a id="__codelineno-41-40" name="__codelineno-41-40" href="#__codelineno-41-40"></a><span class="c1"># Do it on one rank on every node to avoid filesystem conflicts.</span>
-<a id="__codelineno-41-41" name="__codelineno-41-41" href="#__codelineno-41-41"></a><span class="k">if</span> <span class="n">bodo</span><span class="o">.</span><span class="n">get_rank</span><span class="p">()</span> <span class="ow">in</span> <span class="n">bodo</span><span class="o">.</span><span class="n">get_nodes_first_ranks</span><span class="p">():</span>
-<a id="__codelineno-41-42" name="__codelineno-41-42" href="#__codelineno-41-42"></a>    <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">bodo</span><span class="o">.</span><span class="n">HDFS_CORE_SITE_LOC_DIR</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="s2">&quot;sas_token.txt&quot;</span><span class="p">),</span> <span class="s1">&#39;w&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
-<a id="__codelineno-41-43" name="__codelineno-41-43" href="#__codelineno-41-43"></a>        <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">SAS_TOKEN</span><span class="p">)</span>
-<a id="__codelineno-41-44" name="__codelineno-41-44" href="#__codelineno-41-44"></a>
-<a id="__codelineno-41-45" name="__codelineno-41-45" href="#__codelineno-41-45"></a><span class="c1"># Run your ETL job</span>
-<a id="__codelineno-41-46" name="__codelineno-41-46" href="#__codelineno-41-46"></a><span class="nd">@bodo</span><span class="o">.</span><span class="n">jit</span>
-<a id="__codelineno-41-47" name="__codelineno-41-47" href="#__codelineno-41-47"></a><span class="k">def</span> <span class="nf">etl_job</span><span class="p">():</span>
-<a id="__codelineno-41-48" name="__codelineno-41-48" href="#__codelineno-41-48"></a>    <span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_parquet</span><span class="p">(</span><span class="s2">&quot;abfs://</span><span class="si">{CONTAINER_NAME}</span><span class="s2">@</span><span class="si">{STORAGE_ACCOUNT_NAME}</span><span class="s2">.dfs.core.windows.net/file.pq&quot;</span><span class="p">)</span>
-<a id="__codelineno-41-49" name="__codelineno-41-49" href="#__codelineno-41-49"></a>    <span class="c1"># ..</span>
-<a id="__codelineno-41-50" name="__codelineno-41-50" href="#__codelineno-41-50"></a>    <span class="c1"># .. Some ETL Processing</span>
-<a id="__codelineno-41-51" name="__codelineno-41-51" href="#__codelineno-41-51"></a>    <span class="c1"># ..</span>
-<a id="__codelineno-41-52" name="__codelineno-41-52" href="#__codelineno-41-52"></a>    <span class="n">df</span><span class="o">.</span><span class="n">to_parquet</span><span class="p">(</span><span class="s2">&quot;abfs://</span><span class="si">{CONTAINER_NAME}</span><span class="s2">@</span><span class="si">{STORAGE_ACCOUNT_NAME}</span><span class="s2">.dfs.core.windows.net/out_file.pq&quot;</span><span class="p">)</span>
-<a id="__codelineno-41-53" name="__codelineno-41-53" href="#__codelineno-41-53"></a>    <span class="k">return</span>
-<a id="__codelineno-41-54" name="__codelineno-41-54" href="#__codelineno-41-54"></a>
-<a id="__codelineno-41-55" name="__codelineno-41-55" href="#__codelineno-41-55"></a>
-<a id="__codelineno-41-56" name="__codelineno-41-56" href="#__codelineno-41-56"></a><span class="n">etl_job</span><span class="p">()</span>
-</code></pre></div>
-</li>
-</ul>
-<h4 id="interleave-adls-snowflake-write">Interleaving HDFS/ADLS I/O with Snowflake Write<a class="headerlink" href="#interleave-adls-snowflake-write" title="Permanent link">&para;</a></h4>
-<p><strong><em>Interleaving HDFS/ADLS I/O with Snowflake Write</em></strong></p>
-<p>For writing to an Azure based Snowflake account using the direct upload strategy
-(see <a href="#snowflake-write">Snowflake Write</a>), Bodo writes the required core-site
-configuration to <code>bodo.HDFS_CORE_SITE_LOC</code> automatically. In cases where Snowflake
-write (to an Azure based Snowflake account) needs to be
-done in the same process as a regular HDFS/ADLS read/write operation,
-users need to write credentials for the regular HDFS/ADLS read/write operations
-to the same core-site location (<code>bodo.HDFS_CORE_SITE_LOC</code>)
-due to limitations of Arrow and HDFS.
-Bodo will modify the file (temporarily) during the Snowflake write operation(s)
-and then restore the original configuration for the regular HDFS/ADLS
-read/write operations.</p>
-<p>Here is an example of how to do so:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-42-1" name="__codelineno-42-1" href="#__codelineno-42-1"></a><span class="kn">import</span> <span class="nn">bodo</span>
-<a id="__codelineno-42-2" name="__codelineno-42-2" href="#__codelineno-42-2"></a><span class="kn">import</span> <span class="nn">pandas</span> <span class="k">as</span> <span class="nn">pd</span>
-<a id="__codelineno-42-3" name="__codelineno-42-3" href="#__codelineno-42-3"></a>
-<a id="__codelineno-42-4" name="__codelineno-42-4" href="#__codelineno-42-4"></a><span class="c1"># Initialize the temporary directory where the core-site file</span>
-<a id="__codelineno-42-5" name="__codelineno-42-5" href="#__codelineno-42-5"></a><span class="c1"># will be written</span>
-<a id="__codelineno-42-6" name="__codelineno-42-6" href="#__codelineno-42-6"></a><span class="n">bodo</span><span class="o">.</span><span class="n">HDFS_CORE_SITE_LOC_DIR</span><span class="o">.</span><span class="n">initialize</span><span class="p">()</span>
-<a id="__codelineno-42-7" name="__codelineno-42-7" href="#__codelineno-42-7"></a>
-<a id="__codelineno-42-8" name="__codelineno-42-8" href="#__codelineno-42-8"></a>
-<a id="__codelineno-42-9" name="__codelineno-42-9" href="#__codelineno-42-9"></a><span class="c1"># Define the core-site for your regular ADLS/HDFS read/write</span>
-<a id="__codelineno-42-10" name="__codelineno-42-10" href="#__codelineno-42-10"></a><span class="c1"># operations</span>
-<a id="__codelineno-42-11" name="__codelineno-42-11" href="#__codelineno-42-11"></a><span class="n">CORE_SITE_SPEC</span> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;&lt;configuration&gt;</span>
-<a id="__codelineno-42-12" name="__codelineno-42-12" href="#__codelineno-42-12"></a><span class="s2">...</span>
-<a id="__codelineno-42-13" name="__codelineno-42-13" href="#__codelineno-42-13"></a><span class="s2">&lt;/configuration&gt;</span>
-<a id="__codelineno-42-14" name="__codelineno-42-14" href="#__codelineno-42-14"></a><span class="s2">&quot;&quot;&quot;</span>
-<a id="__codelineno-42-15" name="__codelineno-42-15" href="#__codelineno-42-15"></a>
-<a id="__codelineno-42-16" name="__codelineno-42-16" href="#__codelineno-42-16"></a><span class="c1"># Write it to the temporary core-site file</span>
-<a id="__codelineno-42-17" name="__codelineno-42-17" href="#__codelineno-42-17"></a><span class="c1"># Do it on one rank on every node to avoid filesystem conflicts.</span>
-<a id="__codelineno-42-18" name="__codelineno-42-18" href="#__codelineno-42-18"></a><span class="k">if</span> <span class="n">bodo</span><span class="o">.</span><span class="n">get_rank</span><span class="p">()</span> <span class="ow">in</span> <span class="n">bodo</span><span class="o">.</span><span class="n">get_nodes_first_ranks</span><span class="p">():</span>
-<a id="__codelineno-42-19" name="__codelineno-42-19" href="#__codelineno-42-19"></a>    <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">bodo</span><span class="o">.</span><span class="n">HDFS_CORE_SITE_LOC</span><span class="p">,</span> <span class="s1">&#39;w&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
-<a id="__codelineno-42-20" name="__codelineno-42-20" href="#__codelineno-42-20"></a>        <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">CORE_SITE_SPEC</span><span class="p">)</span>
-<a id="__codelineno-42-21" name="__codelineno-42-21" href="#__codelineno-42-21"></a>
-<a id="__codelineno-42-22" name="__codelineno-42-22" href="#__codelineno-42-22"></a>
-<a id="__codelineno-42-23" name="__codelineno-42-23" href="#__codelineno-42-23"></a><span class="c1"># Write the SAS token if required.</span>
-<a id="__codelineno-42-24" name="__codelineno-42-24" href="#__codelineno-42-24"></a><span class="c1"># import bodo_azurefs_sas_token_provider</span>
-<a id="__codelineno-42-25" name="__codelineno-42-25" href="#__codelineno-42-25"></a><span class="c1"># SAS_TOKEN = &quot;...&quot;</span>
-<a id="__codelineno-42-26" name="__codelineno-42-26" href="#__codelineno-42-26"></a><span class="c1"># if bodo.get_rank() in bodo.get_nodes_first_ranks():</span>
-<a id="__codelineno-42-27" name="__codelineno-42-27" href="#__codelineno-42-27"></a><span class="c1">#     with open(os.path.join(bodo.HDFS_CORE_SITE_LOC_DIR.name, &quot;sas_token.txt&quot;), &#39;w&#39;) as f:</span>
-<a id="__codelineno-42-28" name="__codelineno-42-28" href="#__codelineno-42-28"></a><span class="c1">#         f.write(SAS_TOKEN)</span>
-<a id="__codelineno-42-29" name="__codelineno-42-29" href="#__codelineno-42-29"></a>
-<a id="__codelineno-42-30" name="__codelineno-42-30" href="#__codelineno-42-30"></a>
-<a id="__codelineno-42-31" name="__codelineno-42-31" href="#__codelineno-42-31"></a><span class="nd">@bodo</span><span class="o">.</span><span class="n">jit</span>
-<a id="__codelineno-42-32" name="__codelineno-42-32" href="#__codelineno-42-32"></a><span class="k">def</span> <span class="nf">etl_job</span><span class="p">():</span>
-<a id="__codelineno-42-33" name="__codelineno-42-33" href="#__codelineno-42-33"></a>    <span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_parquet</span><span class="p">(</span><span class="s2">&quot;abfs://</span><span class="si">{CONTAINER_NAME}</span><span class="s2">@</span><span class="si">{STORAGE_ACCOUNT_NAME}</span><span class="s2">.dfs.core.windows.net/file.pq&quot;</span><span class="p">)</span>
-<a id="__codelineno-42-34" name="__codelineno-42-34" href="#__codelineno-42-34"></a>    <span class="c1"># ..</span>
-<a id="__codelineno-42-35" name="__codelineno-42-35" href="#__codelineno-42-35"></a>    <span class="c1"># .. Some ETL Processing</span>
-<a id="__codelineno-42-36" name="__codelineno-42-36" href="#__codelineno-42-36"></a>    <span class="c1"># ..</span>
-<a id="__codelineno-42-37" name="__codelineno-42-37" href="#__codelineno-42-37"></a>    <span class="c1"># Here Bodo will replace the core-site configuration to enable Snowflake write</span>
-<a id="__codelineno-42-38" name="__codelineno-42-38" href="#__codelineno-42-38"></a>    <span class="n">df</span><span class="o">.</span><span class="n">to_sql</span><span class="p">(</span><span class="s2">&quot;new_table&quot;</span><span class="p">,</span> <span class="s2">&quot;snowflake://user:password@url/</span><span class="si">{db_name}</span><span class="s2">/schema?warehouse=warehouse_name&amp;role=role_name&quot;</span><span class="p">)</span>
-<a id="__codelineno-42-39" name="__codelineno-42-39" href="#__codelineno-42-39"></a>    <span class="c1"># Once done, Bodo will restore the contents of the original file so that your</span>
-<a id="__codelineno-42-40" name="__codelineno-42-40" href="#__codelineno-42-40"></a>    <span class="c1"># ADLS operations happen as expected.</span>
-<a id="__codelineno-42-41" name="__codelineno-42-41" href="#__codelineno-42-41"></a>    <span class="c1"># ..</span>
-<a id="__codelineno-42-42" name="__codelineno-42-42" href="#__codelineno-42-42"></a>    <span class="c1"># .. Some more ETL Processing</span>
-<a id="__codelineno-42-43" name="__codelineno-42-43" href="#__codelineno-42-43"></a>    <span class="c1"># ..</span>
-<a id="__codelineno-42-44" name="__codelineno-42-44" href="#__codelineno-42-44"></a>    <span class="n">df</span><span class="o">.</span><span class="n">to_parquet</span><span class="p">(</span><span class="s2">&quot;abfs://</span><span class="si">{CONTAINER_NAME}</span><span class="s2">@</span><span class="si">{STORAGE_ACCOUNT_NAME}</span><span class="s2">.dfs.core.windows.net/out_file.pq&quot;</span><span class="p">)</span>
-<a id="__codelineno-42-45" name="__codelineno-42-45" href="#__codelineno-42-45"></a>    <span class="k">return</span>
-<a id="__codelineno-42-46" name="__codelineno-42-46" href="#__codelineno-42-46"></a>
-<a id="__codelineno-42-47" name="__codelineno-42-47" href="#__codelineno-42-47"></a>
-<a id="__codelineno-42-48" name="__codelineno-42-48" href="#__codelineno-42-48"></a><span class="n">etl_job</span><span class="p">()</span>
+<a id="__codelineno-40-2" name="__codelineno-40-2" href="#__codelineno-40-2"></a>
+<a id="__codelineno-40-3" name="__codelineno-40-3" href="#__codelineno-40-3"></a><span class="c1"># Initialize the temporary directory where the core-site file</span>
+<a id="__codelineno-40-4" name="__codelineno-40-4" href="#__codelineno-40-4"></a><span class="c1"># will be written</span>
+<a id="__codelineno-40-5" name="__codelineno-40-5" href="#__codelineno-40-5"></a><span class="n">bodo</span><span class="o">.</span><span class="n">HDFS_CORE_SITE_LOC_DIR</span><span class="o">.</span><span class="n">initialize</span><span class="p">()</span>
+<a id="__codelineno-40-6" name="__codelineno-40-6" href="#__codelineno-40-6"></a>
+<a id="__codelineno-40-7" name="__codelineno-40-7" href="#__codelineno-40-7"></a><span class="c1"># Define the core-site for your regular ADLS/HDFS read/write</span>
+<a id="__codelineno-40-8" name="__codelineno-40-8" href="#__codelineno-40-8"></a><span class="c1"># operations</span>
+<a id="__codelineno-40-9" name="__codelineno-40-9" href="#__codelineno-40-9"></a><span class="n">CORE_SITE_SPEC</span> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;</span>
+<a id="__codelineno-40-10" name="__codelineno-40-10" href="#__codelineno-40-10"></a><span class="s2">&lt;configuration&gt;</span>
+<a id="__codelineno-40-11" name="__codelineno-40-11" href="#__codelineno-40-11"></a><span class="s2">...</span>
+<a id="__codelineno-40-12" name="__codelineno-40-12" href="#__codelineno-40-12"></a><span class="s2">&lt;/configuration&gt;</span>
+<a id="__codelineno-40-13" name="__codelineno-40-13" href="#__codelineno-40-13"></a><span class="s2">&quot;&quot;&quot;</span>
+<a id="__codelineno-40-14" name="__codelineno-40-14" href="#__codelineno-40-14"></a>
+<a id="__codelineno-40-15" name="__codelineno-40-15" href="#__codelineno-40-15"></a><span class="c1"># Write it to the temporary core-site file.</span>
+<a id="__codelineno-40-16" name="__codelineno-40-16" href="#__codelineno-40-16"></a><span class="c1"># Do it on one rank on every node to avoid filesystem conflicts.</span>
+<a id="__codelineno-40-17" name="__codelineno-40-17" href="#__codelineno-40-17"></a><span class="k">if</span> <span class="n">bodo</span><span class="o">.</span><span class="n">get_rank</span><span class="p">()</span> <span class="ow">in</span> <span class="n">bodo</span><span class="o">.</span><span class="n">get_nodes_first_ranks</span><span class="p">():</span>
+<a id="__codelineno-40-18" name="__codelineno-40-18" href="#__codelineno-40-18"></a>    <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">bodo</span><span class="o">.</span><span class="n">HDFS_CORE_SITE_LOC</span><span class="p">,</span> <span class="s1">&#39;w&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+<a id="__codelineno-40-19" name="__codelineno-40-19" href="#__codelineno-40-19"></a>        <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">CORE_SITE_SPEC</span><span class="p">)</span>
+<a id="__codelineno-40-20" name="__codelineno-40-20" href="#__codelineno-40-20"></a>
+<a id="__codelineno-40-21" name="__codelineno-40-21" href="#__codelineno-40-21"></a>
+<a id="__codelineno-40-22" name="__codelineno-40-22" href="#__codelineno-40-22"></a><span class="nd">@bodo</span><span class="o">.</span><span class="n">jit</span>
+<a id="__codelineno-40-23" name="__codelineno-40-23" href="#__codelineno-40-23"></a><span class="k">def</span> <span class="nf">etl_job</span><span class="p">():</span>
+<a id="__codelineno-40-24" name="__codelineno-40-24" href="#__codelineno-40-24"></a>    <span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_parquet</span><span class="p">(</span><span class="s2">&quot;hdfs://.../file.pq&quot;</span><span class="p">)</span>
+<a id="__codelineno-40-25" name="__codelineno-40-25" href="#__codelineno-40-25"></a>    <span class="c1"># ..</span>
+<a id="__codelineno-40-26" name="__codelineno-40-26" href="#__codelineno-40-26"></a>    <span class="c1"># .. Some ETL Processing</span>
+<a id="__codelineno-40-27" name="__codelineno-40-27" href="#__codelineno-40-27"></a>    <span class="c1"># ..</span>
+<a id="__codelineno-40-28" name="__codelineno-40-28" href="#__codelineno-40-28"></a>    <span class="n">df</span><span class="o">.</span><span class="n">to_parquet</span><span class="p">(</span><span class="s2">&quot;hdfs://.../out_file.pq&quot;</span><span class="p">)</span>
+<a id="__codelineno-40-29" name="__codelineno-40-29" href="#__codelineno-40-29"></a>    <span class="k">return</span>
+<a id="__codelineno-40-30" name="__codelineno-40-30" href="#__codelineno-40-30"></a>
+<a id="__codelineno-40-31" name="__codelineno-40-31" href="#__codelineno-40-31"></a>
+<a id="__codelineno-40-32" name="__codelineno-40-32" href="#__codelineno-40-32"></a><span class="n">etl_job</span><span class="p">()</span>
 </code></pre></div>
 <h2 id="db">Databases<a class="headerlink" href="#db" title="Permanent link">&para;</a></h2>
 <p>Currently, Bodo supports most RDBMS that work with SQLAlchemy, with a
@@ -26574,10 +26398,10 @@ Snowflake from Bodo, installing the Snowflake connector is
 necessary (it is installed by default on Bodo Platform).</p>
 <p>If you have installed Bodo using pip, then you can install the Snowflake
 connector using pip as well:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-43-1" name="__codelineno-43-1" href="#__codelineno-43-1"></a>pip<span class="w"> </span>install<span class="w"> </span>snowflake-connector-python
+<div class="highlight"><pre><span></span><code><a id="__codelineno-41-1" name="__codelineno-41-1" href="#__codelineno-41-1"></a>pip<span class="w"> </span>install<span class="w"> </span>snowflake-connector-python
 </code></pre></div>
 <p>If you are using Bodo in a conda environment:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-44-1" name="__codelineno-44-1" href="#__codelineno-44-1"></a>conda<span class="w"> </span>install<span class="w"> </span>-c<span class="w"> </span>conda-forge<span class="w"> </span>snowflake-connector-python
+<div class="highlight"><pre><span></span><code><a id="__codelineno-42-1" name="__codelineno-42-1" href="#__codelineno-42-1"></a>conda<span class="w"> </span>install<span class="w"> </span>-c<span class="w"> </span>conda-forge<span class="w"> </span>snowflake-connector-python
 </code></pre></div>
 <h2 id="reading-from-snowflake">Reading from Snowflake<a class="headerlink" href="#reading-from-snowflake" title="Permanent link">&para;</a></h2>
 <p>To read a dataframe from a Snowflake database, users can use
@@ -26587,17 +26411,17 @@ connector using pip as well:</p>
 <p>Bodo requires the Snowflake connection string to be passed as an
 argument to the <code>pd.read_sql</code> function. The complete code looks as
 follows:</p>
-<p><div class="highlight"><pre><span></span><code><a id="__codelineno-45-1" name="__codelineno-45-1" href="#__codelineno-45-1"></a><span class="kn">import</span> <span class="nn">bodo</span>
-<a id="__codelineno-45-2" name="__codelineno-45-2" href="#__codelineno-45-2"></a><span class="kn">import</span> <span class="nn">pandas</span> <span class="k">as</span> <span class="nn">pd</span>
-<a id="__codelineno-45-3" name="__codelineno-45-3" href="#__codelineno-45-3"></a>
-<a id="__codelineno-45-4" name="__codelineno-45-4" href="#__codelineno-45-4"></a><span class="nd">@bodo</span><span class="o">.</span><span class="n">jit</span>
-<a id="__codelineno-45-5" name="__codelineno-45-5" href="#__codelineno-45-5"></a><span class="k">def</span> <span class="nf">read_snowflake</span><span class="p">(</span><span class="n">db_name</span><span class="p">,</span> <span class="n">table_name</span><span class="p">):</span>
-<a id="__codelineno-45-6" name="__codelineno-45-6" href="#__codelineno-45-6"></a>    <span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_sql</span><span class="p">(</span>
-<a id="__codelineno-45-7" name="__codelineno-45-7" href="#__codelineno-45-7"></a>            <span class="sa">f</span><span class="s2">&quot;SELECT * FROM </span><span class="si">{</span><span class="n">table_name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
-<a id="__codelineno-45-8" name="__codelineno-45-8" href="#__codelineno-45-8"></a>            <span class="sa">f</span><span class="s2">&quot;snowflake://user:password@url/</span><span class="si">{</span><span class="n">db_name</span><span class="si">}</span><span class="s2">/schema?warehouse=warehouse_name&quot;</span><span class="p">,</span>
-<a id="__codelineno-45-9" name="__codelineno-45-9" href="#__codelineno-45-9"></a>        <span class="p">)</span>
-<a id="__codelineno-45-10" name="__codelineno-45-10" href="#__codelineno-45-10"></a>    <span class="k">return</span> <span class="n">df</span>
-<a id="__codelineno-45-11" name="__codelineno-45-11" href="#__codelineno-45-11"></a><span class="n">df</span> <span class="o">=</span> <span class="n">read_snowflake</span><span class="p">(</span><span class="n">db_name</span><span class="p">,</span> <span class="n">temp_table_name</span><span class="p">)</span>
+<p><div class="highlight"><pre><span></span><code><a id="__codelineno-43-1" name="__codelineno-43-1" href="#__codelineno-43-1"></a><span class="kn">import</span> <span class="nn">bodo</span>
+<a id="__codelineno-43-2" name="__codelineno-43-2" href="#__codelineno-43-2"></a><span class="kn">import</span> <span class="nn">pandas</span> <span class="k">as</span> <span class="nn">pd</span>
+<a id="__codelineno-43-3" name="__codelineno-43-3" href="#__codelineno-43-3"></a>
+<a id="__codelineno-43-4" name="__codelineno-43-4" href="#__codelineno-43-4"></a><span class="nd">@bodo</span><span class="o">.</span><span class="n">jit</span>
+<a id="__codelineno-43-5" name="__codelineno-43-5" href="#__codelineno-43-5"></a><span class="k">def</span> <span class="nf">read_snowflake</span><span class="p">(</span><span class="n">db_name</span><span class="p">,</span> <span class="n">table_name</span><span class="p">):</span>
+<a id="__codelineno-43-6" name="__codelineno-43-6" href="#__codelineno-43-6"></a>    <span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_sql</span><span class="p">(</span>
+<a id="__codelineno-43-7" name="__codelineno-43-7" href="#__codelineno-43-7"></a>            <span class="sa">f</span><span class="s2">&quot;SELECT * FROM </span><span class="si">{</span><span class="n">table_name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
+<a id="__codelineno-43-8" name="__codelineno-43-8" href="#__codelineno-43-8"></a>            <span class="sa">f</span><span class="s2">&quot;snowflake://user:password@url/</span><span class="si">{</span><span class="n">db_name</span><span class="si">}</span><span class="s2">/schema?warehouse=warehouse_name&quot;</span><span class="p">,</span>
+<a id="__codelineno-43-9" name="__codelineno-43-9" href="#__codelineno-43-9"></a>        <span class="p">)</span>
+<a id="__codelineno-43-10" name="__codelineno-43-10" href="#__codelineno-43-10"></a>    <span class="k">return</span> <span class="n">df</span>
+<a id="__codelineno-43-11" name="__codelineno-43-11" href="#__codelineno-43-11"></a><span class="n">df</span> <span class="o">=</span> <span class="n">read_snowflake</span><span class="p">(</span><span class="n">db_name</span><span class="p">,</span> <span class="n">temp_table_name</span><span class="p">)</span>
 </code></pre></div>
 - <code>_bodo_read_as_dict</code> is a Bodo specific argument which forces
     the specified string columns to be read with dictionary-encoding. Bodo automatically loads string columns using dictionary encoding when it determines it would be beneficial based on a heuristic. Dictionary-encoding stores data in memory in an efficient manner and is most effective when the column has many repeated values. Read more about dictionary-encoded layout <a href="https://arrow.apache.org/docs/format/Columnar.html#dictionary-encoded-layout" target="blank">here</a>.
@@ -26618,18 +26442,18 @@ def impl(query, conn):
 <p>Bodo requires the Snowflake connection string to be passed as an
 argument to the <code>df.to_sql</code> function. The complete code looks as
 follows:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-47-1" name="__codelineno-47-1" href="#__codelineno-47-1"></a><span class="kn">import</span> <span class="nn">bodo</span>
-<a id="__codelineno-47-2" name="__codelineno-47-2" href="#__codelineno-47-2"></a><span class="kn">import</span> <span class="nn">pandas</span> <span class="k">as</span> <span class="nn">pd</span>
-<a id="__codelineno-47-3" name="__codelineno-47-3" href="#__codelineno-47-3"></a>
-<a id="__codelineno-47-4" name="__codelineno-47-4" href="#__codelineno-47-4"></a>
-<a id="__codelineno-47-5" name="__codelineno-47-5" href="#__codelineno-47-5"></a><span class="nd">@bodo</span><span class="o">.</span><span class="n">jit</span><span class="p">(</span><span class="n">distributed</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;df&quot;</span><span class="p">])</span>
-<a id="__codelineno-47-6" name="__codelineno-47-6" href="#__codelineno-47-6"></a><span class="k">def</span> <span class="nf">write_to_snowflake</span><span class="p">(</span><span class="n">df</span><span class="p">,</span> <span class="n">table_name</span><span class="p">):</span>
-<a id="__codelineno-47-7" name="__codelineno-47-7" href="#__codelineno-47-7"></a>    <span class="n">df</span><span class="o">.</span><span class="n">to_sql</span><span class="p">(</span>
-<a id="__codelineno-47-8" name="__codelineno-47-8" href="#__codelineno-47-8"></a>        <span class="n">table_name</span><span class="p">,</span>
-<a id="__codelineno-47-9" name="__codelineno-47-9" href="#__codelineno-47-9"></a>        <span class="s2">&quot;snowflake://user:password@url/db_name/schema?warehouse=warehouse_name&amp;role=role_name&quot;</span><span class="p">,</span>
-<a id="__codelineno-47-10" name="__codelineno-47-10" href="#__codelineno-47-10"></a>    <span class="p">)</span>
-<a id="__codelineno-47-11" name="__codelineno-47-11" href="#__codelineno-47-11"></a>
-<a id="__codelineno-47-12" name="__codelineno-47-12" href="#__codelineno-47-12"></a><span class="n">write_to_snowflake</span><span class="p">(</span><span class="n">df</span><span class="p">,</span> <span class="n">table_name</span><span class="p">)</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-45-1" name="__codelineno-45-1" href="#__codelineno-45-1"></a><span class="kn">import</span> <span class="nn">bodo</span>
+<a id="__codelineno-45-2" name="__codelineno-45-2" href="#__codelineno-45-2"></a><span class="kn">import</span> <span class="nn">pandas</span> <span class="k">as</span> <span class="nn">pd</span>
+<a id="__codelineno-45-3" name="__codelineno-45-3" href="#__codelineno-45-3"></a>
+<a id="__codelineno-45-4" name="__codelineno-45-4" href="#__codelineno-45-4"></a>
+<a id="__codelineno-45-5" name="__codelineno-45-5" href="#__codelineno-45-5"></a><span class="nd">@bodo</span><span class="o">.</span><span class="n">jit</span><span class="p">(</span><span class="n">distributed</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;df&quot;</span><span class="p">])</span>
+<a id="__codelineno-45-6" name="__codelineno-45-6" href="#__codelineno-45-6"></a><span class="k">def</span> <span class="nf">write_to_snowflake</span><span class="p">(</span><span class="n">df</span><span class="p">,</span> <span class="n">table_name</span><span class="p">):</span>
+<a id="__codelineno-45-7" name="__codelineno-45-7" href="#__codelineno-45-7"></a>    <span class="n">df</span><span class="o">.</span><span class="n">to_sql</span><span class="p">(</span>
+<a id="__codelineno-45-8" name="__codelineno-45-8" href="#__codelineno-45-8"></a>        <span class="n">table_name</span><span class="p">,</span>
+<a id="__codelineno-45-9" name="__codelineno-45-9" href="#__codelineno-45-9"></a>        <span class="s2">&quot;snowflake://user:password@url/db_name/schema?warehouse=warehouse_name&amp;role=role_name&quot;</span><span class="p">,</span>
+<a id="__codelineno-45-10" name="__codelineno-45-10" href="#__codelineno-45-10"></a>    <span class="p">)</span>
+<a id="__codelineno-45-11" name="__codelineno-45-11" href="#__codelineno-45-11"></a>
+<a id="__codelineno-45-12" name="__codelineno-45-12" href="#__codelineno-45-12"></a><span class="n">write_to_snowflake</span><span class="p">(</span><span class="n">df</span><span class="p">,</span> <span class="n">table_name</span><span class="p">)</span>
 </code></pre></div>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
@@ -26670,16 +26494,16 @@ permissions listed in the <a href="#snowflake-write-perms-create">create section
 <p>You can check the permissions granted to your role in Snowflake
 using the
 <a href="https://docs.snowflake.com/en/sql-reference/sql/show-grants.html" target="blank"><code>SHOW GRANTS</code> command</a>, e.g.:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-48-1" name="__codelineno-48-1" href="#__codelineno-48-1"></a><span class="k">show</span><span class="w"> </span><span class="n">grants</span><span class="w"> </span><span class="k">to</span><span class="w"> </span><span class="k">role</span><span class="w"> </span><span class="n">test_role</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-46-1" name="__codelineno-46-1" href="#__codelineno-46-1"></a><span class="k">show</span><span class="w"> </span><span class="n">grants</span><span class="w"> </span><span class="k">to</span><span class="w"> </span><span class="k">role</span><span class="w"> </span><span class="n">test_role</span>
 </code></pre></div>
 <p>Alternatively, you can check the permissions at the database/schema/table level
 and verify that your role has the required permissions, e.g.:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-49-1" name="__codelineno-49-1" href="#__codelineno-49-1"></a><span class="c1">-- Check that your role has the USAGE permission on the database</span>
-<a id="__codelineno-49-2" name="__codelineno-49-2" href="#__codelineno-49-2"></a><span class="k">show</span><span class="w"> </span><span class="n">grants</span><span class="w"> </span><span class="k">on</span><span class="w"> </span><span class="k">database</span><span class="w"> </span><span class="n">test_db</span>
-<a id="__codelineno-49-3" name="__codelineno-49-3" href="#__codelineno-49-3"></a><span class="c1">-- Check that your role has the required permissions on the schema</span>
-<a id="__codelineno-49-4" name="__codelineno-49-4" href="#__codelineno-49-4"></a><span class="k">show</span><span class="w"> </span><span class="n">grants</span><span class="w"> </span><span class="k">on</span><span class="w"> </span><span class="k">schema</span><span class="w"> </span><span class="n">test_schema</span>
-<a id="__codelineno-49-5" name="__codelineno-49-5" href="#__codelineno-49-5"></a><span class="c1">-- Check that your role has the required permissions on the table</span>
-<a id="__codelineno-49-6" name="__codelineno-49-6" href="#__codelineno-49-6"></a><span class="k">show</span><span class="w"> </span><span class="n">grants</span><span class="w"> </span><span class="k">on</span><span class="w"> </span><span class="k">table</span><span class="w"> </span><span class="n">test_schema</span><span class="p">.</span><span class="ss">&quot;TEST_TABLE&quot;</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-47-1" name="__codelineno-47-1" href="#__codelineno-47-1"></a><span class="c1">-- Check that your role has the USAGE permission on the database</span>
+<a id="__codelineno-47-2" name="__codelineno-47-2" href="#__codelineno-47-2"></a><span class="k">show</span><span class="w"> </span><span class="n">grants</span><span class="w"> </span><span class="k">on</span><span class="w"> </span><span class="k">database</span><span class="w"> </span><span class="n">test_db</span>
+<a id="__codelineno-47-3" name="__codelineno-47-3" href="#__codelineno-47-3"></a><span class="c1">-- Check that your role has the required permissions on the schema</span>
+<a id="__codelineno-47-4" name="__codelineno-47-4" href="#__codelineno-47-4"></a><span class="k">show</span><span class="w"> </span><span class="n">grants</span><span class="w"> </span><span class="k">on</span><span class="w"> </span><span class="k">schema</span><span class="w"> </span><span class="n">test_schema</span>
+<a id="__codelineno-47-5" name="__codelineno-47-5" href="#__codelineno-47-5"></a><span class="c1">-- Check that your role has the required permissions on the table</span>
+<a id="__codelineno-47-6" name="__codelineno-47-6" href="#__codelineno-47-6"></a><span class="k">show</span><span class="w"> </span><span class="n">grants</span><span class="w"> </span><span class="k">on</span><span class="w"> </span><span class="k">table</span><span class="w"> </span><span class="n">test_schema</span><span class="p">.</span><span class="ss">&quot;TEST_TABLE&quot;</span>
 </code></pre></div>
 <p>You can also use the
 <a href="https://docs.snowflake.com/en/user-guide/ui-snowsight.html" target="blank">Snowsight UI</a>
@@ -26704,20 +26528,6 @@ Direct Upload (preferred) or Put Upload.</p>
     Snowflake accounts, respectively). Note that Bodo will drop the
     temporary stage once the data has been written. Temporary stages
     are also automatically cleaned up by Snowflake after the session ends.</p>
-<div class="admonition note">
-<p class="admonition-title">Note</p>
-<p>For writing to ADLS based stages, you must have Hadoop setup
-correctly (see more details <a href="#HDFS">here</a>)
-and have the <code>bodo-azurefs-sas-token-provider</code> package installed (it
-can be installed using <code>pip install bodo-azurefs-sas-token-provider</code> or
-<code>conda install bodo-azurefs-sas-token-provider -c bodo.ai -c conda-forge</code>).
-Bodo will fall back to the Put Upload strategy if both these
-conditions are not met. Also see
-<a href="#interleave-adls-snowflake-write">Interleaving HDFS/ADLS I/O with Snowflake Write</a>.</p>
-<p>Note that this is only applicable to
-on-prem use cases since all of this is pre-configured on
-the Bodo Platform.</p>
-</div>
 </li>
 <li>
 <p>Put Upload: In this strategy, Bodo creates a 'named' stage, writes
@@ -26739,11 +26549,11 @@ user. All stages created by Bodo are of the form
 "bodo_io_snowflake_{random-uuid}". You can list all stages
 created by Bodo in Snowflake by executing the
 <a href="https://docs.snowflake.com/en/sql-reference/sql/show-stages.html" target="blank"><code>SHOW STAGES</code> command</a>:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-50-1" name="__codelineno-50-1" href="#__codelineno-50-1"></a><span class="k">show</span><span class="w"> </span><span class="n">stages</span><span class="w"> </span><span class="k">like</span><span class="w"> </span><span class="s1">&#39;bodo_io_snowflake_%&#39;</span><span class="p">;</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-48-1" name="__codelineno-48-1" href="#__codelineno-48-1"></a><span class="k">show</span><span class="w"> </span><span class="n">stages</span><span class="w"> </span><span class="k">like</span><span class="w"> </span><span class="s1">&#39;bodo_io_snowflake_%&#39;</span><span class="p">;</span>
 </code></pre></div>
 <p>and then delete them using the
 <a href="https://docs.snowflake.com/en/sql-reference/sql/drop-stage.html" target="blank"><code>DROP STAGE</code> command</a>, e.g.:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-51-1" name="__codelineno-51-1" href="#__codelineno-51-1"></a><span class="k">drop</span><span class="w"> </span><span class="n">stage</span><span class="w"> </span><span class="ss">&quot;bodo_io_snowflake_02ca9beb-eaf6-4957-a6ff-ff426441cd7a&quot;</span><span class="p">;</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-49-1" name="__codelineno-49-1" href="#__codelineno-49-1"></a><span class="k">drop</span><span class="w"> </span><span class="n">stage</span><span class="w"> </span><span class="ss">&quot;bodo_io_snowflake_02ca9beb-eaf6-4957-a6ff-ff426441cd7a&quot;</span><span class="p">;</span>
 </code></pre></div>
 <p>These operations are not supported in Bodo and must be executed directly
 through the Snowflake console.</p>
@@ -26779,63 +26589,63 @@ the write process further (for advanced users only):</p>
   the <a href="#snowflake-write-usage">Usage section</a>) overrides this value.</li>
 </ul>
 <p>These can be set as follows:
-<div class="highlight"><pre><span></span><code><a id="__codelineno-52-1" name="__codelineno-52-1" href="#__codelineno-52-1"></a><span class="kn">import</span> <span class="nn">bodo</span>
-<a id="__codelineno-52-2" name="__codelineno-52-2" href="#__codelineno-52-2"></a><span class="kn">import</span> <span class="nn">bodo.io.snowflake</span>
-<a id="__codelineno-52-3" name="__codelineno-52-3" href="#__codelineno-52-3"></a>
-<a id="__codelineno-52-4" name="__codelineno-52-4" href="#__codelineno-52-4"></a><span class="n">bodo</span><span class="o">.</span><span class="n">io</span><span class="o">.</span><span class="n">snowflake</span><span class="o">.</span><span class="n">SF_WRITE_UPLOAD_USING_PUT</span> <span class="o">=</span> <span class="kc">False</span>
-<a id="__codelineno-52-5" name="__codelineno-52-5" href="#__codelineno-52-5"></a><span class="n">bodo</span><span class="o">.</span><span class="n">io</span><span class="o">.</span><span class="n">snowflake</span><span class="o">.</span><span class="n">SF_WRITE_PARQUET_COMPRESSION</span> <span class="o">=</span> <span class="s2">&quot;gzip&quot;</span>
-<a id="__codelineno-52-6" name="__codelineno-52-6" href="#__codelineno-52-6"></a><span class="o">...</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-50-1" name="__codelineno-50-1" href="#__codelineno-50-1"></a><span class="kn">import</span> <span class="nn">bodo</span>
+<a id="__codelineno-50-2" name="__codelineno-50-2" href="#__codelineno-50-2"></a><span class="kn">import</span> <span class="nn">bodo.io.snowflake</span>
+<a id="__codelineno-50-3" name="__codelineno-50-3" href="#__codelineno-50-3"></a>
+<a id="__codelineno-50-4" name="__codelineno-50-4" href="#__codelineno-50-4"></a><span class="n">bodo</span><span class="o">.</span><span class="n">io</span><span class="o">.</span><span class="n">snowflake</span><span class="o">.</span><span class="n">SF_WRITE_UPLOAD_USING_PUT</span> <span class="o">=</span> <span class="kc">False</span>
+<a id="__codelineno-50-5" name="__codelineno-50-5" href="#__codelineno-50-5"></a><span class="n">bodo</span><span class="o">.</span><span class="n">io</span><span class="o">.</span><span class="n">snowflake</span><span class="o">.</span><span class="n">SF_WRITE_PARQUET_COMPRESSION</span> <span class="o">=</span> <span class="s2">&quot;gzip&quot;</span>
+<a id="__codelineno-50-6" name="__codelineno-50-6" href="#__codelineno-50-6"></a><span class="o">...</span>
 </code></pre></div></p>
 <h2 id="mysql">MySQL<a class="headerlink" href="#mysql" title="Permanent link">&para;</a></h2>
 <h3 id="prerequisites_1">Prerequisites<a class="headerlink" href="#prerequisites_1" title="Permanent link">&para;</a></h3>
 <p>In addition to <code>sqlalchemy</code>, installing <code>pymysql</code> is required. If you have installed Bodo using pip:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-53-1" name="__codelineno-53-1" href="#__codelineno-53-1"></a>pip<span class="w"> </span>install<span class="w"> </span>pymysql
+<div class="highlight"><pre><span></span><code><a id="__codelineno-51-1" name="__codelineno-51-1" href="#__codelineno-51-1"></a>pip<span class="w"> </span>install<span class="w"> </span>pymysql
 </code></pre></div>
 <p>If you are using Bodo in a conda environment:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-54-1" name="__codelineno-54-1" href="#__codelineno-54-1"></a>conda<span class="w"> </span>install<span class="w"> </span>pymysql<span class="w"> </span>-c<span class="w"> </span>conda-forge
+<div class="highlight"><pre><span></span><code><a id="__codelineno-52-1" name="__codelineno-52-1" href="#__codelineno-52-1"></a>conda<span class="w"> </span>install<span class="w"> </span>pymysql<span class="w"> </span>-c<span class="w"> </span>conda-forge
 </code></pre></div>
 <h3 id="usage_1">Usage<a class="headerlink" href="#usage_1" title="Permanent link">&para;</a></h3>
 <p>Reading result of a SQL query in a dataframe:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-55-1" name="__codelineno-55-1" href="#__codelineno-55-1"></a><span class="kn">import</span> <span class="nn">bodo</span>
-<a id="__codelineno-55-2" name="__codelineno-55-2" href="#__codelineno-55-2"></a><span class="kn">import</span> <span class="nn">pandas</span> <span class="k">as</span> <span class="nn">pd</span>
-<a id="__codelineno-55-3" name="__codelineno-55-3" href="#__codelineno-55-3"></a>
-<a id="__codelineno-55-4" name="__codelineno-55-4" href="#__codelineno-55-4"></a>
-<a id="__codelineno-55-5" name="__codelineno-55-5" href="#__codelineno-55-5"></a><span class="nd">@bodo</span><span class="o">.</span><span class="n">jit</span><span class="p">(</span><span class="n">distributed</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;df&quot;</span><span class="p">])</span>
-<a id="__codelineno-55-6" name="__codelineno-55-6" href="#__codelineno-55-6"></a><span class="k">def</span> <span class="nf">read_mysql</span><span class="p">(</span><span class="n">table_name</span><span class="p">,</span> <span class="n">conn</span><span class="p">):</span>
-<a id="__codelineno-55-7" name="__codelineno-55-7" href="#__codelineno-55-7"></a>    <span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_sql</span><span class="p">(</span>
-<a id="__codelineno-55-8" name="__codelineno-55-8" href="#__codelineno-55-8"></a>            <span class="sa">f</span><span class="s2">&quot;SELECT * FROM </span><span class="si">{</span><span class="n">table_name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
-<a id="__codelineno-55-9" name="__codelineno-55-9" href="#__codelineno-55-9"></a>            <span class="n">conn</span>
-<a id="__codelineno-55-10" name="__codelineno-55-10" href="#__codelineno-55-10"></a>        <span class="p">)</span>
-<a id="__codelineno-55-11" name="__codelineno-55-11" href="#__codelineno-55-11"></a>    <span class="k">return</span> <span class="n">df</span>
-<a id="__codelineno-55-12" name="__codelineno-55-12" href="#__codelineno-55-12"></a>
-<a id="__codelineno-55-13" name="__codelineno-55-13" href="#__codelineno-55-13"></a>
-<a id="__codelineno-55-14" name="__codelineno-55-14" href="#__codelineno-55-14"></a><span class="n">table_name</span> <span class="o">=</span> <span class="s2">&quot;test_table&quot;</span>
-<a id="__codelineno-55-15" name="__codelineno-55-15" href="#__codelineno-55-15"></a><span class="n">conn</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;mysql+pymysql://</span><span class="si">{</span><span class="n">username</span><span class="si">}</span><span class="s2">:</span><span class="si">{</span><span class="n">password</span><span class="si">}</span><span class="s2">@</span><span class="si">{</span><span class="n">host</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">db_name</span><span class="si">}</span><span class="s2">&quot;</span>
-<a id="__codelineno-55-16" name="__codelineno-55-16" href="#__codelineno-55-16"></a><span class="n">df</span> <span class="o">=</span> <span class="n">read_mysql</span><span class="p">(</span><span class="n">table_name</span><span class="p">,</span> <span class="n">conn</span><span class="p">)</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-53-1" name="__codelineno-53-1" href="#__codelineno-53-1"></a><span class="kn">import</span> <span class="nn">bodo</span>
+<a id="__codelineno-53-2" name="__codelineno-53-2" href="#__codelineno-53-2"></a><span class="kn">import</span> <span class="nn">pandas</span> <span class="k">as</span> <span class="nn">pd</span>
+<a id="__codelineno-53-3" name="__codelineno-53-3" href="#__codelineno-53-3"></a>
+<a id="__codelineno-53-4" name="__codelineno-53-4" href="#__codelineno-53-4"></a>
+<a id="__codelineno-53-5" name="__codelineno-53-5" href="#__codelineno-53-5"></a><span class="nd">@bodo</span><span class="o">.</span><span class="n">jit</span><span class="p">(</span><span class="n">distributed</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;df&quot;</span><span class="p">])</span>
+<a id="__codelineno-53-6" name="__codelineno-53-6" href="#__codelineno-53-6"></a><span class="k">def</span> <span class="nf">read_mysql</span><span class="p">(</span><span class="n">table_name</span><span class="p">,</span> <span class="n">conn</span><span class="p">):</span>
+<a id="__codelineno-53-7" name="__codelineno-53-7" href="#__codelineno-53-7"></a>    <span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_sql</span><span class="p">(</span>
+<a id="__codelineno-53-8" name="__codelineno-53-8" href="#__codelineno-53-8"></a>            <span class="sa">f</span><span class="s2">&quot;SELECT * FROM </span><span class="si">{</span><span class="n">table_name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
+<a id="__codelineno-53-9" name="__codelineno-53-9" href="#__codelineno-53-9"></a>            <span class="n">conn</span>
+<a id="__codelineno-53-10" name="__codelineno-53-10" href="#__codelineno-53-10"></a>        <span class="p">)</span>
+<a id="__codelineno-53-11" name="__codelineno-53-11" href="#__codelineno-53-11"></a>    <span class="k">return</span> <span class="n">df</span>
+<a id="__codelineno-53-12" name="__codelineno-53-12" href="#__codelineno-53-12"></a>
+<a id="__codelineno-53-13" name="__codelineno-53-13" href="#__codelineno-53-13"></a>
+<a id="__codelineno-53-14" name="__codelineno-53-14" href="#__codelineno-53-14"></a><span class="n">table_name</span> <span class="o">=</span> <span class="s2">&quot;test_table&quot;</span>
+<a id="__codelineno-53-15" name="__codelineno-53-15" href="#__codelineno-53-15"></a><span class="n">conn</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;mysql+pymysql://</span><span class="si">{</span><span class="n">username</span><span class="si">}</span><span class="s2">:</span><span class="si">{</span><span class="n">password</span><span class="si">}</span><span class="s2">@</span><span class="si">{</span><span class="n">host</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">db_name</span><span class="si">}</span><span class="s2">&quot;</span>
+<a id="__codelineno-53-16" name="__codelineno-53-16" href="#__codelineno-53-16"></a><span class="n">df</span> <span class="o">=</span> <span class="n">read_mysql</span><span class="p">(</span><span class="n">table_name</span><span class="p">,</span> <span class="n">conn</span><span class="p">)</span>
 </code></pre></div>
 <p>Writing dataframe as a table in the database:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-56-1" name="__codelineno-56-1" href="#__codelineno-56-1"></a><span class="kn">import</span> <span class="nn">bodo</span>
-<a id="__codelineno-56-2" name="__codelineno-56-2" href="#__codelineno-56-2"></a><span class="kn">import</span> <span class="nn">pandas</span> <span class="k">as</span> <span class="nn">pd</span>
-<a id="__codelineno-56-3" name="__codelineno-56-3" href="#__codelineno-56-3"></a>
-<a id="__codelineno-56-4" name="__codelineno-56-4" href="#__codelineno-56-4"></a>
-<a id="__codelineno-56-5" name="__codelineno-56-5" href="#__codelineno-56-5"></a><span class="nd">@bodo</span><span class="o">.</span><span class="n">jit</span><span class="p">(</span><span class="n">distributed</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;df&quot;</span><span class="p">])</span>
-<a id="__codelineno-56-6" name="__codelineno-56-6" href="#__codelineno-56-6"></a><span class="k">def</span> <span class="nf">write_mysql</span><span class="p">(</span><span class="n">df</span><span class="p">,</span> <span class="n">table_name</span><span class="p">,</span> <span class="n">conn</span><span class="p">):</span>
-<a id="__codelineno-56-7" name="__codelineno-56-7" href="#__codelineno-56-7"></a>    <span class="n">df</span><span class="o">.</span><span class="n">to_sql</span><span class="p">(</span><span class="n">table</span><span class="p">,</span> <span class="n">conn</span><span class="p">)</span>
-<a id="__codelineno-56-8" name="__codelineno-56-8" href="#__codelineno-56-8"></a>
-<a id="__codelineno-56-9" name="__codelineno-56-9" href="#__codelineno-56-9"></a>
-<a id="__codelineno-56-10" name="__codelineno-56-10" href="#__codelineno-56-10"></a><span class="n">table_name</span> <span class="o">=</span> <span class="s2">&quot;test_table&quot;</span>
-<a id="__codelineno-56-11" name="__codelineno-56-11" href="#__codelineno-56-11"></a><span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span><span class="s2">&quot;A&quot;</span><span class="p">:</span> <span class="p">[</span><span class="mf">1.12</span><span class="p">,</span> <span class="mf">1.1</span><span class="p">]</span> <span class="o">*</span> <span class="mi">5</span><span class="p">,</span> <span class="s2">&quot;B&quot;</span><span class="p">:</span> <span class="p">[</span><span class="mi">213</span><span class="p">,</span> <span class="o">-</span><span class="mi">7</span><span class="p">]</span> <span class="o">*</span> <span class="mi">5</span><span class="p">})</span>
-<a id="__codelineno-56-12" name="__codelineno-56-12" href="#__codelineno-56-12"></a><span class="n">conn</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;mysql+pymysql://</span><span class="si">{</span><span class="n">username</span><span class="si">}</span><span class="s2">:</span><span class="si">{</span><span class="n">password</span><span class="si">}</span><span class="s2">@</span><span class="si">{</span><span class="n">host</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">db_name</span><span class="si">}</span><span class="s2">&quot;</span>
-<a id="__codelineno-56-13" name="__codelineno-56-13" href="#__codelineno-56-13"></a><span class="n">write_mysql</span><span class="p">(</span><span class="n">df</span><span class="p">,</span> <span class="n">table_name</span><span class="p">,</span> <span class="n">conn</span><span class="p">)</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-54-1" name="__codelineno-54-1" href="#__codelineno-54-1"></a><span class="kn">import</span> <span class="nn">bodo</span>
+<a id="__codelineno-54-2" name="__codelineno-54-2" href="#__codelineno-54-2"></a><span class="kn">import</span> <span class="nn">pandas</span> <span class="k">as</span> <span class="nn">pd</span>
+<a id="__codelineno-54-3" name="__codelineno-54-3" href="#__codelineno-54-3"></a>
+<a id="__codelineno-54-4" name="__codelineno-54-4" href="#__codelineno-54-4"></a>
+<a id="__codelineno-54-5" name="__codelineno-54-5" href="#__codelineno-54-5"></a><span class="nd">@bodo</span><span class="o">.</span><span class="n">jit</span><span class="p">(</span><span class="n">distributed</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;df&quot;</span><span class="p">])</span>
+<a id="__codelineno-54-6" name="__codelineno-54-6" href="#__codelineno-54-6"></a><span class="k">def</span> <span class="nf">write_mysql</span><span class="p">(</span><span class="n">df</span><span class="p">,</span> <span class="n">table_name</span><span class="p">,</span> <span class="n">conn</span><span class="p">):</span>
+<a id="__codelineno-54-7" name="__codelineno-54-7" href="#__codelineno-54-7"></a>    <span class="n">df</span><span class="o">.</span><span class="n">to_sql</span><span class="p">(</span><span class="n">table</span><span class="p">,</span> <span class="n">conn</span><span class="p">)</span>
+<a id="__codelineno-54-8" name="__codelineno-54-8" href="#__codelineno-54-8"></a>
+<a id="__codelineno-54-9" name="__codelineno-54-9" href="#__codelineno-54-9"></a>
+<a id="__codelineno-54-10" name="__codelineno-54-10" href="#__codelineno-54-10"></a><span class="n">table_name</span> <span class="o">=</span> <span class="s2">&quot;test_table&quot;</span>
+<a id="__codelineno-54-11" name="__codelineno-54-11" href="#__codelineno-54-11"></a><span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span><span class="s2">&quot;A&quot;</span><span class="p">:</span> <span class="p">[</span><span class="mf">1.12</span><span class="p">,</span> <span class="mf">1.1</span><span class="p">]</span> <span class="o">*</span> <span class="mi">5</span><span class="p">,</span> <span class="s2">&quot;B&quot;</span><span class="p">:</span> <span class="p">[</span><span class="mi">213</span><span class="p">,</span> <span class="o">-</span><span class="mi">7</span><span class="p">]</span> <span class="o">*</span> <span class="mi">5</span><span class="p">})</span>
+<a id="__codelineno-54-12" name="__codelineno-54-12" href="#__codelineno-54-12"></a><span class="n">conn</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;mysql+pymysql://</span><span class="si">{</span><span class="n">username</span><span class="si">}</span><span class="s2">:</span><span class="si">{</span><span class="n">password</span><span class="si">}</span><span class="s2">@</span><span class="si">{</span><span class="n">host</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">db_name</span><span class="si">}</span><span class="s2">&quot;</span>
+<a id="__codelineno-54-13" name="__codelineno-54-13" href="#__codelineno-54-13"></a><span class="n">write_mysql</span><span class="p">(</span><span class="n">df</span><span class="p">,</span> <span class="n">table_name</span><span class="p">,</span> <span class="n">conn</span><span class="p">)</span>
 </code></pre></div>
 <h2 id="oracle-database">Oracle Database<a class="headerlink" href="#oracle-database" title="Permanent link">&para;</a></h2>
 <h3 id="prerequisites_2">Prerequisites<a class="headerlink" href="#prerequisites_2" title="Permanent link">&para;</a></h3>
 <p>In addition to <code>sqlalchemy</code>, install <code>cx_oracle</code> and Oracle instant client driver.
 If you have installed Bodo using pip:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-57-1" name="__codelineno-57-1" href="#__codelineno-57-1"></a>pip<span class="w"> </span>install<span class="w"> </span>cx-Oracle
+<div class="highlight"><pre><span></span><code><a id="__codelineno-55-1" name="__codelineno-55-1" href="#__codelineno-55-1"></a>pip<span class="w"> </span>install<span class="w"> </span>cx-Oracle
 </code></pre></div>
 <p>If you are using Bodo in a conda environment:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-58-1" name="__codelineno-58-1" href="#__codelineno-58-1"></a>conda<span class="w"> </span>install<span class="w"> </span>cx_oracle<span class="w"> </span>-c<span class="w"> </span>conda-forge
+<div class="highlight"><pre><span></span><code><a id="__codelineno-56-1" name="__codelineno-56-1" href="#__codelineno-56-1"></a>conda<span class="w"> </span>install<span class="w"> </span>cx_oracle<span class="w"> </span>-c<span class="w"> </span>conda-forge
 </code></pre></div>
 <ul>
 <li>Then, Download "Basic" or "Basic light" package matching your operating system from <a href="https://www.oracle.com/database/technologies/instant-client/downloads.html" target="blank">here</a>.</li>
@@ -26852,89 +26662,89 @@ If you have installed Bodo using pip:</p>
 <p>See <a href="https://cx-oracle.readthedocs.io/en/latest/user_guide/installation.html#cx-oracle-8-installation&gt;" target="blank">cx_oracle</a> for more information.
 Alternatively, Oracle instant driver can be automatically downloaded using <code>wget</code> or <code>curl</code> commands.
 Here's an example of automatic installation on a Linux OS machine.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-59-1" name="__codelineno-59-1" href="#__codelineno-59-1"></a>conda<span class="w"> </span>install<span class="w"> </span>cx_oracle<span class="w"> </span>libaio<span class="w"> </span>-c<span class="w"> </span>conda-forge
-<a id="__codelineno-59-2" name="__codelineno-59-2" href="#__codelineno-59-2"></a>mkdir<span class="w"> </span>-p<span class="w"> </span>/opt/oracle
-<a id="__codelineno-59-3" name="__codelineno-59-3" href="#__codelineno-59-3"></a><span class="nb">cd</span><span class="w"> </span>/opt/oracle
-<a id="__codelineno-59-4" name="__codelineno-59-4" href="#__codelineno-59-4"></a>wget<span class="w"> </span>https://download.oracle.com/otn_software/linux/instantclient/215000/instantclient-basic-linux.x64-21.5.0.0.0dbru.zip
-<a id="__codelineno-59-5" name="__codelineno-59-5" href="#__codelineno-59-5"></a>unzip<span class="w"> </span>instantclient-basic-linux.x64-21.5.0.0.0dbru.zip
-<a id="__codelineno-59-6" name="__codelineno-59-6" href="#__codelineno-59-6"></a><span class="nb">export</span><span class="w"> </span><span class="nv">LD_LIBRARY_PATH</span><span class="o">=</span>/opt/oracle/instantclient_21_5:<span class="nv">$LD_LIBRARY_PATH</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-57-1" name="__codelineno-57-1" href="#__codelineno-57-1"></a>conda<span class="w"> </span>install<span class="w"> </span>cx_oracle<span class="w"> </span>libaio<span class="w"> </span>-c<span class="w"> </span>conda-forge
+<a id="__codelineno-57-2" name="__codelineno-57-2" href="#__codelineno-57-2"></a>mkdir<span class="w"> </span>-p<span class="w"> </span>/opt/oracle
+<a id="__codelineno-57-3" name="__codelineno-57-3" href="#__codelineno-57-3"></a><span class="nb">cd</span><span class="w"> </span>/opt/oracle
+<a id="__codelineno-57-4" name="__codelineno-57-4" href="#__codelineno-57-4"></a>wget<span class="w"> </span>https://download.oracle.com/otn_software/linux/instantclient/215000/instantclient-basic-linux.x64-21.5.0.0.0dbru.zip
+<a id="__codelineno-57-5" name="__codelineno-57-5" href="#__codelineno-57-5"></a>unzip<span class="w"> </span>instantclient-basic-linux.x64-21.5.0.0.0dbru.zip
+<a id="__codelineno-57-6" name="__codelineno-57-6" href="#__codelineno-57-6"></a><span class="nb">export</span><span class="w"> </span><span class="nv">LD_LIBRARY_PATH</span><span class="o">=</span>/opt/oracle/instantclient_21_5:<span class="nv">$LD_LIBRARY_PATH</span>
 </code></pre></div>
 <h3 id="usage_2">Usage<a class="headerlink" href="#usage_2" title="Permanent link">&para;</a></h3>
 <p>Reading result of a SQL query in a dataframe:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-60-1" name="__codelineno-60-1" href="#__codelineno-60-1"></a><span class="kn">import</span> <span class="nn">bodo</span>
-<a id="__codelineno-60-2" name="__codelineno-60-2" href="#__codelineno-60-2"></a><span class="kn">import</span> <span class="nn">pandas</span> <span class="k">as</span> <span class="nn">pd</span>
-<a id="__codelineno-60-3" name="__codelineno-60-3" href="#__codelineno-60-3"></a>
-<a id="__codelineno-60-4" name="__codelineno-60-4" href="#__codelineno-60-4"></a>
-<a id="__codelineno-60-5" name="__codelineno-60-5" href="#__codelineno-60-5"></a><span class="nd">@bodo</span><span class="o">.</span><span class="n">jit</span><span class="p">(</span><span class="n">distributed</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;df&quot;</span><span class="p">])</span>
-<a id="__codelineno-60-6" name="__codelineno-60-6" href="#__codelineno-60-6"></a><span class="k">def</span> <span class="nf">read_oracle</span><span class="p">(</span><span class="n">table_name</span><span class="p">,</span> <span class="n">conn</span><span class="p">):</span>
-<a id="__codelineno-60-7" name="__codelineno-60-7" href="#__codelineno-60-7"></a>    <span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_sql</span><span class="p">(</span>
-<a id="__codelineno-60-8" name="__codelineno-60-8" href="#__codelineno-60-8"></a>            <span class="sa">f</span><span class="s2">&quot;SELECT * FROM </span><span class="si">{</span><span class="n">table_name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
-<a id="__codelineno-60-9" name="__codelineno-60-9" href="#__codelineno-60-9"></a>            <span class="n">conn</span>
-<a id="__codelineno-60-10" name="__codelineno-60-10" href="#__codelineno-60-10"></a>        <span class="p">)</span>
-<a id="__codelineno-60-11" name="__codelineno-60-11" href="#__codelineno-60-11"></a>    <span class="k">return</span> <span class="n">df</span>
-<a id="__codelineno-60-12" name="__codelineno-60-12" href="#__codelineno-60-12"></a>
-<a id="__codelineno-60-13" name="__codelineno-60-13" href="#__codelineno-60-13"></a>
-<a id="__codelineno-60-14" name="__codelineno-60-14" href="#__codelineno-60-14"></a><span class="n">table_name</span> <span class="o">=</span> <span class="s2">&quot;test_table&quot;</span>
-<a id="__codelineno-60-15" name="__codelineno-60-15" href="#__codelineno-60-15"></a><span class="n">conn</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;oracle+cx_oracle://</span><span class="si">{</span><span class="n">username</span><span class="si">}</span><span class="s2">:</span><span class="si">{</span><span class="n">password</span><span class="si">}</span><span class="s2">@</span><span class="si">{</span><span class="n">host</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">db_name</span><span class="si">}</span><span class="s2">&quot;</span>
-<a id="__codelineno-60-16" name="__codelineno-60-16" href="#__codelineno-60-16"></a><span class="n">df</span> <span class="o">=</span> <span class="n">read_oracle</span><span class="p">(</span><span class="n">table_name</span><span class="p">,</span> <span class="n">conn</span><span class="p">)</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-58-1" name="__codelineno-58-1" href="#__codelineno-58-1"></a><span class="kn">import</span> <span class="nn">bodo</span>
+<a id="__codelineno-58-2" name="__codelineno-58-2" href="#__codelineno-58-2"></a><span class="kn">import</span> <span class="nn">pandas</span> <span class="k">as</span> <span class="nn">pd</span>
+<a id="__codelineno-58-3" name="__codelineno-58-3" href="#__codelineno-58-3"></a>
+<a id="__codelineno-58-4" name="__codelineno-58-4" href="#__codelineno-58-4"></a>
+<a id="__codelineno-58-5" name="__codelineno-58-5" href="#__codelineno-58-5"></a><span class="nd">@bodo</span><span class="o">.</span><span class="n">jit</span><span class="p">(</span><span class="n">distributed</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;df&quot;</span><span class="p">])</span>
+<a id="__codelineno-58-6" name="__codelineno-58-6" href="#__codelineno-58-6"></a><span class="k">def</span> <span class="nf">read_oracle</span><span class="p">(</span><span class="n">table_name</span><span class="p">,</span> <span class="n">conn</span><span class="p">):</span>
+<a id="__codelineno-58-7" name="__codelineno-58-7" href="#__codelineno-58-7"></a>    <span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_sql</span><span class="p">(</span>
+<a id="__codelineno-58-8" name="__codelineno-58-8" href="#__codelineno-58-8"></a>            <span class="sa">f</span><span class="s2">&quot;SELECT * FROM </span><span class="si">{</span><span class="n">table_name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
+<a id="__codelineno-58-9" name="__codelineno-58-9" href="#__codelineno-58-9"></a>            <span class="n">conn</span>
+<a id="__codelineno-58-10" name="__codelineno-58-10" href="#__codelineno-58-10"></a>        <span class="p">)</span>
+<a id="__codelineno-58-11" name="__codelineno-58-11" href="#__codelineno-58-11"></a>    <span class="k">return</span> <span class="n">df</span>
+<a id="__codelineno-58-12" name="__codelineno-58-12" href="#__codelineno-58-12"></a>
+<a id="__codelineno-58-13" name="__codelineno-58-13" href="#__codelineno-58-13"></a>
+<a id="__codelineno-58-14" name="__codelineno-58-14" href="#__codelineno-58-14"></a><span class="n">table_name</span> <span class="o">=</span> <span class="s2">&quot;test_table&quot;</span>
+<a id="__codelineno-58-15" name="__codelineno-58-15" href="#__codelineno-58-15"></a><span class="n">conn</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;oracle+cx_oracle://</span><span class="si">{</span><span class="n">username</span><span class="si">}</span><span class="s2">:</span><span class="si">{</span><span class="n">password</span><span class="si">}</span><span class="s2">@</span><span class="si">{</span><span class="n">host</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">db_name</span><span class="si">}</span><span class="s2">&quot;</span>
+<a id="__codelineno-58-16" name="__codelineno-58-16" href="#__codelineno-58-16"></a><span class="n">df</span> <span class="o">=</span> <span class="n">read_oracle</span><span class="p">(</span><span class="n">table_name</span><span class="p">,</span> <span class="n">conn</span><span class="p">)</span>
 </code></pre></div>
 <p>Writing dataframe as a table in the database:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-61-1" name="__codelineno-61-1" href="#__codelineno-61-1"></a><span class="kn">import</span> <span class="nn">bodo</span>
-<a id="__codelineno-61-2" name="__codelineno-61-2" href="#__codelineno-61-2"></a><span class="kn">import</span> <span class="nn">pandas</span> <span class="k">as</span> <span class="nn">pd</span>
-<a id="__codelineno-61-3" name="__codelineno-61-3" href="#__codelineno-61-3"></a>
-<a id="__codelineno-61-4" name="__codelineno-61-4" href="#__codelineno-61-4"></a>
-<a id="__codelineno-61-5" name="__codelineno-61-5" href="#__codelineno-61-5"></a><span class="nd">@bodo</span><span class="o">.</span><span class="n">jit</span><span class="p">(</span><span class="n">distributed</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;df&quot;</span><span class="p">])</span>
-<a id="__codelineno-61-6" name="__codelineno-61-6" href="#__codelineno-61-6"></a><span class="k">def</span> <span class="nf">write_mysql</span><span class="p">(</span><span class="n">df</span><span class="p">,</span> <span class="n">table_name</span><span class="p">,</span> <span class="n">conn</span><span class="p">):</span>
-<a id="__codelineno-61-7" name="__codelineno-61-7" href="#__codelineno-61-7"></a>    <span class="n">df</span><span class="o">.</span><span class="n">to_sql</span><span class="p">(</span><span class="n">table</span><span class="p">,</span> <span class="n">conn</span><span class="p">)</span>
-<a id="__codelineno-61-8" name="__codelineno-61-8" href="#__codelineno-61-8"></a>
-<a id="__codelineno-61-9" name="__codelineno-61-9" href="#__codelineno-61-9"></a>
-<a id="__codelineno-61-10" name="__codelineno-61-10" href="#__codelineno-61-10"></a><span class="n">table_name</span> <span class="o">=</span> <span class="s2">&quot;test_table&quot;</span>
-<a id="__codelineno-61-11" name="__codelineno-61-11" href="#__codelineno-61-11"></a><span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span><span class="s2">&quot;A&quot;</span><span class="p">:</span> <span class="p">[</span><span class="mf">1.12</span><span class="p">,</span> <span class="mf">1.1</span><span class="p">]</span> <span class="o">*</span> <span class="mi">5</span><span class="p">,</span> <span class="s2">&quot;B&quot;</span><span class="p">:</span> <span class="p">[</span><span class="mi">213</span><span class="p">,</span> <span class="o">-</span><span class="mi">7</span><span class="p">]</span> <span class="o">*</span> <span class="mi">5</span><span class="p">})</span>
-<a id="__codelineno-61-12" name="__codelineno-61-12" href="#__codelineno-61-12"></a><span class="n">conn</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;oracle+cx_oracle://</span><span class="si">{</span><span class="n">username</span><span class="si">}</span><span class="s2">:</span><span class="si">{</span><span class="n">password</span><span class="si">}</span><span class="s2">@</span><span class="si">{</span><span class="n">host</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">db_name</span><span class="si">}</span><span class="s2">&quot;</span>
-<a id="__codelineno-61-13" name="__codelineno-61-13" href="#__codelineno-61-13"></a><span class="n">write_mysql</span><span class="p">(</span><span class="n">df</span><span class="p">,</span> <span class="n">table_name</span><span class="p">,</span> <span class="n">conn</span><span class="p">)</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-59-1" name="__codelineno-59-1" href="#__codelineno-59-1"></a><span class="kn">import</span> <span class="nn">bodo</span>
+<a id="__codelineno-59-2" name="__codelineno-59-2" href="#__codelineno-59-2"></a><span class="kn">import</span> <span class="nn">pandas</span> <span class="k">as</span> <span class="nn">pd</span>
+<a id="__codelineno-59-3" name="__codelineno-59-3" href="#__codelineno-59-3"></a>
+<a id="__codelineno-59-4" name="__codelineno-59-4" href="#__codelineno-59-4"></a>
+<a id="__codelineno-59-5" name="__codelineno-59-5" href="#__codelineno-59-5"></a><span class="nd">@bodo</span><span class="o">.</span><span class="n">jit</span><span class="p">(</span><span class="n">distributed</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;df&quot;</span><span class="p">])</span>
+<a id="__codelineno-59-6" name="__codelineno-59-6" href="#__codelineno-59-6"></a><span class="k">def</span> <span class="nf">write_mysql</span><span class="p">(</span><span class="n">df</span><span class="p">,</span> <span class="n">table_name</span><span class="p">,</span> <span class="n">conn</span><span class="p">):</span>
+<a id="__codelineno-59-7" name="__codelineno-59-7" href="#__codelineno-59-7"></a>    <span class="n">df</span><span class="o">.</span><span class="n">to_sql</span><span class="p">(</span><span class="n">table</span><span class="p">,</span> <span class="n">conn</span><span class="p">)</span>
+<a id="__codelineno-59-8" name="__codelineno-59-8" href="#__codelineno-59-8"></a>
+<a id="__codelineno-59-9" name="__codelineno-59-9" href="#__codelineno-59-9"></a>
+<a id="__codelineno-59-10" name="__codelineno-59-10" href="#__codelineno-59-10"></a><span class="n">table_name</span> <span class="o">=</span> <span class="s2">&quot;test_table&quot;</span>
+<a id="__codelineno-59-11" name="__codelineno-59-11" href="#__codelineno-59-11"></a><span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span><span class="s2">&quot;A&quot;</span><span class="p">:</span> <span class="p">[</span><span class="mf">1.12</span><span class="p">,</span> <span class="mf">1.1</span><span class="p">]</span> <span class="o">*</span> <span class="mi">5</span><span class="p">,</span> <span class="s2">&quot;B&quot;</span><span class="p">:</span> <span class="p">[</span><span class="mi">213</span><span class="p">,</span> <span class="o">-</span><span class="mi">7</span><span class="p">]</span> <span class="o">*</span> <span class="mi">5</span><span class="p">})</span>
+<a id="__codelineno-59-12" name="__codelineno-59-12" href="#__codelineno-59-12"></a><span class="n">conn</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;oracle+cx_oracle://</span><span class="si">{</span><span class="n">username</span><span class="si">}</span><span class="s2">:</span><span class="si">{</span><span class="n">password</span><span class="si">}</span><span class="s2">@</span><span class="si">{</span><span class="n">host</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">db_name</span><span class="si">}</span><span class="s2">&quot;</span>
+<a id="__codelineno-59-13" name="__codelineno-59-13" href="#__codelineno-59-13"></a><span class="n">write_mysql</span><span class="p">(</span><span class="n">df</span><span class="p">,</span> <span class="n">table_name</span><span class="p">,</span> <span class="n">conn</span><span class="p">)</span>
 </code></pre></div>
 <h2 id="postgresql">PostgreSQL<a class="headerlink" href="#postgresql" title="Permanent link">&para;</a></h2>
 <h3 id="prerequisites_3">Prerequisites<a class="headerlink" href="#prerequisites_3" title="Permanent link">&para;</a></h3>
 <p>In addition to <code>sqlalchemy</code>, install <code>psycopg2</code>.</p>
 <p>If you have installed Bodo using pip:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-62-1" name="__codelineno-62-1" href="#__codelineno-62-1"></a>pip<span class="w"> </span>install<span class="w"> </span>psycopg2
+<div class="highlight"><pre><span></span><code><a id="__codelineno-60-1" name="__codelineno-60-1" href="#__codelineno-60-1"></a>pip<span class="w"> </span>install<span class="w"> </span>psycopg2
 </code></pre></div>
 <p>If you are using Bodo in a conda environment:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-63-1" name="__codelineno-63-1" href="#__codelineno-63-1"></a>conda<span class="w"> </span>install<span class="w"> </span>psycopg2<span class="w"> </span>-c<span class="w"> </span>conda-forge
+<div class="highlight"><pre><span></span><code><a id="__codelineno-61-1" name="__codelineno-61-1" href="#__codelineno-61-1"></a>conda<span class="w"> </span>install<span class="w"> </span>psycopg2<span class="w"> </span>-c<span class="w"> </span>conda-forge
 </code></pre></div>
 <h3 id="usage_3">Usage<a class="headerlink" href="#usage_3" title="Permanent link">&para;</a></h3>
 <p>Reading result of a SQL query in a dataframe:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-64-1" name="__codelineno-64-1" href="#__codelineno-64-1"></a><span class="kn">import</span> <span class="nn">bodo</span>
-<a id="__codelineno-64-2" name="__codelineno-64-2" href="#__codelineno-64-2"></a><span class="kn">import</span> <span class="nn">pandas</span> <span class="k">as</span> <span class="nn">pd</span>
-<a id="__codelineno-64-3" name="__codelineno-64-3" href="#__codelineno-64-3"></a>
-<a id="__codelineno-64-4" name="__codelineno-64-4" href="#__codelineno-64-4"></a>
-<a id="__codelineno-64-5" name="__codelineno-64-5" href="#__codelineno-64-5"></a><span class="nd">@bodo</span><span class="o">.</span><span class="n">jit</span><span class="p">(</span><span class="n">distributed</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;df&quot;</span><span class="p">])</span>
-<a id="__codelineno-64-6" name="__codelineno-64-6" href="#__codelineno-64-6"></a><span class="k">def</span> <span class="nf">read_postgresql</span><span class="p">(</span><span class="n">table_name</span><span class="p">,</span> <span class="n">conn</span><span class="p">):</span>
-<a id="__codelineno-64-7" name="__codelineno-64-7" href="#__codelineno-64-7"></a>    <span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_sql</span><span class="p">(</span>
-<a id="__codelineno-64-8" name="__codelineno-64-8" href="#__codelineno-64-8"></a>            <span class="sa">f</span><span class="s2">&quot;SELECT * FROM </span><span class="si">{</span><span class="n">table_name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
-<a id="__codelineno-64-9" name="__codelineno-64-9" href="#__codelineno-64-9"></a>            <span class="n">conn</span>
-<a id="__codelineno-64-10" name="__codelineno-64-10" href="#__codelineno-64-10"></a>        <span class="p">)</span>
-<a id="__codelineno-64-11" name="__codelineno-64-11" href="#__codelineno-64-11"></a>    <span class="k">return</span> <span class="n">df</span>
-<a id="__codelineno-64-12" name="__codelineno-64-12" href="#__codelineno-64-12"></a>
-<a id="__codelineno-64-13" name="__codelineno-64-13" href="#__codelineno-64-13"></a>
-<a id="__codelineno-64-14" name="__codelineno-64-14" href="#__codelineno-64-14"></a><span class="n">table_name</span> <span class="o">=</span> <span class="s2">&quot;test_table&quot;</span>
-<a id="__codelineno-64-15" name="__codelineno-64-15" href="#__codelineno-64-15"></a><span class="n">conn</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;postgresql+psycopg2://</span><span class="si">{</span><span class="n">username</span><span class="si">}</span><span class="s2">:</span><span class="si">{</span><span class="n">password</span><span class="si">}</span><span class="s2">@</span><span class="si">{</span><span class="n">host</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">db_name</span><span class="si">}</span><span class="s2">&quot;</span>
-<a id="__codelineno-64-16" name="__codelineno-64-16" href="#__codelineno-64-16"></a><span class="n">df</span> <span class="o">=</span> <span class="n">read_postgresql</span><span class="p">(</span><span class="n">table_name</span><span class="p">,</span> <span class="n">conn</span><span class="p">)</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-62-1" name="__codelineno-62-1" href="#__codelineno-62-1"></a><span class="kn">import</span> <span class="nn">bodo</span>
+<a id="__codelineno-62-2" name="__codelineno-62-2" href="#__codelineno-62-2"></a><span class="kn">import</span> <span class="nn">pandas</span> <span class="k">as</span> <span class="nn">pd</span>
+<a id="__codelineno-62-3" name="__codelineno-62-3" href="#__codelineno-62-3"></a>
+<a id="__codelineno-62-4" name="__codelineno-62-4" href="#__codelineno-62-4"></a>
+<a id="__codelineno-62-5" name="__codelineno-62-5" href="#__codelineno-62-5"></a><span class="nd">@bodo</span><span class="o">.</span><span class="n">jit</span><span class="p">(</span><span class="n">distributed</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;df&quot;</span><span class="p">])</span>
+<a id="__codelineno-62-6" name="__codelineno-62-6" href="#__codelineno-62-6"></a><span class="k">def</span> <span class="nf">read_postgresql</span><span class="p">(</span><span class="n">table_name</span><span class="p">,</span> <span class="n">conn</span><span class="p">):</span>
+<a id="__codelineno-62-7" name="__codelineno-62-7" href="#__codelineno-62-7"></a>    <span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_sql</span><span class="p">(</span>
+<a id="__codelineno-62-8" name="__codelineno-62-8" href="#__codelineno-62-8"></a>            <span class="sa">f</span><span class="s2">&quot;SELECT * FROM </span><span class="si">{</span><span class="n">table_name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
+<a id="__codelineno-62-9" name="__codelineno-62-9" href="#__codelineno-62-9"></a>            <span class="n">conn</span>
+<a id="__codelineno-62-10" name="__codelineno-62-10" href="#__codelineno-62-10"></a>        <span class="p">)</span>
+<a id="__codelineno-62-11" name="__codelineno-62-11" href="#__codelineno-62-11"></a>    <span class="k">return</span> <span class="n">df</span>
+<a id="__codelineno-62-12" name="__codelineno-62-12" href="#__codelineno-62-12"></a>
+<a id="__codelineno-62-13" name="__codelineno-62-13" href="#__codelineno-62-13"></a>
+<a id="__codelineno-62-14" name="__codelineno-62-14" href="#__codelineno-62-14"></a><span class="n">table_name</span> <span class="o">=</span> <span class="s2">&quot;test_table&quot;</span>
+<a id="__codelineno-62-15" name="__codelineno-62-15" href="#__codelineno-62-15"></a><span class="n">conn</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;postgresql+psycopg2://</span><span class="si">{</span><span class="n">username</span><span class="si">}</span><span class="s2">:</span><span class="si">{</span><span class="n">password</span><span class="si">}</span><span class="s2">@</span><span class="si">{</span><span class="n">host</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">db_name</span><span class="si">}</span><span class="s2">&quot;</span>
+<a id="__codelineno-62-16" name="__codelineno-62-16" href="#__codelineno-62-16"></a><span class="n">df</span> <span class="o">=</span> <span class="n">read_postgresql</span><span class="p">(</span><span class="n">table_name</span><span class="p">,</span> <span class="n">conn</span><span class="p">)</span>
 </code></pre></div>
 <p>Writing dataframe as a table in the database:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-65-1" name="__codelineno-65-1" href="#__codelineno-65-1"></a><span class="kn">import</span> <span class="nn">bodo</span>
-<a id="__codelineno-65-2" name="__codelineno-65-2" href="#__codelineno-65-2"></a><span class="kn">import</span> <span class="nn">pandas</span> <span class="k">as</span> <span class="nn">pd</span>
-<a id="__codelineno-65-3" name="__codelineno-65-3" href="#__codelineno-65-3"></a>
-<a id="__codelineno-65-4" name="__codelineno-65-4" href="#__codelineno-65-4"></a>
-<a id="__codelineno-65-5" name="__codelineno-65-5" href="#__codelineno-65-5"></a><span class="nd">@bodo</span><span class="o">.</span><span class="n">jit</span><span class="p">(</span><span class="n">distributed</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;df&quot;</span><span class="p">])</span>
-<a id="__codelineno-65-6" name="__codelineno-65-6" href="#__codelineno-65-6"></a><span class="k">def</span> <span class="nf">write_postgresql</span><span class="p">(</span><span class="n">df</span><span class="p">,</span> <span class="n">table_name</span><span class="p">,</span> <span class="n">conn</span><span class="p">):</span>
-<a id="__codelineno-65-7" name="__codelineno-65-7" href="#__codelineno-65-7"></a>    <span class="n">df</span><span class="o">.</span><span class="n">to_sql</span><span class="p">(</span><span class="n">table</span><span class="p">,</span> <span class="n">conn</span><span class="p">)</span>
-<a id="__codelineno-65-8" name="__codelineno-65-8" href="#__codelineno-65-8"></a>
-<a id="__codelineno-65-9" name="__codelineno-65-9" href="#__codelineno-65-9"></a>
-<a id="__codelineno-65-10" name="__codelineno-65-10" href="#__codelineno-65-10"></a><span class="n">table_name</span> <span class="o">=</span> <span class="s2">&quot;test_table&quot;</span>
-<a id="__codelineno-65-11" name="__codelineno-65-11" href="#__codelineno-65-11"></a><span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span><span class="s2">&quot;A&quot;</span><span class="p">:</span> <span class="p">[</span><span class="mf">1.12</span><span class="p">,</span> <span class="mf">1.1</span><span class="p">]</span> <span class="o">*</span> <span class="mi">5</span><span class="p">,</span> <span class="s2">&quot;B&quot;</span><span class="p">:</span> <span class="p">[</span><span class="mi">213</span><span class="p">,</span> <span class="o">-</span><span class="mi">7</span><span class="p">]</span> <span class="o">*</span> <span class="mi">5</span><span class="p">})</span>
-<a id="__codelineno-65-12" name="__codelineno-65-12" href="#__codelineno-65-12"></a><span class="n">conn</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;postgresql+psycopg2://</span><span class="si">{</span><span class="n">username</span><span class="si">}</span><span class="s2">:</span><span class="si">{</span><span class="n">password</span><span class="si">}</span><span class="s2">@</span><span class="si">{</span><span class="n">host</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">db_name</span><span class="si">}</span><span class="s2">&quot;</span>
-<a id="__codelineno-65-13" name="__codelineno-65-13" href="#__codelineno-65-13"></a><span class="n">write_postgresql</span><span class="p">(</span><span class="n">df</span><span class="p">,</span> <span class="n">table_name</span><span class="p">,</span> <span class="n">conn</span><span class="p">)</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-63-1" name="__codelineno-63-1" href="#__codelineno-63-1"></a><span class="kn">import</span> <span class="nn">bodo</span>
+<a id="__codelineno-63-2" name="__codelineno-63-2" href="#__codelineno-63-2"></a><span class="kn">import</span> <span class="nn">pandas</span> <span class="k">as</span> <span class="nn">pd</span>
+<a id="__codelineno-63-3" name="__codelineno-63-3" href="#__codelineno-63-3"></a>
+<a id="__codelineno-63-4" name="__codelineno-63-4" href="#__codelineno-63-4"></a>
+<a id="__codelineno-63-5" name="__codelineno-63-5" href="#__codelineno-63-5"></a><span class="nd">@bodo</span><span class="o">.</span><span class="n">jit</span><span class="p">(</span><span class="n">distributed</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;df&quot;</span><span class="p">])</span>
+<a id="__codelineno-63-6" name="__codelineno-63-6" href="#__codelineno-63-6"></a><span class="k">def</span> <span class="nf">write_postgresql</span><span class="p">(</span><span class="n">df</span><span class="p">,</span> <span class="n">table_name</span><span class="p">,</span> <span class="n">conn</span><span class="p">):</span>
+<a id="__codelineno-63-7" name="__codelineno-63-7" href="#__codelineno-63-7"></a>    <span class="n">df</span><span class="o">.</span><span class="n">to_sql</span><span class="p">(</span><span class="n">table</span><span class="p">,</span> <span class="n">conn</span><span class="p">)</span>
+<a id="__codelineno-63-8" name="__codelineno-63-8" href="#__codelineno-63-8"></a>
+<a id="__codelineno-63-9" name="__codelineno-63-9" href="#__codelineno-63-9"></a>
+<a id="__codelineno-63-10" name="__codelineno-63-10" href="#__codelineno-63-10"></a><span class="n">table_name</span> <span class="o">=</span> <span class="s2">&quot;test_table&quot;</span>
+<a id="__codelineno-63-11" name="__codelineno-63-11" href="#__codelineno-63-11"></a><span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span><span class="s2">&quot;A&quot;</span><span class="p">:</span> <span class="p">[</span><span class="mf">1.12</span><span class="p">,</span> <span class="mf">1.1</span><span class="p">]</span> <span class="o">*</span> <span class="mi">5</span><span class="p">,</span> <span class="s2">&quot;B&quot;</span><span class="p">:</span> <span class="p">[</span><span class="mi">213</span><span class="p">,</span> <span class="o">-</span><span class="mi">7</span><span class="p">]</span> <span class="o">*</span> <span class="mi">5</span><span class="p">})</span>
+<a id="__codelineno-63-12" name="__codelineno-63-12" href="#__codelineno-63-12"></a><span class="n">conn</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;postgresql+psycopg2://</span><span class="si">{</span><span class="n">username</span><span class="si">}</span><span class="s2">:</span><span class="si">{</span><span class="n">password</span><span class="si">}</span><span class="s2">@</span><span class="si">{</span><span class="n">host</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">db_name</span><span class="si">}</span><span class="s2">&quot;</span>
+<a id="__codelineno-63-13" name="__codelineno-63-13" href="#__codelineno-63-13"></a><span class="n">write_postgresql</span><span class="p">(</span><span class="n">df</span><span class="p">,</span> <span class="n">table_name</span><span class="p">,</span> <span class="n">conn</span><span class="p">)</span>
 </code></pre></div>
 <h2 id="non-constant-filepaths">Specifying I/O Data Types Manually<a class="headerlink" href="#non-constant-filepaths" title="Permanent link">&para;</a></h2>
 <p>In some rase use cases, the dataset path cannot be a constant value
@@ -26942,13 +26752,13 @@ or a JIT function argument. In such cases, the path is determined dynamically, w
 Therefore, the user has to provide the data types manually.
 For example, <code>names</code> and <code>dtypes</code> keyword arguments of <code>pd.read_csv</code> and <code>pd.read_excel</code>
 allow the user to specify the data types:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-66-1" name="__codelineno-66-1" href="#__codelineno-66-1"></a><span class="nd">@bodo</span><span class="o">.</span><span class="n">jit</span>
-<a id="__codelineno-66-2" name="__codelineno-66-2" href="#__codelineno-66-2"></a><span class="k">def</span> <span class="nf">example_csv</span><span class="p">(</span><span class="n">fname1</span><span class="p">,</span> <span class="n">fname2</span><span class="p">,</span> <span class="n">flag</span><span class="p">):</span>
-<a id="__codelineno-66-3" name="__codelineno-66-3" href="#__codelineno-66-3"></a>    <span class="k">if</span> <span class="n">flag</span><span class="p">:</span>
-<a id="__codelineno-66-4" name="__codelineno-66-4" href="#__codelineno-66-4"></a>        <span class="n">file_name</span> <span class="o">=</span> <span class="n">fname1</span>
-<a id="__codelineno-66-5" name="__codelineno-66-5" href="#__codelineno-66-5"></a>    <span class="k">else</span><span class="p">:</span>
-<a id="__codelineno-66-6" name="__codelineno-66-6" href="#__codelineno-66-6"></a>        <span class="n">file_name</span> <span class="o">=</span> <span class="n">fname2</span>
-<a id="__codelineno-66-7" name="__codelineno-66-7" href="#__codelineno-66-7"></a>    <span class="k">return</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="n">file_name</span><span class="p">,</span> <span class="n">names</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;A&quot;</span><span class="p">,</span> <span class="s2">&quot;B&quot;</span><span class="p">,</span> <span class="s2">&quot;C&quot;</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;A&quot;</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="s2">&quot;B&quot;</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="s2">&quot;C&quot;</span><span class="p">:</span> <span class="nb">str</span><span class="p">})</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-64-1" name="__codelineno-64-1" href="#__codelineno-64-1"></a><span class="nd">@bodo</span><span class="o">.</span><span class="n">jit</span>
+<a id="__codelineno-64-2" name="__codelineno-64-2" href="#__codelineno-64-2"></a><span class="k">def</span> <span class="nf">example_csv</span><span class="p">(</span><span class="n">fname1</span><span class="p">,</span> <span class="n">fname2</span><span class="p">,</span> <span class="n">flag</span><span class="p">):</span>
+<a id="__codelineno-64-3" name="__codelineno-64-3" href="#__codelineno-64-3"></a>    <span class="k">if</span> <span class="n">flag</span><span class="p">:</span>
+<a id="__codelineno-64-4" name="__codelineno-64-4" href="#__codelineno-64-4"></a>        <span class="n">file_name</span> <span class="o">=</span> <span class="n">fname1</span>
+<a id="__codelineno-64-5" name="__codelineno-64-5" href="#__codelineno-64-5"></a>    <span class="k">else</span><span class="p">:</span>
+<a id="__codelineno-64-6" name="__codelineno-64-6" href="#__codelineno-64-6"></a>        <span class="n">file_name</span> <span class="o">=</span> <span class="n">fname2</span>
+<a id="__codelineno-64-7" name="__codelineno-64-7" href="#__codelineno-64-7"></a>    <span class="k">return</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="n">file_name</span><span class="p">,</span> <span class="n">names</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;A&quot;</span><span class="p">,</span> <span class="s2">&quot;B&quot;</span><span class="p">,</span> <span class="s2">&quot;C&quot;</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;A&quot;</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="s2">&quot;B&quot;</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="s2">&quot;C&quot;</span><span class="p">:</span> <span class="nb">str</span><span class="p">})</span>
 </code></pre></div>
 <p>For other pandas read functions, the existing APIs do not
 currently allow this information to be provided.
@@ -26956,30 +26766,30 @@ Users can still provide
 typing information in the <code>bodo.jit</code> decorator,
 similar to <a href="http://numba.pydata.org/numba-doc/latest/reference/types.html" target="blank">Numba's typing syntax</a>.
 For example:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-67-1" name="__codelineno-67-1" href="#__codelineno-67-1"></a><span class="nd">@bodo</span><span class="o">.</span><span class="n">jit</span><span class="p">(</span><span class="nb">locals</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;df&quot;</span><span class="p">:{</span><span class="s2">&quot;one&quot;</span><span class="p">:</span> <span class="n">bodo</span><span class="o">.</span><span class="n">float64</span><span class="p">[:],</span>
-<a id="__codelineno-67-2" name="__codelineno-67-2" href="#__codelineno-67-2"></a>                  <span class="s2">&quot;two&quot;</span><span class="p">:</span> <span class="n">bodo</span><span class="o">.</span><span class="n">string_array_type</span><span class="p">,</span>
-<a id="__codelineno-67-3" name="__codelineno-67-3" href="#__codelineno-67-3"></a>                  <span class="s2">&quot;three&quot;</span><span class="p">:</span> <span class="n">bodo</span><span class="o">.</span><span class="n">bool_</span><span class="p">[:],</span>
-<a id="__codelineno-67-4" name="__codelineno-67-4" href="#__codelineno-67-4"></a>                  <span class="s2">&quot;four&quot;</span><span class="p">:</span> <span class="n">bodo</span><span class="o">.</span><span class="n">float64</span><span class="p">[:],</span>
-<a id="__codelineno-67-5" name="__codelineno-67-5" href="#__codelineno-67-5"></a>                  <span class="s2">&quot;five&quot;</span><span class="p">:</span> <span class="n">bodo</span><span class="o">.</span><span class="n">string_array_type</span><span class="p">,</span>
-<a id="__codelineno-67-6" name="__codelineno-67-6" href="#__codelineno-67-6"></a>                  <span class="p">}})</span>
-<a id="__codelineno-67-7" name="__codelineno-67-7" href="#__codelineno-67-7"></a><span class="k">def</span> <span class="nf">example_df_schema</span><span class="p">(</span><span class="n">fname1</span><span class="p">,</span> <span class="n">fname2</span><span class="p">,</span> <span class="n">flag</span><span class="p">):</span>
-<a id="__codelineno-67-8" name="__codelineno-67-8" href="#__codelineno-67-8"></a>    <span class="k">if</span> <span class="n">flag</span><span class="p">:</span>
-<a id="__codelineno-67-9" name="__codelineno-67-9" href="#__codelineno-67-9"></a>        <span class="n">file_name</span> <span class="o">=</span> <span class="n">fname1</span>
-<a id="__codelineno-67-10" name="__codelineno-67-10" href="#__codelineno-67-10"></a>    <span class="k">else</span><span class="p">:</span>
-<a id="__codelineno-67-11" name="__codelineno-67-11" href="#__codelineno-67-11"></a>        <span class="n">file_name</span> <span class="o">=</span> <span class="n">fname2</span>
-<a id="__codelineno-67-12" name="__codelineno-67-12" href="#__codelineno-67-12"></a>    <span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_parquet</span><span class="p">(</span><span class="n">file_name</span><span class="p">)</span>
-<a id="__codelineno-67-13" name="__codelineno-67-13" href="#__codelineno-67-13"></a>    <span class="k">return</span> <span class="n">df</span>
-<a id="__codelineno-67-14" name="__codelineno-67-14" href="#__codelineno-67-14"></a>
-<a id="__codelineno-67-15" name="__codelineno-67-15" href="#__codelineno-67-15"></a>
-<a id="__codelineno-67-16" name="__codelineno-67-16" href="#__codelineno-67-16"></a> <span class="nd">@bodo</span><span class="o">.</span><span class="n">jit</span><span class="p">(</span><span class="nb">locals</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;X&quot;</span><span class="p">:</span> <span class="n">bodo</span><span class="o">.</span><span class="n">float64</span><span class="p">[:,:],</span> <span class="s2">&quot;Y&quot;</span><span class="p">:</span> <span class="n">bodo</span><span class="o">.</span><span class="n">float64</span><span class="p">[:]})</span>
-<a id="__codelineno-67-17" name="__codelineno-67-17" href="#__codelineno-67-17"></a> <span class="k">def</span> <span class="nf">example_h5</span><span class="p">(</span><span class="n">fname1</span><span class="p">,</span> <span class="n">fname2</span><span class="p">,</span> <span class="n">flag</span><span class="p">):</span>
-<a id="__codelineno-67-18" name="__codelineno-67-18" href="#__codelineno-67-18"></a>    <span class="k">if</span> <span class="n">flag</span><span class="p">:</span>
-<a id="__codelineno-67-19" name="__codelineno-67-19" href="#__codelineno-67-19"></a>        <span class="n">file_name</span> <span class="o">=</span> <span class="n">fname1</span>
-<a id="__codelineno-67-20" name="__codelineno-67-20" href="#__codelineno-67-20"></a>    <span class="k">else</span><span class="p">:</span>
-<a id="__codelineno-67-21" name="__codelineno-67-21" href="#__codelineno-67-21"></a>        <span class="n">file_name</span> <span class="o">=</span> <span class="n">fname2</span>
-<a id="__codelineno-67-22" name="__codelineno-67-22" href="#__codelineno-67-22"></a>     <span class="n">f</span> <span class="o">=</span> <span class="n">h5py</span><span class="o">.</span><span class="n">File</span><span class="p">(</span><span class="n">file_name</span><span class="p">,</span> <span class="s2">&quot;r&quot;</span><span class="p">)</span>
-<a id="__codelineno-67-23" name="__codelineno-67-23" href="#__codelineno-67-23"></a>     <span class="n">X</span> <span class="o">=</span> <span class="n">f</span><span class="p">[</span><span class="s2">&quot;points&quot;</span><span class="p">][:]</span>
-<a id="__codelineno-67-24" name="__codelineno-67-24" href="#__codelineno-67-24"></a>     <span class="n">Y</span> <span class="o">=</span> <span class="n">f</span><span class="p">[</span><span class="s2">&quot;responses&quot;</span><span class="p">][:]</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-65-1" name="__codelineno-65-1" href="#__codelineno-65-1"></a><span class="nd">@bodo</span><span class="o">.</span><span class="n">jit</span><span class="p">(</span><span class="nb">locals</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;df&quot;</span><span class="p">:{</span><span class="s2">&quot;one&quot;</span><span class="p">:</span> <span class="n">bodo</span><span class="o">.</span><span class="n">float64</span><span class="p">[:],</span>
+<a id="__codelineno-65-2" name="__codelineno-65-2" href="#__codelineno-65-2"></a>                  <span class="s2">&quot;two&quot;</span><span class="p">:</span> <span class="n">bodo</span><span class="o">.</span><span class="n">string_array_type</span><span class="p">,</span>
+<a id="__codelineno-65-3" name="__codelineno-65-3" href="#__codelineno-65-3"></a>                  <span class="s2">&quot;three&quot;</span><span class="p">:</span> <span class="n">bodo</span><span class="o">.</span><span class="n">bool_</span><span class="p">[:],</span>
+<a id="__codelineno-65-4" name="__codelineno-65-4" href="#__codelineno-65-4"></a>                  <span class="s2">&quot;four&quot;</span><span class="p">:</span> <span class="n">bodo</span><span class="o">.</span><span class="n">float64</span><span class="p">[:],</span>
+<a id="__codelineno-65-5" name="__codelineno-65-5" href="#__codelineno-65-5"></a>                  <span class="s2">&quot;five&quot;</span><span class="p">:</span> <span class="n">bodo</span><span class="o">.</span><span class="n">string_array_type</span><span class="p">,</span>
+<a id="__codelineno-65-6" name="__codelineno-65-6" href="#__codelineno-65-6"></a>                  <span class="p">}})</span>
+<a id="__codelineno-65-7" name="__codelineno-65-7" href="#__codelineno-65-7"></a><span class="k">def</span> <span class="nf">example_df_schema</span><span class="p">(</span><span class="n">fname1</span><span class="p">,</span> <span class="n">fname2</span><span class="p">,</span> <span class="n">flag</span><span class="p">):</span>
+<a id="__codelineno-65-8" name="__codelineno-65-8" href="#__codelineno-65-8"></a>    <span class="k">if</span> <span class="n">flag</span><span class="p">:</span>
+<a id="__codelineno-65-9" name="__codelineno-65-9" href="#__codelineno-65-9"></a>        <span class="n">file_name</span> <span class="o">=</span> <span class="n">fname1</span>
+<a id="__codelineno-65-10" name="__codelineno-65-10" href="#__codelineno-65-10"></a>    <span class="k">else</span><span class="p">:</span>
+<a id="__codelineno-65-11" name="__codelineno-65-11" href="#__codelineno-65-11"></a>        <span class="n">file_name</span> <span class="o">=</span> <span class="n">fname2</span>
+<a id="__codelineno-65-12" name="__codelineno-65-12" href="#__codelineno-65-12"></a>    <span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_parquet</span><span class="p">(</span><span class="n">file_name</span><span class="p">)</span>
+<a id="__codelineno-65-13" name="__codelineno-65-13" href="#__codelineno-65-13"></a>    <span class="k">return</span> <span class="n">df</span>
+<a id="__codelineno-65-14" name="__codelineno-65-14" href="#__codelineno-65-14"></a>
+<a id="__codelineno-65-15" name="__codelineno-65-15" href="#__codelineno-65-15"></a>
+<a id="__codelineno-65-16" name="__codelineno-65-16" href="#__codelineno-65-16"></a> <span class="nd">@bodo</span><span class="o">.</span><span class="n">jit</span><span class="p">(</span><span class="nb">locals</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;X&quot;</span><span class="p">:</span> <span class="n">bodo</span><span class="o">.</span><span class="n">float64</span><span class="p">[:,:],</span> <span class="s2">&quot;Y&quot;</span><span class="p">:</span> <span class="n">bodo</span><span class="o">.</span><span class="n">float64</span><span class="p">[:]})</span>
+<a id="__codelineno-65-17" name="__codelineno-65-17" href="#__codelineno-65-17"></a> <span class="k">def</span> <span class="nf">example_h5</span><span class="p">(</span><span class="n">fname1</span><span class="p">,</span> <span class="n">fname2</span><span class="p">,</span> <span class="n">flag</span><span class="p">):</span>
+<a id="__codelineno-65-18" name="__codelineno-65-18" href="#__codelineno-65-18"></a>    <span class="k">if</span> <span class="n">flag</span><span class="p">:</span>
+<a id="__codelineno-65-19" name="__codelineno-65-19" href="#__codelineno-65-19"></a>        <span class="n">file_name</span> <span class="o">=</span> <span class="n">fname1</span>
+<a id="__codelineno-65-20" name="__codelineno-65-20" href="#__codelineno-65-20"></a>    <span class="k">else</span><span class="p">:</span>
+<a id="__codelineno-65-21" name="__codelineno-65-21" href="#__codelineno-65-21"></a>        <span class="n">file_name</span> <span class="o">=</span> <span class="n">fname2</span>
+<a id="__codelineno-65-22" name="__codelineno-65-22" href="#__codelineno-65-22"></a>     <span class="n">f</span> <span class="o">=</span> <span class="n">h5py</span><span class="o">.</span><span class="n">File</span><span class="p">(</span><span class="n">file_name</span><span class="p">,</span> <span class="s2">&quot;r&quot;</span><span class="p">)</span>
+<a id="__codelineno-65-23" name="__codelineno-65-23" href="#__codelineno-65-23"></a>     <span class="n">X</span> <span class="o">=</span> <span class="n">f</span><span class="p">[</span><span class="s2">&quot;points&quot;</span><span class="p">][:]</span>
+<a id="__codelineno-65-24" name="__codelineno-65-24" href="#__codelineno-65-24"></a>     <span class="n">Y</span> <span class="o">=</span> <span class="n">f</span><span class="p">[</span><span class="s2">&quot;responses&quot;</span><span class="p">][:]</span>
 </code></pre></div>
 <p>For the complete list of supported types, please see the <a class="autorefs autorefs-internal" href="../bodo_parallelism/typing_considerations/#pandas-dtype">pandas dtype section</a>.
 In the event that the dtypes are improperly specified, Bodo will throw a runtime error.</p>
