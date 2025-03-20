@@ -519,6 +519,28 @@ target_link_libraries(native_typer PRIVATE fmt::fmt)
 install(TARGETS native_typer DESTINATION "bodo/transforms/type_inference/")
 
 
+
+# ---------------------- Cython Target - bodo.pandas.plan_optimizer -----------------------
+add_custom_command(
+  OUTPUT bodo/pandas/plan_optimizer.cpp
+  DEPENDS bodo/pandas/plan_optimizer.pyx
+  VERBATIM
+  WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+  COMMAND "${CYTHON_EXECUTABLE}" --cplus -3 --output-file "${CMAKE_CURRENT_BINARY_DIR}/bodo/pandas/plan_optimizer.cpp" "bodo/pandas/plan_optimizer.pyx"
+  COMMENT "Cythonizing Source bodo/pandas/plan_optimizer.pyx into bodo/pandas/plan_optimizer.cpp"
+)
+
+python_add_library(
+  plan_optimizer
+  MODULE WITH_SOABI
+    "bodo/pandas/plan_optimizer.cpp"
+)
+target_include_directories(plan_optimizer PRIVATE ${BASE_INCLUDE_DIRS} "${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/" "${CMAKE_CURRENT_BINARY_DIR}/bodo/pandas/")
+target_link_directories(plan_optimizer PRIVATE ${CONDA_LIB_DIR})
+target_link_libraries(plan_optimizer PRIVATE fmt::fmt)
+install(TARGETS plan_optimizer DESTINATION "bodo/pandas/")
+
+
 # ------------------------- Main Bodo Extension -------------------------
 set(sources_list
   "bodo/io/_csv_json_writer.cpp"
