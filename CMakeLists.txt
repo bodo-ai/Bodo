@@ -530,112 +530,60 @@ add_custom_command(
   COMMENT "Cythonizing Source bodo/pandas/plan_optimizer.pyx into bodo/pandas/plan_optimizer.cpp"
 )
 
-function(prepend_source_dir input_list output_list)
-  set(result)
-  foreach(element IN LISTS ${input_list})
-      list(APPEND result "${CMAKE_CURRENT_SOURCE_DIR}/${element}")
-  endforeach()
-  set(${output_list} "${result}" PARENT_SCOPE)
-endfunction()
-
-
-set(PLANNER_SOURCES "bodo/pandas/plan_optimizer.cpp")
-
-add_subdirectory(bodo/pandas/vendor/duckdb/planner/operator)
-add_subdirectory(bodo/pandas/vendor/duckdb/function/table)
-add_subdirectory(bodo/pandas/vendor/duckdb/common)
-add_subdirectory(bodo/pandas/vendor/duckdb/catalog)
-add_subdirectory(bodo/pandas/vendor/duckdb/execution/operator/csv_scanner)
-message("PLANNER_SOURCES = ${PLANNER_SOURCES}")
-
 python_add_library(
   plan_optimizer
   MODULE WITH_SOABI
-    ${PLANNER_SOURCES}
-    "bodo/pandas/vendor/duckdb/planner/logical_operator.cpp"
-    "bodo/pandas/vendor/duckdb/storage/serialization/serialize_logical_operator.cpp"
-    "bodo/pandas/vendor/duckdb/storage/serialization/serialize_create_info.cpp"
-    "bodo/pandas/vendor/duckdb/storage/serialization/serialize_parse_info.cpp"
-    "bodo/pandas/vendor/duckdb/storage/serialization/serialize_nodes.cpp"
-    "bodo/pandas/vendor/duckdb/storage/serialization/serialize_constraint.cpp"
-    "bodo/pandas/vendor/duckdb/storage/serialization/serialize_expression.cpp"
-    "bodo/pandas/vendor/duckdb/storage/serialization/serialize_tableref.cpp"
-    "bodo/pandas/vendor/duckdb/storage/serialization/serialize_types.cpp"
-    "bodo/pandas/vendor/duckdb/storage/serialization/serialize_statement.cpp"
-    "bodo/pandas/vendor/duckdb/storage/serialization/serialize_result_modifier.cpp"
-    "bodo/pandas/vendor/duckdb/storage/serialization/serialize_table_filter.cpp"
-    "bodo/pandas/vendor/duckdb/storage/serialization/serialize_extra_drop_info.cpp"
-    "bodo/pandas/vendor/duckdb/storage/serialization/serialize_macro_function.cpp"
-    "bodo/pandas/vendor/duckdb/storage/buffer/buffer_handle.cpp"
-    "bodo/pandas/vendor/duckdb/storage/statistics/struct_stats.cpp"
-    "bodo/pandas/vendor/duckdb/storage/statistics/base_statistics.cpp"
-    "bodo/pandas/vendor/duckdb/storage/statistics/array_stats.cpp"
-    "bodo/pandas/vendor/duckdb/storage/statistics/string_stats.cpp"
-    "bodo/pandas/vendor/duckdb/storage/statistics/numeric_stats.cpp"
-    "bodo/pandas/vendor/duckdb/storage/statistics/list_stats.cpp"
-    "bodo/pandas/vendor/duckdb/main/error_manager.cpp"
-    "bodo/pandas/vendor/duckdb/main/client_data.cpp"
-    "bodo/pandas/vendor/duckdb/main/database_manager.cpp"
-    "bodo/pandas/vendor/duckdb/planner/expression.cpp"
-    "bodo/pandas/vendor/duckdb/planner/filter/null_filter.cpp"
-    "bodo/pandas/vendor/duckdb/planner/filter/struct_filter.cpp"
-    "bodo/pandas/vendor/duckdb/planner/filter/dynamic_filter.cpp"
-    "bodo/pandas/vendor/duckdb/function/function.cpp"
-    "bodo/pandas/vendor/duckdb/function/cast_rules.cpp"
-    "bodo/pandas/vendor/duckdb/function/cast/cast_function_set.cpp"
-    "bodo/pandas/vendor/duckdb/function/scalar/strftime_format.cpp"
-    "bodo/pandas/vendor/duckdb/function/scalar/struct/struct_extract.cpp"
-    "bodo/pandas/vendor/duckdb/function/scalar/operator/multiply.cpp"
-    "bodo/pandas/vendor/duckdb/function/scalar/operator/add.cpp"
-    "bodo/pandas/vendor/duckdb/function/scalar/operator/subtract.cpp"
-    "bodo/pandas/vendor/duckdb/function/built_in_functions.cpp"
-    "bodo/pandas/vendor/duckdb/function/function_set.cpp"
-    "bodo/pandas/vendor/duckdb/parser/keyword_helper.cpp"
-    "bodo/pandas/vendor/duckdb/parser/column_definition.cpp"
-    "bodo/pandas/vendor/duckdb/parser/parsed_data/create_info.cpp"
-    "bodo/pandas/vendor/duckdb/parser/parsed_data/detach_info.cpp"
-    "bodo/pandas/vendor/duckdb/parser/parsed_data/create_schema_info.cpp"
-    "bodo/pandas/vendor/duckdb/parser/parsed_data/vacuum_info.cpp"
-    "bodo/pandas/vendor/duckdb/parser/parsed_data/alter_table_info.cpp"
-    "bodo/pandas/vendor/duckdb/parser/parsed_data/alter_info.cpp"
-    "bodo/pandas/vendor/duckdb/parser/column_list.cpp"
-    "bodo/pandas/vendor/duckdb/parser/result_modifier.cpp"
-    "bodo/pandas/vendor/duckdb/parser/statement/select_statement.cpp"
-    "bodo/pandas/vendor/duckdb/parser/base_expression.cpp"
-    "bodo/pandas/vendor/duckdb/parser/tableref/table_function.cpp"
-    "bodo/pandas/vendor/duckdb/parser/tableref.cpp"
-    "bodo/pandas/vendor/duckdb/parser/tableref/basetableref.cpp"
-    "bodo/pandas/vendor/duckdb/parser/tableref/subqueryref.cpp"
-    "bodo/pandas/vendor/duckdb/parser/tableref/column_data_ref.cpp"
-    "bodo/pandas/vendor/duckdb/parser/tableref/emptytableref.cpp"
-    "bodo/pandas/vendor/duckdb/parser/tableref/expressionlistref.cpp"
-    "bodo/pandas/vendor/duckdb/parser/tableref/joinref.cpp"
-    "bodo/pandas/vendor/duckdb/parser/tableref/pivotref.cpp"
-    "bodo/pandas/vendor/duckdb/third_party/yyjson/yyjson.cpp"
-    "bodo/pandas/vendor/duckdb/third_party/utf8proc/utf8proc.cpp"
-    "bodo/pandas/vendor/duckdb/third_party/utf8proc/utf8proc_wrapper.cpp"
-    "bodo/pandas/vendor/duckdb/third_party/fmt/format.cc"
-    "bodo/pandas/vendor/duckdb/third_party/miniz/miniz.cpp"
-    "bodo/pandas/vendor/duckdb/third_party/hyperloglog/hyperloglog.cpp"
-    "bodo/pandas/vendor/duckdb/third_party/hyperloglog/sds.cpp"
+  "bodo/pandas/plan_optimizer.cpp"
 )
+
+ExternalProject_Add(
+    duckdb_build
+    PREFIX ${CMAKE_CURRENT_BINARY_DIR}/bodo/pandas/vendor/duckdb
+    SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/vendor/duckdb
+    CONFIGURE_COMMAND ""
+    BUILD_COMMAND make
+    INSTALL_COMMAND ""
+    BUILD_IN_SOURCE 1
+)
+
 target_include_directories(plan_optimizer PRIVATE ${BASE_INCLUDE_DIRS} "${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/" "${CMAKE_CURRENT_BINARY_DIR}/bodo/pandas/"
-"${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/vendor/duckdb/include/"
-"${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/vendor/duckdb/third_party/jaro_winkler"
-"${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/vendor/duckdb/third_party/utf8proc/include"
-"${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/vendor/duckdb/third_party/yyjson/include"
-"${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/vendor/duckdb/third_party/pcg"
-"${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/vendor/duckdb/third_party/fsst"
-"${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/vendor/duckdb/third_party/fast_float"
-"${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/vendor/duckdb/third_party/fmt/include"
-"${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/vendor/duckdb/third_party/miniz"
-"${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/vendor/duckdb/third_party/hyperloglog"
+"${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/vendor/duckdb/src/include/"
 )
-target_link_directories(plan_optimizer PRIVATE ${CONDA_LIB_DIR})
+target_link_directories(plan_optimizer PRIVATE ${CONDA_LIB_DIR}
+"${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/vendor/duckdb/build/release/src/"
+"${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/vendor/duckdb/build/release/third_party/fmt/"
+"${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/vendor/duckdb/build/release/third_party/fsst/"
+"${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/vendor/duckdb/build/release/third_party/libpg_query/"
+"${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/vendor/duckdb/build/release/third_party/re2/"
+"${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/vendor/duckdb/build/release/third_party/miniz/"
+"${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/vendor/duckdb/build/release/third_party/utf8proc/"
+"${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/vendor/duckdb/build/release/third_party/hyperloglog/"
+"${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/vendor/duckdb/build/release/third_party/fastpforlib/"
+"${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/vendor/duckdb/build/release/third_party/skiplist/"
+"${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/vendor/duckdb/build/release/third_party/mbedtls/"
+"${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/vendor/duckdb/build/release/third_party/yyjson/"
+"${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/vendor/duckdb/build/release/third_party/zstd/"
+)
 target_link_options(plan_optimizer
 PRIVATE "-fvisibility=hidden"
 PRIVATE "-fno-lto"
 )
+target_link_libraries(plan_optimizer PRIVATE
+  duckdb_static
+  duckdb_fsst
+  duckdb_fmt
+  duckdb_pg_query
+  duckdb_re2
+  duckdb_miniz
+  duckdb_utf8proc
+  duckdb_hyperloglog
+  duckdb_fastpforlib
+  duckdb_skiplistlib
+  duckdb_mbedtls
+  duckdb_yyjson
+  duckdb_zstd
+)
+add_dependencies(plan_optimizer duckdb_build)
 install(TARGETS plan_optimizer DESTINATION "bodo/pandas/")
 
 

@@ -840,6 +840,9 @@ else()
   set(LOCAL_EXTENSION_REPO_DIR ${LOCAL_EXTENSION_REPO})
 endif()
 
+# Bodo change: avoid building extensions
+set(EXTENSION_TESTS_ONLY TRUE)
+
 set(LOCAL_EXTENSION_REPO FALSE)
 if (NOT EXTENSION_CONFIG_BUILD AND NOT ${EXTENSION_TESTS_ONLY} AND NOT CLANG_TIDY)
   if (NOT Python3_FOUND)
@@ -1306,7 +1309,8 @@ if(BUILD_PYTHON)
 endif()
 
 # Load base extension config
-include(${CMAKE_CURRENT_SOURCE_DIR}/extension/extension_config.cmake)
+# Bodo change: avoid extension dependency
+# include(${CMAKE_CURRENT_SOURCE_DIR}/extension/extension_config.cmake)
 
 # For extensions whose tests were loaded, but not linked into duckdb, we need to ensure they are registered to have
 # the sqllogictest "require" statement load the loadable extensions instead of the baked in static one
@@ -1319,7 +1323,8 @@ endforeach()
 
 if (BUILD_MAIN_DUCKDB_LIBRARY)
   add_subdirectory(src)
-  add_subdirectory(tools)
+  # Bodo change: avoid building tools
+  # add_subdirectory(tools)
 endif()
 
 # Add subdirectories for registered extensions
@@ -1477,6 +1482,9 @@ if(BUILD_PYTHON)
   add_extension_dependencies(duckdb_python)
 endif()
 
+# Bodo change: avoid building duckdb_platform_binary
+set(DUCKDB_EXPLICIT_PLATFORM TRUE)
+
 if(NOT DUCKDB_EXPLICIT_PLATFORM)
   set(VERSION_SOURCES tools/utils/test_platform.cpp)
 
@@ -1501,6 +1509,9 @@ else()
           )
 endif()
 add_custom_target(duckdb_platform DEPENDS ${PROJECT_BINARY_DIR}/duckdb_platform_out)
+
+# Bodo change: avoid building unittests
+set(BUILD_UNITTESTS FALSE)
 
 if(NOT CLANG_TIDY)
   if(${BUILD_UNITTESTS})
