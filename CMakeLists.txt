@@ -544,6 +544,7 @@ set(PLANNER_SOURCES "bodo/pandas/plan_optimizer.cpp")
 add_subdirectory(bodo/pandas/vendor/duckdb/planner/operator)
 add_subdirectory(bodo/pandas/vendor/duckdb/function/table)
 add_subdirectory(bodo/pandas/vendor/duckdb/common)
+add_subdirectory(bodo/pandas/vendor/duckdb/execution/operator/csv_scanner)
 message("PLANNER_SOURCES = ${PLANNER_SOURCES}")
 
 python_add_library(
@@ -583,6 +584,7 @@ python_add_library(
     "bodo/pandas/vendor/duckdb/function/scalar/operator/add.cpp"
     "bodo/pandas/vendor/duckdb/function/scalar/operator/subtract.cpp"
     "bodo/pandas/vendor/duckdb/function/built_in_functions.cpp"
+    "bodo/pandas/vendor/duckdb/function/function_set.cpp"
     "bodo/pandas/vendor/duckdb/parser/keyword_helper.cpp"
     "bodo/pandas/vendor/duckdb/parser/column_definition.cpp"
     "bodo/pandas/vendor/duckdb/parser/parsed_data/create_info.cpp"
