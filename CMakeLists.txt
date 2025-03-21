@@ -542,6 +542,8 @@ endfunction()
 set(PLANNER_SOURCES "bodo/pandas/plan_optimizer.cpp")
 
 add_subdirectory(bodo/pandas/vendor/duckdb/planner/operator)
+add_subdirectory(bodo/pandas/vendor/duckdb/function/table)
+add_subdirectory(bodo/pandas/vendor/duckdb/common)
 message("PLANNER_SOURCES = ${PLANNER_SOURCES}")
 
 python_add_library(
@@ -581,43 +583,8 @@ python_add_library(
     "bodo/pandas/vendor/duckdb/function/scalar/operator/add.cpp"
     "bodo/pandas/vendor/duckdb/function/scalar/operator/subtract.cpp"
     "bodo/pandas/vendor/duckdb/function/built_in_functions.cpp"
-    "bodo/pandas/vendor/duckdb/common/value_operations/comparison_operations.cpp"
-    "bodo/pandas/vendor/duckdb/common/binary_serializer.cpp"
-    "bodo/pandas/vendor/duckdb/common/binary_deserializer.cpp"
-    "bodo/pandas/vendor/duckdb/common/tree_renderer.cpp"
-    "bodo/pandas/vendor/duckdb/common/tree_renderer/html_tree_renderer.cpp"
-    "bodo/pandas/vendor/duckdb/common/tree_renderer/json_tree_renderer.cpp"
-    "bodo/pandas/vendor/duckdb/common/tree_renderer/text_tree_renderer.cpp"
-    "bodo/pandas/vendor/duckdb/common/tree_renderer/graphviz_tree_renderer.cpp"
-    "bodo/pandas/vendor/duckdb/common/tree_renderer/tree_renderer.cpp"
-    "bodo/pandas/vendor/duckdb/common/types/date.cpp"
-    "bodo/pandas/vendor/duckdb/common/types/vector_constants.cpp"
-    "bodo/pandas/vendor/duckdb/common/types/value.cpp"
-    "bodo/pandas/vendor/duckdb/common/types/validity_mask.cpp"
-    "bodo/pandas/vendor/duckdb/common/types/vector_buffer.cpp"
-    "bodo/pandas/vendor/duckdb/common/types/cast_helpers.cpp"
-    "bodo/pandas/vendor/duckdb/common/types/hugeint.cpp"
-    "bodo/pandas/vendor/duckdb/common/types/uhugeint.cpp"
-    "bodo/pandas/vendor/duckdb/common/types/vector.cpp"
-    "bodo/pandas/vendor/duckdb/common/types/string_heap.cpp"
-    "bodo/pandas/vendor/duckdb/common/types/timestamp.cpp"
-    "bodo/pandas/vendor/duckdb/common/types/time.cpp"
-    "bodo/pandas/vendor/duckdb/common/types/blob.cpp"
-    "bodo/pandas/vendor/duckdb/common/types/bit.cpp"
-    "bodo/pandas/vendor/duckdb/common/types/uuid.cpp"
-    "bodo/pandas/vendor/duckdb/common/constants.cpp"
-    "bodo/pandas/vendor/duckdb/common/render_tree.cpp"
-    "bodo/pandas/vendor/duckdb/common/serializer/serializer.cpp"
-    "bodo/pandas/vendor/duckdb/common/serializer/memory_stream.cpp"
-    "bodo/pandas/vendor/duckdb/common/random_engine.cpp"
-    "bodo/pandas/vendor/duckdb/common/types.cpp"
-    "bodo/pandas/vendor/duckdb/common/enum_util.cpp"
-    "bodo/pandas/vendor/duckdb/common/string_util.cpp"
-    "bodo/pandas/vendor/duckdb/common/extra_type_info.cpp"
-    "bodo/pandas/vendor/duckdb/common/complex_json.cpp"
-    "bodo/pandas/vendor/duckdb/common/operator/cast_operators.cpp"
-    "bodo/pandas/vendor/duckdb/common/operator/convert_to_string.cpp"
-    "bodo/pandas/vendor/duckdb/common/operator/string_cast.cpp"
+    "bodo/pandas/vendor/duckdb/parser/keyword_helper.cpp"
+    "bodo/pandas/vendor/duckdb/parser/column_definition.cpp"
     "bodo/pandas/vendor/duckdb/parser/parsed_data/create_info.cpp"
     "bodo/pandas/vendor/duckdb/parser/parsed_data/detach_info.cpp"
     "bodo/pandas/vendor/duckdb/parser/parsed_data/create_schema_info.cpp"
@@ -638,6 +605,12 @@ python_add_library(
     "bodo/pandas/vendor/duckdb/parser/tableref/joinref.cpp"
     "bodo/pandas/vendor/duckdb/parser/tableref/pivotref.cpp"
     "bodo/pandas/vendor/duckdb/third_party/yyjson/yyjson.cpp"
+    "bodo/pandas/vendor/duckdb/third_party/utf8proc/utf8proc.cpp"
+    "bodo/pandas/vendor/duckdb/third_party/utf8proc/utf8proc_wrapper.cpp"
+    "bodo/pandas/vendor/duckdb/third_party/fmt/format.cc"
+    "bodo/pandas/vendor/duckdb/third_party/miniz/miniz.cpp"
+    "bodo/pandas/vendor/duckdb/third_party/hyperloglog/hyperloglog.cpp"
+    "bodo/pandas/vendor/duckdb/third_party/hyperloglog/sds.cpp"
 )
 target_include_directories(plan_optimizer PRIVATE ${BASE_INCLUDE_DIRS} "${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/" "${CMAKE_CURRENT_BINARY_DIR}/bodo/pandas/"
 "${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/vendor/duckdb/include/"
@@ -647,9 +620,11 @@ target_include_directories(plan_optimizer PRIVATE ${BASE_INCLUDE_DIRS} "${CMAKE_
 "${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/vendor/duckdb/third_party/pcg"
 "${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/vendor/duckdb/third_party/fsst"
 "${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/vendor/duckdb/third_party/fast_float"
+"${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/vendor/duckdb/third_party/fmt/include"
+"${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/vendor/duckdb/third_party/miniz"
+"${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/vendor/duckdb/third_party/hyperloglog"
 )
 target_link_directories(plan_optimizer PRIVATE ${CONDA_LIB_DIR})
-target_link_libraries(plan_optimizer PRIVATE fmt::fmt)
 target_link_options(plan_optimizer
 PRIVATE "-fvisibility=hidden"
 PRIVATE "-fno-lto"

@@ -1376,8 +1376,7 @@ string_t CastFromBitToString::Operation(string_t input, Vector &vector) {
 //===--------------------------------------------------------------------===//
 template <>
 string_t CastFromPointer::Operation(uintptr_t input, Vector &vector) {
-	// Bodo change: use regular fmt instead of duckdb_fmt
-	std::string s = fmt::format("0x{:x}", input);
+	std::string s = duckdb_fmt::format("0x{:x}", input);
 	return StringVector::AddString(vector, s);
 }
 
