@@ -530,10 +530,24 @@ add_custom_command(
   COMMENT "Cythonizing Source bodo/pandas/plan_optimizer.pyx into bodo/pandas/plan_optimizer.cpp"
 )
 
+function(prepend_source_dir input_list output_list)
+  set(result)
+  foreach(element IN LISTS ${input_list})
+      list(APPEND result "${CMAKE_CURRENT_SOURCE_DIR}/${element}")
+  endforeach()
+  set(${output_list} "${result}" PARENT_SCOPE)
+endfunction()
+
+
+set(PLANNER_SOURCES "bodo/pandas/plan_optimizer.cpp")
+
+add_subdirectory(bodo/pandas/vendor/duckdb/planner/operator)
+message("PLANNER_SOURCES = ${PLANNER_SOURCES}")
+
 python_add_library(
   plan_optimizer
   MODULE WITH_SOABI
-    "bodo/pandas/plan_optimizer.cpp"
+    ${PLANNER_SOURCES}
     "bodo/pandas/vendor/duckdb/planner/logical_operator.cpp"
     "bodo/pandas/vendor/duckdb/storage/serialization/serialize_logical_operator.cpp"
     "bodo/pandas/vendor/duckdb/storage/serialization/serialize_create_info.cpp"
@@ -551,42 +565,23 @@ python_add_library(
     "bodo/pandas/vendor/duckdb/storage/buffer/buffer_handle.cpp"
     "bodo/pandas/vendor/duckdb/storage/statistics/struct_stats.cpp"
     "bodo/pandas/vendor/duckdb/storage/statistics/base_statistics.cpp"
+    "bodo/pandas/vendor/duckdb/storage/statistics/array_stats.cpp"
+    "bodo/pandas/vendor/duckdb/storage/statistics/string_stats.cpp"
+    "bodo/pandas/vendor/duckdb/storage/statistics/numeric_stats.cpp"
+    "bodo/pandas/vendor/duckdb/storage/statistics/list_stats.cpp"
     "bodo/pandas/vendor/duckdb/main/error_manager.cpp"
     "bodo/pandas/vendor/duckdb/planner/expression.cpp"
     "bodo/pandas/vendor/duckdb/planner/filter/null_filter.cpp"
     "bodo/pandas/vendor/duckdb/planner/filter/struct_filter.cpp"
     "bodo/pandas/vendor/duckdb/planner/filter/dynamic_filter.cpp"
-    "bodo/pandas/vendor/duckdb/planner/operator/logical_vacuum.cpp"
-    "bodo/pandas/vendor/duckdb/planner/operator/logical_copy_to_file.cpp"
-    "bodo/pandas/vendor/duckdb/planner/operator/logical_top_n.cpp"
-    "bodo/pandas/vendor/duckdb/planner/operator/logical_limit.cpp"
-    "bodo/pandas/vendor/duckdb/planner/operator/logical_order.cpp"
-    "bodo/pandas/vendor/duckdb/planner/operator/logical_pivot.cpp"
-    "bodo/pandas/vendor/duckdb/planner/operator/logical_set.cpp"
-    "bodo/pandas/vendor/duckdb/planner/operator/logical_reset.cpp"
-    "bodo/pandas/vendor/duckdb/planner/operator/logical_create.cpp"
-    "bodo/pandas/vendor/duckdb/planner/operator/logical_delete.cpp"
-    "bodo/pandas/vendor/duckdb/planner/operator/logical_insert.cpp"
-    "bodo/pandas/vendor/duckdb/planner/operator/logical_simple.cpp"
-    "bodo/pandas/vendor/duckdb/planner/operator/logical_update.cpp"
-    "bodo/pandas/vendor/duckdb/planner/operator/logical_create_index.cpp"
-    "bodo/pandas/vendor/duckdb/planner/operator/logical_create_table.cpp"
-    "bodo/pandas/vendor/duckdb/planner/operator/logical_unconditional_join.cpp"
-    "bodo/pandas/vendor/duckdb/planner/operator/logical_delim_get.cpp"
-    "bodo/pandas/vendor/duckdb/planner/operator/logical_dummy_scan.cpp"
-    "bodo/pandas/vendor/duckdb/planner/operator/logical_recursive_cte.cpp"
-    "bodo/pandas/vendor/duckdb/planner/operator/logical_set_operation.cpp"
-    "bodo/pandas/vendor/duckdb/planner/operator/logical_expression_get.cpp"
-    "bodo/pandas/vendor/duckdb/planner/operator/logical_join.cpp"
-    "bodo/pandas/vendor/duckdb/planner/operator/logical_comparison_join.cpp"
-    "bodo/pandas/vendor/duckdb/planner/operator/logical_cteref.cpp"
-    "bodo/pandas/vendor/duckdb/planner/operator/logical_unnest.cpp"
-    "bodo/pandas/vendor/duckdb/planner/operator/logical_window.cpp"
-    "bodo/pandas/vendor/duckdb/planner/operator/logical_materialized_cte.cpp"
-    "bodo/pandas/vendor/duckdb/planner/operator/logical_get.cpp"
     "bodo/pandas/vendor/duckdb/function/function.cpp"
     "bodo/pandas/vendor/duckdb/function/scalar/strftime_format.cpp"
     "bodo/pandas/vendor/duckdb/function/scalar/struct/struct_extract.cpp"
+    "bodo/pandas/vendor/duckdb/function/scalar/operator/multiply.cpp"
+    "bodo/pandas/vendor/duckdb/function/scalar/operator/add.cpp"
+    "bodo/pandas/vendor/duckdb/function/scalar/operator/subtract.cpp"
+    "bodo/pandas/vendor/duckdb/function/built_in_functions.cpp"
+    "bodo/pandas/vendor/duckdb/common/value_operations/comparison_operations.cpp"
     "bodo/pandas/vendor/duckdb/common/binary_serializer.cpp"
     "bodo/pandas/vendor/duckdb/common/binary_deserializer.cpp"
     "bodo/pandas/vendor/duckdb/common/tree_renderer.cpp"
@@ -605,6 +600,11 @@ python_add_library(
     "bodo/pandas/vendor/duckdb/common/types/uhugeint.cpp"
     "bodo/pandas/vendor/duckdb/common/types/vector.cpp"
     "bodo/pandas/vendor/duckdb/common/types/string_heap.cpp"
+    "bodo/pandas/vendor/duckdb/common/types/timestamp.cpp"
+    "bodo/pandas/vendor/duckdb/common/types/time.cpp"
+    "bodo/pandas/vendor/duckdb/common/types/blob.cpp"
+    "bodo/pandas/vendor/duckdb/common/types/bit.cpp"
+    "bodo/pandas/vendor/duckdb/common/types/uuid.cpp"
     "bodo/pandas/vendor/duckdb/common/constants.cpp"
     "bodo/pandas/vendor/duckdb/common/render_tree.cpp"
     "bodo/pandas/vendor/duckdb/common/serializer/serializer.cpp"
@@ -623,6 +623,7 @@ python_add_library(
     "bodo/pandas/vendor/duckdb/parser/parsed_data/create_schema_info.cpp"
     "bodo/pandas/vendor/duckdb/parser/parsed_data/vacuum_info.cpp"
     "bodo/pandas/vendor/duckdb/parser/parsed_data/alter_table_info.cpp"
+    "bodo/pandas/vendor/duckdb/parser/parsed_data/alter_info.cpp"
     "bodo/pandas/vendor/duckdb/parser/column_list.cpp"
     "bodo/pandas/vendor/duckdb/parser/result_modifier.cpp"
     "bodo/pandas/vendor/duckdb/parser/statement/select_statement.cpp"
