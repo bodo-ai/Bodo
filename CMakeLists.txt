@@ -544,6 +544,7 @@ set(PLANNER_SOURCES "bodo/pandas/plan_optimizer.cpp")
 add_subdirectory(bodo/pandas/vendor/duckdb/planner/operator)
 add_subdirectory(bodo/pandas/vendor/duckdb/function/table)
 add_subdirectory(bodo/pandas/vendor/duckdb/common)
+add_subdirectory(bodo/pandas/vendor/duckdb/catalog)
 add_subdirectory(bodo/pandas/vendor/duckdb/execution/operator/csv_scanner)
 message("PLANNER_SOURCES = ${PLANNER_SOURCES}")
 
@@ -574,12 +575,14 @@ python_add_library(
     "bodo/pandas/vendor/duckdb/storage/statistics/list_stats.cpp"
     "bodo/pandas/vendor/duckdb/main/error_manager.cpp"
     "bodo/pandas/vendor/duckdb/main/client_data.cpp"
-    "bodo/pandas/vendor/duckdb/catalog/catalog.cpp"
+    "bodo/pandas/vendor/duckdb/main/database_manager.cpp"
     "bodo/pandas/vendor/duckdb/planner/expression.cpp"
     "bodo/pandas/vendor/duckdb/planner/filter/null_filter.cpp"
     "bodo/pandas/vendor/duckdb/planner/filter/struct_filter.cpp"
     "bodo/pandas/vendor/duckdb/planner/filter/dynamic_filter.cpp"
     "bodo/pandas/vendor/duckdb/function/function.cpp"
+    "bodo/pandas/vendor/duckdb/function/cast_rules.cpp"
+    "bodo/pandas/vendor/duckdb/function/cast/cast_function_set.cpp"
     "bodo/pandas/vendor/duckdb/function/scalar/strftime_format.cpp"
     "bodo/pandas/vendor/duckdb/function/scalar/struct/struct_extract.cpp"
     "bodo/pandas/vendor/duckdb/function/scalar/operator/multiply.cpp"
