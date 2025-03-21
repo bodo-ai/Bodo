@@ -16,8 +16,7 @@
 #include "duckdb/common/types/hugeint.hpp"
 #include "duckdb/common/types/uhugeint.hpp"
 #include "duckdb/common/types/vector.hpp"
-// #include "fmt/format.h"
-#include "fmt/duckdb_fmt.h"
+#include "fmt/format.h"
 
 namespace duckdb {
 

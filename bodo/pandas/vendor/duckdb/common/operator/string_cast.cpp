@@ -7,8 +7,6 @@
 #include "duckdb/common/types/interval.hpp"
 #include "duckdb/common/types/time.hpp"
 #include "duckdb/common/types/timestamp.hpp"
-// Bodo change: use regular fmt instead of duckdb_fmt
-#include <fmt/format.h>
 
 namespace duckdb {
 
@@ -65,15 +63,13 @@ duckdb::string_t StringCast::Operation(hugeint_t input, Vector &vector) {
 
 template <>
 string_t StringCast::Operation(float input, Vector &vector) {
-	// Bodo change: use regular fmt instead of duckdb_fmt
-	std::string s = fmt::format("{}", input);
+	std::string s = duckdb_fmt::format("{}", input);
 	return StringVector::AddString(vector, s);
 }
 
 template <>
 string_t StringCast::Operation(double input, Vector &vector) {
-	// Bodo change: use regular fmt instead of duckdb_fmt
-	std::string s = fmt::format("{}", input);
+	std::string s = duckdb_fmt::format("{}", input);
 	return StringVector::AddString(vector, s);
 }
 
