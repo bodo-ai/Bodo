@@ -1,3 +1,5 @@
+add_subdirectory(arrow)
+
 set(NEW_SOURCES
   arrow.cpp
   arrow_conversion.cpp

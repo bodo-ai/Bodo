@@ -573,6 +573,8 @@ python_add_library(
     "bodo/pandas/vendor/duckdb/storage/statistics/numeric_stats.cpp"
     "bodo/pandas/vendor/duckdb/storage/statistics/list_stats.cpp"
     "bodo/pandas/vendor/duckdb/main/error_manager.cpp"
+    "bodo/pandas/vendor/duckdb/main/client_data.cpp"
+    "bodo/pandas/vendor/duckdb/catalog/catalog.cpp"
     "bodo/pandas/vendor/duckdb/planner/expression.cpp"
     "bodo/pandas/vendor/duckdb/planner/filter/null_filter.cpp"
     "bodo/pandas/vendor/duckdb/planner/filter/struct_filter.cpp"
