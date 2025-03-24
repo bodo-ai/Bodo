@@ -653,7 +653,7 @@ class Spawner:
         # debug_msg(self.logger, "bcast_root: "+ str(self.bcast_root))
         # rank 0 broadcast its hostname and port for the zmq shell
         # if bodo.get_rank() == 0:
-            
+
         for attempt in range(max_attempts):
             try:
                 port = out_socket.bind_to_random_port("tcp://0.0.0.0")

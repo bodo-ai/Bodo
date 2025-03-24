@@ -5,7 +5,6 @@ directly"""
 import logging
 import os
 import signal
-import socket
 import sys
 import typing as pt
 import uuid
@@ -519,7 +518,7 @@ def worker_loop(
     # don't inherit file descriptors from the parent process.
     out_socket = None
     # TODO: platform check
-    if True: #bodo.utils.utils.is_jupyter_on_windows():
+    if True:  # bodo.utils.utils.is_jupyter_on_windows():
         # Multi-node Jupyter on Windows is not supported yet
         # spawner_hostname = comm_world.bcast(
         #     socket.gethostname() if bodo.get_rank() == 0 else None, root=0
