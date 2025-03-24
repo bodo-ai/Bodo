@@ -484,6 +484,9 @@ class StdoutQueue:
 
     def write(self, msg):
         # TODO(Ehsan): buffer output similar to ipykernel
+        debug_worker_msg(
+            bodo.user_logging.get_current_bodo_verbose_logger(), f"Writing {msg}"
+        )
         self.out_socket.send_string(f"{int(self.is_stderr)}{msg}")
 
     def flush(self):
@@ -505,31 +508,36 @@ def worker_loop(
     # Stored last data value received from scatterv/bcast for testing gatherv purposes
 
     spawnerpid = spawner_intercomm.bcast(None, 0)
-    if bodo.get_rank() == 0:
-        spawner_hostname = spawner_intercomm.recv(source=0)
-        assert spawner_hostname == socket.gethostname(), (
-            "Spawner and worker 0 must be on the same machine"
-        )
+    debug_worker_msg(logger, f"Spawner PID: {spawnerpid}")
+    # if bodo.get_rank() == 0:
+    #     spawner_hostname = spawner_intercomm.recv(source=0)
+    #     assert spawner_hostname == socket.gethostname(), (
+    #         "Spawner and worker 0 must be on the same machine"
+    #     )
 
     # Send output to spawner manually if we are in Jupyter on Windows since child processes
     # don't inherit file descriptors from the parent process.
     out_socket = None
-    if bodo.utils.utils.is_jupyter_on_windows():
+    # TODO: platform check
+    if True: #bodo.utils.utils.is_jupyter_on_windows():
         # Multi-node Jupyter on Windows is not supported yet
-        spawner_hostname = comm_world.bcast(
-            spawner_hostname if bodo.get_rank() == 0 else None, root=0
-        )
-        if spawner_hostname != socket.gethostname():
-            raise bodo.utils.typing.BodoError(
-                "Jupyter is not supported on multi-node Windows clusters yet"
-            )
-        port = spawner_intercomm.bcast(None, 0)
+        # spawner_hostname = comm_world.bcast(
+        #     socket.gethostname() if bodo.get_rank() == 0 else None, root=0
+        # )
+        # if spawner_hostname != socket.gethostname():
+        #     raise bodo.utils.typing.BodoError(
+        #         "Jupyter is not supported on multi-node Windows clusters yet"
+        #     )
+        # port = spawner_intercomm.bcast(None, 0)
+        # connection_info = f"tcp://{spawner_hostname}:{port}"
+        connection_info = spawner_intercomm.bcast(None, 0)
+        debug_worker_msg(logger, f"connection_info: {connection_info}")
 
         import zmq
 
         context = zmq.Context()
         out_socket = context.socket(zmq.PUSH)
-        out_socket.connect(f"tcp://127.0.0.1:{port}")
+        out_socket.connect(connection_info)
         sys.stdout = StdoutQueue(out_socket, False)
         sys.stderr = StdoutQueue(out_socket, True)
 

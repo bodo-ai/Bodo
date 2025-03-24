@@ -625,10 +625,12 @@ class Spawner:
         https://stackoverflow.com/questions/23947281/python-multiprocessing-redirect-stdout-of-a-child-process-to-a-tkinter-text
         """
 
-        # Skip if not in Jupyter or not on Windows
-        if not bodo.utils.utils.is_jupyter_on_windows():
-            self.worker_output_thread = None
-            return
+        # TODO: uncomment
+        # platform_cloud_provider = os.environ.get("BODO_PLATFORM_CLOUD_PROVIDER", None)
+        # Skip if not in Jupyter or not on Windows or not running on Bodo platform
+        # if platform_cloud_provider is None or not bodo.utils.utils.is_jupyter_on_windows():
+        #     self.worker_output_thread = None
+        #     return
 
         import errno
         import threading
@@ -646,9 +648,15 @@ class Spawner:
         except AttributeError:
             win_in_use = None
 
+        # using hardcoded 0 since self.bcast_root= -3!
+        # self.worker_intercomm.rank is None!!
+        # debug_msg(self.logger, "bcast_root: "+ str(self.bcast_root))
+        # rank 0 broadcast its hostname and port for the zmq shell
+        # if bodo.get_rank() == 0:
+            
         for attempt in range(max_attempts):
             try:
-                port = out_socket.bind_to_random_port("tcp://127.0.0.1")
+                port = out_socket.bind_to_random_port("tcp://0.0.0.0")
             except zmq.ZMQError as ze:
                 # Raise if we have any error not related to socket binding
                 if ze.errno != errno.EADDRINUSE and ze.errno != win_in_use:
@@ -656,7 +664,14 @@ class Spawner:
                 if attempt == max_attempts - 1:
                     raise
 
-        self.worker_intercomm.bcast(port, self.bcast_root)
+        hostname = socket.gethostname()
+        connection_info = f"tcp://{hostname}:{port}"
+        self.worker_intercomm.bcast(connection_info, self.bcast_root)
+        debug_msg(self.logger, f"Connection info: {connection_info}")
+
+        # Other ranks connect
+        # if bodo.get_rank() != 0:
+        # out_socket.connect(connection_info)
 
         def worker_output_thread_func():
             """Thread that receives all worker outputs and prints them."""
