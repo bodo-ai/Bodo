@@ -3631,10 +3631,7 @@ def pivot_impl(
 
 
 @overload_method(
-    DataFrameType,
-    "to_parquet",
-    no_unliteral=True,
-    # jit_options={"cache": True}
+    DataFrameType, "to_parquet", no_unliteral=True, jit_options={"cache": True}
 )
 def to_parquet_overload(
     df,

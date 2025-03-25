@@ -29,6 +29,9 @@ from bodo.utils.typing import (
     is_overload_none,
     is_str_arr_type,
 )
+from bodo.utils.utils import (
+    bodo_exec,
+)
 
 if pt.TYPE_CHECKING:
     from bodo.hiframes.pd_dataframe_ext import DataFrameType
@@ -424,11 +427,7 @@ def gen_pandas_parquet_metadata(
 
 
 # TODO: Determine caching issue and re-enable
-@overload(
-    gen_pandas_parquet_metadata,
-    no_unliteral=True,
-    # jit_options={"cache": True}
-)
+@overload(gen_pandas_parquet_metadata, no_unliteral=True, jit_options={"cache": True})
 def overload_gen_pandas_parquet_metadata(
     df,
     col_names_arr,
@@ -489,7 +488,7 @@ def overload_gen_pandas_parquet_metadata(
         )
 
     func_text = (
-        "def impl(df, col_names_arr, partition_cols, write_non_range_index_to_metadata, write_rangeindex_to_metadata):\n"
+        "def bodo_gen_pandas_parquet_metadata(df, col_names_arr, partition_cols, write_non_range_index_to_metadata, write_rangeindex_to_metadata):\n"
         # Fill in the metadata template with the actual values
         "    index = df.index\n"
         "    index_names = index.names\n"
@@ -524,5 +523,4 @@ def overload_gen_pandas_parquet_metadata(
         "metadata_temp": metadata_temp,
         "_apply_template": _apply_template,
     }
-    exec(func_text, glbls, loc_vars)
-    return loc_vars["impl"]
+    return bodo_exec(func_text, glbls, loc_vars, __name__)
