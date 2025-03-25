@@ -97,8 +97,12 @@ void write_buff(char *_path_name, char *buff, int64_t start, int64_t count,
 
         std::filesystem::path out_path(dirname);
         out_path /= fname;  // append file name to output path
+        // Avoid "\" generated on Windows for remote object storage
+        std::string out_path_str = fs->type_name() == "local"
+                                       ? out_path.string()
+                                       : out_path.generic_string();
         arrow::Result<std::shared_ptr<arrow::io::OutputStream>> result =
-            fs->OpenOutputStream(out_path);
+            fs->OpenOutputStream(out_path_str);
         CHECK_ARROW_AND_ASSIGN(result, "FileOutputStream::Open", out_stream);
 
         status = out_stream->Write(buff, count);
