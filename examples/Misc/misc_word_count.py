@@ -20,19 +20,19 @@ def lexi_main(fname):
     a dataframe
     """
 
-    t0 = time.time()
+    t0 = time.perf_counter()
     case_notes = pd.read_csv(fname, usecols=["text"])
-    print("I/O time:", time.time() - t0)
+    print("I/O time:", time.perf_counter() - t0)
 
 
-    t1 = time.time()
+    t1 = time.perf_counter()
     case_notes["text"] = case_notes["text"].str.lower()
     text_split_series = case_notes["text"].str.split()
     str_series = text_split_series.explode()
     str_series = str_series[str_series.str.len() < 100]
     word_count = str_series.value_counts()
 
-    print("Finished counts after", time.time() - t1)
+    print("Finished counts after", time.perf_counter() - t1)
     print(word_count.head(25))
 
 

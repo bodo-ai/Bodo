@@ -34,18 +34,18 @@ def preprocess(reviews):
 @bodo.jit(cache=True, spawn=True)
 def find_top_words(review_filename):
     # Load in the data
-    t_start = time.time()
+    t_start = time.perf_counter()
     df = pd.read_csv(review_filename, parse_dates=[2])
-    print("read time", time.time() - t_start)
+    print("read time", time.perf_counter() - t_start)
 
     score = df.score
     reviews = df.text
 
-    t1 = time.time()
+    t1 = time.perf_counter()
     reviews = preprocess(reviews)
-    print("preprocess time", time.time() - t1)
+    print("preprocess time", time.perf_counter() - t1)
 
-    t1 = time.time()
+    t1 = time.perf_counter()
     # create low and high score series
     low_threshold = 1.5
     high_threshold = 4.95
@@ -56,16 +56,16 @@ def find_top_words(review_filename):
 
     high_colsplit = high_reviews.str.split()
     low_colsplit = low_reviews.str.split()
-    print("high/low time", time.time() - t1)
+    print("high/low time", time.perf_counter() - t1)
 
-    t1 = time.time()
+    t1 = time.perf_counter()
     high_words = high_colsplit.explode()
     low_words = low_colsplit.explode()
 
     top_words = high_words.value_counts().head(25)
     low_words = low_words.value_counts().head(25)
-    print("value_counts time", time.time() - t1)
-    print("total time", time.time() - t_start)
+    print("value_counts time", time.perf_counter() - t1)
+    print("total time", time.perf_counter() - t_start)
 
     print("TOP WORDS:")
     print(top_words)

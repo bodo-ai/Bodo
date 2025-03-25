@@ -23,7 +23,7 @@ def get_monthly_travels_weather(weather_dataset, hvfhv_dataset):
         .getOrCreate()
     )
 
-    start = time.time()
+    start = time.perf_counter()
 
     # Read in weather data using pandas-on-Spark
     central_park_weather_observations = ps.read_csv(
@@ -108,7 +108,7 @@ def get_monthly_travels_weather(weather_dataset, hvfhv_dataset):
 
     ## Write the results to a parquet file
     sorted_data.to_parquet("out.parquet", mode="overwrite")
-    print("Execution time:", time.time() - start)
+    print("Execution time:", time.perf_counter() - start)
 
 
 if __name__ == "__main__":
