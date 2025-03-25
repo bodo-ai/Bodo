@@ -1853,6 +1853,17 @@ def is_jupyter_on_windows() -> bool:
     )
 
 
+def is_jupyter_on_bodo_platform() -> bool:
+    """Returns True if running in Jupyter on Bodo Platform"""
+
+    return True
+    platform_cloud_provider = os.environ.get("BODO_PLATFORM_CLOUD_PROVIDER", None)
+    return (platform_cloud_provider is not None) and (
+        "JPY_SESSION_NAME" in os.environ
+        or "PYDEVD_IPYTHON_COMPATIBLE_DEBUGGING" in os.environ
+    )
+
+
 @dataclass
 class AWSCredentials:
     access_key: str

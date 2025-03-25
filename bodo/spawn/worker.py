@@ -5,6 +5,7 @@ directly"""
 import logging
 import os
 import signal
+import socket
 import sys
 import typing as pt
 import uuid
@@ -507,31 +508,32 @@ def worker_loop(
     # Stored last data value received from scatterv/bcast for testing gatherv purposes
 
     spawnerpid = spawner_intercomm.bcast(None, 0)
-    debug_worker_msg(logger, f"Spawner PID: {spawnerpid}")
-    # if bodo.get_rank() == 0:
-    #     spawner_hostname = spawner_intercomm.recv(source=0)
-    #     assert spawner_hostname == socket.gethostname(), (
-    #         "Spawner and worker 0 must be on the same machine"
-    #     )
+    if bodo.get_rank() == 0:
+        spawner_hostname = spawner_intercomm.recv(source=0)
+        assert spawner_hostname == socket.gethostname(), (
+            "Spawner and worker 0 must be on the same machine"
+        )
 
     # Send output to spawner manually if we are in Jupyter on Windows since child processes
     # don't inherit file descriptors from the parent process.
     out_socket = None
-    # TODO: platform check
-    if True:  # bodo.utils.utils.is_jupyter_on_windows():
+    if bodo.utils.utils.is_jupyter_on_windows():
         # Multi-node Jupyter on Windows is not supported yet
-        # spawner_hostname = comm_world.bcast(
-        #     socket.gethostname() if bodo.get_rank() == 0 else None, root=0
-        # )
-        # if spawner_hostname != socket.gethostname():
-        #     raise bodo.utils.typing.BodoError(
-        #         "Jupyter is not supported on multi-node Windows clusters yet"
-        #     )
-        # port = spawner_intercomm.bcast(None, 0)
-        # connection_info = f"tcp://{spawner_hostname}:{port}"
+        spawner_hostname = comm_world.bcast(
+            socket.gethostname() if bodo.get_rank() == 0 else None, root=0
+        )
+        if spawner_hostname != socket.gethostname():
+            raise bodo.utils.typing.BodoError(
+                "Jupyter is not supported on multi-node Windows clusters yet"
+            )
+        port = spawner_intercomm.bcast(None, 0)
+        connection_info = f"tcp://{spawner_hostname}:{port}"
+    elif bodo.utils.utils.is_jupyter_on_bodo_platform():
         connection_info = spawner_intercomm.bcast(None, 0)
-        debug_worker_msg(logger, f"connection_info: {connection_info}")
-
+    if (
+        bodo.utils.utils.is_jupyter_on_windows()
+        or bodo.utils.utils.is_jupyter_on_bodo_platform()
+    ):
         import zmq
 
         context = zmq.Context()
