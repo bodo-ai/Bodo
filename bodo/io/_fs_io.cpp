@@ -665,7 +665,7 @@ std::shared_ptr<::arrow::fs::FileSystem> get_fs_for_path(const char *_path_name,
     PyObject *scheme =
         PyObject_CallMethod(fs_io_mod, "get_uri_scheme", "s", _path_name);
     PyObject *fs_obj =
-        PyObject_CallMethod(fs_io_mod, "getfs", "sOOOO", _path_name, scheme,
+        PyObject_CallMethod(fs_io_mod, "getfs", "sOOO", _path_name, scheme,
                             Py_None, is_parallel ? Py_True : Py_False);
     CHECK_ARROW_AND_ASSIGN(arrow::py::unwrap_filesystem(fs_obj),
                            "arrow::py::unwrap_filesystem", fs, "");
