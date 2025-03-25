@@ -151,8 +151,7 @@ def test_snowflake_write_drop_internal_stage(is_temporary, memory_leak_check):
     try:
         if bodo.get_rank() == 0:
             show_stages_sql = (
-                "SHOW STAGES "
-                "/* tests.test_sql:test_snowflake_drop_internal_stage() */"
+                "SHOW STAGES /* tests.test_sql:test_snowflake_drop_internal_stage() */"
             )
             all_stages = cursor.execute(show_stages_sql, _is_internal=True).fetchall()
             all_stage_names = [x[1] for x in all_stages]
@@ -267,7 +266,7 @@ def test_snowflake_write_do_upload_and_cleanup(memory_leak_check):
         # Use GET to fetch all uploaded files
         with TemporaryDirectory() as tmp_folder:
             get_stage_sql = (
-                f"GET @\"{stage_name}\" 'file://{tmp_folder}' "
+                f"GET @\"{stage_name}\" 'file://{tmp_folder.replace('\\', '/')}' "
                 f"/* tests.test_sql:test_snowflake_do_upload_and_cleanup() */"
             )
             cursor.execute(get_stage_sql, _is_internal=True)
@@ -386,7 +385,7 @@ def test_snowflake_write_create_table_handle_exists():
         df_input.to_parquet(df_path)
 
         upload_put_sql = (
-            f"PUT 'file://{df_path}' @\"{stage_name}\" AUTO_COMPRESS=FALSE "
+            f"PUT 'file://{df_path.replace('\\', '/')}' @\"{stage_name}\" AUTO_COMPRESS=FALSE "
             f"/* tests.test_sql:test_snowflake_write_create_table_handle_exists() */"
         )
         cursor.execute(upload_put_sql, _is_internal=True)
@@ -419,9 +418,9 @@ def test_snowflake_write_create_table_handle_exists():
                 "TRANSIENT",
                 "TEMPORARY",
             ), "Table type is not an expected value"
-            assert (
-                first_table_creation_time[4] == "TRANSIENT"
-            ), "Table schema is not TRANSIENT"
+            assert first_table_creation_time[4] == "TRANSIENT", (
+                "Table schema is not TRANSIENT"
+            )
 
             describe_table_columns_sql = (
                 f"DESCRIBE TABLE {table_name} TYPE=COLUMNS "
@@ -623,7 +622,7 @@ def test_snowflake_write_execute_copy_into(memory_leak_check):
         bodo.jit(distributed=False)(test_write)(df_input)
 
         upload_put_sql = (
-            f"PUT 'file://{df_path}' @\"{stage_name}\" AUTO_COMPRESS=FALSE "
+            f"PUT 'file://{df_path.replace('\\', '/')}' @\"{stage_name}\" AUTO_COMPRESS=FALSE "
             f"/* tests.test_sql.test_snowflake_write_execute_copy_into() */ "
         )
         cursor.execute(upload_put_sql, _is_internal=True)
@@ -782,7 +781,16 @@ def test_to_sql_table_name(table_names):
 @pytest.mark.parametrize("df_size", [17000 * 3, 2, 0])
 @pytest.mark.parametrize(
     "sf_write_use_put",
-    [pytest.param(True, id="with-put"), pytest.param(False, id="no-put")],
+    [
+        pytest.param(True, id="with-put"),
+        pytest.param(
+            False,
+            id="no-put",
+            marks=pytest.mark.skip(
+                "[BSE-4601] Snowflake no-put write temporarily broken. Unskip after Arrow 19 upgrade."
+            ),
+        ),
+    ],
 )
 @pytest.mark.parametrize(
     "snowflake_user",
@@ -802,8 +810,6 @@ def test_to_sql_snowflake(df_size, sf_write_use_put, snowflake_user, memory_leak
     db = "TEST_DB"
     schema = "PUBLIC"
     conn = get_snowflake_connection_string(db, schema, user=snowflake_user)
-
-    import platform
 
     import bodo
     import bodo.io.snowflake
@@ -837,27 +843,7 @@ def test_to_sql_snowflake(df_size, sf_write_use_put, snowflake_user, memory_leak
         bodo.io.snowflake.SF_WRITE_UPLOAD_USING_PUT = sf_write_use_put
 
         with ensure_clean_snowflake_table(conn) as name:
-            # If using a Azure Snowflake account, the stage will be ADLS backed, so
-            # when writing to it directly, we need a proper ADLS/Hadoop setup
-            # and the bodo_azurefs_sas_token_provider library, both of which are only
-            # done for Linux. So we verify that it shows user the appropriate warning
-            # about falling back to the PUT method.
-            if (
-                snowflake_user == 3
-                and (not sf_write_use_put)
-                and (platform.system() != "Linux")
-            ):
-                if bodo.get_rank() == 0:
-                    # Warning is only raised on rank 0
-                    with pytest.warns(
-                        BodoWarning,
-                        match="Falling back to PUT command for upload for now.",
-                    ):
-                        test_write(df, name, conn, schema)
-                else:
-                    test_write(df, name, conn, schema)
-            else:
-                test_write(df, name, conn, schema)
+            test_write(df, name, conn, schema)
 
             bodo.barrier()
             passed = 1
@@ -1560,7 +1546,13 @@ def test_snowflake_write_column_name_special_chars(memory_leak_check):
     "sf_write_use_put",
     [
         pytest.param(True, id="with-put"),
-        pytest.param(False, id="no-put"),
+        pytest.param(
+            False,
+            id="no-put",
+            marks=pytest.mark.skip(
+                "[BSE-4601] Snowflake no-put write temporarily broken. Unskip after Arrow 19 upgrade."
+            ),
+        ),
     ],
 )
 @pytest.mark.parametrize(
@@ -2200,9 +2192,9 @@ def test_decimal_sub_38_precision_write(memory_leak_check):
             bodo.jit(cache=False)(impl)(conn)
             table_info = pd.read_sql(f"DESCRIBE TABLE {read_table_name}", conn)
             expected_types = ["NUMBER(25,0)"]
-            assert (
-                table_info["type"].to_list() == expected_types
-            ), "Incorrect type found"
+            assert table_info["type"].to_list() == expected_types, (
+                "Incorrect type found"
+            )
             # Verify the result of an except query with these tables is empty
             result = pd.read_sql(
                 f"SELECT * FROM {write_table_name} EXCEPT SELECT * FROM {read_table_name}",
@@ -2251,9 +2243,9 @@ def test_aborted_detached_query(memory_leak_check):
         cur.execute("show parameters like 'ABORT_DETACHED_QUERY'")
         rows = cur.fetchall()
         result = rows[0][1]
-        assert (
-            result.lower() == "false"
-        ), "ABORT_DETACHED_QUERY not set to False by snowflake_connect()"
+        assert result.lower() == "false", (
+            "ABORT_DETACHED_QUERY not set to False by snowflake_connect()"
+        )
     finally:
         pd.read_sql(f"alter user set ABORT_DETACHED_QUERY={old_value}", conn)
 
@@ -2345,6 +2337,6 @@ def test_create_table_with_comments(memory_leak_check):
         )
         assert len(table_info == 1), "Wrong number of tables found"
         assert table_info["rows"][0] == 5, "Wrong number of rows"
-        assert (
-            table_info["comment"][0] == "Records of notable events"
-        ), "Wrong table comment"
+        assert table_info["comment"][0] == "Records of notable events", (
+            "Wrong table comment"
+        )

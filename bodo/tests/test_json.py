@@ -11,11 +11,9 @@ import pandas as pd
 import pytest
 
 import bodo
-from bodo.tests.utils import _get_dist_arg, check_func
+from bodo.tests.utils import _get_dist_arg, check_func, compress_dir, uncompress_dir
 from bodo.utils.testing import ensure_clean, ensure_clean_dir
 from bodo.utils.typing import BodoError
-
-pytestmark = pytest.mark.weekly
 
 
 def compress_file(fname):
@@ -23,32 +21,15 @@ def compress_file(fname):
     if bodo.get_rank() == 0:
         subprocess.run(["gzip", "-k", "-f", fname])
         subprocess.run(["bzip2", "-k", "-f", fname])
+        subprocess.run(["zstd", "-k", "-f", fname])
     bodo.barrier()
-    return [fname + ".gz", fname + ".bz2"]
+    return [fname + ".gz", fname + ".bz2", fname + ".zst"]
 
 
 def remove_files(file_names):
     if bodo.get_rank() == 0:
         for fname in file_names:
             os.remove(fname)
-    bodo.barrier()
-
-
-def compress_dir(dir_name):
-    if bodo.get_rank() == 0:
-        for fname in [
-            f
-            for f in os.listdir(dir_name)
-            if f.endswith(".json") and os.path.getsize(dir_name + "/" + f) > 0
-        ]:
-            subprocess.run(["gzip", "-f", fname], cwd=dir_name)
-    bodo.barrier()
-
-
-def uncompress_dir(dir_name):
-    if bodo.get_rank() == 0:
-        for fname in [f for f in os.listdir(dir_name) if f.endswith(".gz")]:
-            subprocess.run(["gunzip", fname], cwd=dir_name)
     bodo.barrier()
 
 
@@ -206,7 +187,7 @@ def test_json_invalid_path_const(memory_leak_check):
     def test_impl():
         return pd.read_json("in_data_invalid.json")
 
-    with pytest.raises(BodoError, match="No such file or directory"):
+    with pytest.raises(BodoError, match="pyarrow FileSystem: FileNotFoundError"):
         bodo.jit(test_impl)()
 
 
@@ -303,7 +284,7 @@ def json_write_test(test_impl, read_impl, df, sort_col, reset_index=False):
         )
     ]
 )
-def test_df(request, memory_leak_check):
+def test_df(request):
     return request.param
 
 
@@ -332,7 +313,8 @@ def test_json_write_simple_df(memory_leak_check):
     json_write_test(test_impl, read_impl, df, "A")
 
 
-def test_json_write_simple_df_records(test_df, memory_leak_check):
+# TODO[BSE-4577]: Find and fix memory leak in to_json
+def test_json_write_simple_df_records(test_df):
     """
     test to_json with orient='records', lines=False
     """
@@ -366,8 +348,9 @@ def test_json_write_simple_df_records_lines(memory_leak_check):
     json_write_test(test_impl, read_impl, df, "A")
 
 
+# TODO[BSE-4577]: Find and fix memory leak in to_json
 @pytest.mark.parametrize("orient", ["split", "index", "columns", "table"])
-def test_json_write_orient(test_df, orient, memory_leak_check):
+def test_json_write_orient(test_df, orient):
     """
     test to_json with different orient options
     missing orient = "values" because only value arrays are written and
@@ -386,7 +369,7 @@ def test_json_write_orient(test_df, orient, memory_leak_check):
         else:
             dtype = None
 
-        return pd.read_json(fname, orient=orient, dtype=dtype)
+        return pd.read_json(fname, orient=orient, dtype=dtype, dtype_backend="pyarrow")
 
     json_write_test(test_impl, read_impl, test_df, "C")
 

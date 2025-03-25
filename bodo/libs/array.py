@@ -72,7 +72,12 @@ from bodo.utils.typing import (
     type_has_unknown_cats,
     unwrap_typeref,
 )
-from bodo.utils.utils import check_and_propagate_cpp_exception, numba_to_c_type
+from bodo.utils.utils import (
+    bodo_exec,
+    cached_call_internal,
+    check_and_propagate_cpp_exception,
+    numba_to_c_type,
+)
 
 ll.add_symbol("array_item_array_to_info", array_ext.array_item_array_to_info)
 ll.add_symbol("struct_array_to_info", array_ext.struct_array_to_info)
@@ -102,6 +107,9 @@ ll.add_symbol("info_to_nullable_array", array_ext.info_to_nullable_array)
 ll.add_symbol("info_to_interval_array", array_ext.info_to_interval_array)
 ll.add_symbol("info_to_timestamptz_array", array_ext.info_to_timestamptz_array)
 ll.add_symbol("arr_info_list_to_table", array_ext.arr_info_list_to_table)
+ll.add_symbol(
+    "append_arr_info_list_to_cpp_table", array_ext.append_arr_info_list_to_cpp_table
+)
 ll.add_symbol("info_from_table", array_ext.info_from_table)
 ll.add_symbol("delete_info", array_ext.delete_info)
 ll.add_symbol(
@@ -706,9 +714,9 @@ def array_to_info_codegen(context, builder, sig, args):
 
     # interval array
     if isinstance(arr_type, IntervalArrayType):
-        assert isinstance(
-            arr_type.arr_type, types.Array
-        ), "array_to_info(): only IntervalArrayType with Numpy arrays supported"
+        assert isinstance(arr_type.arr_type, types.Array), (
+            "array_to_info(): only IntervalArrayType with Numpy arrays supported"
+        )
         arr = cgutils.create_struct_proxy(arr_type)(context, builder, in_arr)
         left_arr = context.make_array(arr_type.arr_type)(context, builder, arr.left)
         right_arr = context.make_array(arr_type.arr_type)(context, builder, arr.right)
@@ -1130,9 +1138,9 @@ def info_to_array_codegen(context, builder, sig, args, raise_py_err=True):
         )
         # set categorical dtype of output array to be same as input array
         if isinstance(array_type, types.TypeRef):
-            assert (
-                arr_type.dtype.categories is not None
-            ), "info_to_array: unknown categories"
+            assert arr_type.dtype.categories is not None, (
+                "info_to_array: unknown categories"
+            )
             # create the new categorical dtype inside the function instead of passing as
             # constant. This avoids constant lowered Index inside the dtype, which can
             # be slow since it cannot have a dictionary.
@@ -1961,6 +1969,35 @@ def array_from_cpp_table(typingctx, table_t, ind_t, array_type_t):
     return arr_type(table_t, ind_t, array_type_t), array_from_cpp_table_codegen
 
 
+def append_arr_info_list_to_cpp_table_codegen(context, builder, sig, args):
+    """
+    Codegen for append_arr_info_list_to_cpp_table. This isn't a closure so it can be
+    called from other intrinsics.
+    """
+    (table, info_list) = args
+    inst = numba.cpython.listobj.ListInstance(context, builder, sig.args[1], info_list)
+    fnty = lir.FunctionType(
+        lir.VoidType(),
+        [
+            lir.IntType(8).as_pointer(),
+            lir.IntType(8).as_pointer().as_pointer(),
+            lir.IntType(64),
+        ],
+    )
+    fn_tp = cgutils.get_or_insert_function(
+        builder.module, fnty, name="append_arr_info_list_to_cpp_table"
+    )
+    return builder.call(fn_tp, [table, inst.data, inst.size])
+
+
+@intrinsic
+def append_arr_info_list_to_cpp_table(typingctx, table_t, list_arr_info_typ=None):
+    assert list_arr_info_typ == types.List(array_info_type)
+    return types.void(
+        table_type, list_arr_info_typ
+    ), append_arr_info_list_to_cpp_table_codegen
+
+
 @intrinsic
 def cpp_table_to_py_table(
     typingctx, cpp_table_t, table_idx_arr_t, py_table_type_t, default_length_t
@@ -2071,7 +2108,9 @@ def cpp_table_to_py_table(
     )
 
 
-@numba.generated_jit(nopython=True, no_cpython_wrapper=True, no_unliteral=True)
+@numba.generated_jit(
+    nopython=True, no_cpython_wrapper=True, no_unliteral=True, cache=True
+)
 def cpp_table_to_py_data(
     cpp_table,
     out_col_inds_t,
@@ -2135,7 +2174,7 @@ def cpp_table_to_py_data(
 
     out_vars = []
 
-    func_text = "def impl(cpp_table, out_col_inds_t, out_types_t, n_rows_t, n_table_cols_t, unknown_cat_arrs_t=None, cat_inds_t=None):\n"
+    func_text = "def bodo_cpp_table_to_py_data(cpp_table, out_col_inds_t, out_types_t, n_rows_t, n_table_cols_t, unknown_cat_arrs_t=None, cat_inds_t=None):\n"
 
     if isinstance(py_table_type, bodo.TableType):
         func_text += "  py_table = init_table(py_table_type, False)\n"
@@ -2202,7 +2241,7 @@ def cpp_table_to_py_data(
             out_type = f"extra_arr_type_{i}"
             if type_has_unknown_cats(t):
                 if is_overload_none(unknown_cat_arrs_t):
-                    out_type = f"out_types_t[{i+1}]"
+                    out_type = f"out_types_t[{i + 1}]"
                 else:
                     out_type = (
                         f"unknown_cat_arrs_t[{cat_arr_inds[n_py_table_arrs + i]}]"
@@ -2228,17 +2267,15 @@ def cpp_table_to_py_data(
         }
     )
 
-    loc_vars = {}
-    exec(func_text, glbls, loc_vars)
-    return loc_vars["impl"]
+    return bodo_exec(func_text, glbls, {}, __name__)
 
 
 @intrinsic
 def py_table_to_cpp_table(typingctx, py_table_t, py_table_type_t):
     """Extract columns of a Python table and creates a C++ table."""
-    assert isinstance(
-        py_table_t, bodo.hiframes.table.TableType
-    ), "invalid py table type"
+    assert isinstance(py_table_t, bodo.hiframes.table.TableType), (
+        "invalid py table type"
+    )
     assert isinstance(py_table_type_t, types.TypeRef), "invalid py table ref"
     py_table_type = py_table_type_t.instance_type
 
@@ -2403,7 +2440,7 @@ PyDataToCppTableInfer._no_unliteral = True
 def lower_py_data_to_cpp_table(context, builder, sig, args):
     """lower table_filter() using gen_table_filter_impl above"""
     impl = gen_py_data_to_cpp_table_impl(*sig.args)
-    return context.compile_internal(builder, impl, sig, args)
+    return cached_call_internal(context, builder, impl, sig, args)
 
 
 def gen_py_data_to_cpp_table_impl(
@@ -2444,7 +2481,7 @@ def gen_py_data_to_cpp_table_impl(
     #     if array_ind in output_inds:
     #       output_list[out_ind] = array_to_info(block[array_ind])
 
-    func_text = "def impl_py_data_to_cpp_table(py_table, extra_arrs_tup, in_col_inds_t, n_table_cols_t):\n"
+    func_text = "def bodo_impl_py_data_to_cpp_table(py_table, extra_arrs_tup, in_col_inds_t, n_table_cols_t):\n"
     func_text += (
         f"  cpp_arr_list = alloc_empty_list_type({len(in_col_inds)}, array_info_type)\n"
     )
@@ -2498,9 +2535,7 @@ def gen_py_data_to_cpp_table_impl(
         }
     )
 
-    loc_vars = {}
-    exec(func_text, glbls, loc_vars)
-    return loc_vars["impl_py_data_to_cpp_table"]
+    return bodo_exec(func_text, glbls, {}, __name__)
 
 
 delete_info = types.ExternalFunction(
@@ -2524,9 +2559,9 @@ cpp_table_map_to_list = types.ExternalFunction(
 # TODO add a test for this
 @intrinsic
 def concat_tables_cpp(typing_ctx, table_info_list_t):  # pragma: no cover
-    assert table_info_list_t == types.List(
-        table_type
-    ), "table_info_list_t must be a list of table_type"
+    assert table_info_list_t == types.List(table_type), (
+        "table_info_list_t must be a list of table_type"
+    )
 
     def codegen(context, builder, sig, args):
         (info_list,) = args
@@ -2553,15 +2588,15 @@ def concat_tables_cpp(typing_ctx, table_info_list_t):  # pragma: no cover
 
 @intrinsic
 def union_tables_cpp(typing_ctx, table_info_list_t, drop_duplicates_t, is_parallel_t):
-    assert table_info_list_t == types.List(
-        table_type
-    ), "table_info_list_t must be a list of table_type"
-    assert (
-        types.unliteral(drop_duplicates_t) == types.bool_
-    ), "drop_duplicates_t must be an boolean"
-    assert (
-        types.unliteral(is_parallel_t) == types.bool_
-    ), "is_parallel_t must be an boolean"
+    assert table_info_list_t == types.List(table_type), (
+        "table_info_list_t must be a list of table_type"
+    )
+    assert types.unliteral(drop_duplicates_t) == types.bool_, (
+        "drop_duplicates_t must be an boolean"
+    )
+    assert types.unliteral(is_parallel_t) == types.bool_, (
+        "is_parallel_t must be an boolean"
+    )
 
     def codegen(context, builder, sig, args):
         info_list, drop_duplicates, is_parallel = args
@@ -2856,9 +2891,9 @@ def nested_loop_join_table(
     Call cpp function for cross join of two tables.
     """
     assert left_table_t == table_type, "nested_loop_join_table: cpp table type expected"
-    assert (
-        right_table_t == table_type
-    ), "nested_loop_join_table: cpp table type expected"
+    assert right_table_t == table_type, (
+        "nested_loop_join_table: cpp table type expected"
+    )
 
     def codegen(context, builder, sig, args):
         fnty = lir.FunctionType(

@@ -82,6 +82,7 @@ from bodo.utils.typing import (
 from bodo.utils.utils import (
     CTypeEnum,
     bodo_exec,
+    cached_call_internal,
     check_and_propagate_cpp_exception,
     empty_like_type,
     is_array_typ,
@@ -214,7 +215,7 @@ class TimeInfer(ConcreteTemplate):
 
 @lower_builtin(time.time)
 def lower_time_time(context, builder, sig, args):
-    return context.compile_internal(builder, lambda: _get_time(), sig, args)
+    return cached_call_internal(context, builder, lambda: _get_time(), sig, args)
 
 
 @numba.generated_jit(nopython=True)
@@ -691,15 +692,13 @@ def dist_reduce_impl(value, reduce_op, comm):
             types.int32,
             types.float32,
             types.float64,
+            types.int64,
+            bodo.datetime64ns,
+            bodo.timedelta64ns,
+            bodo.datetime_date_type,
+            bodo.TimeType,
         ]
-        # TODO: Support uint64
-        if not sys.platform.startswith("win"):
-            # long is 4 byte on Windows
-            supported_typs.append(types.int64)
-            supported_typs.append(bodo.datetime64ns)
-            supported_typs.append(bodo.timedelta64ns)
-            supported_typs.append(bodo.datetime_date_type)
-            supported_typs.append(bodo.TimeType)
+
         if target_typ not in supported_typs and not isinstance(
             target_typ, (bodo.Decimal128Type, bodo.PandasTimestampType)
         ):  # pragma: no cover
@@ -713,9 +712,9 @@ def dist_reduce_impl(value, reduce_op, comm):
         if isinstance(types.unliteral(value), IndexValueType):
 
             def impl(value, reduce_op, comm):  # pragma: no cover
-                assert (
-                    comm == 0
-                ), "dist_reduce_impl: intercomm not supported for decimal"
+                assert comm == 0, (
+                    "dist_reduce_impl: intercomm not supported for decimal"
+                )
                 if reduce_op in {Reduce_Type.Argmin.value, Reduce_Type.Argmax.value}:
                     in_ptr = value_to_ptr(value.value)
                     out_ptr = value_to_ptr(value)
@@ -1475,9 +1474,9 @@ def overload_distributed_transpose(arr):
     See here for example code with similar algorithm:
     https://docs.oracle.com/cd/E19061-01/hpc.cluster5/817-0090-10/1-sided.html
     """
-    assert (
-        isinstance(arr, types.Array) and arr.ndim == 2
-    ), "distributed_transpose: 2D array expected"
+    assert isinstance(arr, types.Array) and arr.ndim == 2, (
+        "distributed_transpose: 2D array expected"
+    )
     c_type = numba_to_c_type(arr.dtype)
 
     def impl(arr):  # pragma: no cover
@@ -1989,9 +1988,9 @@ def get_value_for_type(dtype, use_arrow_time=False):  # pragma: no cover
     if isinstance(dtype, TimeArrayType):
         precision = dtype.precision
         if use_arrow_time:
-            assert (
-                precision == 9
-            ), "get_value_for_type: only nanosecond precision is supported for nested data"
+            assert precision == 9, (
+                "get_value_for_type: only nanosecond precision is supported for nested data"
+            )
             return pd.array(
                 [bodo.Time(3, precision=precision)], pd.ArrowDtype(pa.time64("ns"))
             )
@@ -3288,9 +3287,9 @@ def bcast_tuple_impl_jit(val, root=DEFAULT_ROOT, comm=0):
     """broadcast a tuple value
     calls bcast_scalar() on individual elements
     """
-    assert isinstance(
-        val, types.BaseTuple
-    ), "Internal Error: Argument to bcast tuple must be of type tuple"
+    assert isinstance(val, types.BaseTuple), (
+        "Internal Error: Argument to bcast tuple must be of type tuple"
+    )
     n_elem = len(val)
     func_text = f"def bcast_tuple_impl(val, root={DEFAULT_ROOT}, comm=0):\n"
     func_text += "  return ({}{})".format(
@@ -3669,12 +3668,12 @@ def int_getitem_overload(arr, ind, arr_start, total_len, is_1D):
     np_dtype = arr.dtype
 
     if isinstance(ind, types.BaseTuple):
-        assert isinstance(
-            arr, types.Array
-        ), "int_getitem_overload: Numpy array expected"
-        assert all(
-            isinstance(a, types.Integer) for a in ind.types
-        ), "int_getitem_overload: only integer indices supported"
+        assert isinstance(arr, types.Array), (
+            "int_getitem_overload: Numpy array expected"
+        )
+        assert all(isinstance(a, types.Integer) for a in ind.types), (
+            "int_getitem_overload: only integer indices supported"
+        )
         # TODO[BSE-2374]: support non-integer indices
 
         def getitem_impl(arr, ind, arr_start, total_len, is_1D):  # pragma: no cover
@@ -3951,7 +3950,7 @@ def alltoallv_tup_overload(
         func_text += f"  alltoallv(send_data[{i}], out_data[{i}], send_counts, recv_counts, send_disp, recv_disp)\n"
     func_text += "  return\n"
 
-    return bodo_exec(func_text, {"alltoallv": alltoallv}, {}, globals())
+    return bodo_exec(func_text, {"alltoallv": alltoallv}, {}, __name__)
 
 
 @numba.njit(cache=True)
@@ -3971,7 +3970,7 @@ def get_start(total_size, pes, rank):  # pragma: no cover
     return rank * blk_size + min(rank, res)
 
 
-@numba.njit
+@numba.njit(cache=True)
 def get_end(total_size, pes, rank):  # pragma: no cover
     """get end point of range for parfor division"""
     res = total_size % pes
@@ -4220,7 +4219,7 @@ def wait(req, cond=True):
         tup_call = ",".join(f"_wait(req[{i}], cond)" for i in range(count))
         func_text = "def bodo_wait(req, cond=True):\n"
         func_text += f"  return {tup_call}\n"
-        return bodo_exec(func_text, {"_wait": _wait}, {}, globals())
+        return bodo_exec(func_text, {"_wait": _wait}, {}, __name__)
 
     # None passed means no request to wait on (no-op), happens for shift() for string
     # arrays since we use blocking communication instead

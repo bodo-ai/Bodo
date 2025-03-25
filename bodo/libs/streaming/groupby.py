@@ -452,13 +452,13 @@ class GroupbyStateType(StreamingStateType):
         if self.fnames != ("min_row_number_filter",):
             for i, f_name in enumerate(self.fnames):
                 if f_name == "size":
-                    assert (
-                        self.f_in_offsets[i + 1] == self.f_in_offsets[i]
-                    ), "Size doesn't require input columns, so the offset should point to an empty range!"
+                    assert self.f_in_offsets[i + 1] == self.f_in_offsets[i], (
+                        "Size doesn't require input columns, so the offset should point to an empty range!"
+                    )
                 elif f_name != "grouping":
-                    assert (
-                        self.f_in_offsets[i + 1] == self.f_in_offsets[i] + 1
-                    ), "only functions with single input column expect grouping supported in streaming groupby currently"
+                    assert self.f_in_offsets[i + 1] == self.f_in_offsets[i] + 1, (
+                        "only functions with single input column expect grouping supported in streaming groupby currently"
+                    )
 
                 out_type, err_msg = None, "ok"
                 if f_name == "size":

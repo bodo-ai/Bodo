@@ -2,6 +2,16 @@
 #include "_array_utils.h"
 #include "_dict_builder.h"
 
+#define CHECK_ARROW_BASE(expr, msg)                           \
+    {                                                         \
+        arrow::Status __status = expr;                        \
+        if (!__status.ok()) {                                 \
+            std::string err_msg =                             \
+                std::string(msg) + " " + __status.ToString(); \
+            throw std::runtime_error(err_msg);                \
+        }                                                     \
+    }
+
 class ChunkedTableBuilder;
 
 /**
@@ -63,11 +73,11 @@ struct ArrayBuildBuffer {
     void UnsafeAppendBatch(const std::shared_ptr<array_info>& in_arr,
                            const std::vector<bool>& append_rows,
                            uint64_t append_rows_sum) {
-        CHECK_ARROW_MEM(
+        CHECK_ARROW_BASE(
             data_array->buffers[0]->SetSize(
                 arrow::bit_util::BytesForBits(size + append_rows_sum)),
             "ArrayBuildBuffer::UnsafeAppendBatch: SetSize failed!");
-        CHECK_ARROW_MEM(
+        CHECK_ARROW_BASE(
             data_array->buffers[1]->SetSize(
                 arrow::bit_util::BytesForBits(size + append_rows_sum)),
             "ArrayBuildBuffer::UnsafeAppendBatch: SetSize failed!");
@@ -107,10 +117,11 @@ struct ArrayBuildBuffer {
                            uint64_t append_rows_sum) {
         using T = typename dtype_to_type<DType>::type;
 
-        CHECK_ARROW_MEM(data_array->buffers[0]->SetSize(
-                            sizeof(T) * (size + append_rows_sum)),
-                        "ArrayBuildBuffer::UnsafeAppendBatch: SetSize failed!");
-        CHECK_ARROW_MEM(
+        CHECK_ARROW_BASE(
+            data_array->buffers[0]->SetSize(sizeof(T) *
+                                            (size + append_rows_sum)),
+            "ArrayBuildBuffer::UnsafeAppendBatch: SetSize failed!");
+        CHECK_ARROW_BASE(
             data_array->buffers[1]->SetSize(
                 arrow::bit_util::BytesForBits(size + append_rows_sum)),
             "ArrayBuildBuffer::UnsafeAppendBatch: SetSize failed!");
@@ -153,10 +164,10 @@ struct ArrayBuildBuffer {
                            const std::vector<bool>& append_rows,
                            uint64_t append_rows_sum) {
         // Set size and copy offsets
-        CHECK_ARROW_MEM(data_array->buffers[1]->SetSize(
-                            (size + 1 + append_rows_sum) * sizeof(offset_t)),
-                        "ArrayBuildBuffer::UnsafeAppendBatch[STRING]: SetSize "
-                        "(offsets) failed!");
+        CHECK_ARROW_BASE(data_array->buffers[1]->SetSize(
+                             (size + 1 + append_rows_sum) * sizeof(offset_t)),
+                         "ArrayBuildBuffer::UnsafeAppendBatch[STRING]: SetSize "
+                         "(offsets) failed!");
         offset_t* curr_offsets = (offset_t*)this->data_array->data2<arr_type>();
         offset_t* in_offsets = (offset_t*)in_arr->data2<arr_type>();
         uint64_t offset_size = this->size;
@@ -171,7 +182,7 @@ struct ArrayBuildBuffer {
         }
 
         // Set size and copy characters
-        CHECK_ARROW_MEM(
+        CHECK_ARROW_BASE(
             // data_array->n_sub_elems() is correct because we set offsets above
             // and n_sub_elems is based on the offsets array
             data_array->buffers[0]->SetSize(this->data_array->n_sub_elems()),
@@ -192,7 +203,7 @@ struct ArrayBuildBuffer {
             }
         }
 
-        CHECK_ARROW_MEM(
+        CHECK_ARROW_BASE(
             data_array->buffers[2]->SetSize(
                 arrow::bit_util::BytesForBits(size + append_rows_sum)),
             "ArrayBuildBuffer::UnsafeAppendBatch[STRING]: SetSize (null "
@@ -255,9 +266,10 @@ struct ArrayBuildBuffer {
                            uint64_t append_rows_sum) {
         using T = typename dtype_to_type<DType>::type;
 
-        CHECK_ARROW_MEM(data_array->buffers[0]->SetSize(
-                            sizeof(T) * (size + append_rows_sum)),
-                        "ArrayBuildBuffer::UnsafeAppendBatch: SetSize failed!");
+        CHECK_ARROW_BASE(
+            data_array->buffers[0]->SetSize(sizeof(T) *
+                                            (size + append_rows_sum)),
+            "ArrayBuildBuffer::UnsafeAppendBatch: SetSize failed!");
         T* out_ptr = (T*)this->data_array->data1<arr_type>();
         const T* in_ptr = (T*)in_arr->data1<arr_type>();
         for (uint64_t row_ind = 0; row_ind < in_arr->length; row_ind++) {
@@ -283,11 +295,11 @@ struct ArrayBuildBuffer {
     void UnsafeAppendBatch(const std::shared_ptr<array_info>& in_arr,
                            const std::vector<bool>& append_rows,
                            uint64_t append_rows_sum) {
-        CHECK_ARROW_MEM(
+        CHECK_ARROW_BASE(
             data_array->buffers[0]->SetSize(sizeof(offset_t) *
                                             (this->size + 1 + append_rows_sum)),
             "ArrayBuildBuffer::UnsafeAppendBatch: SetSize failed!:");
-        CHECK_ARROW_MEM(
+        CHECK_ARROW_BASE(
             data_array->buffers[1]->SetSize(
                 arrow::bit_util::BytesForBits(size + append_rows_sum)),
             "ArrayBuildBuffer::UnsafeAppendBatch: SetSize failed!:");
@@ -363,7 +375,7 @@ struct ArrayBuildBuffer {
     void UnsafeAppendBatch(const std::shared_ptr<array_info>& in_arr,
                            const std::vector<bool>& append_rows,
                            uint64_t append_rows_sum) {
-        CHECK_ARROW_MEM(
+        CHECK_ARROW_BASE(
             data_array->buffers[0]->SetSize(
                 arrow::bit_util::BytesForBits(size + append_rows_sum)),
             "ArrayBuildBuffer::UnsafeAppendBatch: SetSize failed!:");
@@ -410,13 +422,15 @@ struct ArrayBuildBuffer {
         using T1 = typename dtype_to_type<Bodo_CTypes::INT64>::type;
         using T2 = typename dtype_to_type<Bodo_CTypes::INT16>::type;
 
-        CHECK_ARROW_MEM(data_array->buffers[0]->SetSize(
-                            sizeof(T1) * (size + append_rows_sum)),
-                        "ArrayBuildBuffer::UnsafeAppendBatch: SetSize failed!");
-        CHECK_ARROW_MEM(data_array->buffers[1]->SetSize(
-                            sizeof(T2) * (size + append_rows_sum)),
-                        "ArrayBuildBuffer::UnsafeAppendBatch: SetSize failed!");
-        CHECK_ARROW_MEM(
+        CHECK_ARROW_BASE(
+            data_array->buffers[0]->SetSize(sizeof(T1) *
+                                            (size + append_rows_sum)),
+            "ArrayBuildBuffer::UnsafeAppendBatch: SetSize failed!");
+        CHECK_ARROW_BASE(
+            data_array->buffers[1]->SetSize(sizeof(T2) *
+                                            (size + append_rows_sum)),
+            "ArrayBuildBuffer::UnsafeAppendBatch: SetSize failed!");
+        CHECK_ARROW_BASE(
             data_array->buffers[2]->SetSize(
                 arrow::bit_util::BytesForBits(size + append_rows_sum)),
             "ArrayBuildBuffer::UnsafeAppendBatch: SetSize failed!");
@@ -470,11 +484,11 @@ struct ArrayBuildBuffer {
         requires(arr_type == bodo_array_type::NULLABLE_INT_BOOL &&
                  DType == Bodo_CTypes::_BOOL)
     void UnsafeAppendBatch(const std::shared_ptr<array_info>& in_arr) {
-        CHECK_ARROW_MEM(
+        CHECK_ARROW_BASE(
             data_array->buffers[0]->SetSize(
                 arrow::bit_util::BytesForBits(size + in_arr->length)),
             "ArrayBuildBuffer::UnsafeAppendBatch: SetSize failed!");
-        CHECK_ARROW_MEM(
+        CHECK_ARROW_BASE(
             data_array->buffers[1]->SetSize(
                 arrow::bit_util::BytesForBits(size + in_arr->length)),
             "ArrayBuildBuffer::UnsafeAppendBatch: SetSize failed!");
@@ -515,10 +529,11 @@ struct ArrayBuildBuffer {
                  DType != Bodo_CTypes::_BOOL)
     void UnsafeAppendBatch(const std::shared_ptr<array_info>& in_arr) {
         uint64_t size_type = numpy_item_size[in_arr->dtype];
-        CHECK_ARROW_MEM(data_array->buffers[0]->SetSize(
-                            (size + in_arr->length) * size_type),
-                        "ArrayBuildBuffer::UnsafeAppendBatch: SetSize failed!");
-        CHECK_ARROW_MEM(
+        CHECK_ARROW_BASE(
+            data_array->buffers[0]->SetSize((size + in_arr->length) *
+                                            size_type),
+            "ArrayBuildBuffer::UnsafeAppendBatch: SetSize failed!");
+        CHECK_ARROW_BASE(
             data_array->buffers[1]->SetSize(
                 arrow::bit_util::BytesForBits(size + in_arr->length)),
             "ArrayBuildBuffer::UnsafeAppendBatch: SetSize failed!");
@@ -570,13 +585,15 @@ struct ArrayBuildBuffer {
 
         // Set new buffer sizes. Required space should've been reserved
         // beforehand.
-        CHECK_ARROW_MEM(data_array->buffers[0]->SetSize(new_data_size),
-                        "ArrayBuildBuffer::UnsafeAppendBatch: SetSize failed!");
-        CHECK_ARROW_MEM(
+        CHECK_ARROW_BASE(
+            data_array->buffers[0]->SetSize(new_data_size),
+            "ArrayBuildBuffer::UnsafeAppendBatch: SetSize failed!");
+        CHECK_ARROW_BASE(
             data_array->buffers[1]->SetSize(new_offset_size * sizeof(offset_t)),
             "ArrayBuildBuffer::UnsafeAppendBatch: SetSize failed!");
-        CHECK_ARROW_MEM(data_array->buffers[2]->SetSize(new_bitmap_size),
-                        "ArrayBuildBuffer::UnsafeAppendBatch: SetSize failed!");
+        CHECK_ARROW_BASE(
+            data_array->buffers[2]->SetSize(new_bitmap_size),
+            "ArrayBuildBuffer::UnsafeAppendBatch: SetSize failed!");
 
         // Copy data
         char* out_ptr = this->data_array->data1<arr_type>() + old_data_size;
@@ -647,9 +664,10 @@ struct ArrayBuildBuffer {
         requires(arr_type == bodo_array_type::NUMPY)
     void UnsafeAppendBatch(const std::shared_ptr<array_info>& in_arr) {
         uint64_t size_type = numpy_item_size[in_arr->dtype];
-        CHECK_ARROW_MEM(data_array->buffers[0]->SetSize(
-                            (size + in_arr->length) * size_type),
-                        "ArrayBuildBuffer::UnsafeAppendBatch: SetSize failed!");
+        CHECK_ARROW_BASE(
+            data_array->buffers[0]->SetSize((size + in_arr->length) *
+                                            size_type),
+            "ArrayBuildBuffer::UnsafeAppendBatch: SetSize failed!");
         char* out_ptr = this->data_array->data1<arr_type>() + size_type * size;
         const char* in_ptr = in_arr->data1<arr_type>();
         memcpy(out_ptr, in_ptr, size_type * in_arr->length);
@@ -679,11 +697,11 @@ struct ArrayBuildBuffer {
 
         // Set new buffer sizes. Required space should've been reserved
         // beforehand.
-        CHECK_ARROW_MEM(
+        CHECK_ARROW_BASE(
             data_array->buffers[0]->SetSize((this->size + 1 + in_arr->length) *
                                             sizeof(offset_t)),
             "ArrayBuildBuffer::UnsafeAppendBatch: SetSize failed!:");
-        CHECK_ARROW_MEM(
+        CHECK_ARROW_BASE(
             data_array->buffers[1]->SetSize(
                 arrow::bit_util::BytesForBits(this->size + in_arr->length)),
             "ArrayBuildBuffer::UnsafeAppendBatch: SetSize failed!:");
@@ -751,7 +769,7 @@ struct ArrayBuildBuffer {
 
         // Set new buffer sizes. Required space should've been reserved
         // beforehand.
-        CHECK_ARROW_MEM(
+        CHECK_ARROW_BASE(
             data_array->buffers[0]->SetSize(
                 arrow::bit_util::BytesForBits(this->size + in_arr->length)),
             "ArrayBuildBuffer::UnsafeAppendBatch: SetSize failed!:");
@@ -792,13 +810,15 @@ struct ArrayBuildBuffer {
     void UnsafeAppendBatch(const std::shared_ptr<array_info>& in_arr) {
         uint64_t ts_size_type = numpy_item_size[Bodo_CTypes::INT64];
         uint64_t offset_size_type = numpy_item_size[Bodo_CTypes::INT16];
-        CHECK_ARROW_MEM(data_array->buffers[0]->SetSize(
-                            (size + in_arr->length) * ts_size_type),
-                        "ArrayBuildBuffer::UnsafeAppendBatch: SetSize failed!");
-        CHECK_ARROW_MEM(data_array->buffers[1]->SetSize(
-                            (size + in_arr->length) * offset_size_type),
-                        "ArrayBuildBuffer::UnsafeAppendBatch: SetSize failed!");
-        CHECK_ARROW_MEM(
+        CHECK_ARROW_BASE(
+            data_array->buffers[0]->SetSize((size + in_arr->length) *
+                                            ts_size_type),
+            "ArrayBuildBuffer::UnsafeAppendBatch: SetSize failed!");
+        CHECK_ARROW_BASE(
+            data_array->buffers[1]->SetSize((size + in_arr->length) *
+                                            offset_size_type),
+            "ArrayBuildBuffer::UnsafeAppendBatch: SetSize failed!");
+        CHECK_ARROW_BASE(
             data_array->buffers[2]->SetSize(
                 arrow::bit_util::BytesForBits(size + in_arr->length)),
             "ArrayBuildBuffer::UnsafeAppendBatch: SetSize failed!");
@@ -849,11 +869,11 @@ struct ArrayBuildBuffer {
         switch (arr_type) {
             case bodo_array_type::NULLABLE_INT_BOOL: {
                 if (dtype == Bodo_CTypes::_BOOL) {
-                    CHECK_ARROW_MEM(
+                    CHECK_ARROW_BASE(
                         data_array->buffers[0]->SetSize(
                             arrow::bit_util::BytesForBits(size + 1)),
                         "ArrayBuildBuffer::UnsafeAppendRow: SetSize failed!");
-                    CHECK_ARROW_MEM(
+                    CHECK_ARROW_BASE(
                         data_array->buffers[1]->SetSize(
                             arrow::bit_util::BytesForBits(size + 1)),
                         "ArrayBuildBuffer::UnsafeAppendRow: SetSize failed!");
@@ -873,10 +893,10 @@ struct ArrayBuildBuffer {
                              size, bit);
                 } else {
                     uint64_t size_type = numpy_item_size[in_arr->dtype];
-                    CHECK_ARROW_MEM(
+                    CHECK_ARROW_BASE(
                         data_array->buffers[0]->SetSize((size + 1) * size_type),
                         "ArrayBuildBuffer::UnsafeAppendRow: SetSize failed!");
-                    CHECK_ARROW_MEM(
+                    CHECK_ARROW_BASE(
                         data_array->buffers[1]->SetSize(
                             arrow::bit_util::BytesForBits(size + 1)),
                         "ArrayBuildBuffer::UnsafeAppendRow: SetSize failed!");
@@ -900,15 +920,15 @@ struct ArrayBuildBuffer {
                 uint64_t utc_size_type =
                     numpy_item_size[Bodo_CTypes::TIMESTAMPTZ];
                 uint64_t offset_size_type = numpy_item_size[Bodo_CTypes::INT16];
-                CHECK_ARROW_MEM(
+                CHECK_ARROW_BASE(
                     data_array->buffers[0]->SetSize((size + 1) * utc_size_type),
                     "ArrayBuildBuffer::UnsafeAppendRow: SetSize failed!");
-                CHECK_ARROW_MEM(
+                CHECK_ARROW_BASE(
                     data_array->buffers[1]->SetSize(
                         arrow::bit_util::BytesForBits(size + 1) *
                         offset_size_type),
                     "ArrayBuildBuffer::UnsafeAppendRow: SetSize failed!");
-                CHECK_ARROW_MEM(
+                CHECK_ARROW_BASE(
                     data_array->buffers[2]->SetSize(
                         arrow::bit_util::BytesForBits(size + 1)),
                     "ArrayBuildBuffer::UnsafeAppendRow: SetSize failed!");
@@ -935,11 +955,11 @@ struct ArrayBuildBuffer {
                          size, bit);
             } break;
             case bodo_array_type::STRING: {
-                CHECK_ARROW_MEM(
+                CHECK_ARROW_BASE(
                     data_array->buffers[1]->SetSize((size + 2) *
                                                     sizeof(offset_t)),
                     "ArrayBuildBuffer::UnsafeAppendRow: SetSize failed!");
-                CHECK_ARROW_MEM(
+                CHECK_ARROW_BASE(
                     data_array->buffers[2]->SetSize(
                         arrow::bit_util::BytesForBits(size + 1)),
                     "ArrayBuildBuffer::UnsafeAppendRow: SetSize failed!");
@@ -953,7 +973,7 @@ struct ArrayBuildBuffer {
                 int64_t str_len = in_offsets[row_ind + 1] - in_offsets[row_ind];
                 curr_offsets[size + 1] = curr_offsets[size] + str_len;
 
-                CHECK_ARROW_MEM(
+                CHECK_ARROW_BASE(
                     data_array->buffers[0]->SetSize(data_array->n_sub_elems() +
                                                     str_len),
                     "ArrayBuildBuffer::UnsafeAppendRow: SetSize failed!");
@@ -984,7 +1004,7 @@ struct ArrayBuildBuffer {
             } break;
             case bodo_array_type::NUMPY: {
                 uint64_t size_type = numpy_item_size[in_arr->dtype];
-                CHECK_ARROW_MEM(
+                CHECK_ARROW_BASE(
                     data_array->buffers[0]->SetSize((size + 1) * size_type),
                     "ArrayBuildBuffer::UnsafeAppendRow: SetSize failed!");
                 char* out_ptr = data_array->data1<bodo_array_type::NUMPY>() +
@@ -994,11 +1014,11 @@ struct ArrayBuildBuffer {
                 memcpy(out_ptr, in_ptr, size_type);
             } break;
             case bodo_array_type::ARRAY_ITEM: {
-                CHECK_ARROW_MEM(
+                CHECK_ARROW_BASE(
                     data_array->buffers[0]->SetSize((size + 1) *
                                                     sizeof(offset_t)),
                     "ArrayBuildBuffer::UnsafeAppendRow: SetSize failed!");
-                CHECK_ARROW_MEM(
+                CHECK_ARROW_BASE(
                     data_array->buffers[1]->SetSize(
                         arrow::bit_util::BytesForBits(size + 1)),
                     "ArrayBuildBuffer::UnsafeAppendRow: SetSize failed!");
@@ -1032,7 +1052,7 @@ struct ArrayBuildBuffer {
                          size, bit);
             } break;
             case bodo_array_type::STRUCT: {
-                CHECK_ARROW_MEM(
+                CHECK_ARROW_BASE(
                     data_array->buffers[0]->SetSize(
                         arrow::bit_util::BytesForBits(size + 1)),
                     "ArrayBuildBuffer::UnsafeAppendRow: SetSize failed!");

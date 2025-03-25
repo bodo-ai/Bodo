@@ -121,9 +121,9 @@ def create_table(base_name, part_fields, spark=None, postfix=""):
     if spark is None:
         spark = get_spark()
 
-    assert (
-        f"SIMPLE_{base_name}" in TABLE_MAP
-    ), f"Didn't find table definition for {base_name}."
+    assert f"SIMPLE_{base_name}" in TABLE_MAP, (
+        f"Didn't find table definition for {base_name}."
+    )
     df, sql_schema = TABLE_MAP[f"SIMPLE_{base_name}"]
 
     return create_iceberg_table(

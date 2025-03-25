@@ -315,9 +315,9 @@ class JoinStateType(StreamingStateType):
             return input_types[0]
 
         if isinstance(input_types[0], bodo.MapArrayType):
-            assert all(
-                isinstance(t, bodo.MapArrayType) for t in input_types
-            ), f"StreamingHashJoin: Cannot unify Map array with non-Map arrays! {input_types=}"
+            assert all(isinstance(t, bodo.MapArrayType) for t in input_types), (
+                f"StreamingHashJoin: Cannot unify Map array with non-Map arrays! {input_types=}"
+            )
             common_key_arr_type = JoinStateType._derive_common_key_type(
                 [t.key_arr_type for t in input_types]
             )
@@ -327,9 +327,9 @@ class JoinStateType(StreamingStateType):
             return bodo.MapArrayType(common_key_arr_type, common_value_arr_types)
 
         if isinstance(input_types[0], bodo.ArrayItemArrayType):
-            assert all(
-                isinstance(t, bodo.ArrayItemArrayType) for t in input_types
-            ), f"StreamingHashJoin: Cannot unify List array with non-List arrays! {input_types=}"
+            assert all(isinstance(t, bodo.ArrayItemArrayType) for t in input_types), (
+                f"StreamingHashJoin: Cannot unify List array with non-List arrays! {input_types=}"
+            )
 
             common_element_type = JoinStateType._derive_common_key_type(
                 [t.dtype for t in input_types]
@@ -337,9 +337,9 @@ class JoinStateType(StreamingStateType):
             return bodo.ArrayItemArrayType(common_element_type)
 
         if isinstance(input_types[0], bodo.StructArrayType):
-            assert all(
-                isinstance(t, bodo.StructArrayType) for t in input_types
-            ), f"StreamingHashJoin: Cannot unify Struct array with non-Struct arrays! {input_types=}"
+            assert all(isinstance(t, bodo.StructArrayType) for t in input_types), (
+                f"StreamingHashJoin: Cannot unify Struct array with non-Struct arrays! {input_types=}"
+            )
             n_fields = len(input_types[0].data)
             assert all(len(t.data) == n_fields for t in input_types)
             field_names = input_types[0].names
@@ -1607,9 +1607,10 @@ def overload_runtime_join_filter(
         )  # pragma: no cover
 
     col_inds_t = MetaType(tuple(range(n_cols)))
-    col_ind_arr = np.arange(n_cols)
+    col_ind_arr = np.arange(n_cols, dtype=np.int64)
     join_key_idxs_arrs = tuple(
-        np.array(join_key_idxs_list) for join_key_idxs_list in join_key_idxs_lists
+        np.array(join_key_idxs_list, dtype=np.int64)
+        for join_key_idxs_list in join_key_idxs_lists
     )
     process_col_bitmask_arrs = tuple(
         np.array(unwrap_typeref(process_col_bitmask).meta)

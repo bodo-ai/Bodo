@@ -39,9 +39,13 @@ from bodo.utils.typing import BodoWarning
 # when not handled correctly in Cython before v3.
 # PyTest can capture them as warnings, but to be extra
 # safe, we can treat those warnings as exceptions
-pytestmark = pytest.mark.filterwarnings(
-    "error::pytest.PytestUnraisableExceptionWarning"
-)
+pytestmark = [
+    pytest.mark.filterwarnings("error::pytest.PytestUnraisableExceptionWarning"),
+    # TODO[BSE-4556]: enable when bufferpool is enabled on Windows
+    pytest.mark.skipif(
+        sys.platform == "win32", reason="bufferpool disabled on Windows"
+    ),
+]
 
 
 @pytest.fixture
@@ -617,12 +621,12 @@ def test_malloc_allocation():
         assert not size_class.is_in_range(allocation)
         num_blocks = size_class.get_num_blocks()
         for frame_idx in range(num_blocks):
-            assert not size_class.is_frame_mapped(
-                frame_idx
-            ), f"Frame at index {frame_idx} is mapped even though it shouldn't be!"
-            assert not size_class.is_frame_pinned(
-                frame_idx
-            ), f"Frame at index {frame_idx} is pinned even though it shouldn't be!"
+            assert not size_class.is_frame_mapped(frame_idx), (
+                f"Frame at index {frame_idx} is mapped even though it shouldn't be!"
+            )
+            assert not size_class.is_frame_pinned(frame_idx), (
+                f"Frame at index {frame_idx} is pinned even though it shouldn't be!"
+            )
 
     # Free allocation
     pool.free(allocation)
@@ -895,12 +899,12 @@ def test_larger_than_pool_allocation():
         size_class: SizeClass = pool.get_size_class(size_class_idx)
         num_blocks = size_class.get_num_blocks()
         for frame_idx in range(num_blocks):
-            assert not size_class.is_frame_mapped(
-                frame_idx
-            ), f"Frame at index {frame_idx} is mapped even though it shouldn't be!"
-            assert not size_class.is_frame_pinned(
-                frame_idx
-            ), f"Frame at index {frame_idx} is pinned even though it shouldn't be!"
+            assert not size_class.is_frame_mapped(frame_idx), (
+                f"Frame at index {frame_idx} is mapped even though it shouldn't be!"
+            )
+            assert not size_class.is_frame_pinned(frame_idx), (
+                f"Frame at index {frame_idx} is pinned even though it shouldn't be!"
+            )
 
     # Cleanup and delete pool (to be conservative)
     pool.cleanup()
@@ -1417,12 +1421,12 @@ def test_reallocate_0_to_mmap():
         size_class: SizeClass = pool.get_size_class(size_class_idx)
         num_blocks = size_class.get_num_blocks()
         for frame_idx in range(num_blocks):
-            assert not size_class.is_frame_mapped(
-                frame_idx
-            ), f"Frame at index {frame_idx} is mapped even though it shouldn't be!"
-            assert not size_class.is_frame_pinned(
-                frame_idx
-            ), f"Frame at index {frame_idx} is pinned even though it shouldn't be!"
+            assert not size_class.is_frame_mapped(frame_idx), (
+                f"Frame at index {frame_idx} is mapped even though it shouldn't be!"
+            )
+            assert not size_class.is_frame_pinned(frame_idx), (
+                f"Frame at index {frame_idx} is pinned even though it shouldn't be!"
+            )
 
     assert pool.bytes_allocated() == 0
     assert pool.max_memory() == 0
@@ -1479,12 +1483,12 @@ def test_reallocate_0_to_malloc():
         size_class: SizeClass = pool.get_size_class(size_class_idx)
         num_blocks = size_class.get_num_blocks()
         for frame_idx in range(num_blocks):
-            assert not size_class.is_frame_mapped(
-                frame_idx
-            ), f"Frame at index {frame_idx} is mapped even though it shouldn't be!"
-            assert not size_class.is_frame_pinned(
-                frame_idx
-            ), f"Frame at index {frame_idx} is pinned even though it shouldn't be!"
+            assert not size_class.is_frame_mapped(frame_idx), (
+                f"Frame at index {frame_idx} is mapped even though it shouldn't be!"
+            )
+            assert not size_class.is_frame_pinned(frame_idx), (
+                f"Frame at index {frame_idx} is pinned even though it shouldn't be!"
+            )
 
     assert pool.bytes_allocated() == 0
     assert pool.max_memory() == 0
@@ -1496,12 +1500,12 @@ def test_reallocate_0_to_malloc():
         size_class: SizeClass = pool.get_size_class(size_class_idx)
         num_blocks = size_class.get_num_blocks()
         for frame_idx in range(num_blocks):
-            assert not size_class.is_frame_mapped(
-                frame_idx
-            ), f"Frame at index {frame_idx} is mapped even though it shouldn't be!"
-            assert not size_class.is_frame_pinned(
-                frame_idx
-            ), f"Frame at index {frame_idx} is pinned even though it shouldn't be!"
+            assert not size_class.is_frame_mapped(frame_idx), (
+                f"Frame at index {frame_idx} is mapped even though it shouldn't be!"
+            )
+            assert not size_class.is_frame_pinned(frame_idx), (
+                f"Frame at index {frame_idx} is pinned even though it shouldn't be!"
+            )
 
     assert pool.bytes_allocated() == 5 * 1024
     assert pool.max_memory() == 5 * 1024
@@ -1729,6 +1733,7 @@ def test_reallocate_unpinned_frame():
         min_size_class=16,
         max_num_size_classes=10,
         enforce_max_limit_during_allocation=True,
+        debug_mode=True,
     )
     pool: BufferPool = BufferPool.from_options(options)
 
@@ -1759,7 +1764,7 @@ def test_reallocate_unpinned_frame():
     with pytest.raises(
         pyarrow.lib.ArrowMemoryError,
         match=re.escape(
-            "BufferPool::Reallocate: Allocation of new memory failed: Out of memory: Allocation failed. Not enough space in the buffer pool to allocate (3145728)."
+            "BufferPool::Reallocate: Allocation of new memory failed: Out of memory: Allocation canceled beforehand. Not enough space in the buffer pool to allocate (requested 3145728 bytes, aligned 3145728 bytes, available 2097152 bytes)."
         ),
     ):
         pool.reallocate(3 * 1024 * 1024, allocation)
@@ -1896,7 +1901,10 @@ def test_oom_all_mem_pinned():
 
     # Allocate a very small pool for testing
     options = BufferPoolOptions(
-        memory_size=4, min_size_class=1024, enforce_max_limit_during_allocation=True
+        memory_size=4,
+        min_size_class=1024,
+        enforce_max_limit_during_allocation=True,
+        debug_mode=True,
     )
     pool: BufferPool = BufferPool.from_options(options)
     size_class_1MiB: SizeClass = pool.get_size_class(0)
@@ -1916,7 +1924,7 @@ def test_oom_all_mem_pinned():
     # Trying to allocate 1MiB should fail
     with pytest.raises(
         pyarrow.lib.ArrowMemoryError,
-        match="Allocation failed. Not enough space in the buffer pool.",
+        match="Malloc canceled beforehand. Not enough space in the buffer pool.",
     ):
         _: BufferPoolAllocation = pool.allocate(600 * 1024)
 
@@ -1945,7 +1953,10 @@ def test_oom_some_mem_unpinned():
 
     # Allocate a very small pool for testing
     options = BufferPoolOptions(
-        memory_size=4, min_size_class=1024, enforce_max_limit_during_allocation=True
+        memory_size=4,
+        min_size_class=1024,
+        enforce_max_limit_during_allocation=True,
+        debug_mode=True,
     )
     pool: BufferPool = BufferPool.from_options(options)
     size_class_1MiB: SizeClass = pool.get_size_class(0)
@@ -1969,7 +1980,7 @@ def test_oom_some_mem_unpinned():
     # Trying to allocate 2MiB should fail
     with pytest.raises(
         pyarrow.lib.ArrowMemoryError,
-        match="Allocation failed. Not enough space in the buffer pool.",
+        match="Allocation canceled beforehand. Not enough space in the buffer pool.",
     ):
         _: BufferPoolAllocation = pool.allocate(2 * 1024 * 1024)
 
@@ -2000,7 +2011,10 @@ def test_oom_no_storage():
 
     # Allocate a very small pool for testing
     options = BufferPoolOptions(
-        memory_size=4, min_size_class=1024, enforce_max_limit_during_allocation=True
+        memory_size=4,
+        min_size_class=1024,
+        enforce_max_limit_during_allocation=True,
+        debug_mode=True,
     )
     pool: BufferPool = BufferPool.from_options(options)
     size_class_2MiB: SizeClass = pool.get_size_class(1)
@@ -2536,9 +2550,9 @@ def test_extra_frames_no_enforcement():
     ]:
         size_class_: SizeClass = pool.get_size_class(idx)
         n_blocks = size_class_.get_num_blocks()
-        assert (
-            n_blocks == exp_num_frames
-        ), f"Expected SizeClass at idx {idx} to have {exp_num_frames} frames but it has {n_blocks} frames instead!"
+        assert n_blocks == exp_num_frames, (
+            f"Expected SizeClass at idx {idx} to have {exp_num_frames} frames but it has {n_blocks} frames instead!"
+        )
 
     assert pool.bytes_pinned() == 0
     assert pool.bytes_allocated() == 0
@@ -2576,9 +2590,9 @@ def test_extra_frames_no_enforcement():
     ]:
         size_class_: SizeClass = pool.get_size_class(idx)
         n_blocks = size_class_.get_num_blocks()
-        assert (
-            n_blocks == exp_num_frames
-        ), f"Expected SizeClass at idx {idx} to have {exp_num_frames} frames but it has {n_blocks} frames instead!"
+        assert n_blocks == exp_num_frames, (
+            f"Expected SizeClass at idx {idx} to have {exp_num_frames} frames but it has {n_blocks} frames instead!"
+        )
 
     assert pool.bytes_pinned() == 0
     assert pool.bytes_allocated() == 0
@@ -2605,9 +2619,9 @@ def test_extra_frames_no_enforcement():
     ]:
         size_class_: SizeClass = pool.get_size_class(idx)
         n_blocks = size_class_.get_num_blocks()
-        assert (
-            n_blocks == exp_num_frames
-        ), f"Expected SizeClass at idx {idx} to have {exp_num_frames} frames but it has {n_blocks} frames instead!"
+        assert n_blocks == exp_num_frames, (
+            f"Expected SizeClass at idx {idx} to have {exp_num_frames} frames but it has {n_blocks} frames instead!"
+        )
 
     assert pool.bytes_pinned() == 0
     assert pool.bytes_allocated() == 0
@@ -2872,6 +2886,7 @@ def test_repin_eviction(tmp_path: Path):
         min_size_class=1024,
         enforce_max_limit_during_allocation=True,
         storage_options=[local_opt],
+        debug_mode=True,
     )
     pool: BufferPool = BufferPool.from_options(options)
     size_class_1MiB: SizeClass = pool.get_size_class(0)
@@ -3087,6 +3102,7 @@ def test_reallocate_spilled_block(tmp_path: Path):
         min_size_class=16,
         enforce_max_limit_during_allocation=True,
         storage_options=[local_opt],
+        debug_mode=True,
     )
     pool: BufferPool = BufferPool.from_options(options)
 
@@ -3159,7 +3175,7 @@ def test_reallocate_spilled_block(tmp_path: Path):
     with pytest.raises(
         pyarrow.lib.ArrowMemoryError,
         match=re.escape(
-            "BufferPool::Reallocate: Allocation of new memory failed: Out of memory: Allocation failed. Not enough space in the buffer pool to allocate (3145728)."
+            "BufferPool::Reallocate: Allocation of new memory failed: Out of memory: Allocation canceled beforehand. Not enough space in the buffer pool to allocate (requested 3145728 bytes, aligned 3145728 bytes, available 2097152 bytes)."
         ),
     ):
         pool.reallocate(3 * 1024 * 1024, allocation1)
@@ -4156,7 +4172,10 @@ def test_operator_pool_allocation():
 
     # Allocate a very small pool for testing
     options = BufferPoolOptions(
-        memory_size=4, min_size_class=8, enforce_max_limit_during_allocation=True
+        memory_size=4,
+        min_size_class=8,
+        enforce_max_limit_during_allocation=True,
+        debug_mode=True,
     )  # 4MiB, 8KiB
     pool: BufferPool = BufferPool.from_options(options)
 
@@ -4373,7 +4392,7 @@ def test_operator_pool_allocation():
 
     with pytest.raises(
         pyarrow.lib.ArrowMemoryError,
-        match=re.escape("Allocation failed. Not enough space in the buffer pool"),
+        match=re.escape("Not enough space in the buffer pool to allocate"),
     ):
         # This would take the total to over 4MiB, which is higher than
         # the BufferPool limit.
@@ -4392,7 +4411,9 @@ def test_operator_pool_allocation():
     # Test the same through the allocate_scratch API
     with pytest.raises(
         pyarrow.lib.ArrowMemoryError,
-        match=re.escape("Allocation failed. Not enough space in the buffer pool"),
+        match=re.escape(
+            "Allocation canceled beforehand. Not enough space in the buffer pool"
+        ),
     ):
         # This would take the total to over 4MiB, which is higher than
         # the BufferPool limit.
@@ -4433,6 +4454,7 @@ def test_operator_pool_pin_unpin():
         memory_size=2,
         min_size_class=8,
         enforce_max_limit_during_allocation=True,
+        debug_mode=True,
     )  # 2MiB total, 8KiB min size class
     pool: BufferPool = BufferPool.from_options(options)
 
@@ -4795,7 +4817,10 @@ def test_operator_pool_reallocate_edge_cases():
 
     # Allocate a very small pool for testing
     options = BufferPoolOptions(
-        memory_size=4, min_size_class=8, enforce_max_limit_during_allocation=True
+        memory_size=4,
+        min_size_class=8,
+        enforce_max_limit_during_allocation=True,
+        debug_mode=True,
     )  # 4MiB, 8KiB
     pool: BufferPool = BufferPool.from_options(options)
 
@@ -4879,7 +4904,9 @@ def test_operator_pool_reallocate_edge_cases():
     allocation = op_pool.allocate(250 * 1024)
     with pytest.raises(
         pyarrow.lib.ArrowMemoryError,
-        match=re.escape("Allocation failed. Not enough space in the buffer pool"),
+        match=re.escape(
+            "Allocation canceled beforehand. Not enough space in the buffer pool"
+        ),
     ):
         op_pool.reallocate(int(3.8 * 1024 * 1024), allocation)
     assert op_pool.bytes_allocated() == 250 * 1024
@@ -4898,7 +4925,9 @@ def test_operator_pool_reallocate_edge_cases():
 
     with pytest.raises(
         pyarrow.lib.ArrowMemoryError,
-        match=re.escape("Allocation failed. Not enough space in the buffer pool"),
+        match=re.escape(
+            "Allocation canceled beforehand. Not enough space in the buffer pool"
+        ),
     ):
         op_pool.reallocate(int(3.8 * 1024 * 1024), allocation)
     assert op_pool.bytes_allocated() == 250 * 1024

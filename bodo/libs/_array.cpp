@@ -498,6 +498,13 @@ table_info* arr_info_list_to_table(array_info** arrs, int64_t n_arrs) {
 }
 
 // Raw pointers since called from Python
+void append_arr_info_list_to_cpp_table(table_info* table, array_info** arrs,
+                                       int64_t n_arrs) {
+    std::vector<std::shared_ptr<array_info>> columns(arrs, arrs + n_arrs);
+    table->columns.insert(table->columns.end(), columns.begin(), columns.end());
+}
+
+// Raw pointers since called from Python
 array_info* info_from_table(table_info* table, int64_t col_ind) {
     return new array_info(*table->columns[col_ind]);
 }
@@ -1033,6 +1040,7 @@ PyMODINIT_FUNC PyInit_array_ext(void) {
     SetAttrStringFromVoidPtr(m, alloc_numpy);
     SetAttrStringFromVoidPtr(m, alloc_string_array);
     SetAttrStringFromVoidPtr(m, arr_info_list_to_table);
+    SetAttrStringFromVoidPtr(m, append_arr_info_list_to_cpp_table);
     // Not covered by error handler
     SetAttrStringFromVoidPtr(m, info_from_table);
     // Not covered by error handler

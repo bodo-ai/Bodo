@@ -80,6 +80,15 @@ def get_gateway():
 
         # Die on exit will close the gateway server when this python process exits or is killed.
         try:
+            out_fd = sys.stdout
+            err_fd = sys.stderr
+
+            # Jupyter does not support writing to stderr
+            # https://discourse.jupyter.org/t/how-to-know-from-python-script-if-we-are-in-jupyterlab/23993/4
+            if bodo.utils.utils.is_jupyter_on_windows():
+                out_fd = None
+                err_fd = None
+
             java_path = get_java_path()
             port_no = cast(
                 int,
@@ -87,8 +96,8 @@ def get_gateway():
                     jarpath=full_path,
                     java_path=java_path,
                     die_on_exit=True,
-                    redirect_stdout=sys.stdout,
-                    redirect_stderr=sys.stderr,
+                    redirect_stdout=out_fd,
+                    redirect_stderr=err_fd,
                 ),
             )
             gateway = JavaGateway(gateway_parameters=GatewayParameters(port=port_no))

@@ -59,20 +59,15 @@ int64_t pq_write(const char *_path_name,
                  const char *prefix,
                  std::vector<bodo_array_type::arr_type_enum> bodo_array_types,
                  bool create_dir = true, std::string filename = "",
-                 arrow::fs::FileSystem *arrow_fs = nullptr,
-                 bool force_hdfs = false);
+                 arrow::fs::FileSystem *arrow_fs = nullptr);
 
 int64_t pq_write_py_entry(const char *_path_name, table_info *table,
-                          array_info *col_names_arr, array_info *index,
-                          bool write_index, const char *metadata,
+                          array_info *col_names_arr, const char *metadata,
                           const char *compression, bool is_parallel,
-                          bool write_rangeindex_to_metadata, const int ri_start,
-                          const int ri_stop, const int ri_step,
-                          const char *idx_name, const char *bucket_region,
-                          int64_t row_group_size, const char *prefix,
-                          bool convert_timedelta_to_int64, const char *tz,
-                          bool downcast_time_ns_to_us, bool create_dir,
-                          bool force_hdfs);
+                          const char *bucket_region, int64_t row_group_size,
+                          const char *prefix, bool convert_timedelta_to_int64,
+                          const char *tz, bool downcast_time_ns_to_us,
+                          bool create_dir);
 
 /**
  * @brief Create a directory for streaming Parquet write if not exists (called

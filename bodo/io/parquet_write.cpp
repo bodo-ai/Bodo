@@ -1,4 +1,3 @@
-
 // Functions to write Bodo arrays to parquet
 
 #include <arrow/filesystem/filesystem.h>
@@ -204,7 +203,7 @@ int64_t pq_write(const char *_path_name,
                  const char *prefix,
                  std::vector<bodo_array_type::arr_type_enum> bodo_array_types,
                  bool create_dir, std::string filename,
-                 arrow::fs::FileSystem *arrow_fs, bool force_hdfs) {
+                 arrow::fs::FileSystem *arrow_fs) {
     tracing::Event ev("pq_write", is_parallel);
     ev.add_attribute("g_path", _path_name);
     ev.add_attribute("g_compression", compression);
@@ -245,7 +244,7 @@ int64_t pq_write(const char *_path_name,
 
     extract_fs_dir_path(_path_name, is_parallel, prefix, ".parquet", myrank,
                         num_ranks, &fs_option, &dirname, &fname, &orig_path,
-                        &path_name, force_hdfs);
+                        &path_name);
 
     // If filename is provided, use that instead of the generic one.
     // Currently this is used for Iceberg.
@@ -269,8 +268,12 @@ int64_t pq_write(const char *_path_name,
 
     std::filesystem::path out_path(dirname);
     out_path /= fname;  // append file name to output path
+    // Avoid "\" generated on Windows for remote object storage
+    std::string out_path_str = arrow_fs->type_name() == "local"
+                                   ? out_path.string()
+                                   : out_path.generic_string();
     arrow::Result<std::shared_ptr<arrow::io::OutputStream>> result =
-        arrow_fs->OpenOutputStream(out_path);
+        arrow_fs->OpenOutputStream(out_path_str);
     CHECK_ARROW_AND_ASSIGN(result, "FileOutputStream::Open", out_stream);
 
     auto pool = bodo::BufferPool::DefaultPtr();
@@ -379,39 +382,16 @@ int64_t pq_write(const char *_path_name,
 }
 
 /**
- * @brief Generate the metadata for the parquet schema based on the
- * string metadata provided from Python. Optionally this may extend
- * the metadata with RangeIndex information.
+ * @brief Convert the metadata string to a KeyValueMetadata object
+ * to include in the Parquet schema footer.
  *
  * @param metadata The string metadata provided from Python.
- * @param idx_name The name of the index column.
- * @param ri_start The start value of the RangeIndex.
- * @param ri_stop The stop value of the RangeIndex.
- * @param ri_step The step value of the RangeIndex.
- * @param write_rangeindex_to_metadata Whether to write the RangeIndex to the
- * metadata.
  *
  * @return std::shared_ptr<arrow::KeyValueMetadata>
  */
-std::shared_ptr<arrow::KeyValueMetadata> compute_parquet_schema_metadata(
-    const char *metadata, const char *idx_name, int ri_start, int ri_stop,
-    int ri_step, bool write_rangeindex_to_metadata) {
-    int check;
-    std::vector<char> new_metadata;
-    if (write_rangeindex_to_metadata) {
-        new_metadata.resize((strlen(metadata) + strlen(idx_name) + 50));
-        check = snprintf(new_metadata.data(), new_metadata.size(), metadata,
-                         idx_name, ri_start, ri_stop, ri_step);
-    } else {
-        new_metadata.resize((strlen(metadata) + 1 + (strlen(idx_name) * 4)));
-        check = snprintf(new_metadata.data(), new_metadata.size(), metadata,
-                         idx_name, idx_name, idx_name, idx_name);
-    }
-    if (size_t(check + 1) > new_metadata.size()) {
-        throw std::runtime_error(
-            "Fatal error: number of written char for metadata is greater "
-            "than new_metadata size");
-    }
+std::shared_ptr<arrow::KeyValueMetadata> convert_parquet_schema_metadata(
+    const char *metadata) {
+    std::string_view new_metadata(metadata);
     std::shared_ptr<arrow::KeyValueMetadata> schema_metadata;
     if (new_metadata.size() > 0 && new_metadata[0] != 0) {
         std::unordered_map<std::string, std::string> new_metadata_map = {
@@ -422,22 +402,15 @@ std::shared_ptr<arrow::KeyValueMetadata> compute_parquet_schema_metadata(
 }
 
 int64_t pq_write_py_entry(const char *_path_name, table_info *table,
-                          array_info *col_names_arr, array_info *index,
-                          bool write_index, const char *metadata,
+                          array_info *col_names_arr, const char *metadata,
                           const char *compression, bool is_parallel,
-                          bool write_rangeindex_to_metadata, const int ri_start,
-                          const int ri_stop, const int ri_step,
-                          const char *idx_name, const char *bucket_region,
-                          int64_t row_group_size, const char *prefix,
-                          bool convert_timedelta_to_int64, const char *tz,
-                          bool downcast_time_ns_to_us, bool create_dir,
-                          bool force_hdfs) {
+                          const char *bucket_region, int64_t row_group_size,
+                          const char *prefix, bool convert_timedelta_to_int64,
+                          const char *tz, bool downcast_time_ns_to_us,
+                          bool create_dir) {
     try {
         tracing::Event ev("pq_write_py_entry", is_parallel);
         ev.add_attribute("g_metadata", metadata);
-        ev.add_attribute("g_write_index", write_index);
-        ev.add_attribute("g_write_rangeindex_to_metadata",
-                         write_rangeindex_to_metadata);
 
         std::shared_ptr<table_info> table_ptr =
             std::shared_ptr<table_info>(table);
@@ -445,21 +418,11 @@ int64_t pq_write_py_entry(const char *_path_name, table_info *table,
             std::shared_ptr<array_info>(col_names_arr);
         std::vector<std::string> col_names =
             array_to_string_vector(col_names_arr_ptr);
-        // Append the index to the table for simpler conversion.
-        std::shared_ptr<array_info> index_ptr =
-            std::shared_ptr<array_info>(index);
-        if (write_index) {
-            table->columns.push_back(index_ptr);
-            const char *used_name =
-                strcmp(idx_name, "null") != 0 ? idx_name : "__index_level_0__";
-            col_names.emplace_back(used_name);
-        }
+
         // Generate the metadata for the arrow table, including any index
         // metadata.
         std::shared_ptr<arrow::KeyValueMetadata> schema_metadata =
-            compute_parquet_schema_metadata(metadata, idx_name, ri_start,
-                                            ri_stop, ri_step,
-                                            write_rangeindex_to_metadata);
+            convert_parquet_schema_metadata(metadata);
         std::shared_ptr<arrow::Table> arrow_table = bodo_table_to_arrow(
             table_ptr, col_names, schema_metadata, convert_timedelta_to_int64,
             tz, arrow::TimeUnit::NANO, downcast_time_ns_to_us);
@@ -467,10 +430,9 @@ int64_t pq_write_py_entry(const char *_path_name, table_info *table,
         for (auto col : table_ptr->columns) {
             bodo_array_types.emplace_back(col->arr_type);
         }
-        int64_t file_size =
-            pq_write(_path_name, arrow_table, compression, is_parallel,
-                     bucket_region, row_group_size, prefix, bodo_array_types,
-                     create_dir, "", nullptr, force_hdfs);
+        int64_t file_size = pq_write(
+            _path_name, arrow_table, compression, is_parallel, bucket_region,
+            row_group_size, prefix, bodo_array_types, create_dir, "", nullptr);
         return file_size;
     } catch (const std::exception &e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());

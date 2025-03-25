@@ -9,7 +9,7 @@ import types as pytypes
 import warnings
 
 import numba
-from numba.core import cgutils, cpu, serialize
+from numba.core import cgutils, cpu, serialize, types
 from numba.core.options import _mapping
 from numba.core.targetconfig import Option, TargetConfig
 from numba.core.typing.templates import signature
@@ -168,7 +168,7 @@ detail""",
     dbg_directives_only = Option(
         type=bool,
         default=False,
-        doc=("Make debug emissions directives-only. " "Used when generating lineinfo."),
+        doc=("Make debug emissions directives-only. Used when generating lineinfo."),
     )
 
     # Bodo change: add Bodo-specific options
@@ -520,7 +520,7 @@ def _check_return_type(return_type):
     return return_type
 
 
-def wrap_python(return_type):
+def wrap_python(return_type: str | types.Type):
     """Creates a JIT wrapper around a regular Python function to allow its use inside
     JIT functions (including UDFs).
     The data type of the function output must be specified.

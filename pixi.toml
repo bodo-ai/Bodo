@@ -1,7 +1,7 @@
 [project]
 name = "bodo"
 channels = ["bodo.ai", "conda-forge"]
-platforms = ["linux-64", "linux-aarch64", "osx-64", "osx-arm64"]
+platforms = ["linux-64", "linux-aarch64", "osx-64", "osx-arm64", "win-64"]
 conda-pypi-map = { "bodo.ai" = "buildscripts/bodo_mapping.json" }
 
 [environments]
@@ -12,8 +12,7 @@ azure =        { features = ["rcpp", "dev", "local-mpi", "azure"], solve-group =
 platform =     { features = ["rcpp", "platform", "platform-mpi"],  solve-group = "312-platform" }
 platform-dev = { features = ["rcpp", "dev", "platform-mpi"],       solve-group = "312-platform" }
 # Pip C++ Deps
-pip-cpp-linux =      { features = ["local-mpi"], no-default-feature = true,   solve-group = "pip" }
-pip-cpp-macos =      { features = ["rcpp", "local-mpi", "pip"], no-default-feature = true,   solve-group = "pip" }
+pip-cpp-macos-win = { features = ["rcpp", "local-mpi", "pip"], no-default-feature = true, solve-group = "pip" }
 
 # Build Commands
 [tasks.build-bodo]
@@ -72,7 +71,7 @@ pip = "*"
 numba = "==0.61.0"
 numpy = ">=1.24,<2.2"
 pandas = ">=2.2,<2.3"
-pyarrow = { version = "==18.1.0", channel = "conda-forge" }
+pyarrow = { version = "==19.0.0", channel = "conda-forge" }
 fsspec = ">=2021.09"
 requests = "*"
 cloudpickle = ">=3.0,<4.0"
@@ -80,13 +79,12 @@ psutil = "*"
 # Core Java Deps
 openjdk = "=11"
 py4j = "==0.10.9.7"
-
 # HDFS
 h5py = "*"
 # Data Science
 scipy = "*"
 scikit-learn = "1.4.*"
-matplotlib = "<=3.8.2"
+matplotlib ="*"
 # IO
 boto3 = ">=1.35.74"
 botocore = "*"
@@ -94,7 +92,10 @@ botocore = "*"
 # Due to s3fs pinning aiobotocore and not regularly updating
 s3fs = ">=2022.1"
 adlfs = ">=2022.1"
+pyiceberg = ">=0.9,<0.10"
+mypy-boto3-glue = "*"  # Required for PyIceberg Glue Catalog
 huggingface_hub = "*"
+zstandard = "*"
 # Databases
 pymysql = "*"
 psycopg2 = "*"
@@ -105,20 +106,25 @@ snowflake-connector-python = "*"
 xlrd = "*"
 xlsxwriter = "*"
 openpyxl = "*"
+cx_oracle = "*"
+pyzmq = "*"
+
 [target.linux-64.dependencies]
-cx_oracle = "*"
-pyarrow = { version = "==18.1.0", channel = "bodo.ai" }
-libarrow = { version = "==18.1.0", channel = "bodo.ai" }
-[target.osx-64.dependencies]
-cx_oracle = "*"
+pyarrow = { version = "==19.0.0", channel = "bodo.ai" }
+libarrow = { version = "==19.0.0", channel = "bodo.ai" }
 
 # Runtime C++ Deps
 [feature.rcpp.dependencies]
-libcurl = "~=8.0"
 zstd = "<=1.5.6"
-hdf5 = { version = ">=1.14.3,<1.14.4.0a0", build = "*mpi_mpich_*" }
 boost-cpp = "1.85.*"
-aws-sdk-cpp = "1.11.*"
+aws-sdk-cpp = "<=1.11.485"
+
+[feature.rcpp.target.osx.dependencies]
+hdf5 = { version = ">=1.14.3,<1.14.4.0a0", build = "*mpi_mpich_*" }
+[feature.rcpp.target.linux.dependencies]
+hdf5 = { version = ">=1.14.3,<1.14.4.0a0", build = "*mpi_mpich_*" }
+[feature.rcpp.target.win.dependencies]
+hdf5 = { version = ">=1.14.3,<1.14.4.0a0", build = "*mpi_impi_*" }
 
 [feature.dev.dependencies]
 # Build Python
@@ -126,8 +132,7 @@ setuptools = ">=64"
 setuptools_scm = ">=8"
 cython = ">=3.0,<3.1"
 scikit-build-core = "*"
-# Copied into bodo/mpi4py
-mpi4py = "~=3.1"
+
 # Build C++ Deps
 cmake = "*"
 ninja = "*"
@@ -139,16 +144,22 @@ sccache = "*"
 maven = "*"
 sqlglot = "*"
 duckdb = "*"
+
 # Note: PySpark 3.5 is necessary for Python 3.12
 pyspark = "3.5.*"
+# Platform conda package needs numpy >2.0 which is not compatible with our matplotlib
+# requirement, removing from the platform for now.
+matplotlib = "<=3.8.2"
 # Iceberg Testing
 mmh3 = "*"
 avro = "*"  # Reading avro
 
 # Documentation Testing
 beautifulsoup4 = "*"
+
 # Snowflake Testing
 snowflake-sqlalchemy = "*"
+
 # S3 Testing
 minio-server = "*"
 # GCS testing
@@ -162,6 +173,7 @@ pytest-xdist = "*"
 pytest-timeout = "*"
 pytest-split = "*"
 flaky = "*"
+testcontainers = "*"
 
 # Other Deps
 pyyaml = "*"
@@ -188,26 +200,37 @@ ipython = "==8.16.1"
 [feature.dev.target.linux-64.dependencies]
 gcc_linux-64 = ">=9"
 gxx_linux-64 = ">=9"
+# Copied into bodo/mpi4py
+mpi4py = "~=3.1"
+
 [feature.dev.target.linux-aarch64.dependencies]
 gcc_linux-aarch64 = ">=9"
 gxx_linux-aarch64 = ">=9"
+mpi4py = "~=3.1"
+
 [feature.dev.target.osx-64.dependencies]
 clang_osx-64 = "=19"
 clangxx_osx-64 = "=19"
 clang-tools = "=19"
+mpi4py = "~=3.1"
+
 [feature.dev.target.osx-arm64.dependencies]
 clang_osx-arm64 = "=19"
 clangxx_osx-arm64 = "=19"
 clang-tools = "=19"
+mpi4py = "~=3.1"
+
+[feature.dev.target.win.dependencies]
+mpi4py = "~=4.0"
 
 [feature.platform]
 platforms = ["linux-64"]
+channels = ["conda-forge"]
 [feature.platform.target.linux-64.dependencies]
 ipython = "==8.16.1"
 ipykernel = "==6.29.3"
 ipywidgets = "==8.1.1"
 nbconvert = "6.5.*"
-bodo-azurefs-sas-token-provider = "1.0.*"
 _openmp_mutex = { version = "*", build = "*gnu*" }
 jupyter_client = "==8.6.1"
 uvicorn = "*"
@@ -216,9 +239,15 @@ httpie = "*"
 
 # MPI Handling
 # Restricted to match Intel MPI. Upgrade with IMPI.
-[feature.local-mpi.dependencies]
 # Using h* to avoid the "external_*" kind
+[feature.local-mpi.target.osx.dependencies]
 mpich = { version = "4.1.*", build = "h*" }
+[feature.local-mpi.target.linux.dependencies]
+mpich = { version = "4.1.*", build = "h*" }
+
+[feature.local-mpi.target.win.dependencies]
+impi-devel = "*"
+
 [feature.platform-mpi]
 channels = ["conda-forge", "conda-forge/label/broken"]
 platforms = ["linux-64"]
@@ -226,14 +255,16 @@ platforms = ["linux-64"]
 # https://conda-forge.org/docs/user/tipsandtricks/#using-external-message-passing-interface-mpi-libraries
 dependencies = { mpich = { version = "==4.1.2", build = "external_4", channel = "conda-forge/label/broken" } }
 
+# Feature pip
+[feature.pip.target.osx-64.dependencies]
+clang_osx-64 = "=19"
+clangxx_osx-64 = "=19"
+
+[feature.pip.target.osx-arm64.dependencies]
+clang_osx-arm64 = "=19"
+clangxx_osx-arm64 = "=19"
+
 # Azure CI
 [feature.azure.dependencies]
 pytest-azurepipelines = "*"
 pytest-nunit = "*"
-
-[feature.pip.target.osx-64.dependencies]
-clang_osx-64 = "=19"
-clangxx_osx-64 = "=19"
-[feature.pip.target.osx-arm64.dependencies]
-clang_osx-arm64 = "=19"
-clangxx_osx-arm64 = "=19"

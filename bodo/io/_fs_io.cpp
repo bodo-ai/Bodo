@@ -1,4 +1,5 @@
 #include <Python.h>
+#include <algorithm>
 #include <filesystem>
 #include <iostream>
 #include <sstream>
@@ -90,8 +91,7 @@ void extract_fs_dir_path(const char *_path_name, bool is_parallel,
                          const std::string &prefix, const std::string &suffix,
                          int myrank, int num_ranks, Bodo_Fs::FsEnum *fs_option,
                          std::string *dirname, std::string *fname,
-                         std::string *orig_path, std::string *path_name,
-                         bool force_hdfs) {
+                         std::string *orig_path, std::string *path_name) {
     *path_name = std::string(_path_name);
 
     if (strncmp(_path_name, "s3://", 5) == 0) {
@@ -99,7 +99,7 @@ void extract_fs_dir_path(const char *_path_name, bool is_parallel,
         *path_name = std::string(_path_name + 5);  // remove s3://
     } else if ((strncmp(_path_name, "abfs://", 7) == 0 ||
                 strncmp(_path_name, "abfss://", 8) == 0)) {
-        *fs_option = force_hdfs ? Bodo_Fs::hdfs : Bodo_Fs::abfs;
+        *fs_option = Bodo_Fs::abfs;
     } else if (strncmp(_path_name, "hdfs://", 7) == 0) {
         *fs_option = Bodo_Fs::hdfs;
         arrow::Result<std::shared_ptr<arrow::fs::FileSystem>> tempRes =
@@ -391,8 +391,11 @@ void open_outstream(Bodo_Fs::FsEnum fs_option, bool is_parallel,
             if (is_parallel) {
                 std::filesystem::path out_path(dirname);
                 out_path /= fname;  // append file name to output path
-                open_file_outstream(fs_option, file_type, out_path.string(),
-                                    s3_fs, nullptr, out_stream);
+                // Using generic_string() to avoid "\" generated on Windows for
+                // remote object storage
+                std::string out_path_str = out_path.generic_string();
+                open_file_outstream(fs_option, file_type, out_path_str, s3_fs,
+                                    nullptr, out_stream);
             } else {
                 open_file_outstream(fs_option, file_type, fname, s3_fs, nullptr,
                                     out_stream);
@@ -431,6 +434,7 @@ void open_outstream(Bodo_Fs::FsEnum fs_option, bool is_parallel,
             return;
         } break;
         case Bodo_Fs::abfs: {
+#ifndef _WIN32
             ensure_pa_wrappers_imported();
 
             std::string path =
@@ -468,6 +472,12 @@ void open_outstream(Bodo_Fs::FsEnum fs_option, bool is_parallel,
                 fs->OpenOutputStream(path);
             CHECK_ARROW_AND_ASSIGN(result, "AzureFileSystem::OpenOutputStream",
                                    *out_stream, file_type)
+#else
+            // Using AzureFileSystem leads to a compilation error on Windows.
+            // https://github.com/apache/arrow/issues/41990
+            throw std::runtime_error(
+                "open_outstream: AzureFileSystem not supported on Windows.");
+#endif
         } break;
         case Bodo_Fs::gcs: {
             PyObject *gcs_func_obj = nullptr;
@@ -480,8 +490,11 @@ void open_outstream(Bodo_Fs::FsEnum fs_option, bool is_parallel,
             if (is_parallel) {
                 std::filesystem::path out_path(dirname);
                 out_path /= fname;
-                open_file_outstream_gcs(fs_option, file_type, out_path.string(),
-                                        fs, out_stream);
+                // Using generic_string() to avoid "\" generated on Windows for
+                // remote object storage
+                std::string out_path_str = out_path.generic_string();
+                open_file_outstream_gcs(fs_option, file_type, out_path_str, fs,
+                                        out_stream);
             } else {
                 open_file_outstream_gcs(fs_option, file_type, fname, fs,
                                         out_stream);

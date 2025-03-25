@@ -36,16 +36,16 @@
  */
 std::shared_ptr<arrow::Schema> unwrap_schema(PyObject* pyarrow_schema);
 
-#define CHECK_ARROW(expr, msg)                                               \
+#define CHECK_ARROW_READER(expr, msg)                                        \
     if (!(expr.ok())) {                                                      \
         std::string err_msg = std::string("Error in Arrow Reader: ") + msg + \
                               " " + expr.ToString();                         \
         throw std::runtime_error(err_msg);                                   \
     }
 
-#undef CHECK_ARROW_AND_ASSIGN
-#define CHECK_ARROW_AND_ASSIGN(res, msg, lhs) \
-    CHECK_ARROW(res.status(), msg)            \
+#undef CHECK_ARROW_READER_AND_ASSIGN
+#define CHECK_ARROW_READER_AND_ASSIGN(res, msg, lhs) \
+    CHECK_ARROW_READER(res.status(), msg)            \
     lhs = std::move(res).ValueOrDie();
 
 // --------- TableBuilder ---------

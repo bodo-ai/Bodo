@@ -503,9 +503,9 @@ class WindowStateType(StreamingStateType):
                 if output_type is None:
                     # None = infer from input column
                     indices = self.inputs_to_function(func_idx)
-                    assert (
-                        len(indices) == 1
-                    ), f"Expected 1 input column to function {func_name}, received {len(indices)}"
+                    assert len(indices) == 1, (
+                        f"Expected 1 input column to function {func_name}, received {len(indices)}"
+                    )
                     input_index = indices[0]
                     input_type = casted_build_table_type.arr_types[input_index]
                     if func_name in {

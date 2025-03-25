@@ -1807,9 +1807,9 @@ def test_replicated_flag(memory_leak_check):
     ), "df1 should be distributed and df2 replicated based on user flags"
 
     impl2()
-    assert not impl2.overloads[impl2.signatures[0]].metadata[
-        "is_return_distributed"
-    ], "output of impl2 should be replicated since replicated=True is set"
+    assert not impl2.overloads[impl2.signatures[0]].metadata["is_return_distributed"], (
+        "output of impl2 should be replicated since replicated=True is set"
+    )
 
     impl3()
     assert impl3.overloads[impl3.signatures[0]].metadata["is_return_distributed"] == [
@@ -2756,7 +2756,7 @@ def test_send_recv(val):
 
     if bodo.get_size() == 1:
         return
-    np.random.seed(np.uint32(hash(val)))
+    np.random.seed(np.uint64(hash(val)).astype(np.uint32))
     send_rank = np.random.randint(bodo.get_size())
     recv_rank = np.random.randint(bodo.get_size())
     # make sure send_rank != recv_rank

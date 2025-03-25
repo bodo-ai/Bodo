@@ -27,8 +27,16 @@ from bodo.tests.utils import check_func
         ),
         pd.DataFrame(
             {
-                "A": [np.array([1, 2, 3]), np.array([2, 5, -6])] * 20,
-                "B": [np.array([0, -1, 2]), np.array([4, -1, -5])] * 20,
+                "A": [
+                    np.array([1, 2, 3], dtype=np.int64),
+                    np.array([2, 5, -6], dtype=np.int64),
+                ]
+                * 20,
+                "B": [
+                    np.array([0, -1, 2], dtype=np.int64),
+                    np.array([4, -1, -5], dtype=np.int64),
+                ]
+                * 20,
             }
         ),
         pytest.param(

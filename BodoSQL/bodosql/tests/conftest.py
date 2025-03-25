@@ -24,7 +24,6 @@ import bodosql
 from bodo.tests.conftest import (  # noqa
     iceberg_database,
     memory_leak_check,
-    tabular_connection,
 )
 from bodo.tests.iceberg_database_helpers.utils import get_spark
 from bodo.tests.utils import gen_nonascii_list
@@ -131,13 +130,49 @@ def zeros_df():
 @pytest.fixture(
     params=[
         pytest.param(np.int8, marks=pytest.mark.slow),
-        pytest.param(np.uint8, marks=pytest.mark.slow),
+        pytest.param(
+            np.uint8,
+            marks=[
+                pytest.mark.slow,
+                pytest.mark.skipif(
+                    sys.platform == "win32",
+                    reason="Spark doesn't support unsigned int on Windows.",
+                ),
+            ],
+        ),
         pytest.param(np.int16, marks=pytest.mark.slow),
-        pytest.param(np.uint16, marks=pytest.mark.slow),
+        pytest.param(
+            np.uint16,
+            marks=[
+                pytest.mark.slow,
+                pytest.mark.skipif(
+                    sys.platform == "win32",
+                    reason="Spark doesn't support unsigned int on Windows.",
+                ),
+            ],
+        ),
         pytest.param(np.int32, marks=pytest.mark.slow),
-        pytest.param(np.uint32, marks=pytest.mark.slow),
+        pytest.param(
+            np.uint32,
+            marks=[
+                pytest.mark.slow,
+                pytest.mark.skipif(
+                    sys.platform == "win32",
+                    reason="Spark doesn't support unsigned int on Windows.",
+                ),
+            ],
+        ),
         np.int64,
-        pytest.param(np.uint64, marks=pytest.mark.slow),
+        pytest.param(
+            np.uint64,
+            marks=[
+                pytest.mark.slow,
+                pytest.mark.skipif(
+                    sys.platform == "win32",
+                    reason="Spark doesn't support unsigned int on Windows.",
+                ),
+            ],
+        ),
         pytest.param(np.float32, marks=pytest.mark.slow),
         np.float64,
     ]
@@ -929,9 +964,9 @@ def major_types_nullable(request):
     have a distinct column for sorting called ORDERBY_COl.
     """
     df = request.param.copy()
-    assert not (
-        len(df) % 3
-    ), "Appending a boolean column requires the DataFrame to be divisible by 3"
+    assert not (len(df) % 3), (
+        "Appending a boolean column requires the DataFrame to be divisible by 3"
+    )
     df["COND_COL"] = pd.Series([True, False, None] * (len(df) // 3))
     df["ORDERBY_COl"] = np.arange(len(df))
     return {"TABLE1": df}
@@ -1949,18 +1984,6 @@ def listagg_data():
             }
         )
     }
-
-
-@pytest.fixture
-def tabular_catalog(tabular_connection):
-    """
-    Returns a tabular catalog object
-    """
-
-    _, tabular_warehouse, tabular_credential = tabular_connection
-    return bodosql.TabularCatalog(
-        warehouse=tabular_warehouse, credential=tabular_credential
-    )
 
 
 @pytest.fixture

@@ -15,7 +15,7 @@ def create_table(table_name=TABLE_NAME, spark=None):
         {
             "ACCTNMBR": [10000 + i for i in range(50000)],
             "BALANCE": [
-                float(f"{((i**3)%(10**6))}.{((i**4)%91):02}") for i in range(50000)
+                float(f"{((i**3) % (10**6))}.{((i**4) % 91):02}") for i in range(50000)
             ],
         }
     )

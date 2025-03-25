@@ -28,26 +28,31 @@ for parallelization, which is automatically installed as part of the
 `pip` and `conda` install commands above.
 
 
-## How to Install Conda {#conda}
+### How to Install Conda {#conda}
 
-Install conda using the instructions below.
-
-### On Linux
+You can install [Miniforge](https://github.com/conda-forge/miniforge),
+[Anaconda](https://www.anaconda.com/download), or other distributions of Conda. Miniforge can be installed easily
+on Linux, MacOS and WSL using terminal commands:
 
 ```shell
-wget https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh
-chmod +x miniconda.sh
-./miniconda.sh -b
-export PATH=$HOME/miniconda3/bin:$PATH
+curl -L -O "https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-$(uname)-$(uname -m).sh"
+bash Miniforge3-$(uname)-$(uname -m).sh
 ```
 
-### On MacOS
+
+## Windows WSL
+
+The [Windows Subsystem for Linux (WSL)](https://learn.microsoft.com/en-us/windows/wsl/install) lets developers install a Linux distribution
+on Windows, which provides a convenient environment for installing and using Bodo.
+Here are example commands to install Python and Bodo on WSL:
 
 ```shell
-curl https://repo.continuum.io/miniconda/Miniconda3-latest-MacOSX-x86_64.sh -L -o miniconda.sh
-chmod +x miniconda.sh
-./miniconda.sh -b
-export PATH=$HOME/miniconda3/bin:$PATH
+sudo apt update
+sudo apt install python3-pip
+sudo apt install python3-venv
+python3 -m venv bodo-test
+source bodo-test/bin/activate
+pip install bodo
 ```
 
 ## Optional Dependencies {#optionaldep}
@@ -141,7 +146,7 @@ BODO_NUM_WORKERS=1 python example.py
     You may need to delete `example1.pq` between consecutive runs.
 
 
-## Enabling parallelism in Clusters
+## Enabling parallelism in clusters {#cluster_setup}
 
 Bodo relies on MPI for parallel compute. MPI can be configured on clusters
 easily. The cluster nodes need to have passwordless SSH enabled between them,

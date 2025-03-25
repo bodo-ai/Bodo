@@ -136,11 +136,11 @@ def test_f_strings():
 
     # requires formatting (FORMAT_VALUE) and concatenation (BUILD_STRINGS)
     def impl1(a):
-        return f"AA_{a+3}_B"
+        return f"AA_{a + 3}_B"
 
     # does not require concatenation
     def impl2(a):
-        return f"{a+2}"
+        return f"{a + 2}"
 
     # includes format spec
     def impl3(a):

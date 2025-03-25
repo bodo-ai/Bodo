@@ -200,9 +200,9 @@ def csv_file_chunk_reader(
     """
     # TODO: Update storage options to pyobject once the type is updated to do refcounting
     # properly.
-    assert (
-        storage_options_t == storage_options_dict_type
-    ), "Storage options don't match expected type"
+    assert storage_options_t == storage_options_dict_type, (
+        "Storage options don't match expected type"
+    )
 
     def codegen(context, builder, sig, args):
         fnty = lir.FunctionType(
@@ -523,9 +523,9 @@ def csv_distributed_run(
     # At most one of the table and the index
     # can be dead because otherwise the whole
     # node should have already been removed.
-    assert not (
-        csv_node.index_column_index is None and not final_usecols
-    ), "At most one of table and index should be dead if the CSV IR node is live"
+    assert not (csv_node.index_column_index is None and not final_usecols), (
+        "At most one of table and index should be dead if the CSV IR node is live"
+    )
     if csv_node.index_column_index is None:
         # If the index_col is dead, remove the node.
         nodes.pop(-1)
@@ -683,7 +683,7 @@ def _get_pd_dtype_str(t):
 compiled_funcs = []
 
 
-@numba.njit
+@numba.njit(cache=True)
 def check_nrows_skiprows_value(nrows, skiprows):
     """Check at runtime that nrows and skiprows values are >= 0"""
     # Corner case: if user did nrows=-1, this will pass. -1 to mean all rows.

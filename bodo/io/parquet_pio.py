@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import random
 import time
@@ -9,7 +10,6 @@ from collections import defaultdict
 from typing import Any
 from urllib.parse import ParseResult, urlparse
 
-import llvmlite.binding as ll
 import numpy as np
 import pyarrow  # noqa
 import pyarrow as pa
@@ -20,7 +20,6 @@ from numba.core import types
 from numba.extending import (
     NativeValue,
     box,
-    intrinsic,
     models,
     overload,
     register_model,
@@ -138,7 +137,7 @@ class ParquetFileInfo(FileInfo):
         self.use_hive = use_hive
         super().__init__()
 
-    def _get_schema(self, fname):
+    def _get_schema(self, fname) -> FileSchema:
         try:
             return parquet_file_schema(
                 fname,
@@ -427,7 +426,7 @@ def get_fpath_without_protocol_prefix(
         tuple[str | list[str], str]: Filepath(s) without the prefix
             and the prefix itself.
     """
-    if protocol in {"abfs", "abfss"} and bodo.enable_azure_fs:  # pragma: no cover
+    if protocol in {"abfs", "abfss"}:  # pragma: no cover
         # PyArrow AzureBlobFileSystem is initialized with account_name only
         # so the host / container name should be included in the files
         prefix = f"{protocol}://"
@@ -450,7 +449,7 @@ def get_fpath_without_protocol_prefix(
     prefix = ""
     if protocol == "s3":
         prefix = "s3://"
-    elif protocol in {"hdfs", "abfs", "abfss"}:
+    elif protocol == "hdfs":
         # HDFS filesystem is initialized with host:port info. Once
         # initialized, the filesystem needs the <protocol>://<host><port>
         # prefix removed to query and access files
@@ -468,6 +467,45 @@ def get_fpath_without_protocol_prefix(
     else:
         fpath_noprefix = fpath
     return fpath_noprefix, prefix
+
+
+def fpath_without_protocol_prefix(fpath: str) -> str:
+    """
+    Get the filepath(s) without the prefix associated with
+    the protocol. e.g. in the s3 case, this will remove the
+    "s3://" from the start of the path(s).
+
+    Args:
+        fpath (str | list[str]): Filepath or list of filepaths.
+
+    Returns:
+        tuple[str | list[str], str]: Filepath(s) without the prefix
+            and the prefix itself.
+    """
+    parsed_url = urlparse(fpath)
+    protocol = parsed_url.scheme
+
+    if protocol in {"abfs", "abfss", "wasb", "wasbs"}:
+        # pragma: no cover
+        # PyArrow AzureBlobFileSystem is initialized with account_name only
+        # so the host / container name should be included in the files
+        url = urlparse(fpath)
+        container = (
+            parsed_url.netloc if parsed_url.username is None else parsed_url.username
+        )
+        return f"{container}{url.path}"
+
+    prefix = ""
+
+    if protocol == "hdfs":
+        # HDFS filesystem is initialized with host:port info. Once
+        # initialized, the filesystem needs the <protocol>://<host><port>
+        # prefix removed to query and access files
+        prefix = f"{protocol}://{parsed_url.netloc}"
+    elif protocol in {"s3", "gcs", "gs"}:
+        prefix = f"{protocol}://"
+
+    return fpath[len(prefix) :]
 
 
 def get_bodo_pq_dataset_from_fpath(
@@ -1201,28 +1239,26 @@ def _add_categories_to_pq_dataset(pq_dataset):
     pq_dataset._category_info = category_info
 
 
-def get_pandas_metadata(schema, num_pieces):
+def get_pandas_metadata(schema) -> tuple[list[str | dict], dict[str, bool | None]]:
     # find pandas index column if any
     # TODO: other pandas metadata like dtypes needed?
     # https://pandas.pydata.org/pandas-docs/stable/development/developer.html
-    index_col = None
+    index_cols = []
     # column_name -> is_nullable (or None if unknown)
     nullable_from_metadata: defaultdict[str, bool | None] = defaultdict(lambda: None)
-    key = b"pandas"
-    if schema.metadata is not None and key in schema.metadata:
-        import json
-
-        pandas_metadata = json.loads(schema.metadata[key].decode("utf8"))
+    KEY = b"pandas"
+    if schema.metadata is not None and KEY in schema.metadata:
+        pandas_metadata = json.loads(schema.metadata[KEY].decode("utf8"))
         if pandas_metadata is None:
-            return index_col, nullable_from_metadata
+            return [], nullable_from_metadata
 
-        n_indices = len(pandas_metadata["index_columns"])
-        if n_indices > 1:
-            raise BodoError("read_parquet: MultiIndex not supported yet")
-        index_col = pandas_metadata["index_columns"][0] if n_indices else None
+        index_cols = pandas_metadata["index_columns"]
         # ignore non-str/dict index metadata
-        if not isinstance(index_col, str) and not isinstance(index_col, dict):
-            index_col = None
+        index_cols = [
+            index_col
+            for index_col in index_cols
+            if isinstance(index_col, str) or isinstance(index_col, dict)
+        ]
 
         for col_dict in pandas_metadata["columns"]:
             col_name = col_dict["name"]
@@ -1235,7 +1271,7 @@ def get_pandas_metadata(schema, num_pieces):
                     nullable_from_metadata[col_name] = True
                 else:
                     nullable_from_metadata[col_name] = False
-    return index_col, nullable_from_metadata
+    return index_cols, nullable_from_metadata
 
 
 def get_str_columns_from_pa_schema(pa_schema: pa.Schema) -> list[str]:
@@ -1373,7 +1409,6 @@ def parquet_file_schema(
 
     partition_names = pq_dataset.partition_names
     pa_schema = pq_dataset.schema
-    num_pieces = len(pq_dataset.pieces)
 
     # Get list of string columns
     str_columns = get_str_columns_from_pa_schema(pa_schema)
@@ -1407,10 +1442,11 @@ def parquet_file_schema(
     # NOTE: use arrow schema instead of the dataset schema to avoid issues with
     # names of list types columns (arrow 0.17.0)
     # col_names is an array that contains all the column's name and
-    # index's name if there is one, otherwise "__index__level_0"
+    # index's name if there is one, otherwise "__index__level_0__"
     # If there is no index at all, col_names will not include anything.
     col_names = pa_schema.names
-    index_col, nullable_from_metadata = get_pandas_metadata(pa_schema, num_pieces)
+    index_cols, nullable_from_metadata = get_pandas_metadata(pa_schema)
+    index_col_names: set[str] = {name for name in index_cols if isinstance(name, str)}
     col_types_total = []
     is_supported_list = []
     arrow_types = []
@@ -1420,7 +1456,7 @@ def parquet_file_schema(
         field = pa_schema.field(c)
         dtype, supported = _get_numba_typ_from_pa_typ(
             field,
-            c == index_col,
+            c in index_col_names,
             nullable_from_metadata[c],
             pq_dataset._category_info,
             str_as_dict=c in str_as_dict,
@@ -1464,15 +1500,12 @@ def parquet_file_schema(
     for c in selected_columns:
         if c not in col_names_map:
             raise BodoError(f"Selected column {c} not in Parquet file schema")
-    if (
-        index_col
-        and not isinstance(index_col, dict)
-        and index_col not in selected_columns
-    ):
-        # if index_col is "__index__level_0" or some other name, append it.
-        # If the index column is not selected when reading parquet, the index
-        # should still be included.
-        selected_columns.append(index_col)
+    for index_col in index_cols:
+        if not isinstance(index_col, dict) and index_col not in selected_columns:
+            # if index_col is "__index__level_0__" or some other name, append it.
+            # If the index column is not selected when reading parquet, the index
+            # should still be included.
+            selected_columns.append(index_col)
 
     col_names = selected_columns
     col_indices = []
@@ -1491,7 +1524,7 @@ def parquet_file_schema(
     return (
         col_names,
         col_types,
-        index_col,
+        index_cols,
         col_indices,
         partition_names,
         unsupported_columns,
@@ -1512,202 +1545,3 @@ def _get_partition_cat_dtype(dictionary):
     else:
         cat_dtype = PDCategoricalDtype(tuple(S), elem_type, False)
     return CategoricalArrayType(cat_dtype)
-
-
-# ------------------------- Parquet Write C++ ------------------------- #
-from llvmlite import ir as lir
-from numba.core import cgutils
-
-from bodo.io import arrow_cpp
-
-ll.add_symbol("pq_write_py_entry", arrow_cpp.pq_write_py_entry)
-ll.add_symbol("pq_write_create_dir_py_entry", arrow_cpp.pq_write_create_dir_py_entry)
-ll.add_symbol("pq_write_partitioned_py_entry", arrow_cpp.pq_write_partitioned_py_entry)
-
-
-@intrinsic
-def parquet_write_table_cpp(
-    typingctx,
-    filename_t,
-    table_t,
-    col_names_t,
-    index_t,
-    write_index,
-    metadata_t,
-    compression_t,
-    is_parallel_t,
-    write_range_index,
-    start,
-    stop,
-    step,
-    name,
-    bucket_region,
-    row_group_size,
-    file_prefix,
-    convert_timedelta_to_int64,
-    timestamp_tz,
-    downcast_time_ns_to_us,
-    create_dir,
-    force_hdfs=False,
-):
-    """
-    Call C++ parquet write function
-    """
-
-    def codegen(context, builder, sig, args):
-        fnty = lir.FunctionType(
-            lir.IntType(64),
-            [
-                lir.IntType(8).as_pointer(),
-                lir.IntType(8).as_pointer(),
-                lir.IntType(8).as_pointer(),
-                lir.IntType(8).as_pointer(),
-                lir.IntType(1),
-                lir.IntType(8).as_pointer(),
-                lir.IntType(8).as_pointer(),
-                lir.IntType(1),
-                lir.IntType(1),
-                lir.IntType(32),
-                lir.IntType(32),
-                lir.IntType(32),
-                lir.IntType(8).as_pointer(),
-                lir.IntType(8).as_pointer(),
-                lir.IntType(64),
-                lir.IntType(8).as_pointer(),
-                lir.IntType(1),  # convert_timedelta_to_int64
-                lir.IntType(8).as_pointer(),  # tz
-                lir.IntType(1),  # downcast_time_ns_to_us
-                lir.IntType(1),  # create_dir
-                lir.IntType(1),  # force_hdfs
-            ],
-        )
-        fn_tp = cgutils.get_or_insert_function(
-            builder.module, fnty, name="pq_write_py_entry"
-        )
-        ret = builder.call(fn_tp, args)
-        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
-        return ret
-
-    return (
-        types.int64(
-            types.voidptr,
-            table_t,
-            col_names_t,
-            types.voidptr,
-            types.boolean,
-            types.voidptr,
-            types.voidptr,
-            types.boolean,
-            types.boolean,
-            types.int32,
-            types.int32,
-            types.int32,
-            types.voidptr,
-            types.voidptr,
-            types.int64,
-            types.voidptr,
-            types.boolean,  # convert_timedelta_to_int64
-            types.voidptr,  # tz
-            types.boolean,  # downcast_time_ns_to_us
-            types.boolean,  # create dir
-            types.boolean,  # force_hdfs
-        ),
-        codegen,
-    )
-
-
-@intrinsic
-def pq_write_create_dir(
-    typingctx,
-    filename_t,
-):
-    """
-    Call C++ parquet write directory creation function
-    """
-
-    def codegen(context, builder, sig, args):
-        fnty = lir.FunctionType(
-            lir.VoidType(),
-            [
-                lir.IntType(8).as_pointer(),
-            ],
-        )
-        fn_tp = cgutils.get_or_insert_function(
-            builder.module, fnty, name="pq_write_create_dir_py_entry"
-        )
-        builder.call(fn_tp, args)
-        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
-
-    return (
-        types.none(
-            types.voidptr,
-        ),
-        codegen,
-    )
-
-
-@intrinsic
-def parquet_write_table_partitioned_cpp(
-    typingctx,
-    filename_t,
-    data_table_t,
-    col_names_t,
-    col_names_no_partitions_t,
-    cat_table_t,
-    part_col_idxs_t,
-    num_part_col_t,
-    compression_t,
-    is_parallel_t,
-    bucket_region,
-    row_group_size,
-    file_prefix,
-    timestamp_tz,
-):
-    """
-    Call C++ parquet write partitioned function
-
-    """
-
-    def codegen(context, builder, sig, args):
-        fnty = lir.FunctionType(
-            lir.VoidType(),
-            [
-                lir.IntType(8).as_pointer(),
-                lir.IntType(8).as_pointer(),
-                lir.IntType(8).as_pointer(),
-                lir.IntType(8).as_pointer(),
-                lir.IntType(8).as_pointer(),
-                lir.IntType(8).as_pointer(),
-                lir.IntType(32),
-                lir.IntType(8).as_pointer(),
-                lir.IntType(1),
-                lir.IntType(8).as_pointer(),
-                lir.IntType(64),
-                lir.IntType(8).as_pointer(),
-                lir.IntType(8).as_pointer(),  # tz
-            ],
-        )
-        fn_tp = cgutils.get_or_insert_function(
-            builder.module, fnty, name="pq_write_partitioned_py_entry"
-        )
-        builder.call(fn_tp, args)
-        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
-
-    return (
-        types.void(
-            types.voidptr,
-            data_table_t,
-            col_names_t,
-            col_names_no_partitions_t,
-            types.voidptr,
-            types.voidptr,
-            types.int32,
-            types.voidptr,
-            types.boolean,
-            types.voidptr,
-            types.int64,
-            types.voidptr,
-            types.voidptr,  # tz
-        ),
-        codegen,
-    )

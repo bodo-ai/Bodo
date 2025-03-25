@@ -1887,7 +1887,7 @@ std::string GetStringExpression(Bodo_CTypes::CTypeEnum const& dtype,
         return std::to_string(*ptr);
     }
     if (dtype == Bodo_CTypes::DECIMAL) {
-        __int128* val = (__int128*)ptrdata;
+        __int128_t* val = (__int128_t*)ptrdata;
         return int128_decimal_to_std_string(*val, scale);
     }
     if (dtype == Bodo_CTypes::FLOAT64) {
@@ -1981,7 +1981,7 @@ void DEBUG_append_to_primitive_boolean(
 }
 
 void DEBUG_append_to_primitive_decimal(
-    const __int128* values, int64_t offset, int64_t length,
+    const __int128_t* values, int64_t offset, int64_t length,
     std::string& string_builder, const std::vector<uint8_t>& valid_elems) {
     string_builder += "[";
     for (int64_t i = 0; i < length; i++) {
@@ -1989,7 +1989,7 @@ void DEBUG_append_to_primitive_decimal(
             string_builder += ",";
         }
         if (valid_elems[i]) {
-            __int128 val = values[offset + i];
+            __int128_t val = values[offset + i];
             int scale = 18;
             string_builder += int128_decimal_to_std_string(val, scale);
         } else {
@@ -2037,7 +2037,7 @@ void DEBUG_append_to_primitive(arrow::Type::type const& type,
         DEBUG_append_to_primitive_T((double*)values, offset, length,
                                     string_builder, valid_elems);
     } else if (type == arrow::Type::DECIMAL) {
-        DEBUG_append_to_primitive_decimal((__int128*)values, offset, length,
+        DEBUG_append_to_primitive_decimal((__int128_t*)values, offset, length,
                                           string_builder, valid_elems);
     } else {
         Bodo_PyErr_SetString(PyExc_RuntimeError,
@@ -2525,21 +2525,19 @@ std::pair<size_t, size_t> get_nunique_hashes_global(
                   "get_nunique_hashes_global: MPI error on MPI_Op_free:");
     }
 
-    // Cast to known MPI-compatible type since size_t is
-    // implementation defined.
-    unsigned long local_len = static_cast<unsigned long>(len);
-    unsigned long global_len = 0;
-    CHECK_MPI(MPI_Allreduce(&local_len, &global_len, 1, MPI_UNSIGNED_LONG,
+    uint64_t local_len = static_cast<uint64_t>(len);
+    uint64_t global_len = 0;
+    CHECK_MPI(MPI_Allreduce(&local_len, &global_len, 1, MPI_UNSIGNED_LONG_LONG,
                             MPI_SUM, MPI_COMM_WORLD),
               "get_nunique_hashes_global: MPI error on MPI_Allreduce:");
 
-    unsigned long est;
+    uint64_t est;
     if (my_rank == 0) {
         hll.overwrite_registers(std::move(hll_registers));
         using std::min;
-        est = min(global_len, static_cast<unsigned long>(hll.estimate()));
+        est = min(global_len, static_cast<uint64_t>(hll.estimate()));
     }
-    CHECK_MPI(MPI_Bcast(&est, 1, MPI_UNSIGNED_LONG, 0, MPI_COMM_WORLD),
+    CHECK_MPI(MPI_Bcast(&est, 1, MPI_UNSIGNED_LONG_LONG, 0, MPI_COMM_WORLD),
               "get_nunique_hashes_global: MPI error on MPI_Bcast:");
     // cast to `size_t` to avoid compilation error on Windows
     ev.add_attribute("g_global_estimate", static_cast<size_t>(est));

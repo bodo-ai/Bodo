@@ -286,7 +286,7 @@ struct ChunkedTableArrayBuilder {
 
         for (size_t i = 0; i < idx_length; i++) {
             int64_t row_idx = idxs[i + idx_start];
-            T new_data = row_idx < 0 ? 0 : in_data[row_idx];
+            T new_data = row_idx < 0 ? static_cast<T>(0) : in_data[row_idx];
             out_data[this->size + i] = new_data;
         }
         for (size_t i = 0; i < idx_length; i++) {
@@ -426,7 +426,7 @@ struct ChunkedTableArrayBuilder {
 
         for (size_t i = 0; i < idx_length; i++) {
             int64_t row_idx = idxs[i + idx_start];
-            T new_data = row_idx < 0 ? 0 : in_data[row_idx];
+            T new_data = row_idx < 0 ? static_cast<T>(0) : in_data[row_idx];
             out_data[this->size + i] = new_data;
         }
         for (size_t i = 0; i < idx_length; i++) {
@@ -511,7 +511,7 @@ struct ChunkedTableArrayBuilder {
 
         for (size_t i = 0; i < idx_length; i++) {
             int64_t row_idx = idxs[i + idx_start];
-            T new_data = row_idx < 0 ? 0 : in_data[row_idx];
+            T new_data = row_idx < 0 ? static_cast<T>(0) : in_data[row_idx];
             out_data[this->size + i] = new_data;
         }
         this->data_array->length += idx_length;
@@ -556,7 +556,7 @@ struct ChunkedTableArrayBuilder {
 
         for (size_t i = 0; i < idx_length; i++) {
             int64_t row_idx = idxs[i + idx_start];
-            T new_data = row_idx < 0 ? 0 : in_data[row_idx];
+            T new_data = row_idx < 0 ? static_cast<T>(0) : in_data[row_idx];
             out_data[this->size + i] = new_data;
         }
         this->data_array->length += idx_length;
@@ -1088,7 +1088,7 @@ struct ChunkedTableArrayBuilder {
         // In case it's still not sufficient (single very large string
         // case), just resize to required length.
         buffer_size = std::max(buffer_size, total_memory);
-        CHECK_ARROW_MEM(
+        CHECK_ARROW_BASE(
             this->data_array->buffers[0]->Resize(buffer_size, false),
             "ChunkedTableArrayBuilder::AppendRows: Resize failed!");
         // Now simply append into the buffer.

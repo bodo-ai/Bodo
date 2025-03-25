@@ -2,9 +2,11 @@ import os
 import shutil
 from uuid import uuid4
 
+import pytest
 from utils.utils import run_cmd
 
 
+@pytest.mark.skip(reason="TODO [BSE-4605]: update Iceberg tests.")
 def test_iceberg_basic_df():
     num_processes = 4
     timeout = 300

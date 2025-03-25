@@ -339,16 +339,16 @@ inline dict_indices_t DictionaryBuilder::InsertIfNotExists(
         this->dict_buff->ReserveSpaceForStringAppend(val.size());
 
         // Resize buffers
-        CHECK_ARROW_MEM(
+        CHECK_ARROW_BASE(
             this->dict_buff->data_array->buffers[1]->SetSize(
                 (this->dict_buff->size + 2) * sizeof(offset_t)),
             "DictionaryBuilder::InsertIfNotExists: SetSize failed!");
-        CHECK_ARROW_MEM(
+        CHECK_ARROW_BASE(
             this->dict_buff->data_array->buffers[2]->SetSize(
                 arrow::bit_util::BytesForBits(this->dict_buff->size + 1)),
             "DictionaryBuilder::InsertIfNotExists: SetSize failed!");
 
-        CHECK_ARROW_MEM(
+        CHECK_ARROW_BASE(
             this->dict_buff->data_array->buffers[0]->SetSize(
                 this->dict_buff->data_array->n_sub_elems() + val.size()),
             "DictionaryBuilder::InsertIfNotExists: SetSize failed!");

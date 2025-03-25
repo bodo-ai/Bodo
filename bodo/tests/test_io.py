@@ -20,12 +20,14 @@ from bodo.tests.utils import (
     _get_dist_arg,
     _test_equal_guard,
     check_func,
+    compress_dir,
     count_array_REPs,
     count_parfor_REPs,
     get_rank,
     get_start_end,
     pytest_mark_one_rank,
     reduce_sum,
+    uncompress_dir,
 )
 from bodo.utils.testing import ensure_clean
 from bodo.utils.typing import BodoError
@@ -36,35 +38,23 @@ def compress_file(fname, dummy_extension=""):
     if bodo.get_rank() == 0:
         subprocess.run(["gzip", "-k", "-f", fname])
         subprocess.run(["bzip2", "-k", "-f", fname])
+        subprocess.run(["zstd", "-k", "-f", fname])
         if dummy_extension != "":
             os.rename(fname + ".gz", fname + ".gz" + dummy_extension)
             os.rename(fname + ".bz2", fname + ".bz2" + dummy_extension)
+            os.rename(fname + ".zst", fname + ".zst" + dummy_extension)
     bodo.barrier()
-    return [fname + ".gz" + dummy_extension, fname + ".bz2" + dummy_extension]
+    return [
+        fname + ".gz" + dummy_extension,
+        fname + ".bz2" + dummy_extension,
+        fname + ".zst" + dummy_extension,
+    ]
 
 
 def remove_files(file_names):
     if bodo.get_rank() == 0:
         for fname in file_names:
             os.remove(fname)
-    bodo.barrier()
-
-
-def compress_dir(dir_name):
-    if bodo.get_rank() == 0:
-        for fname in [
-            f
-            for f in os.listdir(dir_name)
-            if f.endswith(".csv") and os.path.getsize(dir_name + "/" + f) > 0
-        ]:
-            subprocess.run(["gzip", "-f", fname], cwd=dir_name)
-    bodo.barrier()
-
-
-def uncompress_dir(dir_name):
-    if bodo.get_rank() == 0:
-        for fname in [f for f in os.listdir(dir_name) if f.endswith(".gz")]:
-            subprocess.run(["gunzip", fname], cwd=dir_name)
     bodo.barrier()
 
 

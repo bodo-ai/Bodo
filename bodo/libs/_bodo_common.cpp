@@ -1,7 +1,6 @@
 #include "_bodo_common.h"
 
 #include <arrow/array.h>
-#include <zstd.h>
 #include <complex>
 #include <memory>
 #include <string>
@@ -540,6 +539,104 @@ std::unique_ptr<Schema> Schema::Project(
 }  // namespace bodo
 
 // ---------------------------------------------------------------------------
+
+#if defined(_WIN32)
+
+// Constructor for float/double to int128 conversion
+template <FloatOrDouble T>
+__int128_t::__int128_t(T in_val) {
+    _Word[0] = _Word[1] = 0;
+
+    // Return 0 for NaN and infinity special cases
+    if (std::isnan(in_val) || std::isinf(in_val)) {
+        return;
+    }
+
+    // Check the sign and get magnitude
+    bool negative = (in_val < 0.0f);
+    double mag =
+        negative ? -static_cast<double>(in_val) : static_cast<double>(in_val);
+
+    // If magnitude < 1, the integer part is 0
+    if (mag < 1.0L) {
+        return;
+    }
+
+    // Saturate if mag >= 2^127
+    static const double TWO_POW_127 = std::ldexpl((double)1.0, 127);
+    if (mag >= TWO_POW_127) {
+        // Saturate to INT128_MAX or INT128_MIN
+        if (!negative) {
+            _Word[0] = 0xFFFFFFFFFFFFFFFFULL;
+            _Word[1] = 0x7FFFFFFFFFFFFFFFULL;
+        } else {
+            _Word[0] = 0ULL;
+            _Word[1] = static_cast<int64_t>(0x8000000000000000ULL);
+        }
+        return;
+    }
+
+    // Divide the long double by 2^64 to get the "high" part.
+    // floorl(...) ensures we only keep the integer part.
+    static const double TWO_POW_64 = std::ldexpl((double)1.0, 64);
+
+    long double hiPart = std::floorl(mag / TWO_POW_64);
+    long double loPart = mag - hiPart * TWO_POW_64;
+
+    uint64_t lo64 = static_cast<uint64_t>(loPart);
+    uint64_t hi64 = static_cast<uint64_t>(hiPart);
+
+    _Word[0] = lo64;
+    _Word[1] = hi64;
+
+    if (negative) {
+        // -x = ~x + 1
+        uint64_t negLo = ~_Word[0] + 1ULL;
+        uint64_t negHi = ~_Word[1];
+        if (negLo == 0ULL) {
+            // carry into high part
+            negHi += 1;
+        }
+        _Word[0] = negLo;
+        _Word[1] = negHi;
+    }
+}
+
+template __int128_t::__int128_t(float in_val);
+template __int128_t::__int128_t(double in_val);
+
+// Helper for int128 for float/double conversion
+template <FloatOrDouble T>
+T __int128_t::int128_to_float() const {
+    const __int128_t& value = *this;
+
+    bool negative = (value < __int128_t(0));
+    __int128_t mag = negative ? static_cast<__int128_t>(-value)
+                              : static_cast<__int128_t>(value);
+
+    // Combine (high64 * 2^64 + low64) in a higher-precision type
+    static const double TWO_POW_64 = std::ldexpl((double)1.0, 64);
+    double temp = static_cast<double>(value._Word[1]) * TWO_POW_64 +
+                  static_cast<double>(value._Word[0]);
+
+    // If outside float range, clamp or set to infinity.
+    if (temp > std::numeric_limits<T>::max()) {
+        temp = std::numeric_limits<T>::infinity();
+    }
+
+    // Convert to float and restore sign
+    T result = static_cast<T>(temp);
+    if (negative) {
+        result = -result;
+    }
+
+    return result;
+}
+
+template float __int128_t::int128_to_float<float>() const;
+template double __int128_t::int128_to_float<double>() const;
+
+#endif
 
 std::shared_ptr<arrow::Array> to_arrow(const std::shared_ptr<array_info> arr) {
     arrow::TimeUnit::type time_unit = arrow::TimeUnit::NANO;
@@ -1753,20 +1850,6 @@ std::string get_bodo_version() {
     Py_DECREF(bodo_mod);
     Py_DECREF(version);
     return result;
-}
-
-std::string decode_zstd(std::string blob) {
-    auto const est_decomp_size =
-        ZSTD_getFrameContentSize(blob.data(), blob.size());
-    std::string decomp_buffer{};
-    decomp_buffer.resize(est_decomp_size);
-    size_t const decomp_size = ZSTD_decompress(
-        (void*)decomp_buffer.data(), est_decomp_size, blob.data(), blob.size());
-    if (decomp_size == ZSTD_CONTENTSIZE_UNKNOWN ||
-        decomp_size == ZSTD_CONTENTSIZE_ERROR) {
-        throw std::runtime_error("Malformed ZSTD decompression");
-    }
-    return decomp_buffer;
 }
 
 extern "C" {

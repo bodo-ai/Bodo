@@ -18,16 +18,52 @@ from bodo.utils.utils import is_array_typ
 from bodosql.kernels.array_kernel_utils import unopt_argument
 
 
-def is_in(arr_to_check, arr_search_vals, is_parallel=False):  # pragma: no cover
+def is_in_set_null(arr_to_check, out_arr, null_as):  # pragma: no cover
     pass
 
 
-def is_in_util(arr_to_check, arr_search_vals, is_parallel=False):  # pragma: no cover
+@overload(is_in_set_null)
+def is_in_set_null_overload(arr_to_check, out_arr, null_as):
+    """
+    Sets values in out_arr based on null values in arr_to_check and null_as
+    """
+    # BSE-4544
+    # TODO: only do this null setting in the case that arr_to_check is nullable
+    # TODO: directly copy/clone the whole bit mask
+    if null_as == types.none:
+
+        def impl(arr_to_check, out_arr, null_as):
+            for i in range(len(arr_to_check)):
+                if bodo.libs.array_kernels.isna(arr_to_check, i):
+                    bodo.libs.array_kernels.setna(out_arr, i)
+
+        return impl
+    else:
+        assert is_scalar_type(null_as)
+
+        def impl(arr_to_check, out_arr, null_as):
+            n = len(arr_to_check)
+            for i in range(n):
+                if bodo.libs.array_kernels.isna(arr_to_check, i):
+                    out_arr[i] = null_as
+
+        return impl
+
+
+def is_in(
+    arr_to_check, arr_search_vals, null_as=None, is_parallel=False
+):  # pragma: no cover
+    pass
+
+
+def is_in_util(
+    arr_to_check, arr_search_vals, null_as=None, is_parallel=False
+):  # pragma: no cover
     pass
 
 
 @overload(is_in)
-def is_in_overload(arr_to_check, arr_search_vals, is_parallel=False):
+def is_in_overload(arr_to_check, arr_search_vals, null_as=None, is_parallel=False):
     """
     Handles cases where IS_IN receives optional arguments and forwards
     the arguments to appropriate version of the real implementation.
@@ -44,6 +80,9 @@ def is_in_overload(arr_to_check, arr_search_vals, is_parallel=False):
             arr_search_vals, and set True/False in the output boolean array accordingly.
         arr_search_vals (pandas Array): The values to search for in arr_to_check. Currently, is always
             replicated
+        null_as (scalar, optional): The value to set in the output array if the corresponding value in
+            arr_to_check is null. If null_as is None, then the output array will have nulls where
+            arr_to_check has nulls. Defaults to None.
         is_parallel (bool, optional): Indicates if we should perform a distributed is_in check.
             Set in distributed pass depending on the distribution of arr_search_vals. Defaults to False.
 
@@ -55,30 +94,34 @@ def is_in_overload(arr_to_check, arr_search_vals, is_parallel=False):
         if isinstance(args[i], types.optional):  # pragma: no cover
             return unopt_argument(
                 "bodosql.kernels.is_in",
-                ["arr_to_check", "arr_search_vals", "is_parallel"],
+                ["arr_to_check", "arr_search_vals", "null_as", "is_parallel"],
                 i,
-                default_map={"is_parallel": False},
+                default_map={"null_as": None, "is_parallel": False},
             )
 
-    def impl(arr_to_check, arr_search_vals, is_parallel=False):  # pragma: no cover
-        return is_in_util(arr_to_check, arr_search_vals, is_parallel)
+    def impl(
+        arr_to_check, arr_search_vals, null_as=None, is_parallel=False
+    ):  # pragma: no cover
+        return is_in_util(arr_to_check, arr_search_vals, null_as, is_parallel)
 
     return impl
 
 
 @overload(is_in_util)
-def is_in_util_overload(arr_to_check, arr_search_vals, is_parallel=False):
+def is_in_util_overload(arr_to_check, arr_search_vals, null_as=None, is_parallel=False):
     """
     Helper function for is_in. See is_in for information on arguments
     """
 
-    assert is_array_typ(
-        arr_search_vals
-    ), f"expected argument 'arr_search_vals' to be array type. Found: {arr_search_vals}"
+    assert is_array_typ(arr_search_vals), (
+        f"expected argument 'arr_search_vals' to be array type. Found: {arr_search_vals}"
+    )
 
     if arr_to_check == types.none:
 
-        def impl(arr_to_check, arr_search_vals, is_parallel=False):  # pragma: no cover
+        def impl(
+            arr_to_check, arr_search_vals, null_as=None, is_parallel=False
+        ):  # pragma: no cover
             return None
 
         return impl
@@ -86,7 +129,9 @@ def is_in_util_overload(arr_to_check, arr_search_vals, is_parallel=False):
     if arr_to_check == arr_search_vals:
         """If the types match, we don't have to do any casting, we can just use the array isin kernel"""
 
-        def impl(arr_to_check, arr_search_vals, is_parallel=False):  # pragma: no cover
+        def impl(
+            arr_to_check, arr_search_vals, null_as=None, is_parallel=False
+        ):  # pragma: no cover
             # code modified from overload_series_isin
             n = len(arr_to_check)
             out_arr = bodo.libs.bool_arr_ext.alloc_false_bool_array(n)
@@ -94,13 +139,7 @@ def is_in_util_overload(arr_to_check, arr_search_vals, is_parallel=False):
             bodo.libs.array.array_isin(
                 out_arr, arr_to_check, arr_search_vals, is_parallel
             )
-
-            # apply the null mask from arr_to_check to out_arr to match SQL behavior
-            # TODO: only do this null setting in the case that arr_to_check is nullable
-            # TODO: directly copy/clone the whole bit mask
-            for i in range(n):
-                if bodo.libs.array_kernels.isna(arr_to_check, i):
-                    bodo.libs.array_kernels.setna(out_arr, i)
+            is_in_set_null(arr_to_check, out_arr, null_as)
 
             return out_arr
 
@@ -118,11 +157,13 @@ def is_in_util_overload(arr_to_check, arr_search_vals, is_parallel=False):
         """
 
         # Check the types match
-        assert (
-            arr_search_vals.dtype == bodo.string_type
-        ), "Internal error: arr_to_check is dict encoded, but arr_search_vals does not have string dtype"
+        assert arr_search_vals.dtype == bodo.string_type, (
+            "Internal error: arr_to_check is dict encoded, but arr_search_vals does not have string dtype"
+        )
 
-        def impl(arr_to_check, arr_search_vals, is_parallel=False):  # pragma: no cover
+        def impl(
+            arr_to_check, arr_search_vals, null_as=None, is_parallel=False
+        ):  # pragma: no cover
             # code modified from overload_series_isin
             n = len(arr_to_check)
             out_arr = bodo.libs.bool_arr_ext.alloc_false_bool_array(n)
@@ -134,13 +175,7 @@ def is_in_util_overload(arr_to_check, arr_search_vals, is_parallel=False):
             bodo.libs.array.array_isin(
                 out_arr, arr_to_check, arr_search_vals, is_parallel
             )
-
-            # apply the null mask from arr_to_check to out_arr to match SQL behavior
-            # TODO: only do this null setting in the case that arr_to_check is nullable
-            # TODO: directly copy/clone the whole bit mask from arr_to_check
-            for i in range(n):
-                if bodo.libs.array_kernels.isna(arr_to_check, i):
-                    bodo.libs.array_kernels.setna(out_arr, i)
+            is_in_set_null(arr_to_check, out_arr, null_as)
 
             return out_arr
 
@@ -152,9 +187,9 @@ def is_in_util_overload(arr_to_check, arr_search_vals, is_parallel=False):
     lhs_scalar_type = arr_to_check.dtype if is_array_typ(arr_to_check) else arr_to_check
     rhs_scalar_type = arr_search_vals.dtype
     common_scalar_typ, _ = get_common_scalar_dtype([lhs_scalar_type, rhs_scalar_type])
-    assert (
-        common_scalar_typ is not None
-    ), "Internal error in is_in_util: arguments do not have a common scalar dtype"
+    assert common_scalar_typ is not None, (
+        "Internal error in is_in_util: arguments do not have a common scalar dtype"
+    )
 
     needs_nullable_conversion = is_nullable(arr_to_check) or is_nullable(
         arr_search_vals
@@ -169,13 +204,15 @@ def is_in_util_overload(arr_to_check, arr_search_vals, is_parallel=False):
         common_scalar_typ, needs_nullable_conversion
     )
     if needs_nullable_conversion:
-        assert is_nullable(
-            unified_array_type
-        ), "Internal error in is_in_util: unified_array_type is not nullable, but is required to be"
+        assert is_nullable(unified_array_type), (
+            "Internal error in is_in_util: unified_array_type is not nullable, but is required to be"
+        )
 
     if is_array_typ(arr_to_check):
 
-        def impl(arr_to_check, arr_search_vals, is_parallel=False):  # pragma: no cover
+        def impl(
+            arr_to_check, arr_search_vals, null_as=None, is_parallel=False
+        ):  # pragma: no cover
             # code modified from overload_series_isin
             n = len(arr_to_check)
             out_arr = bodo.libs.bool_arr_ext.alloc_false_bool_array(n)
@@ -192,20 +229,16 @@ def is_in_util_overload(arr_to_check, arr_search_vals, is_parallel=False):
             bodo.libs.array.array_isin(
                 out_arr, arr_to_check, arr_search_vals, is_parallel
             )
-
-            # apply the null mask from arr_to_check to out_arr to match SQL behavior
-            # TODO: only do this null setting in the case that arr_to_check is nullable
-            # TODO: directly copy/clone the whole bit mask from arr_to_check
-            for i in range(n):
-                if bodo.libs.array_kernels.isna(arr_to_check, i):
-                    bodo.libs.array_kernels.setna(out_arr, i)
+            is_in_set_null(arr_to_check, out_arr, null_as)
 
             return out_arr
 
         return impl
     elif is_scalar_type(arr_to_check):
 
-        def impl(arr_to_check, arr_search_vals, is_parallel=False):  # pragma: no cover
+        def impl(
+            arr_to_check, arr_search_vals, null_as=None, is_parallel=False
+        ):  # pragma: no cover
             # convert scalar to array, do the operation, and then return the scalar value
             arr_to_check = bodo.utils.conversion.fix_arr_dtype(
                 bodo.utils.conversion.coerce_to_array(

@@ -20,6 +20,7 @@ import bodosql
 from bodo.mpi4py import MPI
 from bodo.tests.conftest import iceberg_database  # noqa
 from bodo.tests.iceberg_database_helpers.utils import (
+    SparkFilesystemIcebergCatalog,
     create_iceberg_table,
     get_spark,
 )
@@ -175,7 +176,12 @@ def test_drop_table(iceberg_filesystem_catalog, iceberg_database, memory_leak_ch
     def impl(bc, query):
         return bc.sql(query)
 
-    spark = get_spark(path=iceberg_filesystem_catalog.connection_string)
+    spark = get_spark(
+        SparkFilesystemIcebergCatalog(
+            catalog_name="hadoop_prod",
+            path=iceberg_filesystem_catalog.connection_string,
+        )
+    )
     table_name = create_simple_ddl_table(spark)
     db_schema, _ = iceberg_database(table_name, spark=spark)
     existing_tables = spark.sql(
@@ -202,7 +208,12 @@ def test_iceberg_drop_table_python(iceberg_filesystem_catalog, memory_leak_check
     Tests that the filesystem catalog can drop a table using
     bc.sql from Python.
     """
-    spark = get_spark(path=iceberg_filesystem_catalog.connection_string)
+    spark = get_spark(
+        SparkFilesystemIcebergCatalog(
+            catalog_name="hadoop_prod",
+            path=iceberg_filesystem_catalog.connection_string,
+        )
+    )
     table_name = create_simple_ddl_table(spark)
     db_schema = "iceberg_db"
     existing_tables = spark.sql(
@@ -229,7 +240,12 @@ def test_iceberg_drop_table_execute_ddl(iceberg_filesystem_catalog, memory_leak_
     Tests that the filesystem catalog can drop a table using
     bc.execute_ddl from Python.
     """
-    spark = get_spark(path=iceberg_filesystem_catalog.connection_string)
+    spark = get_spark(
+        SparkFilesystemIcebergCatalog(
+            catalog_name="hadoop_prod",
+            path=iceberg_filesystem_catalog.connection_string,
+        )
+    )
     table_name = create_simple_ddl_table(spark)
     db_schema = "iceberg_db"
     existing_tables = spark.sql(
@@ -259,7 +275,12 @@ def test_drop_table_not_found(iceberg_filesystem_catalog, memory_leak_check):
         def impl(bc, query):
             return bc.sql(query)
 
-        spark = get_spark(path=iceberg_filesystem_catalog.connection_string)
+        spark = get_spark(
+            SparkFilesystemIcebergCatalog(
+                catalog_name="hadoop_prod",
+                path=iceberg_filesystem_catalog.connection_string,
+            )
+        )
         # Create an unused table to ensure the database is created
         created_table = create_simple_ddl_table(spark)
         # Create a garbage table name.
@@ -268,9 +289,9 @@ def test_drop_table_not_found(iceberg_filesystem_catalog, memory_leak_check):
         existing_tables = spark.sql(
             f"show tables in hadoop_prod.{db_schema} like '{table_name}'"
         ).toPandas()
-        assert (
-            len(existing_tables) == 0
-        ), "Table Name already exists. Please choose a different table name."
+        assert len(existing_tables) == 0, (
+            "Table Name already exists. Please choose a different table name."
+        )
         with pytest.raises(BodoError, match=""):
             query = f"DROP TABLE {table_name}"
             bc = bodosql.BodoSQLContext(catalog=iceberg_filesystem_catalog)
@@ -295,7 +316,12 @@ def test_drop_table_not_found_if_exists(iceberg_filesystem_catalog, memory_leak_
         def impl(bc, query):
             return bc.sql(query)
 
-        spark = get_spark(path=iceberg_filesystem_catalog.connection_string)
+        spark = get_spark(
+            SparkFilesystemIcebergCatalog(
+                catalog_name="hadoop_prod",
+                path=iceberg_filesystem_catalog.connection_string,
+            )
+        )
         # Create an unused table to ensure the database is created
         created_table = create_simple_ddl_table(spark)
         # Create a garbage table name.
@@ -304,9 +330,9 @@ def test_drop_table_not_found_if_exists(iceberg_filesystem_catalog, memory_leak_
         existing_tables = spark.sql(
             f"show tables in hadoop_prod.{db_schema} like '{table_name}'"
         ).toPandas()
-        assert (
-            len(existing_tables) == 0
-        ), "Table Name already exists. Please choose a different table name."
+        assert len(existing_tables) == 0, (
+            "Table Name already exists. Please choose a different table name."
+        )
         query = f"DROP TABLE IF EXISTS {table_name}"
         py_output = pd.DataFrame(
             {
@@ -338,7 +364,12 @@ def test_describe_table(
     table.
     """
     try:
-        spark = get_spark(path=iceberg_filesystem_catalog.connection_string)
+        spark = get_spark(
+            SparkFilesystemIcebergCatalog(
+                catalog_name="hadoop_prod",
+                path=iceberg_filesystem_catalog.connection_string,
+            )
+        )
         table_name = create_simple_ddl_table(spark)
         db_schema = "iceberg_db"
         existing_tables = spark.sql(
@@ -452,7 +483,12 @@ def test_iceberg_drop_view_unsupported_catalog_error_non_view(
     """
     Tests on the filesystem catalog to drop an non view file
     """
-    spark = get_spark(path=iceberg_filesystem_catalog.connection_string)
+    spark = get_spark(
+        SparkFilesystemIcebergCatalog(
+            catalog_name="hadoop_prod",
+            path=iceberg_filesystem_catalog.connection_string,
+        )
+    )
     table_name = create_simple_ddl_table(spark)
     db_schema = "iceberg_db"
     existing_tables = spark.sql(
@@ -578,7 +614,12 @@ def test_iceberg_drop_table_purge_sql(
     """
     Tests that the filesystem catalog can drop a table and delete all underlying files with or without purge.
     """
-    spark = get_spark(path=iceberg_filesystem_catalog.connection_string)
+    spark = get_spark(
+        SparkFilesystemIcebergCatalog(
+            catalog_name="hadoop_prod",
+            path=iceberg_filesystem_catalog.connection_string,
+        )
+    )
     table_name = create_simple_ddl_table(spark)
     purge_str = "PURGE" if purge else ""
     db_schema = "iceberg_db"
@@ -610,7 +651,12 @@ def test_iceberg_drop_table_purge_execute_dll(
     """
     Tests that the filesystem catalog can drop a table and delete all underlying files with or without purge.
     """
-    spark = get_spark(path=iceberg_filesystem_catalog.connection_string)
+    spark = get_spark(
+        SparkFilesystemIcebergCatalog(
+            catalog_name="hadoop_prod",
+            path=iceberg_filesystem_catalog.connection_string,
+        )
+    )
     table_name = create_simple_ddl_table(spark)
     purge_str = "PURGE" if purge else ""
     db_schema = "iceberg_db"
@@ -640,7 +686,12 @@ def test_iceberg_drop_table_purge(purge, iceberg_filesystem_catalog, memory_leak
     """
     Tests that the filesystem catalog can drop a table and delete all underlying files with or without purge.
     """
-    spark = get_spark(path=iceberg_filesystem_catalog.connection_string)
+    spark = get_spark(
+        SparkFilesystemIcebergCatalog(
+            catalog_name="hadoop_prod",
+            path=iceberg_filesystem_catalog.connection_string,
+        )
+    )
     table_name = create_simple_ddl_table(spark)
     purge_str = "PURGE" if purge else ""
     db_schema = "iceberg_db"

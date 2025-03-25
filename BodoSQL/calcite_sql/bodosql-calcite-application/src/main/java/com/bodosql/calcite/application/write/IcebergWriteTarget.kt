@@ -45,8 +45,9 @@ open class IcebergWriteTarget(
             listOf(
                 operatorID.toExpr(),
                 icebergConnectionString,
-                Expr.StringLiteral(tableName),
-                Expr.StringLiteral(schema.joinToString(separator = "/")),
+                Expr.StringLiteral(
+                    if (schema.size == 0) tableName else schema.joinToString(separator = ".") + "." + tableName,
+                ),
                 columnNamesGlobal,
                 Expr.StringLiteral(ifExistsBehavior.asToSqlKwArgument()),
                 ctasMetaGlobal,

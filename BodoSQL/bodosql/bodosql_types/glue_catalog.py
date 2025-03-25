@@ -119,7 +119,7 @@ def unbox_glue_catalog(typ, val, c):
 @numba.jit
 def get_conn_str(warehouse):
     """Get the connection string for a Glue Iceberg catalog."""
-    return f"glue?warehouse={warehouse}"
+    return f"iceberg+glue?warehouse={warehouse}"
 
 
 class GlueConnectionType(IcebergConnectionType):
@@ -134,9 +134,6 @@ class GlueConnectionType(IcebergConnectionType):
         self.conn_str = get_conn_str(warehouse)
 
         super().__init__(name=f"GlueConnectionType({warehouse=})")
-
-    def get_conn_str(self) -> str:
-        return "iceberg+" + self.conn_str
 
 
 @intrinsic(prefer_literal=True)

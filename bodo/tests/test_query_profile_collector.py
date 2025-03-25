@@ -1,5 +1,6 @@
 import json
 import os
+import sys
 
 import numpy as np
 import pandas as pd
@@ -30,6 +31,10 @@ from bodo.tests.utils import (
     temp_env_override,
 )
 from bodo.utils.typing import ColNamesMetaType, MetaType
+
+pytestmark = pytest.mark.skipif(
+    sys.platform == "win32", reason="TODO[BSE-4580]: fix nightly test hangs on Windows"
+)
 
 
 def test_query_profile_collection_compiles(memory_leak_check):
@@ -200,12 +205,12 @@ def test_join_row_count_collection(memory_leak_check):
     )
     build_output_row_count = reduce_sum(build_output_row_count)
     probe_output_row_count = reduce_sum(probe_output_row_count)
-    assert (
-        build_output_row_count == 0
-    ), f"Expected build_output_row_count to be 0 but it was {build_output_row_count} instead"
-    assert (
-        probe_output_row_count == 18750000
-    ), f"Expected probe_output_row_count to be 18750000 but it was {probe_output_row_count} instead"
+    assert build_output_row_count == 0, (
+        f"Expected build_output_row_count to be 0 but it was {build_output_row_count} instead"
+    )
+    assert probe_output_row_count == 18750000, (
+        f"Expected probe_output_row_count to be 18750000 but it was {probe_output_row_count} instead"
+    )
 
 
 def test_groupby_row_count_collection(memory_leak_check):
@@ -306,9 +311,9 @@ def test_groupby_row_count_collection(memory_leak_check):
         bodo.libs.query_profile_collector.get_output_row_counts_for_op_stage(0, 2)
     )
     produce_output_output_row_count = reduce_sum(produce_output_output_row_count)
-    assert (
-        produce_output_output_row_count == 1000
-    ), f"Expected produce_output_output_row_count to be 1000 but it was {produce_output_output_row_count} instead"
+    assert produce_output_output_row_count == 1000, (
+        f"Expected produce_output_output_row_count to be 1000 but it was {produce_output_output_row_count} instead"
+    )
 
 
 @pytest_mark_snowflake
@@ -358,9 +363,9 @@ def test_snowflake_read_row_count_collection(memory_leak_check):
         bodo.libs.query_profile_collector.get_output_row_counts_for_op_stage(0, 1)
     )
     reader_output_row_count = reduce_sum(reader_output_row_count)
-    assert (
-        reader_output_row_count == 6001215
-    ), f"Expected reader_output_row_count to be 6001215, but it was {reader_output_row_count} instead."
+    assert reader_output_row_count == 6001215, (
+        f"Expected reader_output_row_count to be 6001215, but it was {reader_output_row_count} instead."
+    )
 
 
 @pytest.mark.iceberg
@@ -416,9 +421,9 @@ def test_iceberg_read_row_count_collection(
         bodo.libs.query_profile_collector.get_output_row_counts_for_op_stage(0, 1)
     )
     reader_output_row_count = reduce_sum(reader_output_row_count)
-    assert (
-        reader_output_row_count == 200
-    ), f"Expected reader_output_row_count to be 200, but it was {reader_output_row_count} instead."
+    assert reader_output_row_count == 200, (
+        f"Expected reader_output_row_count to be 200, but it was {reader_output_row_count} instead."
+    )
 
 
 @pytest.mark.parquet
@@ -457,9 +462,9 @@ def test_parquet_read_row_count_collection(datapath, memory_leak_check):
         bodo.libs.query_profile_collector.get_output_row_counts_for_op_stage(0, 1)
     )
     reader_output_row_count = reduce_sum(reader_output_row_count)
-    assert (
-        reader_output_row_count == 120515
-    ), f"Expected reader_output_row_count to be 120515, but it was {reader_output_row_count} instead."
+    assert reader_output_row_count == 120515, (
+        f"Expected reader_output_row_count to be 120515, but it was {reader_output_row_count} instead."
+    )
 
 
 def test_hash_join_metrics_collection(memory_leak_check, tmp_path):

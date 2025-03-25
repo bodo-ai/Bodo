@@ -1,7 +1,5 @@
 """
 Top-level init file for bodo package
-
-isort:skip_file
 """
 
 
@@ -168,10 +166,6 @@ def get_sql_config_str() -> str:
     )
     return conf_str
 
-
-# Should Bodo use the new Arrow Azure FileSystem implementation instead of
-# the old HDFS implementation.
-enable_azure_fs = os.environ.get("BODO_USE_AZURE_FS", "1") != "0"
 check_parquet_schema = os.environ.get("BODO_CHECK_PARQUET_SCHEMA", "0") != "0"
 
 # --------------------------- End Streaming Config ---------------------------
@@ -199,8 +193,12 @@ import pyarrow.parquet
 
 if platform.system() == "Windows":
     # importing our modified mpi4py (see buildscripts/mpi4py-pip/patch-3.1.2.diff)
-    # guarantees that msmpi.dll is loaded, and therefore found when MPI calls are made
-    import mpi4py
+    # guarantees that impi.dll is loaded, and therefore found when MPI calls are made
+    import bodo.mpi4py
+
+    # For Windows pip we need to ensure pyarrow DLLs are added to the search path
+    for lib_dir in pyarrow.get_library_dirs():
+        os.add_dll_directory(lib_dir)
 
 # set number of threads to 1 for Numpy to avoid interference with Bodo's parallelism
 # NOTE: has to be done before importing Numpy, and for all threading backends
@@ -300,8 +298,6 @@ import bodo.libs.table_builder
 import bodo.io
 
 # Rexport HDFS Locations
-# Needed for bodo.io.snowflake_write
-from bodo.io.snowflake_hdfs import HDFS_CORE_SITE_LOC_DIR, HDFS_CORE_SITE_LOC
 import bodo.io.np_io
 import bodo.io.csv_iterator_ext
 import bodo.io.iceberg

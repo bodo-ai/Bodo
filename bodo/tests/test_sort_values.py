@@ -1306,7 +1306,7 @@ def test_sort_values_input_boundaries(memory_leak_check):
                 )
             ],
             [
-                np.array([0, 5, 10]),
+                np.array([0, 5, 10], dtype=np.int64),
             ],
             float("-inf"),
             float("inf"),
@@ -1822,9 +1822,9 @@ def test_sort_table_for_interval_join(
 
         # Verify that it has all the expected rows:
         out_len_g = reduce_sum(out.shape[0])
-        assert (
-            out_len_g == in_df.shape[0]
-        ), f"Expected total length to be the same before and after sorting the points. Expected: {in_df.shape[0]}. Got: {out_len_g}"
+        assert out_len_g == in_df.shape[0], (
+            f"Expected total length to be the same before and after sorting the points. Expected: {in_df.shape[0]}. Got: {out_len_g}"
+        )
 
     def check_correctness_interval(
         in_df: pd.DataFrame,
@@ -1848,13 +1848,13 @@ def test_sort_table_for_interval_join(
                 out["B"][i] = max_val
             if pd.isna(out["A"][i]):
                 out["A"][i] = max_val
-            assert (
-                out["A"][i] <= out["B"][i]
-            ), f"Interval sort should skip bad rows. Found ({out['A'][i]}, {out['B'][i]})."
+            assert out["A"][i] <= out["B"][i], (
+                f"Interval sort should skip bad rows. Found ({out['A'][i]}, {out['B'][i]})."
+            )
             assert left_bound <= out["B"][i], f"Expected {left_bound} <= {out['B'][i]}"
-            assert (
-                out["A"][i] <= right_bound
-            ), f"Expected {out['A'][i]} <= {right_bound}"
+            assert out["A"][i] <= right_bound, (
+                f"Expected {out['A'][i]} <= {right_bound}"
+            )
 
         # Verify that it's sorted correctly:
         sorted_py = out.sort_values(by=["A", "B"])

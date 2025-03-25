@@ -44,7 +44,7 @@ this_module = sys.modules[__name__]
 
 # We don't technically need to get class from the method,
 # but it's useful to avoid IDE not found errors.
-BodoSGDClassifierType = install_py_obj_class(
+BodoSGDClassifierType, _ = install_py_obj_class(
     types_name="sgd_classifier_type",
     python_type=sklearn.linear_model.SGDClassifier,
     module=this_module,
@@ -310,7 +310,7 @@ def get_sgdc_coef(m):
 
 # We don't technically need to get class from the method,
 # but it's useful to avoid IDE not found errors.
-BodoSGDRegressorType = install_py_obj_class(
+BodoSGDRegressorType, _ = install_py_obj_class(
     types_name="sgd_regressor_type",
     python_type=sklearn.linear_model.SGDRegressor,
     module=this_module,
@@ -480,7 +480,7 @@ def overload_sgdr_model_score(
 
 # We don't technically need to get class from the method,
 # but it's useful to avoid IDE not found errors.
-BodoLogisticRegressionType = install_py_obj_class(
+BodoLogisticRegressionType, _ = install_py_obj_class(
     types_name="logistic_regression_type",
     python_type=sklearn.linear_model.LogisticRegression,
     module=this_module,
@@ -671,7 +671,7 @@ def get_logisticR_coef(m):
 
 # We don't technically need to get class from the method,
 # but it's useful to avoid IDE not found errors.
-BodoLinearRegressionType = install_py_obj_class(
+BodoLinearRegressionType, _ = install_py_obj_class(
     types_name="linear_regression_type",
     python_type=sklearn.linear_model.LinearRegression,
     module=this_module,
@@ -793,7 +793,7 @@ def get_lr_coef(m):
 
 # We don't technically need to get class from the method,
 # but it's useful to avoid IDE not found errors.
-BodoLassoType = install_py_obj_class(
+BodoLassoType, _ = install_py_obj_class(
     types_name="lasso_type",
     python_type=sklearn.linear_model.Lasso,
     module=this_module,
@@ -931,7 +931,7 @@ def overload_lasso_score(
 
 # We don't technically need to get class from the method,
 # but it's useful to avoid IDE not found errors.
-BodoRidgeType = install_py_obj_class(
+BodoRidgeType, _ = install_py_obj_class(
     types_name="ridge_type",
     python_type=sklearn.linear_model.Ridge,
     module=this_module,

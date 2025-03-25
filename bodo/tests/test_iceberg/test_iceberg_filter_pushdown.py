@@ -2,18 +2,22 @@
 Basic E2E tests for each type of filter pushdown on Iceberg tables.
 """
 
+import datetime
 import io
 
 import numpy as np
 import pandas as pd
+import pyarrow as pa
+import pyiceberg.expressions as pie
 import pytest
+from pyiceberg.expressions.literals import TimeLiteral
 
 import bodo
+from bodo.io.iceberg.catalog.dir import DirCatalog
 from bodo.tests.iceberg_database_helpers.utils import (
     PartitionField,
     create_iceberg_table,
 )
-from bodo.tests.test_iceberg.test_stream_iceberg_write import _write_iceberg_table
 from bodo.tests.user_logging_utils import (
     check_logger_msg,
     check_logger_no_msg,
@@ -23,6 +27,12 @@ from bodo.tests.user_logging_utils import (
 from bodo.tests.utils import check_func, pytest_mark_one_rank, run_rank0
 
 pytestmark = pytest.mark.iceberg
+
+
+def _write_iceberg_table(input_df: pd.DataFrame, warehouse: str, table_id: str):
+    catalog = DirCatalog("write_catalog", warehouse=warehouse)
+    table = catalog.create_table(table_id, pa.Schema.from_pandas(input_df))
+    table.append(pa.table(input_df))
 
 
 @pytest_mark_one_rank
@@ -37,29 +47,21 @@ def test_filter_pushdown_time_direct(iceberg_database, iceberg_table_conn):
     input_df = pd.DataFrame(
         {
             "ID": np.arange(10),
-            "time_col": [bodo.Time(i, i, precision=9) for i in range(10)],
+            "time_col": [
+                pa.scalar(datetime.time(i, i), type=pa.time64("us")) for i in range(10)
+            ],
         }
     )
+
+    table_id = f"{db_schema}.{table_name}"
+    _write_iceberg_table(input_df, warehouse_loc, table_id)
+    filter_expr = pie.NotEqualTo(
+        "time_col", TimeLiteral((10 * 60 + 10) * 60 * 1_000_000)
+    )
+
     from bodo.io.iceberg import get_iceberg_file_list_parallel
 
-    # Based on the documentation here: https://spark.apache.org/docs/latest/sql-ref-datatypes.html
-    # Spark SQL does not support time data type, so for now, we just handle the write with Bodo itself.
-    # This also causes issues because we can't do partitioning with the bodo write, so we can't
-    # do any sort of correctness testing. Snowflake also can't write the partition spec at this time,
-    # so we can't do the workaround that way either.
-    _write_iceberg_table(input_df, table_name, conn, db_schema, None, "replace")
-
-    from bodo_iceberg_connector.filter_to_java import ColumnRef, FilterExpr, Scalar
-
-    from bodo.io.iceberg import format_iceberg_conn
-
-    filter_expr = FilterExpr(
-        "!=", [ColumnRef("time_col"), Scalar(bodo.Time(10, 10, precision=9))]
-    )
-
-    get_iceberg_file_list_parallel(
-        format_iceberg_conn(conn), db_schema, table_name, filter_expr
-    )
+    get_iceberg_file_list_parallel(conn, table_id, filter_expr)
 
 
 @pytest.mark.skip(
@@ -76,7 +78,7 @@ def test_filter_pushdown_time(iceberg_database, iceberg_table_conn):
 
     # Based on the documentation here: https://spark.apache.org/docs/latest/sql-ref-datatypes.html
     # Spark SQL does not support time data type, so for now, we just handle the write with Bodo itself.
-    _write_iceberg_table(input_df, table_name, conn, db_schema, None, "replace")
+    _write_iceberg_table(input_df, table_name, conn, db_schema)
 
     def impl(table_name, conn, db_schema):
         df = pd.read_sql_table(table_name, conn, db_schema)
@@ -306,4 +308,4 @@ def test_filter_pushdown_logging_msg(iceberg_database, iceberg_table_conn):
         )
         check_logger_msg(stream, "Total number of files is 100. Reading 10 files:")
         for i in range(10):
-            check_logger_msg(stream, f"partition_col_1=0/partition_col_2={i*10}")
+            check_logger_msg(stream, f"partition_col_1=0/partition_col_2={i * 10}")

@@ -1,6 +1,9 @@
 #include "./_query_profile_collector.h"
 #include <fmt/core.h>
 #include <sys/stat.h>
+#ifdef _WIN32
+#include <direct.h>  // _mkdir
+#endif
 #include <boost/json.hpp>
 #include <chrono>
 #include <iostream>
@@ -16,6 +19,14 @@
     if (tracing_level == 0) {       \
         return;                     \
     }
+
+int makedir(std::string path, int mode) {
+#ifdef _WIN32
+    return _mkdir(path.data());
+#else
+    return mkdir(path.data(), mode);
+#endif
+}
 
 void QueryProfileCollector::Init() {
     QueryProfileCollector new_query_profile_collector;
@@ -47,7 +58,7 @@ void QueryProfileCollector::Init() {
             exists = true;
         }
         if (!exists) {
-            int res = mkdir(parent_dir.data(), 0700);
+            int res = makedir(parent_dir.data(), 0700);
             if (res != 0) {
                 // TODO XXX Needs error synchronization!
                 throw std::runtime_error(
@@ -74,7 +85,7 @@ void QueryProfileCollector::Init() {
         output_dir = fmt::format("{}/run_{}{:02}{:02}_{:02}{:02}{:02}",
                                  parent_dir, year, month, day, hour.count(),
                                  minute.count(), second.count());
-        int res = mkdir(output_dir.data(), 0700);
+        int res = makedir(output_dir.data(), 0700);
         if (res != 0) {
             // TODO XXX Needs error synchronization!
             throw std::runtime_error(
@@ -268,7 +279,7 @@ void QueryProfileCollector::Finalize(int64_t verbose_level) {
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
     if (rank == 0 && verbose_level > 0) {
-        std::cerr << "Writing profiles to " << output_dir << "\n";
+        std::cout << "Writing profiles to " << output_dir << "\n";
     }
 
     boost::json::object profile;

@@ -540,7 +540,7 @@ inline void collecting_non_nan_entries(bodo::vector<T> &my_array,
     const uint8_t *null_bitmask = (uint8_t *)arr->null_bitmask();
     for (size_t i_row = 0; i_row < arr->length; i_row++) {
         if (GetBit(null_bitmask, i_row)) {
-            __int128 eVal = arr->at<__int128>(i_row);
+            __int128_t eVal = arr->at<__int128_t>(i_row);
             double eVal_d = decimal_to_double(eVal);
             my_array.emplace_back(eVal_d);
         }
@@ -798,7 +798,7 @@ std::shared_ptr<array_info> compute_ghost_rows(std::shared_ptr<array_info> arr,
     bodo::vector<size_t> ListPrevSizes, ListNextSizes;
     size_t loc_nrows = arr->length;
     MPI_Datatype mpi_row_typ = MPI_LONG_LONG_INT;
-    using T_row_typ = long;
+    using T_row_typ = int64_t;
     int k = 0;
     while (true) {
         k++;

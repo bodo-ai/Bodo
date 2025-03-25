@@ -99,7 +99,7 @@ class DatetimeAttribute(AttributeTemplate):
 # corresponding to this Date object. This is useful
 # for cases such as comparison operators where we
 # need all 3 values.
-@overload_attribute(DatetimeDateType, "_ymd")
+@overload_attribute(DatetimeDateType, "_ymd", jit_options={"cache": True})
 def overload_datetime_date_get_ymd(a):
     def get_ymd(a):  # pragma: no cover
         return _ord2ymd(cast_datetime_date_to_int(a) + UNIX_EPOCH_ORD)
@@ -107,7 +107,7 @@ def overload_datetime_date_get_ymd(a):
     return get_ymd
 
 
-@overload_attribute(DatetimeDateType, "year")
+@overload_attribute(DatetimeDateType, "year", jit_options={"cache": True})
 def overload_datetime_date_get_year(a):
     def get_year(a):  # pragma: no cover
         year, _, _ = _ord2ymd(cast_datetime_date_to_int(a) + UNIX_EPOCH_ORD)
@@ -116,7 +116,7 @@ def overload_datetime_date_get_year(a):
     return get_year
 
 
-@overload_attribute(DatetimeDateType, "month")
+@overload_attribute(DatetimeDateType, "month", jit_options={"cache": True})
 def overload_datetime_date_get_month(a):
     def get_month(a):  # pragma: no cover
         _, month, _ = _ord2ymd(cast_datetime_date_to_int(a) + UNIX_EPOCH_ORD)
@@ -125,7 +125,7 @@ def overload_datetime_date_get_month(a):
     return get_month
 
 
-@overload_attribute(DatetimeDateType, "day")
+@overload_attribute(DatetimeDateType, "day", jit_options={"cache": True})
 def overload_datetime_date_get_day(a):
     def get_day(a):  # pragma: no cover
         _, _, day = _ord2ymd(cast_datetime_date_to_int(a) + UNIX_EPOCH_ORD)
@@ -260,20 +260,20 @@ _DAYS_BEFORE_MONTH = np.array(
 )
 
 
-@register_jitable
+@register_jitable(cache=True)
 def _is_leap(year):  # pragma: no cover
     "year -> 1 if leap year, else 0."
     return year % 4 == 0 and (year % 100 != 0 or year % 400 == 0)
 
 
-@register_jitable
+@register_jitable(cache=True)
 def _days_before_year(year):  # pragma: no cover
     "year -> number of days before January 1st of year."
     y = year - 1
     return y * 365 + y // 4 - y // 100 + y // 400
 
 
-@register_jitable
+@register_jitable(cache=True)
 def _days_in_month(year, month):  # pragma: no cover
     "year, month -> number of days in that month in that year."
     if month == 2 and _is_leap(year):
@@ -281,13 +281,13 @@ def _days_in_month(year, month):  # pragma: no cover
     return _DAYS_IN_MONTH[month]
 
 
-@register_jitable
+@register_jitable(cache=True)
 def _days_before_month(year, month):  # pragma: no cover
     "year, month -> number of days in year preceding first day of month."
     return _DAYS_BEFORE_MONTH[month] + (month > 2 and _is_leap(year))
 
 
-@register_jitable
+@register_jitable(cache=True)
 def _day_of_year(year, month, day):  # pragma: no cover
     "year, month, day -> how many days into the year is it"
     days = day
@@ -301,7 +301,7 @@ _DI100Y = _days_before_year(101)  #    "    "   "   " 100   "
 _DI4Y = _days_before_year(5)  #    "    "   "   "   4   "
 
 
-@register_jitable
+@register_jitable(cache=True)
 def _ymd2ord(year, month, day):  # pragma: no cover
     "year, month, day -> ordinal, considering 01-Jan-0001 as day 1."
     # If we pass in 2/29 on a non-leap-year, decrement to 2/28
@@ -310,7 +310,7 @@ def _ymd2ord(year, month, day):  # pragma: no cover
     return _days_before_year(year) + _days_before_month(year, month) + day
 
 
-@register_jitable
+@register_jitable(cache=True)
 def _ord2ymd(n):  # pragma: no cover
     "ordinal -> (year, month, day), considering 01-Jan-0001 as day 1."
 
@@ -371,7 +371,7 @@ def _ord2ymd(n):  # pragma: no cover
     return year, month, n + 1
 
 
-@register_jitable
+@register_jitable(cache=True)
 def _cmp(x, y):  # pragma: no cover
     return 0 if x == y else 1 if x > y else -1
 
@@ -415,7 +415,7 @@ def get_isocalendar(typingctx, dt_year, dt_month, dt_day):
 types.datetime_date_type = datetime_date_type
 
 
-@register_jitable
+@register_jitable(cache=True)
 def today_impl():  # pragma: no cover
     """Internal call to support datetime.date.today().
     Untyped pass replaces datetime.date.today() with this call since class methods are
@@ -426,7 +426,7 @@ def today_impl():  # pragma: no cover
     return d
 
 
-@register_jitable
+@register_jitable(cache=True)
 def today_rank_consistent():  # pragma: no cover
     """Internal wrapper around today_impl that is used to ensure all
     ranks return the same value.
@@ -439,7 +439,7 @@ def today_rank_consistent():  # pragma: no cover
     return bodo.libs.distributed_api.bcast_scalar(d)
 
 
-@register_jitable
+@register_jitable(cache=True)
 def fromordinal_impl(n):  # pragma: no cover
     """Internal call to support datetime.date.fromordinal().
     Untyped pass replaces datetime.date.fromordinal() with this call since class methods are
@@ -460,7 +460,7 @@ def str_2d(a):  # pragma: no cover
     return res
 
 
-@overload_method(DatetimeDateType, "__str__")
+@overload_method(DatetimeDateType, "__str__", jit_options={"cache": True})
 def overload_date_str(val):
     def impl(val):  # pragma: no cover
         year, month, day = val._ymd
@@ -469,7 +469,7 @@ def overload_date_str(val):
     return impl
 
 
-@overload_method(DatetimeDateType, "replace")
+@overload_method(DatetimeDateType, "replace", jit_options={"cache": True})
 def replace_overload(date, year=None, month=None, day=None):
     if not is_overload_none(year) and not is_overload_int(year):
         raise BodoError("date.replace(): year must be an integer")
@@ -488,7 +488,9 @@ def replace_overload(date, year=None, month=None, day=None):
     return impl
 
 
-@overload_method(DatetimeDatetimeType, "toordinal", no_unliteral=True)
+@overload_method(
+    DatetimeDatetimeType, "toordinal", no_unliteral=True, jit_options={"cache": True}
+)
 def toordinal(dt):
     """Return proleptic Gregorian ordinal for the year, month and day.
     January 1 of year 1 is day 1.  Only the year, month and day values
@@ -501,7 +503,9 @@ def toordinal(dt):
     return impl
 
 
-@overload_method(DatetimeDateType, "toordinal", no_unliteral=True)
+@overload_method(
+    DatetimeDateType, "toordinal", no_unliteral=True, jit_options={"cache": True}
+)
 def toordinal(date):
     """Return proleptic Gregorian ordinal for the year, month and day.
     January 1 of year 1 is day 1.  Only the year, month and day values
@@ -514,8 +518,12 @@ def toordinal(date):
     return impl
 
 
-@overload_method(DatetimeDatetimeType, "weekday", no_unliteral=True)
-@overload_method(DatetimeDateType, "weekday", no_unliteral=True)
+@overload_method(
+    DatetimeDatetimeType, "weekday", no_unliteral=True, jit_options={"cache": True}
+)
+@overload_method(
+    DatetimeDateType, "weekday", no_unliteral=True, jit_options={"cache": True}
+)
 def weekday(date):
     "Return day of the week, where Monday == 0 ... Sunday == 6."
 
@@ -525,7 +533,9 @@ def weekday(date):
     return impl
 
 
-@overload_method(DatetimeDateType, "isocalendar", no_unliteral=True)
+@overload_method(
+    DatetimeDateType, "isocalendar", no_unliteral=True, jit_options={"cache": True}
+)
 def overload_pd_timestamp_isocalendar(date):
     def impl(date):  # pragma: no cover
         year, month, day = date._ymd
@@ -589,7 +599,7 @@ def overload_sub_operator_datetime_date(lhs, rhs):
         return impl
 
 
-@overload(min, no_unliteral=True)
+@overload(min, no_unliteral=True, jit_options={"cache": True})
 def date_min(lhs, rhs):
     if lhs == datetime_date_type and rhs == datetime_date_type:
 
@@ -616,7 +626,7 @@ def date_min(lhs, rhs):
         return impl
 
 
-@overload(max, no_unliteral=True)
+@overload(max, no_unliteral=True, jit_options={"cache": True})
 def date_max(lhs, rhs):
     if lhs == datetime_date_type and rhs == datetime_date_type:
 
@@ -643,7 +653,9 @@ def date_max(lhs, rhs):
         return impl
 
 
-@overload_method(DatetimeDateType, "__hash__", no_unliteral=True)
+@overload_method(
+    DatetimeDateType, "__hash__", no_unliteral=True, jit_options={"cache": True}
+)
 def __hash__(td):
     """Hashcode for datetime.date types. Copies the CPython implementation"""
 
@@ -659,7 +671,7 @@ def __hash__(td):
     return impl
 
 
-@overload(bool, inline="always", no_unliteral=True)
+@overload(bool, inline="always", no_unliteral=True, jit_options={"cache": True})
 def date_to_bool(date):
     """All dates evaluate to True"""
     if date != datetime_date_type:  # pragma: no cover
@@ -732,7 +744,9 @@ make_attribute_wrapper(DatetimeDateArrayType, "data", "_data")
 make_attribute_wrapper(DatetimeDateArrayType, "null_bitmap", "_null_bitmap")
 
 
-@overload_method(DatetimeDateArrayType, "copy", no_unliteral=True)
+@overload_method(
+    DatetimeDateArrayType, "copy", no_unliteral=True, jit_options={"cache": True}
+)
 def overload_datetime_date_arr_copy(A):
     return lambda A: bodo.hiframes.datetime_date_ext.init_datetime_date_array(
         A._data.copy(),
@@ -740,7 +754,7 @@ def overload_datetime_date_arr_copy(A):
     )  # pragma: no cover
 
 
-@overload_attribute(DatetimeDateArrayType, "dtype")
+@overload_attribute(DatetimeDateArrayType, "dtype", jit_options={"cache": True})
 def overload_datetime_date_arr_dtype(A):
     return lambda A: np.object_  # pragma: no cover
 
@@ -887,7 +901,7 @@ def alloc_datetime_date_array_equiv(self, scope, equiv_set, loc, args, kws):
 ArrayAnalysis._analyze_op_call_bodo_hiframes_datetime_date_ext_alloc_datetime_date_array = alloc_datetime_date_array_equiv
 
 
-@overload(operator.getitem, no_unliteral=True)
+@overload(operator.getitem, no_unliteral=True, jit_options={"cache": True})
 def dt_date_arr_getitem(A, ind):
     if A != datetime_date_array_type:
         return
@@ -929,7 +943,7 @@ def dt_date_arr_getitem(A, ind):
     )  # pragma: no cover
 
 
-@overload(operator.setitem, no_unliteral=True)
+@overload(operator.setitem, no_unliteral=True, jit_options={"cache": True})
 def dt_date_arr_setitem(A, idx, val):
     if A != datetime_date_array_type:
         return
@@ -1005,18 +1019,18 @@ def dt_date_arr_setitem(A, idx, val):
     )  # pragma: no cover
 
 
-@overload(len, no_unliteral=True)
+@overload(len, no_unliteral=True, jit_options={"cache": True})
 def overload_len_datetime_date_arr(A):
     if A == datetime_date_array_type:
         return lambda A: len(A._data)
 
 
-@overload_attribute(DatetimeDateArrayType, "shape")
+@overload_attribute(DatetimeDateArrayType, "shape", jit_options={"cache": True})
 def overload_datetime_date_arr_shape(A):
     return lambda A: (len(A._data),)
 
 
-@overload_attribute(DatetimeDateArrayType, "nbytes")
+@overload_attribute(DatetimeDateArrayType, "nbytes", jit_options={"cache": True})
 def datetime_arr_nbytes_overload(A):
     return lambda A: A._data.nbytes + A._null_bitmap.nbytes  # pragma: no cover
 

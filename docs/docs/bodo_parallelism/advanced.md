@@ -92,7 +92,7 @@ Functions `create_params` and `load_data` have `distributed=False` set,
 which makes all of their data structures and computations replicated across processors.
 
 !!! seealso "See Also"
-        [`bodo.scatterv`][bodoscatterv], [`bodo.prange`][explicit-parallel-loops]
+    API Docs for [`bodo.scatterv`][bodoscatterv]
 
 ```py
 @bodo.jit(distributed=False)

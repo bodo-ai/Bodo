@@ -24,6 +24,7 @@ Bodo supports the following `groupby` methods:
 | [`pd.core.groupby.Groupby.median`][pdcoregroupbygroupbymedian]                         | Compute the median value of the group.                                    |
 | [`pd.core.groupby.Groupby.min`][pdcoregroupbygroupbymin]                               | Compute the minimum value of the group.                                   |
 | [`pd.core.groupby.DataFrameGroupby.nunique`][pdcoregroupbydataframegroupbynunique]     | Compute the number of unique values in the group.                         |
+| [`pd.core.groupby.DataFrameGroupby.ngroup`][pdcoregroupbydataframegroupbyngroup]     | Compute a unique index number for each group.                         |
 | [`pd.core.groupby.Groupby.pipe`][pdcoregroupbygroupbypipe]                             | Apply a function to each group.                                           |
 | [`pd.core.groupby.Groupby.prod`][pdcoregroupbygroupbyprod]                             | Compute the product of the group.                                         |
 | [`pd.core.groupby.Groupby.rolling`][pdcoregroupbygroupbyrolling]                       | Provide rolling window calculations.                                      |

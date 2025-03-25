@@ -7,13 +7,11 @@
 
 // Forward declare boost::json::object to avoid including the entire header and
 // increasing compile times
-namespace boost {
-namespace json {
+namespace boost::json {
 class object;
 }
-}  // namespace boost
 
-// TODO Tell the compiler that the branch is unlikely.
+// TODO: Tell the compiler that the branch is unlikely.
 #define CHECK_ARROW_MEM(expr, msg)                            \
     {                                                         \
         arrow::Status __status = expr;                        \
@@ -56,6 +54,9 @@ struct StorageOptions {
 
     /// @brief Type of StorageManager to use
     StorageType type = StorageType::Local;
+
+    /// @brief Run the storage manager in debug mode
+    bool debug_mode = false;
 
     /// @brief Enable Tracing Mode
     bool tracing_mode = false;

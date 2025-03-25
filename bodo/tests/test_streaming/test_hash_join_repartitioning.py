@@ -1,3 +1,5 @@
+import sys
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -17,6 +19,13 @@ from bodo.libs.streaming.join import (
 )
 from bodo.mpi4py import MPI
 from bodo.tests.utils import pytest_mark_one_rank, set_broadcast_join, temp_env_override
+
+pytestmark = [
+    pytest.mark.skipif(
+        sys.platform == "win32", reason="TODO[BSE-4556]: enable buffer pool on Windows"
+    ),
+    pytest.mark.slow,
+]
 
 
 @pytest.fixture(params=[True, False])
@@ -224,31 +233,35 @@ def _test_helper(
         )
 
     output_size = comm.allreduce(output.shape[0], op=MPI.SUM)
-    assert (
-        output_size == expected_output_size
-    ), f"Final output size ({output_size}) is not as expected ({expected_output_size})"
+    assert output_size == expected_output_size, (
+        f"Final output size ({output_size}) is not as expected ({expected_output_size})"
+    )
 
     # By the time we're done with the probe step, all memory should've been
     # released:
     assert_success = final_bytes_pinned == 0
     assert_success = comm.allreduce(assert_success, op=MPI.LAND)
-    assert (
-        assert_success
-    ), f"Final bytes pinned by the Operator BufferPool ({final_bytes_pinned}) is not 0!"
+    assert assert_success, (
+        f"Final bytes pinned by the Operator BufferPool ({final_bytes_pinned}) is not 0!"
+    )
 
     assert_success = final_op_pool_budget == 0
     assert_success = comm.allreduce(assert_success, op=MPI.LAND)
-    assert (
-        assert_success
-    ), f"Final operator pool budget ({final_op_pool_budget}) is not 0!"
+    assert assert_success, (
+        f"Final operator pool budget ({final_op_pool_budget}) is not 0!"
+    )
 
     assert_success = final_bytes_allocated == 0
     assert_success = comm.allreduce(assert_success, op=MPI.LAND)
-    assert assert_success, f"Final bytes allocated by the Operator BufferPool ({final_bytes_allocated}) is not 0!"
+    assert assert_success, (
+        f"Final bytes allocated by the Operator BufferPool ({final_bytes_allocated}) is not 0!"
+    )
 
     assert_success = final_partition_state == expected_partition_state
     assert_success = comm.allreduce(assert_success, op=MPI.LAND)
-    assert assert_success, f"Final partition state ({final_partition_state}) is not as expected ({expected_partition_state})"
+    assert assert_success, (
+        f"Final partition state ({final_partition_state}) is not as expected ({expected_partition_state})"
+    )
 
     assert_success = (expected_op_pool_budget_after_build is None) or (
         expected_op_pool_budget_after_build[0]
@@ -256,7 +269,9 @@ def _test_helper(
         <= expected_op_pool_budget_after_build[1]
     )
     assert_success = comm.allreduce(assert_success, op=MPI.LAND)
-    assert assert_success, f"Operator pool budget after build ({op_pool_budget_after_build}) is not as expected ({expected_op_pool_budget_after_build})"
+    assert assert_success, (
+        f"Operator pool budget after build ({op_pool_budget_after_build}) is not as expected ({expected_op_pool_budget_after_build})"
+    )
 
 
 @pytest_mark_one_rank

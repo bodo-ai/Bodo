@@ -525,9 +525,9 @@ def compile_func_single_block(
         )
     else:
         f_ir = compile_to_numba_ir(func, glbls)
-    assert (
-        len(f_ir.blocks) == 1
-    ), "only single block functions supported in compile_func_single_block()"
+    assert len(f_ir.blocks) == 1, (
+        "only single block functions supported in compile_func_single_block()"
+    )
     if run_untyped_pass:
         arg_typs = tuple(typing_info.typemap[arg.name] for arg in args)
         untyped_pass = bodo.transforms.untyped_pass.UntypedPass(
@@ -1702,9 +1702,9 @@ def set_ith_arg_to_omitted_value(
     call_type = pass_info.calltypes.pop(rhs)
     # normalize to simplify slicing.
     pos_idx = i if i >= 0 else len(call_type.args) + i
-    assert call_type.args[pos_idx] == types.Omitted(
-        expected_existing_value
-    ), f"Omitted({expected_existing_value}) {pos_idx}th argument expected"
+    assert call_type.args[pos_idx] == types.Omitted(expected_existing_value), (
+        f"Omitted({expected_existing_value}) {pos_idx}th argument expected"
+    )
     new_sig = pass_info.typemap[rhs.func.name].get_call_type(
         pass_info.typingctx,
         call_type.args[:pos_idx]

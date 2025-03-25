@@ -16,7 +16,9 @@ import pyarrow as pa
 from numba.core import ir, types
 
 import bodo
-from bodo.ir.sql_ext import parse_dbtype, remove_iceberg_prefix
+import bodo.hiframes
+import bodo.hiframes.pd_multi_index_ext
+from bodo.ir.sql_ext import parse_dbtype
 from bodo.libs.distributed_api import bcast_scalar
 from bodo.utils.typing import BodoError, dtype_to_array_type
 from bodosql.bodosql_types.database_catalog import DatabaseCatalog
@@ -399,39 +401,58 @@ def compute_df_types(df_list, is_bodo_type):
                 # by BodoSQL by returning a tuple.
                 col_names = type_info[0]
                 col_types = type_info[1]
-                index_col = type_info[2]
-                # If index_col is not a column name, we use a range type
-                if index_col is None or isinstance(index_col, dict):
+                index_cols = type_info[2]
+
+                # If index_cols is empty or a single dict, then the index is a RangeIndex
+                if (
+                    len(index_cols) == 0
+                    or len(index_cols) == 1
+                    and isinstance(index_cols[0], dict)
+                ):
+                    index_col = index_cols[0] if len(index_cols) == 1 else None
                     if isinstance(index_col, dict) and index_col["name"] is not None:
                         index_col_name = types.StringLiteral(index_col["name"])
                     else:
                         index_col_name = None
                     index_typ = bodo.RangeIndexType(index_col_name)
 
-                # Otherwise the index is a specific column
+                # Otherwise the index is a specific set of columns
+                # Multiple for MultiIndex, single for single index
                 else:
-                    # if the index_col is __index_level_0_, it means it has no name.
-                    # Thus we do not write the name instead of writing '__index_level_0_' as the name
-                    if "__index_level_" in index_col:
-                        index_name = None
+                    index_col_names = []
+                    index_col_types = []
+                    for index_col in index_cols:
+                        # if the index_col is __index_level_0_, it means it has no name.
+                        # Thus we do not write the name instead of writing '__index_level_0_' as the name
+                        if "__index_level_" in index_col:
+                            index_name = types.none
+                        else:
+                            index_name = types.StringLiteral(index_col)
+                        # Convert the column type to an index type
+                        index_loc = col_names.index(index_col)
+
+                        index_col_types.append(col_types[index_loc])
+                        index_col_names.append(index_name)
+
+                        # Remove the index from the DataFrame.
+                        col_names.pop(index_loc)
+                        col_types.pop(index_loc)
+
+                    if len(index_col_names) == 1:
+                        index_elem_dtype = index_col_types[0].dtype
+                        index_typ = bodo.utils.typing.index_typ_from_dtype_name_arr(
+                            index_elem_dtype, index_col_names[0], index_col_types[0]
+                        )
                     else:
-                        index_name = index_col
-                    # Convert the column type to an index type
-                    index_loc = col_names.index(index_col)
-                    index_elem_dtype = col_types[index_loc].dtype
+                        bodo.hiframes.pd_multi_index_ext.MultiIndexType(
+                            tuple(index_col_types),
+                            tuple(index_col_names),
+                        )
 
-                    index_typ = bodo.utils.typing.index_typ_from_dtype_name_arr(
-                        index_elem_dtype, index_name, col_types[index_loc]
-                    )
-
-                    # Remove the index from the DataFrame.
-                    col_names.pop(index_loc)
-                    col_types.pop(index_loc)
             elif file_type == "sql":
                 const_conn_str = table_info._conn_str
                 db_type, _ = parse_dbtype(const_conn_str)
                 if db_type == "iceberg":
-                    pruned_conn_str = remove_iceberg_prefix(const_conn_str)
                     db_schema = table_info._db_schema
                     iceberg_table_name = table_info._file_path
                     # table_name = table_info.
@@ -441,8 +462,9 @@ def compute_df_types(df_list, is_bodo_type):
                         col_names,
                         col_types,
                         _pyarrow_table_schema,
-                    ) = bodo.io.iceberg.get_iceberg_type_info(
-                        iceberg_table_name, pruned_conn_str, db_schema
+                    ) = bodo.io.iceberg.get_iceberg_orig_schema(
+                        const_conn_str,
+                        f"{db_schema}.{iceberg_table_name}",
                     )
                 else:
                     type_info = (
@@ -551,9 +573,9 @@ def add_table_type(
         if bodo_type._file_type == "pq":
             db_type = "PARQUET"
         else:
-            assert (
-                bodo_type._file_type == "sql"
-            ), "TablePathType is only implement for parquet and SQL APIs"
+            assert bodo_type._file_type == "sql", (
+                "TablePathType is only implement for parquet and SQL APIs"
+            )
             const_conn_str = bodo_type._conn_str
             db_type, _ = parse_dbtype(const_conn_str)
     else:
@@ -626,6 +648,8 @@ def _generate_table_read(
     if isinstance(bodo_type, TablePathType):
         file_type = bodo_type._file_type
         file_path = bodo_type._file_path
+        # Escape "\" in Windows paths
+        file_path = file_path.replace("\\", "\\\\")
 
         read_dict_list = (
             ""
@@ -645,6 +669,8 @@ def _generate_table_read(
             conn_str = bodo_type._conn_str
             db_type, _ = parse_dbtype(conn_str)
             if db_type == "iceberg":
+                # Avoid errors for Windows path backslashes in generated code later
+                conn_str = conn_str.replace("\\", "/")
                 if read_dict_list:
                     read_line = f"pd.read_sql_table('{file_path}', '{conn_str}', '{bodo_type._db_schema}', {read_dict_list}, _bodo_read_as_table=True, %s)"
                 else:
@@ -1129,7 +1155,7 @@ class BodoSQLContext:
 
     def generate_plan(
         self, sql, params_dict=None, dynamic_params_list=None, show_cost=False
-    ):
+    ) -> str:
         """
         Return the optimized plan for the SQL code as
         as a Python string.
