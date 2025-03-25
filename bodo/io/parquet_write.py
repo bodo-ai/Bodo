@@ -7,6 +7,8 @@ import llvmlite.binding as ll
 import pandas as pd
 import pyarrow as pa
 from llvmlite import ir as lir
+from numba.core import cgutils, types
+from numba.extending import intrinsic, overload
 
 import bodo
 from bodo.decorators import wrap_python
@@ -28,8 +30,6 @@ from bodo.utils.typing import (
     is_overload_none,
     is_str_arr_type,
 )
-from numba.core import cgutils, types
-from numba.extending import intrinsic, overload
 
 if pt.TYPE_CHECKING:
     from bodo.hiframes.pd_dataframe_ext import DataFrameType
