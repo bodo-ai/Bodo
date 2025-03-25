@@ -484,9 +484,6 @@ class StdoutQueue:
 
     def write(self, msg):
         # TODO(Ehsan): buffer output similar to ipykernel
-        debug_worker_msg(
-            bodo.user_logging.get_current_bodo_verbose_logger(), f"Writing {msg}"
-        )
         self.out_socket.send_string(f"{int(self.is_stderr)}{msg}")
 
     def flush(self):
@@ -520,7 +517,7 @@ def worker_loop(
     if bodo.utils.utils.is_jupyter_on_windows():
         # Multi-node Jupyter on Windows is not supported yet
         spawner_hostname = comm_world.bcast(
-            socket.gethostname() if bodo.get_rank() == 0 else None, root=0
+            spawner_hostname if bodo.get_rank() == 0 else None, root=0
         )
         if spawner_hostname != socket.gethostname():
             raise bodo.utils.typing.BodoError(
