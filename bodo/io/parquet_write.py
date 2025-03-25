@@ -7,8 +7,6 @@ import llvmlite.binding as ll
 import pandas as pd
 import pyarrow as pa
 from llvmlite import ir as lir
-from numba.core import cgutils, types
-from numba.extending import intrinsic, overload
 
 import bodo
 from bodo.decorators import wrap_python
@@ -30,6 +28,8 @@ from bodo.utils.typing import (
     is_overload_none,
     is_str_arr_type,
 )
+from numba.core import cgutils, types
+from numba.extending import intrinsic, overload
 
 if pt.TYPE_CHECKING:
     from bodo.hiframes.pd_dataframe_ext import DataFrameType
@@ -425,11 +425,7 @@ def gen_pandas_parquet_metadata(
 
 
 # TODO: Determine caching issue and re-enable
-@overload(
-    gen_pandas_parquet_metadata,
-    no_unliteral=True,
-    # jit_options={"cache": True}
-)
+@overload(gen_pandas_parquet_metadata, no_unliteral=True, jit_options={"cache": True})
 def overload_gen_pandas_parquet_metadata(
     df,
     col_names_arr,
