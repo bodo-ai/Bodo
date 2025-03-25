@@ -5,7 +5,7 @@ from libcpp.memory cimport unique_ptr, make_unique
 
 
 cdef extern from "duckdb/common/enums/join_type.hpp" namespace "duckdb" nogil:
-    cdef enum class CJoinType" duckdb::JoinType":
+    cpdef enum class CJoinType" duckdb::JoinType":
         INVALID "duckdb::JoinType::INVALID"
         LEFT "duckdb::JoinType::LEFT"
         RIGHT "duckdb::JoinType::RIGHT"
