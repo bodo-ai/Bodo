@@ -217,5 +217,5 @@ void parallel_in_order_write(
  * @return std::shared_ptr<::arrow::fs::FileSystem> Arrow filesystem object for
  * the path
  */
-std::shared_ptr<::arrow::fs::FileSystem> get_fs_for_path(
-    const char *_path_name, bool is_parallel, bool force_hdfs = false);
+std::shared_ptr<::arrow::fs::FileSystem> get_fs_for_path(const char *_path_name,
+                                                         bool is_parallel);

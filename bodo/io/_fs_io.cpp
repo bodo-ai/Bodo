@@ -655,8 +655,7 @@ void parallel_in_order_write(
 }
 
 std::shared_ptr<::arrow::fs::FileSystem> get_fs_for_path(const char *_path_name,
-                                                         bool is_parallel,
-                                                         bool force_hdfs) {
+                                                         bool is_parallel) {
     ensure_pa_wrappers_imported();
     std::shared_ptr<arrow::fs::FileSystem> fs;
     // scheme = bodo.io.fs_io(_path_name)
@@ -665,9 +664,9 @@ std::shared_ptr<::arrow::fs::FileSystem> get_fs_for_path(const char *_path_name,
     PyObject *fs_io_mod = PyImport_ImportModule("bodo.io.fs_io");
     PyObject *scheme =
         PyObject_CallMethod(fs_io_mod, "get_uri_scheme", "s", _path_name);
-    PyObject *fs_obj = PyObject_CallMethod(
-        fs_io_mod, "getfs", "sOOOO", _path_name, scheme, Py_None,
-        is_parallel ? Py_True : Py_False, force_hdfs ? Py_True : Py_False);
+    PyObject *fs_obj =
+        PyObject_CallMethod(fs_io_mod, "getfs", "sOOOO", _path_name, scheme,
+                            Py_None, is_parallel ? Py_True : Py_False);
     CHECK_ARROW_AND_ASSIGN(arrow::py::unwrap_filesystem(fs_obj),
                            "arrow::py::unwrap_filesystem", fs, "");
     Py_DECREF(fs_io_mod);

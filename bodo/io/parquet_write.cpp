@@ -238,7 +238,7 @@ int64_t pq_write(const char *_path_name,
 
     // Get filesystem object if not provided
     if (arrow_fs == nullptr) {
-        fs = get_fs_for_path(_path_name, is_parallel, force_hdfs);
+        fs = get_fs_for_path(_path_name, is_parallel);
         arrow_fs = fs.get();
     }
 
