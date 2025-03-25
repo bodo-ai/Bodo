@@ -859,7 +859,7 @@ class BodoSQLContext:
             glbls,
             loc_vars,
         )
-        impl = loc_vars["impl"]
+        impl = loc_vars["bodosql_impl"]
 
         dispatcher = bodo.jit(sig)(impl)
         return dispatcher
