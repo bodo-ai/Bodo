@@ -524,18 +524,12 @@ def worker_loop(
                 "Jupyter is not supported on multi-node Windows clusters yet"
             )
         port = spawner_intercomm.bcast(None, 0)
-        connection_info = f"tcp://{spawner_hostname}:{port}"
-    elif bodo.utils.utils.is_jupyter_on_bodo_platform():
-        connection_info = spawner_intercomm.bcast(None, 0)
-    if (
-        bodo.utils.utils.is_jupyter_on_windows()
-        or bodo.utils.utils.is_jupyter_on_bodo_platform()
-    ):
+
         import zmq
 
         context = zmq.Context()
         out_socket = context.socket(zmq.PUSH)
-        out_socket.connect(connection_info)
+        out_socket.connect(f"tcp://127.0.0.1:{port}")
         sys.stdout = StdoutQueue(out_socket, False)
         sys.stderr = StdoutQueue(out_socket, True)
 

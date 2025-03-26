@@ -625,11 +625,8 @@ class Spawner:
         https://stackoverflow.com/questions/23947281/python-multiprocessing-redirect-stdout-of-a-child-process-to-a-tkinter-text
         """
 
-        # Skip if not in Jupyter on Windows and not Jupyter on Bodo platform
-        if (
-            not bodo.utils.utils.is_jupyter_on_windows()
-            and not bodo.utils.utils.is_jupyter_on_bodo_platform()
-        ):
+        # Skip if not in Jupyter or not on Windows
+        if not bodo.utils.utils.is_jupyter_on_windows():
             self.worker_output_thread = None
             return
 
@@ -649,13 +646,9 @@ class Spawner:
         except AttributeError:
             win_in_use = None
 
-        ip_value = "127.0.0.1"
-        if bodo.utils.utils.is_jupyter_on_bodo_platform():
-            ip_value = "0.0.0.0"
-
         for attempt in range(max_attempts):
             try:
-                port = out_socket.bind_to_random_port(f"tcp://{ip_value}")
+                port = out_socket.bind_to_random_port("tcp://127.0.0.1")
             except zmq.ZMQError as ze:
                 # Raise if we have any error not related to socket binding
                 if ze.errno != errno.EADDRINUSE and ze.errno != win_in_use:
@@ -663,12 +656,7 @@ class Spawner:
                 if attempt == max_attempts - 1:
                     raise
 
-        if bodo.utils.utils.is_jupyter_on_bodo_platform():
-            hostname = socket.gethostname()
-            connection_info = f"tcp://{hostname}:{port}"
-            self.worker_intercomm.bcast(connection_info, self.bcast_root)
-        else:  # windows
-            self.worker_intercomm.bcast(port, self.bcast_root)
+        self.worker_intercomm.bcast(port, self.bcast_root)
 
         def worker_output_thread_func():
             """Thread that receives all worker outputs and prints them."""
