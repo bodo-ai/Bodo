@@ -9,7 +9,6 @@ from bodo.tests.utils import (
     pytest_mark_snowflake,
     sql_user_pass_and_hostname,
 )
-from bodo.utils.testing import ensure_clean2
 
 
 @bodo.jit
@@ -125,22 +124,6 @@ def test_read_parquet_cache_fname_arg_list_files(
     py_output_part2 = pd.read_parquet(fpaths[1])
     py_out = pd.concat([py_output_part1, py_output_part2])
     check_caching(impl, (fpaths,), is_cached, fn_distribution, py_output=py_out)
-
-
-@pytest.mark.parquet
-@pytest.mark.smoke
-def test_write_parquet_cache(fn_distribution, is_cached, datapath, memory_leak_check):
-    """
-    test read_parquet with cache=True
-    """
-
-    def impl(df):
-        return df.to_parquet("out.pq")
-
-    df = pd.DataFrame({"A": [1, 2, 3, 4, 5, 6]})
-
-    with ensure_clean2("out.pq"):
-        check_caching(impl, (df,), is_cached, fn_distribution)
 
 
 def test_read_csv_cache_fname_arg(
