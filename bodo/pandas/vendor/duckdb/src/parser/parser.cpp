@@ -6,13 +6,12 @@
 #include "duckdb/parser/parser_extension.hpp"
 #include "duckdb/parser/query_error_context.hpp"
 #include "duckdb/parser/query_node/select_node.hpp"
+#include "duckdb/parser/simplified_token.hpp"
 #include "duckdb/parser/statement/create_statement.hpp"
 #include "duckdb/parser/statement/extension_statement.hpp"
 #include "duckdb/parser/statement/select_statement.hpp"
 #include "duckdb/parser/statement/update_statement.hpp"
 #include "duckdb/parser/tableref/expressionlistref.hpp"
-#include "parser/parser.hpp"
-#include "postgres_parser.hpp"
 
 namespace duckdb {
 
@@ -190,37 +189,7 @@ vector<string> SplitQueryStringIntoStatements(const string &query) {
 void Parser::ParseQuery(const string &query) {}
 
 vector<SimplifiedToken> Parser::Tokenize(const string &query) {
-	auto pg_tokens = PostgresParser::Tokenize(query);
 	vector<SimplifiedToken> result;
-	result.reserve(pg_tokens.size());
-	for (auto &pg_token : pg_tokens) {
-		SimplifiedToken token;
-		switch (pg_token.type) {
-		case duckdb_libpgquery::PGSimplifiedTokenType::PG_SIMPLIFIED_TOKEN_IDENTIFIER:
-			token.type = SimplifiedTokenType::SIMPLIFIED_TOKEN_IDENTIFIER;
-			break;
-		case duckdb_libpgquery::PGSimplifiedTokenType::PG_SIMPLIFIED_TOKEN_NUMERIC_CONSTANT:
-			token.type = SimplifiedTokenType::SIMPLIFIED_TOKEN_NUMERIC_CONSTANT;
-			break;
-		case duckdb_libpgquery::PGSimplifiedTokenType::PG_SIMPLIFIED_TOKEN_STRING_CONSTANT:
-			token.type = SimplifiedTokenType::SIMPLIFIED_TOKEN_STRING_CONSTANT;
-			break;
-		case duckdb_libpgquery::PGSimplifiedTokenType::PG_SIMPLIFIED_TOKEN_OPERATOR:
-			token.type = SimplifiedTokenType::SIMPLIFIED_TOKEN_OPERATOR;
-			break;
-		case duckdb_libpgquery::PGSimplifiedTokenType::PG_SIMPLIFIED_TOKEN_KEYWORD:
-			token.type = SimplifiedTokenType::SIMPLIFIED_TOKEN_KEYWORD;
-			break;
-		// comments are not supported by our tokenizer right now
-		case duckdb_libpgquery::PGSimplifiedTokenType::PG_SIMPLIFIED_TOKEN_COMMENT: // LCOV_EXCL_START
-			token.type = SimplifiedTokenType::SIMPLIFIED_TOKEN_COMMENT;
-			break;
-		default:
-			throw InternalException("Unrecognized token category");
-		} // LCOV_EXCL_STOP
-		token.start = NumericCast<idx_t>(pg_token.start);
-		result.push_back(token);
-	}
 	return result;
 }
 
@@ -352,36 +321,13 @@ vector<SimplifiedToken> Parser::TokenizeError(const string &error_msg) {
 	return tokens;
 }
 
-KeywordCategory ToKeywordCategory(duckdb_libpgquery::PGKeywordCategory type) {
-	switch (type) {
-	case duckdb_libpgquery::PGKeywordCategory::PG_KEYWORD_RESERVED:
-		return KeywordCategory::KEYWORD_RESERVED;
-	case duckdb_libpgquery::PGKeywordCategory::PG_KEYWORD_UNRESERVED:
-		return KeywordCategory::KEYWORD_UNRESERVED;
-	case duckdb_libpgquery::PGKeywordCategory::PG_KEYWORD_TYPE_FUNC:
-		return KeywordCategory::KEYWORD_TYPE_FUNC;
-	case duckdb_libpgquery::PGKeywordCategory::PG_KEYWORD_COL_NAME:
-		return KeywordCategory::KEYWORD_COL_NAME;
-	case duckdb_libpgquery::PGKeywordCategory::PG_KEYWORD_NONE:
-		return KeywordCategory::KEYWORD_NONE;
-	default:
-		throw InternalException("Unrecognized keyword category");
-	}
-}
 
 KeywordCategory Parser::IsKeyword(const string &text) {
-	return ToKeywordCategory(PostgresParser::IsKeyword(text));
+	return KeywordCategory::KEYWORD_COL_NAME;
 }
 
 vector<ParserKeyword> Parser::KeywordList() {
-	auto keywords = PostgresParser::KeywordList();
 	vector<ParserKeyword> result;
-	for (auto &kw : keywords) {
-		ParserKeyword res;
-		res.name = kw.text;
-		res.category = ToKeywordCategory(kw.category);
-		result.push_back(res);
-	}
 	return result;
 }
 
