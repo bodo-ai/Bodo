@@ -15,12 +15,3 @@ if(NOT AMALGAMATION_BUILD)
   add_subdirectory(yyjson)
   add_subdirectory(zstd)
 endif()
-
-if(NOT WIN32
-   AND NOT SUN
-   AND ${BUILD_UNITTESTS})
-  add_subdirectory(imdb)
-  if(${BUILD_TPCE})
-    add_subdirectory(tpce-tool)
-  endif()
-endif()

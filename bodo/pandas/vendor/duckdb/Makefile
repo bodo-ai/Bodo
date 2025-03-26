@@ -144,9 +144,6 @@ endif
 ifeq (${STATIC_OPENSSL}, 1)
 	CMAKE_VARS:=${CMAKE_VARS} -DOPENSSL_USE_STATIC_LIBS=1
 endif
-ifeq (${BUILD_TPCE}, 1)
-	CMAKE_VARS:=${CMAKE_VARS} -DBUILD_TPCE=1
-endif
 ifeq (${BUILD_PYTHON}, 1)
 	CMAKE_VARS:=${CMAKE_VARS} -DBUILD_PYTHON=1 -DDUCKDB_EXTENSION_CONFIGS="tools/pythonpkg/duckdb_extension_config.cmake"
 endif
