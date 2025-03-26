@@ -110,6 +110,9 @@ void extract_fs_dir_path(const char *_path_name, bool is_parallel,
     } else if ((strncmp(_path_name, "gcs://", 6) == 0) ||
                (strncmp(_path_name, "gs://", 5) == 0)) {
         *fs_option = Bodo_Fs::gcs;
+        // remove gcs:// or gs://
+        int chars_to_remove = (strncmp(_path_name, "gcs://", 6) == 0) ? 6 : 5;
+        *path_name = std::string(_path_name + chars_to_remove);
     } else {  // posix
         *fs_option = Bodo_Fs::posix;
         *path_name = *orig_path;
@@ -649,4 +652,25 @@ void parallel_in_order_write(
     }
     CHECK_MPI(MPI_Barrier(MPI_COMM_WORLD),
               "parallel_in_order_write: MPI error on MPI_Barrier:");
+}
+
+std::shared_ptr<::arrow::fs::FileSystem> get_fs_for_path(const char *_path_name,
+                                                         bool is_parallel) {
+    ensure_pa_wrappers_imported();
+    std::shared_ptr<arrow::fs::FileSystem> fs;
+    // scheme = bodo.io.fs_io(_path_name)
+    // fs = bodo.io.fs_io.getfs(_path_name, scheme, None, is_parallel,
+    // force_hdfs)
+    PyObject *fs_io_mod = PyImport_ImportModule("bodo.io.fs_io");
+    PyObject *scheme =
+        PyObject_CallMethod(fs_io_mod, "get_uri_scheme", "s", _path_name);
+    PyObject *fs_obj =
+        PyObject_CallMethod(fs_io_mod, "getfs", "sOOO", _path_name, scheme,
+                            Py_None, is_parallel ? Py_True : Py_False);
+    CHECK_ARROW_AND_ASSIGN(arrow::py::unwrap_filesystem(fs_obj),
+                           "arrow::py::unwrap_filesystem", fs, "");
+    Py_DECREF(fs_io_mod);
+    Py_DECREF(scheme);
+    Py_DECREF(fs_obj);
+    return fs;
 }

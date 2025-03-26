@@ -80,7 +80,6 @@ requirements:
     - scikit-learn =1.4.*
     - s3fs >=2022.1.0
     - adlfs >=2022.1.0
-    - gcsfs >=2022.1.0
     - pyiceberg >=0.9,<0.10
     - boto3 *
     - mypy-boto3-glue *
