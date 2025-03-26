@@ -451,8 +451,6 @@ void pq_write_partitioned_py_entry(
     // - sequential (only rank 0 writes, or all write with same name -which?-)
     // - create directories
     //     - what if directories already have files?
-    // - write index
-    // - write metadata?
     // - convert values to strings for other dtypes like datetime, decimal, etc
     // (see array_info::val_to_str)
 
