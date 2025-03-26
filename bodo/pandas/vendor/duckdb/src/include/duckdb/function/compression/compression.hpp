@@ -28,11 +28,6 @@ struct RLEFun {
 	static bool TypeIsSupported(const PhysicalType physical_type);
 };
 
-struct BitpackingFun {
-	static CompressionFunction GetFunction(PhysicalType type);
-	static bool TypeIsSupported(const PhysicalType physical_type);
-};
-
 struct DictionaryCompressionFun {
 	static CompressionFunction GetFunction(PhysicalType type);
 	static bool TypeIsSupported(const PhysicalType physical_type);

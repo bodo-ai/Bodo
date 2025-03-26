@@ -588,16 +588,6 @@ struct FileSearchPathSetting {
 	static Value GetSetting(const ClientContext &context);
 };
 
-struct ForceBitpackingModeSetting {
-	using RETURN_TYPE = string;
-	static constexpr const char *Name = "force_bitpacking_mode";
-	static constexpr const char *Description = "DEBUG SETTING: forces a specific bitpacking mode";
-	static constexpr const char *InputType = "VARCHAR";
-	static void SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &parameter);
-	static void ResetGlobal(DatabaseInstance *db, DBConfig &config);
-	static Value GetSetting(const ClientContext &context);
-};
-
 struct ForceCompressionSetting {
 	using RETURN_TYPE = string;
 	static constexpr const char *Name = "force_compression";

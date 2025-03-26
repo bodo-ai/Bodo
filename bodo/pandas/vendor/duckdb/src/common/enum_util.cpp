@@ -139,7 +139,6 @@
 #include "duckdb/planner/bound_result_modifier.hpp"
 #include "duckdb/planner/table_filter.hpp"
 #include "duckdb/storage/buffer/block_handle.hpp"
-#include "duckdb/storage/compression/bitpacking.hpp"
 #include "duckdb/storage/magic_bytes.hpp"
 #include "duckdb/storage/statistics/base_statistics.hpp"
 #include "duckdb/storage/table/chunk_info.hpp"
@@ -543,27 +542,6 @@ BindingMode EnumUtil::FromString<BindingMode>(const char *value) {
 	return static_cast<BindingMode>(StringUtil::StringToEnum(GetBindingModeValues(), 3, "BindingMode", value));
 }
 
-const StringUtil::EnumStringLiteral *GetBitpackingModeValues() {
-	static constexpr StringUtil::EnumStringLiteral values[] {
-		{ static_cast<uint32_t>(BitpackingMode::INVALID), "INVALID" },
-		{ static_cast<uint32_t>(BitpackingMode::AUTO), "AUTO" },
-		{ static_cast<uint32_t>(BitpackingMode::CONSTANT), "CONSTANT" },
-		{ static_cast<uint32_t>(BitpackingMode::CONSTANT_DELTA), "CONSTANT_DELTA" },
-		{ static_cast<uint32_t>(BitpackingMode::DELTA_FOR), "DELTA_FOR" },
-		{ static_cast<uint32_t>(BitpackingMode::FOR), "FOR" }
-	};
-	return values;
-}
-
-template<>
-const char* EnumUtil::ToChars<BitpackingMode>(BitpackingMode value) {
-	return StringUtil::EnumToString(GetBitpackingModeValues(), 6, "BitpackingMode", static_cast<uint32_t>(value));
-}
-
-template<>
-BitpackingMode EnumUtil::FromString<BitpackingMode>(const char *value) {
-	return static_cast<BitpackingMode>(StringUtil::StringToEnum(GetBitpackingModeValues(), 6, "BitpackingMode", value));
-}
 
 const StringUtil::EnumStringLiteral *GetBlockStateValues() {
 	static constexpr StringUtil::EnumStringLiteral values[] {
