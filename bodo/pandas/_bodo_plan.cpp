@@ -3,6 +3,14 @@
 #include "duckdb.hpp"
 #include "duckdb/planner/operator/logical_get.hpp"
 
+duckdb::unique_ptr<duckdb::LogicalOperator> optimize_plan(
+    duckdb::unique_ptr<duckdb::LogicalOperator> plan) {
+    duckdb::Optimizer& optimizer = get_duckdb_optimizer();
+    duckdb::unique_ptr<duckdb::LogicalOperator> optimized_plan =
+        optimizer.Optimize(std::move(plan));
+    return optimized_plan;
+}
+
 duckdb::unique_ptr<duckdb::LogicalGet> make_parquet_get_node(
     std::string parquet_path) {
     duckdb::shared_ptr<duckdb::Binder> binder = get_duckdb_binder();
@@ -33,4 +41,10 @@ duckdb::shared_ptr<duckdb::Binder> get_duckdb_binder() {
     static duckdb::shared_ptr<duckdb::Binder> binder =
         duckdb::Binder::CreateBinder(get_duckdb_context());
     return binder;
+}
+
+duckdb::Optimizer& get_duckdb_optimizer() {
+    static duckdb::shared_ptr<duckdb::Binder> binder = get_duckdb_binder();
+    static duckdb::Optimizer optimizer(*binder, get_duckdb_context());
+    return optimizer;
 }

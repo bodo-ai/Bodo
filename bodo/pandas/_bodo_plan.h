@@ -5,6 +5,7 @@
 
 #include "duckdb/function/function.hpp"
 #include "duckdb/function/table_function.hpp"
+#include "duckdb/optimizer/optimizer.hpp"
 
 /**
  * @brief Bodo's DuckDB TableFunction for reading Parquet datasets with Bodo
@@ -36,6 +37,15 @@ class BodoParquetScanFunctionData : public duckdb::TableFunctionData {
 };
 
 /**
+ * @brief Optimize a DuckDB logical plan by applying the DuckDB optimizer.
+ *
+ * @param plan input logical plan to be optimized
+ * @return duckdb::unique_ptr<duckdb::LogicalOperator> optimized plan
+ */
+duckdb::unique_ptr<duckdb::LogicalOperator> optimize_plan(
+    duckdb::unique_ptr<duckdb::LogicalOperator> plan);
+
+/**
  * @brief Creates a LogicalGet node for reading a Parquet dataset in DuckDB with
  * Bodo metadata.
  *
@@ -58,3 +68,10 @@ duckdb::ClientContext& get_duckdb_context();
  * @return duckdb::shared_ptr<duckdb::Binder> static binder object
  */
 duckdb::shared_ptr<duckdb::Binder> get_duckdb_binder();
+
+/**
+ * @brief Returns a statically created duckdb optimizer
+ *
+ * @return duckdb::Optimizer& static optimizer object
+ */
+duckdb::Optimizer& get_duckdb_optimizer();
