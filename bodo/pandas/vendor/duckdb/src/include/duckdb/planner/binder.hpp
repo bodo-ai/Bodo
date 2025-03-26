@@ -18,7 +18,7 @@
 #include "duckdb/parser/query_node.hpp"
 #include "duckdb/parser/result_modifier.hpp"
 #include "duckdb/parser/tableref/delimgetref.hpp"
-#include "duckdb/parser/tokens.hpp"
+// #include "duckdb/parser/tokens.hpp"
 #include "duckdb/planner/bind_context.hpp"
 #include "duckdb/planner/bound_statement.hpp"
 #include "duckdb/planner/bound_tokens.hpp"

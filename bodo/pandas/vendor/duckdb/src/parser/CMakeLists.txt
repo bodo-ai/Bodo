@@ -7,7 +7,6 @@ add_subdirectory(parsed_data)
 add_subdirectory(query_node)
 add_subdirectory(statement)
 add_subdirectory(tableref)
-add_subdirectory(transform)
 
 add_library_unity(
   duckdb_parser
@@ -25,8 +24,7 @@ add_library_unity(
   query_error_context.cpp
   query_node.cpp
   result_modifier.cpp
-  tableref.cpp
-  transformer.cpp)
+  tableref.cpp)
 set(ALL_OBJECT_FILES
     ${ALL_OBJECT_FILES} $<TARGET_OBJECTS:duckdb_parser>
     PARENT_SCOPE)
