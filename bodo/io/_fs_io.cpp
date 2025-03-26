@@ -457,17 +457,31 @@ void open_outstream(Bodo_Fs::FsEnum fs_option, bool is_parallel,
                                      storage_account_py_str);
                 Py_DECREF(storage_account_py_str);
             }
-            PyObject *fs_pyobject =
-                PyObject_CallFunction(abfs_get_fs, "O", storage_options);
+            // Pass the path back to python so it can parse the sas token if
+            // there is one
+            PyObject *path_py_str = PyUnicode_FromString(path.c_str());
+
+            PyObject *fs_pyobject = PyObject_CallFunction(
+                abfs_get_fs, "OO", path_py_str, storage_options);
             std::shared_ptr<::arrow::fs::FileSystem> fs;
             CHECK_ARROW_AND_ASSIGN(arrow::py::unwrap_filesystem(fs_pyobject),
                                    "AzureFileSystem::unwrap_filesystem", fs,
                                    file_type);
 
+            Py_DECREF(path_py_str);
             Py_DECREF(fs_pyobject);
             Py_DECREF(storage_options);
             Py_DECREF(abfs_get_fs);
             Py_DECREF(fs_io_mod);
+
+            // If this is true we really have a URI, so we need to convert it to
+            // a path.
+            if (path.starts_with("abfs")) {
+                auto path_res = fs->PathFromUri(path);
+                CHECK_ARROW_AND_ASSIGN(path_res, "AzureFileSystem::PathFromUri",
+                                       path, file_type);
+            }
+
             arrow::Result<std::shared_ptr<arrow::io::OutputStream>> result =
                 fs->OpenOutputStream(path);
             CHECK_ARROW_AND_ASSIGN(result, "AzureFileSystem::OpenOutputStream",

@@ -1549,9 +1549,6 @@ def test_snowflake_write_column_name_special_chars(memory_leak_check):
         pytest.param(
             False,
             id="no-put",
-            marks=pytest.mark.skip(
-                "[BSE-4601] Snowflake no-put write temporarily broken. Unskip after Arrow 19 upgrade."
-            ),
         ),
     ],
 )

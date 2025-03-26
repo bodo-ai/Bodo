@@ -7,7 +7,7 @@ import sys
 import typing as pt
 import warnings
 from glob import has_magic
-from urllib.parse import ParseResult, urlparse
+from urllib.parse import ParseResult, parse_qs, urlparse
 
 import llvmlite.binding as ll
 import numpy as np
@@ -353,7 +353,7 @@ def pa_fs_list_dir_fnames(fs, path):
     return file_names
 
 
-def abfs_get_fs(storage_options: dict[str, str] | None):  # pragma: no cover
+def abfs_get_fs(path, storage_options: dict[str, str] | None):  # pragma: no cover
     from pyarrow.fs import AzureFileSystem
 
     def get_attr(opt_key: str, env_key: str) -> str | None:
@@ -386,8 +386,43 @@ def abfs_get_fs(storage_options: dict[str, str] | None):  # pragma: no cover
             "abfs_get_fs: Azure storage account name is not provided. Please set either the account_name in the storage_options or the AZURE_STORAGE_ACCOUNT_NAME environment variable."
         )
 
+    # If it's a URI try to extract SAS token
+    if path.startswith("abfs"):
+        query_params = parse_qs(urlparse(path).query)
+        if query_params is not None and "sv" in query_params and "sig" in query_params:
+            # If SAS token is provided in the path, use it
+            # These are the supported SAS token parameters see https://learn.microsoft.com/en-us/rest/api/storageservices/create-service-sas
+            sas_token_params = [
+                "sv",
+                "st",
+                "se",
+                "sr",
+                "sp",
+                "spr",
+                "sig",
+                "tn",
+                "spk",
+                "srk",
+                "epk",
+                "erk",
+                "sip",
+                "sdd",
+                "si",
+                "ses",
+            ]
+            sas_token = "&".join(
+                [
+                    f"{k}={v[0]}"
+                    for k, v in query_params.items()
+                    if k in sas_token_params
+                ]
+            )
+
     # Note, Azure validates credentials at use-time instead of at
     # initialization
+    if sas_token is not None:
+        return AzureFileSystem(account_name)
+
     return AzureFileSystem(account_name, account_key=account_key)
 
 
@@ -561,13 +596,12 @@ def getfs(
             storage_options = {}
         if "account_name" not in storage_options:
             # Extract the storage account from the path, assumes all files are in the same storage account
-            account_name = azure_storage_account_from_path(
-                fpath if not isinstance(fpath, list) else fpath[0]
-            )
+            path = fpath if not isinstance(fpath, list) else fpath[0]
+            account_name = azure_storage_account_from_path(path)
             if account_name is not None:
                 storage_options["account_name"] = account_name
 
-        return abfs_get_fs(storage_options)
+        return abfs_get_fs(path, storage_options)
     elif protocol == "hdfs":  # pragma: no cover
         return (
             get_hdfs_fs(fpath) if not isinstance(fpath, list) else get_hdfs_fs(fpath[0])
