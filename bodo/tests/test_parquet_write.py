@@ -4,6 +4,7 @@ import shutil
 import traceback
 from decimal import Decimal
 
+import numba
 import numpy as np
 import pandas as pd
 import pyarrow as pa
@@ -12,7 +13,6 @@ import pytest
 import pytz
 
 import bodo
-import numba
 from bodo.io.stream_parquet_write import (
     parquet_writer_append_table,
     parquet_writer_init,
