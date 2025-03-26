@@ -80,10 +80,10 @@ times and prints the results to your local terminal. There is also a notebook ve
 In order to run the Modin on Ray benchmark:
 
 1. Enter the benchmark Modin on Ray directory and create a new Conda environment using `env.yml`:
-``` bash
-cd modin_ray
-conda env create -f env.yml
-```
+    ``` bash
+    cd modin_ray
+    conda env create -f env.yml
+    ```
 2. Activate the environment using `conda activate benchmark_modin`.
 3. Ensure that you have set your aws credentials e.g. by running `aws configure`. This will be used by Ray to launch EC2 instances.
 4. Run the script `./run_modin.sh`, which will run the benchmark 3 times and print the results to your local terminal. Note that this is a long running script, and if it is interrupted, additional cleanup of resources may be required e.g. running `ray down modin-cluster.yaml -y` in your terminal or terminating the instances in your EC2 console.
@@ -100,21 +100,58 @@ In order to run the Spark benchmark:
 * [**gzip**](https://www.gnu.org/software/gzip/): Installed on your local machine.
 
 2. Enter the `spark` directory and initialize terraform:
-``` bash
-cd spark
-terraform init
-```
+    ``` bash
+    cd spark
+    terraform init
+    ```
 3. Apply the Terraform script to deploy resources and run the benchmark: `terraform apply` and type `yes` when prompted. The python script will be automatically uploaded to an S3 bucket and run on an EMR cluster.
 4. Run the following command to wait for the benchmark to complete: `./wait_for_steps.sh`.
 5. To view the output, download and print the logs using:
-```bash
-aws s3 cp s3://"$(terraform output --json | jq -r '.s3_bucket_id.value')"/logs/"$(terraform output --json | jq -r '.emr_cluster_id.value')" ./emr-logs --recursive --region "$(terraform output --json | jq -r '.emr_cluster_region.value')"
+    ```bash
+    aws s3 cp s3://"$(terraform output --json | jq -r '.s3_bucket_id.value')"/logs/"$(terraform output --json | jq -r '.emr_cluster_id.value')" ./emr-logs --recursive --region "$(terraform output --json | jq -r '.emr_cluster_region.value')"
 
-# View step logs with execution time result
-gzip -d ./emr-logs/steps/*/*
-cat ./emr-logs/steps/*/stdout
-```
+    # View step logs with execution time result
+    gzip -d ./emr-logs/steps/*/*
+    cat ./emr-logs/steps/*/stdout
+    ```
 6. Finally, cleanup resources: `terraform destroy` and type `yes` when prompted.
+
+### Daft
+
+1. Install the [**AWS CLI**](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html) and run `aws configure` to set up your credentials.
+2. You will need to make sure you have created the following roles in your AWS IAM console
+    * Role with S3FullAccess + EC2FullAccess (required by Ray's autoscaler) in addition a policy that allows passing IAM roles to other nodes (i.e. `iam:PassRole` + `iam:GetRole` on the role created above should be sufficient as described [here](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_use_passrole.html)). Name the role `benchmark-using-ray-head`.
+    * Role with S3FullAccess permissions to assign to **worker** nodes. Name the role `benchmark-using-ray-worker`.
+2. Install daft and other dependencies for a distributed run: `pip install "getdaft[aws,ray]"`.
+3. Run the script:
+    ``` bash
+    cd daft
+    ./run_daft.sh $BUCKET_NAME
+    ```
+    this script takes in the name of an AWS S3 bucket `BUCKET_NAME`, creates a Ray cluster, and runs the benchmark, writing the resulting DataFrame to `BUCKET_NAME`. You can optionally create a new bucket to store the output using the AWS CLI:
+    ``` bash
+    BUCKET_NAME=nyc-taxi-benchmark-daft-$(uuidgen | tr -d - | tr '[:upper:]' '[:lower:]' )
+    aws s3api create-bucket \
+        --bucket $BUCKET_NAME \
+        --region us-east-2 \
+        --create-bucket-configuration LocationConstraint=us-east-2
+    ```
+4. After inspecting the output, you can clean up any S3 resources created by running:
+    ``` bash
+    aws s3 rm s3://$BUCKET_NAME --recursive
+    aws s3api delete-bucket --bucket $BUCKET_NAME --region us-east-2
+    ```
+
+### Polars
+
+1. Install the [**AWS CLI**](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html) and run `aws configure` to set up your credentials.
+2. The script uses Ray to simplify setup and cleanup of an AWS EC2 instance, to install Ray, you can do `pip install -U "ray[default]"`. To run locally, you will also need to install polars: `pip install "polars[all]"`.
+3. Run the script:
+    ``` bash
+    cd polars
+    ./run_polars.sh
+    ```
+    This will create a single EC2 instance, run the workload 3 times, and finally remove the instance.
 
 ## Local Benchmark
 

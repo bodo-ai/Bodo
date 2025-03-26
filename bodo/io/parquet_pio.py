@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import random
 import time
@@ -136,7 +137,7 @@ class ParquetFileInfo(FileInfo):
         self.use_hive = use_hive
         super().__init__()
 
-    def _get_schema(self, fname):
+    def _get_schema(self, fname) -> FileSchema:
         try:
             return parquet_file_schema(
                 fname,
@@ -425,7 +426,7 @@ def get_fpath_without_protocol_prefix(
         tuple[str | list[str], str]: Filepath(s) without the prefix
             and the prefix itself.
     """
-    if protocol in {"abfs", "abfss"} and bodo.enable_azure_fs:  # pragma: no cover
+    if protocol in {"abfs", "abfss"}:  # pragma: no cover
         # PyArrow AzureBlobFileSystem is initialized with account_name only
         # so the host / container name should be included in the files
         prefix = f"{protocol}://"
@@ -448,7 +449,7 @@ def get_fpath_without_protocol_prefix(
     prefix = ""
     if protocol == "s3":
         prefix = "s3://"
-    elif protocol in {"hdfs", "abfs", "abfss"}:
+    elif protocol == "hdfs":
         # HDFS filesystem is initialized with host:port info. Once
         # initialized, the filesystem needs the <protocol>://<host><port>
         # prefix removed to query and access files
@@ -1238,28 +1239,26 @@ def _add_categories_to_pq_dataset(pq_dataset):
     pq_dataset._category_info = category_info
 
 
-def get_pandas_metadata(schema, num_pieces):
+def get_pandas_metadata(schema) -> tuple[list[str | dict], dict[str, bool | None]]:
     # find pandas index column if any
     # TODO: other pandas metadata like dtypes needed?
     # https://pandas.pydata.org/pandas-docs/stable/development/developer.html
-    index_col = None
+    index_cols = []
     # column_name -> is_nullable (or None if unknown)
     nullable_from_metadata: defaultdict[str, bool | None] = defaultdict(lambda: None)
-    key = b"pandas"
-    if schema.metadata is not None and key in schema.metadata:
-        import json
-
-        pandas_metadata = json.loads(schema.metadata[key].decode("utf8"))
+    KEY = b"pandas"
+    if schema.metadata is not None and KEY in schema.metadata:
+        pandas_metadata = json.loads(schema.metadata[KEY].decode("utf8"))
         if pandas_metadata is None:
-            return index_col, nullable_from_metadata
+            return [], nullable_from_metadata
 
-        n_indices = len(pandas_metadata["index_columns"])
-        if n_indices > 1:
-            raise BodoError("read_parquet: MultiIndex not supported yet")
-        index_col = pandas_metadata["index_columns"][0] if n_indices else None
+        index_cols = pandas_metadata["index_columns"]
         # ignore non-str/dict index metadata
-        if not isinstance(index_col, str) and not isinstance(index_col, dict):
-            index_col = None
+        index_cols = [
+            index_col
+            for index_col in index_cols
+            if isinstance(index_col, str) or isinstance(index_col, dict)
+        ]
 
         for col_dict in pandas_metadata["columns"]:
             col_name = col_dict["name"]
@@ -1272,7 +1271,7 @@ def get_pandas_metadata(schema, num_pieces):
                     nullable_from_metadata[col_name] = True
                 else:
                     nullable_from_metadata[col_name] = False
-    return index_col, nullable_from_metadata
+    return index_cols, nullable_from_metadata
 
 
 def get_str_columns_from_pa_schema(pa_schema: pa.Schema) -> list[str]:
@@ -1410,7 +1409,6 @@ def parquet_file_schema(
 
     partition_names = pq_dataset.partition_names
     pa_schema = pq_dataset.schema
-    num_pieces = len(pq_dataset.pieces)
 
     # Get list of string columns
     str_columns = get_str_columns_from_pa_schema(pa_schema)
@@ -1444,10 +1442,11 @@ def parquet_file_schema(
     # NOTE: use arrow schema instead of the dataset schema to avoid issues with
     # names of list types columns (arrow 0.17.0)
     # col_names is an array that contains all the column's name and
-    # index's name if there is one, otherwise "__index__level_0"
+    # index's name if there is one, otherwise "__index__level_0__"
     # If there is no index at all, col_names will not include anything.
     col_names = pa_schema.names
-    index_col, nullable_from_metadata = get_pandas_metadata(pa_schema, num_pieces)
+    index_cols, nullable_from_metadata = get_pandas_metadata(pa_schema)
+    index_col_names: set[str] = {name for name in index_cols if isinstance(name, str)}
     col_types_total = []
     is_supported_list = []
     arrow_types = []
@@ -1457,7 +1456,7 @@ def parquet_file_schema(
         field = pa_schema.field(c)
         dtype, supported = _get_numba_typ_from_pa_typ(
             field,
-            c == index_col,
+            c in index_col_names,
             nullable_from_metadata[c],
             pq_dataset._category_info,
             str_as_dict=c in str_as_dict,
@@ -1501,15 +1500,12 @@ def parquet_file_schema(
     for c in selected_columns:
         if c not in col_names_map:
             raise BodoError(f"Selected column {c} not in Parquet file schema")
-    if (
-        index_col
-        and not isinstance(index_col, dict)
-        and index_col not in selected_columns
-    ):
-        # if index_col is "__index__level_0" or some other name, append it.
-        # If the index column is not selected when reading parquet, the index
-        # should still be included.
-        selected_columns.append(index_col)
+    for index_col in index_cols:
+        if not isinstance(index_col, dict) and index_col not in selected_columns:
+            # if index_col is "__index__level_0__" or some other name, append it.
+            # If the index column is not selected when reading parquet, the index
+            # should still be included.
+            selected_columns.append(index_col)
 
     col_names = selected_columns
     col_indices = []
@@ -1528,7 +1524,7 @@ def parquet_file_schema(
     return (
         col_names,
         col_types,
-        index_col,
+        index_cols,
         col_indices,
         partition_names,
         unsupported_columns,

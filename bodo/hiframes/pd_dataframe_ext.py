@@ -1139,7 +1139,7 @@ def init_dataframe(typingctx, data_tup_typ, index_typ, col_names_typ):
     not changed.
     """
     assert is_pd_index_type(index_typ) or isinstance(index_typ, MultiIndexType), (
-        "init_dataframe(): invalid index type"
+        f"init_dataframe(): invalid index type of {index_typ}"
     )
 
     n_cols = len(data_tup_typ.types)
@@ -3630,7 +3630,12 @@ def pivot_impl(
     return impl
 
 
-@overload_method(DataFrameType, "to_parquet", no_unliteral=True)
+@overload_method(
+    DataFrameType,
+    "to_parquet",
+    no_unliteral=True,
+    # jit_options={"cache": True}
+)
 def to_parquet_overload(
     df,
     path,
@@ -4219,28 +4224,14 @@ def to_sql_overload(
         "            parquet_path='unicode_type',\n"
         "            upload_using_snowflake_put='boolean',\n"
         "            old_creds='DictType(unicode_type, unicode_type)',\n"
-        "            azure_stage_direct_upload='boolean',\n"
-        "            old_core_site='unicode_type',\n"
-        "            old_sas_token='unicode_type',\n"
         "        ):\n"
         "            (\n"
-        "                cursor, tmp_folder, stage_name, parquet_path, upload_using_snowflake_put, old_creds, azure_stage_direct_upload, old_core_site, old_sas_token,\n"
+        "                cursor, tmp_folder, stage_name, parquet_path, upload_using_snowflake_put, old_creds,\n"
         "            ) = bodo.io.snowflake.connect_and_get_upload_info(con)\n"
     )
 
     # Barrier ensures that internal stage exists before we upload files to it
     func_text += "        bodo.barrier()\n"
-
-    # Force reset the existing hadoop filesystem instance. This is very important
-    # in case there are multiple Snowflake writes (to the same Snowflake account)
-    # in the same process since Snowflake will usually create the stage in the
-    # same Azure storage account (but different containers). This means that we
-    # need to use the new SAS token. To do this, we need to force Hadoop to read
-    # the SAS Token again using the BodoSASTokenProvider (which will read it from
-    # the file again, which should now have the latest token).
-    # Note that this is a NOP if the filesystem hasn't been initialized yet.
-    func_text += "        if azure_stage_direct_upload:\n"
-    func_text += "            bodo.libs.distributed_api.disconnect_hdfs_njit()\n"
 
     # Estimate chunk size by repeating internal implementation of `df.memory_usage()`.
     # Calling `df.memory_usage()` provides much poorer performance as the call
@@ -4375,7 +4366,6 @@ def to_sql_overload(
         "                unicode_to_utf8('UTC'),\n"  # Explicitly set tz='UTC' for snowflake write. see [BE-3530]
         "                True,\n"  # Explicitly downcast nanoseconds to microseconds (See gen_snowflake_schema comment)
         "                True,\n"  # Create directory
-        "                True,\n"  # Use HDFS for abfs paths until arrow AzureFileSystem supports SAS tokens
         "            )\n"
         "            ev_pq_write_cpp.finalize()\n"
         # If needed, upload local parquet to internal stage using objmode PUT
@@ -4409,18 +4399,8 @@ def to_sql_overload(
         # dicts we check if they contain type references in the value and throw an error, we need typerefs here
         f"                cursor, stage_name, location, {sf_schema}, dict(zip(df.columns, df_data_)),\n"
         "                if_exists, _bodo_create_table_type, num_files_global, old_creds, tmp_folder,\n"
-        "                azure_stage_direct_upload, old_core_site,\n"
-        "                old_sas_token,\n"
         "            )\n"
     )
-
-    # Force reset the existing hadoop filesystem instance to avoid conflicts
-    # with any future ADLS operations in this same process. See the comment
-    # above for more information.
-    # Note that this is idempotent, so it can be called safely again during
-    # atexit without any side effects (will be a NOP).
-    func_text += "        if azure_stage_direct_upload:\n"
-    func_text += "            bodo.libs.distributed_api.disconnect_hdfs_njit()\n"
     func_text += "        ev.finalize()\n"
 
     # -------------------------- Default to_sql Impl --------------------------

@@ -423,23 +423,6 @@ target_compile_definitions(pyarrow_wrappers PRIVATE ARROW_PYTHON_EXPORTING)
 target_link_libraries(pyarrow_wrappers PRIVATE arrow arrow_python arrow_dataset "${MPI_LIBRARIES}")
 install(TARGETS pyarrow_wrappers DESTINATION "bodo/io/")
 
-# ----------------------- Cython Target - bodo.io._hdfs -----------------------
-add_custom_command(
-  OUTPUT bodo/io/_hdfs.cpp
-  DEPENDS bodo/io/_hdfs.pyx
-  VERBATIM
-  WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-  COMMAND "${CYTHON_EXECUTABLE}" --cplus -3 --output-file "bodo/io/_hdfs.cpp" "bodo/io/_hdfs.pyx"
-  COMMAND "${CMAKE_COMMAND}" -E copy "bodo/io/_hdfs.cpp" "${CMAKE_CURRENT_BINARY_DIR}/bodo/io/_hdfs.cpp"
-  COMMENT "Cythonizing Source bodo/io/_hdfs.pyx into bodo/io/_hdfs.cpp"
-)
-
-python_add_library(_hdfs MODULE WITH_SOABI "bodo/io/_hdfs.cpp")
-target_include_directories(_hdfs PUBLIC ${BASE_INCLUDE_DIRS})
-target_link_directories(_hdfs PRIVATE ${PYARROW_LIB_DIR} ${CONDA_LIB_DIR})
-target_link_libraries(_hdfs PRIVATE arrow arrow_python)
-install(TARGETS _hdfs DESTINATION "bodo/io/")
-
 # ---------------------- Cython Target - bodo.io.tracing ----------------------
 if (NOT (CMAKE_BUILD_TYPE STREQUAL "Release"))
   set(BODO_DEV_BUILD "1")
@@ -806,5 +789,5 @@ else()
 endif()
 
 set_target_properties(ext PROPERTIES CXX_CLANG_TIDY "${CLANG_TIDY_COMMAND}")
-add_dependencies(ext csv_json_reader _hdfs tracing pyarrow_wrappers datasketches)
+add_dependencies(ext csv_json_reader tracing pyarrow_wrappers datasketches)
 install(TARGETS ext DESTINATION "bodo/")

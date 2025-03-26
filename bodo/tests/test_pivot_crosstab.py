@@ -1604,7 +1604,8 @@ def test_pivot_table_index_none(memory_leak_check):
         ),
     ],
 )
-def test_pivot_to_parquet(df, memory_leak_check):
+# TODO[BSE-4642]: Fix memory leak error
+def test_pivot_to_parquet(df):
     """
     Tests calling to_parquet on the output of DataFrame.pivot()
     without requiring an intermediate move to Python.

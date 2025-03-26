@@ -73,17 +73,6 @@ jobs:
     displayName: 'Build Bodo & Iceberg Connector'
 
   - bash: |
-      set -exo pipefail
-      eval "$(pixi shell-hook --shell bash -e azure)"
-
-      wget -q -O - "https://adlsresources.blob.core.windows.net/adlsresources/hadoop-3.3.2.tar.gz" | sudo tar -xzf - -C /opt
-      cd azurefs-sas-token-provider
-      pip install --no-deps --no-build-isolation -ve .
-    displayName: "Setup Snowflake ADLS Testing (only Linux)"
-    condition: ne(variables['Agent.OS'], 'Windows_NT')
-    retryCountOnTaskFailure: 5
-
-  - bash: |
       pixi list
       pixi run pip list
     continueOnError: true
@@ -103,7 +92,7 @@ jobs:
       set -exo pipefail
 
       # This isn't published on pypi so no good way to list it as a dependency
-      pixi run -e azure pip install 'git+https://github.com/apache/polaris.git#subdirectory=regtests/client/python'
+      pixi run -e azure pip install 'git+https://github.com/apache/polaris.git#subdirectory=client/python'
 
       unamestr=`uname`
       if [[ "$unamestr" == 'Linux' ]]; then

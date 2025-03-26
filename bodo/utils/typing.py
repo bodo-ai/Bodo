@@ -7,6 +7,7 @@ import itertools
 import operator
 import types as pytypes
 import typing
+import typing as pt
 import warnings
 from inspect import getfullargspec
 from typing import Any
@@ -54,8 +55,10 @@ INDEX_SENTINEL = "$_bodo_index_"
 
 
 list_cumulative = {"cumsum", "cumprod", "cummin", "cummax"}
-Index = str | dict | None
-FileSchema = tuple[list[str], list, Index, list[int], list, list, list, pa.Schema]
+Index: pt.TypeAlias = list[str | dict]
+FileSchema: pt.TypeAlias = tuple[
+    list[str], list, Index, list[int], list, list, list, pa.Schema
+]
 
 
 def is_timedelta_type(in_type):
@@ -2660,6 +2663,8 @@ def index_typ_from_dtype_name_arr(elem_dtype, name, arr_typ):
     index_class = type(get_index_type_from_dtype(elem_dtype))
     if name is None:
         name_typ = None
+    elif name == types.none or isinstance(name, types.StringLiteral):
+        name_typ = name
     else:
         name_typ = types.StringLiteral(name)
     if index_class == bodo.hiframes.pd_index_ext.NumericIndexType:

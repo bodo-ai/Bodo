@@ -131,20 +131,6 @@ snowflake_writer_payload_members = (
     # Old environment variables that were overwritten to update credentials
     # for uploading to stage
     ("old_creds", types.DictType(types.unicode_type, types.unicode_type)),
-    # Whether the stage is ADLS backed and we'll be writing parquet files to it
-    # directly using our existing HDFS and Parquet infrastructure
-    ("azure_stage_direct_upload", types.boolean),
-    # If azure_stage_direct_upload=True, we replace bodo.HDFS_CORE_SITE_LOC
-    # with a new core-site.xml. `old_core_site` contains the original contents
-    # of the file or "__none__" if file didn't originally exist, so that it
-    # can be restored later after copy into
-    ("old_core_site", types.unicode_type),
-    # If azure_stage_direct_upload=True, we replace contents in
-    # SF_AZURE_WRITE_SAS_TOKEN_FILE_LOCATION if any with the SAS token for
-    # this upload. `old_sas_token` contains the original contents of the file
-    # or "__none__" if file didn't originally exist, so that it can be
-    # restored later after copy into
-    ("old_sas_token", types.unicode_type),
     # Batches collected to write
     ("batches", TableBuilderStateType()),
     # Whether the `copy_intosfqids` exists.
@@ -362,9 +348,6 @@ def overload_connect_and_get_upload_info_jit(conn):
             stage_path="unicode_type",
             upload_using_snowflake_put="boolean",
             old_creds="DictType(unicode_type, unicode_type)",
-            azure_stage_direct_upload="boolean",
-            old_core_site="unicode_type",
-            old_sas_token="unicode_type",
         ):
             (
                 cursor,
@@ -373,9 +356,6 @@ def overload_connect_and_get_upload_info_jit(conn):
                 stage_path,
                 upload_using_snowflake_put,
                 old_creds,
-                azure_stage_direct_upload,
-                old_core_site,
-                old_sas_token,
             ) = bodo.io.snowflake.connect_and_get_upload_info(conn)
 
         return (
@@ -385,9 +365,6 @@ def overload_connect_and_get_upload_info_jit(conn):
             stage_path,
             upload_using_snowflake_put,
             old_creds,
-            azure_stage_direct_upload,
-            old_core_site,
-            old_sas_token,
         )
 
     return impl
@@ -451,9 +428,6 @@ def gen_snowflake_writer_init_impl(
             stage_path,
             upload_using_snowflake_put,
             old_creds,
-            azure_stage_direct_upload,
-            old_core_site,
-            old_sas_token,
         ) = connect_and_get_upload_info_jit(conn)
         writer["cursor"] = cursor
         writer["tmp_folder"] = tmp_folder
@@ -461,15 +435,8 @@ def gen_snowflake_writer_init_impl(
         writer["stage_path"] = stage_path
         writer["upload_using_snowflake_put"] = upload_using_snowflake_put
         writer["old_creds"] = old_creds
-        writer["azure_stage_direct_upload"] = azure_stage_direct_upload
-        writer["old_core_site"] = old_core_site
-        writer["old_sas_token"] = old_sas_token
         # Barrier ensures that internal stage exists before we upload files to it
         bodo.barrier()
-        # Force reset the existing hadoop filesystem instance, to use new SAS token.
-        # See to_sql() for more detailed comments
-        if azure_stage_direct_upload:
-            bodo.libs.distributed_api.disconnect_hdfs_njit()
         # Compute bucket region
         writer["bucket_region"] = bodo.io.fs_io.get_s3_bucket_region_wrapper(
             stage_path, _is_parallel
@@ -658,7 +625,6 @@ def gen_snowflake_writer_append_table_impl_inner(
                     unicode_to_utf8("UTC"),  # Explicitly set tz='UTC'
                     True,  # Explicitly downcast nanoseconds to microseconds
                     False,  # Create write directory if not exists
-                    True,  # Force HDFS for abfs paths until arrow AzureFileSystem supports SAS tokens
                 )
                 ev_pq_write_cpp.finalize()
                 # In case of Snowflake PUT, upload local parquet to internal stage
@@ -830,33 +796,18 @@ def gen_snowflake_writer_append_table_impl_inner(
                 writer["flatten_sql"] = ""
                 writer["flatten_table"] = ""
                 writer["file_count_global_prev"] = 0
-            # Force reset the existing Hadoop filesystem instance to avoid
-            # conflicts with any future ADLS operations in the same process
-            if writer["azure_stage_direct_upload"]:
-                bodo.libs.distributed_api.disconnect_hdfs_njit()
             # Drop internal stage, close Snowflake connection cursor, put back
             # environment variables, restore contents in case of ADLS stage
             cursor = writer["cursor"]
             stage_name = writer["stage_name"]
             old_creds = writer["old_creds"]
             tmp_folder = writer["tmp_folder"]
-            azure_stage_direct_upload = writer["azure_stage_direct_upload"]
-            old_core_site = writer["old_core_site"]
-            old_sas_token = writer["old_sas_token"]
             with bodo.no_warning_objmode():
                 if cursor is not None:
                     bodo.io.snowflake.drop_internal_stage(cursor, stage_name)
                     cursor.close()
                 bodo.io.snowflake.update_env_vars(old_creds)
                 tmp_folder.cleanup()
-                if azure_stage_direct_upload:
-                    bodo.io.snowflake.update_file_contents(
-                        bodo.HDFS_CORE_SITE_LOC, old_core_site
-                    )
-                    bodo.io.snowflake.update_file_contents(
-                        bodo.io.snowflake.SF_AZURE_WRITE_SAS_TOKEN_FILE_LOCATION,
-                        old_sas_token,
-                    )
             if writer["parallel"]:
                 bodo.barrier()
             writer["finished"] = True

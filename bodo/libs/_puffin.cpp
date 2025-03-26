@@ -1,6 +1,7 @@
 #include "_puffin.h"
 
 #include <arrow/python/api.h>
+#include <listobject.h>
 #include <object.h>
 #include <zstd.h>
 #include <algorithm>
@@ -542,7 +543,7 @@ PyObject *get_statistics_file_metadata(
     PyObject *statistics_file_class =
         PyObject_GetAttrString(ice, "StatisticsFile");
     CHECK(statistics_file_class,
-          "getting bodo_iceberg_connector.StatisticsFile failed");
+          "getting pyiceberg.table.statistics.StatisticsFile failed");
 
     PyObject *kwargs = Py_BuildValue(
         "{s:L,s:s,s:L,s:i,s:O}", "snapshot-id", snapshot_id, "statistics-path",
@@ -554,6 +555,7 @@ PyObject *get_statistics_file_metadata(
         PyObject_Call(statistics_file_class, args, kwargs);
 
     CHECK(statistics_file_obj, "creating StatisticsFile object failed");
+    Py_DECREF(kwargs);
     Py_DECREF(args);
     Py_DECREF(blob_list);
     Py_DECREF(statistics_file_class);
@@ -562,24 +564,41 @@ PyObject *get_statistics_file_metadata(
 }
 
 /**
- * @brief Generate an equivalent empty bodo_iceberg_connector.StatisticsFile
+ * @brief Generate an equivalent empty pyiceberg.table.statistics.StatisticsFile
  * object for when the rank is not 0. This is used for type stability when
  * interacting with object mode.
  *
  * @return PyObject*
  */
 PyObject *get_empty_statistics_file_metadata() {
-    PyObject *bic = PyImport_ImportModule("bodo_iceberg_connector");
-    CHECK(bic, "importing bodo_iceberg_connector module failed");
+    PyObject *ice = PyImport_ImportModule("pyiceberg.table.statistics");
+    CHECK(ice, "importing pyiceberg.table.statistics module failed");
     PyObject *statistics_file_class =
-        PyObject_GetAttrString(bic, "StatisticsFile");
+        PyObject_GetAttrString(ice, "StatisticsFile");
     CHECK(statistics_file_class,
-          "getting bodo_iceberg_connector.StatisticsFile failed");
+          "getting pyiceberg.table.statistics.StatisticsFile failed");
+
+    PyObject *args = PyTuple_New(0);
+    CHECK(args, "Creating empty args tuple failed");
+
+    PyObject *blob_list = PyList_New(0);
+    CHECK(blob_list, "Creating empty list failed");
+
+    PyObject *kwargs = Py_BuildValue(
+        "{s:L,s:s,s:L,s:i,s:O}", "snapshot-id", -1, "statistics-path", "",
+        "file-size-in-bytes", -1, "file-footer-size-in-bytes", -1,
+        "blob-metadata", blob_list);
+    CHECK(kwargs, "Creating empty args for StatisticsFile failed");
+
     PyObject *statistics_file_obj =
-        PyObject_CallMethod(statistics_file_class, "empty", "");
+        PyObject_Call(statistics_file_class, args, kwargs);
+
     CHECK(statistics_file_obj, "creating empty StatisticsFile object failed");
+    Py_DECREF(blob_list);
+    Py_DECREF(args);
+    Py_DECREF(kwargs);
     Py_DECREF(statistics_file_class);
-    Py_DECREF(bic);
+    Py_DECREF(ice);
     return statistics_file_obj;
 }
 
