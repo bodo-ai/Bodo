@@ -42,8 +42,8 @@ class BodoParquetScanFunctionData : public duckdb::TableFunctionData {
  * @param plan input logical plan to be optimized
  * @return duckdb::unique_ptr<duckdb::LogicalOperator> optimized plan
  */
-duckdb::unique_ptr<duckdb::LogicalOperator> optimize_plan(
-    duckdb::unique_ptr<duckdb::LogicalOperator> plan);
+std::unique_ptr<duckdb::LogicalOperator> optimize_plan(
+    std::unique_ptr<duckdb::LogicalOperator> plan);
 
 /**
  * @brief Creates a LogicalGet node for reading a Parquet dataset in DuckDB with

@@ -92,7 +92,8 @@ cdef class LogicalComparisonJoin(LogicalOperator):
        self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalOperator*> c_logical_comparison_join.release())
 
     def __str__(self):
-        return f"LogicalComparisonJoin({join_type_to_string(self.c_logical_comparison_join.get().join_type)})"
+        join_type = join_type_to_string((<CLogicalComparisonJoin*>(self.c_logical_operator.get())).join_type)
+        return f"LogicalComparisonJoin({join_type})"
 
 
 cdef class LogicalGetParquetRead(LogicalOperator):
@@ -109,7 +110,7 @@ cdef class LogicalGetParquetRead(LogicalOperator):
         return f"LogicalGetParquetRead({self.path})"
 
 
-cdef public py_optimize_plan(object plan):
+cpdef py_optimize_plan(object plan):
     """Optimize a logical plan using DuckDB's optimizer
     """
     cdef LogicalOperator wrapped_operator

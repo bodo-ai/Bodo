@@ -1,14 +1,22 @@
 #include "_bodo_plan.h"
 #include <utility>
 #include "duckdb.hpp"
+#include "duckdb/common/unique_ptr.hpp"
 #include "duckdb/planner/operator/logical_get.hpp"
 
-duckdb::unique_ptr<duckdb::LogicalOperator> optimize_plan(
-    duckdb::unique_ptr<duckdb::LogicalOperator> plan) {
+std::unique_ptr<duckdb::LogicalOperator> optimize_plan(
+    std::unique_ptr<duckdb::LogicalOperator> plan) {
     duckdb::Optimizer& optimizer = get_duckdb_optimizer();
+
+    // Convert std::unique_ptr to duckdb::unique_ptr
+    // Input is using std since Cython supports it
+    duckdb::unique_ptr<duckdb::LogicalOperator> in_plan =
+        duckdb::unique_ptr<duckdb::LogicalOperator>(plan.release());
+
     duckdb::unique_ptr<duckdb::LogicalOperator> optimized_plan =
-        optimizer.Optimize(std::move(plan));
-    return optimized_plan;
+        optimizer.Optimize(std::move(in_plan));
+
+    return std::unique_ptr<duckdb::LogicalOperator>(optimized_plan.release());
 }
 
 duckdb::unique_ptr<duckdb::LogicalGet> make_parquet_get_node(
