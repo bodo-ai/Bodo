@@ -424,7 +424,6 @@ def gen_pandas_parquet_metadata(
     pass
 
 
-# TODO: Determine caching issue and re-enable
 @overload(gen_pandas_parquet_metadata, no_unliteral=True, jit_options={"cache": True})
 def overload_gen_pandas_parquet_metadata(
     df,
