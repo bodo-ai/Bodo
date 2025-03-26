@@ -54,10 +54,10 @@ PGList *raw_parser(const char *str) {
 	yyextra.have_lookahead = false;
 
 	/* initialize the bison parser */
-	parser_init(&yyextra);
+	// parser_init(&yyextra);
 
 	/* Parse! */
-	yyresult = base_yyparse(yyscanner);
+	// yyresult = base_yyparse(yyscanner);
 
 	/* Clean up (release memory) */
 	scanner_finish(yyscanner);

@@ -13,14 +13,13 @@
 #include "duckdb/function/compression_function.hpp"
 
 namespace duckdb {
-struct UncompressedStringSegmentState;
 
 class OverflowStringWriter {
 public:
 	virtual ~OverflowStringWriter() {
 	}
 
-	virtual void WriteString(UncompressedStringSegmentState &state, string_t string, block_id_t &result_block,
+	virtual void WriteString(string_t string, block_id_t &result_block,
 	                         int32_t &result_offset) = 0;
 	virtual void Flush() = 0;
 };
