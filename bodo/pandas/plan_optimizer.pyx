@@ -4,6 +4,7 @@
 # cython: c_string_type=unicode, c_string_encoding=utf8
 
 from libcpp.memory cimport unique_ptr, make_unique
+from libcpp.string cimport string as c_string
 
 
 cdef extern from "duckdb/common/enums/join_type.hpp" namespace "duckdb" nogil:
@@ -25,6 +26,15 @@ cdef extern from "duckdb/planner/operator/logical_comparison_join.hpp" namespace
     cdef cppclass CLogicalComparisonJoin" duckdb::LogicalComparisonJoin":
         CLogicalComparisonJoin(CJoinType join_type)
         CJoinType join_type
+
+
+cdef extern from "duckdb/planner/operator/logical_get.hpp" namespace "duckdb" nogil:
+    cdef cppclass CLogicalGet" duckdb::LogicalGet":
+        pass
+
+
+cdef extern from "_bodo_plan.h" nogil:
+    cdef unique_ptr[CLogicalGet] make_parquet_get_node(c_string parquet_path)
 
 
 def join_type_to_string(CJoinType join_type):
@@ -68,3 +78,17 @@ cdef class LogicalComparisonJoin:
 
     def __str__(self):
         return f"LogicalComparisonJoin({join_type_to_string(self.c_logical_comparison_join.get().join_type)})"
+
+
+cdef class LogicalGetParquetRead:
+    """Wrapper around DuckDB's LogicalGet for reading Parquet datasets.
+    """
+    cdef unique_ptr[CLogicalGet] c_logical_get
+    cdef readonly str path
+
+    def __cinit__(self, c_string parquet_path):
+       self.c_logical_get = make_parquet_get_node(parquet_path)
+       self.path = (<bytes>parquet_path).decode("utf-8")
+
+    def __str__(self):
+        return f"LogicalGetParquetRead({self.path})"

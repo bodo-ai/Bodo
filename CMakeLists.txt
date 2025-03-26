@@ -534,6 +534,7 @@ python_add_library(
   plan_optimizer
   MODULE WITH_SOABI
   "bodo/pandas/plan_optimizer.cpp"
+  "bodo/pandas/_bodo_plan.cpp"
 )
 
 ExternalProject_Add(
