@@ -9,10 +9,6 @@
 #include "duckdb/storage/storage_extension.hpp"
 #include "duckdb/common/serializer/serializer.hpp"
 
-#ifndef DUCKDB_NO_THREADS
-#include "duckdb/common/thread.hpp"
-#endif
-
 #include <cinttypes>
 #include <cstdio>
 
@@ -414,22 +410,7 @@ void DBConfig::CheckLock(const string &name) {
 }
 
 idx_t DBConfig::GetSystemMaxThreads(FileSystem &fs) {
-#ifdef DUCKDB_NO_THREADS
 	return 1;
-#else
-	idx_t physical_cores = std::thread::hardware_concurrency();
-#ifdef __linux__
-	if (const char *slurm_cpus = getenv("SLURM_CPUS_ON_NODE")) {
-		idx_t slurm_threads;
-		if (TryCast::Operation<string_t, idx_t>(string_t(slurm_cpus), slurm_threads)) {
-			return MaxValue<idx_t>(slurm_threads, 1);
-		}
-	}
-	return MaxValue<idx_t>(CGroups::GetCPULimit(fs, physical_cores), 1);
-#else
-	return MaxValue<idx_t>(physical_cores, 1);
-#endif
-#endif
 }
 
 idx_t DBConfig::GetSystemAvailableMemory(FileSystem &fs) {

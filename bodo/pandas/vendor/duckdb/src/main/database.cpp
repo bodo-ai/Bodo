@@ -27,9 +27,6 @@
 #include "duckdb/storage/compression/empty_validity.hpp"
 #include "duckdb/logging/logger.hpp"
 
-#ifndef DUCKDB_NO_THREADS
-#include "duckdb/common/thread.hpp"
-#endif
 
 namespace duckdb {
 
