@@ -4305,7 +4305,13 @@ def to_sql_overload(
     # Create a unique filename for uploaded chunk with quotes/backslashes escaped
     # We ensure that `parquet_path` always has a trailing slash in `connect_and_get_upload_info`
     func_text += "            chunk_name = f'file{chunk_idx}_rank{my_rank}_{bodo.io.helpers.uuid4_helper()}.parquet'\n"
-    func_text += "            chunk_path = parquet_path + chunk_name\n"
+    func_text += "            if parquet_path.startswith('abfs'):  # Azure\n"
+    func_text += "                container_path, query = parquet_path.split('?')\n"
+    func_text += (
+        "                chunk_path = container_path + chunk_name + '?' + query\n"
+    )
+    func_text += "            else:\n"
+    func_text += "                chunk_path = parquet_path + chunk_name\n"
     # To escape backslashes, we want to replace ( \ ) with ( \\ ), so the func_text
     # should contain the string literals ( \\ ) and ( \\\\ ). To add these to func_text,
     # we need to write ( \\\\ ) and ( \\\\\\\\ ) here.
