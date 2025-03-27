@@ -7,7 +7,7 @@ import sys
 import typing as pt
 import warnings
 from glob import has_magic
-from urllib.parse import ParseResult, parse_qs, urlparse
+from urllib.parse import ParseResult, urlparse
 
 import llvmlite.binding as ll
 import numpy as np
@@ -385,43 +385,6 @@ def abfs_get_fs(path, storage_options: dict[str, str] | None):  # pragma: no cov
         raise BodoError(
             "abfs_get_fs: Azure storage account name is not provided. Please set either the account_name in the storage_options or the AZURE_STORAGE_ACCOUNT_NAME environment variable."
         )
-
-    # If it's a URI try to extract SAS token
-    if path.startswith("abfs"):
-        query_params = parse_qs(urlparse(path).query)
-        if query_params is not None and "sv" in query_params and "sig" in query_params:
-            # If SAS token is provided in the path, use it
-            # These are the supported SAS token parameters see https://learn.microsoft.com/en-us/rest/api/storageservices/create-service-sas
-            sas_token_params = [
-                "sv",
-                "st",
-                "se",
-                "sr",
-                "sp",
-                "spr",
-                "sig",
-                "tn",
-                "spk",
-                "srk",
-                "epk",
-                "erk",
-                "sip",
-                "sdd",
-                "si",
-                "ses",
-            ]
-            sas_token = "&".join(
-                [
-                    f"{k}={v[0]}"
-                    for k, v in query_params.items()
-                    if k in sas_token_params
-                ]
-            )
-
-    # Note, Azure validates credentials at use-time instead of at
-    # initialization
-    if sas_token is not None:
-        return AzureFileSystem(account_name)
 
     return AzureFileSystem(account_name, account_key=account_key)
 
