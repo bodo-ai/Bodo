@@ -515,7 +515,11 @@ def overload_gen_pandas_parquet_metadata(
         ):
             index = df.index
             index_names = index.names
+
+            # Add range_info to metadata,
+            # This is the only line that is different between the two impls.
             range_info = (index.start, index.stop, index.step)
+
             return _gen_pandas_parquet_metadata_helper(
                 range_info,
                 index_names,
@@ -533,7 +537,9 @@ def overload_gen_pandas_parquet_metadata(
         ):
             index = df.index
             index_names = index.names
+
             range_info = None
+
             return _gen_pandas_parquet_metadata_helper(
                 range_info,
                 index_names,
