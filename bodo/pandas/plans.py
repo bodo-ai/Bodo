@@ -2,6 +2,7 @@ from abc import ABC
 
 import pandas as pd
 
+from bodo.pandas import plan_optimizer
 from bodo.pandas.parquet import get_pandas_schema
 
 
@@ -11,6 +12,10 @@ class PlanOperator(ABC):
 
     def add_source(self, node):
         self.sources.append(node)
+
+    def convert_to_duckdb(self):
+        print("No explicit convert_to_duckdb for type", type(self))
+        return [x.convert_to_duckdb() for x in self.sources]
 
 
 class UnaryPlanOperator(PlanOperator, ABC):
@@ -129,6 +134,9 @@ class ParquetRead(DataSourcePlanOperator):
         self.filename = filename
         self.schema = get_pandas_schema(filename)
 
+    def convert_to_duckdb(self):
+        return plan_optimizer.LogicalGetParquetRead(self.filename.encode())
+
 
 class Join(LogicalJoin):
     def __init__(self, lhs_source, rhs_source, join_type):
@@ -140,6 +148,21 @@ class ComparisonJoin(LogicalJoin):
     def __init__(self, lhs_source, rhs_source, conditions):
         self.conditions = conditions
         super().__init__(lhs_source, rhs_source)
+
+    def convert_to_duckdb(self):
+        [x.convert_to_duckdb() for x in self.sources]
+        join_plan = plan_optimizer.LogicalComparisonJoin(plan_optimizer.CJoinType.INNER)
+        """
+        JoinCondition cond;
+        cond.comparison = ExpressionType::COMPARE_EQUAL;
+        LogicalType type(LogicalTypeId::INTEGER);
+        cond.left = make_uniq<BoundColumnRefExpression>(type, ColumnBinding(0, 0));
+        cond.right = make_uniq<BoundColumnRefExpression>(type, ColumnBinding(1, 0));
+        comp_join->children.push_back(std::move(make_uniq<BodoLogicalDummyScan>(binder->GenerateTableIndex(), 11)));
+        comp_join->children.push_back(std::move(make_uniq<BodoLogicalDummyScan>(binder->GenerateTableIndex(), 100)));
+        comp_join->conditions.push_back(std::move(cond));
+        """
+        return join_plan
 
 
 """ Unconverted DuckDB types
@@ -231,14 +254,20 @@ enum class PlanOperatorType : uint8_t {
 """
 
 
+def convert_and_execute(plan):
+    orig_plan = plan.convert_to_duckdb()
+    opt_plan = plan_optimizer.py_optimize_plan(orig_plan)
+    print("opt_plan:", opt_plan)
+
+
 def wrap_plan(schema, plan):
     from bodo.pandas.frame import BodoDataFrame
     from bodo.pandas.series import BodoSeries
     from bodo.pandas.utils import get_lazy_manager_class, get_lazy_single_manager_class
 
-    def collect_func(res_id: str):
-        print("collect_func for plan", res_id)
-        assert False
+    def collect_func(plan_to_execute: PlanOperator):
+        print("collect_func for plan", plan_to_execute)
+        convert_and_execute(plan_to_execute)
 
         """
         # collect is sometimes triggered during receive (e.g. for unsupported types
@@ -272,7 +301,7 @@ def wrap_plan(schema, plan):
         lazy_mgr = get_lazy_manager_class()(
             None,
             None,
-            result_id=str(plan),
+            result_id=plan,
             nrows=1,
             head=schema._mgr,
             collect_func=collect_func,
@@ -285,7 +314,7 @@ def wrap_plan(schema, plan):
         lazy_mgr = get_lazy_single_manager_class()(
             None,
             None,
-            result_id=str(plan),
+            result_id=plan,
             nrows=1,
             head=schema._mgr,
             collect_func=collect_func,
