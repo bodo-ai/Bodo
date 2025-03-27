@@ -1,14 +1,16 @@
 import typing as pt
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 
 import pandas as pd
 
 import bodo
+from bodo.pandas import plans
 from bodo.pandas.array_manager import LazyArrayManager
 from bodo.pandas.lazy_metadata import LazyMetadata
 from bodo.pandas.lazy_wrapper import BodoLazyWrapper
 from bodo.pandas.managers import LazyBlockManager, LazyMetadataMixin
-from bodo.pandas.utils import get_lazy_manager_class
+from bodo.pandas.series import BodoSeries
+from bodo.pandas.utils import convert_to_pandas, get_lazy_manager_class
 from bodo.utils.typing import (
     BodoError,
     check_unsupported_args,
@@ -23,6 +25,9 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
     # so some methods like head will still trigger data pull if we don't store head_df and
     # use it directly when available.
     _head_df: pd.DataFrame | None = None
+
+    _internal_names = pd.DataFrame._internal_names + ["plan"]
+    _internal_names_set = set(_internal_names)
 
     @staticmethod
     def from_lazy_mgr(
@@ -43,6 +48,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         lazy_metadata: LazyMetadata,
         collect_func: Callable[[str], pt.Any] | None = None,
         del_func: Callable[[str], None] | None = None,
+        plan: plans.PlanOperator | None = None,
     ) -> "BodoDataFrame":
         """
         Create a BodoDataFrame from a lazy metadata object.
@@ -57,6 +63,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             collect_func=collect_func,
             del_func=del_func,
             index_data=lazy_metadata.index_data,
+            plan=plan,
         )
         return cls.from_lazy_mgr(lazy_mgr, lazy_metadata.head)
 
@@ -381,3 +388,131 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         return bodo.spawn.spawner.submit_func_to_workers(
             func, [], self, *args, **kwargs
         )
+
+    def merge(
+        self,
+        right,  # BodoDataFrame | BodoSeries,
+        how="inner",  # MergeHow = "inner",
+        on=None,  # IndexLabel | AnyArrayLike | None = None,
+        left_on=None,  # IndexLabel | AnyArrayLike | None = None,
+        right_on=None,  # IndexLabel | AnyArrayLike | None = None,
+        left_index=False,  # bool = False,
+        right_index=False,  # bool = False,
+        sort=False,  # bool = False,
+        suffixes=("_x", "_y"),  # Suffixes = ("_x", "_y"),
+        copy=None,  # bool | None = None,
+        indicator=False,  # str | bool = False,
+        validate=None,  # MergeValidate | None = None,
+    ):  # -> BodoDataFrame:
+        from bodo.pandas import BODO_PANDAS_FALLBACK
+
+        if (
+            isinstance(right, BodoSeries)
+            or how != "inner"
+            or indicator != False
+            or validate != None
+        ):
+            if BODO_PANDAS_FALLBACK != 0:
+                return pd.merge(
+                    convert_to_pandas(self),
+                    convert_to_pandas(right),
+                    how=how,
+                    on=on,
+                    left_on=left_on,
+                    right_on=right_on,
+                    left_index=left_index,
+                    right_index=right_index,
+                    sort=sort,
+                    suffixes=suffixes,
+                    copy=copy,
+                    indicator=indicator,
+                    validate=validate,
+                )
+            else:
+                assert False and "Unsupported option to DataFrame.merge"
+        if hasattr(self, "plan") and hasattr(right, "plan"):
+            from bodo.pandas.base import empty_like
+
+            zero_size_self = empty_like(self)
+            zero_size_right = empty_like(right)
+            new_metadata = zero_size_self.merge(
+                zero_size_right,
+                how=how,
+                on=on,
+                left_on=left_on,
+                right_on=right_on,
+                left_index=left_index,
+                right_index=right_index,
+                sort=sort,
+                suffixes=suffixes,
+            )
+
+            if on is None:
+                if left_on is None:
+                    on = tuple(set(self.columns).intersection(set(right.columns)))
+                else:
+                    on = []
+            elif not isinstance(on, list):
+                on = (on,)
+            if left_on is None:
+                left_on = []
+            if right_on is None:
+                right_on = []
+            planComparisonJoin = plans.ComparisonJoin(
+                self.plan,
+                right.plan,
+                [(self.columns.get_loc(c), right.columns.get_loc(c)) for c in on]
+                + [
+                    (self.columns.get_loc(a), right.columns.get_loc(b))
+                    for a, b in zip(left_on, right_on)
+                ],
+            )
+
+            return plans.wrap_plan(new_metadata, planComparisonJoin)
+
+    def __getitem__(self, key):
+        """Called when df[key] is used."""
+        if hasattr(self, "plan") and self.plan != None:
+            from bodo.pandas.base import empty_like
+
+            """ If the dataframe has a non-empty plan, then the general approach
+                is to create 0 length versions of the dataframe and the key and
+                simulate the operation to see the resulting type. """
+
+            zero_size_self = empty_like(self)
+            if isinstance(key, BodoSeries):
+                """ This is a masking operation. """
+                assert hasattr(key, "plan") and key.plan != None
+                zero_size_key = empty_like(key)
+                new_metadata = zero_size_self.__getitem__(zero_size_key)
+                return plans.wrap_plan(
+                    new_metadata,
+                    plan=plans.FilterPlanOperator(self.plan, key.plan),
+                )
+            else:
+                """ This is selecting one or more columns. Be a bit more
+                    lenient than Pandas here which says that if you have
+                    an iterable it has to be 2+ elements. We will allow
+                    just one element. """
+                if isinstance(key, str):
+                    key = [key]
+                assert isinstance(key, Iterable)
+                key = list(key)
+                if len(key) == 1:
+                    """ If just one element then have to extract that singular
+                        element for the metadata call to Pandas so it doesn't
+                        complain. """
+                    key = key[0]
+                    new_metadata = zero_size_self.__getitem__(key)
+                    return plans.wrap_plan(
+                        new_metadata,
+                        plan=plans.ProjectionPlanOperator(self.plan, key),
+                    )
+                else:
+                    new_metadata = zero_size_self.__getitem__(key)
+                    return plans.wrap_plan(
+                        new_metadata,
+                        plan=plans.ProjectionPlanOperator(self.plan, key),
+                    )
+
+        return super().__getitem__(key)

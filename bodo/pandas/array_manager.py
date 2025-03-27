@@ -8,6 +8,8 @@ import pandas as pd
 from pandas.core.arrays import ExtensionArray
 from pandas.core.arrays.arrow.array import ArrowExtensionArray
 
+from bodo.pandas.plans import PlanOperator
+
 try:
     from pandas.core.internals.array_manager import ArrayManager, SingleArrayManager
 except ModuleNotFoundError:
@@ -38,6 +40,7 @@ class LazyArrayManager(ArrayManager, LazyMetadataMixin[ArrayManager]):
         "_collect_func",
         "_del_func",
         "logger",
+        "plan",
     ]
 
     def __init__(
@@ -53,6 +56,7 @@ class LazyArrayManager(ArrayManager, LazyMetadataMixin[ArrayManager]):
         head: ArrayManager | None = None,
         collect_func: Callable[[str], pt.Any] | None = None,
         del_func: Callable[[str], None] | None = None,
+        plan: PlanOperator | None = None,
         # Can be used for lazy index data
         index_data: ArrowExtensionArray
         | tuple[ArrowExtensionArray, ArrowExtensionArray]
@@ -68,6 +72,7 @@ class LazyArrayManager(ArrayManager, LazyMetadataMixin[ArrayManager]):
         self.logger = bodo.user_logging.get_current_bodo_verbose_logger()
         self._collect_func = collect_func
         self._del_func = del_func
+        self._plan = plan
 
         if result_id is not None:
             # This is the lazy case, we don't have the full data yet
@@ -316,6 +321,7 @@ class LazySingleArrayManager(SingleArrayManager, LazyMetadataMixin[SingleArrayMa
         head: SingleArrayManager | None = None,
         collect_func: Callable[[str], pt.Any] | None = None,
         del_func: Callable[[str], None] | None = None,
+        plan: PlanOperator | None = None,
         # Can be used for lazy index data
         index_data: ArrowExtensionArray
         | tuple[ArrowExtensionArray, ArrowExtensionArray]
