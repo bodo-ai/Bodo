@@ -272,6 +272,12 @@ int64_t pq_write(const char *_path_name,
     std::string out_path_str = arrow_fs->type_name() == "local"
                                    ? out_path.string()
                                    : out_path.generic_string();
+
+    if (out_path_str.starts_with("abfs")) {
+        auto path_res = fs->PathFromUri(out_path_str);
+        CHECK_ARROW_AND_ASSIGN(path_res, "AzureFileSystem::PathFromUri",
+                               out_path_str);
+    }
     arrow::Result<std::shared_ptr<arrow::io::OutputStream>> result =
         arrow_fs->OpenOutputStream(out_path_str);
     CHECK_ARROW_AND_ASSIGN(result, "FileOutputStream::Open", out_stream);
