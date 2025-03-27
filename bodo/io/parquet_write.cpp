@@ -297,7 +297,7 @@ int64_t pq_write(const char *_path_name,
     }
 
     arrow::Result<std::shared_ptr<arrow::io::OutputStream>> result =
-        arrow_fs->OpenOutputStream(out_path);
+        arrow_fs->OpenOutputStream(out_path_str);
     CHECK_ARROW_AND_ASSIGN(result, "FileOutputStream::Open", out_stream);
 
     auto pool = bodo::BufferPool::DefaultPtr();

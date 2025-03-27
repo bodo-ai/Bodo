@@ -353,7 +353,7 @@ def pa_fs_list_dir_fnames(fs, path):
     return file_names
 
 
-def abfs_get_fs(path, storage_options: dict[str, str] | None):  # pragma: no cover
+def abfs_get_fs(storage_options: dict[str, str] | None):  # pragma: no cover
     from pyarrow.fs import AzureFileSystem
 
     def get_attr(opt_key: str, env_key: str) -> str | None:
@@ -386,6 +386,8 @@ def abfs_get_fs(path, storage_options: dict[str, str] | None):  # pragma: no cov
             "abfs_get_fs: Azure storage account name is not provided. Please set either the account_name in the storage_options or the AZURE_STORAGE_ACCOUNT_NAME environment variable."
         )
 
+    # Note, Azure validates credentials at use-time instead of at
+    # initialization
     return AzureFileSystem(account_name, account_key=account_key)
 
 
@@ -559,12 +561,13 @@ def getfs(
             storage_options = {}
         if "account_name" not in storage_options:
             # Extract the storage account from the path, assumes all files are in the same storage account
-            path = fpath if not isinstance(fpath, list) else fpath[0]
-            account_name = azure_storage_account_from_path(path)
+            account_name = azure_storage_account_from_path(
+                fpath if not isinstance(fpath, list) else fpath[0]
+            )
             if account_name is not None:
                 storage_options["account_name"] = account_name
 
-        return abfs_get_fs(path, storage_options)
+        return abfs_get_fs(storage_options)
     elif protocol == "hdfs":  # pragma: no cover
         return (
             get_hdfs_fs(fpath) if not isinstance(fpath, list) else get_hdfs_fs(fpath[0])
