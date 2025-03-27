@@ -3,6 +3,7 @@ from collections.abc import Callable, Hashable
 
 import pandas as pd
 
+from bodo.pandas import plans
 from bodo.pandas.array_manager import LazySingleArrayManager
 from bodo.pandas.lazy_metadata import LazyMetadata
 from bodo.pandas.lazy_wrapper import BodoLazyWrapper
@@ -17,6 +18,29 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
     # use it directly when available.
     _head_s: pd.Series | None = None
     _name: Hashable = None
+
+    _internal_names = pd.DataFrame._internal_names + ["plan"]
+    _internal_names_set = set(_internal_names)
+
+    def _cmp_method(self, other, op):
+        from bodo.pandas.base import empty_like
+
+        if hasattr(self, "plan") and self.plan != None:
+            """ Only supports objects with a plan on lhs. """
+            zero_size_self = empty_like(self)
+            zero_size_other = (
+                empty_like(other) if isinstance(other, BodoSeries) else other
+            )
+            if hasattr(other, "plan") and other.plan != None:
+                other = other.plan
+            new_metadata = zero_size_self._cmp_method(zero_size_other, op)
+            assert isinstance(new_metadata, pd.Series)
+            return plans.wrap_plan(
+                new_metadata,
+                plan=plans.BinaryOpPlanOperator(self.plan, other, op),
+            )
+
+        return super()._cmp_method(other, op)
 
     @staticmethod
     def from_lazy_mgr(
@@ -38,6 +62,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         lazy_metadata: LazyMetadata,
         collect_func: Callable[[str], pt.Any] | None = None,
         del_func: Callable[[str], None] | None = None,
+        plan: plans.PlanOperator | None = None,
     ) -> "BodoSeries":
         """
         Create a BodoSeries from a lazy metadata object.
@@ -52,6 +77,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             collect_func=collect_func,
             del_func=del_func,
             index_data=lazy_metadata.index_data,
+            plan=plan,
         )
         return cls.from_lazy_mgr(lazy_mgr, lazy_metadata.head)
 
