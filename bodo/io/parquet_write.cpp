@@ -255,6 +255,7 @@ int64_t pq_write(const char *_path_name,
         std::regex r(".*[?&]sv=.*&sig=.*");
         regex_search(path_name, match, r);
         if (fs_option == Bodo_Fs::abfs && match.size() != 0) {
+#ifndef _WIN32
             arrow::fs::AzureOptions options;
             std::string updated_out_path;
             auto opt_res =
@@ -264,6 +265,10 @@ int64_t pq_write(const char *_path_name,
             auto fs_res = arrow::fs::AzureFileSystem::Make(options);
             CHECK_ARROW_AND_ASSIGN(fs_res, "AzureFileSystem::Make", fs);
             arrow_fs = fs.get();
+#else
+            throw std::runtime_error(
+                "to_parquet: AzureFileSystem not supported on Windows.");
+#endif
         } else {
             fs = get_fs_for_path(_path_name, is_parallel);
             arrow_fs = fs.get();
