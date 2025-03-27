@@ -649,9 +649,7 @@ class Spawner:
         except AttributeError:
             win_in_use = None
 
-        ip_value = "127.0.0.1"
-        if bodo.utils.utils.is_jupyter_on_bodo_platform():
-            ip_value = "0.0.0.0"
+        ip_value = "0.0.0.0"
 
         for attempt in range(max_attempts):
             try:
@@ -663,12 +661,9 @@ class Spawner:
                 if attempt == max_attempts - 1:
                     raise
 
-        if bodo.utils.utils.is_jupyter_on_bodo_platform():
-            hostname = socket.gethostname()
-            connection_info = f"tcp://{hostname}:{port}"
-            self.worker_intercomm.bcast(connection_info, self.bcast_root)
-        else:  # windows
-            self.worker_intercomm.bcast(port, self.bcast_root)
+        hostname = socket.gethostname()
+        connection_info = f"tcp://{hostname}:{port}"
+        self.worker_intercomm.bcast(connection_info, self.bcast_root)
 
         def worker_output_thread_func():
             """Thread that receives all worker outputs and prints them."""
