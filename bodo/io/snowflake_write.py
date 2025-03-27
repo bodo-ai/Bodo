@@ -597,7 +597,7 @@ def gen_snowflake_writer_append_table_impl_inner(
                 # Note: writer['stage_path'] already has trailing slash
                 if (
                     writer["stage_path"].startswith("abfs://")
-                    or writer["stage_path"].startswith("abfs://")
+                    or writer["stage_path"].startswith("abfss://")
                 ) and "?" in writer["stage_path"]:
                     # We need to move the query parameters to the end of the path
                     container_path, query = writer["stage_path"].split("?")

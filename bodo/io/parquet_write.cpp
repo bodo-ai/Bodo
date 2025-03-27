@@ -247,7 +247,9 @@ int64_t pq_write(const char *_path_name,
         std::smatch match;
         // Ensure the path contains the "sv" and "sig" query parameters
         // since we only need to do this special path
-        // if there's a SAS token
+        // if there's a SAS token.
+        // This is ugly and should be moved to python, abfs_get_fs
+        // when we upgrade to Arrow 20.
         std::regex r(".*[?&]sv=.*&sig=.*");
         regex_search(path_name, match, r);
         if (fs_option == Bodo_Fs::abfs && match.size() != 0) {
