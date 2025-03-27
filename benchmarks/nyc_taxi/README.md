@@ -102,7 +102,7 @@ In order to run the Bodo benchmark:
     ``` bash
     ./run_daft_single_node.sh
     ```
-    Note that this script writes the result to the head node for simplicity.
+    this script writes the result to the head node for simplicity.
 5. After inspecting the output, you can clean up any S3 resources created by running:
     ``` bash
     aws s3 rm s3://$BUCKET_NAME --recursive
@@ -182,7 +182,7 @@ You can start to see the benefits of using Bodo from your laptop by running the 
 pip install bodo==2024.12.1 "dask[dataframe]"==2024.12.0 "modin[all]"==0.32.0 pyspark==3.5.3 pandas==2.2.3 daft==0.4.7 polars==1.25.2 boto3
 ```
 
-We use a smaller subset of the [For Hire Vehicle High Volume dataset](https://www.nyc.gov/site/tlc/about/tlc-trip-record-data.page) to allow the workload to run locally (example setup: an Apple M2 Macbook Pro with 10 cores and 16 GB memory). We have also included an implementation using Pandas, which is often on par with or better than other distributed frameworks when data size is smaller due to the overhead from coordinating parallel workers. Even at this smaller scale, Bodo shows a roughly 3x improvement over the next best system (Dask/Pandas).
+We use a smaller subset of the [For Hire Vehicle High Volume dataset](https://www.nyc.gov/site/tlc/about/tlc-trip-record-data.page) to allow the workload to run locally (example setup: an Apple M2 Macbook Pro with 10 cores and 16 GB memory). We have also included an implementation using Pandas, which is often on par with or better than other distributed frameworks when data size is smaller due to the overhead from coordinating parallel workers. Even at this smaller scale, Bodo and Polars show a roughly 3x improvement over Pandas.
 
 The results below were collected December 18th, 2024. Note that these numbers might differ based on your specific hardware and operating system. Daft and Polars results were added March 2025.
 
@@ -197,7 +197,7 @@ The results below were collected December 18th, 2024. Note that these numbers mi
 | Modin/Ray | 13.65 |
 | PySpark   | 27.27   |
 
-To see an even bigger difference, try increasing the number of rows read by specifying a different parquet file such as `s3://bodo-example-data/nyc-taxi/fhvhv_tripdata/fhvhv_tripdata_2019-02.parquet`. On this size (~20 million rows), Spark runs out of memory while Pandas and Dask become 4-5x slower than Bodo/Polars.
+To see an even bigger difference, try increasing the number of rows read by specifying a different parquet file such as `s3://bodo-example-data/nyc-taxi/fhvhv_tripdata/fhvhv_tripdata_2019-02.parquet`. On this size (~20 million rows), Spark runs out of memory while Pandas and Dask become 4-5x slower than Bodo or Polars.
 
 The code to run the larger dataset is also included in the notebooks section. Results are summarized in the table below.
 
