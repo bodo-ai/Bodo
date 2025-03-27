@@ -32,28 +32,10 @@ def add_fallback():
         # Do the same for things implemented in Bodo via the bodo.pandas.base import.
         bodo_df_lib_attrs = dir(current_module)
 
-        # Get the top-level Pandas funcs.
-        pandas_funcs = [attr for attr in pandas_attrs if inspect.isfunction(getattr(pandas, attr))]
-        # Get everything else accessible at the top-level of Pandas.
-        pandas_nonfuncs = [attr for attr in pandas_attrs if not inspect.isfunction(getattr(pandas, attr))]
-
-        # Get the top-level functions support by bodo.pandas.
-        bodo_df_lib_funcs = [attr for attr in bodo_df_lib_attrs if inspect.isfunction(getattr(current_module, attr))]
-        # Get the top-level non-functions support by bodo.pandas.
-        bodo_df_lib_nonfuncs = [attr for attr in bodo_df_lib_attrs if not inspect.isfunction(getattr(current_module, attr))]
-
-        # Get the pandas functions that don't have an equivalent yet in bodo.
-        non_overloaded_funcs = set(pandas_funcs).difference(bodo_df_lib_funcs)
-        # Get the pandas non-functions that don't have an equivalent yet in bodo.
-        non_overloaded_nonfuncs = set(pandas_nonfuncs).difference(bodo_df_lib_nonfuncs)
-
-        for func in non_overloaded_funcs:
-            # Export the pandas functions into bodo.pandas.
+        for func in set(pandas_attrs).difference(bodo_df_lib_attrs):
+            # Export the pandas functions that aren't implemented by bodo
+            # into bodo.pandas.
             setattr(current_module, func, getattr(pandas, func))
-
-        for nonfunc in non_overloaded_nonfuncs:
-            # Export the pandas non-functions into bodo.pandas.
-            setattr(current_module, nonfunc, getattr(pandas, nonfunc))
 
 # Must do this at the end so that all functions we want to provide already exist.
 add_fallback()
