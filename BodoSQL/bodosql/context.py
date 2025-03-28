@@ -1113,7 +1113,8 @@ class BodoSQLContext:
             glbls.update(lowered_globals)
             loc_vars = {}
             if bodo.spawn_mode:
-
+                # In the spawn mode case we need to bodo_exec on the workers as well
+                # so the code object is available to the caching infra.
                 def f(func_text, glbls, loc_vars, __name__):
                     bodo.utils.utils.bodo_exec(func_text, glbls, loc_vars, __name__)
 
