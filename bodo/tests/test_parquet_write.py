@@ -36,8 +36,14 @@ from bodo.utils.utils import run_rank0
 pytestmark = pytest.mark.parquet
 
 
-@pytest.fixture
-def check_write_func(datapath):
+def check_write_func(
+    fn,
+    df: pd.DataFrame,
+    folder_path: str,
+    file_id: str,
+    check_index: list[str] | None = None,
+    pandas_fn=None,
+):
     DISTRIBUTIONS = {
         "sequential": [lambda x, *args: x, [], {}],
         "1d-distributed": [
@@ -52,44 +58,41 @@ def check_write_func(datapath):
         ],
     }
 
-    def impl(fn, df: pd.DataFrame, file_id: str, check_index: list[str] | None = None):
-        bodo_file_path = datapath(f"bodo_{file_id}.pq", check_exists=False)
-        pandas_file_path = datapath(f"pandas_{file_id}.pq", check_exists=False)
-        for dist_func, args, kwargs in DISTRIBUTIONS.values():
-            with ensure_clean2(bodo_file_path), ensure_clean2(pandas_file_path):
-                write_jit = bodo.jit(fn, **kwargs)
-                write_jit(dist_func(df, *args), bodo_file_path)
-                run_rank0(fn)(df, pandas_file_path)  # Pandas version
-                bodo.barrier()
+    bodo_file_path = os.path.join(folder_path, f"bodo_{file_id}.pq")
+    pandas_file_path = os.path.join(folder_path, f"pandas_{file_id}.pq")
+    pandas_fn = pandas_fn if pandas_fn else fn
 
-                df_bodo = pd.read_parquet(bodo_file_path)
-                df_pandas = pd.read_parquet(pandas_file_path)
-                df_pandas_test = pd.read_parquet(bodo_file_path)
-                pd.testing.assert_frame_equal(
-                    df_bodo, df_pandas, check_column_type=True
+    for dist_func, args, kwargs in DISTRIBUTIONS.values():
+        with ensure_clean2(bodo_file_path), ensure_clean2(pandas_file_path):
+            write_jit = bodo.jit(fn, **kwargs)
+            write_jit(dist_func(df, *args), bodo_file_path)
+            run_rank0(pandas_fn)(df, pandas_file_path)  # Pandas version
+            bodo.barrier()
+
+            # Use fsspec for all reads
+            df_bodo = pd.read_parquet(bodo_file_path, storage_options={})
+            df_pandas = pd.read_parquet(pandas_file_path, storage_options={})
+            df_pandas_test = pd.read_parquet(bodo_file_path, storage_options={})
+            pd.testing.assert_frame_equal(df_bodo, df_pandas, check_column_type=True)
+            pd.testing.assert_frame_equal(
+                df_bodo, df_pandas_test, check_column_type=True
+            )
+
+            if check_index is not None:
+                pandas_meta = pq.read_schema(pandas_file_path)
+                bodo_fps = (
+                    list(os.walk(bodo_file_path))
+                    if os.path.isdir(bodo_file_path)
+                    else [("", [], [bodo_file_path])]
                 )
-                pd.testing.assert_frame_equal(
-                    df_bodo, df_pandas_test, check_column_type=True
-                )
-
-                if check_index is not None:
-                    pandas_meta = pq.read_schema(pandas_file_path)
-                    bodo_fps = (
-                        list(os.walk(bodo_file_path))
-                        if os.path.isdir(bodo_file_path)
-                        else [("", [], [bodo_file_path])]
-                    )
-                    for prefix, _, file_names in bodo_fps:
-                        for file in file_names:
-                            bodo_meta = pq.read_schema(os.path.join(prefix, file))
-                            index_cols = bodo_meta.pandas_metadata["index_columns"]
-                            assert set(check_index).issubset(index_cols)
-                            assert (
-                                index_cols
-                                == pandas_meta.pandas_metadata["index_columns"]
-                            )
-
-    return impl
+                for prefix, _, file_names in bodo_fps:
+                    for file in file_names:
+                        bodo_meta = pq.read_schema(os.path.join(prefix, file))
+                        index_cols = bodo_meta.pandas_metadata["index_columns"]
+                        assert set(check_index).issubset(index_cols)
+                        assert (
+                            index_cols == pandas_meta.pandas_metadata["index_columns"]
+                        )
 
 
 @pytest.mark.parametrize(
@@ -153,10 +156,11 @@ def check_write_func(datapath):
         # "map_arrays"
     ),
 )
-def test_semi_structured_data(df, check_write_func):
+def test_semi_structured_data(df, tmp_path):
     check_write_func(
         lambda df, path: df.to_parquet(path),
         df,
+        str(tmp_path),
         "semi_structured_data",
     )
 
@@ -1078,7 +1082,7 @@ def test_streaming_parquet_write_rep(memory_leak_check):
         bodo.barrier()
 
 
-def test_to_pq_multiIdx(check_write_func, memory_leak_check):
+def test_to_pq_multiIdx(tmp_path, memory_leak_check):
     """Test to_parquet with MultiIndexType"""
     np.random.seed(0)
 
@@ -1094,12 +1098,13 @@ def test_to_pq_multiIdx(check_write_func, memory_leak_check):
     check_write_func(
         lambda df, fname: df.to_parquet(fname),
         df,
+        str(tmp_path),
         "multi_idx_parquet",
         check_index=["first", "second", "third"],
     )
 
 
-def test_to_pq_multiIdx_no_name(check_write_func, memory_leak_check):
+def test_to_pq_multiIdx_no_name(tmp_path, memory_leak_check):
     """Test to_parquet with MultiIndexType with no name at 1 level"""
     np.random.seed(0)
 
@@ -1115,8 +1120,21 @@ def test_to_pq_multiIdx_no_name(check_write_func, memory_leak_check):
     check_write_func(
         lambda df, fname: df.to_parquet(fname),
         df,
+        str(tmp_path),
         "multi_idx_parquet_no_name",
         check_index=["__index_level_0__", "__index_level_1__", "nums"],
+    )
+
+
+def test_write_to_azure(tmp_abfs_path: str) -> None:
+    df = pd.DataFrame({"A": [1, 2]})
+    check_write_func(
+        lambda df, fname: df.to_parquet(fname),
+        df,
+        tmp_abfs_path,
+        "write_to_azure",
+        # This triggers Pandas to use fsspec to write, cause using PyArrow causes issues
+        pandas_fn=lambda df, fname: df.to_parquet(fname, storage_options={}),
     )
 
 
