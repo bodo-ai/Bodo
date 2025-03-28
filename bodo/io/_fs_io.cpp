@@ -100,10 +100,15 @@ void extract_fs_dir_path(const char *_path_name, bool is_parallel,
     } else if ((strncmp(_path_name, "abfs://", 7) == 0 ||
                 strncmp(_path_name, "abfss://", 8) == 0)) {
         *fs_option = Bodo_Fs::abfs;
+#ifndef _WIN32
         auto parsed_opt =
             arrow::fs::AzureOptions::FromUri(_path_name, path_name);
         CHECK_ARROW(parsed_opt.status(), "FromUri failed for Azure File System",
                     "abfs");  // Check if parsing the URI was successful
+#else
+        throw std::runtime_error(
+            "extract_fs_dir_path: Azure File System not supported on Windows.");
+#endif
     } else if (strncmp(_path_name, "hdfs://", 7) == 0) {
         *fs_option = Bodo_Fs::hdfs;
         arrow::Result<std::shared_ptr<arrow::fs::FileSystem>> tempRes =
