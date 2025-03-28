@@ -28,6 +28,7 @@ import bodo.utils.allocation_tracking
 from bodo.mpi4py import MPI
 from bodo.tests.iceberg_database_helpers.utils import DATABASE_NAME
 from bodo.tests.utils import temp_env_override
+from bodo.utils.utils import run_rank0
 
 if TYPE_CHECKING:
     from pyspark.sql import SparkSession
@@ -886,10 +887,20 @@ def tmp_abfs_path(abfs_fs):
     Create a temporary ABFS path for testing.
     """
 
-    account_name = os.environ["AZURE_STORAGE_ACCOUNT_NAME"]
-    folder_name = str(uuid4())
-    abfs_fs.mkdir(f"engine-unit-tests-tmp-blob/{folder_name}")
+    @run_rank0
+    def setup():
+        folder_name = str(uuid4())
+        abfs_fs.mkdir(f"engine-unit-tests-tmp-blob/{folder_name}")
+        return folder_name
+
     # Need to include account name in path for C++ filesystem code
+    folder_name = setup()
+    account_name = os.environ["AZURE_STORAGE_ACCOUNT_NAME"]
     yield f"abfs://engine-unit-tests-tmp-blob@{account_name}.dfs.core.windows.net/{folder_name}/"
-    if abfs_fs.exists(f"engine-unit-tests-tmp-blob/{folder_name}"):
-        abfs_fs.rm(f"engine-unit-tests-tmp-blob/{folder_name}", recursive=True)
+
+    @run_rank0
+    def cleanup():
+        if abfs_fs.exists(f"engine-unit-tests-tmp-blob/{folder_name}"):
+            abfs_fs.rm(f"engine-unit-tests-tmp-blob/{folder_name}", recursive=True)
+
+    cleanup()

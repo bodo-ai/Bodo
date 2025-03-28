@@ -44,6 +44,7 @@ def check_write_func(
     check_index: list[str] | None = None,
     pandas_fn=None,
 ):
+    print("START")
     DISTRIBUTIONS = {
         "sequential": [lambda x, *args: x, [], {}],
         "1d-distributed": [
@@ -63,13 +64,19 @@ def check_write_func(
     pandas_fn = pandas_fn if pandas_fn else fn
 
     for dist_func, args, kwargs in DISTRIBUTIONS.values():
+        print("ENTER")
         with ensure_clean2(bodo_file_path), ensure_clean2(pandas_file_path):
+            print("COMPILE")
             write_jit = bodo.jit(fn, **kwargs)
+            print("RUN BODO")
             write_jit(dist_func(df, *args), bodo_file_path)
+            print("RUN RANK0")
             run_rank0(pandas_fn)(df, pandas_file_path)  # Pandas version
+            print("POST RUN RANK0")
             bodo.barrier()
 
             # Use fsspec for all reads
+            print(bodo_file_path, pandas_file_path)
             df_bodo = pd.read_parquet(bodo_file_path, storage_options={})
             df_pandas = pd.read_parquet(pandas_file_path, storage_options={})
             df_pandas_test = pd.read_parquet(bodo_file_path, storage_options={})
