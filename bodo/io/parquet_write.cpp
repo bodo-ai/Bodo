@@ -1,7 +1,9 @@
 // Functions to write Bodo arrays to parquet
 
+#include <arrow/filesystem/azurefs.h>
 #include <arrow/filesystem/filesystem.h>
 #include <aws/core/auth/AWSCredentialsProvider.h>
+#include <regex>
 #if _MSC_VER >= 1900
 #undef timezone
 #endif
@@ -236,15 +238,48 @@ int64_t pq_write(const char *_path_name,
     // write is done.
     std::shared_ptr<arrow::fs::FileSystem> fs;
 
-    // Get filesystem object if not provided
-    if (arrow_fs == nullptr) {
-        fs = get_fs_for_path(_path_name, is_parallel);
-        arrow_fs = fs.get();
-    }
-
     extract_fs_dir_path(_path_name, is_parallel, prefix, ".parquet", myrank,
                         num_ranks, &fs_option, &dirname, &fname, &orig_path,
                         &path_name);
+    std::filesystem::path out_path(dirname);
+    out_path /= fname;  // append file name to output path
+
+    // Create the fs
+    if (arrow_fs == nullptr) {
+        std::smatch match;
+        // Ensure the path contains the "sv" and "sig" query parameters
+        // since we only need to do this special path
+        // if there's a SAS token.
+        // This is ugly and should be moved to python, abfs_get_fs
+        // when we upgrade to Arrow 20.
+        std::regex r(".*[?&]sv=.*&sig=.*");
+        regex_search(path_name, match, r);
+        if (fs_option == Bodo_Fs::abfs && match.size() != 0) {
+#ifndef _WIN32
+            arrow::fs::AzureOptions options;
+            std::string updated_out_path;
+            auto opt_res =
+                arrow::fs::AzureOptions::FromUri(orig_path, &updated_out_path);
+            out_path = std::filesystem::path(updated_out_path);
+            CHECK_ARROW_AND_ASSIGN(opt_res, "AzureOptions::FromUri", options);
+            auto fs_res = arrow::fs::AzureFileSystem::Make(options);
+            CHECK_ARROW_AND_ASSIGN(fs_res, "AzureFileSystem::Make", fs);
+            arrow_fs = fs.get();
+#else
+            throw std::runtime_error(
+                "to_parquet: AzureFileSystem not supported on Windows.");
+#endif
+        } else {
+            fs = get_fs_for_path(_path_name, is_parallel);
+            arrow_fs = fs.get();
+        }
+    }
+
+    // Avoid "\" generated on Windows for remote object storage
+    // Get filesystem object if not provided
+    std::string out_path_str = arrow_fs->type_name() == "local"
+                                   ? out_path.string()
+                                   : out_path.generic_string();
 
     // If filename is provided, use that instead of the generic one.
     // Currently this is used for Iceberg.
@@ -266,12 +301,6 @@ int64_t pq_write(const char *_path_name,
         return 0;
     }
 
-    std::filesystem::path out_path(dirname);
-    out_path /= fname;  // append file name to output path
-    // Avoid "\" generated on Windows for remote object storage
-    std::string out_path_str = arrow_fs->type_name() == "local"
-                                   ? out_path.string()
-                                   : out_path.generic_string();
     arrow::Result<std::shared_ptr<arrow::io::OutputStream>> result =
         arrow_fs->OpenOutputStream(out_path_str);
     CHECK_ARROW_AND_ASSIGN(result, "FileOutputStream::Open", out_stream);
