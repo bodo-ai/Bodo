@@ -1112,6 +1112,14 @@ class BodoSQLContext:
 
             glbls.update(lowered_globals)
             loc_vars = {}
+            if bodo.spawn_mode:
+
+                def f(func_text, glbls, loc_vars, __name__):
+                    bodo.utils.utils.bodo_exec(func_text, glbls, loc_vars, __name__)
+
+                bodo.spawn.spawner.submit_func_to_workers(
+                    f, [], func_text, glbls, loc_vars, __name__
+                )
             impl = bodo_exec(func_text, glbls, loc_vars, __name__)
 
             # Add table argument name prefix to user provided distributed flags to match
