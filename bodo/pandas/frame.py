@@ -4,13 +4,13 @@ from collections.abc import Callable, Iterable
 import pandas as pd
 
 import bodo
-from bodo.pandas import plans
+from bodo.pandas import plan_optimizer
 from bodo.pandas.array_manager import LazyArrayManager
 from bodo.pandas.lazy_metadata import LazyMetadata
 from bodo.pandas.lazy_wrapper import BodoLazyWrapper
 from bodo.pandas.managers import LazyBlockManager, LazyMetadataMixin
 from bodo.pandas.series import BodoSeries
-from bodo.pandas.utils import convert_to_pandas, get_lazy_manager_class
+from bodo.pandas.utils import get_lazy_manager_class
 from bodo.utils.typing import (
     BodoError,
     check_unsupported_args,
@@ -48,7 +48,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         lazy_metadata: LazyMetadata,
         collect_func: Callable[[str], pt.Any] | None = None,
         del_func: Callable[[str], None] | None = None,
-        plan: plans.PlanOperator | None = None,
+        plan: plan_optimizer.LogicalOperator | None = None,
     ) -> "BodoDataFrame":
         """
         Create a BodoDataFrame from a lazy metadata object.
@@ -414,8 +414,8 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         ):
             if BODO_PANDAS_FALLBACK != 0:
                 return pd.merge(
-                    convert_to_pandas(self),
-                    convert_to_pandas(right),
+                    self,
+                    right,
                     how=how,
                     on=on,
                     left_on=left_on,
@@ -458,9 +458,10 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 left_on = []
             if right_on is None:
                 right_on = []
-            planComparisonJoin = plans.ComparisonJoin(
+            planComparisonJoin = plan_optimizer.LogicalComparisonJoin(
                 self.plan,
                 right.plan,
+                plan_optimizer.CJoinType.INNER,
                 [(self.columns.get_loc(c), right.columns.get_loc(c)) for c in on]
                 + [
                     (self.columns.get_loc(a), right.columns.get_loc(b))
@@ -468,7 +469,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 ],
             )
 
-            return plans.wrap_plan(new_metadata, planComparisonJoin)
+            return plan_optimizer.wrap_plan(new_metadata, planComparisonJoin)
 
     def __getitem__(self, key):
         """Called when df[key] is used."""
@@ -485,9 +486,9 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 assert hasattr(key, "plan") and key.plan != None
                 zero_size_key = empty_like(key)
                 new_metadata = zero_size_self.__getitem__(zero_size_key)
-                return plans.wrap_plan(
+                return plan_optimizer.wrap_plan(
                     new_metadata,
-                    plan=plans.FilterPlanOperator(self.plan, key.plan),
+                    plan=plan_optimizer.FilterPlanOperator(self.plan, key.plan),
                 )
             else:
                 """ This is selecting one or more columns. Be a bit more
@@ -504,15 +505,15 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                         complain. """
                     key = key[0]
                     new_metadata = zero_size_self.__getitem__(key)
-                    return plans.wrap_plan(
+                    return plan_optimizer.wrap_plan(
                         new_metadata,
-                        plan=plans.ProjectionPlanOperator(self.plan, key),
+                        plan=plan_optimizer.ProjectionPlanOperator(self.plan, key),
                     )
                 else:
                     new_metadata = zero_size_self.__getitem__(key)
-                    return plans.wrap_plan(
+                    return plan_optimizer.wrap_plan(
                         new_metadata,
-                        plan=plans.ProjectionPlanOperator(self.plan, key),
+                        plan=plan_optimizer.ProjectionPlanOperator(self.plan, key),
                     )
 
         return super().__getitem__(key)

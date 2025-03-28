@@ -4,11 +4,18 @@
 # cython: c_string_type=unicode, c_string_encoding=utf8
 
 from libcpp.memory cimport unique_ptr, make_unique, dynamic_pointer_cast
-from libcpp.utility cimport move
+from libcpp.utility cimport move, pair
 from libcpp.string cimport string as c_string
 from libcpp.vector cimport vector
 
 ctypedef unsigned long long idx_t
+ctypedef pair[int, int] int_pair
+
+cdef int_pair create_int_pair(int a, int b):
+    cdef int_pair p
+    p.first = a
+    p.second = b
+    return p
 
 cdef extern from "duckdb/common/types.hpp" namespace "duckdb" nogil:
     cpdef enum class CLogicalTypeId" duckdb::LogicalTypeId":
@@ -196,9 +203,6 @@ cdef extern from "duckdb/planner/expression.hpp" namespace "duckdb" nogil:
 
 cdef extern from "duckdb/planner/logical_operator.hpp" namespace "duckdb" nogil:
     cdef cppclass CLogicalOperator" duckdb::LogicalOperator":
-        vector[unique_ptr[CLogicalOperator]] children
-        vector[unique_ptr[CExpression]] expressions
-        vector[CLogicalType] types
         idx_t estimated_cardinality
         bint has_estimated_cardinality
 
@@ -233,6 +237,7 @@ cdef extern from "duckdb/planner/operator/logical_get.hpp" namespace "duckdb" no
 
 cdef extern from "_bodo_plan.h" nogil:
     cdef unique_ptr[CLogicalGet] make_parquet_get_node(c_string parquet_path)
+    cdef unique_ptr[CLogicalComparisonJoin] make_comparison_join(unique_ptr[CLogicalOperator] lhs, unique_ptr[CLogicalOperator] rhs, CJoinType join_type, vector[int_pair] cond_vec)
     cdef unique_ptr[CLogicalOperator] optimize_plan(unique_ptr[CLogicalOperator])
 
 
@@ -278,16 +283,6 @@ cdef class LogicalOperator:
         self.c_logical_operator.get().has_estimated_cardinality = True
         self.c_logical_operator.get().estimated_cardinality = estimated_cardinality
 
-
-    def set_children(self, children):
-        cdef vector[unique_ptr[CLogicalOperator]] child_vec
-        for c in children:
-            cc = c.c_logical_operator
-            ccg = cc.get()
-            ccgc = ccg.clone()
-            child_vec.push_back(unique_ptr[CLogicalOperator](<CLogicalOperator*> ccgc))
-        self.c_logical_operator.get().children = child_vec
-
     """
     def set_expressions(self, expressions):
         self.c_logical_operator.get().expressions = expressions
@@ -310,12 +305,16 @@ cdef class LogicalJoin(LogicalOperator):
         join_type = join_type_to_string((<CLogicalComparisonJoin*>(self.c_logical_operator.get())).join_type)
         return f"LogicalComparisonJoin({join_type})"
 
-cdef class LogicalComparisonJoin(LogicalJoin):
+cdef class LogicalComparisonJoin(LogicalOperator):
     """Wrapper around DuckDB's LogicalComparisonJoin to provide access in Python.
     """
 
-    def __cinit__(self, CJoinType join_type):
-       cdef unique_ptr[CLogicalComparisonJoin] c_logical_comparison_join = make_unique[CLogicalComparisonJoin](join_type)
+    def __cinit__(self, LogicalOperator lhs, LogicalOperator rhs, CJoinType join_type, conditions):
+       cdef vector[int_pair] cond_vec
+       for cond in conditions:
+           cond_vec.push_back(create_int_pair(cond[0], cond[1]))
+
+       cdef unique_ptr[CLogicalComparisonJoin] c_logical_comparison_join = make_comparison_join(lhs.c_logical_operator, rhs.c_logical_operator, join_type, cond_vec)
        self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalOperator*> c_logical_comparison_join.release())
 
     def __str__(self):
@@ -350,3 +349,60 @@ cpdef py_optimize_plan(object plan):
     optimized_plan = LogicalOperator()
     optimized_plan.c_logical_operator = optimize_plan(move(wrapped_operator.c_logical_operator))
     return optimized_plan
+
+cpdef convert_and_execute(plan):
+    orig_plan = plan.convert_to_duckdb()
+    opt_plan = py_optimize_plan(orig_plan)
+    print("opt_plan:", opt_plan)
+
+cpdef collect_func(plan_to_execute):
+    print("collect_func for plan", plan_to_execute)
+    convert_and_execute(plan_to_execute)
+
+cpdef del_func(res_id):
+    pass  # For now.
+
+cpdef wrap_plan(schema, plan):
+    import pandas as pd
+    from bodo.pandas.frame import BodoDataFrame
+    from bodo.pandas.series import BodoSeries
+    from bodo.pandas.utils import get_lazy_manager_class, get_lazy_single_manager_class
+
+    if isinstance(schema, dict):
+        schema = {
+            col: pd.Series(dtype=col_type.dtype) for col, col_type in schema.items()
+        }
+
+    if isinstance(schema, (dict, pd.DataFrame)):
+        if isinstance(schema, dict):
+            schema = pd.DataFrame(schema)
+        lazy_mgr = get_lazy_manager_class()(
+            None,
+            None,
+            result_id=plan,
+            nrows=1,
+            head=schema._mgr,
+            collect_func=collect_func,
+            del_func=del_func,
+            index_data=None,
+            plan=plan,
+        )
+        new_df = BodoDataFrame.from_lazy_mgr(lazy_mgr, schema)
+    elif isinstance(schema, pd.Series):
+        lazy_mgr = get_lazy_single_manager_class()(
+            None,
+            None,
+            result_id=plan,
+            nrows=1,
+            head=schema._mgr,
+            collect_func=collect_func,
+            del_func=del_func,
+            index_data=None,
+            plan=plan,
+        )
+        new_df = BodoSeries.from_lazy_mgr(lazy_mgr, schema)
+    else:
+        assert False
+
+    new_df.plan = plan
+    return new_df

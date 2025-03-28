@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "duckdb/common/enums/join_type.hpp"
 #include "duckdb/function/function.hpp"
 #include "duckdb/function/table_function.hpp"
 #include "duckdb/optimizer/optimizer.hpp"
@@ -46,6 +47,19 @@ std::unique_ptr<duckdb::LogicalOperator> optimize_plan(
     std::unique_ptr<duckdb::LogicalOperator> plan);
 
 /**
+ * @brief Creates a LogicalComparisonJoin node.
+ *
+ * @param lhs - left-side of the join
+ * @param rhs - right-side of the join
+ * @param join_type - the type of the join, e.g., "INNER"
+ * @return duckdb::unique_ptr<duckdb::LogicalComparisonJoin> output node
+ */
+duckdb::unique_ptr<duckdb::LogicalComparisonJoin> make_comparison_join(
+    std::unique_ptr<duckdb::LogicalOperator> &lhs,
+    std::unique_ptr<duckdb::LogicalOperator> &rhs, duckdb::JoinType join_type,
+    std::vector<std::pair<int, int>> &cond_vec);
+
+/**
  * @brief Creates a LogicalGet node for reading a Parquet dataset in DuckDB with
  * Bodo metadata.
  *
@@ -60,7 +74,7 @@ duckdb::unique_ptr<duckdb::LogicalGet> make_parquet_get_node(
  *
  * @return duckdb::ClientContext& static context object
  */
-duckdb::ClientContext& get_duckdb_context();
+duckdb::ClientContext &get_duckdb_context();
 
 /**
  * @brief Returns a statically created DuckDB binder.
@@ -74,4 +88,4 @@ duckdb::shared_ptr<duckdb::Binder> get_duckdb_binder();
  *
  * @return duckdb::Optimizer& static optimizer object
  */
-duckdb::Optimizer& get_duckdb_optimizer();
+duckdb::Optimizer &get_duckdb_optimizer();

@@ -3,7 +3,7 @@ from collections.abc import Callable, Hashable
 
 import pandas as pd
 
-from bodo.pandas import plans
+from bodo.pandas import plan_optimizer
 from bodo.pandas.array_manager import LazySingleArrayManager
 from bodo.pandas.lazy_metadata import LazyMetadata
 from bodo.pandas.lazy_wrapper import BodoLazyWrapper
@@ -35,9 +35,9 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
                 other = other.plan
             new_metadata = zero_size_self._cmp_method(zero_size_other, op)
             assert isinstance(new_metadata, pd.Series)
-            return plans.wrap_plan(
+            return plan_optimizer.wrap_plan(
                 new_metadata,
-                plan=plans.BinaryOpPlanOperator(self.plan, other, op),
+                plan=plan_optimizer.BinaryOpPlanOperator(self.plan, other, op),
             )
 
         return super()._cmp_method(other, op)
@@ -62,7 +62,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         lazy_metadata: LazyMetadata,
         collect_func: Callable[[str], pt.Any] | None = None,
         del_func: Callable[[str], None] | None = None,
-        plan: plans.PlanOperator | None = None,
+        plan: plan_optimizer.LogicalOperator | None = None,
     ) -> "BodoSeries":
         """
         Create a BodoSeries from a lazy metadata object.

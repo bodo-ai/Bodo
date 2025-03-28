@@ -1,8 +1,9 @@
 import pandas as pd
 from pandas._libs import lib
 
-from bodo.pandas import plans
+from bodo.pandas import plan_optimizer
 from bodo.pandas.frame import BodoDataFrame
+from bodo.pandas.parquet import get_pandas_schema
 from bodo.pandas.series import BodoSeries
 
 
@@ -43,8 +44,8 @@ def read_parquet(
             )
         else:
             assert False and "Unsupported option to read_parquet"
-    pr = plans.ParquetRead(path)
-    return plans.wrap_plan(pr.schema, pr)
+    pr = plan_optimizer.LogicalGetParquetRead(path.encode())
+    return plan_optimizer.wrap_plan(get_pandas_schema(path), pr)
 
 
 def merge(lhs, rhs, *args, **kwargs):

@@ -2,6 +2,7 @@
 #include <utility>
 #include "duckdb.hpp"
 #include "duckdb/common/unique_ptr.hpp"
+#include "duckdb/planner/operator/logical_comparison_join.hpp"
 #include "duckdb/planner/operator/logical_get.hpp"
 
 std::unique_ptr<duckdb::LogicalOperator> optimize_plan(
@@ -17,6 +18,39 @@ std::unique_ptr<duckdb::LogicalOperator> optimize_plan(
         optimizer.Optimize(std::move(in_plan));
 
     return std::unique_ptr<duckdb::LogicalOperator>(optimized_plan.release());
+}
+
+duckdb::unique_ptr<duckdb::LogicalComparisonJoin> make_comparison_join(
+    std::unique_ptr<duckdb::LogicalOperator>& lhs,
+    std::unique_ptr<duckdb::LogicalOperator>& rhs, duckdb::JoinType join_type,
+    std::vector<std::pair<int, int>>& cond_vec) {
+    // Convert std::unique_ptr to duckdb::unique_ptr.
+    duckdb::unique_ptr<duckdb::LogicalOperator> lhs_duck =
+        static_cast<duckdb::unique_ptr<duckdb::LogicalOperator>&&>(
+            std::move(lhs));
+    duckdb::unique_ptr<duckdb::LogicalOperator> rhs_duck =
+        static_cast<duckdb::unique_ptr<duckdb::LogicalOperator>&&>(
+            std::move(rhs));
+    // Create join node.
+    duckdb::unique_ptr<duckdb::LogicalComparisonJoin> comp_join =
+        duckdb::make_uniq<duckdb::LogicalComparisonJoin>(join_type);
+    // Create join condition.
+    duckdb::LogicalType cbtype(duckdb::LogicalTypeId::INTEGER);
+    for (std::pair<int, int> cond_pair : cond_vec) {
+        duckdb::JoinCondition cond;
+        cond.comparison = duckdb::ExpressionType::COMPARE_EQUAL;
+        cond.left = duckdb::make_uniq<duckdb::BoundColumnRefExpression>(
+            cbtype, duckdb::ColumnBinding(0, cond_pair.first));
+        cond.right = duckdb::make_uniq<duckdb::BoundColumnRefExpression>(
+            cbtype, duckdb::ColumnBinding(0, cond_pair.second));
+        // Add the join condition to the join node.
+        comp_join->conditions.push_back(std::move(cond));
+    }
+    // Add the sources to be joined.
+    comp_join->children.push_back(std::move(lhs_duck));
+    comp_join->children.push_back(std::move(rhs_duck));
+
+    return comp_join;
 }
 
 duckdb::unique_ptr<duckdb::LogicalGet> make_parquet_get_node(
