@@ -514,22 +514,17 @@ def worker_loop(
     # Send output to spawner manually if we are in Jupyter on Windows since child processes
     # don't inherit file descriptors from the parent process.
     out_socket = None
-    if bodo.utils.utils.is_jupyter_on_windows():
-        # Multi-node Jupyter on Windows is not supported yet
-        spawner_hostname = comm_world.bcast(
-            spawner_hostname if bodo.get_rank() == 0 else None, root=0
-        )
-        if spawner_hostname != socket.gethostname():
-            raise bodo.utils.typing.BodoError(
-                "Jupyter is not supported on multi-node Windows clusters yet"
-            )
-        port = spawner_intercomm.bcast(None, 0)
-
+    if (
+        bodo.utils.utils.is_jupyter_on_windows()
+        or bodo.utils.utils.is_jupyter_on_bodo_platform()
+    ):
         import zmq
+
+        connection_info = spawner_intercomm.bcast(None, 0)
 
         context = zmq.Context()
         out_socket = context.socket(zmq.PUSH)
-        out_socket.connect(f"tcp://127.0.0.1:{port}")
+        out_socket.connect(connection_info)
         sys.stdout = StdoutQueue(out_socket, False)
         sys.stderr = StdoutQueue(out_socket, True)
 

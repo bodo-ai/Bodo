@@ -74,9 +74,7 @@ def _get_table_schema(
 
     # Convert to Bodo Schema
     bodo_types = [
-        _get_numba_typ_from_pa_typ(
-            pa_schema.field_by_name(col_name), False, True, None
-        )[0]
+        _get_numba_typ_from_pa_typ(pa_schema.field(col_name), False, True, None)[0]
         for col_name in col_names
     ]
 

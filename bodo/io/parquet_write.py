@@ -11,6 +11,7 @@ from numba.core import cgutils, types
 from numba.extending import intrinsic, overload
 
 import bodo
+from bodo.decorators import wrap_python
 from bodo.hiframes.datetime_date_ext import datetime_date_array_type
 from bodo.hiframes.pd_index_ext import SingleIndexType, array_type_to_index
 from bodo.hiframes.pd_multi_index_ext import MultiIndexType
@@ -423,12 +424,7 @@ def gen_pandas_parquet_metadata(
     pass
 
 
-# TODO: Determine caching issue and re-enable
-@overload(
-    gen_pandas_parquet_metadata,
-    no_unliteral=True,
-    # jit_options={"cache": True}
-)
+@overload(gen_pandas_parquet_metadata, no_unliteral=True, jit_options={"cache": True})
 def overload_gen_pandas_parquet_metadata(
     df,
     col_names_arr,
@@ -488,41 +484,67 @@ def overload_gen_pandas_parquet_metadata(
             is_runtime_columns=False,
         )
 
-    func_text = (
-        "def impl(df, col_names_arr, partition_cols, write_non_range_index_to_metadata, write_rangeindex_to_metadata):\n"
-        # Fill in the metadata template with the actual values
-        "    index = df.index\n"
-        "    index_names = index.names\n"
-    )
-    if write_rangeindex:
-        func_text += "    range_info = (index.start, index.stop, index.step)\n"
-    else:
-        func_text += "    range_info = None\n"
-
-    func_text += (
-        '    with bodo.no_warning_objmode(metadata_str="unicode_type", out_names_arr=bodo.string_array_type):\n'
+    @wrap_python(types.Tuple((types.unicode_type, bodo.string_array_type)))
+    def _gen_pandas_parquet_metadata_helper(
+        range_info, index_names, col_names_arr, write_non_range_index_to_metadata
+    ):
         # In the underlying Parquet file, for non-range index columns with no name,
         # we use the name __index_level_{idx}__ to identify the column.
-        "        index_field_names = [f'__index_level_{idx}__' if name is None else name for idx, name in enumerate(index_names)]\n"
-        "        metadata_str = _apply_template(\n"
-        "            metadata_temp, \n"
-        "            range_info, \n"
-        "            col_names_arr, \n"
-        "            index_field_names,\n"
-        "            index_names\n"
-        "        )\n"
-        "        if write_non_range_index_to_metadata:\n"
-        "            out_names_arr = pd.array(col_names_arr.tolist() + index_field_names)\n"
-        "        else:\n"
-        "            out_names_arr = col_names_arr\n"
-        "    return metadata_str, out_names_arr\n"
-    )
-    loc_vars = {}
-    glbls = {
-        "pd": pd,
-        "bodo": bodo,
-        "metadata_temp": metadata_temp,
-        "_apply_template": _apply_template,
-    }
-    exec(func_text, glbls, loc_vars)
-    return loc_vars["impl"]
+        index_field_names = [
+            f"__index_level_{idx}__" if name is None else name
+            for idx, name in enumerate(index_names)
+        ]
+        metadata_str = _apply_template(
+            metadata_temp, range_info, col_names_arr, index_field_names, index_names
+        )
+        if write_non_range_index_to_metadata:
+            out_names_arr = pd.array(col_names_arr.tolist() + index_field_names)
+        else:
+            out_names_arr = col_names_arr
+
+        return metadata_str, out_names_arr
+
+    if write_rangeindex:
+
+        def impl(
+            df,
+            col_names_arr,
+            partition_cols,
+            write_non_range_index_to_metadata,
+            write_rangeindex_to_metadata,
+        ):
+            index = df.index
+            index_names = index.names
+
+            # Add range_info to metadata,
+            # This is the only line that is different between the two impls.
+            range_info = (index.start, index.stop, index.step)
+
+            return _gen_pandas_parquet_metadata_helper(
+                range_info,
+                index_names,
+                col_names_arr,
+                write_non_range_index_to_metadata,
+            )
+    else:
+
+        def impl(
+            df,
+            col_names_arr,
+            partition_cols,
+            write_non_range_index_to_metadata,
+            write_rangeindex_to_metadata,
+        ):
+            index = df.index
+            index_names = index.names
+
+            range_info = None
+
+            return _gen_pandas_parquet_metadata_helper(
+                range_info,
+                index_names,
+                col_names_arr,
+                write_non_range_index_to_metadata,
+            )
+
+    return impl
