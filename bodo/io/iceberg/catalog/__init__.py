@@ -65,6 +65,7 @@ def conn_str_to_catalog(conn_str: str) -> Catalog:
                 | "iceberg+s3"
                 | "iceberg+abfs"
                 | "iceberg+abfss"
+                | "iceberg+gs"
             ):
                 from .dir import DirCatalog
 
@@ -126,7 +127,7 @@ def conn_str_to_catalog(conn_str: str) -> Catalog:
             case _:
                 raise ValueError(
                     "Iceberg connection strings must start with one of the following: \n"
-                    "  Hadoop / Directory Catalog: 'iceberg://', 'iceberg+file://', 'iceberg+s3://', 'iceberg+abfs://', 'iceberg+abfss://'\n"
+                    "  Hadoop / Directory Catalog: 'iceberg://', 'iceberg+file://', 'iceberg+s3://', 'iceberg+abfs://', 'iceberg+abfss://', 'iceberg+gs://'\n"
                     "  REST Catalog: 'iceberg+http://', 'iceberg+https://', 'iceberg+rest://'\n"
                     "  Glue Catalog: 'iceberg+glue'\n"
                     "  Hive Catalog: 'iceberg+thrift://'\n"
