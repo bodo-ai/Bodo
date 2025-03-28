@@ -3,6 +3,7 @@ import random
 import shutil
 import traceback
 from decimal import Decimal
+from urllib.parse import urlparse
 
 import numba
 import numpy as np
@@ -44,7 +45,6 @@ def check_write_func(
     check_index: list[str] | None = None,
     pandas_fn=None,
 ):
-    print("START")
     DISTRIBUTIONS = {
         "sequential": [lambda x, *args: x, [], {}],
         "1d-distributed": [
@@ -64,19 +64,13 @@ def check_write_func(
     pandas_fn = pandas_fn if pandas_fn else fn
 
     for dist_func, args, kwargs in DISTRIBUTIONS.values():
-        print("ENTER")
         with ensure_clean2(bodo_file_path), ensure_clean2(pandas_file_path):
-            print("COMPILE")
             write_jit = bodo.jit(fn, **kwargs)
-            print("RUN BODO")
             write_jit(dist_func(df, *args), bodo_file_path)
-            print("RUN RANK0")
             run_rank0(pandas_fn)(df, pandas_file_path)  # Pandas version
-            print("POST RUN RANK0")
             bodo.barrier()
 
             # Use fsspec for all reads
-            print(bodo_file_path, pandas_file_path)
             df_bodo = pd.read_parquet(bodo_file_path, storage_options={})
             df_pandas = pd.read_parquet(pandas_file_path, storage_options={})
             df_pandas_test = pd.read_parquet(bodo_file_path, storage_options={})
@@ -1133,12 +1127,23 @@ def test_to_pq_multiIdx_no_name(tmp_path, memory_leak_check):
     )
 
 
-def test_write_to_azure(tmp_abfs_path: str) -> None:
+@pytest.mark.parametrize("is_short_path", [True, False])
+def test_write_to_azure(tmp_abfs_path: str, is_short_path: bool) -> None:
+    if is_short_path:
+        # Long Path: abfs://<container>@<account>.dfs.windows.net/<path>/
+        # Short Path: abfs://<container>/<path>/
+        res = urlparse(tmp_abfs_path)
+        path = f"abfs://{res.username}{res.path}"
+    else:
+        path = tmp_abfs_path
+
+    print(path)
+
     df = pd.DataFrame({"A": [1, 2]})
     check_write_func(
         lambda df, fname: df.to_parquet(fname),
         df,
-        tmp_abfs_path,
+        path,
         "write_to_azure",
         # This triggers Pandas to use fsspec to write, cause using PyArrow causes issues
         pandas_fn=lambda df, fname: df.to_parquet(fname, storage_options={}),
