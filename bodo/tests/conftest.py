@@ -15,7 +15,9 @@ from typing import (
     Optional,
     Protocol,
 )
+from uuid import uuid4
 
+import adlfs
 import pandas as pd
 import psutil
 import pytest
@@ -26,6 +28,7 @@ import bodo.utils.allocation_tracking
 from bodo.mpi4py import MPI
 from bodo.tests.iceberg_database_helpers.utils import DATABASE_NAME
 from bodo.tests.utils import temp_env_override
+from bodo.utils.utils import run_rank0
 
 if TYPE_CHECKING:
     from pyspark.sql import SparkSession
@@ -865,3 +868,39 @@ def datetime_part_strings(request):
     for use in testing, including aliases.
     """
     return request.param
+
+
+@pytest.fixture(scope="session")
+def abfs_fs():
+    """
+    Create an Azure Blob FileSystem instance for testing.
+    """
+
+    account_name = os.environ["AZURE_STORAGE_ACCOUNT_NAME"]
+    account_key = os.environ["AZURE_STORAGE_ACCOUNT_KEY"]
+    return adlfs.AzureBlobFileSystem(account_name=account_name, account_key=account_key)
+
+
+@pytest.fixture
+def tmp_abfs_path(abfs_fs):
+    """
+    Create a temporary ABFS path for testing.
+    """
+
+    @run_rank0
+    def setup():
+        folder_name = str(uuid4())
+        abfs_fs.mkdir(f"engine-unit-tests-tmp-blob/{folder_name}")
+        return folder_name
+
+    # Need to include account name in path for C++ filesystem code
+    folder_name = setup()
+    account_name = os.environ["AZURE_STORAGE_ACCOUNT_NAME"]
+    yield f"abfs://engine-unit-tests-tmp-blob@{account_name}.dfs.core.windows.net/{folder_name}/"
+
+    @run_rank0
+    def cleanup():
+        if abfs_fs.exists(f"engine-unit-tests-tmp-blob/{folder_name}"):
+            abfs_fs.rm(f"engine-unit-tests-tmp-blob/{folder_name}", recursive=True)
+
+    cleanup()
