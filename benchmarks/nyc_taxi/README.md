@@ -34,13 +34,13 @@ The graph below summarizes the total execution time of each system (averaged ove
 
 <img src="../img/nyc-taxi-benchmark.png" alt="Monthly High Volume for Hire Vehicle Trips with Precipitation Benchmark Execution Time" title="Monthly High Volume for Hire Vehicle Trips with Precipitation Average Execution Time" width="30%">
 
-Results for Daft were collected March 2025.
+Results for Daft were collected in March 2025.
 
 <img src="../img/bodo-daft-comparison.png" alt="Monthly High Volume for Hire Vehicle Trips with Precipitation Benchmark Execution Time" title="Monthly High Volume for Hire Vehicle Trips with Precipitation Average Execution Time" width="30%">
 
 ### Single Node
 
-We compared Bodo, Daft, and Polars performance on a single `r6i.16xlarge` instance and the full dataset. The results are below, these results were collected March 2025.
+We compared Bodo, Daft, and Polars performance on a single `r6i.16xlarge` instance and the full dataset. The results are below, these results were collected in March 2025.
 
 <img src="../img/single-node-bodo-daft-polars.png" alt="Monthly High Volume for Hire Vehicle Trips with Precipitation Benchmark Execution Time" title="Monthly High Volume for Hire Vehicle Trips with Precipitation Average Execution Time Single r6i.16xlarge Instance." width="30%">
 
@@ -184,7 +184,7 @@ pip install bodo==2024.12.1 "dask[dataframe]"==2024.12.0 "modin[all]"==0.32.0 py
 
 We use a smaller subset of the [For Hire Vehicle High Volume dataset](https://www.nyc.gov/site/tlc/about/tlc-trip-record-data.page) to allow the workload to run locally (example setup: an Apple M2 Macbook Pro with 10 cores and 16 GB memory). We have also included an implementation using Pandas, which is often on par with or better than other distributed frameworks when data size is smaller due to the overhead from coordinating parallel workers. Even at this smaller scale, Bodo shows a roughly 3x improvement over Pandas by just adding a single decorator. Polars shows a similar improvement over Pandas but requires rewriting the entire workload.
 
-The results below were collected December 18th, 2024. Note that these numbers might differ based on your specific hardware and operating system. Daft and Polars results were added March 2025.
+The results below were collected December 18th, 2024. Note that these numbers might differ based on your specific hardware and operating system. Daft and Polars results were added in March 2025.
 
 
 | System      | Total Execution Time (s)     |

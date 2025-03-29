@@ -159,7 +159,7 @@ def main():
         "--single_node",
         action="store_true",
         required=False,
-        help="The name of a valid S3 bucket or prefix to write output to.",
+        help="Flag indicating whether we are executing benchmark on a single node.",
     )
     args = parser.parse_args()
 
