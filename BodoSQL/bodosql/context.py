@@ -21,6 +21,7 @@ import bodo.hiframes.pd_multi_index_ext
 from bodo.ir.sql_ext import parse_dbtype
 from bodo.libs.distributed_api import bcast_scalar
 from bodo.utils.typing import BodoError, dtype_to_array_type
+from bodo.utils.utils import bodo_exec
 from bodosql.bodosql_types.database_catalog import DatabaseCatalog
 from bodosql.bodosql_types.table_path import TablePath, TablePathType
 from bodosql.imported_java_classes import (
@@ -858,7 +859,7 @@ class BodoSQLContext:
             glbls,
             loc_vars,
         )
-        impl = loc_vars["impl"]
+        impl = loc_vars["bodosql_impl"]
 
         dispatcher = bodo.jit(sig)(impl)
         return dispatcher
@@ -1032,7 +1033,7 @@ class BodoSQLContext:
                     + dynamic_param_names
                     + named_param_names
                 )
-                func_text_or_err_msg += f"def impl({args}):\n"
+                func_text_or_err_msg += f"def bodosql_impl({args}):\n"
                 func_text_or_err_msg += f"{pd_code}\n"
             except Exception as e:
                 failed = True
@@ -1111,12 +1112,16 @@ class BodoSQLContext:
 
             glbls.update(lowered_globals)
             loc_vars = {}
-            exec(
-                func_text,
-                glbls,
-                loc_vars,
-            )
-            impl = loc_vars["impl"]
+            if bodo.spawn_mode:
+                # In the spawn mode case we need to bodo_exec on the workers as well
+                # so the code object is available to the caching infra.
+                def f(func_text, glbls, loc_vars, __name__):
+                    bodo.utils.utils.bodo_exec(func_text, glbls, loc_vars, __name__)
+
+                bodo.spawn.spawner.submit_func_to_workers(
+                    f, [], func_text, glbls, loc_vars, __name__
+                )
+            impl = bodo_exec(func_text, glbls, loc_vars, __name__)
 
             # Add table argument name prefix to user provided distributed flags to match
             # stored names
