@@ -427,7 +427,6 @@ cdef class LogicalGetParquetRead(LogicalOperator):
     def __cinit__(self, c_string parquet_path):
        cdef unique_ptr[CLogicalGet] c_logical_get = make_parquet_get_node(parquet_path)
        self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalGet*> c_logical_get.release())
-       #print("parquet", self.c_logical_operator.get() == NULL)
        self.path = (<bytes>parquet_path).decode("utf-8")
 
     def __str__(self):
