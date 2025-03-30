@@ -8,7 +8,6 @@
 #include "duckdb/parser/parsed_data/pragma_info.hpp"
 #include "duckdb/planner/expression/bound_aggregate_expression.hpp"
 #include "duckdb/planner/expression/bound_function_expression.hpp"
-#include "duckdb/main/extension_entries.hpp"
 
 namespace duckdb {
 
@@ -101,8 +100,6 @@ void BuiltinFunctions::Initialize() {
 	AddCollation("nocase", LowerFun::GetFunction(), true);
 	AddCollation("noaccent", StripAccentsFun::GetFunction(), true);
 	AddCollation("nfc", NFCNormalizeFun::GetFunction());
-
-	RegisterExtensionOverloads();
 }
 
 hash_t BaseScalarFunction::Hash() const {
