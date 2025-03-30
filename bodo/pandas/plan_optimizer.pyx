@@ -228,9 +228,19 @@ cdef extern from "duckdb/common/enums/join_type.hpp" namespace "duckdb" nogil:
         RIGHT_ANTI "duckdb::JoinType::RIGHT_ANTI"
 
 
+"""
 cdef extern from "duckdb/planner/operator/logical_join.hpp" namespace "duckdb" nogil:
     cdef cppclass CLogicalJoin" duckdb::LogicalJoin"(CLogicalOperator):
         CLogicalJoin(CJoinType join_type)
+
+cdef extern from "duckdb/planner/operator/logical_comparison_join.hpp" namespace "duckdb" nogil:
+    cdef cppclass CLogicalComparisonJoin" duckdb::LogicalComparisonJoin"(CLogicalJoin):
+        CLogicalComparisonJoin(CJoinType join_type)
+"""
+
+cdef extern from "duckdb/planner/operator/logical_comparison_join.hpp" namespace "duckdb" nogil:
+    cdef cppclass CLogicalComparisonJoin" duckdb::LogicalComparisonJoin"(CLogicalOperator):
+        CLogicalComparisonJoin(CJoinType join_type)
         CJoinType join_type
 
 cdef extern from "duckdb/planner/operator/logical_projection.hpp" namespace "duckdb" nogil:
@@ -240,10 +250,6 @@ cdef extern from "duckdb/planner/operator/logical_projection.hpp" namespace "duc
 cdef extern from "duckdb/planner/operator/logical_filter.hpp" namespace "duckdb" nogil:
     cdef cppclass CLogicalFilter" duckdb::LogicalFilter"(CLogicalOperator):
         pass
-
-cdef extern from "duckdb/planner/operator/logical_comparison_join.hpp" namespace "duckdb" nogil:
-    cdef cppclass CLogicalComparisonJoin" duckdb::LogicalComparisonJoin"(CLogicalJoin):
-        CLogicalComparisonJoin(CJoinType join_type)
 
 cdef extern from "duckdb/planner/operator/logical_get.hpp" namespace "duckdb" nogil:
     cdef cppclass CLogicalGet" duckdb::LogicalGet"(CLogicalOperator):
@@ -311,18 +317,6 @@ cdef class LogicalOperator:
     def set_types(self, types):
         self.c_logical_operator.get().types = types
     """
-
-cdef class LogicalJoin(LogicalOperator):
-    """Wrapper around DuckDB's LogicalComparisonJoin to provide access in Python.
-    """
-
-    def __cinit__(self, CJoinType join_type):
-       cdef unique_ptr[CLogicalComparisonJoin] c_logical_comparison_join = make_unique[CLogicalComparisonJoin](join_type)
-       self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalOperator*> c_logical_comparison_join.release())
-
-    def __str__(self):
-        join_type = join_type_to_string((<CLogicalComparisonJoin*>(self.c_logical_operator.get())).join_type)
-        return f"LogicalComparisonJoin({join_type})"
 
 cdef class LogicalComparisonJoin(LogicalOperator):
     """Wrapper around DuckDB's LogicalComparisonJoin to provide access in Python.
