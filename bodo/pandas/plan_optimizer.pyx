@@ -406,8 +406,6 @@ cdef class LogicalFilter(LogicalOperator):
        else:
             assert False & "Unimplemented"
 
-       #print("filter source null", source.c_logical_operator.get() == NULL)
-       #print("filter expr null", c_filter_expr.get() == NULL)
        cdef unique_ptr[CLogicalFilter] c_logical_filter = make_filter(source.c_logical_operator, c_filter_expr)
        self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalOperator*> c_logical_filter.release())
        #print("filter", self.c_logical_operator.get() == NULL)
