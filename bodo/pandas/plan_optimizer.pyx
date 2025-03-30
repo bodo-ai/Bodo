@@ -319,7 +319,6 @@ cdef class LogicalJoin(LogicalOperator):
     def __cinit__(self, CJoinType join_type):
        cdef unique_ptr[CLogicalComparisonJoin] c_logical_comparison_join = make_unique[CLogicalComparisonJoin](join_type)
        self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalOperator*> c_logical_comparison_join.release())
-       #print("join", self.c_logical_operator.get() == NULL)
 
     def __str__(self):
         join_type = join_type_to_string((<CLogicalComparisonJoin*>(self.c_logical_operator.get())).join_type)
