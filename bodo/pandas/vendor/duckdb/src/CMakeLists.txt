@@ -97,7 +97,6 @@ else()
   set(DUCKDB_LINK_LIBS
       ${DUCKDB_SYSTEM_LIBS}
       duckdb_fmt
-      duckdb_pg_query
       duckdb_re2
       duckdb_utf8proc
       duckdb_hyperloglog

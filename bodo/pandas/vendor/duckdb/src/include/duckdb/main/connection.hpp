@@ -16,7 +16,6 @@
 #include "duckdb/main/pending_query_result.hpp"
 #include "duckdb/main/prepared_statement.hpp"
 #include "duckdb/main/query_result.hpp"
-#include "duckdb/main/relation.hpp"
 #include "duckdb/main/stream_query_result.hpp"
 #include "duckdb/main/table_description.hpp"
 #include "duckdb/parser/sql_statement.hpp"
@@ -133,41 +132,6 @@ public:
 	DUCKDB_API void Append(TableDescription &description, ColumnDataCollection &collection);
 
 	//! Returns a relation that produces a table from this connection
-	DUCKDB_API shared_ptr<Relation> Table(const string &tname);
-	DUCKDB_API shared_ptr<Relation> Table(const string &schema_name, const string &table_name);
-	DUCKDB_API shared_ptr<Relation> Table(const string &catalog_name, const string &schema_name,
-	                                      const string &table_name);
-	//! Returns a relation that produces a view from this connection
-	DUCKDB_API shared_ptr<Relation> View(const string &tname);
-	DUCKDB_API shared_ptr<Relation> View(const string &schema_name, const string &table_name);
-	//! Returns a relation that calls a specified table function
-	DUCKDB_API shared_ptr<Relation> TableFunction(const string &tname);
-	DUCKDB_API shared_ptr<Relation> TableFunction(const string &tname, const vector<Value> &values,
-	                                              const named_parameter_map_t &named_parameters);
-	DUCKDB_API shared_ptr<Relation> TableFunction(const string &tname, const vector<Value> &values);
-	//! Returns a relation that produces values
-	DUCKDB_API shared_ptr<Relation> Values(const vector<vector<Value>> &values);
-	DUCKDB_API shared_ptr<Relation> Values(vector<vector<unique_ptr<ParsedExpression>>> &&values);
-	DUCKDB_API shared_ptr<Relation> Values(const vector<vector<Value>> &values, const vector<string> &column_names,
-	                                       const string &alias = "values");
-	DUCKDB_API shared_ptr<Relation> Values(const string &values);
-	DUCKDB_API shared_ptr<Relation> Values(const string &values, const vector<string> &column_names,
-	                                       const string &alias = "values");
-
-	//! Reads CSV file
-	DUCKDB_API shared_ptr<Relation> ReadCSV(const string &csv_file);
-	DUCKDB_API shared_ptr<Relation> ReadCSV(const vector<string> &csv_input, named_parameter_map_t &&options);
-	DUCKDB_API shared_ptr<Relation> ReadCSV(const string &csv_input, named_parameter_map_t &&options);
-	DUCKDB_API shared_ptr<Relation> ReadCSV(const string &csv_file, const vector<string> &columns);
-
-	//! Reads Parquet file
-	DUCKDB_API shared_ptr<Relation> ReadParquet(const string &parquet_file, bool binary_as_string);
-	//! Returns a relation from a query
-	DUCKDB_API shared_ptr<Relation> RelationFromQuery(const string &query, const string &alias = "queryrelation",
-	                                                  const string &error = "Expected a single SELECT statement");
-	DUCKDB_API shared_ptr<Relation> RelationFromQuery(unique_ptr<SelectStatement> select_stmt,
-	                                                  const string &alias = "queryrelation", const string &query = "");
-
 	DUCKDB_API void BeginTransaction();
 	DUCKDB_API void Commit();
 	DUCKDB_API void Rollback();
