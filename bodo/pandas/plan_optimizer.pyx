@@ -363,7 +363,6 @@ cdef class LogicalProjection(LogicalOperator):
 
        cdef unique_ptr[CLogicalProjection] c_logical_projection = make_projection(source.c_logical_operator, self.select_vec, self.type_vec)
        self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalOperator*> c_logical_projection.release())
-       #print("projection", self.c_logical_operator.get() == NULL)
 
     def get_select(self):
         return self.select_vec
