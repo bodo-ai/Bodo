@@ -184,8 +184,6 @@ struct DBConfigOptions {
 	case_insensitive_map_t<Value> set_variables;
 	//! Database configuration variable default values;
 	case_insensitive_map_t<Value> set_variable_defaults;
-	//! Enable emitting FSST Vectors
-	bool enable_fsst_vectors = false;
 	//! Enable VIEWs to create dependencies
 	bool enable_view_dependencies = false;
 	//! Enable macros to create dependencies

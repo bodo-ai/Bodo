@@ -428,17 +428,6 @@ struct EnableExternalAccessSetting {
 	static Value GetSetting(const ClientContext &context);
 };
 
-struct EnableFSSTVectorsSetting {
-	using RETURN_TYPE = bool;
-	static constexpr const char *Name = "enable_fsst_vectors";
-	static constexpr const char *Description =
-	    "Allow scans on FSST compressed segments to emit compressed vectors to utilize late decompression";
-	static constexpr const char *InputType = "BOOLEAN";
-	static void SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &parameter);
-	static void ResetGlobal(DatabaseInstance *db, DBConfig &config);
-	static Value GetSetting(const ClientContext &context);
-};
-
 struct EnableHTTPLoggingSetting {
 	using RETURN_TYPE = bool;
 	static constexpr const char *Name = "enable_http_logging";

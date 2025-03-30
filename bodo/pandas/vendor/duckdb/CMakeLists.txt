@@ -662,13 +662,11 @@ endif()
 
 
 include_directories(src/include)
-include_directories(third_party/fsst)
 include_directories(third_party/fmt/include)
 include_directories(third_party/hyperloglog)
 include_directories(third_party/fastpforlib)
 include_directories(third_party/fast_float)
 include_directories(third_party/re2)
-include_directories(third_party/miniz)
 include_directories(third_party/utf8proc/include)
 include_directories(third_party/concurrentqueue)
 include_directories(third_party/pcg)

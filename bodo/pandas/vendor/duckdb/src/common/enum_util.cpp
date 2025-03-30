@@ -4173,7 +4173,6 @@ VectorBufferType EnumUtil::FromString<VectorBufferType>(const char *value) {
 const StringUtil::EnumStringLiteral *GetVectorTypeValues() {
 	static constexpr StringUtil::EnumStringLiteral values[] {
 		{ static_cast<uint32_t>(VectorType::FLAT_VECTOR), "FLAT_VECTOR" },
-		{ static_cast<uint32_t>(VectorType::FSST_VECTOR), "FSST_VECTOR" },
 		{ static_cast<uint32_t>(VectorType::CONSTANT_VECTOR), "CONSTANT_VECTOR" },
 		{ static_cast<uint32_t>(VectorType::DICTIONARY_VECTOR), "DICTIONARY_VECTOR" },
 		{ static_cast<uint32_t>(VectorType::SEQUENCE_VECTOR), "SEQUENCE_VECTOR" }

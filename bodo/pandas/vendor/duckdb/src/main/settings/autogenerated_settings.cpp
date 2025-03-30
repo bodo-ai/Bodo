@@ -325,22 +325,6 @@ Value EnableExternalAccessSetting::GetSetting(const ClientContext &context) {
 }
 
 //===----------------------------------------------------------------------===//
-// Enable F S S T Vectors
-//===----------------------------------------------------------------------===//
-void EnableFSSTVectorsSetting::SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &input) {
-	config.options.enable_fsst_vectors = input.GetValue<bool>();
-}
-
-void EnableFSSTVectorsSetting::ResetGlobal(DatabaseInstance *db, DBConfig &config) {
-	config.options.enable_fsst_vectors = DBConfig().options.enable_fsst_vectors;
-}
-
-Value EnableFSSTVectorsSetting::GetSetting(const ClientContext &context) {
-	auto &config = DBConfig::GetConfig(context);
-	return Value::BOOLEAN(config.options.enable_fsst_vectors);
-}
-
-//===----------------------------------------------------------------------===//
 // Enable H T T P Logging
 //===----------------------------------------------------------------------===//
 void EnableHTTPLoggingSetting::SetLocal(ClientContext &context, const Value &input) {
