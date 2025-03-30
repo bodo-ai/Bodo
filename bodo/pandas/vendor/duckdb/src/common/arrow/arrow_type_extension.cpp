@@ -181,23 +181,6 @@ void ArrowTypeExtension::PopulateArrowSchema(DuckDBArrowSchemaHolder &root_holde
 	child.metadata = root_holder.metadata_info.back().get();
 }
 
-void DBConfig::RegisterArrowExtension(const ArrowTypeExtension &extension) const {
-	lock_guard<mutex> l(arrow_extensions->lock);
-	auto extension_info = extension.GetInfo();
-	if (arrow_extensions->type_extensions.find(extension_info) != arrow_extensions->type_extensions.end()) {
-		throw NotImplementedException("Arrow Extension with configuration %s is already registered",
-		                              extension_info.ToString());
-	}
-	arrow_extensions->type_extensions[extension_info] = extension;
-	if (extension.HasType()) {
-		const TypeInfo type_info(extension.GetLogicalType());
-		arrow_extensions->type_to_info[type_info].push_back(extension_info);
-		return;
-	}
-	const TypeInfo type_info(extension.GetInfo().GetExtensionName());
-	arrow_extensions->type_to_info[type_info].push_back(extension_info);
-}
-
 ArrowTypeExtension GetArrowExtensionInternal(
     unordered_map<ArrowExtensionMetadata, ArrowTypeExtension, HashArrowTypeExtension> &type_extensions,
     ArrowExtensionMetadata info) {
@@ -211,49 +194,6 @@ ArrowTypeExtension GetArrowExtensionInternal(
 		}
 	}
 	return type_extensions[info];
-}
-ArrowTypeExtension DBConfig::GetArrowExtension(ArrowExtensionMetadata info) const {
-	lock_guard<mutex> l(arrow_extensions->lock);
-	return GetArrowExtensionInternal(arrow_extensions->type_extensions, std::move(info));
-}
-
-ArrowTypeExtension DBConfig::GetArrowExtension(const LogicalType &type) const {
-	lock_guard<mutex> l(arrow_extensions->lock);
-	TypeInfo type_info(type);
-	if (!arrow_extensions->type_to_info[type_info].empty()) {
-		return GetArrowExtensionInternal(arrow_extensions->type_extensions,
-		                                 arrow_extensions->type_to_info[type_info].front());
-	}
-	type_info.type = LogicalTypeId::ANY;
-	return GetArrowExtensionInternal(arrow_extensions->type_extensions,
-	                                 arrow_extensions->type_to_info[type_info].front());
-}
-
-bool DBConfig::HasArrowExtension(const LogicalType &type) const {
-	lock_guard<mutex> l(arrow_extensions->lock);
-	TypeInfo type_info(type);
-	if (!arrow_extensions->type_to_info[type_info].empty()) {
-		return true;
-	}
-	type_info.type = LogicalTypeId::ANY;
-	return !arrow_extensions->type_to_info[type_info].empty();
-}
-
-bool DBConfig::HasArrowExtension(ArrowExtensionMetadata info) const {
-	lock_guard<mutex> l(arrow_extensions->lock);
-	auto type_extensions = arrow_extensions->type_extensions;
-
-	if (type_extensions.find(info) != type_extensions.end()) {
-		return true;
-	}
-
-	auto og_info = info;
-	info.SetArrowFormat("");
-	if (type_extensions.find(info) != type_extensions.end()) {
-		return true;
-	}
-
-	return false;
 }
 
 struct ArrowJson {
@@ -363,29 +303,5 @@ struct ArrowBool8 {
 	}
 };
 
-void ArrowTypeExtensionSet::Initialize(const DBConfig &config) {
-	// Types that are 1:1
-	config.RegisterArrowExtension({"arrow.uuid", "w:16", make_shared_ptr<ArrowTypeExtensionData>(LogicalType::UUID)});
-	config.RegisterArrowExtension(
-	    {"arrow.bool8", "c",
-	     make_shared_ptr<ArrowTypeExtensionData>(LogicalType::BOOLEAN, LogicalType::TINYINT, ArrowBool8::ArrowToDuck,
-	                                             ArrowBool8::DuckToArrow)});
-
-	config.RegisterArrowExtension(
-	    {"DuckDB", "hugeint", "w:16", make_shared_ptr<ArrowTypeExtensionData>(LogicalType::HUGEINT)});
-	config.RegisterArrowExtension(
-	    {"DuckDB", "uhugeint", "w:16", make_shared_ptr<ArrowTypeExtensionData>(LogicalType::UHUGEINT)});
-	config.RegisterArrowExtension(
-	    {"DuckDB", "time_tz", "w:8", make_shared_ptr<ArrowTypeExtensionData>(LogicalType::TIME_TZ)});
-
-	// Types that are 1:n
-	config.RegisterArrowExtension({"arrow.json", &ArrowJson::PopulateSchema, &ArrowJson::GetType,
-	                               make_shared_ptr<ArrowTypeExtensionData>(LogicalType::VARCHAR)});
-
-	config.RegisterArrowExtension({"DuckDB", "bit", &ArrowBit::PopulateSchema, &ArrowBit::GetType,
-	                               make_shared_ptr<ArrowTypeExtensionData>(LogicalType::BIT), nullptr, nullptr});
-
-	config.RegisterArrowExtension({"DuckDB", "varint", &ArrowVarint::PopulateSchema, &ArrowVarint::GetType,
-	                               make_shared_ptr<ArrowTypeExtensionData>(LogicalType::VARINT), nullptr, nullptr});
-}
+void ArrowTypeExtensionSet::Initialize(const DBConfig &config) {}
 } // namespace duckdb

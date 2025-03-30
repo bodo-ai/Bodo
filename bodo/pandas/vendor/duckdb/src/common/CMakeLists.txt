@@ -1,7 +1,3 @@
-if(NOT CLANG_TIDY)
-  add_subdirectory(adbc)
-endif()
-
 add_subdirectory(arrow)
 add_subdirectory(crypto)
 add_subdirectory(enums)

@@ -14,6 +14,7 @@
 #include "duckdb/main/secret/secret_manager.hpp"
 #include "duckdb/main/secret/secret_storage.hpp"
 #include "duckdb/parser/parsed_data/create_secret_info.hpp"
+#include "duckdb/planner/bound_statement.hpp"
 
 namespace duckdb {
 class SecretManager;
@@ -175,11 +176,6 @@ private:
 	void InitializeSecrets(CatalogTransaction transaction);
 	//! Load a secret storage
 	void LoadSecretStorageInternal(unique_ptr<SecretStorage> storage);
-
-	//! Autoload extension for specific secret type
-	void AutoloadExtensionForType(const string &type);
-	//! Autoload extension for specific secret function
-	void AutoloadExtensionForFunction(const string &type, const string &provider);
 
 	//! Will throw appropriate error message when type not found
 	[[noreturn]] void ThrowTypeNotFoundError(const string &type, const string &secret_path = "");
