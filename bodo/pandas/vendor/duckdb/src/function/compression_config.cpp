@@ -1,5 +1,4 @@
 #include "duckdb/common/pair.hpp"
-#include "duckdb/function/compression/compression.hpp"
 #include "duckdb/function/compression_function.hpp"
 #include "duckdb/main/config.hpp"
 
@@ -13,24 +12,6 @@ struct DefaultCompressionMethod {
 	get_compression_function_t get_function;
 	compression_supports_type_t supports_type;
 };
-
-static const DefaultCompressionMethod internal_compression_methods[] = {
-    {CompressionType::COMPRESSION_CONSTANT, ConstantFun::GetFunction, ConstantFun::TypeIsSupported},
-    {CompressionType::COMPRESSION_UNCOMPRESSED, UncompressedFun::GetFunction, UncompressedFun::TypeIsSupported},
-    {CompressionType::COMPRESSION_RLE, RLEFun::GetFunction, RLEFun::TypeIsSupported},
-    {CompressionType::COMPRESSION_BITPACKING, BitpackingFun::GetFunction, BitpackingFun::TypeIsSupported},
-    {CompressionType::COMPRESSION_DICTIONARY, DictionaryCompressionFun::GetFunction,
-     DictionaryCompressionFun::TypeIsSupported},
-    {CompressionType::COMPRESSION_CHIMP, ChimpCompressionFun::GetFunction, ChimpCompressionFun::TypeIsSupported},
-    {CompressionType::COMPRESSION_PATAS, PatasCompressionFun::GetFunction, PatasCompressionFun::TypeIsSupported},
-    {CompressionType::COMPRESSION_ALP, AlpCompressionFun::GetFunction, AlpCompressionFun::TypeIsSupported},
-    {CompressionType::COMPRESSION_ALPRD, AlpRDCompressionFun::GetFunction, AlpRDCompressionFun::TypeIsSupported},
-    {CompressionType::COMPRESSION_FSST, FSSTFun::GetFunction, FSSTFun::TypeIsSupported},
-    {CompressionType::COMPRESSION_ZSTD, ZSTDFun::GetFunction, ZSTDFun::TypeIsSupported},
-    {CompressionType::COMPRESSION_ROARING, RoaringCompressionFun::GetFunction, RoaringCompressionFun::TypeIsSupported},
-    {CompressionType::COMPRESSION_EMPTY, EmptyValidityCompressionFun::GetFunction,
-     EmptyValidityCompressionFun::TypeIsSupported},
-    {CompressionType::COMPRESSION_AUTO, nullptr, nullptr}};
 
 static optional_ptr<CompressionFunction> FindCompressionFunction(CompressionFunctionSet &set, CompressionType type,
                                                                  const PhysicalType physical_type) {
@@ -48,18 +29,6 @@ static optional_ptr<CompressionFunction> FindCompressionFunction(CompressionFunc
 
 static optional_ptr<CompressionFunction> LoadCompressionFunction(CompressionFunctionSet &set, CompressionType type,
                                                                  const PhysicalType physical_type) {
-	for (idx_t i = 0; internal_compression_methods[i].get_function; i++) {
-		const auto &method = internal_compression_methods[i];
-		if (method.type == type) {
-			if (!method.supports_type(physical_type)) {
-				return nullptr;
-			}
-			// The type is supported. We create the function and insert it into the set of available functions.
-			auto function = method.get_function(physical_type);
-			set.functions[type].insert(make_pair(physical_type, function));
-			return FindCompressionFunction(set, type, physical_type);
-		}
-	}
 	throw InternalException("Unsupported compression function type");
 }
 

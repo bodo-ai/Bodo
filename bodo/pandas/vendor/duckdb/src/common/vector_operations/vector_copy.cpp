@@ -27,8 +27,6 @@ static const ValidityMask &ExtractValidityMask(const Vector &v) {
 	switch (v.GetVectorType()) {
 	case VectorType::FLAT_VECTOR:
 		return FlatVector::Validity(v);
-	case VectorType::FSST_VECTOR:
-		return FSSTVector::Validity(v);
 	default:
 		throw InternalException("Unsupported vector type in vector copy");
 	}
@@ -67,9 +65,6 @@ void VectorOperations::Copy(const Vector &source_p, Vector &target, const Select
 			sel = ConstantVector::ZeroSelectionVector(copy_count, owned_sel);
 			finished = true;
 			break;
-		case VectorType::FSST_VECTOR:
-			finished = true;
-			break;
 		case VectorType::FLAT_VECTOR:
 			finished = true;
 			break;
@@ -103,12 +98,6 @@ void VectorOperations::Copy(const Vector &source_p, Vector &target, const Select
 	}
 
 	D_ASSERT(sel);
-
-	// For FSST Vectors we decompress instead of copying.
-	if (source->GetVectorType() == VectorType::FSST_VECTOR) {
-		FSSTVector::DecompressVector(*source, target, source_offset, target_offset, copy_count, sel);
-		return;
-	}
 
 	// now copy over the data
 	switch (source->GetType().InternalType()) {

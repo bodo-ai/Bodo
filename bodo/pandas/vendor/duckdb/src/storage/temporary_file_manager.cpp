@@ -5,7 +5,7 @@
 #include "duckdb/parallel/task_scheduler.hpp"
 #include "duckdb/storage/buffer/temporary_file_information.hpp"
 #include "duckdb/storage/standard_buffer_manager.hpp"
-#include "zstd.h"
+// #include "zstd.h"
 
 namespace duckdb {
 
@@ -211,11 +211,11 @@ unique_ptr<FileBuffer> TemporaryFileHandle::ReadTemporaryBuffer(idx_t block_inde
 	auto buffer = buffer_manager.ConstructManagedBuffer(buffer_manager.GetBlockSize(), std::move(reusable_buffer));
 
 	const auto compressed_size = Load<idx_t>(compressed_buffer.get());
-	D_ASSERT(!duckdb_zstd::ZSTD_isError(compressed_size));
-	const auto decompressed_size = duckdb_zstd::ZSTD_decompress(
-	    buffer->InternalBuffer(), buffer->AllocSize(), compressed_buffer.get() + sizeof(idx_t), compressed_size);
+	// D_ASSERT(!duckdb_zstd::ZSTD_isError(compressed_size));
+	const auto decompressed_size = 0; //duckdb_zstd::ZSTD_decompress(
+	    // buffer->InternalBuffer(), buffer->AllocSize(), compressed_buffer.get() + sizeof(idx_t), compressed_size);
 	(void)decompressed_size;
-	D_ASSERT(!duckdb_zstd::ZSTD_isError(decompressed_size));
+	// D_ASSERT(!duckdb_zstd::ZSTD_isError(decompressed_size));
 
 	D_ASSERT(decompressed_size == buffer->AllocSize());
 	return buffer;
@@ -482,12 +482,12 @@ TemporaryFileManager::CompressBuffer(TemporaryFileCompressionAdaptivity &compres
 	}
 
 	const auto compression_level = static_cast<int>(level);
-	D_ASSERT(compression_level >= duckdb_zstd::ZSTD_minCLevel() && compression_level <= duckdb_zstd::ZSTD_maxCLevel());
-	const auto zstd_bound = duckdb_zstd::ZSTD_compressBound(buffer.AllocSize());
+	// D_ASSERT(compression_level >= duckdb_zstd::ZSTD_minCLevel() && compression_level <= duckdb_zstd::ZSTD_maxCLevel());
+	const auto zstd_bound = 0; // duckdb_zstd::ZSTD_compressBound(buffer.AllocSize());
 	compressed_buffer = Allocator::Get(db).Allocate(sizeof(idx_t) + zstd_bound);
-	const auto zstd_size = duckdb_zstd::ZSTD_compress(compressed_buffer.get() + sizeof(idx_t), zstd_bound,
-	                                                  buffer.InternalBuffer(), buffer.AllocSize(), compression_level);
-	D_ASSERT(!duckdb_zstd::ZSTD_isError(zstd_size));
+	const auto zstd_size = 0; //duckdb_zstd::ZSTD_compress(compressed_buffer.get() + sizeof(idx_t), zstd_bound,
+	                            //                      buffer.InternalBuffer(), buffer.AllocSize(), compression_level);
+	// D_ASSERT(!duckdb_zstd::ZSTD_isError(zstd_size));
 	Store<idx_t>(zstd_size, compressed_buffer.get());
 	const auto compressed_size = sizeof(idx_t) + zstd_size;
 

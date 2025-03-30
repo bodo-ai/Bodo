@@ -8,7 +8,6 @@
 
 #pragma once
 
-#include "duckdb/common/common.hpp"
 #include "duckdb/storage/storage_info.hpp"
 #include "duckdb/storage/buffer/block_handle.hpp"
 #include "duckdb/function/compression_function.hpp"
@@ -34,8 +33,6 @@ struct StringBlock {
 };
 
 struct UncompressedStringSegmentState : public CompressedSegmentState {
-	~UncompressedStringSegmentState() override;
-
 	//! The string block holding strings that do not fit in the main block
 	//! FIXME: this should be replaced by a heap that also allows freeing of unused strings
 	unique_ptr<StringBlock> head;

@@ -1,6 +1,5 @@
 add_subdirectory(buffer)
 add_subdirectory(checkpoint)
-add_subdirectory(compression)
 add_subdirectory(metadata)
 add_subdirectory(serialization)
 add_subdirectory(statistics)
