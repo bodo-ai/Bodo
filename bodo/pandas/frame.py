@@ -488,7 +488,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 new_metadata = zero_size_self.__getitem__(zero_size_key)
                 return plan_optimizer.wrap_plan(
                     new_metadata,
-                    plan=plan_optimizer.FilterPlanOperator(self.plan, key.plan),
+                    plan=plan_optimizer.LogicalFilter(self.plan, key.plan),
                 )
             else:
                 """ This is selecting one or more columns. Be a bit more
@@ -499,6 +499,9 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                     key = [key]
                 assert isinstance(key, Iterable)
                 key = list(key)
+                # convert column name to index
+                key_indices = [self.columns.get_loc(x) for x in key]
+                key_types = [self.dtypes.iloc[x].name for x in key_indices]
                 if len(key) == 1:
                     """ If just one element then have to extract that singular
                         element for the metadata call to Pandas so it doesn't
@@ -507,13 +510,17 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                     new_metadata = zero_size_self.__getitem__(key)
                     return plan_optimizer.wrap_plan(
                         new_metadata,
-                        plan=plan_optimizer.ProjectionPlanOperator(self.plan, key),
+                        plan=plan_optimizer.LogicalProjection(
+                            self.plan, zip(key_indices, key_types)
+                        ),
                     )
                 else:
                     new_metadata = zero_size_self.__getitem__(key)
                     return plan_optimizer.wrap_plan(
                         new_metadata,
-                        plan=plan_optimizer.ProjectionPlanOperator(self.plan, key),
+                        plan=plan_optimizer.LogicalProjection(
+                            self.plan, zip(key_indices, key_types)
+                        ),
                     )
 
         return super().__getitem__(key)

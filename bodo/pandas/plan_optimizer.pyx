@@ -7,6 +7,7 @@ from libcpp.memory cimport unique_ptr, make_unique, dynamic_pointer_cast
 from libcpp.utility cimport move, pair
 from libcpp.string cimport string as c_string
 from libcpp.vector cimport vector
+import operator
 
 ctypedef unsigned long long idx_t
 ctypedef pair[int, int] int_pair
@@ -147,6 +148,12 @@ cdef extern from "duckdb/common/enums/expression_type.hpp" namespace "duckdb" no
         BOUND_LAMBDA_REF "duckdb::ExpressionType::BOUND_LAMBDA_REF"
         BOUND_EXPANDED "duckdb::ExpressionType::BOUND_EXPANDED"
 
+def str_to_expr_type(val):
+    if val is operator.gt:
+        return CExpressionType.COMPARE_GREATERTHAN
+    else:
+        assert False
+
 cdef extern from "duckdb/common/enums/expression_type.hpp" namespace "duckdb" nogil:
     cpdef enum class CExpressionClass" duckdb::ExpressionClass":
         INVALID "duckdb::ExpressionType::INVALID"
@@ -226,6 +233,14 @@ cdef extern from "duckdb/planner/operator/logical_join.hpp" namespace "duckdb" n
         CLogicalJoin(CJoinType join_type)
         CJoinType join_type
 
+cdef extern from "duckdb/planner/operator/logical_projection.hpp" namespace "duckdb" nogil:
+    cdef cppclass CLogicalProjection" duckdb::LogicalProjection"(CLogicalOperator):
+        pass
+
+cdef extern from "duckdb/planner/operator/logical_filter.hpp" namespace "duckdb" nogil:
+    cdef cppclass CLogicalFilter" duckdb::LogicalFilter"(CLogicalOperator):
+        pass
+
 cdef extern from "duckdb/planner/operator/logical_comparison_join.hpp" namespace "duckdb" nogil:
     cdef cppclass CLogicalComparisonJoin" duckdb::LogicalComparisonJoin"(CLogicalJoin):
         CLogicalComparisonJoin(CJoinType join_type)
@@ -239,7 +254,11 @@ cdef extern from "_bodo_plan.h" nogil:
     cdef unique_ptr[CLogicalGet] make_parquet_get_node(c_string parquet_path)
     cdef unique_ptr[CLogicalComparisonJoin] make_comparison_join(unique_ptr[CLogicalOperator] lhs, unique_ptr[CLogicalOperator] rhs, CJoinType join_type, vector[int_pair] cond_vec)
     cdef unique_ptr[CLogicalOperator] optimize_plan(unique_ptr[CLogicalOperator])
-
+    cdef unique_ptr[CLogicalProjection] make_projection(unique_ptr[CLogicalOperator] source, vector[int] select_vec, vector[CLogicalTypeId] type_vec)
+    cdef unique_ptr[CExpression] make_binop_expr(unique_ptr[CExpression] lhs, unique_ptr[CExpression] rhs, CExpressionType etype)
+    cdef unique_ptr[CLogicalFilter] make_filter(unique_ptr[CLogicalOperator] source, unique_ptr[CExpression] filter_expr)
+    cdef unique_ptr[CExpression] make_const_int_expr(int val)
+    cdef unique_ptr[CExpression] make_col_ref_expr(CLogicalTypeId, int col_idx)
 
 def join_type_to_string(CJoinType join_type):
     """
@@ -300,6 +319,7 @@ cdef class LogicalJoin(LogicalOperator):
     def __cinit__(self, CJoinType join_type):
        cdef unique_ptr[CLogicalComparisonJoin] c_logical_comparison_join = make_unique[CLogicalComparisonJoin](join_type)
        self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalOperator*> c_logical_comparison_join.release())
+       #print("join", self.c_logical_operator.get() == NULL)
 
     def __str__(self):
         join_type = join_type_to_string((<CLogicalComparisonJoin*>(self.c_logical_operator.get())).join_type)
@@ -321,6 +341,83 @@ cdef class LogicalComparisonJoin(LogicalOperator):
         join_type = join_type_to_string((<CLogicalComparisonJoin*>(self.c_logical_operator.get())).join_type)
         return f"LogicalComparisonJoin({join_type})"
 
+def str_to_type(x):
+    if x == "int64":
+        return CLogicalTypeId.BIGINT
+    elif x == "string":
+        return CLogicalTypeId.VARCHAR
+    else:
+        print("Unconverted type", x)
+        assert False
+
+cdef class LogicalProjection(LogicalOperator):
+    """Wrapper around DuckDB's LogicalProjection to provide access in Python.
+    """
+
+    cdef vector[int] select_vec
+    cdef vector[CLogicalTypeId] type_vec
+
+    def __cinit__(self, LogicalOperator source, select_list):
+       for col in select_list:
+           self.select_vec.push_back(col[0])
+           self.type_vec.push_back(str_to_type(col[1]))
+
+       cdef unique_ptr[CLogicalProjection] c_logical_projection = make_projection(source.c_logical_operator, self.select_vec, self.type_vec)
+       self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalOperator*> c_logical_projection.release())
+       #print("projection", self.c_logical_operator.get() == NULL)
+
+    def get_select(self):
+        return self.select_vec
+
+    def get_type(self):
+        return self.type_vec
+
+cdef unique_ptr[CExpression] make_expr(val):
+    if isinstance(val, int):
+        return make_const_int_expr(val)
+    elif isinstance(val, LogicalProjection):
+        select_vec = val.get_select()
+        type_vec = val.get_type()
+        assert len(select_vec) == 1
+        return make_col_ref_expr(type_vec[0], select_vec[0])
+    else:
+        assert False
+
+def get_source(val):
+    if isinstance(val, int):
+        return None
+    elif isinstance(val, LogicalProjection):
+        return val
+    else:
+        assert False
+
+cdef class LogicalFilter(LogicalOperator):
+    def __cinit__(self, LogicalOperator source, key):
+       cdef unique_ptr[CExpression] c_filter_expr
+       if isinstance(key, LogicalBinaryOp):
+            lhs_expr = make_expr(key.lhs)
+            rhs_expr = make_expr(key.rhs)
+            lhs_source = get_source(key.lhs)
+            rhs_source = get_source(key.rhs)
+            c_filter_expr = make_binop_expr(lhs_expr, rhs_expr, str_to_expr_type(key.binop))
+            if lhs_source is not None:
+                source = lhs_source
+            elif rhs_source is not None:
+                source = rhs_source
+       else:
+            assert False & "Unimplemented"
+
+       #print("filter source null", source.c_logical_operator.get() == NULL)
+       #print("filter expr null", c_filter_expr.get() == NULL)
+       cdef unique_ptr[CLogicalFilter] c_logical_filter = make_filter(source.c_logical_operator, c_filter_expr)
+       self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalOperator*> c_logical_filter.release())
+       #print("filter", self.c_logical_operator.get() == NULL)
+
+class LogicalBinaryOp:
+    def __init__(self, lhs, rhs, binop):
+        self.lhs = lhs
+        self.rhs = rhs
+        self.binop = binop
 
 cdef class LogicalGetParquetRead(LogicalOperator):
     """Wrapper around DuckDB's LogicalGet for reading Parquet datasets.
@@ -330,6 +427,7 @@ cdef class LogicalGetParquetRead(LogicalOperator):
     def __cinit__(self, c_string parquet_path):
        cdef unique_ptr[CLogicalGet] c_logical_get = make_parquet_get_node(parquet_path)
        self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalGet*> c_logical_get.release())
+       #print("parquet", self.c_logical_operator.get() == NULL)
        self.path = (<bytes>parquet_path).decode("utf-8")
 
     def __str__(self):
@@ -351,18 +449,20 @@ cpdef py_optimize_plan(object plan):
     return optimized_plan
 
 cpdef convert_and_execute(plan):
-    orig_plan = plan.convert_to_duckdb()
-    opt_plan = py_optimize_plan(orig_plan)
+    opt_plan = py_optimize_plan(plan)
     print("opt_plan:", opt_plan)
 
 cpdef collect_func(plan_to_execute):
-    print("collect_func for plan", plan_to_execute)
+    print("collect_func for plan", plan_to_execute, type(plan_to_execute))
     convert_and_execute(plan_to_execute)
 
 cpdef del_func(res_id):
     pass  # For now.
 
 cpdef wrap_plan(schema, plan):
+    """ Create a BodoDataFrame or BodoSeries with the given
+        schema and given plan node.
+    """
     import pandas as pd
     from bodo.pandas.frame import BodoDataFrame
     from bodo.pandas.series import BodoSeries
