@@ -28,7 +28,7 @@ def test_projection_node():
 
 
 def test_filter_node():
-    """Make sure Cython wrapper around the join node works. Just tests node creation."""
+    """Make sure Cython wrapper around the filter node works. Just tests node creation."""
     P1 = bodo.pandas.plan_optimizer.LogicalGetParquetRead(b"example.parquet1")
     A = bodo.pandas.plan_optimizer.LogicalProjection(P1, [(0, "int64")])
     B = bodo.pandas.plan_optimizer.LogicalBinaryOp(A, 5, operator.gt)
