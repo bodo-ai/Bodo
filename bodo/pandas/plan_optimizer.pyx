@@ -69,7 +69,7 @@ cdef extern from "duckdb/common/types.hpp" namespace "duckdb" nogil:
         ARRAY "duckdb::LogicalTypeId::ARRAY"
 
 cdef extern from "duckdb/common/types.hpp" namespace "duckdb" nogil:
-    cdef cppclass CLogicalType" duckdb::LogicalType":
+    cdef cppclass CLogicalType "duckdb::LogicalType":
         CLogicalType(CLogicalTypeId)
 
 cdef extern from "duckdb/common/enums/expression_type.hpp" namespace "duckdb" nogil:
