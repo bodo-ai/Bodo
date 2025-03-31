@@ -12,12 +12,6 @@ import operator
 ctypedef unsigned long long idx_t
 ctypedef pair[int, int] int_pair
 
-cdef int_pair create_int_pair(int a, int b):
-    cdef int_pair p
-    p.first = a
-    p.second = b
-    return p
-
 cdef extern from "duckdb/common/types.hpp" namespace "duckdb" nogil:
     cpdef enum class CLogicalTypeId "duckdb::LogicalTypeId":
         INVALID "duckdb::LogicalTypeId::INVALID"
@@ -228,16 +222,6 @@ cdef extern from "duckdb/common/enums/join_type.hpp" namespace "duckdb" nogil:
         RIGHT_ANTI "duckdb::JoinType::RIGHT_ANTI"
 
 
-"""
-cdef extern from "duckdb/planner/operator/logical_join.hpp" namespace "duckdb" nogil:
-    cdef cppclass CLogicalJoin" duckdb::LogicalJoin"(CLogicalOperator):
-        CLogicalJoin(CJoinType join_type)
-
-cdef extern from "duckdb/planner/operator/logical_comparison_join.hpp" namespace "duckdb" nogil:
-    cdef cppclass CLogicalComparisonJoin" duckdb::LogicalComparisonJoin"(CLogicalJoin):
-        CLogicalComparisonJoin(CJoinType join_type)
-"""
-
 cdef extern from "duckdb/planner/operator/logical_comparison_join.hpp" namespace "duckdb" nogil:
     cdef cppclass CLogicalComparisonJoin" duckdb::LogicalComparisonJoin"(CLogicalOperator):
         CLogicalComparisonJoin(CJoinType join_type)
@@ -308,16 +292,6 @@ cdef class LogicalOperator:
         self.c_logical_operator.get().has_estimated_cardinality = True
         self.c_logical_operator.get().estimated_cardinality = estimated_cardinality
 
-    """
-    def set_expressions(self, expressions):
-        self.c_logical_operator.get().expressions = expressions
-    """
-
-    """
-    def set_types(self, types):
-        self.c_logical_operator.get().types = types
-    """
-
 cdef class LogicalComparisonJoin(LogicalOperator):
     """Wrapper around DuckDB's LogicalComparisonJoin to provide access in Python.
     """
@@ -325,7 +299,7 @@ cdef class LogicalComparisonJoin(LogicalOperator):
     def __cinit__(self, LogicalOperator lhs, LogicalOperator rhs, CJoinType join_type, conditions):
        cdef vector[int_pair] cond_vec
        for cond in conditions:
-           cond_vec.push_back(create_int_pair(cond[0], cond[1]))
+           cond_vec.push_back(int_pair(cond[0], cond[1]))
 
        cdef unique_ptr[CLogicalComparisonJoin] c_logical_comparison_join = make_comparison_join(lhs.c_logical_operator, rhs.c_logical_operator, join_type, cond_vec)
        self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalOperator*> c_logical_comparison_join.release())
@@ -444,10 +418,8 @@ cpdef py_optimize_plan(object plan):
 
 cpdef convert_and_execute(plan):
     opt_plan = py_optimize_plan(plan)
-    print("opt_plan:", opt_plan)
 
 cpdef collect_func(plan_to_execute):
-    print("collect_func for plan", plan_to_execute, type(plan_to_execute))
     convert_and_execute(plan_to_execute)
 
 cpdef del_func(res_id):
