@@ -214,7 +214,7 @@ cdef extern from "duckdb/planner/logical_operator.hpp" namespace "duckdb" nogil:
         bint has_estimated_cardinality
 
 cdef extern from "duckdb/common/enums/join_type.hpp" namespace "duckdb" nogil:
-    cpdef enum class CJoinType" duckdb::JoinType":
+    cpdef enum class CJoinType "duckdb::JoinType":
         INVALID "duckdb::JoinType::INVALID"
         LEFT "duckdb::JoinType::LEFT"
         RIGHT "duckdb::JoinType::RIGHT"
