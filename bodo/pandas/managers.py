@@ -17,7 +17,7 @@ from pandas.core.internals.managers import (
 
 import bodo.user_logging
 from bodo.pandas.lazy_metadata import LazyMetadataMixin
-from bodo.pandas.plans import PlanOperator
+from bodo.pandas.plan_optimizer import LogicalOperator
 from bodo.spawn.utils import debug_msg
 
 
@@ -147,7 +147,7 @@ class LazyBlockManager(BlockManager, LazyMetadataMixin[BlockManager]):
         result_id=None,
         collect_func: Callable[[str], pt.Any] | None = None,
         del_func: Callable[[str], None] | None = None,
-        plan: PlanOperator | None = None,
+        plan: LogicalOperator | None = None,
         # Can be used for lazy index data
         index_data: ArrowExtensionArray
         | tuple[ArrowExtensionArray, ArrowExtensionArray]
@@ -270,7 +270,7 @@ class LazySingleBlockManager(SingleBlockManager, LazyMetadataMixin[SingleBlockMa
         head=None,
         collect_func: Callable[[str], pt.Any] | None = None,
         del_func: Callable[[str], None] | None = None,
-        plan: PlanOperator | None = None,
+        plan: LogicalOperator | None = None,
         # Can be used for lazy index data
         index_data: ArrowExtensionArray
         | tuple[ArrowExtensionArray, ArrowExtensionArray]
