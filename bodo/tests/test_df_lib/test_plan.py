@@ -18,7 +18,7 @@ def test_join_node():
 
 
 def test_projection_node():
-    """Make sure Cython wrapper around the join node works. Just tests node creation."""
+    """Make sure Cython wrapper around the projection node works. Just tests node creation."""
     P1 = bodo.pandas.plan_optimizer.LogicalGetParquetRead(b"example.parquet1")
     A = bodo.pandas.plan_optimizer.LogicalProjection(P1, [(1, "int64"), (3, "string")])
     assert (
