@@ -204,7 +204,7 @@ cdef extern from "duckdb/parser/base_expression.hpp" namespace "duckdb" nogil:
         CExpressionClass expression_class
 
 cdef extern from "duckdb/planner/expression.hpp" namespace "duckdb" nogil:
-    cdef cppclass CExpression" duckdb::Expression"(CBaseExpression):
+    cdef cppclass CExpression "duckdb::Expression"(CBaseExpression):
         CExpression(CExpressionType type, CExpressionClass expression_class, CLogicalType return_type)
         CLogicalType return_type
 
