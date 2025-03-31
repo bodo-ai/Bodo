@@ -364,6 +364,9 @@ cdef class LogicalProjection(LogicalOperator):
     def get_type(self):
         return self.type_vec
 
+    def __str__(self):
+        return f"LogicalProjection({self.select_vec}, {self.type_vec})"
+
 cdef unique_ptr[CExpression] make_expr(val):
     if isinstance(val, int):
         return make_const_int_expr(val)
@@ -401,6 +404,9 @@ cdef class LogicalFilter(LogicalOperator):
 
        cdef unique_ptr[CLogicalFilter] c_logical_filter = make_filter(source.c_logical_operator, c_filter_expr)
        self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalOperator*> c_logical_filter.release())
+
+    def __str__(self):
+        return f"LogicalFilter()"
 
 class LogicalBinaryOp:
     def __init__(self, lhs, rhs, binop):
