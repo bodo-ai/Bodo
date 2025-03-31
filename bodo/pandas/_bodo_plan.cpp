@@ -89,7 +89,7 @@ duckdb::unique_ptr<duckdb::LogicalProjection> make_projection(
         projection_expressions.push_back(std::move(expr));
     }
 
-    // Create join node.
+    // Create projection node.
     duckdb::unique_ptr<duckdb::LogicalProjection> proj =
         duckdb::make_uniq<duckdb::LogicalProjection>(
             table_idx, std::move(projection_expressions));
