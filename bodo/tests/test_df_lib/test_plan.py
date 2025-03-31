@@ -3,6 +3,7 @@ Tests dataframe library plan nodes.
 """
 
 import operator
+
 import pyarrow as pa
 
 from bodo.ext import plan_optimizer

@@ -130,7 +130,7 @@ duckdb::unique_ptr<duckdb::LogicalComparisonJoin> make_comparison_join(
 }
 
 duckdb::unique_ptr<duckdb::LogicalGet> make_parquet_get_node(
-    std::string parquet_path, PyObject* pyarrow_schema) {
+    std::string parquet_path, PyObject *pyarrow_schema) {
     duckdb::shared_ptr<duckdb::Binder> binder = get_duckdb_binder();
 
     BodoParquetScanFunction table_function = BodoParquetScanFunction();
@@ -178,9 +178,9 @@ arrow_schema_to_duckdb(std::shared_ptr<arrow::Schema> arrow_schema) {
     duckdb::vector<duckdb::LogicalType> logical_types;
 
     for (int i = 0; i < arrow_schema->num_fields(); i++) {
-        const std::shared_ptr<arrow::Field>& field = arrow_schema->field(i);
+        const std::shared_ptr<arrow::Field> &field = arrow_schema->field(i);
         return_names.emplace_back(field->name());
-        const std::shared_ptr<arrow::DataType>& arrow_type = field->type();
+        const std::shared_ptr<arrow::DataType> &arrow_type = field->type();
 
         // Convert Arrow type to DuckDB LogicalType
         // TODO: handle all types
