@@ -458,7 +458,8 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 left_on = []
             if right_on is None:
                 right_on = []
-            planComparisonJoin = plan_optimizer.LogicalComparisonJoin(
+            planComparisonJoin = plan_optimizer.LazyPlan(
+                plan_optimizer.LogicalComparisonJoin,
                 self.plan,
                 right.plan,
                 plan_optimizer.CJoinType.INNER,
@@ -488,7 +489,9 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 new_metadata = zero_size_self.__getitem__(zero_size_key)
                 return plan_optimizer.wrap_plan(
                     new_metadata,
-                    plan=plan_optimizer.LogicalFilter(self.plan, key.plan),
+                    plan=plan_optimizer.LazyPlan(
+                        plan_optimizer.LogicalFilter, self.plan, key.plan
+                    ),
                 )
             else:
                 """ This is selecting one or more columns. Be a bit more
@@ -510,16 +513,20 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                     new_metadata = zero_size_self.__getitem__(key)
                     return plan_optimizer.wrap_plan(
                         new_metadata,
-                        plan=plan_optimizer.LogicalProjection(
-                            self.plan, zip(key_indices, key_types)
+                        plan=plan_optimizer.LazyPlan(
+                            plan_optimizer.LogicalProjection,
+                            self.plan,
+                            list(zip(key_indices, key_types)),
                         ),
                     )
                 else:
                     new_metadata = zero_size_self.__getitem__(key)
                     return plan_optimizer.wrap_plan(
                         new_metadata,
-                        plan=plan_optimizer.LogicalProjection(
-                            self.plan, zip(key_indices, key_types)
+                        plan=plan_optimizer.LazyPlan(
+                            plan_optimizer.LogicalProjection,
+                            self.plan,
+                            list(zip(key_indices, key_types)),
                         ),
                     )
 
