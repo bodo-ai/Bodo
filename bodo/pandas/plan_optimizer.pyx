@@ -198,7 +198,7 @@ cdef extern from "duckdb/common/enums/expression_type.hpp" namespace "duckdb" no
         BOUND_EXPANDED "duckdb::ExpressionType::BOUND_EXPANDED"
 
 cdef extern from "duckdb/parser/base_expression.hpp" namespace "duckdb" nogil:
-    cdef cppclass CBaseExpression" duckdb::BaseExpression":
+    cdef cppclass CBaseExpression "duckdb::BaseExpression":
         CBaseExpression(CExpressionType type, CExpressionClass expression_class)
         CExpressionType type
         CExpressionClass expression_class
