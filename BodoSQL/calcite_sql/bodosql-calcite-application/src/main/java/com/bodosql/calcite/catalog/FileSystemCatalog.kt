@@ -448,6 +448,13 @@ class FileSystemCatalog(
                     "com.amazonaws.auth.DefaultAWSCredentialsProviderChain",
             )
 
+            // Set the GCS implementation classes
+            conf.set("fs.gs.impl", "com.google.cloud.hadoop.fs.gcs.GoogleHadoopFileSystem")
+            conf.set("fs.AbstractFileSystem.gs.impl", "com.google.cloud.hadoop.fs.gcs.GoogleHadoopFS")
+
+            // Use Application Default Credentials for authentication
+            conf.set("fs.gs.auth.type", "APPLICATION_DEFAULT")
+
             // Configure Azure Storage authentication, use the account name and key if provided
             // otherwise try to use the vm identity
             val accountName = System.getenv("AZURE_STORAGE_ACCOUNT_NAME")

@@ -132,12 +132,6 @@
             <version>${iceberg.version}</version>
         </dependency>
 
-        <dependency>
-            <groupId>org.apache.iceberg</groupId>
-            <artifactId>iceberg-gcp</artifactId>
-            <version>${iceberg.version}</version>
-        </dependency>
-
         <!-- https://mvnrepository.com/artifact/com.google.cloud.bigdataoss/gcs-connector -->
         <dependency>
             <groupId>com.google.cloud.bigdataoss</groupId>
