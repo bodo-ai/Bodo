@@ -19,7 +19,7 @@ cdef int_pair create_int_pair(int a, int b):
     return p
 
 cdef extern from "duckdb/common/types.hpp" namespace "duckdb" nogil:
-    cpdef enum class CLogicalTypeId" duckdb::LogicalTypeId":
+    cpdef enum class CLogicalTypeId "duckdb::LogicalTypeId":
         INVALID "duckdb::LogicalTypeId::INVALID"
         SQLNULL "duckdb::LogicalTypeId::SQLNULL"
         UNKNOWN "duckdb::LogicalTypeId::UNKNOWN"
