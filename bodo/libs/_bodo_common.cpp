@@ -1854,6 +1854,61 @@ std::string get_bodo_version() {
 
 extern "C" {
 
+/**
+ * @brief Get the Cython-generated plan_optimizer module, which requires special
+ * initialization.
+ *
+ * @return PyObject* plan_optimizer module object or nullptr on failure.
+ */
+PyObject* get_plan_optimizer_module() {
+    // Cython uses multi-phase initialization which needs
+    // PyModule_FromDefAndSpec(). See:
+    // https://docs.python.org/3/c-api/module.html#c.PyModuleDef
+    PyModuleDef* moddef = (PyModuleDef*)PyInit_plan_optimizer();
+
+    PyObject* machinery = PyImport_ImportModule("importlib.machinery");
+    if (!machinery) {
+        PyErr_Print();
+        return nullptr;
+    }
+
+    PyObject* module_spec_cls = PyObject_GetAttrString(machinery, "ModuleSpec");
+    Py_DECREF(machinery);
+    if (!module_spec_cls) {
+        PyErr_Print();
+        return nullptr;
+    }
+
+    PyObject* args = Py_BuildValue("sO", "plan_optimizer", Py_None);
+    if (!args) {
+        PyErr_Print();
+        Py_DECREF(module_spec_cls);
+        return nullptr;
+    }
+
+    PyObject* spec = PyObject_CallObject(module_spec_cls, args);
+    Py_DECREF(module_spec_cls);
+    Py_DECREF(args);
+    if (!spec) {
+        PyErr_Print();
+        return nullptr;
+    }
+
+    PyObject* mod = PyModule_FromDefAndSpec(moddef, spec);
+    Py_DECREF(spec);
+    if (!mod) {
+        PyErr_Print();
+        return nullptr;
+    }
+
+    if (PyModule_ExecDef(mod, moddef) < 0) {
+        PyErr_Print();
+        Py_DECREF(mod);
+        return nullptr;
+    }
+    return mod;
+}
+
 PyMODINIT_FUNC PyInit_ext(void) {
     PyObject* m;
     MOD_DEF(m, "ext", "No docs", nullptr);
@@ -1902,6 +1957,20 @@ PyMODINIT_FUNC PyInit_ext(void) {
 
     SetAttrStringFromPyInit(m, listagg);
     SetAttrStringFromPyInit(m, memory_cpp);
+
+    // Setup the Cython-generated plan_optimizer module
+    PyObject* plan_opt_mod = get_plan_optimizer_module();
+    if (!plan_opt_mod) {
+        PyErr_Print();
+        return nullptr;
+    }
+    if (PyObject_SetAttrString(m, "plan_optimizer", plan_opt_mod) < 0) {
+        PyErr_Print();
+        Py_DECREF(plan_opt_mod);
+        return nullptr;
+    }
+    Py_DECREF(plan_opt_mod);
+
     return m;
 }
 
