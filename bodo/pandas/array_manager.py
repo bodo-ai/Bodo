@@ -8,7 +8,7 @@ import pandas as pd
 from pandas.core.arrays import ExtensionArray
 from pandas.core.arrays.arrow.array import ArrowExtensionArray
 
-from bodo.pandas.plans import PlanOperator
+from bodo.pandas.plan_optimizer import LogicalOperator
 
 try:
     from pandas.core.internals.array_manager import ArrayManager, SingleArrayManager
@@ -56,7 +56,7 @@ class LazyArrayManager(ArrayManager, LazyMetadataMixin[ArrayManager]):
         head: ArrayManager | None = None,
         collect_func: Callable[[str], pt.Any] | None = None,
         del_func: Callable[[str], None] | None = None,
-        plan: PlanOperator | None = None,
+        plan: LogicalOperator | None = None,
         # Can be used for lazy index data
         index_data: ArrowExtensionArray
         | tuple[ArrowExtensionArray, ArrowExtensionArray]
@@ -321,7 +321,7 @@ class LazySingleArrayManager(SingleArrayManager, LazyMetadataMixin[SingleArrayMa
         head: SingleArrayManager | None = None,
         collect_func: Callable[[str], pt.Any] | None = None,
         del_func: Callable[[str], None] | None = None,
-        plan: PlanOperator | None = None,
+        plan: LogicalOperator | None = None,
         # Can be used for lazy index data
         index_data: ArrowExtensionArray
         | tuple[ArrowExtensionArray, ArrowExtensionArray]
