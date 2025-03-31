@@ -209,7 +209,7 @@ cdef extern from "duckdb/planner/expression.hpp" namespace "duckdb" nogil:
         CLogicalType return_type
 
 cdef extern from "duckdb/planner/logical_operator.hpp" namespace "duckdb" nogil:
-    cdef cppclass CLogicalOperator" duckdb::LogicalOperator":
+    cdef cppclass CLogicalOperator "duckdb::LogicalOperator":
         idx_t estimated_cardinality
         bint has_estimated_cardinality
 
