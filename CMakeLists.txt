@@ -520,7 +520,8 @@ install(TARGETS native_typer DESTINATION "bodo/transforms/type_inference/")
 
 
 
-# ---------------------- Cython Target - bodo.pandas.plan_optimizer -----------------------
+# ---------------------- Cython Target - plan_optimizer -----------------------
+
 add_custom_command(
   OUTPUT bodo/pandas/plan_optimizer.cpp
   DEPENDS bodo/pandas/plan_optimizer.pyx
@@ -530,12 +531,6 @@ add_custom_command(
   COMMENT "Cythonizing Source bodo/pandas/plan_optimizer.pyx into bodo/pandas/plan_optimizer.cpp"
 )
 
-python_add_library(
-  plan_optimizer
-  MODULE WITH_SOABI
-  "bodo/pandas/plan_optimizer.cpp"
-  "bodo/pandas/_bodo_plan.cpp"
-)
 
 ExternalProject_Add(
     duckdb_build
@@ -547,49 +542,11 @@ ExternalProject_Add(
     BUILD_IN_SOURCE 1
 )
 
-target_include_directories(plan_optimizer PRIVATE ${BASE_INCLUDE_DIRS} "${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/" "${CMAKE_CURRENT_BINARY_DIR}/bodo/pandas/"
-"${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/vendor/duckdb/src/include/"
-)
-target_link_directories(plan_optimizer PRIVATE ${CONDA_LIB_DIR}
-"${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/vendor/duckdb/build/release/src/"
-"${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/vendor/duckdb/build/release/third_party/fmt/"
-"${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/vendor/duckdb/build/release/third_party/fsst/"
-"${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/vendor/duckdb/build/release/third_party/libpg_query/"
-"${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/vendor/duckdb/build/release/third_party/re2/"
-"${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/vendor/duckdb/build/release/third_party/miniz/"
-"${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/vendor/duckdb/build/release/third_party/utf8proc/"
-"${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/vendor/duckdb/build/release/third_party/hyperloglog/"
-"${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/vendor/duckdb/build/release/third_party/fastpforlib/"
-"${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/vendor/duckdb/build/release/third_party/skiplist/"
-"${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/vendor/duckdb/build/release/third_party/mbedtls/"
-"${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/vendor/duckdb/build/release/third_party/yyjson/"
-"${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/vendor/duckdb/build/release/third_party/zstd/"
-)
-target_link_options(plan_optimizer
-PRIVATE "-fvisibility=hidden"
-PRIVATE "-fno-lto"
-)
-target_link_libraries(plan_optimizer PRIVATE
-  duckdb_static
-  duckdb_fsst
-  duckdb_fmt
-  duckdb_pg_query
-  duckdb_re2
-  duckdb_miniz
-  duckdb_utf8proc
-  duckdb_hyperloglog
-  duckdb_fastpforlib
-  duckdb_skiplistlib
-  duckdb_mbedtls
-  duckdb_yyjson
-  duckdb_zstd
-)
-add_dependencies(plan_optimizer duckdb_build)
-install(TARGETS plan_optimizer DESTINATION "bodo/pandas/")
-
 
 # ------------------------- Main Bodo Extension -------------------------
 set(sources_list
+  "bodo/pandas/plan_optimizer.cpp"
+  "bodo/pandas/_bodo_plan.cpp"
   "bodo/io/_csv_json_writer.cpp"
   "bodo/io/_fs_io.cpp"
   "bodo/io/_hdfs_reader.cpp"
@@ -743,6 +700,41 @@ python_add_library(ext MODULE WITH_SOABI "${sources_list}")
 target_include_directories(ext SYSTEM PRIVATE ${BASE_INCLUDE_DIRS} ${Boost_INCLUDE_DIRS})
 target_link_directories(ext PRIVATE ${CONDA_LIB_DIR} ${MPI_LIB_DIR})
 
+# plan_optimizer build on top of DuckDB
+target_include_directories(ext PRIVATE ${BASE_INCLUDE_DIRS} "${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/" "${CMAKE_CURRENT_BINARY_DIR}/bodo/pandas/"
+"${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/vendor/duckdb/src/include/"
+)
+target_link_directories(ext PRIVATE ${CONDA_LIB_DIR}
+"${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/vendor/duckdb/build/release/src/"
+"${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/vendor/duckdb/build/release/third_party/fmt/"
+"${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/vendor/duckdb/build/release/third_party/fsst/"
+"${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/vendor/duckdb/build/release/third_party/libpg_query/"
+"${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/vendor/duckdb/build/release/third_party/re2/"
+"${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/vendor/duckdb/build/release/third_party/miniz/"
+"${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/vendor/duckdb/build/release/third_party/utf8proc/"
+"${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/vendor/duckdb/build/release/third_party/hyperloglog/"
+"${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/vendor/duckdb/build/release/third_party/fastpforlib/"
+"${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/vendor/duckdb/build/release/third_party/skiplist/"
+"${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/vendor/duckdb/build/release/third_party/mbedtls/"
+"${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/vendor/duckdb/build/release/third_party/yyjson/"
+"${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/vendor/duckdb/build/release/third_party/zstd/"
+)
+target_link_libraries(ext PRIVATE
+  duckdb_static
+  duckdb_fsst
+  duckdb_fmt
+  duckdb_pg_query
+  duckdb_re2
+  duckdb_miniz
+  duckdb_utf8proc
+  duckdb_hyperloglog
+  duckdb_fastpforlib
+  duckdb_skiplistlib
+  duckdb_mbedtls
+  duckdb_yyjson
+  duckdb_zstd
+)
+
 if (CMAKE_BUILD_TYPE STREQUAL "Release")
   if (NOT WIN32)
     target_compile_options(ext PRIVATE "-Wno-unknown-pragmas")
@@ -857,6 +849,11 @@ else()
   target_link_libraries(ext PRIVATE hdf5)
 endif()
 
-set_target_properties(ext PROPERTIES CXX_CLANG_TIDY "${CLANG_TIDY_COMMAND}")
-add_dependencies(ext csv_json_reader tracing pyarrow_wrappers datasketches)
+
+# TODO: fix excluding plan_optimizer.cpp and enable clang-tidy
+# set_target_properties(ext PROPERTIES CXX_CLANG_TIDY "${CLANG_TIDY_COMMAND}")
+# # Exclude Cython generated code from clang-tidy since it can hang
+# set_source_files_properties(bodo/pandas/plan_optimizer.cpp PROPERTIES CXX_CLANG_TIDY "")
+
+add_dependencies(ext csv_json_reader tracing pyarrow_wrappers datasketches duckdb_build)
 install(TARGETS ext DESTINATION "bodo/")
