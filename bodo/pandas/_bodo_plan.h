@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <Python.h>
+#include "../io/arrow_reader.h"
 #include "duckdb/function/function.hpp"
 #include "duckdb/function/table_function.hpp"
 #include "duckdb/optimizer/optimizer.hpp"
@@ -53,7 +55,7 @@ std::unique_ptr<duckdb::LogicalOperator> optimize_plan(
  * @return duckdb::unique_ptr<duckdb::LogicalGet> output node
  */
 duckdb::unique_ptr<duckdb::LogicalGet> make_parquet_get_node(
-    std::string parquet_path);
+    std::string parquet_path, PyObject* pyarrow_schema);
 
 /**
  * @brief Returns a statically created DuckDB client context.
@@ -75,3 +77,14 @@ duckdb::shared_ptr<duckdb::Binder> get_duckdb_binder();
  * @return duckdb::Optimizer& static optimizer object
  */
 duckdb::Optimizer& get_duckdb_optimizer();
+
+/**
+ * @brief Convert an Arrow schema to DuckDB column names and data types to pass
+ * to plan nodes.
+ *
+ * @param arrow_schema input Arrow schema
+ * @return std::pair<duckdb::vector<duckdb::string>,
+ * duckdb::vector<duckdb::LogicalType>> duckdb column names and types
+ */
+std::pair<duckdb::vector<duckdb::string>, duckdb::vector<duckdb::LogicalType>>
+arrow_schema_to_duckdb(std::shared_ptr<arrow::Schema> arrow_schema);
