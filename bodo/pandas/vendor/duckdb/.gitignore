@@ -306,8 +306,6 @@ duckdb_benchmark_data/
 test/evidence/
 third_party/sqllogictest
 
-#imdb dataset
-third_party/imdb/data
 #taxi dataset
 benchmark/taxi/data/
 
