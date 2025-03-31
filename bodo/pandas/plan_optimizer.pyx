@@ -73,7 +73,7 @@ cdef extern from "duckdb/common/types.hpp" namespace "duckdb" nogil:
         CLogicalType(CLogicalTypeId)
 
 cdef extern from "duckdb/common/enums/expression_type.hpp" namespace "duckdb" nogil:
-    cpdef enum class CExpressionType" duckdb::ExpressionType":
+    cpdef enum class CExpressionType "duckdb::ExpressionType":
         INVALID "duckdb::ExpressionType::INVALID"
         OPERATOR_CAST "duckdb::ExpressionType::OPERATOR_CAST"
         OPERATOR_NOT "duckdb::ExpressionType::OPERATOR_NOT"
