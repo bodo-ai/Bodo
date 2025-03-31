@@ -155,7 +155,7 @@ def str_to_expr_type(val):
         assert False
 
 cdef extern from "duckdb/common/enums/expression_type.hpp" namespace "duckdb" nogil:
-    cpdef enum class CExpressionClass" duckdb::ExpressionClass":
+    cpdef enum class CExpressionClass "duckdb::ExpressionClass":
         INVALID "duckdb::ExpressionType::INVALID"
         AGGREGATE "duckdb::ExpressionType::AGGREGATE"
         CASE "duckdb::ExpressionType::CASE"
