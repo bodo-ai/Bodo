@@ -3,7 +3,6 @@ from pandas._libs import lib
 
 from bodo.ext import plan_optimizer
 from bodo.pandas.frame import BodoDataFrame
-from bodo.pandas.lazy_metadata import LazyMetadata
 from bodo.pandas.series import BodoSeries
 
 
@@ -66,11 +65,10 @@ def read_parquet(
     ).to_pandas()
     empty_df.index = pd.RangeIndex(0)
 
-    metadata = LazyMetadata("dummy", empty_df, nrows, None)
     plan = plan_optimizer.LazyPlan(
         plan_optimizer.LogicalGetParquetRead, path.encode(), arrow_schema
     )
-    return BodoDataFrame.from_lazy_metadata(metadata, plan=plan)
+    return plan_optimizer.wrap_plan(empty_df, plan=plan, nrows=nrows)
 
 
 def merge(lhs, rhs, *args, **kwargs):
