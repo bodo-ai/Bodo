@@ -71,6 +71,7 @@ huggingface_hub = ["huggingface_hub"]
 [tool.setuptools_scm]
 
 [tool.scikit-build]
+cmake.version = ">=3.23,<=3.31"
 strict-config = true
 experimental = false
 ninja.make-fallback = false
