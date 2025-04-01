@@ -251,7 +251,7 @@ cdef extern from "duckdb/planner/operator/logical_get.hpp" namespace "duckdb" no
 
 
 cdef extern from "_bodo_plan.h" nogil:
-    cdef unique_ptr[CLogicalGet] make_parquet_get_node(c_string parquet_path)
+    cdef unique_ptr[CLogicalGet] make_parquet_get_node(c_string parquet_path, object arrow_schema)
     cdef unique_ptr[CLogicalComparisonJoin] make_comparison_join(unique_ptr[CLogicalOperator] lhs, unique_ptr[CLogicalOperator] rhs, CJoinType join_type, vector[int_pair] cond_vec)
     cdef unique_ptr[CLogicalOperator] optimize_plan(unique_ptr[CLogicalOperator])
     cdef unique_ptr[CLogicalProjection] make_projection(unique_ptr[CLogicalOperator] source, vector[int] select_vec, vector[CLogicalTypeId] type_vec)
@@ -402,11 +402,13 @@ cdef class LogicalGetParquetRead(LogicalOperator):
     """Wrapper around DuckDB's LogicalGet for reading Parquet datasets.
     """
     cdef readonly str path
+    cdef readonly object arrow_schema
 
-    def __cinit__(self, c_string parquet_path):
-       cdef unique_ptr[CLogicalGet] c_logical_get = make_parquet_get_node(parquet_path)
+    def __cinit__(self, c_string parquet_path, object arrow_schema):
+       cdef unique_ptr[CLogicalGet] c_logical_get = make_parquet_get_node(parquet_path, arrow_schema)
        self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalGet*> c_logical_get.release())
        self.path = (<bytes>parquet_path).decode("utf-8")
+       self.arrow_schema = arrow_schema
 
     def __str__(self):
         return f"LogicalGetParquetRead({self.path})"
