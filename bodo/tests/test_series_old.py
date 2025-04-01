@@ -389,7 +389,7 @@ class TestSeries(unittest.TestCase):
             return A + i
 
         n = 11
-        df = pd.DataFrame({"A": np.arange(n)})
+        df = pd.DataFrame({"A": np.arange(n, dtype=np.int64)})
         bodo_func = bodo.jit(test_impl)
         pd.testing.assert_series_equal(
             bodo_func(df.A, 1), test_impl(df.A, 1), check_names=False
@@ -460,8 +460,8 @@ class TestSeries(unittest.TestCase):
             return A + B + 1
 
         n = 11
-        A = pd.Series(np.arange(n))
-        B = pd.Series(np.arange(n) ** 2)
+        A = pd.Series(np.arange(n, dtype=np.int64))
+        B = pd.Series(np.arange(n, dtype=np.int64) ** 2)
         bodo_func = bodo.jit(test_impl)
         pd.testing.assert_series_equal(bodo_func(A, B), test_impl(A, B))
         self.assertEqual(count_parfor_REPs(), 1)
@@ -475,8 +475,8 @@ class TestSeries(unittest.TestCase):
             return S + B
 
         n = 11
-        A = pd.Series(np.arange(n))
-        B = pd.Series(np.arange(n) ** 2)
+        A = pd.Series(np.arange(n, dtype=np.int64))
+        B = pd.Series(np.arange(n, dtype=np.int64) ** 2)
         bodo_func = bodo.jit(test_impl)
         pd.testing.assert_series_equal(bodo_func(A, B), test_impl(A, B))
         self.assertEqual(count_parfor_REPs(), 3)

@@ -167,7 +167,7 @@ register_model(StringDtype)(models.OpaqueModel)
 @box(StringDtype)
 def box_string_dtype(typ, val, c):
     mod_name = c.context.insert_const_string(c.builder.module, "pandas")
-    pd_class_obj = c.pyapi.import_module_noblock(mod_name)
+    pd_class_obj = c.pyapi.import_module(mod_name)
     res = c.pyapi.call_method(pd_class_obj, "StringDtype", ())
     c.pyapi.decref(pd_class_obj)
     return res
@@ -968,7 +968,7 @@ def to_list_if_immutable_arr_overload(data, str_null_bools=None):
                 "bodo": bodo,
             },
             {},
-            globals(),
+            __name__,
         )
 
     return lambda data, str_null_bools=None: data  # pragma: no cover
@@ -1031,7 +1031,7 @@ def cp_str_list_to_array_overload(str_arr, list_data, str_null_bools=None):
         func_text += "  return\n"
 
         return bodo.utils.utils.bodo_exec(
-            func_text, {"cp_str_list_to_array": cp_str_list_to_array}, {}, globals()
+            func_text, {"cp_str_list_to_array": cp_str_list_to_array}, {}, __name__
         )
 
     return lambda str_arr, list_data, str_null_bools=None: None  # pragma: no cover
@@ -1202,7 +1202,7 @@ def empty_str_arr(in_seq):  # pragma: no cover
             "pre_alloc_string_array": pre_alloc_string_array,
         },
         {},
-        globals(),
+        __name__,
     )
 
 
@@ -1230,7 +1230,7 @@ def str_arr_from_sequence(in_seq):  # pragma: no cover
             "pre_alloc_binary_array": pre_alloc_binary_array,
         },
         {},
-        globals(),
+        __name__,
     )
 
 
@@ -2405,9 +2405,9 @@ def str_arr_to_dict_str_arr_cpp(typingctx, str_arr_t):
 
         return dict_arr
 
-    assert (
-        str_arr_t == bodo.string_array_type
-    ), "str_arr_to_dict_str_arr: Input Array is not a Bodo String Array"
+    assert str_arr_t == bodo.string_array_type, (
+        "str_arr_to_dict_str_arr: Input Array is not a Bodo String Array"
+    )
 
     sig = bodo.dict_str_arr_type(bodo.string_array_type)
     return sig, codegen

@@ -10,7 +10,7 @@ import pandas as pd
 import pytest
 
 import bodo
-from bodo.tests.utils import pytest_mark_one_rank
+from bodo.tests.utils import pytest_mark_one_rank, temp_env_override
 from bodo.utils.testing import ensure_clean
 from bodo.utils.typing import BodoError, BodoWarning
 
@@ -35,7 +35,7 @@ def test_csv_invalid_path():
     def test_impl(fname):
         return pd.read_csv(fname, names=["A"], dtype={"A": np.int64})
 
-    with pytest.raises(RuntimeError, match="invalid path"):
+    with pytest.raises(BodoError, match=r"FileNotFoundError"):
         bodo.jit(test_impl)("f.csv")
 
 
@@ -45,7 +45,7 @@ def test_csv_invalid_path_const(memory_leak_check):
     def test_impl():
         return pd.read_csv("in_csv.csv")
 
-    with pytest.raises(BodoError, match="No such file or directory"):
+    with pytest.raises(BodoError, match="FileNotFoundError"):
         bodo.jit(test_impl)()
 
 
@@ -75,17 +75,25 @@ def test_read_csv_incorrect_s3_credentials(memory_leak_check):
     # Test as a user
     numba.core.config.DEVELOPER_MODE = 0
 
-    @bodo.jit
-    def read(filename):
-        df = pd.read_csv(filename)
-        return df
+    with temp_env_override(
+        {
+            "AWS_ACCESS_KEY_ID": "bad_key_id",
+            "AWS_SECRET_ACCESS_KEY": "bad_key",
+            "AWS_SESSION_TOKEN": "bad_token",
+        }
+    ):
 
-    # Test with passing filename from bodo to bodo call error and S3
-    def test_impl_csv(filename):
-        return read(filename)
+        @bodo.jit
+        def read(filename):
+            df = pd.read_csv(filename)
+            return df
 
-    with pytest.raises(BodoError, match="No response body"):
-        bodo.jit(test_impl_csv)(filename)
+        # Test with passing filename from bodo to bodo call error and S3
+        def test_impl_csv(filename):
+            return read(filename)
+
+        with pytest.raises(BodoError, match="No response body"):
+            bodo.jit(test_impl_csv)(filename)
 
     # Reset developer mode
     numba.core.config.DEVELOPER_MODE = default_mode
@@ -109,7 +117,7 @@ def test_io_error_nested_calls(memory_leak_check):
         return test_csv(filename)
 
     filename = "I_dont_exist.csv"
-    with pytest.raises(BodoError, match="No such file or directory"):
+    with pytest.raises(BodoError, match="FileNotFoundError"):
         bodo.jit(test_impl_csv)(filename)
 
     @bodo.jit
@@ -378,9 +386,15 @@ def test_csv_skiprows_type_nonconstant(memory_leak_check):
     """
     fname = os.path.join("bodo", "tests", "data", "example.csv")
 
+    @bodo.jit
+    def g(skiprow_list):
+        # Add print to avoid constant inference to call the function at compile time
+        print(skiprow_list)
+        return skiprow_list[0]
+
     def impl(skiprow_list):
         return pd.read_csv(
-            fname, skiprows=skiprow_list[0], names=["X", "Y", "Z", "MM", "AA"]
+            fname, skiprows=g(skiprow_list), names=["X", "Y", "Z", "MM", "AA"]
         )
 
     skiprow_list = ["abcd"]
@@ -400,9 +414,15 @@ def test_csv_skiprows_nonconstant_incorrect_values():
     """
     fname = os.path.join("bodo", "tests", "data", "example.csv")
 
+    @bodo.jit
+    def g(skiprow_list):
+        # Add print to avoid constant inference to call the function at compile time
+        print(skiprow_list)
+        return skiprow_list[0]
+
     def impl(skiprow_list):
         return pd.read_csv(
-            fname, skiprows=skiprow_list[0], names=["X", "Y", "Z", "MM", "AA"]
+            fname, skiprows=g(skiprow_list), names=["X", "Y", "Z", "MM", "AA"]
         )
 
     skiprow_list = [-2]
@@ -411,6 +431,8 @@ def test_csv_skiprows_nonconstant_incorrect_values():
 
     @bodo.jit
     def f2():
+        # Add print to avoid constant inference to call the function at compile time
+        print("f2")
         return [1, -3, 0]
 
     def impl2():
@@ -871,9 +893,15 @@ def test_csv_sample_nrows_size(memory_leak_check):
     def impl2(fname):
         return pd.read_csv(fname, sample_nrows="no thanks")
 
+    @bodo.jit
+    def g(ilist):
+        # Add print to avoid constant inference to call the function at compile time
+        print(ilist)
+        return ilist[0]
+
     # nonconstant
     def impl3(fname, ilist):
-        return pd.read_csv(fname, sample_nrows=ilist[0])
+        return pd.read_csv(fname, sample_nrows=g(ilist))
 
     with pytest.raises(
         BodoError,
@@ -912,9 +940,15 @@ def test_json_sample_nrows_size(memory_leak_check):
     def impl2(fname):
         return pd.read_json(fname, sample_nrows="no thanks")
 
+    @bodo.jit
+    def g(ilist):
+        # Add print to avoid constant inference to call the function at compile time
+        print(ilist)
+        return ilist
+
     # nonconstant
     def impl3(fname, ilist):
-        return pd.read_json(fname, sample_nrows=ilist[0])
+        return pd.read_json(fname, sample_nrows=g(ilist))
 
     with pytest.raises(
         BodoError,

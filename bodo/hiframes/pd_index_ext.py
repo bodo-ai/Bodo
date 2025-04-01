@@ -1,6 +1,7 @@
 import datetime
 import operator
 import warnings
+from abc import ABC, abstractmethod
 
 import numba
 import numpy as np
@@ -32,7 +33,7 @@ import bodo
 import bodo.hiframes
 import bodo.utils.conversion
 from bodo.hiframes.datetime_timedelta_ext import pd_timedelta_type
-from bodo.hiframes.pd_multi_index_ext import MultiIndexType
+from bodo.hiframes.pd_multi_index_ext import IndexNameType, MultiIndexType
 from bodo.hiframes.pd_series_ext import SeriesType
 from bodo.hiframes.pd_timestamp_ext import pd_timestamp_tz_naive_type
 from bodo.libs.binary_arr_ext import binary_array_type, bytes_type
@@ -196,10 +197,29 @@ def typeof_pd_index(val, c):
     raise NotImplementedError(f"unsupported pd.Index type {val}")
 
 
+# -------------------------  Base Index Type ------------------------------
+class SingleIndexType(ABC):
+    name_typ: IndexNameType
+
+    @property
+    @abstractmethod
+    def pandas_type_name(self):
+        raise NotImplementedError
+
+    @property
+    @abstractmethod
+    def numpy_type_name(self):
+        raise NotImplementedError
+
+    @property
+    def nlevels(self):
+        return 1
+
+
 # -------------------------  DatetimeIndex ------------------------------
 
 
-class DatetimeIndexType(types.IterableType, types.ArrayCompatible):
+class DatetimeIndexType(types.IterableType, types.ArrayCompatible, SingleIndexType):
     """type class for DatetimeIndex objects."""
 
     def __init__(self, name_typ=None, data=None):
@@ -311,7 +331,7 @@ def overload_datetime_index_copy(A, name=None, deep=False, dtype=None, names=Non
 def box_dt_index(typ, val, c):
     """"""
     mod_name = c.context.insert_const_string(c.builder.module, "pandas")
-    pd_class_obj = c.pyapi.import_module_noblock(mod_name)
+    pd_class_obj = c.pyapi.import_module(mod_name)
 
     dt_index = numba.core.cgutils.create_struct_proxy(typ)(c.context, c.builder, val)
 
@@ -438,7 +458,7 @@ def gen_dti_field_impl(field):
     else:
         func_text += "        S[i] = ts." + field + "\n"
     func_text += "    return bodo.hiframes.pd_index_ext.init_numeric_index(S, name)\n"
-    return bodo_exec(func_text, {"numba": numba, "np": np, "bodo": bodo}, {}, globals())
+    return bodo_exec(func_text, {"numba": numba, "np": np, "bodo": bodo}, {}, __name__)
 
 
 def _install_dti_field_overload(field):
@@ -755,7 +775,7 @@ def gen_dti_str_binop_impl(op, is_lhs_dti):
     func_text += "  for i in numba.parfors.parfor.internal_prange(l):\n"
     func_text += f"    S[i] = {comp}\n"
     func_text += "  return S\n"
-    return bodo_exec(func_text, {"bodo": bodo, "numba": numba, "np": np}, {}, globals())
+    return bodo_exec(func_text, {"bodo": bodo, "numba": numba, "np": np}, {}, __name__)
 
 
 def overload_binop_dti_str(op):
@@ -1146,8 +1166,7 @@ def pd_date_range_overload(
             func_text += "  b = np.int64(e) + addend\n"
         else:
             raise_bodo_error(
-                "at least 'start' or 'end' should be specified "
-                "if a 'period' is given."
+                "at least 'start' or 'end' should be specified if a 'period' is given."
             )
         # TODO: handle overflows
         func_text += "  arr = np.arange(b, e, stride, np.int64)\n"
@@ -1177,7 +1196,7 @@ def pd_date_range_overload(
     func_text += "  A = bodo.utils.conversion.convert_to_dt64ns(arr)\n"
     func_text += "  return bodo.hiframes.pd_index_ext.init_datetime_index(A, name)\n"
 
-    return bodo_exec(func_text, {"bodo": bodo, "np": np, "pd": pd}, {}, globals())
+    return bodo_exec(func_text, {"bodo": bodo, "np": np, "pd": pd}, {}, __name__)
 
 
 @overload(pd.timedelta_range, no_unliteral=True, jit_options={"cache": True})
@@ -1315,7 +1334,7 @@ def overload_pd_timestamp_isocalendar(idx):
 
 
 # similar to DatetimeIndex
-class TimedeltaIndexType(types.IterableType, types.ArrayCompatible):
+class TimedeltaIndexType(types.IterableType, types.ArrayCompatible, SingleIndexType):
     """Temporary type class for TimedeltaIndex objects."""
 
     def __init__(self, name_typ=None, data=None):
@@ -1386,7 +1405,7 @@ def typeof_timedelta_index(val, c):
 def box_timedelta_index(typ, val, c):
     """"""
     mod_name = c.context.insert_const_string(c.builder.module, "pandas")
-    pd_class_obj = c.pyapi.import_module_noblock(mod_name)
+    pd_class_obj = c.pyapi.import_module(mod_name)
 
     timedelta_index = numba.core.cgutils.create_struct_proxy(typ)(
         c.context, c.builder, val
@@ -1649,7 +1668,7 @@ def gen_tdi_field_impl(field):
     else:
         assert False, "invalid timedelta field"
     func_text += "    return bodo.hiframes.pd_index_ext.init_numeric_index(S, name)\n"
-    return bodo_exec(func_text, {"numba": numba, "np": np, "bodo": bodo}, {}, globals())
+    return bodo_exec(func_text, {"numba": numba, "np": np, "bodo": bodo}, {}, __name__)
 
 
 def _install_tdi_field_overload(field):
@@ -1723,7 +1742,7 @@ def pd_timedelta_index_overload(
 
 
 # pd.RangeIndex(): simply keep start/stop/step/name
-class RangeIndexType(types.IterableType, types.ArrayCompatible):
+class RangeIndexType(types.IterableType, types.ArrayCompatible, SingleIndexType):
     """type class for pd.RangeIndex() objects."""
 
     def __init__(self, name_typ=None):
@@ -1824,7 +1843,7 @@ def overload_range_index_copy(A, name=None, deep=False, dtype=None, names=None):
 @box(RangeIndexType)
 def box_range_index(typ, val, c):
     mod_name = c.context.insert_const_string(c.builder.module, "pandas")
-    class_obj = c.pyapi.import_module_noblock(mod_name)
+    class_obj = c.pyapi.import_module(mod_name)
     range_val = cgutils.create_struct_proxy(typ)(c.context, c.builder, val)
     start_obj = c.pyapi.from_native_value(types.int64, range_val.start, c.env_manager)
     stop_obj = c.pyapi.from_native_value(types.int64, range_val.stop, c.env_manager)
@@ -1990,7 +2009,7 @@ def range_index_overload(
 
     func_text = "def bodo_pd_range_index(start=None, stop=None, step=None, dtype=None, copy=False, name=None):\n"
     func_text += f"  return init_range_index({_start}, {_stop}, {_step}, name)\n"
-    return bodo_exec(func_text, {"init_range_index": init_range_index}, {}, globals())
+    return bodo_exec(func_text, {"init_range_index": init_range_index}, {}, __name__)
 
 
 @overload(
@@ -2066,7 +2085,7 @@ def overload_range_len(r):
 
 
 # Simple type for PeriodIndex for now, freq is saved as a constant string
-class PeriodIndexType(types.IterableType, types.ArrayCompatible):
+class PeriodIndexType(types.IterableType, types.ArrayCompatible, SingleIndexType):
     """type class for pd.PeriodIndex. Contains frequency as constant string"""
 
     def __init__(self, freq, name_typ=None):
@@ -2191,7 +2210,7 @@ def init_period_index(typingctx, data, name, freq):
 @box(PeriodIndexType)
 def box_period_index(typ, val, c):
     mod_name = c.context.insert_const_string(c.builder.module, "pandas")
-    class_obj = c.pyapi.import_module_noblock(mod_name)
+    class_obj = c.pyapi.import_module(mod_name)
 
     index_val = cgutils.create_struct_proxy(typ)(c.context, c.builder, val)
 
@@ -2232,7 +2251,7 @@ def unbox_period_index(typ, val, c):
     name = c.pyapi.to_native_value(typ.name_typ, name_obj).value
 
     mod_name = c.context.insert_const_string(c.builder.module, "pandas")
-    pd_class_obj = c.pyapi.import_module_noblock(mod_name)
+    pd_class_obj = c.pyapi.import_module(mod_name)
     arr_mod_obj = c.pyapi.object_getattr_string(pd_class_obj, "arrays")
     data_obj = c.pyapi.call_method(arr_mod_obj, "IntegerArray", (asi8_obj, isna_obj))
     data = c.pyapi.to_native_value(arr_typ, data_obj).value
@@ -2261,15 +2280,15 @@ def unbox_period_index(typ, val, c):
 # ------------------------------ CategoricalIndex ---------------------------
 
 
-class CategoricalIndexType(types.IterableType, types.ArrayCompatible):
+class CategoricalIndexType(types.IterableType, types.ArrayCompatible, SingleIndexType):
     """data type for CategoricalIndex values"""
 
     def __init__(self, data, name_typ=None):
         from bodo.hiframes.pd_categorical_ext import CategoricalArrayType
 
-        assert isinstance(
-            data, CategoricalArrayType
-        ), "CategoricalIndexType expects CategoricalArrayType"
+        assert isinstance(data, CategoricalArrayType), (
+            "CategoricalIndexType expects CategoricalArrayType"
+        )
         name_typ = types.none if name_typ is None else name_typ
         self.name_typ = name_typ
         self.data = data
@@ -2350,7 +2369,7 @@ def typeof_categorical_index(val, c):
 def box_categorical_index(typ, val, c):
     """"""
     mod_name = c.context.insert_const_string(c.builder.module, "pandas")
-    pd_class_obj = c.pyapi.import_module_noblock(mod_name)
+    pd_class_obj = c.pyapi.import_module(mod_name)
 
     categorical_index = numba.core.cgutils.create_struct_proxy(typ)(
         c.context, c.builder, val
@@ -2487,15 +2506,15 @@ def overload_categorical_index_copy(A, name=None, deep=False, dtype=None, names=
 # ------------------------------ IntervalIndex ---------------------------
 
 
-class IntervalIndexType(types.ArrayCompatible):
+class IntervalIndexType(types.ArrayCompatible, SingleIndexType):
     """data type for IntervalIndex values"""
 
     def __init__(self, data, name_typ=None):
         from bodo.libs.interval_arr_ext import IntervalArrayType
 
-        assert isinstance(
-            data, IntervalArrayType
-        ), "IntervalIndexType expects IntervalArrayType"
+        assert isinstance(data, IntervalArrayType), (
+            "IntervalIndexType expects IntervalArrayType"
+        )
         name_typ = types.none if name_typ is None else name_typ
         self.name_typ = name_typ
         self.data = data
@@ -2564,7 +2583,7 @@ def typeof_interval_index(val, c):
 def box_interval_index(typ, val, c):
     """"""
     mod_name = c.context.insert_const_string(c.builder.module, "pandas")
-    pd_class_obj = c.pyapi.import_module_noblock(mod_name)
+    pd_class_obj = c.pyapi.import_module(mod_name)
 
     interval_index = numba.core.cgutils.create_struct_proxy(typ)(
         c.context, c.builder, val
@@ -2666,7 +2685,7 @@ make_attribute_wrapper(IntervalIndexType, "dict", "_dict")
 
 
 # Represents numeric indices (excluding RangeIndex)
-class NumericIndexType(types.IterableType, types.ArrayCompatible):
+class NumericIndexType(types.IterableType, types.ArrayCompatible, SingleIndexType):
     """type class for pd.Index objects with numeric dtypes."""
 
     def __init__(self, dtype, name_typ=None, data=None):
@@ -2756,7 +2775,7 @@ def box_numeric_index(typ, val, c):
     Int64/UInt64/Float64. pd.Index() will convert to the available Index type.
     """
     mod_name = c.context.insert_const_string(c.builder.module, "pandas")
-    class_obj = c.pyapi.import_module_noblock(mod_name)
+    class_obj = c.pyapi.import_module(mod_name)
     index_val = cgutils.create_struct_proxy(typ)(c.context, c.builder, val)
     c.context.nrt.incref(c.builder, typ.data, index_val.data)
     data_obj = c.pyapi.from_native_value(typ.data, index_val.data, c.env_manager)
@@ -2842,7 +2861,7 @@ def unbox_numeric_index(typ, val, c):
 
 # represents string index, which doesn't have direct Pandas type
 # pd.Index() infers string
-class StringIndexType(types.IterableType, types.ArrayCompatible):
+class StringIndexType(types.IterableType, types.ArrayCompatible, SingleIndexType):
     """type class for pd.Index() objects with 'string' as inferred_dtype."""
 
     def __init__(self, name_typ=None, data_typ=None):
@@ -2906,14 +2925,14 @@ make_attribute_wrapper(StringIndexType, "dict", "_dict")
 # represents binary index, which doesn't have direct Pandas type
 # pd.Index() infers binary
 # Largely copied from the StringIndexType class
-class BinaryIndexType(types.IterableType, types.ArrayCompatible):
+class BinaryIndexType(types.IterableType, types.ArrayCompatible, SingleIndexType):
     """type class for pd.Index() objects with 'binary' as inferred_dtype."""
 
     def __init__(self, name_typ=None, data_typ=None):
         # data_typ is added just for compatibility with StringIndexType
-        assert (
-            data_typ is None or data_typ == binary_array_type
-        ), "data_typ must be binary_array_type"
+        assert data_typ is None or data_typ == binary_array_type, (
+            "data_typ must be binary_array_type"
+        )
         name_typ = types.none if name_typ is None else name_typ
         self.name_typ = name_typ
         # Add a .data field for consistency with other index types
@@ -3009,7 +3028,7 @@ def box_binary_str_index(typ, val, c):
     """
     array_type = typ.data
     mod_name = c.context.insert_const_string(c.builder.module, "pandas")
-    class_obj = c.pyapi.import_module_noblock(mod_name)
+    class_obj = c.pyapi.import_module(mod_name)
 
     index_val = cgutils.create_struct_proxy(typ)(c.context, c.builder, val)
     c.context.nrt.incref(c.builder, array_type, index_val.data)
@@ -3093,7 +3112,7 @@ def get_binary_str_codegen(is_binary=False):
             "string_type": string_type,
         },
         {},
-        globals(),
+        __name__,
     )
 
 
@@ -3832,7 +3851,7 @@ def create_isna_specific_method(overload_name):
             "    return out_arr\n"
         )
         return bodo_exec(
-            func_text, {"bodo": bodo, "np": np, "numba": numba}, {}, globals()
+            func_text, {"bodo": bodo, "np": np, "numba": numba}, {}, __name__
         )
 
     return overload_index_isna_specific_method
@@ -4308,7 +4327,7 @@ def overload_index_drop_duplicates(I, keep="first"):
     else:
         func_text += "    return bodo.utils.conversion.index_from_array(arr, name)"
 
-    return bodo_exec(func_text, {"bodo": bodo}, {}, globals())
+    return bodo_exec(func_text, {"bodo": bodo}, {}, __name__)
 
 
 @numba.generated_jit(cache=True, nopython=True)
@@ -4489,7 +4508,7 @@ def overload_index_map(I, mapper, na_action=None):
             "data_arr_type": out_arr_type.dtype,
         },
         {},
-        globals(),
+        __name__,
     )
 
 
@@ -4559,7 +4578,7 @@ def create_binary_op_overload(op):
                 func_text,
                 {"bodo": bodo, "op": op},
                 {},
-                globals(),
+                __name__,
             )
 
         # right arg is Index
@@ -4585,7 +4604,7 @@ def create_binary_op_overload(op):
                 func_text,
                 {"bodo": bodo, "op": op},
                 {},
-                globals(),
+                __name__,
             )
 
         if isinstance(lhs, HeterogeneousIndexType):
@@ -4612,7 +4631,7 @@ def create_binary_op_overload(op):
                     for i in range(count)
                 ),
             )
-            return bodo_exec(func_text, {"op": op, "np": np}, {}, globals())
+            return bodo_exec(func_text, {"op": op, "np": np}, {}, __name__)
 
         if isinstance(rhs, HeterogeneousIndexType):
             # handle as regular array data if not actually heterogeneous
@@ -4638,7 +4657,7 @@ def create_binary_op_overload(op):
                     for i in range(count)
                 ),
             )
-            return bodo_exec(func_text, {"op": op, "np": np}, {}, globals())
+            return bodo_exec(func_text, {"op": op, "np": np}, {}, __name__)
 
     return overload_index_binary_op
 
@@ -4726,7 +4745,7 @@ def range_index_to_numeric(I):  # pragma: no cover
     )
 
 
-class HeterogeneousIndexType(types.Type):
+class HeterogeneousIndexType(types.Type, SingleIndexType):
     """
     Type class for Index objects with potentially heterogeneous but limited number of
     values (e.g. pd.Index([1, 'A']))
@@ -4814,7 +4833,7 @@ def overload_heter_index_copy(A, name=None, deep=False, dtype=None, names=None):
 @box(HeterogeneousIndexType)
 def box_heter_index(typ, val, c):  # pragma: no cover
     mod_name = c.context.insert_const_string(c.builder.module, "pandas")
-    class_obj = c.pyapi.import_module_noblock(mod_name)
+    class_obj = c.pyapi.import_module(mod_name)
 
     index_val = cgutils.create_struct_proxy(typ)(c.context, c.builder, val)
     c.context.nrt.incref(c.builder, typ.data, index_val.data)
@@ -4896,7 +4915,7 @@ def overload_nbytes(I):
         for i in range(I.nlevels):
             func_text += f"    total += data[{i}].nbytes\n"
         func_text += "    return total\n"
-        return bodo_exec(func_text, {}, {}, globals())
+        return bodo_exec(func_text, {}, {}, __name__)
 
     else:
 
@@ -4984,7 +5003,7 @@ def overload_index_to_series(I, index=None, name=None):
     func_text += (
         "    return bodo.hiframes.pd_series_ext.init_series(data, new_index, new_name)"
     )
-    return bodo_exec(func_text, {"bodo": bodo, "np": np}, {}, globals())
+    return bodo_exec(func_text, {"bodo": bodo, "np": np}, {}, __name__)
 
 
 @overload_method(
@@ -5087,7 +5106,7 @@ def overload_index_to_frame(I, index=True, name=None):
             "__col_name_meta_value": columns,
         },
         {},
-        globals(),
+        __name__,
     )
 
 
@@ -5169,7 +5188,7 @@ def overload_multi_index_to_frame(I, index=True, name=None):
         func_text,
         {"bodo": bodo, "np": np, "__col_name_meta_value": columns},
         {},
-        globals(),
+        __name__,
     )
 
 
@@ -6575,7 +6594,7 @@ def overload_index_where(I, cond, other=np.nan):
         else get_index_constructor(I)
     )
     return bodo_exec(
-        func_text, {"bodo": bodo, "np": np, "constructor": constructor}, {}, globals()
+        func_text, {"bodo": bodo, "np": np, "constructor": constructor}, {}, __name__
     )
 
 
@@ -6683,7 +6702,7 @@ def overload_index_putmask(I, cond, other):
         else get_index_constructor(I)
     )
     return bodo_exec(
-        func_text, {"bodo": bodo, "np": np, "constructor": constructor}, {}, globals()
+        func_text, {"bodo": bodo, "np": np, "constructor": constructor}, {}, __name__
     )
 
 
@@ -6780,7 +6799,7 @@ def overload_index_repeat(I, repeats, axis=None):
         else get_index_constructor(I)
     )
     return bodo_exec(
-        func_text, {"bodo": bodo, "np": np, "constructor": constructor}, {}, globals()
+        func_text, {"bodo": bodo, "np": np, "constructor": constructor}, {}, __name__
     )
 
 

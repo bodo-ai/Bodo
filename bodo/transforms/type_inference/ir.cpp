@@ -45,7 +45,7 @@ Type* Const::getType() const {
     }
 
     if (this->use_literal_type) {
-        return IntegerLiteral::get(PyLong_AsLong(value));
+        return IntegerLiteral::get(PyLong_AsLongLong(value));
     }
     return Integer::get(64, true);
 }

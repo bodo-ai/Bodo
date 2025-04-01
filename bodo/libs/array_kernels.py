@@ -509,7 +509,7 @@ def overload_setna_tup(arr_tup, ind, int_nan_const=0):
         func_text += f"  setna(arr_tup[{i}], ind, int_nan_const)\n"
     func_text += "  return\n"
 
-    return bodo_exec(func_text, {"setna": setna}, {}, globals())
+    return bodo_exec(func_text, {"setna": setna}, {}, __name__)
 
 
 def setna_slice(arr, s):  # pragma: no cover
@@ -1545,7 +1545,7 @@ def overload_dropna(data, how, thresh, subset):
             "bodo": bodo,
         }
     )
-    return bodo_exec(func_text, _globals, {}, globals())
+    return bodo_exec(func_text, _globals, {}, __name__)
 
 
 def get(arr, ind):  # pragma: no cover
@@ -2301,7 +2301,7 @@ def overload_astype_float_tup(arr_tup):
         "," if count == 1 else "",
     )  # single value needs comma to become tuple
 
-    return bodo_exec(func_text, {"np": np}, {}, globals())
+    return bodo_exec(func_text, {"np": np}, {}, __name__)
 
 
 def convert_to_nullable_tup(arr_tup):
@@ -2319,9 +2319,9 @@ def overload_convert_to_nullable_tup(arr_tup):
     ):
         return lambda arr_tup: arr_tup  # pragma: no cover
 
-    assert isinstance(
-        arr_tup, types.BaseTuple
-    ), "convert_to_nullable_tup: tuple expected"
+    assert isinstance(arr_tup, types.BaseTuple), (
+        "convert_to_nullable_tup: tuple expected"
+    )
     count = len(arr_tup.types)
     comm_dtype = find_common_np_dtype(arr_tup.types)
     out_dtype = None
@@ -2342,7 +2342,7 @@ def overload_convert_to_nullable_tup(arr_tup):
         "," if count == 1 else "",
     )  # single value needs comma to become tuple
 
-    return bodo_exec(func_text, {"bodo": bodo, "out_dtype": out_dtype}, {}, globals())
+    return bodo_exec(func_text, {"bodo": bodo, "out_dtype": out_dtype}, {}, __name__)
 
 
 def nunique(A, dropna):  # pragma: no cover
@@ -2846,7 +2846,7 @@ def overload_resize_and_copy(A, old_size, new_len):
 # calculation is replaced with explicit call for easier matching
 # (e.g. for handling 1D_Var RangeIndex)
 # TODO: move this to upstream Numba
-@register_jitable
+@register_jitable(cache=True)
 def calc_nitems(start, stop, step):  # pragma: no cover
     nitems_r = math.ceil((stop - start) / step)
     return int(max(nitems_r, 0))
@@ -4424,9 +4424,9 @@ def _overload_nan_argmin(arr):
         return impl_bodo_arr
 
     if isinstance(arr, CategoricalArrayType):
-        assert (
-            arr.dtype.ordered
-        ), "Categorical Array must be ordered to select an argmin"
+        assert arr.dtype.ordered, (
+            "Categorical Array must be ordered to select an argmin"
+        )
         elem_width = bodo.hiframes.pd_categorical_ext.get_categories_int_type(arr.dtype)
 
         def impl_cat_arr(arr):  # pragma: no cover
@@ -4507,9 +4507,9 @@ def _overload_nan_argmax(arr):
         return impl_bodo_arr
 
     if isinstance(arr, CategoricalArrayType):
-        assert (
-            arr.dtype.ordered
-        ), "Categorical Array must be ordered to select an argmin"
+        assert arr.dtype.ordered, (
+            "Categorical Array must be ordered to select an argmin"
+        )
         elem_width = bodo.hiframes.pd_categorical_ext.get_categories_int_type(arr.dtype)
 
         def impl_cat_arr(arr):  # pragma: no cover

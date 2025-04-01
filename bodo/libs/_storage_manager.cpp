@@ -9,7 +9,7 @@
 
 #include <arrow/status.h>
 #include <fcntl.h>
-#include <sys/errno.h>
+#include <cerrno>
 #ifdef __linux__
 // For fallocate
 #include <linux/falloc.h>
@@ -19,6 +19,7 @@
 #include <arrow/filesystem/localfs.h>
 #include <arrow/filesystem/s3fs.h>
 #include <arrow/result.h>
+#include <arrow/util/windows_compatibility.h>
 
 #include <boost/json.hpp>
 #include <boost/uuid/uuid.hpp>             // uuid class
@@ -371,6 +372,7 @@ struct SparseFileSizeInfo {
     std::vector<uint32_t> free_block_list;
 };
 
+#ifndef _WIN32
 class SparseFileStorageManager final : public StorageManager {
    public:
     explicit SparseFileStorageManager(
@@ -394,7 +396,7 @@ class SparseFileStorageManager final : public StorageManager {
         bool created = std::filesystem::create_directories(location);
         if (!created) {
             throw std::runtime_error(
-                "SparseFileStorageManager(): Unable to create "
+                "SparseFileStorageManager(): Unable to create spill "
                 "directory");
         }
 
@@ -446,7 +448,7 @@ class SparseFileStorageManager final : public StorageManager {
 #endif
 
             // Construct 1 Frame per File
-            int err = ftruncate(fi.file_descriptor, fi.block_size);
+            int err = ftruncate(fi.file_descriptor, (off_t)(fi.block_size));
             if (err == -1) {
                 this->Cleanup();
                 throw std::runtime_error(
@@ -672,30 +674,32 @@ class SparseFileStorageManager final : public StorageManager {
     /// so we need to track any leftovers
     uint64_t curr_occupied_bytes = 0;
 };
+#endif
 
 using LocalStorageManager = ArrowStorageManager<arrow::fs::LocalFileSystem>;
 static std::unique_ptr<StorageManager> MakeLocal(
     const std::shared_ptr<StorageOptions> options,
     const std::span<const uint64_t> size_class_bytes) {
-    // Sparse File Storage Manager is supported on
-    // macOS Monterey and above (12.0+, oldest supported version in 2024)
-    // Linux should support from 2013 onwards
-    // - O_DIRECT: Linux 2.4.10 (2001), ignored in previous versions
-    // - O_TMPFILE: Linux 3.11 (2013)
-    //   - XFS in Linux 3.15 (2014)
-    //   - Btrfs in Linux 3.16 (2014)
-    //   - F2FS in Linux 3.16 (2014)
-    //   - ubifs in Linux 4.9 (2016)
-    // - fallocate: Linux 2.6.38 in glibc 2.10 (2011)
-    // - FALLOC_FL_PUNCH_HOLE in glib 2.18 (2013)
-    //   - XFS in Linux 2.6.38 (2011)
-    //   - ext4 in Linux 3.0 (2011)
-    //   - Btrfs in Linux 3.7 (2012)
-    //   - tmpfs in Linux 3.5 (2012)
-    //   - gfs2 in Linux 4.16 (2018)
-    // - FALLOC_FL_KEEP_SIZE in glib 2.18 (2013)
-    // - ftruncate: glibc 2.3.5 (2006)
-
+// Sparse File Storage Manager is supported on
+// macOS Monterey and above (12.0+, oldest supported version in 2024)
+// Linux should support from 2013 onwards
+// - O_DIRECT: Linux 2.4.10 (2001), ignored in previous versions
+// - O_TMPFILE: Linux 3.11 (2013)
+//   - XFS in Linux 3.15 (2014)
+//   - Btrfs in Linux 3.16 (2014)
+//   - F2FS in Linux 3.16 (2014)
+//   - ubifs in Linux 4.9 (2016)
+// - fallocate: Linux 2.6.38 in glibc 2.10 (2011)
+// - FALLOC_FL_PUNCH_HOLE in glib 2.18 (2013)
+//   - XFS in Linux 2.6.38 (2011)
+//   - ext4 in Linux 3.0 (2011)
+//   - Btrfs in Linux 3.7 (2012)
+//   - tmpfs in Linux 3.5 (2012)
+//   - gfs2 in Linux 4.16 (2018)
+// - FALLOC_FL_KEEP_SIZE in glib 2.18 (2013)
+// - ftruncate: glibc 2.3.5 (2006)
+// TODO [BSE-4555]: Add Windows support for SparseFileStorageManager.
+#ifndef _WIN32
     // Just in case, we test if SparseFileStorageManager works
     // and default to LocalStorageManager if it doesn't
     try {
@@ -711,6 +715,11 @@ static std::unique_ptr<StorageManager> MakeLocal(
         return std::make_unique<LocalStorageManager>(
             options, "LocalStorageManager", fs, size_class_bytes, false);
     }
+#else
+    auto fs = std::make_shared<arrow::fs::LocalFileSystem>();
+    return std::make_unique<LocalStorageManager>(options, "LocalStorageManager",
+                                                 fs, size_class_bytes, false);
+#endif
 }
 
 using S3StorageManager = ArrowStorageManager<arrow::fs::S3FileSystem>;
@@ -751,6 +760,7 @@ static std::unique_ptr<S3StorageManager> MakeS3(
                                               size_class_bytes, true);
 }
 
+#ifndef _WIN32
 using AzureStorageManager = ArrowStorageManager<arrow::fs::AzureFileSystem>;
 static std::unique_ptr<AzureStorageManager> MakeAzure(
     const std::shared_ptr<StorageOptions> options,
@@ -790,6 +800,17 @@ static std::unique_ptr<AzureStorageManager> MakeAzure(
     return std::make_unique<AzureStorageManager>(options, "AzureStorageManager",
                                                  fs, size_class_bytes, true);
 }
+#else
+using AzureStorageManager = StorageManager;
+static std::unique_ptr<AzureStorageManager> MakeAzure(
+    const std::shared_ptr<StorageOptions> options,
+    const std::span<const uint64_t> size_class_bytes) {
+    // Using AzureFileSystem leads to a compilation error on Windows.
+    // https://github.com/apache/arrow/issues/41990
+    throw std::runtime_error(
+        "MakeAzure: arrow::fs::AzureFileSystem Not supported on Windows.");
+}
+#endif
 
 std::unique_ptr<StorageManager> MakeStorageManager(
     const std::shared_ptr<StorageOptions>& options,

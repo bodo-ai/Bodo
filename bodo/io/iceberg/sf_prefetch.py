@@ -9,10 +9,19 @@ from __future__ import annotations
 from numba.extending import overload
 
 import bodo
+from bodo.utils.utils import run_rank0
 
 
-def prefetch_sf_tables():
-    pass
+@run_rank0
+def prefetch_sf_tables(conn_str: str, table_paths: list[str]):
+    "Helper function for the Python contents of prefetch_sf_tables_njit."
+    from bodo.io.iceberg.catalog import conn_str_to_catalog
+    from bodo.io.iceberg.catalog.snowflake import SnowflakeCatalog
+
+    sf_catalog = conn_str_to_catalog(conn_str)
+    assert isinstance(sf_catalog, SnowflakeCatalog)
+
+    sf_catalog.prefetch_metadata_paths(table_paths)
 
 
 def prefetch_sf_tables_njit(
@@ -31,9 +40,9 @@ def prefetch_sf_tables_njit(
 
 
 @overload(prefetch_sf_tables_njit)
-def overload_prefetch_sf_tables_njit(conn_str, table_paths, verbose_level):
-    def impl(conn_str, table_paths, verbose_level):
+def overload_prefetch_sf_tables_njit(conn_str, table_paths):
+    def impl(conn_str, table_paths):
         with bodo.no_warning_objmode():
-            prefetch_sf_tables(conn_str, table_paths, verbose_level)
+            prefetch_sf_tables(conn_str, table_paths)
 
     return impl

@@ -114,7 +114,7 @@ def unbox_s3_tables_catalog_type(typ, val, c):
 @numba.jit(types.unicode_type(types.unicode_type))
 def get_conn_str(warehouse):
     """Get the connection string for a S3 Tables Iceberg catalog."""
-    return warehouse
+    return "iceberg+" + warehouse
 
 
 class S3TablesConnectionType(IcebergConnectionType):
@@ -129,9 +129,6 @@ class S3TablesConnectionType(IcebergConnectionType):
         self.conn_str = get_conn_str(warehouse)
 
         super().__init__(name=f"S3TablesConnectionType({warehouse=})")
-
-    def get_conn_str(self) -> str:
-        return "iceberg+" + self.conn_str
 
 
 @intrinsic

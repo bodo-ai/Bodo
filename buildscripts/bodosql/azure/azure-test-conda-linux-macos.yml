@@ -20,7 +20,7 @@ jobs:
   variables:
     - group: AWS-427-S3-Access-Keys
     - group: SnowflakeCredentials
-    - group: TabularCredentials
+    - group: AzureCredentials
   timeoutInMinutes: 360
   pool: ${{ parameters.pool_name }}
   strategy:
@@ -28,17 +28,24 @@ jobs:
       ${{ insert }}: ${{ parameters.matrix }}
 
   steps:
-  - script: |
+  - bash: |
       set -exo pipefail
       curl -fsSL https://pixi.sh/install.sh | bash
       source ~/.bashrc
       echo "##vso[task.prependpath]$HOME/.pixi/bin"
     displayName: Install Pixi
-  - script: pixi install -v --locked -e azure
+  - bash: pixi install -v --locked -e azure
+    retryCountOnTaskFailure: 3
     displayName: Install Test Environment
 
-  - script: |
+  - bash: |
       set -exo pipefail
+
+      unamestr=`uname`
+      if [[ "$unamestr" == 'Linux' ]]; then
+        export USE_BODO_ARROW_FORK=1
+      fi
+
       pixi run -e azure build-bodo -Cbuild.verbose=true
       pixi run -e azure build-bodosql
       pixi run -e azure build-iceberg
@@ -47,18 +54,7 @@ jobs:
       AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
       AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
       DISABLE_CCACHE: 1  # Just use sccache directly on CI
-      USE_BODO_ARROW_FORK: 1  # Build from Source with Arrow Fork
     displayName: 'Build Bodo, BodoSQL, and Iceberg Connector'
-
-  - script: |
-      set -exo pipefail
-      eval "$(pixi shell-hook --shell bash -e azure)"
-
-      wget -q -O - "https://adlsresources.blob.core.windows.net/adlsresources/hadoop-3.3.2.tar.gz" | sudo tar -xzf - -C /opt
-      cd azurefs-sas-token-provider
-      pip install --no-deps --no-build-isolation -ve .
-    displayName: "Setup Snowflake ADLS Testing (only Linux)"
-    retryCountOnTaskFailure: 5
 
   - script: |
       pixi list
@@ -66,12 +62,24 @@ jobs:
     continueOnError: true
     displayName: Export Environment Spec
 
+  - bash: |
+      set -exo pipefail
+      sudo apt-get update
+      sudo apt-get install -y docker.io
+      sudo service docker start
+      sudo chmod 666 /var/run/docker.sock
+      sudo usermod -aG docker $USER
+    displayName: Install Docker
+    retryCountOnTaskFailure: 5
+
   - script: |
       set -exo pipefail
-      eval "$(pixi shell-hook --shell bash -e azure)"
 
-      python -c "import bodo; print(bodo.__version__)"
-      python -c "import bodosql; print(bodosql.__version__)"
+      pixi run -e azure python -c "import bodo; print(bodo.__version__)"
+      pixi run -e azure python -c "import bodosql; print(bodosql.__version__)"
+
+      # This isn't published on pypi so no good way to list it as a dependency
+      pixi run -e azure pip install 'git+https://github.com/apache/polaris.git#subdirectory=client/python'
 
       unamestr=`uname`
       if [[ "$unamestr" == 'Linux' ]]; then
@@ -87,29 +95,38 @@ jobs:
         export HADOOP_OPTIONAL_TOOLS=hadoop-azure
         export ARROW_LIBHDFS_DIR=$HADOOP_HOME/lib/native
         export CLASSPATH=`$HADOOP_HOME/bin/hdfs classpath --glob`
+      elif [[ "$(Agent.OS)" == "Windows_NT" ]]; then
+        # On Windows we set HADOOP_HOME to a dummy directory.
+        # Spark needs to verify HADOOP_HOME exists at initialization even if it is not used.
+        export HADOOP_HOME="$(System.DefaultWorkingDirectory)/buildscripts/local_utils/hadoop_dummy"
+        export PATH=$HADOOP_HOME/bin:$PATH
+        # Visual Studio 2010 DLLs are needed for winutils.exe
+        curl -LO https://download.microsoft.com/download/1/6/5/165255E7-1014-4D0A-B094-B6A430A6BFFC/vcredist_x64.exe
+        ./vcredist_x64.exe -passive
       else
         echo "Skipping hadoop/arrow env var setup"
       fi
 
-      cd $(System.DefaultWorkingDirectory)/BodoSQL
+      cd "$(System.DefaultWorkingDirectory)/BodoSQL"
       # For caching tests we need to update the location of the decryption file.
       # We set the absolute path as an environment variable.
       export BODO_TRACING_DECRYPTION_FILE_PATH=`echo "$(System.DefaultWorkingDirectory)/buildscripts/decompress_traces.py"`
       if [[ "${{ parameters.CACHE_TEST }}" == "True" ]]; then
-        python -u -m bodosql.runtests_caching "${{ parameters.name }}" "$(NP)" bodosql/tests/caching_tests/
+        pixi run -e azure python -u -m bodosql.runtests_caching "${{ parameters.name }}" "$(NP)" bodosql/tests/caching_tests/
       elif [[ "${{ parameters.SPAWN_MODE_TEST }}" == "True" ]]; then
         export BODO_TEST_SPAWN_MODE=1
         export BODO_NUM_WORKERS="$NP"
-        pytest -s -v -p no:faulthandler -Wignore -m "$(PYTEST_MARKER)" bodosql/tests --junitxml=pytest-report-sql-spawn-mode.xml --test-run-title="${{ parameters.name }}"
+        pixi run -e azure pytest -s -v -p no:faulthandler -Wignore -m "$(PYTEST_MARKER)" bodosql/tests --junitxml=pytest-report-sql-spawn-mode.xml --test-run-title="${{ parameters.name }}"
       else
-        python -u -m bodosql.runtests "${{ parameters.name }}" "$(NP)" -s -v -p no:faulthandler -m "$(PYTEST_MARKER)" bodosql/tests/
+        pixi run -e azure python -u -m bodosql.runtests "${{ parameters.name }}" "$(NP)" -s -v -p no:faulthandler -m "$(PYTEST_MARKER)" bodosql/tests/
       fi
     env:
       SF_USERNAME: $(SNOWFLAKE_USER)
       SF_PASSWORD: $(SNOWFLAKE_PASSWORD)
       SF_AZURE_USER: $(SF_AZURE_USER)
       SF_AZURE_PASSWORD: $(SF_AZURE_PASSWORD)
-      TABULAR_CREDENTIAL: $(TABULAR_CREDENTIAL)
+      AZURE_CLIENT_ID: $(AZURE_CLIENT_ID)
+      AZURE_CLIENT_SECRET: $(AZURE_CLIENT_SECRET)
       AZURE_STORAGE_ACCOUNT_NAME: $(AZURE_ICEBERG_STORAGE_ACCOUNT)
       AZURE_STORAGE_ACCOUNT_KEY: $(AZURE_ICEBERG_ACCESS_KEY)
       AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
@@ -119,4 +136,5 @@ jobs:
       BODO_SPAWN_MODE: "0"
       BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: "1"
       BODO_BUFFER_POOL_REMOTE_MODE: "1"
+      BODO_BUFFER_POOL_DEBUG_MODE: "1"
     displayName: 'Test BodoSQL'

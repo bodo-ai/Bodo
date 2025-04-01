@@ -12,16 +12,20 @@ NOTE: This script assumes that you have the file `nyc_taxi_precipitation.py`
 copied in your current workspace.
 
 usage:
-    python run_bodo.py
+    python run_bodo.py --num_workers NUM_WORKERS
 """
+
+import argparse
 
 from bodosdk import BodoWorkspaceClient
 
 
-def run_bodo_benchmark():
+def run_bodo_benchmark(num_workers):
     bodo_workspace = BodoWorkspaceClient()
     benchmark_cluster = bodo_workspace.ClusterClient.create(
-        name="Benchmark Bodo", instance_type="r6i.16xlarge", workers_quantity=4
+        name="Benchmark Bodo",
+        instance_type="r6i.16xlarge",
+        workers_quantity=num_workers,
     )
     benchmark_cluster.wait_for_status(["RUNNING"])
 
@@ -39,5 +43,15 @@ def run_bodo_benchmark():
     benchmark_cluster.delete(wait=True)
 
 
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--num_workers", type=int, default=4, help="Number of workers in cluster."
+    )
+    args = parser.parse_args()
+
+    run_bodo_benchmark(args.num_workers)
+
+
 if __name__ == "__main__":
-    run_bodo_benchmark()
+    main()

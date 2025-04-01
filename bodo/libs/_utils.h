@@ -34,6 +34,11 @@ std::optional<std::chrono::steady_clock::time_point> start_now(bool get);
 /// @brief Get the amount of physically installed memory in bytes
 uint64_t get_physically_installed_memory();
 
+#ifndef __FILE_NAME__
+// Windows does define __FILE_NAME__
+#define __FILE_NAME__ __FILE__
+#endif
+
 // Helper macro to check for conditions. Unlike the builtin 'assert', this is
 // executed even in release builds, so it should be used judiciously. It
 // includes the line number and file name (basename) in the error message.

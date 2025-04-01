@@ -1,5 +1,8 @@
+import sys
+
 import numpy as np
 import pandas as pd
+import pytest
 
 import bodo
 import bodo.io.snowflake
@@ -23,6 +26,13 @@ from bodo.libs.streaming.join import (
     get_op_pool_budget_bytes as join_get_op_pool_budget_bytes,
 )
 from bodo.tests.utils import pytest_mark_one_rank, temp_env_override
+
+pytestmark = [
+    pytest.mark.skipif(
+        sys.platform == "win32", reason="TODO[BSE-4556]: enable buffer pool on Windows"
+    ),
+    pytest.mark.slow,
+]
 
 
 def hash_join_impl(df1, df2):
@@ -199,15 +209,15 @@ def test_hash_join_dynamic_budget_increase(memory_leak_check, capfd):
         "[DEBUG] OperatorComptroller::ReduceOperatorBudget: Reduced budget for operator 0 from 1.13MiB to 0 bytes.",
     ]
     for expected_log_message in expected_log_messages:
-        assert (
-            expected_log_message in err
-        ), f"Expected log message ('{expected_log_message}') not in logs!"
+        assert expected_log_message in err, (
+            f"Expected log message ('{expected_log_message}') not in logs!"
+        )
 
     # Verify that the output size is as expected
     expected_out_size = 18750000
-    assert (
-        output.shape[0] == expected_out_size
-    ), f"Final output size ({output.shape[0]}) is not as expected ({expected_out_size})"
+    assert output.shape[0] == expected_out_size, (
+        f"Final output size ({output.shape[0]}) is not as expected ({expected_out_size})"
+    )
 
     # Verify that the op pool budget is as expected after the build and probe stages
     expected_op_pool_budget_after_build = (1190000, 1190500)
@@ -215,10 +225,12 @@ def test_hash_join_dynamic_budget_increase(memory_leak_check, capfd):
         expected_op_pool_budget_after_build[0]
         <= op_pool_budget_after_build
         <= expected_op_pool_budget_after_build[1]
-    ), f"Operator pool budget after build ({op_pool_budget_after_build}) is not as expected ({expected_op_pool_budget_after_build})"
-    assert (
-        final_op_pool_budget == 0
-    ), f"Final operator pool budget ({final_op_pool_budget}) is not 0!"
+    ), (
+        f"Operator pool budget after build ({op_pool_budget_after_build}) is not as expected ({expected_op_pool_budget_after_build})"
+    )
+    assert final_op_pool_budget == 0, (
+        f"Final operator pool budget ({final_op_pool_budget}) is not 0!"
+    )
 
 
 def groupby_impl(df, key_inds_list, func_names, f_in_offsets, f_in_cols):
@@ -366,12 +378,12 @@ def test_groupby_dynamic_budget_increase(memory_leak_check, capfd):
         "[DEBUG] GroupbyState::FinalizeBuild: Total number of partitions: 1.",
     ]
     for expected_log_message in expected_log_messages:
-        assert (
-            expected_log_message in err
-        ), f"Expected log message ('{expected_log_message}') not in logs!"
+        assert expected_log_message in err, (
+            f"Expected log message ('{expected_log_message}') not in logs!"
+        )
 
     # Verify that the output size is as expected
     expected_output_size = 1000
-    assert (
-        output.shape[0] == expected_output_size
-    ), f"Final output size ({output.shape[0]}) is not as expected ({expected_output_size})"
+    assert output.shape[0] == expected_output_size, (
+        f"Final output size ({output.shape[0]}) is not as expected ({expected_output_size})"
+    )

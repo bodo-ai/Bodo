@@ -292,9 +292,9 @@ def test_describe_many_columns(memory_leak_check):
     # Determine the max compilation time on any rank to avoid hangs.
     comm = MPI.COMM_WORLD
     compilation_time = comm.allreduce(compilation_time, op=MPI.MAX)
-    assert (
-        compilation_time < 60
-    ), "df.describe() took too long to compile. Possible regression?"
+    assert compilation_time < 60, (
+        "df.describe() took too long to compile. Possible regression?"
+    )
 
 
 @pytest.mark.parametrize(
@@ -1712,6 +1712,8 @@ def test_df_table_rename(use_copy, datapath, memory_leak_check):
         check_logger_msg(stream, "Columns loaded ['Column1', 'Column5']")
 
 
+# This test is slow on Windows
+@pytest.mark.timeout(600)
 @pytest.mark.parametrize(
     "method",
     ["average", "first", "dense"],

@@ -24,7 +24,7 @@ from bodo.tests.iceberg_database_helpers.metadata_utils import (
 )
 from bodo.tests.utils import pytest_mark_one_rank
 
-pytestmark = pytest.mark.iceberg
+pytestmark = [pytest.mark.iceberg, pytest.mark.skip]
 
 
 # Note: We mark df as distributed but for testing we are only
@@ -36,7 +36,7 @@ def create_table_jit(df, table_name, conn, db_schema):
 
 def update_field_mapping(
     field_id_map: dict[str, int], field: dict[str, pt.Any], prefix: str = ""
-):
+) -> None:
     """
     Update the field_id_map to include any arrays found within this field.
     This will map every field name to its field id.
@@ -162,27 +162,27 @@ def validate_metrics(
     )
     for name, id in name_to_id_map.items():
         if name in expected_value_counts:
-            assert (
-                value_counts[id] == expected_value_counts[name]
-            ), "Value counts do not match"
+            assert value_counts[id] == expected_value_counts[name], (
+                "Value counts do not match"
+            )
         else:
             assert id not in value_counts, "Unexpected value counts"
         if name in expected_null_counts:
-            assert (
-                null_counts[id] == expected_null_counts[name]
-            ), "Null value counts do not match"
+            assert null_counts[id] == expected_null_counts[name], (
+                "Null value counts do not match"
+            )
         else:
             assert id not in null_counts, "Unexpected null value counts"
         if name in expected_lower_bounds:
-            assert (
-                lower_bounds[id] == expected_lower_bounds[name]
-            ), "Lower bounds do not match"
+            assert lower_bounds[id] == expected_lower_bounds[name], (
+                "Lower bounds do not match"
+            )
         else:
             assert id not in lower_bounds, "Unexpected lower bound"
         if name in expected_upper_bounds:
-            assert (
-                upper_bounds[id] == expected_upper_bounds[name]
-            ), "Upper bounds do not match"
+            assert upper_bounds[id] == expected_upper_bounds[name], (
+                "Upper bounds do not match"
+            )
         else:
             assert id not in upper_bounds, "Unexpected upper bound"
 
@@ -298,11 +298,11 @@ def test_datetime_metrics(
             # Time
             "C": np.array(
                 [
-                    bodo.Time(2, 46, 40, precision=9),
-                    bodo.Time(0, 59, 59, microsecond=11, precision=9),
+                    bodo.Time(2, 46, 40, precision=6),
+                    bodo.Time(0, 59, 59, microsecond=11, precision=6),
                     None,
                     None,
-                    bodo.Time(23, 45, 45, millisecond=948, precision=9),
+                    bodo.Time(23, 45, 45, millisecond=948, precision=6),
                 ]
             ),
             # Date

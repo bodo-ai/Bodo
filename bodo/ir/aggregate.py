@@ -829,9 +829,9 @@ def handle_listagg_additional_args(func_ir, outcol_and_namedagg):  # pragma: no 
         func_ir, outcol_and_namedagg
     )
 
-    assert isinstance(
-        additional_args_values[0], (ir.Global, ir.FreeVar, ir.Const)
-    ), "Internal error in handle_listagg_additional_args: listagg_sep should be a constant value"
+    assert isinstance(additional_args_values[0], (ir.Global, ir.FreeVar, ir.Const)), (
+        "Internal error in handle_listagg_additional_args: listagg_sep should be a constant value"
+    )
     listagg_sep = additional_args_values[0].value
     orderby = get_const_or_build_tuple_of_consts(additional_args_values[1])
     ascending = list(get_const_or_build_tuple_of_consts(additional_args_values[2]))
@@ -878,9 +878,9 @@ def handle_percentile_additional_args(func_ir, outcol_and_namedagg):  # pragma: 
         func_ir, outcol_and_namedagg
     )
 
-    assert isinstance(
-        additional_args_values[0], (ir.Global, ir.FreeVar, ir.Const)
-    ), "Internal error in handle_percentile_additional_args: percentile should be a constant value"
+    assert isinstance(additional_args_values[0], (ir.Global, ir.FreeVar, ir.Const)), (
+        "Internal error in handle_percentile_additional_args: percentile should be a constant value"
+    )
     return additional_args_values[0].value
 
 
@@ -898,9 +898,9 @@ def handle_object_agg_additional_args(func_ir, outcol_and_namedagg):  # pragma: 
         func_ir, outcol_and_namedagg
     )
 
-    assert isinstance(
-        additional_args_values[0], (ir.Global, ir.FreeVar, ir.Const)
-    ), "Internal error in handle_object_agg_additional_args: key column should be a constant value"
+    assert isinstance(additional_args_values[0], (ir.Global, ir.FreeVar, ir.Const)), (
+        "Internal error in handle_object_agg_additional_args: key column should be a constant value"
+    )
     return additional_args_values[0].value
 
 
@@ -913,9 +913,9 @@ def extract_extendedagg_additional_args_tuple(func_ir, outcol_and_namedagg):
     specific function is being called.
     """
 
-    assert (
-        len(outcol_and_namedagg) == 2
-    ), "bodo extended agg tuple should have 2 values (Output column name), and the additional arguments"
+    assert len(outcol_and_namedagg) == 2, (
+        "bodo extended agg tuple should have 2 values (Output column name), and the additional arguments"
+    )
 
     named_agg_args = guard(get_definition, func_ir, outcol_and_namedagg[1]).items
     extended_args_list = guard(get_definition, func_ir, named_agg_args[2]).items
@@ -1723,9 +1723,9 @@ def gen_update_cb(
                 col_offset += f.n_redvars + 1
                 data_in_typs.append(data_in_typs_[func_idx_to_in_col[i]])
                 in_col_offsets.append(func_idx_to_in_col[i] + n_keys)
-    assert (
-        len(redvar_offsets) == n_red_vars
-    ), "Internal error: redvar offsets lenth does not match number of redvars"
+    assert len(redvar_offsets) == n_red_vars, (
+        "Internal error: redvar offsets lenth does not match number of redvars"
+    )
 
     # get input data types
     n_data_cols = len(data_in_typs)
@@ -2019,9 +2019,9 @@ def gen_top_level_agg_func(
     n_out_vars = len(agg_node.out_vars)
     # If we output the index then we need to remove it from the list of variables.
     if agg_node.same_index:
-        assert (
-            agg_node.input_has_index
-        ), "agg codegen: input_has_index=True required for same_index=True"
+        assert agg_node.input_has_index, (
+            "agg codegen: input_has_index=True required for same_index=True"
+        )
 
     # make sure array arg names have logical column number for easier codegen below
     # NOTE: input columns are not repeated in the arg list
@@ -2071,7 +2071,7 @@ def gen_top_level_agg_func(
         all_in_arrs = key_in_arrs + data_in_arrs
         if agg_node.input_has_index:
             # Index is always last input
-            all_in_arrs.append(f"arg{len(agg_node.in_vars)-1}")
+            all_in_arrs.append(f"arg{len(agg_node.in_vars) - 1}")
 
         # NOTE: Avoiding direct array_to_info calls to workaround possible Numba
         # refcount pruning bug. See https://bodo.atlassian.net/browse/BSE-1135
@@ -2194,9 +2194,9 @@ def gen_top_level_agg_func(
             udf_ncols.append(0)
             do_combine = False
     func_offsets.append(len(allfuncs))
-    assert len(agg_node.gb_info_out) == len(
-        allfuncs
-    ), "invalid number of groupby outputs"
+    assert len(agg_node.gb_info_out) == len(allfuncs), (
+        "invalid number of groupby outputs"
+    )
     if num_cum_funcs > 0:
         if num_cum_funcs != len(allfuncs):
             raise BodoError(
@@ -2451,12 +2451,14 @@ def gen_top_level_agg_func(
                 in_cols = agg_node.gb_info_out[i][0]
                 # Currently we only support functions that take exactly 1 input
                 # array and output categorical data
-                assert (
-                    len(in_cols) == 1
-                ), "Internal error: Categorical output requires a groupby function with 1 input column"
+                assert len(in_cols) == 1, (
+                    "Internal error: Categorical output requires a groupby function with 1 input column"
+                )
                 in_col = in_cols[0]
             else:
-                assert agg_node.return_key, "Internal error: groupby key output with unknown categoricals detected, but return_key is False"
+                assert agg_node.return_key, (
+                    "Internal error: groupby key output with unknown categoricals detected, but return_key is False"
+                )
                 key_no = i - out_key_offset
                 in_col = agg_node.in_key_inds[key_no]
             unknown_cat_out_inds.append(i)
@@ -2897,7 +2899,7 @@ class RegularUDFGenerator:
         f_ir._definitions = build_definitions(f_ir.blocks)
 
         assert len(f_ir.blocks) == 1 and 0 in f_ir.blocks, (
-            "only simple functions" " with one block supported for aggregation"
+            "only simple functions with one block supported for aggregation"
         )
         block = f_ir.blocks[0]
 

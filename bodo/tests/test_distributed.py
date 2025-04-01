@@ -1,8 +1,10 @@
 import datetime
+import platform
 import random
 import sys
 from decimal import Decimal
 
+import numba
 import numpy as np
 import pandas as pd
 import psutil
@@ -1805,9 +1807,9 @@ def test_replicated_flag(memory_leak_check):
     ), "df1 should be distributed and df2 replicated based on user flags"
 
     impl2()
-    assert not impl2.overloads[impl2.signatures[0]].metadata[
-        "is_return_distributed"
-    ], "output of impl2 should be replicated since replicated=True is set"
+    assert not impl2.overloads[impl2.signatures[0]].metadata["is_return_distributed"], (
+        "output of impl2 should be replicated since replicated=True is set"
+    )
 
     impl3()
     assert impl3.overloads[impl3.signatures[0]].metadata["is_return_distributed"] == [
@@ -2754,7 +2756,7 @@ def test_send_recv(val):
 
     if bodo.get_size() == 1:
         return
-    np.random.seed(np.uint32(hash(val)))
+    np.random.seed(np.uint64(hash(val)).astype(np.uint32))
     send_rank = np.random.randint(bodo.get_size())
     recv_rank = np.random.randint(bodo.get_size())
     # make sure send_rank != recv_rank
@@ -2887,11 +2889,20 @@ def test_barrier_error():
     def f():
         bodo.barrier("foo")
 
+    # Save default developer mode value
+    default_mode = numba.core.config.DEVELOPER_MODE
+
+    # Test as a user
+    numba.core.config.DEVELOPER_MODE = 0
+
     with pytest.raises(
-        TypeError,
+        numba.TypingError,
         match=r"too many positional arguments",
     ):
         bodo.jit(f)()
+
+    # Reset back to original setting
+    numba.core.config.DEVELOPER_MODE = default_mode
 
 
 @pytest.mark.slow
@@ -3200,8 +3211,9 @@ def test_complex_arr_attr(memory_leak_check):
 
 
 @pytest.mark.skipif(
-    (not sys.platform.startswith("linux")) and (not sys.platform.startswith("darwin")),
-    reason="get_cpu_id only works on Mac/Linux",
+    (not sys.platform.startswith("linux"))
+    and (not sys.platform.startswith("darwin") or platform.machine() == "arm64"),
+    reason="get_cpu_id only works on Mac (x86)/Linux",
 )
 def test_get_cpu_id(memory_leak_check):
     """

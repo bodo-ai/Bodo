@@ -36,7 +36,7 @@ this_module = sys.modules[__name__]
 
 # We don't technically need to get class from the method,
 # but it's useful to avoid IDE not found errors.
-BodoMultinomialNBType = install_py_obj_class(
+BodoMultinomialNBType, _ = install_py_obj_class(
     types_name="multinomial_nb_type",
     python_type=sklearn.naive_bayes.MultinomialNB,
     module=this_module,
@@ -202,7 +202,7 @@ def fit_multinomial_nb(
         n_features * n_effective_classes
     )
     # Get count of elements and displacements for each rank.
-    sizes = np.ones(nranks) * (total_cols // nranks)
+    sizes = np.ones(nranks, dtype=np.int64) * (total_cols // nranks)
     remainder_cols = total_cols % nranks
     for rank in range(remainder_cols):
         sizes[rank] += 1

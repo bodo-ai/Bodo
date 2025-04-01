@@ -5,6 +5,11 @@
 
 #include "_theta_sketches.h"
 
+// Use libzstd to decompress a blob string.
+// It is in this file for now because we don't have enough zstd functionality
+// to give it its own file.
+std::string decode_zstd(std::string blob);
+
 /**
  * Class used to describe one of the blocks of metadata in the footer of the
  * Puffin file corresponding to one of the blobs.
@@ -31,8 +36,8 @@ class BlobMetadata {
      * the metadata, such as the NDV value for a theta sketch.
      */
     BlobMetadata(
-        std::string _type, std::vector<int64_t> _fields, long _snapshot_id,
-        long _sequence_number, long _offset, long _length,
+        std::string _type, std::vector<int64_t> _fields, int64_t _snapshot_id,
+        int64_t _sequence_number, int64_t _offset, int64_t _length,
         std::optional<std::string> _compression_codec,
         std::optional<std::unordered_map<std::string, std::string>> _properties)
         : type(_type),
@@ -57,22 +62,22 @@ class BlobMetadata {
     /**
      * Retrieves the Iceberg snapshot ID of the BlobMetadata.
      */
-    long get_snapshot_id() { return snapshot_id; }
+    int64_t get_snapshot_id() { return snapshot_id; }
 
     /**
      * Retrieves the sequence number of the BlobMetadata.
      */
-    long get_sequence_number() { return sequence_number; }
+    int64_t get_sequence_number() { return sequence_number; }
 
     /**
      * Retrieves the byte offset of the blob that the metadata refers to.
      */
-    long get_offset() { return offset; }
+    int64_t get_offset() { return offset; }
 
     /**
      * Retrieves the byte length of the blob that the metadata refers to.
      */
-    long get_length() { return length; }
+    int64_t get_length() { return length; }
 
     /**
      * Returns whether the blob that the metadata refers to has a compression
@@ -123,10 +128,10 @@ class BlobMetadata {
    private:
     std::string type;
     std::vector<int64_t> fields;
-    long snapshot_id;
-    long sequence_number;
-    long offset;
-    long length;
+    int64_t snapshot_id;
+    int64_t sequence_number;
+    int64_t offset;
+    int64_t length;
     std::optional<std::string> compression_codec;
     std::optional<std::unordered_map<std::string, std::string>> properties;
 };

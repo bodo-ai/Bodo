@@ -3,7 +3,6 @@
 #include <arrow/io/api.h>
 #include <mpi.h>
 
-#include "_csv_json_reader.h"
 #include "_fs_io.h"
 #include "_io.h"
 
@@ -17,6 +16,11 @@ extern "C" {
                               " " + expr.ToString();                       \
         throw std::runtime_error(err_msg);                                 \
     }
+
+#undef CHECK_ARROW_AND_ASSIGN
+#define CHECK_ARROW_AND_ASSIGN(res, msg, lhs) \
+    CHECK_ARROW(res.status(), msg)            \
+    lhs = std::move(res).ValueOrDie();
 
 /*
  * Write output of pandas to_csv/to_json string to a csv/json file
@@ -57,6 +61,7 @@ void write_buff(char *_path_name, char *buff, int64_t start, int64_t count,
         std::string fname;      // name of parquet file to write (excludes path)
         std::shared_ptr<::arrow::io::OutputStream> out_stream;
         Bodo_Fs::FsEnum fs_option;
+        std::shared_ptr<arrow::fs::FileSystem> fs;
         arrow::Status status;
         extract_fs_dir_path(_path_name, is_parallel, prefix, suffix, myrank,
                             num_ranks, &fs_option, &dirname, &fname, &orig_path,
@@ -87,10 +92,19 @@ void write_buff(char *_path_name, char *buff, int64_t start, int64_t count,
             create_dir_parallel(fs_option, myrank, dirname, path_name,
                                 orig_path, suffix.substr(1));
         }
-        // handling s3 and hdfs with arrow
-        // & handling posix json directory outputs with std::filesystem
-        open_outstream(fs_option, is_parallel, suffix.substr(1), dirname, fname,
-                       orig_path, &out_stream, bucket_region);
+
+        fs = get_fs_for_path(_path_name, is_parallel);
+
+        std::filesystem::path out_path(dirname);
+        out_path /= fname;  // append file name to output path
+        // Avoid "\" generated on Windows for remote object storage
+        std::string out_path_str = fs->type_name() == "local"
+                                       ? out_path.string()
+                                       : out_path.generic_string();
+        arrow::Result<std::shared_ptr<arrow::io::OutputStream>> result =
+            fs->OpenOutputStream(out_path_str);
+        CHECK_ARROW_AND_ASSIGN(result, "FileOutputStream::Open", out_stream);
+
         status = out_stream->Write(buff, count);
         CHECK_ARROW(status, "arrow::io::OutputStream::Write");
         // writing an extra '\n' to the end of json files inside of directory
@@ -168,7 +182,6 @@ PyMODINIT_FUNC PyInit_csv_cpp(void) {
     SetAttrStringFromVoidPtr(m, csv_write);
     SetAttrStringFromVoidPtr(m, csv_output_is_dir);
 
-    PyInit_csv(m);
     return m;
 }
 
@@ -181,7 +194,6 @@ PyMODINIT_FUNC PyInit_json_cpp(void) {
 
     SetAttrStringFromVoidPtr(m, json_write);
 
-    PyInit_json(m);
     return m;
 }
 

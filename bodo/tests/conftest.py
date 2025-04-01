@@ -15,7 +15,9 @@ from typing import (
     Optional,
     Protocol,
 )
+from uuid import uuid4
 
+import adlfs
 import pandas as pd
 import psutil
 import pytest
@@ -26,6 +28,7 @@ import bodo.utils.allocation_tracking
 from bodo.mpi4py import MPI
 from bodo.tests.iceberg_database_helpers.utils import DATABASE_NAME
 from bodo.tests.utils import temp_env_override
+from bodo.utils.utils import run_rank0
 
 if TYPE_CHECKING:
     from pyspark.sql import SparkSession
@@ -384,7 +387,10 @@ def s3_bucket_helper(minio_server, datapath, bucket_name, region="us-east-1"):
                 rel_path = os.path.join(
                     "example_deltalake", os.path.relpath(full_path, path)
                 )
-                s3.meta.client.upload_file(full_path, bucket_name, rel_path)
+                # Avoid "\" generated on Windows that causes object name errors
+                s3.meta.client.upload_file(
+                    full_path, bucket_name, rel_path.replace("\\", "/")
+                )
 
     bodo.barrier()
     return bucket_name
@@ -524,9 +530,9 @@ def is_cached(pytestconfig):
 
 
 @pytest.fixture(scope="session")
-def iceberg_database() -> (
-    Generator[Callable[[list[str] | str], tuple[str, str]], None, None]
-):
+def iceberg_database() -> Generator[
+    Callable[[list[str] | str], tuple[str, str]], None, None
+]:
     """
     Create and populate Iceberg test tables.
     """
@@ -800,43 +806,6 @@ def pytest_collect_file(parent, file_path: Path):
         )
 
 
-def get_tabular_connection(tabular_credential: str):
-    return (
-        "https://api.tabular.io/ws",
-        os.getenv("TABULAR_WAREHOUSE", "Bodo-Test-Iceberg-Warehouse"),
-        os.getenv("TABULAR_CREDENTIAL"),
-    )
-
-
-@pytest.fixture
-def tabular_connection(request):
-    """
-    Fixture to create a connection to the tabular warehouse.
-    Returns the catalog url, warehouse name, and credential.
-    """
-    assert "TABULAR_CREDENTIAL" in os.environ, "TABULAR_CREDENTIAL is not set"
-    assert (
-        request.node.get_closest_marker("tabular") is not None
-    ), "tabular marker not set"
-    # Unset the AWS credentials to avoid using them
-    # to confirm that the tests are getting aws credentials from Tabular
-    with temp_env_override(
-        {
-            "AWS_ACCESS_KEY_ID": None,
-            "AWS_SECRET_ACCESS_KEY": None,
-            "AWS_SESSION_TOKEN": None,
-        }
-    ):
-        yield get_tabular_connection(os.getenv("TABULAR_CREDENTIAL"))
-
-
-def pytest_runtest_setup(item):
-    tabular = len(list(item.iter_markers(name="tabular")))
-    if tabular:
-        if "TABULAR_CREDENTIAL" not in os.environ or "AGENT_NAME" not in os.environ:
-            pytest.skip("Tabular tests must be run on Azure CI")
-
-
 @pytest.fixture(
     params=[
         "quarter",
@@ -899,3 +868,39 @@ def datetime_part_strings(request):
     for use in testing, including aliases.
     """
     return request.param
+
+
+@pytest.fixture(scope="session")
+def abfs_fs():
+    """
+    Create an Azure Blob FileSystem instance for testing.
+    """
+
+    account_name = os.environ["AZURE_STORAGE_ACCOUNT_NAME"]
+    account_key = os.environ["AZURE_STORAGE_ACCOUNT_KEY"]
+    return adlfs.AzureBlobFileSystem(account_name=account_name, account_key=account_key)
+
+
+@pytest.fixture
+def tmp_abfs_path(abfs_fs):
+    """
+    Create a temporary ABFS path for testing.
+    """
+
+    @run_rank0
+    def setup():
+        folder_name = str(uuid4())
+        abfs_fs.mkdir(f"engine-unit-tests-tmp-blob/{folder_name}")
+        return folder_name
+
+    # Need to include account name in path for C++ filesystem code
+    folder_name = setup()
+    account_name = os.environ["AZURE_STORAGE_ACCOUNT_NAME"]
+    yield f"abfs://engine-unit-tests-tmp-blob@{account_name}.dfs.core.windows.net/{folder_name}/"
+
+    @run_rank0
+    def cleanup():
+        if abfs_fs.exists(f"engine-unit-tests-tmp-blob/{folder_name}"):
+            abfs_fs.rm(f"engine-unit-tests-tmp-blob/{folder_name}", recursive=True)
+
+    cleanup()

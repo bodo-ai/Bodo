@@ -418,7 +418,7 @@ def test_variant_metadata_handling(cursor):
     )[0]
 
     assert len(pa_fields) == 7
-    assert [f.name for f in pa_fields] == [f"V{i+1}" for i in range(7)]
+    assert [f.name for f in pa_fields] == [f"V{i + 1}" for i in range(7)]
     assert all(f.nullable for f in pa_fields)
 
     target_types = [
@@ -3068,9 +3068,9 @@ def test_dict_encoded_small_table(memory_leak_check):
         return pd.read_sql(query, conn_str)
 
     str_list = ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j"]
-    assert (
-        len(str_list) <= bodo.io.snowflake.SF_SMALL_TABLE_THRESHOLD
-    ), "test_dict_encoded_small_table requires a small table input"
+    assert len(str_list) <= bodo.io.snowflake.SF_SMALL_TABLE_THRESHOLD, (
+        "test_dict_encoded_small_table requires a small table input"
+    )
     new_df = pd.DataFrame({"a": str_list})
     db = "TEST_DB"
     schema = "PUBLIC"
@@ -3290,9 +3290,9 @@ def test_disable_result_cache_session_param(memory_leak_check):
     try:
         # Sanity check: Default value is the same as old_value
         result = get_use_cached_result_val()
-        assert (
-            result.lower() == str(old_value).lower()
-        ), f"USE_CACHED_RESULT is not the expected default ({str(old_value).lower()})"
+        assert result.lower() == str(old_value).lower(), (
+            f"USE_CACHED_RESULT is not the expected default ({str(old_value).lower()})"
+        )
 
         # Now set the user level parameter to True.
         pd.read_sql("alter user set USE_CACHED_RESULT=True", conn)
@@ -3305,9 +3305,9 @@ def test_disable_result_cache_session_param(memory_leak_check):
         # it to false.
         with temp_env_override({"BODO_DISABLE_SF_RESULT_CACHE": "1"}):
             result = get_use_cached_result_val()
-            assert (
-                result.lower() == "false"
-            ), "'USE_CACHED_RESULT' is not set to false by snowflake_connect()"
+            assert result.lower() == "false", (
+                "'USE_CACHED_RESULT' is not set to false by snowflake_connect()"
+            )
     finally:
         pd.read_sql(f"alter user set USE_CACHED_RESULT={old_value}", conn)
 

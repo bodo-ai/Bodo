@@ -26,7 +26,6 @@ source venv/bin/activate
 # Install dependencies
 sudo apt install unzip maven openjdk@11 -y
 pip install pytest wheel setuptools setuptools_scm psutil pyspark boto3 scipy s3fs snowflake-connector-python sqlalchemy snowflake-sqlalchemy scikit-learn mmh3 h5py avro adlfs pytest-azurepipelines cx_oracle
-(cd Bodo/azurefs-sas-token-provider && pip install -v --no-deps --no-build-isolation .)
 (cd Bodo/iceberg && pip install -v --no-deps --no-build-isolation .)
 wget -q -O - "https://adlsresources.blob.core.windows.net/adlsresources/hadoop-3.3.2.tar.gz" | sudo tar -xzf - -C /opt
 echo "export JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64" | sudo tee -a /opt/hadoop-3.3.2/etc/hadoop/hadoop-env.sh

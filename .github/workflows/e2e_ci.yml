@@ -43,18 +43,14 @@ jobs:
           path: hadoop.tar.gz
           key: hadoop-3.3.2-${{ runner.os }}
 
-      # TODO: Once stable, inline all the scripts
       - name: Install Bodo Packages
         env:
-          # Build with support for javascript udfs
+          # Build with support for Javascript UDFs
           BUILD_WITH_V8: 1
           # Use sccache over ccache
           DISABLE_CCACHE: 1
-        run: |
-          pixi run build
-          # Azure SAS Provider Install
-          ./buildscripts/install_azurefs_sas_token_provider.sh
-
+        run: pixi run build
+  
       - name: Run Tests
         run: |
           set -eo pipefail
@@ -97,11 +93,11 @@ jobs:
     env:
       # Skip files that aren't testing core functionality or are covered in existing tests.
       SKIP_FILES: >
-        query_llm_ollama.py
+        llm_query_ollama.py
         preprocess_thepile_bodo.py
-        generate_kmers.py
+        bio_parallelizing_fasta_processing.py
         llm_inference_speedtest.py
-        Tutorials/*.py
+        #Tutorials/*.py
     steps:
       - uses: actions/checkout@v4
       - uses: prefix-dev/setup-pixi@v0.8.1
@@ -129,10 +125,13 @@ jobs:
 
       - name: Convert Notebooks scripts to Python
         run: |
-          pip install nbconvert
+          pip install nbconvert ipython
 
+          # Get notebook files and convert to python scripts
           export NOTEBOOK_FILES=$(find examples -name "*.ipynb")
           echo "$NOTEBOOK_FILES" | xargs -n 10 jupyter nbconvert --to script
+
+          # filter file names we want to skip 
           export PYTHON_FILES=$(find examples -name "*.py" | grep -v -E "$(echo $SKIP_FILES | sed 's/ /|/g')")
 
           # replace notebook builtin display with a print
@@ -141,14 +140,9 @@ jobs:
 
       - name: Install Bodo Packages
         env:
-          # Build with support for javascript udfs
-          BUILD_WITH_V8: 1
           # Use sccache over ccache
           DISABLE_CCACHE: 1
-        run: |
-          pixi run build
-          # Azure SAS Provider Install
-          ./buildscripts/install_azurefs_sas_token_provider.sh
+        run: pixi run build
 
       - name: Run Python Examples
         working-directory: ./examples
@@ -162,6 +156,7 @@ jobs:
           # for ML examples
           pip install seaborn imblearn
 
+          # filter file names we want to skip 
           export PYTHON_FILES=$(find . -name "*.py" | grep -v -E "$(echo $SKIP_FILES | sed 's/ /|/g')")
           echo "$PYTHON_FILES"
 

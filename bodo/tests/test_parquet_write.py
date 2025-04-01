@@ -3,6 +3,7 @@ import random
 import shutil
 import traceback
 from decimal import Decimal
+from urllib.parse import urlparse
 
 import numba
 import numpy as np
@@ -26,12 +27,73 @@ from bodo.tests.utils import (
     gen_random_arrow_array_struct_int,
     gen_random_arrow_list_list_int,
     gen_random_arrow_struct_struct,
+    pytest_mark_one_rank,
     reduce_sum,
 )
 from bodo.utils.testing import ensure_clean2, ensure_clean_dir
 from bodo.utils.typing import BodoError
+from bodo.utils.utils import run_rank0
 
 pytestmark = pytest.mark.parquet
+
+
+def check_write_func(
+    fn,
+    df: pd.DataFrame,
+    folder_path: str,
+    file_id: str,
+    check_index: list[str] | None = None,
+    pandas_fn=None,
+):
+    DISTRIBUTIONS = {
+        "sequential": [lambda x, *args: x, [], {}],
+        "1d-distributed": [
+            _get_dist_arg,
+            [False],
+            {"all_args_distributed_block": True},
+        ],
+        "1d-distributed-varlength": [
+            _get_dist_arg,
+            [False, True],
+            {"all_args_distributed_varlength": True},
+        ],
+    }
+
+    bodo_file_path = os.path.join(folder_path, f"bodo_{file_id}.pq")
+    pandas_file_path = os.path.join(folder_path, f"pandas_{file_id}.pq")
+    pandas_fn = pandas_fn if pandas_fn else fn
+
+    for dist_func, args, kwargs in DISTRIBUTIONS.values():
+        with ensure_clean2(bodo_file_path), ensure_clean2(pandas_file_path):
+            write_jit = bodo.jit(fn, **kwargs)
+            write_jit(dist_func(df, *args), bodo_file_path)
+            run_rank0(pandas_fn)(df, pandas_file_path)  # Pandas version
+            bodo.barrier()
+
+            # Use fsspec for all reads
+            df_bodo = pd.read_parquet(bodo_file_path, storage_options={})
+            df_pandas = pd.read_parquet(pandas_file_path, storage_options={})
+            df_pandas_test = pd.read_parquet(bodo_file_path, storage_options={})
+            pd.testing.assert_frame_equal(df_bodo, df_pandas, check_column_type=True)
+            pd.testing.assert_frame_equal(
+                df_bodo, df_pandas_test, check_column_type=True
+            )
+
+            if check_index is not None:
+                pandas_meta = pq.read_schema(pandas_file_path)
+                bodo_fps = (
+                    list(os.walk(bodo_file_path))
+                    if os.path.isdir(bodo_file_path)
+                    else [("", [], [bodo_file_path])]
+                )
+                for prefix, _, file_names in bodo_fps:
+                    for file in file_names:
+                        bodo_meta = pq.read_schema(os.path.join(prefix, file))
+                        index_cols = bodo_meta.pandas_metadata["index_columns"]
+                        assert set(check_index).issubset(index_cols)
+                        assert (
+                            index_cols == pandas_meta.pandas_metadata["index_columns"]
+                        )
 
 
 @pytest.mark.parametrize(
@@ -95,32 +157,13 @@ pytestmark = pytest.mark.parquet
         # "map_arrays"
     ),
 )
-def test_semi_structured_data(df, datapath: DataPath):
-    fp_bodo = datapath("bodo.pq", check_exists=False)
-    fp_pandas = datapath("pandas.pq", check_exists=False)
-    write = lambda df: df.to_parquet(fp_bodo)
-    distributions = {
-        "sequential": [lambda x, *args: x, [], {}],
-        "1d-distributed": [
-            _get_dist_arg,
-            [False],
-            {"all_args_distributed_block": True},
-        ],
-        "1d-distributed-varlength": [
-            _get_dist_arg,
-            [False, True],
-            {"all_args_distributed_varlength": True},
-        ],
-    }
-    for dist_func, args, kwargs in distributions.values():
-        with ensure_clean2(fp_bodo), ensure_clean2(fp_pandas):
-            write_jit = bodo.jit(write, **kwargs)
-            write_jit(dist_func(df, *args))
-            df.to_parquet(fp_pandas)
-            bodo.barrier()
-            df_bodo = pd.read_parquet(fp_bodo)
-            df_pandas = pd.read_parquet(fp_pandas)
-        pd.testing.assert_frame_equal(df_bodo, df_pandas, check_column_type=True)
+def test_semi_structured_data(df, tmp_path):
+    check_write_func(
+        lambda df, path: df.to_parquet(path),
+        df,
+        str(tmp_path),
+        "semi_structured_data",
+    )
 
 
 def clean_pq_files(mode, pandas_pq_path, bodo_pq_path):
@@ -227,8 +270,11 @@ def test_pq_write_metadata(df, index_name, memory_leak_check):
                     bodo.barrier()
     finally:
         if bodo.libs.distributed_api.get_size() == 1:
-            os.remove("bodo_metadatatest.pq")
-            os.remove("pandas_metadatatest.pq")
+            try:
+                os.remove("bodo_metadatatest.pq")
+                os.remove("pandas_metadatatest.pq")
+            except FileNotFoundError:
+                pass
         else:
             shutil.rmtree("bodo_metadatatest.pq", ignore_errors=True)
 
@@ -487,7 +533,7 @@ def test_write_parquet_empty_chunks(memory_leak_check):
     processes have empty chunks"""
 
     def f(n, write_filename):
-        df = pd.DataFrame({"A": np.arange(n)})
+        df = pd.DataFrame({"A": np.arange(n, dtype=np.int64)})
         df.to_parquet(write_filename)
 
     write_filename = "test__empty_chunks.pq"
@@ -497,7 +543,9 @@ def test_write_parquet_empty_chunks(memory_leak_check):
         bodo.barrier()
         if bodo.get_rank() == 0:
             df = pd.read_parquet(write_filename)
-            pd.testing.assert_frame_equal(df, pd.DataFrame({"A": np.arange(n)}))
+            pd.testing.assert_frame_equal(
+                df, pd.DataFrame({"A": np.arange(n, dtype=np.int64)})
+            )
     finally:
         if bodo.get_rank() == 0:
             shutil.rmtree(write_filename)
@@ -626,17 +674,17 @@ def test_write_parquet_dict(memory_leak_check):
             schema = bodo_table.schema
             expected_dtype = pa.string()
             for c in py_output.columns:
-                assert (
-                    schema.field(c).type == expected_dtype
-                ), f"Field '{c}' has an incorrect type"
+                assert schema.field(c).type == expected_dtype, (
+                    f"Field '{c}' has an incorrect type"
+                )
         except Exception:
             passed = 0
         finally:
             shutil.rmtree("arr_dict_test.pq")
     n_passed = reduce_sum(passed)
-    assert (
-        n_passed == bodo.get_size()
-    ), "to_parquet output doesn't match expected pandas output"
+    assert n_passed == bodo.get_size(), (
+        "to_parquet output doesn't match expected pandas output"
+    )
 
 
 def test_write_parquet_dict_table(memory_leak_check):
@@ -681,46 +729,45 @@ def test_write_parquet_dict_table(memory_leak_check):
             schema = bodo_table.schema
             expected_dtype = pa.string()
             for c in py_output.columns:
-                assert (
-                    schema.field(c).type == expected_dtype
-                ), f"Field '{c}' has an incorrect type"
+                assert schema.field(c).type == expected_dtype, (
+                    f"Field '{c}' has an incorrect type"
+                )
         except Exception:
             passed = 0
         finally:
             shutil.rmtree("arr_dict_test.pq")
             os.remove("dummy_source.pq")
     n_passed = reduce_sum(passed)
-    assert (
-        n_passed == bodo.get_size()
-    ), "to_parquet output doesn't match expected pandas output"
+    assert n_passed == bodo.get_size(), (
+        "to_parquet output doesn't match expected pandas output"
+    )
 
 
+@pytest_mark_one_rank
 def test_write_parquet_row_group_size(memory_leak_check):
     """Test df.to_parquet(..., row_group_size=n)"""
-    if bodo.get_rank() == 0:
-        # We don't need to test the distributed case, because in the distributed
-        # case each rank writes its own data to a separate file. row_group_size
-        # is passed to Arrow WriteTable in the same way regardless
+    # We don't need to test the distributed case, because in the distributed
+    # case each rank writes its own data to a separate file. row_group_size
+    # is passed to Arrow WriteTable in the same way regardless
 
-        @bodo.jit(replicated=["df"])
-        def impl(df, output_filename, n):
-            df.to_parquet(output_filename, row_group_size=n)
+    @bodo.jit(replicated=["df"])
+    def impl(df, output_filename, n):
+        df.to_parquet(output_filename, row_group_size=n)
 
-        output_filename = "bodo_temp.pq"
-        try:
-            df = pd.DataFrame({"A": range(93)})
-            impl(df, output_filename, 20)
-            m = pq.ParquetFile(output_filename).metadata
-            assert [m.row_group(i).num_rows for i in range(m.num_row_groups)] == [
-                20,
-                20,
-                20,
-                20,
-                13,
-            ]
-        finally:
-            os.remove(output_filename)
-    bodo.barrier()
+    output_filename = "bodo_temp.pq"
+    try:
+        df = pd.DataFrame({"A": range(93)})
+        impl(df, output_filename, 20)
+        m = pq.ParquetFile(output_filename).metadata
+        assert [m.row_group(i).num_rows for i in range(m.num_row_groups)] == [
+            20,
+            20,
+            20,
+            20,
+            13,
+        ]
+    finally:
+        os.remove(output_filename)
 
 
 def test_write_parquet_no_empty_files(memory_leak_check):
@@ -807,20 +854,20 @@ def test_tz_to_parquet(memory_leak_check):
             for col_name in tz_columns:
                 col_index = result.columns.get_loc(col_name)
                 col_metadata = columns_info[col_index]
-                assert (
-                    col_metadata["pandas_type"] == "datetimetz"
-                ), f"incorrect pandas_type metadata for column {col_name}"
-                assert (
-                    col_metadata["numpy_type"] == "datetime64[ns]"
-                ), f"incorrect numpy_type metadata for column {col_name}"
+                assert col_metadata["pandas_type"] == "datetimetz", (
+                    f"incorrect pandas_type metadata for column {col_name}"
+                )
+                assert col_metadata["numpy_type"] == "datetime64[ns]", (
+                    f"incorrect numpy_type metadata for column {col_name}"
+                )
                 metadata_field = col_metadata["metadata"]
-                assert isinstance(
-                    metadata_field, dict
-                ), f"incorrect metadata field for column {col_name}"
+                assert isinstance(metadata_field, dict), (
+                    f"incorrect metadata field for column {col_name}"
+                )
                 fields = list(metadata_field.items())
-                assert fields == [
-                    ("timezone", result.dtypes[col_index].tz.zone)
-                ], f"incorrect metadata field for column {col_name}"
+                assert fields == [("timezone", result.dtypes[col_index].tz.zone)], (
+                    f"incorrect metadata field for column {col_name}"
+                )
         except Exception:
             passed = 0
         finally:
@@ -969,6 +1016,7 @@ def test_streaming_parquet_write(memory_leak_check):
         bodo.io.stream_parquet_write.PARQUET_WRITE_CHUNK_SIZE = orig_chunk_size
         if bodo.get_rank() == 0:
             shutil.rmtree(write_filename)
+        bodo.barrier()
 
 
 def test_streaming_parquet_write_rep(memory_leak_check):
@@ -1032,6 +1080,74 @@ def test_streaming_parquet_write_rep(memory_leak_check):
         bodo.io.stream_parquet_write.PARQUET_WRITE_CHUNK_SIZE = orig_chunk_size
         if bodo.get_rank() == 0:
             shutil.rmtree(write_filename)
+        bodo.barrier()
+
+
+def test_to_pq_multiIdx(tmp_path, memory_leak_check):
+    """Test to_parquet with MultiIndexType"""
+    np.random.seed(0)
+
+    arrays = [
+        ["bar", "bar", "baz", "baz", "foo", "foo", "qux", "qux"],
+        ["one", "two", "one", "two", "one", "two", "one", "two"],
+        [1, 2, 2, 1] * 2,
+    ]
+    tuples = list(zip(*arrays))
+    idx = pd.MultiIndex.from_tuples(tuples, names=["first", "second", "third"])
+    df = pd.DataFrame(np.random.randn(8, 2), index=idx, columns=["A", "B"])
+
+    check_write_func(
+        lambda df, fname: df.to_parquet(fname),
+        df,
+        str(tmp_path),
+        "multi_idx_parquet",
+        check_index=["first", "second", "third"],
+    )
+
+
+def test_to_pq_multiIdx_no_name(tmp_path, memory_leak_check):
+    """Test to_parquet with MultiIndexType with no name at 1 level"""
+    np.random.seed(0)
+
+    arrays = [
+        ["bar", "bar", "baz", "baz", "foo", "foo", "qux", "qux"],
+        ["one", "two", "one", "two", "one", "two", "one", "two"],
+        [1, 2, 2, 1] * 2,
+    ]
+    tuples = list(zip(*arrays))
+    idx = pd.MultiIndex.from_tuples(tuples, names=[None, None, "nums"])
+    df = pd.DataFrame(np.random.randn(8, 2), index=idx, columns=["A", "B"])
+
+    check_write_func(
+        lambda df, fname: df.to_parquet(fname),
+        df,
+        str(tmp_path),
+        "multi_idx_parquet_no_name",
+        check_index=["__index_level_0__", "__index_level_1__", "nums"],
+    )
+
+
+@pytest.mark.parametrize("is_short_path", [True, False])
+def test_write_to_azure(tmp_abfs_path: str, is_short_path: bool) -> None:
+    if is_short_path:
+        # Long Path: abfs://<container>@<account>.dfs.windows.net/<path>/
+        # Short Path: abfs://<container>/<path>/
+        res = urlparse(tmp_abfs_path)
+        path = f"abfs://{res.username}{res.path}"
+    else:
+        path = tmp_abfs_path
+
+    print(path)
+
+    df = pd.DataFrame({"A": [1, 2]})
+    check_write_func(
+        lambda df, fname: df.to_parquet(fname),
+        df,
+        path,
+        "write_to_azure",
+        # This triggers Pandas to use fsspec to write, cause using PyArrow causes issues
+        pandas_fn=lambda df, fname: df.to_parquet(fname, storage_options={}),
+    )
 
 
 # ---------------------------- Test Error Checking ---------------------------- #
@@ -1082,21 +1198,3 @@ def test_to_parquet_row_group_size():
     df = pd.DataFrame({"A": np.arange(10)})
     with pytest.raises(BodoError, match=msg):
         bodo.jit(lambda f: impl(df))(df)
-
-
-@pytest.mark.slow
-def test_to_pq_multiIdx_errcheck(memory_leak_check):
-    """Test unsupported to_parquet with MultiIndexType"""
-    arrays = [
-        ["bar", "bar", "baz", "baz", "foo", "foo", "qux", "qux"],
-        ["one", "two", "one", "two", "one", "two", "one", "two"],
-    ]
-    tuples = list(zip(*arrays))
-    idx = pd.MultiIndex.from_tuples(tuples, names=["first", "second"])
-    df = pd.DataFrame(np.random.randn(8, 2), index=idx, columns=["A", "B"])
-
-    def impl(df):
-        df.to_parquet("multi_idx_parquet.pq")
-
-    with pytest.raises(BodoError, match="to_parquet: MultiIndex not supported yet"):
-        bodo.jit(impl)(df)

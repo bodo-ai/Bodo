@@ -240,7 +240,7 @@ def to_arr_obj_if_list_obj(c, context, builder, val, typ):
         if isinstance(typ, bodo.DatetimeArrayType):
             # get pd.array to convert list items to Pandas array
             mod_name = context.insert_const_string(builder.module, "pandas")
-            pd_mod_obj = c.pyapi.import_module_noblock(mod_name)
+            pd_mod_obj = c.pyapi.import_module(mod_name)
 
             old_obj = builder.load(val_ptr)
             new_obj = c.pyapi.call_method(pd_mod_obj, "array", (old_obj,))
@@ -252,7 +252,7 @@ def to_arr_obj_if_list_obj(c, context, builder, val, typ):
         else:
             # get np.array to convert list items to array
             mod_name = context.insert_const_string(builder.module, "numpy")
-            np_mod_obj = c.pyapi.import_module_noblock(mod_name)
+            np_mod_obj = c.pyapi.import_module(mod_name)
             dtype_str = "object_"
             # float lists become float arrays, but others are object arrays
             # (see _value_to_array in boxing.py)
@@ -301,7 +301,7 @@ def get_array_elem_counts(c, builder, context, arr_obj, typ):
     if isinstance(typ, (StructType, types.BaseTuple)):
         # get pd.NA object to check for new NA kind
         mod_name = context.insert_const_string(builder.module, "pandas")
-        pd_mod_obj = c.pyapi.import_module_noblock(mod_name)
+        pd_mod_obj = c.pyapi.import_module(mod_name)
         C_NA = c.pyapi.object_getattr_string(pd_mod_obj, "NA")
 
         n_nested_count = bodo.utils.transform.get_type_alloc_counts(typ)
@@ -362,7 +362,7 @@ def get_array_elem_counts(c, builder, context, arr_obj, typ):
 
     # get pd.NA object to check for new NA kind
     mod_name = context.insert_const_string(builder.module, "pandas")
-    pd_mod_obj = c.pyapi.import_module_noblock(mod_name)
+    pd_mod_obj = c.pyapi.import_module(mod_name)
     C_NA = c.pyapi.object_getattr_string(pd_mod_obj, "NA")
 
     # create a tuple for nested counts
@@ -581,9 +581,9 @@ def meminfo_to_np_arr(context, builder, meminfo, meminfo_offset, length, arrtype
 
     from numba.np.arrayobj import get_itemsize, populate_array
 
-    assert (
-        arrtype.ndim == 1 and arrtype.layout == "C"
-    ), "meminfo_to_np_arr: 1D array type with C layout expected"
+    assert arrtype.ndim == 1 and arrtype.layout == "C", (
+        "meminfo_to_np_arr: 1D array type with C layout expected"
+    )
 
     arr = context.make_array(arrtype)(context, builder)
 

@@ -967,15 +967,10 @@ def get_call_type(self, context, args, kws):
                     nolitkws = {k: _unlit_non_poison(v) for k, v in kws.items()}
                     sig = temp.apply(nolitargs, nolitkws)
             except Exception as e:
-                from numba.core import utils
-
-                if utils.use_new_style_errors() and not isinstance(
-                    e, errors.NumbaError
-                ):
+                if not isinstance(e, errors.NumbaError):
                     raise e
-                else:
-                    sig = None
-                    failures.add_error(temp, False, e, uselit)
+                sig = None
+                failures.add_error(temp, False, e, uselit)
             else:
                 if sig is not None:
                     self._impl_keys[sig.args] = temp.get_impl_key(sig)
@@ -1000,7 +995,7 @@ if _check_numba_change:  # pragma: no cover
     lines = inspect.getsource(numba.core.types.functions.BaseFunction.get_call_type)
     if (
         hashlib.sha256(lines.encode()).hexdigest()
-        != "25f038a7216f8e6f40068ea81e11fd9af8ad25d19888f7304a549941b01b7015"
+        != "6559c167bfc0ad36ab4af049ed2f2b9ddc28ce1eedbc2e3462b69b62079e850e"
     ):  # pragma: no cover
         warnings.warn(
             "numba.core.types.functions.BaseFunction.get_call_type has changed"
@@ -1050,11 +1045,7 @@ def get_call_type2(self, context, args, kws):
                 try:
                     out = template.apply(unliteral_args, unliteral_kws)
                 except Exception as exc:
-                    from numba.core import utils
-
-                    if utils.use_new_style_errors() and not isinstance(
-                        exc, errors.NumbaError
-                    ):
+                    if not isinstance(exc, errors.NumbaError):
                         raise exc
                     if isinstance(exc, errors.ForceLiteralArg):
                         if template.prefer_literal:
@@ -1133,7 +1124,7 @@ if _check_numba_change:  # pragma: no cover
     lines = inspect.getsource(numba.core.types.functions.BoundFunction.get_call_type)
     if (
         hashlib.sha256(lines.encode()).hexdigest()
-        != "502cd77c0084452e903a45a0f1f8107550bfbde7179363b57dabd617ce135f4a"
+        != "b8bf7bc438d0362698a9057a998d49a19ed46f03e0d3ccff3987f0037387a685"
     ):  # pragma: no cover
         warnings.warn(
             "numba.core.types.functions.BoundFunction.get_call_type has changed"
@@ -1352,7 +1343,7 @@ def _compile_for_args(self, *args, **kws):  # pragma: no cover
         raise e
     # Bodo change: avoid arg leak
     finally:
-        self._types_active_call = []
+        self._types_active_call.clear()
         # avoid issue of reference leak of arguments to jitted function:
         # https://github.com/numba/numba/issues/5419
         del args
@@ -1369,7 +1360,7 @@ if _check_numba_change:  # pragma: no cover
     lines = inspect.getsource(numba.core.dispatcher._DispatcherBase._compile_for_args)
     if (
         hashlib.sha256(lines.encode()).hexdigest()
-        != "5cdfbf0b13a528abf9f0408e70f67207a03e81d610c26b1acab5b2dc1f79bf06"
+        != "574ef31a488694f419a02dff4e313c1714e3dd2368d990a78fbe5e72c3bfb23f"
     ):  # pragma: no cover
         warnings.warn(
             "numba.core.dispatcher._DispatcherBase._compile_for_args has changed"
@@ -1610,29 +1601,7 @@ def propagate(self, typeinfer):
                     errors.append(
                         bodo.utils.typing.BodoError(e.msg, locs_in_msg=e.locs_in_msg)
                     )
-            except Exception as e:
-                from numba.core import utils
 
-                if utils.use_old_style_errors():
-                    numba.core.typeinfer._logger.debug("captured error", exc_info=e)
-                    msg = (
-                        "Internal error at {con}.\n{err}\n"
-                        "Enable logging at debug level for details."
-                    )
-                    new_exc = numba.core.errors.TypingError(
-                        msg.format(con=constraint, err=str(e)),
-                        loc=constraint.loc,
-                        highlighting=False,
-                    )
-                    errors.append(utils.chain_exception(new_exc, e))
-                elif utils.use_new_style_errors():
-                    raise e
-                else:
-                    msg = (
-                        "Unknown CAPTURED_ERRORS style: "
-                        f"'{numba.core.config.CAPTURED_ERRORS}'."
-                    )
-                    assert 0, msg
     return errors
 
 
@@ -1640,7 +1609,7 @@ if _check_numba_change:  # pragma: no cover
     lines = inspect.getsource(numba.core.typeinfer.ConstraintNetwork.propagate)
     if (
         hashlib.sha256(lines.encode()).hexdigest()
-        != "1e73635eeba9ba43cb3372f395b747ae214ce73b729fb0adba0a55237a1cb063"
+        != "01b516bfb28ce9fc4b090366eca51fbc6c714ad847f3a5481ab43c073f40b50f"
     ):
         warnings.warn("numba.core.typeinfer.ConstraintNetwork.propagate has changed")
 
@@ -1946,6 +1915,8 @@ def CacheImpl__init__(self, py_func):
     )
 
     conf_str_hash = hashlib.md5(get_sql_config_str().encode()).hexdigest()
+    # Remove unnecessary prefix to make path shorter (important on Windows)
+    fullname = fullname.removeprefix("<string>.")
     self._filename_base = f"{self.get_filename_base(fullname, abiflags)}bodo{bodo_version}-{conf_str_hash}"
 
 
@@ -2131,11 +2102,7 @@ def passmanager_run(self, state):
         except Exception as e:
             # TODO: [BE-486] environment variable developer_mode?
             if numba.core.config.DEVELOPER_MODE:
-                from numba.core import utils
-
-                if utils.use_new_style_errors() and not isinstance(
-                    e, errors.NumbaError
-                ):
+                if not isinstance(e, errors.NumbaError):
                     raise e
                 msg = "Failed in %s mode pipeline (step: %s)" % (
                     self.pipeline_name,
@@ -2152,7 +2119,7 @@ if _check_numba_change:  # pragma: no cover
     lines = inspect.getsource(numba.core.compiler_machinery.PassManager.run)
     if (
         hashlib.sha256(lines.encode()).hexdigest()
-        != "43505782e15e690fd2d7e53ea716543bec37aa0633502956864edf649e790cdb"
+        != "0a50275e02bb0f11ffc403fb7a560aff8840d5d45149aeae7e06188de07deb7d"
     ):  # pragma: no cover
         warnings.warn("numba.core.compiler_machinery.PassManager.run has changed")
 
@@ -5622,12 +5589,12 @@ if _check_numba_change:  # pragma: no cover
         (
             "numba.core.dispatcher.Dispatcher._reduce_states",
             numba.core.dispatcher.Dispatcher._reduce_states,
-            "b5eff22f9db75873bb7623137912d42c63204166d84ccae13346a0598ada7afa",
+            "15aeae6bded38f319ff1c4269ae3683d2973e44787ca47ad974f36e89d4ef7a5",
         ),
         (
             "numba.core.dispatcher.Dispatcher._rebuild",
             numba.core.dispatcher.Dispatcher._rebuild,
-            "b6634a51819746bc86907ac7baeee4b1607c1b5eeb7b9ebf22d7cf7104f5788a",
+            "61f176cd04774fe23cc99e94f47ae562d50f7bcce7c2b78447cda963c3448a99",
         ),
     ):
         lines = inspect.getsource(orig)
@@ -5684,30 +5651,19 @@ def define_untyped_pipeline(state, name="untyped"):
         ReconstructSSA,
         RewriteDynamicRaises,
         RewriteSemanticConstants,
-        RVSDGFrontend,
         TranslateByteCode,
         WithLifting,
     )
     from numba.core.utils import PYVERSION
 
     pm = PassManager(name)
-
-    if numba.core.config.USE_RVSDG_FRONTEND:
-        if state.func_ir is None:
-            pm.add_pass(RVSDGFrontend, "rvsdg frontend")
-            # Bodo Change: Insert Python 3.10 Bytecode peepholes
-            if PYVERSION >= (3, 10):
-                pm.add_pass(Bodo310ByteCodePass, "Apply Python 3.10 bytecode changes")
-            pm.add_pass(FixupArgs, "fix up args")
-        pm.add_pass(IRProcessing, "processing IR")
-    else:
-        if state.func_ir is None:
-            pm.add_pass(TranslateByteCode, "analyzing bytecode")
-            # Bodo Change: Insert Python 3.10 Bytecode peepholes
-            if PYVERSION >= (3, 10):
-                pm.add_pass(Bodo310ByteCodePass, "Apply Python 3.10 bytecode changes")
-            pm.add_pass(FixupArgs, "fix up args")
-        pm.add_pass(IRProcessing, "processing IR")
+    if state.func_ir is None:
+        pm.add_pass(TranslateByteCode, "analyzing bytecode")
+        # Bodo Change: Insert Python 3.10 Bytecode peepholes
+        if PYVERSION >= (3, 10):
+            pm.add_pass(Bodo310ByteCodePass, "Apply Python 3.10 bytecode changes")
+        pm.add_pass(FixupArgs, "fix up args")
+    pm.add_pass(IRProcessing, "processing IR")
 
     pm.add_pass(WithLifting, "Handle with contexts")
 
@@ -5739,6 +5695,11 @@ def define_untyped_pipeline(state, name="untyped"):
     if state.flags.enable_ssa:
         pm.add_pass(ReconstructSSA, "ssa")
 
+    # Bodo change: disable extra branch pruning since it can result in IR issues
+    # See test_batched_read_agg for example (TODO(Ehsan): investigate and re-enable)
+    # if not state.flags.no_rewrites:
+    #     pm.add_pass(DeadBranchPrune, "dead branch pruning")
+
     pm.add_pass(LiteralPropagationSubPipelinePass, "Literal propagation")
 
     pm.finalize()
@@ -5751,7 +5712,7 @@ if _check_numba_change:  # pragma: no cover
     )
     if (
         hashlib.sha256(lines.encode()).hexdigest()
-        != "ee2d8498b402655ac08d02018fab21932d416c2e8caed3f98cfe0126af0f044d"
+        != "0cb11451d06eef493a9959a4fced3d1d693e6f1a48b686c51649e9a9849de64b"
     ):
         warnings.warn(
             "numba.core.compiler.DefaultPassBuilder.define_untyped_pipeline has changed"
@@ -6408,108 +6369,6 @@ numba.parfors.parfor._update_parfor_get_setitems = _update_parfor_get_setitems
 
 #### END PATCH OF GETITEM OPTIMIZATIONS TO SUPPORT scalar_optional_getitem ####
 
-#### START PATCH TO ADD AN ITERATIVE IMPLEMENTATION OF find_topo_order ####
-
-
-def find_topo_order(blocks, cfg=None):
-    from numba.core.analysis import compute_cfg_from_blocks
-
-    if cfg is None:
-        cfg = compute_cfg_from_blocks(blocks)
-
-    # Bodo Change: Provide an iterative implmentation
-    # for very large IRs. This implementation is likely more expensive
-    # to compute, so we only take it if its possible to exceed the max
-    # recursion depth due to a highly complex IR or we specify it in
-    # the environment.
-    use_iterative = int(os.environ.get("BODO_TOPO_ORDER_ITERATIVE", "0"))
-    if use_iterative or len(blocks) > 900:
-        return _find_topo_order_iterative(blocks, cfg)
-    else:
-        return _find_topo_order_recursive(blocks, cfg)
-
-
-def _find_topo_order_iterative(blocks, cfg):
-    """find topological order of blocks such that true branches are visited
-    first (e.g. for_break test in test_dataflow). This has an iterative
-    implementation which is more expensive.
-    """
-    post_order = []
-    # Has the node already added its children
-    seen = set()
-    # Has the node already been pushed to post order.
-    visited = set()
-    stack = [cfg.entry_point()]
-
-    while len(stack) > 0:
-        node = stack[-1]
-        if node not in seen:
-            # We haven't added a node or its children.
-            seen.add(node)
-            succs = cfg._succs[node]
-            last_inst = blocks[node].body[-1]
-            if isinstance(last_inst, ir.Branch):
-                # Note: This is flipped because we append to the end
-                # of the stack. This is the opposite of the recursive implementation.
-                #
-                # We don't reverse for the set case because in other situations the ordering
-                # doesn't matter.
-                succs = [last_inst.truebr, last_inst.falsebr]
-            for dest in succs:
-                if (node, dest) not in cfg._back_edges:
-                    if dest not in seen:
-                        stack.append(dest)
-        else:
-            # This node has already added its children. We either need
-            # to visit the node or it has been added multiple times.
-            node = stack.pop()
-            if node not in visited:
-                # We have seen the node and are now returning
-                # to the original call
-                post_order.append(node)
-                visited.add(node)
-
-    post_order.reverse()
-    return post_order
-
-
-def _find_topo_order_recursive(blocks, cfg):
-    """find topological order of blocks such that true branches are visited
-    first (e.g. for_break test in test_dataflow). This has a recursive
-    implementation.
-    """
-    post_order = []
-    seen = set()
-
-    def _dfs_rec(node):
-        if node not in seen:
-            seen.add(node)
-            succs = cfg._succs[node]
-            last_inst = blocks[node].body[-1]
-            if isinstance(last_inst, ir.Branch):
-                succs = [last_inst.falsebr, last_inst.truebr]
-            for dest in succs:
-                if (node, dest) not in cfg._back_edges:
-                    _dfs_rec(dest)
-            post_order.append(node)
-
-    _dfs_rec(cfg.entry_point())
-    post_order.reverse()
-    return post_order
-
-
-if _check_numba_change:  # pragma: no cover
-    lines = inspect.getsource(numba.core.ir_utils.find_topo_order)
-    if (
-        hashlib.sha256(lines.encode()).hexdigest()
-        != "377491699cc45120a35a9f65e14160189189b2d5c1f65c15a409c122c55f880a"
-    ):
-        warnings.warn("numba.core.ir_utils.find_topo_order has changed")
-
-numba.core.ir_utils.find_topo_order = find_topo_order
-
-#### END PATCH TO ADD AN ITERATIVE IMPLEMENTATION OF find_topo_order ####
-
 
 def _sanitize_cell_contents(c):
     """Make cell contents in function closure hashable for compilation cache key below"""
@@ -6681,7 +6540,7 @@ def _sequence_of_arrays(
         or not all(isinstance(a, types.Array) for a in arrays)
     ):
         # Bodo change: raise NumbaError to allow typing to continue
-        raise numba.NumbaTypeError(
+        raise numba.TypingError(
             "%s(): expecting a non-empty tuple of arrays, "
             "got %s" % (func_name, arrays)
         )
@@ -6691,7 +6550,7 @@ def _sequence_of_arrays(
     dtype = context.unify_types(*(a.dtype for a in arrays))
     if dtype is None:
         # Bodo change: raise NumbaError to allow typing to continue
-        raise numba.NumbaTypeError(
+        raise numba.TypingError(
             "%s(): input arrays must have " "compatible dtypes" % func_name
         )
 
@@ -6702,7 +6561,7 @@ if _check_numba_change:  # pragma: no cover
     lines = inspect.getsource(numba.core.typing.npydecl._sequence_of_arrays)
     if (
         hashlib.sha256(lines.encode()).hexdigest()
-        != "5e56ef05b3d09d20f9bd73e1f9fd198c453ab61c126e40754c285f631433c519"
+        != "8dbf671f71d6afeb2571516acd935c2b385a25c54219b591210ead43dd4a191e"
     ):
         warnings.warn("numba.core.typing.npydecl._sequence_of_arrays")
 
@@ -6887,17 +6746,106 @@ if _check_numba_change:  # pragma: no cover
 numba.core.funcdesc.FunctionDescriptor._from_python_function = _from_python_function
 
 
+def fold_arguments(pysig, args, kws, normal_handler, default_handler,
+                   stararg_handler):
+    """
+    Given the signature *pysig*, explicit *args* and *kws*, resolve
+    omitted arguments and keyword arguments. A tuple of positional
+    arguments is returned.
+    Various handlers allow to process arguments:
+    - normal_handler(index, param, value) is called for normal arguments
+    - default_handler(index, param, default) is called for omitted arguments
+    - stararg_handler(index, param, values) is called for a "*args" argument
+    """
+    if isinstance(kws, Sequence):
+        # Normalize dict kws
+        kws = dict(kws)
+
+    # deal with kwonly args
+    params = pysig.parameters
+    kwonly = []
+    for name, p in params.items():
+        if p.kind == p.KEYWORD_ONLY:
+            kwonly.append(name)
+
+    if kwonly:
+        bind_args = args[:-len(kwonly)]
+    else:
+        bind_args = args
+    bind_kws = kws.copy()
+    if kwonly:
+        for idx, n in enumerate(kwonly):
+            bind_kws[n] = args[len(kwonly) + idx]
+
+    # now bind
+    try:
+        ba = pysig.bind(*bind_args, **bind_kws)
+    except TypeError as e:
+        # The binding attempt can raise if the args don't match up, this needs
+        # to be converted to a TypingError so that e.g. partial type inference
+        # doesn't just halt.
+        # msg = (f"Cannot bind 'args={bind_args} kws={bind_kws}' to "
+        #        f"signature '{pysig}' due to \"{type(e).__name__}: {e}\".")
+        # Bodo change: keep the original error message for simpler user error reporting
+        raise TypingError(str(e))
+    for i, param in enumerate(pysig.parameters.values()):
+        name = param.name
+        default = param.default
+        if param.kind == param.VAR_POSITIONAL:
+            # stararg may be omitted, in which case its "default" value
+            # is simply the empty tuple
+            if name in ba.arguments:
+                argval = ba.arguments[name]
+                # NOTE: avoid wrapping the tuple type for stararg in another
+                #       tuple.
+                if (len(argval) == 1 and
+                        isinstance(argval[0], (types.StarArgTuple,
+                                               types.StarArgUniTuple))):
+                    argval = tuple(argval[0])
+            else:
+                argval = ()
+            out = stararg_handler(i, param, argval)
+
+            ba.arguments[name] = out
+        elif name in ba.arguments:
+            # Non-stararg, present
+            ba.arguments[name] = normal_handler(i, param, ba.arguments[name])
+        else:
+            # Non-stararg, omitted
+            assert default is not param.empty
+            ba.arguments[name] = default_handler(i, param, default)
+    # Collect args in the right order
+    args = tuple(ba.arguments[param.name]
+                 for param in pysig.parameters.values())
+    return args
+
+
+if _check_numba_change:  # pragma: no cover
+    lines = inspect.getsource(numba.core.typing.templates.fold_arguments)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "1ace2d13ce2c1637efa0c280fedd1204cf5e2cc0ec7d14e17cad4098ca364e5c"
+    ):
+        warnings.warn("numba.core.typing.templates.fold_arguments has changed")
+
+
+numba.core.typing.templates.fold_arguments = fold_arguments
+numba.core.typing.fold_arguments = fold_arguments
+numba.core.dispatcher.fold_arguments = fold_arguments
+
+
 class BodoCacheLocator(numba.core.caching._CacheLocator):
     """
     A CacheLocator for Numba that handles functions created from strings.
     """
     __slots__ = ('_py_file', '_cache_path', '_bytes_source')
     registered_funcs = {}   # Holds mapping of generated function name to its source.
-    if os.environ.get("BODO_PLATFORM_CACHE_LOCATION") is not None:
-        cache_path = numba.config.CACHE_DIR
-    else:
+    cache_path = os.environ.get("BODO_PLATFORM_CACHE_LOCATION")
+    if cache_path is None:
         appdirs = AppDirs(appname="bodo", appauthor=False)
-        cache_path = os.path.join(appdirs.user_cache_dir, ".bodo_strfunc_cache")
+        cache_path = os.path.join(appdirs.user_cache_dir, ".strfunc_cache")
+    else:
+        cache_path = os.path.join(cache_path, ".strfunc_cache")
 
     def __init__(self, py_func, py_file):
         source = BodoCacheLocator.registered_funcs[py_func.__qualname__]

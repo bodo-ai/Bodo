@@ -765,7 +765,7 @@ PyObject* box_date_offset(int64_t n, bool normalize, int64_t fields_arr[18],
                 if (field_value != default_value) {
                     PyObject* field_obj = Py_BuildValue("s", field_name);
                     CHECK(field_obj, "Creating name obj for kwargs failed");
-                    PyObject* value_obj = Py_BuildValue("l", field_value);
+                    PyObject* value_obj = Py_BuildValue("L", field_value);
                     CHECK(value_obj, "Creating value obj for kwargs failed");
                     CHECK(PyDict_SetItem(kwargs, field_obj, value_obj) != -1,
                           "Dict setitem failed");
@@ -775,7 +775,7 @@ PyObject* box_date_offset(int64_t n, bool normalize, int64_t fields_arr[18],
             }
         }
     }
-    PyObject* n_obj = Py_BuildValue("l", n);
+    PyObject* n_obj = Py_BuildValue("L", n);
     CHECK(n_obj, "Creating n object failed");
     PyObject* normalize_obj = PyBool_FromLong(normalize);
     CHECK(normalize_obj, "Creating normalize object failed");
@@ -991,8 +991,10 @@ void* box_timestamptz_array(int64_t n, const int64_t* data_ts,
                 PyObject_CallFunction(timestamp_constructor, "L", ts_val);
 
             int16_t offset = data_offset[i];
-            PyObject* ts_tz = PyObject_CallFunction(
-                bodo_timestamptz_constructor, "OL", ts, offset);
+            // NOTE: int64_t casting of offset is necessary on Windows
+            PyObject* ts_tz =
+                PyObject_CallFunction(bodo_timestamptz_constructor, "OL", ts,
+                                      static_cast<int64_t>(offset));
             err = PyArray_SETITEM((PyArrayObject*)ret, (char*)p, ts_tz);
 
             Py_DECREF(ts);

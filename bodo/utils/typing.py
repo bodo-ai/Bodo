@@ -7,6 +7,7 @@ import itertools
 import operator
 import types as pytypes
 import typing
+import typing as pt
 import warnings
 from inspect import getfullargspec
 from typing import Any
@@ -54,8 +55,10 @@ INDEX_SENTINEL = "$_bodo_index_"
 
 
 list_cumulative = {"cumsum", "cumprod", "cummin", "cummax"}
-Index = str | dict | None
-FileSchema = tuple[list[str], list, Index, list[int], list, list, list, pa.Schema]
+Index: pt.TypeAlias = list[str | dict]
+FileSchema: pt.TypeAlias = tuple[
+    list[str], list, Index, list[int], list, list, list, pa.Schema
+]
 
 
 def is_timedelta_type(in_type):
@@ -144,7 +147,7 @@ def decode_if_dict_array_overload(A):
         res = ",".join(f"decode_if_dict_array(A[{i}])" for i in range(n))
         func_text += "  return ({}{})\n".format(res, "," if n == 1 else "")
         return bodo.utils.utils.bodo_exec(
-            func_text, {"decode_if_dict_array": decode_if_dict_array}, {}, globals()
+            func_text, {"decode_if_dict_array": decode_if_dict_array}, {}, __name__
         )
 
     if isinstance(A, types.List):
@@ -285,7 +288,7 @@ def get_udf_error_msg(context_str, error):
     msg = ""
     if hasattr(error, "msg"):
         msg = str(error.msg)
-    if hasattr(error, "args") and error.args:
+    elif hasattr(error, "args") and error.args:
         # TODO(ehsan): can Exception have more than one arg?
         msg = str(error.args[0])
 
@@ -1103,6 +1106,11 @@ def parse_dtype(dtype, func_name=None):
             return bodo.libs.bool_arr_ext.boolean_dtype
         if d_str == "str":
             return bodo.string_type
+
+        # Handle separately since Numpy < 2 on Windows returns int32 in np.dtype
+        if d_str == "int":
+            return types.int64
+
         return numba.np.numpy_support.from_dtype(np.dtype(d_str))
     except Exception:
         pass
@@ -1308,9 +1316,9 @@ def is_bodosql_context_type(t):
             from bodosql.context_ext import BodoSQLContextType
         except ImportError:  # pragma: no cover
             raise ImportError("BodoSQL not installed properly")
-        assert isinstance(
-            t, BodoSQLContextType
-        ), "is_bodosql_context_type: expected BodoSQLContextType"
+        assert isinstance(t, BodoSQLContextType), (
+            "is_bodosql_context_type: expected BodoSQLContextType"
+        )
         return True
 
     return False
@@ -1483,6 +1491,7 @@ class CreateTableMetaType(MetaType):
         types.Type.__init__(self, f"CreateTableMetaType({meta})")
 
 
+EMPTY_CREATE_TABLE_META = CreateTableMetaType(None, None, None)
 register_model(CreateTableMetaType)(models.OpaqueModel)
 
 
@@ -2556,9 +2565,9 @@ def fold_typing_args(
         arg_defaults = {}
         for i, arg_name in enumerate(arg_names):
             if arg_name in unsupported_arg_names:
-                assert (
-                    arg_name in defaults
-                ), f"{func_name}(): '{arg_name}' is unsupported but no default is provided"
+                assert arg_name in defaults, (
+                    f"{func_name}(): '{arg_name}' is unsupported but no default is provided"
+                )
                 unsupported_args[arg_name] = folded_args[i]
                 arg_defaults[arg_name] = defaults[arg_name]
 
@@ -2654,6 +2663,8 @@ def index_typ_from_dtype_name_arr(elem_dtype, name, arr_typ):
     index_class = type(get_index_type_from_dtype(elem_dtype))
     if name is None:
         name_typ = None
+    elif name == types.none or isinstance(name, types.StringLiteral):
+        name_typ = name
     else:
         name_typ = types.StringLiteral(name)
     if index_class == bodo.hiframes.pd_index_ext.NumericIndexType:
@@ -3127,9 +3138,9 @@ def error_on_unsupported_streaming_arrays(table_type):
     if table_type in (None, types.unknown, types.undefined):
         return
 
-    assert isinstance(
-        table_type, bodo.TableType
-    ), "error_on_unsupported_streaming_arrays: TableType expected"
+    assert isinstance(table_type, bodo.TableType), (
+        "error_on_unsupported_streaming_arrays: TableType expected"
+    )
 
     for arr_type in table_type.arr_types:
         if isinstance(arr_type, bodo.IntervalArrayType):

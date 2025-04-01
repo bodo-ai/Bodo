@@ -1,6 +1,7 @@
 """Support for MultiIndex type of Pandas"""
 
 import operator
+import typing as pt
 
 import numba
 import pandas as pd
@@ -28,12 +29,23 @@ from bodo.utils.typing import (
     is_overload_none,
 )
 
+IndexNameType: pt.TypeAlias = (
+    types.NoneType
+    | types.StringLiteral
+    | types.UnicodeType
+    | types.Integer
+    | types.IntegerLiteral
+)
+
 
 # NOTE: minimal MultiIndex support that just stores the index arrays without factorizing
 # the data into `levels` and `codes`
 # TODO: support factorizing similar to pd.core.algorithms._factorize_array
 class MultiIndexType(types.ArrayCompatible):
     """type class for pd.MultiIndex object"""
+
+    array_types: tuple[types.ArrayCompatible, ...]
+    names_typ: tuple[IndexNameType, ...]
 
     def __init__(self, array_types, names_typ=None, name_typ=None):
         # NOTE: store array types instead of just dtypes since we currently store whole
@@ -80,7 +92,10 @@ class MultiIndexModel(models.StructModel):
     def __init__(self, dmm, fe_type):
         members = [
             ("data", types.Tuple(fe_type.array_types)),
-            ("names", types.Tuple(fe_type.names_typ)),
+            (
+                "names",
+                types.Tuple(fe_type.names_typ),
+            ),  # TODO: Use FrozenList like Pandas
             ("name", fe_type.name_typ),
         ]
         super().__init__(dmm, fe_type, members)
@@ -109,7 +124,7 @@ def box_multi_index(typ, val, c):
     arrays currently. TODO: support `levels` and `codes`
     """
     mod_name = c.context.insert_const_string(c.builder.module, "pandas")
-    class_obj = c.pyapi.import_module_noblock(mod_name)
+    class_obj = c.pyapi.import_module(mod_name)
     multi_index_class_obj = c.pyapi.object_getattr_string(class_obj, "MultiIndex")
 
     index_val = cgutils.create_struct_proxy(typ)(c.context, c.builder, val)

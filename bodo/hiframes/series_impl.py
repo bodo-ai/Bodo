@@ -392,7 +392,7 @@ def overload_series_reset_index(S, level=None, drop=False, name=None, inplace=Fa
             ),
         },
         {},
-        globals(),
+        __name__,
     )
 
 
@@ -2498,7 +2498,7 @@ def overload_get_bin_inds(bins, arr, is_nullable=True, include_lowest=True):
         func_text,
         {"bodo": bodo, "np": np, "numba": numba},
         {},
-        globals(),
+        __name__,
     )
 
 
@@ -2758,7 +2758,7 @@ def overload_series_value_counts(
             ),
         },
         {},
-        globals(),
+        __name__,
     )
 
 
@@ -2880,7 +2880,7 @@ def overload_cut(
             "compute_bins": compute_bins,
         },
         {},
-        globals(),
+        __name__,
     )
 
 
@@ -3381,7 +3381,7 @@ def binary_str_fillna_inplace_series_impl(is_binary=False):
             "numba": numba,
         },
         {},
-        globals(),
+        __name__,
     )
 
 
@@ -3422,7 +3422,7 @@ def binary_str_fillna_inplace_impl(is_binary=False):
             "numba": numba,
         },
         {},
-        globals(),
+        __name__,
     )
 
 
@@ -4055,9 +4055,9 @@ def _build_replace_dict(to_replace, value, key_dtype_conv):
 
             def impl_cast(to_replace, value, key_dtype_conv):  # pragma: no cover
                 replace_dict = {}
-                assert len(to_replace) == len(
-                    value
-                ), "To_replace and value lengths must be the same"
+                assert len(to_replace) == len(value), (
+                    "To_replace and value lengths must be the same"
+                )
                 for i in range(len(to_replace)):
                     replace_dict[key_dtype_conv(to_replace[i])] = value[i]
                 return replace_dict
@@ -4066,9 +4066,9 @@ def _build_replace_dict(to_replace, value, key_dtype_conv):
 
         def impl(to_replace, value, key_dtype_conv):  # pragma: no cover
             replace_dict = {}
-            assert len(to_replace) == len(
-                value
-            ), "To_replace and value lengths must be the same"
+            assert len(to_replace) == len(value), (
+                "To_replace and value lengths must be the same"
+            )
             for i in range(len(to_replace)):
                 replace_dict[to_replace[i]] = value[i]
             return replace_dict
@@ -4438,7 +4438,7 @@ def create_series_mask_where_overload(func_name):
             "  return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)\n"
         )
         return bodo.utils.utils.bodo_exec(
-            func_text, {"bodo": bodo, "np": np}, {}, globals()
+            func_text, {"bodo": bodo, "np": np}, {}, __name__
         )
 
     return overload_series_mask_where
@@ -5568,7 +5568,7 @@ def overload_np_where(condition, x, y):
             "out_dtype": out_dtype,
         },
         {},
-        globals(),
+        __name__,
     )
 
 
@@ -5793,7 +5793,7 @@ def overload_np_select(condlist, choicelist, default=0):
             "alloc_typ": alloc_typ,
         },
         {},
-        globals(),
+        __name__,
     )
 
 

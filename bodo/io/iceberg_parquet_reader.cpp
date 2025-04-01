@@ -252,7 +252,7 @@ std::shared_ptr<::arrow::Array> EvolveArray(
                         target_field_type->field(i)->type(), column_->length(),
                         bodo::BufferPool::DefaultPtr());
                 std::shared_ptr<arrow::Array> null_arr;
-                CHECK_ARROW_AND_ASSIGN(
+                CHECK_ARROW_READER_AND_ASSIGN(
                     null_arr_res,
                     fmt::format(
                         "IcebergParquetReader::EvolveArray: Failed to "
@@ -382,28 +382,29 @@ static std::shared_ptr<::arrow::dataset::ScanOptions> make_scan_options(
         std::make_shared<arrow::dataset::ScannerBuilder>(dataset);
 
     auto bind_res = expr_filter.Bind(*(builder->schema()));
-    CHECK_ARROW_AND_ASSIGN(bind_res, "Error while binding schema to the filter",
-                           auto bound_expr_filter);
+    CHECK_ARROW_READER_AND_ASSIGN(bind_res,
+                                  "Error while binding schema to the filter",
+                                  auto bound_expr_filter);
     auto filter_res = builder->Filter(bound_expr_filter);
-    CHECK_ARROW(filter_res, "Error during filter");
+    CHECK_ARROW_READER(filter_res, "Error during filter");
     auto project_res = builder->Project(column_names);
-    CHECK_ARROW(project_res, "Error during projection ");
+    CHECK_ARROW_READER(project_res, "Error during projection ");
     auto batch_size_res = builder->BatchSize(batch_size);
-    CHECK_ARROW(batch_size_res, "Error setting batch_size");
+    CHECK_ARROW_READER(batch_size_res, "Error setting batch_size");
     auto batch_readahead_res = builder->BatchReadahead(batch_readahead);
-    CHECK_ARROW(builder->BatchReadahead(batch_readahead),
-                "Error setting batch_readahead");
+    CHECK_ARROW_READER(builder->BatchReadahead(batch_readahead),
+                       "Error setting batch_readahead");
     auto fragment_readahead_res =
         builder->FragmentReadahead(fragment_readahead);
-    CHECK_ARROW(builder->FragmentReadahead(fragment_readahead),
-                "Error setting fragment_readahead");
+    CHECK_ARROW_READER(builder->FragmentReadahead(fragment_readahead),
+                       "Error setting fragment_readahead");
     auto use_threads_res = builder->UseThreads(use_threads);
-    CHECK_ARROW(use_threads_res, "Error setting use_threads");
+    CHECK_ARROW_READER(use_threads_res, "Error setting use_threads");
     auto pool_res = builder->Pool(bodo::BufferPool::DefaultPtr());
-    CHECK_ARROW(pool_res, "Error setting pool");
+    CHECK_ARROW_READER(pool_res, "Error setting pool");
     // XXX Could set FragmentScanOptions similarly
 
-    CHECK_ARROW_AND_ASSIGN(
+    CHECK_ARROW_READER_AND_ASSIGN(
         builder->GetScanOptions(), "Error during GetScanOptions",
         std::shared_ptr<::arrow::dataset::ScanOptions> scan_options);
 
@@ -448,11 +449,12 @@ std::shared_ptr<::arrow::dataset::Scanner> scanner_from_py_dataset(
     ensure_pa_wrappers_imported();
     // Unwrap Python objects into C++
     auto unwrap_expr_res = arrow::py::unwrap_expression(expr_filter_py);
-    CHECK_ARROW_AND_ASSIGN(unwrap_expr_res, "Error unwrapping filter",
-                           arrow::compute::Expression expr_filter);
+    CHECK_ARROW_READER_AND_ASSIGN(unwrap_expr_res, "Error unwrapping filter",
+                                  arrow::compute::Expression expr_filter);
     auto unwrap_dataset_res = arrow::py::unwrap_dataset(dataset_py);
-    CHECK_ARROW_AND_ASSIGN(unwrap_dataset_res, "Error unwrapping dataset",
-                           std::shared_ptr<arrow::dataset::Dataset> dataset);
+    CHECK_ARROW_READER_AND_ASSIGN(
+        unwrap_dataset_res, "Error unwrapping dataset",
+        std::shared_ptr<arrow::dataset::Dataset> dataset);
 
     std::vector<std::string> column_names;
     for (int field_num : selected_fields) {
@@ -468,8 +470,9 @@ std::shared_ptr<::arrow::dataset::Scanner> scanner_from_py_dataset(
         std::make_shared<arrow::dataset::ScannerBuilder>(dataset, scan_options);
 
     auto builder_res = scanner_builder->Finish();
-    CHECK_ARROW_AND_ASSIGN(builder_res, "Error finalizing ScannerBuilder!",
-                           std::shared_ptr<arrow::dataset::Scanner> scanner);
+    CHECK_ARROW_READER_AND_ASSIGN(
+        builder_res, "Error finalizing ScannerBuilder!",
+        std::shared_ptr<arrow::dataset::Scanner> scanner);
     return scanner;
 }
 
@@ -483,7 +486,7 @@ static std::shared_ptr<arrow::RecordBatchReader> scanner_to_rb_reader(
     std::shared_ptr<::arrow::dataset::Scanner> scanner) {
     std::shared_ptr<arrow::RecordBatchReader> reader;
     auto to_reader_res = scanner->ToRecordBatchReader();
-    CHECK_ARROW_AND_ASSIGN(
+    CHECK_ARROW_READER_AND_ASSIGN(
         to_reader_res,
         "scanner_to_rb_reader: Error creating RecordBatchReader from Scanner!",
         reader)
@@ -586,18 +589,16 @@ class IcebergParquetReader : public ArrowReader {
      * See iceberg_pq_read_py_entry function below for description of arguments.
      */
     IcebergParquetReader(
-        const char* _conn, const char* _database_schema,
-        const char* _table_name, bool _parallel, int64_t tot_rows_to_read,
-        PyObject* _iceberg_filter_str, std::string _expr_filter_f_str,
-        PyObject* _filter_scalars, std::vector<int> _selected_fields,
-        std::vector<bool> is_nullable, PyObject* _pyarrow_schema,
-        int64_t batch_size, int64_t op_id)
+        const char* _conn, const char* _table_id, bool _parallel,
+        int64_t tot_rows_to_read, PyObject* _iceberg_filter,
+        std::string _expr_filter_f_str, PyObject* _filter_scalars,
+        std::vector<int> _selected_fields, std::vector<bool> is_nullable,
+        PyObject* _pyarrow_schema, int64_t batch_size, int64_t op_id)
         : ArrowReader(_parallel, _pyarrow_schema, tot_rows_to_read,
                       _selected_fields, is_nullable, batch_size, op_id),
           conn(_conn),
-          database_schema(_database_schema),
-          table_name(_table_name),
-          iceberg_filter_str(_iceberg_filter_str),
+          table_id(_table_id),
+          iceberg_filter(_iceberg_filter),
           expr_filter_f_str(std::move(_expr_filter_f_str)),
           filter_scalars(_filter_scalars) {
 #ifdef USE_BODO_ARROW_FORK
@@ -759,21 +760,19 @@ class IcebergParquetReader : public ArrowReader {
             this->force_row_level_read() ? Py_True : Py_False;
 
         // ds = bodo.io.iceberg.get_iceberg_pq_dataset(
-        //          conn, database_schema, table_name,
-        //          pyarrow_schema, iceberg_filter_str,
+        //          conn, table_id, pyarrow_schema, iceberg_filter,
         //          expr_filter_f_str, filter_scalars,
         //      )
         PyObject* ds = PyObject_CallMethod(
-            iceberg_mod, "get_iceberg_pq_dataset", "sssOOOsOO", this->conn,
-            this->database_schema, this->table_name, this->pyarrow_schema,
-            str_as_dict_cols_py, this->iceberg_filter_str,
-            this->expr_filter_f_str.c_str(), this->filter_scalars,
-            force_row_level_py);
+            iceberg_mod, "get_iceberg_pq_dataset", "ssOOOsOO", this->conn,
+            this->table_id, this->pyarrow_schema, str_as_dict_cols_py,
+            this->iceberg_filter, this->expr_filter_f_str.c_str(),
+            this->filter_scalars, force_row_level_py);
         if (ds == nullptr && PyErr_Occurred()) {
             throw std::runtime_error("python");
         }
 
-        Py_XDECREF(this->iceberg_filter_str);
+        Py_XDECREF(this->iceberg_filter);
         Py_XDECREF(this->filter_scalars);
         Py_DECREF(str_as_dict_cols_py);
         Py_DECREF(iceberg_mod);
@@ -783,7 +782,7 @@ class IcebergParquetReader : public ArrowReader {
         this->file_list = PyObject_GetAttrString(ds, "file_list");
         PyObject* py_snapshot_id = PyObject_GetAttrString(ds, "snapshot_id");
         // The snapshot Id is just an integer so store in native code.
-        this->snapshot_id = PyLong_AsLong(py_snapshot_id);
+        this->snapshot_id = PyLong_AsLongLong(py_snapshot_id);
         Py_DECREF(py_snapshot_id);
         // Returns a new reference.
         this->schema_groups_py = PyObject_GetAttrString(ds, "schema_groups");
@@ -1249,7 +1248,7 @@ class IcebergParquetReader : public ArrowReader {
         // if (cpu_count == 0) {
         //     cpu_count = 2;
         // }
-        // CHECK_ARROW(arrow::io::SetIOThreadPoolCapacity(4),
+        // CHECK_ARROW_READER(arrow::io::SetIOThreadPoolCapacity(4),
         //             "Error setting IO thread pool capacity!");
 
         // get_pyarrow_datasets returns a tuple with the a list of PyArrow
@@ -1257,7 +1256,7 @@ class IcebergParquetReader : public ArrowReader {
         // offset for the first batch.
         time_pt start = start_timer();
         PyObject* datasets_updated_offset_tup = PyObject_CallMethod(
-            iceberg_mod, "get_pyarrow_datasets", "OOOOdiOOlO", fpaths_py,
+            iceberg_mod, "get_pyarrow_datasets", "OOOOdiOOLO", fpaths_py,
             file_nrows_to_read_py, file_schema_group_idxs_py,
             this->schema_groups_py, this->avg_num_pieces, int(this->parallel),
             this->filesystem, str_as_dict_cols_py, this->start_row_first_piece,
@@ -1323,7 +1322,7 @@ class IcebergParquetReader : public ArrowReader {
             PyObject* read_schema_py =
                 PyList_GetItem(scanner_read_schemas_py, i);
             std::shared_ptr<arrow::Schema> read_schema;
-            CHECK_ARROW_AND_ASSIGN(
+            CHECK_ARROW_READER_AND_ASSIGN(
                 arrow::py::unwrap_schema(read_schema_py),
                 "Iceberg Scanner Read Schema Couldn't Unwrap from Python",
                 read_schema);
@@ -1331,7 +1330,7 @@ class IcebergParquetReader : public ArrowReader {
         }
 
         this->rows_to_skip =
-            PyLong_AsLong(PyTuple_GetItem(datasets_updated_offset_tup, 3));
+            PyLong_AsLongLong(PyTuple_GetItem(datasets_updated_offset_tup, 3));
 
         Py_DECREF(iceberg_mod);
         Py_DECREF(fpaths_py);
@@ -1436,8 +1435,7 @@ class IcebergParquetReader : public ArrowReader {
     // Table identifiers for the iceberg table
     // provided by the user.
     const char* conn;
-    const char* database_schema;
-    const char* table_name;
+    const char* table_id;
 
     /// @brief Executor to use for CPU bound tasks.
     arrow::internal::Executor* cpu_executor() const {
@@ -1459,7 +1457,7 @@ class IcebergParquetReader : public ArrowReader {
     /// the IcebergParquetDataset.
 
     // Filters to use for file pruning using Iceberg metadata.
-    PyObject* iceberg_filter_str = nullptr;
+    PyObject* iceberg_filter;
     // Information for constructing the filters dynamically
     // for each schema group based on their schema. See
     // description of bodo.io.iceberg.generate_expr_filter
@@ -1546,9 +1544,10 @@ class IcebergParquetReader : public ArrowReader {
         }
         std::shared_ptr<arrow::RecordBatch> batch = nullptr;
         auto batch_res = this->curr_reader->ReadNext(&batch);
-        CHECK_ARROW(batch_res,
-                    "IcebergParquetReader::get_next_batch_: Error reading "
-                    "next batch!");
+        CHECK_ARROW_READER(
+            batch_res,
+            "IcebergParquetReader::get_next_batch_: Error reading "
+            "next batch!");
         if (batch == nullptr) {
             // Reset the reader to free it. This will
             // prompt the next invocation to create a reader from the
@@ -1568,11 +1567,10 @@ class IcebergParquetReader : public ArrowReader {
  * Read a Iceberg table made up of parquet files.
  *
  * @param conn : Connection string for the iceberg table
- * @param database_schema : Database schema in which the iceberg table resides
- * @param table_name : Name of the iceberg table to read
+ * @param table_id : Table identifier of the iceberg table to read
  * @param parallel : true if reading in parallel
  * @param tot_rows_to_read : limit of rows to read or -1 if not limited
- * @param iceberg_filter_str : filters passed to iceberg for filter pushdown
+ * @param iceberg_filter : filters passed to iceberg for filter pushdown
  * @param expr_filter_f_str : Format string to use to generate the Arrow
  *  expression filter dynamically.
  * @param filter_scalars : Python list of tuples of the form
@@ -1609,8 +1607,8 @@ class IcebergParquetReader : public ArrowReader {
  * @return Table containing all the read data
  */
 table_info* iceberg_pq_read_py_entry(
-    const char* conn, const char* database_schema, const char* table_name,
-    bool parallel, int64_t tot_rows_to_read, PyObject* iceberg_filter_str,
+    const char* conn, const char* table_id, bool parallel,
+    int64_t tot_rows_to_read, PyObject* iceberg_filter,
     const char* expr_filter_f_str_, PyObject* filter_scalars,
     int32_t* _selected_fields, int32_t num_selected_fields,
     int32_t* _is_nullable, PyObject* pyarrow_schema, int32_t* _str_as_dict_cols,
@@ -1631,10 +1629,10 @@ table_info* iceberg_pq_read_py_entry(
             // as we must load the whole file.
             expr_filter_f_str = "";
         }
-        IcebergParquetReader reader(
-            conn, database_schema, table_name, parallel, tot_rows_to_read,
-            iceberg_filter_str, expr_filter_f_str, filter_scalars,
-            selected_fields, is_nullable, pyarrow_schema, -1, -1);
+        IcebergParquetReader reader(conn, table_id, parallel, tot_rows_to_read,
+                                    iceberg_filter, expr_filter_f_str,
+                                    filter_scalars, selected_fields,
+                                    is_nullable, pyarrow_schema, -1, -1);
 
         // Initialize reader
         reader.init_iceberg_reader(str_as_dict_cols, create_dict_from_string);
@@ -1703,11 +1701,10 @@ table_info* iceberg_pq_read_py_entry(
  * Construct an Iceberg Parquet-based ArrowReader
  *
  * @param conn : Connection string for the iceberg table
- * @param database_schema : Database schema in which the iceberg table resides
- * @param table_name : Name of the iceberg table to read
+ * @param table_id : Table Identifier of the iceberg table to read
  * @param parallel : true if reading in parallel
  * @param tot_rows_to_read : limit of rows to read or -1 if not limited
- * @param iceberg_filter_str : filters passed to iceberg for filter pushdown
+ * @param iceberg_filter : filters passed to iceberg for filter pushdown
  * @param expr_filter_f_str : Format string to use to generate the Arrow
  *  expression filter dynamically.
  * @param filter_scalars : Python list of tuples of the form
@@ -1729,8 +1726,8 @@ table_info* iceberg_pq_read_py_entry(
  * @return ArrowReader to read the table's data
  */
 ArrowReader* iceberg_pq_reader_init_py_entry(
-    const char* conn, const char* database_schema, const char* table_name,
-    bool parallel, int64_t tot_rows_to_read, PyObject* iceberg_filter_str,
+    const char* conn, const char* table_id, bool parallel,
+    int64_t tot_rows_to_read, PyObject* iceberg_filter,
     const char* expr_filter_f_str, PyObject* filter_scalars,
     int32_t* _selected_fields, int32_t num_selected_fields,
     int32_t* _is_nullable, PyObject* pyarrow_schema, int32_t* _str_as_dict_cols,
@@ -1745,9 +1742,9 @@ ArrowReader* iceberg_pq_reader_init_py_entry(
                                             num_str_as_dict_cols);
 
         IcebergParquetReader* reader = new IcebergParquetReader(
-            conn, database_schema, table_name, parallel, tot_rows_to_read,
-            iceberg_filter_str, std::string(expr_filter_f_str), filter_scalars,
-            selected_fields, is_nullable, pyarrow_schema, batch_size, op_id);
+            conn, table_id, parallel, tot_rows_to_read, iceberg_filter,
+            std::string(expr_filter_f_str), filter_scalars, selected_fields,
+            is_nullable, pyarrow_schema, batch_size, op_id);
 
         // Initialize reader
         reader->init_iceberg_reader(str_as_dict_cols, create_dict_from_string);

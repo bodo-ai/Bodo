@@ -223,9 +223,9 @@ def init_rolling(
     elif isinstance(obj_type, DataFrameType):
         selection = obj_type.columns
     else:
-        assert isinstance(
-            obj_type, DataFrameGroupByType
-        ), f"invalid obj type for rolling: {obj_type}"
+        assert isinstance(obj_type, DataFrameGroupByType), (
+            f"invalid obj type for rolling: {obj_type}"
+        )
         selection = obj_type.selection
     rolling_type = RollingType(obj_type, window_type, on, selection, False)
     return (
@@ -667,9 +667,9 @@ def _validate_rolling_args(obj, window, min_periods, center, on):
     # similar to argument validation in Pandas:
     # https://github.com/pandas-dev/pandas/blob/93d46cfc76f939ec5e2148c35728fad4e2389c90/pandas/core/window/rolling.py#L196
     # https://github.com/pandas-dev/pandas/blob/93d46cfc76f939ec5e2148c35728fad4e2389c90/pandas/core/window/rolling.py#L1393
-    assert isinstance(
-        obj, (SeriesType, DataFrameType, DataFrameGroupByType)
-    ), "invalid rolling obj"
+    assert isinstance(obj, (SeriesType, DataFrameType, DataFrameGroupByType)), (
+        "invalid rolling obj"
+    )
     func_name = (
         "Series"
         if isinstance(obj, SeriesType)

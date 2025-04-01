@@ -57,7 +57,7 @@ class StructArrayType(types.ArrayCompatible):
     data: tuple[types.ArrayCompatible, ...]
     names: tuple[str, ...]
 
-    def __init__(self, data, names=None):
+    def __init__(self, data: tuple[types.ArrayCompatible, ...], names=None):
         # data is tuple of Array types
         # names is a tuple of field names
         assert isinstance(data, tuple) and all(
@@ -527,7 +527,7 @@ def unbox_struct(typ, val, c):
 
     # get pd.NA object to check for new NA kind
     mod_name = context.insert_const_string(builder.module, "pandas")
-    pd_mod_obj = c.pyapi.import_module_noblock(mod_name)
+    pd_mod_obj = c.pyapi.import_module(mod_name)
     C_NA = c.pyapi.object_getattr_string(pd_mod_obj, "NA")
 
     data_vals = []
@@ -650,9 +650,9 @@ def init_struct_with_nulls(values, nulls, names):
         and the specified indices as nulls.
     """
     names_unwrapped = unwrap_typeref(names)
-    assert isinstance(
-        names_unwrapped, bodo.utils.typing.ColNamesMetaType
-    ), f"Internal error in init_struct_with_nulls: 'names' must be a ColNamesMetaType. Got: {names}"
+    assert isinstance(names_unwrapped, bodo.utils.typing.ColNamesMetaType), (
+        f"Internal error in init_struct_with_nulls: 'names' must be a ColNamesMetaType. Got: {names}"
+    )
     names_tup = names_unwrapped.meta
     func_text = "def impl(values, nulls, names):\n"
     func_text += f"  s = init_struct(values, {names_tup})\n"

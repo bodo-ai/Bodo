@@ -40,7 +40,7 @@ from bodo.tests.iceberg_database_helpers.utils import (
     get_spark,
     transform_str,
 )
-from bodo.tests.test_iceberg.test_iceberg import _check_for_sql_read_head_only
+from bodo.tests.test_iceberg.test_read import _check_for_sql_read_head_only
 from bodo.tests.user_logging_utils import (
     check_logger_msg,
     create_string_io_logger,
@@ -712,7 +712,7 @@ def test_filter_pushdown_on_newly_added_column(
             bodo_impl = impl
 
         expected_filter_pushdown_logs = [
-            "bic.FilterExpr('IS_NULL', [bic.ColumnRef('some_new_column')])",
+            "pie.IsNull('some_new_column')",
             "(ds.field('{some_new_column}').is_null())",
         ]
 
@@ -786,7 +786,7 @@ def test_filter_pushdown_on_newly_added_column(
             bodo_impl = impl
 
         expected_filter_pushdown_logs = [
-            "bic.FilterExpr('IN', [bic.ColumnRef('some_new_column'), bic.Scalar(f0)])",
+            "pie.In('some_new_column', literal(f0))",
             "(ds.field('{some_new_column}').isin(f0))",
         ]
     else:
@@ -1975,7 +1975,7 @@ def test_change_sort_order(iceberg_database, iceberg_table_conn, memory_leak_che
         spark.sql(
             f"""
                 ALTER TABLE hadoop_prod.{DATABASE_NAME}.{table_name}
-                WRITE ORDERED BY {', '.join(sort_defs)}
+                WRITE ORDERED BY {", ".join(sort_defs)}
             """
         )
 

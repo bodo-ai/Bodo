@@ -385,7 +385,6 @@ def _get_dtype_str(dtype):
     "astype",
     inline="always",
     no_unliteral=True,
-    # jit_options={"cache": True},   # TODO: Get this working.  Right now error pickling get_rank.
 )
 def overload_dataframe_astype(
     df,
@@ -439,13 +438,13 @@ def overload_dataframe_astype(
     if _bodo_object_typeref is not None:
         # If _bodo_object_typeref is provided then we have a typeref that should be used to generate the appropriate
         # schema
-        assert isinstance(
-            _bodo_object_typeref, types.TypeRef
-        ), "Bodo schema used in DataFrame.astype should be a TypeRef"
+        assert isinstance(_bodo_object_typeref, types.TypeRef), (
+            "Bodo schema used in DataFrame.astype should be a TypeRef"
+        )
         schema_type = _bodo_object_typeref.instance_type
-        assert isinstance(
-            schema_type, DataFrameType
-        ), "Bodo schema used in DataFrame.astype is only supported for DataFrame schemas"
+        assert isinstance(schema_type, DataFrameType), (
+            "Bodo schema used in DataFrame.astype is only supported for DataFrame schemas"
+        )
         if df.is_table_format:
             # Find the names in the new schema and convert those.
             for i, name in enumerate(df.columns):
@@ -2132,7 +2131,7 @@ def overload_dataframe_take(df, indices, axis=0, convert=None, is_copy=True):
         "def bodo_dataframe_take(df, indices, axis=0, convert=None, is_copy=True):\n"
     )
     header += "  indices_t = bodo.utils.conversion.coerce_to_ndarray(indices)\n"
-    index = "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)" "[indices_t]"
+    index = "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)[indices_t]"
     return _gen_init_df(header, df.columns, data_args, index)
 
 
@@ -2616,7 +2615,7 @@ def create_dataframe_mask_where_overload(func_name):
 
         n_cols = len(df.columns)
         data_args = ", ".join(
-            f"bodo.hiframes.series_impl.where_impl({cond_str(i,gen_all_false)}, bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i}), {other_str(i)})"
+            f"bodo.hiframes.series_impl.where_impl({cond_str(i, gen_all_false)}, bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i}), {other_str(i)})"
             for i in range(n_cols)
         )
 
@@ -2757,7 +2756,7 @@ def _gen_init_df(
     }
     _global.update(extra_globals)
 
-    return bodo_exec(func_text, _global, {}, globals())
+    return bodo_exec(func_text, _global, {}, __name__)
 
 
 ############################ binary operators #############################
@@ -3278,11 +3277,14 @@ def _insert_NA_cond(expr_node, left_columns, left_data, right_columns, right_dat
             )
         return binop
 
-    def _insert_NA_cond_body(expr_node, null_set):
+    def _insert_NA_cond_body(expr_node, null_set) -> None:
         """
-        Returns an updated version of the sub expr and a set
-        of all column checks (i.e. right.A) that need a null value
-        inserted.
+        Scans through expr_node and inserts names for all
+        columns that have a column check (i.e. right.A) and need a
+        null value inserted.
+
+        Also modified expr_node in-place to add null checks,
+        but only for the OR case.
         """
         if isinstance(expr_node, pandas.core.computation.ops.BinOp):
             if expr_node.op == "|":
@@ -3291,8 +3293,8 @@ def _insert_NA_cond(expr_node, left_columns, left_data, right_columns, right_dat
                 left_null = set()
                 right_null = set()
 
-                left_body = _insert_NA_cond_body(expr_node.lhs, left_null)
-                right_body = _insert_NA_cond_body(expr_node.rhs, right_null)
+                _insert_NA_cond_body(expr_node.lhs, left_null)
+                _insert_NA_cond_body(expr_node.rhs, right_null)
 
                 # Elements found in both sets can be bubbled up
                 joint_nulls = left_null.intersection(right_null)
@@ -3305,13 +3307,13 @@ def _insert_NA_cond(expr_node, left_columns, left_data, right_columns, right_dat
                 null_set.update(joint_nulls)
 
                 # Add null checks where needed
-                expr_node.lhs = append_null_checks(left_body, left_null)
-                expr_node.rhs = append_null_checks(right_body, right_null)
+                expr_node.lhs = append_null_checks(expr_node.lhs, left_null)
+                expr_node.rhs = append_null_checks(expr_node.rhs, right_null)
                 # Update operands so print works properly
                 expr_node.operands = (expr_node.lhs, expr_node.rhs)
             else:
-                expr_node.lhs = _insert_NA_cond_body(expr_node.lhs, null_set)
-                expr_node.rhs = _insert_NA_cond_body(expr_node.rhs, null_set)
+                _insert_NA_cond_body(expr_node.lhs, null_set)
+                _insert_NA_cond_body(expr_node.rhs, null_set)
         elif _is_col_access(expr_node):
             # If we have a column add it to the nullset if the type is nullable.
             full_name = expr_node.name
@@ -3325,7 +3327,6 @@ def _insert_NA_cond(expr_node, left_columns, left_data, right_columns, right_dat
             arr_type = data[cols.index(col_name)]
             if bodo.utils.typing.is_nullable(arr_type):
                 null_set.add(expr_node.name)
-        return expr_node
 
     null_set = set()
     _insert_NA_cond_body(expr_node, null_set)
@@ -3442,8 +3443,14 @@ def _parse_merge_cond(on_str, left_columns, left_data, right_columns, right_data
     )
 
 
-@overload_method(DataFrameType, "merge", inline="always", no_unliteral=True)
-@overload(pd.merge, inline="always", no_unliteral=True)
+@overload_method(
+    DataFrameType,
+    "merge",
+    inline="always",
+    no_unliteral=True,
+    jit_options={"cache": True},
+)
+@overload(pd.merge, inline="always", no_unliteral=True, jit_options={"cache": True})
 def overload_dataframe_merge(
     left,
     right,
@@ -3584,14 +3591,13 @@ def overload_dataframe_merge(
     right_keys = gen_const_tup(right_keys)
 
     # generating code since typers can't find constants easily
-    func_text = "def _impl(left, right, how='inner', on=None, left_on=None,\n"
+    func_text = (
+        "def bodo_dataframe_merge(left, right, how='inner', on=None, left_on=None,\n"
+    )
     func_text += "    right_on=None, left_index=False, right_index=False, sort=False,\n"
     func_text += "    suffixes=('_x', '_y'), copy=True, indicator=False, validate=None, _bodo_na_equal=True, _bodo_rebalance_output_if_skewed=False):\n"
     func_text += f"  return bodo.hiframes.pd_dataframe_ext.join_dummy(left, right, {left_keys}, {right_keys}, '{how}', '{suffix_x}', '{suffix_y}', False, {indicator_val}, {_bodo_na_equal_val}, {_bodo_rebalance_output_if_skewed_val}, {gen_cond!r})\n"
-    loc_vars = {}
-    exec(func_text, {"bodo": bodo}, loc_vars)
-    _impl = loc_vars["_impl"]
-    return _impl
+    return bodo_exec(func_text, {"bodo": bodo}, {}, __name__)
 
 
 def common_validate_merge_merge_asof_spec(
@@ -4128,7 +4134,13 @@ def overload_dataframe_merge_asof(
     return _impl
 
 
-@overload_method(DataFrameType, "groupby", inline="always", no_unliteral=True)
+@overload_method(
+    DataFrameType,
+    "groupby",
+    inline="always",
+    no_unliteral=True,
+    jit_options={"cache": True},
+)
 def overload_dataframe_groupby(
     df,
     by=None,
@@ -4974,7 +4986,13 @@ def crosstab_overload(
     return _impl
 
 
-@overload_method(DataFrameType, "sort_values", inline="always", no_unliteral=True)
+@overload_method(
+    DataFrameType,
+    "sort_values",
+    inline="always",
+    no_unliteral=True,
+    jit_options={"cache": True},
+)
 def overload_dataframe_sort_values(
     df,
     by,
@@ -5102,7 +5120,7 @@ def validate_sort_values_spec(
     # make sure axis has default value 0
     if not is_overload_zero(axis):
         raise_bodo_error(
-            "sort_values(): 'axis' parameter only " "supports integer value 0."
+            "sort_values(): 'axis' parameter only supports integer value 0."
         )
 
     # make sure 'ascending' is of type bool
@@ -5128,8 +5146,7 @@ def validate_sort_values_spec(
     # make sure 'inplace' is of type bool
     if not is_overload_bool(inplace):
         raise_bodo_error(
-            "sort_values(): 'inplace' parameter must be of type bool, "
-            f"not {inplace}."
+            f"sort_values(): 'inplace' parameter must be of type bool, not {inplace}."
         )
 
     # make sure 'kind' is not specified
@@ -5321,7 +5338,7 @@ def overload_dataframe_fillna(
     func_text = "def bodo_dataframe_fillna(df, value=None, method=None, axis=None, inplace=False, limit=None, downcast=None):\n"
     if is_overload_true(inplace):
         func_text += "  " + "  \n".join(data_args) + "\n"
-        return bodo_exec(func_text, {}, {}, globals())
+        return bodo_exec(func_text, {}, {}, __name__)
     else:
         return _gen_init_df(
             func_text, df.columns, ", ".join(d + ".values" for d in data_args)
@@ -6201,21 +6218,23 @@ class BodoSQLReplaceColsInfer(AbstractTemplate):  # pragma: no cover
 
         assert (
             isinstance(input_df_typ, DataFrameType) and len(input_df_typ.columns) > 0
-        ), "Error while typechecking __bodosql_replace_columns_dummy: we should only generate a call __bodosql_replace_columns_dummy if the input dataframe"
+        ), (
+            "Error while typechecking __bodosql_replace_columns_dummy: we should only generate a call __bodosql_replace_columns_dummy if the input dataframe"
+        )
 
         col_names_to_replace = get_overload_const_tuple(args[1])
         replacement_columns = args[2]
-        assert (
-            len(col_names_to_replace) == len(replacement_columns)
-        ), "Error while typechecking __bodosql_replace_columns_dummy: the tuple of column indicies to replace should be equal to the number of columns to replace them with"
-        assert (
-            len(col_names_to_replace) <= len(input_df_typ.columns)
-        ), "Error while typechecking __bodosql_replace_columns_dummy: The number of indicies provided should be less than or equal to the number of columns in the input dataframe"
+        assert len(col_names_to_replace) == len(replacement_columns), (
+            "Error while typechecking __bodosql_replace_columns_dummy: the tuple of column indicies to replace should be equal to the number of columns to replace them with"
+        )
+        assert len(col_names_to_replace) <= len(input_df_typ.columns), (
+            "Error while typechecking __bodosql_replace_columns_dummy: The number of indicies provided should be less than or equal to the number of columns in the input dataframe"
+        )
 
         for col_name in col_names_to_replace:
-            assert (
-                col_name in input_df_typ.columns
-            ), "Error while typechecking __bodosql_replace_columns_dummy: All columns specified to be replaced should already be present in input dataframe"
+            assert col_name in input_df_typ.columns, (
+                "Error while typechecking __bodosql_replace_columns_dummy: All columns specified to be replaced should already be present in input dataframe"
+            )
 
         # I don't think this check should ever be needed, due to the way bodosql does
         # codegen, but better safe than sorry
@@ -6232,9 +6251,9 @@ class BodoSQLReplaceColsInfer(AbstractTemplate):  # pragma: no cover
             replace_col = replacement_columns[i]
             # Currently, replace_col should always be series type
             # But, we may pass non series values to this function in the future
-            assert isinstance(
-                replace_col, SeriesType
-            ), "Error while typechecking __bodosql_replace_columns_dummy: the values to replace the columns with are expected to be series"
+            assert isinstance(replace_col, SeriesType), (
+                "Error while typechecking __bodosql_replace_columns_dummy: the values to replace the columns with are expected to be series"
+            )
             if isinstance(replace_col, SeriesType):
                 replace_col = replace_col.data
 

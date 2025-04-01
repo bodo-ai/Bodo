@@ -459,7 +459,7 @@ class SnowflakeFilterVisitor(bif.FilterVisitor[str]):
 
 # Class for a the RTJF min/max/unique stored values
 this_module = sys.modules[__name__]
-install_py_obj_class(
+RtjfValueType, _ = install_py_obj_class(
     types_name="rtjf_value_type",
     python_type=None,
     module=this_module,
@@ -681,7 +681,7 @@ def overload_gen_runtime_join_filter_cond(
 
                     if len(unique_as_strings) > 0:
                         local_conds.append(
-                            f"(${col_idx+1} IN ({', '.join(sorted(unique_as_strings))}))"
+                            f"(${col_idx + 1} IN ({', '.join(sorted(unique_as_strings))}))"
                         )
                         included_low_ndv_filter = True
 
@@ -700,9 +700,9 @@ def overload_gen_runtime_join_filter_cond(
                     ):
                         min_result = max_result = ""
                         if min_val is not None:
-                            min_result = f"(${col_idx+1} >= {convert_pyobj_to_snowflake_str(min_val, time_zones[i])})"
+                            min_result = f"(${col_idx + 1} >= {convert_pyobj_to_snowflake_str(min_val, time_zones[i])})"
                         if max_val is not None:
-                            max_result = f"(${col_idx+1} <= {convert_pyobj_to_snowflake_str(max_val, time_zones[i])})"
+                            max_result = f"(${col_idx + 1} <= {convert_pyobj_to_snowflake_str(max_val, time_zones[i])})"
                     # If the results were successful, add to the conjunction list
                     if min_result != "":
                         local_conds.append(min_result)
@@ -746,9 +746,9 @@ def overload_gen_runtime_join_filter_interval_cond(
             with bodo.no_warning_objmode(result="unicode_type"):
                 result = ""
                 if op in (">", ">=") and min_val is not None:
-                    result = f"(${probe_col+1} {op} {convert_pyobj_to_snowflake_str(min_val, time_zones[i])})"
+                    result = f"(${probe_col + 1} {op} {convert_pyobj_to_snowflake_str(min_val, time_zones[i])})"
                 elif op in ("<", "<=") and max_val is not None:
-                    result = f"(${probe_col+1} {op} {convert_pyobj_to_snowflake_str(max_val, time_zones[i])})"
+                    result = f"(${probe_col + 1} {op} {convert_pyobj_to_snowflake_str(max_val, time_zones[i])})"
             # If the results were successful, add to the conjunction list
             if result != "":
                 local_conds.append(result)
@@ -1133,10 +1133,11 @@ def sql_distributed_run(
     # At most one of the table and the index
     # can be dead because otherwise the whole
     # node should have already been removed.
-    assert (
-        sql_node.has_side_effects
-        or not (sql_node.index_column_name is None and not sql_node.is_live_table)
-    ), "At most one of table and index should be dead if the SQL IR node is live and has no side effects"
+    assert sql_node.has_side_effects or not (
+        sql_node.index_column_name is None and not sql_node.is_live_table
+    ), (
+        "At most one of table and index should be dead if the SQL IR node is live and has no side effects"
+    )
     if sql_node.index_column_name is None:
         # If the index_col is dead, remove the node.
         nodes.pop(-1)
@@ -1544,12 +1545,12 @@ def _gen_snowflake_reader_chunked_py(
     Args:
         chunksize: Number of rows in each batch
     """
-    assert (
-        db_type == "snowflake"
-    ), f"Database {db_type} not supported in streaming IO mode, and should not go down this path"
-    assert (
-        pyarrow_schema is not None
-    ), "SQLNode must contain a pyarrow_schema if reading from Snowflake"
+    assert db_type == "snowflake", (
+        f"Database {db_type} not supported in streaming IO mode, and should not go down this path"
+    )
+    assert pyarrow_schema is not None, (
+        "SQLNode must contain a pyarrow_schema if reading from Snowflake"
+    )
 
     call_id = next_label()
 
@@ -1718,9 +1719,9 @@ def _gen_sql_reader_py(
     func_text = "def sql_reader_py(sql_request, conn, database_schema):\n"
 
     if db_type == "snowflake":  # pragma: no cover
-        assert (
-            pyarrow_schema is not None
-        ), "SQLNode must contain a pyarrow_schema if reading from Snowflake"
+        assert pyarrow_schema is not None, (
+            "SQLNode must contain a pyarrow_schema if reading from Snowflake"
+        )
 
         # Filter the schema by selected columns only
         # Only need to prune columns for SELECT queries
@@ -1955,13 +1956,14 @@ def snowflake_reader_init_py_entry(
     op_id_t,
     arrow_reader_t,
 ):  # pragma: no cover
-    assert (
-        isinstance(arrow_reader_t, types.TypeRef)
-        and isinstance(arrow_reader_t.instance_type, ArrowReaderType)
-    ), "snowflake_reader_init_py_entry(): The last argument arrow_reader must by a TypeRef to an ArrowReader"
-    assert (
-        pyarrow_schema_t == pyarrow_schema_type
-    ), "snowflake_reader_init_py_entry(): The 5th argument pyarrow_schema must by a PyArrow schema"
+    assert isinstance(arrow_reader_t, types.TypeRef) and isinstance(
+        arrow_reader_t.instance_type, ArrowReaderType
+    ), (
+        "snowflake_reader_init_py_entry(): The last argument arrow_reader must by a TypeRef to an ArrowReader"
+    )
+    assert pyarrow_schema_t == pyarrow_schema_type, (
+        "snowflake_reader_init_py_entry(): The 5th argument pyarrow_schema must by a PyArrow schema"
+    )
 
     def codegen(context: "BaseContext", builder: "IRBuilder", signature, args):
         fnty = lir.FunctionType(

@@ -6,14 +6,18 @@
 #include "_dict_builder.h"
 #include "_table_builder.h"
 #include "include/libplatform/libplatform.h"
+#if defined(__GNUC__) || defined(__clang__)
 PUSH_IGNORED_COMPILER_ERROR("-Wtemplate-id-cdtor")
+#endif
 #include "include/v8-context.h"
 #include "include/v8-exception.h"
 #include "include/v8-isolate.h"
 #include "include/v8-persistent-handle.h"
 #include "include/v8-script.h"
 #include "include/v8-typed-array.h"
+#if defined(__GNUC__) || defined(__clang__)
 POP_IGNORED_COMPILER_ERROR()
+#endif
 
 #ifndef CHECK_v8_EXCEPTION
 #define CHECK_V8_EXCEPTION(isolate, context, try_catch, error_prefix)         \
@@ -185,7 +189,7 @@ void append_v8_handle(v8::Local<v8::Context> ctx, v8::Local<v8::Value> obj,
         }
     }
     arr->data_array->data1<arr_arr_type, val_t>()[idx] = val;
-    CHECK_ARROW_MEM(
+    CHECK_ARROW_BASE(
         arr->data_array->buffers[0]->SetSize((arr->size + 1) * sizeof(val_t)),
         "append_v8_handle: SetSize failed")
     arr->data_array->length += 1;
@@ -237,7 +241,7 @@ void append_v8_handle(v8::Local<v8::Context> ctx, v8::Local<v8::Value> obj,
         val = static_cast<val_t>(maybe_val.ToChecked());
     }
     arr->data_array->data1<arr_arr_type, val_t>()[idx] = val;
-    CHECK_ARROW_MEM(
+    CHECK_ARROW_BASE(
         arr->data_array->buffers[0]->SetSize((arr->size + 1) * sizeof(val_t)),
         "append_v8_handle: SetSize failed")
     arr->data_array->length += 1;
@@ -272,7 +276,7 @@ void append_v8_handle(v8::Local<v8::Context> ctx, v8::Local<v8::Value> obj,
     val_t val;
     val = static_cast<val_t>(js_val->Value());
     arr->data_array->data1<arr_arr_type, val_t>()[idx] = val;
-    CHECK_ARROW_MEM(
+    CHECK_ARROW_BASE(
         arr->data_array->buffers[0]->SetSize((arr->size + 1) * sizeof(val_t)),
         "append_v8_handle: SetSize failed")
     arr->data_array->length += 1;
@@ -300,7 +304,7 @@ void append_v8_handle(v8::Local<v8::Context> ctx, v8::Local<v8::Value> obj,
     size_t idx = arr->size;
     auto js_val = obj->ToBoolean(ctx->GetIsolate());
     arr->data_array->data1<arr_arr_type, bool>()[idx] = js_val->Value();
-    CHECK_ARROW_MEM(
+    CHECK_ARROW_BASE(
         arr->data_array->buffers[0]->SetSize((arr->size + 1) * sizeof(bool)),
         "append_v8_handle: SetSize failed")
     arr->data_array->length += 1;
@@ -335,7 +339,7 @@ void append_v8_handle(v8::Local<v8::Context> ctx, v8::Local<v8::Value> obj,
     constexpr val_t days_to_ms = 24 * 60 * 60 * 1000;
     arr->data_array->data1<arr_arr_type, val_t>()[idx] =
         val_t(js_val / days_to_ms);
-    CHECK_ARROW_MEM(
+    CHECK_ARROW_BASE(
         arr->data_array->buffers[0]->SetSize((arr->size + 1) * sizeof(val_t)),
         "append_v8_handle: SetSize failed")
     arr->data_array->length += 1;
@@ -378,16 +382,16 @@ void append_v8_handle(v8::Local<v8::Context> ctx, v8::Local<v8::Value> obj,
             js_string.length();
         arr->data_array->set_null_bit<arr_arr_type>(idx, true);
     }
-    CHECK_ARROW_MEM(
+    CHECK_ARROW_BASE(
         arr->data_array->buffers[0]->SetSize(
             arr->data_array->data2<arr_arr_type, offset_t>()[idx + 1]),
         "append_v8_handle: SetSize failed")
-    CHECK_ARROW_MEM(arr->data_array->buffers[1]->SetSize((arr->size + 1) *
-                                                         sizeof(offset_t)),
-                    "append_v8_handle: SetSize failed")
-    CHECK_ARROW_MEM(arr->data_array->buffers[2]->SetSize(
-                        arrow::bit_util::BytesForBits(arr->size + 1)),
-                    "append_v8_handle: SetSize failed")
+    CHECK_ARROW_BASE(arr->data_array->buffers[1]->SetSize((arr->size + 1) *
+                                                          sizeof(offset_t)),
+                     "append_v8_handle: SetSize failed")
+    CHECK_ARROW_BASE(arr->data_array->buffers[2]->SetSize(
+                         arrow::bit_util::BytesForBits(arr->size + 1)),
+                     "append_v8_handle: SetSize failed")
     arr->data_array->length += 1;
 }
 
@@ -429,16 +433,16 @@ void append_v8_handle(v8::Local<v8::Context> ctx, v8::Local<v8::Value> obj,
             js_binary_arr->ByteLength();
         arr->data_array->set_null_bit<arr_arr_type>(idx, true);
     }
-    CHECK_ARROW_MEM(
+    CHECK_ARROW_BASE(
         arr->data_array->buffers[0]->SetSize(
             arr->data_array->data2<arr_arr_type, offset_t>()[idx + 1]),
         "append_v8_handle: SetSize failed")
-    CHECK_ARROW_MEM(arr->data_array->buffers[1]->SetSize((arr->size + 1) *
-                                                         sizeof(offset_t)),
-                    "append_v8_handle: SetSize failed")
-    CHECK_ARROW_MEM(arr->data_array->buffers[2]->SetSize(
-                        arrow::bit_util::BytesForBits(arr->size + 1)),
-                    "append_v8_handle: SetSize failed")
+    CHECK_ARROW_BASE(arr->data_array->buffers[1]->SetSize((arr->size + 1) *
+                                                          sizeof(offset_t)),
+                     "append_v8_handle: SetSize failed")
+    CHECK_ARROW_BASE(arr->data_array->buffers[2]->SetSize(
+                         arrow::bit_util::BytesForBits(arr->size + 1)),
+                     "append_v8_handle: SetSize failed")
     arr->data_array->length += 1;
 }
 
@@ -467,9 +471,9 @@ void append_v8_handle(v8::Local<v8::Context> ctx, v8::Local<v8::Value> obj,
         arr->data_array->set_null_bit<arr_arr_type>(idx, false);
         // Not calling the numpy append function because we need to set the null
         // so we need to resize here
-        CHECK_ARROW_MEM(arr->data_array->buffers[0]->SetSize(
-                            numpy_item_size[arr_c_type] * (arr->size + 1)),
-                        "append_v8_handle: SetSize failed")
+        CHECK_ARROW_BASE(arr->data_array->buffers[0]->SetSize(
+                             numpy_item_size[arr_c_type] * (arr->size + 1)),
+                         "append_v8_handle: SetSize failed")
         arr->data_array->length += 1;
     } else {
         append_v8_handle<bodo_array_type::NUMPY, arr_c_type>(ctx, obj, arr,
@@ -477,9 +481,9 @@ void append_v8_handle(v8::Local<v8::Context> ctx, v8::Local<v8::Value> obj,
         arr->data_array->set_null_bit<arr_arr_type>(idx, true);
     }
     // Only set size for null array, the rest are handled by the numpy function
-    CHECK_ARROW_MEM(arr->data_array->buffers[1]->SetSize(
-                        arrow::bit_util::BytesForBits(arr->size + 1)),
-                    "append_v8_handle: SetSize failed")
+    CHECK_ARROW_BASE(arr->data_array->buffers[1]->SetSize(
+                         arrow::bit_util::BytesForBits(arr->size + 1)),
+                     "append_v8_handle: SetSize failed")
 }
 
 /**
@@ -512,12 +516,12 @@ void append_v8_handle(v8::Local<v8::Context> ctx, v8::Local<v8::Value> obj,
             arr->data_array->data1<arr_arr_type, uint8_t>(), idx, bit_is_set);
         arr->data_array->set_null_bit<arr_arr_type>(idx, true);
     }
-    CHECK_ARROW_MEM(arr->data_array->buffers[0]->SetSize(
-                        arrow::bit_util::BytesForBits(arr->size + 1)),
-                    "append_v8_handle: SetSize failed")
-    CHECK_ARROW_MEM(arr->data_array->buffers[1]->SetSize(
-                        arrow::bit_util::BytesForBits(arr->size + 1)),
-                    "append_v8_handle: SetSize failed")
+    CHECK_ARROW_BASE(arr->data_array->buffers[0]->SetSize(
+                         arrow::bit_util::BytesForBits(arr->size + 1)),
+                     "append_v8_handle: SetSize failed")
+    CHECK_ARROW_BASE(arr->data_array->buffers[1]->SetSize(
+                         arrow::bit_util::BytesForBits(arr->size + 1)),
+                     "append_v8_handle: SetSize failed")
     arr->data_array->length += 1;
 }
 
@@ -559,12 +563,12 @@ void append_v8_handle(v8::Local<v8::Context> ctx, v8::Local<v8::Value> obj,
         // Set the null bit, the dict array just uses the index array's null bit
         arr->data_array->set_null_bit<arr_arr_type>(idx, true);
     }
-    CHECK_ARROW_MEM(arr->data_array->child_arrays[1]->buffers[0]->SetSize(
-                        (arr->size + 1) * sizeof(dict_indices_t)),
-                    "append_v8_handle: SetSize failed")
-    CHECK_ARROW_MEM(arr->data_array->child_arrays[1]->buffers[1]->SetSize(
-                        arrow::bit_util::BytesForBits(arr->size + 1)),
-                    "append_v8_handle: SetSize failed")
+    CHECK_ARROW_BASE(arr->data_array->child_arrays[1]->buffers[0]->SetSize(
+                         (arr->size + 1) * sizeof(dict_indices_t)),
+                     "append_v8_handle: SetSize failed")
+    CHECK_ARROW_BASE(arr->data_array->child_arrays[1]->buffers[1]->SetSize(
+                         arrow::bit_util::BytesForBits(arr->size + 1)),
+                     "append_v8_handle: SetSize failed")
     arr->data_array->length += 1;
 }
 
@@ -608,11 +612,11 @@ void append_v8_handle(v8::Local<v8::Context> ctx, v8::Local<v8::Value> obj,
         // Set the null bit, the dict array just uses the index array's null bit
         arr->data_array->set_null_bit<arr_arr_type>(idx, true);
     }
-    CHECK_ARROW_MEM(arr->data_array->child_arrays[1]->buffers[0]->SetSize(
-                        (arr->size + 1) * sizeof(dict_indices_t)),
-                    "append_v8_handle: SetSize failed")
-    CHECK_ARROW_MEM(arr->data_array->child_arrays[1]->buffers[1]->SetSize(
-                        arrow::bit_util::BytesForBits(arr->size + 1)),
-                    "append_v8_handle: SetSize failed")
+    CHECK_ARROW_BASE(arr->data_array->child_arrays[1]->buffers[0]->SetSize(
+                         (arr->size + 1) * sizeof(dict_indices_t)),
+                     "append_v8_handle: SetSize failed")
+    CHECK_ARROW_BASE(arr->data_array->child_arrays[1]->buffers[1]->SetSize(
+                         arrow::bit_util::BytesForBits(arr->size + 1)),
+                     "append_v8_handle: SetSize failed")
     arr->data_array->length += 1;
 }

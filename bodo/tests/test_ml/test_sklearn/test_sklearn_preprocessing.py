@@ -125,6 +125,8 @@ def test_leave_p_out_error(memory_leak_check):
 # ---------------------- LabelEncoder -----------------------
 
 
+# This test is slow on Windows
+@pytest.mark.timeout(600)
 @pytest.mark.parametrize(
     "values, classes ",
     [
@@ -231,9 +233,9 @@ def test_one_hot_encoder_fit_attributes():
             and not callable(getattr(python_m, py_attr_name))
         ):
             assert hasattr(bodo_m, py_attr_name), f"{py_attr_name} not found in bodo_m"
-            assert getattr(python_m, py_attr_name) == getattr(
-                bodo_m, py_attr_name
-            ), f"Attribute {py_attr_name} does not match between python and bodo"
+            assert getattr(python_m, py_attr_name) == getattr(bodo_m, py_attr_name), (
+                f"Attribute {py_attr_name} does not match between python and bodo"
+            )
 
 
 @pytest.mark.parametrize(

@@ -765,6 +765,7 @@ def str_split(arr, pat, n):  # pragma: no cover
     """spits string array's elements into lists and creates an array of string arrays"""
     # numba.parfors.parfor.init_prange()
     is_regex = pat is not None and len(pat) > 1
+    compiled_pat = None
     if is_regex:
         compiled_pat = re.compile(pat)
         if n == -1:

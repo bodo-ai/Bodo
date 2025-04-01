@@ -135,18 +135,18 @@ if __name__ == "__main__":
     print("Output table checksum: ", sf_df_checksum)
     print("Output table length: ", len_sf_df)
 
-    assert (
-        expected_out_len == len_sf_df
-    ), f"Expected length ({expected_out_len}) != Table length in Snowflake ({len_sf_df})"
+    assert expected_out_len == len_sf_df, (
+        f"Expected length ({expected_out_len}) != Table length in Snowflake ({len_sf_df})"
+    )
 
-    assert (
-        expected_checksum_lower <= sf_df_checksum <= expected_checksum_upper
-    ), f"Expected checksum (between {expected_checksum_lower} and {expected_checksum_upper}) != checksum of table in Snowflake ({sf_df_checksum})"
+    assert expected_checksum_lower <= sf_df_checksum <= expected_checksum_upper, (
+        f"Expected checksum (between {expected_checksum_lower} and {expected_checksum_upper}) != checksum of table in Snowflake ({sf_df_checksum})"
+    )
 
     if args.require_cache and isinstance(run_query, numba.core.dispatcher.Dispatcher):
-        assert (
-            run_query._cache_hits[run_query.signatures[0]] == 1
-        ), "ERROR: Bodo did not load from cache"
+        assert run_query._cache_hits[run_query.signatures[0]] == 1, (
+            "ERROR: Bodo did not load from cache"
+        )
 
     # Drop the table, to avoid dangling tables on our account.
     drop_result = drop_sf_table(

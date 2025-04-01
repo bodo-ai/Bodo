@@ -259,12 +259,12 @@ def state_contains_multi_input_dict_array(
         This can have false negatives (arrays are the same but have
         different ids), but no false positives.
     """
-    assert (
-        isinstance(dict_ids, types.List) and dict_ids.dtype == types.int64
-    ), "dict_ids must a be list of int64"
-    assert (
-        isinstance(dict_lens, types.List) and dict_lens.dtype == types.int64
-    ), "dict_lens must a be list of int64"
+    assert isinstance(dict_ids, types.List) and dict_ids.dtype == types.int64, (
+        "dict_ids must a be list of int64"
+    )
+    assert isinstance(dict_lens, types.List) and dict_lens.dtype == types.int64, (
+        "dict_lens must a be list of int64"
+    )
 
     def codegen(context, builder, sig, args):
         dict_encoding_state, func_id, dict_ids, dict_lens = args

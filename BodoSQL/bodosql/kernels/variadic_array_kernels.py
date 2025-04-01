@@ -511,7 +511,7 @@ def overload_coalesce_util(A, dict_encoding_state=None, func_id=-1):
             scalar_text += f"{cond} not bodo.libs.array_kernels.isna(A{i}, i):\n"
             if dict_encode_data:
                 # If data is dictionary encoded just copy the indices
-                scalar_text += f"   res[i] = old_indices{i-dead_offset}[i] + index_offset{i - dead_offset}\n"
+                scalar_text += f"   res[i] = old_indices{i - dead_offset}[i] + index_offset{i - dead_offset}\n"
             elif is_string_data:
                 # If we have string data directly copy from one array to another without an intermediate
                 # allocation.
@@ -519,14 +519,14 @@ def overload_coalesce_util(A, dict_encoding_state=None, func_id=-1):
                     f"   bodo.libs.str_arr_ext.get_str_arr_item_copy(res, i, A{i}, i)\n"
                 )
             else:
-                scalar_text += f"   res[i] = bodo.utils.conversion.unbox_if_tz_naive_timestamp(arg{i-dead_offset})\n"
+                scalar_text += f"   res[i] = bodo.utils.conversion.unbox_if_tz_naive_timestamp(arg{i - dead_offset})\n"
             first = False
 
         # If A[i] is a non-NULL scalar, then it is the answer and stop searching
         else:
-            assert (
-                not found_scalar
-            ), "should not encounter more than one scalar due to dead column pruning"
+            assert not found_scalar, (
+                "should not encounter more than one scalar due to dead column pruning"
+            )
             indent = ""
             if not first:
                 scalar_text += "else:\n"
@@ -536,7 +536,7 @@ def overload_coalesce_util(A, dict_encoding_state=None, func_id=-1):
                 # dictionary. A scalar must only be the last element so its always index num_strings - 1
                 scalar_text += f"{indent}res[i] = num_strings - 1\n"
             else:
-                scalar_text += f"{indent}res[i] = bodo.utils.conversion.unbox_if_tz_naive_timestamp(arg{i-dead_offset})\n"
+                scalar_text += f"{indent}res[i] = bodo.utils.conversion.unbox_if_tz_naive_timestamp(arg{i - dead_offset})\n"
             found_scalar = True
             break
 
@@ -700,12 +700,12 @@ def decode_util(A, dict_encoding_state, func_id):
         if A[i + 1] == bodo.none:
             match_code = "   bodo.libs.array_kernels.setna(res, i)\n"
         elif bodo.utils.utils.is_array_typ(A[i + 1]):
-            match_code = f"   if bodo.libs.array_kernels.isna({arg_names[i+1]}, i):\n"
+            match_code = f"   if bodo.libs.array_kernels.isna({arg_names[i + 1]}, i):\n"
             match_code += "      bodo.libs.array_kernels.setna(res, i)\n"
             match_code += "   else:\n"
-            match_code += f"      res[i] = arg{i+1}\n"
+            match_code += f"      res[i] = arg{i + 1}\n"
         else:
-            match_code = f"   res[i] = arg{i+1}\n"
+            match_code = f"   res[i] = arg{i + 1}\n"
 
         # Match if the first column is a SCALAR null and this column is a scalar null or
         # a column with a null in it
@@ -771,7 +771,7 @@ def decode_util(A, dict_encoding_state, func_id):
             scalar_text += f"   if bodo.libs.array_kernels.isna({arg_names[-1]}, i):\n"
             scalar_text += "      bodo.libs.array_kernels.setna(res, i)\n"
             scalar_text += "   else:\n"
-        scalar_text += f"      res[i] = arg{len(A)-1}"
+        scalar_text += f"      res[i] = arg{len(A) - 1}"
     else:
         scalar_text += "   bodo.libs.array_kernels.setna(res, i)"
 
@@ -893,13 +893,13 @@ def overload_object_filter_keys_util(A, keep_keys, scalars):
         json_type = json_type.data
 
     key_names = [f"k{i}" for i in range(n_keys_to_drop)]
-    key_arg_names = [f"arg{i+1}" for i in range(n_keys_to_drop)]
+    key_arg_names = [f"arg{i + 1}" for i in range(n_keys_to_drop)]
     arg_names = ["json_data"] + key_names
     arg_types = list(A)
 
     # Create the mapping from the tuple to the local variable.
     arg_string = "A, keep_keys, scalars"
-    arg_sources = {f"k{i}": f"A[{i+1}]" for i in range(n_keys_to_drop)}
+    arg_sources = {f"k{i}": f"A[{i + 1}]" for i in range(n_keys_to_drop)}
     arg_sources["json_data"] = "A[0]"
 
     propagate_null = [True] * (n_keys_to_drop + 1)
