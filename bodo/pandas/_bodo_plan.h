@@ -4,6 +4,7 @@
 #pragma once
 
 #include <Python.h>
+#include <utility>
 #include "../io/arrow_reader.h"
 #include "duckdb/common/enums/join_type.hpp"
 #include "duckdb/function/function.hpp"
@@ -46,6 +47,17 @@ class BodoParquetScanFunctionData : public duckdb::TableFunctionData {
  * @return duckdb::unique_ptr<duckdb::LogicalOperator> optimized plan
  */
 duckdb::unique_ptr<duckdb::LogicalOperator> optimize_plan(
+    std::unique_ptr<duckdb::LogicalOperator> plan);
+
+/**
+ * @brief Execute a DuckDB logical plan in our C++ runtime and return the
+ * result.
+ *
+ * @param plan logical plan to execute (should be optimized unless if testing)
+ * @return std::pair<int64_t, PyObject*> Bodo C++ table pointer cast to int64,
+ * pyarrow schema object
+ */
+std::pair<int64_t, PyObject *> execute_plan(
     std::unique_ptr<duckdb::LogicalOperator> plan);
 
 /**
