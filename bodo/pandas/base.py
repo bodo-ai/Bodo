@@ -44,7 +44,7 @@ def read_parquet(
             )
         else:
             assert False and "Unsupported option to read_parquet"
-    pr = plan_optimizer.LogicalGetParquetRead(path.encode())
+    pr = plan_optimizer.LazyPlan(plan_optimizer.LogicalGetParquetRead, path.encode())
     return plan_optimizer.wrap_plan(get_pandas_schema(path), pr)
 
 

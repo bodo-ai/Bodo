@@ -414,6 +414,43 @@ cdef class LogicalGetParquetRead(LogicalOperator):
         return f"LogicalGetParquetRead({self.path})"
 
 
+class LazyPlan:
+    """ Easiest mode to use DuckDB is to generate isolated queries and try to minimize
+        node re-use issues due to the frequent use of unique_ptr.  This class should be
+        used when constructing all plans and holds them lazily.  On demand, generate_duckdb
+        can be used to convert to an isolated set of DuckDB objects for execution.
+    """
+    def __init__(self, plan_class, *args, **kwargs):
+        self.plan_class = plan_class
+        self.args = args
+        self.kwargs = kwargs
+
+    def generate_duckdb(self, cache=None):
+        # Sometimes the same LazyPlan object is encountered twice during the same
+        # query so  we use the cache dict to only convert it once.
+        if cache is None:
+            cache = {}
+        # If previously converted then use the last result.
+        if id(self) in cache:
+            return cache[id(self)]
+
+        def recursive_check(x):
+            """ Recursively convert LazyPlans but return other types unmodified.
+            """
+            if isinstance(x, LazyPlan):
+                return x.generate_duckdb(cache=cache)
+            else:
+                return x
+
+        # Convert any LazyPlan in the args or kwargs.
+        args = [recursive_check(x) for x in self.args]
+        kwargs = {k:recursive_check(v) for k,v in self.kwargs.items()}
+        # Create real duckdb class.
+        ret = self.plan_class(*args, **kwargs)
+        # Add to cache so we don't convert it again.
+        cache[id(self)] = ret
+        return ret
+
 cpdef py_optimize_plan(object plan):
     """Optimize a logical plan using DuckDB's optimizer
     """
@@ -421,7 +458,7 @@ cpdef py_optimize_plan(object plan):
 
     if not isinstance(plan, LogicalOperator):
         raise TypeError("Expected a LogicalOperator instance")
-   
+
     wrapped_operator = plan
 
     optimized_plan = LogicalOperator()
@@ -432,6 +469,8 @@ cpdef convert_and_execute(plan):
     opt_plan = py_optimize_plan(plan)
 
 cpdef collect_func(plan_to_execute):
+    assert isinstance(plan_to_execute, LazyPlan)
+    plan_to_execute = plan_to_execute.generate_duckdb()
     convert_and_execute(plan_to_execute)
 
 cpdef del_func(res_id):
@@ -445,6 +484,8 @@ cpdef wrap_plan(schema, plan):
     from bodo.pandas.frame import BodoDataFrame
     from bodo.pandas.series import BodoSeries
     from bodo.pandas.utils import get_lazy_manager_class, get_lazy_single_manager_class
+
+    assert isinstance(plan, LazyPlan)
 
     if isinstance(schema, dict):
         schema = {
