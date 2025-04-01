@@ -161,6 +161,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # Don't use GCC / Clang Extensions, only C++ Standard
 set(CMAKE_C_EXTENSIONS OFF)
 set(CMAKE_CXX_EXTENSIONS OFF)
+# Don't bother checking for C++ Modules
+set(CMAKE_CXX_SCAN_FOR_MODULES 0)
 
 # Get Pretty Color diagnostics in Ninja and C++ Compiler
 # Same as enabling `-fcolor-diagnostics` by default
