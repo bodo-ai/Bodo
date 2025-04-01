@@ -12,6 +12,13 @@
  */
 class PhysicalOperator {
    public:
+    /**
+     * @brief Execute the physical operator and return the result (placeholder
+     * for now).
+     *
+     * @return std::pair<int64_t, PyObject*> Bodo C++ table pointer cast to
+     * int64 (to pass to Cython easily), pyarrow schema object
+     */
     virtual std::pair<int64_t, PyObject*> execute() = 0;
     virtual ~PhysicalOperator() = default;
 };
@@ -23,6 +30,13 @@ class PhysicalOperator {
 class PhysicalReadParquet : public PhysicalOperator {
    public:
     PhysicalReadParquet(std::string path) : path(path) {}
+
+    /**
+     * @brief Read parquet and return the result (placeholder for now).
+     *
+     * @return std::pair<int64_t, PyObject*> Bodo C++ table pointer cast to
+     * int64 (to pass to Cython easily), pyarrow schema object
+     */
     std::pair<int64_t, PyObject*> execute() override;
 
    private:
@@ -37,6 +51,13 @@ class Pipeline {
    public:
     Pipeline(std::vector<std::shared_ptr<PhysicalOperator>> operators)
         : operators(operators) {}
+
+    /**
+     * @brief Execute the pipeline and return the result (placeholder for now).
+     *
+     * @return std::pair<int64_t, PyObject*> Bodo C++ table pointer cast to
+     * int64 (to pass to Cython easily), pyarrow schema object
+     */
     std::pair<int64_t, PyObject*> execute();
 
    private:
@@ -51,6 +72,13 @@ class Pipeline {
 class Executor {
    public:
     Executor(std::unique_ptr<duckdb::LogicalOperator> plan);
+
+    /**
+     * @brief Execute the plan and return the result (placeholder for now).
+     *
+     * @return std::pair<int64_t, PyObject*> Bodo C++ table pointer cast to
+     * int64 (to pass to Cython easily), pyarrow schema object
+     */
     std::pair<int64_t, PyObject*> execute();
 
    private:
