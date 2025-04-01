@@ -201,7 +201,9 @@ class LazyBlockManager(BlockManager, LazyMetadataMixin[BlockManager]):
         if self._plan is not None:
             from bodo.ext import plan_optimizer
 
-            optimized_plan = plan_optimizer.py_optimize_plan(self._plan)
+            optimized_plan = plan_optimizer.py_optimize_plan(
+                self._plan.generate_duckdb()
+            )
 
             # TODO: run on workers
             # def exec_plan(optimized_plan):

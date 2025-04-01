@@ -37,7 +37,9 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             assert isinstance(new_metadata, pd.Series)
             return plan_optimizer.wrap_plan(
                 new_metadata,
-                plan=plan_optimizer.LogicalBinaryOp(self.plan, other, op),
+                plan=plan_optimizer.LazyPlan(
+                    plan_optimizer.LogicalBinaryOp, self.plan, other, op
+                ),
             )
 
         return super()._cmp_method(other, op)

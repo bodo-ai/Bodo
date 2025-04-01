@@ -67,9 +67,10 @@ def read_parquet(
     empty_df.index = pd.RangeIndex(0)
 
     metadata = LazyMetadata("dummy", empty_df, nrows, None)
-    return BodoDataFrame.from_lazy_metadata(
-        metadata, plan=plan_optimizer.LogicalGetParquetRead(path.encode(), arrow_schema)
+    plan = plan_optimizer.LazyPlan(
+        plan_optimizer.LogicalGetParquetRead, path.encode(), arrow_schema
     )
+    return BodoDataFrame.from_lazy_metadata(metadata, plan=plan)
 
 
 def merge(lhs, rhs, *args, **kwargs):
