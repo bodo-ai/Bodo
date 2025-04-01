@@ -59,7 +59,7 @@ def cast_int64_to_table_ptr(typingctx, val):
 
 
 @numba.njit
-def cpp_table_to_py_table(in_table, out_cols_arr, out_table_type):
+def cpp_table_to_py(in_table, out_cols_arr, out_table_type):
     """Convert a C++ table pointer to a Python table.
     Args:
         in_table (int64): C++ table pointer
@@ -70,3 +70,23 @@ def cpp_table_to_py_table(in_table, out_cols_arr, out_table_type):
     out_table = cpp_table_to_py_table(cpp_table, out_cols_arr, out_table_type, 0)
     delete_table(cpp_table)
     return out_table
+
+
+def cpp_table_to_df(cpp_table, arrow_schema):
+    """Convert a C++ table (table_info) to a pandas DataFrame."""
+
+    import numpy as np
+
+    from bodo.hiframes.table import TableType
+    from bodo.io.helpers import pyarrow_type_to_numba
+
+    out_cols_arr = np.array(range(len(arrow_schema)), dtype=np.int64)
+    table_type = TableType(
+        tuple([pyarrow_type_to_numba(field.type) for field in arrow_schema])
+    )
+
+    out_df = cpp_table_to_py(cpp_table, out_cols_arr, table_type).to_pandas()
+    out_df.columns = [f.name for f in arrow_schema]
+    # TODO: handle Indexes properly
+    out_df = out_df.drop(columns=["__index_level_0__"])
+    return out_df

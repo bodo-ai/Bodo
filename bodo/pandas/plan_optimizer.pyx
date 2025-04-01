@@ -8,6 +8,11 @@ from libcpp.utility cimport move, pair
 from libcpp.string cimport string as c_string
 from libcpp.vector cimport vector
 import operator
+from libc.stdint cimport int64_t
+
+from cpython.ref cimport PyObject
+ctypedef PyObject* PyObjectPtr
+
 
 ctypedef unsigned long long idx_t
 ctypedef pair[int, int] int_pair
@@ -259,6 +264,8 @@ cdef extern from "_bodo_plan.h" nogil:
     cdef unique_ptr[CLogicalFilter] make_filter(unique_ptr[CLogicalOperator] source, unique_ptr[CExpression] filter_expr)
     cdef unique_ptr[CExpression] make_const_int_expr(int val)
     cdef unique_ptr[CExpression] make_col_ref_expr(CLogicalTypeId, int col_idx)
+    cdef pair[int64_t, PyObjectPtr] execute_plan(unique_ptr[CLogicalOperator])
+
 
 def join_type_to_string(CJoinType join_type):
     """
@@ -484,3 +491,24 @@ cpdef wrap_plan(schema, plan):
 
     new_df.plan = plan
     return new_df
+
+
+cpdef py_execute_plan(object plan):
+    """Execute a logical plan in the C++ backend
+    """
+    from bodo.pandas.utils import cpp_table_to_df
+
+    cdef LogicalOperator wrapped_operator
+    cdef pair[int64_t, PyObjectPtr] exec_output
+    cdef int64_t cpp_table
+
+    if not isinstance(plan, LogicalOperator):
+        raise TypeError("Expected a LogicalOperator instance")
+
+    wrapped_operator = plan
+
+    exec_output = execute_plan(move(wrapped_operator.c_logical_operator))
+    cpp_table = exec_output.first
+    arrow_schema = <object>exec_output.second
+
+    return cpp_table_to_df(cpp_table, arrow_schema)
