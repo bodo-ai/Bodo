@@ -1,3 +1,8 @@
+import numba
+from llvmlite import ir as lir
+from numba.extending import intrinsic
+
+from bodo.libs.array import cpp_table_to_py_table, delete_table, table_type
 from bodo.pandas.array_manager import LazyArrayManager, LazySingleArrayManager
 from bodo.pandas.managers import LazyBlockManager, LazySingleBlockManager
 
@@ -41,3 +46,27 @@ def get_lazy_single_manager_class() -> type[
     raise Exception(
         f"Got unexpected value of pandas option mode.manager: {data_manager}"
     )
+
+
+@intrinsic
+def cast_int64_to_table_ptr(typingctx, val):
+    """Cast int64 value to C++ table pointer"""
+
+    def codegen(context, builder, signature, args):
+        return builder.inttoptr(args[0], lir.IntType(8).as_pointer())
+
+    return table_type(numba.core.types.int64), codegen
+
+
+@numba.njit
+def cpp_table_to_py_table(in_table, out_cols_arr, out_table_type):
+    """Convert a C++ table pointer to a Python table.
+    Args:
+        in_table (int64): C++ table pointer
+        out_cols_arr (array(int64)): Array of column indices to be extracted
+        out_table_type (types.Type): Type of the output table
+    """
+    cpp_table = cast_int64_to_table_ptr(in_table)
+    out_table = cpp_table_to_py_table(cpp_table, out_cols_arr, out_table_type, 0)
+    delete_table(cpp_table)
+    return out_table

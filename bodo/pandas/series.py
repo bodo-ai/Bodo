@@ -3,7 +3,7 @@ from collections.abc import Callable, Hashable
 
 import pandas as pd
 
-from bodo.pandas import plan_optimizer
+from bodo.ext import plan_optimizer
 from bodo.pandas.array_manager import LazySingleArrayManager
 from bodo.pandas.lazy_metadata import LazyMetadata
 from bodo.pandas.lazy_wrapper import BodoLazyWrapper

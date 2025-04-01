@@ -4,7 +4,7 @@ from collections.abc import Callable, Iterable
 import pandas as pd
 
 import bodo
-from bodo.pandas import plan_optimizer
+from bodo.ext import plan_optimizer
 from bodo.pandas.array_manager import LazyArrayManager
 from bodo.pandas.lazy_metadata import LazyMetadata
 from bodo.pandas.lazy_wrapper import BodoLazyWrapper

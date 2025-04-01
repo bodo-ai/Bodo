@@ -39,6 +39,7 @@ class LazyBlockManager(BlockManager, LazyMetadataMixin[BlockManager]):
             collect_func = kwargs["collect_func"]
             del_func = kwargs["del_func"]
             index_data = kwargs.get("index_data", None)
+            plan = kwargs.get("plan", None)
             dummy_blocks = head.blocks
             # XXX Copy?
             col_index = [head.axes[0]]
@@ -120,6 +121,7 @@ class LazyBlockManager(BlockManager, LazyMetadataMixin[BlockManager]):
                 col_index + row_indexes,
                 verify_integrity=False,
             )
+            obj._plan = plan
             obj._md_nrows = nrows
             obj._md_head = head
             obj._md_result_id = result_id
@@ -195,6 +197,29 @@ class LazyBlockManager(BlockManager, LazyMetadataMixin[BlockManager]):
         """
         Collect data from workers if needed.
         """
+        # Execute the plan if it's lazy
+        if self._plan is not None:
+            from bodo.ext import plan_optimizer
+
+            optimized_plan = plan_optimizer.py_optimize_plan(self._plan)
+
+            # TODO: run on workers
+            # def exec_plan(optimized_plan):
+            #     pass
+
+            # data = bodo.spawn.spawner.submit_func_to_workers(
+            #     exec_plan, [], optimized_plan
+            # )
+            data = plan_optimizer.py_execute_plan(optimized_plan)
+
+            self._plan = None
+            self._md_result_id = None
+            self.blocks = data._mgr.blocks
+            self._md_result_id = None
+            self._md_nrows = None
+            self._md_head = None
+            BlockManager._rebuild_blknos_and_blklocs(self)
+
         if self._md_result_id is not None:
             debug_msg(self.logger, "[LazyBlockManager] Collecting data from workers...")
             assert self._md_nrows is not None
