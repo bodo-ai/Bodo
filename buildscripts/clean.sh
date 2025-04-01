@@ -7,3 +7,6 @@ echo "Removing bodo/io/csv_json_reader.cpp"
 find . -name "csv_json_reader.cpp" | xargs rm -f
 echo "Removing mpi4py"
 rm -rf bodo/mpi4py
+echo "Removing DuckDB build"
+rm -rf bodo/pandas/vendor/duckdb/build
+
