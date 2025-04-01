@@ -5,7 +5,7 @@
 #include <memory>
 #include "../io/arrow_compat.h"
 #include "../libs/_bodo_to_arrow.h"
-#include "_bodo_plan.h"
+#include "_plan.h"
 #include "arrow/io/api.h"
 #include "parquet/arrow/reader.h"
 
