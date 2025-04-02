@@ -11,10 +11,13 @@
 #include "duckdb/planner/operator/logical_get.hpp"
 #include "duckdb/planner/operator/logical_projection.hpp"
 
+/**
+ * @brief Convert a std::unique_ptr to the duckdb equivalent.
+ *
+ */
 template <class T>
 duckdb::unique_ptr<T> to_duckdb(std::unique_ptr<T> &val) {
-    duckdb::unique_ptr<T> ret = duckdb::unique_ptr<T>(val.release());
-    return ret;
+    return duckdb::unique_ptr<T>(val.release());
 }
 
 duckdb::unique_ptr<duckdb::LogicalOperator> optimize_plan(
@@ -25,12 +28,7 @@ duckdb::unique_ptr<duckdb::LogicalOperator> optimize_plan(
     // Input is using std since Cython supports it
     auto in_plan = to_duckdb(plan);
 
-    duckdb::unique_ptr<duckdb::LogicalOperator> optimized_plan =
-        optimizer.Optimize(std::move(in_plan));
-
-    return optimized_plan;
-    // return
-    // std::unique_ptr<duckdb::LogicalOperator>(optimized_plan.release());
+    return optimizer.Optimize(std::move(in_plan));
 }
 
 duckdb::unique_ptr<duckdb::Expression> make_const_int_expr(int val) {
@@ -52,10 +50,8 @@ duckdb::unique_ptr<duckdb::Expression> make_binop_expr(
     // Convert std::unique_ptr to duckdb::unique_ptr.
     auto lhs_duck = to_duckdb(lhs);
     auto rhs_duck = to_duckdb(rhs);
-    auto filter_expression =
-        duckdb::make_uniq<duckdb::BoundComparisonExpression>(
-            etype, std::move(lhs_duck), std::move(rhs_duck));
-    return filter_expression;
+    return duckdb::make_uniq<duckdb::BoundComparisonExpression>(
+        etype, std::move(lhs_duck), std::move(rhs_duck));
 }
 
 duckdb::unique_ptr<duckdb::LogicalFilter> make_filter(
@@ -109,7 +105,7 @@ duckdb::unique_ptr<duckdb::LogicalComparisonJoin> make_comparison_join(
     auto lhs_duck = to_duckdb(lhs);
     auto rhs_duck = to_duckdb(rhs);
     // Create join node.
-    duckdb::unique_ptr<duckdb::LogicalComparisonJoin> comp_join =
+    auto comp_join =
         duckdb::make_uniq<duckdb::LogicalComparisonJoin>(join_type);
     // Create join condition.
     duckdb::LogicalType cbtype(duckdb::LogicalTypeId::INTEGER);

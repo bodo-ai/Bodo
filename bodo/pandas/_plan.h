@@ -91,6 +91,15 @@ duckdb::unique_ptr<duckdb::LogicalProjection> make_projection(
  * @return duckdb::unique_ptr<duckdb::Expression> - the const int expr
  */
 duckdb::unique_ptr<duckdb::Expression> make_const_int_expr(int val);
+
+/**
+ * @brief Create an expression that references a specified column.
+ *
+ * @param ctype - the data type of the specified column
+ * @param col_idx - the column index of the specified column
+ * @return duckdb::unique_ptr<duckdb::Expression> - the column reference
+ * expression
+ */
 duckdb::unique_ptr<duckdb::Expression> make_col_ref_expr(
     duckdb::LogicalTypeId ctype, int col_idx);
 

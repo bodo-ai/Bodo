@@ -13,9 +13,10 @@ Series = BodoSeries
 
 # If not present or 0 then allow Python to give a symbol not found error
 # if they try to use a Pandas feature that we haven't explicitly implemented.
-# If present and non-zero then try to convert bodo dataframe/series to
-# Pandas equivalent and run standard Pandas for operations not explicitly
-# support by bodo.pandas yet.
+# If present and non-zero then for functions that we haven't explicitly
+# implemented it will try to call the Pandas version which will
+# trigger any bodo dataframe/series arguments to be automatically converted
+# to Pandas.
 BODO_PANDAS_FALLBACK = int(os.environ.get("BODO_PANDAS_FALLBACK", 0))
 
 def add_fallback():
