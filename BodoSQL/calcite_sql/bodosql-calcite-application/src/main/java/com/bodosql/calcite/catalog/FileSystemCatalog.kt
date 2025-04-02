@@ -18,6 +18,7 @@ import org.apache.calcite.sql.ddl.SqlCreateTable.CreateTableType
 import org.apache.calcite.sql.parser.SqlParser
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.FileSystem
+import org.apache.hadoop.fs.LocalFileSystem
 import org.apache.hadoop.fs.Path
 import org.apache.iceberg.hadoop.HadoopCatalog
 import org.apache.iceberg.hadoop.Util
@@ -447,6 +448,9 @@ class FileSystemCatalog(
                 "org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider," +
                     "com.amazonaws.auth.DefaultAWSCredentialsProviderChain",
             )
+
+            // Configure Local File Storage
+            conf.set("fs.file.impl", LocalFileSystem::class.java.name)
 
             // Configure Azure Storage authentication, use the account name and key if provided
             // otherwise try to use the vm identity
