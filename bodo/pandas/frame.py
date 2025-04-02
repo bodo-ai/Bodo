@@ -431,10 +431,10 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             else:
                 assert False and "Unsupported option to DataFrame.merge"
         if hasattr(self, "plan") and hasattr(right, "plan"):
-            from bodo.pandas.base import empty_like
+            from bodo.pandas.base import _empty_like
 
-            zero_size_self = empty_like(self)
-            zero_size_right = empty_like(right)
+            zero_size_self = _empty_like(self)
+            zero_size_right = _empty_like(right)
             new_metadata = zero_size_self.merge(
                 zero_size_right,
                 how=how,
@@ -475,17 +475,17 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
     def __getitem__(self, key):
         """Called when df[key] is used."""
         if hasattr(self, "plan") and self.plan != None:
-            from bodo.pandas.base import empty_like
+            from bodo.pandas.base import _empty_like
 
             """ If the dataframe has a non-empty plan, then the general approach
                 is to create 0 length versions of the dataframe and the key and
                 simulate the operation to see the resulting type. """
 
-            zero_size_self = empty_like(self)
+            zero_size_self = _empty_like(self)
             if isinstance(key, BodoSeries):
                 """ This is a masking operation. """
                 assert hasattr(key, "plan") and key.plan != None
-                zero_size_key = empty_like(key)
+                zero_size_key = _empty_like(key)
                 new_metadata = zero_size_self.__getitem__(zero_size_key)
                 return plan_optimizer.wrap_plan(
                     new_metadata,

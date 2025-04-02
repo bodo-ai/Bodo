@@ -420,6 +420,15 @@ cdef class LogicalGetParquetRead(LogicalOperator):
     def __str__(self):
         return f"LogicalGetParquetRead({self.path})"
 
+cdef class LogicalGetSeriesRead(LogicalOperator):
+    """Represents an already materialized BodoSeries."""
+    def __cinit__(self, result_id):
+        assert False & "Not implemented yet."
+
+cdef class LogicalGetDataframeRead(LogicalOperator):
+    """Represents an already materialized BodoDataFrame."""
+    def __cinit__(self, result_id):
+        assert False & "Not implemented yet."
 
 class LazyPlan:
     """ Easiest mode to use DuckDB is to generate isolated queries and try to minimize
@@ -472,6 +481,10 @@ cpdef py_optimize_plan(object plan):
     optimized_plan.c_logical_operator = optimize_plan(move(wrapped_operator.c_logical_operator))
     return optimized_plan
 
+def _del_func(x):
+    # Intentionally do nothing
+    pass
+
 cpdef wrap_plan(schema, plan, nrows=None, index_data=None):
     """ Create a BodoDataFrame or BodoSeries with the given
         schema and given plan node.
@@ -480,6 +493,7 @@ cpdef wrap_plan(schema, plan, nrows=None, index_data=None):
     from bodo.pandas.frame import BodoDataFrame
     from bodo.pandas.series import BodoSeries
     from bodo.pandas.lazy_metadata import LazyMetadata
+    from bodo.pandas.utils import get_lazy_manager_class, get_lazy_single_manager_class
 
     assert isinstance(plan, LazyPlan)
 
@@ -488,14 +502,20 @@ cpdef wrap_plan(schema, plan, nrows=None, index_data=None):
             col: pd.Series(dtype=col_type.dtype) for col, col_type in schema.items()
         }
 
+    if nrows is None:
+        # Fake non-zero rows.  nrows should be overwritten upon plan execution.
+        nrows = 1
+
     if isinstance(schema, (dict, pd.DataFrame)):
         if isinstance(schema, dict):
             schema = pd.DataFrame(schema)
         metadata = LazyMetadata("LazyPlan_" + str(plan.plan_class), schema, nrows=nrows, index_data=index_data)
-        new_df = BodoDataFrame.from_lazy_metadata(metadata, plan=plan)
+        mgr = get_lazy_manager_class()
+        new_df = BodoDataFrame.from_lazy_metadata(metadata, collect_func=mgr._collect, del_func=_del_func, plan=plan)
     elif isinstance(schema, pd.Series):
         metadata = LazyMetadata("LazyPlan_" + str(plan.plan_class), schema, nrows=nrows, index_data=index_data)
-        new_df = BodoSeries.from_lazy_metadata(metadata, plan=plan)
+        mgr = get_lazy_single_manager_class()
+        new_df = BodoSeries.from_lazy_metadata(metadata, collect_func=mgr._collect, del_func=_del_func, plan=plan)
     else:
         assert False
 

@@ -75,8 +75,10 @@ def merge(lhs, rhs, *args, **kwargs):
     return lhs.merge(rhs, *args, **kwargs)
 
 
-def empty_like(val):
-    """Create an empty DataFrame or Series from the given DataFrame or Series"""
+def _empty_like(val):
+    """Create an empty Pandas DataFrame or Series having the same schema as
+    the given BodoDataFrame or BodoSeries
+    """
     if isinstance(val, BodoDataFrame):
         return pd.DataFrame(
             {col: pd.Series(dtype=dt) for col, dt in val.dtypes.items()}
@@ -84,4 +86,4 @@ def empty_like(val):
     elif isinstance(val, BodoSeries):
         return pd.Series(dtype=val.dtype)
     else:
-        assert False & f"empty_like cannot create empty object like type {type(val)}"
+        assert False & f"_empty_like cannot create empty object like type {type(val)}"
