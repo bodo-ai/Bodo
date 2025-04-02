@@ -491,10 +491,10 @@ cpdef wrap_plan(schema, plan, nrows=None, index_data=None):
     if isinstance(schema, (dict, pd.DataFrame)):
         if isinstance(schema, dict):
             schema = pd.DataFrame(schema)
-        metadata = LazyMetadata("LazyPlan_" + plan.plan_class, schema, nrows=nrows, index_data=index_data)
+        metadata = LazyMetadata("LazyPlan_" + str(plan.plan_class), schema, nrows=nrows, index_data=index_data)
         new_df = BodoDataFrame.from_lazy_metadata(metadata, plan=plan)
     elif isinstance(schema, pd.Series):
-        metadata = LazyMetadata("LazyPlan_" + plan.plan_class, schema, nrows=nrows, index_data=index_data)
+        metadata = LazyMetadata("LazyPlan_" + str(plan.plan_class), schema, nrows=nrows, index_data=index_data)
         new_df = BodoSeries.from_lazy_metadata(metadata, plan=plan)
     else:
         assert False
