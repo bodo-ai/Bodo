@@ -6,6 +6,7 @@ and processing their metadata for later steps.
 
 from __future__ import annotations
 
+import io
 import itertools
 import json
 import os
@@ -59,7 +60,8 @@ def _construct_parquet_infos(
     for manifest_file in snap.manifests(table.io):
         # Open Avro file
         with table.io.new_input(manifest_file.manifest_path).open(seekable=True) as f:
-            reader = DataFileReader(f, DatumReader())
+            # gcs doesn't support seeking to the end of a file which the avro reader depends on.
+            reader = DataFileReader(io.BytesIO(f.read()), DatumReader())
             schema_serialized = reader.get_meta("schema")
             assert schema_serialized is not None
             schema_id = int(json.loads(schema_serialized)["schema-id"])

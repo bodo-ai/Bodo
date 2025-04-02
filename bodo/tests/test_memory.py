@@ -1,12 +1,10 @@
 import math
 import mmap
-import os
 import re
 import sys
 from pathlib import Path
 from uuid import uuid4
 
-import adlfs
 import boto3
 import numpy as np
 import pandas as pd
@@ -59,32 +57,6 @@ def tmp_s3_path():
     folder_name = str(uuid4())
     yield f"s3://engine-unit-tests-tmp-bucket/{folder_name}/"
     bucket.objects.filter(Prefix=folder_name).delete()
-
-
-@pytest.fixture(scope="session")
-def abfs_fs():
-    """
-    Create an Azure Blob FileSystem instance for testing.
-    """
-
-    account_name = os.environ["AZURE_STORAGE_ACCOUNT_NAME"]
-    account_key = os.environ["AZURE_STORAGE_ACCOUNT_KEY"]
-    return adlfs.AzureBlobFileSystem(account_name=account_name, account_key=account_key)
-
-
-@pytest.fixture
-def tmp_abfs_path(abfs_fs):
-    """
-    Create a temporary ABFS path for testing.
-    """
-
-    account_name = os.environ["AZURE_STORAGE_ACCOUNT_NAME"]
-    folder_name = str(uuid4())
-    abfs_fs.mkdir(f"engine-unit-tests-tmp-blob/{folder_name}")
-    # Need to include account name in path for C++ filesystem code
-    yield f"abfs://engine-unit-tests-tmp-blob@{account_name}.dfs.core.windows.net/{folder_name}/"
-    if abfs_fs.exists(f"engine-unit-tests-tmp-blob/{folder_name}"):
-        abfs_fs.rm(f"engine-unit-tests-tmp-blob/{folder_name}", recursive=True)
 
 
 def test_default_buffer_pool_options():

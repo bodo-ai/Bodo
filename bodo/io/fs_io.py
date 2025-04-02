@@ -118,21 +118,6 @@ def validate_s3fs_installed():
         )
 
 
-def validate_gcsfs_installed():
-    """
-    Validate that gcsfs is installed. An error is raised
-    when this is not the case.
-    """
-    try:
-        import gcsfs  # noqa
-    except ImportError:
-        raise BodoError(
-            "Couldn't import gcsfs, which is required for Google cloud access."
-            " gcsfs can be installed by calling"
-            " 'conda install -c conda-forge gcsfs'.\n"
-        )
-
-
 def validate_huggingface_hub_installed():
     """
     Validate that huggingface_hub is installed. Raise an error if not.
@@ -525,7 +510,7 @@ def getfs(
 
     Returns:
         Filesystem implementation. This is either a PyFileSystem wrapper over
-        s3fs/gcsfs or a native PyArrow filesystem.
+        s3fs or a native PyArrow filesystem.
     """
     # NOTE: add remote filesystems to REMOTE_FILESYSTEMS
     if (
@@ -592,6 +577,14 @@ def getfs(
         return get_hf_fs(storage_options)
     else:
         return pa.fs.LocalFileSystem()
+
+
+def get_uri_scheme(path):
+    """Get URI scheme from path (e.g. "s3", "gcs").
+    Used in C++ code to avoid including extra dependencies like boost::url.
+    """
+    parsed_url: ParseResult = urlparse(path)
+    return parsed_url.scheme
 
 
 @pt.overload
