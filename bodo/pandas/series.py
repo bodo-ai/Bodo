@@ -19,13 +19,16 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
     _head_s: pd.Series | None = None
     _name: Hashable = None
 
-    _internal_names = pd.DataFrame._internal_names + ["plan"]
-    _internal_names_set = set(_internal_names)
+    @property
+    def _plan(self):
+        if hasattr(self._mgr, "plan"):
+            return self._mgr.plan
+        return None
 
     def _cmp_method(self, other, op):
         from bodo.pandas.base import empty_like
 
-        if hasattr(self, "plan") and self.plan != None:
+        if hasattr(self, "plan") and self._plan != None:
             """ Only supports objects with a plan on lhs. """
             zero_size_self = empty_like(self)
             zero_size_other = (
@@ -38,7 +41,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             return plan_optimizer.wrap_plan(
                 new_metadata,
                 plan=plan_optimizer.LazyPlan(
-                    plan_optimizer.LogicalBinaryOp, self.plan, other, op
+                    plan_optimizer.LogicalBinaryOp, self._plan, other, op
                 ),
             )
 

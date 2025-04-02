@@ -26,8 +26,11 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
     # use it directly when available.
     _head_df: pd.DataFrame | None = None
 
-    _internal_names = pd.DataFrame._internal_names + ["plan"]
-    _internal_names_set = set(_internal_names)
+    @property
+    def _plan(self):
+        if hasattr(self._mgr, "plan"):
+            return self._mgr.plan
+        return None
 
     @staticmethod
     def from_lazy_mgr(
@@ -460,7 +463,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 right_on = []
             planComparisonJoin = plan_optimizer.LazyPlan(
                 plan_optimizer.LogicalComparisonJoin,
-                self.plan,
+                self._plan,
                 right.plan,
                 plan_optimizer.CJoinType.INNER,
                 [(self.columns.get_loc(c), right.columns.get_loc(c)) for c in on]
@@ -474,7 +477,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
 
     def __getitem__(self, key):
         """Called when df[key] is used."""
-        if hasattr(self, "plan") and self.plan != None:
+        if hasattr(self, "plan") and self._plan != None:
             from bodo.pandas.base import empty_like
 
             """ If the dataframe has a non-empty plan, then the general approach
@@ -490,7 +493,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 return plan_optimizer.wrap_plan(
                     new_metadata,
                     plan=plan_optimizer.LazyPlan(
-                        plan_optimizer.LogicalFilter, self.plan, key.plan
+                        plan_optimizer.LogicalFilter, self._plan, key.plan
                     ),
                 )
             else:
@@ -515,7 +518,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                         new_metadata,
                         plan=plan_optimizer.LazyPlan(
                             plan_optimizer.LogicalProjection,
-                            self.plan,
+                            self._plan,
                             list(zip(key_indices, key_types)),
                         ),
                     )
@@ -525,7 +528,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                         new_metadata,
                         plan=plan_optimizer.LazyPlan(
                             plan_optimizer.LogicalProjection,
-                            self.plan,
+                            self._plan,
                             list(zip(key_indices, key_types)),
                         ),
                     )
