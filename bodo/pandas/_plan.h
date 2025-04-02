@@ -78,11 +78,12 @@ duckdb::unique_ptr<duckdb::LogicalComparisonJoin> make_comparison_join(
  *
  * @param source - the data source to project from
  * @param select_vec - vector of column indices to project
+ * @param out_schema_py - the schema of data coming out of the projection
  * @return duckdb::unique_ptr<duckdb::LogicalProjection> output node
  */
 duckdb::unique_ptr<duckdb::LogicalProjection> make_projection(
     std::unique_ptr<duckdb::LogicalOperator> &source,
-    std::vector<int> &select_vec, std::vector<duckdb::LogicalTypeId> &type_vec);
+    std::vector<int> &select_vec, PyObject *out_schema_py);
 
 /**
  * @brief Create an expression from a constant integer.
@@ -95,13 +96,13 @@ duckdb::unique_ptr<duckdb::Expression> make_const_int_expr(int val);
 /**
  * @brief Create an expression that references a specified column.
  *
- * @param ctype - the data type of the specified column
+ * @param field_py - the data type of the specified column
  * @param col_idx - the column index of the specified column
  * @return duckdb::unique_ptr<duckdb::Expression> - the column reference
  * expression
  */
-duckdb::unique_ptr<duckdb::Expression> make_col_ref_expr(
-    duckdb::LogicalTypeId ctype, int col_idx);
+duckdb::unique_ptr<duckdb::Expression> make_col_ref_expr(PyObject *field_py,
+                                                         int col_idx);
 
 /**
  * @brief Create an expression from two sources and an operator.
@@ -166,4 +167,14 @@ duckdb::Optimizer &get_duckdb_optimizer();
  * duckdb::vector<duckdb::LogicalType>> duckdb column names and types
  */
 std::pair<duckdb::vector<duckdb::string>, duckdb::vector<duckdb::LogicalType>>
-arrow_schema_to_duckdb(std::shared_ptr<arrow::Schema> arrow_schema);
+arrow_schema_to_duckdb(const std::shared_ptr<arrow::Schema> &arrow_schema);
+
+/**
+ * @brief Convert an Arrow field to a DuckDB column name and data type.
+ *
+ * @param field input Arrow field
+ * @return std::pair<duckdb::string, duckdb::LogicalType> duckdb column name and
+ * type
+ */
+std::pair<duckdb::string, duckdb::LogicalType> arrow_field_to_duckdb(
+    const std::shared_ptr<arrow::Field> &field);

@@ -2,6 +2,7 @@ import typing as pt
 from collections.abc import Callable, Iterable
 
 import pandas as pd
+import pyarrow as pa
 
 import bodo
 from bodo.ext import plan_optimizer
@@ -504,7 +505,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 key = list(key)
                 # convert column name to index
                 key_indices = [self.columns.get_loc(x) for x in key]
-                key_types = [self.dtypes.iloc[x].name for x in key_indices]
+                pa_schema = pa.Schema.from_pandas(self[key])
                 if len(key) == 1:
                     """ If just one element then have to extract that singular
                         element for the metadata call to Pandas so it doesn't
@@ -515,8 +516,9 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                         new_metadata,
                         plan=plan_optimizer.LazyPlan(
                             plan_optimizer.LogicalProjection,
-                            self.plan,
-                            list(zip(key_indices, key_types)),
+                            self._plan,
+                            key_indices,
+                            pa_schema,
                         ),
                     )
                 else:
@@ -525,8 +527,9 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                         new_metadata,
                         plan=plan_optimizer.LazyPlan(
                             plan_optimizer.LogicalProjection,
-                            self.plan,
-                            list(zip(key_indices, key_types)),
+                            self._plan,
+                            key_indices,
+                            pa_schema,
                         ),
                     )
 
