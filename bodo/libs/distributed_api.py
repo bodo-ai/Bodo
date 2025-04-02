@@ -4672,10 +4672,33 @@ def get_num_nodes():  # pragma: no cover
     return len(get_host_ranks())
 
 
-def get_gpu_ranks(num_gpus_in_node):  # pragma: no cover
+def get_num_gpus(framework="torch"):  # pragma: no cover
+    """Get number of GPU devices on this host"""
+    if framework == "torch":
+        try:
+            import torch
+
+            return torch.cuda.device_count()
+        except ImportError:
+            raise RuntimeError(
+                "PyTorch is not installed. Please install PyTorch to use GPU features."
+            )
+    elif framework == "tensorflow":
+        try:
+            import tensorflow as tf
+
+            return len(tf.config.list_physical_devices("GPU"))
+        except ImportError:
+            raise RuntimeError(
+                "TensorFlow is not installed. Please install TensorFlow to use GPU features."
+            )
+    else:
+        raise RuntimeError(f"Framework {framework} not recognized")
+
+
+def get_gpu_ranks():  # pragma: no cover
     """Calculate and return the global list of ranks to pin to GPUs
-    num_gpus_in_node: number of GPUs on current node
-    Return list of ranks to pin to GPUs
+    Return list of ranks to pin to the GPUs.
     """
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
@@ -4684,12 +4707,20 @@ def get_gpu_ranks(num_gpus_in_node):  # pragma: no cover
     if rank in nodes_first_ranks:
         # the first rank on each host collects the number of GPUs on the host
         # and sends them to rank 0. rank 0 will calculate global gpu rank list
+        try:
+            num_gpus_in_node = get_num_gpus()
+        except Exception as e:  # pragma: no cover
+            num_gpus_in_node = e
         subcomm = create_subcomm_mpi4py(nodes_first_ranks)
         num_gpus_per_node = subcomm.gather(num_gpus_in_node)
         if rank == 0:
             gpu_ranks = []
+            error = None
             for i, ranks in enumerate(host_ranks.values()):  # pragma: no cover
                 n_gpus = num_gpus_per_node[i]
+                if isinstance(n_gpus, Exception):
+                    error = n_gpus
+                    break
                 if n_gpus == 0:
                     continue
                 cores_per_gpu = len(ranks) // n_gpus
@@ -4699,10 +4730,17 @@ def get_gpu_ranks(num_gpus_in_node):  # pragma: no cover
                         my_gpu = local_rank / cores_per_gpu
                         if my_gpu < n_gpus:
                             gpu_ranks.append(global_rank)
-            comm.bcast(gpu_ranks)
+            if error:  # pragma: no cover
+                comm.bcast(error)
+                raise error
+            else:
+                comm.bcast(gpu_ranks)
     if rank != 0:  # pragma: no cover
         # wait for global list of GPU ranks from rank 0.
         gpu_ranks = comm.bcast(None)
+        if isinstance(gpu_ranks, Exception):
+            e = gpu_ranks
+            raise e
     return gpu_ranks
 
 
