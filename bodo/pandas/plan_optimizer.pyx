@@ -8,6 +8,11 @@ from libcpp.utility cimport move, pair
 from libcpp.string cimport string as c_string
 from libcpp.vector cimport vector
 import operator
+from libc.stdint cimport int64_t
+
+from cpython.ref cimport PyObject
+ctypedef PyObject* PyObjectPtr
+
 
 ctypedef unsigned long long idx_t
 ctypedef pair[int, int] int_pair
@@ -250,7 +255,7 @@ cdef extern from "duckdb/planner/operator/logical_get.hpp" namespace "duckdb" no
         pass
 
 
-cdef extern from "_bodo_plan.h" nogil:
+cdef extern from "_plan.h" nogil:
     cdef unique_ptr[CLogicalGet] make_parquet_get_node(c_string parquet_path, object arrow_schema)
     cdef unique_ptr[CLogicalComparisonJoin] make_comparison_join(unique_ptr[CLogicalOperator] lhs, unique_ptr[CLogicalOperator] rhs, CJoinType join_type, vector[int_pair] cond_vec)
     cdef unique_ptr[CLogicalOperator] optimize_plan(unique_ptr[CLogicalOperator])
@@ -259,6 +264,8 @@ cdef extern from "_bodo_plan.h" nogil:
     cdef unique_ptr[CLogicalFilter] make_filter(unique_ptr[CLogicalOperator] source, unique_ptr[CExpression] filter_expr)
     cdef unique_ptr[CExpression] make_const_int_expr(int val)
     cdef unique_ptr[CExpression] make_col_ref_expr(CLogicalTypeId, int col_idx)
+    cdef pair[int64_t, PyObjectPtr] execute_plan(unique_ptr[CLogicalOperator])
+
 
 def join_type_to_string(CJoinType join_type):
     """
@@ -465,25 +472,14 @@ cpdef py_optimize_plan(object plan):
     optimized_plan.c_logical_operator = optimize_plan(move(wrapped_operator.c_logical_operator))
     return optimized_plan
 
-cpdef convert_and_execute(plan):
-    opt_plan = py_optimize_plan(plan)
-
-cpdef collect_func(plan_to_execute):
-    assert isinstance(plan_to_execute, LazyPlan)
-    plan_to_execute = plan_to_execute.generate_duckdb()
-    convert_and_execute(plan_to_execute)
-
-cpdef del_func(res_id):
-    pass  # For now.
-
-cpdef wrap_plan(schema, plan):
+cpdef wrap_plan(schema, plan, nrows=None, index_data=None):
     """ Create a BodoDataFrame or BodoSeries with the given
         schema and given plan node.
     """
     import pandas as pd
     from bodo.pandas.frame import BodoDataFrame
     from bodo.pandas.series import BodoSeries
-    from bodo.pandas.utils import get_lazy_manager_class, get_lazy_single_manager_class
+    from bodo.pandas.lazy_metadata import LazyMetadata
 
     assert isinstance(plan, LazyPlan)
 
@@ -495,33 +491,34 @@ cpdef wrap_plan(schema, plan):
     if isinstance(schema, (dict, pd.DataFrame)):
         if isinstance(schema, dict):
             schema = pd.DataFrame(schema)
-        lazy_mgr = get_lazy_manager_class()(
-            None,
-            None,
-            result_id=plan,
-            nrows=1,
-            head=schema._mgr,
-            collect_func=collect_func,
-            del_func=del_func,
-            index_data=None,
-            plan=plan,
-        )
-        new_df = BodoDataFrame.from_lazy_mgr(lazy_mgr, schema)
+        metadata = LazyMetadata("LazyPlan_" + plan.plan_class, schema, nrows=nrows, index_data=index_data)
+        new_df = BodoDataFrame.from_lazy_metadata(metadata, plan=plan)
     elif isinstance(schema, pd.Series):
-        lazy_mgr = get_lazy_single_manager_class()(
-            None,
-            None,
-            result_id=plan,
-            nrows=1,
-            head=schema._mgr,
-            collect_func=collect_func,
-            del_func=del_func,
-            index_data=None,
-            plan=plan,
-        )
-        new_df = BodoSeries.from_lazy_mgr(lazy_mgr, schema)
+        metadata = LazyMetadata("LazyPlan_" + plan.plan_class, schema, nrows=nrows, index_data=index_data)
+        new_df = BodoSeries.from_lazy_metadata(metadata, plan=plan)
     else:
         assert False
 
     new_df.plan = plan
     return new_df
+
+
+cpdef py_execute_plan(object plan):
+    """Execute a logical plan in the C++ backend
+    """
+    from bodo.pandas.utils import cpp_table_to_df
+
+    cdef LogicalOperator wrapped_operator
+    cdef pair[int64_t, PyObjectPtr] exec_output
+    cdef int64_t cpp_table
+
+    if not isinstance(plan, LogicalOperator):
+        raise TypeError("Expected a LogicalOperator instance")
+
+    wrapped_operator = plan
+
+    exec_output = execute_plan(move(wrapped_operator.c_logical_operator))
+    cpp_table = exec_output.first
+    arrow_schema = <object>exec_output.second
+
+    return cpp_table_to_df(cpp_table, arrow_schema)

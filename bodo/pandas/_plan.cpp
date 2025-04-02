@@ -1,5 +1,6 @@
-#include "_bodo_plan.h"
+#include "_plan.h"
 #include <utility>
+#include "_executor.h"
 #include "duckdb.hpp"
 #include "duckdb/common/unique_ptr.hpp"
 #include "duckdb/planner/expression/bound_columnref_expression.hpp"
@@ -127,6 +128,12 @@ duckdb::unique_ptr<duckdb::LogicalComparisonJoin> make_comparison_join(
     comp_join->children.push_back(std::move(rhs_duck));
 
     return comp_join;
+}
+
+std::pair<int64_t, PyObject *> execute_plan(
+    std::unique_ptr<duckdb::LogicalOperator> plan) {
+    Executor executor(std::move(plan));
+    return executor.execute();
 }
 
 duckdb::unique_ptr<duckdb::LogicalGet> make_parquet_get_node(
