@@ -4672,6 +4672,40 @@ def get_num_nodes():  # pragma: no cover
     return len(get_host_ranks())
 
 
+def get_gpu_ranks(num_gpus_in_node):  # pragma: no cover
+    """Calculate and return the global list of ranks to pin to GPUs
+    num_gpus_in_node: number of GPUs on current node
+    Return list of ranks to pin to GPUs
+    """
+    comm = MPI.COMM_WORLD
+    rank = comm.Get_rank()
+    host_ranks = get_host_ranks()
+    nodes_first_ranks = get_nodes_first_ranks()
+    if rank in nodes_first_ranks:
+        # the first rank on each host collects the number of GPUs on the host
+        # and sends them to rank 0. rank 0 will calculate global gpu rank list
+        subcomm = create_subcomm_mpi4py(nodes_first_ranks)
+        num_gpus_per_node = subcomm.gather(num_gpus_in_node)
+        if rank == 0:
+            gpu_ranks = []
+            for i, ranks in enumerate(host_ranks.values()):  # pragma: no cover
+                n_gpus = num_gpus_per_node[i]
+                if n_gpus == 0:
+                    continue
+                cores_per_gpu = len(ranks) // n_gpus
+                for local_rank, global_rank in enumerate(ranks):
+                    if local_rank % cores_per_gpu == 0:
+                        # pin this rank to GPU
+                        my_gpu = local_rank / cores_per_gpu
+                        if my_gpu < n_gpus:
+                            gpu_ranks.append(global_rank)
+            comm.bcast(gpu_ranks)
+    if rank != 0:  # pragma: no cover
+        # wait for global list of GPU ranks from rank 0.
+        gpu_ranks = comm.bcast(None)
+    return gpu_ranks
+
+
 # Use default number of iterations for sync if not specified by user
 sync_iters = (
     bodo.default_stream_loop_sync_iters
