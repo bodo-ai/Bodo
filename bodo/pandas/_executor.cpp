@@ -58,7 +58,7 @@ std::pair<int64_t, PyObject*> PhysicalReadParquet::execute() {
 
     std::vector<std::shared_ptr<array_info>> out_arrs;
     out_arrs.reserve(table->num_columns());
-    for (uint64_t i = 0; i < table->num_columns(); i++) {
+    for (int64_t i = 0; i < table->num_columns(); i++) {
         std::shared_ptr<arrow::Array> arr = table->column(i)->chunk(0);
         std::shared_ptr<array_info> out_arr =
             arrow_array_to_bodo(arr, bodo_pool);
