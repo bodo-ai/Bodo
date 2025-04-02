@@ -717,7 +717,6 @@ target_link_directories(ext PRIVATE ${CONDA_LIB_DIR}
 "${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/vendor/duckdb/build/release/third_party/utf8proc/"
 "${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/vendor/duckdb/build/release/third_party/hyperloglog/"
 "${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/vendor/duckdb/build/release/third_party/fastpforlib/"
-"${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/vendor/duckdb/build/release/third_party/skiplist/"
 "${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/vendor/duckdb/build/release/third_party/mbedtls/"
 "${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/vendor/duckdb/build/release/third_party/yyjson/"
 "${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/vendor/duckdb/build/release/third_party/zstd/"
@@ -732,7 +731,6 @@ target_link_libraries(ext PRIVATE
   duckdb_utf8proc
   duckdb_hyperloglog
   duckdb_fastpforlib
-  duckdb_skiplistlib
   duckdb_mbedtls
   duckdb_yyjson
   duckdb_zstd
