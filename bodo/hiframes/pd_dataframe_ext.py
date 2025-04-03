@@ -4486,21 +4486,6 @@ def to_sql_overload(
     return _impl
 
 
-def _concat_str_rank_0(D, _bodo_concat_str_output):
-    """
-    Concatenate the input on rank 0 if _bodo_concat_str_output flag is set
-    """
-    from bodo.mpi4py import MPI
-
-    if _bodo_concat_str_output:
-        comm = MPI.COMM_WORLD
-        new_D = comm.reduce(D)
-        if comm.Get_rank() == 0:
-            D = new_D
-
-    return D
-
-
 # TODO: other Pandas versions (0.24 defaults are different than 0.23)
 @overload_method(DataFrameType, "to_csv", no_unliteral=True)
 def to_csv_overload(
@@ -4612,6 +4597,13 @@ def to_csv_overload(
             _bodo_file_prefix="part-",
             _bodo_concat_str_output=False,
         ):  # pragma: no cover
+            if _bodo_concat_str_output:
+                # Return the concatenated string output on rank 0
+                # and empty string on all other ranks
+                df = bodo.gatherv(df)
+                if bodo.get_rank() != 0:
+                    return ""
+
             with bodo.no_warning_objmode(D="unicode_type"):
                 D = df.to_csv(
                     path_or_buf,
@@ -4636,7 +4628,6 @@ def to_csv_overload(
                     errors=errors,
                     storage_options=storage_options,
                 )
-                D = _concat_str_rank_0(D, _bodo_concat_str_output)
             return D
 
         return _impl
