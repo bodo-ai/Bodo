@@ -641,6 +641,22 @@ def test_json(collect_func):
 
 
 @pytest_mark_spawn_mode
+def test_json_str(collect_func):
+    """Tests that to_json() with string output works properly (returns all string data to spawner)"""
+
+    @bodo.jit(spawn=True)
+    def _get_bodo_df(df):
+        return df
+
+    df = collect_func(0)
+    bodo_df = _get_bodo_df(df)
+    assert bodo_df.to_json(orient="records", lines=True) == df.to_json(
+        orient="records", lines=True
+    )
+    assert bodo_df._lazy
+
+
+@pytest_mark_spawn_mode
 def test_map_partitions():
     """Test map_partitions on BodoDataFrame"""
 

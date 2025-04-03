@@ -356,6 +356,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 indent=indent,
                 storage_options=storage_options,
                 mode=mode,
+                _bodo_concat_str_output=True,
             )
 
         return to_json_wrapper(
