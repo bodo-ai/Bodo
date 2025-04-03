@@ -4512,6 +4512,8 @@ def to_csv_overload(
     errors="strict",
     storage_options=None,
     _bodo_file_prefix="part-",
+    # Concatenate string output on rank 0 if set (used in spawn mode)
+    _bodo_concat_str_output=False,
 ):
     check_runtime_cols_unsupported(df, "DataFrame.to_csv()")
     check_unsupported_args(
@@ -4593,7 +4595,15 @@ def to_csv_overload(
             errors="strict",
             storage_options=None,
             _bodo_file_prefix="part-",
+            _bodo_concat_str_output=False,
         ):  # pragma: no cover
+            if _bodo_concat_str_output:
+                # Return the concatenated string output on rank 0
+                # and empty string on all other ranks
+                df = bodo.gatherv(df)
+                if bodo.get_rank() != 0:
+                    return ""
+
             with bodo.no_warning_objmode(D="unicode_type"):
                 D = df.to_csv(
                     path_or_buf,
@@ -4646,6 +4656,7 @@ def to_csv_overload(
         errors="strict",
         storage_options=None,
         _bodo_file_prefix="part-",
+        _bodo_concat_str_output=False,
     ):  # pragma: no cover
         # passing None for the first argument returns a string
         # containing contents to write to csv
@@ -4700,6 +4711,8 @@ def to_json_overload(
     storage_options=None,
     mode="w",
     _bodo_file_prefix="part-",
+    # Concatenate string output on rank 0 if set (used in spawn mode)
+    _bodo_concat_str_output=False,
 ):
     check_runtime_cols_unsupported(df, "DataFrame.to_json()")
     check_unsupported_args(
@@ -4734,7 +4747,14 @@ def to_json_overload(
             storage_options=None,
             mode="w",
             _bodo_file_prefix="part-",
+            _bodo_concat_str_output=False,
         ):  # pragma: no cover
+            if _bodo_concat_str_output:
+                # Return the concatenated string output on rank 0
+                # and empty string on all other ranks
+                df = bodo.gatherv(df)
+                if bodo.get_rank() != 0:
+                    return ""
             with bodo.no_warning_objmode(D="unicode_type"):
                 D = df.to_json(
                     path_or_buf,
@@ -4771,6 +4791,7 @@ def to_json_overload(
         storage_options=None,
         mode="w",
         _bodo_file_prefix="part-",
+        _bodo_concat_str_output=False,
     ):  # pragma: no cover
         # passing None for the first argument returns a string
         # containing contents to write to json
