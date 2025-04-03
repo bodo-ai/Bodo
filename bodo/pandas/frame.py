@@ -132,7 +132,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 + get_overload_const_str(compression)
             )
 
-        to_parquet_wrapper(
+        return to_parquet_wrapper(
             self,
             path,
             engine,
@@ -186,7 +186,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 method,
             )
 
-        to_sql_wrapper(
+        return to_sql_wrapper(
             self,
             name,
             con,
@@ -264,6 +264,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 doublequote=doublequote,
                 escapechar=escapechar,
                 decimal=decimal,
+                _bodo_concat_str_output=True,
             )
 
         # checks string arguments before jit performs conversion to unicode
@@ -286,7 +287,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             module_name="IO",
         )
 
-        to_csv_wrapper(
+        return to_csv_wrapper(
             self,
             path_or_buf,
             sep=sep,
@@ -357,7 +358,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 mode=mode,
             )
 
-        to_json_wrapper(
+        return to_json_wrapper(
             self,
             path_or_buf,
             date_format=date_format,

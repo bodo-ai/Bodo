@@ -4486,6 +4486,21 @@ def to_sql_overload(
     return _impl
 
 
+def _concat_str_rank_0(D, _bodo_concat_str_output):
+    """
+    Concatenate the input on rank 0 if _bodo_concat_str_output flag is set
+    """
+    from bodo.mpi4py import MPI
+
+    if _bodo_concat_str_output:
+        comm = MPI.COMM_WORLD
+        new_D = comm.reduce(D)
+        if comm.Get_rank() == 0:
+            D = new_D
+
+    return D
+
+
 # TODO: other Pandas versions (0.24 defaults are different than 0.23)
 @overload_method(DataFrameType, "to_csv", no_unliteral=True)
 def to_csv_overload(
@@ -4512,6 +4527,8 @@ def to_csv_overload(
     errors="strict",
     storage_options=None,
     _bodo_file_prefix="part-",
+    # Concatenate string output on rank 0 if set (used in spawn mode)
+    _bodo_concat_str_output=False,
 ):
     check_runtime_cols_unsupported(df, "DataFrame.to_csv()")
     check_unsupported_args(
@@ -4593,6 +4610,7 @@ def to_csv_overload(
             errors="strict",
             storage_options=None,
             _bodo_file_prefix="part-",
+            _bodo_concat_str_output=False,
         ):  # pragma: no cover
             with bodo.no_warning_objmode(D="unicode_type"):
                 D = df.to_csv(
@@ -4618,6 +4636,7 @@ def to_csv_overload(
                     errors=errors,
                     storage_options=storage_options,
                 )
+                D = _concat_str_rank_0(D, _bodo_concat_str_output)
             return D
 
         return _impl
@@ -4646,6 +4665,7 @@ def to_csv_overload(
         errors="strict",
         storage_options=None,
         _bodo_file_prefix="part-",
+        _bodo_concat_str_output=False,
     ):  # pragma: no cover
         # passing None for the first argument returns a string
         # containing contents to write to csv
