@@ -432,10 +432,10 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             else:
                 assert False and "Unsupported option to DataFrame.merge"
         if hasattr(self, "plan") and hasattr(right, "plan"):
-            from bodo.pandas.base import empty_like
+            from bodo.pandas.base import _empty_like
 
-            zero_size_self = empty_like(self)
-            zero_size_right = empty_like(right)
+            zero_size_self = _empty_like(self)
+            zero_size_right = _empty_like(right)
             new_metadata = zero_size_self.merge(
                 zero_size_right,
                 how=how,
@@ -446,6 +446,17 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 right_index=right_index,
                 sort=sort,
                 suffixes=suffixes,
+            )
+
+            self_plan = (
+                self.plan
+                if self.plan is not None
+                else plan_optimizer.LogicalGetDataframeRead(self._mgr._md_result_id)
+            )
+            right_plan = (
+                right.plan
+                if right.plan is not None
+                else plan_optimizer.LogicalGetDataframeRead(right._mgr._md_result_id)
             )
 
             if on is None:
@@ -461,8 +472,8 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 right_on = []
             planComparisonJoin = plan_optimizer.LazyPlan(
                 plan_optimizer.LogicalComparisonJoin,
-                self.plan,
-                right.plan,
+                self_plan,
+                right_plan,
                 plan_optimizer.CJoinType.INNER,
                 [(self.columns.get_loc(c), right.columns.get_loc(c)) for c in on]
                 + [
@@ -475,23 +486,29 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
 
     def __getitem__(self, key):
         """Called when df[key] is used."""
-        if hasattr(self, "plan") and self.plan != None:
-            from bodo.pandas.base import empty_like
+        if hasattr(self, "plan"):
+            from bodo.pandas.base import _empty_like
+
+            self_plan = (
+                self.plan
+                if self.plan is not None
+                else plan_optimizer.LogicalGetDataframeRead(self._mgr._md_result_id)
+            )
 
             """ If the dataframe has a non-empty plan, then the general approach
                 is to create 0 length versions of the dataframe and the key and
                 simulate the operation to see the resulting type. """
 
-            zero_size_self = empty_like(self)
+            zero_size_self = _empty_like(self)
             if isinstance(key, BodoSeries):
                 """ This is a masking operation. """
                 assert hasattr(key, "plan") and key.plan != None
-                zero_size_key = empty_like(key)
+                zero_size_key = _empty_like(key)
                 new_metadata = zero_size_self.__getitem__(zero_size_key)
                 return plan_optimizer.wrap_plan(
                     new_metadata,
                     plan=plan_optimizer.LazyPlan(
-                        plan_optimizer.LogicalFilter, self.plan, key.plan
+                        plan_optimizer.LogicalFilter, self_plan, key.plan
                     ),
                 )
             else:
@@ -516,7 +533,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                         new_metadata,
                         plan=plan_optimizer.LazyPlan(
                             plan_optimizer.LogicalProjection,
-                            self._plan,
+                            self_plan,
                             key_indices,
                             pa_schema,
                         ),
@@ -527,7 +544,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                         new_metadata,
                         plan=plan_optimizer.LazyPlan(
                             plan_optimizer.LogicalProjection,
-                            self._plan,
+                            self_plan,
                             key_indices,
                             pa_schema,
                         ),

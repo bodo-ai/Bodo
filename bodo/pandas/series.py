@@ -23,22 +23,38 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
     _internal_names_set = set(_internal_names)
 
     def _cmp_method(self, other, op):
-        from bodo.pandas.base import empty_like
+        """Called when a BodoSeries is compared with a different entity (other)
+        with the given operator "op".
+        """
+        from bodo.pandas.base import _empty_like
 
-        if hasattr(self, "plan") and self.plan != None:
-            """ Only supports objects with a plan on lhs. """
-            zero_size_self = empty_like(self)
-            zero_size_other = (
-                empty_like(other) if isinstance(other, BodoSeries) else other
+        if hasattr(self, "plan"):
+            # The plan==None part of this line is untested.
+            cur_plan = (
+                self.plan
+                if self.plan is not None
+                else plan_optimizer.LogicalGetSeriesRead(self._mgr._md_result_id)
             )
-            if hasattr(other, "plan") and other.plan != None:
-                other = other.plan
+
+            # Get empty Pandas objects for self and other with same schema.
+            zero_size_self = _empty_like(self)
+            zero_size_other = (
+                _empty_like(other) if isinstance(other, BodoSeries) else other
+            )
+            if hasattr(other, "plan"):
+                # The other.plan==None part of this line is untested.
+                other = (
+                    other.plan
+                    if other.plan is not None
+                    else plan_optimizer.LogicalGetSeriesRead(other._mgr._md_result_id)
+                )
+            # Compute schema of new series.
             new_metadata = zero_size_self._cmp_method(zero_size_other, op)
             assert isinstance(new_metadata, pd.Series)
             return plan_optimizer.wrap_plan(
                 new_metadata,
                 plan=plan_optimizer.LazyPlan(
-                    plan_optimizer.LogicalBinaryOp, self.plan, other, op
+                    plan_optimizer.LogicalBinaryOp, cur_plan, other, op
                 ),
             )
 
