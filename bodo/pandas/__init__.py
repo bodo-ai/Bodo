@@ -17,7 +17,7 @@ Series = BodoSeries
 # implemented it will try to call the Pandas version which will
 # trigger any bodo dataframe/series arguments to be automatically converted
 # to Pandas.
-BODO_PANDAS_FALLBACK = int(os.environ.get("BODO_PANDAS_FALLBACK", 0))
+BODO_PANDAS_FALLBACK = int(os.environ.get("BODO_PANDAS_FALLBACK", 1))
 
 def add_fallback():
     if BODO_PANDAS_FALLBACK != 0:
