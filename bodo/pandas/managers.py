@@ -131,6 +131,7 @@ class LazyBlockManager(BlockManager, LazyMetadataMixin[BlockManager]):
         else:
             # This is the normal BlockManager case
             obj = super().__new__(*args, **kwargs)
+            obj._plan = None
             obj._md_nrows = None
             obj._md_head = None
             obj._md_result_id = None

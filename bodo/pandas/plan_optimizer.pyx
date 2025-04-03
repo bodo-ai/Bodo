@@ -227,16 +227,6 @@ cdef extern from "duckdb/common/enums/join_type.hpp" namespace "duckdb" nogil:
         RIGHT_ANTI "duckdb::JoinType::RIGHT_ANTI"
 
 
-"""
-cdef extern from "duckdb/planner/operator/logical_join.hpp" namespace "duckdb" nogil:
-    cdef cppclass CLogicalJoin" duckdb::LogicalJoin"(CLogicalOperator):
-        CLogicalJoin(CJoinType join_type)
-
-cdef extern from "duckdb/planner/operator/logical_comparison_join.hpp" namespace "duckdb" nogil:
-    cdef cppclass CLogicalComparisonJoin" duckdb::LogicalComparisonJoin"(CLogicalJoin):
-        CLogicalComparisonJoin(CJoinType join_type)
-"""
-
 cdef extern from "duckdb/planner/operator/logical_comparison_join.hpp" namespace "duckdb" nogil:
     cdef cppclass CLogicalComparisonJoin" duckdb::LogicalComparisonJoin"(CLogicalOperator):
         CLogicalComparisonJoin(CJoinType join_type)
@@ -259,11 +249,11 @@ cdef extern from "_plan.h" nogil:
     cdef unique_ptr[CLogicalGet] make_parquet_get_node(c_string parquet_path, object arrow_schema)
     cdef unique_ptr[CLogicalComparisonJoin] make_comparison_join(unique_ptr[CLogicalOperator] lhs, unique_ptr[CLogicalOperator] rhs, CJoinType join_type, vector[int_pair] cond_vec)
     cdef unique_ptr[CLogicalOperator] optimize_plan(unique_ptr[CLogicalOperator])
-    cdef unique_ptr[CLogicalProjection] make_projection(unique_ptr[CLogicalOperator] source, vector[int] select_vec, vector[CLogicalTypeId] type_vec)
+    cdef unique_ptr[CLogicalProjection] make_projection(unique_ptr[CLogicalOperator] source, vector[int] select_vec, object out_schema)
     cdef unique_ptr[CExpression] make_binop_expr(unique_ptr[CExpression] lhs, unique_ptr[CExpression] rhs, CExpressionType etype)
     cdef unique_ptr[CLogicalFilter] make_filter(unique_ptr[CLogicalOperator] source, unique_ptr[CExpression] filter_expr)
     cdef unique_ptr[CExpression] make_const_int_expr(int val)
-    cdef unique_ptr[CExpression] make_col_ref_expr(CLogicalTypeId, int col_idx)
+    cdef unique_ptr[CExpression] make_col_ref_expr(object field, int col_idx)
     cdef pair[int64_t, PyObjectPtr] execute_plan(unique_ptr[CLogicalOperator])
 
 
@@ -325,47 +315,31 @@ cdef class LogicalComparisonJoin(LogicalOperator):
         join_type = join_type_to_string((<CLogicalComparisonJoin*>(self.c_logical_operator.get())).join_type)
         return f"LogicalComparisonJoin({join_type})"
 
-def str_to_type(x):
-    if x == "int64":
-        return CLogicalTypeId.BIGINT
-    elif x == "string":
-        return CLogicalTypeId.VARCHAR
-    else:
-        print("Unconverted type", x)
-        assert False
-
 cdef class LogicalProjection(LogicalOperator):
     """Wrapper around DuckDB's LogicalProjection to provide access in Python.
     """
 
-    cdef vector[int] select_vec
-    cdef vector[CLogicalTypeId] type_vec
+    cdef readonly vector[int] select_vec
+    cdef readonly out_schema
 
-    def __cinit__(self, LogicalOperator source, select_list):
-       for col in select_list:
-           self.select_vec.push_back(col[0])
-           self.type_vec.push_back(str_to_type(col[1]))
+    def __cinit__(self, LogicalOperator source, select_idxs, object out_schema):
+        self.select_vec = select_idxs
+        self.out_schema = out_schema
 
-       cdef unique_ptr[CLogicalProjection] c_logical_projection = make_projection(source.c_logical_operator, self.select_vec, self.type_vec)
-       self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalOperator*> c_logical_projection.release())
-
-    def get_select(self):
-        return self.select_vec
-
-    def get_type(self):
-        return self.type_vec
+        cdef unique_ptr[CLogicalProjection] c_logical_projection = make_projection(source.c_logical_operator, self.select_vec, self.out_schema)
+        self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalOperator*> c_logical_projection.release())
 
     def __str__(self):
-        return f"LogicalProjection({self.select_vec}, {self.type_vec})"
+        return f"LogicalProjection({self.select_vec}, {self.out_schema})"
 
 cdef unique_ptr[CExpression] make_expr(val):
     if isinstance(val, int):
         return make_const_int_expr(val)
     elif isinstance(val, LogicalProjection):
-        select_vec = val.get_select()
-        type_vec = val.get_type()
+        select_vec = val.select_vec
+        field = val.out_schema.field(0)
         assert len(select_vec) == 1
-        return make_col_ref_expr(type_vec[0], select_vec[0])
+        return make_col_ref_expr(field, select_vec[0])
     else:
         assert False
 
@@ -420,6 +394,15 @@ cdef class LogicalGetParquetRead(LogicalOperator):
     def __str__(self):
         return f"LogicalGetParquetRead({self.path})"
 
+cdef class LogicalGetSeriesRead(LogicalOperator):
+    """Represents an already materialized BodoSeries."""
+    def __cinit__(self, result_id):
+        assert False & "Not implemented yet."
+
+cdef class LogicalGetDataframeRead(LogicalOperator):
+    """Represents an already materialized BodoDataFrame."""
+    def __cinit__(self, result_id):
+        assert False & "Not implemented yet."
 
 class LazyPlan:
     """ Easiest mode to use DuckDB is to generate isolated queries and try to minimize
@@ -472,6 +455,10 @@ cpdef py_optimize_plan(object plan):
     optimized_plan.c_logical_operator = optimize_plan(move(wrapped_operator.c_logical_operator))
     return optimized_plan
 
+def _del_func(x):
+    # Intentionally do nothing
+    pass
+
 cpdef wrap_plan(schema, plan, nrows=None, index_data=None):
     """ Create a BodoDataFrame or BodoSeries with the given
         schema and given plan node.
@@ -480,6 +467,7 @@ cpdef wrap_plan(schema, plan, nrows=None, index_data=None):
     from bodo.pandas.frame import BodoDataFrame
     from bodo.pandas.series import BodoSeries
     from bodo.pandas.lazy_metadata import LazyMetadata
+    from bodo.pandas.utils import get_lazy_manager_class, get_lazy_single_manager_class
 
     assert isinstance(plan, LazyPlan)
 
@@ -488,14 +476,20 @@ cpdef wrap_plan(schema, plan, nrows=None, index_data=None):
             col: pd.Series(dtype=col_type.dtype) for col, col_type in schema.items()
         }
 
+    if nrows is None:
+        # Fake non-zero rows.  nrows should be overwritten upon plan execution.
+        nrows = 1
+
     if isinstance(schema, (dict, pd.DataFrame)):
         if isinstance(schema, dict):
             schema = pd.DataFrame(schema)
         metadata = LazyMetadata("LazyPlan_" + str(plan.plan_class), schema, nrows=nrows, index_data=index_data)
-        new_df = BodoDataFrame.from_lazy_metadata(metadata, plan=plan)
+        mgr = get_lazy_manager_class()
+        new_df = BodoDataFrame.from_lazy_metadata(metadata, collect_func=mgr._collect, del_func=_del_func, plan=plan)
     elif isinstance(schema, pd.Series):
         metadata = LazyMetadata("LazyPlan_" + str(plan.plan_class), schema, nrows=nrows, index_data=index_data)
-        new_df = BodoSeries.from_lazy_metadata(metadata, plan=plan)
+        mgr = get_lazy_single_manager_class()
+        new_df = BodoSeries.from_lazy_metadata(metadata, collect_func=mgr._collect, del_func=_del_func, plan=plan)
     else:
         assert False
 

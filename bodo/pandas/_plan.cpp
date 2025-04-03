@@ -2,6 +2,7 @@
 #include <utility>
 #include "_executor.h"
 #include "duckdb.hpp"
+#include "duckdb/common/types.hpp"
 #include "duckdb/common/unique_ptr.hpp"
 #include "duckdb/planner/expression/bound_columnref_expression.hpp"
 #include "duckdb/planner/expression/bound_comparison_expression.hpp"
@@ -11,10 +12,30 @@
 #include "duckdb/planner/operator/logical_get.hpp"
 #include "duckdb/planner/operator/logical_projection.hpp"
 
+// if status of arrow::Result is not ok, form an err msg and raise a
+// runtime_error with it
+#undef CHECK_ARROW
+#define CHECK_ARROW(expr, msg)                                          \
+    if (!(expr.ok())) {                                                 \
+        std::string err_msg = std::string(msg) + " " + expr.ToString(); \
+        throw std::runtime_error(err_msg);                              \
+    }
+
+// if status of arrow::Result is not ok, form an err msg and raise a
+// runtime_error with it. If it is ok, get value using ValueOrDie
+// and assign it to lhs using std::move
+#undef CHECK_ARROW_AND_ASSIGN
+#define CHECK_ARROW_AND_ASSIGN(res, msg, lhs) \
+    CHECK_ARROW(res.status(), msg)            \
+    lhs = std::move(res).ValueOrDie();
+
+/**
+ * @brief Convert a std::unique_ptr to the duckdb equivalent.
+ *
+ */
 template <class T>
 duckdb::unique_ptr<T> to_duckdb(std::unique_ptr<T> &val) {
-    duckdb::unique_ptr<T> ret = duckdb::unique_ptr<T>(val.release());
-    return ret;
+    return duckdb::unique_ptr<T>(val.release());
 }
 
 duckdb::unique_ptr<duckdb::LogicalOperator> optimize_plan(
@@ -25,12 +46,7 @@ duckdb::unique_ptr<duckdb::LogicalOperator> optimize_plan(
     // Input is using std since Cython supports it
     auto in_plan = to_duckdb(plan);
 
-    duckdb::unique_ptr<duckdb::LogicalOperator> optimized_plan =
-        optimizer.Optimize(std::move(in_plan));
-
-    return optimized_plan;
-    // return
-    // std::unique_ptr<duckdb::LogicalOperator>(optimized_plan.release());
+    return optimizer.Optimize(std::move(in_plan));
 }
 
 duckdb::unique_ptr<duckdb::Expression> make_const_int_expr(int val) {
@@ -38,10 +54,17 @@ duckdb::unique_ptr<duckdb::Expression> make_const_int_expr(int val) {
         duckdb::Value(val));
 }
 
-duckdb::unique_ptr<duckdb::Expression> make_col_ref_expr(
-    duckdb::LogicalTypeId ctype, int col_idx) {
+duckdb::unique_ptr<duckdb::Expression> make_col_ref_expr(PyObject *field_py,
+                                                         int col_idx) {
     auto binder = get_duckdb_binder();
     auto table_idx = binder.get()->GenerateTableIndex();
+
+    auto field_res = arrow::py::unwrap_field(field_py);
+    std::shared_ptr<arrow::Field> field;
+    CHECK_ARROW_AND_ASSIGN(field_res,
+                           "make_col_ref_expr: unable to unwrap field", field);
+    auto [_, ctype] = arrow_field_to_duckdb(field);
+
     return duckdb::make_uniq<duckdb::BoundColumnRefExpression>(
         ctype, duckdb::ColumnBinding(table_idx, col_idx));
 }
@@ -52,10 +75,8 @@ duckdb::unique_ptr<duckdb::Expression> make_binop_expr(
     // Convert std::unique_ptr to duckdb::unique_ptr.
     auto lhs_duck = to_duckdb(lhs);
     auto rhs_duck = to_duckdb(rhs);
-    auto filter_expression =
-        duckdb::make_uniq<duckdb::BoundComparisonExpression>(
-            etype, std::move(lhs_duck), std::move(rhs_duck));
-    return filter_expression;
+    return duckdb::make_uniq<duckdb::BoundComparisonExpression>(
+        etype, std::move(lhs_duck), std::move(rhs_duck));
 }
 
 duckdb::unique_ptr<duckdb::LogicalFilter> make_filter(
@@ -73,12 +94,15 @@ duckdb::unique_ptr<duckdb::LogicalFilter> make_filter(
 
 duckdb::unique_ptr<duckdb::LogicalProjection> make_projection(
     std::unique_ptr<duckdb::LogicalOperator> &source,
-    std::vector<int> &select_vec,
-    std::vector<duckdb::LogicalTypeId> &type_vec) {
+    std::vector<int> &select_vec, PyObject *out_schema_py) {
     // Convert std::unique_ptr to duckdb::unique_ptr.
     auto source_duck = to_duckdb(source);
     auto binder = get_duckdb_binder();
     auto table_idx = binder.get()->GenerateTableIndex();
+
+    std::shared_ptr<arrow::Schema> out_schema = unwrap_schema(out_schema_py);
+    // We only care about the types, not the field names
+    auto [_, type_vec] = arrow_schema_to_duckdb(out_schema);
 
     assert(select_vec.size() == type_vec.size());
     std::vector<duckdb::unique_ptr<duckdb::Expression>> projection_expressions;
@@ -87,7 +111,7 @@ duckdb::unique_ptr<duckdb::LogicalProjection> make_projection(
         auto stype = type_vec[i];
         auto expr = duckdb::make_uniq<duckdb::BoundColumnRefExpression>(
             stype, duckdb::ColumnBinding(table_idx, selection));
-        projection_expressions.push_back(std::move(expr));
+        projection_expressions.emplace_back(std::move(expr));
     }
 
     // Create projection node.
@@ -109,7 +133,7 @@ duckdb::unique_ptr<duckdb::LogicalComparisonJoin> make_comparison_join(
     auto lhs_duck = to_duckdb(lhs);
     auto rhs_duck = to_duckdb(rhs);
     // Create join node.
-    duckdb::unique_ptr<duckdb::LogicalComparisonJoin> comp_join =
+    auto comp_join =
         duckdb::make_uniq<duckdb::LogicalComparisonJoin>(join_type);
     // Create join condition.
     duckdb::LogicalType cbtype(duckdb::LogicalTypeId::INTEGER);
@@ -174,7 +198,7 @@ duckdb::Optimizer &get_duckdb_optimizer() {
 }
 
 std::pair<duckdb::vector<duckdb::string>, duckdb::vector<duckdb::LogicalType>>
-arrow_schema_to_duckdb(std::shared_ptr<arrow::Schema> arrow_schema) {
+arrow_schema_to_duckdb(const std::shared_ptr<arrow::Schema> &arrow_schema) {
     // See Arrow type handling in DuckDB for possible cases:
     // https://github.com/duckdb/duckdb/blob/d29a92f371179170688b4df394478f389bf7d1a6/src/function/table/arrow/arrow_duck_schema.cpp#L59
     // https://github.com/duckdb/duckdb/blob/d29a92f371179170688b4df394478f389bf7d1a6/src/common/adbc/nanoarrow/schema.cpp#L73
@@ -186,34 +210,42 @@ arrow_schema_to_duckdb(std::shared_ptr<arrow::Schema> arrow_schema) {
 
     for (int i = 0; i < arrow_schema->num_fields(); i++) {
         const std::shared_ptr<arrow::Field> &field = arrow_schema->field(i);
+        auto [return_name, duckdb_type] = arrow_field_to_duckdb(field);
+
         return_names.emplace_back(field->name());
-        const std::shared_ptr<arrow::DataType> &arrow_type = field->type();
-
-        // Convert Arrow type to DuckDB LogicalType
-        // TODO: handle all types
-        duckdb::LogicalType duckdb_type;
-        if ((arrow_type->id() == arrow::Type::STRING) ||
-            (arrow_type->id() == arrow::Type::LARGE_STRING)) {
-            duckdb_type = duckdb::LogicalType::VARCHAR;
-        } else if (arrow_type->id() == arrow::Type::INT32) {
-            duckdb_type = duckdb::LogicalType::INTEGER;
-        } else if (arrow_type->id() == arrow::Type::INT64) {
-            duckdb_type = duckdb::LogicalType::BIGINT;
-        } else if (arrow_type->id() == arrow::Type::FLOAT) {
-            duckdb_type = duckdb::LogicalType::FLOAT;
-        } else if (arrow_type->id() == arrow::Type::DOUBLE) {
-            duckdb_type = duckdb::LogicalType::DOUBLE;
-        } else if (arrow_type->id() == arrow::Type::BOOL) {
-            duckdb_type = duckdb::LogicalType::BOOLEAN;
-        } else {
-            throw std::runtime_error(
-                "Unsupported Arrow type: " + arrow_type->ToString() +
-                ". Please extend the arrow_schema_to_duckdb function to handle "
-                "this type.");
-        }
-
         logical_types.push_back(duckdb_type);
     }
 
     return {return_names, logical_types};
 }
+
+std::pair<duckdb::string, duckdb::LogicalType> arrow_field_to_duckdb(
+    const std::shared_ptr<arrow::Field> &field) {
+    // Convert Arrow type to DuckDB LogicalType
+    // TODO: handle all types
+    duckdb::LogicalType duckdb_type;
+    const std::shared_ptr<arrow::DataType> &arrow_type = field->type();
+    if ((arrow_type->id() == arrow::Type::STRING) ||
+        (arrow_type->id() == arrow::Type::LARGE_STRING)) {
+        duckdb_type = duckdb::LogicalType::VARCHAR;
+    } else if (arrow_type->id() == arrow::Type::INT32) {
+        duckdb_type = duckdb::LogicalType::INTEGER;
+    } else if (arrow_type->id() == arrow::Type::INT64) {
+        duckdb_type = duckdb::LogicalType::BIGINT;
+    } else if (arrow_type->id() == arrow::Type::FLOAT) {
+        duckdb_type = duckdb::LogicalType::FLOAT;
+    } else if (arrow_type->id() == arrow::Type::DOUBLE) {
+        duckdb_type = duckdb::LogicalType::DOUBLE;
+    } else if (arrow_type->id() == arrow::Type::BOOL) {
+        duckdb_type = duckdb::LogicalType::BOOLEAN;
+    } else {
+        throw std::runtime_error(
+            "Unsupported Arrow type: " + arrow_type->ToString() +
+            ". Please extend the arrow_schema_to_duckdb function to handle "
+            "this type.");
+    }
+    return {field->name(), duckdb_type};
+}
+
+#undef CHECK_ARROW
+#undef CHECK_ARROW_AND_ASSIGN

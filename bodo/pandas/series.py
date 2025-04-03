@@ -26,24 +26,40 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         return None
 
     def _cmp_method(self, other, op):
-        from bodo.pandas.base import empty_like
+        """Called when a BodoSeries is compared with a different entity (other)
+        with the given operator "op".
+        """
+        from bodo.pandas.base import _empty_like
 
-        if hasattr(self, "plan") and self._plan != None:
-            """ Only supports objects with a plan on lhs. """
-            zero_size_self = empty_like(self)
-            zero_size_other = (
-                empty_like(other) if isinstance(other, BodoSeries) else other
+        # The plan==None part of this line is untested.
+        self_plan = (
+            self.plan
+            if self.plan is not None
+            else plan_optimizer.LogicalGetSeriesRead(self._mgr._md_result_id)
+        )
+
+        # Get empty Pandas objects for self and other with same schema.
+        zero_size_self = _empty_like(self)
+        zero_size_other = (
+            _empty_like(other) if isinstance(other, BodoSeries) else other
+        )
+        # This is effectively a check for a dataframe or series.
+        if hasattr(other, "_plan"):
+            # The other.plan==None part of this line is untested.
+            other = (
+                other._plan
+                if other._plan is not None
+                else plan_optimizer.LogicalGetSeriesRead(other._mgr._md_result_id)
             )
-            if hasattr(other, "plan") and other.plan != None:
-                other = other.plan
-            new_metadata = zero_size_self._cmp_method(zero_size_other, op)
-            assert isinstance(new_metadata, pd.Series)
-            return plan_optimizer.wrap_plan(
-                new_metadata,
-                plan=plan_optimizer.LazyPlan(
-                    plan_optimizer.LogicalBinaryOp, self._plan, other, op
-                ),
-            )
+        # Compute schema of new series.
+        new_metadata = zero_size_self._cmp_method(zero_size_other, op)
+        assert isinstance(new_metadata, pd.Series)
+        return plan_optimizer.wrap_plan(
+            new_metadata,
+            plan=plan_optimizer.LazyPlan(
+                plan_optimizer.LogicalBinaryOp, self_plan, other, op
+            ),
+        )
 
         return super()._cmp_method(other, op)
 
