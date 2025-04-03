@@ -19,7 +19,7 @@ def from_pandas(df):
 
     # TODO: distribute to workers and get result_id
     plan = plan_optimizer.LazyPlan(
-        plan_optimizer.LogicalGetDataframeRead, df, arrow_schema
+        plan_optimizer.LogicalGetPandasRead, df, arrow_schema
     )
     # TODO: Add support for Index
 
