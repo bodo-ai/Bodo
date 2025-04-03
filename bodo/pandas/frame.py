@@ -434,7 +434,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 )
             else:
                 assert False and "Unsupported option to DataFrame.merge"
-                
+
         from bodo.pandas.base import _empty_like
 
         zero_size_self = _empty_like(self)

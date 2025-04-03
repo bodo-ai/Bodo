@@ -40,9 +40,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
 
         # Get empty Pandas objects for self and other with same schema.
         zero_size_self = _empty_like(self)
-        zero_size_other = (
-            _empty_like(other) if isinstance(other, BodoSeries) else other
-        )
+        zero_size_other = _empty_like(other) if isinstance(other, BodoSeries) else other
         # This is effectively a check for a dataframe or series.
         if hasattr(other, "_plan"):
             # The other.plan==None part of this line is untested.
