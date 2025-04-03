@@ -19,8 +19,17 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
     _head_s: pd.Series | None = None
     _name: Hashable = None
 
-    _internal_names = pd.DataFrame._internal_names + ["plan"]
-    _internal_names_set = set(_internal_names)
+    @property
+    def _plan(self):
+        if hasattr(self._mgr, "plan"):
+            if self._mgr.plan is not None:
+                return self._mgr.plan
+            else:
+                return plan_optimizer.LogicalGetSeriesRead(self._mgr._md_result_id)
+
+        raise NotImplementedError(
+            "Plan not available for this manager, recreate this series with from_pandas"
+        )
 
     def _cmp_method(self, other, op):
         """Called when a BodoSeries is compared with a different entity (other)
@@ -28,35 +37,22 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         """
         from bodo.pandas.base import _empty_like
 
-        if hasattr(self, "plan"):
-            # The plan==None part of this line is untested.
-            cur_plan = (
-                self.plan
-                if self.plan is not None
-                else plan_optimizer.LogicalGetSeriesRead(self._mgr._md_result_id)
-            )
+        # Get empty Pandas objects for self and other with same schema.
+        zero_size_self = _empty_like(self)
+        zero_size_other = _empty_like(other) if isinstance(other, BodoSeries) else other
+        # This is effectively a check for a dataframe or series.
+        if hasattr(other, "_plan"):
+            other = other._plan
 
-            # Get empty Pandas objects for self and other with same schema.
-            zero_size_self = _empty_like(self)
-            zero_size_other = (
-                _empty_like(other) if isinstance(other, BodoSeries) else other
-            )
-            if hasattr(other, "plan"):
-                # The other.plan==None part of this line is untested.
-                other = (
-                    other.plan
-                    if other.plan is not None
-                    else plan_optimizer.LogicalGetSeriesRead(other._mgr._md_result_id)
-                )
-            # Compute schema of new series.
-            new_metadata = zero_size_self._cmp_method(zero_size_other, op)
-            assert isinstance(new_metadata, pd.Series)
-            return plan_optimizer.wrap_plan(
-                new_metadata,
-                plan=plan_optimizer.LazyPlan(
-                    plan_optimizer.LogicalBinaryOp, cur_plan, other, op
-                ),
-            )
+        # Compute schema of new series.
+        new_metadata = zero_size_self._cmp_method(zero_size_other, op)
+        assert isinstance(new_metadata, pd.Series)
+        return plan_optimizer.wrap_plan(
+            new_metadata,
+            plan=plan_optimizer.LazyPlan(
+                plan_optimizer.LogicalBinaryOp, self._plan, other, op
+            ),
+        )
 
         return super()._cmp_method(other, op)
 

@@ -196,10 +196,15 @@ class LazyBlockManager(BlockManager, LazyMetadataMixin[BlockManager]):
 
     def _collect(self):
         """
-        Collect data from workers if needed.
+        Collect the data onto the spawner.
+        If we have a plan, execute it and replace the blocks with the result.
+        If the data is on the workers, collect it.
         """
-        # Execute the plan if it's lazy
+        # Execute the plan if we have one
         if self._plan is not None:
+            debug_msg(
+                self.logger, "[LazyBlockManager] Executing Plan and collecting data..."
+            )
             from bodo.ext import plan_optimizer
 
             optimized_plan = plan_optimizer.py_optimize_plan(
@@ -216,7 +221,6 @@ class LazyBlockManager(BlockManager, LazyMetadataMixin[BlockManager]):
             data = plan_optimizer.py_execute_plan(optimized_plan)
 
             self._plan = None
-            self._md_result_id = None
             self.blocks = data._mgr.blocks
             self._md_result_id = None
             self._md_nrows = None
@@ -311,6 +315,7 @@ class LazySingleBlockManager(SingleBlockManager, LazyMetadataMixin[SingleBlockMa
         self._md_head = head
         self._collect_func = collect_func
         self._del_func = del_func
+        self._plan = plan
         if result_id is not None:
             assert nrows is not None
             assert result_id is not None
@@ -423,8 +428,37 @@ class LazySingleBlockManager(SingleBlockManager, LazyMetadataMixin[SingleBlockMa
 
     def _collect(self):
         """
-        Collect data from workers if needed.
+        Collect the data onto the spawner.
+        If we have a plan, execute it and replace the blocks with the result.
+        If the data is on the workers, collect it.
         """
+        # Execute the plan if we have one
+        if self._plan is not None:
+            debug_msg(
+                self.logger,
+                "[LazySingleBlockManager] Executing Plan and collecting data...",
+            )
+            from bodo.ext import plan_optimizer
+
+            optimized_plan = plan_optimizer.py_optimize_plan(
+                self._plan.generate_duckdb()
+            )
+
+            # TODO: run on workers
+            # def exec_plan(optimized_plan):
+            #     pass
+
+            # data = bodo.spawn.spawner.submit_func_to_workers(
+            #     exec_plan, [], optimized_plan
+            # )
+            data = plan_optimizer.py_execute_plan(optimized_plan)
+
+            self._plan = None
+            self.blocks = data._mgr.blocks
+            self._md_result_id = None
+            self._md_nrows = None
+            self._md_head = None
+
         if self._md_result_id is not None:
             assert self._md_nrows is not None
             assert self._md_head is not None

@@ -27,8 +27,16 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
     # use it directly when available.
     _head_df: pd.DataFrame | None = None
 
-    _internal_names = pd.DataFrame._internal_names + ["plan"]
-    _internal_names_set = set(_internal_names)
+    @property
+    def _plan(self):
+        if hasattr(self._mgr, "plan"):
+            if self._mgr.plan is not None:
+                return self._mgr.plan
+            else:
+                return plan_optimizer.LogicalGetDataframeRead(self._mgr._md_result_id)
+        raise NotImplementedError(
+            "Plan not available for this manager, recreate this dataframe with from_pandas"
+        )
 
     @staticmethod
     def from_lazy_mgr(
@@ -431,123 +439,108 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 )
             else:
                 assert False and "Unsupported option to DataFrame.merge"
-        if hasattr(self, "plan") and hasattr(right, "plan"):
-            from bodo.pandas.base import _empty_like
 
-            zero_size_self = _empty_like(self)
-            zero_size_right = _empty_like(right)
-            new_metadata = zero_size_self.merge(
-                zero_size_right,
-                how=how,
-                on=on,
-                left_on=left_on,
-                right_on=right_on,
-                left_index=left_index,
-                right_index=right_index,
-                sort=sort,
-                suffixes=suffixes,
-            )
+        from bodo.pandas.base import _empty_like
 
-            self_plan = (
-                self.plan
-                if self.plan is not None
-                else plan_optimizer.LogicalGetDataframeRead(self._mgr._md_result_id)
-            )
-            right_plan = (
-                right.plan
-                if right.plan is not None
-                else plan_optimizer.LogicalGetDataframeRead(right._mgr._md_result_id)
-            )
+        zero_size_self = _empty_like(self)
+        zero_size_right = _empty_like(right)
+        new_metadata = zero_size_self.merge(
+            zero_size_right,
+            how=how,
+            on=on,
+            left_on=left_on,
+            right_on=right_on,
+            left_index=left_index,
+            right_index=right_index,
+            sort=sort,
+            suffixes=suffixes,
+        )
 
-            if on is None:
-                if left_on is None:
-                    on = tuple(set(self.columns).intersection(set(right.columns)))
-                else:
-                    on = []
-            elif not isinstance(on, list):
-                on = (on,)
+        if on is None:
             if left_on is None:
-                left_on = []
-            if right_on is None:
-                right_on = []
-            planComparisonJoin = plan_optimizer.LazyPlan(
-                plan_optimizer.LogicalComparisonJoin,
-                self_plan,
-                right_plan,
-                plan_optimizer.CJoinType.INNER,
-                [(self.columns.get_loc(c), right.columns.get_loc(c)) for c in on]
-                + [
-                    (self.columns.get_loc(a), right.columns.get_loc(b))
-                    for a, b in zip(left_on, right_on)
-                ],
-            )
+                on = tuple(set(self.columns).intersection(set(right.columns)))
+            else:
+                on = []
+        elif not isinstance(on, list):
+            on = (on,)
+        if left_on is None:
+            left_on = []
+        if right_on is None:
+            right_on = []
+        planComparisonJoin = plan_optimizer.LazyPlan(
+            plan_optimizer.LogicalComparisonJoin,
+            self._plan,
+            right._plan,
+            plan_optimizer.CJoinType.INNER,
+            [(self.columns.get_loc(c), right.columns.get_loc(c)) for c in on]
+            + [
+                (self.columns.get_loc(a), right.columns.get_loc(b))
+                for a, b in zip(left_on, right_on)
+            ],
+        )
 
-            return plan_optimizer.wrap_plan(new_metadata, planComparisonJoin)
+        return plan_optimizer.wrap_plan(new_metadata, planComparisonJoin)
 
     def __getitem__(self, key):
         """Called when df[key] is used."""
-        if hasattr(self, "plan"):
-            from bodo.pandas.base import _empty_like
+        from bodo.pandas.base import _empty_like
 
-            self_plan = (
-                self.plan
-                if self.plan is not None
-                else plan_optimizer.LogicalGetDataframeRead(self._mgr._md_result_id)
+        """ Create 0 length versions of the dataframe and the key and
+            simulate the operation to see the resulting type. """
+
+        zero_size_self = _empty_like(self)
+        if isinstance(key, BodoSeries):
+            """ This is a masking operation. """
+            key_plan = (
+                key._plan
+                if key._plan is not None
+                else plan_optimizer.LogicalGetSeriesRead(key._mgr._md_result_id)
             )
-
-            """ If the dataframe has a non-empty plan, then the general approach
-                is to create 0 length versions of the dataframe and the key and
-                simulate the operation to see the resulting type. """
-
-            zero_size_self = _empty_like(self)
-            if isinstance(key, BodoSeries):
-                """ This is a masking operation. """
-                assert hasattr(key, "plan") and key.plan != None
-                zero_size_key = _empty_like(key)
-                new_metadata = zero_size_self.__getitem__(zero_size_key)
+            zero_size_key = _empty_like(key)
+            new_metadata = zero_size_self.__getitem__(zero_size_key)
+            return plan_optimizer.wrap_plan(
+                new_metadata,
+                plan=plan_optimizer.LazyPlan(
+                    plan_optimizer.LogicalFilter, self._plan, key_plan
+                ),
+            )
+        else:
+            """ This is selecting one or more columns. Be a bit more
+                lenient than Pandas here which says that if you have
+                an iterable it has to be 2+ elements. We will allow
+                just one element. """
+            if isinstance(key, str):
+                key = [key]
+            assert isinstance(key, Iterable)
+            key = list(key)
+            # convert column name to index
+            key_indices = [self.columns.get_loc(x) for x in key]
+            pa_schema = pa.Schema.from_pandas(self[key])
+            if len(key) == 1:
+                """ If just one element then have to extract that singular
+                    element for the metadata call to Pandas so it doesn't
+                    complain. """
+                key = key[0]
+                new_metadata = zero_size_self.__getitem__(key)
                 return plan_optimizer.wrap_plan(
                     new_metadata,
                     plan=plan_optimizer.LazyPlan(
-                        plan_optimizer.LogicalFilter, self_plan, key.plan
+                        plan_optimizer.LogicalProjection,
+                        self._plan,
+                        key_indices,
+                        pa_schema,
                     ),
                 )
             else:
-                """ This is selecting one or more columns. Be a bit more
-                    lenient than Pandas here which says that if you have
-                    an iterable it has to be 2+ elements. We will allow
-                    just one element. """
-                if isinstance(key, str):
-                    key = [key]
-                assert isinstance(key, Iterable)
-                key = list(key)
-                # convert column name to index
-                key_indices = [self.columns.get_loc(x) for x in key]
-                pa_schema = pa.Schema.from_pandas(self[key])
-                if len(key) == 1:
-                    """ If just one element then have to extract that singular
-                        element for the metadata call to Pandas so it doesn't
-                        complain. """
-                    key = key[0]
-                    new_metadata = zero_size_self.__getitem__(key)
-                    return plan_optimizer.wrap_plan(
-                        new_metadata,
-                        plan=plan_optimizer.LazyPlan(
-                            plan_optimizer.LogicalProjection,
-                            self_plan,
-                            key_indices,
-                            pa_schema,
-                        ),
-                    )
-                else:
-                    new_metadata = zero_size_self.__getitem__(key)
-                    return plan_optimizer.wrap_plan(
-                        new_metadata,
-                        plan=plan_optimizer.LazyPlan(
-                            plan_optimizer.LogicalProjection,
-                            self_plan,
-                            key_indices,
-                            pa_schema,
-                        ),
-                    )
+                new_metadata = zero_size_self.__getitem__(key)
+                return plan_optimizer.wrap_plan(
+                    new_metadata,
+                    plan=plan_optimizer.LazyPlan(
+                        plan_optimizer.LogicalProjection,
+                        self._plan,
+                        key_indices,
+                        pa_schema,
+                    ),
+                )
 
         return super().__getitem__(key)
