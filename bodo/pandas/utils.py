@@ -88,5 +88,6 @@ def cpp_table_to_df(cpp_table, arrow_schema):
     out_df = cpp_table_to_py(cpp_table, out_cols_arr, table_type).to_pandas()
     out_df.columns = [f.name for f in arrow_schema]
     # TODO: handle Indexes properly
-    out_df = out_df.drop(columns=["__index_level_0__"])
+    if "__index_level_0__" in out_df.columns:
+        out_df = out_df.drop(columns=["__index_level_0__"])
     return out_df

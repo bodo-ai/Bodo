@@ -247,6 +247,7 @@ cdef extern from "duckdb/planner/operator/logical_get.hpp" namespace "duckdb" no
 
 cdef extern from "_plan.h" nogil:
     cdef unique_ptr[CLogicalGet] make_parquet_get_node(c_string parquet_path, object arrow_schema)
+    cdef unique_ptr[CLogicalGet] make_dataframe_get_node(object df, object arrow_schema)
     cdef unique_ptr[CLogicalComparisonJoin] make_comparison_join(unique_ptr[CLogicalOperator] lhs, unique_ptr[CLogicalOperator] rhs, CJoinType join_type, vector[int_pair] cond_vec)
     cdef unique_ptr[CLogicalOperator] optimize_plan(unique_ptr[CLogicalOperator])
     cdef unique_ptr[CLogicalProjection] make_projection(unique_ptr[CLogicalOperator] source, vector[int] select_vec, object out_schema)
@@ -394,15 +395,24 @@ cdef class LogicalGetParquetRead(LogicalOperator):
     def __str__(self):
         return f"LogicalGetParquetRead({self.path})"
 
+
 cdef class LogicalGetSeriesRead(LogicalOperator):
     """Represents an already materialized BodoSeries."""
     def __cinit__(self, result_id):
         assert False & "Not implemented yet."
 
+
 cdef class LogicalGetDataframeRead(LogicalOperator):
     """Represents an already materialized BodoDataFrame."""
-    def __cinit__(self, result_id):
-        assert False & "Not implemented yet."
+    cdef readonly object arrow_schema
+    cdef readonly object df
+
+    def __cinit__(self, object df, object arrow_schema):
+        cdef unique_ptr[CLogicalGet] c_logical_get = make_dataframe_get_node(df, arrow_schema)
+        self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalGet*> c_logical_get.release())
+        self.df = df
+        self.arrow_schema = arrow_schema
+
 
 class LazyPlan:
     """ Easiest mode to use DuckDB is to generate isolated queries and try to minimize

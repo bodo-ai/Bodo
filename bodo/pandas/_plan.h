@@ -6,21 +6,45 @@
 #include <Python.h>
 #include <utility>
 #include "../io/arrow_reader.h"
+#include "_executor.h"
 #include "duckdb/common/enums/join_type.hpp"
 #include "duckdb/function/function.hpp"
 #include "duckdb/function/table_function.hpp"
 #include "duckdb/optimizer/optimizer.hpp"
 
 /**
+ * @brief Superclass for Bodo's DuckDB TableFunction classes.
+ *
+ */
+class BodoScanFunction : public duckdb::TableFunction {
+   public:
+    BodoScanFunction(std::string name)
+        : TableFunction(name, {}, nullptr, nullptr, nullptr, nullptr) {}
+};
+
+/**
+ * @brief Superclass for Bodo's DuckDB TableFunctionData classes.
+ *
+ */
+class BodoScanFunctionData : public duckdb::TableFunctionData {
+   public:
+    BodoScanFunctionData() {}
+    /**
+     * @brief Create a PhysicalOperator for reading data from this source.
+     *
+     * @return std::shared_ptr<PhysicalOperator> read operator
+     */
+    virtual std::shared_ptr<PhysicalOperator> CreatePhysicalOperator() = 0;
+};
+
+/**
  * @brief Bodo's DuckDB TableFunction for reading Parquet datasets with Bodo
  * metadata (used in LogicalGet).
  *
  */
-class BodoParquetScanFunction : public duckdb::TableFunction {
+class BodoParquetScanFunction : public BodoScanFunction {
    public:
-    BodoParquetScanFunction()
-        : TableFunction("bodo_read_parquet", {}, nullptr, nullptr, nullptr,
-                        nullptr) {
+    BodoParquetScanFunction() : BodoScanFunction("bodo_read_parquet") {
         filter_pushdown = true;
         filter_prune = true;
         projection_pushdown = true;
@@ -33,11 +57,46 @@ class BodoParquetScanFunction : public duckdb::TableFunction {
  * @brief Data for Bodo's DuckDB TableFunction for reading Parquet datasets.
  *
  */
-class BodoParquetScanFunctionData : public duckdb::TableFunctionData {
+class BodoParquetScanFunctionData : public BodoScanFunctionData {
    public:
     BodoParquetScanFunctionData(std::string path) : path(path) {}
+    std::shared_ptr<PhysicalOperator> CreatePhysicalOperator() override {
+        return std::make_shared<PhysicalReadParquet>(path);
+    }
     // Parquet dataset path
     std::string path;
+};
+
+/**
+ * @brief Bodo's DuckDB TableFunction for reading dataframe rows
+ * (used in LogicalGet).
+ *
+ */
+class BodoDataFrameScanFunction : public BodoScanFunction {
+   public:
+    BodoDataFrameScanFunction() : BodoScanFunction("bodo_read_df") {
+        projection_pushdown = true;
+    }
+};
+
+/**
+ * @brief Data for Bodo's DuckDB TableFunction for reading dataframe rows.
+ *
+ */
+class BodoDataFrameScanFunctionData : public BodoScanFunctionData {
+   public:
+    BodoDataFrameScanFunctionData(PyObject *df) : df(df) { Py_INCREF(df); }
+    ~BodoDataFrameScanFunctionData() { Py_DECREF(df); }
+    /**
+     * @brief Create a PhysicalOperator for reading from the dataframe.
+     *
+     * @return std::shared_ptr<PhysicalOperator> dataframe read operator
+     */
+    std::shared_ptr<PhysicalOperator> CreatePhysicalOperator() override {
+        return std::make_shared<PhysicalReadPandas>(df);
+    }
+
+    PyObject *df;
 };
 
 /**
@@ -136,6 +195,9 @@ duckdb::unique_ptr<duckdb::LogicalFilter> make_filter(
  */
 duckdb::unique_ptr<duckdb::LogicalGet> make_parquet_get_node(
     std::string parquet_path, PyObject *pyarrow_schema);
+
+duckdb::unique_ptr<duckdb::LogicalGet> make_dataframe_get_node(
+    PyObject *df, PyObject *pyarrow_schema);
 
 /**
  * @brief Returns a statically created DuckDB client context.
