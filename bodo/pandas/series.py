@@ -30,17 +30,13 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         with the given operator "op".
         """
         from bodo.pandas.base import _empty_like
-        from bodo.pandas.frame import BodoDataFrame
 
         # Get empty Pandas objects for self and other with same schema.
         zero_size_self = _empty_like(self)
         zero_size_other = _empty_like(other) if isinstance(other, BodoSeries) else other
         # This is effectively a check for a dataframe or series.
-        if not isinstance(other, (BodoSeries, BodoDataFrame)):
-            raise TypeError(
-                f"Unsupported type for comparison: {type(other)}. "
-                "Only BodoSeries or BodoDataFrame are supported."
-            )
+        if hasattr(other, "_plan"):
+            other = other._plan
 
         # Compute schema of new series.
         new_metadata = zero_size_self._cmp_method(zero_size_other, op)
@@ -48,7 +44,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         return plan_optimizer.wrap_plan(
             new_metadata,
             plan=plan_optimizer.LazyPlan(
-                plan_optimizer.LogicalBinaryOp, self._plan, other._plan, op
+                plan_optimizer.LogicalBinaryOp, self._plan, other, op
             ),
         )
 
