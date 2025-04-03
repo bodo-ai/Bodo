@@ -21,41 +21,34 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
 
     @property
     def _plan(self):
-        if hasattr(self._mgr, "plan"):
+        if hasattr(self._mgr, "plan") and self._mgr.plan is not None:
             return self._mgr.plan
-        return None
+        return plan_optimizer.LogicalGetSeriesRead(self._mgr._md_result_id)
 
     def _cmp_method(self, other, op):
         """Called when a BodoSeries is compared with a different entity (other)
         with the given operator "op".
         """
         from bodo.pandas.base import _empty_like
-
-        # The plan==None part of this line is untested.
-        self_plan = (
-            self.plan
-            if self.plan is not None
-            else plan_optimizer.LogicalGetSeriesRead(self._mgr._md_result_id)
-        )
+        from bodo.pandas.frame import BodoDataFrame
 
         # Get empty Pandas objects for self and other with same schema.
         zero_size_self = _empty_like(self)
         zero_size_other = _empty_like(other) if isinstance(other, BodoSeries) else other
         # This is effectively a check for a dataframe or series.
-        if hasattr(other, "_plan"):
-            # The other.plan==None part of this line is untested.
-            other = (
-                other._plan
-                if other._plan is not None
-                else plan_optimizer.LogicalGetSeriesRead(other._mgr._md_result_id)
+        if not isinstance(other, (BodoSeries, BodoDataFrame)):
+            raise TypeError(
+                f"Unsupported type for comparison: {type(other)}. "
+                "Only BodoSeries or BodoDataFrame are supported."
             )
+
         # Compute schema of new series.
         new_metadata = zero_size_self._cmp_method(zero_size_other, op)
         assert isinstance(new_metadata, pd.Series)
         return plan_optimizer.wrap_plan(
             new_metadata,
             plan=plan_optimizer.LazyPlan(
-                plan_optimizer.LogicalBinaryOp, self_plan, other, op
+                plan_optimizer.LogicalBinaryOp, self._plan, other._plan, op
             ),
         )
 
