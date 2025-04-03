@@ -29,9 +29,9 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
 
     @property
     def _plan(self):
-        if hasattr(self._mgr, "plan"):
-            if self._mgr.plan is not None:
-                return self._mgr.plan
+        if hasattr(self._mgr, "_plan"):
+            if self._mgr._plan is not None:
+                return self._mgr._plan
             else:
                 return plan_optimizer.LogicalGetDataframeRead(self._mgr._md_result_id)
         raise NotImplementedError(
@@ -515,7 +515,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             key = list(key)
             # convert column name to index
             key_indices = [self.columns.get_loc(x) for x in key]
-            pa_schema = pa.Schema.from_pandas(self[key])
+            pa_schema = pa.Schema.from_pandas(zero_size_self[key])
             if len(key) == 1:
                 """ If just one element then have to extract that singular
                     element for the metadata call to Pandas so it doesn't

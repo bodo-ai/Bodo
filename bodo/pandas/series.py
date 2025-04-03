@@ -21,9 +21,9 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
 
     @property
     def _plan(self):
-        if hasattr(self._mgr, "plan"):
-            if self._mgr.plan is not None:
-                return self._mgr.plan
+        if hasattr(self._mgr, "_plan"):
+            if self._mgr._plan is not None:
+                return self._mgr._plan
             else:
                 return plan_optimizer.LogicalGetSeriesRead(self._mgr._md_result_id)
 
