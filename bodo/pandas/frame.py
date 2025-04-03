@@ -29,7 +29,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
 
     @property
     def _plan(self):
-        if hasattr(self._mgr, "plan"):
+        if hasattr(self._mgr, "plan") and self._mgr.plan is not None:
             return self._mgr.plan
         return plan_optimizer.LogicalGetDataframeRead(self._mgr._md_result_id)
 
@@ -451,12 +451,6 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             suffixes=suffixes,
         )
 
-        right_plan = (
-            right._plan
-            if right._plan is not None
-            else plan_optimizer.LogicalGetDataframeRead(right._mgr._md_result_id)
-        )
-
         if on is None:
             if left_on is None:
                 on = tuple(set(self.columns).intersection(set(right.columns)))
@@ -471,7 +465,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         planComparisonJoin = plan_optimizer.LazyPlan(
             plan_optimizer.LogicalComparisonJoin,
             self._plan,
-            right_plan,
+            right._plan,
             plan_optimizer.CJoinType.INNER,
             [(self.columns.get_loc(c), right.columns.get_loc(c)) for c in on]
             + [
