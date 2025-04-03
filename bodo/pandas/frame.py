@@ -413,6 +413,22 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         indicator=False,  # str | bool = False,
         validate=None,  # MergeValidate | None = None,
     ):  # -> BodoDataFrame:
+        if not bodo.dataframe_library_enabled:
+            return super().merge(
+                right,
+                how=how,
+                on=on,
+                left_on=left_on,
+                right_on=right_on,
+                left_index=left_index,
+                right_index=right_index,
+                sort=sort,
+                suffixes=suffixes,
+                copy=copy,
+                indicator=indicator,
+                validate=validate,
+            )
+
         from bodo.pandas import BODO_PANDAS_FALLBACK
 
         if (
@@ -483,6 +499,9 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
 
     def __getitem__(self, key):
         """Called when df[key] is used."""
+        if not bodo.dataframe_library_enabled:
+            return super().__getitem__(key)
+
         from bodo.pandas.base import _empty_like
 
         """ Create 0 length versions of the dataframe and the key and
@@ -542,5 +561,3 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                         pa_schema,
                     ),
                 )
-
-        return super().__getitem__(key)

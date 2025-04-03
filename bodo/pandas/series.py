@@ -3,6 +3,7 @@ from collections.abc import Callable, Hashable
 
 import pandas as pd
 
+import bodo
 from bodo.ext import plan_optimizer
 from bodo.pandas.array_manager import LazySingleArrayManager
 from bodo.pandas.lazy_metadata import LazyMetadata
@@ -35,6 +36,9 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         """Called when a BodoSeries is compared with a different entity (other)
         with the given operator "op".
         """
+        if not bodo.dataframe_library_enabled:
+            return super()._cmp_method(other, op)
+
         from bodo.pandas.base import _empty_like
 
         # Get empty Pandas objects for self and other with same schema.
