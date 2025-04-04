@@ -180,7 +180,7 @@ duckdb::unique_ptr<duckdb::LogicalGet> make_parquet_get_node(
 
 duckdb::unique_ptr<duckdb::LogicalGet> make_dataframe_get_node(
     PyObject *df, PyObject *pyarrow_schema) {
-    // See DuckDB Pandads scan code:
+    // See DuckDB Pandas scan code:
     // https://github.com/duckdb/duckdb/blob/d29a92f371179170688b4df394478f389bf7d1a6/tools/pythonpkg/src/include/duckdb_python/pandas/pandas_scan.hpp#L19
     // https://github.com/duckdb/duckdb/blob/d29a92f371179170688b4df394478f389bf7d1a6/tools/pythonpkg/src/include/duckdb_python/pandas/pandas_bind.hpp#L19
     // https://github.com/duckdb/duckdb/blob/d29a92f371179170688b4df394478f389bf7d1a6/tools/pythonpkg/src/pandas/scan.cpp#L185
