@@ -6895,3 +6895,17 @@ if hasattr(numba.core.caching, "CacheImpl"):
     # list of CacheLocators it has and uses the first one that doesn't return None.
     # This allows for the caching of text-generation functions created through bodo_exec.
     numba.core.caching.CacheImpl._locator_classes.append(BodoCacheLocator)
+
+def get_method_overloads(typ):
+    """Returns a list of method names with overloads
+       for the given Numba datatype.
+    """
+    from numba.core.registry import cpu_target
+    ctx = cpu_target._toplevel_typing_context
+    # Make sure the templates are present.
+    ctx.refresh()
+    # Get the templates for the given datatype.
+    attr_templates = ctx._attributes[typ]
+    # Not all templates are for method so filter for
+    # methods by presence of _attr attribute.
+    return [x._attr for x in attr_templates if hasattr(x, "_attr")]
