@@ -6,7 +6,6 @@
 #include "duckdb/common/serializer/buffered_file_reader.hpp"
 #include "duckdb/common/types/uuid.hpp"
 #include "duckdb/function/function_set.hpp"
-#include "duckdb/main/extension_helper.hpp"
 #include "duckdb/main/secret/secret_storage.hpp"
 #include "duckdb/main/secret/secret_manager.hpp"
 #include "duckdb/parser/parsed_data/create_secret_info.hpp"

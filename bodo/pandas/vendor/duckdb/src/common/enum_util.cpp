@@ -103,13 +103,9 @@
 #include "duckdb/function/table_function.hpp"
 #include "duckdb/logging/logging.hpp"
 #include "duckdb/main/appender.hpp"
-#include "duckdb/main/capi/capi_internal.hpp"
 #include "duckdb/main/client_properties.hpp"
 #include "duckdb/main/config.hpp"
 #include "duckdb/main/error_manager.hpp"
-#include "duckdb/main/extension.hpp"
-#include "duckdb/main/extension_helper.hpp"
-#include "duckdb/main/extension_install_info.hpp"
 #include "duckdb/main/query_result.hpp"
 #include "duckdb/main/secret/secret.hpp"
 #include "duckdb/main/settings.hpp"
@@ -589,10 +585,10 @@ BlockState EnumUtil::FromString<BlockState>(const char *value) {
 
 const StringUtil::EnumStringLiteral *GetCAPIResultSetTypeValues() {
 	static constexpr StringUtil::EnumStringLiteral values[] {
-		{ static_cast<uint32_t>(CAPIResultSetType::CAPI_RESULT_TYPE_NONE), "CAPI_RESULT_TYPE_NONE" },
-		{ static_cast<uint32_t>(CAPIResultSetType::CAPI_RESULT_TYPE_MATERIALIZED), "CAPI_RESULT_TYPE_MATERIALIZED" },
-		{ static_cast<uint32_t>(CAPIResultSetType::CAPI_RESULT_TYPE_STREAMING), "CAPI_RESULT_TYPE_STREAMING" },
-		{ static_cast<uint32_t>(CAPIResultSetType::CAPI_RESULT_TYPE_DEPRECATED), "CAPI_RESULT_TYPE_DEPRECATED" }
+		{ 0, "CAPI_RESULT_TYPE_NONE" },
+		{ 1, "CAPI_RESULT_TYPE_MATERIALIZED" },
+		{ 2, "CAPI_RESULT_TYPE_STREAMING" },
+		{ 3, "CAPI_RESULT_TYPE_DEPRECATED" }
 	};
 	return values;
 }
@@ -1494,10 +1490,10 @@ ExpressionType EnumUtil::FromString<ExpressionType>(const char *value) {
 
 const StringUtil::EnumStringLiteral *GetExtensionABITypeValues() {
 	static constexpr StringUtil::EnumStringLiteral values[] {
-		{ static_cast<uint32_t>(ExtensionABIType::UNKNOWN), "UNKNOWN" },
-		{ static_cast<uint32_t>(ExtensionABIType::CPP), "CPP" },
-		{ static_cast<uint32_t>(ExtensionABIType::C_STRUCT), "C_STRUCT" },
-		{ static_cast<uint32_t>(ExtensionABIType::C_STRUCT_UNSTABLE), "C_STRUCT_UNSTABLE" }
+		{ 0, "UNKNOWN" },
+		{ 1, "CPP" },
+		{ 2, "C_STRUCT" },
+		{ 3, "C_STRUCT_UNSTABLE" }
 	};
 	return values;
 }
@@ -1514,11 +1510,11 @@ ExtensionABIType EnumUtil::FromString<ExtensionABIType>(const char *value) {
 
 const StringUtil::EnumStringLiteral *GetExtensionInstallModeValues() {
 	static constexpr StringUtil::EnumStringLiteral values[] {
-		{ static_cast<uint32_t>(ExtensionInstallMode::UNKNOWN), "UNKNOWN" },
-		{ static_cast<uint32_t>(ExtensionInstallMode::REPOSITORY), "REPOSITORY" },
-		{ static_cast<uint32_t>(ExtensionInstallMode::CUSTOM_PATH), "CUSTOM_PATH" },
-		{ static_cast<uint32_t>(ExtensionInstallMode::STATICALLY_LINKED), "STATICALLY_LINKED" },
-		{ static_cast<uint32_t>(ExtensionInstallMode::NOT_INSTALLED), "NOT_INSTALLED" }
+		{ 0, "UNKNOWN" },
+		{ 1, "REPOSITORY" },
+		{ 2, "CUSTOM_PATH" },
+		{ 3, "STATICALLY_LINKED" },
+		{ 4, "NOT_INSTALLED" }
 	};
 	return values;
 }
@@ -1535,9 +1531,9 @@ ExtensionInstallMode EnumUtil::FromString<ExtensionInstallMode>(const char *valu
 
 const StringUtil::EnumStringLiteral *GetExtensionLoadResultValues() {
 	static constexpr StringUtil::EnumStringLiteral values[] {
-		{ static_cast<uint32_t>(ExtensionLoadResult::LOADED_EXTENSION), "LOADED_EXTENSION" },
-		{ static_cast<uint32_t>(ExtensionLoadResult::EXTENSION_UNKNOWN), "EXTENSION_UNKNOWN" },
-		{ static_cast<uint32_t>(ExtensionLoadResult::NOT_LOADED), "NOT_LOADED" }
+		{ 0, "LOADED_EXTENSION" },
+		{ 1, "EXTENSION_UNKNOWN" },
+		{ 2, "NOT_LOADED" }
 	};
 	return values;
 }
@@ -1554,14 +1550,14 @@ ExtensionLoadResult EnumUtil::FromString<ExtensionLoadResult>(const char *value)
 
 const StringUtil::EnumStringLiteral *GetExtensionUpdateResultTagValues() {
 	static constexpr StringUtil::EnumStringLiteral values[] {
-		{ static_cast<uint32_t>(ExtensionUpdateResultTag::UNKNOWN), "UNKNOWN" },
-		{ static_cast<uint32_t>(ExtensionUpdateResultTag::NO_UPDATE_AVAILABLE), "NO_UPDATE_AVAILABLE" },
-		{ static_cast<uint32_t>(ExtensionUpdateResultTag::NOT_A_REPOSITORY), "NOT_A_REPOSITORY" },
-		{ static_cast<uint32_t>(ExtensionUpdateResultTag::NOT_INSTALLED), "NOT_INSTALLED" },
-		{ static_cast<uint32_t>(ExtensionUpdateResultTag::STATICALLY_LOADED), "STATICALLY_LOADED" },
-		{ static_cast<uint32_t>(ExtensionUpdateResultTag::MISSING_INSTALL_INFO), "MISSING_INSTALL_INFO" },
-		{ static_cast<uint32_t>(ExtensionUpdateResultTag::REDOWNLOADED), "REDOWNLOADED" },
-		{ static_cast<uint32_t>(ExtensionUpdateResultTag::UPDATED), "UPDATED" }
+		{ 0, "UNKNOWN" },
+		{ 1, "NO_UPDATE_AVAILABLE" },
+		{ 2, "NOT_A_REPOSITORY" },
+		{ 3, "NOT_INSTALLED" },
+		{ 4, "STATICALLY_LOADED" },
+		{ 5, "MISSING_INSTALL_INFO" },
+		{ 6, "REDOWNLOADED" },
+		{ 7, "UPDATED" }
 	};
 	return values;
 }

@@ -3,7 +3,6 @@
 #include "duckdb/common/string_util.hpp"
 #include "duckdb/main/client_context.hpp"
 #include "duckdb/main/config.hpp"
-#include "duckdb/main/extension_helper.hpp"
 #include "duckdb/parser/query_node/select_node.hpp"
 #include "duckdb/parser/statement/select_statement.hpp"
 #include "duckdb/parser/tableref/basetableref.hpp"
@@ -18,31 +17,6 @@
 #include "duckdb/catalog/catalog_search_path.hpp"
 
 namespace duckdb {
-
-static bool TryLoadExtensionForReplacementScan(ClientContext &context, const string &table_name) {
-	auto lower_name = StringUtil::Lower(table_name);
-	auto &dbconfig = DBConfig::GetConfig(context);
-
-	if (!dbconfig.options.autoload_known_extensions) {
-		return false;
-	}
-
-	for (const auto &entry : EXTENSION_FILE_POSTFIXES) {
-		if (StringUtil::EndsWith(lower_name, entry.name)) {
-			ExtensionHelper::AutoLoadExtension(context, entry.extension);
-			return true;
-		}
-	}
-
-	for (const auto &entry : EXTENSION_FILE_CONTAINS) {
-		if (StringUtil::Contains(lower_name, entry.name)) {
-			ExtensionHelper::AutoLoadExtension(context, entry.extension);
-			return true;
-		}
-	}
-
-	return false;
-}
 
 unique_ptr<BoundTableRef> Binder::BindWithReplacementScan(ClientContext &context, BaseTableRef &ref) {
 	auto &config = DBConfig::GetConfig(context);
@@ -226,24 +200,6 @@ unique_ptr<BoundTableRef> Binder::Bind(BaseTableRef &ref) {
 
 		// Try autoloading an extension, then retry the replacement scan bind
 		auto full_path = ReplacementScan::GetFullPath(ref.catalog_name, ref.schema_name, ref.table_name);
-		auto extension_loaded = TryLoadExtensionForReplacementScan(context, full_path);
-		if (extension_loaded) {
-			replacement_scan_bind_result = BindWithReplacementScan(context, ref);
-			if (replacement_scan_bind_result) {
-				return replacement_scan_bind_result;
-			}
-		}
-		auto &config = DBConfig::GetConfig(context);
-		if (context.config.use_replacement_scans && config.options.enable_external_access &&
-		    ExtensionHelper::IsFullPath(full_path)) {
-			auto &fs = FileSystem::GetFileSystem(context);
-			if (fs.FileExists(full_path)) {
-				throw BinderException(
-				    "No extension found that is capable of reading the file \"%s\"\n* If this file is a supported file "
-				    "format you can explicitly use the reader functions, such as read_csv, read_json or read_parquet",
-				    full_path);
-			}
-		}
 
 		// could not find an alternative: bind again to get the error
 		(void)entry_retriever.GetEntry(ref.catalog_name, ref.schema_name, table_lookup,

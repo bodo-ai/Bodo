@@ -30,9 +30,6 @@ BoundCastExpression::BoundCastExpression(ClientContext &context, unique_ptr<Expr
 
 unique_ptr<Expression> AddCastExpressionInternal(unique_ptr<Expression> expr, const LogicalType &target_type,
                                                  BoundCastInfo bound_cast, bool try_cast) {
-	if (ExpressionBinder::GetExpressionReturnType(*expr) == target_type) {
-		return expr;
-	}
 	auto &expr_type = expr->return_type;
 	if (target_type.id() == LogicalTypeId::LIST && expr_type.id() == LogicalTypeId::LIST) {
 		auto &target_list = ListType::GetChildType(target_type);

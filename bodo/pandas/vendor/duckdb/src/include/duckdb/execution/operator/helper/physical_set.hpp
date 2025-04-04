@@ -15,7 +15,6 @@
 namespace duckdb {
 
 struct DBConfig;
-struct ExtensionOption;
 
 //! PhysicalSet represents a SET operation (e.g. SET a = 42)
 class PhysicalSet : public PhysicalOperator {
@@ -35,9 +34,6 @@ public:
 	bool IsSource() const override {
 		return true;
 	}
-
-	static void SetExtensionVariable(ClientContext &context, ExtensionOption &extension_option, const string &name,
-	                                 SetScope scope, const Value &value);
 
 public:
 	const string name;

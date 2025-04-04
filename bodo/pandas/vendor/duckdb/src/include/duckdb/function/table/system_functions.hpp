@@ -71,10 +71,6 @@ struct DuckDBDependenciesFun {
 	static void RegisterFunction(BuiltinFunctions &set);
 };
 
-struct DuckDBExtensionsFun {
-	static void RegisterFunction(BuiltinFunctions &set);
-};
-
 struct DuckDBPreparedStatementsFun {
 	static void RegisterFunction(BuiltinFunctions &set);
 };
