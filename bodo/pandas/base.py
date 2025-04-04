@@ -16,6 +16,14 @@ def from_pandas(df):
     if not isinstance(df, pd.DataFrame):
         raise TypeError("Input must be a pandas DataFrame")
 
+    # TODO: Add support for Index
+    if (
+        not isinstance(df.index, pd.RangeIndex)
+        or df.index.start != 0
+        or df.index.step != 1
+    ):
+        raise ValueError("Only RangeIndex with start=0 and step=1 is supported")
+
     empty_df = df.iloc[:0]
     n_rows = len(df)
     arrow_schema = pa.Schema.from_pandas(df)
@@ -25,7 +33,6 @@ def from_pandas(df):
         plan = LazyPlan("LogicalGetPandasReadParallel", res_id, arrow_schema)
     else:
         plan = LazyPlan("LogicalGetPandasReadSeq", df, arrow_schema)
-    # TODO: Add support for Index
 
     return plan_optimizer.wrap_plan(empty_df, plan=plan, nrows=n_rows)
 
