@@ -239,24 +239,12 @@ class LazyArrayManager(ArrayManager, LazyMetadataMixin[ArrayManager]):
         If the data is on the workers, collect it.
         """
         if self._plan is not None:
+            from bodo.pandas.utils import execute_plan
+
             debug_msg(
                 self.logger, "[LazyArrayManager] Executing Plan and collecting data..."
             )
-            from bodo.ext import plan_optimizer
-
-            optimized_plan = plan_optimizer.py_optimize_plan(
-                self._plan.generate_duckdb()
-            )
-
-            # TODO: run on workers
-            # def exec_plan(optimized_plan):
-            #     pass
-
-            # data = bodo.spawn.spawner.submit_func_to_workers(
-            #     exec_plan, [], optimized_plan
-            # )
-            data = plan_optimizer.py_execute_plan(optimized_plan)
-
+            data = execute_plan(self._plan)
             self._plan = None
             self.arrays = data._mgr.arrays
             self._md_result_id = None
@@ -460,25 +448,13 @@ class LazySingleArrayManager(SingleArrayManager, LazyMetadataMixin[SingleArrayMa
         If the data is on the workers, collect it.
         """
         if self._plan is not None:
+            from bodo.pandas.utils import execute_plan
+
             debug_msg(
                 self.logger,
                 "[LazySingleArrayManager] Executing Plan and collecting data...",
             )
-            from bodo.ext import plan_optimizer
-
-            optimized_plan = plan_optimizer.py_optimize_plan(
-                self._plan.generate_duckdb()
-            )
-
-            # TODO: run on workers
-            # def exec_plan(optimized_plan):
-            #     pass
-
-            # data = bodo.spawn.spawner.submit_func_to_workers(
-            #     exec_plan, [], optimized_plan
-            # )
-            data = plan_optimizer.py_execute_plan(optimized_plan)
-
+            data = execute_plan(self._plan)
             self._plan = None
             self.arrays = data._mgr.arrays
             self._md_result_id = None

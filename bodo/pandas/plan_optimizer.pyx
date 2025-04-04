@@ -247,7 +247,8 @@ cdef extern from "duckdb/planner/operator/logical_get.hpp" namespace "duckdb" no
 
 cdef extern from "_plan.h" nogil:
     cdef unique_ptr[CLogicalGet] make_parquet_get_node(c_string parquet_path, object arrow_schema)
-    cdef unique_ptr[CLogicalGet] make_dataframe_get_node(object df, object arrow_schema)
+    cdef unique_ptr[CLogicalGet] make_dataframe_get_seq_node(object df, object arrow_schema)
+    cdef unique_ptr[CLogicalGet] make_dataframe_get_parallel_node(c_string res_id, object arrow_schema)
     cdef unique_ptr[CLogicalComparisonJoin] make_comparison_join(unique_ptr[CLogicalOperator] lhs, unique_ptr[CLogicalOperator] rhs, CJoinType join_type, vector[int_pair] cond_vec)
     cdef unique_ptr[CLogicalOperator] optimize_plan(unique_ptr[CLogicalOperator])
     cdef unique_ptr[CLogicalProjection] make_projection(unique_ptr[CLogicalOperator] source, vector[int] select_vec, object out_schema)
@@ -408,54 +409,27 @@ cdef class LogicalGetDataframeRead(LogicalOperator):
         assert False & "Not implemented yet."
 
 
-cdef class LogicalGetPandasRead(LogicalOperator):
-    """Represents scan of a Pandas dataframe passed into from_pandas."""
+cdef class LogicalGetPandasReadSeq(LogicalOperator):
+    """Represents sequential scan of a Pandas dataframe passed into from_pandas."""
     cdef readonly object arrow_schema
     cdef readonly object df
 
     def __cinit__(self, object df, object arrow_schema):
-        cdef unique_ptr[CLogicalGet] c_logical_get = make_dataframe_get_node(df, arrow_schema)
+        cdef unique_ptr[CLogicalGet] c_logical_get = make_dataframe_get_seq_node(df, arrow_schema)
         self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalGet*> c_logical_get.release())
         self.df = df
         self.arrow_schema = arrow_schema
 
 
-class LazyPlan:
-    """ Easiest mode to use DuckDB is to generate isolated queries and try to minimize
-        node re-use issues due to the frequent use of unique_ptr.  This class should be
-        used when constructing all plans and holds them lazily.  On demand, generate_duckdb
-        can be used to convert to an isolated set of DuckDB objects for execution.
-    """
-    def __init__(self, plan_class, *args, **kwargs):
-        self.plan_class = plan_class
-        self.args = args
-        self.kwargs = kwargs
+cdef class LogicalGetPandasReadParallel(LogicalOperator):
+    """Represents parallel scan of a Pandas dataframe passed into from_pandas."""
+    cdef readonly object arrow_schema
 
-    def generate_duckdb(self, cache=None):
-        # Sometimes the same LazyPlan object is encountered twice during the same
-        # query so  we use the cache dict to only convert it once.
-        if cache is None:
-            cache = {}
-        # If previously converted then use the last result.
-        if id(self) in cache:
-            return cache[id(self)]
+    def __cinit__(self, str result_id, object arrow_schema):
+        cdef unique_ptr[CLogicalGet] c_logical_get = make_dataframe_get_parallel_node(result_id.encode(), arrow_schema)
+        self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalGet*> c_logical_get.release())
+        self.arrow_schema = arrow_schema
 
-        def recursive_check(x):
-            """ Recursively convert LazyPlans but return other types unmodified.
-            """
-            if isinstance(x, LazyPlan):
-                return x.generate_duckdb(cache=cache)
-            else:
-                return x
-
-        # Convert any LazyPlan in the args or kwargs.
-        args = [recursive_check(x) for x in self.args]
-        kwargs = {k:recursive_check(v) for k,v in self.kwargs.items()}
-        # Create real duckdb class.
-        ret = self.plan_class(*args, **kwargs)
-        # Add to cache so we don't convert it again.
-        cache[id(self)] = ret
-        return ret
 
 cpdef py_optimize_plan(object plan):
     """Optimize a logical plan using DuckDB's optimizer
@@ -480,12 +454,13 @@ cpdef wrap_plan(schema, plan, nrows=None, index_data=None):
         schema and given plan node.
     """
     import pandas as pd
+    from bodo.pandas.utils import LazyPlan
     from bodo.pandas.frame import BodoDataFrame
     from bodo.pandas.series import BodoSeries
     from bodo.pandas.lazy_metadata import LazyMetadata
     from bodo.pandas.utils import get_lazy_manager_class, get_lazy_single_manager_class
 
-    assert isinstance(plan, LazyPlan)
+    assert isinstance(plan, LazyPlan), "wrap_plan: LazyPlan expected"
 
     if isinstance(schema, dict):
         schema = {
