@@ -239,6 +239,7 @@ def check_args_fallback(
 
     return decorator
 
+
 class LazyPlan:
     """Easiest mode to use DuckDB is to generate isolated queries and try to minimize
     node re-use issues due to the frequent use of unique_ptr.  This class should be
