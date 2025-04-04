@@ -26,6 +26,8 @@ def test_from_pandas(datapath):
             bdf,
             df,
         )
+        assert not bdf._lazy
+        assert bdf._mgr._plan is None
 
     # Parallel test
     bdf = bd.from_pandas(df)
@@ -36,3 +38,5 @@ def test_from_pandas(datapath):
         bdf,
         df,
     )
+    assert not bdf._lazy
+    assert bdf._mgr._plan is None
