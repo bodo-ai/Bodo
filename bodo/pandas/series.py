@@ -3,6 +3,8 @@ from collections.abc import Callable, Hashable
 
 import pandas as pd
 
+import bodo
+from bodo.ext import plan_optimizer
 from bodo.pandas.array_manager import LazySingleArrayManager
 from bodo.pandas.lazy_metadata import LazyMetadata
 from bodo.pandas.lazy_wrapper import BodoLazyWrapper
@@ -17,6 +19,46 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
     # use it directly when available.
     _head_s: pd.Series | None = None
     _name: Hashable = None
+
+    @property
+    def _plan(self):
+        if hasattr(self._mgr, "_plan"):
+            if self._mgr._plan is not None:
+                return self._mgr._plan
+            else:
+                return plan_optimizer.LogicalGetSeriesRead(self._mgr._md_result_id)
+
+        raise NotImplementedError(
+            "Plan not available for this manager, recreate this series with from_pandas"
+        )
+
+    def _cmp_method(self, other, op):
+        """Called when a BodoSeries is compared with a different entity (other)
+        with the given operator "op".
+        """
+        if not bodo.dataframe_library_enabled:
+            return super()._cmp_method(other, op)
+
+        from bodo.pandas.base import _empty_like
+
+        # Get empty Pandas objects for self and other with same schema.
+        zero_size_self = _empty_like(self)
+        zero_size_other = _empty_like(other) if isinstance(other, BodoSeries) else other
+        # This is effectively a check for a dataframe or series.
+        if hasattr(other, "_plan"):
+            other = other._plan
+
+        # Compute schema of new series.
+        new_metadata = zero_size_self._cmp_method(zero_size_other, op)
+        assert isinstance(new_metadata, pd.Series)
+        return plan_optimizer.wrap_plan(
+            new_metadata,
+            plan=plan_optimizer.LazyPlan(
+                plan_optimizer.LogicalBinaryOp, self._plan, other, op
+            ),
+        )
+
+        return super()._cmp_method(other, op)
 
     @staticmethod
     def from_lazy_mgr(
@@ -38,6 +80,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         lazy_metadata: LazyMetadata,
         collect_func: Callable[[str], pt.Any] | None = None,
         del_func: Callable[[str], None] | None = None,
+        plan: plan_optimizer.LogicalOperator | None = None,
     ) -> "BodoSeries":
         """
         Create a BodoSeries from a lazy metadata object.
@@ -52,6 +95,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             collect_func=collect_func,
             del_func=del_func,
             index_data=lazy_metadata.index_data,
+            plan=plan,
         )
         return cls.from_lazy_mgr(lazy_mgr, lazy_metadata.head)
 

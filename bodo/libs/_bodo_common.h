@@ -2193,4 +2193,5 @@ PyMODINIT_FUNC PyInit_memory_cpp(void);
 #ifdef IS_TESTING
 PyMODINIT_FUNC PyInit_test_cpp(void);
 #endif
+PyMODINIT_FUNC PyInit_plan_optimizer(void);
 }  // extern "C"
