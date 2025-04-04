@@ -3,13 +3,12 @@ from collections.abc import Callable, Hashable
 
 import pandas as pd
 
-import bodo
 from bodo.ext import plan_optimizer
 from bodo.pandas.array_manager import LazySingleArrayManager
 from bodo.pandas.lazy_metadata import LazyMetadata
 from bodo.pandas.lazy_wrapper import BodoLazyWrapper
 from bodo.pandas.managers import LazyMetadataMixin, LazySingleBlockManager
-from bodo.pandas.utils import get_lazy_single_manager_class
+from bodo.pandas.utils import check_args_fallback, get_lazy_single_manager_class
 
 
 class BodoSeries(pd.Series, BodoLazyWrapper):
@@ -32,13 +31,11 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             "Plan not available for this manager, recreate this series with from_pandas"
         )
 
+    @check_args_fallback("all")
     def _cmp_method(self, other, op):
         """Called when a BodoSeries is compared with a different entity (other)
         with the given operator "op".
         """
-        if not bodo.dataframe_library_enabled:
-            return super()._cmp_method(other, op)
-
         from bodo.pandas.base import _empty_like
 
         # Get empty Pandas objects for self and other with same schema.
@@ -57,8 +54,6 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
                 plan_optimizer.LogicalBinaryOp, self._plan, other, op
             ),
         )
-
-        return super()._cmp_method(other, op)
 
     @staticmethod
     def from_lazy_mgr(
