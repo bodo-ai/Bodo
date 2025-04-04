@@ -91,3 +91,68 @@ def cpp_table_to_df(cpp_table, arrow_schema):
     if "__index_level_0__" in out_df.columns:
         out_df = out_df.drop(columns=["__index_level_0__"])
     return out_df
+
+
+class LazyPlan:
+    """Easiest mode to use DuckDB is to generate isolated queries and try to minimize
+    node re-use issues due to the frequent use of unique_ptr.  This class should be
+    used when constructing all plans and holds them lazily.  On demand, generate_duckdb
+    can be used to convert to an isolated set of DuckDB objects for execution.
+    """
+
+    def __init__(self, plan_class, *args, **kwargs):
+        self.plan_class = plan_class
+        self.args = args
+        self.kwargs = kwargs
+
+    def generate_duckdb(self, cache=None):
+        from bodo.ext import plan_optimizer
+
+        # Sometimes the same LazyPlan object is encountered twice during the same
+        # query so  we use the cache dict to only convert it once.
+        if cache is None:
+            cache = {}
+        # If previously converted then use the last result.
+        if id(self) in cache:
+            return cache[id(self)]
+
+        def recursive_check(x):
+            """Recursively convert LazyPlans but return other types unmodified."""
+            if isinstance(x, LazyPlan):
+                return x.generate_duckdb(cache=cache)
+            else:
+                return x
+
+        # Convert any LazyPlan in the args or kwargs.
+        args = [recursive_check(x) for x in self.args]
+        kwargs = {k: recursive_check(v) for k, v in self.kwargs.items()}
+        # Create real duckdb class.
+        ret = getattr(plan_optimizer, self.plan_class)(*args, **kwargs)
+        # Add to cache so we don't convert it again.
+        cache[id(self)] = ret
+        return ret
+
+
+def execute_plan(plan: LazyPlan):
+    """Execute a dataframe plan using Bodo's execution engine.
+
+    Args:
+        plan (LazyPlan): query plan to execute
+
+    Returns:
+        pd.DataFrame: output data
+    """
+    import bodo
+
+    def _exec_plan(plan):
+        from bodo.ext import plan_optimizer
+
+        optimized_plan = plan_optimizer.py_optimize_plan(plan.generate_duckdb())
+        return plan_optimizer.py_execute_plan(optimized_plan)
+
+    if bodo.dataframe_library_run_parallel:
+        import bodo.spawn.spawner
+
+        return bodo.spawn.spawner.submit_func_to_workers(_exec_plan, [], plan)
+
+    return _exec_plan(plan)

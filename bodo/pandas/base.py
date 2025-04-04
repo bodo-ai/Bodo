@@ -4,6 +4,7 @@ from pandas._libs import lib
 from bodo.ext import plan_optimizer
 from bodo.pandas.frame import BodoDataFrame
 from bodo.pandas.series import BodoSeries
+from bodo.pandas.utils import LazyPlan
 
 
 def from_pandas(df):
@@ -18,9 +19,7 @@ def from_pandas(df):
     arrow_schema = pa.Schema.from_pandas(df)
 
     # TODO: distribute to workers and get result_id
-    plan = plan_optimizer.LazyPlan(
-        plan_optimizer.LogicalGetPandasRead, df, arrow_schema
-    )
+    plan = LazyPlan("LogicalGetPandasRead", df, arrow_schema)
     # TODO: Add support for Index
 
     return plan_optimizer.wrap_plan(empty_df, plan=plan, nrows=n_rows)
@@ -85,9 +84,7 @@ def read_parquet(
     ).to_pandas()
     empty_df.index = pd.RangeIndex(0)
 
-    plan = plan_optimizer.LazyPlan(
-        plan_optimizer.LogicalGetParquetRead, path.encode(), arrow_schema
-    )
+    plan = LazyPlan("LogicalGetParquetRead", path.encode(), arrow_schema)
     return plan_optimizer.wrap_plan(empty_df, plan=plan, nrows=nrows)
 
 

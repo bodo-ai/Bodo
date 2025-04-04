@@ -11,7 +11,7 @@ from bodo.pandas.lazy_metadata import LazyMetadata
 from bodo.pandas.lazy_wrapper import BodoLazyWrapper
 from bodo.pandas.managers import LazyBlockManager, LazyMetadataMixin
 from bodo.pandas.series import BodoSeries
-from bodo.pandas.utils import get_lazy_manager_class
+from bodo.pandas.utils import LazyPlan, get_lazy_manager_class
 from bodo.utils.typing import (
     BodoError,
     check_unsupported_args,
@@ -485,8 +485,8 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             left_on = []
         if right_on is None:
             right_on = []
-        planComparisonJoin = plan_optimizer.LazyPlan(
-            plan_optimizer.LogicalComparisonJoin,
+        planComparisonJoin = LazyPlan(
+            "LogicalComparisonJoin",
             self._plan,
             right._plan,
             plan_optimizer.CJoinType.INNER,
@@ -521,9 +521,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             new_metadata = zero_size_self.__getitem__(zero_size_key)
             return plan_optimizer.wrap_plan(
                 new_metadata,
-                plan=plan_optimizer.LazyPlan(
-                    plan_optimizer.LogicalFilter, self._plan, key_plan
-                ),
+                plan=LazyPlan("LogicalFilter", self._plan, key_plan),
             )
         else:
             """ This is selecting one or more columns. Be a bit more
@@ -545,8 +543,8 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 new_metadata = zero_size_self.__getitem__(key)
                 return plan_optimizer.wrap_plan(
                     new_metadata,
-                    plan=plan_optimizer.LazyPlan(
-                        plan_optimizer.LogicalProjection,
+                    plan=LazyPlan(
+                        "LogicalProjection",
                         self._plan,
                         key_indices,
                         pa_schema,
@@ -557,7 +555,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 return plan_optimizer.wrap_plan(
                     new_metadata,
                     plan=plan_optimizer.LazyPlan(
-                        plan_optimizer.LogicalProjection,
+                        "LogicalProjection",
                         self._plan,
                         key_indices,
                         pa_schema,

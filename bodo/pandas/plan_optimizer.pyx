@@ -420,43 +420,6 @@ cdef class LogicalGetPandasRead(LogicalOperator):
         self.arrow_schema = arrow_schema
 
 
-class LazyPlan:
-    """ Easiest mode to use DuckDB is to generate isolated queries and try to minimize
-        node re-use issues due to the frequent use of unique_ptr.  This class should be
-        used when constructing all plans and holds them lazily.  On demand, generate_duckdb
-        can be used to convert to an isolated set of DuckDB objects for execution.
-    """
-    def __init__(self, plan_class, *args, **kwargs):
-        self.plan_class = plan_class
-        self.args = args
-        self.kwargs = kwargs
-
-    def generate_duckdb(self, cache=None):
-        # Sometimes the same LazyPlan object is encountered twice during the same
-        # query so  we use the cache dict to only convert it once.
-        if cache is None:
-            cache = {}
-        # If previously converted then use the last result.
-        if id(self) in cache:
-            return cache[id(self)]
-
-        def recursive_check(x):
-            """ Recursively convert LazyPlans but return other types unmodified.
-            """
-            if isinstance(x, LazyPlan):
-                return x.generate_duckdb(cache=cache)
-            else:
-                return x
-
-        # Convert any LazyPlan in the args or kwargs.
-        args = [recursive_check(x) for x in self.args]
-        kwargs = {k:recursive_check(v) for k,v in self.kwargs.items()}
-        # Create real duckdb class.
-        ret = self.plan_class(*args, **kwargs)
-        # Add to cache so we don't convert it again.
-        cache[id(self)] = ret
-        return ret
-
 cpdef py_optimize_plan(object plan):
     """Optimize a logical plan using DuckDB's optimizer
     """
@@ -480,12 +443,13 @@ cpdef wrap_plan(schema, plan, nrows=None, index_data=None):
         schema and given plan node.
     """
     import pandas as pd
+    from bodo.pandas.utils import LazyPlan
     from bodo.pandas.frame import BodoDataFrame
     from bodo.pandas.series import BodoSeries
     from bodo.pandas.lazy_metadata import LazyMetadata
     from bodo.pandas.utils import get_lazy_manager_class, get_lazy_single_manager_class
 
-    assert isinstance(plan, LazyPlan)
+    assert isinstance(plan, LazyPlan), "wrap_plan: LazyPlan expected"
 
     if isinstance(schema, dict):
         schema = {
